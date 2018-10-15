@@ -1,0 +1,7 @@
+
+config LIB_DBUS
+	bool 'dbus'
+	select LIB_EXPAT
+	help
+	  dbus library and tools
+

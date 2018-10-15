@@ -1,0 +1,169 @@
+config USER_E2FSPROGS
+	bool "e2fsprogs"
+	help
+	  The e2fsprogs package contains tools for creating and configuring
+	  ext2/ext3/ext4 filesystems.
+
+config USER_E2FSPROGS_BADBLOCKS
+	bool "badblocks"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_BLKID
+	bool "blkid"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_CHATTR
+	bool "chattr"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_DEBUGFS
+	bool "debugfs"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_DUMPE2FS
+	bool "dumpe2fs"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_E2FREEFRAG
+	bool "e2freefrag"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_E2FSCK
+	bool "e2fsck"
+	depends on USER_E2FSPROGS
+	help
+	  E2fsck is a tool for checking and repairing damaged filesystems.
+
+config USER_E2FSPROGS_E2IMAGE
+	bool "e2image"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_E2LABEL
+	bool "e2label"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_E2UNDO
+	bool "e2undo"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_FILEFRAG
+	bool "filefrag"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_FINDFS
+	bool "findfs"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_FSCK
+	bool "fsck"
+	depends on USER_E2FSPROGS
+	help
+	  Fsck is a catchall tool used for checking and repairing damaged
+	  filesystems. It will call filesystem sub-tools to do the real work.
+
+config USER_E2FSPROGS_FSCK_EXT2
+	bool "fsck.ext2"
+	depends on USER_E2FSPROGS
+	help
+	  A tool to check and repair ext2 filesystems.
+
+config USER_E2FSPROGS_FSCK_EXT3
+	bool "fsck.ext3"
+	depends on USER_E2FSPROGS
+	help
+	  A tool to check and repair ext3 filesystems.
+
+config USER_E2FSPROGS_FSCK_EXT4
+	bool "fsck.ext4"
+	depends on USER_E2FSPROGS
+	help
+	  A tool to check and repair ext4 filesystems.
+
+config USER_E2FSPROGS_LOGSAVE
+	bool "logsave"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_LSATTR
+	bool "lsattr"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_MKE2FS
+	bool "mke2fs"
+	depends on USER_E2FSPROGS
+	help
+	  A tool for creating ext2/ext3/ext4 filesystems.
+
+config USER_E2FSPROGS_MKFS_EXT2
+	bool "mkfs.ext2"
+	depends on USER_E2FSPROGS
+	help
+	  A tool for creating ext2 filesystems.
+
+config USER_E2FSPROGS_MKFS_EXT3
+	bool "mkfs.ext3"
+	depends on USER_E2FSPROGS
+	help
+	  A tool for creating ext3 filesystems.
+
+config USER_E2FSPROGS_MKFS_EXT4
+	bool "mkfs.ext4"
+	depends on USER_E2FSPROGS
+	help
+	  A tool for creating ext4 filesystems.
+
+config USER_E2FSPROGS_MKLOST_FOUND
+	bool "mklost+found"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_RESIZE2FS
+	bool "resize2fs"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_TUNE2FS
+	bool "tune2fs"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_UUIDD
+	bool "uuidd"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+
+config USER_E2FSPROGS_UUIDGEN
+	bool "uuidgen"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool.
+

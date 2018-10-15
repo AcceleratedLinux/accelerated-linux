@@ -1,0 +1,24 @@
+--- lm_sensors-3.4.0/Makefile.org	2015-12-04 23:13:31.666905553 +1000
++++ lm_sensors-3.4.0/Makefile	2015-12-04 23:13:41.302905485 +1000
+@@ -42,10 +42,10 @@
+ DESTDIR :=
+ 
+ # This is the prefix that will be used for almost all directories below.
+-PREFIX := /usr/local
++PREFIX := /usr
+ 
+ # Your C compiler
+-CC := gcc
++#CC := gcc
+ 
+ # This is the directory where sensors3.conf will be installed, if no other
+ # configuration file is found
+@@ -121,7 +121,7 @@
+ MV := mv -f
+ BISON := bison
+ FLEX := flex
+-AR := ar
++#AR := ar
+ INSTALL := install
+ LN := ln -sf
+ GREP := grep

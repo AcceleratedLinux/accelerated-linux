@@ -1,0 +1,2 @@
+# we will never have a PCI based cell modem to ignore all PCI based devices
+SUBSYSTEM=="pci", ENV{ID_MM_DEVICE_IGNORE}="1"

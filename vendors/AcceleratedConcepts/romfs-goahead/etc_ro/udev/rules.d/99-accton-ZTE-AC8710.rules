@@ -1,0 +1,44 @@
+#
+# udev rule for HUAWEI E220 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+#add call itself
+ACTION=="add", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="2000", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0015", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0015", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+ACTION=="add", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0001", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0001", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+ACTION=="add", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0031", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0031", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+ACTION=="add", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0052", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0052", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+#zte 2726, 8710v1 zeroCD both
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff5",RUN+="/bin/sh -c '/sbin/iss >/dev/console'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff5",RUN+="/bin/sh -c '/etc/init.d/3g.sh ac8710ms'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff5",RUN+="/bin/sh -c '/etc/init.d/3g.sh ac8710ms'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff5",RUN+="/bin/sh -c '/etc/init.d/3g.sh ac8710ms'"
+
+#add/remove zte 2726 modem only
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff1",RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff1",RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="fff1", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+# add/remove 8710v1 modem only
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="ffff",RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="ffff",RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="ffff", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+#add zte 8710 v2 zeroCD
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff6",RUN+="/bin/sh -c '/sbin/iss >/dev/console'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff6",RUN+="/bin/sh -c '/etc/init.d/3g.sh ac8710ms'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff6",RUN+="/bin/sh -c '/etc/init.d/3g.sh ac8710ms'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff6",RUN+="/bin/sh -c '/etc/init.d/3g.sh ac8710ms'"
+# zte 8710v2 modem 
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff1",RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add",ATTRS{idVendor}=="19d2",ATTRS{idProduct}=="fff1",RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="fff1", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+

@@ -1,0 +1,34 @@
+#!/bin/sh
+
+#
+# mkffs -- make flash filesystem for 6300-CX NAND
+#
+# Create and partition a UBI flash region over most of the nand flash.
+# This is best for UBI, we want bad blocking and wear leveling over most
+# of the flash for best results.
+#
+
+MTDEVICE=/dev/mtd3
+UBINUM=0
+UBIDEVICE=/dev/ubi0
+
+# Check if we are running from mounted root on UBI first?
+
+# make sure ubi is not attached
+ubidetach -d $UBINUM > /dev/null
+
+#
+# Creat and attach the single large UBI region.
+#
+ubiformat -y $MTDEVICE
+ubiattach -p $MTDEVICE -d $UBINUM
+
+#
+# Create the filesystem partitions we want.
+#
+ubimkvol $UBIDEVICE -N image -s 32MiB
+ubimkvol $UBIDEVICE -N image1 -s 32MiB
+ubimkvol $UBIDEVICE -N config -s 16MiB
+ubimkvol $UBIDEVICE -N opt -m
+
+exit 0

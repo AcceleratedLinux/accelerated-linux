@@ -1,0 +1,128 @@
+This is a newly written mail to fax gateway that can handle MIME attachments
+(like "tiff images" or "pdf documents").  
+
+Actually, it can handle all file types that faxspool will handle.
+
+
+How to use it?
+
+* mail2fax.pl expects a fax number, usually in the form "12345@fax.do.main"
+  on the command line, and a well-formatted e-mail on stdin
+
+* the e-mail address of the sender is passed as "-f <address>" on the
+  command line
+
+* depending on your e-mail transport, you need to make sure that 
+  mail2fax.pl is called with the proper arguments for e-mails sent to 
+  your fax pseudo-domain.
+
+
+  1. SENDMAIL
+
+   - adapt sendmail.cf (or sendmail.mc) to include a "fax" mailer - the
+     hylafax "mailer/fax.mc" mailer prototype can be used, you just need
+     to adapt the command line.  The net result in sendmail.cf should
+     look like this:
+
+      Mfax,     P=/usr/local/lib/mgetty+sendfax/mail2fax.pl,
+                F=DFMhuS, S=14, R=24, U=fax:dialer,
+                D=/var/spool/fax, M=500000, T=X-Phone/X-FAX/X-Unix,
+                A=mail2fax -h $h -f $f $u
+
+   - in your "mailertable" file, route your fax pseudo domain to this
+     mailer transport:
+
+      fax.do.main     fax:faxrelay
+
+     (the "fax:" part is the key, it means "call the program defined in Mfax, 
+      and pass the e-mail-address as "$u", and the from address as "$f".  
+      The "faxrelay" part is just an arbitrary string, passed as "$h", but
+      it's not currently used)
+
+
+   - further information on "mailer" definitons etc can be found on:
+      http://www.sendmail.org/doc/sendmail-current/doc/op/op.pdf
+
+
+  2. QMAIL
+
+   - there are multiple possible approaches - this is just one variant I've
+     seen used at a qmail site.
+
+   - use "control/virtualdomains" to tell your mail server that "fax.do.main" 
+     is something to be handled locally on your system:
+
+        fax.do.main:fax.do.main
+
+     (specifically: all mail to <number>@fax.do.main is mapped to the 
+     pseudo-user "fax.do.main-<number>@fax.do.main" and delivered locally,
+     see "man qmail-send")
+
+   - use "users/assign" to map your fax.do.main pseudo user to a local user
+     directory:
+
+        +fax.do.main-:fax.do.main:411:411:/home/mail2fax/qmail/:-::
+
+     (this step is optional - you could map to a "real" user in the first 
+     step, like the "fax" user, and use this user's $HOME directory)
+
+   - in the /home/mail2fax/qmail/ directory, create a .qmail-default file
+     that pipes to fax2mail:
+
+        |/usr/local/lib/mgetty+sendfax/mail2fax.pl -f $SENDER $EXT
+
+     ($EXT contains the original fax number, see "man qmail-command")
+
+
+  3. Postfix
+   <example config to be inserted>
+
+
+  4. Exim  (smail3 would be fairly similar to this)
+
+   - you need a "router" definition that directs the "fax.do.main" 
+     pseudo-domain to the "fax_pipe" transport (conf.d/routers file):
+
+	localfax:
+	  debug_print = "R: localfax for $local_part@$domain"
+	  driver = accept
+	  domains = fax.do.main
+	  transport = fax_pipe
+	  no_expn
+
+   - then you need to have a "transport" definition for "fax_pipe"
+     (conf.d/transports file):
+
+	fax_pipe:
+	  debug_print = "T: fax_pipe for $local_part@$domain"
+	  driver = pipe
+	  path = "/bin:/usr/bin:/usr/local/bin"
+	  command = "/usr/local/lib/mgetty+sendfax/mail2fax.pl -f $sender_address $local_part"
+	  user = fax
+	  batch_max = 1
+	  return_path_add
+	  delivery_date_add
+	  envelope_to_add
+
+   - and that's it, basically.
+
+   - if you want to use the exim machine as mail->fax relay for other 
+     hosts (not only local mail) you need to permit relaying to "fax.do.main",
+     otherwise exim won't accept the mail.  How that is configured depends
+     upon your distribution, unfortunately.  Check local documentation...
+
+
+* currently, no authorization is done by mail2fax.pl - so you should 
+  use your MTA rules to restrict who is permitted to send mails to your
+  fax pseudo domain, and thus who may use the fax setup.
+
+* logging goes to /var/log/mgetty/mail2fax.log (by default) - make sure
+  the user ID that your MTA uses to call mail2fax.pl is permitted to write
+  to that directory, otherwise fax-mail will bounce.
+
+* mail2fax.pl needs a working directory, by default /var/spool/fax/tmp/,
+  again, writeable by the user ID picked by your MTA.  If the directory isn't
+  there, or not writeable, fax-mail will bounce.
+
+
+$Id: README,v 1.4 2006/10/19 08:00:43 gert Exp $

@@ -1,0 +1,12 @@
+diff -ru valgrind-3.11.0/configure valgrind-3.11.0-patched/configure
+--- valgrind-3.11.0/configure	2015-09-23 06:30:47.000000000 +1000
++++ valgrind-3.11.0-patched/configure	2016-09-27 08:21:03.085048161 +1000
+@@ -5607,7 +5607,7 @@
+         ARCH_MAX="s390x"
+         ;;
+ 
+-     armv7*)
++     arm*)
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: ok (${host_cpu})" >&5
+ $as_echo "ok (${host_cpu})" >&6; }
+ 	ARCH_MAX="arm"

@@ -1,0 +1,2759 @@
+--- sysklogd-1.5.orig/syslogd.c
++++ sysklogd-1.5/syslogd.c
+@@ -46,6 +46,10 @@
+  * extensive changes by Ralph Campbell
+  * more extensive changes by Eric Allman (again)
+  *
++ * Wed Nov 24 2004 14:02:48 CET 2004: Martin Pitt
++ *      Added option "-u <user>" to drop privileges to given user after
++ *      initialisation.
++ *
+  * Steve Lord:	Fix UNIX domain socket code, added linux kernel logging
+  *		change defines to
+  *		SYSLOG_INET	- listen on a UDP socket
+@@ -553,6 +557,9 @@
+ #include <paths.h>
+ #endif
+ 
++#include <pwd.h>
++#include <grp.h>
++
+ #ifndef UTMP_FILE
+ #ifdef UTMP_FILENAME
+ #define UTMP_FILE UTMP_FILENAME
+@@ -878,6 +885,11 @@
+ 	extern char *optarg;
+ 	int maxfds;
+ 
++        /* user and group id to drop to */
++        uid_t uid = 0;
++        gid_t gid = 0;
++        const char* username = NULL;
++
+ #ifndef TESTING
+ 	chdir ("/");
+ #endif
+@@ -886,7 +898,7 @@
+ 		funix[i]  = -1;
+ 	}
+ 
+-	while ((ch = getopt(argc, argv, "a:dhf:l:m:np:rs:v")) != EOF)
++	while ((ch = getopt(argc, argv, "a:dhf:l:m:np:rs:vu:")) != EOF)	
+ 		switch((char)ch) {
+ 		case 'a':
+ 			if (nfunix < MAXFUNIX)
+@@ -934,6 +946,21 @@
+ 		case 'v':
+ 			printf("syslogd %s.%s\n", VERSION, PATCHLEVEL);
+ 			exit (0);
++		case 'u':
++                        if (optarg) {
++                                username = strdup (optarg);
++                                struct passwd *pw = getpwnam (username);
++                                if (!pw) {
++                                        fprintf (stderr, "User %s does not exist, aborting.\n", username);
++                                        exit (1);
++                                }
++                                uid = pw->pw_uid;
++                                gid = pw->pw_gid;
++                        } else {
++                                fputs ("Internal error: -u optarg == NULL!\n", stderr);
++                                exit (1);
++                        }
++			break;
+ 		case '?':
+ 		default:
+ 			usage();
+@@ -1087,6 +1114,19 @@
+ 		kill (ppid, SIGTERM);
+ #endif
+ 
++        /*
++         * Drop privileges if -u was specified
++         */
++	if (username) {
++                if (initgroups (username, gid) || 
++                    setgid (gid) || setuid (uid)) {
++                        perror ("Could not drop to specified user privileges");
++                        exit (1);
++                }
++                free (username);
++                username = NULL;
++        }
++
+ 	/* Main loop begins here. */
+ 	for (;;) {
+ 		int nfds;
+@@ -1239,7 +1279,7 @@
+ int usage()
+ {
+ 	fprintf(stderr, "usage: syslogd [-drvh] [-l hostlist] [-m markinterval] [-n] [-p path]\n" \
+-		" [-s domainlist] [-f conffile]\n");
++		" [-s domainlist] [-f conffile] [-u user]\n");
+ 	exit(1);
+ }
+ 
+@@ -1603,10 +1643,10 @@
+ 	int msglen;
+ 	char *timestamp;
+ #ifdef __gnu_linux__
+-	sigset_t mask;
++        sigset_t mask;
+ #else
+ #ifndef SYSV
+-	sigset_t omask;
++        sigset_t omask;
+ #endif
+ #endif
+ 
+@@ -1618,9 +1658,9 @@
+ 	sigaddset(&mask, SIGALRM);
+ 	sigprocmask(SIG_BLOCK, &mask, NULL);
+ #else
+-#ifndef SYSV
++#  ifndef SYSV
+ 	omask = sigblock(sigmask(SIGHUP)|sigmask(SIGALRM));
+-#endif
++#  endif
+ #endif
+ 
+ 	/*
+@@ -1660,11 +1700,11 @@
+ 			f->f_file = -1;
+ 		}
+ #ifdef __gnu_linux__
+-		sigprocmask(SIG_UNBLOCK, &mask, NULL);
++	sigprocmask(SIG_UNBLOCK, &mask, NULL);
+ #else
+-#ifndef SYSV
++#  ifndef SYSV
+ 		(void) sigsetmask(omask);
+-#endif
++#  endif
+ #endif
+ 		return;
+ 	}
+@@ -1731,9 +1771,9 @@
+ #ifdef __gnu_linux__
+ 	sigprocmask(SIG_UNBLOCK, &mask, NULL);
+ #else
+-#ifndef SYSV
++#  ifndef SYSV
+ 	(void) sigsetmask(omask);
+-#endif
++#  endif
+ #endif
+ }
+ #if FALSE
+@@ -2392,7 +2432,7 @@
+ 		if (*p == '\0' || *p == '#')
+ 			continue;
+ #if CONT_LINE
+-		strcpy(cline, p);
++		memmove(cline, p, strlen(p)+1);
+ #endif
+ 		for (p = strchr(cline, '\0'); isspace(*--p););
+ #if CONT_LINE
+--- sysklogd-1.5.orig/klogd.8
++++ sysklogd-1.5/klogd.8
+@@ -18,6 +18,9 @@
+ .RB [ " \-n " ]
+ .RB [ " \-o " ]
+ .RB [ " \-p " ]
++.RB [ " \-P "
++.I path
++]
+ .RB [ " \-s " ]
+ .RB [ " \-k "
+ .I fname
+@@ -64,6 +67,11 @@
+ symbol information whenever an Oops string is detected in the kernel message
+ stream.
+ .TP
++.B "\-P " path
++Use \fIpath\fR instead of /proc/kmsg as the source of the kernel message.
++Specify "-" to read from standard input.  This allows klogd to run entirely
++without root privileges.
++.TP
+ .B "\-s"
+ Force \fBklogd\fP to use the system call interface to the kernel message
+ buffers.
+@@ -94,10 +102,15 @@
+ .I /proc
+ file system and the syscall (sys_syslog) interface, although
+ ultimately they are one and the same.  Klogd is designed to choose
+-whichever source of information is the most appropriate.  It does this
+-by first checking for the presence of a mounted 
++whichever source of information is the most appropriate.  If the
++.B \-P
++switch is used,
++.B klogd
++opens the specified path as the source of kernel log information.  Otherwise
++.B klogd
++checks for the presence of a mounted 
+ .I /proc
+-file system.  If this is found the 
++file system and if this is found the 
+ .I /proc/kmsg
+ file is used as the source of kernel log
+ information.  If the proc file system is not mounted 
+--- sysklogd-1.5.orig/Makefile
++++ sysklogd-1.5/Makefile
+@@ -70,7 +70,7 @@
+ SYSLOGD_FLAGS= -DSYSLOG_INET -DSYSLOG_UNIXAF -DNO_SCCS ${FSSTND} \
+ 	${SYSLOGD_PIDNAME}
+ SYSLOG_FLAGS= -DALLOW_KERNEL_LOGGING
+-KLOGD_FLAGS = ${FSSTND} ${KLOGD_START_DELAY}
++KLOGD_FLAGS = ${FSSTND} ${KLOGD_START_DELAY} ${KLOGD_DEFINES}
+ DEB =
+ 
+ all: syslogd klogd
+@@ -102,7 +102,7 @@
+ 	${CC} ${SKFLAGS} ${SYSLOG_FLAGS} -c syslog.c
+ 
+ klogd.o: klogd.c klogd.h version.h
+-	${CC} ${SKFLAGS} ${KLOGD_FLAGS} $(DEB) -c klogd.c
++	${CC} -U_FORTIFY_SOURCE ${SKFLAGS} ${KLOGD_FLAGS} $(DEB) -c klogd.c
+ 
+ ksym.o: ksym.c klogd.h ksyms.h module.h
+ 	${CC} ${SKFLAGS} ${KLOGD_FLAGS} -c ksym.c
+--- sysklogd-1.5.orig/klogd.c
++++ sysklogd-1.5/klogd.c
+@@ -20,6 +20,13 @@
+ */
+ 
+ /*
++ * Thu Nov 25 16:48:39 CET 2004:  Martin Pitt
++ *      Added option -P to give alternative location of /proc/kmsg ("-" for
++ *      stdin). This allows to run klogd entirely without root privileges.
++ *
++ *      Added support for macro PIDFILE_DIR which is used as pid file directory
++ *      instead of _PATH_VARRUN.
++ *
+  * Steve Lord (lord@cray.com) 7th Nov 92
+  *
+  * Modified to check for kernel info by Dr. G.W. Wettstein 02/17/93.
+@@ -289,7 +296,9 @@
+ #define LOG_LINE_LENGTH 1000
+ 
+ #ifndef TESTING
+-#if defined(FSSTND)
++#if defined(PIDFILE_DIR)
++static char	*PidFile = PIDFILE_DIR "klogd.pid";
++#elif defined(FSSTND)
+ static char	*PidFile = _PATH_VARRUN "klogd.pid";
+ #else
+ static char	*PidFile = "/etc/klogd.pid";
+@@ -313,6 +322,8 @@
+ 
+ static FILE *output_file = (FILE *) 0;
+ 
++static char     *kmsg_file = NULL; /* NULL means default /proc/kmsg */
++
+ static enum LOGSRC {none, proc, kernel} logsrc;
+ 
+ int debugging = 0;
+@@ -543,6 +554,22 @@
+ 		       "console output.");
+ 	}
+ 
++        /* Do we read kernel messages from a pipe? */
++        if ( kmsg_file ) {
++                if ( !strcmp(kmsg_file, "-") )
++                        kmsg = fileno(stdin);
++                else {
++                        if ( (kmsg = open(kmsg_file, O_RDONLY)) < 0 )
++                        {
++                                fprintf(stderr, "klogd: Cannot open kmsg file, " \
++                                        "%d - %s.\n", errno, strerror(errno));
++                                ksyslog(7, NULL, 0);
++                                exit(1);
++                        }
++                }
++                return proc;
++        }
++
+ 	/*
+ 	 * First do a stat to determine whether or not the proc based
+ 	 * file system is available to get kernel messages from.
+@@ -990,7 +1017,7 @@
+ 	chdir ("/");
+ #endif
+ 	/* Parse the command-line. */
+-	while ((ch = getopt(argc, argv, "c:df:iIk:nopsvx2")) != EOF)
++	while ((ch = getopt(argc, argv, "c:df:iIk:nopP:svx2")) != EOF)
+ 		switch((char)ch)
+ 		{
+ 		    case '2':		/* Print lines with symbols twice. */
+@@ -1024,6 +1051,9 @@
+ 		    case 'p':
+ 			SetParanoiaLevel(1);	/* Load symbols on oops. */
+ 			break;	
++                    case 'P':           /* Alternative kmsg file path */
++                        kmsg_file = strdup(optarg);
++                        break;
+ 		    case 's':		/* Use syscall interface. */
+ 			use_syscall = 1;
+ 			break;
+@@ -1035,7 +1065,6 @@
+ 			break;
+ 		}
+ 
+-
+ 	/* Set console logging level. */
+ 	if ( log_level != (char *) 0 )
+ 	{
+--- sysklogd-1.5.orig/ksym_mod.c
++++ sysklogd-1.5/ksym_mod.c
+@@ -189,7 +189,6 @@
+ 		else
+ 			Syslog(LOG_ERR, "Error loading kernel symbols " \
+ 			       "- %s\n", strerror(errno));
+-		fclose(ksyms);
+ 		return(0);
+ 	}
+ 
+--- sysklogd-1.5.orig/sysklogd.8
++++ sysklogd-1.5/sysklogd.8
+@@ -29,6 +29,9 @@
+ .RB [ " \-s "
+ .I domainlist
+ ]
++.RB [ " \-u"
++.IB user
++]
+ .RB [ " \-v " ]
+ .SH DESCRIPTION
+ .B Sysklogd
+@@ -150,6 +153,26 @@
+ no domain would be cut, you will have to specify two domains like:
+ .BR "\-s north.de:infodrom.north.de" .
+ .TP
++.BI "\-u" " user"
++The
++.B syslogd
++daemon runs with full root privileges by default. If you specify this
++option, the daemon will drop its privileges to the given user (and the
++primary group of this user) before starting up logging. This
++greatly reduces the potential impact of exploitable security holes in
++syslogd.
++
++.B syslogd
++will still open all log files as root at startup.
++However, after receiving a
++.B SIGHUP
++signal (which causes the daemon to restart) the log files will be
++reopened as the non-privileged user which fails if the log files are
++only writeable by root. If you need to restart the daemon using the
++signal, then you have to adapt the permissions of your log files to be
++writeable by the specified user (or its primary group).
++
++.TP
+ .B "\-v"
+ Print version and exit.
+ .SH SIGNALS
+--- sysklogd-1.5.orig/debian/syslog.conf
++++ sysklogd-1.5/debian/syslog.conf
+@@ -0,0 +1,70 @@
++#  /etc/syslog.conf	Configuration file for syslogd.
++#
++#			For more information see syslog.conf(5)
++#			manpage.
++
++#
++# First some standard logfiles.  Log by facility.
++#
++
++auth,authpriv.*			/var/log/auth.log
++*.*;auth,authpriv.none		-/var/log/syslog
++#cron.*				/var/log/cron.log
++daemon.*			-/var/log/daemon.log
++kern.*				-/var/log/kern.log
++lpr.*				-/var/log/lpr.log
++mail.*				-/var/log/mail.log
++user.*				-/var/log/user.log
++
++#
++# Logging for the mail system.  Split it up so that
++# it is easy to write scripts to parse these files.
++#
++mail.info			-/var/log/mail.info
++mail.warn			-/var/log/mail.warn
++mail.err			/var/log/mail.err
++
++# Logging for INN news system
++#
++news.crit			/var/log/news/news.crit
++news.err			/var/log/news/news.err
++news.notice			-/var/log/news/news.notice
++
++#
++# Some `catch-all' logfiles.
++#
++*.=debug;\
++	auth,authpriv.none;\
++	news.none;mail.none	-/var/log/debug
++*.=info;*.=notice;*.=warn;\
++	auth,authpriv.none;\
++	cron,daemon.none;\
++	mail,news.none		-/var/log/messages
++
++#
++# Emergencies are sent to everybody logged in.
++#
++*.emerg				*
++
++#
++# I like to have messages displayed on the console, but only on a virtual
++# console I usually leave idle.
++#
++#daemon,mail.*;\
++#	news.=crit;news.=err;news.=notice;\
++#	*.=debug;*.=info;\
++#	*.=notice;*.=warn	/dev/tty8
++
++# The named pipe /dev/xconsole is for the `xconsole' utility.  To use it,
++# you must invoke `xconsole' with the `-file' option:
++# 
++#    $ xconsole -file /dev/xconsole [...]
++#
++# NOTE: adjust the list below, or you'll go crazy if you have a reasonably
++#      busy site..
++#
++daemon.*;mail.*;\
++	news.err;\
++	*.=debug;*.=info;\
++	*.=notice;*.=warn	|/dev/xconsole
++
+--- sysklogd-1.5.orig/debian/syslogd-listfiles.8
++++ sysklogd-1.5/debian/syslogd-listfiles.8
+@@ -0,0 +1,95 @@
++.\" syslogd-listfiles.8 - generic routine for /etc/syslog.conf
++.\" Copyright (c) 1997,8,2001  Martin Schulze <joey@debian.org>
++.\" 
++.\" This program is free software; you can redistribute it and/or modify
++.\" it under the terms of the GNU General Public License as published by
++.\" the Free Software Foundation; either version 2 of the License, or
++.\" (at your option) any later version.
++.\" 
++.\" This program is distributed in the hope that it will be useful,
++.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
++.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++.\" GNU General Public License for more details.
++.\" 
++.\" You should have received a copy of the GNU General Public License
++.\" along with this program; if not, write to the Free Software
++.\" Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++.\"
++.TH SYSLOGD-LISTFILES 8 "December 5th, 2001" "Debian Project" "Debian GNU/Linux"
++.SH NAME
++syslogd-listfiles \- list system logfiles
++.SH SYNOPSIS
++.B syslogd-listfiles
++.RB [ " \-a " | " \-\-all " ]
++.RB [ " \-\-auth " ] 
++.RB [ " \-f "
++.I config file
++]
++.RB [ " \-s "
++.I pattern
++]
++.RB [ " \-\-large "
++.I nnn
++]
++.RB [ " \-\-news " ]
++.RB [ " \-w " | " \-\-weekly " ]
++.SH DESCRIPTION
++.B Sysklogd
++provides a modern mechanism to log system messages.  This mechanism is
++controlled by the file
++.IR /etc/syslog.conf .
++Messages are divided into logfiles which can grow quite big.
++Therefore the logfiles need to be rotated once per day, per week or
++per month.  On a Debian GNU/Linux system most of the files are rotated
++once per week.
++
++This program helps the rotation script to determine which logfiles
++need to be rotated and when.  It takes care of news logfiles that are
++handled by the
++.B news.daily
++script from INN.  In conjunction with the scripts in
++.IR /etc/cron.daily " and " /etc/cron.weekly
++it takes care of files with sensitive information.
++
++By default a list of files for daily rotation is generated.  At the
++moment this option only reflects entries that contain "*.*" as
++facility.priority.
++
++.SH OPTIONS
++.TP
++.BR "\-a" ", " "\-\-all"
++List all logfiles and ignore all other rules.
++.TP
++.BI "\-f " "config file"
++Specify an alternative configuration file instead of
++.IR /etc/syslog.conf ","
++which is the default.
++.TP
++.BI "\-s " "pattern"
++Specify a regular expression for files that must not be listed.
++.TP
++.B "\-\-auth"
++Only list files containing sensitive information such as the one
++containing auth.*.
++.TP
++.BI "\-\-large " "nnn"
++Define the filesize for a large file.  The size is provided in bytes.
++This value defaults to 1 megabyte.
++.TP
++.B \-\-ignore\-size
++Don't rotate files whose file size is larger than the regular limit
++(see above).  This option is useful if you are postprocessing logfiles
++which would break if log files are rotated at a different date/time.
++.TP
++.B "\-\-news"
++Don't exclude news logfiles which are normally handled by the
++.B news.daily
++script from INN.
++.TP
++.BR "\-w" ", " "\-\-weekly"
++Generate the list for weekly rotation.
++.LP
++.SH SEE ALSO
++.BR syslog.conf (5),
++.BR syslogd (8),
++.BR savelog (8).
+--- sysklogd-1.5.orig/debian/postrm
++++ sysklogd-1.5/debian/postrm
+@@ -0,0 +1,11 @@
++#! /bin/sh
++
++set -e
++
++if [ "$1" = "purge" ]
++then
++    update-rc.d sysklogd remove >/dev/null
++
++    test ! -f /run/sendsigs.omit.d/sysklogd || \
++	rm -f /run/sendsigs.omit.d/sysklogd
++fi
+--- sysklogd-1.5.orig/debian/syslogd-listfiles
++++ sysklogd-1.5/debian/syslogd-listfiles
+@@ -0,0 +1,141 @@
++#! /usr/bin/perl
++
++# Copyright (c) 1997-9,2001,3,7-8 by Martin Schulze <joey@infodrom.org>
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++# 
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++# 
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111, USA.
++
++use strict;
++use warnings;
++use Getopt::Long;
++
++my $conf = "/etc/syslog.conf";
++my $opt_daily = 1;
++my $opt_all = 0;
++my $opt_auth = 0;
++my $opt_ign_size = 0;
++my $opt_news = 0;
++my $opt_skip = '';
++my $opt_large = 1024*1024;
++
++sub usage
++{
++    print STDERR
++"
++Debian GNU/Linux syslogd-listfiles.  Copyright (c) 1997-9,2001,3,7-8
++Martin Schulze.  This is free software; see the GNU General Public Licence
++version 2 or later for copying conditions.  There is NO warranty.
++
++Usage: syslogd-listfiles <options>
++Options: -f file	specifies another syslog.conf file
++         -a | --all	list all files (including news)
++         --auth		list all files containing auth.<some prio>
++	 --ignore-size  don't rotate files which got too large
++         --large nnn	define what is large in bytes (default: 1MB)
++         --news		include news logfiles, too
++         -w | --weekly	use weekly pattern instead of daily
++         -s pattern	skip files matching pattern
++";
++    exit 0;
++}
++
++# Test if the file was already rotated within the last n hours
++# with n=5
++#
++sub rotated
++{
++    my $file = shift;
++    my $nfile;
++    my $delta = 5 * 60 * 60;
++    my $now = time();
++    
++    # /var/log/file -> /var/log/file.0
++    $nfile = $file . ".0";
++    if (-r $nfile) {
++	if (($now - (stat $nfile)[9]) > $delta) {
++	    return 0;
++	} else {
++	    return 1;
++	}
++    }
++
++    # /var/log/file -> /var/log/OLD/file.0
++    $nfile =~ s,(.*)/([^/]+),$1/OLD/$2,;
++    if (-r $nfile) {
++	if (($now - (stat $nfile)[9]) > $delta) {
++	    return 0;
++	} else {
++	    return 1;
++	}
++    }
++
++    return 0;
++}
++
++GetOptions('config|f=s' => \$conf,
++	   'skip=s' => \$opt_skip,
++	   'large=i' => \$opt_large,
++	   'weekly' => sub { $opt_daily = 0; },
++	   'all|a' => \$opt_all,
++	   'auth' => \$opt_auth,
++	   'ignore-size' => \$opt_ign_size,
++	   'news' => \$opt_news,
++	   'help' => \&usage) or usage();
++
++open (C, $conf) || die "Can't open $conf, $!";
++my $line = '';
++my @lines;
++while (<C>) {
++    next if (/^(\#|$)/);
++    chomp;
++
++    s/\s*(\S.*)$/$1/ if ($line);
++
++    $line .= $_;
++    chop ($line) if (/\\$/);
++    if (!/\\$/) {
++	$line =~ s/\s+/\t/;
++	$line =~ s/\t-/\t/;
++	push (@lines, $line) if ($line =~ /\t\/(?!dev\/)/);
++	$line = "";
++    }
++}
++close (C);
++
++my %output;
++foreach my $line (@lines) {
++    my ($pat,$file) = split (/\t/,$line);
++
++    # These files are handled by news.daily from INN, so we ignore them
++    next if (!$opt_news &&!$opt_all && ($pat =~ /news\.(\*|crit|err|info|notice)/));
++
++    if ($opt_all) {
++	$output{$file} = 1;
++    } elsif ($opt_auth) {
++	$output{$file} = 1 if ($pat =~ /auth[^\.]*\.(?!none).*/);
++    } else {
++	my $everything = ($pat =~ /\*\.\*/);
++	$output{$file} = 1 if (($everything && $opt_daily)
++			       || (!$everything && !$opt_daily && !rotated ($file))
++			       || (!$opt_ign_size && (-r $file && (stat _)[7] >= $opt_large) && $opt_daily)
++			       );
++    }
++}
++
++foreach my $file (keys (%output)) {
++    my $skip = $file;
++    if (!length($opt_skip) ||  $skip !~ /$opt_skip/) {
++	printf "%s\n", $file;
++    }
++}
+--- sysklogd-1.5.orig/debian/changelog
++++ sysklogd-1.5/debian/changelog
+@@ -0,0 +1,827 @@
++sysklogd (1.5-6.2) unstable; urgency=low
++
++  * Non-maintainer upload.
++  * /run transition: sysklogd and klogd use /run/sendsigs.omit.d in
++    place of /lib/init/rw/sendsigs.omit.d.  Old files are migrated
++    from /lib/init/rw/sendsigs.omit.d to /run/sendsigs.omit.d in the
++    package postinsts, and both packages depend upon initscripts
++    (>= 2.88dsf-13.3) in order to guarantee the presence of
++    /run/sendsigs.omit.d (Closes: #633038).
++
++ -- Roger Leigh <rleigh@debian.org>  Wed, 07 Dec 2011 10:01:28 +0000
++
++sysklogd (1.5-6.1) unstable; urgency=low
++
++  * Non-maintainer upload.
++  * Merge Ubuntu patch to enable klogd and syslogd to run as non-root users
++    (Closes: Bug#35325)
++    - debian/control: add dependency on adduser
++    - debian/postrm.klogd, postinst.klogd: handle addition/removal of klogd
++      user
++    - debian/rc.klogd, default.klogd: run klogd as user klogd
++    - klogd.c, debian/rules, Makefile, klogd.8: specify location of klogd pid
++      file
++
++    - syslogd.c, syslogd.8: add -u <user> option
++    - debian/cron.daily, cron.weekly, rc: run syslogd as user syslogd
++
++ -- Matt Zimmerman <mdz@debian.org>  Thu, 14 Apr 2011 06:52:27 -0400
++
++sysklogd (1.5-6) unstable; urgency=low
++
++  * Remove faulty fclose() call.  Thanks to Andrea Morandi and Sean Young
++  * Adjust priority to extra
++  * Remove sendsigs.omit file for both binary packages/daemons on purge
++    (closes: Bug#492149, Bug#492148)
++  * Add existence test before stat'ing a log file in syslogd-listfiles
++  * Replace strcpy with memmove to fix continuation line problems on 64bit
++    architectures, patch by David Couture <glowplugrelayw0rks@gmail.com>
++    (closes: Bug#586156, Bug#585395)
++  * Use SKFLAGS instead of CFLAGS due to a conflict with the kernel build
++    system (complement to what was done with Makefile already) (closes:
++    Bug#535510)
++  * Add dependency to lsb-base due to inclusion of /lib/lsb/init-functions
++    in rc scripts (closes: Bug#527873)
++
++ -- Joey Schulze <joey@infodrom.org>  Fri, 10 Sep 2010 09:10:23 +0200
++
++sysklogd (1.5-5) unstable; urgency=low
++
++  * Handle --all for syslogd-listfiles properly, i.e. include news log
++    files (closes: Bug#487174)
++  * Move syslogd-listfiles to use strict and Getopt::Long for convenience
++
++ -- Joey Schulze <joey@infodrom.org>  Fri, 20 Jun 2008 11:43:13 +0200
++
++sysklogd (1.5-4) unstable; urgency=low
++
++  * Ensure that the omit directory really exists, thanks to Patryk Cisek
++    <patryk@prezu.one.pl> (closes: Bug#481093, Bug#481094, Bug#479896)
++
++ -- Joey Schulze <joey@infodrom.org>  Sat, 07 Jun 2008 19:06:41 +0200
++
++sysklogd (1.5-3) unstable; urgency=low
++
++  * Bumped standards version
++  * Adjusted dependency, thanks to Petter Reinholdtsen (closes: Bug#479896)
++  * Add syslogd and klogd PIDs to omit list of sendsigs (closes: Bug#468649)
++
++ -- Martin Schulze <joey@infodrom.org>  Tue, 13 May 2008 08:32:38 +0200
++
++sysklogd (1.5-2) unstable; urgency=low
++
++  * Import NMU, thanks Petter (closes: Bug#459710)
++  * changelog converted into UTF-8 (closes: Bug#453997, Bug#454022)
++  * Christian Perrier believes there are no systems upgrading from 1.2,
++    thus removed code from postinst (closes: Bug#465108)
++  * Restore SELinux context for /dev/xconsole (closes: Bug#453137)
++
++ -- Martin Schulze <joey@finlandia.infodrom.org>  Sat, 23 Feb 2008 20:12:55 +0100
++
++sysklogd (1.5-1.1) unstable; urgency=low
++
++  * Non-maintainer upload with approval from maintainer.
++  * Break dependency loop in init.d dependencies by dropping optional
++    depend on $named for sysklogd, and correct the list of runlevels
++    for this script.  Changed syskogd script to provide the specific
++    service, to avoid name conflicts.  (Closes: #458265).
++
++ -- Petter Reinholdtsen <pere@debian.org>  Tue,  8 Jan 2008 09:33:38 +0100
++
++sysklogd (1.5-1) unstable; urgency=low
++
++  * New upstream version
++    . Use proper facility for MARK messages (closes: Bug#107501)
++    . Properly handle buffer full condition (closes: Bug#118856)
++    . Spelling fixes (closes: Bug#136190)
++    . Reconnect klogd to syslogd when disconnected (closes: Bug#144499,
++      Bug#178000, Bug#284877, Bug#415136)
++    . Fixed symbol lookup (closes: Bug#166433)
++    . Don't die too soon (closes: Bug#166763)
++    . No special rule for '%' in klogd anymore (closes: Bug#192841)
++    . Don't hang during broken startup anymore (closes: Bug#196521)
++    . Don't resolve hostnames needlessly (closes: Bug#197602)
++    . Stop using obsolete SO_BSDCOMPAT option (closes: Bug#201231, Bug#291442)
++    . Update klogd symbol parser (closes: Bug#203710)
++    . Don't add extra space when forwarding messages (closes: Bug#238507)
++    . Don't eat too much suspicious characters (closes: Bug#315605)
++    . Improved documentation (closes: Bug#426271)
++    . Removed <asm/linkage.h> (closes: Bug#427596)
++  * One of the many changes fixed another bug (closes: Bug#428964)
++  * Adjusted klogd stop method
++
++ -- Martin Schulze <joey@infodrom.org>  Mon, 30 Jul 2007 12:13:46 +0200
++
++sysklogd (1.4.1-21) unstable; urgency=low
++
++  * Adjusted the permissions for default files (closes: Bug#420689,
++    Bug#420690, Bug#370406)
++  * Adjusted default file size limit in syslogd-listfiles (closes: Bug#412641,
++    Bug#225783, Bug#425365)
++  * Optimised default configuration in syslog.conf (closes: Bug#409834)
++  * Only play with the network when the syslog port can be determined.
++    Ignore networking otherwise, but continue working.  (closes: Bug#226611)
++  * Use log_success_msg provided by the init functions
++  * Removed note about devfsd in init.d/sysklogd
++  * Improved cron scripts to cope with no files to rotate
++  * Updated init.d files wrt. LSB dependency information (closes: Bug#324679)
++  * Removed uucp facility since not even the uucp package logs via this
++    facility.  (closes: Bug#338914)
++  * Added build-dependency against linux-kernel-headers (closes: Bug#427596)
++
++ -- Martin Schulze <joey@infodrom.org>  Thu, 07 Jun 2007 15:32:46 +0200
++
++sysklogd (1.4.1-20) unstable; urgency=low
++
++  * Added a missing whitespace to the rc file (Closes: Bug#388787,
++    Bug#388378, Bug#388260)
++  * Corrected typo in syslog.conf(5) (Closes: Bug#327200)
++
++ -- Martin Schulze <joey@infodrom.org>  Thu, 28 Sep 2006 20:46:41 +0200
++
++sysklogd (1.4.1-19) unstable; urgency=high
++
++  * Converted init.d scripts to LSB style
++    - accidently closes: Bug#211858
++  * Removed code that's not required anymore in cron.daily/sysklogd
++  * Fix initial permission (closes: Bug#285500)
++  * Added a special exception for when /var/log/news is a file (closes:
++    Bug#266555)
++  * Tidy up the postinst script
++  * Added devfs awarenes for /dev/xconsole creation (closes: Bug#206066)
++  * Move daemon stop logic into klogd's postinst
++  * Removed both preinst scripts from the distribution
++
++ -- Martin Schulze <joey@infodrom.org>  Mon, 18 Sep 2006 13:15:59 +0200
++
++sysklogd (1.4.1-18) unstable; urgency=medium
++
++  * Removed asm/atomic.h since it is not needed anymore. (closes:
++    Bug#350764)
++  * Fixed typo in NMU-Disclaimer (closes: Bug#225895)
++  * Corrected getconf call in debian/rules to fix lagefile support
++    (closes: Bug#320119)
++  * Applied patch by Joey Hess to prevent klogd to be stopped/started too
++    fast (closes: Bug#284914)
++  * Finish /usr/share/doc transition with patch by Julien Cristau (closes:
++    Bug#337712, Bug#322769, Bug#255590)
++  * Reset the 'restart' flag immediately after entering the restart code.
++    Thanks to Dean Gaudet (closes: Bug#154805)
++  * Added support for /etc/default/{syslogd,klogd} files to contain
++    commandline arguments for syslogd and klogd (closes: Bug#98631,
++    Bug#127579, Bug#241350, Bug#266985)
++  * Added a description of system log level and link to sysctl(8) (closes:
++    Bug#164153)
++  * Acknowledging Joey's NMUs (closes: Bug#347333)
++
++ -- Martin Schulze <joey@infodrom.org>  Thu, 25 May 2006 11:07:52 +0200
++
++sysklogd (1.4.1-17) unstable; urgency=high
++
++  * Use $(getconf LFS_CFLAGS) for large file support
++  * Applied adjusted patch by Miquel van Smoorenburg to fix spurious
++    hanging syslogd in connection with futex and NPTL introduced in recent
++    glibc versions and Linux 2.6 (closes: Bug#301511)
++
++ -- Martin Schulze <joey@infodrom.org>  Wed, 25 May 2005 20:10:31 +0200
++
++sysklogd (1.4.1-16) unstable; urgency=medium
++
++  * applied patch by cph
++  * Applied patch by Colin Phipps so that syslogd doesn't block on the
++    network socket, in case a packet gets lost between select and
++    recv. (closes: Bug#275578)
++  * Applied patch by Anders Henke so that syslog calculates the time for
++    each message (closes: Bug#207619)
++  * Don't create /var/log/news if it's not needed (closes: Bug#266555)
++
++ -- Martin Schulze <joey@infodrom.org>  Sun,  7 Nov 2004 13:10:03 +0100
++
++sysklogd (1.4.1-15) unstable; urgency=low
++
++  * Applied patch by Steve Grubb <linux_4ever@yahoo.com> to adjust memory
++    calculation in crunch_list().
++  * Removed atomic_t in the usecount field of the module struct for
++    compatibility reasons (closes: Bug#245513)
++
++ -- Martin Schulze <joey@infodrom.org>  Tue, 27 Jul 2004 17:28:49 +0200
++
++sysklogd (1.4.1-14) unstable; urgency=medium
++
++  * Added more trailing newlines to init.d programs (closes: Bug#216110)
++  * Adjusted the use of head to the new behaviour for GNU coreutils
++    (closes: Bug#205535, Bug#172655)
++  * Install /usr/share/sysklogd/dummy to replace /usr/share/doc/sysklogd,
++    since /usr/share/doc should be removable by an admin (Policy 12.3).
++    (closes: Bug#237724)
++  * Added a private module.h with extracted data from Linux 2.2 to replace
++    <linux/module.h> which creates a number parse errors.  (closes: Bug#223210)
++  * Added support for invoke-rc.d as written in policy 9.3.3 (closes:
++    Bug#213211, Bug#213585, Bug#216858, Bug#214912)
++
++ -- Martin Schulze <joey@debian.org>  Wed, 31 Mar 2004 18:18:54 +0200
++
++sysklogd (1.4.1-13) unstable; urgency=medium
++
++  * Updated some text in the cronjobs
++  * Direct output of reloading to /dev/null so that no cron log mails will
++    be created defaultly (closes: Bug#213717, Bug#213646)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu,  2 Oct 2003 19:51:34 +0200
++
++sysklogd (1.4.1-12) unstable; urgency=low
++
++  * On heavily loaded system syslog will not spit out error messages
++    anymore when recvfrom() results in EAGAIN (closes: Bug#188194)
++  * Applied patch by Ryan Murray to make this package build on mipsel
++    again (closes: Bug#191969)
++  * Added O_NONBLOCK to two more locations, since Andreas Barth
++    <aba@not.so.argh.org> believes that it fixes this bug.  However,
++    according to the note in open(2) this does not have to have any effect
++    on files other than pipes... (closes: Bug#45245)
++  * Permissions on empty files should also be corrected (closes: Bug#135485)
++  * Corrected the number of bytes denoting 1GB for large logfiles (closes: Bug#138234)
++  * Corrected the handling of the skip pattern (closes: Bug#152247)
++  * Don't cut non-newline trailing characters from the last line anymore
++    (closes: Bug#152248)
++  * Improved init.d scripts so non-existing pid directories are not
++    touched anymore (see Bug#165472)
++  * Whoops, looks like O_TRUNC was missing when opening the pidfile for writing,
++    increasing the chance of left-overs from older pid contents in the
++    file.  (closes: Bug#165472) 
++  * Don't send SIGHUP to klogd anymore.  Only restart it in case the old
++    process got lost somehow.  (closes: Bug#168851)
++  * Improved init.d script output (closes: Bug#190328)
++  * Adjusted the use of chown to the new behaviour for GNU coreutils
++    (closes: Bug#205364)
++  * Adjusted the use of head to the new behaviour for GNU coreutils
++    (closes: Bug#205535)
++  * Moved the installation of the signal handler up a little bit so it
++    guaranteed to be available when the child is forked, hence, fixing a
++    race condition.  This used to create problems with UML and fast
++    machines.  Thanks to Jon Burgess <Jon_Burgess@eur.3com.com> (closes:
++    Bug#211993)
++
++ -- Martin Schulze <joey@kyllikki.infodrom.north.de>  Sun, 28 Sep 2003 12:34:31 +0200
++
++sysklogd (1.4.1-11) unstable; urgency=low
++
++  * Added a disclaimer for those people who plan to NMU this package
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 17 Oct 2002 08:26:04 +0200
++
++sysklogd (1.4.1-10) unstable; urgency=low
++
++  * Removed bashism from rc files (closes: Bug#127406, Bug#127407,
++    Bug#127578, Bug#127372)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu,  3 Jan 2002 18:22:13 +0100
++
++sysklogd (1.4.1-9) unstable; urgency=low
++
++  * Use a newer Standards-Version
++  * Corrected dependency of sysklogd (closes: Bug#123908)
++  * Transfer section/priority into .deb (closes: Bug#123908)
++  * Fix typo in syslog.conf(5) (closes: Bug#126899)
++  * Added ``-e'' to weekly and daily cron scripts.  Beware, from now on
++    they will fail if an error occurs and leave /var/log in an undefined
++    state, not signalling syslogd to reopen files as well. (closes: Bug#123281)
++  * Added some intelligence into /etc/init.d/sysklogd and klogd so the
++    daemons will be restarted when they should only be reloaded but are
++    not running.  This could be helpful if after an OOM situation syslogd
++    or klogd were killed by init but cron wasn't.  (closes: Bug#126749, Bug#126750)
++  * Create /dev/xconsole in init.d script if it doesn't exist.  Hence
++    removing this out of the postinst script.  This should help situations
++    when devfs is installed and /dev/ get's removed on system boot, thus
++    /dev/xconsole gets removed as well. (closes: Bug#106535)
++  * Added ftp facility (closes: Bug#100437)
++  * Added missing documentation to syslogd-listfiles(8) (fixes: Bug#48326)
++  * Added a PATH= statement to all init.d files (closes: Bug#47901)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Tue,  1 Jan 2002 13:44:42 +0100
++
++sysklogd (1.4.1-8) unstable; urgency=low
++
++  * Added special code to find out if a logfile was rotated within the
++    last 5 hours already, hence should not be rotated again.  Hope this
++    satisfies Craig Sanders' request properly. (closes: Bug#39198)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu,  6 Dec 2001 11:06:53 +0100
++
++sysklogd (1.4.1-7) unstable; urgency=low
++
++  * Fixed override disparity
++  * Added more defines so files larger than 2GB can be created, approved
++    by the glibc maintainer (closes: Bug#120574)
++  * Closing old bug reports (closes: Bug#95230, Bug#34391, Bug#72892)
++  * Added `--large nnn' as argument to syslogd-listfiles so people can
++    decide on their own what a large file is (closes: Bug#39198)
++  * Increased the default definition for large files
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Wed,  5 Dec 2001 22:01:23 +0100
++
++sysklogd (1.4.1-6) unstable; urgency=low
++
++  * Corrected path for syslogd in cron scripts (closes: Bug#122261,
++    Bug#121680, Bug#120809)
++  * Already fixed bugs (closes: Bug#121784)
++  * Improved package description (closes: Bug#120755)
++  * Added an improved pattern for news.*, thanks Takuo (closes: Bug#103999)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Tue,  4 Dec 2001 09:46:46 +0100
++
++sysklogd (1.4.1-5) unstable; urgency=low
++
++  * Fix the override disparity
++  * Removed superflous Priority
++  * Removed =VER= string from syslogd-listfiles (closes: Bug#102998)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Wed, 21 Nov 2001 23:00:29 +0100
++
++sysklogd (1.4.1-4) unstable; urgency=low
++
++  * Added convenience code to support $DEB_BUILD_OPTIONS
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Wed, 21 Nov 2001 18:41:23 +0100
++
++sysklogd (1.4.1-3) unstable; urgency=medium
++
++  * Be more anal about whether sysklogd is installed or not in our cron
++    scripts (closes: Bug#100319)
++  * Added missing newline in init.d script upon restart (closes: Bug#95554)
++  * Moved stop code to prerm (closes: Bug#120249, Bug#96355, Bug#105441,
++    Bug#105442, Bug#109470)
++  * Corrected broken character in klogd.8 (closes: Bug#75932) [repeat, due
++    to typo]
++  * Added dependency to klogd so people who upgrade their sysklogd package
++    won't lose it anymore (closes: Bug#93729) [repeat, another bug#]
++  * auth.* files are only rotated daily (closes: Bug#102138)
++  * Changed -p to -s in documentation (closes: Bug#108473)
++  * Updated documentation to reflect the current location of the mailing
++    list
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Tue, 20 Nov 2001 20:48:32 +0100
++
++sysklogd (1.4.1-2) unstable; urgency=low
++
++  * Corrected location of GPL (closes: Bug#90582)
++  * Added section and priority for binary packages
++  * Added dependency to klogd so people who upgrade their sysklogd package
++    won't lose it anymore (closes: Bug#93922)
++  * Added code snipped to stop klogd/syslogd upon removal (closes:
++    Bug#90534, Bug#90970)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sat, 21 Apr 2001 15:06:02 +0200
++
++sysklogd (1.4.1-1) unstable; urgency=low
++
++  * New upstream source (closes: Bug#87819, Bug#70790, Bug#32580,
++    Bug#62358, Bug#71631)
++  * Upstream: Doesn't re-set log-level if not requested (closes:
++    Bug#76170, Bug#76170, Bug#85289)
++  * Upstream: Ignore zero bytes (closes: Bug#85478, Bug#85478, Bug#41068)
++  * Upstream: Corrected documentation for `-s' (closes: Bug#87020)
++  * Upstream: test for existence of syslogd-listfiles before calling
++    them.  This got lost due to 1.4.0 brokennes which was packaged and
++    removed some hours later (closes: Bug#84872, Bug#66712)
++  * Applied patch by Tommi Virtanen <tv@debian.org> splitting the package
++    into `sysklogd' and `klogd' (closes:Bug#35586, Bug#72043, Bug#74864,
++    Bug#72122)
++  * Provide / depend on virtual packages system-log-daemon
++    and linux-kernel-log-daemon (closes: Bug#67604)
++  * Applied patch from Tim Janik <timj@gtk.org> to support `-s pattern' in
++    syslogd-listfiles
++  * Transition to FHS, i.e. /usr/share/doc instead of /usr/doc and
++    /usr/share/man instead of /usr/man (closes:  Bug#79250, Bug#80771)
++  * Use --exec for stopping services (closes: Bug#76757)
++  * Corrected broken character in klogd.8 (cloes: Bug#75932)
++  * Only rotate logfiles with size greater than zero.  This got lost due
++    to 1.4.0 brokennes which was packaged and removed some hours later
++    (closes: Bug#74993, Bug#49824)
++  * Added another note about modificability of cronjobs (closes:
++    Bug#88741)
++  * Since klogd replaces parts of sysklogd a proper Replaces line is there
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sun, 11 Mar 2001 22:30:53 +0100
++
++sysklogd (1.4-1) stable unstable; urgency=medium, closes=70790 32580 49824 62358 66712 71631
++
++  * Added paragraph to binary target
++  * New upstream version (closes: Bug#70790, Bug#32580, Bug#62358,
++    Bug#71631)
++  * Only rotate logfiles that have a size greater than zero (closes:
++    Bug#49824)
++  * Test for existence of syslogd-listfiles before calling it (closes:
++    Bug#66712)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Mon, 18 Sep 2000 16:02:05 +0200
++
++sysklogd (1.3-33) unstable; urgency=medium, closes=38977
++
++  * chmod 0640 /dev/xconsole regardless of its existence (closes: Bug#38977)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sun, 12 Sep 1999 20:47:53 +0200
++
++sysklogd (1.3-32) unstable; urgency=low, closes=35408 34733 36198
++
++  * Fixed typo in syslogd-listfiles (closes: Bug#35408)
++  * Removed superflous call to utmpname() (closes: Bug#34733)
++  * Added --ignore-size and limit for rotating log files at 2MB to
++    syslogd-listfiles (closes: Bug#36198)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sun, 23 May 1999 10:40:33 +0200
++
++sysklogd (1.3-31) frozen unstable; urgency=low, closes=28629 30093 31494 30462
++
++  * ``-m 0'' turns off -- MARK -- now. (closes: Bug#28629, Bug#31494)
++  * Changed Greg's e-mail address to represent his current one.
++  * Shortened line length for kernel logging slightly.
++  * Corrected return value of AddModule (closes: Bug#30093)
++  * Finally fixed an error with `-a' processing, thanks to Topi Miettinen
++    <tom@medialab.sonera.net> (closes: Bug#30462)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Tue, 19 Jan 1999 23:56:07 +0100
++
++sysklogd (1.3-30) unstable; urgency=low, closes=28128 28122 24893
++
++  * Contains more patches from Topi Miettinen.
++  * Fixed two mistakes from the most recent version
++  * Fixed fd leak problem.  Thanks to Topi for detecting it
++  * Ouch!  Looks like the released package again is broken.  It worked
++    locally.
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sun, 18 Oct 1998 20:38:22 +0200
++
++sysklogd (1.3-29) unstable; urgency=low, closes=24893
++
++  * Re-Applied patch provided vom Topi Miettinen with regard to the people
++    from OpenBSD.  This provides the additional '-a' argument used for
++    specifying additional UNIX domain sockets to listen to.  This is been
++    used with chroot()'ed named's for example.  An example is described at
++    http://www.psionic.com/papers/dns.html.  This time the patch doesn't
++    stall syslogd.  Thanks to Topi Miettinen <tom@medialab.sonera.net>
++    (closes: Bug#24893)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sat, 17 Oct 1998 20:23:00 +0200
++
++sysklogd (1.3-28) unstable; urgency=low
++
++  * Added manpage for syslog-facility, also written by RaphaÃ«l Hertzog 
++  * Reverted support for multiple Unix domain sockets since it caused
++    syslogd to not accept more sockets after a certain (undefinitve)
++    time.  (opens: Bug#24893)
++  * The complete code is still present, search for `Bug#24893'
++  * Commented out `-a' in the syslogd.8 manpage
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 15 Oct 1998 19:35:26 +0200
++
++sysklogd (1.3-27) frozen unstable; urgency=low, closes=21212 11917 21606 24609 25835 26015 24648 20135 23502 24893 24894
++
++  * Postinst will create files with correct file modes (closes: Bug#21212)
++  * Made /dev/xconsole mode 0640 and root.adm (closes: Bug#11917)
++  * Changed priority of exit message from LOG_ERR to LOG_INFO (closes
++    Bug#21606)
++  * The code now is compilable without SYSLOG_INET again.  Thanks to
++    Enrik Berkhan <enrik@rzstud1.akk.org>.
++  * Added support for TESTING define which will turn syslogd into
++    stdio-mode used for debugging.
++  * Reworked the initialization/fork code.  Now the parent
++    process activates a signal handler which the daughter process will
++    raise if it is initialized.  Only after that one the parent process
++    may exit.  Otherwise klogd might try to flush its log cache while
++    syslogd can't receive the messages yet. (closes: Bug#24609)
++  * Fixed typo in /etc/syslog.conf (closes: Bug#25835)
++  * Modified pre- and postinst scripts to set +e before executing external
++    scripts.  This is a workaround against a bug in bash (Bug#23857).
++    Bash exports the errexit (-e) flag if allexport (-a) has been set. The
++    bug occurs even if allexport is being _re_set.  (closes: Bug#26015)
++  * Modified ksym::CheckVersion()
++    . Use shift to decode the kernel version
++    . Compare integers of kernel version
++    . extract major.minor.patch from utsname.release via sscanf()
++    The reason lays in possible use of kernel flavours which modify
++    utsname.release but no the Version_ symbol.  (closes: Bug#20135)
++  * Corrected klogd.c in order to support the new address space for late
++    2.1 kernels.  Some support for unsigned long in contrary to int was
++    missing.  (closes: Bug#23502)
++  * Applied patch provided vom Topi Miettinen with regard to the people
++    from OpenBSD.  This provides the additional '-a' argument used for
++    specifying additional UNIX domain sockets to listen to.  This is been
++    used with chroot()'ed named's for example.  An example is described at
++    http://www.psionic.com/papers/dns.html.  Thanks to Topi Miettinen
++    <tom@medialab.sonera.net> (closes: Bug#24893)
++  * Added support for `ftp' log facility which was introduced by glibc
++    version 2.  Thanks to netgod and Flood from #Debian.
++  * Code cleanups with regard to bsd -> posix transition and stronger
++    security (buffer length checking).  Thanks to Topi Miettinen
++    <tom@medialab.sonera.net> (closes: Bug#24894)
++    . index() --> strchr()
++    . sprintf() --> snprintf()
++    . bcopy() --> memcpy()
++    . bzero() --> memset()
++    . UNAMESZ --> UT_NAMESIZE
++    . sys_errlist --> strerror()
++  * Added support for setutent()/getutent()/endutend() instead of binary
++    reading the UTMP file.  This is the the most portable way.  Thanks to
++    Topi Miettinen <tom@medialab.sonera.net>.
++  * Avoid logging of SIGCHLD when syslogd is in the process of exiting and
++    closing its files.  Again thanks to Topi.
++  * Added /usr/sbin/syslog-facility, written by RaphaÃ«l Hertzog
++    <hertzog@debian.org>.  It opens a way for other packages to add and
++    remove logfiles/facilities.
++  * Modified printline() to support 8bit characters - such as russion
++    letters.  Thanks to Vladas Lapinskas <lapinskas@mail.iae.lt>.
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Mon, 12 Oct 1998 22:24:04 +0200
++
++sysklogd (1.3-26) frozen unstable; urgency=low, closes=20903 20765 20556 20507 20647 20220
++
++  * Fixed typos in syslogd-listfiles(1), thanks to Francesco Potorti`
++    <F.Potorti@cnuce.cnr.it> (closes: Bug#20903)
++  * Corrected email address for Shane Alderton (closes: Bug#20765)
++  * Fixed manpage to not reflect reverse implementated SIGALRM signal
++    handler (closes: Bug#20647)
++  * Modified behaviour with including <sys/module.h> (closes: Bug#20556)
++  * Added correct prototype for llseek() (closes: Bug#20507, Bug#20220)
++  * Added more log information if problems occurr while reading a system
++    map file.
++  * Modified System.map read function to try all possible map files until
++    a file with matching version is found.
++  * Added Debian release to klogd
++  * Switched to fgets() as gets() is not buffer overrun secure.
++  * Modified loop for detecting the correct system map.
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 16 Apr 1998 19:28:05 +0200
++
++sysklogd (1.3-25) unstable; urgency=low, closes=19454 19145 1914
++
++  * Corrected permissions on packaging control files (closes: Bug#19414)
++  * Removed kill statements from rc file (closes: Bug#19454, Bug#19145)
++  * Applied patch from Pedro Manuel Rodrigues <pmanuel@cindy.fe.up.pt> to
++    let klogd work togther with >2GB address space.
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 19 Mar 1998 23:56:09 +0100
++
++sysklogd (1.3-24) unstable; urgency=low, closes=18124
++
++  * Fixed tiny mistake which refused the MARK facility to work properly
++    (closes: Bug#18124)
++  * Corrected Topi's patch as it prevented forwarding during startup due
++    to an unknown LogPort.
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Wed, 25 Feb 1998 13:19:27 +0100
++
++sysklogd (1.3-23) unstable; urgency=low
++
++  * Corrected FSF's address (lintian)
++  * Implemented force-reload (lintian)
++  * Standards-Version: 2.4.0.0
++  * Applied patch from Topi Miettinen <Topi.Miettinen@ml.tele.fi> to open
++    the UDP socket only if it is really needed.
++  * Updated sysklogd(8) manpage
++  * Added notes to mailing list
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Tue, 24 Feb 1998 00:39:10 +0100
++
++sysklogd (1.3-22) unstable; urgency=low, closes=17192 17385 17601
++
++  * Included a real fix to the %'s problem (fixes: Bug#17192)
++  * Another patch for Linux/alpha by Christopher C Chimelis
++    <chris@classnet.med.miami.edu> (fixes: Bug#17385)
++  * Removed killall-statement from postinst.  Thanks to James Troup for
++    reporting it.
++  * Added chdir("/") to both daemons (fixes: Bug#17601)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 29 Jan 1998 21:56:40 +0100
++
++sysklogd (1.3-21) unstable; urgency=low, closes=17159
++
++  * Fixed small typo in syslogd-listfiles (Bug#17159)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 15 Jan 1998 23:22:57 +0100
++
++sysklogd (1.3-20) unstable; urgency=low, closes=17000
++
++  * Corrected some code that caused klogd to dump core when receiving some
++    special messages from 2.1.78.  Thanks to Chu-yeon Park
++    <kokids@doit.ajou.ac.kr> for informing me.
++  * Fixed bug that caused klogd to die if there is no System.map
++    available.
++  * Added -x switch to omit EIP translation and System.map evaluation.
++    Thanks to Florian La Roche <florian@knorke.saar.de>
++  * Fixed small bugs in F_FORW_UNKN meachanism.  Thanks to Torsten Neumann
++    <torsten@londo.rhein-main.de> for pointing me to it.
++  * Fixed problem with klogd not being able to be built on a kernel newer
++    than 2.1.18.  Worked in a patch from Alessandro Suardi <asuardi@uninetcom.it>
++  * Fixed small typo in syslogd-listfiles
++  * Corrected debug output concerning remote receiption
++  * Removed race condition in syslogd-listfiles
++  * Modified logfile detection routine to take care of double listed
++    logfiles.  Thanks to Roman Hodek <roman@debian.org> for providing an
++    appropriate patch.  (Bug#17000)
++  
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Tue, 13 Jan 1998 01:59:56 +0100
++
++sysklogd (1.3-19) unstable; urgency=low, closes=16643 16769 16796 16828 16148 14776
++
++  * Used better regexp for detecting sensitive data.  Thanks a lot to
++    Susanne Schmidt <banshee@linux.de> for providing it.
++  * Fixed ownership of /usr/doc/sysklogd/copyright and readme (Bug#16643)
++  * Corrected Standards-Version to 2.3.0.1 (Bug#16769)
++  * Reworked one line of an older patch because it prevented syslogd from
++    binding the socket with the result that no messages were forwarded to
++    other hosts.
++  * Changed the behaviour of klogd when receiving a terminate signal. Now
++    the program terminates immediately instead of completing the receipt of
++    a kernel message.  (Bug#16796, Bug#16828, Bug#16148)
++  * Noticed a bug which was closed by 1.3-18 (Bug#14776)
++  * Changed Maintainer address to joey@debian.org
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Fri, 9 Jan 1998 00:58:36 +0100
++
++sysklogd (1.3-18) unstable; urgency=low, closes=11731 12009 13506 14329 14521 14610 15840 15336
++
++  * Added test in postinst if user and group exist.  Christoph Lameter run
++    into trouble upgrading a RedHat system.
++  * Fixed little mistake which prevented klogd from accepting a console
++    log level of 8 to get <7> alias KERN_DEBUG displayed.
++  * Linked against libc6 (Bug#11731)
++  * Added SHELL=/bin/bash to rules as Herbert Xu suggested
++  * Corrected syslog.conf(5) manpage
++  * syslogd resets the ignore priority flag now.  Thanks to Herbert
++    Thielen. (Bug#12009)
++  * Fixed bug that caused syslogd to write into wrong files under some
++    race conditions.  Thanks to Herbet Xu. (Bug#13506)
++  * /var/log/auth.log will only be touch if needed (Bug#14329)
++  * debian/conffiles is treated like a document (Bug#14521)
++  * Added script for generic logfile detection and rotation and included
++    that in cron scripts, included also its manpage (Bug#14610)
++  * Modified restart messages in /etc/init.d/sysklogd (Bug#15840)
++  * klogd will first try to load /boot/System.map-$ver, then
++    /boot/System.map, then /System.map-$ver and after that /System.map
++  * Modified ExpandKadds() because there were some problems accessing
++    memory r/w.  (Bug#15336)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Fri, 2 Jan 1998 03:31:09 +0100
++
++sysklogd (1.3-17) unstable; urgency=low
++
++  * Fixed stupid bug which caused klogd to eat up 90% cpu time.
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Wed, 25 Jun 1997 15:22:29 +0200
++
++sysklogd (1.3-16) unstable; urgency=low
++
++  * Included Miquel's patches which allows continuation line support
++    for syslogd.  Corrected syslog.conf(5) manpage.  Improved
++    syslog.conf file.  Thanks to Miquel van Smoorenburg
++    <miquels@cistron.nl> for dropping in these patches.
++  * Added /var/log/syslog as a daily rotated logfile which contains
++    everything except auth.*
++  * ksym.c: Added #1 and #2 to some error messages in order to being able
++    to divide them (ulmo@Q.Net)
++  * Improved postinst script (Thanks to Miquel van Smorrenborg for ideas)
++  * klogd now also reads /System.map-<version> and
++    /boot/System.map-<version> (Bug#7210)
++  * syslogd,klogd: made DEBRELEASE optional to support a non-Debian
++    release as well.
++  * Corrected freeing of logfiles.
++  * Removed delay of 10 seconds. (Bug#8104, Bug#8400)
++  * Modified permissions of logfiles from 644 to 640 and 640 to 600 for
++    security aspects.
++  * Corrected syslog.conf(5) manpage (Bug#9779)
++  * Found upstream patches for 1.3.1 to 1.3.3 which are now included.
++    These also include some patches for glibc and Alpha.
++  * Included patch to modules package to support better debugging
++  * Added patch from Leland Olds which fixes a buffer overrun and improved
++    symbol lookup. (Bug#4875)
++  * Some more glibc patches made by Michael Alan Dorman
++    <mdorman@debian.org>. (Bug#8362, Bug#8763)
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Sun, 15 Jun 1997 19:37:13 +0200
++
++sysklogd (1.3-15) unstable; urgency=low
++
++  * Added /var/log/mail.log as a logfile
++  * Corrected Description field (Bug#7624)
++  * Added read statement in postinst script (Bug#8243)
++
++ -- Martin Schulze <joey@infodrom.north.de>  Wed, 26 Mar 1997 13:32:24 +0100
++
++sysklogd (1.3-14) unstable; urgency=low
++
++  * Debugging syslogd now shows facility.priority
++  * Minor fixes
++  * Modified syslogd.c to not kill itself which confuses bash 2.0
++
++ -- Martin Schulze <joey@infodrom.north.de>  Sun, 23 Feb 1997 12:23:55 +0100
++
++sysklogd (1.3-13) stable; urgency=low
++
++  * Made /etc/init.d/sysklogd more verbose
++  * Minor fixes
++  * Uncompressed copyright, but compressed /usr/doc/sysklogd-1.3.16/readme
++
++ -- Martin Schulze <joey@debian.org>  Sat, 8 Feb 1997 14:12:29 +0100
++
++sysklogd (1.3-12) stable; urgency=HIGH
++  
++  * Converted to Standards-Version 2.1.1.2
++  * init.d/sysklogd: added "sleep 1"
++  * syslogd won't hassle anymore if it can't access logfils. Patched by
++    me. This adresses Bug#5865.
++  * /etc/init.d/sysklogd: Modified so that one can use commandline
++    arguments for both syslogd and klogd.
++  * debian.rules: Installed ChangeLog
++
++ -- Martin Schulze <joey@finlandia.infodrom.north.de>  Thu, 30 Jan 1997 22:48:59 +0100
++
++Mon Now 25 10:36:01 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* modified preinst to work if /etc/init.d/sysklogd doesn't exist
++	because of a failure
++
++Mon Sep 10 10:36:01 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* ksyms.c: klogd will first look at /System.map (Bug#4403, #4459)
++
++Fri Aug 16 21:36:01 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* debian.rules: Changed permissions for syslogd and klogd to 755
++	(Bug#4049)
++
++Mon Aug 12 10:40:05 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* Corrected permissions of documentation.  Thanks to Dan
++        Quinlan. (Bug#4090)
++
++Mon Aug  5 22:47:40 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* syslogd.c: If you haven't set your domainname, syslogd will dump
++	core upon startup.  Fixed.  Thanks to Leeland Lucius
++	<llucius@millcomm.com> for reporting and patching it. (Bug#3526)
++
++	* /etc/init.d/sysklogd, /etc/cron.weekly/sysklogd: slight
++	improvements.  Thanks to Bernd Eckenfels <ecki@tapac.inka.de>.
++
++Fri Aug  2 11:03:30 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* modified weekly cron script, thanks to Todd Tyrone Fries <todd@miango.com>
++
++Fri Jun 14 10:42:26 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* ksyms.c: increased the size of vstring, because since Linux
++	major versions are decoded with n * 65536 and we now have 2.0, the
++	field was too short.
++
++Tue May 28 01:02:01 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* syslogd.c: Corrected behaviour of blocking pipes - i.e. the
++	whole system hung.  Michael Nonweiler <mrn20@hermes.cam.ac.uk> has
++	sent us a patch to correct this.  A new logfile type F_PIPE has
++	been introduced.
++
++Thu May 23 08:39:54 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* postinst: Corrected killall-statement, Thanks to Miquel van
++	Smoorenborg for the hint
++
++Mon May 20 00:14:35 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* postinst: added a killall to remove an existing syslogd.  It
++	could exist because of Bug#2836.
++
++Sun May 12 13:36:55 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* removed auth.* from /dev/xconsole
++
++	* klogd won't log old messages anymore (Bug#2337)
++	I have applied the patch from Chris Hanson.
++
++	* I have put another start-stop-daemon call in the startup script
++	so the configs are reloaded on startup. This should
++	help. (Bug#2552)
++
++	* Sysklogd takes care of this and createst /dev/xconsole if it
++	doesn't exist during installation. (Bug#2683)
++
++	* I have corrected permissions of /dev/xconsole. (Bug#2837)
++
++	* defined /etc/cron.weekly/sysklogd as a conffile (Bug#2950, Bug#2960)
++
++	* introduced two binary packages: syslogd and sysklogd which
++	exclude each other
++
++Sun Apr 21 17:56:03 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* Corrected preinst (Bug#2722, Bug#2725, Bug#2726)
++
++	* Linked against libc 5.2.18 (Bug#2723, Bug#2725)
++
++	* Corrected control file to fit with newer dpkgs
++
++Wed Apr 17 21:40:56 1996  Martin Schulze  <joey@finlandia.infodrom.north.de>
++
++	* Added Debian packaging information
++
++
+--- sysklogd-1.5.orig/debian/cron.daily
++++ sysklogd-1.5/debian/cron.daily
+@@ -0,0 +1,47 @@
++#! /bin/sh
++
++# sysklogd	Cron script to rotate system log files daily.
++#
++#		If you want to rotate other logfiles daily, edit
++#		this script.  An easy way is to add files manually,
++#		to add -a (for all log files) to syslogd-listfiles and
++#		add some grep stuff, or use the -s pattern argument to
++#		specify files that must not be listed.
++#
++#		This is a configration file.  You are invited to edit
++#		it and maintain it on your own.  You'll have to do
++#		that if you don't like the default policy
++#		wrt. rotating logfiles (i.e. with large logfiles
++#		weekly and daily rotation may interfere).  If you edit
++#		this file and don't let dpkg upgrade it, you have full
++#		control over it.  Please read the manpage to
++#		syslogd-listfiles.
++#
++#		Written by Martin Schulze <joey@debian.org>.
++#		$Id: cron.daily,v 1.14 2007-05-28 16:33:34 joey Exp $
++
++test -x /usr/sbin/syslogd-listfiles || exit 0
++test -x /sbin/syslogd || exit 0
++test -f /usr/share/sysklogd/dummy || exit 0
++
++USER=$(ps -C syslogd -o user= | head -n 1)
++[ -z "${USER}" ] && USER="root" || true
++
++set -e
++
++cd /var/log
++
++logs=$(syslogd-listfiles)
++
++test -n "$logs" || exit 0
++
++for LOG in $logs
++do
++   if [ -s $LOG ]; then
++      savelog -g adm -m 640 -u ${USER} -c 7 $LOG >/dev/null
++   fi
++done
++
++# Restart syslogd
++#
++/etc/init.d/sysklogd reload-or-restart > /dev/null
+--- sysklogd-1.5.orig/debian/conffiles.klogd
++++ sysklogd-1.5/debian/conffiles.klogd
+@@ -0,0 +1,2 @@
++/etc/default/klogd
++/etc/init.d/klogd
+--- sysklogd-1.5.orig/debian/dummy
++++ sysklogd-1.5/debian/dummy
+@@ -0,0 +1,4 @@
++Do not remove this file or your log files won't be rotated anymore.
++This is a control file to ensure that the sysklogd package is
++installed so that the cronjobs don't have to parse the dpkg database
++for each run.
+--- sysklogd-1.5.orig/debian/preinst.klogd
++++ sysklogd-1.5/debian/preinst.klogd
+@@ -0,0 +1,21 @@
++#! /bin/sh
++
++set -e
++
++dpkg --assert-support-predepends
++
++if [ "$1" = "upgrade" -a -f /etc/init.d/klogd ]; then
++    if [ -f /etc/init.d/klogd ]
++    then
++	set +e
++	if [ -x /usr/sbin/invoke-rc.d ]
++	then
++	    invoke-rc.d klogd stop
++	else
++	    sh /etc/init.d/klogd stop
++	fi
++	set -e
++    fi
++fi
++
++exit 0
+--- sysklogd-1.5.orig/debian/rc
++++ sysklogd-1.5/debian/rc
+@@ -0,0 +1,154 @@
++#! /bin/sh
++# /etc/init.d/sysklogd: start the system log daemon.
++
++### BEGIN INIT INFO
++# Provides:             sysklogd
++# Required-Start:       $remote_fs $time
++# Required-Stop:        $remote_fs $time
++# Should-Start:         $network
++# Should-Stop:          $network
++# Default-Start:        2 3 4 5
++# Default-Stop:         0 1 6
++# Short-Description:    System logger
++### END INIT INFO
++
++PATH=/bin:/usr/bin:/sbin:/usr/sbin
++
++pidfile=/var/run/syslogd.pid
++binpath=/sbin/syslogd
++
++test -x $binpath || exit 0
++
++# syslogd options should be set in /etc/default/syslogd
++SYSLOGD=""
++
++# user to run syslogd as - this can overriden in /etc/default/syslogd
++USER="syslog"
++
++test ! -r /etc/default/syslogd || . /etc/default/syslogd
++
++# Figure out under which user syslogd should be running as
++if echo ${SYSLOGD} | grep -q '^.*-u[[:space:]]*\([[:alnum:]]*\)[[:space:]]*.*$'
++then
++	# A specific user has been set on the command line, try to extract it.
++	USER=$(echo ${SYSLOGD} | sed -e 's/^.*-u[[:space:]]*\([[:alnum:]]*\)[[:space:]]*.*$/\1/')
++else
++	# By default, run syslogd under the syslog user
++	SYSLOGD="${SYSLOGD} -u ${USER}"
++fi
++
++# Unable to get the user under which syslogd should be running, stop.
++if [ -z "${USER}" ]
++then
++	log_failure_msg "Unable to get syslog user"
++	exit 1
++fi
++
++. /lib/lsb/init-functions
++
++create_xconsole()
++{
++    # Only proceed if /dev/xconsole is used at all
++    if ! grep -q '^[^#].*/dev/xconsole' /etc/syslog.conf
++    then
++	return
++    fi
++
++    if [ ! -e /dev/xconsole ]; then
++	mknod -m 640 /dev/xconsole p
++    else
++	chmod 0640 /dev/xconsole
++    fi
++
++    chown ${USER}:adm /dev/xconsole
++    test ! -x /sbin/restorecon || /sbin/restorecon /dev/xconsole
++
++}
++
++fix_log_ownership()
++{
++	for l in `syslogd-listfiles -a`
++	do
++		chown ${USER}:adm $l
++	done
++}
++
++running()
++{
++    # No pidfile, probably no daemon present
++    #
++    if [ ! -f $pidfile ]
++    then
++	return 1
++    fi
++
++    pid=`cat $pidfile`
++
++    # No pid, probably no daemon present
++    #
++    if [ -z "$pid" ]
++    then
++	return 1
++    fi
++
++    if [ ! -d /proc/$pid ]
++    then
++	return 1
++    fi
++
++    cmd=`cat /proc/$pid/cmdline | tr "\000" "\n"|head -n 1`
++
++    # No syslogd?
++    #
++    if [ "$cmd" != "$binpath" ]
++    then
++	return 1
++    fi
++
++    return 0
++}
++
++case "$1" in
++  start)
++    log_begin_msg "Starting system log daemon..."
++    create_xconsole
++    fix_log_ownership
++    start-stop-daemon --start --quiet --pidfile $pidfile --name syslogd --startas $binpath -- $SYSLOGD
++    log_end_msg $?
++    if [ -d /run/sendsigs.omit.d ]; then
++	rm -f /run/sendsigs.omit.d/sysklogd
++	ln -s $pidfile /run/sendsigs.omit.d/sysklogd
++    fi
++    ;;
++  stop)
++    log_begin_msg "Stopping system log daemon..."
++    start-stop-daemon --stop --quiet --pidfile $pidfile --name syslogd
++    log_end_msg $?
++    ;;
++  reload|force-reload)
++    log_begin_msg "Reloading system log daemon..."
++    fix_log_ownership
++    start-stop-daemon --stop --quiet --signal 1 --pidfile $pidfile --name syslogd
++    log_end_msg $?
++    ;;
++  restart)
++    log_begin_msg "Restarting system log daemon..."
++    start-stop-daemon --stop --retry 5 --quiet --pidfile $pidfile --name syslogd
++    fix_log_ownership
++    start-stop-daemon --start --quiet --pidfile $pidfile --name syslogd --startas $binpath -- $SYSLOGD
++    log_end_msg $?
++    ;;
++  reload-or-restart)
++    if running
++    then
++	$0 reload
++    else
++	$0 start
++    fi
++    ;;
++  *)
++    log_success_msg "Usage: /etc/init.d/sysklogd {start|stop|reload|restart|force-reload|reload-or-restart}"
++    exit 1
++esac
++
++exit 0
+--- sysklogd-1.5.orig/debian/default.klogd
++++ sysklogd-1.5/debian/default.klogd
+@@ -0,0 +1,15 @@
++#
++# top configuration file for klogd
++#
++
++#
++# Full documentation of possible arguments are found in the manpage
++# klogd(8).
++#
++
++#
++# Use KLOGD="-k /boot/System.map-$(uname -r)" to specify System.map
++# -c 4 to alter the kernel console log level (deprecated)
++#   use sysctl instead
++#
++#KLOGD="-P /var/run/klogd/kmsg -x"
+--- sysklogd-1.5.orig/debian/cron.weekly
++++ sysklogd-1.5/debian/cron.weekly
+@@ -0,0 +1,46 @@
++#! /bin/sh
++
++# sysklogd	Cron script to rotate system log files weekly.
++#
++#		If you want to rotate logfiles daily, edit
++#		this script and /etc/cron.daily/sysklogd to get
++#		the logfiles in sync (they must not occur in both
++#		files).
++#
++#		This is a configration file.  You are invited to edit
++#		it and maintain it on your own.  You'll have to do
++#		that if you don't like the default policy
++#		wrt. rotating logfiles (i.e. with large logfiles
++#		weekly and daily rotation may interfere).  If you edit
++#		this file and don't let dpkg upgrade it, you have full
++#		control over it.  Please read the manpage to
++#		syslogd-listfiles.
++#
++#		Written by Ian A. Murdock <imurdock@debian.org>.
++#		$Id: cron.weekly,v 1.11 2007-05-28 16:33:34 joey Exp $
++
++test -x /usr/sbin/syslogd-listfiles || exit 0
++test -x /sbin/syslogd || exit 0
++test -f /usr/share/sysklogd/dummy || exit 0
++
++set -e
++
++USER=$(ps -C syslogd -o user= | head -n 1)
++[ -z "${USER}" ] && USER="root" || true
++
++cd /var/log
++
++logs=$(syslogd-listfiles --weekly)
++
++test -n "$logs" || exit 0
++
++for LOG in $logs
++do
++   if [ -s $LOG ]; then
++      savelog -g adm -m 640 -u ${USER} -c 4 $LOG >/dev/null
++   fi
++done
++
++# Restart syslogd
++#
++/etc/init.d/sysklogd reload-or-restart > /dev/null
+--- sysklogd-1.5.orig/debian/postinst
++++ sysklogd-1.5/debian/postinst
+@@ -0,0 +1,77 @@
++#! /bin/sh
++
++set -e
++
++if [ "$1" = "configure" ]
++then
++    case $2 in
++    1.4.1-18|1.4.1-19|1.4.1-20|1.4.1-21|1.5-1)
++        chmod 644 /etc/default/syslogd
++        ;;
++    esac
++
++    # Prepare for takeover of the host
++    if [ -z "$2" ]
++    then
++	if [ ! -e /var/log/news ] \
++	    && grep -q '^[^#].*/var/log/news/' /etc/syslog.conf \
++	    && grep -q ^news: /etc/passwd \
++	    && grep -q ^news: /etc/group 
++	then
++	    mkdir /var/log/news
++	    chmod 2755 /var/log/news
++	    chown news:news /var/log/news
++	fi
++
++	# Create logfiles with correct file modes
++	if [ -z "$2" ]
++	then
++	    for LOG in `syslogd-listfiles --all`
++	    do
++	      if [ ! -f $LOG ]
++	      then
++		  touch $LOG
++	      fi
++	      chown root:adm $LOG
++	      chmod 640 $LOG
++	    done
++	fi
++    fi
++
++    if [ -f /etc/init.d/sysklogd -a -n "$2" ]
++    then
++	set +e
++	if [ -x /usr/sbin/invoke-rc.d ]
++	then
++	    invoke-rc.d sysklogd stop
++	else
++	    sh /etc/init.d/sysklogd stop
++	fi
++	set -e
++    fi
++
++    update-rc.d sysklogd defaults 10 90 >/dev/null
++
++    adduser --system --group --no-create-home --quiet syslog
++
++    # Migrate from /lib/init/rw to /run prior to restart
++    if [ -f /lib/init/rw/sendsigs.omit.d/sysklogd ]; then 
++	mv /lib/init/rw/sendsigs.omit.d/sysklogd /run/sendsigs.omit.d/sysklogd 
++    fi
++
++    # restarting daemon
++    #
++    if [ -f /etc/init.d/sysklogd ]
++    then
++	set +e
++	if [ -x /usr/sbin/invoke-rc.d ]
++	then
++	    invoke-rc.d sysklogd start
++	else
++	    sh /etc/init.d/sysklogd start
++	fi
++	set -e
++    fi
++fi
++
++exit 0
+--- sysklogd-1.5.orig/debian/control
++++ sysklogd-1.5/debian/control
+@@ -0,0 +1,33 @@
++Source: sysklogd
++Section: admin
++Priority: extra
++Maintainer: Martin Schulze <joey@debian.org>
++Build-Depends: linux-kernel-headers
++Standards-Version: 3.5.10
++
++Package: sysklogd
++Architecture: any
++Section: admin
++Depends: ${shlibs:Depends}, klogd | linux-kernel-log-daemon, adduser, lsb-base, initscripts (>= 2.88dsf-13.3)
++Conflicts: syslogd
++Provides: syslogd, system-log-daemon
++Replaces: syslogd
++Description: System Logging Daemon
++ This package implements the system log daemon, which is an enhanced
++ version of the standard Berkeley utility program. It is responsible
++ for providing logging of messages received from programs and facilities
++ on the local host as well as from remote hosts.
++
++Package: klogd
++Architecture: any
++Section: admin
++Depends: ${shlibs:Depends}, sysklogd | system-log-daemon, adduser, lsb-base, initscripts (>= 2.88dsf-13.3)
++Conflicts: sysklogd (<= 1.3-33)
++Provides: linux-kernel-log-daemon
++Replaces: sysklogd
++Description: Kernel Logging Daemon
++ The klogd daemon listens to kernel message sources and is responsible
++ for prioritizing and processing operating system messages.  The klogd
++ daemon can run as a client of syslogd or optionally as a standalone
++ program.  Klogd can now be used to decode EIP addresses if it can
++ determine a System.map file.
+--- sysklogd-1.5.orig/debian/postrm.klogd
++++ sysklogd-1.5/debian/postrm.klogd
+@@ -0,0 +1,12 @@
++#! /bin/sh
++
++set -e
++
++if [ "$1" = "purge" ]
++then
++  deluser --system --quiet klog || true
++  update-rc.d klogd remove >/dev/null
++
++  test ! -f /run/sendsigs.omit.d/klogd || \
++      rm -f /run/sendsigs.omit.d/klogd
++fi
+--- sysklogd-1.5.orig/debian/copyright
++++ sysklogd-1.5/debian/copyright
+@@ -0,0 +1,50 @@
++This is the Debian GNU/Linux prepackaged version of Linux' system and
++kernel logging daemons.
++
++This package was put together by Martin Schulze <joey@debian.org>,
++from sources obtained from:
++
++  http://www.infodrom.org/projects/sysklogd/download/sysklogd-1.4.1.tar.gz
++
++Recent versions are Debian versions that may be also be found at
++
++  http://www.infodrom.org/projects/sysklogd/
++
++syslogd is under Berkeley copyright, klogd is under GPL.
++
++   Copyright (C) 1994-96 Greg Wettstein <greg@wind.enjellic.com>
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; version 2 dated June, 1991.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program;  if not, write to the Free Software
++   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111, USA.
++
++On Debian GNU/Linux systems, the complete text of the GNU General
++Public License can be found in `/usr/share/common-licenses/GPL'.
++
++There is a mailing list covering this package and syslog in general.
++The lists address is infodrom-sysklogd@lists.infodrom.org .  
++
++To subscribe to this list,
++
++ . send a mail to infodrom-sysklogd-request@lists.infodrom.org with
++   the word "subscribe" as subject, or
++
++ . send a mail to majordomo@lists.infodrom.org with the body of
++   "subscribe infodrom-sysklogd".
++
++The list will be archived publically at
++<http://www.infodrom.org/Mail-Archive/infodrom-sysklogd>.
++
++The source of the Debian package is managed through CVS.  It is publically
++available at <http://cvs.infodrom.org/sysklogd/?cvsroot=debian> or as
++<:pserver:anonymous@cvs.infodrom.org/var/cvs/debian/sysklogd/>.
++
+--- sysklogd-1.5.orig/debian/NMU-Disclaimer
++++ sysklogd-1.5/debian/NMU-Disclaimer
+@@ -0,0 +1,45 @@
++Non Maintainer Upload of this Package
++-------------------------------------
++
++If you plan to work on an NMU for this package, read the following
++closely.  It can save you and me some grief.
++
++ 1. At first, contact the maintainer (i.e. send a mail to
++    joey@debian.org, do not cc or bounce a mail, send a plain mail,
++    not copied to any mailing list or the BTS) and ask about the
++    status of the bug you are considering to work on.
++
++ 2. In this mail include all information relevant for this problem,
++    i.e. include a description of the bug and not only its bug
++    number.
++
++ 3. If the maintainer is not able or willing to fix the problem or
++    does not respond within four days, continue with step 4.
++
++ 4. Work on the bug and prepare a patch.  Do not upload into the
++    Debian archive.
++
++ 5. Send the entire patch, together with enough explanations, to the
++    maintainer for reviewing and ask him for permission of an NMU
++    using this patch.
++
++ 6. IF AND ONLY IF the maintainer approves the patch (or doesn't
++    respond within four days), upload the NMU to the incoming
++    directory and send the patch to the BTS.  If the NMU is not
++    approved, go back to 4. or add the NMU to your homepage, but do
++    not upload it to the Debian archive.
++
++ 7. Properly sized and well-written patches sent to the BTS are always
++    appreciated, even if they are rejected later.  They demonstrate a
++    potential solution which could probably improved into a real
++    solution.
++
++ 8. NEVER change the way a package is maintained in an NMU, i.e. don't
++    remove dh_* stuff or switch to dh_* respectively.  This rule
++    applies to all NMU's, not only to an NMU for this package.
++
++These rules always apply.  They even apply if somebody declares NMUs
++as ok and reduces regular NMU rules to a delay of zero days.  Unless
++I'm on vacation or on a show I am reachable via mail, so there is
++hardly a reason not to contact me.
++
+--- sysklogd-1.5.orig/debian/cron.daily.klogd
++++ sysklogd-1.5/debian/cron.daily.klogd
+@@ -0,0 +1,47 @@
++#! /bin/sh
++
++binpath=/sbin/klogd
++pidfile=/var/run/klogd.pid
++
++test -x $binpath || exit 0
++
++
++running()
++{
++    # No pidfile, probably no daemon present
++    #
++    if [ ! -f $pidfile ]
++    then
++	return 1
++    fi
++
++    pid=`cat $pidfile`
++
++    # No pid, probably no daemon present
++    #
++    if [ -z "$pid" ]
++    then
++	return 1
++    fi
++
++    if [ ! -d /proc/$pid ]
++    then
++	return 1
++    fi
++
++    cmd=`cat /proc/$pid/cmdline | tr "\000" "\n"|head -n 1`
++
++    # No syslogd?
++    #
++    if [ "$cmd" != "$binpath" ]
++    then
++	return 1
++    fi
++
++    return 0
++}
++
++if ! running
++then
++    sh /etc/init.d/klogd start > /dev/null
++fi
+--- sysklogd-1.5.orig/debian/rc.klogd
++++ sysklogd-1.5/debian/rc.klogd
+@@ -0,0 +1,67 @@
++#! /bin/sh
++# /etc/init.d/klogd: start the kernel log daemon.
++
++### BEGIN INIT INFO
++# Provides:             klogd
++# Required-Start:       $syslog
++# Required-Stop:        $syslog
++# Default-Start:        2 3 4 5
++# Default-Stop:         0 1 6
++# Short-Description:    Kernel logger
++### END INIT INFO
++
++PATH=/bin:/usr/bin:/sbin:/usr/sbin
++
++pidfile=/var/run/klogd/klogd.pid
++kmsgpipe=/var/run/klogd/kmsg
++kmsgpidfile=/var/run/klogd/kmsgpipe.pid
++binpath=/sbin/klogd
++
++test -f $binpath || exit 0
++
++. /lib/lsb/init-functions
++
++#  Use KLOGD="-k /boot/System.map-$(uname -r)" to specify System.map
++#
++KLOGD="-P $kmsgpipe"
++
++test ! -r /etc/default/klogd || . /etc/default/klogd
++
++case "$1" in
++  start)
++    log_begin_msg "Starting kernel log daemon..."
++    # create klog-writeable pid and fifo directory
++    mkdir -p /var/run/klogd
++    chown klog:klog /var/run/klogd
++    mkfifo -m 700 $kmsgpipe
++    chown klog:klog $kmsgpipe
++ 
++    # shovel /proc/kmsg to pipe readable by klogd user
++    start-stop-daemon --start --pidfile $kmsgpidfile --exec /bin/dd -b -m -- bs=1 if=/proc/kmsg of=$kmsgpipe
++ 
++    # start klogd as non-root with reading from kmsgpipe
++    start-stop-daemon --start --quiet --chuid klog --exec $binpath -- $KLOGD
++    log_end_msg $?
++    ;;
++  stop)
++    log_begin_msg "Stopping kernel log daemon..."
++    start-stop-daemon --stop --quiet --retry 3 --oknodo --exec $binpath --pidfile $pidfile
++    # stop kmsgpipe
++    start-stop-daemon --stop --quiet --oknodo --pidfile $kmsgpidfile
++    rm -f $kmsgpidfile $kmsgpipe
++    log_end_msg $?
++    ;;
++  restart|force-reload)
++    $0 stop
++    sleep 1
++    $0 start
++    ;;
++  status)
++    status_of_proc -p $pidfile $binpath klogd && exit 0 || exit $?
++    ;;
++  *)
++    log_success_msg "Usage: /etc/init.d/klogd {start|stop|restart|force-reload|status}"
++    exit 1
++esac
++
++exit 0
+--- sysklogd-1.5.orig/debian/prerm
++++ sysklogd-1.5/debian/prerm
+@@ -0,0 +1,19 @@
++#! /bin/sh
++
++set -e
++
++if [ \( "$1" = "upgrade" -o "$1" = "remove" \) -a -L /usr/doc/sysklogd ]
++then
++    rm -f /usr/doc/sysklogd
++fi
++
++if [ "$1" = "purge"  -o "$1" = "remove" ]
++then
++    if [ -x /usr/sbin/invoke-rc.d ]
++    then
++	invoke-rc.d sysklogd stop
++    else
++	sh /etc/init.d/sysklogd stop
++    fi
++fi
++
+--- sysklogd-1.5.orig/debian/conffiles
++++ sysklogd-1.5/debian/conffiles
+@@ -0,0 +1,5 @@
++/etc/default/syslogd
++/etc/syslog.conf
++/etc/init.d/sysklogd
++/etc/cron.daily/sysklogd
++/etc/cron.weekly/sysklogd
+--- sysklogd-1.5.orig/debian/rules
++++ sysklogd-1.5/debian/rules
+@@ -0,0 +1,172 @@
++#! /usr/bin/make -f
++
++#   Copyright 1994-98,2001   joey@infodrom.org (Martin Schulze)
++#
++#   This program is free software; you can redistribute it and/or modify
++#   it under the terms of the GNU General Public License as published by
++#   the Free Software Foundation; version 2 dated June, 1991.
++#
++#   This program is distributed in the hope that it will be useful,
++#   but WITHOUT ANY WARRANTY; without even the implied warranty of
++#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++#   GNU General Public License for more details.
++#
++#   You should have received a copy of the GNU General Public License
++#   along with this program;  if not, write to the Free Software
++#   Foundation Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307, USA
++#
++SHELL=/bin/bash
++
++# The name and version of the source
++#
++source = $(shell grep "^Source: " debian/control|head -n 1|sed 's/Source: \(.*\)/\1/g')
++package = $(shell grep "^Package: " debian/control|head -n 1|sed 's/Package: \(.*\)/\1/g')
++version = $(shell grep "^$(source) " debian/changelog|head -n 1 |sed 's/.*(\(.*\)\-[^\-]*).*/\1/g')
++revision = $(shell grep "^$(source) " debian/changelog|head -n 1 |sed 's/.*([^\-]*\-\(.*\)).*/\1/g')
++
++installbin = install -g root -o root -m 755
++installdoc = install -g root -o root -m 644
++
++ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
++CFLAGS = -g -O2 -Wall $(shell getconf LFS_CFLAGS)
++else
++CFLAGS = -O2 -Wall $(shell getconf LFS_CFLAGS)
++endif
++ifeq (,$(findstring nostrip,$(DEB_BUILD_OPTIONS)))
++STRIP = -s
++endif
++
++build:
++	$(MAKE) DEB="-DDEBRELEASE=\\\"$(revision)\\\"" \
++		SKFLAGS="$(CFLAGS) -DSYSV -fomit-frame-pointer -fno-strength-reduce" \
++		LDFLAGS="" KLOGD_DEFINES='-DPIDFILE_DIR=\"/var/run/klogd/\"'
++	pod2man --section=8 --lax --center="Debian GNU/Linux" \
++	  --release="Debian Project" debian/syslog-facility.pod \
++	  > syslog-facility.8
++	(cat README.linux; printf "\n\n"; cat README.1st; \
++	  printf "\n\nThe following important changes have been reported by the developers:\n\n"; \
++	  cat NEWS debian/readme) \
++	  > readme.txt
++	(cat debian/copyright; \
++	  printf "Syslogd stays under the following copyright:\n\n"; \
++	    sed -e '/^$$/,$$d' < syslogd.c; \
++	  printf "\nKlogd has the following copyright notice:\n\n"; \
++	    sed -e '/^$$/,$$d' < klogd.c ) \
++	  > copyright
++	touch stamp-build
++
++clean: debclean
++	rm -f stamp-build
++	$(MAKE) clobber
++	rm -rf *~ debian/*~ syslog-facility.8 readme.txt copyright
++
++debclean:
++# Cleans debian binary directories to allow binary creation
++	rm -rf debian/tmp.sysklogd debian/tmp.klogd
++	rm -f debian/{files,substvars}
++
++binary-indep:
++# Nothing to be done here
++
++binary-arch-sysklogd: debclean
++	test -f stamp-build || $(MAKE) -f debian/rules build
++	$(installbin) -d debian/tmp.sysklogd/DEBIAN
++	chown -R root:root debian/tmp.sysklogd
++	chmod -R g-ws debian/tmp.sysklogd
++	$(installbin) -d debian/tmp.sysklogd/usr/share/doc/$(package)
++	$(installbin) debian/{postinst,postrm,prerm} debian/tmp.sysklogd/DEBIAN/
++	$(installdoc) debian/conffiles debian/tmp.sysklogd/DEBIAN/
++	$(installdoc) debian/changelog debian/tmp.sysklogd/usr/share/doc/$(package)/changelog.Debian
++	#
++	$(installbin) -d debian/tmp.sysklogd/usr/share/$(package)
++	$(installdoc) debian/dummy debian/tmp.sysklogd/usr/share/$(package)
++	#
++	$(installdoc) copyright debian/tmp.sysklogd/usr/share/doc/$(package)/
++	$(installdoc) readme.txt debian/tmp.sysklogd/usr/share/doc/$(package)/
++	$(installdoc) CHANGES debian/tmp.sysklogd/usr/share/doc/$(package)/changelog
++	gzip -9f debian/tmp.sysklogd/usr/share/doc/$(package)/{changelog.Debian,changelog,readme.txt}
++	#
++	$(installbin) -d debian/tmp.sysklogd/{usr/,}sbin
++	$(installbin) $(STRIP) syslogd debian/tmp.sysklogd/sbin
++	$(installbin) debian/syslogd-listfiles debian/tmp.sysklogd/usr/sbin
++	$(installbin) debian/syslog-facility debian/tmp.sysklogd/usr/sbin
++	#
++	$(installbin) -d debian/tmp.sysklogd/etc/{init.d,cron.{daily,weekly},default}
++	$(installdoc) debian/default debian/tmp.sysklogd/etc/default/syslogd
++	$(installbin) debian/rc debian/tmp.sysklogd/etc/init.d/sysklogd
++	$(installbin) debian/cron.weekly debian/tmp.sysklogd/etc/cron.weekly/sysklogd
++	$(installbin) debian/cron.daily debian/tmp.sysklogd/etc/cron.daily/sysklogd
++	$(installdoc) debian/syslog.conf debian/tmp.sysklogd/etc/syslog.conf
++	$(installbin) -d debian/tmp.sysklogd/var/log
++	#
++	$(installbin) -d debian/tmp.sysklogd/usr/share/man/man{5,8}
++	$(installdoc) syslog.conf.5 debian/tmp.sysklogd/usr/share/man/man5
++	$(installdoc) {sysklogd,syslogd,debian/syslogd-listfiles}.8 debian/tmp.sysklogd/usr/share/man/man8
++	$(installdoc) syslog-facility.8 debian/tmp.sysklogd/usr/share/man/man8
++	gzip -9 debian/tmp.sysklogd/usr/share/man/man?/*
++	#
++	dpkg-shlibdeps debian/tmp.sysklogd/sbin/syslogd
++	dpkg-gencontrol -psysklogd -Pdebian/tmp.sysklogd -isp
++	dpkg --build debian/tmp.sysklogd ..
++
++binary-arch-klogd: debclean
++	test -f stamp-build || $(MAKE) -f debian/rules build
++	$(installbin) -d debian/tmp.klogd/DEBIAN
++	chown -R root:root debian/tmp.klogd
++	chmod -R g-ws debian/tmp.klogd
++	$(installbin) -d debian/tmp.klogd/usr/share/doc/klogd
++	$(installbin) debian/postinst.klogd debian/tmp.klogd/DEBIAN/postinst
++	$(installbin) debian/postrm.klogd debian/tmp.klogd/DEBIAN/postrm
++	$(installbin) debian/prerm.klogd debian/tmp.klogd/DEBIAN/prerm
++	$(installdoc) debian/conffiles.klogd debian/tmp.klogd/DEBIAN/conffiles
++	$(installdoc) debian/changelog debian/tmp.klogd/usr/share/doc/klogd/changelog.Debian
++	#
++	$(installdoc) copyright debian/tmp.klogd/usr/share/doc/klogd/
++	$(installdoc) readme.txt debian/tmp.klogd/usr/share/doc/klogd/
++	$(installdoc) CHANGES debian/tmp.klogd/usr/share/doc/klogd/changelog
++	gzip -9f debian/tmp.klogd/usr/share/doc/klogd/{changelog.Debian,changelog,readme.txt}
++	$(installdoc) modutils.patch debian/tmp.klogd/usr/share/doc/klogd
++	#
++	$(installbin) -d debian/tmp.klogd/sbin
++	$(installbin) $(STRIP) klogd debian/tmp.klogd/sbin
++	#
++	$(installbin) -d debian/tmp.klogd/etc/{init.d,default}
++	$(installdoc) debian/default.klogd debian/tmp.klogd/etc/default/klogd
++	$(installbin) debian/rc.klogd debian/tmp.klogd/etc/init.d/klogd
++	#
++	$(installbin) -d debian/tmp.klogd/usr/share/man/man8
++	$(installdoc) klogd.8 debian/tmp.klogd/usr/share/man/man8
++	gzip -9 debian/tmp.klogd/usr/share/man/man?/*
++	#
++	dpkg-shlibdeps debian/tmp.klogd/sbin/klogd
++	dpkg-gencontrol -pklogd -Pdebian/tmp.klogd -isp
++	dpkg --build debian/tmp.klogd ..
++
++binary-arch: binary-arch-sysklogd binary-arch-klogd
++
++binary: binary-indep binary-arch
++
++source diff:
++	@echo >&2 'source and diff are obsolete - use dpkg-source -b' or dsc; false
++
++dsc:
++	-test -d debian/tmp.sysklogd -o -d debian/tmp.klogd \
++		&& $(MAKE) -f debian/rules clean
++	if [ ! -f ../$(source)_$(version).orig.tar.gz -a -f ../orig/$(source)_$(version).orig.tar.gz ]; \
++	then \
++	  ln -s orig/$(source)_$(version).orig.tar.gz ../$(source)_$(version).orig.tar.gz; \
++	  touch /tmp/stamp-$(source)-link; \
++	fi; \
++	cd .. && dpkg-source -b $(source)-$(version)
++	if [ -f /tmp/stamp-$(source)-link ]; then \
++	  rm ../$(source)_$(version).orig.tar.gz /tmp/stamp-$(source)-link; \
++	fi
++
++checkroot:
++	$(checkdir)
++	test root = "`whoami`"
++
++dist: binary dsc
++
++.PHONY: binary binary-arch binary-indep clean checkroot
++
+--- sysklogd-1.5.orig/debian/readme
++++ sysklogd-1.5/debian/readme
+@@ -0,0 +1,44 @@
++
++Additional information about system logging
++-------------------------------------------
++
++ . When logging into a fifo syslogd will stop loggin into this
++   logfile if no process is reading it and thus the buffer is filled
++   up.  Buffer size can be adjusted through the kernel.
++
++ . When using the Perl5 Sys::Syslog module (use Sys::Syslog;) to
++   provide logging to your Perl programs, please notice that since it
++   will open a UDP connection to the local syslogd you'll need to have
++   remote receiption enabled.
++
++   Joey Hess teaches us how to change this behaviour and switch to
++   using the Unix domain socket.  After the opening with "use" you
++   have to add "Sys::Syslog::setlogsock('unix');".
++
++   The default behaviour might change in future releases of Perl.
++
++Modifying the kernel console log level
++--------------------------------------
++
++  There are two ways to alter the kernel console log level.  This
++  setting controls whether log messages from the kernel should appear
++  on the system console or not.
++
++  In the past, klogd had to do this with the -c parameter.  Using '-c
++  4' will set the log level of console messages to 4 and only display
++  warnings and errors but not regular debug or information messages.
++
++  This behaviour is deprecated and hencely not enforced anymore via
++  the RC script of klogd.  Instead sysctl(8) should be used as
++  interface to various kernel variables.  These can be stored
++  non-volatile in /etc/sysctl.conf.
++
++  The prevent the kernel to flood the system console and to achieve
++  the same behaviour of '-c 4' simply add the following to the
++  configuration file and let sysctl set this kernel parameter upon
++  system boot.
++
++  kernel/printk = 4 4 1 7
++
++  More information can be found in Documentation/sysctl/kernel.txt in
++  the kernel source and proc(5).
+--- sysklogd-1.5.orig/debian/technical
++++ sysklogd-1.5/debian/technical
+@@ -0,0 +1,10 @@
++  Some technical information - unsorted
++  -------------------------------------
++
++  1. Logfiles in syslogd
++
++     As of version 1.3 syslogd doesn't come with a static array of
++     logfiles.  Although the logfiles are still organized in an array.
++     This array is initialized when the configuration file (default is
++     /etc/syslog.conf) is read.  Whenever a new line is read the
++     length of the array it prolongued.
+--- sysklogd-1.5.orig/debian/prerm.klogd
++++ sysklogd-1.5/debian/prerm.klogd
+@@ -0,0 +1,19 @@
++#! /bin/sh
++
++set -e
++
++if [ \( "$1" = "upgrade" -o "$1" = "remove" \) -a -L /usr/doc/klogd ]
++then
++    rm -f /usr/doc/klogd
++fi
++
++if [ "$1" = "purge"  -o "$1" = "remove" ]
++then
++    if [ -x /usr/sbin/invoke-rc.d ]
++    then
++	invoke-rc.d klogd stop
++    else
++	sh /etc/init.d/klogd stop
++    fi
++fi
++
+--- sysklogd-1.5.orig/debian/syslog-facility.pod
++++ sysklogd-1.5/debian/syslog-facility.pod
+@@ -0,0 +1,58 @@
++=head1 NAME
++
++syslog-facility - Setup and remove LOCALx facility for sysklogd
++
++=head1 SYNOPSIS
++
++B<syslog-facility> B<set> I<set_of_priority> I<log_file>  ...
++
++B<syslog-facility> B<remove> I<facility>
++
++=head1 DESCRIPTION
++
++B<syslog-facility> can be used to setup a syslog facility and to remove
++it. The primary use of this perl script is to allow packages to
++automatically setup (and remove) a LOCALx facility. With the
++first argument beeing I<set>, it will output a string containing
++the first free LOCALx facility that has been assigned to your request :
++
++  # syslog-facility set all /var/log/sympa
++  local0
++
++This does mean that a line "local0.*	/var/log/sympa" has been
++added to the syslog.conf file. If no free LOCALx facility has been
++found, then it outputs "none" (with a end of line).
++
++You can use different set of priorities (most of what syslogd supports) :
++
++  # syslog-facility set 'all;!=debug;' /var/log/sympa '=debug' /var/log/sympa-d
++  local1
++
++Pay particular attention to shell escapes since ';','!' have special
++meanings for them. The syntax is similar to syslog.conf except that
++'*' must be replaced by 'all'.
++
++In that case you will have two lines added two the syslog.conf file :
++
++  local1.*;local1.!=debug	/var/log/sympa
++  local1.=debug			/var/log/sympa-d
++
++If the first argument is I<remove>, then it will remove all references
++to a precise LOCALx facility. Example :
++
++  # syslog-facility remove local1
++
++It will remove all references to the local1 facility. 
++
++=head1 BUGS
++
++The script doesn't know about multi-lines configuration (ie with '\').
++
++With a line like that "mail,local0.* /anything", "syslog-facility remove
++local0" would remove the entire line. It should not be a problem since
++lines installed by this script cannot use this syntax.
++
++=head1 SEE ALSO
++
++B<syslog.conf>(5), B<sysklogd>(8).
++ 
+--- sysklogd-1.5.orig/debian/syslog-facility
++++ sysklogd-1.5/debian/syslog-facility
+@@ -0,0 +1,140 @@
++#! /usr/bin/perl -w
++
++# Copyright 1998 Hertzog Raphaël
++# You can use this script under the term of the GPL v2 or later.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++# 
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++# 
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111, USA.
++
++my $conf_file = '/etc/syslog.conf';
++
++## BUGS :
++#  . This script doesn't know about multi-lines configuration (ie with '\')
++#  . With a line like that "mail,local0.* /anything" 
++#    "syslog-facility remove local0" would remove the entire line
++#    => should not be a problem since lines installed by this script
++#    cannot use such syntax
++##
++
++## Nothing to modify after this line ##
++
++my $command = lc(shift);
++
++usage() if ($command !~ /^(?:set|remove)$/); 
++usage() if (not scalar(@ARGV));
++
++if ($command eq "set")
++{
++    usage() if (int(scalar(@ARGV) / 2) != scalar(@ARGV) / 2);
++    # find a free localx facility
++    my $facility = get_first_free_facility();
++    # if none stop immediately
++    if ($facility eq "none") {
++	print "none\n";
++	exit 1;
++    }
++    # ok append the lines asked
++    open (CONF, ">>$conf_file") || 
++        die "Can't open $conf_file in write mode: $!\n";
++    my ($pri,$file,$line);
++    while (defined($pri = shift)) {
++	$file = shift;
++	$line = "";
++	foreach (split(/;/,$pri)) {
++	    $_ =~ s/all/*/g;
++	    $line .= ";" if ($line);
++	    $line .= "$facility.$_";
++	}
++	$line .= "\t\t$file\n";
++	print CONF $line;
++    }
++    close CONF;
++    print "$facility\n";
++    exit 0;
++
++} elsif ($command eq "remove") {
++
++    my $facility = lc(shift);
++    my ($left,$file,$line);
++    open (CONF, $conf_file) || die "Can't open $conf_file: $!\n";
++    open (CONFNEW, ">$conf_file.new")  || 
++	die "Can't open $conf_file.new in write mode: $!\n";
++    while (defined($_=<CONF>)) {
++	# Write all "simple" lines like empty lines and comments
++	if (/^\s*$/ or /^\s*#/ or /\\$/) {
++	    print CONFNEW $_;
++	    next;
++	}
++	# Otherwise look if the facility to remove appears in the line
++	if (/^\s*(\S+)\s+(\S+)\s*/) {
++	    $left = $1; $file = $2; chomp $file;
++	    # It doesn't appers => write
++	    if ($left !~ /$facility/i) {
++		print CONFNEW $_;
++		next;
++	    }
++	    # It appears => write a new line without the localx facility
++	    $line = "";
++	    foreach (split(/;/,$left)) {
++		if (not /$facility/i) {
++		    $line .= ";" if ($line);
++		    $line .= $_;
++		}
++	    }
++	    next if ($line eq "");
++	    $line .= "\t\t$file\n";
++	    print CONFNEW $line;
++	}
++    }
++    close CONFNEW;
++    close CONF;
++    rename ("$conf_file.new", "$conf_file");
++}
++
++sub get_first_free_facility {
++
++    my @facility = (0) x 8;
++    my ($left,$fac);
++    open(CONF, $conf_file) || die "Can't open $conf_file: $!\n";
++    while(defined($_=<CONF>))
++    {
++	next if (/^\s*$/);
++	next if (/^\s*#/);
++        next if (/\\$/);
++	next if (not /^\s*(\S+)\s+(\S+)\s*$/);
++	$left = $1;
++	foreach $fac (split(/;/,$left)) {
++	    $facility[$1]++ if ($fac =~ /local(\d)/i);
++	}
++    }
++    foreach $fac (0..7)	{
++	return "local$fac" if ($facility[$fac] == 0);
++    }
++    return "none";
++}
++
++sub usage {
++
++    die  "syslog-facility - Copyright (c) 1998 Hertzog Raphaël\n"
++	."Usage : $0 set <set_of_priority> <logfile> ... \n"
++	."        it returns the 'LOCALx' string you have the right to use.\n"
++	."        $0 remove <facility>\n"
++	."Example: $0 set all /var/log/all\n"
++	."         $0 set all\\;\\!=info /var/log/all-without-info\n"
++	."         $0 set =err /var/log/errors =warning /var/log/warn\n"
++	."         $0 remove LOCAL1\n";   
++}
++
++
++
+--- sysklogd-1.5.orig/debian/default
++++ sysklogd-1.5/debian/default
+@@ -0,0 +1,13 @@
++#
++# Top configuration file for syslogd
++#
++
++#
++# Full documentation of possible arguments are found in the manpage
++# syslogd(8).
++#
++
++#
++# For remote UDP logging use SYSLOGD="-r"
++#
++SYSLOGD=""
+--- sysklogd-1.5.orig/debian/preinst
++++ sysklogd-1.5/debian/preinst
+@@ -0,0 +1,21 @@
++#! /bin/sh
++
++set -e
++
++dpkg --assert-support-predepends
++
++if [ "$1" = "upgrade" -a -f /etc/init.d/sysklogd ]; then
++    if [ -f /etc/init.d/sysklogd ]
++    then
++	set +e
++	if [ -x /usr/sbin/invoke-rc.d ]
++	then
++	    invoke-rc.d sysklogd stop
++	else
++	    sh /etc/init.d/sysklogd stop
++	fi
++	set -e
++    fi
++fi
++
++exit 0
+--- sysklogd-1.5.orig/debian/postinst.klogd
++++ sysklogd-1.5/debian/postinst.klogd
+@@ -0,0 +1,50 @@
++#! /bin/sh
++
++set -e
++
++if [ "$1" = "configure" ]
++then
++
++    case $2 in
++    1.4.1-18|1.4.1-19|1.4.1-20|1.4.1-21|1.5-1)
++        chmod 644 /etc/default/klogd
++        ;;
++    esac
++
++    if [ -f /etc/init.d/klogd -a -n "$2" ]
++    then
++	set +e
++	if [ -x /usr/sbin/invoke-rc.d ]
++	then
++	    invoke-rc.d klogd stop
++	else
++	    sh /etc/init.d/klogd stop
++	fi
++	set -e
++    fi
++
++    update-rc.d klogd defaults 11 89 >/dev/null
++
++    adduser --system --quiet --group --no-create-home klog || true
++
++    # Migrate from /lib/init/rw to /run prior to restart
++    if [ -f /lib/init/rw/sendsigs.omit.d/klogd ]; then
++        mv /lib/init/rw/sendsigs.omit.d/klogd /run/sendsigs.omit.d/klogd
++    fi
++
++    # restarting daemon
++    #
++    if [ -f /etc/init.d/klogd ]
++    then
++	set +e
++	if [ -x /usr/sbin/invoke-rc.d ]
++	then
++	    invoke-rc.d klogd start
++	else
++	    sh /etc/init.d/klogd start
++	fi
++	set -e
++    fi
++fi
++
++exit 0

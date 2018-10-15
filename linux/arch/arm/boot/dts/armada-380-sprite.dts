@@ -1,0 +1,236 @@
+/*
+ * armada-380-sprite.dts -- device tree for Accelerated Concepts sprite
+ *
+ *  Copyright (C) 2014 Marvell
+ *  Copyright (C) 2016 Accelerated Concepts
+ *
+ * This file is dual-licensed: you can use it either under the terms
+ * of the GPL or the X11 license, at your option. Note that this dual
+ * licensing only applies to this file, and not this project as a
+ * whole.
+ *
+ *  a) This file is free software; you can redistribute it and/or
+ *     modify it under the terms of the GNU General Public License as
+ *     published by the Free Software Foundation; either version 2 of the
+ *     License, or (at your option) any later version.
+ *
+ *     This file is distributed in the hope that it will be useful
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ * Or, alternatively
+ *
+ *  b) Permission is hereby granted, free of charge, to any person
+ *     obtaining a copy of this software and associated documentation
+ *     files (the "Software"), to deal in the Software without
+ *     restriction, including without limitation the rights to use
+ *     copy, modify, merge, publish, distribute, sublicense, and/or
+ *     sell copies of the Software, and to permit persons to whom the
+ *     Software is furnished to do so, subject to the following
+ *     conditions:
+ *
+ *     The above copyright notice and this permission notice shall be
+ *     included in all copies or substantial portions of the Software.
+ *
+ *     THE SOFTWARE IS PROVIDED , WITHOUT WARRANTY OF ANY KIND
+ *     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ *     OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ *     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ *     HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
+ *     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ *     OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/dts-v1/;
+#include "armada-388.dtsi"
+
+/ {
+	model = "Accelerated Concepts sprite";
+	compatible = "accelerated,sprite", "marvell,armada388",
+		"marvell,armada385", "marvell,armada380";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x10000000>; /* 256 MB */
+	};
+
+	soc {
+		ranges = <MBUS_ID(0xf0, 0x01) 0 0xf1000000 0x100000
+			  MBUS_ID(0x01, 0x1d) 0 0xfff00000 0x100000
+			  MBUS_ID(0x09, 0x19) 0 0xf1100000 0x10000
+			  MBUS_ID(0x09, 0x15) 0 0xf1110000 0x10000>;
+
+		internal-regs {
+			serial@12000 {
+				status = "okay";
+			};
+
+			mdio@72004 {
+				phy0: ethernet-phy@0 {
+					reg = <1>;
+				};
+			};
+
+			ethernet@70000 {
+				status = "okay";
+				phy = <&phy0>;
+				phy-mode = "sgmii";
+			};
+
+			usb@58000 {
+				status = "ok";
+			};
+
+			usb3@f0000 {
+				status = "okay";
+			};
+
+			usb3@f8000 {
+				status = "okay";
+			};
+
+			gpio_leds {
+				compatible = "gpio-leds";
+				pinctrl-names = "default";
+				pinctrl-0 = <&rss1_led_pin>;
+
+				green_rss1_led {
+					label = "sprite:green:rss1";
+					gpios = <&gpio0 31 1>;
+					linux,default-trigger = "rss1";
+				};
+
+				green_rss2_led {
+					label = "sprite:green:rss2";
+					gpios = <&gpio0 29 1>;
+					linux,default-trigger = "rss2";
+				};
+
+				green_rss3_led {
+					label = "sprite:green:rss3";
+					gpios = <&gpio0 27 1>;
+					linux,default-trigger = "rss3";
+				};
+
+				green_rss4_led {
+					label = "sprite:green:rss4";
+					gpios = <&gpio0 26 1>;
+					linux,default-trigger = "rss4";
+				};
+
+				green_lte_led {
+					label = "sprite:green:lte";
+					gpios = <&gpio0 18 1>;
+					linux,default-trigger = "lte";
+				};
+
+				green_3g_led {
+					label = "sprite:green:3g";
+					gpios = <&gpio0 21 1>;
+					linux,default-trigger = "3g";
+				};
+
+				green_sim1_led {
+					label = "sprite:green:sim1";
+					gpios = <&gpio1 37 1>;
+					linux,default-trigger = "sim1";
+				};
+
+				green_sim2_led {
+					label = "sprite:green:sim2";
+					gpios = <&gpio0 24 1>;
+					linux,default-trigger = "sim2";
+				};
+			};
+		};
+	};
+};
+
+&nand_controller {
+	status = "okay";
+
+	nand@0 {
+		reg = <0>;
+		label = "pxa3xx_nand-0";
+		nand-rb = <0>;
+		marvell,nand-keep-config;
+		nand-on-flash-bbt;
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x00000000 0x00200000>;
+			};
+			partition@1 {
+				label = "u-boot-env";
+				reg = <0x00200000 0x00100000>;
+			};
+			partition@2 {
+				label = "log";
+				reg = <0x00300000 0x00200000>;
+			};
+			partition@3 {
+				label = "flash";
+				reg = <0x00500000 0>;
+			};
+			partition@4 {
+				label = "all";
+				reg = <0x00000000 0>;
+			};
+		};
+	};
+};
+
+&pinctrl {
+	rss1_led_pin: rss1-led-pin {
+		marvell,pins = "mpp31";
+		marvell,function = "gpio";
+	};
+
+	rss2_led_pin: rss2-led-pin {
+		marvell,pins = "mpp29";
+		marvell,function = "gpio";
+	};
+
+	rss3_led_pin: rss3-led-pin {
+		marvell,pins = "mpp27";
+		marvell,function = "gpio";
+	};
+
+	rss4_led_pin: rss4-led-pin {
+		marvell,pins = "mppp26";
+		marvell,function = "gpio";
+	};
+
+	lte_led_pin: lte-led-pin {
+		marvell,pins = "mppp18";
+		marvell,function = "gpio";
+	};
+
+	threeg_led_pin: threeg-led-pin {
+		marvell,pins = "mpp21";
+		marvell,function = "gpio";
+	};
+
+	sim1_led_pin: sim1-led-pin {
+		marvell,pins = "mpp37";
+		marvell,function = "gpio";
+	};
+
+	sim2_led_pin: sim2-led-pin {
+		marvell,pins = "mpp24";
+		marvell,function = "gpio";
+	};
+};

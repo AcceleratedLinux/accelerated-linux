@@ -1,0 +1,5 @@
+config LIB_LIBEVENT
+	bool "libevent"
+	help
+		libevent is an event notification library. It is meant to replace the
+		event loop found in event driven network servers.

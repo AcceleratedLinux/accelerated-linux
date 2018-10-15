@@ -1,0 +1,16 @@
+If the user requested a netmask of 0.0.0.0 then allow it.  This is
+useful to force a lease regardless of what subnet is on that interface.
+
+Index: dnsmasq-2.72/src/dhcp.c
+===================================================================
+--- dnsmasq-2.72.orig/src/dhcp.c
++++ dnsmasq-2.72/src/dhcp.c
+@@ -509,7 +509,7 @@
+  	context->netmask = netmask;
+       }
+       
+-      if (context->netmask.s_addr != 0 &&
++      if (((context->flags & CONTEXT_NETMASK) || context->netmask.s_addr != 0) &&
+ 	  is_same_net(local, context->start, context->netmask) &&
+ 	  is_same_net(local, context->end, context->netmask))
+ 	{

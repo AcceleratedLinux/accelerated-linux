@@ -1,0 +1,7 @@
+Makefile
+/brctl/brctl
+/bridge-utils.spec
+/config.log
+/config.status
+/configure.lineno
+/libbridge/config.h

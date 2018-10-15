@@ -1,0 +1,83 @@
+NetReach README
+---------------
+
+This is a random collection of notes I have made along the way to getting
+the NetReach board (Alfa/Hornet-UB) running a uClinux-dist image.
+
+By default we use and run the u-boot loader than is supplied with the unit.
+We do modify the u-boot environment variables and use a slightly different,
+but mosly compatible, MTD flash layout.
+
+-----------------------------------------------------------------------------
+
+To load an image from uboot command line using DHCP and TFTP do:
+
+    set bootargs board=NETREACH console=ttyATH0,115200 rd_start=0x81800000 rd_size=0x700000
+    set bootfile ukernel.bin
+    dhcp
+    tftpboot 0x817fffc0 urootfs.bin
+    bootm 0x81000000
+
+For a manual IP address setup do:
+
+    set bootargs board=NETREACH console=ttyATH0,115200 rd_start=0x81800000 rd_size=0x700000
+    set ipaddr A.B.C.D
+    set tftpip W.X.Y.Z
+    tftp 0x81000000 ukernel.bin
+    tftp 0x817fffc0 urootfs.bin
+    bootm 0x81000000
+
+-----------------------------------------------------------------------------
+
+The above load commands can be automated by putting them all into an
+environment variable, then "run"ing that variable.
+
+    set netload "set bootargs board=NETREACH console=ttyATH0,115200 rd_start=0x81800000 rd_size=0x700000 ; set bootfile ukernel.bin ; dhcp ; tftpboot 0x817fffc0 urootfs.bin ; bootm 0x81000000"
+    saveenv
+    run netload
+
+That "saveenv" means on subsequent reboots we only need to fo that "run"
+command.
+
+-----------------------------------------------------------------------------
+
+To program an image into flash for booting:
+From a running linux we can use the usual netflash command to program an
+image into the flash, for example:
+
+   netflash A.B.C.D image.bin
+
+We do need to have the u-boot environment variables set appropriately for
+direct flash booting. From the u-boot command line you would do:
+
+   set bootargs board=NETREACH console=ttyATH0,115200 root=/dev/mtdblock3
+   saveenv
+
+Or from within a running linux system you can do:
+
+   fw_setsenv bootargs "board=NETREACH console=ttyATH0,115200 root=/dev/mtdblock3"
+
+-----------------------------------------------------------------------------
+
+If you want to boot OpenWRT generated images then you would use bootargs
+like this. And the load and run the kernel and rootfs as above.
+
+    set bootargs board=HORNET-UB console=ttyATH0,115200 rd_start=0x81800000 rd_size=0x400000 mtdparts=ar7240-nor0:256k(u-boot),64k(u-boot-env),6144k(rootfs),1600k(uImage),64k(NVRAM),64k(ART) init=/bin/init
+
+-----------------------------------------------------------------------------
+
+For use with the NetReach board the u-boot environment should look something
+like this:
+
+bootdelay=4
+baudrate=115200
+ethaddr=0x00:0xaa:0xbb:0xcc:0xdd:0xee
+ethact=eth0
+netload=set bootargs board=NETREACH console=ttyATH0,115200 rd_start=0x81800000 rd_size=0x700000 ; set bootfile ukernel.bin ; dhcp ; tftpboot 0x817fffc0 urootfs.bin ; bootm 0x81000000
+bootcmd=bootm 0x9f650000
+stdin=serial
+stdout=serial
+stderr=serial
+bootargs=board=NETREACH console=ttyATH0,115200 root=/dev/mtdblock3
+
+-----------------------------------------------------------------------------

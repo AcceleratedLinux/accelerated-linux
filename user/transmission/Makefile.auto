@@ -1,0 +1,2 @@
+dir_$(CONFIG_USER_TRANSMISSION_DAEMON) += transmission
+dir_$(CONFIG_USER_TRANSMISSION_CLI) += transmission

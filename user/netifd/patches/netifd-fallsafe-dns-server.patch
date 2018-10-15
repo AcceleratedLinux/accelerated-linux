@@ -1,0 +1,33 @@
+Index: netifd/interface-ip.c
+===================================================================
+--- netifd.orig/interface-ip.c
++++ netifd/interface-ip.c
+@@ -1177,6 +1177,7 @@ interface_write_resolv_conf(void)
+ 	char *path = alloca(strlen(resolv_conf) + 5);
+ 	FILE *f;
+ 	uint32_t crcold, crcnew;
++	bool have_dns_server = false;
+ 
+ 	sprintf(path, "%s.tmp", resolv_conf);
+ 	unlink(path);
+@@ -1196,11 +1197,20 @@ interface_write_resolv_conf(void)
+ 		    vlist_simple_empty(&iface->config_ip.dns_servers))
+ 			continue;
+ 
++		if (!vlist_simple_empty(&iface->config_ip.dns_servers) ||
++		    (!iface->proto_ip.no_dns &&
++		        !vlist_simple_empty(&iface->proto_ip.dns_servers)))
++			have_dns_server = true;
++
+ 		fprintf(f, "# Interface %s\n", iface->name);
+ 		write_resolv_conf_entries(f, &iface->config_ip, iface->ifname);
+ 		if (!iface->proto_ip.no_dns)
+ 			write_resolv_conf_entries(f, &iface->proto_ip, iface->ifname);
+ 	}
++	if (!have_dns_server) {
++		fprintf(f, "# failsafe name server in absense of any others\n");
++		fprintf(f, "nameserver 8.8.8.8\n");
++	}
+ 	fflush(f);
+ 	rewind(f);
+ 	crcnew = crc32_file(f);

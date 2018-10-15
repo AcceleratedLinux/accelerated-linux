@@ -1,0 +1,12 @@
+diff -ru ptmalloc3/Makefile ptmalloc3-patched/Makefile
+--- ptmalloc3/Makefile	2006-04-01 02:25:23.000000000 +1000
++++ ptmalloc3-patched/Makefile	2016-10-28 08:02:45.369134028 +1000
+@@ -17,7 +17,7 @@
+ TAR_FLAGS = --numeric-owner --exclude "*~" --exclude "debian/tmp*"
+ 
+ #CC = /pkg/gcc-2.95.2-wg/bin/gcc
+-CC = gcc
++#CC = gcc
+ 
+ SYS_FLAGS  =
+ OPT_FLAGS  = -g -O2 #-O # -O2

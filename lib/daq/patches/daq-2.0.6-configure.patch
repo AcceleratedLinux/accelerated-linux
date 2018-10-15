@@ -1,0 +1,132 @@
+--- daq-2.0.6/configure.orig	2016-03-23 14:51:15.750889175 +1000
++++ daq-2.0.6/configure	2016-03-23 14:53:59.090891817 +1000
+@@ -13491,110 +13491,6 @@
+   enable_pcap_module=no
+ fi
+ 
+-
+-
+-
+-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pcap_lib_version" >&5
+-$as_echo_n "checking for pcap_lib_version... " >&6; }
+-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for pcap_lib_version in -lpcap" >&5
+-$as_echo_n "checking for pcap_lib_version in -lpcap... " >&6; }
+-if ${ac_cv_lib_pcap_pcap_lib_version+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  ac_check_lib_save_LIBS=$LIBS
+-LIBS="-lpcap  $LIBS"
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-/* Override any GCC internal prototype to avoid an error.
+-   Use char because int might match the return type of a GCC
+-   builtin and then its argument prototype would still apply.  */
+-#ifdef __cplusplus
+-extern "C"
+-#endif
+-char pcap_lib_version ();
+-int
+-main ()
+-{
+-return pcap_lib_version ();
+-  ;
+-  return 0;
+-}
+-_ACEOF
+-if ac_fn_c_try_link "$LINENO"; then :
+-  ac_cv_lib_pcap_pcap_lib_version=yes
+-else
+-  ac_cv_lib_pcap_pcap_lib_version=no
+-fi
+-rm -f core conftest.err conftest.$ac_objext \
+-    conftest$ac_exeext conftest.$ac_ext
+-LIBS=$ac_check_lib_save_LIBS
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_pcap_pcap_lib_version" >&5
+-$as_echo "$ac_cv_lib_pcap_pcap_lib_version" >&6; }
+-if test "x$ac_cv_lib_pcap_pcap_lib_version" = xyes; then :
+-  LIBS="-lpcap ${LIBS}"
+-else
+-  have_pcap_lib_version="no"
+-fi
+-
+-    if test "x$have_pcap_lib_version" = "xno"; then
+-        echo
+-        echo "    ERROR!  Libpcap library version >= "1.0.0" not found."
+-        echo "    Get it from http://www.tcpdump.org"
+-        echo
+-        exit 1
+-    fi
+-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libpcap version >= \"1.0.0\"" >&5
+-$as_echo_n "checking for libpcap version >= \"1.0.0\"... " >&6; }
+-if ${daq_cv_libpcap_version_1x+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-
+-    if test "$cross_compiling" = yes; then :
+-  { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+-$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+-as_fn_error $? "cannot run test program while cross compiling
+-See \`config.log' for more details" "$LINENO" 5; }
+-else
+-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-    #include <pcap.h>
+-    #include <string.h>
+-    extern char pcap_version[];
+-
+-int
+-main ()
+-{
+-
+-        if (strcmp(pcap_version, "1.0.0") < 0)
+-            return 1;
+-
+-  ;
+-  return 0;
+-}
+-_ACEOF
+-if ac_fn_c_try_run "$LINENO"; then :
+-  daq_cv_libpcap_version_1x="yes"
+-else
+-  daq_cv_libpcap_version_1x="no"
+-fi
+-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+-  conftest.$ac_objext conftest.beam conftest.$ac_ext
+-fi
+-
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $daq_cv_libpcap_version_1x" >&5
+-$as_echo "$daq_cv_libpcap_version_1x" >&6; }
+-    if test "x$daq_cv_libpcap_version_1x" = "xno"; then
+-        echo
+-        echo "    ERROR!  Libpcap library version >= "1.0.0"  not found."
+-        echo "    Get it from http://www.tcpdump.org"
+-        echo
+-        exit 1
+-    fi
+-
+     if test "$enable_pcap_module" = yes; then
+         STATIC_LIBS="${STATIC_LIBS} -lpcap"
+     fi
+
+--- daq-2.0.6/configure	2018-03-21 15:49:50.213872231 +1000
++++ daq-2.0.6/configure_new	2018-03-21 15:51:01.025872226 +1000
+@@ -13172,14 +13172,12 @@
+ 
+ if test "x$with_dnet_includes" != "xno"; then
+     CPPFLAGS="${CPPFLAGS} -I${with_dnet_includes}"
+-else
+-    CPPFLAGS="${CPPFLAGS} `dnet-config --cflags 2>/dev/null`"
+ fi
+ 
+ if test "x$with_dnet_libraries" != "xno"; then
+     DNET_LDPATH="-L${with_dnet_libraries}"
+ else
+-    DNET_LDFLAGS="`dnet-config --libs 2>/dev/null`"
++    DNET_LDFLAGS=
+ fi
+ 
+ 

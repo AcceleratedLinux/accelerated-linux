@@ -1,0 +1,53 @@
+diff --git a/templates/lxc-download.in b/templates/lxc-download.in
+index 973783ba..3c817daf 100644
+--- a/templates/lxc-download.in
++++ b/templates/lxc-download.in
+@@ -266,7 +266,7 @@ done
+ 
+ # Check for required binaries
+ for bin in tar xz wget; do
+-  if ! command -V "${bin}" >/dev/null 2>&1; then
++  if ! which "${bin}" >/dev/null 2>&1; then
+     echo "ERROR: Missing required tool: ${bin}" 1>&2
+     exit 1
+   fi
+@@ -274,7 +274,7 @@ done
+ 
+ # Check for GPG
+ if [ "${DOWNLOAD_VALIDATE}" = "true" ]; then
+-  if ! command -V gpg >/dev/null 2>&1; then
++  if ! which gpg >/dev/null 2>&1; then
+     echo "ERROR: Missing recommended tool: gpg" 1>&2
+     echo "You can workaround this by using --no-validate" 1>&2
+     exit 1
+@@ -317,7 +317,7 @@ if mountpoint -q /tmp; then
+   DOWNLOAD_TEMP="${LXC_PATH}"
+ fi
+ 
+-if ! command -V mktemp >/dev/null 2>&1; then
++if ! which mktemp >/dev/null 2>&1; then
+   DOWNLOAD_TEMP="${DOWNLOAD_TEMP}/tmp/lxc-download.$$"
+ elif [ -n "${DOWNLOAD_TEMP}" ]; then
+   mkdir -p "${DOWNLOAD_TEMP}"
+diff --git a/templates/lxc-local.in b/templates/lxc-local.in
+index 552a4946..3a3c75b2 100644
+--- a/templates/lxc-local.in
++++ b/templates/lxc-local.in
+@@ -97,7 +97,7 @@ done
+ 
+ # Check for required binaries
+ for bin in tar xz; do
+-  if ! command -V "${bin}" >/dev/null 2>&1; then
++  if ! which "${bin}" >/dev/null 2>&1; then
+     echo "ERROR: Missing required tool: ${bin}" 1>&2
+     exit 1
+   fi
+@@ -145,7 +145,7 @@ relevant_file() {
+ echo "Unpacking the rootfs"
+ 
+ # Create temporary directory to
+-if ! command -V mktemp >/dev/null 2>&1; then
++if ! which mktemp >/dev/null 2>&1; then
+   LOCAL_TEMP=/tmp/lxc-local.$$
+   mkdir -p "${LOCAL_TEMP}"
+ else

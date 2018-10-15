@@ -1,0 +1,211 @@
+Index: iproute2-3.15.0/ip/ipaddress.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/ipaddress.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/ip/ipaddress.c	2014-06-17 16:35:04.652731818 +1000
+@@ -1043,7 +1043,7 @@
+ static int ipaddr_flush(void)
+ {
+ 	int round = 0;
+-	char flushb[4096-512];
++	static char flushb[4096-512];
+ 
+ 	filter.flushb = flushb;
+ 	filter.flushp = 0;
+Index: iproute2-3.15.0/ip/ipmroute.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/ipmroute.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/ip/ipmroute.c	2014-06-17 16:34:42.908731639 +1000
+@@ -44,7 +44,7 @@
+ 	exit(-1);
+ }
+ 
+-struct rtfilter
++static struct rtfilter
+ {
+ 	int tb;
+ 	int af;
+Index: iproute2-3.15.0/ip/ipneigh.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/ipneigh.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/ip/ipneigh.c	2014-06-17 16:34:42.908731639 +1000
+@@ -390,7 +390,7 @@
+ 
+ 	if (flush) {
+ 		int round = 0;
+-		char flushb[4096-512];
++		static char flushb[4096-512];
+ 
+ 		filter.flushb = flushb;
+ 		filter.flushp = 0;
+Index: iproute2-3.15.0/ip/iproute.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/iproute.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/ip/iproute.c	2014-06-17 16:36:33.000732544 +1000
+@@ -676,7 +676,7 @@
+ static int parse_nexthops(struct nlmsghdr *n, struct rtmsg *r,
+ 			  int argc, char **argv)
+ {
+-	char buf[1024];
++	static char buf[1024];
+ 	struct rtattr *rta = (void*)buf;
+ 	struct rtnexthop *rtnh;
+ 
+@@ -707,7 +707,7 @@
+ 
+ static int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
+ {
+-	struct {
++	static struct {
+ 		struct nlmsghdr	n;
+ 		struct rtmsg		r;
+ 		char  			buf[1024];
+@@ -1298,7 +1298,7 @@
+ 
+ 	if (action == IPROUTE_FLUSH) {
+ 		int round = 0;
+-		char flushb[4096-512];
++		static char flushb[4096-512];
+ 		time_t start = time(0);
+ 
+ 		if (filter.cloned) {
+@@ -1375,7 +1375,7 @@
+ 
+ static int iproute_get(int argc, char **argv)
+ {
+-	struct {
++	static struct {
+ 		struct nlmsghdr	n;
+ 		struct rtmsg		r;
+ 		char  			buf[1024];
+Index: iproute2-3.15.0/ip/iptunnel.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/iptunnel.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/ip/iptunnel.c	2014-06-17 16:34:42.908731639 +1000
+@@ -427,7 +427,7 @@
+ 	tx_fifo, tx_colls, tx_carrier, rx_multi;
+ 	struct ip_tunnel_parm p1;
+ 
+-	char buf[512];
++	static char buf[512];
+ 	FILE *fp = fopen("/proc/net/dev", "r");
+ 	if (fp == NULL) {
+ 		perror("fopen");
+Index: iproute2-3.15.0/lib/libnetlink.c
+===================================================================
+--- iproute2-3.15.0.orig/lib/libnetlink.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/lib/libnetlink.c	2014-06-17 16:35:41.124732118 +1000
+@@ -193,7 +193,7 @@
+ 		.msg_iov = &iov,
+ 		.msg_iovlen = 1,
+ 	};
+-	char buf[16384];
++	static char buf[16384];
+ 	int dump_intr = 0;
+ 
+ 	iov.iov_base = buf;
+@@ -305,7 +305,7 @@
+ 		.msg_iov = &iov,
+ 		.msg_iovlen = 1,
+ 	};
+-	char   buf[16384];
++	static char   buf[16384];
+ 
+ 	memset(&nladdr, 0, sizeof(nladdr));
+ 	nladdr.nl_family = AF_NETLINK;
+@@ -420,7 +420,7 @@
+ 		.msg_iov = &iov,
+ 		.msg_iovlen = 1,
+ 	};
+-	char   buf[8192];
++	static char   buf[8192];
+ 
+ 	memset(&nladdr, 0, sizeof(nladdr));
+ 	nladdr.nl_family = AF_NETLINK;
+@@ -486,7 +486,7 @@
+ {
+ 	int status;
+ 	struct sockaddr_nl nladdr;
+-	char   buf[8192];
++	static char   buf[8192];
+ 	struct nlmsghdr *h = (void*)buf;
+ 
+ 	memset(&nladdr, 0, sizeof(nladdr));
+Index: iproute2-3.15.0/lib/rt_names.c
+===================================================================
+--- iproute2-3.15.0.orig/lib/rt_names.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/lib/rt_names.c	2014-06-17 16:34:42.912731639 +1000
+@@ -75,7 +75,7 @@
+ 
+ static void rtnl_tab_initialize(const char *file, char **tab, int size)
+ {
+-	char buf[512];
++	static char buf[512];
+ 	FILE *fp;
+ 
+ 	fp = fopen(file, "r");
+@@ -84,7 +84,7 @@
+ 	while (fgets(buf, sizeof(buf), fp)) {
+ 		char *p = buf;
+ 		int id;
+-		char namebuf[512];
++		static char namebuf[512];
+ 
+ 		while (*p == ' ' || *p == '\t')
+ 			p++;
+Index: iproute2-3.15.0/tc/tc_class.c
+===================================================================
+--- iproute2-3.15.0.orig/tc/tc_class.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/tc/tc_class.c	2014-06-17 16:34:42.912731639 +1000
+@@ -42,7 +42,7 @@
+ 
+ static int tc_class_modify(int cmd, unsigned flags, int argc, char **argv)
+ {
+-	struct {
++	static struct {
+ 		struct nlmsghdr 	n;
+ 		struct tcmsg 		t;
+ 		char   			buf[4096];
+@@ -156,7 +156,7 @@
+ 	int len = n->nlmsg_len;
+ 	struct rtattr * tb[TCA_MAX+1];
+ 	struct qdisc_util *q;
+-	char abuf[256];
++	static char abuf[256];
+ 
+ 	if (n->nlmsg_type != RTM_NEWTCLASS && n->nlmsg_type != RTM_DELTCLASS) {
+ 		fprintf(stderr, "Not a class\n");
+Index: iproute2-3.15.0/tc/tc_filter.c
+===================================================================
+--- iproute2-3.15.0.orig/tc/tc_filter.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/tc/tc_filter.c	2014-06-17 16:34:42.912731639 +1000
+@@ -47,7 +47,7 @@
+ 
+ static int tc_filter_modify(int cmd, unsigned flags, int argc, char **argv)
+ {
+-	struct {
++	static struct {
+ 		struct nlmsghdr 	n;
+ 		struct tcmsg 		t;
+ 		char   			buf[MAX_MSG];
+@@ -190,7 +190,7 @@
+ 	int len = n->nlmsg_len;
+ 	struct rtattr * tb[TCA_MAX+1];
+ 	struct filter_util *q;
+-	char abuf[256];
++	static char abuf[256];
+ 
+ 	if (n->nlmsg_type != RTM_NEWTFILTER && n->nlmsg_type != RTM_DELTFILTER) {
+ 		fprintf(stderr, "Not a filter\n");
+Index: iproute2-3.15.0/tc/tc_qdisc.c
+===================================================================
+--- iproute2-3.15.0.orig/tc/tc_qdisc.c	2014-06-17 16:34:42.916731639 +1000
++++ iproute2-3.15.0/tc/tc_qdisc.c	2014-06-17 16:34:42.912731639 +1000
+@@ -54,7 +54,7 @@
+ 	} stab;
+ 	char  d[16];
+ 	char  k[16];
+-	struct {
++	static struct {
+ 		struct nlmsghdr 	n;
+ 		struct tcmsg 		t;
+ 		char   			buf[TCA_BUF_MAX];

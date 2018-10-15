@@ -1,0 +1,22 @@
+#
+# uvar/dev rule for HUAWEI E220 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+ACTION=="add", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1003", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1003", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1003", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh remove_device'"
+
+ACTION=="add", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1001", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1001", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1001", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh remove_device'"
+
+ACTION=="add", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1412", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1412", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh remove_device'"
+
+ACTION=="add", ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="1000", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="6000", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="05c6", ATTRS{idProduct}=="6000", RUN+="/bin/sh -c '/etc_ro/init.d/3g.sh remove_device'"
+
+

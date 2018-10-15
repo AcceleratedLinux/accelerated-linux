@@ -1,0 +1,10 @@
+--- libreswan-3.12/Makefile.LSW	2015-08-24 14:16:12.235763909 -0400
++++ libreswan-3.12/Makefile	2015-08-24 14:16:30.591879933 -0400
+@@ -24,6 +24,7 @@
+ srcdir?=$(shell pwd)
+ 
+ # dummy default rule
++default: programs
+ def:
+ 	@echo "Please read the README for detailed build instructions"
+ 	@echo

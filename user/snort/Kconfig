@@ -1,0 +1,12 @@
+config USER_SNORT_SNORT
+	bool "snort"
+	select LIB_DAQ
+	select LIB_LIBPCRE
+	select LIB_LIBDNET
+	help
+	  Snort is a network intrusion detection system.  It is capable of
+	  performing real-time traffic analysis and packet logging on IP
+	  networks.  It can perform protocol analysis, content searching and
+	  can be used to detect a variety of attacks and probes, such as
+	  buffer overflows, stealth port scans, CGI attacks, SMB probes,
+	  OS fingerprinting attempts and much more.

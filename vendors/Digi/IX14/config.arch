@@ -1,0 +1,30 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+
+LINUXTARGET = zImage dtbs
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES = images/image.bin \
+	   images/u-boot.imx \
+	   images/configs.tar.gz \
+	   images/romfs-inst.log \
+	   prop/config/schema/accns.schema \
+	   prop/config/schema/accns-aview.schema \
+	   images/rci_descriptors.tar.gz
+
+# remain compatible with existing WR14 images
+
+HW_PRODUCT = WR14
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/arm/config.arch
+
+############################################################################

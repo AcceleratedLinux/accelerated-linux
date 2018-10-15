@@ -1,0 +1,4 @@
+libubox-gcc-ver-bswap.patch
+libubox-jshn-duplicate-keys.patch
+libubox-ustream-fd-error.patch
+libubox-jshn-read-result.patch

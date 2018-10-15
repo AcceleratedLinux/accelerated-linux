@@ -1,0 +1,184 @@
+
+config USER_MODEMMANAGER
+	bool 'ModemManager'
+	select LIB_DBUS_GLIB
+	select LIB_DBUS
+	select USER_LIBQMI
+	select USER_UDEV
+	help
+	  USB/Serial modem mananger.
+
+config USER_MODEMMANAGER_ALLPLUGINS
+	bool 'all plugins'
+	depends on USER_MODEMMANAGER
+	help
+	  Install all ModemManager plugins
+
+config USER_MODEMMANAGER_PLUGIN_ANYDATA
+	bool 'plugin-anydata'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install anydata plugin
+
+config USER_MODEMMANAGER_PLUGIN_MOTOROLA
+	bool 'plugin-motorola'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install motorola plugin
+
+config USER_MODEMMANAGER_PLUGIN_GENERIC
+	bool 'plugin-generic'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install generic plugin
+
+config USER_MODEMMANAGER_PLUGIN_SAMSUNG
+	bool 'plugin-samsung'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install samsung plugin
+
+config USER_MODEMMANAGER_PLUGIN_MBM
+	bool 'plugin-mbm'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install mbm plugin
+
+config USER_MODEMMANAGER_PLUGIN_ZTE
+	bool 'plugin-zte'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install zte plugin
+
+config USER_MODEMMANAGER_PLUGIN_PANTECH
+	bool 'plugin-pantech'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install pantech plugin
+
+config USER_MODEMMANAGER_PLUGIN_NOKIA_ICERA
+	bool 'plugin-nokia-icera'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install nokia-icera plugin
+
+config USER_MODEMMANAGER_PLUGIN_NOVATEL_LTE
+	bool 'plugin-novatel-lte'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install novatel-lte plugin
+
+config USER_MODEMMANAGER_PLUGIN_WAVECOM
+	bool 'plugin-wavecom'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install wavecom plugin
+
+config USER_MODEMMANAGER_PLUGIN_NOVATEL
+	bool 'plugin-novatel'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install novatel plugin
+
+config USER_MODEMMANAGER_PLUGIN_GOBI
+	bool 'plugin-gobi'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install gobi plugin
+
+config USER_MODEMMANAGER_PLUGIN_CINTERION
+	bool 'plugin-cinterion'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install cinterion plugin
+
+config USER_MODEMMANAGER_PLUGIN_LONGCHEER
+	bool 'plugin-longcheer'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install longcheer plugin
+
+config USER_MODEMMANAGER_PLUGIN_OPTION
+	bool 'plugin-option'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install option plugin
+
+config USER_MODEMMANAGER_PLUGIN_VIA
+	bool 'plugin-via'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install via plugin
+
+config USER_MODEMMANAGER_PLUGIN_HSO
+	bool 'plugin-hso'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install hso plugin
+
+config USER_MODEMMANAGER_PLUGIN_IRIDIUM
+	bool 'plugin-iridium'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install iridium plugin
+
+config USER_MODEMMANAGER_PLUGIN_SIERRA
+	bool 'plugin-sierra'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install sierra plugin
+
+config USER_MODEMMANAGER_PLUGIN_NOKIA
+	bool 'plugin-nokia'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install nokia plugin
+
+config USER_MODEMMANAGER_PLUGIN_HUAWEI
+	bool 'plugin-huawei'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install huawei plugin
+
+config USER_MODEMMANAGER_PLUGIN_X22X
+	bool 'plugin-x22x'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install x22x plugin
+
+config USER_MODEMMANAGER_PLUGIN_SIMTECH
+	bool 'plugin-simtech'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install simtech plugin
+
+config USER_MODEMMANAGER_PLUGIN_LINKTOP
+	bool 'plugin-linktop'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install linktop plugin
+

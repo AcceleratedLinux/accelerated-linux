@@ -1,0 +1,21 @@
+--- nss-3.17.4/nss/lib/freebl/stubs.c.LSW	2015-08-24 21:17:46.667763667 -0400
++++ nss-3.17.4/nss/lib/freebl/stubs.c	2015-08-24 21:18:50.879812908 -0400
+@@ -351,6 +351,10 @@
+ 
+     STUB_SAFE_CALL2(PR_GetLibraryFilePathname, name, addr);
+ 
++#if 1
++    return "bogus path";
++#else
++
+     if (dladdr((void *)addr, &dli) == 0) {
+         return NULL;
+     }
+@@ -359,6 +363,7 @@
+         strcpy(result, dli.dli_fname);
+     }
+     return result;
++#endif
+ }
+ 
+ 

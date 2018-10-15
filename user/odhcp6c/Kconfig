@@ -1,0 +1,6 @@
+
+config USER_ODHCP6C
+	bool "odhcp6c"
+	help
+		DHCPv6 client
+

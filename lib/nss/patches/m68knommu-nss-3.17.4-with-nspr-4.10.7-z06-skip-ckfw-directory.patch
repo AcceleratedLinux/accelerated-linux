@@ -1,0 +1,11 @@
+--- nss-3.17.4/nss/lib/manifest.mn.LSW	2015-08-24 13:20:56.171763256 -0400
++++ nss-3.17.4/nss/lib/manifest.mn	2015-08-24 13:21:16.087754912 -0400
+@@ -28,7 +28,7 @@
+ 	$(ZLIB_SRCDIR) ssl \
+ 	pkcs12 pkcs7 smime \
+ 	crmf jar \
+-	ckfw $(SYSINIT_SRCDIR) \
++	$(ckfw) $(SYSINIT_SRCDIR) \
+ 	$(NULL)
+ unexport
+ unexport DIRS

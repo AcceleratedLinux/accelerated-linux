@@ -1,0 +1,40 @@
+#
+# Kbuild ignores
+#
+.*
+*.o
+*.o.*
+*.a
+*.s
+Kbuild
+Config.in
+
+#
+# Never ignore these
+#
+!.gitignore
+!.indent.pro
+!/Config.in
+
+#
+# Normal output
+#
+/busybox
+/busybox_old
+/busybox_unstripped*
+/busybox.links
+
+#
+# Backups / patches
+#
+*~
+*.orig
+*.rej
+/*.patch
+
+#
+# debugging stuff
+#
+core
+.gdb_history
+.gdbinit

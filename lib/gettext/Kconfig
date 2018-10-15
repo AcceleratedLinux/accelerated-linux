@@ -1,0 +1,12 @@
+
+config LIB_GETTEXT
+	bool 'gettext'
+	help
+	  gettext library
+
+config LIB_GETTEXT_TOOLS
+	bool 'tools'
+	depends on LIB_GETTEXT
+	help
+	  gettext command line tools
+

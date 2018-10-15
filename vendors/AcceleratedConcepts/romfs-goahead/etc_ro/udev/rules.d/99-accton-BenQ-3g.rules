@@ -1,0 +1,12 @@
+#
+# uvar/dev rule for BenQ H10 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+#
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+ACTION=="add", ATTRS{idVendor}=="04a5", ATTRS{idProduct}=="4068", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="04a5", ATTRS{idProduct}=="4068", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="04a5", ATTRS{idProduct}=="4068", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+
+

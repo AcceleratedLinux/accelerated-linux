@@ -1,0 +1,10 @@
+--- a/utils/swi-update.c.org	2018-09-08 00:01:27.159688736 +1000
++++ b/utils/swi-update.c	2018-09-08 00:02:12.979543947 +1000
+@@ -42,6 +42,7 @@
+ #include <sys/stat.h>
+ #include <termios.h>
+ #include <unistd.h>
++#include <sys/select.h>
+ 
+ /* FIXME: endianness - this works on LE for now... */
+ 

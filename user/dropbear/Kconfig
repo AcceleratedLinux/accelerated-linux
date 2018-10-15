@@ -1,0 +1,26 @@
+
+config USER_DROPBEAR_DROPBEAR
+	depends on USER_INETD_INETD || USER_BUSYBOX_INETD
+	select LIB_ZLIB
+	bool "dropbear"
+	help
+		small SSH server invoked from inetd
+
+config USER_DROPBEAR_DROPBEARCONVERT
+	depends on USER_DROPBEAR_DROPBEAR
+	bool "dropbearconvert"
+	help
+		key conversion tools
+
+config USER_DROPBEAR_DROPBEARKEY
+	depends on USER_DROPBEAR_DROPBEAR
+	bool "dropbearkey"
+	help
+		key conversion tools
+
+config USER_DROPBEAR_DBCLIENT
+	depends on USER_DROPBEAR_DROPBEAR
+	bool "dbclient"
+	help
+		small SSH client
+

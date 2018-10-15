@@ -1,0 +1,15 @@
+proc            /proc           proc    defaults 0 0
+none            /var            ramfs   defaults 0 0
+none            /etc            ramfs   defaults 0 0
+none            /tmp            ramfs   defaults 0 0
+none            /media          ramfs   defaults 0 0
+#Tom 04-23-2009 for 3G begin
+none            /sys            sysfs   default  0 0
+none            /dev/pts        devpts  default  0 0
+none            /proc/bus/usb   usbfs   defaults 0 0
+#/proc/bus/usb   /proc/bus/usb   usbfs   rw       0 0
+#devpts          /dev/pts        devpts  gid=5,mode=620  0 0
+#sysfs           /sys            sysfs   rw       0 0
+#tmpfs           /dev            tmpfs   rw       0 0
+#Tom 04-23-2009 for 3G end
+

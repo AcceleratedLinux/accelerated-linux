@@ -1,0 +1,57 @@
+--- nspr-4.11/nspr/configure.in.orig	2015-12-02 12:38:53.626997958 -0500
++++ nspr-4.11/nspr/configure.in	2015-12-02 13:55:03.438024691 -0500
+@@ -2518,8 +2518,9 @@
+ *-darwin*|*-beos*|*-os2*)
+     ;;
+ *)
++    dnl define HAVE_DLFCN_H when present
+     AC_CHECK_LIB(dl, dlopen,
+-        [AC_CHECK_HEADER(dlfcn.h,
++        [AC_CHECK_HEADERS(dlfcn.h,
+             OS_LIBS="-ldl $OS_LIBS")])
+     ;;
+ esac
+--- nspr-4.11/nspr/pr/include/md/_linux.h.orig	2015-12-02 14:06:23.694020882 -0500
++++ nspr-4.11/nspr/pr/include/md/_linux.h	2015-12-02 14:07:37.706046831 -0500
+@@ -74,10 +74,12 @@
+ #undef	HAVE_STACK_GROWING_UP
+ 
+ /*
+- * Elf linux supports dl* functions
++ * Elf linux supports dl* functions but uClinux may not.
+  */
++#if defined(HAVE_DLFCN_H)
+ #define HAVE_DLL
+ #define USE_DLFCN
++#endif
+ #if defined(ANDROID)
+ #define NO_DLOPEN_NULL
+ #endif
+--- nspr-4.11/nspr/pr/src/pthreads/ptthread.c.orig	2015-11-18 07:36:52.000000000 -0500
++++ nspr-4.11/nspr/pr/src/pthreads/ptthread.c	2015-12-02 14:15:10.850057366 -0500
+@@ -19,7 +19,9 @@
+ #include <unistd.h>
+ #include <string.h>
+ #include <signal.h>
++#ifdef HAVE_DLFCN_H
+ #include <dlfcn.h>
++#endif
+ 
+ #ifdef SYMBIAN
+ /* In Open C sched_get_priority_min/max do not work properly, so we undefine
+@@ -1764,6 +1766,7 @@
+     int (*dynamic_pthread_setname_np)(pthread_t, const char*);
+ #endif
+ 
++#if defined(HAVE_DLL)
+     *(void**)(&dynamic_pthread_setname_np) =
+         dlsym(RTLD_DEFAULT, "pthread_setname_np");
+     if (!dynamic_pthread_setname_np)
+@@ -1801,6 +1804,7 @@
+         PR_SetError(PR_UNKNOWN_ERROR, result);
+         return PR_FAILURE;
+     }
++#endif /* HAVE_DLL */
+     return PR_SUCCESS;
+ }
+ 

@@ -1,0 +1,19 @@
+--- crconf-pre2/src/Makefile.orig	2011-09-21 16:01:50.000000000 +1000
++++ crconf-pre2/src/Makefile	2015-12-11 15:53:55.506558109 +1000
+@@ -4,7 +4,8 @@
+ 
+ all: $(TARGETS) $(LIBS)
+ 
+-crconf: $(ALLOBJ) $(LIBNETLINK) 
++crconf: $(ALLOBJ) $(LIBNETLINK) 
++	$(CC) $(LDFLAGS) -o $@ $(ALLOBJ) $(LIBNETLINK) -ldl $(LDLIBS$(LDLIBS_$@))
+ 
+ install: all
+ 	install -m 0755 $(TARGETS) $(DESTDIR)$(SBINDIR)
+@@ -12,6 +13,4 @@
+ clean:
+ 	rm -f $(ALLOBJ) $(TARGETS)
+ 
+-LDLIBS += -ldl
+-LDFLAGS += -Wl,-export-dynamic
+ 

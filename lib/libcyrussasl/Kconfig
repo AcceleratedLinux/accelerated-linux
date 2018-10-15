@@ -1,0 +1,4 @@
+config LIB_CYRUSSASL
+	bool "libcyrussasl"
+	help
+		Build the Cyrus SASL library.

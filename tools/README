@@ -1,0 +1,23 @@
+
+COMPILER TOOLS
+--------------
+
+No compiler tools are provided in this source distribution.
+Generally any cross tool chain can be used for building.
+
+Note that for quite a few non-MMU targets you may need a toolchain
+that can generate flat format binaries. You may find usefull binary
+toolchains on www.uclinux.org.
+
+CodeSourcery toolchains have been used, as have the cross-tool chain
+packages of common distributions such as Ubuntu.
+
+You can of course build your own too. The usual set of GNU tools
+should be enough. Typically you will want to build:
+
+    binutils
+    gcc
+ 
+You will usually need to build with a libc as well (such as glibc or
+uClibc).
+

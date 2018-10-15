@@ -1,0 +1,19 @@
+--- dbus-glib-0.100.2/dbus/Makefile.am.orig	2013-04-15 11:22:37.363286957 +1000
++++ dbus-glib-0.100.2/dbus/Makefile.am	2013-04-15 11:22:38.863319551 +1000
+@@ -1,4 +1,4 @@
+-SUBDIRS = . examples
++SUBDIRS = .
+ 
+ INCLUDES = \
+ 	-I$(top_srcdir)						\
+--- dbus-glib-0.100.2/dbus/Makefile.in.orig	2013-04-15 11:21:11.353291676 +1000
++++ dbus-glib-0.100.2/dbus/Makefile.in	2013-04-15 11:21:13.353734842 +1000
+@@ -382,7 +382,7 @@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-SUBDIRS = . examples
++SUBDIRS = .
+ INCLUDES = \
+ 	-I$(top_srcdir)						\
+ 	-I$(top_builddir)					\

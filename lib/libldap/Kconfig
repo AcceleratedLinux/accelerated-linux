@@ -1,0 +1,11 @@
+config LIB_LIBLDAP
+	bool "libldap"
+	help
+		The OpenLDAP library and ldapsearch utility
+
+config LIB_LIBLDAP_UTILS
+	bool "libldap utils"
+	depends on LIB_LIBLDAP
+	help
+		Install OpenLDAP utilities: ldapcompare, ldapdelete, ldapexop, ldapmodify
+		ldapmodrdn, ldappasswd, ldapurl, ldapwhoami.

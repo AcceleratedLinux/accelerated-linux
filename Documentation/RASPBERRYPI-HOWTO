@@ -1,0 +1,37 @@
+Raspberry Pi
+------------
+
+The Raspberry Pi 2 board is based around the Broadcom BCM2836 SoC.
+It has 1Gb of RAM, serial port, ethernet port, SD-card and a few other
+peripherals fitted.
+
+Generate images for this board using the RaspberryPi/RaspberryPi-2
+uClinux-dist target. The default is to select uClibc when building.
+The build will generate 2 binaries that we can then load onto the board,
+images/ukernel.bin and images/urootfs.bin.
+
+The easiest way to boot on the Raspberry Pi is to install u-boot as the
+primary boot loader. There are many instructions on the web on how to do
+this. Given you are booting from the usual SD card then copy the
+generated images/ukernel.bin and images/urootfs.bin onto the SD card.
+Then insert the SD card into the Raspberry Pi 2 and boot from it.
+
+You should see the u-boot console come up. Then from the u-boot command
+line run the following:
+
+    mmc dev 0
+    fatload mmc 0:1 0x01000000 ukernel.bin
+    fatload mmc 0:1 0x02000000 bcm2836-rpi-2-b.dtb
+    fatload mmc 0:1 0x02ffffc0 urootfs.bin
+    setenv bootargs earlyprintk console=tty0 console=ttyAMA0 root=/dev/ram0 initrd=0x03000000,16M
+    bootm 0x01000000 - 0x02000000
+
+OR
+
+    mmc dev 0
+    fatload mmc 0:1 0x01000000 zImage
+    fatload mmc 0:1 0x02000000 bcm2836-rpi-2-b.dtb
+    fatload mmc 0:1 0x03000000 rootfs.bin
+    setenv bootargs earlyprintk console=tty0 console=ttyAMA0 root=/dev/ram0 initrd=0x03000000,16M
+    bootz 0x01000000 - 0x02000000
+

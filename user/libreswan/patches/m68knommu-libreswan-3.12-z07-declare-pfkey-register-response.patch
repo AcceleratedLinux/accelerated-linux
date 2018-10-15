@@ -1,0 +1,12 @@
+--- libreswan-3.12/programs/pluto/kernel_pfkey.h.LSW	2015-09-01 13:45:51.298113861 -0400
++++ libreswan-3.12/programs/pluto/kernel_pfkey.h	2015-09-01 13:46:51.125168247 -0400
+@@ -19,9 +19,7 @@
+ extern void klips_register_proto(unsigned satype, const char *satypename);
+ #endif
+ extern void pfkey_close(void);
+-#ifdef KLIPS
+ extern void pfkey_register_response(const struct sadb_msg *msg);
+-#endif
+ extern void pfkey_dequeue(void);
+ extern void pfkey_event(void);
+ #ifdef KLIPS

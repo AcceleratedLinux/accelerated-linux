@@ -1,0 +1,28 @@
+From: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+Date: Wed, 23 Dec 2015 11:49:55 +0100
+Subject: [PATCH 19/31] Add an option to disable CJK codecs
+
+Signed-off-by: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+---
+ configure.ac | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 7863784..f5a758b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -3131,6 +3131,14 @@ if test "$SQLITE3" = "no" ; then
+ fi
+ AC_MSG_RESULT($DISABLED_EXTENSIONS)
+ 
++AC_MSG_CHECKING(for --disable-codecs-cjk)
++AC_ARG_ENABLE(codecs-cjk,
++	AS_HELP_STRING([--disable-codecs-cjk], [disable CJK codecs]),
++	[ if test "$enableval" = "no"; then
++		DISABLED_EXTENSIONS="${DISABLED_EXTENSIONS} _codecs_kr _codecs_jp _codecs_cn _codecs_tw _codecs_hk _codecs_iso2022"
++	fi])
++AC_MSG_RESULT($DISABLED_EXTENSIONS)
++
+ AC_SUBST(TK)
+ AC_MSG_CHECKING(for --disable-tk)
+ AC_ARG_ENABLE(tk,

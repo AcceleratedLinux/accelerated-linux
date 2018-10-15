@@ -1,0 +1,27 @@
+--- libreswan-3.12/programs/pluto/plutomain.c.LSW	2015-08-24 14:44:46.527768160 -0400
++++ libreswan-3.12/programs/pluto/plutomain.c	2015-08-24 14:47:41.499770789 -0400
+@@ -1062,6 +1062,7 @@
+ 	}
+ 
+ 	/* If not suppressed, do daemon fork */
++#if 0
+ 	if (fork_desired) {
+ 		{
+ 			pid_t pid = fork();
+@@ -1094,13 +1095,15 @@
+ 			exit_pluto(1);
+ 		}
+ 	} else {
++#else
+ 		/* no daemon fork: we have to fill in lock file */
+ 		(void) fill_lock(lockfd, getpid());
+ 		if (isatty(fileno(stdout))) {
+ 			fprintf(stdout, "Pluto initialized\n");
+ 			fflush(stdout);
+ 		}
+-	}
++#endif
++	// }
+ 
+ 	/*
+ 	 * Close everything but ctl_fd and (if needed) stderr.

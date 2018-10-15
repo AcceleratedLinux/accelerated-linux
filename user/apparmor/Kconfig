@@ -1,0 +1,15 @@
+
+config USER_APPARMOR
+        bool "AppArmor"
+        default n
+        help
+          Mandatory Access Control (MAC) system which is a kernel (LSM)
+          enhancement to confine programs to a limited set of resources.
+
+config USER_APPARMOR_FULL_INSTALL
+        bool "AppArmor full install"
+        depends on USER_APPARMOR
+        default n
+        help
+          Do a full default apparmor install to the romfs.
+

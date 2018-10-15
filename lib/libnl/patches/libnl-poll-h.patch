@@ -1,0 +1,11 @@
+--- libnl-3.2.21/include/netlink/netlink.h.org	2018-09-08 00:14:19.902604908 +1000
++++ libnl-3.2.21/include/netlink/netlink.h	2018-09-08 00:14:28.626453560 +1000
+@@ -16,7 +16,7 @@
+ #include <stdint.h>
+ #include <string.h>
+ #include <stdlib.h>
+-#include <sys/poll.h>
++#include <poll.h>
+ #include <sys/socket.h>
+ #include <sys/types.h>
+ #include <sys/time.h>

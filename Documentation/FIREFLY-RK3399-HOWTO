@@ -1,0 +1,35 @@
+Firefly RK-3399
+---------------
+
+The Firefly RK-3399 board is based around the Marvel Rockchip 3399 SoC.
+It is a 6-core ARM64 based device, with 2 fast A72 CPU cores and four slower
+A53 CPU cores. It has 4GB of RAM, serial port, ethernet port, SD-card and
+a few other peripherals fitted. It is a 
+
+Generate images for this board using the Firefly/RK-3399 uClinux-dist
+target. The default is to select glibc when building. The build will
+generate 3 binaries that we can then load onto the board, images/Image,
+images/urootfs.bin and the devicetree blob rk3399-firefly.dtb.
+
+The produce to load and run the binaries is a bit klunky at the moment.
+You will need to use an SD-CARD and copy the files into it using dd.
+You need to copy a working SD-CARD based ubuntu system onto the SD-CARD.
+With that in place then you can copy your built image with:
+
+    dd if=images/rk3399-firefly.dtb of=/dev/sdi seek=32768
+    dd if=images/Image of=/dev/sdi seek=34816
+    dd if=images/rootfs.bin of=/dev/sdi seek=262144
+
+Once the SD-CARD is loaded into the RK-3399 then you can use the following
+u-boot commands to load and run:
+
+    setenv bootargs console=ttyS2,1500000 root=/dev/ram0 initrd=0x20000000,16M
+    mmc dev 1
+    mmc read 0x10000000 0x8000 0x800
+    mmc read 0x11000000 0x8800 0x10000
+    mmc read 0x20000000 0x40000 0x10000
+    booti 0x11000000 - 0x10000000
+
+The console will be the serial port attached via the micro USB port and
+converter dongle. The default is the unusual speed of 1500000 baud.
+

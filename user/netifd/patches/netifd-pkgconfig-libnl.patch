@@ -1,0 +1,23 @@
+Index: netifd/CMakeLists.txt
+===================================================================
+--- netifd.orig/CMakeLists.txt
++++ netifd/CMakeLists.txt
+@@ -21,14 +21,13 @@ SET(SOURCES
+ SET(LIBS
+ 	ubox ubus uci json-c blobmsg_json)
+ 
+-IF (NOT DEFINED LIBNL_LIBS)
+-  FIND_LIBRARY(libnl NAMES libnl-3 libnl nl-3 nl)
+-  SET(LIBNL_LIBS ${libnl})
+-ENDIF()
++INCLUDE(FindPkgConfig)
++PKG_SEARCH_MODULE(LIBNL libnl-3.0 linl-3 linl nl-3 nl)
++INCLUDE_DIRECTORIES(${LIBNL_INCLUDE_DIRS})
+ 
+ IF("${CMAKE_SYSTEM_NAME}" MATCHES "Linux" AND NOT DUMMY_MODE)
+ 	SET(SOURCES ${SOURCES} system-linux.c)
+-	SET(LIBS ${LIBS} ${LIBNL_LIBS})
++	SET(LIBS ${LIBS} ${LIBNL_LIBRARIES})
+ ELSE()
+ 	ADD_DEFINITIONS(-DDUMMY_MODE=1)
+ 	SET(SOURCES ${SOURCES} system-dummy.c)

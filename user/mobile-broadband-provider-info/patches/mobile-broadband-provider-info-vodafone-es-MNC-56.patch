@@ -1,0 +1,21 @@
+From: Javier Viguera <javier.viguera@digi.com>
+Date: Mon, 12 Mar 2018 15:01:20 +0100
+Subject: [PATCH] mobile broadband provider info: vodafone es MNC 56
+
+Signed-off-by: Javier Viguera <javier.viguera@digi.com>
+---
+ serviceproviders.xml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/serviceproviders.xml b/serviceproviders.xml
+index 0c39361f2af3..b56d6a977a66 100644
+--- a/serviceproviders.xml
++++ b/serviceproviders.xml
+@@ -4359,6 +4359,7 @@ conceived.
+ 		<gsm>
+ 			<network-id mcc="214" mnc="01"/>
+ 			<network-id mcc="214" mnc="06"/>
++			<network-id mcc="214" mnc="56"/>
+ 			<msisdn-query>
+ 				<ussd>*138#</ussd>
+ 			</msisdn-query>

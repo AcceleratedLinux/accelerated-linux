@@ -1,0 +1,25 @@
+--- libtirpc-1.0.3/src/rpc_com.h.org	2018-09-13 00:16:18.256813314 +1000
++++ libtirpc-1.0.3/src/rpc_com.h	2018-09-13 00:16:32.072340569 +1000
+@@ -61,8 +61,8 @@
+ void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
+ 
+ 
+-SVCXPRT **__svc_xports;
+-int __svc_maxrec;
++extern SVCXPRT **__svc_xports;
++extern int __svc_maxrec;
+ 
+ #ifdef __cplusplus
+ }
+--- libtirpc-1.0.3/src/svc.c.org	2018-09-13 00:18:15.060737695 +1000
++++ libtirpc-1.0.3/src/svc.c	2018-09-13 00:18:54.979307469 +1000
+@@ -79,6 +79,9 @@
+ 				     struct svc_callout **, char *);
+ static void __xprt_do_unregister (SVCXPRT * xprt, bool_t dolock);
+ 
++SVCXPRT **__svc_xports;
++int __svc_maxrec;
++
+ /* ***************  SVCXPRT related stuff **************** */
+ 
+ /*

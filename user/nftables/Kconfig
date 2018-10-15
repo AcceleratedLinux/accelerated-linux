@@ -1,0 +1,9 @@
+config USER_NFTABLES
+	bool "nftables"
+	select LIB_LIBMNL
+	select LIB_LIBNFTNL
+	select LIB_LIBGMP
+	select USER_READLINE
+	help
+	  nftables is the new packet classification framework that intends
+	  to replace the existing {ip,ip6,arp,eb}_tables infrastructure.

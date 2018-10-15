@@ -1,0 +1,7 @@
+--- nss-3.17.4/nss/coreconf/uClinux-dist.mk.LSW	2015-08-24 21:23:04.251769500 -0400
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-08-24 21:23:09.367860177 -0400
+@@ -82,3 +82,4 @@
+         sed -e 's,;+,,' -e 's; DATA ;;' -e 's,;;,,' -e 's,;.*,;,' > $@
+ 
+ DEFINES += -DNO_FORK_CHECK
++DEFINES += -DSQLITE_OMIT_LOAD_EXTENSION

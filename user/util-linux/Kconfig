@@ -1,0 +1,29 @@
+
+config USER_UTIL_LINUX
+	bool "Build util-linux"
+	default n
+	help
+	  util-linux is a collection of all things better served by busybox
+	  in most cases
+
+config USER_UTIL_LINUX_LIBBLKID
+	bool "libblkid"
+	depends on USER_UTIL_LINUX
+	default n
+	help
+	  libblkid
+
+config USER_UTIL_LINUX_LIBUUID
+	bool "libuuid"
+	depends on USER_UTIL_LINUX
+	default n
+	help
+	  libuuid
+
+config USER_UTIL_LINUX_LIBMOUNT
+	bool "libmount"
+	depends on USER_UTIL_LINUX
+	default n
+	help
+	  libmount
+

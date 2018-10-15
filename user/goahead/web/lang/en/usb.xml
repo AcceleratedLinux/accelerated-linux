@@ -1,0 +1,68 @@
+<po>
+  <message msgid="usb disable" msgstr="Disable" />
+  <message msgid="usb enable" msgstr="Enable" />
+  <message msgid="usb add" msgstr="Add" />
+  <message msgid="usb edit" msgstr="Edit" />
+  <message msgid="usb del" msgstr="Delete" />
+  <message msgid="usb apply" msgstr="Apply" />
+  <message msgid="usb cancel" msgstr="Cancel" />
+  <message msgid="usb reset" msgstr="Reset" />
+
+  <message msgid="storage adm title" msgstr="Administration" />
+  <message msgid="storage adm introduction" msgstr="" />
+  <message msgid="storage adm user" msgstr="User Management" />
+  <message msgid="storage user name" msgstr="User Name" />
+  <message msgid="storage user ftp" msgstr="FTP used" />
+  <message msgid="storage user smb" msgstr="Samba used" />
+
+  <message msgid="adduser name" msgstr="User Name" />
+  <message msgid="adduser password" msgstr="Password" />
+  <message msgid="adduser ftp" msgstr="Ftp Setup" />
+  <message msgid="adduser mullogins" msgstr="Multiple Logins Capability" />
+  <message msgid="adduser maxlogins" msgstr="Maximum Login" />
+  <message msgid="adduser download" msgstr="Download Capability" />
+  <message msgid="adduser upload" msgstr="Upload Capability" />
+  <message msgid="adduser overwrite" msgstr="Overwrite Capability" />
+  <message msgid="adduser erase" msgstr="Erase Capability" />
+  <message msgid="adduser smb" msgstr="Samba Setup" />
+  
+  <message msgid="ftp title" msgstr="FTP Settings" />
+  <message msgid="ftp introduction" msgstr="" />
+  <message msgid="ftp server setup" msgstr="FTP Server Setup" />
+  <message msgid="ftp server enable" msgstr="FTP Server" />
+  <message msgid="ftp server anonymous" msgstr="Anonymous Login" />
+  <message msgid="ftp server port" msgstr="FTP Port" />
+  <message msgid="ftp server maxusers" msgstr="Max. Users" />
+  <message msgid="ftp server logintimeout" msgstr="Login Timeout" />
+  <message msgid="ftp server staytimeout" msgstr="Stay Timeout" />
+  
+  <message msgid="smb title" msgstr="SAMBA Settings" />
+  <message msgid="smb introduction" msgstr="" />
+  <message msgid="smb server setup" msgstr="SAMBA Server Setup" />
+  <message msgid="smb server enable" msgstr="SAMBA Server" />
+  <message msgid="smb server workgroup" msgstr="Workgroup" />
+  <message msgid="smb server netbios" msgstr="NetBIOS Name" />
+  <message msgid="smb server dirlist" msgstr="Sharing Directory List" />
+  <message msgid="smb server dirname" msgstr="Directory Name" />
+  <message msgid="smb server allowuser" msgstr="Allowes Users" />
+  <message msgid="smb adddir name" msgstr="Directory Name" />
+  <message msgid="smb adddir accessusers" msgstr="Access User" />
+  
+  <message msgid="webcam title" msgstr="Web Camera Settings" />
+  <message msgid="webcam introduction" msgstr="" />
+  <message msgid="webcam settings" msgstr="Web Camera Setup" />
+  <message msgid="webcam capability" msgstr="Capability" />
+  <message msgid="webcam resolution" msgstr="Resolution" />
+  <message msgid="webcam fps" msgstr="Frames Per Second" />
+  <message msgid="webcam port" msgstr="Port" />
+  
+  <message msgid="printer title" msgstr="Printer Server Settings" />
+  <message msgid="printer introduction" msgstr="" />
+  <message msgid="printer settings" msgstr="Printer Server Setup" />
+  <message msgid="printer capability" msgstr="Capability" />
+  
+  <message msgid="usbiNIC title" msgstr="USB iNIC Settings" />
+  <message msgid="usbiNIC introduction" msgstr="" />
+  <message msgid="usbiNIC settings" msgstr="USB iNIC Setup" />
+  <message msgid="usbiNIC capability" msgstr="Capability" />
+</po>

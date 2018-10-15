@@ -1,0 +1,12 @@
+diff --git a/shellinabox/styles.css b/shellinabox/styles.css
+index 8978eaa..c69f36f 100755
+--- a/shellinabox/styles.css
++++ b/shellinabox/styles.css
+@@ -38,6 +38,7 @@
+ }
+ 
+ #vt100 #scrollable {
++  background-color:     white;
+   overflow-x:           hidden;
+   overflow-y:           scroll;
+   position:             relative;

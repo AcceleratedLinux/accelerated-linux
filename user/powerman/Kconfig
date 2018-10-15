@@ -1,0 +1,23 @@
+config USER_POWERMAN_POWERMAN
+	bool "powerman"
+	help
+		Software that controls (remotely and in parallel) switched power
+		distribution units.
+
+config USER_POWERMAN_HTTPPOWER
+	bool "httppower"
+	depends on USER_POWERMAN_POWERMAN
+	default y
+	help
+		A helper program for powerman which enables it to communicate with
+		HTTP based power distribution units.
+
+config USER_POWERMAN_SNMPPOWER
+	bool "snmppower"
+	depends on USER_POWERMAN_POWERMAN
+	depends on USER_NETSNMP_SNMPD && USER_NETSNMP_MIBLOADING && !USER_NETSNMP_BUILDSTATIC
+	default y
+	help
+		A helper program for powerman which enables it to communicate with
+		SNMP based power distribution units.
+

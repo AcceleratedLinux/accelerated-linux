@@ -1,0 +1,1 @@
+dep_daq = libdnet libnetfilter_queue libpcap

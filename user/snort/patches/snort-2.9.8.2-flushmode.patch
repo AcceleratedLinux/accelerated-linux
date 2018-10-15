@@ -1,0 +1,32 @@
+--- snort-2.9.8.0/src/preprocessors/Stream6/stream_paf.h.org	2016-03-24 11:00:36.952062738 +1000
++++ snort-2.9.8.0/src/preprocessors/Stream6/stream_paf.h	2016-03-24 11:01:13.104063323 +1000
+@@ -63,13 +63,6 @@
+ uint16_t s5_paf_port_registration_all (void* pv, uint16_t port, bool c2s, bool flush);
+ uint16_t s5_paf_service_registration (void* pv, uint16_t service, bool c2s, bool flush);
+ 
+-enum FlushMode
+-{
+-    FLUSH_MODE_NORMAL = 0,
+-    FLUSH_MODE_PRE_DISCARD,
+-    FLUSH_MODE_DISCARD
+-}FlushMode;
+-
+ typedef struct {
+     void* user[MAX_PAF_USER];      // arbitrary user data
+ 
+--- snort-2.9.8.0/src/preprocessors/Stream6/stream_paf.c.org	2016-03-24 11:03:49.208065848 +1000
++++ snort-2.9.8.0/src/preprocessors/Stream6/stream_paf.c	2016-03-24 11:04:23.408066401 +1000
+@@ -55,6 +55,13 @@
+ //
+ uint16_t global_mask = 0;
+ 
++enum FlushMode
++{
++    FLUSH_MODE_NORMAL = 0,
++    FLUSH_MODE_PRE_DISCARD,
++    FLUSH_MODE_DISCARD
++}FlushMode;
++
+ typedef enum {
+     FT_NOP,  // no flush
+     FT_SFP,  // abort paf

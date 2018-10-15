@@ -1,0 +1,47 @@
+--- nss-3.17.4/nss/lib/softoken/fipstokn.c.LSW	2015-08-24 20:43:51.095753533 -0400
++++ nss-3.17.4/nss/lib/softoken/fipstokn.c	2015-08-24 20:45:26.807770561 -0400
+@@ -33,7 +33,7 @@
+ #include <unistd.h>
+ #endif
+ 
+-#ifdef LINUX
++#ifdef XXX_LINUX_AUDIT
+ #include <pthread.h>
+ #include <dlfcn.h>
+ #define LIBAUDIT_NAME "libaudit.so.0"
+@@ -85,7 +85,7 @@
+ 	audit_send_user_message_func = NULL;
+     }
+ }
+-#endif /* LINUX */
++#endif /* XXX_LINUX_AUDIT */
+ 
+ 
+ /*
+@@ -289,7 +289,7 @@
+     return rv;
+ }
+ 
+-#ifdef LINUX
++#ifdef XXX_LINUX_AUDIT
+ 
+ int
+ sftk_mapLinuxAuditType(NSSAuditSeverity severity, NSSAuditType auditType)
+@@ -374,7 +374,7 @@
+     syslog(level | LOG_USER /* facility */,
+ 	   "NSS " SOFTOKEN_LIB_NAME "[pid=%d uid=%d]: %s",
+ 	   (int)getpid(), (int)getuid(), msg);
+-#ifdef LINUX
++#ifdef XXX_LINUX_AUDIT
+     if (pthread_once(&libaudit_once_control, libaudit_init) != 0) {
+ 	return;
+     }
+@@ -401,7 +401,7 @@
+ 	audit_close_func(audit_fd);
+ 	PR_smprintf_free(message);
+     }
+-#endif /* LINUX */
++#endif /* XXX_LINUX_AUDIT */
+ #else
+     /* do nothing */
+ #endif

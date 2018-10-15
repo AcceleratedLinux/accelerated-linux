@@ -1,0 +1,45 @@
+#!/bin/sh
+
+# If there is no nvram.2860 file then we have been erased,  put in the
+# default settings now.
+
+if [ ! -f /etc/config/nvram.2860 ]; then
+	cp /sbin/update-reset.cfg /etc/config/nvram.2860
+	#
+	# default our interface settings for Atheros devices
+	#
+	flashconfig.sh set ra0 wlan0
+	flashconfig.sh set ra1 eth1
+	flashconfig.sh set ra2 BAD
+	flashconfig.sh set ra3 BAD
+	flashconfig.sh set ra4 BAD
+	flashconfig.sh set ra5 BAD
+	flashconfig.sh set ra6 BAD
+	flashconfig.sh set ra7 BAD
+	flashconfig.sh set eth0 BAD
+	flashconfig.sh set eth1 BAD
+	flashconfig.sh set eth2 eth0
+fi
+
+# If our firmware version has changed, record the new version and clear
+# the updatetime (it will get set later in the smx-query.sh routine).
+
+if [ "`flashconfig.sh get SoftwareVersion`" != "$BASEVER" ]; then
+	echo ">>> New version '$BASEVER' - updatetime reset."
+	flashconfig.sh set SoftwareVersion "$BASEVER"
+	flashconfig.sh set smx_updatetime ''
+fi
+
+if [ -x /bin/goahead ]
+then
+	/bin/goahead &
+fi
+
+if [ "`flashconfig.sh get StaQueryStatus`" = 'active' ]; then
+	sleep 25
+	sta-query.sh &
+else
+	smx-query.sh 35 &
+fi
+
+exit 0

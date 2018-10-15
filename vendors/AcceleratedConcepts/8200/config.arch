@@ -1,0 +1,42 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+LINUXTARGET = vmlinux.bin
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+HW_PRODUCT = 8200
+
+############################################################################
+
+CPUFLAGS      = -march=octeon -mabi=64
+CPULDFLAGS    += -melf64btsmip
+CPU_CFLAGS    = -march=octeon -mabi=64
+TARGETARCH    = mips64-linux
+CONFIGURE_HOST= mips64-linux
+ENDIAN        = big
+
+CROSS_COMPILE := mips64-linux-20160421-
+ifeq ($(shell which $(CROSS_COMPILE)gcc),)
+CROSS_COMPILE := mips64-linux-
+endif
+
+OCTEON_MODEL := OCTEON_CN50XX
+OCTEON_CPPFLAGS_GLOBAL_ADD :=
+export OCTEON_MODEL OCTEON_CPPFLAGS_GLOBAL_ADD
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/mips/config.arch
+
+ifdef UCLINUX_BUILD_BOOT
+	BOOTFLAGS += -DCONFIG_NOSERIAL
+	BOOTFLAGS += -DCONFIG_CRYPTO=1 -DCONFIG_CRYPTO_DOUBLE=1
+	CONFIG_OCTEON_ETH=y
+endif
+
+############################################################################

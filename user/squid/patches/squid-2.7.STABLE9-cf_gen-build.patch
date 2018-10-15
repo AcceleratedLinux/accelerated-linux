@@ -1,0 +1,11 @@
+--- squid-2.7.STABLE9/src/Makefile.in.org	2016-10-10 11:09:49.811272942 +1000
++++ squid-2.7.STABLE9/src/Makefile.in	2016-10-10 11:10:27.767273556 +1000
+@@ -721,7 +721,7 @@
+ 	-test -z "$(sbin_PROGRAMS)" || rm -f $(sbin_PROGRAMS)
+ cf_gen$(EXEEXT): $(cf_gen_OBJECTS) $(cf_gen_DEPENDENCIES) 
+ 	@rm -f cf_gen$(EXEEXT)
+-	$(LINK) $(cf_gen_OBJECTS) $(cf_gen_LDADD) $(LIBS)
++	gcc -o $(@) $(DEFS) $(INCLUDES) cf_gen.c debug.c globals.c ../lib/util.c -lm
+ dnsserver$(EXEEXT): $(dnsserver_OBJECTS) $(dnsserver_DEPENDENCIES) 
+ 	@rm -f dnsserver$(EXEEXT)
+ 	$(LINK) $(dnsserver_OBJECTS) $(dnsserver_LDADD) $(LIBS)

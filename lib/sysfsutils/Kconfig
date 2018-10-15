@@ -1,0 +1,34 @@
+
+config LIB_SYSFSUTILS
+	bool
+
+config LIB_LIBSYSFS
+	select LIB_SYSFSUTILS
+	bool "sysfsutils (libsysfs)"
+	default n
+
+config LIB_SYSFSUTILS_GET_DEVICE
+	depends on LIB_SYSFSUTILS
+	bool "get_device"
+	default n
+
+config LIB_SYSFSUTILS_GET_MODULE
+	depends on LIB_SYSFSUTILS
+	bool "get_module"
+	default n
+
+config LIB_SYSFSUTILS_GET_DRIVER
+	depends on LIB_SYSFSUTILS
+	bool "get_driver"
+	default n
+
+config LIB_SYSFSUTILS_DLIST_TEST
+	depends on LIB_SYSFSUTILS
+	bool "dlist_test"
+	default n
+
+config LIB_SYSFSUTILS_SYSTOOL
+	depends on LIB_SYSFSUTILS
+	bool "systool"
+	default n
+

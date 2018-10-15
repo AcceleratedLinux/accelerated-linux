@@ -1,0 +1,31 @@
+diff --git a/utilities/ovs-lib.in b/utilities/ovs-lib.in
+index 773efb3..9f78c71 100644
+--- a/utilities/ovs-lib.in
++++ b/utilities/ovs-lib.in
+@@ -88,22 +88,22 @@ elif test -e /lib/lsb/init-functions; then
+ fi
+ 
+ # Implement missing functions (e.g. OpenSUSE lacks 'action').
+-if type log_success_msg >/dev/null 2>&1; then :; else
++if type log_success_msg 2>&1 | grep function >/dev/null 2>&1; then :; else
+     log_success_msg () {
+         printf '%s.\n' "$*"
+     }
+ fi
+-if type log_failure_msg >/dev/null 2>&1; then :; else
++if type log_failure_msg 2>&1 | grep function >/dev/null 2>&1; then :; else
+     log_failure_msg () {
+         printf '%s ... failed!\n' "$*"
+     }
+ fi
+-if type log_warning_msg >/dev/null 2>&1; then :; else
++if type log_warning_msg 2>&1 | grep function >/dev/null 2>&1; then :; else
+     log_warning_msg () {
+         printf '%s ... (warning).\n' "$*"
+     }
+ fi
+-if type action >/dev/null 2>&1; then :; else
++if type action 2>&1 | grep function >/dev/null 2>&1; then :; else
+     action () {
+        STRING=$1
+        shift

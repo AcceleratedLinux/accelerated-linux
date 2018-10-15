@@ -1,0 +1,9 @@
+
+config USER_HASERL_HASERL
+	bool "haserl"
+	help
+	  A tiny (<30K) cgi wrapper that uses a UNIX shell to provide
+	  PHP-like scripting for dynamic web content. It parses form data
+	  placing the data in environment variables. It also supports
+	  file-uploads and running as a non-privleged user.
+

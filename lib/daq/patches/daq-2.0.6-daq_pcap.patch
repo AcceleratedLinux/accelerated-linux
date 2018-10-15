@@ -1,0 +1,449 @@
+--- daq-2.0.6/os-daq-modules/daq_pcap.c.orig	2014-06-10 23:38:53.000000000 +1000
++++ daq-2.0.6/os-daq-modules/daq_pcap.c	2018-03-29 10:24:23.355241132 +1000
+@@ -40,6 +40,10 @@
+ 
+ #include "daq_api.h"
+ 
++#define STARTLOOP_NO_CHECK int loop_count=0;while(loop_count++ < num_devices){ 
++#define STARTLOOP Pcap_Context_t *context = context_check;int loop_count=0;while(loop_count++ < 4 && context->device){ 
++#define NEXTLOOP context += sizeof(Pcap_Context_t);}
++
+ #define DAQ_PCAP_VERSION 3
+ 
+ typedef struct _pcap_context
+@@ -70,6 +74,8 @@
+ 
+ static void pcap_daq_reset_stats(void *handle);
+ 
++int num_devices = 0;
++
+ #ifndef PCAP_OLDSTYLE
+ /* Attempt to convert from the PCAP_FRAMES environment variable used by Phil Wood's PCAP-Ring
+     to a buffer size I can pass to PCAP 1.0.0's pcap_set_buffer_size(). */
+@@ -105,11 +111,11 @@
+ 
+ static int pcap_daq_open(Pcap_Context_t *context)
+ {
+-    uint32_t localnet, netmask;
+-    uint32_t defaultnet = 0xFFFFFF00;
+ #ifndef PCAP_OLDSTYLE
+     int status;
+ #endif /* PCAP_OLDSTYLE */
++    uint32_t localnet, netmask;
++    uint32_t defaultnet = 0xFFFFFF00;
+ 
+     if (context->handle)
+         return DAQ_SUCCESS;
+@@ -148,7 +154,6 @@
+         netmask = htonl(defaultnet);
+     }
+     context->netmask = htonl(defaultnet);
+-
+     return DAQ_SUCCESS;
+ 
+ #ifndef PCAP_OLDSTYLE
+@@ -196,76 +201,118 @@
+ 
+ static int pcap_daq_initialize(const DAQ_Config_t *config, void **ctxt_ptr, char *errbuf, size_t len)
+ {
+-    Pcap_Context_t *context;
++	char *name_copy, *upto;
++	char more;
++    Pcap_Context_t *context, *original;
+ #ifndef PCAP_OLDSTYLE
+     DAQ_Dict *entry;
+ #endif
+ 
+-    context = calloc(1, sizeof(Pcap_Context_t));
+-    if (!context)
++
++	num_devices = 1;
++	upto = config->name;
++	while(*upto)
++	{
++		if( *upto == ' ' )
++			num_devices++;
++		upto++;
++	}
++	
++    original = calloc(1, sizeof(Pcap_Context_t)*num_devices);
++    if (!original)
+     {
+         snprintf(errbuf, len, "%s: Couldn't allocate memory for the new PCAP context!", __FUNCTION__);
+         return DAQ_ERROR_NOMEM;
+     }
++	
++	context = original;
++	upto = name_copy = strdup(config->name);
++
++	if( !name_copy )
++	{
++        snprintf(errbuf, len, "%s: Couldn't allocate memory for the name copy", __FUNCTION__);
++        return DAQ_ERROR_NOMEM;
++	}
+ 
+-    context->snaplen = config->snaplen;
+-    context->promisc_flag = (config->flags & DAQ_CFG_PROMISC);
+-    context->timeout = config->timeout;
++	do
++	{
++		if( strchr(upto, ' ') )
++		{
++			*strchr(upto, ' ') = 0;
++			more = 1;
++		}
++		else
++		{
++			more = 0;
++		}
++
++		context->snaplen = config->snaplen;
++		context->promisc_flag = (config->flags & DAQ_CFG_PROMISC);
++		context->timeout = config->timeout / num_devices;
+ 
+ #ifndef PCAP_OLDSTYLE
+-    /* Retrieve the requested buffer size (default = 0) */
+-    for (entry = config->values; entry; entry = entry->next)
+-    {
+-        if (!strcmp(entry->key, "buffer_size"))
+-            context->buffer_size = strtol(entry->value, NULL, 10);
+-    }
+-    /* Try to account for legacy PCAP_FRAMES environment variable if we weren't passed a buffer size. */
+-    if (context->buffer_size == 0)
+-        context->buffer_size = translate_PCAP_FRAMES(context->snaplen);
++		/* Retrieve the requested buffer size (default = 0) */
++		for (entry = config->values; entry; entry = entry->next)
++		{
++			if (!strcmp(entry->key, "buffer_size"))
++				context->buffer_size = strtol(entry->value, NULL, 10);
++		}
++		/* Try to account for legacy PCAP_FRAMES environment variable if we weren't passed a buffer size. */
++		if (context->buffer_size == 0)
++			context->buffer_size = translate_PCAP_FRAMES(context->snaplen);
+ #endif
+ 
+-    if (config->mode == DAQ_MODE_READ_FILE)
+-    {
+-        context->file = strdup(config->name);
+-        if (!context->file)
+-        {
+-            snprintf(errbuf, len, "%s: Couldn't allocate memory for the filename string!", __FUNCTION__);
+-            free(context);
+-            return DAQ_ERROR_NOMEM;
+-        }
+-        context->delayed_open = 0;
+-    }
+-    else
+-    {
+-        context->device = strdup(config->name);
+-        if (!context->device)
+-        {
+-            snprintf(errbuf, len, "%s: Couldn't allocate memory for the device string!", __FUNCTION__);
+-            free(context);
+-            return DAQ_ERROR_NOMEM;
+-        }
+-        context->delayed_open = 1;
+-    }
+-
+-    if (!context->delayed_open)
+-    {
+-        if (pcap_daq_open(context) != DAQ_SUCCESS)
+-        {
+-            snprintf(errbuf, len, "%s", context->errbuf);
+-            free(context);
+-            return DAQ_ERROR;
+-        }
+-    }
++		if (config->mode == DAQ_MODE_READ_FILE)
++		{
++			context->file = strdup(upto);
++			if (!context->file)
++			{
++				snprintf(errbuf, len, "%s: Couldn't allocate memory for the filename string!", __FUNCTION__);
++				free(context);
++				free(name_copy);
++				return DAQ_ERROR_NOMEM;
++			}
++			context->delayed_open = 0;
++		}
++		else
++		{
++			context->device = strdup(upto);
++			if (!context->device)
++			{
++				snprintf(errbuf, len, "%s: Couldn't allocate memory for the device string!", __FUNCTION__);
++				free(context);
++				free(name_copy);
++				return DAQ_ERROR_NOMEM;
++			}
++			context->delayed_open = 1;
++		}
++
++		if (!context->delayed_open)
++		{
++			if (pcap_daq_open(context) != DAQ_SUCCESS)
++			{
++				snprintf(errbuf, len, "%s", context->errbuf);
++				free(context);
++				free(name_copy);
++				return DAQ_ERROR;
++			}
++		}
++
++		context->state = DAQ_STATE_INITIALIZED;
++		upto += strlen(upto) + 1;
++		context += sizeof(Pcap_Context_t);
++	} while( more );
+ 
+-    context->state = DAQ_STATE_INITIALIZED;
++	free(name_copy);
+ 
+-    *ctxt_ptr = context;
++    *ctxt_ptr = original;
+     return DAQ_SUCCESS;
+ }
+ 
+ static int pcap_daq_set_filter(void *handle, const char *filter)
+ {
+     Pcap_Context_t *context = (Pcap_Context_t *) handle;
++
+     struct bpf_program fcode;
+     pcap_t *dead_handle;
+ 
+@@ -319,16 +366,18 @@
+ 
+ static int pcap_daq_start(void *handle)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
++
++	STARTLOOP
+ 
+     if (pcap_daq_open(context) != DAQ_SUCCESS)
+         return DAQ_ERROR;
+ 
+-    pcap_daq_reset_stats(handle);
++    pcap_daq_reset_stats(context);
+ 
+     if (context->filter_string)
+     {
+-        if (pcap_daq_set_filter(handle, context->filter_string))
++        if (pcap_daq_set_filter(context, context->filter_string))
+             return DAQ_ERROR;
+         free(context->filter_string);
+         context->filter_string = NULL;
+@@ -336,12 +385,15 @@
+ 
+     context->state = DAQ_STATE_STARTED;
+ 
++	NEXTLOOP
++
+     return DAQ_SUCCESS;
+ }
+ 
+ static void pcap_process_loop(u_char *user, const struct pcap_pkthdr *pkth, const u_char *data)
+ {
+     Pcap_Context_t *context = (Pcap_Context_t *) user;
++
+     DAQ_PktHdr_t hdr;
+     DAQ_Verdict verdict;
+ 
+@@ -368,36 +420,54 @@
+ static int pcap_daq_acquire(
+     void *handle, int cnt, DAQ_Analysis_Func_t callback, DAQ_Meta_Func_t metaback, void *user)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
+     int ret;
++	int interfaces_read;
+ 
++
++	STARTLOOP
+     context->analysis_func = callback;
+     context->user_data = user;
+-
+     context->packets = 0;
+-    while (context->packets < cnt || cnt <= 0)
+-    {
+-        ret = pcap_dispatch(
+-            context->handle, (cnt <= 0) ? -1 : cnt-context->packets, pcap_process_loop, (void *) context);
+-        if (ret == -1)
+-        {
+-            DPE(context->errbuf, "%s", pcap_geterr(context->handle));
+-            return ret;
+-        }
+-        /* In read-file mode, PCAP returns 0 when it hits the end of the file. */
+-        else if (context->file && ret == 0)
+-            return DAQ_READFILE_EOF;
+-        /* If we hit a breakloop call or timed out without reading any packets, break out. */
+-        else if (ret == -2 || ret == 0)
+-            break;
+-    }
++	NEXTLOOP
++
++	do
++	{
++		interfaces_read = 0;
++
++		STARTLOOP
++		if (context->packets < cnt || cnt <= 0)
++		{
++			interfaces_read++;
++			if( user )
++				strcpy(user, context->device);
++			ret = pcap_dispatch(
++				context->handle, (cnt <= 0) ? -1 : cnt-context->packets, pcap_process_loop, (void *) context);
++			if (ret == -1)
++			{
++				DPE(context->errbuf, "%s", pcap_geterr(context->handle));
++				return ret;
++			}
++			/* In read-file mode, PCAP returns 0 when it hits the end of the file. */
++			else if (context->file && ret == 0)
++				return DAQ_READFILE_EOF;
++			/* If we hit a breakloop call or timed out without reading any packets, break out. */
++			else if ( ret == 0)
++				interfaces_read--;
++			else if ( ret == -2)
++				return; // we have broken the loop - we are quitting.
++		}
++		NEXTLOOP
++	} while( interfaces_read );
+ 
+     return 0;
+ }
+ 
+ static int pcap_daq_inject(void *handle, const DAQ_PktHdr_t *hdr, const uint8_t *packet_data, uint32_t len, int reverse)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
++
++	STARTLOOP
+ 
+     if (pcap_inject(context->handle, packet_data, len) < 0)
+     {
+@@ -406,25 +476,33 @@
+     }
+ 
+     context->stats.packets_injected++;
++
++	NEXTLOOP
++
+     return DAQ_SUCCESS;
+ }
+ 
+ static int pcap_daq_breakloop(void *handle)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
++
++	STARTLOOP
+ 
+     if (!context->handle)
+         return DAQ_ERROR;
+ 
+     pcap_breakloop(context->handle);
+ 
++	NEXTLOOP
++
+     return DAQ_SUCCESS;
+ }
+ 
+ static int pcap_daq_stop(void *handle)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
+ 
++	STARTLOOP
+     if (context->handle)
+     {
+         /* Store the hardware stats for post-stop stat calls. */
+@@ -434,14 +512,16 @@
+     }
+ 
+     context->state = DAQ_STATE_STOPPED;
++	NEXTLOOP
+ 
+     return DAQ_SUCCESS;
+ }
+ 
+ static void pcap_daq_shutdown(void *handle)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle, *orig = context_check;
+ 
++	STARTLOOP
+     if (context->handle)
+         pcap_close(context->handle);
+     if (context->device)
+@@ -450,9 +530,11 @@
+         free(context->file);
+     if (context->filter_string)
+         free(context->filter_string);
+-    free(context);
++	NEXTLOOP
++    free(orig);
+ }
+ 
++// TODO: this 2 functions
+ static DAQ_State pcap_daq_check_status(void *handle)
+ {
+     Pcap_Context_t *context = (Pcap_Context_t *) handle;
+@@ -462,21 +544,42 @@
+ 
+ static int pcap_daq_get_stats(void *handle, DAQ_Stats_t *stats)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
++	DAQ_Stats_t total_stats;
++	int loop;
++
++	memset(&total_stats, 0, sizeof(DAQ_Stats_t));
++
++	STARTLOOP
+ 
+     if (update_hw_stats(context) != DAQ_SUCCESS)
+         return DAQ_ERROR;
+ 
+-    memcpy(stats, &context->stats, sizeof(DAQ_Stats_t));
++	total_stats.hw_packets_received += context->stats.hw_packets_received;
++	total_stats.hw_packets_dropped += context->stats.hw_packets_dropped;
++	total_stats.packets_received += context->stats.packets_received;
++	total_stats.packets_filtered += context->stats.packets_filtered;
++	total_stats.packets_injected += context->stats.packets_injected;
++	
++	for( loop = 0; loop < MAX_DAQ_VERDICT; loop++ )
++	{
++		total_stats.verdicts[loop] += context->stats.verdicts[loop];
++	}
++
++	NEXTLOOP
++    memcpy(stats, &total_stats, sizeof(DAQ_Stats_t));
+ 
+     return DAQ_SUCCESS;
+ }
+ 
+ static void pcap_daq_reset_stats(void *handle)
+ {
+-    Pcap_Context_t *context = (Pcap_Context_t *) handle;
++    Pcap_Context_t *context_check = (Pcap_Context_t *) handle;
++
+     struct pcap_stat ps;
+ 
++	STARTLOOP
++
+     memset(&context->stats, 0, sizeof(DAQ_Stats_t));
+ 
+     if (!context->handle)
+@@ -488,8 +591,11 @@
+         context->base_recv = context->wrap_recv = ps.ps_recv;
+         context->base_drop = context->wrap_drop = ps.ps_drop;
+     }
++
++	NEXTLOOP
+ }
+ 
++// TODO: these next few too
+ static int pcap_daq_get_snaplen(void *handle)
+ {
+     Pcap_Context_t *context = (Pcap_Context_t *) handle;

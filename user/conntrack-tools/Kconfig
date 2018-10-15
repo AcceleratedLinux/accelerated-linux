@@ -1,0 +1,10 @@
+config USER_CONNTRACK_CONNTRACK
+	bool "conntrack"
+	select LIB_NFNETLINK
+	select LIB_NETFILTER_CONNTRACK
+	select LIB_NETFILTER_CTTIMEOUT
+	select LIB_NETFILTER_CTHELPER
+	select LIB_NETFILTER_QUEUE
+	help
+	  Conntrack is a tool for listing and modifying the netfilter
+	  conntrack table.

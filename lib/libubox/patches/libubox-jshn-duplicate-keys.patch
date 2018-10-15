@@ -1,0 +1,38 @@
+Index: libubox/sh/jshn.sh
+===================================================================
+--- libubox.orig/sh/jshn.sh
++++ libubox/sh/jshn.sh
+@@ -59,11 +59,12 @@
+ 		[[ "$var" == "$2" ]] || export -- "${JSON_PREFIX}N_${4}_${var}=$2"
+ 	fi
+ 
+-	export -- \
+-		"${JSON_PREFIX}${4}_$var=$3" \
+-		"${JSON_PREFIX}T_${4}_$var=$1"
+-	_jshn_append "JSON_UNSET" "${4}_$var"
+-	_jshn_append "K_$4" "$var"
++	if eval "[ -z \${${JSON_PREFIX}T_${4}_${var}+x} ]"; then
++		export -- "${JSON_PREFIX}T_${4}_$var=$1"
++		_jshn_append "JSON_UNSET" "${4}_$var"
++		_jshn_append "K_$4" "$var"
++	fi
++	export -- "${JSON_PREFIX}${4}_$var=$3"
+ }
+ 
+ _json_add_table() {
+@@ -124,6 +125,7 @@
+ 	json_cleanup
+ 	export -n ${JSON_PREFIX}JSON_SEQ=0
+ 	export -- \
++		${JSON_PREFIX}JSON_UNSET= \
+ 		${JSON_PREFIX}JSON_CUR="J_V" \
+ 		${JSON_PREFIX}K_J_V=
+ }
+@@ -171,6 +173,7 @@
+ # functions read access to json variables
+ 
+ json_load() {
++	json_cleanup
+ 	eval "`jshn -r "$1"`"
+ }
+ 

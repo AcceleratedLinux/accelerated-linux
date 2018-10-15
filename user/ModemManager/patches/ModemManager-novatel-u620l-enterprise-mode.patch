@@ -1,0 +1,20 @@
+diff --git a/plugins/novatel/77-mm-novatel-u620l-enterprise-mode.rules b/plugins/novatel/77-mm-novatel-u620l-enterprise-mode.rules
+new file mode 100644
+index 0000000..4179c2a
+--- /dev/null
++++ b/plugins/novatel/77-mm-novatel-u620l-enterprise-mode.rules
+@@ -0,0 +1 @@
++ATTRS{idVendor}=="1410", ATTRS{idProduct}=="9020", ATTR{bConfigurationValue}="4"
+diff --git a/plugins/Makefile.am b/plugins/Makefile.am
+index 018b696..b1f21b6 100644
+--- a/plugins/Makefile.am
++++ b/plugins/Makefile.am
+@@ -216,6 +216,8 @@ libmm_utils_novatel_la_SOURCES = \
+ NOVATEL_COMMON_COMPILER_FLAGS = -I$(top_srcdir)/plugins/novatel
+ NOVATEL_COMMON_LIBADD_FLAGS   = $(builddir)/libmm-utils-novatel.la
+ 
++dist_udevrules_DATA += novatel/77-mm-novatel-u620l-enterprise-mode.rules
++
+ ################################################################################
+ # plugin: generic
+ ################################################################################

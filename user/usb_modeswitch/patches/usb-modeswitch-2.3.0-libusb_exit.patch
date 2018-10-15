@@ -1,0 +1,24 @@
+Must call libusb_exit() with the context initialized by libusb_init().
+A context of NULL refers to a default context which is NOT set by libusb_init()
+when given a context pointer argument, at least not in libusb 1.0.9.
+So libusb_exit(NULL) crashes, but this would only happen to targets that
+weren't ARM and little-endian (i.e. have __ARMEL__ defined).
+
+This probably wasn't related to Raspbian 7.
+
+diff -ru usb-modeswitch-2.3.0.orig/usb_modeswitch.c usb-modeswitch-2.3.0/usb_modeswitch.c
+--- usb-modeswitch-2.3.0.orig/usb_modeswitch.c	2017-10-11 11:22:31.367760320 +1000
++++ usb-modeswitch-2.3.0/usb_modeswitch.c	2017-10-11 11:16:35.197170128 +1000
+@@ -1997,10 +1997,8 @@
+ 		libusb_free_config_descriptor(active_config);
+ 	if (devh)
+ 		libusb_close(devh);
+-	// libusb_exit will crash on Raspbian 7, crude protection
+-#ifndef __ARMEL__
+-	libusb_exit(NULL);
+-#endif
++	if (ctx)
++		libusb_exit(ctx);
+ 	if (sysmode)
+ 		closelog();
+ }

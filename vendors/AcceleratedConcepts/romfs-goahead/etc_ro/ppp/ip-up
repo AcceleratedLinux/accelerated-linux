@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# place the commands to run after the pppd dial up successfully.
+echo "ip-up:start" >/dev/console
+if [ -x /bin/qos_run ]; then
+	echo "/bin/qos_run"
+	/bin/qos_run
+fi
+
+#echo "Start:JCYU,The code can't run here, because it affects dual wan fallback"
+#if [ -x /sbin/ddns.sh ]; then
+#	echo "/sbin/ddns.sh" >/dev/console
+#	/sbin/ddns.sh
+#fi
+
+#if [ -x /sbin/config-udhcpd.sh ]; then
+#	echo "dns1=$DNS1 dns2=$DNS2" >/dev/console
+#	echo "/sbin/config-udhcpd.sh $DNS1 $DNS2"
+#	/sbin/config-udhcpd.sh -k
+#	/sbin/config-udhcpd.sh -d $DNS1 $DNS2
+#	/sbin/config-udhcpd.sh -r 10
+#fi
+#echo "End:JCYU,The code can't run here, because it affects dual wan fallback"
+echo "ip-up:end" >/dev/console

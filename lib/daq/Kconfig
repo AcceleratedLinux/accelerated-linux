@@ -1,0 +1,8 @@
+config LIB_DAQ
+	bool "DAQ"
+	select LIB_LIBDNET
+	select LIB_NETFILTER_QUEUE
+	select LIB_LIBPCAP
+	default n
+	help
+	  Data Acquisition library for Snort

@@ -1,0 +1,34 @@
+--- /dev/null	2015-02-16 15:33:24.055841081 +1000
++++ nss-3.17.4/Makefile	2015-02-18 13:25:45.927607893 +1000
+@@ -0,0 +1,31 @@
++
++
++
++export OS_CFLAGS = -DHAVE_POSIX_FALLOCATE=0
++
++NSPR_CONFIGURE_OPTS := $(CONFIGURE_OPTS) $(CONFOPTS)
++NSPR_CONFIGURE_OPTS += --disable-debug --enable-optimize
++ifneq ($(findstring 64,$(ARCH)),)
++NSPR_CONFIGURE_OPTS += --enable-64bit
++endif
++
++
++
++MAKEVARS = \
++	NSPR_CONFIGURE_OPTS="$(NSPR_CONFIGURE_OPTS)" \
++	NSPR_COMPILERS="CC=\"$(CC)\" CXX=\"$(CXX)\"" \
++	OS_TARGET=uClinux-dist OS_RELEASE=
++
++
++
++all:
++	make -C nss nss_build_all $(MAKEVARS)
++
++
++install:
++	make -C nss install $(MAKEVARS) DESTDIR=$(DESTDIR)
++	cd dist/uClinux-dist; cp -rL * $(DESTDIR)/.
++	cd dist/public; cp -rL * $(DESTDIR)/include/.
++clean:
++
++

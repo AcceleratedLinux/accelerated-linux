@@ -1,0 +1,19 @@
+--- mtd-utils/misc-utils/recv_image.c.org	2018-09-28 10:30:42.406311191 +1000
++++ mtd-utils/misc-utils/recv_image.c	2018-09-28 10:31:56.409358341 +1000
+@@ -137,6 +137,8 @@
+ 				continue;
+ 			}
+ 
++#ifdef IPV6_ADD_MEMBERSHIP
++		/* uClibc allows for build with no IPv6 */
+ 		} else if (runp->ai_family == AF_INET6 &&
+ 			   ((struct sockaddr_in6 *)runp->ai_addr)->sin6_addr.s6_addr[0] == 0xff) {
+ 			struct ipv6_mreq rq;
+@@ -147,6 +149,7 @@
+ 				close(sock);
+ 				continue;
+ 			}
++#endif
+ 		}
+ 		if (bind(sock, runp->ai_addr, runp->ai_addrlen)) {
+ 			perror("bind");

@@ -1,0 +1,4 @@
+#!/bin/sh
+dhcpcd eth0 &
+dhcpcd eth1 &
+exit 0

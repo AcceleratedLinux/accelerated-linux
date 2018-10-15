@@ -1,0 +1,265 @@
+#!/bin/sh
+#
+# Convert a /usr/local toolchain to a /usr/local/accelerated toolchain
+# installer that is date stamped appropriately.
+#
+# David McCullough <ucdevel@gmail.com>
+#
+
+if [ $# -lt 3 -o $# -gt 4 -o ! -f "$1" ]
+then
+	echo "usage: `basename $0` <tar-gz from / of usr local chain> <build-date> <cross> [prefix]"
+	echo "       for example:"
+	echo "       `basename $0` arm-linux-tools-20070808.tar.gz 20070808 arm-linux"
+	echo "       `basename $0` mips-linux-tools-20130305.tar.gz 20130305 mips-linux mips-unknown-linux-gnu"
+	echo ""
+	echo "cross  - new tools will be called cross-date-gcc"
+	echo "prefix - if existing prefix is different to cross, otherwise"
+	echo "         it defaults to cross"
+	exit 1
+fi
+
+ARCHIVE="$1"
+DATE="$2"
+CROSS="$3"
+PREFIX="${4:-$CROSS}"
+EXTRACT_DIR=/usr/local/accelerated
+LINK_DIR=/usr/local/bin
+CLEAN_OLD=n
+
+#
+# helper to extract tar.gz from archive
+#
+# $1 = archive
+#
+
+cat_archive()
+{
+	case "$1" in
+	*.sh)
+		SKIP=`awk '/^__ARCHIVE_FOLLOWS__/ { print NR + 1; exit 0; }' "$1"`
+		tail -n +$SKIP "$1"
+		;;
+	*)
+		cat "$1"
+		;;
+	esac
+}
+
+#
+# lets check the archive is pure ;-)
+#
+
+CHECK="/tmp/$$.check"
+cat_archive "$ARCHIVE" | tar tvzf - > $CHECK
+trap "rm -f $CHECK" 0
+
+if egrep -v '(usr/local|usr/$)' $CHECK
+then
+	echo "Found files outside usr/local !"
+	exit 1
+fi
+rm -f $CHECK
+trap "" 0
+
+#
+# Now we generate a script to install this appropriately
+#
+
+INSTALL_FILE="$CROSS-tools-$DATE.sh"
+
+cat <<!EOF > $INSTALL_FILE
+#!/bin/sh
+
+EXTRACT_DIR=$EXTRACT_DIR
+LINK_DIR=$LINK_DIR
+CLEAN_OLD=$CLEAN_OLD
+CCACHE_OPTION=y
+
+SCRIPT="\$0"
+case "\${SCRIPT}" in
+/*)
+	;;
+*)
+	if [ -f "\${SCRIPT}" ]
+	then
+		SCRIPT="\`pwd\`/\${SCRIPT}"
+	else
+		SCRIPT="\`which \${SCRIPT}\`"
+	fi
+	;;
+esac
+
+cd /
+
+if [ ! -f "\${SCRIPT}" ]
+then
+	echo "Cannot find the location of the install script (\$SCRIPT) ?"
+	exit 1
+fi
+
+SKIP=\`awk '/^__ARCHIVE_FOLLOWS__/ { print NR + 1; exit 0; }' \${SCRIPT}\`
+
+#
+# find out where to put the buld of the archive
+#
+while :; do
+	echo -n "Where would you like these tools installed? [\$EXTRACT_DIR]: "
+	read t
+	case "\$t" in
+	"") break ;;
+	*)
+		if [ -w \`basename \$t\` -o -w \$t ]; then
+			EXTRACT_DIR=\$t
+			break
+		fi
+		echo "Neither \`basename \$t\` or \$t are writable"
+		;;
+	esac
+done
+
+#
+# and where we need to install the "compiler" executables for running
+#
+while :; do
+	echo -n "Install executable links into ? [\$LINK_DIR]: "
+	read t
+	case "\$t" in
+	"") break ;;
+	*)
+		if [ -w \`basename \$t\` -o -w \$t ]; then
+			LINK_DIR=\$t
+			break
+		fi
+		echo "Neither \`basename \$t\` or \$t are writable"
+		;;
+	esac
+done
+
+#
+# clean out old or possibly conflicting tools chains ?
+#
+while :; do
+	echo "***** Warning - removal may break other non Accelerated packaged tool chains"
+	echo -n "Remove old or possible conflicting toolchains/files ? [\$CLEAN_OLD]: "
+	read t
+	case "\$t" in
+	"") break ;;
+	y|Y|[yY][eE][sS]) CLEAN_OLD=y; break ;;
+	n|N|[nN][oO])     CLEAN_OLD=n; break ;;
+	*) echo "Either Y or N will do :-)" ;;
+	esac
+done
+
+#
+# if they have ccache install,  let them use it by default :-)
+#
+if [ -x "\`which ccache\`" ]; then
+	echo -n "You have ccache installed, always use it? [\$CCACHE_OPTION]: "
+	read t
+	case "\$t" in
+	"") break ;;
+	y|Y|[yY][eE][sS]) CCACHE_OPTION=y; break ;;
+	n|N|[nN][oO])     CCACHE_OPTION=n; break ;;
+	*) echo "Either Y or N will do :-)" ;;
+	esac
+
+fi
+if [ "\$CCACHE_OPTION" = y ]; then
+	CCACHE="\`which ccache\`"
+else
+	CCACHE=""
+fi
+
+#
+# Now clean up old conflicting tool chains and directories
+#
+if [ "\$CLEAN_OLD" = "y" ]; then
+	rm -rf "/usr/local/${CROSS}"
+	rm -rf "/usr/local/lib/gcc-lib/${CROSS}"
+	rm -rf "/usr/local/lib/gcc/${CROSS}"
+	rm -rf "/usr/local/libexec/gcc/${CROSS}"
+	rm -rf /usr/local/include/g++-v3
+	rm -rf /usr/local/include/c++
+	for i in /usr/local/bin/${CROSS}-*
+	do
+		case "\$i" in
+		/usr/local/bin/${CROSS}-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*)
+			echo "\$i is ok, leaving..."
+			;;
+		*)
+			echo "\$i is a conflict, removing..."
+			rm -f "\$i"
+			;;
+		esac
+	done
+fi
+
+#
+# extract the toolchain and install the executables appropriately
+#
+
+[ -d \$EXTRACT_DIR ] || mkdir -p \$EXTRACT_DIR
+if [ ! -d \$EXTRACT_DIR ]; then
+	echo "Cannot make directory \$EXTRACT_DIR"
+	exit 1
+fi
+rm -rf \$EXTRACT_DIR/${CROSS}-tools-${DATE}
+if [ -d \$EXTRACT_DIR/${CROSS}-tools-${DATE} ]; then
+	echo "Cannot remove \$EXTRACT_DIR/${CROSS}-tools-${DATE}"
+	exit 1
+fi
+mkdir -p \$EXTRACT_DIR/${CROSS}-tools-${DATE}
+if [ ! -d \$EXTRACT_DIR/${CROSS}-tools-${DATE} ]; then
+	echo "Cannot make directory \$EXTRACT_DIR/${CROSS}-tools-${DATE}"
+	exit 1
+fi
+
+(
+	cd \$EXTRACT_DIR/${CROSS}-tools-${DATE} || exit 1
+	tail -n +\${SKIP} \${SCRIPT} | gunzip | tar xf -
+)
+
+if [ ! -d \$EXTRACT_DIR/${CROSS}-tools-${DATE}/usr ]; then
+	"Extraction failed,  no usr directory created in target"
+	exit 1
+fi
+
+#
+# move the binaries to a nicer location
+#
+for i in \$EXTRACT_DIR/${CROSS}-tools-${DATE}/usr/local/*
+do
+	mv "\$i" \$EXTRACT_DIR/${CROSS}-tools-${DATE}/.
+done
+rm -rf \$EXTRACT_DIR/${CROSS}-tools-${DATE}/usr
+
+#
+# create the executables
+#
+for i in \$EXTRACT_DIR/${CROSS}-tools-${DATE}/bin/*
+do
+	BASE="\`basename \$i\`"
+	BASE="\`echo \$BASE | sed 's/^${PREFIX}-//'\`"
+	rm -f \$LINK_DIR/${CROSS}-${DATE}-\$BASE
+	echo "#!/bin/sh" >> \$LINK_DIR/${CROSS}-${DATE}-\$BASE
+	if [ "\$CCACHE" ]; then
+		case "\$BASE" in
+		*gcc|*g++|*c++)
+			echo "exec \$CCACHE \$i \\"\\\$@\\"" >> \
+				\$LINK_DIR/${CROSS}-${DATE}-\$BASE
+			;;
+		esac
+	fi
+	# fallback to non cache in case ccache is removed
+	printf "exec \$i \\"\\\$@\\"" >> \$LINK_DIR/${CROSS}-${DATE}-\$BASE
+	chmod 755 \$LINK_DIR/${CROSS}-${DATE}-\$BASE
+done
+
+exit 0
+__ARCHIVE_FOLLOWS__
+!EOF
+
+cat_archive "$ARCHIVE" >> $INSTALL_FILE
+chmod +x $INSTALL_FILE
+

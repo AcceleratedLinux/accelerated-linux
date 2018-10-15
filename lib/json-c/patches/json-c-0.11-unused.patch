@@ -1,0 +1,55 @@
+--- json-c-0.11/json_object.c.orig	2013-05-10 15:33:06.401181196 +1000
++++ json-c-0.11/json_object.c	2013-05-10 15:33:57.891304947 +1000
+@@ -431,8 +431,8 @@
+ 
+ static int json_object_boolean_to_json_string(struct json_object* jso,
+ 					      struct printbuf *pb,
+-					      int level,
+-						  int flags)
++					      __attribute__((unused)) int level,
++						  __attribute__((unused)) int flags)
+ {
+   if(jso->o.c_boolean) return sprintbuf(pb, "true");
+   else return sprintbuf(pb, "false");
+@@ -469,8 +469,8 @@
+ 
+ static int json_object_int_to_json_string(struct json_object* jso,
+ 					  struct printbuf *pb,
+-					  int level,
+-					  int flags)
++					  __attribute__((unused)) int level,
++					  __attribute__((unused)) int flags)
+ {
+   return sprintbuf(pb, "%"PRId64, jso->o.c_int64);
+ }
+@@ -556,7 +556,7 @@
+ 
+ static int json_object_double_to_json_string(struct json_object* jso,
+ 					     struct printbuf *pb,
+-					     int level,
++					     __attribute__((unused)) int level,
+ 						 int flags)
+ {
+   char buf[128], *p, *q;
+@@ -616,8 +616,8 @@
+ 
+ static int json_object_string_to_json_string(struct json_object* jso,
+ 					     struct printbuf *pb,
+-					     int level,
+-						 int flags)
++					     __attribute__((unused)) int level,
++						 __attribute__((unused)) int flags)
+ {
+   sprintbuf(pb, "\"");
+   json_escape_str(pb, jso->o.c_string.str, jso->o.c_string.len);
+--- json-c-0.11/json_object_iterator.c.orig	2013-05-10 15:36:30.380440049 +1000
++++ json-c-0.11/json_object_iterator.c	2013-05-10 15:36:35.880890911 +1000
+@@ -84,7 +84,7 @@
+  * ****************************************************************************
+  */
+ struct json_object_iterator
+-json_object_iter_end(const struct json_object* obj)
++json_object_iter_end(__attribute__((unused)) const struct json_object* obj)
+ {
+     struct json_object_iterator iter;
+ 

@@ -1,0 +1,60 @@
+
+Start the Debugger
+------------------
+
+From the top of the tree run:
+
+	sudo openocd -f tools/openocd/targets/5400-rm.cfg
+
+You will need and openocd installation (lastest from git is best)
+This will load and run u-boot.  Break into u-boot to a prompt and run tyhe
+following if you have network support (you can use USB support otherwise,
+see later):
+
+	nand erase.chip
+    dhcp 0x800000 u-boot.kwb
+
+Check that u-boot.kwb was loaded,  if not (perhaps image.bin was loaded),
+run:
+
+	tftpboot 0x800000 u-boot.kwb
+
+once u-boot.kwb has been loaded into RAM you can run:
+
+    nand write 0x800000 0 80000
+
+At this point it is best to power off,  remove the debugger and then repower
+and drop into the u-boot prompt.
+
+	saveenv
+	run netload
+
+Once booted into linux run:
+
+	/etc/mkffs
+	ifconfig eth0 192.168.0.1/24
+	netflash -kib 192.168.0.2 image.bin
+	netflash -kib -r /dev/flash/image1 192.168.0.2 image.bin
+
+The reason we disconnect the debugger is that it often interferes with linux
+causing crashes.
+
+Program u-boot -- from network using u-boot
+-------------------------------------------
+
+nand erase 0 100000
+dhcp 0x800000 u-boot.kwb
+nand write 0x800000 0 80000
+
+Program u-boot -- from usb using u-boot
+---------------------------------------
+
+nand erase 0 100000
+fatload usb 0 0x800000 u-boot.kwb
+nand write 0x800000 0 80000
+
+Load a new boot loader from linux
+---------------------------------
+
+netflash -n -i -k -b -r /dev/flash/boot 192.168.0.2 u-boot.kwb
+

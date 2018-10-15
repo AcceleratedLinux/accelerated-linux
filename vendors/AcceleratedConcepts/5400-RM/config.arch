@@ -1,0 +1,24 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+
+LINUXTARGET = zImage dtbs
+BOOTTARGET = u-boot.kwb
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES = images/image.bin images/u-boot.kwb images/configs.tar.gz \
+           images/romfs-inst.log prop/config/schema/accns.schema
+
+############################################################################
+
+CPUFLAGS = -msoft-float
+
+include $(ROOTDIR)/vendors/config/arm/config.arch
+
+############################################################################

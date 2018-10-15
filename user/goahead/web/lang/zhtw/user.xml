@@ -1,0 +1,60 @@
+<po>
+  <message msgid="wireless enable" msgstr="啟用" />
+  <message msgid="wireless disable" msgstr="停用" />
+  <message msgid="wireless allow" msgstr="允許" />
+  <message msgid="wireless reject" msgstr="拒絕" />
+  <message msgid="wireless none" msgstr="無" />
+
+  <message msgid="secure select ssid" msgstr="選擇無線網路識別碼" />
+  <message msgid="secure ssid choice" msgstr="無線網路識別碼的選取" />
+  <message msgid="secure security policy" msgstr="安全原則 -- " />
+  <message msgid="secure security mode" msgstr="安全模式" />
+  <message msgid="secure encryp type" msgstr="加密型態" />
+  <message msgid="secure wep" msgstr="有線等效協議（WEP）" />
+  <message msgid="secure wep default key" msgstr="預設金鑰" />
+  <message msgid="secure wep default key1" msgstr="金鑰 1" />
+  <message msgid="secure wep default key2" msgstr="金鑰 2" />
+  <message msgid="secure wep default key3" msgstr="金鑰 3" />
+  <message msgid="secure wep default key4" msgstr="金鑰 4" />
+  <message msgid="secure wep key" msgstr="WEP 金鑰" />
+  <message msgid="secure wep key1" msgstr="WEP 金鑰 1 ：" />
+  <message msgid="secure wep key2" msgstr="WEP 金鑰 2 ：" />
+  <message msgid="secure wep key3" msgstr="WEP 金鑰 3 ：" />
+  <message msgid="secure wep key4" msgstr="WEP 金鑰 4 ：" />
+  <message msgid="secure wpa" msgstr="Wi-Fi保護存取" />
+  <message msgid="secure wpa algorithm" msgstr="WPA演算法" />
+  <message msgid="secure wpa pass phrase" msgstr="通行碼" />
+  <message msgid="secure wpa key renew interval" msgstr="金鑰更新間隔" />
+  <message msgid="secure wpa pmk cache period" msgstr="配對主鍵快取週期" />
+  <message msgid="secure wpa preauth" msgstr="先期認證" />
+  <message msgid="secure 8021x wep" msgstr="802.1x有線等效協議" />
+  <message msgid="secure 1x wep" msgstr=" 有線等效協議 " />
+  <message msgid="secure radius" msgstr="Radius伺服器" />
+  <message msgid="secure radius ipaddr" msgstr=" IP位址 " />
+  <message msgid="secure radius port" msgstr=" 連接埠 " />
+  <message msgid="secure radius shared secret" msgstr=" 共享密鑰 " />
+  <message msgid="secure radius session timeout" msgstr=" 連線時限 " />
+  <message msgid="secure radius idle timeout" msgstr=" 閒置時限 " />
+  <message msgid="secure access policy" msgstr=" 存取原則 " />
+  <message msgid="secure access policy capable" msgstr=" 功能 " />
+  <message msgid="secure access policy new" msgstr="新增：" />
+  <message msgid="secure access policy del" msgstr="刪除" />
+  
+  <message msgid="status title" msgstr="系統狀態" />
+  <message msgid="status introduction" msgstr="系統狀態。" />
+  <message msgid="status system information" msgstr="系統資訊" />
+  <message msgid="status sdk version" msgstr="軔體版本" />
+  <message msgid="status operate mode" msgstr="操作模式" />
+  <message msgid="status internet config" msgstr="網際網路" />
+  <message msgid="status connect type" msgstr="連接型態" />
+  <message msgid="status wan ipaddr" msgstr="廣域網路IP位址" />
+  <message msgid="status subnet mask" msgstr="子網域遮罩" />
+  <message msgid="status default gateway" msgstr="預設通訊閘" />
+  <message msgid="status primary dns" msgstr="主要網域名稱解析伺服器" />
+  <message msgid="status secondary dns" msgstr="次要網域名稱解析伺服器" />
+  <message msgid="status local network" msgstr="區域網路" />
+  <message msgid="status lan ipaddr" msgstr="本機IP位址" />
+  <message msgid="status local netmask" msgstr="區域網路遮罩" />
+  <message msgid="status mac" msgstr="MAC 位址" />
+  <message msgid="status ethernet port status" msgstr="乙太網路連接埠遮罩" />
+ </po>

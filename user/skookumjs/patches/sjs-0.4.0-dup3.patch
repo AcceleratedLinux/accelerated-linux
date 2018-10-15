@@ -1,0 +1,26 @@
+diff -ur sjs/modules/_os.c sjs-patched/modules/_os.c
+--- sjs/modules/_os.c	2016-10-27 15:53:03.737195042 +1000
++++ sjs-patched/modules/_os.c	2016-10-27 15:52:18.481194310 +1000
+@@ -788,14 +788,14 @@
+     newfd = duk_require_int(ctx, 1);
+     cloexec = duk_require_boolean(ctx, 2);
+ 
+-#if defined(__linux__)
+-    r = dup3(oldfd, newfd, cloexec ? O_CLOEXEC : 0);
+-    if (r < 0) {
+-        SJS_THROW_ERRNO_ERROR();
+-        return -42;    /* control never returns here */
+-    }
+-    goto end;
+-#endif
++// #if defined(__linux__)
++//     r = dup3(oldfd, newfd, cloexec ? O_CLOEXEC : 0);
++//     if (r < 0) {
++//         SJS_THROW_ERRNO_ERROR();
++//         return -42;    /* control never returns here */
++//     }
++//     goto end;
++// #endif
+     r = dup2(oldfd, newfd);
+     if (r < 0) {
+         SJS_THROW_ERRNO_ERROR();

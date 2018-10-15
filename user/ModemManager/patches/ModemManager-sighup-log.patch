@@ -1,0 +1,53 @@
+diff -ru ModemManager/src/main.c ModemManager-logpatch/src/main.c
+--- ModemManager/src/main.c	2015-10-01 13:57:25.981252000 +1000
++++ ModemManager-logpatch/src/main.c	2016-12-09 15:43:00.190496931 +1000
+@@ -55,6 +55,25 @@
+     return FALSE;
+ }
+ 
++static gboolean
++hup_cb (gpointer user_data)
++{
++    GError *err = NULL;
++
++    mm_info ("Reloading log file...");
++    mm_log_shutdown ();
++    if (!mm_log_setup (mm_context_get_log_level (),
++                   mm_context_get_log_file (),
++                   mm_context_get_timestamps (),
++                   mm_context_get_relative_timestamps (),
++                   mm_context_get_debug (),
++                   &err)) {
++        g_warning ("Failed to set up logging: %s", err->message);
++        g_error_free (err);
++    }
++    return G_SOURCE_CONTINUE;
++}
++
+ #if WITH_SUSPEND_RESUME
+ 
+ static void
+@@ -153,6 +172,7 @@
+ 
+     g_unix_signal_add (SIGTERM, quit_cb, NULL);
+     g_unix_signal_add (SIGINT, quit_cb, NULL);
++    g_unix_signal_add (SIGHUP, hup_cb, NULL);
+ 
+     mm_info ("ModemManager (version " MM_DIST_VERSION ") starting in %s bus...",
+              mm_context_get_test_session () ? "session" : "system");
+Only in ModemManager-logpatch/src: main.c~
+diff -ru ModemManager/src/mm-log.c ModemManager-logpatch/src/mm-log.c
+--- ModemManager/src/mm-log.c	2015-10-01 13:57:25.985252000 +1000
++++ ModemManager-logpatch/src/mm-log.c	2016-12-07 11:28:57.322318826 +1000
+@@ -267,6 +267,8 @@
+ {
+     if (logfd < 0)
+         closelog ();
+-    else
++    else {
+         close (logfd);
++        logfd = -1;
++    }
+ }
+Only in ModemManager-logpatch/src: mm-log.c~
+Only in ModemManager-logpatch/src: mm-log.h~

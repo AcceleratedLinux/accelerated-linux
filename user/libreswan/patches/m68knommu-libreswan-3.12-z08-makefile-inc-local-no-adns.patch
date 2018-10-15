@@ -1,0 +1,10 @@
+--- libreswan-3.12/Makefile.inc.local.LSW	2015-09-01 20:46:45.356177845 -0400
++++ libreswan-3.12/Makefile.inc.local	2015-09-01 20:47:06.713195375 -0400
+@@ -75,6 +75,7 @@
+ USE_LDAP := false
+ USE_LIBCURL := false
+ USE_DNSSEC := false
++USE_ADNS := false
+ 
+ # can't be empty
+ USERLINK = -Wl,--got=multigot

@@ -1,0 +1,5 @@
+config LIB_NETFILTER_CTTIMEOUT
+	bool "libnetfilter_cttimeout"
+	select LIB_NFNETLINK
+	select LIB_LIBMNL
+	default n

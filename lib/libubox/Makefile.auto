@@ -1,0 +1,3 @@
+ifdef CONFIG_LIB_JSON_C
+dep_libubox += json-c
+endif

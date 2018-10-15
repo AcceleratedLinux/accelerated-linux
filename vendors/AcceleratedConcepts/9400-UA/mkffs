@@ -1,0 +1,63 @@
+#!/bin/sh
+
+#
+# mkffs -- make flash filesystem for 9400-UA
+#
+# Create fdisk style partitions and install grub on target mSATA drive.
+#
+
+# Default drive to setup and boot from
+DRIVE=/dev/sda
+
+# Default size of image partitions (in Mbytes)
+IMAGESIZE=${1:-4096}
+
+# Check if this device is mounted
+if mount | grep -q $DRIVE
+then
+	echo "ERROR: drive $DRIVE is active (mounted)"
+	exit 1
+fi
+
+#
+# Make the fdisk partitions
+# We create 2 partitions for images (dual boot images), and a large
+# partition over the remaining disk space. We need to make sure to leave
+# the first entire cylinder empty. Our grub primary boot is larger due
+# to supporting squashfs filesystems.
+#
+dd if=/dev/zero of=$DRIVE bs=512 count=1
+
+set -- `sfdisk -g $DRIVE`
+CYLS=$2
+HEADS=$4
+SECTORS=$6
+
+# Calculate cylinder size in kbytes.
+CYLSIZEK=`expr $HEADS \* $SECTORS / 2`
+# Calculate the number os cylinders per image partition.
+IMGCYLS=`expr $IMAGESIZE \* 1024 / $CYLSIZEK + 1`
+
+P1_START=1
+P1_SIZE=$IMGCYLS
+P2_START=`expr $P1_START + $P1_SIZE`
+P2_SIZE=$IMGCYLS
+P3_START=`expr $P2_START + $P2_SIZE`
+sfdisk -f -q -L $DRIVE << EOF
+$P1_START,$P1_SIZE,L,*
+$P2_START,$P2_SIZE,L,*
+$P3_START,,L
+EOF
+
+# Now that all the partitioning is done install grub.
+/etc/grub-install $DRIVE
+
+# Make out /opt filesystem.
+mkfs.ext4 ${DRIVE}3
+mount -t ext4 ${DRIVE}3 /opt
+mkdir /opt/config
+touch /opt/config/.init
+mkdir /opt/boot
+grub-editenv /opt/boot/grubenv set default=0
+
+exit 0

@@ -1,0 +1,11 @@
+--- qemu-2.3.0/pixman/pixman/Makefile.am.org	2015-07-17 15:15:09.313079234 +1000
++++ qemu-2.3.0/pixman/pixman/Makefile.am	2015-07-17 15:15:16.853079006 +1000
+@@ -2,7 +2,7 @@
+ 
+ lib_LTLIBRARIES = libpixman-1.la
+ 
+-libpixman_1_la_LDFLAGS = -version-info $(LT_VERSION_INFO) -no-undefined @PTHREAD_LDFLAGS@ 
++libpixman_1_la_LDFLAGS = -version-info $(LT_VERSION_INFO) -Wl,-no-undefined @PTHREAD_LDFLAGS@ 
+ libpixman_1_la_LIBADD = @PTHREAD_LIBS@ -lm
+ libpixman_1_la_SOURCES = $(libpixman_sources) $(libpixman_headers)
+ 

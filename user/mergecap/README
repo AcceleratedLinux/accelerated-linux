@@ -1,0 +1,93 @@
+mergecap
+========
+
+Merge tcpdump packets into a single, timestamped file.
+
+A dump file is in pcap format detailing the packet and timestamp. One
+thing it doesn't contain is the interface. You can dump multiple interfaces
+with tcpdump, however it may be easier to dump each interface separately.
+Merging is done via the timestamp, so all packets are in order.
+
+For example on device 1:
+
+> ip route
+default via 10.44.44.1 dev wan  proto static  metric 1  mtu 1500
+10.44.11.0/24 dev lan1  proto static  scope link  src 10.44.11.1  metric 5  mtu 1500
+10.44.44.0/24 dev wan  proto static  scope link  src 10.44.44.11  metric 1  mtu 1500
+10.44.44.1 via 10.44.44.1 dev wan  proto static  src 10.44.44.11  metric 1  mtu 1500
+
+tcpdump -i lan1 icmp and dst host 10.44.0.1 -w lan1.pcap -c 5 &
+tcpdump -i wan icmp and src host 10.44.0.1 -w wan.pcap -c 5 &
+
+on device 2: (ip 10.44.11.250)
+> ping 10.44.0.1
+
+You will capture two files on device 1 (lan1.pcap and wan.pcap). The lan1.pcap
+file will contain the ping requests, and wan.pcap will contain the ping replies.
+Device 1 should route the requests from lan1 to wan, and the replies from wan
+back to lan1. We can modify the source and destination addresses so that we don't
+need an actual server. Device 1 will believe the packets have come from a real
+server and act accordingly. We can merge the two pcap files into one so that
+tcpreplay can resend the packets. Merging the two files will end up with 10
+packets (5 requests, and 5 replies) in the correct order, as the timestamp for the
+request is before each reply.
+
+You can use tcpdump to check the order of the packets by using:
+
+tcpdump -r pcap_file
+
+
+generate
+========
+This script wraps all the tcprewrite, mergecap, tcpprep and tcpreplay commands into
+a single script. As the saved pcap files are from a real system, we will most probably
+want to modify the ip addresses for testing. Supplying the generate script with the
+'src' or 'dst' parameters modifies the address for that file. You can generate traffic
+with only a primary, or with primary (server) and secondary (client) interfaces.
+
+If you wanted to test a ping from 10.44.11.100 to 10.44.0.50, and both ip addresses were
+not real devices, you could generate to correct packets with:
+
+generate_packets primary=wan file=wan.pcap src=10.44.0.50 secondary=lan1 file=lan1.pcap src=10.44.11.100 dst=10.44.0.50
+
+This will edit the pcap files, changing source and destination IPs to the ones specified,
+merge and precache the files, fix and checksums, and replay the packets on the correct
+interface. If you dump the lan1 interface you will see:
+
+00:08:59.273552 IP 10.44.11.100 > 10.44.0.50: ICMP echo request, id 61704, seq 1, length 64
+00:08:59.273790 IP 10.44.0.50 > 10.44.11.1: ICMP echo reply, id 61704, seq 1, length 64
+
+Note: the device in test is 10.44.11.1, and has source NAT, so the replied ping packet
+      goes to it first, then the routing sends it on to the correct IP.
+
+You can test firewall and routing rules by seeing that the packets make it back from the
+"server". If you ran:
+
+generate_packets primary=wan file=wan.pcap src=10.44.0.51 secondary=lan1 file=lan1.pcap src=10.44.11.100 dst=10.44.0.50
+
+you would only see:
+
+00:46:30.016785 IP 10.44.11.250 > 10.44.0.50: ICMP echo request, id 61704, seq 1, length 64
+
+as the firewall blocks the return packet from "10.44.0.51" as it doesn't know about the
+connection state for this IP.
+
+ARP
+===
+One thing to note is that you can change IP addresses on a local network to a non-existant
+device, however the router doesn't know about it. It will issue an arp request for the
+address. If nothing replies, then that IP will fail. To fix this, you need to add the
+ARP entry into the router by using the following command:
+
+arp -s src_ip mac_addr temp
+
+So if we have generated packets from 10.44.44.100, and it doesn't exist, on the router
+(device under test) use:
+
+arp -s 10.44.44.100 00:27:01:02:03:04 temp
+
+This will mean the router thinks it knows about 10.44.44.100 and will send a packet to
+the local mac address 00:27:01:02:03:04. You can use any mac address that isn't currently
+being used.
+
+

@@ -1,0 +1,19 @@
+#
+# uvar/dev rule for HUAWEI E220 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN="/bin/mknod -m 665 /var/dev/ttyACM0 c 166 0"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN="/bin/mknod -m 665 /var/dev/ttyACM1 c 166 1"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN="/bin/mknod -m 665 /var/dev/ttyACM2 c 166 2"
+
+ACTION=="add", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN="/bin/mknod -m 665 /var/dev/ttyACM0 c 166 0"
+ACTION=="add", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN="/bin/mknod -m 665 /var/dev/ttyACM1 c 166 1"
+ACTION=="add", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN="/bin/mknod -m 665 /var/dev/ttyACM2 c 166 2"
+
+ACTION=="add", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="0af0", ATTRS{idProduct}=="6901", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+

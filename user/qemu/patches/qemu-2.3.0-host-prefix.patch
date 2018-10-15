@@ -1,0 +1,30 @@
+--- qemu-2.3.0/configure.org	2015-07-17 14:51:10.221122630 +1000
++++ qemu-2.3.0/configure	2015-07-17 14:53:35.549118247 +1000
+@@ -742,6 +742,8 @@
+   ;;
+   --host-cc=*) host_cc="$optarg"
+   ;;
++  --host=*) host_prefix="$optarg"
++  ;;
+   --cxx=*)
+   ;;
+   --iasl=*) iasl="$optarg"
+@@ -1247,6 +1249,7 @@
+   --iasl=IASL              use ACPI compiler IASL [$iasl]
+   --host-cc=CC             use C compiler CC [$host_cc] for code run at
+                            build time
++  --host=PREFIX            host PREFIX for target
+   --cxx=CXX                use C++ compiler CXX [$cxx]
+   --objcc=OBJCC            use Objective-C compiler OBJCC [$objcc]
+   --extra-cflags=CFLAGS    append extra C compiler flags QEMU_CFLAGS
+@@ -5023,7 +5026,9 @@
+   echo "HOST_CC      := REAL_CC=\"\$(HOST_CC)\" cgcc"  >> $config_host_mak
+   echo "QEMU_CFLAGS  += -Wbitwise -Wno-transparent-union -Wno-old-initializer -Wno-non-pointer-null" >> $config_host_mak
+ fi
+-if test "$cross_prefix" != ""; then
++if test "$host_prefix" != ""; then
++  echo "AUTOCONF_HOST := --host=${host_prefix%-}"     >> $config_host_mak
++elif test "$cross_prefix" != ""; then
+   echo "AUTOCONF_HOST := --host=${cross_prefix%-}"     >> $config_host_mak
+ else
+   echo "AUTOCONF_HOST := "                             >> $config_host_mak

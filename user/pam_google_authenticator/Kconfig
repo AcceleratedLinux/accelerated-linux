@@ -1,0 +1,5 @@
+config USER_PAM_GOOGLE_AUTHENTICATOR
+	bool "PAM Google Authenticator"
+	depends on LIB_LIBPAM
+	help
+	  PAM support for TOTP/HOTP authentication.

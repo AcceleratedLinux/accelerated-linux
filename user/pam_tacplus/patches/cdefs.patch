@@ -1,0 +1,14 @@
+--- pam_tacplus/libtac/include/libtac.h.org	2018-09-17 22:19:57.361594873 +1000
++++ pam_tacplus/libtac/include/libtac.h	2018-09-17 22:20:48.578029634 +1000
+@@ -37,11 +37,7 @@
+ #include <netdb.h>
+ #include <unistd.h>
+ #include <sys/types.h>
+-#ifdef __linux__
+-#include <sys/cdefs.h>
+-#else
+ #include "cdefs.h"
+-#endif
+ #include "tacplus.h"
+ 
+ #if defined(DEBUGTAC) && !defined(TACDEBUG)

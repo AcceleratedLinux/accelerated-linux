@@ -1,0 +1,25 @@
+
+Standalone diskless X86
+-----------------------
+
+Take the .iso image produces and burn it to CD,  boot CD on device of
+choice.
+
+Existing uBuntu install
+-----------------------
+
+1. cp images/X86-bzImage images/X86-initrd.gz /boot/.
+
+2. Edit /etc/default/grub and:
+
+   a) comment out all *HIDDEN* lines so you can see boot menu
+
+   b) edit /etc/grub.d/40_custom and add an entry as follows:
+
+      menuentry "ACC X86" {
+         linux    /boot/X86-bzImage
+         initrd   /boot/X86-initrd.gz
+      }
+
+   c) reboot and select "ACC X86" option to boot this target.
+

@@ -1,0 +1,6 @@
+*.o
+*~
+*.bak
+l2tpd
+xl2tpd
+pfc

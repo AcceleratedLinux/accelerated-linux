@@ -1,0 +1,21 @@
+--- wget-1.16/src/utils.c.orig	2014-10-30 09:22:29.236616210 +1000
++++ wget-1.16/src/utils.c	2014-10-30 09:22:31.325940092 +1000
+@@ -434,7 +434,7 @@
+ /* The Windows versions of the following two functions are defined in
+    mswindows.c. On MSDOS this function should never be called. */
+ 
+-#ifdef __VMS
++#if defined(__VMS) || defined(__uClinux__)
+ 
+ void
+ fork_to_background (void)
+--- wget-1.16/Makefile.in.orig	2014-10-30 09:23:18.586617521 +1000
++++ wget-1.16/Makefile.in	2014-10-30 09:23:20.056749853 +1000
+@@ -45,6 +45,7 @@
+ #
+ # Version: $(VERSION)
+ #
++FLTFLAGS += -s 20000
+ VPATH = @srcdir@
+ am__is_gnu_make = test -n '$(MAKEFILE_LIST)' && test -n '$(MAKELEVEL)'
+ am__make_running_with_option = \

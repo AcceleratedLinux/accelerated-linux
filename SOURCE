@@ -1,0 +1,56 @@
+
+SOURCE TREE AND LAYOUT
+----------------------
+
+The sources in this build have come from many places. Everything in
+this package is covered by some type of open source or public domain
+license. GNU copyleft is the most prevelant, but check within each
+package for its specific licsense if you have concerns.
+
+
+The directories:
+
+Documentation -- Useful notes related to building and using specific targets.
+                 Also some useful notes related to this distribution.
+
+linux         -- linux sources from kernel.org (+ changes)
+
+lib           -- Application libraries.
+
+uClibc        -- An alternate libc from www.uClibc.org
+
+glibc         -- Standard GNU libc
+
+user          -- User mode applications, source from many, many places.
+                 Too many places to enumerate, most are standard GNU/Linux
+                 packages, all are freely available on the net somewhere.
+                 Some applications have been developed locally (in tree).
+
+openswan      -- Openswan from www.openswan.org
+
+vendors       -- Plaform specific build information and support files.
+                 Layed out for each specific vendor and board, contains
+                 default configurations and make instructions.
+
+tools         -- Supporting tools used by the build
+                 (also contains some debugger stubs and aids)
+
+bin           -- Supporting scripts used by some targets to build
+
+config        -- Linux kernel config scripts used to drive the
+                 vendor/platform configuration.
+
+
+The following directories hold results of the build process:
+
+include       -- Layout for target include files used to build libs/apps.
+
+staging       -- Layout of target system libs for building.
+
+romfs         -- Is the structrue of the root file system. Mostly it holds
+                 the user application binaries, but also has device nodes,
+                 configuration files, shared libraries, etc.
+
+images        -- Contains the final build binaries of the kernel, root file
+                 system, and often a complete combined image.
+

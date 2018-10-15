@@ -1,0 +1,11 @@
+--- ipsec-tools-0.8.2/src/racoon/pfkey.c.orig	2013-10-11 21:37:12.889001863 +1000
++++ ipsec-tools-0.8.2/src/racoon/pfkey.c	2013-10-11 21:37:14.726100480 +1000
+@@ -3352,7 +3352,7 @@
+ 	struct sockaddr *old_saddr, *new_saddr;
+ 	struct sockaddr *old_daddr, *new_daddr;
+ 	struct sockaddr *old_local, *old_remote;
+-	struct sockaddr *local, *remote;
++	struct sockaddr *local = NULL, *remote = NULL;
+ 	struct sadb_x_kmaddress *kmaddr;
+ 	struct sadb_x_policy *xpl;
+ 	struct sadb_x_ipsecrequest *xisr_list;

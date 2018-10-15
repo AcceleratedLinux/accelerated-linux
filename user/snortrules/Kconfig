@@ -1,0 +1,3 @@
+config USER_SNORTRULES
+	bool "snort rules"
+	select USER_SNORT_SNORT

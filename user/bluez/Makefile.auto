@@ -1,0 +1,3 @@
+dir_$(CONFIG_USER_BLUEZ_BLUETOOTHD) += bluez
+
+bluez: udev readline

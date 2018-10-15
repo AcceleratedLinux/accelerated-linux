@@ -1,0 +1,15 @@
+#
+# uvar/dev rule for HUAWEI E220 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#  chukuo : at add, remove ACTION, I add another parameter that is used to deal with MF628 un-finished process.
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+ACTION=="add", ATTRS{idVendor}=="1199", ATTRS{idProduct}=="0fff", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="1199", ATTRS{idProduct}=="0025", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="1199", ATTRS{idProduct}=="0025", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+ACTION=="add", ATTRS{idVendor}=="168d", ATTRS{idProduct}=="6002", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="16d8", ATTRS{idProduct}=="6002", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="16d8", ATTRS{idProduct}=="6002", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+

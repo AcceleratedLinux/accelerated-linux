@@ -1,0 +1,17 @@
+/Makefile
+/config.cache
+/config.log
+/config.status
+/example/Makefile
+/include/config.h
+/libnet-config
+/test/Ethernet/Makefile
+/test/ICMP/Makefile
+/test/Makefile
+/test/OSPF/Makefile
+/test/Random/Makefile
+/test/TCP/Makefile
+/test/UDP/Makefile
+/util/Get-mac/Makefile
+/util/Makefile
+/version.h

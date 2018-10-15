@@ -1,0 +1,21 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+VENDOR_CFLAGS = -DCONFIG_SNAPGEAR
+
+LINUXTARGET = vmlinux
+
+HW_VENDOR = AcceleratedConcepts
+VERSIONPKG = 1.0.0
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/mips/config.arch
+
+RELFILES += images/configs.tar.gz
+
+############################################################################

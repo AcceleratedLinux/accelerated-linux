@@ -1,0 +1,6 @@
+config USER_IW
+	select LIB_LIBNL
+	bool "iw"
+	help
+		Configuration utility for wireless devices.
+		This is a replacement for iwconfig.

@@ -1,0 +1,392 @@
+This output plugin runs a command for each alert, with various values appended.
+The command to run is specified in the snort configuration, e.g.:
+
+  output alert_process: logger -t snort_alert
+
+The values are in order of:
+  timestamp, sig_gen, sig_id, sig_rev, msg, proto, srcip, srcport, dstip,
+  dstport, classification, priority
+
+For example, the logger command might be executed as:
+
+  logger -t snort_alert 1504057779 1 1000002 2 "Telnet access" "TCP" \
+  "192.168.210.254" 47360 "192.168.210.1" 23 \
+  "An attempted login using a suspicious username was detected" 2
+
+Author: Samuel Brian <sam.brian@accelerated.com>
+diff -ru --new-file snort-2.9.8.2.orig/src/output-plugins/Makefile.am snort-2.9.8.2/src/output-plugins/Makefile.am
+--- snort-2.9.8.2.orig/src/output-plugins/Makefile.am	2013-06-05 07:19:53.000000000 +1000
++++ snort-2.9.8.2/src/output-plugins/Makefile.am	2017-08-29 08:54:44.769478530 +1000
+@@ -8,6 +8,7 @@
+ spo_alert_syslog.c spo_alert_syslog.h \
+ spo_alert_unixsock.c spo_alert_unixsock.h \
+ spo_csv.c spo_csv.h  \
++spo_process.c spo_process.h  \
+ spo_log_null.c spo_log_null.h \
+ spo_log_tcpdump.c spo_log_tcpdump.h \
+ spo_unified2.c spo_unified2.h \
+diff -ru --new-file snort-2.9.8.2.orig/src/output-plugins/Makefile.in snort-2.9.8.2/src/output-plugins/Makefile.in
+--- snort-2.9.8.2.orig/src/output-plugins/Makefile.in	2016-03-19 05:11:30.000000000 +1000
++++ snort-2.9.8.2/src/output-plugins/Makefile.in	2017-08-29 08:55:07.857649847 +1000
+@@ -98,7 +98,7 @@
+ libspo_a_LIBADD =
+ am_libspo_a_OBJECTS = spo_alert_fast.$(OBJEXT) \
+ 	spo_alert_full.$(OBJEXT) spo_alert_syslog.$(OBJEXT) \
+-	spo_alert_unixsock.$(OBJEXT) spo_csv.$(OBJEXT) \
++	spo_alert_unixsock.$(OBJEXT) spo_csv.$(OBJEXT) spo_process.$(OBJEXT) \
+ 	spo_log_null.$(OBJEXT) spo_log_tcpdump.$(OBJEXT) \
+ 	spo_unified2.$(OBJEXT) spo_log_ascii.$(OBJEXT) \
+ 	spo_alert_sf_socket.$(OBJEXT) spo_alert_test.$(OBJEXT)
+@@ -307,6 +307,7 @@
+ spo_alert_syslog.c spo_alert_syslog.h \
+ spo_alert_unixsock.c spo_alert_unixsock.h \
+ spo_csv.c spo_csv.h  \
++spo_process.c spo_process.h  \
+ spo_log_null.c spo_log_null.h \
+ spo_log_tcpdump.c spo_log_tcpdump.h \
+ spo_unified2.c spo_unified2.h \
+diff -ru --new-file snort-2.9.8.2.orig/src/output-plugins/spo_process.c snort-2.9.8.2/src/output-plugins/spo_process.c
+--- snort-2.9.8.2.orig/src/output-plugins/spo_process.c	1970-01-01 10:00:00.000000000 +1000
++++ snort-2.9.8.2/src/output-plugins/spo_process.c	2017-09-01 13:21:36.852237459 +1000
+@@ -0,0 +1,293 @@
++/*
++** Copyright (C) 2014-2015 Cisco and/or its affiliates. All rights reserved.
++** Copyright (C) 2002-2013 Sourcefire, Inc.
++** Copyright (C) 1998-2002 Martin Roesch <roesch@sourcefire.com>
++** Copyright (C) 2001 Brian Caswell <bmc@mitre.org>
++**
++** This program is free software; you can redistribute it and/or modify
++** it under the terms of the GNU General Public License Version 2 as
++** published by the Free Software Foundation.  You may not use, modify or
++** distribute this program under any other version of the GNU General
++** Public License.
++**
++** This program is distributed in the hope that it will be useful,
++** but WITHOUT ANY WARRANTY; without even the implied warranty of
++** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++** GNU General Public License for more details.
++**
++** You should have received a copy of the GNU General Public License
++** along with this program; if not, write to the Free Software
++** Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
++*/
++
++/* $Id$ */
++
++/* spo_csv
++ *
++ * Purpose:  output plugin for csv alerting
++ *
++ * Arguments:  alert file (eventually)
++ *
++ * Effect:
++ *
++ * Alerts are written to a file in the snort csv alert format
++ *
++ * Comments:   Allows use of csv alerts with other output plugin types
++ *
++ */
++
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include <sys/types.h>
++#include <stdio.h>
++#include <stdlib.h>
++#ifndef WIN32
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#endif /* !WIN32 */
++
++#ifdef HAVE_STRINGS_H
++#include <strings.h>
++#endif
++
++#include "spo_csv.h"
++#include "event.h"
++#include "decode.h"
++#include "plugbase.h"
++#include "spo_plugbase.h"
++#include "parser.h"
++#include "snort_debug.h"
++#include "mstring.h"
++#include "util.h"
++#include "log.h"
++
++#include "snort.h"
++
++#include "sfutil/sf_textlog.h"
++#include "log_text.h"
++
++#define DEFAULT_CMD  "logger -s -t snort_alert"
++
++#define REFERENCE_LEN_MAX 256
++
++extern OptTreeNode *otn_tmp;    /* global ptr to current rule data */
++
++typedef struct _AlertProcessData
++{
++    char *cmd;
++} AlertProcessData;
++
++/* list of function prototypes for this preprocessor */
++static void AlertProcessInit(struct _SnortConfig *, char *);
++static AlertProcessData *AlertProcessParseArgs(struct _SnortConfig *, char *);
++static void AlertProcess(Packet *, const char *, void *, Event *);
++static void AlertProcessCleanExit(int, void *);
++static void RealAlertProcess(Packet * p, const char *msg, Event *event, AlertProcessData *data);
++
++/*
++ * Function: SetupProcess()
++ *
++ * Purpose: Registers the output plugin keyword and initialization
++ *          function into the output plugin list.  This is the function that
++ *          gets called from InitOutputPlugins() in plugbase.c.
++ *
++ * Arguments: None.
++ *
++ * Returns: void function
++ *
++ */
++void AlertProcessSetup(void)
++{
++    /* link the preprocessor keyword to the init function in
++       the preproc list */
++    RegisterOutputPlugin("alert_process", OUTPUT_TYPE_FLAG__ALERT, AlertProcessInit);
++
++    DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Output plugin: alert_process is setup...\n"););
++}
++
++
++/*
++ * Function: ProcessInit(char *)
++ *
++ * Purpose: Calls the argument parsing function, performs final setup on data
++ *          structs, links the preproc function into the function list.
++ *
++ * Arguments: args => ptr to argument string
++ *
++ * Returns: void function
++ *
++ */
++static void AlertProcessInit(struct _SnortConfig *sc, char *args)
++{
++    AlertProcessData *data;
++    DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Output: Process Initialized\n"););
++
++    /* parse the argument list from the rules file */
++    data = AlertProcessParseArgs(sc, args);
++
++    DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Linking Process functions to call lists...\n"););
++
++    /* Set the preprocessor function into the function list */
++    AddFuncToOutputList(sc, AlertProcess, OUTPUT_TYPE__ALERT, data);
++    AddFuncToCleanExitList(AlertProcessCleanExit, data);
++}
++
++/*
++ * Function: ParseProcessArgs(char *)
++ *
++ * Purpose: Process positional args, if any.  Syntax is:
++ * output alert_process: [<logpath> ["default"|<list> [<limit>]]]
++ * list ::= <field>(,<field>)*
++ * field ::= "dst"|"src"|"ttl" ...
++ * limit ::= <number>('G'|'M'|K')
++ *
++ * Arguments: args => argument list
++ *
++ * Returns: void function
++ */
++static AlertProcessData *AlertProcessParseArgs(struct _SnortConfig *sc, char *args)
++{
++    AlertProcessData *data;
++
++    DEBUG_WRAP(DebugMessage(DEBUG_INIT, "ParseProcessArgs: %s\n", args););
++    data = (AlertProcessData *)SnortAlloc(sizeof(AlertProcessData));
++
++    /* The command to execute on alert is the only argument right now
++     * (no field list like CSV plugin) */
++    if ( !args ) args = DEFAULT_CMD;
++    data->cmd = strdup(args);
++
++    return data;
++}
++
++static void AlertProcessCleanup(int signal, void *arg, const char* msg)
++{
++    AlertProcessData *data = (AlertProcessData *)arg;
++    /* close alert file */
++    DEBUG_WRAP(DebugMessage(DEBUG_LOG,"%s\n", msg););
++
++    if(data)
++    {
++        free(data->cmd);
++        /* free memory from SpoProcessData */
++        free(data);
++    }
++}
++
++static void AlertProcessCleanExit(int signal, void *arg)
++{
++    AlertProcessCleanup(signal, arg, "AlertProcessCleanExit");
++}
++
++static void AlertProcess(Packet *p, const char *msg, void *arg, Event *event)
++{
++    AlertProcessData *data = (AlertProcessData *)arg;
++    RealAlertProcess(p, msg, event, data);
++}
++
++/*
++ *
++ * Function: RealAlertProcess(Packet * p, const char *msg, Event *event, AlertProcessData *data)
++ *
++ * Purpose: Write a user defined Process message
++ *
++ * Arguments:     p => packet. (could be NULL)
++ *              msg => the message to send
++ *            event => event info
++ *             data => data struct
++ * Returns: void function
++ *
++ */
++static void RealAlertProcess(Packet * p, const char *msg, Event *event, AlertProcessData *data)
++{
++    char *cmd;
++    char *proto = "";
++    char *src_ip = NULL, *dst_ip = NULL;
++    unsigned src_port = 0, dst_port = 0;
++    char reference[REFERENCE_LEN_MAX];
++
++    if(p == NULL)
++        return;
++
++    if (IPH_IS_VALID(p))
++    {
++        switch (GET_IPH_PROTO(p))
++        {
++            case IPPROTO_UDP:
++                proto = "UDP";
++                break;
++            case IPPROTO_TCP:
++                proto = "TCP";
++                break;
++            case IPPROTO_ICMP:
++            case IPPROTO_ICMPV6:
++                proto = "ICMP";
++                break;
++            default:
++                break;
++        }
++
++        switch (GET_IPH_PROTO(p))
++        {
++            case IPPROTO_UDP:
++            case IPPROTO_TCP:
++                src_port = p->sp;
++                dst_port = p->dp;
++                break;
++            case IPPROTO_ICMP:
++                break;
++            default:
++                break;
++        }
++
++        src_ip = strdup(inet_ntoa(GET_SRC_ADDR(p)));
++        dst_ip = strdup(inet_ntoa(GET_DST_ADDR(p)));
++    }
++
++    reference[0] = 0;
++    if (otn_tmp) {
++        char *s = reference;
++        size_t n = REFERENCE_LEN_MAX;
++        int i;
++        ReferenceNode *ref;
++
++        for (ref = otn_tmp->sigInfo.refs; ref; ref = ref->next) {
++            if (ref->system == NULL)
++                continue;
++            i = snprintf(s, n, "%s%s, %s", s == reference ? "" : ", ",
++                ref->system->url ?: ref->system->name, ref->id);
++            if (i > 0 && i < n) {
++                s += i;
++                n -= i;
++            } else {
++                reference[0] = 0;
++                break;
++            }
++        }
++    }
++
++    asprintf(&cmd, "%s %lu %lu %lu %lu \"%s\" \"%s\" \"%s\" %u \"%s\" %u \"%s\" %lu \"%s\" \"%s\"\n",
++        data->cmd,
++        event->ref_time.tv_sec,
++        event->sig_generator,
++        event->sig_id,
++        event->sig_rev,
++        msg,
++        proto,
++        src_ip ?: "",
++        src_port,
++        dst_ip ?: "",
++        dst_port,
++        otn_tmp && otn_tmp->sigInfo.classType && otn_tmp->sigInfo.classType->name ? otn_tmp->sigInfo.classType->name : "",
++        event->priority,
++        reference,
++        ScAlertInterface() ? PRINT_INTERFACE(DAQ_GetInterfaceSpec()) : "");
++
++    free(src_ip);
++    free(dst_ip);
++    system(cmd);
++    free(cmd);
++}
++
+diff -ru --new-file snort-2.9.8.2.orig/src/output-plugins/spo_process.h snort-2.9.8.2/src/output-plugins/spo_process.h
+--- snort-2.9.8.2.orig/src/output-plugins/spo_process.h	1970-01-01 10:00:00.000000000 +1000
++++ snort-2.9.8.2/src/output-plugins/spo_process.h	2017-08-29 08:51:42.700130172 +1000
+@@ -0,0 +1,32 @@
++/*
++** Copyright (C) 2014-2015 Cisco and/or its affiliates. All rights reserved.
++** Copyright (C) 2002-2013 Sourcefire, Inc.
++** Copyright (C) 1998-2002 Martin Roesch <roesch@sourcefire.com>
++** Copyright (C) 2001 Brian Caswell <bmc@mitre.org>
++**
++** This program is free software; you can redistribute it and/or modify
++** it under the terms of the GNU General Public License Version 2 as
++** published by the Free Software Foundation.  You may not use, modify or
++** distribute this program under any other version of the GNU General
++** Public License.
++**
++** This program is distributed in the hope that it will be useful,
++** but WITHOUT ANY WARRANTY; without even the implied warranty of
++** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++** GNU General Public License for more details.
++**
++** You should have received a copy of the GNU General Public License
++** along with this program; if not, write to the Free Software
++** Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
++*/
++
++/* $Id$ */
++
++/* spo_process has been adapted from spo_csv. */
++
++#ifndef __SPO_PROCESS_H__
++#define __SPO_PROCESS_H__
++
++void AlertProcessSetup(void);
++
++#endif  /* __SPO_PROCESS_H__ */
+diff -ru --new-file snort-2.9.8.2.orig/src/plugbase.c snort-2.9.8.2/src/plugbase.c
+--- snort-2.9.8.2.orig/src/plugbase.c	2016-03-18 23:54:32.000000000 +1000
++++ snort-2.9.8.2/src/plugbase.c	2017-08-29 08:50:39.691664833 +1000
+@@ -1574,6 +1574,7 @@
+     AlertUnixSockSetup();
+ #endif /* !WIN32 */
+     AlertCSVSetup();
++    AlertProcessSetup();
+     LogNullSetup();
+     Unified2Setup();
+     LogAsciiSetup();

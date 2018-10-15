@@ -1,0 +1,18 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+
+LINUXTARGET = vmlinux
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/mips/config.arch
+
+############################################################################

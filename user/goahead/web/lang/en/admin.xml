@@ -1,0 +1,334 @@
+<po>
+  <message msgid="admin disable" msgstr="Disable" />
+  <message msgid="admin enable" msgstr="Enable" />
+  <message msgid="admin apply" msgstr="Apply" />
+  <message msgid="admin cancel" msgstr="Cancel" />
+  <message msgid="admin reset" msgstr="Reset" />
+  <message msgid="admin scan" msgstr="Scan" />
+  <message msgid="admin next" msgstr="Next" />
+
+  <message msgid="wizardTime Title" msgstr="Time Setting" />
+  <message msgid="wizardTime Introduction" msgstr="Your Time Zone Settings can be input on this page." />
+  
+  <message msgid="wizardLang Title" msgstr="Language Setting" />
+  <message msgid="wizardLang Introduction" msgstr="Please select language." />
+  
+  <message msgid="man title" msgstr="System Management" />
+  <message msgid="man introduction" msgstr="The System Management section is provided for configuration of administrative needs such as language type, password, Time Zone Settings, SNTP settings, DNS, etc." />
+  <message msgid="man language setting" msgstr="Language Settings" />
+  <message msgid="man select language" msgstr="Select Language" />
+  <message msgid="man admin setting" msgstr="Web Interface Settings" />
+  <message msgid="man admin account" msgstr="User Name" />
+  <message msgid="man admin passwd" msgstr="Password" />
+  <message msgid="man ntp setting" msgstr="Time Zone Settings" />
+  <message msgid="man ntp timezone" msgstr="Time Zone" />
+  
+  <message msgid="man ntp International Date Line" msgstr="(GMT-12:00) International Date Line" />
+  <message msgid="man ntp mid island" msgstr="(GMT-11:00) Midway Island, Samoa" />
+  <message msgid="man ntp Adak" msgstr="(GMT-10:00) Adak" />
+  <message msgid="man ntp hawaii" msgstr="(GMT-10:00) Hawaii" />
+  <message msgid="man ntp alaska" msgstr="(GMT-09:00) Alaska" />
+  <message msgid="man ntp pacific" msgstr="(GMT-08:00) Pacific Time (US/Canada) Tijuana" />
+  <message msgid="man ntp arizona" msgstr="(GMT-07:00) Arizona" />
+  <message msgid="man ntp Chihuahua" msgstr="(GMT-07:00) Chihuahua, La Paz, Mazatlan" />
+  <message msgid="man ntp mountain" msgstr="(GMT-07:00) Mountain Time (US/Canada)" />
+  <message msgid="man ntp mid us" msgstr="(GMT-06:00) Central America" />
+  <message msgid="man ntp central" msgstr="(GMT-06:00) Central Time (US/Canada)" />
+  <message msgid="man ntp Guadalajara" msgstr="(GMT-06:00) Guadalajara, Mexico City, Monterrey" />
+  <message msgid="man ntp Guatemala" msgstr="(GMT-06:00) Guatemala" />
+  <message msgid="man ntp Saskatchewan" msgstr="(GMT-06:00) Saskatchewan" />
+  <message msgid="man ntp Bogota" msgstr="(GMT-05:00) Bogota, Lima, Quito" />
+  <message msgid="man ntp Cuba Standard Time" msgstr="(GMT-05:00) Cuba Standard Time" />
+  <message msgid="man ntp eastern" msgstr="(GMT-05:00) Eastern Time (US/Canada)" />
+  <message msgid="man ntp Venezuela" msgstr="(GMT-04:30) Venezuela" />
+  <message msgid="man ntp Atlantic Time" msgstr="(GMT-04:00) Atlantic Time (Canada)" />
+  <message msgid="man ntp Falkland Islands" msgstr="(GMT-04:00) Falkland Islands" />
+  <message msgid="man ntp La Paz" msgstr="(GMT-04:00) La Paz" />
+  <message msgid="man ntp Paraguay" msgstr="(GMT-04:00) Paraguay" />
+  <message msgid="man ntp San Luis Argentina" msgstr="(GMT-04:00) San Luis, Argentina" />
+  <message msgid="man ntp Santiago" msgstr="(GMT-04:00) Santiago" />
+  <message msgid="man ntp Newfoundland" msgstr="(GMT-03:30) Newfoundland" />
+  <message msgid="man ntp Argentina" msgstr="(GMT-03:00) Argentina" />
+  <message msgid="man ntp Brasilia" msgstr="(GMT-03:00) Brasilia" />
+  <message msgid="man ntp Georgetown" msgstr="(GMT-03:00) Georgetown, South America Eastern Time" />
+  <message msgid="man ntp Greenland" msgstr="(GMT-03:00) Greenland" />
+  <message msgid="man ntp St Pierre" msgstr="(GMT-03:00) St Pierre and Miquelon" />
+  <message msgid="man ntp Uruguay" msgstr="(GMT-03:00) Uruguay" />
+  
+  <message msgid="man ntp Mid Atlantic" msgstr="(GMT-02:00) Mid-Atlantic" />
+  
+  <message msgid="man ntp azores" msgstr="(GMT-01:00) Azores" />
+  <message msgid="man ntp Cape" msgstr="(GMT-01:00) Cape Verde Is." />
+  <message msgid="man ntp Dublin" msgstr="(GMT) Dublin, Edinburgh, Lisbon, London" />
+  <message msgid="man ntp Greenwich" msgstr="(GMT) Greenwich Mean Time" />
+  <message msgid="man ntp Morocco" msgstr="(GMT) Morocco" />
+  <message msgid="man ntp Amsterdam" msgstr="(GMT+01:00) Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna" />
+  <message msgid="man ntp Belgrade" msgstr="(GMT+01:00) Belgrade, Bratislava, Budapest, Ljubljana, Prague" />
+  <message msgid="man ntp Brussels" msgstr="(GMT+01:00) Brussels, Copenhagen, Madrid, Paris" />
+  <message msgid="man ntp Namibia" msgstr="(GMT+01:00) Namibia" />
+  <message msgid="man ntp Sarajevo" msgstr="(GMT+01:00) Sarajevo, Skopje, Warsaw, Zagreb" />
+  <message msgid="man ntp West Central Africa" msgstr="(GMT+01:00) West Central Africa" />
+  <message msgid="man ntp Athens" msgstr="(GMT+02:00) Athens, Beirut, Istanbul, Minsk" />
+  <message msgid="man ntp BeirutAthens" msgstr="(GMT+02:00) BeirutAthens, Beirut, Istanbul, Minsk" />
+  <message msgid="man ntp Bucharest" msgstr="(GMT+02:00) Bucharest" />
+  <message msgid="man ntp Cairo" msgstr="(GMT+02:00) Cairo" />
+  <message msgid="man ntp Harare" msgstr="(GMT+02:00) Harare, Pretoria" />
+  <message msgid="man ntp Helsinki" msgstr="(GMT+02:00) Helsinki, Kyiv, Riga, Sofia, Tallinn, Vilnius" />
+  <message msgid="man ntp Jordan" msgstr="(GMT+02:00) Jordan" />
+  <message msgid="man ntp Syria" msgstr="(GMT+02:00) Syria" />
+  <message msgid="man ntp Tel Aviv" msgstr="(GMT+02:00) Tel Aviv, Jerusalem" />
+  <message msgid="man ntp Turkey" msgstr="(GMT+02:00) Turkey" />
+  <message msgid="man ntp Baghdad" msgstr="(GMT+03:00) Baghdad" />
+  <message msgid="man ntp Kuwait" msgstr="(GMT+03:00) Kuwait, Riyadh" />
+  <message msgid="man ntp Moscow" msgstr="(GMT+03:00) Moscow, St. Petersburg, Volgograd" />
+  <message msgid="man ntp Nairobi" msgstr="(GMT+03:00) Nairobi" />
+  <message msgid="man ntp Tehran" msgstr="(GMT+03:30) Tehran" />
+  <message msgid="man ntp Abu Dhabi" msgstr="(GMT+04:00) Abu Dhabi, Muscat" />
+  <message msgid="man ntp Baku" msgstr="(GMT+04:00) Baku" />
+  <message msgid="man ntp Mauritius" msgstr="(GMT+04:00) Mauritius" />
+  <message msgid="man ntp Tbilisi" msgstr="(GMT+04:00) Tbilisi" />
+  <message msgid="man ntp Yerevan" msgstr="(GMT+04:00) Yerevan" />
+  <message msgid="man ntp Kabul" msgstr="(GMT+04:30) Kabul" />
+  <message msgid="man ntp Ekaterinburg" msgstr="(GMT+05:00) Ekaterinburg" />
+  <message msgid="man ntp Pakistan" msgstr="(GMT+05:00) Pakistan" />
+  <message msgid="man ntp Tashkent" msgstr="(GMT+05:00) Tashkent" />
+  <message msgid="man ntp Chennai" msgstr="(GMT+05:30) Chennai, Kolkata, Mumbai, New Delhi" />
+  <message msgid="man ntp Kathmandu" msgstr="(GMT+05:45) Kathmandu" />
+  <message msgid="man ntp Almaty" msgstr="(GMT+06:00) Almaty, Novosibirsk" />
+  <message msgid="man ntp Bangladesh" msgstr="(GMT+06:00) Bangladesh" />
+  <message msgid="man ntp Central Asia" msgstr="(GMT+06:00) Central Asia" />
+  <message msgid="man ntp Rangoon" msgstr="(GMT+06:30) Rangoon" />
+  <message msgid="man ntp Bangkok" msgstr="(GMT+07:00) Bangkok, Hanoi, Jakarta" />
+  <message msgid="man ntp Krasnoyarsk" msgstr="(GMT+07:00) Krasnoyarsk" />
+  <message msgid="man ntp Beijing" msgstr="(GMT+08:00) Beijing, Chongqing, Hong Kong, Urum" />
+  <message msgid="man ntp Irkutsk" msgstr="(GMT+08:00) Irkutsk" />
+  <message msgid="man ntp Kuala Lumpur" msgstr="(GMT+08:00) Kuala Lumpur, Singapore" />
+  <message msgid="man ntp Perth" msgstr="(GMT+08:00) Perth" />
+  <message msgid="man ntp Taipei" msgstr="(GMT+08:00) Taipei" />
+  <message msgid="man ntp Ulaanbaatar" msgstr="(GMT+08:00) Ulaanbaatar" />
+  <message msgid="man ntp Osaka" msgstr="(GMT+09:00) Osaka, Sapporo, Tokyo" />
+  <message msgid="man ntp Seoul" msgstr="(GMT+09:00) Seoul" />
+  <message msgid="man ntp Yakutsk" msgstr="(GMT+09:00) Yakutsk" />
+  <message msgid="man ntp Adelaide" msgstr="(GMT+09:30) Adelaide" />
+  <message msgid="man ntp Darwin" msgstr="(GMT+09:30) Darwin" />
+  <message msgid="man ntp Brisbane" msgstr="(GMT+10:00) Brisbane" />
+  <message msgid="man ntp Canberra" msgstr="(GMT+10:00) Canberra, Melbourne, Sydney" />
+  <message msgid="man ntp Guam" msgstr="(GMT+10:00) Guam, Port Moresby" />
+  <message msgid="man ntp Hobart" msgstr="(GMT+10:00) Hobart" />
+  <message msgid="man ntp Vladivostok" msgstr="(GMT+10:00) Vladivostok" />
+  <message msgid="man ntp Magadan" msgstr="(GMT+11:00) Magadan" />
+  <message msgid="man ntp solomon" msgstr="(GMT+11:00) Solomon Is., New Caledonia" />
+  <message msgid="man ntp Norfolk" msgstr="(GMT+11:30) Norfolk Island" />
+  <message msgid="man ntp Auckland" msgstr="(GMT+12:00) Auckland, Wellington" />
+  <message msgid="man ntp Fiji" msgstr="(GMT+12:00) Fiji, Marshall Is." />
+  <message msgid="man ntp Kamchatka" msgstr="(GMT+12:00) Kamchatka" />
+  <message msgid="man ntp Nuku" msgstr="(GMT+13:00) Nuku'alofa" />
+  <message msgid="man ntp server" msgstr="SNTP Server" />
+  <message msgid="man ntp sync" msgstr="SNTP synchronization (hours)" />
+  <message msgid="man ntp current time" msgstr="Current Time" />
+  <message msgid="man ntp sync with host" msgstr="Sync with host" />
+  <message msgid="man ntp previous" msgstr="Previous" />
+  <message msgid="man ntp daylight saving" msgstr="Daylight Saving" />
+  <message msgid="man ntp daylight saving offset" msgstr="Offset" />
+  <message msgid="man ntp daylight saving start" msgstr="Start" />
+  <message msgid="man ntp daylight saving end" msgstr="End" />
+  <message msgid="man ntp auto detecte time zone" msgstr="Auto detected" />
+  <message msgid="man gap title" msgstr="Green AP" />
+  <message msgid="man gap time" msgstr="Duration" />
+  <message msgid="man gap action" msgstr="Action" />
+  <message msgid="man ddns setting" msgstr="DDNS Settings" />
+  <message msgid="man ddns provider" msgstr="Dynamic DNS Provider" />
+  <message msgid="man ddns none" msgstr="None" />
+  <message msgid="man ddns account" msgstr="User Name" />
+  <message msgid="man ddns passwd" msgstr="Password" />
+  <message msgid="man ddns" msgstr="HostName" />
+
+  <message msgid="upload title" msgstr="Firmware Upgrade" />
+  <message msgid="upload introduction1" msgstr="Caution !!! " />
+  <message msgid="upload introduction2" msgstr="Click [Browse] to select a firmware file, then click [Apply].
+ Upgrades take around 3 minutes.
+ The WPS light will blink rapidly during the upgrade.
+ Do not interrupt the upgrade or the system may no longer boot!" />
+  <message msgid="upload firmware" msgstr="Firmware Upgrade" />
+  <message msgid="upload firmware location" msgstr="Location" />
+  <message msgid="upload firmware params" msgstr="Optional Parameters" />
+  <message msgid="uploadSucess1" msgstr="Upgrade successfully." />
+  <message msgid="uploadSucess2" msgstr="Please press Apply button to reboot your system first." />
+  <message msgid="upload bootloader location" msgstr="Location" />
+  <message msgid="upload firmware from usb" msgstr="Upgrade firmware from USB" />
+  <message msgid="upload firmware force upgrade via mem" msgstr="Force upgrade firmware via mem " />
+  <message msgid="upload firmware force" msgstr="Force:" />
+
+  <message msgid="upload success title" msgstr="Firmware Upgrade Success" />
+  <message msgid="upload success introduction" msgstr="The firmware upgrade was successful.  The new firmware version details should be displayed below.  You may now continue to configure your device." />
+  <message msgid="upload firmware details" msgstr="Firmware Details" />
+
+  <message msgid="setman title" msgstr="Settings Management" />
+  <message msgid="setman introduction" msgstr="You can export or import configuration files or reset the configuration to factory defaults." />
+  <message msgid="setman export setting" msgstr="Export Settings" />
+  <message msgid="setman export setting button" msgstr="Export Configuration File" />
+  <message msgid="setman export setting export" msgstr="Export" />
+  <message msgid="setman import setting" msgstr="Import Settings" />
+  <message msgid="setman import setting file location" msgstr="Import Configuration File" />
+  <message msgid="setman import setting import" msgstr="Import" />
+  <message msgid="setman load factory default" msgstr="Load Factory Defaults" />
+  <message msgid="setman load factory default button" msgstr="Restore Configuration to Factory Defaults" />
+  <message msgid="setman load default" msgstr="Load Default" />
+
+  <message msgid="status connected" msgstr="Connected" />
+  <message msgid="status disconnected" msgstr="Disconnected/Connecting..." />
+  <message msgid="status title" msgstr="Status" />
+  <message msgid="status introduction" msgstr="Displays the status of the device." />
+  <message msgid="status system information" msgstr="System Info" />
+  <message msgid="status sdk version" msgstr="Firmware Version" />
+  <message msgid="status system up time" msgstr="Time since boot" />
+  <message msgid="status system platform" msgstr="System Platform" />
+  <message msgid="status operate mode" msgstr="Operation Mode" />
+  <message msgid="status internet config" msgstr="Internet Configurations" />
+  <message msgid="status connect type" msgstr="Connected Type" />
+  <message msgid="status connect status" msgstr="Connected Status" />
+  <message msgid="status wan ipaddr" msgstr="WAN IP Address" />
+  <message msgid="status subnet mask" msgstr="Subnet Mask" />
+  <message msgid="status default gateway" msgstr="Default Gateway" />
+  <message msgid="status primary dns" msgstr="Primary Domain Name Server" />
+  <message msgid="status secondary dns" msgstr="Secondary Domain Name Server" />
+  <message msgid="status local network" msgstr="LAN Configurations" />
+  <message msgid="status lan ipaddr" msgstr="LAN IP Address" />
+  <message msgid="status local netmask" msgstr="LAN Netmask" />
+  <message msgid="status mac" msgstr="MAC Address" />
+  <message msgid="status ethernet port status" msgstr="Ethernet Port Status" />
+  
+  <message msgid="status bridge mode" msgstr="bridge mode" />
+  <message msgid="status router mode" msgstr="Router Mode" />
+  <message msgid="status ethernet converter mode" msgstr="WISP" />
+  <message msgid="status ap client mode" msgstr="WISP" />
+  <message msgid="status unknown" msgstr="Unknown" />
+  
+  <message msgid="status 3g title" msgstr="3G Budget Status" />
+  <message msgid="status 3g introduction" msgstr="This section display 3G budget status information of the device." />
+  <message msgid="status 3g internet config" msgstr="Budget Control Parameters" />
+  <message msgid="status 3g BC Enable" msgstr="Budget Control enable" />
+  <message msgid="status 3g TBC" msgstr="Time Budget Control" />
+  <message msgid="status 3g MaxTimeBudget" msgstr="Max Time Budget/(Percent of time pre-limit)" />
+  <message msgid="status 3g DataBudgetControl" msgstr="Data Budget Control" />
+  <message msgid="status 3g DataBudgetTrafficflow" msgstr="Data Budget Traffic Flow" />
+  <message msgid="status 3g MaxDataBudget" msgstr="Max Data Budget/(Percent of data pre-limit)" />
+  <message msgid="status 3g DropConnectionOverBT" msgstr="Drop Current Connection When Over Budget" />
+  <message msgid="status 3g DisallowOverBT" msgstr="Disallow New Connection When Over Budget" />
+  <message msgid="status 3g BillingStartingDate" msgstr="Billing Starting Date" />
+  <message msgid="status 3g DataBudgetStatus" msgstr="Data Budget Status" />
+  <message msgid="status 3g TimeBudgetStatus" msgstr="Time Budget Status" />
+  <message msgid="status 3g EmailAlert" msgstr="Email Alert" />
+  <message msgid="status 3g Access3GStatistics" msgstr="3G Access Statistics" />
+  <message msgid="status 3g Login" msgstr="Login" />
+  <message msgid="status 3g Connection Time" msgstr="Connection time(minutes)" />
+  <message msgid="status 3g Elapsed Time" msgstr="Summated Elapsed time(minutes)" />
+  <message msgid="status 3g Total Transfer" msgstr="Total Transfer(MB)" />
+
+  <message msgid="status 3g hours" msgstr="hours" />
+  <message msgid="status 3g upload" msgstr="Upload" />
+  <message msgid="status 3g download" msgstr="Download" />
+  <message msgid="status 3g up_down" msgstr="Upload/Download" />
+  <message msgid="status 3g MB" msgstr="MB" />
+  <message msgid="status 3g modem identification" msgstr="3G modem identification" />
+  <message msgid="status 3g Signal Strength" msgstr="3G Signal Strength" />
+  <message msgid="status 3g Remaining Budget Bytes" msgstr="Remaining Budget Bytes" />
+  <message msgid="status 3g Remaining Budget Time" msgstr="Remaining Budget Time" />
+  
+  <message msgid="3G Manually Start" msgstr="Manually start 3G" />
+  <message msgid="3G Manually Stop" msgstr="Manually stop 3G" />
+  <message msgid="3G Update" msgstr="Update" />
+  <message msgid="Forced Reset Budget" msgstr="Forced Reset Budget" />
+  <message msgid="manual mode only" msgstr="manual mode only" />
+  
+  <message msgid="dayid 1" msgstr="1st day per month" />
+  <message msgid="dayid 2" msgstr="2nd day per month" />
+  <message msgid="dayid 3" msgstr="3rd day per month" />
+  <message msgid="dayid 4" msgstr="4th day per month" />
+  <message msgid="dayid 5" msgstr="5th day per month" />
+  <message msgid="dayid 6" msgstr="6th day per month" />
+  <message msgid="dayid 7" msgstr="7th day per month" />
+  <message msgid="dayid 8" msgstr="8th day per month" />
+  <message msgid="dayid 9" msgstr="9th day per month" />
+  <message msgid="dayid 10" msgstr="10th day per month" />
+  <message msgid="dayid 11" msgstr="11th day per month" />
+  <message msgid="dayid 12" msgstr="12th day per month" />
+  <message msgid="dayid 13" msgstr="13th day per month" />
+  <message msgid="dayid 14" msgstr="14th day per month" />
+  <message msgid="dayid 15" msgstr="15th day per month" />
+  <message msgid="dayid 16" msgstr="16th day per month" />
+  <message msgid="dayid 17" msgstr="17th day per month" />
+  <message msgid="dayid 18" msgstr="18th day per month" />
+  <message msgid="dayid 19" msgstr="19th day per month" />
+  <message msgid="dayid 20" msgstr="20th day per month" />
+  <message msgid="dayid 21" msgstr="21st day per month" />
+  <message msgid="dayid 22" msgstr="22nd day per month" />
+  <message msgid="dayid 23" msgstr="23rd day per month" />
+  <message msgid="dayid 24" msgstr="24th day per month" />
+  <message msgid="dayid 25" msgstr="25th day per month" />
+  <message msgid="dayid 26" msgstr="26th day per month" />
+  <message msgid="dayid 27" msgstr="27th day per month" />
+  <message msgid="dayid 28" msgstr="28th day per month" />
+  <message msgid="dayid 29" msgstr="29th day per month" />
+  <message msgid="dayid 30" msgstr="30th day per month" />
+  <message msgid="dayid 31" msgstr="31st day per month" />
+
+  <message msgid="statistic title" msgstr="Statistics" />
+  <message msgid="statistic introduction" msgstr="This section displays various status information of the device." />
+  <message msgid="statistic memory" msgstr="Memory" />
+  <message msgid="statistic memory total" msgstr="Memory total" />
+  <message msgid="statistic memory left" msgstr="Memory left" />
+  <message msgid="statistic wanlan" msgstr="WAN/LAN" />
+  <message msgid="statistic wan rx pkt" msgstr="WAN Rx packets" />
+  <message msgid="statistic wan rx bytes" msgstr="WAN Rx bytes" />
+  <message msgid="statistic wan tx pkt" msgstr="WAN Tx packets" />
+  <message msgid="statistic wan tx bytes" msgstr="WAN Tx bytes" />
+  <message msgid="statistic lan rx pkt" msgstr="LAN Rx packets" />
+  <message msgid="statistic lan rx bytes" msgstr="LAN Rx bytes" />
+  <message msgid="statistic lan tx pkt" msgstr="LAN Tx packets" />
+  <message msgid="statistic lan tx bytes" msgstr="LAN Tx bytes" />
+  <message msgid="statistic all interface" msgstr="All interfaces" />
+  
+  <message msgid="statistic interface name" msgstr="Name" />
+  <message msgid="statistic interface rx packet" msgstr="Rx Packet" />
+  <message msgid="statistic interface rx byte" msgstr="Rx Byte" />
+  <message msgid="statistic interface tx packet" msgstr="Tx Packet" />
+  <message msgid="statistic interface tx byte" msgstr="Tx Byte" />
+  
+  <message msgid="syscommand title" msgstr="System Command" />
+  <message msgid="syscommand introduction" msgstr=" Run a system command as root: " />
+  <message msgid="syscommand system command" msgstr="System command " />
+  <message msgid="syscommand command" msgstr="Command:" />
+
+  <message msgid="syslog title" msgstr="System Log" />
+  <message msgid="syslog introduction" msgstr="The system log with potential issues highlighted in &lt;font color=red&gt;red&lt;/font&gt; for errors and &lt;font color=blue&gt;blue&lt;/font&gt; for important info." />
+  <message msgid="syslog system log" msgstr="System Log" />
+  <message msgid="syslog clear" msgstr="Clear" />
+  <message msgid="syslog refresh" msgstr="Refresh" />
+  <message msgid="current Software Version" msgstr="Software Version" />  
+  <message msgid="wizard Success Message" msgstr="wizard - Success!" /> 
+
+  <message msgid="config reboot wait" msgstr="System is rebooting, please wait a moment!" />
+  <message msgid="config firmware wait" msgstr="Firmware Upgrade in progress, please wait a moment.!" />
+  <message msgid="admin booting" msgstr="Rebooting Now..." />
+  <message msgid="admin flashing" msgstr="Programming Flash Now..." />
+  
+  <message msgid="admin giving up cannot create an XMLHTTP instance" msgstr="Giving up :( Cannot create an XMLHTTP instance)" />
+  <message msgid="admin there was a problem with the request" msgstr="There was a problem with the request." />
+  <message msgid="admin invalid account format" msgstr="Invalid account format." />
+  <message msgid="admin account is too long" msgstr="Account is too long." />
+  <message msgid="admin account contains illegal character" msgstr="Account contains illegal character" />
+  <message msgid="admin please specify the administrator account" msgstr="Please specify the administrator account." />
+  <message msgid="admin please specify the administrator password" msgstr="Please specify the administrator password." />
+  <message msgid="admin password contains illegal character" msgstr="Password contains illegal character(s)" />
+  <message msgid="admin not a valid domain name" msgstr="Not a valid domain name" />
+  <message msgid="admin not a valid ntpsync" msgstr="Not a valid SNTP Synchronization(hours) !" />
+  <message msgid="admin the synchronization value is not valid integer" msgstr="The synchronization value is not valid integer.(1~300)" />
+  <message msgid="admin account password and ddns name cannot be empty" msgstr="Account, password, and DDNS name cannot be empty." />
+  <message msgid="admin not a valid domain name is required" msgstr="Not a valid domain name, '.' is required." />
+ 
+  <message msgid="admin please select your time zone settings" msgstr="Please select your Time Zone settings." />
+  <message msgid="greenap duration" msgstr="Duration " />
+  <message msgid="greenap incorrect" msgstr=" incorrect!" />
+  <message msgid="greenap conflict" msgstr=" conflict!" />
+</po>

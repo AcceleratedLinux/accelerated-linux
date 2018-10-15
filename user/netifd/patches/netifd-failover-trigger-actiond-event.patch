@@ -1,0 +1,17 @@
+Index: netifd/interface.c
+===================================================================
+--- netifd.orig/interface.c	2017-12-07 14:12:56.687534006 +1000
++++ netifd/interface.c	2017-12-07 14:13:55.175534952 +1000
+@@ -688,8 +688,10 @@
+ 		netifd_ubus_actiond_trigger_event();
+ 		break;
+ 	case IFPEV_DOWN:
+-		if (iface->state == IFS_DOWN)
+-			return;
++		if (iface->state == IFS_DOWN) {
++			netifd_ubus_actiond_trigger_event();
++			return;
++		}
+ 
+ 		netifd_log_message(L_NOTICE, "Interface '%s' is now down\n", iface->name);
+ 		mark_interface_down(iface);

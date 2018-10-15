@@ -1,0 +1,25 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+LINUXTARGET = zImage dtbs
+
+HW_VENDOR = ARM
+VERSIONPKG = 1.0.0
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+DISABLE_XIP         = 1            # XIP works fine
+DISABLE_MOVE_RODATA = 1            # move-rodata is fine
+DISABLE_SHARED_LIBS = 1            # shared libs are fine
+LOPT := -O2                    # library is alway 02
+UOPT := -Os                    # user apps are always Os
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/armnommu/config.arch
+
+RELFILES += images/configs.tar.gz
+
+############################################################################

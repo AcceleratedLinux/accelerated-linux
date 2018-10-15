@@ -1,0 +1,27 @@
+Index: firewall3/iptables.c
+===================================================================
+--- firewall3.orig/iptables.c
++++ firewall3/iptables.c
+@@ -37,22 +37,6 @@
+ 	.orig_opts = base_opts,
+ };
+ 
+-/* Required by certain extensions like SNAT and DNAT */
+-int kernel_version = 0;
+-
+-void
+-get_kernel_version(void)
+-{
+-	static struct utsname uts;
+-	int x = 0, y = 0, z = 0;
+-
+-	if (uname(&uts) == -1)
+-		sprintf(uts.release, "3.0.0");
+-
+-	sscanf(uts.release, "%d.%d.%d", &x, &y, &z);
+-	kernel_version = 0x10000 * x + 0x100 * y + z;
+-}
+-
+ #ifdef DISABLE_IPV6
+ #undef __ipt_module
+ #define __ipt_module(x) libxt_##x##_init, libipt_##x##_init,

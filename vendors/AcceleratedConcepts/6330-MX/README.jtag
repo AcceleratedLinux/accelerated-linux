@@ -1,0 +1,140 @@
+
+6330-MX JTAG
+-------------
+
+The openocd jtag package can be used with the Armada370 based 6330-MX boards.
+It can quite easily be used to load boot code (like u-boot) and then from
+there you can program the NAND flash.
+
+As of this writing I am using openocd-0.7.0, with local bug fixes. Later
+versions may work without change (best chance is using the latest source
+from the openocd git tree). I'll keep this updated as support in openocd
+improves.
+
+I have used a couple of different JTAG USB based debuggers with success.
+I expect most other standard types of USB jtag dongle would work. I had
+no problems with the Amontec JTAGkey USB based jtag debug dongle, and
+the JTAG Lock Pick Tiny..
+
+With the JTAG adapter conected to the 6330-MX board run openocd with:
+
+    sudo openocd -f tools/openocd/targets/6300-cx.cfg
+
+You may get a slow stream of noisy messages from openocd at this point.
+Generally these will not cause you any problems. Sometimes though you may
+need to kill this openocd process and restart it. Occassionaly even an
+openocd restart is not enough, you will need to power on and power off
+the target 6330-MX board. As you can see using openocd on the 6330-MX can
+be a bit unreliable. But with a little persistence you can always get it to
+eventually load and run something.
+
+Then on another console telnet to the openocd daemon:
+
+    telnet localhost 4444
+
+Then issue the following commands:
+
+    reset
+    halt
+    meminit
+    loaduboot
+    resume
+
+After the "meminit" run you should see something like the following output
+on the serial console:
+
+    BootROM 1.08
+    Booting from NAND flash
+    High speed PHY - Version: 2.1.2 (COM-PHY-V20) 
+    Update PEX Device ID 0x67100
+    High speed PHY - Ended Successfully
+    DDR3 Training Sequence - Ver 4.5.0 
+    DDR3 Training Sequence - Ended Successfully 
+    Status = MV_OK
+
+Then the "loaduboot" command will load the uboot binary into RAM. To start
+it up issue the "resume" command. You should see the normal uboot messages
+come out on the console.
+
+If you break into the uboot command line you can then do "run netload" and
+that will network load a linux firmware image and run it.
+
+Note that running the "meminit" and "loaduboot" commands on an already flash
+programmed unit is more problematical. Generally you need to "reset" and
+"halt" quite quickly - even then the memory initializer code is likely to have
+run. This is ok, but don't run "meminit" again, only run "loaduboot" now.
+To run the reset/halt fast enough issue the commands on a single line:
+
+    reset ; halt
+    loaduboot
+
+FLASH
+-----
+
+To setup the NAND flash from the linux command line you need to do something
+like the following:
+
+    ifconfig eth0 A.B.C.D
+    netflash -n -i -k -b -r /dev/flash/boot W.X.Y.Z u-boot.bin
+    /etc/mkffs
+    netflash -i W.X.Y.Z image.bin
+
+The unit is now fully flash programmed. On the next reboot you should again
+break into u-boot and set the units MAC addresses into the u-boot environment. 
+Do this with the following u-boot commands:
+
+    setenv ethaddr 00:27:04:03:02:01
+    saveenv
+
+Or you can do the same thing from within linux using "fw_setenv".
+
+
+FACTORY FLASH
+-------------
+
+To generate the ECC version of the boot loader for the factory,  program the
+bootloader into flash and then run the following command:
+
+    nanddump -l 0x100000 -f /tmp/u-boot-with-ecc.bin /dev/flash/boot
+
+
+BOOTING FROM SERIAL
+-------------------
+
+The built-in boot ROM of the Armada 370 CPU has the facility to boot from
+the serial port. The 6330-MX is strapped in hardware to boot from NAND flash,
+but if the NAND is empty then the BootROM will eventually give up on the
+flash and listen on the serial port. You will see the BootROM try the flash
+on the serial port and eventually get to this:
+
+    ....
+    BootROM: Bad header at offset 03FD0000
+    BootROM: Bad header at offset 03FE0000
+    BootROM: Bad header at offset 03FF0000
+    BootROM: Trying UART
+
+At this point you need to send it the boot-me-from-serial command sequence.
+That is pretty easy, just do this:
+
+    echo -e -n '\0273\0021\0042\0063\0104\0125\0146\0167' > /dev/ttyS4
+
+Where /dev/ttyS4 was the serial port in this case. The BootROM will respond
+with this on the console:
+
+    Pattern detected on UART0 (Boot)
+
+Now it is expecting to get the boot loader image using X-modem. Todo this I
+exit from tip, and then run the "sx" command:
+
+  sx u-boot-uart.bin < /dev/ttyS4 > /dev/ttyS4
+
+This should run through and push out the entire image. Note that you need
+to send it a UART boot image, not the usual NAND boot image (u-boot.bin)
+that we program into the NAND flash. A UART boot image is also compiled in
+our normal u-boot building process, so you just need to go find it. It will
+be something like: u-boot-a370-2014.9.1-nand-ac6300cx-uart.bin.
+
+As soon as the whole of the binary image is pushed out the Armada 370 will
+start running the code. You need to quickly reconnect tip so you can see
+the usual boot mesages.
+

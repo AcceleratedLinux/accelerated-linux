@@ -1,0 +1,4 @@
+config USER_GRUB
+	bool 'GRUB'
+	help
+	  GRUB (GRand Unified Bootloader) package.

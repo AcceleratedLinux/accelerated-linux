@@ -1,0 +1,35 @@
+diff -ru udns-0.4-original/dnsget.c udns-0.4/dnsget.c
+--- udns-0.4-original/dnsget.c	2011-12-29 22:58:40.000000000 +1000
++++ udns-0.4/dnsget.c	2017-07-06 17:04:15.505875767 +1000
+@@ -673,9 +673,21 @@
+     memset(&sin, 0, sizeof(sin));
+     sin.sin_family = AF_INET;
+     sin.sin_port = htons(dns_set_opt(NULL, DNS_OPT_PORT, -1));
++#ifdef HAVE_IPv6
++    struct sockaddr_in6 sin6;
++    memset(&sin6, 0, sizeof(sin6));
++    sin6.sin6_family = AF_INET6;
++    sin6.sin6_port = htons(dns_set_opt(NULL, DNS_OPT_PORT, -1));
++#endif
+     dns_add_serv(NULL, NULL);
+     for(i = 0; i < nns; ++i) {
+-      if (dns_pton(AF_INET, ns[i], &sin.sin_addr) <= 0) {
++      if (dns_pton(AF_INET, ns[i], &sin.sin_addr) > 0) {
++        r = dns_add_serv_s(NULL, (struct sockaddr *)&sin);
++#ifdef HAVE_IPv6
++      } else if (dns_pton(AF_INET6, ns[i], &sin6.sin6_addr) > 0) {
++        r = dns_add_serv_s(NULL, (struct sockaddr *)&sin6);
++#endif
++      } else {
+         struct dns_rr_a4 *rr;
+         if (!opened) {
+           if (dns_open(nctx) < 0)
+@@ -693,8 +705,6 @@
+         }
+         free(rr);
+       }
+-      else
+-        r = dns_add_serv_s(NULL, (struct sockaddr *)&sin);
+       if (r < 0)
+         die(errno, "unable to add nameserver %s",
+              dns_xntop(AF_INET, &sin.sin_addr));

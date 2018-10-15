@@ -1,0 +1,16 @@
+#!/bin/sh
+mount -t tmpfs tmpfs /overlay
+mkdir /overlay/lower
+mkdir /overlay/upper
+mkdir /overlay/work
+mkdir /overlay/merged
+mount -t overlay overlay -olowerdir=/,upperdir=/overlay/upper,workdir=/overlay/work /overlay/merged
+cd /overlay/merged
+mkdir lower
+pivot_root . lower
+cd /
+mount --move /lower/dev /dev
+mount --move /lower/overlay /overlay
+mount --move /lower /overlay/lower
+rmdir lower
+exec chroot . /bin/init

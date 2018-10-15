@@ -1,0 +1,58 @@
+#!/usr/bin/kermit
+#
+# apt-get install ckermit,  edit script to suit
+#
+# Serial port setup.  These settings will likely need to be
+# changed to match the configuration of your workstation
+# and the ARM board you're working with.
+
+set line /dev/ttyS4
+set speed 115200
+set serial 8n1
+
+# General C-Kermit settings.  These probably don't need to change.
+set flow-control none
+set file type bin
+set carrier-watch off
+set prefixing all
+set modem none
+
+echo "Prepared to boot new kernel.  Reset the board now."
+
+# This is the string that my board outputs to allow the user to
+# gain access to the U-Boot console.  Change this to suit your
+# setup.
+input 60 "Hit any key to stop autoboot:"
+
+# If your board wants you to press a different key to get to
+# U-Boot, edit this line.
+output " "
+input 5 " >"
+
+# Here, 0x800000 is the memory address into which the kernel
+# should be loaded.
+lineout "loadb $loadaddr"
+
+# This should be the absolute path to your image file.
+send /tftpboot/image.bin
+input 5 " > "
+lineout "setexpr sizaddr $loadaddr + c"
+input 5 " > "
+lineout "setexpr.s uksize *$sizaddr + 0x40"
+input 5 " > "
+lineout "setexpr fsaddr $loadaddr + $uksize"
+input 5 " > "
+lineout "setexpr fsaddr $fsaddr + 0xffff"
+input 5 " > "
+lineout "setexpr fsaddr $fsaddr \\\x26 0xffff0000"
+input 5 " > "
+lineout "setexpr fssize $filesize - $uksize"
+input 5 " > "
+lineout "setenv bootargs \"console=ttymxc1,115200 initrd=0x$fsaddr,0x$fssize root=/dev/ram0\""
+input 5 " > "
+lineout "bootm $loadaddr"
+
+# This command drops you into a console where you can interact
+# with the kernel.
+connect
+

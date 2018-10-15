@@ -1,0 +1,68 @@
+Index: netifd/proto-shell.c
+===================================================================
+--- netifd.orig/proto-shell.c
++++ netifd/proto-shell.c
+@@ -423,6 +423,18 @@ proto_shell_create_tunnel(const char *na
+ 	return dev;
+ }
+ 
++static void
++proto_shell_device_apply_config(struct device *dev, struct blob_attr *attr)
++{
++	struct blob_attr *tb[__DEV_ATTR_MAX];
++
++	memset(tb, 0, sizeof(tb));
++	blobmsg_parse(device_attr_list.params, __DEV_ATTR_MAX, tb,
++		      blobmsg_data(attr), blobmsg_len(attr));
++	device_init_settings(dev, tb);
++	dev->set_state(dev, true);
++}
++
+ enum {
+ 	NOTIFY_ACTION,
+ 	NOTIFY_ERROR,
+@@ -436,6 +448,7 @@ enum {
+ 	NOTIFY_ROUTES,
+ 	NOTIFY_ROUTES6,
+ 	NOTIFY_TUNNEL,
++	NOTIFY_DEVICE,
+ 	NOTIFY_DATA,
+ 	NOTIFY_KEEP,
+ 	NOTIFY_HOST,
+@@ -457,6 +470,7 @@ static const struct blobmsg_policy notif
+ 	[NOTIFY_ROUTES] = { .name = "routes", .type = BLOBMSG_TYPE_ARRAY },
+ 	[NOTIFY_ROUTES6] = { .name = "routes6", .type = BLOBMSG_TYPE_ARRAY },
+ 	[NOTIFY_TUNNEL] = { .name = "tunnel", .type = BLOBMSG_TYPE_TABLE },
++	[NOTIFY_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_TABLE },
+ 	[NOTIFY_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
+ 	[NOTIFY_KEEP] = { .name = "keep", .type = BLOBMSG_TYPE_BOOL },
+ 	[NOTIFY_HOST] = { .name = "host", .type = BLOBMSG_TYPE_STRING },
+@@ -514,6 +528,9 @@ proto_shell_update_link(struct proto_she
+ 		if (!dev)
+ 			return UBUS_STATUS_INVALID_ARGUMENT;
+ 
++		if (tb[NOTIFY_DEVICE])
++			proto_shell_device_apply_config(dev, tb[NOTIFY_DEVICE]);
++
+ 		interface_set_l3_dev(iface, dev);
+ 		if (device_claim(&iface->l3_dev) < 0)
+ 			return UBUS_STATUS_UNKNOWN_ERROR;
+Index: netifd/scripts/netifd-proto.sh
+===================================================================
+--- netifd.orig/scripts/netifd-proto.sh
++++ netifd/scripts/netifd-proto.sh
+@@ -76,6 +76,14 @@ proto_close_tunnel() {
+ 	proto_close_nested
+ }
+ 
++proto_add_device() {
++	proto_add_nested "device"
++}
++
++proto_close_device() {
++	proto_close_nested
++}
++
+ proto_add_data() {
+ 	proto_add_nested "data"
+ }

@@ -1,0 +1,12 @@
+config USER_USBIP_USBIP
+	bool "usbip"
+	help
+	  Tool to connect to a remote USB device shared by usbipd.
+	  Requires kernel modules from USBIP_VHCI_HCD option.
+
+config USER_USBIP_USBIPD
+	bool "usbipd"
+	help
+	  Tool to share a local USB device over the network.
+	  This daemon is a listening server.
+	  Requires kernel modules from USBIP_HOST option.

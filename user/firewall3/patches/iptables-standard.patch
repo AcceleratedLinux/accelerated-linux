@@ -1,0 +1,13 @@
+Index: firewall3/iptables.c
+===================================================================
+--- firewall3.orig/iptables.c
++++ firewall3/iptables.c
+@@ -478,7 +478,7 @@
+ 	struct xtables_target *t;
+ 
+ 	if (is_chain(r->h, name))
+-		return xtables_find_target(XT_STANDARD_TARGET, XTF_LOAD_MUST_SUCCEED);
++		name = "standard";
+ 
+ 	t = xtables_find_target(name, XTF_DONT_LOAD);
+ 

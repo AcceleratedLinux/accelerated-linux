@@ -1,0 +1,16 @@
+#!/usr/bin/env python
+
+import kcheck
+import product
+import argparse
+import os
+import sys
+
+parser = argparse.ArgumentParser()
+parser.add_argument('dir', nargs='?', default=os.getcwd())
+args = parser.parse_args()
+
+kconfig = kcheck.Config(product.products, args.dir)
+kproduct = kcheck.Product(kconfig, product.products, product.groups)
+if kproduct.check(kconfig):
+    sys.exit(1)

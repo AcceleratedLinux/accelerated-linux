@@ -1,0 +1,94 @@
+<po>
+  <message msgid="main disable" msgstr="停用" />
+  <message msgid="main enable" msgstr="啟用" />
+  <message msgid="main apply" msgstr="確定" />
+  <message msgid="main cancel" msgstr="取消" />
+  
+  <message msgid="waitStatus1" msgstr="系統設定中 ......." />
+  <message msgid="waitStatus2" msgstr="請稍等一會兒 ...." />
+  <message msgid="overview corp" msgstr="Accton Wireless Broadband Corp. 2009. " />
+
+  <message msgid="overview introduction" msgstr="鈺程科技" />
+  <message msgid="overview select language" msgstr="選擇語言" />
+  <message msgid="overview status link" msgstr="狀態" />
+  <message msgid="overview statistic link" msgstr="統計" />
+  <message msgid="overview management link" msgstr="管理" />
+  <message msgid="treeapp openall" msgstr="開啟全部" />
+  <message msgid="treeapp closeall" msgstr="關閉全部" />
+  <message msgid="treeapp ralink" msgstr="鈺程科技" />
+  <message msgid="treeapp wizard list" msgstr="精靈" />
+  <message msgid="treeapp setup wizard" msgstr="安裝精靈" />
+  <message msgid="treeapp enter setup wizard" msgstr="安裝精靈" />
+  <message msgid="treeapp welcome message" msgstr="歡迎使用SMCWBR11-3GN安裝精靈" />
+  <message msgid="treeapp welcome messageA" msgstr="歡迎使用 " />
+  <message msgid="treeapp welcome messageB" msgstr=" 安裝精靈" />
+  <message msgid="treeapp usage message1" msgstr="假如您想直接設定或瀏灠設備狀態" />
+  <message msgid="treeapp usage message2" msgstr="請使用上方之功能列" />
+  <message msgid="treeapp usage message3" msgstr="或透過下方之安裝精靈來引導您完成設定" />
+  <message msgid="treeapp operation mode" msgstr="操作模式" />
+  <message msgid="treeapp internet settings" msgstr="有線網路" />
+  <message msgid="treeapp wan" msgstr="廣域網路" />
+  <message msgid="treeapp lan" msgstr="區域網路" />
+  <message msgid="treeapp dhcp clients" msgstr="DHCP連結列表" />
+  <message msgid="treeapp vpn passthrough" msgstr="VPN Passthrough" />
+  <message msgid="treeapp routing" msgstr="路由設定" />
+  <message msgid="treeapp wireless settings" msgstr="無線網路" />
+  <message msgid="treeapp inic settings" msgstr="I-NIC 設定" />
+  <message msgid="treeapp legacy settings" msgstr="Legacy 設定" />
+  <message msgid="treeapp profile" msgstr="連線設定" />
+  <message msgid="treeapp link status" msgstr="連線狀態" />
+  <message msgid="treeapp site survey" msgstr="基地台掃描" />
+  <message msgid="treeapp statistics" msgstr="統計資料" />
+  <message msgid="treeapp advance" msgstr="進階設定" />
+  <message msgid="treeapp qos" msgstr="QoS品質服務" />
+  <message msgid="treeapp 11n configurations" msgstr="11n 設定" />
+  <message msgid="treeapp about" msgstr="關於" />
+  <message msgid="treeapp wds" msgstr="WDS" />
+  <message msgid="treeapp wps" msgstr="WPS" />
+  <message msgid="treeapp basic" msgstr="基本設定" />
+  <message msgid="treeapp advanced" msgstr="進階設定" />
+  <message msgid="treeapp security" msgstr="安全設定" />
+  <message msgid="treeapp ap client" msgstr="AP Client" />
+  <message msgid="treeapp station list" msgstr="客戶端列表" />
+  <message msgid="treeapp mesh settings" msgstr="網狀網路設定" />
+  <message msgid="treeapp firewall" msgstr="防火牆" />
+  <message msgid="treeapp ip/port filtering" msgstr="MAC/IP/Port 過瀘" />
+  <message msgid="treeapp port forwarding" msgstr="虛擬伺服器" />
+  <message msgid="treeapp dmz" msgstr="DMZ" />
+  <message msgid="treeapp content filtering" msgstr="內容過濾" />  
+  <message msgid="treeapp administration" msgstr="系統管理" />
+  <message msgid="treeapp management" msgstr="系統管理" />
+  <message msgid="treeapp upload firmware" msgstr="軔體更新" />
+  <message msgid="treeapp settings management" msgstr="系統組態" />
+  <message msgid="treeapp status" msgstr="系統狀態" />
+  <message msgid="treeapp system command" msgstr="系統指令" />
+  <message msgid="treeapp system log" msgstr="系統記錄" />
+  <message msgid="treeapp 3g budget status" msgstr="3G連線預算" />
+  <message msgid="treeapp sdk history" msgstr="SDK 歷史" />
+  <message msgid="treeapp system firewall" msgstr="系統安全設定" />
+
+  <message msgid="treeapp usb" msgstr="USB應用" />
+  <message msgid="treeapp usb" msgstr="儲存裝置" />
+  <message msgid="treeapp useradmin" msgstr="使用者管理" />
+  <message msgid="treeapp ftpsrv" msgstr="FTP 伺服器" /> 
+  <message msgid="treeapp sambasrv" msgstr="SAMBA 伺服器" /> 
+  <message msgid="treeapp mediasrv" msgstr="多媒體伺服器" />
+  <message msgid="treeapp webcam" msgstr="網路相機" />
+  <message msgid="treeapp disk" msgstr="磁碟" />
+  <message msgid="treeapp printersrv" msgstr="列印伺服器" />
+  <message msgid="treeapp usbinic" msgstr="USB iNIC" />
+  
+  <message msgid="opmode title" msgstr="操作模式設定" />
+  <message msgid="opmode introduction" msgstr="您可以在此處設定適合您網路環境的操作模式" />
+  <message msgid="opmode mode b" msgstr="橋接模式" />
+  <message msgid="opmode mode b intro" msgstr="所有乙太網路埠、以及無線網路介面，皆被串連到單一的橋接器介面。" />
+  <message msgid="opmode mode g" msgstr="路由模式" />
+  <message msgid="opmode mode g intro" msgstr="第一個乙太網路埠視為廣域網路端。其他的乙太網路埠、以及無線網路介面，則串連到單一的橋接器介面，並視為區域網路端。" />
+  <message msgid="opmode mode e" msgstr="Ethernet Converter:" />
+  <message msgid="opmode mode e intro" msgstr="無線網路介面視為廣域網路端。所有乙太網路埠則被視為區域網路端。" />
+  <message msgid="opmode mode a" msgstr="AP Client:" />
+  <message msgid="opmode mode wisp" msgstr="WISP" />
+  <message msgid="opmode mode a intro" msgstr="無線網路介面的用戶端視為廣域網路端。無線網路介面的基地台端、以及所有乙太網路埠，則串連到單一的橋接器介面，並視為區域網路端。" />
+  <message msgid="opmode nat" msgstr="啟用 NAT" />
+  <message msgid="opmode eth conv" msgstr="啟用 Ethernet Converter" />
+</po>

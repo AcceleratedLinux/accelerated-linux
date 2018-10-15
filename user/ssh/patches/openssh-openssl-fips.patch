@@ -1,0 +1,586 @@
+diff -ur openssh-7.8p1.orig/cipher.c openssh-7.8p1/cipher.c
+--- openssh-7.8p1.orig/cipher.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/cipher.c	2018-09-03 10:58:34.784859567 +1000
+@@ -111,6 +111,20 @@
+ 	{ NULL,			0, 0, 0, 0, 0, NULL }
+ };
+ 
++static const struct sshcipher fips_ciphers[] = {
++	{ "none",	 8,  0, 0, 0, 0, EVP_enc_null },
++	{ "3des-cbc",	 8, 24, 0, 0, 1, EVP_des_ede3_cbc },
++	{ "aes128-cbc",	16, 16, 0, 0, 1, EVP_aes_128_cbc },
++	{ "aes192-cbc",	16, 24, 0, 0, 1, EVP_aes_192_cbc },
++	{ "aes256-cbc",	16, 32, 0, 0, 1, EVP_aes_256_cbc },
++	{ "rijndael-cbc@lysator.liu.se",
++			16, 32, 0, 0, 1, EVP_aes_256_cbc },
++	{ "aes128-ctr",	16, 16, 0, 0, 0, EVP_aes_128_ctr },
++	{ "aes192-ctr",	16, 24, 0, 0, 0, EVP_aes_192_ctr },
++	{ "aes256-ctr",	16, 32, 0, 0, 0, EVP_aes_256_ctr },
++	{ NULL,		0,   0, 0, 0, 0, NULL }
++};
++
+ /*--*/
+ 
+ /* Returns a comma-separated list of supported ciphers. */
+@@ -121,7 +135,7 @@
+ 	size_t nlen, rlen = 0;
+ 	const struct sshcipher *c;
+ 
+-	for (c = ciphers; c->name != NULL; c++) {
++	for (c = FIPS_mode() ? fips_ciphers : ciphers; c->name != NULL; c++) {
+ 		if ((c->flags & CFLAG_INTERNAL) != 0)
+ 			continue;
+ 		if (auth_only && c->auth_len == 0)
+@@ -193,7 +207,7 @@
+ cipher_by_name(const char *name)
+ {
+ 	const struct sshcipher *c;
+-	for (c = ciphers; c->name != NULL; c++)
++	for (c = FIPS_mode() ? fips_ciphers : ciphers; c->name != NULL; c++)
+ 		if (strcmp(c->name, name) == 0)
+ 			return c;
+ 	return NULL;
+Only in openssh-7.8p1: cipher.c.orig
+diff -ur openssh-7.8p1.orig/cipher-ctr.c openssh-7.8p1/cipher-ctr.c
+--- openssh-7.8p1.orig/cipher-ctr.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/cipher-ctr.c	2018-09-03 10:57:38.152858338 +1000
+@@ -138,7 +138,8 @@
+ 	aes_ctr.do_cipher = ssh_aes_ctr;
+ #ifndef SSH_OLD_EVP
+ 	aes_ctr.flags = EVP_CIPH_CBC_MODE | EVP_CIPH_VARIABLE_LENGTH |
+-	    EVP_CIPH_ALWAYS_CALL_INIT | EVP_CIPH_CUSTOM_IV;
++	    EVP_CIPH_ALWAYS_CALL_INIT | EVP_CIPH_CUSTOM_IV |
++	    EVP_CIPH_FLAG_FIPS;
+ #endif
+ 	return (&aes_ctr);
+ }
+diff -ur openssh-7.8p1.orig/dh.h openssh-7.8p1/dh.h
+--- openssh-7.8p1.orig/dh.h	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/dh.h	2018-09-03 10:57:38.156858338 +1000
+@@ -51,6 +51,7 @@
+  * Miniumum increased in light of DH precomputation attacks.
+  */
+ #define DH_GRP_MIN	2048
++#define DH_GRP_MIN_FIPS	2048
+ #define DH_GRP_MAX	8192
+ 
+ /*
+diff -ur openssh-7.8p1.orig/entropy.c openssh-7.8p1/entropy.c
+--- openssh-7.8p1.orig/entropy.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/entropy.c	2018-09-03 10:57:38.156858338 +1000
+@@ -223,6 +223,9 @@
+ 		fatal("OpenSSL version mismatch. Built against %lx, you "
+ 		    "have %lx", (u_long)OPENSSL_VERSION_NUMBER, SSLeay());
+ 
++	/* clean the PRNG status when exiting the program */
++	atexit(RAND_cleanup);
++
+ #ifndef OPENSSL_PRNG_ONLY
+ 	if (RAND_status() == 1) {
+ 		debug3("RNG is ready, skipping seeding");
+Only in openssh-7.8p1: entropy.c.orig
+diff -ur openssh-7.8p1.orig/kex.c openssh-7.8p1/kex.c
+--- openssh-7.8p1.orig/kex.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/kex.c	2018-09-03 10:57:38.156858338 +1000
+@@ -106,6 +106,23 @@
+ 	{ NULL, -1, -1, -1},
+ };
+ 
++static const struct kexalg kexalgs_fips[] = {
++#ifdef HAVE_EVP_SHA256
++	{ KEX_DHGEX_SHA256, KEX_DH_GEX_SHA256, 0, SSH_DIGEST_SHA256 },
++#endif
++#ifdef OPENSSL_HAS_ECC
++	{ KEX_ECDH_SHA2_NISTP256, KEX_ECDH_SHA2,
++	    NID_X9_62_prime256v1, SSH_DIGEST_SHA256 },
++	{ KEX_ECDH_SHA2_NISTP384, KEX_ECDH_SHA2, NID_secp384r1,
++	    SSH_DIGEST_SHA384 },
++# ifdef OPENSSL_HAS_NISTP521
++	{ KEX_ECDH_SHA2_NISTP521, KEX_ECDH_SHA2, NID_secp521r1,
++	    SSH_DIGEST_SHA512 },
++# endif
++#endif
++	{ NULL, -1, -1, -1},
++};
++
+ char *
+ kex_alg_list(char sep)
+ {
+@@ -133,7 +150,7 @@
+ {
+ 	const struct kexalg *k;
+ 
+-	for (k = kexalgs; k->name != NULL; k++) {
++	for (k = (FIPS_mode() ? kexalgs_fips : kexalgs); k->name != NULL; k++) {
+ 		if (strcmp(k->name, name) == 0)
+ 			return k;
+ 	}
+@@ -153,7 +170,10 @@
+ 	for ((p = strsep(&cp, ",")); p && *p != '\0';
+ 	    (p = strsep(&cp, ","))) {
+ 		if (kex_alg_by_name(p) == NULL) {
+-			error("Unsupported KEX algorithm \"%.100s\"", p);
++			if (FIPS_mode())
++				error("\"%.100s\" is not allowed in FIPS mode", p);
++			else
++				error("Unsupported KEX algorithm \"%.100s\"", p);
+ 			free(s);
+ 			return 0;
+ 		}
+Only in openssh-7.8p1: kex.c.orig
+diff -ur openssh-7.8p1.orig/kexgexc.c openssh-7.8p1/kexgexc.c
+--- openssh-7.8p1.orig/kexgexc.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/kexgexc.c	2018-09-03 10:57:38.156858338 +1000
+@@ -63,7 +63,7 @@
+ 
+ 	nbits = dh_estimate(kex->dh_need * 8);
+ 
+-	kex->min = DH_GRP_MIN;
++	kex->min = FIPS_mode() ? DH_GRP_MIN_FIPS : DH_GRP_MIN;
+ 	kex->max = DH_GRP_MAX;
+ 	kex->nbits = nbits;
+ 	if (datafellows & SSH_BUG_DHGEX_LARGE)
+diff -ur openssh-7.8p1.orig/kexgexs.c openssh-7.8p1/kexgexs.c
+--- openssh-7.8p1.orig/kexgexs.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/kexgexs.c	2018-09-03 10:57:38.156858338 +1000
+@@ -82,9 +82,9 @@
+ 	kex->nbits = nbits;
+ 	kex->min = min;
+ 	kex->max = max;
+-	min = MAXIMUM(DH_GRP_MIN, min);
++	min = MAXIMUM(FIPS_mode() ? DH_GRP_MIN_FIPS : DH_GRP_MIN, min);
+ 	max = MINIMUM(DH_GRP_MAX, max);
+-	nbits = MAXIMUM(DH_GRP_MIN, nbits);
++	nbits = MAXIMUM(FIPS_mode() ? DH_GRP_MIN_FIPS : DH_GRP_MIN, nbits);
+ 	nbits = MINIMUM(DH_GRP_MAX, nbits);
+ 
+ 	if (kex->max < kex->min || kex->nbits < kex->min ||
+Only in openssh-7.8p1: kexgexs.c.orig
+diff -ur openssh-7.8p1.orig/mac.c openssh-7.8p1/mac.c
+--- openssh-7.8p1.orig/mac.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/mac.c	2018-09-03 10:57:38.156858338 +1000
+@@ -54,7 +54,7 @@
+ 	int		etm;		/* Encrypt-then-MAC */
+ };
+ 
+-static const struct macalg macs[] = {
++static const struct macalg all_macs[] = {
+ 	/* Encrypt-and-MAC (encrypt-and-authenticate) variants */
+ 	{ "hmac-sha1",				SSH_DIGEST, SSH_DIGEST_SHA1, 0, 0, 0, 0 },
+ 	{ "hmac-sha1-96",			SSH_DIGEST, SSH_DIGEST_SHA1, 96, 0, 0, 0 },
+@@ -82,6 +82,24 @@
+ 	{ NULL,					0, 0, 0, 0, 0, 0 }
+ };
+ 
++static const struct macalg fips_macs[] = {
++	/* Encrypt-and-MAC (encrypt-and-authenticate) variants */
++	{ "hmac-sha1",				SSH_DIGEST, SSH_DIGEST_SHA1, 0, 0, 0, 0 },
++#ifdef HAVE_EVP_SHA256
++	{ "hmac-sha2-256",			SSH_DIGEST, SSH_DIGEST_SHA256, 0, 0, 0, 0 },
++	{ "hmac-sha2-512",			SSH_DIGEST, SSH_DIGEST_SHA512, 0, 0, 0, 0 },
++#endif
++
++	/* Encrypt-then-MAC variants */
++	{ "hmac-sha1-etm@openssh.com",		SSH_DIGEST, SSH_DIGEST_SHA1, 0, 0, 0, 1 },
++#ifdef HAVE_EVP_SHA256
++	{ "hmac-sha2-256-etm@openssh.com",	SSH_DIGEST, SSH_DIGEST_SHA256, 0, 0, 0, 1 },
++	{ "hmac-sha2-512-etm@openssh.com",	SSH_DIGEST, SSH_DIGEST_SHA512, 0, 0, 0, 1 },
++#endif
++
++	{ NULL,					0, 0, 0, 0, 0, 0 }
++};
++
+ /* Returns a list of supported MACs separated by the specified char. */
+ char *
+ mac_alg_list(char sep)
+@@ -90,7 +108,7 @@
+ 	size_t nlen, rlen = 0;
+ 	const struct macalg *m;
+ 
+-	for (m = macs; m->name != NULL; m++) {
++	for (m = FIPS_mode() ? fips_macs : all_macs; m->name != NULL; m++) {
+ 		if (ret != NULL)
+ 			ret[rlen++] = sep;
+ 		nlen = strlen(m->name);
+@@ -129,7 +147,7 @@
+ {
+ 	const struct macalg *m;
+ 
+-	for (m = macs; m->name != NULL; m++) {
++	for (m = FIPS_mode() ? fips_macs : all_macs; m->name != NULL; m++) {
+ 		if (strcmp(name, m->name) != 0)
+ 			continue;
+ 		if (mac != NULL)
+Only in openssh-7.8p1: mac.c.orig
+diff -ur openssh-7.8p1.orig/myproposal.h openssh-7.8p1/myproposal.h
+--- openssh-7.8p1.orig/myproposal.h	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/myproposal.h	2018-09-03 10:57:38.156858338 +1000
+@@ -139,6 +139,25 @@
+ 
+ #define KEX_CLIENT_MAC KEX_SERVER_MAC
+ 
++#define KEX_DEFAULT_KEX_FIPS		\
++	KEX_ECDH_METHODS
++#define	KEX_FIPS_ENCRYPT \
++	"aes128-ctr,aes192-ctr,aes256-ctr," \
++	"aes128-cbc,3des-cbc," \
++	"aes192-cbc,aes256-cbc,rijndael-cbc@lysator.liu.se"
++#ifdef HAVE_EVP_SHA256
++#define	KEX_FIPS_MAC \
++	"hmac-sha1," \
++	"hmac-sha2-256," \
++	"hmac-sha2-512," \
++	"hmac-sha1-etm@openssh.com," \
++	"hmac-sha2-256-etm@openssh.com," \
++	"hmac-sha2-512-etm@openssh.com"
++#else
++#define        KEX_FIPS_MAC \
++       "hmac-sha1"
++#endif
++
+ #else /* WITH_OPENSSL */
+ 
+ #define KEX_SERVER_KEX		\
+Only in openssh-7.8p1: myproposal.h.orig
+diff -ur openssh-7.8p1.orig/readconf.c openssh-7.8p1/readconf.c
+--- openssh-7.8p1.orig/readconf.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/readconf.c	2018-09-03 11:04:23.020867123 +1000
+@@ -2083,9 +2083,9 @@
+ 		    defaults, all)) != 0) \
+ 			fatal("%s: %s: %s", __func__, #what, ssh_err(r)); \
+ 	} while (0)
+-	ASSEMBLE(ciphers, KEX_SERVER_ENCRYPT, all_cipher);
+-	ASSEMBLE(macs, KEX_SERVER_MAC, all_mac);
+-	ASSEMBLE(kex_algorithms, KEX_SERVER_KEX, all_kex);
++	ASSEMBLE(ciphers, (FIPS_mode() ? KEX_FIPS_ENCRYPT : KEX_CLIENT_ENCRYPT), all_cipher);
++	ASSEMBLE(macs, (FIPS_mode() ? KEX_FIPS_MAC : KEX_CLIENT_MAC), all_mac);
++	ASSEMBLE(kex_algorithms, (FIPS_mode() ? KEX_DEFAULT_KEX_FIPS : KEX_SERVER_KEX), all_kex);
+ 	ASSEMBLE(hostbased_key_types, KEX_DEFAULT_PK_ALG, all_key);
+ 	ASSEMBLE(pubkey_key_types, KEX_DEFAULT_PK_ALG, all_key);
+ #undef ASSEMBLE
+Only in openssh-7.8p1: readconf.c.orig
+diff -ur openssh-7.8p1.orig/sandbox-seccomp-filter.c openssh-7.8p1/sandbox-seccomp-filter.c
+--- openssh-7.8p1.orig/sandbox-seccomp-filter.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/sandbox-seccomp-filter.c	2018-09-03 10:57:38.156858338 +1000
+@@ -137,6 +137,9 @@
+ #ifdef __NR_open
+ 	SC_DENY(__NR_open, EACCES),
+ #endif
++#ifdef __NR_socket
++	SC_DENY(socket, EACCES),
++#endif
+ #ifdef __NR_openat
+ 	SC_DENY(__NR_openat, EACCES),
+ #endif
+Only in openssh-7.8p1: sandbox-seccomp-filter.c.orig
+diff -ur openssh-7.8p1.orig/servconf.c openssh-7.8p1/servconf.c
+--- openssh-7.8p1.orig/servconf.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/servconf.c	2018-09-03 11:02:48.888865081 +1000
+@@ -203,9 +203,9 @@
+ 		if ((r = kex_assemble_names(&o->what, defaults, all)) != 0) \
+ 			fatal("%s: %s: %s", __func__, #what, ssh_err(r)); \
+ 	} while (0)
+-	ASSEMBLE(ciphers, KEX_SERVER_ENCRYPT, all_cipher);
+-	ASSEMBLE(macs, KEX_SERVER_MAC, all_mac);
+-	ASSEMBLE(kex_algorithms, KEX_SERVER_KEX, all_kex);
++	ASSEMBLE(ciphers, (FIPS_mode() ? KEX_FIPS_ENCRYPT : KEX_SERVER_ENCRYPT), all_cipher);
++	ASSEMBLE(macs, (FIPS_mode() ? KEX_FIPS_MAC : KEX_SERVER_MAC), all_mac);
++	ASSEMBLE(kex_algorithms, (FIPS_mode() ? KEX_DEFAULT_KEX_FIPS : KEX_SERVER_KEX), all_kex);
+ 	ASSEMBLE(hostkeyalgorithms, KEX_DEFAULT_PK_ALG, all_key);
+ 	ASSEMBLE(hostbased_key_types, KEX_DEFAULT_PK_ALG, all_key);
+ 	ASSEMBLE(pubkey_key_types, KEX_DEFAULT_PK_ALG, all_key);
+@@ -2583,8 +2583,10 @@
+ 	/* string arguments */
+ 	dump_cfg_string(sPidFile, o->pid_file);
+ 	dump_cfg_string(sXAuthLocation, o->xauth_location);
+-	dump_cfg_string(sCiphers, o->ciphers ? o->ciphers : KEX_SERVER_ENCRYPT);
+-	dump_cfg_string(sMacs, o->macs ? o->macs : KEX_SERVER_MAC);
++	dump_cfg_string(sCiphers, o->ciphers ? o->ciphers : FIPS_mode()
++		? KEX_FIPS_ENCRYPT : KEX_SERVER_ENCRYPT);
++	dump_cfg_string(sMacs, o->macs ? o->macs : FIPS_mode()
++		? KEX_FIPS_MAC : KEX_SERVER_MAC);
+ 	dump_cfg_string(sBanner, o->banner);
+ 	dump_cfg_string(sForceCommand, o->adm_forced_command);
+ 	dump_cfg_string(sChrootDirectory, o->chroot_directory);
+@@ -2599,8 +2601,8 @@
+ 	dump_cfg_string(sAuthorizedPrincipalsCommand, o->authorized_principals_command);
+ 	dump_cfg_string(sAuthorizedPrincipalsCommandUser, o->authorized_principals_command_user);
+ 	dump_cfg_string(sHostKeyAgent, o->host_key_agent);
+-	dump_cfg_string(sKexAlgorithms,
+-	    o->kex_algorithms ? o->kex_algorithms : KEX_SERVER_KEX);
++	dump_cfg_string(sKexAlgorithms, o->kex_algorithms ? o->kex_algorithms :
++		FIPS_mode() ? KEX_DEFAULT_KEX_FIPS : KEX_SERVER_KEX);
+ 	dump_cfg_string(sHostbasedAcceptedKeyTypes, o->hostbased_key_types ?
+ 	    o->hostbased_key_types : KEX_DEFAULT_PK_ALG);
+ 	dump_cfg_string(sHostKeyAlgorithms, o->hostkeyalgorithms ?
+Only in openssh-7.8p1: servconf.c.orig
+diff -ur openssh-7.8p1.orig/ssh-add.c openssh-7.8p1/ssh-add.c
+--- openssh-7.8p1.orig/ssh-add.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/ssh-add.c	2018-09-03 10:57:38.160858338 +1000
+@@ -52,6 +52,7 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <limits.h>
++#include <syslog.h>
+ 
+ #include "xmalloc.h"
+ #include "ssh.h"
+@@ -533,6 +534,18 @@
+ 	OpenSSL_add_all_algorithms();
+ #endif
+ 
++#ifdef WITH_OPENSSL
++	if (getenv("OPENSSL_FIPS")) {
++		openlog(__progname, 0, 0);
++		if (!FIPS_mode_set(1)) {
++			syslog(LOG_ERR, "Failed to set FIPs mode, exiting.");
++			exit(1);
++		}
++		syslog(LOG_INFO, "FIPs mode enabled.");
++		closelog();
++	}
++#endif
++
+ 	setvbuf(stdout, NULL, _IOLBF, 0);
+ 
+ 	/* First, get a connection to the authentication agent. */
+Only in openssh-7.8p1: ssh-add.c.orig
+diff -ur openssh-7.8p1.orig/ssh-agent.c openssh-7.8p1/ssh-agent.c
+--- openssh-7.8p1.orig/ssh-agent.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/ssh-agent.c	2018-09-03 10:57:38.160858338 +1000
+@@ -73,6 +73,7 @@
+ #ifdef HAVE_UTIL_H
+ # include <util.h>
+ #endif
++#include <syslog.h>
+ 
+ #include "xmalloc.h"
+ #include "ssh.h"
+@@ -1100,6 +1101,19 @@
+ #endif
+ 
+ 	__progname = ssh_get_progname(av[0]);
++
++#ifdef WITH_OPENSSL
++	if (getenv("OPENSSL_FIPS")) {
++		openlog(__progname, 0, 0);
++		if (!FIPS_mode_set(1)) {
++			syslog(LOG_ERR, "Failed to set FIPs mode, exiting.");
++			exit(1);
++		}
++		syslog(LOG_INFO, "FIPs mode enabled.");
++		closelog();
++	}
++#endif
++
+ 	seed_rng();
+ 
+ 	while ((ch = getopt(ac, av, "cDdksE:a:P:t:")) != -1) {
+Only in openssh-7.8p1: ssh-agent.c.orig
+diff -ur openssh-7.8p1.orig/ssh.c openssh-7.8p1/ssh.c
+--- openssh-7.8p1.orig/ssh.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/ssh.c	2018-09-03 10:57:38.160858338 +1000
+@@ -68,6 +68,7 @@
+ #include <unistd.h>
+ #include <limits.h>
+ #include <locale.h>
++#include <syslog.h>
+ 
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+@@ -599,6 +600,19 @@
+ 
+ 	__progname = ssh_get_progname(av[0]);
+ 
++#ifdef WITH_OPENSSL
++	OpenSSL_add_all_algorithms();
++	if (getenv("OPENSSL_FIPS")) {
++		openlog(__progname, 0, 0);
++		if (!FIPS_mode_set(1)) {
++			syslog(LOG_ERR, "Failed to set FIPs mode, exiting.");
++			exit(1);
++		}
++		syslog(LOG_INFO, "FIPs mode enabled.");
++		closelog();
++	}
++#endif
++
+ #ifndef HAVE_SETPROCTITLE
+ 	/* Prepare for later setproctitle emulation */
+ 	/* Save argv so it isn't clobbered by setproctitle() emulation */
+@@ -1030,7 +1044,6 @@
+ 	host_arg = xstrdup(host);
+ 
+ #ifdef WITH_OPENSSL
+-	OpenSSL_add_all_algorithms();
+ 	ERR_load_crypto_strings();
+ #endif
+ 
+@@ -1260,6 +1273,10 @@
+ 
+ 	seed_rng();
+ 
++	if (FIPS_mode()) {
++		logit("FIPS mode initialized");
++	}
++
+ 	if (options.user == NULL)
+ 		options.user = xstrdup(pw->pw_name);
+ 
+diff -ur openssh-7.8p1.orig/sshconnect2.c openssh-7.8p1/sshconnect2.c
+--- openssh-7.8p1.orig/sshconnect2.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/sshconnect2.c	2018-09-03 10:57:38.156858338 +1000
+@@ -658,6 +658,13 @@
+ 	OM_uint32 min;
+ 	int r, ok = 0;
+ 
++#ifdef WITH_OPENSSL
++	if (FIPS_mode()) {
++		logit("Disabling GSSAPI. Not usable in FIPS mode");
++		return 0;
++	}
++#endif
++
+ 	/* Try one GSSAPI method at a time, rather than sending them all at
+ 	 * once. */
+ 
+Only in openssh-7.8p1: sshconnect2.c.orig
+Only in openssh-7.8p1: ssh.c.orig
+diff -ur openssh-7.8p1.orig/sshd.c openssh-7.8p1/sshd.c
+--- openssh-7.8p1.orig/sshd.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/sshd.c	2018-09-03 10:57:38.160858338 +1000
+@@ -66,6 +66,7 @@
+ #include <grp.h>
+ #include <pwd.h>
+ #include <signal.h>
++#include <syslog.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -1491,6 +1492,20 @@
+ #endif
+ 	__progname = ssh_get_progname(av[0]);
+ 
++        SSLeay_add_all_algorithms();
++
++#ifdef WITH_OPENSSL
++	if (getenv("OPENSSL_FIPS")) {
++		openlog(__progname, 0, 0);
++		if (!FIPS_mode_set(1)) {
++			syslog(LOG_ERR, "Failed to set FIPs mode, exiting.");
++			cleanup_exit(255);
++		}
++		syslog(LOG_INFO, "FIPs mode enabled.");
++		closelog();
++	}
++#endif
++
+ 	/* Save argv. Duplicate so setproctitle emulation doesn't clobber it */
+ 	saved_argc = ac;
+ 	rexec_argc = ac;
+@@ -1632,7 +1647,7 @@
+ 	else
+ 		closefrom(REEXEC_DEVCRYPTO_RESERVED_FD);
+ 
+-#ifdef WITH_OPENSSL
++#if 0 /* FIPS */
+ 	OpenSSL_add_all_algorithms();
+ #endif
+ 
+@@ -1940,6 +1955,10 @@
+ 	/* Reinitialize the log (because of the fork above). */
+ 	log_init(__progname, options.log_level, options.log_facility, log_stderr);
+ 
++	if (FIPS_mode()) {
++		logit("FIPS mode initialized");
++	}
++
+ 	/* Chdir to the root directory so that the current disk can be
+ 	   unmounted if desired. */
+ 	if (chdir("/") == -1)
+Only in openssh-7.8p1: sshd.c.orig
+diff -ur openssh-7.8p1.orig/sshkey.c openssh-7.8p1/sshkey.c
+--- openssh-7.8p1.orig/sshkey.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/sshkey.c	2018-09-03 11:05:33.348868649 +1000
+@@ -53,6 +53,7 @@
+ #include "sshbuf.h"
+ #include "cipher.h"
+ #include "digest.h"
++#include "log.h"
+ #define SSHKEY_INTERNAL
+ #include "sshkey.h"
+ #include "sshkey-xmss.h"
+@@ -1517,6 +1518,8 @@
+ 	}
+ 	if (!BN_set_word(f4, RSA_F4) ||
+ 	    !RSA_generate_key_ex(private, bits, f4, NULL)) {
++			if (FIPS_mode())
++				logit("%s: the key length might be unsupported by FIPS mode approved key generation method", __func__);
+ 		ret = SSH_ERR_LIBCRYPTO_ERROR;
+ 		goto out;
+ 	}
+Only in openssh-7.8p1: sshkey.c.orig
+diff -ur openssh-7.8p1.orig/ssh-keygen.c openssh-7.8p1/ssh-keygen.c
+--- openssh-7.8p1.orig/ssh-keygen.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/ssh-keygen.c	2018-09-03 10:59:19.692860541 +1000
+@@ -36,6 +36,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
++#include <syslog.h>
+ #include <limits.h>
+ #include <locale.h>
+ #include <time.h>
+@@ -2367,6 +2368,19 @@
+ #ifdef WITH_OPENSSL
+ 	OpenSSL_add_all_algorithms();
+ #endif
++
++#ifdef WITH_OPENSSL
++	if (getenv("OPENSSL_FIPS")) {
++		openlog(__progname, 0, 0);
++		if (!FIPS_mode_set(1)) {
++			syslog(LOG_ERR, "Failed to set FIPs mode, exiting.");
++			exit(1);
++		}
++		syslog(LOG_INFO, "FIPs mode enabled.");
++		closelog();
++	}
++#endif
++
+ 	log_init(argv[0], SYSLOG_LEVEL_INFO, SYSLOG_FACILITY_USER, 1);
+ 
+ 	seed_rng();
+Only in openssh-7.8p1: ssh-keygen.c.orig
+diff -ur openssh-7.8p1.orig/ssh-keysign.c openssh-7.8p1/ssh-keysign.c
+--- openssh-7.8p1.orig/ssh-keysign.c	2018-08-23 15:41:42.000000000 +1000
++++ openssh-7.8p1/ssh-keysign.c	2018-09-03 10:57:38.160858338 +1000
+@@ -35,6 +35,7 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <errno.h>
++#include <syslog.h>
+ 
+ #ifdef WITH_OPENSSL
+ #include <openssl/evp.h>
+@@ -225,6 +226,19 @@
+ 
+ #ifdef WITH_OPENSSL
+ 	OpenSSL_add_all_algorithms();
++
++#ifdef WITH_OPENSSL
++	if (getenv("OPENSSL_FIPS")) {
++		openlog(__progname, 0, 0);
++		if (!FIPS_mode_set(1)) {
++			syslog(LOG_ERR, "Failed to set FIPs mode, exiting.");
++			exit(1);
++		}
++		syslog(LOG_INFO, "FIPs mode enabled.");
++		closelog();
++	}
++#endif
++
+ 	arc4random_buf(rnd, sizeof(rnd));
+ 	RAND_seed(rnd, sizeof(rnd));
+ #endif
+Only in openssh-7.8p1: ssh-keysign.c.orig

@@ -1,0 +1,6 @@
+config LIB_LIBPCIACCESS
+	bool "Build libpciaccess"
+	default n
+	help
+	  The libpciaccess package contains a library for portable PCI access routines
+		across multiple operating systems.

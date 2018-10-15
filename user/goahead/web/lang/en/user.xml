@@ -1,0 +1,59 @@
+<po>
+  <message msgid="wireless enable" msgstr="Enable" />
+  <message msgid="wireless disable" msgstr="Disable" />
+  <message msgid="wireless allow" msgstr="Allow" />
+  <message msgid="wireless reject" msgstr="Reject" />
+  <message msgid="wireless none" msgstr="None" />
+  
+  <message msgid="secure select ssid" msgstr="Select SSID" />
+  <message msgid="secure ssid choice" msgstr="SSID Choice" />
+  <message msgid="secure security policy" msgstr="Security Policy -- " />
+  <message msgid="secure security mode" msgstr="Security Mode" />
+  <message msgid="secure encryp type" msgstr="Encrypt Type" />
+  <message msgid="secure wep" msgstr="Wire Equivalence Protection (WEP)" />
+  <message msgid="secure wep default key" msgstr="Default Key" />
+  <message msgid="secure wep default key1" msgstr="Key 1" />
+  <message msgid="secure wep default key2" msgstr="Key 2" />
+  <message msgid="secure wep default key3" msgstr="Key 3" />
+  <message msgid="secure wep default key4" msgstr="Key 4" />
+  <message msgid="secure wep key" msgstr="WEP Keys" />
+  <message msgid="secure wep key1" msgstr="WEP Key 1 :" />
+  <message msgid="secure wep key2" msgstr="WEP Key 2 :" />
+  <message msgid="secure wep key3" msgstr="WEP Key 3 :" />
+  <message msgid="secure wep key4" msgstr="WEP Key 4 :" />
+  <message msgid="secure wpa" msgstr="WPA" />
+  <message msgid="secure wpa algorithm" msgstr="WPA Algorithms" />
+  <message msgid="secure wpa pass phrase" msgstr="Pass Phrase" />
+  <message msgid="secure wpa key renew interval" msgstr="Key Renewal Interval" />
+  <message msgid="secure wpa pmk cache period" msgstr="PMK Cache Period" />
+  <message msgid="secure wpa preauth" msgstr="Pre-Authentication" />
+  <message msgid="secure 8021x wep" msgstr="802.1x WEP" />
+  <message msgid="secure 1x wep" msgstr=" WEP " />
+  <message msgid="secure radius" msgstr="Radius Server" />
+  <message msgid="secure radius ipaddr" msgstr=" IP Address " />
+  <message msgid="secure radius port" msgstr=" Port " />
+  <message msgid="secure radius shared secret" msgstr=" Shared Secret " />
+  <message msgid="secure radius session timeout" msgstr=" Session Timeout " />
+  <message msgid="secure radius idle timeout" msgstr=" Idle Timeout " />
+  <message msgid="secure access policy" msgstr=" Access Policy " />
+  <message msgid="secure access policy capable" msgstr=" Policy " />
+  <message msgid="secure access policy new" msgstr="Add a station MAC" />
+  
+  <message msgid="status title" msgstr="Status" />
+  <message msgid="status introduction" msgstr="Displays the status of the device." />
+  <message msgid="status system information" msgstr="System Info" />
+  <message msgid="status sdk version" msgstr="Firmware Version" />
+  <message msgid="status operate mode" msgstr="Operation Mode" />
+  <message msgid="status internet config" msgstr="Internet Configurations" />
+  <message msgid="status connect type" msgstr="Connected Type" />
+  <message msgid="status wan ipaddr" msgstr="WAN IP Address" />
+  <message msgid="status subnet mask" msgstr="Subnet Mask" />
+  <message msgid="status default gateway" msgstr="Default Gateway" />
+  <message msgid="status primary dns" msgstr="Primary Domain Name Server" />
+  <message msgid="status secondary dns" msgstr="Secondary Domain Name Server" />
+  <message msgid="status local network" msgstr="LAN Configurations" />
+  <message msgid="status lan ipaddr" msgstr="LAN IP Address" />
+  <message msgid="status local netmask" msgstr="LAN Netmask" />
+  <message msgid="status mac" msgstr="MAC Address" />
+  <message msgid="status ethernet port status" msgstr="Ethernet Port Status" />
+</po>

@@ -1,0 +1,5 @@
+config LIB_NETFILTER_LOG
+	bool "libnetfilter_log"
+	select LIB_NFNETLINK
+	select LIB_LIBMNL
+	default n

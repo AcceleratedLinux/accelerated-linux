@@ -1,0 +1,60 @@
+<po>
+  <message msgid="wireless enable" msgstr="启用" />
+  <message msgid="wireless disable" msgstr="停用" />
+  <message msgid="wireless allow" msgstr="允许" />
+  <message msgid="wireless reject" msgstr="拒绝" />
+  <message msgid="wireless none" msgstr="无" />
+
+  <message msgid="secure select ssid" msgstr="选择无线网路识别码" />
+  <message msgid="secure ssid choice" msgstr="无线网路识别码的选取" />
+  <message msgid="secure security policy" msgstr="安全原则 -- " />
+  <message msgid="secure security mode" msgstr="安全模式" />
+  <message msgid="secure encryp type" msgstr="加密型态" />
+  <message msgid="secure wep" msgstr="有线等效协议（WEP）" />
+  <message msgid="secure wep default key" msgstr="预设密钥" />
+  <message msgid="secure wep default key1" msgstr="密钥 1" />
+  <message msgid="secure wep default key2" msgstr="密钥 2" />
+  <message msgid="secure wep default key3" msgstr="密钥 3" />
+  <message msgid="secure wep default key4" msgstr="密钥 4" />
+  <message msgid="secure wep key" msgstr="WEP 密钥" />
+  <message msgid="secure wep key1" msgstr="WEP 密钥 1 ：" />
+  <message msgid="secure wep key2" msgstr="WEP 密钥 2 ：" />
+  <message msgid="secure wep key3" msgstr="WEP 密钥 3 ：" />
+  <message msgid="secure wep key4" msgstr="WEP 密钥 4 ：" />
+  <message msgid="secure wpa" msgstr="Wi-Fi保护存取" />
+  <message msgid="secure wpa algorithm" msgstr="WPA演算法" />
+  <message msgid="secure wpa pass phrase" msgstr="通行码" />
+  <message msgid="secure wpa key renew interval" msgstr="密钥更新间隔" />
+  <message msgid="secure wpa pmk cache period" msgstr="配对主键快取周期" />
+  <message msgid="secure wpa preauth" msgstr="先期认证" />
+  <message msgid="secure 8021x wep" msgstr="802.1x有线等效协议" />
+  <message msgid="secure 1x wep" msgstr=" 有线等效协议 " />
+  <message msgid="secure radius" msgstr="Radius服务器" />
+  <message msgid="secure radius ipaddr" msgstr=" IP地址 " />
+  <message msgid="secure radius port" msgstr=" 连接端口 " />
+  <message msgid="secure radius shared secret" msgstr=" 共享密钥 " />
+  <message msgid="secure radius session timeout" msgstr=" 连线时限 " />
+  <message msgid="secure radius idle timeout" msgstr=" 闲置时限 " />
+  <message msgid="secure access policy" msgstr=" 存取原则 " />
+  <message msgid="secure access policy capable" msgstr=" 功能 " />
+  <message msgid="secure access policy new" msgstr="新增：" />
+  <message msgid="secure access policy del" msgstr="删除" />
+  
+  <message msgid="status title" msgstr="系统状态" />
+  <message msgid="status introduction" msgstr="系统状态。" />
+  <message msgid="status system information" msgstr="系统资讯" />
+  <message msgid="status sdk version" msgstr="软件版本" />
+  <message msgid="status operate mode" msgstr="操作模式" />
+  <message msgid="status internet config" msgstr="网际网路" />
+  <message msgid="status connect type" msgstr="连接型态" />
+  <message msgid="status wan ipaddr" msgstr="广域网路IP地址" />
+  <message msgid="status subnet mask" msgstr="子网域掩码" />
+  <message msgid="status default gateway" msgstr="默认网关" />
+  <message msgid="status primary dns" msgstr="主要网域名称解析服务器" />
+  <message msgid="status secondary dns" msgstr="次要网域名称解析服务器" />
+  <message msgid="status local network" msgstr="区域网路" />
+  <message msgid="status lan ipaddr" msgstr="本机IP地址" />
+  <message msgid="status local netmask" msgstr="区域网路掩码" />
+  <message msgid="status mac" msgstr="MAC 地址" />
+  <message msgid="status ethernet port status" msgstr="乙太网路连接端口掩码" />
+ </po>

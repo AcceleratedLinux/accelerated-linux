@@ -1,0 +1,14 @@
+Index: netifd/interface.c
+===================================================================
+--- netifd.orig/interface.c
++++ netifd/interface.c
+@@ -277,6 +277,9 @@ __interface_set_up(struct interface *ifa
+ {
+ 	int ret;
+ 
++	if (iface->main_dev.dev && !iface->main_dev.claimed)
++		return -1;
++
+ 	netifd_log_message(L_NOTICE, "Interface '%s' is setting up now\n", iface->name);
+ 
+ 	iface->state = IFS_SETUP;

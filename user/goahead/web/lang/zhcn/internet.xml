@@ -1,0 +1,387 @@
+<po>
+  <message msgid="inet apply" msgstr="确定" />
+  <message msgid="inet cancel" msgstr="取消" />
+  <message msgid="inet enable" msgstr="启用" />
+  <message msgid="inet disable" msgstr="停用" />
+  <message msgid="inet optional" msgstr="(非必须的)" />
+  <message msgid="inet next" msgstr="下一步" />
+
+<message msgid="admin saving" msgstr="储存中 . . ." />
+
+  <message msgid="pppoe disconnect" msgstr="断开" />
+  <message msgid="pppoe connect" msgstr="连接" />
+
+  <message msgid="inet mac" msgstr="MAC 地址" />
+  <message msgid="inet ip" msgstr="IP 地址" />
+  <message msgid="inet server" msgstr="服务器 IP" />
+  <message msgid="inet netmask" msgstr="子网掩码" />
+  <message msgid="inet lan2" msgstr="局域网 2" />
+  <message msgid="inet lan2 ip" msgstr="局域网 2 IP 地址" />
+  <message msgid="inet lan2 netmask" msgstr="局域网 2 子网掩码" />
+  <message msgid="inet gateway" msgstr="默认网关" />
+  <message msgid="inet pri dns" msgstr="主要DNS 服务器" />
+  <message msgid="inet sec dns" msgstr="次要DNS 服务器" />
+  <message msgid="inet user" msgstr="用户名" />
+  <message msgid="inet password" msgstr="口令" />
+  <message msgid="inet pass2" msgstr="确认口令" />
+  <message msgid="inet hostname" msgstr="主机名称(非必须的)" />
+
+ <message msgid="inet Download" msgstr="下载" />
+  <message msgid="inet Upload" msgstr="上传" />
+  <message msgid="inet Download Upload" msgstr="下载 / 上传" /> <message msgid="inet wc dns" msgstr="DNS服务器 (手动设定)" />
+  <message msgid="inet wc pri dns" msgstr="主DNS服务器" />
+  <message msgid="inet wc sec dns" msgstr="从DNS服务器" />
+  
+  <message msgid="wan title" msgstr="广域网络设定" />
+  <message msgid="wan introduction" msgstr="您可以依您的环境选择适当的连接类型，并针对不同的连接类型设定参数。" />
+  <message msgid="wan dual wan introduction" msgstr="如果你选择双路广域网(两个广域网设定)，3G，PPPOE，PPTP，L2TP只支持保持模式。所以系统将重置它们以继续保持模式。" />
+  <message msgid="wan 3g introduction" msgstr="如果广域网连接类型选择3G USB调制解调器，驱动程序和拨号过程都需要额外的时间。" /><message msgid="wan connection type" msgstr="广域网连接类型：" />
+<message msgid="wan connection type of ethernet" msgstr="乙太网路埠" />
+  <message msgid="wan connection type of usb" msgstr="USB埠" />  
+  <message msgid="wan connection type static" msgstr="静态 (固定 IP)" />
+  <message msgid="wan connection type dhcp" msgstr="动态 (自动取得)" />
+  <message msgid="wan connection type pppoe" msgstr="PPPoE (ADSL)" />
+  <message msgid="wan connection type l2tp" msgstr="L2TP" />
+  <message msgid="wan connection type pptp" msgstr="PPTP" />
+  <message msgid="wan connection type bpond" msgstr="Bigpond" />
+  <message msgid="wan connection type 3g" msgstr="3G" />
+  <message msgid="wan connection type none" msgstr="没有" />
+  <message msgid="wan 3g Device status" msgstr="连接的 USB 类型" />
+  <message msgid="wan protocol opmode" msgstr="运行模式" />
+  <message msgid="wan protocol opmode keepalive" msgstr="保持连接" />
+  <message msgid="wan protocol opmode ondemand" msgstr="动态需求" />
+  <message msgid="wan protocol opmode manual" msgstr="手动" />
+
+  <message msgid="wan protocol keep alive mode" msgstr="保持连接模式：重拨周期" />
+  <message msgid="wan protocol keep seconds" msgstr="秒" />
+  <message msgid="wan protocol on demand mode" msgstr="动态需求模式：闲置时间" />
+  <message msgid="wan protocol on demand minutes" msgstr="分钟" />  
+  
+<message msgid="wan fallback option" msgstr="双WAN备援模式" />
+  <message msgid="wan Master Detect IP" msgstr="主WAN连线状态侦测位址" />
+  <message msgid="wan Backup Detect IP" msgstr="备援WAN连线状态侦测位址" />
+  <message msgid="wan illegal characters in masterDetectIp" msgstr="错误：主WAN连线状态侦测位址输入错误!" />
+  <message msgid="wan illegal characters in backupDetectIp" msgstr="错误：备援WAN连线状态侦测位址输入错误!" />
+  <message msgid="wan Detect Timeout" msgstr="侦测逾时时间" />
+  <message msgid="wan Detect Timeout range" msgstr="(1 ~ 5 秒, 预设: 3)" />
+  <message msgid="wan Detect Timeout range error" msgstr="侦测逾时时间范围。(1~5)" />
+  <message msgid="wan Detect Timeout digits" msgstr="请输入正确的侦测逾时时间!" />
+  <message msgid="wan Master" msgstr="主 WAN" />
+  <message msgid="wan Backup" msgstr="备援 WAN" />
+
+  <message msgid="wan Dual Wan Mode" msgstr="双 WAN 模式" />
+  <message msgid="wan Dual Wan error no wan selected" msgstr="错误：尚未选择WAN连线类型!" />
+  <message msgid="wan static mode" msgstr="静态模式" />
+  <message msgid="wan dhcp mode" msgstr="DHCP 模式" />
+  <message msgid="wan pppoe mode" msgstr="PPPoE 模式" />
+  <message msgid="wan l2tp mode" msgstr="L2TP 模式" />
+  <message msgid="wan pptp mode" msgstr="PPTP 模式" />
+  <message msgid="wan 3G mode" msgstr="3G 模式" />
+  <message msgid="wan 3G modem" msgstr="USB 3G 数据机" />
+  <message msgid="wan address mode" msgstr="IP 地址模式" />
+  <message msgid="wan address mode static" msgstr="静态" />
+  <message msgid="wan address mode dynamic" msgstr="动态" />
+  <message msgid="wan mac empty" msgstr="MAC位址不能空白!" />
+  <message msgid="wan fill incorrect mac01" msgstr="请填入正确的MAC位址格式!(XX:XX:XX:XX:XX:XX)" />
+  <message msgid="wan fill incorrect mac02" msgstr="请填入正确的MAC位址格式!( can not broadcast )" />
+  <message msgid="wan fill incorrect mac03" msgstr="请填入正确的MAC位址格式!" />
+  <message msgid="wan mac clone" msgstr="MAC 复制" />
+  <message msgid="wan not create XMLHTTP instance" msgstr="无法建立XMLHTTP实体。" />
+  <message msgid="wan not get mac" msgstr="无法取得MAC位址!" />
+  <message msgid="wan ip empty" msgstr="错误：IP位址不能空白!" />
+  <message msgid="wan ip invalid" msgstr="错误：无法辨识IP位址!" />
+  <message msgid="wan pppoe not specify ussername" msgstr="错误：请输入您的使用者名称!" />
+  <message msgid="wan pppoe not specify password" msgstr="错误：请输入您的密码!" />
+  <message msgid="wan pppoe password mismatched" msgstr="错误：您输入的密码不一致!" />
+  <message msgid="wan pppoe redial period error" msgstr="错误：请输入拨号间隔。" />
+  <message msgid="wan pppoe not a valid integer" msgstr="错误：无效的输入!" />
+  <message msgid="wan pppoe not a valid integer zero" msgstr="错误：无效的输入(零)!" />
+  <message msgid="wan pppoe not specify idle time" msgstr="错误：请输入等候时间!" />
+  <message msgid="wan pppoe not a valid idle time integer" msgstr="错误：无效的输入!" />
+  <message msgid="wan pppoe not a valid idle time integer zero" msgstr="错误：无效的输入(零)!" />
+  
+  <message msgid="wan pptp not specify ussername" msgstr="错误：请输入您的使用者名称!" />
+  <message msgid="wan pptp not specify password" msgstr="错误：请输入您的密码!" />
+  <message msgid="wan pptp redial period error" msgstr="错误：请输入拨号间隔!" />
+  <message msgid="wan pptp not a valid integer" msgstr="错误：无效的输入!" />
+  <message msgid="wan pptp not a valid integer zero" msgstr="错误：无效的输入(零)!" />
+  <message msgid="wan pptp not specify idle time" msgstr="错误：请输入等候时间!" />
+  
+  <message msgid="wan l2tp not specify ussername" msgstr="错误：请输入您的使用者名称!" />
+  <message msgid="wan l2tp not specify password" msgstr="错误：请输入您的密码!" />
+  <message msgid="wan l2tp redial period error" msgstr="错误：请输入拨号间隔!" />
+  <message msgid="wan l2tp not specify idle time" msgstr="错误：请输入等候时间!" />
+  <message msgid="wan please make sure your Time Zone Settings" msgstr="请先设置您的网路时区设定!" />
+  <message msgid="lan ip incorrect value" msgstr="错误：仅能输入数字[0~9]。" />
+
+  <message msgid="lan title" msgstr="局域网络设定" />
+  <message msgid="lan introduction" msgstr="您可以启用/停止以及设定所有的网络功能。" />
+  <message msgid="lan setup" msgstr="局域网络设定" />
+  <message msgid="lan dhcp setup" msgstr="DHCP设定" />
+  <message msgid="lan dhcp type" msgstr="DHCP 服务器" />
+  <message msgid="lan dhcp type server" msgstr="开启" />
+  <message msgid="lan dhcp start" msgstr="起始IP地址" />
+  <message msgid="lan dhcp end" msgstr="结束IP地址" />
+  <message msgid="lan dhcp lease" msgstr="释放时间" />
+  <message msgid="lan dhcp static" msgstr="静态指定" />
+  <message msgid="lan dhcp other setup" msgstr="其它设定" />
+  <message msgid="lan stp" msgstr="802.1d Spanning Tree" />
+  <message msgid="lan lltd" msgstr="LLTD链路层拓扑发现协议" />
+  <message msgid="lan igmpp" msgstr="IGMP组播代理" />
+  <message msgid="lan upnp" msgstr="UPNP（即插即用）" />
+  <message msgid="lan radvd" msgstr="路由器通告" />
+  <message msgid="lan pppoer" msgstr="PPPoE 中继" />
+  <message msgid="lan dnsp" msgstr="DNS 代理" />
+
+<message msgid="lan ip incorrect format" msgstr="错误 IP : IP 地址栏格式错误！" />
+
+<message msgid="host name incorrect" msgstr="错误：主机名称太长!" />
+  <message msgid="host name format illegal" msgstr="错误：主机名称包含不合法的字元!" />
+  <message msgid="host name not specify" msgstr="错误：请输入主机名称!" />
+
+  <message msgid="dhcp title" msgstr="DHCP 客户端列表" />
+  <message msgid="dhcp introduction" msgstr="您可以在这里监视所有 DHCP 客户端。" />
+  <message msgid="dhcp clients" msgstr="DHCP 客户端" />
+  <message msgid="dhcp clients update" msgstr="更新" />
+  <message msgid="dhcp expire" msgstr="过期" />
+
+  <message msgid="vpn title" msgstr="VPN Passthrough" />
+  <message msgid="vpn introduction" msgstr="VPN passthrought 设定，包含: L2TP, IPSec, 以及 PPTP passthrough" />
+  <message msgid="vpn pass thru" msgstr="VPN Pass Through" />
+  <message msgid="vpn l2tp pass thru" msgstr="L2TP Passthrough" />
+  <message msgid="vpn ipsec pass thru" msgstr="IPSec Passthrough" />
+  <message msgid="vpn pptp pass thru" msgstr="PPTP Passthrough" />
+  
+  <message msgid="routing title" msgstr="静态路由设定" />
+  <message msgid="routing Introduction" msgstr="您可以在此处新增或删除自订的路由规则，或者启动动态路由规则交换协定。" />
+  <message msgid="routing add rule" msgstr="新增静态路由规则" />
+  <message msgid="routing routing dest" msgstr="目标IP地址" />
+  <message msgid="routing range" msgstr="类型" />
+  <message msgid="routing netmask" msgstr="子网掩码" />
+  <message msgid="routing gateway" msgstr="闸道器IP地址" />
+  <message msgid="routing interface" msgstr="网络介面" />
+  <message msgid="routing custom" msgstr="自订" />
+  <message msgid="routing comment" msgstr="注解" />
+  <message msgid="routing submit" msgstr="新增" />
+  <message msgid="routing reset" msgstr="重置" />
+  <message msgid="routing Number" msgstr="编号" />
+  <message msgid="routing del title" msgstr="目前系统中的路由规则" />
+  <message msgid="routing del dest" msgstr="目标IP地址" />
+  <message msgid="routing del netmask" msgstr="子网掩码" />
+  <message msgid="routing del gateway" msgstr="闸道器IP地址" />
+  <message msgid="routing del flags" msgstr="旗标" />
+  <message msgid="routing del metric" msgstr="路由度量" />
+  <message msgid="routing del ref" msgstr="参考" />
+  <message msgid="routing del use" msgstr="使用" />
+  <message msgid="routing del interface" msgstr="网络介面" />
+  <message msgid="routing del comment" msgstr="注解" />
+  <message msgid="routing del" msgstr="删除" />
+  <message msgid="routing del reset" msgstr="重置" />
+  <message msgid="routing host" msgstr="主机" />
+  <message msgid="routing net" msgstr="网段" />
+  <message msgid="routing LAN" msgstr="区域网络" />
+  <message msgid="routing WAN" msgstr="广域网络" />     
+  
+  <message msgid="routing dynamic Title" msgstr="动态路由设定" />
+  <message msgid="routing dynamic Title2" msgstr="动态路由协定" />
+  <message msgid="routing dynamic rip disable" msgstr="关闭" />
+  <message msgid="routing dynamic rip enable" msgstr="开启" />
+  <message msgid="routing dynamic rip apply" msgstr="确定" />
+  <message msgid="routing dynamic rip reset" msgstr="取消" />
+     
+  <message msgid="qos title" msgstr="服务品质(QoS)" />
+  <message msgid="qos intro" msgstr="您可以在此新增或移除服务品质(QoS)的规则,为每种流量提供的不同频宽和优先权" />
+  <message msgid="qos setup" msgstr="服务品质(QoS)设定" />
+  <message msgid="qos str" msgstr="服务品质(QoS)" />
+  <message msgid="qos disable" msgstr="停用" />
+  <message msgid="qos enable" msgstr="启用" />
+  <message msgid="qos dscpmarkeronly" msgstr="DSCP only" />
+  <message msgid="qos upload bandwidth" msgstr="上传频宽:" />
+  <message msgid="qos bandwidth custom" msgstr="自定" />
+  <message msgid="qos download bandwidth" msgstr="下载频宽:" />
+  <message msgid="qos setup submit" msgstr="确认" />
+  <message msgid="qos setup reset" msgstr="重置" />
+  <message msgid="qos group" msgstr="群组" />
+  <message msgid="qos group attr" msgstr="属性" />
+  <message msgid="qos group modify" msgstr="修改" />
+  <message msgid="qos rule no" msgstr="编号" />
+  <message msgid="qos rule name" msgstr="名称" />
+  <message msgid="qos rule prio" msgstr="所属群组" />
+  <message msgid="qos rule info" msgstr="资讯" />
+  <message msgid="qos loaddefault" msgstr="载入系统预设值" />
+  <message msgid="qos rule add" msgstr="新增" />
+  <message msgid="qos rule del" msgstr="删除" />
+  <message msgid="qos Rate" msgstr="保证最小频宽:" />
+  <message msgid="qos Ceil" msgstr="可借用最大频宽:" />
+  <message msgid="qos AF Name" msgstr="群组名称" />  
+  <message msgid="qos AF Upload Bandwidth" msgstr="% 的上传频宽" /> 
+  
+  <message msgid="qos classifier title" msgstr="QoS规则设定" />
+  <message msgid="qos classifier name" msgstr="名称" />
+  <message msgid="qos classifier group" msgstr="所属群组" />
+  <message msgid="qos classifier mac" msgstr="MAC地址" />
+  <message msgid="qos classifier dip" msgstr="目的端IP地址" />
+  <message msgid="qos classifier sip" msgstr="来源端IP地址" />
+  <message msgid="qos classifier pktlen" msgstr="封包长度" />
+  <message msgid="qos classifier dscp" msgstr="DSCP" />
+  <message msgid="qos classifier proto" msgstr="协定" />
+  <message msgid="qos classifier dport" msgstr="目的端端口" />
+  <message msgid="qos classifier sport" msgstr="目的端端口" />
+  <message msgid="qos classifier l7" msgstr="应用" />
+  <message msgid="qos classifier remark" msgstr="重标记DSCP为:" />
+
+<message msgid="qos classifier auto" msgstr="自动" />
+
+<message msgid="w Previous" msgstr="上一页" />
+
+<message msgid="dayid 1" msgstr="每月第  1 天" />
+  <message msgid="dayid 2" msgstr="每月第  2 天" />
+  <message msgid="dayid 3" msgstr="每月第  3 天" />
+  <message msgid="dayid 4" msgstr="每月第  4 天" />
+  <message msgid="dayid 5" msgstr="每月第  5 天" />
+  <message msgid="dayid 6" msgstr="每月第  6 天" />
+  <message msgid="dayid 7" msgstr="每月第  7 天" />
+  <message msgid="dayid 8" msgstr="每月第  8 天" />
+  <message msgid="dayid 9" msgstr="每月第  9 天" />
+  <message msgid="dayid 10" msgstr="每月第 10 天" />
+  <message msgid="dayid 11" msgstr="每月第 11 天" />
+  <message msgid="dayid 12" msgstr="每月第 12 天" />
+  <message msgid="dayid 13" msgstr="每月第 13 天" />
+  <message msgid="dayid 14" msgstr="每月第 14 天" />
+  <message msgid="dayid 15" msgstr="每月第 15 天" />
+  <message msgid="dayid 16" msgstr="每月第 16 天" />
+  <message msgid="dayid 17" msgstr="每月第 17 天" />
+  <message msgid="dayid 18" msgstr="每月第 18 天" />
+  <message msgid="dayid 19" msgstr="每月第 19 天" />
+  <message msgid="dayid 20" msgstr="每月第 20 天" />
+  <message msgid="dayid 21" msgstr="每月第 21 天" />
+  <message msgid="dayid 22" msgstr="每月第 22 天" />
+  <message msgid="dayid 23" msgstr="每月第 23 天" />
+  <message msgid="dayid 24" msgstr="每月第 24 天" />
+  <message msgid="dayid 25" msgstr="每月第 25 天" />
+  <message msgid="dayid 26" msgstr="每月第 26 天" />
+  <message msgid="dayid 27" msgstr="每月第 27 天" />
+  <message msgid="dayid 28" msgstr="每月第 28 天" />
+  <message msgid="dayid 29" msgstr="每月第 29 天" />
+  <message msgid="dayid 30" msgstr="每月第 30 天" />
+  <message msgid="dayid 31" msgstr="每月第 31 天" />
+  
+  <message msgid="3G Enable Mode" msgstr="3G 启用模式" />
+  <message msgid="3G Start Mode" msgstr="启动模式" />
+  <message msgid="3G Automatically" msgstr="全自动" />
+  <message msgid="3G Manually" msgstr="手动" />
+  <message msgid="3G Manually Start" msgstr="手动启动 3G" />
+  <message msgid="3G Manually Stop" msgstr="手动停止 3G" />
+  <message msgid="3G Pin Code Protect" msgstr="Pin码保护" />
+  <message msgid="3G Dial Code" msgstr="拨号号码" />
+  <message msgid="3G APN Service" msgstr="APN服务" />
+  <message msgid="3G Connect Type" msgstr="连线型态" />
+  <message msgid="3G Max Idle Time" msgstr="最大等候时间" />
+  <message msgid="3G Idle" msgstr="秒。" />
+  <message msgid="3G Time Budget" msgstr="时间预算" />
+  <message msgid="3G Data Budget" msgstr="数据预算" />
+  <message msgid="3G Update" msgstr="更新" />
+  <message msgid="Forced Reset Budget" msgstr="重置预算统计" />
+
+  <message msgid="wan 3g pincode invalid" msgstr="无效的3G Pin码 (请填入4-8码) " />
+  <message msgid="wan 3g pincode digits" msgstr="请输入正确的3G Pin码(数字)!" />
+  <message msgid="wan 3g pincode warring" msgstr="若您的3G SIM Card设定为保护模式，请确定Pin码是否正确。(若错误超过三次，您的SIM卡将被锁住!)" />
+  <message msgid="wan 3g budget control mode not select" msgstr="请检察预算控制模式。" />
+  <message msgid="wan 3g maxidletime digits" msgstr="请输入正确的最长等候时间(数字)!" />
+  <message msgid="wan 3g max online monthly digits" msgstr="请输入正确的最长连线持续时间(月)!" />
+  <message msgid="wan 3g max xfer monthly digits" msgstr="请输入正确的每月3G最大传输量限制!" />
+  <message msgid="wan 3g max time limit digits" msgstr="请输入正确的每月3G最长连线时间限制!" />
+  <message msgid="wan 3g max data limit digits" msgstr="请输入正确的每月3G最长数据限制!" />
+  <message msgid="wan 3g mail sent period digits" msgstr="请输入正确的每月3G E-Mail传送周期!" />
+  <message msgid="wan 3g max time limit invalid" msgstr="您输入的最大3G连线时间限制值无效。( 1% ~ 99% )" />
+  <message msgid="wan 3g max data limit invalid" msgstr="您输入的最大3G连线数据限制值无效。( 1% ~ 99% )" />
+  <message msgid="wan 3g max online monthly invalid" msgstr="您输入的最大3G连线时间限制值无效。( 1 ~ 999 )" />
+  <message msgid="wan 3g max xfer monthly invalid" msgstr="您输入的最大3G连线数据限制值无效。( 3 ~ 4000 )" />
+
+  <message msgid="Not dial yet" msgstr="尚未拨号" />
+  <message msgid="Auth successfully" msgstr="已通过验证" />
+  <message msgid="Auth failure" msgstr="验证发生错误" />
+
+  <message msgid="Actions if Over Budget" msgstr="预算超支的动作" />
+  <message msgid="Drop Current Connection" msgstr="中断目前连线" />
+  <message msgid="Disallow New Connection" msgstr="禁止建立新的连线" />
+  <message msgid="Trigger by Limit Budget" msgstr="预算限制的触发条件" />
+  <message msgid="% of the time budget" msgstr="% 的时间预算" />
+  <message msgid="% of the data budget" msgstr="% 的数据预算" />
+  <message msgid="E-mail Alert" msgstr="E-mail通知" />
+  <message msgid="will recur every" msgstr="重复发送信件间隔" />
+  <message msgid="minutes" msgstr="分钟" />
+
+  <message msgid="Budget Policy" msgstr="预算策略" />
+  <message msgid="Budget Control" msgstr="预算控制" />
+  <message msgid="Budget Control Enable" msgstr="启用 (预设:关闭)" />
+  <message msgid="Budget Criterion" msgstr="预算基准" />
+  <message msgid="Budget Counter" msgstr="预算计数" />
+  <message msgid="TIME Budget OK" msgstr="[TIME]连线预算OK" />
+  <message msgid="TIME Over Budget" msgstr="[TIME]预算超支" />
+  <message msgid="TIME Pre Limit OK" msgstr="[TIME]预设限制OK" />
+  <message msgid="TIME Reach Pre Limit" msgstr="[TIME]到达预设限制" />
+  <message msgid="DATA Budget OK" msgstr="[DATA]Budget OK" />
+  <message msgid="DATA Over Budget" msgstr="[DATA]超出连线预算" />
+  <message msgid="DATA Pre Limit OK" msgstr="[DATA]预设限制 OK" />
+  <message msgid="DATA Reach Pre Limit" msgstr="[DATA]到达预设限制" />
+  <message msgid="hours per month" msgstr="小时(s)/月" />
+  <message msgid="MBytes per month" msgstr="MByte(s)/月" />
+  <message msgid="per_month" msgstr="/月" />
+  <message msgid="Reset on" msgstr="重置间隔" />
+  <message msgid="Reset on message" msgstr="，否则将超出预算!" />
+  <message msgid="Mail Settings" msgstr="信箱设定" />
+  <message msgid="Mail SMTP Authentication" msgstr="邮件验证方式(SMTP)" />
+  <message msgid="Mail PLAIN" msgstr="PLAIN" />
+  <message msgid="Mail LOGIN" msgstr="LOGIN" />
+  <message msgid="Mail Server" msgstr="邮件伺服器" />
+  <message msgid="Mail Sender" msgstr="发送者" />
+  <message msgid="Mail Recipient" msgstr="收件者" /> 
+  
+  <message msgid="chk Mail User Name" msgstr="不正确的使用者名称!" />
+  <message msgid="chk Mail Server" msgstr="不正确的伺服器主机!" />
+  <message msgid="chk Mail Sender" msgstr="不正确的送件者!" />
+  <message msgid="chk Mail Recipient" msgstr="不正确的收件者!" />
+
+  <message msgid="w Previous" msgstr="上一步" />
+  <message msgid="alt budget warning" msgstr="警告!!" />
+  <message msgid="alt budget warning message" msgstr="3G连线预算控制关闭中。" />
+  <message msgid="alt budget warning message2" msgstr="请再次确认您的设定是否正确：" />
+  <message msgid="alt budget budget criterion" msgstr="======== 预算基准 ==================" />
+  <message msgid="alt budget budget policy" msgstr="======== 预算策略 ==================" />
+  
+  <message msgid="lan Error Not a legal IP address" msgstr="错误!不合法的IP位址。" />
+  <message msgid="lan Error IP address is empty" msgstr="错误!空的IP位址。" />
+  <message msgid="lan It should be a [0-9] number" msgstr="输入值必须为数字0~9!" />
+  <message msgid="lan IP adress format error" msgstr="IP位址格式错误!" />
+  <message msgid="lan Dont enter Blank Space in this feild" msgstr="错误!请勿在输入栏中加入空白符号。" />
+  <message msgid="lan Incorrect Lan IP = Wan IP" msgstr="错误! 区域网路IP = 广域网路IP。" />
+  <message msgid="lan Netmask format error" msgstr="错误! 子网路遮罩格式错误。" />
+  <message msgid="lan Incorrect Lan IP NOT in subnet" msgstr="错误! 区域网路IP不属于子网路的范围内。" />
+  <message msgid="lan Incorrect dhcpStart IP dhcpEnd IP" msgstr="错误! DHCP起始IP位址 >= DHCP结束IP位址" />
+  <message msgid="lan Incorrect dhcpStart IP Lan IP" msgstr="错误! DHCP起始IP位址 = 区域网路IP !" />
+  <message msgid="lan IP address format error" msgstr="错误的IP位址格式!" />
+  <message msgid="lan Incorrect DHCP Range NOT in Subnet" msgstr="错误! DHCP 范围不属于子网路!" />
+  <message msgid="lan Please fill the MAC Address in correct format" msgstr="请使用正确的MAC位址格式!(XX:XX:XX:XX:XX:XX)" />
+  <message msgid="lan Incorrect Lan ip in DHCP lease range" msgstr="错误! 区域网路IP存在DHCP租约范围!" />
+  <message msgid="dhcpLease Half hour" msgstr="半小时" />
+  <message msgid="dhcpLease One hour" msgstr="一小时" />
+  <message msgid="dhcpLease Two hours" msgstr="两小时" />
+  <message msgid="dhcpLease Half day" msgstr="半天" />
+  <message msgid="dhcpLease One day" msgstr="一天" />
+  <message msgid="dhcpLease Two days" msgstr="两天" />
+  <message msgid="dhcpLease One week" msgstr="一周" />
+  <message msgid="dhcpLease Two weeks" msgstr="两周" />
+  <message msgid="dhcpLease Forever" msgstr="永久" />
+  
+  <message msgid="routing destination has wrong format" msgstr="目標IP地址格式错误。" />
+  <message msgid="routing netmask has wrong format" msgstr="子网掩码格式错误。" />
+  <message msgid="routing gateway has wrong format" msgstr="闸道器格式错误。" />
+  <message msgid="routing please input the destination" msgstr="请输入目标IP地址。" />
+  <message msgid="routing please input the netmask" msgstr="请输入子网掩码。" />
+  <message msgid="routing Incorrect Rule Alive" msgstr="错误 ! 该规则已存在 !" />
+  <message msgid="routing Illegal characters are now allowable" msgstr="输入不合法字元。" />
+    
+  <message msgid="wan Error Time Zone Settings" msgstr="错误，网路时区尚未设定!!" />
+  <message msgid="wan please make sure your Time Zone Settings" msgstr="请设定您的时区! 系统管理 -> 系统管理 -> 网路时区设定" />
+</po>

@@ -1,0 +1,413 @@
+--- mii-diag-2.11.orig/mii-diag.8
++++ mii-diag-2.11/mii-diag.8
+@@ -61,7 +61,7 @@
+ .B \-F, --fixed-speed <speed|setting>
+ 
+ Speed is one of: 100baseT4, 100baseTx, 100baseTx-FD, 100baseTx-HD, 10baseT,
+-10baseT-FD, 10baseT-HD.  For more precise control an explict numeric
++10baseT-FD, 10baseT-HD.  For more precise control an explicit numeric
+ register setting is also allowed.
+ 
+ 
+@@ -117,7 +117,7 @@
+ .PP
+ The '--monitor' option allows scripting link beat changes.
+ .PP
+-This option is similar to --watch, but with lower overhead and simplifed
++This option is similar to --watch, but with lower overhead and simplified
+ output.  It polls the interface only once a second and the output format
+ is a single line per link change with three fixed words
+   <unknown|down||negotiating|up> <STATUS> <PARTNER-CAP>
+--- mii-diag-2.11.orig/Makefile
++++ mii-diag-2.11/Makefile
+@@ -0,0 +1,26 @@
++CFLAGS= -O -Wall
++CC=gcc
++INSTALL=install
++
++LIBS=libmii.o
++
++all: mii-diag mii-diag-udeb
++
++mii-diag:
++	$(CC) $(CFLAGS) -Wstrict-prototypes -O mii-diag.c -DLIBMII \
++				libmii.c -o mii-diag
++
++mii-diag-udeb:
++	$(CC) -Os -Wstrict-prototypes -O mii-diag.c -o mii-diag
++clean:
++	rm -f *.o mii-diag mii-diag-udeb *~
++
++install-mii-diag:
++	mkdir -p $(DESTDIR)/usr/sbin
++	$(INSTALL) mii-diag $(DESTDIR)/usr/sbin
++
++install-mii-diag-udeb:
++	mkdir -p $(DESTDIR)/usr/sbin
++	$(INSTALL) mii-diag-udeb $(DESTDIR)/usr/sbin/mii-diag
++	
++install: all install-mii-diag
+--- mii-diag-2.11.orig/debian/mii-diag-udeb.manpages
++++ mii-diag-2.11/debian/mii-diag-udeb.manpages
+@@ -0,0 +1 @@
++debian/mii-diag.8
+--- mii-diag-2.11.orig/debian/changelog
++++ mii-diag-2.11/debian/changelog
+@@ -0,0 +1,190 @@
++mii-diag (2.11-3) unstable; urgency=low
++
++  * Adopt package (Closes: #541000)
++  * Add ${misc:Depends} to depends
++  * Make lintian happy wrt make clean (Yes, the Makefile is shipped by us and
++    therefore will always exists.  But it's easier than a lintian override.)
++  * Bump debhelper compat level, build depend on debhelper 5
++  * Remove empty maintainer scripts
++  * Improve debian/copyright
++  * Bump standards Version (No further changes needed)
++
++ -- Alexander Reichle-Schmehl <tolimar@debian.org>  Mon, 18 Jan 2010 22:25:18 +0100
++
++mii-diag (2.11-2) unstable; urgency=low
++
++  * Fix Typos in manpage (closes: #325676)
++
++ -- Alain Schroeder <alain@debian.org>  Sat,  3 Jun 2006 11:57:52 +0200
++
++mii-diag (2.11-1) unstable; urgency=low
++
++  * New Upstream
++  * Switched to upstreams manpage
++
++ -- Alain Schroeder <alain@debian.org>  Sat, 26 Mar 2005 18:58:53 +0100
++
++mii-diag (2.09-1) unstable; urgency=low
++
++  * Build udeb (smaller binary, not using libmii) (Closes: #247177)
++  * Fix manpage, thanks to Jim Van Zandt (Closes: #229386)
++  * New Upstream: new -C (Set BMCR) and -m (Monitor) switches.
++  * Add manpage entries for new -C and -m switches.
++
++ -- Alain Schroeder <alain@debian.org>  Mon,  3 May 2004 22:05:56 +0200
++
++mii-diag (2.07-1) unstable; urgency=low
++
++  * New Upstream
++    * mii-diag 2.07
++      * Split the -G command into -g and -G
++    * libmii 2.10
++      * New chip-ids added
++      * Better support for TDK, VIA and Intel chips
++  * Updated man-page
++  * Cleaned my helptext from multiline strings, Thanks to Daniel Schepler
++    <schepler@math.berkeley.edu> (Closes: #194987)
++
++ -- Alain Schroeder <alain@debian.org>  Fri,  6 Jun 2003 20:46:44 +0200
++
++mii-diag (2.05-1) unstable; urgency=low
++
++  * New Upstream. It now has a detailed --help from upstream.
++  * Fixed manpage to match --help.
++
++ -- Alain Schroeder <alain@debian.org>  Sat, 27 Jul 2002 22:23:07 +0200
++
++mii-diag (2.04-1) unstable; urgency=low
++
++  * New Upstream - few fixes and it now showes, if the old or new SIOCGMIIPHY
++    is used.
++  * Add "-s" parameter to manpage, which is documented in the helptext.
++    (Closes: #146879).
++
++ -- Alain Schroeder <alain@debian.org>  Sun, 26 May 2002 15:47:21 +0200
++
++mii-diag (2.03-1) unstable; urgency=low
++
++  * New Upstream (closes: #133000).
++  * Some small changes to the manpage.
++  * Do not use dh_testversion anymore.
++
++ -- Alain Schroeder <alain@debian.org>  Sun, 10 Feb 2002 00:16:46 +0100
++
++mii-diag (2.02-4) unstable; urgency=low
++
++  * Fix-a-typo (closes: #130565)
++
++ -- Alain Schroeder <alain@debian.org>  Wed, 23 Jan 2002 23:51:54 +0100
++
++mii-diag (2.02-3) unstable; urgency=low
++
++  * Fix-a-typo in description. (closes: #125136)
++  * Make mii-diag flush after changes (Thanks to Ingvar Mattsson).
++
++ -- Alain Schroeder <alain@parkautomat.net>  Sat, 22 Dec 2001 16:28:28 +0100
++
++mii-diag (2.02-2) unstable; urgency=low
++
++  * Removed Build dependency on libc6-dev
++
++ -- Alain Schroeder <alain@debian.org>  Tue, 10 Jul 2001 13:28:48 +0200
++ 
++mii-diag (2.02-1) unstable; urgency=low
++
++  * Splitted nictools source into mii-diag, nictools-pci and
++    nictools-nopci.
++  * Bumped version to 2.02, because mii-diag has that version.
++
++ -- Alain Schroeder <alain@debian.org>  Mon, 18 Jun 2001 22:15:42 +0200
++
++nictools (1.3.1-2) unstable; urgency=low
++
++  * Removed a tab from debian/control
++
++ -- Alain Schroeder <alain@debian.org>  Fri,  1 Jun 2001 13:40:30 +0200
++
++nictools (1.3.1-1) unstable; urgency=low
++
++  * New Upstream(s):
++  ** Added ns820-diag for cards with Myson MTD803 chip (v1.00)
++  ** Added myson-diag for cards with National Semiconductor DP83820
++      chips (v2.02)
++  ** Updated eepro-diag    (v2.04)
++  ** Updated epic-diag     (v2.01)
++  ** Updated libmmi        (v2.04)
++  ** Updated mii-diag      (v2.02)
++  ** Updated natsemi-diag  (v2.04)
++  ** Updated ne2k-pci-diag (v2.01)
++  ** Updatet rtl8139-diag  (v2.03)
++  ** Updated tulip-diag    (v2.08)
++  ** Updated via-diag      (v2.06)
++  ** Updated vortex-diag   (v2.05)
++  * Added myson-diag and ns820-diag to description
++
++ -- Alain Schroeder <alain@debian.org>  Tue, 22 May 2001 00:18:46 +0200
++
++nictools (1.3-6) unstable; urgency=low
++
++  * Added patch that allowes building this package with
++    /usr/src/kernel-source-* as a symlink from Guido Guenther. 
++    (Closes: #95850)
++  * Added Build-Depend on gawk.
++
++ -- Alain Schroeder <alain@debian.org>  Tue, 17 Apr 2001 00:10:20 +0200
++ 
++nictools (1.3-5) unstable; urgency=low
++
++  * I was a bit too fast with making 3c5x9utils an obsolete package.
++    I forgot to include the actual binaries. (Closes: #94194)
++
++ -- Alain Schroeder <alain@debian.org>  Tue, 17 Apr 2001 00:10:20 +0200
++ 
++nictools (1.3-4) unstable; urgency=low
++
++  * Modified the Descriptions a little bit.
++  * Wrote manpages for atlantic-diag, atp-diag, eexpress-diag, e21-diag,
++    hp+-diag and ne2k-diag.
++
++ -- Alain Schroeder <alain@debian.org>  Thu,  8 Mar 2001 02:53:10 +0100
++
++nictools (1.3-3) unstable; urgency=low
++
++  * Reimplemented debian/rules cleanly.
++  * Wrote manpages for 3c515-diag, alta-diag and at1700-diag.
++
++ -- Alain Schroeder <alain@debian.org>  Wed, 28 Feb 2001 14:02:04 +0100
++
++nictools (1.3-2) unstable; urgency=low
++
++  * Fixed Typos in mii-diag's description, closes: #83700
++  * Wrote a manpage for mii-diag, closes: #83702
++  * Implemented a real "help" mode with all infos from the manpagei in
++    mii-diag.
++
++ -- Alain Schroeder <alain@debian.org>  Fri, 16 Feb 2001 16:03:35 +0100
++ 
++nictools (1.3-1) unstable; urgency=low
++
++  * Jumped upstream version up to 1.3 to nicely integrate 3c5x9utils.
++  * Reconstructed the building. Now 3c9x5utils and nictools-noisa ist only
++    build on i386, while nictools-pci is i386 arm alpha only. mii-diag is
++    the only package that can be crosscompiled, closes: #84704, #85233
++
++ -- Alain Schroeder <alain@debian.org>  Mon,  5 Feb 2001 15:07:24 +0100
++
++nictools (1.0-2) unstable; urgency=low
++
++  * Fixed Description to not be wrapped, closes: #83985
++
++ -- Alain Schroeder <alain@debian.org>  Tue, 30 Jan 2001 13:26:25 +0100
++ 
++nictools (1.0-1) unstable; urgency=low
++
++  * Initial Release, closes: #83441
++
++ -- Alain Schroeder <alain@debian.org>  Tue,  9 Jan 2001 20:27:27 +0100
++
++Local variables:
++mode: debian-changelog
++End:
+--- mii-diag-2.11.orig/debian/mii-diag-udeb.dirs
++++ mii-diag-2.11/debian/mii-diag-udeb.dirs
+@@ -0,0 +1 @@
++usr/sbin
+--- mii-diag-2.11.orig/debian/mii-diag-udeb.files
++++ mii-diag-2.11/debian/mii-diag-udeb.files
+@@ -0,0 +1 @@
++usr/sbin/mii-diag
+--- mii-diag-2.11.orig/debian/mii-diag.dirs
++++ mii-diag-2.11/debian/mii-diag.dirs
+@@ -0,0 +1,2 @@
++usr/sbin
++usr/share/man/man8
+--- mii-diag-2.11.orig/debian/control
++++ mii-diag-2.11/debian/control
+@@ -0,0 +1,28 @@
++Source: mii-diag
++Section: net
++Priority: extra
++Maintainer: Alexander Reichle-Schmehl <tolimar@debian.org>
++Standards-Version: 3.8.3
++Build-Depends: debhelper (>= 5)
++
++Package: mii-diag
++Architecture: any
++Section: net
++Depends: ${shlibs:Depends}, ${misc:Depends}
++Suggests: nictools-pci, nictools-nopci
++Description: A little tool to manipulate network cards
++ Examines and sets the MII registers of network cards.
++ .
++ This is a general program. You can find specialized programs for 
++ several network cards in the nictools-pci and nictools-nopci packages.
++
++Package: mii-diag-udeb
++Architecture: any
++Section: debian-installer
++Depends: ${shlibs:Depends}, ${misc:Depends}
++XC-Package-Type: udeb
++Description: A little tool to manipulate network cards
++ Examines and sets the MII registers of network cards.
++ .
++ This is a general program. You can find specialized programs for 
++ several network cards in the nictools-pci and nictools-nopci packages.
+--- mii-diag-2.11.orig/debian/copyright
++++ mii-diag-2.11/debian/copyright
+@@ -0,0 +1,15 @@
++This package was debianized by Alain Schroeder <alain@debian.org> on
++Tue,  9 Jan 2001 20:27:27 +0100. It is now maintained by Alexander
++Reichle-Schmehl <tolimar@debian.org>.
++
++It was downloaded from http://www.scyld.com/diag/index.html
++
++Upstream Author: Donald Becker <becker@scyld.com>
++
++Copyright: 
++  Copyright (C) 1997-2003 Donald Becker <becker@scyld.com>
++
++  You are free to distribute this software under the terms of the GNU 
++  General Public License. The full text of this license can be found 
++  in the file /usr/share/common-licenses/GPL.
++      
+--- mii-diag-2.11.orig/debian/mii-diag.manpages
++++ mii-diag-2.11/debian/mii-diag.manpages
+@@ -0,0 +1 @@
++mii-diag.8
+--- mii-diag-2.11.orig/debian/rules
++++ mii-diag-2.11/debian/rules
+@@ -0,0 +1,90 @@
++#!/usr/bin/make -f
++# Sample debian/rules that uses debhelper. 
++# GNU copyright 1997 by Joey Hess.
++#
++# This version is for a hypothetical package that builds an
++# architecture-dependant package, as well as an architecture-independent
++# package.
++
++# Uncomment this to turn on verbose mode. 
++#export DH_VERBOSE=1
++
++# This has to be exported to make some magic below work.
++export DH_OPTIONS
++
++BUILD_ARCH:=$(shell dpkg --print-gnu-build-architecture)
++# New cross-compilation policy may set the DEB_HOST_ARCH variable.
++ifdef DEB_HOST_ARCH
++ ARCH:=$(DEB_HOST_ARCH)
++else
++ # dpkg-cross sets the ARCH environment variable, so use it.
++ ifdef ARCH
++  ARCH:=$(ARCH)
++ else
++  ARCH:=$(BUILD_ARCH)
++ endif
++endif
++
++build: build-stamp
++build-stamp:
++	dh_testdir
++	touch build-stamp
++
++clean:
++	dh_testdir
++	dh_testroot
++	rm -f build-stamp 
++
++	# Add here commands to clean up after the build process.
++	# pointless, since we ship the Makefile ourself, but it makes lintian happy ;)
++	[ ! -f Makefile ] || $(MAKE) clean
++	-rm -rf debian/mii-diag debian/mii-diag-udeb
++
++	dh_clean
++
++install: DH_OPTIONS=
++install: build
++	dh_testdir
++	dh_testroot
++	dh_clean -k
++	dh_installdirs
++	$(MAKE) mii-diag
++	dh_install -pmii-diag mii-diag usr/sbin
++	$(MAKE) clean
++	$(MAKE) mii-diag-udeb
++	dh_install -pmii-diag-udeb mii-diag usr/sbin
++	#dh_movefiles
++
++# Build architecture-independent files here.
++# Pass -i to all debhelper commands in this target to reduce clutter.
++binary-indep: DH_OPTIONS=-i
++binary-indep: build install
++
++# Build architecture-dependent files here.
++# Pass -a to all debhelper commands in this target to reduce clutter.
++binary-arch: DH_OPTIONS=-s
++binary-arch: build install
++#	dh_testversion 1.1.17
++	dh_testdir
++	dh_testroot
++	dh_installdocs
++	dh_installexamples
++	dh_installmenu
++	dh_installcron
++	
++	dh_installman
++
++	dh_installinfo
++	dh_installchangelogs 
++	dh_strip
++	dh_link
++	dh_compress
++	dh_fixperms
++	dh_installdeb
++	dh_shlibdeps
++	dh_gencontrol
++	dh_md5sums
++	dh_builddeb
++
++binary: binary-indep binary-arch
++.PHONY: build clean binary-indep binary-arch binary install
+--- mii-diag-2.11.orig/debian/compat
++++ mii-diag-2.11/debian/compat
+@@ -0,0 +1 @@
++5
+--- mii-diag-2.11.orig/debian/mii-diag.files
++++ mii-diag-2.11/debian/mii-diag.files
+@@ -0,0 +1 @@
++usr/sbin/mii-diag

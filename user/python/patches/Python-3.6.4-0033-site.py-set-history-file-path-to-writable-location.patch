@@ -1,0 +1,23 @@
+From: David Escalona <david.escalona@digi.com>
+Date: Wed, 1 Aug 2018 12:45:45 +0200
+Subject: [PATCH 1/1] site.py: set history file path to writable location
+
+Signed-off-by: David Escalona <david.escalona@digi.com>
+---
+ Lib/site.py | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/Lib/site.py b/Lib/site.py
+index 0fc9200..43f8f35 100644
+--- a/Lib/site.py
++++ b/Lib/site.py
+@@ -412,8 +412,7 @@ def enablerlcompleter():
+             # each interpreter exit when readline was already configured
+             # through a PYTHONSTARTUP hook, see:
+             # http://bugs.python.org/issue5845#msg198636
+-            history = os.path.join(os.path.expanduser('~'),
+-                                   '.python_history')
++            history = os.path.join('/var/run', '.python_history')
+             try:
+                 readline.read_history_file(history)
+             except IOError:

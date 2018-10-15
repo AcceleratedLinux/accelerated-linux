@@ -1,0 +1,10 @@
+config USER_LIBVIRT
+	bool "Build libvirt"
+	default n
+	select LIB_LIBXML2
+	select LIB_LIBPCIACCESS
+	select LIB_LIBNL
+	select LIB_YAJL
+	help
+		Libvirt is collection of software that provides a convenient way to manage
+		virtual machines and other virtualization functionality.

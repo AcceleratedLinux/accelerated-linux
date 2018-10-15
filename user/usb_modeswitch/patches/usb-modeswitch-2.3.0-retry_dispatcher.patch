@@ -1,0 +1,25 @@
+--- usb-modeswitch-2.3.0.orig/usb_modeswitch.sh	2016-01-12 05:18:57.000000000 +1000
++++ usb-modeswitch-2.3.0/usb_modeswitch.sh	2018-07-04 06:12:57.929031685 +1000
+@@ -80,18 +80,18 @@
+ PATH=/bin:/sbin:/usr/bin:/usr/sbin
+ count=20
+ while [ $count != 0 ]; do
++	count=$(($count - 1))
+ 	if [ ! -e "/usr/sbin/usb_modeswitch_dispatcher" ]; then
+ 		sleep 1
+-		count=$(($count - 1))
+ 	else
+ 		if [ -e "/etc/systemd/system/usb_modeswitch@.service" ]; then
+ 			exec systemctl --no-block start usb_modeswitch@$p1'_'$p2.service
+ 		elif [ -e "/etc/init/usb-modeswitch-upstart.conf" ]; then
+ 			exec initctl emit --no-wait usb-modeswitch-upstart UMS_PARAM=$1
+-		else
+-			exec usb_modeswitch_dispatcher --switch-mode $1 &
++		elif usb_modeswitch_dispatcher --switch-mode $1; then
++			exit 0
+ 		fi
+-		exit 0
++		sleep 5
+ 	fi
+ done
+ ) &

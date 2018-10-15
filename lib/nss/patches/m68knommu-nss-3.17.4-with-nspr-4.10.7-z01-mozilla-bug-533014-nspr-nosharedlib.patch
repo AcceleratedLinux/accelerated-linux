@@ -1,0 +1,161 @@
+--- nss-3.17.4/nspr/configure.in.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/configure.in	2015-08-21 11:40:53.203737960 -0400
+@@ -2049,8 +2049,8 @@
+             LIBNSPR='$(dist_libdir)/libnspr$(MOD_MAJOR_VERSION).$(LIB_SUFFIX)'
+             LIBPLC='$(dist_libdir)/libplc$(MOD_MAJOR_VERSION).$(LIB_SUFFIX)'
+         else
+-            LIBNSPR='$(dist_libdir)/nspr$(MOD_MAJOR_VERSION).$(LIB_SUFFIX)'
+-            LIBPLC='$(dist_libdir)/plc$(MOD_MAJOR_VERSION).$(LIB_SUFFIX)'
++            LIBNSPR='$(dist_libdir)/nspr$(MOD_MAJOR_VERSION)_s.$(LIB_SUFFIX)'
++            LIBPLC='$(dist_libdir)/plc$(MOD_MAJOR_VERSION)_s.$(LIB_SUFFIX)'
+         fi
+     fi # GNU_CC
+ 
+--- nss-3.17.4/nspr/config/rules.mk.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/config/rules.mk	2015-08-21 11:40:53.203737960 -0400
+@@ -107,18 +107,7 @@
+ endif
+ 
+ ifndef TARGETS
+-ifeq (,$(filter-out WINNT WINCE OS2,$(OS_ARCH)))
+-TARGETS		= $(LIBRARY) $(SHARED_LIBRARY) $(IMPORT_LIBRARY)
+-ifdef MOZ_DEBUG_SYMBOLS
+-ifdef MSC_VER
+-ifneq (,$(filter-out 1100 1200,$(MSC_VER)))
+-TARGETS		+= $(SHARED_LIB_PDB)
+-endif
+-endif
+-endif
+-else
+-TARGETS		= $(LIBRARY) $(SHARED_LIBRARY)
+-endif
++TARGETS		= $(LIBRARY)
+ endif
+ 
+ #
+@@ -399,6 +388,9 @@
+ 	awk 'BEGIN {ord=1;} { print($$0 " @" ord " RESIDENTNAME"); ord++;}'	>> $@
+ 	$(ADD_TO_DEF_FILE)
+ endif
++ifeq ($(OS_ARCH),WINNT)
++	cp $< $@
++endif
+ 
+ #
+ # Translate source filenames to absolute paths. This is required for
+--- nss-3.17.4/nspr/lib/libc/src/Makefile.in.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/lib/libc/src/Makefile.in	2015-08-21 11:40:53.203737960 -0400
+@@ -142,11 +142,3 @@
+ 
+ export:: $(TARGETS)
+ 	$(INSTALL) -m 444 $(TARGETS) $(dist_libdir)
+-ifdef SHARED_LIBRARY
+-ifeq ($(OS_ARCH),HP-UX)
+-	$(INSTALL) -m 755 $(SHARED_LIBRARY) $(dist_libdir)
+-	$(INSTALL) -m 755 $(SHARED_LIBRARY) $(dist_bindir)
+-else
+-	$(INSTALL) -m 444 $(SHARED_LIBRARY) $(dist_bindir)
+-endif
+-endif
+--- nss-3.17.4/nspr/lib/ds/Makefile.in.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/lib/ds/Makefile.in	2015-08-21 11:43:41.295790147 -0400
+@@ -141,11 +141,3 @@
+ export:: $(TARGETS)
+ 	$(INSTALL) -m 444 $(HEADERS) $(dist_includedir)
+ 	$(INSTALL) -m 444 $(TARGETS) $(dist_libdir)
+-ifdef SHARED_LIBRARY
+-ifeq ($(OS_ARCH),HP-UX)
+-	$(INSTALL) -m 755 $(SHARED_LIBRARY) $(dist_libdir)
+-	$(INSTALL) -m 755 $(SHARED_LIBRARY) $(dist_bindir)
+-else
+-	$(INSTALL) -m 444 $(SHARED_LIBRARY) $(dist_bindir)
+-endif
+-endif
+--- nss-3.17.4/nspr/pr/include/prtypes.h.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/pr/include/prtypes.h	2015-08-21 11:40:53.207739438 -0400
+@@ -48,7 +48,23 @@
+ **
+ **
+ ***********************************************************************/
+-#if defined(WIN32)
++#if 1  /* STATIC LIBRARIES */
++
++#define PR_EXPORT(__type) extern __type
++#define PR_EXPORT_DATA(__type) extern __type
++#define PR_IMPORT(__type) extern __type
++#define PR_IMPORT_DATA(__type) extern __type
++
++#define PR_EXTERN(__type) extern __type
++#define PR_IMPLEMENT(__type) __type
++#define PR_EXTERN_DATA(__type) extern __type
++#define PR_IMPLEMENT_DATA(__type) __type
++
++#define PR_CALLBACK
++#define PR_CALLBACK_DECL
++#define PR_STATIC_CALLBACK(__x) static __x
++
++#elif defined(WIN32)
+ 
+ #define PR_EXPORT(__type) extern __declspec(dllexport) __type
+ #define PR_EXPORT_DATA(__type) extern __declspec(dllexport) __type
+--- nss-3.17.4/nspr/pr/src/Makefile.in.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/pr/src/Makefile.in	2015-08-21 11:44:11.235803218 -0400
+@@ -364,14 +364,6 @@
+ 
+ build:: $(TARGETS)
+ 	$(INSTALL) -m 444 $(TARGETS) $(dist_libdir)
+-ifdef SHARED_LIBRARY
+-ifeq ($(OS_ARCH),HP-UX)
+-	$(INSTALL) -m 755 $(SHARED_LIBRARY) $(dist_libdir)
+-	$(INSTALL) -m 755 $(SHARED_LIBRARY) $(dist_bindir)
+-else
+-	$(INSTALL) -m 444 $(SHARED_LIBRARY) $(dist_bindir)
+-endif
+-endif
+ 
+ ifeq ($(BUILD_AIX_RTL_LIBC),1)
+ $(AIX_RTL_LIBC): /usr/ccs/lib/libc.a
+--- nss-3.17.4/nspr/pr/tests/libfilename.c.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/pr/tests/libfilename.c	2015-08-21 11:40:53.207739438 -0400
+@@ -59,6 +59,7 @@
+         debug_mode = PR_TRUE;
+     }
+ 
++#if 0
+     /* First test a library that is implicitly linked. */
+ #ifdef WINNT
+     name = PR_Malloc(strlen("libnspr4.dll")+1);
+@@ -71,6 +72,7 @@
+         failed = PR_TRUE;
+     }
+     PR_FreeLibraryName(name);
++#endif
+ 
+     /* Next test a library that is dynamically loaded. */
+     name = PR_GetLibraryName("dll", "my");
+--- nss-3.17.4/nspr/pr/tests/dll/Makefile.in.orig	2014-08-12 11:40:57.000000000 -0400
++++ nss-3.17.4/nspr/pr/tests/dll/Makefile.in	2015-08-21 11:40:53.207739438 -0400
+@@ -25,6 +25,8 @@
+ W16OBJS = $(subst $(space),$(comma)$(space),$(OBJS))
+ endif
+ 
++LIBRARY_NAME = my
++
+ ifeq ($(OS_ARCH), WINNT)
+ ifeq ($(OS_TARGET), WIN16)
+ # do nothing
+@@ -37,10 +39,12 @@
+ ifeq (,$(filter-out WINNT OS2,$(OS_ARCH)))
+ IMPORT_LIBRARY	= $(OBJDIR)/my.$(LIB_SUFFIX)
+ SHARED_LIBRARY	= $(OBJDIR)/my.dll
+-ifeq ($(OS_ARCH), OS2)
+-MAPFILE		= $(OBJDIR)/my.def
++MAPFILE		= $(OBJDIR)/mydll.def
+ GARBAGE		+= $(MAPFILE)
++ifeq ($(OS_ARCH), OS2)
+ MKSHLIB		+= $(MAPFILE)
++else
++LINK_DLL	+= -DEF:$(MAPFILE)
+ endif
+ TARGETS		= $(SHARED_LIBRARY) $(IMPORT_LIBRARY)
+ else

@@ -1,0 +1,70 @@
+
+config USER_NTP
+	bool
+
+config USER_NTPD_NTPD
+	bool "ntpd"
+	select USER_NTP
+	help
+	  Network time protocol daemon version 4.1.1.
+
+config USER_NTPD_NTPDC
+	bool "ntpdc"
+	select USER_NTP
+	help
+	  Private mode query program for ntpd.
+
+config USER_NTPD_NTPDATE
+	bool "ntpdate"
+	select USER_NTP
+	help
+	  Poll NTP server and set system date.  Part of the NTPD package.
+
+config USER_NTPD_NTPQ
+	bool "ntpq"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_TICKADJ
+	bool "tickadj"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_CALC_TICKADJ
+	bool "calc-tickadj"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_NTP_KEYGEN
+	bool "ntp-keygen"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_NTPTRACE
+	bool "ntptrace"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_SNTP
+	bool "sntp"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_NTP_WAIT
+	bool "ntp-wait"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+
+config USER_NTPD_UPDATE_LEAP
+	bool "update-leap"
+	select USER_NTP
+	help
+	  NTP utility.  Part of the NTPD package.
+

@@ -1,0 +1,43 @@
+diff --git a/commands-wms.c b/commands-wms.c
+index 78554c5..ca875a8 100644
+--- a/commands-wms.c
++++ b/commands-wms.c
+@@ -190,7 +190,7 @@ static void decode_udh(const unsigned char *data)
+ 
+ static void decode_7bit_field(char *name, const unsigned char *data, int data_len, bool udh)
+ {
+-	const unsigned char *udh_start;
++	const unsigned char *udh_start = NULL;
+ 	char *dest;
+ 	int pos_offset = 0;
+ 
+@@ -247,9 +247,9 @@ pdu_decode_address(char *str, unsigned char *data, int len)
+ 	*str = 0;
+ }
+ 
+-static void wms_decode_address(char *str, char *name, unsigned char *data, int len)
++static void wms_decode_address(char *name, unsigned char *data, int len)
+ {
+-	str = blobmsg_alloc_string_buffer(&status, name, len * 2 + 2);
++	char *str = blobmsg_alloc_string_buffer(&status, name, len * 2 + 2);
+ 	pdu_decode_address(str, data, len);
+ 	blobmsg_add_string_buffer(&status);
+ }
+@@ -272,7 +272,7 @@ static void cmd_wms_get_message_cb(struct qmi_dev *qmi, struct qmi_request *req,
+ 		return;
+ 
+ 	if (cur_len) {
+-		wms_decode_address(str, "smsc", data, cur_len - 1);
++		wms_decode_address("smsc", data, cur_len - 1);
+ 		data += cur_len;
+ 	}
+ 
+@@ -290,7 +290,7 @@ static void cmd_wms_get_message_cb(struct qmi_dev *qmi, struct qmi_request *req,
+ 
+ 	if (cur_len) {
+ 		cur_len = (cur_len + 1) / 2;
+-		wms_decode_address(str, sent ? "receiver" : "sender", data, cur_len);
++		wms_decode_address(sent ? "receiver" : "sender", data, cur_len);
+ 		data += cur_len + 1;
+ 	}
+ 

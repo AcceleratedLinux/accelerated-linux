@@ -1,0 +1,21 @@
+From: David Escalona <david.escalona@digi.com>
+Date: Mon, 7 May 2018 14:01:47 +0200
+Subject: [PATCH 8/9] parser: policy-cache: add missing errno include
+
+Signed-off-by: David Escalona <david.escalona@digi.com>
+---
+ parser/policy_cache.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/parser/policy_cache.c b/parser/policy_cache.c
+index 2864eec..019f9c0 100644
+--- a/parser/policy_cache.c
++++ b/parser/policy_cache.c
+@@ -18,6 +18,7 @@
+ 
+ #include <ctype.h>
+ #include <dirent.h>
++#include <errno.h>
+ #include <fcntl.h>
+ #include <stdio.h>
+ #include <string.h>

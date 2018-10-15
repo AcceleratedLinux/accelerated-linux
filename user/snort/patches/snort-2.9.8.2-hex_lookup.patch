@@ -1,0 +1,15 @@
+Index: snort-2.9.8.0/src/sfutil/util_jsnorm.c
+===================================================================
+--- snort-2.9.8.0.orig/src/sfutil/util_jsnorm.c	2014-01-01 02:07:55.000000000 +1000
++++ snort-2.9.8.0/src/sfutil/util_jsnorm.c	2014-02-10 14:49:52.684992164 +1000
+@@ -90,8 +90,8 @@
+     ACT_UNESCAPE
+ } ActionJSNorm;
+ 
+-int hex_lookup[256];
+-int valid_chars[256];
++static int hex_lookup[256];
++static int valid_chars[256];
+ 
+ char decoded_out[6335];
+ 

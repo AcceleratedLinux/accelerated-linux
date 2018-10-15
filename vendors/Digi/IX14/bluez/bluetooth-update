@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# usage:
+# runt update bluetooth[.*] [min_age]
+
+check_age() {
+	local age=
+	[ "${min_age}" ] && age="$(runt age $1)" && [ "${age}" -le "${min_age}" ] && return 1
+	return 0
+}
+
+min_age=${2}
+
+check_age bluetooth || exit 0
+runt set bluetooth ""
+
+runt set bluetooth.mac "$(bluetooth mac)"
+runt set bluetooth.state "$(bluetooth state)"
+runt set bluetooth.device "$(bluetooth device)"
+runt set bluetooth.name "$(bluetooth name)"
+runt set bluetooth.connections "$(bluetooth connections 2> /dev/null)"
+
+exit 0
+

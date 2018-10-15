@@ -1,0 +1,51 @@
+Index: odhcp6c/src/ra.c
+===================================================================
+--- odhcp6c.orig/src/ra.c
++++ odhcp6c/src/ra.c
+@@ -140,6 +140,20 @@ int ra_init(const char *ifname, const st
+ 	return 0;
+ }
+ 
++static int ra_calc_refresh_timer(void)
++{
++	struct odhcp6c_entry *e;
++	size_t ra_route_entries, i;
++	int64_t l_valid = UINT32_MAX;
++
++	e = odhcp6c_get_state(STATE_RA_ROUTE, &ra_route_entries);
++	ra_route_entries /= sizeof(*e);
++	for (i = 0; i < ra_route_entries; i++)
++		if (e[i].valid < l_valid)
++			l_valid = e[i].valid;
++
++	return ra_route_entries ? l_valid * 3 / 4 : 0;
++}
+ 
+ static void ra_send_rs(int signal __attribute__((unused)))
+ {
+@@ -323,12 +337,6 @@ bool ra_process(void)
+ 		if (!ra_icmpv6_valid(&from, hlim, buf, len))
+ 			continue;
+ 
+-		// Stop sending solicits
+-		if (rs_attempt > 0) {
+-			alarm(0);
+-			rs_attempt = 0;
+-		}
+-
+ 		if (!found) {
+ 			odhcp6c_expire();
+ 			found = true;
+@@ -452,8 +460,11 @@ bool ra_process(void)
+ 		}
+ 	}
+ 
+-	if (found)
++	if (found) {
+ 		odhcp6c_expire();
++		rs_attempt = 0;
++		alarm(ra_calc_refresh_timer());
++	}
+ 
+ 	return found && changed;
+ }

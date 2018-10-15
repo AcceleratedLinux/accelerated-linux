@@ -1,0 +1,8 @@
+config USER_HOSTAPD_HOSTAPD
+	bool "hostapd"
+	help
+	  Support Access Point mode on many common WiFi interfaces.
+
+config USER_HOSTAPD_HOSTAPD_CLI
+	bool "hostapd_cli"
+	depends on USER_HOSTAPD_HOSTAPD

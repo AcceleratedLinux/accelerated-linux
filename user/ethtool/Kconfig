@@ -1,0 +1,5 @@
+config USER_ETHTOOL_ETHTOOL
+	bool "ethtool"
+	help
+	  ethtool is a small utility for examining and tuning your
+	  ethernet-based network interface. (80k+)

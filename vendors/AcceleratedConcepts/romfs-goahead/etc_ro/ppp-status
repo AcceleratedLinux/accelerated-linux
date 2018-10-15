@@ -1,0 +1,19 @@
+#!/bin/sh
+#RC_CONF=/var/run/rc.conf
+IF=$1
+DEV=$2
+SP=$3
+IP=$4
+RP=$5
+PA=$6
+
+# include the enviro's
+#. $RC_CONF
+echo "[PPP traffic]CONNECT_TIME=$CONNECT_TIME,BYTES_RCVD=$BYTES_RCVD,BYTES_SENT=$BYTES_SENT" > /dev/console
+wan_3g_policy_drop=`flashconfig.sh get wan_3g_policy_drop`
+if [ $wan_3g_policy_drop = 1 ]; then
+	/etc_ro/init.d/3g.sh  ppp_stop
+else
+	echo "[PPP traffic]keep current connection" >/dev/console
+	/etc_ro/init.d/3g.sh  cron_3g_budget_control
+fi

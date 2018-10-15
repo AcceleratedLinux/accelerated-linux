@@ -1,0 +1,29 @@
+Intel Minnow Board
+------------------
+
+The (Intel) Minnow Board is based around an Intel Atom E38xx SoC.
+Typically it is fitted with 1 or 2 GB of RAM and a handful of assorted
+peripherals.
+
+To generate images for this board use the Intel/MinnowBoard uClinux-dist
+target. The default is to select uClibc when building. The build will
+generate 2 binaries that we can then load onto the board, images/bzImage
+and images/initrd.gz.
+
+The simplest way to boot on the Minnow board is to use a USB flash stick.
+You need a USB stick that is formated with a FAT32 filesystem. When copying
+the bzImage to the flash stick rename it to bzImage.efi. Also copy the
+initrd.gz file.
+
+Insert the USB flash stick into a USB slot on the Minnow board. Boot up
+using the serial console (you will need a serial debug header fitted to
+the Minnow). At the console prompt do:
+
+
+    fs0:
+    bzImage.efi console=ttyS0,115200 initrd=initrd.gz root=/dev/ram0
+
+That assumes you copied the image files to the root directory of the flash
+stick. If not then change directories (using the "cd" command) before
+running the kernel).
+

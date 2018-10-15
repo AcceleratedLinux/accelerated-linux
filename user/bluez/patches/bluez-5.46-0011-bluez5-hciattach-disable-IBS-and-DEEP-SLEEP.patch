@@ -1,0 +1,97 @@
+From 01c20c3d45845f3803e48ed5229b0c8b14686979 Mon Sep 17 00:00:00 2001
+From: Jose Diaz de Grenu <Jose.DiazdeGrenu@digi.com>
+Date: Thu, 30 Aug 2018 17:24:50 +0200
+Subject: [PATCH] bluez5: hciattach: disable IBS and DEEP SLEEP
+
+Ocasionally we have seen problems in with the bluetooth chip, including the
+following errors:
+
+Bluetooth: received HCI_IBS_SLEEP_IND in rx state 0
+Bluetooth: spurrious timeout tx state 0
+Bluetooth: hci0: command 0x1003 tx timeout
+
+that sometimes cause the bluetooth low energy connection to drop.
+
+We workarounded this errors in userspace (see commit 2fca621e5e08). However,
+it seems that disabling the bluetooth low power modes gets rid of all these
+problems, and this feature is not required for this product.
+
+Signed-off-by: Jose Diaz de Grenu <Jose.DiazdeGrenu@digi.com>
+---
+ tools/hciattach.c      |  2 +-
+ tools/hciattach_rome.c | 21 +++++++++------------
+ tools/hciattach_rome.h |  7 +++++++
+ 3 files changed, 17 insertions(+), 13 deletions(-)
+
+diff --git a/tools/hciattach.c b/tools/hciattach.c
+index 4aacdafeda7d..23428388297a 100644
+--- a/tools/hciattach.c
++++ b/tools/hciattach.c
+@@ -1120,7 +1120,7 @@ struct uart_t uart[] = {
+ 			FLOW_CTL, DISABLE_PM, NULL, ath3k_ps, ath3k_pm  },
+ 
+ 	/* QCA ROME */
+-        { "qca",    0x0000, 0x0000, HCI_UART_IBS, 115200, 115200,
++        { "qca",    0x0000, 0x0000, HCI_UART_H4, 115200, 115200,
+                         FLOW_CTL, DISABLE_PM, NULL, qca, NULL },
+ 
+ 	/* QUALCOMM BTS */
+diff --git a/tools/hciattach_rome.c b/tools/hciattach_rome.c
+index 40983fc087c0..95952540eba9 100644
+--- a/tools/hciattach_rome.c
++++ b/tools/hciattach_rome.c
+@@ -1018,20 +1018,17 @@ int rome_get_tlv_file(char *file_path, unsigned char * bdaddr)
+                 }
+             }
+ 
++            /* Disable IBS */
+ 	    if (nvm_ptr->tag_id == TAG_NUM_17) {
+-		if ((ibs_value =
+-			get_value_from_config(FW_CONFIG_FILE_PATH, "IBS")) >= 0) {
+-			if (ibs_value == FWCONF_IBS_DISABLE) {
+-				nvm_byte_ptr[FWCONF_IBS_VAL_OFFSET] &=
+-					(~(FWCONF_IBS_ENABLE <<
+-							FWCONF_IBS_VAL_BIT));
+-			} else if (ibs_value == FWCONF_IBS_ENABLE) {
+-				nvm_byte_ptr[FWCONF_IBS_VAL_OFFSET] |=
+-					(FWCONF_IBS_ENABLE <<
+-							FWCONF_IBS_VAL_BIT);
+-			}
+-		}
++		nvm_byte_ptr[FWCONF_IBS_VAL_OFFSET] &= (~(FWCONF_IBS_ENABLE << FWCONF_IBS_VAL_BIT));
+ 	    }
++
++	    /* Disable DEEP SLEEP configuration */
++	    if (nvm_ptr->tag_id == TAG_NUM_27) {
++		fprintf(stderr, "Disabling DEEP SLEEP configuration\n");
++		nvm_byte_ptr[FWCONF_DEEP_SLEEP_BYTE_OFFSET] &= (~(1 << FWCONF_DEEP_SLEEP_BIT_OFFSET));
++	    }
++
+             /* Read from file and check what PCM Configuration is required:
+              * Master = 0 /Slave = 1 */
+             /* Override PCM configuration */
+diff --git a/tools/hciattach_rome.h b/tools/hciattach_rome.h
+index 760685ad7915..7118ccae6632 100644
+--- a/tools/hciattach_rome.h
++++ b/tools/hciattach_rome.h
+@@ -209,6 +209,7 @@ typedef struct
+ #define TAG_NUM_OFFSET             5
+ #define TAG_NUM_2			2
+ #define TAG_NUM_17			(17)
++#define TAG_NUM_27			(27)
+ #define TAG_NUM_44			44
+ #define TAG_BDADDR_OFFSET     7
+ 
+@@ -225,6 +226,12 @@ typedef struct
+ #define FWCONF_IBS_VAL_BIT		(7)
+ #define FWCONF_IBS_VAL_OFFSET		(0)
+ 
++/* FW DEEP SLEEP Configuration */
++#define FWCONF_DEEP_SLEEP_DISABLE	(0)
++#define FWCONF_DEEP_SLEEP_ENABLE	(1)
++#define FWCONF_DEEP_SLEEP_BYTE_OFFSET	(0)
++#define FWCONF_DEEP_SLEEP_BIT_OFFSET	(0)
++
+ #define MAX_RETRY_CNT  1
+ #define SELECT_TIMEOUT 3
+ 

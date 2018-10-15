@@ -1,0 +1,110 @@
+--- libreswan-3.12/programs/pluto/Makefile.LSW	2015-09-01 20:55:42.945130906 -0400
++++ libreswan-3.12/programs/pluto/Makefile	2015-09-01 20:58:03.425249625 -0400
+@@ -32,7 +32,7 @@
+ BINNAMEPLUTO = pluto
+ BINNAMEWHACK = whack
+ BINNAMEWHACKINIT = whackinit
+-BINNAMEADNS = _pluto_adns
++#BINNAMEADNS = _pluto_adns
+ 
+ OSDEP?=$(shell uname -s | tr 'A-Z' 'a-z')
+ SYSDEP_SRC=sysdep_${OSDEP}.c
+@@ -67,8 +67,8 @@
+ LDFLAGS+=-L$(LD_LIBRARY_PATH)
+ endif
+ 
+-LIBSADNS = $(LIBRESWANLIB)
+-LIBSADNS += -lresolv # -lefence
++#LIBSADNS = $(LIBRESWANLIB)
++#LIBSADNS += -lresolv # -lefence
+ 
+ LIBSPLUTO += $(IPSECCONFLIB) $(LIBRESWANLIB) -lrt
+ ifeq ($(USE_DNSSEC),true)
+@@ -188,7 +188,7 @@
+ OBJSPLUTO += certload.o pem.o pkcs.o
+ OBJSPLUTO += ${UDPFROMTO_SRCS:.c=.o}
+ 
+-OBJSADNS = adns.o
++#OBJSADNS = adns.o
+ 
+ OBJSWHACK = whack.o
+ OBJSWHACKINIT = whackinit.o
+--- libreswan-3.12/programs/pluto/Makefile.options.LSW	2015-09-01 20:57:32.505149535 -0400
++++ libreswan-3.12/programs/pluto/Makefile.options	2015-09-01 20:57:39.120245845 -0400
+@@ -70,8 +70,8 @@
+ #    Double quoting may be needed.
+ 
+ 
+-USE_ADNS=true
+-BINNAMEADNSIFNEEDED=$(BINNAMEADNS)
++#USE_ADNS=true
++#BINNAMEADNSIFNEEDED=$(BINNAMEADNS)
+ 
+ ifeq ($(USE_KEYRR),true)
+ KEYRR_DEFINES=-DUSE_KEYRR
+--- libreswan-3.12/programs/pluto/plutomain.c.LSW	2015-09-01 20:58:29.629127741 -0400
++++ libreswan-3.12/programs/pluto/plutomain.c	2015-09-01 21:00:36.652226987 -0400
+@@ -63,7 +63,9 @@
+ #include "log.h"
+ #include "keys.h"
+ #include "secrets.h"
++#if USE_ADNS
+ #include "adns.h"	/* needs <resolv.h> */
++#endif
+ #include "dnskey.h"	/* needs keys.h and adns.h */
+ #include "rnd.h"
+ #include "state.h"
+@@ -409,7 +411,9 @@
+ 	{ "ipsecdir\0<ipsec-dir>", required_argument, NULL, 'f' },
+ 	{ "ipsec_dir\0>ipsecdir", required_argument, NULL, 'f' },	/* redundant spelling; _ */
+ 	{ "foodgroupsdir\0>ipsecdir", required_argument, NULL, 'f' },	/* redundant spelling */
++#ifdef USE_ADNS
+ 	{ "adns\0<pathname>", required_argument, NULL, 'a' },
++#endif
+ 	{ "nat_traversal\0!", no_argument, NULL, 'h' },	/* obsolete; _ */
+ 	{ "keep_alive\0_", required_argument, NULL, '2' },	/* _ */
+ 	{ "keep-alive\0<delay_secs>", required_argument, NULL, '2' },
+@@ -455,8 +459,10 @@
+ 
+ 	/* --impair-* options (using I for shorthand) */
+ #define I(name, code) { "impair-" name, no_argument, NULL, (code) + DBG_OFFSET }
++#ifdef USE_ADNS
+ 	I("delay-adns-key-answer\0^", IMPAIR_DELAY_ADNS_KEY_ANSWER_IX),
+ 	I("delay-adns-txt-answer\0", IMPAIR_DELAY_ADNS_TXT_ANSWER_IX),
++#endif
+ 	I("bust-mi2\0", IMPAIR_BUST_MI2_IX),
+ 	I("bust-mr2\0", IMPAIR_BUST_MR2_IX),
+ 	I("sa-creation\0", IMPAIR_SA_CREATION_IX),
+@@ -838,10 +844,11 @@
+ 		case 'f':	/* --ipsecdir <ipsec-dir> */
+ 			lsw_init_ipsecdir(optarg);
+ 			continue;
+-
++#ifdef USE_ADNS
+ 		case 'a':	/* --adns <pathname> */
+ 			pluto_adns_option = optarg;
+ 			continue;
++#endif
+ 
+ 		case 'N':	/* --debug-none */
+ 			base_debugging = DBG_NONE;
+@@ -1359,7 +1366,9 @@
+ 	init_crypto_helpers(nhelpers);
+ 	init_demux();
+ 	init_kernel();
++#ifdef USE_ADNS
+ 	init_adns();
++#endif
+ 	init_id();
+ 	init_vendorid();
+ 
+@@ -1425,7 +1434,9 @@
+ 	free_myFQDN();	/* free myid FQDN */
+ 
+ 	free_ifaces();	/* free interface list from memory */
++#ifdef USE_ADNS
+ 	stop_adns();	/* Stop async DNS process (if running) */
++#endif
+ 	free_md_pool();	/* free the md pool */
+ 	NSS_Shutdown();
+ 	delete_lock();	/* delete any lock files */

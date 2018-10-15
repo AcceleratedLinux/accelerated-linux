@@ -1,0 +1,11 @@
+--- openssh-7.8p1/session.c	2018-09-03 14:26:32.285130321 +1000
++++ openssh-7.8p1/session.c	2018-09-03 14:26:34.149130362 +1000
+@@ -146,7 +146,7 @@
+ extern void destroy_sensitive_data(void);
+ extern struct sshbuf *loginmsg;
+ extern struct sshauthopt *auth_opts;
+-char *tun_fwd_ifnames; /* serverloop.c */
++extern char *tun_fwd_ifnames; /* serverloop.c */
+ 
+ /* original command from peer. */
+ const char *original_command = NULL;

@@ -1,0 +1,15 @@
+Index: netifd/interface.c
+===================================================================
+--- netifd.orig/interface.c
++++ netifd/interface.c
+@@ -301,6 +301,10 @@ interface_check_state(struct interface *
+ 		if (!iface->enabled || !link_state) {
+ 			interface_proto_event(iface->proto, PROTO_CMD_TEARDOWN, false);
+ 			mark_interface_down(iface);
++			/* ensure same action as LINK_LOST */
++			if (iface->dynamic)
++				iface->state = IFS_SETUP;
++			netifd_ubus_interface_state_event(iface);
+ 		}
+ 		break;
+ 	case IFS_DOWN:

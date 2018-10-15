@@ -1,0 +1,48 @@
+--- nss-3.17.4/nss/cmd/manifest.mn.LSW	2015-09-03 18:19:54.205438427 -0400
++++ nss-3.17.4/nss/cmd/manifest.mn	2015-09-03 19:21:33.220499141 -0400
+@@ -16,7 +16,7 @@
+  certcgi \
+  certutil  \
+  checkcert  \
+- chktest  \
++ $(chktest)  \
+  crlutil  \
+  crmftest \
+  dbtest \
+@@ -24,8 +24,8 @@
+  digest  \
+  httpserv  \
+  $(FIPSTEST_SRCDIR)  \
+- $(LOWHASHTEST_SRCDIR)  \
+- listsuites \
++ $($(LOWHASHTEST_SRCDIR))  \
++ $(listsuites) \
+  makepqg  \
+  multinit \
+  ocspclnt  \
+@@ -44,18 +44,18 @@
+  pwdecrypt \
+  rsaperf \
+  sdrtest \
+- selfserv  \
+- signtool \
++ $(selfserv)  \
++ $(signtool) \
+  signver \
+  smimetools  \
+  ssltap  \
+- strsclnt \
++ $(strsclnt) \
+  symkeyutil \
+- tests \
+- tstclnt  \
++ $(tests) \
++ $(tstclnt)  \
+  vfychain \
+- vfyserv \
+- modutil \
++ $(vfyserv) \
++ $(modutil) \
+  $(NULL)
+ unexport
+ unexport DIRS

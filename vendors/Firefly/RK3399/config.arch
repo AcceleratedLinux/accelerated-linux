@@ -1,0 +1,13 @@
+############################################################################
+
+LINUXTARGET = Image.gz dtbs
+
+HW_VENDOR = Firefly
+VERSIONPKG = 1.0.0
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/arm64/config.arch
+
+############################################################################

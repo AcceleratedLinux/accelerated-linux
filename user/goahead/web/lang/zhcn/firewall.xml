@@ -1,0 +1,165 @@
+<po>
+  <message msgid="firewall disable" msgstr="停用" />
+  <message msgid="firewall enable" msgstr="启用" />
+  <message msgid="firewall apply" msgstr="确定" />
+  <message msgid="firewall reset" msgstr="重置" />
+  <message msgid="firewall del select" msgstr="选择删除" />
+  <message msgid="firewall no" msgstr="编号" />
+  <message msgid="firewall protocol" msgstr="协议" />
+  <message msgid="firewall comment" msgstr="批注" />
+  <message msgid="firewall default drop" msgstr="预设丢弃" />
+  <message msgid="firewall default accept" msgstr="预设接受" />
+  
+  <message msgid="firewall max rule number" msgstr="规则的最大总数是32." />
+  <message msgid="firewall rule number exceeded" msgstr="规则数量超过了" />
+  <message msgid="firewall mac address not correct format" msgstr="请输入正确形式的MAC地址！(XX:XX:XX:XX:XX:XX)" />
+  <message msgid="firewall cannot input chinese" msgstr="批注只能为是英文" />
+  <message msgid="firewall mac address not for broadcast" msgstr="MAC地址不能是 FF:FF:FF:FF:FF:FF !" />
+  <message msgid="admin saving" msgstr="储存中 . . ." />
+
+  <message msgid="port title" msgstr="MAC/IP/Port过滤设定" />
+  <message msgid="port introduction" msgstr="您可以建立防火墙规则来保护您的网络避免 Internet 的病毒蠕虫以及恶意攻击。 " />
+  <message msgid="port basic setting" msgstr="基本设定" />
+  <message msgid="port basic filter" msgstr="MAC/IP/Port过滤规则" />
+  <message msgid="port basic default policy" msgstr="默认策略-- 未符合任何规则的封包将会被：" />
+  <message msgid="port basic default policy accepted" msgstr="接受" />
+  <message msgid="port basic default policy dropped" msgstr="丢弃" />
+  <message msgid="port basic default policy changed confirm" msgstr="您确定吗? 若切换默认策略，目前的过滤规则将全部被删除." />
+  <message msgid="port filter setting" msgstr="MAC/IP/Port过滤设定" />
+  <message msgid="port filter macaddr" msgstr="MAC地址" />
+  <message msgid="port filter source ipaddr" msgstr="源IP地址" />
+  <message msgid="port filter port range" msgstr="端口范围" />
+  <message msgid="port filter dest ipaddr" msgstr="目的IP地址" />
+  <message msgid="port filter action" msgstr="执行动作" />
+  <message msgid="port filter action drop" msgstr="丢弃" />
+  <message msgid="port filter action accept" msgstr="接受" />
+  <message msgid="port current filter" msgstr="MAC/IP/Port过滤规则列表" />
+  <message msgid="port filter source port range" msgstr="源端口范围" />
+  <message msgid="port filter dest port range" msgstr="目的端口范围" />
+  <message msgid="port filter packetcount" msgstr="封包计数" />
+  <message msgid="port filter current source ipaddr" msgstr="SIP" />
+  <message msgid="port filter current dest ipaddr" msgstr="DIP" />
+  <message msgid="port filter current source port range" msgstr="SPR" />
+  <message msgid="port filter current dest port range" msgstr="DPR" />
+  
+  <message msgid="forward title" msgstr="虚拟服务器设定 (端口转发)" />
+  <message msgid="forward introduction" msgstr="您可以建立虚拟服务器来提供网络服务。 " />
+  <message msgid="forward virtual server" msgstr="虚拟服务器" />
+  <message msgid="forward virtual server setting" msgstr="虚拟服务器设定" />
+  <message msgid="forward virtual server ipaddr" msgstr="IP地址" />
+  <message msgid="forward virtual server port mapping" msgstr="连接端口对映" />
+  <message msgid="forward virtual server port range" msgstr="私有连接端口" />
+  <message msgid="forward virtual server port range2" msgstr="公用连接端口" />
+  <message msgid="forward current virtual server" msgstr="目前系统的虚拟服务器" />
+
+  <message msgid="dmz title" msgstr=" DMZ设定 " />
+  <message msgid="dmz introduction" msgstr=" 您可以建立一个隔离区来区分内部网络与Internet。" />
+  <message msgid="dmz setting" msgstr="DMZ设定" />
+  <message msgid="dmz ipaddr" msgstr="DMZ IP地址" />
+
+  <message msgid="content filter title" msgstr="内容过滤设定" />
+  <message msgid="content filter introduction" msgstr="您可以设定内容过滤规则来限制不适当的网页存取，过滤规则上限为32。" />
+  <message msgid="content filter webs content filter" msgstr="网页内容过滤" />
+  <message msgid="content filter webs content filter filter" msgstr="过滤" />
+  <message msgid="content filter webs content filter apply" msgstr="确定" />
+  <message msgid="content filter webs content filter reset" msgstr="重置" />
+  <message msgid="content filter webs URL filter title" msgstr="网页URL过滤设定" />
+  <message msgid="content filter webs url filter current" msgstr="目前系统的网页URL过滤规则：" />
+  <message msgid="content filter webs url fitler No" msgstr="编号" />
+  <message msgid="content filter webs url fitler url" msgstr="URL" />
+  <message msgid="content filter webs url fitler del" msgstr="删除" />
+  <message msgid="content filter webs url fitler reset" msgstr="重置" />
+  <message msgid="content filter webs url fitler add title" msgstr="新增URL过滤规则" />
+  <message msgid="content filter webs url fitler add" msgstr="新增" />
+  <message msgid="content filter webs url fitler reset" msgstr="重置" />
+  <message msgid="content filter webs host fitler title" msgstr="网页主机过滤设定" />
+  <message msgid="content filter webs host fitler current" msgstr="目前系统的网页主机过滤规则" />
+  <message msgid="content filter webs host fitler no" msgstr="编号" />
+  <message msgid="content filter webs host fitler host" msgstr="主机名(关键词)" />
+  <message msgid="content filter webs host fitler del" msgstr="删除" />
+  <message msgid="content filter webs host fitler reset" msgstr="重置" />
+  <message msgid="content filter webs host fitler add title" msgstr="新增网页主机过滤规则" />
+  <message msgid="content filter webs host fitler keyword" msgstr="关键词" />
+  <message msgid="content filter webs host fitler add" msgstr="新增" />
+  <message msgid="content filter webs host fitler reset" msgstr="重置" />
+<message msgid="content filter message" msgstr="最多能设定规则数量为" />
+<message msgid="content filter select rulte to be deleted" msgstr="请选择欲删除的规则." />
+  <message msgid="content filter enter a host filter" msgstr="请输入一个主机过滤名称." />
+  <message msgid="content filter enter a url filter" msgstr="请输入一个网址过滤名称" />
+  <message msgid="content filter repeated url" msgstr="网址名称已经存在列表中。" />
+  <message msgid="content filter repeated host" msgstr="主机(关键词)名称已经存在列表中。" />
+  <message msgid="content filter not support url" msgstr="这个URL网址不支持！" />
+  <message msgid="content filter not support host" msgstr="这个主机(关键字)不支持！" />
+  <message msgid="content filter max rules is 32" msgstr="过滤规则上限为32" />
+
+  <message msgid="sysfw title" msgstr="系统安全设定" />
+  <message msgid="sysfw introduction" msgstr="您可以通过设定系统防火墙来防护对路由器或无线AP本身的攻击。" />
+  <message msgid="sysfw remote management title" msgstr="远程管理" />
+  <message msgid="sysfw remote management head" msgstr="远程管理 (经由广域网络)" />
+  <message msgid="sysfw allow" msgstr="允许" />
+  <message msgid="sysfw deny" msgstr="禁止" />
+  <message msgid="sysfw wanping title" msgstr="过滤来至广域网路的PING封包" />
+  <message msgid="sysfw wanping head" msgstr="过滤PING封包" />
+  <message msgid="sysfw wanping deny" msgstr="禁止" />
+  <message msgid="sysfw wanping allow" msgstr="允许" /><message msgid="sysfw spi title" msgstr="封包状态检测 (SPI)" />
+  <message msgid="sysfw spi head" msgstr="SPI 防火墙" />
+  <message msgid="sysfw apply" msgstr="确定" />
+  <message msgid="sysfw reset" msgstr="重置" />
+
+  <message msgid="sysfw alg title" msgstr="应用层网关(ALGs)" />
+
+  <message msgid="sysfw alg introduction" msgstr= "应用层网关根据所选某些应用程序（例如：FTP, SIP,...等应用程序）允许该应用层所支持的控制命令或数据穿越NAT过滤。" />
+
+  <message msgid="sysfw alg management title" msgstr="应用层网关（ALG）管理" />
+  <message msgid="sysfw ftp management head"  msgstr="FTP 支持" />
+  <message msgid="sysfw h323 management head" msgstr="H.323 支持" />
+  <message msgid="sysfw pptp management head" msgstr="PPTP 支持" />
+  <message msgid="sysfw vpn-pptp management head" msgstr="VPN 虚拟专网透传 (L2TP, IPSEC, PPTP) 支持" />
+  <message msgid="sysfw sip management head"  msgstr="SIP 支持" />
+  <message msgid="sysfw tftp management head" msgstr="TFTP 支持" />
+  
+  
+  <message msgid="alert giving up:cannot create an xmlhttp instance" msgstr="Giving up :(Cannot create an XMLHTTP instance)" />
+  
+  <message msgid="forward alert ip address format error" msgstr="IP地址格式错误 !" /> 
+  <message msgid="forward alert ip address is empty" msgstr="错误 ! IP地址是空的 !" />
+  <message msgid="forward alert it should be a 0 to 9 number" msgstr="填入0到9的数字 !" />
+  <message msgid="forward alert ip address range error" msgstr="IP地址范围错误 !" />
+  <message msgid="forward alert the rule number is exceeded" msgstr="规则数量超过 " />
+  <message msgid="forward alert ip address is required" msgstr="需要填入IP地址 !"  /> 
+  <message msgid="forward alert invalid ip address" msgstr="无效的IP地址 !" /> 
+  <message msgid="forward alert please input fromport" msgstr="请输入私有连接端口 !" />
+  <message msgid="forward alert please input toport" msgstr="请输入公用连接端口 !" />
+  <message msgid="forward alert invalid port number" msgstr="无效的端口号码 !" /> 
+  <message msgid="forward alert illegal characters are not allowable" msgstr="含有不支援的字元 !" /> 
+  <message msgid="forward alert the same rule has existed" msgstr="已存在相同的规则 !" /> 
+  
+  <message msgid="port filter alert the rule number is exceeded" msgstr="规则数量超过 " />   
+  <message msgid="port filter alert please input any ip or/and port value" msgstr="请输入任何IP地址或端口范围" />
+  <message msgid="port filter alert please fill the mac address in correct format" msgstr="请填入MAC地址的正确格式! (XX:XX:XX:XX:XX:XX)" /> 
+  <message msgid="port filter alert invalid source port number: from" msgstr="源端口范围: 无效的开始端口号码 !" /> 
+  <message msgid="port filter alert invalid source port number: to" msgstr="源端口范围: 无效的结束端口号码 !" /> 
+  <message msgid="port filter alert invalid source port range setting" msgstr="无效的源端口范围! 开始端口号码不能大于结束端口号码" />
+  <message msgid="port filter alert invalid dest port number: from" msgstr="目的端口范围: 无效的开始端口号码 !" />
+  <message msgid="port filter alert invalid dest port number: to" msgstr="目的端口范围: 无效的结束端口号码 !" />
+  <message msgid="port filter alert invalid dest port range setting" msgstr="无效的目的端口范围! 开始端口号码不能大于结束端口号码" /> 
+  <message msgid="port filter alert please input src or dest from port number" msgstr="请输入源端口或目的端口的开始端口号码"/>
+  <message msgid="port filter alert source ip address format error" msgstr="源IP地址格式错误 !" /> 
+  <message msgid="port filter alert dest ip address format error" msgstr="目的IP地址格式错误 !" /> 
+  <message msgid="port filter alert the same rule has existed" msgstr="已存在相同的规则 !" /> 
+  <message msgid="port filter alert illegal characters are not allowable" msgstr="含有不支援的字元 !" /> 
+  <message msgid="port filter alert the action of this rule would be the same with default policy" msgstr="此规则与默认策略的执行动作相同 !" /> 
+  
+  <message msgid="content filter alert please select the rule to be deleted" msgstr="请选择需要删除的规则 !" /> 
+  <message msgid="content filter alert the maximum rule count is 32" msgstr="规则数量最多为32 !" /> 
+  <message msgid="content filter alert please enter a url filter" msgstr="请输入URL过滤规则 !" /> 
+  <message msgid="content filter alert please enter a valid url" msgstr="请输入有效的URL !" />
+  <message msgid="content filter alert duplicated url string" msgstr="重复的URL !" /> 
+  <message msgid="content filter alert please enter a host filter" msgstr="请输入网页主机过滤规则 !" /> 
+  <message msgid="content filter alert invalid host name" msgstr="无效的主机名 !" /> 
+  <message msgid="content filter alert duplicated host string" msgstr="无效的主机名 !" /> 
+  
+  <message msgid="dmz alert not set a ip address" msgstr="没有设定IP地址 !" /> 
+  <message msgid="dmz alert ip address format error" msgstr="IP地址格式错误 !" /> 
+  <message msgid="dmz alert incorrect! ip address is lan ip" msgstr="不正确! IP地址不能与区域网路的IP地址相同 !" />
+</po>

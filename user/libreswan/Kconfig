@@ -1,0 +1,10 @@
+config USER_LIBRESWAN
+	bool "libreswan"
+	select LIB_NSS
+	select LIB_LIBGMP
+	select LIB_LIBCAP_NG
+	help
+	  Libreswan IPsec tools and files.
+	  (Ensure FTW/NFTW/USE_NETLINK/AI_ADDRCONFIG is enabled in your
+	  libc config)
+

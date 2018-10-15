@@ -1,0 +1,58 @@
+--- /dev/null	2015-02-16 15:33:24.055841081 +1000
++++ libreswan-3.12/Makefile.inc.local	2015-02-17 22:28:59.362737657 +1000
+@@ -0,0 +1,55 @@
++
++CFLAGS := $(subst -Werror,,$(CFLAGS))
++export CFLAGS
++
++ifeq ($(HOSTBUILD),)
++ifneq ($(CONFIG_OCF_CRYPTODEV),)
++HAVE_OCF := true
++endif
++ifneq ($(CONFIG_LIB_LIBSSL),)
++HAVE_OPENSSL := true
++endif
++ifneq ($(CONFIG_USER_FLATFSD_FLATFSD),)
++USE_SINGLE_CONF_DIR := true
++endif
++ifneq ($(CONFIG_LIB_LIBPAM_FORCE)$(CONFIG_LIB_LIBPAM),)
++USE_XAUTHPAM := true
++HAVE_THREADS := true # the comments below about XAUTH say we need threads
++endif
++ifdef CONFIG_PROP_CONFIG
++EXTRA_DEFINES += -DHAVE_STATSD=1
++endif
++ifdef CONFIG_IPSEC_CONNECTION_LIMIT_BOOL
++USE_IPSEC_CONNECTION_LIMIT := true
++IPSEC_CONNECTION_LIMIT     := $(CONFIG_IPSEC_CONNECTION_LIMIT)
++endif
++endif
++
++ifdef CONFIG_USER_FLATFSD_FLATFSD
++FINALCONFDIR        := /etc/config
++FINALCONFDDIR       := /etc/config
++FINALLOGDIR         := /var/log
++USE_SINGLE_CONF_DIR := true
++USE_WEAKSTUFF       := true
++USE_NOCRYPTO        := true
++USE_DYNAMICDNS      := true
++USE_DEFAULT_CONNS   := false
++FINALSBINDIR        := /bin
++FINALLIBDIR         := /bin
++FINALLIBEXECDIR     := /bin
++endif
++
++ifneq ($(CONFIG_USER_OPENSWAN_CONFDIR),)
++FINALCONFDIR        := $(CONFIG_USER_OPENSWAN_CONFDIR)
++FINALCONFDDIR       := $(CONFIG_USER_OPENSWAN_CONFDIR)
++endif
++NSSLIBS    := -lnss3 -lplds4 -lplc4 -lnspr4
++PORTINCLUDE:= -I${LIBRESWANSRCDIR}/ports/linux/include
++PORTDEFINE  = -DKLIPS -DSCANDIR_HAS_CONST
++USERCOMPILE:= -g
++USE_OBJDIR := false
++OBJDIR     := OBJ.uclinux-dist
++OBJDIRTOP  := ${LIBRESWANSRCDIR}/${OBJDIR}
++WERROR     :=  -Wall
++USE_DNSSEC := false
++USE_MAST   := false

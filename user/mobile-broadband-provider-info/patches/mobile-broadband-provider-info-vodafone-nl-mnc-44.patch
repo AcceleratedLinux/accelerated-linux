@@ -1,0 +1,11 @@
+diff -ru a/serviceproviders.xml b/serviceproviders.xml
+--- a/serviceproviders.xml 2017-06-29 08:52:48.261359272 +1000
++++ b/serviceproviders.xml  2017-06-29 08:58:41.359586127 +1000
+@@ -9133,6 +9133,7 @@
+ 	<provider>
+ 		<name>Vodafone</name>
+ 		<gsm>
+ 			<network-id mcc="204" mnc="04"/>
++			<network-id mcc="204" mnc="44"/>
+ 			<msisdn-query>
+ 				<ussd>*#100#</ussd>

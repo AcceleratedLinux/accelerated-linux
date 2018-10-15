@@ -1,0 +1,24 @@
+#
+# udev rule for HUAWEI E220 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+#PIC D21LC
+ACTION=="add", ATTRS{idVendor}=="1c9e", ATTRS{idProduct}=="9401", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="1c9e", ATTRS{idProduct}=="9404", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="1c9e", ATTRS{idProduct}=="9404", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+#Softbank C01LC
+ACTION=="add", ATTRS{idVendor}=="1c9e", ATTRS{idProduct}=="f000", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="1c9e", ATTRS{idProduct}=="9603", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="1c9e", ATTRS{idProduct}=="9603", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+
+
+
+
+
+
+
+
+

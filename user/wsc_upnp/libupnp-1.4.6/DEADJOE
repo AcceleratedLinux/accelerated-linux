@@ -1,0 +1,43 @@
+
+*** These modified files were found in JOE when it aborted on Fri Jun  1 11:44:37 2007
+*** JOE was aborted by UNIX signal 1
+
+*** File '(Unnamed)'
+goto err;
+ByteASP
+PacketASP
+char_t buf
+strtoll(field, NULL, 16)
+strtoll(field, NULL, 16)
+strtoll(field, NULL, 10)
+UPNP
+UPNP
+IXML
+
+*** File '(Unnamed)'
+getMemInFile
+getMemInFile
+free
+fprintf
+stderr
+nvram_show
+clear
+RT2880_DAT
+RT2880_DAT
+Error with UpnpInit
+UpnpInit
+
+return
+
+*** File '(Unnamed)'
+Makefile
+Makefile
+makefile
+makefile
+makefile
+Makefile
+makefile
+wsc_main.
+wsc_main.c
+../wsc_main.c
+upnp/src/api/upnpapi.c

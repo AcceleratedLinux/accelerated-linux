@@ -1,0 +1,349 @@
+#!/bin/sh
+
+##################################################################
+#exec 2> /dev/console
+#set -x
+##################################################################
+
+SW_SCRIPTNAME="$(basename "${0}")"
+
+# Bluetooth power GPIO
+BT_EN_QCA_GPIO_NR="137"
+
+# set_gpio_value <gpio_nr> <value>
+set_gpio_value() {
+	local SG_GPIONR="${1}"
+	local SG_GPIOVAL="${2}"
+	local SG_GPIOPATH="/sys/class/gpio/gpio${SG_GPIONR}"
+
+	[ -d "${SG_GPIOPATH}" ] || printf "%s" "${SG_GPIONR}" > /sys/class/gpio/export
+	printf out > "${SG_GPIOPATH}/direction" && sleep .2
+	printf "%s" "${SG_GPIOVAL}" > "${SG_GPIOPATH}/value" && sleep .2
+	[ -d "${SG_GPIOPATH}" ] && printf "%s" "${SG_GPIONR}" > /sys/class/gpio/unexport
+}
+
+# powercycle_gpio <gpio_nr>
+powercycle_gpio() {
+	set_gpio_value "${1}" 0
+	set_gpio_value "${1}" 1
+}
+
+# log [logger parameters]
+log() {
+	logger -t bluetooth "$@"
+}
+
+# fail <message>
+fail() {
+	[ -n "${1}" ] && log -p 3 "cannot start because ${1}"
+
+	exit 1
+}
+
+get_bt_default_name() {
+	printf "%s" "$(fw_printenv -n serial)"
+}
+
+get_hci_mac() {
+	if [ -n "${HCI_DEVICE}" ]; then
+		hciconfig "${HCI_DEVICE}" | sed -ne "s,.*BD Address: \\([^ ]\\+\\) .*,\\1,g;T;p" | tr 'a-f' 'A-F'
+	fi
+}
+
+# set_bt_mac [mac]
+set_bt_mac() {
+	local BT_MAC
+
+	#
+	# MAC priority:
+	# - parameter
+	# - u-boot environment variable
+	# - hardcoded default
+	#
+	BT_MAC="${1}"
+	[ -z "${BT_MAC}" ] || [ "${BT_MAC}" = "00:00:00:00:00:00" ] && BT_MAC="$(fw_printenv -n btaddr 2>/dev/null)"
+	if [ -z "${BT_MAC}" ] || [ "${BT_MAC}" = "00:00:00:00:00:00" ]; then
+		BT_MAC="00:04:F3:FF:FF:BB"
+		log -p 4 "Using default MAC address: ${BT_MAC}"
+	fi
+
+	runt set bluetooth.mac "${BT_MAC}"
+
+	printf "%s" "${BT_MAC}"
+}
+
+get_idx() {
+	printf "%s" "${HCI_DEVICE#hci}"
+}
+
+get_hci_device() {
+	# Get the name of the bluetooth hci device. The first entry inside '/sys/class/bluetooth'
+	if echo /sys/class/bluetooth/hci* | grep -qs '/sys/class/bluetooth/hci[0-9]'; then
+		basename /sys/class/bluetooth/hci*
+	fi
+}
+
+bluetooth_init() {
+	local BT_MAC
+
+	BT_MAC="$(runt get bluetooth.mac)"
+	[ -z "${BT_MAC}" ] && BT_MAC="$(set_bt_mac)"
+
+	echo >/var/log/hciattach.log
+	# Retry mechanism to attach the bluetooth firmware
+	for ATTACH_RETRY in $(seq 5); do
+		# Power up bluetooth
+		powercycle_gpio "${BT_EN_QCA_GPIO_NR}"
+
+		# Attach device using qca id (will use kernel driver HCI_UART_IBS)
+		echo "Attach try $ATTACH_RETRY" >>/var/log/hciattach.log
+		hciattach -t 30 /dev/ttymxc0 qca 115200 flow unused "${BT_MAC}" >>/var/log/hciattach.log 2>&1 && return
+		sleep 1
+	done
+
+	fail "hciattach failed"
+}
+
+bluetooth_start() {
+	local RETRIES
+
+	bluetooth_init
+	HCI_DEVICE="$(get_hci_device)"
+
+	# Start bluetooth service
+	/libexec/bluetooth/bluetoothd 2>/dev/null &
+
+	# Wait until bluetoothd is started, it will bring up the device interface
+	RETRIES="20"
+	while [ "${RETRIES}" -gt "0" ]; do
+		hciconfig "${HCI_DEVICE}" | grep -qs "UP" && break
+		RETRIES="$((RETRIES - 1))"
+		sleep 0.5
+	done
+	[ "${RETRIES}" = "0" ] && fail "'bluetoothd' could not UP ${HCI_DEVICE}"
+
+	# Start ble server
+	ble-provisioning-app -i "${HCI_DEVICE}" >/dev/null &
+
+	log "bluetooth daemon and provisioning app started"
+}
+
+bluetooth_stop() {
+	# Stop ble server
+	if pidof ble-provisioning-app >/dev/null; then
+		killall -q ble-provisioning-app
+		for _ in $(seq 4); do
+			pidof ble-provisioning-app >/dev/null || break
+			sleep 0.5
+		done
+		pidof ble-provisioning-app >/dev/null && killall -q -9 ble-provisioning-app
+	fi
+
+	# Stop bluetooth service
+	killall -q bluetoothd
+
+	if [ -d "/sys/class/bluetooth/${HCI_DEVICE}" ]; then
+		killall -q hciattach
+		# Power down bluetooth
+		set_gpio_value "${BT_EN_QCA_GPIO_NR}" 0
+	fi
+
+	log "bluetooth daemon and provisioning app stopped"
+}
+
+usage() {
+	cat <<EOF
+
+Usage: ${SW_SCRIPTNAME} <command> [command parameters]
+
+Commands:
+    Bluetooth power control:
+      on                             Turn on the interface
+      off                            Turn off the interface
+
+    Bluetooth status:
+      connections                    List active connections
+      device                         Show Bluetooth device
+      mac                            Show Bluetooth MAC Address
+      state                          Show Bluetooth status
+
+    Bluetooth configuration:
+      name [NAME]                    Get/set device friendly name
+EOF
+}
+
+# power_cmd [on|off]
+power_cmd() {
+	case "${1}" in
+		on) bluetooth_start ;;
+		off) bluetooth_stop ;;
+		*) log -s "Must specify 'on' or 'off'" ;;
+	esac
+}
+
+get_hci_state() {
+	local STATE
+
+	[ -n "${HCI_DEVICE}" ] && STATE="$(hciconfig "${HCI_DEVICE}" | sed -ne '3p' | xargs | tr '[:upper:]' '[:lower:]')"
+
+	printf "%s" "${STATE:-off}"
+}
+
+#
+# NOTE: depends on ACL's hexdump implementation (hd)
+#
+string_to_byte_array() {
+	printf "%s" "${1}" | hd -b -m | xargs
+}
+
+int_to_hex() {
+	printf "%02x" "${1}"
+}
+
+set_advertisment_data() {
+	# Get all required data to compose hcitool command
+
+	# AD1: Specific manuf data (eir 0xFF)
+	ad1_ascii_data="$(runt get system.model)"
+	ad1_oct_data=$(string_to_byte_array "${ad1_ascii_data}")
+	ad1_data_int_len=${#ad1_ascii_data}
+	# AD structure  = EIR_code(ff - 1 octet) + manuf id (2 octets) + data
+	ad1_int_len="$((ad1_data_int_len + 3))"
+
+	# AD2: full device name (eir 0x09)
+	bt_name="${1}"
+	ad2_oct_data=$(string_to_byte_array "${bt_name}")
+	ad2_data_int_len=${#bt_name}
+	ad2_int_len="$((ad2_data_int_len + 1))"
+
+	# significant part lenght
+	sp_int_len="$((ad1_int_len + ad2_int_len + 2))"
+	# non significant part lenght
+	nsp_int_len="$((31 - sp_int_len))"
+
+	# Compose bytes/octets to pass to hcitool command
+	digi_manuf_id="db 02"
+	eir1_tag="ff"
+	eir2_tag="09"
+	sp_oct_len=$(int_to_hex ${sp_int_len})
+	ad1_oct_len=$(int_to_hex ${ad1_int_len})
+	ad2_oct_len=$(int_to_hex ${ad2_int_len})
+	nsp_data=$(printf "00 %.s" $(seq ${nsp_int_len}))
+
+	hcitool -i "${HCI_DEVICE}" cmd 0x08 0x0008 ${sp_oct_len} ${ad1_oct_len} ${eir1_tag} ${digi_manuf_id} ${ad1_oct_data} ${ad2_oct_len} ${eir2_tag} ${ad2_oct_data} ${nsp_data} >/dev/null
+	# example:
+	#   hcitool -i hci0 cmd 0x08 0x0008 1a 0c ff db 02 44 69 67 69 20 49 58 31 34 0c 09 49 58 31 34 2d 31 32 33 34 35 36 00 00 00 00 00
+	# # btmon output
+	# < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32  #29 [hci0] 196.755446
+	#         Length: 26
+	#         Company: Digi International Inc (R) (731)
+	#           Data: 446967692049583134
+	#         Name (complete): IX14-123456
+
+}
+
+set_scan_response() {
+	bt_name="${1}"
+	ad1_oct_data=$(string_to_byte_array "${bt_name}")
+	ad1_data_int_len=${#bt_name}
+	# AD structure  = EIR_code(09 - 1 octet) + data
+	ad1_int_len="$((ad1_data_int_len + 1))"
+	# significant part lenght
+	sp_int_len="$((ad1_int_len + 1))"
+	# non significant part lenght
+	nsp_int_len="$((31 - sp_int_len))"
+
+	# Compose bytes/octets to pass to hcitool command
+	eir1_tag="09"
+	sp_oct_len=$(int_to_hex ${sp_int_len})
+	ad1_oct_len=$(int_to_hex ${ad1_int_len})
+	nsp_data=$(printf "00 %.s" $(seq ${nsp_int_len}))
+
+	# Scan response data
+	hcitool -i "${HCI_DEVICE}" cmd 0x08 0x0009 ${sp_oct_len} ${ad1_oct_len} ${eir1_tag} ${ad1_oct_data} ${nsp_data} >/dev/null
+	# example:
+	#  hcitool -i hci0 cmd 0x08 0x0009 0d 0c 09 49 58 31 34 5f 31 32 33 34 35 36 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+}
+
+# bt_name [name]
+bt_name() {
+	local IDX
+
+	[ -z "${HCI_DEVICE}" ] && return 0
+
+	IDX="$(get_idx "${HCI_DEVICE}")"
+	# NOTE: The advertise data, response, etc.. must be set just after enabling the advertising
+	[ -n "${1}" ] && set_btmgmt_options "${1}" && set_advertisment_data "${1}" && set_scan_response "${1}"
+	hciconfig "${HCI_DEVICE}" name | sed -ne "s,.*Name: '\\([^']\\+\\)'.*,\\1,g;T;p"
+}
+
+set_btmgmt_options() {
+	IDX="$(get_idx "${HCI_DEVICE}")"
+	btmgmt --index "${IDX}" name "${1}" >/dev/null
+	btmgmt --index "${IDX}" connectable on >/dev/null
+	btmgmt --index "${IDX}" pairable on >/dev/null
+	btmgmt --index "${IDX}" sc on >/dev/null
+	btmgmt --index "${IDX}" io-cap 0x03 >/dev/null
+	btmgmt --index "${IDX}" advertising on >/dev/null
+}
+
+# list_connections [multiline]
+list_connections() {
+	local COUNT
+	local IDX
+	local LIST
+	local TYPE
+
+	[ -z "${HCI_DEVICE}" ] && return 0
+
+	IDX="$(get_idx "${HCI_DEVICE}")"
+	LIST="$(btmgmt --index "${IDX}" con)"
+	[ -z "${LIST}" ] && return 0
+
+	COUNT="0"
+	echo "${LIST}" | while read -r m t; do
+		TYPE="$(echo "${t}" | sed -ne 's/^.*type \(.*\)$/\1/p')"
+		[ "${1}" != "multiline" ] && [ "${COUNT}" -gt "0" ] && printf ";"
+		printf "%s,%s" "${m}" "${TYPE}" && [ "${1}" = "multiline" ] && printf "\\n"
+		COUNT="$((COUNT + 1))"
+	done
+
+	[ "${1}" != "multiline" ] && printf "\\n"
+}
+
+# Get the bluetooth interface before any other command is executed
+HCI_DEVICE="$(get_hci_device)"
+
+case "${1}" in
+	help|'')
+		usage
+		;;
+	on|off)
+		power_cmd "${1}"
+		;;
+	device)
+		echo "${HCI_DEVICE}"
+		;;
+	state)
+		printf "%s\\n" "$(get_hci_state)"
+		;;
+	name)
+		bt_name "${2}"
+		;;
+	mac)
+		get_hci_mac
+		;;
+	connections)
+		list_connections "${2}"
+		;;
+	setmac)
+		printf "%s\\n" "$(set_bt_mac "${2}")"
+		;;
+	defname)
+		printf "%s\\n" "$(get_bt_default_name)"
+		;;
+	*)
+		usage
+		exit 1
+		;;
+esac

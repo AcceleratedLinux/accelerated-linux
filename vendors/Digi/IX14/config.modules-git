@@ -1,0 +1,75 @@
+#
+# Automatically generated make config: don't edit
+# Dist builder
+#
+CONFIG_MODULES=y
+
+#
+# ART Driver
+#
+# CONFIG_MODULES_ATHEROS_ART is not set
+
+#
+# XSCALE/IXP400 Modules
+#
+# CONFIG_IXP400_LIB is not set
+# CONFIG_IXP400_ETH_2_4 is not set
+
+#
+# Components
+#
+
+#
+# Codelets
+#
+
+#
+# Sierra Driver
+#
+# CONFIG_MODULES_SIERRA is not set
+# CONFIG_MODULES_SIERRA_NET is not set
+
+#
+# GobiNet Driver
+#
+# CONFIG_MODULES_GOBINET is not set
+
+#
+# GobiSerial Driver
+#
+# CONFIG_MODULES_GOBISERIAL is not set
+
+#
+# GobiNet Driver (S2.26N2.39 2016)
+#
+# CONFIG_MODULES_GOBINET2016 is not set
+
+#
+# GobiSerial Driver (S2.26N2.39 2016)
+#
+# CONFIG_MODULES_GOBISERIAL2016 is not set
+
+#
+# OCF Configuration
+#
+# CONFIG_OCF_OCF is not set
+
+#
+# NetFlow
+#
+CONFIG_MODULES_IPT_NETFLOW=y
+CONFIG_MODULES_IPT_NETFLOW_PROBE_ID=y
+CONFIG_MODULES_IPT_NETFLOW_DOMAINS=y
+CONFIG_MODULES_IPT_NETFLOW_MAC=y
+CONFIG_MODULES_IPT_NETFLOW_DIRECTION=y
+# CONFIG_MODULES_IPT_NETFLOW_VLAN is not set
+CONFIG_MODULES_IPT_NETFLOW_PHYSDEV=y
+CONFIG_MODULES_IPT_NETFLOW_SAMPLER=y
+CONFIG_MODULES_IPT_NETFLOW_SAMPLER_HASH=y
+CONFIG_MODULES_IPT_NETFLOW_NAT=y
+# CONFIG_MODULES_IPT_NETFLOW_PROMISC is not set
+
+#
+# Cryptodev Module
+#
+CONFIG_MODULES_CRYPTODEV_CRYPTODEV=m

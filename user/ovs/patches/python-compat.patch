@@ -1,0 +1,49 @@
+--- ovs/m4/openvswitch.m4.org	2017-06-07 15:46:43.931397799 +1000
++++ ovs/m4/openvswitch.m4	2017-06-07 15:47:39.335398695 +1000
+@@ -356,10 +356,6 @@
+    HAVE_PYTHON=yes
+    AM_CONDITIONAL([HAVE_PYTHON], [test "$HAVE_PYTHON" = yes])
+ 
+-   AC_MSG_CHECKING([whether $PYTHON has six library])
+-   if ! $PYTHON -c 'import six ; six.moves.range' >&AS_MESSAGE_LOG_FD 2>&1; then
+-     AC_MSG_ERROR([Missing Python six library or version too old.])
+-   fi
+    AC_MSG_RESULT([yes])])
+ 
+ dnl Checks for Python 3.x, x >= 4.
+diff -Naur openvswitch-2.6.1.org/python/ovs/ovsuuid.py openvswitch-2.6.1/python/ovs/ovsuuid.py
+--- openvswitch-2.6.1.org/python/ovs/ovsuuid.py	2016-09-28 16:26:58.168659149 +1000
++++ openvswitch-2.6.1/python/ovs/ovsuuid.py	2017-02-13 09:50:10.722541650 +1000
+@@ -16,7 +16,7 @@
+ import uuid
+ 
+ import six
+-from six.moves import range
++#from six.moves import range
+ 
+ from ovs.db import error
+ import ovs.db.parser
+diff -Naur openvswitch-2.6.1.org/python/ovs/socket_util.py openvswitch-2.6.1/python/ovs/socket_util.py
+--- openvswitch-2.6.1.org/python/ovs/socket_util.py	2016-09-28 16:26:58.168659149 +1000
++++ openvswitch-2.6.1/python/ovs/socket_util.py	2017-02-13 09:50:04.610541551 +1000
+@@ -19,7 +19,7 @@
+ import socket
+ 
+ import six
+-from six.moves import range
++#from six.moves import range
+ 
+ import ovs.fatal_signal
+ import ovs.poller
+diff -Naur openvswitch-2.6.1.org/python/ovs/vlog.py openvswitch-2.6.1/python/ovs/vlog.py
+--- openvswitch-2.6.1.org/python/ovs/vlog.py	2016-09-28 16:26:58.168659149 +1000
++++ openvswitch-2.6.1/python/ovs/vlog.py	2017-02-13 09:49:59.942541475 +1000
+@@ -23,7 +23,7 @@
+ import threading
+ 
+ import six
+-from six.moves import range
++#from six.moves import range
+ 
+ import ovs.dirs
+ import ovs.unixctl

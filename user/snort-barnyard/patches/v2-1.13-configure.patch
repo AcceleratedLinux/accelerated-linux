@@ -1,0 +1,11 @@
+--- barnyard2-2-1.13/configure.in.orig	2016-03-29 14:30:36.467253434 +1000
++++ barnyard2-2-1.13/configure.in	2016-03-29 14:32:03.991254849 +1000
+@@ -236,7 +236,7 @@
+ # In case INADDR_NONE is not defined (like on Solaris)
+ have_inaddr_none="no"
+ AC_MSG_CHECKING([for INADDR_NONE])
+-AC_RUN_IFELSE(
++AC_COMPILE_IFELSE(
+ [AC_LANG_PROGRAM(
+ [[
+ #include <sys/types.h>

@@ -1,0 +1,306 @@
+/*
+ * Device Tree file for AcceleratedConcepts 8300
+ *
+ * Greg Ungerer <greg.ungerer@accelerated.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+#include "armada-370.dtsi"
+
+/ {
+	model = "Accelerated Concepts 8300";
+	compatible = "accelerated,8300", "marvell,armada370", "marvell,armada-370-xp";
+
+	chosen {
+		bootargs = "console=ttyS0,115200";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x00000000 0x80000000>; /* 2 GB */
+	};
+
+	soc {
+		ranges = <MBUS_ID(0xf0, 0x01) 0 0xd0000000 0x100000
+			  MBUS_ID(0x01, 0xe0) 0 0xfff00000 0x100000
+			  MBUS_ID(0x09, 0x01) 0 0xf1100000 0x10000>;
+
+		internal-regs {
+			serial@12000 {
+				clock-frequency = <200000000>;
+				status = "okay";
+			};
+			timer@20300 {
+				clock-frequency = <600000000>;
+				status = "okay";
+			};
+
+			gpio_leds {
+				compatible = "gpio-leds";
+				pinctrl-names = "default";
+				pinctrl-0 = <&online_led_pin &dial_led_pin &vpn1_led_pin &wan1_led_pin &wan2_led_pin &lan_led_pin &vpn2_led_pin &usb_led_pin>;
+
+				green_pwr_led {
+					label = "ac8300:green:online";
+					gpios = <&gpio1 23 1>;
+					linux,default-trigger = "online";
+				};
+
+				green_dial_led {
+					label = "ac8300:green:dial";
+					gpios = <&gpio1 24 1>;
+					linux,default-trigger = "dial";
+				};
+
+				green_vpn1_led {
+					label = "ac8300:green:vpn1";
+					gpios = <&gpio1 25 1>;
+					linux,default-trigger = "vpn1";
+				};
+
+				green_wan1_led {
+					label = "ac8300:green:wan1";
+					gpios = <&gpio1 26 1>;
+					linux,default-trigger = "wan1";
+				};
+
+				green_wan2_led {
+					label = "ac8300:green:wan2";
+					gpios = <&gpio1 27 1>;
+					linux,default-trigger = "wan2";
+				};
+
+				green_lan_led {
+					label = "ac8300:green:lan";
+					gpios = <&gpio1 28 1>;
+					linux,default-trigger = "lan";
+				};
+
+				green_vpn2_led {
+					label = "ac8300:green:vpn2";
+					gpios = <&gpio1 29 1>;
+					linux,default-trigger = "vpn2";
+				};
+
+				green_usb_led {
+					label = "ac8300:green:usb";
+					gpios = <&gpio1 30 1>;
+					linux,default-trigger = "usb";
+				};
+			};
+
+			gpio_usb_enables {
+				pinctrl-names = "default";
+				pinctrl-0 = <&wdisable0_pin &wdisable1_pin &pcie_reset_pin &usb_enable_pin1 &usb_enable_pin2 &usb_enable_pin3>;
+			};
+
+			mdio1 {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				compatible = "virtual,mdio-bcm53118";
+				bcm53118,spi = <&switch0>;
+
+				phy1: ethernet-phy@8 {
+					reg = <8>;
+				};
+			};
+
+			eth0: ethernet@70000 {
+				status = "okay";
+				phy = <&phy1>;
+				phy-mode = "rgmii-id";
+			};
+			ethernet@74000 {
+				status = "okay";
+				phy = <&phy0>;
+				phy-mode = "rgmii-id";
+			};
+
+			crypto@90000 {
+				status = "okay";
+			};
+
+			usb@50000 {
+				status = "okay";
+			};
+
+			usb@51000 {
+				status = "okay";
+			};
+
+			sata@a0000 {
+				nr-ports = <2>;
+				status = "okay";
+			};
+		};
+	};
+};
+
+&pinctrl {
+	online_led_pin: online-led-pin {
+		marvell,pins = "mpp55";
+		marvell,function = "gpio";
+	};
+
+	dial_led_pin: dial-led-pin {
+		marvell,pins = "mpp56";
+		marvell,function = "gpio";
+	};
+
+	vpn1_led_pin: vpn1-led-pin {
+		marvell,pins = "mpp57";
+		marvell,function = "gpio";
+	};
+
+	wan1_led_pin: wan1-led-pin {
+		marvell,pins = "mpp58";
+		marvell,function = "gpio";
+	};
+
+	wan2_led_pin: wan2-led-pin {
+		marvell,pins = "mpp59";
+		marvell,function = "gpo";
+	};
+
+	lan_led_pin: lan-led-pin {
+		marvell,pins = "mpp60";
+		marvell,function = "gpio";
+	};
+
+	vpn2_led_pin: vpn2-led-pin {
+		marvell,pins = "mpp61";
+		marvell,function = "gpo";
+	};
+
+	usb_led_pin: usb-led-pin {
+		marvell,pins = "mpp62";
+		marvell,function = "gpio";
+	};
+
+	wdisable0_pin: wdisable0-pin {
+		marvell,pins = "mpp2";
+		marvell,function = "gpio";
+	};
+
+	wdisable1_pin: wdisable1-pin {
+		marvell,pins = "mpp3";
+		marvell,function = "gpio";
+	};
+
+	pcie_reset_pin: pcie_reset-pin {
+		marvell,pins = "mpp48";
+		marvell,function = "gpio";
+	};
+
+	usb_enable_pin1: usb-enable-pin1 {
+		marvell,pins = "mpp4";
+		marvell,function = "gpio";
+	};
+
+	usb_enable_pin2: usb-enable-pin2 {
+		marvell,pins = "mpp31";
+		marvell,function = "gpio";
+	};
+
+	usb_enable_pin3: usb-enable-pin3 {
+		marvell,pins = "mpp47";
+		marvell,function = "gpio";
+	};
+};
+
+&pciec {
+	status = "okay";
+ 
+	/* Internal mini-PCIe connector */
+	pcie@1,0 {
+		/* Port 0, Lane 0 */
+		status = "okay";
+	};
+ 
+	/* Connected on the PCB to a USB 3.0 XHCI controller */
+	pcie@2,0 {
+		/* Port 1, Lane 0 */
+		status = "okay";
+	};
+};
+
+&nand_controller {
+	status = "okay";
+
+	nand@0 {
+		reg = <0>;
+		label = "pxa3xx_nand-0";
+		nand-rb = <0>;
+		marvell,nand-keep-config;
+		nand-on-flash-bbt;
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x00000000 0x00200000>;
+			};
+			partition@1 {
+				label = "u-boot-env";
+				reg = <0x00200000 0x00100000>;
+			};
+			partition@2 {
+				label = "log";
+				reg = <0x00300000 0x00200000>;
+			};
+			partition@3 {
+				label = "flash";
+				reg = <0x00500000 0x07b00000>;
+			};
+			partition@4 {
+				label = "all";
+				reg = <0x00000000 0x08000000>;
+			};
+		};
+	};
+};
+
+&mdio {
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+	phy0: ethernet-phy@0 {
+		reg = <3>;
+	};
+};
+
+&spi0 {
+	status = "disable";
+
+	spi-flash@0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "mx25l25635e";
+		reg = <0>; /* Chip select 0 */
+		spi-max-frequency = <50000000>;
+	};
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	switch0: ethernet-switch@0 {
+		compatible = "bcm53118";
+		reg = <0>; /* Chip select 0 */
+		spi-max-frequency = <2000000>;
+		spi-cpol;
+		spi-cpha;
+		bcm53118,ethernet = <&eth0>;
+	};
+};
+

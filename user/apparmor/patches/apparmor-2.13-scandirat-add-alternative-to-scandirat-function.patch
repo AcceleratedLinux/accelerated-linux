@@ -1,0 +1,73 @@
+From: David Escalona <david.escalona@digi.com>
+Date: Mon, 7 May 2018 10:16:58 +0200
+Subject: [PATCH 2/7] scandirat: add alternative to scandirat function
+
+Signed-off-by: David Escalona <david.escalona@digi.com>
+---
+
+diff --git a/libraries/libapparmor/src/private.c b/libraries/libapparmor/src/private.c
+index cbc3d84..ee04604 100644
+--- a/libraries/libapparmor/src/private.c
++++ b/libraries/libapparmor/src/private.c
+@@ -343,8 +343,30 @@ int _aa_overlaydirat_for_each(int dirfd[], int n, void *data,
+ 	int rc = 0;
+ 
+ 	for (i = 0; i < n; i++) {
++#ifndef NEED_SCANDIRAT
+ 		n_list = scandirat(dirfd[i], ".", &list, dot_or_dot_dot_filter,
+ 				   alphasort);
++#else
++		struct stat buffer, buffer2;
++		int len;
++		char proc_path[128];
++		char buf[1024];
++
++		sprintf(proc_path, "/proc/self/fd/%d", dirfd[i]);
++		if ((len = readlink(proc_path, buf, sizeof(buf)-1)) != -1)
++			buf[len] = '\0';
++
++		if (stat(buf, &buffer) == 0 &&
++				fstat(dirfd[i], &buffer2) == 0 &&
++				buffer.st_dev == buffer2.st_dev &&
++				buffer.st_ino == buffer2.st_ino) {
++			n_list = scandir(buf, &list, dot_or_dot_dot_filter,
++								   alphasort);
++		} else {
++			PDEBUG("scandirat of dirfd[%d] failed: could not retrieve file name\n", i);
++			return -1;
++		}
++#endif
+ 		if (n_list == -1) {
+ 			PDEBUG("scandirat of dirfd[%d] failed: %m\n", i);
+ 			return -1;
+@@ -425,8 +447,30 @@ int _aa_dirat_for_each(int dirfd, const char *name, void *data,
+ 		return -1;
+ 	}
+ 
++#ifndef NEED_SCANDIRAT
+ 	num_dirs = scandirat(cb_dirfd, ".", &namelist,
+ 			     dot_or_dot_dot_filter, NULL);
++#else
++	struct stat buffer, buffer2;
++	int len;
++	char proc_path[128];
++	char buf[1024];
++
++	sprintf(proc_path, "/proc/self/fd/%d", cb_dirfd);
++	if ((len = readlink(proc_path, buf, sizeof(buf)-1)) != -1)
++		buf[len] = '\0';
++
++	if (stat(buf, &buffer) == 0 &&
++			fstat(cb_dirfd, &buffer2) == 0 &&
++			buffer.st_dev == buffer2.st_dev &&
++			buffer.st_ino == buffer2.st_ino) {
++		num_dirs = scandir(buf, &namelist, dot_or_dot_dot_filter,
++							   NULL);
++	} else {
++		PDEBUG("scandirat of dirfd[%d] failed: could not retrieve file name\n", i);
++		return -1;
++	}
++#endif
+ 	if (num_dirs == -1) {
+ 		PDEBUG("scandirat of directory '%s' failed: %m\n", name);
+ 		return -1;

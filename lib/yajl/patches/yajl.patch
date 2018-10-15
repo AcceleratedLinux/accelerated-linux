@@ -1,0 +1,41 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 4c0a9be..ce73c43 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -64,11 +64,6 @@ ENDIF (WIN32)
+ 
+ 
+ ADD_SUBDIRECTORY(src)
+-ADD_SUBDIRECTORY(test)
+-ADD_SUBDIRECTORY(reformatter)
+-ADD_SUBDIRECTORY(verify)
+-ADD_SUBDIRECTORY(example)
+-ADD_SUBDIRECTORY(perf)
+ 
+ INCLUDE(YAJLDoc.cmake)
+ 
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 99cf9e9..d6c05d8 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -14,10 +14,10 @@
+ 
+ SET (SRCS yajl.c yajl_lex.c yajl_parser.c yajl_buf.c
+           yajl_encode.c yajl_gen.c yajl_alloc.c
+-          yajl_tree.c yajl_version.c
++          yajl_version.c
+ )
+ SET (HDRS yajl_parser.h yajl_lex.h yajl_buf.h yajl_encode.h yajl_alloc.h)
+-SET (PUB_HDRS api/yajl_parse.h api/yajl_gen.h api/yajl_common.h api/yajl_tree.h)
++SET (PUB_HDRS api/yajl_parse.h api/yajl_gen.h api/yajl_common.h)
+ 
+ # useful when fixing lexer bugs.
+ #ADD_DEFINITIONS(-DYAJL_LEXER_DEBUG)
+@@ -38,6 +38,7 @@ SET(LIBRARY_OUTPUT_PATH ${libDir})
+ ADD_LIBRARY(yajl_s STATIC ${SRCS} ${HDRS} ${PUB_HDRS})
+ 
+ ADD_LIBRARY(yajl SHARED ${SRCS} ${HDRS} ${PUB_HDRS})
++TARGET_LINK_LIBRARIES(yajl m)
+ 
+ #### setup shared library version number
+ SET_TARGET_PROPERTIES(yajl PROPERTIES

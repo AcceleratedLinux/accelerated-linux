@@ -1,0 +1,14 @@
+--- kmod-15/libkmod/macro.h.orig	2013-12-11 17:10:29.414356452 +1000
++++ kmod-15/libkmod/macro.h	2013-12-11 17:10:47.994367087 +1000
+@@ -20,9 +20,9 @@
+ #pragma once
+ 
+ #include <stddef.h>
++#include <assert.h>
+ 
+-#define assert_cc(expr) \
+-	_Static_assert((expr), #expr)
++#define assert_cc(expr) assert(expr)
+ 
+ #if HAVE_TYPEOF
+ #define check_types_match(expr1, expr2)		\

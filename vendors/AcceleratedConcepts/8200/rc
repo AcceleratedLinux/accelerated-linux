@@ -1,0 +1,63 @@
+echo "/etc/rc processing ..."
+mount -t proc proc /proc
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+hostname 8200
+echo "Mounting Filesystems ..."
+mount -o remount,rw /sda1
+mount -t sysfs none /sys
+mount -t tmpfs -o size=33792k tmpfs /var
+mount -t tmpfs -o size=2048k tmpfs /etc/config
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/dev
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+mkdir -m 755 /var/run/xl2tpd
+mount -t tmpfs -o size=4m,mode=0755 tmpfs /dev
+echo "Enabling external USB storage"
+echo "1-1" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+echo "1-2" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+echo "1-3" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+echo "1-1" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+echo "1-2" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+echo "1-3" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+sleep 1
+cp -a /lib/udev/devices/* /dev/
+cp /etc/default/group /etc/config/
+echo "" > /proc/sys/kernel/hotplug
+/etc/init.d/S10udev start
+udevadm trigger
+sleep 1
+mount -t devpts devpts /dev/pts
+echo "Processing Config Filesystem ..."
+if [ -f /etc/config/.init ]; then
+	echo "Initialising new Config Filesystem ..."
+	rm -rf /etc/config/*
+	cp -ar /etc/default/. /etc/config/.
+	flatfsd -s
+else
+	flatfsd -n -r
+fi
+echo "Loading network drivers."
+modprobe octeon-ethernet
+setmac -p
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+echo "Loading USB drivers."
+modprobe option
+modprobe cdc-acm
+modprobe ark3116
+modprobe ipw
+modprobe sierra
+echo "Loading crypto drivers."
+modprobe ocf
+modprobe cryptocteon
+modprobe cryptodev
+modprobe ipsec
+echo "Updating devices"
+udevadm control --reload-rules
+udevadm trigger
+ifconfig lo 127.0.0.1
+echo "/etc/rc complete."

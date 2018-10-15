@@ -1,0 +1,13 @@
+Index: iproute2-3.15.0/genl/Makefile
+===================================================================
+--- iproute2-3.15.0.orig/genl/Makefile	2014-06-17 16:33:41.240731132 +1000
++++ iproute2-3.15.0/genl/Makefile	2014-06-17 16:33:41.236731132 +1000
+@@ -19,7 +19,7 @@
+ 
+ all: genl
+ 
+-genl: $(GENLOBJ) $(LIBNETLINK) $(LIBUTIL) $(GENLLIB)
++genl: $(GENLOBJ) $(LIBNETLINK) $(GENLLIB)
+ 
+ install: all
+ 	install -m 0755 genl $(DESTDIR)$(SBINDIR)

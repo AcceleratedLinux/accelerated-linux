@@ -1,0 +1,9 @@
+{
+  "cell": {
+    "cellular1-sim1": ["all/cellular","all/cellular/1"],
+    "cellular1-sim2": ["all/cellular","all/cellular/1"]
+  },
+  "eth": {
+    "eth0": ["all/eth"]
+  }
+}

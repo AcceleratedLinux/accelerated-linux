@@ -1,0 +1,17 @@
+--- nss-3.17.4/nss/lib/sqlite/sqlite3.c.LSW	2015-09-04 16:10:00.153615487 -0400
++++ nss-3.17.4/nss/lib/sqlite/sqlite3.c	2015-09-04 16:10:22.225625334 -0400
+@@ -22714,12 +22714,14 @@
+ */
+ #if SQLITE_OS_UNIX              /* This file is used on unix only */
+ 
++#if 0
+ /* Use posix_fallocate() if it is available
+ */
+ #if !defined(HAVE_POSIX_FALLOCATE) \
+       && (_XOPEN_SOURCE >= 600 || _POSIX_C_SOURCE >= 200112L)
+ # define HAVE_POSIX_FALLOCATE 1
+ #endif
++#endif
+ 
+ /*
+ ** There are various methods for file locking used for concurrency

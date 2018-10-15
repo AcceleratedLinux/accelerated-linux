@@ -1,0 +1,28 @@
+############################################################################
+
+#ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+#VENDOR_TOPDIRS = boot
+#endif
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
+
+#LINUXTARGET = uImage.lzma
+#LINUXTARGET = uImage
+LINUXTARGET = vmlinux dtbs
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES = images/image.bin images/configs.tar.gz \
+           images/romfs-inst.log prop/config/schema/accns.schema
+
+############################################################################
+
+CPUFLAGS      = -EL
+CPU_CFLAGS    = -EL
+CPULDFLAGS    += -EL
+
+include $(ROOTDIR)/vendors/config/mips/config.arch
+
+############################################################################

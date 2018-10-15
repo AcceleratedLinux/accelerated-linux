@@ -1,0 +1,12 @@
+--- libreswan-3.12/Makefile.inc.local.LSW	2015-09-04 19:51:59.830625621 -0400
++++ libreswan-3.12/Makefile.inc.local	2015-09-04 19:52:10.209740621 -0400
+@@ -1,7 +1,8 @@
+ 
+ CFLAGS := $(subst -Werror,,$(CFLAGS)) \
+ 	-I$(LIBRESWANSRCDIR)/../../../../lib/nss/build/nss-3.17.4/dist/public/nss/ \
+-	-I$(LIBRESWANSRCDIR)/../../../../lib/nss/build/nss-3.17.4/dist/uClinux-dist/include
++	-I$(LIBRESWANSRCDIR)/../../../../lib/nss/build/nss-3.17.4/dist/uClinux-dist/include \
++	-mxgot
+ export CFLAGS
+ 
+ ifeq ($(HOSTBUILD),)

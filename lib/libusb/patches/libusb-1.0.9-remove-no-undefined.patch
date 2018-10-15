@@ -1,0 +1,22 @@
+--- libusb-1.0.9/configure.org	2013-08-08 17:20:34.713166095 +1000
++++ libusb-1.0.9/configure	2013-08-08 17:21:05.643177398 +1000
+@@ -11088,8 +11088,6 @@
+ $as_echo "#define _GNU_SOURCE 1" >>confdefs.h
+ 
+ 
+-LTLDFLAGS="${LTLDFLAGS} -no-undefined"
+-
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking operating system" >&5
+ $as_echo_n "checking operating system... " >&6; }
+ case $host in
+--- libusb-1.0.9/configure.ac.org	2013-08-08 17:20:43.123150524 +1000
++++ libusb-1.0.9/configure.ac	2013-08-08 17:21:13.363030887 +1000
+@@ -42,8 +42,6 @@
+ AM_PROG_CC_C_O
+ AC_DEFINE([_GNU_SOURCE], 1, [Use GNU extensions])
+ 
+-LTLDFLAGS="${LTLDFLAGS} -no-undefined"
+-
+ AC_MSG_CHECKING([operating system])
+ case $host in
+ *-linux*)

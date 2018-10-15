@@ -1,0 +1,4 @@
+config USER_TAR_TAR
+	bool "tar"
+	help
+	  The GNU Project tar utility.

@@ -1,0 +1,133 @@
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 9pt;
+  width: 530px;
+  margin-left: 10px;
+}
+
+p.head {
+  font-size: 9pt; 
+  background-color: #DBE2EC;
+  font-family: Arial, Helvetica, sans-serif; 
+  color: #000000;
+}
+
+p {
+  font-size: 9pt; 
+  font-family: Arial, Helvetica, sans-serif; 
+  color: #4F7599;
+}
+
+h1 {
+  font-size: 14pt; font-weight: bold;
+  margin-left: 10px;
+  font-family: Arial, Helvetica, sans-serif; color: #4F7599
+}
+
+h2 {
+	font-size: 12pt; font-weight: bold;
+; margin-left: 10px
+; font-family: Arial, Helvetica, sans-serif; color: #4F7599
+}
+
+h3 {
+  font-size: 10pt; font-weight: bold;
+  margin-left: 10px;
+  font-family: Arial, Helvetica, sans-serif; color: #4F7599
+}
+
+h4 {
+  font-size: 9pt; font-weight: bold; ; margin-left: 10px ; font-family: Arial, Helvetica, sans-serif; color: #4F7599
+}
+
+pre {
+  line-height: normal;
+  color: #0A0A8C;
+font-family: "Courier New", Courier, mono; font-size: 9pt; margin-left: 10px; background-color: #EEEEEE; padding-left: 20px
+; padding-top: 5px; padding-bottom: 5px; padding-right: 20px
+}
+
+table {
+  border: 0px;
+}
+
+table.body {
+  border: 0px;
+  width: 530px;
+}
+
+td.title {
+  margin-left: 5px;
+  background-color: #4F7599;
+  font-weight: bold;
+  white-space: nowrap;
+  color: #FFFFFF
+}
+
+td.subtitle {
+  background-color: #4F7599;
+  font-style: italic;
+  color: #FFFFFF
+}
+
+td.head {
+  width: 40%;
+  font-size: 9pt; 
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #DBE2EC;
+  white-space: nowrap;
+  color: #4F759
+}
+
+td.head1 {
+  width: 20%;
+  font-size: 9pt; 
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #DBE2EC;
+  white-space: nowrap;
+  color: #4F759
+}
+
+td.head2 {
+  width: 25%;
+  font-size: 9pt; 
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #DBE2EC;
+  white-space: nowrap;
+  color: #4F759
+}
+
+td.head_filter {
+  width: 5%;
+  font-size: 9pt; 
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #DBE2EC;
+  color: #4F759
+}
+
+td {
+  font-size: 9pt; 
+  font-family: Arial, Helvetica, sans-serif;
+  color: #4F759
+}
+
+ol {
+  margin-left: 40px; color: #4F759; font-family: Arial, Helvetica, sans-serif; font-size: 9pt
+}
+
+ul {
+  font-size: 9pt; ; margin-left: 30px; font-family: Arial, Helvetica, sans-serif; color: #4F759
+}
+
+div.restart {
+       width: 600px;
+       height: 400px;
+       background-color: #DBE2EC;
+		 color: #000000;
+       left: 50%;
+       top: 50%;
+       margin-top: -150px;
+       margin-left: -300px;
+		 position: absolute;
+       text-align: center;
+}

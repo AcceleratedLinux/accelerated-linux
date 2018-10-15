@@ -1,0 +1,81 @@
+diff -wcr a/configure b/configure
+*** a/configure	2015-10-02 21:06:53.000000000 +1000
+--- b/configure	2015-10-29 13:07:36.769219166 +1000
+***************
+*** 59675,59683 ****
+  
+  else
+  
+!       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for yajl_tree_parse in -lyajl" >&5
+! $as_echo_n "checking for yajl_tree_parse in -lyajl... " >&6; }
+! if ${ac_cv_lib_yajl_yajl_tree_parse+:} false; then :
+    $as_echo_n "(cached) " >&6
+  else
+    ac_check_lib_save_LIBS=$LIBS
+--- 59675,59683 ----
+  
+  else
+  
+!       { $as_echo "$as_me:${as_lineno-$LINENO}: checking for yajl_parse in -lyajl" >&5
+! $as_echo_n "checking for yajl_parse in -lyajl... " >&6; }
+! if ${ac_cv_lib_yajl_yajl_parse+:} false; then :
+    $as_echo_n "(cached) " >&6
+  else
+    ac_check_lib_save_LIBS=$LIBS
+***************
+*** 59691,59717 ****
+  #ifdef __cplusplus
+  extern "C"
+  #endif
+! char yajl_tree_parse ();
+  int
+  main ()
+  {
+! return yajl_tree_parse ();
+    ;
+    return 0;
+  }
+  _ACEOF
+  if ac_fn_c_try_link "$LINENO"; then :
+!   ac_cv_lib_yajl_yajl_tree_parse=yes
+  else
+!   ac_cv_lib_yajl_yajl_tree_parse=no
+  fi
+  rm -f core conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+  LIBS=$ac_check_lib_save_LIBS
+  fi
+! { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_yajl_yajl_tree_parse" >&5
+! $as_echo "$ac_cv_lib_yajl_yajl_tree_parse" >&6; }
+! if test "x$ac_cv_lib_yajl_yajl_tree_parse" = xyes; then :
+  
+          alt=1
+  
+--- 59691,59717 ----
+  #ifdef __cplusplus
+  extern "C"
+  #endif
+! char yajl_parse ();
+  int
+  main ()
+  {
+! return yajl_parse ();
+    ;
+    return 0;
+  }
+  _ACEOF
+  if ac_fn_c_try_link "$LINENO"; then :
+!   ac_cv_lib_yajl_yajl_parse=yes
+  else
+!   ac_cv_lib_yajl_yajl_parse=no
+  fi
+  rm -f core conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+  LIBS=$ac_check_lib_save_LIBS
+  fi
+! { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_yajl_yajl_parse" >&5
+! $as_echo "$ac_cv_lib_yajl_yajl_parse" >&6; }
+! if test "x$ac_cv_lib_yajl_yajl_parse" = xyes; then :
+  
+          alt=1
+  

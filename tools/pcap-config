@@ -1,0 +1,20 @@
+#! /bin/sh
+#
+# helper for getting the right libpcap settings
+#
+
+if [ -f $ROOTDIR/config/.config ] ; then
+  . $ROOTDIR/config/.config
+fi
+
+if [ "$CONFIG_LIB_LIBPCAP_STATIC" ]; then
+  LIBPCAP="$STAGEDIR/lib/libpcap.a"
+else
+  LIBPCAP="-lpcap"
+fi
+
+for i in "$@"; do
+  case "$1" in
+  --libs) echo "$LIBPCAP" ;;
+  esac
+done

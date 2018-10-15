@@ -1,0 +1,5 @@
+config LIB_LIBGMP
+	bool "Build libGMP"
+	default n
+	help
+	  GMP Library.

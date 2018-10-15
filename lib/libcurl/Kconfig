@@ -1,0 +1,25 @@
+config LIB_LIBCURL
+	bool "Build curl"
+	select LIB_LIBIDN
+	select LIB_ZLIB
+	select LIB_LIBBZ2
+	select LIB_LIBSSL
+	default n
+	help
+	  The curl library for resolving URLs.
+	  This library requires (and enables) SSL, zlib and libidn.
+
+config LIB_LIBCURL_CURL
+	bool "curl"
+	depends on LIB_LIBCURL
+	default n
+	help
+	  The curl application
+
+config LIB_LIBCURL_CURL_CONFIG
+	bool "curl-config"
+	depends on LIB_LIBCURL
+	default n
+	help
+	  The curl-config application
+

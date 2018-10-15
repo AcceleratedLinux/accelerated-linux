@@ -1,0 +1,11 @@
+#
+# udev rule for HUAWEI E220 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+ACTION=="add", ATTRS{idVendor}=="1b7d", ATTRS{idProduct}=="0700", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="1b7d", ATTRS{idProduct}=="0001", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="1b7d", ATTRS{idProduct}=="0001", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+
+

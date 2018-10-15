@@ -1,0 +1,9 @@
+--- nss-3.17.4/nss/coreconf/uClinux-dist.mk.LSW	2015-08-24 21:04:06.707753059 -0400
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-08-24 21:04:19.039842695 -0400
+@@ -81,6 +81,4 @@
+ PROCESS_MAP_FILE = grep -v ';-' $< | \
+         sed -e 's,;+,,' -e 's; DATA ;;' -e 's,;;,,' -e 's,;.*,;,' > $@
+ 
+-ifeq ($(OS_RELEASE),2.4)
+ DEFINES += -DNO_FORK_CHECK
+-endif

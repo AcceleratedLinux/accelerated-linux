@@ -1,0 +1,11 @@
+--- udev-182/configure.org	2013-03-20 13:38:02.000000000 +1000
++++ udev-182/configure	2013-03-20 13:38:12.000000000 +1000
+@@ -13430,7 +13430,7 @@
+ -Wnested-externs -Wpointer-arith \
+ -Wpointer-arith -Wsign-compare -Wchar-subscripts \
+ -Wstrict-prototypes -Wshadow \
+--Wformat-security -Wtype-limits"
++-Wformat-security"
+ 
+ 
+ ac_config_headers="$ac_config_headers config.h"

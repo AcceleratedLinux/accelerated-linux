@@ -1,0 +1,17 @@
+#!/bin/sh
+IF=$1
+DEV=$2
+SP=$3
+IP=$4
+RP=$5
+PA=$6
+
+#Tom add two lines command to add deault  gateway when 3g connected
+route del default dev $IF
+route add default gw $RP dev $IF
+echo $0: ifname $IF device $DEV speed $SP ip $IP remote $RP param $PA > /dev/console
+
+cp /etc/ppp/resolv.conf  /etc/resolv.conf
+echo "[G3GPPPD]PPP Connected!" > /dev/console
+# Jason, 20090726
+#/sbin/firewall.sh init

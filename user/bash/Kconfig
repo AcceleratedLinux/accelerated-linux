@@ -1,0 +1,6 @@
+
+config USER_BASH_BASH
+	bool "bash"
+	help
+	  The Bourne-Again Shell. (large)
+

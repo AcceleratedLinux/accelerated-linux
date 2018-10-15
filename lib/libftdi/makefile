@@ -1,0 +1,13 @@
+URL = http://www.intra2net.com/en/developer/libftdi/download/libftdi1-1.1.tar.bz2
+CMAKE_OPTS += -DFTDIPP=OFF
+CMAKE_OPTS += -DUNIT_TEST=OFF
+CMAKE_OPTS += -DPYTHON_BINDINGS=OFF
+# CMAKE_OPTS += -DBoost_DEBUG=ON
+# CMAKE_OPTS += -DBoost_NO_BOOST_CMAKE=ON
+# CMAKE_OPTS += -DBoost_NO_SYSTEM_PATHS=TRUE
+# CMAKE_OPTS += -DBOOST_INCLUDE_DIR:PATH=$(PWD)
+# CMAKE_OPTS += -DBOOST_LIBRARY_DIR=$(PWD)
+# CMAKE_OPTS += -DBOOST_LIBRARY=/dev/null
+# CMAKE_OPTS += -DBOOST_ROOT=$(PWD)
+
+include $(ROOTDIR)/tools/cmake.inc

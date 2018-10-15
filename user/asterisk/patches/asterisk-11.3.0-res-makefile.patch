@@ -1,0 +1,10 @@
+--- asterisk-11.3.0/res/Makefile.orig	2013-05-08 15:01:58.910452370 +1000
++++ asterisk-11.3.0/res/Makefile	2013-05-08 15:02:04.411270910 +1000
+@@ -75,7 +75,6 @@
+ 
+ .PHONY : pjproject
+ pjproject: pjproject/build.mak
+-	# Make sure we always build pjproject with a single job.
+ 	$(MAKE) -j1 -C pjproject dep
+ 	$(MAKE) -j1 -C pjproject
+ 

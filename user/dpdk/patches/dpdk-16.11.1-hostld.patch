@@ -1,0 +1,11 @@
+--- dpdk-stable-16.11.1/mk/rte.hostapp.mk.org	2017-03-24 14:45:39.086131858 +1000
++++ dpdk-stable-16.11.1/mk/rte.hostapp.mk	2017-03-24 14:46:00.454131709 +1000
+@@ -58,7 +58,7 @@
+ exe2cmd = $(strip $(call dotfile,$(patsubst %,%.cmd,$(1))))
+ 
+ O_TO_EXE = $(HOSTCC) $(HOST_LDFLAGS) $(LDFLAGS_$(@)) \
+-	$(EXTRA_HOST_LDFLAGS) -o $@ $(OBJS-y) $(LDLIBS)
++	$(EXTRA_HOST_LDFLAGS) -o $@ $(OBJS-y) $(HOST_LDLIBS)
+ O_TO_EXE_STR = $(subst ','\'',$(O_TO_EXE)) #'# fix syntax highlight
+ O_TO_EXE_DISP = $(if $(V),"$(O_TO_EXE_STR)","  HOSTLD $(@)")
+ O_TO_EXE_CMD = "cmd_$@ = $(O_TO_EXE_STR)"

@@ -1,0 +1,31 @@
+diff -ru cyrus-sasl-2.1.26.orig/include/Makefile.in cyrus-sasl-2.1.26/include/Makefile.in
+--- cyrus-sasl-2.1.26.orig/include/Makefile.in	2017-11-15 10:44:54.491039775 +1000
++++ cyrus-sasl-2.1.26/include/Makefile.in	2017-11-15 10:45:23.107348685 +1000
+@@ -113,12 +113,12 @@
+ depcomp = $(SHELL) $(top_srcdir)/config/depcomp
+ am__depfiles_maybe = depfiles
+ am__mv = mv -f
+-COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
++COMPILE = $(HOSTCC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
+ 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+ LTCOMPILE = $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+-	--mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
++	--mode=compile $(HOSTCC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+ 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+-CCLD = $(CC)
++CCLD = $(HOSTCC)
+ LINK = $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link \
+ 	$(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+ SOURCES = $(makemd5_SOURCES)
+@@ -190,9 +190,9 @@
+ JAVAH = @JAVAH@
+ JAVAROOT = @JAVAROOT@
+ JAVA_INCLUDES = @JAVA_INCLUDES@
+-LDFLAGS = @LDFLAGS@
++LDFLAGS = 
+ LIBOBJS = @LIBOBJS@
+-LIBS = @LIBS@
++LIBS = 
+ LIBTOOL = @LIBTOOL@
+ LIB_CRYPT = @LIB_CRYPT@
+ LIB_DES = @LIB_DES@

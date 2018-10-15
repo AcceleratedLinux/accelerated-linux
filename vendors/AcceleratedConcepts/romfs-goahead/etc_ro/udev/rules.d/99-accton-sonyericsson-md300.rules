@@ -1,0 +1,23 @@
+#
+# udev rule for BenQ H10 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+#
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN="/bin/mknod -m 665 /dev/ttyUSB0 c 188 0"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN="/bin/mknod -m 665 /dev/ttyUSB1 c 188 1"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN="/bin/mknod -m 665 /dev/ttyUSB2 c 188 2"
+#
+ACTION=="add", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN+="/bin/mknod -m 665 /dev/ttyUSB0 c 188 0"
+ACTION=="add", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN+="/bin/mknod -m 665 /dev/ttyUSB1 c 188 1"
+ACTION=="add", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN+="/bin/mknod -m 665 /dev/ttyUSB2 c 188 2"
+
+ACTION!="add", GOTO="3G_End"
+BUS=="usb", SYSFS{idProduct}=="d0cf", SYSFS{idVendor}=="0fce", NAME="%k",
+SYMLINK="modem3G-%n", PROGRAM="/bin/sh -c 'echo 3 > /sys/%p/device/bConfigurationValue'"
+LABEL="3G_End"
+
+ACTION=="add", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{idVendor}=="0fce", ATTRS{idProduct}=="d0cf", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"
+

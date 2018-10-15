@@ -1,0 +1,9 @@
+/threadutil/src/obj/
+/upnp/inc/upnp/
+/upnp/inc/FreeList.h
+/upnp/inc/LinkedList.h
+/upnp/inc/ThreadPool.h
+/upnp/inc/TimerThread.h
+/upnp/inc/iasnprintf.h
+/upnp/inc/ithread.h
+/upnp/inc/ixml.h

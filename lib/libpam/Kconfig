@@ -1,0 +1,236 @@
+
+config LIB_LIBPAM
+	bool 'libpam'
+	help
+	  Build/Install libpam
+
+config LIB_LIBPAM_CONF
+	bool "install pam.conf"
+	depends on LIB_LIBPAM
+	default n
+	help
+	  Install a default pam.conf
+
+config LIB_LIBPAM_ALL_MODULES
+	bool "all modules"
+	depends on LIB_LIBPAM
+	default n
+	help
+	  Install all pam modules
+
+config LIB_LIBPAM_PAM_XAUTH
+	bool 'pam_xauth'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_xauth.so
+
+config LIB_LIBPAM_PAM_SHELLS
+	bool 'pam_shells'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_shells.so
+
+config LIB_LIBPAM_PAM_SUCCEED_IF
+	bool 'pam_succeed_if'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_succeed_if.so
+
+config LIB_LIBPAM_PAM_STRESS
+	bool 'pam_stress'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_stress.so
+
+config LIB_LIBPAM_PAM_SECURETTY
+	bool 'pam_securetty'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_securetty.so
+
+config LIB_LIBPAM_PAM_ISSUE
+	bool 'pam_issue'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_issue.so
+
+config LIB_LIBPAM_PAM_LISTFILE
+	bool 'pam_listfile'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_listfile.so
+
+config LIB_LIBPAM_PAM_ACCESS
+	bool 'pam_access'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_access.so
+
+config LIB_LIBPAM_PAM_ENV
+	bool 'pam_env'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_env.so
+
+config LIB_LIBPAM_PAM_GROUP
+	bool 'pam_group'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_group.so
+
+config LIB_LIBPAM_PAM_FILTER
+	bool 'pam_filter'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_filter.so
+
+config LIB_LIBPAM_PAM_MKHOMEDIR
+	bool 'pam_mkhomedir'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_mkhomedir.so
+
+config LIB_LIBPAM_PAM_FTP
+	bool 'pam_ftp'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_ftp.so
+
+config LIB_LIBPAM_PAM_ECHO
+	bool 'pam_echo'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_echo.so
+
+config LIB_LIBPAM_PAM_PERMIT
+	bool 'pam_permit'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_permit.so
+
+config LIB_LIBPAM_PAM_MAIL
+	bool 'pam_mail'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_mail.so
+
+config LIB_LIBPAM_PAM_WHEEL
+	bool 'pam_wheel'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_wheel.so
+
+config LIB_LIBPAM_PAM_RHOSTS_AUTH
+	bool 'pam_rhosts_auth'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_rhosts_auth.so
+
+config LIB_LIBPAM_PAM_UMASK
+	bool 'pam_umask'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_umask.so
+
+config LIB_LIBPAM_PAM_NOLOGIN
+	bool 'pam_nologin'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_nologin.so
+
+config LIB_LIBPAM_PAM_LASTLOG
+	bool 'pam_lastlog'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_lastlog.so
+
+config LIB_LIBPAM_PAM_DENY
+	bool 'pam_deny'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_deny.so
+
+config LIB_LIBPAM_PAM_MOTD
+	bool 'pam_motd'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_motd.so
+
+config LIB_LIBPAM_PAM_ROOTOK
+	bool 'pam_rootok'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_rootok.so
+
+config LIB_LIBPAM_PAM_UNIX
+	bool 'pam_unix'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_unix.so
+
+config LIB_LIBPAM_PAM_DEBUG
+	bool 'pam_debug'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_debug.so
+
+config LIB_LIBPAM_PAM_LIMITS
+	bool 'pam_limits'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_limits.so
+
+config LIB_LIBPAM_PAM_TIME
+	bool 'pam_time'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_time.so
+
+config LIB_LIBPAM_PAM_TALLY
+	bool 'pam_tally'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_tally.so
+
+config LIB_LIBPAM_PAM_WARN
+	bool 'pam_warn'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_warn.so
+
+config LIB_LIBPAM_PAM_LOCALUSER
+	bool 'pam_localuser'
+	depends on LIB_LIBPAM
+	depends on !LIB_LIBPAM_ALL_MODULES
+	help
+	  Install pam_localuser.so

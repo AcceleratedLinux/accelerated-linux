@@ -1,0 +1,22 @@
+Index: netifd/ubus.c
+===================================================================
+--- netifd.orig/ubus.c
++++ netifd/ubus.c
+@@ -587,10 +587,16 @@ interface_ip_dump_prefix_assignment_list
+ 
+ 			a = blobmsg_open_table(&b, NULL);
+ 
+-			buf = blobmsg_alloc_string_buffer(&b, "address", buflen);
++			buf = blobmsg_alloc_string_buffer(&b, "prefix", buflen);
+ 			inet_ntop(AF_INET6, &addr, buf, buflen);
+ 			blobmsg_add_string_buffer(&b);
+ 
++			if (!IN6_IS_ADDR_UNSPECIFIED(&assign->addr)) {
++				buf = blobmsg_alloc_string_buffer(&b, "address", buflen);
++				inet_ntop(AF_INET6, &assign->addr, buf, buflen);
++				blobmsg_add_string_buffer(&b);
++			}
++
+ 			blobmsg_add_u32(&b, "mask", assign->length);
+ 
+ 			if (prefix->preferred_until) {

@@ -1,0 +1,58 @@
+This patch changes how QEMU claims USB interfaces in passthrough mode.
+Instead of only claiming the interfaces in the range reported by the USB device
+through bNumInterfaces, all possible interfaces (0 to 15) are claimed and errors
+are ignored.
+The reasoning for this is that some USB devices have non-sequential interfaces
+numbers.
+For example, the Sierra Wireless MC74xx modems advertise 5 USB interfaces, but
+these interfaces are available at 0, 2, 3, 8, 10 and not 0, 1, 2, 3, 4.
+--- qemu-2.8.0-original/hw/usb/host-libusb.c	2016-12-21 06:16:46.000000000 +1000
++++ qemu-2.8.0/hw/usb/host-libusb.c	2017-04-05 08:16:15.960080104 +1000
+@@ -1104,7 +1104,7 @@
+     if (rc != 0) {
+         return;
+     }
+-    for (i = 0; i < conf->bNumInterfaces; i++) {
++    for (i = 0; i < USB_MAX_INTERFACES; i++) {
+         rc = libusb_kernel_driver_active(s->dh, i);
+         usb_host_libusb_error("libusb_kernel_driver_active", rc);
+         if (rc != 1) {
+@@ -1127,7 +1127,7 @@
+     if (rc != 0) {
+         return;
+     }
+-    for (i = 0; i < conf->bNumInterfaces; i++) {
++    for (i = 0; i < USB_MAX_INTERFACES; i++) {
+         if (!s->ifs[i].detached) {
+             continue;
+         }
+@@ -1161,14 +1161,12 @@
+         return USB_RET_STALL;
+     }
+ 
+-    for (i = 0; i < conf->bNumInterfaces; i++) {
++    for (i = 0; i < USB_MAX_INTERFACES; i++) {
+         trace_usb_host_claim_interface(s->bus_num, s->addr, configuration, i);
+         rc = libusb_claim_interface(s->dh, i);
+-        usb_host_libusb_error("libusb_claim_interface", rc);
+-        if (rc != 0) {
+-            return USB_RET_STALL;
++        if (rc == 0) {
++             s->ifs[i].claimed = true;
+         }
+-        s->ifs[i].claimed = true;
+     }
+ 
+     udev->ninterfaces   = conf->bNumInterfaces;
+@@ -1180,10 +1178,9 @@
+ 
+ static void usb_host_release_interfaces(USBHostDevice *s)
+ {
+-    USBDevice *udev = USB_DEVICE(s);
+     int i, rc;
+ 
+-    for (i = 0; i < udev->ninterfaces; i++) {
++    for (i = 0; i < USB_MAX_INTERFACES; i++) {
+         if (!s->ifs[i].claimed) {
+             continue;
+         }

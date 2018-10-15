@@ -1,0 +1,15 @@
+libreswan-3.12-makefile-inc-local.patch
+m68knommu-libreswan-3.12-z01-makefile-inc-local.patch
+m68knommu-libreswan-3.12-z02-programs-target.patch
+m68knommu-libreswan-3.12-z03-no-fork.patch
+m68knommu-libreswan-3.12-z04-nopthread-setschedprio.patch
+m68knommu-libreswan-3.12-z05-nsslibs.patch
+m68knommu-libreswan-3.12-z06-makefile-inc-local-options.patch
+m68knommu-libreswan-3.12-z07-declare-pfkey-register-response.patch
+m68knommu-libreswan-3.12-z08-makefile-inc-local-no-adns.patch
+m68knommu-libreswan-3.12-z09-no-adns-really.patch
+m68knommu-libreswan-3.12-z10-drop-got-multigot.patch
+m68knommu-libreswan-3.12-z11-add-back-mxgot.patch
+m68knommu-libreswan-3.12-z12-no-adns.patch
+m68knommu-libreswan-3.12-z13-no-addconn.patch
+m68knommu-libreswan-3.12-z14-without-many-programs.patch

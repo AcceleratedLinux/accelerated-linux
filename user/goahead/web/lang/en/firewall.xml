@@ -1,0 +1,137 @@
+<po>
+  <message msgid="firewall disable" msgstr="Disable" />
+  <message msgid="firewall enable" msgstr="Enable" />
+  <message msgid="firewall apply" msgstr="Apply" />
+  <message msgid="firewall reset" msgstr="Reset" />
+  <message msgid="firewall del select" msgstr="Delete Selected" />
+  <message msgid="firewall no" msgstr=" No." />
+  <message msgid="firewall protocol" msgstr="Protocol" />
+  <message msgid="firewall comment" msgstr="Comment" />
+  <message msgid="firewall default drop" msgstr="Others would be dropped" />
+  <message msgid="firewall default accept" msgstr="Others would be accepted" />
+
+  <message msgid="port title" msgstr="MAC/IP/Port Filtering Settings " />
+  <message msgid="port introduction" msgstr=" This section allows you to configure the firewall to filter based on MAC, IP or port to protect your network from viruses and other malicious activity on the Internet." />
+  <message msgid="port basic setting" msgstr="Basic Settings" />
+  <message msgid="port basic filter" msgstr="MAC/IP/Port Filtering" />
+  <message msgid="port basic default policy" msgstr="Default Policy: Describes how packets not matching any rules will be handled" />
+  <message msgid="port basic default policy accepted" msgstr="Accepted" />
+  <message msgid="port basic default policy dropped" msgstr="Dropped" />
+  <message msgid="port filter setting" msgstr="MAC/IP/Port Filter Settings" />
+  <message msgid="port filter macaddr" msgstr="MAC address" />
+  <message msgid="port filter source ipaddr" msgstr="Source IP address (SIP)" />
+  <message msgid="port filter port range" msgstr="Port Range" />
+  <message msgid="port filter dest ipaddr" msgstr="Destination IP address (DIP)" />
+  <message msgid="port filter action" msgstr="Action" />
+  <message msgid="port filter action drop" msgstr="Drop" />
+  <message msgid="port filter action accept" msgstr="Accept" />
+  <message msgid="port current filter" msgstr="Current MAC/IP/Port filtering rules in system" />
+  <message msgid="port filter source port range" msgstr="Source Port Range (SPR)" />
+  <message msgid="port filter dest port range" msgstr="Destination Port Range (DPR)" />
+  <message msgid="port filter packetcount" msgstr="Cnt" />
+  <message msgid="port filter current source ipaddr" msgstr="SIP" />
+  <message msgid="port filter current dest ipaddr" msgstr="DIP" />
+  <message msgid="port filter current source port range" msgstr="SPR" />
+  <message msgid="port filter current dest port range" msgstr="DPR" />
+  
+  <message msgid="forward title" msgstr="Virtual Server Settings " />
+  <message msgid="forward introduction" msgstr="This section is provided for the configuration of the Virtual Server." />
+  <message msgid="forward virtual server" msgstr="Virtual Server" />
+  <message msgid="forward virtual server setting" msgstr="Virtual Server Settings" />
+  <message msgid="forward virtual server ipaddr" msgstr="IP Address" />
+  <message msgid="forward virtual server port mapping" msgstr="Port Mapping" />
+  <message msgid="forward virtual server port range" msgstr="Private Port" />
+  <message msgid="forward virtual server port range2" msgstr="Public Port" />
+  <message msgid="forward current virtual server" msgstr="Current Virtual Servers in system" />
+
+  <message msgid="dmz title" msgstr=" DMZ Settings " />
+  <message msgid="dmz introduction" msgstr="This section is dedicated to the DMZ, or De-Militarized Zone. Since some Internet applications, such as interactive games or video may not function properly behind the firewall, the DMZ allows a specified host on the LAN to access the Internet without any firewall protection." />
+  <message msgid="dmz setting" msgstr="DMZ Settings" />
+  <message msgid="dmz ipaddr" msgstr="DMZ IP Address" />
+
+  <message msgid="content filter title" msgstr="Content Filter Settings" />
+  <message msgid="content filter introduction" msgstr="The Content Filtering Settings page helps to control access through various types of restrictions." />
+  <message msgid="content filter webs content filter" msgstr="Webs Content Filter" />
+  <message msgid="content filter webs content filter filter" msgstr="Filters" />
+  <message msgid="content filter webs content filter apply" msgstr="Apply" />
+  <message msgid="content filter webs content filter reset" msgstr="Reset" />
+  <message msgid="content filter webs URL filter title" msgstr="Webs URL Filter Settings" />
+  <message msgid="content filter webs url filter current" msgstr="Current Web URL Filters" />
+  <message msgid="content filter webs url fitler No" msgstr="No" />
+  <message msgid="content filter webs url fitler url" msgstr="URL" />
+  <message msgid="content filter webs url fitler del" msgstr="Delete" />
+  <message msgid="content filter webs url fitler reset" msgstr="Reset" />
+  <message msgid="content filter webs url fitler add title" msgstr="Add a URL filter" />
+  <message msgid="content filter webs url fitler add" msgstr="Add" />
+  <message msgid="content filter webs url fitler reset" msgstr="Reset" />
+  <message msgid="content filter webs host fitler title" msgstr="Webs Host Filter Settings" />
+  <message msgid="content filter webs host fitler current" msgstr="Current Website Host Filters" />
+  <message msgid="content filter webs host fitler no" msgstr="No" />
+  <message msgid="content filter webs host fitler host" msgstr="Host (Keyword)" />
+  <message msgid="content filter webs host fitler del" msgstr="Delete" />
+  <message msgid="content filter webs host fitler reset" msgstr="Reset" />
+  <message msgid="content filter webs host fitler add title" msgstr="Add a Host (keyword) Filter" />
+  <message msgid="content filter webs host fitler keyword" msgstr="Keyword" />
+  <message msgid="content filter webs host fitler add" msgstr="Add" />
+  <message msgid="content filter webs host fitler reset" msgstr="Reset" />
+  <message msgid="content filter message" msgstr="The maximum rule count is " />
+
+  <message msgid="sysfw title" msgstr="System Security Settings" />
+  <message msgid="sysfw introduction" msgstr="System Security Settings allows you to make various configurations that maintain and protect your device." />
+  <message msgid="sysfw remote management title" msgstr="Remote Management Access" />
+  <message msgid="sysfw remote management head" msgstr="Remote management (via WAN)" />
+  <message msgid="sysfw allow" msgstr="Allow" />
+  <message msgid="sysfw deny" msgstr="Deny" />
+  <message msgid="sysfw wanping title" msgstr="Ping from WAN Filter" />
+  <message msgid="sysfw wanping head" msgstr="Ping from WAN" />
+  <message msgid="sysfw wanping deny" msgstr="Deny" />
+  <message msgid="sysfw wanping allow" msgstr="Allow" />
+  <message msgid="sysfw spi title" msgstr="Stateful Packet Inspection (SPI)" />
+  <message msgid="sysfw spi head" msgstr="SPI Firewall" />
+  <message msgid="sysfw apply" msgstr="Apply" />
+  <message msgid="sysfw reset" msgstr="Reset" />
+  
+  <message msgid="alert giving up:cannot create an xmlhttp instance" msgstr="Giving up :(Cannot create an XMLHTTP instance)" />
+  
+  <message msgid="forward alert ip address format error" msgstr="IP address format error." /> 
+  <message msgid="forward alert ip address is empty" msgstr="Error. IP address is empty." />
+  <message msgid="forward alert it should be a 0 to 9 number" msgstr="It should be a [0-9] number." />
+  <message msgid="forward alert ip address range error" msgstr="IP address range error." />
+  <message msgid="forward alert the rule number is exceeded" msgstr="The rule number is exceeded " />
+  <message msgid="forward alert ip address is required" msgstr="IP address is required." /> 
+  <message msgid="forward alert invalid ip address" msgstr="Invalid ip address." /> 
+  <message msgid="forward alert please input fromport" msgstr="Please input Private Port." />
+  <message msgid="forward alert please input toport" msgstr="Please input Public Port." />
+  <message msgid="forward alert invalid port number" msgstr="Invalid port number." /> 
+  <message msgid="forward alert illegal characters are not allowable" msgstr="Illegal characters are not allowable." /> 
+  <message msgid="forward alert the same rule has existed" msgstr="The same rule has existed." /> 
+  
+  <message msgid="port filter alert the rule number is exceeded" msgstr="The rule number is exceeded " />   
+  <message msgid="port filter alert please input any ip or/and port value" msgstr="Please input any IP or/and port value." />
+  <message msgid="port filter alert please fill the mac address in correct format" msgstr="Please fill the MAC Address in correct format! (XX:XX:XX:XX:XX:XX)" /> 
+  <message msgid="port filter alert invalid source port number: from" msgstr="Source PortRange(SPR): Invalid start port number !" /> 
+  <message msgid="port filter alert invalid source port number: to" msgstr="Source PortRange(SPR): Invalid end port number !" /> 
+  <message msgid="port filter alert invalid source port range setting" msgstr="Invalid source port range setting ! Start port number must less than or equal end port number." />
+  <message msgid="port filter alert invalid dest port number: from" msgstr="Dest PortRange(DPR): Invalid start port number !" />
+  <message msgid="port filter alert invalid dest port number: to" msgstr="Dest PortRange(DPR): Invalid end port number !" />
+  <message msgid="port filter alert invalid dest port range setting" msgstr="Invalid dest port range setting ! Start port number must less than or equal end port number." /> 
+  <message msgid="port filter alert please input src or dest from port number" msgstr="Please input Source or Dest start port number."/>
+  <message msgid="port filter alert source ip address format error" msgstr="Source IP address format error." /> 
+  <message msgid="port filter alert dest ip address format error" msgstr="Dest IP address format error." /> 
+  <message msgid="port filter alert the same rule has existed" msgstr="The same rule has existed." /> 
+  <message msgid="port filter alert illegal characters are not allowable" msgstr="Illegal characters are not allowable." /> 
+  <message msgid="port filter alert the action of this rule would be the same with default policy" msgstr="The action of this rule would be the same with default policy." /> 
+  
+  <message msgid="content filter alert please select the rule to be deleted" msgstr="Please select the rule to be deleted." /> 
+  <message msgid="content filter alert the maximum rule count is 32" msgstr="The maximum rule count is 32." /> 
+  <message msgid="content filter alert please enter a url filter" msgstr="Please enter a URL filter." /> 
+  <message msgid="content filter alert please enter a valid url" msgstr="Please enter a valid URL." />
+  <message msgid="content filter alert duplicated url string" msgstr="Duplicated URL string." /> 
+  <message msgid="content filter alert please enter a host filter" msgstr="Please enter a host filter." /> 
+  <message msgid="content filter alert invalid host name" msgstr="Invalid host name." /> 
+  <message msgid="content filter alert duplicated host string" msgstr="Duplicated Host string." /> 
+  
+  <message msgid="dmz alert not set a ip address" msgstr="Not set a ip address." /> 
+  <message msgid="dmz alert ip address format error" msgstr="IP address format error." /> 
+  <message msgid="dmz alert incorrect! ip address is lan ip" msgstr="Incorrect ! IP address cannot be the same with LAN IP !" />    
+</po>

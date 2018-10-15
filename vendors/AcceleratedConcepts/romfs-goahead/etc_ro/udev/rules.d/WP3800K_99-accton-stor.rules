@@ -1,0 +1,20 @@
+#
+# uvar/dev rule for USB storage 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+SUBSYSTEMS=="usb",  OWNER="uucp", GROUP="accton", NAME="%k, MODE="0664"
+ACTION=="add", KERNEL=="sd[a-z][0-9]", OWNER="uucp", GROUP="accton", MODE="0664"
+
+ACTION=="add", KERNEL=="sd[a-z][0-9]", RUN+="/bin/ash -c 'mkdir -p /var/media/%k'" 
+
+###ACTION=="add", KERNEL=="sd[a-z][0-9]", RUN+="/bin/mount -t auto -o iocharset=cp950,rw,noauto,async,noexec,suid,novar/dev,noatime,umask=0000,uid=500,gid=500 /dev/%k /var/media/%k", OPTIONS="last_rule" 
+
+###ACTION=="add", KERNEL=="sd[a-z][0-9]", RUN+="/bin/mount -t auto -o iocharset=utf8,rw,noauto,async,noexec,suid,novar/dev,noatime,umask=0000,uid=500,gid=500 /var/dev/%k /var/media/%k", OPTIONS="last_rule" 
+
+ACTION=="add", KERNEL=="sd[a-z][0-9]", RUN+="/bin/mount -o iocharset=cp950 /var/dev/%k /var/media/%k", OPTIONS="last_rule" 
+
+ACTION=="remove", KERNEL=="sd[a-z][0-9]", RUN+="/bin/ash -c 'umount -f -l /var/media/%k'" 
+
+ACTION=="remove", KERNEL=="sd[a-z][0-9]", RUN+="/bin/ash -c 'rm -rf /var/media/%k'", OPTIONS="last_rule" 
+
+

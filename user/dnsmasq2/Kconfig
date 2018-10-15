@@ -1,0 +1,4 @@
+config USER_DNSMASQ2_DNSMASQ2
+	bool "dnsmasq v2"
+	help
+	  DNS masquerading (v2)

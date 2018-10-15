@@ -1,0 +1,2 @@
+dir_$(CONFIG_LIB_NETFILTER_LOG) += libnetfilter_log
+dep_libnetfilter_log = libnfnetlink libmnl

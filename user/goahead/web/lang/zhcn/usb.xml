@@ -1,0 +1,68 @@
+<po>
+  <message msgid="usb disable" msgstr="停用" />
+  <message msgid="usb enable" msgstr="启用" />
+  <message msgid="usb add" msgstr="新增" />
+  <message msgid="usb edit" msgstr="编辑" />
+  <message msgid="usb del" msgstr="删除" />>
+  <message msgid="usb apply" msgstr="确定" />
+  <message msgid="usb cancel" msgstr="取消" />
+  <message msgid="usb reset" msgstr="重置" />
+
+  <message msgid="storage adm title" msgstr="管理" />
+  <message msgid="storage adm introduction" msgstr="" />
+  <message msgid="storage adm user" msgstr="使用者管理" />
+  <message msgid="storage user name" msgstr="使用者名称" />
+  <message msgid="storage user ftp" msgstr="FTP模式" />
+  <message msgid="storage user smb" msgstr="Samba模式" />
+
+  <message msgid="adduser name" msgstr="使用者名称" />
+  <message msgid="adduser password" msgstr="密码" />
+  <message msgid="adduser ftp" msgstr="Ftp 设定" />
+  <message msgid="adduser mullogins" msgstr="多重登入" />
+  <message msgid="adduser maxlogins" msgstr="最多登入量" />
+  <message msgid="adduser download" msgstr="下载功能" />
+  <message msgid="adduser upload" msgstr="上传功能" />
+  <message msgid="adduser overwrite" msgstr="覆写功能" />
+  <message msgid="adduser erase" msgstr="删除功能" />
+  <message msgid="adduser smb" msgstr="Samba 设定" />
+  
+  <message msgid="ftp title" msgstr="FTP 设定" />
+  <message msgid="ftp introduction" msgstr="" />
+  <message msgid="ftp server setup" msgstr="FTP 伺服器设定" />
+  <message msgid="ftp server enable" msgstr="FTP 伺服器" />
+  <message msgid="ftp server anonymous" msgstr="匿名登入" />
+  <message msgid="ftp server port" msgstr="FTP 埠" />
+  <message msgid="ftp server maxusers" msgstr="最多使用者登入数" />
+  <message msgid="ftp server logintimeout" msgstr="登入时限" />
+  <message msgid="ftp server staytimeout" msgstr="停留时限" />
+  
+  <message msgid="smb title" msgstr="SAMBA 设定" />
+  <message msgid="smb introduction" msgstr="" />
+  <message msgid="smb server setup" msgstr="SAMBA 伺服器设定" />
+  <message msgid="smb server enable" msgstr="SAMBA 伺服器" />
+  <message msgid="smb server workgroup" msgstr="工作群组" />
+  <message msgid="smb server netbios" msgstr="NetBIOS 名称" />
+  <message msgid="smb server dirlist" msgstr="共享目录" />
+  <message msgid="smb server dirname" msgstr="目录名称" />
+  <message msgid="smb server allowuser" msgstr="允许存取的使用者" />
+  <message msgid="smb adddir name" msgstr="目录名称" />
+  <message msgid="smb adddir accessusers" msgstr="存取的使用者" />
+  
+  <message msgid="webcam title" msgstr="网路相机设定" />
+  <message msgid="webcam introduction" msgstr="" />
+  <message msgid="webcam settings" msgstr="网路相机建置" />
+  <message msgid="webcam capability" msgstr="功能" />
+  <message msgid="webcam resolution" msgstr="解析度" />
+  <message msgid="webcam fps" msgstr="每秒页数" />
+  <message msgid="webcam port" msgstr="传输埠" />
+  
+  <message msgid="printer title" msgstr="列印伺服器设定" />
+  <message msgid="printer introduction" msgstr="" />
+  <message msgid="printer settings" msgstr="列印伺服器设定" />
+  <message msgid="printer capability" msgstr="功能" />
+  
+  <message msgid="usbiNIC title" msgstr="USB iNIC 设定" />
+  <message msgid="usbiNIC introduction" msgstr="" />
+  <message msgid="usbiNIC settings" msgstr="USB iNIC 设定" />
+  <message msgid="usbiNIC capability" msgstr="功能" />
+</po>

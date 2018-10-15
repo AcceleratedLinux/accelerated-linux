@@ -1,0 +1,114 @@
+--- nss-3.17.4/nss/coreconf/nsinstall/Makefile.LSW	2015-09-04 12:36:27.133634221 -0400
++++ nss-3.17.4/nss/coreconf/nsinstall/Makefile	2015-09-04 12:54:10.250642888 -0400
+@@ -21,8 +21,12 @@
+ 
+ $(warning NATIVE_CC=$(value NATIVE_CC) $(origin NATIVE_CC))
+ $(warning NATIVE_CFLAGS=$(value NATIVE_CFLAGS) $(origin NATIVE_CFLAGS))
+-$(warning before CC=$(value CC))
+-$(warning before OS_CFLAGS=$(value OS_CFLAGS))
++$(warning NATIVE_LDFLAGS=$(value NATIVE_LDFLAGS) $(origin NATIVE_LDFLAGS))
++$(warning CC=$(value CC))
++$(warning OS_CFLAGS=$(value OS_CFLAGS))
++$(warning OS_LIBS=$(value OS_LIBS))
++
++$(warning munging flags)
+ 
+ ifeq (,$(filter-out OS2 WIN%,$(OS_TARGET)))
+ PROGRAM		=
+@@ -44,14 +48,26 @@
+ LDFLAGS=$(NATIVE_LDFLAGS)
+ endif
+ 
+-$(warning after CC=$(value CC))
+-$(warning after OS_CFLAGS=$(value OS_CFLAGS))
+-$(warning after CFLAGS=$(value CFLAGS))
++$(warning CC=$(value CC))
++$(warning OS_CFLAGS=$(value OS_CFLAGS))
++$(warning CFLAGS=$(value CFLAGS))
++$(warning LDFLAGS=$(value LDFLAGS))
+ 
+ $(warning including $(DEPTH)/coreconf/rules.mk)
+ 
+ include $(DEPTH)/coreconf/rules.mk
+ 
++$(warning CC=$(value CC))
++$(warning OS_CFLAGS=$(value OS_CFLAGS))
++$(warning CFLAGS=$(value CFLAGS))
++$(warning LDFLAGS=$(value LDFLAGS))
++
++$(warning killing OS_LIBS)
++
++OS_LIBS := -g
++
++$(warning OS_LIBS=$(value OS_LIBS))
++
+ # Redefine MAKE_OBJDIR for just this directory
+ define MAKE_OBJDIR
+ if test ! -d $(@D); then rm -rf $(@D); mkdir $(@D); fi
+--- nss-3.17.4/nss/coreconf/uClinux-dist.mk.LSW	2015-09-04 10:52:06.321631447 -0400
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-09-04 12:16:14.169625570 -0400
+@@ -6,12 +6,11 @@
+ 
+ include $(CORE_DEPTH)/coreconf/UNIX.mk
+ OBJDIR_NAME            = uClinux-dist
+-#CC			= gcc
+ CCC			= $(CXX)
+-#RANLIB		= ranlib
+ NATIVE_CC              = $(HOSTCC)
+-NATIVE_FLAGS           =
+-NATIVE_LDFLAGS	       =
++# so not empty
++NATIVE_FLAGS           = -g
++NATIVE_LDFLAGS	       = -g
+ DEFAULT_COMPILER       = $(CC)
+ CPU_ARCH = $(ARCH)
+ ARCHFLAG = $(CPUFLAGS)
+@@ -24,12 +23,13 @@
+ USE_PTHREADS = 1
+ IMPL_STRATEGY = _PTH
+ OS_PTHREAD = -lpthread 
+-DEFINES		+= -D_REENTRANT
++DEFINES += -D_REENTRANT
+ CROSS_COMPILE = 1
+ 
+-OS_CFLAGS		+= $(DSO_CFLAGS) $(OS_REL_CFLAGS) $(ARCHFLAG) -Wall -Werror-implicit-function-declaration -Wno-switch -pipe -ffunction-sections -fdata-sections -DLINUX -Dlinux -DHAVE_STRERROR
+-OS_CFLAGS += -Wl,--got=multigot
+-OS_LIBS		= $(OS_PTHREAD) -lc
++# Grab what ever is in the environment :-/
++OS_CFLAGS += -DHAVE_STRERROR
++# -Wl,--got=multigot needed?
++OS_LIBS = $(OS_PTHREAD) -lc -Wl,--got=multigot
+ 
+ ARCH			= linux
+ 
+@@ -42,15 +42,6 @@
+ DSO_LDOPTS		+= $(if $(findstring 2.11.90.0.8,$(shell ld -v)),,$(ZDEFS_FLAG))
+ LDFLAGS			+= $(ARCHFLAG)
+ 
+-# On Maemo, we need to use the -rpath-link flag for even the standard system
+-# library directories.
+-ifdef _SBOX_DIR
+-LDFLAGS			+= -Wl,-rpath-link,/usr/lib:/lib
+-endif
+-
+-# INCLUDES += -I/usr/include -Y/usr/include/linux
+-G++INCLUDES		= -I/usr/include/g++
+-
+ #
+ # Always set CPU_TAG on Linux.
+ #
+@@ -61,14 +52,8 @@
+ # dependencies by default.  Set FREEBL_NO_DEPEND to 0 in the environment to
+ # override this.
+ #
+-ifneq ($(OS_TARGET),Android)
+-ifeq (2.6,$(firstword $(sort 2.6 $(OS_RELEASE))))
+-ifndef FREEBL_NO_DEPEND
+ FREEBL_NO_DEPEND = 1
+ FREEBL_LOWHASH = 1
+-endif
+-endif
+-endif
+ 
+ USE_SYSTEM_ZLIB = 1
+ ZLIB_LIBS = -lz

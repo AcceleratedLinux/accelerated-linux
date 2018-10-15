@@ -1,0 +1,20 @@
+--- tcpreplay-4.2.5/src/config.h.in	2017-05-09 00:26:51.000000000 +1000
++++ tcpreplay-4.2.5/src/config.h.in2	2018-05-14 13:26:55.887046147 +1000
+@@ -748,7 +748,7 @@
+ #undef int8_t
+ 
+ /* Define to rpl_malloc if the replacement function should be used. */
+-#undef malloc
++//#undef malloc
+ 
+ /* Define to `long int' if <sys/types.h> does not define. */
+ #undef off_t
+@@ -757,7 +757,7 @@
+ #undef pid_t
+ 
+ /* Define to rpl_realloc if the replacement function should be used. */
+-#undef realloc
++//#undef realloc
+ 
+ /* Define to `unsigned int' if <sys/types.h> does not define. */
+ #undef size_t

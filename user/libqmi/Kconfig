@@ -1,0 +1,23 @@
+
+config USER_LIBQMI
+	bool 'libqmi'
+	help
+	  QMI library
+
+config USER_LIBQMI_QMICLI
+	bool 'qmicli'
+	depends on USER_LIBQMI
+	help
+	  The qmicli command
+
+config USER_LIBQMI_QMI_NETWORK
+	bool 'qmi-network'
+	depends on USER_LIBQMI
+	help
+	  The qmi-network command
+
+config USER_LIBQMI_QMI_FIRMWARE_UPDATE
+	bool 'qmi-firmware-update'
+	depends on USER_LIBQMI
+	help
+	  The qmi-firmware-update command

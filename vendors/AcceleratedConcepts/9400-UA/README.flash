@@ -1,0 +1,41 @@
+
+9400-UA FLASH
+-------------
+
+We can program the BIOS flash of the 9400-UA in-circuit using a specially
+modified SG580 SPI programmer(*).
+
+To program the flash connect the SG580 SPI programmer header to the 4-pin
+flash programming header (CON5) on the 9400-UA. Be sure to get pin 1 (with
+the dot) lined up and at the right end.
+
+Power up both boards. The SG580 will do a typical boot and you end up at
+a shell prompt. You can dump the current contents of the flash using a
+command like:
+
+  dd if=/dev/spi of=/tmp/boot.bin
+
+Of course you can visually inspect it on the console too:
+
+  hd -b /dev/spi | more
+
+To program the flash firstly copy the binary file you want to load into
+the flash onto the SG580 SPI prgrammer. Typically something like:
+
+  scp 192.168.0.22:coreboot.rom /tmp/
+
+Then to program that into the flash do:
+
+  dd if=/tmp/coreboot.rom of=/dev/spi bs=4194304
+
+It will give some nice console trace to let you know how it is progressing.
+It generally takes a minute or 2 to program a 4Mb flash. Note that the
+program step needs to supply the image as a single write() - so that is
+why the "bs" is set to the full 4Mb (4194304) image size.
+
+
+
+(*) The SG580 SPI programmer is a modified SG580 unit that has the SPI
+    signals derived from LED lines. It runs modified firmware that is the
+    base SG580 with the "snapspi" driver enabled. That driver is in our
+    linux tree as drivers/char/snapspi.c.

@@ -1,0 +1,5 @@
+config USER_AIRCRACK_NG
+	bool "aircrack-ng"
+	select LIB_INSTALL_LIBSTDCPLUS
+	help
+		aircrack-ng is a complete suite of tools to assess WiFi network security.

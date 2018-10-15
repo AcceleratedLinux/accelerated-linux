@@ -1,0 +1,31 @@
+For moment, when no fork() replace the call with a barf.
+Should, perhaps, eventually look at changing the code to
+be vfork proof.
+
+--- nspr-4.11/nspr/configure.in.LSW	2015-12-04 12:22:02.942504176 -0500
++++ nspr-4.11/nspr/configure.in	2015-12-04 12:23:32.594522058 -0500
+@@ -2540,7 +2540,7 @@
+ AC_PROG_GCC_TRADITIONAL
+ _SAVE_LIBS="$LIBS"
+ LIBS="$LIBS $OS_LIBS"
+-AC_CHECK_FUNCS(dladdr gettid lchown setpriority strerror syscall)
++AC_CHECK_FUNCS(dladdr gettid lchown setpriority strerror syscall fork)
+ LIBS="$_SAVE_LIBS"
+ 
+ dnl ========================================================
+--- nspr-4.11/nspr/pr/src/md/unix/uxproces.c.LSW	2015-12-04 12:21:59.453465794 -0500
++++ nspr-4.11/nspr/pr/src/md/unix/uxproces.c	2015-12-04 12:25:52.282503511 -0500
+@@ -237,8 +237,12 @@
+         if (fd_map[2] != 2)
+             close(fd_map[2]);
+     }
+-#else
++#elif defined(HAVE_FORK)
+     process->md.pid = fork();
++#else
++    /* XXX: code that follows isn't exactly vfork() proof so just fail.  */
++    fprintf(stderr, "XXX: barfing fork() call\n");
++    process->md.pid = -1;
+ #endif
+     if ((pid_t) -1 == process->md.pid) {
+         PR_SetError(PR_INSUFFICIENT_RESOURCES_ERROR, errno);

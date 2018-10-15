@@ -1,0 +1,18 @@
+--- libreswan-3.12/programs/pluto/pluto_crypt.c.LSW	2015-08-24 21:08:59.771770843 -0400
++++ libreswan-3.12/programs/pluto/pluto_crypt.c	2015-08-24 21:09:24.919803430 -0400
+@@ -220,6 +220,7 @@
+ 	struct pluto_crypto_req req;
+ 
+ 	/* OS X does not have pthread_setschedprio */
++#if 0
+ #if !(defined(macintosh) || (defined(__MACH__) && defined(__APPLE__)))
+ 	int status = pthread_setschedprio(pthread_self(), 10);
+ 
+@@ -227,6 +228,7 @@
+ 	    DBG_log("status value returned by setting the priority of this thread (crypto helper %d) %d",
+ 		    helpernum, status));
+ #endif
++#endif
+ 
+ 	DBG(DBG_CONTROL, DBG_log("crypto helper %d waiting on fd %d",
+ 				 helpernum, fileno(in)));

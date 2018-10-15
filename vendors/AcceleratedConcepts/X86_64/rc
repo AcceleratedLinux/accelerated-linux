@@ -1,0 +1,49 @@
+hostname X86
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=32M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+# init devices before we need any
+cp -ra /lib/udev/devices/. /dev
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+
+echo "Mounting config filesystem ..."
+echo "Using tmpfs for /etc/config."
+mount -t tmpfs -o size=4M tmpfs /etc/config
+
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
+	[ -f /etc/config/.init2 ] && filter='$'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+cat /etc/inittab.d/* > /etc/inittab
+
+# do the rc script processing
+#actiond &
+
+cat /etc/motd
+
+exit 0

@@ -1,0 +1,9 @@
+--- nss-3.17.4/Makefile.LSW	2015-09-04 17:22:44.609635678 -0400
++++ nss-3.17.4/Makefile	2015-09-04 17:22:56.205725245 -0400
+@@ -1,5 +1,5 @@
+ 
+-OS_CFLAGS := $(filter-out -fPIC,$(patsubst -O2,-Os,$(CFLAGS)))
++OS_CFLAGS := $(filter-out -fPIC,$(patsubst -O2,-Os,$(CFLAGS))) -mxgot
+ export OS_CFLAGS
+ $(warning copying CFLAGS to OS_CFLAGS=$(value OS_CFLAGS))
+ 

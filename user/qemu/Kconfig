@@ -1,0 +1,342 @@
+
+config USER_QEMU
+	bool 'QEMU system emulator'
+	help
+	  QEMU is a system emulator. You may want it for KVM.
+
+config USER_QEMU_AARCH64_SOFTMMU
+	bool 'QEMU target aarch64-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target aarch64-softmmu.
+
+config USER_QEMU_AARCH64_LINUX_USER
+	bool 'QEMU target aarch64-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target aarch64-linux-user.
+
+config USER_QEMU_ALPHA_SOFTMMU
+	bool 'QEMU target alpha-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target alpha-softmmu.
+
+config USER_QEMU_ALPHA_LINUX_USER
+	bool 'QEMU target alpha-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target alpha-linux-user.
+
+config USER_QEMU_ARM_SOFTMMU
+	bool 'QEMU target arm-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target arm-softmmu.
+
+config USER_QEMU_ARM_LINUX_USER
+	bool 'QEMU target arm-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target arm-linux-user.
+
+config USER_QEMU_ARMEB_LINUX_USER
+	bool 'QEMU target armeb-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target armeb-linux-user.
+
+config USER_QEMU_CRIS_SOFTMMU
+	bool 'QEMU target cris-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target cris-softmmu.
+
+config USER_QEMU_CRIS_LINUX_USER
+	bool 'QEMU target cris-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target cris-linux-user.
+
+config USER_QEMU_I386_SOFTMMU
+	bool 'QEMU target i386-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target i386-softmmu.
+
+config USER_QEMU_I386_LINUX_USER
+	bool 'QEMU target i386-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target i386-linux-user.
+
+config USER_QEMU_LM32_SOFTMMU
+	bool 'QEMU target lm32-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target lm32-softmmu.
+
+config USER_QEMU_M68K_SOFTMMU
+	bool 'QEMU target m68k-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target m68k-softmmu.
+
+config USER_QEMU_M68K_LINUX_USER
+	bool 'QEMU target m68k-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target m68k-linux-user.
+
+config USER_QEMU_MICROBLAZE_SOFTMMU
+	bool 'QEMU target microblaze-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target microblaze-softmmu.
+
+config USER_QEMU_MICROBLAZE_LINUX_USER
+	bool 'QEMU target microblaze-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target microblaze-linux-user.
+
+config USER_QEMU_MICROBLAZEEL_SOFTMMU
+	bool 'QEMU target microblazeel-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target microblazeel-softmmu.
+
+config USER_QEMU_MICROBLAZEEL_INUX_USER
+	bool 'QEMU target microblazeel-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target microblazeel-linux-user.
+
+config USER_QEMU_MIPS_SOFTMMU
+	bool 'QEMU target mips-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mips-softmmu.
+
+config USER_QEMU_MIPS_LINUX_USER
+	bool 'QEMU target mips-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mips-linux-user.
+
+config USER_QEMU_MIPSEL_SOFTMMU
+	bool 'QEMU target mipsel-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mipsel-softmmu.
+
+config USER_QEMU_MIPSEL_LINUX_USER
+	bool 'QEMU target mipsel-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mipsel-linux-user.
+
+config USER_QEMU_MIPSN32_LINUX_USER
+	bool 'QEMU target mipsn32-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mipsn32-linux-user.
+
+config USER_QEMU_MIPSN32EL_LINUX_USER
+	bool 'QEMU target mipsn32el-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mipsn32el-linux-user.
+
+config USER_QEMU_MIPS64_SOFTMMU
+	bool 'QEMU target mips64-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mips64-softmmu.
+
+config USER_QEMU_MIPS64_LINUX_USER
+	bool 'QEMU target mips64-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mips64-linux-user.
+
+config USER_QEMU_MIPS64EL_SOFTMMU
+	bool 'QEMU target mips64el-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mips64el-softmmu.
+
+config USER_QEMU_MIPS64EL_LINUX_USER
+	bool 'QEMU target mips64el-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target mips64el-linux-user.
+
+config USER_QEMU_MOXIE_SOFTMMU
+	bool 'QEMU target moxie-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target moxie-softmmu.
+
+config USER_QEMU_OR32_SOFTMMU
+	bool 'QEMU target or32-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target or32-softmmu.
+
+config USER_QEMU_OR32_LINUX_USER
+	bool 'QEMU target or32-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target or32-linux-user.
+
+config USER_QEMU_PPC_SOFTMMU
+	bool 'QEMU target ppc-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppc-softmmu.
+
+config USER_QEMU_PPC_LINUX_USER
+	bool 'QEMU target ppc-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppc-linux-user.
+
+config USER_QEMU_PPCEMB_SOFTMMU
+	bool 'QEMU target ppcemb-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppcemb-softmmu.
+
+config USER_QEMU_PPC64_SOFTMMU
+	bool 'QEMU target ppc64-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppc64-softmmu.
+
+config USER_QEMU_PPC64_LINUX_USER
+	bool 'QEMU target ppc64-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppc64-linux-user.
+
+config USER_QEMU_PPC64ABI32_LINUX_USER
+	bool 'QEMU target ppc64abi32-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppc64abi32-linux-user.
+
+config USER_QEMU_PPC64LE_LINUX_USER
+	bool 'QEMU target ppc64le-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target ppc64le-linux-user.
+
+config USER_QEMU_S390X_SOFTMMU
+	bool 'QEMU target s390x-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target s390x-softmmu.
+
+config USER_QEMU_S390X_LINUX_USER
+	bool 'QEMU target s390x-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target s390x-linux-user.
+
+config USER_QEMU_SH4_SOFTMMU
+	bool 'QEMU target sh4-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sh4-softmmu.
+
+config USER_QEMU_SH4_LINUX_USER
+	bool 'QEMU target sh4-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sh4-linux-user.
+
+config USER_QEMU_SH4EB_SOFTMMU
+	bool 'QEMU target sh4eb-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sh4eb-softmmu.
+
+config USER_QEMU_SH4EB_LINUX_USER
+	bool 'QEMU target sh4eb-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sh4eb-linux-user.
+
+config USER_QEMU_SPARC_SOFTMMU
+	bool 'QEMU target sparc-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sparc-softmmu.
+
+config USER_QEMU_SPARC_LINUX_USER
+	bool 'QEMU target sparc-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sparc-linux-user.
+
+config USER_QEMU_SPARC32PLUS_LINUX_USER
+	bool 'QEMU target sparc32plus-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sparc32plus-linux-user.
+
+config USER_QEMU_SPARC64_SOFTMMU
+	bool 'QEMU target sparc64-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sparc64-softmmu.
+
+config USER_QEMU_SPARC64_LINUX_USER
+	bool 'QEMU target sparc64-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target sparc64-linux-user.
+
+config USER_QEMU_TRICORE_SOFTMMU
+	bool 'QEMU target tricore-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target tricore-softmmu.
+
+config USER_QEMU_UNICORE32_SOFTMMU
+	bool 'QEMU target unicore32-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target unicore32-softmmu.
+
+config USER_QEMU_UNICORE32_LINUX_USER
+	bool 'QEMU target unicore32-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target unicore32-linux-user.
+
+config USER_QEMU_X86_64_SOFTMMU
+	bool 'QEMU target x86_64-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target x86_64-softmmu.
+
+config USER_QEMU_X86_64_LINUX_USER
+	bool 'QEMU target x86_64-linux-user'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target x86_64-linux-user.
+
+config USER_QEMU_XTENSA_SOFTMMU
+	bool 'QEMU target xtensa-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target xtensa-softmmu.
+
+config USER_QEMU_XTENSAEB_SOFTMMU
+	bool 'QEMU target xtensaeb-softmmu'
+	depends on USER_QEMU
+	help
+	  Build the QEMU system target xtensaeb-softmmu.
+

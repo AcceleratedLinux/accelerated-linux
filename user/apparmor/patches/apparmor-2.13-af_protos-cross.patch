@@ -1,0 +1,22 @@
+--- apparmor-2.13/libraries/libapparmor/src/Makefile.am.save	2018-05-22 10:07:49.268744460 +1000
++++ apparmor-2.13/libraries/libapparmor/src/Makefile.am	2018-05-22 10:08:38.408745526 +1000
+@@ -42,7 +42,7 @@
+ 
+ scanner.c: scanner.l
+ 
+-af_protos.h: /usr/include/netinet/in.h
++af_protos.h: $(shell echo '#include <netinet/in.h>' | $(CC) $(CFLAGS) -E -M - | tr ' ' '\n' | grep netinet/in.h | head -1)
+ 	 LC_ALL=C  sed  -n -e "/IPPROTO_MAX/d"  -e "s/^\#define[ \\t]\\+IPPROTO_\\([A-Z0-9_]\\+\\)\\(.*\\)$$/AA_GEN_PROTO_ENT(\\UIPPROTO_\\1, \"\\L\\1\")/p" $< > $@
+ 
+ lib_LTLIBRARIES = libapparmor.la
+--- apparmor-2.13/libraries/libapparmor/src/Makefile.in.save	2018-05-22 10:09:29.632746638 +1000
++++ apparmor-2.13/libraries/libapparmor/src/Makefile.in	2018-05-22 10:09:34.808746750 +1000
+@@ -1182,7 +1182,7 @@
+ 
+ scanner.c: scanner.l
+ 
+-af_protos.h: /usr/include/netinet/in.h
++af_protos.h: $(shell echo '#include <netinet/in.h>' | $(CC) $(CFLAGS) -E -M - | tr ' ' '\n' | grep netinet/in.h | head -1)
+ 	 LC_ALL=C  sed  -n -e "/IPPROTO_MAX/d"  -e "s/^\#define[ \\t]\\+IPPROTO_\\([A-Z0-9_]\\+\\)\\(.*\\)$$/AA_GEN_PROTO_ENT(\\UIPPROTO_\\1, \"\\L\\1\")/p" $< > $@
+ 
+ %.pc: %.pc.in $(top_builddir)/config.status

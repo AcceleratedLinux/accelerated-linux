@@ -1,0 +1,104 @@
+#!/bin/sh
+
+#
+# Globals
+#
+ifs=0
+if_started=0
+tcpprep_cmd="--auto=first"
+unset src dst file intf cachefile files servers replay_line
+uuid=$(cat /proc/sys/kernel/random/uuid)
+
+usage() {
+	echo "Usage: $0 <[primary|secondary]=iface> <file=pcap_file> [src=source_ip[,mac_address]] [dst=dest_ip[,mac_address]]"
+	echo
+	echo "     : eg. $0 primary=wan file=reply src=10.1.1.2 secondary=lan src=192.168.1.2,01:02:03:04:05:06 file=request"
+	echo
+	echo "     : Note that primary refers to the interface which talks to the server and secondary is the client."
+	echo "     : If both are on the same interface, just use the primary."
+	exit 1
+}
+
+quit() {
+	echo "Error: $1"
+	exit 1
+}
+
+unspace() {
+	echo ${1# }
+}
+
+#
+# generate a tcprewrite command to take the original dump, modify the src/dest and
+# copy it to /tmp
+#
+do_tcprewrite() {
+	[ -z "$intf" -o -z "$file" ] && usage
+	cmd="tcprewrite"
+
+	[ -n "$src" ] && cmd="$cmd -S 0.0.0.0/0:${src%,*}"
+	[ -n "$dst" ] && cmd="$cmd -D 0.0.0.0/0:${dst%,*}"
+	[ "${src#*,}" != "${src}" ] && cmd="$cmd --enet-smac=${src#*,}"
+	[ "${dst#*,}" != "${dst}" ] && cmd="$cmd --enet-dmac=${dst#*,}"
+	[ -n "$file" ] && cmd="$cmd --infile $file --outfile /tmp/$(basename $file)_$uuid"
+	$cmd &> /dev/null || quit "Can't process $file"
+
+	[ "${intf#--intf2}" = "$intf" -a -n "$src" ] && tcpprep_cmd="--cidr=${src%,*}/32"
+
+	replay_line=$(unspace "$replay_line $intf")
+	files=$(unspace "$files /tmp/$(basename $file)_$uuid")
+	unset src dst file intf
+	if_started=0
+}
+
+#
+# Process args. TODO: fix out of order args
+#
+while [ -n "$1" ]
+do
+	case "$1" in
+		primary=*)
+			[ $if_started -eq 1 ] && do_tcprewrite
+			intf="--intf1=${1#*=}"
+			if_started=1
+			;;
+		secondary=*)
+			[ $if_started -eq 1 ] && do_tcprewrite
+			ifs=1
+			intf="--intf2=${1#*=}"
+			if_started=1
+			;;
+		src=*)
+			src=${1#*=}
+			;;
+		dst=*)
+			dst=${1#*=}
+			;;
+		file=*)
+			file=${1#*=}
+			;;
+		*)
+			usage
+	esac	
+
+	shift
+done
+
+# the last interface hasn't been done yet
+[ $if_started -ne 0 ] && do_tcprewrite
+[ -z "$replay_line" ] && usage
+
+# Are we a dual interface setup (ie primary and secondary)
+if [ $ifs -eq 1 ]
+then
+	mergecap $files /tmp/merged.dump_$uuid || quit "Can't merge dump files"
+	tcprewrite --fixcsum --infile /tmp/merged.dump_$uuid --outfile /tmp/merged.pcap_$uuid || quit "Can't update checksum"
+	tcpprep $tcpprep_cmd --cachefile=/tmp/in.cache_$uuid --pcap=/tmp/merged.pcap_$uuid || quit "Can't order the interfaces"
+	cachefile="--cachefile=/tmp/in.cache_$uuid"
+else
+	tcprewrite --fixcsum --infile $files --outfile /tmp/merged.pcap_$uuid || quit "Can't update checksum"
+fi
+
+# replay the packets
+tcpreplay $replay_line $cachefile /tmp/merged.pcap_$uuid || quit "Can't replay data"
+rm /tmp/*_$uuid

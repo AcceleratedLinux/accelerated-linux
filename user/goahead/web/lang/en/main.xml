@@ -1,0 +1,97 @@
+<po>
+  <message msgid="main disable" msgstr="Disable" />
+  <message msgid="main enable" msgstr="Enable" />
+  <message msgid="main apply" msgstr="Apply" />
+  <message msgid="main cancel" msgstr="Cancel" />
+  
+  <message msgid="waitStatus1" msgstr="Saving ..." />
+  <message msgid="waitStatus2" msgstr="Please wait a moment ...." />
+  <message msgid="overview corp" msgstr="Accelecon " />
+  
+  <message msgid="overview introduction" msgstr="AWB" />
+  <message msgid="overview select language" msgstr="Select Language" />
+  <message msgid="overview status link" msgstr="Status" />
+  <message msgid="overview statistic link" msgstr="Statistic" />
+  <message msgid="overview management link" msgstr="Management" />
+  <message msgid="treeapp openall" msgstr="open all" />
+  <message msgid="treeapp closeall" msgstr="close all" />
+  <message msgid="treeapp ralink" msgstr="AWB" />
+  <message msgid="treeapp wizard list" msgstr="Wizard" />
+  <message msgid="treeapp setup wizard" msgstr="Setup Wizard" />
+  <message msgid="treeapp enter setup wizard" msgstr="Enter Setup Wizard" />
+  <message msgid="treeapp welcome messageA" msgstr="Welcome to the " />
+  <message msgid="treeapp welcome messageB" msgstr=" Home Page" />
+  <message msgid="treeapp welcome message" msgstr="Welcome to the SMCWBR11-3GN Home Page." />
+  <message msgid="treeapp usage message1" msgstr="If you wish to directly configure or view the status of this device," />
+  <message msgid="treeapp usage message2" msgstr="please use the menu bar located above." />
+  <message msgid="treeapp usage message3" msgstr="For basic configuration to get started, enter Setup Wizard." />
+  <message msgid="treeapp operation mode" msgstr="Operation Mode" />
+  <message msgid="treeapp internet settings" msgstr="Network Settings" />
+  <message msgid="treeapp wan" msgstr="WAN" />
+  <message msgid="treeapp lan" msgstr="LAN" />
+  <message msgid="treeapp dhcp clients" msgstr="DHCP Clients" />
+  <message msgid="treeapp vpn passthrough" msgstr="VPN Passthrough" />
+  <message msgid="treeapp routing" msgstr="Advanced Routing" />
+  <message msgid="treeapp wireless settings" msgstr="Wireless Settings" />
+  <message msgid="treeapp inic settings" msgstr="I-NIC Settings" />
+  <message msgid="treeapp legacy settings" msgstr="Legacy Settings" />
+  <message msgid="treeapp profile" msgstr="Profile" />
+  <message msgid="treeapp link status" msgstr="Link Status" />
+  <message msgid="treeapp site survey" msgstr="Site Survey" />
+  <message msgid="treeapp statistics" msgstr="Statistics" />
+  <message msgid="treeapp advance" msgstr="Advance" />
+  <message msgid="treeapp qos" msgstr="QoS" />
+  <message msgid="treeapp 11n configurations" msgstr="11n Configurations" />
+  <message msgid="treeapp about" msgstr="About" />
+  <message msgid="treeapp wds" msgstr="WDS" />
+  <message msgid="treeapp wps" msgstr="WPS" />
+  <message msgid="treeapp basic" msgstr="Basic" />
+  <message msgid="treeapp advanced" msgstr="Advanced" />
+  <message msgid="treeapp security" msgstr="Security" />
+  <message msgid="treeapp ap client" msgstr="AP Client" />
+  <message msgid="treeapp station list" msgstr="Station List" />
+  <message msgid="treeapp mesh settings" msgstr="Mesh Settings" />
+  <message msgid="treeapp firewall" msgstr="Firewall" />
+  <message msgid="treeapp ip/port filtering" msgstr="MAC/IP/Port Filtering" />
+  <message msgid="treeapp port forwarding" msgstr="Virtual Server" />
+  <message msgid="treeapp dmz" msgstr="DMZ" />
+  <message msgid="treeapp content filtering" msgstr="Content Filtering" />
+  <message msgid="treeapp administration" msgstr="Administration" />
+  <message msgid="treeapp management" msgstr="Management" />
+  <message msgid="treeapp upload firmware" msgstr="Firmware upgrade" />
+  <message msgid="treeapp settings management" msgstr="Configuration" />
+  <message msgid="treeapp status" msgstr="System Status" />
+  <message msgid="treeapp system command" msgstr="System Command" />
+  <message msgid="treeapp system log" msgstr="System Log" />
+  <message msgid="treeapp 3g budget status" msgstr="3G Budget Status" />
+  <message msgid="treeapp sdk history" msgstr="SDK History" />
+  <message msgid="treeapp system firewall" msgstr="System Security" />
+
+  <message msgid="treeapp usb" msgstr="USB App." />
+  <message msgid="treeapp storage" msgstr="Storage" />
+  <message msgid="treeapp useradmin" msgstr="User Admin" />
+  <message msgid="treeapp ftpsrv" msgstr="FTP Server" />
+  <message msgid="treeapp sambasrv" msgstr="SAMBA Server" />
+  <message msgid="treeapp mediasrv" msgstr="MEDIA Server" />
+  <message msgid="treeapp webcam" msgstr="Web Camera" />
+  <message msgid="treeapp disk" msgstr="Disk" />
+  <message msgid="treeapp printersrv" msgstr="Printer Server" />
+  <message msgid="treeapp usbinic" msgstr="USB iNIC" />
+  
+  <message msgid="opmode title" msgstr="Operation Mode Configuration" />
+  <message msgid="opmode introduction" msgstr="The Operation Mode of the NetReach is always Bridge." />
+  <message msgid="opmode mode b" msgstr="Bridge" />
+  <message msgid="opmode mode b intro" msgstr="Is an access point mode that gives wireless clients transparent access to the LAN subnet." />
+  <message msgid="opmode mode g" msgstr="Router" />
+  <message msgid="opmode mode g intro" msgstr="Connects a wired LAN and wireless clients to an Internet access device, such as a cable or DSL modem." />
+  <message msgid="opmode mode e" msgstr="Ethernet Converter" />
+  <message msgid="opmode mode e intro" msgstr="The wireless interface is treated as WAN port, and the ethernet ports are LAN ports." />
+  <message msgid="opmode mode a" msgstr="AP Client" />
+  <message msgid="opmode mode wisp" msgstr="WISP" />
+  <message msgid="opmode mode a intro" msgstr="The wireless apcli interface is treated as WAN port, and the wireless ap interface and the ethernet ports are LAN ports." />
+  <message msgid="opmode nat" msgstr="NAT Enabled" />
+  <message msgid="opmode eth conv" msgstr="Ethernet Converter Enabled" />
+  
+  <message msgid="Wizard Success" msgstr="Wizard-Success" />
+</po>
+

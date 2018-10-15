@@ -1,0 +1,19 @@
+
+On the Novatel u620l, +CGMR and we do not get to do the +GMR, so
+do the +GMR first,  hopefully this doesn't break other modems.
+The Novatel u620l does this with a lot of AT commands unfortunately.
+
+diff --git a/src/mm-broadband-modem.c b/src/mm-broadband-modem.c
+index 611a80a..3a37ef5 100644
+--- a/src/mm-broadband-modem.c
++++ b/src/mm-broadband-modem.c
+@@ -837,8 +837,8 @@ modem_load_revision_finish (MMIfaceModem *self,
+ }
+ 
+ static const MMBaseModemAtCommand revisions[] = {
+-    { "+CGMR",  3, TRUE, response_processor_string_ignore_at_errors },
+     { "+GMR",   3, TRUE, response_processor_string_ignore_at_errors },
++    { "+CGMR",  3, TRUE, response_processor_string_ignore_at_errors },
+     { NULL }
+ };
+ 

@@ -1,0 +1,12 @@
+diff -Nuar gandro-input-event-daemon-13f4d61.orig/Makefile gandro-input-event-daemon-13f4d61/Makefile
+--- gandro-input-event-daemon-13f4d61.orig/Makefile	2010-03-20 21:53:49.000000000 +1000
++++ gandro-input-event-daemon-13f4d61/Makefile	2014-02-24 12:02:41.558267969 +1000
+@@ -3,7 +3,7 @@
+ input-event-daemon: input-event-daemon.c input-event-daemon.h input-event-table.h
+ 	$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
+ 
+-input-event-table.h: /usr/include/linux/input.h
++input-event-table.h: $(STAGEDIR)/include/linux/input-event-codes.h
+ 	awk -f parse_input_h.awk < $< > $@
+ 
+ docs/input-event-daemon.8: docs/input-event-daemon.txt

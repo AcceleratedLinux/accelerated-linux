@@ -1,0 +1,24 @@
+--- libtirpc-1.0.3/configure.ac.org	2018-09-12 23:50:23.918726442 +1000
++++ libtirpc-1.0.3/configure.ac	2018-09-12 23:51:01.044873842 +1000
+@@ -72,7 +72,8 @@
+ case $build_os in
+      linux*)
+          # Do something specific for linux
+-         LDFLAG_NOUNDEFINED="-Wl,--no-undefined"
++         #LDFLAG_NOUNDEFINED="-Wl,--no-undefined"
++	 LDFLAG_NOUNDEFINED=""
+          AC_SUBST(LDFLAG_NOUNDEFINED)
+          ;;
+      *)
+--- libtirpc-1.0.3/src/Makefile.am.org	2018-09-12 23:54:45.195398685 +1000
++++ libtirpc-1.0.3/src/Makefile.am	2018-09-12 23:55:04.116310417 +1000
+@@ -12,7 +12,8 @@
+ 
+ lib_LTLIBRARIES = libtirpc.la
+ 
+-libtirpc_la_LDFLAGS = @LDFLAG_NOUNDEFINED@ -no-undefined -lpthread
++#libtirpc_la_LDFLAGS = @LDFLAG_NOUNDEFINED@ -no-undefined -lpthread
++libtirpc_la_LDFLAGS = @LDFLAG_NOUNDEFINED@ -lpthread
+ libtirpc_la_LDFLAGS += -version-info @LT_VERSION_INFO@
+ 
+ libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c \

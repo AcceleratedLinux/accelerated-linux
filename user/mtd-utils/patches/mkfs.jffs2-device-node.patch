@@ -1,0 +1,40 @@
+--- mtd-utils/jffsX-utils/mkfs.jffs2.c.org	2018-09-27 15:51:35.792035820 +1000
++++ mtd-utils/jffsX-utils/mkfs.jffs2.c	2018-09-27 15:53:19.794823462 +1000
+@@ -338,6 +338,37 @@
+ 		if (lstat(hpath, &sb)) {
+ 			sys_errmsg_die("%s", hpath);
+ 		}
++
++		if (((sb.st_mode & S_IFMT) == S_IFREG) && (sb.st_size == 0)) {
++			char devname[32];
++			char type;
++			int major;
++			int minor;
++
++			if (sscanf(dp->d_name, "@%31[-a-zA-Z0-9_+],%c,%d,%d", devname, &type, &major, &minor) == 4) {
++				strcpy(dp->d_name, devname);
++				sb.st_rdev = makedev(major, minor);
++				sb.st_mode &= ~S_IFMT;
++				switch (type) {
++				case 'c':
++				case 'u':
++					sb.st_mode |= S_IFCHR;
++					break;
++				case 'b':
++					sb.st_mode |= S_IFBLK;
++					break;
++				case 'p':
++					sb.st_mode |= S_IFIFO;
++					break;
++				default:
++					errmsg("%s: invalid special device type '%c'", dp->d_name, type);
++					
++					break;
++				}
++				xasprintf(&hpath, "%s/%s", hostpath, dp->d_name);
++			}
++		}
++
+ 		if (strcmp(targetpath, "/") == 0) {
+ 			xasprintf(&tpath, "%s%s", targetpath, dp->d_name);
+ 		} else {

@@ -1,0 +1,11 @@
+--- i2c-tools-3-1-0/Makefile.org	2016-05-04 09:53:44.753290578 +1000
++++ i2c-tools-3-1-0/Makefile	2016-05-04 09:53:53.889290725 +1000
+@@ -8,7 +8,7 @@
+ # (at your option) any later version.
+ 
+ DESTDIR	=
+-prefix	= /usr/local
++prefix	= /usr
+ bindir	= $(prefix)/bin
+ sbindir	= $(prefix)/sbin
+ mandir	= $(prefix)/share/man

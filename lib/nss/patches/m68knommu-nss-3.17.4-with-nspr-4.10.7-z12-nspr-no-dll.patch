@@ -1,0 +1,13 @@
+--- nss-3.17.4/nspr/pr/include/md/_linux.h.LSW	2015-08-24 21:38:10.759758091 -0400
++++ nss-3.17.4/nspr/pr/include/md/_linux.h	2015-08-24 21:38:41.755796779 -0400
+@@ -74,8 +74,8 @@
+ /*
+  * Elf linux supports dl* functions
+  */
+-#define HAVE_DLL
+-#define USE_DLFCN
++// #define HAVE_DLL
++// #define USE_DLFCN
+ #if defined(ANDROID)
+ #define NO_DLOPEN_NULL
+ #endif

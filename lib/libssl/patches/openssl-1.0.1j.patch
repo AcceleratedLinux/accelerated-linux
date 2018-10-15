@@ -1,0 +1,24 @@
+--- openssl-1.0.1j/Configure.orig	2014-11-27 10:35:56.209622963 +1000
++++ openssl-1.0.1j/Configure	2014-11-27 10:35:58.209513563 +1000
+@@ -612,8 +612,8 @@
+ "tandem-c89","c89:-Ww -D__TANDEM -D_XOPEN_SOURCE -D_XOPEN_SOURCE_EXTENDED=1 -D_TANDEM_SOURCE -DB_ENDIAN::(unknown):::THIRTY_TWO_BIT:::",
+ 
+ # uClinux
+-"uClinux-dist","$ENV{'CC'}:\$(CFLAGS)::-D_REENTRANT::\$(LDFLAGS) \$(LDLIBS):BN_LLONG:${no_asm}:$ENV{'LIBSSL_dlfcn'}:linux-shared:-fPIC:-shared:.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR):$ENV{'RANLIB'}::",
+-"uClinux-dist64","$ENV{'CC'}:\$(CFLAGS)::-D_REENTRANT::\$(LDFLAGS) \$(LDLIBS):SIXTY_FOUR_BIT_LONG:${no_asm}:$ENV{'LIBSSL_dlfcn'}:linux-shared:-fPIC:-shared:.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR):$ENV{'RANLIB'}::",
++"uClinux-dist","$ENV{'CC'}:\$(CFLAGS)::-D_REENTRANT::\$(LDFLAGS) \$(LDLIBS):BN_LLONG:".(eval "\$$ENV{'UCDIST_ASM'}").":$ENV{'LIBSSL_dlfcn'}:linux-shared:-fPIC:-shared:.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR):$ENV{'RANLIB'}::",
++"uClinux-dist64","$ENV{'CC'}:\$(CFLAGS)::-D_REENTRANT::\$(LDFLAGS) \$(LDLIBS):SIXTY_FOUR_BIT_LONG:".(eval "\$$ENV{'UCDIST_ASM'}").":elf:$ENV{'LIBSSL_dlfcn'}:linux-shared:-fPIC:-shared:.so.\$(SHLIB_MAJOR).\$(SHLIB_MINOR):$ENV{'RANLIB'}::",
+ 
+ );
+ 
+--- openssl-1.0.1j/crypto/arm_arch.h.org	2014-12-01 15:22:22.058518738 +1000
++++ openssl-1.0.1j/crypto/arm_arch.h	2014-12-01 16:08:58.970563205 +1000
+@@ -31,6 +31,8 @@
+ #   define __ARM_ARCH__ 5
+ #  elif	defined(__ARM_ARCH_4__)	|| defined(__ARM_ARCH_4T__)
+ #   define __ARM_ARCH__ 4
++#  elif	defined(__ARM_ARCH_3__)	|| defined(__ARM_ARCH_3T__)
++#   define __ARM_ARCH__ 3
+ #  else
+ #   error "unsupported ARM architecture"
+ #  endif

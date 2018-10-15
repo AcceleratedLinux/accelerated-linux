@@ -1,0 +1,2 @@
+inc_libiconv = build/libiconv*-install/include/*.h,.
+lib_libiconv = build/libiconv*-install/lib/*.a

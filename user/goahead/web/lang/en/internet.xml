@@ -1,0 +1,378 @@
+<po>
+  <message msgid="inet apply" msgstr="Apply" />
+  <message msgid="inet cancel" msgstr="Cancel" />
+  <message msgid="inet enable" msgstr="Enable" />
+  <message msgid="inet disable" msgstr="Disable" />
+  <message msgid="inet next" msgstr="Next" />
+  
+  <message msgid="inet mac" msgstr="MAC Address" />
+  <message msgid="inet ip" msgstr="IP Address" />
+  <message msgid="inet server" msgstr="Server IP" />
+  <message msgid="inet netmask" msgstr="Subnet Mask" />
+  <message msgid="inet lan2" msgstr="LAN 2" />
+  <message msgid="inet lan2 ip" msgstr="LAN2 IP Address" />
+  <message msgid="inet lan2 netmask" msgstr="LAN2 Subnet Mask" />
+  <message msgid="inet gateway" msgstr="Default Gateway" />
+  <message msgid="inet pri dns" msgstr="Primary DNS Server" />
+  <message msgid="inet sec dns" msgstr="Secondary DNS Server" />
+  <message msgid="inet user" msgstr="User Name" />
+  <message msgid="inet password" msgstr="Password" />
+  <message msgid="inet pass2" msgstr="Verify Password" />
+  <message msgid="inet hostname" msgstr="Hostname" />
+  <message msgid="inet Download" msgstr="Download" />
+  <message msgid="inet Upload" msgstr="Upload" />
+  <message msgid="inet Download Upload" msgstr="Download / Upload" />
+
+  <message msgid="inet wc dns" msgstr="DNS Settings (Optional)" />
+  <message msgid="inet wc pri dns" msgstr="Primary DNS Server" />
+  <message msgid="inet wc sec dns" msgstr="Secondary DNS Server" />
+  <message msgid="wan title" msgstr="Wide Area Network (WAN) Settings" />
+  <message msgid="wan introduction" msgstr="This section allows you to configure the connection type and other related WAN parameters suitable to your environment." />
+  <message msgid="wan dual wan introduction" msgstr="When Dual WAN has been selected, only Keep Alive mode will be supported." />
+  <message msgid="wan 3g introduction" msgstr="If a 3G USB Modem is selected as the WAN Connection Type, an extended amount of time is required for driver location and the dial up process." />
+  <message msgid="wan connection type" msgstr="WAN Connections" />
+  <message msgid="wan connection type of ethernet" msgstr="Ethernet Port" />
+  <message msgid="wan connection type of usb" msgstr="USB Port" />
+  
+  <message msgid="wan connection type static" msgstr="Static (Fixed IP)" />
+  <message msgid="wan connection type dhcp" msgstr="Cable/Dynamic IP (DHCP)" />
+  <message msgid="wan connection type pppoe" msgstr="PPPoE (ADSL)" />
+  <message msgid="wan connection type l2tp" msgstr="L2TP" />
+  <message msgid="wan connection type pptp" msgstr="PPTP" />
+  <message msgid="wan connection type 3g" msgstr="3G" />
+  <message msgid="wan connection type none" msgstr="Disable" />
+  <message msgid="wan 3g Device status" msgstr="3G Device" />
+  <message msgid="wan protocol opmode" msgstr="Operation Mode" />
+  <message msgid="wan protocol opmode keepalive" msgstr="Keep Alive" />
+  <message msgid="wan protocol opmode ondemand" msgstr="On Demand" />
+  <message msgid="wan protocol opmode manual" msgstr="Manual" />
+  <message msgid="wan protocol keep alive mode" msgstr="Keep Alive Mode: Redial Period " />
+  <message msgid="wan protocol keep seconds" msgstr="Seconds" />
+  <message msgid="wan protocol on demand mode" msgstr="On Demand Mode: Idle Time " />
+  <message msgid="wan protocol on demand minutes" msgstr="Minutes" />
+  
+  <message msgid="wan fallback option" msgstr="Fallback of dual wan" />
+  <message msgid="wan Master Detect IP" msgstr="Detect IP address of Master WAN" />
+  <message msgid="wan Backup Detect IP" msgstr="Detect IP address of Backup WAN" />
+  <message msgid="wan illegal characters in masterDetectIp" msgstr="Error : Illegal host name found in the detect Ip of Master WAN !" />
+  <message msgid="wan illegal characters in backupDetectIp" msgstr="Error : Illegal host name found in the detect Ip of Backup WAN !" />
+  <message msgid="wan Detect Timeout" msgstr="Detect Timeout" />
+  <message msgid="wan Detect Timeout range" msgstr="(1 ~ 5 seconds, default: 3)" />
+  <message msgid="wan Detect Timeout range error" msgstr="Detect Timeout is out of range. (1~5)" />
+  <message msgid="wan Detect Timeout digits" msgstr="Please input correct Detect Timeout digits format!" />
+  <message msgid="wan Master" msgstr="Master WAN" />
+  <message msgid="wan Backup" msgstr="Backup WAN" />
+  <message msgid="wan Dual Wan Mode" msgstr="Dual WAN Mode" />
+  <message msgid="wan Dual Wan error no wan selected" msgstr="Error : No wan has been setected!" />
+  <message msgid="wan static mode" msgstr="Static Mode" />
+  <message msgid="wan dhcp mode" msgstr="DHCP Mode" />
+  <message msgid="wan pppoe mode" msgstr="PPPoE Mode" />
+  <message msgid="wan l2tp mode" msgstr="L2TP Mode" />
+  <message msgid="wan pptp mode" msgstr="PPTP Mode" />
+  <message msgid="wan 3G mode" msgstr="3G Mode" />
+  <message msgid="wan 3G modem" msgstr="USB 3G modem" />
+  <message msgid="wan address mode" msgstr="Address Mode" />
+  <message msgid="wan address mode static" msgstr="Static" />
+  <message msgid="wan address mode dynamic" msgstr="Dynamic" />
+  <message msgid="wan mac empty" msgstr="MAC Address should not be empty!" />
+  <message msgid="wan fill incorrect mac01" msgstr="Please fill the MAC Address in correct format! (XX:XX:XX:XX:XX:XX)" />
+  <message msgid="wan fill incorrect mac02" msgstr="Please fill the MAC Address in correct format! ( can not broadcast )" />
+  <message msgid="wan fill incorrect mac03" msgstr="Please fill the MAC Address in correct format!" />
+
+  <message msgid="wan mac clone" msgstr="MAC Clone" />
+  
+  <message msgid="wan not create XMLHTTP instance" msgstr="Cannot create an XMLHTTP instance." />
+  <message msgid="wan not get mac" msgstr="Can't get the mac address." />
+  <message msgid="wan ip empty" msgstr="Error. IP address is empty." />
+  <message msgid="wan ip invalid" msgstr="Error. Not a legal IP address." />
+  <message msgid="wan pppoe not specify ussername" msgstr="Error : Please specify UserName!" />
+  <message msgid="wan pppoe not specify password" msgstr="Error : Please specify Password!" />
+  <message msgid="wan pppoe password mismatched" msgstr="Error : Password mismatched!" />
+  <message msgid="wan pppoe redial period error" msgstr="Error : Please specify Redial Period." />
+  <message msgid="wan pppoe not a valid integer" msgstr="Error : Not a valid integer." />
+  <message msgid="wan pppoe not a valid integer zero" msgstr="Error : Not a valid integer (ZERO) ." />
+  <message msgid="wan pppoe not specify idle time" msgstr="Error : Please specify Idle Time." />
+  <message msgid="wan pppoe not a valid idle time integer" msgstr="Error : Not a valid integer." />
+  <message msgid="wan pppoe not a valid idle time integer zero" msgstr="Error : Not a valid integer (ZERO) ." />
+  
+  <message msgid="wan pptp not specify ussername" msgstr="Error : Please specify UserName!" />
+  <message msgid="wan pptp not specify password" msgstr="Error : Please specify Password!" />
+  <message msgid="wan pptp redial period error" msgstr="Error : Please specify Redial Period." />
+  <message msgid="wan pptp not a valid integer" msgstr="Error : Not a valid integer." />
+  <message msgid="wan pptp not a valid integer zero" msgstr="Error : Not a valid integer (ZERO) ." />
+  <message msgid="wan pptp not specify idle time" msgstr="Error : Please specify Idle Time." />
+  
+  <message msgid="wan l2tp not specify ussername" msgstr="Error : Please specify UserName!" />
+  <message msgid="wan l2tp not specify password" msgstr="Error : Please specify Password!" />
+  <message msgid="wan l2tp redial period error" msgstr="Error : Please specify Redial Period." />
+  <message msgid="wan l2tp not specify idle time" msgstr="Error : Please specify Idle Time." />
+  
+  <message msgid="lan ip incorrect value" msgstr="Error : It should be a [0-9] number." />
+  
+  <message msgid="lan title" msgstr="Local Area Network (LAN) Settings" />
+  <message msgid="lan introduction" msgstr="This section is provided to configure LAN settings like DHCP and other networking features." />
+  <message msgid="lan setup" msgstr="LAN Setup" />
+  <message msgid="lan dhcp setup" msgstr="DHCP Setup" />
+  <message msgid="lan dhcp type" msgstr="DHCP Server" />
+  <message msgid="lan dhcp type server" msgstr="Enable" />
+  <message msgid="lan dhcp start" msgstr="Start IP Address" />
+  <message msgid="lan dhcp end" msgstr="End IP Address" />
+  <message msgid="lan dhcp lease" msgstr="Lease Time" />
+  <message msgid="lan dhcp static" msgstr="Statically Assigned" />
+  <message msgid="lan dhcp other setup" msgstr="Other Setup" />
+  <message msgid="lan stp" msgstr="802.1d Spanning Tree" />
+  <message msgid="lan lltd" msgstr="LLTD" />
+  <message msgid="lan igmpp" msgstr="IGMP Proxy" />
+  <message msgid="lan upnp" msgstr="UPNP" />
+  <message msgid="lan radvd" msgstr="Router Advertisement" />
+  <message msgid="lan pppoer" msgstr="PPPoE Relay" />
+  <message msgid="lan dnsp" msgstr="DNS Proxy" />
+  <message msgid="lan ip incorrect format" msgstr="Error : IP adress format error." />
+  <message msgid="host name incorrect" msgstr="Error : Hostname is too long." />
+  <message msgid="host name format illegal" msgstr="Error : Hostname contains illegal character." />
+  <message msgid="host name not specify" msgstr="Error : Please specify hostname." />
+
+  <message msgid="dhcp title" msgstr="DHCP Client List" />
+  <message msgid="dhcp introduction" msgstr="A DHCP client list is displayed in this section." />
+  <message msgid="dhcp clients" msgstr="DHCP Clients" />
+  <message msgid="dhcp expire" msgstr="Expires in" />
+
+  <message msgid="vpn title" msgstr="VPN Passthrough" />
+  <message msgid="vpn introduction" msgstr="VPN passthrought configurations including: L2TP, IPSec, and PPTP passthrough." />
+  <message msgid="vpn pass thru" msgstr="VPN Pass Through" />
+  <message msgid="vpn l2tp pass thru" msgstr="L2TP Passthrough" />
+  <message msgid="vpn ipsec pass thru" msgstr="IPSec Passthrough" />
+  <message msgid="vpn pptp pass thru" msgstr="PPTP Passthrough" />
+
+  <message msgid="routing title" msgstr="Advanced Routing Settings" />
+  <message msgid="routing Introduction" msgstr="The Advanced Routing Section allows you to configure Static and Dynamic Routing settings." />
+  <message msgid="routing add rule" msgstr="Add a routing rule" />
+  <message msgid="routing routing dest" msgstr="Destination" />
+  <message msgid="routing range" msgstr="Type" />
+  <message msgid="routing netmask" msgstr="Netmask" />
+  <message msgid="routing gateway" msgstr="Gateway" />
+  <message msgid="routing interface" msgstr="Interface" />
+  <message msgid="routing custom" msgstr="Custom" />
+  <message msgid="routing comment" msgstr="Comment" />
+  <message msgid="routing submit" msgstr="Apply" />
+  <message msgid="routing reset" msgstr="Reset" />
+  <message msgid="routing Number" msgstr="No." />
+  <message msgid="routing del title" msgstr="Current Routing table in the system" />
+  <message msgid="routing del dest" msgstr="Destination" />
+  <message msgid="routing del netmask" msgstr="Netmask" />
+  <message msgid="routing del gateway" msgstr="Gateway" />
+  <message msgid="routing del flags" msgstr="Flags" />
+  <message msgid="routing del metric" msgstr="Metric" />
+  <message msgid="routing del ref" msgstr="Ref" />
+  <message msgid="routing del use" msgstr="Use" />
+  <message msgid="routing del interface" msgstr="Interface" />
+  <message msgid="routing del comment" msgstr="Comment" />
+  <message msgid="routing del" msgstr="Delete" />
+  <message msgid="routing del reset" msgstr="Reset" />
+  <message msgid="routing host" msgstr="Host" />
+  <message msgid="routing net" msgstr="Net" />
+  <message msgid="routing LAN" msgstr="LAN" />
+  <message msgid="routing WAN" msgstr="WAN" />
+
+  <message msgid="routing dynamic Title" msgstr="Dynamic Routing Settings" />
+  <message msgid="routing dynamic Title2" msgstr="Dynamic Routing Protocol" />
+  <message msgid="routing dynamic rip disable" msgstr="Disable" />
+  <message msgid="routing dynamic rip enable" msgstr="Enable" />
+  <message msgid="routing dynamic rip apply" msgstr="Apply" />
+  <message msgid="routing dynamic rip reset" msgstr="Reset" />
+
+  <message msgid="qos title" msgstr="Quality of Service Settings" />
+  <message msgid="qos intro" msgstr="You may setup rules to provide Quality of Service guarantees for specific applications." />
+  <message msgid="qos setup" msgstr="QoS Setup" />
+  <message msgid="qos str" msgstr="Quality of Service" />
+  <message msgid="qos disable" msgstr="Disable" />
+  <message msgid="qos enable" msgstr="Enable" />
+  <message msgid="qos dscpmarkeronly" msgstr="mark DSCP only" />
+  <message msgid="qos upload bandwidth" msgstr="Upload Bandwidth:" />
+  <message msgid="qos bandwidth custom" msgstr="User defined" />
+  <message msgid="qos download bandwidth" msgstr="Download Bandwidth:" />
+  <message msgid="qos setup submit" msgstr="Submit" />
+  <message msgid="qos setup reset" msgstr="Reset" />
+  <message msgid="qos group" msgstr="Group" />
+  <message msgid="qos group attr" msgstr="Attribute" />
+  <message msgid="qos group modify" msgstr="Modify" />
+  <message msgid="qos rule no" msgstr="No" />
+  <message msgid="qos rule name" msgstr="Name" />
+  <message msgid="qos rule prio" msgstr="Group" />
+  <message msgid="qos rule info" msgstr="Info." />
+  <message msgid="qos rule add" msgstr="Add" />
+  <message msgid="qos rule del" msgstr="Delete" />
+  <message msgid="qos loaddefault" msgstr="Load default" />
+  <message msgid="qos Rate" msgstr="Rate:" />
+  <message msgid="qos Ceil" msgstr="Ceil:" />
+  <message msgid="qos AF Name" msgstr="Group Name" />
+  <message msgid="qos AF Upload Bandwidth" msgstr="% of upload bandwidth" />
+
+  <message msgid="qos classifier title" msgstr="Classifier Settings" />
+  <message msgid="qos classifier name" msgstr="Name" />
+  <message msgid="qos classifier group" msgstr="Group" />
+  <message msgid="qos classifier mac" msgstr="MAC Address" />
+  <message msgid="qos classifier dip" msgstr="Dest. IP address" />
+  <message msgid="qos classifier sip" msgstr="Src. IP address" />
+  <message msgid="qos classifier pktlen" msgstr="Packet Length" />
+  <message msgid="qos classifier dscp" msgstr="DSCP" />
+  <message msgid="qos classifier proto" msgstr="Protocol" />
+  <message msgid="qos classifier dport" msgstr="Dest. port" />
+  <message msgid="qos classifier sport" msgstr="Src. port" />
+  <message msgid="qos classifier l7" msgstr="Application" />
+  <message msgid="qos classifier remark" msgstr="Remark DSCP as:" />
+  <message msgid="qos classifier auto" msgstr="Auto" />
+  
+  <message msgid="w Previous" msgstr="Previous" />
+
+<message msgid="dayid 1" msgstr="1st day per month" />
+  <message msgid="dayid 2" msgstr="2nd day per month" />
+  <message msgid="dayid 3" msgstr="3rd day per month" />
+  <message msgid="dayid 4" msgstr="4th day per month" />
+  <message msgid="dayid 5" msgstr="5th day per month" />
+  <message msgid="dayid 6" msgstr="6th day per month" />
+  <message msgid="dayid 7" msgstr="7th day per month" />
+  <message msgid="dayid 8" msgstr="8th day per month" />
+  <message msgid="dayid 9" msgstr="9th day per month" />
+  <message msgid="dayid 10" msgstr="10th day per month" />
+  <message msgid="dayid 11" msgstr="11th day per month" />
+  <message msgid="dayid 12" msgstr="12th day per month" />
+  <message msgid="dayid 13" msgstr="13th day per month" />
+  <message msgid="dayid 14" msgstr="14th day per month" />
+  <message msgid="dayid 15" msgstr="15th day per month" />
+  <message msgid="dayid 16" msgstr="16th day per month" />
+  <message msgid="dayid 17" msgstr="17th day per month" />
+  <message msgid="dayid 18" msgstr="18th day per month" />
+  <message msgid="dayid 19" msgstr="19th day per month" />
+  <message msgid="dayid 20" msgstr="20th day per month" />
+  <message msgid="dayid 21" msgstr="21st day per month" />
+  <message msgid="dayid 22" msgstr="22nd day per month" />
+  <message msgid="dayid 23" msgstr="23rd day per month" />
+  <message msgid="dayid 24" msgstr="24th day per month" />
+  <message msgid="dayid 25" msgstr="25th day per month" />
+  <message msgid="dayid 26" msgstr="26th day per month" />
+  <message msgid="dayid 27" msgstr="27th day per month" />
+  <message msgid="dayid 28" msgstr="28th day per month" />
+  <message msgid="dayid 29" msgstr="29th day per month" />
+  <message msgid="dayid 30" msgstr="30th day per month" />
+  <message msgid="dayid 31" msgstr="31st day per month" />
+  
+  <message msgid="3G Enable Mode" msgstr="3G Enable Mode" />
+  <message msgid="3G Start Mode" msgstr="Start Mode" />
+  <message msgid="3G Automatically" msgstr="Automatically" />
+  <message msgid="3G Manually" msgstr="Manually" />
+  <message msgid="3G Manually Start" msgstr="Manually start 3G" />
+  <message msgid="3G Manually Stop" msgstr="Manually stop 3G" />
+  <message msgid="3G Pin Code Protect" msgstr="Pin Code Protect" />
+  <message msgid="3G Dial Code" msgstr="Dial Code" />
+  <message msgid="3G APN Service" msgstr="APN Service" />
+  <message msgid="3G Connect Type" msgstr="Connect Type" />
+  <message msgid="3G Max Idle Time" msgstr="Max Idle Time" />
+  <message msgid="3G Idle" msgstr="seconds." />
+  <message msgid="3G Time Budget" msgstr="Time Budget" />
+  <message msgid="3G Data Budget" msgstr="Data Budget" />
+  <message msgid="3G Update" msgstr="Update" />
+  <message msgid="Forced Reset Budget" msgstr="Forced Reset Budget" />
+
+  <message msgid="wan 3g pincode invalid" msgstr="The 3g pincode is invalid. (Please fill in the figures 4-8) " />
+  <message msgid="wan 3g pincode digits" msgstr="Please input correct 3g pincode digits format!" />
+  <message msgid="wan 3g pincode warring" msgstr="Please sure the 3g pincode is correct if your SIM card is in protected mode. (If over 3 times error, the SIM Card will be locked!)" />
+  <message msgid="wan 3g budget control mode not select" msgstr="Please check the budget control mode." />
+  <message msgid="wan 3g maxidletime digits" msgstr="Please input correct 3g maxidletime digits format!" />
+  <message msgid="wan 3g max online monthly digits" msgstr="Please input correct 3g max online monthly digits format!" />
+  <message msgid="wan 3g max xfer monthly digits" msgstr="Please input correct 3g max xfer monthly digits format!" />
+  <message msgid="wan 3g max time limit digits" msgstr="Please input correct 3g max time limit digits format!" />
+  <message msgid="wan 3g max data limit digits" msgstr="Please input correct 3g max data limit digits format!" />
+  <message msgid="wan 3g mail sent period digits" msgstr="Please input correct 3g mail sent period digits format!" />
+  <message msgid="wan 3g max time limit invalid" msgstr="The 3g max time limit is invalid. ( 1% ~ 99% )" />
+  <message msgid="wan 3g max data limit invalid" msgstr="The 3g max data limit is invalid. ( 1% ~ 99% )" />
+  <message msgid="wan 3g max online monthly invalid" msgstr="The 3g trigger time is invalid. ( 1 ~ 999 )" />
+  <message msgid="wan 3g max xfer monthly invalid" msgstr="The 3g trigger data is invalid. ( 3 ~ 4000 )" />
+
+  <message msgid="Not dial yet" msgstr="Not dial yet" />
+  <message msgid="Auth successfully" msgstr="Authenticated successfully" />
+  <message msgid="Auth failure" msgstr="Authentication failure" />
+
+  <message msgid="Actions if Over Budget" msgstr="Actions if Over Budget" />
+  <message msgid="Drop Current Connection" msgstr="Drop Current Connection" />
+  <message msgid="Disallow New Connection" msgstr="Disallow New Connection" />
+  <message msgid="Trigger by Limit Budget" msgstr="Trigger by Limit Budget" />
+  <message msgid="% of the time budget" msgstr="% of the time budget" />
+  <message msgid="% of the data budget" msgstr="% of the data budget" />
+  <message msgid="E-mail Alert" msgstr="E-mail Alert" />
+  <message msgid="will recur every" msgstr="Will recur every" />
+  <message msgid="minutes" msgstr="minutes" />
+
+  <message msgid="Budget Policy" msgstr="Budget Policy" />
+  <message msgid="Budget Control" msgstr="Budget Control" />
+  <message msgid="Budget Control Enable" msgstr="Enable (default:disabled)" />
+  <message msgid="Budget Criterion" msgstr="Budget Criterion" />
+  <message msgid="Budget Counter" msgstr="Budget Counter" />
+  <message msgid="TIME Budget OK" msgstr="[TIME]Budget OK" />
+  <message msgid="TIME Over Budget" msgstr="[TIME]Over Budget" />
+  <message msgid="TIME Pre Limit OK" msgstr="[TIME]Pre-Limit OK" />
+  <message msgid="TIME Reach Pre Limit" msgstr="[TIME]Reach Pre-Limit" />
+  <message msgid="DATA Budget OK" msgstr="[DATA]Budget OK" />
+  <message msgid="DATA Over Budget" msgstr="[DATA]Over Budget" />
+  <message msgid="DATA Pre Limit OK" msgstr="[DATA]Pre-Limit OK" />
+  <message msgid="DATA Reach Pre Limit" msgstr="[DATA]Reach Pre-Limit" />
+  <message msgid="hours per month" msgstr="hour(s) per month" />
+  <message msgid="MBytes per month" msgstr="MByte(s) per month" />
+  <message msgid="per_month" msgstr="per_month" />
+  <message msgid="Reset on" msgstr="Reset on" />
+  <message msgid="Reset on message" msgstr="If not over budget !" />
+  <message msgid="Mail Settings" msgstr="E-mail Settings" />
+  <message msgid="Mail SMTP Authentication" msgstr="Mail SMTP Authentication" />
+  <message msgid="Mail PLAIN" msgstr="PLAIN" />
+  <message msgid="Mail LOGIN" msgstr="LOGIN" />
+  <message msgid="Mail Server" msgstr="Mail Server" />
+  <message msgid="Mail Sender" msgstr="Mail Sender" />
+  <message msgid="Mail Recipient" msgstr="Mail Recipient" />
+
+  <message msgid="chk Mail User Name" msgstr="Please check E-mail Alert:User Name is valid ?" />
+  <message msgid="chk Mail Server" msgstr="Please check  E-mail Alert:Mail Server is valid ?" />
+  <message msgid="chk Mail Sender" msgstr="Please check  E-mail Alert:Mail Sender is valid ?" />
+  <message msgid="chk Mail Recipient" msgstr="Please check  E-mail Alert:Mail Recipient is valid ?" />
+  
+  <message msgid="w Previous" msgstr="Previous" /> 
+  <message msgid="alt budget warning" msgstr="Warning!!" />
+  <message msgid="alt budget warning message" msgstr="budget control now is disable." />
+  <message msgid="alt budget warning message2" msgstr="Please make sure your settings:" />
+  <message msgid="alt budget budget criterion" msgstr="======== Budget Criterion ==============" />
+  <message msgid="alt budget budget policy" msgstr="======== Budget Policy ================" />
+  
+  <message msgid="lan Error Not a legal IP address" msgstr="Error. Not a legal IP address." />
+  <message msgid="lan Error IP address is empty" msgstr="Error. IP address is empty." />
+  <message msgid="lan It should be a [0-9] number" msgstr="It should be a [0-9] number." />
+  <message msgid="lan IP adress format error" msgstr="IP adress format error." />
+  <message msgid="lan Dont enter Blank Space in this feild" msgstr="Don\'t enter Blank Space in this feild." />
+  <message msgid="lan Incorrect Lan IP = Wan IP" msgstr="Incorrect ! Lan IP = Wan IP !" />
+  <message msgid="lan Netmask format error" msgstr="Netmask format error." />
+  <message msgid="lan Incorrect Lan IP NOT in subnet" msgstr="Incorrect ! Lan IP NOT in subnet !" />
+  <message msgid="lan Incorrect dhcpStart IP dhcpEnd IP" msgstr="Incorrect ! dhcpStart IP >= dhcpEnd IP" />
+  <message msgid="lan Incorrect dhcpStart IP Lan IP" msgstr="Incorrect ! dhcpStart IP = Lan IP !" />
+  <message msgid="lan IP address format error" msgstr="IP address format error." />
+  <message msgid="lan Incorrect DHCP Range NOT in Subnet" msgstr="Incorrect. DHCP Range NOT in Subnet!" />
+  <message msgid="lan Please fill the MAC Address in correct format" msgstr="Please fill the MAC Address in correct format! (XX:XX:XX:XX:XX:XX)" />
+  <message msgid="lan Incorrect Lan ip in DHCP lease range" msgstr="Incorrect ! Lan ip in DHCP lease range !" />
+  <message msgid="dhcpLease Half hour" msgstr="Half hour" />
+  <message msgid="dhcpLease One hour" msgstr="One hour" />
+  <message msgid="dhcpLease Two hours" msgstr="Two hours" />
+  <message msgid="dhcpLease Half day" msgstr="Half day" />
+  <message msgid="dhcpLease One day" msgstr="One day" />
+  <message msgid="dhcpLease Two days" msgstr="Two days" />
+  <message msgid="dhcpLease One week" msgstr="One week" />
+  <message msgid="dhcpLease Two weeks" msgstr="Two weeks" />
+  <message msgid="dhcpLease Forever" msgstr="Forever" />
+  
+  <message msgid="routing destination has wrong format" msgstr="The destination has wrong format." />
+  <message msgid="routing netmask has wrong format" msgstr="The netmask has wrong format." />
+  <message msgid="routing gateway has wrong format" msgstr="The gateway has wrong format." />
+  <message msgid="routing please input the destination" msgstr="Please input the destination." />
+  <message msgid="routing please input the netmask" msgstr="Please input the netmask." />
+  <message msgid="routing Incorrect Rule Alive" msgstr="Incorrect ! Rule Alive !" />
+  <message msgid="routing Illegal characters are now allowable" msgstr="Illegal characters are now allowable." />
+  
+  <message msgid="wan Error Time Zone Settings" msgstr="Error, Time Zone is not set!!" />
+  <message msgid="wan please make sure your Time Zone Settings" msgstr="Please set your Time Zone in Administration -> Management -> Time Zone Settings" />
+  </po>

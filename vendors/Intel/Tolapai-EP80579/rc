@@ -1,0 +1,8 @@
+hostname Tolapao 
+mount -t proc proc /proc
+mkdir /var/config/ /var/tmp /var/log /var/run /var/lock /var/empty
+> /etc/config/start
+> /etc/config/inittab
+ifconfig lo 127.0.0.1
+cat /etc/motd
+exit 0

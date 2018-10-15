@@ -1,0 +1,13 @@
+diff --git a/serviceproviders.xml b/serviceproviders.xml
+index 0347cd3..2663c63 100644
+--- a/serviceproviders.xml
++++ b/serviceproviders.xml
+@@ -12498,7 +12498,7 @@ conceived.
+ 			<network-id mcc="311" mnc="480"/>
+ 			<apn value="vzwims">
+ 				<plan type="postpaid"/>
+-				<usage type="internet"/>
++				<usage type="ims"/>
+ 				<name>4G LTE Contract</name>
+ 			</apn>
+ 			<apn value="vzwinternet">

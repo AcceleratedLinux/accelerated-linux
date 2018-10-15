@@ -1,0 +1,10 @@
+--- tinyrl/tinyrl.c.org	2018-09-06 23:54:06.469544283 +1000
++++ tinyrl/tinyrl.c	2018-09-06 23:54:16.700248976 +1000
+@@ -12,6 +12,7 @@
+ #include <termios.h>
+ #include <unistd.h>
+ #include <sys/ioctl.h>
++#include <sys/ttydefaults.h>
+ 
+ #define KEYMAP_SIZE 256
+ 

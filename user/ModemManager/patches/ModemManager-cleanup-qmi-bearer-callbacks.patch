@@ -1,0 +1,56 @@
+--- ModemManager/src/mm-bearer-qmi.c.orig	2017-05-12 18:02:33.943680886 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2017-05-12 18:11:32.092750332 +1000
+@@ -1446,11 +1446,21 @@
+                          gboolean reset_ipv6)
+ {
+     if (reset_ipv4) {
++        if (self->priv->packet_service_status_ipv4_indication_id)
++            common_setup_cleanup_unsolicited_events (self,
++                                                     self->priv->client_ipv4,
++                                                     FALSE,
++                                                     &self->priv->packet_service_status_ipv4_indication_id);
+         self->priv->packet_data_handle_ipv4 = 0;
+         g_clear_object (&self->priv->client_ipv4);
+     }
+ 
+     if (reset_ipv6) {
++        if (self->priv->packet_service_status_ipv6_indication_id)
++            common_setup_cleanup_unsolicited_events (self,
++                                                     self->priv->client_ipv6,
++                                                     FALSE,
++                                                     &self->priv->packet_service_status_ipv6_indication_id);
+         self->priv->packet_data_handle_ipv6 = 0;
+         g_clear_object (&self->priv->client_ipv6);
+     }
+@@ -1517,10 +1527,11 @@
+         if (ctx->packet_data_handle_ipv4) {
+             QmiMessageWdsStopNetworkInput *input;
+ 
+-            common_setup_cleanup_unsolicited_events (ctx->self,
+-                                                     ctx->client_ipv4,
+-                                                     FALSE,
+-                                                     &ctx->self->priv->packet_service_status_ipv4_indication_id);
++            if (ctx->self->priv->packet_service_status_ipv4_indication_id)
++              common_setup_cleanup_unsolicited_events (ctx->self,
++                                                       ctx->client_ipv4,
++                                                       FALSE,
++                                                       &ctx->self->priv->packet_service_status_ipv4_indication_id);
+ 
+             input = qmi_message_wds_stop_network_input_new ();
+             qmi_message_wds_stop_network_input_set_packet_data_handle (input, ctx->packet_data_handle_ipv4, NULL);
+@@ -1543,10 +1554,11 @@
+         if (ctx->packet_data_handle_ipv6) {
+             QmiMessageWdsStopNetworkInput *input;
+ 
+-            common_setup_cleanup_unsolicited_events (ctx->self,
+-                                                     ctx->client_ipv6,
+-                                                     FALSE,
+-                                                     &ctx->self->priv->packet_service_status_ipv6_indication_id);
++            if (ctx->self->priv->packet_service_status_ipv6_indication_id)
++              common_setup_cleanup_unsolicited_events (ctx->self,
++                                                       ctx->client_ipv6,
++                                                       FALSE,
++                                                       &ctx->self->priv->packet_service_status_ipv6_indication_id);
+ 
+             input = qmi_message_wds_stop_network_input_new ();
+             qmi_message_wds_stop_network_input_set_packet_data_handle (input, ctx->packet_data_handle_ipv6, NULL);

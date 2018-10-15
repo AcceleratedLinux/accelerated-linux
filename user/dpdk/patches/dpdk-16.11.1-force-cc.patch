@@ -1,0 +1,11 @@
+--- dpdk-2.2.0/mk/toolchain/gcc/rte.vars.mk.org	2016-02-18 14:28:41.030172129 +1000
++++ dpdk-2.2.0/mk/toolchain/gcc/rte.vars.mk	2016-02-18 14:29:11.262172618 +1000
+@@ -38,7 +38,7 @@
+ #   - define TOOLCHAIN_ASFLAGS variable (overriden by cmdline value)
+ #
+ 
+-CC        = $(CROSS)gcc
++#CC        = $(CROSS)gcc
+ KERNELCC  = $(CROSS)gcc
+ CPP       = $(CROSS)cpp
+ # for now, we don't use as but nasm.

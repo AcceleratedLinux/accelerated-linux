@@ -1,0 +1,70 @@
+--- libreswan-3.12/programs/pluto/server.c.orig	2015-09-16 15:53:26.368651651 -0400
++++ libreswan-3.12/programs/pluto/server.c	2015-09-16 16:00:58.504777214 -0400
+@@ -98,7 +98,9 @@
+ 
+ char *pluto_vendorid;
+ 
++#ifdef USE_ADDCONN
+ static pid_t addconn_child_pid = 0;
++#endif
+ 
+ /* list of interface devices */
+ struct iface_list interface_dev;
+@@ -478,12 +480,14 @@
+ 			continue;
+ #endif
+ 
++#ifdef USE_ADDCONN
+ 		if (child == addconn_child_pid) {
+ 			DBG(DBG_CONTROLMORE,
+ 			    DBG_log("reaped addconn helper child"));
+ 			addconn_child_pid = 0;
+ 			continue;
+ 		}
++#endif
+ 		/* Threads are created instead of child processes when using LIBNSS */
+ 		libreswan_log("child pid=%d (status=%d) is not my child!",
+ 			      child, status);
+@@ -525,6 +529,7 @@
+ 
+ 	/* do_whacklisten() is now done by the addconn fork */
+ 
++#ifdef USE_ADDCONN
+ 	/*
+ 	 * fork to issue the command "ipsec addconn --autoall"
+ 	 * (or vfork() when fork() isn't available, eg on embedded platforms
+@@ -593,6 +598,7 @@
+ 		}
+ 		/* parent continues */
+ 	}
++#endif
+ 
+ 	for (;; ) {
+ 		lsw_fd_set readfds;
+--- libreswan-3.12/programs/addconn/Makefile.orig	2015-09-16 15:54:48.492672565 -0400
++++ libreswan-3.12/programs/addconn/Makefile	2015-09-16 16:01:32.668799738 -0400
+@@ -11,6 +11,7 @@
+ # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ # for more details.
+ 
++ifeq ($(USE_ADDCONN),true)
+ $(info info: addcon/Makefile: MAKECMDGOALS="$(MAKECMDGOALS)")
+ 
+ LIBRESWANSRCDIR?=$(shell cd ../..; pwd)
+@@ -24,6 +25,8 @@
+ PROGLIBS+=-lunbound
+ endif
+ 
++# XXX: instead of wrapping this in ifeq, should instead just not
++# assign PROGRAM[S]
+ PROGRAM=addconn
+ 
+ # reach into pluto for now.
+@@ -36,3 +39,7 @@
+ TAGS:	$(DISTSRC)
+ 	LC_ALL=C etags $(ETAGSFLAGS) $(DISTSRC) $(LIBSWANDIR)/*.[ch]
+ 
++else
++all:
++programs:
++endif

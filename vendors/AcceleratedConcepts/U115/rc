@@ -1,0 +1,148 @@
+hostname U115
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=40M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# init devices before we need any
+cp -ra /lib/udev/devices/. /dev
+
+echo "Initializing network interfaces..."
+ip link set eth0 name eth0cpu
+ip link set eth1 name wan1
+ip link set eth2 name wan2
+
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+ifconfig eth0cpu up
+setmac -i lan1,lan2,lan3,lan4,lan5,lan6,lan7,lan8,wan1,wan2 -u -n 10
+
+echo "Initializing CELL power control..."
+echo 21 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio21/direction
+echo 0 > /sys/class/gpio/gpio21/value
+echo "Initializing CELL SIM control..."
+echo 18 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio18/direction
+echo "Initializing CELL presence control..."
+echo 24 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio24/direction
+echo "Initializing CELL switch control..."
+echo 27 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio27/direction
+echo falling > /sys/class/gpio/gpio27/edge
+
+echo "Initializing USB1 power control..."
+echo 45 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio45/direction
+echo 0 > /sys/class/gpio/gpio45/value
+
+echo "Initializing USB2 power control..."
+echo 48 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio48/direction
+echo 0 > /sys/class/gpio/gpio48/value
+
+if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+	/etc/factory
+	exit 0
+fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+	# Use the same setup as for factory testing
+	/etc/factory
+	# The following loops are to deal with an issue with switchport lan1.
+	# Sometimes the port gets missconfigured and the test station cannot
+	# ping us because this device is sending packets with bad CRC.
+	echo "lan1 wait for link and ping 192.168.0.2 or reboot"
+	time=10
+	link=0
+	while [ "$time" -gt 0 ]
+	do
+		ip addr show dev lan1 | grep -qE "(.*UP){3}" && link=1 && break
+		sleep 1
+		time=$((time-1))
+	done
+	[ "$link" = 0 ] && reboot -f
+	time=10
+	ping=0
+	while [ "$time" -gt 0 ]
+	do
+		ping -c 1 -q -w 1 192.168.0.2 && ping=1 && break
+		time=$((time-1))
+	done
+	[ "$ping" = 0 ] && reboot -f
+	exit 0
+fi
+
+echo "Mounting config filesystem ..."
+if ! mount -t ubifs ubi0:config /etc/config
+then
+	echo "Cannot mount /etc/config as ubifs, reformatting..."
+	flash_erase /dev/flash/config 0 0
+	echo "Mounting config filesystem after reformat..."
+	if ! mount -t ubifs ubi0:config /etc/config
+	then
+		echo "Failed to mount flash based config filesystem"
+		echo "Using tmpfs for /etc/config."
+		mount -t tmpfs -o size=4M tmpfs /etc/config
+	fi
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
+	[ -f /etc/config/.init2 ] && filter='$'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+cat /etc/inittab.d/* > /etc/inittab
+
+# handle /opt,  contains modem firmware and maybe other goodies
+if grep -q '"opt"' /proc/mtd
+then
+	echo "Mounting opt filesystem ...."
+	if ! mount -t ubifs ubi0:opt /opt
+	then
+		echo "Cannot mount /opt as ubifs, reformatting..."
+		flash_erase /dev/flash/opt 0 0
+		echo "Mounting opt filesystem after reformat..."
+		if ! mount -t ubifs ubi0:opt /opt
+		then
+			echo "Failed to mount flash based opt filesystem"
+			# just leave the empty mount point (RO)
+		fi
+	fi
+fi
+
+# modem firmware updates
+[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

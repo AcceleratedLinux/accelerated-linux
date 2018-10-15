@@ -1,0 +1,5 @@
+config LIB_NETFILTER_CONNTRACK
+	bool "libnetfilter_conntrack"
+	select LIB_NFNETLINK
+	select LIB_LIBMNL
+	default n

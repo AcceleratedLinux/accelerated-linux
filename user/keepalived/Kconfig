@@ -1,0 +1,14 @@
+
+config USER_KEEPALIVED
+	bool "keepalived"
+	default n
+	help
+	  A High availability and load balancing framework that uses Linux IPVS.
+
+config USER_KEEPALIVED_MINIMAL
+	bool "keepalived minimal install"
+	depends on USER_KEEPALIVED
+	default n
+	help
+	  Only install the keepalived daemon without its supporting files.
+

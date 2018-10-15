@@ -1,0 +1,38 @@
+diff -ru bluez-5.46.orig/peripheral/main.c bluez-5.46/peripheral/main.c
+--- bluez-5.46.orig/peripheral/main.c	2015-06-15 19:33:25.000000000 +1000
++++ bluez-5.46/peripheral/main.c	2017-09-10 09:17:16.243339617 +1000
+@@ -70,7 +70,7 @@
+ } mount_table[] = {
+ 	{ "sysfs",    "/sys",		NULL,	MS_NOSUID|MS_NOEXEC|MS_NODEV },
+ 	{ "proc",     "/proc",		NULL,	MS_NOSUID|MS_NOEXEC|MS_NODEV },
+-	{ "devtmpfs", "/dev",		NULL,	MS_NOSUID|MS_STRICTATIME },
++	{ "devtmpfs", "/dev",		NULL,	MS_NOSUID },
+ 	{ "efivarfs", "/sys/firmware/efi/efivars",
+ 					NULL,	MS_NOSUID|MS_NOEXEC|MS_NODEV },
+ 	{ "pstore",   "/sys/fs/pstore",	NULL,	MS_NOSUID|MS_NOEXEC|MS_NODEV },
+diff -ru bluez-5.46.orig/tools/test-runner.c bluez-5.46/tools/test-runner.c
+--- bluez-5.46.orig/tools/test-runner.c	2017-02-26 02:03:51.000000000 +1000
++++ bluez-5.46/tools/test-runner.c	2017-09-10 09:16:53.808821962 +1000
+@@ -126,10 +126,10 @@
+ } mount_table[] = {
+ 	{ "sysfs",    "/sys",     NULL,        MS_NOSUID|MS_NOEXEC|MS_NODEV },
+ 	{ "proc",     "/proc",    NULL,        MS_NOSUID|MS_NOEXEC|MS_NODEV },
+-	{ "devtmpfs", "/dev",     "mode=0755", MS_NOSUID|MS_STRICTATIME },
++	{ "devtmpfs", "/dev",     "mode=0755", MS_NOSUID },
+ 	{ "devpts",   "/dev/pts", "mode=0620", MS_NOSUID|MS_NOEXEC },
+-	{ "tmpfs",    "/dev/shm", "mode=1777", MS_NOSUID|MS_NODEV|MS_STRICTATIME },
+-	{ "tmpfs",    "/run",     "mode=0755", MS_NOSUID|MS_NODEV|MS_STRICTATIME },
++	{ "tmpfs",    "/dev/shm", "mode=1777", MS_NOSUID|MS_NODEV },
++	{ "tmpfs",    "/run",     "mode=0755", MS_NOSUID|MS_NODEV },
+ 	{ "tmpfs",    "/tmp",              NULL, 0 },
+ 	{ "debugfs",  "/sys/kernel/debug", NULL, 0 },
+ 	{ }
+@@ -184,7 +184,7 @@
+ 		printf("Creating %s\n", config_table[i]);
+ 
+ 		if (mount("tmpfs", config_table[i], "tmpfs",
+-				MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME,
++				MS_NOSUID|MS_NOEXEC|MS_NODEV,
+ 				"mode=0755") < 0)
+ 			perror("Failed to create filesystem");
+ 	}

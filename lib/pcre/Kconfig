@@ -1,0 +1,5 @@
+config LIB_LIBPCRE
+	bool "PCRE"
+	default n
+	help
+	  Perl Compatible Regular Expressions library.

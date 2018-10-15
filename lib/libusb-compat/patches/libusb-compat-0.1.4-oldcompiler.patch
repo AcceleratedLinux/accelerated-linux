@@ -1,0 +1,24 @@
+diff -ur libusb-compat-0.1.4.orig/configure libusb-compat-0.1.4/configure
+--- libusb-compat-0.1.4.orig/configure	2012-04-24 15:46:32.000000000 +1000
++++ libusb-compat-0.1.4/configure	2013-01-20 21:31:43.000000000 +1000
+@@ -10951,7 +10951,7 @@
+ 
+ $as_echo "#define API_EXPORTED __attribute__((visibility(\"default\")))" >>confdefs.h
+ 
+-AM_CFLAGS="-std=gnu99 $inline_cflags -Wall -Wundef -Wunused -Wstrict-prototypes -Werror-implicit-function-declaration -Wno-pointer-sign -Wshadow"
++AM_CFLAGS="-std=gnu99 $inline_cflags -Wall -Wundef -Wunused -Wstrict-prototypes -Werror-implicit-function-declaration -Wshadow"
+ 
+ 
+ ac_config_files="$ac_config_files libusb.pc libusb-config Makefile libusb/Makefile examples/Makefile"
+diff -ur libusb-compat-0.1.4.orig/libusb/Makefile.in libusb-compat-0.1.4/libusb/Makefile.in
+--- libusb-compat-0.1.4.orig/libusb/Makefile.in	2012-04-24 15:46:43.000000000 +1000
++++ libusb-compat-0.1.4/libusb/Makefile.in	2013-01-20 21:19:25.000000000 +1000
+@@ -218,7 +218,7 @@
+ include_HEADERS = usb.h
+ lib_LTLIBRARIES = libusb.la
+ libusb_la_SOURCES = core.c usbi.h
+-libusb_la_CFLAGS = -fvisibility=hidden $(AM_CFLAGS) $(LIBUSB_1_0_CFLAGS)
++libusb_la_CFLAGS = $(AM_CFLAGS) $(LIBUSB_1_0_CFLAGS)
+ libusb_la_LIBADD = $(LIBUSB_1_0_LIBS)
+ libusb_la_LDFLAGS = -version-info $(LT_MAJOR):$(LT_REVISION):$(LT_AGE) \
+ 	-release 0.1

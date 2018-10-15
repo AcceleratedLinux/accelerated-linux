@@ -1,0 +1,264 @@
+check_backup_mode () {
+        if [ $wan_dual_wan_backup = "99" ]; then
+                return 0
+        else
+                return 1
+        fi
+}
+check_interface () {
+	case $1 in
+		0|1)
+			if [ $1 = $wan_dual_wan_master ]; then
+				case $wan_dual_wan_backup in
+					2|3|4|5|6)
+				master_if="${eth2}.2"
+				backup_if="ppp0"
+						;;
+					7)
+						master_if="${eth2}.2"
+						backup_if="apcli0"
+						;;
+				esac
+			else
+				case $wan_dual_wan_master in
+					2|3|4|5|6)
+				master_if="ppp0"
+				backup_if="${eth2}.2"
+						;;
+					7)
+						master_if="apcli0"
+						backup_if="${eth2}.2"
+						;;
+				esac
+			fi 
+			;;
+		2|4|5|6)
+			if [ $1 = $wan_dual_wan_master ]; then
+				case $wan_dual_wan_backup in
+					3)
+				master_if="ppp0"
+				backup_if="ppp1"
+						;;
+					7)
+						master_if="ppp0"
+						backup_if="apcli0"
+						;;
+				esac
+			else
+				case $wan_dual_wan_master in
+					3)
+				master_if="ppp1"
+				backup_if="ppp0"
+						;;
+					7)
+						master_if="apcli0"
+						backup_if="ppp0"
+						;;
+				esac
+			fi
+			;;
+		3)
+			if [ $1 = $wan_dual_wan_master ]; then
+				case $wan_dual_wan_backup in
+					0|1)
+						master_if="ppp0"
+						backup_if="${eth2}.2"
+						;;
+					2|4|5|6)
+						master_if="ppp0"
+						backup_if="ppp1"
+						;;
+					7)
+						master_if="ppp0"
+						backup_if="apcli0"
+						;;
+				esac
+			else
+				case $wan_dual_wan_master in
+					0|1)
+						master_if="${eth2}.2"
+						backup_if="ppp0"
+						;;
+					2|4|5|6)
+						master_if="ppp1"
+						backup_if="ppp0"
+						;;
+					7)
+						master_if="apcli0"
+						backup_if="ppp0"
+						;;
+				esac
+			fi
+			;;
+		7)
+			if [ $1 = $wan_dual_wan_master ]; then
+				case $wan_dual_wan_backup in
+					0|1)
+						master_if="apcli0"
+						backup_if="${eth2}.2"
+						;;
+					2|3|4|5|6)
+						master_if="apcli0"
+						backup_if="ppp0"
+						;;
+				esac
+			else
+				case $wan_dual_wan_master in
+					0|1)
+						master_if="${eth2}.2"
+						backup_if="apcli0"
+						;;
+					2|3|4|5|6)
+						master_if="ppp0"
+						backup_if="apcli0"
+						;;
+				esac
+			fi
+			;;
+	esac
+}
+run_interface () {
+	if [ "$wan_dual_wan_backup" = "99" ]; then
+        	run_if="ppp0"
+        else
+       		if [ `cat /var/run/lb.status` = "$wan_ip_assignment" ]; then
+			check_interface $wan_ip_assignment
+                	[ "$wan_ip_assignment" = "$wan_dual_wan_master" ] && run_if=$master_if
+                	[ ! "$wan_ip_assignment" = "$wan_dual_wan_master" ] && run_if=$backup_if	
+		else
+			check_interface $wan_dual_wan_backup
+			run_if=$master_if
+		fi
+  	fi
+}
+stop_lb () {
+	count=0
+        while [ $count -le $1 ]
+         do
+           if [ -e $2 ]; then
+             sleep 1
+             count=`expr $count + 1`
+           else
+	     return 0
+           fi
+        done
+	return 1
+}
+lb_status() {
+	check_backup_mode
+        if [ $? = 1 ]; then 
+		[ -e /var/run/lb.status ] && echo `cat /var/run/lb.status`	
+		##DWAN_DEBUG [ ! -e /var/run/lb.status ] && echo $wan_ip_assignment
+	else
+		##DWAN_DEBUG echo $wan_ip_assignment
+		echo "" > /dev/null
+	fi
+}
+stop_lb_process() {
+        if [ "$1" = "0" ]; then
+                /etc/init.d/load_balance.sh stop
+                stop_lb 30 $2
+                if [ $? = 1 ]; then
+                        for i in `pidof load_balance.sh`; do
+                                kill -9 $i > /dev/null
+                                rm -rf /var/run/stop.run
+                        done
+                fi
+        fi
+}
+waitting_interface () {
+
+        local devcount=0;sleep_time=1
+        while [ -z "`ls /proc/sys/net/ipv4/conf | grep $1`" ]
+        do
+          sleep $sleep_time 
+          if [ $devcount -gt $2 ]; then
+             ##DWAN_DEBUG echo "over $2 sec !!!"  >/dev/console
+             return 0
+          else
+             devcount=`expr $devcount + $sleep_time`
+          fi
+        done
+        return 1
+}
+check_connection () {
+	PING_CMD=/bin/ping
+	PING_TEST_IP=168.95.192.1
+	Delay=3
+	TIME=$wan_dual_wan_detect_timeout
+	[ "$1" = "$wan_dual_wan_master" ] && PING_TEST_IP=$wan_dual_wan_detect_ip
+	[ "$1" = "$wan_dual_wan_backup" ] && PING_TEST_IP=$wan_dual_backup_wan_detect_ip
+
+	# delay some time for geting ip netmask status, 20090730, Jason Huang
+	sleep $Delay
+	
+	if [ "`$PING_CMD -c 3 -I $2 -W $TIME $PING_TEST_IP | grep ttl`" ]; then
+		return 1 
+	else
+		return 0 
+	fi
+}
+counting_connection () {
+	count=0
+	while [ $count -le $3 ]
+	do
+		if [ ! -e /var/run/start_detect ]; then
+			sleep 1
+			count=`expr $count + 1`
+		else
+			check_hosts $1
+			check_connection $1 $2
+			if [ "$?" = "0" ]; then
+				return 0 
+			else
+				return 1 
+			fi
+		fi
+		stop_load_balance
+		[ "$?" = "1" ] && exit 0
+	done
+	return 0 
+}
+get_ip_type () {
+	IPCALC=/bin/ipcalc
+	case $1 in
+		"$wan_dual_wan_master") 
+					[ -z "`$IPCALC -m $wan_dual_wan_detect_ip 2>/dev/null | grep NETMASK`" ] && return 0
+					;;
+		"$wan_dual_wan_backup") 
+					[ -z "`$IPCALC -m $wan_dual_backup_wan_detect_ip 2>/dev/null | grep NETMASK`" ] && return 0
+					;;
+		*) 			##DWAN_DEBUG echo "Not match ip assigment!"
+					;;
+	esac
+	return 1
+}
+check_hosts () {
+	local ip_tmp
+	HOSTS_FILE=/etc/hosts
+	HOSTNAME_SCRIPT=/etc/init.d/hostname.sh
+	case $1 in
+		"$wan_dual_wan_master") 
+					get_ip_type $wan_dual_wan_master
+					if [ "$?" = "0" ]; then
+						ip_tmp=`cat $HOSTS_FILE 2>/dev/null | grep $wan_dual_wan_detect_ip`
+						[ -z "$ip_tmp" ] && $HOSTNAME_SCRIPT wan_config
+					fi
+					;;	
+		"$wan_dual_wan_backup") 
+					get_ip_type $wan_dual_wan_backup
+					if [ "$?" = "0" ]; then
+						ip_tmp=`cat $HOSTS_FILE 2>/dev/null | grep $wan_dual_backup_wan_detect_ip`
+						[ -z "$ip_tmp" ] && $HOSTNAME_SCRIPT backup_wan_config
+					fi
+					;;
+		*)
+					##DWAN_DEBUG echo "No match ip assigment!"
+					;;
+	esac
+}
+active_interface () {
+	check_interface $1
+	[ "$wan_ip_assignment" = "$wan_dual_wan_master" ] && tmp_if=$master_if
+	[ ! "$wan_ip_assignment" = "$wan_dual_wan_master" ] && tmp_if=$backup_if
+}

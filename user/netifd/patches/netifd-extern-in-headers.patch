@@ -1,0 +1,13 @@
+Index: netifd/system.h
+===================================================================
+--- netifd.orig/system.h
++++ netifd/system.h
+@@ -37,7 +37,7 @@ enum tunnel_param {
+ 	__TUNNEL_ATTR_MAX
+ };
+ 
+-const struct uci_blob_param_list tunnel_attr_list;
++extern const struct uci_blob_param_list tunnel_attr_list;
+ 
+ enum bridge_opt {
+ 	/* stp and forward delay always set */

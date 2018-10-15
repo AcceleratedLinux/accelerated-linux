@@ -1,0 +1,10 @@
+--- ipsec-tools-0.8.2/src/racoon/isakmp_xauth.c.org	2018-01-25 13:33:13.389879392 +1000
++++ ipsec-tools-0.8.2/src/racoon/isakmp_xauth.c	2018-01-25 13:33:34.441879733 +1000
+@@ -376,6 +376,7 @@
+ 	struct ph1handle *iph1;
+ 	int port;
+ 	int id;
++	int res;
+ {
+ 	struct xauth_state *xst = &iph1->mode_cfg->xauth;
+ 	char *usr = xst->authdata.generic.usr;

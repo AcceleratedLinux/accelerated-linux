@@ -1,0 +1,11 @@
+Index: iptables-1.4.21/libiptc/linux_list.h
+===================================================================
+--- iptables-1.4.21.orig/libiptc/linux_list.h
++++ iptables-1.4.21/libiptc/linux_list.h
+@@ -1,5 +1,4 @@
+-#ifndef _LINUX_LIST_H
+-#define _LINUX_LIST_H
++#ifndef INIT_LIST_HEAD
+ 
+ #undef offsetof
+ #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)

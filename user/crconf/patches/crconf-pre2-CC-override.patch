@@ -1,0 +1,25 @@
+--- crconf-pre2/Makefile.orig	2011-09-21 16:01:50.000000000 +1000
++++ crconf-pre2/Makefile	2015-12-11 15:55:44.402559870 +1000
+@@ -1,9 +1,10 @@
+ DESTDIR=/usr
+-ROOTDIR=$(DESTDIR)
++#ROOTDIR=$(DESTDIR)
+ LIBDIR=/usr/lib
+ SBINDIR=/sbin
+ #MANDIR=/share/man
+ 
++ifdef NOT_DEFINED
+ CC = gcc
+ HOSTCC = gcc
+ CCOPTS = -D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall
+@@ -12,6 +13,10 @@
+ LDLIBS += -L../lib -lnetlink
+ 
+ SUBDIRS=lib src
++else
++CFLAGS += -I../include
++SUBDIRS=lib src
++endif
+ 
+ LIBNETLINK=../lib/libnetlink.a 
+ 

@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# maintain current ipsec tunnel status,  for now we use a file in /var/run
+# that we update as needed.  This will not scale,  but, its gets us started.
+#
+
+map_field()
+{
+	case "$1" in
+	tunnel) echo "ipsec" ;;
+	phase1) echo "isakmp-sa" ;;
+	phase2) echo "ipsec-sa" ;;
+	*)      echo "$1" ;;
+	esac
+}
+
+push() {
+	TUNNEL="$1"
+	FIELD=$(map_field "$2")
+	VALUE="$3"
+	drop "$1" "$2" "$3"
+	echo "$FIELD=$VALUE" >> "/var/run/$TUNNEL.state"
+}
+
+drop() {
+	TUNNEL="$1"
+	FIELD=$(map_field "$2")
+	VALUE="$3"
+	sed -i "\\?^$FIELD=?D" "/var/run/$TUNNEL.state"
+}
+
+eval "$@"
+exit 0

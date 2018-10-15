@@ -1,0 +1,19 @@
+--- libreswan-3.12/Makefile.inc.local.LSW	2015-09-01 14:19:41.282112853 -0400
++++ libreswan-3.12/Makefile.inc.local	2015-09-01 14:20:41.353197545 -0400
+@@ -66,5 +66,15 @@
+ USE_LIBCAP_NG := false
+ USE_LIBCURL := false
+ HAVE_NO_FORK := true
++USE_EXTRACRYPTO := false
++USE_LINUX_AUDIT := false
++USE_LABELED_IPSEC := false
++USE_XAUTHPAM := false
++USE_FIPSCHECK := false
++USE_KLIPS := false
++USE_LDAP := false
++USE_LIBCURL := false
++USE_DNSSEC := false
+ 
+-USERLINK = -g 
++# can't be empty
++USERLINK = -Wl,--got=multigot

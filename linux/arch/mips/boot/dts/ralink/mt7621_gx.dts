@@ -1,0 +1,94 @@
+/dts-v1/;
+
+#include "mt7621.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "Digi GX";
+	compatible = "digi,gx", "mediatek,mt7621-soc";
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x08000000>;
+	};
+};
+
+&pcie {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie_pins>;
+	status = "okay";
+};
+
+&xhci {
+	status = "okay";
+};
+
+&nand {
+	status = "okay";
+	pin-ctrl-names = "default";
+	pinctrl-0 = <&nand_pins>;
+
+	partition@0 {
+		label = "u-boot";
+		reg = <0x00000000 0x00200000>;
+	};
+	partition@1 {
+		label = "u-boot-env";
+		reg = <0x00200000 0x00100000>;
+	};
+	partition@2 {
+		label = "log";
+		reg = <0x00300000 0x00200000>;
+	};
+	partition@3 {
+		label = "flash";
+		reg = <0x00500000 0>;
+	};
+	partition@4 {
+		label = "all";
+		reg = <0x00000000 0>;
+	};
+};
+
+&i2c {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	extgpio0: pca8575@26 {
+		compatible = "nxp,pca8575";
+		reg = <0x26>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+	extgpio1: pca8575@25 {
+		compatible = "nxp,pca8575";
+		reg = <0x25>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
+
+&uartlite0 {
+	status = "okay";
+};
+
+&uartlite1 {
+	status = "disabled";
+};
+
+&uartlite2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_pins>;
+	dtr-gpios = <&gpio0 27 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio0 23 GPIO_ACTIVE_LOW>;
+};
+
+&pinctrl {
+	state_default: pinctrl0 {
+		gpio {
+			ralink,group = "rgmii2", "uart2";
+			ralink,function = "gpio";
+		};
+	};
+};

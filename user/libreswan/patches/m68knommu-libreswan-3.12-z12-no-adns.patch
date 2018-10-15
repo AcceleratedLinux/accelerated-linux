@@ -1,0 +1,504 @@
+--- libreswan-3.12/programs/pluto/connections.c.orig	2014-11-06 22:52:50.000000000 -0500
++++ libreswan-3.12/programs/pluto/connections.c	2015-09-11 16:51:33.063323642 -0400
+@@ -322,7 +322,9 @@
+ 
+ 	free_generalNames(c->requested_ca, TRUE);
+ 
++#ifdef USE_ADNS
+ 	gw_delref(&c->gw_info);
++#endif
+ 	palg_info.ppai_esp = &c->alg_info_esp;
+ 	alg_info_delref(palg_info.ppai);
+ 	palg_info.ppai_ike = &c->alg_info_ike;
+@@ -1880,9 +1882,11 @@
+ 	if (sameaddr(peer_client, &d->spd.that.host_addr))
+ 		d->spd.that.has_client = FALSE;
+ 
++#ifdef USE_ADNS
+ 	passert(d->gw_info == NULL);
+ 	gw_addref(gw);
+ 	d->gw_info = gw;
++#endif
+ 
+ #if 0
+ 	/*
+@@ -1908,7 +1912,11 @@
+ struct connection *oppo_instantiate(struct connection *c,
+ 				const ip_address *him,
+ 				const struct id *his_id,
++#ifdef USE_ADNS
+ 				struct gw_info *gw,
++#else
++				struct gw_info *gw UNUSED,
++#endif
+ 				const ip_address *our_client,
+ 				const ip_address *peer_client)
+ {
+@@ -1961,9 +1969,11 @@
+ 	if (sameaddr(peer_client, &d->spd.that.host_addr))
+ 		d->spd.that.has_client = FALSE;
+ 
++#ifdef USE_ADNS
+ 	passert(d->gw_info == NULL);
+ 	gw_addref(gw);
+ 	d->gw_info = gw;
++#endif
+ 
+ 	/*
+ 	 * Adjust routing if something is eclipsing c.
+--- libreswan-3.12/programs/pluto/ikev1_main.c.orig	2014-11-06 22:52:50.000000000 -0500
++++ libreswan-3.12/programs/pluto/ikev1_main.c	2015-09-11 16:14:03.623279196 -0400
+@@ -1778,7 +1778,11 @@
+ stf_status oakley_id_and_auth(struct msg_digest *md,
+ 			bool initiator, /* are we the Initiator? */
+ 			bool aggrmode, /* aggressive mode? */
++#ifdef USE_ADNS
+ 			cont_fn_t cont_fn, /* continuation function */
++#else
++			cont_fn_t cont_fn UNUSED, /* continuation function */
++#endif
+ 			/* current state, can be NULL */
+ 			const struct key_continuation *kc)
+ {
+@@ -1843,7 +1847,7 @@
+ 					"key continuation");
+ 			enum key_oppo_step step_done =
+ 				kc == NULL ? kos_null : kc->step;
+-			err_t ugh;
++			err_t ugh = NULL;
+ 
+ 			/* Record that state is used by a suspended md */
+ 			passert(st->st_suspended_md == NULL);
+@@ -1859,6 +1863,7 @@
+ #ifdef USE_KEYRR
+ 				nkc->failure_ok = TRUE;
+ #endif
++#ifdef USE_ADNS
+ 				ugh = start_adns_query(
+ 					&st->st_connection->spd.that.id,
+ 					/* SG itself */
+@@ -1866,18 +1871,21 @@
+ 					ns_t_txt,
+ 					cont_fn,
+ 					&nkc->ac);
++#endif
+ 				break;
+ 
+ #ifdef USE_KEYRR
+ 			case kos_his_txt:
+ 				/* second try: look for the KEY records */
+ 				nkc->step = kos_his_key;
++#ifdef USE_ADNS
+ 				ugh = start_adns_query(
+ 					&st->st_connection->spd.that.id,
+ 					NULL, /* no sgw for KEY */
+ 					ns_t_key,
+ 					cont_fn,
+ 					&nkc->ac);
++#endif
+ 				break;
+ #endif /* USE_KEYRR */
+ 
+--- libreswan-3.12/programs/pluto/server.c.orig	2015-09-11 16:57:28.087323691 -0400
++++ libreswan-3.12/programs/pluto/server.c	2015-09-16 11:53:22.956788665 -0400
+@@ -74,8 +74,10 @@
+ #include "demux.h"  /* needs packet.h */
+ #include "rcv_whack.h"
+ #include "keys.h"
++#ifdef USE_ADNS
+ #include "adns.h"               /* needs <resolv.h> */
+ #include "dnskey.h"             /* needs keys.h and adns.h */
++#endif
+ #include "whack.h"              /* for RC_LOG_SERIOUS */
+ #include "pluto_crypt.h"        /* cryptographic helper functions */
+ #include "udpfromto.h"
+@@ -470,9 +472,11 @@
+ 	errno = 0;
+ 
+ 	while ((child = waitpid(-1, &status, WNOHANG)) > 0) {
++#ifdef USE_ADNS
+ 		/* got a child to reap */
+ 		if (adns_reapchild(child))
+ 			continue;
++#endif
+ 
+ 		if (child == addconn_child_pid) {
+ 			DBG(DBG_CONTROLMORE,
+@@ -622,18 +626,22 @@
+ 			LSW_FD_ZERO(&writefds);
+ 			LSW_FD_SET(ctl_fd, &readfds);
+ 
++#ifdef USE_ADNS
+ 			/* the only write file-descriptor of interest */
+ 			if (adns_qfd != NULL_FD && unsent_ADNS_queries) {
+ 				if (maxfd < adns_qfd)
+ 					maxfd = adns_qfd;
+ 				LSW_FD_SET(adns_qfd, &writefds);
+ 			}
++#endif
+ 
++#ifdef USE_ADNS
+ 			if (adns_afd != NULL_FD) {
+ 				if (maxfd < adns_afd)
+ 					maxfd = adns_afd;
+ 				LSW_FD_SET(adns_afd, &readfds);
+ 			}
++#endif
+ 
+ #ifdef KLIPS
+ 			if (kern_interface != NO_KERNEL) {
+@@ -702,6 +710,7 @@
+ 		if (ndes > 0) {
+ 			/* at least one file descriptor is ready */
+ 
++#ifdef USE_ADNS
+ 			if (adns_qfd != NULL_FD &&
+ 			    LSW_FD_ISSET(adns_qfd, &writefds)) {
+ 				passert(ndes > 0);
+@@ -709,7 +718,9 @@
+ 				passert(GLOBALS_ARE_RESET());
+ 				ndes--;
+ 			}
++#endif
+ 
++#ifdef USE_ADNS
+ 			if (adns_afd != NULL_FD &&
+ 			    LSW_FD_ISSET(adns_afd, &readfds)) {
+ 				passert(ndes > 0);
+@@ -719,6 +730,7 @@
+ 				passert(GLOBALS_ARE_RESET());
+ 				ndes--;
+ 			}
++#endif
+ 
+ #ifdef KLIPS
+ 			if (kern_interface != NO_KERNEL &&
+--- libreswan-3.12/programs/pluto/rcv_whack.c.orig	2014-11-06 22:52:50.000000000 -0500
++++ libreswan-3.12/programs/pluto/rcv_whack.c	2015-09-11 16:14:42.475291064 -0400
+@@ -110,7 +110,9 @@
+ 	libreswan_log("listening for IKE messages");
+ 	listening = TRUE;
+ 	daily_log_reset();
++#ifdef USE_ADNS
+ 	reset_adns_restart_count();
++#endif
+ 	set_myFQDN();
+ 	find_ifaces();
+ 	load_preshared_secrets();
+@@ -213,6 +215,7 @@
+ 	return TRUE;
+ }
+ 
++#ifdef USE_ADNS
+ static void key_add_continue(struct adns_continuation *ac, err_t ugh)
+ {
+ 	struct key_add_continuation *kc = (void *) ac;
+@@ -236,6 +239,7 @@
+ 	key_add_merge(oc, &ac->id);
+ 	whack_log_fd = NULL_FD;
+ }
++#endif
+ 
+ static void key_add_request(const struct whack_message *msg)
+ {
+@@ -272,19 +276,23 @@
+ 				kc->lookingfor = kaa;
+ 				switch (kaa) {
+ 				case ka_TXT:
++#ifdef USE_ADNS
+ 					ugh = start_adns_query(&keyid,
+ 							       &keyid, /* same */
+ 							       ns_t_txt,
+ 							       key_add_continue,
+ 							       &kc->ac);
++#endif
+ 					break;
+ #ifdef USE_KEYRR
+ 				case ka_KEY:
++#ifdef USE_ADNS
+ 					ugh = start_adns_query(&keyid,
+ 							       NULL,
+ 							       ns_t_key,
+ 							       key_add_continue,
+ 							       &kc->ac);
++#endif
+ 					break;
+ #endif                                                  /* USE_KEYRR */
+ 				default:
+--- libreswan-3.12/programs/pluto/Makefile.options.orig	2015-09-11 16:24:27.792270556 -0400
++++ libreswan-3.12/programs/pluto/Makefile.options	2015-09-11 16:30:59.435348573 -0400
+@@ -22,6 +22,10 @@
+ DNSSECDEF=-DDNSSEC
+ endif
+ 
++ifeq ($(USE_ADNS),true)
++CFLAGS+=-DUSE_ADNS
++endif
++
+ ifeq ($(USE_LINUX_AUDIT),true)
+ CFLAGS += -DUSE_LINUX_AUDIT
+ endif
+@@ -70,12 +74,11 @@
+ #    Double quoting may be needed.
+ 
+ 
+-#USE_ADNS=true
+-#BINNAMEADNSIFNEEDED=$(BINNAMEADNS)
+-
++ifeq ($(USE_ADNS),true)
+ ifeq ($(USE_KEYRR),true)
+ KEYRR_DEFINES=-DUSE_KEYRR
+ endif
++endif
+ 
+ ifeq ($(USE_PFKEYv2),true)
+ PFKEYv2_DIST_SRC=kernel_pfkey.c kernel_pfkey.h
+@@ -198,9 +201,9 @@
+ 
+ DEFINES = $(EXTRA_DEFINES) \
+ 	${VENDORID} \
++	$(ADNS_DEFS) \
+ 	$(KEYRR_DEFINES) \
+ 	$(BYTE_ORDER) \
+-	$(DNSSECDEF) \
+ 	$(NETKEY_DEFS) \
+ 	$(X509_DEFS) \
+ 	${EXTRA_CRYPTO_DEFS} \
+--- libreswan-3.12/programs/pluto/ikev1_quick.c.orig	2014-11-06 22:52:50.000000000 -0500
++++ libreswan-3.12/programs/pluto/ikev1_quick.c	2015-09-11 16:14:03.623279196 -0400
+@@ -1486,6 +1486,7 @@
+ 	       which, ugh, st->st_msgid);
+ }
+ 
++#ifdef USE_ADNS
+ static void quick_inI1_outR1_continue(struct adns_continuation *cr, err_t ugh)
+ {
+ 	stf_status r;
+@@ -1513,6 +1514,7 @@
+ 	release_any_md(&b->md);
+ 	cur_state = NULL;
+ }
++#endif
+ 
+ static stf_status quick_inI1_outR1_start_query(struct verify_oppo_bundle *b,
+ 					       enum verify_oppo_step next_step)
+@@ -1527,7 +1529,7 @@
+ 	struct id id,           /* subject of query */
+ 		  our_id_space; /* ephemeral: no need for unshare_id_content */
+ 	ip_address client;
+-	err_t ugh;
++	err_t ugh = NULL;
+ 
+ 	/* Record that state is used by a suspended md */
+ 	b->step = next_step; /* not just vc->b.step */
+@@ -1572,30 +1574,36 @@
+ 		networkof(&b->my.net, &client);
+ 		iptoid(&client, &id);
+ 		vc->b.failure_ok = b->failure_ok = FALSE;
++#ifdef USE_ADNS
+ 		ugh = start_adns_query(&id,
+ 				       our_id,
+ 				       ns_t_txt,
+ 				       quick_inI1_outR1_continue,
+ 				       &vc->ac);
++#endif
+ 		break;
+ 
+ 	case vos_our_txt:
+ 		vc->b.failure_ok = b->failure_ok = TRUE;
++#ifdef USE_ADNS
+ 		ugh = start_adns_query(our_id,
+ 				       our_id, /* self as SG */
+ 				       ns_t_txt,
+ 				       quick_inI1_outR1_continue,
+ 				       &vc->ac);
++#endif
+ 		break;
+ 
+ #ifdef USE_KEYRR
+ 	case vos_our_key:
+ 		vc->b.failure_ok = b->failure_ok = FALSE;
++#ifdef USE_ADNS
+ 		ugh = start_adns_query(our_id,
+ 				       NULL,
+ 				       ns_t_key,
+ 				       quick_inI1_outR1_continue,
+ 				       &vc->ac);
++#endif
+ 		break;
+ #endif
+ 
+@@ -1603,11 +1611,13 @@
+ 		networkof(&b->his.net, &client);
+ 		iptoid(&client, &id);
+ 		vc->b.failure_ok = b->failure_ok = FALSE;
++#ifdef USE_ADNS
+ 		ugh = start_adns_query(&id,
+ 				       &c->spd.that.id,
+ 				       ns_t_txt,
+ 				       quick_inI1_outR1_continue,
+ 				       &vc->ac);
++#endif
+ 		break;
+ 
+ 	default:
+--- libreswan-3.12/programs/pluto/Makefile.orig	2015-09-11 14:06:07.083278210 -0400
++++ libreswan-3.12/programs/pluto/Makefile	2015-09-11 16:33:20.327335272 -0400
+@@ -32,7 +32,6 @@
+ BINNAMEPLUTO = pluto
+ BINNAMEWHACK = whack
+ BINNAMEWHACKINIT = whackinit
+-#BINNAMEADNS = _pluto_adns
+ 
+ OSDEP?=$(shell uname -s | tr 'A-Z' 'a-z')
+ SYSDEP_SRC=sysdep_${OSDEP}.c
+@@ -67,8 +66,12 @@
+ LDFLAGS+=-L$(LD_LIBRARY_PATH)
+ endif
+ 
+-#LIBSADNS = $(LIBRESWANLIB)
+-#LIBSADNS += -lresolv # -lefence
++ifeq ($(USE_ADNS),true)
++LIBSADNS = $(LIBRESWANLIB)
++LIBSADNS += -lresolv # -lefence
++BINNAMEADNS = _pluto_adns
++ADNS_OBJS=dnskey.o
++endif
+ 
+ LIBSPLUTO += $(IPSECCONFLIB) $(LIBRESWANLIB) -lrt
+ ifeq ($(USE_DNSSEC),true)
+@@ -170,7 +173,7 @@
+ OBJSPLUTO += kernel.o
+ OBJSPLUTO += $(NETKEY_OBJS) $(BSDKAME_OBJS) ${KLIPS_OBJS} ${MAST_OBJS} ${WIN2K_OBJS} ${PFKEYv2_OBJS}
+ OBJSPLUTO += kernel_noklips.o rcv_whack.o
+-OBJSPLUTO += demux.o msgdigest.o keys.o dnskey.o
++OBJSPLUTO += demux.o msgdigest.o keys.o ${ADNS_OBJS}
+ OBJSPLUTO += pluto_crypt.o crypt_utils.o crypt_ke.o crypt_dh.o crypt_start_dh.o
+ OBJSPLUTO += rnd.o spdb.o spdb_struct.o spdb_print.o
+ OBJSPLUTO += vendor.o nat_traversal.o virtual.o
+@@ -200,7 +203,7 @@
+ 	cd ${LIBRESWANSRCDIR} && cd ${OBJDIRTOP}/programs/pluto && $(MAKE) $@
+ else
+ all: $(BINNAMEPLUTO) $(BINNAMEADNSIFNEEDED) $(BINNAMEWHACK) #$(BINNAMEWHACKINIT)
+-programs: $(BINNAMEPLUTO) $(BINNAMEADNSIFNEEDED) $(BINNAMEWHACK) $(MANPAGES) #$(BINNAMEWHACKINIT) 
++programs: $(BINNAMEPLUTO) $(BINNAMEADNS) $(BINNAMEWHACK) $(MANPAGES) #$(BINNAMEWHACKINIT) 
+ clean:	cleanall
+ install: doinstall
+ endif
+@@ -254,8 +257,10 @@
+ $(BINNAMEPLUTO): $(OBJSPLUTO) $(ALG_LIBS) $(LIBRESWANLIB)
+ 	$(CC) -o $(BINNAMEPLUTO) $(LDFLAGS) $(USERLINK) $(OBJSPLUTO) $(LIBSPLUTO) ${PLUTOMINUSL}
+ 
++ifeq ($(USE_ADNS),true)
+ $(BINNAMEADNS): $(OBJSADNS)
+ 	$(CC) -o $(BINNAMEADNS) $(LDFLAGS) $(OBJSADNS) $(USERLINK) $(LIBSADNS) ${ADNSMINUSL}
++endif
+ 
+ $(BINNAMEWHACK): $(OBJSWHACK)
+ 	$(CC) -o $(BINNAMEWHACK) $(LDFLAGS) $(OBJSWHACK) $(USERLINK) $(LIBSWHACK) ${WHACKMINUSL}
+--- libreswan-3.12/programs/pluto/initiate.c.orig	2014-11-06 22:52:50.000000000 -0500
++++ libreswan-3.12/programs/pluto/initiate.c	2015-09-11 16:14:03.627278466 -0400
+@@ -583,6 +583,7 @@
+ 				      );
+ }
+ 
++#ifdef USE_ADNS
+ static void continue_oppo(struct adns_continuation *acr, err_t ugh)
+ {
+ 	struct find_oppo_continuation *cr = (void *)acr; /* inherit, damn you! */
+@@ -648,6 +649,7 @@
+ 	whack_log_fd = NULL_FD;
+ 	close_any(whackfd);
+ }
++#endif
+ 
+ static err_t check_txt_recs(enum myid_state try_state,
+ 			    const struct connection *c,
+@@ -1136,7 +1138,9 @@
+ 			struct find_oppo_continuation *cr = alloc_thing(
+ 				struct find_oppo_continuation,
+ 				"opportunistic continuation");
++#ifdef USE_ADNS
+ 			struct id id;
++#endif
+ 
+ 			b->policy_prio = c->prio;
+ 			b->failure_shunt = shunt_policy_spi(c, FALSE);
+@@ -1177,6 +1181,7 @@
+ 			 */
+ 			switch (next_step) {
+ 			case fos_myid_ip_txt:
++#ifdef USE_ADNS
+ 				if (c->spd.this.id.kind == ID_MYID &&
+ 				    myid_state != MYID_SPECIFIED) {
+ 					cr->b.failure_ok = TRUE;
+@@ -1189,9 +1194,11 @@
+ 							       &cr->ac);
+ 					break;
+ 				}
++#endif
+ 				cr->b.step = fos_myid_hostname_txt;
+ 			/* FALL THROUGH */
+ 			case fos_myid_hostname_txt:
++#ifdef USE_ADNS
+ 				if (c->spd.this.id.kind == ID_MYID &&
+ 				    myid_state != MYID_SPECIFIED) {
+ 					cr->b.failure_ok = FALSE;
+@@ -1205,10 +1212,11 @@
+ 							       &cr->ac);
+ 					break;
+ 				}
+-
++#endif
+ 				cr->b.step = fos_our_client;
+ 			/* FALL THROUGH */
+ 			case fos_our_client: /* IPSECKEY for our client */
++#ifdef USE_ADNS
+ 				if (!sameaddr(&c->spd.this.host_addr,
+ 					      &b->our_client)) {
+ 					/* Check that at least one IPSECKEY(reverse(b->our_client)) is workable.
+@@ -1224,9 +1232,11 @@
+ 							       &cr->ac);
+ 					break;
+ 				}
++#endif
+ 				cr->b.step = fos_our_txt;
+ 			/* FALL THROUGH */
+ 			case fos_our_txt: /* IPSECKEY for us */
++#ifdef USE_ADNS
+ 				cr->b.failure_ok = b->failure_ok = TRUE;
+ 				cr->b.want = b->want = "our IPSECKEY record";
+ 				ugh = start_adns_query(&sr->this.id,
+@@ -1235,8 +1245,9 @@
+ 						       continue_oppo,
+ 						       &cr->ac);
+ 				break;
+-
++#endif
+ 			case fos_his_client: /* IPSECKEY for his client */
++#ifdef USE_ADNS
+ 				/* note: {unshare|free}_id_content not needed for id: ephemeral */
+ 				cr->b.want = b->want =
+ 						     "target's IPSECKEY record";
+@@ -1248,7 +1259,7 @@
+ 						       continue_oppo,
+ 						       &cr->ac);
+ 				break;
+-
++#endif
+ 			default:
+ 				bad_case(next_step);
+ 			}
+--- libreswan-3.12/Makefile.inc.orig	2015-09-11 16:18:32.603287749 -0400
++++ libreswan-3.12/Makefile.inc	2015-09-11 16:19:11.375396431 -0400
+@@ -298,6 +298,10 @@
+ # Enable support for DNSSEC. This requires the unbound library
+ USE_DNSSEC?=true
+ 
++# Enable support for the obsoleted adns resolver
++# This code is only used by IKEv1 OE - which is obsoleted. Do not enable!
++USE_ADNS?=false
++
+ # Do we want all the configuration files like ipsec.conf and ipsec.secrets
+ # and any certificates to be in a single directory defined by 
+ # FINALCONFDDIR?

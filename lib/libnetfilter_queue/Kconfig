@@ -1,0 +1,5 @@
+config LIB_NETFILTER_QUEUE
+	bool "libnetfilter_queue"
+	select LIB_NFNETLINK
+	select LIB_LIBMNL
+	default n

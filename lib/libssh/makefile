@@ -1,0 +1,16 @@
+
+CFLAGS   := $(CFLAGS:-fno-common=)
+
+URL       = https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.2.tar.gz
+SRCDIR   := libssh-0.7.2
+BUILDDIR := libssh-0.7.2-build
+CMAKE_OPTS += -DOPENSSL_INCLUDE_DIR=$(STAGEDIR)
+CMAKE_OPTS += -DWITH_SERVER=OFF
+CMAKE_OPTS += -DWITH_GCRYPT=OFF
+CMAKE_OPTS += -DWITH_GSSAPI=OFF
+CMAKE_OPTS += -DWITH_NACL=OFF
+CMAKE_OPTS += -DWITH_EXAMPLES=OFF
+CMAKE_OPTS += -DWITH_INTERNAL_DOC=ON
+CMAKE_OPTS += -DWITH_STACK_PROTECTOR=OFF
+
+include $(ROOTDIR)/tools/cmake.inc

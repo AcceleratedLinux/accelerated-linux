@@ -1,0 +1,5 @@
+config USER_ARPTABLES_ARPTABLES
+	bool "arptables"
+	help
+	  Arptables is used to set up, maintain, and inspect the tables of ARP
+	  packet filter rules in the Linux kernel.

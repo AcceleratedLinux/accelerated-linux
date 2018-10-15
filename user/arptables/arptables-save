@@ -1,0 +1,51 @@
+#!/bin/sh
+# A script that generates text output of the arptables rules.
+# Similar to iptables-save.
+
+tool="/sbin/arptables"
+
+# ========================================================
+# Process filter table
+# ========================================================
+process_table()
+{
+	chain=""
+	rules=""
+	chains=""
+	custom_chains=""
+	line=""
+
+	while read line ; do
+		[ -z "$line" ] && continue
+		temp=$(echo "$line" | sed -rn 's/Chain (.*?) \(.*\)/\1/p')
+		if [ "$temp" ]; then
+			policy=$(echo "$line" | sed -rn 's/Chain .*? \(policy (.*)\)/\1/p')
+			chain="$temp"
+			if [ "$policy" ]; then
+				chains="$chains:$chain $policy\n"
+				continue
+			else
+				custom_chains="$custom_chains:$chain -\n"
+				continue
+			fi
+		fi
+
+		rules="$rules-A $chain $line\n"
+	done <<EOF
+$1
+EOF
+
+	printf "*filter\n"
+	printf "$chains"
+	printf "$custom_chains"
+	printf "$rules"
+	printf "\n"
+}
+# ========================================================
+
+[ ! -x "$tool" ] && echo "ERROR: Tool $tool isn't executable" && exit 1
+table=$($tool -t filter -L -n)
+[ $? != 0 ] && echo "$table" && exit 1
+process_table "$table"
+
+exit 0

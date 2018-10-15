@@ -1,0 +1,3 @@
+config LIB_NFNETLINK
+	bool "libnfnetlink"
+	default n

@@ -1,0 +1,371 @@
+<po>
+  <message msgid="wireless apply" msgstr="确定" />
+  <message msgid="wireless cancel" msgstr="取消" />
+  <message msgid="wireless close" msgstr="关闭" />
+  <message msgid="wireless enable" msgstr="启用" />
+  <message msgid="wireless disable" msgstr="停用" />
+  <message msgid="wireless allow" msgstr="允许" />
+  <message msgid="wireless reject" msgstr="拒绝" />
+  <message msgid="wireless auto" msgstr="自动" />
+  <message msgid="wireless long" msgstr="长" />
+  <message msgid="wireless on" msgstr="开" />
+  <message msgid="wireless off" msgstr="关" />
+  <message msgid="wireless none" msgstr="无" />
+  <message msgid="wireless next" msgstr="下一步" />
+  
+  <message msgid="wireless turn on" msgstr="开启" />
+  <message msgid="wireless turn off" msgstr="关闭" />
+
+  <message msgid="station add" msgstr="新增" />
+  <message msgid="station del" msgstr="删除" />
+  <message msgid="station edit" msgstr="编辑" />
+  <message msgid="station active" msgstr="启动" />
+  <message msgid="station enable" msgstr="启用" />
+  <message msgid="station used" msgstr="使用中&#160;&#160;" />
+  <message msgid="station select" msgstr="&#160;" />
+  <message msgid="station ssid" msgstr="无线接入点名称" />
+  <message msgid="station channel" msgstr="频道" />
+  <message msgid="station encryp" msgstr="加密方式" />
+  <message msgid="station auth" msgstr="认证方式" />
+  <message msgid="station network type" msgstr="网路型态" />
+
+  <message msgid="basic title" msgstr="基本无线设定" />
+  <message msgid="basic introduction" msgstr="您可以设定基本的无线网路，譬如：无线接入点名称和频道，甚至设定高效率实体模组来提高效能。" />
+  <message msgid="basic wireless network" msgstr="无线网路" />
+  <message msgid="basic radio button" msgstr="无线网路 开/关" />
+  <message msgid="basic network mode" msgstr="网路模式" />
+  <message msgid="basic ssid" msgstr="无线接入点名称" />
+  <message msgid="basic multiple ssid" msgstr="虚拟无线接入点名称" />
+  <message msgid="basic hssid" msgstr="隐藏" />
+  <message msgid="basic isolated" msgstr="分离" />
+  <message msgid="basic broadcast ssid" msgstr="广播无线接入点名称" />
+  <message msgid="basic apisolated" msgstr="AP 分离" />
+  <message msgid="basic mbssidapisolated" msgstr="MBSSID AP 分离" />
+  <message msgid="basic bssid" msgstr="MAC地址" />
+  <message msgid="basic frequency" msgstr="频道" />
+  <message msgid="basic frequency auto" msgstr="自动选择" />
+  <message msgid="basic rate" msgstr="传输速率" />
+  <message msgid="basic wds title" msgstr="无线桥接系统（WDS）" />
+  <message msgid="basic wds introduction" msgstr="WDS允许设定无线桥接或者设定无线中继的应用。" />
+  <message msgid="basic wds introduction2" msgstr="当网路使用WDS Lazy模式时，其余的AP必须设定为无线桥接模式或无线中继模式。" />
+  
+  <message msgid="basic wds mode" msgstr="无线桥接模式" />
+  <message msgid="basic wds phy mode" msgstr="实体模式" />
+  <message msgid="basic wds encryp type" msgstr="加密型态" />
+  <message msgid="basic wds encryp key" msgstr="加密密钥" />
+  <message msgid="basic wds ap macaddr" msgstr="无线桥接器MAC地址" />
+  <message msgid="basic ht phy mode" msgstr="高效率实体模组" />
+  <message msgid="basic ht op mode" msgstr="运作模式" />
+  <message msgid="basic ht op mixed" msgstr="混合模式" />
+  <message msgid="basic ht channel bandwidth" msgstr="频道频宽" />
+  <message msgid="basic ht guard interval" msgstr="保护区间" />
+  <message msgid="basic ht rdg" msgstr="反转方向权限(RDG)" />
+  <message msgid="basic ht extension channel" msgstr="延伸频道" />
+  <message msgid="basic ht stbc" msgstr="空时分组码(STBC)" />
+  <message msgid="basic ht amsdu" msgstr="汇集MAC服务数据单位（A-MSDU）" />
+  <message msgid="basic ht addba" msgstr="自动区块答应" />
+  <message msgid="basic ht delba" msgstr="拒绝区块答应要求" />
+  <message msgid="basic ht allowtkip" msgstr="禁止临时密钥完整性协议(TKIP)" />
+  <message msgid="basic other" msgstr="其他" />
+  <message msgid="basic ht txstream" msgstr="高效率传送串流" />
+  <message msgid="basic ht rxstream" msgstr="高效率接收串流" />
+
+  <message msgid="adv title" msgstr="进阶无线设定" />
+  <message msgid="adv introduction" msgstr="进阶设定包含，讯号间隔、控制传送速率、基本资料传输速率等。" />
+  <message msgid="adv wireless" msgstr="进阶设定" />
+  <message msgid="adv bgpro" msgstr="BG保护模式" />
+  <message msgid="adv basic data rate" msgstr="基本资料传输速率" />
+  <message msgid="adv basic data rate default" msgstr="预设（1-2-5.5-11 Mbps）" />
+  <message msgid="adv basic data rate all" msgstr="完整（1-2-5.5-6-11-12-24 Mbps）" />
+  <message msgid="adv beacon interval" msgstr="讯号间隔" />
+  <message msgid="adv beacon interval range" msgstr="（范围 20 - 999，预设 100）" />
+  <message msgid="adv dtim" msgstr="资料讯号比例（传输通信量指示资讯）" />
+  <message msgid="adv dtim range" msgstr="（范围 1 - 255，预设 1）" />
+  <message msgid="adv fragment threshold" msgstr="区块切割临界值" />
+  <message msgid="adv fragment threshold range" msgstr="（范围 256 - 2346，预设 2346）" />
+  <message msgid="adv rts threshold" msgstr="要求传送临界值" />
+  <message msgid="adv rts threshold range" msgstr="（范围 1 - 2347，预设 2347）" />
+  <message msgid="adv tx power" msgstr="发射功率" />
+  <message msgid="adv tx power range" msgstr="（范围 1 - 100，预设 100）" />
+  <message msgid="adv short preamble" msgstr="短前置讯号" />
+  <message msgid="adv short slot" msgstr="短碰撞时槽" />
+  <message msgid="adv tx burst" msgstr="传输速度增强" />
+  <message msgid="adv pkt aggregate" msgstr="封包汇集" />
+  <message msgid="adv 80211h" msgstr="支援IEEE 802.11H" />
+  <message msgid="adv 80211h disable describe" msgstr="（仅在A频带）" />
+  <message msgid="adv rdregion" msgstr="DFS RDRegion" />
+  <message msgid="adv country code" msgstr="国码" />
+  <message msgid="adv country code us" msgstr="美国（US）" />
+  <message msgid="adv country code jp" msgstr="日本（JP）" />
+  <message msgid="adv country code fr" msgstr="法国（FR）" />
+  <message msgid="adv country code tw" msgstr="台湾（TW）" />
+  <message msgid="adv country code ie" msgstr="爱尔兰（IE）" />
+  <message msgid="adv country code hk" msgstr="香港（HK）" />
+  <message msgid="adv carrier" msgstr="资料载波侦测" />
+  <message msgid="adv wmm" msgstr="Wi-Fi多媒体（WMM）" />
+  <message msgid="adv wmm capable" msgstr="Wi-Fi多媒体功能" />
+  <message msgid="adv apds capable" msgstr="自动省电模式功能" />
+  <message msgid="adv dls capable" msgstr="直接连线功能" />
+  <message msgid="adv wmm parameter" msgstr="Wi-Fi多媒体参数" />
+  <message msgid="adv wmm configuration" msgstr="Wi-Fi多媒体设定" />
+  <message msgid="adv multicast2unicast converter" msgstr="群播对单播转换" />
+  <message msgid="adv multicast2unicast" msgstr="群播对单播" />
+  <message msgid="wmm ap parameter" msgstr="网路桥接器的Wi-Fi多媒体参数" />
+  <message msgid="wmm sta parameter" msgstr="客户端的Wi-Fi多媒体参数" />
+
+  <message msgid="secure select ssid" msgstr="选择无线接入点" />
+  <message msgid="secure ssid title" msgstr="无线网路安全与加密设定" />
+  <message msgid="secure ssid introduction" msgstr="设定无线网路的安全与加密以防止未被授权的存取与监听。" />
+  <message msgid="secure ssid choice" msgstr="无线接入点名称" />
+  <message msgid="secure security policy" msgstr="安全原则 -- " />
+  <message msgid="secure security mode" msgstr="安全模式" />
+  <message msgid="secure encryp type" msgstr="加密型态" />
+  <message msgid="secure wep" msgstr="WEP" />
+  <message msgid="secure wep default key" msgstr="预设密钥" />
+  <message msgid="secure wep default key1" msgstr="密钥 1" />
+  <message msgid="secure wep default key2" msgstr="密钥 2" />
+  <message msgid="secure wep default key3" msgstr="密钥 3" />
+  <message msgid="secure wep default key4" msgstr="密钥 4" />
+  <message msgid="secure wep key" msgstr="WEP 密钥" />
+  <message msgid="secure wep key1" msgstr="WEP 密钥 1" />
+  <message msgid="secure wep key2" msgstr="WEP 密钥 2" />
+  <message msgid="secure wep key3" msgstr="WEP 密钥 3" />
+  <message msgid="secure wep key4" msgstr="WEP 密钥 4" />
+  <message msgid="secure wpa" msgstr="WPA" />
+  <message msgid="secure wpa algorithm" msgstr="WPA密码" />
+  <message msgid="secure wpa pass phrase" msgstr="预先分享密钥" />
+  <message msgid="secure wpa key renew interval" msgstr="密钥更新间隔" />
+  <message msgid="secure wpa pmk cache period" msgstr="配对主键快取周期" />
+  <message msgid="secure wpa preauth" msgstr="先期认证" />
+  <message msgid="secure 8021x wep" msgstr="802.1x WEP" />
+  <message msgid="secure 1x wep" msgstr="802.1x WEP" />
+  <message msgid="secure radius" msgstr="Radius服务器" />
+  <message msgid="secure radius ipaddr" msgstr="IP地址" />
+  <message msgid="secure radius port" msgstr="连接端口" />
+  <message msgid="secure radius shared secret" msgstr="分享密钥" />
+  <message msgid="secure radius session timeout" msgstr="连线时限" />
+  <message msgid="secure radius idle timeout" msgstr="闲置时限" />
+  <message msgid="secure access policy" msgstr="存取原则" />
+  <message msgid="secure access policy capable" msgstr="功能" />
+  <message msgid="secure access policy new" msgstr="新增" />
+  <message msgid="secure access policy del" msgstr="删除" />
+
+  <message msgid="wps title" msgstr="Wi-Fi保护设定（WPS）" />
+  <message msgid="wps introduction" msgstr="藉由选用输入个人识别码（PIN）或按钮（PBC）的方式来执行Wi-Fi保护设定，能够让您更容易的建立安全机制。请先按下Reset OOB，它将会重置您的安全模式，请透过无线网卡的WPS机制来连结这台AP，WPS将会为您完成所有的连线机制。 " />
+  <message msgid="wps introduction2" msgstr="假如WEP已设定为启用，并启用WPS功能，则WEP设定值将由WPA设定值取代。" />
+  <message msgid="wps config" msgstr="WPS设定" />
+  <message msgid="wps wps" msgstr="WPS" />
+  <message msgid="wps summary" msgstr="WPS状态" />
+  <message msgid="wps current status" msgstr="WPS状态" />
+  <message msgid="wps configured" msgstr="WPS设定" />
+  <message msgid="wps ssid" msgstr="WPS无线接入点名称" />
+  <message msgid="wps auth mode" msgstr="WPS安全模式" />
+  <message msgid="wps encryp type" msgstr="WPS加密模式" />
+  <message msgid="wps default key index" msgstr="WPS预设密钥索引" />
+  <message msgid="wps ap pin" msgstr="无线接入点识别码 (AP PIN)" />
+  <message msgid="wps reset oob" msgstr="重置WPS" />
+  <message msgid="wps progress" msgstr="WPS启用" />
+  <message msgid="wps mode" msgstr="WPS启用模式" />
+  <message msgid="wps pin mode" msgstr="识别码（PIN） " />
+  <message msgid="wps pbc mode" msgstr="按钮（PBC） " />
+  <message msgid="wps pin num" msgstr="识别码（PIN）" />
+  <message msgid="wps status" msgstr="WPS启用进度" />
+
+  <message msgid="stalist title" msgstr="客户端列表" />
+  <message msgid="stalist introduction" msgstr=" 您能够在这个网页监视连结上此无线网路桥接器的客户端。 " />
+  <message msgid="stalist wireless network" msgstr="无线网路" />
+  <message msgid="stalist macaddr" msgstr="MAC地址" />
+
+  <message msgid="prof title" msgstr="客户端连线设定档" />
+  <message msgid="prof introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="prof list" msgstr="连线设定档列表" />
+  <message msgid="prof profile" msgstr="连线设定档" />
+
+  <message msgid="link title" msgstr="客户端连线状态" />
+  <message msgid="link introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="link link status" msgstr="连线状态" />
+  <message msgid="link status" msgstr="状态" />
+  <message msgid="link extra info" msgstr="额外资讯" />
+  <message msgid="link speed" msgstr="连线速度" />
+  <message msgid="link throughput" msgstr="效能" />
+  <message msgid="link quality" msgstr="连线品质" />
+  <message msgid="link signal strength" msgstr="讯号强度" />
+  <message msgid="link noise level" msgstr="杂讯位准" />
+  <message msgid="link ht" msgstr="高效能" />
+  <message msgid="link snr" msgstr="讯号杂讯比" />
+
+  <message msgid="scan title" msgstr="客户端扫描" />
+  <message msgid="scan introduction" msgstr="扫描网页呈现附近无线桥接器的资讯。您可以选择其中一个无线桥接器作连结或新增连线设定档。" />
+  <message msgid="scan site survey" msgstr="扫描" />
+  <message msgid="scan bssid" msgstr="基础服务组识别码" />
+  <message msgid="scan rssi" msgstr="收讯强弱指数" />
+  <message msgid="scan connet" msgstr="连结" />
+  <message msgid="scan rescan" msgstr="重新扫描" />
+  <message msgid="scan add profile" msgstr="新增连结设定档" />
+
+  <message msgid="addprof system config" msgstr="系统设定" />
+  <message msgid="addprof profile name" msgstr="设定档名称" />
+  <message msgid="addprof adhoc" msgstr="802.11对等式网路" />
+  <message msgid="addprof infrastructure" msgstr="基础架构" />
+  <message msgid="addprof power save" msgstr="省电模式" />
+  <message msgid="addprof cam" msgstr="持续唤醒模式（CAM）" />
+  <message msgid="addprof preamble type" msgstr="11B前置讯号型态" />
+  <message msgid="addprof secure policy" msgstr="安全原则" />
+  <message msgid="addprof wep key length" msgstr="WEP密钥长度" />
+  <message msgid="addprof wep key entry method" msgstr="WEP密钥编码类型" />
+  <message msgid="addprof hex" msgstr="十六进位" />
+  <message msgid="addprof ascii" msgstr="ASCII纯文字" />
+  <message msgid="addprof 8021X Auth Type" msgstr="验证型态" />
+  <message msgid="addprof tunnel auth" msgstr="频道认证" />
+  <message msgid="addprof identity" msgstr="识别" />
+  <message msgid="addprof passwd" msgstr="密码" />
+  <message msgid="addprof client cert" msgstr="用户端凭证" />
+  <message msgid="addprof client cert path" msgstr="用户端凭证路径" />
+  <message msgid="addprof private key path" msgstr="私钥路径" />
+  <message msgid="addprof private key passwd" msgstr="私钥密码" />
+  <message msgid="addprof ca cert" msgstr="凭证授权单位" />
+  <message msgid="addprof ca cert path" msgstr="凭证授权单位路径" />
+
+  <message msgid="statistic title" msgstr="客户端统计资料" />
+  <message msgid="statistic introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="statistic tx" msgstr="传送统计资料" />
+  <message msgid="statistic rx" msgstr="接收统计资料" />
+  <message msgid="statistic reset counter" msgstr="归零" />
+
+  <message msgid="staadv title" msgstr="客户端进阶设定" />
+  <message msgid="staadv introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="staadv config" msgstr="进阶设定" />
+  <message msgid="staadv infra" msgstr="无线模式（基础架构）" />
+  <message msgid="staadv country" msgstr="国家范围码" />
+  <message msgid="staadv bgprotect" msgstr="B/G保护机制" />
+  <message msgid="staadv tx rate" msgstr="传送速率" />
+  <message msgid="staadv bw" msgstr="频宽" />
+  <message msgid="staadv gi" msgstr="保护区间" />
+
+  <message msgid="qos title" msgstr="客户端进阶设定" />
+  <message msgid="qos introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="qos config" msgstr="服务品质设定" />
+  <message msgid="qos wmm" msgstr="Wi-Fi多媒体" />
+  <message msgid="qos wmm power save" msgstr="Wi-Fi多媒体省电" />
+  <message msgid="qos wmm ps mode" msgstr="PS模式" />
+  <message msgid="qos dls" msgstr="直接连结设定" />
+  <message msgid="qos dls timeoutvalue" msgstr="时限数值" />
+  <message msgid="qos second" msgstr="秒" />
+  <message msgid="qos dls status" msgstr="直接连结设定状态" />
+  <message msgid="qos dls timeout" msgstr="时限" />
+  <message msgid="qos teardown" msgstr="舍弃" />
+
+  <message msgid="11n title" msgstr="客户端11n设定" />
+  <message msgid="11n introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="11n config" msgstr="11n设定" />
+  <message msgid="11n ampdu" msgstr="MAC协议数据单元汇集" />
+  <message msgid="11n ampdu manual" msgstr="手动" />
+  <message msgid="11n mpdu density" msgstr="MAC协议数据单元密度" />
+
+  <message msgid="about title" msgstr="关于客户端" />
+  <message msgid="about introduction" msgstr="此网页呈现设定与目前客户端的运作状态。" />
+  <message msgid="about about" msgstr="相关" />
+  <message msgid="about driver version" msgstr="驱动程式版本" />
+
+  <message msgid="stawps title" msgstr="WPS（STA）" />
+  <message msgid="stawps introduction" msgstr="藉由选用输入个人识别码（PIN）或按钮（PBC）的方式来执行Wi-Fi保护设定（WPS），能够让您更容.>易的建立安全机制。" />
+  <message msgid="stawps scan" msgstr=" WPS无线网路桥接器扫描 " />
+  <message msgid="stawps refresh" msgstr="重新扫描" />
+  <message msgid="stawps mode" msgstr="模式" />
+  <message msgid="stawps enrollee" msgstr="参与者" />
+  <message msgid="stawps registrar" msgstr="登录者" />
+  <message msgid="stawps pin start" msgstr="PIN启动" />
+  <message msgid="stawps pbc start" msgstr="PBC启动" />
+  <message msgid="stawps renew pin" msgstr="更新PIN" />
+  <message msgid="stawps registrar set" msgstr=" 登录者设定 " />
+  <message msgid="stawps wep key type" msgstr="WEP密钥型态" />
+  <message msgid="stawps wep key index" msgstr="WEP密钥索引" />
+  <message msgid="stawps key" msgstr="密钥" />
+  <message msgid="stawps submit" msgstr=" 提交 " />
+  
+  <message msgid="mesh title" msgstr="网状网路" />
+  <message msgid="mesh introduction" msgstr="网状网路是由一群802.11区域网路连结和控制元件所组成, 在每个网路成员之间转送封包." />
+  <message msgid="mesh capacity" msgstr="网状功能" />
+  <message msgid="mesh settings" msgstr="网状网路设定" />
+  <message msgid="mesh mid" msgstr="网状网路识别 (MID)" />
+  <message msgid="mesh hostname" msgstr="主机名称" />
+  <message msgid="mesh autolink" msgstr="自动连结" />
+  <message msgid="mesh manual" msgstr="手动网状网路连结" />
+  <message msgid="mesh mpmac" msgstr="网状网路的MAC Address" />
+  <message msgid="mesh info" msgstr="网状网路资讯" />
+  <message msgid="mesh nbrmacaddr" msgstr="邻近存取点的 MAC Address" />
+  
+  <message msgid="Wizard Success" msgstr="安装向导-完成" />
+  <message msgid="man ntp previous" msgstr="上一步" />
+
+  <message msgid="alert giving up:cannot create an xmlhttp instance" msgstr="Giving up :(Cannot create an XMLHTTP instance)" />
+  <message msgid="alert a problem with the request" msgstr="网页要求发生问题!" />
+
+  <message msgid="basic alert null ssid" msgstr="请输入无线接入点名称!" />
+  <message msgid="basic alert error! ssid name are equal" msgstr="错误! 网路名称相同!" />
+
+  <message msgid="adv alert null beacon" msgstr="请指定讯号间隔!" />
+  <message msgid="adv alert invalid beacon" msgstr="无效的讯号间隔!" />
+  <message msgid="adv alert null dtim" msgstr="请指定资料讯号比例!" />
+  <message msgid="adv alert invalid dtim" msgstr="无效的资料讯号比例!" />
+  <message msgid="adv alert null fragment" msgstr="请指定区块切割临界值!" />
+  <message msgid="adv alert invalid fragment" msgstr="无效的区块切割临界值!" />
+  <message msgid="adv alert null rts threshold" msgstr ="请指定要求传送临界值!" />
+  <message msgid="adv alert invalid rts threshold" msgstr="无效的要求传送临界值!" />
+  <message msgid="adv alert invalid txpower" msgstr="无效的发射功率!" />
+
+  <message msgid="wds alert wds" msgstr="WDS" />
+  <message msgid="wds alert key should be 10/26 hex or 5/13 ascii" msgstr="密钥必须是10或26个十六进制的字元，或是5或13个ASCII码!" />
+  <message msgid="wds alert key should be with 8 to 64 length" msgstr="密钥的长度必须是8到63个ASCII码，或64个十六进制的字元!" />
+  <message msgid="wds alert key should be 64 hex" msgstr="密钥必须是64个十六进制的字元!" />
+  <message msgid="wds alert boradcast string is not allowed" msgstr="不允许填入广播地址!" />
+  <message msgid="wds alert please fill wds remote ap mac address in correct format" msgstr="请填入网路桥接器MAC地址的正确格式! XX:XX:XX:XX:XX:XX" />
+  <message msgid="wds alert wds mac address cannot be the same" msgstr="网路桥接器MAC地址不可以相同!" />
+  <message msgid="wds alert wds remote ap mac address are empty" msgstr="网路桥接器MAC地址是空的!" />
+
+  <message msgid="wps alert pin number length less than 4" msgstr="个人识别码长度小于4!" />
+  <message msgid="wps alert pin number validation failed" msgstr="个人识别码验证错误!" />
+  <message msgid="wps alert null pin number" msgstr="请输入个人识别码!" />
+
+  <message msgid="security alert please input pass phrase" msgstr="请输入预先分享密钥!" />
+  <message msgid="security alert please input shared secret" msgstr="请输入分享密钥!" />
+  <message msgid="security alert please input at greater 8 character of pass phrase" msgstr="请输入大于8个字元的预先分享密钥!" />
+  <message msgid="security alert please input at greater 8 character of shared secret" msgstr="请输入大于8个字元的分享密钥!" />
+  <message msgid="security alert please input 8 to 63 ascii or 64 hex" msgstr="请输入8到63个ASCII码，或64个十六进制的字元" />
+  <message msgid="security alert invalid characters in pass phrase" mesgstr="密钥含有无效的字元!" />
+  <message msgid="security alert please choose a wpa algorithms" msgstr="请选择WPA密码选项"/>
+  <message msgid="security alert please input a valid key renewal interval" msgstr="请输入有效的密钥更新间隔" />
+  <message msgid="security alert a short key renewal interval" msgstr="警告:密钥更新时间太短! (必须大于60秒)" />
+  <message msgid="security alert please choose the 802.1x wep option" msgstr="请选择802.1x WEP的选项" />
+  <message msgid="security alert please choose the pre-authentication options" msgstr="请选择先期认证的选项" />
+  <message msgid="security alert please input the pmk cache period" msgstr="请输入配对主键快取周期!" />
+  <message msgid="security alert the mac address in access policy form is invalid" msgstr="请填入MAC地址的正确格式! XX:XX:XX:XX:XX:XX" />
+  <message msgid="security alert boradcast mac address is not acceptable" msgstr="不允许填入广播地址!" />
+  <message msgid="security alert this mac is inputed" msgstr="此MAC地址已输入" />
+  <message msgid="security alert max number is" msgstr="存取原则的数量最多为" />
+  <message msgid="security alert please input the radius server ip address" msgstr="请输入Radius服务器的IP地址" />
+  <message msgid="security alert please input the radius server port number" msgstr="请输入Radius服务器的连接端口" />
+  <message msgid="security alert please input the radius server shared secret" msgstr="请输入Radius服务器的分享密鑰" />
+  <message msgid="security alert the shared secret contains invalid characters" msgstr="分享密鑰含有无效的字元!" />
+  <message msgid="security alert please input a valid radius server ip address" msgstr="请输入Radius服务器有效的IP地址!" />
+  <message msgid="security alert ip address format error" msgstr="IP地址格式错误!" />
+  <message msgid="security alert please input a valid radius server port number" msgstr="请输入Radius服务器有效的连接端口!" />
+  <message msgid="security alert please input a valid session timeout number or u may left it empty" msgstr="请输入有效的连线时限或可以留空白不需填值" />
+  <message msgid="security alert please input wep key" msgstr="请输入WEP 密钥" />
+  <message msgid="security alert please input 5 or 13 characters of wep key1" msgstr="请输入WEP 密钥1 : 5或13个ASCII码!" />
+  <message msgid="security alert please input 5 or 13 characters of wep key2" msgstr="请输入WEP 密钥2 : 5或13个ASCII码!" />
+  <message msgid="security alert please input 5 or 13 characters of wep key3" msgstr="请输入WEP 密钥3 : 5或13个ASCII码!" />
+  <message msgid="security alert please input 5 or 13 characters of wep key4" msgstr="请输入WEP 密钥4 : 5或13个ASCII码!" />
+  <message msgid="security alert wep key1 contains invalid characters" msgstr="WEP 密钥1 含有无效的字元!" />
+  <message msgid="security alert wep key2 contains invalid characters" msgstr="WEP 密钥2 含有无效的字元!" />
+  <message msgid="security alert wep key3 contains invalid characters" msgstr="WEP 密钥3 含有无效的字元!" />
+  <message msgid="security alert wep key4 contains invalid characters" msgstr="WEP 密钥4 含有无效的字元!" />
+  <message msgid="security alert please input 10 or 26 characters of wep key1" msgstr="请输入WEP 密钥1 : 10或26个十六进制的字元!" />
+  <message msgid="security alert please input 10 or 26 characters of wep key2" msgstr="请输入WEP 密钥2 : 10或26个十六进制的字元!" />
+  <message msgid="security alert please input 10 or 26 characters of wep key3" msgstr="请输入WEP 密钥3 : 10或26个十六进制的字元!" />
+  <message msgid="security alert please input 10 or 26 characters of wep key4" msgstr="请输入WEP 密钥4 : 10或26个十六进制的字元!" />
+  <message msgid="security alert invalid wep key1 format" msgstr="WEP 密钥1 是无效的格式!" /> 
+  <message msgid="security alert invalid wep key2 format" msgstr="WEP 密钥2 是无效的格式!" />
+  <message msgid="security alert invalid wep key3 format" msgstr="WEP 密钥3 是无效的格式!" />
+  <message msgid="security alert invalid wep key4 format" msgstr="WEP 密钥4 是无效的格式!" />
+</po>

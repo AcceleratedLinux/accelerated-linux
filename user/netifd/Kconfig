@@ -1,0 +1,11 @@
+
+config USER_NETIFD
+	select USER_UBUS
+	select LIB_JSON_C
+	select LIB_LIBUBOX
+	select USER_UCI
+	select LIB_LIBNL
+	bool "netifd"
+	help
+		Network Interface Daemon
+

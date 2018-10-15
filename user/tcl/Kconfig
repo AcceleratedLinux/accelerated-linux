@@ -1,0 +1,30 @@
+
+config USER_TCL
+	bool "tcl"
+	default n
+	help
+	  TCL (Tool Command Language) is a simple textual language.
+
+config USER_TCL_STATIC
+	bool "tcl static"
+	depends on USER_TCL
+	default n
+	help
+	  Build non-shared tcl/libtcl
+
+config USER_TCL_LIBTCL_ONLY
+	bool "libtcl only"
+	depends on USER_TCL
+	default n
+	help
+	  Only build/install the libtcl library
+
+config USER_TCL_INSTALL_ENCODINGS
+	bool "tcl character encodings"
+	depends on USER_TCL
+	default n
+	help
+	  Install encoding files for TCL. If your programs use
+	  various tcl character recoding functions you should
+	  choose Y here.
+

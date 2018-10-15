@@ -1,0 +1,249 @@
+Index: iproute2-3.15.0/tc/Makefile
+===================================================================
+--- iproute2-3.15.0.orig/tc/Makefile
++++ iproute2-3.15.0/tc/Makefile
+@@ -1,72 +1,82 @@
+ TCOBJ= tc.o tc_qdisc.o tc_class.o tc_filter.o tc_util.o \
+-       tc_monitor.o m_police.o m_estimator.o m_action.o \
+-       m_ematch.o emp_ematch.yacc.o emp_ematch.lex.o
++       tc_monitor.o m_police.o m_estimator.o m_action.o
++include $(LINUX_CONFIG)
++include $(CONFIG_CONFIG)
++-include $(MODULES_CONFIG)
++ifdef CONFIG_NET_EMATCH
++TCOBJ += m_ematch.o emp_ematch.yacc.o emp_ematch.lex.o
++endif
+ 
+ include ../Config
+ SHARED_LIBS ?= y
+ 
+ TCMODULES :=
++TCMODULES_y :=
++TCMODULES_m :=
+ TCMODULES += q_fifo.o
+-TCMODULES += q_sfq.o
+-TCMODULES += q_red.o
+-TCMODULES += q_prio.o
+-TCMODULES += q_tbf.o
+-TCMODULES += q_cbq.o
+-TCMODULES += q_rr.o
+-TCMODULES += q_multiq.o
+-TCMODULES += q_netem.o
+-TCMODULES += q_choke.o
+-TCMODULES += q_sfb.o
+-TCMODULES += f_rsvp.o
+-TCMODULES += f_u32.o
+-TCMODULES += f_route.o
+-TCMODULES += f_fw.o
+-TCMODULES += f_basic.o
+-TCMODULES += f_bpf.o
+-TCMODULES += f_flow.o
+-TCMODULES += f_cgroup.o
+-TCMODULES += q_dsmark.o
+-TCMODULES += q_gred.o
+-TCMODULES += f_tcindex.o
+-TCMODULES += q_ingress.o
+-TCMODULES += q_hfsc.o
+-TCMODULES += q_htb.o
+-TCMODULES += q_drr.o
+-TCMODULES += q_qfq.o
+-TCMODULES += m_gact.o
+-TCMODULES += m_mirred.o
+-TCMODULES += m_nat.o
+-TCMODULES += m_pedit.o
+-TCMODULES += m_skbedit.o
+-TCMODULES += m_csum.o
+-TCMODULES += m_simple.o
+-TCMODULES += p_ip.o
+-TCMODULES += p_icmp.o
+-TCMODULES += p_tcp.o
+-TCMODULES += p_udp.o
+-TCMODULES += em_nbyte.o
+-TCMODULES += em_cmp.o
+-TCMODULES += em_u32.o
+-TCMODULES += em_canid.o
+-TCMODULES += em_meta.o
+-TCMODULES += q_mqprio.o
+-TCMODULES += q_codel.o
+-TCMODULES += q_fq_codel.o
+-TCMODULES += q_fq.o
+-TCMODULES += q_pie.o
+-TCMODULES += q_hhf.o
++TCMODULES_$(CONFIG_NET_SCH_SFQ) += q_sfq.o
++TCMODULES_$(CONFIG_NET_SCH_RED) += q_red.o
++TCMODULES_$(CONFIG_NET_SCH_PRIO) += q_prio.o
++TCMODULES_$(CONFIG_NET_SCH_TBF) += q_tbf.o
++TCMODULES_$(CONFIG_NET_SCH_CBQ) += q_cbq.o
++TCMODULES_$(CONFIG_NET_SCH_RR) += q_rr.o
++TCMODULES_$(CONFIG_NET_SCH_MULTIQ) += q_multiq.o
++TCMODULES_$(CONFIG_NET_SCH_NETEM) += q_netem.o
++TCMODULES_$(CONFIG_NET_SCH_CHOKE) += q_choke.o
++TCMODULES_$(CONFIG_NET_SCH_SFB) += q_sfb.o
++TCMODULES_$(CONFIG_NET_CLS_RSVP) += f_rsvp.o
++TCMODULES_$(CONFIG_NET_CLS_U32) += f_u32.o
++TCMODULES_$(CONFIG_NET_CLS_ROUTE) += f_route.o
++TCMODULES_$(CONFIG_NET_CLS_FW) += f_fw.o
++TCMODULES_$(CONFIG_NET_CLS_BASIC) += f_basic.o
++TCMODULES_$(CONFIG_NET_CLS_BPF) += f_bpf.o
++TCMODULES_$(CONFIG_NET_CLS_FLOW) += f_flow.o
++TCMODULES_$(CONFIG_NET_CLS_CGROUP) += f_cgroup.o
++TCMODULES_$(CONFIG_NET_SCH_DSMARK) += q_dsmark.o
++TCMODULES_$(CONFIG_NET_SCH_GRED) += q_gred.o
++TCMODULES_$(CONFIG_NET_CLS_TCINDEX) += f_tcindex.o
++TCMODULES_$(CONFIG_NET_SCH_INGRESS) += q_ingress.o
++TCMODULES_$(CONFIG_NET_SCH_HFSC) += q_hfsc.o
++TCMODULES_$(CONFIG_NET_SCH_HTB) += q_htb.o
++TCMODULES_$(CONFIG_NET_SCH_DRR) += q_drr.o
++TCMODULES_$(CONFIG_NET_SCH_QFQ) += q_qfq.o
++TCMODULES_$(CONFIG_NET_ACT_GACT) += m_gact.o
++TCMODULES_$(CONFIG_NET_ACT_MIRRED) += m_mirred.o
++TCMODULES_$(CONFIG_NET_ACT_NAT) += m_nat.o
++TCMODULES_$(CONFIG_NET_ACT_PEDIT) += m_pedit.o
++TCMODULES_$(CONFIG_NET_ACT_SKBEDIT) += m_skbedit.o
++TCMODULES_$(CONFIG_NET_ACT_CSUM) += m_csum.o
++TCMODULES_$(CONFIG_NET_ACT_SIMPLE) += m_simple.o
++TCMODULES_$(CONFIG_NET_ACT_PEDIT) += p_ip.o
++TCMODULES_$(CONFIG_NET_ACT_PEDIT) += p_icmp.o
++TCMODULES_$(CONFIG_NET_ACT_PEDIT) += p_tcp.o
++TCMODULES_$(CONFIG_NET_ACT_PEDIT) += p_udp.o
++TCMODULES_$(CONFIG_NET_EMATCH_NBYTE) += em_nbyte.o
++TCMODULES_$(CONFIG_NET_EMATCH_CMP) += em_cmp.o
++TCMODULES_$(CONFIG_NET_EMATCH_U32) += em_u32.o
++TCMODULES_$(CONFIG_NET_EMATCH_CANID) += em_canid.o
++TCMODULES_$(CONFIG_NET_EMATCH_META) += em_meta.o
++TCMODULES_$(CONFIG_NET_SCH_MQPRIO) += q_mqprio.o
++TCMODULES_$(CONFIG_NET_SCH_CODEL) += q_codel.o
++TCMODULES_$(CONFIG_NET_SCH_FQ_CODEL) += q_fq_codel.o
++TCMODULES_$(CONFIG_NET_SCH_FQ) += q_fq.o
++TCMODULES_$(CONFIG_NET_SCH_PIE) += q_pie.o
++TCMODULES_$(CONFIG_NET_SCH_HHF) += q_hhf.o
+ 
+ ifeq ($(TC_CONFIG_IPSET), y)
+   ifeq ($(TC_CONFIG_XT), y)
+-    TCMODULES += em_ipset.o
++    TCMODULES_$(CONFIG_NET_MATCH_IPSET) += em_ipset.o
+   endif
+ endif
+ 
+ TCSO :=
++ifdef CONFIG_NET_SCH_ATM
+ ifeq ($(TC_CONFIG_ATM),y)
+   TCSO += q_atm.so
+ endif
++endif
+ 
++ifdef CONFIG_NET_ACT_IPT
+ ifeq ($(TC_CONFIG_XT),y)
+   TCSO += m_xt.so
+ else
+@@ -81,7 +88,9 @@ else
+     endif
+   endif
+ endif
++endif
+ 
++TCMODULES += $(TCMODULES_y) $(TCMODULES_m)
+ TCOBJ += $(TCMODULES)
+ LDLIBS += -L. -ltc -lm
+ 
+@@ -100,6 +109,9 @@ CFLAGS += -DCONFIG_GACT -DCONFIG_GACT_PR
+ ifneq ($(IPT_LIB_DIR),)
+ 	CFLAGS += -DIPT_LIB_DIR=\"$(IPT_LIB_DIR)\"
+ endif
++ifneq ($(CONFIG_NET_SCH_PRIO),)
++	CFLAGS += -DWITH_NET_SCH_PRIO=1
++endif
+ 
+ YACC := bison
+ LEX := flex
+Index: iproute2-3.15.0/tc/q_fifo.c
+===================================================================
+--- iproute2-3.15.0.orig/tc/q_fifo.c
++++ iproute2-3.15.0/tc/q_fifo.c
+@@ -95,8 +95,10 @@ struct qdisc_util pfifo_head_drop_qdisc_
+ 	.print_qopt = fifo_print_opt,
+ };
+ 
++#ifdef WITH_NET_SCH_PRIO
+ extern int prio_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt);
+ struct qdisc_util pfifo_fast_qdisc_util = {
+ 	.id = "pfifo_fast",
+ 	.print_qopt = prio_print_opt,
+ };
++#endif
+Index: iproute2-3.15.0/ip/iplink.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/iplink.c
++++ iproute2-3.15.0/ip/iplink.c
+@@ -69,8 +69,10 @@ void iplink_usage(void)
+ 	fprintf(stderr, "	                  [ address LLADDR ]\n");
+ 	fprintf(stderr, "	                  [ broadcast LLADDR ]\n");
+ 	fprintf(stderr, "	                  [ mtu MTU ]\n");
++#ifdef HAVE_NETNS
+ 	fprintf(stderr, "	                  [ netns PID ]\n");
+ 	fprintf(stderr, "	                  [ netns NAME ]\n");
++#endif
+ 	fprintf(stderr, "			  [ alias NAME ]\n");
+ 	fprintf(stderr, "	                  [ vf NUM [ mac LLADDR ]\n");
+ 	fprintf(stderr, "				   [ vlan VLANID [ qos VLAN-QOS ] ]\n");
+@@ -312,7 +314,9 @@ int iplink_parse(int argc, char **argv,
+ 	char abuf[32];
+ 	int qlen = -1;
+ 	int mtu = -1;
++#ifdef HAVE_NETNS
+ 	int netns = -1;
++#endif
+ 	int vf = -1;
+ 	int numtxqueues = -1;
+ 	int numrxqueues = -1;
+@@ -365,6 +369,7 @@ int iplink_parse(int argc, char **argv,
+ 			if (get_integer(&mtu, *argv, 0))
+ 				invarg("Invalid \"mtu\" value\n", *argv);
+ 			addattr_l(&req->n, sizeof(*req), IFLA_MTU, &mtu, 4);
++#ifdef HAVE_NETNS
+ 		} else if (strcmp(*argv, "netns") == 0) {
+ 			NEXT_ARG();
+ 			if (netns != -1)
+@@ -375,6 +380,7 @@ int iplink_parse(int argc, char **argv,
+ 				addattr_l(&req->n, sizeof(*req), IFLA_NET_NS_PID, &netns, 4);
+ 			else
+ 				invarg("Invalid \"netns\" value\n", *argv);
++#endif
+ 		} else if (strcmp(*argv, "multicast") == 0) {
+ 			NEXT_ARG();
+ 			req->i.ifi_change |= IFF_MULTICAST;
+Index: iproute2-3.15.0/ip/Makefile
+===================================================================
+--- iproute2-3.15.0.orig/ip/Makefile
++++ iproute2-3.15.0/ip/Makefile
+@@ -1,4 +1,4 @@
+-IPOBJ=ip.o ipaddress.o ipaddrlabel.o iproute.o iprule.o ipnetns.o \
++IPOBJ=ip.o ipaddress.o ipaddrlabel.o iproute.o iprule.o \
+     rtm_map.o iptunnel.o ip6tunnel.o tunnel.o ipneigh.o ipntable.o iplink.o \
+     ipmaddr.o ipmonitor.o ipmroute.o ipprefix.o iptuntap.o iptoken.o \
+     ipxfrm.o xfrm_state.o xfrm_policy.o xfrm_monitor.o \
+@@ -11,6 +11,10 @@ RTMONOBJ=rtmon.o
+ 
+ include ../Config
+ 
++ifeq ($(CONFIG_NET_NS),y)
++	CFLAGS += -DHAVE_NETNS
++	IPOBJ += ipnetns.o
++endif
+ ifeq ($(IP_CONFIG_SETNS),y)
+ 	CFLAGS += -DHAVE_SETNS
+ endif
+Index: iproute2-3.15.0/ip/ip.c
+===================================================================
+--- iproute2-3.15.0.orig/ip/ip.c
++++ iproute2-3.15.0/ip/ip.c
+@@ -87,7 +87,9 @@ static const struct cmd {
+ 	{ "xfrm",	do_xfrm },
+ 	{ "mroute",	do_multiroute },
+ 	{ "mrule",	do_multirule },
++#ifdef HAVE_NETNS
+ 	{ "netns",	do_netns },
++#endif
+ 	{ "netconf",	do_ipnetconf },
+ 	{ "help",	do_help },
+ 	{ 0 }

@@ -1,0 +1,19 @@
+--- pciutils-3.4.0/Makefile.org	2015-10-13 14:35:22.953158379 +1000
++++ pciutils-3.4.0/Makefile	2015-10-13 14:40:43.281163560 +1000
+@@ -108,7 +108,7 @@
+ 
+ distclean: clean
+ 
+-install: all
++install: all install-lib
+ # -c is ignored on Linux, but required on FreeBSD
+ 	$(DIRINSTALL) -m 755 $(DESTDIR)$(SBINDIR) $(DESTDIR)$(IDSDIR) $(DESTDIR)$(MANDIR)/man8 $(DESTDIR)$(MANDIR)/man7
+ 	$(INSTALL) -c -m 755 $(STRIP) lspci setpci $(DESTDIR)$(SBINDIR)
+@@ -121,6 +121,7 @@
+ 	ln -sf $(PCILIB) $(DESTDIR)$(LIBDIR)/$(LIBNAME)$(ABI_VERSION).$(LIBEXT)
+ else
+ 	ln -sf $(PCILIB) $(DESTDIR)$(LIBDIR)/$(LIBNAME).$(LIBEXT)$(ABI_VERSION)
++	ln -sf $(PCILIB) $(DESTDIR)$(LIBDIR)/$(LIBNAME).$(LIBEXT)
+ endif
+ endif
+ 

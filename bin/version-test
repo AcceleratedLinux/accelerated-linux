@@ -1,0 +1,220 @@
+#!/bin/sh
+# test the version script
+#
+# this runs in two modes because we cannot modify the committer
+# dates in git,  only the author dates.  So we test the basic date based
+# versioning and then do the branch testing seperately.
+
+# we cannot change the committer date so for testing we use author date
+export GIT_DATE=%ai
+
+# commit hashes cannot be tested,  run in build server mode
+export ON_BUILD_MACHINE=1
+
+REPO=/tmp/version-test.$$
+D=`dirname $0`
+case "$D" in
+/*) VERSION=$D/version ;;
+*)  VERSION=$(pwd)/$D/version ;;
+esac
+
+check_version()
+{
+	V=$($VERSION)
+	if [ "$V" != "$1" ]; then
+		echo "Tree version '$V' does not match expected version '$1'"
+		echo "check in $REPO for git state"
+		trap "" 0
+		exit 1
+	fi
+	echo "PASSED - got version $1"
+}
+
+trap "echo cleaning $REPO...; rm -rf $REPO" 0
+
+mkdir $REPO
+cd $REPO
+
+git init
+
+DATE="2013-02-03 12:30:12"
+git commit --date="$DATE" --allow-empty -m "commit 1 on master"
+git commit --date="$DATE" --allow-empty -m "commit 2 on master"
+
+DATE="2013-02-04 12:30:12"
+git commit --date="$DATE" --allow-empty -m "commit 3 on master"
+git commit --date="$DATE" --allow-empty -m "commit 4 on master"
+
+# a branch off master
+git checkout -b aaaaaaaa
+git commit --date="$DATE" --allow-empty -m "commit 1 on aaaaaaaa"
+git commit --date="$DATE" --allow-empty -m "commit 2 on aaaaaaaa"
+git commit --date="$DATE" --allow-empty -m "commit 3 on aaaaaaaa"
+
+# a branch off aaaaaaaa
+git checkout -b aaaaaaaa_branch_1
+git commit --date="$DATE" --allow-empty -m "commit 1 on aaaaaaaa_branch_1"
+git commit --date="$DATE" --allow-empty -m "commit 2 on aaaaaaaa_branch_1"
+
+git checkout master
+check_version "13.2.4"
+git checkout $(git rev-parse HEAD)
+check_version "13.2.4"
+
+git checkout aaaaaaaa
+check_version "13.2.4.3"
+git checkout $(git rev-parse HEAD)
+check_version "13.2.4.3"
+
+git checkout aaaaaaaa_branch_1
+check_version "13.2.4.5"
+git checkout $(git rev-parse HEAD)
+check_version "13.2.4.5"
+
+# Thats enough basic date based testing, lets do branches
+rm -rf .git
+git init
+unset GIT_DATE
+
+git commit --allow-empty -m "commit 1 on master"
+BASE_VER=$($VERSION | sed 's/\.[0-9]*$//')
+
+git commit --allow-empty -m "commit 2 on master"
+
+git commit --allow-empty -m "commit 3 on master"
+git commit --allow-empty -m "commit 4 on master"
+
+# a branch off master
+git checkout -b aaaaaaaa
+git commit --allow-empty -m "commit 1 on aaaaaaaa"
+git commit --allow-empty -m "commit 2 on aaaaaaaa"
+git commit --allow-empty -m "commit 3 on aaaaaaaa"
+
+# a branch off aaaaaaaa
+git checkout -b aaaaaaaa_branch_1
+git commit --allow-empty -m "commit 1 on aaaaaaaa_branch_1"
+git commit --allow-empty -m "commit 2 on aaaaaaaa_branch_1"
+
+git checkout master
+check_version "$BASE_VER.4"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.4"
+
+git checkout aaaaaaaa
+check_version "$BASE_VER.4.3"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.4.3"
+
+git checkout aaaaaaaa_branch_1
+check_version "$BASE_VER.4.5"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.4.5"
+
+# some more work on master
+git checkout master
+git commit --allow-empty -m "commit 5 on master"
+git commit --allow-empty -m "commit 6 on master"
+
+check_version "$BASE_VER.6"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.6"
+
+git checkout aaaaaaaa
+git commit --allow-empty     -m "commit 4 on aaaaaaaa"
+git checkout master
+git merge aaaaaaaa    -m "commit 7 on master (merge)"
+git checkout aaaaaaaa
+git commit --allow-empty     -m "commit 5 on aaaaaaaa"
+
+git checkout master
+check_version "$BASE_VER.7"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.7"
+
+git checkout aaaaaaaa
+check_version "$BASE_VER.8.1"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.8.1"
+
+git checkout aaaaaaaa
+git merge master             -m "commit 6 on aaaaaaaa (merge master)"
+git checkout master
+git commit --allow-empty     -m "commit 8 on master"
+git merge aaaaaaaa    -m "commit 9 on master (merge)"
+git checkout aaaaaaaa
+git commit --allow-empty     -m "commit 7 on aaaaaaaa"
+
+check_version "$BASE_VER.10.1"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.10.1"
+
+git checkout master
+check_version "$BASE_VER.9"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.9"
+
+git checkout aaaaaaaa_branch_1
+check_version "$BASE_VER.7.2"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.7.2"
+
+git checkout master
+git commit --allow-empty     -m "commit 10 on master"
+git checkout -b master_branch_2
+git commit --allow-empty     -m "commit 1 on master_branch_2"
+git checkout master
+git commit --allow-empty     -m "commit 11 on master"
+git merge -m "commit 12 on master (merge master_branch_2)" master_branch_2
+git checkout master_branch_2
+git merge --ff-only master
+git commit --allow-empty     -m "commit 1 on master_branch_2 (post FF merge)"
+git checkout master
+git commit --allow-empty     -m "commit 13 on master"
+
+check_version "$BASE_VER.13"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.13"
+
+git checkout master_branch_2
+check_version "$BASE_VER.12.1"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.12.1"
+
+git checkout master
+git checkout -b master_branch_3
+git commit --allow-empty     -m "commit 1 on master_branch_3"
+git checkout master
+git commit --allow-empty     -m "commit 14 on master"
+git merge -m "commit 15 on master (merge master_branch_3)" master_branch_3
+git checkout master_branch_3
+git commit --allow-empty     -m "commit 2 on master_branch_3"
+
+check_version "$BASE_VER.14.1"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.14.1"
+
+git checkout master
+check_version "$BASE_VER.15"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.15"
+
+git checkout master
+git checkout -b tmp-branch master
+git merge -m "commit 1 on tmp-branch (merge master_branch_3, master copy)" master_branch_3
+git checkout master_branch_3
+git merge --ff-only tmp-branch # commit 1 on post FF merge from master
+git branch -d tmp-branch
+
+git checkout master
+git commit --allow-empty     -m "commit 16 on master"
+
+check_version "$BASE_VER.16"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.16"
+
+git checkout master_branch_3
+check_version "$BASE_VER.15.1"
+git checkout $(git rev-parse HEAD)
+check_version "$BASE_VER.15.1"
+
+

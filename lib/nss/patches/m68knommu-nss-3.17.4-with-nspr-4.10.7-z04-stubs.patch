@@ -1,0 +1,11 @@
+--- nss-3.17.4/nss/lib/freebl/stubs.c.LSW	2015-08-21 16:56:11.991786877 -0400
++++ nss-3.17.4/nss/lib/freebl/stubs.c	2015-08-21 16:59:13.151808340 -0400
+@@ -38,7 +38,7 @@
+ #include <blapi.h>
+ #include <private/pprio.h>
+ 
+-#define FREEBL_NO_WEAK 1
++//#define FREEBL_NO_WEAK 1
+ 
+ #define WEAK __attribute__((weak))
+ 

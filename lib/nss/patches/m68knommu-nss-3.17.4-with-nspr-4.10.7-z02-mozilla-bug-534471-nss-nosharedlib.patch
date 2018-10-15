@@ -1,0 +1,728 @@
+--- nss-3.17.4/nss/coreconf/ruleset.mk.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/coreconf/ruleset.mk	2015-08-21 16:18:04.727902017 -0400
+@@ -109,7 +109,7 @@
+ endif
+ 
+ ifndef TARGETS
+-    TARGETS = $(LIBRARY) $(SHARED_LIBRARY) $(PROGRAM)
++    TARGETS = $(LIBRARY) $(PROGRAM)
+ endif
+ 
+ # Make both .cpp and .cc work.
+--- nss-3.17.4/nss/coreconf/rules.mk.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/coreconf/rules.mk	2015-08-21 16:17:26.535736609 -0400
+@@ -76,17 +76,6 @@
+ ifdef LIBRARY
+ 	$(INSTALL) -m 664 $(LIBRARY) $(SOURCE_LIB_DIR)
+ endif
+-ifdef SHARED_LIBRARY
+-	$(INSTALL) -m 775 $(SHARED_LIBRARY) $(SOURCE_LIB_DIR)
+-ifdef MOZ_DEBUG_SYMBOLS
+-ifeq (,$(filter-out _WIN%,$(NS_USE_GCC)_$(OS_TARGET)))
+-	$(INSTALL) -m 644 $(SHARED_LIBRARY:$(DLL_SUFFIX)=pdb) $(SOURCE_LIB_DIR)
+-endif
+-endif
+-endif
+-ifdef IMPORT_LIBRARY
+-	$(INSTALL) -m 775 $(IMPORT_LIBRARY) $(SOURCE_LIB_DIR)
+-endif
+ ifdef PROGRAM
+ 	$(INSTALL) -m 775 $(PROGRAM) $(SOURCE_BIN_DIR)
+ ifdef MOZ_DEBUG_SYMBOLS
+--- nss-3.17.4/nss/lib/freebl/manifest.mn.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/freebl/manifest.mn	2015-08-21 16:22:21.367838592 -0400
+@@ -6,6 +6,10 @@
+ # NOTE: any ifdefs in this file must be defined on the gmake command line
+ # (if anywhere).  They cannot come from Makefile or config.mk 
+ 
++# When we build NSS as static libraries, there is no parent build.  Just do
++# a child build.
++FREEBL_CHILD_BUILD = 1
++
+ CORE_DEPTH = ../..
+ 
+ MODULE = nss
+--- nss-3.17.4/nss/lib/freebl/config.mk.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/freebl/config.mk	2015-08-21 16:27:48.103795080 -0400
+@@ -34,10 +34,10 @@
+ 
+ else
+ 
+-# This is a recursive child make. We build the shared lib.
++# This is a recursive child make. We build the static lib.
+ 
+-TARGETS      = $(SHARED_LIBRARY)
+-LIBRARY      =
++TARGETS      = $(LIBRARY)
++SHARED_LIBRARY =
+ IMPORT_LIBRARY =
+ PROGRAM      =
+ 
+--- nss-3.17.4/nss/lib/freebl/rsa.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/freebl/rsa.c	2015-08-21 16:19:49.455754194 -0400
+@@ -1535,6 +1535,13 @@
+     RSA_Cleanup();
+ }
+ 
++#if 1  /* STATIC LIBRARIES */
++void
++BL_Unload(void)
++{
++}
++#endif
++
+ PRBool bl_parentForkedAfterC_Initialize;
+ 
+ /*
+--- nss-3.17.4/nss/lib/freebl/shvfy.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/freebl/shvfy.c	2015-08-21 16:26:05.391807382 -0400
+@@ -273,9 +273,19 @@
+     return SECSuccess;
+ }
+ 
++/*
++ * Define PSEUDO_FIPS if you can't do FIPS software integrity test (e.g.,
++ * if you're using NSS as static libraries), but want to confirm to the
++ * rest of the FIPS requirements.
++ */
++#define PSEUDO_FIPS
++
+ PRBool
+ BLAPI_SHVerify(const char *name, PRFuncPtr addr)
+ {
++#ifdef PSEUDO_FIPS
++    return PR_TRUE;  /* a lie, hence *pseudo* FIPS */
++#else
+     PRBool result = PR_FALSE; /* if anything goes wrong,
+ 			       * the signature does not verify */
+     /* find our shared library name */
+@@ -492,6 +502,7 @@
+     }
+ 
+     return result;
++#endif  /* PSEUDO_FIPS */
+ }
+ 
+ PRBool
+--- nss-3.17.4/nss/lib/ckfw/builtins/Makefile.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/ckfw/builtins/Makefile	2015-08-21 16:17:26.543734095 -0400
+@@ -23,11 +23,12 @@
+ 	-lnspr4 \
+ 	$(NULL)
+ else 
+-EXTRA_SHARED_LIBS += \
+-        $(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4.lib \
+-        $(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4.lib \
+-        $(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.lib \
++EXTRA_LIBS += \
++        $(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4_s.lib \
++        $(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4_s.lib \
++        $(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4_s.lib \
+         $(NULL)
++OS_LIBS = advapi32.lib wsock32.lib winmm.lib
+ endif # NS_USE_GCC
+ else
+ 
+--- nss-3.17.4/nss/lib/softoken/lgglue.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/softoken/lgglue.c	2015-08-21 16:17:26.551737413 -0400
+@@ -23,6 +23,7 @@
+ static LGAddSecmodFunc legacy_glue_addSecmod = NULL;
+ static LGShutdownFunc legacy_glue_shutdown = NULL;
+ 
++#if 0  /* STATIC LIBRARIES */
+ /*
+  * The following 3 functions duplicate the work done by bl_LoadLibrary.
+  * We should make bl_LoadLibrary a global and replace the call to
+@@ -160,6 +161,7 @@
+ 
+     return lib;
+ }
++#endif  /* STATIC LIBRARIES */
+ 
+ /*
+  * stub files for legacy db's to be able to encrypt and decrypt
+@@ -272,6 +274,22 @@
+ 	return SECSuccess;
+     }
+ 
++#define TRY_TO_USE_NSSDBM
++#if 1  /* STATIC LIBRARIES */
++#ifdef TRY_TO_USE_NSSDBM
++    lib = (PRLibrary *) 0x8;
++
++    legacy_glue_open = legacy_Open;
++    legacy_glue_readSecmod = legacy_ReadSecmodDB;
++    legacy_glue_releaseSecmod = legacy_ReleaseSecmodDBData;
++    legacy_glue_deleteSecmod = legacy_DeleteSecmodDB;
++    legacy_glue_addSecmod = legacy_AddSecmodDB;
++    legacy_glue_shutdown = legacy_Shutdown;
++    setCryptFunction = legacy_SetCryptFunctions;
++#else
++    return SECFailure;
++#endif
++#else
+     lib = sftkdb_LoadLibrary(LEGACY_LIB_NAME);
+     if (lib == NULL) {
+ 	return SECFailure;
+@@ -297,11 +315,14 @@
+ 	PR_UnloadLibrary(lib);
+ 	return SECFailure;
+     }
++#endif  /* STATIC LIBRARIES */
+ 
+     /* verify the loaded library if we are in FIPS mode */
+     if (isFIPS) {
+ 	if (!BLAPI_SHVerify(LEGACY_LIB_NAME,(PRFuncPtr)legacy_glue_open)) {
++#if 0  /* STATIC LIBRARIES */
+ 	    PR_UnloadLibrary(lib);
++#endif
+ 	    return SECFailure;
+ 	}
+     	legacy_glue_libCheckSucceeded = PR_TRUE;
+@@ -418,10 +439,12 @@
+ #endif
+ 	crv = (*legacy_glue_shutdown)(parentForkedAfterC_Initialize);
+     }
++#if 0  /* STATIC LIBRARIES */
+     disableUnload = PR_GetEnv("NSS_DISABLE_UNLOAD");
+     if (!disableUnload) {
+         PR_UnloadLibrary(legacy_glue_lib);
+     }
++#endif
+     legacy_glue_lib = NULL;
+     legacy_glue_open = NULL;
+     legacy_glue_readSecmod = NULL;
+--- nss-3.17.4/nss/lib/softoken/lgglue.h.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/softoken/lgglue.h	2015-08-21 16:17:26.551737413 -0400
+@@ -38,6 +38,25 @@
+ typedef void (*LGSetForkStateFunc)(PRBool);
+ typedef void (*LGSetCryptFunc)(LGEncryptFunc, LGDecryptFunc);
+ 
++extern CK_RV legacy_Open(const char *dir, const char *certPrefix, 
++		const char *keyPrefix, 
++		int certVersion, int keyVersion, int flags, 
++		SDB **certDB, SDB **keyDB);
++extern char ** legacy_ReadSecmodDB(const char *appName, 
++			const char *filename, 
++			const char *dbname, char *params, PRBool rw);
++extern SECStatus legacy_ReleaseSecmodDBData(const char *appName,
++			const char *filename, 
++			const char *dbname, char **params, PRBool rw);
++extern SECStatus legacy_DeleteSecmodDB(const char *appName,
++			const char *filename, 
++			const char *dbname, char *params, PRBool rw);
++extern SECStatus legacy_AddSecmodDB(const char *appName, 
++			const char *filename, 
++			const char *dbname, char *params, PRBool rw);
++extern SECStatus legacy_Shutdown(PRBool forked);
++extern void legacy_SetCryptFunctions(LGEncryptFunc, LGDecryptFunc);
++
+ /*
+  * Softoken Glue Functions
+  */
+--- nss-3.17.4/nss/lib/certhigh/certvfy.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/certhigh/certvfy.c	2015-08-21 16:17:26.543734095 -0400
+@@ -13,9 +13,12 @@
+ #include "certdb.h"
+ #include "certi.h"
+ #include "cryptohi.h"
++#undef NO_LIBPKIX
++#ifndef NO_LIBPKIX
+ #include "pkix.h"
+ /*#include "pkix_sample_modules.h" */
+ #include "pkix_pl_cert.h"
++#endif  /* NO_LIBPKIX */
+ 
+ 
+ #include "nsspki.h"
+@@ -24,6 +27,47 @@
+ #include "pki3hack.h"
+ #include "base.h"
+ 
++#ifdef NO_LIBPKIX
++SECStatus
++cert_VerifyCertChainPkix(
++    CERTCertificate *cert,
++    PRBool           checkSig,
++    SECCertUsage     requiredUsage,
++    PRTime           time,
++    void            *wincx,
++    CERTVerifyLog   *log,
++    PRBool          *pSigerror,
++    PRBool          *pRevoked)
++{
++    PORT_SetError(PR_NOT_IMPLEMENTED_ERROR);
++    return SECFailure;
++}
++
++SECStatus
++CERT_SetUsePKIXForValidation(PRBool enable)
++{
++    PORT_SetError(PR_NOT_IMPLEMENTED_ERROR);
++    return SECFailure;
++}
++
++PRBool
++CERT_GetUsePKIXForValidation()
++{
++    return PR_FALSE;
++}
++
++SECStatus CERT_PKIXVerifyCert(
++    CERTCertificate *cert,
++    SECCertificateUsage usages,
++    CERTValInParam *paramsIn,
++    CERTValOutParam *paramsOut,
++    void *wincx)
++{
++    PORT_SetError(PR_NOT_IMPLEMENTED_ERROR);
++    return SECFailure;
++}
++#endif  /* NO_LIBPKIX */
++
+ /*
+  * Check the validity times of a certificate
+  */
+--- nss-3.17.4/nss/lib/nss/config.mk.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/nss/config.mk	2015-08-21 16:17:26.547736922 -0400
+@@ -71,6 +71,7 @@
+ 	$(DIST)/lib/$(LIB_PREFIX)module.$(LIB_SUFFIX) \
+ 	$(NULL)
+ 
++# If NO_LIBPKIX, remove the libpkix directories.
+ SHARED_LIBRARY_DIRS = \
+ 	../certhigh \
+ 	../cryptohi \
+--- nss-3.17.4/nss/lib/nss/nssinit.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/nss/nssinit.c	2015-08-21 16:44:31.923754165 -0400
+@@ -20,9 +20,12 @@
+ #include "secerr.h"
+ #include "nssbase.h"
+ #include "nssutil.h"
++#undef NO_LIBPKIX
++#ifndef NO_LIBPKIX
+ #include "pkixt.h"
+ #include "pkix.h"
+ #include "pkix_tools.h"
++#endif
+ 
+ #include "pki3hack.h"
+ #include "certi.h"
+@@ -530,8 +533,10 @@
+ 		 PRBool dontFinalizeModules)
+ {
+     SECStatus rv = SECFailure;
++#ifndef NO_LIBPKIX
+     PKIX_UInt32 actualMinorVersion = 0;
+     PKIX_Error *pkixError = NULL;
++#endif
+     PRBool isReallyInitted;
+     char *configStrings = NULL;
+     char *configName = NULL;
+@@ -685,6 +690,7 @@
+ 	pk11sdr_Init();
+ 	cert_CreateSubjectKeyIDHashTable();
+ 
++#ifndef NO_LIBPKIX
+ 	pkixError = PKIX_Initialize
+ 	    (PKIX_FALSE, PKIX_MAJOR_VERSION, PKIX_MINOR_VERSION,
+ 	    PKIX_MINOR_VERSION, &actualMinorVersion, &plContext);
+@@ -697,6 +703,7 @@
+                 CERT_SetUsePKIXForValidation(PR_TRUE);
+             }
+         }
++#endif  /* NO_LIBPKIX */
+ 
+ 
+     }
+@@ -1081,7 +1088,9 @@
+     cert_DestroyLocks();
+     ShutdownCRLCache();
+     OCSP_ShutdownGlobal();
++#ifndef NO_LIBPKIX
+     PKIX_Shutdown(plContext);
++#endif
+     SECOID_Shutdown();
+     status = STAN_Shutdown();
+     cert_DestroySubjectKeyIDHashTable();
+--- nss-3.17.4/nss/lib/util/manifest.mn.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/util/manifest.mn	2015-08-21 16:43:32.043856941 -0400
+@@ -66,7 +66,6 @@
+ 	secasn1e.c \
+ 	secasn1u.c \
+ 	secitem.c \
+-	secload.c \
+ 	secoid.c \
+ 	sectime.c \
+ 	secport.c \
+--- nss-3.17.4/nss/lib/util/secport.h.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/util/secport.h	2015-08-21 16:17:26.559735189 -0400
+@@ -210,6 +210,7 @@
+ 
+ extern int NSS_SecureMemcmp(const void *a, const void *b, size_t n);
+ 
++#if 0  /* STATIC LIBRARIES */
+ /*
+  * Load a shared library called "newShLibName" in the same directory as
+  * a shared library that is already loaded, called existingShLibName.
+@@ -244,6 +245,7 @@
+ PORT_LoadLibraryFromOrigin(const char* existingShLibName,
+                  PRFuncPtr staticShLibFunc,
+                  const char *newShLibName);
++#endif  /* STATIC LIBRARIES */
+ 
+ SEC_END_PROTOS
+ 
+--- nss-3.17.4/nss/lib/pk11wrap/pk11load.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/lib/pk11wrap/pk11load.c	2015-08-21 16:43:03.903764953 -0400
+@@ -341,6 +341,11 @@
+     }
+ }
+ 
++#if 1  /* STATIC LIBRARIES */
++extern CK_RV NSC_GetFunctionList(CK_FUNCTION_LIST_PTR *pFunctionList);
++extern CK_RV FC_GetFunctionList(CK_FUNCTION_LIST_PTR *pFunctionList);
++extern char **NSC_ModuleDBFunc(unsigned long function,char *parameters, void *args);
++#else
+ static const char* my_shlib_name =
+     SHLIB_PREFIX"nss"SHLIB_VERSION"."SHLIB_SUFFIX;
+ static const char* softoken_shlib_name =
+@@ -349,12 +354,14 @@
+ static PRCallOnceType loadSoftokenOnce;
+ static PRLibrary* softokenLib;
+ static PRInt32 softokenLoadCount;
++#endif  /* STATIC LIBRARIES */
+ 
+ #include "prio.h"
+ #include "prprf.h"
+ #include <stdio.h>
+ #include "prsystem.h"
+ 
++#if 0  /* STATIC LIBRARIES */
+ /* This function must be run only once. */
+ /*  determine if hybrid platform, then actually load the DSO. */
+ static PRStatus
+@@ -371,6 +378,7 @@
+   }
+   return PR_FAILURE;
+ }
++#endif  /* STATIC LIBRARIES */
+ 
+ /*
+  * load a new module into our address space and initialize it.
+@@ -389,6 +397,16 @@
+ 
+     /* intenal modules get loaded from their internal list */
+     if (mod->internal && (mod->dllName == NULL)) {
++#if 1  /* STATIC LIBRARIES */
++    if (mod->isFIPS) {
++        entry = FC_GetFunctionList;
++    } else {
++        entry = NSC_GetFunctionList;
++    }
++    if (mod->isModuleDB) {
++        mod->moduleDBFunc = NSC_ModuleDBFunc;
++    }
++#else
+     /*
+      * Loads softoken as a dynamic library,
+      * even though the rest of NSS assumes this as the "internal" module.
+@@ -414,6 +432,7 @@
+         mod->moduleDBFunc = (CK_C_GetFunctionList) 
+                     PR_FindSymbol(softokenLib, "NSC_ModuleDBFunc");
+     }
++#endif
+ 
+     if (mod->moduleDBOnly) {
+         mod->loaded = PR_TRUE;
+@@ -585,6 +604,7 @@
+      * if not, we should change this to SECFailure and move it above the
+      * mod->loaded = PR_FALSE; */
+     if (mod->internal && (mod->dllName == NULL)) {
++#if 0 /* static libraries */
+         if (0 == PR_ATOMIC_DECREMENT(&softokenLoadCount)) {
+           if (softokenLib) {
+               disableUnload = PR_GetEnv("NSS_DISABLE_UNLOAD");
+@@ -596,6 +616,7 @@
+           }
+           loadSoftokenOnce = pristineCallOnce;
+         }
++#endif
+ 	return SECSuccess;
+     }
+ 
+--- nss-3.17.4/nss/cmd/manifest.mn.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/manifest.mn	2015-08-21 16:42:13.435829142 -0400
+@@ -47,7 +47,6 @@
+  selfserv  \
+  signtool \
+  signver \
+- $(SHLIBSIGN_SRCDIR) \
+  smimetools  \
+  ssltap  \
+  strsclnt \
+--- nss-3.17.4/nss/cmd/platlibs.mk.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/platlibs.mk	2015-08-21 16:48:31.055810165 -0400
+@@ -32,6 +32,7 @@
+ DBMLIB = $(DIST)/lib/$(LIB_PREFIX)dbm.$(LIB_SUFFIX) 
+ endif
+ 
++USE_STATIC_LIBS = 1
+ ifdef USE_STATIC_LIBS
+ 
+ DEFINES += -DNSS_USE_STATIC_LIBS
+@@ -81,17 +82,18 @@
+ 	$(DIST)/lib/$(LIB_PREFIX)pk11wrap.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)certdb.$(LIB_SUFFIX) \
+ 	$(SOFTOKENLIB) \
++	$(DIST)/lib/$(LIB_PREFIX)nssdbm.$(LIB_SUFFIX) \
+ 	$(CRYPTOLIB) \
+ 	$(DIST)/lib/$(LIB_PREFIX)nsspki.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)nssdev.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)nssb.$(LIB_SUFFIX) \
+ 	$(PKIXLIB) \
+ 	$(DBMLIB) \
+-	$(DIST)/lib/$(LIB_PREFIX)$(SQLITE_LIB_NAME).$(LIB_SUFFIX) \
+-	$(DIST)/lib/$(LIB_PREFIX)nssutil3.$(LIB_SUFFIX) \
+-	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4.$(LIB_SUFFIX) \
+-	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4.$(LIB_SUFFIX) \
+-	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.$(LIB_SUFFIX) \
++	$(DIST)/lib/$(LIB_PREFIX)sqlite.$(LIB_SUFFIX) \
++	$(DIST)/lib/$(LIB_PREFIX)nssutil.$(LIB_SUFFIX) \
++	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4_s.$(LIB_SUFFIX) \
++	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4_s.$(LIB_SUFFIX) \
++	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4_s.$(LIB_SUFFIX) \
+ 	$(NULL)
+ 
+ # $(PROGRAM) has NO explicit dependencies on $(OS_LIBS)
+@@ -120,12 +122,18 @@
+ 	$(DIST)/lib/$(LIB_PREFIX)nsspki.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)nssdev.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)nssb.$(LIB_SUFFIX) \
++	$(DIST)/lib/$(LIB_PREFIX)nssdbm.$(LIB_SUFFIX) \
+ 	$(CRYPTOLIB) \
+ 	$(DBMLIB) \
+ 	$(PKIXLIB) \
+ 	$(DIST)/lib/$(LIB_PREFIX)nss.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)pk11wrap.$(LIB_SUFFIX) \
+ 	$(DIST)/lib/$(LIB_PREFIX)certhi.$(LIB_SUFFIX) \
++	$(DIST)/lib/$(LIB_PREFIX)sqlite.$(LIB_SUFFIX) \
++	$(DIST)/lib/$(LIB_PREFIX)nssutil.$(LIB_SUFFIX) \
++	$(NSPR_LIB_DIR)/$(LIB_PREFIX)plc4.$(LIB_SUFFIX) \
++	$(NSPR_LIB_DIR)/$(LIB_PREFIX)plds4.$(LIB_SUFFIX) \
++	$(NSPR_LIB_DIR)/$(LIB_PREFIX)nspr4.$(LIB_SUFFIX) \
+ 	$(NULL)
+ 
+ ifeq ($(OS_ARCH), AIX) 
+@@ -134,7 +142,7 @@
+ 
+ # $(PROGRAM) has NO explicit dependencies on $(EXTRA_SHARED_LIBS)
+ # $(EXTRA_SHARED_LIBS) come before $(OS_LIBS), except on AIX.
+-EXTRA_SHARED_LIBS += \
++#EXTRA_SHARED_LIBS += \
+ 	-L$(DIST)/lib \
+ 	-l$(SQLITE_LIB_NAME) \
+ 	-L$(NSSUTIL_LIB_DIR) \
+--- nss-3.17.4/nss/cmd/pk11mode/pk11mode.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/pk11mode/pk11mode.c	2015-08-21 16:17:26.543734095 -0400
+@@ -37,6 +37,11 @@
+ 
+ #include "pk11table.h"
+ 
++#if 1  /* STATIC LIBRARIES */
++extern CK_RV NSC_GetFunctionList(CK_FUNCTION_LIST_PTR *pFunctionList);
++extern CK_RV FC_GetFunctionList(CK_FUNCTION_LIST_PTR *pFunctionList);
++#endif
++
+ #define NUM_ELEM(array) (sizeof(array)/sizeof(array[0]))
+ 
+ #ifndef NULL_PTR
+@@ -205,11 +210,13 @@
+ }
+ 
+ 
++#if 0  /* STATIC LIBRARIES */
+ #ifdef _WIN32
+ HMODULE hModule;
+ #else
+ PRLibrary *lib;
+ #endif
++#endif  /* STATIC LIBRARIES */
+ 
+ /*
+ * All api that belongs to pk11mode.c layer start with the prefix PKM_
+@@ -393,6 +400,13 @@
+     }
+ 
+ 
++#if 1  /* STATIC_LIBRARIES */
++    if (MODE == FIPSMODE) {
++        pC_GetFunctionList = FC_GetFunctionList;
++    } else {
++        pC_GetFunctionList = NSC_GetFunctionList;
++    }
++#else  /* STATIC LIBRARIES */
+ #ifdef _WIN32
+     hModule = LoadLibrary(LIB_NAME);
+     if (hModule == NULL) {
+@@ -407,7 +421,7 @@
+         /* NON FIPS mode  == C_GetFunctionList */
+         pC_GetFunctionList = (CK_C_GetFunctionList)
+                              GetProcAddress(hModule, "C_GetFunctionList");
+-     }
++    }
+     if (pC_GetFunctionList == NULL) {
+         PKM_Error( "cannot load %s\n", LIB_NAME);
+         goto cleanup;
+@@ -425,15 +439,13 @@
+     if (MODE == FIPSMODE) {
+         pC_GetFunctionList = (CK_C_GetFunctionList) PR_FindFunctionSymbol(lib,
+         "FC_GetFunctionList");
+-        assert(pC_GetFunctionList != NULL);
+-        slotID = 0;
+     } else {
+         pC_GetFunctionList = (CK_C_GetFunctionList) PR_FindFunctionSymbol(lib,
+         "C_GetFunctionList");
+-        assert(pC_GetFunctionList != NULL);
+-        slotID = 1;
+     }
++    assert(pC_GetFunctionList != NULL);
+ #endif
++#endif  /* STATIC LIBRARIES */
+ 
+     if (MODE == FIPSMODE) {
+         printf("Loaded FC_GetFunctionList for FIPS MODE; slotID %d \n",
+@@ -751,6 +763,7 @@
+         PR_smprintf_free(moduleSpec);
+     }
+ 
++#if 0  /* STATIC LIBRARIES */
+ #ifdef _WIN32
+     FreeLibrary(hModule);
+ #else
+@@ -759,6 +772,7 @@
+         PR_UnloadLibrary(lib);
+     }
+ #endif
++#endif
+     if (CKR_OK == crv && doForkTests && !disableUnload) {
+         /* try to fork with softoken both de-initialized and unloaded */
+         crv = PKM_ForkCheck(123, NULL, PR_TRUE, NULL);
+@@ -1894,8 +1908,11 @@
+ 
+     NUMTESTS++; /* increment NUMTESTS */
+     MODE = NONFIPSMODE;
+-#ifdef _WIN32
+     /* NON FIPS mode  == C_GetFunctionList */
++#if 1  /* STATIC LIBRARIES */
++    pC_GetFunctionList = NSC_GetFunctionList;
++#else  /* STATIC LIBRARIES */
++#ifdef _WIN32
+     pC_GetFunctionList = (CK_C_GetFunctionList)
+                          GetProcAddress(hModule, "C_GetFunctionList");
+     if (pC_GetFunctionList == NULL) {
+@@ -1907,6 +1924,7 @@
+         "C_GetFunctionList");
+         assert(pC_GetFunctionList != NULL);
+ #endif
++#endif  /* STATIC LIBRARIES */
+     PKM_LogIt("loading C_GetFunctionList for Non FIPS Mode; slotID %d \n",
+               slotID_C);
+     crv = (*pC_GetFunctionList)(&pC_FunctionList);
+@@ -1962,14 +1980,17 @@
+     /* Now load the FIPS token */
+     /* FIPS mode == FC_GetFunctionList */
+     pFC_GetFunctionList = NULL; 
++#if 1  /* STATIC LIBRARIES */
++    pFC_GetFunctionList = FC_GetFunctionList;
++#else  /* STATIC LIBRARIES */
+ #ifdef _WIN32
+     pFC_GetFunctionList = (CK_C_GetFunctionList)
+                           GetProcAddress(hModule, "FC_GetFunctionList");
+ #else
+-     pFC_GetFunctionList = (CK_C_GetFunctionList) PR_FindFunctionSymbol(lib,
++    pFC_GetFunctionList = (CK_C_GetFunctionList) PR_FindFunctionSymbol(lib,
+         "FC_GetFunctionList");
+-        assert(pFC_GetFunctionList != NULL);
+ #endif
++#endif  /* STATIC LIBRARIES */
+ 
+     PKM_LogIt("loading FC_GetFunctionList for FIPS Mode; slotID %d \n",
+               slotID_FC);
+--- nss-3.17.4/nss/cmd/pk11mode/Makefile.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/pk11mode/Makefile	2015-08-21 16:17:26.539735895 -0400
+@@ -28,7 +28,7 @@
+ 
+ ifeq ($(OS_ARCH), WINNT)
+ 
+-EXTRA_LIBS += \
++#EXTRA_LIBS += \
+ 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4.$(LIB_SUFFIX) \
+ 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4.$(LIB_SUFFIX) \
+ 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.$(LIB_SUFFIX) \
+@@ -36,7 +36,7 @@
+ 
+ else
+ 
+-EXTRA_SHARED_LIBS += \
++#EXTRA_SHARED_LIBS += \
+ 	-L$(NSPR_LIB_DIR) \
+ 	-lplc4 \
+ 	-lplds4 \
+--- nss-3.17.4/nss/cmd/bltest/blapitest.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/bltest/blapitest.c	2015-08-21 16:40:50.919755190 -0400
+@@ -3615,7 +3615,14 @@
+ 
+     /* Do FIPS self-test */
+     if (bltest.commands[cmd_FIPS].activated) {
++#if 0
+ 	CK_RV ckrv = sftk_fipsPowerUpSelfTest();
++#else
++	CK_RV ckrv;
++	rv = SECOID_Init();
++	CHECKERROR(rv, __LINE__);
++	ckrv = sftk_fipsPowerUpSelfTest();
++#endif
+ 	fprintf(stdout, "CK_RV: %ld.\n", ckrv);
+         PORT_Free(cipherInfo);
+         if (ckrv == CKR_OK)
+--- nss-3.17.4/nss/cmd/certutil/certext.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/certutil/certext.c	2015-08-21 16:17:26.539735895 -0400
+@@ -461,7 +461,7 @@
+ 
+ SEC_ASN1_MKSUB(SEC_ObjectIDTemplate)
+ 
+-const SEC_ASN1Template CERT_OidSeqTemplate[] = {
++const SEC_ASN1Template CERTOidSeqTemplate[] = {
+     { SEC_ASN1_SEQUENCE_OF | SEC_ASN1_XTRN, offsetof(CERTOidSequence, oids),
+       SEC_ASN1_SUB(SEC_ObjectIDTemplate) }
+ };
+@@ -477,7 +477,7 @@
+         goto loser;
+     }
+ 
+-    if( !SEC_ASN1EncodeItem(os->arena, rv, os, CERT_OidSeqTemplate) ) {
++    if( !SEC_ASN1EncodeItem(os->arena, rv, os, CERTOidSeqTemplate) ) {
+         goto loser;
+     }
+ 
+--- nss-3.17.4/nss/cmd/certutil/keystuff.c.orig	2015-01-22 14:49:26.000000000 -0500
++++ nss-3.17.4/nss/cmd/certutil/keystuff.c	2015-08-21 16:17:26.539735895 -0400
+@@ -37,7 +37,7 @@
+ 
+ #define ERROR_BREAK rv = SECFailure;break;
+ 
+-const SEC_ASN1Template SECKEY_PQGParamsTemplate[] = {
++static const SEC_ASN1Template SECKEYPQGParamsTemplate[] = {
+     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(SECKEYPQGParams) },
+     { SEC_ASN1_INTEGER, offsetof(SECKEYPQGParams,prime) },
+     { SEC_ASN1_INTEGER, offsetof(SECKEYPQGParams,subPrime) },
+@@ -222,7 +222,7 @@
+     if ((buf == NULL) || (len == 0))
+         goto loser;
+  
+-    status = SEC_ASN1Decode(arena, params, SECKEY_PQGParamsTemplate, buf, len);
++    status = SEC_ASN1Decode(arena, params, SECKEYPQGParamsTemplate, buf, len);
+     if (status != SECSuccess)
+         goto loser;
+  

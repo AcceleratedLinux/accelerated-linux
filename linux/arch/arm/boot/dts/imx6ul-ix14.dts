@@ -1,0 +1,58 @@
+/*
+ * Copyright 2018 Digi International, Inc.
+ *
+ * The code contained herein is licensed under the GNU General Public
+ * License. You may obtain a copy of the GNU General Public License
+ * Version 2 or later at the following locations:
+ *
+ * http://www.opensource.org/licenses/gpl-license.html
+ * http://www.gnu.org/copyleft/gpl.html
+ */
+
+/dts-v1/;
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+/* i.MX6 UltraLite CPU */
+#include "imx6ul.dtsi"
+/* ConnectCore 6UL (common) */
+#include "imx6ul-ccimx6ul.dtsi"
+/* ConnectCore 6UL IX14 platform */
+#include "imx6ul-ccimx6ulix14.dtsi"
+
+/* ENET1 */
+&fec1 {
+	status = "okay";
+};
+
+&usbotg2 {
+	status = "okay";
+};
+
+&mca_cc6ul {
+	status = "okay";
+	restore-config-on-resume;
+};
+
+&mca_adc {
+	status = "okay";
+};
+
+/* UART1 (Bluetooth) */
+&uart1 {
+	status = "okay";
+};
+
+/* UART3 */
+&uart3 {
+	status = "okay";
+};
+
+/* UART5 (Console) */
+&uart5 {
+	status = "okay";
+};
+
+&i2c2 {
+	status = "okay";
+};
+

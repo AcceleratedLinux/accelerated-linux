@@ -1,0 +1,66 @@
+
+First time setup for Digi i.MX6UL
+=================================
+
+Setup console and check you have access to the U-Boot bootload command line
+do the following.
+
+At the U-Boot prompt
+--------------------
+
+setenv mtdparts mtdparts=gpmi-nand:3m(bootloader),1m(environment),1m(log),-(flash)
+
+setenv sizing 'setexpr sizaddr $loadaddr + 0x28; setexpr fssize *$sizaddr + 0xfff; setexpr fssize $fssize \\\& 0xfffff000; setexpr ukaddr $loadaddr + $fssize;'
+
+setenv netload 'setenv loadaddr 0x83800000; dhcp $loadaddr image.bin; run sizing; setenv bootargs boot=network $mtdparts console=ttymxc4,115200 root=/dev/ram0 initrd=$loadaddr,0x$fssize; bootm $ukaddr;'
+
+setenv nandload 'if test X$bootpart != Xb ; then setenv nandpart image ; setenv rootpart /dev/mtdblock4 ; else setenv nandpart image1 ; setenv rootpart /dev/mtdblock5 ; fi ; ubi part flash 2048 ; setenv loadaddr 0x83800000; ubi read $loadaddr $nandpart 0x1000000 ; run sizing ; setenv bootargs console=ttymxc4,115200 ubi.mtd=3 root=$rootpart bootpart=$bootpart ; bootm $ukaddr;'
+
+setenv serial 0123456789abcdef
+setenv bootpart a
+setenv bootcmd run nandload
+
+saveenv
+
+Netload and final Config
+------------------------
+
+Setup a DHCP/tftp server and load the image file onto that server.
+Call the file "image.bin".
+
+Connect to U-Boot console and issue:
+
+	run netload
+
+The i.MX6UL should get an address and load the file and boot it.
+Once booted you will be at a shell prompt.
+
+The default networking on the LAN port (closest to USB ports) is:
+
+	192.168.210.1/24
+
+            or
+
+	192.168.2.1/24
+
+Ensure either gives access to a tftpserver at IP W.X.Y.Z,  then run the
+following commands at the shell prompt.
+
+	# /etc/mkffs
+
+	# netflash -bikr /dev/flash/image  W.X.Y.Z image.bin
+
+	# netflash -bihr /dev/flash/image1 W.X.Y.Z image.bin
+
+You may then reboot:
+
+	# reboot
+
+to bring the system up to a full accelerated cellular router mode (most USB
+and PCIe modems are supported).
+
+You can access the WebUI at either of the above addresses,  connect in with
+ssh,  and route through the device to that WAN (DHCP assigned) or cell
+networks.
+
+

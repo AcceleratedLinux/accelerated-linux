@@ -1,0 +1,2 @@
+dir_$(CONFIG_USER_HOSTAPD_HOSTAPD)          += hostapd
+dir_$(CONFIG_USER_HOSTAPD_HOSTAPD_CLI)      += hostapd

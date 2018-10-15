@@ -1,0 +1,22 @@
+--- snort-2.9.8.0/src/detection-plugins/sp_session.c.org	2016-03-24 10:56:45.260058991 +1000
++++ snort-2.9.8.0/src/detection-plugins/sp_session.c	2016-03-24 10:56:59.720059225 +1000
+@@ -80,7 +80,7 @@
+ #include "snort.h"
+ #include "profiler.h"
+ #ifdef PERF_PROFILING
+-PreprocStats sessionPerfStats;
++static PreprocStats sessionPerfStats;
+ extern PreprocStats ruleOTNEvalPerfStats;
+ #endif
+ 
+--- snort-2.9.8.0/src/preprocessors/spp_session.c.org	2016-03-24 10:57:57.740060163 +1000
++++ snort-2.9.8.0/src/preprocessors/spp_session.c	2016-03-24 10:58:11.204060381 +1000
+@@ -64,7 +64,7 @@
+ #endif
+ 
+ #ifdef PERF_PROFILING
+-PreprocStats sessionPerfStats;
++static PreprocStats sessionPerfStats;
+ # ifdef ENABLE_HA
+ extern PreprocStats sessionHAPerfStats;
+ # endif

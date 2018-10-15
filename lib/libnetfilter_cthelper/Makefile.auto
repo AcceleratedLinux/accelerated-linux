@@ -1,0 +1,2 @@
+dir_$(CONFIG_LIB_NETFILTER_CTHELPER) += libnetfilter_cthelper
+dep_libnetfilter_cthelper = libnfnetlink libmnl

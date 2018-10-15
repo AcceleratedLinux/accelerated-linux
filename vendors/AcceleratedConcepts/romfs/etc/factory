@@ -1,0 +1,55 @@
+#!/bin/sh
+echo "Initiating factory test ..."
+mount -t tmpfs -o size=4M tmpfs /etc/config
+echo '#!/bin/sh'  > /tmp/factory_test.sh
+echo 'read cmd'  >> /tmp/factory_test.sh
+echo 'eval $cmd' >> /tmp/factory_test.sh
+echo 'exit 0'    >> /tmp/factory_test.sh
+chmod 755 /tmp/factory_test.sh
+echo "1969 stream tcp nowait root /tmp/factory_test.sh" > /etc/inetd.conf
+echo "23 stream tcp nowait root /bin/telnetd" >> /etc/inetd.conf
+cat > /etc/config/accns.json <<!EOF
+{
+    "auth": {
+        "group": {
+            "admin": {
+                "acl": {
+                    "admin": {
+                        "enable": false
+                    },
+                    "shell": {
+                        "enable": true
+                    }
+                }
+            }
+        }
+    }
+}
+!EOF
+/etc/action.d/pam start
+echo '#!/bin/sh'  > /etc/config/start
+echo 'exit 0'    >> /etc/config/start
+chmod 555 /etc/config/start
+if [ -f /etc/inittab.d/console ] ; then
+	echo "console:console:-/bin/sh" > /var/run/inittab
+fi
+
+# check if has real mac address, if so do part two
+mount -t ubifs ubi0:config /var/mnt >/dev/null 2>&1
+chmod 700 /var/mnt/*
+if [ -f /var/mnt/macaddr.sh ]; then
+	. /var/mnt/macaddr.sh
+	if [ $(fw_printenv -n ethaddr) = "$ethaddr" ]; then
+		sh /var/mnt/factory.sh
+	fi
+fi
+umount /var/mnt
+
+# The default static ip in factory test mode
+# order is important here
+if ifconfig eth0 &>/dev/null; then netdev=eth0; fi
+if ifconfig lan &>/dev/null; then netdev=lan; fi
+if ifconfig lan1 &>/dev/null; then netdev=lan1; fi
+ifconfig $netdev 192.168.0.1
+inetd &
+exit 0

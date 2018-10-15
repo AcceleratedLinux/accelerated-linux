@@ -1,0 +1,11 @@
+diff --git a/configure.ac b/configure.ac
+index 5b80910..f115b9c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1,5 +1,5 @@
+ dnl Process this file with autoconf to produce a configure script.
+-AC_PREREQ([2.68])
++#AC_PREREQ([2.68])
+ 
+ dnl The libmbim version number
+ m4_define([mbim_major_version], [1])

@@ -1,0 +1,7 @@
+
+1. Don't name your cgi to contain "upload.cgi" term
+   coz it has been specified for "firmware upload" purpose.
+
+   (X)  settings_upload.cgi    ( wrong! )
+   (O)  settings.upload.cgi    ( correct)
+   (O)  upload_settings.cgi    ( correct)

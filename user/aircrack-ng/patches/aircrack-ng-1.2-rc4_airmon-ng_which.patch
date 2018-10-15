@@ -1,0 +1,201 @@
+diff -ru aircrack-ng-1.2-rc4.orig/scripts/airmon-ng aircrack-ng-1.2-rc4/scripts/airmon-ng
+--- aircrack-ng-1.2-rc4.orig/scripts/airmon-ng	2016-01-29 14:38:21.000000000 +1000
++++ aircrack-ng-1.2-rc4/scripts/airmon-ng	2017-09-21 15:42:26.230875468 +1000
+@@ -52,7 +52,7 @@
+ #fix to not assume wifi drivers are modules
+ #rewrite to not have two devices at any one time
+ 
+-if [ -n "$(command -v id 2> /dev/null)" ]; then
++if [ -n "$(which id 2> /dev/null)" ]; then
+ 	USERID="$(id -u 2> /dev/null)"
+ fi
+ 
+@@ -67,7 +67,7 @@
+ fi
+ 
+ #check for all needed binaries
+-if [ ! -x "$(command -v uname 2>&1)" ]; then
++if [ ! -x "$(which uname 2>&1)" ]; then
+ 	printf "How in the world do you not have uname installed?\n"
+ 	printf "Please select a linux distro which has at least basic functionality (or install uname).\n"
+ 	exit 1
+@@ -76,26 +76,26 @@
+ 	#Recognized values are Linux and Darwin
+ fi
+ 
+-if [ ! -x "$(command -v ip 2>&1)" ] && [ ! -x "$(command -v ifconfig 2>&1)" ]; then
++if [ ! -x "$(which ip 2>&1)" ] && [ ! -x "$(which ifconfig 2>&1)" ]; then
+ 	printf "You have neither ip (iproute2) nor ifconfig installed.\n"
+ 	printf "Please install one of them from your distro's package manager.\n"
+ 	exit 1
+ fi
+ 
+-if [ ! -x "$(command -v iw 2>&1)" ]; then
++if [ ! -x "$(which iw 2>&1)" ]; then
+ 	printf "You don't have iw installed, please install it from your distro's package manager.\n"
+ 	printf "If your distro doesn't have a recent version you can download it from this link:\n"
+ 	printf "${IW_SOURCE}\n"
+ 	exit 1
+ fi
+ 
+-if [ ! -x "$(command -v ethtool 2>&1)" ]; then
++if [ ! -x "$(which ethtool 2>&1)" ]; then
+ 	printf "Please install the ethtool package for your distro.\n"
+ 	exit 1
+ fi
+ 
+ if [ -d /sys/bus/usb ]; then
+-	if [ ! -x "$(command -v lsusb 2>&1)" ]; then
++	if [ ! -x "$(which lsusb 2>&1)" ]; then
+ 		printf "Please install lsusb from your distro's package manager.\n"
+ 		exit 1
+ 	else
+@@ -106,7 +106,7 @@
+ fi
+ 
+ if [ -d /sys/bus/pci ] || [ -d /sys/bus/pci_express ] || [ -d /proc/bus/pci ]; then
+-	if [ ! -x "$(command -v lspci 2>&1)" ]; then
++	if [ ! -x "$(which lspci 2>&1)" ]; then
+ 		printf "Please install lspci from your distro's package manager.\n"
+ 		exit 1
+ 	else
+@@ -117,14 +117,14 @@
+ fi
+ 
+ if [ -f /proc/modules ] || [ -d /sys/module ]; then
+-	if [ ! -x "$(command -v modprobe 2>&1)" ]; then
++	if [ ! -x "$(which modprobe 2>&1)" ]; then
+ 		printf "Your kernel has module support but you don't have modprobe installed.\n"
+ 		printf "It is highly recommended to install modprobe (typically from kmod).\n"
+ 		MODPROBE=0
+ 	else
+ 		MODPROBE=1
+ 	fi
+-	if [ ! -x "$(command -v modinfo 2>&1)" ]; then
++	if [ ! -x "$(which modinfo 2>&1)" ]; then
+ 		printf "Your kernel has module support but you don't have modinfo installed.\n"
+ 		printf "It is highly recommended to install modinfo (typically from kmod).\n"
+ 		printf "Warning: driver detection without modinfo may yield inaccurate results.\n"
+@@ -137,7 +137,7 @@
+ fi
+ 
+ if [ -c /dev/rfkill ]; then
+-	if [ ! -x "$(command -v rfkill 2>&1)" ];then
++	if [ ! -x "$(which rfkill 2>&1)" ];then
+ 		printf "Your kernel supports rfkill but you don't have rfkill installed.\n"
+ 		printf "To ensure devices are unblocked you must install rfkill.\n"
+ 		RFKILL=0
+@@ -148,13 +148,13 @@
+ 	RFKILL=0
+ fi
+ 
+-if [ ! -x "$(command -v awk 2>&1)" ]; then
++if [ ! -x "$(which awk 2>&1)" ]; then
+ 	printf "How in the world do you not have awk installed?\n"
+ 	printf "Please select a linux distro which has at least basic functionality (or install awk).\n"
+ 	exit 1
+ fi
+ 
+-if [ ! -x "$(command -v grep 2>&1)" ]; then
++if [ ! -x "$(which grep 2>&1)" ]; then
+ 	printf "How in the world do you not have grep installed?\n"
+ 	printf "Please select a linux distro which has at least basic functionality (or install grep).\n"
+ 	exit 1
+@@ -308,18 +308,18 @@
+ }
+ 
+ setLink() {
+-	if [ -x "$(command -v ip 2>&1)" ]; then
++	if [ -x "$(which ip 2>&1)" ]; then
+ 		ip link set dev ${1} ${2} > /dev/null 2>&1 || printf "\nFailed to set ${1} ${2} using ip\n"
+-	elif [ -x "$(command -v ifconfig 2>&1)" ]; then
++	elif [ -x "$(which ifconfig 2>&1)" ]; then
+ 		ifconfig ${1} ${2} > /dev/null 2>&1 || printf "\nFailed to set ${1} ${2} using ifconfig\n"
+ 	fi
+ 	return
+ }
+ 
+ ifaceIsUp() {
+-	if [ -x "$(command -v ip 2>&1)" ]; then
++	if [ -x "$(which ip 2>&1)" ]; then
+ 		ifaceIsUpCmd="ip link show dev"
+-	elif [ -x "$(command -v ifconfig 2>&1)" ]; then
++	elif [ -x "$(which ifconfig 2>&1)" ]; then
+ 		ifaceIsUpCmd="ifconfig"
+ 	fi
+ 	if ${ifaceIsUpCmd} ${1} 2>&1 | grep -q UP
+@@ -331,9 +331,9 @@
+ }
+ 
+ #listIfaceUnspec() {
+-#	if [ -x "$(command -v ip 2>&1)" ]; then
++#	if [ -x "$(which ip 2>&1)" ]; then
+ #		ip link 2>/dev/null | awk -F"[: ]+" '/UNSPEC/ {print $2}'
+-#	elif [ -x "$(command -v ifconfig 2>&1)" ]; then
++#	elif [ -x "$(which ifconfig 2>&1)" ]; then
+ #		ifconfig -a 2>/dev/null | awk -F"[: ]+" '/UNSPEC/ {print $1}'
+ #	fi
+ #}
+@@ -997,7 +997,7 @@
+ 	PROCESSES="wpa_action\|wpa_supplicant\|wpa_cli\|dhclient\|ifplugd\|dhcdbd\|dhcpcd\|udhcpc\|NetworkManager\|knetworkmanager\|avahi-autoipd\|avahi-daemon\|wlassistant\|wifibox"
+ 	#PS_ERROR="invalid\|illegal"
+ 
+-	if [ -x "$(command -v service 2>&1)" ] && [ "$1" = "kill" ]; then
++	if [ -x "$(which service 2>&1)" ] && [ "$1" = "kill" ]; then
+ 		service network-manager stop 2> /dev/null > /dev/null
+ 		service NetworkManager stop 2> /dev/null > /dev/null
+ 		service avahi-daemon stop 2> /dev/null > /dev/null
+@@ -1091,7 +1091,7 @@
+ 			fi
+ 		fi
+ 	done
+-	if [ -x "$(command -v iwconfig 2>&1)" ] && [ -x "$(command -v sort 2>&1)" ]; then
++	if [ -x "$(which iwconfig 2>&1)" ] && [ -x "$(which sort 2>&1)" ]; then
+ 		for iface in $(iwconfig 2> /dev/null | sed 's/^\([a-zA-Z0-9_.]*\) .*/\1/'); do
+ 			iface_list="${iface_list}\n ${iface}"
+ 		done
+@@ -1121,7 +1121,7 @@
+ checkvm() {
+ 	#this entire section of code is completely stolen from Carlos Perez's work in checkvm.rb for metasploit and rewritten (poorly) in sh
+ 	#Check dmi info
+-	if [ -x "$(command -v dmidecode 2>&1)" ]; then
++	if [ -x "$(which dmidecode 2>&1)" ]; then
+ 		dmi_info=$(dmidecode 2>&1)
+ 		if [ -n "${dmi_info}" ]; then
+ 			printf "${dmi_info}" | grep -iq "microsoft corporation" 2> /dev/null && vm="MS Hyper-V"
+@@ -1135,7 +1135,7 @@
+ 
+ 	#check loaded modules
+ 	if [ -z "${vm_from}" ]; then
+-		if [ -x "$(command -v lsmod 2>&1)" ]; then
++		if [ -x "$(which lsmod 2>&1)" ]; then
+ 			lsmod_data="$(lsmod 2>&1)"
+ 			if [ -n "${lsmod}" ]; then
+ 				printf "${lsmod_data}" | grep -iqE "vboxsf|vboxguest" 2> /dev/null && vm="VirtualBox"
+@@ -1188,7 +1188,7 @@
+ 
+ 	# Check using lscpu
+ 	if [ -z "${vm_from}" ]; then
+-		if [ -x "$(command -v lscpu 2>&1)" ]; then
++		if [ -x "$(which lscpu 2>&1)" ]; then
+                         lscpu_data="$(lscpu 2>&1)"
+ 			printf "${lscpu_data}" | grep -iq "Xen" 2> /dev/null && vm="Xen"
+ 			printf "${lscpu_data}" | grep -iq "KVM" 2> /dev/null && vm="KVM"
+@@ -1207,7 +1207,7 @@
+ 
+ 	# Check dmesg Output
+ 	if [ -z "${vm_from}" ]; then
+-		if [ -x "$(command -v dmesg 2>&1)" ]; then
++		if [ -x "$(which dmesg 2>&1)" ]; then
+ 			dmesg | grep -iqE "vboxbios|vboxcput|vboxfacp|vboxxsdt|(vbox cd-rom)|(vbox harddisk)" && vm="VirtualBox"
+ 			dmesg | grep -iqE "(vmware virtual ide)|(vmware pvscsi)|(vmware virtual platform)" && vm="VMware"
+ 			dmesg | grep -iqE "(xen_mem)|(xen-vbd)" && vm="Xen"
+@@ -1255,7 +1255,7 @@
+ #startup checks complete, headers then main
+ 
+ if [ "$DEBUG" = "1" ]; then
+-	if [ -x "$(command -v readlink 2>&1)" ]; then
++	if [ -x "$(which readlink 2>&1)" ]; then
+ 		printf "/bin/sh -> $(readlink -f /bin/sh)\n"
+ 		if $(readlink -f /bin/sh) --version > /dev/null 2>&1
+ 		then

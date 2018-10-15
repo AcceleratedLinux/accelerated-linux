@@ -1,0 +1,80 @@
+
+9400-UA
+-------
+
+The 9400-UA platform is based on an AMD GX-420 quadcore x86 CPU. We run
+it in x86_64 64bit mode as standard.
+
+It is largely a standard PC type platform. As such we can run our images
+on standard PC hardware, and even on KVM/QEMU emulators. Here is a simple
+example of how to run it under QEMU on a desktop Linux system:
+
+  qemu-system-x86_64 -smp cpus=4 -cdrom images/9400-UA.iso -serial stdio
+
+This boots up our USB based install/setup image. It may be a little confusing
+that the vga console starts up with the isolinux boot prompt. But then on
+Linux kernel boot the starting shell takes over as the machine console.
+This is because we normally run our system with serial port console - not
+the start up vga console. (On real 9400-UA hardware all output is via the
+serial port - even the ISO boot step).
+
+
+Virtual 9400-UA Setup for use with Aview
+----------------------------------------
+
+The following example assume linux and "qemu" or kvm.  You could just as
+easily setup the VM under Virtualbox or some other system.  Just ensure that
+the 4th network interface provides us with a DHCP address and preferrable
+internet.  Obviously you can configure and of the 5 network interfaces to
+provide the needed connectivity but for simplicity,  just go with the 4th
+interface for now :-)
+
+1. Create a HDD image as big as you would like. 20G should run a good lots
+   of stuff.  You can go leaner or bigger,  if you go leaner its your
+   responsibility to understand how that limits you.
+   
+   IMAGE_FILE=9400-hdd.img
+   qemu-img create $IMAGE_FILE 20G
+
+2. Boot the ISO (wait for the ISO boot timeout before getting output):
+
+   IMAGE_FILE=9400-hdd.img; sudo qemu-system-x86_64 -enable-kvm -m 4096 -smp cpus=4 -net nic,vlan=1 -net nic,vlan=2 -net nic,vlan=3 -net nic,vlan=4 -net nic,vlan=5 -net user,vlan=4 -nographic -cdrom images/9400-UA.iso -drive file=$IMAGE_FILE,if=none,id=hdimage -device ich9-ahci,id=ahci -device ide-drive,drive=hdimage,bus=ahci.0 -boot d 
+
+3. Get a shell
+
+   login as root/default and run:
+      config set auth user root password default
+      config set auth group admin acl shell enable true
+   logout and back in using 'Shell' this time.
+
+4. Make the filesystems (reduced sizing).  Get a real MAC/Serial from davidm
+   if you want to use with Aview.
+
+   /etc/mkffs 1000
+   echo "/opt/bootenv.img 0 0x80000" > /etc/fw_env.config
+   dd if=/dev/zero of=/opt/bootenv.img bs=524288 count=1
+   fw_setenv ethaddr  00:27:04:........
+   fw_setenv eth1addr 00:27:04:........
+   fw_setenv eth2addr 00:27:04:........
+   fw_setenv eth3addr 00:27:04:........
+   fw_setenv eth4addr 00:27:04:........
+   fw_setenv serial 940001..........
+
+5. Program in the image (takes a while ever, slow emulated disk performance)
+   You can use a relase 9400-UA-*-image.bin off jenkins instead of image.bin.
+
+   netflash -ki dev-box-ip image.bin
+
+6, Run the fully functional HDD version
+
+   IMAGE_FILE=9400-hdd.img; sudo qemu-system-x86_64 -enable-kvm -m 4096 -smp cpus=4 -net nic,vlan=1 -net nic,vlan=2 -net nic,vlan=3 -net nic,vlan=4 -net nic,vlan=5 -net user,vlan=4,hostfwd=tcp::2222-:22,hostfwd=tcp::4443-:443 -nographic -drive file=$IMAGE_FILE,if=none,id=hdimage -device ich9-ahci,id=ahci -device ide-drive,drive=hdimage,bus=ahci.0
+
+7. Add your VM to Aview,  access the web pages at https://localhost:4443/ or
+   ssh into it with 'ssh -p 2222 root@localhost'.
+
+   To point a unit at "theme",  currently required for uCPE:
+
+   config set config.certificate_url https://theme.accns.com/certificates/v2
+   config set config.config_url.0 https://theme.accns.com/
+
+

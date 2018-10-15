@@ -1,0 +1,54 @@
+--- clean-0.9.35/src/h_bash.c	2015-02-16 08:16:19.000000000 +1000
++++ patched-0.9.35/src/h_bash.c	2017-11-28 16:54:42.297844933 +1000
+@@ -89,15 +89,6 @@
+ 	      count--;
+ 	    }
+ 
+-
+-	  /* populate the environment */
+-	  while (env)
+-	    {
+-	      next = env->next;
+-	      putenv (env->buf);
+-	      env = next;
+-	    }
+-
+ 	  execv (argv[0].string, av);
+ 	  free (argv);
+ 
+@@ -108,6 +99,35 @@
+ 	{
+ 	  /* I'm parent, move along please */
+ 	  close (subshell_pipe[PARENT_IN]);
++
++	  /* setup the environment vars without limitations */
++	  while (env)
++	    {
++	      char *np, *cp = strchr(env->buf, '=');
++	      for (np = env->buf; cp && np < cp && (isalnum(*np) || *np == '_'); np++);
++	      if (!cp || np != cp) {
++	      	env=env->next;
++		continue;
++	      }
++	      cp++;
++	      write(subshell_pipe[PARENT_OUT], env->buf, cp - env->buf);
++	      write(subshell_pipe[PARENT_OUT], "'", 1);
++	      while (*cp) {
++	         np = strchr(cp, '\'');
++		     if (np) {
++	           write(subshell_pipe[PARENT_OUT], cp, np - cp);
++	           write(subshell_pipe[PARENT_OUT], "'\"'\"'", 5);
++		       np++;
++		     } else {
++		       np = cp + strlen(cp);
++	           write(subshell_pipe[PARENT_OUT], cp, np - cp);
++            }
++		     cp = np;
++	      }
++	      write(subshell_pipe[PARENT_OUT], "'\n", 2);
++	      next = env->next;
++	      env = next;
++	    }
+ 	}
+     }
+ 

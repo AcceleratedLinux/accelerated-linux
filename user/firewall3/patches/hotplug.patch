@@ -1,0 +1,13 @@
+Index: firewall3/utils.c
+===================================================================
+--- firewall3.orig/utils.c
++++ firewall3/utils.c
+@@ -746,7 +746,7 @@
+ 	setenv("DEVICE",    d->name,                1);
+ 
+ 	execl(FW3_HOTPLUG, FW3_HOTPLUG, "firewall", NULL);
+-
++	exit(1);
+ 	/* unreached */
+ 	return false;
+ }

@@ -1,0 +1,17 @@
+QEMU Emulation of ARM Integrator-CP Evaluation Board
+----------------------------------------------------
+
+The QEMU emulator has machine support for the ARM/Integrator-CP board and
+ARM926EJ-S CPU. The ARM/Integrator-CP target images can be run in qemu.
+
+
+BOOTING
+-------
+
+To run the generated image do:
+
+  qemu-system-arm -M integratorcp -nographic -kernel images/zImage -initrd images/rootfs.bin -append "console=ttyAMA0 root=/dev/ram0"
+
+The serial console output will come out on the same device that you run qemu
+from.
+

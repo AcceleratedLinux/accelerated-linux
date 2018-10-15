@@ -1,0 +1,13 @@
+diff -Nuar libnetfilter_queue-1.0.2.orig/src/nlmsg.c libnetfilter_queue-1.0.2/src/nlmsg.c
+--- libnetfilter_queue-1.0.2.orig/src/nlmsg.c	2012-08-21 03:47:41.169899914 +1000
++++ libnetfilter_queue-1.0.2/src/nlmsg.c	2014-03-03 18:22:09.747309579 +1000
+@@ -19,8 +19,7 @@
+ #define __aligned_le64 __le64 __attribute__((aligned(8)))
+ #endif
+ 
+-#include <linux/netfilter/nfnetlink_queue.h>
+-
++#include <libnfnetlink/libnfnetlink.h>
+ #include <libnetfilter_queue/libnetfilter_queue.h>
+ 
+ #include "internal.h"

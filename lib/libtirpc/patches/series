@@ -1,0 +1,8 @@
+0001-Disable-parts-of-TIRPC-requiring-NIS-support.patch
+0002-uClibc-without-RPC-support-and-musl-does-not-install-rpcent.h.patch
+0003-Automatically-generate-XDR-header-files-from-.x-sour.patch
+0004-Add-more-XDR-files-needed-to-build-rpcbind-on-top-of.patch
+0005-Disable-DES-authentification-support.patch
+0006-rpc-types.h-fix-musl-build.patch
+0007-no-undefined.patch
+0008-stop-multiple.patch

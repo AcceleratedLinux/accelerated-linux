@@ -1,0 +1,86 @@
+config USER_QUAGGA
+	bool
+	help
+		For automake build directory inclusion only. Enable USER_QUAGGA_ZEBRA_ZEBRA
+		for Quagga.
+
+config USER_QUAGGA_ZEBRA_ZEBRA
+	bool "quagga"
+	select USER_QUAGGA
+	select LIB_NCURSES
+	help
+		The Quagga (unofficial GNU Zebra replacement) routing daemon server
+		process.
+
+config USER_QUAGGA_VTYSH_VTYSH
+	bool "quagga-vtysh"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga shell.
+
+config USER_QUAGGA_BGPD_BGPD
+	bool "quagga-bgpd"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga BGP daemon.
+
+config USER_QUAGGA_OSPFD_OSPFD
+	bool "quagga-ospfd"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga OSPF daemon.
+
+config USER_QUAGGA_OSPFAPI
+	bool "quagga-ospfapi"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA && USER_QUAGGA_OSPFD_OSPFD
+	help
+		Enables the Quagga OSPFAPI, used to access the OSPF LSA database.
+
+config USER_QUAGGA_OSPFAPI_OSPFCLIENT
+	bool "quagga-ospfclient"
+	select USER_QUAGGA_OSPFAPI
+	depends on USER_QUAGGA_ZEBRA_ZEBRA && USER_QUAGGA_OSPFD_OSPFD
+	help
+		The Quagga OSPFAPI client program.
+
+config USER_QUAGGA_OSPF6D_OSPF6D
+	bool "quagga-ospf6d"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga OSPF6 daemon.
+
+config USER_QUAGGA_RIPD_RIPD
+	bool "quagga-ripd"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga RIP daemon.
+
+config USER_QUAGGA_RIPNGD_RIPNGD
+	bool "quagga-ripngd"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga RIPNG daemon.
+
+config USER_QUAGGA_ISISD_ISISD
+	bool "quagga-isisd"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga ISIS daemon.
+
+config USER_QUAGGA_BABELD_BABELD
+	bool "quagga-babeld"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga Babel daemon.
+
+config USER_QUAGGA_PIMD_PIMD
+	bool "quagga-pimd"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga PIM (Protocol Independent Multicast) daemon.
+
+config USER_QUAGGA_WATCHQUAGGA_WATCHQUAGGA
+	bool "quagga-watchquagga"
+	depends on USER_QUAGGA_ZEBRA_ZEBRA
+	help
+		The Quagga 'watchquagga' utility.

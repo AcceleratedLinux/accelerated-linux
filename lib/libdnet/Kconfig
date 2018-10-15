@@ -1,0 +1,5 @@
+config LIB_LIBDNET
+	bool "libdnet"
+	default n
+	help
+	  libdnet provides a simplified, portable interface to several low-level networking routines.

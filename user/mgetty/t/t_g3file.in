@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# test for functions in g3file.c, via t_g3f_c C program
+#
+#
+# reference file
+REF=../g3/test-ref.g3
+set -e
+
+#
+# basic test
+@ECHO@ "\tbasic"
+./t_g3f_c $REF >test-out.g3
+cmp $REF test-out.g3
+rm test-out.g3
+
+#
+# bit reverse test
+@ECHO@ "\tbit reverse"
+../g3/g32pbm $REF | ../g3/pbm2g3 -r >test-out-pbm2g3.g3
+./t_g3f_c -r $REF >test-out-g3file.g3
+cmp test-out-pbm2g3.g3 test-out-g3file.g3
+rm test-out-pbm2g3.g3 test-out-g3file.g3
+
+#
+# padding test
+#  (this is a bit ugly, as g3cat will always align EOLs, and g3file won't)
+@ECHO@ "\tpadding"
+../g3/g3cat -p 30 $REF >test-out-g3cat.g3
+../g3/g3cat -a $REF >test-ref-aligned.g3
+./t_g3f_c -p 30 test-ref-aligned.g3 >test-out-g3file.g3
+cmp test-out-g3cat.g3 test-out-g3file.g3
+rm test-ref-aligned.g3 test-out-g3cat.g3 test-out-g3file.g3

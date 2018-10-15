@@ -1,0 +1,75 @@
+diff -ru fcron-3.2.1.old/database.c fcron-3.2.1/database.c
+--- fcron-3.2.1.old/database.c	2016-06-27 03:42:39.000000000 +1000
++++ fcron-3.2.1/database.c	2018-05-25 13:31:31.270451581 +1000
+@@ -183,8 +183,10 @@
+         send_msg_fd(info_fd, "Job '%s' started.", line->cl_shell);
+     }
+     else {
++        if (is_exe_sev_log(line->cl_option)) {
+         warn_fd(info_fd, "    process already running: %s's '%s'",
+                 line->cl_file->cf_user, line->cl_shell);
++        }
+     }
+ 
+ }
+Binary files fcron-3.2.1.old/database.o and fcron-3.2.1/database.o differ
+Binary files fcron-3.2.1.old/fcron and fcron-3.2.1/fcron differ
+Binary files fcron-3.2.1.old/fcrontab and fcron-3.2.1/fcrontab differ
+diff -ru fcron-3.2.1.old/fileconf.c fcron-3.2.1/fileconf.c
+--- fcron-3.2.1.old/fileconf.c	2016-06-27 03:42:39.000000000 +1000
++++ fcron-3.2.1/fileconf.c	2018-05-25 13:30:20.929823751 +1000
+@@ -629,6 +629,17 @@
+                 fprintf(stderr, "  Opt : \"%s\" %d\n", opt_name, i);
+         }
+ 
++        else if (strcmp(opt_name, "exesevlog") == 0) {
++            if (in_brackets && (ptr = get_bool(ptr, &i)) == NULL)
++                Handle_err;
++            if (i == 0)
++                clear_exe_sev_log(cl->cl_option);
++            else
++                set_exe_sev_log(cl->cl_option);
++            if (debug_opt)
++                fprintf(stderr, "  Opt : \"%s\" %d\n", opt_name, i);
++        }
++
+         else if (strcmp(opt_name, "b") == 0 || strcmp(opt_name, "bootrun") == 0) {
+             if (in_brackets && (ptr = get_bool(ptr, &i)) == NULL)
+                 Handle_err;
+Binary files fcron-3.2.1.old/fileconf.o and fcron-3.2.1/fileconf.o differ
+diff -ru fcron-3.2.1.old/option.h fcron-3.2.1/option.h
+--- fcron-3.2.1.old/option.h	2016-06-27 03:42:39.000000000 +1000
++++ fcron-3.2.1/option.h	2018-05-25 14:59:15.058905409 +1000
+@@ -95,6 +95,7 @@
+   28     runatreboot: if set then run the job at each system startup
+   29     runonce: if set then run the job only once
+   30     hasrun: set if the job has been run at least once
++  31     log when this job cannot be executed several times simultaneously, but tries
+ 
+ */
+ 
+@@ -128,6 +129,7 @@
+        { \
+           if ( SERIAL_ONCE >= 1 ) clear_serial_sev(opt); \
+           if ( LAVG_ONCE == 0 ) set_lavg_sev(opt); \
++          set_exe_sev_log(opt); \
+        }
+ 
+ 
+@@ -510,4 +512,16 @@
+ #define clear_hasrun(opt) \
+ 	(_bit_clear(opt, 30))
+ 
++/*
++  bit 31 : set to 1 : log when this job cannot be executed several times
++                      simultaneously, but tries
++           set to 0 : do not log
++*/
++#define	is_exe_sev_log(opt) \
++	(_bit_test(opt, 31))
++#define	set_exe_sev_log(opt) \
++	(_bit_set(opt, 31))
++#define clear_exe_sev_log(opt) \
++	(_bit_clear(opt, 31))
++
+ #endif                          /* __OPTIONH__ */

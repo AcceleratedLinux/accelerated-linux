@@ -1,0 +1,137 @@
+<po>
+  <message msgid="firewall disable" msgstr="停用" />
+  <message msgid="firewall enable" msgstr="啟用" />
+  <message msgid="firewall apply" msgstr="確定" />
+  <message msgid="firewall reset" msgstr="重置" />
+  <message msgid="firewall del select" msgstr="選擇刪除" />
+  <message msgid="firewall no" msgstr="編號" />
+  <message msgid="firewall protocol" msgstr="協定" />
+  <message msgid="firewall comment" msgstr="註解" />
+  <message msgid="firewall default drop" msgstr="預設丟棄" />
+  <message msgid="firewall default accept" msgstr="預設接受" />
+  
+  <message msgid="port title" msgstr="MAC/IP/Port過濾設定" />
+  <message msgid="port introduction" msgstr="您可以建立防火牆規則來保護您的網路避免Internet的病毒蠕蟲以及惡意攻擊。 " />
+  <message msgid="port basic setting" msgstr="基本設定" />
+  <message msgid="port basic filter" msgstr="MAC/IP/Port過濾" />
+  <message msgid="port basic default policy" msgstr="預設原則 -- 未符合任何規則的封包將會被：" />
+  <message msgid="port basic default policy accepted" msgstr="接受" />
+  <message msgid="port basic default policy dropped" msgstr="丟棄" />
+  <message msgid="port filter setting" msgstr="MAC/IP/Port過濾設定" />
+  <message msgid="port filter macaddr" msgstr="MAC位址" />
+  <message msgid="port filter source ipaddr" msgstr="來源端IP位址 (SIP)" />
+  <message msgid="port filter port range" msgstr="連接埠範圍" />
+  <message msgid="port filter dest ipaddr" msgstr="目的端IP位址 (DIP)" />
+  <message msgid="port filter action" msgstr="執行動作" />
+  <message msgid="port filter action drop" msgstr="丟棄" />
+  <message msgid="port filter action accept" msgstr="接受" />
+  <message msgid="port current filter" msgstr="設定此系統的MAC/IP/Port過濾規則： " />
+  <message msgid="port filter source port range" msgstr="來源端連接埠範圍 (SPR)" />
+  <message msgid="port filter dest port range" msgstr="目的端連接埠範圍 (DPR)" />
+  <message msgid="port filter packetcount" msgstr="封包計數" />
+  <message msgid="port filter current source ipaddr" msgstr="SIP" />
+  <message msgid="port filter current dest ipaddr" msgstr="DIP" />
+  <message msgid="port filter current source port range" msgstr="SPR" />
+  <message msgid="port filter current dest port range" msgstr="DPR" />
+  
+  <message msgid="forward title" msgstr="虛擬伺服器設定" />
+  <message msgid="forward introduction" msgstr="您可以建立虛擬伺服器來提供網路服務。 " />
+  <message msgid="forward virtual server" msgstr="虛擬伺服器" />
+  <message msgid="forward virtual server setting" msgstr="虛擬伺服器設定" />
+  <message msgid="forward virtual server ipaddr" msgstr="IP位址" />
+  <message msgid="forward virtual server port mapping" msgstr="連接埠對映" />
+  <message msgid="forward virtual server port range" msgstr="私有連接埠" />
+  <message msgid="forward virtual server port range2" msgstr="公用連接埠" />
+  <message msgid="forward current virtual server" msgstr="目前系統的虛擬伺服器： " />
+
+  <message msgid="dmz title" msgstr=" DMZ設定 " />
+  <message msgid="dmz introduction" msgstr=" 您可以建立一個隔離區來區分內部網路與Internet。" />
+  <message msgid="dmz setting" msgstr="DMZ設定" />
+  <message msgid="dmz ipaddr" msgstr="DMZ IP位址" />
+
+  <message msgid="content filter title" msgstr="內容過濾設定" />
+  <message msgid="content filter introduction" msgstr="您可以設定內容過濾規則來限制不適當的網頁存取。" />
+  <message msgid="content filter webs content filter" msgstr="網頁內容過濾" />
+  <message msgid="content filter webs content filter filter" msgstr="過濾" />
+  <message msgid="content filter webs content filter apply" msgstr="確定" />
+  <message msgid="content filter webs content filter reset" msgstr="重置" />
+  <message msgid="content filter webs URL filter title" msgstr="網頁URL過濾設定" />
+  <message msgid="content filter webs url filter current" msgstr="目前系統的網頁URL過濾規則：" />
+  <message msgid="content filter webs url fitler No" msgstr="編號" />
+  <message msgid="content filter webs url fitler url" msgstr="URL" />
+  <message msgid="content filter webs url fitler del" msgstr="删除" />
+  <message msgid="content filter webs url fitler reset" msgstr="重置" />
+  <message msgid="content filter webs url fitler add title" msgstr="新增URL過濾規則" />
+  <message msgid="content filter webs url fitler add" msgstr="新增" />
+  <message msgid="content filter webs url fitler reset" msgstr="重置" />
+  <message msgid="content filter webs host fitler title" msgstr="網頁主機過濾設定" />
+  <message msgid="content filter webs host fitler current" msgstr="目前系統的網頁主機過濾規則" />
+  <message msgid="content filter webs host fitler no" msgstr="编號" />
+  <message msgid="content filter webs host fitler host" msgstr="主機名(關鍵字)" />
+  <message msgid="content filter webs host fitler del" msgstr="删除" />
+  <message msgid="content filter webs host fitler reset" msgstr="重置" />
+  <message msgid="content filter webs host fitler add title" msgstr="新增網頁主機過濾規則：" />
+  <message msgid="content filter webs host fitler keyword" msgstr="關鍵字" />
+  <message msgid="content filter webs host fitler add" msgstr="新增" />
+  <message msgid="content filter webs host fitler reset" msgstr="重置" />
+  <message msgid="content filter message" msgstr="最多能設定規則數量為" />
+
+  <message msgid="sysfw title" msgstr="系統安全設定" />
+  <message msgid="sysfw introduction" msgstr="您可以透過設定系統防火牆來保護路由器或無線存取點本身。" />
+  <message msgid="sysfw remote management title" msgstr="遠端管理" />
+  <message msgid="sysfw remote management head" msgstr="遠端管理 (經由廣域網路)" />
+  <message msgid="sysfw allow" msgstr="允許" />
+  <message msgid="sysfw deny" msgstr="禁止" />
+  <message msgid="sysfw wanping title" msgstr="過濾廣域網路的PING封包" />
+  <message msgid="sysfw wanping head" msgstr="廣域網路的PING封包" />
+  <message msgid="sysfw wanping deny" msgstr="禁止" />
+  <message msgid="sysfw wanping allow" msgstr="允許" />
+  <message msgid="sysfw spi title" msgstr="封包狀態檢測 (SPI)" />
+  <message msgid="sysfw spi head" msgstr="SPI 防火牆" />
+  <message msgid="sysfw apply" msgstr="確定" />
+  <message msgid="sysfw reset" msgstr="重置" />
+
+  <message msgid="alert giving up:cannot create an xmlhttp instance" msgstr="Giving up :(Cannot create an XMLHTTP instance)" />
+  
+  <message msgid="forward alert ip address format error" msgstr="IP位址格式錯誤 !" /> 
+  <message msgid="forward alert ip address is empty" msgstr="錯誤 ! IP位址是空的 !" />
+  <message msgid="forward alert it should be a 0 to 9 number" msgstr="填入0到9的數字 !" />
+  <message msgid="forward alert ip address range error" msgstr="IP位址範圍錯誤 !" />
+  <message msgid="forward alert the rule number is exceeded" msgstr="規則數量超過 " />
+  <message msgid="forward alert ip address is required" msgstr="需要填入IP位址 !"  /> 
+  <message msgid="forward alert invalid ip address" msgstr="無效的IP位址 !" /> 
+  <message msgid="forward alert please input fromport" msgstr="請輸入私有連接埠 !" />
+  <message msgid="forward alert please input toport" msgstr="請輸入公用連接埠 !" />
+  <message msgid="forward alert invalid port number" msgstr="無效的連接埠號碼 !" /> 
+  <message msgid="forward alert illegal characters are not allowable" msgstr="含有不支援的字元 !" /> 
+  <message msgid="forward alert the same rule has existed" msgstr="已存在相同的規則 !" /> 
+  
+  <message msgid="port filter alert the rule number is exceeded" msgstr="規則數量超過 " />   
+  <message msgid="port filter alert please input any ip or/and port value" msgstr="請輸入任何IP位址或連接埠範圍" />
+  <message msgid="port filter alert please fill the mac address in correct format" msgstr="請填入MAC位址的正確格式 ! (XX:XX:XX:XX:XX:XX)" /> 
+  <message msgid="port filter alert invalid source port number: from" msgstr="來源端連接埠範圍(SPR): 無效的開始連接埠號碼 !" /> 
+  <message msgid="port filter alert invalid source port number: to" msgstr="來源端連接埠範圍(SPR): 無效的結束連接埠號碼 !" /> 
+  <message msgid="port filter alert invalid source port range setting" msgstr="無效的來源端連接埠範圍(SPR) ! 開始連接埠號碼不能大於結束連接埠號碼" />
+  <message msgid="port filter alert invalid dest port number: from" msgstr="目的端連接埠範圍(DPR): 無效的開始連接埠號碼 !" />
+  <message msgid="port filter alert invalid dest port number: to" msgstr="目的端連接埠範圍(DPR): 無效的結束連接埠號碼 !" />
+  <message msgid="port filter alert invalid dest port range setting" msgstr="無效的目的端連接埠範圍(DPR) ! 開始連接埠號碼不能大於結束連接埠號碼" /> 
+  <message msgid="port filter alert please input src or dest from port number" msgstr="請輸入來源端或目的端的開始連接埠號碼"/>
+  <message msgid="port filter alert source ip address format error" msgstr="來源端IP位址(SIP)格式錯誤 !" /> 
+  <message msgid="port filter alert dest ip address format error" msgstr="目的端IP位址(DIP)格式錯誤 !" /> 
+  <message msgid="port filter alert the same rule has existed" msgstr="已存在相同的規則 !" /> 
+  <message msgid="port filter alert illegal characters are not allowable" msgstr="含有不支援的字元 !" /> 
+  <message msgid="port filter alert the action of this rule would be the same with default policy" msgstr="此規則與預設原則的執行動作相同 !" /> 
+  
+  <message msgid="content filter alert please select the rule to be deleted" msgstr="請選擇需要刪除的規則 !" /> 
+  <message msgid="content filter alert the maximum rule count is 32" msgstr="規則數量最多為32 !" /> 
+  <message msgid="content filter alert please enter a url filter" msgstr="請輸入URL過濾規則 !" /> 
+  <message msgid="content filter alert please enter a valid url" msgstr="請輸入有效的URL !" />
+  <message msgid="content filter alert duplicated url string" msgstr="重複的URL !" /> 
+  <message msgid="content filter alert please enter a host filter" msgstr="請輸入網頁主機過濾規則 !" /> 
+  <message msgid="content filter alert invalid host name" msgstr="無效的主機名稱 !" /> 
+  <message msgid="content filter alert duplicated host string" msgstr="重複的主機名稱 !" /> 
+  
+  <message msgid="dmz alert not set a ip address" msgstr="沒有設定IP位址 !" /> 
+  <message msgid="dmz alert ip address format error" msgstr="IP位址格式錯誤 !" /> 
+  <message msgid="dmz alert incorrect! ip address is lan ip" msgstr="不正確! IP位址不能與區域網路的IP位址相同 !" />
+</po>

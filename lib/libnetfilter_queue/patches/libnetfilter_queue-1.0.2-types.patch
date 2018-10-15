@@ -1,0 +1,50 @@
+--- libnetfilter_queue-1.0.2/src/libnetfilter_queue.c.org	2018-09-06 23:31:21.035336149 +1000
++++ libnetfilter_queue-1.0.2/src/libnetfilter_queue.c	2018-09-06 23:31:32.135325979 +1000
+@@ -28,6 +28,7 @@
+ #include <time.h>
+ #include <errno.h>
+ #include <netinet/in.h>
++#include <sys/types.h>
+ #include <sys/socket.h>
+ 
+ #include <libnfnetlink/libnfnetlink.h>
+--- libnetfilter_queue-1.0.2/src/nlmsg.c.org	2018-09-06 23:33:02.579347016 +1000
++++ libnetfilter_queue-1.0.2/src/nlmsg.c	2018-09-06 23:33:13.183360753 +1000
+@@ -11,6 +11,7 @@
+ #include <endian.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <sys/types.h>
+ 
+ #include <libmnl/libmnl.h>
+ 
+--- libnetfilter_queue-1.0.2/src/extra/ipv6.c.org	2018-09-06 23:34:31.795528195 +1000
++++ libnetfilter_queue-1.0.2/src/extra/ipv6.c	2018-09-06 23:34:41.295555772 +1000
+@@ -12,6 +12,7 @@
+ #include <stdio.h>
+ #include <stddef.h>
+ #include <stdbool.h>
++#include <sys/types.h>
+ #include <arpa/inet.h>
+ #include <netinet/ip6.h>
+ 
+--- libnetfilter_queue-1.0.2/src/extra/ipv4.c.org	2018-09-06 23:44:12.063166078 +1000
++++ libnetfilter_queue-1.0.2/src/extra/ipv4.c	2018-09-06 23:44:21.371246716 +1000
+@@ -11,6 +11,7 @@
+ 
+ #include <stdio.h>
+ #include <stdbool.h>
++#include <sys/types.h>
+ #include <arpa/inet.h>
+ #include <netinet/ip.h>
+ 
+--- libnetfilter_queue-1.0.2/src/extra/udp.c.org	2018-09-06 23:45:17.719744379 +1000
++++ libnetfilter_queue-1.0.2/src/extra/udp.c	2018-09-06 23:45:26.691825052 +1000
+@@ -11,6 +11,7 @@
+ 
+ #include <stdio.h>
+ #include <stdbool.h>
++#include <sys/types.h>
+ #include <arpa/inet.h>
+ #include <netinet/ip.h>
+ #include <netinet/ip6.h>

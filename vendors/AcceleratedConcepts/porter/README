@@ -1,0 +1,170 @@
+# Porter
+
+The Porter is an x86_64 virtual machine guest with operating functionality
+based on the Sprite project.
+
+
+# Virtual hardware
+
+  - 1 CPU
+  - RAM: 100MB
+  - Disk bus model: virtio
+    - Disk #1: Porter disk image
+  - Ethernet model: virtio
+    - Interface #1: Data path
+    - Interface #2: Control interface
+        (same specification as 4093 VLAN on Sprite)
+  - Console: serial port
+
+
+# Hypervisor: QEMU/KVM
+
+## Build QEMU
+
+QEMU 2.8.0 must be
+[patched](qemu-2.8.0-nonsequential-usb-interface-passthrough.patch)
+to allow USB passthrough for the Sierra Wireless MC74xx modems which have
+sparse/non-sequential USB interfaces.
+
+    wget http://download.qemu-project.org/qemu-2.8.0.tar.xz
+    tar xvJf qemu-2.8.0.tar.xz
+    cd qemu-2.8.0
+    patch -p 1 -i ../qemu-2.8.0-nonsequential-usb-interface-passthrough.patch
+    ./configure --enable-libusb --target-list=x86_64-softmmu
+    make
+    QEMU=$(pwd)/x86_64-softmmu/qemu-system-x86_64
+
+## Prepare networking
+
+The Porter has two network interfaces.
+The first interface presented to the Porter is used as the data path.
+Junos may sends commands to the Porter over the second interface according to
+the Sprite specification.
+
+The TAP host networking option can be used. QEMU requires that the TAP devices
+are created before starting.
+
+    # Data path interface
+    sudo ip tuntap add dev porter0 mode tap
+
+    # Control interface
+    sudo ip tuntap add dev porter1 mode tap
+
+    # Default IP for testing (Porter has 192.168.210.1)
+    sudo ifconfig porter0 192.168.210.254 up
+
+## Run Porter VM
+
+    DISK=images/disk.qcow2
+
+    sudo $QEMU --enable-kvm -nographic \
+      -m 100M \
+      -serial mon:stdio \
+      -net nic,model=virtio -net tap,ifname=porter1,script=no,downscript=no \
+      -net nic,model=virtio -net tap,ifname=porter0,script=no,downscript=no \
+      -drive file=$DISK,format=qcow2,if=virtio \
+      -usb \
+        -device usb-ehci,id=usb \
+        -device usb-host,vendorid=0x1199,bus=usb.0
+
+### USB 3.0
+
+It is possible to use USB 3.0 with QEMU 2.9.x (with the same USB passthrough
+patch) using the following arguments for USB:
+
+        -usb \
+          -device qemu-xhci,id=usb \
+          -device usb-host,vendorid=0x1199,bus=usb.0
+
+However, USB3 speeds have been untested due to hardware limitations (USB2
+carrier board for modem).
+
+
+# USB passthrough
+
+## Device matching
+
+The Sierra Wireless MC7430/MC7455 modems have a normal mode and a bootloader
+mode. The bootloader mode is used when updating modem firmware.
+The two modes have different USB PIDs:
+
+  - Normal mode: VID: 0x1199, PID: 0x9071
+  - Bootloader mode: VID: 0x1199, PID: 0x9070
+
+The two PIDs must be taken into consideration if passing through USB devices by
+VID/PID.
+
+## Blacklisting drivers
+
+To prevent the host system from taking control of the passthrough USB device,
+the drivers must be blacklisted in `/etc/modprobe.d/blacklist.conf`.
+
+    blacklist qmi_wwan
+    blacklist qcserial
+    install qmi_wwan /bin/false
+    install qcserial /bin/false
+
+
+# Development notes
+
+## Disk layout
+
+The `mkdisk` script generates a full fdisk-partioned disk image. The first
+cylinder contains the GRUB bootloader. There is a single `ext2` partition that
+fills the remainder of the disk image which contains the dual-rootfs setup
+and persistent storage. This partition contains:
+
+  * `image` file - the first firmware image (in `image.bin` format)
+  * `image1` file - the second firmware image (in `image.bin` format)
+  * `opt` directory - mounted to `/opt` in the final rootfs
+  * `config` directory - mounted to `/etc/config` in the final rootfs
+
+This disk layout was chosen over the traditional fixed-size partitions in order
+to minimize wasted space.
+
+Also note that `mkdisk` is called during `make image`, and uses QEMU to run a VM
+in order to install partition a disk image and install GRUB onto it. =
+
+
+## Boot procedure
+
+The Porter has an indirect bootloading procedure due to the dual disk images
+as files rather than partitions.
+
+1. GRUB boots and loads the `grub_embedded.cfg` config file which is embedded
+into the bootloader.
+This config script determines which disk image is to be used (`image` or
+`image1`) by examining the `default` variable in `/opt/boot/grubenv` (either `0`
+or `1`). It then loopback mounts the selected disk image and runs a secondary
+configuration file `/opt/boot/grub.cfg`.
+
+2. The secondary `grub.cfg` examines the `default` variable to determine which
+disk image to use as an initrd. It then loads this initrd and boots the kernel.
+The `init-loop` script is executed.
+
+3. The `init-loop` script examines the kernel boot parameters for the `bootpart`
+flag (`a` or `b`) and loopback mounts the desired disk image.
+It then pivots the root from the initrd to the loopback mount.
+This allows the initrd to be freed.
+
+4. The `rc` script is then executed as normal.
+
+
+## Testing without Junos
+
+After the Porter has booted and performed the SIM check, the control interface
+may be set up using Accelerated tools that mimic Junos:
+
+    cd prop/juniper/sprite/sprited
+    make clean all
+
+    ETH=porter1
+    NET=192.168.20
+    sudo ETH=$ETH NET=$NET ./test/setup.sh
+
+This will configure the host's `$ETH` interface with the address `$NET.2` and
+the Porter's control network interface with `$NET.1`. The `sprite_send` tool
+sends and receives messages using the same mechanism as Junos. For example:
+
+    ./sprite_send -s $NET.1 -S sprite_info
+    ./sprite_send -s $NET.1 -S modem_info

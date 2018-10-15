@@ -1,0 +1,30 @@
+diff -ur openssh-6.6p1/sshd_config openssh-6.6p1/sshd_config
+--- openssh-6.6p1/sshd_config	2010-09-10 11:20:12.000000000 +1000
++++ openssh-6.6p1/sshd_config	2014-05-23 17:00:39.833432575 +1000
+@@ -38,6 +38,7 @@
+ 
+ #LoginGraceTime 2m
+-#PermitRootLogin prohibit-password
++PermitRootLogin yes
++StrictModes no
+ #StrictModes yes
+ #MaxAuthTries 6
+ #MaxSessions 10
+@@ -84,6 +85,9 @@
+ # and ChallengeResponseAuthentication to 'no'.
+ #UsePAM no
+ 
++# SG default
++UsePAM yes
++
+ #AllowAgentForwarding yes
+ #AllowTcpForwarding yes
+ #GatewayPorts no
+@@ -117,6 +117,7 @@
+ #ClientAliveInterval 0
+ #ClientAliveCountMax 3
+ #UseDNS no
++UseDNS no
+ #PidFile /var/run/sshd.pid
+ #MaxStartups 10:30:100
+ #PermitTunnel no

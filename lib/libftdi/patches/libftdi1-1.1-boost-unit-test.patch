@@ -1,0 +1,14 @@
+--- libftdi1-1.1/test/CMakeLists.txt.orig	2014-06-19 22:52:38.986778248 +1000
++++ libftdi1-1.1/test/CMakeLists.txt	2014-06-19 22:52:55.147108669 +1000
+@@ -1,6 +1,10 @@
+ # Optional unit test
+ 
+-find_package(Boost COMPONENTS unit_test_framework)
++option ( UNIT_TEST  "Enable boost unit test tests" ON )
++
++if (UNIT_TEST)
++	find_package(Boost COMPONENTS unit_test_framework)
++endif(UNIT_TEST)
+ 
+ if(Boost_UNIT_TEST_FRAMEWORK_FOUND)
+ 

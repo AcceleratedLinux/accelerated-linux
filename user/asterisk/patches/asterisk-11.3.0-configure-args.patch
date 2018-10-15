@@ -1,0 +1,9 @@
+--- asterisk-11.3.0/res/pjproject/configure.orig	2013-05-08 13:32:09.410794167 +1000
++++ asterisk-11.3.0/res/pjproject/configure	2013-05-08 13:32:12.410574602 +1000
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-./aconfigure $*
++./aconfigure "$@"
+ 
+ # Note:
+ # if you're looking for the old configure script, it has been renamed

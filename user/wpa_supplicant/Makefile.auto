@@ -1,0 +1,2 @@
+dir_$(CONFIG_USER_WPA_SUPPLICANT)           += wpa_supplicant
+dir_$(CONFIG_USER_WPA_PASSPHRASE)           += wpa_supplicant

@@ -1,0 +1,83 @@
+#!/bin/sh
+#
+# Action for 5301-DC LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+case "$1" in
+start)
+	ledcmd -a -N COM -N ETH -N ONLINE
+	exit 0
+	;;
+reload)
+	;;
+stop)
+	# Firmware flash
+	ledcmd -a -n COM -n ETH -n ONLINE -o COM -f ETH -O ONLINE
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+
+LINK=$(ip link show wan 2> /dev/null | grep -c "state UP")
+
+WAN4=-1
+WAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.wan.ipv4.up) in
+	1) [ "$(runt get netmon.ipv4_interface_wan.passed)" = n ] && WAN4=1 || WAN4=2 ;;
+	0) [ "$(runt get network.interface.wan.ipv4.pending)" = 1 ] && WAN4=1 || WAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.wan.ipv6.up) in
+	1) [ "$(runt get netmon.ipv6_interface_wan.passed)" = n ] && WAN6=1 || WAN6=2 ;;
+	0) [ "$(runt get network.interface.wan.ipv6.pending)" = 1 ] && WAN6=1 || WAN6=0 ;;
+	esac
+fi
+
+if [ "$WAN4" = -1 -a "$WAN6" = -1 ]; then
+	# if neither interface exists force the WAN to match link
+	WAN=$((LINK ? 2 : 0))
+elif [ "$WAN4" = 2 -o "$WAN6" = 2 ]; then
+	WAN=2
+elif [ "$WAN4" = 1 -o "$WAN6" = 1 ]; then
+	WAN=1
+else
+	WAN=0
+fi
+
+case "$WAN" in
+2) WAN="-O COM -O ONLINE -o ETH" ;; # solid green
+1) WAN="-f COM -O ONLINE -f ETH" ;; # flashing yellow
+*) WAN="-f COM -O ONLINE -f ETH" ;; # flashing yellow
+esac
+
+##############################################################
+
+case $(runt get network.interface.dialin.ipv4.up) in
+1) DIALIN=2 ;;
+0) [ "$(runt get network.interface.dialin.ipv4.pending)" = 1 ] && DIALIN=1 || DIALIN=0 ;;
+*) DIALIN=0 ;;
+esac
+
+case $DIALIN in
+2) DIALIN="-a -o COM -O ETH -o ONLINE -n COM -n ETH -n ONLINE" ;;
+1) DIALIN="-a -n COM -n ETH -n ONLINE -f COM -O ETH -f ONLINE" ;;
+*) DIALIN="-a -N COM -N ETH -N ONLINE" ;;
+esac
+
+##############################################################
+
+ledcmd $WAN $DIALIN
+
+exit 0

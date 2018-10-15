@@ -1,0 +1,43 @@
+--- snort-2.9.8.0/src/preprocessors/Stream6/stream_common.h.orig	2016-03-23 17:34:07.863047224 +1000
++++ snort-2.9.8.0/src/preprocessors/Stream6/stream_common.h	2016-03-23 17:34:49.231047893 +1000
+@@ -370,10 +370,6 @@
+ int StreamSetRuntimeConfiguration( SessionControlBlock *scb, uint8_t protocol );
+ 
+ // per protocol session cache handles
+-void *tcp_lws_cache;
+-void *udp_lws_cache;
+-void *icmp_lws_cache;
+-void *ip_lws_cache;
+ 
+ // shared stream state
+ extern StreamStats s5stats;
+--- snort-2.9.8.0/src/preprocessors/Stream6/snort_stream_udp.c.org	2016-03-24 10:24:43.320027907 +1000
++++ snort-2.9.8.0/src/preprocessors/Stream6/snort_stream_udp.c	2016-03-24 10:25:37.188028778 +1000
+@@ -83,6 +83,7 @@
+ 
+ 
+ /*  G L O B A L S  **************************************************/
++void *udp_lws_cache = NULL;
+ 
+ /*  P R O T O T Y P E S  ********************************************/
+ static void StreamParseUdpArgs(StreamUdpConfig *, char *, StreamUdpPolicy *);
+--- snort-2.9.8.0/src/preprocessors/Stream6/snort_stream_icmp.c.org	2016-03-24 10:26:52.708029999 +1000
++++ snort-2.9.8.0/src/preprocessors/Stream6/snort_stream_icmp.c	2016-03-24 10:27:36.452030707 +1000
+@@ -64,6 +64,7 @@
+ 
+ 
+ /*  G L O B A L S  **************************************************/
++void *icmp_lws_cache = NULL;
+ 
+ /*  P R O T O T Y P E S  ********************************************/
+ static void StreamParseIcmpArgs(char *, StreamIcmpPolicy *);
+--- snort-2.9.8.0/src/preprocessors/Stream6/snort_stream_ip.c.org	2016-03-24 10:31:19.844034320 +1000
++++ snort-2.9.8.0/src/preprocessors/Stream6/snort_stream_ip.c	2016-03-24 10:31:54.388034879 +1000
+@@ -53,6 +53,7 @@
+ PreprocStats s5IpPerfStats;
+ #endif
+ 
++void *ip_lws_cache = NULL;
+ 
+ //-------------------------------------------------------------------------
+ // private methods

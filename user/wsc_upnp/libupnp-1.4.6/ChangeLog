@@ -1,0 +1,527 @@
+*************************************************************************
+Version 1.4.6
+*************************************************************************
+
+2007-04-19 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* Fix for freebsd host_os in configure.ac.
+
+*************************************************************************
+Version 1.4.5
+*************************************************************************
+
+2007-04-19 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* Case insensitive comparison in raw_find_str() (httpparser.c) as
+	suggested by Craig Nelson in SF Tracker [ 1689382 ] DLINK DIR-625
+	patch.
+
+2007-04-07 Nektarios K. Papadopoulos <npapadop(at)inaccessnetworks.com>
+	* Fix for a bug in makeAction where va_arg was beeing called one
+	extra time.
+
+2007-04-28 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* SF Tracker [ 1703533 ] Patch to make it compile under FreeBSD
+	Submitted By: Timothy Redaelli - drittz
+	I made some patches to make it compile under FreeBSD using
+	gethostbyaddr_r when supported.
+
+2007-04-28 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* [pupnp-devel] Type mixup on x86_64 causes UPNP_E_OUTOF_MEMORY
+	Submitted By: Glen Masgai
+	after an UpnpSendActionAsync() for example, i get UPNP_E_OUTOF_MEMORY
+	in the callback using 1.4.4 on a x86_64 system. This happens in
+	http_MakeMessage(), which in some cases get called with wrong types
+	(int instead of size_t) in combination with format "b" and "Q".
+	The attached patch should fix this.
+
+*************************************************************************
+Version 1.4.4
+*************************************************************************
+
+2007-04-06 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* SF Tracker [ 1695399 ] Typo in util.h
+	Submitted By: Luke Kim - nereusuj
+	Unix sleep is in seconds but WIN32 Sleep is in milliseconds.
+
+2007-04-17 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* SF Tracker [ 1652827 ] UpnpRegisterRootDevice returned -104
+	Submitted By: Michael Andersen - miwer
+	
+	Issue was found to be related to sizeof (size_t) != sizeof (int)
+	on AMD64 systems. Emil Ljungdahl's AMD64 patch has been applied along
+	with some other fixes. Original user report follows:
+
+	When I run upnpd I get the above mentioned error (UPNP_E_OUTOF_MEMORY).
+	I've tried with 1.4.1 and 1.4.2-RC3, it's the same. I don't understand why,
+	because I have plenty of RAM, and I even tried closing some applications,
+	but it didn't help.
+
+	$ upnpd eth1 br0
+
+	The following is logged in the /var/log/messages:
+	Feb 6 01:33:47 server upnpd[6933]: Error registering the root device with
+	descDocUrl: http://192.168.0.1:49152/gatedesc.xml
+	Feb 6 01:33:47 server upnpd[6933]: UpnpRegisterRootDevice returned -104
+
+
+	I tried enabling debugging and it looks like it cannot allocate memory
+	through the membuffer_append function. It's wierd because it's only a few
+	bytes.
+
+	Please note, that I enabled some extra debugging lines that were commented,
+	in order to get more information. See attached files.
+
+*************************************************************************
+Version 1.4.3
+*************************************************************************
+
+2007-03-13 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	* SF Tracker [ 1663004 ] Compile on Cygwin
+	Submitted By: Jon Foster - jongfoster
+	This patch gives basic support for building under Cygwin - it compiles,
+	links, and a simple UPnP device application can initialise. I'm not sure
+	if it actually works yet, but this is definitely a step in the right
+	direction.
+	
+	Patch is against the 1.4.1 release. Changes are:
+	
+	* threadutil/inc/ithread.h: Fix the ithread mutex support to use
+	documented, portable APIs (if present) rather than the Non-Portable (_NP)
+	ones it uses now. This is required because Cygwin implements only the
+	portable API.
+	
+	* threadutil/src/ThreadPool.c: Fake SetPolicyType() to do nothing on Cygwin
+	because otherwise it fails. Should probably investigate why it fails and
+	add a proper implementation later.
+	
+	* upnp/src/api/upnpapi.c: On Cygwin, zero out the GlobalHndMutex structure
+	before initialising it. Without this, the initialisation fails. This
+	appears to be a bug in Cygwin.
+	
+	* upnp/src/genlib/net/uri/uri.c: Use gethostbyname() on Cygwin.
+	
+2007-03-05 Oxy <oxygenic(at)users.sourceforge.net>
+	* Code adapted and typedefs added to compile cleanly under Windows
+	with Borland C++ Builder and MS Visual C++
+
+2007-03-03 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+	
+	* Fixed nasty segmentation fault bug on membuffer.c.
+	
+*************************************************************************
+Version 1.4.2
+*************************************************************************
+
+2007-02-09 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* 32/64 bits portability issues on *printf.
+	Use %zd for size_t, and cast to (long long) for off_t.
+
+2007-02-02 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* Bumped the program version to 1.4.2 in config.ac.
+
+	* Now requires autoconf 2.60.
+
+	* Fixed docdir use.
+
+	* Does not install the documentation by default.
+
+	* Use dist-bzip2 to create a .bz2 distribution file.
+
+2007-01-23 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* SF Tracker [ 1634922 ] Support for large files (>= 2 GiB), part 2
+	Submitted By: Jonathan - no_dice
+	Summary: This patch hopefully fixes the remaining types and related
+	code to enable files >= 2 GiB to be streamed. Jonathan claims to have
+	tested this with a patched version of ushare-0.9.8 and a D-Link DSM-520.
+
+2007-01-09 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* SF Tracker [ 1628629 ] Multicast interface patch
+	Submitted By: Fredrik Svensson - svefredrik
+	This patch fixes two problems:
+	1) Specify the IP address for the interface when we do
+	setsockopt IP_ADD_MEMBERSHIP. This makes it possible to run
+	when no default router has been configured.
+	2) Explicitly set the multicast interface through setsockopt
+	IP_MULTICAST_IF. Avoids socket error -207 in some cases.
+	
+	* SF Tracker [ 1628590 ] XML parsing segfault patch
+	Submitted By: Fredrik Svensson - svefredrik
+	This patch fixes a segmentation fault problem that occurrs
+	when parsing XML code than some routers produce.
+
+2007-01-06 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* SF Tracker [ 1628552 ] XML white space patch
+	Submitted By: Fredrik Svensson - svefredrik
+	
+	* SF Tracker [ 1628562 ] Maximum total jobs patch
+	Submitted By: Fredrik Svensson - svefredrik
+	Also, I incremented the libray versions and included some
+	comments in the file configure.ac so that we do not bump
+	the library version excessively, only the necessary numbers
+	on the next release.
+	
+	* SF Tracker [ 1628575 ] Linksys WRT54G patch
+	Submitted By: Fredrik Svensson - svefredrik
+	
+	* SF Tracker [ 1628636 ] SSDP packet copy patch
+	Submitted By: Fredrik Svensson - svefredrik
+	Changed NUM_COPY to 1 since, according to section 9.2 of the
+	HTTPU/MU spec, we should never send more than one copy of a
+	reply to an SSDP request. Ref. section 9.2 of
+	http://www.upnp.org/download/draft-goland-http-udp-04.txt
+
+2006-12-23 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* Thorough revision of every call of http_MakeMessage() due to a
+	bug introduced in rev.79 "largefile patch added".
+	http_MakeMessage() has a worst than brain damaged "printf" like
+	interface. In rev.79, the "N" format parameter must be an off_t.
+	Every call of this function with an "N" format parameter and an
+	int passed on the stack would fail terribly.
+	
+	* SF Bug tracker [ 1590469 ]
+	Typo in ixmlparser.c
+	Submitted By: Erik Johansson - erijo
+	
+	* SF Bug Tracker [ 1590466 ] Invalid xml output
+	Submitted By: Erik Johansson - erijo
+	
+	* SF Patch tracker [ 1581161 ] VStudio2005 patch
+	Submitted By: David Maass - darkservant
+	
+	* SF Patch tracker [ 1587272 ] const-ified ixml
+	Submitted By: Erik Johansson
+	
+	* Finished const-ifications as suggested by Erik Johansson in
+	SF Patch tracker [ 1587272 ].
+
+2006-07-05 Nektarios K. Papadopoulos <npapadop(at)inaccessnetworks.com>
+	* [bug-id] 1580440
+	[submitted-by] Erik Johansson - erijo
+	[patched-by] Erik Johansson - erijo
+	The SOAP HTTP message that's generated on upnp errors
+	is missing a \r\n\ between header and body.
+
+2006-07-07 Oxy <virtual_worlds(at)gmx.de>
+
+	* support for large files (>2 GBytes) added
+
+
+*************************************************************************
+Version 1.4.1
+*************************************************************************
+
+2006-07-07 Oxy <virtual_worlds(at)gmx.de>
+
+	* full support for Windows added, static library and DLL are fully
+	working, code compiles with Borland Builder C++ and MS Visual
+	C/C++
+
+2006-07-05 Nektarios K. Papadopoulos <npapadop(at)inaccessnetworks.com>
+
+	* Include prebuilt documentation (html,pdf), dropping doc++ 
+	dependancy.
+
+2006-07-03 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* Patch for FreeBSD, thanks to Markus Strobl.
+
+2006-06-26 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* Fix for missing "else" in httpreadwrite.c. Thanks to npapadop
+	for the patch.
+
+2006-06-26 Marcelo Jimenez <mroberto(at)users.sourceforge.net>
+
+	* Fix for va_list initialization in x86_64 architectures.
+
+2006-06-08 Oxy <virtual_worlds(at)gmx.de>
+
+	* Patch to fix memory leaks and reasons for crashes added (thanks
+	to loigu)
+
+*************************************************************************
+Version 1.4.0
+*************************************************************************
+
+2006-05-26 Oxy <virtual_worlds(at)gmx.de>
+
+	* defines in iasnprintf.h changed to work with GCC-version < 3
+
+2006-05-22 Oxy <virtual_worlds(at)gmx.de>
+
+	* BSD-patch added (not tested yet on an BSD system)
+
+2006-05-19 Oxy <virtual_worlds(at)gmx.de>
+
+	* Patch added for bug: ixml parser colapsed on empty args (arg="")
+
+2006-05-18 Oxy <virtual_worlds(at)gmx.de>
+
+	* DSM-320 patch added (fetched from project MediaTomb)
+	
+	* httpGet additons atch added, Added proxy support by introducing
+	  UpnpOpenHttpGetProxy. UpnpOpenHttpGet now just calls
+	  UpnpOpenHttpGetProxy with the proxy url set to NULL.
+	  
+	* Bugfix for typo ("\0" / "0") in ixmlparser.c
+	
+	* Bugfix for M-Search packet
+
+*************************************************************************
+FORK FROM DEAD libupnp
+*************************************************************************
+
+2006-04-29  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* THANKS: new file with list of contributors
+
+	* upnp/src/gena/gena_device.c (respond_ok): add 'Content-Length: 0'
+	  in subscription response. Patch by Chaos (Bug # 1455367).
+
+2006-04-08  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/doc/UPnP_Programming_Guide.pdf: replace this document with 
+	  the one in libupnp-doc-1.2.1 because current CVS version 
+	  was corrupted.
+
+2006-04-06
+
+	* changes applied to several files to work under Sparc Solaris, temporarily
+	  requiring a define SPARC_SOLARIS
+
+2006-04-03  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/Makefile.am: install upnp samples in $(docdir)/examples
+
+2006-03-28  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* configure.ac: add --with-docdir option to choose where documentation
+	  is installed (or -without-docdir to not install the documentation)
+
+2006-03-27  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* ixml/test: add simple test suite for xml parser
+
+2006-03-26  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* ixml/src/ixmlparser.c (Parser_processCDSect): fix bug which prevents
+	  CDATA sections which contain a 0 (zero) to be parsed (instead the
+	  parsing of the whole document is aborted). Patch by Arno Willig 
+	  (Patch # 1432124).
+
+	* configure.ac, upnp/Makefile.am: add "--disable-samples" configure
+	  option, and move samples compilation from check_PROGRAMS to
+	  noinst_PROGRAMS
+
+2006-03-25  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/src/genlib/miniserver/miniserver.c (get_miniserver_sockets): 
+	  fix bug if new socket created has fd 0 (can only occur when stdin
+	  has been closed). Patch by Oskar Liljeblad 2004-07-02 :
+	  http://sourceforge.net/mailarchive/message.php?msg_id=8870528
+	
+2006-03-21  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/test/test_init.c: add some version checks and exit if failure
+
+2006-03-05  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* libupnp version 1.3.1
+
+	* upnp/inc/upnpconfig.h.in: add new define UPNP_VERSION_PATCH
+
+	* upnp/test/test_init.c: add simple test to run during checks
+
+	* upnp/inc/upnp.h: include "upnpdebug.h" only if debug enabled
+	  in the library (else header file is not installed)
+
+	* upnp/Makefile.am (libupnp_la_LDFLAGS): add inter-library libtool
+	  dependencies between upnp and ixml / threadutil, so that programs 
+	  linking against upnp only still work.
+
+2006-03-04  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* libupnp version 1.3.0
+
+2006-03-03  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/src/genlib/net/http/httpreadwrite.c (get_sdk_info): use
+	  package version string from configure to set sdk info
+
+	* upnp/Makefile.am: add sample/tvdevice/web/ files in EXTRA_DIST
+	  + do not distribute generated upnpconfig.h file.
+
+2006-02-28  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/src/inc/config.h, configure.ac: use only new defines
+	  UPNP_HAVE_xx instead of INCLUDE_yyy_APIS and INTERNAL_WEB_SERVER
+
+	* upnp/Makefile.am, ixml/Makefile.am: add -export-symbols-regex to
+	  the librarie LDFLAGS in order to export only the symbols defined 
+	  in the API
+
+2006-02-27  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* configure.ac: add libtool versions for the 3 libraries
+
+	* ixml/src/ixml.c (copy_with_escape): add missing 'static' to function
+
+	* threadutil/src/ThreadPool.c (SetSeed): add missing 'static' 
+
+2006-02-26  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* threadutil/inc/iasnprintf.h: add gcc __printf__ format attribute
+	  to "iasnprintf"
+
+	* upnp/src/api/upnpapi.c: fix invalid UpnpPrintf formats
+
+	* upnp/src/gena/gena_device.c: fix invalid UpnpPrintf formats
+
+	* upnp/src/inc/config.h: move upnp/inc/config.h to internal
+	  sources (this file is no longer installed with the libraries)
+
+	* upnp/inc/upnpdebug.h: new file created from debug definitions
+	  previously in upnp/inc/config.h
+
+	* upnp/src/api/config.c: rename to upnp/src/api/upnpdebug.c
+
+	* upnp/inc/upnpconfig.h.in: new file to contain information on    
+	  the configuration of the installed libraries (generates installed
+	  file <upnp/upnpconfig.h>)
+
+2006-02-22  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/ : add missing include of config.h in some .c files
+
+2006-02-21  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/inc/upnp.h: move some definitions which should not be
+	  exported into "upnp/src/inc/util.h"
+
+	* import all modifications below from libupnp in djmount 0.51
+	  into official libupnp
+	
+2006-01-17  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* threadutil/Makefile.am (libthreadutil_la_SOURCES): remove extraneous
+	  file
+
+2006-01-15  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* configure.ac: add checks for large-file support
+
+	* upnp/inc/config.h: rename to "upnpconfig.h". The new "config.h" file
+	  is the one generated by autoconf.
+
+	* m4/type_socklen_t.m4: added new check for socklen_t (fallback to
+	  int if not defined)
+
+	* upnp/src/genlib/miniserver/miniserver.c, 
+	  upnp/src/ssdp/ssdp_server.c: use socklen_t where appropriate 
+	  (instead of int)
+
+	* upnp/src/genlib/net/http/httpreadwrite.c (get_sdk_info): remove
+	  XINLINE declaration (unused and too late)
+
+	* ixml/src/node.c (ixmlNode_getNodeType): fix compilation warning
+	  on const return type
+
+2006-01-12  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/src/inc/readwrite.h : suppress unused C++ header file
+
+2006-01-11  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/inc/config.h, upnp/src/inc/upnpapi.h, 
+	  upnp/src/inc/httpreadwrite.h: remove internal configuration variable 
+	  MINIMUM_DELAY (no clear purpose)
+
+2005-12-05  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/inc/upnp.h: re-declare obsolete method UpnpSetContentLength,
+	  for binary compatibility with previous libupnp version.
+
+	* upnp/src/api/upnpapi.c: correct type of g_maxContentLength to size_t
+
+2005-11-01  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* autoconfiscate library : replace all makefiles by Makefile.am
+	  for automake support, + preliminary autoconf support
+	  (generated config.h not yet used in source files)
+
+2005-10-18  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/src/makefile: fix location of DEBUG STATIC libupnp library
+	
+	* upnp/sample/tvctrlpt/linux/Makefile, 
+	  upnp/sample/tvdevice/linux/Makefile: fix STATIC library support
+
+2005-10-16  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* threadutil/src/Makefile (clean): remove built library
+
+2005-08-28  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* ixml/src/ixml.h, ixml/src/ixml.c (ixmlRelaxParser) : new function
+
+	* ixml/src/ixmlparser.h, ixml/src/ixmlparser.c (Parser_setErrorChar) :
+	  new function
+
+2005-08-02  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* ixml/src/Makefile: correct bug for static library being incorrectly 
+	  stripped when building non-debug
+
+2005-06-09  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* ixml/src/element.c (ixmlElement_removeAttributeNode): 
+	  remove some compilation warning
+
+	* ixml/inc/ixml.h, ixml/src/document.c : 
+	  add some missing const's in public API 
+
+	* upnp/inc/upnptools.h, upnp/src/api/upnptools.c : 
+	  add missing const's in public API
+
+2005-05-28  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/inc/config.h: suppress HTTP_READ_BYTES (unused)
+	  and replace by DEFAULT_SOAP_CONTENT_LENGTH (previously in upnpapi.h)
+	
+	* upnp/inc/upnp.h, upnp/src/api/upnpapi.c : replace 
+	  UpnpSetContentLength (which was not using its Handle argument) 
+	  by global function UpnpSetMaxContentLength. 
+	  Remove "hard" limitation to 32K (not suitable for using in UPnP AV).
+	
+	* upnp/src/inc/upnpapi.h : removed DEFAULT_SOAP_CONTENT_LENGTH
+	  (moved to config.h) and MAX_SOAP_CONTENT_LENGTH (now unused)
+
+	* upnp/src/api/upnptools.c : add more error message strings
+
+	* upnp/src/genlib/net/http/httpreadwrite.c : return OUTOF_BOUNDS
+	  instead of BAD_HTTPMSG when allowed Content Length is exceeded.
+
+	* upnp/src/genlib/net/http/httpreadwrite.c : corrected an incorrect
+	  sprintf format
+	
+2005-05-27  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/makefile, upnp/src/makefile, 
+	  ixml/Makefile, ixml/src/Makefile, 
+	  threadutil/Makefile, threadutil/src/Makefile : 
+	  implement STATIC library support (from patch at 
+	  http://sourceforge.net/tracker/?group_id=7189&atid=307189 )
+
+2005-05-26  Rémi Turboult  <r3mi(at)users.sourceforge.net>
+
+	* upnp/src/api/upnpapi.c, upnp/src/soap/soap_device.c,
+	  upnp/src/soap/makefile : 
+	  corrections for compilation with CLIENT=1 only
+	
+	* importing "libupnp-1.2.1a" as baseline
+	

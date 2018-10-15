@@ -1,0 +1,6 @@
+
+config USER_GREP_GREP
+	bool "GNU grep"
+	help
+		GNU grep/fgrep/egrep tools
+

@@ -1,0 +1,6 @@
+config USER_PAM_LDAP
+	bool "PAM LDAP"
+	depends on LIB_LIBPAM
+	select LIB_LIBLDAP
+	help
+	  PAM support for LDAP authentication.

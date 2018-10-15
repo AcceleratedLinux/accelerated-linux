@@ -1,0 +1,25 @@
+
+config interface 'lan'
+	option ifname 'eth0.1'
+	option force_link '1'
+
+config interface 'wan'
+	option ifname 'eth0.2'
+	option force_link '1'
+
+config switch
+	option name 'switch0'
+	option reset '1'
+	option enable_vlan '1'
+	option enable_vlan '2'
+
+config switch_vlan
+	option device 'switch0'
+	option vlan '1'
+	option ports '0 6t'
+
+config switch_vlan
+	option device 'switch0'
+	option vlan '2'
+	option ports '1 6t'
+

@@ -1,0 +1,35 @@
+--- ipset-6.30/Makefile.am.orig	2016-10-17 21:50:14.000000000 +1000
++++ ipset-6.30/Makefile.am	2016-12-16 11:43:44.983949636 +1000
+@@ -16,7 +16,6 @@
+ endif
+ 
+ SUBDIRS		= include/libipset lib src utils
+-INSTALL_MOD_PATH = /
+ 
+ sparse:
+ 	$(MAKE) -C lib sparse-check
+@@ -26,6 +25,7 @@
+ if WITH_KMOD
+ 	${MAKE} -C $(KBUILD_OUTPUT) M=$$PWD/kernel/net \
+ 			V=$V W=1 C=2 CF="-D__CHECK_ENDIAN__ -Wsparse-all" \
++			CPPFLAGS= CFLAGS="$(CPUCFLAGS)" LDFLAGS="$(CPULDFLAGS)" \
+ 			KCFLAGS="-DPACKAGE_VERSION=$(PACKAGE_VERSION) -DCHECK_KCONFIG -Wextra" \
+ 			IP_SET_MAX=$(IP_SET_MAX) KDIR=$$PWD/kernel modules
+ else
+@@ -35,6 +35,7 @@
+ modules:
+ if WITH_KMOD
+ 	${MAKE} -C $(KBUILD_OUTPUT) M=$$PWD/kernel/net V=$V \
++			CPPFLAGS= CFLAGS="$(CPUCFLAGS)" LDFLAGS="$(CPULDFLAGS)"\
+ 			KCFLAGS="-DPACKAGE_VERSION=$(PACKAGE_VERSION)" \
+ 			IP_SET_MAX=$(IP_SET_MAX) KDIR=$$PWD/kernel modules
+ else
+@@ -72,8 +73,6 @@
+ if WITH_KMOD
+ 	${MAKE} -C $(KBUILD_OUTPUT) M=$$PWD/kernel/net \
+ 			KDIR=$$PWD/kernel modules_install
+-	@modinfo -b ${INSTALL_MOD_PATH} ip_set_hash_ip | ${GREP} /extra/ >/dev/null || echo "$$DEPMOD_WARNING"
+-	@lsmod | ${GREP} '^ip_set' >/dev/null && echo "$$MODULE_WARNING"
+ else
+ 	@echo Skipping kernel modules due to --with-kmod=no
+ endif

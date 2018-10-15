@@ -1,0 +1,34 @@
+Freescale IMX28EVK Evaluation Kit
+---------------------------------
+
+The Freescale IMX28EVK development board is based around the iMX28 SoC.
+It has 128Mb of RAM, serial port, ethernet port, SD-card and a few other
+peripherals fitted.
+
+Generate images for this board using the Freescale/IMX28EVK uClinux-dist
+target. The default is to select the uClibc when building. The build will
+generate 3 binaries that we can then load onto the board, images/ukernel.bin,
+images/urootfs.bin and images/imx28-evk.dtb.
+
+You can load onto the IMX28EVK using the usual uboot loader that is installed
+in the boot ROM of the board. (You can break to the uboot serial port prompt,
+by hitting a key during the early uboot startup).
+
+Use the following example commands to load and run:
+
+    setenv bootargs console=ttyAMA0,115200 root=/dev/ram0 initrd=0x44000000,16M
+    dhcp ukernel.bin
+    tftp 0x43ffffc0 urootfs.bin
+    tftp 0x43000000 imx28-evk.dtb
+    bootm 0x42000000 0x43ffffc0 0x43000000
+
+This assumes you have a local network with and file server that is configured
+with a DHCP server. If not you can change out the u-boot "dhcp" command with
+a fixed address setup using something like this:
+
+    setenv ipaddr 192.168.0.111
+    setenv serverip 192.168.0.22
+    tftp 0x42000000 ukernel.bin
+
+The console will be the debug serial port (at the default 115200,8,n,1).
+

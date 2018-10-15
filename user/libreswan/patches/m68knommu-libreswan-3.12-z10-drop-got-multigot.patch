@@ -1,0 +1,9 @@
+--- libreswan-3.12/Makefile.inc.local.LSW	2015-09-04 17:07:07.105629253 -0400
++++ libreswan-3.12/Makefile.inc.local	2015-09-04 17:07:28.877730434 -0400
+@@ -78,4 +78,5 @@
+ USE_ADNS := false
+ 
+ # can't be empty
+-USERLINK = -Wl,--got=multigot
++# -Wl,--got=multigot causes uClinux to crash
++USERLINK = -g 

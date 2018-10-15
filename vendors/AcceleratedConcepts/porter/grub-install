@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# grub-install -- install GRUB bootloader for Porter disk images
+#
+# This is a replacement for the real grub-install tool that is part of
+# the grub source package. This script is designed to run from our root
+# squashfs, and does not need a read/write root to work.
+#
+DRIVE=$1
+
+/usr/bin/grub-mkimage \
+  --directory=/boot/grub/i386-pc --format=i386-pc --output=/tmp/core.img \
+  --prefix="(,msdos1)/boot/grub" --config=/boot/grub/grub_embedded.cfg \
+  biosdisk ext2 squash4 part_msdos normal terminal extcmd boot gettext linux \
+  vbe serial relocator mmap gcry_crc loopback configfile test loadenv
+
+cp /boot/grub/i386-pc/boot.img /tmp/
+ls -alh /tmp/*.img
+
+/usr/sbin/grub-bios-setup --directory=/ \
+  --boot-image=/tmp/boot.img \
+  --core-image=/tmp/core.img \
+  --device-map= $DRIVE
+
+exit 0

@@ -1,0 +1,18 @@
+--- nss-3.17.4/nspr/pr/src/pthreads/ptthread.c.LSW	2015-08-24 21:43:54.071766882 -0400
++++ nss-3.17.4/nspr/pr/src/pthreads/ptthread.c	2015-08-24 21:44:35.607861693 -0400
+@@ -1762,6 +1762,7 @@
+     int (*dynamic_pthread_setname_np)(pthread_t, const char*);
+ #endif
+ 
++#ifdef HAVE_DLL
+     *(void**)(&dynamic_pthread_setname_np) =
+         dlsym(RTLD_DEFAULT, "pthread_setname_np");
+     if (!dynamic_pthread_setname_np)
+@@ -1799,6 +1800,7 @@
+         PR_SetError(PR_UNKNOWN_ERROR, result);
+         return PR_FAILURE;
+     }
++#endif
+     return PR_SUCCESS;
+ }
+ 

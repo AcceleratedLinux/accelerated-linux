@@ -1,0 +1,90 @@
+diff --git a/plugins/telit/77-mm-telit-port-types.rules b/plugins/telit/77-mm-telit-port-types.rules
+index 3ff6cce..c64ea3c 100644
+--- a/plugins/telit/77-mm-telit-port-types.rules
++++ b/plugins/telit/77-mm-telit-port-types.rules
+@@ -45,7 +45,8 @@ ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="1011", ENV{ID_MM_TELIT_TAGGED}="1"
+ ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0021", ENV{ID_MM_TELIT_TAGGED}="1", ENV{ID_MM_TELIT_PORTS_TAGGED}="1"
+ 
+ # LE910 V2
+-ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0036", ENV{ID_MM_TELIT_TAGGED}="1", ENV{ID_MM_TELIT_PORTS_TAGGED}="1"
++ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0036", ENV{.MM_USBIFNUM}=="00", RUN += "/bin/telit-mbim.sh"
++ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0032", ENV{ID_MM_TELIT_TAGGED}="1", ENV{ID_MM_TELIT_PORTS_TAGGED}="1"
+ 
+ # NOTE: Qualcomm Gobi-based devices like the LE920 should not be handled
+ # by this plugin, but by the Gobi plugin.
+diff --git a/plugins/telit/mm-common-telit.c b/plugins/telit/mm-common-telit.c
+index e607f2e..5e89933 100644
+--- a/plugins/telit/mm-common-telit.c
++++ b/plugins/telit/mm-common-telit.c
+@@ -63,7 +63,7 @@ telit_grab_port (MMPlugin *self,
+                 mm_port_probe_get_port_subsys (probe),
+                 mm_port_probe_get_port_name (probe));
+         ptype = MM_PORT_TYPE_GPS;
+-    } else if (g_object_get_data (G_OBJECT (device), TAG_GETPORTCFG_SUPPORTED) != NULL) {
++    } else if (g_udev_device_get_property (port, "ID_USB_INTERFACE_NUM") != NULL && g_object_get_data (G_OBJECT (device), TAG_GETPORTCFG_SUPPORTED) != NULL) {
+         if (g_strcmp0 (g_udev_device_get_property (port, "ID_USB_INTERFACE_NUM"), g_object_get_data (G_OBJECT (device), TAG_TELIT_MODEM_PORT)) == 0) {
+             mm_dbg ("telit: AT port '%s/%s' flagged as primary",
+                 mm_port_probe_get_port_subsys (probe),
+@@ -79,9 +79,9 @@ telit_grab_port (MMPlugin *self,
+                 mm_port_probe_get_port_subsys (probe),
+                 mm_port_probe_get_port_name (probe));
+             ptype = MM_PORT_TYPE_GPS;
+-        } else
++        } else if (ptype == MM_PORT_TYPE_AT)
+             ptype = MM_PORT_TYPE_IGNORED;
+-    } else {
++    } else if (ptype == MM_PORT_TYPE_AT) {
+         /* If the port was tagged by the udev rules but isn't a primary or secondary,
+          * then ignore it to guard against race conditions if a device just happens
+          * to show up with more than two AT-capable ports.
+diff --git a/plugins/telit/mm-plugin-telit.c b/plugins/telit/mm-plugin-telit.c
+index 5a44ba6..bf9a2c9 100644
+--- a/plugins/telit/mm-plugin-telit.c
++++ b/plugins/telit/mm-plugin-telit.c
+@@ -28,6 +28,10 @@
+ #include "mm-common-telit.h"
+ #include "mm-broadband-modem-telit.h"
+ 
++#if defined WITH_MBIM
++#include "mm-broadband-modem-mbim.h"
++#endif
++
+ G_DEFINE_TYPE (MMPluginTelit, mm_plugin_telit, MM_TYPE_PLUGIN)
+ 
+ MM_PLUGIN_DEFINE_MAJOR_VERSION
+@@ -44,6 +48,18 @@ create_modem (MMPlugin *self,
+               GList *probes,
+               GError **error)
+ {
++
++#if defined WITH_MBIM
++    if (mm_port_probe_list_has_mbim_port (probes)) {
++        mm_dbg ("MBIM-powered telit modem found...");
++        return MM_BASE_MODEM (mm_broadband_modem_mbim_new (sysfs_path,
++                                                           drivers,
++                                                           mm_plugin_get_name (self),
++                                                           vendor,
++                                                           product));
++    }
++#endif
++
+     return MM_BASE_MODEM (mm_broadband_modem_telit_new (sysfs_path,
+                                                         drivers,
+                                                         mm_plugin_get_name (self),
+@@ -56,7 +72,7 @@ create_modem (MMPlugin *self,
+ G_MODULE_EXPORT MMPlugin *
+ mm_plugin_create (void)
+ {
+-    static const gchar *subsystems[] = { "tty", NULL };
++    static const gchar *subsystems[] = { "tty", "net", "usb", NULL };
+     /* Vendors: Telit */
+     static const guint16 vendor_ids[] = { 0x1bc7, 0 };
+     /* Only handle TELIT tagged devices here. */
+@@ -78,6 +94,7 @@ mm_plugin_create (void)
+                       MM_PLUGIN_ALLOWED_AT,         TRUE,
+                       MM_PLUGIN_ALLOWED_UDEV_TAGS,  udev_tags,
+                       MM_PLUGIN_CUSTOM_INIT,        &custom_init,
++                      MM_PLUGIN_ALLOWED_MBIM,       TRUE,
+                       NULL));
+ }
+ 

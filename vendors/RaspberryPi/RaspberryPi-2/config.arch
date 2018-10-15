@@ -1,0 +1,15 @@
+############################################################################
+
+LINUXTARGET = zImage dtbs
+
+HW_VENDOR = RaspberryPi
+VERSIONPKG = 1.0.0
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/arm/config.arch
+
+RELFILES += images/configs.tar.gz
+
+############################################################################

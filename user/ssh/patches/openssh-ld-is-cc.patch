@@ -1,0 +1,12 @@
+diff -ur openssh-6.6p1/Makefile.in openssh-6.6p1/Makefile.in
+--- openssh-6.6p1/Makefile.in	2011-02-04 10:42:13.000000000 +1000
++++ openssh-6.6p1/Makefile.in	2014-05-23 17:00:39.643070484 +1000
+@@ -130,6 +131,8 @@
+ $(SSHOBJS): Makefile.in config.h
+ $(SSHDOBJS): Makefile.in config.h
+ 
++LD := $(CC)
++
+ .c.o:
+ 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
+ 

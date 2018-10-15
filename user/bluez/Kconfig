@@ -1,0 +1,83 @@
+config USER_BLUEZ_BLUETOOTHD
+	bool "bluetoothd (Bluez)"
+	select LIB_DBUS
+	help
+		The Bluez Bluetooth daemon.
+
+config USER_BLUEZ_BLUETOOTHCTRL
+	bool "build bluetoothctrl"
+	depends on USER_BLUEZ_BLUETOOTHD
+	default y
+	help
+		bluetoothctrl is a CLI for interaction with bluetoothd
+
+config USER_BLUEZ_TOOLS
+	bool "build tools"
+	depends on USER_BLUEZ_BLUETOOTHD
+	help
+		Bluetooth utilities: bccmd, bluemoon, btattach, hex2hcd, l2ping,
+		l2test, mpris-proxy, rctest
+
+config USER_BLUEZ_TOOLS_DEPRECATED
+	bool "build deprecated tools"
+	depends on USER_BLUEZ_TOOLS
+	help
+		Deprecated Bluetooth utilities: hciattach, hciconfig, hcitool,
+		hcidump, rfcomm, sdptool, ciptool
+
+config USER_BLUEZ_BTMON
+	bool "build btmon"
+	depends on USER_BLUEZ_BLUETOOTHD
+	help
+		The Bluetooth monitor utility - btmon
+		It provides support for HCI level tracing and debugging.
+
+config USER_BLUEZ_LIBBLUETOOTH
+	bool "build libbluetooth"
+	depends on USER_BLUEZ_BLUETOOTHD
+	help
+		Enable installation of Bluetooth library
+
+menu "Bluetooth profiles"
+	depends on USER_BLUEZ_BLUETOOTHD
+
+config USER_BLUEZ_PROFILE_SAP
+	bool "enable SAP profile"
+
+config USER_BLUEZ_PROFILE_A2DP
+	bool "enable A2DP profile"
+
+config USER_BLUEZ_PROFILE_AVRCP
+	bool "enable AVRCP profile"
+
+config USER_BLUEZ_PROFILE_NETWORK
+	bool "enable network profiles"
+
+config USER_BLUEZ_PROFILE_HID
+	bool "enable HID profile"
+
+config USER_BLUEZ_PROFILE_HOG
+	bool "enable HoG profile"
+
+config USER_BLUEZ_PROFILE_HEALTH
+	bool "enable health profiles"
+
+endmenu
+
+config USER_BLUEZ_CUPS
+	bool "enable CUPS printer support"
+	depends on USER_BLUEZ_BLUETOOTHD
+	help
+		Disable support for CUPS printer backend
+
+config USER_BLUEZ_MIDI
+	depends on USER_BLUEZ_BLUETOOTHD
+	bool "enable MIDI support"
+
+config USER_BLUEZ_OBEX
+	depends on USER_BLUEZ_BLUETOOTHD
+	bool "enable OBEX profile support"
+
+config USER_BLUEZ_NFC
+	depends on USER_BLUEZ_BLUETOOTHD
+	bool "enable NFC pairing"

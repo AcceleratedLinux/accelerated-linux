@@ -1,0 +1,21 @@
+############################################################################
+
+#
+# Vendor specific settings
+#
+
+KERNEL_EXTRA_CFLAGS = 
+VENDOR_CFLAGS = 
+VENDOR_TOPDIRS = include
+export VENDOR_TOPDIRS
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES   = $(IMAGEDIR)/* prop/config/schema/accns.schema
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/x86_64/config.arch
+
+############################################################################

@@ -1,0 +1,80 @@
+--- snort-2.9.8.2/src/snort.c.orig	2016-03-18 23:54:32.000000000 +1000
++++ snort-2.9.8.2/src/snort.c	2018-03-29 11:03:04.927240944 +1000
+@@ -1742,6 +1742,7 @@
+ #endif
+     PREPROC_PROFILE_END(eventqPerfStats);
+ 
++	s_packet.dev_name = user; // add the device name to the packet
+     verdict = ProcessPacket(&s_packet, pkthdr, pkt, NULL);
+ 
+ #ifdef ACTIVE_RESPONSE
+@@ -3286,6 +3287,7 @@
+     int error = 0;
+     int pkts_to_read = (int)snort_conf->pkt_cnt;
+     time_t curr_time, last_time;
++	char device_name[64]; // get the device name for the multi device pcap
+ 
+     curr_time = time(NULL);
+     last_time = curr_time;
+@@ -3293,7 +3295,7 @@
+ 
+     while ( !exit_logged )
+     {
+-        error = DAQ_Acquire(pkts_to_read, PacketCallback, NULL);
++        error = DAQ_Acquire(pkts_to_read, PacketCallback, (uint8_t *)device_name);
+ 
+ #ifdef CONTROL_SOCKET
+         if (packet_dump_stop)
+@@ -3658,6 +3660,7 @@
+     snort_exiting = 1;
+     snort_initializing = false;  /* just in case we cut out early */
+ 
++
+     Active_Suspend();  // rules that fire now can't actually block
+ 
+ #if defined(INLINE_FAILOPEN) && !defined(WIN32)
+@@ -4205,7 +4208,6 @@
+ 
+     if (sc == NULL)
+         return;
+-
+     if (sc->dynamic_rules_path != NULL)
+         free(sc->dynamic_rules_path);
+ 
+@@ -4270,12 +4272,11 @@
+     FreeRuleStateList(sc->rule_state_list);
+     FreeClassifications(sc->classifications);
+     FreeReferences(sc->references);
+-
+     FreeRuleLists(sc);
+     SoRuleOtnLookupFree(sc->so_rule_otn_map);
+     OtnLookupFree(sc->otn_map);
+     VarTablesFree(sc);
+-    PortTablesFree(sc->port_tables);
++    //PortTablesFree(sc->port_tables);
+     FastPatternConfigFree(sc->fast_pattern_config);
+ 
+     ThresholdConfigFree(sc->threshold_config);
+--- snort-2.9.8.2/src/decode.h	2016-03-18 23:54:31.000000000 +1000
++++ snort-2.9.8.2/src/decode.h.new	2018-03-29 11:01:53.383240950 +1000
+@@ -1826,6 +1826,9 @@
+ 
+     // Expected session created due to this packet.
+     struct _ExpectNode* expectedSession;
++
++	// store for the device name for multi interface mode
++	char *dev_name;
+ } Packet;
+ 
+ #define PKT_ZERO_LEN offsetof(Packet, ip_options)
+--- snort-2.9.8.2/src/output-plugins/spo_process.c.orig	2018-03-29 11:21:40.651240854 +1000
++++ snort-2.9.8.2/src/output-plugins/spo_process.c	2018-03-29 11:29:10.883240818 +1000
+@@ -284,7 +284,7 @@
+         otn_tmp && otn_tmp->sigInfo.classType && otn_tmp->sigInfo.classType->name ? otn_tmp->sigInfo.classType->name : "",
+         event->priority,
+         reference,
+-        ScAlertInterface() ? PRINT_INTERFACE(DAQ_GetInterfaceSpec()) : "");
++		 ScAlertInterface() ? (p && p->dev_name ? p->dev_name : PRINT_INTERFACE(DAQ_GetInterfaceSpec())) : "");
+ 
+     free(src_ip);
+     free(dst_ip);

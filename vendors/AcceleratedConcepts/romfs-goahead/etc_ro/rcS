@@ -1,0 +1,59 @@
+#!/bin/sh
+
+BASEVER='1.390.12'
+
+mount -a
+
+mkdir -p /var/run
+mkdir -p /var/log
+mkdir -p /var/dev
+mkdir -p /var/run/ppp
+mkdir -p /proc/bus/usb
+mkdir -p /proc/sys/kernel
+mkdir -p /etc/mtab
+mkdir -p /etc/modprobe.d
+mkdir -p /etc/ppp/peers
+mkdir -p /var/run/ppp
+mkdir -p /var/spool
+mkdir -p /var/spool/cron
+mkdir -p /var/spool/cron/crontabs
+
+/sbin/flashconfig.sh read
+nvram_daemon &
+(gpio i 10 && /sbin/update-reset.sh manual &) &
+
+ln -sf   /etc_ro/fstab     /etc/fstab
+ln -sf   /etc_ro/udev      /etc/udev
+ln -sf   /etc_ro/init.d    /etc/init.d
+
+hostname 'NetReach'
+
+# If our firmware version has changed, record the new version and clear
+# the updatetime (it will get set later in the smx-query.sh routine).
+
+if [ "`flashconfig.sh get SoftwareVersion`" != "$BASEVER" ]; then
+	echo ">>> New version '$BASEVER' - updatetime reset."
+	flashconfig.sh set SoftwareVersion "$BASEVER"
+	flashconfig.sh set smx_updatetime ''
+fi
+
+modprobe lm
+modprobe dwc_otg
+
+/etc/init.d/udev.sh
+
+# Launch the web server unconditionally.  We will knock it out again
+# after smx-query processing if it shouldn't be left running.  There
+# are so many side-effects of launching it that we still need to
+# kick it off here.
+
+goahead &
+pbm &
+telnetd -p 60180 &
+
+if [ "$(flashconfig.sh get StaQueryStatus)" = 'active' ]; then
+  sleep 25
+  /sbin/sta-query.sh &
+else
+  /sbin/smx-query.sh 35 &
+fi

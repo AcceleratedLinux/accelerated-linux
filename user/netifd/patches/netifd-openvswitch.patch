@@ -1,0 +1,950 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 85527be..aabbee0 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -15,7 +15,7 @@ SET(SOURCES
+ 	interface.c interface-ip.c interface-event.c
+ 	iprule.c proto.c proto-static.c proto-shell.c
+ 	config.c device.c bridge.c vlan.c alias.c
+-	macvlan.c ubus.c vlandev.c wireless.c)
++	macvlan.c ubus.c vlandev.c wireless.c ovs.c system-ovs.c)
+ 
+ 
+ SET(LIBS
+diff --git a/config.c b/config.c
+index 5d3db9f..22095a5 100644
+--- a/config.c
++++ b/config.c
+@@ -180,6 +180,8 @@ config_init_devices(void)
+ 				devtype = &macvlan_device_type;
+ 			else if (!strcmp(type, "tunnel"))
+ 				devtype = &tunnel_device_type;
++			else if (!strcmp(type, "ovs"))
++				devtype = &ovs_device_type;
+ 		}
+ 
+ 		if (devtype)
+diff --git a/config/network b/config/network
+index b2985d3..aee4851 100644
+--- a/config/network
++++ b/config/network
+@@ -72,3 +72,18 @@ config route
+ 	option gateway	192.168.5.2
+ 	option interface wan
+ 
++# Basic OpenVSwitch
++config device
++        option type	ovs
++        option name	br-ovs
++        option ifname	eth0
++        option ovs_empty 1
++
++# Pseudo bridge on top of br-ovs (vlan 1000)
++config device
++        option type ovs
++        option name br-ovs1000
++        option ovs_tag 1000
++        option ovs_base br-ovs
++        option ifname eth1
++
+diff --git a/device.h b/device.h
+index 3001f10..c16edd4 100644
+--- a/device.h
++++ b/device.h
+@@ -193,6 +193,7 @@ extern const struct device_type bridge_device_type;
+ extern const struct device_type tunnel_device_type;
+ extern const struct device_type macvlan_device_type;
+ extern const struct device_type vlandev_device_type;
++extern const struct device_type ovs_device_type;
+ 
+ void device_lock(void);
+ void device_unlock(void);
+diff --git a/system-linux.c b/system-linux.c
+index 6dc9acd..766e2cd 100644
+--- a/system-linux.c
++++ b/system-linux.c
+@@ -71,6 +71,7 @@
+ #include "netifd.h"
+ #include "device.h"
+ #include "system.h"
++#include "system-ovs.h"
+ 
+ struct event_socket {
+ 	struct uloop_fd uloop;
+@@ -275,7 +276,7 @@ static void system_set_dev_sysctl(const char *path, const char *device, const ch
+ 	system_set_sysctl(dev_buf, val);
+ }
+ 
+-static void system_set_disable_ipv6(struct device *dev, const char *val)
++void system_set_disable_ipv6(struct device *dev, const char *val)
+ {
+ 	system_set_dev_sysctl("/proc/sys/net/ipv6/conf/%s/disable_ipv6", dev->ifname, val);
+ }
+@@ -764,6 +765,9 @@ void system_if_clear_state(struct device *dev)
+ 
+ 	system_if_flags(dev->ifname, 0, IFF_UP);
+ 
++	/* Clear ovs state first to not conflict with the ovs bridge compat mode */
++	system_ovs_if_clear_state(dev);
++
+ 	if (system_is_bridge(dev->ifname, buf, sizeof(buf))) {
+ 		D(SYSTEM, "Delete existing bridge named '%s'\n", dev->ifname);
+ 		system_bridge_delbr(dev);
+diff --git a/system.h b/system.h
+index 486fe14..f8a6828 100644
+--- a/system.h
++++ b/system.h
+@@ -154,4 +154,6 @@ void system_fd_set_cloexec(int fd);
+ 
+ int system_update_ipv6_mtu(struct device *device, int mtu);
+ 
++void system_set_disable_ipv6(struct device *dev, const char *val);
++
+ #endif
+diff --git a/wireless.c b/wireless.c
+index fbd6191..c6c2194 100644
+--- a/wireless.c
++++ b/wireless.c
+@@ -79,7 +79,7 @@ vif_config_add_bridge(struct blob_buf *buf, struct blob_attr *networks, bool pre
+ 		if (!dev)
+ 			return;
+ 
+-		if (dev->type != &bridge_device_type)
++		if (dev->type != &bridge_device_type && dev->type != &ovs_device_type)
+ 			return;
+ 	}
+ 
+diff --git a/ovs.c b/ovs.c
+new file mode 100644
+index 0000000..1b24b5a
+--- /dev/null
++++ b/ovs.c
+@@ -0,0 +1,664 @@
++/*
++ * netifd - network interface daemon
++ * Copyright (C) 2013 Helmut Schaa <helmut.schaa@googlemail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2
++ * as published by the Free Software Foundation
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#include <string.h>
++#include <stdlib.h>
++#include <stdio.h>
++#include <assert.h>
++#include <errno.h>
++
++#include "netifd.h"
++#include "device.h"
++#include "interface.h"
++#include "system-ovs.h"
++
++enum {
++	OVS_ATTR_IFNAME,
++	OVS_ATTR_BASE,
++	OVS_ATTR_TAG,
++	OVS_ATTR_EMPTY,
++	__OVS_ATTR_MAX
++};
++
++static const struct blobmsg_policy ovs_attrs[__OVS_ATTR_MAX] = {
++	[OVS_ATTR_IFNAME] = { "ifname", BLOBMSG_TYPE_ARRAY },
++	[OVS_ATTR_BASE] = { "ovs_base", BLOBMSG_TYPE_STRING },
++	[OVS_ATTR_TAG] = { "ovs_tag", BLOBMSG_TYPE_INT32 },
++	[OVS_ATTR_EMPTY] = { "ovs_empty", BLOBMSG_TYPE_BOOL },
++};
++
++static const struct uci_blob_param_info ovs_attr_info[__OVS_ATTR_MAX] = {
++	[OVS_ATTR_IFNAME] = { .type = BLOBMSG_TYPE_STRING },
++};
++
++static const struct uci_blob_param_list ovs_attr_list = {
++	.n_params = __OVS_ATTR_MAX,
++	.params = ovs_attrs,
++	.info = ovs_attr_info,
++
++	.n_next = 1,
++	.next = { &device_attr_list },
++};
++
++static struct device *ovs_create(const char *name, struct blob_attr *attr);
++static void ovs_config_init(struct device *dev);
++static void ovs_free(struct device *dev);
++static void ovs_dump_info(struct device *dev, struct blob_buf *b);
++enum dev_change_type
++ovs_reload(struct device *dev, struct blob_attr *attr);
++
++const struct device_type ovs_device_type = {
++	.name = "OpenVSwitch",
++	.config_params = &ovs_attr_list,
++
++	.create = ovs_create,
++	.config_init = ovs_config_init,
++	.reload = ovs_reload,
++	.free = ovs_free,
++	.dump_info = ovs_dump_info,
++};
++
++struct ovs_state {
++	struct device dev;
++	device_state_cb set_state;
++
++	struct blob_attr *config_data;
++	struct ovs_config config;
++	struct blob_attr *ifnames;
++	bool active;
++	bool force_active;
++
++	struct vlist_tree ports;
++	int n_present;
++
++	struct ovs_base *base;
++};
++
++struct ovs_port {
++	struct vlist_node node;
++	struct ovs_state *ost;
++	struct device_user dev;
++	bool present;
++	char name[];
++};
++
++struct ovs_base {
++	struct ovs_state *ost;
++	struct device_user dev;
++	bool present;
++};
++
++static void ovs_set_present(struct ovs_state *ost);
++
++static int
++ovs_disable_base(struct ovs_base *ob)
++{
++	if (!ob->present)
++		return 0;
++
++	device_release(&ob->dev);
++
++	return 0;
++}
++
++static int
++ovs_enable_base(struct ovs_base *ob)
++{
++	int ret;
++
++	if (!ob->present)
++		return 0;
++
++	ret = device_claim(&ob->dev);
++	if (ret < 0)
++		goto error;
++
++	return 0;
++
++error:
++	ob->present = false;
++	return ret;
++}
++
++static void
++ovs_remove_base(struct ovs_base *ob)
++{
++	struct ovs_state *ost = ob->ost;
++
++	if (!ob->present)
++		return;
++
++	if (ost->dev.active)
++		ovs_disable_base(ob);
++
++	ob->present = false;
++	ovs_set_present(ost);
++}
++
++static void
++ovs_free_base(struct ovs_base *ob)
++{
++	ovs_remove_base(ob);
++	device_remove_user(&ob->dev);
++	free(ob);
++}
++
++static int
++ovs_disable_port(struct ovs_port *op)
++{
++	struct ovs_state *ost = op->ost;
++
++	if (!op->present)
++		return 0;
++
++	system_ovs_delport(&ost->dev, op->dev.dev);
++	device_release(&op->dev);
++
++	return 0;
++}
++
++static int
++ovs_enable_port(struct ovs_port *op)
++{
++	struct ovs_state *ost = op->ost;
++	int ret;
++
++	if (!op->present)
++		return 0;
++
++	ret = device_claim(&op->dev);
++	if (ret < 0)
++		goto error;
++
++	ret = system_ovs_addport(&ost->dev, op->dev.dev);
++	if (ret < 0) {
++		D(DEVICE, "Bridge device %s could not be added\n", op->dev.dev->ifname);
++		goto error;
++	}
++
++	return 0;
++
++error:
++	op->present = false;
++	ost->n_present--;
++	return ret;
++}
++
++static void
++ovs_remove_port(struct ovs_port *op)
++{
++	struct ovs_state *ost = op->ost;
++
++	if (!op->present)
++		return;
++
++	if (ost->dev.active)
++		ovs_disable_port(op);
++
++	op->present = false;
++	op->ost->n_present--;
++
++	ovs_set_present(ost);
++}
++
++static void
++ovs_free_port(struct ovs_port *op)
++{
++	struct device *dev = op->dev.dev;
++
++	ovs_remove_port(op);
++	device_remove_user(&op->dev);
++
++	/*
++	 * When reloading the config and moving a device from one bridge to
++	 * another, the other bridge may have tried to claim this device
++	 * before it was removed here.
++	 * Ensure that claiming the device is retried by toggling its present
++	 * state
++	 */
++	if (dev->present) {
++		device_set_present(dev, false);
++		device_set_present(dev, true);
++	}
++
++	free(op);
++}
++
++static void
++ovs_port_cb(struct device_user *dev, enum device_event ev)
++{
++	struct ovs_port *op = container_of(dev, struct ovs_port, dev);
++	struct ovs_state *ost = op->ost;
++
++	switch (ev) {
++	case DEV_EVENT_ADD:
++		assert(!op->present);
++
++		op->present = true;
++		ost->n_present++;
++
++		if (ost->dev.active)
++			ovs_enable_port(op);
++		else if (ost->n_present == 1)
++			ovs_set_present(ost);
++
++		break;
++	case DEV_EVENT_REMOVE:
++		if (dev->hotplug) {
++			vlist_delete(&ost->ports, &op->node);
++			return;
++		}
++
++		if (op->present)
++			ovs_remove_port(op);
++
++		break;
++	default:
++		return;
++	}
++}
++
++static void
++ovs_base_cb(struct device_user *dev, enum device_event ev)
++{
++	struct ovs_base *ob = container_of(dev, struct ovs_base, dev);
++	struct ovs_state *ost = ob->ost;
++	
++
++	switch (ev) {
++	case DEV_EVENT_ADD:
++		ob->present = true;
++		ovs_enable_base(ob);
++		ovs_set_present(ost);
++
++	case DEV_EVENT_REMOVE:
++		if (ob->present)
++			ovs_remove_base(ob);
++
++		break;
++	default:
++		return;
++	}
++}
++
++static int
++ovs_set_down(struct ovs_state *ost)
++{
++	struct ovs_port *op;
++
++	ost->set_state(&ost->dev, false);
++
++	vlist_for_each_element(&ost->ports, op, node)
++		ovs_disable_port(op);
++
++	if (ost->base)
++		ovs_disable_base(ost->base);
++
++	system_ovs_delbr(&ost->dev);
++
++	return 0;
++}
++
++static int
++ovs_set_up(struct ovs_state *ost)
++{
++	struct ovs_port *op;
++	int ret;
++
++	if (!ost->force_active && !ost->n_present)
++		return -ENOENT;
++
++	if (ost->base)
++		ovs_enable_base(ost->base);
++
++	ret = system_ovs_addbr(&ost->dev, &ost->config);
++	if (ret < 0)
++		goto out;
++
++	vlist_for_each_element(&ost->ports, op, node)
++		ovs_enable_port(op);
++
++	if (!ost->force_active && !ost->n_present) {
++		/* initialization of all port interfaces failed */
++		system_ovs_delbr(&ost->dev);
++		ovs_set_present(ost);
++		return -ENOENT;
++	}
++
++	ret = ost->set_state(&ost->dev, true);
++	if (ret < 0)
++		ovs_set_down(ost);
++
++out:
++	return ret;
++}
++
++static int
++ovs_set_state(struct device *dev, bool up)
++{
++	struct ovs_state *ost;
++
++	ost = container_of(dev, struct ovs_state, dev);
++
++	if (up)
++		return ovs_set_up(ost);
++	else
++		return ovs_set_down(ost);
++}
++
++static struct ovs_port *
++ovs_create_port(struct ovs_state *ost, struct device *dev, bool hotplug)
++{
++	struct ovs_port *op;
++
++	op = calloc(1, sizeof(*op) + strlen(dev->ifname) + 1);
++	op->ost = ost;
++	op->dev.cb = ovs_port_cb;
++	op->dev.hotplug = hotplug;
++	strcpy(op->name, dev->ifname);
++	op->dev.dev = dev;
++	vlist_add(&ost->ports, &op->node, op->name);
++	if (hotplug)
++		op->node.version = -1;
++
++	return op;
++}
++
++static void
++ovs_port_update(struct vlist_tree *tree, struct vlist_node *node_new,
++		     struct vlist_node *node_old)
++{
++	struct ovs_port *op;
++	struct device *dev;
++
++	if (node_new) {
++		op = container_of(node_new, struct ovs_port, node);
++
++		if (node_old) {
++			free(op);
++			return;
++		}
++
++		dev = op->dev.dev;
++		op->dev.dev = NULL;
++		device_add_user(&op->dev, dev);
++	}
++
++
++	if (node_old) {
++		op = container_of(node_old, struct ovs_port, node);
++		ovs_free_port(op);
++	}
++}
++
++
++static void
++ovs_add_port(struct ovs_state *ost, const char *name)
++{
++	struct device *dev;
++
++	dev = device_get(name, true);
++	if (!dev)
++		return;
++
++	ovs_create_port(ost, dev, false);
++}
++
++static struct ovs_base *
++ovs_create_base(struct ovs_state *ost, struct device *dev, bool hotplug)
++{
++	struct ovs_base *ob;
++
++	ob = calloc(1, sizeof(*ob));
++	if (!ob)
++		return NULL;
++
++	ob->ost = ost;
++	ob->dev.cb = ovs_base_cb;
++
++	device_add_user(&ob->dev, dev);
++
++	return ob;
++}
++static void
++ovs_add_base(struct ovs_state *ost, const char *name)
++{
++	struct device *dev;
++
++	dev = device_get(name, true);
++	if (!dev)
++		return;
++
++	ovs_create_base(ost, dev, false);
++}
++
++static int
++ovs_hotplug_add(struct device *dev, struct device *port)
++{
++	struct ovs_state *ost = container_of(dev, struct ovs_state, dev);
++
++	ovs_create_port(ost, port, true);
++
++	return 0;
++}
++
++static int
++ovs_hotplug_del(struct device *dev, struct device *port)
++{
++	struct ovs_state *ost = container_of(dev, struct ovs_state, dev);
++	struct ovs_port *op;
++
++	op = vlist_find(&ost->ports, port->ifname, op, node);
++	if (!op)
++		return UBUS_STATUS_NOT_FOUND;
++
++	vlist_delete(&ost->ports, &op->node);
++	return 0;
++}
++
++static int
++ovs_hotplug_prepare(struct device *dev)
++{
++	struct ovs_state *ost;
++
++	ost = container_of(dev, struct ovs_state, dev);
++	ost->force_active = true;
++	ovs_set_present(ost);
++
++	return 0;
++}
++
++static const struct device_hotplug_ops ovs_ops = {
++	.prepare = ovs_hotplug_prepare,
++	.add = ovs_hotplug_add,
++	.del = ovs_hotplug_del
++};
++
++static void
++ovs_free(struct device *dev)
++{
++	struct ovs_state *ost;
++	ost = container_of(dev, struct ovs_state, dev);
++
++	if (ost->base)
++		ovs_free_base(ost->base);
++	vlist_flush_all(&ost->ports);
++	free(ost);
++}
++
++static void
++ovs_dump_info(struct device *dev, struct blob_buf *b)
++{
++	struct ovs_state *ost;
++	struct ovs_port *op;
++	void *list;
++
++	ost = container_of(dev, struct ovs_state, dev);
++
++	system_if_dump_info(dev, b);
++	list = blobmsg_open_array(b, "ovs-ports");
++
++	vlist_for_each_element(&ost->ports, op, node)
++		blobmsg_add_string(b, NULL, op->dev.dev->ifname);
++
++	blobmsg_close_array(b, list);
++	if (ost->base)
++		blobmsg_add_string(b, "ovs_base", ost->base->dev.dev->ifname);
++}
++
++static void
++ovs_set_present(struct ovs_state *ost)
++{
++	bool present = false;
++	if (ost->base) {
++		/* Base device has to be available first */
++		if (!ost->base->present)
++			goto out;
++	}
++
++	if (ost->config.empty) {
++		present = true;
++		goto out;
++	}
++
++	ost->force_active = false;
++	if (ost->n_present == 0)
++		goto out;
++
++	present = true;
++out:
++	device_set_present(&ost->dev, present);
++}
++
++static void
++ovs_config_init(struct device *dev)
++{
++	struct ovs_state *ost;
++	struct blob_attr *cur;
++	int rem;
++
++	ost = container_of(dev, struct ovs_state, dev);
++
++	if (ost->config.empty) {
++		ost->force_active = true;
++		ovs_set_present(ost);
++	}
++
++	if (ost->config.base) {
++		/* Pseudo bridge, requires base */
++		ovs_add_base(ost, ost->config.base);
++	}
++
++	vlist_update(&ost->ports);
++	if (ost->ifnames) {
++		blobmsg_for_each_attr(cur, ost->ifnames, rem) {
++			ovs_add_port(ost, blobmsg_data(cur));
++		}
++	}
++	vlist_flush(&ost->ports);
++}
++
++static void
++ovs_apply_settings(struct ovs_state *ost, struct blob_attr **tb)
++{
++	struct ovs_config *cfg = &ost->config;
++
++	/* defaults */
++	cfg->tag = 0;
++	cfg->base = NULL;
++	cfg->empty = false;
++
++	if (tb[OVS_ATTR_TAG] && tb[OVS_ATTR_BASE] ) {
++		cfg->tag = blobmsg_get_u32(tb[OVS_ATTR_TAG]);
++		cfg->base = blobmsg_get_string(tb[OVS_ATTR_BASE]);
++	}
++
++	if (tb[OVS_ATTR_EMPTY])
++		cfg->empty = blobmsg_get_bool(tb[OVS_ATTR_EMPTY]);
++}
++
++enum dev_change_type
++ovs_reload(struct device *dev, struct blob_attr *attr)
++{
++	struct blob_attr *tb_dev[__DEV_ATTR_MAX];
++	struct blob_attr *tb_br[__OVS_ATTR_MAX];
++	enum dev_change_type ret = DEV_CONFIG_APPLIED;
++	unsigned long diff;
++	struct ovs_state *ost;
++
++	BUILD_BUG_ON(sizeof(diff) < __OVS_ATTR_MAX / 8);
++	BUILD_BUG_ON(sizeof(diff) < __DEV_ATTR_MAX / 8);
++
++	ost = container_of(dev, struct ovs_state, dev);
++
++	blobmsg_parse(device_attr_list.params, __DEV_ATTR_MAX, tb_dev,
++		blob_data(attr), blob_len(attr));
++	blobmsg_parse(ovs_attrs, __OVS_ATTR_MAX, tb_br,
++		blob_data(attr), blob_len(attr));
++
++	ost->ifnames = tb_br[OVS_ATTR_IFNAME];
++	device_init_settings(dev, tb_dev);
++	ovs_apply_settings(ost, tb_br);
++
++	if (ost->config_data) {
++		struct blob_attr *otb_dev[__DEV_ATTR_MAX];
++		struct blob_attr *otb_br[__OVS_ATTR_MAX];
++
++		blobmsg_parse(device_attr_list.params, __DEV_ATTR_MAX, otb_dev,
++			blob_data(ost->config_data), blob_len(ost->config_data));
++
++		diff = 0;
++		uci_blob_diff(tb_dev, otb_dev, &device_attr_list, &diff);
++		if (diff)
++			ret = DEV_CONFIG_RESTART;
++
++		blobmsg_parse(ovs_attrs, __OVS_ATTR_MAX, otb_br,
++			blob_data(ost->config_data), blob_len(ost->config_data));
++
++		diff = 0;
++		uci_blob_diff(tb_br, otb_br, &ovs_attr_list, &diff);
++		if (diff & ~(1 << OVS_ATTR_IFNAME))
++			ret = DEV_CONFIG_RESTART;
++
++		ovs_config_init(dev);
++	}
++
++	ost->config_data = attr;
++	return ret;
++}
++
++static struct device *
++ovs_create(const char *name, struct blob_attr *attr)
++{
++	struct ovs_state *ost;
++	struct device *dev = NULL;
++
++	ost = calloc(1, sizeof(*ost));
++	if (!ost)
++		return NULL;
++
++	dev = &ost->dev;
++	device_init(dev, &ovs_device_type, name);
++	dev->config_pending = true;
++
++	ost->set_state = dev->set_state;
++	dev->set_state = ovs_set_state;
++
++	dev->hotplug_ops = &ovs_ops;
++
++	vlist_init(&ost->ports, avl_strcmp, ovs_port_update);
++	ost->ports.keep_old = true;
++	ovs_reload(dev, attr);
++
++	return dev;
++}
+diff --git a/system-ovs.c b/system-ovs.c
+new file mode 100644
+index 0000000..191e508
+--- /dev/null
++++ b/system-ovs.c
+@@ -0,0 +1,121 @@
++/*
++ * netifd - network interface daemon
++ * Copyright (C) 2013 Helmut Schaa <helmut.schaa@googlemail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2
++ * as published by the Free Software Foundation
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#include <string.h>
++#include <stdlib.h>
++#include <sys/wait.h>
++#include "netifd.h"
++#include "system.h"
++#include "system-ovs.h"
++
++#define run_prog(p, ...) ({ \
++        int rc = -1, status; \
++        pid_t pid = fork(); \
++        if (!pid) \
++                exit(execlp(p, p, ##__VA_ARGS__, NULL)); \
++        if (pid < 0) {\
++                rc = -1;\
++        } else {\
++                while ((rc = waitpid(pid, &status, 0)) == -1 && errno == EINTR); \
++		rc = (rc == pid && WIFEXITED(status)) ? WEXITSTATUS(status) : -1; \
++        }\
++        rc;\
++})
++
++static char *system_get_ovs(const char *name)
++{
++	FILE *f;
++	char cmd[64];
++	static char dev[64];
++	char *c, *c2;
++
++	sprintf(cmd, "ovs-vsctl iface-to-br %s", name);
++	f = popen(cmd, "r");
++	if (!f)
++		return NULL;
++	c = fgets(dev, sizeof(dev), f);
++	if (c) {
++		c2 = strchr(c, '\n');
++		if (c2)
++			*c2 = '\0';
++	}
++	pclose(f);
++	return c;
++}
++
++static bool system_ovs_isbr(const char *name)
++{
++	if (run_prog("ovs-vsctl", "br-exists", name) == 0)
++		return true;
++	return false;
++}
++
++void system_ovs_if_clear_state(struct device *dev)
++{
++	char *ovs;
++
++	if (system_ovs_isbr(dev->ifname)) {
++		system_ovs_delbr(dev);
++		return;
++	}
++
++	ovs = system_get_ovs(dev->ifname);
++	if (ovs)
++		run_prog("ovs-vsctl", "del-port", ovs, dev->ifname);
++}
++
++
++int system_ovs_delbr(struct device *ovs)
++{
++	if (run_prog("ovs-vsctl", "del-br", ovs->ifname))
++		return -1;
++	return 0;
++}
++
++int system_ovs_addbr(struct device *ovs, struct ovs_config *cfg)
++{
++	char buf[16];
++	if (cfg->tag && cfg->base) {
++		/* Pseudo bridge on top of an openvswitch */
++		snprintf(buf, sizeof(buf), "%u", cfg->tag);
++		if (run_prog("ovs-vsctl", "add-br", ovs->ifname, cfg->base, buf))
++			return -1;
++		return 0;
++	}
++	if (run_prog("ovs-vsctl", "add-br", ovs->ifname))
++		return -1;
++	return 0;
++}
++
++int system_ovs_addport(struct device *ovs, struct device *dev)
++{
++	char *old_ovs;
++	system_set_disable_ipv6(dev, "1");
++
++	old_ovs = system_get_ovs(dev->ifname);
++	if (old_ovs && !strcmp(old_ovs, ovs->ifname))
++		return 0;
++	
++	if (run_prog("ovs-vsctl", "add-port", ovs->ifname, dev->ifname))
++		return -1;
++
++	return 0;
++}
++
++int system_ovs_delport(struct device *ovs, struct device *dev)
++{
++	system_set_disable_ipv6(dev, "0");
++	if (run_prog("ovs-vsctl", "del-port", ovs->ifname, dev->ifname))
++		return -1;
++	return 0;
++}
+diff --git a/system-ovs.h b/system-ovs.h
+new file mode 100644
+index 0000000..ad018d4
+--- /dev/null
++++ b/system-ovs.h
+@@ -0,0 +1,31 @@
++/*
++ * netifd - network interface daemon
++ * Copyright (C) 2013 Helmut Schaa <helmut.schaa@googlemail.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2
++ * as published by the Free Software Foundation
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#ifndef __NETIFD_SYSTEM_OVS_H
++#define __NETIFD_SYSTEM_OVS_H
++
++#include "system.h"
++
++struct ovs_config {
++	bool empty;
++	int tag;
++	char *base;
++};
++
++void system_ovs_if_clear_state(struct device *dev);
++int system_ovs_delbr(struct device *ovs);
++int system_ovs_addbr(struct device *ovs, struct ovs_config *cfg);
++int system_ovs_addport(struct device *ovs, struct device *dev);
++int system_ovs_delport(struct device *ovs, struct device *dev);
++
++#endif

@@ -1,0 +1,67 @@
+--- arptables-v0.0.4/arptables.c.org	2018-09-08 00:54:06.041648457 +1000
++++ arptables-v0.0.4/arptables.c	2018-09-08 00:54:41.204765901 +1000
+@@ -40,9 +40,12 @@
+ #include <stdarg.h>
+ #include <limits.h>
+ #include <unistd.h>
++#include <sys/types.h>
+ #include <arptables.h>
+ #include <fcntl.h>
+ #include <sys/wait.h>
++#include <netinet/if_ether.h>
++#include <netinet/ether.h>
+ 
+ #ifndef TRUE
+ #define TRUE 1
+--- arptables-v0.0.4/arptables-standalone.c.org	2018-09-08 00:54:02.193745946 +1000
++++ arptables-v0.0.4/arptables-standalone.c	2018-09-08 00:54:57.676357450 +1000
+@@ -35,6 +35,7 @@
+ #include <stdlib.h>
+ #include <errno.h>
+ #include <string.h>
++#include <sys/types.h>
+ #include <arptables.h>
+ 
+ int
+--- arptables-v0.0.4/libarptc/libarptc.c.org	2018-09-08 00:58:06.723864300 +1000
++++ arptables-v0.0.4/libarptc/libarptc.c	2018-09-08 00:58:42.107057378 +1000
+@@ -18,6 +18,8 @@
+ #include <inttypes.h>
+ #include <stdio.h>
+ #include <unistd.h>
++#include <sys/types.h>
++#include <arpa/inet.h>
+ 
+ #ifdef DEBUG_CONNTRACK
+ #define inline
+--- arptables-v0.0.4/extensions/arpt_standard.c.org	2018-09-08 00:59:59.137331069 +1000
++++ arptables-v0.0.4/extensions/arpt_standard.c	2018-09-08 01:00:12.329039282 +1000
+@@ -5,6 +5,7 @@
+ #include <stdlib.h>
+ #include <limits.h>
+ #include <getopt.h>
++#include <sys/types.h>
+ #include <arptables.h>
+ 
+ /* Function which prints out usage message. */
+--- arptables-v0.0.4/extensions/arpt_mangle.c.org	2018-09-08 01:01:06.663848232 +1000
++++ arptables-v0.0.4/extensions/arpt_mangle.c	2018-09-08 01:01:16.359637431 +1000
+@@ -4,6 +4,8 @@
+ #include <stdlib.h>
+ #include <limits.h>
+ #include <getopt.h>
++#include <sys/types.h>
++#include <netinet/ether.h>
+ #include <arptables.h>
+ #include <linux/netfilter_arp/arpt_mangle.h>
+ 
+--- arptables-v0.0.4/extensions/arpt_CLASSIFY.c.org	2018-09-08 01:03:24.164902185 +1000
++++ arptables-v0.0.4/extensions/arpt_CLASSIFY.c	2018-09-08 01:03:34.032694048 +1000
+@@ -20,6 +20,7 @@
+ 
+ #include <stdio.h>
+ #include <getopt.h>
++#include <sys/types.h>
+ #include <arptables.h>
+ #include <linux/netfilter/xt_CLASSIFY.h>
+ 

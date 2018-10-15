@@ -1,0 +1,3 @@
+inc_libroxml = build/libroxml*-install/usr/include/*,.
+lib_libroxml = build/libroxml*-install/usr/lib/*.a \
+		       build/libroxml*-install/usr/lib/*.so

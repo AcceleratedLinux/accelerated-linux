@@ -1,0 +1,33 @@
+#!/bin/sh
+# A script that imports text arptables rules. Similar to iptables-restore.
+
+tool="/sbin/arptables";
+
+[ ! -x $tool ] && echo "ERROR: $tool isn't executable" && exit 1
+
+# set policies to accept
+$tool -P INPUT ACCEPT || exit 1
+$tool -P FORWARD ACCEPT || exit 1
+$tool -P OUTPUT ACCEPT || exit 1
+
+# flush chains
+$tool -F || exit 1
+
+# removes custom chains
+$tool -L | sed -rn 's/Chain (.*?) \(.*references\)/\1/p' | while read line; do
+	$tool -X $chain || exit 1
+done
+
+n=0
+table=
+while read line; do
+	n=$((n + 1))
+	echo "$line" | egrep -q '^#' && continue
+	[ -z "$line" ] && continue
+
+	[ "${line:0:1}" = "*" ] && table="-t ${line:1}" && continue
+	$tool $table $line
+	[ $? != 0 ] && echo "ERROR(line $n)" && exit 1
+done
+
+exit 0

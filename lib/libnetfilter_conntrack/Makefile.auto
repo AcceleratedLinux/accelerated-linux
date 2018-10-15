@@ -1,0 +1,2 @@
+dir_$(CONFIG_LIB_NETFILTER_CONNTRACK) += libnetfilter_conntrack
+dep_libnetfilter_conntrack = libnfnetlink libmnl

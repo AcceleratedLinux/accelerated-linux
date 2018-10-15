@@ -1,0 +1,60 @@
+diff -Naur libiconv-1.14.org/build-aux/ltmain.sh libiconv-1.14/build-aux/ltmain.sh
+--- libiconv-1.14.org/build-aux/ltmain.sh	2010-09-24 09:27:59.000000000 +1000
++++ libiconv-1.14/build-aux/ltmain.sh	2016-03-02 22:05:48.702040774 +1000
+@@ -5678,7 +5678,7 @@
+ 	continue
+ 	;;
+ 
+-      -no-undefined)
++      -Wl,-no-undefined)
+ 	allow_undefined=no
+ 	continue
+ 	;;
+diff -Naur libiconv-1.14.org/lib/Makefile.in libiconv-1.14/lib/Makefile.in
+--- libiconv-1.14.org/lib/Makefile.in	2011-08-08 03:48:03.000000000 +1000
++++ libiconv-1.14/lib/Makefile.in	2016-03-02 22:02:22.570031200 +1000
+@@ -68,7 +68,7 @@
+ all : libiconv.la
+ 
+ libiconv.la : $(OBJECTS)
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) -o libiconv.la -rpath $(libdir) -version-info $(LIBICONV_VERSION_INFO) -no-undefined $(OBJECTS)
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) -o libiconv.la -rpath $(libdir) -version-info $(LIBICONV_VERSION_INFO) -Wl,-no-undefined $(OBJECTS)
+ 
+ iconv.lo : $(srcdir)/iconv.c $(srcdir)/converters.h \
+            $(srcdir)/encodings.def $(srcdir)/encodings_aix.def $(srcdir)/encodings_osf1.def $(srcdir)/encodings_dos.def $(srcdir)/encodings_local.def \
+diff -Naur libiconv-1.14.org/libcharset/build-aux/ltmain.sh libiconv-1.14/libcharset/build-aux/ltmain.sh
+--- libiconv-1.14.org/libcharset/build-aux/ltmain.sh	2010-09-24 09:27:59.000000000 +1000
++++ libiconv-1.14/libcharset/build-aux/ltmain.sh	2016-03-02 22:06:17.402042107 +1000
+@@ -5678,7 +5678,7 @@
+ 	continue
+ 	;;
+ 
+-      -no-undefined)
++      -Wl,-no-undefined)
+ 	allow_undefined=no
+ 	continue
+ 	;;
+diff -Naur libiconv-1.14.org/libcharset/lib/Makefile.in libiconv-1.14/libcharset/lib/Makefile.in
+--- libiconv-1.14.org/libcharset/lib/Makefile.in	2009-06-21 21:17:33.000000000 +1000
++++ libiconv-1.14/libcharset/lib/Makefile.in	2016-03-02 22:02:50.186032482 +1000
+@@ -56,7 +56,7 @@
+ all : libcharset.la charset.alias ref-add.sed ref-del.sed
+ 
+ libcharset.la : $(OBJECTS)
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) -o libcharset.la -rpath $(libdir) -version-info $(LIBCHARSET_VERSION_INFO) -no-undefined $(OBJECTS)
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) -o libcharset.la -rpath $(libdir) -version-info $(LIBCHARSET_VERSION_INFO) -Wl,-no-undefined $(OBJECTS)
+ 
+ localcharset.lo : $(srcdir)/localcharset.c
+ 	$(LIBTOOL_COMPILE) $(CC) $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(DEFS) -c $(srcdir)/localcharset.c
+diff -Naur libiconv-1.14.org/preload/Makefile.in libiconv-1.14/preload/Makefile.in
+--- libiconv-1.14.org/preload/Makefile.in	2009-06-21 21:17:33.000000000 +1000
++++ libiconv-1.14/preload/Makefile.in	2016-03-02 22:02:58.598032873 +1000
+@@ -52,7 +52,7 @@
+ 	for f in $(SOURCES); do \
+ 	  $(LIBTOOL_COMPILE) $(CC) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) $(DEFS) -DLIBICONV_PLUG -c $$f -o objects/`basename $$f | sed -e 's,\.c$$,.o,'` || exit 1; \
+ 	done && \
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) -o libiconv.la -rpath $(libdir) -no-undefined objects/*.lo && \
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) -o libiconv.la -rpath $(libdir) -Wl,-no-undefined objects/*.lo && \
+ 	$(RM) -r objects
+ 	cp .libs/libiconv.so preloadable_libiconv.so
+ 

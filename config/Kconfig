@@ -1,0 +1,31 @@
+#############################################################################
+
+#
+#	Kconfig - user space configuration
+#
+
+#############################################################################
+
+mainmenu "Linux Application Configuration"
+
+config DISTVERSION
+	string
+	default "5.0"
+
+source ../vendors/Kconfig
+
+source ../lib/Kconfig
+menu "Automake Libraries"
+source ../lib/Kconfig.auto
+endmenu
+
+
+source ../user/Kconfig
+menu "Automake Applications"
+source ../user/Kconfig.auto
+endmenu
+
+menu "Bootloaders"
+endmenu
+
+#############################################################################

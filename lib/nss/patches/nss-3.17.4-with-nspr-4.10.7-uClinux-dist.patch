@@ -1,0 +1,84 @@
+--- /dev/null	2015-02-16 15:33:24.055841081 +1000
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-02-17 13:54:42.618238598 +1000
+@@ -0,0 +1,81 @@
++#
++# This Source Code Form is subject to the terms of the Mozilla Public
++# License, v. 2.0. If a copy of the MPL was not distributed with this
++# file, You can obtain one at http://mozilla.org/MPL/2.0/.
++
++include $(CORE_DEPTH)/coreconf/UNIX.mk
++OBJDIR_NAME            = uClinux-dist
++#CC			= gcc
++CCC			= $(CXX)
++#RANLIB		= ranlib
++NATIVE_CC              = $(HOSTCC)
++NATIVE_FLAGS           = 
++DEFAULT_COMPILER       = $(CC)
++CPU_ARCH = $(ARCH)
++ARCHFLAG = $(CPUFLAGS)
++
++# LIBC_TAG		= _glibc
++
++USE_PTHREADS = 1
++IMPL_STRATEGY = _PTH
++OS_PTHREAD = -lpthread 
++DEFINES		+= -D_REENTRANT
++CROSS_COMPILE = 1
++
++OS_CFLAGS		+= $(DSO_CFLAGS) $(OS_REL_CFLAGS) $(ARCHFLAG) -Wall -Werror-implicit-function-declaration -Wno-switch -pipe -ffunction-sections -fdata-sections -DLINUX -Dlinux -DHAVE_STRERROR
++OS_LIBS		= $(OS_PTHREAD) -ldl -lc
++
++ARCH			= linux
++
++DSO_CFLAGS		= -fPIC
++DSO_LDOPTS		= -shared $(ARCHFLAG) -Wl,--gc-sections
++# The linker on Red Hat Linux 7.2 and RHEL 2.1 (GNU ld version 2.11.90.0.8)
++# incorrectly reports undefined references in the libraries we link with, so
++# we don't use -z defs there.
++ZDEFS_FLAG		= -Wl,-z,defs
++DSO_LDOPTS		+= $(if $(findstring 2.11.90.0.8,$(shell ld -v)),,$(ZDEFS_FLAG))
++LDFLAGS			+= $(ARCHFLAG)
++
++# On Maemo, we need to use the -rpath-link flag for even the standard system
++# library directories.
++ifdef _SBOX_DIR
++LDFLAGS			+= -Wl,-rpath-link,/usr/lib:/lib
++endif
++
++# INCLUDES += -I/usr/include -Y/usr/include/linux
++G++INCLUDES		= -I/usr/include/g++
++
++#
++# Always set CPU_TAG on Linux.
++#
++CPU_TAG = _$(CPU_ARCH)
++
++#
++# On Linux 2.6 or later, build libfreebl3.so with no NSPR and libnssutil3.so
++# dependencies by default.  Set FREEBL_NO_DEPEND to 0 in the environment to
++# override this.
++#
++ifneq ($(OS_TARGET),Android)
++ifeq (2.6,$(firstword $(sort 2.6 $(OS_RELEASE))))
++ifndef FREEBL_NO_DEPEND
++FREEBL_NO_DEPEND = 1
++FREEBL_LOWHASH = 1
++endif
++endif
++endif
++
++USE_SYSTEM_ZLIB = 1
++ZLIB_LIBS = -lz
++
++OS_REL_CFLAGS   += -DLINUX2_1
++MKSHLIB         = $(CC) $(DSO_LDOPTS) -Wl,-soname -Wl,$(@:$(OBJDIR)/%.so=%.so) $(RPATH)
++
++ifdef MAPFILE
++	MKSHLIB += -Wl,--version-script,$(MAPFILE)
++endif
++PROCESS_MAP_FILE = grep -v ';-' $< | \
++        sed -e 's,;+,,' -e 's; DATA ;;' -e 's,;;,,' -e 's,;.*,;,' > $@
++
++ifeq ($(OS_RELEASE),2.4)
++DEFINES += -DNO_FORK_CHECK
++endif

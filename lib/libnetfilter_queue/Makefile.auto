@@ -1,0 +1,2 @@
+dir_$(CONFIG_LIB_NETFILTER_QUEUE) += libnetfilter_queue
+dep_libnetfilter_queue = libnfnetlink libmnl

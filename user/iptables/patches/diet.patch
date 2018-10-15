@@ -1,0 +1,86 @@
+Index: iptables-1.4.21/extensions/GNUmakefile.in
+===================================================================
+--- iptables-1.4.21.orig/extensions/GNUmakefile.in
++++ iptables-1.4.21/extensions/GNUmakefile.in
+@@ -45,6 +45,68 @@ pfx_symlinks  := NOTRACK state
+ pfx_build_mod := $(filter-out @blacklist_modules@,${pfx_build_mod})
+ pf4_build_mod := $(filter-out @blacklist_modules@,${pf4_build_mod})
+ pf6_build_mod := $(filter-out @blacklist_modules@,${pf6_build_mod})
++
++# Only build matches/targets for the current kernel config
++-include $(ROOTDIR)/$(LINUXDIR)/.config
++lower=$(shell echo $(1) | tr [:upper:] [:lower:])
++upper=$(shell echo $(1) | tr [:lower:] [:upper:])
++keeplower=$(filter-out $(call upper,$(1)),$(1))
++keepupper=$(filter-out $(call lower,$(1)),$(1))
++TEST_CONFIG_VAL=$(patsubst $(3)_%,%,$(filter $(3)_%,$(foreach i,$(1),$(CONFIG_$(2)_$(i))_$(i))))
++TEST_CONFIG_TYPE=$(call TEST_CONFIG_VAL,$(1),$(2),y) $(call TEST_CONFIG_VAL,$(1),$(2),m)
++TEST_CONFIG=$(call TEST_CONFIG_TYPE,$(1),$(2)_$(3)) $(call TEST_CONFIG_TYPE,$(1),NETFILTER_XT_$(3))
++
++PF_EXT_SLIB_BASE:=icmp
++PF_EXT_SLIB_OPT:=$(filter-out $(PF_EXT_SLIB_BASE),$(pf4_build_mod))
++PF_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PF_EXT_SLIB_OPT))))
++PF_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PF_EXT_SLIB_OPT)))
++pf4_build_mod:=$(PF_EXT_SLIB_BASE)
++pf4_build_mod+=$(call lower,$(call TEST_CONFIG,$(PF_EXT_SLIB_MATCH),IP_NF,MATCH))
++pf4_build_mod+=$(call TEST_CONFIG,$(PF_EXT_SLIB_TARGET),IP_NF,TARGET)
++
++PF6_EXT_SLIB_BASE:=icmp6
++PF6_EXT_SLIB_OPT:=$(filter-out $(PF6_EXT_SLIB_BASE),$(pf6_build_mod))
++PF6_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PF6_EXT_SLIB_OPT))))
++PF6_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PF6_EXT_SLIB_OPT)))
++pf6_build_mod:=$(PF6_EXT_SLIB_BASE)
++pf6_build_mod+=$(call lower,$(call TEST_CONFIG,$(PF6_EXT_SLIB_MATCH),IP6_NF,MATCH))
++pf6_build_mod+=$(call TEST_CONFIG,$(PF6_EXT_SLIB_TARGET),IP6_NF,TARGET)
++
++PFX_EXT_SLIB_BASE:=tcp udp standard
++PFX_EXT_SLIB_OPT:=$(filter-out $(PFX_EXT_SLIB_BASE),$(pfx_build_mod))
++PFX_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PFX_EXT_SLIB_OPT))))
++PFX_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PFX_EXT_SLIB_OPT)))
++pfx_build_mod:=$(PFX_EXT_SLIB_BASE)
++pfx_build_mod+=$(call lower,$(call TEST_CONFIG,$(PFX_EXT_SLIB_MATCH),IP_NF,MATCH))
++pfx_build_mod+=$(call TEST_CONFIG,$(PFX_EXT_SLIB_TARGET),IP_NF,TARGET)
++ifeq ($(DO_IPV6), 1)
++pfx_build_mod+=$(call lower,$(call TEST_CONFIG,$(PFX_EXT_SLIB_MATCH),IP6_NF,MATCH))
++pfx_build_mod+=$(call TEST_CONFIG,$(PFX_EXT_SLIB_TARGET),IP6_NF,TARGET)
++endif
++pfx_build_mod:=$(sort $(pfx_build_mod))
++
++ifneq ($(CONFIG_NETFILTER_XT_TARGET_DSCP),)
++pfx_build_mod+=TOS
++endif
++ifneq ($(CONFIG_NETFILTER_XT_MARK),)
++pfx_build_mod+=mark MARK
++endif
++ifneq ($(CONFIG_NETFILTER_XT_CONNMARK),)
++pfx_build_mod+=connmark CONNMARK
++endif
++ifneq ($(CONFIG_IP_NF_NAT)$(CONFIG_NF_NAT),)
++pf4_build_mod+=SNAT DNAT
++pf6_build_mod+=SNAT DNAT
++endif
++ifneq ($(CONFIG_IP_NF_MATCH_AH_ESP),)
++pf4_build_mod+=ah
++pfx_build_mod+=esp
++endif
++ifneq ($(CONFIG_USER_IPSET_IPSET),)
++pfx_build_mod+=set SET
++endif
++
++
+ pfx_objs      := $(patsubst %,libxt_%.o,${pfx_build_mod})
+ pf4_objs      := $(patsubst %,libipt_%.o,${pf4_build_mod})
+ pf6_objs      := $(patsubst %,libip6t_%.o,${pf6_build_mod})
+@@ -126,9 +188,9 @@ libext4.a: initext4.o ${libext4_objs}
+ libext6.a: initext6.o ${libext6_objs}
+ 	${AM_VERBOSE_AR} ${AR} crs $@ $^;
+ 
+-initext_func  := $(addprefix xt_,${pfx_build_mod})
+-initext4_func := $(addprefix ipt_,${pf4_build_mod})
+-initext6_func := $(addprefix ip6t_,${pf6_build_mod})
++initext_func  := $(sort $(addprefix xt_,${pfx_build_mod}))
++initext4_func := $(sort $(addprefix ipt_,${pf4_build_mod}))
++initext6_func := $(sort $(addprefix ip6t_,${pf6_build_mod}))
+ 
+ .initext.dd: FORCE
+ 	@echo "${initext_func}" >$@.tmp; \

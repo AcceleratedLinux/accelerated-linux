@@ -1,0 +1,6 @@
+lib/config.h
+lib/config.mk
+lspci
+lspci.8
+setpci
+setpci.8

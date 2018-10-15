@@ -1,0 +1,95 @@
+QEMU Emulation of Freescale M5208EVB Evaluation Board
+-----------------------------------------------------
+
+The QEMU emulator has machine support for the M52087EVB board and M5208
+ColdFire CPU. You will need at least qemu version 2.4 or newer to run
+modern versions of the Linux kernel (such as a 4.x kernel).
+
+The original Freescale M5208EVB development board comes with 32MB SDRAM,
+and has an internal FEC ethernet device. The default uClinux configuration
+includes an ethernet driver for this device.
+
+
+BOOTING
+-------
+
+QEMU boots an ELF object, normally we would just use the generated kernel
+image file, vmlinux. Problem is that this doesn't normally contain our
+root filesystem - and we won't have a fully booting and working system
+without that.
+
+The default uClinux-dist build process will generate an ELF file that
+contains both the kernel and the romfs filesystem. But unfortunately this
+is a rather special ELF file, and when supplied to QEMU it still won't load
+the romfs filesystem section (it is not in an ELF segment). You would run it
+like this:
+
+    qemu-system-m68k -nographic -machine mcf5208evb -kernel images/image.elf
+
+The console acts as the first serial port in this setup, and you should
+get all the usual boot messages coming out. At least up to trying to mount
+the root filesystem.
+
+
+BOOTING WITH GDB
+----------------
+
+One reasonably simple method to get past this is to get gdb to help us, by
+loading the root romfs filesystem. To do this firstly run:
+
+    qemu-system-m68k -s -S -nographic -machine mcf5208evb -kernel images/image.elf
+
+This starts up QEMU, but doesn't start executing the image yet. It waits for
+gdb to connect and give it commands.
+
+Then you can connect with m68k-linux-gdb using "target remote localhost:1234"
+command. Normal gdb debugging then works from here. So a sequence like this:
+
+    target remote localhost:1234
+    load images/image.elf
+    c
+
+Will get you a fully running system that boots up to a shell.
+
+Note that to break into the qemu command console you type CTRL-a followed
+by 'c'. It has lots of online help, just type 'help'.
+
+
+AN ALTERNATE METHOD OF BOOTING
+------------------------------
+
+We can actually do a single boot through QEMU without needing gdb if we
+modify our kernel and build it slightly differently. Firstly build the
+uClinux-dist with a M5208EVB target. Then reconfigure the kernel with the
+following:
+
+    CONFIG_BLK_DEV_INITRD=y
+    CONFIG_INITRAMFS_SOURCE="uClinux-dist/romfs"
+
+Note that you will probably need the full absolute path to the romfs
+directory.
+
+Now we need a couple of changes to the romfs as well before we rebuild the
+kernel with these. Follow these steps:
+
+1. cd uClinux-dist/romfs
+   ln -s bin/init init
+2. cd dev
+   for each device file, make the real corresponding device node (as root)
+
+Now you can rebuild the kernel. This will build the romfs file tree as the
+root filesystem into the kernel image itself. 
+
+To run it we now simply use:
+
+    qemu-system-m68k -nographic -machine mcf5208evb -kernel linux-3.x/vmlinux
+
+
+NETWORKING
+----------
+
+Qemu emulates the FEC ethernet hardware of the M5208EVB board. By default
+this will be probed and initialized on boot. The default slirp configuration
+of qemu will work, and if you run a dhcp client then you will get an address
+of 10.0.2.15. You can access host services through address 10.0.2.2.
+

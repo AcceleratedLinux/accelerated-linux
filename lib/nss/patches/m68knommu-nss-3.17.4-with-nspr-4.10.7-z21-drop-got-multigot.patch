@@ -1,0 +1,13 @@
+--- nss-3.17.4/nss/coreconf/uClinux-dist.mk.LSW	2015-09-04 17:05:19.761676628 -0400
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-09-04 17:05:48.029623328 -0400
+@@ -28,8 +28,8 @@
+ 
+ # Grab what ever is in the environment :-/
+ OS_CFLAGS += -DHAVE_STRERROR
+-# -Wl,--got=multigot needed?
+-OS_LIBS = $(OS_PTHREAD) -lc -Wl,--got=multigot
++# -Wl,--got=multigot causes uClinux to crash
++OS_LIBS = $(OS_PTHREAD) -lc
+ 
+ ARCH			= linux
+ 

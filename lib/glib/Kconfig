@@ -1,0 +1,20 @@
+
+config LIB_GLIB
+	bool 'glib'
+	select LIB_LIBFFI
+	select LIB_GETTEXT
+	help
+	  glib library
+
+config LIB_GLIB_STATIC
+	bool 'build static'
+	depends on LIB_GLIB
+	help
+	  Build static version of glib (and similar libs)
+
+config LIB_GLIB_TOOLS
+	bool 'tools'
+	depends on LIB_GLIB
+	help
+	  glib command line tools
+

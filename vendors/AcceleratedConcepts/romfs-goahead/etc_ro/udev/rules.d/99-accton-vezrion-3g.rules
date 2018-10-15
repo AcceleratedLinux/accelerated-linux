@@ -1,0 +1,15 @@
+#
+# udev rule for vezrion novatel u727 3G HSDPA Modem
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+##
+SUBSYSTEMS=="usb", NAME="%k", GROUP="uucp", OWNER="root", MODE="0665"
+SUBSYSTEMS=="usb", ATTRS{product}=="Novatel Wireless CDMA", RUN="/bin/mknod -m 665 /dev/ttyUSB0 c 188 0"
+SUBSYSTEMS=="usb", ATTRS{product}=="Novatel Wireless CDMA", RUN="/bin/mknod -m 665 /dev/ttyUSB1 c 188 1"
+SUBSYSTEMS=="usb", ATTRS{product}=="Novatel Wireless CDMA", RUN="/bin/mknod -m 665 /dev/ttyUSB2 c 188 2", OPTIONS="last_rule"
+ACTION=="add", ATTRS{product}=="Novatel Wireless CDMA", RUN="/bin/mknod -m 665 /dev/ttyUSB0 c 188 0"
+ACTION=="add", ATTRS{product}=="Novatel Wireless CDMA", RUN="/bin/mknod -m 665 /dev/ttyUSB1 c 188 1"
+ACTION=="add", ATTRS{product}=="Novatel Wireless CDMA", RUN="/bin/mknod -m 665 /dev/ttyUSB2 c 188 2"
+ACTION=="add", ATTRS{product}=="Novatel Wireless CDMA", RUN+="/bin/sh -c '/etc/init.d/3g.sh wakeup'"
+ACTION=="add", ATTRS{product}=="Novatel Wireless CDMA", RUN+="/bin/sh -c '/etc/init.d/3g.sh add_device'"
+ACTION=="remove", ATTRS{product}=="Novatel Wireless CDMA", RUN+="/bin/sh -c '/etc/init.d/3g.sh remove_device'"

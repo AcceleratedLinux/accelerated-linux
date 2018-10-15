@@ -1,0 +1,323 @@
+<po>
+  <message msgid="admin disable" msgstr="停用" />
+  <message msgid="admin enable" msgstr="啟用" />
+  <message msgid="admin apply" msgstr="確定" />
+  <message msgid="admin cancel" msgstr="取消" />
+  <message msgid="admin reset" msgstr="重置" />
+  <message msgid="admin scan" msgstr="搜尋" />
+  <message msgid="admin next" msgstr="下一步" />
+
+   <message msgid="wizardTime Title" msgstr="時間設定" />
+  <message msgid="wizardTime Introduction" msgstr="請選擇NTP伺服器或同步您的電腦時間" />
+  
+  <message msgid="wizardLang Title" msgstr="語系設定" />
+  <message msgid="wizardLang Introduction" msgstr="請選擇語系" />
+  
+  <message msgid="man title" msgstr="系統管理" />
+  <message msgid="man introduction" msgstr="您可以設定此系統的管理者跟密碼、網路時間、動態網域名稱服務。" />
+  <message msgid="man language setting" msgstr="語系設定" />
+  <message msgid="man select language" msgstr="選擇語系" />
+  <message msgid="man admin setting" msgstr="系統管理者設定" />
+  <message msgid="man admin account" msgstr="帳號" />
+  <message msgid="man admin passwd" msgstr="密碼" />
+  <message msgid="man ntp setting" msgstr="網路時間設定" />
+  <message msgid="man ntp timezone" msgstr="時區：" />
+  <message msgid="man ntp International Date Line" msgstr="(GMT-12:00) 國際換日線以西" />
+  <message msgid="man ntp mid island" msgstr="(GMT-11:00) 中途島, 薩摩亞群島" /> 
+  <message msgid="man ntp Adak" msgstr="(GMT-10:00) 艾德克島" />
+  <message msgid="man ntp hawaii" msgstr="(GMT-10:00) 夏威夷島" />
+  <message msgid="man ntp alaska" msgstr="(GMT-09:00) 阿拉斯加州" />
+  <message msgid="man ntp pacific" msgstr="(GMT-08:00) 美國西部標準時間(美國/加拿大), 提華納" />
+  <message msgid="man ntp arizona" msgstr="(GMT-07:00) 亞利桑那州" />
+  <message msgid="man ntp Chihuahua" msgstr="(GMT-07:00) 奇瓦瓦, 拉巴斯, 馬薩特蘭" />
+  <message msgid="man ntp mountain" msgstr="(GMT-07:00) (美國/加拿大)山地時間" />
+  <message msgid="man ntp mid us" msgstr="(GMT-06:00)中美洲" />
+  <message msgid="man ntp central" msgstr="(GMT-06:00) (美國/加拿大)中央時間" />
+  <message msgid="man ntp Guadalajara" msgstr="(GMT-06:00) 瓜達拉哈納, 墨西哥城, 蒙特裡" />
+  <message msgid="man ntp Guatemala" msgstr="(GMT-06:00) 瓜地馬拉" />
+  <message msgid="man ntp Saskatchewan" msgstr="(GMT-06:00) 薩斯克其萬省" />
+  <message msgid="man ntp Bogota" msgstr="(GMT-05:00) 波哥大, 利馬, 基多" />
+  <message msgid="man ntp Cuba Standard Time" msgstr="(GMT-05:00) 古巴標準時間" />
+  <message msgid="man ntp eastern" msgstr="(GMT-05:00) 東部時間(美國/加拿大)" />
+  <message msgid="man ntp Venezuela" msgstr="(GMT-04:30) 委內瑞拉" />
+  <message msgid="man ntp Atlantic Time" msgstr="(GMT-04:00) 大西洋時間 (加拿大)" />
+  <message msgid="man ntp Falkland Islands" msgstr="(GMT-04:00) 福克蘭群島" />
+  <message msgid="man ntp La Paz" msgstr="(GMT-04:00) 拉巴斯" />
+  <message msgid="man ntp Paraguay" msgstr="(GMT-04:00) 拉帕耳馬島" />
+  <message msgid="man ntp San Luis Argentina" msgstr="(GMT-04:00) 聖路易斯, 阿根廷" />
+  <message msgid="man ntp Santiago" msgstr="(GMT-04:00) 聖地牙哥" />
+  <message msgid="man ntp Newfoundland" msgstr="(GMT-03:30) 紐芬蘭" />
+  <message msgid="man ntp Argentina" msgstr="(GMT-03:00) 阿根廷" />
+  <message msgid="man ntp Brasilia" msgstr="(GMT-03:00) 巴西利亞" />
+  <message msgid="man ntp Georgetown" msgstr="(GMT-03:00) 喬治市, 南美洲東部時間" />
+  <message msgid="man ntp Greenland" msgstr="(GMT-03:00) 格陵蘭" />
+  <message msgid="man ntp St Pierre" msgstr="(GMT-03:00) 聖皮埃爾和密克隆" />
+  <message msgid="man ntp Uruguay" msgstr="(GMT-03:00) 烏拉圭" />
+  <message msgid="man ntp Mid Atlantic" msgstr="(GMT-02:00) 大西洋中部" />
+  <message msgid="man ntp azores" msgstr="(GMT-01:00) 亞速爾群島" />
+  <message msgid="man ntp Cape" msgstr="(GMT-01:00) 佛得角" />
+  <message msgid="man ntp Dublin" msgstr="(GMT) 都柏林, 愛丁堡, 里斯本, 倫敦" />
+  <message msgid="man ntp Greenwich" msgstr="(GMT) 格林尼治標準時間" />
+  <message msgid="man ntp Morocco" msgstr="(GMT) 摩洛哥" />
+  <message msgid="man ntp Amsterdam" msgstr="(GMT+01:00) 阿姆斯特丹, 柏林, 伯恩, 羅馬, 斯德哥爾摩, 維也納" />
+  <message msgid="man ntp Belgrade" msgstr="(GMT+01:00) 貝爾格勒, 布拉迪斯拉, 布達佩斯, 盧布爾雅那, 布拉格" />
+  <message msgid="man ntp Brussels" msgstr="(GMT+01:00) 布魯塞爾, 哥本哈根, 馬德裡, 巴黎" />
+  <message msgid="man ntp Namibia" msgstr="(GMT+01:00) 納米比亞" />
+  <message msgid="man ntp Sarajevo" msgstr="(GMT+01:00) 塞拉耶佛, 斯科普里, 華沙, 薩格勒布" />
+  <message msgid="man ntp West Central Africa" msgstr="(GMT+01:00) 中西非" />
+  <message msgid="man ntp Athens" msgstr="(GMT+02:00) 雅典, 貝魯特, 伊斯坦堡, 明斯克" />
+  <message msgid="man ntp BeirutAthens" msgstr="(GMT+02:00) 貝魯特雅典, 貝魯特, 伊斯坦堡, 明斯克" />
+  <message msgid="man ntp Bucharest" msgstr="(GMT+02:00) 布加勒斯特" />
+  <message msgid="man ntp Cairo" msgstr="(GMT+02:00) 開羅" />
+  <message msgid="man ntp Harare" msgstr="(GMT+02:00) 哈拉雷, 比勒陀利亞" />
+  <message msgid="man ntp Helsinki" msgstr="(GMT+02:00) 赫爾辛基, 基輔, 里加, 索非亞, 塔林, 維爾紐斯" />
+  <message msgid="man ntp Jordan" msgstr="(GMT+02:00) 約旦" />
+  <message msgid="man ntp Syria" msgstr="(GMT+02:00) 敘利亞" />
+  <message msgid="man ntp Tel Aviv" msgstr="(GMT+02:00) 特拉維夫, 耶路撒冷" />
+  <message msgid="man ntp Turkey" msgstr="(GMT+02:00) 土耳其" />
+  <message msgid="man ntp Baghdad" msgstr="(GMT+03:00) 巴格達" />
+  <message msgid="man ntp Kuwait" msgstr="(GMT+03:00) 科威特, 利雅德" />
+  <message msgid="man ntp Moscow" msgstr="(GMT+03:00) 莫斯科, 聖彼得堡, 伏爾加格勒" />
+  <message msgid="man ntp Nairobi" msgstr="(GMT+03:00) 奈洛比" />
+  <message msgid="man ntp Tehran" msgstr="(GMT+03:30) 德黑蘭" />
+  <message msgid="man ntp Abu Dhabi" msgstr="(GMT+04:00) 阿布達比, 馬斯喀特" />
+  <message msgid="man ntp Baku" msgstr="(GMT+04:00) 巴庫" />
+  <message msgid="man ntp Mauritius" msgstr="(GMT+04:00) 毛里西斯" />
+  <message msgid="man ntp Tbilisi" msgstr="(GMT+04:00) 第比利斯" />
+  <message msgid="man ntp Yerevan" msgstr="(GMT+04:00) 埃里溫" />
+  <message msgid="man ntp Kabul" msgstr="(GMT+04:30) 喀布爾" />
+  <message msgid="man ntp Ekaterinburg" msgstr="(GMT+05:00) 葉卡捷琳堡" />
+  <message msgid="man ntp Pakistan" msgstr="(GMT+05:00) 巴基斯坦" />
+  <message msgid="man ntp Tashkent" msgstr="(GMT+05:00) 塔什幹" />
+  <message msgid="man ntp Chennai" msgstr="(GMT+05:30) 欽奈, 加爾各答, 孟買, 新德里" />
+  <message msgid="man ntp Kathmandu" msgstr="(GMT+05:45) 加德滿都" />
+  <message msgid="man ntp Almaty" msgstr="(GMT+06:00) 阿拉木圖, 新西伯利亞" />
+  <message msgid="man ntp Bangladesh" msgstr="(GMT+06:00) 孟加拉共和國" />
+  <message msgid="man ntp Central Asia" msgstr="(GMT+06:00) 中亞細亞" />
+  <message msgid="man ntp Rangoon" msgstr="(GMT+06:30) 仰光" />
+  <message msgid="man ntp Bangkok" msgstr="(GMT+07:00) 曼谷, 河內, 雅加達" />
+  <message msgid="man ntp Krasnoyarsk" msgstr="(GMT+07:00) 克拉斯諾雅斯克" />
+  <message msgid="man ntp Beijing" msgstr="(GMT+08:00) 北京, 重慶, 香港, 烏魯木齊" />
+  <message msgid="man ntp Irkutsk" msgstr="(GMT+08:00) 伊爾庫次克" />
+  <message msgid="man ntp Kuala Lumpur" msgstr="(GMT+08:00) 吉隆坡, 新加坡" />
+  <message msgid="man ntp Perth" msgstr="(GMT+08:00) 伯斯" />
+  <message msgid="man ntp Taipei" msgstr="(GMT+08:00) 台北" />
+  <message msgid="man ntp Ulaanbaatar" msgstr="(GMT+08:00) 烏蘭巴托" />
+  <message msgid="man ntp Osaka" msgstr="(GMT+09:00) 大阪, 札幌, 東京" />
+  <message msgid="man ntp Seoul" msgstr="(GMT+09:00) 漢城" />
+  <message msgid="man ntp Yakutsk" msgstr="(GMT+09:00) 雅庫茨克" />
+  <message msgid="man ntp Adelaide" msgstr="(GMT+09:30) 阿得雷德" />
+  <message msgid="man ntp Darwin" msgstr="(GMT+09:30) 達爾文" />
+  <message msgid="man ntp Brisbane" msgstr="(GMT+10:00) 布里斯班" />
+  <message msgid="man ntp Canberra" msgstr="(GMT+10:00) 坎培拉, 墨爾本, 雪梨" />
+  <message msgid="man ntp Guam" msgstr="(GMT+10:00) 關島, 莫爾茲比港" />
+  <message msgid="man ntp Hobart" msgstr="(GMT+10:00) 荷伯特" />
+  <message msgid="man ntp Vladivostok" msgstr="(GMT+10:00) 海參崴" />
+  <message msgid="man ntp Magadan" msgstr="(GMT+11:00) 馬格達" />
+  <message msgid="man ntp solomon" msgstr="(GMT+11:00) 所羅門群島, 新喀裡多尼亞" />
+  <message msgid="man ntp Norfolk" msgstr="(GMT+11:30) 諾福克島" />
+  <message msgid="man ntp Auckland" msgstr="(GMT+12:00) 奧克蘭, 威靈頓" />
+  <message msgid="man ntp Fiji" msgstr="(GMT+12:00) 斐濟, 馬紹爾群島" />
+  <message msgid="man ntp Kamchatka" msgstr="(GMT+12:00) 堪察加半島" />
+  <message msgid="man ntp Nuku" msgstr="(GMT+13:00) 努庫阿洛" />
+  <message msgid="man ntp server" msgstr="網路時間伺服器" />
+  <message msgid="man ntp sync" msgstr="網路時間校準(小時)" />
+  <message msgid="man ntp current time" msgstr="目前時間" />
+  <message msgid="man ntp sync with host" msgstr="與主機同步" />  
+  <message msgid="man ntp previous" msgstr="上一步" />
+  <message msgid="man ntp daylight saving" msgstr="日光節約" />
+  <message msgid="man ntp daylight saving offset" msgstr="調整" />
+  <message msgid="man ntp daylight saving start" msgstr="開始" />
+  <message msgid="man ntp daylight saving end" msgstr="結束" />
+  <message msgid="man ntp auto detecte time zone" msgstr="自動偵測" />
+  <message msgid="man ntp daylight saving" msgstr="日光節約" />
+  <message msgid="man gap title" msgstr="Green AP" />
+  <message msgid="man gap time" msgstr="啟用期間" />
+  <message msgid="man gap action" msgstr="執行項目" />
+  <message msgid="man ddns setting" msgstr="動態網域名稱解析服務設定" />
+  <message msgid="man ddns provider" msgstr="動態網域名稱解析服務網站" />
+  <message msgid="man ddns none" msgstr="無" />
+  <message msgid="man ddns account" msgstr="帳號" />
+  <message msgid="man ddns passwd" msgstr="密碼" />
+  <message msgid="man ddns" msgstr="主機名稱" />
+
+  <message msgid="upload title" msgstr="韌體更新" />
+  <message msgid="upload introduction1" msgstr="注意！" />
+  <message msgid="upload introduction2" msgstr="大約需要1分鐘請耐心等候。" />
+  <message msgid="upload firmware" msgstr="韌體更新" />
+  <message msgid="upload firmware location" msgstr="位置：" />
+  <message msgid="uploadSucess1" msgstr="更新成功！" />
+  <message msgid="uploadSucess2" msgstr="請同意系統為您的設備重新開機及關閉您目前的瀏灠器並重新連線瀏灠" />
+  <message msgid="upload bootloader" msgstr="開機載入程式更新" />
+  <message msgid="upload bootloader location" msgstr="位置：" />
+  <message msgid="upload firmware from usb" msgstr="由USB Disk更新韌體" />
+  <message msgid="upload firmware force upgrade via mem" msgstr="強制使用記憶體更新韌體" />
+  <message msgid="upload firmware force" msgstr="強制是否:" />
+
+  <message msgid="setman title" msgstr="設定管理" />
+  <message msgid="setman introduction" msgstr="您可以藉由匯出設定檔來儲存系統的設定、或藉由匯入的設定檔來恢復系統設定、甚至可以重置回系統預設值。" />
+  <message msgid="setman export setting" msgstr="匯出設定" />
+  <message msgid="setman export setting button" msgstr="匯出按鈕" />
+  <message msgid="setman export setting export" msgstr="匯出" />
+  <message msgid="setman import setting" msgstr="匯入設定" />
+  <message msgid="setman import setting file location" msgstr="設定檔位置" />
+  <message msgid="setman import setting import" msgstr="匯入" />
+  <message msgid="setman load factory default" msgstr="載入原廠預設值" />
+  <message msgid="setman load factory default button" msgstr="載入預設按鈕" />
+  <message msgid="setman load default" msgstr="載入預設" />
+
+  <message msgid="status connected" msgstr="已連線" />
+  <message msgid="status disconnected" msgstr="尚未連線/連線中..." />
+  <message msgid="status title" msgstr="系統狀態" />
+  <message msgid="status introduction" msgstr="系統狀態。" />
+  <message msgid="status system information" msgstr="系統資訊" />
+  <message msgid="status sdk version" msgstr="軔體版本" />
+  <message msgid="status system up time" msgstr="系統時間" />
+  <message msgid="status system platform" msgstr="系統平台" />
+  <message msgid="status operate mode" msgstr="操作模式" />
+  <message msgid="status internet config" msgstr="網際網路" />
+  <message msgid="status connect type" msgstr="連接型態" />
+  <message msgid="status connect status" msgstr="連線狀態" />
+  <message msgid="status wan ipaddr" msgstr="廣域網路IP位址" />
+  <message msgid="status subnet mask" msgstr="子網域遮罩" />
+  <message msgid="status default gateway" msgstr="預設通訊閘" />
+  <message msgid="status primary dns" msgstr="主要網域名稱解析伺服器" />
+  <message msgid="status secondary dns" msgstr="次要網域名稱解析伺服器" />
+  <message msgid="status local network" msgstr="區域網路" />
+  <message msgid="status lan ipaddr" msgstr="本機IP位址" />
+  <message msgid="status local netmask" msgstr="區域網路遮罩" />
+  <message msgid="status mac" msgstr="MAC 位址" />
+  <message msgid="status ethernet port status" msgstr="乙太網路連接埠遮罩" />
+  
+  <message msgid="status bridge mode" msgstr="橋接模式" />
+  <message msgid="status router mode" msgstr="路由模式" />
+  <message msgid="status ethernet converter mode" msgstr="WISP" />
+  <message msgid="status ap client mode" msgstr="WISP" />
+  <message msgid="status unknown" msgstr="Unknown" />
+
+  <message msgid="status 3g title" msgstr="3G 預算" />
+  <message msgid="status 3g introduction" msgstr="在此頁顯示裝置的3G連線預算狀態與資訊。" />
+  <message msgid="status 3g internet config" msgstr="連線預算控制參數" />
+  <message msgid="status 3g BC Enable" msgstr="連線預算啟用" />
+  <message msgid="status 3g TBC" msgstr="時間預算控制" />
+  <message msgid="status 3g MaxTimeBudget" msgstr="最大時間預算/(預設時間限制-百分比)" />
+  <message msgid="status 3g DataBudgetControl" msgstr="時間預算控制" />
+  <message msgid="status 3g DataBudgetTrafficflow" msgstr="數據預算數據流量" />
+  <message msgid="status 3g MaxDataBudget" msgstr="最大數據預算/(預設數據限制-百分比)" />
+  <message msgid="status 3g DropConnectionOverBT" msgstr="預算超支，將降低連線數" />
+  <message msgid="status 3g DisallowOverBT" msgstr="預算超支，將不允許新增連線" />
+  <message msgid="status 3g BillingStartingDate" msgstr="計費開始日期" />
+  <message msgid="status 3g DataBudgetStatus" msgstr="數據預算狀態" />
+  <message msgid="status 3g TimeBudgetStatus" msgstr="時間預算狀態" />
+  <message msgid="status 3g EmailAlert" msgstr="電子郵件通知" />
+  <message msgid="status 3g Access3GStatistics" msgstr="3G 存取狀態" />
+  <message msgid="status 3g Login" msgstr="登入" />
+  <message msgid="status 3g Connection Time" msgstr="連線時間(分鐘)" />
+  <message msgid="status 3g Elapsed Time" msgstr="總共使用時間(分鐘)" />
+  <message msgid="status 3g Total Transfer" msgstr="總共傳輸量(MB)" />
+
+  <message msgid="status 3g hours" msgstr="小時" />
+  <message msgid="status 3g upload" msgstr="上傳" />
+  <message msgid="status 3g download" msgstr="下載" />
+  <message msgid="status 3g up_down" msgstr="上傳/下載" />
+  <message msgid="status 3g MB" msgstr="MB" />
+  <message msgid="status 3g modem identification" msgstr="3G modem identification" />
+  <message msgid="status 3g Signal Strength" msgstr="3G訊號強度" />
+  <message msgid="status 3g Remaining Budget Bytes" msgstr="剩餘數據預算" />
+  <message msgid="status 3g Remaining Budget Time" msgstr="剩餘預算時間" />
+  
+  <message msgid="3G Manually Start" msgstr="啟動" />
+  <message msgid="3G Manually Stop" msgstr="停止" />
+  <message msgid="3G Update" msgstr="更新" />
+  <message msgid="Forced Reset Budget" msgstr="強制重置連線預算" />
+  <message msgid="manual mode only" msgstr="手動模式" />
+  
+  <message msgid="dayid 1" msgstr="每月第  1 天" />
+  <message msgid="dayid 2" msgstr="每月第  2 天" />
+  <message msgid="dayid 3" msgstr="每月第  3 天" />
+  <message msgid="dayid 4" msgstr="每月第  4 天" />
+  <message msgid="dayid 5" msgstr="每月第  5 天" />
+  <message msgid="dayid 6" msgstr="每月第  6 天" />
+  <message msgid="dayid 7" msgstr="每月第  7 天" />
+  <message msgid="dayid 8" msgstr="每月第  8 天" />
+  <message msgid="dayid 9" msgstr="每月第  9 天" />
+  <message msgid="dayid 10" msgstr="每月第 10 天" />
+  <message msgid="dayid 11" msgstr="每月第 11 天" />
+  <message msgid="dayid 12" msgstr="每月第 12 天" />
+  <message msgid="dayid 13" msgstr="每月第 13 天" />
+  <message msgid="dayid 14" msgstr="每月第 14 天" />
+  <message msgid="dayid 15" msgstr="每月第 15 天" />
+  <message msgid="dayid 16" msgstr="每月第 16 天" />
+  <message msgid="dayid 17" msgstr="每月第 17 天" />
+  <message msgid="dayid 18" msgstr="每月第 18 天" />
+  <message msgid="dayid 19" msgstr="每月第 19 天" />
+  <message msgid="dayid 20" msgstr="每月第 20 天" />
+  <message msgid="dayid 21" msgstr="每月第 21 天" />
+  <message msgid="dayid 22" msgstr="每月第 22 天" />
+  <message msgid="dayid 23" msgstr="每月第 23 天" />
+  <message msgid="dayid 24" msgstr="每月第 24 天" />
+  <message msgid="dayid 25" msgstr="每月第 25 天" />
+  <message msgid="dayid 26" msgstr="每月第 26 天" />
+  <message msgid="dayid 27" msgstr="每月第 27 天" />
+  <message msgid="dayid 28" msgstr="每月第 28 天" />
+  <message msgid="dayid 29" msgstr="每月第 29 天" />
+  <message msgid="dayid 30" msgstr="每月第 30 天" />
+  <message msgid="dayid 31" msgstr="每月第 31 天" />
+
+  <message msgid="statistic title" msgstr="統計資料" />
+  <message msgid="statistic introduction" msgstr="統計資料。" />
+  <message msgid="statistic memory" msgstr="記憶體" />
+  <message msgid="statistic memory total" msgstr="記憶體總容量：" />
+  <message msgid="statistic memory left" msgstr="記憶體剩餘量：" />
+  <message msgid="statistic wanlan" msgstr="廣域網路/區域網路" />
+  <message msgid="statistic wan rx pkt" msgstr="廣域網路接收的封包數：" />
+  <message msgid="statistic wan rx bytes" msgstr="廣域網路接收的資料量：" />
+  <message msgid="statistic wan tx pkt" msgstr="廣域網路傳送的封包數：" />
+  <message msgid="statistic wan tx bytes" msgstr="廣域網路傳送的資料量：" />
+  <message msgid="statistic lan rx pkt" msgstr="區域網路接收的封包數：" />
+  <message msgid="statistic lan rx bytes" msgstr="區域網路接收的資料量：" />
+  <message msgid="statistic lan tx pkt" msgstr="區域網路傳送的封包數：" />
+  <message msgid="statistic lan tx bytes" msgstr="區域網路傳送的資料量：" />
+  <message msgid="statistic all interface" msgstr="所有的介面" />
+
+  <message msgid="statistic interface name" msgstr="介面名稱" />
+  <message msgid="statistic interface rx packet" msgstr="接收封包數" />
+  <message msgid="statistic interface rx byte" msgstr="接收位元數" />
+  <message msgid="statistic interface tx packet" msgstr="傳送封包數" />
+  <message msgid="statistic interface tx byte" msgstr="傳送位元數" />
+  
+  <message msgid="syscommand title" msgstr="系統指令" />
+  <message msgid="syscommand introduction" msgstr="以root的身分執行一個系統指令。" />
+  <message msgid="syscommand system command" msgstr="系統指令" />
+  <message msgid="syscommand command" msgstr="指令：" />
+
+  <message msgid="syslog title" msgstr="系統記錄" />
+  <message msgid="syslog introduction" msgstr=" 系統記錄:" />
+  <message msgid="syslog system log" msgstr="系統記錄" />
+  <message msgid="syslog clear" msgstr="清除" />
+  <message msgid="syslog refresh" msgstr="更新" />  
+  <message msgid="current Software Version" msgstr="韌體版本" />  
+  <message msgid="wizard Success Message" msgstr="安裝精靈 - 完成" />
+
+  <message msgid="config reboot wait" msgstr="請稍待片刻，系統正在重新啟動!" />
+  <message msgid="admin booting" msgstr="重新啟動中..." />  
+  
+  <message msgid="admin giving up cannot create an XMLHTTP instance" msgstr="Giving up :( Cannot create an XMLHTTP instance)" />
+  <message msgid="admin there was a problem with the request" msgstr="There was a problem with the request." />
+  <message msgid="admin invalid account format" msgstr="錯誤的帳號格式！" />
+  <message msgid="admin account is too long" msgstr="帳號名稱太長！" />
+  <message msgid="admin account contains illegal character" msgstr="帳號包含不合法字元！" />
+  <message msgid="admin please specify the administrator account" msgstr="請輸入您的管理者帳號！" />
+  <message msgid="admin please specify the administrator password" msgstr="請輸入您的管理者密碼！" />
+  <message msgid="admin password contains illegal character" msgstr="密碼包含不合法字元！" />
+  <message msgid="admin not a valid domain name" msgstr="無效的伺服器名稱！" />
+  <message msgid="admin not a valid ntpsync" msgstr="無效的校正時間值(小時)！" />
+  <message msgid="admin the synchronization value is not valid integer" msgstr="同步時間設定非有效的數值！(1~300)" />
+  <message msgid="admin account password and ddns name cannot be empty" msgstr="帳號、密碼或DDNS伺服器名稱不能為空值！" />
+  <message msgid="admin not a valid domain name is required" msgstr="錯誤的伺服器名稱！" />
+  
+  <message msgid="admin please select your time zone settings" msgstr="請選擇您的時區!" />
+  <message msgid="greenap duration" msgstr="啟用期間 " />
+  <message msgid="greenap incorrect" msgstr=" 不正確!" />
+  <message msgid="greenap conflict" msgstr=" 衝突!" />
+</po>

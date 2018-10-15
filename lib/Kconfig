@@ -1,0 +1,291 @@
+#############################################################################
+
+#
+#	Kconfig - library configuration
+#
+
+#############################################################################
+
+menu "Library Configuration"
+
+comment "Force build (normally built when required)"
+
+config LIB_LIBNVRAM
+	bool "Build libnvram"
+	default n
+	help
+	  nvram style settings.
+
+config LIB_BITVECTOR
+	bool "Build bit vector"
+	default n
+	help
+	  BitVector support.
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_FLEX
+	bool "Build flex"
+	default n
+
+config LIB_BFD
+	bool "Build libbfd"
+	default n
+
+config LIB_LIBIBERTY
+	bool "Build libiberty"
+	default n
+
+config LIB_POPT
+	bool "Build libpopt"
+	default n
+
+config LIB_LIBSSL
+	bool "Build libSSL"
+	default n
+	help
+	  SSL library.
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_LIBSSL_FIPS
+	bool "Build libSSL with FIPs"
+	default n
+	depends on LIB_LIBSSL
+	help
+	  Build OpenSSL for use with the openssl FIPs certification.
+
+config LIB_LIBG
+	bool "Build libG"
+	default n
+
+config LIB_LIBKRB5
+	bool "Build MIT Kerberos Library"
+	default n
+
+config LIB_MINI_LIBINTL
+	bool "Tiny gettext/libintl stub"
+	default n
+	help
+	  A very tiny libintl.h stub implementation.
+
+config LIB_IPTABLES
+	bool "Iptables libraries"
+	default n
+
+config LIB_LIBLZMA
+	bool "Build liblzma"
+	default n
+
+config LIB_LIBLZO
+	bool "Build liblzo"
+	default n
+
+config LIB_LIBNET
+	bool "Build libnet"
+	default n
+	help
+	  Archaic version of libnet required for snort inline operation.
+	  See: http://www.packetfactory.net/libnet/
+	  Only enable this if you want to force the library to be built.  The
+	  Config will make sure this library is built if it is needed.
+
+config LIB_LIBNETOLD
+	bool "Build really old libnet"
+	default n
+
+source ../lib/libpam/Kconfig
+
+config USER_PAM_RADIUS
+	bool "PAM RADIUS"
+	depends on LIB_LIBPAM
+	help
+	  PAM should support RADIUS authentication.
+
+config USER_PAM_SMB
+	bool "PAM SMB"
+	depends on LIB_LIBPAM
+	help
+	  PAM should support SMB authentication.
+
+config USER_PAM_KRB5
+	bool "PAM Kerberos 5"
+	depends on LIB_LIBPAM
+	select LIB_LIBKRB5
+	help
+	  PAM should support Kerberos 5 authentication.
+
+config LIB_LIBPCAP
+	bool "Build libPCAP"
+	default n
+
+config LIB_LIBPCAP_STATIC
+	bool "Static libpcap"
+	depends on LIB_LIBPCAP
+	default y
+	help
+	  If you only have 1 or 2 small users of libpcap, enabling
+	  the use of the static libpcap can save space.
+
+config LIB_LIBBZ2
+	bool "Build libBZIP2"
+	default n
+	help
+	  Data compression library.
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_LIBATM
+	bool "Build libATM"
+	default n
+	help
+	  ATM support library.
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_LIBPNG
+	bool "Build libpng"
+	select LIB_ZLIB
+	default n
+
+config LIB_LIBJPEG
+	bool "Build libjpeg"
+	default n
+
+config LIB_LIBUPNP
+	bool "Build libupnp"
+	default n
+	help
+	  UPnP support library.
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_TERMCAP
+	bool "Build termcap"
+	default n
+
+config LIB_TERMCAP_SHARED
+	bool "Build libtermcap.so"
+	depends on LIB_TERMCAP
+	default n
+
+config LIB_LIBEFENCE
+	bool "Build libefence"
+	default n
+
+config LIB_EXPAT
+	bool "Build expat"
+	default n
+	help
+	  Force libexpat to be built.
+
+config LIB_ADNS
+	bool "Build adns"
+	default n
+	help
+	  An asyncrhonous resolver with more features than the uClibc resolver.
+
+config LIB_ARES
+	bool "Build libares"
+	default n
+	help
+	  An asynchronous resolver with more features than the uClibc resolver.
+
+config LIB_LIBIDN
+	bool "Build libidn"
+	default n
+	help
+	  GNU libidn the internationalised domain name resolver.
+
+config LIB_OSIP2
+	bool "Build libosip2"
+	default n
+
+config LIB_LIBCURL
+	bool "Build curl"
+	select LIB_LIBIDN
+	select LIB_ZLIB
+	select LIB_LIBBZ2
+	select LIB_LIBSSL
+	default n
+	help
+	  The curl library for resolving URLs.
+	  This library requires (and enables) SSL, zlib and libidn.
+
+config LIB_PWLIB
+	bool 'Build pwlib'
+	select LIB_STLPORT
+	help
+	  Portable Windows libaray.
+	  Only enable this if you want to force the library to be built.  The
+	  Config will make sure this library is built if it is needed.
+
+config LIB_LIBOPENH323
+	bool 'Build libopenh323'
+	select LIB_PWLIB
+	select LIB_STLPORT
+	help
+	  Open H.323 (VoIP) library.
+	  Only enable this if you want to force the library to be built.  The
+	  Config will make sure this library is built if it is needed.
+
+config LIB_LIBJUDY
+	bool 'Build libjudy'
+	default n
+	help
+	  Judy array library.
+	  Only enable this if you want to force the library to be built.  The
+	  Config will make sure this library is built if it is needed.
+
+ config LIB_LIBJUDY_TESTS
+ 	bool 'Build libjudy tests'
+	depends on LIB_LIBJUDY
+	default n
+	help
+	  Builds the libjudy tests.  These are installed in /bin and
+	  the required file StringCompare.c in /etc.  To manually
+	  execute the tests look at the tests/Checkit script.
+
+config LIB_CLASSPATH
+	bool 'Build classpath'
+	default n
+	help
+	  Clean room standard Java libraries
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.
+
+config LIB_LIBXML2
+	bool 'Build libxml2'
+	default n
+	help
+	  Library to access XML files.
+	  See  http://xmlsoft.org/
+
+comment "Library Configuration"
+
+config LIB_INSTALL_LIBGCC_S
+	bool "Install libgcc_s if available"
+	help
+	  Some pthreads apps may need this if using pthread_cancel and NPTL,
+	  otherwise they abort.
+
+config LIB_INSTALL_LIBATOMIC
+	bool "Install libatomic if available"
+	help
+	  Some apps use the newer gcc libatomic support,  if so then we
+	  need to install the libs.
+
+config LIB_INSTALL_LIBSTDCPLUS
+	bool "Install libstdc++ if available"
+	select C_PLUS_PLUS
+	help
+	  Under some circumstances we can use the toolchains own libstdc++.
+	  (If it was uClibc based, and we are uClibc based for example).
+	  This is an alternative to compiling something like STLport.
+
+config C_PLUS_PLUS
+	bool "c++" if LIB_INSTALL_LIBSTDCPLUS || LIB_STLPORT
+
+endmenu
+
+#############################################################################

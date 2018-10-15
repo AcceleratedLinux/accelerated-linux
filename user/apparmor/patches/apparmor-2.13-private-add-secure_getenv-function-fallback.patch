@@ -1,0 +1,30 @@
+From: David Escalona <david.escalona@digi.com>
+Date: Fri, 4 May 2018 18:00:53 +0200
+Subject: [PATCH 2/9] private: add secure_getenv function fallback
+
+Signed-off-by: David Escalona <david.escalona@digi.com>
+---
+ libraries/libapparmor/src/private.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/libraries/libapparmor/src/private.c b/libraries/libapparmor/src/private.c
+index bece09d..bfafdb8 100644
+--- a/libraries/libapparmor/src/private.c
++++ b/libraries/libapparmor/src/private.c
+@@ -34,12 +34,15 @@
+  * Allow libapparmor to build on older systems where secure_getenv() is still
+  * named __secure_getenv(). This snippet was taken from the glibc wiki
+  * (https://sourceware.org/glibc/wiki/Tips_and_Tricks/secure_getenv).
++ *
++ * If none of them are defined, fallback to 'getenv'
+  */
+ #ifndef HAVE_SECURE_GETENV
+  #ifdef HAVE___SECURE_GETENV
+   #define secure_getenv __secure_getenv
+  #else
+-  #error neither secure_getenv nor __secure_getenv is available
++  #warning neither secure_getenv nor __secure_getenv is available
++  #define secure_getenv getenv
+  #endif
+ #endif
+ 

@@ -1,0 +1,63 @@
+config USER_MOBILE_BROADBAND_PROVIDER_INFO
+	bool 'mobile-broadband-provider-info'
+	help
+	  Database of mobile broadband provides and their setups.
+
+choice
+	prompt 'mobile-broadband-provider-info install type'
+	depends on USER_MOBILE_BROADBAND_PROVIDER_INFO
+	default USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_NONE
+	help
+	  Select installation mode of mobile-broadband-provider-info
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_NONE
+	bool 'none'
+	help
+	  Do not install any files
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_COMPLETE
+	bool 'complete'
+	help
+	  Install mobile-broadband-provider-info as the creators intended.
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_FULL
+	bool 'full'
+	help
+	  Install mobile-broadband-provider-info as a text CSV file,
+	  /etc/serviceproviders.txt, containing just the interesting bits.
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_PARTIAL
+	bool 'partial'
+	help
+	  Install mobile-broadband-provider-info as a text CSV file,
+	  /etc/serviceproviders.txt, containg just the selected countries
+	  interesting bits.
+
+endchoice
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_AU
+	bool 'Australia (au)'
+	depends on USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_PARTIAL
+	help
+      Install "au" entries.
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_US
+	bool 'USA (us)'
+	depends on USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_PARTIAL
+	help
+      Install "us" entries.
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_CA
+	bool 'Canada (ca)'
+	depends on USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_PARTIAL
+	help
+      Install "ca" entries.
+
+config USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_UNKNOWN
+	bool 'install unknown entries'
+	depends on USER_MOBILE_BROADBAND_PROVIDER_INFO && !USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_NONE
+	help
+	  Sometimes the modem/modem manager fails to determine the providers
+	  name and it is set to unknown.  Create unknown entries for all
+	  possible APN's as a fallback measure.
+

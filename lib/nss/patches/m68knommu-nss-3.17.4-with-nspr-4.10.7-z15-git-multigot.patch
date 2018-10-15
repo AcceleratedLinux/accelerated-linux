@@ -1,0 +1,11 @@
+--- nss-3.17.4/nss/coreconf/uClinux-dist.mk.LSW	2015-09-03 17:56:22.120387624 -0400
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-09-03 17:57:19.296430223 -0400
+@@ -28,7 +28,7 @@
+ CROSS_COMPILE = 1
+ 
+ OS_CFLAGS		+= $(DSO_CFLAGS) $(OS_REL_CFLAGS) $(ARCHFLAG) -Wall -Werror-implicit-function-declaration -Wno-switch -pipe -ffunction-sections -fdata-sections -DLINUX -Dlinux -DHAVE_STRERROR
+-//OS_CFLAGS += -mxgot
++OS_CFLAGS += -Wl,--got=multigot
+ OS_LIBS		= $(OS_PTHREAD) -lc
+ 
+ ARCH			= linux

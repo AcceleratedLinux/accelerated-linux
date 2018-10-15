@@ -1,0 +1,71 @@
+Index: odhcp6c/src/odhcp6c.h
+===================================================================
+--- odhcp6c.orig/src/odhcp6c.h
++++ odhcp6c/src/odhcp6c.h
+@@ -254,6 +254,7 @@
+ 	STATE_SIP_FQDN,
+ 	STATE_RA_ROUTE,
+ 	STATE_RA_PREFIX,
++	STATE_RA_PREFIX_ROUTE,
+ 	STATE_RA_DNS,
+ 	STATE_RA_SEARCH,
+ 	STATE_AFTR_NAME,
+Index: odhcp6c/src/ra.c
+===================================================================
+--- odhcp6c.orig/src/ra.c
++++ odhcp6c/src/ra.c
+@@ -390,17 +390,18 @@
+ 						|| entry->valid < entry->preferred)
+ 					continue;
+ 
+-				if (pinfo->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_ONLINK)
+-					changed |= odhcp6c_update_entry(STATE_RA_ROUTE, entry, 7200, true);
++				if ((pinfo->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) &&
++						pinfo->nd_opt_pi_prefix_len == 64) {
++					entry->target.s6_addr32[2] = lladdr.s6_addr32[2];
++					entry->target.s6_addr32[3] = lladdr.s6_addr32[3];
+ 
+-				if (!(pinfo->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_AUTO) ||
+-						pinfo->nd_opt_pi_prefix_len != 64)
+-					continue;
+-
+-				entry->target.s6_addr32[2] = lladdr.s6_addr32[2];
+-				entry->target.s6_addr32[3] = lladdr.s6_addr32[3];
+-
+-				changed |= odhcp6c_update_entry(STATE_RA_PREFIX, entry, 7200, true);
++					changed |= odhcp6c_update_entry(STATE_RA_PREFIX, entry, 7200, true);
++					if (pinfo->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_ONLINK)
++						changed |= odhcp6c_update_entry(STATE_RA_PREFIX_ROUTE, entry, 7200, true);
++				} else {
++					if (pinfo->nd_opt_pi_flags_reserved & ND_OPT_PI_FLAG_ONLINK)
++						changed |= odhcp6c_update_entry(STATE_RA_ROUTE, entry, 7200, true);
++				}
+ 			} else if (opt->type == ND_OPT_RECURSIVE_DNS && opt->len > 2) {
+ 				entry->router = from.sin6_addr;
+ 				entry->priority = 0;
+Index: odhcp6c/src/script.c
+===================================================================
+--- odhcp6c.orig/src/script.c
++++ odhcp6c/src/script.c
+@@ -367,11 +367,12 @@
+ #endif
+ 	uint8_t *passthru = odhcp6c_get_state(STATE_PASSTHRU, &passthru_len);
+ 
+-	size_t prefix_len, address_len, ra_pref_len,
++	size_t prefix_len, address_len, ra_pref_len, ra_pref_route_len,
+ 		ra_route_len, ra_dns_len, ra_search_len;
+ 	uint8_t *prefix = odhcp6c_get_state(STATE_IA_PD, &prefix_len);
+ 	uint8_t *address = odhcp6c_get_state(STATE_IA_NA, &address_len);
+ 	uint8_t *ra_pref = odhcp6c_get_state(STATE_RA_PREFIX, &ra_pref_len);
++	uint8_t *ra_pref_route = odhcp6c_get_state(STATE_RA_PREFIX_ROUTE, &ra_pref_route_len);
+ 	uint8_t *ra_route = odhcp6c_get_state(STATE_RA_ROUTE, &ra_route_len);
+ 	uint8_t *ra_dns = odhcp6c_get_state(STATE_RA_DNS, &ra_dns_len);
+ 	uint8_t *ra_search = odhcp6c_get_state(STATE_RA_SEARCH, &ra_search_len);
+@@ -401,6 +402,7 @@
+ 		}
+ 
+ 		entry_to_env("RA_ADDRESSES", ra_pref, ra_pref_len, ENTRY_ADDRESS);
++		entry_to_env("RA_ADDRESS_ROUTES", ra_pref_route, ra_pref_route_len, ENTRY_ROUTE);
+ 		entry_to_env("RA_ROUTES", ra_route, ra_route_len, ENTRY_ROUTE);
+ 		entry_to_env("RA_DNS", ra_dns, ra_dns_len, ENTRY_HOST);
+ 		search_to_env("RA_DOMAINS", ra_search, ra_search_len);

@@ -1,0 +1,30 @@
+--- libreswan-3.12/programs/Makefile.orig	2015-09-16 16:06:47.256661563 -0400
++++ libreswan-3.12/programs/Makefile	2015-09-16 16:09:20.032777189 -0400
+@@ -20,12 +20,24 @@
+ 
+ SUBDIRS=
+ 
+-SUBDIRS+=proc pluto addconn 
++SUBDIRS+=proc pluto
++ifeq ($(WITH_ADDCONN),true)
++SUBDIRS+=addconn 
++endif
+ SUBDIRS+=configs _keycensor _plutorun _stackmanager
+ SUBDIRS+=_secretcensor _updown 
+ SUBDIRS+=auto barf verify ipsec look newhostkey secrets 
+-SUBDIRS+=rsasigkey setup showhostkey
+-SUBDIRS+=ikeping readwriteconf
++ifeq ($(WITH_RSASIGKEY),true)
++SUBDIRS+=rsasigkey
++endif
++SUBDIRS+=setup
++ifeq ($(WITH_SHOWHOSTKEY),true)
++SUBDIRS+=showhostkey
++endif
++SUBDIRS+=ikeping
++ifeq ($(WITH_READWRITECONF),true)
++SUBDIRS+=readwriteconf
++endif
+ 
+ ifeq ($(USE_KLIPS),true)
+ SUBDIRS+= _updown.klips 

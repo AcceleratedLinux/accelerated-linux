@@ -1,0 +1,18 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+LINUXTARGET = zImage dtbs
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES   = $(IMAGEDIR)/* prop/config/schema/accns.schema
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/arm/config.arch
+
+############################################################################

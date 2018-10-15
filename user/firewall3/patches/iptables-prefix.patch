@@ -1,0 +1,17 @@
+Index: firewall3/iptables.c
+===================================================================
+--- firewall3.orig/iptables.c
++++ firewall3/iptables.c
+@@ -382,10 +382,10 @@
+ 	void *lib, **tmp;
+ 	const char *pfx = (h->family == FW3_FAMILY_V6) ? "libip6t" : "libipt";
+ 
+-	snprintf(path, sizeof(path), "/usr/lib/iptables/libxt_%s.so", name);
++	snprintf(path, sizeof(path), "/lib/xtables/libxt_%s.so", name);
+ 	if (!(lib = dlopen(path, RTLD_NOW)))
+ 	{
+-		snprintf(path, sizeof(path), "/usr/lib/iptables/%s_%s.so", pfx, name);
++		snprintf(path, sizeof(path), "/lib/xtables/%s_%s.so", pfx, name);
+ 		lib = dlopen(path, RTLD_NOW);
+ 	}
+ 

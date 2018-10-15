@@ -1,0 +1,10 @@
+/lsof/dstore.c
+/lsof/dfile.c
+/lsof/dlsof.h
+/lsof/dnode.c
+/lsof/dproc.c
+/lsof/dproto.h
+/lsof/dsock.c
+/lsof/dmnt.c
+/lsof/version.h
+/lsof/lsof

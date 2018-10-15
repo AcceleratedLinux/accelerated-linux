@@ -1,0 +1,69 @@
+.\" $Id: faxq-helper.8in,v 4.1 2006/02/17 14:38:25 gert Exp $
+.TH faxq-helper 1 "18 Feb 06" "greenie" "mgetty+sendfax manual"
+.IX faxq-helper
+.SH NAME
+faxq-helper \- privileged helper process to access the fax queue 
+.SH SYNOPSIS
+.B faxq-helper <command> [<options>]
+.SH DESCRIPTION
+.I faxq-helper
+is part of the internal workings of faxspool(1).
+
+Formerly, the @FAX_SPOOL_OUT@ directory was world-writeable,
+leading to all sort of funny symlink attacks against faxspool(1) and
+faxrunq(8).
+
+These days, it's owned by the user ``@FAX_OUT_USER@'', and only this user
+can write to it.  To be able to put jobs there, faxspool(1) calls 
+.I faxq-helper
+for very clearly defined purposes:
+
+ - make a new queue directory
+
+ - put a new fax G3 file into this queue directory
+
+ - put a JOB file into this queue directory, and activate the fax job
+
+and possibly:
+
+ - remove a fax job from the queue (to be used by faxrm and in case of errors)
+
+ - re-queue a job that has been suspended due to repeated failures (faxq -r)
+
+To achieve this,
+.I faxq-helper
+is installed set-user-id @FAX_OUT_USER@.  If you remove the suid bit, or
+chown the fax queue directory to a different user, it will stop working.
+
+.SH RETURN VALUES
+.I faxq-helper
+has the following exit() values:
+
+.TP
+.B 0
+everything went fine
+
+.TP
+.B 1
+invalid JOB ID specified on the command line
+
+.TP
+.B 2
+some problem with the directory setup of the outgoing queue dir, 
+@FAX_SPOOL_OUT@ (it will print a detailed error message)
+
+.TP
+.B 3
+some problems with the user ID setup of the ``@FAX_OUT_USER@'' user (it will 
+print a detailed error message)
+
+.TP
+.B 10
+failure to process the specified command (it will print a detailed 
+error message)
+
+.SH "SEE ALSO"
+faxspool(1), faxq(1), faxrm(1), faxqueue(5)
+.SH AUTHOR
+.I faxq-helper
+is Copyright (C) 2004-2006 by Gert Doering, <gert@greenie.muc.de>. 

@@ -1,0 +1,20 @@
+#
+# Cavium Octeon
+#
+platform-$(CONFIG_CAVIUM_OCTEON_SOC)	+= cavium-octeon/
+cflags-$(CONFIG_CAVIUM_OCTEON_SOC)	+=				\
+		-I$(srctree)/arch/mips/include/asm/mach-cavium-octeon
+
+ifdef CONFIG_SG590
+load-$(CONFIG_SG590)			+= 0xffffffff80100000
+else
+ifdef CONFIG_SG8200
+load-$(CONFIG_SG8200)			+= 0xffffffff80100000
+else
+ifdef CONFIG_SG770
+load-$(CONFIG_SG770)			+= 0xffffffff80100000
+else
+load-$(CONFIG_CAVIUM_OCTEON_SOC)	+= 0xffffffff81100000
+endif
+endif
+endif

@@ -1,0 +1,40 @@
+Freescale M5475EVB Evaluation Board
+-----------------------------------
+
+The Freescale M5475EVB development board comes with 64MB of RAM, and has
+2 internal ethernet devices. The M5475 CPU also has an MMU (Memory Management
+Unit) built in - unlike most other ColdFire family members.
+
+There are 2 targets for this board in the uClinux-dist. One generates a
+system that runs without the MMU enabled (Freescale/M5475EVB), and the other
+generates a system with the MMU enabled (Freescale/M5475EVB-MMU).
+
+You can run the 2.4.x or 3.x kernel with MMU disabled, but you must use the
+3.x kernel if you want a system with the MMU enabled. There is no 2.0.x
+kernel support for this board. You must use the uClibc library with these
+targets too.
+
+No matter what type of system you build for the M5475EVB the build process
+results in a file, images/image.bin, that can be loaded into the M5475EVB
+board using the builtin dBUG firmware.
+
+To load using the ethernet network download: 
+
+    dn -i image.bin
+
+To start up the image use: 
+
+    go 0x20000
+
+The serial port console is configured to be the first ColdFire UART. On the
+M5475EVB board this is the same serial port that dBUG runs on. Its is the
+port labeled "PSC0" on the board. uClinux/Coldfire configures this port for
+19200 baud, 8 data bits, no parity, 1 stop bit. You should see the kernel boot
+messages come out on this port, and uClinux/Coldfire will boot to an
+interactive Linux shell. 
+
+You could also use the serial port download. The serial download is slow,
+it will take several minutes to load the image. You must use an S-record
+format binary when loading over the serial line. (You can use
+m68k-elf-objcopy to convert the binary file to S-Record format.) 
+

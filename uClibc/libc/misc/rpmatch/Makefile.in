@@ -1,0 +1,23 @@
+# Makefile for uClibc
+#
+# Copyright (C) 2000-2008 Erik Andersen <andersen@uclibc.org>
+#
+# Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+#
+
+subdirs += libc/misc/rpmatch
+
+CSRC := rpmatch.c
+
+MISC_RPMATCH_DIR := $(top_srcdir)libc/misc/rpmatch
+MISC_RPMATCH_OUT := $(top_builddir)libc/misc/rpmatch
+
+MISC_RPMATCH_SRC := $(patsubst %.c,$(MISC_RPMATCH_DIR)/%.c,$(CSRC))
+MISC_RPMATCH_OBJ := $(patsubst %.c,$(MISC_RPMATCH_OUT)/%.o,$(CSRC))
+
+libc-$(UCLIBC_HAS_RPMATCH) += $(MISC_RPMATCH_OBJ)
+
+objclean-y += misc_rpmatch_clean
+
+misc_rpmatch_clean:
+	$(do_rm) $(addprefix $(MISC_RPMATCH_OUT)/*., o os)

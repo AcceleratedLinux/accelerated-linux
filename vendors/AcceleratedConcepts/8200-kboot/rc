@@ -1,0 +1,47 @@
+echo "/etc/rc processing ..."
+mount -t proc proc /proc
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+hostname 8200
+echo "Mounting Filesystems ..."
+mount -t sysfs none /sys
+mount -t tmpfs -o size=33792k tmpfs /var
+mount -t tmpfs -o size=2048k tmpfs /etc/config
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/dev
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+mkdir -m 755 /var/run/xl2tpd
+echo "" > /proc/sys/kernel/hotplug
+mount -t devpts devpts /dev/pts
+echo "waiting for USB to come alive..."
+sleep 10
+/etc/mountflash
+if grep bootload /proc/cmdline ; then /etc/bootload; fi
+mount -o remount,rw /sda1
+echo "Loading network drivers."
+modprobe octeon-ethernet
+setmac -p
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+echo "Loading USB drivers."
+#modprobe ehci-hcd
+#modprobe ohci-hcd
+#modprobe usbserial
+#modprobe option
+#modprobe cdc-acm
+#modprobe ark3116
+#modprobe ipw
+#modprobe sierra
+echo "Loading crypto drivers."
+#modprobe ocf
+#modprobe cryptocteon
+#modprobe cryptodev
+echo "Updating devices"
+echo "Using factory default config ..."
+find /etc/config -name '*' | grep -v '/etc/config$' | xargs rm -rf
+cp -ra /etc/default/. /etc/config/.
+ifconfig lo 127.0.0.1
+echo "/etc/rc complete."

@@ -1,0 +1,11 @@
+--- nss-3.17.4/nss/manifest.mn.LSW	2015-08-24 13:23:09.823761711 -0400
++++ nss-3.17.4/nss/manifest.mn	2015-08-24 13:23:27.979828873 -0400
+@@ -10,7 +10,7 @@
+ 
+ RELEASE = nss
+ 
+-DIRS = coreconf lib cmd
++DIRS = coreconf lib $(cmd)
+ 
+ ifdef NSS_BUILD_GTESTS
+ DIRS += external_tests

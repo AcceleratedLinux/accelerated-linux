@@ -1,0 +1,14 @@
+
+config USER_SYSKLOGD
+	bool "sysklogd"
+	default n
+	help
+	  Standard linux syslog daemon.
+
+config USER_SYSKLOGD_LOG_PRIORITY
+	bool "sysklogd log priority"
+	depends on USER_SYSKLOGD
+	default n
+	help
+	  Log the priority of each syslog line.
+

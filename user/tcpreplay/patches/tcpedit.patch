@@ -1,0 +1,11 @@
+--- tcpreplay-4.2.5/src/tcpedit/tcpedit.c	2017-05-09 00:26:51.000000000 +1000
++++ tcpreplay-4.2.5/src/tcpedit/tcpedit.c2	2018-05-16 14:26:48.659315748 +1000
+@@ -42,7 +42,7 @@
+ #include "lib/sll.h"
+ #include "dlt.h"
+ 
+-tOptDesc *const tcpedit_tcpedit_optDesc_p;
++//tOptDesc *const tcpedit_tcpedit_optDesc_p;
+ 
+ /**
+  * \brief Checks to see if you should make an edit

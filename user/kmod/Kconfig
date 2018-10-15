@@ -1,0 +1,22 @@
+
+config USER_KMOD
+	bool "Build kmod tools (libkmod)"
+	default n
+	help
+	  Module loading tools and libraries
+
+config USER_KMOD_LIBKMOD
+	bool "libkmod"
+	depends on USER_KMOD
+	default n
+	help
+	  libkmod
+
+config USER_KMOD_TOOLS
+	bool "tools (rmmod modprobe ...)"
+	depends on USER_KMOD
+	default n
+	help
+	  All kmod tools (in for a penny)
+
+

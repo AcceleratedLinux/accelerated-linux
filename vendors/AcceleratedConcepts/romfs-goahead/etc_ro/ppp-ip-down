@@ -1,0 +1,23 @@
+#!/bin/sh
+IF=$1
+DEV=$2
+SP=$3
+IP=$4
+RP=$5
+PA=$6
+
+# EXITID: FATAL_ERROR=1, OPTION_ERROR=2, NOT_ROOT=3, NO_KERNEL_SUPPORT=4, USER_REQUEST=5
+#LOCK_FAILED=6, OPEN_FAILED=7, CONNECT_FAILED=8,PTYCMD_FAILED=9,NEGOTIATION_FAILED=10
+#PEER_AUTH_FAILED=11, IDLE_TIMEOUT=12, CONNECT_TIME=13, CALLBACK=14, PEER_DEAD=15
+#HANGUP=16, LOOPBACK=17, INIT_FAILED=18, AUTH_TOPEER_FAILED=19, TRAFFIC_LIMIT=20, CNID_AUTH_FAILED=21
+EXITID=$PA
+echo "[G3GPPPD]PPP Disonnected by $EXITID" > /dev/console
+if [ "$EXITID" = "12" ];then
+    /etc_ro/init.d/3g.sh  update_3g_info
+fi
+# hot plug
+if [ "$EXITID" = "16" ];then
+    /etc_ro/init.d/3g.sh  stop   
+    rm -f /var/3gs/*
+fi
+

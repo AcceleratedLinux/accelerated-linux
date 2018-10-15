@@ -1,0 +1,366 @@
+--- nss-3.17.4/nspr/configure.in.LSW	2015-08-19 16:05:12.559770174 -0400
++++ nss-3.17.4/nspr/configure.in	2015-08-20 11:52:03.871751105 -0400
+@@ -11,6 +11,8 @@
+ AC_CONFIG_AUX_DIR(${srcdir}/build/autoconf)
+ AC_CANONICAL_TARGET
+ 
++echo AR=$AR
++
+ dnl ========================================================
+ dnl = Defaults
+ dnl ========================================================
+@@ -580,8 +582,8 @@
+ dnl ========================================================
+ dnl Checks for compilers.
+ dnl ========================================================
+-if test "$target" != "$host"; then
+-    echo "cross compiling from $host to $target"
++if test "$target" != "$build"; then
++    echo "cross compiling from $build to $target"
+     cross_compiling=yes
+ 
+     case "$build:$target" in
+@@ -619,7 +621,7 @@
+ AC_PROG_CC
+ 
+ dnl Reenter the conditional blocks after invoking AC_PROG_CC.
+-if test "$target" != "$host"; then
++if test "$target" != "$build"; then
+     if test -n "$USE_CPLUS"; then
+         AC_CHECK_PROGS(CXX, $CXX "${target_alias}-g++" "${target}-g++", echo)
+         unset ac_cv_prog_CXX
+@@ -637,7 +639,13 @@
+     esac
+ 
+     AC_CHECK_PROGS(RANLIB, $RANLIB "${target_alias}-ranlib" "${target}-ranlib", echo)
++echo AR=$AR
++echo target-alias-AR=${target_alias}-ar
++echo target-AR=${target}-ar
+     AC_CHECK_PROGS(AR, $AR "${target_alias}-ar" "${target}-ar", echo)
++echo AS=$AS
++echo target-alias-AS=${target_alias}-as
++echo target-AS=${target}-as
+     AC_CHECK_PROGS(AS, $AS "${target_alias}-as" "${target}-as", echo)
+     AC_CHECK_PROGS(LD, $LD "${target_alias}-ld" "${target}-ld", echo)
+     AC_CHECK_PROGS(STRIP, $STRIP "${target_alias}-strip" "${target}-strip", echo)
+@@ -647,27 +655,27 @@
+     _SAVE_CFLAGS="$CFLAGS"
+     _SAVE_LDFLAGS="$LDFLAGS"
+ 
+-    AC_MSG_CHECKING([for $host compiler])
++    AC_MSG_CHECKING([for $build compiler])
+     AC_CHECK_PROGS(HOST_CC, $HOST_CC gcc cc /usr/ucb/cc, "")
+     if test -z "$HOST_CC"; then
+         AC_MSG_ERROR([no acceptable cc found in \$PATH])
+     fi
+     AC_MSG_RESULT([$HOST_CC])
+     if test -z "$HOST_CFLAGS"; then
+-        HOST_CFLAGS="$CFLAGS"
++        echo HOST_CFLAGS="$CFLAGS"
+     fi
+     if test -z "$HOST_LDFLAGS"; then
+-        HOST_LDFLAGS="$LDFLAGS"
++        echo HOST_LDFLAGS="$LDFLAGS"
+     fi
+ 
+     CC="$HOST_CC"
+     CFLAGS="$HOST_CFLAGS"
+     LDFLAGS="$HOST_LDFLAGS"
+ 
+-    AC_MSG_CHECKING([whether the $host compiler ($HOST_CC $HOST_CFLAGS $HOST_LDFLAGS) works])
++    AC_MSG_CHECKING([whether the $build build compiler ($HOST_CC $HOST_CFLAGS $HOST_LDFLAGS) works])
+     AC_TRY_COMPILE([], [return 0;],
+         [AC_MSG_RESULT([yes])],
+-        [AC_MSG_ERROR([installation or configuration problem: $host compiler $HOST_CC cannot create executables.])] )
++        [AC_MSG_ERROR([installation or configuration problem: $build compiler $HOST_CC cannot create executables.])] )
+ 
+     CC=$_SAVE_CC
+     CFLAGS=$_SAVE_CFLAGS
+@@ -1208,7 +1216,7 @@
+ dnl ========================================================
+ dnl Override of system specific host options
+ dnl ========================================================
+-case "$host" in
++case "$build" in
+ *-mingw*|*-msys*)
+     NSINSTALL=nsinstall
+     ;;
+@@ -1900,8 +1908,8 @@
+         fi
+         ;;
+     m68k)
+-        CFLAGS="$CFLAGS -m68020-60"
+-        CXXFLAGS="$CXXFLAGS -m68020-60"
++        echo CFLAGS="$CFLAGS -m68020-60"
++        echo CXXFLAGS="$CXXFLAGS -m68020-60"
+         ;;
+     esac    
+     ;;
+@@ -3088,6 +3096,8 @@
+ AC_SUBST(DLL_SUFFIX)
+ AC_SUBST(ASM_SUFFIX)
+ AC_SUBST(WRAP_LDFLAGS)
++echo clobbering MKSHLIB
++MKSHLIB=
+ AC_SUBST(MKSHLIB)
+ AC_SUBST(DSO_CFLAGS)
+ AC_SUBST(DSO_LDOPTS)
+--- nss-3.17.4/nspr/config/Makefile.in.LSW	2015-08-19 15:56:43.039765054 -0400
++++ nss-3.17.4/nspr/config/Makefile.in	2015-08-19 16:02:46.031770750 -0400
+@@ -8,6 +8,9 @@
+ topsrcdir	= @top_srcdir@
+ srcdir		= @srcdir@
+ VPATH		= @srcdir@
++$(warning DIRS=$(DIRS))
++DIRS=
++$(warning DIRS=$(DIRS))
+ 
+ include $(MOD_DEPTH)/config/autoconf.mk
+ 
+--- nss-3.17.4/nspr/Makefile.in.LSW	2015-08-19 16:31:51.263837717 -0400
++++ nss-3.17.4/nspr/Makefile.in	2015-08-19 16:34:06.059875551 -0400
+@@ -14,6 +14,8 @@
+ include $(MOD_DEPTH)/config/autoconf.mk
+ 
+ DIRS = config pr lib
++unexport DIRS
++unexport
+ 
+ ifdef MOZILLA_CLIENT
+ # Make nsinstall use absolute symlinks by default for Mozilla OSX builds
+--- nss-3.17.4/nspr/pr/src/md/unix/uxproces.c.LSW	2015-08-19 19:36:55.843752053 -0400
++++ nss-3.17.4/nspr/pr/src/md/unix/uxproces.c	2015-08-19 19:37:06.275817457 -0400
+@@ -238,7 +238,7 @@
+             close(fd_map[2]);
+     }
+ #else
+-    process->md.pid = fork();
++    process->md.pid = vfork();
+ #endif
+     if ((pid_t) -1 == process->md.pid) {
+         PR_SetError(PR_INSUFFICIENT_RESOURCES_ERROR, errno);
+--- nss-3.17.4/nss/Makefile.LSW	2015-08-20 11:13:20.951752909 -0400
++++ nss-3.17.4/nss/Makefile	2015-08-20 13:47:13.571872589 -0400
+@@ -1,4 +1,6 @@
+ #! gmake
++unexport
++$(warning at start AR=$(value AR))
+ #
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+@@ -10,12 +12,16 @@
+ 
+ include manifest.mn
+ 
++$(warning after manifest AR=$(value AR))
++
+ #######################################################################
+ # (2) Include "global" configuration information. (OPTIONAL)          #
+ #######################################################################
+ 
+ include $(CORE_DEPTH)/coreconf/config.mk
+ 
++$(warning after config.mk AR=$(value AR))
++
+ #######################################################################
+ # (3) Include "component" configuration information. (OPTIONAL)       #
+ #######################################################################
+@@ -34,6 +40,8 @@
+ 
+ include $(CORE_DEPTH)/coreconf/rules.mk
+ 
++$(warning after rules.mk AR=$(value AR))
++
+ #######################################################################
+ # (6) Execute "component" rules. (OPTIONAL)                           #
+ #######################################################################
+@@ -101,15 +109,20 @@
+ NSPR_PREFIX = $$(topsrcdir)/../dist/$(OBJDIR_NAME)
+ endif
+ 
++$(warning at rules AR=$(value AR))
++
+ $(NSPR_CONFIG_STATUS): $(NSPR_CONFIGURE)
++	echo nspr config status AR=$(value AR)
+ 	mkdir -p $(CORE_DEPTH)/../nspr/$(OBJDIR_NAME)
+ 	cd $(CORE_DEPTH)/../nspr/$(OBJDIR_NAME) ; \
++	echo before config AR=$$AR ; \
+ 	$(NSPR_COMPILERS) sh ../configure \
+ 	$(NSPR_CONFIGURE_OPTS) \
+ 	--with-dist-prefix='$(NSPR_PREFIX)' \
+ 	--with-dist-includedir='$(NSPR_PREFIX)/include'
+ 
+ build_nspr: $(NSPR_CONFIG_STATUS)
++	echo build nspr AR=$(value AR)
+ 	$(MAKE) -C $(CORE_DEPTH)/../nspr/$(OBJDIR_NAME)
+ 
+ clobber_nspr: $(NSPR_CONFIG_STATUS)
+--- nss-3.17.4/nss/coreconf/Makefile.LSW	2015-08-20 13:48:52.915763271 -0400
++++ nss-3.17.4/nss/coreconf/Makefile	2015-08-20 13:49:13.987877415 -0400
+@@ -7,7 +7,9 @@
+ 
+ MODULE		= coreconf
+ 
++unexport
+ DIRS		= nsinstall
++unexport DIRS
+ 
+ include $(DEPTH)/coreconf/config.mk
+ include $(DEPTH)/coreconf/rules.mk
+--- nss-3.17.4/nss/coreconf/nsinstall/Makefile.LSW	2015-08-20 14:08:45.259766649 -0400
++++ nss-3.17.4/nss/coreconf/nsinstall/Makefile	2015-08-20 14:26:14.703812469 -0400
+@@ -15,9 +15,15 @@
+ # Indicate that this directory builds build tools.
+ INTERNAL_TOOLS  = 1
+ 
++$(warning including $(DEPTH)/coreconf/config.mk)
+ 
+ include $(DEPTH)/coreconf/config.mk
+ 
++$(warning NATIVE_CC=$(value NATIVE_CC) $(origin NATIVE_CC))
++$(warning NATIVE_CFLAGS=$(value NATIVE_CFLAGS) $(origin NATIVE_CFLAGS))
++$(warning before CC=$(value CC))
++$(warning before OS_CFLAGS=$(value OS_CFLAGS))
++
+ ifeq (,$(filter-out OS2 WIN%,$(OS_TARGET)))
+ PROGRAM		=
+ else
+@@ -29,10 +35,21 @@
+ CC=$(NATIVE_CC)
+ endif
+ 
+-ifdef NATIVE_FLAGS
++ifneq ($(origin NATIVE_FLAGS),undefined)
+ OS_CFLAGS=$(NATIVE_FLAGS)
++CFLAGS=$(NATIVE_FLAGS)
++endif
++
++ifneq ($(origin NATIVE_LDFLAGS),undefined)
++LDFLAGS=$(NATIVE_LDFLAGS)
+ endif
+ 
++$(warning after CC=$(value CC))
++$(warning after OS_CFLAGS=$(value OS_CFLAGS))
++$(warning after CFLAGS=$(value CFLAGS))
++
++$(warning including $(DEPTH)/coreconf/rules.mk)
++
+ include $(DEPTH)/coreconf/rules.mk
+ 
+ # Redefine MAKE_OBJDIR for just this directory
+--- nss-3.17.4/nss/coreconf/rules.mk.LSW	2015-08-20 14:48:20.640003577 -0400
++++ nss-3.17.4/nss/coreconf/rules.mk	2015-08-20 14:53:23.283778076 -0400
+@@ -261,7 +261,8 @@
+ ifeq (,$(filter-out _WIN%,$(NS_USE_GCC)_$(OS_TARGET)))
+ 	$(AR) $(subst /,\\,$(OBJS))
+ else
+-	$(AR) $(OBJS)
++	echo AR=$(value AR)
++	$(AR) cr $@ $(OBJS)
+ endif
+ 	$(RANLIB) $@
+ 
+--- nss-3.17.4/nss/coreconf/Linux.mk.LSW	2015-08-20 14:06:52.955752655 -0400
++++ nss-3.17.4/nss/coreconf/Linux.mk	2015-08-20 14:07:00.875834127 -0400
+@@ -1,3 +1,4 @@
++$(warning in Linux.mk)
+ #
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+--- nss-3.17.4/nss/coreconf/ruleset.mk.LSW	2015-08-20 15:19:05.279758476 -0400
++++ nss-3.17.4/nss/coreconf/ruleset.mk	2015-08-20 15:19:13.275832472 -0400
+@@ -1,3 +1,4 @@
++$(warning in coreutils/ruleset.mk)
+ #
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+--- nss-3.17.4/nss/coreconf/uClinux-dist.mk.LSW	2015-08-20 14:16:28.595763550 -0400
++++ nss-3.17.4/nss/coreconf/uClinux-dist.mk	2015-08-20 15:20:06.839877079 -0400
+@@ -1,3 +1,4 @@
++$(warning in coreconf/uClinux-dist.mk)
+ #
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+@@ -9,11 +10,15 @@
+ CCC			= $(CXX)
+ #RANLIB		= ranlib
+ NATIVE_CC              = $(HOSTCC)
+-NATIVE_FLAGS           = 
++NATIVE_FLAGS           =
++NATIVE_LDFLAGS	       =
+ DEFAULT_COMPILER       = $(CC)
+ CPU_ARCH = $(ARCH)
+ ARCHFLAG = $(CPUFLAGS)
+ 
++# not on our system
++SHARED_LIBRARY =
++
+ # LIBC_TAG		= _glibc
+ 
+ USE_PTHREADS = 1
+--- nss-3.17.4/nss/coreconf/UNIX.mk.LSW	2015-08-20 11:40:41.503761239 -0400
++++ nss-3.17.4/nss/coreconf/UNIX.mk	2015-08-20 15:15:57.527842864 -0400
+@@ -6,7 +6,8 @@
+ XP_DEFINE  += -DXP_UNIX
+ LIB_SUFFIX  = a
+ DLL_SUFFIX  = so
+-AR          = ar cr $@
++AR          ?= ar cr $@
++$(warning UNIX after AR=$(value AR))
+ LDOPTS     += -L$(SOURCE_LIB_DIR)
+ 
+ ifdef BUILD_OPT
+--- nss-3.17.4/nss/coreconf/config.mk.LSW	2015-08-20 15:21:57.267760544 -0400
++++ nss-3.17.4/nss/coreconf/config.mk	2015-08-20 15:22:23.035805894 -0400
+@@ -1,3 +1,4 @@
++$(warning in coreconf/config.mk)
+ #
+ # This Source Code Form is subject to the terms of the Mozilla Public
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+--- nss-3.17.4/nss/lib/freebl/unix_rand.c.LSW	2015-08-20 16:23:18.559761693 -0400
++++ nss-3.17.4/nss/lib/freebl/unix_rand.c	2015-08-20 16:25:38.047794523 -0400
+@@ -714,7 +714,8 @@
+     sigfillset(&newact.sa_mask);
+     sigaction (SIGCHLD, &newact, &oldact);
+ 
+-    pid = fork();
++    fprintf(stderr, "Calling vfork() %s %d\n", __FILE__, __LINE__);
++    pid = vfork();
+     switch (pid) {
+       int ndesc;
+ 
+--- nss-3.17.4/nss/lib/manifest.mn.LSW	2015-08-20 14:37:28.751764710 -0400
++++ nss-3.17.4/nss/lib/manifest.mn	2015-08-20 14:37:51.987787647 -0400
+@@ -30,6 +30,8 @@
+ 	crmf jar \
+ 	ckfw $(SYSINIT_SRCDIR) \
+ 	$(NULL)
++unexport
++unexport DIRS
+ 
+ #  fortcrypt  is no longer built
+ 
+--- nss-3.17.4/nss/lib/util/Makefile.LSW	2015-08-20 15:10:00.035745291 -0400
++++ nss-3.17.4/nss/lib/util/Makefile	2015-08-20 15:33:44.671811094 -0400
+@@ -34,6 +34,10 @@
+ # (5) Execute "global" rules. (OPTIONAL)                              #
+ #######################################################################
+ 
++$(warning SHARED_LIBRARY=$(value SHARED_LIBRARY))
++SHARED_LIBRARY=
++$(warning SHARED_LIBRARY=$(value SHARED_LIBRARY))
++
+ include $(CORE_DEPTH)/coreconf/rules.mk
+ 
+ #######################################################################
+--- nss-3.17.4/nss/cmd/manifest.mn.LSW	2015-08-20 14:39:53.435751772 -0400
++++ nss-3.17.4/nss/cmd/manifest.mn	2015-08-20 14:40:14.495783102 -0400
+@@ -58,6 +58,8 @@
+  vfyserv \
+  modutil \
+  $(NULL)
++unexport
++unexport DIRS
+ 
+ TEMPORARILY_DONT_BUILD = \
+  $(NULL)

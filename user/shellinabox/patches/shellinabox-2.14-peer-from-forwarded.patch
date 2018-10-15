@@ -1,0 +1,143 @@
+diff --git a/shellinabox/launcher.c b/shellinabox/launcher.c
+index 2bac171..4fc02c6 100644
+--- a/shellinabox/launcher.c
++++ b/shellinabox/launcher.c
+@@ -528,8 +528,7 @@ int launchChild(int service, struct Session *session, const char *url) {
+   request->terminate   = -1;
+   request->width       = session->width;
+   request->height      = session->height;
+-  const char *peerName = httpGetPeerName(session->http);
+-  strncat(request->peerName, peerName, sizeof(request->peerName) - 1);
++  strncat(request->peerName, session->peerName, sizeof(request->peerName) - 1);
+   const char *realIP   = httpGetRealIP(session->http);
+   if (realIP && *realIP) {
+     strncat(request->realIP, realIP, sizeof(request->realIP) - 1);
+@@ -1785,8 +1784,9 @@ static void launcherDaemon(int fd) {
+       if (!((*s >= '0' && *s <= '9') ||
+             (*s >= 'A' && *s <= 'Z') ||
+             (*s >= 'a' && *s <= 'z') ||
+-             *s == '.' || *s == '-')) {
+-        *s                    = '-';
++             *s == '.' || *s == '-'  ||
++             *s == ':')) {
++        *s                    = '_'; /* cannot use '-' if its first char !  */
+       }
+     }
+ 
+diff --git a/shellinabox/session.c b/shellinabox/session.c
+index e699a5a..76ae212 100644
+--- a/shellinabox/session.c
++++ b/shellinabox/session.c
+@@ -245,3 +245,12 @@ void iterateOverSessions(int (*fnc)(void *, const char *, char **), void *arg){
+ int numSessions(void) {
+   return getHashmapSize(sessions);
+ }
++
++void changeSessionPeerName(struct Session *session, const char *peerName)
++{
++  if (peerName) {
++    if (session->peerName)
++      free((char *)session->peerName);
++    check(session->peerName = strdup(peerName));
++  }
++}
+diff --git a/shellinabox/session.h b/shellinabox/session.h
+index 73d0eb3..ae05732 100644
+--- a/shellinabox/session.h
++++ b/shellinabox/session.h
+@@ -82,5 +82,6 @@ struct Session *findSession(const char *sessionKey, const char *cgiSessionKey,
+                             int *sessionIsNew, HttpConnection *http);
+ void iterateOverSessions(int (*fnc)(void *, const char *, char **), void *arg);
+ int  numSessions(void);
++void changeSessionPeerName(struct Session *session, const char *peerName);
+ 
+ #endif /* SESSION_H__ */
+diff --git a/shellinabox/shellinaboxd.c b/shellinabox/shellinaboxd.c
+index cabe922..0c4f844 100644
+--- a/shellinabox/shellinaboxd.c
++++ b/shellinabox/shellinaboxd.c
+@@ -51,6 +51,7 @@
+ #include <getopt.h>
+ #include <limits.h>
+ #include <locale.h>
++#include <ctype.h>
+ #include <poll.h>
+ #include <setjmp.h>
+ #include <signal.h>
+@@ -110,6 +111,7 @@ static int            portMax;
+ static int            localhostOnly     = 0;
+ static int            noBeep            = 0;
+ static int            numericHosts      = 0;
++static int            peerFromForwarded = 0;
+ static int            enableSSL         = 1;
+ static int            enableSSLMenu     = 1;
+ int                   enableUtmpLogging = 1;
+@@ -366,13 +368,40 @@ static int dataHandler(HttpConnection *http, struct Service *service,
+     return HTTP_DONE;
+   }
+ 
++  char *usePeerName = NULL;
++  if (peerFromForwarded) {
++    char *cp, *fwd  = getFromHashMap(httpGetHeaders(http), "forwarded");
++    if (fwd)
++      fwd = strcasestr(fwd, "for=");
++    if (fwd)
++      fwd += 4; /* skip for= */
++    if (fwd && *fwd == '"')
++      fwd++; /* skip initial quote (if present) */
++    if (fwd)
++      fwd = strdup(fwd); /* make a writabel copy */
++    for (cp = fwd; cp && *cp && strchr("0123456789abcdef:.", tolower(*cp)); cp++)	
++      /* skip over all possible valid characters */;
++    if (cp && cp != fwd)
++      *cp = '\0'; /* terminate string */
++    if (fwd) {
++      usePeerName = strdup(fwd);
++      if (sessionIsNew)
++        changeSessionPeerName(session, usePeerName);
++      free(fwd);
++    }
++  }
++  if (!usePeerName)
++    usePeerName = strdup(httpGetPeerName(http));
++
+   // Sanity check
+-  if (!sessionIsNew && strcmp(session->peerName, httpGetPeerName(http))) {
++  if (!sessionIsNew && strcmp(session->peerName, usePeerName)) {
+     error("[server] Peername changed from %s to %s",
+-          session->peerName, httpGetPeerName(http));
++          session->peerName, usePeerName);
++    free(usePeerName);
+     httpSendReply(http, 400, "Bad Request", NO_MSG);
+     return HTTP_DONE;
+   }
++  free(usePeerName);
+ 
+   int oldWidth            = session->width;
+   int oldHeight           = session->height;
+@@ -797,6 +826,7 @@ static void usage(void) {
+           "      --user-css=STYLES       defines user-selectable CSS options\n"
+           "  -v, --verbose               enable logging messages\n"
+           "      --version               prints version information\n"
++          "      --peer-from-forwarded   Use HTTP Forwarded header for peer\n"
+           "\n"
+           "Debug, quiet, and verbose are mutually exclusive.\n"
+           "\n"
+@@ -906,6 +936,7 @@ static void parseArgs(int argc, char * const argv[]) {
+       { "user-css",             1, 0,  0  },
+       { "verbose",              0, 0, 'v' },
+       { "version",              0, 0,  0  },
++      { "peer-from-forwarded",  0, 0,  0  },
+       { 0,                  0, 0,  0  } };
+     int idx                = -1;
+     int c                  = getopt_long(argc, argv, optstring, options, &idx);
+@@ -1214,6 +1245,9 @@ static void parseArgs(int argc, char * const argv[]) {
+       // Version
+       printf("ShellInABox version " VERSION VCS_REVISION "\n");
+       exit(0);
++    } else if (!idx--) {
++      // peerFromForwarded
++      peerFromForwarded    = 1;
+     }
+   }
+   if (optind != argc) {

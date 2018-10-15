@@ -1,0 +1,13 @@
+diff --git a/libhttp/httpconnection.c b/libhttp/httpconnection.c
+index 31e41d8..6bce356 100644
+--- a/libhttp/httpconnection.c
++++ b/libhttp/httpconnection.c
+@@ -841,7 +841,7 @@ static int httpHandleCommand(struct HttpConnection *http,
+         *ptr                                 = '\000';
+         break;
+       }
+-      if (ch != '-' && ch != '.' &&
++      if (ch != '-' && ch != '.' && ch != '[' && ch != ']' &&
+           (ch < '0' ||(ch > '9' && ch < 'A') ||
+           (ch > 'Z' && ch < 'a')||(ch > 'z' && ch <= 0x7E))) {
+         httpSendReply(http, 400, "Bad Request", NO_MSG);

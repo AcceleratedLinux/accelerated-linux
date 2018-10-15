@@ -1,0 +1,36 @@
+--- libreswan-3.12/Makefile.inc.local.LSW	2015-08-24 13:45:09.115792877 -0400
++++ libreswan-3.12/Makefile.inc.local	2015-08-24 15:03:55.823794898 -0400
+@@ -1,5 +1,7 @@
+ 
+-CFLAGS := $(subst -Werror,,$(CFLAGS))
++CFLAGS := $(subst -Werror,,$(CFLAGS)) \
++	-I$(LIBRESWANSRCDIR)/../../../../lib/nss/build/nss-3.17.4/dist/public/nss/ \
++	-I$(LIBRESWANSRCDIR)/../../../../lib/nss/build/nss-3.17.4/dist/uClinux-dist/include
+ export CFLAGS
+ 
+ ifeq ($(HOSTBUILD),)
+@@ -12,10 +14,13 @@
+ ifneq ($(CONFIG_USER_FLATFSD_FLATFSD),)
+ USE_SINGLE_CONF_DIR := true
+ endif
+-ifneq ($(CONFIG_LIB_LIBPAM_FORCE)$(CONFIG_LIB_LIBPAM),)
+-USE_XAUTHPAM := true
+-HAVE_THREADS := true # the comments below about XAUTH say we need threads
+-endif
++#ifneq ($(CONFIG_LIB_LIBPAM_FORCE)$(CONFIG_LIB_LIBPAM),)
++#USE_XAUTHPAM := true
++#HAVE_THREADS := true # the comments below about XAUTH say we need threads
++#endif
++USE_XAUTHPAM := false
++CONFIG_LIB_LIBPAM := 
++
+ ifdef CONFIG_PROP_CONFIG
+ EXTRA_DEFINES += -DHAVE_STATSD=1
+ endif
+@@ -53,3 +58,6 @@
+ WERROR     :=  -Wall
+ USE_DNSSEC := false
+ USE_MAST   := false
++USE_LIBCAP_NG := false
++USE_LIBCURL := false
++HAVE_NO_FORK := true

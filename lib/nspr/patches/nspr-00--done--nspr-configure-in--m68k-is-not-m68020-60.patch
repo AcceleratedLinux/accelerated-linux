@@ -1,0 +1,11 @@
+--- nspr-4.10.9/nspr/configure.in.orig	2015-11-25 15:17:14.732725317 -0500
++++ nspr-4.10.9/nspr/configure.in	2015-11-25 20:09:38.299725384 -0500
+@@ -1857,8 +1865,4 @@
+         fi
+         ;;
+-    m68k)
+-        CFLAGS="$CFLAGS -m68020-60"
+-        CXXFLAGS="$CXXFLAGS -m68020-60"
+-        ;;
+     esac    
+     ;;

@@ -1,0 +1,7 @@
+
+config LIB_DBUS_GLIB
+	bool 'glib'
+	select LIB_GLIB
+	help
+	  dbus-glib library
+

@@ -1,0 +1,3 @@
+config LIB_LIBMNL
+	bool "libmnl"
+	default n

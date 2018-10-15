@@ -1,0 +1,5 @@
+config USER_OVS
+	bool 'ovs (Open vSwitch)'
+	select LIB_INSTALL_LIBATOMIC
+	help
+	  Open vSwitch and related tools

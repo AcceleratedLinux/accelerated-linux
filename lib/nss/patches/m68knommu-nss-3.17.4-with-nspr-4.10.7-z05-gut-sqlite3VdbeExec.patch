@@ -1,0 +1,20 @@
+--- nss-3.17.4/nss/lib/sqlite/sqlite3.c.LSW	2015-08-24 12:39:58.451757106 -0400
++++ nss-3.17.4/nss/lib/sqlite/sqlite3.c	2015-08-24 13:03:30.843734108 -0400
+@@ -64032,6 +64032,9 @@
+ SQLITE_PRIVATE int sqlite3VdbeExec(
+   Vdbe *p                    /* The VDBE */
+ ){
++#if 1
++  return 0;
++#else
+   int pc=0;                  /* The program counter */
+   Op *aOp = p->aOp;          /* Copy of p->aOp */
+   Op *pOp;                   /* Current operation */
+@@ -70316,6 +70319,7 @@
+   p->rc = rc;
+   sqlite3SetString(&p->zErrMsg, db, "%s", sqlite3ErrStr(rc));
+   goto vdbe_error_halt;
++#endif
+ }
+ 
+ /************** End of vdbe.c ************************************************/

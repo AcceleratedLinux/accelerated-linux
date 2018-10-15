@@ -1,0 +1,131 @@
+
+If we are querying all servers and we see an NXDOMAIN response,  just hold
+onto that in case a batter response arrives from another server.  Only
+forward the NXDOMAIN if we get nothing better.
+
+This allows the use of upstreams servers that know about internal domains
+that are not visible to somthing like internet based servers.
+
+diff -ru dnsmasq-2.78/src/dnsmasq.h /tmp/dnsmasq-2.78/src/dnsmasq.h
+--- dnsmasq-2.78/src/dnsmasq.h	2017-10-02 23:13:51.000000000 +1000
++++ /tmp/dnsmasq-2.78/src/dnsmasq.h	2017-10-04 14:05:21.104214384 +1000
+@@ -635,6 +635,10 @@
+   struct frec *blocking_query; /* Query which is blocking us. */
+ #endif
+   struct frec *next;
++
++  void *reply; /* saved reply while waiting for a better response */
++  int rlen; /* length of reply */
++  struct server *server;
+ };
+ 
+ /* flags in top of length field for DHCP-option tables */
+diff -ru dnsmasq-2.78/src/forward.c /tmp/dnsmasq-2.78/src/forward.c
+--- dnsmasq-2.78/src/forward.c	2017-10-02 23:13:51.000000000 +1000
++++ /tmp/dnsmasq-2.78/src/forward.c	2017-10-04 14:25:10.600244340 +1000
+@@ -22,6 +22,8 @@
+ 					  void *hash);
+ static unsigned short get_id(void);
+ static void free_frec(struct frec *f);
++static void forward_reply(struct dns_header *header, size_t n, time_t now,
++			  struct frec *forward, struct server *server);
+ 
+ /* Send a UDP packet with its source address set as "source" 
+    unless nowild is true, when we just send it with the kernel default */
+@@ -727,6 +729,20 @@
+   return resize_packet(header, n, pheader, plen);
+ }
+ 
++static void store_reply(struct dns_header *header, size_t nn, struct frec *forward, struct server *server)
++{
++  prettyprint_addr(&server->addr, daemon->namebuff);
++  if (forward->reply)
++    return;
++  forward->reply = (void *) whine_malloc(nn);
++  if (!forward->reply)
++    return;
++
++  memcpy(forward->reply, header, nn);
++  forward->rlen = nn;
++  forward->server = server;
++}
++
+ /* sets new last_server */
+ void reply_query(int fd, int family, time_t now)
+ {
+@@ -850,13 +866,26 @@
+       ((header->hb3 & HB3_TC) || n >= SAFE_PKTSZ))
+     server->edns_pktsz = SAFE_PKTSZ;
+   
+-  /* If the answer is an error, keep the forward record in place in case
++  /* if we are querying all servers and we get an NXDOMAIN response, save
++     it in case we get a better response a bit later,  otherwise send
++     through what we just received.
++    
++     If the answer is an error, keep the forward record in place in case
+      we get a good reply from another server. Kill it when we've
+      had replies from all to avoid filling the forwarding table when
+      everything is broken */
+-  if (forward->forwardall == 0 || --forward->forwardall == 1 ||
+-      (RCODE(header) != REFUSED && RCODE(header) != SERVFAIL))
+-    {
++  if (forward->forwardall != 0)
++    forward->forwardall--;
++  if (option_bool(OPT_ALL_SERVERS) && forward->forwardall != 0 && forward->forwardall != 1 && RCODE(header) == NXDOMAIN)
++    store_reply(header, n, forward, server);
++  else if (forward->forwardall == 0 || forward->forwardall == 1 || RCODE(header) != SERVFAIL)
++    forward_reply(header, n, now, forward, server);
++}
++  
++static void forward_reply(struct dns_header *header, size_t n, time_t now,
++                         struct frec *forward, struct server *server)
++{
++      int nn;
+       int check_rebind = 0, no_cache_dnssec = 0, cache_secure = 0, bogusanswer = 0;
+ 
+       if (option_bool(OPT_NO_REBIND))
+@@ -1110,7 +1139,6 @@
+ 		    &forward->source, &forward->dest, forward->iface);
+ 	}
+       free_frec(forward); /* cancel */
+-    }
+ }
+ 
+ 
+@@ -2012,6 +2040,9 @@
+       f->blocking_query = NULL;
+       f->stash = NULL;
+ #endif
++      f->server = NULL;
++      f->reply = NULL;
++      f->rlen = 0;
+       daemon->frec_list = f;
+     }
+ 
+@@ -2066,6 +2097,12 @@
+   f->rfd4 = NULL;
+   f->sentto = NULL;
+   f->flags = 0;
++
++  f->server = NULL;
++  if (f->reply) {
++    free(f->reply);
++    f->reply = NULL;
++  }
+   
+ #ifdef HAVE_IPV6
+   free_rfd(f->rfd6);
+@@ -2115,7 +2152,12 @@
+ 	    if (!f->dependent)
+ #endif
+ 	      {
+-		if (difftime(now, f->time) >= 4*TIMEOUT)
++	        if (f->reply && difftime(now, f->time) >= TIMEOUT)
++	          {
++	             forward_reply(f->reply, f->rlen, now, f, f->server);
++	             target = f;
++	          }
++	        else if (difftime(now, f->time) >= 4*TIMEOUT)
+ 		  {
+ 		    free_frec(f);
+ 		    target = f;

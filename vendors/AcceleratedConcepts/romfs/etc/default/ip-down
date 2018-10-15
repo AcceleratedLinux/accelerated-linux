@@ -1,0 +1,12 @@
+#!/bin/sh
+[ "$IP_DOWN_RECURSED" ] && exit 0
+
+IP_DOWN_RECURSED=1
+export IP_DOWN_RECURSED
+
+[ "$6" -a -x "/etc/config/$6-down" ] && exec "/etc/config/$6-down"
+[ "$6" -a -x "/etc/ppp/$6-down" ] && exec "/etc/ppp/$6-down"
+
+[ -x /etc/ppp/ip-down ] && exec /etc/ppp/ip-down "$@"
+
+exit 0

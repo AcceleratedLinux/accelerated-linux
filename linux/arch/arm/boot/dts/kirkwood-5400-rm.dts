@@ -1,0 +1,250 @@
+/*
+ * Device Tree file for AcceleratedConcepts 5400-RM
+ *
+ * David McCullough <david.mccullough@accelerated.com>
+ * Greg Ungerer <greg.ungerer@accelerated.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+
+#include "kirkwood.dtsi"
+#include "kirkwood-6180.dtsi"
+
+/ {
+	model = "Accelerated Concepts 5400-RM";
+	compatible = "accelerated,5400-rm", "marvell,kirkwood-88f6180", "marvell,kirkwood";
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x4000000>;
+	};
+
+	chosen {
+		bootargs = "console=ttyS0,115200n8 earlyprintk";
+		stdout-path = &uart0;
+	};
+
+	ocp@f1000000 {
+		 pinctrl: pin-controller@10000 {
+			pmx_led_0: pmx-led-0 {
+				marvell,pins = "mpp8";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_1: pmx-led-1 {
+				marvell,pins = "mpp9";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_2: pmx-led-2 {
+				marvell,pins = "mpp13";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_3: pmx-led-3 {
+				marvell,pins = "mpp14";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_4: pmx-led-4 {
+				marvell,pins = "mpp16";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_5: pmx-led-5 {
+				marvell,pins = "mpp35";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_6: pmx-led-6 {
+				marvell,pins = "mpp40";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_7: pmx-led-7 {
+				marvell,pins = "mpp41";
+				marvell,function = "gpio";
+			};
+
+			pmx_led_8: pmx-led-8 {
+				marvell,pins = "mpp42";
+				marvell,function = "gpio";
+			};
+
+			pmx_watchdog: pmx-watchdog {
+				marvell,pins = "mpp36";
+				marvell,function = "gpio";
+			};
+
+			pmx_cell_disable: pmx-cell-disable {
+				marvell,pins = "mpp37";
+				marvell,function = "gpio";
+			};
+
+			pmx_cell_reset: pmx-cell-reset {
+				marvell,pins = "mpp38";
+				marvell,function = "gpio";
+			};
+
+			pmx_erase: pmx-erase {
+				marvell,pins = "mpp39";
+				marvell,function = "gpio";
+			};
+
+			pmx_sim_detect: pmx-sim-detect {
+				marvell,pins = "mpp43";
+				marvell,function = "gpio";
+			};
+
+			pmx_buzzer: pmx-buzzer {
+				marvell,pins = "mpp44";
+				marvell,function = "gpio";
+			};
+
+			pmx_usb_power: pmx-usb-power {
+				marvell,pins = "mpp15";
+				marvell,function = "gpio";
+			};
+
+			pmx_usb_ovc: pmx-usb-ovc {
+				marvell,pins = "mpp17";
+				marvell,function = "gpio";
+			};
+		};
+
+		serial@12000 {
+			status = "ok";
+		};
+
+		ehci@50000 {
+			status = "ok";
+		};
+
+		crypto@30000 {
+			status = "ok";
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-0 = <
+				&pmx_uart0
+				&pmx_nand
+				&pmx_led_0
+				&pmx_led_1
+				&pmx_led_2
+				&pmx_led_3
+				&pmx_led_4
+				&pmx_led_5
+				&pmx_led_6
+				&pmx_led_7
+				&pmx_led_8
+				&pmx_watchdog
+				&pmx_cell_disable
+				&pmx_cell_reset
+				&pmx_erase
+				&pmx_sim_detect
+				&pmx_buzzer
+				&pmx_usb_power
+				&pmx_usb_ovc
+			>;
+		pinctrl-names = "default";
+
+		online {
+			label = "online";
+			gpios = <&gpio0 8 1>;
+			default-state = "off";
+		};
+		4g {
+			label = "4g";
+			gpios = <&gpio0 9 1>;
+			default-state = "off";
+		};
+		3g {
+			label = "3g";
+			gpios = <&gpio0 13 1>;
+			default-state = "off";
+		};
+		backup {
+			label = "backup";
+			gpios = <&gpio0 14 1>;
+			default-state = "off";
+		};
+		signal_strength_1 {
+			label = "signal-strength-1";
+			gpios = <&gpio0 16 1>;
+			default-state = "off";
+		};
+		signal_strength_2 {
+			label = "signal-strength-2";
+			gpios = <&gpio0 35 1>;
+			default-state = "off";
+		};
+		signal_strength_3 {
+			label = "signal-strength-3";
+			gpios = <&gpio0 40 1>;
+			default-state = "off";
+		};
+		signal_strength_4 {
+			label = "signal-strength-4";
+			gpios = <&gpio0 41 1>;
+			default-state = "off";
+		};
+		signal_strength_5 {
+			label = "signal-strength-5";
+			gpios = <&gpio0 42 1>;
+			default-state = "off";
+		};
+	};
+};
+
+&nand {
+	status = "okay";
+
+	u-boot@0 {
+		label = "u-boot";
+		reg = <0x0 0x200000>;
+	};
+
+	u-boot-env@200000 {
+		label = "u-boot-env";
+		reg = <0x200000 0x100000>;
+	};
+
+	flash@400000 {
+		label = "flash";
+		reg = <0x300000 0x0>;
+	};
+
+	all@0 {
+		label = "all";
+		reg = <0x0 0x0>;
+	};
+};
+
+&pciec {
+	status = "okay";
+};
+
+&pcie0 {
+	status = "okay";
+};
+
+&mdio {
+	status = "okay";
+	ethphy0: ethernet-phy@0 {
+		reg = <0>;
+	};
+};
+
+&eth0 {
+	status = "okay";
+	ethernet0-port@0 {
+		phy-handle = <&ethphy0>;
+        };
+};
+

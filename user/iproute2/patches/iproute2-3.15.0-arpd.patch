@@ -1,0 +1,42 @@
+Index: iproute2-3.15.0/Makefile
+===================================================================
+--- iproute2-3.15.0.orig/Makefile	2014-06-17 16:33:40.144731123 +1000
++++ iproute2-3.15.0/Makefile	2014-06-17 16:33:40.140731123 +1000
+@@ -1,4 +1,3 @@
+-ROOTDIR=$(DESTDIR)
+ PREFIX=/usr
+ LIBDIR=$(PREFIX)/lib
+ SBINDIR=/sbin
+@@ -8,9 +7,6 @@
+ MANDIR=$(DATADIR)/man
+ ARPDDIR=/var/lib/arpd
+ 
+-# Path to db_185.h include
+-DBM_INCLUDE:=$(ROOTDIR)/usr/include
+-
+ SHARED_LIBS = y
+ 
+ DEFINES= -DRESOLVE_HOSTNAMES -DLIBDIR=\"$(LIBDIR)\"
+Index: iproute2-3.15.0/misc/Makefile
+===================================================================
+--- iproute2-3.15.0.orig/misc/Makefile	2014-06-17 16:33:40.144731123 +1000
++++ iproute2-3.15.0/misc/Makefile	2014-06-17 16:33:40.140731123 +1000
+@@ -1,7 +1,7 @@
+ SSOBJ=ss.o ssfilter.o
+ LNSTATOBJ=lnstat.o lnstat_util.o
+ 
+-TARGETS=ss nstat ifstat rtacct arpd lnstat
++TARGETS=ss nstat ifstat rtacct lnstat
+ 
+ include ../Config
+ 
+@@ -23,9 +23,6 @@
+ rtacct: rtacct.c
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o rtacct rtacct.c $(LIBNETLINK) -lm
+ 
+-arpd: arpd.c
+-	$(CC) $(CFLAGS) -I$(DBM_INCLUDE) $(LDFLAGS) -o arpd arpd.c $(LIBNETLINK) -ldb -lpthread
+-
+ ssfilter.c: ssfilter.y
+ 	bison ssfilter.y -o ssfilter.c
+ 

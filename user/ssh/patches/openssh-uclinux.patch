@@ -1,0 +1,612 @@
+diff -ur openssh-6.6p1/clientloop.c openssh-6.6p1/clientloop.c
+--- openssh-6.6p1/clientloop.c	2011-01-16 22:18:35.000000000 +1000
++++ openssh-6.6p1/clientloop.c	2014-05-23 17:00:39.673183196 +1000
+@@ -1059,14 +1059,22 @@
+ 				buffer_append(berr, string, strlen(string));
+ 
+ 				/* Fork into background. */
++#ifdef __uClinux__
++				pid = vfork();
++#else
+ 				pid = fork();
++#endif
+ 				if (pid < 0) {
+ 					error("fork: %.100s", strerror(errno));
+ 					continue;
+ 				}
+ 				if (pid != 0) {	/* This is the parent. */
+ 					/* The parent just exits. */
++#ifdef __uClinux__
++					_exit(0);
++#else
+ 					exit(0);
++#endif
+ 				}
+ 				/* The child continues serving connections. */
+ 				if (compat20) {
+diff -ur openssh-6.6p1/config.sub openssh-6.6p1/config.sub
+--- openssh-6.6p1/config.sub	2010-03-02 09:57:43.000000000 +1000
++++ openssh-6.6p1/config.sub	2014-05-23 17:00:39.673183196 +1000
+@@ -314,6 +314,11 @@
+ 		basic_machine=mt-unknown
+ 		;;
+ 
++	nios2 | nios2-* | nios2 | nios2-*)
++		basic_machine=nios2-altera
++		os=-linux
++		;;
++
+ 	# We use `pc' rather than `unknown'
+ 	# because (1) that's what they normally are, and
+ 	# (2) the word "unknown" tends to confuse beginning users.
+diff -ur openssh-6.6p1/pathnames.h openssh-6.6p1/pathnames.h
+--- openssh-6.6p1/pathnames.h	2010-08-31 22:41:14.000000000 +1000
++++ openssh-6.6p1/pathnames.h	2014-05-23 17:00:39.802963772 +1000
+@@ -12,7 +12,16 @@
+  * called by a name other than "ssh" or "Secure Shell".
+  */
+ 
++#include <config/autoconf.h>
++
++#ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
++#define ETCDIR				"/etc/config"
++#define SSHDIR				ETCDIR ""
++#endif
++
++#ifndef ETCDIR
+ #define ETCDIR				"/etc"
++#endif
+ 
+ #ifndef SSHDIR
+ #define SSHDIR				ETCDIR "/ssh"
+@@ -45,7 +54,7 @@
+ #define _PATH_DH_PRIMES			SSHDIR "/primes"
+ 
+ #ifndef _PATH_SSH_PROGRAM
+-#define _PATH_SSH_PROGRAM		"/usr/bin/ssh"
++#define _PATH_SSH_PROGRAM		"/bin/ssh"
+ #endif
+ 
+ /*
+diff -ur openssh-6.6p1/readpass.c openssh-6.6p1/readpass.c
+--- openssh-6.6p1/readpass.c	2011-01-06 21:43:45.000000000 +1000
++++ openssh-6.6p1/readpass.c	2014-05-23 17:00:39.802963772 +1000
+@@ -66,7 +66,11 @@
+ 		return NULL;
+ 	}
+ 	osigchld = signal(SIGCHLD, SIG_DFL);
++#ifdef __uClinux__
++	if ((pid = vfork()) < 0) {
++#else
+ 	if ((pid = fork()) < 0) {
++#endif
+ 		error("ssh_askpass: fork: %s", strerror(errno));
+ 		signal(SIGCHLD, osigchld);
+ 		return NULL;
+@@ -78,6 +82,11 @@
+ 			fatal("ssh_askpass: dup2: %s", strerror(errno));
+ 		execlp(askpass, askpass, msg, (char *) 0);
+ 		fatal("ssh_askpass: exec(%s): %s", askpass, strerror(errno));
++#ifdef __uClinux__
++		_exit(0);
++#else
++		exit(0);
++#endif
+ 	}
+ 	close(p[1]);
+ 
+diff -ur openssh-6.6p1/scp.c openssh-6.6p1/scp.c
+--- openssh-6.6p1/scp.c	2011-01-06 21:41:21.000000000 +1000
++++ openssh-6.6p1/scp.c	2014-05-23 17:00:39.822954827 +1000
+@@ -258,7 +258,11 @@
+ 	signal(SIGTTOU, suspchild);
+ 
+ 	/* Fork a child to execute the command on the remote host using ssh. */
++#ifdef __uClinux__
++	do_cmd_pid = vfork();
++#else
+ 	do_cmd_pid = fork();
++#endif
+ 	if (do_cmd_pid == 0) {
+ 		/* Child. */
+ 		close(pin[1]);
+@@ -279,7 +283,11 @@
+ 
+ 		execvp(ssh_program, args.list);
+ 		perror(ssh_program);
++#ifdef __uClinux__
++		_exit(1);
++#else
+ 		exit(1);
++#endif
+ 	} else if (do_cmd_pid == -1) {
+ 		fatal("fork: %s", strerror(errno));
+ 	}
+diff -ur openssh-6.6p1/session.c openssh-6.6p1/session.c
+--- openssh-6.6p1/session.c	2010-12-01 11:02:59.000000000 +1000
++++ openssh-6.6p1/session.c	2014-05-23 17:00:39.822954827 +1000
+@@ -96,6 +96,10 @@
+ #include <kafs.h>
+ #endif
+ 
++#ifdef EMBED
++# include <syslog.h>
++#endif	/* EMBED */
++
+ #define IS_INTERNAL_SFTP(c) \
+ 	(!strncmp(c, INTERNAL_SFTP_NAME, sizeof(INTERNAL_SFTP_NAME) - 1) && \
+ 	 (c[sizeof(INTERNAL_SFTP_NAME) - 1] == '\0' || \
+@@ -494,7 +498,11 @@
+ 	session_proctitle(s);
+ 
+ 	/* Fork the child. */
++#ifdef __uClinux__
++	switch ((pid = vfork())) {
++#else
+ 	switch ((pid = fork())) {
++#endif
+ 	case -1:
+ 		error("%s: fork: %.100s", __func__, strerror(errno));
+ #ifdef USE_PIPES
+@@ -572,6 +580,11 @@
+ 		/* Do processing for the child (exec command etc). */
+ 		do_child(s, command);
+ 		/* NOTREACHED */
++#ifdef __uClinux__
++		_exit(0);
++#else
++		exit(0);
++#endif
+ 	default:
+ 		break;
+ 	}
+@@ -639,12 +652,14 @@
+ do_exec_pty(Session *s, const char *command)
+ {
+ 	int fdout, ptyfd, ttyfd, ptymaster;
++	int tfd;
+ 	pid_t pid;
+ 
+ 	if (s == NULL)
+ 		fatal("do_exec_pty: no session");
+ 	ptyfd = s->ptyfd;
+ 	ttyfd = s->ttyfd;
++	tfd = ttyfd;
+ 
+ 	/*
+ 	 * Create another descriptor of the pty master side for use as the
+@@ -669,7 +684,11 @@
+ 	}
+ 
+ 	/* Fork the child. */
++#ifdef __uClinux__
++	switch ((pid = vfork())) {
++#else
+ 	switch ((pid = fork())) {
++#endif
+ 	case -1:
+ 		error("%s: fork: %.100s", __func__, strerror(errno));
+ 		close(fdout);
+@@ -690,18 +709,20 @@
+ 		close(ptyfd);
+ 
+ 		/* Make the pseudo tty our controlling tty. */
+-		pty_make_controlling_tty(&ttyfd, s->tty);
++		
++		pty_make_controlling_tty(&tfd, s->tty);
+ 
+ 		/* Redirect stdin/stdout/stderr from the pseudo tty. */
+-		if (dup2(ttyfd, 0) < 0)
++		if (dup2(tfd, 0) < 0)
+ 			error("dup2 stdin: %s", strerror(errno));
+-		if (dup2(ttyfd, 1) < 0)
++		if (dup2(tfd, 1) < 0)
+ 			error("dup2 stdout: %s", strerror(errno));
+-		if (dup2(ttyfd, 2) < 0)
++		if (dup2(tfd, 2) < 0)
+ 			error("dup2 stderr: %s", strerror(errno));
+ 
+ 		/* Close the extra descriptor for the pseudo tty. */
+-		close(ttyfd);
++		if (tfd > 2)
++			close(tfd);
+ 
+ 		/* record login, etc. similar to login(1) */
+ #ifndef HAVE_OSF_SIA
+@@ -736,6 +757,7 @@
+ 	s->pid = pid;
+ 
+ 	/* Parent.  Close the slave side of the pseudo tty. */
++
+ 	close(ttyfd);
+ 
+ 	/* Enter interactive session. */
+@@ -1586,7 +1608,9 @@
+ 	 * Close any extra file descriptors.  Note that there may still be
+ 	 * descriptors left by system functions.  They will be closed later.
+ 	 */
++#ifndef __uClinux__
+ 	endpwent();
++#endif
+ 
+ 	/*
+ 	 * Close any extra open file descriptors so that we don't have them
+@@ -1540,7 +1564,9 @@
+ 	int r = 0;
+ 
+ 	/* remove hostkey from the child's memory */
++#ifndef __uClinux__
+ 	destroy_sensitive_data();
++#endif
+ 	packet_clear_keys();
+ 
+ 	/* Force a password change */
+@@ -1548,7 +1574,11 @@
+ 		do_setusercontext(pw);
+ 		child_close_fds(ssh);
+ 		do_pwchange(s);
++#ifdef __uClinux__
++		_exit(1);
++#else
+ 		exit(1);
++#endif
+ 	}
+ 
+ 	/*
+@@ -1660,7 +1690,11 @@
+ 	if (options.use_pam && !options.use_login && !is_pam_session_open()) {
+ 		debug3("PAM session not opened, exiting");
+ 		display_loginmsg();
++#ifdef __uClinux__
++		_exit(254);
++#else
+ 		exit(254);
++#endif
+ 	}
+ #endif
+ 
+@@ -1737,7 +1771,11 @@
+ 			    "directory %s: %s\n", pw->pw_dir,
+ 			    strerror(errno));
+ 		if (r)
++#ifdef __uClinux__
++			_exit(1);
++#else
+ 			exit(1);
++#endif
+ 	}
+ 
+ 	closefrom(STDERR_FILENO + 1);
+@@ -1768,7 +1806,11 @@
+ #ifdef WITH_SELINUX
+ 		ssh_selinux_change_context("sftpd_t");
+ #endif
++#ifdef __uClinux__
++		_exit(sftp_server_main(i, argv, s->pw));
++#else
+ 		exit(sftp_server_main(i, argv, s->pw));
++#endif
+ 	}
+ 
+ 	fflush(NULL);
+@@ -1799,7 +1841,11 @@
+ 		    >= sizeof(argv0) - 1) {
+ 			errno = EINVAL;
+ 			perror(shell);
++#ifdef __uClinux__
++			_exit(1);
++#else
+ 			exit(1);
++#endif
+ 		}
+ 
+ 		/* Execute the shell. */
+@@ -1809,7 +1855,11 @@
+ 
+ 		/* Executing the shell failed. */
+ 		perror(shell);
++#ifdef __uClinux__
++		_exit(1);
++#else
+ 		exit(1);
++#endif
+ 	}
+ 	/*
+ 	 * Execute the command using the user's shell.  This uses the -c
+@@ -1821,7 +1871,11 @@
+ 	argv[3] = NULL;
+ 	execve(shell, argv, env);
+ 	perror(shell);
++#ifdef __uClinux__
++	_exit(1);
++#else
+ 	exit(1);
++#endif
+ }
+ 
+ void
+@@ -2056,8 +2110,15 @@
+ 		n_bytes = packet_remaining();
+ 	tty_parse_modes(s->ttyfd, &n_bytes);
+ 
++#ifndef EMBED
+ 	if (!use_privsep)
+ 		pty_setowner(s->pw, s->tty);
++#else
++	syslog(LOG_ALERT,
++			"WARNING: "
++			"currently everything is run as root on an embedded system "
++			":WARNING");
++#endif
+ 
+ 	/* Set window size from the packet. */
+ 	pty_change_window_size(s->ptyfd, s->row, s->col, s->xpixel, s->ypixel);
+diff -ur openssh-6.6p1/ssh.c openssh-6.6p1/ssh.c
+--- openssh-6.6p1/ssh.c	2011-02-04 10:42:15.000000000 +1000
++++ openssh-6.6p1/ssh.c	2014-05-23 17:00:39.833432575 +1000
+@@ -975,7 +975,9 @@
+ 		control_persist_detach();
+ 	debug("forking to background");
+ 	fork_after_authentication_flag = 0;
++#ifndef __uClinux__
+ 	if (daemon(1, 1) < 0)
++#endif
+ 		fatal("daemon() failed: %.200s", strerror(errno));
+ }
+ 
+@@ -1947,8 +1972,10 @@
+ 			fork_postauth();
+ 	}
+ 
+-	return client_loop(ssh, tty_flag, tty_flag ?
+-	    options.escape_char : SSH_ESCAPECHAR_NONE, id);
++	return client_loop(ssh, tty_flag,
++	    options.escape_char == SSH_ESCAPECHAR_DEFAULT
++	    ? (tty_flag ? '~' : SSH_ESCAPECHAR_NONE)
++	    : options.escape_char, id);
+ }
+ 
+ /* request pty/x11/agent/tcpfwd/shell for channel */
+diff -ur openssh-6.6p1/sshconnect2.c openssh-6.6p1/sshconnect2.c
+--- openssh-6.6p1/sshconnect2.c	2010-12-01 11:21:51.000000000 +1000
++++ openssh-6.6p1/sshconnect2.c	2014-05-23 17:00:39.833432575 +1000
+@@ -1594,7 +1594,11 @@
+ 		error("ssh_keysign: pipe: %s", strerror(errno));
+ 		return -1;
+ 	}
++#ifdef __uClinux__
++	if ((pid = vfork()) < 0) {
++#else
+ 	if ((pid = fork()) < 0) {
++#endif
+		error("%s: fork: %s", __func__, strerror(errno));
+ 		return -1;
+ 	}
+@@ -1613,6 +1617,11 @@
+ 		execl(_PATH_SSH_KEY_SIGN, _PATH_SSH_KEY_SIGN, (char *) 0);
+ 		fatal("ssh_keysign: exec(%s): %s", _PATH_SSH_KEY_SIGN,
+ 		    strerror(errno));
++#ifdef __uClinux__
++		_exit(0);
++#else
++		exit(0);
++#endif
+ 	}
+ 	close(from[1]);
+ 	close(to[0]);
+diff -ur openssh-6.6p1/sshconnect.c openssh-6.6p1/sshconnect.c
+--- openssh-6.6p1/sshconnect.c	2011-01-16 22:17:59.000000000 +1000
++++ openssh-6.6p1/sshconnect.c	2014-05-23 17:00:39.833432575 +1000
+@@ -115,7 +115,11 @@
+ 	debug("Executing proxy command: %.500s", command_string);
+ 
+ 	/* Fork and execute the proxy command. */
++#ifdef __uClinux__
++	if ((pid = vfork()) == 0) {
++#else
+ 	if ((pid = fork()) == 0) {
++#endif
+ 		char *argv[10];
+ 
+ 		/* Child.  Permanently give up superuser privileges. */
+@@ -146,7 +150,11 @@
+ 		signal(SIGPIPE, SIG_DFL);
+ 		execv(argv[0], argv);
+ 		perror(argv[0]);
++#ifdef __uClinux__
++		_exit(1);
++#else
+ 		exit(1);
++#endif
+ 	}
+ 	/* Parent. */
+ 	if (pid < 0)
+diff -ur openssh-6.6p1/sshd.c openssh-6.6p1/sshd.c
+--- openssh-6.6p1/sshd.c	2011-01-11 16:20:31.000000000 +1000
++++ openssh-6.6p1/sshd.c	2014-05-23 17:00:39.833432575 +1000
+@@ -157,7 +157,11 @@
+ int test_flag = 0;
+ 
+ /* Flag indicating that the daemon is being started from inetd. */
++#ifdef __uClinux__
++int inetd_flag = 1;
++#else
+ int inetd_flag = 0;
++#endif
+ 
+ /* Flag indicating that sshd should not detach and become a daemon. */
+ int no_daemon_flag = 0;
+@@ -622,6 +626,7 @@
+ static int
+ privsep_preauth(Authctxt *authctxt)
+ {
++#ifndef __uClinux__
+	int status, r;
+ 	pid_t pid;
+ 
+@@ -667,6 +673,10 @@
+ static void
+ privsep_postauth(Authctxt *authctxt)
+ {
++#ifdef __uClinux__
++	fatal("vfork of unprivileged child failed");
++#endif
++
+ #ifdef DISABLE_FD_PASSING
+ 	if (1) {
+ #else
+@@ -680,7 +690,11 @@
+ 	/* New socket pair */
+ 	monitor_reinit(pmonitor);
+ 
++#ifdef __uClinux__
++	pmonitor->m_pid = vfork();
++#else
+ 	pmonitor->m_pid = fork();
++#endif
+ 	if (pmonitor->m_pid == -1)
+ 		fatal("fork of unprivileged child failed");
+ 	else if (pmonitor->m_pid != 0) {
+@@ -690,7 +704,11 @@
+ 		monitor_child_postauth(pmonitor);
+ 
+ 		/* NEVERREACHED */
++#ifdef __uClinux__
++		_exit(0);
++#else
+ 		exit(0);
++#endif
+ 	}
+ 
+ 	close(pmonitor->m_sendfd);
+@@ -1106,6 +1125,7 @@
+ static void
+ server_listen(void)
+ {
++#ifndef __uClinux__
+ 	u_int i;
+ 
+ 	for (i = 0; i < options.num_listen_addrs; i++) {
+@@ -1060,6 +1079,7 @@
+ 
+ 	if (!num_listen_socks)
+ 		fatal("Cannot bind any address.");
++#endif /*!__uClinux__*/
+ }
+ 
+ /*
+@@ -1529,6 +1549,10 @@
+ 	/* Fill in default values for those options not explicitly set. */
+ 	fill_default_server_options(&options);
+ 
++#ifdef __uClinux__
++	use_privsep = 0;
++#endif
++
+ 	/* challenge-response is implemented via keyboard interactive */
+ 	if (options.challenge_response_authentication)
+ 		options.kbd_interactive_authentication = 1;
+@@ -1732,8 +1756,12 @@
+ 	already_daemon = daemonized();
+ 	if (!(debug_flag || inetd_flag || no_daemon_flag || already_daemon)) {
+ 
++#ifndef __uClinux__
+ 		if (daemon(0, 0) < 0)
+ 			fatal("daemon() failed: %.200s", strerror(errno));
++#else
++		fatal("Cannot use daemon() under uClinux");
++#endif
+ 
+ 		/* Disconnect from the controlling tty. */
+ #ifdef TIOCNOTTY
+@@ -1758,9 +1786,14 @@
+ 	signal(SIGPIPE, SIG_IGN);
+ 
+ 	/* Get a connection, either from inetd or a listening TCP socket */
++#ifndef __uClinux__
+ 	if (inetd_flag) {
++#else
++	if (1) {
++#endif /*!__uClinux__*/
+ 		server_accept_inetd(&sock_in, &sock_out);
+ 	} else {
++#ifndef __uClinux__
+ 		platform_pre_listen();
+ 		server_listen();
+ 
+@@ -1791,6 +1824,7 @@
+ 		/* Accept a connection and return in a forked child */
+ 		server_accept_loop(&sock_in, &sock_out,
+ 		    &newsock, config_s);
++#endif /*!__uClinux__*/
+ 	}
+ 
+ 	/* This is the child processing a new connection. */
+@@ -2046,7 +2080,11 @@
+ 	if (use_privsep)
+ 		mm_terminate();
+ 
++#ifdef __uClinux__
++	_exit(0);
++#else
+ 	exit(0);
++#endif
+ }
+ 
+ /*
+@@ -2345,5 +2383,9 @@
+ 	if (!use_privsep || mm_is_monitor())
+ 		audit_event(SSH_CONNECTION_ABANDON);
+ #endif
++#ifdef __uClinux__
+ 	_exit(i);
++#else
++	exit(i);
++#endif
+ }
+diff -ur openssh-6.6p1/ssh.h openssh-6.6p1/ssh.h
+--- openssh-6.6p1/ssh.h	2010-06-26 09:50:30.000000000 +1000
++++ openssh-6.6p1/ssh.h	2014-05-23 17:00:39.833432575 +1000
+@@ -83,6 +83,9 @@
+ /* Used to identify ``EscapeChar none'' */
+ #define SSH_ESCAPECHAR_NONE		-2
+ 
++/* Use default, which could be ~ or none (based on tty presence) */
++#define SSH_ESCAPECHAR_DEFAULT		-3
++
+ /*
+  * unprivileged user when UsePrivilegeSeparation=yes;
+  * sshd will change its privileges to this user and its
+--- openssh-6.6p1/readconf.c.orig	2014-05-23 22:32:25.952951049 +1000
++++ openssh-6.6p1/readconf.c	2014-05-23 22:32:28.472956257 +1000
+@@ -1674,7 +1674,7 @@
+ 		}
+ 	}
+ 	if (options->escape_char == -1)
+-		options->escape_char = '~';
++		options->escape_char = SSH_ESCAPECHAR_DEFAULT;
+ 	if (options->num_system_hostfiles == 0) {
+ 		options->system_hostfiles[options->num_system_hostfiles++] =
+ 		    xstrdup(_PATH_SSH_SYSTEM_HOSTFILE);
+--- openssh-6.6p1/ssh_config.orig	2014-05-23 22:39:18.983065413 +1000
++++ openssh-6.6p1/ssh_config	2014-05-23 22:39:21.322965846 +1000
+@@ -46,3 +46,9 @@
+ #   VisualHostKey no
+ #   ProxyCommand ssh -q -W %h:%p gateway.example.com
+ #   RekeyLimit 1G 1h
++
++IdentityFile /etc/config/identity
++IdentityFile /etc/config/id_rsa
++IdentityFile /etc/config/id_dsa
++
++GlobalKnownHostsFile /etc/config/ssh_known_hosts                   
+--- openssh-6.6p1/sshd.c.orig	2014-05-23 22:41:43.262953501 +1000
++++ openssh-6.6p1/sshd.c	2014-05-23 22:41:45.273572983 +1000
+@@ -724,6 +724,7 @@
+ 
+ 		return 0;
+ 	}
++#endif
+ }
+ 
+ static void

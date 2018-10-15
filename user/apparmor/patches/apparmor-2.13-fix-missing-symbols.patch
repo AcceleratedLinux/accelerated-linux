@@ -1,0 +1,18 @@
+--- apparmor-2.13/libraries/libapparmor/src/libapparmor.map.save	2018-05-22 11:44:56.976870918 +1000
++++ apparmor-2.13/libraries/libapparmor/src/libapparmor.map	2018-05-22 11:45:57.208872225 +1000
+@@ -104,6 +104,7 @@
+ 	aa_policy_cache_open;
+ 	aa_policy_cache_filename;
+         aa_features_id;
++	aa_policy_cache_add_ro_dir;
+   local:
+         *;
+ } APPARMOR_2.11;
+@@ -115,6 +116,7 @@
+ 		_aa_autoclose;
+ 		_aa_autofclose;
+ 		_aa_dirat_for_each;
++		_aa_asprintf;
+ 	local:
+ 		*;
+ };

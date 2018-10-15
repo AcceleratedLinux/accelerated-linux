@@ -1,0 +1,5 @@
+config USER_PAM_TACACS
+	bool "PAM TACACS+"
+	depends on LIB_LIBPAM
+	help
+	  PAM should support TACACS authentication.

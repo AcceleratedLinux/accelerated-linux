@@ -1,0 +1,22 @@
+--- libreswan-3.12/Makefile.inc.local.LSW	2015-08-24 21:56:36.663761557 -0400
++++ libreswan-3.12/Makefile.inc.local	2015-08-24 22:10:12.367956758 -0400
+@@ -49,7 +49,12 @@
+ FINALCONFDIR        := $(CONFIG_USER_OPENSWAN_CONFDIR)
+ FINALCONFDDIR       := $(CONFIG_USER_OPENSWAN_CONFDIR)
+ endif
+-NSSLIBS    := -lnss3 -lplds4 -lplc4 -lnspr4
++NSSLIBS    := -L$(LIBRESWANSRCDIR)/../../../../lib/nss/build/nss-3.17.4/dist/uClinux-dist/lib/ \
++	-lnss -lnssutil -lnssb -lcryptohi -lpk11wrap -lnsspki -lcertdb \
++	-lcerthi -lpkixtop -lnssdev -lsoftokn -lpkixutil -lpkixmodule \
++	-lpkixparams -lpkixcertsel -lpkixsystem -lpkixpki -lpkixchecker \
++	-lpkixresults -lpkixstore -lfreebl -lnssdbm -lsqlite -lpkixcrlsel -ldbm \
++	-lplds4 -lplc4 -lnspr4
+ PORTINCLUDE:= -I${LIBRESWANSRCDIR}/ports/linux/include
+ PORTDEFINE  = -DKLIPS -DSCANDIR_HAS_CONST
+ USERCOMPILE:= -g
+@@ -62,3 +67,5 @@
+ USE_LIBCAP_NG := false
+ USE_LIBCURL := false
+ HAVE_NO_FORK := true
++
++USERLINK = -g 

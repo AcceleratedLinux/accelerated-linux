@@ -1,0 +1,47 @@
+From bb9e9a92a325b955ee839565618f13a2a0bf4cf0 Mon Sep 17 00:00:00 2001
+From: "Brian, Sam" <Samuel.Brian@digi.com>
+Date: Fri, 22 Jun 2018 01:50:20 +0000
+Subject: [PATCH] port-serial: don't close tty file descriptor twice
+
+After the tty is opened, the fd is passed off to a GIOChannel which
+manages it. When the serial port is closed with _close_internal(),
+g_io_channel_shutdown() is called which then calls g_io_unix_close() which
+in turn close()s the fd.
+_close_internal() performs a second explicit close() after the
+g_io_channel_shutdown() which *in the best case scenario* will fail with
+EBADF.
+This is a race condition that can result in other file descriptors being
+closed.
+
+This change avoids double closing the serial port fd -- the shutdown() call
+is removed in favour of the explicit close().
+---
+ src/mm-port-serial.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/mm-port-serial.c b/src/mm-port-serial.c
+index 44699a76..225a684e 100644
+--- a/src/mm-port-serial.c
++++ b/src/mm-port-serial.c
+@@ -1263,7 +1263,6 @@ error:
+     mm_warn ("(%s) failed to open serial device", device);
+ 
+     if (self->priv->iochannel) {
+-        g_io_channel_shutdown (self->priv->iochannel, FALSE, NULL);
+         g_io_channel_unref (self->priv->iochannel);
+         self->priv->iochannel = NULL;
+     }
+@@ -1351,7 +1350,9 @@ _close_internal (MMPortSerial *self, gboolean force)
+         /* Destroy channel */
+         if (self->priv->iochannel) {
+             data_watch_enable (self, FALSE);
+-            g_io_channel_shutdown (self->priv->iochannel, TRUE, NULL);
++            /* unref() without g_io_channel_shutdown() to destroy the channel
++             * without closing the fd. The close() is called explicitly after.
++             */
+             g_io_channel_unref (self->priv->iochannel);
+             self->priv->iochannel = NULL;
+         }
+-- 
+2.17.1
+

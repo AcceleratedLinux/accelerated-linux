@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# Create a complete disk image for the Porter.
+
+IMAGE="${1:-images/image.bin}"
+ZIMAGE="${2:-images/vmlinuz}"
+DISKRAW="${3:-images/disk.raw}"
+
+# Disk size in megabytes
+DISKSIZE="${4:-100}"
+dd if=/dev/zero of=$DISKRAW bs=1024 count=$(($DISKSIZE*1024))
+
+# Boot kernel and run mkffs
+PID_FILE="$(dirname $DISKRAW)/qemu.pid"
+qemu-system-x86_64 -net none -nographic -serial mon:stdio -pidfile $PID_FILE \
+	-append "rw root=/dev/vdb console=ttyS0,9600 init=/etc/mkffs" \
+	-kernel $ZIMAGE \
+	-drive file=$DISKRAW,if=virtio \
+	-drive file=$IMAGE,if=virtio | ( \
+		s=`date +%s`; \
+		while read t; do \
+			echo "$t"; \
+			case "$t" in \
+			*panic*) kill -INT `cat $PID_FILE` ;; \
+			esac; \
+			n=`date +%s`; \
+			d=`expr $n - $s`; \
+			if [ "$d" -gt 30 ]; then \
+				kill -INT `cat $PID_FILE`; \
+				s=$n; \
+			fi; \
+		done; \
+		echo "Finished running mkffs"; \
+	)
+rm -f $PID_FILE
+
+exit 0

@@ -1,0 +1,16 @@
+Index: libubox/sh/jshn.sh
+===================================================================
+--- libubox.orig/sh/jshn.sh
++++ libubox/sh/jshn.sh
+@@ -172,8 +172,10 @@ json_add_double() {
+ # functions read access to json variables
+ 
+ json_load() {
++	local cmds
+ 	json_cleanup
+-	eval "`jshn -r "$1"`"
++	cmds=$(jshn -r "$1") || return 1
++	eval "$cmds"
+ }
+ 
+ json_dump() {

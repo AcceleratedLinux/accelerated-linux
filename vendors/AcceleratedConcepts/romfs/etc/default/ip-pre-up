@@ -1,0 +1,12 @@
+#!/bin/sh
+[ "$IP_PRE_UP_RECURSED" ] && exit 0
+
+IP_PRE_UP_RECURSED=1
+export IP_PRE_UP_RECURSED
+
+[ "$6" -a -x "/etc/config/$6-pre-up" ] && exec "/etc/config/$6-pre-up"
+[ "$6" -a -x "/etc/ppp/$6-pre-up" ] && exec "/etc/ppp/$6-pre-up"
+
+[ -x /etc/ppp/ip-pre-up ] && exec /etc/ppp/ip-pre-up "$@"
+
+exit 0

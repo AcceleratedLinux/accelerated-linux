@@ -1,0 +1,14 @@
+
+config USER_IPTABLES_IPTABLES
+	bool "iptables"
+	help
+	  Iptables is the IP firewall administration tool for 2.4 linux.
+
+config USER_IPTABLES_IP6TABLES
+	bool "ip6tables"
+
+config USER_IPTABLES_SHARED
+	bool "iptables shared extensions"
+	help
+	  Build iptables extensions as shared objects instead of statically
+	  linking.

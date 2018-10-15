@@ -1,0 +1,30 @@
+This is a collection of useful tools, to be documented one day..
+
+- kvg   : kill a running mgetty process with a specified signal, as in:
+	  "kvg -1 ttyS0"
+
+- ltest : display state of the serial port control lines (DCD, DTR, DSR,
+          RTS, CTS) on systems that support querying them.  Optionally,
+	  you can also set the RTS and DTR lines interactively.
+
+	  Run like this: "ltest /dev/ttyS0" or "ltest -k /dev/ttyS0"
+
+	  To see line changes in quasi real time, run like this:
+
+	    "ltest -m 50 -d /dev/ttyS0"
+
+	  this will check all 50 msec ("-m 50") for changes ("deltas", -d)
+	  in the modem status lines, and print the new values.
+
+	    
+- mid   : "modem identify"
+
+	  Run like this: "mid /dev/ttyS0" to see what sort of modem is there
+	  (or whether there is something responding at all).  Don't be 
+	  surprised if some of the AT commands used for querying cause
+	  ERROR messages - not all commands are available everywhere
+
+- microcom : like minicom, but "bare minimum needed to talk to a modem"
+
+	  Run like this: "microcom /dev/ttyS0", exit with ctrl-x
+

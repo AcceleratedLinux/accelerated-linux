@@ -1,0 +1,36 @@
+QEMU Emulation of ARM Versatile-PB Evaluation Board
+---------------------------------------------------
+
+The QEMU emulator has machine support for the ARM/Versatile-PB board and
+ARM926EJ-S CPU. The ARM/Versatile-PB target images can be run in qemu.
+
+
+BOOTING
+-------
+
+Quite simply to run the generated images do:
+
+  qemu-system-arm -M versatilepb -kernel images/zImage -initrd images/rootfs.bin -dtb linux/arch/arm/boot/dts/versatile-pb.dtb -append root=/dev/ram0
+
+Qemu will open a new window with the console device of the emulated
+versatile board, and it will boot up the the usual Linux shell prompt.
+
+If you want to boot up with a serial console then do:
+
+  qemu-system-arm -M versatilepb -nographic -kernel images/zImage -initrd images/rootfs.bin -dtb linux/arch/arm/boot/dts/versatile-pb.dtb -append "root=/dev/ram0 console=ttyAMA0,115200"
+
+The serial console output with come out on the same device that run on.
+
+
+BOOTING - NO MMU LINUX
+----------------------
+
+You can run in no-MMU mode on the Versatile board too. It is basically the
+same as running the normal VM kernel. Build for the ARM/Versatile-PB-noMMU
+target.
+
+  qemu-system-arm -M versatilepb -nographic -kernel images/zImage -dtb linux/arch/arm/boot/dts/versatile-pb.dtb -append "console=ttyAMA0,115200"
+
+The serial console output will come out on the same terminal device that
+you ran qemu from.
+

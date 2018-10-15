@@ -1,0 +1,10 @@
+--- iptables-1.4.21/iptables/xshared.h.org	2018-09-14 22:50:24.444379932 +1000
++++ iptables-1.4.21/iptables/xshared.h	2018-09-14 22:50:07.112473268 +1000
+@@ -6,6 +6,7 @@
+ #include <stdint.h>
+ #include <netinet/in.h>
+ #include <net/if.h>
++#include <sys/types.h>
+ #include <linux/netfilter_ipv4/ip_tables.h>
+ #include <linux/netfilter_ipv6/ip6_tables.h>
+ 

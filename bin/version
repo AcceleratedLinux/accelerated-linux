@@ -1,0 +1,71 @@
+#!/bin/sh
+
+# no git info,  generate suitable public version based on build date
+if [  ! -d ${ROOTDIR:-`pwd`}/.git ]; then
+	YEAR=$(date +%y)
+	MONTH=$(date +%m | sed 's/^0*//')
+	DAY=$(date +%d | sed 's/^0*//')
+	VERSIONSTR="$YEAR.$MONTH.$DAY-public"
+	echo $VERSIONSTR
+	exit 0
+fi
+
+# ensure everyones time is the same
+TZ=UTC
+export TZ
+
+# are we on the build machine
+if [ "$ON_BUILD_MACHINE" ]; then
+	CREV=
+else
+	CREV="-$(git rev-parse --short HEAD)"
+fi
+
+# is the tree dirty
+DIRTY=$(git describe --always --dirty | sed -n 's/.*dirty$/-dirty/p')
+
+# Check if we have a version TAG at this commit
+
+# Find any tags pointing at this version
+TAGS=$(git tag --points-at HEAD 2> /dev/null)
+
+# look for a pure version number tag (no commit IDs or dirty is allowed)
+for v in $TAGS; do
+	VERSION=$(echo "$v" | sed -n '/^[1-9][0-9]\.*[1-9][0-2]\{0,1\}\(\.[1-9][0-9]*\)\{1,\}$/p')
+	[ "$VERSION" ] && echo "$VERSION$CREV$DIRTY" && exit 0
+done
+
+# look for a mixed name-version-YYYMMDD tag
+for v in $TAGS; do
+	VERSION=$(echo "$v" | sed -n 's/^.*-\([1-9][0-9]\.*[1-9][0-2]\{0,1\}\(\.[1-9][0-9]*\)\{1,\}\)-[0-9]\{8\}$/\1/p')
+	[ "$VERSION" ] && echo "$VERSION$CREV$DIRTY" && exit 0
+done
+
+# there is no tag forcing a version on us so we  need to create a version
+
+# find the first commit on master
+
+CNT=0
+for hash in $(git log --first-parent --pretty=format:"%H" --graph | sed 's/^\* *//')
+do
+	git branch -a --no-color --contains $hash 2> /dev/null | sed 's/^[*]\{0,1\} *//' | egrep -q '^(.*/)*master$' && break
+	CNT=$((CNT + 1))
+done
+
+# Move to 4 digit versions (always, old code kept for reference)
+#BRANCH=
+#[ $CNT -ne 0 ] && BRANCH=".$CNT"
+BRANCH=".$CNT"
+
+MASTER_COMMIT="$hash"
+
+LASTREVDATE=$(git show -s --format=${GIT_DATE:-%ci} $MASTER_COMMIT | head -n1)
+
+YEAR=$(date -d "$LASTREVDATE" +%y)
+YEAR4=$(date -d "$LASTREVDATE" +%Y)
+MONTH=$(date -d "$LASTREVDATE" +%m | sed 's/^0*//')
+COUNT=$(git rev-list --first-parent --since="$YEAR4-$MONTH-01 00:00:00" $MASTER_COMMIT | wc -l)
+
+VERSIONSTR="$YEAR.$MONTH.$COUNT$BRANCH$CREV$DIRTY"
+
+echo $VERSIONSTR
