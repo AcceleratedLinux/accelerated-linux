@@ -1,8 +1,7 @@
 Accelerated Linux Distribution
 ==============================
 
-Contents
---------
+##Contents
 
 1. Introduction
 2. Instructions for compiling
@@ -10,8 +9,7 @@ Contents
 4. Documentation
 
 
-1 Introduction
----------------
+##Introduction
 
 This source package is an "all-in-one" build framework for generating a
 complete embedded system. It has been developed with embedded devices
@@ -28,8 +26,7 @@ target boards. It is easy to extend the build for new vendors or boards
 and to add new applications.
 
 
-2 Instructions for Compiling
------------------------------
+##Instructions for Compiling
 
   1. You will need a cross-compiler package for your target. Many binary
      tool packages exist already. Your development host system may have
@@ -98,8 +95,7 @@ and to add new applications.
   Look for a file named after your target board.
 
 
-3 Changing the Applications/Kernel/Libraries
----------------------------------------------
+##Changing the Applications/Kernel/Libraries
 
   You can modify the kernel configuration and application set generated for
   your target using the config system. You can configure by running one of
@@ -128,8 +124,7 @@ and to add new applications.
    configs you have selected to customise.
 
 
-4 Documention
---------------
+##Documention
 
   There is an assortment of documentaion files under the Documentaion
   directory. The more interresting ones are:
