@@ -10,7 +10,7 @@ Contents
 4. Documentation
 
 
-Introduction
+1 Introduction
 ------------
 
 This source package is an "all-in-one" build framework for generating a
@@ -28,7 +28,7 @@ target boards. It is easy to extend the build for new vendors or boards
 and to add new applications.
 
 
-Instructions for Compiling
+2 Instructions for Compiling
 --------------------------
 
   1. You will need a cross-compiler package for your target. Many binary
@@ -98,7 +98,7 @@ Instructions for Compiling
   Look for a file named after your target board.
 
 
-Changing the Applications/Kernel/Libraries
+3 Changing the Applications/Kernel/Libraries
 ------------------------------------------
 
   You can modify the kernel configuration and application set generated for
@@ -128,7 +128,7 @@ Changing the Applications/Kernel/Libraries
    configs you have selected to customise.
 
 
-Documention
+4 Documention
 -----------
 
   There is an assortment of documentaion files under the Documentaion
