@@ -1,0 +1,17 @@
+For a ubuntu 10.04/12.04/14.04 system, here are some packages/directories
+that you will need installed. Other systems will need similar packages
+installed.
+
+  sudo apt-get update
+  sudo apt-get install build-essential doxygen libncurses5-dev xutils-dev pkg-config gettext lzma-dev liblzma-dev flex bison autoconf libtool bin86 zlib1g-dev genisoimage genext2fs tcl libssl-dev cmake libdbus-glib-1-dev gtk-doc-tools autogen lynx-cur u-boot-tools byacc haserl ruby-sass git iasl libc6-dev-i386 genisoimage syslinux lib32stdc++6 liblzma-dev:i386 zlib1g:i386 gawk intltool autopoint bc
+
+For 64bit systems you needs some 32bit compat packages:
+
+  sudo apt-get install libc6-i386
+
+And finally somewhere for the firmware to go thats useful:
+
+  sudo mkdir /tftpboot
+  sudo chmod 777 /tftpboot
+
+For some x86 platform build targets you will also need qemu installed.
