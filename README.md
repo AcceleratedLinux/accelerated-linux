@@ -35,9 +35,11 @@ and to add new applications.
      tool packages exist already. Your development host system may have
      cross cimpiler packages available for it (for example ubuntu does).
      There are third party packages available from groups such as
-     CodeSourcery. Or you can get one from community sites such as
-     www.uclinux.org (their sourceforge mirror has a long list of binary
-     toolchains for example). Install that first in the usual way.
+     CodeSourcery. Pre built toolchains are available from:
+	 
+	 https://sourceforge.net/projects/uclinux/files/Tools/
+	 
+     Install that first in the usual way.
  
   2. If you have not un-archived the source package then do that now.
      It is a bzipped tar image, so do:
