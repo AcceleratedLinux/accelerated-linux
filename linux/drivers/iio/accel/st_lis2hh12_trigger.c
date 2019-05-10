@@ -24,7 +24,7 @@ static irqreturn_t lis2hh12_irq_management(int irq, void *private)
 	u8 status;
 	struct timespec ts;
 
-	get_monotonic_boottime(&ts);
+	ts = ktime_to_timespec(ktime_get_boottime());
 	cdata->timestamp = timespec_to_ns(&ts);
 
 	if (cdata->hwfifo_enabled) {

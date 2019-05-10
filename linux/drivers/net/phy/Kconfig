@@ -28,7 +28,7 @@ config MDIO_BCM_IPROC
 
 config MDIO_BCM_UNIMAC
 	tristate "Broadcom UniMAC MDIO bus controller"
-	depends on HAS_IOMEM && OF_MDIO
+	depends on HAS_IOMEM
 	help
 	  This module provides a driver for the Broadcom UniMAC MDIO busses.
 	  This hardware can be found in the Broadcom GENET Ethernet MAC
@@ -92,7 +92,8 @@ config MDIO_CAVIUM
 
 config MDIO_GPIO
 	tristate "GPIO lib-based bitbanged MDIO buses"
-	depends on MDIO_BITBANG && GPIOLIB
+	depends on MDIO_BITBANG
+	depends on GPIOLIB || COMPILE_TEST
 	---help---
 	  Supports GPIO lib-based MDIO busses.
 
@@ -223,6 +224,7 @@ comment "MII PHY device drivers"
 config SFP
 	tristate "SFP cage support"
 	depends on I2C && PHYLINK
+	depends on HWMON || HWMON=n
 	select MDIO_I2C
 
 config AMD_PHY
@@ -248,7 +250,7 @@ config AT803X_PHY
 
 config BCM63XX_PHY
 	tristate "Broadcom 63xx SOCs internal PHY"
-	depends on BCM63XX
+	depends on BCM63XX || COMPILE_TEST
 	select BCM_NET_PHYLIB
 	---help---
 	  Currently supports the 6348 and 6358 PHYs.
@@ -370,6 +372,11 @@ config MARVELL_10G_PHY
 	tristate "Marvell Alaska 10Gbit PHYs"
 	---help---
 	  Support for the Marvell Alaska MV88X3310 and compatible PHYs.
+
+config MV88X3310P_PHY
+	tristate "MV88X3310P PHY"
+	---help---
+	  Supports the MV88X3310P PHY.
 
 config MESON_GXL_PHY
 	tristate "Amlogic Meson GXL Internal PHY"

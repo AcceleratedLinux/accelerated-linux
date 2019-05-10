@@ -7,7 +7,7 @@ UROMFSIMG = $(IMAGEDIR)/urootfs.bin
 ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
-DTB       = $(IMAGEDIR)/armada-388-db.dtb
+DTB       = $(IMAGEDIR)/mt7623n-bananapi-bpi-r2.dtb
 
 DIRS = 
 
@@ -95,7 +95,7 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/mt7623-bananapi-bpi-r2.dtb $(DTB)
+	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/mt7623n-bananapi-bpi-r2.dtb $(DTB)
 	cat $(DTB) >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x81000000 -e 0x81000000 -n "Linux-4.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x88000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)

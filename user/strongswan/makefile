@@ -1,5 +1,5 @@
 
-VERSION = 5.5.3
+VERSION = 5.7.1
 URL = http://download.strongswan.org/strongswan-$(VERSION).tar.bz2
 strongswan-$(VERSION)_ROMFS = strongswan_romfs
 

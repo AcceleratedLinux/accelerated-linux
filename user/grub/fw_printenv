@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+#  Copyright (C) 2013-2018 by Digi International Inc.
+#  All rights reserved.
+#
+#  This program is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License version 2 as published by
+#  the Free Software Foundation.
+
+# fw_setenv/fw_printenv-workalike wrapper for grub-editenv.
+# bootpart=a/bootpart=b translates to default=0/default=1
+
+GRUBENV=/efi/grub/grubenv
+
+case $0 in
+*fw_setenv)
+	[ "$#" = 0 ] && exit 1
+	key="$1"
+	shift
+	args="$@"
+
+	# if nothing has changed do not write to env, just exit
+	[ "$(fw_printenv $key 2> /dev/null)" = "$key=$args" ] && exit 0
+
+	case "$key=$args" in
+	bootpart=b) key=default; args=1 ;;
+	bootpart=*) key=default; args=0 ;;
+	esac
+	if [ "$args" ]; then
+		grub-editenv "$GRUBENV" set "$key"="$args"
+	else
+		grub-editenv "$GRUBENV" unset "$key"
+	fi
+	exit $?
+	;;
+*)
+	N=
+	for arg in "$@"; do
+		case "$arg" in
+		-n)
+			if [ "$#" != 2 ]; then
+				echo "## Error: \`-n' option requires exactly one argument" >&2
+				exit 1
+			fi
+			N=1
+		;;
+		-h|--help)
+			echo "usage:  fw_printenv [-n] [variable name]" >&2
+			exit 0
+		;;
+		-*)
+			echo "fw_printenv: invalid option -- ${arg:1}" >&2
+			exit 1
+		;;
+		esac
+	done
+
+	genv="$(grub-editenv "$GRUBENV" list)"
+	if [ "$#" = 0 ]; then
+		echo "$genv" | sed -e 's/^default=0$/bootpart=a/' -e 's/^default=1$/bootpart=b/'
+		exit 0
+	fi
+
+	STATUS=0
+	for arg in "$@"; do
+		[ "$arg" = '-n' ] && continue
+		if [ "$arg" = bootpart ]; then
+			case "$(echo "$genv" | grep "^default=")" in
+			default=1) val='bootpart=b' ;;
+			*)           val='bootpart=a' ;;
+			esac
+		else
+			val="$(echo "$genv" | grep "^$arg=")"
+		fi
+		if [ "$val" ]; then
+			[ "$N" ] && echo "${val#*=}" || echo "$val"
+		else
+			echo "## Error: \"$arg\" not defined" >&2
+			STATUS=1
+		fi
+	done
+
+	exit $STATUS
+	;;
+esac

@@ -440,7 +440,7 @@ out:
 }
 device_initcall(octeon_rng_device_init);
 
-const struct of_device_id octeon_ids[] __initconst = {
+static const struct of_device_id octeon_ids[] __initconst = {
 	{ .compatible = "simple-bus", },
 	{ .compatible = "cavium,octeon-6335-uctl", },
 	{ .compatible = "cavium,octeon-5750-usbn", },
@@ -501,7 +501,7 @@ static void __init octeon_fdt_set_phy(int eth, int phy_addr)
 	if (phy_addr >= 256 && alt_phy > 0) {
 		const struct fdt_property *phy_prop;
 		struct fdt_property *alt_prop;
-		u32 phy_handle_name;
+		fdt32_t phy_handle_name;
 
 		/* Use the alt phy node instead.*/
 		phy_prop = fdt_get_property(initial_boot_params, eth, "phy-handle", NULL);
@@ -1069,6 +1069,6 @@ end_led:
 
 static int __init octeon_publish_devices(void)
 {
-	return of_platform_bus_probe(NULL, octeon_ids, NULL);
+	return of_platform_populate(NULL, octeon_ids, NULL, NULL);
 }
 arch_initcall(octeon_publish_devices);

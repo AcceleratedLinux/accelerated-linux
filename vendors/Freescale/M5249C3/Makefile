@@ -8,7 +8,7 @@ ELFIMAGE = $(IMAGEDIR)/image.elf
 
 DIRS = 
 
-ROMFS_DIRS = bin dev etc etc/config etc/default home lib mnt proc usr var \
+ROMFS_DIRS = bin dev etc etc/config etc/default home lib mnt proc sbin usr var \
              home/httpd home/httpd/cgi-bin
 
 DEVICES = \

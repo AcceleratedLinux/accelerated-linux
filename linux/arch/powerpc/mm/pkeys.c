@@ -6,19 +6,21 @@
  */
 
 #include <asm/mman.h>
+#include <asm/mmu_context.h>
 #include <asm/setup.h>
 #include <linux/pkeys.h>
 #include <linux/of_device.h>
 
 DEFINE_STATIC_KEY_TRUE(pkey_disabled);
-bool pkey_execute_disable_supported;
 int  pkeys_total;		/* Total pkeys as per device tree */
-bool pkeys_devtree_defined;	/* pkey property exported by device tree */
-u32  initial_allocation_mask;	/* Bits set for reserved keys */
-u64  pkey_amr_mask;		/* Bits in AMR not to be touched */
-u64  pkey_iamr_mask;		/* Bits in AMR not to be touched */
-u64  pkey_uamor_mask;		/* Bits in UMOR not to be touched */
-int  execute_only_key = 2;
+u32  initial_allocation_mask;   /* Bits set for the initially allocated keys */
+u32  reserved_allocation_mask;  /* Bits set for reserved keys */
+static bool pkey_execute_disable_supported;
+static bool pkeys_devtree_defined;	/* property exported by device tree */
+static u64 pkey_amr_mask;		/* Bits in AMR not to be touched */
+static u64 pkey_iamr_mask;		/* Bits in AMR not to be touched */
+static u64 pkey_uamor_mask;		/* Bits in UMOR not to be touched */
+static int execute_only_key = 2;
 
 #define AMR_BITS_PER_PKEY 2
 #define AMR_RD_BIT 0x1UL
@@ -44,7 +46,7 @@ static void scan_pkey_feature(void)
 	 * Since any pkey can be used for data or execute, we will just treat
 	 * all keys as equal and track them as one entity.
 	 */
-	pkeys_total = be32_to_cpu(vals[0]);
+	pkeys_total = vals[0];
 	pkeys_devtree_defined = true;
 }
 
@@ -56,7 +58,7 @@ static inline bool pkey_mmu_enabled(void)
 		return cpu_has_feature(CPU_FTR_PKEY);
 }
 
-int pkey_initialize(void)
+static int pkey_initialize(void)
 {
 	int os_reserved, i;
 
@@ -121,8 +123,8 @@ int pkey_initialize(void)
 #else
 	os_reserved = 0;
 #endif
-	initial_allocation_mask  = (0x1 << 0) | (0x1 << 1) |
-					(0x1 << execute_only_key);
+	/* Bits are in LE format. */
+	reserved_allocation_mask = (0x1 << 1) | (0x1 << execute_only_key);
 
 	/* register mask is in BE format */
 	pkey_amr_mask = ~0x0ul;
@@ -138,9 +140,10 @@ int pkey_initialize(void)
 
 	/* mark the rest of the keys as reserved and hence unavailable */
 	for (i = (pkeys_total - os_reserved); i < pkeys_total; i++) {
-		initial_allocation_mask |= (0x1 << i);
+		reserved_allocation_mask |= (0x1 << i);
 		pkey_uamor_mask &= ~(0x3ul << pkeyshift(i));
 	}
+	initial_allocation_mask = reserved_allocation_mask | (0x1 << 0);
 
 	if (unlikely((pkeys_total - os_reserved) <= execute_only_key)) {
 		/*
@@ -359,9 +362,6 @@ static bool pkey_access_permitted(int pkey, bool write, bool execute)
 	int pkey_shift;
 	u64 amr;
 
-	if (!pkey)
-		return true;
-
 	if (!is_pkey_enabled(pkey))
 		return true;
 
@@ -414,4 +414,14 @@ bool arch_vma_access_permitted(struct vm_area_struct *vma, bool write,
 		return true;
 
 	return pkey_access_permitted(vma_pkey(vma), write, execute);
+}
+
+void arch_dup_pkeys(struct mm_struct *oldmm, struct mm_struct *mm)
+{
+	if (static_branch_likely(&pkey_disabled))
+		return;
+
+	/* Duplicate the oldmm pkey state in mm: */
+	mm_pkey_allocation_map(mm) = mm_pkey_allocation_map(oldmm);
+	mm->context.execute_only_pkey = oldmm->context.execute_only_pkey;
 }

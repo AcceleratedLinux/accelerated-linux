@@ -304,7 +304,7 @@ static struct ctl_table ipsec_table[] = {
           .child    = NULL,
           .proc_handler = &proc_dointvec,
        },
-       {0}
+       {}
 #else
 	{ NET_IPSEC_ICMP, "icmp", &sysctl_ipsec_icmp,
 	  sizeof(int), 0644, NULL, .proc_handler = &proc_dointvec},    
@@ -312,7 +312,7 @@ static struct ctl_table ipsec_table[] = {
 	  sizeof(int), 0644, NULL, .proc_handler = &proc_dointvec},    
 	{ NET_IPSEC_TOS, "tos", &sysctl_ipsec_tos,
 	  sizeof(int), 0644, NULL, .proc_handler = &proc_dointvec},    
-	{0}
+	{}
 #endif
 };
 
@@ -326,10 +326,10 @@ static struct ctl_table ipsec_net_table[] = {
           .child    = ipsec_table,
           .proc_handler = NULL,
         },
-       { 0 }
+       {}
 #else
         { NET_IPSEC, "ipsec", NULL, 0, 0555, ipsec_table },
-        { 0 }
+        {}
 #endif
 };
  
@@ -343,10 +343,10 @@ static struct ctl_table ipsec_root_table[] = {
           .child    = ipsec_net_table,
           .proc_handler = NULL,
         },
-       { 0 }
+       {}
 #else
         { CTL_NET, "net", NULL, 0, 0555, ipsec_net_table },
-        { 0 }
+        {}
 #endif
 };
  

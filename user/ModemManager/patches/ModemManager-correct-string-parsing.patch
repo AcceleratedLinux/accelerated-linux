@@ -1,8 +1,6 @@
-diff --git a/plugins/novatel/mm-sim-novatel-lte.c b/plugins/novatel/mm-sim-novatel-lte.c
-index 41d3041..4622207 100644
---- a/plugins/novatel/mm-sim-novatel-lte.c
-+++ b/plugins/novatel/mm-sim-novatel-lte.c
-@@ -74,8 +74,8 @@ imsi_read_ready (MMBaseModem *modem,
+--- ModemManager/plugins/novatel/mm-sim-novatel-lte.c	2018-11-13 15:22:44.890516047 +1000
++++ ModemManager/plugins/novatel/mm-sim-novatel-lte.c.new	2018-11-26 15:34:13.092943918 +1000
+@@ -66,8 +66,8 @@
      str = mm_strip_tag (response, "+CRSM:");
  
      /* With or without quotes... */
@@ -10,6 +8,6 @@ index 41d3041..4622207 100644
 -        sscanf (str, "%d,%d,%18c", &sw1, &sw2, (char *) &buf) != 3) {
 +    if (sscanf (str, "%d,%d,\"%18s\"", &sw1, &sw2, (char *) &buf) != 3 &&
 +        sscanf (str, "%d,%d,%18s", &sw1, &sw2, (char *) &buf) != 3) {
-         g_simple_async_result_set_error (simple,
-                                          MM_CORE_ERROR,
-                                          MM_CORE_ERROR_FAILED,
+         g_task_return_new_error (task,
+                                  MM_CORE_ERROR,
+                                  MM_CORE_ERROR_FAILED,

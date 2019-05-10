@@ -132,6 +132,9 @@ static int
 ipsec_ocf_authalg(int authalg)
 {
 	switch (authalg) {
+	case AH_SHA2_512:  return CRYPTO_SHA2_512_HMAC;
+	case AH_SHA2_384:  return CRYPTO_SHA2_384_HMAC;
+	case AH_SHA2_256:  return CRYPTO_SHA2_256_HMAC;
 	case AH_SHA:  return CRYPTO_SHA1_HMAC;
 	case AH_MD5:  return CRYPTO_MD5_HMAC;
 	}
@@ -287,7 +290,20 @@ ipsec_ocf_sa_init(struct ipsec_sa *ipsp, int authalg, int encalg)
 	cria.cri_alg = ipsec_ocf_authalg(authalg);
 	cria.cri_klen = ipsp->ips_key_bits_a;
 	cria.cri_key  = ipsp->ips_key_a;
-	cria.cri_mlen = 12;
+	switch (cria.cri_alg) {
+	case CRYPTO_SHA2_512_HMAC:
+		cria.cri_mlen = 32;
+		break;
+	case CRYPTO_SHA2_384_HMAC:
+		cria.cri_mlen = 24;
+		break;
+	case CRYPTO_SHA2_256_HMAC:
+		cria.cri_mlen = 16;
+		break;
+	default:
+		cria.cri_mlen = 12;
+		break;
+	}
 
 	crie.cri_alg = ipsec_ocf_encalg(encalg);
 	crie.cri_klen = ipsp->ips_key_bits_e;
@@ -631,10 +647,23 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 
 		/* OCF needs cri_mlen initialized in order to properly migrate the
 		 * session to another driver */
-		crda->crd_mlen = 12;
+		switch (crda->crd_alg) {
+		case CRYPTO_SHA2_512_HMAC:
+			crda->crd_mlen = 32;
+			break;
+		case CRYPTO_SHA2_384_HMAC:
+			crda->crd_mlen = 24;
+			break;
+		case CRYPTO_SHA2_256_HMAC:
+			crda->crd_mlen = 16;
+			break;
+		default:
+			crda->crd_mlen = 12;
+			break;
+		}
 
 		/* Copy the authenticator to check aganinst later */
-		memcpy(irs->hash, irs->authenticator, 12);
+		memcpy(irs->hash, irs->authenticator, crda->crd_mlen);
 
 		if (!crde) { /* assume AH processing */
 			/* AH processing, save fields we have to zero */
@@ -650,7 +679,7 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 			}
 			crda->crd_len      = irs->skb->len;
 			crda->crd_skip     = ((unsigned char *)irs->iph) - irs->skb->data;
-			memset(irs->authenticator, 0, 12);
+			memset(irs->authenticator, 0, crda->crd_mlen);
 		} else {
 			crda->crd_len      = irs->ilen;
 			crda->crd_skip     =
@@ -677,7 +706,7 @@ ipsec_ocf_rcv(struct ipsec_rcv_state *irs)
 			 * processing, either directly or via their implementation.
 			 */
 #if 0
-			memset(irs->authenticator, 0, 12);
+			memset(irs->authenticator, 0, crda->crd_mlen);
 #endif
 		}
 	}
@@ -1078,6 +1107,24 @@ ipsec_ocf_xmit(struct ipsec_xmit_state *ixs)
 			crypto_freereq(crp);
 			return IPSEC_RCV_BADPROTO;
 		}
+
+		/* OCF needs cri_mlen initialized in order to properly migrate
+		 * the session to another driver */
+		switch (crda->crd_alg) {
+		case CRYPTO_SHA2_512_HMAC:
+			crda->crd_mlen = 32;
+			break;
+		case CRYPTO_SHA2_384_HMAC:
+			crda->crd_mlen = 24;
+			break;
+		case CRYPTO_SHA2_256_HMAC:
+			crda->crd_mlen = 16;
+			break;
+		default:
+			crda->crd_mlen = 12;
+			break;
+		}
+
 		if (!crde) { /* assume AH processing */
 			/* AH processing, save fields we have to zero */
 			crda->crd_skip = ((unsigned char *) ixs->iph) - ixs->skb->data;
@@ -1095,16 +1142,12 @@ ipsec_ocf_xmit(struct ipsec_xmit_state *ixs)
 				(((struct ahhdr *)(ixs->dat + ixs->iphlen))->ah_data) -
 					ixs->skb->data;
 			crda->crd_len      = ixs->len - ixs->authlen;
-			memset(ixs->skb->data + crda->crd_inject, 0, 12);
+			memset(ixs->skb->data + crda->crd_inject, 0, crda->crd_mlen);
 		} else {
 			crda->crd_skip     = ((unsigned char *) ixs->espp) - ixs->skb->data;
 			crda->crd_inject   = ixs->len - ixs->authlen;
 			crda->crd_len      = ixs->len - ixs->iphlen - ixs->authlen;
 		}
-
-		/* OCF needs cri_mlen initialized in order to properly migrate
-		 * the session to another driver */
-		crda->crd_mlen = 12;
 
 		crda->crd_key    = ipsp->ips_key_a;
 		crda->crd_klen   = ipsp->ips_key_bits_a;
@@ -1209,6 +1252,30 @@ static struct ipsec_alg_supported ocf_ah_algs[] = {
 	  .ias_keymaxbits = 160,
   },
   {
+	  .ias_name       = "ocf-sha256hmac",
+	  .ias_id         = AH_SHA2_256,
+	  .ias_exttype    = SADB_EXT_SUPPORTED_AUTH,
+	  .ias_ivlen      = 0,
+	  .ias_keyminbits = 256,
+	  .ias_keymaxbits = 256,
+  },
+  {
+	  .ias_name       = "ocf-sha384hmac",
+	  .ias_id         = AH_SHA2_384,
+	  .ias_exttype    = SADB_EXT_SUPPORTED_AUTH,
+	  .ias_ivlen      = 0,
+	  .ias_keyminbits = 384,
+	  .ias_keymaxbits = 384,
+  },
+  {
+	  .ias_name       = "ocf-sha512hmac",
+	  .ias_id         = AH_SHA2_512,
+	  .ias_exttype    = SADB_EXT_SUPPORTED_AUTH,
+	  .ias_ivlen      = 0,
+	  .ias_keyminbits = 512,
+	  .ias_keymaxbits = 512,
+  },
+  {
 	  .ias_name       = NULL,
 	  .ias_id         = 0,
 	  .ias_exttype    = 0,
@@ -1235,6 +1302,30 @@ static struct ipsec_alg_supported ocf_esp_algs[] = {
 	  .ias_ivlen      = 0,
 	  .ias_keyminbits = 160,
 	  .ias_keymaxbits = 160,
+  },
+  {
+	  .ias_name       = "ocf-sha256hmac",
+	  .ias_id         = AH_SHA2_256,
+	  .ias_exttype    = SADB_EXT_SUPPORTED_AUTH,
+	  .ias_ivlen      = 0,
+	  .ias_keyminbits = 256,
+	  .ias_keymaxbits = 256,
+  },
+  {
+	  .ias_name       = "ocf-sha384hmac",
+	  .ias_id         = AH_SHA2_384,
+	  .ias_exttype    = SADB_EXT_SUPPORTED_AUTH,
+	  .ias_ivlen      = 0,
+	  .ias_keyminbits = 384,
+	  .ias_keymaxbits = 384,
+  },
+  {
+	  .ias_name       = "ocf-sha512hmac",
+	  .ias_id         = AH_SHA2_512,
+	  .ias_exttype    = SADB_EXT_SUPPORTED_AUTH,
+	  .ias_ivlen      = 0,
+	  .ias_keyminbits = 512,
+	  .ias_keymaxbits = 512,
   },
   {
 	  .ias_name       = "ocf-aes",
@@ -1284,13 +1375,14 @@ ipsec_ocf_check_alg(struct ipsec_alg_supported *s)
 	struct cryptoini cri;
 	int64_t cryptoid;
 
+	KLIPS_PRINT(debug_pfkey, "klips_debug:ipsec_ocf: checking for %s\n", s->ias_name);
 	memset(&cri, 0, sizeof(cri));
 	if (s->ias_exttype == SADB_EXT_SUPPORTED_ENCRYPT)
 		cri.cri_alg  = ipsec_ocf_encalg(s->ias_id);
 	else
 		cri.cri_alg  = ipsec_ocf_authalg(s->ias_id);
 	cri.cri_klen     = s->ias_keyminbits;
-	cri.cri_key      = "0123456789abcdefghijklmnopqrstuvwxyz";
+	cri.cri_key      = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 	if (crypto_newsession(&cryptoid, &cri, ipsec_ocf_crid)) {
 		KLIPS_PRINT(debug_pfkey, "klips_debug:ipsec_ocf:%s not supported\n",

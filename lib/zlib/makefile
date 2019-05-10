@@ -1,3 +1,5 @@
+export ACL_LICENSE = BSD (3 clause)
+
 URL = http://www.zlib.net/zlib-1.2.11.tar.gz
 
 zlib-1.2.11_NODEFCONF = 1

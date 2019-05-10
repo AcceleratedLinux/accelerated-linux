@@ -1,0 +1,31 @@
+Fixed redisplay of user input containing newlines, carriage returns, and tabs.
+Previously, the tinyrl "point" was getting out of sync with where the text
+was because \n \r \t were not interpreted as special characters.
+
+--- tinyrl/tinyrl.c.orig	2019-04-02 16:11:03.456560941 +1000
++++ tinyrl/tinyrl.c	2019-04-02 16:14:51.230235105 +1000
+@@ -51,6 +51,8 @@
+ #define ESCAPE 27
+ #define BACKSPACE 127
+ 
++#define TAB_WIDTH 8
++
+ static void tinyrl_vt100_clear_screen(struct tinyrl *this)
+ {
+ 	tinyrl_printf(this, "\x1b[2J");
+@@ -468,7 +470,14 @@
+ 	for (point = 0; point < len; point = next) {
+ 		width = utf8_grapheme_width(s, len, point, &next);
+ 		*col += width;
+-		if (*col > row_width) {
++		if (s[point] == '\t')
++			*col = TAB_WIDTH*((*col + 1)/TAB_WIDTH + 1);
++		if (s[point] == '\n') {
++			*row += 1;
++			*col = 0;
++		} else if (s[point] == '\r') {
++			*col = 0;
++		} else if (*col > row_width) {
+ 			*row += 1;
+ 			*col = width;
+ 		}

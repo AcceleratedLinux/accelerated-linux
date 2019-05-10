@@ -1,3 +1,4 @@
+export ACL_LICENSE = PublicDomain
 
 EXEC = dhrystone
 OBJS = dhry_1.o dhry_2.o

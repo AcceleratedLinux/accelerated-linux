@@ -30,7 +30,7 @@ static char sccsid[] = "@(#)tftp.c	5.7 (Berkeley) 6/29/88";
 
 #include <netinet/in.h>
 
-#include <arpa/tftp.h>
+#include <arpa/inet.h>
 
 #include <signal.h>
 #include <stdio.h>
@@ -44,7 +44,7 @@ static char sccsid[] = "@(#)tftp.c	5.7 (Berkeley) 6/29/88";
 #include "netflash.h"
 #include "tftp.h"
 
-static int tftpmakerequest(int request, char *name, struct tftphdr *tp, char *mode);
+static int tftpmakerequest(int request, char *name, struct tftphdr *tp, char *mode, int blksize);
 static void tftpnak(int error);
 static void tftpstartclock(void);
 static void tftptpacket(char *s, struct tftphdr *tp, int n);
@@ -58,10 +58,9 @@ extern  int     tftpverbose;
 extern  int     tftprexmtval;
 extern  int     tftpmaxtimeout;
 
-extern struct tftphdr *tftpw_init(void);
+extern struct tftphdr *tftpw_init(int size);
 
-#define PKTSIZE    SEGSIZE+4
-char    tftpackbuf[PKTSIZE];
+char    *tftpackbuf;
 int	tftptimeout;
 sigjmp_buf	tftptimeoutbuf;
 
@@ -187,14 +186,47 @@ abort:
 }
 #endif
 
+static char *tftp_get_option(const char *option, char *buf, int len)
+{
+	int opt_val = 0;
+	int opt_found = 0;
+	int k;
+
+	while (len > 0) {
+		/* Make sure options are terminated correctly */
+		for (k = 0; k < len; k++) {
+			if (buf[k] == '\0') {
+				goto nul_found;
+			}
+		}
+		return NULL;
+ nul_found:
+		if (opt_val == 0) { /* it's "name" part */
+			if (strcasecmp(buf, option) == 0) {
+				opt_found = 1;
+			}
+		} else if (opt_found) {
+			return buf;
+		}
+
+		k++;
+		buf += k;
+		len -= k;
+		opt_val ^= 1;
+	}
+
+	return NULL;
+}
+
 /*
  * Receive a file.
  */
 void
-tftprecvfile(fd, name, mode)
+tftprecvfile(fd, name, mode, blksize)
 	int fd;
 	char *name;
 	char *mode;
+	int blksize;
 {
 	register struct tftphdr *ap;
 	struct tftphdr *dp, *w_init();
@@ -206,17 +238,20 @@ tftprecvfile(fd, name, mode)
 	int firsttrip = 1;
 	FILE *file;
 	int convert;                    /* true if converting crlf -> lf */
-
+	int pktsize = blksize + 4;
+	int expect_OACK;
 	tftpstartclock();
-	dp = tftpw_init();
+	tftpackbuf = realloc(tftpackbuf, pktsize);
 	ap = (struct tftphdr *)tftpackbuf;
+	dp = tftpw_init(pktsize); /* allocate buf with unconfirmed size */
 	file = local_fdopen(fd, "w");
 	convert = !strcmp(mode, "netascii");
 
 	signal(SIGALRM, tftptimer);
 	do {
 		if (firsttrip) {
-			size = tftpmakerequest(RRQ, name, ap, mode);
+			size = tftpmakerequest(RRQ, name, ap, mode, blksize);
+			expect_OACK = 1;
 			firsttrip = 0;
 		} else {
 			ap->th_opcode = htons((u_short)ACK);
@@ -242,7 +277,7 @@ send_ack:
 			alarm(tftprexmtval);
 			do  {
 				fromlen = sizeof (from);
-				n = recvfrom(tftpf, dp, PKTSIZE, 0,
+				n = recvfrom(tftpf, dp, pktsize, 0,
 				    (struct sockaddr *)&from, &fromlen);
 			} while (n <= 0);
 			alarm(0);
@@ -255,15 +290,49 @@ send_ack:
 				tftptpacket("received", dp, n);
 			/* should verify client address */
 			dp->th_opcode = ntohs(dp->th_opcode);
-			dp->th_block = ntohs(dp->th_block);
 			if (dp->th_opcode == ERROR) {
 				printf("Error code %d: %s\n", dp->th_code,
 					dp->th_msg);
 				goto abort;
 			}
+			/* handle option ack */
+			if (expect_OACK) {
+				if (dp->th_opcode == OACK) {
+					expect_OACK = 0;
+					/* server seems to support options */
+					char *res;
+					res = tftp_get_option("blksize", dp->th_stuff, fromlen - 2);
+					if (res) {
+						blksize = atoi(res);
+						if (blksize < 0)
+							goto abort;
+						pktsize = blksize + 4;
+						tftpackbuf = realloc(tftpackbuf, pktsize);
+					}
+					/* ACK for OACK, has block number 0 */
+					dp->th_block = ntohs(dp->th_block);
+					ap->th_block = htons((short)0);
+					ap->th_opcode = htons((u_short)ACK);
+					size = 4;
+					goto send_ack;
+				} else {
+					expect_OACK = 0;
+					printf("Server does not support blocksize option. Use blocksize 512.\n");
+					/* server does not support options
+					 * fall back to standard 512 */
+					blksize = SEGSIZE;
+					pktsize = PKTSIZE;
+				}
+				if (tftpverbose)
+					printf("Using blocksize: %d\n", blksize);
+				/* rfc2347:
+				 * "An option not acknowledged by the server
+				 * must be ignored by the client and server
+				 * as if it were never requested." */
+			}
 			if (dp->th_opcode == DATA) {
 				int j;
-
+				dp->th_block = ntohs(dp->th_block);
 				if (dp->th_block == block) {
 					break;          /* have next packet */
 				}
@@ -279,14 +348,13 @@ send_ack:
 				}
 			}
 		}
-	/*      size = write(fd, dp->th_data, n - 4); */
 		size = tftpwriteit(file, &dp, n - 4, convert);
 		if (size < 0) {
 			tftpnak(errno + 100);
 			break;
 		}
 		amount += size;
-	} while (size == SEGSIZE);
+	} while (size == blksize);
 abort:                                          /* ok to ack, since user */
 	ap->th_opcode = htons((u_short)ACK);    /* has seen err msg */
 	ap->th_block = htons(block);
@@ -297,11 +365,13 @@ abort:                                          /* ok to ack, since user */
 	tftpstopclock();
 	if (amount > 0)
 		tftpprintstats("Received", amount, "from", name);
+	tftprw_free();
+	free(tftpackbuf);
 }
 
 static int
-tftpmakerequest(request, name, tp, mode)
-	int request;
+tftpmakerequest(request, name, tp, mode, blksize)
+	int request, blksize;
 	char *name, *mode;
 	struct tftphdr *tp;
 {
@@ -315,6 +385,16 @@ tftpmakerequest(request, name, tp, mode)
 	strcpy(cp, mode);
 	cp += strlen(mode);
 	*cp++ = '\0';
+	/* according to RFC 1350, 512 is the default */
+	/* add "blksize", <nul>, blksize, <nul> */
+	strcpy(cp, "blksize");
+	cp += sizeof("blksize");
+	cp += snprintf(cp, 6, "%d", blksize) + 1;
+	/* add "tsize", <nul>, size, <nul> (see RFC2349) */
+	strcpy(cp, "tsize");
+	cp += sizeof("tsize");
+	strcpy(cp, "0");
+	cp += 2;
 	return (cp - (char *)tp);
 }
 
@@ -346,8 +426,9 @@ tftpnak(error)
 	register struct tftphdr *tp;
 	int length;
 	register struct errmsg *pe;
+	char *nakbuf[PKTSIZE];
 
-	tp = (struct tftphdr *)tftpackbuf;
+	tp = (struct tftphdr *)nakbuf;
 	tp->th_opcode = htons((u_short)ERROR);
 	tp->th_code = htons((u_short)error);
 	for (pe = tftperrmsgs; pe->e_code >= 0; pe++)
@@ -377,7 +458,7 @@ tftptpacket(s, tp, n)
 	int n;
 {
 	static char *opcodes[] =
-	   { "#0", "RRQ", "WRQ", "DATA", "ACK", "ERROR" };
+	   { "#0", "RRQ", "WRQ", "DATA", "ACK", "ERROR", "OACK"};
 	register char *cp, *file;
 	u_short op = ntohs(tp->th_opcode);
 

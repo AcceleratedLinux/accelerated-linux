@@ -86,6 +86,10 @@ ipsec_rcv_ah_checks(struct ipsec_rcv_state *irs,
 
 	irs->said.spi = irs->protostuff.ahstuff.ahp->ah_spi;
 
+	/* OCF supports other hashes */
+	if (irs->ipsp->ocf_in_use)
+		return IPSEC_RCV_OK;
+
 	/* XXX we only support the one 12-byte authenticator for now */
 	if(irs->protostuff.ahstuff.ahp->ah_hl != ((AHHMAC_HASHLEN+AHHMAC_RPLLEN) >> 2)) {
 		KLIPS_PRINT(debug_rcv & DB_RX_INAU,

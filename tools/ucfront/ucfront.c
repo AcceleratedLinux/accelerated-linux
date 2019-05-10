@@ -55,10 +55,10 @@ static enum {
 	LIBTYPE_MUSL,
 } libtype = LIBTYPE_NONE;
 
-/* Are we generating a flat executable file, if we are do not ever use
- * crtbegin.o/crtend.o as the flat handling does contructors for us
+/* Some libraries or platform types require crtbegin.o/crtend.o
+ * (flat format binaries don't, musl also does not need them).
  */
-static int flat_executable = 0;
+static int needs_begin_end_constructors = 1;
 
 static int pthread = 0;
 
@@ -452,6 +452,7 @@ static void find_lib_env(void)
 		}
 	}
 	else if (getenv("CONFIG_DEFAULTS_LIBC_MUSL")) {
+		needs_begin_end_constructors = 0;
 		if (config_libcdir) {
 			libtype = LIBTYPE_MUSL;
 			x_asprintf(&libc_libdir, "%s/%s/install/lib", rootdir, config_libcdir);
@@ -678,7 +679,7 @@ static void process_args(int argc, char **argv)
 		}
 
 		if (strstr(argv[i], "-elf2flt")) {
-			flat_executable = 1;
+			needs_begin_end_constructors = 0;
 			args_add(stripped_args, argv[i]);
 			continue;
 		}
@@ -738,7 +739,7 @@ static void process_args(int argc, char **argv)
 		else {
 			if (!nostartfiles) {
 				startfile = NULL;
-				if (!flat_executable)
+				if (needs_begin_end_constructors)
 					startfile = find_gcc_file(compiler,
 							(mode == MODE_LINK) ? "crtbegin.o" : "crtbeginS.o");
 				if (startfile)
@@ -829,7 +830,7 @@ static void process_args(int argc, char **argv)
 			}
 #endif
 			startfile = NULL;
-			if (!flat_executable)
+			if (needs_begin_end_constructors)
 				startfile = find_gcc_file(compiler,
 						(mode == MODE_LINK) ? "crtend.o" : "crtendS.o");
 			if (startfile)

@@ -1,6 +1,6 @@
 #
-# Automatically generated make config: don't edit
-# Dist builder
+# Automatically generated file; DO NOT EDIT.
+# Embedded Linux Configuration
 #
 CONFIG_DISTVERSION="5.0"
 
@@ -22,6 +22,7 @@ CONFIG_DISTVERSION="5.0"
 # CONFIG_DEFAULTS_ATARI is not set
 # CONFIG_DEFAULTS_ATHEROS is not set
 # CONFIG_DEFAULTS_ATMEL is not set
+# CONFIG_DEFAULTS_ATT is not set
 # CONFIG_DEFAULTS_AVNET is not set
 # CONFIG_DEFAULTS_BANANAPI is not set
 # CONFIG_DEFAULTS_DIGI is not set
@@ -73,11 +74,8 @@ CONFIG_DEFAULTS_SECURECOMPUTING_SG570=y
 #
 # Kernel/Library/Defaults Selection
 #
-
-#
-# Kernel is linux
-#
 CONFIG_DEFAULTS_KERNEL_LINUX=y
+# CONFIG_DEFAULTS_KERNEL_git is not set
 CONFIG_DEFAULTS_LIBC_UCLIBC=y
 # CONFIG_DEFAULTS_LIBC_UCLIBC_NG is not set
 # CONFIG_DEFAULTS_LIBC_GLIBC is not set
@@ -85,6 +83,7 @@ CONFIG_DEFAULTS_LIBC_UCLIBC=y
 # CONFIG_DEFAULTS_LIBC_NONE is not set
 # CONFIG_DEFAULTS_OVERRIDE is not set
 # CONFIG_DEFAULTS_KERNEL is not set
+# CONFIG_DEFAULTS_MODULES is not set
 # CONFIG_DEFAULTS_VENDOR is not set
 # CONFIG_DEFAULTS_VENDOR_UPDATE is not set
 CONFIG_VENDOR=SecureComputing

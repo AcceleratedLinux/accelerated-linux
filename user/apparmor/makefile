@@ -1,7 +1,16 @@
 
 AA_VERSION = 2.13
 AA_DIR     = apparmor-$(AA_VERSION)
-AALIB      = -L../libraries/libapparmor/src/.libs -lapparmor $(LIBSTDCPP) -lsupc++ -lpthread -lintl -lm -lgcc_s
+
+AALIB      = -L../libraries/libapparmor/src/.libs
+AALIB     += -lapparmor
+AALIB     += $(LIBSTDCPP) -lsupc++
+AALIB     += -lpthread
+ifdef CONFIG_DEFAULTS_LIBC_UCLIBC
+AALIB     += -lintl
+endif
+AALIB     += -lm
+AALIB     += -lgcc_s
 
 CFLAGS += -D_GLIBCXX_HAVE_MBSTATE_T
 CFLAGS += -DNEED_REALLOCARRAY=1

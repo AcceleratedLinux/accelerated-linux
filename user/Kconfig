@@ -465,6 +465,59 @@ config USER_NETFLASH_ATECC508A
 	  Netflash requires the image to include a ECDSA signature which will
 	  be authenticated using the ATECC508A cryptochip.
 
+choice
+	prompt "Netflash algorithm for ATECC508A authentication"
+	depends on USER_NETFLASH_ATECC508A
+	default USER_NETFLASH_ATECC508A_ALG_ECDSA
+
+config USER_NETFLASH_ATECC508A_ALG_ECDSA
+	bool "ECDSA algorithm"
+	help
+	  ECDSA algorithm is used for ATECC508 authentication.
+
+config USER_NETFLASH_ATECC508A_ALG_HMAC
+	bool "HMAC authentication algorithm"
+	help
+	  HMAC algorithm is used for ATECC508 authentication.
+endchoice
+
+config USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT
+	int "netflash ATECC508 production key slot"
+	depends on USER_NETFLASH_ATECC508A
+	help
+	  Production key slot used for the ATECC508-based signature
+	  verification.
+
+config USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT
+	int "netflash ATECC508 development key slot"
+	depends on USER_NETFLASH_ATECC508A
+	help
+	  Development key slot used for the ATECC508-based signature
+	  verification.
+
+config USER_NETFLASH_ATECC508A_I2C_BUS
+	int "I2C bus index of the ATECC508A chip"
+	depends on USER_NETFLASH_ATECC508A
+	default 0
+	help
+	  The I2C bus index, where the ATECC508A chip is connected to.
+
+config USER_NETFLASH_ATECC508A_I2C_ADDRESS
+	hex "I2C bus address of the ATECC508A chip"
+	depends on USER_NETFLASH_ATECC508A
+	default 0x60
+	help
+	  The I2C bus address of the ATECC508A chip.
+
+config USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL
+	bool "netflash support for embedded kernel image inside the rootfs"
+	depends on USER_NETFLASH_ATECC508A
+	default n
+	help
+	  If enabled, Netflash expects the kernel image is embedded in the
+	  rootfs image.
+	  Otherwise it expects, the kernel is appended to the rootfs image.
+
 config USER_NETFLASH_CRYPTO_OPTIONAL
 	bool "netflash optional public key encryption"
 	depends on USER_NETFLASH_CRYPTO
@@ -2391,18 +2444,6 @@ config USER_ROUTED_ROUTED
 	help
 	  A RIPv1 routed
 
-config USER_RP_PPPOE_PPPOE
-	bool "rp-pppoe"
-	help
-	  The Roaring Penguin PPPOE.
-	  Approx. binary size: 38k
-
-config USER_RP_PPPOE_PPPOE_SERVER
-	bool "rp-pppoe server"
-	depends on USER_RP_PPPOE_PPPOE
-	help
-	  The Roaring Penguin PPPOE Server.
-
 config USER_RSYNC_RSYNC
 	bool "rsync"
 	help
@@ -3214,11 +3255,6 @@ config USER_POTRACE_POTRACE
 	help
 	  The protrace graphics utility that converts bitmaps to vector graphics
 
-config USER_PYTHON_PYTHON
-	bool "python"
-	help
-	  The Python scripting language.
-
 config USER_READPROFILE_READPROFILE
 	bool "readprofile"
 	help
@@ -3459,11 +3495,6 @@ config USER_TRIPWIRE_SIGGEN
 	bool "siggen"
 	help
 	  Cryptographic file signature utility.
-
-config USER_STRACE_STRACE
-	bool "strace"
-	help
-	  Trace system calls and signals.
 
 config USER_STTY_STTY
 	bool "stty"

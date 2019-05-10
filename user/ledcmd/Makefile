@@ -1,3 +1,4 @@
+export ACL_LICENSE = GPLv2
 
 EXEC = ledcmd
 OBJS = ledcmd.o

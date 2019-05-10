@@ -1,10 +1,9 @@
-diff -ru ModemManager/src/mm-iface-modem.c ModemManager-patched/src/mm-iface-modem.c
---- ModemManager/src/mm-iface-modem.c	2016-11-03 16:10:29.309067282 +1000
-+++ ModemManager-patched/src/mm-iface-modem.c	2016-11-03 16:17:49.741074405 +1000
-@@ -4705,6 +4705,14 @@
+--- ModemManager/src/mm-iface-modem.c	2018-11-20 13:07:04.158319614 +1000
++++ ModemManager/src/mm-iface-modem.c.new	2018-11-20 13:23:52.122319532 +1000
+@@ -4983,6 +4983,15 @@
                            "handle-factory-reset",
                            G_CALLBACK (handle_factory_reset),
-                           ctx->self);
+                           self);
 +        /* Allow AT commands in the FAILED state as this operation does not
 +         * necessarily depend on the presence of a SIM. This is important for
 +         * modems that support multiple SIM slots and selection is performed
@@ -12,18 +11,19 @@ diff -ru ModemManager/src/mm-iface-modem.c ModemManager-patched/src/mm-iface-mod
 +        g_signal_connect (ctx->skeleton,
 +                          "handle-command",
 +                          G_CALLBACK (handle_command),
-+                          ctx->self);
++                          self);
++
  
          if (ctx->fatal_error) {
-             g_simple_async_result_take_error (ctx->result, ctx->fatal_error);
-@@ -4717,10 +4725,6 @@
+             if (g_error_matches (ctx->fatal_error,
+@@ -5006,10 +5015,6 @@
                                G_CALLBACK (handle_create_bearer),
-                               ctx->self);
+                               self);
              g_signal_connect (ctx->skeleton,
 -                              "handle-command",
 -                              G_CALLBACK (handle_command),
--                              ctx->self);
+-                              self);
 -            g_signal_connect (ctx->skeleton,
                                "handle-delete-bearer",
                                G_CALLBACK (handle_delete_bearer),
-                               ctx->self);
+                               self);

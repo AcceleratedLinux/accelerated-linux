@@ -1,0 +1,79 @@
+--- strongswan-5.7.1/src/libstrongswan/utils/identification.c.orig	2018-11-27 10:01:46.556472426 +1000
++++ strongswan-5.7.1/src/libstrongswan/utils/identification.c	2018-11-27 10:01:45.808485427 +1000
+@@ -1201,6 +1201,54 @@
+ }
+ 
+ /**
++ * process an ipv4 address
++ */
++static bool parse_ipv4_id(private_identification_t *this, char *str)
++{
++	host_t *host;
++	struct in_addr address;
++	chunk_t chunk = {(void*)&address, sizeof(address)};
++
++	if (inet_pton(AF_INET, str, &address) > 0)
++	{	/* is IPv4 */
++		this->encoded = chunk_clone(chunk);
++		return TRUE;
++	}
++	host = lib->hosts->resolve(lib->hosts, str, AF_INET);
++	if (host)
++	{
++		this->encoded = chunk_clone(host->get_address(host));
++		host->destroy(host);
++		return TRUE;
++	}
++	return FALSE;
++}
++
++/**
++ * process an ipv6 address
++ */
++static bool parse_ipv6_id(private_identification_t *this, char *str)
++{
++	host_t *host;
++	struct in6_addr address;
++	chunk_t chunk = {(void*)&address, sizeof(address)};
++
++	if (inet_pton(AF_INET6, str, &address) > 0)
++	{	/* is IPv64 */
++		this->encoded = chunk_clone(chunk);
++		return TRUE;
++	}
++	host = lib->hosts->resolve(lib->hosts, str, AF_INET6);
++	if (host)
++	{
++		this->encoded = chunk_clone(host->get_address(host));
++		host->destroy(host);
++		return TRUE;
++	}
++	return FALSE;
++}
++
++/**
+  * Create an identity for a specific type, determined by prefix
+  */
+ static private_identification_t* create_from_string_with_prefix_type(char *str)
+@@ -1208,9 +1256,10 @@
+ 	struct {
+ 		const char *str;
+ 		id_type_t type;
++		bool (*helper)(private_identification_t *this, char *str);
+ 	} prefixes[] = {
+-		{ "ipv4:",			ID_IPV4_ADDR			},
+-		{ "ipv6:",			ID_IPV6_ADDR			},
++		{ "ipv4:",			ID_IPV4_ADDR,			parse_ipv4_id	},
++		{ "ipv6:",			ID_IPV6_ADDR,			parse_ipv6_id	},
+ 		{ "ipv4net:",		ID_IPV4_ADDR_SUBNET		},
+ 		{ "ipv6net:",		ID_IPV6_ADDR_SUBNET		},
+ 		{ "ipv4range:",		ID_IPV4_ADDR_RANGE		},
+@@ -1239,7 +1288,7 @@
+ 			{
+ 				this->encoded = chunk_from_hex(chunk_from_str(str + 1), NULL);
+ 			}
+-			else
++			else if (prefixes[i].helper == NULL || prefixes[i].helper(this, str) == FALSE)
+ 			{
+ 				this->encoded = chunk_clone(chunk_from_str(str));
+ 			}

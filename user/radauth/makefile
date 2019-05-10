@@ -1,3 +1,5 @@
+export ACL_LICENSE=RSA/GPL/Custom-OSS
+
 CONFOPTS :=	
 
 all: configured

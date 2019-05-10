@@ -1,0 +1,131 @@
+
+DIGI/EX55 JTAG
+--------------
+
+The openocd jtag package can be used with the MediaTek 7621 based EX55
+boards. It can quite easily be used to load boot code (like u-boot), and
+then a linux system and from there you can program the NAND flash.
+
+You need to use at least version openocd-0.10.0 for this process to work.
+I am using a LockPick Tuny USB based jtag debug dongle. I expect most other
+standard types of USB jtag dongle would work.
+
+The EX55 JATG header is pinned out like a standard ARM JTAG, so no
+special header or cable assembley will be required to use it.
+
+With the JTAG adapter conected to the EX55 board run openocd with:
+
+    sudo openocd -f tools/openocd/targets/6310-ex.cfg
+
+Then on another console telnet to the openocd daemon:
+
+    telnet localhost 4444
+
+Then issue the following commands:
+
+    mem-init
+    load-uboot
+
+Set the serial console for 115200,8,n,1. On running the "mem-init" command
+you should see a lot of the MediaTek memory initializer trace come out.
+Once you run the "load-uboot" command you should see the usual u-boot console
+trace come out.
+
+We have seen that the JATG/openocd combo may not be useable with a corrupted
+NAND boot flash. (So if the flash was programmed with a bad boot image). Not
+entirely sure why this is, but openocd cannot reset the CPU or issue any
+commands in this state. The only solution we have to this is to change the
+boot mode straping of the CPU to boot from SPI. Then you can use openocd to
+repair the NAND flash. When done you change the boot mode back to select
+boot from NAND.
+
+
+
+FLASH PROGRAMMING
+-----------------
+
+Once running a u-boot the usual next step is to load a linux system. The
+simplest way to do this is using the "netload" command to dhcp load a
+built image.bin:
+
+    run netload
+
+Once running an Accelerated Linux system you can program the flash with these
+steps:
+
+    /etc/mkffs
+    netflash -iknb -r /dev/flash/boot 192.168.210.22 u-boot.nand
+    netflash -ikb -r /dev/flash/image 192.168.210.22 image.bin
+
+On rebooting the EX55 should be able to boot all the way from power up
+to a Linux shell prompt.
+
+
+
+U-BOOT DEBUGGING
+----------------
+
+If you have a boot loader programmed into the NAND flash but you want to
+load and run a different u-boot binary you can use the memory initializer
+code in the programm boot loader, and then load your own new u-boot code
+through openocd.
+
+The process to use:
+
+    reset
+
+When you see the MediaTek memory initializer code running (you see its console
+trace comming out) then:
+
+    halt
+
+At this point if we set a break point at the RAM start address then we can
+let the memory initilizer code complete:
+
+    bp 0xa0200000 4 hw
+    resume
+
+This typically takes a couple of seconds and openocd will report that it has
+hit the breakpoint. Now we are ready to load and run our own code:
+
+    rbp 0xa0200000
+    load-uboot
+
+You should see your new u-boot code running.
+
+
+
+HISTORICAL LOADING
+------------------
+
+When using MediaTeks original u-boot code you can load and run a kernel
+and filesystem using the following commands. You need to enter through the
+menu system they use, and select the u-boot console to run this.
+
+    setenv bootargs console=ttyS0,57600 rd_start=0x84000000 rd_size=0x01000000
+    setenv ipaddr 192.168.1.1 ; setenv serverip 192.168.1.22
+    tftpboot 0x84000000 rootfs.bin
+    tftpboot 0x81000000 ukernel.bin
+    bootm 0x81000000
+
+Note that the original Mediatek builds use 57600 as the serial console baud
+rate.
+
+
+FACTORY FLASH
+-------------
+
+To generate the ECC version of the boot loader for the factory, program the
+bootloader into flash and then run the following command on the EX55:
+
+    nanddump -l 0x80000 -f /tmp/u-boot-flash-dump.bin /dev/flash/boot
+
+And then you need to mangle the blocks back into the real flash order
+using the "mktmangle" tool:
+
+    mtkmangle u-boot-flash-dump.bin u-boot-with-ecc.bin
+
+You can find the mtkmangle tool source in the source tree at
+tools/mtkmangle/mtkmangle.c.
+To compile it do "gcc -O2 -o mtkmangle mtkmangle.c".
+

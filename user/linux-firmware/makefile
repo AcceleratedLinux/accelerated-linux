@@ -1,6 +1,6 @@
 METHOD = git
 URL = git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
-VERSION = 65b1c68c63f974d72610db38dfae49861117cae2
+VERSION = 9ee52be785cf91fc6a3c6aa27d484873f8270b72
 
 linux-firmware_INSTALLVARS = :
 linux-firmware_ROMFS = linux-firmware_romfs
@@ -25,4 +25,5 @@ linux-firmware_romfs:
 	$(ROMFSINST) -e CONFIG_R8169 -d $(SDIR)/rt73.bin /lib/firmware/rt73.bin
 	$(ROMFSINST) -e CONFIG_R8169 $(SDIR)/rtl_nic /lib/firmware/rtl_nic
 	$(ROMFSINST) -e CONFIG_ATH10K $(SDIR)/ath10k/QCA988X /lib/firmware/ath10k/QCA988X
+	$(ROMFSINST) -e CONFIG_ATH10K $(SDIR)/ath10k/QCA9984 /lib/firmware/ath10k/QCA9984
 

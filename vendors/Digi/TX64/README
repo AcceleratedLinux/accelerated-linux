@@ -1,0 +1,47 @@
+ACL on the TX64
+---------------
+
+This is a collection of notes on installing an ACL built image onto the
+Digi/TX64. This is very much a work in progress.
+
+Basic method involves copying files directly from your development server
+onto the CFast flash card. So you need a USB CFast flash card reader.
+
+To install ACL linux after inserting the CFast card into the reader and
+connecting that to your local development server do the following.
+
+The following notes assume that the CFast card appeared as device
+/dev/sdd, modify accordingly for the device that is used on your system.
+It is quite likely that when you insert the CFast card your linux system
+will automount the partitions on the CFast card. This is fine, you won't
+need to carry out all the mount steps in the following instructions, but
+you may need to adjust the copy destinations to match the automounted
+mount points.
+
+1. mount /dev/sdd4 /media/Kernel1
+2. cp accelerated-linux/images/vmlinuz /media/Kernel1/vmlinuz
+   cp accelerated-linux/images/vmlinuz.sig /media/Kernel1/vmlinuz.sig
+
+3. umount /dev/sdd5
+   (only required if automounted)
+4. dd if=accelerated-linux/images/rootfs of=/dev/sdd5
+
+5. mount /dev/sdd1 /mnt
+6. cp accelerated-linux/images/initrd /mnt/initrd
+   cp accelerated-linux/images/initrd.sig /mnt/initrd.sig
+
+7. mount /dev/sdd8 /media/UserFS
+8. mkdir /media/UserFS/config
+   touch /media/UserFS/config/.init
+
+Cleanly unmount any of the CFast mounted filesystems, and re-insert the
+card into the TX64.
+
+The TX64 will need to be set to development mode via the DIP switch setting.
+
+Power up the TX64 and it will boot the ACL kernel. Console will be on the
+external serial port at 115200,8,n,1. The primary LAN interface is by
+default on eth4 port. Default ACL configures a fixed address on that
+port of 192.168.210.1. The WEB management interface will be available on
+that address from a browser on that network address.
+

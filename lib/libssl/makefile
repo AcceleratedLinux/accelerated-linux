@@ -202,7 +202,10 @@ FIPS_ENV    = export CC=gcc CROSS_COMPILE=cross-; \
 	      export PATH="$(PATH):$(FIPS_BIN)" ; \
 	      export DESTDIR=$(FIPS_INSTALL); \
 	      export FIPSDIR="/"; \
-	      export INSTALL_PREFIX=$(FIPS_INSTALL)
+	      export INSTALL_PREFIX=$(FIPS_INSTALL); \
+	      export ACL_PKG=$(FIPS_SRC_DIR); \
+	      export ACL_LICENSE="OpenSSL (BSD)"; \
+	      export ACL_URL=$($(FIPS_SRC_DIR)-url)
 
 FIPS_ROMFS   = romfs-fips
 FIPS_CLEAN   = clean-fips
@@ -331,8 +334,10 @@ openssl-1.0.2h-url := http://www.openssl.org/source/openssl-1.0.2h.tar.gz
 openssl-1.0.2j-url := http://www.openssl.org/source/openssl-1.0.2j.tar.gz
 openssl-1.0.2o-url := http://www.openssl.org/source/openssl-1.0.2o.tar.gz
 openssl-1.0.2p-url := http://www.openssl.org/source/openssl-1.0.2p.tar.gz
+openssl-1.0.2q-url := http://www.openssl.org/source/openssl-1.0.2q.tar.gz
+openssl-1.0.2r-url := http://www.openssl.org/source/openssl-1.0.2r.tar.gz
 
-SRC_DIR := openssl-1.0.2p
+SRC_DIR := openssl-1.0.2r
 PATCH = $(wildcard patches/$(SRC_DIR).patch)
 ifdef CONFIG_MODULES_CRYPTODEV_CRYPTODEV
 PATCH_CRYPTODEV_MODULE = $(wildcard patches/$(SRC_DIR)-cryptodev-module.patch)
@@ -385,6 +390,9 @@ clean: $(FIPS_CLEAN)
 	-rm -rf build $(EXTRA_CLEAN)
 
 romfs: $(FIPS_ROMFS)
+	$(MAKE) _romfs ACL_LICENSE="OpenSSL (BSD)" ACL_URL=$($(SRC_DIR)-url)
+
+_romfs:
 	cd build/install/lib; \
 	for i in *.so*; do \
 		if [ -L $$i ]; then \

@@ -1,3 +1,5 @@
+export ACL_LICENSE = GPLv2
+
 -include ../user.mak
 
 EXEC = gettyd

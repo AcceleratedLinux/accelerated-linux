@@ -10,8 +10,8 @@ ELFIMAGE = $(IMAGEDIR)/image.elf
 DIRS = ../cgi/Cleopatra2
 
 ROMFS_DIRS = bin dev dev/flash etc etc/config etc/default home lib mnt proc \
-             usr var home/config home/httpd home/httpd/cgi-bin home/httpd/img \
-             home/httpd/image_s
+             sbin usr var home/config home/httpd home/httpd/cgi-bin \
+	     home/httpd/img home/httpd/image_s
 
 DEVICES = \
 	tty,c,5,0      console,c,5,1      cua0,c,5,64      cua1,c,5,65  \

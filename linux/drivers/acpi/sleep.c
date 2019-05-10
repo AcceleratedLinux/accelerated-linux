@@ -726,9 +726,6 @@ static const struct acpi_device_id lps0_device_ids[] = {
 #define ACPI_LPS0_ENTRY		5
 #define ACPI_LPS0_EXIT		6
 
-#define ACPI_LPS0_SCREEN_MASK	((1 << ACPI_LPS0_SCREEN_OFF) | (1 << ACPI_LPS0_SCREEN_ON))
-#define ACPI_LPS0_PLATFORM_MASK	((1 << ACPI_LPS0_ENTRY) | (1 << ACPI_LPS0_EXIT))
-
 static acpi_handle lps0_device_handle;
 static guid_t lps0_dsm_guid;
 static char lps0_dsm_func_mask;
@@ -932,20 +929,19 @@ static int lps0_device_attach(struct acpi_device *adev,
 	if (out_obj && out_obj->type == ACPI_TYPE_BUFFER) {
 		char bitmask = *(char *)out_obj->buffer.pointer;
 
-		if ((bitmask & ACPI_LPS0_PLATFORM_MASK) == ACPI_LPS0_PLATFORM_MASK ||
-		    (bitmask & ACPI_LPS0_SCREEN_MASK) == ACPI_LPS0_SCREEN_MASK) {
-			lps0_dsm_func_mask = bitmask;
-			lps0_device_handle = adev->handle;
-			/*
-			 * Use suspend-to-idle by default if the default
-			 * suspend mode was not set from the command line.
-			 */
-			if (mem_sleep_default > PM_SUSPEND_MEM)
-				mem_sleep_current = PM_SUSPEND_TO_IDLE;
-		}
+		lps0_dsm_func_mask = bitmask;
+		lps0_device_handle = adev->handle;
+		/*
+		 * Use suspend-to-idle by default if the default
+		 * suspend mode was not set from the command line.
+		 */
+		if (mem_sleep_default > PM_SUSPEND_MEM)
+			mem_sleep_current = PM_SUSPEND_TO_IDLE;
 
 		acpi_handle_debug(adev->handle, "_DSM function mask: 0x%x\n",
 				  bitmask);
+
+		acpi_ec_mark_gpe_for_wake();
 	} else {
 		acpi_handle_debug(adev->handle,
 				  "_DSM function 0 evaluation failed\n");
@@ -974,16 +970,23 @@ static int acpi_s2idle_prepare(void)
 	if (lps0_device_handle) {
 		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SCREEN_OFF);
 		acpi_sleep_run_lps0_dsm(ACPI_LPS0_ENTRY);
+
+		acpi_ec_set_gpe_wake_mask(ACPI_GPE_ENABLE);
 	}
 
 	if (acpi_sci_irq_valid())
 		enable_irq_wake(acpi_sci_irq);
 
+	/* Change the configuration of GPEs to avoid spurious wakeup. */
+	acpi_enable_all_wakeup_gpes();
+	acpi_os_wait_events_complete();
 	return 0;
 }
 
 static void acpi_s2idle_wake(void)
 {
+	if (!lps0_device_handle)
+		return;
 
 	if (pm_debug_messages_on)
 		lpi_check_constraints();
@@ -1002,8 +1005,7 @@ static void acpi_s2idle_wake(void)
 		 * takes too much time for EC wakeup events to survive, so look
 		 * for them now.
 		 */
-		if (lps0_device_handle)
-			acpi_ec_dispatch_gpe();
+		acpi_ec_dispatch_gpe();
 	}
 }
 
@@ -1023,10 +1025,14 @@ static void acpi_s2idle_sync(void)
 
 static void acpi_s2idle_restore(void)
 {
+	acpi_enable_all_runtime_gpes();
+
 	if (acpi_sci_irq_valid())
 		disable_irq_wake(acpi_sci_irq);
 
 	if (lps0_device_handle) {
+		acpi_ec_set_gpe_wake_mask(ACPI_GPE_DISABLE);
+
 		acpi_sleep_run_lps0_dsm(ACPI_LPS0_EXIT);
 		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SCREEN_ON);
 	}

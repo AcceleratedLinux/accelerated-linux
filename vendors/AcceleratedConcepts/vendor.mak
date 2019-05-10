@@ -25,6 +25,11 @@ FLASH_DEVICES ?= \
 	image,c,90,4 \
 	all,c,90,6
 
+ACL_LICENSE = Digi
+ACL_URL     = http://www.digi.com/
+ACL_PKG     = Digi Accelerated Linux
+export ACL_PKG ACL_URL ACL_LICENSE
+
 ACKEY ?= $(HOME)/keys/ackey.pem
 ACKEYV3 ?= $(HOME)/keys/ackeyv3.pem
 ACCRTV3 ?= $(HOME)/keys/accrtv3.pem
@@ -122,11 +127,11 @@ mksquashfs7z:
 	ln -fs $(ROOTDIR)/user/squashfs/squashfs-tools/mksquashfs7z .
 
 image.sign-atmel:
-ifneq ($(CONFIG_ATMEL_PRIVATE_KEY_PATH),)
-	$(ROOTDIR)/tools/sign_atmel.sh -k "$(CONFIG_ATMEL_PRIVATE_KEY_PATH)" $(IMAGE)
-else
-	@echo "No EC key specified, skipping signature."
-endif
+	if [ -x $(ROOTDIR)/prop/sign_image/sign_atmel.sh ] ; then \
+		$(ROOTDIR)/prop/sign_image/sign_atmel.sh -k "$(if $(SIGNING_KEY),$(SIGNING_KEY),$(ROOTDIR)/prop/sign_image/devkeys/DAL-image/atmel_private.pem)" -a "$(SIGNING_ALG)" $(SIGNING_EXTRA) $(IMAGE) ; \
+	else \
+		echo "warning: not signing image" ; \
+	fi
 
 # Tags an image with vendor,product,version and adds the checksum
 image.tag:
@@ -227,6 +232,10 @@ image.bin:
 # Create an image.bin with ukernel.bin attached
 image.ukernel.bin:
 	cat $(ROMFSIMG) $(UKERNEL) > $(IMAGE)
+
+# Create image for the X86 platforms
+image.x86.bin:
+	cp $(ROMFSIMG) $(IMAGE)
 
 addr.txt: $(ROOTDIR)/$(LINUXDIR)/vmlinux
 	$(CROSS)nm $(ROOTDIR)/$(LINUXDIR)/vmlinux | \

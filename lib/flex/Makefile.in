@@ -245,8 +245,10 @@ Makefile: $(srcdir)/Makefile.in config.status
 	CONFIG_FILES=$@ CONFIG_HEADERS= ./config.status
 config.status: configure
 	./config.status --recheck
+ifdef REBUILD_AUTOGEN_FILES
 configure: configure.in
 	cd $(srcdir) && autoconf
+endif
 config.h: stamp-h
 stamp-h: conf.in config.status
 	CONFIG_FILES= CONFIG_HEADERS=config.h:conf.in ./config.status

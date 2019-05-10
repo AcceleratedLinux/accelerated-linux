@@ -28,7 +28,7 @@ find "$ROMFS" -type f | while read t; do
 	readelf -d $t 2> /dev/null | grep 'Shared lib' |
 		sed -e 's/^.*\[//' -e 's/]$//' | while read c
 		do
-			echo "$c: $t"
+			echo "`basename $c`: $t"
 		done
 done > $TMPF
 find "$ROMFS" -type f -a \( -name '*.so' -o -name '*.so.*' \) > $TMPS
@@ -111,10 +111,6 @@ while :; do
 			*libpcap*)
 				echo "Skipping libpcap file $so"
 				echo "`basename $so`: libpcap" >> $TMPF
-				;;
-			*libzebra*|*libospf*)
-				echo "Skipping quagga file $so"
-				echo "`basename $so`: quagga" >> $TMPF
 				;;
 			*libnss*)
 				echo "Skipping libnss file $so"

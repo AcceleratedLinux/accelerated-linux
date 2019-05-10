@@ -1,3 +1,5 @@
+export ACL_LICENSE = OSS (Other)
+
 LDFLAGS += -L$(ROOTDIR)/$(LIBCDIR)/lib
 
 #

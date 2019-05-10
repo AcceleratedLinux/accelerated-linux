@@ -1,3 +1,4 @@
+export ACL_LICENSE = PublicDomain
 
 EXEC = null
 OBJS = null.o

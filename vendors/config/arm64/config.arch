@@ -51,8 +51,10 @@ ENDIAN        ?= little
 MACHINE        = arm64
 ARCH           = arm64
 
-ifndef CROSS_COMPILE
-    CROSS_COMPILE = aarch64-linux-
+ifneq ($(shell which aarch64-linux-20171204-gcc),)
+CROSS_COMPILE ?= aarch64-linux-20171204-
+else
+CROSS_COMPILE = aarch64-linux-
 endif
 
 CROSS          = $(CROSS_COMPILE)

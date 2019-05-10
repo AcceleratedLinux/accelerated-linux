@@ -331,6 +331,10 @@ AFLAGS		:= $(AFLAGS)
 LDFLAGS		:= $(LDFLAGS)
 LDLIBS		:=
 
+ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
+LDLIBS		+= tirpc
+endif
+
 # Read KERNELRELEASE from .kernelrelease (if it exists)
 KERNELRELEASE = $(shell cat .kernelrelease 2> /dev/null)
 KERNELVERSION = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)

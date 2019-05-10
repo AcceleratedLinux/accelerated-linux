@@ -4,13 +4,16 @@ all:
 include Makefile.conf
 
 oldconfig: conf autoconf
-	$(SCRIPTSDIR)/conf -o Kconfig
+	$(SCRIPTSDIR)/conf --oldconfig Kconfig
 
 config: conf autoconf
 	$(SCRIPTSDIR)/conf Kconfig
 
 menuconfig: mconf autoconf
 	$(SCRIPTSDIR)/mconf Kconfig
+
+nconfig: nconf autoconf
+	$(SCRIPTSDIR)/nconf Kconfig
 
 gconfig: gconf autoconf
 	$(SCRIPTSDIR)/gconf Kconfig
@@ -78,4 +81,4 @@ autoclean:
 clean: confclean autoclean
 	rm -f autoconf.h auto.conf .config .config.old
 
-.PHONY: all oldconfig config menuconfig gconfig qconfig xconfig clean
+.PHONY: all oldconfig config menuconfig nconfig gconfig qconfig xconfig clean

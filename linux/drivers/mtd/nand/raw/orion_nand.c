@@ -18,7 +18,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/io.h>
-#include <asm/sizes.h>
+#include <linux/sizes.h>
 #include <linux/platform_data/mtd-orion_nand.h>
 
 struct orion_nand_info {
@@ -26,9 +26,9 @@ struct orion_nand_info {
 	struct clk *clk;
 };
 
-static void orion_nand_cmd_ctrl(struct mtd_info *mtd, int cmd, unsigned int ctrl)
+static void orion_nand_cmd_ctrl(struct nand_chip *nc, int cmd,
+				unsigned int ctrl)
 {
-	struct nand_chip *nc = mtd_to_nand(mtd);
 	struct orion_nand_data *board = nand_get_controller_data(nc);
 	u32 offs;
 
@@ -45,15 +45,14 @@ static void orion_nand_cmd_ctrl(struct mtd_info *mtd, int cmd, unsigned int ctrl
 	if (nc->options & NAND_BUSWIDTH_16)
 		offs <<= 1;
 
-	writeb(cmd, nc->IO_ADDR_W + offs);
+	writeb(cmd, nc->legacy.IO_ADDR_W + offs);
 }
 
-static void orion_nand_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
+static void orion_nand_read_buf(struct nand_chip *chip, uint8_t *buf, int len)
 {
-	struct nand_chip *chip = mtd_to_nand(mtd);
-	void __iomem *io_base = chip->IO_ADDR_R;
+	void __iomem *io_base = chip->legacy.IO_ADDR_R;
 #if 0 /* this 64 bit code fails on kirkwood processor with 8bit nand */
-#if __LINUX_ARM_ARCH__ >= 5
+#if defined(__LINUX_ARM_ARCH__) && __LINUX_ARM_ARCH__ >= 5
 	uint64_t *buf64;
 #endif
 	int i = 0;
@@ -62,7 +61,7 @@ static void orion_nand_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 		*buf++ = readb(io_base);
 		len--;
 	}
-#if __LINUX_ARM_ARCH__ >= 5
+#if defined(__LINUX_ARM_ARCH__) && __LINUX_ARM_ARCH__ >= 5
 	buf64 = (uint64_t *)buf;
 	while (i < len/8) {
 		/*
@@ -164,14 +163,14 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 
 	nand_set_controller_data(nc, board);
 	nand_set_flash_node(nc, pdev->dev.of_node);
-	nc->IO_ADDR_R = nc->IO_ADDR_W = io_base;
-	nc->cmd_ctrl = orion_nand_cmd_ctrl;
-	nc->read_buf = orion_nand_read_buf;
+	nc->legacy.IO_ADDR_R = nc->legacy.IO_ADDR_W = io_base;
+	nc->legacy.cmd_ctrl = orion_nand_cmd_ctrl;
+	nc->legacy.read_buf = orion_nand_read_buf;
 	nc->ecc.mode = orion_nand_ecc;
 	nc->ecc.algo = orion_nand_algo;
 
 	if (board->chip_delay)
-		nc->chip_delay = board->chip_delay;
+		nc->legacy.chip_delay = board->chip_delay;
 
 	WARN(board->width > 16,
 		"%d bit bus width out of range",
@@ -179,9 +178,6 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 
 	if (board->width == 16)
 		nc->options |= NAND_BUSWIDTH_16;
-
-	if (board->dev_ready)
-		nc->dev_ready = board->dev_ready;
 
 	platform_set_drvdata(pdev, info);
 
@@ -204,14 +200,14 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = nand_scan(mtd, 1);
+	ret = nand_scan(nc, 1);
 	if (ret)
 		goto no_dev;
 
 	mtd->name = "orion_nand";
 	ret = mtd_device_register(mtd, board->parts, board->nr_parts);
 	if (ret) {
-		nand_release(mtd);
+		nand_release(nc);
 		goto no_dev;
 	}
 
@@ -226,9 +222,8 @@ static int orion_nand_remove(struct platform_device *pdev)
 {
 	struct orion_nand_info *info = platform_get_drvdata(pdev);
 	struct nand_chip *chip = &info->chip;
-	struct mtd_info *mtd = nand_to_mtd(chip);
 
-	nand_release(mtd);
+	nand_release(chip);
 
 	clk_disable_unprepare(info->clk);
 

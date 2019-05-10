@@ -7,7 +7,6 @@
 #
 /pthread-errnos.h
 /gen_pthread-errnos.[cs]
-!sysdeps/pthread/tcb-offsets.h
 sysdeps/*/tcb-offsets.h
 sysdeps/*/gen_tcb-offsets.[cs]
 sysdeps/unix/sysv/linux/gen_*.[cs]

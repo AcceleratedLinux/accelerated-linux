@@ -1,4 +1,4 @@
-hostname "Connect IT Mini"
+hostname "Digi Connect IT Mini"
 
 echo "Mounting filesystems..."
 mount -t proc proc /proc
@@ -23,29 +23,48 @@ echo 6 > /proc/sys/kernel/printk
 # init devices before we need any
 cp -ra /lib/udev/devices/. /dev
 
+# test /dev/console and if not present make it /dev/null
+if ! (echo -n "" > /dev/console) 2> /dev/null; then
+	rm -f /dev/console
+	ln /dev/null /dev/console
+fi
+
 echo "Initializing network interfaces..."
+ip link set eth0 name eth
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
-setmac -i eth0 -u -n 1
+setmac -i eth -u -n 1
 
 echo "Initializing CELL interface control..."
-# GPIO53 = Cell Module Presence Detect (input, active low)
-# GPIO64 = Cell Module On/Off Toggle (output, active high)
-# GPIO52 = Cell Module Power (output, active high)
-echo 53 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio53/direction
-echo 64 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio64/direction
-echo 52 > /sys/class/gpio/export
+# GPIO50 = Cell Module Presence Detect (input, active low)
+# GPIO52 = Cell Module Power (output, active low)
+# GPIO64 = Cell Module On/Off Toggle (output, active low)
+# GPIO65 = Cell Module Shutdown (output, active high)
+echo 50  > /sys/class/gpio/export
+echo in  > /sys/class/gpio/gpio50/direction
+
+echo 52  > /sys/class/gpio/export
 echo low > /sys/class/gpio/gpio52/direction
 
+echo 64  > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio64/direction
+
+echo 65  > /sys/class/gpio/export
+echo low > /sys/class/gpio/gpio65/direction
+
 echo "Initializing USB interface..."
-# GPIO50 = USB power/enable (output, active low)
-# GPIO51 = USB over-current (input, active low)
-echo 50 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio50/direction
-echo 51 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio51/direction
+# GPIO119 = USB power/enable (output, active low)
+# GPIO120 = USB over-current (input, active low)
+echo 119 > /sys/class/gpio/export
+echo low > /sys/class/gpio/gpio119/direction
+
+echo 120 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio120/direction
+echo 1   > /sys/class/gpio/gpio120/active_low
+
+# developer key
+echo 86 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio86/direction
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory

@@ -1,11 +1,9 @@
 
 .EXPORT_ALL_VARIABLES:
 
-DIRS = src
+all clean:
+	$(MAKE) -C src $@
 
-all romfs:
-	for i in $(DIRS) ; do make -C $$i $@ || exit $?; done
-
-clean:
-	for i in $(DIRS) ; do make -C $$i clean ; done
+romfs:
+	$(MAKE) -C src romfs ACL_LICENSE='$(shell $(ROOTDIR)/bin/license-detect.sh .)'
 

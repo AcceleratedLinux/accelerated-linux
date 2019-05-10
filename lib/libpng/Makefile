@@ -5,6 +5,8 @@
 
 #CC=gcc
 
+export ACL_LICENSE = Custom-OSS
+
 # where "make install" puts libpng.a, libpng.so*, png.h and pngconf.h
 prefix=/usr/local
 

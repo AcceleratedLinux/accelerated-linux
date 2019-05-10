@@ -25,6 +25,8 @@
 # SUCH DAMAGE.
 #
 
+export ACL_LICENSE = BSD (2/3 clause)
+
 ALL=	cryptotest cryptokeytest cmactest
 
 all:	${ALL}

@@ -1,0 +1,59 @@
+/* Registers defined for mv88x3310p */
+
+#ifndef __MV88X3310P_H
+#define __MV88X3310P_H
+
+#include <linux/phy.h>
+#include <linux/mii.h>
+#include <linux/mdio.h>
+
+#define PHY_88X3310P_FEATURES			(SUPPORTED_10000baseT_Full | \
+						SUPPORTED_1000baseT_Full | \
+						SUPPORTED_100baseT_Full | SUPPORTED_100baseT_Half | \
+						SUPPORTED_10baseT_Full | SUPPORTED_10baseT_Half | \
+						SUPPORTED_FIBRE | \
+						PHY_DEFAULT_FEATURES)
+
+/* Control Unit */
+#define CUNIT_DEV				31
+#define CUNIT_PORT_CTRL_REG			0xf001
+#define CUNIT_GPIO_DATA_REG			0xf012
+#define CUNIT_LED0_CTRL_REG			0xf020
+#define CUNIT_LED1_CTRL_REG			0xf021
+
+#define CUNIT_FIBER_TYPE_MASK			0x18
+#define CUNIT_GPIO0_SFP_1G			0x0001
+#define CUNIT_GPIO1_SFP_10G			0x0002
+#define CUNIT_GPIO2_COPPER_1G			0x0004
+#define CUNIT_GPIO3_COPPER_10G			0x0008
+
+/* MAC Interface UNIT (H UNIT) */
+#define HUNIT_DEV				4
+#define HUNIT_TGBASER_PCS_STATUS_1_REG		0x1001
+
+/* Copper UNIT (T UNIT) */
+#define TUNIT_PMAPMD_DEV			MDIO_MMD_PMAPMD
+#define TUNIT_PMAPMD_CTRL_REG			0x0000
+#define TUNIT_PMAPMD_STATUS_REG			0x0001
+
+#define TUNIT_PCS_DEV				MDIO_MMD_PCS
+#define TUNIT_PCS_STATUS_REG			0x0001
+#define TUNIT_COPPER_STATUS_REG			0x8008
+
+#define TUNIT_AN_DEV				MDIO_MMD_AN
+#define TUNIT_AN_CTRL_REG			0x0000
+#define TUNIT_AN_STATUS_REG			0x0001
+#define TUNIT_1000_AN_CTRL_STA_REG		0x8000
+
+#define TUNIT_SPEED_10000			0X2040
+#define TUNIT_SPEED_1000			0x0040
+#define TUNIT_SPEED_100				0x2000
+#define TUNIT_SPEED_10				0x0000
+#define TUNIT_1000_DUPLEX_FULL_MASK		0x0010
+
+/* Fiber UNIT (X UNIT) */
+#define XUNIT_DEV				MDIO_MMD_PCS
+#define XUNIT_TGBASER_PCS_STATUS_REG		0x1001
+#define XUNIT_1000BASE_STATUS_REG		0x2001
+
+#endif

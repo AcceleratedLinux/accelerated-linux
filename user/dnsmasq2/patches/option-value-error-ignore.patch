@@ -1,0 +1,184 @@
+diff -ru dnsmasq-2.78.orig/src/dnsmasq.h dnsmasq-2.78/src/dnsmasq.h
+--- dnsmasq-2.78.orig/src/dnsmasq.h	2018-12-13 14:52:01.120431478 +1000
++++ dnsmasq-2.78/src/dnsmasq.h	2018-12-13 14:55:07.920434499 +1000
+@@ -246,6 +246,7 @@
+ #define OPT_MAC_HEX        55
+ #define OPT_TFTP_APREF_MAC 56
+ #define OPT_LAST           57
++#define OPT_IGN_CONF_ERR   58
+ 
+ /* extra flags for my_syslog, we use a couple of facilities since they are known 
+    not to occupy the same bits as priorities, no matter how syslog.h is set up. */
+diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
+--- dnsmasq-2.78.orig/src/option.c	2017-10-02 23:13:51.000000000 +1000
++++ dnsmasq-2.78/src/option.c	2018-12-13 14:59:55.748439154 +1000
+@@ -160,6 +160,7 @@
+ #define LOPT_DHCPTTL       348
+ #define LOPT_TFTP_MTU      349
+ #define LOPT_REPLY_DELAY   350
++#define LOPT_IGNORE_CONF_ERR 351
+  
+ #ifdef HAVE_GETOPT_LONG
+ static const struct option opts[] =  
+@@ -325,6 +326,7 @@
+     { "script-arp", 0, 0, LOPT_SCRIPT_ARP },
+     { "dhcp-ttl", 1, 0 , LOPT_DHCPTTL },
+     { "dhcp-reply-delay", 1, 0, LOPT_REPLY_DELAY },
++    { "ignore-conf-error", 0, 0, LOPT_IGNORE_CONF_ERR},
+     { NULL, 0, 0, 0 }
+   };
+ 
+@@ -495,6 +497,7 @@
+   { LOPT_LOCAL_SERVICE, OPT_LOCAL_SERVICE, NULL, gettext_noop("Accept queries only from directly-connected networks."), NULL },
+   { LOPT_LOOP_DETECT, OPT_LOOP_DETECT, NULL, gettext_noop("Detect and remove DNS forwarding loops."), NULL },
+   { LOPT_IGNORE_ADDR, ARG_DUP, "<ipaddr>", gettext_noop("Ignore DNS responses containing ipaddr."), NULL }, 
++  { LOPT_IGNORE_CONF_ERR, OPT_IGN_CONF_ERR, NULL, gettext_noop("Log dnsmasq conf errors to syslog but continue to run DNSMASQ."), NULL },
+   { LOPT_DHCPTTL, ARG_ONE, "<ttl>", gettext_noop("Set TTL in DNS responses with DHCP-derived addresses."), NULL }, 
+   { LOPT_REPLY_DELAY, ARG_ONE, "<integer>", gettext_noop("Delay DHCP replies for at least number of seconds."), NULL },
+   { 0, 0, NULL, NULL, NULL }
+@@ -1059,7 +1062,11 @@
+   if (is6)
+     {
+       if (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))
+-	ret_err(_("unsupported encapsulation for IPv6 option"));
++	if (option_bool(OPT_IGN_CONF_ERR)) {
++    my_syslog(LOG_CRIT, "DHCP-option %d - unsupported encapsulation for IPv6 option", new->opt);
++  } else {
++    ret_err(_("unsupported encapsulation for IPv6 option"));
++  }
+       
+       if (opt_len == 0 &&
+ 	  !(new->flags & DHOPT_RFC3925))
+@@ -1073,7 +1080,11 @@
+   
+   /* option may be missing with rfc3925 match */
+   if (!option_ok)
+-    ret_err(_("bad dhcp-option"));
++    if (option_bool(OPT_IGN_CONF_ERR)) {
++      my_syslog(LOG_CRIT, "DHCP-option %d - bad dhcp-option", new->opt);
++    } else {
++      ret_err(_("bad dhcp-option"));
++    }
+   
+   if (comma)
+     {
+@@ -1141,10 +1152,20 @@
+ 	  is_string = is_dec = is_hex = 0;
+ 	  
+ 	  if (!is6 && (!is_addr || dots == 0))
+-	    ret_err(_("bad IP address"));
++    if (option_bool(OPT_IGN_CONF_ERR)) {
++      my_syslog(LOG_CRIT, "DHCP-option %d - bad IP address", new->opt);
++      is_string = 1; /* defaulting all errneous values to value type strings */
++    } else {
++      ret_err(_("bad IP address"));
++    }
+ 
+-	   if (is6 && !is_addr6)
+-	     ret_err(_("bad IPv6 address"));
++	  if (is6 && !is_addr6)
++      if (option_bool(OPT_IGN_CONF_ERR)) {
++        my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv6 address", new->opt);
++        is_string = 1; /* defaulting all errneous values to value type strings */
++      } else {
++	      ret_err(_("bad IPv6 address"));
++      }
+ 	}
+       /* or names */
+       else if (opt_len & (OT_NAME | OT_RFC1035_NAME | OT_CSTRING))
+@@ -1237,7 +1258,11 @@
+ 	      comma = split(cp);
+ 	      slash = split_chr(cp, '/');
+ 	      if (!inet_pton(AF_INET, cp, &in))
+-		ret_err(_("bad IPv4 address"));
++    if (option_bool(OPT_IGN_CONF_ERR)) {
++      my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv4 address", new->opt);
++    } else {
++      ret_err(_("bad IPv4 address"));
++    }
+ 	      if (!slash)
+ 		{
+ 		  memcpy(op, &in, INADDRSZ);
+@@ -1283,7 +1308,11 @@
+ 		  continue;
+ 		}
+ 	  
+-	      ret_err(_("bad IPv6 address"));
++        if (option_bool(OPT_IGN_CONF_ERR)) {
++          my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv6 address", new->opt);
++        } else {
++          ret_err(_("bad IPv6 address"));
++        }
+ 	    } 
+ 	  new->len = op - new->val;
+ 	}
+@@ -1310,7 +1339,11 @@
+ 		  if (strcmp (arg, ".") != 0)
+ 		    {
+ 		      if (!(dom = canonicalise_opt(arg)))
+-			ret_err(_("bad domain in dhcp-option"));
++      if (option_bool(OPT_IGN_CONF_ERR)) {
++        my_syslog(LOG_CRIT, "DHCP-option %d - bad domain in dhcp-option", new->opt);
++      } else {
++        ret_err(_("bad domain in dhcp-option"));
++      }
+ 			
+ 		      domlen = strlen(dom) + 2;
+ 		    }
+@@ -1404,7 +1437,11 @@
+ 		{
+ 		  char *dom = canonicalise_opt(arg);
+ 		  if (!dom)
+-		    ret_err(_("bad domain in dhcp-option"));
++        if (option_bool(OPT_IGN_CONF_ERR)) {
++          my_syslog(LOG_CRIT, "DHCP-option %d - bad domain in dhcp-option", new->opt);
++        } else {
++          ret_err(_("bad domain in dhcp-option"));
++        }
+ 		    		  
+ 		  newp = opt_malloc(len + strlen(dom) + 2);
+ 		  
+@@ -1442,14 +1479,22 @@
+       ((new->len > 255) || 
+       (new->len > 253 && (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))) ||
+        (new->len > 250 && (new->flags & DHOPT_RFC3925))))
+-    ret_err(_("dhcp-option too long"));
++    if (option_bool(OPT_IGN_CONF_ERR)) {
++      my_syslog(LOG_CRIT, "DHCP-option %d - dhcp-option too long", new->opt);
++    } else {
++      ret_err(_("bad dhcp-option too long"));
++    }
+   
+   if (flags == DHOPT_MATCH)
+     {
+       if ((new->flags & (DHOPT_ENCAPSULATE | DHOPT_VENDOR)) ||
+ 	  !new->netid ||
+ 	  new->netid->next)
+-	ret_err(_("illegal dhcp-match"));
++  if (option_bool(OPT_IGN_CONF_ERR)) {
++    my_syslog(LOG_CRIT, "DHCP-option %d - illegal dhcp-match", new->opt);
++  } else {
++    ret_err(_("illegal dhcp-match"));
++  }
+        
+       if (is6)
+ 	{
+@@ -1535,6 +1580,9 @@
+   
+   switch (option)
+     { 
++      case LOPT_IGNORE_CONF_ERR:
++        set_option_bool(OPT_IGN_CONF_ERR);
++        break;
+     case 'C': /* --conf-file */
+       {
+ 	char *file = opt_string_alloc(arg);
+@@ -4304,7 +4352,7 @@
+       if (errmess)
+ 	strcpy(daemon->namebuff, errmess);
+ 	  
+-      if (errmess || !one_opt(option, arg, buff, _("error"), 0, hard_opt == LOPT_REV_SERV))
++      if ((errmess || !one_opt(option, arg, buff, _("error"), 0, hard_opt == LOPT_REV_SERV)) && (!option && !option_bool(OPT_IGN_CONF_ERR)))
+ 	{
+ 	  sprintf(daemon->namebuff + strlen(daemon->namebuff), _(" at line %d of %s"), lineno, file);
+ 	  if (hard_opt != 0)

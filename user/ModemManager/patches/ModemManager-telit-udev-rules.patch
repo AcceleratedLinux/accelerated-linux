@@ -1,28 +1,13 @@
-From: Javier Viguera <javier.viguera@digi.com>
-Date: Wed, 9 May 2018 14:37:01 +0200
-Subject: [PATCH] ModemManager: telit udev rules
-
-This patch may grow with rules for other Telit modems.
-
-Signed-off-by: Javier Viguera <javier.viguera@digi.com>
----
- plugins/telit/77-mm-telit-port-types.rules | 6 ++++++
- 1 file changed, 6 insertions(+)
-
-diff --git a/plugins/telit/77-mm-telit-port-types.rules b/plugins/telit/77-mm-telit-port-types.rules
-index c64ea3c47ec0..7f1d9716ccbd 100644
---- a/plugins/telit/77-mm-telit-port-types.rules
-+++ b/plugins/telit/77-mm-telit-port-types.rules
-@@ -48,6 +48,12 @@ ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0021", ENV{ID_MM_TELIT_TAGGED}="1",
+--- ModemManager/plugins/telit/77-mm-telit-port-types.rules	2018-11-21 08:15:01.618314046 +1000
++++ ModemManager/plugins/telit/77-mm-telit-port-types.rules.new	2018-11-21 08:20:39.034314019 +1000
+@@ -41,4 +41,10 @@
  ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0036", ENV{.MM_USBIFNUM}=="00", RUN += "/bin/telit-mbim.sh"
  ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="0032", ENV{ID_MM_TELIT_TAGGED}="1", ENV{ID_MM_TELIT_PORTS_TAGGED}="1"
  
 +# LE910C1
-+ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="1201", ENV{.MM_USBIFNUM}=="05", RUN += "/bin/telit-mbim.sh"
++ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="1201", ENV{.MM_USBIFNUM}=="05", ENV{ID_MM_TELIT_TAGGED}="1", RUN += "/bin/telit-mbim.sh"
 +ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="1204", ENV{.MM_USBIFNUM}=="05", ENV{ID_MM_TELIT_PORT_TYPE_MODEM}="1"
 +ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="1204", ENV{.MM_USBIFNUM}=="06", ENV{ID_MM_TELIT_PORT_TYPE_AUX}="1"
 +ATTRS{idVendor}=="1bc7", ATTRS{idProduct}=="1204", ENV{ID_MM_TELIT_TAGGED}="1"
 +
- # NOTE: Qualcomm Gobi-based devices like the LE920 should not be handled
- # by this plugin, but by the Gobi plugin.
- 
+ LABEL="mm_telit_port_types_end"

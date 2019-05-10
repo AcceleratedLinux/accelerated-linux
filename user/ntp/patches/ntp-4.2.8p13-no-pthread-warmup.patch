@@ -1,0 +1,12 @@
+--- ntp-4.2.8p13/ntpd/ntpd.c.orig	2019-03-25 13:05:26.803153307 +1000
++++ ntp-4.2.8p13/ntpd/ntpd.c	2019-03-25 13:07:36.107149976 +1000
+@@ -34,9 +34,6 @@
+ # ifdef HAVE_PTHREAD_H
+ #  include <pthread.h>
+ # endif
+-# if defined(linux)
+-#  define NEED_PTHREAD_WARMUP
+-# endif
+ #endif
+ 
+ #ifdef HAVE_UNISTD_H

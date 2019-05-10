@@ -169,6 +169,16 @@ config MCA_CC6UL_WATCHDOG
 	  If you say yes here you will get support for the watchdog in the
 	  Micro Controller Assist of Digi ConnectCore 6UL system-on-module.
 
+config MENZ069_WATCHDOG
+	tristate "MEN 16Z069 Watchdog"
+	depends on MCB
+	select WATCHDOG_CORE
+	help
+	  Say Y here to include support for the MEN 16Z069 Watchdog.
+
+	  This driver can also be built as a module. If so the module
+	  will be called menz069_wdt.
+
 config TANGOX_WATCHDOG
 	tristate "Sigma Designs SMP86xx/SMP87xx watchdog"
 	select WATCHDOG_CORE
@@ -270,6 +280,17 @@ config ARM_SBSA_WATCHDOG
 
 	  To compile this driver as module, choose M here: The module
 	  will be called sbsa_gwdt.
+
+config ARMADA_37XX_WATCHDOG
+	tristate "Armada 37xx watchdog"
+	depends on ARCH_MVEBU || COMPILE_TEST
+	select MFD_SYSCON
+	select WATCHDOG_CORE
+	help
+	   Say Y here to include support for the watchdog timer found on
+	   Marvell Armada 37xx SoCs.
+	   To compile this driver as a module, choose M here: the
+	   module will be called armada_37xx_wdt.
 
 config ASM9260_WATCHDOG
 	tristate "Alphascale ASM9260 watchdog"
@@ -525,7 +546,7 @@ config COH901327_WATCHDOG
 config NPCM7XX_WATCHDOG
 	bool "Nuvoton NPCM750 watchdog"
 	depends on ARCH_NPCM || COMPILE_TEST
-	default y if ARCH_NPCM750
+	default y if ARCH_NPCM7XX
 	select WATCHDOG_CORE
 	help
 	  Say Y here to include Watchdog timer support for the
@@ -833,6 +854,14 @@ config SPRD_WATCHDOG
 	help
 	  Say Y here to include watchdog timer supported
 	  by Spreadtrum system.
+
+config PM8916_WATCHDOG
+	tristate "QCOM PM8916 pmic watchdog"
+	depends on OF && MFD_SPMI_PMIC
+	select WATCHDOG_CORE
+	help
+	  Say Y here to include support watchdog timer embedded into the
+	  pm8916 module.
 
 # X86 (i386 + ia64 + x86_64) Architecture
 
@@ -1295,6 +1324,18 @@ config SMSC37B787_WDT
 
 	  Most people will say N.
 
+config TQMX86_WDT
+	tristate "TQ-Systems TQMX86 Watchdog Timer"
+	depends on X86
+	help
+	This is the driver for the hardware watchdog timer in the TQMX86 IO
+	controller found on some of their ComExpress Modules.
+
+	To compile this driver as a module, choose M here; the module
+	will be called tqmx86_wdt.
+
+	Most people will say N.
+
 config VIA_WDT
 	tristate "VIA Watchdog Timer"
 	depends on X86 && PCI
@@ -1627,6 +1668,7 @@ config IMGPDC_WDT
 config LANTIQ_WDT
 	tristate "Lantiq SoC watchdog"
 	depends on LANTIQ
+	select WATCHDOG_CORE
 	help
 	  Hardware driver for the Lantiq SoC Watchdog Timer.
 

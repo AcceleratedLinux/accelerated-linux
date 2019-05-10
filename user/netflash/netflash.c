@@ -132,7 +132,7 @@
 #define	UBOOT_OPTIONS
 #endif
 
-#define CMD_LINE_OPTIONS "abc:Cd:efFhiHjkKlL:Mno:pr:R:sStuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS
+#define CMD_LINE_OPTIONS "abB:c:Cd:efFhiHjkKlL:Mno:pr:R:sStuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS
 
 #define PID_DIR "/var/run"
 #if defined(CONFIG_USER_DHCPCD_DHCPCD) || defined(CONFIG_USER_DHCPCD_NEW_DHCPCD)
@@ -323,10 +323,13 @@ int local_write(int fd, void *buf, int count)
  * This will call the local_write() routine with the data that is
  * fetched, and it will create the ioctl structure.
  */
-static int tftpfetch(char *srvname, char *filename)
+static int tftpfetch(char *srvname, char *filename, int blocksize)
 {
 	char *tftpargv[8];
 	int tftpmainargc = 0;
+	char blocksize_str[16];
+	/* If we get here assume blocksize is in range */
+	sprintf(blocksize_str, "bs=%d", blocksize);
 
 	tftpverbose = 0;	/* Set to 1 for tftp trace info */
 
@@ -342,7 +345,8 @@ static int tftpfetch(char *srvname, char *filename)
 	notice("fetching file \"%s\" from %s\n", filename, srvname);
 	tftpargv[0] = "get";
 	tftpargv[1] = filename;
-	tftpget(2, tftpargv);
+	tftpargv[2] = blocksize_str;
+	tftpget(3, tftpargv);
 	return 0;
 }
 
@@ -950,16 +954,19 @@ static int get_bootpart(void)
 static int set_bootpart(void)
 {
 	char *bootpart;
+	char *partvalid;
 	if (dobootpart == 'a') {
 		bootpart = "default=0";
+		partvalid = "part0_valid=true";
 	} else if (dobootpart == 'b') {
 		bootpart = "default=1";
+		partvalid = "part1_valid=true";
 	} else {
 		return 0;
 	}
 
 	char *localargv[] = {
-		GRUBEDIT, GRUBENVFILE, "set", bootpart, NULL
+		GRUBEDIT, GRUBENVFILE, "set", bootpart, partvalid, NULL
 	};
 	return local_system(localargv, 0);
 }
@@ -1010,6 +1017,7 @@ static int usage(int rc)
 #endif
 	"\t-a\tdon't add filename to bootcfg file (if using -R)\n"
 	"\t-b\tdon't reboot hardware when done\n"
+	"\t-B N\tTFTP blocksize option 'N' bytes, 8-65464, default: 8192\n"
 	"\t-C\tcheck that image was written correctly\n"
 	"\t-d\tspecify seconds to wait before programming flash\n"
 	"\t-e\tdo not erase flash segments if they are already blank\n"
@@ -1083,6 +1091,7 @@ int netflashmain(int argc, char *argv[])
 	int kill_processes_run = 0;
 	int dokill, dokillpartial, doreboot, doftp;
 	int dopreserve, doflashingrootfs;
+	int blocksize = BLOCKSIZE_DEFAULT;
 #if defined(CONFIG_USER_NETFLASH_WITH_CGI) && !defined(RECOVER_PROGRAM)
 	char options[64];
 	char flash_region[20];
@@ -1246,6 +1255,13 @@ int netflashmain(int argc, char *argv[])
 			break;
 		case 'b':
 			doreboot = 0;
+			break;
+		case 'B':
+			blocksize = atoi(optarg);
+			if (blocksize > BLOCKSIZE_MAX || blocksize < BLOCKSIZE_MIN) {
+				error("Invalid blocksize!");
+				usage(1);
+			}
 			break;
 		case 'c':
 			console = optarg;
@@ -1513,7 +1529,7 @@ int netflashmain(int argc, char *argv[])
 			if (doftp)
 				ftpfetch(srvname, filename);
 			else
-				tftpfetch(srvname, filename);
+				tftpfetch(srvname, filename, blocksize);
 		} else if (filefetch(filename) < 0) {
 				error("failed to find %s", filename);
 				exit(NO_IMAGE);

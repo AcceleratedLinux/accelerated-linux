@@ -19,10 +19,9 @@ This patch changes the default state returned by
 `get_current_consolidated_state()` from UNKNOWN to DISABLED. ModemManager can
 continue working in this state.
 
-diff -ru ModemManager/src/mm-iface-modem.c ModemManager/src/mm-iface-modem.c
---- ModemManager/src/mm-iface-modem.c	2017-05-22 09:18:55.976814760 +1000
-+++ ModemManager/src/mm-iface-modem.c	2017-05-22 09:19:22.789139520 +1000
-@@ -446,7 +446,7 @@
+--- ModemManager/src/mm-iface-modem.c	2018-11-20 14:31:47.166319203 +1000
++++ ModemManager/src/mm-iface-modem.c.new	2018-11-20 14:30:45.190319208 +1000
+@@ -463,7 +463,7 @@
              new_state = MM_MODEM_STATE_DISCONNECTING;
              break;
          case MM_BEARER_STATUS_DISCONNECTED:

@@ -50,6 +50,7 @@
 /* this is for "generic access to PC-style RTC" using CMOS_READ/CMOS_WRITE */
 #include <linux/mc146818rtc.h>
 
+#ifdef CONFIG_ACPI
 /*
  * Use ACPI SCI to replace HPET interrupt for RTC Alarm event
  *
@@ -60,6 +61,18 @@
 
 static bool use_acpi_alarm;
 module_param(use_acpi_alarm, bool, 0444);
+
+static inline int cmos_use_acpi_alarm(void)
+{
+	return use_acpi_alarm;
+}
+#else /* !CONFIG_ACPI */
+
+static inline int cmos_use_acpi_alarm(void)
+{
+	return 0;
+}
+#endif
 
 struct cmos_rtc {
 	struct rtc_device	*rtc;
@@ -167,9 +180,9 @@ static inline int hpet_unregister_irq_handler(irq_handler_t handler)
 #endif
 
 /* Don't use HPET for RTC Alarm event if ACPI Fixed event is used */
-static int use_hpet_alarm(void)
+static inline int use_hpet_alarm(void)
 {
-	return is_hpet_enabled() && !use_acpi_alarm;
+	return is_hpet_enabled() && !cmos_use_acpi_alarm();
 }
 
 /*----------------------------------------------------------------*/
@@ -239,11 +252,13 @@ static int cmos_set_time(struct device *dev, struct rtc_time *t)
 	return mc146818_set_time(t);
 }
 
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 static int cmos_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 {
 	struct cmos_rtc	*cmos = dev_get_drvdata(dev);
 	unsigned char	rtc_control;
 
+	/* This not only a rtc_op, but also called directly */
 	if (!is_valid_irq(cmos->irq))
 		return -EIO;
 
@@ -307,6 +322,7 @@ static int cmos_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 
 	return 0;
 }
+#endif
 
 static void cmos_checkintr(struct cmos_rtc *cmos, unsigned char rtc_control)
 {
@@ -340,7 +356,7 @@ static void cmos_irq_enable(struct cmos_rtc *cmos, unsigned char mask)
 	if (use_hpet_alarm())
 		hpet_set_rtc_irq_bit(mask);
 
-	if ((mask & RTC_AIE) && use_acpi_alarm) {
+	if ((mask & RTC_AIE) && cmos_use_acpi_alarm()) {
 		if (cmos->wake_on)
 			cmos->wake_on(cmos->dev);
 	}
@@ -358,7 +374,7 @@ static void cmos_irq_disable(struct cmos_rtc *cmos, unsigned char mask)
 	if (use_hpet_alarm())
 		hpet_mask_rtc_irq_bit(mask);
 
-	if ((mask & RTC_AIE) && use_acpi_alarm) {
+	if ((mask & RTC_AIE) && cmos_use_acpi_alarm()) {
 		if (cmos->wake_off)
 			cmos->wake_off(cmos->dev);
 	}
@@ -366,6 +382,7 @@ static void cmos_irq_disable(struct cmos_rtc *cmos, unsigned char mask)
 	cmos_checkintr(cmos, rtc_control);
 }
 
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 static int cmos_validate_alarm(struct device *dev, struct rtc_wkalrm *t)
 {
 	struct cmos_rtc *cmos = dev_get_drvdata(dev);
@@ -439,6 +456,7 @@ static int cmos_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	unsigned char mon, mday, hrs, min, sec, rtc_control;
 	int ret;
 
+	/* This not only a rtc_op, but also called directly */
 	if (!is_valid_irq(cmos->irq))
 		return -EIO;
 
@@ -497,14 +515,12 @@ static int cmos_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 
 	return 0;
 }
+#endif
 
 static int cmos_alarm_irq_enable(struct device *dev, unsigned int enabled)
 {
 	struct cmos_rtc	*cmos = dev_get_drvdata(dev);
 	unsigned long	flags;
-
-	if (!is_valid_irq(cmos->irq))
-		return -EINVAL;
 
 	spin_lock_irqsave(&rtc_lock, flags);
 
@@ -560,10 +576,18 @@ static int cmos_procfs(struct device *dev, struct seq_file *seq)
 static const struct rtc_class_ops cmos_rtc_ops = {
 	.read_time		= cmos_read_time,
 	.set_time		= cmos_set_time,
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 	.read_alarm		= cmos_read_alarm,
 	.set_alarm		= cmos_set_alarm,
+#endif
 	.proc			= cmos_procfs,
 	.alarm_irq_enable	= cmos_alarm_irq_enable,
+};
+
+static const struct rtc_class_ops cmos_rtc_ops_no_alarm = {
+	.read_time		= cmos_read_time,
+	.set_time		= cmos_set_time,
+	.proc			= cmos_procfs,
 };
 
 /*----------------------------------------------------------------*/
@@ -628,6 +652,123 @@ static int cmos_nvram_write(void *priv, unsigned int off, void *val,
 
 	return retval;
 }
+
+/*----------------------------------------------------------------*/
+
+#ifdef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
+
+static ssize_t alarm_seconds_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	unsigned int data;
+
+	spin_lock_irq(&rtc_lock);
+	data = CMOS_READ(RTC_SECONDS_ALARM);
+	spin_unlock_irq(&rtc_lock);
+
+	return sprintf(buf, "%u\n", data);
+}
+
+static ssize_t alarm_seconds_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	unsigned long data;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &data);
+	if (ret > 255) {
+		dev_err(dev, "alarm_seconds should be [0-255]\n");
+		return -EINVAL;
+	}
+
+	spin_lock_irq(&rtc_lock);
+	CMOS_WRITE(data, RTC_SECONDS_ALARM);
+	spin_unlock_irq(&rtc_lock);
+
+	return count;
+}
+
+static ssize_t alarm_minutes_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	unsigned int data;
+
+	spin_lock_irq(&rtc_lock);
+	data = CMOS_READ(RTC_MINUTES_ALARM);
+	spin_unlock_irq(&rtc_lock);
+
+	return sprintf(buf, "%u\n", data);
+}
+
+static ssize_t alarm_minutes_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	unsigned long data;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &data);
+	if (ret > 255) {
+		dev_err(dev, "alarm_minutes should be [0-255]\n");
+		return -EINVAL;
+	}
+
+	spin_lock_irq(&rtc_lock);
+	CMOS_WRITE(data, RTC_MINUTES_ALARM);
+	spin_unlock_irq(&rtc_lock);
+
+	return count;
+}
+
+static ssize_t alarm_hours_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	unsigned int data;
+
+	spin_lock_irq(&rtc_lock);
+	data = CMOS_READ(RTC_HOURS_ALARM);
+	spin_unlock_irq(&rtc_lock);
+
+	return sprintf(buf, "%u\n", data);
+}
+
+static ssize_t alarm_hours_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	unsigned long data;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &data);
+	if (ret > 255) {
+		dev_err(dev, "alarm_hours should be [0-255]\n");
+		return -EINVAL;
+	}
+
+	spin_lock_irq(&rtc_lock);
+	CMOS_WRITE(data, RTC_HOURS_ALARM);
+	spin_unlock_irq(&rtc_lock);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(alarm_seconds);
+static DEVICE_ATTR_RW(alarm_minutes);
+static DEVICE_ATTR_RW(alarm_hours);
+
+static struct attribute *cmos_raw_alarm_attrs[] = {
+	&dev_attr_alarm_seconds.attr,
+	&dev_attr_alarm_minutes.attr,
+	&dev_attr_alarm_hours.attr,
+	NULL,
+};
+
+static const struct attribute_group cmost_raw_alarm_attr_group = {
+	.attrs		= cmos_raw_alarm_attrs,
+};
+
+#endif /* CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES */
 
 /*----------------------------------------------------------------*/
 
@@ -842,13 +983,26 @@ cmos_do_probe(struct device *dev, struct resource *ports, int rtc_irq)
 			dev_dbg(dev, "IRQ %d is already in use\n", rtc_irq);
 			goto cleanup1;
 		}
+
+		cmos_rtc.rtc->ops = &cmos_rtc_ops;
+	} else {
+		cmos_rtc.rtc->ops = &cmos_rtc_ops_no_alarm;
 	}
 
-	cmos_rtc.rtc->ops = &cmos_rtc_ops;
 	cmos_rtc.rtc->nvram_old_abi = true;
 	retval = rtc_register_device(cmos_rtc.rtc);
 	if (retval)
 		goto cleanup2;
+
+#ifdef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
+	/* Export raw alarm sysfs entries */
+	retval = sysfs_create_group(&dev->kobj, &cmost_raw_alarm_attr_group);
+	if (retval) {
+		dev_err(dev, "Failed to create sysfs group: %d\n", retval);
+		goto cleanup2;
+	}
+#endif /* CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES */
+
 
 	/* export at least the first block of NVRAM */
 	nvmem_cfg.size = address_space - NVRAM_OFFSET;
@@ -894,6 +1048,10 @@ static void cmos_do_remove(struct device *dev)
 
 	cmos_do_shutdown(cmos->irq);
 
+#ifdef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
+	sysfs_remove_group(&dev->kobj, &cmost_raw_alarm_attr_group);
+#endif
+
 	if (is_valid_irq(cmos->irq)) {
 		free_irq(cmos->irq, cmos->rtc);
 		if (use_hpet_alarm())
@@ -915,8 +1073,10 @@ static void cmos_do_remove(struct device *dev)
 static int cmos_aie_poweroff(struct device *dev)
 {
 	struct cmos_rtc	*cmos = dev_get_drvdata(dev);
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 	struct rtc_time now;
 	time64_t t_now;
+#endif
 	int retval = 0;
 	unsigned char rtc_control;
 
@@ -931,6 +1091,7 @@ static int cmos_aie_poweroff(struct device *dev)
 	if (rtc_control & RTC_AIE)
 		return -EBUSY;
 
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 	cmos_read_time(dev, &now);
 	t_now = rtc_tm_to_time64(&now);
 
@@ -950,7 +1111,9 @@ static int cmos_aie_poweroff(struct device *dev)
 		rtc_time64_to_tm(t_now - 1, &alarm.time);
 		alarm.enabled = 0;
 		retval = cmos_set_alarm(dev, &alarm);
-	} else if (cmos->alarm_expires > t_now + 1) {
+	} else if (cmos->alarm_expires > t_now + 1)
+#endif
+	{
 		retval = -EBUSY;
 	}
 
@@ -980,7 +1143,7 @@ static int cmos_suspend(struct device *dev)
 	}
 	spin_unlock_irq(&rtc_lock);
 
-	if ((tmp & RTC_AIE) && !use_acpi_alarm) {
+	if ((tmp & RTC_AIE) && !cmos_use_acpi_alarm()) {
 		cmos->enabled_wake = 1;
 		if (cmos->wake_on)
 			cmos->wake_on(dev);
@@ -988,7 +1151,9 @@ static int cmos_suspend(struct device *dev)
 			enable_irq_wake(cmos->irq);
 	}
 
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 	cmos_read_alarm(dev, &cmos->saved_wkalrm);
+#endif
 
 	dev_dbg(dev, "suspend%s, ctrl %02x\n",
 			(tmp & RTC_AIE) ? ", alarm may wake" : "",
@@ -1011,6 +1176,7 @@ static inline int cmos_poweroff(struct device *dev)
 	return cmos_suspend(dev);
 }
 
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 static void cmos_check_wkalrm(struct device *dev)
 {
 	struct cmos_rtc *cmos = dev_get_drvdata(dev);
@@ -1031,7 +1197,7 @@ static void cmos_check_wkalrm(struct device *dev)
 	 * ACPI RTC wake event is cleared after resume from STR,
 	 * ACK the rtc irq here
 	 */
-	if (t_now >= cmos->alarm_expires && use_acpi_alarm) {
+	if (t_now >= cmos->alarm_expires && cmos_use_acpi_alarm()) {
 		cmos_interrupt(0, (void *)cmos->rtc);
 		return;
 	}
@@ -1044,6 +1210,7 @@ static void cmos_check_wkalrm(struct device *dev)
 		cmos_set_alarm(dev, &cmos->saved_wkalrm);
 	}
 }
+#endif
 
 static void cmos_check_acpi_rtc_status(struct device *dev,
 				       unsigned char *rtc_control);
@@ -1053,7 +1220,7 @@ static int __maybe_unused cmos_resume(struct device *dev)
 	struct cmos_rtc	*cmos = dev_get_drvdata(dev);
 	unsigned char tmp;
 
-	if (cmos->enabled_wake && !use_acpi_alarm) {
+	if (cmos->enabled_wake && !cmos_use_acpi_alarm()) {
 		if (cmos->wake_off)
 			cmos->wake_off(dev);
 		else
@@ -1061,8 +1228,10 @@ static int __maybe_unused cmos_resume(struct device *dev)
 		cmos->enabled_wake = 0;
 	}
 
+#ifndef CONFIG_RTC_DRV_CMOS_RAW_ALARM_BYTES
 	/* The BIOS might have changed the alarm, restore it */
 	cmos_check_wkalrm(dev);
+#endif
 
 	spin_lock_irq(&rtc_lock);
 	tmp = cmos->suspend_ctrl;
@@ -1132,7 +1301,7 @@ static u32 rtc_handler(void *context)
 	 * Or else, ACPI SCI is enabled during suspend/resume only,
 	 * update rtc irq in that case.
 	 */
-	if (use_acpi_alarm)
+	if (cmos_use_acpi_alarm())
 		cmos_interrupt(0, (void *)cmos->rtc);
 	else {
 		/* Fix me: can we use cmos_interrupt() here as well? */

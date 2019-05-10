@@ -29,6 +29,7 @@ endif
 endif
 
 ifdef CONFIG_USER_FLATFSD_FLATFSD
+FINALCONFFILE       := /etc/config/ipsec.conf
 FINALCONFDIR        := /etc/config
 FINALCONFDDIR       := /etc/config
 FINALLOGDIR         := /var/log
@@ -43,8 +44,10 @@ FINALLIBEXECDIR     := /bin
 endif
 
 ifneq ($(CONFIG_USER_OPENSWAN_CONFDIR),)
+ifneq ($(CONFIG_USER_OPENSWAN_CONFDIR),"")
 FINALCONFDIR        := $(CONFIG_USER_OPENSWAN_CONFDIR)
 FINALCONFDDIR       := $(CONFIG_USER_OPENSWAN_CONFDIR)
+endif
 endif
 
 PORTINCLUDE := -I${OPENSWANSRCDIR}/ports/linux/include

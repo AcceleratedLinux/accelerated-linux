@@ -4,7 +4,7 @@
 
 DIRS = 
 
-ROMFS_DIRS = bin dev etc etc/rc.d home lib mnt proc \
+ROMFS_DIRS = bin dev etc etc/rc.d home lib mnt proc sbin \
              usr var home/httpd home/httpd/cgi-bin
 
 DEVICES = \
@@ -107,7 +107,6 @@ image-tools:
 
 image: image-tools
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
-	rm -rf $(IMAGEDIR)/*
 	$(CROSS)objcopy  --set-section-flags=.romvec=alloc,load,readonly,data \
 			-O binary $(ROOTDIR)/$(LINUXDIR)/linux \
 			$(ROMFSDIR)/linux.bin

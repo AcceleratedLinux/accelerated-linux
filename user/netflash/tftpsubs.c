@@ -40,11 +40,9 @@ static char sccsid[] = "@(#)tftpsubs.c	5.4 (Berkeley) 6/29/88";
 #include "netflash.h"
 #include "tftp.h"
 
-#define PKTSIZE SEGSIZE+4       /* should be moved to tftp.h */
-
 static struct bf {
 	int counter;            /* size of data in buffer, or flag */
-	char buf[PKTSIZE];      /* room for data packet */
+	char *buf;              /* room for data packet */
 } bfs[2];
 
 				/* Values for bf.counter  */
@@ -60,22 +58,32 @@ static int newline = 0;        /* fillbuf: in middle of newline expansion */
 static int prevchar = -1;      /* putbuf: previous char (cr check) */
 
 struct tftphdr *tftprpw_init();
-struct tftphdr *tftprw_init(int x);
+struct tftphdr *tftprw_init(int x, int size);
 
-struct tftphdr *tftpw_init() { return tftprw_init(0); }     /* write-behind */
-struct tftphdr *tftpr_init() { return tftprw_init(1); }     /* read-ahead */
+struct tftphdr *tftpw_init(int size) { return tftprw_init(0, size); }     /* write-behind */
+struct tftphdr *tftpr_init(int size) { return tftprw_init(1, size); }     /* read-ahead */
 
 struct tftphdr *
-tftprw_init(x)              /* init for either read-ahead or write-behind */
+tftprw_init(x, size)    /* init for either read-ahead or write-behind */
 int x;                  /* zero for write-behind, one for read-head */
+int size;               /* alloc size */
 {
+
 	newline = 0;            /* init crlf flag */
 	prevchar = -1;
+	bfs[0].buf = malloc(size);
 	bfs[0].counter =  BF_ALLOC;     /* pass out the first buffer */
 	current = 0;
+	bfs[1].buf = malloc(size);
 	bfs[1].counter = BF_FREE;
 	nextone = x;                    /* ahead or behind? */
 	return (struct tftphdr *)bfs[0].buf;
+}
+
+void tftprw_free(void)
+{
+	free(bfs[0].buf);
+	free(bfs[1].buf);
 }
 
 #if 0

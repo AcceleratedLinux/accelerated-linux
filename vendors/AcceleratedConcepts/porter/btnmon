@@ -1,6 +1,0 @@
-#!/bin/sh
-#
-# Simple ACPI power off button event monitoring to perform shutdown
-
-[ -e /dev/input/event0 ] || exit 1
-read -n1 < /dev/input/event0 ; reboot_managed poweroff "ACPI shutdown"

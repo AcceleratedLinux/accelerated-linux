@@ -2,6 +2,8 @@
 # (c) 2003 port GmbH oe@port.de
 #
 
+export ACL_LICENSE = GPL
+
 EXEC = ctest can_send receive
 CTEST_OBJS = ctest.o
 CANSEND_OBJS = can_send.o

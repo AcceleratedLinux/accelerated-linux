@@ -1,49 +1,17 @@
 config NET_VENDOR_MEDIATEK
 	bool "MediaTek ethernet driver"
-	depends on ARCH_MEDIATEK || RALINK
+	depends on ARCH_MEDIATEK || SOC_MT7621
 	---help---
 	  If you have a Mediatek SoC with ethernet, say Y.
 
+if NET_VENDOR_MEDIATEK
+
 config NET_MEDIATEK_SOC
-	def_tristate NET_VENDOR_MEDIATEK
-
-if NET_MEDIATEK_SOC
-choice
-	prompt "MAC type"
-
-config NET_MEDIATEK_MT7620
-	bool "MT7620"
-	depends on MIPS && SOC_MT7620
-
-config NET_MEDIATEK_MT7621
-	bool "MT7621"
-	depends on MIPS && SOC_MT7621
-
-config NET_MEDIATEK_MT2701
-	bool "MT2701"
-	depends on ARM
-
-config NET_MEDIATEK_MT7623
-	bool "MT7623"
-	depends on ARM
-
-endchoice
-
-config NET_MEDIATEK_MDIO
-	def_bool NET_MEDIATEK_SOC
-	depends on (NET_MEDIATEK_MT7620 || NET_MEDIATEK_MT7621)
+	tristate "MediaTek SoC Gigabit Ethernet support"
+	depends on NET_VENDOR_MEDIATEK
 	select PHYLIB
+	---help---
+	  This driver supports the gigabit ethernet MACs in the
+	  MediaTek SoC family.
 
-config NET_MEDIATEK_MDIO_MT7620
-	def_bool NET_MEDIATEK_SOC
-	depends on (NET_MEDIATEK_MT7620 || NET_MEDIATEK_MT7621)
-	select NET_MEDIATEK_MDIO
-
-config NET_MEDIATEK_GSW_MT7620
-	def_tristate NET_MEDIATEK_SOC
-	depends on NET_MEDIATEK_MT7620
-
-config NET_MEDIATEK_GSW_MT7621
-	def_tristate NET_MEDIATEK_SOC
-	depends on NET_MEDIATEK_MT7621
-endif
+endif #NET_VENDOR_MEDIATEK

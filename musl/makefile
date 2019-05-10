@@ -1,4 +1,4 @@
-MUSL_VERSION = 1.1.19
+MUSL_VERSION = 1.1.22
 MUSL = musl-$(MUSL_VERSION)
 URL = http://www.musl-libc.org/releases/$(MUSL).tar.gz
 
@@ -13,6 +13,9 @@ $(MUSL)_CONFIGURE = ./configure
 $(MUSL)_ROMFS = musl_romfs
 
 include $(ROOTDIR)/tools/automake.inc
+
+# Do not use any of the automake.inc CONFOPTS, they disable static libs
+CONFOPTS := --prefix=
 
 complete_target:
 	rm -f install

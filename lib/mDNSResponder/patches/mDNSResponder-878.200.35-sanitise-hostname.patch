@@ -1,0 +1,15 @@
+--- mDNSResponder-878.200.35/mDNSPosix/mDNSPosix.c	2019-05-01 11:12:44.269677581 +1000
++++ mDNSResponder-878.200.35/mDNSPosix/mDNSPosix.c	2019-05-01 11:14:01.941679266 +1000
+@@ -467,7 +467,11 @@
+ {
+     int len = 0;
+     gethostname((char *)(&namelabel->c[1]), MAX_DOMAIN_LABEL);
+-    while (len < MAX_DOMAIN_LABEL && namelabel->c[len+1] && namelabel->c[len+1] != '.') len++;
++    while (len < MAX_DOMAIN_LABEL && namelabel->c[len+1] && namelabel->c[len+1] != '.') {
++	if (namelabel->c[len+1] == ' ')
++	    namelabel->c[len+1] = '-'; /* sanitise hostname */
++        len++;
++	}
+     namelabel->c[0] = len;
+ }
+ 

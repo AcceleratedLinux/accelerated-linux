@@ -309,7 +309,7 @@ static bool bcm53118_untag(struct bcm53118_switch *sp, struct sk_buff *skb)
 		 */
 		u16 tci = 4071 + (tag[3] & 0x1f);
 		vlan->h_vlan_proto = htons(ETH_P_8021Q);
-		vlan->h_vlan_TCI = htons(VLAN_TAG_PRESENT | tci);
+		vlan->h_vlan_TCI = htons(VLAN_CFI_MASK | tci);
 	} else {
 		/* Remove the tag */
 		memmove(skb->data + BCM53118_TAG_LEN, skb->data, 2 * ETH_ALEN);
@@ -570,7 +570,7 @@ static struct phy_driver bcm53118_phy_driver = {
 	.phy_id_mask	= 0xffffffff,
 	.name		= "Broadcom BCM53118",
 	.config_init	= bcm53118_phy_config_init,
-	.features	= SUPPORTED_MII | SUPPORTED_1000baseT_Full,
+	.features	= PHY_GBIT_FEATURES,
 	.config_aneg	= bcm53118_phy_config_aneg,
 	.read_status	= bcm53118_phy_read_status,
 	.soft_reset	= bcm53118_phy_soft_reset,

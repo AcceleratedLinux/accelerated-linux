@@ -1697,7 +1697,7 @@ static void rtl8139_tx_timeout_task (struct work_struct *work)
 
 	napi_disable(&tp->napi);
 	netif_stop_queue(dev);
-	synchronize_sched();
+	synchronize_rcu();
 
 	netdev_dbg(dev, "Transmit timeout, status %02x %04x %04x media %02x\n",
 		   RTL_R8(ChipCmd), RTL_R16(IntrStatus),
@@ -2260,7 +2260,7 @@ static irqreturn_t rtl8139_interrupt (int irq, void *dev_instance)
 	if (status & RxAckBits){
 #ifdef FAST_POLL
 		int max_quota = MAX_QUOTA;
-		rtl8139_poll(dev, &max_quota);
+		rtl8139_poll(&tp->napi, max_quota);
 #else
 		if (napi_schedule_prep(&tp->napi)) {
 			RTL_W16_F (IntrMask, rtl8139_norx_intr_mask);

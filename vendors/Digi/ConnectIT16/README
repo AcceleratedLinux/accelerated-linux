@@ -1,0 +1,75 @@
+ACL on the ConnectIT16
+----------------------
+
+Build image
+
+Put CFAST card into a local reader
+
+sudo dd if=images/disk.raw of=/dev/sd? bs=8192b
+
+put CFAST into Connect IT 16,  boot and run :-)
+
+Regenerate Signed Grub
+----------------------
+
+rm vendors/Digi/ConnectIT16/bootx64.efi-signed
+
+commit, push
+
+do a jenkins build (release)
+
+sign images/bootx64.efi.standalone artifact
+
+    sbsign --key uefi-keys/DB.key --cert uefi-keys/DB.crt \
+	--output bootx64.efi.signed bootx64.efi.standalone
+
+copy signed version to vendors/Digi/ConnectIT16/bootx64.efi.signed
+
+commit vendors/Digi/ConnectIT16/bootx64.efi.signed
+
+continue as usual to build with new signed grub
+
+BIOS Update
+-----------
+
+Put AfuEfix64.efi and BIOS images onto a USB.
+
+Go into BIOS, Save&Exit, UEFI Shell
+...
+Shell> FS1:
+FS1:\> ls
+Directory of: FS1:\
+02/27/2019  09:56               2,313  DB.auth
+02/27/2019  09:56               2,312  KEK.auth
+02/27/2019  09:56               1,473  noPK.auth
+02/27/2019  09:56               2,310  PK.auth
+02/27/2019  09:56               1,131  DB.crt
+02/27/2019  09:56               1,131  KEK.crt
+02/27/2019  09:56               1,131  PK.crt
+02/27/2019  09:56                 837  DB.esl
+02/27/2019  09:56                 839  KEK.esl
+02/27/2019  09:56                   0  noPK.esl
+02/27/2019  09:56                 837  PK.esl
+03/13/2019  15:06             505,968  AfuEfix64.efi
+03/13/2019  10:29          16,777,216  Z009-005.ROM
+         13 File(s)  17,297,498 bytes
+          0 Dir(s)
+FS1:\>  AfuEfix64.efi  Z009-005.ROM /p /b  /n /x /reboot
++---------------------------------------------------------------------------+
+|                 AMI Firmware Update Utility v5.09.02.1384                 |
+|      Copyright (C)2017 American Megatrends Inc. All Rights Reserved.      |
++---------------------------------------------------------------------------+
+ Reading flash ............... done
+ - ME Data Size checking . ok
+ - FFS checksums ......... ok
+ - Check RomLayout ......... Ok.
+ Erasing Boot Block .......... done
+ Updating Boot Block ......... done
+ Verifying Boot Block ........ done
+ Erasing Main Block .......... done
+ Updating Main Block ......... done
+ Verifying Main Block ........ done
+ Erasing NVRAM Block ......... done
+ Updating NVRAM Block ........ done
+ Verifying NVRAM Block ....... done
+

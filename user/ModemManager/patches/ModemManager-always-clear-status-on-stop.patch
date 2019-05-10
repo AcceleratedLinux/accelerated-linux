@@ -1,20 +1,18 @@
-diff --git a/src/mm-bearer-qmi.c b/src/mm-bearer-qmi.c
-index db8e0ac..46a4045 100644
---- a/src/mm-bearer-qmi.c
-+++ b/src/mm-bearer-qmi.c
-@@ -1164,13 +1164,11 @@ stop_network_ready (QmiClientWds *client,
+--- ModemManager/src/mm-bearer-qmi.c	2018-11-20 14:35:28.902319185 +1000
++++ ModemManager/src/mm-bearer-qmi.c.new	2018-11-20 14:46:52.314319130 +1000
+@@ -1816,13 +1816,11 @@
              ctx->error_ipv4 = error;
          else
              ctx->error_ipv6 = error;
 -    } else {
 -        /* Clear internal status */
--        reset_bearer_connection (ctx->self,
+-        reset_bearer_connection (self,
 -                                 ctx->running_ipv4,
 -                                 ctx->running_ipv6);
      }
  
-+    /* Clear internal status */
-+    reset_bearer_connection (ctx->self, TRUE, TRUE);
++	/* Clear internal status */
++	reset_bearer_connection (self, TRUE, TRUE);
 +
      if (output)
          qmi_message_wds_stop_network_output_unref (output);

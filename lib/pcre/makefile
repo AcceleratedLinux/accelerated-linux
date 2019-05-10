@@ -1,6 +1,6 @@
-URL = ftp://ftp.pcre.org/pub/pcre/pcre-8.36.tar.gz
+URL = ftp://ftp.pcre.org/pub/pcre/pcre-8.42.tar.gz
 MAKEVARS =
-pcre-8.36_CONFOPTS = --disable-cpp
+CONFOPTS = --disable-cpp --enable-utf --enable-unicode-properties
 ROMFS = pcre_cleanup
 include $(ROOTDIR)/tools/automake.inc
 

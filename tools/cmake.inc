@@ -7,6 +7,8 @@ include $(ROOTDIR)/tools/download.inc
 
 CMAKE_OPTS += -DCMAKE_INSTALL_PREFIX= -DCMAKE_SYSTEM_PREFIX_PATH=$(STAGEDIR)
 
+PRECIOUS: $(addprefix build/,$(addsuffix -cmake,$(PKG_y)))
+
 build/%-cmake: build/%-patched
 	@echo "CMake $* ..."
 	$(AT)mkdir -p build/$($*_BUILDDIR)

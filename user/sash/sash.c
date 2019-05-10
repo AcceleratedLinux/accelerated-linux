@@ -349,7 +349,10 @@ readfile(name)
 			return;
 		}
 
+again:
 		if (fgets(buf, CMDLEN - 1, fp) == NULL) {
+			if (ferror(fp) && (errno == EAGAIN))
+				goto again;
 			if (ferror(fp) && (errno == EINTR)) {
 				clearerr(fp);
 				continue;

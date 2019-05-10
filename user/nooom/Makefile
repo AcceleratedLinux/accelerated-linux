@@ -1,3 +1,5 @@
+export ACL_LICENSE = GPL
+
 EXEC1 = no_oom
 OBJS1 = no_oom.o
 

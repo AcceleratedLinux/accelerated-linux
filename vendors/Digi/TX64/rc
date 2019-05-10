@@ -1,0 +1,124 @@
+readonly LABEL_USERFS="UserFS"
+readonly GUID_USERFS="eceab4b2-cd57-49d9-b0b4-63b6808bfae9"
+readonly USERFS_PART=8
+readonly DRIVE=/dev/sda
+
+hostname TX64
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=256M tmpfs /tmp
+mount -t tmpfs -o size=256M tmpfs /var
+#mkdir -m 755 /dev/hugepages
+#mount -t hugetlbfs none /dev/hugepages
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# rename interfaces to match rear label
+ip link set eth3 name eth4
+ip link set eth2 name eth3
+ip link set eth1 name eth2
+ip link set eth0 name eth1
+
+# init devices before we need any
+cp -ra /lib/udev/devices/. /dev
+
+# /efi filesystem
+mount /dev/flash/efi /efi
+
+# Check if opt filesystem exists
+if ! sgdisk ${DRIVE} -p | grep -q "${LABEL_USERFS}"; then
+	echo "Creating new OPT filesystem..."
+	# Fix GPT
+	sgdisk ${DRIVE} -e
+	sgdisk ${DRIVE} -new 0::-0 --typecode=0:8300 --change-name=0:"${LABEL_USERFS}" --partition-guid=0:"${GUID_USERFS}" > /dev/null
+	partprobe
+	mkfs.ext4 -F ${DRIVE}${USERFS_PART}
+	mount -t ext4 ${DRIVE}${USERFS_PART} /opt
+	mkdir /opt/config
+	ln -s /efi/grub /opt/boot
+	touch /opt/config/.init
+	umount /opt
+else
+	echo "Mounting OPT filesystem..."
+fi
+
+fsck.ext4 -p /dev/flash/opt
+mount -t ext4 /dev/flash/opt /opt
+
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+
+# pull values from BIOS
+echo "Loading BIOS information ..."
+/etc/dmi2fwenv
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+#setmac -i eth4,eth1,eth2,eth3,bmc -u -n 5
+#/etc/switch.sh
+
+#if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+#	/etc/factory
+#	exit 0
+#fi
+#if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+#	# Use the same setup as for factory testing
+#	/etc/factory
+#	exit 0
+#fi
+
+echo "Mounting config filesystem ..."
+if ! mount --bind /opt/config /etc/config
+then
+	echo "Cannot bind mount /etc/config to /opt/config..."
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=4M tmpfs /etc/config
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
+	[ -f /etc/config/.init2 ] && filter='$'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+
+cat /etc/inittab.d/* > /etc/inittab
+
+# speed up crypto
+#echo "Enabling parrallel crypto ..."
+#crconf add driver "pcrypt(authenc(hmac(sha1),cbc(aes)))" type 3 2> /dev/null
+
+#load wifi module before we come up
+modprobe ath10k_pci
+
+# load I2C driver with modified frequency (100kHz, because of the ATECC508)
+modprobe i2c-designware-core bus_speed=100
+modprobe i2c-designware-pci
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

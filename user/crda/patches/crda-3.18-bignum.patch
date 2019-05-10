@@ -1,0 +1,19 @@
+--- crda-3.18/utils/key2pub.py	2014-12-11 09:51:29.000000000 +1000
++++ crda-3.18/utils/key2pub.py	2018-10-22 21:41:38.553626217 +1000
+@@ -24,7 +24,7 @@
+     for v1, v2, v3, v4, v5, v6, v7, v8 in vnew:
+         if not idx:
+             output.write('\t')
+-        output.write('0x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x, ' % (ord(v1), ord(v2), ord(v3), ord(v4), ord(v5), ord(v6), ord(v7), ord(v8)))
++        output.write('(BN_ULONG)0x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x, ' % (ord(v1), ord(v2), ord(v3), ord(v4), ord(v5), ord(v6), ord(v7), ord(v8)))
+         idx += 1
+         if idx == 2:
+             idx = 0
+@@ -60,6 +60,7 @@
+ def print_ssl(output, name, val):
+     import struct
+     output.write('#include <stdint.h>\n')
++    output.write('#include <openssl/bn.h>\n')
+     if len(struct.pack('@L', 0)) == 8:
+         return print_ssl_64(output, name, val)
+     else:

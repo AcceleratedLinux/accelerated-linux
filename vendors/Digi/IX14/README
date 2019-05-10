@@ -30,7 +30,7 @@ setenv mtdparts mtdparts=gpmi-nand:3m(bootloader),1m(environment),1m(log),-(flas
 
 setenv sizing 'setexpr sizaddr $loadaddr + 0x28; setexpr fssize *$sizaddr + 0xfff; setexpr fssize $fssize \\\& 0xfffff000; setexpr ukaddr $loadaddr + $fssize;'
 
-setenv netload 'setenv loadaddr 0x83800000; dhcp $loadaddr image.bin; run sizing; setenv bootargs boot=network $mtdparts console=$console,115200 root=/dev/ram0 initrd=$loadaddr,0x$fssize $arg; bootm $ukaddr;'
+setenv netload 'setenv loadaddr 0x83800000; dhcp $loadaddr image.bin; run sizing; setenv bootargs boot=network $mtdparts ubi.mtd=3 console=$console,115200 root=/dev/ram0 initrd=$loadaddr,0x$fssize $arg; bootm $ukaddr;'
 
 setenv nandload 'if test X$bootpart != Xb ; then setenv nandpart image ; setenv rootpart /dev/mtdblock4 ; else setenv nandpart image1 ; setenv rootpart /dev/mtdblock5 ; fi ; ubi part flash 2048 ; setenv loadaddr 0x83800000; ubi read $loadaddr $nandpart 0x2000000 ; run sizing ; setenv bootargs $mtdparts console=$console,115200 ubi.mtd=3 root=$rootpart bootpart=$bootpart ; bootm $ukaddr;'
 

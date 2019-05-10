@@ -1,0 +1,1142 @@
+From bd40b45415038a6cf490702896e9b3c2c2015f3f Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Mon, 28 Jan 2019 19:17:04 +0100
+Subject: [PATCH] Add MCU driver
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ grub-core/Makefile.core.def         |    5 +
+ grub-core/commands/mcu.c            | 1098 +++++++++++++++++++++++++++
+ include/grub/i386/coreboot/serial.h |    2 +-
+ 3 files changed, 1104 insertions(+), 1 deletion(-)
+ create mode 100644 grub-core/commands/mcu.c
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index 1c0d54827..84c511f28 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -2392,3 +2392,8 @@ module = {
+   common = commands/atecc_cmd.c;
+   enable = efi;
+ };
++
++module = {
++  name = mcu;
++  common = commands/mcu.c;
++};
+diff --git a/grub-core/commands/mcu.c b/grub-core/commands/mcu.c
+new file mode 100644
+index 000000000..294ccfd56
+--- /dev/null
++++ b/grub-core/commands/mcu.c
+@@ -0,0 +1,1098 @@
++/* mcu.c - MCU communication interface */
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2009  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <grub/dl.h>
++#include <grub/misc.h>
++#include <grub/mm.h>
++#include <grub/command.h>
++#include <grub/env.h>
++#include <grub/cpu/io.h>
++#include <grub/i18n.h>
++#include <grub/serial.h>
++#include <grub/time.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++/* MCU communication port */
++struct grub_serial_port *grub_mcu_port = NULL;
++
++/* <START> <DEVID> <CMD> <ADDR> <DATA> <CRC8> <STOP> */
++#define GRUB_MCU_PKT_START		0xF1
++
++#define GRUB_MCU_PKT_DEVID_SYSTEM	0x00
++#define GRUB_MCU_PKT_DEVID_BIOS		0x05
++#define GRUB_MCU_PKT_DEVID_DIGI		0x11
++
++#define GRUB_MCU_PKT_CMD_GET		0x02
++#define GRUB_MCU_PKT_CMD_SET		0x03
++
++/* System command addresses */
++#define GRUB_MCU_PKT_ADDR_PWR_TYPE	0x10
++
++/* BIOS command addresses */
++#define GRUB_MCU_PKT_ADDR_SET_WDOG_CTRL	0x20
++#define GRUB_MCU_PKT_ADDR_SET_WDOG_TMR	0x21
++#define GRUB_MCU_PKT_ADDR_SET_ALL_LEDS	0x26
++
++/* DIGI command addresses */
++#define GRUB_MCU_PKT_ADDR_LED_WIFI_CTRL	0x02
++#define GRUB_MCU_PKT_ADDR_LED_WIFI_TIME	0x03
++#define GRUB_MCU_PKT_ADDR_LED_WWAN_CTRL	0x04
++#define GRUB_MCU_PKT_ADDR_LED_WWAN_TIME	0x05
++#define GRUB_MCU_PKT_ADDR_LED_GPS_CTRL	0x06
++#define GRUB_MCU_PKT_ADDR_LED_GPS_TIME	0x07
++#define GRUB_MCU_PKT_ADDR_LED_PWR_CTRL	0x0E
++#define GRUB_MCU_PKT_ADDR_LED_PWR_TIME	0x0F
++
++
++/* Offsets not counting START and END bytes */
++#define GRUB_MCU_PKT_DEVID_OFFSET	0
++#define GRUB_MCU_PKT_CMD_OFFSET		1
++#define GRUB_MCU_PKT_ADDR_OFFSET	2
++#define GRUB_MCU_PKT_DATA_OFFSET	3
++
++#define GRUB_MCU_PKT_END		0xF2
++
++#define GRUB_MCU_PKT_ESCAPE		0xF0
++
++static const grub_uint8_t grub_mcu_crc8_table[16] = {
++  0x00, 0x5A, 0xB4, 0xEE, 0x32, 0x68, 0x86, 0xDC,
++  0x64, 0x3E, 0xD0, 0x8A, 0x56, 0x0C, 0xE2, 0xB8
++};
++
++static grub_uint8_t
++grub_mcu_crc8(void *buffer, unsigned int len)
++{
++  grub_uint8_t *ptr = buffer;
++  grub_uint8_t crc = 0;
++
++  while (len--)
++    {
++      grub_uint8_t data = *ptr++;
++      grub_uint8_t high_nibble;
++
++      high_nibble = crc / 16;
++      crc <<= 4;
++      crc ^= grub_mcu_crc8_table[high_nibble ^ (data / 16)];
++
++      high_nibble = crc / 16;
++      crc <<= 4;
++      crc ^= grub_mcu_crc8_table[high_nibble ^ (data & 0x0F)];
++    }
++
++  return crc;
++}
++
++/*
++ * buffer: message without the START and END bytes. Keep a spare byte at the end
++ *         for crc
++ */
++static void
++grub_mcu_tx (grub_uint8_t *buffer, unsigned int size)
++{
++  /* Calculate CRC8 */
++  buffer[size - 1] = grub_mcu_crc8 (buffer, size - 1);
++
++#if 0
++  {
++    unsigned int i;
++    grub_printf("TX:\n");
++    for ( i = 0; i < size; i++ )
++      grub_printf("0x%02x ", buffer[i]);
++    grub_printf("\n");
++  }
++#endif
++
++  /* Escape special characters on sending */
++
++  /* Send START delimiter without escaping */
++  grub_serial_port_put (grub_mcu_port, GRUB_MCU_PKT_START);
++
++  while (size--)
++    {
++      grub_uint8_t ch = *buffer++;
++
++      switch (ch)
++	{
++	  case GRUB_MCU_PKT_ESCAPE:
++	  case GRUB_MCU_PKT_START:
++	  case GRUB_MCU_PKT_END:
++	    grub_serial_port_put (grub_mcu_port, GRUB_MCU_PKT_ESCAPE);
++	    grub_serial_port_put (grub_mcu_port, ch - GRUB_MCU_PKT_ESCAPE);
++
++	    break;
++
++	  default:
++	    grub_serial_port_put (grub_mcu_port, ch);
++
++	    break;
++	}
++    }
++
++  /* Send END delimiter without escaping */
++  grub_serial_port_put (grub_mcu_port, GRUB_MCU_PKT_END);
++}
++
++enum grub_mcu_rx_state {
++  GRUB_MCU_RX_STATE_START = 0,
++  GRUB_MCU_RX_STATE_RX,
++  GRUB_MCU_RX_STATE_FINISH,
++};
++
++static grub_err_t
++grub_mcu_rx (grub_uint8_t *buffer, unsigned int size)
++{
++  grub_uint8_t *ptr;
++  unsigned int rxSize;
++  grub_uint64_t timeout;
++  enum grub_mcu_rx_state state;
++
++  /* Set receive timeout */
++  timeout = grub_get_time_ms () + 5000;
++
++retry:
++  state = GRUB_MCU_RX_STATE_START;
++  while (state != GRUB_MCU_RX_STATE_FINISH)
++    {
++      int ch;
++      int isEscaped;
++
++      do
++	ch = grub_serial_port_fetch (grub_mcu_port);
++      while (ch < 0 && grub_get_time_ms() < timeout);
++
++      /* Check for timeout hit */
++      if (ch < 0)
++	return grub_error (GRUB_ERR_TIMEOUT, "RX timeout");
++
++      switch (state)
++	{
++	  case GRUB_MCU_RX_STATE_START:
++	    /* Wait until START delimiter */
++	    if (ch == GRUB_MCU_PKT_START)
++	      {
++		ptr = buffer;
++		rxSize = 0;
++		isEscaped = 0;
++		state = GRUB_MCU_RX_STATE_RX;
++	      }
++
++	    break;
++
++	  case GRUB_MCU_RX_STATE_RX:
++	    /* Previous character was an escape */
++	    if (isEscaped)
++	      {
++		/* Only 3 characters are escaped
++		 * (NOTE: already checked for < 0) */
++		if (ch > 0x02)
++		  {
++		    /* Invalid character, drop this packet */
++		    grub_dprintf ("mcu", "invalid escape character 0x%02x\n",
++				  ch);
++		    state = GRUB_MCU_RX_STATE_START;
++
++		    break;
++		  }
++
++		*ptr++ = GRUB_MCU_PKT_ESCAPE + ch;
++		rxSize++;
++		isEscaped = 0;
++	      }
++	    else
++	      {
++		/* If that's an END delimiter, we're done */
++		if (ch == GRUB_MCU_PKT_END)
++		  {
++		    state = GRUB_MCU_RX_STATE_FINISH;
++
++		    break;
++		  }
++
++		/* Check if we have room in the buffer */
++		if (rxSize >= size)
++		  {
++		    grub_dprintf ("mcu", "no more room in the RX buffer\n");
++
++		    state = GRUB_MCU_RX_STATE_START;
++
++		    break;
++		  }
++
++		/* Check if it is an escape character */
++		if (ch == GRUB_MCU_PKT_ESCAPE)
++		  {
++		    /* Don't store it, only the next one */
++		    isEscaped = 1;
++
++		    break;
++		  }
++
++		*ptr++ = ch;
++		rxSize++;
++	      }
++
++	    break;
++
++	  default:
++	    /* Go back waiting for START */
++	    state = GRUB_MCU_RX_STATE_START;
++
++	    break;
++	}
++    }
++#if 0
++  {
++    unsigned int i;
++    grub_printf("RX:\n");
++    for ( i = 0; i < size; i++ )
++      grub_printf("0x%02x ", buffer[i]);
++    grub_printf("\n");
++  }
++#endif
++
++  if (rxSize != size)
++    {
++      grub_dprintf ("mcu", "less RX data than expected\n");
++      goto retry;
++    }
++
++  /* Verify CRC8 */
++  if (buffer[size - 1] != grub_mcu_crc8 (buffer, size - 1))
++    {
++      grub_dprintf ("mcu", "RX checksum error\n");
++      goto retry;
++    }
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_txrx (grub_uint8_t *tx_buffer, unsigned int tx_len,
++	       grub_uint8_t *rx_buffer, unsigned int rx_len)
++{
++  int retryCnt;
++
++  grub_mcu_tx (tx_buffer, tx_len);
++
++  retryCnt = 3;
++  do
++    {
++      /* Read answer */
++      if (grub_mcu_rx (rx_buffer, rx_len))
++	return grub_errno;
++
++      /* Check, if it's an answer for our command: first 3 bytes should match */
++      if (grub_memcmp (tx_buffer, rx_buffer, 3) == 0)
++	break;
++
++      grub_dprintf ("mcu", "not a response (%02x%02x%02x)\n",
++		    rx_buffer[0], rx_buffer[1], rx_buffer[2]);
++    } while (--retryCnt > 0);
++
++  if (retryCnt <= 0)
++    return grub_error (GRUB_ERR_IO, "no response for cmd");
++
++  return GRUB_ERR_NONE;
++}
++
++
++
++/*******************************************************************************
++ *				LEDs
++ ******************************************************************************/
++/* LED color - matches to the communication protocol */
++typedef enum {
++  GRUB_MCU_COLOR_OFF = 0,
++  GRUB_MCU_COLOR_GREEN,
++  GRUB_MCU_COLOR_YELLOW,
++} grub_mcu_color_t;
++
++typedef struct {
++  const char	*name;				/* name of the LED */
++  grub_err_t	(*set) (grub_mcu_color_t color, grub_uint8_t blink_time);	/* Set function */
++  int		is_bicolor;			/* true: bicolor LED */
++} grub_mcu_led_t;
++
++static grub_err_t
++grub_mcu_leds_multi_get_color (grub_uint8_t addr, grub_uint8_t slot,
++			       grub_uint8_t *value)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_GET,
++      addr,
++      slot,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if ((rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] & 0xF0) != 0)
++    return grub_error (GRUB_ERR_IO, "couldn't get LED state");
++
++  *value = rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] & 0x0F;
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_leds_multi_set_color (grub_uint8_t addr, grub_uint8_t slot,
++			       grub_uint8_t led_index, grub_mcu_color_t color)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_SET,
++      addr,
++      slot,
++      0,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++  grub_uint8_t cur_colors = 0;
++  int shift_value = led_index ? 2 : 0;
++
++  /* Get current value */
++  if (grub_mcu_leds_multi_get_color (addr, slot, &cur_colors))
++    return grub_errno;
++
++  /* Modify it */
++  cur_colors &= ~(0x03 << shift_value);
++  cur_colors |= color << shift_value;
++  cmd[GRUB_MCU_PKT_DATA_OFFSET + 1] = cur_colors;
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 1)
++    return grub_error (GRUB_ERR_IO, "couldn't set LED state");
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_leds_multi_get_period (grub_uint8_t addr, grub_uint8_t slot,
++				int is_dual_purpose, grub_uint8_t value[2])
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_GET,
++      addr,
++      slot,
++      0			/* CRC */
++    };
++  /* NOTE: 1 or 2 bytes of DATA returned, depending on is_dual_purpose */
++  grub_uint8_t rx_buffer[6];
++  unsigned int rx_len = sizeof (rx_buffer);
++
++  if (!is_dual_purpose)
++    rx_len--;
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, rx_len))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] == 0xFF ||
++      (is_dual_purpose && rx_buffer[GRUB_MCU_PKT_DATA_OFFSET + 1] == 0xFF))
++    return grub_error (GRUB_ERR_IO, "couldn't get LED period");
++
++  value[0] = rx_buffer[GRUB_MCU_PKT_DATA_OFFSET];
++  if (is_dual_purpose)
++    value[1] = rx_buffer[GRUB_MCU_PKT_DATA_OFFSET + 1];
++
++  return GRUB_ERR_NONE;
++}
++
++/*
++ * For WWAN and WiFi LEDs
++ *
++ * is_dual_purpose: 0 - if only a service or signal LED; 1 - if both
++ * led_index: 0 - 1st LED, 1 - 2nd LED
++ * blink_time: 0 - solid; 1-10 - 100msec-1sec
++ */
++static grub_err_t
++grub_mcu_leds_multi_set_period (grub_uint8_t addr, grub_uint8_t slot,
++				int is_dual_purpose, grub_uint8_t led_index,
++				grub_uint8_t blink_time)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_SET,
++      addr,
++      slot,
++      0,
++      0,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++  grub_uint8_t cur_periods[2];
++  unsigned int tx_size = sizeof (cmd) - 1;
++
++  /* Get current value */
++  if (grub_mcu_leds_multi_get_period (addr, slot, is_dual_purpose, cur_periods))
++    return grub_errno;
++
++  /* Modify it */
++  led_index = led_index ? 1 : 0;
++  cur_periods[led_index] = blink_time;
++  cmd[GRUB_MCU_PKT_DATA_OFFSET + 1] = cur_periods[0];
++  if (is_dual_purpose)
++    {
++      cmd[GRUB_MCU_PKT_DATA_OFFSET + 1 + 1] = cur_periods[1];
++      tx_size++;
++    }
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, tx_size, rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 1)
++    return grub_error (GRUB_ERR_IO, "couldn't set LED state");
++
++  return GRUB_ERR_NONE;
++}
++
++#if 0
++static grub_err_t
++grub_mcu_leds_single_get_color (grub_uint8_t addr, grub_uint8_t *value)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_GET,
++      addr,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] == 0xFF)
++    return grub_error (GRUB_ERR_IO, "couldn't get LED state");
++
++  *value = rx_buffer[GRUB_MCU_PKT_DATA_OFFSET];
++
++  return GRUB_ERR_NONE;
++}
++#endif
++
++static grub_err_t
++grub_mcu_leds_single_set_color (grub_uint8_t addr, grub_mcu_color_t color)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_SET,
++      addr,
++      color,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 1)
++    return grub_error (GRUB_ERR_IO, "couldn't set LED state");
++
++  return GRUB_ERR_NONE;
++}
++
++#if 0
++static grub_err_t
++grub_mcu_leds_single_get_period (grub_uint8_t addr, grub_uint8_t *value)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_GET,
++      addr,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] == 0xFF)
++    return grub_error (GRUB_ERR_IO, "couldn't get LED period");
++
++  *value = rx_buffer[GRUB_MCU_PKT_DATA_OFFSET];
++
++  return GRUB_ERR_NONE;
++}
++#endif
++
++static grub_err_t
++grub_mcu_leds_single_set_period (grub_uint8_t addr, grub_uint8_t blink_time)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_DIGI,
++      GRUB_MCU_PKT_CMD_SET,
++      addr,
++      blink_time,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 1)
++    return grub_error (GRUB_ERR_IO, "couldn't set LED state");
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_leds_wwan1_signal_set (grub_mcu_color_t color, grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_multi_set_period (GRUB_MCU_PKT_ADDR_LED_WWAN_TIME, 0, 1, 0,
++				      blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_multi_set_color (GRUB_MCU_PKT_ADDR_LED_WWAN_CTRL, 0, 0,
++					color);
++}
++
++static grub_err_t
++grub_mcu_leds_wwan1_service_set (grub_mcu_color_t color,
++				 grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_multi_set_period (GRUB_MCU_PKT_ADDR_LED_WWAN_TIME, 0, 1, 1,
++				      blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_multi_set_color (GRUB_MCU_PKT_ADDR_LED_WWAN_CTRL, 0, 1,
++					color);
++}
++
++static grub_err_t
++grub_mcu_leds_wwan2_signal_set (grub_mcu_color_t color, grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_multi_set_period (GRUB_MCU_PKT_ADDR_LED_WWAN_TIME, 1, 1, 0,
++				      blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_multi_set_color (GRUB_MCU_PKT_ADDR_LED_WWAN_CTRL, 1, 0,
++					color);
++}
++
++static grub_err_t
++grub_mcu_leds_wwan2_service_set (grub_mcu_color_t color,
++				 grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_multi_set_period (GRUB_MCU_PKT_ADDR_LED_WWAN_TIME, 1, 1, 1,
++				      blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_multi_set_color (GRUB_MCU_PKT_ADDR_LED_WWAN_CTRL, 1, 1,
++					color);
++}
++
++static grub_err_t
++grub_mcu_leds_wifi1_set (grub_mcu_color_t color, grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_multi_set_period (GRUB_MCU_PKT_ADDR_LED_WIFI_TIME, 0, 0, 0,
++				      blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_multi_set_color (GRUB_MCU_PKT_ADDR_LED_WIFI_CTRL, 0, 0,
++					color);
++}
++
++static grub_err_t
++grub_mcu_leds_wifi2_set (grub_mcu_color_t color, grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_multi_set_period (GRUB_MCU_PKT_ADDR_LED_WIFI_TIME, 1, 0, 0,
++				      blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_multi_set_color (GRUB_MCU_PKT_ADDR_LED_WIFI_CTRL, 1, 0,
++					color);
++}
++
++static grub_err_t
++grub_mcu_leds_gps_set (grub_mcu_color_t color, grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_single_set_period (GRUB_MCU_PKT_ADDR_LED_GPS_TIME,
++				       blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_single_set_color (GRUB_MCU_PKT_ADDR_LED_GPS_CTRL, color);
++}
++
++static grub_err_t
++grub_mcu_leds_power_set (grub_mcu_color_t color, grub_uint8_t blink_time)
++{
++  if (grub_mcu_leds_single_set_period (GRUB_MCU_PKT_ADDR_LED_PWR_TIME,
++				       blink_time))
++    return grub_errno;
++
++  return grub_mcu_leds_single_set_color (GRUB_MCU_PKT_ADDR_LED_PWR_CTRL, color);
++}
++
++static const grub_mcu_led_t grub_mcu_leds[] = {
++  {
++    "wwan1_signal",
++    grub_mcu_leds_wwan1_signal_set,
++    1,
++  },
++  {
++    "wwan1_service",
++    grub_mcu_leds_wwan1_service_set,
++    1,
++  },
++  {
++    "wwan2_signal",
++    grub_mcu_leds_wwan2_signal_set,
++    1,
++  },
++  {
++    "wwan2_service",
++    grub_mcu_leds_wwan2_service_set,
++    1,
++  },
++  {
++    "wifi1_service",
++    grub_mcu_leds_wifi1_set,
++    0,
++  },
++  {
++    "wifi2_service",
++    grub_mcu_leds_wifi2_set,
++    0,
++  },
++  {
++    "gnss_service",
++    grub_mcu_leds_gps_set,
++    0,
++  },
++  {
++    "power",
++    grub_mcu_leds_power_set,
++    0,
++  },
++  {
++    NULL,
++    NULL,
++    0,
++  }
++};
++
++static grub_err_t
++grub_mcu_set_all_leds (int is_on)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_BIOS,
++      GRUB_MCU_PKT_CMD_SET,
++      GRUB_MCU_PKT_ADDR_SET_ALL_LEDS,
++      is_on ? 0x01 : 0x00,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 0x01)
++    return grub_error (GRUB_ERR_IO, "couldn't set all leds");
++
++  return GRUB_ERR_NONE;
++}
++
++/*******************************************************************************
++ *				Power type
++ ******************************************************************************/
++enum grub_mcu_pwr_type
++{
++  GRUB_MCU_PWR_TYPE_9_36V = 0,	/* 9-36V */
++  GRUB_MCU_PWR_TYPE_9_36V_DEV,	/* 9-36V development mode */
++  GRUB_MCU_PWR_TYPE_24V,	/* 24V */
++  GRUB_MCU_PWR_TYPE_12V,	/* 12V */
++
++  GRUB_MCU_PWR_TYPE_MAX,	/* Not used */
++};
++
++/*
++ * Get power type
++ */
++static grub_err_t
++grub_mcu_get_pwr_type (enum grub_mcu_pwr_type *pwr_type)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_SYSTEM,
++      GRUB_MCU_PKT_CMD_GET,
++      GRUB_MCU_PKT_ADDR_PWR_TYPE,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] >= GRUB_MCU_PWR_TYPE_MAX)
++    return grub_error (GRUB_ERR_IO, "couldn't get power type");
++
++  *pwr_type = rx_buffer[GRUB_MCU_PKT_DATA_OFFSET];
++
++  return GRUB_ERR_NONE;
++}
++
++/*******************************************************************************
++ *				Watchdog
++ ******************************************************************************/
++
++/*
++ * Set watchdog timer
++ *
++ * timeout should be 3-255
++ */
++static grub_err_t
++grub_mcu_set_watchdog_timer (grub_uint8_t timeout)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_BIOS,
++      GRUB_MCU_PKT_CMD_SET,
++      GRUB_MCU_PKT_ADDR_SET_WDOG_TMR,
++      timeout,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  if (timeout < 3)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, "invalid watchdog timeout");
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 0x01)
++    return grub_error (GRUB_ERR_IO, "couldn't set watchdog timer");
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_set_watchdog_control (int is_enabled)
++{
++  grub_uint8_t cmd[] =
++    {
++      GRUB_MCU_PKT_DEVID_BIOS,
++      GRUB_MCU_PKT_CMD_SET,
++      GRUB_MCU_PKT_ADDR_SET_WDOG_CTRL,
++      is_enabled ? 0x80 : 0x00,
++      0			/* CRC */
++    };
++  grub_uint8_t rx_buffer[5];
++
++  /* Send to MCU */
++  if (grub_mcu_txrx (cmd, sizeof (cmd), rx_buffer, sizeof (rx_buffer)))
++    return grub_errno;
++
++  /* Check answer */
++  if (rx_buffer[GRUB_MCU_PKT_DATA_OFFSET] != 0x01)
++    return grub_error (GRUB_ERR_IO, "couldn't set watchdog timer");
++
++  return GRUB_ERR_NONE;
++}
++
++
++/*******************************************************************************
++ *				GRUB commands
++ ******************************************************************************/
++
++#define VERIFY_MCU_PORT() \
++{ \
++  if (!grub_mcu_port) \
++    return grub_error (GRUB_ERR_BAD_DEVICE, N_("first set MCU port")); \
++} while (0)
++
++
++static grub_err_t
++grub_mcu_init (int argc, char **argv)
++{
++  grub_err_t err;
++  struct grub_serial_port *port;
++  struct grub_serial_config config;
++
++  if (argc != 1)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("port required"));
++
++  port = grub_serial_find (argv[0]);
++  if (!port)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid port"));
++
++  config = port->config;
++  config.speed = 115200;
++  config.word_len = 8;
++  config.parity = GRUB_SERIAL_PARITY_NONE;
++  config.rtscts = 0;
++  config.stop_bits = GRUB_SERIAL_STOP_BITS_1;
++
++  /* Initialize with new settings.  */
++  err = port->driver->configure (port, &config);
++  if (err)
++    return err;
++
++  grub_mcu_port = port;
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_list_led_names (int argc __attribute__ ((unused)),
++			 char **argv __attribute__ ((unused)))
++{
++  const grub_mcu_led_t *led;
++
++  grub_printf("LEDs:\n");
++
++  led = grub_mcu_leds;
++  while (led->name)
++    {
++      grub_printf("  %s%s\n", led->name, led->is_bicolor ? " (bicolor)" : "");
++      led++;
++    }
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_led_set (int argc, char **argv)
++{
++  const grub_mcu_led_t *led;
++  grub_mcu_color_t color;
++  unsigned int blink;
++
++  if (argc != 3)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("three arguments expected"));
++
++  VERIFY_MCU_PORT();
++
++  /* Search for LED */
++  for (led = grub_mcu_leds; led->name != NULL; led++)
++    {
++      if (grub_strcmp (led->name, argv[0]) == 0)
++	break;
++    }
++
++  if (led->name == NULL)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid LED"));
++
++  /* Get desired state */
++  if (grub_strcmp ("off", argv[1]) == 0)
++    color = GRUB_MCU_COLOR_OFF;
++  else if (grub_strcmp ("green", argv[1]) == 0)
++    color = GRUB_MCU_COLOR_GREEN;
++  else if (grub_strcmp ("yellow", argv[1]) == 0)
++    {
++      /* Check if it is a bicolor LED */
++      if (!led->is_bicolor)
++	return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("not a bicolor LED"));
++
++      color = GRUB_MCU_COLOR_YELLOW;
++    }
++  else
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid color"));
++
++  /* Get period */
++  blink = grub_strtoul (argv[2], 0, 0);
++  if (blink > 10)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid blink time"));
++
++  return led->set (color, blink);
++}
++
++static grub_err_t
++grub_mcu_led_set_all (int argc, char **argv)
++{
++  int state;
++
++  if (argc != 1)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("on or off?"));
++
++  VERIFY_MCU_PORT();
++
++  if (grub_strcmp ("off", argv[0]) == 0)
++    state = 0;
++  else if (grub_strcmp ("on", argv[0]) == 0)
++    state = 1;
++  else
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid state, should be 'on' or 'off'"));
++
++  return grub_mcu_set_all_leds (state);
++}
++
++static grub_err_t
++grub_mcu_is_dev_mode (int argc, char **argv)
++{
++  grub_err_t err;
++  enum grub_mcu_pwr_type pwr_type = 0xFF;
++  unsigned int is_dev_mode;
++
++  VERIFY_MCU_PORT();
++
++  err = grub_mcu_get_pwr_type (&pwr_type);
++  if (err)
++    return err;
++
++  grub_dprintf ("mcu", "power type = %d\n", pwr_type);
++
++  is_dev_mode = (pwr_type == GRUB_MCU_PWR_TYPE_9_36V_DEV) ? 1 : 0;
++
++  if (argc > 0)
++    {
++      char buf[sizeof ("X")];
++      grub_snprintf (buf, sizeof (buf), "%u", is_dev_mode);
++      grub_env_set (argv[0], buf);
++    }
++  else
++    grub_printf ("%u\n", is_dev_mode);
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_mcu_set_wdog (int argc, char **argv)
++{
++  grub_err_t err;
++  unsigned int value;
++
++  if (argc != 1)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("need timeout"));
++
++  VERIFY_MCU_PORT();
++
++  /* Get period */
++  value = grub_strtoul (argv[0], 0, 0);
++  if ((value > 0 && value < 3) || (value > 255))
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid watchdog timeout"));
++
++  /* Set timer */
++  if (value != 0)
++    {
++      err = grub_mcu_set_watchdog_timer (value);
++      if (err)
++	return err;
++    }
++
++  /* Enable / disable watchdog */
++  return grub_mcu_set_watchdog_control (value);
++}
++
++typedef struct
++{
++  const char	*cmd;
++  grub_err_t	(*func)(int argc, char **argv);
++} grub_mcu_cmd_t;
++
++static const grub_mcu_cmd_t grub_mcu_cmds[] =
++{
++  { "init",		grub_mcu_init },
++  { "led_names",	grub_mcu_list_led_names },
++  { "set_led",		grub_mcu_led_set },
++  { "set_all_leds",	grub_mcu_led_set_all },
++  { "is_dev_mode",	grub_mcu_is_dev_mode },
++  { "set_wdog",		grub_mcu_set_wdog },
++  { NULL, NULL },
++};
++
++static grub_err_t
++grub_cmd_mcu (grub_command_t cmd __attribute__ ((unused)),
++	      int argc, char **argv)
++{
++  const grub_mcu_cmd_t *mcu_cmd;
++
++  if (argc < 1)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("command required"));
++
++  for (mcu_cmd = grub_mcu_cmds; mcu_cmd->cmd != NULL; mcu_cmd++)
++    {
++      if (grub_strcmp (argv[0], mcu_cmd->cmd) == 0)
++	return mcu_cmd->func (argc - 1, &argv[1]);
++    }
++
++  return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid command"));
++}
++
++static grub_command_t cmd_mcu;
++
++GRUB_MOD_INIT(mcu)
++{
++  cmd_mcu = grub_register_command ("mcu", grub_cmd_mcu,
++				   N_("CMD [ARGS]"),
++				   N_("Commands:\n" \
++				      "  init SERIAL_PORT:               initialize MCU communication on SERIAL_PORT\n" \
++				      "\n" \
++			              "  led_names:                      list LED names\n" \
++			              "\n" \
++				      "  set_led LED COLOR BLINK_TIME:   set LED\n" \
++				      "    LED:                          see command 'led_names'\n" \
++				      "    COLOR:\n" \
++				      "      off:                        OFF\n" \
++				      "      green:                      green\n" \
++				      "      yellow:                     yellow\n" \
++				      "    BLINK_TIME:\n" \
++				      "      0:                          solid\n" \
++				      "      1-10:                       100msec - 1sec\n" \
++				      "\n" \
++				      "  set_all_leds STATE:             set all LEDs on or off\n" \
++				      "    STATE:\n" \
++				      "      off:                        OFF\n" \
++				      "      on:                         ON\n" \
++				      "\n" \
++				      "  is_dev_mode [ENVVAR]:           check if development mode is enabled\n" \
++				      "    ENVVAR:                       [OPTIONAL] store result in this env var\n" \
++				      "\n" \
++				      "  set_wdog [TIMEOUT]:             set watchdog\n" \
++				      "    TIMEOUT:                      watchdog timeout in seconds (3-255), or 0 to disable\n"));
++}
++
++GRUB_MOD_FINI(mcu)
++{
++  grub_unregister_command (cmd_mcu);
++}
+diff --git a/include/grub/i386/coreboot/serial.h b/include/grub/i386/coreboot/serial.h
+index b6819d587..660afc998 100644
+--- a/include/grub/i386/coreboot/serial.h
++++ b/include/grub/i386/coreboot/serial.h
+@@ -19,6 +19,6 @@
+ #ifndef GRUB_MACHINE_SERIAL_HEADER
+ #define GRUB_MACHINE_SERIAL_HEADER	1
+ 
+-#define GRUB_MACHINE_SERIAL_PORTS { 0x3f8, 0x2f8, 0x3e8, 0x2e8 }
++#define GRUB_MACHINE_SERIAL_PORTS { 0x3f8, 0x2f8, 0x3e8, 0x2e8, 0x2e0 }
+ 
+ #endif

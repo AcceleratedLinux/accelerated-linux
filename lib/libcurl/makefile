@@ -32,7 +32,8 @@ CONFOPTS :=	--enable-dependency-tracking \
 		--with-random=/dev/urandom \
 		--with-ssl=$(ROOTDIR)/lib/libssl \
 		--with-zlib=$(ROOTDIR)/lib/zlib \
-		--with-libidn=$(ROOTDIR)/lib/libidn
+		--with-libidn2
+
 URL := http://curl.haxx.se/download/curl-7.56.1.tar.bz2
 ROMFS = curl_romfs
 MAKEVARS = 

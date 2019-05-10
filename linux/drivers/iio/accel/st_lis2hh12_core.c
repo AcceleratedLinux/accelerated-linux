@@ -202,7 +202,7 @@ int lis2hh12_set_fifo_mode(struct lis2hh12_data *cdata, enum fifo_mode fm)
 	if (err < 0)
 		return err;
 
-	get_monotonic_boottime(&ts);
+	ts = ktime_to_timespec(ktime_get_boottime());
 	cdata->sensor_timestamp = timespec_to_ns(&ts);
 
 	err = lis2hh12_write_register(cdata, LIS2HH12_FIFO_EN_ADDR,

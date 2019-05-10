@@ -144,7 +144,7 @@ char **mkargs(int argc, char *argv[])
 	len = argc * sizeof(char *);
 	newargv = malloc(len);
 	if (newargv == NULL) {
-		printf(PNAME ": failed to mallooc(%d)\n", len);
+		printf(PNAME ": failed to malloc(%d)\n", len);
 		exit(1);
 	}
 

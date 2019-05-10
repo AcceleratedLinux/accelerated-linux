@@ -1,0 +1,3 @@
+config LIB_GNUTLS
+	bool "gnutls"
+	select LIB_LIBNETTLE

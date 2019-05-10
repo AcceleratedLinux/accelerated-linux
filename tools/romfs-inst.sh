@@ -67,18 +67,20 @@ setperm()
 file_copy()
 {
 	rc=0
+	[ "$ACL_LICENSE" ] ||
+		ACL_LICENSE="$($ROOTDIR/bin/license-detect.sh `pwd`)"
+	[ "$ACL_PKG" ] ||
+		ACL_PKG="$(echo ${PWD} | sed -r 's?^/.*/(user|lib)/??')"
 	if [ -d "${src}" ]
 	then
 		[ "$v" ] && echo "CopyDir ${src} ${ROMFSDIR}${dst}"
 		(
 			cd ${src} || return 1
 			echo "$src"
-			find * -type f | grep -E -v '/CVS|/\.svn' | while read t; do
+			find * -type f 2> /dev/null | grep -E -v '/CVS|/\.svn' | while read t; do
 				echo "`pwd`/${t} ${ROMFSDIR}${dst}/${t}"
 			done >> $IMAGEDIR/romfs-inst.log
-			[ "${ACL_LICENCE}" ] && license="${ACL_LICENCE}" || license="unknown"
-			[ "${ACL_PACKAGE_NAME}" ] && package_name="${ACL_PACKAGE_NAME}" || package_name="unknown ${src}"
-			echo "${package_name}:${license}" >> $IMAGEDIR/license.log
+			echo "${ACL_PKG}:${ACL_LICENSE:-UNKNOWN}:${ACL_URL}:${dst}" >> $IMAGEDIR/license.log
 			VV=
 			[ "$v" ] && VV=v
 			find . -print | grep -E -v '/CVS|/\.svn' | cpio --quiet -p${VV}dum${follow} ${ROMFSDIR}${dst}
@@ -109,9 +111,7 @@ file_copy()
 			/*) echo "${src} ${dstfile}" ;;
 			*)  echo "`pwd`/${src} ${dstfile}" ;;
 		esac >> $IMAGEDIR/romfs-inst.log
-		[ "${ACL_LICENCE}" ] && license="${ACL_LICENCE}" || license="unknown"
-		[ "${ACL_PACKAGE_NAME}" ] && package_name="${ACL_PACKAGE_NAME}" || package_name="unknown ${src}"
-		echo "${package_name}:${license}" >> $IMAGEDIR/license.log
+		echo "${ACL_PKG}:${ACL_LICENSE:-UNKNOWN}:${ACL_URL}:${dstfile}" >> $IMAGEDIR/license.log
 		cp ${src} ${dstfile}
 		rc=$?
 		if [ $rc -eq 0 ]; then

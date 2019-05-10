@@ -9,7 +9,7 @@ ELFIMAGE = $(IMAGEDIR)/image.elf
 DIRS = 
 
 ROMFS_DIRS = bin dev dev/flash etc etc/config etc/default home lib mnt proc \
-             usr var home/httpd home/httpd/cgi-bin
+             sbin usr var home/httpd home/httpd/cgi-bin
 
 DEVICES = \
 	tty,c,5,0	console,c,5,1	cua0,c,5,64	cua1,c,5,65 \

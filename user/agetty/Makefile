@@ -1,5 +1,7 @@
 # Makefile for agetty
 
+export ACL_LICENSE = Open Source (other)
+
 EXEC = agetty
 OBJS = agetty.o
 CFLAGS += -D__USE_BSD

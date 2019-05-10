@@ -1,0 +1,45 @@
+diff -Naur shadow.org/lib/getdef.c shadow/lib/getdef.c
+--- shadow.org/lib/getdef.c	2018-04-30 02:42:37.000000000 +1000
++++ shadow/lib/getdef.c	2019-04-11 21:26:51.229745959 +1000
+@@ -140,6 +140,9 @@
+ 	{"USE_TCB", NULL},
+ #endif
+ 	{"FORCE_SHADOW", NULL},
++#ifdef USE_PAM
++	{"VIRTUAL_USER", NULL},
++#endif
+ 	{NULL, NULL}
+ };
+ 
+diff -Naur shadow.org/src/login.c shadow/src/login.c
+--- shadow.org/src/login.c	2018-04-30 02:42:37.000000000 +1000
++++ shadow/src/login.c	2019-04-11 22:31:41.297305832 +1000
+@@ -707,7 +707,6 @@
+ 		(void) alarm (timeout);
+ 	}
+ 
+-	environ = newenvp;	/* make new environment active */
+ 	delay   = getdef_unum ("FAIL_DELAY", 1);
+ 	retries = getdef_unum ("LOGIN_RETRIES", RETRIES);
+ 
+@@ -885,6 +884,11 @@
+ 
+ 	pwd = xgetpwnam (username);
+ 	if (NULL == pwd) {
++		tmp = getdef_str ("VIRTUAL_USER");
++		if (NULL != tmp)
++			pwd = xgetpwnam (tmp);
++	}
++	if (NULL == pwd) {
+ 		SYSLOG ((LOG_ERR, "cannot find user %s", failent_user));
+ 		fprintf (stderr,
+ 		         _("Cannot find user (%s)\n"),
+@@ -1118,6 +1122,8 @@
+ 		addenv ("IFS= \t\n", NULL);	/* ... instead, set a safe IFS */
+ 	}
+ 
++	environ = newenvp;      /* make new environment active */
++
+ 	if (pwd->pw_shell[0] == '*') {	/* subsystem root */
+ 		pwd->pw_shell++;	/* skip the '*' */
+ 		subsystem (pwd);	/* figure out what to execute */

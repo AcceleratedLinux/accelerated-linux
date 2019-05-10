@@ -1,0 +1,169 @@
+
+hostname "Digi Connect IT 48"
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=256M tmpfs /tmp
+mount -t tmpfs -o size=256M tmpfs /var
+mkdir -m 755 /dev/hugepages
+mount -t hugetlbfs none /dev/hugepages
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+ledcmd -F STATUS_BLUE -F STATUS_REAR_BLUE -O WWAN_SERV_BLUE -O WWAN_SIG_BLUE
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# Enable i350 virtual network interfaces if present.
+for pcidev in /sys/bus/pci/devices/0000:*
+do
+	vendor=$(cat $pcidev/vendor)
+	device=$(cat $pcidev/device)
+	if [ "$vendor" = 0x8086 -a "$device" = 0x151f ]
+	then
+		echo 7 > $pcidev/sriov_numvfs
+	fi
+done
+
+# rename interfaces to match front label
+ip link set eth0 name sfp1
+ip link set eth1 name sfp2
+ip link set eth2 name eth1
+ip link set eth3 name eth2
+
+# init devices before we need any
+cp -ra /lib/udev/devices/. /dev
+
+# test /dev/console and if not present make it /dev/null
+if ! (echo -n "" > /dev/console) 2> /dev/null; then
+	rm -f /dev/console
+	ln /dev/null /dev/console
+fi
+
+# the active main boot drive in /dev/sdX format
+DRIVE=$(df -a / | grep -o /dev/sd.)
+
+# Fix our /dev/flash devices depending on boot device
+# we use symbolic links otherwise grub-install gets it wrong
+rm -f /dev/flash/*
+ln -s ${DRIVE}  /dev/flash/all
+ln -s ${DRIVE}1 /dev/flash/efi
+ln -s ${DRIVE}2 /dev/flash/image
+ln -s ${DRIVE}3 /dev/flash/image1
+ln -s ${DRIVE}4 /dev/flash/opt
+
+# /efi filesystem
+mount /dev/flash/efi /efi
+
+# opt filesystem
+# if we have a disk, no opt, and 3 partitions then add an opt that uses the
+# rest of the disk at partition 4
+NUM=$(parted --script -- $DRIVE print 2> /dev/null | egrep '^ *[0-9] ' | wc -l)
+OPT=$(parted --script -- $DRIVE print 2> /dev/null | egrep '^ *4 ' | grep ext4)
+if [ "$DRIVE" -a -z "$OPT" -a "$NUM" -eq 3 ]; then
+    echo "Creating new OPT filesystem..."
+    last=$(parted --script -- $DRIVE unit s print | awk '/^ *[0-9]/ { gsub("s","",$3); print $3 }' | tail -1)
+    free=$((${last:-0}+1))
+    parted --script -- $DRIVE mkpart primary ext4  ${free}s -0
+    parted --script -- $DRIVE name 4 Opt
+    mkfs.ext4 -F ${DRIVE}4
+    mount -t ext4 ${DRIVE}4 /opt
+    mkdir /opt/config
+    ln -s /efi/grub /opt/boot
+    touch /opt/config/.init /opt/config/.init2
+    umount /opt
+else
+    echo "Mounting OPT filesystem..."
+fi
+
+fsck.ext4 -p /dev/flash/opt
+mount -t ext4 /dev/flash/opt /opt
+
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+
+# pull values from BIOS
+echo "Loading BIOS information ..."
+/etc/dmi2fwenv
+
+# allow easier installation of VM images
+if [ -f /opt/setup-new-device ]; then
+	/bin/setup-new-device.sh < /dev/console > /dev/console 2>&1
+	rm -f /opt/setup-new-device
+fi
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+if [ "$(fw_printenv -n ethaddr 2> /dev/null)" ]; then
+	setmac -i eth1,eth2,sfp1,sfp2 -u -n 4
+fi
+
+if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+	ledcmd -f STATUS_REAR_BLUE -f PSU2_BLUE -f PSU1_BLUE -f WWAN_SERV_BLUE -f WWAN_SIG_BLUE
+	/etc/factory
+	exit 0
+fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+	# Use the same setup as for factory testing
+	ledcmd -f STATUS_REAR_BLUE -f PSU2_BLUE -f PSU1_BLUE -f WWAN_SERV_BLUE -f WWAN_SIG_BLUE
+	/etc/factory
+	exit 0
+fi
+
+echo "Mounting config filesystem ..."
+if ! mount --bind /opt/config /etc/config
+then
+	echo "Cannot bind mount /etc/config to /opt/config..."
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=4M tmpfs /etc/config
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if nexcom-tool -f 2> /dev/null | grep -q 'set$'; then
+	# force erase if factory flag is set, this allows for it to be
+	# set while DAL is not actually running
+	touch /etc/config/.init
+fi
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
+	[ -f /etc/config/.init2 ] && filter='$'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+
+	# safe to clear factory flag now we are done
+	nexcom-tool -F 0
+else
+	rm -f /etc/config/.init2
+fi
+cat /etc/inittab.d/* > /etc/inittab
+
+# speed up crypto
+echo "Enabling parrallel crypto ..."
+crconf add driver "pcrypt(authenc(hmac(sha1),cbc(aes)))" type 3 2> /dev/null
+
+# restore SIM slot selection, or otherwise just power
+SIM_SLOT="$(cat /etc/config/sim.conf 2>/dev/null)"
+[ "$SIM_SLOT" -a "$(sim)" != "$SIM_SLOT" ] && sim "$SIM_SLOT" || sim -o
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

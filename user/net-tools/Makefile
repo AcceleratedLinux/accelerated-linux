@@ -91,19 +91,7 @@ PROGS 	+= mii-tool
 endif
 
 BINDIR=/bin
-ifeq ($(ARCH),sh)
 SBINDIR=/sbin
-else
-ifeq ($(ARCH),i386)
-SBINDIR=/sbin
-else
-ifeq ($(ARCH),arm)
-SBINDIR=/sbin
-else
-SBINDIR=/bin
-endif
-endif
-endif
 
 -include config.make
 

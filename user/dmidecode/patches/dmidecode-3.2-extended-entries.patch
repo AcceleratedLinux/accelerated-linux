@@ -1,0 +1,10 @@
+--- dmidecode-3.2/dmiopt.c.orig	2018-12-18 16:50:41.791746425 +1000
++++ dmidecode-3.2/dmiopt.c	2018-12-18 16:50:47.059746414 +1000
+@@ -156,6 +156,7 @@
+ 	{ "system-version", 1, 0x06 },
+ 	{ "system-serial-number", 1, 0x07 },
+ 	{ "system-uuid", 1, 0x08 },             /* dmi_system_uuid() */
++	{ "system-sku-number", 1, 0x0f },
+ 	{ "system-family", 1, 0x1a },
+ 	{ "baseboard-manufacturer", 2, 0x04 },
+ 	{ "baseboard-product-name", 2, 0x05 },

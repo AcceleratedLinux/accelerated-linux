@@ -1,6 +1,6 @@
 
 URL       = git://anongit.freedesktop.org/libmbim/libmbim
-VERSION   = d939587ef7fff0195a45fb8418d2911dfbb52c99
+VERSION   = 61b3f09e417e4f6131a763094960a7d45bb4fc56
 METHOD    = git
 CONFIGURE = autogen.sh
 

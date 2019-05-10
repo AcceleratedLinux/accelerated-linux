@@ -1,3 +1,4 @@
+export ACL_LICENSE = GPLv2
 
 LOGIN = login
 LOGINOBJS = login.o

@@ -1,10 +1,15 @@
 
 #URL             = http://archive.ntp.org/ntp4/ntp-4.2/ntp-4.2.8p4.tar.gz
-URL             = https://ftp.osuosl.org/pub/blfs/conglomeration/ntp/ntp-4.2.8p4.tar.gz
+URL             = https://ftp.osuosl.org/pub/blfs/conglomeration/ntp/ntp-4.2.8p13.tar.gz
 CONFOPTS       += --with-yielding-select=yes --sbindir=/bin
+
 AUTOMAKE_ROMFS  = my_romfs
 
 include $(ROOTDIR)/tools/automake.inc
+
+ifndef CONFIG_USER_NTP_ENABLE_HARDENFILE
+CONFOPTS += --with-hardenfile=/dev/null
+endif
 
 INSTALL_DIR = build/$(PKG)-install
 

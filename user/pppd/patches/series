@@ -1,0 +1,4 @@
+2.4.5-changes.patch
+2.4.7-changes.patch
+makefile-strip.patch
+plugins-Makefile-handle-dynamic-plugins.patch

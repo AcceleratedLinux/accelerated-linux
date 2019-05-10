@@ -18,6 +18,7 @@ include lib.mak
 ##############################################################################
 
 dir_base = $(LIBCDIR)
+dir_smp  = $(LIBCDIR) glib dbus dbus-glib libgmp gettext
 
 ifeq ($(LIBCDIR),libc)
 .PHONY:
@@ -108,10 +109,6 @@ dir_$(CONFIG_LIB_ARES) += libares
 lib_libares = build/*.a
 inc_libares = ares.h,.
 
-dir_$(CONFIG_LIB_LIBIDN) += libidn
-lib_libidn = build/lib/.libs/libidn.a
-inc_libidn = lib/*.h,.
-
 dir_$(CONFIG_LIB_LIBLZO) += lzo
 lib_lzo = build/src/.libs/*.a
 inc_lzo = include/lzo,.
@@ -145,10 +142,6 @@ lib_libiberty = build/*.a
 dir_$(CONFIG_LIB_BFD) += bfd
 lib_bfd = build/*.a
 inc_bfd = build/bfd.h,.
-
-dir_$(CONFIG_LIB_POPT) += popt
-lib_popt = build/.libs/*.a
-inc_popt = popt.h,.
 
 dir_$(CONFIG_LIB_LIBJUDY) += libjudy
 lib_libjudy = \
@@ -204,6 +197,7 @@ dir_extra += $(ROOTDIR)/prop
 ##############################################################################
 
 DIRS_y   = $(sort $(dir_base) $(dir_y) $(dir_extra))
+
 DIRS_all = $(dir_$(n)_n) $(dir_$(n)_) $(sort $(dir_base) $(dir_y) $(dir_n) $(dir_) $(dir_extra))
 DIRPATH = $(if $(path_$(1)),$(path_$(1)),$(1))
 
@@ -252,7 +246,7 @@ $(dir_extra): base $(dir_y)
 # the actual dir target
 .PHONY: $(DIRS_y)
 $(DIRS_y):
-	i=$(call DIRPATH,$@); [ ! -d $$i ] || ( touch $$i/.sgbuilt_lib && $(MAKE) $(SUBDIR_SMP_BUILD) -C $$i ) || exit $$?
+	i=$(call DIRPATH,$@); [ ! -d $$i ] || ( touch $$i/.sgbuilt_lib && $(MAKE) $(if $(filter $@,$(dir_smp)),-j$(HOST_NCPU),$(SUBDIR_SMP_BUILD)) -C $$i ) || exit $$?
 	@set -f; \
 	for p in $(lib_$@); do \
 		set +f; \

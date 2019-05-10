@@ -50,7 +50,7 @@ uimage.bin:
 	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx28-wr11.dtb >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x40800000 -e 0x40800000 -n "Linux-4.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x42000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx28-wr11.dtb /tftpboot/
+	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx28-wr11.dtb /tftpboot/
 
 image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.tag image.copy
 

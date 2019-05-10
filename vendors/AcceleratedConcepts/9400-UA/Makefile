@@ -55,9 +55,6 @@ romfs.post:: romfs.cleanup
 	rm -rf $(ROMFSDIR)/usr/include
 	$(ROMFSINST) -R /usr/share/locale
 
-image.x86.bin:
-	cp $(ROMFSIMG) $(IMAGE)
-
 image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.tag image.copy
 	gzip -9 -c -f $(ROMFSIMG) > $(ROMFSIMGZ)
 	mkdir -p $(ISODIR)/boot/isolinux

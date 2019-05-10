@@ -7,7 +7,7 @@ IMAGE    = $(IMAGEDIR)/image.bin
 
 DIRS = 
 
-ROMFS_DIRS = bin dev etc home lib mnt proc usr var \
+ROMFS_DIRS = bin dev etc home lib mnt proc sbin usr var \
              home/httpd home/httpd/cgi-bin
 
 DEVICES = \

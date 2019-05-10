@@ -1,2 +1,3 @@
 dhcp-lease-netmask-0.patch
 nxdomain.patch
+option-value-error-ignore.patch

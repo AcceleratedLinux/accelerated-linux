@@ -20,7 +20,7 @@ if [ "$*" ]; then
     TARGETS="$*"
 else
     TARGETS=
-    TARGETS="$TARGETS AcceleratedConcepts/5301-DC"
+    #TARGETS="$TARGETS AcceleratedConcepts/5301-DC"
     TARGETS="$TARGETS AcceleratedConcepts/5400-RM"
     TARGETS="$TARGETS AcceleratedConcepts/5401-RM"
     TARGETS="$TARGETS AcceleratedConcepts/6300-CX"
@@ -29,17 +29,24 @@ else
     TARGETS="$TARGETS AcceleratedConcepts/6335-MX"
     TARGETS="$TARGETS AcceleratedConcepts/6350-SR"
     TARGETS="$TARGETS AcceleratedConcepts/6355-SR"
-    TARGETS="$TARGETS AcceleratedConcepts/6300-LX"
+    #TARGETS="$TARGETS AcceleratedConcepts/6300-LX"
     TARGETS="$TARGETS AcceleratedConcepts/8300"
     #TARGETS="$TARGETS AcceleratedConcepts/U115"
-    TARGETS="$TARGETS AcceleratedConcepts/8200-kboot"
+    #TARGETS="$TARGETS AcceleratedConcepts/8200-kboot"
     TARGETS="$TARGETS AcceleratedConcepts/Factory8200"
     TARGETS="$TARGETS AcceleratedConcepts/Factory8300"
+    TARGETS="$TARGETS AcceleratedConcepts/FactoryU115"
     #TARGETS="$TARGETS AcceleratedConcepts/9400-UA"
     #TARGETS="$TARGETS AcceleratedConcepts/sprite"
     TARGETS="$TARGETS ATT/U115"
     TARGETS="$TARGETS Digi/IX14"
     TARGETS="$TARGETS Digi/ConnectIT4"
+    TARGETS="$TARGETS Digi/ConnectIT16"
+    TARGETS="$TARGETS Digi/ConnectIT48"
+    TARGETS="$TARGETS Digi/ConnectIT-Mini"
+    TARGETS="$TARGETS Digi/EX15"
+    TARGETS="$TARGETS Digi/EX15W"
+    TARGETS="$TARGETS Digi/TX64"
 fi
 
 # clean out releases for each build
@@ -61,7 +68,7 @@ for target in $TARGETS; do
 
     # do kcheck after the build so we have the Kconfig* files handy
     case "$target" in
-    *Factory82*|*8200-kboot*) KCHECK= ;;
+    *Factory82*|*8200-kboot*|*TX64*) KCHECK= ;;
     *)         KCHECK="$(tools/kcheck/check 2>&1)" ;;
     esac
     echo "$KCHECK"

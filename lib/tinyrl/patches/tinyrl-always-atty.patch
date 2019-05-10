@@ -1,0 +1,18 @@
+tinyrl tries to be smart when it detects stdin is not a tty and goes into
+an fgets()ing line reading mode. None of the key handlers are called in
+this mode, which means the input is interpreted completely differently to
+when it's in tty reading mode.
+This particularly interferes with lines that contain \n by use of a newline
+key handler... our idea of multiline lines.
+
+--- tinyrl/tinyrl.c.orig	2019-04-04 14:43:16.265293000 +1000
++++ tinyrl/tinyrl.c	2019-04-04 14:44:45.410076081 +1000
+@@ -348,7 +348,7 @@
+ 	this->kill_string = NULL;
+ 	this->echo_char = '\0';
+ 	this->echo_enabled = true;
+-	this->isatty = isatty(fileno(instream));
++	this->isatty = true;
+ 	this->last_buffer = NULL;
+ 	this->last_end = 0;
+ 	this->last_row = 0;

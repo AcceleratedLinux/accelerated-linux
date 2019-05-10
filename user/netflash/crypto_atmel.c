@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -8,7 +9,9 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#include <config/autoconf.h>
 
 #include "atecc.h"
 #include "crypto_atmel.h"
@@ -27,6 +30,11 @@
 
 #define CRYPTOCHIP_RETRIES 	5
 
+#if defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI)
+#define DEVKEY_GPIO "/sys/class/gpio/gpio86/value"
+#endif
+
+#if defined(CONFIG_DEFAULTS_DIGI_IX14)
 #define SECJUMPER_GPIOCHIP_PATH	"/dev/gpiochip3"
 #define SECJUMPER_GPIO_OFFSET	25
 #define SECJUMPER_ASSERTED_VAL	1
@@ -39,6 +47,7 @@
 #define HAB_ENABLED_OTP_BANK	0
 #define HAB_ENABLED_OTP_WORD	6
 #define HAB_ENABLED_OTP_MASK	0x2
+#endif
 
 static uint32_t get_blobsize()
 {
@@ -46,7 +55,7 @@ static uint32_t get_blobsize()
 	uint32_t uimage_size;
 
 	/* Read and round SquashFS size */
-	if(fb_seek_set(SQUASHFS_SIZE_OFFSET))
+	if (fb_seek_set(SQUASHFS_SIZE_OFFSET))
 		return 0;
 
 	if (fb_read(&squashfs_size, sizeof(squashfs_size)) != sizeof(squashfs_size))
@@ -54,6 +63,7 @@ static uint32_t get_blobsize()
 
 	squashfs_size = (squashfs_size + 0xfff) & 0xfffff000;
 
+#ifndef CONFIG_USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL
 	/* Read uImage size */
 	if (fb_seek_set(squashfs_size + UIMAGE_HDR_SIZE_OFFSET))
 		return 0;
@@ -61,9 +71,12 @@ static uint32_t get_blobsize()
 	if (fb_read(&uimage_size, sizeof(uimage_size)) != sizeof(uimage_size))
 		return 0;
 
-	uimage_size = htonl(uimage_size);
+	uimage_size = htonl(uimage_size) + UIMAGE_HDR_SIZE;
+#else
+	uimage_size = 0;
+#endif
 
-	return squashfs_size + uimage_size + UIMAGE_HDR_SIZE;
+	return squashfs_size + uimage_size;
 }
 
 static void compute_sha256(uint32_t size, unsigned char *sha256)
@@ -89,13 +102,19 @@ static void compute_sha256(uint32_t size, unsigned char *sha256)
 static int signature_valid(atecc_ctx *ctx, int key_slot,
 			   const unsigned char *sha256, const atmel_signature_t *signature)
 {
-	int ret = nonce(ctx, sha256);
+	int ret;
+#if defined(CONFIG_USER_NETFLASH_ATECC508A_ALG_ECDSA)
+	ret = nonce(ctx, sha256);
 	if (!ret)
 		ret = verify(ctx, key_slot, signature->r, signature->s);
+#elif defined(CONFIG_USER_NETFLASH_ATECC508A_ALG_HMAC)
+	ret = hmac(ctx, key_slot, sha256, signature->hmac);
+#endif
 
 	return ret;
 }
 
+#ifdef CONFIG_DEFAULTS_DIGI_IX14
 static int is_seckey_jumper_closed() {
 	int ret;
 	int jumper_closed = 0;
@@ -174,6 +193,74 @@ static int is_development_key_allowed() {
 	return 0;
 }
 
+#elif defined(CONFIG_DEFAULTS_DIGI_TX64)
+static int is_development_key_allowed()
+{
+	int allowed = 0;
+	FILE *f;
+	size_t len;
+	size_t n = 0;
+	char *line = NULL;
+	char *s;
+
+	f = fopen("/proc/cmdline", "r");
+	if (f) {
+		if ((len = getline(&line, &n, f)) != -1) {
+			s = strtok(line, " \n");
+			while (s != NULL) {
+				if (strncmp(s, "dev_mode=", 9) == 0) {
+					allowed = (s[9] == '1');
+					notice("development keys allowed");
+					break;
+				}
+				s = strtok(NULL, " \n");
+			}
+			free(line);
+		}
+		fclose(f);
+	}
+
+	return allowed;
+}
+
+#elif defined(CONFIG_DEFAULTS_DIGI_CONNECTITXX)
+
+static int is_development_key_allowed()
+{
+	int stat;
+	FILE *fp = popen("nexcom-tool -d | grep -q 'System Mode.*engineer'", "w");
+
+	if (fp) {
+		int stat = pclose(fp);
+		/* shell exits 0 on success */
+		return WEXITSTATUS(stat) ? 0 : 1;
+	}
+
+	return 0;
+}
+
+#elif defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI)
+
+static int is_development_key_allowed() {
+	int fd = open(DEVKEY_GPIO, O_RDONLY);
+	char value = 0;
+	
+	if (fd >= 0) {
+		read(fd, &value, 1);
+		close(fd);
+	}
+
+	return value == '1';
+}
+
+#else
+static int is_development_key_allowed()
+{
+	/* No method defined, assume dev-mode is not allowed */
+	return 0;
+}
+#endif
+
 void check_crypto_atmel()
 {
 	atmel_signature_t signature;
@@ -181,7 +268,7 @@ void check_crypto_atmel()
 	int retry, ret = -255;
 	atecc_ctx ctx;
 	uint32_t blobsize = get_blobsize();
-	int key_index = PRODUCTION_KEY_SLOT;
+	int key_index = CONFIG_USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT;
 
 	if (blobsize == 0) {
 		error("signature not found (blob parse error)");
@@ -221,8 +308,8 @@ void check_crypto_atmel()
 		if (ret == ATECC_STATUS_OK) {
 			break;
 		} else if (ret == ATECC_STATUS_VERIFY_FAILED) {
-			if (key_index == PRODUCTION_KEY_SLOT && is_development_key_allowed()) {
-				key_index = DEV_KEY_SLOT;
+			if (key_index == CONFIG_USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT && is_development_key_allowed()) {
+				key_index = CONFIG_USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT;
 				retry = -1;
 				continue;
 			}

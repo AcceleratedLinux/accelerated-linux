@@ -11,7 +11,7 @@ ELFIMAGE = $(IMAGEDIR)/image.elf
 DIRS =  ../cgi/CANCam
 
 ROMFS_DIRS = bin dev dev/flash etc etc/config etc/default home lib mnt proc \
-             usr var home/httpd home/httpd/cgi-bin home/httpd/img \
+             sbin usr var home/httpd home/httpd/cgi-bin home/httpd/img \
              home/httpd/image_s home/cmdserver /home/cancamdrv
 
 DEVICES = \

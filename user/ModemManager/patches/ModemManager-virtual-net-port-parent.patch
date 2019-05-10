@@ -1,0 +1,215 @@
+When probing virtual network ports (e.g. VLAN and QMI mux ports), associate
+the port with the master network port's parent.
+This relies on the virtual port to be named as "<master-port>.<some-id>" e.g.
+"wwan0.1" gets the same parent as "wwan0" even though in the Linux sysfs it
+is a virtual device (no parent).
+
+--- ModemManager/src/kerneldevice/mm-kernel-device-udev.c	2019-02-22 10:30:43.875451289 +1000
++++ ModemManager/src/kerneldevice/mm-kernel-device-udev.c	2019-02-25 11:36:36.118523348 +1000
+@@ -41,6 +41,7 @@
+     GUdevDevice *device;
+     GUdevDevice *parent;
+     GUdevDevice *physdev;
++    GUdevClient *client;
+     guint16      vendor;
+     guint16      product;
+ 
+@@ -49,10 +50,34 @@
+ 
+ /*****************************************************************************/
+ 
++static GUdevDevice*
++get_parent (GUdevDevice *device,
++            GUdevClient *client)
++{
++    GUdevDevice *parent;
++    gchar *name, *c;
++
++    parent = g_udev_device_get_parent (device);
++    if (!parent && g_str_equal ( g_udev_device_get_subsystem (device), "net")) {
++        /* Associate VLAN interface with parent interface's parent */
++        name = g_strdup (g_udev_device_get_name (device));
++        if (name && (c = strchr (name, '.'))) {
++            *c = 0;
++            parent = g_udev_client_query_by_subsystem_and_name (client, "net", name);
++            if (parent)
++                parent = g_udev_device_get_parent (parent);
++        }
++        g_free(name);
++    }
++
++    return parent;
++}
++
+ static gboolean
+ get_device_ids (GUdevDevice *device,
+                 guint16     *vendor,
+-                guint16     *product)
++                guint16     *product,
++                GUdevClient *client)
+ {
+     GUdevDevice *parent = NULL;
+     const gchar *vid = NULL, *pid = NULL, *parent_subsys;
+@@ -61,7 +86,7 @@
+ 
+     g_assert (vendor != NULL && product != NULL);
+ 
+-    parent = g_udev_device_get_parent (device);
++    parent = get_parent (device, client);
+     if (parent) {
+         parent_subsys = g_udev_device_get_subsystem (parent);
+         if (parent_subsys) {
+@@ -90,7 +115,7 @@
+                 /* Need to look for vendor/product in the parent of the QMI/MBIM device */
+                 GUdevDevice *qmi_parent;
+ 
+-                qmi_parent = g_udev_device_get_parent (parent);
++                qmi_parent = get_parent (parent, client);
+                 if (qmi_parent) {
+                     vid = g_udev_device_get_property (qmi_parent, "ID_VENDOR_ID");
+                     pid = g_udev_device_get_property (qmi_parent, "ID_MODEL_ID");
+@@ -158,7 +183,7 @@
+     if (!self->priv->device)
+         return;
+ 
+-    if (!get_device_ids (self->priv->device, &self->priv->vendor, &self->priv->product))
++    if (!get_device_ids (self->priv->device, &self->priv->vendor, &self->priv->product, self->priv->client))
+         mm_dbg ("(%s/%s) could not get vendor/product id",
+                 g_udev_device_get_subsystem (self->priv->device),
+                 g_udev_device_get_name      (self->priv->device));
+@@ -167,7 +192,8 @@
+ /*****************************************************************************/
+ 
+ static GUdevDevice *
+-find_physical_gudevdevice (GUdevDevice *child)
++find_physical_gudevdevice (GUdevDevice *child,
++                           GUdevClient *client)
+ {
+     GUdevDevice *iter, *old = NULL;
+     GUdevDevice *physdev = NULL;
+@@ -206,7 +232,7 @@
+                  * for the base PCMCIA device, not the PCMCIA controller which
+                  * is usually PCI or some other bus type.
+                  */
+-                pcmcia_parent = g_udev_device_get_parent (iter);
++                pcmcia_parent = get_parent (iter, client);
+                 if (pcmcia_parent) {
+                     tmp_subsys = g_udev_device_get_subsystem (pcmcia_parent);
+                     if (tmp_subsys && strcmp (tmp_subsys, "pcmcia"))
+@@ -226,7 +252,7 @@
+         }
+ 
+         old = iter;
+-        iter = g_udev_device_get_parent (old);
++        iter = get_parent (old, client);
+         g_object_unref (old);
+     }
+ 
+@@ -239,7 +265,7 @@
+     if (self->priv->physdev)
+         return;
+     if (self->priv->device)
+-        self->priv->physdev = find_physical_gudevdevice (self->priv->device);
++        self->priv->physdev = find_physical_gudevdevice (self->priv->device, self->priv->client);
+ }
+ 
+ /*****************************************************************************/
+@@ -250,7 +276,7 @@
+     if (self->priv->parent)
+         return;
+     if (self->priv->device)
+-        self->priv->parent = g_udev_device_get_parent (self->priv->device);
++        self->priv->parent = get_parent (self->priv->device, self->priv->client);
+ }
+ 
+ /*****************************************************************************/
+@@ -304,7 +330,7 @@
+     if (!driver) {
+         GUdevDevice *parent;
+ 
+-        parent = g_udev_device_get_parent (self->priv->device);
++        parent = get_parent (self->priv->device, self->priv->client);
+         if (parent)
+             driver = g_udev_device_get_driver (parent);
+ 
+@@ -718,7 +744,8 @@
+ /*****************************************************************************/
+ 
+ MMKernelDevice *
+-mm_kernel_device_udev_new (GUdevDevice *udev_device)
++mm_kernel_device_udev_new (GUdevDevice *udev_device,
++                           GUdevClient *client)
+ {
+     GError *error = NULL;
+     MMKernelDevice *self;
+@@ -731,6 +758,7 @@
+                                              "udev-device", udev_device,
+                                              NULL));
+     g_assert_no_error (error);
++    MM_KERNEL_DEVICE_UDEV(self)->priv->client = client;
+     return self;
+ }
+ 
+@@ -738,13 +766,18 @@
+ 
+ MMKernelDevice *
+ mm_kernel_device_udev_new_from_properties (MMKernelEventProperties  *properties,
++                                           GUdevClient              *client,
+                                            GError                  **error)
+ {
+-    return MM_KERNEL_DEVICE (g_initable_new (MM_TYPE_KERNEL_DEVICE_UDEV,
++    MMKernelDevice *self;
++    self = MM_KERNEL_DEVICE (g_initable_new (MM_TYPE_KERNEL_DEVICE_UDEV,
+                                              NULL,
+                                              error,
+                                              "properties", properties,
+                                              NULL));
++
++    MM_KERNEL_DEVICE_UDEV(self)->priv->client = client;
++    return self;
+ }
+ 
+ /*****************************************************************************/
+--- ModemManager/src/kerneldevice/mm-kernel-device-udev.h	2019-02-25 09:32:03.012443450 +1000
++++ ModemManager/src/kerneldevice/mm-kernel-device-udev.h	2019-02-25 09:38:45.735783480 +1000
+@@ -46,8 +46,10 @@
+ };
+ 
+ GType           mm_kernel_device_udev_get_type            (void);
+-MMKernelDevice *mm_kernel_device_udev_new                 (GUdevDevice              *udev_device);
++MMKernelDevice *mm_kernel_device_udev_new                 (GUdevDevice              *udev_device,
++                                                           GUdevClient              *client);
+ MMKernelDevice *mm_kernel_device_udev_new_from_properties (MMKernelEventProperties  *properties,
++                                                           GUdevClient              *client,
+                                                            GError                  **error);
+ 
+ #endif /* MM_KERNEL_DEVICE_UDEV_H */
+--- ModemManager/src/mm-base-manager.c	2019-02-22 16:45:16.810082076 +1000
++++ ModemManager/src/mm-base-manager.c	2019-02-25 11:37:59.587213285 +1000
+@@ -410,7 +410,7 @@
+     mm_dbg ("  uid:       %s", uid ? uid : "n/a");
+ 
+ #if defined WITH_UDEV
+-    kernel_device = mm_kernel_device_udev_new_from_properties (properties, error);
++    kernel_device = mm_kernel_device_udev_new_from_properties (properties, self->priv->udev, error);
+ #else
+     kernel_device = mm_kernel_device_generic_new (properties, error);
+ #endif
+@@ -449,7 +449,7 @@
+     g_return_if_fail (subsys != NULL);
+     g_return_if_fail (g_str_equal (subsys, "tty") || g_str_equal (subsys, "net") || g_str_has_prefix (subsys, "usb"));
+ 
+-    kernel_device = mm_kernel_device_udev_new (device);
++    kernel_device = mm_kernel_device_udev_new (device, client);
+ 
+     /* We only care about tty/net and usb/cdc-wdm devices when adding modem ports,
+      * but for remove, also handle usb parent device remove events
+@@ -475,7 +475,7 @@
+ {
+     MMKernelDevice *kernel_device;
+ 
+-    kernel_device = mm_kernel_device_udev_new (ctx->device);
++    kernel_device = mm_kernel_device_udev_new (ctx->device, ctx->self->priv->udev);
+     device_added (ctx->self, kernel_device, FALSE, ctx->manual_scan);
+     g_object_unref (kernel_device);
+ 

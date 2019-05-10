@@ -1,3 +1,5 @@
+export ACL_LICENSE = GPL
+
 all: etherwake
 
 etherwake: ether-wake.c

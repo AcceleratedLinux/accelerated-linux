@@ -12,6 +12,7 @@
 / {
 	memory: memory {
 		/* U-boot to fill memory details here */
+		device_type = "memory";
 	};
 
 	reserved-memory {

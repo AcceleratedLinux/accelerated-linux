@@ -1,3 +1,5 @@
+ACL_LICENSE = BSD/OpenSource
+
 -include ../user.mak
 
 # Set to enable memory debugging commands

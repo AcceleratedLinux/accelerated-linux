@@ -1,0 +1,63 @@
+Use QMI bearer "number" to choose PDP profile index.
+
+Previously, ModemManager did not specify the "profile index" for each bearer
+it tried to connect on the same modem. The profile index corresponds to the
+entry in the AT+CGDCONT list that the QMI commands would affect.
+
+This meant that the bearers would all try to use the "default profile number"
+(3 on Verizon firmware, 1 on others) which, in some scenarios (locked to 4G?),
+would trigger disconnections.
+E.g. Bearer 1 connects, Bearer 2 connects causing Bearer 1 to disconnect,
+Bearer 1 reconnects causing Bearer 2 to disconnect, and so on.
+
+Now, we can nominate a profile index when creating the bearer e.g.
+  mmcli ... --create-bearer='apn=vzwinternet,number=3'
+and if not specified, the bearer behaves as it did before.
+
+--- ModemManager/src/mm-bearer-qmi.c	2019-03-01 11:45:49.105660911 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2019-03-01 11:51:39.235547791 +1000
+@@ -413,6 +413,7 @@
+     MMBearerQmi *self;
+     ConnectStep step;
+     MMPort *data;
++    guint data_profile_index;
+     MMPortQmi *qmi;
+     gchar *user;
+     gchar *password;
+@@ -648,6 +649,14 @@
+             NULL);
+     }
+ 
++    if (ctx->data_profile_index) {
++        mm_dbg ("%s using 3GPP profile index %d for APN %s",
++            mm_port_get_device (ctx->data),
++            ctx->data_profile_index,
++            ctx->apn);
++        qmi_message_wds_start_network_input_set_profile_index_3gpp (input, ctx->data_profile_index, NULL);
++    }
++
+     return input;
+ }
+ 
+@@ -1570,6 +1579,7 @@
+     MMPortQmi *qmi;
+     GError *error = NULL;
+     const gchar *apn;
++    const gchar *number;
+     GTask *task;
+ 
+     g_object_get (self,
+@@ -1652,6 +1662,13 @@
+     ctx->step = CONNECT_STEP_FIRST;
+     ctx->ip_method = MM_BEARER_IP_METHOD_UNKNOWN;
+ 
++    number = mm_bearer_properties_get_number (mm_base_bearer_peek_config (MM_BASE_BEARER (self)));
++    if (number && *number) {
++        ctx->data_profile_index = g_ascii_strtoull (number, NULL, 10);
++        if (ctx->data_profile_index > 16)
++            ctx->data_profile_index = 0;
++    }
++
+     g_object_get (self,
+                   MM_BASE_BEARER_CONFIG, &properties,
+                   NULL);

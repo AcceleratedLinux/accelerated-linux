@@ -2,10 +2,13 @@
 CONFOPTS :=
 ifdef CONFIG_LIB_LIBSSL
 CONFOPTS += --with-ssl=openssl
+CONFVARS  = OPENSSL_CFLAGS=" " OPENSSL_LIBS="-lssl -lcrypto"
 else
 CONFOPTS += --without-ssl
 endif
 
-URL = http://ftp.gnu.org/gnu/wget/wget-1.16.tar.xz
+LDFLAGS += -lpthread
+
+URL = http://ftp.gnu.org/gnu/wget/wget-1.19.5.tar.gz
 
 include $(ROOTDIR)/tools/automake.inc

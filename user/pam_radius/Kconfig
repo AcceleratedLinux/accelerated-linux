@@ -1,0 +1,5 @@
+config USER_PAM_RADIUS
+	bool "pam_radius"
+	depends on LIB_LIBPAM
+	help
+	  Pam radius plugin.

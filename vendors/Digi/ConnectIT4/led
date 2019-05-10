@@ -29,7 +29,7 @@ esac
 
 ##############################################################
 
-# Find the primary modem, or alternatively *any* modem
+# Find the PRIMARY modem, or alternatively *any* modem
 idx="$(modem name=modem idx 2> /dev/null)" || idx="$(modem idx 2> /dev/null)"
 # Find the first interface on the modem
 for i in $(runt keys mm.map.interface_idx); do
@@ -98,6 +98,58 @@ fi
 
 ##############################################################
 
+PRIMARY="LAN3_RX"
+BACKUP="LAN3_TX"
+
+# work out if WAN is really our primary interface (WAN_LED LED) or not
+wan4_metric="$(config get network.interface.wan.ipv4.metric)"
+cell4_metric="$(config get modem.ipv4.metric)"
+
+if [ ${cell4_metric} -lt ${wan4_metric} ]; then
+	PRIMARY="LAN3_TX"
+	BACKUP="LAN3_RX"
+fi
+
+LINK=$(ip link show wan 2> /dev/null | grep -c "state UP")
+WAN4=-1
+WAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.wan.ipv4.up) in
+	1) [ "$(runt get netmon.ipv4_interface_wan.passed)" = n ] && WAN4=1 || WAN4=2 ;;
+	0) [ "$(runt get network.interface.wan.ipv4.pending)" = 1 ] && WAN4=1 || WAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.wan.ipv6.up) in
+	1) [ "$(runt get netmon.ipv6_interface_wan.passed)" = n ] && WAN6=1 || WAN6=2 ;;
+	0) [ "$(runt get network.interface.wan.ipv6.pending)" = 1 ] && WAN6=1 || WAN6=0 ;;
+	esac
+fi
+
+# working out WAN state irrespective of which interface is PRIMARY
+if [ "$WAN4" = -1 -a "$WAN6" = -1 ]; then
+	WAN=$((LINK ? 2 : 0))
+elif [ "$WAN4" = 2 -o "$WAN6" = 2 ]; then
+	WAN=2
+elif [ "$WAN4" = 1 -o "$WAN6" = 1 ]; then
+	WAN=1
+else
+	WAN=0
+fi
+
+case "$WAN" in
+2) WAN_LED="-o $PRIMARY" ;;
+1) WAN_LED="-f $PRIMARY" ;;
+*) WAN_LED="-O $PRIMARY" ;;
+esac
+
+case "$CELL" in
+2|3) CELL_LED="-o $BACKUP" ;;
+1) CELL_LED="-f $BACKUP" ;;
+*) CELL_LED="-O $BACKUP" ;;
+esac
+
+##############################################################
+
 #
 # The LED table of things based on all possible values above
 #
@@ -114,6 +166,6 @@ LED12="-f COM -f ONLINE -f ETH" # flashing white
 LED22="-O COM -O ONLINE -o ETH" # solid green
 LED32="-O COM -o ONLINE -O ETH" # solid blue
 
-eval ledcmd $SIGNAL \$LED$CELL$LAN
+eval ledcmd $SIGNAL $WAN_LED $CELL_LED \$LED$CELL$LAN
 
 exit 0

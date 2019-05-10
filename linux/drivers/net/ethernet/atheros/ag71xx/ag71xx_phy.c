@@ -145,11 +145,11 @@ static int ag71xx_phy_connect_multi(struct ag71xx *ag)
 
 	/* mask with MAC supported features */
 	if (pdata->has_gbit)
-		phydev->supported &= PHY_GBIT_FEATURES;
+		linkmode_copy(phydev->supported, PHY_GBIT_FEATURES);
 	else
-		phydev->supported &= PHY_BASIC_FEATURES;
+		linkmode_copy(phydev->supported, PHY_BASIC_FEATURES);
 
-	phydev->advertising = phydev->supported;
+	linkmode_copy(phydev->advertising, phydev->supported);
 
 	netdev_info(dev, "connected to PHY at %s [uid=%08x, driver=%s]\n",
 		    phydev_name(phydev), phydev->phy_id, phydev->drv->name);

@@ -1,0 +1,296 @@
+From 8a387968330d9b5c00e1c0a25f0ffcdc2ec16c0e Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Wed, 20 Feb 2019 16:34:22 +0100
+Subject: [PATCH] Add watchdog support
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ grub-core/Makefile.core.def   |   5 +
+ grub-core/commands/watchdog.c | 265 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 270 insertions(+)
+ create mode 100644 grub-core/commands/watchdog.c
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index 8271a0db4..f5f266a51 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -2402,3 +2402,8 @@ module = {
+   name = bootcntr;
+   common = commands/bootcntr.c;
+ };
++
++module = {
++  name = watchdog;
++  common = commands/watchdog.c;
++};
+diff --git a/grub-core/commands/watchdog.c b/grub-core/commands/watchdog.c
+new file mode 100644
+index 000000000..147e83d7b
+--- /dev/null
++++ b/grub-core/commands/watchdog.c
+@@ -0,0 +1,265 @@
++/* watchdog.c - command to set watchdog */
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2003,2005,2007,2008,2009  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <grub/dl.h>
++#include <grub/command.h>
++#include <grub/mm.h>
++#include <grub/pci.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++#define GRUB_PCI_VENDOR_ID_INTEL	0x8086
++
++#define GRUB_PCI_DEV_ID_WDT_BAYTRAIL	0x0f1c
++
++#define GRUB_PCIDEV(vendor, dev) \
++	((GRUB_PCI_DEV_ID_##dev << 16) | GRUB_PCI_VENDOR_ID_##vendor)
++
++#define GRUB_ACPIBASE			0x40
++#define GRUB_ACPIBASE_SMI_OFF		0x30
++#define GRUB_ACPIBASE_TCO_OFF		0x60
++
++#define GRUB_ACPICTRL_PMCBASE		0x44
++#define GRUB_ACPIBASE_PMC_OFF		0x08
++
++#define GRUB_TCO_RLD			0x00	/* TCO Timer Reload and Curr. Value */
++#define GRUB_TCO1_STS			0x04	/* TCO1 Status Register */
++#define GRUB_TCO1_CNT			0x08	/* TCO1 Control Register */
++#define GRUB_TCO_TMR			0x12	/* TCO Timer Initial Value */
++
++static const grub_pci_id_t grub_watchdog_pci_id_list[] =
++{
++  GRUB_PCIDEV(INTEL, WDT_BAYTRAIL),
++  0
++};
++
++typedef struct
++{
++  grub_port_t			tco_base;
++  grub_port_t			smi_base;
++  volatile grub_uint32_t	*gcs_pmc;
++} grub_watchdog_dev_t;
++
++static grub_watchdog_dev_t *grub_watchdog_dev = NULL;
++
++struct grub_watchdog_iter_ctx
++{
++  grub_pci_device_t	dev;
++  int			found;
++};
++
++static int
++grub_watchdog_iter (grub_pci_device_t dev, grub_pci_id_t pciid, void *data)
++{
++  const grub_pci_id_t *pid;
++
++  for (pid = grub_watchdog_pci_id_list; *pid; pid++)
++    {
++      if (*pid == pciid)
++	{
++	  struct grub_watchdog_iter_ctx *ctx = data;
++
++	  ctx->dev = dev;
++	  ctx->found = 1;
++
++	  /* Found device -> return with 1 to stop iteration */
++	  return 1;
++	}
++    }
++
++  return 0;
++}
++
++static grub_err_t
++grub_watchdog_init (void)
++{
++  struct grub_watchdog_iter_ctx ctx = {
++    .found = 0
++  };
++  grub_watchdog_dev_t *wdev = NULL;
++  grub_uint32_t base_addr;
++  grub_pci_address_t addr;
++  grub_err_t err;
++
++  grub_pci_iterate (grub_watchdog_iter, &ctx);
++
++  if (!ctx.found)
++    {
++      err = grub_error (GRUB_ERR_UNKNOWN_DEVICE, N_("device not found"));
++      goto fail;
++    }
++
++  wdev = grub_zalloc (sizeof (grub_watchdog_dev));
++  if (!wdev)
++    {
++      err = grub_error (GRUB_ERR_OUT_OF_MEMORY, N_("out of mem"));
++      goto fail;
++    }
++
++  /* Get TCO and SMI addresses */
++  addr = grub_pci_make_address (ctx.dev, GRUB_ACPIBASE);
++  base_addr = grub_pci_read (addr);
++  if (!base_addr)
++    {
++      err = grub_error (GRUB_ERR_BAD_DEVICE, N_("ACPI IO space uninitialized"));
++      goto fail;
++    }
++  wdev->smi_base = (base_addr & 0x0000ff80) + GRUB_ACPIBASE_SMI_OFF;
++  wdev->tco_base = (base_addr & 0x0000ff80) + GRUB_ACPIBASE_TCO_OFF;
++
++#if 0
++  grub_dprintf ("wdt", "smi_base = 0x%x, tco_base = 0x%x\n",
++		wdev->smi_base, wdev->tco_base);
++#endif
++
++  /* Enable ACPI space */
++  grub_pci_write_byte (addr, base_addr | 0x2);
++
++  /* Get power management configuration register:
++   * Read PMC BASE from config space and address the register at offset 0x8 */
++
++  /* Enable PMC space */
++  addr = grub_pci_make_address (ctx.dev, GRUB_ACPICTRL_PMCBASE);
++  base_addr = grub_pci_read (addr);
++  grub_pci_write_byte (addr, base_addr | 0x2);
++
++  base_addr = (base_addr & 0xfffffe00) + GRUB_ACPIBASE_PMC_OFF;
++
++  wdev->gcs_pmc = grub_pci_device_map_range(ctx.dev, base_addr,
++					   sizeof (grub_uint32_t));
++
++#if 0
++  grub_dprintf ("wdt", "gcs_pmc = %p\n", wdev->gcs_pmc);
++#endif
++
++  grub_watchdog_dev = wdev;
++
++  return GRUB_ERR_NONE;
++
++fail:
++  if (wdev)
++    grub_free (wdev);
++
++  return err;
++}
++
++static void
++grub_watchdog_set_noreboot_bit (int is_enable)
++{
++  grub_uint32_t val;
++
++  val = *grub_watchdog_dev->gcs_pmc;
++#define NO_REBOOT_BIT	0x00000010
++  if (is_enable)
++    val |= NO_REBOOT_BIT;
++  else
++    val &= ~NO_REBOOT_BIT;
++  *grub_watchdog_dev->gcs_pmc = val;
++}
++
++static void
++grub_watchdog_set_halt (int is_halt)
++{
++  grub_uint16_t val;
++  const grub_port_t addr = grub_watchdog_dev->tco_base + GRUB_TCO1_CNT;
++
++  val = grub_inw (addr);
++#define HALT_BIT	0x0800
++  if (is_halt)
++    val |= HALT_BIT;
++  else
++    val &= ~HALT_BIT;
++  grub_outw (val, addr);
++}
++
++static grub_err_t
++grub_cmd_watchdog_set (grub_command_t cmd __attribute__ ((unused)),
++		       int argc, char **args)
++{
++  unsigned int timeout;
++
++  if (argc != 1)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("timeout time expected"));
++
++  timeout = grub_strtoul (args[0], 0, 0);
++
++  if (timeout == 1 || timeout > 1023)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid timeout time"));
++
++  /* Initialize watchdog */
++  if (!grub_watchdog_dev)
++    {
++      grub_err_t err;
++
++      err = grub_watchdog_init();
++      if (err)
++	return err;
++    }
++
++  if (timeout == 0)
++    {
++      /* Disable watchdog */
++      grub_watchdog_set_halt (1);
++
++      /* Set NO_REBOOT_BIT */
++      grub_watchdog_set_noreboot_bit (1);
++    }
++  else
++    {
++      const grub_port_t tco_base = grub_watchdog_dev->tco_base;
++      grub_uint16_t val;
++
++      /* Set new timer value */
++      val = grub_inw (tco_base + GRUB_TCO_TMR);
++      val &= 0xfc00;
++      val |= timeout;
++      grub_outw (val, tco_base + GRUB_TCO_TMR);
++
++      /* Reload timer value */
++      grub_outw (0x01, tco_base + GRUB_TCO_RLD);
++
++      /* Clear status */
++      grub_outl (0x20008, tco_base + GRUB_TCO1_STS);
++
++      /* Disable NO_REBOOT_BIT */
++      grub_watchdog_set_noreboot_bit (0);
++
++      /* Enable watchdog */
++      grub_watchdog_set_halt (0);
++    }
++
++  return GRUB_ERR_NONE;
++}
++
++static grub_command_t cmd;
++
++GRUB_MOD_INIT(watchdog)
++{
++  cmd = grub_register_command ("watchdog_set", grub_cmd_watchdog_set,
++			       N_("TIMEOUT_SEC"),
++			       N_("Set watchdog timeout, and start it\n" \
++				  "TIMEOUT_SEC:\n" \
++				  "  0:       disable watchdog\n"
++				  "  2-1023:  timeout in seconds"));
++}
++
++GRUB_MOD_FINI(watchdog)
++{
++  grub_unregister_command (cmd);
++}

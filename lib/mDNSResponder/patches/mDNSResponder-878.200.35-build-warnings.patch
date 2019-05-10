@@ -1,0 +1,193 @@
+diff --git a/mDNSCore/DNSCommon.c b/mDNSCore/DNSCommon.c
+index a249b96..1b9b666 100644
+--- a/mDNSCore/DNSCommon.c
++++ b/mDNSCore/DNSCommon.c
+@@ -1532,8 +1532,7 @@ mDNSexport mDNSu32 RDataHashValue(const ResourceRecord *const rr)
+         sum = DomainNameHashValue((domainname *)rdb->data);
+         ptr += dlen;
+         len -= dlen;
+-        /* FALLTHROUGH */
+-    }
++    } /* Fallthrough */
+ 
+     default:
+     {
+@@ -4386,6 +4385,7 @@ decimal:    if (!F.havePrecision)
+ 
+             case 'p':  F.havePrecision = F.lSize = 1;
+                 F.precision = sizeof(void*) * 2;                // 8 characters on 32-bit; 16 characters on 64-bit
++                /* Fallthrough */
+             case 'X':  digits = kHexDigitsUppercase;
+                 goto hexadecimal;
+             case 'x':  digits = kHexDigitsLowercase;
+@@ -4485,6 +4485,7 @@ hexadecimal: if (F.lSize) n = va_arg(arg, unsigned long);
+ 
+             default:    s = mDNS_VACB;
+                 i = mDNS_snprintf(mDNS_VACB, sizeof(mDNS_VACB), "<<UNKNOWN FORMAT CONVERSION CODE %%%c>>", c);
++                /* Fallthrough */
+ 
+             case '%':  *sbuffer++ = (char)c;
+                 if (++nwritten >= buflen) goto exit;
+diff --git a/mDNSCore/DNSDigest.c b/mDNSCore/DNSDigest.c
+index 57a4012..7cc8079 100644
+--- a/mDNSCore/DNSDigest.c
++++ b/mDNSCore/DNSDigest.c
+@@ -572,25 +572,25 @@ void md5_block_data_order (MD5_CTX *c, const void *p,int num);
+                          l)
+ #define HOST_p_c2l(c,l,n)   {                   \
+         switch (n) {                    \
+-        case 0: l =((unsigned long)(*((c)++)))<<24; \
+-        case 1: l|=((unsigned long)(*((c)++)))<<16; \
+-        case 2: l|=((unsigned long)(*((c)++)))<< 8; \
++        case 0: l =((unsigned long)(*((c)++)))<<24; /* Fallthrough */ \
++        case 1: l|=((unsigned long)(*((c)++)))<<16; /* Fallthrough */ \
++        case 2: l|=((unsigned long)(*((c)++)))<< 8; /* Fallthrough */ \
+         case 3: l|=((unsigned long)(*((c)++)));     \
+         } }
+ #define HOST_p_c2l_p(c,l,sc,len) {                  \
+         switch (sc) {                   \
+         case 0: l =((unsigned long)(*((c)++)))<<24; \
+-            if (--len == 0) break;                                                 \
++            if (--len == 0) break;                  /* Fallthrough */                                \
+         case 1: l|=((unsigned long)(*((c)++)))<<16; \
+-            if (--len == 0) break;                                                 \
++            if (--len == 0) break;                  /* Fallthrough */                                \
+         case 2: l|=((unsigned long)(*((c)++)))<< 8; \
+         } }
+ /* NOTE the pointer is not incremented at the end of this */
+ #define HOST_c2l_p(c,l,n)   {                   \
+         l=0; (c)+=n;                    \
+         switch (n) {                    \
+-        case 3: l =((unsigned long)(*(--(c))))<< 8; \
+-        case 2: l|=((unsigned long)(*(--(c))))<<16; \
++        case 3: l =((unsigned long)(*(--(c))))<< 8; /* Fallthrough */ \
++        case 2: l|=((unsigned long)(*(--(c))))<<16; /* Fallthrough */ \
+         case 1: l|=((unsigned long)(*(--(c))))<<24; \
+         } }
+ #define _HOST_l2c(l,c)  (*((c)++)=(unsigned char)(((l)>>24)&0xff),  \
+@@ -608,25 +608,25 @@ void md5_block_data_order (MD5_CTX *c, const void *p,int num);
+                          l)
+ #define HOST_p_c2l(c,l,n)   {                   \
+         switch (n) {                    \
+-        case 0: l =((unsigned long)(*((c)++)));     \
+-        case 1: l|=((unsigned long)(*((c)++)))<< 8; \
+-        case 2: l|=((unsigned long)(*((c)++)))<<16; \
++        case 0: l =((unsigned long)(*((c)++)));     /* Fallthrough */ \
++        case 1: l|=((unsigned long)(*((c)++)))<< 8; /* Fallthrough */ \
++        case 2: l|=((unsigned long)(*((c)++)))<<16; /* Fallthrough */ \
+         case 3: l|=((unsigned long)(*((c)++)))<<24; \
+         } }
+ #define HOST_p_c2l_p(c,l,sc,len) {                  \
+         switch (sc) {                   \
+         case 0: l =((unsigned long)(*((c)++)));     \
+-            if (--len == 0) break;                                                 \
++            if (--len == 0) break;                                                 /* Fallthrough */ \
+         case 1: l|=((unsigned long)(*((c)++)))<< 8; \
+-            if (--len == 0) break;                                                 \
++            if (--len == 0) break;                                                 /* Fallthrough */ \
+         case 2: l|=((unsigned long)(*((c)++)))<<16; \
+         } }
+ /* NOTE the pointer is not incremented at the end of this */
+ #define HOST_c2l_p(c,l,n)   {                   \
+         l=0; (c)+=n;                    \
+         switch (n) {                    \
+-        case 3: l =((unsigned long)(*(--(c))))<<16; \
+-        case 2: l|=((unsigned long)(*(--(c))))<< 8; \
++        case 3: l =((unsigned long)(*(--(c))))<<16; /* Fallthrough */ \
++        case 2: l|=((unsigned long)(*(--(c))))<< 8; /* Fallthrough */ \
+         case 1: l|=((unsigned long)(*(--(c))));     \
+         } }
+ #define _HOST_l2c(l,c)  (*((c)++)=(unsigned char)(((l)    )&0xff),  \
+diff --git a/mDNSCore/mDNS.c b/mDNSCore/mDNS.c
+index 8deada2..7873c4a 100755
+--- a/mDNSCore/mDNS.c
++++ b/mDNSCore/mDNS.c
+@@ -3026,8 +3026,8 @@ mDNSlocal void SendResponses(mDNS *const m)
+         if (rr->SendRNow)
+         {
+             if (rr->ARType != AuthRecordLocalOnly && rr->ARType != AuthRecordP2P)
+-                LogInfo("SendResponses: No active interface %d to send: %d %02X %s",
+-                     (uint32_t)rr->SendRNow, (uint32_t)rr->resrec.InterfaceID, rr->resrec.RecordType, ARDisplayString(m, rr));
++                LogInfo("SendResponses: No active interface %p to send: %p %02X %s",
++                     rr->SendRNow, rr->resrec.InterfaceID, rr->resrec.RecordType, ARDisplayString(m, rr));
+             rr->SendRNow = mDNSNULL;
+         }
+ 
+@@ -3999,8 +3999,8 @@ mDNSlocal void SendQueries(mDNS *const m)
+         if (ar->SendRNow)
+         {
+             if (ar->ARType != AuthRecordLocalOnly && ar->ARType != AuthRecordP2P)
+-                LogInfo("SendQueries: No active interface %d to send probe: %d %s",
+-                    (uint32_t)ar->SendRNow, (uint32_t)ar->resrec.InterfaceID, ARDisplayString(m, ar));
++                LogInfo("SendQueries: No active interface %p to send probe: %p %s",
++                    ar->SendRNow, ar->resrec.InterfaceID, ARDisplayString(m, ar));
+             ar->SendRNow = mDNSNULL;
+         }
+ 
+@@ -4034,8 +4034,8 @@ mDNSlocal void SendQueries(mDNS *const m)
+             // There will not be an active interface for questions applied to mDNSInterface_BLE
+             // so don't log the warning in that case.
+             if (q->InterfaceID != mDNSInterface_BLE)
+-                LogInfo("SendQueries: No active interface %d to send %s question: %d %##s (%s)",
+-                    (uint32_t)q->SendQNow, x ? "new" : "old", (uint32_t)q->InterfaceID, q->qname.c, DNSTypeName(q->qtype));
++                LogInfo("SendQueries: No active interface %p to send %s question: %p %##s (%s)",
++                    q->SendQNow, x ? "new" : "old", q->InterfaceID, q->qname.c, DNSTypeName(q->qtype));
+             q->SendQNow = mDNSNULL;
+         }
+         q->CachedAnswerNeedsUpdate = mDNSfalse;
+@@ -11725,8 +11725,8 @@ mDNSlocal mStatus ValidateParameters(mDNS *const m, DNSQuestion *const question)
+     {
+         NetworkInterfaceInfo *intf = FirstInterfaceForID(m, question->InterfaceID);
+         if (!intf)
+-            LogInfo("ValidateParameters: Note: InterfaceID %d for question %##s (%s) not currently found in active interface list",
+-                    (uint32_t)question->InterfaceID, question->qname.c, DNSTypeName(question->qtype));
++            LogInfo("ValidateParameters: Note: InterfaceID %p for question %##s (%s) not currently found in active interface list",
++                    question->InterfaceID, question->qname.c, DNSTypeName(question->qtype));
+     }
+ 
+     return(mStatus_NoError);
+@@ -13014,8 +13014,8 @@ mDNSexport mStatus mDNS_RegisterInterface(mDNS *const m, NetworkInterfaceInfo *s
+     if (set->Advertise)
+         AdvertiseInterface(m, set);
+ 
+-    LogInfo("mDNS_RegisterInterface: InterfaceID %d %s (%#a) %s",
+-            (uint32_t)set->InterfaceID, set->ifname, &set->ip,
++    LogInfo("mDNS_RegisterInterface: InterfaceID %p %s (%#a) %s",
++            set->InterfaceID, set->ifname, &set->ip,
+             set->InterfaceActive ?
+             "not represented in list; marking active and retriggering queries" :
+             "already represented in list; marking inactive for now");
+@@ -13180,8 +13180,8 @@ mDNSexport void mDNS_DeregisterInterface(mDNS *const m, NetworkInterfaceInfo *se
+         intf = FirstInterfaceForID(m, set->InterfaceID);
+         if (intf)
+         {
+-            LogInfo("mDNS_DeregisterInterface: Another representative of InterfaceID %d %s (%#a) exists;"
+-                    " making it active", (uint32_t)set->InterfaceID, set->ifname, &set->ip);
++            LogInfo("mDNS_DeregisterInterface: Another representative of InterfaceID %p %s (%#a) exists;"
++                    " making it active", set->InterfaceID, set->ifname, &set->ip);
+             if (intf->InterfaceActive)
+                 LogMsg("mDNS_DeregisterInterface: ERROR intf->InterfaceActive already set for %s (%#a)", set->ifname, &set->ip);
+             intf->InterfaceActive = mDNStrue;
+@@ -13203,8 +13203,8 @@ mDNSexport void mDNS_DeregisterInterface(mDNS *const m, NetworkInterfaceInfo *se
+             CacheRecord *rr;
+             DNSQuestion *q;
+ 
+-            LogInfo("mDNS_DeregisterInterface: Last representative of InterfaceID %d %s (%#a) deregistered;"
+-                    " marking questions etc. dormant", (uint32_t)set->InterfaceID, set->ifname, &set->ip);
++            LogInfo("mDNS_DeregisterInterface: Last representative of InterfaceID %p %s (%#a) deregistered;"
++                    " marking questions etc. dormant", set->InterfaceID, set->ifname, &set->ip);
+ 
+             m->mDNSStats.InterfaceDown++;
+ 
+diff --git a/mDNSCore/uDNS.c b/mDNSCore/uDNS.c
+index cd91f4d..42107c1 100755
+--- a/mDNSCore/uDNS.c
++++ b/mDNSCore/uDNS.c
+@@ -2327,6 +2327,7 @@ mDNSlocal void UpdateOneSRVRecord(mDNS *m, AuthRecord *rr)
+ 
+     case regState_NATError:
+         if (!NATChanged) return;
++	/* Fallthrough */
+     // if nat changed, register if we have a target (below)
+ 
+     case regState_NoTarget:

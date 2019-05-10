@@ -26,8 +26,8 @@ ubiattach -p $MTDEVICE -d $UBINUM
 #
 # Create the filesystem partitions we want.
 #
-ubimkvol $UBIDEVICE -N image -s 32MiB
-ubimkvol $UBIDEVICE -N image1 -s 32MiB
+ubimkvol $UBIDEVICE -N image -s 30MiB
+ubimkvol $UBIDEVICE -N image1 -s 30MiB
 ubimkvol $UBIDEVICE -N config -s 16MiB
 ubimkvol $UBIDEVICE -N opt -m
 

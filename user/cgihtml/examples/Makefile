@@ -16,6 +16,7 @@
 # 20030325  - adapted to the uClinux-dist
 #             (hede)
 
+export ACL_LICENSE = Unknown
 
 # macros and variables
 LIB = ../cgihtml.a

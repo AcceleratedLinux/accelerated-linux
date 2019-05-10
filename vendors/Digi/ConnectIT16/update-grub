@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# run grub with the correct parameters to update the system
+#
+
+if [ -f /boot/grub/bootx64.efi.signed ] ; then
+	mkdir -p /efi/EFI/BOOT
+	cp /boot/grub/bootx64.efi.signed /efi/EFI/BOOT/BOOTX64.EFI
+else
+	# grub bootstrap mode
+
+	MODULES="terminal serial part_gpt part_msdos fat squash4"
+	MODULES="$MODULES verify_part gcry_sha256 loadenv echo normal linux"
+	MODULES="$MODULES reboot sleep test i2c i2c_dw i2c_ismt atecc"
+	MODULES="$MODULES atecc_cmd mcu bootcntr watchdog regexp"
+	MODULES="$MODULES probe"
+
+	DRIVE=$(sed -n 's?.*root=/dev/\(sd.\).*?/dev/\1?p' < /proc/cmdline)
+	[ "${DRIVE}" ] || DRIVE=/dev/sdb
+
+	/usr/sbin/grub-install --removable --recheck --target=x86_64-efi \
+		--boot-directory=/efi --efi-directory=/efi \
+		--bootloader-id=grub -d /boot/grub/x86_64-efi ${DRIVE}
+
+	#
+	# make standalone grub for signing etc,  write to grubdev if available
+	#
+	grub-mkstandalone --directory /boot/grub/x86_64-efi \
+		--format x86_64-efi \
+		--modules "$MODULES" \
+		--install-modules "$MODULES" \
+		--output /tmp/bootx64.efi.standalone \
+		"boot/grub/grub.cfg=/boot/grub/grub.cfg"
+
+	rm -rf /efi/grub/x86_64-efi /efi/EFI/BOOT/*
+	cp /tmp/bootx64.efi.standalone /efi/EFI/BOOT/BOOTX64.EFI
+
+	GRUB=$(sed -n 's?.*grub=/dev/\(sd.\).*?/dev/\1?p' < /proc/cmdline)
+	if [ "${GRUB}" ]; then
+		(cd /tmp; tar cvf "${GRUB}" bootx64.efi.standalone)
+	fi
+
+	rm -f /tmp/bootx64.efi.standalone
+fi
+

@@ -1,0 +1,53 @@
+--- ../clone/netifd/wireless.c	2018-10-25 14:31:56.857869276 +1000
++++ netifd/wireless.c	2018-10-26 13:04:43.855382683 +1000
+@@ -17,8 +17,6 @@
+ #include "handler.h"
+ #include "ubus.h"
+ 
+-#define WIRELESS_SETUP_RETRY	3
+-
+ struct vlist_tree wireless_devices;
+ struct avl_tree wireless_drivers;
+ static struct blob_buf b;
+@@ -344,7 +342,7 @@
+ void
+ wireless_device_set_up(struct wireless_device *wdev)
+ {
+-	wdev->retry = WIRELESS_SETUP_RETRY;
++	wdev->retry = 0;
+ 	wdev->autostart = true;
+ 	__wireless_device_set_up(wdev);
+ }
+@@ -387,8 +385,8 @@
+ 	if (wdev->state == IFS_TEARDOWN || wdev->state == IFS_DOWN || wdev->cancel)
+ 		return;
+ 
+-	if (--wdev->retry < 0)
+-		wdev->autostart = false;
++	wdev->retry++;
++	netifd_log_message(L_NOTICE, "Retrying setup for wireless device '%s' (attempt %d)\n", wdev->name, wdev->retry);
+ 
+ 	__wireless_device_set_down(wdev);
+ }
+@@ -424,9 +422,10 @@
+ 		return;
+ 
+ 	wdev->config_state = s;
+-	if (wdev->state == IFS_DOWN)
++	if (wdev->state == IFS_DOWN) {
++		wdev->retry = 0;
+ 		wdev_handle_config_change(wdev);
+-	else
++	} else
+ 		__wireless_device_set_down(wdev);
+ }
+ 
+@@ -462,7 +461,7 @@
+ static void
+ wdev_create(struct wireless_device *wdev)
+ {
+-	wdev->retry = WIRELESS_SETUP_RETRY;
++	wdev->retry = 0;
+ 	wdev->config = blob_memdup(wdev->config);
+ }
+ 

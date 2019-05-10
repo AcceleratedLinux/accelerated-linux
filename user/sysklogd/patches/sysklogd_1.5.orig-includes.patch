@@ -1,0 +1,34 @@
+--- sysklogd-1.5/pidfile.c.org	2019-04-10 16:12:57.597945287 +1000
++++ sysklogd-1.5/pidfile.c	2019-04-10 16:14:26.770334749 +1000
+@@ -26,11 +26,13 @@
+ 
+ #include <stdio.h>
+ #include <unistd.h>
++#include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sys/file.h>
+ #include <string.h>
+ #include <errno.h>
+ #include <signal.h>
++#include <fcntl.h>
+ 
+ /* read_pid
+  *
+--- sysklogd-1.5/syslog.c.org	2019-04-10 16:15:54.294796223 +1000
++++ sysklogd-1.5/syslog.c	2019-04-10 16:16:38.469012024 +1000
+@@ -64,6 +64,7 @@
+ 
+ #include <sys/uio.h>
+ #include <sys/wait.h>
++#include <sys/stat.h>
+ #include <netdb.h>
+ #include <string.h>
+ #include <time.h>
+@@ -72,6 +73,7 @@
+ #include <stdarg.h>
+ #include <paths.h>
+ #include <stdio.h>
++#include <fcntl.h>
+ 
+ #define	_PATH_LOGNAME	"/dev/log"
+ 

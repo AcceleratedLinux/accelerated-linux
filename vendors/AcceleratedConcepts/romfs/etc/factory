@@ -48,6 +48,7 @@ umount /var/mnt
 # The default static ip in factory test mode
 # order is important here
 if ifconfig eth0 &>/dev/null; then netdev=eth0; fi
+if ifconfig eth &>/dev/null; then netdev=eth; fi
 if ifconfig lan &>/dev/null; then netdev=lan; fi
 if ifconfig lan1 &>/dev/null; then netdev=lan1; fi
 ifconfig $netdev 192.168.0.1

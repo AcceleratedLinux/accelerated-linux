@@ -1,5 +1,7 @@
 .EXPORT_ALL_VARIABLES:
 
+export ACL_LICENSE = GoAhead
+
 ifeq ("$(CONFIG_USER_MATRIXSSL)", "y")
 DIRS = ../matrixssl-1.8.3 src cgi-src
 else

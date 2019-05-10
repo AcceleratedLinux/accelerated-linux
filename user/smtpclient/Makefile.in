@@ -18,7 +18,7 @@ INSTALL         = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT  = @INSTALL_SCRIPT@
 INSTALL_DATA    = @INSTALL_DATA@
-MKDIR           = ./etc/mkinstalldirs
+MKDIR           = @srcdir@/etc/mkinstalldirs
 
 prefix          = @prefix@
 
@@ -33,7 +33,7 @@ all: smtpclient smtpclient.1
 # ------------------------------------------------
 
 _GETDISTINFO = \
-    _version=`./etc/newvers -lc -d smtpclient_vers.c`; \
+    _version=`@srcdir@/etc/newvers -lc -d smtpclient_vers.c`; \
     _date=`date '+%y%m%d_%H%M'`
 
 _BUILDDIST = \
@@ -47,14 +47,14 @@ _BUILDDIST = \
     ls -l $${_tarball}
 
 _NEWVERS = \
-    ./etc/newvers -lc -p SMTPclient $$OPT smtpclient_vers.c; \
-    V=`./etc/newvers -lc -D gfont_vers.c`;\
+    @srcdir@/etc/newvers -lc -p SMTPclient $$OPT @srcdir@/smtpclient_vers.c; \
+    V=`@srcdir@/etc/newvers -lc -D @srcdir@/gfont_vers.c`;\
     sed -e "s/Version .*(.*)/Version $$V/g" <README >README.n && mv README.n README
 
 _UPDATEVERS = \
-    V=`./etc/newvers -lc -d smtpclient_vers.c`;\
-    ./etc/newvers -lc -p SMTPclient -r $$V smtpclient_vers.c; \
-    V=`./etc/newvers -lc -D smtpclient_vers.c`;\
+    V=`@srcdir@/etc/newvers -lc -d @srcdir@/smtpclient_vers.c`;\
+    @srcdir@/etc/newvers -lc -p SMTPclient -r $$V @srcdir@/smtpclient_vers.c; \
+    V=`@srcdir@/etc/newvers -lc -D @srcdir@/smtpclient_vers.c`;\
     sed -e "s/Version .*(.*)/Version $$V/g" <README >README.n && mv README.n README
 
 release: distclean fixperm
@@ -84,7 +84,7 @@ update-version:
 	$(_UPDATEVERS)
 
 fixperm:
-	./etc/fixperm *
+	@srcdir@/etc/fixperm *
 
 # ------------------------------------------------
 #   THE PROGRAM
@@ -98,14 +98,14 @@ smtpclient: smtpclient_main.o smtpclient_getopt.o smtpclient_errno.o smtpclient_
 # ------------------------------------------------
 
 smtpclient.1: smtpclient.pod
-	V=`./etc/newvers -l c -D smtpclient_vers.c`; \
+	V=`@srcdir@/etc/newvers -l c -D @srcdir@/smtpclient_vers.c`; \
     sed -e "s|\@V\@|$$V|g" \
-        <smtpclient.pod >/tmp/smtpclient.pod; \
+        < @srcdir@/smtpclient.pod >.smtpclient.pod; \
     pod2man --section=1 \
             --center="Ralf S. Engelschall" \
             --release="EN" \
-            /tmp/smtpclient.pod >smtpclient.1 && \
-    rm -f /tmp/smtpclient.pod
+            .smtpclient.pod >smtpclient.1 && \
+    rm -f .smtpclient.pod
 
 # ------------------------------------------------
 #   INSTALLATION

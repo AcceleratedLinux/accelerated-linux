@@ -1,0 +1,10 @@
+--- iproute2-3.15.0/tc/tc_core.c.org	2018-01-04 23:20:35.454285798 +1000
++++ iproute2-3.15.0/tc/tc_core.c	2018-01-04 23:20:52.878286080 +1000
+@@ -12,6 +12,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <stdint.h>
+ #include <unistd.h>
+ #include <syslog.h>
+ #include <fcntl.h>

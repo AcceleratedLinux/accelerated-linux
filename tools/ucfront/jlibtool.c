@@ -120,6 +120,7 @@
 #  define PIC_FLAG "-fPIC"
 #  define RPATH "-rpath"
 #  define DYNAMIC_LINK_OPTS "-shared"
+#  define NO_UNDEFINED "-no-undefined"
 #  define LINKER_FLAG_PREFIX "-Wl,"
 #endif
 
@@ -181,6 +182,7 @@ typedef struct {
     int dry_run;
     enum pic_mode_e pic_mode;
     int export_dynamic;
+    int no_undefined;
 } options_t;
 
 typedef struct {
@@ -429,7 +431,9 @@ int parse_long_opt(char *arg, command_t *cmd_data)
     } else if (strcmp(var, "version") == 0) {
         printf("Version " VERSION "\n");
     } else if (strcmp(var, "tag") == 0) {
-        printf("Sorry.  Don't care about tags.\n");
+        if (cmd_data->options.debug) {
+            printf("Sorry.  Don't care about tags.\n");
+        }
     } else if (strcmp(var, "help") == 0) {
         printf("Sorry.  No help available.\n");
     } else {
@@ -475,13 +479,22 @@ int parse_short_opt(char *arg, command_t *cmd_data)
         return 1;
     }
 
+    if (strcmp(arg, "no-undefined") == 0) {
+        cmd_data->options.no_undefined = 1;
+        return 1;
+    }
+
     if (strcmp(arg, "release") == 0) {
-        printf("Sorry. Don't care about release numbering\n");
+        if (cmd_data->options.debug) {
+            printf("Sorry. Don't care about release numbering\n");
+        }
 		return 2;
 	}
 
     if (strcmp(arg, "dlopen") == 0) {
-        printf("Sorry. Don't care about dlopen options\n");
+        if (cmd_data->options.debug) {
+            printf("Sorry. Don't care about dlopen options\n");
+        }
 		return 2;
 	}
 
@@ -764,7 +777,7 @@ void add_linker_flag_prefix(count_chars *cc, const char *arg)
     char *newarg;
     newarg = (char*)malloc(strlen(arg) + sizeof(LINKER_FLAG_PREFIX));
     strcpy(newarg, LINKER_FLAG_PREFIX);
-    strcpy(newarg, arg);
+    strcpy(newarg + sizeof(LINKER_FLAG_PREFIX) - 1, arg);
     push_count_chars(cc, newarg);
 #endif
 }
@@ -1229,6 +1242,12 @@ void link_fixup(command_t *c)
 #endif
         }
     }
+
+#ifdef NO_UNDEFINED
+    if (c->options.no_undefined) {
+        add_linker_flag_prefix(c->arglist, NO_UNDEFINED);
+    }
+#endif
 }
 
 void post_parse_fixup(command_t *cmd_data)
@@ -1483,13 +1502,16 @@ int main(int argc, char *argv[])
 {
     int rc;
     command_t cmd_data;
+    char *v;
 
     memset(&cmd_data, 0, sizeof(cmd_data));
 
     cmd_data.options.pic_mode = UNKNOWN;
-#if 1 /* enable for more verbose runs */
-    cmd_data.options.debug = 1;
-#endif
+
+    v = getenv("V");
+    if (v) {
+        cmd_data.options.debug = atoi(v);
+    }
 
     cmd_data.program_opts = (count_chars*)malloc(sizeof(count_chars));
     init_count_chars(cmd_data.program_opts);

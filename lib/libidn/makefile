@@ -1,27 +1,4 @@
-#
-# Build using configure.
-#
+URL       = http://alpha.gnu.org/gnu/libidn/libidn-0.5.2.tar.gz
+CONFVARS  = ac_cv_locale_works=yes
+include $(ROOTDIR)/tools/automake.inc
 
-all: build/Makefile
-	$(MAKE) -C build
-
-build/Makefile: makefile
-	-chmod u+x configure
-	-rm -rf build
-	-mkdir build
-	( \
-		cd build; \
-		CC="$(CC) $(CFLAGS)" \
-		LDFLAGS="$(LDFLAGS)" \
-		LIBS="$(LDLIBS)" \
-		ac_cv_locale_works=yes \
-			sh ../configure $(CONFIGURE_OPTS) \
-				--enable-dependency-tracking \
-				--disable-shared \
-			; \
-	)
-
-clean:
-	rm -rf build
-
-romfs:

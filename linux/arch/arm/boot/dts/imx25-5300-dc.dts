@@ -18,6 +18,7 @@
 	compatible = "accelerated,5300-dc", "fsl,imx25";
 
 	memory {
+		device_type = "memory";
 		reg = <0x80000000 0x4000000>;
 	};
 

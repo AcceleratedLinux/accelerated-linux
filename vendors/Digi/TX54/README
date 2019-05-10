@@ -1,0 +1,42 @@
+
+DIGI/TX54
+---------
+
+You will need the serial debug console hookup and enabled to see and use
+u-boot on this platform. On the TX54 this console is at 115200,8n1.
+
+
+NETWORK LOADING
+---------------
+
+When using MediaTeks legacy u-boot code you can load and run a kernel
+and filesystem using the following commands. You need to enter through the
+menu system they use, and select the u-boot console to run this.
+
+    setenv bootargs console=ttyS1,115200 rd_start=0x84000000 rd_size=0x01000000
+    setenv ipaddr 192.168.1.1 ; setenv serverip 192.168.1.22
+    tftpboot 0x84000000 rootfs.bin
+    tftpboot 0x80100000 ukernel.bin
+    bootm 0x80100000
+
+
+FLASH INSTALL
+-------------
+
+If running an ACL image/kernel on the TX54 then you can install a new image
+on the flash with the following shell commands:
+
+    netflash -iknb -r /dev/flash/kernel2 192.168.1.22 kernel.nand
+    netflash -iknb -r /dev/flash/rootfs2 192.168.1.22 rootfs.bin
+
+If you want to install into the first image slot, then modify the names of
+the flash devices to be /dev/flash/kernel1 and /dev/flash/rootfs1.
+
+To set to boot from the new image you need to update the boot flags in the
+u-boot environment:
+
+    fw_setenv part1_valid 1
+    fw_setenv boot_part 1
+
+
+

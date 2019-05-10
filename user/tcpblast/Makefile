@@ -1,3 +1,4 @@
+export ACL_LICENSE = FreeBSD
 
 EXEC = tcpblast
 OBJS = tcpblast.o

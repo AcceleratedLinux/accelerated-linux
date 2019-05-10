@@ -69,19 +69,19 @@ fi
 
 ##############################################################
 
-LINK=$(ip link show lan 2> /dev/null | grep -c "state UP")
+LINK=$(ip link show eth 2> /dev/null | grep -c "state UP")
 
 LAN4=-1
 LAN6=-1
 if [ "$LINK" = 1 ]; then
-	case $(runt get network.interface.lan.ipv4.up) in
-	1) [ "$(runt get netmon.ipv4_interface_lan.passed)" = n ] && LAN4=1 || LAN4=2 ;;
-	0) [ "$(runt get network.interface.lan.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
+	case $(runt get network.interface.eth.ipv4.up) in
+	1) [ "$(runt get netmon.ipv4_interface_eth.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	0) [ "$(runt get network.interface.eth.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
 	esac
 
-	case $(runt get network.interface.lan.ipv6.up) in
-	1) [ "$(runt get netmon.ipv6_interface_lan.passed)" = n ] && LAN6=1 || LAN6=2 ;;
-	0) [ "$(runt get network.interface.lan.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
+	case $(runt get network.interface.eth.ipv6.up) in
+	1) [ "$(runt get netmon.ipv6_interface_eth.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	0) [ "$(runt get network.interface.eth.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
 	esac
 fi
 
@@ -95,6 +95,42 @@ elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
 else
 	LAN=0
 fi
+
+##############################################################
+
+ONLINE="LAN3_RX"
+
+LINK=$(ip link show eth 2> /dev/null | grep -c "state UP")
+LAN4=-1
+LAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.eth.ipv4.up) in
+	1) [ "$(runt get netmon.ipv4_interface_eth.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	0) [ "$(runt get network.interface.eth.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.eth.ipv6.up) in
+	1) [ "$(runt get netmon.ipv6_interface_eth.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	0) [ "$(runt get network.interface.eth.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
+	esac
+fi
+
+# working out ETH state
+if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
+	ETH=$((LINK ? 2 : 0))
+elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
+	ETH=2
+elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
+	ETH=1
+else
+	ETH=0
+fi
+
+case "$CELL$ETH" in
+*2|[23]*) ONLINE_LED="-o $ONLINE";;
+*1|1*) ONLINE_LED="-f $ONLINE";;
+*) ONLINE_LED="-O $ONLINE";;
+esac
 
 ##############################################################
 
@@ -114,6 +150,7 @@ LED12="-f COM -f ONLINE -f ETH" # flashing white
 LED22="-O COM -O ONLINE -o ETH" # solid green
 LED32="-O COM -o ONLINE -O ETH" # solid blue
 
-eval ledcmd $SIGNAL \$LED$CELL$LAN
+eval ledcmd $SIGNAL $ONLINE_LED \$LED$CELL$LAN
+
 
 exit 0

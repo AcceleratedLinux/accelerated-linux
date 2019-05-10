@@ -1,4 +1,4 @@
-QEMU_VERSION = 2.3.0
+QEMU_VERSION = 3.0.0
 URL = http://wiki.qemu-project.org/download/qemu-$(QEMU_VERSION).tar.bz2
 
 QEMU_TARGETS_$(CONFIG_USER_QEMU_AARCH64_SOFTMMU) += aarch64-softmmu
@@ -67,6 +67,7 @@ qemu-$(QEMU_VERSION)_CONFOPTS = \
 	--cxx="disable" \
 	--host="$(MACHINE)" \
 	--target-list="$(QEMU_TARGETS_y)" \
+	--disable-gcrypt \
 	--enable-kvm
 
 CFLAGS := $(CFLAGS:-O1=)
@@ -76,8 +77,6 @@ qemu-$(QEMU_VERSION)_ROMFS = qemu_romfs
 include $(ROOTDIR)/tools/automake.inc
 
 qemu_romfs:
-	# Install any extra libs
-	$(ROMFSINST) build/qemu-${QEMU_VERSION}/pixman/pixman/.libs/libpixman-1.so /lib/libpixman-1.so
 	# Create "kvm" executable if we have that for our target machine
 	MACHINECAP=`echo $(MACHINE) | tr 'a-z' 'A-Z'` ; \
 	CFGOPT="CONFIG_USER_QEMU_$${MACHINECAP}_SOFTMMU" ; \

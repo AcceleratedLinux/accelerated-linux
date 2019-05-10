@@ -49,6 +49,10 @@
 
 #define DS3232_REG_TEMPERATURE	0x11
 
+#define DS3232_REG_NVRAM		0x14
+#define DS3232_REG_NVRAM_MAX	0xFF
+#define DS3232_NVRAM_LEN		(DS3232_REG_NVRAM_MAX - DS3232_REG_NVRAM + 1)
+
 struct ds3232 {
 	struct device *dev;
 	struct regmap *regmap;
@@ -461,11 +465,37 @@ static const struct rtc_class_ops ds3232_rtc_ops = {
 	.alarm_irq_enable = ds3232_alarm_irq_enable,
 };
 
+static int ds3232_nvram_read(void *priv, unsigned int offset, void *val,
+							 size_t bytes)
+{
+	struct ds3232 *ds3232 = priv;
+
+	return regmap_bulk_read(ds3232->regmap, DS3232_REG_NVRAM + offset, val,
+							bytes);
+}
+
+static int ds3232_nvram_write(void *priv, unsigned int offset, void *val,
+							  size_t bytes)
+{
+	struct ds3232 *ds3232 = priv;
+
+	return regmap_bulk_write(ds3232->regmap, DS3232_REG_NVRAM + offset, val,
+							 bytes);
+}
+
 static int ds3232_probe(struct device *dev, struct regmap *regmap, int irq,
 			const char *name)
 {
 	struct ds3232 *ds3232;
 	int ret;
+	struct nvmem_config nvmem_cfg = {
+		.name = "ds3232_nvram",
+		.word_size = 1,
+		.stride = 1,
+		.size = DS3232_NVRAM_LEN,
+		.reg_read = ds3232_nvram_read,
+		.reg_write = ds3232_nvram_write,
+	};
 
 	ds3232 = devm_kzalloc(dev, sizeof(*ds3232), GFP_KERNEL);
 	if (!ds3232)
@@ -501,6 +531,9 @@ static int ds3232_probe(struct device *dev, struct regmap *regmap, int irq,
 			dev_err(dev, "unable to request IRQ\n");
 		}
 	}
+
+	nvmem_cfg.priv = ds3232;
+	rtc_nvmem_register(ds3232->rtc, &nvmem_cfg);
 
 	return 0;
 }

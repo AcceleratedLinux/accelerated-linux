@@ -208,7 +208,7 @@ static int ag71xx_rx_reserve(struct ag71xx *ag)
 			reserve = 2;
 
 		if (ag->phy_dev)
-			reserve += 4 - (ag->phy_dev->pkt_align % 4);
+			reserve += 4;
 
 		reserve %= 4;
 	}
@@ -738,18 +738,8 @@ err_drop:
 static int ag71xx_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct ag71xx *ag = netdev_priv(dev);
-	int ret;
 
 	switch (cmd) {
-	case SIOCETHTOOL:
-		if (ag->phy_dev == NULL)
-			break;
-
-		spin_lock_irq(&ag->lock);
-		ret = phy_ethtool_ioctl(ag->phy_dev, (void *) ifr->ifr_data);
-		spin_unlock_irq(&ag->lock);
-		return ret;
-
 	case SIOCSIFHWADDR:
 		if (copy_from_user
 			(dev->dev_addr, ifr->ifr_data, sizeof(dev->dev_addr)))
@@ -923,12 +913,8 @@ static int ag71xx_rx_packets(struct ag71xx *ag, int limit)
 		} else {
 			skb->dev = dev;
 			skb->ip_summed = CHECKSUM_NONE;
-			if (ag->phy_dev) {
-				ag->phy_dev->netif_receive_skb(skb);
-			} else {
-				skb->protocol = eth_type_trans(skb, dev);
-				netif_receive_skb(skb);
-			}
+			skb->protocol = eth_type_trans(skb, dev);
+			netif_receive_skb(skb);
 		}
 
 		ring->buf[i].skb = NULL;

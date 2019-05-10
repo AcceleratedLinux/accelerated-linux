@@ -2,3 +2,21 @@ config USER_GRUB
 	bool 'GRUB'
 	help
 	  GRUB (GRand Unified Bootloader) package.
+
+config USER_GRUB_EFI
+	bool 'efi'
+	depends on USER_GRUB
+	help
+	  Build efi extensions into grub
+
+config USER_GRUB_ENVTOOLS
+	bool 'fw_printenv/fw_setenv'
+	depends on USER_GRUB
+	help
+	  Install uboot-envtool fw_printenv and fw_setenv emulation wrappers.
+
+config USER_GRUB_DISABLE_VGA_CONSOLE
+	bool 'Disable VGA console'
+	depends on USER_GRUB
+	help
+	  Disable VGA console in GRUB

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 int local_creat(char *name, int flags);
 int local_fclose(FILE *fp);

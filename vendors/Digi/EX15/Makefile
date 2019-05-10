@@ -43,7 +43,6 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
 	$(ROMFSINST) -p 555 /etc/mkffs
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
-	$(ROMFSINST) -p 440 /etc/network
 	$(ROMFSINST) /etc/fw_env.config
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
@@ -64,7 +63,7 @@ uimage.bin: lzma
 	./lzma e $(KERNEL) $(LZKERNEL)
 	mkimage -A mips -O linux -T kernel -C lzma -a 0x80001000 -e 0x80001000 -n "Linux" -d $(LZKERNEL) $(UKERNEL)
 	mkimage -A mips -O linux -T ramdisk -C none -a 0x88000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
-	cp $(ROMFSIMG) /tftpboot/
+	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROMFSIMG) /tftpboot/
 
 image: image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.tag image.copy
 

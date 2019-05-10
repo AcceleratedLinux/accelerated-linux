@@ -36,6 +36,7 @@
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_plane_helper.h>
+#include <drm/drm_scdc_helper.h>
 #include <drm/drm_edid.h>
 
 #include <nvif/class.h>
@@ -136,12 +137,24 @@ nv50_dmac_create(struct nvif_device *device, struct nvif_object *disp,
 {
 	struct nouveau_cli *cli = (void *)device->object.client;
 	struct nv50_disp_core_channel_dma_v0 *args = data;
+	u8 type = NVIF_MEM_COHERENT;
 	int ret;
 
 	mutex_init(&dmac->lock);
 
-	ret = nvif_mem_init_map(&cli->mmu, NVIF_MEM_COHERENT, 0x1000,
-				&dmac->push);
+	/* Pascal added support for 47-bit physical addresses, but some
+	 * parts of EVO still only accept 40-bit PAs.
+	 *
+	 * To avoid issues on systems with large amounts of RAM, and on
+	 * systems where an IOMMU maps pages at a high address, we need
+	 * to allocate push buffers in VRAM instead.
+	 *
+	 * This appears to match NVIDIA's behaviour on Pascal.
+	 */
+	if (device->info.family == NV_DEVICE_INFO_V0_PASCAL)
+		type |= NVIF_MEM_VRAM;
+
+	ret = nvif_mem_init_map(&cli->mmu, type, 0x1000, &dmac->push);
 	if (ret)
 		return ret;
 
@@ -185,6 +198,22 @@ nv50_dmac_create(struct nvif_device *device, struct nvif_object *disp,
 /******************************************************************************
  * EVO channel helpers
  *****************************************************************************/
+static void
+evo_flush(struct nv50_dmac *dmac)
+{
+	/* Push buffer fetches are not coherent with BAR1, we need to ensure
+	 * writes have been flushed right through to VRAM before writing PUT.
+	 */
+	if (dmac->push.type & NVIF_MEM_VRAM) {
+		struct nvif_device *device = dmac->base.device;
+		nvif_wr32(&device->object, 0x070000, 0x00000001);
+		nvif_msec(device, 2000,
+			if (!(nvif_rd32(&device->object, 0x070000) & 0x00000002))
+				break;
+		);
+	}
+}
+
 u32 *
 evo_wait(struct nv50_dmac *evoc, int nr)
 {
@@ -195,6 +224,7 @@ evo_wait(struct nv50_dmac *evoc, int nr)
 	mutex_lock(&dmac->lock);
 	if (put + nr >= (PAGE_SIZE / 4) - 8) {
 		dmac->ptr[put] = 0x20000000;
+		evo_flush(dmac);
 
 		nvif_wr32(&dmac->base.user, 0x0000, 0x00000000);
 		if (nvif_msec(device, 2000,
@@ -216,6 +246,9 @@ void
 evo_kick(u32 *push, struct nv50_dmac *evoc)
 {
 	struct nv50_dmac *dmac = evoc;
+
+	evo_flush(dmac);
+
 	nvif_wr32(&dmac->base.user, 0x0000, (push - dmac->ptr) << 2);
 	mutex_unlock(&dmac->lock);
 }
@@ -424,7 +457,7 @@ nv50_dac_create(struct drm_connector *connector, struct dcb_output *dcbe)
 			 "dac-%04x-%04x", dcbe->hasht, dcbe->hashm);
 	drm_encoder_helper_add(encoder, &nv50_dac_help);
 
-	drm_mode_connector_attach_encoder(connector, encoder);
+	drm_connector_attach_encoder(connector, encoder);
 	return 0;
 }
 
@@ -506,6 +539,7 @@ nv50_hdmi_disable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc)
 static void
 nv50_hdmi_enable(struct drm_encoder *encoder, struct drm_display_mode *mode)
 {
+	struct nouveau_drm *drm = nouveau_drm(encoder->dev);
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nouveau_crtc *nv_crtc = nouveau_crtc(encoder->crtc);
 	struct nv50_disp *disp = nv50_disp(encoder->dev);
@@ -523,9 +557,12 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct drm_display_mode *mode)
 		.pwr.rekey = 56, /* binary driver, and tegra, constant */
 	};
 	struct nouveau_connector *nv_connector;
+	struct drm_hdmi_info *hdmi;
 	u32 max_ac_packet;
 	union hdmi_infoframe avi_frame;
 	union hdmi_infoframe vendor_frame;
+	bool scdc_supported, high_tmds_clock_ratio = false, scrambling = false;
+	u8 config;
 	int ret;
 	int size;
 
@@ -533,8 +570,11 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct drm_display_mode *mode)
 	if (!drm_detect_hdmi_monitor(nv_connector->edid))
 		return;
 
+	hdmi = &nv_connector->base.display_info.hdmi;
+	scdc_supported = hdmi->scdc.supported;
+
 	ret = drm_hdmi_avi_infoframe_from_display_mode(&avi_frame.avi, mode,
-						       false);
+						       scdc_supported);
 	if (!ret) {
 		/* We have an AVI InfoFrame, populate it to the display */
 		args.pwr.avi_infoframe_length
@@ -557,12 +597,42 @@ nv50_hdmi_enable(struct drm_encoder *encoder, struct drm_display_mode *mode)
 	max_ac_packet -= 18; /* constant from tegra */
 	args.pwr.max_ac_packet = max_ac_packet / 32;
 
+	if (hdmi->scdc.scrambling.supported) {
+		high_tmds_clock_ratio = mode->clock > 340000;
+		scrambling = high_tmds_clock_ratio ||
+			hdmi->scdc.scrambling.low_rates;
+	}
+
+	args.pwr.scdc =
+		NV50_DISP_SOR_HDMI_PWR_V0_SCDC_SCRAMBLE * scrambling |
+		NV50_DISP_SOR_HDMI_PWR_V0_SCDC_DIV_BY_4 * high_tmds_clock_ratio;
+
 	size = sizeof(args.base)
 		+ sizeof(args.pwr)
 		+ args.pwr.avi_infoframe_length
 		+ args.pwr.vendor_infoframe_length;
 	nvif_mthd(&disp->disp->object, 0, &args, size);
+
 	nv50_audio_enable(encoder, mode);
+
+	/* If SCDC is supported by the downstream monitor, update
+	 * divider / scrambling settings to what we programmed above.
+	 */
+	if (!hdmi->scdc.scrambling.supported)
+		return;
+
+	ret = drm_scdc_readb(nv_encoder->i2c, SCDC_TMDS_CONFIG, &config);
+	if (ret < 0) {
+		NV_ERROR(drm, "Failure to read SCDC_TMDS_CONFIG: %d\n", ret);
+		return;
+	}
+	config &= ~(SCDC_TMDS_BIT_CLOCK_RATIO_BY_40 | SCDC_SCRAMBLING_ENABLE);
+	config |= SCDC_TMDS_BIT_CLOCK_RATIO_BY_40 * high_tmds_clock_ratio;
+	config |= SCDC_SCRAMBLING_ENABLE * scrambling;
+	ret = drm_scdc_writeb(nv_encoder->i2c, SCDC_TMDS_CONFIG, config);
+	if (ret < 0)
+		NV_ERROR(drm, "Failure to write SCDC_TMDS_CONFIG = 0x%02x: %d\n",
+			 config, ret);
 }
 
 /******************************************************************************
@@ -818,22 +888,16 @@ nv50_mstc_atomic_best_encoder(struct drm_connector *connector,
 {
 	struct nv50_head *head = nv50_head(connector_state->crtc);
 	struct nv50_mstc *mstc = nv50_mstc(connector);
-	if (mstc->port) {
-		struct nv50_mstm *mstm = mstc->mstm;
-		return &mstm->msto[head->base.index]->encoder;
-	}
-	return NULL;
+
+	return &mstc->mstm->msto[head->base.index]->encoder;
 }
 
 static struct drm_encoder *
 nv50_mstc_best_encoder(struct drm_connector *connector)
 {
 	struct nv50_mstc *mstc = nv50_mstc(connector);
-	if (mstc->port) {
-		struct nv50_mstm *mstm = mstc->mstm;
-		return &mstm->msto[0]->encoder;
-	}
-	return NULL;
+
+	return &mstc->mstm->msto[0]->encoder;
 }
 
 static enum drm_mode_status
@@ -850,7 +914,7 @@ nv50_mstc_get_modes(struct drm_connector *connector)
 	int ret = 0;
 
 	mstc->edid = drm_dp_mst_get_edid(&mstc->connector, mstc->port->mgr, mstc->port);
-	drm_mode_connector_update_edid_property(&mstc->connector, mstc->edid);
+	drm_connector_update_edid_property(&mstc->connector, mstc->edid);
 	if (mstc->edid)
 		ret = drm_add_edid_modes(&mstc->connector, mstc->edid);
 
@@ -875,9 +939,22 @@ static enum drm_connector_status
 nv50_mstc_detect(struct drm_connector *connector, bool force)
 {
 	struct nv50_mstc *mstc = nv50_mstc(connector);
+	enum drm_connector_status conn_status;
+	int ret;
+
 	if (!mstc->port)
 		return connector_status_disconnected;
-	return drm_dp_mst_detect_port(connector, mstc->port->mgr, mstc->port);
+
+	ret = pm_runtime_get_sync(connector->dev->dev);
+	if (ret < 0 && ret != -EACCES)
+		return connector_status_disconnected;
+
+	conn_status = drm_dp_mst_detect_port(connector, mstc->port->mgr,
+					     mstc->port);
+
+	pm_runtime_mark_last_busy(connector->dev->dev);
+	pm_runtime_put_autosuspend(connector->dev->dev);
+	return conn_status;
 }
 
 static void
@@ -927,11 +1004,11 @@ nv50_mstc_new(struct nv50_mstm *mstm, struct drm_dp_mst_port *port,
 	nouveau_conn_attach_properties(&mstc->connector);
 
 	for (i = 0; i < ARRAY_SIZE(mstm->msto) && mstm->msto[i]; i++)
-		drm_mode_connector_attach_encoder(&mstc->connector, &mstm->msto[i]->encoder);
+		drm_connector_attach_encoder(&mstc->connector, &mstm->msto[i]->encoder);
 
 	drm_object_attach_property(&mstc->connector.base, dev->mode_config.path_property, 0);
 	drm_object_attach_property(&mstc->connector.base, dev->mode_config.tile_property, 0);
-	drm_mode_connector_set_path_property(&mstc->connector, path);
+	drm_connector_set_path_property(&mstc->connector, path);
 	return 0;
 }
 
@@ -1007,7 +1084,7 @@ nv50_mstm_destroy_connector(struct drm_dp_mst_topology_mgr *mgr,
 	mstc->port = NULL;
 	drm_modeset_unlock(&drm->dev->mode_config.connection_mutex);
 
-	drm_connector_unreference(&mstc->connector);
+	drm_connector_put(&mstc->connector);
 }
 
 static void
@@ -1185,8 +1262,16 @@ nv50_mstm_fini(struct nv50_mstm *mstm)
 static void
 nv50_mstm_init(struct nv50_mstm *mstm)
 {
-	if (mstm && mstm->mgr.mst_state)
-		drm_dp_mst_topology_mgr_resume(&mstm->mgr);
+	int ret;
+
+	if (!mstm || !mstm->mgr.mst_state)
+		return;
+
+	ret = drm_dp_mst_topology_mgr_resume(&mstm->mgr);
+	if (ret == -1) {
+		drm_dp_mst_topology_mgr_set_mst(&mstm->mgr, false);
+		drm_kms_helper_hotplug_event(mstm->mgr.dev);
+	}
 }
 
 static void
@@ -1194,6 +1279,7 @@ nv50_mstm_del(struct nv50_mstm **pmstm)
 {
 	struct nv50_mstm *mstm = *pmstm;
 	if (mstm) {
+		drm_dp_mst_topology_mgr_destroy(&mstm->mgr);
 		kfree(*pmstm);
 		*pmstm = NULL;
 	}
@@ -1449,7 +1535,7 @@ nv50_sor_create(struct drm_connector *connector, struct dcb_output *dcbe)
 			 "sor-%04x-%04x", dcbe->hasht, dcbe->hashm);
 	drm_encoder_helper_add(encoder, &nv50_sor_help);
 
-	drm_mode_connector_attach_encoder(connector, encoder);
+	drm_connector_attach_encoder(connector, encoder);
 
 	if (dcbe->type == DCB_OUTPUT_DP) {
 		struct nv50_disp *disp = nv50_disp(encoder->dev);
@@ -1607,7 +1693,7 @@ nv50_pior_create(struct drm_connector *connector, struct dcb_output *dcbe)
 			 "pior-%04x-%04x", dcbe->hasht, dcbe->hashm);
 	drm_encoder_helper_add(encoder, &nv50_pior_help);
 
-	drm_mode_connector_attach_encoder(connector, encoder);
+	drm_connector_attach_encoder(connector, encoder);
 	return 0;
 }
 
@@ -2180,7 +2266,7 @@ nv50_display_create(struct drm_device *dev)
 	nouveau_display(dev)->fini = nv50_display_fini;
 	disp->disp = &nouveau_display(dev)->disp;
 	dev->mode_config.funcs = &nv50_disp_func;
-	dev->driver->driver_features |= DRIVER_PREFER_XBGR_30BPP;
+	dev->mode_config.quirk_addfb_prefer_xbgr_30bpp = true;
 
 	/* small shared memory area we use for notifiers and semaphores */
 	ret = nouveau_bo_new(&drm->client, 4096, 0x1000, TTM_PL_FLAG_VRAM,
@@ -2223,7 +2309,7 @@ nv50_display_create(struct drm_device *dev)
 
 	/* create encoder/connector objects based on VBIOS DCB table */
 	for (i = 0, dcbe = &dcb->entry[0]; i < dcb->entries; i++, dcbe++) {
-		connector = nouveau_connector_create(dev, dcbe->connector);
+		connector = nouveau_connector_create(dev, dcbe);
 		if (IS_ERR(connector))
 			continue;
 
@@ -2262,6 +2348,9 @@ nv50_display_create(struct drm_device *dev)
 			connector->name);
 		connector->funcs->destroy(connector);
 	}
+
+	/* Disable vblank irqs aggressively for power-saving, safe on nv50+ */
+	dev->vblank_disable_immediate = true;
 
 out:
 	if (ret)

@@ -6,5 +6,10 @@ CONFOPTS    = --disable-pam --disable-runtime-loading
 CFLAGS     += -Dupdwtmp=failed
 AUTORECONF  = autoreconf -i
 
+ifdef CONFIG_DEFAULTS_LIBC_MUSL
+# Musl does not fully support any of the glibc utmp functions
+CONFOPTS   += --disable-utmp
+endif
+
 include $(ROOTDIR)/tools/automake.inc
 

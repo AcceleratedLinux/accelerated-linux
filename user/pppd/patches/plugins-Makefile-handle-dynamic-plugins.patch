@@ -1,0 +1,31 @@
+From 2848a80e7c4521a90c25aedf83e567b4f9ead49b Mon Sep 17 00:00:00 2001
+From: Andrew <andrew.smith@digi.com>
+Date: Tue, 2 Apr 2019 15:44:36 +1000
+Subject: [PATCH] pppd/plugins/Makefile: handle dynamic plugins
+
+Without dynamic plugins enabled '$?' will expand to nothing and the install
+will fail.
+
+This is bad form in the makefile, but we can fix it by looping through, which
+can handle none. This also has the added benefit of always installing in the
+dir's as opose to $? which is only newer prerequisites. (see $? doc)
+---
+ pppd/plugins/Makefile.linux | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pppd/plugins/Makefile.linux b/pppd/plugins/Makefile.linux
+index ee84f83..312d186 100644
+--- a/pppd/plugins/Makefile.linux
++++ b/pppd/plugins/Makefile.linux
+@@ -72,7 +72,7 @@ VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../patchlevel.h)
+ 
+ install: $(PLUGINS)
+ 	$(INSTALL) -d $(LIBDIR)
+-	$(INSTALL) $? $(LIBDIR)
++	for p in $(PLUGINS); do $(INSTALL) $$p $(LIBDIR); done
+ 	for d in $(SUBDIRS); do $(MAKE) $(MFLAGS) -C $$d install; done
+ 
+ clean:
+-- 
+2.11.0
+

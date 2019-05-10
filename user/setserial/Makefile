@@ -1,4 +1,6 @@
 
+export ACL_LICENSE = GPL
+
 EXEC = setserial
 OBJS = setserial.o
 #CFLAGS += -DHAVE_ASM_IOCTLS_H -DHAVE_LINUX_HAYESESP_H

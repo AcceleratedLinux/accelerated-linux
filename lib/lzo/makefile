@@ -1,4 +1,5 @@
 CONFOPTS =
+CFLAGS += -std=c90
 
 all: build/build
 	$(MAKE) -C build

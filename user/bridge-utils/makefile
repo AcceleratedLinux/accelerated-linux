@@ -1,3 +1,5 @@
+CONFIGURE_OPTS += \
+	--with-linux-headers=$(STAGEDIR)/include
 
 all: Makefile
 	$(MAKE) -f Makefile

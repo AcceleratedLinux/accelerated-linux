@@ -10,6 +10,11 @@ CONFVARS += ac_cv_file__dev_ptmx=yes
 CONFVARS += ac_cv_file__dev_ptc=no
 CONFVARS += ac_cv_have_long_long_format=yes
 
+ifdef CONFIG_X86
+# HACK to fix module builds for now
+CFLAGS += -fPIC
+endif
+
 Python-$(PYTHON_VERSION)_CONFOPTS += --disable-codecs-cjk
 Python-$(PYTHON_VERSION)_CONFOPTS += --disable-curses
 Python-$(PYTHON_VERSION)_CONFOPTS += --disable-idle3

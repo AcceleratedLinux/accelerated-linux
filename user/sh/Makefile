@@ -1,5 +1,7 @@
 # Makefile for sh
 
+export ACL_LICENSE = GPLv2
+
 EXEC = sh
 OBJS = sh1.o sh2.o sh3.o sh4.o sh5.o sh6.o
 CFLAGS += -DHAVE_MALLOC

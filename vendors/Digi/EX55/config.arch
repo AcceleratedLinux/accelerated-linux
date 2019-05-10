@@ -1,0 +1,34 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
+
+LINUXTARGET = vmlinux dtbs
+BOOTTARGET = u-boot.nand
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES = images/image.bin \
+	   images/u-boot.bin \
+	   images/configs.tar.gz \
+	   images/romfs-inst.log \
+	   images/acl-licenses.txt \
+	   prop/config/schema/accns.schema \
+	   prop/config/cc_acl/app/runt/FE00000A*
+
+############################################################################
+
+
+CROSS_COMPILE = mips-linux-20170624-
+CPUFLAGS      = -EL
+CPU_CFLAGS    = -EL
+CPULDFLAGS    += -EL
+
+include $(ROOTDIR)/vendors/config/mips/config.arch
+
+############################################################################

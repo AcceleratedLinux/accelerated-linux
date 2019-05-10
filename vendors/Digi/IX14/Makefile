@@ -8,6 +8,9 @@ ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
 
+SIGNING_ALG = ecdsa
+SIGNING_EXTRA =
+
 DTB       = imx6ul-ix14.dtb
 
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
@@ -49,7 +52,6 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	echo "Digi IX14" > $(ROMFSDIR)/etc/issue
-	$(ROMFSINST) -e CONFIG_PROP_DIGI_DEVICE_HEALTH -p 644 health_metrics_config.IX14.json /etc/health_metrics_config.json
 	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 644 wlan/modprobe-qualcomm.conf /etc/modprobe.d/modprobe-qualcomm.conf
 	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 755 wlan/qualcomm.sh /etc/qualcomm.sh
 	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 644 wlan/bdwlan30_US.bin /lib/firmware/bdwlan30_US.bin

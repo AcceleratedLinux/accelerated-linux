@@ -1,0 +1,55 @@
+--- tinyrl/tinyrl.c.org	2018-09-06 23:54:06.469544283 +1000
++++ tinyrl/tinyrl.c	2018-09-06 23:54:16.700248976 +1000
+@@ -900,7 +901,7 @@
+ 	}
+ }
+ 
+-static void tinyrl_bind_keyseq(struct tinyrl *this, const char *seq,
++void tinyrl_bind_keyseq(struct tinyrl *this, const char *seq,
+ 			       tinyrl_key_func_t *handler, void *context)
+ {
+ 	struct tinyrl_keymap *keymap;
+@@ -1008,11 +1009,21 @@
+ 	return this->line;
+ }
+ 
++void tinyrl_set_point(struct tinyrl *this, unsigned new_point)
++{
++	this->point = new_point;
++}
++
+ unsigned tinyrl_get_point(const struct tinyrl *this)
+ {
+ 	return this->point;
+ }
+ 
++unsigned tinyrl_get_end(const struct tinyrl *this)
++{
++	return this->end;
++}
++
+ size_t tinyrl__get_width(const struct tinyrl *this)
+ {
+ 	struct winsize ws;
+
+--- tinyrl/tinyrl.h.orig	2019-03-18 10:41:20.000000000 +1000
++++ tinyrl/tinyrl.h	2019-04-04 10:39:19.621640465 +1000
+@@ -51,6 +51,8 @@
+ 
+ void tinyrl_bind_key(struct tinyrl *instance, unsigned char key,
+ 		     tinyrl_key_func_t *handler, void *context);
++void tinyrl_bind_keyseq(struct tinyrl *this, const char *seq,
++			       tinyrl_key_func_t *handler, void *context);
+ void tinyrl_bind_special(struct tinyrl *instance, enum tinyrl_key key,
+ 			 tinyrl_key_func_t *handler, void *context);
+ 
+@@ -78,7 +80,9 @@
+  */
+ const char *tinyrl_get_line(const struct tinyrl *instance);
+ 
++void tinyrl_set_point(struct tinyrl *this, unsigned new_point);
+ unsigned tinyrl_get_point(const struct tinyrl *instance);
++unsigned tinyrl_get_end(const struct tinyrl *instance);
+ 
+ /**
+  * Disable echoing of input characters when a line in input.

@@ -1,0 +1,15 @@
+config USER_CRDA
+	bool "crda"
+	help
+	  CRDA acts as the udev helper for communication between the kernel and
+	  userspace for regulatory compliance for 802.11 WiFi.
+
+config USER_CRDA_REGDB_UNRESTRICTED_WORLD
+	bool "Unrestricted world regulatory domain"
+	depends on USER_CRDA
+	help
+	  Rebuild the wireless-regdb's regulatory.bin with an unrestricted "00"
+	  world regulatory domain. This domain is usually the most restrictive.
+	  The new regulatory.bin file will be signed with an automatically
+	  generated public/private key pair rather than by the wireless-regdb's
+	  maintainer.

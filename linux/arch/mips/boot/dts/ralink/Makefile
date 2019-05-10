@@ -5,7 +5,8 @@ dtb-$(CONFIG_DTB_RT3883_EVAL)	+= rt3883_eval.dtb
 dtb-$(CONFIG_DTB_MT7620A_EVAL)	+= mt7620a_eval.dtb
 dtb-$(CONFIG_DTB_MT7621_OOLITE) += mt7621_oolite.dtb
 dtb-$(CONFIG_DTB_MT7621_EX15)	+= mt7621_ex15.dtb
-dtb-$(CONFIG_DTB_MT7621_GX)	+= mt7621_gx.dtb
+dtb-$(CONFIG_DTB_MT7621_EX55)	+= mt7621_ex55.dtb
+dtb-$(CONFIG_DTB_MT7621_TX54)	+= mt7621_tx54.dtb
 dtb-$(CONFIG_DTB_OMEGA2P)	+= omega2p.dtb
 dtb-$(CONFIG_DTB_VOCORE2)	+= vocore2.dtb
 

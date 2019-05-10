@@ -1,0 +1,17 @@
+config LIB_MDNSRESPONDER
+	bool 'mDNSResponder'
+	help
+	  Library (libdns_sd.so) and service daemon (mdnsd) for mDNS zeroconf
+	  service discovery.
+
+config LIB_MDNSRESPONDER_CLIENTS
+	bool 'mDNSResponder example clients'
+	depends on LIB_MDNSRESPONDER
+	help
+	  Build package example clients that communicate with mdns (dns-sd utility).
+
+config LIB_MDNSRESPONDER_EMBED
+	bool 'mDNSResponder embedded service library'
+	depends on LIB_MDNSRESPONDER
+	help
+	  Build library used by mDNS service applications exposing the mDNSEmbeddedAPI.

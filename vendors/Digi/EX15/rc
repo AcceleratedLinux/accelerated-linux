@@ -28,33 +28,33 @@ echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
 
 # Set eth IRQ affinity to improve throughput
-echo 8 > /proc/irq/22/smp_affinity
+echo c > /proc/irq/21/smp_affinity
 
-/sbin/swconfig dev switch0 load /etc/network
-ip link add link eth0 name lan type vlan id 1
-ip link add link eth0 name wan type vlan id 2
-setmac -i eth0,lan,wan -u -n 3
+# Set CPU eth interface to a fixed MAC address (it is internal)
+setmac -b 00:27:04:03:02:01 -i eth0
+# Set external network interfaces to asigned MAC addresses
+setmac -i lan,wan -u -n 2
 ifconfig eth0 up
 
 echo "Initializing CELL interface control..."
-# GPIO24 = Cell Module Presence Detect (input, active low)
-# GPIO27 = Cell Module SIM Select (output, 0=SIM1, 1=SIM2)
-# GPIO25 = Cell MOdule Power On (output, active low)
-# GPIO26 = Cell Module Push Button (input, active low)
-echo 24 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio24/direction
-echo 26 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio26/direction
-echo falling > /sys/class/gpio/gpio26/edge
-echo 27 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio27/direction
-echo 25 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio25/direction
+# GPIO24 = Cell Module Presence Detect (input, active low) [sysgpio=488]
+# GPIO27 = Cell Module SIM Select (output, 0=SIM1, 1=SIM2) [sysgpio=491]
+# GPIO25 = Cell MOdule Power On (output, active low)       [sysgpio=489]
+# GPIO26 = Cell Module Push Button (input, active low)     [sysgpio=490]
+echo 488 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio488/direction
+echo 490 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio490/direction
+echo falling > /sys/class/gpio/gpio490/edge
+echo 491 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio491/direction
+echo 489 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio489/direction
 
 echo "Initializing WiFi interface control..."
-# GPIO30 = WiFi W_disable (output, disable low)
-echo 30 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio30/direction
+# GPIO30 = WiFi W_disable (output, disable low) [sysgpio=494]
+echo 494 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio494/direction
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory

@@ -1,0 +1,2 @@
+dir_$(CONFIG_USER_PPPD_PPPD_PPPD) += pppd
+dir_$(CONFIG_USER_CHAT_CHAT) += pppd

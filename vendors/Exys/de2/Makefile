@@ -8,7 +8,7 @@ BOARDDIR = $(ROOTDIR)/$(LINUXDIR)/arch/m68knommu/platform/68VZ328/de2
 
 DIRS = 
 
-ROMFS_DIRS = bin dev etc home lib mnt proc usr var mnt \
+ROMFS_DIRS = bin dev etc home lib mnt proc sbin usr var mnt \
              home/httpd home/httpd/cgi-bin
 
 DEVICES = \

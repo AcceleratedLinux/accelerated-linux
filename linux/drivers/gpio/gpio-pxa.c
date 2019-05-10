@@ -245,6 +245,7 @@ static bool pxa_gpio_has_pinctrl(void)
 {
 	switch (gpio_type) {
 	case PXA3XX_GPIO:
+	case MMP2_GPIO:
 		return false;
 
 	default:
@@ -268,8 +269,8 @@ static int pxa_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
 
 	if (pxa_gpio_has_pinctrl()) {
 		ret = pinctrl_gpio_direction_input(chip->base + offset);
-		if (!ret)
-			return 0;
+		if (ret)
+			return ret;
 	}
 
 	spin_lock_irqsave(&gpio_lock, flags);
@@ -626,7 +627,7 @@ static int pxa_gpio_probe(struct platform_device *pdev)
 	struct pxa_gpio_platform_data *info;
 	void __iomem *gpio_reg_base;
 	int gpio, ret;
-	int irq0 = 0, irq1 = 0, irq_mux, gpio_offset = 0;
+	int irq0 = 0, irq1 = 0, irq_mux;
 
 	pchip = devm_kzalloc(&pdev->dev, sizeof(*pchip), GFP_KERNEL);
 	if (!pchip)
@@ -671,9 +672,6 @@ static int pxa_gpio_probe(struct platform_device *pdev)
 				     resource_size(res));
 	if (!gpio_reg_base)
 		return -EINVAL;
-
-	if (irq0 > 0)
-		gpio_offset = 2;
 
 	clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(clk)) {
@@ -779,6 +777,9 @@ static int pxa_gpio_suspend(void)
 	struct pxa_gpio_bank *c;
 	int gpio;
 
+	if (!pchip)
+		return 0;
+
 	for_each_gpio_bank(gpio, c, pchip) {
 		c->saved_gplr = readl_relaxed(c->regbase + GPLR_OFFSET);
 		c->saved_gpdr = readl_relaxed(c->regbase + GPDR_OFFSET);
@@ -796,6 +797,9 @@ static void pxa_gpio_resume(void)
 	struct pxa_gpio_chip *pchip = pxa_gpio_chip;
 	struct pxa_gpio_bank *c;
 	int gpio;
+
+	if (!pchip)
+		return;
 
 	for_each_gpio_bank(gpio, c, pchip) {
 		/* restore level with set/clear */

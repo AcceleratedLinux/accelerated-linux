@@ -90,8 +90,8 @@
 &pinctrl {
 	state_default: pinctrl0 {
 		gpio {
-			ralink,group = "uart2", "rgmii2";
-			ralink,function = "gpio";
+			group = "uart2", "rgmii2";
+			function = "gpio";
 		};
 	};
 };

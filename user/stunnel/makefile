@@ -1,5 +1,5 @@
 
-VERSION  = 5.49
+VERSION  = 5.52
 URL      = http://www.stunnel.org/downloads/archive/5.x/stunnel-$(VERSION).tar.gz
 CONFOPTS = --with-ssl=$(STAGEDIR) --with-random=/dev/urandom --prefix=
 CONFOPTS += --sysconfdir=/etc

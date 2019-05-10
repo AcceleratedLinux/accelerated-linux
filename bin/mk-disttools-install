@@ -40,6 +40,12 @@ cat_archive()
 		SKIP=`awk '/^__ARCHIVE_FOLLOWS__/ { print NR + 1; exit 0; }' "$1"`
 		tail -n +$SKIP "$1"
 		;;
+	*.bz2|*.tbz)
+		bunzip2 < "$1"
+		;;
+	*.gz|*.tgz)
+		gunzip < "$1"
+		;;
 	*)
 		cat "$1"
 		;;
@@ -51,7 +57,7 @@ cat_archive()
 #
 
 CHECK="/tmp/$$.check"
-cat_archive "$ARCHIVE" | tar tvzf - > $CHECK
+cat_archive "$ARCHIVE" | tar tvf - > $CHECK
 trap "rm -f $CHECK" 0
 
 if egrep -v '(usr/local|usr/$)' $CHECK
@@ -260,6 +266,6 @@ exit 0
 __ARCHIVE_FOLLOWS__
 !EOF
 
-cat_archive "$ARCHIVE" >> $INSTALL_FILE
+cat_archive "$ARCHIVE" | gzip -9 >> $INSTALL_FILE
 chmod +x $INSTALL_FILE
 

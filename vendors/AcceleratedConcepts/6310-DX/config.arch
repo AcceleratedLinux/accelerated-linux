@@ -16,7 +16,10 @@ RELFILES = images/image.bin \
 	   images/u-boot-nand.imx \
 	   images/configs.tar.gz \
 	   images/romfs-inst.log \
-	   prop/config/schema/accns.schema
+	   prop/config/schema/accns.schema \
+	   images/acl-licenses.txt \
+	   images/rci_descriptors.tar.gz \
+	   prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################
 

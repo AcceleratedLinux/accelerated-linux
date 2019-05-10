@@ -1,4 +1,4 @@
-URL = https://w1.fi/releases/hostapd-2.6.tar.gz
+URL = https://w1.fi/releases/hostapd-2.7.tar.gz
 FINALTARGET = my_build
 AUTOMAKE_ROMFS = my_romfs
 include $(ROOTDIR)/tools/download.inc

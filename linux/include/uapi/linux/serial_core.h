@@ -281,7 +281,10 @@
 /* MediaTek BTIF */
 #define PORT_MTK_BTIF	117
 
+/* RDA UART */
+#define PORT_RDA	118
+
 /* Micrel KSZ8692 */
-#define PORT_KS8692	118
+#define PORT_KS8692	119
 
 #endif /* _UAPILINUX_SERIAL_CORE_H */

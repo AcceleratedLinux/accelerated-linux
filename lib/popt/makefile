@@ -1,15 +1,4 @@
-CONFOPTS =
-
-all: build/build
-	$(MAKE) -C build
-
-build/build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; LDFLAGS=-lintl sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
-
-clean:
-	rm -rf build
-
-romfs:
+URL = http://downloads.sourceforge.net/project/cross-stuff/cross-stuff/1.0/popt-1.7.tar.gz
+CONFOPTS += --without-libiconv-prefix --without-libintl-prefix
+LDFLAGS += -lintl
+include $(ROOTDIR)/tools/automake.inc

@@ -1356,12 +1356,27 @@ ipsec_rcv_auth_decap(struct ipsec_rcv_state *irs)
 	/* authenticate, if required */
 #ifdef CONFIG_KLIPS_OCF
 	if (irs->ipsp->ocf_in_use) {
-		irs->authlen = AHHMAC_HASHLEN;
 		irs->authfuncs = NULL;
 		irs->ictx = NULL;
 		irs->octx = NULL;
 		irs->ictx_len = 0;
 		irs->octx_len = 0;
+		switch (irs->ipsp->ips_authalg) {
+		case AH_NONE:
+		case AH_MD5:
+		case AH_SHA:
+			irs->authlen = AHHMAC_HASHLEN;
+			break;
+		case AH_SHA2_256:
+			irs->authlen = 16;
+			break;
+		case AH_SHA2_384:
+			irs->authlen = 24;
+			break;
+		case AH_SHA2_512:
+			irs->authlen = 32;
+			break;
+		}
 	} else
 #endif /* CONFIG_KLIPS_OCF */
 #ifdef CONFIG_KLIPS_ALG
@@ -1518,18 +1533,26 @@ ipsec_rcv_auth_chk(struct ipsec_rcv_state *irs)
 #endif
 			0) {
 		if (memcmp(irs->hash, irs->authenticator, irs->authlen)) {
+			unsigned char rhash[irs->authlen*2+1];
+			unsigned char chash[irs->authlen*2+1];
+			int i;
+
 			irs->ipsp->ips_errs.ips_auth_errs += 1;
+
+			for (i = 0; i < irs->authlen; i++) {
+				sprintf(&rhash[i * 2], "%02x", irs->hash[i]);
+				sprintf(&chash[i * 2], "%02x", irs->authenticator[i]);
+			}
+			rhash[sizeof(rhash) - 1] = '\0';
+			chash[sizeof(chash) - 1] = '\0';
+
 			KLIPS_ERROR(debug_rcv & DB_RX_INAU,
 				    "klips_debug:ipsec_rcv_auth_chk: "
-				    "auth failed on incoming packet from %s (replay=%d): calculated hash=%08x%08x%08x received hash=%08x%08x%08x, dropped\n",
+				    "auth failed on incoming packet from %s (replay=%d): calculated hash=%s received hash=%s, dropped\n",
 				    irs->ipsaddr_txt,
 				    irs->replay,
-				    ntohl(*(__u32*)&irs->hash[0]),
-				    ntohl(*(__u32*)&irs->hash[4]),
-				    ntohl(*(__u32*)&irs->hash[8]),
-				    ntohl(*(__u32*)irs->authenticator),
-				    ntohl(*((__u32*)irs->authenticator + 1)),
-				    ntohl(*((__u32*)irs->authenticator + 2)));
+				    chash,
+				    rhash);
 			if(irs->stats) {
 				irs->stats->rx_dropped++;
 			}

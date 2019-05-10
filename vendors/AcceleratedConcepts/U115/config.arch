@@ -12,7 +12,10 @@ VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
 VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
 RELFILES = images/image.bin images/u-boot.bin images/configs.tar.gz \
-           images/romfs-inst.log prop/config/schema/accns.schema
+           images/romfs-inst.log prop/config/schema/accns.schema \
+           images/acl-licenses.txt \
+           images/rci_descriptors.tar.gz \
+           prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################
 

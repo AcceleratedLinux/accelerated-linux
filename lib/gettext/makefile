@@ -1,11 +1,14 @@
 
-URL = http://ftp.gnu.org/gnu/gettext/gettext-0.16.1.tar.gz
+URL = http://ftp.gnu.org/gnu/gettext/gettext-0.19.8.1.tar.gz
 
 CONFOPTS =  --disable-libasprintf --disable-openmp --disable-rpath 
 CONFOPTS += --disable-java --disable-native-java --disable-csharp
 CONFOPTS += --disable-relocatable --without-emacs
 CONFOPTS += --enable-nls
 # CONFOPTS += --with-included-gettext
+
+LDFLAGS += -lrt
+LDFLAGS += -lpthread
 
 ROMFS = gettext_romfs
 

@@ -1,3 +1,4 @@
+export ACL_LICENSE = GPLv2
 
 OPENSWANSRCDIR := $(ROOTDIR)/openswan
 include $(OPENSWANSRCDIR)/Makefile.inc
@@ -16,7 +17,7 @@ romfs:
 ifneq ($(CONFIG_USER_IPSEC_CONFIGURATOR)$(CONFIG_PROP_IFMOND_IPSEC),)
 	$(ROMFSINST) -e CONFIG_USER_OPENSWAN_PLUTO_PLUTO $(OBJDIRTOP)/programs/pluto/pluto /bin/pluto
 	-$(ROMFSINST) -e CONFIG_USER_OPENSWAN_PLUTO_PLUTO $(OBJDIRTOP)/programs/pluto/_pluto_adns /bin/_pluto_adns
-	$(ROMFSINST) -e CONFIG_USER_OPENSWAN_PLUTO_WHACK $(OBJDIRTOP)/programs/pluto/whack /bin/whack
+	$(ROMFSINST) -e CONFIG_USER_OPENSWAN_PLUTO_WHACK $(OBJDIRTOP)/programs/*/whack /bin/whack
 	$(ROMFSINST) -e CONFIG_USER_OPENSWAN_UTILS_RANBITS $(OBJDIRTOP)/programs/ranbits/ranbits /bin/ranbits
 	$(ROMFSINST) -e CONFIG_USER_OPENSWAN_UTILS_RSASIGKEY $(OBJDIRTOP)/programs/rsasigkey/rsasigkey /bin/rsasigkey
 	$(ROMFSINST) -e CONFIG_USER_OPENSWAN_KLIPS_EROUTE $(OBJDIRTOP)/programs/eroute/eroute /bin/eroute
@@ -36,7 +37,7 @@ else
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/ipsec/ipsec /bin/ipsec
 	$(ROMFSINST) -p 755 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/pluto/pluto /bin/pluto
 	-$(ROMFSINST) -p 755 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/pluto/_pluto_adns /bin/_pluto_adns
-	$(ROMFSINST) -p 755 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/pluto/whack /bin/whack
+	$(ROMFSINST) -p 755 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/*/whack /bin/whack
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/setup/setup /bin/setup
 	$(ROMFSINST) -p 755 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/tncfg/tncfg /bin/tncfg
 	$(ROMFSINST) -p 555 -e CONFIG_USER_OPENSWAN $(OBJDIRTOP)/programs/_plutoload/_plutoload /bin/_plutoload

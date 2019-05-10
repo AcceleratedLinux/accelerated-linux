@@ -1,11 +1,11 @@
---- ModemManager-0.7.990/src/mm-log.c.orig	2013-05-26 20:52:16.391045568 +1000
-+++ ModemManager-0.7.990/src/mm-log.c	2013-05-26 20:52:26.391062394 +1000
-@@ -218,7 +218,7 @@
-     g_get_current_time (&rel_start);
- 
-     if (log_file == NULL)
+--- ModemManager/src/mm-log.c	2018-11-23 13:57:45.523720821 +1000
++++ ModemManager/src/mm-log.c.new	2018-11-26 15:27:38.692943949 +1000
+@@ -308,7 +308,7 @@
+     } else
+ #endif
+     if (log_file == NULL) {
 -        openlog (G_LOG_DOMAIN, LOG_CONS | LOG_PID | LOG_PERROR, LOG_DAEMON);
 +        openlog (G_LOG_DOMAIN, LOG_CONS | LOG_PID, LOG_DAEMON);
-     else {
+         log_backend = log_backend_syslog;
+     } else {
          logfd = open (log_file,
-                       O_CREAT | O_APPEND | O_WRONLY,

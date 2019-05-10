@@ -47,6 +47,27 @@ endif
 .PRECIOUS: $(addprefix build/,$(addsuffix -patched,$(PKG_y)))
 
 #
+# extract an archive ready for patching/building
+#
+define extract_dep_default
+
+build/$(1)-extracted: downloads/$($(1)_DOWNLOADNAME)
+	@echo "Extracting $$< ..."
+	$(AT)rm -rf build/$($(1)_SRCDIR)
+	$(AT)rm -rf build/$($(1)_BUILDDIR)
+	$(AT)mkdir -p build
+	$(AT)case "$$<" in \
+	*zip) rm -rf build/$(1); mkdir -p build/$(1); pkg=`pwd`/$$<; (cd build/$(1); unzip $$$$pkg);; \
+	*bz2) bunzip2 < $$< | (cd build; tar xf -);; \
+	*xz) unxz < $$< | (cd build; tar xf -);; \
+	*lz) lzip -d < $$< | (cd build; tar xf -);; \
+	*) gunzip < $$< | (cd build; tar xf -);; \
+	esac || exit 1
+	$(AT)touch $$@
+
+endef
+
+#
 # download support for tarballs and the like from a URL
 #
 define download_dep_default
@@ -68,116 +89,60 @@ downloads/$$($(1)_DOWNLOADNAME):
 		exit 1; \
 	fi
 
-build/$(1)-extracted: downloads/$($(1)_DOWNLOADNAME)
-	@echo "Extracting $$< ..."
-	$(AT)rm -rf build/$($(1)_SRCDIR)
-	$(AT)mkdir -p build
-	$(AT)case "$$<" in \
-	*zip) rm -rf build/$(1); mkdir -p build/$(1); pkg=`pwd`/$$<; (cd build/$(1); unzip $$$$pkg);; \
-	*bz2) bunzip2 < $$< | (cd build; tar xf -);; \
-	*xz) unxz < $$< | (cd build; tar xf -);; \
-	*lz) lzip -d < $$< | (cd build; tar xf -);; \
-	*) gunzip < $$< | (cd build; tar xf -);; \
-	esac || exit 1
-	$(AT)touch $$@
+$(call extract_dep_default,$1)
 
 endef
 
 #
-# Support for remote GIT subdirectories of sorts, we do not remember master
-# downloads as they change from load to load so just save it until the next
-# clean.  The clone will save us downloading it all again.
+# Support for remote GIT repos, github is special and does not support
+# git-archive
 #
-# we do not update our clone if we are using the same version as previous
-# clones.  Include the URL in the version test to be sure its the same
-#
-define download_dep_gitarchive
 
-.PRECIOUS: downloads/$(1)$(if $($(1)_VERSION),-$($(1)_VERSION)).tar
-downloads/$(1)$$(if $$($(1)_VERSION),-$$($(1)_VERSION)).tar:
-	@echo "Downloading `basename $$@` ..."
-	$(AT)[ -d "$(UC_DOWNLOADS)" ] || mkdir -p "$(UC_DOWNLOADS)"
-	$(AT)if [ ! -f "$(UC_DOWNLOADS)/`basename $$@`" ]; then \
-		echo "Updating/Cloning `basename $$($(1)_URL)` for archive ..."; \
-		if [ -d "archive/`basename $$($(1)_URL)`" ]; then \
-			if [ "$$$$(cat archive/`basename $$($(1)_URL)`-version)" = "$$($(1)_URL) $$(if $$($(1)_VERSION),$$($(1)_VERSION),master)" ]; then \
-				(\
-				cd "archive/`basename $$($(1)_URL)`"; \
-				$(GIT) checkout -q master || exit 1; \
-				$(GIT) pull $$($(1)_METHOD_OPTS) || exit 1; \
-				$(GIT) checkout -q $$(if $$($(1)_VERSION),$$($(1)_VERSION),master) || exit 1; \
-				$(GIT) submodule update; \
-				echo "$$($(1)_URL) $$(if $$($(1)_VERSION),$$($(1)_VERSION),master)" > archive/`basename $$($(1)_URL)`-version; \
-				) || exit 1; \
-			else \
-				echo "$(1) clone is up to date"; \
-			fi ; \
-		else \
-			$(GIT) clone $$($(1)_METHOD_OPTS) $$($(1)_URL) archive/`basename $$($(1)_URL)` || exit 1; \
-			(\
-			cd "archive/`basename $$($(1)_URL)`"; \
-			$(GIT) checkout -q $$(if $$($(1)_VERSION),$$($(1)_VERSION),master) || exit 1; \
-			) || exit 1; \
-		fi ; \
-		cd archive/`basename $$($(1)_URL)`; \
-			$(GIT) archive -o $(UC_DOWNLOADS)/`basename $$@` HEAD:$$(if $$($(1)_SUBDIR),$$($(1)_SUBDIR)/,) || exit 1; \
-	fi
-	$(AT)mkdir -p `dirname $$@`
-	$(AT)if [ "$$(if $$($(1)_VERSION),$$($(1)_VERSION),master)" = "master" ]; then \
-			mv -f "$(UC_DOWNLOADS)/`basename $$@`" $$@ || exit 1; \
-	elif [ -f "$(UC_DOWNLOADS)/`basename $$@`" ]; then \
-			ln -fs "$(UC_DOWNLOADS)/`basename $$@`" $$@; \
-	fi
-	$(AT)if [ ! -f "$$@" ]; then \
-		echo "Cannot find download for $$@" >&2 ; \
-		exit 1; \
-	fi
-
-build/$(1)-extracted: downloads/$(1)$(if $($(1)_VERSION),-$($(1)_VERSION)).tar
-	@echo "Extracting $$< ..."
-	$(AT)rm -rf build/$(1)
-	$(AT)mkdir -p build/$(1)
-	$(AT)cat < $$< | (cd build/$(1); tar xf -); exit $?
-	$(AT)touch $$@
-
-endef
-
-#
-# Support for remote GIT repos
-#
 define download_dep_git
 
-build/$(1)-extracted:
-	@echo "Cloning $(1) ..."
-	$(AT)if [ -z "$$($(1)_URL)" ]; then \
-		echo "*** URL for git clone of $(1) not specified." >&2; \
+.PRECIOUS: downloads/$$($(1)_DOWNLOADNAME)
+downloads/$$($(1)_DOWNLOADNAME):
+	@echo "Git checking $$($(1)_DOWNLOADNAME) from $($(1)_URL) ..."
+	$(AT)[ -d "$(UC_DOWNLOADS)" ] || mkdir -p "$(UC_DOWNLOADS)"
+	$(AT) mkdir -p `dirname $$@`; \
+	: quick check to see if we can avoid git use; \
+	VERSION="$($(1)_VERSION)"; \
+	HASH=$$$$(echo -n $($(1)_URL) $$$${VERSION} | openssl dgst -sha256 | sed 's/.* //'); \
+	if [ ! -f "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" ]; then \
+		: Can not avoid git,  but keep it lightweight; \
+		[ "$$$${VERSION}" ] || VERSION=master; \
+		REF=$$$$($(GIT) ls-remote $($(1)_URL) | grep "[^/]refs/[a-z]*/$$$${VERSION}$$$$" | awk '{ print $$$$1 }'); \
+		[ "$$$${REF}" ] || REF=$$$${VERSION}; \
+		if [ "$$$$(echo $$$${REF} | wc -w)" -gt 1 ]; then \
+			echo "ERROR: Ambiguous VERSION could be branch or tag ($$$${REF})"; \
+			exit 1; \
+		fi; \
+		HASH=$$$$(echo -n $($(1)_URL) $$$${REF} | openssl dgst -sha256 | sed 's/.* //'); \
+	fi; \
+	if [ ! -f "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" ]; then \
+		: Ok, time to build our own hashed tarball ; \
+		( \
+			cd `dirname $$@`;\
+			rm -rf $(1); \
+			$(GIT) clone $($(1)_URL) $(1) || exit 1;\
+			cd $(1); \
+			$(GIT) checkout $$$${REF} || exit 1; \
+			$(GIT) submodule update --init --recursive || exit 1; \
+			cd ..; \
+			rm -rf $(1)/.git; \
+			tar cvzf "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" $(1) || exit 1;\
+			rm -rf $(1); \
+		) \
+	fi; \
+	if [ -f "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" ]; then \
+			ln -fs "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" $$@; \
+	fi
+	$(AT)if [ ! -f "$$@" ]; then \
+		echo "Git cannot fetch download for $$@" >&2 ; \
 		exit 1; \
 	fi
-	$(AT)mkdir -p clone
-	$(AT)if [ "$$($(1)_URL) $$(if $$($(1)_VERSION),$$($(1)_VERSION),master)" != "`cat clone/$(1)-version`" ]; then \
-		if [ -f "clone/$(1)/.git/config" ]; then \
-			cd "clone/$(1)" || exit 1; \
-			$(GIT) remote set-url origin "$$($(1)_URL)" || exit 1; \
-			$(GIT) fetch $$($(1)_METHOD_OPTS) || exit 1; \
-			$(GIT) clean -d -f || exit 1; \
-		else \
-			rm -rf "clone/$(1)"; \
-			$(GIT) clone $$($(1)_METHOD_OPTS) $$($(1)_URL) clone/$(1) || exit 1; \
-		fi; \
-		pwd; \
-		rm -f clone/$(1)-version; \
-	else \
-		echo "$(1) already cloned at correct version, pulling updates."; \
-		cd "clone/$(1)" || exit 1; \
-		$(GIT) checkout -q master || exit 1; \
-		$(GIT) pull $$($(1)_METHOD_OPTS) || exit 1; \
-	fi
-	$(AT)cd "clone/$(1)" &&	$(GIT) checkout -q $$(if $$($(1)_VERSION),$$($(1)_VERSION),origin/master) && $(GIT) submodule update
-	$(AT)echo "$$($(1)_URL) $$(if $$($(1)_VERSION),$$($(1)_VERSION),master)" > clone/$(1)-version
-	$(AT)rm -rf build/$(1)
-	$(AT)mkdir -p build/$(1)
-	$(AT)lndir -silent `pwd`/clone/$(1) build/$(1)
-	$(AT)touch $$@
+
+$(call extract_dep_default,$1)
 
 endef
 
@@ -205,4 +170,9 @@ build/%-patched: build/%-extracted
 			esac || exit 1; \
 		done || exit 1; \
 	fi
+	$(AT)mkdir -p build
+	echo "ACL_LICENSE='$(if $($(*)_LICENSE),$($(*)_LICENSE),$(if $(ACL_LICENSE),$(ACL_LICENSE),`$(ROOTDIR)/bin/license-detect.sh build/$($(*)_BUILDDIR)`))'" > build/$(*)-license
+	echo "ACL_URL='$($(*)_URL)'" >> build/$(*)-license
+	echo "ACL_PKG='$(*)'" >> build/$(*)-license
+	echo "export ACL_LICENSE ACL_URL ACL_PKG" >> build/$(*)-license
 	$(AT)touch $@

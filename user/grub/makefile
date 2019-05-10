@@ -1,4 +1,5 @@
-GRUB_VERSION = 2.00
+
+GRUB_VERSION = 2.02
 URL = ftp://ftp.gnu.org/gnu/grub/grub-$(GRUB_VERSION).tar.gz
 
 CONFOPTS += --exec-prefix="/usr"
@@ -7,7 +8,28 @@ CONFOPTS += --program-prefix=""
 CONFOPTS += --disable-werror 
 CONFOPTS += --with-libintl-prefix=/foo
 
+ifdef CONFIG_USER_GRUB_EFI
+  CONFOPTS += --with-platform=efi
+  ifdef CONFIG_X86
+    ifdef CONFIG_64BIT
+      CONFOPTS += --target=x86_64
+    else
+      CONFOPTS += --target=i386
+    endif
+  endif
+endif
+
+ifdef CONFIG_USER_GRUB_DISABLE_VGA_CONSOLE
+  CONFOPTS += --disable-vga-console
+endif
+
 grub-$(GRUB_VERSION)_ROMFS = grub_romfs
+
+AUTORECONF = ./autogen.sh
+
+ifneq (,$(CONFIG_DEFAULTS_DIGI_CONNECTIT16)$(CONFIG_DEFAULTS_DIGI_CONNECTIT48))
+CFLAGS += -DDIGI_CONNECTITXX
+endif
 
 include $(ROOTDIR)/tools/automake.inc
 
@@ -22,4 +44,5 @@ grub_romfs:
 	for i in * ; do \
 		$(ROMFSINST) -S /usr/lib/grub/$$ARCH/$$i ; \
 	done
-
+	ACL_LICENSE=GPLv2 $(ROMFSINST) -e CONFIG_USER_GRUB_ENVTOOLS -p 755 /bin/fw_printenv
+	ACL_LICENSE=GPLv2 $(ROMFSINST) -e CONFIG_USER_GRUB_ENVTOOLS -s /bin/fw_printenv /bin/fw_setenv

@@ -1,8 +1,8 @@
-PKG = ipset-6.32
+PKG = ipset-7.1
 URL = http://ipset.netfilter.org/$(PKG).tar.bz2
 AUTORECONF = autoreconf
-MAKEVARS =
 UCFRONT_ENV = 
+MAKEVARS = 
 
 CONFOPTS += --with-kmod=no
 

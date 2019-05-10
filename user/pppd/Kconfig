@@ -1,0 +1,4 @@
+config USER_PPPD_PPPD_PPPD
+	bool "pppd"
+	help
+	  Dialup networking daemon.

@@ -1,14 +1,27 @@
-diff --git a/plugins/huawei/77-mm-huawei-net-port-types.rules b/plugins/huawei/77-mm-huawei-net-port-types.rules
-index f60f1f8..7ad2950 100644
---- a/plugins/huawei/77-mm-huawei-net-port-types.rules
-+++ b/plugins/huawei/77-mm-huawei-net-port-types.rules
-@@ -11,6 +11,9 @@ SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01"
- SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_HUAWEI_AT_PORT}="1"
- SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="02", ATTRS{bInterfaceProtocol}=="01", ENV{ID_MM_HUAWEI_MODEM_PORT}="1"
- SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="02", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_HUAWEI_AT_PORT}="1"
+--- ModemManager/plugins/huawei/77-mm-huawei-net-port-types.rules	2018-11-13 15:22:44.870516047 +1000
++++ ModemManager/plugins/huawei/77-mm-huawei-net-port-types.rules.new	2018-11-20 16:24:44.618318655 +1000
+@@ -9,15 +9,18 @@
+ ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1573", ENV{ID_MM_HUAWEI_DISABLE_GETPORTMODE}="1"
+ 
+ # Mark the modem and at port flags for ModemManager
+-SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="01", ENV{ID_MM_PORT_TYPE_AT_PPP}="1"
+-SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_PORT_TYPE_AT_PRIMARY}="1"
+-SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="02", ATTRS{bInterfaceProtocol}=="01", ENV{ID_MM_PORT_TYPE_AT_PPP}="1"
+-SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="02", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_PORT_TYPE_AT_PRIMARY}="1"
++SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="01", ENV{ID_MM_HUAWEI_MODEM_PORT}="1"
++SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_HUAWEI_AT_PORT}="1"
++SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="02", ATTRS{bInterfaceProtocol}=="01", ENV{ID_MM_HUAWEI_MODEM_PORT}="1"
++SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="02", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_HUAWEI_AT_PORT}="1"
 +SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="03", ATTRS{bInterfaceProtocol}=="01", ENV{ID_MM_HUAWEI_MODEM_PORT}="1"
 +SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="03", ATTRS{bInterfaceProtocol}=="02", ENV{ID_MM_HUAWEI_AT_PORT}="1"
 +SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="03", ATTRS{bInterfaceProtocol}=="06", ENV{ID_MM_HUAWEI_AT_PORT}="1"
  
  # GPS NMEA port on MU609
- SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="05", ENV{ID_MM_HUAWEI_GPS_PORT}="1"
+-SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="05", ENV{ID_MM_PORT_TYPE_GPS}="1"
++SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="05", ENV{ID_MM_HUAWEI_GPS_PORT}="1"
+ # GPS NMEA port on MU909
+-SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="14", ENV{ID_MM_PORT_TYPE_GPS}="1"
++SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="ff", ATTRS{bInterfaceSubClass}=="01", ATTRS{bInterfaceProtocol}=="14", ENV{ID_MM_HUAWEI_GPS_PORT}="1"
+ 
+ # Only the standard ECM or NCM port can support dial-up with AT NDISDUP through AT port
+ SUBSYSTEMS=="usb", ATTRS{bInterfaceClass}=="02", ATTRS{bInterfaceSubClass}=="06",ATTRS{bInterfaceProtocol}=="00", ENV{ID_MM_HUAWEI_NDISDUP_SUPPORTED}="1"

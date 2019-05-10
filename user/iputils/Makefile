@@ -1,8 +1,9 @@
+export ACL_LICENSE=GPLv2/BSD
+
 # Path to parent kernel include files directory
 KERNEL_INCLUDE=$(ROOTDIR)/$(LINUXDIR)/include
 LIBC_INCLUDE=$(ROOTDIR)/$(LIBCDIR)/include
 BINDIR=/bin
-
 DEFINES= 
 
 #options if you have a bind>=4.9.4 libresolv (or, maybe, glibc)

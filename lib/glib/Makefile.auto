@@ -1,5 +1,5 @@
 inc_glib = build/glib*-install/include/*,.
 lib_glib = build/glib*-install/lib/*.a \
 		   build/glib*-install/lib/*.so
-dep_glib = libiconv mini-iconv libffi gettext mini-libintl
+dep_glib = libiconv mini-iconv libffi gettext mini-libintl pcre
 

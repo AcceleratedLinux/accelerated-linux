@@ -2,7 +2,7 @@
 PKG        = ModemManager
 URL        = git://anongit.freedesktop.org/ModemManager/ModemManager
 METHOD     = git
-VERSION    = ddbc2195687bf4f5c94d7e60d808ddb695052f7f
+VERSION    = 98fbc7a8b39aa84c905a7ce3c7b412ee04566f26
 #BUILDDIR  = ModemManager-1.2.0
 #URL       = http://cgit.freedesktop.org/ModemManager/ModemManager/snapshot/ModemManager-1.2.0.tar.gz
 CONFIGURE  = autogen.sh
@@ -25,10 +25,9 @@ endif
 MAKEVARS   = 
 
 # the tool versions need to match the library, so don't use the host system tools
-$(shell mkdir -p build/bin; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.37.93-install/bin/gdbus-codegen build/bin/.; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.37.93-install/bin/glib-mkenums build/bin/.)
-MAKEVARS += PATH=$(shell pwd)/build/bin:$$PATH UNINSTALLED_GLIB_SRCDIR=$(ROOTDIR)/lib/glib/build/glib-2.37.93
+$(shell mkdir -p build/bin; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.57.1-install/bin/gdbus-codegen build/bin/.; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.57.1-install/bin/glib-mkenums build/bin/.)
+MAKEVARS += PATH=$(shell pwd)/build/bin:$$PATH UNINSTALLED_GLIB_SRCDIR=$(ROOTDIR)/lib/glib/build/glib-2.57.1
 
-ModemManager-0.7.990_ROMFS = mm_romfs
 ModemManager_ROMFS = mm_romfs
 
 include $(ROOTDIR)/tools/automake.inc

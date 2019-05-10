@@ -134,8 +134,17 @@ clean: $(foreach pkg,$(PKG_y),$($(pkg)_CLEAN))
 	rm -rf build downloads
 
 romfs_pre:
+ifneq ($(AUTOMAKE_ROMFS),)
+	unset ACL_PKG; unset ACL_URL; unset ACL_LICENSE; \
+	for i in build/*-license; do . $$i; done; \
+	$(MAKE) $(AUTOMAKE_ROMFS)
+else
 	@echo "Romfs pre-install ..."
 	$(AT)for i in build/*-install; do \
+		[ "$$i" = "build/*-install" ] && continue; \
+		echo "Loading license `basename $$i -install`-license ..."; \
+		unset ACL_PKG; unset ACL_URL; unset ACL_LICENSE; \
+		. build/`basename $$i -install`-license; \
 		echo "Installing `basename $$i -install` ..."; \
 		[ ! -d $$i/usr ] || $(ROMFSINST) -v -f $$i/usr /usr; \
 		[ ! -d $$i/bin ] || $(ROMFSINST) -v -f $$i/bin /bin; \
@@ -150,7 +159,17 @@ romfs_pre:
 	done
 	rm -f $(ROMFSDIR)/lib/*.a
 	rm -f $(ROMFSDIR)/lib/*.la
+endif
 
-romfs_post: $(foreach pkg,$(PKG_y),$($(pkg)_ROMFS))
+romfs_post:
+	for i in $(foreach pkg,$(PKG_y),$(pkg):$($(pkg)_ROMFS)); do \
+		pkg=`expr $$i : '\(.*\):'`; \
+		tgt=`expr $$i : '.*:\(.*\)'`; \
+		echo "Loading license $$pkg-license ..."; \
+		unset ACL_PKG; unset ACL_URL; unset ACL_LICENSE; \
+		. build/$$pkg-license; \
+		echo "Romfs $$pkg - $$tgt..."; \
+		$(MAKE) $$tgt; \
+	done
 
-romfs: $(if $(AUTOMAKE_ROMFS),$(AUTOMAKE_ROMFS),romfs_pre) romfs_post
+romfs: romfs_pre romfs_post

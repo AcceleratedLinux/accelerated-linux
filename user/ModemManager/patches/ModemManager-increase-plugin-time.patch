@@ -1,0 +1,16 @@
+--- ModemManager/src/mm-plugin-manager.c	2018-11-13 15:22:45.290516047 +1000
++++ ModemManager/src/mm-plugin-manager.c.new	2018-11-30 13:29:18.718197501 +1000
+@@ -671,11 +671,11 @@
+ /* Device context */
+ 
+ /* Time to wait for ports to appear before starting to probe the first one */
+-#define MIN_WAIT_TIME_MSECS 1500
++#define MIN_WAIT_TIME_MSECS 5000
+ 
+ /* Time to wait for other ports to appear once the first port is exposed
+  * (needs to be > MIN_WAIT_TIME_MSECS!!) */
+-#define MIN_PROBING_TIME_MSECS 2500
++#define MIN_PROBING_TIME_MSECS 6000
+ 
+ /* The wait time we define must always be less than the probing time */
+ G_STATIC_ASSERT (MIN_WAIT_TIME_MSECS < MIN_PROBING_TIME_MSECS);

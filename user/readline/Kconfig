@@ -1,0 +1,8 @@
+
+config USER_READLINE
+	bool 'readline'
+	select LIB_TERMCAP
+	select LIB_TERMCAP_SHARED
+	help
+	  readline library
+

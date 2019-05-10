@@ -1,0 +1,97 @@
+hostname "AnywhereUSB 8 Plus"
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=40M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+echo "Starting watchdog..."
+watchdog /dev/watchdog
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# init devices before we need any
+cp -ra /lib/udev/devices/. /dev
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+setmac -i eth0 -u -n 1
+
+if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+	#load wifi module for testing
+	modprobe ath10k_pci
+	/etc/factory
+	exit 0
+fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+	#load wifi module for testing
+	modprobe ath10k_pci
+	# Use the same setup as for factory testing
+	/etc/factory
+	exit 0
+fi
+
+# handle /opt,  contains modem firmware and maybe other goodies
+# opt filesystem
+echo "Mounting opt filesystem..."
+if ! mount -t ext4 /dev/flash/opt /opt; then
+    echo "Cannot mount /opt, reformatting..."
+    mkfs.ext4 -F /dev/flash/opt
+    mount -t ext4 /dev/flash/opt /opt
+fi
+
+{
+    # Create /opt filesystem
+    [ -d "/opt/config" ] || mkdir /opt/config
+    [ -d "/opt/boot" ] || ln -s /efi/grub /opt/boot
+}
+
+echo "Mounting config filesystem ..."
+if ! mount --bind /opt/config /etc/config
+then
+    echo "Cannot bind mount /etc/config to /opt/config..."
+    echo "Using tmpfs for /etc/config."
+    mount -t tmpfs -o size=4M tmpfs /etc/config
+    touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
+	[ -f /etc/config/.init2 ] && filter='$'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+cat /etc/inittab.d/* > /etc/inittab
+
+
+# modem firmware updates
+[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+#load wifi module before we come up
+modprobe ath10k_pci
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

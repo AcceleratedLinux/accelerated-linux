@@ -9,8 +9,8 @@ ELFIMAGE = $(IMAGEDIR)/image.elf
 
 DIRS = ../cgi/SCALES
 
-ROMFS_DIRS = bin dev dev/flash etc etc/config etc/default home lib mnt proc \
-             usr var home/httpd home/httpd/cgi-bin home/httpd/img dev/usb
+ROMFS_DIRS = bin dev dev/flash dev/usb etc etc/config etc/default home lib \
+	     mnt proc sbin usr var home/httpd home/httpd/cgi-bin home/httpd/img
 
 USB_DEVICES = dabusb0,180,240
 

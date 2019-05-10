@@ -1,5 +1,6 @@
-
 .EXPORT_ALL_VARIABLES:
+
+ACL_LICENSE = BSD (3 clause variant)
 
 TARGET :=  # $(CROSS:-=)
 DEBUG  := 0

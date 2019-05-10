@@ -1,6 +1,6 @@
 #
-# Automatically generated make config: don't edit
-# Dist builder
+# Automatically generated file; DO NOT EDIT.
+# Embedded Linux Configuration
 #
 CONFIG_DISTVERSION="5.0"
 
@@ -22,16 +22,21 @@ CONFIG_DISTVERSION="5.0"
 # CONFIG_DEFAULTS_ATARI is not set
 # CONFIG_DEFAULTS_ATHEROS is not set
 # CONFIG_DEFAULTS_ATMEL is not set
+# CONFIG_DEFAULTS_ATT is not set
 # CONFIG_DEFAULTS_AVNET is not set
+# CONFIG_DEFAULTS_BANANAPI is not set
+# CONFIG_DEFAULTS_DIGI is not set
 # CONFIG_DEFAULTS_EMAC is not set
 # CONFIG_DEFAULTS_EXYS is not set
 # CONFIG_DEFAULTS_FEITH is not set
 # CONFIG_DEFAULTS_FIREBEE is not set
+# CONFIG_DEFAULTS_FIREFLY is not set
 # CONFIG_DEFAULTS_FREESCALE is not set
 # CONFIG_DEFAULTS_GLOBALSCALE is not set
 # CONFIG_DEFAULTS_INTEC is not set
 CONFIG_DEFAULTS_INTEL=y
 # CONFIG_DEFAULTS_MCAFEE is not set
+# CONFIG_DEFAULTS_MEDIATEK is not set
 # CONFIG_DEFAULTS_MICREL is not set
 # CONFIG_DEFAULTS_NETBURNER is not set
 # CONFIG_DEFAULTS_OPENGEAR is not set
@@ -57,11 +62,8 @@ CONFIG_DEFAULTS_INTEL_MINNOWBOARD=y
 #
 # Kernel/Library/Defaults Selection
 #
-
-#
-# Kernel is linux
-#
 CONFIG_DEFAULTS_KERNEL_LINUX=y
+# CONFIG_DEFAULTS_KERNEL_git is not set
 CONFIG_DEFAULTS_LIBC_UCLIBC=y
 # CONFIG_DEFAULTS_LIBC_UCLIBC_NG is not set
 # CONFIG_DEFAULTS_LIBC_GLIBC is not set

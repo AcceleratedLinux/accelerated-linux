@@ -198,6 +198,7 @@ static const char rcsid[] =
  *     Tue Dec 20 03:50:13 PST 1988
  */
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>

@@ -1,3 +1,4 @@
+export ACL_LICENSE = Artistic/GPLv2
 
 all: .setup
 	$(MAKE) -f Makefile perl

@@ -1,7 +1,9 @@
 
-URL := http://ftp.gnome.org/pub/GNOME/sources/glib/2.37/glib-2.37.93.tar.xz
+# later versions introduce some build issues, be warned :-)
+URL := http://ftp.gnome.org/pub/GNOME/sources/glib/2.57/glib-2.57.1.tar.xz
 
-MAKEVARS = 
+MAKEVARS  =  
+CONFIGURE = autogen.sh
 
 CONFVARS :=
 CONFVARS += glib_cv_stack_grows=no
@@ -9,9 +11,11 @@ CONFVARS += glib_cv_uscore=no
 CONFVARS += ac_cv_func_posix_getpwuid_r=yes
 CONFVARS += ac_cv_func_posix_getgrgid_r=yes
 CONFVARS += ZLIB_CFLAGS=" "
+CONFVARS += PCRE_CFLAGS=" "
 
 # CONFOPTS += --enable-gc-friendly
 # CONFOPTS += --disable-mem-pools
+CONFOPTS += --disable-libmount
 CONFOPTS += --disable-rebuilds
 CONFOPTS += --disable-modular-tests
 CONFOPTS += --disable-largefile
@@ -49,6 +53,7 @@ include $(ROOTDIR)/tools/automake.inc
 
 glib_cleanup:
 	rm -rf $(ROMFSDIR)/lib/glib-2.0
+	rm -rf $(ROMFSDIR)/lib/locale
 ifndef CONFIG_LIB_GLIB_TOOLS
 	@for i in build/glib-*-install/bin/*; do \
 		[ -f "$$i" ] || continue; \

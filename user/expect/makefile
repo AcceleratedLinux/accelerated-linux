@@ -1,3 +1,5 @@
+export ACL_LICENSE = Public Domain
+
 CONFOPTS=--disable-shared --with-tcl=$(ROOTDIR)/staging/lib --with-tclinclude=$(ROOTDIR)/user/tcl/build/tcl*/generic/
 
 all: build/build

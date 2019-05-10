@@ -18,7 +18,6 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
-#include <linux/of_gpio.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
@@ -28,6 +27,9 @@
 #include <linux/reset.h>
 #include <linux/gpio/consumer.h>
 #include <net/dsa.h>
+#ifdef CONFIG_LEDMAN
+#include <linux/ledman.h>
+#endif
 
 #include "mt7530.h"
 
@@ -621,18 +623,63 @@ static void mt7530_adjust_link(struct dsa_switch *ds, int port,
 {
 	struct mt7530_priv *priv = ds->priv;
 
+#ifdef CONFIG_LEDMAN
+	if (port < 2) {
+		int led = (port == 0) ? LEDMAN_LAN1_LINK : LEDMAN_LAN2_LINK;
+		int cmd = (phydev->link) ? LEDMAN_CMD_ON : LEDMAN_CMD_OFF;
+		ledman_cmd(cmd, led);
+	}
+#endif
+
 	if (phy_is_pseudo_fixed_link(phydev)) {
-		dev_dbg(priv->dev, "phy-mode for master device = %x\n",
-			phydev->interface);
+		if (priv->id == ID_MT7530) {
+			dev_dbg(priv->dev, "phy-mode for master device = %x\n",
+				phydev->interface);
 
-		/* Setup TX circuit incluing relevant PAD and driving */
-		mt7530_pad_clk_setup(ds, phydev->interface);
+			/* Setup TX circuit incluing relevant PAD and driving */
+			mt7530_pad_clk_setup(ds, phydev->interface);
 
-		/* Setup RX circuit, relevant PAD and driving on the host
-		 * which must be placed after the setup on the device side is
-		 * all finished.
-		 */
-		mt7623_pad_clk_setup(ds);
+			/* Setup RX circuit, relevant PAD and driving on the
+			 * host which must be placed after the setup on the
+			 * device side is all finished.
+			 */
+			mt7623_pad_clk_setup(ds);
+		}
+	} else {
+		u16 lcl_adv = 0, rmt_adv = 0;
+		u8 flowctrl;
+		u32 mcr = PMCR_USERP_LINK | PMCR_FORCE_MODE;
+
+		switch (phydev->speed) {
+		case SPEED_1000:
+			mcr |= PMCR_FORCE_SPEED_1000;
+			break;
+		case SPEED_100:
+			mcr |= PMCR_FORCE_SPEED_100;
+			break;
+		};
+
+		if (phydev->link)
+			mcr |= PMCR_FORCE_LNK;
+
+		if (phydev->duplex) {
+			mcr |= PMCR_FORCE_FDX;
+
+			if (phydev->pause)
+				rmt_adv = LPA_PAUSE_CAP;
+			if (phydev->asym_pause)
+				rmt_adv |= LPA_PAUSE_ASYM;
+
+			lcl_adv = linkmode_adv_to_lcl_adv_t(
+				phydev->advertising);
+			flowctrl = mii_resolve_flowctrl_fdx(lcl_adv, rmt_adv);
+
+			if (flowctrl & FLOW_CTRL_TX)
+				mcr |= PMCR_TX_FC_EN;
+			if (flowctrl & FLOW_CTRL_RX)
+				mcr |= PMCR_RX_FC_EN;
+		}
+		mt7530_write(priv, MT7530_PMCR_P(port), mcr);
 	}
 }
 
@@ -652,6 +699,10 @@ mt7530_cpu_port_enable(struct mt7530_priv *priv,
 
 	/* Unknown unicast frame fordwarding to the cpu port */
 	mt7530_set(priv, MT7530_MFC, UNU_FFP(BIT(port)));
+
+	/* Set CPU port number */
+	if (priv->id == ID_MT7621)
+		mt7530_rmw(priv, MT7530_MFC, CPU_MASK, CPU_EN | CPU_PORT(port));
 
 	/* CPU port gets connected to all user ports of
 	 * the switch
@@ -1185,24 +1236,27 @@ mt7530_setup(struct dsa_switch *ds)
 	 * as two netdev instances.
 	 */
 	dn = ds->ports[MT7530_CPU_PORT].master->dev.of_node->parent;
-	priv->ethernet = syscon_node_to_regmap(dn);
-	if (IS_ERR(priv->ethernet))
-		return PTR_ERR(priv->ethernet);
 
-	regulator_set_voltage(priv->core_pwr, 1000000, 1000000);
-	ret = regulator_enable(priv->core_pwr);
-	if (ret < 0) {
-		dev_err(priv->dev,
-			"Failed to enable core power: %d\n", ret);
-		return ret;
-	}
+	if (priv->id == ID_MT7530) {
+		priv->ethernet = syscon_node_to_regmap(dn);
+		if (IS_ERR(priv->ethernet))
+			return PTR_ERR(priv->ethernet);
 
-	regulator_set_voltage(priv->io_pwr, 3300000, 3300000);
-	ret = regulator_enable(priv->io_pwr);
-	if (ret < 0) {
-		dev_err(priv->dev, "Failed to enable io pwr: %d\n",
-			ret);
-		return ret;
+		regulator_set_voltage(priv->core_pwr, 1000000, 1000000);
+		ret = regulator_enable(priv->core_pwr);
+		if (ret < 0) {
+			dev_err(priv->dev,
+				"Failed to enable core power: %d\n", ret);
+			return ret;
+		}
+
+		regulator_set_voltage(priv->io_pwr, 3300000, 3300000);
+		ret = regulator_enable(priv->io_pwr);
+		if (ret < 0) {
+			dev_err(priv->dev, "Failed to enable io pwr: %d\n",
+				ret);
+			return ret;
+		}
 	}
 
 	/* Reset whole chip through gpio pin or memory-mapped registers for
@@ -1234,10 +1288,12 @@ mt7530_setup(struct dsa_switch *ds)
 		return -ENODEV;
 	}
 
-	/* Reset the switch through internal reset */
-	mt7530_write(priv, MT7530_SYS_CTRL,
-		     SYS_CTRL_PHY_RST | SYS_CTRL_SW_RST |
-		     SYS_CTRL_REG_RST);
+	if (priv->id == ID_MT7530) {
+		/* Reset the switch through internal reset */
+		mt7530_write(priv, MT7530_SYS_CTRL,
+			     SYS_CTRL_PHY_RST | SYS_CTRL_SW_RST |
+			     SYS_CTRL_REG_RST);
+	}
 
 	/* Enable Port 6 only; P5 as GMAC5 which currently is not supported */
 	val = mt7530_read(priv, MT7530_MHWTRAP);
@@ -1251,6 +1307,7 @@ mt7530_setup(struct dsa_switch *ds)
 	mt7530_clear(priv, MT7530_MFC, UNU_FFP_MASK);
 
 	for (i = 0; i < MT7530_NUM_PORTS; i++) {
+
 		/* Disable forwarding by default on all ports */
 		mt7530_rmw(priv, MT7530_PCR_P(i), PCR_MATRIX_MASK,
 			   PCR_MATRIX_CLR);
@@ -1292,9 +1349,17 @@ static const struct dsa_switch_ops mt7530_switch_ops = {
 	.port_vlan_del		= mt7530_port_vlan_del,
 };
 
+static const struct of_device_id mt7530_of_match[] = {
+	{ .compatible = "mediatek,mt7621", .data = (void *) ID_MT7621, },
+	{ .compatible = "mediatek,mt7530", .data = (void *) ID_MT7530, },
+	{ /* sentinel */ },
+};
+MODULE_DEVICE_TABLE(of, mt7530_of_match);
+
 static int
 mt7530_probe(struct mdio_device *mdiodev)
 {
+	const struct of_device_id *of_id;
 	struct mt7530_priv *priv;
 	struct device_node *dn;
 
@@ -1322,13 +1387,21 @@ mt7530_probe(struct mdio_device *mdiodev)
 		}
 	}
 
-	priv->core_pwr = devm_regulator_get(&mdiodev->dev, "core");
-	if (IS_ERR(priv->core_pwr))
-		return PTR_ERR(priv->core_pwr);
+	/* Get the hardware identifier from the devicetree node.
+	 * We will need it for some of the clock and regulator setup.
+	 */
+	of_id = of_match_node(mt7530_of_match, dn);
+	priv->id = (unsigned int) of_id->data;
 
-	priv->io_pwr = devm_regulator_get(&mdiodev->dev, "io");
-	if (IS_ERR(priv->io_pwr))
-		return PTR_ERR(priv->io_pwr);
+	if (priv->id == ID_MT7530) {
+		priv->core_pwr = devm_regulator_get(&mdiodev->dev, "core");
+		if (IS_ERR(priv->core_pwr))
+			return PTR_ERR(priv->core_pwr);
+
+		priv->io_pwr = devm_regulator_get(&mdiodev->dev, "io");
+		if (IS_ERR(priv->io_pwr))
+			return PTR_ERR(priv->io_pwr);
+	}
 
 	/* Not MCM that indicates switch works as the remote standalone
 	 * integrated circuit so the GPIO pin would be used to complete
@@ -1373,12 +1446,6 @@ mt7530_remove(struct mdio_device *mdiodev)
 	dsa_unregister_switch(priv->ds);
 	mutex_destroy(&priv->reg_mutex);
 }
-
-static const struct of_device_id mt7530_of_match[] = {
-	{ .compatible = "mediatek,mt7530" },
-	{ /* sentinel */ },
-};
-MODULE_DEVICE_TABLE(of, mt7530_of_match);
 
 static struct mdio_driver mt7530_mdio_driver = {
 	.probe  = mt7530_probe,

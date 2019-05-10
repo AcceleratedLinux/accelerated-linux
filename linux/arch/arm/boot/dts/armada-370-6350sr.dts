@@ -324,6 +324,7 @@
 };
 
 &mdio {
+	status = "okay";
 	pinctrl-0 = <&mdio_pins>;
 	pinctrl-names = "default";
 
@@ -332,6 +333,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x11>;
+		dsa,member = <0 0>;
 
 		ports {
 			#address-cells = <1>;

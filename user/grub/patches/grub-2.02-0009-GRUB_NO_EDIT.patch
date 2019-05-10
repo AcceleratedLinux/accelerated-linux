@@ -1,0 +1,24 @@
+--- grub-2.02/grub-core/normal/menu.c.orig	2019-03-01 18:30:34.540437895 +1000
++++ grub-2.02/grub-core/normal/menu.c	2019-03-01 18:30:44.248438105 +1000
+@@ -772,17 +772,21 @@
+ 	      break;
+ 
+ 	    case 'c':
++	      if (!grub_env_get ("GRUB_NO_EDIT")) {
+ 	      menu_fini ();
+ 	      grub_cmdline_run (1, 0);
++	      }
+ 	      goto refresh;
+ 
+ 	    case 'e':
++	      if (!grub_env_get ("GRUB_NO_EDIT")) {
+ 	      menu_fini ();
+ 		{
+ 		  grub_menu_entry_t e = grub_menu_get_entry (menu, current_entry);
+ 		  if (e)
+ 		    grub_menu_entry_run (e);
+ 		}
++	      }
+ 	      goto refresh;
+ 
+ 	    default:

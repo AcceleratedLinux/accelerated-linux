@@ -1,0 +1,128 @@
+#!/bin/sh
+#
+# mkffs -- make flash filesystem for TX64
+#
+# Create GNU part partitions and install grub on target mSATA drive.
+#
+
+readonly LABEL_EFI="EFI"
+readonly GUID_EFI="51279de9-b98b-492d-b021-665ce54b7ae8"
+readonly VOLID_EFI="99033AE0"
+readonly EFI_PART=1
+
+readonly LABEL_ENV1="ENV1"
+readonly GUID_ENV1="bbbe1e59-b881-490e-9105-3b6640f9257c"
+readonly ENV1_PART=2
+
+readonly LABEL_ENV2="ENV2"
+readonly GUID_ENV2="826aabd2-2f68-40f6-9703-aff06d69401d"
+readonly ENV2_PART=3
+
+readonly LABEL_KERNEL1="Kernel1"
+readonly GUID_KERNEL1="b2a82b1a-10ee-444c-bbae-f20c6aef3588"
+readonly KERNEL1_PART=4
+
+readonly LABEL_ROOTFS1="RootFS1"
+readonly GUID_ROOTFS1="c46f2fa2-532f-48f6-8757-c0600690bfec"
+readonly ROOTFS1_PART=5
+
+readonly LABEL_KERNEL2="Kernel2"
+readonly GUID_KERNEL2="d1b8878a-0a3c-4aff-a816-a2024874bc54"
+readonly KERNEL2_PART=6
+
+readonly LABEL_ROOTFS2="RootFS2"
+readonly GUID_ROOTFS2="b8a79f44-0634-4efa-8844-0626788202fc"
+readonly ROOTFS2_PART=7
+
+#readonly LABEL_USERFS="UserFS"
+#readonly GUID_USERFS="eceab4b2-cd57-49d9-b0b4-63b6808bfae9"
+#readonly USERFS_PART=8
+
+readonly DEV_BLOCK_SIZE="4KiB"
+readonly MKFS_BLOCK_SIZE="4096"
+
+format_env() {
+	local device="$1"
+	local env_file="$2"
+
+	dd if=/dev/zero bs=${DEV_BLOCK_SIZE} count=1 2>/dev/null | tr '\000' '\043' | dd of=${device}
+
+	dd if="${env_file}" of=${device}
+}
+
+
+if ! mount 2>&1 | grep -q tmp; then
+        echo "Mounting filesystems..."
+        mount -t proc proc /proc
+        mount -t sysfs sys /sys
+        mkdir -m 755 /dev/pts
+        mount -t devpts devpts /dev/pts
+        mount -t tmpfs -o size=256M tmpfs /tmp
+        mount -t tmpfs -o size=256M tmpfs /var
+        mkdir -m 755 /dev/hugepages
+        mount -t hugetlbfs none /dev/hugepages
+        mkdir -m 1777 /var/tmp
+        mkdir -m 755 /var/log
+        mkdir -m 755 /var/run
+        mkdir -m 1777 /var/lock
+        mkdir -m 755 /var/empty
+        mkdir -m 755 /var/mnt
+fi
+
+# Default drive to setup and boot from
+DRIVE=/dev/sda
+RAWIMAGE=/dev/sdb
+
+# Check if this device is mounted
+if mount | grep -q $DRIVE
+then
+        echo "ERROR: drive $DRIVE is active (mounted)"
+        exit 1
+fi
+
+echo "Making the GPT partitions..."
+# Note, we are not creating the UserFS here. It will be created on the first
+# boot by /etc/rc
+sgdisk --clear \
+	--mbrtogpt \
+	--new 1::+64MiB             --typecode=1:ef00 --change-name=1:"${LABEL_EFI}"     --partition-guid=1:"${GUID_EFI}" \
+	--new 2::+${DEV_BLOCK_SIZE} --typecode=2:8300 --change-name=2:"${LABEL_ENV1}"    --partition-guid=2:"${GUID_ENV1}" \
+	--new 3::+${DEV_BLOCK_SIZE} --typecode=3:8300 --change-name=3:"${LABEL_ENV2}"    --partition-guid=3:"${GUID_ENV2}" \
+	--new 4::+64MiB             --typecode=4:8300 --change-name=4:"${LABEL_KERNEL1}" --partition-guid=4:"${GUID_KERNEL1}" \
+	--new 5::+1GiB              --typecode=5:8300 --change-name=5:"${LABEL_ROOTFS1}" --partition-guid=5:"${GUID_ROOTFS1}" \
+	--new 6::+64MiB             --typecode=6:8300 --change-name=6:"${LABEL_KERNEL2}" --partition-guid=6:"${GUID_KERNEL2}" \
+	--new 7::+1GiB              --typecode=7:8300 --change-name=7:"${LABEL_ROOTFS2}" --partition-guid=7:"${GUID_ROOTFS2}" \
+	${DRIVE}
+
+echo "Creating filesystems..."
+# Bootloader partition
+mkfs.vfat ${DRIVE}1 -n "${LABEL_EFI}" -i "${VOLID_EFI}"
+
+# Create 2 empty - unused - raw ENV partitions (backward compatibilty)
+echo "Creating raw ENV partitions..."
+RAW_ENV=$(mktemp)
+grub-editenv "${RAW_ENV}" create
+format_env ${DRIVE}2 "${RAW_ENV}"
+format_env ${DRIVE}3 "${RAW_ENV}"
+
+# Kernel1 partition (not used, backward compatiblity)
+echo "Creating kernel partitions..."
+mkfs.ext4 ${DRIVE}4 -O ^has_journal -b ${MKFS_BLOCK_SIZE} -L "${LABEL_KERNEL1}" -U "${GUID_KERNEL1}"
+mkfs.ext4 ${DRIVE}6 -O ^has_journal -b ${MKFS_BLOCK_SIZE} -L "${LABEL_KERNEL2}" -U "${GUID_KERNEL2}"
+
+echo "Installing GRUB..."
+mount -t vfat ${DRIVE}1 /efi
+mkdir -p /efi/grub
+grub-editenv /efi/grub/grubenv set default=0 part0_valid=true part1_valid=true
+mkdir -p /efi/EFI/BOOT
+cp /boot/grub/bootx64.efi /efi/EFI/BOOT/
+umount /efi
+
+echo "Install image A ..."
+dd if=$RAWIMAGE of=${DRIVE}5 bs=4096b
+
+echo "Install image B ..."
+dd if=$RAWIMAGE of=${DRIVE}7 bs=4096b
+
+poweroff -f
+exit 0

@@ -1,3 +1,4 @@
+export ACL_LICENSE = GPLv2
 
 EXEC = sgutool
 OBJS = sgutool.o

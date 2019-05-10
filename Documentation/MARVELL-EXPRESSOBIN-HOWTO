@@ -1,0 +1,30 @@
+Marvell ExpressoBin
+-------------------
+
+The Marvell ExpressoBin evaluation kit is based around the Marvell
+Armada 3700 (dual core ARM64) SoC. It has 1Gb of RAM, serial port,
+ethernet port3, SD-card and a few other peripherals fitted.
+
+Generate images for this board using the Marvell/ExpressoBin accelerated
+target. The default is to select the glibc when building. The build will
+generate 3 binaries that we can then load onto the board, images/kernel.bin,
+images/rootfs.bin and images/armada-3720-espressobin.dtb.
+
+You can load onto the ExpressoBin board using the usual uboot loader do this
+installed in the boot ROM of the board. (You can break to the uboot serial
+port prompt, by hitting a key during the early uboot startup).
+
+Use the following example commands to load and run:
+
+    setenv bootargs $console root=/dev/ram0 initrd=0x8000000,24M
+    dhcp kernel.bin
+    tftp 0x8000000 rootfs.bin
+    tftp 0x1500000 armada-3720-espressobin.dtb
+    booti 0x5000000 - 0x1500000
+
+This assumes you have a local network with addresses 192.168.0.0/24, and
+a tftp server at 192.168.0.22. Adjust the above commands as necessary for
+your different network setup.
+
+The console is the USB debug serial port (at the default 115200,8,n,1).
+

@@ -1,56 +1,56 @@
-CONFOPTS :=--bindir=/bin --datadir=/etc 
-CONFOPTS += --enable-dependency-tracking --disable-largefile
-CONFOPTS += --disable-man --disable-nls
-CONFOPTS += --without-selinux --without-audit --without-skey
+VERSION=4.6
+URL = https://github.com/shadow-maint/shadow/releases/download/$(VERSION)/shadow-$(VERSION).tar.gz
+
+CONFOPTS += --enable-dependency-tracking
+CONFOPTS += --disable-largefile
+CONFOPTS += --disable-man
+CONFOPTS += --disable-nls
+CONFOPTS += --without-selinux
+CONFOPTS += --without-audit
+CONFOPTS += --without-skey
 CONFOPTS += --without-libcrack
 
 ifdef CONFIG_USER_SHADOW_PAM
-CONFOPTS += --with-libpam	# This autodetcts properly but what the heck
+CONFOPTS += --with-libpam
+# The link test for this fails due to not linking with -lpam, so override
+CONFVARS += ac_cv_lib_pam_misc_misc_conv=yes
 endif
 ifdef CONFIG_USER_SHADOW_SHAREDLIB
 CONFOPTS += --enable-shared
-EXECPTH := build/src/.libs
-else
-EXECPTH := build/src
+endif
+
+ifdef CONFIG_DEFAULTS_LIBC_UCLIBC_NG
+LDFLAGS += -lrt
 endif
 
 # Have to specify the correct paths to various files
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
-CFLAGS += -DPASSWD_FILE='"/etc/config/passwd"'
-CFLAGS += -DGROUP_FILE='"/etc/config/group"'
-CFLAGS += -DSHADOW_FILE='"/etc/config/shadow"'
-CFLAGS += -DSGROUP_FILE='"/etc/config/gshadow"'
-CFLAGS += -DLOGINDEFS='"/etc/config/login.defs"'
+CFLAGS += -DPASSWD_FILE='\"/etc/config/passwd\"'
+CFLAGS += -DGROUP_FILE='\"/etc/config/group\"'
+CFLAGS += -DSHADOW_FILE='\"/etc/config/shadow\"'
+CFLAGS += -DSGROUP_FILE='\"/etc/config/gshadow\"'
+CFLAGS += -DLOGINDEFS='\"/etc/config/login.defs\"'
 endif
 
-all: build/build
-	$(MAKE) -C build
+AUTOMAKE_ROMFS = shadow_romfs
 
-build/build: makefile
-	rm -rf build
-	mkdir build
-	chmod a+x configure
-	(cd build; ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
+include $(ROOTDIR)/tools/automake.inc
 
-clean:
-	rm -rf build
+BINPROGS := login su groups
 
+SBINPROGS := sulogin
 
-# We place these programs in their correct places.  See build/src/Makefile
-# for the correct locations.
-BINPROGS :=	login su
-
-SBINPROGS :=	sulogin
-
-USRBINPROGS :=	chage chfn chsh expiry faillog gpasswd groups id
-USRBINPROGS +=	lastlog newgrp passwd
+USRBINPROGS := chage chfn chsh expiry faillog gpasswd groups id
+USRBINPROGS += lastlog newgrp passwd
 
 USRSBINPROGS := chpasswd groupadd groupdel groupmod grpck grpconv
 USRSBINPROGS += grpunconv logoutd newusers nologin pwck pwconv pwunconv
 USRSBINPROGS += useradd userdel usermod vipw
 
-romfs:
+BINPATH = $(CURDIR)/build/shadow-$(VERSION)-install/bin
+SBINPATH = $(CURDIR)/build/shadow-$(VERSION)-install/sbin
+
+shadow_romfs:
 ifdef CONFIG_USER_SHADOW_SHAREDLIB
 	$(ROMFSINST) build/lib/.libs/libshadow.so.0.0.0 /lib/libshadow.so.0.0.0
 	$(ROMFSINST) -s libshadow.so.0.0.0 /lib/libshadow.so.0
@@ -59,20 +59,21 @@ endif
 	@for f in $(BINPROGS);						\
 	do								\
 		ev="CONFIG_USER_SHADOW_`echo $$f | tr a-z A-Z`";	\
-		$(ROMFSINST) -e "$$ev" $(EXECPTH)/$$f /bin/$$f;		\
+		$(ROMFSINST) -e "$$ev" $(BINPATH)/$$f /bin/$$f;		\
 	done
 	@for f in $(SBINPROGS);						\
 	do								\
 		ev="CONFIG_USER_SHADOW_`echo $$f | tr a-z A-Z`";	\
-		$(ROMFSINST) -e "$$ev" $(EXECPTH)/$$f /sbin/$$f;	\
+		$(ROMFSINST) -e "$$ev" $(SBINPATH)/$$f /sbin/$$f;	\
 	done
 	@for f in $(USRBINPROGS);					\
 	do								\
 		ev="CONFIG_USER_SHADOW_`echo $$f | tr a-z A-Z`";	\
-		$(ROMFSINST) -e "$$ev" $(EXECPTH)/$$f /usr/bin/$$f;	\
+		$(ROMFSINST) -e "$$ev" $(BINPATH)/$$f /usr/bin/$$f;	\
 	done
 	@for f in $(USRSBINPROGS);					\
 	do								\
 		ev="CONFIG_USER_SHADOW_`echo $$f | tr a-z A-Z`";	\
-		$(ROMFSINST) -e "$$ev" $(EXECPTH)/$$f /usr/sbin/$$f;	\
+		$(ROMFSINST) -e "$$ev" $(SBINPATH)/$$f /usr/sbin/$$f;	\
 	done
+

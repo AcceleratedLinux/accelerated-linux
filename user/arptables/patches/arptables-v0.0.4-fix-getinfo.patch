@@ -1,0 +1,12 @@
+diff -Naur arptables-v0.0.4.org/libarptc/libarptc_incl.c arptables-v0.0.4/libarptc/libarptc_incl.c
+--- arptables-v0.0.4.org/libarptc/libarptc_incl.c	2013-01-11 06:09:39.000000000 +1000
++++ arptables-v0.0.4/libarptc/libarptc_incl.c	2019-04-15 22:20:36.101137792 +1000
+@@ -232,6 +232,8 @@
+ 	if (sockfd < 0)
+ 		return NULL;
+ 
++	memset(&info, 0, sizeof(info));
++
+ 	s = sizeof(info);
+ 	if (RUNTIME_NF_ARP_NUMHOOKS == 2)
+ 		s -= 2 * sizeof(unsigned int);

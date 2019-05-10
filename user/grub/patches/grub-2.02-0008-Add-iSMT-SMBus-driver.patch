@@ -1,0 +1,725 @@
+From 5009559425425e0115b11a569989bccb4e32b7f2 Mon Sep 17 00:00:00 2001
+From: Greg Ungerer <gerg@kernel.org>
+Date: Thu, 28 Feb 2019 23:05:48 +1000
+Subject: [PATCH 7/7] grub: add driver for Intel iSMT SMBus hardware module
+
+Add a driver for the PCI based Intel iSMT SMBus interface module.
+It can do i2c good enough to talk to the Atmel 508 device.
+---
+ grub-core/Makefile.core.def         |   6 +
+ grub-core/bus/i2c/busses/i2c_ismt.c | 686 ++++++++++++++++++++++++++++
+ 2 files changed, 692 insertions(+)
+ create mode 100644 grub-core/bus/i2c/busses/i2c_ismt.c
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index 6b4b67b..77c5527 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -2376,6 +2376,12 @@ module = {
+   enable = pci;
+ };
+ 
++module = {
++  name = i2c_ismt;
++  common = bus/i2c/busses/i2c_ismt.c;
++  enable = pci;
++};
++
+ module = {
+   name = i2c_cmd;
+   common = commands/i2c_cmd.c;
+diff --git a/grub-core/bus/i2c/busses/i2c_ismt.c b/grub-core/bus/i2c/busses/i2c_ismt.c
+new file mode 100644
+index 0000000..671bf66
+--- /dev/null
++++ b/grub-core/bus/i2c/busses/i2c_ismt.c
+@@ -0,0 +1,686 @@
++/* i2c_ismt.c - Intel Atom SMBus support.  */
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2013  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <grub/pci.h>
++#include <grub/dl.h>
++#include <grub/mm.h>
++#include <grub/time.h>
++#include <grub/i2c.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++#define DRIVER_NAME	"i2c_ismt"
++
++#define	I2C_SMBUS_BLOCK_MAX	32
++
++/* PCI Address Constants */
++#define SMBBAR			0
++
++#define ISMT_DESC_ENTRIES	2	/* number of descriptor entries */
++#define ISMT_MAX_RETRIES	3	/* number of SMBus retries to attempt */
++
++/* Hardware Descriptor Constants - Control Field */
++#define ISMT_DESC_CWRL	0x01	/* Command/Write Length */
++#define ISMT_DESC_BLK	0X04	/* Perform Block Transaction */
++#define ISMT_DESC_FAIR	0x08	/* Set fairness flag upon successful arbit. */
++#define ISMT_DESC_PEC	0x10	/* Packet Error Code */
++#define ISMT_DESC_I2C	0x20	/* I2C Enable */
++#define ISMT_DESC_INT	0x40	/* Interrupt */
++#define ISMT_DESC_SOE	0x80	/* Stop On Error */
++
++/* Hardware Descriptor Constants - Status Field */
++#define ISMT_DESC_SCS	0x01	/* Success */
++#define ISMT_DESC_DLTO	0x04	/* Data Low Time Out */
++#define ISMT_DESC_NAK	0x08	/* NAK Received */
++#define ISMT_DESC_CRC	0x10	/* CRC Error */
++#define ISMT_DESC_CLTO	0x20	/* Clock Low Time Out */
++#define ISMT_DESC_COL	0x40	/* Collisions */
++#define ISMT_DESC_LPR	0x80	/* Large Packet Received */
++
++/* Macros */
++#define ISMT_DESC_ADDR_RW(addr, rw) (((addr) << 1) | (rw))
++
++/* iSMT General Register address offsets (SMBBAR + <addr>) */
++#define ISMT_GR_GCTRL		0x000	/* General Control */
++#define ISMT_GR_SMTICL		0x008	/* SMT Interrupt Cause Location */
++#define ISMT_GR_ERRINTMSK	0x010	/* Error Interrupt Mask */
++#define ISMT_GR_ERRAERMSK	0x014	/* Error AER Mask */
++#define ISMT_GR_ERRSTS		0x018	/* Error Status */
++#define ISMT_GR_ERRINFO		0x01c	/* Error Information */
++
++/* iSMT Master Registers */
++#define ISMT_MSTR_MDBA		0x100	/* Master Descriptor Base Address */
++#define ISMT_MSTR_MCTRL		0x108	/* Master Control */
++#define ISMT_MSTR_MSTS		0x10c	/* Master Status */
++#define ISMT_MSTR_MDS		0x110	/* Master Descriptor Size */
++#define ISMT_MSTR_RPOLICY	0x114	/* Retry Policy */
++
++/* iSMT Miscellaneous Registers */
++#define ISMT_SPGT	0x300	/* SMBus PHY Global Timing */
++
++/* General Control Register (GCTRL) bit definitions */
++#define ISMT_GCTRL_TRST	0x04	/* Target Reset */
++#define ISMT_GCTRL_KILL	0x08	/* Kill */
++#define ISMT_GCTRL_SRST	0x40	/* Soft Reset */
++
++/* Master Control Register (MCTRL) bit definitions */
++#define ISMT_MCTRL_SS	0x01		/* Start/Stop */
++#define ISMT_MCTRL_MEIE	0x10		/* Master Error Interrupt Enable */
++#define ISMT_MCTRL_FMHP	0x00ff0000	/* Firmware Master Head Ptr (FMHP) */
++
++/* Master Status Register (MSTS) bit definitions */
++#define ISMT_MSTS_HMTP	0xff0000	/* HW Master Tail Pointer (HMTP) */
++#define ISMT_MSTS_MIS	0x20		/* Master Interrupt Status (MIS) */
++#define ISMT_MSTS_MEIS	0x10		/* Master Error Int Status (MEIS) */
++#define ISMT_MSTS_IP	0x01		/* In Progress */
++
++/* Master Descriptor Size (MDS) bit definitions */
++#define ISMT_MDS_MASK	0xff	/* Master Descriptor Size mask (MDS) */
++
++/* SMBus PHY Global Timing Register (SPGT) bit definitions */
++#define ISMT_SPGT_SPD_MASK	0xc0000000	/* SMBus Speed mask */
++#define ISMT_SPGT_SPD_80K	0x00		/* 80 kHz */
++#define ISMT_SPGT_SPD_100K	(0x1 << 30)	/* 100 kHz */
++#define ISMT_SPGT_SPD_400K	(0x2 << 30)	/* 400 kHz */
++#define ISMT_SPGT_SPD_1M	(0x3 << 30)	/* 1 MHz */
++
++
++/* MSI Control Register (MSICTL) bit definitions */
++#define ISMT_MSICTL_MSIE	0x01	/* MSI Enable */
++
++/* iSMT Hardware Descriptor */
++struct ismt_desc {
++	grub_uint8_t tgtaddr_rw;	/* target address & r/w bit */
++	grub_uint8_t wr_len_cmd;	/* write length in bytes or a command */
++	grub_uint8_t rd_len;		/* read length */
++	grub_uint8_t control;		/* control bits */
++	grub_uint8_t status;		/* status bits */
++	grub_uint8_t retry;		/* collision retry and retry count */
++	grub_uint8_t rxbytes;		/* received bytes */
++	grub_uint8_t txbytes;		/* transmitted bytes */
++	grub_uint32_t dptr_low;		/* lower 32 bit of the data pointer */
++	grub_uint32_t dptr_high;	/* upper 32 bit of the data pointer */
++} __packed;
++
++struct ismt_priv {
++	struct pci_dev *pci_dev;
++
++	/* PCI BAR */
++  	volatile grub_uint8_t *smba;
++
++	/* descriptor virt base addr */
++	struct grub_pci_dma_chunk *hw_chunk;
++	volatile struct ismt_desc *hw_virt;
++	grub_uint32_t hw_phys;
++
++	/* descriptor ring head index */
++	grub_uint8_t head;
++
++	/* temp R/W data buffer */
++	struct grub_pci_dma_chunk *data_chunk;
++	volatile grub_uint8_t *data_virt;
++	grub_uint32_t data_phys;
++};
++
++/* Bus speed control bits for slow debuggers - refer to the docs for usage */
++static unsigned int bus_speed;
++
++/* bus read/writte */
++static inline grub_uint32_t
++readl (volatile grub_uint8_t *addr)
++{
++	return grub_le_to_cpu32(*((volatile grub_uint32_t *) addr));
++}
++
++static inline void
++writel (grub_uint32_t v, volatile grub_uint8_t *addr)
++{
++	*((volatile grub_uint32_t *) addr) = grub_cpu_to_le32(v);
++}
++
++static inline grub_uint64_t
++readq (volatile grub_uint8_t *addr)
++{
++	return *((volatile grub_uint64_t *) addr);
++}
++
++static inline void
++writeq (grub_uint64_t v, volatile grub_uint8_t *addr)
++{
++	*((volatile grub_uint64_t *) addr) = v;
++}
++
++#if 0
++/**
++ * ismt_desc_dump() - dump the contents of a specific descriptor
++ */
++static void
++__ismt_desc_dump (const volatile struct ismt_desc *desc)
++{
++	grub_dprintf (DRIVER_NAME, "Descriptor struct:  %p\n", desc);
++	grub_dprintf (DRIVER_NAME, "\ttgtaddr_rw=0x%02x\n", desc->tgtaddr_rw);
++	grub_dprintf (DRIVER_NAME, "\twr_len_cmd=0x%02x\n", desc->wr_len_cmd);
++	grub_dprintf (DRIVER_NAME, "\trd_len=    0x%02x\n", desc->rd_len);
++	grub_dprintf (DRIVER_NAME, "\tcontrol=   0x%02x\n", desc->control);
++	grub_dprintf (DRIVER_NAME, "\tstatus=    0x%02x\n", desc->status);
++	grub_dprintf (DRIVER_NAME, "\tretry=     0x%02x\n", desc->retry);
++	grub_dprintf (DRIVER_NAME, "\trxbytes=   0x%02x\n", desc->rxbytes);
++	grub_dprintf (DRIVER_NAME, "\ttxbytes=   0x%02x\n", desc->txbytes);
++	grub_dprintf (DRIVER_NAME, "\tdptr_low=  0x%08x\n", desc->dptr_low);
++	grub_dprintf (DRIVER_NAME, "\tdptr_high= 0x%08x\n", desc->dptr_high);
++}
++
++/**
++ * ismt_desc_dump() - dump the contents of a descriptor for debug purposes
++ * @priv: iSMT private data
++ */
++static void
++ismt_desc_dump (struct ismt_priv *priv)
++{
++	volatile struct ismt_desc *desc = &priv->hw_virt[priv->head];
++
++	grub_dprintf (DRIVER_NAME, "Dump of the descriptor struct: 0x%x\n", priv->head);
++	__ismt_desc_dump (desc);
++}
++
++/**
++ * ismt_gen_reg_dump() - dump the iSMT General Registers
++ * @priv: iSMT private data
++ */
++static void
++ismt_gen_reg_dump (struct ismt_priv *priv)
++{
++	grub_dprintf (DRIVER_NAME, "Dump of the iSMT General Registers\n");
++	grub_dprintf (DRIVER_NAME, "  GCTRL.... : (%p)=0x%08x\n",
++		priv->smba + ISMT_GR_GCTRL,
++		readl (priv->smba + ISMT_GR_GCTRL));
++	grub_dprintf (DRIVER_NAME, "  SMTICL... : (%p)=0x%016llx\n",
++		priv->smba + ISMT_GR_SMTICL,
++		(long long unsigned int) readq (priv->smba + ISMT_GR_SMTICL));
++	grub_dprintf (DRIVER_NAME, "  ERRINTMSK : (%p)=0x%08x\n",
++		priv->smba + ISMT_GR_ERRINTMSK,
++		readl (priv->smba + ISMT_GR_ERRINTMSK));
++	grub_dprintf (DRIVER_NAME, "  ERRAERMSK : (%p)=0x%08x\n",
++		priv->smba + ISMT_GR_ERRAERMSK,
++		readl (priv->smba + ISMT_GR_ERRAERMSK));
++	grub_dprintf (DRIVER_NAME, "  ERRSTS... : (%p)=0x%08x\n",
++		priv->smba + ISMT_GR_ERRSTS,
++		readl (priv->smba + ISMT_GR_ERRSTS));
++	grub_dprintf (DRIVER_NAME, "  ERRINFO.. : (%p)=0x%08x\n",
++		priv->smba + ISMT_GR_ERRINFO,
++		readl (priv->smba + ISMT_GR_ERRINFO));
++}
++
++/**
++ * ismt_mstr_reg_dump() - dump the iSMT Master Registers
++ * @priv: iSMT private data
++ */
++static void
++ismt_mstr_reg_dump (struct ismt_priv *priv)
++{
++	grub_dprintf (DRIVER_NAME, "Dump of the iSMT Master Registers\n");
++	grub_dprintf (DRIVER_NAME, "  MDBA..... : (%p)=0x%016llx\n",
++		priv->smba + ISMT_MSTR_MDBA,
++		(long long unsigned int) readq (priv->smba + ISMT_MSTR_MDBA));
++	grub_dprintf (DRIVER_NAME, "  MCTRL.... : (%p)=0x%08x\n",
++		priv->smba + ISMT_MSTR_MCTRL,
++		readl (priv->smba + ISMT_MSTR_MCTRL));
++	grub_dprintf (DRIVER_NAME, "  MSTS..... : (%p)=0x%08x\n",
++		priv->smba + ISMT_MSTR_MSTS,
++		readl (priv->smba + ISMT_MSTR_MSTS));
++	grub_dprintf (DRIVER_NAME, "  MDS...... : (%p)=0x%08x\n",
++		priv->smba + ISMT_MSTR_MDS,
++		readl (priv->smba + ISMT_MSTR_MDS));
++	grub_dprintf (DRIVER_NAME, "  RPOLICY.. : (%p)=0x%08x\n",
++		priv->smba + ISMT_MSTR_RPOLICY,
++		readl (priv->smba + ISMT_MSTR_RPOLICY));
++	grub_dprintf (DRIVER_NAME, "  SPGT..... : (%p)=0x%08x\n",
++		priv->smba + ISMT_SPGT,
++		readl (priv->smba + ISMT_SPGT));
++}
++#endif
++
++/**
++ * ismt_submit_desc() - add a descriptor to the ring
++ * @priv: iSMT private data
++ */
++static void
++ismt_submit_desc (struct ismt_priv *priv)
++{
++	grub_uint32_t fmhp;
++	grub_uint32_t val;
++
++	/* Set the FMHP (Firmware Master Head Pointer)*/
++	fmhp = ((priv->head + 1) % ISMT_DESC_ENTRIES) << 16;
++	val = readl (priv->smba + ISMT_MSTR_MCTRL);
++	writel ((val & ~ISMT_MCTRL_FMHP) | fmhp, priv->smba + ISMT_MSTR_MCTRL);
++
++	/* Set the start bit */
++	val = readl (priv->smba + ISMT_MSTR_MCTRL);
++	writel (val | ISMT_MCTRL_SS, priv->smba + ISMT_MSTR_MCTRL);
++}
++
++/*
++ * poll chip for completion, 1 second timeout
++ */
++static grub_err_t
++ismt_do_interrupt (struct ismt_priv *priv)
++{
++	grub_uint64_t end = grub_get_time_ms () + 1000;
++	grub_err_t ret = GRUB_ERR_NONE;
++	grub_uint32_t val;
++
++	do {
++		/* check to see if we it's our interrupt */
++		val = readl (priv->smba + ISMT_MSTR_MSTS);
++		if (grub_get_time_ms () > end) {
++			ret = GRUB_ERR_TIMEOUT;
++			break;
++		}
++	} while (!(val & (ISMT_MSTS_MIS | ISMT_MSTS_MEIS)));
++
++	writel (val | ISMT_MSTS_MIS | ISMT_MSTS_MEIS,
++		       priv->smba + ISMT_MSTR_MSTS);
++
++	return ret;
++}
++
++static grub_err_t
++grub_i2c_ismt_set_bus_speed (struct grub_i2c_adapter *adap, grub_uint32_t speed)
++{
++	struct ismt_priv *priv = adap->priv;
++	grub_uint32_t val;
++
++	grub_dprintf (DRIVER_NAME, "grub_i2c_ismt_set_bus_speed(speed=%d)\n", speed);
++
++	val = readl (priv->smba + ISMT_SPGT);
++
++	switch (speed) {
++	case 0:
++		break;
++
++	case 80:
++		grub_dprintf (DRIVER_NAME, "Setting SMBus clock to 80 kHz\n");
++		writel (((val & ~ISMT_SPGT_SPD_MASK) | ISMT_SPGT_SPD_80K),
++			priv->smba + ISMT_SPGT);
++		bus_speed = 80;
++		break;
++
++	case 100:
++		grub_dprintf (DRIVER_NAME, "Setting SMBus clock to 100 kHz\n");
++		writel (((val & ~ISMT_SPGT_SPD_MASK) | ISMT_SPGT_SPD_100K),
++			priv->smba + ISMT_SPGT);
++		bus_speed = 100;
++		break;
++
++	case 400:
++		grub_dprintf (DRIVER_NAME, "Setting SMBus clock to 400 kHz\n");
++		writel (((val & ~ISMT_SPGT_SPD_MASK) | ISMT_SPGT_SPD_400K),
++			priv->smba + ISMT_SPGT);
++		bus_speed = 400;
++		break;
++
++	case 1000:
++		grub_dprintf (DRIVER_NAME, "Setting SMBus clock to 1000 kHz\n");
++		writel (((val & ~ISMT_SPGT_SPD_MASK) | ISMT_SPGT_SPD_1M),
++			priv->smba + ISMT_SPGT);
++		bus_speed = 1000;
++		break;
++
++	default:
++		grub_dprintf (DRIVER_NAME, "Invalid SMBus clock speed, " \
++			"only 0, 80, 100, 400, and 1000 are valid\n");
++		writel (((val & ~ISMT_SPGT_SPD_MASK) | ISMT_SPGT_SPD_80K),
++			priv->smba + ISMT_SPGT);
++		bus_speed = 80;
++		break;
++	}
++
++	grub_dprintf (DRIVER_NAME, "SMBus clock is running at %d kHz\n",
++		      bus_speed);
++
++	return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_i2c_ismt_init (struct grub_i2c_adapter *adap, grub_uint32_t speed)
++{
++	struct ismt_priv *priv = adap->priv;
++	grub_uint32_t val;
++
++	/* allocate memory for the descriptor */
++	priv->hw_chunk = grub_memalign_dma32 (4096,
++				sizeof(struct ismt_desc) * ISMT_DESC_ENTRIES);
++	if (!priv->hw_chunk)
++		return GRUB_ERR_OUT_OF_MEMORY;
++	priv->hw_virt = grub_dma_get_virt (priv->hw_chunk);
++	priv->hw_phys = grub_dma_get_phys (priv->hw_chunk);
++
++	grub_memset ((void *)priv->hw_virt, 0,
++		     (ISMT_DESC_ENTRIES * sizeof(struct ismt_desc)));
++	priv->head = 0;
++
++	/* allocate memory for the temporary data transfer buffer */
++	priv->data_chunk = grub_memalign_dma32 (32, I2C_SMBUS_BLOCK_MAX);
++	if (!priv->data_chunk)
++		return GRUB_ERR_OUT_OF_MEMORY;
++	priv->data_virt = grub_dma_get_virt (priv->data_chunk);
++	priv->data_phys = grub_dma_get_phys (priv->data_chunk);
++	grub_memset ((void *)priv->data_virt, 0, I2C_SMBUS_BLOCK_MAX);
++
++	/* initialize the Master Descriptor Base Address (MDBA) */
++	writeq (priv->hw_phys, priv->smba + ISMT_MSTR_MDBA);
++	/* initialize the Master Control Register (MCTRL) */
++	writel (ISMT_MCTRL_MEIE, priv->smba + ISMT_MSTR_MCTRL);
++	/* initialize the Master Status Register (MSTS) */
++	writel (0, priv->smba + ISMT_MSTR_MSTS);
++	/* initialize the Master Descriptor Size (MDS) */
++	val = readl(priv->smba + ISMT_MSTR_MDS);
++	writel ((val & ~ISMT_MDS_MASK) | (ISMT_DESC_ENTRIES - 1),
++		priv->smba + ISMT_MSTR_MDS);
++
++	/* Set bus speed */
++	grub_i2c_ismt_set_bus_speed (adap, speed);
++
++	return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_i2c_ismt_read_block (struct ismt_priv *priv, grub_uint8_t dev,
++			  grub_uint8_t *buffer, int len)
++{
++	volatile struct ismt_desc *desc;
++	grub_err_t ret;
++
++	desc = &priv->hw_virt[priv->head];
++
++	/* prepare return buffer */
++	grub_memset (buffer, 0xff, len);
++
++	/* initialize the DMA buffer and descriptor */
++	grub_memset ((void *)priv->data_virt, 0, I2C_SMBUS_BLOCK_MAX);
++	grub_memset ((void *)desc, 0, sizeof(struct ismt_desc));
++
++	/* i2c Block Read */
++	desc->control = ISMT_DESC_FAIR;
++	desc->dptr_low = grub_cpu_to_le32 (priv->data_phys);
++	desc->tgtaddr_rw = ISMT_DESC_ADDR_RW(dev, 1);
++
++	if (len == 1) {
++		/* I2C_SMBUS_BYTE transaction type */
++		desc->rd_len = 1;
++	} else {
++		/* I2C_SMBUS_I2C_BLOCK_DATA transaction type */
++		desc->control |= ISMT_DESC_I2C;
++		desc->rd_len = len;
++	}
++
++	/* Add the descriptor */
++	ismt_submit_desc (priv);
++
++	/* Now we wait for interrupt completion, 1s */
++	ret = ismt_do_interrupt (priv);
++	if (ret)
++		return ret;
++
++	if (desc->status & ISMT_DESC_SCS) {
++		grub_dprintf (DRIVER_NAME, "READ SUCCESS\n");
++		grub_memcpy (buffer, (void *)priv->data_virt, desc->rxbytes);
++	} else {
++		if (desc->status & ISMT_DESC_NAK)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_NAK\n");
++		else if (desc->status & ISMT_DESC_CRC)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_CRC\n");
++		else if (desc->status & ISMT_DESC_COL)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_COL\n");
++		else if (desc->status & ISMT_DESC_LPR)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_LPR\n");
++		else if (desc->status & (ISMT_DESC_DLTO | ISMT_DESC_CLTO))
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_DLTO|ISMT_DESC_CLTO\n");
++		else
++			grub_dprintf (DRIVER_NAME, "READ ERROR\n");
++	}
++
++	/* Update the ring pointer */
++	priv->head++;
++	priv->head %= ISMT_DESC_ENTRIES;
++
++	return ret;
++}
++
++static grub_err_t
++grub_i2c_ismt_read (struct grub_i2c_adapter *adap, grub_uint8_t dev,
++		    grub_uint32_t addr, int alen, grub_uint8_t *buffer, int len)
++{
++	struct ismt_priv *priv = adap->priv;
++	grub_uint8_t *p;
++	grub_err_t ret;
++	int siz;
++
++	grub_dprintf (DRIVER_NAME, "iSMT: i2c read (dev=0x%02x,addr=0x%08x,alen=%d)\n", dev, addr, alen);
++
++	p = buffer;
++
++	do {
++		siz = (len > I2C_SMBUS_BLOCK_MAX) ? I2C_SMBUS_BLOCK_MAX : len;
++
++		ret = grub_i2c_ismt_read_block (priv, dev, p, siz);
++		if (ret)
++			return ret;
++
++		len -= siz;
++		if (p)
++			p += siz;
++	} while (len > 0);
++
++	return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_i2c_ismt_write_block (struct ismt_priv *priv, grub_uint8_t dev,
++			   grub_uint8_t *buffer, int len)
++{
++	volatile struct ismt_desc *desc;
++	grub_err_t ret;
++
++	desc = &priv->hw_virt[priv->head];
++
++	/* initialize the DMA buffer and descriptor */
++	grub_memset ((void *)priv->data_virt, 0, I2C_SMBUS_BLOCK_MAX);
++	grub_memset ((void *)desc, 0, sizeof(struct ismt_desc));
++
++	/* i2c Block Write */
++	desc->tgtaddr_rw = ISMT_DESC_ADDR_RW(dev, 0);
++	desc->control = ISMT_DESC_FAIR;
++
++	if (len == 1) {
++		/* I2C_SMBUS_BYTE transaction type */
++		desc->control |= ISMT_DESC_CWRL;
++		desc->wr_len_cmd = buffer[0] /*comamnd*/;
++	} else {
++		/* I2C_SMBUS_I2C_BLOCK_DATA transaction type */
++		desc->wr_len_cmd = len;
++		desc->control |= ISMT_DESC_I2C;
++		desc->dptr_low = grub_cpu_to_le32 (priv->data_phys);
++		grub_memcpy ((void *)priv->data_virt, buffer, len);
++	}
++
++	/* Add the descriptor */
++	ismt_submit_desc (priv);
++
++	/* Now we wait for interrupt completion, 1s */
++	ret = ismt_do_interrupt (priv);
++	if (ret)
++		return ret;
++
++	if (desc->status & ISMT_DESC_SCS) {
++		grub_dprintf (DRIVER_NAME, "WRITE success\n");
++	} else {
++		if (desc->status & ISMT_DESC_NAK)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_NAK\n");
++		else if (desc->status & ISMT_DESC_CRC)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_CRC\n");
++		else if (desc->status & ISMT_DESC_COL)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_COL\n");
++		else if (desc->status & ISMT_DESC_LPR)
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_LPR\n");
++		else if (desc->status & (ISMT_DESC_DLTO | ISMT_DESC_CLTO))
++			grub_dprintf (DRIVER_NAME, "ISMT_DESC_DLTO|ISMT_DESC_CLTO\n");
++		else
++			grub_dprintf (DRIVER_NAME, "WRITE ERROR\n");
++	}
++
++	/* Update the ring pointer */
++	priv->head++;
++	priv->head %= ISMT_DESC_ENTRIES;
++
++	return ret;
++}
++
++static grub_err_t
++grub_i2c_ismt_write (struct grub_i2c_adapter *adap, grub_uint8_t dev,
++		     grub_uint32_t addr, int alen, grub_uint8_t *buffer,
++		     int len)
++{
++	struct ismt_priv *priv = adap->priv;
++	grub_uint8_t *bp, tmp[I2C_SMBUS_BLOCK_MAX];
++	grub_err_t ret;
++	int siz;
++
++	grub_dprintf (DRIVER_NAME, "iSMT: i2c write (dev=0x%02x,addr=0x%08x,alen=%d)\n", dev, addr, alen);
++
++	tmp[0] = buffer[0] /*command*/;
++	bp = &buffer[1];
++	len--;
++
++	do {
++		siz = (len > I2C_SMBUS_BLOCK_MAX-1) ? I2C_SMBUS_BLOCK_MAX-1 : len;
++
++		grub_memcpy (&tmp[1], bp, siz);
++		ret = grub_i2c_ismt_write_block (priv, dev, tmp, siz+1);
++		if (ret)
++			return ret;
++
++		len -= siz;
++		if (bp)
++			bp += siz;
++	} while (len > 0);
++
++	return GRUB_ERR_NONE;
++}
++
++static void
++grub_i2c_ismt_fini_hw (struct grub_i2c_adapter *adap)
++{
++	if (adap) {
++		struct ismt_priv *priv = adap->priv;
++
++		/* Free up memory */
++		grub_dma_free (priv->hw_chunk);
++		grub_dma_free (priv->data_chunk);
++		grub_free (adap->priv);
++		grub_free (adap);
++	}
++}
++
++static const struct grub_i2c_driver grub_i2c_ismt_driver =
++{
++	.name		= DRIVER_NAME,
++	.set_bus_speed	= grub_i2c_ismt_set_bus_speed,
++	.read		= grub_i2c_ismt_read,
++	.write		= grub_i2c_ismt_write,
++	.fini		= grub_i2c_ismt_fini_hw,
++};
++
++static int
++grub_i2c_ismt_pci_iterate (grub_pci_device_t dev,
++			   grub_pci_id_t pciid,
++			   void *data __attribute__ ((unused)))
++{
++	grub_pci_address_t addr;
++	grub_uint32_t bar;
++	struct grub_i2c_adapter *adap;
++	struct ismt_priv *priv;
++
++	if ((pciid & 0xFFFF) != 0x8086 ||
++	    ((pciid >> 16) != 0x0c59 &&		/* S1200_SMT0 */
++	     (pciid >> 16) != 0x0c5a &&		/* S1200_SMT1 */
++	     (pciid >> 16) != 0x19ac &&		/* DNV_SMT */
++	     (pciid >> 16) != 0x1f15))		/* AVOTON_SMT */
++		return 0;
++
++	grub_dprintf (DRIVER_NAME, "found\n");
++
++	/* Allocate memory for the adapter */
++	adap = grub_zalloc (sizeof (*adap));
++	if (!adap) {
++		grub_dprintf (DRIVER_NAME, "no mem\n");
++		return 0;
++	}
++
++	/* Allocate memory for the private data */
++	adap->priv = priv = grub_zalloc (sizeof (struct ismt_priv));
++	if (!priv) {
++		grub_dprintf (DRIVER_NAME, "no mem\n");
++		goto fail;
++	}
++
++	/* Read address */
++	addr = grub_pci_make_address (dev, GRUB_PCI_REG_ADDRESSES);
++	bar = grub_pci_read (addr);
++
++	/* Enable device */
++	addr = grub_pci_make_address (dev, GRUB_PCI_REG_COMMAND);
++	grub_pci_write_word (addr, grub_pci_read_word (addr) |
++			     GRUB_PCI_COMMAND_MEM_ENABLED |
++			     GRUB_PCI_COMMAND_BUS_MASTER);
++
++	/* Map base address */
++	priv->smba = grub_pci_device_map_range (dev, bar & GRUB_PCI_ADDR_MEM_MASK, 0x3ff);
++	grub_dprintf (DRIVER_NAME, "smba=%p\n", priv->smba);
++
++	/* Initialize adapter */
++	if (grub_i2c_ismt_init (adap, 100)) {
++		grub_dprintf (DRIVER_NAME, "couldn't initialize I2C adapter\n");
++		goto fail;
++	}
++
++	adap->driver = (struct grub_i2c_driver *)&grub_i2c_ismt_driver;
++
++	/* Register in I2C layer */
++	grub_i2c_adapter_register (adap);
++	return 0;
++
++fail:
++	if (adap->priv)
++		grub_free (adap->priv);
++	grub_free (adap);
++	return 0;
++}
++
++GRUB_MOD_INIT(i2c_ismt)
++{
++	/* Iterate through devices, search for DW I2C adapter */
++	grub_pci_iterate (grub_i2c_ismt_pci_iterate, NULL);
++}
++
++GRUB_MOD_FINI(i2c_ismt)
++{
++	grub_i2c_driver_unregister ((struct grub_i2c_driver *)&grub_i2c_ismt_driver);
++}
+-- 
+2.17.1
+

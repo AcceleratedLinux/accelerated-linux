@@ -2603,6 +2603,13 @@ next_request:
 		/* POST for files does not make sense */
 		send_headers_and_exit(HTTP_NOT_IMPLEMENTED);
 	}
+	if (strncmp(tptr, "ccgi-bin/", 9) == 0) {
+		if (tptr[9] == '\0') {
+			/* protect listing "cgi-bin/" */
+			send_headers_and_exit(HTTP_FORBIDDEN);
+		}
+		send_cgi_and_exit(urlcopy, urlcopy, prequest, length, cookie, content_type);
+	}
 	send_file_and_exit(tptr,
 		(prequest != request_HEAD ? SEND_HEADERS_AND_BODY : SEND_HEADERS)
 	);

@@ -1,0 +1,179 @@
+From 65974f1220638ffb10974d4cdc99d5c7a338330d Mon Sep 17 00:00:00 2001
+From: Greg Ungerer <gerg@kernel.org>
+Date: Tue, 2 Apr 2019 13:35:27 +1000
+Subject: [PATCH 2/3] pppd: update pppd from version 2.4.5 to 2.4.7
+
+Fixes to upgrade from automate pppd-2.4.5 to pppd-2.4.7.
+---
+ pppd/plugins/Makefile.linux        | 54 +++++++++++++++++++++++++-----
+ pppd/plugins/radius/radiusclient.h |  6 +++-
+ pppd/plugins/rp-pppoe/plugin.c     | 10 +++++-
+ pppd/plugins/tacc/lib/Makefile     |  3 ++
+ 4 files changed, 62 insertions(+), 11 deletions(-)
+
+diff --git a/pppd/plugins/Makefile.linux b/pppd/plugins/Makefile.linux
+index ab8cf50..ee84f83 100644
+--- a/pppd/plugins/Makefile.linux
++++ b/pppd/plugins/Makefile.linux
+@@ -1,23 +1,59 @@
+ #CC	= gcc
+-COPTS	= -O2 -g
+-CFLAGS	= $(COPTS) -I.. -I../../include -fPIC
+-LDFLAGS	= -shared
++CFLAGS	= $(COPTS) -I.. -I../../include -Itacc/include
+ INSTALL	= install
+ 
++ifeq ($(CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS),y)
++CFLAGS  += -fPIC -DDYNAMIC_PLUGINS=1
++LDFLAGS = -shared
++SO = so
++else
++SO = o
++endif
++
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ BINDIR = $(DESTDIR)/sbin
+ MANDIR = $(DESTDIR)/share/man/man8
+ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
+ 
+-SUBDIRS := rp-pppoe pppoatm pppol2tp
+-# Uncomment the next line to include the radius authentication plugin
++SUBDIRS := 
++ifeq ($(CONFIG_USER_PPPD_WITH_PPPOE),y)
++SUBDIRS += rp-pppoe
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PPPOA),y)
++SUBDIRS += pppoatm
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PPPOL2TP),y)
++SUBDIRS += pppol2tp
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_RADIUS),y)
+ SUBDIRS += radius
+-PLUGINS := minconn.so passprompt.so passwordfd.so winbind.so
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PPTP),y)
++SUBDIRS += pptp
++endif
++
++PLUGINS := 
++ifeq ($(CONFIG_USER_PPPD_WITH_MINCONN),y)
++PLUGINS += minconn.$(SO)
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PASSPROMPT),y)
++PLUGINS += passprompt.$(SO)
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PASSWORDFD),y)
++PLUGINS += passwordfd.$(SO)
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_WINBIND),y)
++PLUGINS += winbind.$(SO)
++endif
++
++ifeq ($(CONFIG_USER_PPPD_WITH_TACACS),y)
++PLUGINS += tacacs.$(SO)
++SUBDIRS += tacc/lib
++endif
+ 
+ # This setting should match the one in ../Makefile.linux
++ifeq ($(CONFIG_USER_PPPD_WITH_MPPE),y)
+ MPPE=y
+-
+-ifdef MPPE
+ CFLAGS   += -DMPPE=1
+ endif
+ 
+@@ -27,7 +63,7 @@ include .depend
+ endif
+ 
+ all:	$(PLUGINS)
+-	for d in $(SUBDIRS); do $(MAKE) $(MFLAGS) -C $$d all; done
++	for d in $(SUBDIRS); do $(MAKE) $(MFLAGS) -C $$d all || exit 1; done
+ 
+ %.so: %.c
+ 	$(CC) -o $@ $(LDFLAGS) $(CFLAGS) $^
+diff --git a/pppd/plugins/radius/radiusclient.h b/pppd/plugins/radius/radiusclient.h
+index 51b959a..94f94c9 100644
+--- a/pppd/plugins/radius/radiusclient.h
++++ b/pppd/plugins/radius/radiusclient.h
+@@ -67,7 +67,7 @@ typedef struct pw_auth_hdr
+ } AUTH_HDR;
+ 
+ #define AUTH_HDR_LEN			20
+-#define MAX_SECRET_LENGTH		(3 * 16) /* MUST be multiple of 16 */
++#define MAX_SECRET_LENGTH		(16 * 16) /* MUST be multiple of 16 */
+ #define CHAP_VALUE_LENGTH		16
+ 
+ #define PW_AUTH_UDP_PORT		1812
+@@ -152,6 +152,7 @@ typedef struct pw_auth_hdr
+ #define PW_MS_CHAP_MPPE_KEYS		12	/* string */
+ #define PW_MS_MPPE_SEND_KEY		16	/* string */
+ #define PW_MS_MPPE_RECV_KEY		17	/* string */
++#define PW_SG_GROUP			1	/* string */
+ #define PW_MS_PRIMARY_DNS_SERVER	28	/* ipaddr */
+ #define PW_MS_SECONDARY_DNS_SERVER	29	/* ipaddr */
+ #define PW_MS_PRIMARY_NBNS_SERVER	30	/* ipaddr */
+@@ -296,6 +297,8 @@ typedef struct pw_auth_hdr
+ /* Vendor codes */
+ #define VENDOR_NONE     (-1)
+ #define VENDOR_MICROSOFT	311
++#define VENDOR_SECURE		1573
++
+ 
+ /* Server data structures */
+ 
+@@ -391,6 +394,7 @@ int rc_avpair_assign __P((VALUE_PAIR *, void *, int));
+ VALUE_PAIR *rc_avpair_new __P((int, void *, int, int));
+ VALUE_PAIR *rc_avpair_gen __P((AUTH_HDR *));
+ VALUE_PAIR *rc_avpair_get __P((VALUE_PAIR *, UINT4));
++VALUE_PAIR *rc_vsa_get __P((VALUE_PAIR *, UINT4, UINT4));
+ VALUE_PAIR *rc_avpair_copy __P((VALUE_PAIR *));
+ void rc_avpair_insert __P((VALUE_PAIR **, VALUE_PAIR *, VALUE_PAIR *));
+ void rc_avpair_free __P((VALUE_PAIR *));
+diff --git a/pppd/plugins/rp-pppoe/plugin.c b/pppd/plugins/rp-pppoe/plugin.c
+index a8c2bb4..8eb4a9e 100644
+--- a/pppd/plugins/rp-pppoe/plugin.c
++++ b/pppd/plugins/rp-pppoe/plugin.c
+@@ -47,9 +47,11 @@ static char const RCSID[] =
+ #include <fcntl.h>
+ #include <signal.h>
+ #include <net/ethernet.h>
++#include <netinet/in.h>
+ #include <net/if_arp.h>
+ #include <linux/ppp_defs.h>
+ #include <linux/if_pppox.h>
++#include <linux/if_pppol2tp.h>
+ 
+ #ifndef _ROOT_PATH
+ #define _ROOT_PATH ""
+@@ -57,7 +59,13 @@ static char const RCSID[] =
+ 
+ #define _PATH_ETHOPT         _ROOT_PATH "/etc/ppp/options."
+ 
+-char pppd_version[] = VERSION;
++#ifndef DYNAMIC_PLUGINS
++#define	plugin_init pppoe_plugin_init
++#endif
++char pppoe_pppd_version[] = VERSION;
++
++int h = sizeof(struct sockaddr_in6) + sizeof(__u16) + sizeof(__kernel_pid_t);
++int n = sizeof(struct pppol2tpin6_addr);
+ 
+ /* From sys-linux.c in pppd -- MUST FIX THIS! */
+ extern int new_style_driver;
+diff --git a/pppd/plugins/tacc/lib/Makefile b/pppd/plugins/tacc/lib/Makefile
+index 4ae17a8..70faf90 100644
+--- a/pppd/plugins/tacc/lib/Makefile
++++ b/pppd/plugins/tacc/lib/Makefile
+@@ -44,5 +44,8 @@ $(LIBRARY): $(LIBOBJS) Makefile
+ 	$(AR) rc $(LIBRARY) $(LIBOBJS)
+ 	$(RANLIB) $(LIBRARY)
+ 
++install:
++	@echo "install: nothing to do here"
++
+ clean: 
+ 	rm -f core $(LIBRARY) $(LIBOBJS)
+-- 
+2.17.1
+

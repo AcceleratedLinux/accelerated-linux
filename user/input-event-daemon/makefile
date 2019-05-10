@@ -1,4 +1,6 @@
 
+export ACL_LICENSE = COFFEE-WARE
+
 PKG = input-event-daemon
 URL = http://github.com/gandro/input-event-daemon/tarball/v0.1.3
 DOWNLOADNAME = $(PKG)-v0.1.3.tar

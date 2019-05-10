@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# first push all DMI values into our grub bootenv using fw_setenv emulation
+DMI_LIST=
+DMI_LIST="$DMI_LIST system-manufacturer:manufacturer"
+DMI_LIST="$DMI_LIST system-product-name:model"
+DMI_LIST="$DMI_LIST system-serial-number:serial"
+DMI_LIST="$DMI_LIST system-version:hardware_version"
+DMI_LIST="$DMI_LIST system-family:part_number"
+DMI_LIST="$DMI_LIST system-sku-number:ethaddr"
+DMI_LIST="$DMI_LIST system-uuid:uuid"
+DMI_LIST="$DMI_LIST baseboard-asset-tag:upasswd"
+
+for i in $DMI_LIST; do
+	dmi=${i%:*}
+	fwenv=${i#*:}
+	val=$(dmidecode -q -s $dmi)
+	# special fixup for ethaddr
+	[ "$fwenv" = "ethaddr" ] && val=$(printf "%012X" 0x$val | sed 's/\(..\)/&:/g;s/:$//')
+	# special check for blank unique password
+	[ "$val" -a "$val" != "PasswordBlank" ] && fw_setenv "$fwenv" "$val"
+done
+
+# second,  populate MAC addrs, 4 of them starting at ethaddr
+ethaddr=$(fw_printenv -n ethaddr)
+
+if [ "$ethaddr" ]; then
+	base="0x${ethaddr//:/}"
+	for i in 1 2 3; do
+		fw_setenv eth${i}addr \
+			$(printf "%012X" $((base + i)) | sed 's/\(..\)/&:/g;s/:$//')
+	done
+fi
+
+exit 0

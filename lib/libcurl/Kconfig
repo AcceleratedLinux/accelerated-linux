@@ -1,6 +1,6 @@
 config LIB_LIBCURL
 	bool "Build curl"
-	select LIB_LIBIDN
+	select LIB_LIBIDN2
 	select LIB_ZLIB
 	select LIB_LIBBZ2
 	select LIB_LIBSSL

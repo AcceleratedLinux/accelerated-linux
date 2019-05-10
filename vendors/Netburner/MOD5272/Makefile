@@ -15,6 +15,7 @@ ROMFS_DIRS = bin \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	usr \
 	var
 

@@ -1,6 +1,6 @@
 #
-# Automatically generated make config: don't edit
-# Dist builder
+# Automatically generated file; DO NOT EDIT.
+# Embedded Linux Configuration
 #
 CONFIG_DISTVERSION="5.0"
 

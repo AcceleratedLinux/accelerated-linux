@@ -1,3 +1,5 @@
+export ACL_LICENSE=Custom-OSS
+
 all: linux
 
 romfs:

@@ -1,3 +1,4 @@
+export ACL_LICENSE = GPLv2
 
 EXEC = cgi_demo
 OBJS = cgi.o cgivars.o htmllib.o template.o

@@ -1,0 +1,10 @@
+--- glib-2.57.1/gio/Makefile.am	2018-09-27 13:27:14.725376091 +1000
++++ glib-2.57.1/gio/Makefile.am	2018-09-27 13:27:18.525376173 +1000
+@@ -915,6 +915,7 @@
+ 	$(NULL)
+ gio_LDADD = libgio-2.0.la 				\
+ 	$(top_builddir)/gobject/libgobject-2.0.la	\
++	$(top_builddir)/gmodule/libgmodule-2.0.la 	\
+ 	$(top_builddir)/glib/libglib-2.0.la		\
+ 	$(NULL)
+ 

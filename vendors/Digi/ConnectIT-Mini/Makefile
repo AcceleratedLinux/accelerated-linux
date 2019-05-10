@@ -8,16 +8,16 @@ ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
 
+SIGNING_ALG = ecdsa
+SIGNING_EXTRA =
+
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
 ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
 
 DEVICES += $(DEVICE_PTY_64) \
 	ledman,c,126,0 \
-	serial/port1,c,207,16 \
-	serial/port2,c,207,17 \
-	serial/port3,c,207,18 \
-	serial/port4,c,207,19
+	serial/port1,c,207,17
 
 FLASH_DEVICES = \
 	boot,c,90,0 \
@@ -55,9 +55,9 @@ uimage.bin:
 	mkimage -A arm -O linux -T kernel -C none -a 0x80800000 -e 0x80800000 -n "Linux-4.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x83800000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-connectit4.dtb $(IMAGEDIR)/
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-connectit4.dtb /tftpboot/
+	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-connectit4.dtb /tftpboot/
 
-image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.tag image.copy
+image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

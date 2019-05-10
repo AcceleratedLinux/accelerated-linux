@@ -1,3 +1,4 @@
+export ACL_LICENSE=GPLv2
 
 EXEC1 = resolveip
 OBJS1 = resolveip.o

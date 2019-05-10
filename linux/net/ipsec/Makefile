@@ -15,9 +15,10 @@ $(obj)/.linked:
 -include $(obj)/.linked
 
 include $(OPENSWANSRCDIR)/linux/net/ipsec/Makefile.fs2_6
+include $(OPENSWANSRCDIR)/Makefile.ver
 
 $(obj)/version.c:     $(OPENSWANSRCDIR)/linux/net/ipsec/version.in.c
-	sed '/"/s/xxx/$(IPSECVERSION)/' $? > $@
+	sed 's/@IPSECVERSION@/$(IPSECBASEVERSION)/' $? > $@
 
 clean:
 	rm -f $(obj)/.linked $(obj)/*.o $(obj)/*.ko $(obj)/version.c

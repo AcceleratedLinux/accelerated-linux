@@ -1,0 +1,43 @@
+diff -ur libidn-0.5.2/config.sub libidn-0.5.2/config.sub
+--- libidn-0.5.2/config.sub	2004-07-14 17:52:01.000000000 +1000
++++ libidn-0.5.2/config.sub	2019-04-23 08:22:07.902815416 +1000
+@@ -227,6 +227,7 @@
+ 	# Some are omitted here because they have special meanings below.
+ 	1750a | 580 \
+ 	| a29k \
++	| aarch64 | aarch64_be \
+ 	| alpha | alphaev[4-8] | alphaev56 | alphaev6[78] | alphapca5[67] \
+ 	| alpha64 | alpha64ev[4-8] | alpha64ev56 | alpha64ev6[78] | alpha64pca5[67] \
+ 	| am33_2.0 \
+@@ -278,7 +279,10 @@
+ 		;;
+ 	m88110 | m680[12346]0 | m683?2 | m68360 | m5200 | v70 | w65 | z8k)
+ 		;;
+-
++	nios2 | nios2-* | nios2 | nios2-*)
++		basic_machine=nios2-altera
++		os=-linux
++		;;
+ 	# We use `pc' rather than `unknown'
+ 	# because (1) that's what they normally are, and
+ 	# (2) the word "unknown" tends to confuse beginning users.
+@@ -293,6 +297,7 @@
+ 	# Recognize the basic CPU types with company name.
+ 	580-* \
+ 	| a29k-* \
++	| aarch64-* | aarch64_be-* \
+ 	| alpha-* | alphaev[4-8]-* | alphaev56-* | alphaev6[78]-* \
+ 	| alpha64-* | alpha64ev[4-8]-* | alpha64ev56-* | alpha64ev6[78]-* \
+ 	| alphapca5[67]-* | alpha64pca5[67]-* | arc-* \
+diff -ur libidn-0.5.2/Makefile.in libidn-0.5.2/Makefile.in
+--- libidn-0.5.2/Makefile.in	2004-07-14 17:52:01.000000000 +1000
++++ libidn-0.5.2/Makefile.in	2016-03-18 16:25:37.856648223 +1000
+@@ -233,7 +233,7 @@
+ sharedstatedir = @sharedstatedir@
+ sysconfdir = @sysconfdir@
+ target_alias = @target_alias@
+-SUBDIRS = lib po src doc tests examples java
++SUBDIRS = lib po src #doc tests examples java
+ ACLOCAL_AMFLAGS = -I m4
+ EXTRA_DIST = FAQ libidn.pc.in \
+ 	libc/README libc/getaddrinfo-idn.txt libc/example.c \

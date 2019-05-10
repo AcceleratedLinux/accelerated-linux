@@ -512,10 +512,10 @@ ipsec_tunnel_strip_hard_header(struct ipsec_xmit_state *ixs)
 		       (unsigned long int)ixs->skb->len, ixs->hard_header_len);
 		c = ' ';
 		for (i=0; i < ixs->hard_header_len; i++) {
-			printk("%c%02x", c, ixs->skb->data[i]);
+			printk(KERN_CONT "%c%02x", c, ixs->skb->data[i]);
 			c = ':';
 		}
-		printk(" \n");
+		printk(KERN_CONT " \n");
 	}
 
 	KLIPS_IP_PRINT(debug_tunnel & DB_TN_XMIT, ixs->iph);

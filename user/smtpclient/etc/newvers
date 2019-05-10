@@ -58,10 +58,10 @@ INCREASE=P
 
 #   fallback if "getopt" is not available on system
 getopt=getopt
-eval "$getopt" >/dev/null 2>&1
+which $getopt >/dev/null 2>&1
 if [ $? -ne 0 ]; then
-    rm -f /tmp/getopt.c >/dev/null 2>&1
-    cat >/tmp/getopt.c <<EOT
+    rm -f /tmp/getopt-$$.c >/dev/null 2>&1
+    cat >/tmp/getopt-$$.c <<EOT
 #include <stdio.h>
 main(argc, argv)
 int argc;
@@ -91,15 +91,15 @@ char *argv[];
     exit(status);
 }
 EOT
-        cc -o /tmp/getopt /tmp/getopt.c
-    getopt=/tmp/getopt
+        cc -o /tmp/getopt-$$ /tmp/getopt-$$.c
+    getopt=/tmp/getopt-$$
 fi
 set -- `$getopt l:p:r:i:dDVh $*`
 if [ $? != 0 ]; then
     print_usage
     exit 2
 fi
-rm -f /tmp/getopt >/dev/null 2>&1
+rm -f /tmp/getopt-$$ >/dev/null 2>&1
 for opt in $*; do
     case $opt in
         -l)  LANGUAGE=$2;      shift; shift  ;;

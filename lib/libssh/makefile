@@ -1,9 +1,13 @@
 
-CFLAGS   := $(CFLAGS:-fno-common=)
+CFLAGS   := $(CFLAGS:-fno-common=) -save-temps -D_GNU_SOURCE=1
 
-URL       = https://git.libssh.org/projects/libssh.git/snapshot/libssh-0.7.2.tar.gz
-SRCDIR   := libssh-0.7.2
-BUILDDIR := libssh-0.7.2-build
+# VERSION   = 0.7.6
+# 0.8.4 requires cmake3
+VERSION   = 0.8.4
+
+URL       = https://git.libssh.org/projects/libssh.git/snapshot/libssh-$(VERSION).tar.gz
+SRCDIR   := libssh-$(VERSION)
+BUILDDIR := libssh-$(VERSION)-build
 CMAKE_OPTS += -DOPENSSL_INCLUDE_DIR=$(STAGEDIR)
 CMAKE_OPTS += -DWITH_SERVER=OFF
 CMAKE_OPTS += -DWITH_GCRYPT=OFF

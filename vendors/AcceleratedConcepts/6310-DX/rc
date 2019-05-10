@@ -23,6 +23,12 @@ echo 6 > /proc/sys/kernel/printk
 # init devices before we need any
 cp -ra /lib/udev/devices/. /dev
 
+# test /dev/console and if not present make it /dev/null
+if ! (echo -n "" > /dev/console) 2> /dev/null; then
+	rm -f /dev/console
+	ln /dev/null /dev/console
+fi
+
 echo "Initializing network interfaces..."
 ip link set eth0 name wan
 ip link set eth1 name lan

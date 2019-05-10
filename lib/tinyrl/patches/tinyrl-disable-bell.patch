@@ -1,0 +1,31 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 897209d..eab0344 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -11,6 +11,11 @@ else()
+ 	add_definitions(-DDISABLE_UTF8)
+ endif()
+ 
++option(DISABLE_BELL "Disable Bell" OFF)
++if(DISABLE_BELL)
++	add_definitions(-DDISABLE_BELL)
++endif()
++
+ add_library(tinyrl tinyrl.c history.c complete.c ${UTF8_SOURCE})
+ 
+ add_executable(example example.c)
+diff --git a/tinyrl.c b/tinyrl.c
+index ea605fa..063db5a 100644
+--- a/tinyrl.c
++++ b/tinyrl.c
+@@ -971,8 +971,10 @@ void tinyrl_crlf(struct tinyrl *this)
+  */
+ void tinyrl_ding(struct tinyrl *this)
+ {
++#ifndef DISABLE_BELL
+ 	tinyrl_printf(this, "\x7");
+ 	fflush(this->ostream);
++#endif
+ }
+ 
+ void tinyrl_reset_line_state(struct tinyrl *this)

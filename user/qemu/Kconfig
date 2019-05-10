@@ -1,6 +1,7 @@
 
 config USER_QEMU
 	bool 'QEMU system emulator'
+	select LIB_LIBPIXMAN
 	help
 	  QEMU is a system emulator. You may want it for KVM.
 

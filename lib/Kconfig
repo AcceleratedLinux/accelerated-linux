@@ -36,10 +36,6 @@ config LIB_LIBIBERTY
 	bool "Build libiberty"
 	default n
 
-config LIB_POPT
-	bool "Build libpopt"
-	default n
-
 config LIB_LIBSSL
 	bool "Build libSSL"
 	default n
@@ -95,12 +91,6 @@ config LIB_LIBNETOLD
 	default n
 
 source ../lib/libpam/Kconfig
-
-config USER_PAM_RADIUS
-	bool "PAM RADIUS"
-	depends on LIB_LIBPAM
-	help
-	  PAM should support RADIUS authentication.
 
 config USER_PAM_SMB
 	bool "PAM SMB"
@@ -191,26 +181,9 @@ config LIB_ARES
 	help
 	  An asynchronous resolver with more features than the uClibc resolver.
 
-config LIB_LIBIDN
-	bool "Build libidn"
-	default n
-	help
-	  GNU libidn the internationalised domain name resolver.
-
 config LIB_OSIP2
 	bool "Build libosip2"
 	default n
-
-config LIB_LIBCURL
-	bool "Build curl"
-	select LIB_LIBIDN
-	select LIB_ZLIB
-	select LIB_LIBBZ2
-	select LIB_LIBSSL
-	default n
-	help
-	  The curl library for resolving URLs.
-	  This library requires (and enables) SSL, zlib and libidn.
 
 config LIB_PWLIB
 	bool 'Build pwlib'

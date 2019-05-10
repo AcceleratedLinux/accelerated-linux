@@ -1,0 +1,233 @@
+diff --git a/Makefile b/Makefile
+index e5b840e..39bd24b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -38,6 +38,9 @@ all: pam_radius_auth.so
+ pam_radius_auth.o: src/pam_radius_auth.c src/pam_radius_auth.h
+ 	$(CC) $(CFLAGS) -c $< -o $@
+ 
++pam_radius_parse_attributes.o: src/pam_radius_parse_attributes.c src/pam_radius_auth.h src/pam_radius_parse_attributes.h
++	$(CC) $(CFLAGS) -c $< -o $@
++
+ md5.o: src/md5.c src/md5.h
+ 	$(CC) $(CFLAGS) -c $< -o $@
+ #
+@@ -58,8 +61,8 @@ md5.o: src/md5.c src/md5.h
+ #
+ #	gcc -shared pam_radius_auth.o md5.o -lpam -lc -o pam_radius_auth.so
+ #
+-pam_radius_auth.so: pam_radius_auth.o md5.o
+-	$(CC) $(LDFLAGS) pam_radius_auth.o md5.o -lpam -o pam_radius_auth.so
++pam_radius_auth.so: pam_radius_auth.o pam_radius_parse_attributes.o md5.o
++	$(CC) $(LDFLAGS) pam_radius_auth.o pam_radius_parse_attributes.o md5.o -lpam -o pam_radius_auth.so
+ 
+ ######################################################################
+ #
+diff --git a/src/pam_radius_auth.c b/src/pam_radius_auth.c
+index 7c7c9d9..d6d8743 100644
+--- a/src/pam_radius_auth.c
++++ b/src/pam_radius_auth.c
+@@ -61,6 +61,8 @@
+ 
+ #include "pam_radius_auth.h"
+ 
++#include "pam_radius_parse_attributes.h"
++
+ #define DPRINT if (opt_debug & PAM_DEBUG_ARG) _pam_log
+ 
+ /* internal data */
+@@ -1250,6 +1252,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh,int flags,int argc,CONST c
+ 
+ 	/* Whew! Done the pasword checks, look for an authentication acknowledge */
+ 	if (response->code == PW_AUTHENTICATION_ACK) {
++        pam_radius_parse_attributes(pamh, response);
+ 		retval = PAM_SUCCESS;
+ 	} else {
+ 		retval = PAM_AUTH_ERR;	/* authentication failure */
+@@ -1623,6 +1626,7 @@ PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh,int flags,int argc,CONST char
+ 	return retval;
+ }
+ 
++
+ #ifdef PAM_STATIC
+ 
+ /* static module data */
+diff --git a/src/pam_radius_auth.h b/src/pam_radius_auth.h
+index 894d3fe..f00d8ee 100644
+--- a/src/pam_radius_auth.h
++++ b/src/pam_radius_auth.h
+@@ -139,4 +139,6 @@ typedef struct radius_conf_t {
+ #define TRUE !FALSE
+ #endif
+ 
++#define DPRINT if (opt_debug & PAM_DEBUG_ARG) _pam_log
++
+ #endif /* PAM_RADIUS_H */
+diff --git a/src/pam_radius_parse_attributes.c b/src/pam_radius_parse_attributes.c
+new file mode 100644
+index 0000000..4f04306
+--- /dev/null
++++ b/src/pam_radius_parse_attributes.c
+@@ -0,0 +1,125 @@
++/*
++ * Copyright (c) 2019 Digi International Inc.,
++ *  11001 Bren Road East, Minnetonka, MN 55343
++ *
++ * pam_radius_parse_attributes
++ *      Parse attributes from the RADIUS response
++ *
++ *   This program is free software; you can redistribute it and/or modify
++ *   it under the terms of the GNU General Public License as published by
++ *   the Free Software Foundation; either version 2 of the License, or
++ *   (at your option) any later version.
++ *
++ *   This program is distributed in the hope that it will be useful,
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *   GNU General Public License for more details.
++ *
++ *   You should have received a copy of the GNU General Public License
++ *   along with this program; if not, write to the Free Software
++ *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ */
++
++#include <stddef.h>
++#include "pam_radius_auth.h"
++
++// From dictionary.unix
++#define RADIUS_VSA_UNIX 4
++#define RADIUS_VSA_UNIX_GROUP_NAMES 14
++
++// From RFC 2865 section 5.26
++typedef struct radius_vsa_value_t
++{
++       unsigned char vendor_type;
++       unsigned char vendor_length;
++       unsigned char vendor_value[];
++} radius_vsa_value_t;
++
++// It turns out that ntohl assumes that values that are aligned to 4-byte boundaries.
++// However, some RADIUS attribute fields are not aligned (e.g. vendor ID).
++static inline uint32_t ntohl_unaligned(uint8_t * data)
++{
++    return
++        ((uint32_t)data[0]) << 24 |
++        ((uint32_t)data[1]) << 16 |
++        ((uint32_t)data[2]) << 8 |
++        ((uint32_t)data[3]) << 0;
++}
++
++void pam_radius_parse_attributes(pam_handle_t * pamh, AUTH_HDR * response)
++{
++    // Loop through each attribute in the response
++    uint8_t * response_end_ptr = ((uint8_t *)response) + ntohs(response->length);
++    uint8_t * attr_ptr;
++    uint8_t * attr_end_ptr;
++
++    for (attr_ptr = response->data;
++        attr_ptr + sizeof(attribute_t) < response_end_ptr;
++        attr_ptr = attr_end_ptr)
++    {
++        // Read the attribute header
++        attribute_t * attr = (attribute_t *)attr_ptr;
++
++        // Check that the attribute length field is valid
++        if (attr->length < sizeof(attribute_t))
++            break;
++
++        // Check that the response is long enough to hold the entire attribute
++        attr_end_ptr = attr_ptr + attr->length;
++        if (attr_end_ptr > response_end_ptr)
++            break;
++
++        // Check if it is the VSA attribute
++        if (attr->attribute != PW_VENDOR_SPECIFIC)
++            continue;
++
++        // Check if the attribute is long enough to hold the vendor_id
++        uint8_t * vendor_id_ptr = attr->data;
++        uint8_t * vendor_id_end_ptr = vendor_id_ptr + sizeof(uint32_t);
++        if (vendor_id_end_ptr > attr_end_ptr)
++            continue;
++
++        // Check if the VSA vendor ID is for the Unix VSA
++        if (ntohl_unaligned(vendor_id_ptr) != RADIUS_VSA_UNIX)
++            continue;
++
++        // Loop through each value in the vendor-specific attribute
++        uint8_t * value_ptr;
++        uint8_t * value_end_ptr;
++        for (value_ptr = vendor_id_end_ptr;
++            value_ptr + sizeof(radius_vsa_value_t) < attr_end_ptr;
++            value_ptr = value_end_ptr)
++        {
++            // Read the value header
++            radius_vsa_value_t * value = (radius_vsa_value_t *)value_ptr;
++
++            // Check that the value length field is valid
++            if (value->vendor_length < sizeof(radius_vsa_value_t))
++                break;
++
++            // Check that the attribute is long enough to hold the entire value
++            value_end_ptr = value_ptr + value->vendor_length;
++            if (value_end_ptr > attr_end_ptr)
++                break;
++
++            if (value->vendor_type == RADIUS_VSA_UNIX_GROUP_NAMES)
++            {
++
++                if (value->vendor_value == '\0')
++                {
++                    continue;
++                }
++
++                // Save value to environment variable
++                char buffer[128]={0};
++                char group_name[128]={0};
++
++                memcpy(group_name, value->vendor_value, value->vendor_length-offsetof(radius_vsa_value_t, vendor_value));
++                snprintf(buffer, sizeof buffer, "GROUPNAME=%s", group_name);
++                pam_putenv(pamh, buffer);
++
++            }
++        }
++    }
++}
+diff --git a/src/pam_radius_parse_attributes.h b/src/pam_radius_parse_attributes.h
+new file mode 100644
+index 0000000..05644c5
+--- /dev/null
++++ b/src/pam_radius_parse_attributes.h
+@@ -0,0 +1,31 @@
++/*
++ * Copyright (c) 2019 Digi International Inc.,
++ *  11001 Bren Road East, Minnetonka, MN 55343
++ *
++ * pam_radius_parse_attributes
++ *      Parse attributes from the RADIUS response
++ *
++ *   This program is free software; you can redistribute it and/or modify
++ *   it under the terms of the GNU General Public License as published by
++ *   the Free Software Foundation; either version 2 of the License, or
++ *   (at your option) any later version.
++ *
++ *   This program is distributed in the hope that it will be useful,
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *   GNU General Public License for more details.
++ *
++ *   You should have received a copy of the GNU General Public License
++ *   along with this program; if not, write to the Free Software
++ *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ */
++
++#ifndef PAM_RADIUS_PAM_RADIUS_PARSE_ATTRIBUTES_H
++#define PAM_RADIUS_PAM_RADIUS_PARSE_ATTRIBUTES_H
++
++#include "pam_radius_auth.h"
++
++void pam_radius_parse_attributes(pam_handle_t * pamh, AUTH_HDR * response);
++
++#endif // PAM_RADIUS_PAM_RADIUS_PARSE_ATTRIBUTES_H

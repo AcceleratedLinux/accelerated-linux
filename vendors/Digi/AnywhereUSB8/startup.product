@@ -1,0 +1,49 @@
+#!/bin/sh
+
+runt set firmware.version    "$(awk '{ print $3 }' < /etc/version)"
+runt set firmware.build_date "$(cat /etc/version | sed 's/.* -- \+//')"
+
+mac="$(accns_mac)"
+mac_uppercase="$(echo $mac | tr [a-z] [A-Z])"
+runt set drm.connected false
+runt set drm.device_id "00000000-00000000-$(echo $mac_uppercase | cut -c 1-6)FF-FF$(echo $mac_uppercase | cut -c 7-12)"
+
+runt set system.mac    "$mac"
+runt set system.serial "$(fw_printenv -n serial_number 2>/dev/null)"
+oem_sn="$(fw_printenv -n oem_serial_number 2>/dev/null)" && runt set system.oem_serial "$oem_sn"
+sku="$(fw_printenv -n partnumber 2>/dev/null)" && runt set system.sku "$sku"
+
+runt set system.manufacturer "$(sed -e 's?/.*$??' < /etc/version)" 
+
+case "$(fw_printenv -n product_id | tr [A-Z] [a-z])" in
+0x0000d002) modelname="AnywhereUSB 2 Plus" ;;
+0x0000d003) modelname="AnywhereUSB 8 Plus" ;;
+0x0000d004) modelname="AnywhereUSB 24 Plus" ;;
+*) modelname="$(sed -e 's?^.*/??' -e 's? .*$??' < /etc/version)" ;;
+esac
+runt set system.model "$modelname"
+
+# manufacture values, for 'show manufacture'
+hardware_version="$(fw_printenv -n hardwareversion 2>/dev/null)"
+runt set manufacture.hardware_version "${hardware_version:-Not Found}" "Hardware Version"
+
+serial_number="$(fw_printenv -n serial_number 2>/dev/null)"
+runt set manufacture.serial_number "${serial_number:-Not Found}" "Serial Number"
+
+boot_ver="$(grep -o 'ubootdate=[^ ]*' /proc/cmdline | sed 's/^.*=//')"
+runt set manufacture.boot_ver "${boot_ver:-Not Found}" "Bootloader Version"
+
+bootpart_config="$(fw_printenv -n boot_index 2>/dev/null)"
+runt set manufacture.bootpart_config "${bootpart_config:-Not Found}" "Bootpart (Configured)"
+
+booted_partition="$(grep -o 'root=[^ ]*' /proc/cmdline | sed 's?^.*=.*\(.\)$?\1?')"
+booted_partition="$(( booted_partition / 2 - 1 ))"
+runt set manufacture.booted_partition "${booted_partition:-Not Found}" "Booted Partition"
+
+ethaddr="$(fw_printenv -n ethaddr 2>/dev/null)"
+runt set manufacture.ethaddr "${ethaddr:-Not Found}" "Ethernet 0 MAC Address"
+
+#root=/dev/mmcblk0p4 rootwait mem=2029564k rootfstype=squashfs ro mtdparts=1550000.quadspi:1M(rcw)ro,1M(u-boot),1M(eth-fw)ro,1M(u-boot-env) ubootdate=0x20181125 console=ttyS0,115200 earlycon=uart8250,0x21c0500,115200 loglevel=7
+
+runt update system
+runt update network.device

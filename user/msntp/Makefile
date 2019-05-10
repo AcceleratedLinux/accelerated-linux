@@ -106,6 +106,8 @@
 # LDFLAGS = 
 # LIBS = -lm
 
+export ACL_LICENSE = Custom-OSS
+
 LIBS = -lm
 CFLAGS += -DLOCKNAME='"/var/run/msntp.pid"' -DSAVENAME='"/var/run/msntp.state"'
 

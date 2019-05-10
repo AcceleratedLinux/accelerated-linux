@@ -1,0 +1,38 @@
+--- popt-1.7/Makefile.in.orig	2019-04-29 08:47:20.322097218 +1000
++++ popt-1.7/Makefile.in	2019-04-29 08:47:22.026097255 +1000
+@@ -132,13 +132,13 @@
+ 
+ noinst_PROGRAMS = test1 test2 test3
+ test1_SOURCES = test1.c
+-test1_LDFLAGS = -all-static
++test1_LDFLAGS = -static
+ test1_LDADD = $(lib_LTLIBRARIES)
+ test2_SOURCES = test2.c
+-test2_LDFLAGS = -all-static
++test2_LDFLAGS = -static
+ test2_LDADD = $(lib_LTLIBRARIES)
+ test3_SOURCES = test3.c
+-test3_LDFLAGS = -all-static
++test3_LDFLAGS = -static
+ test3_LDADD = $(lib_LTLIBRARIES)
+ 
+ noinst_SCRIPTS = testit.sh
+--- popt-1.7/Makefile.am.orig	2019-04-29 08:47:27.978097384 +1000
++++ popt-1.7/Makefile.am	2019-04-29 08:47:36.142097562 +1000
+@@ -15,13 +15,13 @@
+ 
+ noinst_PROGRAMS = test1 test2 test3
+ test1_SOURCES = test1.c
+-test1_LDFLAGS = -all-static
++test1_LDFLAGS = -static
+ test1_LDADD = $(lib_LTLIBRARIES)
+ test2_SOURCES = test2.c
+-test2_LDFLAGS = -all-static
++test2_LDFLAGS = -static
+ test2_LDADD = $(lib_LTLIBRARIES)
+ test3_SOURCES = test3.c
+-test3_LDFLAGS = -all-static
++test3_LDFLAGS = -static
+ test3_LDADD = $(lib_LTLIBRARIES)
+ 
+ noinst_SCRIPTS = testit.sh

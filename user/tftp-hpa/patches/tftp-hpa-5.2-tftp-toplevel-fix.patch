@@ -1,0 +1,11 @@
+--- tftp-hpa-5.2/tftp/tftp.c.orig	2018-10-12 14:32:55.481817493 +1000
++++ tftp-hpa-5.2/tftp/tftp.c	2018-10-12 14:33:03.357817692 +1000
+@@ -48,7 +48,7 @@
+ #define PKTSIZE    SEGSIZE+4
+ char ackbuf[PKTSIZE];
+ int timeout;
+-sigjmp_buf toplevel;
++extern sigjmp_buf toplevel;
+ sigjmp_buf timeoutbuf;
+ 
+ static void nak(int, const char *);

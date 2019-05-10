@@ -1,0 +1,173 @@
+
+serial --unit=0 --speed=115200
+# let serial port settle before transmitting or we corrupt
+sleep 1
+
+terminal_output serial
+terminal_input serial
+
+set default="0"
+set timeout=5
+
+set GRUB_NO_EDIT=1
+set GRUB_NO_OUTPUT=1
+set BOOT_VER="1.2.3.4"
+set SECUREBOOT_ALG="ecdsa"
+set SECUREBOOT_PROD_SLOT=15
+set SECUREBOOT_DEV_SLOT=9
+
+# if boot_cntr is >= BOOTCNTR_ALT,  change partitions
+set BOOTCNTR_ALT=3
+# if boot_cntr is >= BOOTCNTR_MAX,  restart cntr from 0
+set BOOTCNTR_MAX=6
+
+insmod regexp
+insmod squash4
+
+# check if an image is bootable/ok
+
+function verify_partition {
+	if verify_part "$1" "$SECUREBOOT_PROD_SLOT" "$SECUREBOOT_ALG"; then
+		return 0
+	fi
+	if [ "$dev_mode" = "0" ]; then
+		return 1
+	fi
+	if verify_part "$1" "$SECUREBOOT_DEV_SLOT" "$SECUREBOOT_ALG"; then
+		return 0
+	fi
+	return 1
+}
+
+# handle USB mass storage disabled
+if [ -f (hd0,gpt1)/grub/grubenv ]; then
+	set HD=hd0
+else
+	set HD=hd1
+fi
+
+# We can override settings in the system environment
+load_env -f ($HD,gpt1)/grub/grubenv
+
+if [ $timeout -gt 0 ]; then
+	# allow serial output if timeout is set
+	unset GRUB_NO_OUTPUT
+fi
+
+# LED sequence:
+# POWER:     Solid Blue (MCU power on default).
+# STATUS:    Slow Flash Blue until
+#            Solid Red if both partitions failed verification, otherwise
+#            Fast Flash Blue on /etc/rc until
+#            Solid Blue when led action starts (complete boot successful).
+# WWAN_SERV: Fast Flash Blue during partition 1 verification, then
+#            Solid Red for verification failure or
+#            Solid Blue for verification success, until
+#            Off in /etc/rc, until
+#            operation as WWAN service indicator when led action starts.
+# WWAN_SIG:  Fast Flash Blue during partition 2 verification, then
+#            Solid Red for verification failure or
+#            Solid Blue for verification success, until
+#            Off in /etc/rc, until
+#            operation as WWAN signal indicator when led action starts.
+
+mcu init com2
+mcu is_dev_mode dev_mode
+
+# start boot sequence
+mcu ledcmd -O ALL -o POWER_BLUE -f STATUS_BLUE -f STATUS_REAR_BLUE
+
+# ensure bootcntr is valid
+if ! bootcntr_get boot_cntr; then
+	# Reset boot counter
+	set SAVE_GRUB_NO_OUTPUT $GRUB_NO_OUTPUT
+	unset GRUB_NO_OUTPUT
+	echo "ERROR: invalid boot counter, resetting it..."
+	set GRUB_NO_OUTPUT $SAVE_GRUB_NO_OUTPUT
+	sleep 3
+	bootcntr_set 0
+	set boot_cntr=0
+fi
+
+# wrap bootcntr after MAX boots
+if [ $boot_cntr -ge $BOOTCNTR_MAX ]; then
+	bootcntr_set 0
+	set boot_cntr=0
+fi
+
+# verify images
+mcu ledcmd -F WWAN_SERV_BLUE
+if verify_partition "($HD,gpt2)"; then
+	image1="PASSED"
+	mcu ledcmd -o WWAN_SERV_BLUE
+else
+	image1="FAILED"
+	mcu ledcmd -o WWAN_SERV_RED
+fi
+
+mcu ledcmd -F WWAN_SIG_BLUE
+if verify_partition "($HD,gpt3)"; then
+	image2="PASSED"
+	mcu ledcmd -o WWAN_SIG_BLUE
+else
+	image2="FAILED"
+	mcu ledcmd -o WWAN_SIG_RED
+fi
+
+# No bootable partitions ?
+if [ $image1 != PASSED -a $image2 != PASSED ]; then
+	mcu ledcmd -o STATUS_RED -o STATUS_REAR_RED
+	unset GRUB_NO_OUTPUT
+	echo "No bootable partitions!"
+	sleep 30
+	reboot
+fi
+
+# apply bootcnr changes before partition checks
+if [ $default = 0 -a $boot_cntr -ge $BOOTCNTR_ALT ]; then
+	default=1
+fi
+if [ $default = 1 -a $boot_cntr -ge $BOOTCNTR_ALT ]; then
+	default=0
+fi
+
+# avoid broken partitions,  we know one is good
+if [ $default = 0 -a $image1 != PASSED ]; then
+	default=1
+fi
+if [ $default = 1 -a $image2 != PASSED ]; then
+	default=0
+fi
+
+# consider this a boot attempt, arm watchdog, increment cntr
+mcu set_wdog 250
+bootcntr_inc
+
+set common_args="boot_ver=${BOOT_VER} console=null panic=30"
+
+menuentry "Digi Connect IT 48 (image1 verification $image1)" {
+	set root=($HD,gpt2)
+	probe -U $root --set=partuuid
+	# allow no backdoors by using menu
+	if [ "$image1" = PASSED ]; then
+		linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=a $common_args $arg
+	else
+		unset GRUB_NO_OUTPUT
+		echo "Partition cannot be booted - $image1 verification!"
+		sleep 3
+	fi
+}
+
+menuentry "Digi Connect IT 48 (image2 verification $image2)" {
+	set root=($HD,gpt3)
+	probe -U $root --set=partuuid
+	# allow no backdoors by using menu
+	if [ "$image2" = PASSED ]; then
+		linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=b $common_args $arg
+	else
+		unset GRUB_NO_OUTPUT
+		echo "Partition cannot be booted - $image2 verification!"
+		sleep 3
+	fi
+}
+

@@ -295,8 +295,10 @@ static int mca_cc6ul_rtc_probe(struct platform_device *pdev)
 	}
 
 	/* Register RTC device */
-	rtc->rtc_dev = rtc_device_register(MCA_CC6UL_DRVNAME_RTC, &pdev->dev,
-					   &mca_cc6ul_rtc_ops, THIS_MODULE);
+	rtc->rtc_dev = devm_rtc_device_register(&pdev->dev,
+						MCA_CC6UL_DRVNAME_RTC,
+						&mca_cc6ul_rtc_ops,
+						THIS_MODULE);
 	if (IS_ERR(rtc->rtc_dev)) {
 		dev_err(&pdev->dev, "Failed to register RTC device: %ld\n",
 			PTR_ERR(rtc->rtc_dev));
@@ -333,8 +335,6 @@ static int mca_cc6ul_rtc_remove(struct platform_device *pdev)
 
 	if (rtc->irq_alarm >= 0)
 		devm_free_irq(&pdev->dev, rtc->irq_alarm, rtc);
-
-	rtc_device_unregister(rtc->rtc_dev);
 	return 0;
 }
 

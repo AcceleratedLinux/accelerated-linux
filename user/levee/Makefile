@@ -1,5 +1,7 @@
 # makefile for Levee
 
+export ACL_LICENSE = Open Source (other)
+
 EXEC = vi
 OBJS = blockio.o display.o editcor.o exec.o find.o \
     unixcall.o globals.o insert.o main.o misc.o \

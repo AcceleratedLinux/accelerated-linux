@@ -1,0 +1,57 @@
+diff -Naur ntp-4.2.8p4.org/config.sub ntp-4.2.8p4/config.sub
+--- ntp-4.2.8p4.org/config.sub	2011-07-11 12:22:26.000000000 +1000
++++ ntp-4.2.8p4/config.sub	2018-11-08 11:05:53.672831279 +1000
+@@ -247,6 +247,7 @@
+ 	# Some are omitted here because they have special meanings below.
+ 	1750a | 580 \
+ 	| a29k \
++	| aarch64 | aarch64_be \
+ 	| alpha | alphaev[4-8] | alphaev56 | alphaev6[78] | alphapca5[67] \
+ 	| alpha64 | alpha64ev[4-8] | alpha64ev56 | alpha64ev6[78] | alpha64pca5[67] \
+ 	| am33_2.0 \
+@@ -352,6 +353,7 @@
+ 	# Recognize the basic CPU types with company name.
+ 	580-* \
+ 	| a29k-* \
++	| aarch64 | aarch64_be \
+ 	| alpha-* | alphaev[4-8]-* | alphaev56-* | alphaev6[78]-* \
+ 	| alpha64-* | alpha64ev[4-8]-* | alpha64ev56-* | alpha64ev6[78]-* \
+ 	| alphapca5[67]-* | alpha64pca5[67]-* | arc-* \
+diff -Naur ntp-4.2.8p4.org/sntp/config.sub ntp-4.2.8p4/sntp/config.sub
+--- ntp-4.2.8p4.org/sntp/config.sub	2011-07-11 12:24:59.000000000 +1000
++++ ntp-4.2.8p4/sntp/config.sub	2018-11-08 11:04:52.537550610 +1000
+@@ -247,6 +247,7 @@
+ 	# Some are omitted here because they have special meanings below.
+ 	1750a | 580 \
+ 	| a29k \
++	| aarch64 | aarch64_be \
+ 	| alpha | alphaev[4-8] | alphaev56 | alphaev6[78] | alphapca5[67] \
+ 	| alpha64 | alpha64ev[4-8] | alpha64ev56 | alpha64ev6[78] | alpha64pca5[67] \
+ 	| am33_2.0 \
+@@ -352,6 +353,7 @@
+ 	# Recognize the basic CPU types with company name.
+ 	580-* \
+ 	| a29k-* \
++	| aarch64 | aarch64_be \
+ 	| alpha-* | alphaev[4-8]-* | alphaev56-* | alphaev6[78]-* \
+ 	| alpha64-* | alpha64ev[4-8]-* | alpha64ev56-* | alpha64ev6[78]-* \
+ 	| alphapca5[67]-* | alpha64pca5[67]-* | arc-* \
+diff -Naur ntp-4.2.8p4.org/sntp/libevent/build-aux/config.sub ntp-4.2.8p4/sntp/libevent/build-aux/config.sub
+--- ntp-4.2.8p4.org/sntp/libevent/build-aux/config.sub	2014-12-19 21:59:16.000000000 +1000
++++ ntp-4.2.8p4/sntp/libevent/build-aux/config.sub	2018-11-08 11:04:29.965816019 +1000
+@@ -247,6 +247,7 @@
+ 	# Some are omitted here because they have special meanings below.
+ 	1750a | 580 \
+ 	| a29k \
++	| aarch64 | aarch64_be \
+ 	| alpha | alphaev[4-8] | alphaev56 | alphaev6[78] | alphapca5[67] \
+ 	| alpha64 | alpha64ev[4-8] | alpha64ev56 | alpha64ev6[78] | alpha64pca5[67] \
+ 	| am33_2.0 \
+@@ -352,6 +353,7 @@
+ 	# Recognize the basic CPU types with company name.
+ 	580-* \
+ 	| a29k-* \
++	| aarch64-* | aarch64_be-* \
+ 	| alpha-* | alphaev[4-8]-* | alphaev56-* | alphaev6[78]-* \
+ 	| alpha64-* | alpha64ev[4-8]-* | alpha64ev56-* | alpha64ev6[78]-* \
+ 	| alphapca5[67]-* | alpha64pca5[67]-* | arc-* \

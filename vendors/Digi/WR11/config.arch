@@ -11,8 +11,13 @@ LINUXTARGET = zImage dtbs
 VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
 VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
-RELFILES = images/image.bin images/u-boot.bin images/configs.tar.gz \
-           images/romfs-inst.log prop/config/schema/accns.schema
+RELFILES = images/image.bin \
+	   images/u-boot.bin \
+	   images/configs.tar.gz \
+	   images/romfs-inst.log \
+	   images/acl-licenses.txt \
+	   prop/config/schema/accns.schema \
+	   prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################
 

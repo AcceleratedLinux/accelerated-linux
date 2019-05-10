@@ -1,0 +1,4 @@
+libqmi-conf-ver.patch
+libqmi-select-h.patch
+libqmi-firmware-update-ignore-sysfs_path.patch
+#libqmi-override-should-not-fail.patch

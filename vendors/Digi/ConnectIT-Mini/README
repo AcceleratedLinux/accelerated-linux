@@ -50,6 +50,33 @@ shell login:
 
 You cannot directly netflash the u-boot binary.
 
+*** NOTE ***
+when the u-boot is signed for HAB authentication, it doesn't have the 1K
+padding at the front. In this case, you must use:
+
+  kobs-ng init -v -x /tmp/u-boot-signed.img
+
+You can check if the image doesn't have padding by using hd (hexdump).
+
+  hd /tmp/u-boot-signed.img | less
+
+There should be no padding (0's), and the images starts with:
+
+  00000000  d1 00 20 40 .....
+
+***NOTE***
+If you are booting from the debug uboot image via imx_usb, the system
+will be unstable. RAM is easily corrupted, which causes instability. You
+should include the u-boot-nand.imx file in your netloaded image so you can
+upload uboot as the first command using (substituting the correct path):
+
+	kobs-ng init -v /etc/config/u-boot-nand.imx
+
+then rebooting. It may take several attemps to successfully complete this
+command (corruption in ram). Ensure this is the first command you execute.
+It is also advised to edit /etc/rc and inittab to only bring up a command
+prompt to minimise running processes. Once uploaded, remove the debug
+jumper and reboot.
 
 
 FACTORY FLASH

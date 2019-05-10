@@ -16,10 +16,11 @@
 	compatible = "digi,connectit-mini", "fsl,imx6ull";
 
 	chosen {
-		stdout-path = &uart4;
+		stdout-path = &uart1;
 	};
 
 	memory {
+		device_type = "memory";
 		reg = <0x80000000 0x8000000>;
 	};
 
@@ -103,7 +104,7 @@
 			label = "rss4";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_leds>;
-			gpios = <&gpio1 24 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio5 0 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
 		};
 
@@ -111,7 +112,7 @@
 			label = "rss5";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_leds>;
-			gpios = <&gpio1 25 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio5 1 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
 		};
 
@@ -119,7 +120,27 @@
 			label = "power";
 			pinctrl-names = "default";
 			pinctrl-0 = <&pinctrl_leds>;
+			gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+		};
+
+		serial-led {
+			label = "serial";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pinctrl_leds>;
 			gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+		};
+	};
+
+	devkey {
+		compatible = "gpio-leds";
+
+		dev-gpio {
+			label = "developer";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pinctrl_devkey>;
+			gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
 		};
 	};
@@ -151,9 +172,6 @@
 &uart1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1>;
-        uart-has-rtscts;
-        fsl,uart-has-dtr-gpio = <&gpio4 22 GPIO_ACTIVE_HIGH>;
-        fsl,uart-has-dcd-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -161,14 +179,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2>;
 	uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio1 27 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio4 23 GPIO_ACTIVE_HIGH>;
-	status = "okay";
-};
-
-&uart4 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_uart4>;
+	fsl,uart-has-dtr-gpio = <&gpio4 22 GPIO_ACTIVE_HIGH>;
+	fsl,uart-has-dcd-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -180,7 +192,19 @@
 	status = "okay";
 };
 
+&usbotg2 {
+	dr_mode = "otg";
+	srp-disable;
+	hnp-disable;
+	adp-disable;
+	status = "okay";
+};
+
 &usbphy1 {
+	tx-d-cal = <0x5>;
+};
+
+&usbphy2 {
 	tx-d-cal = <0x5>;
 };
 
@@ -218,6 +242,13 @@
 	};
 };
 
+&i2c2 {
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c2>;
+	status = "okay";
+};
+
 &iomuxc {
 	pinctrl-names = "default";
 
@@ -240,10 +271,6 @@
 		fsl,pins = <
 			MX6UL_PAD_UART1_TX_DATA__UART1_DCE_TX 0x1b0b1
 			MX6UL_PAD_UART1_RX_DATA__UART1_DCE_RX 0x1b0b1
-			MX6UL_PAD_UART1_RTS_B__UART1_DCE_RTS 0x1b0b1
-			MX6UL_PAD_UART1_CTS_B__UART1_DCE_CTS 0x1b0b1
-			MX6UL_PAD_CSI_DATA00__GPIO4_IO21 0x1b0b1
-			MX6UL_PAD_CSI_DATA01__GPIO4_IO22 0x1b0b1
 		>;
 	};
 
@@ -253,16 +280,8 @@
 			MX6UL_PAD_UART2_RX_DATA__UART2_DCE_RX 0x1b0b1
 			MX6UL_PAD_UART2_RTS_B__UART2_DCE_RTS 0x1b0b1
 			MX6UL_PAD_UART2_CTS_B__UART2_DCE_CTS 0x1b0b1
-			MX6UL_PAD_UART3_RTS_B__GPIO1_IO27 0x1b0b1
-			MX6UL_PAD_UART3_CTS_B__GPIO1_IO26 0x1b0b1
-			MX6UL_PAD_CSI_DATA02__GPIO4_IO23 0x1b0b1
-		>;
-	};
-
-	pinctrl_uart4: uart4grp {
-		fsl,pins = <
-			MX6UL_PAD_UART4_TX_DATA__UART4_DCE_TX 0x1b0b1
-			MX6UL_PAD_UART4_RX_DATA__UART4_DCE_RX 0x1b0b1
+			MX6UL_PAD_CSI_DATA00__GPIO4_IO21 0x1b0b1
+			MX6UL_PAD_CSI_DATA01__GPIO4_IO22 0x1b0b1
 		>;
 	};
 
@@ -301,10 +320,24 @@
 			MX6UL_PAD_GPIO1_IO03__GPIO1_IO03	0x00010
 			MX6UL_PAD_GPIO1_IO04__GPIO1_IO04	0x00010
 			MX6UL_PAD_GPIO1_IO05__GPIO1_IO05	0x00010
-			MX6UL_PAD_UART3_TX_DATA__GPIO1_IO24	0x00010
-			MX6UL_PAD_UART3_RX_DATA__GPIO1_IO25	0x00010
 			MX6UL_PAD_GPIO1_IO08__GPIO1_IO08	0x00010
+			MX6UL_PAD_GPIO1_IO09__GPIO1_IO09	0x00010
+			MX6UL_PAD_SNVS_TAMPER0__GPIO5_IO00  0x00010
+			MX6UL_PAD_SNVS_TAMPER1__GPIO5_IO01  0x00010
 			MX6UL_PAD_SD1_CLK__GPIO2_IO17		0x00000
+		>;
+	};
+
+	pinctrl_i2c2: i2c2grp {
+		fsl,pins = <
+			MX6UL_PAD_UART5_TX_DATA__I2C2_SCL	0x4001b8b0		
+			MX6UL_PAD_UART5_RX_DATA__I2C2_SDA	0x4001b8b0		
+		>;
+	};
+
+	pinctrl_devkey: devkeygrp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA17__GPIO3_IO22	0x00000
 		>;
 	};
 };

@@ -2,6 +2,12 @@
 config USER_NTP
 	bool
 
+config USER_NTP_ENABLE_HARDENFILE
+	bool "hardenfile"
+	select USER_NTP
+	help
+	  Enable stack protect all on platforms that support it.
+
 config USER_NTPD_NTPD
 	bool "ntpd"
 	select USER_NTP

@@ -1,16 +1,10 @@
-CONFOPTS=
+URL = https://strace.io/files/4.25/strace-4.25.tar.xz
 
-all: build/build
-	$(MAKE) -C build
+ifeq ($(ARCH),arm64)
+MAKEVARS += ARCH=aarch64
+endif
 
-build/build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
+CONFOPTS += --enable-mpers=check
+CFLAGS += -std=c99
 
-clean:
-	rm -rf build
-
-romfs:
-	$(ROMFSINST) build/strace /bin/strace
+include $(ROOTDIR)/tools/automake.inc

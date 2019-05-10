@@ -1,0 +1,10 @@
+--- acpid-2.0.31/sock.c.save	2019-03-21 20:48:10.009917319 +1000
++++ acpid-2.0.31/sock.c	2019-03-21 20:48:12.341917370 +1000
+@@ -51,6 +51,7 @@
+ int non_root_clients;
+ 
+ #ifndef HAVE_ISFDTYPE
++#define isfdtype my_isfdtype
+ static int
+ isfdtype(int fd, int fdtype)
+ {

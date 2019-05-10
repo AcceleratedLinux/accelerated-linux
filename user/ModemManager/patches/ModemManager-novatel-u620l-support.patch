@@ -1,16 +1,14 @@
-diff --git a/plugins/Makefile.am b/plugins/Makefile.am
-index b6eff43..abc90f4 100644
---- a/plugins/Makefile.am
-+++ b/plugins/Makefile.am
-@@ -488,6 +488,8 @@ libmm_plugin_novatel_lte_la_SOURCES = \
+--- ModemManager/plugins/Makefile.am	2018-11-26 16:08:43.992943750 +1000
++++ ModemManager/plugins/Makefile.am.new	2018-11-26 16:17:02.360943710 +1000
+@@ -760,6 +760,8 @@
  	novatel/mm-broadband-modem-novatel-lte.h \
  	novatel/mm-broadband-bearer-novatel-lte.c \
  	novatel/mm-broadband-bearer-novatel-lte.h \
 +	novatel/mm-broadband-bearer-novatel-lte-ccm.c \
 +	novatel/mm-broadband-bearer-novatel-lte-ccm.h \
  	novatel/mm-sim-novatel-lte.c \
- 	novatel/mm-sim-novatel-lte.h
- libmm_plugin_novatel_lte_la_CPPFLAGS = $(PLUGIN_COMMON_COMPILER_FLAGS)
+ 	novatel/mm-sim-novatel-lte.h \
+ 	$(NULL)
 diff --git a/plugins/novatel/mm-broadband-bearer-novatel-lte-ccm.c b/plugins/novatel/mm-broadband-bearer-novatel-lte-ccm.c
 new file mode 100644
 index 0000000..8c0ecc9
@@ -422,7 +420,7 @@ index 0000000..8c0ecc9
 +    }
 +
 +    /* initialize a PDP context 1 with our APN */
-+    apn = mm_bearer_properties_get_apn (mm_base_bearer_peek_config (MM_BASE_BEARER (ctx->self)));
++    apn = (gchar *)mm_bearer_properties_get_apn (mm_base_bearer_peek_config (MM_BASE_BEARER (ctx->self)));
 +    apn = mm_port_serial_at_quote_string (apn);
 +    command = g_strdup_printf ("+CGDCONT=1,\"%s\",%s", pdp_type,
 +                               apn);
@@ -949,11 +947,9 @@ index 0000000..6596bdb
 +
 +
 +#endif /* MM_BROADBAND_BEARER_NOVATEL_LTE_CCM_H */
-diff --git a/plugins/novatel/mm-broadband-modem-novatel-lte.c b/plugins/novatel/mm-broadband-modem-novatel-lte.c
-index 499aafe..2fa9eae 100644
---- a/plugins/novatel/mm-broadband-modem-novatel-lte.c
-+++ b/plugins/novatel/mm-broadband-modem-novatel-lte.c
-@@ -25,23 +25,38 @@
+--- ModemManager/plugins/novatel/mm-broadband-modem-novatel-lte.c	2018-11-13 15:22:44.886516047 +1000
++++ ModemManager/plugins/novatel/mm-broadband-modem-novatel-lte.c.new	2018-11-27 08:56:22.172938863 +1000
+@@ -25,23 +25,40 @@
  #include "ModemManager.h"
  #include "mm-base-modem-at.h"
  #include "mm-broadband-bearer-novatel-lte.h"
@@ -978,6 +974,7 @@ index 499aafe..2fa9eae 100644
 +static void iface_modem_3gpp_ccm_init (MMIfaceModem3gpp *iface);
 +static void iface_modem_cdma_ccm_init (MMIfaceModemCdma *iface);
 +static void iface_modem_signal_ccm_init (MMIfaceModemSignal *iface);
++
  
  G_DEFINE_TYPE_EXTENDED (MMBroadbandModemNovatelLte, mm_broadband_modem_novatel_lte, MM_TYPE_BROADBAND_MODEM, 0,
                          G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM, iface_modem_init)
@@ -989,11 +986,12 @@ index 499aafe..2fa9eae 100644
 +                        G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM_SIGNAL, iface_modem_signal_ccm_init)
 +                        G_IMPLEMENT_INTERFACE (MM_TYPE_IFACE_MODEM_3GPP, iface_modem_3gpp_ccm_init));
 +
++
  /*****************************************************************************/
  /* Modem power down (Modem interface) */
  
-@@ -125,6 +140,28 @@ modem_create_bearer (MMIfaceModem *self,
-                                      result);
+@@ -107,6 +124,28 @@
+                                      g_task_new (self, NULL, callback, user_data));
  }
  
 +static void
@@ -1021,7 +1019,7 @@ index 499aafe..2fa9eae 100644
  /*****************************************************************************/
  /* Create SIM (Modem interface) */
  
-@@ -524,6 +561,91 @@ load_access_technologies (MMIfaceModem *self,
+@@ -536,6 +575,91 @@
  }
  
  /*****************************************************************************/
@@ -1113,7 +1111,7 @@ index 499aafe..2fa9eae 100644
  /* Reset (Modem interface) */
  
  static gboolean
-@@ -638,6 +760,865 @@ scan_networks (MMIfaceModem3gpp *self,
+@@ -640,6 +764,867 @@
  }
  
  /*****************************************************************************/
@@ -1572,7 +1570,7 @@ index 499aafe..2fa9eae 100644
 +                             GError **error)
 +{
 +    gchar *meid, *nwati, *cp;
-+    nwati = mm_base_modem_at_command_finish (MM_BASE_MODEM (self), res, error);
++    nwati = (gchar *)mm_base_modem_at_command_finish (MM_BASE_MODEM (self), res, error);
 +    if (!nwati)
 +        return NULL;
 +    cp = strstr(nwati, "MEID:0x");
@@ -1609,7 +1607,7 @@ index 499aafe..2fa9eae 100644
 +                            GError **error)
 +{
 +    gchar *esn, *nwati, *cp;
-+    nwati = mm_base_modem_at_command_finish (MM_BASE_MODEM (self), res, error);
++    nwati = (gchar *)mm_base_modem_at_command_finish (MM_BASE_MODEM (self), res, error);
 +    if (!nwati)
 +        return NULL;
 +    cp = strstr(nwati, "ESN:0x");
@@ -1757,7 +1755,9 @@ index 499aafe..2fa9eae 100644
 +        break;
 +    case MM_MODEM_ACCESS_TECHNOLOGY_LTE:
 +        *lte  = values_result->value ? g_object_ref (values_result->value) : NULL;
-+	break;
++        break;
++    default:
++        break;
 +    }
 +
 +    return TRUE;
@@ -1937,10 +1937,10 @@ index 499aafe..2fa9eae 100644
 +                                  GAsyncResult *res,
 +                                  GError **error)
 +{
-+    gchar *response, *nwati, *cp;
++    gchar *response, *cp;
 +    guint ind, per;
 +
-+    response = mm_base_modem_at_command_finish (MM_BASE_MODEM (self), res, error);
++    response = (gchar *)mm_base_modem_at_command_finish (MM_BASE_MODEM (self), res, error);
 +    if (!response)
 +        return 0;
 +    cp = strstr(response, "rssi:");
@@ -1979,7 +1979,7 @@ index 499aafe..2fa9eae 100644
  
  MMBroadbandModemNovatelLte *
  mm_broadband_modem_novatel_lte_new (const gchar *device,
-@@ -655,6 +1636,23 @@ mm_broadband_modem_novatel_lte_new (const gchar *device,
+@@ -657,6 +1642,23 @@
                           NULL);
  }
  
@@ -2003,16 +2003,16 @@ index 499aafe..2fa9eae 100644
  static void
  mm_broadband_modem_novatel_lte_init (MMBroadbandModemNovatelLte *self)
  {
-@@ -663,6 +1661,8 @@ mm_broadband_modem_novatel_lte_init (MMBroadbandModemNovatelLte *self)
+@@ -665,6 +1667,8 @@
  static void
  iface_modem_init (MMIfaceModem *iface)
  {
-+    iface_modem_parent = g_type_interface_peek_parent (iface);
++	iface_modem_parent = g_type_interface_peek_parent (iface);
 +
      iface->modem_power_down = modem_power_down;
      iface->modem_power_down_finish = modem_power_down_finish;
      iface->create_bearer = modem_create_bearer;
-@@ -695,3 +1695,79 @@ static void
+@@ -699,3 +1703,79 @@
  mm_broadband_modem_novatel_lte_class_init (MMBroadbandModemNovatelLteClass *klass)
  {
  }
@@ -2092,11 +2092,9 @@ index 499aafe..2fa9eae 100644
 +mm_broadband_modem_novatel_lte_ccm_class_init (MMBroadbandModemNovatelLteCcmClass *klass)
 +{
 +}
-diff --git a/plugins/novatel/mm-broadband-modem-novatel-lte.h b/plugins/novatel/mm-broadband-modem-novatel-lte.h
-index 0f64339..4d66482 100644
---- a/plugins/novatel/mm-broadband-modem-novatel-lte.h
-+++ b/plugins/novatel/mm-broadband-modem-novatel-lte.h
-@@ -32,7 +32,7 @@ typedef struct _MMBroadbandModemNovatelLtePrivate MMBroadbandModemNovatelLtePriv
+--- ModemManager/plugins/novatel/mm-broadband-modem-novatel-lte.h	2017-10-12 10:42:44.808909401 +1000
++++ ModemManager/plugins/novatel/mm-broadband-modem-novatel-lte.h.new	2018-11-27 08:59:58.124938845 +1000
+@@ -32,7 +32,7 @@
  
  struct _MMBroadbandModemNovatelLte {
      MMBroadbandModem parent;
@@ -2105,7 +2103,7 @@ index 0f64339..4d66482 100644
  };
  
  struct _MMBroadbandModemNovatelLteClass{
-@@ -47,4 +47,23 @@ MMBroadbandModemNovatelLte *mm_broadband_modem_novatel_lte_new (const gchar *dev
+@@ -47,4 +47,23 @@
                                                                  guint16 vendor_id,
                                                                  guint16 product_id);
  
@@ -2129,24 +2127,23 @@ index 0f64339..4d66482 100644
 +                                                                    guint16 product_id);
 +
  #endif /* MM_BROADBAND_MODEM_NOVATEL_LTE_H */
-diff --git a/plugins/novatel/mm-plugin-novatel-lte.c b/plugins/novatel/mm-plugin-novatel-lte.c
-index e5fd91d..3abdc6c 100644
---- a/plugins/novatel/mm-plugin-novatel-lte.c
-+++ b/plugins/novatel/mm-plugin-novatel-lte.c
-@@ -42,6 +42,12 @@ create_modem (MMPlugin *self,
+--- ModemManager/plugins/novatel/mm-plugin-novatel-lte.c	2018-11-13 15:22:44.886516047 +1000
++++ ModemManager/plugins/novatel/mm-plugin-novatel-lte.c.new	2018-11-27 09:36:14.908938669 +1000
+@@ -42,6 +42,13 @@
                GList *probes,
                GError **error)
  {
 +    if (vendor == 0x1410 && product == 0x9022)
-+        return MM_BASE_MODEM (mm_broadband_modem_novatel_lte_ccm_new (sysfs_path,
++        return MM_BASE_MODEM (mm_broadband_modem_novatel_lte_ccm_new (uid,
 +                                                                      drivers,
 +                                                                      mm_plugin_get_name (self),
 +                                                                      vendor,
 +                                                                      product));
-     return MM_BASE_MODEM (mm_broadband_modem_novatel_lte_new (sysfs_path,
++
+     return MM_BASE_MODEM (mm_broadband_modem_novatel_lte_new (uid,
                                                                drivers,
                                                                mm_plugin_get_name (self),
-@@ -56,6 +62,7 @@ mm_plugin_create (void)
+@@ -56,6 +63,7 @@
  {
      static const gchar *subsystems[] = { "tty", "net", NULL };
      static const mm_uint16_pair products[] = { { 0x1410, 0x9010 }, /* Novatel E362 */
@@ -2154,11 +2151,9 @@ index e5fd91d..3abdc6c 100644
                                                 {0, 0} };
  
      return MM_PLUGIN (
-diff --git a/plugins/novatel/mm-plugin-novatel.c b/plugins/novatel/mm-plugin-novatel.c
-index 9476150..c192103 100644
---- a/plugins/novatel/mm-plugin-novatel.c
-+++ b/plugins/novatel/mm-plugin-novatel.c
-@@ -79,6 +79,7 @@ mm_plugin_create (void)
+--- ModemManager/plugins/novatel/mm-plugin-novatel.c	2018-11-13 15:22:44.890516047 +1000
++++ ModemManager/plugins/novatel/mm-plugin-novatel.c.new	2018-11-27 09:38:53.380938657 +1000
+@@ -79,6 +79,7 @@
      static const gchar *subsystems[] = { "tty", "net", "usb", NULL };
      static const guint16 vendors[] = { 0x1410, 0 };
      static const mm_uint16_pair forbidden_products[] = { { 0x1410, 0x9010 }, /* Novatel E362 */
@@ -2166,11 +2161,9 @@ index 9476150..c192103 100644
                                                           { 0, 0 } };
      static const MMAsyncMethod custom_init = {
          .async  = G_CALLBACK (mm_common_novatel_custom_init),
-diff --git a/src/mm-iface-modem.c b/src/mm-iface-modem.c
-index 0ed204c..eb0e228 100644
---- a/src/mm-iface-modem.c
-+++ b/src/mm-iface-modem.c
-@@ -272,9 +272,6 @@ load_unlock_required_ready (MMIfaceModem *self,
+--- ModemManager/src/mm-iface-modem.c.orig	2018-11-27 09:53:20.672938586 +1000
++++ ModemManager/src/mm-iface-modem.c	2018-11-27 10:32:45.436938395 +1000
+@@ -292,9 +292,6 @@
                               MM_CORE_ERROR_CANCELLED) ||
              g_error_matches (error,
                               MM_MOBILE_EQUIPMENT_ERROR,
@@ -2180,19 +2173,22 @@ index 0ed204c..eb0e228 100644
                               MM_MOBILE_EQUIPMENT_ERROR_SIM_FAILURE) ||
              g_error_matches (error,
                               MM_MOBILE_EQUIPMENT_ERROR,
-@@ -297,6 +294,15 @@ load_unlock_required_ready (MMIfaceModem *self,
+@@ -317,6 +314,18 @@
              return;
          }
  
-+	/* if last error was sim not inserted, report that */
-+	if (g_error_matches (error,
++       /* if last error was sim not inserted, report that */
++       if (g_error_matches (error,
 +                             MM_MOBILE_EQUIPMENT_ERROR,
 +                             MM_MOBILE_EQUIPMENT_ERROR_SIM_NOT_INSERTED)) {
-+            g_simple_async_result_take_error (ctx->result, error);
-+            internal_load_unlock_required_context_complete_and_free (ctx);
++            g_task_return_new_error (task,
++                                     MM_MOBILE_EQUIPMENT_ERROR,
++                                     MM_MOBILE_EQUIPMENT_ERROR_SIM_NOT_INSERTED,
++                                     "SIM not inserted");
++            g_object_unref (task);
 +            return;
-+	}
++       }
 +
          /* If reached max retries and still reporting error... default to SIM error */
          g_error_free (error);
-         g_simple_async_result_set_error (ctx->result,
+         g_task_return_new_error (task,

@@ -17,6 +17,7 @@ ROMFS_DIRS = \
 	lib \
 	mnt mnt/workspace mnt/flash \
 	proc \
+	sbin \
 	usr \
 	var
 

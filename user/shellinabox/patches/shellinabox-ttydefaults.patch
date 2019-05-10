@@ -1,0 +1,12 @@
+diff --git a/shellinabox/launcher.c b/shellinabox/launcher.c
+index 2bac171..2ffeb15 100644
+--- a/shellinabox/launcher.c
++++ b/shellinabox/launcher.c
+@@ -67,6 +67,7 @@
+ #include <sys/wait.h>
+ #include <sys/utsname.h>
+ #include <termios.h>
++#include <sys/ttydefaults.h>
+ #include <unistd.h>
+ 
+ #ifdef HAVE_LIBUTIL_H

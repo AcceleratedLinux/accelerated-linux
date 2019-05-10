@@ -283,13 +283,8 @@
 	 * the kernels own GPIO services - they are setup up too late
 	 * in the boot process.
 	 */
-	#ifdef CONFIG_SNAPDOG_CONNECTITMINI
-	#define GPIO_ADDR	0x0209c000	/* GPIO bank 1 address */
-	#define GPIO_WDT	9		/* GPIO 9 */
-	#else
 	#define GPIO_ADDR	0x020a0000	/* GPIO bank 2 address */
 	#define GPIO_WDT	16		/* GPIO 16 */
-	#endif
 
 	static int wdt_state;
 	static void __iomem *snapdog_regp;
@@ -590,7 +585,7 @@
 	#define HAS_HW_SERVICE 1
 #endif
 
-#if defined(CONFIG_DTB_MT7621_EX15) || defined(CONFIG_DTB_MT7621_GX)
+#if defined(CONFIG_DTB_MT7621_EX15) || defined(CONFIG_DTB_MT7621_EX55)
 	#include <linux/io.h>
 	/*
 	 * We need to be able to start kicking the dog early in kernel
@@ -598,7 +593,7 @@
 	 * the kernels own GPIO services - they are setup up too late
 	 * in the boot process.
 	 */
-#if defined(CONFIG_DTB_MT7621_GX)
+#if defined(CONFIG_DTB_MT7621_EX55)
 	#define WDT_GPIO_CTRL		0x604
 	#define WDT_GPIO_DATA		0x624
 	#define WDT_GPIO_PIN		1 /* GPIO33 */
@@ -648,7 +643,7 @@
 	core_initcall(enable_dog);
 
 	#define HAS_HW_SERVICE 1
-#endif /* CONFIG_DTB_MT7621_EX15 || CONFIG_DTB_MT7621_GX */
+#endif /* CONFIG_DTB_MT7621_EX15 || CONFIG_DTB_MT7621_EX55 */
 
 
 #ifndef HAS_HW_SERVICE

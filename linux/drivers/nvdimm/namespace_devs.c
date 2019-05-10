@@ -270,11 +270,10 @@ static ssize_t __alt_name_store(struct device *dev, const char *buf,
 	if (dev->driver || to_ndns(dev)->claim)
 		return -EBUSY;
 
-	input = kmemdup(buf, len + 1, GFP_KERNEL);
+	input = kstrndup(buf, len, GFP_KERNEL);
 	if (!input)
 		return -ENOMEM;
 
-	input[len] = '\0';
 	pos = strim(input);
 	if (strlen(pos) + 1 > NSLABEL_NAME_LEN) {
 		rc = -EINVAL;
@@ -1144,6 +1143,26 @@ resource_size_t nvdimm_namespace_capacity(struct nd_namespace_common *ndns)
 }
 EXPORT_SYMBOL(nvdimm_namespace_capacity);
 
+bool nvdimm_namespace_locked(struct nd_namespace_common *ndns)
+{
+	int i;
+	bool locked = false;
+	struct device *dev = &ndns->dev;
+	struct nd_region *nd_region = to_nd_region(dev->parent);
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm *nvdimm = nd_mapping->nvdimm;
+
+		if (test_bit(NDD_LOCKED, &nvdimm->flags)) {
+			dev_dbg(dev, "%s locked\n", nvdimm_name(nvdimm));
+			locked = true;
+		}
+	}
+	return locked;
+}
+EXPORT_SYMBOL(nvdimm_namespace_locked);
+
 static ssize_t size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1695,6 +1714,9 @@ struct nd_namespace_common *nvdimm_namespace_common_probe(struct device *dev)
 		}
 	}
 
+	if (nvdimm_namespace_locked(ndns))
+		return ERR_PTR(-EACCES);
+
 	size = nvdimm_namespace_capacity(ndns);
 	if (size < ND_MIN_NAMESPACE_SIZE) {
 		dev_dbg(&ndns->dev, "%pa, too small must be at least %#x\n",
@@ -2076,7 +2098,6 @@ static struct device *nd_namespace_pmem_create(struct nd_region *nd_region)
 		return NULL;
 	}
 	dev_set_name(dev, "namespace%d.%d", nd_region->id, nspm->id);
-	dev->parent = &nd_region->dev;
 	dev->groups = nd_namespace_attribute_groups;
 	nd_namespace_pmem_set_resource(nd_region, nspm, 0);
 

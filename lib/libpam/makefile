@@ -30,6 +30,9 @@ clean:
 	rm -rf build
 
 romfs:
+	$(MAKE) _romfs ACL_LICENSE='$(shell $(ROOTDIR)/bin/license-detect.sh `pwd`)'
+
+_romfs:
 	$(ROMFSINST) build/libpamc/.libs/libpamc.so.0.81.0 /lib/libpamc.so.0.81.0
 	$(ROMFSINST) -s libpamc.so.0.81.0 /lib/libpamc.so.0
 	$(ROMFSINST) -s libpamc.so.0.81.0 /lib/libpamc.so

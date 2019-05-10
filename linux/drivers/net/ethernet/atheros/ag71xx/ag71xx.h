@@ -455,8 +455,8 @@ int ag71xx_ar7240_init(struct ag71xx *ag);
 void ag71xx_ar7240_cleanup(struct ag71xx *ag);
 int ag71xx_ar7240_mii_ioctl(struct ag71xx *ag, struct ifreq *ifr, int cmd);
 
-int ag71xx_ar7240_ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *cmd);
-int ag71xx_ar7240_ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *cmd);
+int ag71xx_ar7240_ethtool_get_link_ksettings(struct net_device *dev, struct ethtool_link_ksettings *cmd);
+int ag71xx_ar7240_ethtool_set_link_ksettings(struct net_device *dev, const struct ethtool_link_ksettings *cmd);
 
 int ag71xx_mdio_mii_read(struct ag71xx_mdio *am, int addr, int reg);
 void ag71xx_mdio_mii_write(struct ag71xx_mdio *am, int addr, int reg, u16 val);

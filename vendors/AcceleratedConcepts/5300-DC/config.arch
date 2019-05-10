@@ -13,7 +13,10 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
 RELFILES = images/image.bin images/boot.bin images/configs.tar.gz \
            images/romfs-inst.log images/factory.bin \
-           prop/config/schema/accns.schema
+           prop/config/schema/accns.schema \
+           images/acl-licenses.txt \
+           prop/config/cc_acl/app/runt/FE00000A*
+
 
 ############################################################################
 

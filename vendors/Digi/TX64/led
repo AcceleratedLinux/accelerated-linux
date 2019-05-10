@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# Action for TX64 specific LED setting
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+case "$1" in
+start)
+	ledcmd -O ALL -o POWER
+	exit 0
+	;;
+reload)
+	;;
+stop)
+	# Firmware flash
+	ledcmd -F POWER
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+
+exit 0

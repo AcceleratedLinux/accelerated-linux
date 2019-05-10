@@ -44,6 +44,9 @@ bzlib.o: bzlib.c
 	$(CC) $(CFLAGS) -c bzlib.c
 
 romfs:
+	$(MAKE) _romfs ACL_LICENSE='$(shell $(ROOTDIR)/bin/license-detect.sh `pwd`)'
+
+_romfs:
 	$(ROMFSINST) libbz2.so.1.0.3 /lib/libbz2.so.1.0.3
 	$(ROMFSINST) -s libbz2.so.1.0.3 /lib/libbz2.so.1.0
 	$(ROMFSINST) -s libbz2.so.1.0.3 /lib/libbz2.so

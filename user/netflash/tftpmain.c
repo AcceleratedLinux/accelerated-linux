@@ -401,7 +401,7 @@ void
 tftpget(argc, argv)
 	char *argv[];
 {
-	int fd;
+	int fd, blocksize = SEGSIZE;
 	register int n;
 	register char *cp;
 	char *src;
@@ -428,6 +428,16 @@ tftpget(argc, argv)
 				tftpgetusage(argv[0]);
 				return;
 			}
+	}
+	if (argc > 2) {
+		if (strncmp("bs=",argv[2], 3) == 0) {
+			blocksize = atoi(argv[2] + 3);
+			argc--;
+		}
+	}
+	if (blocksize > BLOCKSIZE_MAX || blocksize < BLOCKSIZE_MIN) {
+		printf("tftp: Invalid blocksize %d", blocksize);
+		return;
 	}
 	for (n = 1; n < argc ; n++) {
 		src = strchr(argv[n], ':');
@@ -463,7 +473,7 @@ tftpget(argc, argv)
 				printf("getting from %s:%s to %s [%s]\n",
 					tftphostname, src, cp, tftpmode);
 			tftpsin.sin_port = tftpport;
-			tftprecvfile(fd, src, tftpmode);
+			tftprecvfile(fd, src, tftpmode, blocksize);
 			break;
 		}
 		cp = tftptail(src);         /* new .. jdg */
@@ -476,7 +486,7 @@ tftpget(argc, argv)
 			printf("getting from %s:%s to %s [%s]\n",
 				tftphostname, src, cp, tftpmode);
 		tftpsin.sin_port = tftpport;
-		tftprecvfile(fd, src, tftpmode);
+		tftprecvfile(fd, src, tftpmode, blocksize);
 	}
 }
 
@@ -484,8 +494,8 @@ static void
 tftpgetusage(s)
 char * s;
 {
-	printf("usage: %s host:file host:file ... file, or\n", s);
-	printf("       %s file file ... file if connected\n", s);
+	printf("usage: %s host:file host:file ... file [bs=N], or\n", s);
+	printf("       %s file file ... file [bs=N] if connected\n", s);
 }
 
 int	tftprexmtval = TIMEOUT;

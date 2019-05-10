@@ -184,6 +184,9 @@ run-xmltest: xmlwf/xmlwf tests/XML-Test-Suite
 	install uninstall
 
 romfs:
+	$(MAKE) _romfs ACL_LICENSE='$(shell $(ROOTDIR)/bin/license-detect.sh `pwd`)'
+
+_romfs:
 ifndef DISABLE_SHARED_LIBS
 	$(ROMFSINST) libexpat.so /lib/libexpat.so.0.5.0
 	$(ROMFSINST) -s libexpat.so.0.5.0 /lib/libexpat.so.0

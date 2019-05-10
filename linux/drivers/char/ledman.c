@@ -4100,14 +4100,14 @@ static ledmap_t ledman_std = {
 };
 
 static leddef_t ledman_def = {
-	[LEDS_ON] = LED0,
+	[LEDS_ON] = LED0 | LED_RED | LED_GREEN,
 };
 
-static unsigned int leds_state = LED_MASK;
+static unsigned int leds_state;
 static unsigned int leds_bits = LED_MASK;
 static struct work_struct leds_work;
 static int leds_scheduled;
-static int leds_deferedsetup;
+static unsigned int leds_deferedsetup;
 
 static void ledman_set(unsigned long bits)
 {
@@ -4135,7 +4135,7 @@ static void ledman_initgpio(void)
 
 		rc = gpio_request(ledgpio[i].gpio, ledgpio[i].name);
 		if (rc < 0) {
-			leds_deferedsetup++;
+			leds_deferedsetup |= 0x1 << i;
 			continue;
 		}
 		gpio_direction_output(ledgpio[i].gpio, 1);
@@ -4155,7 +4155,7 @@ static void ledman_work(struct work_struct *work)
 	 * Get new state and mark that we have processed that.
 	 * This ordering avoids need for preempt protection.
 	 */
-	bits = leds_bits;
+	bits = leds_bits & ~leds_deferedsetup;
 	leds_scheduled = 0;
 
 	changed = bits ^ leds_state;
@@ -4275,8 +4275,9 @@ static leddef_t ac6310dx_ledman_def = {
 #define CONNECTIT_MINI_LED_RSS4		0x40
 #define CONNECTIT_MINI_LED_RSS5		0x80
 #define CONNECTIT_MINI_LED_POWER	0x100
-#define CONNECTIT_MINI_LED_MASK		0x1ff
-#define CONNECTIT_MINI_LED_NR		9
+#define CONNECTIT_MINI_LED_ONLINE	0x200
+#define CONNECTIT_MINI_LED_MASK		0x3ff
+#define CONNECTIT_MINI_LED_NR		10
 
 static struct ledgpiomap connectit_mini_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
@@ -4285,13 +4286,15 @@ static struct ledgpiomap connectit_mini_ledgpio[] = {
 	{ .name = "RSS1", .gpio = 3, },
 	{ .name = "RSS2", .gpio = 4, },
 	{ .name = "RSS3", .gpio = 5, },
-	{ .name = "RSS4", .gpio = 24, },
-	{ .name = "RSS5", .gpio = 25, },
-	{ .name = "POWER", .gpio = 8, },
+	{ .name = "RSS4", .gpio = 128, },
+	{ .name = "RSS5", .gpio = 129, },
+	{ .name = "POWER", .gpio = 9, },
+	{ .name = "ONLINE", .gpio = 8, },
 };
 
 static ledmap_t connectit_mini_ledman_std = {
 	[LEDMAN_ALL]       = CONNECTIT_MINI_LED_MASK,
+	[LEDMAN_POWER]     = CONNECTIT_MINI_LED_POWER,
 
 	[LEDMAN_NVRAM_1]   = 0,
 	[LEDMAN_NVRAM_2]   = CONNECTIT_MINI_LED_RED | CONNECTIT_MINI_LED_GREEN |
@@ -4309,6 +4312,8 @@ static ledmap_t connectit_mini_ledman_std = {
 	[LEDMAN_ETH]       = CONNECTIT_MINI_LED_GREEN,
 	[LEDMAN_ONLINE]    = CONNECTIT_MINI_LED_BLUE,
 	[LEDMAN_COM]       = CONNECTIT_MINI_LED_RED,
+	[LEDMAN_LAN3_RX]   = CONNECTIT_MINI_LED_ONLINE,
+	[LEDMAN_LAN3_TX]   = CONNECTIT_MINI_LED_ONLINE,
 };
 
 static leddef_t connectit_mini_ledman_def = {
@@ -4544,7 +4549,7 @@ struct ledgpiomap {
 #define LED_MASK	0xfff
 #define LED_NR		12
 
-#define GPIO_ERASE	28
+#define GPIO_ERASE	492
 
 static struct ledgpiomap ledgpio[] = {
 	{ .name = "RED", .gpio = 496, },
@@ -4555,10 +4560,10 @@ static struct ledgpiomap ledgpio[] = {
 	{ .name = "RSS3", .gpio = 501, },
 	{ .name = "RSS4", .gpio = 502, },
 	{ .name = "RSS5", .gpio = 503, },
-	{ .name = "SIM1", .gpio = 32, },
-	{ .name = "SIM2", .gpio = 31, },
-	{ .name = "ETH0", .gpio = 22, },
-	{ .name = "ETH1", .gpio = 23, },
+	{ .name = "SIM1", .gpio = 432, },
+	{ .name = "SIM2", .gpio = 495, },
+	{ .name = "ETH0", .gpio = 486, },
+	{ .name = "ETH1", .gpio = 487, },
 };
 
 static ledmap_t ledman_std = {
@@ -4590,7 +4595,9 @@ static ledmap_t ledman_std = {
 	[LEDMAN_SIM2]      = LED_SIM2,
 };
 
-static leddef_t ledman_def = { };
+static leddef_t ledman_def = {
+	[LEDS_ON]	   = LED_GREEN | LED_RED,
+};
 
 static unsigned int leds_state = LED_MASK;
 static unsigned int leds_bits = LED_MASK;
@@ -4692,7 +4699,7 @@ static void ledman_initarch(void)
 #endif /* CONFIG_DTB_MT7621_EX15 */
 /****************************************************************************/
 /****************************************************************************/
-#if defined(CONFIG_DTB_MT7621_GX)
+#if defined(CONFIG_DTB_MT7621_EX55)
 /****************************************************************************/
 #define LEDMAN_PLATFORM_DEFINED
 
@@ -4731,7 +4738,7 @@ struct ledgpiomap {
 #define LED_MASK		0x3fffff
 #define LED_NR			22
 
-#define GPIO_ERASE		32
+#define GPIO_ERASE		416
 
 static struct ledgpiomap ledgpio[] = {
 	{ .name = "RED", .gpio = 496, },
@@ -4754,8 +4761,8 @@ static struct ledgpiomap ledgpio[] = {
 	{ .name = "RSS5", .gpio = 487, },
 	{ .name = "SIM1", .gpio = 488, },
 	{ .name = "SIM2", .gpio = 489, },
-	{ .name = "ETH0", .gpio = 12, },
-	{ .name = "ETH1", .gpio = 31, },
+	{ .name = "ETH0", .gpio = 460, },
+	{ .name = "ETH1", .gpio = 479, },
 };
 
 static ledmap_t ledman_std = {
@@ -4801,7 +4808,10 @@ static ledmap_t ledman_std = {
 	[LEDMAN_SIM2]      = LED_MODEM1_SIM2,
 };
 
-static leddef_t ledman_def = { };
+static leddef_t ledman_def = {
+	[LEDS_ON]	   = LED_MODEM1_GREEN | LED_MODEM1_RED |
+			     LED_MODEM2_GREEN | LED_MODEM2_RED,
+};
 
 static unsigned int leds_state = LED_MASK;
 static unsigned int leds_bits = LED_MASK;
@@ -4900,7 +4910,7 @@ static void ledman_initarch(void)
 }
 
 /****************************************************************************/
-#endif /* CONFIG_DTB_MT7621_GX */
+#endif /* CONFIG_DTB_MT7621_EX55 */
 /****************************************************************************/
 /****************************************************************************/
 #if defined(CONFIG_GPIO_AMDFCH)

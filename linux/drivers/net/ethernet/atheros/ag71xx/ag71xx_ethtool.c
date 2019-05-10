@@ -13,34 +13,34 @@
 
 #include "ag71xx.h"
 
-static int ag71xx_ethtool_get_settings(struct net_device *dev,
-				       struct ethtool_cmd *cmd)
+static int ag71xx_ethtool_get_link_ksettings(struct net_device *dev,
+					     struct ethtool_link_ksettings *cmd)
 {
 	struct ag71xx *ag = netdev_priv(dev);
 	struct phy_device *phydev = ag->phy_dev;
 
 	if (!phydev) {
 		if (ag71xx_get_pdata(ag)->switch_data)
-			return ag71xx_ar7240_ethtool_get_settings(dev, cmd);
+			return ag71xx_ar7240_ethtool_get_link_ksettings(dev, cmd);
 		return -ENODEV;
 	}
 
-	return phy_ethtool_gset(phydev, cmd);
+	return phy_ethtool_get_link_ksettings(dev, cmd);
 }
 
-static int ag71xx_ethtool_set_settings(struct net_device *dev,
-				       struct ethtool_cmd *cmd)
+static int ag71xx_ethtool_set_link_ksettings(struct net_device *dev,
+					     const struct ethtool_link_ksettings *cmd)
 {
 	struct ag71xx *ag = netdev_priv(dev);
 	struct phy_device *phydev = ag->phy_dev;
 
 	if (!phydev) {
 		if (ag71xx_get_pdata(ag)->switch_data)
-			return ag71xx_ar7240_ethtool_set_settings(dev, cmd);
+			return ag71xx_ar7240_ethtool_set_link_ksettings(dev, cmd);
 		return -ENODEV;
 	}
 
-	return phy_ethtool_sset(phydev, cmd);
+	return phy_ethtool_set_link_ksettings(dev, cmd);
 }
 
 static void ag71xx_ethtool_get_drvinfo(struct net_device *dev,
@@ -119,12 +119,12 @@ static int ag71xx_ethtool_set_ringparam(struct net_device *dev,
 }
 
 struct ethtool_ops ag71xx_ethtool_ops = {
-	.set_settings	= ag71xx_ethtool_set_settings,
-	.get_settings	= ag71xx_ethtool_get_settings,
-	.get_drvinfo	= ag71xx_ethtool_get_drvinfo,
-	.get_msglevel	= ag71xx_ethtool_get_msglevel,
-	.set_msglevel	= ag71xx_ethtool_set_msglevel,
-	.get_ringparam	= ag71xx_ethtool_get_ringparam,
-	.set_ringparam	= ag71xx_ethtool_set_ringparam,
-	.get_link	= ethtool_op_get_link,
+	.get_drvinfo		= ag71xx_ethtool_get_drvinfo,
+	.get_msglevel		= ag71xx_ethtool_get_msglevel,
+	.set_msglevel		= ag71xx_ethtool_set_msglevel,
+	.set_link_ksettings	= ag71xx_ethtool_set_link_ksettings,
+	.get_link_ksettings	= ag71xx_ethtool_get_link_ksettings,
+	.get_ringparam		= ag71xx_ethtool_get_ringparam,
+	.set_ringparam		= ag71xx_ethtool_set_ringparam,
+	.get_link		= ethtool_op_get_link,
 };

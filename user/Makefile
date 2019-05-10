@@ -20,6 +20,8 @@ include user.mak
 dir_v = $(PRODUCTDIR)
 dir_p = $(ROOTDIR)/prop
 
+dir_smp = libqmi libmbim ModemManager busybox
+
 dir_y = 
 dir_n =
 dir_  =
@@ -56,7 +58,6 @@ dir_$(CONFIG_USER_CTORRENT_CTORRENT)        += ctorrent
 dir_$(CONFIG_USER_CAN_HORCH)                += horch
 dir_$(CONFIG_USER_CGI_GENERIC)              += cgi_generic
 dir_$(CONFIG_USER_CGIHTML)                  += cgihtml/examples
-dir_$(CONFIG_USER_CHAT_CHAT)                += pppd
 dir_$(CONFIG_USER_CKSUM_CKSUM)              += cksum
 dir_$(CONFIG_USER_CLAMAV_CLAMAV)            += clamav
 dir_$(CONFIG_USER_CLAMAV_CLAMSMTP)          += clamsmtp
@@ -247,7 +248,6 @@ dir_$(CONFIG_USER_OPENVPN_OPENVPN)          += openvpn
 dir_$(CONFIG_USER_OPROFILE)                 += oprofile
 dir_$(CONFIG_USER_P7ZIP_7ZA)                += p7zip
 dir_$(CONFIG_USER_PALMBOT_PALMBOT)          += palmbot
-dir_$(CONFIG_USER_PAM_RADIUS)               += pam_radius
 dir_$(CONFIG_USER_PAM_SMB)                  += pam_smb
 dir_$(CONFIG_USER_PAM_KRB5)                 += pam_krb5
 dir_$(CONFIG_USER_PCMCIA_CS)                += pcmcia-cs
@@ -261,7 +261,6 @@ dir_$(CONFIG_USER_PLUG_PLUG)                += plug
 dir_$(CONFIG_USER_POP3PROXY_POP3PROXY)      += pop3proxy
 dir_$(CONFIG_USER_PORTMAP_PORTMAP)          += portmap
 dir_$(CONFIG_USER_POTRACE_POTRACE)          += potrace
-dir_$(CONFIG_USER_PPPD_PPPD_PPPD)           += pppd
 dir_$(CONFIG_USER_PPTP_PPTP)                += pptp
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP)         += pptp-client
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP_CALLMGR) += pptp-client
@@ -282,7 +281,6 @@ dir_$(CONFIG_USER_PROCPS_VMSTAT)            += procps
 dir_$(CONFIG_USER_PROCPS_W)                 += procps
 dir_$(CONFIG_USER_PROCPS_WATCH)             += procps
 dir_$(CONFIG_USER_PROFTPD_PROFTPD)          += proftpd
-dir_$(CONFIG_USER_PYTHON_PYTHON)            += python
 dir_$(CONFIG_USER_QSPITEST_TEST)            += qspitest
 dir_$(CONFIG_USER_QSPITEST_RX)              += qspitest
 dir_$(CONFIG_USER_RADVD_RADVD)              += radvd
@@ -353,7 +351,6 @@ dir_$(CONFIG_USER_SSH_SSHD)                 += ssh
 dir_$(CONFIG_USER_SSH_SSH)                  += ssh
 dir_$(CONFIG_USER_SSH_SSHKEYGEN)            += ssh
 dir_$(CONFIG_USER_STP_STP)                  += stp
-dir_$(CONFIG_USER_STRACE_STRACE)            += strace
 dir_$(CONFIG_USER_STTY_STTY)                += stty
 dir_$(CONFIG_USER_SWCONFIG_SWCONFIG)        += swconfig
 dir_$(CONFIG_USER_SYSUTILS_DF)              += sysutils
@@ -433,8 +430,10 @@ dir_p :=
 dir_v :=
 endif
 
+DIRS_y    = $(sort $(dir_y) $(dir_v) $(dir_p))
+
 all::
-	$(MAKE) -j$(HOST_NCPU) $(sort $(dir_y) $(dir_v) $(dir_p)) || exit $$?
+	$(MAKE) -j$(HOST_NCPU) $(DIRS_y) || exit $$?
 
 .PHONY: $(sort $(dir_y) $(dir_p))
 
@@ -456,6 +455,7 @@ libqmi: udev
 ModemManager: udev libmbim libqmi
 mtd-utils: util-linux
 netifd: ubus uci
+netflash: i2c-tools
 flashrom: pciutils
 ovs: dpdk
 swconfig: uci
@@ -466,10 +466,10 @@ $(ROOTDIR)/prop: ubus ModemManager hostapd ipset
 ###################################
 
 $(sort $(dir_y) $(dir_p)):
-	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) $(SUBDIR_SMP_BUILD) -C $@ ) || exit $$?
+	[ ! -d "$@" ] || ( touch $@/.sgbuilt_user && $(MAKE) $(if $(filter $@,$(dir_smp)),-j$(HOST_NCPU),$(SUBDIR_SMP_BUILD)) -C $@ ) || exit $$?
 
 %_only:
-	touch $(@:_only=)/.sgbuilt_user && $(MAKE) -j$(HOST_NCPU) $(SUBDIR_SMP_BUILD) -C $(@:_only=)
+	touch $(@:_only=)/.sgbuilt_user && $(MAKE) $(if $(filter $(@:_only=),$(dir_smp)),-j$(HOST_NCPU),$(SUBDIR_SMP_BUILD)) -C $(@:_only=)
 
 %_clean:
 	$(MAKE) -j1 -C $(@:_clean=) clean; rm -f $(@:_clean=)/.sgbuilt_user; true

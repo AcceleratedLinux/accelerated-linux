@@ -1,0 +1,11 @@
+config LIB_TINYRL
+    bool "tinyrl"
+    help
+        Library for building good CLI interfaces
+
+config LIB_TINYRL_DISABLE_BELL
+    bool "tinrl: disable bell"
+    depends on LIB_TINYRL
+    help
+        Disable the bell
+

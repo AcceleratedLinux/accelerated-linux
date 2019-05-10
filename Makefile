@@ -67,15 +67,17 @@ include config/Makefile.conf
 
 SCRIPTS_BINARY_config     = conf
 SCRIPTS_BINARY_menuconfig = mconf
+SCRIPTS_BINARY_nconfig    = nconf
 SCRIPTS_BINARY_qconfig    = qconf
 SCRIPTS_BINARY_gconfig    = gconf
 SCRIPTS_BINARY_xconfig    = gconf
-.PHONY: config menuconfig qconfig gconfig xconfig
+.PHONY: config menuconfig nconfig qconfig gconfig xconfig
 menuconfig: mconf
+nconfig: nconf
 qconfig: qconf
 gconfig: gconf
 xconfig: $(SCRIPTS_BINARY_xconfig)
-config menuconfig qconfig gconfig xconfig: Kconfig conf
+config menuconfig nconfig qconfig gconfig xconfig: Kconfig conf
 	KCONFIG_NOTIMESTAMP=1 $(SCRIPTSDIR)/$(SCRIPTS_BINARY_$@) Kconfig
 	@if [ ! -f .config ]; then \
 		echo; \
@@ -98,7 +100,7 @@ config menuconfig qconfig gconfig xconfig: Kconfig conf
 
 .PHONY: oldconfig
 oldconfig: Kconfig conf
-	KCONFIG_NOTIMESTAMP=1 $(SCRIPTSDIR)/conf -o Kconfig
+	KCONFIG_NOTIMESTAMP=1 $(SCRIPTSDIR)/conf --oldconfig Kconfig
 	@chmod u+x config/setconfig
 	@config/setconfig defaults
 	@$(MAKE) oldconfig_linux
@@ -132,12 +134,19 @@ modules_install:
 		find $(ROMFSDIR)/lib/modules -type f -name "*o" | xargs -r $(STRIP) -R .comment -R .note -g --strip-unneeded; \
 	fi
 
+SYNCCONFIG = KCONFIG_AUTOCONFIG=auto.conf \
+	KCONFIG_TRISTATE=tristate.conf \
+	KCONFIG_AUTOHEADER=autoconf.h \
+	$(SCRIPTSDIR)/conf --syncconfig Kconfig
+
 linux_%:
 	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH_KERNEL) -C $(LINUXDIR) $(patsubst linux_%,%,$@)
 modules_%:
 	[ ! -d modules ] || KCONFIG_NOTIMESTAMP=1 $(MAKEARCH) -C modules $(patsubst modules_%,%,$@)
+	[ ! -d modules -o $* = clean ] || (cd modules && $(SYNCCONFIG))
 myconfig_%:
 	KCONFIG_NOTIMESTAMP=1 $(MAKEARCH) -C config $(patsubst myconfig_%,%,$@)
+	cd config && $(SYNCCONFIG)
 oldconfig_config: myconfig_oldconfig
 oldconfig_modules: modules_oldconfig
 oldconfig_linux: linux_oldconfig
@@ -173,18 +182,27 @@ romfs.post:
 image:
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	$(MAKEARCH) -C vendors image
+	@echo "Package:License:URL:Target Filesystem location" > $(IMAGEDIR)/acl-licenses.txt
+	@sort -u $(IMAGEDIR)/license.log >> $(IMAGEDIR)/acl-licenses.txt
+	@if grep :UNKNOWN: $(IMAGEDIR)/acl-licenses.txt; then \
+	    echo "ERROR: packages have an Unknown license in this build" >&2;\
+	    echo "-----------------------------------------------------" >&2;\
+	    grep :UNKNOWN: $(IMAGEDIR)/acl-licenses.txt >&2; \
+	    echo "-----------------------------------------------------" >&2;\
+	    grep -qe "CONFIG_PROP.*=y" $(ROOTDIR)/config/.config && \
+		exit 1; \
+	fi
 
 .PHONY: release
 release:
 	[ -d $(RELDIR) ] || mkdir -p $(RELDIR)
-	@for f in $(RELFILES); do \
+	@for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt; do \
 		s=`echo "$$f" | sed 's/^\([^,]*\)\(,.*\)\{0,1\}$$/\1/'`; \
 		d=`echo "$$s" | sed 's/\([^,]*\)\([.][^.]*,\)\{0,1\}/\1/'`; \
 		[ -f "$$s" ] || continue; \
 		echo $(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d`-`basename $$d`; \
 		cp $$s $(RELDIR)/$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d`-`basename $$d`; \
 	done
-	@sort -u ${IMAGEDIR}/license.log > $(RELDIR)/$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d`-licenses
 
 .PHONY: single
 single:
@@ -249,7 +267,7 @@ relink:
 	find user prop vendors -type f -name '*.gdb' | sed 's/^\(.*\)\.gdb/\1 \1.gdb/' | xargs rm -f
 
 clean: modules_clean
-	for dir in $(LINUXDIR) $(DIRS) vendors; do [ ! -d $$dir ] || $(MAKEARCH) -C $$dir clean ; done
+	for dir in $(LINUXDIR) $(DIRS) vendors config/kconfig; do [ ! -d $$dir ] || $(MAKEARCH) -C $$dir clean ; done
 	rm -rf $(ROMFSDIR)/*
 	rm -rf $(STAGEDIR)/*
 	rm -rf $(IMAGEDIR)/*
@@ -378,6 +396,7 @@ help:
 	@echo "make xconfig               Configure the target etc"
 	@echo "make config                \""
 	@echo "make menuconfig            \""
+	@echo "make nconfig               \""
 	@echo "make qconfig               \""
 	@echo "make gconfig               \""
 	@echo "make dep                   2.4 and earlier kernels need this step"

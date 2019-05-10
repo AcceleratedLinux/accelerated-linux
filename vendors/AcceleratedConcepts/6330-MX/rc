@@ -51,12 +51,14 @@ echo high > /sys/class/gpio/gpio49/direction
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	#load wifi module for testing
+	modprobe ath9k
 	modprobe ath10k_pci
 	/etc/factory
 	exit 0
 fi
 if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	#load wifi module for testing
+	modprobe ath9k
 	modprobe ath10k_pci
 	# Use the same setup as for factory testing
 	/etc/factory
@@ -115,6 +117,7 @@ fi
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
 #load wifi module before we come up
+modprobe ath9k
 modprobe ath10k_pci
 
 # do the rc script processing

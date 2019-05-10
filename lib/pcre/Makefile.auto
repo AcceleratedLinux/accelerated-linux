@@ -1,1 +1,3 @@
 dir_$(CONFIG_LIB_LIBPCRE) += pcre
+dep_pcre = zlib
+

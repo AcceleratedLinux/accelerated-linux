@@ -25,6 +25,8 @@ int send_cmd(atecc_ctx *ctx, const uint8_t *buffer, uint8_t len, int sleep_time_
 	     uint8_t *ret_buffer, size_t rx_buffer_size);
 int verify(atecc_ctx *ctx, uint8_t slot_id, const uint8_t *r, const uint8_t *s);
 int nonce(atecc_ctx *ctx, const uint8_t *message);
+int hmac(atecc_ctx *ctx, uint8_t slot_id,
+	 const uint8_t *message, const uint8_t *hmac);
 void wakeup_cryptochip(atecc_ctx *ctx);
 void sleep_cryptochip(atecc_ctx *ctx);
 

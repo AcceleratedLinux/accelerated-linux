@@ -1,0 +1,11 @@
+--- strongswan-5.7.1/src/libstrongswan/utils/utils/memory.h.orig	2018-11-27 10:16:59.914748102 +1000
++++ strongswan-5.7.1/src/libstrongswan/utils/utils/memory.h	2018-11-27 10:17:16.226524648 +1000
+@@ -22,6 +22,8 @@
+ #ifndef MEMORY_H_
+ #define MEMORY_H_
+ 
++#include <stdint.h> /* for uintptr_t */
++
+ /**
+  * Helper function that compares two binary blobs for equality
+  */

@@ -114,6 +114,19 @@ static const struct ieee80211_regdomain ath_world_regdom_67_68_6A_6C = {
 	}
 };
 
+#ifdef CONFIG_ATH_REG_FORCE_UNRESTRICTED
+/* Unrestricted regulatory domain */
+static const struct ieee80211_regdomain ath_world_regdom_unrestricted = {
+	.n_reg_rules = 3,
+	.alpha2 =  "99",
+	.reg_rules = {
+		REG_RULE(2412-10, 2484+10, 40, 0, 40, 0),
+		REG_RULE(5150-10, 5850+10, 160, 0, 40, 0),
+		REG_RULE(56160+2160*1-1080, 56160+2160*3+1080, 2160, 0, 50, 0),
+	}
+};
+#endif
+
 static bool dynamic_country_user_possible(struct ath_regulatory *reg)
 {
 	if (IS_ENABLED(CONFIG_ATH_REG_DYNAMIC_USER_CERT_TESTING))
@@ -240,6 +253,10 @@ ieee80211_regdomain *ath_world_regdomain(struct ath_regulatory *reg)
 	case 0x6A:
 	case 0x6C:
 		return &ath_world_regdom_67_68_6A_6C;
+#ifdef CONFIG_ATH_REG_FORCE_UNRESTRICTED
+	case 0x6F:
+		return &ath_world_regdom_unrestricted;
+#endif
 	default:
 		WARN_ON(1);
 		return ath_default_world_regdomain();
@@ -340,6 +357,7 @@ ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 			      struct ath_regulatory *reg,
 			      enum nl80211_reg_initiator initiator)
 {
+#ifndef CONFIG_ATH_REG_NO_FORCED_RADAR
 	enum nl80211_band band;
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_channel *ch;
@@ -355,6 +373,7 @@ ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 							initiator, ch);
 		}
 	}
+#endif
 }
 
 /**
@@ -376,6 +395,7 @@ ath_reg_apply_ir_flags(struct wiphy *wiphy,
 		       struct ath_regulatory *reg,
 		       enum nl80211_reg_initiator initiator)
 {
+#ifndef CONFIG_ATH_REG_NO_FORCED_RADAR
 	struct ieee80211_supported_band *sband;
 
 	sband = wiphy->bands[NL80211_BAND_2GHZ];
@@ -397,12 +417,14 @@ ath_reg_apply_ir_flags(struct wiphy *wiphy,
 		ath_force_no_ir_freq(wiphy, 2467);
 		ath_force_no_ir_freq(wiphy, 2472);
 	}
+#endif
 }
 
 /* Always apply Radar/DFS rules on freq range 5500 MHz - 5700 MHz */
 static void ath_reg_apply_radar_flags(struct wiphy *wiphy,
 				      struct ath_regulatory *reg)
 {
+#ifndef CONFIG_ATH_REG_NO_FORCED_RADAR
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_channel *ch;
 	unsigned int i;
@@ -430,6 +452,7 @@ static void ath_reg_apply_radar_flags(struct wiphy *wiphy,
 			ch->flags |= IEEE80211_CHAN_RADAR |
 				     IEEE80211_CHAN_NO_IR;
 	}
+#endif
 }
 
 static void ath_reg_apply_world_flags(struct wiphy *wiphy,
@@ -688,6 +711,14 @@ static int __ath_regd_init(struct ath_regulatory *reg)
 		return -EINVAL;
 
 	ath_regd_sanitize(reg);
+
+#if defined(CONFIG_ATH_REG_FORCE_UNRESTRICTED)
+	/* Force an unrestricted regulatory domain */
+	reg->current_rd = 0x6F;
+#elif defined(CONFIG_ATH_REG_FORCE_DEFAULT)
+	/* Force the default regulatory domain */
+	reg->current_rd = 0x00;
+#endif
 
 	printk(KERN_DEBUG "ath: EEPROM regdomain: 0x%0x\n", reg->current_rd);
 

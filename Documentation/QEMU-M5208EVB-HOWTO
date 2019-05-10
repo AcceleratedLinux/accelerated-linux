@@ -82,7 +82,7 @@ root filesystem into the kernel image itself.
 
 To run it we now simply use:
 
-    qemu-system-m68k -nographic -machine mcf5208evb -kernel linux-3.x/vmlinux
+    qemu-system-m68k -nographic -machine mcf5208evb -kernel linux/vmlinux
 
 
 NETWORKING

@@ -226,55 +226,55 @@ ipsec_print_ip4(struct iphdr *ip)
 	}
 
 	printk(KERN_INFO "klips_debug:   IP:");
-	printk(" ihl:%d", ip->ihl << 2);
-	printk(" ver:%d", ip->version);
-	printk(" tos:%d", ip->tos);
-	printk(" tlen:%d", ntohs(ip->tot_len));
-	printk(" id:%d", ntohs(ip->id));
-	printk(" %s%s%sfrag_off:%d",
+	printk(KERN_CONT " ihl:%d", ip->ihl << 2);
+	printk(KERN_CONT " ver:%d", ip->version);
+	printk(KERN_CONT " tos:%d", ip->tos);
+	printk(KERN_CONT " tlen:%d", ntohs(ip->tot_len));
+	printk(KERN_CONT " id:%d", ntohs(ip->id));
+	printk(KERN_CONT " %s%s%sfrag_off:%d",
                ip->frag_off & __constant_htons(IP_CE) ? "CE " : "",
                ip->frag_off & __constant_htons(IP_DF) ? "DF " : "",
                ip->frag_off & __constant_htons(IP_MF) ? "MF " : "",
                (ntohs(ip->frag_off) & IP_OFFSET) << 3);
-	printk(" ttl:%d", ip->ttl);
-	printk(" proto:%d", ip->protocol);
+	printk(KERN_CONT " ttl:%d", ip->ttl);
+	printk(KERN_CONT " proto:%d", ip->protocol);
 	if(ip->protocol == IPPROTO_UDP)
-		printk(" (UDP)");
+		printk(KERN_CONT " (UDP)");
 	if(ip->protocol == IPPROTO_TCP)
-		printk(" (TCP)");
+		printk(KERN_CONT " (TCP)");
 	if(ip->protocol == IPPROTO_ICMP)
-		printk(" (ICMP)");
+		printk(KERN_CONT " (ICMP)");
 	if(ip->protocol == IPPROTO_ESP)
-		printk(" (ESP)");
+		printk(KERN_CONT " (ESP)");
 	if(ip->protocol == IPPROTO_AH)
-		printk(" (AH)");
+		printk(KERN_CONT " (AH)");
 	if(ip->protocol == IPPROTO_COMP)
-		printk(" (COMP)");
-	printk(" chk:%d", ntohs(ip->check));
+		printk(KERN_CONT " (COMP)");
+	printk(KERN_CONT " chk:%d", ntohs(ip->check));
 	addrtoa(*((struct in_addr*)(&ip->saddr)), 0, buf, sizeof(buf));
-	printk(" saddr:%s", buf);
+	printk(KERN_CONT " saddr:%s", buf);
 	if(tcphdr)
-		printk(":%d",
+		printk(KERN_CONT ":%d",
 		       ntohs(tcphdr->source));
 	addrtoa(*((struct in_addr*)(&ip->daddr)), 0, buf, sizeof(buf));
-	printk(" daddr:%s", buf);
+	printk(KERN_CONT " daddr:%s", buf);
 	if(tcphdr)
-		printk(":%d",
+		printk(KERN_CONT ":%d",
 		       ntohs(tcphdr->dest));
 	if(ip->protocol == IPPROTO_ICMP)
-		printk(" type:code=%d:%d",
+		printk(KERN_CONT " type:code=%d:%d",
 		       ((struct icmphdr*)((caddr_t)ip + (ip->ihl << 2)))->type,
 		       ((struct icmphdr*)((caddr_t)ip + (ip->ihl << 2)))->code);
 	if(ip->protocol == IPPROTO_TCP) {
-		printk(" seq=%u ack=%u", tcphdr->seq, tcphdr->ack_seq);
-		if (tcphdr->fin) printk(" FIN");
-		if (tcphdr->syn) printk(" SYN");
-		if (tcphdr->rst) printk(" RST");
-		if (tcphdr->psh) printk(" PSH");
-		if (tcphdr->ack) printk(" ACK");
-		if (tcphdr->urg) printk(" URG");
-		if (tcphdr->ece) printk(" ECE");
-		if (tcphdr->cwr) printk(" CWR");
+		printk(KERN_CONT " seq=%u ack=%u", tcphdr->seq, tcphdr->ack_seq);
+		if (tcphdr->fin) printk(KERN_CONT " FIN");
+		if (tcphdr->syn) printk(KERN_CONT " SYN");
+		if (tcphdr->rst) printk(KERN_CONT " RST");
+		if (tcphdr->psh) printk(KERN_CONT " PSH");
+		if (tcphdr->ack) printk(KERN_CONT " ACK");
+		if (tcphdr->urg) printk(KERN_CONT " URG");
+		if (tcphdr->ece) printk(KERN_CONT " ECE");
+		if (tcphdr->cwr) printk(KERN_CONT " CWR");
 	}
 	printk("\n");
 
@@ -294,51 +294,51 @@ ipsec_print_ip6(struct ipv6hdr *ip)
 	char buf[ADDRTOA_BUF];
 
 	printk(KERN_INFO "klips_debug:   IPV6:");
-	printk(" prio:%d", ip->priority);
-	printk(" ver:%d", ip->version);
-	printk(" flow:%02x%02x%02x", ip->flow_lbl[0], ip->flow_lbl[1], ip->flow_lbl[2]);
-	printk(" pllen:%d", ntohs(ip->payload_len));
-	printk(" hopl:%d", ip->hop_limit);
-	printk(" nexthdr:%d", ip->nexthdr);
+	printk(KERN_CONT " prio:%d", ip->priority);
+	printk(KERN_CONT " ver:%d", ip->version);
+	printk(KERN_CONT " flow:%02x%02x%02x", ip->flow_lbl[0], ip->flow_lbl[1], ip->flow_lbl[2]);
+	printk(KERN_CONT " pllen:%d", ntohs(ip->payload_len));
+	printk(KERN_CONT " hopl:%d", ip->hop_limit);
+	printk(KERN_CONT " nexthdr:%d", ip->nexthdr);
 	if(ip->nexthdr == IPPROTO_UDP)
-		printk(" (UDP)");
+		printk(KERN_CONT " (UDP)");
 	if(ip->nexthdr == IPPROTO_TCP)
-		printk(" (TCP)");
+		printk(KERN_CONT " (TCP)");
 	if(ip->nexthdr == IPPROTO_ICMP)
-		printk(" (ICMP)");
+		printk(KERN_CONT " (ICMP)");
 	if(ip->nexthdr == IPPROTO_ICMPV6)
-		printk(" (ICMP)");
+		printk(KERN_CONT " (ICMP)");
 	if(ip->nexthdr == IPPROTO_ESP)
-		printk(" (ESP)");
+		printk(KERN_CONT " (ESP)");
 	if(ip->nexthdr == IPPROTO_AH)
-		printk(" (AH)");
+		printk(KERN_CONT " (AH)");
 	if(ip->nexthdr == IPPROTO_COMP)
-		printk(" (COMP)");
+		printk(KERN_CONT " (COMP)");
 	inet_addrtot(AF_INET6, &ip->saddr, 0, buf, sizeof(buf));
-	printk(" saddr:%s", buf);
+	printk(KERN_CONT " saddr:%s", buf);
 #if 0
 	if(ip->protocol == IPPROTO_UDP)
-		printk(":%d",
+		printk(KERN_CONT ":%d",
 		       ntohs(((struct udphdr*)((caddr_t)ip + (ip->ihl << 2)))->source));
 	if(ip->protocol == IPPROTO_TCP)
-		printk(":%d",
+		printk(KERN_CONT ":%d",
 		       ntohs(((struct tcphdr*)((caddr_t)ip + (ip->ihl << 2)))->source));
 #endif
 	inet_addrtot(AF_INET6, &ip->daddr, 0, buf, sizeof(buf));
-	printk(" daddr:%s", buf);
+	printk(KERN_CONT " daddr:%s", buf);
 #if 0
 	if(ip->protocol == IPPROTO_UDP)
-		printk(":%d",
+		printk(KERN_CONT ":%d",
 		       ntohs(((struct udphdr*)((caddr_t)ip + (ip->ihl << 2)))->dest));
 	if(ip->protocol == IPPROTO_TCP)
-		printk(":%d",
+		printk(KERN_CONT ":%d",
 		       ntohs(((struct tcphdr*)((caddr_t)ip + (ip->ihl << 2)))->dest));
 	if(ip->protocol == IPPROTO_ICMP)
-		printk(" type:code=%d:%d",
+		printk(KERN_CONT " type:code=%d:%d",
 		       ((struct icmphdr*)((caddr_t)ip + (ip->ihl << 2)))->type,
 		       ((struct icmphdr*)((caddr_t)ip + (ip->ihl << 2)))->code);
 #endif
-	printk("\n");
+	printk(KERN_CONT "\n");
 
 	if(sysctl_ipsec_debug_verbose) {
 		__u8 *c;
@@ -685,6 +685,15 @@ ipsec_xmit_encap_init(struct ipsec_xmit_state *ixs)
 			case AH_MD5:
 			case AH_SHA:
 				ixs->authlen = AHHMAC_HASHLEN;
+				break;
+			case AH_SHA2_256:
+				ixs->authlen = 16;
+				break;
+			case AH_SHA2_384:
+				ixs->authlen = 24;
+				break;
+			case AH_SHA2_512:
+				ixs->authlen = 32;
 				break;
 			case AH_NONE:
 				break;
@@ -1983,6 +1992,15 @@ ipsec_xmit_init2(struct ipsec_xmit_state *ixs)
 				case AH_MD5:
 				case AH_SHA:
 					ixs->tailroom += AHHMAC_HASHLEN;
+					break;
+				case AH_SHA2_256:
+					ixs->tailroom += 16;
+					break;
+				case AH_SHA2_384:
+					ixs->tailroom += 24;
+					break;
+				case AH_SHA2_512:
+					ixs->tailroom += 32;
 					break;
 				case AH_NONE:
 					break;

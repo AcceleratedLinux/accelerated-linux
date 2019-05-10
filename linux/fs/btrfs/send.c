@@ -1186,9 +1186,9 @@ static int __clone_root_cmp_bsearch(const void *key, const void *elt)
 	u64 root = (u64)(uintptr_t)key;
 	struct clone_root *cr = (struct clone_root *)elt;
 
-	if (root < cr->root->objectid)
+	if (root < cr->root->root_key.objectid)
 		return -1;
-	if (root > cr->root->objectid)
+	if (root > cr->root->root_key.objectid)
 		return 1;
 	return 0;
 }
@@ -1198,9 +1198,9 @@ static int __clone_root_cmp_sort(const void *e1, const void *e2)
 	struct clone_root *cr1 = (struct clone_root *)e1;
 	struct clone_root *cr2 = (struct clone_root *)e2;
 
-	if (cr1->root->objectid < cr2->root->objectid)
+	if (cr1->root->root_key.objectid < cr2->root->root_key.objectid)
 		return -1;
-	if (cr1->root->objectid > cr2->root->objectid)
+	if (cr1->root->root_key.objectid > cr2->root->root_key.objectid)
 		return 1;
 	return 0;
 }
@@ -1501,7 +1501,7 @@ static int read_symlink(struct btrfs_root *root,
 	BUG_ON(compression);
 
 	off = btrfs_file_extent_inline_start(ei);
-	len = btrfs_file_extent_inline_len(path->nodes[0], path->slots[0], ei);
+	len = btrfs_file_extent_ram_bytes(path->nodes[0], ei);
 
 	ret = fs_path_add_from_extent_buffer(dest, path->nodes[0], off, len);
 
@@ -1693,12 +1693,8 @@ static int lookup_dir_item_inode(struct btrfs_root *root,
 
 	di = btrfs_lookup_dir_item(NULL, root, path,
 			dir, name, name_len, 0);
-	if (!di) {
-		ret = -ENOENT;
-		goto out;
-	}
-	if (IS_ERR(di)) {
-		ret = PTR_ERR(di);
+	if (IS_ERR_OR_NULL(di)) {
+		ret = di ? PTR_ERR(di) : -ENOENT;
 		goto out;
 	}
 	btrfs_dir_item_key_to_cpu(path->nodes[0], di, &key);
@@ -2242,7 +2238,7 @@ out:
  * inodes "orphan" name instead of the real name and stop. Same with new inodes
  * that were not created yet and overwritten inodes/refs.
  *
- * When do we have have orphan inodes:
+ * When do we have orphan inodes:
  * 1. When an inode is freshly created and thus no valid refs are available yet
  * 2. When a directory lost all it's refs (deleted) but still has dir items
  *    inside which were not processed yet (pending for move/delete). If anyone
@@ -2346,7 +2342,7 @@ static int send_subvol_begin(struct send_ctx *sctx)
 		return -ENOMEM;
 	}
 
-	key.objectid = send_root->objectid;
+	key.objectid = send_root->root_key.objectid;
 	key.type = BTRFS_ROOT_BACKREF_KEY;
 	key.offset = 0;
 
@@ -2362,7 +2358,7 @@ static int send_subvol_begin(struct send_ctx *sctx)
 	leaf = path->nodes[0];
 	btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 	if (key.type != BTRFS_ROOT_BACKREF_KEY ||
-	    key.objectid != send_root->objectid) {
+	    key.objectid != send_root->root_key.objectid) {
 		ret = -ENOENT;
 		goto out;
 	}
@@ -3344,7 +3340,8 @@ static void free_pending_move(struct send_ctx *sctx, struct pending_dir_move *m)
 	kfree(m);
 }
 
-static void tail_append_pending_moves(struct pending_dir_move *moves,
+static void tail_append_pending_moves(struct send_ctx *sctx,
+				      struct pending_dir_move *moves,
 				      struct list_head *stack)
 {
 	if (list_empty(&moves->list)) {
@@ -3354,6 +3351,10 @@ static void tail_append_pending_moves(struct pending_dir_move *moves,
 		list_splice_init(&moves->list, &list);
 		list_add_tail(&moves->list, stack);
 		list_splice_tail(&list, stack);
+	}
+	if (!RB_EMPTY_NODE(&moves->node)) {
+		rb_erase(&moves->node, &sctx->pending_dir_moves);
+		RB_CLEAR_NODE(&moves->node);
 	}
 }
 
@@ -3369,7 +3370,7 @@ static int apply_children_dir_moves(struct send_ctx *sctx)
 		return 0;
 
 	INIT_LIST_HEAD(&stack);
-	tail_append_pending_moves(pm, &stack);
+	tail_append_pending_moves(sctx, pm, &stack);
 
 	while (!list_empty(&stack)) {
 		pm = list_first_entry(&stack, struct pending_dir_move, list);
@@ -3380,7 +3381,7 @@ static int apply_children_dir_moves(struct send_ctx *sctx)
 			goto out;
 		pm = get_pending_dir_moves(sctx, parent_ino);
 		if (pm)
-			tail_append_pending_moves(pm, &stack);
+			tail_append_pending_moves(sctx, pm, &stack);
 	}
 	return 0;
 
@@ -3853,7 +3854,7 @@ static int process_recorded_refs(struct send_ctx *sctx, int *pending_move)
 		/*
 		 * We may have refs where the parent directory does not exist
 		 * yet. This happens if the parent directories inum is higher
-		 * the the current inum. To handle this case, we create the
+		 * than the current inum. To handle this case, we create the
 		 * parent directory out of order. But we need to check if this
 		 * did already happen before due to other refs in the same dir.
 		 */
@@ -4774,7 +4775,7 @@ static ssize_t fill_read_buf(struct send_ctx *sctx, u64 offset, u32 len)
 	struct btrfs_key key;
 	pgoff_t index = offset >> PAGE_SHIFT;
 	pgoff_t last_index;
-	unsigned pg_offset = offset & ~PAGE_MASK;
+	unsigned pg_offset = offset_in_page(offset);
 	ssize_t ret = 0;
 
 	key.objectid = sctx->cur_ino;
@@ -4907,8 +4908,8 @@ static int send_clone(struct send_ctx *sctx,
 
 	btrfs_debug(sctx->send_root->fs_info,
 		    "send_clone offset=%llu, len=%d, clone_root=%llu, clone_inode=%llu, clone_offset=%llu",
-		    offset, len, clone_root->root->objectid, clone_root->ino,
-		    clone_root->offset);
+		    offset, len, clone_root->root->root_key.objectid,
+		    clone_root->ino, clone_root->offset);
 
 	p = fs_path_alloc();
 	if (!p)
@@ -5170,7 +5171,7 @@ static int clone_range(struct send_ctx *sctx,
 		ei = btrfs_item_ptr(leaf, slot, struct btrfs_file_extent_item);
 		type = btrfs_file_extent_type(leaf, ei);
 		if (type == BTRFS_FILE_EXTENT_INLINE) {
-			ext_len = btrfs_file_extent_inline_len(leaf, slot, ei);
+			ext_len = btrfs_file_extent_ram_bytes(leaf, ei);
 			ext_len = PAGE_ALIGN(ext_len);
 		} else {
 			ext_len = btrfs_file_extent_num_bytes(leaf, ei);
@@ -5246,8 +5247,7 @@ static int send_write_or_clone(struct send_ctx *sctx,
 			struct btrfs_file_extent_item);
 	type = btrfs_file_extent_type(path->nodes[0], ei);
 	if (type == BTRFS_FILE_EXTENT_INLINE) {
-		len = btrfs_file_extent_inline_len(path->nodes[0],
-						   path->slots[0], ei);
+		len = btrfs_file_extent_ram_bytes(path->nodes[0], ei);
 		/*
 		 * it is possible the inline item won't cover the whole page,
 		 * but there may be items after this page.  Make
@@ -5385,7 +5385,7 @@ static int is_extent_unchanged(struct send_ctx *sctx,
 		}
 
 		if (right_type == BTRFS_FILE_EXTENT_INLINE) {
-			right_len = btrfs_file_extent_inline_len(eb, slot, ei);
+			right_len = btrfs_file_extent_ram_bytes(eb, ei);
 			right_len = PAGE_ALIGN(right_len);
 		} else {
 			right_len = btrfs_file_extent_num_bytes(eb, ei);
@@ -5506,8 +5506,7 @@ static int get_last_extent(struct send_ctx *sctx, u64 offset)
 			    struct btrfs_file_extent_item);
 	type = btrfs_file_extent_type(path->nodes[0], fi);
 	if (type == BTRFS_FILE_EXTENT_INLINE) {
-		u64 size = btrfs_file_extent_inline_len(path->nodes[0],
-							path->slots[0], fi);
+		u64 size = btrfs_file_extent_ram_bytes(path->nodes[0], fi);
 		extent_end = ALIGN(key.offset + size,
 				   sctx->send_root->fs_info->sectorsize);
 	} else {
@@ -5570,7 +5569,7 @@ static int range_is_hole_in_parent(struct send_ctx *sctx,
 		fi = btrfs_item_ptr(leaf, slot, struct btrfs_file_extent_item);
 		if (btrfs_file_extent_type(leaf, fi) ==
 		    BTRFS_FILE_EXTENT_INLINE) {
-			u64 size = btrfs_file_extent_inline_len(leaf, slot, fi);
+			u64 size = btrfs_file_extent_ram_bytes(leaf, fi);
 
 			extent_end = ALIGN(key.offset + size,
 					   root->fs_info->sectorsize);
@@ -5616,8 +5615,7 @@ static int maybe_send_hole(struct send_ctx *sctx, struct btrfs_path *path,
 			    struct btrfs_file_extent_item);
 	type = btrfs_file_extent_type(path->nodes[0], fi);
 	if (type == BTRFS_FILE_EXTENT_INLINE) {
-		u64 size = btrfs_file_extent_inline_len(path->nodes[0],
-							path->slots[0], fi);
+		u64 size = btrfs_file_extent_ram_bytes(path->nodes[0], fi);
 		extent_end = ALIGN(key->offset + size,
 				   sctx->send_root->fs_info->sectorsize);
 	} else {
@@ -6458,7 +6456,6 @@ static int full_send_tree(struct send_ctx *sctx)
 	int ret;
 	struct btrfs_root *send_root = sctx->send_root;
 	struct btrfs_key key;
-	struct btrfs_key found_key;
 	struct btrfs_path *path;
 	struct extent_buffer *eb;
 	int slot;
@@ -6480,16 +6477,12 @@ static int full_send_tree(struct send_ctx *sctx)
 	while (1) {
 		eb = path->nodes[0];
 		slot = path->slots[0];
-		btrfs_item_key_to_cpu(eb, &found_key, slot);
+		btrfs_item_key_to_cpu(eb, &key, slot);
 
-		ret = changed_cb(path, NULL, &found_key,
+		ret = changed_cb(path, NULL, &key,
 				 BTRFS_COMPARE_TREE_NEW, sctx);
 		if (ret < 0)
 			goto out;
-
-		key.objectid = found_key.objectid;
-		key.type = found_key.type;
-		key.offset = found_key.offset + 1;
 
 		ret = btrfs_next_item(send_root, path);
 		if (ret < 0)
@@ -6653,7 +6646,7 @@ long btrfs_ioctl_send(struct file *mnt_file, struct btrfs_ioctl_send_args *arg)
 		goto out;
 	}
 
-	if (!access_ok(VERIFY_READ, arg->clone_sources,
+	if (!access_ok(arg->clone_sources,
 			sizeof(*arg->clone_sources) *
 			arg->clone_sources_count)) {
 		ret = -EFAULT;

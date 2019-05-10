@@ -1229,11 +1229,12 @@ int ag71xx_ar7240_mii_ioctl(struct ag71xx *ag, struct ifreq *ifr, int cmd)
 	return 0;
 }
 
-int ag71xx_ar7240_ethtool_get_settings(struct net_device *dev,
-		struct ethtool_cmd *cmd)
+int ag71xx_ar7240_ethtool_get_link_ksettings(struct net_device *dev,
+		struct ethtool_link_ksettings *cmd)
 {
 	struct ag71xx *ag = netdev_priv(dev);
 	int phy;
+	u32 supported, advertising;
 	u32 status;
 
 	for (phy = 0; phy < AR7240_NUM_PHYS; phy++) {
@@ -1246,40 +1247,43 @@ int ag71xx_ar7240_ethtool_get_settings(struct net_device *dev,
 		phy = 0;
 	status = ar7240sw_reg_read(ag->mii_bus, AR7240_REG_PORT_STATUS(phy+1));
 
-	cmd->supported  = SUPPORTED_Pause | SUPPORTED_Asym_Pause;
-	cmd->supported |= SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full;
-	cmd->supported |= SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full;
-	cmd->supported |= SUPPORTED_1000baseT_Half | SUPPORTED_1000baseT_Full;
-	cmd->supported |= SUPPORTED_Autoneg|SUPPORTED_Pause|SUPPORTED_Asym_Pause;
-	cmd->advertising = ADVERTISED_Pause | ADVERTISED_Asym_Pause;
-	cmd->advertising |= ADVERTISED_10baseT_Half | ADVERTISED_10baseT_Full;
-	cmd->advertising |= ADVERTISED_100baseT_Half | ADVERTISED_100baseT_Full;
-	cmd->advertising |= ADVERTISED_1000baseT_Half | ADVERTISED_1000baseT_Full;
+	supported  = SUPPORTED_Pause | SUPPORTED_Asym_Pause;
+	supported |= SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full;
+	supported |= SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full;
+	supported |= SUPPORTED_1000baseT_Half | SUPPORTED_1000baseT_Full;
+	supported |= SUPPORTED_Autoneg|SUPPORTED_Pause|SUPPORTED_Asym_Pause;
+	advertising = ADVERTISED_Pause | ADVERTISED_Asym_Pause;
+	advertising |= ADVERTISED_10baseT_Half | ADVERTISED_10baseT_Full;
+	advertising |= ADVERTISED_100baseT_Half | ADVERTISED_100baseT_Full;
+	advertising |= ADVERTISED_1000baseT_Half | ADVERTISED_1000baseT_Full;
+
+	ethtool_convert_legacy_u32_to_link_mode(cmd->link_modes.supported, supported);
+	ethtool_convert_legacy_u32_to_link_mode(cmd->link_modes.advertising, advertising);
 
 	switch (status & AR7240_PORT_STATUS_SPEED_M) {
 	case AR7240_PORT_STATUS_SPEED_10:
-		ethtool_cmd_speed_set(cmd, SPEED_10);
+		cmd->base.speed = SPEED_10;
 		break;
 	case AR7240_PORT_STATUS_SPEED_100:
-		ethtool_cmd_speed_set(cmd, SPEED_100);
+		cmd->base.speed = SPEED_100;
 		break;
 	case AR7240_PORT_STATUS_SPEED_1000:
-		ethtool_cmd_speed_set(cmd, SPEED_1000);
+		cmd->base.speed = SPEED_1000;
 		break;
 	}
 
-	cmd->duplex = (status & AR7240_PORT_STATUS_DUPLEX)?DUPLEX_FULL:DUPLEX_HALF;
-	cmd->port = PORT_MII | PORT_TP;
-	cmd->phy_address = AR7240_NUM_PHYS;
-	cmd->transceiver = XCVR_EXTERNAL;
-	cmd->autoneg = (status & AR7240_PORT_STATUS_LINK_AUTO) ?
+	cmd->base.duplex = (status & AR7240_PORT_STATUS_DUPLEX)?DUPLEX_FULL:DUPLEX_HALF;
+	cmd->base.port = PORT_MII | PORT_TP;
+	cmd->base.phy_address = AR7240_NUM_PHYS;
+	cmd->base.transceiver = XCVR_EXTERNAL;
+	cmd->base.autoneg = (status & AR7240_PORT_STATUS_LINK_AUTO) ?
 			AUTONEG_ENABLE : AUTONEG_DISABLE;
 
 	return 0;
 }
 
-int ag71xx_ar7240_ethtool_set_settings(struct net_device *dev,
-		struct ethtool_cmd *cmd)
+int ag71xx_ar7240_ethtool_set_link_ksettings(struct net_device *dev,
+		const struct ethtool_link_ksettings *cmd)
 {
 	/* don't allow setting for now - fake success */
 	return 0;

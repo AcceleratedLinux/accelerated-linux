@@ -53,12 +53,16 @@ rexp/.done : $(REXP_C)
 	$(MAKE) CC="$(CC)" CFLAGS="$(CFLAGS) -DMAWK -I.." 
 
 parse.c  : parse.y  
+ifdef REBUILD_AUTOGEN_FILES
 	@echo  expect 4 shift/reduce conflicts
 	$(YACC) -d parse.y
 	mv y.tab.c parse.c
 	-if cmp -s y.tab.h parse.h ;\
 	   then rm y.tab.h ;\
 	   else mv y.tab.h parse.h ; fi
+else
+	@touch parse.c
+endif
 
 array.c : # array.w
 	notangle -R'"array.c"' array.w | cpif array.c

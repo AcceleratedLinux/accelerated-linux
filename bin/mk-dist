@@ -172,6 +172,7 @@ echo "removing vendors..."
 rm -rf ${DSTDIR}/vendors/ATT
 rm -rf ${DSTDIR}/vendors/AcceleratedConcepts/Factory*
 rm -rf ${DSTDIR}/vendors/AcceleratedConcepts/*[Ss]prite*
+rm -rf ${DSTDIR}/vendors/AcceleratedConcepts/*[Pp]orter*
 
 
 #

@@ -1,0 +1,6 @@
+config USER_SHADOW_UTILS
+	bool "shadow utilities"
+	help
+	  A collection of shadow password file based utilities.
+	  These are generally full featured with lots of flexibility.
+

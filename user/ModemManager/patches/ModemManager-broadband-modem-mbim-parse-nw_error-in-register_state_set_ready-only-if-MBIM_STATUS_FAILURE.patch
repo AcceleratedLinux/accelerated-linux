@@ -1,0 +1,79 @@
+broadband-modem-mbim: parse nw_error in register_state_set_ready only if MBIM_STATUS_FAILURE
+
+Some modems (Namely: Telit LE910 V2) report nonzero NwError code, outside of
+3GPP TS 24.008 - in "register-state set command-done" response, while status
+code equals MBIM_STATUS_ERROR_NONE. In such cases network is operational.
+According to MBIM specification 1.0 table 10.5.9.8 "Status codes", NwError
+shall be nonzero only if Status Code equals MBIM_STATUS_FAILURE, and client
+shall parse NwError only in such cases. Also, MBIM specification does not
+explicitly state that 'NwError == 0' equals no error, rather than that it is
+unknown error, hence raise an error unconditionally if MBIM status code is
+MBIM_STATUS_FAILURE.
+
+Therefore, check NwError IFF MBIM response status code equals
+MBIM_STATUS_FAILURE, instead of MBIM_STATUS_SUCCESS.
+
+Fixes: 854c371c ("broadband-modem-mbim: implement 3GPP registration request")
+Signed-off-by: Lech Perczak l.perczak@camlintechnologies.com
+
+diff --git a/src/mm-broadband-modem-mbim.c b/src/mm-broadband-modem-mbim.c
+index 1cc4ec2a4c142562de7f71e8f45aacedb3d728f8..19572b16643c68301b9c0e46badfbea30960d8ea 100644
+--- a/src/mm-broadband-modem-mbim.c
++++ b/src/mm-broadband-modem-mbim.c
+@@ -3938,24 +3938,41 @@ register_state_set_ready (MbimDevice *device,
+ {
+     MbimMessage *response;
+     GError *error = NULL;
+-    MbimNwError nw_error;
+ 
+     response = mbim_device_command_finish (device, res, &error);
++    /* According to Mobile Broadband Interface Model specification 1.0,
++     * Errata 1, table 10.5.9.8: Status codes for MBIM_CID_REGISTER_STATE,
++     * NwError field of MBIM_REGISTRATION_STATE_INFO structure is valid
++     * if and only if MBIM_SET_REGISTRATION_STATE response status code equals
++     * MBIM_STATUS_FAILURE.
++     * Therefore it only makes sense to parse this value if MBIM_STATUS_FAILURE
++     * result is returned in response, contrary to usual "success" code.
++     * However, some modems do not set this value to 0 when registered,
++     * causing ModemManager to drop to idle state, while modem itself is
++     * registered.
++     * Also NwError "0" is defined in 3GPP TS 24.008 as "Unknown error",
++     * not "No error", making it unsuitable as condition for registration check.
++     */
+     if (response &&
+-        mbim_message_response_get_result (response, MBIM_MESSAGE_TYPE_COMMAND_DONE, &error) &&
+-        mbim_message_register_state_response_parse (
+-            response,
+-            &nw_error,
+-            NULL, /* &register_state */
+-            NULL, /* register_mode */
+-            NULL, /* available_data_classes */
+-            NULL, /* current_cellular_class */
+-            NULL, /* provider_id */
+-            NULL, /* provider_name */
+-            NULL, /* roaming_text */
+-            NULL, /* registration_flag */
+-            NULL)) {
+-        if (nw_error)
++        !mbim_message_response_get_result (response,
++                                           MBIM_MESSAGE_TYPE_COMMAND_DONE,
++                                           &error) &&
++        g_error_matches (error, MBIM_STATUS_ERROR, MBIM_STATUS_ERROR_FAILURE)) {
++        MbimNwError nw_error;
++
++        g_clear_error (&error);
++        if (mbim_message_register_state_response_parse (
++                response,
++                &nw_error,
++                NULL, /* &register_state */
++                NULL, /* register_mode */
++                NULL, /* available_data_classes */
++                NULL, /* current_cellular_class */
++                NULL, /* provider_id */
++                NULL, /* provider_name */
++                NULL, /* roaming_text */
++                NULL, /* registration_flag */
++                &error))
+             error = mm_mobile_equipment_error_from_mbim_nw_error (nw_error);
+     }
+ 

@@ -9,7 +9,7 @@
 
 	memory@0 {
 		device_type = "memory";
-		reg = <0x0 0x08000000>;
+		reg = <0x0 0x10000000>;
 	};
 };
 
@@ -50,6 +50,60 @@
 	};
 };
 
+&ethernet {
+	status = "okay";
+
+	gmac0: mac@0 {
+		compatible = "mediatek,eth-mac";
+		reg = <0>;
+		phy-mode = "rgmii";
+
+		fixed-link {
+			speed = <1000>;
+			full-duplex;
+			pause;
+		};
+	};
+
+	mdio-bus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		switch@0 {
+			compatible = "mediatek,mt7621", "mediatek,mt7530";
+			reg = <0>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					label = "lan";
+				};
+
+				port@1 {
+					reg = <1>;
+					label = "wan";
+				};
+
+				port@6 {
+					reg = <6>;
+					label = "cpu";
+					ethernet = <&gmac0>;
+					phy-mode = "rgmii";
+
+					fixed-link {
+						speed = <1000>;
+						full-duplex;
+						pause;
+					};
+				};
+			};
+		};
+	};
+};
+
 &i2c {
 	clock-frequency = <400000>;
 	status = "okay";
@@ -70,9 +124,8 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
-	/* Commented out for now due bugs in prototype hardware */
-	/*dtr-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;*/
-	/*dcd-gpios = <&gpio0 8 GPIO_ACTIVE_LOW>;*/
+	dtr-gpios = <&gpio 7 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio 8 GPIO_ACTIVE_LOW>;
 };
 
 &uartlite2 {
@@ -82,8 +135,8 @@
 &pinctrl {
 	state_default: pinctrl0 {
 		gpio {
-			ralink,group = "rgmii2";
-			ralink,function = "gpio";
+			group = "rgmii2";
+			function = "gpio";
 		};
 	};
 };

@@ -31,10 +31,11 @@ while read _id _ignit _pwoff _pwmon; do
 	eval "id${_id}_pwmon=\"${_pwmon}\""
 	AVAILABLE_BOARD_IDS="${AVAILABLE_BOARD_IDS:+${AVAILABLE_BOARD_IDS} }${_id}"
 done<<-_EOF_
-	155    10     15      0
-	156    10     15      0
+	155    10     15     10
+	156    10     15     10
 	157   1.5     30     25
 	158   1.5     30     25
+	159    10     15     10
 _EOF_
 
 # Cellular GPIOs
@@ -96,6 +97,14 @@ log_warning() {
 	[ ${#} -ne 0 ] && printf "${YELLOW}[WARNING]:${NONE} %s\n" "${1}"
 }
 
+#
+# Directly set the value of a gpio
+#
+gpio_set()
+{
+	echo $2 > /sys/class/gpio/gpio${1}/value
+}
+		
 #
 # Get the value of a GPIO
 #
@@ -213,7 +222,12 @@ poweron_cellular() {
 		set_gpio_value "${CEL_GPIO_CELL_IGN}" 0
 
 		# Additional sleep time for the powermon line to be ready
-		sleep ${CELL_PWMON_TIME}
+		for i in $(seq 1 ${CELL_PWMON_TIME}); do
+		    sleep 1
+		    if is_cellular_enabled; then
+			break
+		    fi
+		done
 
 		# Check whether cellular is enabled or force an unconditional shutdown
 		if is_cellular_enabled; then
@@ -231,6 +245,26 @@ poweron_cellular() {
 	done
 
 	[ "${RETRIES}" -gt "0" ] && true || false
+}
+
+# Force a poweroff - used in firmware recovery
+poweroff_force()
+{
+	# if all else fails, use the hardware power control
+	# HARD SHUTDOWN
+	echo "Turning off power to the modem."
+	gpio_set $CEL_GPIO_CELL_PWR_EN 0
+}
+
+# Force a poweron, and don't wait - used in firmware recovery
+poweron_automatic()
+{
+	# alternative power on method that simulates a system that does not use
+	# ON/OFF power control.
+	# turn the power on and do not wait for anything
+
+	# hold the on_off line and then enable the power
+	gpio_set $CEL_GPIO_CELL_PWR_EN 1 && sleep 0.1
 }
 
 # Get board_id from OTP bits
@@ -265,6 +299,10 @@ case "${MODE}" in
 		poweron_cellular && log_info "cellular successfully turned on";;
 	off)
 		poweroff_cellular && log_info "cellular successfully turned off";;
+	forceoff)
+		poweroff_force;;
+	forceon)
+		poweron_automatic;;
 	*)
 		log_error "${MODE} is an invalid option"
 		usage && false;;

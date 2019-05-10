@@ -6,8 +6,8 @@ Welcome to
    | |__ | | | | | |_| |/    \
    |____||_|_| |_|\____|\_/\_/
 
-Linux system generated using uClinux-dist build engine.
+Generated using the Digi Accelerated Linux build engine.
 
 For further information check:
-http://www.uclinux.org/pub/uClinux/dist/
+https://github.com/AcceleratedLinux
 
