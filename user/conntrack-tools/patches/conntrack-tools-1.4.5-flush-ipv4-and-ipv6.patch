@@ -1,0 +1,15 @@
+The kernel respects the l3proto family field in the netlink message, so
+in order to flush both IPv4 and IPv6 with "conntrack -F" the field must be
+AF_UNSPEC rather than AF_INET.
+
+--- conntrack-tools-1.4.5.orig/src/conntrack.c	2019-07-11 10:57:47.594675188 +1000
++++ conntrack-tools-1.4.5/src/conntrack.c	2019-07-11 10:57:50.390695975 +1000
+@@ -2530,7 +2530,7 @@
+ 	}
+ 
+ 	/* default family */
+-	if (family == AF_UNSPEC)
++	if (family == AF_UNSPEC && command != CT_FLUSH)
+ 		family = AF_INET;
+ 
+ 	/* we cannot check this combination with generic_opt_check. */

@@ -1,0 +1,71 @@
+
+config USER_BIND
+       bool "bind"
+       help
+         ISC BIND DNS nameserver/utils.
+
+config USER_BIND_FULL_INSTALL
+       bool "install all bind applications/files"
+       depends on USER_BIND
+       help
+         ISC BIND nsupdate command.
+
+config USER_BIND_NSUPDATE
+       bool "nsupdate"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND nsupdate command.
+
+config USER_BIND_DELV
+       bool "delv"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND delv command.
+
+config USER_BIND_MDIG
+       bool "mdig"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND mdig command.
+
+config USER_BIND_ARPANAME
+       bool "arpaname"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND arpaname command.
+
+config USER_BIND_HOST
+       bool "host"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND host command.
+
+config USER_BIND_DIG
+       bool "dig"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND dig command.
+
+config USER_BIND_NSLOOKUP
+       bool "nslookup"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND nslookup command.
+
+config USER_BIND_NAMED
+       bool "named"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND named and related files.
+
+config USER_BIND_RNDC
+       bool "rndc"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND rndc.
+
+config USER_BIND_DNSSEC
+       bool "dnssec tools"
+       depends on USER_BIND && !USER_BIND_FULL_INSTALL
+       help
+         ISC BIND DNSSEC tools.

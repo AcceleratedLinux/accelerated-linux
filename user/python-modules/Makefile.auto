@@ -1,0 +1,12 @@
+dir_$(CONFIG_USER_PYTHON_MODULES_PIP)           += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_SETUPTOOLS)    += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_SIX)           += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_CFFI)          += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_PYSERIAL)      += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_BCRYPT)        += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_PEXPECT)       += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_PTYPROCESS)    += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_DIGI_XBEE_LIB) += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_SRP)           += python-modules
+
+python-modules: python

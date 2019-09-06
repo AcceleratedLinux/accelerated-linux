@@ -1,0 +1,25 @@
+From: Javier Viguera <javier.viguera@digi.com>
+Date: Wed, 26 Jun 2019 14:19:50 +0200
+Subject: [PATCH] makefile: shrink binaries size
+
+  -w    disable DWARF generation
+  -s    disable symbol table
+
+Signed-off-by: Javier Viguera <javier.viguera@digi.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 9707ba846e9b..8a893e7a28e2 100644
+--- a/Makefile
++++ b/Makefile
+@@ -21,7 +21,7 @@ MICROSERVICES=cmd/config-seed/config-seed cmd/export-client/export-client cmd/ex
+ VERSION=$(shell cat ./VERSION)
+ DOCKER_TAG=$(VERSION)-dev
+ 
+-GOFLAGS=-ldflags "-X github.com/edgexfoundry/edgex-go.Version=$(VERSION)"
++GOFLAGS=-ldflags "-s -w -X github.com/edgexfoundry/edgex-go.Version=$(VERSION)"
+ 
+ GIT_SHA=$(shell git rev-parse HEAD)
+ 

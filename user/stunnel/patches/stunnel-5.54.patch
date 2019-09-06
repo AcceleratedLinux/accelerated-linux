@@ -1,0 +1,17 @@
+--- a/src/sthreads.c	2019-05-16 05:35:16.000000000 +1000
++++ b/src/sthreads.c	2019-06-05 08:54:25.870776462 +1000
+@@ -518,8 +518,14 @@
+ 
+     /* this is a workaround for NPTL threads failing to invoke
+      * pthread_exit() or pthread_cancel() from a chroot jail */
++
++    /*Below code commented out to address Abort in pthread_exit 
++     * on 64 bit Digi/Accelerated platforms, as is this is not
++     * doing any meaning full funtionality.*/
++#if 0
+     if(!pthread_create(&thread_id, NULL, dummy_thread, NULL))
+         pthread_join(thread_id, NULL);
++#endif
+ 
+     thread_id_init();
+     locking_init();

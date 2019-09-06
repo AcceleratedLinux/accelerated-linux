@@ -1,0 +1,22 @@
+--- apparmor-2.13/parser/libapparmor_re/aare_rules.cc	2019-07-22 11:51:52.110108201 +1000
++++ apparmor-2.13/parser/libapparmor_re/aare_rules.cc	2019-07-22 11:52:30.518109035 +1000
+@@ -246,14 +246,14 @@
+ 		return NULL;
+ 	}
+ 
+-	stringbuf *buf = stream.rdbuf();
+-
+-	buf->pubseekpos(0);
+-	*size = buf->in_avail();
++	stream.seekg(0, stream.end);
++	*size = stream.tellg();
+ 
+ 	buffer = (char *)malloc(*size);
+ 	if (!buffer)
+ 		return NULL;
+-	buf->sgetn(buffer, *size);
++
++	stream.seekg(0, stream.beg);
++	stream.read(buffer, *size);
+ 	return buffer;
+ }

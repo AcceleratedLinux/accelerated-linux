@@ -1,0 +1,11 @@
+--- powerman/configure.ac.org	2019-07-17 17:18:46.320181708 +1000
++++ powerman/configure.ac	2019-07-17 17:18:52.071963138 +1000
+@@ -2,7 +2,7 @@
+ # Prologue.
+ ##
+ AC_INIT([powerman],
+-        m4_esyscmd([git describe --always | awk '/.*/ {printf "%s",$1; exit}']))
++        m4_esyscmd([echo -n 'standalone']))
+ AC_CONFIG_AUX_DIR([config])
+ AC_CONFIG_SRCDIR([NEWS])
+ AC_CANONICAL_SYSTEM

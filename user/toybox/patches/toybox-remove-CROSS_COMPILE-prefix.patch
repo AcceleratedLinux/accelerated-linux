@@ -1,0 +1,67 @@
+diff -ru toybox/scripts/genconfig.sh toybox.new/scripts/genconfig.sh
+--- toybox/scripts/genconfig.sh	2019-06-14 09:32:40.000000000 +1000
++++ toybox.new/scripts/genconfig.sh	2019-06-14 14:23:32.131796991 +1000
+@@ -9,7 +9,7 @@
+ 
+ probecc()
+ {
+-  ${CROSS_COMPILE}${CC} $CFLAGS -xc -o /dev/null $1 -
++  ${CC} $CFLAGS -xc -o /dev/null $1 -
+ }
+ 
+ # Probe for a single config symbol with a "compiles or not" test.
+diff -ru toybox/scripts/make.sh toybox.new/scripts/make.sh
+--- toybox/scripts/make.sh	2019-06-14 09:32:40.000000000 +1000
++++ toybox.new/scripts/make.sh	2019-06-14 14:24:00.608046032 +1000
+@@ -66,7 +66,7 @@
+ TOYFILES="$($SED -n 's/^CONFIG_\([^=]*\)=.*/\1/p' "$KCONFIG_CONFIG" | xargs | tr ' [A-Z]' '|[a-z]')"
+ TOYFILES="$(egrep -l "TOY[(]($TOYFILES)[ ,]" toys/*/*.c)"
+ CFLAGS="$CFLAGS $(cat generated/cflags)"
+-BUILD="$(echo ${CROSS_COMPILE}${CC} $CFLAGS -I . $OPTIMIZE $GITHASH)"
++BUILD="$(echo ${CC} $CFLAGS -I . $OPTIMIZE $GITHASH)"
+ LIBFILES="$(ls lib/*.c | grep -v lib/help.c)"
+ TOYFILES="lib/help.c main.c $TOYFILES"
+ 
+@@ -107,7 +107,7 @@
+   for i in util crypt m resolv selinux smack attr crypto z log iconv
+   do
+     echo "int main(int argc, char *argv[]) {return 0;}" | \
+-    ${CROSS_COMPILE}${CC} $CFLAGS $LDFLAGS -xc - -o generated/libprobe $LDASNEEDED -l$i > /dev/null 2>/dev/null &&
++    ${CC} $CFLAGS $LDFLAGS -xc - -o generated/libprobe $LDASNEEDED -l$i > /dev/null 2>/dev/null &&
+     echo -l$i >> generated/optlibs.dat
+     echo -n .
+   done
+@@ -186,7 +186,7 @@
+     # turn any non-quoted opstring (NULL or 0) into " " (because fscanf can't
+     # handle "" with nothing in it, and mkflags uses that).
+ 
+-    ) | ${CROSS_COMPILE}${CC} -E - | \
++    ) | ${CC} -E - | \
+     $SED -n -e 's/" *"//g;/^#/d;t clear;:clear;s/"/"/p;t;s/\( [AB] \).*/\1 " "/p'
+ 
+   # Sort resulting line pairs and glue them together into triplets of
+@@ -329,7 +329,7 @@
+ 
+ do_loudly $BUILD $LNKFILES $LINK || exit 1
+ if [ ! -z "$NOSTRIP" ] ||
+-  ! do_loudly ${CROSS_COMPILE}${STRIP} "$UNSTRIPPED" -o "$OUTNAME"
++  ! do_loudly ${STRIP} "$UNSTRIPPED" -o "$OUTNAME"
+ then
+   echo "strip failed, using unstripped" &&
+   rm -f "$OUTNAME" &&
+diff -ru toybox/scripts/portability.sh toybox.new/scripts/portability.sh
+--- toybox/scripts/portability.sh	2019-06-14 09:32:40.000000000 +1000
++++ toybox.new/scripts/portability.sh	2019-06-14 14:22:57.819496628 +1000
+@@ -2,12 +2,6 @@
+ 
+ source configure
+ 
+-if [ -z "$(command -v "${CROSS_COMPILE}${CC}")" ]
+-then
+-  echo "No ${CROSS_COMPILE}${CC} found" >&2
+-  exit 1
+-fi
+-
+ if [ -z "$SED" ]
+ then
+   [ ! -z "$(which gsed 2>/dev/null)" ] && SED=gsed || SED=sed

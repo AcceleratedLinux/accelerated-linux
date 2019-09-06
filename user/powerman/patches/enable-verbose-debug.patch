@@ -1,0 +1,60 @@
+From 5d267cc899061580b64683efdf658a7d4970a31d Mon Sep 17 00:00:00 2001
+From: Seth Bollinger <Seth.Bollinger@digi.com>
+Date: Fri, 19 Jul 2019 10:33:55 -0500
+Subject: [PATCH] enable verbose debug
+
+---
+ powermand/daemon.c |  2 +-
+ powermand/device.c | 16 +++++++++++++++-
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/powermand/daemon.c b/powermand/daemon.c
+index 0ae6c79..e37e6f0 100644
+--- a/powermand/daemon.c
++++ b/powermand/daemon.c
+@@ -103,7 +103,7 @@ void daemon_init(int *skipfds, int skipfdslen, char *rundir, char *pidfile,
+     }
+ 
+     /* close fd's */
+-    for (i = 0; i < 256; i++) {
++    for (i = 3; i < 256; i++) {
+         if (!in_fdlist(i, skipfds, skipfdslen))
+             close(i);               /* ignore errors */
+     }
+diff --git a/powermand/device.c b/powermand/device.c
+index 597fa8a..a3a3203 100644
+--- a/powermand/device.c
++++ b/powermand/device.c
+@@ -156,6 +156,20 @@ static bool _time_to_reconnect(Device * dev, struct timeval *timeout);
+ static List dev_devices = NULL;
+ static bool short_circuit_delay = FALSE;
+ 
++static void _client_printf(int client_id, const char *fmt, ...)
++{
++    char *str = NULL;
++    va_list ap;
++
++    va_start(ap, fmt);
++    str = hvsprintf(fmt, ap);
++    va_end(ap);
++
++    fprintf(stderr, "%s\n", str);
++    /* Free the tmp string */
++    xfree(str);
++}
++
+ static void _dbg_actions(Device * dev)
+ {
+     char tmpstr[1024];
+@@ -282,7 +296,7 @@ static Action *_create_action(Device * dev, int com, List plugs,
+     act->magic = ACT_MAGIC;
+     act->com = com;
+     act->complete_fun = complete_fun;
+-    act->vpf_fun = vpf_fun;
++    act->vpf_fun = _client_printf;
+     act->client_id = client_id;
+ 
+     act->exec = list_create((ListDelF)_destroy_exec_ctx);
+-- 
+2.20.1
+

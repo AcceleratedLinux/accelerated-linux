@@ -1,0 +1,30 @@
+--- busybox-1.31.0/shell/ash.c.org	2019-07-01 16:40:16.397814456 +1000
++++ busybox-1.31.0/shell/ash.c	2019-07-01 16:41:44.854362570 +1000
+@@ -9812,6 +9812,19 @@
+ }
+ 
+ static int FAST_FUNC
++socketpaircmd(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
++{
++	int sv[2];
++
++	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
++		return 1;
++
++	setvar("SOCKETPAIR0", utoa(sv[0]), 0);
++	setvar("SOCKETPAIR1", utoa(sv[1]), 0);
++	return 0;
++}
++
++static int FAST_FUNC
+ execcmd(int argc UNUSED_PARAM, char **argv)
+ {
+ 	optionarg = NULL;
+@@ -9968,6 +9981,7 @@
+ 	{ BUILTIN_SPEC_REG      "return"  , returncmd  },
+ 	{ BUILTIN_SPEC_REG      "set"     , setcmd     },
+ 	{ BUILTIN_SPEC_REG      "shift"   , shiftcmd   },
++	{ BUILTIN_REGULAR       "socketpair", socketpaircmd },
+ #if BASH_SOURCE
+ 	{ BUILTIN_SPEC_REG      "source"  , dotcmd     },
+ #endif

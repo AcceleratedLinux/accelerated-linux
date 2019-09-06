@@ -1,0 +1,8 @@
+config USER_REDIS
+       bool "redis"
+       help
+         Redis is an open source (BSD licensed), in-memory data structure
+         store, used as a database, cache and message broker.
+
+         https://redis.io/
+

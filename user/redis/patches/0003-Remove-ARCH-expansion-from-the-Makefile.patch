@@ -1,0 +1,37 @@
+From: Dmitri Vorobiev <dmitri.vorobiev@movial.com>
+Date: Wed, 27 Dec 2017 14:43:03 +0200
+Subject: [PATCH] Remove $(ARCH) expansion from the Makefile
+
+Some compilation environments (such as Yocto) define the ARCH
+environment variable to indicate the target architecture. For
+such enviroments, hiredis build fails, because the expanded
+$(ARCH) variable in the Makefile gets erroneously interpreted
+as an argument to the `-ggdb' command line option during the
+compilation stage or as an input file name during the linking
+stage.
+
+This patch removes $(ARCH) expansions from the Makefile. This
+doesn't harm cross-compilation, the latter goes fine with the
+properly assigned CC environment variable. For native builds,
+this patch does not imply any changes.
+
+Signed-off-by: Dmitri Vorobiev <dmitri.vorobiev@movial.com>
+---
+ deps/hiredis/Makefile | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/deps/hiredis/Makefile b/deps/hiredis/Makefile
+index 9a4de83600dd..b8e2219411f5 100644
+--- a/deps/hiredis/Makefile
++++ b/deps/hiredis/Makefile
+@@ -41,8 +41,8 @@ CXX:=$(shell sh -c 'type $(CXX) >/dev/null 2>/dev/null && echo $(CXX) || echo g+
+ OPTIMIZATION?=-O3
+ WARNINGS=-Wall -W -Wstrict-prototypes -Wwrite-strings
+ DEBUG_FLAGS?= -g -ggdb
+-REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CFLAGS) $(WARNINGS) $(DEBUG_FLAGS) $(ARCH)
+-REAL_LDFLAGS=$(LDFLAGS) $(ARCH)
++REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CFLAGS) $(WARNINGS) $(DEBUG_FLAGS)
++REAL_LDFLAGS=$(LDFLAGS)
+ 
+ DYLIBSUFFIX=so
+ STLIBSUFFIX=a

@@ -1,0 +1,10 @@
+config USER_EDGEX
+       bool "edgex"
+       select LIB_ZEROMQ
+       select USER_REDIS
+       help
+         EdgeX Foundry is a open source platform for the IoT Edge
+
+         https://www.edgexfoundry.org/
+
+         This option installs the GO implementation of EdgeX Foundry microservices

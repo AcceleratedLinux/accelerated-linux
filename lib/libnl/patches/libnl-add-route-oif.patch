@@ -1,0 +1,83 @@
+--- libnl-3.2.21.orig/include/netlink/route/route.h	2019-05-10 17:04:25.874320395 +1000
++++ libnl-3.2.21/include/netlink/route/route.h	2019-05-10 17:04:51.490542822 +1000
+@@ -95,6 +95,8 @@
+ extern struct nl_addr *rtnl_route_get_pref_src(struct rtnl_route *);
+ extern void	rtnl_route_set_iif(struct rtnl_route *, int);
+ extern int	rtnl_route_get_iif(struct rtnl_route *);
++extern void	rtnl_route_set_oif(struct rtnl_route *, int);
++extern int	rtnl_route_get_oif(struct rtnl_route *);
+ extern int	rtnl_route_get_src_len(struct rtnl_route *);
+ 
+ extern void	rtnl_route_add_nexthop(struct rtnl_route *,
+--- libnl-3.2.21.orig/include/netlink-private//types.h	2019-05-10 17:03:47.249984679 +1000
++++ libnl-3.2.21/include/netlink-private/types.h	2019-05-10 17:04:51.490542822 +1000
+@@ -281,6 +281,7 @@
+ 	struct nl_addr *	rt_src;
+ 	uint32_t		rt_table;
+ 	uint32_t		rt_iif;
++	uint32_t		rt_oif;
+ 	uint32_t		rt_prio;
+ 	uint32_t		rt_metrics[RTAX_MAX];
+ 	uint32_t		rt_metrics_mask;
+--- libnl-3.2.21.orig/lib/route/route_obj.c	2019-05-10 17:02:35.089356260 +1000
++++ libnl-3.2.21/lib/route/route_obj.c	2019-05-10 17:04:51.490542822 +1000
+@@ -25,6 +25,7 @@
+  * family                                         AF_UNSPEC
+  * type                                           RTN_UNICAST
+  * iif                                            NULL
++ * oif                                            NULL
+  * @endcode
+  *
+  * @{
+@@ -242,6 +243,15 @@
+ 			nl_dump(p, "iif %d ", r->rt_iif);
+ 	}
+ 
++	if (r->ce_mask & ROUTE_ATTR_OIF) {
++		if (link_cache) {
++			nl_dump(p, "oif %s ",
++				rtnl_link_i2name(link_cache, r->rt_oif,
++						 buf, sizeof(buf)));
++		} else
++			nl_dump(p, "oif %d ", r->rt_oif);
++	}
++
+ 	if (r->ce_mask & ROUTE_ATTR_SRC)
+ 		nl_dump(p, "src %s ", nl_addr2str(r->rt_src, buf, sizeof(buf)));
+ 
+@@ -363,6 +373,7 @@
+ 	diff |= ROUTE_DIFF(DST,		nl_addr_cmp(a->rt_dst, b->rt_dst));
+ 	diff |= ROUTE_DIFF(SRC,		nl_addr_cmp(a->rt_src, b->rt_src));
+ 	diff |= ROUTE_DIFF(IIF,		a->rt_iif != b->rt_iif);
++	diff |= ROUTE_DIFF(OIF,		a->rt_oif != b->rt_oif);
+ 	diff |= ROUTE_DIFF(PREF_SRC,	nl_addr_cmp(a->rt_pref_src,
+ 						    b->rt_pref_src));
+ 
+@@ -837,6 +848,17 @@
+ 	return route->rt_iif;
+ }
+ 
++void rtnl_route_set_oif(struct rtnl_route *route, int ifindex)
++{
++	route->rt_oif = ifindex;
++	route->ce_mask |= ROUTE_ATTR_OIF;
++}
++
++int rtnl_route_get_oif(struct rtnl_route *route)
++{
++	return route->rt_oif;
++}
++
+ void rtnl_route_add_nexthop(struct rtnl_route *route, struct rtnl_nexthop *nh)
+ {
+ 	nl_list_add_tail(&nh->rtnh_list, &route->rt_nexthops);
+@@ -1233,6 +1255,9 @@
+ 	if (route->ce_mask & ROUTE_ATTR_IIF)
+ 		NLA_PUT_U32(msg, RTA_IIF, route->rt_iif);
+ 
++	if (route->ce_mask & ROUTE_ATTR_OIF)
++		NLA_PUT_U32(msg, RTA_OIF, route->rt_oif);
++
+ 	if (route->rt_nmetrics > 0) {
+ 		uint32_t val;
+ 

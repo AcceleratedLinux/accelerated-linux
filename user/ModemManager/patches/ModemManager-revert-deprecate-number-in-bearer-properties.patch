@@ -1,0 +1,223 @@
+Subject: [PATCH] Revert "api: deprecate 'number' in bearer properties"
+
+This reverts Bearer Properties changes in commit
+55c3026643ee6c75c0a68171abd884edf035b9ba.
+
+The bearer "number" is used by patches for nominating PDP context ids for
+bearers, which is required for dual APNs with MBIM and QMI muxing.
+---
+ cli/mmcli-bearer.c                |  3 +++
+ libmm-glib/mm-bearer-properties.c | 44 +++++++++++++++----------------
+ libmm-glib/mm-bearer-properties.h | 11 +++-----
+ 3 files changed, 28 insertions(+), 30 deletions(-)
+
+diff --git a/cli/mmcli-bearer.c b/cli/mmcli-bearer.c
+index 6e239ed4..f07fdfbe 100644
+--- a/cli/mmcli-bearer.c
++++ b/cli/mmcli-bearer.c
+@@ -158,7 +158,8 @@ print_bearer_info (MMBearer *bearer)
+         gchar       *ip_family_str = NULL;
+         const gchar *user = NULL;
+         const gchar *password = NULL;
++        const gchar *number = NULL;
+         gchar       *allow_auth_str = NULL;
+         const gchar *rm_protocol = NULL;
+ 
+         if (properties) {
+@@ -167,6 +168,7 @@ print_bearer_info (MMBearer *bearer)
+             allow_auth_str = mm_bearer_allowed_auth_build_string_from_mask(mm_bearer_properties_get_allowed_auth(properties));
+             if (mm_bearer_get_bearer_type (bearer) != MM_BEARER_TYPE_DEFAULT_ATTACH) {
+                 roaming     = mm_bearer_properties_get_allow_roaming (properties) ? "allowed" : "forbidden";
++                number      = mm_bearer_properties_get_number (properties);
+                 rm_protocol = mm_modem_cdma_rm_protocol_get_string (mm_bearer_properties_get_rm_protocol (properties));
+             }
+         }
+@@ -176,7 +178,8 @@ print_bearer_info (MMBearer *bearer)
+         mmcli_output_string_take (MMC_F_BEARER_PROPERTIES_IP_TYPE,     ip_family_str);
+         mmcli_output_string      (MMC_F_BEARER_PROPERTIES_USER,        user);
+         mmcli_output_string      (MMC_F_BEARER_PROPERTIES_PASSWORD,    password);
+         mmcli_output_string_take (MMC_F_BEARER_PROPERTIES_ALLOW_AUTH,  allow_auth_str);
++        mmcli_output_string      (MMC_F_BEARER_PROPERTIES_NUMBER,      number);
+         mmcli_output_string      (MMC_F_BEARER_PROPERTIES_RM_PROTOCOL, rm_protocol);
+     }
+ 
+diff --git a/libmm-glib/mm-bearer-properties.c b/libmm-glib/mm-bearer-properties.c
+index dfddeff1..a02316d1 100644
+--- a/libmm-glib/mm-bearer-properties.c
++++ b/libmm-glib/mm-bearer-properties.c
+@@ -38,12 +38,10 @@ G_DEFINE_TYPE (MMBearerProperties, mm_bearer_properties, G_TYPE_OBJECT);
+ #define PROPERTY_USER            "user"
+ #define PROPERTY_PASSWORD        "password"
+ #define PROPERTY_IP_TYPE         "ip-type"
++#define PROPERTY_NUMBER          "number"
+ #define PROPERTY_ALLOW_ROAMING   "allow-roaming"
+ #define PROPERTY_RM_PROTOCOL     "rm-protocol"
+ 
+-/* no longer used properties */
+-#define DEPRECATED_PROPERTY_NUMBER "number"
+-
+ struct _MMBearerPropertiesPrivate {
+     /* APN */
+     gchar *apn;
+@@ -51,6 +49,8 @@ struct _MMBearerPropertiesPrivate {
+     MMBearerIpFamily ip_type;
+     /* Allowed auth */
+     MMBearerAllowedAuth allowed_auth;
++    /* Number */
++    gchar *number;
+     /* User */
+     gchar *user;
+     /* Password */
+@@ -273,17 +273,12 @@ mm_bearer_properties_get_allow_roaming (MMBearerProperties *self)
+ 
+ /*****************************************************************************/
+ 
+-#ifndef MM_DISABLE_DEPRECATED
+-
+ /**
+  * mm_bearer_properties_set_number:
+  * @self: a #MMBearerProperties.
+  * @number: the number.
+  *
+  * Sets the number to use when performing the connection.
+- *
+- * Deprecated: 1.10.0. The number setting is not used anywhere, and therefore
+- * it doesn't make sense to expose it in the ModemManager interface.
+  */
+ void
+ mm_bearer_properties_set_number (MMBearerProperties *self,
+@@ -291,7 +286,8 @@ mm_bearer_properties_set_number (MMBearerProperties *self,
+ {
+     g_return_if_fail (MM_IS_BEARER_PROPERTIES (self));
+ 
+-    /* NO-OP */
++    g_free (self->priv->number);
++    self->priv->number = g_strdup (number);
+ }
+ 
+ /**
+@@ -301,21 +297,15 @@ mm_bearer_properties_set_number (MMBearerProperties *self,
+  * Gets the number to use when performing the connection.
+  *
+  * Returns: (transfer none): the number, or #NULL if not set. Do not free the returned value, it is owned by @self.
+- *
+- * Deprecated: 1.10.0. The number setting is not used anywhere, and therefore
+- * it doesn't make sense to expose it in the ModemManager interface.
+  */
+ const gchar *
+ mm_bearer_properties_get_number (MMBearerProperties *self)
+ {
+     g_return_val_if_fail (MM_IS_BEARER_PROPERTIES (self), NULL);
+ 
+-    /* NO-OP */
+-    return NULL;
++    return self->priv->number;
+ }
+ 
+-#endif /* MM_DISABLE_DEPRECATED */
+-
+ /*****************************************************************************/
+ 
+ /**
+@@ -395,6 +385,12 @@ mm_bearer_properties_get_dictionary (MMBearerProperties *self)
+                                PROPERTY_IP_TYPE,
+                                g_variant_new_uint32 (self->priv->ip_type));
+ 
++    if (self->priv->number)
++        g_variant_builder_add (&builder,
++                               "{sv}",
++                               PROPERTY_NUMBER,
++                               g_variant_new_string (self->priv->number));
++
+     if (self->priv->allow_roaming_set)
+         g_variant_builder_add (&builder,
+                                "{sv}",
+@@ -456,7 +452,9 @@ mm_bearer_properties_consume_string (MMBearerProperties *self,
+             return FALSE;
+         }
+         mm_bearer_properties_set_allow_roaming (self, allow_roaming);
+-    } else if (g_str_equal (key, PROPERTY_RM_PROTOCOL)) {
++    } else if (g_str_equal (key, PROPERTY_NUMBER))
++        mm_bearer_properties_set_number (self, value);
++    else if (g_str_equal (key, PROPERTY_RM_PROTOCOL)) {
+         GError *inner_error = NULL;
+         MMModemCdmaRmProtocol protocol;
+ 
+@@ -466,8 +464,6 @@ mm_bearer_properties_consume_string (MMBearerProperties *self,
+             return FALSE;
+         }
+         mm_bearer_properties_set_rm_protocol (self, protocol);
+-    } else if (g_str_equal (key, DEPRECATED_PROPERTY_NUMBER)) {
+-        /* NO-OP */
+     } else {
+         g_set_error (error,
+                      MM_CORE_ERROR,
+@@ -549,13 +545,15 @@ mm_bearer_properties_consume_variant (MMBearerProperties *properties,
+         mm_bearer_properties_set_ip_type (
+             properties,
+             g_variant_get_uint32 (value));
++    else if (g_str_equal (key, PROPERTY_NUMBER))
++        mm_bearer_properties_set_number (
++            properties,
++            g_variant_get_string (value, NULL));
+     else if (g_str_equal (key, PROPERTY_ALLOW_ROAMING))
+         mm_bearer_properties_set_allow_roaming (
+             properties,
+             g_variant_get_boolean (value));
+-    else if (g_str_equal (key, DEPRECATED_PROPERTY_NUMBER)) {
+-        /* NO-OP */
+-    } else {
++    else {
+         /* Set error */
+         g_set_error (error,
+                      MM_CORE_ERROR,
+@@ -648,6 +646,7 @@ mm_bearer_properties_cmp (MMBearerProperties *a,
+ {
+     return ((!g_strcmp0 (a->priv->apn, b->priv->apn)) &&
+             (a->priv->ip_type == b->priv->ip_type) &&
++            (!g_strcmp0 (a->priv->number, b->priv->number)) &&
+             (a->priv->allowed_auth == b->priv->allowed_auth) &&
+             (!g_strcmp0 (a->priv->user, b->priv->user)) &&
+             (!g_strcmp0 (a->priv->password, b->priv->password)) &&
+@@ -694,6 +693,7 @@ finalize (GObject *object)
+     g_free (self->priv->apn);
+     g_free (self->priv->user);
+     g_free (self->priv->password);
++    g_free (self->priv->number);
+ 
+     G_OBJECT_CLASS (mm_bearer_properties_parent_class)->finalize (object);
+ }
+diff --git a/libmm-glib/mm-bearer-properties.h b/libmm-glib/mm-bearer-properties.h
+index 6a302cf5..e1ddb995 100644
+--- a/libmm-glib/mm-bearer-properties.h
++++ b/libmm-glib/mm-bearer-properties.h
+@@ -73,6 +73,8 @@ void mm_bearer_properties_set_ip_type       (MMBearerProperties *self,
+                                              MMBearerIpFamily ip_type);
+ void mm_bearer_properties_set_allow_roaming (MMBearerProperties *self,
+                                              gboolean allow_roaming);
++void mm_bearer_properties_set_number        (MMBearerProperties *self,
++                                             const gchar *number);
+ void mm_bearer_properties_set_rm_protocol   (MMBearerProperties *self,
+                                              MMModemCdmaRmProtocol protocol);
+ 
+@@ -82,16 +84,9 @@ const gchar           *mm_bearer_properties_get_user          (MMBearerPropertie
+ const gchar           *mm_bearer_properties_get_password      (MMBearerProperties *self);
+ MMBearerIpFamily       mm_bearer_properties_get_ip_type       (MMBearerProperties *self);
+ gboolean               mm_bearer_properties_get_allow_roaming (MMBearerProperties *self);
++const gchar           *mm_bearer_properties_get_number        (MMBearerProperties *self);
+ MMModemCdmaRmProtocol  mm_bearer_properties_get_rm_protocol   (MMBearerProperties *self);
+ 
+-#ifndef MM_DISABLE_DEPRECATED
+-G_DEPRECATED
+-void         mm_bearer_properties_set_number (MMBearerProperties *self,
+-                                              const gchar        *number);
+-G_DEPRECATED
+-const gchar *mm_bearer_properties_get_number (MMBearerProperties *self);
+-#endif
+-
+ /*****************************************************************************/
+ /* ModemManager/libmm-glib/mmcli specific methods */
+ 
+-- 
+2.17.1
+

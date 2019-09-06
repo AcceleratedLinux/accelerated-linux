@@ -1,0 +1,63 @@
+# Digi Remote Power Manager 
+
+specification "DigiRPM10" {
+	timeout 	10  
+
+
+	plug name { "1" "2" "3" "4" "5" "6" "7" "8" "9" "10" }
+
+        script login {
+                send "\r\n"
+                expect "RPM:>"
+        }
+        
+	script logout {
+                send "\r\n"
+                expect "RPM:>"
+	}
+
+	script status_all {
+                send "status 0\r\n"
+		expect "Outlets[^\r\n]*\r\n"
+                expect "Status[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)[^\r\n]*(On|Off)"
+                setplugstate "1" $1 on="On" off="Off"
+                setplugstate "2" $2 on="On" off="Off"
+                setplugstate "3" $3 on="On" off="Off"
+                setplugstate "4" $4 on="On" off="Off"
+                setplugstate "5" $5 on="On" off="Off"
+                setplugstate "6" $6 on="On" off="Off"
+                setplugstate "7" $7 on="On" off="Off"
+                setplugstate "8" $8 on="On" off="Off"
+                setplugstate "9" $9 on="On" off="Off"
+                setplugstate "10" $10 on="On" off="Off"
+		expect "RPM:>"
+        }
+
+	script on {
+		delay 1
+		send "on 0 %s\r\n"
+		expect "ACK"
+		expect "RPM:>"
+	}
+
+
+	script off {
+		delay 1
+		send "off 0 %s\r\n"
+		expect "ACK"
+		expect "RPM:>"
+	}
+
+
+	script cycle {
+		delay 1
+		send "off 0 %s\r\n"
+		expect "ACK"
+		expect "RPM:>"
+		delay 2
+		send "on 0 %s\r\n"
+		expect "ACK"
+		expect "RPM:>"
+	}
+
+}

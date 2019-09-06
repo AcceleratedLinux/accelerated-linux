@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -x
+exec 2>/dev/console
+
+ifconfig lan1 192.168.0.1
+ifconfig lan2 192.168.2.1
+ifconfig lan3 192.168.3.1
+ifconfig lan4 192.168.4.1
+ifconfig lan5 192.168.5.1
+ifconfig lan6 192.168.6.1
+ifconfig lan7 192.168.7.1
+ifconfig lan8 192.168.8.1
+ifconfig wan1 192.168.9.1
+ifconfig wan2 192.168.10.1
+
+ping -b -i 0.1 -I lan2 255.255.255.255 & # 1 <--> 2
+ping -b -i 0.1 -I lan3 255.255.255.255 & # 3 <--> 4
+ping -b -i 0.1 -I lan5 255.255.255.255 & # 5 <--> 6
+ping -b -i 0.1 -I lan7 255.255.255.255 & # 7 <--> 8
+ping -b -i 0.1 -I wan1 255.255.255.255 & # wan1 <--> wan2
+
+ledcmd -f ONLINE
+

@@ -1,0 +1,94 @@
+diff -Nurd build/gcc-9.1.0/libphobos/libdruntime/core/stdc/math.d libphobos.new/libdruntime/core/stdc/math.d
+--- gcc-9.1.0.orig/libphobos/libdruntime/core/stdc/math.d	2019-04-22 23:46:13.000000000 +1000
++++ gcc-9.1.0.orig/libphobos/libdruntime/core/stdc/math.d	2019-06-25 15:41:06.262802373 +1000
+@@ -803,27 +803,27 @@
+         FP_FAST_FMAL = 0,
+     }
+ 
+-    int __fpclassifyf(float x);
+-    int __fpclassify(double x);
+-    int __fpclassifyl(real x);
++    pure int __fpclassifyf(float x);
++    pure int __fpclassify(double x);
++    pure int __fpclassifyl(real x);
+ 
+-    int __finitef(float x);
+-    int __finite(double x);
+-    int __finitel(real x);
++    pure int __finitef(float x);
++    pure int __finite(double x);
++    pure int __finitel(real x);
+ 
+-    int __isinff(float x);
+-    int __isinf(double x);
+-    int __isinfl(real x);
++    pure int __isinff(float x);
++    pure int __isinf(double x);
++    pure int __isinfl(real x);
+ 
+-    int __isnanf(float x);
+-    int __isnan(double x);
+-    int __isnanl(real x);
++    pure int __isnanf(float x);
++    pure int __isnan(double x);
++    pure int __isnanl(real x);
+ 
+-    int __signbitf(float x);
+-    int __signbit(double x);
+-    int __signbitl(real x);
++    pure int __signbitf(float x);
++    pure int __signbit(double x);
++    pure int __signbitl(real x);
+ 
+-  extern (D)
++  extern (D) pure
+   {
+     ///
+     int fpclassify(float x)     { return __fpclassifyf(x); }
+diff -Nurd build/gcc-9.1.0/libphobos/src/std/exception.d libphobos.new/src/std/exception.d
+--- gcc-9.1.0.orig/libphobos/src/std/exception.d	2018-10-29 05:51:47.000000000 +1000
++++ gcc-9.1.0/libphobos/src/std/exception.d	2019-06-25 15:41:33.343025692 +1000
+@@ -1487,6 +1487,12 @@
+         char[1024] buf = void;
+         auto s = strerror_r(errno, buf.ptr, buf.length);
+     }
++    else version (CRuntime_UClibc)
++    {
++        import core.stdc.string : strerror_r;
++        char[1024] buf = void;
++        auto s = strerror_r(errno, buf.ptr, buf.length);
++    }
+     else version (Posix)
+     {
+         // XSI-compliant
+diff -Nurd build/gcc-9.1.0/libphobos/src/std/socket.d libphobos.new/src/std/socket.d
+--- gcc-9.1.0.orig/libphobos/src/std/socket.d	2019-04-12 07:11:15.000000000 +1000
++++ gcc-9.1.0/libphobos//src/std/socket.d	2019-06-25 15:41:50.463166944 +1000
+@@ -163,6 +163,10 @@
+         {
+             cs = strerror_r(err, buf.ptr, buf.length);
+         }
++        else version (CRuntime_UClibc)
++        {
++            cs = strerror_r(err, buf.ptr, buf.length);
++        }
+         else version (OSX)
+         {
+             auto errs = strerror_r(err, buf.ptr, buf.length);
+diff -Nurd build/gcc-9.1.0/libphobos/src/std/stdio.d libphobos.new/src/std/stdio.d
+--- gcc-9.1.0.orig/libphobos/src/std/stdio.d	2019-04-12 07:11:15.000000000 +1000
++++ gcc-9.1.0/libphobos.new/src/std/stdio.d	2019-06-25 15:42:19.087403221 +1000
+@@ -45,6 +45,13 @@
+     version = HAS_GETDELIM;
+ }
+ 
++version (CRuntime_UClibc)
++{
++    // Specific to the way Gnu C does stdio
++    version = GCC_IO;
++    version = HAS_GETDELIM;
++}
++
+ version (OSX)
+ {
+     version = GENERIC_IO;

@@ -1,0 +1,12 @@
+diff -ru toybox/Makefile toybox.new/Makefile
+--- toybox/Makefile	2019-06-14 09:32:40.000000000 +1000
++++ toybox.new/Makefile	2019-06-14 15:43:56.256725959 +1000
+@@ -45,7 +45,7 @@
+ 	scripts/install.sh --symlink --force
+ 
+ install_airlock:
+-	scripts/install.sh --symlink --force --airlock
++	scripts/install.sh --long --symlink --force --airlock
+ 
+ install:
+ 	scripts/install.sh --long --symlink --force

@@ -1,0 +1,10 @@
+ash-socketpair.patch
+arping-no-bind.patch
+cross-compile-setup.patch
+flatfsd.patch
+httpd-fixes.patch
+init-etc-rc.patch
+miscutils-rc-timeout.patch
+nslookup-ipv6-fixes.patch
+udhcp.patch
+watchdog-oom.patch

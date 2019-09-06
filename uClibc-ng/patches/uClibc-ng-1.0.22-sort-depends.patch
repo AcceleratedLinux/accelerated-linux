@@ -1,0 +1,26 @@
+uClibc-ng: fix "arg list too long" make errors
+
+When compiling uClibc-ng for certain targets with certain configurations
+you can hit a make error with:
+
+ execvp: arg list too long
+
+The problem is the internal .depends.dep variable which grows to be too
+large for a single string line. And that causes any more command execution
+from the uClibc-ng make to fail (the linux kernel has a single string limit
+in the environment of 32 pages - so 128k on x86 systems- when execing).
+
+It turns out that the .depends.dep ends up with most of the strings it
+contains duplication, sometimes up to 4 times each. So the easy answer
+is to "sort" it using the makefile variable sort function.
+
+--- uClibc-ng-1.0.31/Makerules.org	2019-06-18 13:29:25.877543782 +1000
++++ uClibc-ng-1.0.31/Makerules	2019-06-18 13:29:00.818534156 +1000
+@@ -492,6 +492,7 @@
+ # calling 'size thefile.o*'
+ .depends.dep := $(foreach f,$(.depends.dep),$(dir $(f)).$(notdir $(f)))
+ .depends.dep := $(wildcard $(.depends.dep))
++.depends.dep := $(sort $(.depends.dep))
+ 
+ FORCE:
+ 

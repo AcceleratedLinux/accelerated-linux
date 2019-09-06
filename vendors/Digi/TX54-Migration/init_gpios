@@ -1,0 +1,106 @@
+#!/bin/sh
+##############################################################################
+# Copyright (c) 2019 Digi International Inc., All Rights Reserved
+#
+# This software contains proprietary and confidential information of Digi
+# International Inc.  By accepting transfer of this copy, Recipient agrees
+# to retain this software in confidence, to prevent disclosure to others,
+# and to make no use of this software other than that for which it was
+# delivered.  This is an unpublished copyrighted work of Digi International
+# Inc.  Except as permitted by federal law, 17 USC 117, copying is strictly
+# prohibited.
+#
+# Restricted Rights Legend
+#
+# Use, duplication, or disclosure by the Government is subject to
+# restrictions set forth in sub-paragraph (c)(1)(ii) of The Rights in
+# Technical Data and Computer Software clause at DFARS 252.227-7031 or
+# subparagraphs (c)(1) and (2) of the Commercial Computer Software -
+# Restricted Rights at 48 CFR 52.227-19, as applicable.
+#
+# Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
+#
+##############################################################################
+
+[ "$1" == "start" ] || exit 0
+
+#
+# Modern linux kernels probe/discover/enumerate the GPIO banks and pins
+# in a different order. Mangle the index numbers to match conventional
+# GPIO pin name and ordering.
+#
+gpio_index() {
+	local index=$1
+	if [ ${index} -ge 96 ] ; then
+		echo $((400 + ${index} - 96))
+	elif [ ${index} -ge 64 ] ; then
+		echo $((416 + ${index} - 64))
+	elif [ ${index} -ge 32 ] ; then
+		echo $((448 + ${index} - 32))
+	else
+		echo $((480 + ${index}))
+	fi
+}
+
+init_gpio() {
+	local index
+	local dir=$2
+
+	index=$(gpio_index $1)
+	echo ${index} > /sys/class/gpio/export
+	echo ${dir} > /sys/class/gpio/gpio${index}/direction
+}
+
+echo -n "Initilizing GPIOs... "
+
+### Cellular module 1
+# Switch off regulator
+init_gpio 110 low
+# Deassert PERST
+init_gpio 105 low
+# Deassert W_DISABLE
+init_gpio 104 low
+# SIM1-1_CD as input
+init_gpio 25 in
+# SIM1-2_CD as input
+init_gpio 16 in
+
+### Cellular module 2
+# Switch off regulator
+init_gpio 111 low
+# Deassert PERST
+init_gpio 107 low
+# Deassert W_DISABLE
+init_gpio 106 low
+# SIM2-1_CD as input
+init_gpio 31 in
+# SIM2-2_CD as input
+init_gpio 15 in
+
+### Wi-Fi module
+# Deassert enable
+init_gpio 13 high
+# Deassert W_DISABLE
+init_gpio 33 low
+
+### GPS
+# Assert reset pin
+init_gpio 109 low
+
+### BLE
+# Assert reset pin
+init_gpio 108 high
+
+### RTC
+# Deassert reset pin
+init_gpio 22 low
+
+### User buttons
+# Reset pin as input
+init_gpio 29 in
+
+### MCU
+# MCU interrupt as input
+init_gpio 32 in
+
+echo "OK"

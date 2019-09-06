@@ -1,0 +1,28 @@
+diff -Naur busybox-1.31.0.org/miscutils/rx.c busybox-1.31.0/miscutils/rx.c
+--- busybox-1.31.0.org/miscutils/rx.c	2018-12-06 00:44:34.000000000 +1000
++++ busybox-1.31.0/miscutils/rx.c	2019-07-02 14:26:34.514572676 +1000
+@@ -81,7 +81,6 @@
+ 	unsigned length = 0;
+ 	int do_crc = 1;
+ 	char reply_char;
+-	unsigned timeout = TIMEOUT_LONG;
+ 
+ 	/* Flush pending input */
+ 	tcflush(read_fd, TCIFLUSH);
+@@ -97,7 +96,7 @@
+ 		unsigned expected;
+ 		int i, j;
+ 
+-		blockBegin = read_byte(timeout);
++		blockBegin = read_byte(TIMEOUT_LONG);
+ 		if (blockBegin < 0)
+ 			goto timeout;
+ 
+@@ -124,7 +123,6 @@
+ 			goto fatal;
+ 		}
+ 
+-		timeout = TIMEOUT;
+ 		reply_char = NAK;
+ 
+ 		switch (blockBegin) {

@@ -1,0 +1,61 @@
+if USER_PYTHON
+menu "python modules"
+
+config USER_PYTHON_MODULES_PIP
+	bool "pip"
+	help
+		The PyPA recommended tool for installing Python packages.
+
+config USER_PYTHON_MODULES_SETUPTOOLS
+	bool "setuptools"
+	help
+		Easily download, build, install, upgrade, and uninstall Python packages.
+
+config USER_PYTHON_MODULES_SIX
+	bool "six"
+	help
+		Python 2 and 3 compatibility utilities.
+
+config USER_PYTHON_MODULES_CFFI
+	bool "cffi"
+	help
+		Foreign Function Interface for Python calling C code.
+
+config USER_PYTHON_MODULES_PYSERIAL
+	bool "pyserial"
+	help
+		Python Serial Port Extension.
+
+config USER_PYTHON_MODULES_BCRYPT
+	bool "bcrypt"
+	select USER_PYTHON_MODULES_CFFI
+	select USER_PYTHON_MODULES_SIX
+	help
+		Modern password hashing for your software and your servers.
+
+config USER_PYTHON_MODULES_PEXPECT
+	bool "pexpect"
+	select USER_PYTHON_MODULES_PTYPROCESS
+	help
+		Pexpect allows easy control of interactive console applications.
+
+config USER_PYTHON_MODULES_PTYPROCESS
+	bool "ptyprocess"
+	help
+		Run a subprocess in a pseudo terminal.
+
+config USER_PYTHON_MODULES_DIGI_XBEE_LIB
+	bool "Digi XBee Python library"
+	select USER_PYTHON_MODULES_PYSERIAL
+	select USER_PYTHON_MODULES_SRP
+	help
+		Digi XBee Python library.
+
+config USER_PYTHON_MODULES_SRP
+	bool "Secure Remote Password protocol (SRP)"
+	select USER_PYTHON_MODULES_SIX
+	help
+		Secure Remote Password protocol (SRP)
+
+endmenu
+endif

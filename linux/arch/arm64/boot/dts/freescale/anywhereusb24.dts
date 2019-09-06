@@ -1,0 +1,709 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Include file for Digi AnywhereUSB-8.
+ *
+ * Copyright 2016 Freescale Semiconductor, Inc.
+ * Copyright 2018.2019 Digi Inc.
+ *
+ * Mingkai Hu <mingkai.hu@nxp.com>
+ * Greg Ungerer <gregory.ungerer@digi.com>
+ */
+
+/dts-v1/;
+
+#include "fsl-ls1046a.dtsi"
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "Digi AnywhereUSB-24";
+	compatible = "digi,anywhereusb24", "fsl,ls1046a";
+
+	aliases {
+		serial0 = &duart0;
+		serial1 = &duart1;
+		serial2 = &duart2;
+		serial3 = &duart3;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	soc {
+		esdhc: esdhc@1560000 {
+			compatible = "fsl,ls1046a-esdhc", "fsl,esdhc";
+			reg = <0x0 0x1560000 0x0 0x10000>;
+			interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clockgen 2 1>;
+			voltage-ranges = <1800 1800 3300 3300>;
+			sdhci,auto-cmd12;
+			big-endian;
+			bus-width = <4>;
+		};
+
+		 pcie@3400000 {
+			compatible = "fsl,ls1046a-pcie", "snps,dw-pcie";
+			status = "okay";
+			num-ib-windows = <6>;
+			num-ob-windows = <6>;
+		 };
+		 pcie@3500000 {
+			compatible = "fsl,ls1046a-pcie", "snps,dw-pcie";
+			status = "okay";
+			num-ib-windows = <6>;
+			num-ob-windows = <6>;
+		 };
+		 pcie@3600000 {
+			compatible = "fsl,ls1046a-pcie", "snps,dw-pcie";
+			status = "okay";
+			num-ib-windows = <6>;
+			num-ob-windows = <6>;
+		 };
+
+		usb0: usb@2f00000 {
+			usb3-lpm-capable;
+			snps,dis-u1u2-when-u3-quirk;
+			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+			clock-names = "ref", "bus_early", "suspend";
+			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+		};
+
+		usb1: usb@3000000 {
+			usb3-lpm-capable;
+			snps,dis-u1u2-when-u3-quirk;
+			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+			clock-names = "ref", "bus_early", "suspend";
+			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+		};
+
+		usb2: usb@3100000 {
+			usb3-lpm-capable;
+			snps,dis-u1u2-when-u3-quirk;
+			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+			clock-names = "ref", "bus_early", "suspend";
+			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+		};
+	};
+};
+
+&duart0 {
+	status = "okay";
+	/*dtr-gpios = <&gpio0 27 GPIO_ACTIVE_LOW>;
+	dsr-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+	rng-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+	uart-has-rtscts;*/
+};
+
+&i2c0 {
+	status = "okay";
+	awusb24_cpld@59 {
+		compatible = "digi,awusb24_cpld";
+		reg = <0x59>;
+		fan1r {
+		    name = "fan1r";
+		    reg = /bits/ 8 <0x32>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		fan1g {
+		    name = "fan1g";
+		    reg = /bits/ 8 <0x32>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		fan2r {
+		    name = "fan2r";
+		    reg = /bits/ 8 <0x33>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		fan2g {
+		    name = "fan2g";
+		    reg = /bits/ 8 <0x33>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		wansigr {
+		    name = "wansigr";
+		    reg = /bits/ 8 <0x34>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		wansigg {
+		    name = "wansigg";
+		    reg = /bits/ 8 <0x34>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		wanserr {
+		    name = "wanserr";
+		    reg = /bits/ 8 <0x35>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		wanserg {
+		    name = "wanserg";
+		    reg = /bits/ 8 <0x35>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		wifir {
+		    name = "wifir";
+		    reg = /bits/ 8 <0x36>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		wifig {
+		    name = "wifig";
+		    reg = /bits/ 8 <0x36>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		usrr {
+		    name = "usrr";
+		    reg = /bits/ 8 <0x37>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		usrg {
+		    name = "usrg";
+		    reg = /bits/ 8 <0x37>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		r01 {
+		    name = "r01";
+		    reg = /bits/ 8 <0x38>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g01 {
+		    name = "g01";
+		    reg = /bits/ 8 <0x38>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b01 {
+		    name = "b01";
+		    reg = /bits/ 8 <0x38>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r02 {
+		    name = "r02";
+		    reg = /bits/ 8 <0x39>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g02 {
+		    name = "g02";
+		    reg = /bits/ 8 <0x39>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b02 {
+		    name = "b02";
+		    reg = /bits/ 8 <0x39>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r03 {
+		    name = "r03";
+		    reg = /bits/ 8 <0x3a>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g03 {
+		    name = "g03";
+		    reg = /bits/ 8 <0x3a>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b03 {
+		    name = "b03";
+		    reg = /bits/ 8 <0x3a>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r04 {
+		    name = "r04";
+		    reg = /bits/ 8 <0x3b>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g04 {
+		    name = "g04";
+		    reg = /bits/ 8 <0x3b>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b04 {
+		    name = "b04";
+		    reg = /bits/ 8 <0x3b>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r05 {
+		    name = "r05";
+		    reg = /bits/ 8 <0x3c>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g05 {
+		    name = "g05";
+		    reg = /bits/ 8 <0x3c>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b05 {
+		    name = "b05";
+		    reg = /bits/ 8 <0x3c>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r06 {
+		    name = "r06";
+		    reg = /bits/ 8 <0x3d>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g06 {
+		    name = "g06";
+		    reg = /bits/ 8 <0x3d>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b06 {
+		    name = "b06";
+		    reg = /bits/ 8 <0x3d>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r07 {
+		    name = "r07";
+		    reg = /bits/ 8 <0x3e>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g07 {
+		    name = "g07";
+		    reg = /bits/ 8 <0x3e>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b07 {
+		    name = "b07";
+		    reg = /bits/ 8 <0x3e>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r08 {
+		    name = "r08";
+		    reg = /bits/ 8 <0x3f>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g08 {
+		    name = "g08";
+		    reg = /bits/ 8 <0x3f>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b08 {
+		    name = "b08";
+		    reg = /bits/ 8 <0x3f>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r09 {
+		    name = "r09";
+		    reg = /bits/ 8 <0x40>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g09 {
+		    name = "g09";
+		    reg = /bits/ 8 <0x40>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b09 {
+		    name = "b09";
+		    reg = /bits/ 8 <0x40>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r10 {
+		    name = "r10";
+		    reg = /bits/ 8 <0x41>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g10 {
+		    name = "g10";
+		    reg = /bits/ 8 <0x41>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b10 {
+		    name = "b10";
+		    reg = /bits/ 8 <0x41>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r11 {
+		    name = "r11";
+		    reg = /bits/ 8 <0x42>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g11 {
+		    name = "g11";
+		    reg = /bits/ 8 <0x42>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b11 {
+		    name = "b11";
+		    reg = /bits/ 8 <0x42>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r12 {
+		    name = "r12";
+		    reg = /bits/ 8 <0x43>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g12 {
+		    name = "g12";
+		    reg = /bits/ 8 <0x43>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b12 {
+		    name = "b12";
+		    reg = /bits/ 8 <0x43>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r13 {
+		    name = "r13";
+		    reg = /bits/ 8 <0x44>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g13 {
+		    name = "g13";
+		    reg = /bits/ 8 <0x44>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b13 {
+		    name = "b13";
+		    reg = /bits/ 8 <0x44>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r14 {
+		    name = "r14";
+		    reg = /bits/ 8 <0x45>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g14 {
+		    name = "g14";
+		    reg = /bits/ 8 <0x45>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b14 {
+		    name = "b14";
+		    reg = /bits/ 8 <0x45>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r15 {
+		    name = "r15";
+		    reg = /bits/ 8 <0x46>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g15 {
+		    name = "g15";
+		    reg = /bits/ 8 <0x46>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b15 {
+		    name = "b15";
+		    reg = /bits/ 8 <0x46>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r16 {
+		    name = "r16";
+		    reg = /bits/ 8 <0x47>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g16 {
+		    name = "g16";
+		    reg = /bits/ 8 <0x47>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b16 {
+		    name = "b16";
+		    reg = /bits/ 8 <0x47>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r17 {
+		    name = "r17";
+		    reg = /bits/ 8 <0x48>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g17 {
+		    name = "g17";
+		    reg = /bits/ 8 <0x48>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b17 {
+		    name = "b17";
+		    reg = /bits/ 8 <0x48>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r18 {
+		    name = "r18";
+		    reg = /bits/ 8 <0x49>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g18 {
+		    name = "g18";
+		    reg = /bits/ 8 <0x49>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b18 {
+		    name = "b18";
+		    reg = /bits/ 8 <0x49>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r19 {
+		    name = "r19";
+		    reg = /bits/ 8 <0x4a>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g19 {
+		    name = "g19";
+		    reg = /bits/ 8 <0x4a>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b19 {
+		    name = "b19";
+		    reg = /bits/ 8 <0x4a>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r20 {
+		    name = "r20";
+		    reg = /bits/ 8 <0x4b>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g20 {
+		    name = "g20";
+		    reg = /bits/ 8 <0x4b>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b20 {
+		    name = "b20";
+		    reg = /bits/ 8 <0x4b>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r21 {
+		    name = "r21";
+		    reg = /bits/ 8 <0x4c>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g21 {
+		    name = "g21";
+		    reg = /bits/ 8 <0x4c>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b21 {
+		    name = "b21";
+		    reg = /bits/ 8 <0x4c>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r22 {
+		    name = "r22";
+		    reg = /bits/ 8 <0x4d>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g22 {
+		    name = "g22";
+		    reg = /bits/ 8 <0x4d>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b22 {
+		    name = "b22";
+		    reg = /bits/ 8 <0x4d>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r23 {
+		    name = "r23";
+		    reg = /bits/ 8 <0x4e>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g23 {
+		    name = "g23";
+		    reg = /bits/ 8 <0x4e>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b23 {
+		    name = "b23";
+		    reg = /bits/ 8 <0x4e>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+		r24 {
+		    name = "r24";
+		    reg = /bits/ 8 <0x4f>;
+		    led = /bits/ 8 <0x04>;
+		    linux,default-trigger = "timer";
+		};
+		g24 {
+		    name = "g24";
+		    reg = /bits/ 8 <0x4f>;
+		    led = /bits/ 8 <0x02>;
+		    linux,default-trigger = "timer";
+		};
+		b24 {
+		    name = "b24";
+		    reg = /bits/ 8 <0x4f>;
+		    led = /bits/ 8 <0x01>;
+		    linux,default-trigger = "timer";
+		};
+	};
+
+	rtc@51 {
+		compatible = "idt,ds1337";
+		reg = <0x68>;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+};
+
+&qspi {
+	num-cs = <1>;
+	bus-num = <0>;
+	status = "okay";
+
+	qflash0: mx25u3235f@0 {
+		compatible = "spi-nor";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		spi-max-frequency = <20000000>;
+		spi-rx-bus-width = <1>;
+		spi-tx-bus-width = <1>;
+		reg = <0>;
+	};
+};
+
+&soc {
+#include "qoriq-fman3-0.dtsi"
+#include "qoriq-fman3-0-1g-0.dtsi"
+#include "qoriq-fman3-0-1g-1.dtsi"
+#include "qoriq-fman3-0-1g-2.dtsi"
+#include "qoriq-fman3-0-1g-3.dtsi"
+#include "qoriq-fman3-0-1g-4.dtsi"
+#include "qoriq-fman3-0-1g-5.dtsi"
+#include "qoriq-fman3-0-10g-0.dtsi"
+#include "qoriq-fman3-0-10g-1.dtsi"
+
+	fsldpaa: fsl,dpaa {
+		compatible = "fsl,ls1043a-dpaa", "simple-bus", "fsl,dpaa";
+		ethernet@0 {
+			compatible = "fsl,dpa-ethernet";
+			fsl,fman-mac = <&enet0>;
+			dma-coherent;
+		};
+		ethernet@1 {
+			compatible = "fsl,dpa-ethernet";
+			fsl,fman-mac = <&enet1>;
+			dma-coherent;
+		};
+	};
+};
+
+&fman0 {
+	enet0: ethernet@f0000 {
+		phy-handle = <&phy0>;
+		phy-connection-type = "xgmii";
+	};
+
+	enet1: ethernet@f2000 {
+		phy-handle = <&phy1>;
+		phy-connection-type = "xgmii";
+	};
+
+	enet2: ethernet@e0000 {
+		status = "disabled";
+	};
+
+	enet3: ethernet@e2000 {
+		status = "disabled";
+	};
+
+	enet4: ethernet@e4000 {
+		status = "disabled";
+	};
+
+	enet5: ethernet@e6000 {
+		status = "disabled";
+	};
+
+	enet6: ethernet@e8000 {
+		status = "disabled";
+	};
+
+	enet7: ethernet@ea000 {
+		status = "disabled";
+	};
+
+	mdio@fd000 {
+		phy0: ethernet-phy@0 {
+			compatible = "ethernet-phy-ieee802.3-c45";
+			reg = <28>;
+		};
+
+		phy1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c45";
+			reg = <29>;
+		};
+	};
+};
+

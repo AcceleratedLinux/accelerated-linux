@@ -1,0 +1,12 @@
+--- strace-4.25/strace.c.org	2019-06-04 23:41:42.421953955 +1000
++++ strace-4.25/strace.c	2019-06-04 23:51:50.417088079 +1000
+@@ -46,9 +46,6 @@
+ #include <dirent.h>
+ #include <locale.h>
+ #include <sys/utsname.h>
+-#ifdef HAVE_PRCTL
+-# include <sys/prctl.h>
+-#endif
+ #include <asm/unistd.h>
+ 
+ #include "largefile_wrappers.h"

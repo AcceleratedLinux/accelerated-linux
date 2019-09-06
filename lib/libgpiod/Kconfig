@@ -1,0 +1,5 @@
+config LIB_LIBGPIOD
+	bool "libgpiod"
+	help
+	  C library and tools for interacting with the linux GPIO
+	  character device (gpiod stands for GPIO device)

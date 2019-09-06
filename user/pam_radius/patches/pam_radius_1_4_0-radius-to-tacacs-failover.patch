@@ -1,0 +1,46 @@
+--- a/src/pam_radius_auth.c	2019-07-05 13:01:47.480670763 +1000
++++ b/src/pam_radius_auth.c	2019-07-05 13:38:42.117453863 +1000
+@@ -77,6 +77,10 @@
+ static radius_server_t *live_server = NULL;
+ static time_t session_time;
+ 
++/* radius_authenticated is introduced, to handle authentication with 
++ * tacacs as fallback authentication method to radius. */
++static char radius_authenticated = FALSE;
++
+ /* logging */
+ static void _pam_log(int err, CONST char *format, ...)
+ {
+@@ -1077,6 +1081,7 @@
+ 	AUTH_HDR *response = (AUTH_HDR *) recv_buffer;
+ 	radius_conf_t config;
+ 
++	radius_authenticated = FALSE;
+ 	ctrl = _pam_parse(argc, argv, &config);
+ 
+ 	/* grab the user name */
+@@ -1275,6 +1280,9 @@
+ 		*pret = retval;
+ 		pam_set_data(pamh, "rad_setcred_return", (void *) pret, _int_free);
+ 	}
++	if (retval==PAM_SUCCESS) {
++		radius_authenticated = TRUE;
++	}
+ 	return retval;
+ }
+ 
+@@ -1621,9 +1629,11 @@
+  */
+ PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
+ {
+-	int retval;
+-	retval = PAM_SUCCESS;
+-	return retval;
++	if (radius_authenticated == TRUE) {
++		return PAM_SUCCESS;
++	} else {
++		return PAM_IGNORE;
++	}
+ }
+ 
+ 

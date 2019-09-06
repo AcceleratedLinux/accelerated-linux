@@ -1,0 +1,114 @@
+From ed8d1f3956c777401897ebddbc30c7bb124c4d2a Mon Sep 17 00:00:00 2001
+From: Hugo Grostabussiat <bonstra@bonstra.fr.eu.org>
+Date: Sun, 14 Apr 2019 20:39:56 +0200
+Subject: [PATCH] Do not use the YIELD instruction for ARMv5
+
+This commit disables the check for the ARM YIELD instruction in
+configure.ac when the target is an ARMv5 platform.
+A config.h define HAVE_ARM_YIELD was added, which is set to 1 only
+if the platform is ARMv6 or higher and the YIELD test passes.
+---
+ config.h.in      |  3 +++
+ configure        | 17 +++++++++++++++--
+ configure.ac     | 13 +++++++++++--
+ lib/isc/rwlock.c |  2 +-
+ 4 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/config.h.in b/config.h.in
+index 7ab5551..31307cb 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -45,6 +45,9 @@
+ /* Define to 1 if you have the `arc4random_uniform' function. */
+ #undef HAVE_ARC4RANDOM_UNIFORM
+ 
++/* define if the ARM yield instruction is available */
++#undef HAVE_ARM_YIELD
++
+ /* Define to 1 if the compiler supports __builtin_clz. */
+ #undef HAVE_BUILTIN_CLZ
+ 
+diff --git a/configure b/configure
+index 4f017d2..91475ab 100755
+--- a/configure
++++ b/configure
+@@ -13842,6 +13842,12 @@ $as_echo "#define FLEXIBLE_ARRAY_MEMBER /**/" >>confdefs.h
+ # Check for yield support on ARM processors
+ #
+ case $host in #(
++  *) :
++
++	 # Since armv5 does not support multiprocessing, the yield
++	 # instruction does not make sense for this architecture.
++	 # Skip the check.
++	  ;; #(
+   arm*) :
+ 
+ 	  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for yield instruction support" >&5
+@@ -13859,10 +13865,17 @@ __asm__ __volatile__ ("yield")
+ }
+ _ACEOF
+ if ac_fn_c_try_compile "$LINENO"; then :
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
++
++	     { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+ $as_echo "yes" >&6; }
++
++$as_echo "#define HAVE_ARM_YIELD 1" >>confdefs.h
++
++
+ else
+-  as_fn_error $? "no, try adding -march=native or -march=armv7-a to CFLAGS (see PLATFORMS.md for more information)" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++	     as_fn_error $? "try adding -march=native or -march=armv7-a to CFLAGS (see PLATFORMS.md for more information)" "$LINENO" 5
+ fi
+ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext ;; #(
+   *) :
+diff --git a/configure.ac b/configure.ac
+index e547ecc..af0e50b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -416,6 +416,11 @@ AC_C_FLEXIBLE_ARRAY_MEMBER
+ # Check for yield support on ARM processors
+ #
+ AS_CASE([$host],
++	[*],[
++	 # Since armv5 does not support multiprocessing, the yield
++	 # instruction does not make sense for this architecture.
++	 # Skip the check.
++	 ],
+ 	[arm*],[
+ 	  AC_MSG_CHECKING([for yield instruction support])
+ 	  AC_COMPILE_IFELSE(
+@@ -423,8 +428,12 @@ AS_CASE([$host],
+ 	       [[]],
+ 	       [[__asm__ __volatile__ ("yield")]]
+ 	     )],
+-	    [AC_MSG_RESULT([yes])],
+-	    [AC_MSG_ERROR([no, try adding -march=native or -march=armv7-a to CFLAGS (see PLATFORMS.md for more information)])])])
++	    [
++	     AC_MSG_RESULT([yes])
++	     AC_DEFINE([HAVE_ARM_YIELD], [1], [define if the ARM yield instruction is available])
++	     ],
++	    [AC_MSG_RESULT([no])
++	     AC_MSG_ERROR([try adding -march=native or -march=armv7-a to CFLAGS (see PLATFORMS.md for more information)])])])
+ 
+ AC_CHECK_FUNCS([sysctlbyname])
+ 
+diff --git a/lib/isc/rwlock.c b/lib/isc/rwlock.c
+index 8d970c7..1071fec 100644
+--- a/lib/isc/rwlock.c
++++ b/lib/isc/rwlock.c
+@@ -52,7 +52,7 @@
+ # define isc_rwlock_pause() __asm__ __volatile__ ("rep; nop")
+ #elif defined(__ia64__)
+ # define isc_rwlock_pause() __asm__ __volatile__ ("hint @pause")
+-#elif defined(__arm__)
++#elif defined(__arm__) && HAVE_ARM_YIELD
+ # define isc_rwlock_pause() __asm__ __volatile__ ("yield")
+ #elif defined(sun) && (defined(__sparc) || defined(__sparc__))
+ # define isc_rwlock_pause() smt_pause()
+-- 
+2.21.0
+

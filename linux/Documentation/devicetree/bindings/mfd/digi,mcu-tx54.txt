@@ -1,0 +1,61 @@
+* Digi TX54 microcontroller multifunction device driver
+
+Required properties:
+ - compatible		: Should be "digi,mcu-tx54"
+ - reg			: Specifies the I2C slave address (should be 0x78)
+ - interrupt-parent	: Specifies the reference to the interrupt controller
+ 			  for the MCU
+ - interrupts		: IRQ line information
+ - interrupt-controller	: Describes the MCU is an interrupt controller with, and
+ 			  has its own domain
+ - #interrupt-cells	: should be 1 for 1-cell format: local IRQ number
+
+===============================================================
+
+The TX54 MCU multifunction device has the following submodules:
+
+Submodule			Description
+---------			-----------
+ - "digi,mcu-tx54-battery"	Battery voltage monitoring. startup / shutdown
+ 				voltage configurationg, low voltage event
+ - "digi,mcu-tx54-keys"		Power off keys (ignition and power button)
+ - "digi,mcu-tx54-led"		Power LED
+ - "digi,mcu-tx54-poweroff"	Board power off
+
+
+Required child device properties:
+ - compatible		: "digi,mcu-tx54-[battery|keys|led|poweroff]
+
+"digi,mcu-tx54-led" optional properties:
+ - label		 : see Documentation/devicetree/bindings/leds/common.txt
+ - default-state	 : see Documentation/devicetree/bindings/leds/common.txt
+ - linux,default-trigger : see Documentation/devicetree/bindings/leds/common.txt
+
+
+ Example:
+ 	mcu_tx54: mcu@78 {
+		compatible = "digi,mcu-tx54";
+		reg = <0x78>;
+		interrupt-parent = <&gpio>;
+		interrupts = <32 IRQ_TYPE_EDGE_RISING>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+
+		mcu_pwr_led: mcu_led {
+			compatible = "digi,mcu-tx54-led";
+			label = "tx54:blue:power";
+			linux,default-trigger = "timer";
+		};
+
+		poweroff {
+			compatible = "digi,mcu-tx54-poweroff";
+		};
+
+		keys {
+			compatible = "digi,mcu-tx54-keys";
+		};
+
+		battery {
+			compatible = "digi,mcu-tx54-battery";
+		};
+	};

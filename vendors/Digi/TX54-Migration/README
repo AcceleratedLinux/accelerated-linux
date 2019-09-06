@@ -1,0 +1,39 @@
+
+DIGI/TX54-Migration
+-------------------
+
+XOS -> DAL migration image for TX54
+
+The boot partition layout is different between XOS and DAL. This image supposed
+to re-partition the flash, and install the DAL image onto the new boot
+partitions.
+
+The built kernel has an embedded initramfs. That is doing all the migration
+tasks. The generated rootfs image contains the new firmware and bootloader
+images, and other thing, needed for the migration process.
+
+Note: the WR54's kernel partition is only 5MB, and if that has a few bad blocks
+(128kB per block), it can be even smaller. So the kernel image should be as
+small as possible. Keeping it under 4MB, should be OK.
+
+COMPILING
+---------
+Have to define the path of the TX54 DAL firmware image's and bootloader image's
+path to the build, before the make.
+
+	# Configure for platform
+	make Digi/TX54-Migration_defconfig
+
+	# Firmware image
+	export CONFIG_MIGRATION_FIRMWARE_IMAGE=<path_to_tx54_dal_fw_image>
+	# Bootloader image
+	export CONFIG_MIGRATION_BOOTLOADER_IMAGE=<path_to_tx54_dal_bloader_image>
+
+	# Build
+	make
+
+INSTALLATION
+------------
+
+Simply update the WR54 with the generated firmware. It should do the migration
+automatically.

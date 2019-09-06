@@ -1,0 +1,49 @@
+--- busybox-1.31.0/Makefile.org	2019-06-10 19:53:44.000000000 +1000
++++ busybox-1.31.0/Makefile	2019-07-07 22:41:38.530708366 +1000
+@@ -1,7 +1,7 @@
+ VERSION = 1
+ PATCHLEVEL = 31
+ SUBLEVEL = 0
+-EXTRAVERSION =
++EXTRAVERSION = -ac0
+ NAME = Unnamed
+ 
+ # *DOCUMENTATION*
+@@ -288,15 +288,19 @@
+ 
+ # Make variables (CC, etc...)
+ 
+-AS		= $(CROSS_COMPILE)as
+-CC		= $(CROSS_COMPILE)gcc
+-LD		= $(CC) -nostdlib
+-CPP		= $(CC) -E
+-AR		= $(CROSS_COMPILE)ar
+-NM		= $(CROSS_COMPILE)nm
+-STRIP		= $(CROSS_COMPILE)strip
+-OBJCOPY		= $(CROSS_COMPILE)objcopy
+-OBJDUMP		= $(CROSS_COMPILE)objdump
++#
++# The cross compiler and other tools are passed in when building.
++# Do not setup them up here.
++#
++#AS		= $(CROSS_COMPILE)as
++#CC		= $(CROSS_COMPILE)gcc
++#LD		= $(CC) -nostdlib
++#CPP		= $(CC) -E
++#AR		= $(CROSS_COMPILE)ar
++#NM		= $(CROSS_COMPILE)nm
++#STRIP		= $(CROSS_COMPILE)strip
++#OBJCOPY		= $(CROSS_COMPILE)objcopy
++#OBJDUMP		= $(CROSS_COMPILE)objdump
+ PKG_CONFIG	?= $(CROSS_COMPILE)pkg-config
+ AWK		= awk
+ GENKSYMS	= scripts/genksyms/genksyms
+@@ -322,7 +326,7 @@
+ CPPFLAGS	:= $(CPPFLAGS)
+ AFLAGS		:= $(AFLAGS)
+ LDFLAGS		:= $(LDFLAGS)
+-LDLIBS		:=
++LDLIBS		:= $(LDLIBS)
+ 
+ # Read KERNELRELEASE from .kernelrelease (if it exists)
+ KERNELRELEASE = $(shell cat .kernelrelease 2> /dev/null)

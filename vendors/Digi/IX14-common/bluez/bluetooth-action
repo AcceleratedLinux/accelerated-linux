@@ -1,0 +1,57 @@
+#!/bin/sh
+
+##################################################################
+#exec 2> /dev/console
+#set -x
+##################################################################
+
+is_bt_enabled() {
+	local enabled="$(bluetooth state)"
+	[ "${enabled}" != "off" -a "${enabled}" != "down" ] && true || false
+}
+
+bt_start() {
+	[ "${enable}" = "0" ] && return 0
+
+	! is_bt_enabled && bluetooth on > /dev/null 2>&1 && sleep 1
+
+	# Check if the default name value is being restored
+	[ -z "${new_name}" ] && new_name="$(bluetooth defname)"
+
+	if is_bt_enabled; then
+		[ "$(bluetooth name)" = "${new_name}" ] && return 0
+		bluetooth name "${new_name}" > /dev/null 2>&1
+	else
+		return 1
+	fi
+}
+
+bt_stop() {
+	[ "${enable}" = "1" ] && return 0
+
+	is_bt_enabled && bluetooth off > /dev/null 2>&1
+}
+
+eval $(config start)
+config load
+enable="$(config get service.bluetooth.enable)"
+new_name="$(config get service.bluetooth.name)"
+eval $(config stop)
+
+case "${1}" in
+	start)
+		bt_start
+		;;
+	stop)
+		bt_stop
+		;;
+	reload)
+		bt_stop
+		sleep 1
+		bt_start
+		;;
+	*)
+		echo "Usage: ${0} {start|stop|reload}"
+		exit 1
+		;;
+esac

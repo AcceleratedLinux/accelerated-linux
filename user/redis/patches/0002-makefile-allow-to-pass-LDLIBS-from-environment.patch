@@ -1,0 +1,22 @@
+From: Javier Viguera <javier.viguera@digi.com>
+Date: Wed, 19 Jun 2019 14:23:25 +0200
+Subject: [PATCH] makefile: allow to pass LDLIBS from environment
+
+Signed-off-by: Javier Viguera <javier.viguera@digi.com>
+---
+ src/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/Makefile b/src/Makefile
+index 86e0b3fe0602..441b4292d5b8 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -65,7 +65,7 @@ endif
+ 
+ FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
+ FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
+-FINAL_LIBS=-lm
++FINAL_LIBS=-lm $(LDLIBS)
+ DEBUG=-g -ggdb
+ 
+ ifeq ($(uname_S),SunOS)

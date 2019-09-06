@@ -1,0 +1,25 @@
+From bfdea5d8158abbf9b4235fe96267beb21c88667d Mon Sep 17 00:00:00 2001
+From: Valentin Blot <freedesktop-devel@valentinblot.org>
+Date: Thu, 28 Feb 2019 13:08:50 +0000
+Subject: [PATCH] libqmi-glib,proxy: reset offset before 2nd call to
+ qmi_message_tlv_read_init
+
+---
+ src/libqmi-glib/qmi-proxy.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/libqmi-glib/qmi-proxy.c b/src/libqmi-glib/qmi-proxy.c
+index 00a1847..63e2ec1 100644
+--- a/src/libqmi-glib/qmi-proxy.c
++++ b/src/libqmi-glib/qmi-proxy.c
+@@ -489,6 +489,7 @@ track_cid (Client *client,
+     if ((error_status != 0x00) || (error_code != QMI_PROTOCOL_ERROR_NONE))
+         return;
+ 
++    offset = 0;
+     if (((init_offset = qmi_message_tlv_read_init (message, QMI_MESSAGE_OUTPUT_TLV_ALLOCATION_INFO, NULL, &error)) == 0) ||
+         !qmi_message_tlv_read_guint8 (message, init_offset, &offset, &service_tmp, &error) ||
+         !qmi_message_tlv_read_guint8 (message, init_offset, &offset, &(info.cid), &error)) {
+-- 
+2.21.0
+

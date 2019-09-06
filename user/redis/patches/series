@@ -1,0 +1,3 @@
+0001-hyperloglog-fix-build-error.patch
+0002-makefile-allow-to-pass-LDLIBS-from-environment.patch
+0003-Remove-ARCH-expansion-from-the-Makefile.patch

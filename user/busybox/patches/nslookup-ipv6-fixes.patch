@@ -1,0 +1,14 @@
+diff -Naur busybox-1.31.0.org/networking/nslookup.c busybox-1.31.0/networking/nslookup.c
+--- busybox-1.31.0.org/networking/nslookup.c	2019-01-22 19:09:17.000000000 +1000
++++ busybox-1.31.0/networking/nslookup.c	2019-07-02 14:08:41.757213490 +1000
+@@ -176,6 +176,10 @@
+ 		_res.nscount = 1;
+ 		/* struct copy */
+ 		_res.nsaddr_list[0] = lsa->u.sin;
++#if ENABLE_FEATURE_IPV6 && defined(__UCLIBC__)
++		_res._u._ext.nscount = 1;
++		_res._u._ext.nsaddrs[0] = (void *)_res.nsaddr_list;
++#endif
+ 	}
+ #if ENABLE_FEATURE_IPV6
+ 	/* Hoped libc can cope with IPv4 address there too.

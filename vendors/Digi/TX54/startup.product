@@ -1,0 +1,41 @@
+#!/bin/sh
+
+runt set firmware.version    "$(awk '{ print $3 }' < /etc/version)"
+runt set firmware.build_date "$(cat /etc/version | sed 's/.* -- \+//')"
+
+mac="$(accns_mac)"
+mac_uppercase="$(echo $mac | tr [a-z] [A-Z])"
+runt set drm.connected false
+runt set drm.device_id "00000000-00000000-$(echo $mac_uppercase | cut -c 1-6)FF-FF$(echo $mac_uppercase | cut -c 7-12)"
+
+if [ $(grep -c -i "^Digi/" /etc/version) -ne 0 ]
+then
+	runt set system.model "$(awk '{gsub(/\//, " "); print $1" "$2}' < /etc/version | sed -r 's/ConnectIT-?/Connect IT /g')"
+else
+	runt set system.model  "$(sed -e 's?^.*/??' -e 's? .*$??' < /etc/version)"
+fi
+runt set system.mac    "$mac"
+runt set system.serial "$(fw_printenv -n serial#)"
+sku="$(fw_printenv -n sku 2> /dev/null)" && runt set system.sku "$sku"
+
+# manufacture values, for 'show manufacture'
+hardware_version="$(fw_printenv -n hwver 2>/dev/null)"
+runt set manufacture.hardware_version "${hardware_version:-Not Available}" "Hardware Version"
+
+serial_number="$(fw_printenv -n serial# 2>/dev/null)"
+runt set manufacture.serial_number "${serial_number:-Not Available}" "Serial Number"
+
+boot_ver="$(grep -o boot_ver=.+* /proc/cmdline | sed 's/^.*=//')"
+runt set manufacture.boot_ver "${boot_ver:-Not Available}" "Bootloader Version"
+
+bootpart_config="$(fw_printenv -n bootpart 2>/dev/null)"
+runt set manufacture.bootpart_config "${bootpart_config:-Not Available}" "Bootpart (Configured)"
+
+booted_partition="$(grep -o bootpart=.+* /proc/cmdline | sed 's/^.*=//')"
+runt set manufacture.booted_partition "${booted_partition:-Not Available}" "Booted Partition"
+
+ethaddr="$(fw_printenv -n ethaddr 2>/dev/null)"
+runt set manufacture.ethaddr "${ethaddr:-Not Available}" "Ethernet 0 MAC Address"
+
+runt update system
+runt update network.device

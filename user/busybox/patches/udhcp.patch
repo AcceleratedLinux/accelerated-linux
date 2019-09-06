@@ -1,0 +1,21 @@
+diff -Naur busybox-1.31.0.org/networking/udhcp/dhcpc.c busybox-1.31.0/networking/udhcp/dhcpc.c
+--- busybox-1.31.0.org/networking/udhcp/dhcpc.c	2019-06-10 19:09:31.000000000 +1000
++++ busybox-1.31.0/networking/udhcp/dhcpc.c	2019-07-02 14:02:22.732337825 +1000
+@@ -1397,7 +1397,7 @@
+ 	srand(monotonic_us());
+ 
+ 	client_data.state = INIT_SELECTING;
+-	udhcp_run_script(NULL, "deconfig");
++	udhcp_run_script(NULL, "started");
+ 	change_listen_mode(LISTEN_RAW);
+ 	packet_num = 0;
+ 	timeout = 0;
+@@ -1795,8 +1795,6 @@
+ 				if (opt & OPT_q) { /* quit after lease */
+ 					goto ret0;
+ 				}
+-				/* future renew failures should not exit (JM) */
+-				opt &= ~OPT_n;
+ #if BB_MMU /* NOMMU case backgrounded earlier */
+ 				if (!(opt & OPT_f)) {
+ 					client_background();

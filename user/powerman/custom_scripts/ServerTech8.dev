@@ -1,0 +1,64 @@
+# Sentry Switched CDU Version 6.1d
+
+specification "ServerTech8" {
+	timeout 	10  
+
+	plug name { ".A1" ".A2" ".A3" ".A4" ".A5" ".A6" ".A7" ".A8"}
+
+	script login {
+		send "logout\r\n"
+		send "\r\n"
+		expect "Username: "
+		send "admn\r\n"
+		expect "Password: "
+		send "admn\r\n"
+		expect "Switched CDU: "
+	}
+
+	script logout {
+		send "logout\r\n"
+	}
+
+	script status_all {
+		send "status\r\n"
+		expect "\.A1[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A1" $1 on="On" off="Off"
+		expect "\.A2[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A2" $1 on="On" off="Off"
+		expect "\.A3[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A3" $1 on="On" off="Off"
+		expect "\.A4[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A4" $1 on="On" off="Off"
+		expect "\.A5[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A5" $1 on="On" off="Off"
+		expect "\.A6[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A6" $1 on="On" off="Off"
+		expect "\.A7[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A7" $1 on="On" off="Off"
+		expect "\.A8[^\r\n]*(On|Off)[^\r\n]*(On|Off) *\r\n"
+		setplugstate ".A8" $1 on="On" off="Off"
+		expect "Command successful"
+		expect "\r\n\r\nSwitched CDU: "
+	}
+
+	script on {
+		delay 1
+		send "on %s\r\n"
+		expect "Switched CDU: "
+	}
+
+	script off {
+		delay 1
+		send "off %s\r\n"
+		expect "Switched CDU: "
+	}
+
+	script cycle {
+		delay 1
+		send "off %s\r\n"
+		expect "Switched CDU: "
+		delay 2
+		send "on %s\r\n"
+		expect "Switched CDU: "
+	}
+}

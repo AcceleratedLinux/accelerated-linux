@@ -1,0 +1,29 @@
+From: Javier Viguera <javier.viguera@digi.com>
+Date: Wed, 19 Jun 2019 10:28:03 +0200
+Subject: [PATCH] hyperloglog: fix build error
+
+The version of uClibc used does not support "llroundl", so use instead
+'llround' which is supported.
+
+Fixes following error:
+
+src/hyperloglog.c:1034: undefined reference to `llroundl'
+
+Signed-off-by: Javier Viguera <javier.viguera@digi.com>
+---
+ src/hyperloglog.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/hyperloglog.c b/src/hyperloglog.c
+index c0f20815c3a9..135659882ab7 100644
+--- a/src/hyperloglog.c
++++ b/src/hyperloglog.c
+@@ -1031,7 +1031,7 @@ uint64_t hllCount(struct hllhdr *hdr, int *invalid) {
+                   -0.005384159*pow(zl,6) +
+                    0.00042419*pow(zl,7);
+ 
+-    E  = llroundl(alpha*m*(m-ez)*(1/(E+beta)));
++    E  = llround(alpha*m*(m-ez)*(1/(E+beta)));
+     return (uint64_t) E;
+ }
+ 
