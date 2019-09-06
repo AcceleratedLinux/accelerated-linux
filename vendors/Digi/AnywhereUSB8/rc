@@ -1,4 +1,4 @@
-hostname "AnywhereUSB 8 Plus"
+hostname "$(fw_printenv -n serial_number)"
 
 echo "Mounting filesystems..."
 mount -t proc proc /proc
@@ -23,10 +23,17 @@ echo 6 > /proc/sys/kernel/printk
 # init devices before we need any
 cp -ra /lib/udev/devices/. /dev
 
+# test /dev/console and if not present make it /dev/null
+if ! (echo -n "" > /dev/console) 2> /dev/null; then
+	rm -f /dev/console
+	ln /dev/null /dev/console
+fi
+
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
-setmac -i eth0 -u -n 1
+ip link set eth0 name eth1
+setmac -i eth1 -u -n 1
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	#load wifi module for testing
@@ -54,7 +61,7 @@ fi
 {
     # Create /opt filesystem
     [ -d "/opt/config" ] || mkdir /opt/config
-    [ -d "/opt/boot" ] || ln -s /efi/grub /opt/boot
+    [ -L "/opt/boot" ] || ln -s /efi/grub /opt/boot
 }
 
 echo "Mounting config filesystem ..."
@@ -69,8 +76,8 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
-	[ -f /etc/config/.init2 ] && filter='$'
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2|/factory.json|/cfd.json|/nv.json|/current.json|/validation.json|/shadow|/awusbdcerts|/descriptors|/.migrate)"
+	[ -f /etc/config/.init2 ] && filter='($|/.migrate)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
 		egrep -v "/etc/config$filter" |
@@ -80,8 +87,28 @@ if [ -f /etc/config/.init ]; then
 else
 	rm -f /etc/config/.init2
 fi
+if [ ! -f /etc/config/accns.json ]; then
+	cp -ra /etc/default/. /etc/config/.
+fi
+# TODO: Disable migration for now - remove when migration is fixed
+#if [ -f /etc/config/nv.json -a ! -f /etc/config/.migrate ]; then
+#	echo "Pulling configuration from previous firmware..."
+#	if /usr/bin/migrate_to_dal; then
+		touch /etc/config/.migrate
+#		echo "Configuration updated" >/etc/config/reboot_msg
+#	else
+#		echo "Failed to pull configuration"
+#	fi
+#fi
 cat /etc/inittab.d/* > /etc/inittab
 
+# Reset device status LEDs before actions start... status LEDs all
+# default to timer trigger
+for delay_off in /sys/class/leds/*[rbg]/delay_off
+do
+	echo 86400 > $delay_off
+	echo 0 > $(dirname $delay_off)/delay_on
+done
 
 # modem firmware updates
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
@@ -93,5 +120,7 @@ modprobe ath10k_pci
 actiond &
 
 cat /etc/motd
+
+echo 0 > /sys/kernel/persistent_mem/boot_attempts
 
 exit 0

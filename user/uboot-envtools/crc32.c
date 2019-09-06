@@ -7,30 +7,22 @@
  * Copyright (C) 1995-1998 Mark Adler
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
-#include <stdint.h>
-#include <unistd.h>
-#include <endian.h>
-#include <byteswap.h>
+
+#ifdef USE_HOSTCC
+#include <arpa/inet.h>
+#else
+#include <common.h>
+#endif
+#include <compiler.h>
+#include <u-boot/crc.h>
+
+#if defined(CONFIG_HW_WATCHDOG) || defined(CONFIG_WATCHDOG)
+#include <watchdog.h>
+#endif
+#include "u-boot/zlib.h"
 
 #define local static
 #define ZEXPORT	/* empty */
-#define	OF(x)	x
-#define	Bytef	unsigned char
-#define	uInt	unsigned int
-
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define	cpu_to_le32(x)	(x)
-#define	le32_to_cpu(x)	(x)
-#elif __BYTE_ORDER == __BIG_ENDIAN
-#define	swap32(x)	((((x) & 0x000000ff) << 24) | \
-				(((x) & 0x0000ff00) << 8) | \
-				(((x) & 0x00ff0000) >> 8) | \
-				(((x) & 0xff000000) >> 24))
-#define	cpu_to_le32(x)	swap32(x)
-#define	le32_to_cpu(x)	swap32(x)
-#else
-#error "ERROR: don't know what endian your machine is?"
-#endif
 
 #define tole(x) cpu_to_le32(x)
 
@@ -258,4 +250,14 @@ uint32_t ZEXPORT crc32_wd (uint32_t crc,
 #endif
 
 	return crc;
+}
+
+void crc32_wd_buf(const unsigned char *input, unsigned int ilen,
+		unsigned char *output, unsigned int chunk_sz)
+{
+	uint32_t crc;
+
+	crc = crc32_wd(0, input, ilen, chunk_sz);
+	crc = htonl(crc);
+	memcpy(output, &crc, sizeof(crc));
 }

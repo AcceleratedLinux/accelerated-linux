@@ -8,6 +8,7 @@ config USER_QUAGGA_ZEBRA_ZEBRA
 	bool "quagga"
 	select USER_QUAGGA
 	select LIB_NCURSES
+	select LIB_LIBCARES
 	help
 		The Quagga (unofficial GNU Zebra replacement) routing daemon server
 		process.

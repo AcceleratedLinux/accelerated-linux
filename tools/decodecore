@@ -127,6 +127,10 @@ proc load_coredump {filename} {
 		if {[regexp {EIP:[ 0-9a-fA-F]*:*\[<([0-9a-f]+)>\]} $line dummy val]} {
 			set ::pc($::coredumps) 0x$val
 		}
+		# The x86_64 program counter
+		if {[regexp {RIP: [0-9a-fA-F]*:0x([0-9a-f]+)} $line dummy val]} {
+			set ::pc($::coredumps) 0x$val
+		}
 		# The MIPS program counter
 		if {[regexp {epc *: *([0-9a-f]+)} $line dummy val]} {
 			set ::pc($::coredumps) 0x$val
@@ -307,8 +311,12 @@ proc examine_coredump {filename} {
 
 	for {set i 1} {$i <= $::coredumps} {incr i} {
 		puts "---------------------- dump $i -------------------"
-		puts "Possible PC:     [find_segment $::segments($i) $::pc($i)]"
-		puts "Possible caller: [find_segment $::segments($i) $::ra($i)]"
+		if {$::pc($i) != 0} {
+			puts "Possible PC:     [find_segment $::segments($i) $::pc($i)]($::pc($i))"
+		}
+		if {$::ra($i) != 0} {
+			puts "Possible caller: [find_segment $::segments($i) $::ra($i)]($::ra($i))"
+		}
 		puts ""
 		puts "Possible Backtrace:"
 		foreach addr [split $::stack($i)] {

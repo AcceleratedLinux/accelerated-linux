@@ -823,3 +823,5 @@ ifeq ($(CONFIG_BINFMT_SHARED_FLAT),y)
 endif
 
 LOCAL_INSTALL_PATH := install_dir
+
+PTHREAD_GENERATE_MANGLE ?= -n "s/^.*@@@name@@@\([^@]*\)@@@value@@@[^0-9Xxa-fA-F-]*\([0-9Xxa-fA-F-][0-9Xxa-fA-F-]*\).*@@@end@@@.*\$$/\#define \1 \2/p"

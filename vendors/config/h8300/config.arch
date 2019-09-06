@@ -45,15 +45,15 @@ endif
 #
 # First settings we always want for all builds
 #
+MACHINE = h8300
+ARCH    = h8300
+ENDIAN ?= little
+FLOAT  ?= soft
 
-# ARCH = kernel,  TARGET_ARCH = uClibc
-
-ENDIAN        = big
-MACHINE       = h8300
-ARCH          = h8300
 CROSS_COMPILE = h8300-linux-elf-
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = h8300-linux-elf
+CONFIGURE_TOOL ?= h8300-linux-elf$(LIBCSUFFIX)
 
 CONFIG_UCLINUX=y
 

@@ -30,7 +30,7 @@
 
 #define CRYPTOCHIP_RETRIES 	5
 
-#if defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI)
+#if defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI) || defined(CONFIG_DEFAULTS_DIGI_EX12)
 #define DEVKEY_GPIO "/sys/class/gpio/gpio86/value"
 #endif
 
@@ -193,7 +193,7 @@ static int is_development_key_allowed() {
 	return 0;
 }
 
-#elif defined(CONFIG_DEFAULTS_DIGI_TX64)
+#elif defined(CONFIG_USER_NETFLASH_DEVMODE_KERNEL_CMDLINE)
 static int is_development_key_allowed()
 {
 	int allowed = 0;
@@ -239,7 +239,7 @@ static int is_development_key_allowed()
 	return 0;
 }
 
-#elif defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI)
+#elif defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI) || defined(CONFIG_DEFAULTS_DIGI_EX12)
 
 static int is_development_key_allowed() {
 	int fd = open(DEVKEY_GPIO, O_RDONLY);
@@ -311,6 +311,7 @@ void check_crypto_atmel()
 			if (key_index == CONFIG_USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT && is_development_key_allowed()) {
 				key_index = CONFIG_USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT;
 				retry = -1;
+				atecc_close(&ctx);
 				continue;
 			}
 

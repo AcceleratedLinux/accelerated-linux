@@ -30,6 +30,7 @@ static const char rcsid[] = "$Id: res_update.c,v 1.15 2007/09/05 17:32:10 dhanki
  * <viraj_bais@ccm.fm.intel.com>
  */
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/time.h>

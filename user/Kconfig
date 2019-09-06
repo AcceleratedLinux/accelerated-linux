@@ -109,7 +109,7 @@ config USER_SASH_REBOOT
 
 config USER_SASH_REBOOT_SNAPGEAR
 	bool "SnapGear reboot script"
-	depends on USER_BUSYBOX_BUSYBOX && USER_SASH_REBOOT
+	depends on USER_BUSYBOX && USER_SASH_REBOOT
 	select USER_BUSYBOX_KILLALL
 	help
 	  Use a simple script to send flatfsd a SIGHUP in place of reboot.
@@ -286,45 +286,6 @@ config USER_UBOOT_ENVTOOLS_DEFAULT_CONFIG_FILE
 	  or environment size then you will need to supply your own
 	  fw_env.config file.
 
-config USER_UBOOT_ENVTOOLS_ENV_OVERWRITE
-	bool "uboot-envtools - env overwrite"
-	depends on USER_UBOOT_ENVTOOLS
-	help
-	  fw_setenv can overwrite all env settings
-
-config USER_UBOOT_ENVTOOLS_OVERWRITE_ETHADDR_ONCE
-	bool "uboot-envtools - overwrite ethaddr once"
-	depends on USER_UBOOT_ENVTOOLS && !USER_UBOOT_ENVTOOLS_ENV_OVERWRITE
-	help
-	  fw_setenv will only overwrite serialnum/ethaddr once.
-
-config USER_UBOOT_ENVTOOLS_OPTIONS
-	bool "uboot-envtools - provide some default options"
-	depends on USER_UBOOT_ENVTOOLS
-	help
-	  A small set of configurable defaults for the envtools.
-
-config USER_UBOOT_ENVTOOLS_OPTION_ETHADDR
-	string "ethaddr"
-	depends on USER_UBOOT_ENVTOOLS_OPTIONS
-	default "00:00:00:00:00:00"
-	help
-	  The fallback ethaddr for uboot-env tools.
-
-config USER_UBOOT_ENVTOOLS_OPTION_ETH1ADDR
-	string "eth1addr"
-	depends on USER_UBOOT_ENVTOOLS_OPTIONS
-	default "00:00:00:00:00:01"
-	help
-	  The fallback eth1addr for uboot-env tools.
-
-config USER_UBOOT_ENVTOOLS_OPTION_ETH2ADDR
-	string "eth2addr"
-	depends on USER_UBOOT_ENVTOOLS_OPTIONS
-	default "00:00:00:00:00:02"
-	help
-	  The fallback eth2addr for uboot-env tools.
-
 config USER_KWBOOTFLASH_KWBOOTFLASH
 	bool "kwbootflash"
 	help
@@ -495,9 +456,18 @@ config USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT
 	  Development key slot used for the ATECC508-based signature
 	  verification.
 
+config USER_NETFLASH_ATECC508A_KERNEL_DRIVER
+	bool "netflash ATECC508 communication uses kernel driver"
+	depends on USER_NETFLASH_ATECC508A
+	default n
+	help
+	  Netflash uses the 'atsha204' kernel driver to communicate with the
+	  ATECC508A chip.
+
 config USER_NETFLASH_ATECC508A_I2C_BUS
 	int "I2C bus index of the ATECC508A chip"
 	depends on USER_NETFLASH_ATECC508A
+	depends on !USER_NETFLASH_ATECC508A_KERNEL_DRIVER
 	default 0
 	help
 	  The I2C bus index, where the ATECC508A chip is connected to.
@@ -505,6 +475,7 @@ config USER_NETFLASH_ATECC508A_I2C_BUS
 config USER_NETFLASH_ATECC508A_I2C_ADDRESS
 	hex "I2C bus address of the ATECC508A chip"
 	depends on USER_NETFLASH_ATECC508A
+	depends on !USER_NETFLASH_ATECC508A_KERNEL_DRIVER
 	default 0x60
 	help
 	  The I2C bus address of the ATECC508A chip.
@@ -517,6 +488,15 @@ config USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL
 	  If enabled, Netflash expects the kernel image is embedded in the
 	  rootfs image.
 	  Otherwise it expects, the kernel is appended to the rootfs image.
+
+config USER_NETFLASH_DEVMODE_KERNEL_CMDLINE
+	bool "netflash checking development mode in kernel command line"
+	depends on USER_NETFLASH_ATECC508A
+	default n
+	help
+	  If enabled, Netflash will check the kernel command line for "dev_mode"
+	  argument. If it is there, will verify the signature with the
+	  development key as well.
 
 config USER_NETFLASH_CRYPTO_OPTIONAL
 	bool "netflash optional public key encryption"
@@ -1102,11 +1082,6 @@ config USER_TRUSTEDSOURCE
 	bool "antispam - trusted source"
 	select USER_CLAMAV_CLAMSMTP
 
-config USER_BIND_BIND
-	bool "bind"
-	help
-	  ISC BIND DNS nameserver.
-
 config USER_GOAHEAD_GOAHEAD
 	bool "goahead web server"
 	select LIB_LIBNVRAM
@@ -1521,11 +1496,6 @@ config USER_IPCHAINS_IPCHAINS
 	  An alternate method for configuring the firwall rules.  Note that you
 	  must have ipchains configured in your kernel for this program to work.
 	  Approx. binary size: 53k
-
-config USER_IPERF_IPERF
-	bool "iperf"
-	help
-	  An application for measuring network performance.
 
 config USER_IPFWADM_IPFWADM
 	bool "ipfwadm"
@@ -4054,7 +4024,7 @@ endmenu
 
 menu "BusyBox"
 
-config USER_BUSYBOX_BUSYBOX
+config USER_BUSYBOX
 	bool "BusyBox"
 	help
 	  BusyBox combines tiny versions of many common UNIX utilities into
@@ -4063,8 +4033,8 @@ config USER_BUSYBOX_BUSYBOX
 	  findutils, textutils, grep, gzip, tar, etc.  Simply select those
 	  utilities and options you want.
 
-if USER_BUSYBOX_BUSYBOX
-source ../user/busybox/Kconfig
+if USER_BUSYBOX
+source ../user/busybox/Kconfig.busybox
 endif
 
 endmenu

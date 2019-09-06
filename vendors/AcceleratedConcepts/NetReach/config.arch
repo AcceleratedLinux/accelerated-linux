@@ -13,6 +13,8 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
 ############################################################################
 
+CROSS_COMPILE = mips-linux-20170624-
+
 include $(ROOTDIR)/vendors/config/mips/config.arch
 
 ############################################################################

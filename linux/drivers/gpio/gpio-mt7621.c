@@ -8,6 +8,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
+#include <linux/irqdomain.h>
 #include <linux/module.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
@@ -30,7 +31,6 @@
 #define GPIO_REG_EDGE		0xA0
 
 struct mtk_gc {
-	struct irq_chip irq_chip;
 	struct gpio_chip chip;
 	spinlock_t lock;
 	int bank;
@@ -54,6 +54,8 @@ struct mtk {
 	struct device *dev;
 	void __iomem *base;
 	int gpio_irq;
+	struct irq_domain *irq_domain;
+	struct irq_chip irq_chip;
 	struct mtk_gc gc_map[MTK_BANK_CNT];
 };
 
@@ -86,20 +88,26 @@ mtk_gpio_r32(struct mtk_gc *rg, u32 offset)
 static irqreturn_t
 mediatek_gpio_irq_handler(int irq, void *data)
 {
-	struct gpio_chip *gc = data;
-	struct mtk_gc *rg = to_mediatek_gpio(gc);
+	struct mtk *mtk = data;
 	irqreturn_t ret = IRQ_NONE;
-	unsigned long pending;
-	int bit;
+	int bank;
 
-	pending = mtk_gpio_r32(rg, GPIO_REG_STAT);
+	for (bank = 0; bank < MTK_BANK_CNT; bank++) {
+		struct mtk_gc *rg = &mtk->gc_map[bank];
+		unsigned long pending;
+		int bit;
 
-	for_each_set_bit(bit, &pending, MTK_BANK_WIDTH) {
-		u32 map = irq_find_mapping(gc->irq.domain, bit);
+		pending = mtk_gpio_r32(rg, GPIO_REG_STAT);
 
-		generic_handle_irq(map);
-		mtk_gpio_w32(rg, GPIO_REG_STAT, BIT(bit));
-		ret |= IRQ_HANDLED;
+		for_each_set_bit(bit, &pending, MTK_BANK_WIDTH) {
+			unsigned int virq;
+
+			virq = irq_linear_revmap(mtk->irq_domain,
+						 bank * MTK_BANK_WIDTH + bit);
+			generic_handle_irq(virq);
+			mtk_gpio_w32(rg, GPIO_REG_STAT, BIT(bit));
+			ret |= IRQ_HANDLED;
+		}
 	}
 
 	return ret;
@@ -207,6 +215,68 @@ mediatek_gpio_xlate(struct gpio_chip *chip,
 }
 
 static int
+mediatek_gpio_dir_out(struct gpio_chip *chip, unsigned int gpio, int val)
+{
+	unsigned long flags;
+
+	/*
+	 * As logic dictates, the bpgio_dir_out() first sets the GPIO's value,
+	 * then changes the mode to output. Unfortunately, the MT7621 doesn't
+	 * support this sequence, as it is using the same 'value' register in
+	 * INPUT-, and OUTPUT-mode: all 'value' register writing in INPUT-mode
+	 * get lost. So we first change the direction, and after that we change
+	 * the value
+	 */
+
+	spin_lock_irqsave(&chip->bgpio_lock, flags);
+
+	chip->bgpio_dir |= BIT(gpio);
+	chip->write_reg(chip->reg_dir, chip->bgpio_dir);
+
+	spin_unlock_irqrestore(&chip->bgpio_lock, flags);
+
+	chip->set(chip, gpio, val);
+
+	return 0;
+}
+
+static int
+mediatek_gpio_to_irq(struct gpio_chip *chip, unsigned int gpio)
+{
+	struct mtk *mtk = gpiochip_get_data(chip);
+	struct mtk_gc *rg = to_mediatek_gpio(chip);
+
+	return irq_create_mapping(mtk->irq_domain,
+				  rg->bank * MTK_BANK_WIDTH + gpio);
+}
+
+static int
+mediatek_gpio_irq_domain_map(struct irq_domain *h, unsigned int irq,
+			irq_hw_number_t hwirq)
+{
+	struct mtk *mtk = h->host_data;
+	int bank;
+
+	if (hwirq >= MTK_BANK_CNT * MTK_BANK_WIDTH)
+		return -EINVAL;
+
+	bank = hwirq / MTK_BANK_WIDTH;
+
+	dev_dbg(mtk->dev, "map hw irq=%d, irq=%d, bank=%d\n",
+		(int)hwirq, irq, bank);
+
+	irq_set_chip_data(irq, &mtk->gc_map[bank].chip);
+	irq_set_chip_and_handler(irq, &mtk->irq_chip, handle_level_irq);
+
+	return 0;
+}
+
+static const struct irq_domain_ops mediatek_gpio_irq_domain_ops = {
+	.map	= mediatek_gpio_irq_domain_map,
+	.xlate	= irq_domain_xlate_twocell,
+};
+
+static int
 mediatek_gpio_bank_probe(struct device *dev,
 			 struct device_node *node, int bank)
 {
@@ -240,46 +310,14 @@ mediatek_gpio_bank_probe(struct device *dev,
 					dev_name(dev), bank);
 	if (!rg->chip.label)
 		return -ENOMEM;
+	rg->chip.direction_output = mediatek_gpio_dir_out;
+	rg->chip.to_irq = mediatek_gpio_to_irq;
 
 	ret = devm_gpiochip_add_data(dev, &rg->chip, mtk);
 	if (ret < 0) {
 		dev_err(dev, "Could not register gpio %d, ret=%d\n",
 			rg->chip.ngpio, ret);
 		return ret;
-	}
-
-	rg->irq_chip.name = dev_name(dev);
-	rg->irq_chip.parent_device = dev;
-	rg->irq_chip.irq_unmask = mediatek_gpio_irq_unmask;
-	rg->irq_chip.irq_mask = mediatek_gpio_irq_mask;
-	rg->irq_chip.irq_mask_ack = mediatek_gpio_irq_mask;
-	rg->irq_chip.irq_set_type = mediatek_gpio_irq_type;
-
-	if (mtk->gpio_irq) {
-		/*
-		 * Manually request the irq here instead of passing
-		 * a flow-handler to gpiochip_set_chained_irqchip,
-		 * because the irq is shared.
-		 */
-		ret = devm_request_irq(dev, mtk->gpio_irq,
-				       mediatek_gpio_irq_handler, IRQF_SHARED,
-				       rg->chip.label, &rg->chip);
-
-		if (ret) {
-			dev_err(dev, "Error requesting IRQ %d: %d\n",
-				mtk->gpio_irq, ret);
-			return ret;
-		}
-
-		ret = gpiochip_irqchip_add(&rg->chip, &rg->irq_chip,
-					   0, handle_simple_irq, IRQ_TYPE_NONE);
-		if (ret) {
-			dev_err(dev, "failed to add gpiochip_irqchip\n");
-			return ret;
-		}
-
-		gpiochip_set_chained_irqchip(&rg->chip, &rg->irq_chip,
-					     mtk->gpio_irq, NULL);
 	}
 
 	/* set polarity to low for all gpios */
@@ -299,6 +337,7 @@ mediatek_gpio_probe(struct platform_device *pdev)
 	struct mtk *mtk;
 	int i;
 	int ret;
+	struct irq_chip *irq_chip;
 
 	mtk = devm_kzalloc(dev, sizeof(*mtk), GFP_KERNEL);
 	if (!mtk)
@@ -318,6 +357,48 @@ mediatek_gpio_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+	if (mtk->gpio_irq) {
+		const char *name = dev_name(dev);
+
+		irq_chip = &mtk->irq_chip;
+		irq_chip->name = name;
+		irq_chip->parent_device = dev;
+		irq_chip->irq_unmask = mediatek_gpio_irq_unmask;
+		irq_chip->irq_mask = mediatek_gpio_irq_mask;
+		irq_chip->irq_mask_ack = mediatek_gpio_irq_mask;
+		irq_chip->irq_set_type = mediatek_gpio_irq_type;
+
+		mtk->irq_domain = irq_domain_add_linear(np,
+			MTK_BANK_CNT * MTK_BANK_WIDTH,
+			&mediatek_gpio_irq_domain_ops, mtk);
+		if (!mtk->irq_domain) {
+			dev_err(dev, "cannot initialize IRQ domain\n");
+			return -ENXIO;
+		}
+
+		ret = devm_request_irq(dev, mtk->gpio_irq,
+				       mediatek_gpio_irq_handler, IRQF_SHARED,
+				       name, mtk);
+		if (ret) {
+			dev_err(dev, "Error requesting IRQ %d: %d\n",
+				mtk->gpio_irq, ret);
+
+			irq_domain_remove(mtk->irq_domain);
+			return ret;
+		}
+	} else
+		mtk->irq_domain = NULL;
+
+	return 0;
+}
+
+static int mediatek_gpio_remove(struct platform_device *pdev)
+{
+	struct mtk *mtk = platform_get_drvdata(pdev);
+
+	if (mtk->irq_domain)
+		irq_domain_remove(mtk->irq_domain);
+
 	return 0;
 }
 
@@ -329,6 +410,7 @@ MODULE_DEVICE_TABLE(of, mediatek_gpio_match);
 
 static struct platform_driver mediatek_gpio_driver = {
 	.probe = mediatek_gpio_probe,
+	.remove = mediatek_gpio_remove,
 	.driver = {
 		.name = "mt7621_gpio",
 		.of_match_table = mediatek_gpio_match,

@@ -1,7 +1,7 @@
-diff -ru ModemManager/src/mm-bearer-qmi.c ModemManager-patched/src/mm-bearer-qmi.c
---- ModemManager/src/mm-bearer-qmi.c	2017-07-06 12:17:52.954453400 +1000
-+++ ModemManager/src/mm-bearer-qmi.c	2017-07-06 12:17:55.434453440 +1000
-@@ -957,9 +957,11 @@
+diff -Nurd ModemManager.orig/src/mm-bearer-qmi.c ModemManager/src/mm-bearer-qmi.c
+--- ModemManager.orig/src/mm-bearer-qmi.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2019-05-29 11:08:19.348305221 +1000
+@@ -1242,9 +1242,11 @@
           * to request. If the LLP is raw-ip, we force Static IP, because not
           * all DHCP clients support the raw-ip interfaces; otherwise default
           * to DHCP as always. */

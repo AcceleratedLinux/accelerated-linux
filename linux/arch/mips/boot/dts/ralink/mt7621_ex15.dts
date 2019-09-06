@@ -135,7 +135,7 @@
 &pinctrl {
 	state_default: pinctrl0 {
 		gpio {
-			group = "rgmii2";
+			groups = "rgmii2";
 			function = "gpio";
 		};
 	};

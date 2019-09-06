@@ -1,11 +1,10 @@
 If the user requested a netmask of 0.0.0.0 then allow it.  This is
 useful to force a lease regardless of what subnet is on that interface.
 
-Index: dnsmasq-2.72/src/dhcp.c
-===================================================================
---- dnsmasq-2.72.orig/src/dhcp.c
-+++ dnsmasq-2.72/src/dhcp.c
-@@ -509,7 +509,7 @@
+diff -Nurd dnsmasq-2.80.orig/src/dhcp.c dnsmasq-2.80/src/dhcp.c
+--- dnsmasq-2.80.orig/src/dhcp.c	2018-10-19 04:21:55.000000000 +1000
++++ dnsmasq-2.80/src/dhcp.c	2019-07-16 08:16:47.915312179 +1000
+@@ -534,7 +534,7 @@
   	context->netmask = netmask;
        }
        

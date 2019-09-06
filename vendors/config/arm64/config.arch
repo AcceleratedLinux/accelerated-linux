@@ -46,10 +46,15 @@ endif
 #
 # First settings we always want for all builds.
 #
+MACHINE = arm64
+ARCH    = arm64
 
-ENDIAN        ?= little
-MACHINE        = arm64
-ARCH           = arm64
+#
+# The default on ARM64 is little-endian with hard float.
+# Can be overriden by targets if required.
+#
+ENDIAN ?= little
+FLOAT  ?= hard
 
 ifneq ($(shell which aarch64-linux-20171204-gcc),)
 CROSS_COMPILE ?= aarch64-linux-20171204-
@@ -59,6 +64,7 @@ endif
 
 CROSS          = $(CROSS_COMPILE)
 CONFIGURE_HOST = aarch64-linux
+CONFIGURE_TOOL ?= aarch64-linux$(LIBCSUFFIX)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)
@@ -98,7 +104,7 @@ ifdef UCLINUX_BUILD_LIB
 	CFLAGS  := -g
 	LDFLAGS :=
   else
-	CFLAGS  := -O1
+	CFLAGS  := -O2
 	LDFLAGS := -Wl,-S
   endif
 	CFLAGS  += -pipe
@@ -126,7 +132,7 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  := -g
 	LDFLAGS :=
   else
-	CFLAGS  := -O1
+	CFLAGS  := -O2
 	LDFLAGS := -g
   endif
 	CFLAGS  += -pipe

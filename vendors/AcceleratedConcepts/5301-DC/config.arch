@@ -24,4 +24,6 @@ CPUFLAGS = -msoft-float
 
 include $(ROOTDIR)/vendors/config/arm/config.arch
 
+CFLAGS := $(CFLAGS:-O2=-O1)
+
 ############################################################################

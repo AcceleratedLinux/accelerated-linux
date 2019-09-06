@@ -130,9 +130,6 @@ fi
 # modem firmware updates
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
-# load wifi module before we come up
-[ -f /etc/qualcomm.sh ] && /etc/qualcomm.sh
-
 # set the default password if it is empty
 [ -z "$(config get auth.user.root.password)" ] && config set auth.user.root.password "$(fw_printenv -n upasswd)"
 

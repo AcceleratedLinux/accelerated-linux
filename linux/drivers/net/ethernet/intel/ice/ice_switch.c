@@ -98,7 +98,7 @@ enum ice_status ice_init_def_sw_recp(struct ice_hw *hw)
 	u8 i;
 
 	recps = devm_kcalloc(ice_hw_to_dev(hw), ICE_MAX_NUM_RECIPES,
-			     sizeof(struct ice_sw_recipe), GFP_KERNEL);
+			     sizeof(*recps), GFP_KERNEL);
 	if (!recps)
 		return ICE_ERR_NO_MEMORY;
 
@@ -643,21 +643,37 @@ static void ice_fill_sw_info(struct ice_hw *hw, struct ice_fltr_info *fi)
 	     fi->fltr_act == ICE_FWD_TO_VSI_LIST ||
 	     fi->fltr_act == ICE_FWD_TO_Q ||
 	     fi->fltr_act == ICE_FWD_TO_QGRP)) {
-		fi->lb_en = true;
-		/* Do not set lan_en to TRUE if
+		/* Setting LB for prune actions will result in replicated
+		 * packets to the internal switch that will be dropped.
+		 */
+		if (fi->lkup_type != ICE_SW_LKUP_VLAN)
+			fi->lb_en = true;
+
+		/* Set lan_en to TRUE if
 		 * 1. The switch is a VEB AND
 		 * 2
-		 * 2.1 The lookup is MAC with unicast addr for MAC, OR
-		 * 2.2 The lookup is MAC_VLAN with unicast addr for MAC
+		 * 2.1 The lookup is VLAN, OR
+		 * 2.2 The lookup is default port mode, OR
+		 * 2.3 The lookup is MAC with mcast or bcast addr for MAC, OR
+		 * 2.4 The lookup is MAC_VLAN with mcast or bcast addr for MAC.
 		 *
-		 * In all other cases, the LAN enable has to be set to true.
+		 * OR
+		 *
+		 * The switch is a VEPA.
+		 *
+		 * In all other cases, the LAN enable has to be set to false.
 		 */
-		if (!(hw->evb_veb &&
-		      ((fi->lkup_type == ICE_SW_LKUP_MAC &&
-			is_unicast_ether_addr(fi->l_data.mac.mac_addr)) ||
-		       (fi->lkup_type == ICE_SW_LKUP_MAC_VLAN &&
-			is_unicast_ether_addr(fi->l_data.mac_vlan.mac_addr)))))
+		if (hw->evb_veb) {
+			if (fi->lkup_type == ICE_SW_LKUP_VLAN ||
+			    fi->lkup_type == ICE_SW_LKUP_DFLT ||
+			    (fi->lkup_type == ICE_SW_LKUP_MAC &&
+			     !is_unicast_ether_addr(fi->l_data.mac.mac_addr)) ||
+			    (fi->lkup_type == ICE_SW_LKUP_MAC_VLAN &&
+			     !is_unicast_ether_addr(fi->l_data.mac.mac_addr)))
+				fi->lan_en = true;
+		} else {
 			fi->lan_en = true;
+		}
 	}
 }
 
@@ -1538,9 +1554,20 @@ ice_remove_rule_internal(struct ice_hw *hw, u8 recp_id,
 	} else if (!list_elem->vsi_list_info) {
 		status = ICE_ERR_DOES_NOT_EXIST;
 		goto exit;
+	} else if (list_elem->vsi_list_info->ref_cnt > 1) {
+		/* a ref_cnt > 1 indicates that the vsi_list is being
+		 * shared by multiple rules. Decrement the ref_cnt and
+		 * remove this rule, but do not modify the list, as it
+		 * is in-use by other rules.
+		 */
+		list_elem->vsi_list_info->ref_cnt--;
+		remove_rule = true;
 	} else {
-		if (list_elem->vsi_list_info->ref_cnt > 1)
-			list_elem->vsi_list_info->ref_cnt--;
+		/* a ref_cnt of 1 indicates the vsi_list is only used
+		 * by one rule. However, the original removal request is only
+		 * for a single VSI. Update the vsi_list first, and only
+		 * remove the rule if there are no further VSIs in this list.
+		 */
 		vsi_handle = f_entry->fltr_info.vsi_handle;
 		status = ice_rem_update_vsi_list(hw, vsi_handle, list_elem);
 		if (status)

@@ -323,6 +323,7 @@
 				reg = <9>;
 				label = "cpu";
 				ethernet = <&eth0>;
+				phy-mode = "sgmii";
 				fixed-link {
 					speed = <1000>;
 					full-duplex;

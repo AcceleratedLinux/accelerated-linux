@@ -27,6 +27,7 @@
 /sys/elf.h
 /sys/epoll.h
 /sys/eventfd.h
+/sys/fanotify.h
 /sys/fpregdef.h
 /sys/inotify.h
 /sys/io.h

@@ -130,7 +130,7 @@ romfs:
 	echo "$(VERSIONSTR) -- " `date` > $(ROMFSDIR)/etc/version
 
 mkcramfs: $(ROOTDIR)/user/cramfs/mkcramfs.c
-	$(HOSTCC) -o $@ -I$(STAGEDIR)/include $< -lz
+	$(HOSTCC) -o $@ $< -lz
 
 image: mkcramfs
 	-cp $(ROOTDIR)/boot/ixp425/bios.bin $(ROMFSDIR)/boot/biosplus.bin

@@ -6,20 +6,21 @@
 # allow script override
 [ -x /etc/config/led ] && exec /etc/config/led "$@"
 ##############################################################
+
+##############################################################
 #exec 2>> /tmp/led.log
 #set -x
 
 case "$1" in
 start)
-	ledcmd -a -N COM -N ETH -N ONLINE
+	# Turn off all LEDs
+	ledcmd -O ALL -o POWER_B
+
 	exit 0
 	;;
 reload)
 	;;
 stop)
-	# Firmware flash
-	ledcmd -a -n COM -n ETH -n ONLINE -o COM -f ETH -O ONLINE
-	exit 0
 	;;
 *)
 	echo "Usage: $0 {start|stop|reload}"
@@ -27,93 +28,115 @@ stop)
 	;;
 esac
 
-##############################################################
+LEDCMD=
 
-# Find the primary modem, or alternatively *any* modem
-idx="$(modem name=modem idx 2> /dev/null)" || idx="$(modem idx 2> /dev/null)"
-# Find the first interface on the modem
-for i in $(runt keys mm.map.interface_idx); do
-	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
-		&& intf=$i && break
+##############################################################
+# Update wifi leds
+runt update network.wireless
+eval $(config stop)
+eval $(config start)
+config load
+
+wifi_led="-O"
+aps=$(config keys network.wireless.ap)
+for ap in $aps ; do
+	ap=${ap%%.*}
+	device="$(runt get network.wireless.ap.$ap.device)"
+	if [ -n "$device" ]; then
+		if ip link show $device up | grep -q "state UP"; then
+			wifi_led="-o"
+		fi
+	fi
 done
 
-if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
-		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
-	if [ "$(runt get netmon.ipv4_interface_$intf.passed)" = n \
-			-o "$(runt get netmon.ipv6_interface_$intf.passed)" = n ]; then
-		CELL=1
-	elif [ "$(runt get mm.modem.$idx.status.gtech)" = 4g ]; then
-		CELL=3
-	else
-		CELL=2
+clients=$(config keys network.wireless.client)
+for client in $clients ; do
+	client=${client%%.*}
+	device="$(runt get network.wireless.client.$client.device)"
+	if [ -n "$device" ]; then
+		if ip link show $device up | grep -q "state UP"; then
+			wifi_led="-o"
+		fi
 	fi
-elif [ "$(runt get network.interface.$intf.ipv4.pending)" = 1 ] \
-		|| [ "$(runt get network.interface.$intf.ipv6.pending)" = 1 ]; then
-	CELL=1
-else
-	CELL=0 # not-valid, never going to work
-fi
+done
 
-if [ "$CELL" != 0 ]; then
+LEDCMD="${LEDCMD} ${wifi_led} WIFI1_G"
+
+eval $(config stop)
+
+##############################################################
+# Cellular LEDs
+
+# The TX54 has one LED per modem for signal strength
+# Off: No service.
+# Yellow: Poor / Fair signal.
+# Green: Good / Excellent signal.
+update_signal_led() {
+	idx=$1
+	wan=$2
+
 	case "$(runt get mm.modem.$idx.status.bars)" in
-	5) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
-	4) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
-	3) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;
-	2) SIGNAL="-o RSS1 -o RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
-	1) SIGNAL="-o RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
-	*) SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+		4|5) SIGNAL="-o ${wan}_SIGNAL_G -O ${wan}_SIGNAL_Y" ;;
+		1|2|3) SIGNAL="-o ${wan}_SIGNAL_Y -O ${wan}_SIGNAL_G" ;;
+		*) SIGNAL="-O ${wan}_SIGNAL_Y -O ${wan}_SIGNAL_G" ;;
 	esac
-else
-	SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5"
-fi
+}
+
+# TX54 service LED
+# Off: No service.
+# Blinking Green: 2G/3G/4G connection is coming up.
+# Solid Yellow: 2G or 3G connection is up.
+# Solid Green: 4G connection is up.
+update_service_led() {
+	idx=$1
+	wan=$2
+
+	if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
+		case "$(runt get mm.modem.$idx.status.gtech)" in
+			4g) SERVICE="-o ${wan}_SERVICE_G -O ${wan}_SERVICE_Y" ;;
+			3g|2g) SERVICE="-o ${wan}_SERVICE_Y -O ${wan}_SERVICE_G" ;;
+			*) SERVICE="-O ${wan}_SERVICE_Y -O ${wan}_SERVICE_G" ;;
+		esac
+	elif [ "$(runt get mm.modem.$idx.status.state)" = disabled ]; then
+		SERVICE="-O ${wan}_SERVICE_Y -O ${wan}_SERVICE_G"
+	else
+		 SERVICE="-f ${wan}_SERVICE_G -O ${wan}_SERVICE_Y"
+	fi
+}
+
+idxs="$(modem idxs 2>/dev/null)"
+
+for idx in $idxs; do
+
+	port="$(runt get mm.modem.$idx.modem.port)"
+	wan_port=${port#*/}
+	wan="$(printf '%s\n' "$wan_port" | awk '{ print toupper($0) }')"
+
+	SIGNAL=
+	SERVICE=
+	update_signal_led "$idx" "$wan"
+	update_service_led "$idx" "$wan"
+
+	LEDCMD="${LEDCMD} ${SERVICE} ${SIGNAL}"
+done
+
+##############################################################
+# GNSS LED
+#
+# Off: GNSS is disabled
+# Flashing: GNSS is enabled but does not have a valid fix
+# On: GNSS is enabled and has a valid fix
+#
+case "$(runt get location.state)" in
+    "Enabled, signal") gnss_led_state="-o" ;;
+    "Enabled, no signal") gnss_led_state="-f" ;;
+    *) gnss_led_state="-O" ;;
+esac
+
+LEDCMD="${LEDCMD} $gnss_led_state GNSS_G"
 
 ##############################################################
 
-LINK=$(ip link show lan 2> /dev/null | grep -c "state UP")
-
-LAN4=-1
-LAN6=-1
-if [ "$LINK" = 1 ]; then
-	case $(runt get network.interface.lan.ipv4.up) in
-	1) [ "$(runt get netmon.ipv4_interface_lan.passed)" = n ] && LAN4=1 || LAN4=2 ;;
-	0) [ "$(runt get network.interface.lan.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
-	esac
-
-	case $(runt get network.interface.lan.ipv6.up) in
-	1) [ "$(runt get netmon.ipv6_interface_lan.passed)" = n ] && LAN6=1 || LAN6=2 ;;
-	0) [ "$(runt get network.interface.lan.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
-	esac
-fi
-
-if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
-	# if neither interface exists, match link
-	LAN=$((LINK ? 2 : 0))
-elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
-	LAN=2
-elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
-	LAN=1
-else
-	LAN=0
-fi
-
-##############################################################
-
-#
-# The LED table of things based on all possible values above
-#
-LED00="-f COM -O ONLINE -f ETH" # flashing yellow
-LED10="-f COM -O ONLINE -f ETH" # flashing yellow
-LED20="-O COM -O ONLINE -f ETH" # flashing green
-LED30="-O COM -f ONLINE -O ETH" # flashing blue
-LED01="-f COM -O ONLINE -f ETH" # flashing yellow
-LED11="-f COM -O ONLINE -f ETH" # flashing yellow
-LED21="-O COM -O ONLINE -f ETH" # flashing green
-LED31="-O COM -f ONLINE -O ETH" # flashing blue
-LED02="-f COM -f ONLINE -f ETH" # flashing white
-LED12="-f COM -f ONLINE -f ETH" # flashing white
-LED22="-O COM -O ONLINE -o ETH" # solid green
-LED32="-O COM -o ONLINE -O ETH" # solid blue
-
-eval ledcmd $SIGNAL \$LED$CELL$LAN
+[ -z "${LEDCMD}" ] || eval ledcmd ${LEDCMD}
 
 exit 0

@@ -481,6 +481,13 @@ static void gpmi_nfc_compute_timings(struct gpmi_nand_data *this,
 
 void gpmi_nfc_apply_timings(struct gpmi_nand_data *this)
 {
+	/*
+	 * Temporarily not using the optimized timings. We have seen on
+	 * at least 2 different iMX6 based platforms DMA timeouts at kernel
+	 * startup. The timeouts cause the driver to disable the NAND
+	 * flash completely - so no system flash visible.
+	 */
+#if 0
 	struct gpmi_nfc_hardware_timing *hw = &this->hw;
 	struct resources *r = &this->resources;
 	void __iomem *gpmi_regs = r->gpmi_regs;
@@ -505,6 +512,7 @@ void gpmi_nfc_apply_timings(struct gpmi_nand_data *this)
 
 	/* Wait for the DLL to settle. */
 	udelay(dll_wait_time_us);
+#endif
 }
 
 int gpmi_setup_data_interface(struct nand_chip *chip, int chipnr,

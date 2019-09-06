@@ -74,12 +74,6 @@
 #endif
 #endif
 
-/* Get linux C library versions. */
-#if defined(__linux__) && !defined(__UCLIBC__) && !defined(__uClinux__)
-#  include <libio.h> 
-#endif
-
-
 /* Follows system specific switches. If you run on a 
    new system, you may want to edit these. 
    May replace this with Autoconf one day. 

@@ -10,19 +10,9 @@ yet connected. Now we require bearer connect and disconnect procedures
 The states during connection are:    claimed -> connected -> unclaimed
 The states during disconnection are: claimed -> disconnected -> unclaimed
 
---- ModemManager/src/mm-port.h	2019-01-14 09:38:06.502308429 +1000
-+++ ModemManager/src/mm-port.h	2019-01-24 16:27:27.536409543 +1000
-@@ -77,6 +77,8 @@
- MMPortType      mm_port_get_port_type      (MMPort *self);
- gboolean        mm_port_get_connected      (MMPort *self);
- void            mm_port_set_connected      (MMPort *self, gboolean connected);
-+gboolean        mm_port_get_claimed        (MMPort *self);
-+void            mm_port_set_claimed        (MMPort *self, gboolean claimed);
- MMKernelDevice *mm_port_peek_kernel_device (MMPort *self);
- 
- #endif /* MM_PORT_H */
---- ModemManager/src/mm-base-modem.c	2019-01-14 09:38:06.486308527 +1000
-+++ ModemManager/src/mm-base-modem.c	2019-01-24 16:29:06.673313178 +1000
+diff -Nurd ModemManager.orig/src/mm-base-modem.c ModemManager/src/mm-base-modem.c
+--- ModemManager.orig/src/mm-base-modem.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-base-modem.c	2019-05-29 11:08:19.640306659 +1000
 @@ -826,6 +826,7 @@
      /* Return first not-connected data port */
      for (l = self->priv->data; l; l = g_list_next (l)) {
@@ -31,8 +21,68 @@ The states during disconnection are: claimed -> disconnected -> unclaimed
              (mm_port_get_port_type ((MMPort *)l->data) == type ||
               type == MM_PORT_TYPE_UNKNOWN)) {
              return (MMPort *)l->data;
---- ModemManager/src/mm-port.c	2019-01-14 09:38:06.502308429 +1000
-+++ ModemManager/src/mm-port.c	2019-01-25 13:41:25.378982824 +1000
+diff -Nurd ModemManager.orig/src/mm-bearer-qmi.c ModemManager/src/mm-bearer-qmi.c
+--- ModemManager.orig/src/mm-bearer-qmi.c	2019-05-29 11:08:19.436305652 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2019-05-29 11:08:19.640306659 +1000
+@@ -449,6 +449,9 @@
+     g_free (ctx->user);
+     g_free (ctx->password);
+ 
++    if (ctx->data)
++        mm_port_set_claimed ((MMPort *)ctx->data, FALSE);
++
+     if (ctx->packet_service_status_ipv4_indication_id) {
+         common_setup_cleanup_packet_service_status_unsolicited_events (ctx->self,
+                                                                        ctx->client_ipv4,
+@@ -1728,6 +1731,10 @@
+         }
+     }
+ 
++    /* Claim the data port so other bearers do not try to use it while this
++     * bearer is connecting. */
++    mm_port_set_claimed ((MMPort *)ctx->data, TRUE);
++
+     /* Run! */
+     connect_context_step (task);
+ }
+@@ -1754,6 +1761,8 @@
+     QmiClientWds *client_ipv6;
+     guint32 packet_data_handle_ipv6;
+     GError *error_ipv6;
++
++    MMPort *data;
+ } DisconnectContext;
+ 
+ static void
+@@ -1767,6 +1776,8 @@
+         g_object_unref (ctx->client_ipv4);
+     if (ctx->client_ipv6)
+         g_object_unref (ctx->client_ipv6);
++    if (ctx->data)
++        mm_port_set_claimed ((MMPort *)ctx->data, FALSE);
+     g_slice_free (DisconnectContext, ctx);
+ }
+ 
+@@ -1991,6 +2002,7 @@
+     }
+ 
+     ctx = g_slice_new0 (DisconnectContext);
++    ctx->data = g_object_ref (self->priv->data);
+     ctx->client_ipv4 = self->priv->client_ipv4 ? g_object_ref (self->priv->client_ipv4) : NULL;
+     ctx->packet_data_handle_ipv4 = self->priv->packet_data_handle_ipv4;
+     ctx->client_ipv6 = self->priv->client_ipv6 ? g_object_ref (self->priv->client_ipv6) : NULL;
+@@ -2000,6 +2012,8 @@
+     task = g_task_new (self, NULL, callback, user_data);
+     g_task_set_task_data (task, ctx, (GDestroyNotify)disconnect_context_free);
+ 
++    mm_port_set_claimed ((MMPort *)ctx->data, TRUE);
++
+     /* Run! */
+     disconnect_context_step (task);
+ }
+diff -Nurd ModemManager.orig/src/mm-port.c ModemManager/src/mm-port.c
+--- ModemManager.orig/src/mm-port.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-port.c	2019-05-29 11:08:19.640306659 +1000
 @@ -38,6 +38,7 @@
      MMPortSubsys subsys;
      MMPortType ptype;
@@ -72,45 +122,15 @@ The states during disconnection are: claimed -> disconnected -> unclaimed
  MMKernelDevice *
  mm_port_peek_kernel_device (MMPort *self)
  {
---- ModemManager/src/mm-bearer-qmi.c	2019-01-14 09:38:06.622307694 +1000
-+++ ModemManager/src/mm-bearer-qmi.c	2019-02-12 15:51:22.356314293 +1000
-@@ -449,6 +449,9 @@
-     g_free (ctx->user);
-     g_free (ctx->password);
+diff -Nurd ModemManager.orig/src/mm-port.h ModemManager/src/mm-port.h
+--- ModemManager.orig/src/mm-port.h	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-port.h	2019-05-29 11:08:19.640306659 +1000
+@@ -77,6 +77,8 @@
+ MMPortType      mm_port_get_port_type      (MMPort *self);
+ gboolean        mm_port_get_connected      (MMPort *self);
+ void            mm_port_set_connected      (MMPort *self, gboolean connected);
++gboolean        mm_port_get_claimed        (MMPort *self);
++void            mm_port_set_claimed        (MMPort *self, gboolean claimed);
+ MMKernelDevice *mm_port_peek_kernel_device (MMPort *self);
  
-+    if (ctx->data)
-+        mm_port_set_claimed ((MMPort *)ctx->data, FALSE);
-+
-     if (ctx->packet_service_status_ipv4_indication_id) {
-         common_setup_cleanup_packet_service_status_unsolicited_events (ctx->self,
-                                                                        ctx->client_ipv4,
-@@ -1728,6 +1731,10 @@
-         }
-     }
- 
-+    /* Claim the data port so other bearers do not try to use it while this
-+     * bearer is connecting. */
-+    mm_port_set_claimed ((MMPort *)ctx->data, TRUE);
-+
-     /* Run! */
-     connect_context_step (task);
- }
-@@ -1768,6 +1775,9 @@
-         g_object_unref (ctx->client_ipv4);
-     if (ctx->client_ipv6)
-         g_object_unref (ctx->client_ipv6);
-+
-+    if (ctx->data)
-+        mm_port_set_claimed ((MMPort *)ctx->data, FALSE);
-     g_object_unref (ctx->data);
-     g_slice_free (DisconnectContext, ctx);
- }
-@@ -2001,6 +2011,8 @@
-     task = g_task_new (self, NULL, callback, user_data);
-     g_task_set_task_data (task, ctx, (GDestroyNotify)disconnect_context_free);
- 
-+    mm_port_set_claimed ((MMPort *)ctx->data, TRUE);
-+
-     /* Run! */
-     disconnect_context_step (task);
- }
+ #endif /* MM_PORT_H */

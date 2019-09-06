@@ -36,6 +36,20 @@
 
 #define MAX_INCLUDE_DEPTH  10
 
+/*
+ * Not all implementations of the C library global expression code
+ * support the GNU/GLIBC extension types, like BRACE and NOMAGIC.
+ * Define these extensions locally to get a compile, we won't be able
+ * to use the modes that these select, but I don't think that is going
+ * to be a problem for our use case.
+ */
+#ifndef GLOB_BRACE
+#define GLOB_BRACE 0
+#endif
+#ifndef GLOB_NOMAGIC
+#define GLOB_NOMAGIC 0
+#endif
+
 char rootdir[PATH_MAX];      /* when evaluating paths, prefix this to them */
 char rootdir2[PATH_MAX];     /* or... try this one too */
 

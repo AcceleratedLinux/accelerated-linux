@@ -114,7 +114,7 @@ image.clean:
 	rm -f addr.txt
 
 mkcramfs: $(ROOTDIR)/user/cramfs/mkcramfs.c
-	$(HOSTCC) -o $@ -I$(STAGEDIR)/include $< -lz
+	$(HOSTCC) -o $@ $< -lz
 
 .PHONY: mksquashfs
 mksquashfs:

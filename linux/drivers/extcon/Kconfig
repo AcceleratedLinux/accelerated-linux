@@ -30,7 +30,7 @@ config EXTCON_ARIZONA
 
 config EXTCON_AXP288
 	tristate "X-Power AXP288 EXTCON support"
-	depends on MFD_AXP20X && USB_SUPPORT && X86
+	depends on MFD_AXP20X && USB_SUPPORT && X86 && ACPI
 	select USB_ROLE_SWITCH
 	help
 	  Say Y here to enable support for USB peripheral detection
@@ -113,6 +113,14 @@ config EXTCON_PALMAS
 	help
 	  Say Y here to enable support for USB peripheral and USB host
 	  detection by palmas usb.
+
+config EXTCON_PTN5150
+	tristate "NXP PTN5150 CC LOGIC USB EXTCON support"
+	depends on I2C && (GPIOLIB || COMPILE_TEST)
+	select REGMAP_I2C
+	help
+	  Say Y here to enable support for USB peripheral and USB host
+	  detection by NXP PTN5150 CC (Configuration Channel) logic chip.
 
 config EXTCON_QCOM_SPMI_MISC
 	tristate "Qualcomm USB extcon support"

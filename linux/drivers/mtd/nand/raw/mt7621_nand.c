@@ -823,7 +823,6 @@ static void mt7621_nand_command_bp(struct nand_chip *chip, unsigned int command,
 		break;
 
 	case NAND_CMD_ERASE1:
-		chip->state = FL_ERASING;
 		mt7621_nand_reset();
 		mt7621_nand_set_mode(CNFG_OP_ERASE);
 		mt7621_nand_set_command(NAND_CMD_ERASE1);

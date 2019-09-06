@@ -10,7 +10,7 @@ CONFVARS += ac_cv_file__dev_ptmx=yes
 CONFVARS += ac_cv_file__dev_ptc=no
 CONFVARS += ac_cv_have_long_long_format=yes
 
-ifdef CONFIG_X86
+ifneq ($(CONFIG_X86)$(CONFIG_MIPS),)
 # HACK to fix module builds for now
 CFLAGS += -fPIC
 endif

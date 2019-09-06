@@ -183,8 +183,4 @@ u32 ath79_device_reset_get(u32 mask);
 void ath79_flash_acquire(void);
 void ath79_flash_release(void);
 
-void ath79_cpu_irq_init(unsigned irq_wb_chan2, unsigned irq_wb_chan3);
-void ath79_misc_irq_init(void __iomem *regs, int irq,
-			int irq_base, bool is_ar71xx);
-
 #endif /* __ASM_MACH_ATH79_H */

@@ -57,13 +57,19 @@ endif
 
 # ARCH = kernel,  TARGET_ARCH = uClibc
 
-MACHINE       = arm
+MACHINE = arm
 ifeq ($(shell egrep 'linux-2.[024]' $(ROOTDIR)/.config),)
-ARCH          = arm
+ARCH    = arm
 else
-ARCH          = armnommu
+ARCH    = armnommu
 endif
-ENDIAN        ?= little
+
+#
+# The default on ARM is little-endian with hard float.
+# Can be overriden by targets if required.
+#
+ENDIAN ?= little
+FLOAT  ?= hard
 
 ifneq ($(shell which arm-uclinuxeabi-gcc),)
 CROSS_COMPILE  = arm-uclinuxeabi-
@@ -73,6 +79,7 @@ endif
 
 CROSS          = $(CROSS_COMPILE)
 CONFIGURE_HOST = arm-linux
+CONFIGURE_TOOL ?= arm-uclinuxeabi$(LIBCSUFFIX)
 
 CONFIG_UCLINUX=y
 
@@ -114,7 +121,7 @@ CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH
 
 ifdef UCLINUX_BUILD_LIB
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
   else
 	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
   endif
@@ -164,7 +171,7 @@ ifdef UCLINUX_BUILD_USER
 	LIBC     = -Wl,-R,$(ROOTDIR)/lib/libc.gdb $(SLIBC)
   endif
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
   else
 	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
   endif

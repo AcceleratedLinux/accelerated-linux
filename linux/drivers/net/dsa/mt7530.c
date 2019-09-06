@@ -657,7 +657,7 @@ static void mt7530_adjust_link(struct dsa_switch *ds, int port,
 		case SPEED_100:
 			mcr |= PMCR_FORCE_SPEED_100;
 			break;
-		};
+		}
 
 		if (phydev->link)
 			mcr |= PMCR_FORCE_LNK;
@@ -740,8 +740,7 @@ mt7530_port_enable(struct dsa_switch *ds, int port,
 }
 
 static void
-mt7530_port_disable(struct dsa_switch *ds, int port,
-		    struct phy_device *phy)
+mt7530_port_disable(struct dsa_switch *ds, int port)
 {
 	struct mt7530_priv *priv = ds->priv;
 
@@ -1315,7 +1314,7 @@ mt7530_setup(struct dsa_switch *ds)
 		if (dsa_is_cpu_port(ds, i))
 			mt7530_cpu_port_enable(priv, i);
 		else
-			mt7530_port_disable(ds, i, NULL);
+			mt7530_port_disable(ds, i);
 	}
 
 	/* Flush the FDB table */
@@ -1350,8 +1349,8 @@ static const struct dsa_switch_ops mt7530_switch_ops = {
 };
 
 static const struct of_device_id mt7530_of_match[] = {
-	{ .compatible = "mediatek,mt7621", .data = (void *) ID_MT7621, },
-	{ .compatible = "mediatek,mt7530", .data = (void *) ID_MT7530, },
+	{ .compatible = "mediatek,mt7621", .data = (void *)ID_MT7621, },
+	{ .compatible = "mediatek,mt7530", .data = (void *)ID_MT7530, },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, mt7530_of_match);
@@ -1390,8 +1389,8 @@ mt7530_probe(struct mdio_device *mdiodev)
 	/* Get the hardware identifier from the devicetree node.
 	 * We will need it for some of the clock and regulator setup.
 	 */
-	of_id = of_match_node(mt7530_of_match, dn);
-	priv->id = (unsigned int) of_id->data;
+	priv->id = (unsigned int)(unsigned long)
+		of_device_get_match_data(&mdiodev->dev);
 
 	if (priv->id == ID_MT7530) {
 		priv->core_pwr = devm_regulator_get(&mdiodev->dev, "core");

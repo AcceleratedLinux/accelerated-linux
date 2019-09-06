@@ -52,10 +52,15 @@ endif
 #
 # First settings we always want for all builds.
 #
+MACHINE = arm
+ARCH    = arm
 
-ENDIAN        ?= little
-MACHINE        = arm
-ARCH           = arm
+#
+# The default on ARM is little-endian with hard float.
+# Can be overriden by targets if required.
+#
+ENDIAN ?= little
+FLOAT  ?= hard
 
 # older kernels need an older compiler
 ifeq ($(filter-out linux-2.0% linux-2.2% linux-2.4%, $(LINUXDIR)),)
@@ -92,6 +97,10 @@ endif
 
 CROSS          = $(CROSS_COMPILE)
 CONFIGURE_HOST = arm-linux
+
+LIBCSUFFIX := $(patsubst -%,-%eabi,$(LIBCSUFFIX))
+LIBCSUFFIX := $(LIBCSUFFIX)$(subst glibc,-gnueabi,$(LIBSDIR))
+CONFIGURE_TOOL ?= arm-linux$(LIBCSUFFIX)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)
@@ -131,7 +140,7 @@ ifdef UCLINUX_BUILD_LIB
 	CFLAGS  := -g
 	LDFLAGS :=
   else
-	CFLAGS  := -O1
+	CFLAGS  := -O2
 	LDFLAGS := -Wl,-S
   endif
 	CFLAGS  += -pipe
@@ -159,7 +168,7 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  := -g
 	LDFLAGS :=
   else
-	CFLAGS  := -O1
+	CFLAGS  := -O2
 	LDFLAGS := -g
   endif
 	CFLAGS  += -pipe

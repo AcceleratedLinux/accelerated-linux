@@ -27,6 +27,18 @@ license_detect() {
 		echo "GPLv3"; return 0 ;;
 	esac
 	#
+	# SPDX is short hand way of describing a license
+	#
+	GPL=$(egrep -m 1 -i 'SPDX-License-Identifier' "$1" | tr '[a-z]' '[A-Z]' | tr -d '\n')
+	case "$GPL" in
+	*"SPDX-LICENSE-IDENTIFIER:"*"GPL-2"*)
+		echo "GPLv2"; return 0 ;;
+	*"SPDX-LICENSE-IDENTIFIER:"*"GPL-3"*)
+		echo "GPLv3"; return 0 ;;
+	*"SPDX-LICENSE-IDENTIFIER:"*"BSD-3-CLAUSE"*)
+		echo "BSD (3 clause)"; return 0 ;;
+	esac
+	#
 	# BSD is a bit trickier but lets try
 	#
 	BSD=$(egrep -B 20 -A 20 'TH.* SOFTWARE IS PROVIDED.*AS IS' "$1" | tr -d '\n')
@@ -52,6 +64,12 @@ license_detect() {
 	#
 	if grep -q "PUBLIC DOMAIN" "$1"; then
 		echo "PublicDomain" ; return 0
+	fi
+	#
+	# ISC license
+	#
+	if grep -iq "ISC license" "$1"; then
+		echo "ISC" ; return 0
 	fi
 	#
 	# no luck

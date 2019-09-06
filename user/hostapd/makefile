@@ -1,7 +1,8 @@
 URL = https://w1.fi/releases/hostapd-2.7.tar.gz
 FINALTARGET = my_build
 AUTOMAKE_ROMFS = my_romfs
-include $(ROOTDIR)/tools/download.inc
+
+include $(ROOTDIR)/tools/automake.inc
 
 build/%-my_build: build/%-patched
 	@echo "Building $* ..."

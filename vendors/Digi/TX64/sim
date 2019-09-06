@@ -4,7 +4,7 @@
 # SIM slot control is over AT commands for both LM940 modems.
 # No need to reset the modem after changing active slot -- ModemManager will
 # detect it from AT#QSS unsolicited messages.
-
+#set -x
 # If named simX, change modem WWANX SIM slot
 wwan="${0##*sim}"
 idx="$(runt find mm.modem modem.port "modem/wwan$wwan")"
@@ -35,29 +35,18 @@ case "$1" in
 	exit 0
 	;;
 1|2)
-	[ -z "$idx" ] && exit 1
-	mmcli -m "$idx" --disable &>/dev/null
-	usleep 1000
-	mmcli -m "$idx" --command="#SIMDET=$(( $1 - 1 ))" &>/dev/null || exit 1
-	echo "$1" > "$sim_file"
+	/bin/modem idx=$idx softsim $1 2>/dev/null || exit 1
+	echo "$1" > "$sim_file"	
 	;;
 '')
-	[ -z "$idx" ] && exit 1
-	current="$(mmcli -m "$idx" --command="#SIMDET?" 2>/dev/null | sed -rn 's/^.*: *([0,1]),.*$/\1/p')"
 	expected="$(cat "$sim_file" 2>/dev/null)"
-	expected="${expected:-1}"
-	# The modem always boots with slot 1 active, so it may be out of sync
-	# with the .conf when we read it. So re-set it if required.
-	if [ "$expected" != "$(( current + 1 ))" ]; then
-		mmcli -m "$idx" --disable
-		usleep 1000
-		mmcli -m "$idx" --command="#SIMDET=$(( expected - 1 ))" &>/dev/null
-		echo "$current"
-	else
-		echo "$expected"
-	fi
+	#expected="${expected:-1}"
+	current="$(/bin/modem idx=$idx softsim 2>/dev/null || echo "$expected")"
+	echo "$current"
 	;;
 *)
+	logger -t modem "sim: invalid option"#SIMDET
+
 	echo "usage: $(basename $0) [none|1|2|-dDnoOp]
 Get, set and control WWAN$wwan SIM selection (MM idx $idx)
 

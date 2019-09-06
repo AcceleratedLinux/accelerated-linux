@@ -52,25 +52,38 @@ endif
 #
 # First settings we always want for all builds.
 #
+MACHINE = mips
+ARCH    = mips
 
-ENDIAN         ?= big
-MACHINE        = mips
-ARCH           = mips
+#
+# The default on MIPS is big-endian with hard float.
+# Can be overriden by targets if required.
+#
+ENDIAN ?= big
+FLOAT  ?= hard
 
 ifndef CROSS_COMPILE
- ifneq ($(shell which mips-linux-20130305-gcc),)
-  CROSS_COMPILE  = mips-linux-20130305-
- else
-  ifneq ($(shell which mips-linux-20071101-gcc),)
-   CROSS_COMPILE  = mips-linux-20071101-
-  else
-   CROSS_COMPILE  = mips-linux-
+  ifneq ($(shell which mips-linux-20170624-gcc),)
+    CROSS_COMPILE  = mips-linux-20170624-
   endif
- endif
+endif
+ifndef CROSS_COMPILE
+  ifneq ($(shell which mips-linux-20130305-gcc),)
+    CROSS_COMPILE  = mips-linux-20130305-
+  endif
+endif
+ifndef CROSS_COMPILE
+  ifneq ($(shell which mips-linux-20071101-gcc),)
+    CROSS_COMPILE  = mips-linux-20071101-
+  endif
+endif
+ifndef CROSS_COMPILE
+  CROSS_COMPILE  = mips-linux-
 endif
 
 CROSS = $(CROSS_COMPILE)
 CONFIGURE_HOST = mips-linux
+CONFIGURE_TOOL ?= mips-linux$(LIBCSUFFIX)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)

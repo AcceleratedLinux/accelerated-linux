@@ -1,6 +1,5 @@
 CC = gcc
 CFLAGS = -W -Wall -O2 -g
-CPPFLAGS = -I/usr/src/linux/include/
 PROGS = mkcramfs cramfsck
 
 all: $(PROGS)

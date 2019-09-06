@@ -57,8 +57,16 @@ enum
 #define MS_BIND		MS_BIND
   MS_MOVE = 8192,
 #define MS_MOVE		MS_MOVE
+  MS_REC = 16384,
+#define MS_REC		MS_REC
+  MS_SILENT = 32768,
+#define MS_SILENT	MS_SILENT
   MS_UNBINDABLE = (1<<17),	/* change to unbindable */
 #define MS_UNBINDABLE	MS_UNBINDABLE
+  MS_PRIVATE = (1<<18),		/* change to private */
+#define MS_PRIVATE	MS_PRIVATE
+  MS_SLAVE = (1<<19),		/* change to slave */
+#define MS_SLAVE	MS_SLAVE
   MS_SHARED = (1<<20),		/* change to shared */
 #define MS_SHARED	MS_SHARED
   MS_RELATIME = (1<<21),	/* Update atime relative to mtime/ctime. */

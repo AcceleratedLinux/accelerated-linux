@@ -559,8 +559,8 @@ static void drm_enable_read_cb(struct gatt_db_attribute *attrib,
 		goto done;
 	}
 
-	config_service = get_cmd_output("config get config.service");
-	config_enable = get_cmd_output("config get config.enable");
+	config_service = get_cmd_output("config get cloud.service");
+	config_enable = get_cmd_output("config get cloud.enable");
 	value =
 		(
 			(config_service && !strcmp(config_service, "drm"))  &&
@@ -611,10 +611,10 @@ static void drm_enable_write_cb(struct gatt_db_attribute *attrib,
 		error = BT_ATT_ERROR_INVALID_HANDLE;
 
 	if (!error) {
-		config_service = get_cmd_output("config get config.service");
-		/* When enabling, we also need to establish DRM (no matter previous config.service) */
+		config_service = get_cmd_output("config get cloud.service");
+		/* When enabling, we also need to establish DRM (no matter previous cloud.service) */
 		if (request_enable) {
-			if (safe_execute("config set config.service drm", &status) < 0 || status) {
+			if (safe_execute("config set cloud.service drm", &status) < 0 || status) {
 				syslog(LOG_ERR, "Failed to set DRM cnonection, error(%d)\n", status);
 				error = BT_ATT_ERROR_INVALID_HANDLE;
 				goto done;
@@ -625,12 +625,12 @@ static void drm_enable_write_cb(struct gatt_db_attribute *attrib,
 			/*
 			 * In this specific case:
 			 *    - We are requested to disable the DRM service
-			 *    - config.service is not drm
+			 *    - cloud.service is not drm
 			 *
-			 * So take no actions regarding the config.enable setting
+			 * So take no actions regarding the cloud.enable setting
 			 */
 		} else {
-			if (asprintf(&cmd, "config set config.enable %s", request_enable ? "1" : "0" ) < 0  ||
+			if (asprintf(&cmd, "config set cloud.enable %s", request_enable ? "1" : "0" ) < 0  ||
 			    safe_execute(cmd, &status) < 0                                                  ||
 			    status) {
 				syslog(LOG_ERR, "Failed to set DRM cnonection, error(%d)\n", status);

@@ -99,7 +99,7 @@ image.clean:
 	rm -f addr.txt
 
 mkcramfs: $(ROOTDIR)/user/cramfs/mkcramfs.c
-	$(HOSTCC) -o $@ -I$(STAGEDIR)/include $< -lz
+	$(HOSTCC) -o $@ $< -lz
 
 .PHONY: mksquashfs
 mksquashfs:
@@ -336,6 +336,10 @@ endif
 
 romfs.nooom:
 	[ ! -x $(ROMFSDIR)/bin/no_oom ] || ( ( cd $(ROMFSDIR) && mkdir -p .no_oom ) && for i in `echo ${CONFIG_USER_NOOOM_BINARIES}` ; do [ -x $(ROMFSDIR)/$$i ] && [ x`readlink $(ROMFSDIR)/$$i` != x/bin/no_oom ] && mv $(ROMFSDIR)/$$i $(ROMFSDIR)/.no_oom/`basename $$i` && ln -s /bin/no_oom $(ROMFSDIR)/$$i || "NOTICE: $$i not present in romfs" ; done )
+
+romfs.cleanup:
+	$(ROMFSINST) -R /share
+	$(ROMFSINST) -R /usr/share/man
 
 romfs.post:: romfs.nooom
 

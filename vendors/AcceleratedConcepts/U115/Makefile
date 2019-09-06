@@ -35,7 +35,7 @@ all:
 
 clean: image.clean
 
-romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
+romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey romfs.emc
 	$(ROMFSINST) /etc/default/start
 	$(ROMFSINST) -p 555 /etc/mkffs
 	$(ROMFSINST) -d -p 555 /etc/action.d/led

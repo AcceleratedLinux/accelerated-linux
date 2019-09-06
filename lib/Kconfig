@@ -256,6 +256,13 @@ config LIB_INSTALL_LIBSTDCPLUS
 	  (If it was uClibc based, and we are uClibc based for example).
 	  This is an alternative to compiling something like STLport.
 
+config LIB_STATIC_LIBSTDCPLUS
+	bool "Compiler has static libstdc++"
+	depends on ! LIB_INSTALL_LIBSTDCPLUS
+	select C_PLUS_PLUS
+	help
+	  Tool chani provides a static libstdc++
+
 config C_PLUS_PLUS
 	bool "c++" if LIB_INSTALL_LIBSTDCPLUS || LIB_STLPORT
 

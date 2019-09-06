@@ -45,7 +45,7 @@ romfs.post::
 	$(ROMFSINST) ../../Generic/romfs/etc/services /etc/services
 
 mkcramfs: $(ROOTDIR)/user/cramfs/mkcramfs.c
-	$(HOSTCC) -o $@ -I$(STAGEDIR)/include $< -lz
+	$(HOSTCC) -o $@ $< -lz
 
 image: mkcramfs
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)

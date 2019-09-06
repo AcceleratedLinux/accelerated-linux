@@ -1,4 +1,4 @@
-VERSION = 0.99.24
+VERSION = 1.2.4
 URL = http://download.savannah.gnu.org/releases/quagga/quagga-$(VERSION).tar.gz
 
 CONFOPTS =

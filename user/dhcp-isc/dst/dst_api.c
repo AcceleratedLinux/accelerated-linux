@@ -49,6 +49,7 @@ static const char rcsid[] = "$Header: /proj/cvs/prod/DHCP/dst/dst_api.c,v 1.6 20
 #include <memory.h>
 #include <ctype.h>
 #include <time.h>
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/socket.h>

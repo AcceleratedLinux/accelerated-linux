@@ -245,5 +245,11 @@ config POWER_RESET_SC27XX
 	  PMICs includes the SC2720, SC2721, SC2723, SC2730
 	  and SC2731 chips.
 
+config POWER_RESET_MCU_TX54
+	tristate "Power-off driver for the MCU of TX54"
+	depends on MFD_MCU_TX54
+	help
+	  This driver supports powering off board via the MCU.
+
 endif
 

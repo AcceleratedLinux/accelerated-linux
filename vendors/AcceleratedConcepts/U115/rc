@@ -88,6 +88,13 @@ if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	[ "$ping" = 0 ] && reboot -f
 	exit 0
 fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=standalone" ]; then
+	# Use the same setup as for factory testing
+	/etc/factory
+	# run standalone emc noise generation
+	/etc/emc
+	exit 0
+fi
 
 echo "Mounting config filesystem ..."
 if ! mount -t ubifs ubi0:config /etc/config

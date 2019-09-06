@@ -1,5 +1,5 @@
 #
-# Makefile -- Build instructions for Digi/TX54
+# Makefile -- Build instructions for Digi/TX54-Migration
 #
 
 ROMFSIMG  = $(IMAGEDIR)/rootfs.bin
@@ -9,6 +9,7 @@ VMLINUX   = $(IMAGEDIR)/vmlinux
 KERNEL    = $(IMAGEDIR)/kernel
 LZKERNEL  = $(IMAGEDIR)/kernel.lzma
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
+MFGIMG    = $(IMAGEDIR)/tx54_mfg.tar.gz
 
 SIGNING_ALG = ecdsa
 SIGNING_EXTRA =
@@ -42,6 +43,8 @@ clean: image.clean
 
 romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
+	$(ROMFSINST) -p 555 sim /bin/sim1
+	$(ROMFSINST) -p 555 -s /bin/sim1 /bin/sim2
 	$(ROMFSINST) -p 555 /etc/mkffs
 	$(ROMFSINST) -d -p 555 led /etc/action.d/led
 	$(ROMFSINST) -d -p 555 /etc/init_gpios
@@ -49,9 +52,11 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/fw_env.config
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
+	$(ROMFSINST) -d -p 555 startup.product /etc/runt.d/startup.product
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) -d console /etc/inittab.d/console
 	echo "Digi TX54" > $(ROMFSDIR)/etc/issue
+	$(ROMFSINST) -d -p 755 pwrbtn.sh /etc/acpi/events/PWRF/00000080
 
 romfs.post:: romfs.cleanup
 
@@ -69,6 +74,8 @@ uimage.bin: lzma
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROMFSIMG) /tftpboot/
 
 image: image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+	# Create manufacturing image
+	tar -zcvf $(MFGIMG) -C $(IMAGEDIR) image.bin u-boot.bin
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

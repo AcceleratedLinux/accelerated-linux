@@ -21,39 +21,16 @@
 # MA 02111-1307 USA
 #
 
-CFLAGS += -D_GNU_SOURCE
+CFLAGS += -DUSE_HOSTCC
+CFLAGS += -Iinclude
 
-ifdef CONFIG_USER_UBOOT_ENVTOOLS_ENV_OVERWRITE
-CFLAGS += -DCONFIG_ENV_OVERWRITE=1
-endif
-
-ifdef CONFIG_USER_UBOOT_ENVTOOLS_OVERWRITE_ETHADDR_ONCE
-CFLAGS += -DCONFIG_OVERWRITE_ETHADDR_ONCE=1
-endif
-
-ifdef CONFIG_USER_UBOOT_ENVTOOLS_OPTION_ETHADDR
-CFLAGS += -DCONFIG_ETHADDR="$(CONFIG_USER_UBOOT_ENVTOOLS_OPTION_ETHADDR)"
-endif
-
-ifdef CONFIG_USER_UBOOT_ENVTOOLS_OPTION_ETH1ADDR
-CFLAGS += -DCONFIG_ETH1ADDR="$(CONFIG_USER_UBOOT_ENVTOOLS_OPTION_ETH1ADDR)"
-endif
-
-ifdef CONFIG_USER_UBOOT_ENVTOOLS_OPTION_ETH2ADDR
-CFLAGS += -DCONFIG_ETH2ADDR="$(CONFIG_USER_UBOOT_ENVTOOLS_OPTION_ETH2ADDR)"
-endif
-
-OBJS := crc32.o fw_env.o fw_env_main.o
-
-# Compile for a hosted environment on the target
-#HOSTCPPFLAGS  = -idirafter $(SRCTREE)/include \
-#		-idirafter $(OBJTREE)/include2 \
-#		-idirafter $(OBJTREE)/include \
-#		-DUSE_HOSTCC
-
-ifeq ($(MTD_VERSION),old)
-HOSTCPPFLAGS += -DMTD_OLD
-endif
+OBJS = crc32.o
+OBJS += ctype.o
+OBJS += env_attr.o
+OBJS += env_flags.o
+OBJS += fw_env.o
+OBJS += fw_env_main.o
+OBJS += linux_string.o
 
 all: fw_printenv fw_setenv
 

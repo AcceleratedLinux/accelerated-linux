@@ -792,6 +792,13 @@ config LEDS_AWUSB24
 	  This driver can also be built as a module. If so the module
 	  will be called leds-awusb24.
 
+config LEDS_MCU_TX54
+	tristate "LED Support for MCU on TX54"
+	depends on LEDS_CLASS
+	depends on MFD_MCU_TX54
+	help
+	  This option enables support for the LED of MCU on TX54.
+
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"
 

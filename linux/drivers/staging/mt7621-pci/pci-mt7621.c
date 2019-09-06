@@ -136,7 +136,6 @@ struct mt7621_pcie_port {
 	struct list_head list;
 	struct mt7621_pcie *pcie;
 	struct reset_control *reset;
-	u32 slot;
 };
 
 /**
@@ -444,6 +443,7 @@ static int mt7621_pci_probe(struct platform_device *pdev)
 	struct mt7621_pcie_port *port, *tmp;
 	int err;
 	u32 val = 0;
+	u32 slot = 0;
 	LIST_HEAD(res);
 
 	if (!dev->of_node)
@@ -476,13 +476,12 @@ static int mt7621_pci_probe(struct platform_device *pdev)
 
 	ASSERT_SYSRST_PCIE(RALINK_PCIE0_RST | RALINK_PCIE1_RST | RALINK_PCIE2_RST);
 
-	*(unsigned int *)(0xbe000060) &= ~(0x3 << 10 | 0x3 << 3);
-	*(unsigned int *)(0xbe000060) |=  BIT(10) | BIT(3);
+	*(unsigned int *)(0xbe000060) &= ~(0x3 << 10);
+	*(unsigned int *)(0xbe000060) |=  BIT(10);
 	mdelay(100);
-	*(unsigned int *)(0xbe000600) |= BIT(19) | BIT(8) | BIT(7); // use GPIO19/GPIO8/GPIO7 (PERST_N/UART_RXD3/UART_TXD3)
+	*(unsigned int *)(0xbe000600) |= BIT(19); // use GPIO19 (PERST_N)
 	mdelay(100);
-	*(unsigned int *)(0xbe000620) &= ~(BIT(19) | BIT(8) | BIT(7));		// clear DATA
-
+	*(unsigned int *)(0xbe000620) &= ~(BIT(19)); // clear DATA
 	mdelay(100);
 
 	val = RALINK_PCIE0_RST;
@@ -495,12 +494,6 @@ static int mt7621_pci_probe(struct platform_device *pdev)
 		bypass_pipe_rst(pcie);
 	set_phy_for_ssc(pcie);
 
-	list_for_each_entry_safe(port, tmp, &pcie->ports, list) {
-		u32 slot = port->slot++;
-		val = read_config(pcie, slot, 0x70c);
-		dev_info(dev, "Port %d N_FTS = %x\n", slot, (unsigned int)val);
-	}
-
 	rt_sysc_m32(0, RALINK_PCIE_RST, RALINK_RSTCTRL);
 	rt_sysc_m32(0x30, 2 << 4, SYSC_REG_SYSTEM_CONFIG1);
 
@@ -512,7 +505,7 @@ static int mt7621_pci_probe(struct platform_device *pdev)
 	rt_sysc_m32(RALINK_PCIE_RST, 0, RALINK_RSTCTRL);
 
 	/* Use GPIO control instead of PERST_N */
-	*(unsigned int *)(0xbe000620) |= BIT(19) | BIT(8) | BIT(7);		// set DATA
+	*(unsigned int *)(0xbe000620) |= BIT(19); // set DATA
 	mdelay(1000);
 
 	if ((pcie_read(pcie, RT6855_PCIE0_OFFSET + RALINK_PCI_STATUS) & 0x1) == 0) {
@@ -553,51 +546,6 @@ static int mt7621_pci_probe(struct platform_device *pdev)
 
 	if (pcie_link_status == 0)
 		return 0;
-
-/*
-pcie(2/1/0) link status	pcie2_num	pcie1_num	pcie0_num
-3'b000			x		x		x
-3'b001			x		x		0
-3'b010			x		0		x
-3'b011			x		1		0
-3'b100			0		x		x
-3'b101			1		x		0
-3'b110			1		0		x
-3'b111			2		1		0
-*/
-	switch (pcie_link_status) {
-	case 2:
-		val = pcie_read(pcie, RALINK_PCI_PCICFG_ADDR);
-		val &= ~0x00ff0000;
-		val |= 0x1 << 16;	// port 0
-		val |= 0x0 << 20;	// port 1
-		pcie_write(pcie, val, RALINK_PCI_PCICFG_ADDR);
-		break;
-	case 4:
-		val = pcie_read(pcie, RALINK_PCI_PCICFG_ADDR);
-		val &= ~0x0fff0000;
-		val |= 0x1 << 16;	//port0
-		val |= 0x2 << 20;	//port1
-		val |= 0x0 << 24;	//port2
-		pcie_write(pcie, val, RALINK_PCI_PCICFG_ADDR);
-		break;
-	case 5:
-		val = pcie_read(pcie, RALINK_PCI_PCICFG_ADDR);
-		val &= ~0x0fff0000;
-		val |= 0x0 << 16;	//port0
-		val |= 0x2 << 20;	//port1
-		val |= 0x1 << 24;	//port2
-		pcie_write(pcie, val, RALINK_PCI_PCICFG_ADDR);
-		break;
-	case 6:
-		val = pcie_read(pcie, RALINK_PCI_PCICFG_ADDR);
-		val &= ~0x0fff0000;
-		val |= 0x2 << 16;	//port0
-		val |= 0x0 << 20;	//port1
-		val |= 0x1 << 24;	//port2
-		pcie_write(pcie, val, RALINK_PCI_PCICFG_ADDR);
-		break;
-	}
 
 /*
 	ioport_resource.start = mt7621_res_pci_io1.start;

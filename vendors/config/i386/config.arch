@@ -79,9 +79,11 @@ endif
 
 # ARCH = kernel,  TARGET_ARCH = uClibc
 
-ENDIAN        = little
-MACHINE       = i386
-ARCH          = i386
+MACHINE = i386
+ARCH    = i386
+ENDIAN  = little
+FLOAT   = hard
+
 ifneq ($(shell which i386-linux-20151029-gcc),)
 CROSS_COMPILE ?= i386-linux-20151029-
 else
@@ -89,6 +91,7 @@ CROSS_COMPILE ?= i386-linux-
 endif
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = i386-linux
+CONFIGURE_TOOL = i386-linux$(LIBCSUFFIX)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)
@@ -160,9 +163,9 @@ ifdef UCLINUX_BUILD_LIB
 	GLIBC_TARGET_OPTS = --host=i386-redhat-linux
   endif
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
   else
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
@@ -180,9 +183,9 @@ endif
 
 ifdef UCLINUX_BUILD_USER
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror

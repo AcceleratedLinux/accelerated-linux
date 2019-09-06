@@ -154,7 +154,7 @@ romfs:
 	echo "$(VERSIONSTR) -- " `date` > $(ROMFSDIR)/etc/version
 
 mkcramfs: $(ROOTDIR)/user/cramfs/mkcramfs.c
-	$(HOSTCC) -o $@ -I$(STAGEDIR)/include $< -lz
+	$(HOSTCC) -o $@ $< -lz
 
 mksquashfs:
 	CC=$(HOSTCC) CFLAGS=$(HOSTCFLAGS) EXTRA_CFLAGS= make -C $(ROOTDIR)/user/squashfs-new/squashfs-tools mksquashfs

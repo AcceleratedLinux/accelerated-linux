@@ -114,8 +114,7 @@ echo "Installing GRUB..."
 mount -t vfat ${DRIVE}1 /efi
 mkdir -p /efi/grub
 grub-editenv /efi/grub/grubenv set default=0 part0_valid=true part1_valid=true
-mkdir -p /efi/EFI/BOOT
-cp /boot/grub/bootx64.efi /efi/EFI/BOOT/
+update-grub
 umount /efi
 
 echo "Install image A ..."

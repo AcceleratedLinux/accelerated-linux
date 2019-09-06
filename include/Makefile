@@ -87,30 +87,40 @@ link:
 		done ; \
 	done
 
+REALCC=$(subst ucfront-gcc,,$(CC))
+REALCXX=$(subst ucfront-g++,,$(CXX))
+
+#
+# Create include links for ucfront so that it can find the c++ includes
+# and bits directories. This works the same way no matter if we built the
+# toolchain in-tree or using an external one. Use the actuall real gcc/g++
+# and not the ucfront ended version.
+#
 .PHONY: cpplink
 cpplink:
-	@echo "Making include/c++ symlink to compiler c++ includes"
-	@rm -f $(INCDIR)/c++
-	@ln -s /usr/local/include/g++-v3 $(INCDIR)/c++
-	@GCCVER=`$(CC) -dumpversion` ; \
-	 for i in `$(CXX) -v -E -xc++ /dev/null 2>&1 | sed -e '/^Reading specs/,/^#include <\.\.\.>/d' -e '/End of search list/Q'`; do \
-		if [ -f $$i/new ]; then rm -f $(INCDIR)/c++; ln -s $$i $(INCDIR)/c++; break; fi; \
-		if [ -f $$i/c++/$$GCCVER/new ]; then rm -f $(INCDIR)/c++; ln -s $$i/c++/$$GCCVER $(INCDIR)/c++; break; fi; \
-	 done
-	@rm -f $(INCDIR)/bits ; \
-	 GCCVER=`$(CC) -dumpversion` ; \
-	 GCCMACH=`$(CC) -dumpmachine` ; \
-	 GCCMULTI=`$(CC) -print-multi-directory` ; \
-	 GCCPATH=`$(CC) -print-libgcc-file-name | sed -e 's?/lib/gcc/.*$$??g'` ; \
-	 GPLUSBITS="$$GCCPATH/$$GCCMACH/include/c++/$$GCCVER/$$GCCMACH/$$GCCMULTI/bits $$GCCPATH/include/c++/$$GCCVER/$$GCCMACH/$$GCCMULTI/bits"; \
-	 echo "Checking for modern c++ bits..."; \
-	 for i in $$GPLUSBITS; do \
-		 if [ -d $$i ] ; then \
+	echo "Making include/c++includes symlink to compiler c++ includes" ; \
+	ln -sf /usr/local/include/g++-v3 $(INCDIR)/c++includes ; \
+	GCCVER=`$(REALCC) -dumpversion` ; \
+	for i in `$(REALCXX) -v -E -xc++ /dev/null 2>&1 | sed -e '/^Reading specs/,/^#include <\.\.\.>/d' -e '/End of search list/Q'` ; do \
+		if [ -f $$i/new ] ; then echo "USING: $$i" ; ln -sf $$i $(INCDIR)/c++includes ; break ; fi ; \
+		if [ -f $$i/c++/$$GCCVER/new ] ; then ln -sf $$i/c++/$$GCCVER $(INCDIR)/c++includes ; break ; fi ; \
+	done
+	ls -ld $(INCDIR)/c++includes
+	@mkdir -p $(INCDIR)/c++bits ; \
+	rm -f $(INCDIR)/c++bits/bits ; \
+	GCCVER=`$(REALCC) -dumpversion` ; \
+	GCCMACH=`$(REALCC) -dumpmachine` ; \
+	GCCMULTI=`$(REALCC) -print-multi-directory` ; \
+	GCCPATH=`$(REALCC) -print-libgcc-file-name | sed -e 's?/lib/gcc/.*$$??g'` ; \
+	GPLUSBITS="$$GCCPATH/$$GCCMACH/include/c++/$$GCCVER/$$GCCMACH/$$GCCMULTI/bits $$GCCPATH/include/c++/$$GCCVER/$$GCCMACH/$$GCCMULTI/bits" ; \
+	echo "Checking for modern c++ bits..." ; \
+	for i in $$GPLUSBITS ; do \
+		if [ -d $$i ] ; then \
 			echo "Using modern c++ bits, $$i" ; \
-			ln -s $$i $(INCDIR)/bits ; \
-			break; \
-		 fi; \
-	 done
+			ln -s $$i $(INCDIR)/c++bits/bits ; \
+			break ; \
+		fi ; \
+	done
 
 $(INCDIR)/vendor/autoconf.h: $(ROOTDIR)/autoconf.h
 	@mkdir -p $(INCDIR)/vendor

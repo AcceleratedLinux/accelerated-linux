@@ -25,11 +25,14 @@ RELFILES = images/image.bin \
 
 ############################################################################
 
+# We run the mediatek MT7621 in little endian mode.
+CONFIGURE_TOOL = mipsel-linux$(LIBCSUFFIX)
+ENDIAN = little
+FLOAT = hard
 
-CROSS_COMPILE = mips-linux-20170624-
-CPUFLAGS      = -EL
-CPU_CFLAGS    = -EL
-CPULDFLAGS    += -EL
+CPUFLAGS = -EL
+CPU_CFLAGS = -EL
+CPULDFLAGS += -EL
 
 include $(ROOTDIR)/vendors/config/mips/config.arch
 

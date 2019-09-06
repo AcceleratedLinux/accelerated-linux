@@ -34,6 +34,7 @@
 #define VERSION "3.07"
 #define DATE "990908"
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>		/* atoi, free */
 #include <stdarg.h>		/* varargs */
@@ -43,6 +44,7 @@
 #include <string.h>		/* index() */
 #include <ctype.h>
 #include <getopt.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>

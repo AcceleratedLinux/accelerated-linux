@@ -1,7 +1,7 @@
-diff -Nuar iptables-1.4.21/extensions/GNUmakefile.in iptables/extensions/GNUmakefile.in
---- iptables-1.4.21/extensions/GNUmakefile.in	2016-03-10 08:46:25.889525000 +1000
-+++ iptables/extensions/GNUmakefile.in	2016-03-10 08:47:34.357524714 +1000
-@@ -105,6 +105,9 @@
+diff -Nurd iptables.orig-1.8.3/extensions/GNUmakefile.in iptables-1.8.3/extensions/GNUmakefile.in
+--- iptables.orig-1.8.3/extensions/GNUmakefile.in	2019-05-30 11:58:09.365797847 +1000
++++ iptables-1.8.3/extensions/GNUmakefile.in	2019-05-30 11:58:09.513798973 +1000
+@@ -121,6 +121,9 @@
  ifneq ($(CONFIG_USER_IPSET_IPSET),)
  pfx_build_mod+=set SET
  endif
@@ -9,11 +9,11 @@ diff -Nuar iptables-1.4.21/extensions/GNUmakefile.in iptables/extensions/GNUmake
 +pfx_build_mod+=NETFLOW
 +endif
  
- 
- pfx_objs      := $(patsubst %,libxt_%.o,${pfx_build_mod})
-diff -Nuar iptables-1.4.21/extensions/libxt_NETFLOW.c iptables/extensions/libxt_NETFLOW.c
---- iptables-1.4.21/extensions/libxt_NETFLOW.c	1970-01-01 10:00:00.000000000 +1000
-+++ iptables/extensions/libxt_NETFLOW.c	2016-03-10 08:49:23.513523951 +1000
+ #
+ # Building blocks
+diff -Nurd iptables.orig-1.8.3/extensions/libxt_NETFLOW.c iptables-1.8.3/extensions/libxt_NETFLOW.c
+--- iptables.orig-1.8.3/extensions/libxt_NETFLOW.c	1970-01-01 10:00:00.000000000 +1000
++++ iptables-1.8.3/extensions/libxt_NETFLOW.c	2019-05-30 11:58:09.513798973 +1000
 @@ -0,0 +1,117 @@
 +/*
 + * iptables helper for NETFLOW target

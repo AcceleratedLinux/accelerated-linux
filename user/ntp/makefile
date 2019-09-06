@@ -2,6 +2,7 @@
 #URL             = http://archive.ntp.org/ntp4/ntp-4.2/ntp-4.2.8p4.tar.gz
 URL             = https://ftp.osuosl.org/pub/blfs/conglomeration/ntp/ntp-4.2.8p13.tar.gz
 CONFOPTS       += --with-yielding-select=yes --sbindir=/bin
+CONFOPTS       += --without-ntpsnmpd
 
 AUTOMAKE_ROMFS  = my_romfs
 

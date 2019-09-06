@@ -1,6 +1,7 @@
---- ModemManager/src/mm-bearer-qmi.c	2018-11-20 14:35:28.902319185 +1000
-+++ ModemManager/src/mm-bearer-qmi.c.new	2018-11-20 14:46:52.314319130 +1000
-@@ -1816,13 +1816,11 @@
+diff -Nurd ModemManager.orig/src/mm-bearer-qmi.c ModemManager/src/mm-bearer-qmi.c
+--- ModemManager.orig/src/mm-bearer-qmi.c	2019-05-29 11:08:19.348305221 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2019-05-29 11:08:19.416305556 +1000
+@@ -1814,13 +1814,11 @@
              ctx->error_ipv4 = error;
          else
              ctx->error_ipv6 = error;

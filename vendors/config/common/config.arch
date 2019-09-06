@@ -7,16 +7,29 @@ export UCLINUX_DIST
 # ROOTDIR must be set by the initial makefile
 export ROOTDIR
 
+TOOLS_CONFIG = $(ROOTDIR)/.sgbuilt_toolchain
+export TOOLS_CONFIG
+-include $(TOOLS_CONFIG)
+
 DEVICE_CONFIG = $(ROOTDIR)/.config
 export DEVICE_CONFIG
 -include $(DEVICE_CONFIG)
 
-LINUXDIR   = $(CONFIG_LINUXDIR)
-LIBCDIR    = $(CONFIG_LIBCDIR)
-PRODUCTDIR = $(ROOTDIR)/vendors/$(CONFIG_VENDOR)/$(CONFIG_PRODUCT)
-export LINUXDIR LIBCDIR PRODUCTDIR
+TOOLSDIR    = $(ROOTDIR)/toolchain
+TOOLSPREFIX = $(TOOLSDIR)/usr/local
+LINUXDIR    = $(CONFIG_LINUXDIR)
+LIBCDIR     = $(CONFIG_LIBCDIR)
+PRODUCTDIR  = $(ROOTDIR)/vendors/$(CONFIG_VENDOR)/$(CONFIG_PRODUCT)
+export TOOLSDIR TOOLSPREFIX LINUXDIR LIBCDIR PRODUCTDIR
 
-PATH	 := $(PATH):$(ROOTDIR)/tools
+# Construct canonical name for C-library - blank for glibc
+LIBCSUFFIX  := $(subst uClibc,-uclibc,$(LIBCDIR))
+LIBCSUFFIX  := $(subst uClibc-ng,-uclibc,$(LIBCSUFFIX))
+LIBCSUFFIX  := $(subst musl,-musl,$(LIBCSUFFIX))
+LIBCSUFFIX  := $(subst glibc,,$(LIBCSUFFIX))
+export LIBCSUFFIX
+
+PATH	 := $(PATH):$(ROOTDIR)/tools:$(TOOLSPREFIX)/bin
 ROMFSINST = romfs-inst.sh
 LIBTOOL   = jlibtool
 export PATH ROMFSINST LIBTOOL
@@ -58,7 +71,7 @@ export CONFIG_SHELL
 UCFRONT_MAPDIRS  = /lib/=$(STAGEDIR)/lib/
 UCFRONT_MAPDIRS += /usr/lib/=$(STAGEDIR)/lib/
 UCFRONT_MAPDIRS += /include/=$(STAGEDIR)/include/
-UCFRONT_MAPDIRS += /usr/include/=$(STAGEDIR)/include/
+UCFRONT_MAPDIRS += /usr/include=$(STAGEDIR)/include
 export UCFRONT_MAPDIRS
 
 ############################################################################

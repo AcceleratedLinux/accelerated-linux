@@ -35,39 +35,9 @@ ifconfig eth0 up
 
 /etc/init_gpios start
 
-echo "Initializing LED GPIO pins..."
-# WIFI LED -- GPIO28 (492)
-# WIFI GPS -- GPIO30 (494)
-# WWAN1 SERVICE YELLOW LED -- I2C GPA7 (503)
-# WWAN1 SERVICE GREEN LED -- I2C GPA6 (502)
-# WWAN1 SIGNAL YELLOW LED -- I2C GPA5 (501)
-# WWAN1 SIGNAL GREEN LED -- I2C GPA4 (500)
-# WWAN2 SERVICE YELLOW LED -- I2C GPA3 (499)
-# WWAN2 SERVICE GREEN LED -- I2C GPA2 (498)
-# WWAN2 SIGNAL YELLOW LED -- I2C GPA1 (497)
-# WWAN2 SIGNAL GREEN LED -- I2C GPA0 (496)
-echo 492 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio492/direction
-echo 1 > /sys/class/gpio/gpio492/active_low
-echo 494 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio494/direction
-echo 1 > /sys/class/gpio/gpio494/active_low
-echo 496 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio496/direction
-echo 497 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio497/direction
-echo 498 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio498/direction
-echo 499 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio499/direction
-echo 500 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio500/direction
-echo 501 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio501/direction
-echo 502 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio502/direction
-echo 503 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio503/direction
+# Power up modems
+/bin/sim1 -o
+/bin/sim2 -o
 
 #factory=true
 [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ] && factory=true
@@ -144,8 +114,5 @@ cat /etc/motd
 mkdir -p /dev/serial
 ln -sf /dev/serial/by-usb/1-1-if01-port0 /dev/serial/port1
 
-# Power up modems for testing...
-#echo 1 > /sys/class/gpio/gpio510/value
-#echo 1 > /sys/class/gpio/gpio511/value
 
 exit 0

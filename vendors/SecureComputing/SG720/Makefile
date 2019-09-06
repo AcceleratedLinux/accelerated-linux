@@ -30,7 +30,7 @@ romfs: romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc romfs.version 
 	$(ROMFSINST) ../firewall.init.std /etc/firewall.init
 	$(ROMFSINST) -e CONFIG_USER_LM_SENSORS_SENSORS sensors.conf /etc/sensors.conf
 
-romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode
+romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode romfs.cleanup
 
 image: image.configs image.dir image.arm.zimage image.squashfs7z image.mbr image.bin image.tag image.copy
 

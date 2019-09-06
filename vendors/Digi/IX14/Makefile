@@ -39,31 +39,19 @@ clean: image.clean
 
 romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
-	$(ROMFSINST) -p 555 /etc/clear-bootcount.sh
+	$(ROMFSINST) -p 555 ../IX14-common/scripts/clear-bootcount.sh /etc/clear-bootcount.sh
 	$(ROMFSINST) -p 555 /etc/mkffs
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 bluez/bluetooth /bin/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 bluez/bluetooth-action /etc/action.d/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 bluez/bluetooth-update /etc/runt.d/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 bluez/main.conf /etc/bluetooth/main.conf
+	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/bluetooth /bin/bluetooth
+	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/bluetooth-action /etc/action.d/bluetooth
+	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/bluetooth-update /etc/runt.d/bluetooth
+	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/main.conf /etc/bluetooth/main.conf
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
-	$(ROMFSINST) -p 555 /bin/cellular_power.sh
-	$(ROMFSINST) /etc/fw_env.config
+	$(ROMFSINST) -p 555 ../IX14-common/scripts/cellular_power.sh /bin/cellular_power.sh
+	$(ROMFSINST) ../IX14-common/config/fw_env.config /etc/fw_env.config
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	echo "Digi IX14" > $(ROMFSDIR)/etc/issue
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 644 wlan/modprobe-qualcomm.conf /etc/modprobe.d/modprobe-qualcomm.conf
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 755 wlan/qualcomm.sh /etc/qualcomm.sh
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 644 wlan/bdwlan30_US.bin /lib/firmware/bdwlan30_US.bin
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -s bdwlan30_US.bin /lib/firmware/bdwlan30.bin
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -p 644 wlan/LICENCE.atheros_firmware /lib/firmware/LICENCE.atheros_firmware
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -p 644 wlan/otp30.bin /lib/firmware/otp30.bin
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -p 644 wlan/qwlan30.bin /lib/firmware/qwlan30.bin
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -p 644 wlan/utf30.bin /lib/firmware/utf30.bin
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -s bdwlan30_US.bin /lib/firmware/utfbd30.bin
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -d -p 644 $(ROOTDIR)/modules/qcacld/firmware_bin/WCNSS_cfg.dat /lib/firmware/wlan/cfg.dat
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -p 644 $(ROOTDIR)/modules/qcacld/firmware_bin/WCNSS_qcom_cfg.ini /lib/firmware/wlan/qcom_cfg.ini
-	$(ROMFSINST) -e CONFIG_QCA_CLD_WLAN -s /etc/config/wlan/wlan_mac.bin /lib/firmware/wlan/wlan_mac.bin
 
 romfs.post:: romfs.cleanup
 

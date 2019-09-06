@@ -2129,12 +2129,25 @@ static int vmw_cmd_set_shader(struct vmw_private *dev_priv,
 		return 0;
 
 	if (cmd->body.shid != SVGA3D_INVALID_ID) {
+		/*
+		 * This is the compat shader path - Per device guest-backed
+		 * shaders, but user-space thinks it's per context host-
+		 * backed shaders.
+		 */
 		res = vmw_shader_lookup(vmw_context_res_man(ctx),
 					cmd->body.shid,
 					cmd->body.type);
 
 		if (!IS_ERR(res)) {
 			ret = vmw_execbuf_res_noctx_val_add(sw_context, res);
+			if (unlikely(ret != 0))
+				return ret;
+
+			ret = vmw_resource_relocation_add
+				(sw_context, res,
+				 vmw_ptr_diff(sw_context->buf_start,
+					      &cmd->body.shid),
+				 vmw_res_rel_normal);
 			if (unlikely(ret != 0))
 				return ret;
 		}
@@ -2338,7 +2351,8 @@ static int vmw_cmd_dx_set_shader(struct vmw_private *dev_priv,
 
 	cmd = container_of(header, typeof(*cmd), header);
 
-	if (cmd->body.type >= SVGA3D_SHADERTYPE_DX10_MAX) {
+	if (cmd->body.type >= SVGA3D_SHADERTYPE_DX10_MAX ||
+	    cmd->body.type < SVGA3D_SHADERTYPE_MIN) {
 		DRM_ERROR("Illegal shader type %u.\n",
 			  (unsigned) cmd->body.type);
 		return -EINVAL;
@@ -2574,6 +2588,10 @@ static int vmw_cmd_dx_view_define(struct vmw_private *dev_priv,
 	if (view_type == vmw_view_max)
 		return -EINVAL;
 	cmd = container_of(header, typeof(*cmd), header);
+	if (unlikely(cmd->sid == SVGA3D_INVALID_ID)) {
+		DRM_ERROR("Invalid surface id.\n");
+		return -EINVAL;
+	}
 	ret = vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
 				user_surface_converter,
 				&cmd->sid, &srf);

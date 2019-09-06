@@ -1,10 +1,9 @@
-diff --git a/src/mm-iface-modem-location.c b/src/mm-iface-modem-location.c
-index 32f9a73..bfcfb43 100644
---- a/src/mm-iface-modem-location.c
-+++ b/src/mm-iface-modem-location.c
-@@ -1372,7 +1372,7 @@ mm_iface_modem_location_initialize (MMIfaceModemLocation *self,
-         /* Set all initial property defaults */
+diff -Nurd ModemManager.orig/src/mm-iface-modem-location.c ModemManager/src/mm-iface-modem-location.c
+--- ModemManager.orig/src/mm-iface-modem-location.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-iface-modem-location.c	2019-05-29 11:08:19.236304668 +1000
+@@ -1863,7 +1863,7 @@
          mm_gdbus_modem_location_set_capabilities (skeleton, MM_MODEM_LOCATION_SOURCE_NONE);
+         mm_gdbus_modem_location_set_supported_assistance_data (skeleton, MM_MODEM_LOCATION_ASSISTANCE_DATA_TYPE_NONE);
          mm_gdbus_modem_location_set_enabled (skeleton, MM_MODEM_LOCATION_SOURCE_NONE);
 -        mm_gdbus_modem_location_set_signals_location (skeleton, FALSE);
 +        mm_gdbus_modem_location_set_signals_location (skeleton, TRUE);

@@ -25,6 +25,8 @@ romfs: romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc romfs.version 
 	$(ROMFSINST) ../network.init.std /etc/network.init
 	$(ROMFSINST) ../firewall.init.std /etc/firewall.init
 
+romfs.post:: romfs.cleanup
+
 image: image.configs image.dir image.linuz image.squashfs7z image.bin image.size image.tag image.copy image.flash 
 
 #

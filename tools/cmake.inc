@@ -3,6 +3,7 @@
 .EXPORT_ALL_VARIABLES:
 
 CONFIGTARGET ?= cmake
+include $(ROOTDIR)/tools/base.inc
 include $(ROOTDIR)/tools/download.inc
 
 CMAKE_OPTS += -DCMAKE_INSTALL_PREFIX= -DCMAKE_SYSTEM_PREFIX_PATH=$(STAGEDIR)

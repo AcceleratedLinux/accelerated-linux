@@ -1,5 +1,6 @@
---- ModemManager/plugins/novatel/mm-sim-novatel-lte.c	2018-11-13 15:22:44.890516047 +1000
-+++ ModemManager/plugins/novatel/mm-sim-novatel-lte.c.new	2018-11-26 15:34:13.092943918 +1000
+diff -Nurd ModemManager.orig/plugins/novatel/mm-sim-novatel-lte.c ModemManager/plugins/novatel/mm-sim-novatel-lte.c
+--- ModemManager.orig/plugins/novatel/mm-sim-novatel-lte.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/plugins/novatel/mm-sim-novatel-lte.c	2019-05-29 11:08:19.516306050 +1000
 @@ -66,8 +66,8 @@
      str = mm_strip_tag (response, "+CRSM:");
  

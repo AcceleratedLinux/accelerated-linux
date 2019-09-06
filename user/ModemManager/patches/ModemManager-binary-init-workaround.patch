@@ -1,6 +1,7 @@
---- ModemManager-0.7.990/src/mm-iface-modem-3gpp-ussd.h.orig	2013-05-15 13:09:15.560428260 +1000
-+++ ModemManager-0.7.990/src/mm-iface-modem-3gpp-ussd.h	2013-05-15 13:09:17.560400535 +1000
-@@ -31,8 +31,8 @@
+diff -Nurd ModemManager.orig/src/mm-iface-modem-3gpp-ussd.h ModemManager/src/mm-iface-modem-3gpp-ussd.h
+--- ModemManager.orig/src/mm-iface-modem-3gpp-ussd.h	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-iface-modem-3gpp-ussd.h	2019-05-29 11:08:19.148304234 +1000
+@@ -29,8 +29,8 @@
  #define MM_IFACE_MODEM_3GPP_USSD_GET_INTERFACE(obj) (G_TYPE_INSTANCE_GET_INTERFACE ((obj), MM_TYPE_IFACE_MODEM_3GPP_USSD, MMIfaceModem3gppUssd))
  
  /* CBS data coding scheme - 3GPP TS 23.038 */

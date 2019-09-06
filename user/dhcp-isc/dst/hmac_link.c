@@ -29,6 +29,7 @@ static const char rcsid[] = "$Header: /proj/cvs/prod/DHCP/dst/hmac_link.c,v 1.3 
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <netinet/in.h>

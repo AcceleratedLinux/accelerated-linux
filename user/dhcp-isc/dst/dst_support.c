@@ -24,6 +24,7 @@ static const char rcsid[] = "$Header: /proj/cvs/prod/DHCP/dst/dst_support.c,v 1.
 #include <memory.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
 #include <sys/socket.h>

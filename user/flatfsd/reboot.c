@@ -43,7 +43,7 @@ static int shutdown_now(int rb_which)
 	 * Write the current date/time to the RTC
 	 */
 #if defined(CONFIG_USER_BUSYBOX_TIMEOUT) && defined(CONFIG_USER_HWCLOCK_HWCLOCK)
-	system("timeout -t 5 hwclock --systohc --utc");
+	system("timeout 5 hwclock --systohc --utc");
 #elif defined(CONFIG_USER_HWCLOCK_HWCLOCK)
 	system("hwclock --systohc --utc");
 #elif defined(CONFIG_USER_RTC_M41T11) || defined (CONFIG_USER_RTC_DS1302)

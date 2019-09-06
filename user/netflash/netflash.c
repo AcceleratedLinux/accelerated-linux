@@ -978,18 +978,29 @@ static int set_bootpart(void)
  */
 static int set_bootpart(void)
 {
+	int ret;
 	char *bootpart;
+	char *partvalid;
 	if (dobootpart == 'a') {
 		bootpart = "a";
+		partvalid = "parta_valid";
 	} else if (dobootpart == 'b') {
 		bootpart = "b";
+		partvalid = "partb_valid";
 	} else {
 		return 0;
 	}
 
 	char *localargv[] = {
-		"/bin/fw_setenv", "bootpart", bootpart, NULL
+		"/bin/fw_setenv", partvalid, "1", NULL
 	};
+	ret = local_system(localargv, 0);
+	if (ret)
+		return ret;
+
+	localargv[1] = "bootpart";
+	localargv[2] = bootpart;
+
 	return local_system(localargv, 0);
 }
 

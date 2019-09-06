@@ -3,7 +3,6 @@
 .EXPORT_ALL_VARIABLES:
 
 CONFIGTARGET ?= patched
-include $(ROOTDIR)/tools/base.inc
 
 #
 # You can override the downloads cache dir in case you would prefer

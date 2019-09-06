@@ -1,6 +1,19 @@
 #!/bin/sh
 #
-# Generate Kconfigs for busbox that are distified versions of Config.in
+# mkKconfig - generate Kconfig for busybox
+#
+# Create a single Kconfig file that can be directly included in the
+# Accelerated build vendor Kconfig. This transforms busybox's own
+# Config.in files (after being generated) into that single Kconfig.
+# The key thing that needs to be added is USER_BUSYBOX_ inserted into
+# the CONFIG_ names - to avoid namespace collisions with the accelerated
+# vendor configuration space.
+#
+# Currently this script is just run when ever we update the busybox
+# version - to create a new Kconfig for the automake busybox. This is
+# a manual step, done by the person doing the busybox update.
+#
+# It needs to br run from the top level of a busybox tree.
 #
 
 mk_Kconfig()
@@ -12,15 +25,22 @@ mk_Kconfig()
 		-e '/^[^a-zA-Z]*[ 	]*depends[ 	]/s/\([A-Z][0-9A-Z_]*\)/USER_BUSYBOX_\1/g' \
 		-e '/^[^a-zA-Z]*[ 	]*default[ 	]/s/\([A-Z][A-Z][0-9A-Z_]*\)/USER_BUSYBOX_\1/g' \
 		-e '/^[^a-zA-Z]*[ 	]*select[ 	]/s/\([A-Z][0-9A-Z_]*\)/USER_BUSYBOX_\1/g' \
-		-e 's?\(^[ 	]*source[ 	][ 	]*\)\([a-zA-Z._].*\)/Config.in?\1../user/busybox/\2/Kconfig?' \
+		-e '/^[^a-zA-Z]*[ 	]*range[ 	]/s/\([A-Z][0-9A-Z_]*\)/USER_BUSYBOX_\1/g' \
+		-e 's?\(^[ 	]*source[ 	][ 	]*\)\([a-zA-Z._].*\)/Config.in?\1\2/Kconfig?' \
+		-e '/^if/s/\([A-Z][A-Z][0-9A-Z_]*\)/USER_BUSYBOX_\1/g' \
 		> $2
 }
 
 make gen_build_files
 
-find . -name Config.in | while read c
+find . -name Config.in | while read CFGFILE
 do
-	echo "Processing $c ..."
-	out=`dirname $c`/Kconfig
-	mk_Kconfig "$c" "$out"
+	#echo "Processing $CFGFILE ..."
+	OUT=`dirname $CFGFILE`/Kconfig
+	mk_Kconfig "$CFGFILE" "$OUT"
 done
+
+# Construct a single Kconfig by wrapping all the 'source'd files
+awk '{ if ($1 == "source") { FILE1=$2 ; while (getline < FILE1 > 0) { if ($1 == "source") { FILE2=$2 ; while (getline < FILE2 > 0) print $0 } else print $0 } } else print $0 }' Kconfig
+
+exit 0

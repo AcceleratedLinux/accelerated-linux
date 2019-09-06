@@ -41,15 +41,15 @@ VENDOR_LIBDIRS =
 #
 # First settings we always want for all build
 #
+MACHINE ?= i386
+ARCH    ?= i386
+ENDIAN  ?= little
+FLOAT   ?= hard
 
-# ARCH = kernel,  TARGET_ARCH = uClibc
-
-MACHINE       ?= i386
-ARCH          ?= i386
-ENDIAN        ?= little
 CROSS_COMPILE ?=
 CROSS         ?= $(CROSS_COMPILE)
 CONFIGURE_HOST ?= 
+CONFIGURE_TOOL ?=
 
 CC        = $(CROSS_COMPILE)gcc
 AS        = $(CROSS_COMPILE)as

@@ -53,15 +53,15 @@ endif
 # First settings we always want for all builds
 #
 
-# ARCH = kernel,  TARGET_ARCH = uClibc
-
-MACHINE       = m68k
+MACHINE = m68k
 ifeq ($(shell egrep 'linux-2.[024]' $(ROOTDIR)/.config),)
-ARCH          = m68k
+ARCH    = m68k
 else
-ARCH          = m68knommu
+ARCH    = m68knommu
 endif
-ENDIAN        = big
+ENDIAN  = big
+FLOAT  ?= soft
+
 ifneq ($(shell which m68k-uclinux-20060615-gcc),)
 CROSS_COMPILE = m68k-uclinux-20060615-
 else
@@ -69,6 +69,7 @@ CROSS_COMPILE = m68k-uclinux-
 endif
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = m68k-elf
+CONFIGURE_TOOL ?= m68k-uclinux$(LIBCSUFFIX)
 
 CONFIG_UCLINUX=y
 
@@ -108,7 +109,7 @@ CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH
 
 ifdef UCLINUX_BUILD_LIB
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
   else
 	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
   endif
@@ -157,9 +158,9 @@ ifdef UCLINUX_BUILD_USER
 	LIBC          = -Wl,-R,$(ROOTDIR)/lib/libc.gdb $(SLIBC)
   endif
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-Os) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror

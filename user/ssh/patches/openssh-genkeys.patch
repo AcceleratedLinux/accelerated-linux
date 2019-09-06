@@ -180,7 +180,7 @@
 +gen-keys$(EXEEXT): gen-keys.o
 +	FLTFLAGS="-s 1000" $(LD) -o $@ gen-keys.o $(LDFLAGS) $(LIBS)
 +
- ssh-keysign$(EXEEXT): $(LIBCOMPAT) libssh.a ssh-keysign.o readconf.o uidswap.o
+ ssh-keysign$(EXEEXT): $(LIBCOMPAT) libssh.a ssh-keysign.o readconf.o uidswap.o compat.o
  	$(LD) -o $@ ssh-keysign.o readconf.o uidswap.o $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
  
 @@ -304,6 +307,7 @@

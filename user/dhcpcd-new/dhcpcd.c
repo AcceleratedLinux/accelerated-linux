@@ -29,6 +29,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
 #include "dhcpcd.h"
 #include "client.h"
 #include "signals.h"

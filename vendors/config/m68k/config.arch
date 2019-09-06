@@ -52,15 +52,15 @@ endif
 #
 # First settings we always want for all builds
 #
+MACHINE = m68k
+ARCH    = m68k
+ENDIAN  = big
+FLOAT  ?= hard
 
-# ARCH = kernel,  TARGET_ARCH = uClibc
-
-MACHINE       = m68k
-ARCH          = m68k
-ENDIAN        = big
 CROSS_COMPILE = m68k-linux-
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = m68k-linux
+CONFIGURE_TOOL ?= m68k-linux$(LIBCSUFFIX)
 
 CC        = ucfront-gcc $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)

@@ -177,7 +177,7 @@ dir_filelist() {
 	dirlist=$(find "${srcdir}" -printf "%p %m %U %G\n" | LANG=C sort)
 
 	# If $dirlist is only one line, then the directory is empty
-	if [  "$(echo "${dirlist}" | wc -l)" -gt 1 ]; then
+	if [  "$(echo "${dirlist}" | wc -l)" -ge 1 ]; then
 		${dep_list}print_mtime "$1"
 
 		echo "${dirlist}" | \

@@ -424,6 +424,43 @@ config HW_RANDOM_EXYNOS
 	  will be called exynos-trng.
 
 	  If unsure, say Y.
+
+config HW_RANDOM_SHA204
+	tristate "Atmel SHA204 Random Number Generator support"
+	depends on HW_RANDOM && I2C
+	---help---
+	  This driver provides kernel-side support for the Random Number
+	  Generator hardware found on Atmel SHA204 chip.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called atsha204-i2c.
+
+	  If unsure, say Y.
+
+config HW_RANDOM_SHA204_LOCKCFG
+	bool "Lock SHA204 config on load"
+	depends on HW_RANDOM_SHA204
+	default n
+	help
+	  This will force the driver to lock the configuration section
+	  when the driver loads thus enabling random number generation.
+
+	  If you are unsure how to answer this question, answer N.
+
+config HW_RANDOM_OPTEE
+	tristate "OP-TEE based Random Number Generator support"
+	depends on OPTEE
+	default HW_RANDOM
+	help
+	  This  driver provides support for OP-TEE based Random Number
+	  Generator on ARM SoCs where hardware entropy sources are not
+	  accessible to normal world (Linux).
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called optee-rng.
+
+	  If unsure, say Y.
+
 endif # HW_RANDOM
 
 config UML_RANDOM

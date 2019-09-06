@@ -31,7 +31,7 @@ echo '#!/bin/sh'  > /etc/config/start
 echo 'exit 0'    >> /etc/config/start
 chmod 555 /etc/config/start
 if [ -f /etc/inittab.d/console ] ; then
-	echo "console:console:-/bin/sh" > /var/run/inittab
+	cat /etc/inittab.d/console > /var/run/inittab
 fi
 
 # check if has real mac address, if so do part two
@@ -51,6 +51,7 @@ if ifconfig eth0 &>/dev/null; then netdev=eth0; fi
 if ifconfig eth &>/dev/null; then netdev=eth; fi
 if ifconfig lan &>/dev/null; then netdev=lan; fi
 if ifconfig lan1 &>/dev/null; then netdev=lan1; fi
+if ifconfig eth1 &>/dev/null; then netdev=eth1; fi
 ifconfig $netdev 192.168.0.1
 inetd &
 exit 0

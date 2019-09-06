@@ -49,7 +49,7 @@ if ! (echo -n "" > /dev/console) 2> /dev/null; then
 fi
 
 # the active main boot drive in /dev/sdX format
-DRIVE=$(df -a / | grep -o /dev/sd.)
+DRIVE=$(stat -c "%t%02T %n" /dev/sd[a-z][0-9] | sed -n 's?'$(stat -c %D /)' \(/dev/sd.\).*?\1?p')
 
 # Fix our /dev/flash devices depending on boot device
 # we use symbolic links otherwise grub-install gets it wrong

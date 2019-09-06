@@ -17,6 +17,8 @@
  * for more details.
  */
 
+#define _GNU_SOURCE
+
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
@@ -130,7 +132,7 @@ bool invoke_command(const char *verb, const char *verb_suffix, char *cmd)
          * Any used by library routines (perhaps the resolver or syslog)
          * will remain.
          */
-	__sighandler_t savesig;
+	sighandler_t savesig;
         FILE *f;
 
 	savesig = signal(SIGCHLD, SIG_DFL);

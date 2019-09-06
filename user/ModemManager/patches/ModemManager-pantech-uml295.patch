@@ -1,5 +1,6 @@
---- ModemManager/plugins/pantech/mm-plugin-pantech.c	2018-11-13 15:22:44.894516047 +1000
-+++ ModemManager/plugins/pantech/mm-plugin-pantech.c.new	2018-11-26 15:50:03.912943841 +1000
+diff -Nurd ModemManager.orig/plugins/pantech/mm-plugin-pantech.c ModemManager/plugins/pantech/mm-plugin-pantech.c
+--- ModemManager.orig/plugins/pantech/mm-plugin-pantech.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/plugins/pantech/mm-plugin-pantech.c	2019-05-29 11:08:19.536306146 +1000
 @@ -131,7 +131,7 @@
  mm_plugin_create (void)
  {

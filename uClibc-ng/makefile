@@ -1,4 +1,4 @@
-UCLIBC_VERSION = 1.0.12
+UCLIBC_VERSION = 1.0.22
 UCLIBC = uClibc-ng-$(UCLIBC_VERSION)
 URL = http://downloads.uclibc-ng.org/releases/$(UCLIBC_VERSION)/$(UCLIBC).tar.xz
 
@@ -15,6 +15,9 @@ oldconfig:
 
 install_headers:
 	$(MAKE) -C build/$(UCLIBC) install_headers PREFIX=$(PREFIX)
+
+install:
+	$(MAKE) -C build/$(UCLIBC) install PREFIX=$(STAGEDIR)/ DEVEL_PREFIX= RUNTIME_PREFIX=
 
 LDSOGCC := $(shell $(CC) $(LIBGCC_CFLAGS) -v -Wl,-verbose 2>&1 | sed -n 's/.*-dynamic-linker *\([^ ]*\) .*$$/\1/p')
 

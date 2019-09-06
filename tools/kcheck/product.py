@@ -51,6 +51,7 @@ groups['linux_common'] = dict(
         BLK_DEV_RAM='y',
         BLK_DEV_RAM_COUNT=4,
         TTY='y',
+        LDISC_AUTOLOAD='y',
         UNIX98_PTYS='y',
         LEDMAN='y',
         GPIOLIB='y',
@@ -211,7 +212,7 @@ groups['modules_cryptodev'] = dict(
 
 groups['modules_qcacld'] = dict(
     modules = dict(
-        QCA_CLD_WLAN='m',
+        QCA_CLD_WLAN='y',
         )
     )
 
@@ -273,8 +274,6 @@ groups['linux_netfilter'] = dict(
         NF_NAT_SNMP_BASIC='m',
         NF_SOCKET_IPV4='m',
         NF_SOCKET_IPV6='m',
-        NF_NAT_IPV4='m',
-        NF_NAT_IPV6='m',
         )
     )
 
@@ -295,8 +294,6 @@ groups['linux_netfilter_ipv4'] = dict(
         NF_CT_NETLINK='m',
         NF_NAT_SNMP_BASIC='m',
         NF_SOCKET_IPV4='m',
-        NF_NAT_IPV4='m',
-        NF_NAT_IPV6='n',
         )
     )
 
@@ -370,7 +367,6 @@ groups['linux_ip6tables'] = dict(
     linux = dict(
         NF_REJECT_IPV6='m',
         NF_LOG_IPV6='m',
-        NF_NAT_MASQUERADE_IPV6='y',
         IP6_NF_IPTABLES='m',
         IP6_NF_MATCH_EUI64='m',
         IP6_NF_MATCH_RPFILTER='m',
@@ -626,6 +622,14 @@ groups['linux_pci_layerscape'] = dict(
     linux = dict(
         PCI_HOST_GENERIC='y',
         PCI_LAYERSCAPE='y',
+        PCIE_DW_PLAT_HOST='y',
+        PCIEPORTBUS='y',
+        PCIEAER='y',
+        PCIEASPM='y',
+        PCI_PRI='y',
+        PCI_PASID='y',
+        PCI_IOV='y',
+        HW_RANDOM='y',
         )
     )
 
@@ -648,6 +652,7 @@ groups['linux_pci_mt7621'] = dict(
     include = [ 'linux_pci' ],
     linux = dict(
         PCI_MT7621='y',
+        PCI_MT7621_PHY='y',
         PCI_MSI='y',
         PCI_QUIRKS='y',
         PCIEPORTBUS='y',
@@ -811,7 +816,6 @@ groups['linux_arm64'] = dict(
         VMAP_STACK='y',
         SPARSEMEM_VMEMMAP='y',
         UNMAP_KERNEL_AT_EL0='y',
-        PINCTRL='y',
         OF='y',
         DEBUG_BUGVERBOSE='y',
         RSEQ='y',
@@ -1180,6 +1184,7 @@ groups['hardware_arm64'] = dict(
         ARM64_ERRATUM_1188873='y',
         ARM64_ERRATUM_1165522='y',
         ARM64_ERRATUM_1286807='y',
+        ARM64_ERRATUM_1463225='y',
         HARDEN_BRANCH_PREDICTOR='y',
         HARDEN_EL2_VECTORS='y',
         RODATA_FULL_DEFAULT_ENABLED='y',
@@ -1191,8 +1196,6 @@ groups['hardware_arm64'] = dict(
         HZ_PERIODIC='y',
         HIGH_RES_TIMERS='y',
         MODULE_FORCE_UNLOAD='y',
-        REGULATOR='y',
-        REGULATOR_FIXED_VOLTAGE='y',
         ARM_ARCH_TIMER_EVTSTREAM='y',
         HISILICON_ERRATUM_161010101='y',
         ARM_TIMER_SP804='y',
@@ -1216,14 +1219,12 @@ groups['hardware_arm64'] = dict(
         RTC_INTF_SYSFS='y',
         RTC_INTF_PROC='y',
         RTC_INTF_DEV='y',
-        SATA_AHCI='y',
-        SATA_MOBILE_LPM_POLICY='0',
         POWER_SUPPLY='y',
         HWMON='y',
         NEW_LEDS='y',
         LEDS_CLASS='y',
         LEDS_TRIGGERS='y',
-        LEDS_TRIGGER_DISK='y',
+        LEDS_TRIGGER_TIMER='y',
         LEDS_TRIGGER_HEARTBEAT='y',
         LEDS_TRIGGER_CPU='y',
         LEDS_TRIGGER_DEFAULT_ON='y',
@@ -1236,7 +1237,6 @@ groups['hardware_arm64'] = dict(
         DEBUG_MEMORY_INIT='y',
         MSDOS_PARTITION='y',
         EFI_PARTITION='y',
-        TEE='y',
         CRYPTO_MANAGER_DISABLE_TESTS='y',
         CRYPTO_NULL='y',
         CRYPTO_HW='y',
@@ -1254,23 +1254,20 @@ groups['hardware_arm64'] = dict(
         ),
     )
 
-groups['hardware_layerscape_1046'] = dict(
+groups['hardware_layerscape'] = dict(
     include = [
         'hardware_arm64',
         ],
     linux = dict(
         ARCH_LAYERSCAPE='y',
-        FSL_ERRATUM_A008585='y',
         CLK_QORIQ='y',
-        PINCTRL_SINGLE='y',
+        FSL_ERRATUM_A008585='y',
         SERIAL_8250='y',
         SERIAL_8250_DEPRECATED_OPTIONS='y',
         SERIAL_8250_CONSOLE='y',
+        SERIAL_8250_DMA='y',
         SERIAL_OF_PLATFORM='y',
-        AHCI_QORIQ='y',
         SPI='y',
-        SPI_FSL_SPI='y',
-        SPI_FSL_DSPI='y',
         SPI_FSL_QUADSPI='y',
         I2C='y',
         I2C_IMX='y',
@@ -1279,27 +1276,17 @@ groups['hardware_layerscape_1046'] = dict(
         I2C_MUX='y',
         I2C_HELPER_AUTO='y',
         I2C_DESIGNWARE_PLATFORM='y',
-        NET_VENDOR_FREESCALE='y',
-        FSL_FMAN='y',
-        FSL_XGMAC_MDIO='y',
-        FSL_DPAA='y',
-        FSL_DPAA_ETH='y',
         FSL_MC_BUS='y',
+        DMADEVICES='y',
+        FSL_EDMA='y',
         USB_PCI='y',
         USB_STORAGE='y',
         USB_XHCI_HCD='y',
-        USB_EHCI_HCD_PLATFORM='y',
-        USB_OHCI_HCD='y',
-        USB_OHCI_HCD_PCI='y',
-        USB_OHCI_HCD_PLATFORM='y',
         USB_MUSB_HDRC='y',
         USB_DWC3='y',
-        USB_DWC3_HAPS='y',
         USB_DWC3_OF_SIMPLE='y',
         USB_DWC2='y',
-        USB_CHIPIDEA='y',
-        USB_CHIPIDEA_HOST='y',
-        USB_ISP1760='y',
+        USB_DWC2_PCI='y',
         NOP_USB_XCEIV='y',
         USB_ULPI='y',
         PWRSEQ_EMMC='y',
@@ -1314,11 +1301,55 @@ groups['hardware_layerscape_1046'] = dict(
         EXT4_USE_FOR_EXT2='y',
         VFAT_FS='y',
         CONFIGFS_FS='y',
+        CRYPTO_DEV_FSL_CAAM='y',
+        CRYPTO_DEV_FSL_CAAM_CRYPTO_API_QI='y',
+        CRYPTO_DEV_FSL_CAAM_COMMON='y',
+        CRYPTO_DEV_FSL_CAAM_JR='y',
+        CRYPTO_DEV_FSL_CAAM_RINGSIZE='9',
+        CRYPTO_DEV_FSL_CAAM_CRYPTO_API='y',
+        CRYPTO_DEV_FSL_CAAM_AHASH_API='y',
+        CRYPTO_DEV_FSL_CAAM_PKC_API='y',
+        CRYPTO_DEV_FSL_CAAM_RNG_API='y',
+        CRYPTO_DEV_FSL_CAAM_CRYPTO_API_DESC='y',
+        CRYPTO_DEV_FSL_CAAM_AHASH_API_DESC='y',
         ),
     user = dict(
         USER_FDISK_FDISK='y',
         USER_FDISK_SFDISK='y',
        )
+    )
+
+groups['hardware_layerscape_1012'] = dict(
+    include = [
+        'hardware_layerscape',
+        ],
+    linux = dict(
+        NET_VENDOR_FREESCALE='y',
+        FSL_FMAN='y',
+        FSL_DPAA='y',
+        FSL_XGMAC_MDIO='y',
+        FSL_PPFE='y',
+        FSL_PPFE_UTIL_DISABLED='y',
+        DEBUG_FS='y',
+        BLK_DEBUG_FS='y',
+        GPIO_MPC8XXX='y',
+        ),
+    user = dict(
+        USER_QORIQ_ENGINE_PFE_BIN='y',
+       )
+    )
+
+groups['hardware_layerscape_1046'] = dict(
+    include = [
+        'hardware_layerscape',
+        ],
+    linux = dict(
+        NET_VENDOR_FREESCALE='y',
+        FSL_FMAN='y',
+        FSL_XGMAC_MDIO='y',
+        FSL_DPAA='y',
+        FSL_DPAA_ETH='y',
+        ),
     )
 
 groups['linux_32bit'] = dict(
@@ -1340,6 +1371,9 @@ groups['linux_x86'] = dict(
     linux = dict(
         IA32_EMULATION='y',
         KERNEL_XZ='y',
+        RELOCATABLE='y',
+        RANDOMIZE_BASE='y',
+        RANDOMIZE_MEMORY='y',
         LOG_BUF_SHIFT='17',
         LOG_CPU_MAX_BUF_SHIFT='12',
         ELF_CORE='y',
@@ -1361,7 +1395,7 @@ groups['linux_x86'] = dict(
         DMIID='y',
         PERF_EVENTS='y',
         VM_EVENT_COUNTERS='y',
-        COMPAT_BRK='y',
+        COMPAT_BRK='n',
         RD_BZIP2='y',
         RD_LZMA='y',
         RD_XZ='y',
@@ -1772,26 +1806,43 @@ groups['hardware_wireless'] = dict(
         )
     )
 
+groups['hardware_gnss'] = dict(
+    user = dict(
+        PROP_LOCATION='y',
+        USER_GPSD='y',
+        )
+    )
+
 groups['wireless_ixx4'] = dict(
     include = [
         'config_wireless',
         ],
     linux = dict(
+        CFG80211='y',
+        CFG80211_CRDA_SUPPORT='y',
+        CFG80211_DEFAULT_PS='y',
+        MMC='y',
+        MMC_SDHCI_ESDHC_IMX='y',
+        WEXT_PRIV='y',
         WIRELESS='y',
         WIRELESS_EXT='y',
-        WEXT_PRIV='y',
         WLAN='y',
         WLAN_VENDOR_INTERSIL='y',
+        MMC_BLOCK='y',
+        MMC_BLOCK_MINORS=8,
+        MMC_SDHCI='y',
+        MMC_SDHCI_IO_ACCESSORS='y',
+        MMC_SDHCI_PLTFM='y',
+        MMC_CQHCI='y',
         ),
     user = dict(
+        USER_CRDA='y',
         USER_HOSTAPD_HOSTAPD_CLI='y',
         USER_IW='y',
         USER_WIRELESS_TOOLS='y',
         USER_WIRELESS_TOOLS_IWCONFIG='y',
-        USER_WIRELESS_TOOLS_IWGETID='y',
         USER_WIRELESS_TOOLS_IWLIST='y',
         USER_WIRELESS_TOOLS_IWPRIV='y',
-        USER_WIRELESS_TOOLS_IWSPY='y',
         USER_WPA_CLI='y',
         USER_WPA_SUPPLICANT='y',
         USER_WPA_PASSPHRASE='y',
@@ -2114,6 +2165,61 @@ groups['hardware_connectit_mini'] = dict(
         )
     )
 
+groups['hardware_ex12'] = dict(
+    include = [
+        'hardware_imx6',
+        'hardware_nand',
+        'hardware_cellular_telit',
+        'custom_telit_firmware_upload',
+        'linux_usb_net_internal',
+        'linux_usb_storage',
+        'config_stdcpp',
+        ],
+    linux = dict(
+        SNAPDOG='y',
+        SNAPDOG_EX12='y',
+        BLK_DEV_RAM_SIZE=16384,
+        LOG_BUF_SHIFT='17',
+        UNCOMPRESS_INCLUDE='../mach-imx/include/mach/uncompress.h',
+        CMDLINE='console=null',
+        COMPAT_BRK='y',
+        STANDALONE='y',
+        SCSI_PROC_FS='y',
+        EXT4_FS='y',
+        EXT3_FS='y',
+        EXT4_USE_FOR_EXT2='y',
+        MSDOS_FS='y',
+        VFAT_FS='y',
+        FAT_DEFAULT_CODEPAGE='437',
+        FAT_DEFAULT_IOCHARSET='iso8859-1',
+        DEBUG_MEMORY_INIT='y',
+        I2C='y',
+        I2C_CHARDEV='y',
+        I2C_IMX='y',
+        I2C_MUX='y',
+        NVMEM='y',
+        NVMEM_IMX_OCOTP='y',
+        ),
+    user = dict(
+        BOOT_UBOOT_FREESCALE_IMX6='y',
+        BOOT_UBOOT_FREESCALE_IMX6_TARGET='ex12',
+        USER_I2C_TOOLS='y',
+        USER_NETFLASH_AUTODECOMPRESS='y',
+        USER_NETFLASH_CRYPTO_V3='y',
+        USER_NETFLASH_DUAL_IMAGES='y',
+        USER_NETFLASH_ATECC508A='y',
+        USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT=15,
+        USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT=9,
+        USER_NETFLASH_ATECC508A_I2C_BUS='1',
+        USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL='n',
+        USER_SIGS_SIGS='y',
+        PROP_SECUREBOOT='y',
+        PROP_SECUREBOOT_PROGRAM_ECC508='y',
+        PROP_SECUREBOOT_TOOLS='y',
+        PROP_IMX_FUSES='y',
+        )
+    )
+
 groups['hardware_connectit4'] = dict(
     include = [
         'hardware_imx6',
@@ -2179,7 +2285,6 @@ groups['hardware_connectit48'] = dict(
         RTC_DRV_CMOS_RAW_ALARM_BYTES='y',
         BLK_DEV_RAM_SIZE=65536,
         LOG_BUF_SHIFT='17',
-        COMPAT_BRK='y',
         STANDALONE='y',
         SCSI_PROC_FS='y',
         EXT4_FS='y',
@@ -2205,7 +2310,6 @@ groups['hardware_connectit48'] = dict(
         USER_GRUB_ENVTOOLS='y',
         USER_GRUB_DISABLE_VGA_CONSOLE='y',
         USER_UBOOT_ENVTOOLS='n',
-        USER_UBOOT_ENVTOOLS_ENV_OVERWRITE='n',
         USER_NETFLASH_AUTODECOMPRESS='y',
         USER_NETFLASH_CRYPTO_V3='y',
         USER_NETFLASH_DUAL_IMAGES='y',
@@ -2313,7 +2417,7 @@ groups['hardware_6310_dx'] = dict(
         )
     )
 
-groups['hardware_ix14'] = dict(
+groups['hardware_ix14-base'] = dict(
     include = [
         'hardware_imx6',
         'hardware_nand',
@@ -2322,10 +2426,6 @@ groups['hardware_ix14'] = dict(
         'linux_container',
         'hardware_bluetooth',
         'modules_cryptodev',
-        #
-        # Uncomment the following line to enable wireless on the IX14
-        #
-        # 'modules_qcacld',
         ],
     linux = dict(
         ALLOW_DEV_COREDUMP='y',
@@ -2395,7 +2495,7 @@ groups['hardware_ix14'] = dict(
         POWER_SUPPLY='y',
         PPP_MULTILINK='y',
         PROC_EVENTS='y',
-        PWM_IMX='y',
+        PWM_IMX27='y',
         PWM='y',
         PM='y',
         RELAY='y',
@@ -2473,7 +2573,7 @@ groups['hardware_ix14'] = dict(
     user = dict(
         BOOT_UBOOT_DIGI_PRODUCTION='y',
         BOOT_UBOOT_DIGI_TARGET='ix14',
-        BOOT_UBOOT_DIGI_VERSION='64a2930682d9bc157b6ea2708dc9ecb45f0d7fa9',
+        BOOT_UBOOT_DIGI_VERSION='5bc67edc07e649a0f734bd23b546d9fcaf440a59',
         BOOT_UBOOT_DIGI='y',
         LIB_LIBFTDI='y',
         POOR_ENTROPY='n',
@@ -2483,7 +2583,7 @@ groups['hardware_ix14'] = dict(
         PROP_SIM_SIM='y',
         USER_HWCLOCK_HWCLOCK='y',
         USER_BUSYBOX_FEATURE_FANCY_SLEEP='y',
-        USER_BUSYBOX_FEATURE_FLOAT_SLEEP='y',
+        USER_BUSYBOX_FLOAT_DURATION='y',
         USER_BUSYBOX_FEATURE_TR_CLASSES='y',
         USER_BUSYBOX_MICROCOM='y',
         USER_BUSYBOX_STRINGS='y',
@@ -2503,6 +2603,19 @@ groups['hardware_ix14'] = dict(
         USER_NETFLASH_ATECC508A_I2C_BUS='0',
         USER_SIGS_SIGS='y',
         )
+    )
+
+groups['hardware_ix14'] = dict(
+    include = [
+        'hardware_ix14-base',
+        ]
+    )
+
+groups['hardware_ix14-wx'] = dict(
+    include = [
+        'hardware_ix14-base',
+        'modules_qcacld',
+        ]
     )
 
 groups['hardware_mt7621'] = dict(
@@ -2555,7 +2668,7 @@ groups['hardware_mt7621'] = dict(
         FUTEX='y',
         CROSS_MEMORY_ATTACH='y',
         RELAY='y',
-        BLK_DEV_RAM_SIZE=16384,
+        BLK_DEV_RAM_SIZE=32768,
         MTD_CMDLINE_PARTS='y',
         MTD_OF_PARTS='y',
         MTD_NAND='y',
@@ -2564,7 +2677,7 @@ groups['hardware_mt7621'] = dict(
         MTD_UBI_WL_THRESHOLD='4096',
         MTD_UBI_BEB_LIMIT='20',
         MTD_UBI_GLUEBI='y',
-        I2C_MT7621='y',
+        I2C_MT7621_MANUAL='y',
         GPIO_MT7621='y',
         GPIO_PCF857X='y',
         NET_SWITCHDEV='y',
@@ -2685,6 +2798,7 @@ groups['hardware_tx54'] = dict(
         'hardware_mt7621',
         'hardware_cellular_cm',
         'hardware_wireless',
+        'hardware_gnss',
         ],
     linux = dict(
         DTB_MT7621_TX54='y',
@@ -2703,12 +2817,269 @@ groups['hardware_tx54'] = dict(
         INPUT_MISC='y',
         INPUT_ADXL34X='y',
         INPUT_ADXL34X_I2C='y',
+        HW_RANDOM_SHA204='y',
+        HW_RANDOM_SHA204_LOCKCFG='n',
+        MFD_MCU_TX54='y',
+        INPUT_EVDEV='y',
+        INPUT_MCU_TX54_KEYS='y',
+        I2C_CHARDEV='y',
+        POWER_RESET='y',
+        POWER_RESET_MCU_TX54='y',
+        POWER_SUPPLY='y',
+        BATTERY_MCU_TX54='y',
+        LEDS_MCU_TX54='y',
+        LEDS_TRIGGER_TIMER='y',
+        LEDS_GPIO='y',
         ),
     user = dict(
+        USER_BUSYBOX_LONG_OPTS='y',
         USER_BUSYBOX_HWCLOCK='y',
-        USER_BUSYBOX_FEATURE_HWCLOCK_LONG_OPTIONS='y',
         BOOT_UBOOT='y',
         BOOT_UBOOT_TARGET='tx54',
+        USER_NETFLASH_CRYPTO_V3='y',
+        USER_NETFLASH_DUAL_IMAGES='y',
+        USER_NETFLASH_ATECC508A='y',
+        USER_NETFLASH_ATECC508A_ALG_ECDSA='y',
+        USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT=15,
+        USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT=9,
+        USER_NETFLASH_ATECC508A_KERNEL_DRIVER='y',
+        USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL='n',
+        USER_NETFLASH_DEVMODE_KERNEL_CMDLINE='y',
+        PROP_TX54_MCU='y',
+        USER_BUSYBOX_ACPID='y',
+        USER_BUSYBOX_FEATURE_ACPID_COMPAT='y',
+        USER_BUSYBOX_HEXDUMP='y',
+        USER_BUSYBOX_FEATURE_HEXDUMP_REVERSE='y',
+        USER_LEDCMD_LEDCMD='n',
+        PROP_LEDCMD_SYSFS='y',
+        )
+    )
+
+groups['hardware_tx54_migration'] = dict(
+    include = [
+        'hardware_nand',
+        'linux_mips',
+        'linux_smp',
+        'linux_32bit',
+        'linux_pci_mt7621',
+        'linux_i2c',
+        ],
+    linux = dict(
+        LOCALVERSION_AUTO='y',
+        SYSVIPC='y',
+        BLK_DEV_INITRD='y',
+        RD_LZMA='y',
+        MULTIUSER='y',
+        POSIX_TIMERS='y',
+        PRINTK='y',
+        BUG='y',
+        BASE_FULL='y',
+        EPOLL='y',
+        SIGNALFD='y',
+        TIMERFD='y',
+        EVENTFD='y',
+        SHMEM='y',
+        ADVISE_SYSCALLS='y',
+        EMBEDDED='y',
+        SLUB_DEBUG='y',
+        SLAB_MERGE_DEFAULT='y',
+        MODULES='y',
+        MODULE_UNLOAD='y',
+        BLOCK='y',
+        PARTITION_ADVANCED='y',
+        BINFMT_ELF='y',
+        BINFMT_SCRIPT='y',
+        COREDUMP='y',
+        DEVTMPFS='y',
+        DEVTMPFS_MOUNT='y',
+        PREVENT_FIRMWARE_BUILD='y',
+        MTD='y',
+        MTD_BLOCK='y',
+        BLK_DEV='y',
+        BLK_DEV_LOOP='y',
+        BLK_DEV_RAM='y',
+        BLK_DEV_RAM_COUNT='4',
+        INPUT_MISC='y',
+        INPUT_ADXL34X='y',
+        INPUT_ADXL34X_I2C='y',
+        TTY='y',
+        UNIX98_PTYS='y',
+        LEDMAN='y',
+        GPIO_SYSFS='y',
+        HWMON='y',
+        SENSORS_LM73='y',
+        USB_SUPPORT='y',
+        USB='y',
+        USB_ANNOUNCE_NEW_DEVICES='y',
+        USB_DEFAULT_PERSIST='y',
+        USB_EHCI_HCD='y',
+        USB_EHCI_ROOT_HUB_TT='y',
+        USB_EHCI_TT_NEWSCHED='y',
+        USB_ACM='y',
+        USB_WDM='y',
+        USB_SERIAL='y',
+        USB_SERIAL_GENERIC='y',
+        USB_SERIAL_SIMPLE='y',
+        USB_SERIAL_IPW='y',
+        USB_SERIAL_QCAUX='y',
+        USB_SERIAL_QUALCOMM='y',
+        USB_SERIAL_OPTION='y',
+        USB_SERIAL_QT2='y',
+        GENERIC_PHY='y',
+        FILE_LOCKING='y',
+        INOTIFY_USER='y',
+        OVERLAY_FS='y',
+        OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW='y',
+        PROC_FS='y',
+        PROC_SYSCTL='y',
+        PROC_PAGE_MONITOR='y',
+        SYSFS='y',
+        TMPFS='y',
+        MISC_FILESYSTEMS='y',
+        SQUASHFS='y',
+        SQUASHFS_XZ='y',
+        NLS_CODEPAGE_437='y',
+        NLS_ISO8859_1='y',
+        COREDUMP_PRINTK='y',
+        KEYS='y',
+        CRYPTO_RSA='y',
+        CRYPTO_MANAGER_DISABLE_TESTS='y',
+        CRYPTO_AUTHENC='y',
+        CRYPTO_ECHAINIV='y',
+        CRYPTO_CBC='y',
+        CRYPTO_ECB='y',
+        CRYPTO_CMAC='y',
+        CRYPTO_MD5='y',
+        CRYPTO_SHA1='y',
+        CRYPTO_ARC4='y',
+        CRYPTO_DES='y',
+        ASYMMETRIC_KEY_TYPE='y',
+        ASYMMETRIC_PUBLIC_KEY_SUBTYPE='y',
+        X509_CERTIFICATE_PARSER='y',
+        PKCS7_MESSAGE_PARSER='y',
+        SYSTEM_TRUSTED_KEYRING='y',
+        CRC_CCITT='y',
+        SECTION_MISMATCH_WARN_ONLY='y',
+        PANIC_TIMEOUT='-1',
+        RALINK='y',
+        SOC_MT7621='y',
+        MIPS_NO_APPENDED_DTB='y',
+        MIPS_CMDLINE_FROM_BOOTLOADER='y',
+        CPU_LITTLE_ENDIAN='y',
+        MIPS_MT_SMP='y',
+        SCHED_SMT='y',
+        MIPS_MT_FPAFF='y',
+        MIPS_CPS='y',
+        CPU_NEEDS_NO_SMARTMIPS_OR_MICROMIPS='y',
+        CPU_ISOLATION='y',
+        NR_CPUS='4',
+        RCU_CPU_STALL_TIMEOUT='21',
+        HZ_100='y',
+        HZ_PERIODIC='y',
+        HIGH_RES_TIMERS='y',
+        LOG_BUF_SHIFT='17',
+        LOG_CPU_MAX_BUF_SHIFT='12',
+        CC_OPTIMIZE_FOR_PERFORMANCE='y',
+        STACKPROTECTOR_STRONG='y',
+        SYSCTL_SYSCALL='y',
+        KALLSYMS='y',
+        ELF_CORE='y',
+        CORE_DUMP_DEFAULT_ELF_HEADERS='y',
+        AIO='y',
+        VM_EVENT_COUNTERS='y',
+        COMPAT_BRK='y',
+        MODULE_FORCE_UNLOAD='y',
+        STANDALONE='y',
+        FW_LOADER='y',
+        EXTRA_FIRMWARE='',
+        LBDAF='y',
+        BLK_DEV_BSG='y',
+        MSDOS_PARTITION='y',
+        EFI_PARTITION='y',
+        FUTEX='y',
+        CROSS_MEMORY_ATTACH='y',
+        RELAY='y',
+        BLK_DEV_RAM_SIZE=16384,
+        MTD_CMDLINE_PARTS='y',
+        MTD_OF_PARTS='y',
+        MTD_NAND='y',
+        MTD_NAND_MT7621='y',
+        MTD_UBI='y',
+        MTD_UBI_WL_THRESHOLD='4096',
+        MTD_UBI_BEB_LIMIT='20',
+        MTD_UBI_GLUEBI='y',
+        I2C_MT7621_MANUAL='y',
+        GPIO_MT7621='y',
+        GPIO_PCF857X='y',
+        NET_SWITCHDEV='n',
+        SWCONFIG='n',
+        SCSI='y',
+        SCSI_PROC_FS='y',
+        BLK_DEV_SD='y',
+        STAGING='y',
+        USB_PCI='y',
+        USB_OHCI_HCD='y',
+        USB_OHCI_HCD_PCI='y',
+        USB_EHCI_HCD_PLATFORM='y',
+        USB_XHCI_HCD='y',
+        USB_XHCI_PLATFORM='y',
+        SERIAL_8250='y',
+        SERIAL_8250_CONSOLE='y',
+        SERIAL_8250_NR_UARTS='3',
+        SERIAL_8250_RUNTIME_UARTS='3',
+        SERIAL_OF_PLATFORM='y',
+        EARLY_PRINTK='y',
+        RTC_CLASS='y',
+        RTC_HCTOSYS='y',
+        RTC_SYSTOHC='y',
+        RTC_HCTOSYS_DEVICE='rtc0',
+        RTC_SYSTOHC_DEVICE='rtc0',
+        RTC_INTF_SYSFS='y',
+        RTC_INTF_PROC='y',
+        RTC_INTF_DEV='y',
+        RTC_DRV_CMOS='y',
+        RESET_CONTROLLER='y',
+        MFD_SYSCON='y',
+        NEW_LEDS='y',
+        LEDS_CLASS='y',
+        LEDS_TRIGGERS='y',
+        EXT4_FS='y',
+        EXT3_FS='y',
+        EXT4_USE_FOR_EXT2='y',
+        DNOTIFY='y',
+        MSDOS_FS='y',
+        VFAT_FS='y',
+        FAT_DEFAULT_CODEPAGE='437',
+        FAT_DEFAULT_IOCHARSET='iso8859-1',
+        ENABLE_MUST_CHECK='y',
+        DEBUG_MEMORY_INIT='y',
+        CRYPTO_SHA512='y',
+        CRYPTO_ANSI_CPRNG='m',
+        CRYPTO_CCM='y',
+        CRYPTO_GCM='y',
+        WATCHDOG='y',
+        HW_RANDOM='y',
+        DTB_MT7621_TX54_MIGRATION='y',
+        MT7621_WDT='y',
+        SQUASHFS_ZLIB='y',
+        USB_SERIAL_CP210X='y',
+        PINCTRL_MCP23S08='y',
+        RTC_DRV_DS3232='y',
+        RTC_NVMEM='y',
+        INPUT='y',
+        INPUT_LEDS='y',
+        HW_RANDOM_SHA204='y',
+        HW_RANDOM_SHA204_LOCKCFG='n',
+        INITRAMFS_SOURCE='../romfs ../vendors/Digi/TX54-Migration/romfs.dev',
+        ),
+    user = dict(
+        USER_ETHTOOL_ETHTOOL='n',
+        USER_FLATFSD_USE_FLASH_FS='y',
+        USER_BUSYBOX_LONG_OPTS='y',
+        USER_BUSYBOX_HWCLOCK='y',
+        USER_BUSYBOX_LSPCI='y',
+        USER_BUSYBOX_SEQ='y',
+        USER_BUSYBOX_GETTY='y',
         )
     )
 
@@ -2720,6 +3091,7 @@ groups['hardware_tx64'] = dict(
         'custom_telit_firmware_upload',
         'hardware_cellular_external',
         'hardware_wireless',
+        'hardware_gnss',
         'linux_x86',
         'linux_net_e1000',
         'linux_net_r8169',
@@ -2774,6 +3146,8 @@ groups['hardware_tx64'] = dict(
         LPC_ICH='y',
         ITCO_WDT='y',
         INPUT_EVDEV='y',
+        HW_RANDOM_SHA204='y',
+        HW_RANDOM_SHA204_LOCKCFG='n',
         ),
     user = dict(
         LIB_INSTALL_LIBATOMIC='y',
@@ -2790,8 +3164,9 @@ groups['hardware_tx64'] = dict(
         USER_NETFLASH_ATECC508A_ALG_HMAC='y',
         USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT=1,
         USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT=9,
-        USER_NETFLASH_ATECC508A_I2C_BUS='1',
+        USER_NETFLASH_ATECC508A_KERNEL_DRIVER='y',
         USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL='y',
+        USER_NETFLASH_DEVMODE_KERNEL_CMDLINE='y',
         USER_FLATFSD_USE_FLASH_FS='y',
         USER_FDISK_FDISK='y',
         USER_FDISK_SFDISK='y',
@@ -2804,7 +3179,6 @@ groups['hardware_tx64'] = dict(
         USER_PCIUTILS='y',
         USER_ETHTOOL_ETHTOOL='y',
         USER_UBOOT_ENVTOOLS='n',
-        USER_UBOOT_ENVTOOLS_ENV_OVERWRITE='n',
         USER_LM_SENSORS='y',
         USER_BUSYBOX_GETTY='y',
         USER_GRUB='y',
@@ -2966,10 +3340,6 @@ groups['hardware_8300'] = dict(
         USER_LINUX_FIRMWARE='y',
         USER_INIT_CONSOLE_SH='y',
         USER_CRON_CRON='y',
-        USER_UBOOT_ENVTOOLS_OPTIONS='y',
-        USER_UBOOT_ENVTOOLS_OPTION_ETHADDR='00:27:04:03:02:00',
-        USER_UBOOT_ENVTOOLS_OPTION_ETH1ADDR='00:27:04:03:02:01',
-        USER_UBOOT_ENVTOOLS_OPTION_ETH2ADDR='00:27:04:03:02:02',
         USER_NETFLASH_CRYPTO='y',
         USER_NETFLASH_CRYPTO_V2='y',
         USER_NETFLASH_CRYPTO_OPTIONAL='y',
@@ -3309,10 +3679,6 @@ groups['hardware_factoryU115'] = dict(
         USER_PROCPS_VMSTAT='y',
         USER_PROCPS_W='y',
         USER_SIGS_SIGS='y',
-        USER_UBOOT_ENVTOOLS_OPTIONS='y',
-        USER_UBOOT_ENVTOOLS_OPTION_ETHADDR='00:27:04:03:02:00',
-        USER_UBOOT_ENVTOOLS_OPTION_ETH1ADDR='00:27:04:03:02:01',
-        USER_UBOOT_ENVTOOLS_OPTION_ETH2ADDR='00:27:04:03:02:02',
         )
     )
 
@@ -3484,10 +3850,6 @@ groups['hardware_factory8300'] = dict(
         USER_LINUX_FIRMWARE='y',
         USER_INIT_CONSOLE_SH='y',
         USER_CRON_CRON='y',
-        USER_UBOOT_ENVTOOLS_OPTIONS='y',
-        USER_UBOOT_ENVTOOLS_OPTION_ETHADDR='00:27:04:03:02:00',
-        USER_UBOOT_ENVTOOLS_OPTION_ETH1ADDR='00:27:04:03:02:01',
-        USER_UBOOT_ENVTOOLS_OPTION_ETH2ADDR='00:27:04:03:02:02',
         USER_NETFLASH_CRYPTO='y',
         USER_NETFLASH_CRYPTO_OPTIONAL='y',
         USER_MTD_UTILS_ERASEALL='y',
@@ -3538,7 +3900,7 @@ groups['hardware_factory8300'] = dict(
 
 groups['busybox'] = dict(
     user = dict(
-        USER_BUSYBOX_BUSYBOX='y',
+        USER_BUSYBOX='y',
         USER_BUSYBOX_ARPING='y',
         USER_BUSYBOX_ETHER_WAKE='y',
         USER_BUSYBOX_INCLUDE_SUSv2='y',
@@ -3552,7 +3914,6 @@ groups['busybox'] = dict(
         USER_BUSYBOX_FEATURE_DEVPTS='y',
         USER_BUSYBOX_NO_DEBUG_LIB='y',
         USER_BUSYBOX_INSTALL_APPLET_SYMLINKS='y',
-        USER_BUSYBOX_FEATURE_USE_TERMIOS='y',
         USER_BUSYBOX_FEATURE_EDITING='y',
         USER_BUSYBOX_FEATURE_TAB_COMPLETION='y',
         USER_BUSYBOX_FEATURE_NON_POSIX_CP='y',
@@ -3612,11 +3973,9 @@ groups['busybox'] = dict(
         USER_BUSYBOX_FEATURE_LS_USERNAME='y',
         USER_BUSYBOX_MD5SUM='y',
         USER_BUSYBOX_MKDIR='y',
-        USER_BUSYBOX_FEATURE_MKDIR_LONG_OPTIONS='y',
         USER_BUSYBOX_MKFIFO='y',
         USER_BUSYBOX_MKNOD='y',
         USER_BUSYBOX_MV='y',
-        USER_BUSYBOX_FEATURE_MV_LONG_OPTIONS='y',
         USER_BUSYBOX_NICE='y',
         USER_BUSYBOX_PRINTF='y',
         USER_BUSYBOX_PWD='y',
@@ -3624,7 +3983,6 @@ groups['busybox'] = dict(
         USER_BUSYBOX_FEATURE_READLINK_FOLLOW='y',
         USER_BUSYBOX_RM='y',
         USER_BUSYBOX_RMDIR='y',
-        USER_BUSYBOX_FEATURE_RMDIR_LONG_OPTIONS='y',
         USER_BUSYBOX_SLEEP='y',
         USER_BUSYBOX_SORT='y',
         USER_BUSYBOX_STAT='y',
@@ -3641,7 +3999,6 @@ groups['busybox'] = dict(
         USER_BUSYBOX_USLEEP='y',
         USER_BUSYBOX_WC='y',
         USER_BUSYBOX_YES='y',
-        USER_BUSYBOX_FEATURE_AUTOWIDTH='y',
         USER_BUSYBOX_FEATURE_HUMAN_READABLE='y',
         USER_BUSYBOX_CLEAR='y',
         USER_BUSYBOX_RESET='y',
@@ -3670,11 +4027,13 @@ groups['busybox'] = dict(
         USER_BUSYBOX_FEATURE_FIND_SIZE='y',
         USER_BUSYBOX_FEATURE_FIND_LINKS='y',
         USER_BUSYBOX_GREP='y',
-        USER_BUSYBOX_FEATURE_GREP_EGREP_ALIAS='y',
-        USER_BUSYBOX_FEATURE_GREP_FGREP_ALIAS='y',
+        USER_BUSYBOX_EGREP='y',
+        USER_BUSYBOX_FGREP='y',
         USER_BUSYBOX_FEATURE_GREP_CONTEXT='y',
         USER_BUSYBOX_XARGS='y',
         USER_BUSYBOX_HALT='y',
+        USER_BUSYBOX_REBOOT='y',
+        USER_BUSYBOX_POWEROFF='y',
         USER_BUSYBOX_USE_BB_CRYPT='y',
         USER_BUSYBOX_USE_BB_CRYPT_SHA='y',
         USER_BUSYBOX_DMESG='y',
@@ -3729,6 +4088,7 @@ groups['busybox'] = dict(
 
 groups['busybox_big'] = dict(
     user = dict(
+        USER_BUSYBOX_LONG_OPTS='y',
         USER_BUSYBOX_FEATURE_DATE_NANO='y',
         USER_BUSYBOX_HOSTID='y',
         USER_BUSYBOX_FEATURE_TEST_64='y',
@@ -3739,9 +4099,7 @@ groups['busybox_big'] = dict(
         USER_BUSYBOX_CKSUM='y',
         USER_BUSYBOX_COMM='y',
         USER_BUSYBOX_FEATURE_DD_IBS_OBS='y',
-        USER_BUSYBOX_FEATURE_ENV_LONG_OPTIONS='y',
         USER_BUSYBOX_EXPAND='y',
-        USER_BUSYBOX_FEATURE_EXPAND_LONG_OPTIONS='y',
         USER_BUSYBOX_EXPR_MATH_SUPPORT_64='y',
         USER_BUSYBOX_FOLD='y',
         USER_BUSYBOX_FEATURE_FANCY_HEAD='y',
@@ -3758,7 +4116,7 @@ groups['busybox_big'] = dict(
         USER_BUSYBOX_SHA512SUM='y',
         USER_BUSYBOX_SHA3SUM='y',
         USER_BUSYBOX_FEATURE_FANCY_SLEEP='y',
-        USER_BUSYBOX_FEATURE_FLOAT_SLEEP='y',
+        USER_BUSYBOX_FLOAT_DURATION='y',
         USER_BUSYBOX_FEATURE_SORT_BIG='y',
         USER_BUSYBOX_SPLIT='y',
         USER_BUSYBOX_FEATURE_SPLIT_FANCY='y',
@@ -3766,7 +4124,6 @@ groups['busybox_big'] = dict(
         USER_BUSYBOX_TAC='y',
         USER_BUSYBOX_FEATURE_TEE_USE_BLOCK_IO='y',
         USER_BUSYBOX_UNEXPAND='y',
-        USER_BUSYBOX_FEATURE_UNEXPAND_LONG_OPTIONS='y',
         USER_BUSYBOX_FEATURE_WC_LARGE='y',
         USER_BUSYBOX_WHOAMI='y',
         USER_BUSYBOX_FEATURE_PRESERVE_HARDLINKS='y',
@@ -3801,7 +4158,6 @@ groups['busybox_big'] = dict(
         USER_BUSYBOX_GETOPT='y',
         USER_BUSYBOX_FEATURE_GETOPT_LONG='y',
         USER_BUSYBOX_HWCLOCK='y',
-        USER_BUSYBOX_FEATURE_HWCLOCK_LONG_OPTIONS='y',
         USER_BUSYBOX_FEATURE_HWCLOCK_ADJTIME_FHS='y',
         USER_BUSYBOX_LOSETUP='y',
         USER_BUSYBOX_MKSWAP='y',
@@ -3892,7 +4248,8 @@ groups['busybox_big'] = dict(
         USER_BUSYBOX_BB_SYSCTL='y',
         USER_BUSYBOX_FEATURE_SHOW_THREADS='y',
         USER_BUSYBOX_WATCH='y',
-        USER_BUSYBOX_SH_MATH_SUPPORT_64='y'
+        USER_BUSYBOX_FEATURE_SH_MATH='y',
+        USER_BUSYBOX_FEATURE_SH_MATH_64='y'
         )
     )
 
@@ -3903,14 +4260,15 @@ groups['busybox_ash'] = dict(
         USER_BUSYBOX_ASH_JOB_CONTROL='y',
         USER_BUSYBOX_ASH_ALIAS='y',
         USER_BUSYBOX_ASH_GETOPTS='y',
-        USER_BUSYBOX_ASH_BUILTIN_ECHO='y',
-        USER_BUSYBOX_ASH_BUILTIN_PRINTF='y',
-        USER_BUSYBOX_ASH_BUILTIN_TEST='y',
+        USER_BUSYBOX_ASH_ECHO='y',
+        USER_BUSYBOX_ASH_PRINTF='y',
+        USER_BUSYBOX_ASH_TEST='y',
         USER_BUSYBOX_ASH_OPTIMIZE_FOR_SIZE='y',
+        USER_BUSYBOX_ASH_INTERNAL_GLOB='y',
         USER_BUSYBOX_ASH_RANDOM_SUPPORT='y',
-        USER_BUSYBOX_FEATURE_SH_IS_ASH='y',
-        USER_BUSYBOX_FEATURE_BASH_IS_ASH='y',
-        USER_BUSYBOX_SH_MATH_SUPPORT='y',
+        USER_BUSYBOX_SH_IS_ASH='y',
+        USER_BUSYBOX_BASH_IS_ASH='y',
+        USER_BUSYBOX_FEATURE_SH_MATH='y',
         USER_BUSYBOX_FEATURE_SH_EXTRA_QUIET='y',
         USER_OTHER_SH='y'
         )
@@ -4071,12 +4429,11 @@ groups['user_common'] = dict(
         USER_FLASHW_FLASHW='y',
         USER_SETMAC_SETMAC='y',
         USER_UBOOT_ENVTOOLS=['y','n'],
-        USER_UBOOT_ENVTOOLS_ENV_OVERWRITE=['y','n'],
-        USER_NETFLASH_NETFLASH='y',
-        USER_NETFLASH_WITH_FTP='y',
-        USER_NETFLASH_WITH_CGI='y',
-        USER_NETFLASH_HARDWARE='y',
-        USER_NETFLASH_DECOMPRESS='y',
+        USER_NETFLASH_NETFLASH=['y','n'],
+        USER_NETFLASH_WITH_FTP=['y','n'],
+        USER_NETFLASH_WITH_CGI=['y','n'],
+        USER_NETFLASH_HARDWARE=['y','n'],
+        USER_NETFLASH_DECOMPRESS=['y','n'],
         USER_FLATFSD_FLATFSD='y',
         USER_FLATFSD_EXTERNAL_INIT='y',
         USER_BRCTL_BRCTL='y',
@@ -4177,7 +4534,6 @@ groups['user_factory'] = dict(
         USER_FLASHW_FLASHW='y',
         USER_SETMAC_SETMAC='y',
         USER_UBOOT_ENVTOOLS='y',
-        USER_UBOOT_ENVTOOLS_ENV_OVERWRITE='y',
         USER_NETFLASH_NETFLASH='y',
         USER_NETFLASH_WITH_FTP='y',
         USER_NETFLASH_WITH_CGI='y',
@@ -4260,7 +4616,6 @@ groups['busybox_httpd'] = dict(
         USER_BUSYBOX_PAM='y',
         USER_BUSYBOX_HTTPD='y',
         USER_BUSYBOX_FEATURE_HTTPD_RANGES='y',
-        USER_BUSYBOX_FEATURE_HTTPD_USE_SENDFILE='y',
         USER_BUSYBOX_FEATURE_HTTPD_SETUID='y',
         USER_BUSYBOX_FEATURE_HTTPD_BASIC_AUTH='y',
         USER_BUSYBOX_FEATURE_HTTPD_CGI='y',
@@ -4290,8 +4645,8 @@ groups['hostapd'] = dict(
 
 groups['init_overlay'] = dict(
     linux = dict(
-        OVERLAY_FS='y',
-        OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW='y',
+        OVERLAY_FS=['y', 'n'],
+        OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=['y', 'n'],
         ),
     user = dict(
         USER_INIT_INIT='y',
@@ -4514,7 +4869,8 @@ groups['config_factory'] = dict(
         USER_BUSYBOX_DUMPLEASES='y',
         USER_BUSYBOX_FEATURE_UDHCPD_WRITE_LEASES_EARLY='y',
         USER_BUSYBOX_DHCPD_LEASES_FILE='/var/lib/misc/udhcpd.leases',
-        USER_BUSYBOX_SH_MATH_SUPPORT_64='y',
+        USER_BUSYBOX_FEATURE_SH_MATH='y',
+        USER_BUSYBOX_FEATURE_SH_MATH_64='y',
         USER_BUSYBOX_SYSLOGD='y',
         USER_BUSYBOX_FEATURE_ROTATE_LOGFILE='y',
         USER_BUSYBOX_FEATURE_REMOTE_LOG='y',
@@ -4616,6 +4972,14 @@ groups['config_python'] = dict(
         )
     )
 
+groups['config_xbee'] = dict(
+    user = dict(
+        PROP_XBEE='y',
+        USER_PYTHON_MODULES_PYSERIAL='y',
+        USER_PYTHON_MODULES_DIGI_XBEE_LIB='y',
+        )
+    )
+
 groups['custom_telit_firmware_upload'] = dict(
     user = dict(
         PROP_TELIT_CUSTOM_FIRMWARE='y',
@@ -4663,6 +5027,14 @@ groups['config_stdcpp'] = dict(
         )
     )
 
+groups['config_static_stdcpp'] = dict(
+    user = dict(
+        LIB_INSTALL_LIBATOMIC='n',
+        LIB_INSTALL_LIBSTDCPLUS='n',
+        LIB_STATIC_LIBSTDCPLUS='y',
+        )
+    )
+
 groups['config_stlport'] = dict(
     user = dict(
         LIB_STLPORT='y',
@@ -4692,7 +5064,6 @@ groups['config_apparmor'] = dict(
     linux = dict (
         SECURITY='y',
         SECURITY_APPARMOR='y',
-        SECURITY_APPARMOR_BOOTPARAM_VALUE=1,
         SECURITY_APPARMOR_HASH='y',
         SECURITY_APPARMOR_HASH_DEFAULT='y',
         INTEGRITY='y',
@@ -4783,7 +5154,7 @@ groups['config_openvpn'] = dict(
 
 groups['config_iptunnel'] = dict(
     linux = dict(
-        NF_CT_PROTO_GRE='m',
+        NF_CT_PROTO_GRE='y',
         NET_IPGRE_DEMUX='y',
         NET_IP_TUNNEL='y',
         NET_IPGRE='y',
@@ -4934,7 +5305,28 @@ groups['config_connectit'] = dict(
         ],
     user = dict(
         PROP_CONFIG_SERIAL_EXCLUSIVE_ACCESS='y',
+        USER_POWERMAN_POWERMAN='y',
+        USER_POWERMAN_HTTPPOWER='y',
         ),
+    )
+
+groups['config_connectit_mini'] = dict(
+    include = [
+        'config_connectit',
+        ],
+    user = dict(
+        PROP_CONFIG_HIDE_AVIEW='y',
+        ),
+    )
+
+groups['config_ex12'] = dict(
+    include = [
+        'config',
+        'config_cli_analyzer',
+        'config_base_features',
+        'config_cellular',
+        'config_serial',
+        ],
     )
 
 groups['config_connectit16'] = dict(
@@ -4965,6 +5357,8 @@ groups['config_connectit48'] = dict(
         PROP_CONFIG_SERIALD_LED='y',
         USER_DMIDECODE='y',
         PROP_CONFIG_HIDE_AVIEW='y',
+        USER_POWERMAN_POWERMAN='y',
+        USER_POWERMAN_HTTPPOWER='y',
         ),
     )
 
@@ -4988,7 +5382,7 @@ groups['config_6300_lx'] = dict(
         ],
     )
 
-groups['config_ix14'] = dict(
+groups['config_ix14-base'] = dict(
     include = [
         'config',
         'config_cli_legacy',
@@ -4999,10 +5393,6 @@ groups['config_ix14'] = dict(
         'config_apparmor',
         'config_cloud',
         'config_python',
-        #
-        # uncomment the following to enable wireless on the IX14
-        #
-        #'wireless_ixx4',
         ],
     user = dict(
         USER_BLUEZ_BLUETOOTHD='y',
@@ -5011,6 +5401,20 @@ groups['config_ix14'] = dict(
         PROP_BLUETOOTH_QCA65x4_FW='y',
         PROP_CONFIG_HIDE_AVIEW='y',
         ),
+    )
+
+groups['config_ix14'] = dict(
+    include = [
+        'config_ix14-base',
+        ]
+    )
+
+groups['config_ix14-wx'] = dict(
+    include = [
+        'config_ix14-base',
+        'wireless_ixx4',
+        'config_xbee',
+        ]
     )
 
 groups['config_6310_dx'] = dict(
@@ -5034,14 +5438,19 @@ groups['config_ex15'] = dict(
         ],
     )
 
+groups['config_restrict_5g_channels'] = dict(
+    user = dict(
+        PROP_CONFIG_RESTRICT_5G_CHANNELS='y',
+        USER_CRDA_REGDB_UNRESTRICTED_WORLD='y',
+        ),
+    )
+
 groups['config_ex15w'] = dict(
     include = [
         'config_ex15',
         'config_wireless',
+        'config_restrict_5g_channels',
         ],
-    user = dict(
-        USER_CRDA_REGDB_UNRESTRICTED_WORLD='y',
-        ),
     )
 
 groups['config_ex55'] = dict(
@@ -5058,13 +5467,18 @@ groups['config_ex55'] = dict(
 groups['config_tx54'] = dict(
     include = [
         'config',
-        'config_cli_legacy',
-        'config_cli_analyzer',
         'config_base_features',
         'config_cellular',
         'config_wireless',
         'config_serial',
+        'config_restrict_5g_channels',
+        'config_apparmor',
+        'config_python',
         ],
+    user = dict(
+        PROP_CONFIG_HIDE_AVIEW='y',
+        LIB_INSTALL_LIBGCC_S='n',
+        )
     )
 
 groups['config_tx64'] = dict(
@@ -5075,6 +5489,7 @@ groups['config_tx64'] = dict(
         'config_wireless',
         'config_serial',
         'config_python',
+        'config_restrict_5g_channels',
         ],
     user = dict(
         PROP_CONFIG_HIDE_AVIEW='y',
@@ -5088,17 +5503,103 @@ groups['config_tx64'] = dict(
         ),
     )
 
-groups['config_anywhereusb8'] = dict(
+groups['config_anywhereusb'] = dict(
     include = [
         'config',
         'config_cli_legacy',
         'config_cli_analyzer',
         'config_base_features',
         'config_cellular',
-        'config_wireless',
         'config_serial',
-        'config_apparmor',
         ],
+    linux = dict(
+        OF_OVERLAY='y',
+        MQ_IOSCHED_DEADLINE='y',
+        STACKPROTECTOR_STRONG='y',
+        RANDOMIZE_BASE='y',
+        BONDING='m',
+        ),
+    user = dict(
+        USER_BUSYBOX_READAHEAD='y',
+        USER_E2FSPROGS='y',
+        USER_E2FSPROGS_FSCK_EXT4='y',
+        USER_E2FSPROGS_MKFS_EXT4='y',
+        USER_NETFLASH_NETFLASH='n',
+        USER_NETFLASH_WITH_FTP='n',
+        USER_NETFLASH_WITH_CGI='n',
+        USER_NETFLASH_HARDWARE='n',
+        USER_NETFLASH_DECOMPRESS='n',
+        USER_NTP_ENABLE_HARDENFILE='y',
+        PROP_APP_WATCHDOG='y',
+        PROP_CONFIG_HIDE_AVIEW='y',
+        PROP_AWUSBD='y',
+        ),
+    )
+
+groups['config_anywhereusb2'] = dict(
+    include = [
+        'config_anywhereusb',
+        ],
+    linux = dict(
+        NR_CPUS='4',
+        LEDS_LP5569='y',
+        MICREL_PHY='y',
+        DP83867_PHY='y',
+        RTC_NVMEM='y',
+        RTC_DRV_DS1307='y',
+        GPIO_PCA953X='y',
+        GPIO_PCA953X_IRQ='y',
+        WATCHDOG='y',
+        WATCHDOG_HANDLE_BOOT_ENABLED='y',
+        ARM_SP805_WATCHDOG='y',
+        IMX2_WDT='y',
+        MEMORY='y',
+        ARM_PL172_MPMC='y',
+        SYSFS_PERSISTENT_MEM='y',
+        ),
+    user = dict(
+        PROP_DIGI_HWMON='y',
+        PROP_DIGI_RESET_BUTTON='y',
+        PROP_DIGI_RESET_GPIOCHIP=0,
+        PROP_DIGI_RESET_GPIO=24,
+        PROP_NUM_LEDS=2,
+        LIB_LIBGPIOD='y',
+        PROP_USBLEDD='y',
+        ),
+    )
+
+groups['config_anywhereusb_8_24'] = dict(
+    include = [
+        'config_anywhereusb',
+        ],
+    linux = dict(
+        NR_CPUS='4',
+        LEDS_AWUSB24='y',
+        LEDS_PWM='y',
+        LEDS_GPIO='y',
+        PWM='y',
+        MARVELL_PHY='y',
+        MARVELL_10G_PHY='y',
+        MV88X3310P_PHY='y',
+        RTC_NVMEM='y',
+        RTC_DRV_DS1307='y',
+        GPIO_MPC8XXX='y',
+        WATCHDOG='y',
+        WATCHDOG_HANDLE_BOOT_ENABLED='y',
+        ARM_SP805_WATCHDOG='y',
+        IMX2_WDT='y',
+        MEMORY='y',
+        ARM_PL172_MPMC='y',
+        SYSFS_PERSISTENT_MEM='y',
+        ),
+    user = dict(
+        PROP_DIGI_HWMON='y',
+        PROP_DIGI_RESET_BUTTON='y',
+        PROP_DIGI_RESET_GPIOCHIP='0',
+        PROP_DIGI_RESET_GPIO=31,
+        LIB_LIBGPIOD='y',
+        PROP_USBLEDD='y',
+        ),
     )
 
 groups['config_6335_mx'] = dict(
@@ -5203,6 +5704,7 @@ products['AC 5300-DC'] = dict(
     product = '5300-DC',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_5300_dc',
         'config_5300_dc',
@@ -5217,6 +5719,7 @@ products['AC 5301-DC'] = dict(
     product = '5301-DC',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_5301_dc',
         'config_5301_dc',
@@ -5231,6 +5734,7 @@ products['AC 5400-RM'] = dict(
     product = '5400-RM',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_5400_rm',
         'config_5400_rm',
@@ -5246,6 +5750,7 @@ products['AC 5401-RM'] = dict(
     product = '5401-RM',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_5401_rm',
         'config_5401_rm',
@@ -5261,9 +5766,26 @@ products['Digi Connect IT Mini'] = dict(
     product = 'ConnectIT-Mini',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_connectit_mini',
-        'config_connectit',
+        'config_connectit_mini',
+        'strongswan_netkey',
+        'linux_crypto_arm',
+        'linux_i2c',
+        'config_security_dac_y',
+        ]
+    )
+
+products['Digi EX12'] = dict(
+    vendor = 'Digi',
+    product = 'EX12',
+    arch = 'arm',
+    cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
+    include = [
+        'hardware_ex12',
+        'config_ex12',
         'strongswan_netkey',
         'linux_crypto_arm',
         'linux_i2c',
@@ -5276,6 +5798,7 @@ products['Digi Connect IT 4'] = dict(
     product = 'ConnectIT4',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_connectit4',
         'config_connectit',
@@ -5291,6 +5814,7 @@ products['Digi Connect IT 16'] = dict(
     product = 'ConnectIT16',
     arch = 'x86',
     cc = 'x86_64-linux-20151029-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_connectit16',
         'config_connectit16',
@@ -5308,6 +5832,7 @@ products['Digi Connect IT 48'] = dict(
     product = 'ConnectIT48',
     arch = 'x86',
     cc = 'x86_64-linux-20151029-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_connectit48',
         'config_connectit48',
@@ -5325,6 +5850,7 @@ products['AC 6300-CX'] = dict(
     product = '6300-CX',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6300_cx',
         'config_6300_cx',
@@ -5340,6 +5866,7 @@ products['AC 6300-LX'] = dict(
     product = '6300-LX',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6300_lx',
         'config_6300_lx',
@@ -5355,6 +5882,7 @@ products['AC 6310-DX'] = dict(
     product = '6310-DX',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6310_dx',
         'config_6310_dx',
@@ -5370,9 +5898,25 @@ products['Digi IX14'] = dict(
     product = 'IX14',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_ix14',
         'config_ix14',
+        'strongswan_netkey',
+        'linux_crypto_arm',
+        'config_stdcpp',
+        ]
+    )
+
+products['Digi IX14-WX'] = dict(
+    vendor = 'Digi',
+    product = 'IX14-WX',
+    arch = 'arm',
+    cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
+    include = [
+        'hardware_ix14-wx',
+        'config_ix14-wx',
         'strongswan_netkey',
         'linux_crypto_arm',
         'config_stdcpp',
@@ -5384,6 +5928,7 @@ products['Digi EX15'] = dict(
     product = 'EX15',
     arch = 'mips',
     cc = ' mips-linux-20170624-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_ex15',
         'config_ex15',
@@ -5397,6 +5942,7 @@ products['Digi EX15W'] = dict(
     product = 'EX15W',
     arch = 'mips',
     cc = ' mips-linux-20170624-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_ex15w',
         'config_ex15w',
@@ -5410,6 +5956,7 @@ products['Digi EX55'] = dict(
     product = 'EX55',
     arch = 'mips',
     cc = ' mips-linux-20170624-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_ex55',
         'config_ex55',
@@ -5423,12 +5970,223 @@ products['Digi TX54'] = dict(
     product = 'TX54',
     arch = 'mips',
     cc = ' mips-linux-20170624-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_tx54',
         'config_tx54',
         'strongswan_netkey',
-        'config_stlport',
+        'config_static_stdcpp',
         ]
+    )
+
+products['Digi TX54 Migration'] = dict(
+    vendor = 'Digi',
+    product = 'TX54-Migration',
+    arch = 'mips',
+    cc = ' mips-linux-20170624-gcc',
+    libc = 'uClibc',
+    include = [
+        'hardware_tx54_migration',
+        'busybox_ash',
+        ],
+    user = dict(
+        USER_SYSKLOGD='y',
+        USER_SYSKLOGD_LOG_PRIORITY='y',
+        USER_UTIL_LINUX='y',
+        USER_UTIL_LINUX_LIBUUID='y',
+        USER_READLINE='y',
+        USER_BUSYBOX='y',
+        USER_BUSYBOX_LFS='n',
+        USER_BUSYBOX_FEATURE_SORT_BIG='y',
+        USER_BUSYBOX_FLOCK='n',
+        USER_BUSYBOX_HEXDUMP='y',
+        USER_BUSYBOX_PIVOT_ROOT='y',
+        USER_BUSYBOX_LESS='y',
+        USER_BUSYBOX_FEATURE_LESS_BRACKETS='y',
+        USER_BUSYBOX_FEATURE_LESS_FLAGS='y',
+        USER_BUSYBOX_FEATURE_LESS_MARKS='y',
+        USER_BUSYBOX_FEATURE_LESS_REGEXP='y',
+        USER_BUSYBOX_FEATURE_LESS_WINCH='y',
+        USER_BUSYBOX_FEATURE_LESS_ASK_TERMINAL='y',
+        USER_BUSYBOX_FEATURE_LESS_DASHCMD='y',
+        USER_BUSYBOX_FEATURE_LESS_LINENUMS='y',
+        USER_BUSYBOX_INCLUDE_SUSv2='y',
+        USER_BUSYBOX_SHOW_USAGE='y',
+        USER_BUSYBOX_FEATURE_VERBOSE_USAGE='y',
+        USER_BUSYBOX_FEATURE_COMPRESS_USAGE='y',
+        USER_BUSYBOX_LONG_OPTS='y',
+        USER_BUSYBOX_FEATURE_DEVPTS='y',
+        USER_BUSYBOX_FEATURE_EDITING='y',
+        USER_BUSYBOX_FEATURE_TAB_COMPLETION='y',
+        USER_BUSYBOX_FEATURE_NON_POSIX_CP='y',
+        USER_BUSYBOX_FEATURE_SKIP_ROOTFS='y',
+        USER_BUSYBOX_MONOTONIC_SYSCALL='y',
+        USER_BUSYBOX_IOCTL_HEX2STR_ERROR='y',
+        USER_BUSYBOX_FEATURE_SEAMLESS_XZ='y',
+        USER_BUSYBOX_FEATURE_SEAMLESS_LZMA='y',
+        USER_BUSYBOX_FEATURE_SEAMLESS_BZ2='y',
+        USER_BUSYBOX_FEATURE_SEAMLESS_GZ='y',
+        USER_BUSYBOX_GUNZIP='y',
+        USER_BUSYBOX_GZIP='y',
+        USER_BUSYBOX_FEATURE_GZIP_LONG_OPTIONS='y',
+        USER_BUSYBOX_TAR='y',
+        USER_BUSYBOX_FEATURE_TAR_CREATE='y',
+        USER_BUSYBOX_FEATURE_TAR_FROM='y',
+        USER_BUSYBOX_FEATURE_TAR_NOPRESERVE_TIME='y',
+        USER_BUSYBOX_BASENAME='y',
+        USER_BUSYBOX_CAT='y',
+        USER_BUSYBOX_DATE='y',
+        USER_BUSYBOX_FEATURE_DATE_ISOFMT='y',
+        USER_BUSYBOX_FEATURE_DATE_COMPAT='y',
+        USER_BUSYBOX_ID='y',
+        USER_BUSYBOX_GROUPS='y',
+        USER_BUSYBOX_TEST='y',
+        USER_BUSYBOX_TOUCH='y',
+        USER_BUSYBOX_FEATURE_TOUCH_SUSV3='y',
+        USER_BUSYBOX_TR='y',
+        USER_BUSYBOX_CHGRP='y',
+        USER_BUSYBOX_CHMOD='y',
+        USER_BUSYBOX_CHOWN='y',
+        USER_BUSYBOX_FEATURE_CHOWN_LONG_OPTIONS='y',
+        USER_BUSYBOX_CHROOT='y',
+        USER_BUSYBOX_CP='y',
+        USER_BUSYBOX_FEATURE_CP_LONG_OPTIONS='y',
+        USER_BUSYBOX_CUT='y',
+        USER_BUSYBOX_DD='y',
+        USER_BUSYBOX_DF='y',
+        USER_BUSYBOX_FEATURE_DF_FANCY='y',
+        USER_BUSYBOX_DIRNAME='y',
+        USER_BUSYBOX_DU='y',
+        USER_BUSYBOX_FEATURE_DU_DEFAULT_BLOCKSIZE_1K='y',
+        USER_BUSYBOX_ECHO='y',
+        USER_BUSYBOX_FEATURE_FANCY_ECHO='y',
+        USER_BUSYBOX_ENV='y',
+        USER_BUSYBOX_EXPR='y',
+        USER_BUSYBOX_FALSE='y',
+        USER_BUSYBOX_FSYNC='y',
+        USER_BUSYBOX_HEAD='y',
+        USER_BUSYBOX_LN='y',
+        USER_BUSYBOX_LS='y',
+        USER_BUSYBOX_FEATURE_LS_FILETYPES='y',
+        USER_BUSYBOX_FEATURE_LS_FOLLOWLINKS='y',
+        USER_BUSYBOX_FEATURE_LS_RECURSIVE='y',
+        USER_BUSYBOX_FEATURE_LS_SORTFILES='y',
+        USER_BUSYBOX_FEATURE_LS_TIMESTAMPS='y',
+        USER_BUSYBOX_FEATURE_LS_USERNAME='y',
+        USER_BUSYBOX_MD5SUM='y',
+        USER_BUSYBOX_MKDIR='y',
+        USER_BUSYBOX_MKFIFO='y',
+        USER_BUSYBOX_MKNOD='y',
+        USER_BUSYBOX_MV='y',
+        USER_BUSYBOX_NICE='y',
+        USER_BUSYBOX_PRINTF='y',
+        USER_BUSYBOX_PWD='y',
+        USER_BUSYBOX_READLINK='y',
+        USER_BUSYBOX_FEATURE_READLINK_FOLLOW='y',
+        USER_BUSYBOX_RM='y',
+        USER_BUSYBOX_RMDIR='y',
+        USER_BUSYBOX_SLEEP='y',
+        USER_BUSYBOX_SORT='y',
+        USER_BUSYBOX_STAT='y',
+        USER_BUSYBOX_FEATURE_STAT_FORMAT='y',
+        USER_BUSYBOX_STTY='y',
+        USER_BUSYBOX_SYNC='y',
+        USER_BUSYBOX_TAIL='y',
+        USER_BUSYBOX_FEATURE_FANCY_TAIL='y',
+        USER_BUSYBOX_TEE='y',
+        USER_BUSYBOX_TRUE='y',
+        USER_BUSYBOX_TTY='y',
+        USER_BUSYBOX_UNAME='y',
+        USER_BUSYBOX_UNIQ='y',
+        USER_BUSYBOX_USLEEP='y',
+        USER_BUSYBOX_WC='y',
+        USER_BUSYBOX_YES='y',
+        USER_BUSYBOX_FEATURE_HUMAN_READABLE='y',
+        USER_BUSYBOX_CLEAR='y',
+        USER_BUSYBOX_RESET='y',
+        USER_BUSYBOX_MKTEMP='y',
+        USER_BUSYBOX_WHICH='y',
+        USER_BUSYBOX_VI='y',
+        USER_BUSYBOX_FEATURE_VI_8BIT='y',
+        USER_BUSYBOX_FEATURE_VI_COLON='y',
+        USER_BUSYBOX_FEATURE_VI_YANKMARK='y',
+        USER_BUSYBOX_FEATURE_VI_SEARCH='y',
+        USER_BUSYBOX_FEATURE_VI_USE_SIGNALS='y',
+        USER_BUSYBOX_FEATURE_VI_DOT_CMD='y',
+        USER_BUSYBOX_FEATURE_VI_READONLY='y',
+        USER_BUSYBOX_FEATURE_VI_SETOPTS='y',
+        USER_BUSYBOX_FEATURE_VI_SET='y',
+        USER_BUSYBOX_FEATURE_VI_WIN_RESIZE='y',
+        USER_BUSYBOX_FEATURE_VI_ASK_TERMINAL='y',
+        USER_BUSYBOX_CMP='y',
+        USER_BUSYBOX_SED='y',
+        USER_BUSYBOX_FEATURE_ALLOW_EXEC='y',
+        USER_BUSYBOX_FIND='y',
+        USER_BUSYBOX_FEATURE_FIND_MTIME='y',
+        USER_BUSYBOX_FEATURE_FIND_PERM='y',
+        USER_BUSYBOX_FEATURE_FIND_TYPE='y',
+        USER_BUSYBOX_FEATURE_FIND_NEWER='y',
+        USER_BUSYBOX_FEATURE_FIND_SIZE='y',
+        USER_BUSYBOX_FEATURE_FIND_LINKS='y',
+        USER_BUSYBOX_GREP='y',
+        USER_BUSYBOX_EGREP='y',
+        USER_BUSYBOX_FGREP='y',
+        USER_BUSYBOX_FEATURE_GREP_CONTEXT='y',
+        USER_BUSYBOX_XARGS='y',
+        USER_BUSYBOX_HALT='y',
+        USER_BUSYBOX_REBOOT='y',
+        USER_BUSYBOX_POWEROFF='y',
+        USER_BUSYBOX_USE_BB_CRYPT='y',
+        USER_BUSYBOX_USE_BB_CRYPT_SHA='y',
+        USER_BUSYBOX_DMESG='y',
+        USER_BUSYBOX_FREERAMDISK='y',
+        USER_BUSYBOX_MORE='y',
+        USER_BUSYBOX_MOUNT='y',
+        USER_BUSYBOX_FEATURE_MOUNT_NFS='y',
+        USER_BUSYBOX_FEATURE_MOUNT_FLAGS='y',
+        USER_BUSYBOX_RDATE='y',
+        USER_BUSYBOX_UMOUNT='y',
+        USER_BUSYBOX_FEATURE_UMOUNT_ALL='y',
+        USER_BUSYBOX_FEATURE_MOUNT_LOOP='y',
+        USER_BUSYBOX_FEATURE_MOUNT_LOOP_CREATE='y',
+        USER_BUSYBOX_TIME='y',
+        USER_BUSYBOX_TIMEOUT='y',
+        USER_BUSYBOX_VOLNAME='y',
+        USER_BUSYBOX_WATCHDOG='y',
+        USER_BUSYBOX_WHOIS='y',
+        USER_BUSYBOX_IOSTAT='y',
+        USER_BUSYBOX_LSOF='y',
+        USER_BUSYBOX_TOP='y',
+        USER_BUSYBOX_FEATURE_TOP_CPU_USAGE_PERCENTAGE='y',
+        USER_BUSYBOX_FEATURE_TOP_CPU_GLOBAL_PERCENTS='y',
+        USER_BUSYBOX_FEATURE_TOP_SMP_CPU='y',
+        USER_BUSYBOX_FEATURE_TOP_SMP_PROCESS='y',
+        USER_BUSYBOX_UPTIME='y',
+        USER_BUSYBOX_FREE='y',
+        USER_BUSYBOX_FUSER='y',
+        USER_BUSYBOX_KILL='y',
+        USER_BUSYBOX_KILLALL='y',
+        USER_BUSYBOX_PIDOF='y',
+        USER_BUSYBOX_PS='y',
+        USER_BUSYBOX_FEATURE_PS_LONG='y',
+        USER_BUSYBOX_RENICE='y',
+        USER_BUSYBOX_LOGGER='y',
+        LIB_ZLIB='y',
+        LIB_TERMCAP='y',
+        LIB_TERMCAP_SHARED='y',
+        USER_INIT_INIT='y',
+        USER_INIT_CONSOLE_SH='y',
+        USER_GETTYD_GETTYD='y',
+        USER_UBOOT_ENVTOOLS='y',
+        USER_FLATFSD_FLATFSD='y',
+        USER_FLATFSD_USE_FLASH_FS='y',
+        USER_FLATFSD_EXTERNAL_INIT='y',
+        USER_MAWK_AWK='y',
+        POOR_ENTROPY='y',
+        USER_UDEV='n',
+        USER_MTD_UTILS_NANDWRITE='y',
+        USER_RAMIMAGE_NONE='y',
+        )
     )
 
 products['Digi TX64'] = dict(
@@ -5436,6 +6194,7 @@ products['Digi TX64'] = dict(
     product = 'TX64',
     arch = 'x86',
     cc = 'x86_64-linux-20151029-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_tx64',
         'config_tx64',
@@ -5451,14 +6210,45 @@ products['Digi TX64'] = dict(
         ]
     )
 
+products['Digi AnywhereUSB2'] = dict(
+    vendor = 'Digi',
+    product = 'AnywhereUSB2',
+    arch = 'arm64',
+    cc = 'aarch64-linux-20171204-gcc',
+    libc = 'glibc',
+    include = [
+        'hardware_layerscape_1012',
+        'hardware_nor',
+        'hardware_mmc',
+        'linux_pci_layerscape',
+        'linux_crypto_arm64',
+        'linux_crypto_smp',
+        'linux_hugepages',
+        'config_anywhereusb2',
+        'config_security_dac_y',
+        'config_stdcpp',
+        'busybox_big',
+        'strongswan_netkey',
+        ],
+    linux = dict(
+        OVERLAY_FS='n',
+        OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW='n',
+        ),
+    user = dict(
+        PROP_NUM_LEDS=2,
+        USER_BUSYBOX_GETTY='y',
+        USER_BUSYBOX_LSPCI='y',
+        )
+    )
+
 products['Digi AnywhereUSB8'] = dict(
     vendor = 'Digi',
     product = 'AnywhereUSB8',
     arch = 'arm64',
     cc = 'aarch64-linux-20171204-gcc',
+    libc = 'glibc',
     include = [
         'hardware_layerscape_1046',
-        'hardware_wireless',
         'hardware_cellular_cm',
         'hardware_nor',
         'hardware_mmc',
@@ -5466,26 +6256,50 @@ products['Digi AnywhereUSB8'] = dict(
         'linux_crypto_arm64',
         'linux_crypto_smp',
         'linux_hugepages',
-        'linux_sata',
-        'config_anywhereusb8',
-        'config_security_dac_n',
+        'config_anywhereusb_8_24',
+        'config_security_dac_y',
         'config_stdcpp',
         'busybox_big',
         'strongswan_netkey',
         ],
-    device = dict(
-        DEFAULTS_LIBC_GLIBC='y',
-        ),
     linux = dict(
-        LEDS_AWUSB24='y',
-        MARVELL_PHY='y',
-        MARVELL_10G_PHY='y',
-        MV88X3310P_PHY='y',
-        RTC_NVMEM='y',
-        RTC_DRV_DS1307='y',
-        RTC_DRV_DS1307_CENTURY='y',
+        OVERLAY_FS='n',
+        OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW='n',
         ),
     user = dict(
+        PROP_NUM_LEDS=8,
+        USER_BUSYBOX_GETTY='y',
+        USER_BUSYBOX_LSPCI='y',
+        )
+    )
+
+products['Digi AnywhereUSB24'] = dict(
+    vendor = 'Digi',
+    product = 'AnywhereUSB24',
+    arch = 'arm64',
+    cc = 'aarch64-linux-20171204-gcc',
+    libc = 'glibc',
+    include = [
+        'hardware_layerscape_1046',
+        'hardware_cellular_cm',
+        'hardware_nor',
+        'hardware_mmc',
+        'linux_pci_layerscape',
+        'linux_crypto_arm64',
+        'linux_crypto_smp',
+        'linux_hugepages',
+        'config_anywhereusb_8_24',
+        'config_security_dac_y',
+        'config_stdcpp',
+        'busybox_big',
+        'strongswan_netkey',
+        ],
+    linux = dict(
+        OVERLAY_FS='n',
+        OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW='n',
+        ),
+    user = dict(
+        PROP_NUM_LEDS=24,
         USER_BUSYBOX_GETTY='y',
         USER_BUSYBOX_LSPCI='y',
         )
@@ -5496,6 +6310,7 @@ products['AC 6330-MX'] = dict(
     product = '6330-MX',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6330_mx',
         'config_6330_mx',
@@ -5512,6 +6327,7 @@ products['AC 6335-MX'] = dict(
     product = '6335-MX',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6335_mx',
         'config_6335_mx',
@@ -5528,6 +6344,7 @@ products['AC 6350-SR'] = dict(
     product = '6350-SR',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6350_sr',
         'config_6350_sr',
@@ -5544,6 +6361,7 @@ products['AC 6355-SR'] = dict(
     product = '6355-SR',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_6355_sr',
         'config_6355_sr',
@@ -5560,6 +6378,7 @@ products['AC 8300'] = dict(
     product = '8300',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_8300',
         'config_8300',
@@ -5578,6 +6397,7 @@ products['AC 9400-UA'] = dict(
     product = '9400-UA',
     arch = 'x86',
     cc = 'x86_64-linux-20151029-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_9400_ua',
         'config_9400_ua',
@@ -5597,6 +6417,7 @@ products['AC Factory8300'] = dict(
     product = 'Factory8300',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_factory8300',
         'config_factory8300',
@@ -5610,6 +6431,7 @@ products['AC FactoryU115'] = dict(
     product = 'FactoryU115',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_factoryU115',
         'config_factory',
@@ -5623,6 +6445,7 @@ products['AC Sprite'] = dict(
     product = 'sprite',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_sprite',
         'config_sprite',
@@ -5638,6 +6461,7 @@ products['AC U115'] = dict(
     product = 'U115',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_u115',
         'config_u115',
@@ -5656,6 +6480,7 @@ products['AC Porter'] = dict(
     product = 'porter',
     arch = 'x86',
     cc = 'x86_64-linux-20151029-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_porter',
         'config_sprite',
@@ -5672,6 +6497,7 @@ products['ATT U115'] = dict(
     product = 'U115',
     arch = 'arm',
     cc = 'arm-linux-gnueabi-20180525-gcc',
+    libc = 'uClibc',
     include = [
         'hardware_att_u115',
         'config_u115',

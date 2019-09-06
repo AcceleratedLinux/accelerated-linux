@@ -52,15 +52,15 @@ endif
 #
 # First settings we always want for all builds
 #
+MACHINE = microblaze
+ARCH    = microblaze
+ENDIAN ?= big
+FLOAT  ?= soft
 
-# ARCH = kernel,  TARGET_ARCH = uClibc
-
-ENDIAN        = big
-MACHINE       = microblaze
-ARCH          = microblaze
 CROSS_COMPILE = mb-
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = mb
+CONFIGURE_TOOL = mb-linux$(LIBCSUFFIX)
 
 CONFIG_UCLINUX=y
 
@@ -197,7 +197,7 @@ endif
 ifdef UCLINUX_BUILD_LIB
 
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
   else
 	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
   endif
@@ -238,9 +238,9 @@ ifdef UCLINUX_BUILD_USER
 	LIBC          = -Wl,-R,$(ROOTDIR)/lib/libc.gdb $(SLIBC)
   endif
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-Os) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
   endif
 
 	CFLAGS  += -pipe

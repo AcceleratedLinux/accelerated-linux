@@ -1,20 +1,7 @@
--include ../user.mak
+URL = https://sourceforge.net/projects/iperf2/files/iperf-2.0.13.tar.gz
 
-CONFOPTS=--disable-threads
+CONFOPTS += --disable-threads
+LDFLAGS += -lm
 
-all: build/build
-	$(MAKE) -C build
+include $(ROOTDIR)/tools/automake.inc
 
-build/build: makefile
-	rm -rf build
-	mkdir build
-	touch makefile
-	find . -type f | xargs touch -r makefile
-	(cd build; ac_cv_func_malloc_0_nonnull=yes LIBS="$(CXXLIBS)" sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
-
-clean:
-	rm -rf build
-
-romfs:
-	$(ROMFSINST) build/src/iperf /bin/iperf

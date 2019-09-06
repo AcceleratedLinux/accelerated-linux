@@ -283,8 +283,13 @@
 	 * the kernels own GPIO services - they are setup up too late
 	 * in the boot process.
 	 */
+#if defined(CONFIG_SNAPDOG_EX12)
+	#define GPIO_ADDR	0x0209c000	/* GPIO bank 1 address */
+	#define GPIO_WDT	28		/* GPIO 28 */
+#else
 	#define GPIO_ADDR	0x020a0000	/* GPIO bank 2 address */
 	#define GPIO_WDT	16		/* GPIO 16 */
+#endif
 
 	static int wdt_state;
 	static void __iomem *snapdog_regp;

@@ -1,8 +1,7 @@
-diff --git a/m4/vapigen.m4 b/m4/vapigen.m4
-index 2c435e7..16ac392 100644
---- a/m4/vapigen.m4
-+++ b/m4/vapigen.m4
-@@ -23,7 +23,7 @@ dnl Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  US
+diff -Nurd ModemManager.orig/m4/vapigen.m4 ModemManager/m4/vapigen.m4
+--- ModemManager.orig/m4/vapigen.m4	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/m4/vapigen.m4	2019-05-29 11:08:19.288304925 +1000
+@@ -23,7 +23,7 @@
  # See http://live.gnome.org/Vala/UpstreamGuide for detailed documentation
  AC_DEFUN([VAPIGEN_CHECK],
  [

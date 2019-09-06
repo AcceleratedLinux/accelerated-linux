@@ -33,7 +33,7 @@ romfs: romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc romfs.version 
 	$(ROMFSINST) ../network.init.bridge /etc/network.init
 	$(ROMFSINST) ../firewall.init.std /etc/firewall.init
 
-romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode
+romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode romfs.cleanup
 
 image: image.configs image.dir image.arm.zimage image.squashfs7z image.bin image.size image.tag image.copy image.flash
 

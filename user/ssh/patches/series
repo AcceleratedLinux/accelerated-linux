@@ -7,4 +7,3 @@ openssh-virtual-user.patch
 openssh-fwd_opts.patch
 openssh-uclinux-sshd-config.patch
 openssh-deny-socket.patch
-openssh-tun_fwd_ifnames-dup.patch

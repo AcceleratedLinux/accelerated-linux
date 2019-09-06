@@ -1,4 +1,3 @@
-ModemManager-allow-at.patch
 ModemManager-allow-at-in-failed-state.patch
 ModemManager-binary-init-workaround.patch
 ModemManager-cdma-only-sim.patch
@@ -8,14 +7,12 @@ ModemManager-signals-location.patch
 ModemManager-state-unknown.patch
 ModemManager-vapigen-autoconf2.63.patch
 ModemManager-bearer-print-allowed-auth.patch
-ModemManager-disabled-state-after-bearer-disconnected.patch
 ModemManager-force-dhcp-qmi.patch
 ModemManager-telit-add-LTE-access-technology-reporting.patch
 ModemManager-telit-LM940.patch
 ModemManager-always-clear-status-on-stop.patch
 ModemManager-mm-call-end-notify.patch
 ModemManager-telit-LE910-NA_V2.patch
-#ModemManager-telit-udev-rules.patch
 ModemManager-sighup-log.patch
 ModemManager-no-perror-syslog.patch
 ModemManager-correct-string-parsing.patch
@@ -23,7 +20,6 @@ ModemManager-pantech-uml295.patch
 ModemManager-novatel-u620l-enterprise-mode.patch
 ModemManager-novatel-u620l-support.patch
 ModemManager-novatel-u620l-support-revision.patch
-#ModemManager-cleanup-qmi-bearer-callbacks.patch - code has changed. Not required?
 ModemManager-increase-plugin-time.patch
 ModemManager-net-port-claim.patch
 ModemManager-qmi-set-3gpp-profile-index.patch
@@ -32,3 +28,4 @@ ModemManager-qmi-qmap-mux.patch
 ModemManager-mbim-vlan-session_id.patch
 ModemManager-telit-plugin-extended.patch
 ModemManager-mmcli-bearer-command-timeout.patch
+ModemManager-revert-deprecate-number-in-bearer-properties.patch

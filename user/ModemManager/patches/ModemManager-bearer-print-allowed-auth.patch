@@ -1,20 +1,49 @@
-diff --git a/cli/mmcli-bearer.c b/cli/mmcli-bearer.c
-index cd9ecca..ebea037 100644
---- a/cli/mmcli-bearer.c
-+++ b/cli/mmcli-bearer.c
-@@ -172,6 +172,7 @@ print_bearer_info (MMBearer *bearer)
-                  "                     |     IP type: '%s'\n"
-                  "                     |        user: '%s'\n"
-                  "                     |    password: '%s'\n"
-+                 "                     |  allow auth: '%s'\n"
-                  "                     |      number: '%s'\n"
-                  "                     | Rm protocol: '%s'\n",
-                  VALIDATE_NONE (mm_bearer_properties_get_apn (properties)),
-@@ -179,6 +180,7 @@ print_bearer_info (MMBearer *bearer)
-                  VALIDATE_UNKNOWN (ip_family_str),
-                  VALIDATE_NONE (mm_bearer_properties_get_user (properties)),
-                  VALIDATE_NONE (mm_bearer_properties_get_password (properties)),
-+                 mm_bearer_allowed_auth_build_string_from_mask(mm_bearer_properties_get_allowed_auth(properties)),
-                  VALIDATE_NONE (mm_bearer_properties_get_number (properties)),
-                  VALIDATE_UNKNOWN (mm_modem_cdma_rm_protocol_get_string (
-                                        mm_bearer_properties_get_rm_protocol (properties))));
+diff -Nurd ModemManager.orig/cli/mmcli-bearer.c ModemManager/cli/mmcli-bearer.c
+--- ModemManager.orig/cli/mmcli-bearer.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/cli/mmcli-bearer.c	2019-05-29 11:08:19.308305021 +1000
+@@ -158,6 +158,7 @@
+         gchar       *ip_family_str = NULL;
+         const gchar *user = NULL;
+         const gchar *password = NULL;
++        gchar       *allow_auth_str = NULL;
+         const gchar *rm_protocol = NULL;
+ 
+         if (properties) {
+@@ -165,6 +166,7 @@
+             ip_family_str = (properties ? mm_bearer_ip_family_build_string_from_mask (mm_bearer_properties_get_ip_type (properties)) : NULL);
+             user          = mm_bearer_properties_get_user (properties);
+             password      = mm_bearer_properties_get_password (properties);
++            allow_auth_str = mm_bearer_allowed_auth_build_string_from_mask(mm_bearer_properties_get_allowed_auth(properties));
+             if (mm_bearer_get_bearer_type (bearer) != MM_BEARER_TYPE_DEFAULT_ATTACH) {
+                 roaming     = mm_bearer_properties_get_allow_roaming (properties) ? "allowed" : "forbidden";
+                 rm_protocol = mm_modem_cdma_rm_protocol_get_string (mm_bearer_properties_get_rm_protocol (properties));
+@@ -176,6 +178,7 @@
+         mmcli_output_string_take (MMC_F_BEARER_PROPERTIES_IP_TYPE,     ip_family_str);
+         mmcli_output_string      (MMC_F_BEARER_PROPERTIES_USER,        user);
+         mmcli_output_string      (MMC_F_BEARER_PROPERTIES_PASSWORD,    password);
++        mmcli_output_string_take (MMC_F_BEARER_PROPERTIES_ALLOW_AUTH,  allow_auth_str);
+         mmcli_output_string      (MMC_F_BEARER_PROPERTIES_RM_PROTOCOL, rm_protocol);
+     }
+ 
+diff -Nurd ModemManager.orig/cli/mmcli-output.c ModemManager/cli/mmcli-output.c
+--- ModemManager.orig/cli/mmcli-output.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/cli/mmcli-output.c	2019-05-29 11:08:19.308305021 +1000
+@@ -207,6 +207,7 @@
+     [MMC_F_BEARER_PROPERTIES_IP_TYPE]         = { "bearer.properties.ip-type",                       "ip type",                  MMC_S_BEARER_PROPERTIES,       },
+     [MMC_F_BEARER_PROPERTIES_USER]            = { "bearer.properties.user",                          "user",                     MMC_S_BEARER_PROPERTIES,       },
+     [MMC_F_BEARER_PROPERTIES_PASSWORD]        = { "bearer.properties.password",                      "password",                 MMC_S_BEARER_PROPERTIES,       },
++    [MMC_F_BEARER_PROPERTIES_ALLOW_AUTH]      = { "bearer.properties.allow-auth",                    "allow auth",               MMC_S_BEARER_PROPERTIES,       },
+     [MMC_F_BEARER_PROPERTIES_NUMBER]          = { "bearer.properties.number",                        "number",                   MMC_S_BEARER_PROPERTIES,       },
+     [MMC_F_BEARER_PROPERTIES_RM_PROTOCOL]     = { "bearer.properties.rm-protocol",                   "rm protocol",              MMC_S_BEARER_PROPERTIES,       },
+     [MMC_F_BEARER_IPV4_CONFIG_METHOD]         = { "bearer.ipv4-config.method",                       "method",                   MMC_S_BEARER_IPV4_CONFIG,      },
+diff -Nurd ModemManager.orig/cli/mmcli-output.h ModemManager/cli/mmcli-output.h
+--- ModemManager.orig/cli/mmcli-output.h	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/cli/mmcli-output.h	2019-05-29 11:08:19.308305021 +1000
+@@ -223,6 +223,7 @@
+     MMC_F_BEARER_PROPERTIES_IP_TYPE,
+     MMC_F_BEARER_PROPERTIES_USER,
+     MMC_F_BEARER_PROPERTIES_PASSWORD,
++    MMC_F_BEARER_PROPERTIES_ALLOW_AUTH,
+     MMC_F_BEARER_PROPERTIES_NUMBER,
+     MMC_F_BEARER_PROPERTIES_RM_PROTOCOL,
+     MMC_F_BEARER_IPV4_CONFIG_METHOD,

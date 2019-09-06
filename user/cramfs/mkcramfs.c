@@ -1,10 +1,7 @@
 /*
  * mkcramfs - make a cramfs file system
  *
- * Copyright (C) 1999-2001 Transmeta Corporation
- *
- * 28 May 2002 - added '@name,[cubp],maj,min' special files and '-r' option
- *               David McCullough <davidm@snapgear.com>
+ * Copyright (C) 1999-2002 Transmeta Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,28 +18,111 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/*
+ * If you change the disk format of cramfs, please update fs/cramfs/README.
+ */
+
 #include <sys/types.h>
+#include <sys/sysmacros.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <dirent.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
-#include <assert.h>
-#include <getopt.h>
+#include <stdarg.h>
 #include <linux/cramfs_fs.h>
 #include <zlib.h>
 
-#define PAD_SIZE 512		/* only 0 and 512 supported by kernel */
+/* Exit codes used by mkfs-type programs */
+#define MKFS_OK          0	/* No errors */
+#define MKFS_ERROR       8	/* Operational error */
+#define MKFS_USAGE       16	/* Usage or syntax error */
 
-#define NODE_PATTERN "@%[a-zA-Z0-9_+-],%c,%d,%d" /* sscanf string for specials */
+/* The kernel only supports PAD_SIZE of 0 and 512. */
+#define PAD_SIZE 512
+
+/* sscanf string for specials */
+#define NODE_PATTERN "@%[a-zA-Z0-9_+-],%c,%d,%d"
+
+/* The kernel assumes PAGE_CACHE_SIZE as block size. */
+#define PAGE_CACHE_SIZE (4096)
+
+/*
+ * The longest filename component to allow for in the input directory tree.
+ * ext2fs (and many others) allow up to 255 bytes.  A couple of filesystems
+ * allow longer (e.g. smbfs 1024), but there isn't much use in supporting
+ * >255-byte names in the input directory tree given that such names get
+ * truncated to CRAMFS_MAXPATHLEN (252 bytes) when written to cramfs.
+ *
+ * Old versions of mkcramfs generated corrupted filesystems if any input
+ * filenames exceeded CRAMFS_MAXPATHLEN (252 bytes), however old
+ * versions of cramfsck seem to have been able to detect the corruption.
+ */
+#define MAX_INPUT_NAMELEN 255
+
+/*
+ * Maximum size fs you can create is roughly 256MB.  (The last file's
+ * data must begin within 256MB boundary but can extend beyond that.)
+ *
+ * Note that if you want it to fit in a ROM then you're limited to what the
+ * hardware and kernel can support.
+ */
+#define MAXFSLEN ((((1 << CRAMFS_OFFSET_WIDTH) - 1) << 2) /* offset */ \
+		  + (1 << CRAMFS_SIZE_WIDTH) - 1 /* filesize */ \
+		  + (1 << CRAMFS_SIZE_WIDTH) * 4 / PAGE_CACHE_SIZE /* block pointers */ )
 
 static const char *progname = "mkcramfs";
+static unsigned int blksize = PAGE_CACHE_SIZE;
+static long total_blocks = 0, total_nodes = 1; /* pre-count the root node */
+static int image_length = 0;
 
-/* N.B. If you change the disk format of cramfs, please update fs/cramfs/README. */
+/*
+ * If opt_holes is set, then mkcramfs can create explicit holes in the
+ * data, which saves 26 bytes per hole (which is a lot smaller a
+ * saving than most most filesystems).
+ *
+ * Note that kernels up to at least 2.3.39 don't support cramfs holes,
+ * which is why this is turned off by default.
+ *
+ * If opt_verbose is 1, be verbose.  If it is higher, be even more verbose.
+ */
+static uint32_t opt_edition = 0;
+static int opt_errors = 0;
+static int opt_holes = 0;
+static int opt_pad = 0;
+static int opt_force_root = 0;
+static int opt_verbose = 0;
+static char *opt_image = NULL;
+static char *opt_name = NULL;
+
+static int warn_dev, warn_gid, warn_namelen, warn_skip, warn_size, warn_uid;
+
+/* In-core version of inode / directory entry. */
+struct entry {
+	/* stats */
+	unsigned char *name;
+	unsigned int mode, size, uid, gid;
+
+	/* these are only used for non-empty files */
+	char *path;		/* always null except non-empty files */
+	int fd;			/* temporarily open files while mmapped */
+
+	/* FS data */
+	void *uncompressed;
+	/* points to other identical file */
+	struct entry *same;
+	unsigned int offset;		/* pointer to compressed data in archive */
+	unsigned int dir_offset;	/* Where in the archive is the directory entry? */
+
+	/* organization */
+	struct entry *child; /* null for non-directories and empty directories */
+	struct entry *next;
+};
 
 /* Input status of 0 to print help and exit without an error. */
 static void usage(int status)
@@ -57,113 +137,109 @@ static void usage(int status)
 		" -n name    set name of cramfs filesystem\n"
 		" -p         pad by %d bytes for boot code\n"
 		" -s         sort directory entries (old option, ignored)\n"
+		" -v         be more verbose\n"
 		" -z         make explicit holes (requires >= 2.3.39)\n"
-		" -r         force root uid/gid on all files\n"
-		" -v         verbose output\n"
-		" dirname    root of the filesystem to be compressed\n"
+		" dirname    root of the directory tree to be compressed\n"
 		" outfile    output file\n", progname, PAD_SIZE);
 
 	exit(status);
 }
 
-#define PAGE_CACHE_SIZE (4096)
-/* The kernel assumes PAGE_CACHE_SIZE as block size. */
-static unsigned int blksize = PAGE_CACHE_SIZE;
-static long total_blocks = 0, total_nodes = 1; /* pre-count the root node */
-static int image_length = 0;
-
-/*
- * If opt_holes is set, then mkcramfs can create explicit holes in the
- * data, which saves 26 bytes per hole (which is a lot smaller a
- * saving than most most filesystems).
- *
- * Note that kernels up to at least 2.3.39 don't support cramfs holes,
- * which is why this is turned off by default.
- */
-static int opt_edition = 0;
-static int opt_errors = 0;
-static int opt_holes = 0;
-static int opt_pad = 0;
-static int opt_force_root = 0;
-static int opt_verbose = 0;
-static char *opt_image = NULL;
-static char *opt_name = NULL;
-
-static int warn_dev, warn_gid, warn_namelen, warn_skip, warn_size, warn_uid;
-
-#ifndef MIN
-# define MIN(_a,_b) ((_a) < (_b) ? (_a) : (_b))
-#endif
-
-/* In-core version of inode / directory entry. */
-struct entry {
-	/* stats */
-	char *name;
-	unsigned int mode, size, uid, gid;
-
-	/* FS data */
-	void *uncompressed;
-        /* points to other identical file */
-        struct entry *same;
-        unsigned int offset;            /* pointer to compressed data in archive */
-	unsigned int dir_offset;	/* Where in the archive is the directory entry? */
-
-	/* organization */
-	struct entry *child; /* null for non-directories and empty directories */
-	struct entry *next;
-};
-
-/*
- * The longest file name component to allow for in the input directory tree.
- * Ext2fs (and many others) allow up to 255 bytes.  A couple of filesystems
- * allow longer (e.g. smbfs 1024), but there isn't much use in supporting
- * >255-byte names in the input directory tree given that such names get
- * truncated to 255 bytes when written to cramfs.
- */
-#define MAX_INPUT_NAMELEN 255
-
-static int find_identical_file(struct entry *orig,struct entry *newfile)
+static void die(int status, int syserr, const char *fmt, ...)
 {
-        if(orig==newfile) return 1;
-        if(!orig) return 0;
-        if(orig->size==newfile->size && orig->uncompressed && !memcmp(orig->uncompressed,newfile->uncompressed,orig->size)) {
-                newfile->same=orig;
-                return 1;
-        }
-        return find_identical_file(orig->child,newfile) ||
-                   find_identical_file(orig->next,newfile);
+	va_list arg_ptr;
+	int save = errno;
+
+	fflush(0);
+	va_start(arg_ptr, fmt);
+	fprintf(stderr, "%s: ", progname);
+	vfprintf(stderr, fmt, arg_ptr);
+	if (syserr) {
+		fprintf(stderr, ": %s", strerror(save));
+	}
+	fprintf(stderr, "\n");
+	va_end(arg_ptr);
+	exit(status);
 }
 
-static void eliminate_doubles(struct entry *root,struct entry *orig) {
-        if(orig) {
-                if(orig->size && orig->uncompressed)
-			find_identical_file(root,orig);
-                eliminate_doubles(root,orig->child);
-                eliminate_doubles(root,orig->next);
-        }
+static void map_entry(struct entry *entry)
+{
+	if (entry->path) {
+		entry->fd = open(entry->path, O_RDONLY);
+		if (entry->fd < 0) {
+			die(MKFS_ERROR, 1, "open failed: %s", entry->path);
+		}
+		entry->uncompressed = mmap(NULL, entry->size, PROT_READ, MAP_PRIVATE, entry->fd, 0);
+		if (entry->uncompressed == MAP_FAILED) {
+			die(MKFS_ERROR, 1, "mmap failed: %s", entry->path);
+		}
+	}
+}
+
+static void unmap_entry(struct entry *entry)
+{
+	if (entry->path) {
+		if (munmap(entry->uncompressed, entry->size) < 0) {
+			die(MKFS_ERROR, 1, "munmap failed: %s", entry->path);
+		}
+		close(entry->fd);
+	}
+}
+
+static int find_identical_file(struct entry *orig, struct entry *newfile)
+{
+	if (orig == newfile)
+		return 1;
+	if (!orig)
+		return 0;
+	if (orig->size == newfile->size && (orig->path || orig->uncompressed))
+	{
+		map_entry(orig);
+		map_entry(newfile);
+		if (!memcmp(orig->uncompressed, newfile->uncompressed, orig->size))
+		{
+			newfile->same = orig;
+			unmap_entry(newfile);
+			unmap_entry(orig);
+			return 1;
+		}
+		unmap_entry(newfile);
+		unmap_entry(orig);
+	}
+	return (find_identical_file(orig->child, newfile) ||
+		find_identical_file(orig->next, newfile));
+}
+
+static void eliminate_doubles(struct entry *root, struct entry *orig) {
+	if (orig) {
+		if (orig->size && (orig->path || orig->uncompressed))
+			find_identical_file(root, orig);
+		eliminate_doubles(root, orig->child);
+		eliminate_doubles(root, orig->next);
+	}
 }
 
 /*
  * We define our own sorting function instead of using alphasort which
  * uses strcoll and changes ordering based on locale information.
  */
-static int cramsort (const void *a, const void *b)
+static int cramsort (const struct dirent **a, const struct dirent **b)
 {
-	char name1[32], name2[32];
-	char typ;
-	int  maj;
-	int  min;
-	char *sa, *sb;
+	char name1[64], name2[64];
+        char typ;
+        int  maj;
+        int  min;
+        const char *sa, *sb;
 
-	sa = (*(const struct dirent **) a)->d_name;
-	sb = (*(const struct dirent **) b)->d_name;
-			
+	sa = (*a)->d_name;
+	sb = (*b)->d_name;
+
 	if (sscanf(sa, NODE_PATTERN, name1, &typ, &maj, &min) == 4)
 		sa = name1;
 	if (sscanf(sb, NODE_PATTERN, name2, &typ, &maj, &min) == 4)
 		sb = name2;
 
-	return strcmp(sa, sb);
+	return strcmp (sa, sb);
 }
 
 static unsigned int parse_directory(struct entry *root_entry, const char *name, struct entry **prev, loff_t *fslen_ub)
@@ -177,8 +253,7 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 	/* TODO: Reuse the parent's buffer to save memcpy'ing and duplication. */
 	path = malloc(len + 1 + MAX_INPUT_NAMELEN + 1);
 	if (!path) {
-		perror(NULL);
-		exit(8);
+		die(MKFS_ERROR, 1, "malloc failed");
 	}
 	memcpy(path, name, len);
 	endpath = path + len;
@@ -189,8 +264,7 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 	dircount = scandir(name, &dirlist, 0, cramsort);
 
 	if (dircount < 0) {
-		perror(name);
-		exit(8);
+		die(MKFS_ERROR, 1, "scandir failed: %s", name);
 	}
 
 	/* process directory */
@@ -200,9 +274,8 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 		struct stat st;
 		int size;
 		size_t namelen;
-		char dev[32], typ;
+		char dev[64], typ;
 		int maj, min;
-					
 
 		dirent = dirlist[dirindex];
 
@@ -217,23 +290,22 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 		}
 		namelen = strlen(dirent->d_name);
 		if (namelen > MAX_INPUT_NAMELEN) {
-			fprintf(stderr,
-				"Very long (%u bytes) filename `%s' found.\n"
-				" Please increase MAX_INPUT_NAMELEN in mkcramfs.c and recompile.  Exiting.\n",
+			die(MKFS_ERROR, 0,
+				"very long (%u bytes) filename found: %s\n"
+				"please increase MAX_INPUT_NAMELEN in mkcramfs.c and recompile",
 				namelen, dirent->d_name);
-			exit(8);
 		}
 		memcpy(endpath, dirent->d_name, namelen + 1);
 
 		if (lstat(path, &st) < 0) {
-			perror(endpath);
 			warn_skip = 1;
 			continue;
 		}
 
 		/*
-		 * special pattern to make dev nodes as non-root user.  The file
-		 * must match the pattern '@name,[cubp],major,minor' and have 0 length
+		 * Special pattern to make dev nodes as non-root user.
+		 * The file must match the pattern '@name,[cubp],major,minor'
+		 * and have 0 length.
 		 */
 		if (sscanf(dirent->d_name,NODE_PATTERN,dev,&typ,&maj,&min) == 4) {
 			if (!S_ISREG(st.st_mode)) {
@@ -272,21 +344,25 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 
 		entry = calloc(1, sizeof(struct entry));
 		if (!entry) {
-			perror(NULL);
-			exit(8);
+			die(MKFS_ERROR, 1, "calloc failed");
 		}
 		entry->name = strdup(dirent->d_name);
 		if (!entry->name) {
-			perror(NULL);
-			exit(8);
+			die(MKFS_ERROR, 1, "strdup failed");
 		}
-		if (namelen > 255) {
-			/* Can't happen when reading from ext2fs. */
-
-			/* TODO: we ought to avoid chopping in half
-			   multi-byte UTF8 characters. */
-			entry->name[namelen = 255] = '\0';
+		/* truncate multi-byte UTF-8 filenames on character boundary */
+		if (namelen > CRAMFS_MAXPATHLEN) {
+			namelen = CRAMFS_MAXPATHLEN;
 			warn_namelen = 1;
+			/* the first lost byte must not be a trail byte */
+			while ((entry->name[namelen] & 0xc0) == 0x80) {
+				namelen--;
+				/* are we reasonably certain it was UTF-8 ? */
+				if (entry->name[namelen] < 0x80 || !namelen) {
+					die(MKFS_ERROR, 0, "cannot truncate filenames not encoded in UTF-8");
+				}
+			}
+			entry->name[namelen] = '\0';
 		}
 		entry->mode = st.st_mode;
 		entry->size = st.st_size;
@@ -301,69 +377,55 @@ static unsigned int parse_directory(struct entry *root_entry, const char *name, 
 			warn_uid = 1;
 		if (entry->gid >= 1 << CRAMFS_GID_WIDTH)
 			/* TODO: We ought to replace with a default
-                           gid instead of truncating; otherwise there
-                           are security problems.  Maybe mode should
-                           be &= ~070.  Same goes for uid once Linux
-                           supports >16-bit uids. */
+			   gid instead of truncating; otherwise there
+			   are security problems.  Maybe mode should
+			   be &= ~070.  Same goes for uid once Linux
+			   supports >16-bit uids. */
 			warn_gid = 1;
 		size = sizeof(struct cramfs_inode) + ((namelen + 3) & ~3);
 		*fslen_ub += size;
 		if (S_ISDIR(st.st_mode)) {
 			entry->size = parse_directory(root_entry, path, &entry->child, fslen_ub);
 		} else if (S_ISREG(st.st_mode)) {
-			/* TODO: We ought to open files in do_compress, one
-			   at a time, instead of amassing all these memory
-			   maps during parse_directory (which don't get used
-			   until do_compress anyway).  As it is, we tend to
-			   get EMFILE errors (especially if mkcramfs is run
-			   by non-root).
-
-			   While we're at it, do analagously for symlinks
-			   (which would just save a little memory). */
-			int fd = open(path, O_RDONLY);
-			if (fd < 0) {
-				perror(path);
-				warn_skip = 1;
-				continue;
-			}
 			if (entry->size) {
+				if (access(path, R_OK) < 0) {
+					warn_skip = 1;
+					continue;
+				}
+				entry->path = strdup(path);
+				if (!entry->path) {
+					die(MKFS_ERROR, 1, "strdup failed");
+				}
 				if ((entry->size >= 1 << CRAMFS_SIZE_WIDTH)) {
 					warn_size = 1;
 					entry->size = (1 << CRAMFS_SIZE_WIDTH) - 1;
 				}
-
-				entry->uncompressed = mmap(NULL, entry->size, PROT_READ, MAP_PRIVATE, fd, 0);
-				if (-1 == (int) (long) entry->uncompressed) {
-					perror("mmap");
-					exit(8);
-				}
 			}
-			close(fd);
 		} else if (S_ISLNK(st.st_mode)) {
 			entry->uncompressed = malloc(entry->size);
 			if (!entry->uncompressed) {
-				perror(NULL);
-				exit(8);
+				die(MKFS_ERROR, 1, "malloc failed");
 			}
 			if (readlink(path, entry->uncompressed, entry->size) < 0) {
-				perror(path);
 				warn_skip = 1;
 				continue;
 			}
 		} else if (S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode)) {
 			/* maybe we should skip sockets */
 			entry->size = 0;
-		} else {
+		} else if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode)) {
 			entry->size = st.st_rdev;
 			if (entry->size & -(1<<CRAMFS_SIZE_WIDTH))
 				warn_dev = 1;
+		} else {
+			die(MKFS_ERROR, 0, "bogus file type: %s", entry->name);
 		}
 
 		if (S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
 			int blocks = ((entry->size - 1) / blksize + 1);
 
 			/* block pointers & data expansion allowance + data */
-			if(entry->size)
+			if (entry->size)
 				*fslen_ub += (4+26)*blocks + entry->size + 3;
 		}
 
@@ -383,9 +445,7 @@ static unsigned int write_superblock(struct entry *root, char *base, int size)
 	struct cramfs_super *super = (struct cramfs_super *) base;
 	unsigned int offset = sizeof(struct cramfs_super) + image_length;
 
-	if (opt_pad) {
-		offset += opt_pad;
-	}
+	offset += opt_pad;	/* 0 if no padding */
 
 	super->magic = CRAMFS_MAGIC;
 	super->flags = CRAMFS_FLAG_FSID_VERSION_2 | CRAMFS_FLAG_SORTED_DIRS;
@@ -419,27 +479,66 @@ static unsigned int write_superblock(struct entry *root, char *base, int size)
 static void set_data_offset(struct entry *entry, char *base, unsigned long offset)
 {
 	struct cramfs_inode *inode = (struct cramfs_inode *) (base + entry->dir_offset);
-#ifdef DEBUG
-	assert ((offset & 3) == 0);
-#endif /* DEBUG */
+
+	if ((offset & 3) != 0) {
+		die(MKFS_ERROR, 0, "illegal offset of %lu bytes", offset);
+	}
 	if (offset >= (1 << (2 + CRAMFS_OFFSET_WIDTH))) {
-		fprintf(stderr, "filesystem too big.  Exiting.\n");
-		exit(8);
+		die(MKFS_ERROR, 0, "filesystem too big");
 	}
 	inode->offset = (offset >> 2);
 }
 
+/*
+ * TODO: Does this work for chars >= 0x80?  Most filesystems use UTF-8
+ * encoding for filenames, whereas the console is a single-byte
+ * character set like iso-latin-1.
+ */
+static void print_node(struct entry *e)
+{
+	char info[10];
+	char type = '?';
+
+	if (S_ISREG(e->mode)) type = 'f';
+	else if (S_ISDIR(e->mode)) type = 'd';
+	else if (S_ISLNK(e->mode)) type = 'l';
+	else if (S_ISCHR(e->mode)) type = 'c';
+	else if (S_ISBLK(e->mode)) type = 'b';
+	else if (S_ISFIFO(e->mode)) type = 'p';
+	else if (S_ISSOCK(e->mode)) type = 's';
+
+	if (S_ISCHR(e->mode) || (S_ISBLK(e->mode))) {
+		/* major/minor numbers can be as high as 2^12 or 4096 */
+		snprintf(info, 10, "%4d,%4d", major(e->size), minor(e->size));
+	}
+	else {
+		/* size be as high as 2^24 or 16777216 */
+		snprintf(info, 10, "%9d", e->size);
+	}
+
+	printf("%c %04o %s %5d:%-3d %s\n",
+	       type, e->mode & ~S_IFMT, info, e->uid, e->gid, e->name);
+}
 
 /*
  * We do a width-first printout of the directory
  * entries, using a stack to remember the directories
  * we've seen.
  */
-#define MAXENTRIES (100)
 static unsigned int write_directory_structure(struct entry *entry, char *base, unsigned int offset)
 {
 	int stack_entries = 0;
-	struct entry *entry_stack[MAXENTRIES];
+	int stack_size = 64;
+	struct entry **entry_stack;
+
+	entry_stack = malloc(stack_size * sizeof(struct entry *));
+	if (!entry_stack) {
+		die(MKFS_ERROR, 1, "malloc failed");
+	}
+
+	if (opt_verbose) {
+		printf("root:\n");
+	}
 
 	for (;;) {
 		int dir_start = stack_entries;
@@ -468,17 +567,16 @@ static unsigned int write_directory_structure(struct entry *entry, char *base, u
 			inode->namelen = len >> 2;
 			offset += len;
 
-			/* TODO: this may get it wrong for chars >= 0x80.
-			   Most filesystems use UTF8 encoding for filenames,
-			   whereas the console is a single-byte character
-			   set like iso-latin-1. */
-			if (opt_verbose) {
-				printf("  %s\n", entry->name);
-			}
+			if (opt_verbose)
+				print_node(entry);
+
 			if (entry->child) {
-				if (stack_entries >= MAXENTRIES) {
-					fprintf(stderr, "Exceeded MAXENTRIES.  Raise this value in mkcramfs.c and recompile.  Exiting.\n");
-					exit(8);
+				if (stack_entries >= stack_size) {
+					stack_size *= 2;
+					entry_stack = realloc(entry_stack, stack_size * sizeof(struct entry *));
+					if (!entry_stack) {
+						die(MKFS_ERROR, 1, "realloc failed");
+					}
 				}
 				entry_stack[stack_entries] = entry;
 				stack_entries++;
@@ -488,9 +586,9 @@ static unsigned int write_directory_structure(struct entry *entry, char *base, u
 
 		/*
 		 * Reverse the order the stack entries pushed during
-                 * this directory, for a small optimization of disk
-                 * access in the created fs.  This change makes things
-                 * `ls -UR' order.
+		 * this directory, for a small optimization of disk
+		 * access in the created fs.  This change makes things
+		 * `ls -UR' order.
 		 */
 		{
 			struct entry **lo = entry_stack + dir_start;
@@ -512,30 +610,26 @@ static unsigned int write_directory_structure(struct entry *entry, char *base, u
 
 		set_data_offset(entry, base, offset);
 		if (opt_verbose) {
-			printf("'%s':\n", entry->name);
+			printf("%s:\n", entry->name);
 		}
 		entry = entry->child;
 	}
+	free(entry_stack);
 	return offset;
 }
 
 static int is_zero(char const *begin, unsigned len)
 {
-	if (opt_holes)
-		/* Returns non-zero iff the first LEN bytes from BEGIN are
-		   all NULs. */
-		return (len-- == 0 ||
-			(begin[0] == '\0' &&
-			 (len-- == 0 ||
-			  (begin[1] == '\0' &&
-			   (len-- == 0 ||
-			    (begin[2] == '\0' &&
-			     (len-- == 0 ||
-			      (begin[3] == '\0' &&
-			       memcmp(begin, begin + 4, len) == 0))))))));
-	else
-		/* Never create holes. */
-		return 0;
+	/* Returns non-zero iff the first LEN bytes from BEGIN are all NULs. */
+	return (len-- == 0 ||
+		(begin[0] == '\0' &&
+		 (len-- == 0 ||
+		  (begin[1] == '\0' &&
+		   (len-- == 0 ||
+		    (begin[2] == '\0' &&
+		     (len-- == 0 ||
+		      (begin[3] == '\0' &&
+		       memcmp(begin, begin + 4, len) == 0))))))));
 }
 
 /*
@@ -562,22 +656,26 @@ static unsigned int do_compress(char *base, unsigned int offset, char const *nam
 	do {
 		unsigned long len = 2 * blksize;
 		unsigned int input = size;
+		int err;
+
 		if (input > blksize)
 			input = blksize;
 		size -= input;
-		if (!is_zero (uncompressed, input)) {
-			compress(base + curr, &len, uncompressed, input);
+		if (!(opt_holes && is_zero (uncompressed, input))) {
+			err = compress2(base + curr, &len, uncompressed, input, Z_BEST_COMPRESSION);
+			if (err != Z_OK) {
+				die(MKFS_ERROR, 0, "compression error: %s", zError(err));
+			}
 			curr += len;
 		}
 		uncompressed += input;
 
 		if (len > blksize*2) {
 			/* (I don't think this can happen with zlib.) */
-			printf("AIEEE: block \"compressed\" to > 2*blocklength (%ld)\n", len);
-			exit(8);
+			die(MKFS_ERROR, 0, "AIEEE: block \"compressed\" to > 2*blocklength (%ld)", len);
 		}
 
-		*(u_int32_t *) (base + offset) = curr;
+		*(uint32_t *) (base + offset) = curr;
 		offset += 4;
 	} while (size);
 
@@ -587,9 +685,9 @@ static unsigned int do_compress(char *base, unsigned int offset, char const *nam
 	   st_blocks * 512.  But if you say that then perhaps
 	   administrative data should also be included in both. */
 	change = new_size - original_size;
-	if (opt_verbose) {
+	if (opt_verbose > 1) {
 		printf("%6.2f%% (%+d bytes)\t%s\n",
-			   (change * 100) / (double) original_size, change, name);
+		       (change * 100) / (double) original_size, change, name);
 	}
 
 	return curr;
@@ -598,25 +696,28 @@ static unsigned int do_compress(char *base, unsigned int offset, char const *nam
 
 /*
  * Traverse the entry tree, writing data for every item that has
- * non-null entry->compressed (i.e. every symlink and non-empty
- * regfile).
+ * non-null entry->path (i.e. every non-empty regfile) and non-null
+ * entry->uncompressed (i.e. every symlink).
  */
 static unsigned int write_data(struct entry *entry, char *base, unsigned int offset)
 {
 	do {
-		if (entry->uncompressed) {
-                        if(entry->same) {
-                                set_data_offset(entry, base, entry->same->offset);
-                                entry->offset=entry->same->offset;
-                        } else {
-                                set_data_offset(entry, base, offset);
-                                entry->offset=offset;
-                                offset = do_compress(base, offset, entry->name, entry->uncompressed, entry->size);
-                        }
+		if (entry->path || entry->uncompressed) {
+			if (entry->same) {
+				set_data_offset(entry, base, entry->same->offset);
+				entry->offset = entry->same->offset;
+			}
+			else {
+				set_data_offset(entry, base, offset);
+				entry->offset = offset;
+				map_entry(entry);
+				offset = do_compress(base, offset, entry->name, entry->uncompressed, entry->size);
+				unmap_entry(entry);
+			}
 		}
 		else if (entry->child)
 			offset = write_data(entry->child, base, offset);
-                entry=entry->next;
+		entry=entry->next;
 	} while (entry);
 	return offset;
 }
@@ -628,10 +729,12 @@ static unsigned int write_file(char *file, char *base, unsigned int offset)
 
 	fd = open(file, O_RDONLY);
 	if (fd < 0) {
-		perror(file);
-		exit(8);
+		die(MKFS_ERROR, 1, "open failed: %s", file);
 	}
 	buf = mmap(NULL, image_length, PROT_READ, MAP_PRIVATE, fd, 0);
+	if (buf == MAP_FAILED) {
+		die(MKFS_ERROR, 1, "mmap failed");
+	}
 	memcpy(base + offset, buf, image_length);
 	munmap(buf, image_length);
 	close (fd);
@@ -643,27 +746,6 @@ static unsigned int write_file(char *file, char *base, unsigned int offset)
 	return (offset + image_length);
 }
 
-/*
- * Maximum size fs you can create is roughly 256MB.  (The last file's
- * data must begin within 256MB boundary but can extend beyond that.)
- *
- * Note that if you want it to fit in a ROM then you're limited to what the
- * hardware and kernel can support (64MB?).
- */
-#define MAXFSLEN ((((1 << CRAMFS_OFFSET_WIDTH) - 1) << 2) /* offset */ \
-		  + (1 << CRAMFS_SIZE_WIDTH) - 1 /* filesize */ \
-		  + (1 << CRAMFS_SIZE_WIDTH) * 4 / PAGE_CACHE_SIZE /* block pointers */ )
-
-
-/*
- * Usage:
- *
- *      mkcramfs directory-name outfile
- *
- * where "directory-name" is simply the root of the directory
- * tree that we want to generate a compressed filesystem out
- * of.
- */
 int main(int argc, char **argv)
 {
 	struct stat st;		/* used twice... */
@@ -674,8 +756,9 @@ int main(int argc, char **argv)
 	/* initial guess (upper-bound) of required filesystem size */
 	loff_t fslen_ub = sizeof(struct cramfs_super);
 	char const *dirname, *outfile;
-	u_int32_t crc = crc32(0L, Z_NULL, 0);
+	uint32_t crc;
 	int c;			/* for getopt */
+	char *ep;		/* for strtoul */
 
 	total_blocks = 0;
 
@@ -683,24 +766,23 @@ int main(int argc, char **argv)
 		progname = argv[0];
 
 	/* command line options */
-	while ((c = getopt(argc, argv, "vhEe:i:n:pszr")) != EOF) {
+	while ((c = getopt(argc, argv, "hrEe:i:n:psvz")) != EOF) {
 		switch (c) {
 		case 'h':
-			usage(0);
+			usage(MKFS_OK);
 		case 'E':
 			opt_errors = 1;
 			break;
-		case 'v':
-			opt_verbose = 1;
-			break;
 		case 'e':
-			opt_edition = atoi(optarg);
+			errno = 0;
+			opt_edition = strtoul(optarg, &ep, 10);
+			if (errno || optarg[0] == '\0' || *ep != '\0')
+				usage(MKFS_USAGE);
 			break;
 		case 'i':
 			opt_image = optarg;
 			if (lstat(opt_image, &st) < 0) {
-				perror(opt_image);
-				exit(16);
+				die(MKFS_ERROR, 1, "lstat failed: %s", opt_image);
 			}
 			image_length = st.st_size; /* may be padded later */
 			fslen_ub += (image_length + 3); /* 3 is for padding */
@@ -715,6 +797,9 @@ int main(int argc, char **argv)
 		case 's':
 			/* old option, ignored */
 			break;
+		case 'v':
+			opt_verbose++;
+			break;
 		case 'z':
 			opt_holes = 1;
 			break;
@@ -725,20 +810,21 @@ int main(int argc, char **argv)
 	}
 
 	if ((argc - optind) != 2)
-		usage(16);
+		usage(MKFS_USAGE);
 	dirname = argv[optind];
 	outfile = argv[optind + 1];
 
 	if (stat(dirname, &st) < 0) {
-		perror(dirname);
-		exit(16);
+		die(MKFS_USAGE, 1, "stat failed: %s", dirname);
 	}
 	fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0) {
+		die(MKFS_USAGE, 1, "open failed: %s", outfile);
+	}
 
 	root_entry = calloc(1, sizeof(struct entry));
 	if (!root_entry) {
-		perror(NULL);
-		exit(8);
+		die(MKFS_ERROR, 1, "calloc failed");
 	}
 	root_entry->mode = st.st_mode;
 	root_entry->uid = st.st_uid;
@@ -747,35 +833,34 @@ int main(int argc, char **argv)
 	root_entry->size = parse_directory(root_entry, dirname, &root_entry->child, &fslen_ub);
 
 	/* always allocate a multiple of blksize bytes because that's
-           what we're going to write later on */
+	   what we're going to write later on */
 	fslen_ub = ((fslen_ub - 1) | (blksize - 1)) + 1;
 
 	if (fslen_ub > MAXFSLEN) {
 		fprintf(stderr,
-			"warning: guestimate of required size (upper bound) is %LdMB, but maximum image size is %uMB.  We might die prematurely.\n",
+			"warning: estimate of required size (upper bound) is %ldMB, but maximum image size is %uMB, we might die prematurely\n",
 			fslen_ub >> 20,
 			MAXFSLEN >> 20);
 		fslen_ub = MAXFSLEN;
 	}
 
-        /* find duplicate files. TODO: uses the most inefficient algorithm
-           possible. */
-        eliminate_doubles(root_entry,root_entry);
+	/* find duplicate files. TODO: uses the most inefficient algorithm
+	   possible. */
+	eliminate_doubles(root_entry, root_entry);
 
 	/* TODO: Why do we use a private/anonymous mapping here
-           followed by a write below, instead of just a shared mapping
-           and a couple of ftruncate calls?  Is it just to save us
-           having to deal with removing the file afterwards?  If we
-           really need this huge anonymous mapping, we ought to mmap
-           in smaller chunks, so that the user doesn't need nn MB of
-           RAM free.  If the reason is to be able to write to
-           un-mmappable block devices, then we could try shared mmap
-           and revert to anonymous mmap if the shared mmap fails. */
+	   followed by a write below, instead of just a shared mapping
+	   and a couple of ftruncate calls?  Is it just to save us
+	   having to deal with removing the file afterwards?  If we
+	   really need this huge anonymous mapping, we ought to mmap
+	   in smaller chunks, so that the user doesn't need nn MB of
+	   RAM free.  If the reason is to be able to write to
+	   un-mmappable block devices, then we could try shared mmap
+	   and revert to anonymous mmap if the shared mmap fails. */
 	rom_image = mmap(NULL, fslen_ub?fslen_ub:1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
-	if (-1 == (int) (long) rom_image) {
-		perror("ROM image map");
-		exit(8);
+	if (rom_image == MAP_FAILED) {
+		die(MKFS_ERROR, 1, "mmap failed");
 	}
 
 	/* Skip the first opt_pad bytes for boot loader code */
@@ -792,67 +877,72 @@ int main(int argc, char **argv)
 	}
 
 	offset = write_directory_structure(root_entry->child, rom_image, offset);
-	printf("Directory data: %d bytes\n", offset);
+	printf("Directory data: %ld bytes\n", offset);
 
 	offset = write_data(root_entry, rom_image, offset);
 
 	/* We always write a multiple of blksize bytes, so that
-           losetup works. */
+	   losetup works. */
 	offset = ((offset - 1) | (blksize - 1)) + 1;
-	printf("Everything: %d kilobytes\n", offset >> 10);
+	printf("Everything: %ld kilobytes\n", offset >> 10);
 
 	/* Write the superblock now that we can fill in all of the fields. */
 	write_superblock(root_entry, rom_image+opt_pad, offset);
-	printf("Super block: %d bytes\n", sizeof(struct cramfs_super));
+	printf("Super block: %ld bytes\n", sizeof(struct cramfs_super));
 
 	/* Put the checksum in. */
+	crc = crc32(0L, Z_NULL, 0);
 	crc = crc32(crc, (rom_image+opt_pad), (offset-opt_pad));
 	((struct cramfs_super *) (rom_image+opt_pad))->fsid.crc = crc;
 	printf("CRC: %x\n", crc);
 
 	/* Check to make sure we allocated enough space. */
 	if (fslen_ub < offset) {
-		fprintf(stderr, "not enough space allocated for ROM image (%Ld allocated, %d used)\n",
-			fslen_ub, offset);
-		exit(8);
+		die(MKFS_ERROR, 0, "not enough space allocated for ROM image (%Ld allocated, %d used)", fslen_ub, offset);
 	}
 
 	written = write(fd, rom_image, offset);
 	if (written < 0) {
-		perror("ROM image");
-		exit(8);
+		die(MKFS_ERROR, 1, "write failed");
 	}
 	if (offset != written) {
-		fprintf(stderr, "ROM image write failed (%d %d)\n", written, offset);
-		exit(8);
+		die(MKFS_ERROR, 0, "ROM image write failed (wrote %d of %d bytes)", written, offset);
 	}
 
 	/* (These warnings used to come at the start, but they scroll off the
-           screen too quickly.) */
-	if (warn_namelen) /* (can't happen when reading from ext2fs) */
-		fprintf(stderr, /* bytes, not chars: think UTF8. */
-			"warning: filenames truncated to 255 bytes.\n");
+	   screen too quickly.) */
+	if (warn_namelen)
+		fprintf(stderr, /* bytes, not chars: think UTF-8. */
+			"warning: filenames truncated to %d bytes (possibly less if multi-byte UTF-8)\n",
+			CRAMFS_MAXPATHLEN);
 	if (warn_skip)
-		fprintf(stderr, "warning: files were skipped due to errors.\n");
+		fprintf(stderr, "warning: files were skipped due to errors\n");
 	if (warn_size)
 		fprintf(stderr,
-			"warning: file sizes truncated to %luMB (minus 1 byte).\n",
+			"warning: file sizes truncated to %luMB (minus 1 byte)\n",
 			1L << (CRAMFS_SIZE_WIDTH - 20));
 	if (warn_uid) /* (not possible with current Linux versions) */
 		fprintf(stderr,
-			"warning: uids truncated to %u bits.  (This may be a security concern.)\n",
+			"warning: uids truncated to %u bits (this may be a security concern)\n",
 			CRAMFS_UID_WIDTH);
 	if (warn_gid)
 		fprintf(stderr,
-			"warning: gids truncated to %u bits.  (This may be a security concern.)\n",
+			"warning: gids truncated to %u bits (this may be a security concern)\n",
 			CRAMFS_GID_WIDTH);
 	if (warn_dev)
 		fprintf(stderr,
-			"WARNING: device numbers truncated to %u bits.  This almost certainly means\n"
-			"that some device files will be wrong.\n",
+			"WARNING: device numbers truncated to %u bits (this almost certainly means\n"
+			"that some device files will be wrong)\n",
 			CRAMFS_OFFSET_WIDTH);
 	if (opt_errors &&
 	    (warn_namelen||warn_skip||warn_size||warn_uid||warn_gid||warn_dev))
-		exit(8);
-	return 0;
+		exit(MKFS_ERROR);
+
+	exit(MKFS_OK);
 }
+
+/*
+ * Local variables:
+ * c-file-style: "linux"
+ * End:
+ */

@@ -226,7 +226,7 @@ static void mtk_phy_link_adjust(struct net_device *dev)
 	case SPEED_100:
 		mcr |= MAC_MCR_SPEED_100;
 		break;
-	};
+	}
 
 	if (MTK_HAS_CAPS(mac->hw->soc->caps, MTK_GMAC1_TRGMII) &&
 	    !mac->id && !mac->trgmii)
@@ -840,6 +840,44 @@ static void mtk_stop_queue(struct mtk_eth *eth)
 	}
 }
 
+/*
+ * With DSA drivers in place our packets will be 4-bytes larger - that
+ * is the mediatek tag header size. We need to consider the frame also
+ * having a VLAN tag header (so another 4-bytes on top of that).
+ */
+#define ETH_LEN		(ETH_ZLEN + 4)
+#define	VLAN_ETH_LEN	(ETH_LEN + VLAN_HLEN)
+
+/*
+ * The mediatek ethernet hardware pads packets smaller then 64 bytes.
+ * But it inserts bytes other than 0 in some of the padding area - a
+ * potential leak of information from a security point of view. (It is
+ * unknown at the moment where the bytes come from, they are not from
+ * in-memory data after the packet). We force padding here, and use the
+ * kernels padding function to force 0 data.
+ */
+static inline int mtk_skb_padto(struct sk_buff *skb)
+{
+	unsigned int len;
+	int ret;
+
+	if (unlikely(skb->len < VLAN_ETH_LEN)) {
+		len = ETH_LEN;
+		if (skb->protocol == htons(ETH_P_8021Q))
+			len = VLAN_ETH_LEN;
+
+		if (skb->len < len) {
+			ret = skb_pad(skb, len - skb->len);
+			if (ret < 0)
+				return ret;
+			skb->len = len;
+			skb_set_tail_pointer(skb, len);
+		}
+	}
+
+	return 0;
+}
+
 static int mtk_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct mtk_mac *mac = netdev_priv(dev);
@@ -848,6 +886,11 @@ static int mtk_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct net_device_stats *stats = &dev->stats;
 	bool gso = false;
 	int tx_num;
+
+	if (mtk_skb_padto(skb)) {
+		netif_warn(eth, tx_err, dev, "Tx padding failed!\n");
+		return NETDEV_TX_OK;
+	}
 
 	/* normally we can rely on the stack not calling this more than once,
 	 * however we have 2 queues running on the same ring so we need to lock

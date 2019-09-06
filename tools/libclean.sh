@@ -116,7 +116,7 @@ while :; do
 				echo "Skipping libnss file $so"
 				echo "`basename $so`: libnss" >> $TMPF
 				;;
-			*cpython*)
+			*cpython*|*dist-packages*)
 				echo "Skipping python file $so"
 				echo "`basename $so`: python" >> $TMPF
 				;;

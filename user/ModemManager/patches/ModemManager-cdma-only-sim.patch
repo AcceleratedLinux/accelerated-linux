@@ -16,9 +16,10 @@ is CDMA-only but has a SIM that is used.
 Fixing Problems 2 & 3 is necessary to prevent ghost SIMs in e.g. EVDO-compatible
 MC7354 (SKU 1102552) modems.
  
---- ModemManager/src/mm-iface-modem.c.orig	2018-11-20 13:49:03.598319410 +1000
-+++ ModemManager/src/mm-iface-modem.c	2018-11-20 14:16:16.394319278 +1000
-@@ -3147,18 +3147,12 @@
+diff -Nurd ModemManager.orig/src/mm-iface-modem.c ModemManager/src/mm-iface-modem.c
+--- ModemManager.orig/src/mm-iface-modem.c	2019-05-29 11:08:19.128304133 +1000
++++ ModemManager/src/mm-iface-modem.c	2019-05-29 11:08:19.168304330 +1000
+@@ -3175,18 +3175,12 @@
              g_error_matches (error,
                               MM_MOBILE_EQUIPMENT_ERROR,
                               MM_MOBILE_EQUIPMENT_ERROR_SIM_WRONG)) {
@@ -42,7 +43,7 @@ MC7354 (SKU 1102552) modems.
          } else {
              mm_dbg ("Couldn't check if unlock required: '%s'", error->message);
              g_error_free (error);
-@@ -3213,7 +3207,7 @@
+@@ -3241,7 +3235,7 @@
          /* If we get that no lock is required, run the after SIM unlock step
           * in order to wait for the SIM to get ready.  Skip waiting on
           * CDMA-only modems where we don't support a SIM. */
@@ -51,7 +52,7 @@ MC7354 (SKU 1102552) modems.
              (ctx->lock == MM_MODEM_LOCK_NONE ||
               ctx->lock == MM_MODEM_LOCK_SIM_PIN2 ||
               ctx->lock == MM_MODEM_LOCK_SIM_PUK2)) {
-@@ -3992,6 +3986,7 @@
+@@ -4022,6 +4016,7 @@
          interface_initialization_step (task);                           \
      }
  
@@ -59,7 +60,7 @@ MC7354 (SKU 1102552) modems.
  static void
  current_capabilities_internal_load_unlock_required_ready (MMIfaceModem *self,
                                                            GAsyncResult *res,
-@@ -4015,16 +4010,7 @@
+@@ -4045,16 +4040,7 @@
              g_error_matches (error,
                               MM_MOBILE_EQUIPMENT_ERROR,
                               MM_MOBILE_EQUIPMENT_ERROR_SIM_WRONG)) {
@@ -77,7 +78,7 @@ MC7354 (SKU 1102552) modems.
          }
  
          g_error_free (error);
-@@ -4034,6 +4020,7 @@
+@@ -4064,6 +4050,7 @@
      ctx->step++;
      interface_initialization_step (task);
  }
@@ -85,7 +86,7 @@ MC7354 (SKU 1102552) modems.
  
  static void
  load_current_capabilities_ready (MMIfaceModem *self,
-@@ -4080,18 +4067,6 @@
+@@ -4110,18 +4097,6 @@
       * exposed in DBus yet. */
      mm_gdbus_modem_set_current_capabilities (ctx->skeleton, caps);
  
@@ -104,7 +105,7 @@ MC7354 (SKU 1102552) modems.
      ctx->step++;
      interface_initialization_step (task);
  }
-@@ -4837,7 +4812,7 @@
+@@ -4929,7 +4904,7 @@
      case INITIALIZATION_STEP_SIM:
          /* If the modem doesn't need any SIM (not implemented by plugin, or not
           * needed in CDMA-only modems) */

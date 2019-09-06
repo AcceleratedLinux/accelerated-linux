@@ -55,10 +55,11 @@ endif
 # To save some pain we put it all here
 #
 # First settings we always want for all build
-
-ENDIAN        ?= little
-MACHINE       = sh
-ARCH          = sh
+#
+MACHINE = sh
+ARCH    = sh
+ENDIAN ?= little
+FLOAT  ?= hard
 
 CROSS_COMPILE = sh-linux-
 ifneq ($(shell which sh-linux-gnu-gcc),)
@@ -80,6 +81,7 @@ endif
 
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = sh-linux
+CONFIGURE_TOOL ?= sh-linux$(LIBCSUFFIX)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)
 AS        = $(CROSS_COMPILE)as $(CPUFLAGS)

@@ -35,6 +35,7 @@
 #define IMX_OCOTP_OFFSET_PER_WORD	0x10  /* Offset between the start addr
 					       * of two consecutive OTP words.
 					       */
+#define IMX_OTP_WORD_SIZE		4
 
 #define IMX_OCOTP_ADDR_CTRL		0x0000
 #define IMX_OCOTP_ADDR_CTRL_SET		0x0004
@@ -124,16 +125,8 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 			  void *val, size_t bytes)
 {
 	struct ocotp_priv *priv = context;
-	unsigned int count;
-	u32 *buf = val;
+	u8 *buf = val;
 	int i, ret;
-	u32 index;
-
-	index = offset >> 2;
-	count = bytes >> 2;
-
-	if (count > (priv->params->nregs - index))
-		count = priv->params->nregs - index;
 
 	mutex_lock(&ocotp_mutex);
 
@@ -150,9 +143,9 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 		goto read_end;
 	}
 
-	for (i = index; i < (index + count); i++) {
-		*buf++ = readl(priv->base + IMX_OCOTP_OFFSET_B0W0 +
-			       i * IMX_OCOTP_OFFSET_PER_WORD);
+	for (i = offset; i < (bytes + offset); i++) {
+		u32 word_val = readl(priv->base + IMX_OCOTP_OFFSET_B0W0 +
+				     (i >> 2) * IMX_OCOTP_OFFSET_PER_WORD);
 
 		/* 47.3.1.2
 		 * For "read locked" registers 0xBADABADA will be returned and
@@ -160,9 +153,14 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 		 * software before any new write, read or reload access can be
 		 * issued
 		 */
-		if (*(buf - 1) == IMX_OCOTP_READ_LOCKED_VAL)
+		if (word_val == IMX_OCOTP_READ_LOCKED_VAL)
 			imx_ocotp_clr_err_if_set(priv->base);
+
+		word_val >>= (i % 4) * 8;
+
+		*buf++ = (u8) (word_val & 0xFF);
 	}
+
 	ret = 0;
 
 read_end:
@@ -229,8 +227,8 @@ static int imx_ocotp_write(void *context, unsigned int offset, void *val,
 	u8 word = 0;
 
 	/* allow only writing one complete OTP word at a time */
-	if ((bytes != priv->config->word_size) ||
-	    (offset % priv->config->word_size))
+	if ((bytes != IMX_OTP_WORD_SIZE) ||
+	    (offset % IMX_OTP_WORD_SIZE))
 		return -EINVAL;
 
 	mutex_lock(&ocotp_mutex);
@@ -270,7 +268,7 @@ static int imx_ocotp_write(void *context, unsigned int offset, void *val,
 		 * see i.MX 7Solo Applications Processor Reference Manual, Rev.
 		 * 0.1 section 6.4.3.1
 		 */
-		offset = offset / priv->config->word_size;
+		offset = offset / IMX_OTP_WORD_SIZE;
 		waddr = offset / priv->params->bank_address_words;
 		word  = offset & (priv->params->bank_address_words - 1);
 	} else {
@@ -391,8 +389,8 @@ write_end:
 static struct nvmem_config imx_ocotp_nvmem_config = {
 	.name = "imx-ocotp",
 	.read_only = false,
-	.word_size = 4,
-	.stride = 4,
+	.word_size = 1,
+	.stride = 1,
 	.reg_read = imx_ocotp_read,
 	.reg_write = imx_ocotp_write,
 };
@@ -427,10 +425,21 @@ static const struct ocotp_params imx6ul_params = {
 	.set_timing = imx_ocotp_set_imx6_timing,
 };
 
+static const struct ocotp_params imx6ull_params = {
+	.nregs = 64,
+	.bank_address_words = 0,
+	.set_timing = imx_ocotp_set_imx6_timing,
+};
+
 static const struct ocotp_params imx7d_params = {
 	.nregs = 64,
 	.bank_address_words = 4,
 	.set_timing = imx_ocotp_set_imx7_timing,
+};
+
+static const struct ocotp_params imx7ulp_params = {
+	.nregs = 256,
+	.bank_address_words = 0,
 };
 
 static const struct of_device_id imx_ocotp_dt_ids[] = {
@@ -438,8 +447,10 @@ static const struct of_device_id imx_ocotp_dt_ids[] = {
 	{ .compatible = "fsl,imx6sl-ocotp", .data = &imx6sl_params },
 	{ .compatible = "fsl,imx6sx-ocotp", .data = &imx6sx_params },
 	{ .compatible = "fsl,imx6ul-ocotp", .data = &imx6ul_params },
+	{ .compatible = "fsl,imx6ull-ocotp", .data = &imx6ull_params },
 	{ .compatible = "fsl,imx7d-ocotp",  .data = &imx7d_params },
 	{ .compatible = "fsl,imx6sll-ocotp", .data = &imx6sll_params },
+	{ .compatible = "fsl,imx7ulp-ocotp", .data = &imx7ulp_params },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, imx_ocotp_dt_ids);

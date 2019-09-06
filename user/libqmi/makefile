@@ -1,6 +1,6 @@
 
 METHOD    = git
-VERSION   = 5f5e7e9b6e1bde31c23b5152a33caba72fa9c0fe
+VERSION   = 1.23.1
 URL       = git://anongit.freedesktop.org/libqmi
 
 CONFIGURE = autogen.sh

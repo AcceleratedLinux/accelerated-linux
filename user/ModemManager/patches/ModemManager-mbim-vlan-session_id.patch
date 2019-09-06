@@ -21,33 +21,9 @@ The default #MBIMCFG value is usually "14" (for AT&T) or "3" (for Verizon),
 which means that only Session ID 0 works by default as other sessions are not
 mapped to a PDP profile.
 
---- ModemManager/src/mm-broadband-modem-mbim.c	2019-03-01 11:16:02.184676290 +1000
-+++ ModemManager/src/mm-broadband-modem-mbim.c	2019-03-01 11:18:38.054422141 +1000
-@@ -1773,12 +1773,21 @@
-     MMBroadbandModemMbim *self = MM_BROADBAND_MODEM_MBIM (_self);
-     MMBaseBearer *bearer;
-     GTask *task;
--    gint session_id;
-+    gint session_id = -1;
-+    const gchar *number;
- 
-     task = g_task_new (self, NULL, callback, user_data);
- 
-+    number = mm_bearer_properties_get_number (properties);
-+    if (number && *number) {
-+        session_id = g_ascii_strtoull (number, NULL, 10);
-+        if (session_id > 255)
-+            session_id = -1;
-+    }
-+    if (session_id < 0) {
-     /* Find a new session ID */
-     session_id = find_next_bearer_session_id (self);
-+    }
-     if (session_id < 0) {
-         g_task_return_new_error (task,
-                                  MM_CORE_ERROR,
---- ModemManager/src/mm-bearer-mbim.c	2019-03-01 11:16:02.184676290 +1000
-+++ ModemManager/src/mm-bearer-mbim.c	2019-03-01 11:17:02.397350872 +1000
+diff -Nurd ModemManager.orig/src/mm-bearer-mbim.c ModemManager/src/mm-bearer-mbim.c
+--- ModemManager.orig/src/mm-bearer-mbim.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-bearer-mbim.c	2019-05-29 11:08:19.728307093 +1000
 @@ -51,6 +51,39 @@
  
  /*****************************************************************************/
@@ -97,3 +73,29 @@ mapped to a PDP profile.
          if (!port) {
              g_task_report_new_error (self,
                                       callback,
+diff -Nurd ModemManager.orig/src/mm-broadband-modem-mbim.c ModemManager/src/mm-broadband-modem-mbim.c
+--- ModemManager.orig/src/mm-broadband-modem-mbim.c	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/src/mm-broadband-modem-mbim.c	2019-05-29 11:08:19.728307093 +1000
+@@ -1778,12 +1778,21 @@
+     MMBroadbandModemMbim *self = MM_BROADBAND_MODEM_MBIM (_self);
+     MMBaseBearer *bearer;
+     GTask *task;
+-    gint session_id;
++    gint session_id = -1;
++    const gchar *number;
+ 
+     task = g_task_new (self, NULL, callback, user_data);
+ 
++    number = mm_bearer_properties_get_number (properties);
++    if (number && *number) {
++        session_id = g_ascii_strtoull (number, NULL, 10);
++        if (session_id > 255)
++            session_id = -1;
++    }
++    if (session_id < 0) {
+     /* Find a new session ID */
+     session_id = find_next_bearer_session_id (self);
++    }
+     if (session_id < 0) {
+         g_task_return_new_error (task,
+                                  MM_CORE_ERROR,

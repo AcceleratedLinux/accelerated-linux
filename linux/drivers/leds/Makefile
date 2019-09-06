@@ -85,6 +85,7 @@ obj-$(CONFIG_LEDS_SC27XX_BLTC)		+= leds-sc27xx-bltc.o
 obj-$(CONFIG_LEDS_LM3601X)		+= leds-lm3601x.o
 obj-$(CONFIG_LEDS_AWUSB24)		+= leds-awusb24.o
 obj-$(CONFIG_LEDS_AWUSB24)		+= leds-awusb24-sysfs.o
+obj-$(CONFIG_LEDS_MCU_TX54)		+= leds-mcu-tx54.o
 
 # LED SPI Drivers
 obj-$(CONFIG_LEDS_CR0014114)		+= leds-cr0014114.o

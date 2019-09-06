@@ -2,14 +2,14 @@
 PKG        = ModemManager
 URL        = git://anongit.freedesktop.org/ModemManager/ModemManager
 METHOD     = git
-VERSION    = 98fbc7a8b39aa84c905a7ce3c7b412ee04566f26
+VERSION    = 5a25776807081fc83b89781de5fba8325862daca
 #BUILDDIR  = ModemManager-1.2.0
 #URL       = http://cgit.freedesktop.org/ModemManager/ModemManager/snapshot/ModemManager-1.2.0.tar.gz
 CONFIGURE  = autogen.sh
 
 CFLAGS    += -Wno-error
 
-CONFOPTS   = --disable-gtk-doc-html
+CONFOPTS   = --disable-gtk-doc-html --with-at-command-via-dbus
 ifdef CONFIG_LIB_GLIB_STATIC
 CONFVARS   = LIBS="-lgmodule-2.0 -lglib-2.0 -lffi -lz -lpthread -ldl"
 CONFOPTS   += --enable-static --disable-shared

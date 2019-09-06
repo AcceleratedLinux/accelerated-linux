@@ -434,29 +434,28 @@ static void find_lib_env(void)
 		if (config_libcdir) {
 			libtype = LIBTYPE_UCLIBC;
 			x_asprintf(&libc_libdir, "%s/%s/lib", rootdir, config_libcdir);
-			x_asprintf(&libc_incdir, "%s/uClibc/include", stagedir);
+			x_asprintf(&libc_incdir, "%s/include", stagedir);
 		}
 	}
 	else if (getenv("CONFIG_DEFAULTS_LIBC_UCLIBC_NG")) {
 		if (config_libcdir) {
 			libtype = LIBTYPE_UCLIBC_NG;
 			x_asprintf(&libc_libdir, "%s/%s/lib", rootdir, config_libcdir);
-			x_asprintf(&libc_incdir, "%s/uClibc/include", stagedir);
+			x_asprintf(&libc_incdir, "%s/include", stagedir);
 		}
 	}
 	else if (getenv("CONFIG_DEFAULTS_LIBC_GLIBC")) {
 		if (config_libcdir) {
 			libtype = LIBTYPE_GLIBC;
 			x_asprintf(&libc_libdir, "%s/%s/install/lib", rootdir, config_libcdir);
-			x_asprintf(&libc_incdir, "%s/%s/install/include", rootdir, config_libcdir);
+			x_asprintf(&libc_incdir, "%s/include", stagedir);
 		}
 	}
 	else if (getenv("CONFIG_DEFAULTS_LIBC_MUSL")) {
-		needs_begin_end_constructors = 0;
 		if (config_libcdir) {
 			libtype = LIBTYPE_MUSL;
 			x_asprintf(&libc_libdir, "%s/%s/install/lib", rootdir, config_libcdir);
-			x_asprintf(&libc_incdir, "%s/%s/install/include", rootdir, config_libcdir);
+			x_asprintf(&libc_incdir, "%s/include", stagedir);
 		}
 	}
 	else if (getenv("CONFIG_DEFAULTS_LIBC_NONE")) {
@@ -672,13 +671,13 @@ static void process_args(int argc, char **argv)
 			continue;
 		}
 
-		if (strstr(argv[i], "-pthread")) {
+		if (strncmp(argv[i], "-pthread", 8) == 0) {
 			pthread = 1;
 			args_add(stripped_args, argv[i]);
 			continue;
 		}
 
-		if (strstr(argv[i], "-elf2flt")) {
+		if (strncmp(argv[i], "-elf2flt", 8) == 0) {
 			needs_begin_end_constructors = 0;
 			args_add(stripped_args, argv[i]);
 			continue;
@@ -701,11 +700,6 @@ static void process_args(int argc, char **argv)
 		/* Not an option, so this as an input file */
 		args_add(stripped_args, argv[i]);
 		input_files++;
-	}
-
-	if (mode != MODE_DEPEND && !input_files) {
-		cc_log("No input files found\n");
-		invoke_original_compiler();
 	}
 
 	if (mode == MODE_COMPILE) {
@@ -870,7 +864,10 @@ static void process_args(int argc, char **argv)
 
 	if (cplusplus) {
 		if (getenv("CONFIG_LIB_STLPORT")) {
-			x_asprintf(&e, "%s/include/c++", stagedir);
+			x_asprintf(&e, "%s/include/c++includes", stagedir);
+			args_add_prefix(stripped_args, e);
+			args_add_prefix(stripped_args, "-isystem");
+			x_asprintf(&e, "%s/include/c++bits", stagedir);
 			args_add_prefix(stripped_args, e);
 			args_add_prefix(stripped_args, "-isystem");
 			x_asprintf(&e, "%s", getenv("STL_INCDIR"));
@@ -883,7 +880,9 @@ static void process_args(int argc, char **argv)
 			args_add_prefix(stripped_args, e);
 		}
 		else {
-			x_asprintf(&e, "-I%s/include/c++", stagedir);
+			x_asprintf(&e, "-I%s/include/c++bits", stagedir);
+			args_add_prefix(stripped_args, e);
+			x_asprintf(&e, "-I%s/include/c++includes", stagedir);
 			args_add_prefix(stripped_args, e);
 		}
 	}

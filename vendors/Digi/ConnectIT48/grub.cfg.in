@@ -80,10 +80,10 @@ mcu ledcmd -O ALL -o POWER_BLUE -f STATUS_BLUE -f STATUS_REAR_BLUE
 # ensure bootcntr is valid
 if ! bootcntr_get boot_cntr; then
 	# Reset boot counter
-	set SAVE_GRUB_NO_OUTPUT $GRUB_NO_OUTPUT
+	set SAVE_GRUB_NO_OUTPUT=$GRUB_NO_OUTPUT
 	unset GRUB_NO_OUTPUT
 	echo "ERROR: invalid boot counter, resetting it..."
-	set GRUB_NO_OUTPUT $SAVE_GRUB_NO_OUTPUT
+	set GRUB_NO_OUTPUT=$SAVE_GRUB_NO_OUTPUT
 	sleep 3
 	bootcntr_set 0
 	set boot_cntr=0

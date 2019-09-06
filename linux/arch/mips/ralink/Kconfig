@@ -112,6 +112,11 @@ choice
 		bool "Digi TX54"
 		depends on SOC_MT7621
 		select BUILTIN_DTB
+
+	config DTB_MT7621_TX54_MIGRATION
+		bool "Digi TX54 Migration"
+		depends on SOC_MT7621
+		select BUILTIN_DTB
 endchoice
 
 endif

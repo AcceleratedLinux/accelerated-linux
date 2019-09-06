@@ -25,7 +25,7 @@ else
 	INSTALL_MOD_PATH="${INSTALL_MOD_PATH%%/lib/modules}"
 	INSTALL_MOD_PATH="$INSTALL_MOD_PATH/lib/modules"
 	export INSTALL_MOD_PATH
-	$ROOTDIR/user/busybox/examples/depmod.pl "$@"
+	$ROOTDIR/user/busybox/depmod.pl "$@"
 	if [ "$CONFIG_USER_BUSYBOX_FEATURE_MODUTILS_ALIAS" = "y" ]; then
 		find $ROMFSDIR/lib/modules -type f -name "*o" |
 			/bin/sh $ROOTDIR/tools/modules-alias.sh $ROMFSDIR/etc/modprobe.conf

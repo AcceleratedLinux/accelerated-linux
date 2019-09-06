@@ -11,7 +11,10 @@ LINUXTARGET = Image.gz dtbs
 VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
 VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
-RELFILES = $(IMAGEDIR)/* prop/config/schema/accns.schema prop/config/cc_acl/app/runt/FE00000A*
+RELFILES = $(IMAGEDIR)/* \
+	   prop/config/schema/accns.schema \
+	   prop/config/schema/accns-aview.schema \
+	   prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################
 

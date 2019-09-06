@@ -9,6 +9,7 @@
 #include <unistd.h>             /* write */
 
 #include <endian.h>
+#include <sys/types.h>
 
 #include "common.h"
 #include "fdisk.h"

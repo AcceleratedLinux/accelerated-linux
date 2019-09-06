@@ -18,16 +18,20 @@ RELFILES = images/image.bin \
 	   images/configs.tar.gz \
 	   images/romfs-inst.log \
 	   images/acl-licenses.txt \
+	   images/rci_descriptors.tar.gz \
 	   prop/config/schema/accns.schema \
 	   prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################
 
+# We run the mediatek MT7621 in little endian mode.
+CONFIGURE_TOOL = mipsel-linux$(LIBCSUFFIX)
+ENDIAN = little
+FLOAT = hard
 
-CROSS_COMPILE = mips-linux-20170624-
-CPUFLAGS      = -EL
-CPU_CFLAGS    = -EL
-CPULDFLAGS    += -EL
+CPUFLAGS = -EL
+CPU_CFLAGS = -EL
+CPULDFLAGS += -EL
 
 include $(ROOTDIR)/vendors/config/mips/config.arch
 

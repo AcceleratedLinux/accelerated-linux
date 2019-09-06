@@ -1,42 +1,44 @@
-diff -ru dnsmasq-2.78.orig/src/dnsmasq.h dnsmasq-2.78/src/dnsmasq.h
---- dnsmasq-2.78.orig/src/dnsmasq.h	2018-12-13 14:52:01.120431478 +1000
-+++ dnsmasq-2.78/src/dnsmasq.h	2018-12-13 14:55:07.920434499 +1000
-@@ -246,6 +246,7 @@
- #define OPT_MAC_HEX        55
+diff -Nurd dnsmasq-2.80.orig/src/dnsmasq.h dnsmasq-2.80/src/dnsmasq.h
+--- dnsmasq-2.80.orig/src/dnsmasq.h	2019-07-16 08:16:47.923312233 +1000
++++ dnsmasq-2.80/src/dnsmasq.h	2019-07-16 08:16:47.935312311 +1000
+@@ -262,7 +262,8 @@
  #define OPT_TFTP_APREF_MAC 56
- #define OPT_LAST           57
-+#define OPT_IGN_CONF_ERR   58
+ #define OPT_RAPID_COMMIT   57
+ #define OPT_UBUS           58
+-#define OPT_LAST           59
++#define OPT_IGN_CONF_ERR   59
++#define OPT_LAST           60
  
  /* extra flags for my_syslog, we use a couple of facilities since they are known 
     not to occupy the same bits as priorities, no matter how syslog.h is set up. */
-diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
---- dnsmasq-2.78.orig/src/option.c	2017-10-02 23:13:51.000000000 +1000
-+++ dnsmasq-2.78/src/option.c	2018-12-13 14:59:55.748439154 +1000
-@@ -160,6 +160,7 @@
- #define LOPT_DHCPTTL       348
- #define LOPT_TFTP_MTU      349
- #define LOPT_REPLY_DELAY   350
-+#define LOPT_IGNORE_CONF_ERR 351
+diff -Nurd dnsmasq-2.80.orig/src/option.c dnsmasq-2.80/src/option.c
+--- dnsmasq-2.80.orig/src/option.c	2018-10-19 04:21:55.000000000 +1000
++++ dnsmasq-2.80/src/option.c	2019-07-16 08:16:47.935312311 +1000
+@@ -166,6 +166,7 @@
+ #define LOPT_UBUS          354
+ #define LOPT_NAME_MATCH    355
+ #define LOPT_CAA           356
++#define LOPT_IGNORE_CONF_ERR 357
   
  #ifdef HAVE_GETOPT_LONG
  static const struct option opts[] =  
-@@ -325,6 +326,7 @@
-     { "script-arp", 0, 0, LOPT_SCRIPT_ARP },
-     { "dhcp-ttl", 1, 0 , LOPT_DHCPTTL },
-     { "dhcp-reply-delay", 1, 0, LOPT_REPLY_DELAY },
+@@ -337,6 +338,7 @@
+     { "dhcp-rapid-commit", 0, 0, LOPT_RAPID_COMMIT },
+     { "dumpfile", 1, 0, LOPT_DUMPFILE },
+     { "dumpmask", 1, 0, LOPT_DUMPMASK },
 +    { "ignore-conf-error", 0, 0, LOPT_IGNORE_CONF_ERR},
      { NULL, 0, 0, 0 }
    };
  
-@@ -495,6 +497,7 @@
+@@ -510,6 +512,7 @@
    { LOPT_LOCAL_SERVICE, OPT_LOCAL_SERVICE, NULL, gettext_noop("Accept queries only from directly-connected networks."), NULL },
    { LOPT_LOOP_DETECT, OPT_LOOP_DETECT, NULL, gettext_noop("Detect and remove DNS forwarding loops."), NULL },
    { LOPT_IGNORE_ADDR, ARG_DUP, "<ipaddr>", gettext_noop("Ignore DNS responses containing ipaddr."), NULL }, 
 +  { LOPT_IGNORE_CONF_ERR, OPT_IGN_CONF_ERR, NULL, gettext_noop("Log dnsmasq conf errors to syslog but continue to run DNSMASQ."), NULL },
    { LOPT_DHCPTTL, ARG_ONE, "<ttl>", gettext_noop("Set TTL in DNS responses with DHCP-derived addresses."), NULL }, 
    { LOPT_REPLY_DELAY, ARG_ONE, "<integer>", gettext_noop("Delay DHCP replies for at least number of seconds."), NULL },
-   { 0, 0, NULL, NULL, NULL }
-@@ -1059,7 +1062,11 @@
+   { LOPT_RAPID_COMMIT, OPT_RAPID_COMMIT, NULL, gettext_noop("Enables DHCPv4 Rapid Commit option."), NULL },
+@@ -1077,7 +1080,11 @@
    if (is6)
      {
        if (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))
@@ -49,7 +51,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
        
        if (opt_len == 0 &&
  	  !(new->flags & DHOPT_RFC3925))
-@@ -1073,7 +1080,11 @@
+@@ -1091,7 +1098,11 @@
    
    /* option may be missing with rfc3925 match */
    if (!option_ok)
@@ -62,7 +64,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
    
    if (comma)
      {
-@@ -1141,10 +1152,20 @@
+@@ -1159,10 +1170,20 @@
  	  is_string = is_dec = is_hex = 0;
  	  
  	  if (!is6 && (!is_addr || dots == 0))
@@ -86,7 +88,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
  	}
        /* or names */
        else if (opt_len & (OT_NAME | OT_RFC1035_NAME | OT_CSTRING))
-@@ -1237,7 +1258,11 @@
+@@ -1255,7 +1276,11 @@
  	      comma = split(cp);
  	      slash = split_chr(cp, '/');
  	      if (!inet_pton(AF_INET, cp, &in))
@@ -99,7 +101,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
  	      if (!slash)
  		{
  		  memcpy(op, &in, INADDRSZ);
-@@ -1283,7 +1308,11 @@
+@@ -1301,7 +1326,11 @@
  		  continue;
  		}
  	  
@@ -112,7 +114,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
  	    } 
  	  new->len = op - new->val;
  	}
-@@ -1310,7 +1339,11 @@
+@@ -1328,7 +1357,11 @@
  		  if (strcmp (arg, ".") != 0)
  		    {
  		      if (!(dom = canonicalise_opt(arg)))
@@ -125,7 +127,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
  			
  		      domlen = strlen(dom) + 2;
  		    }
-@@ -1404,7 +1437,11 @@
+@@ -1422,7 +1455,11 @@
  		{
  		  char *dom = canonicalise_opt(arg);
  		  if (!dom)
@@ -138,7 +140,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
  		    		  
  		  newp = opt_malloc(len + strlen(dom) + 2);
  		  
-@@ -1442,14 +1479,22 @@
+@@ -1460,14 +1497,22 @@
        ((new->len > 255) || 
        (new->len > 253 && (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))) ||
         (new->len > 250 && (new->flags & DHOPT_RFC3925))))
@@ -163,7 +165,7 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
         
        if (is6)
  	{
-@@ -1535,6 +1580,9 @@
+@@ -1553,6 +1598,9 @@
    
    switch (option)
      { 
@@ -173,12 +175,12 @@ diff -ru dnsmasq-2.78.orig/src/option.c dnsmasq-2.78/src/option.c
      case 'C': /* --conf-file */
        {
  	char *file = opt_string_alloc(arg);
-@@ -4304,7 +4352,7 @@
+@@ -4395,7 +4443,7 @@
        if (errmess)
  	strcpy(daemon->namebuff, errmess);
  	  
--      if (errmess || !one_opt(option, arg, buff, _("error"), 0, hard_opt == LOPT_REV_SERV))
-+      if ((errmess || !one_opt(option, arg, buff, _("error"), 0, hard_opt == LOPT_REV_SERV)) && (!option && !option_bool(OPT_IGN_CONF_ERR)))
+-      if (errmess || !one_opt(option, arg, daemon->namebuff, _("error"), 0, hard_opt == LOPT_REV_SERV))
++      if ((errmess || !one_opt(option, arg, daemon->namebuff, _("error"), 0, hard_opt == LOPT_REV_SERV)) && (!option && !option_bool(OPT_IGN_CONF_ERR)))
  	{
  	  sprintf(daemon->namebuff + strlen(daemon->namebuff), _(" at line %d of %s"), lineno, file);
  	  if (hard_opt != 0)

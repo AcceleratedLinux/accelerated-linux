@@ -1,9 +1,8 @@
-diff --git a/configure.ac b/configure.ac
-index 1065f08..f1a11bb 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -84,7 +84,7 @@ dnl
- IT_PROG_INTLTOOL([0.40.0])
+diff -Nurd ModemManager.orig/configure.ac ModemManager/configure.ac
+--- ModemManager.orig/configure.ac	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/configure.ac	2019-05-29 11:08:19.216304567 +1000
+@@ -83,7 +83,7 @@
+ dnl
  
  AM_GNU_GETTEXT([external])
 -AM_GNU_GETTEXT_VERSION([0.19.8])

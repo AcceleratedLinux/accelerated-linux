@@ -249,9 +249,9 @@ diff -ur openssh-7.8p1.orig/readconf.c openssh-7.8p1/readconf.c
  		    defaults, all)) != 0) \
  			fatal("%s: %s: %s", __func__, #what, ssh_err(r)); \
  	} while (0)
--	ASSEMBLE(ciphers, KEX_SERVER_ENCRYPT, all_cipher);
--	ASSEMBLE(macs, KEX_SERVER_MAC, all_mac);
--	ASSEMBLE(kex_algorithms, KEX_SERVER_KEX, all_kex);
+-	ASSEMBLE(ciphers, KEX_CLIENT_ENCRYPT, all_cipher);
+-	ASSEMBLE(macs, KEX_CLIENT_MAC, all_mac);
+-	ASSEMBLE(kex_algorithms, KEX_CLIENT_KEX, all_kex);
 +	ASSEMBLE(ciphers, (FIPS_mode() ? KEX_FIPS_ENCRYPT : KEX_CLIENT_ENCRYPT), all_cipher);
 +	ASSEMBLE(macs, (FIPS_mode() ? KEX_FIPS_MAC : KEX_CLIENT_MAC), all_mac);
 +	ASSEMBLE(kex_algorithms, (FIPS_mode() ? KEX_DEFAULT_KEX_FIPS : KEX_SERVER_KEX), all_kex);
@@ -408,14 +408,6 @@ diff -ur openssh-7.8p1.orig/ssh.c openssh-7.8p1/ssh.c
  #ifndef HAVE_SETPROCTITLE
  	/* Prepare for later setproctitle emulation */
  	/* Save argv so it isn't clobbered by setproctitle() emulation */
-@@ -1030,7 +1044,6 @@
- 	host_arg = xstrdup(host);
- 
- #ifdef WITH_OPENSSL
--	OpenSSL_add_all_algorithms();
- 	ERR_load_crypto_strings();
- #endif
- 
 @@ -1260,6 +1273,10 @@
  
  	seed_rng();
@@ -478,15 +470,6 @@ diff -ur openssh-7.8p1.orig/sshd.c openssh-7.8p1/sshd.c
  	/* Save argv. Duplicate so setproctitle emulation doesn't clobber it */
  	saved_argc = ac;
  	rexec_argc = ac;
-@@ -1632,7 +1647,7 @@
- 	else
- 		closefrom(REEXEC_DEVCRYPTO_RESERVED_FD);
- 
--#ifdef WITH_OPENSSL
-+#if 0 /* FIPS */
- 	OpenSSL_add_all_algorithms();
- #endif
- 
 @@ -1940,6 +1955,10 @@
  	/* Reinitialize the log (because of the fork above). */
  	log_init(__progname, options.log_level, options.log_facility, log_stderr);
@@ -532,9 +515,9 @@ diff -ur openssh-7.8p1.orig/ssh-keygen.c openssh-7.8p1/ssh-keygen.c
  #include <locale.h>
  #include <time.h>
 @@ -2367,6 +2368,19 @@
- #ifdef WITH_OPENSSL
- 	OpenSSL_add_all_algorithms();
- #endif
+ 
+ 	seed_rng();
+ 
 +
 +#ifdef WITH_OPENSSL
 +	if (getenv("OPENSSL_FIPS")) {
@@ -565,8 +548,8 @@ diff -ur openssh-7.8p1.orig/ssh-keysign.c openssh-7.8p1/ssh-keysign.c
  #include <openssl/evp.h>
 @@ -225,6 +226,19 @@
  
- #ifdef WITH_OPENSSL
- 	OpenSSL_add_all_algorithms();
+ 	seed_rng();
+ 
 +
 +#ifdef WITH_OPENSSL
 +	if (getenv("OPENSSL_FIPS")) {
@@ -580,7 +563,6 @@ diff -ur openssh-7.8p1.orig/ssh-keysign.c openssh-7.8p1/ssh-keysign.c
 +	}
 +#endif
 +
- 	arc4random_buf(rnd, sizeof(rnd));
- 	RAND_seed(rnd, sizeof(rnd));
+ #ifdef DEBUG_SSH_KEYSIGN
+ 	log_init("ssh-keysign", SYSLOG_LEVEL_DEBUG3, SYSLOG_FACILITY_AUTH, 0);
  #endif
-Only in openssh-7.8p1: ssh-keysign.c.orig

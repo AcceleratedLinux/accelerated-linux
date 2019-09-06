@@ -232,13 +232,13 @@ diff -ur openssh-6.6p1/session.c openssh-6.6p1/session.c
  	/*
  	 * Close any extra open file descriptors so that we don't have them
 @@ -1540,7 +1564,9 @@
- 	int r = 0;
+ 	sshpkt_fmt_connection_id(ssh, remote_id, sizeof(remote_id));
  
  	/* remove hostkey from the child's memory */
 +#ifndef __uClinux__
  	destroy_sensitive_data();
 +#endif
- 	packet_clear_keys();
+ 	ssh_packet_clear_keys(ssh);
  
  	/* Force a password change */
 @@ -1548,7 +1574,11 @@
@@ -429,9 +429,9 @@ diff -ur openssh-6.6p1/sshd.c openssh-6.6p1/sshd.c
  
  /* Flag indicating that the daemon is being started from inetd. */
 +#ifdef __uClinux__
-+int inetd_flag = 1;
++static int inetd_flag = 1;
 +#else
- int inetd_flag = 0;
+ static int inetd_flag = 0;
 +#endif
  
  /* Flag indicating that sshd should not detach and become a daemon. */

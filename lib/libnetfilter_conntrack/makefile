@@ -1,3 +1,4 @@
-URL = ftp://ftp.netfilter.org/pub/libnetfilter_conntrack/libnetfilter_conntrack-1.0.4.tar.bz2
+VERSION = 1.0.7
+URL = https://www.netfilter.org/projects/libnetfilter_conntrack/files/libnetfilter_conntrack-$(VERSION).tar.bz2
 MAKEVARS =
 include $(ROOTDIR)/tools/automake.inc

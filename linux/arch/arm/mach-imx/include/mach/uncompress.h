@@ -24,9 +24,12 @@ static inline void arch_decomp_setup(void) {}
 #define ARCH_HAS_DECOMP_WDOG
 static inline void arch_decomp_wdog(void)
 {
-#ifdef CONFIG_SNAPDOG_CONNECTITMINI
+#if defined(CONFIG_SNAPDOG_CONNECTITMINI)
 	/* external watchdog is on GPIO1 IO9 */
 	*((volatile u32 *)(0x0209c000)) ^= 0x00000200;
+#elif defined(CONFIG_SNAPDOG_EX12)
+	/* external watchdog is on GPIO1 IO28 */
+	*((volatile u32 *)(0x0209c000)) ^= 0x10000000;
 #else
 	/* external watchdog is on GPIO2 IO16 */
 	*((volatile u32 *)(0x020a0000)) ^= 0x00010000;

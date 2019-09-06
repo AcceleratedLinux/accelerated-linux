@@ -55,7 +55,7 @@ reload)
 	ledcmd $WWAN_SERV $WWAN_SIG
 	;;
 stop)
-	ledcmd -f ALL -o POWER_BLUE
+	ledcmd -O ALL -f STATUS_BLUE -f STATUS_REAR_BLUE -o POWER_BLUE
 	;;
 *)
 	echo "Usage: $0 {start|stop|reload}"

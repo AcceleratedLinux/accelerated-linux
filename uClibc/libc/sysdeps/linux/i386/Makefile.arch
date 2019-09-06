@@ -15,3 +15,7 @@ SSRC := \
 ifneq ($(UCLIBC_HAS_THREADS_NATIVE),y)
 SSRC += vfork.S clone.S
 endif
+
+ifeq ($(UCLIBC_HAS_CONTEXT_FUNCS),y)
+SSRC += makecontext.S setcontext.S getcontext.S swapcontext.S
+endif

@@ -1,5 +1,6 @@
---- ModemManager/src/mm-bearer-qmi.c.orig	2018-11-20 15:35:20.006318895 +1000
-+++ ModemManager/src/mm-bearer-qmi.c	2018-11-20 15:36:43.422318888 +1000
+diff -Nurd ModemManager.orig/src/mm-bearer-qmi.c ModemManager/src/mm-bearer-qmi.c
+--- ModemManager.orig/src/mm-bearer-qmi.c	2019-05-29 11:08:19.416305556 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2019-05-29 11:08:19.436305652 +1000
 @@ -531,28 +531,51 @@
              if (g_error_matches (error,
                                   QMI_PROTOCOL_ERROR,

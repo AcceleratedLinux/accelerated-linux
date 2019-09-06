@@ -6,6 +6,10 @@ CONFVARS += CC="$(subst ucfront-gcc,,$(CC))"
 CONFVARS += CXX="$(subst ucfront-g++,,$(CXX))"
 CONFVARS += LD="$(subst ucfront-ld,,$(LD))"
 
+# Carry out any translations of kernel ARCH to MUSL expected ARCH
+MUSLARCH = $(subst arm64,aarch64,$(ARCH))
+MAKEVARS += ARCH=$(MUSLARCH)
+
 CFLAGS =
 LDFLAGS =
 

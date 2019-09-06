@@ -4339,6 +4339,7 @@ static leddef_t connectit_mini_ledman_def = {
 #define CONNECTIT4_LED_NR	14
 
 #define GPIO_ERASE		49
+#define GPIO_EX12_ERASE		120
 #define GPIO_BUZZER		65
 
 static struct ledgpiomap connectit4_ledgpio[] = {
@@ -4494,7 +4495,7 @@ static void ledman_initarch(void)
 
 	if (of_machine_is_compatible("accelerated,6310dx"))
 		ac6310dx_ledman_init();
-	else if (of_machine_is_compatible("digi,connectit-mini"))
+	else if (of_machine_is_compatible("digi,connectit-mini") || of_machine_is_compatible("digi,ex12"))
 		connectit_mini_ledman_init();
 	else if (of_machine_is_compatible("digi,connectit4"))
 		connectit4_ledman_init();
@@ -4506,7 +4507,10 @@ static void ledman_initarch(void)
 		gpio_direction_output(ledgpio[i].gpio, 1);
 	}
 	ledman_set(0);
-	ledman_setup_erase(GPIO_ERASE);
+	if (of_machine_is_compatible("digi,ex12"))
+		ledman_setup_erase(GPIO_EX12_ERASE);
+	else
+		ledman_setup_erase(GPIO_ERASE);
 
 	if (buzzer_use) {
 		gpio_request(GPIO_BUZZER, "Buzzer");

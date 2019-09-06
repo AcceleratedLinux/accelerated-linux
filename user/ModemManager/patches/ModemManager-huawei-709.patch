@@ -1,5 +1,6 @@
---- ModemManager/plugins/huawei/77-mm-huawei-net-port-types.rules	2018-11-13 15:22:44.870516047 +1000
-+++ ModemManager/plugins/huawei/77-mm-huawei-net-port-types.rules.new	2018-11-20 16:24:44.618318655 +1000
+diff -Nurd ModemManager.orig/plugins/huawei/77-mm-huawei-net-port-types.rules ModemManager/plugins/huawei/77-mm-huawei-net-port-types.rules
+--- ModemManager.orig/plugins/huawei/77-mm-huawei-net-port-types.rules	2019-05-27 15:37:56.000000000 +1000
++++ ModemManager/plugins/huawei/77-mm-huawei-net-port-types.rules	2019-05-29 11:08:19.192304449 +1000
 @@ -9,15 +9,18 @@
  ATTRS{idVendor}=="12d1", ATTRS{idProduct}=="1573", ENV{ID_MM_HUAWEI_DISABLE_GETPORTMODE}="1"
  

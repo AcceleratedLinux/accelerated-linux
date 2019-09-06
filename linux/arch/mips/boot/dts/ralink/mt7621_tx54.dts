@@ -11,6 +11,70 @@
 		device_type = "memory";
 		reg = <0x0 0x10000000>;
 	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		wwan2_signal_yellow {
+			label = "WWAN2_SIGNAL_Y";
+			gpios = <&mcp23017 0 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan2_signal_green {
+			label = "WWAN2_SIGNAL_G";
+			gpios = <&mcp23017 1 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan2_service_yellow {
+			label = "WWAN2_SERVICE_Y";
+			gpios = <&mcp23017 2 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan2_service_green {
+			label = "WWAN2_SERVICE_G";
+			gpios = <&mcp23017 3 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan1_signal_yellow {
+			label = "WWAN1_SIGNAL_Y";
+			gpios = <&mcp23017 4 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan1_signal_green {
+			label = "WWAN1_SIGNAL_G";
+			gpios = <&mcp23017 5 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan1_service_yellow {
+			label = "WWAN1_SERVICE_Y";
+			gpios = <&mcp23017 6 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wwan1_service_green {
+			label = "WWAN1_SERVICE_G";
+			gpios = <&mcp23017 7 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		wifi1_green {
+			label = "WIFI1_G";
+			gpios = <&gpio 28 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		gnss_green {
+			label = "GNSS_G";
+			gpios = <&gpio 30 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
 };
 
 &pcie {
@@ -126,10 +190,16 @@
 &i2c {
 	clock-frequency = <400000>;
 	status = "okay";
+	pinctrl-names = "default", "gpio";
+	pinctrl-1 = <&i2c_gpios>;
+	sda-gpios = <&gpio 3 GPIO_ACTIVE_HIGH>;
+	scl-gpios = <&gpio 4 GPIO_ACTIVE_HIGH>;
 
 	mcp23017: mcp23017@21 {
 		compatible = "microchip,mcp23017";
 		reg = <0x21>;
+		gpio-controller;
+		#gpio-cells = <2>;
 	};
 
 	temp: lm73@48 {
@@ -137,12 +207,14 @@
 		reg = <0x48>;
 	};
 
-	adxl343: adxl343@56 {
+	adxl343: adxl343@53 {
 		compatible = "adi,adxl345";
-		reg = <0x56>;
+		reg = <0x53>;
+		interrupt-parent = <&mcu_tx54>;
+		interrupts = <4>;
 	};
 
-	rng: atsh204@80 {
+	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
 		reg = <0x60>;
 	};
@@ -150,6 +222,35 @@
 	rtc: ds3232@68 {
 		compatible = "dallas,ds3232";
 		reg = <0x68>;
+		interrupt-parent = <&mcu_tx54>;
+		interrupts = <3>;
+	};
+
+	mcu_tx54: mcu@78 {
+		compatible = "digi,mcu-tx54";
+		reg = <0x78>;
+		interrupt-parent = <&gpio>;
+		interrupts = <32 IRQ_TYPE_EDGE_RISING>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+
+		mcu_pwr_led: mcu_led {
+			compatible = "digi,mcu-tx54-led";
+			label = "POWER_B";
+			linux,default-trigger = "timer";
+		};
+
+		poweroff {
+			compatible = "digi,mcu-tx54-poweroff";
+		};
+
+		keys {
+			compatible = "digi,mcu-tx54-keys";
+		};
+
+		battery {
+			compatible = "digi,mcu-tx54-battery";
+		};
 	};
 };
 
@@ -173,7 +274,14 @@
 &pinctrl {
 	state_default: pinctrl0 {
 		gpio {
-			group = "rgmii2";
+			groups = "rgmii2";
+			function = "gpio";
+		};
+	};
+
+	i2c_gpios: i2c_gpios {
+		i2c {
+			groups = "i2c";
 			function = "gpio";
 		};
 	};

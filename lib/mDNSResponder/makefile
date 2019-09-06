@@ -18,4 +18,4 @@ MAKEVARS += INSTBASE=$(INSTBASE)
 mDNSResponder-$(VERSION)_INSTALLVARS = \
 	mkdir -p $(INSTBASE)/lib $(INSTBASE)/include $(INSTBASE)/sbin $(INSTBASE)/bin;
 
-include $(ROOTDIR)/tools/download.inc
+include $(ROOTDIR)/tools/automake.inc

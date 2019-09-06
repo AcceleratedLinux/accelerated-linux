@@ -3,7 +3,7 @@ VERSION = 5.7.1
 URL = http://download.strongswan.org/strongswan-$(VERSION).tar.bz2
 strongswan-$(VERSION)_ROMFS = strongswan_romfs
 
-CONFOPTS :=
+CONFOPTS := --enable-bypass-lan
 ifdef CONFIG_LIB_LIBSSL
 CONFOPTS += --enable-openssl
 endif

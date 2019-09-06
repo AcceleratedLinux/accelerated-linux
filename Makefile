@@ -46,6 +46,85 @@ tools/cksum: tools/sg-cksum/*.c
 	$(MAKE) -C tools/sg-cksum
 	ln -sf $(ROOTDIR)/tools/sg-cksum/cksum tools/cksum
 
+TOOLSARCHDIR = $(TOOLSPREFIX)/$(CONFIGURE_TOOL)
+
+.PHONY: binutils_only
+binutils_only:
+	$(MAKE) TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/binutils/
+
+binutils_clean:
+	$(MAKE) -C tools/binutils/ clean
+
+.PHONY: gcc-pass1_only
+gcc-pass1_only:
+	$(MAKE) PASS1=1 TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/gcc/
+
+.PHONY: gcc-pass2_only
+gcc-pass2_only: gcc_clean
+	$(MAKE) PASS2=1 TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/gcc/
+
+gcc_clean:
+	$(MAKE) -C tools/gcc/ clean
+
+.PHONY: toolchain_headers
+toolchain_headers:
+	$(MAKEARCH_KERNEL) CROSS_COMPILE=$(CONFIGURE_TOOL)- -j$(HOST_NCPU) -C $(LINUXDIR) headers_install
+	cp -a $(ROOTDIR)/$(LINUXDIR)/usr/include $(TOOLSARCHDIR)/
+
+.PHONY: toolchain_uClibc
+toolchain_uClibc:
+	$(MAKE) CROSS_COMPILE=$(CONFIGURE_TOOL)- STAGEDIR=$(TOOLSARCHDIR) -C $(LIBCDIR) install PREFIX=$(TOOLSARCHDIR)/ DEVEL_PREFIX= RUNTIME_PREFIX=
+	sed -e 's/lib\///g' < $(LIBCDIR)/lib/libc.so > $(TOOLSARCHDIR)/lib/libc.so
+	sed -e 's/lib\///g' < $(LIBCDIR)/lib/libpthread.so > $(TOOLSARCHDIR)/lib/libpthread.so
+
+.PHONY: toolchain_musl
+toolchain_musl:
+	$(MAKE) UCFRONT_ENV= CC=$(CONFIGURE_TOOL)-gcc musl_only
+	cp -a $(ROOTDIR)/$(LIBCDIR)/install/lib/* $(TOOLSARCHDIR)/lib/
+	cp -a $(ROOTDIR)/$(LIBCDIR)/install/include/* $(TOOLSARCHDIR)/include/
+
+.PHONY: toolchain_glibc
+toolchain_glibc:
+	echo Makefile CONFIGURE_OPTS=$(CONFIGURE_OPTS)
+	$(MAKE) UCFRONT_ENV= CC=$(CONFIGURE_TOOL)-gcc CONFIGURE_OPTS="$(CONFIGURE_OPTS)" TARGETARCH=$(TARGETARCH) STAGEDIR=$(TOOLSARCHDIR) glibc_only
+	cp -rp --remove-destination $(ROOTDIR)/$(LIBCDIR)/install/* $(TOOLSARCHDIR)/
+
+.PHONY: toolchain_only
+toolchain_only: binutils_only gcc-pass1_only toolchain_headers toolchain_$(LIBCDIR) gcc-pass2_only
+	echo "CROSS_COMPILE=$(CONFIGURE_TOOL)-" > .sgbuilt_toolchain
+	echo "Toolchain built successfully"
+
+DATE=$(shell date +%Y%m%d)
+
+.PHONY: toolchain_package
+toolchain_package:
+	mkdir -p $(IMAGEDIR)
+	-strip $(TOOLSPREFIX)/bin/*
+	-strip $(TOOLSPREFIX)/libexec/gcc/*/*/c*
+	-strip $(TOOLSPREFIX)/libexec/gcc/*/*/lt*
+	-strip $(TOOLSARCHDIR)/bin/*
+	cd $(TOOLSDIR) ; \
+	tar --owner=root --group=root -cvzf $(IMAGEDIR)/$(CONFIGURE_TOOL)-$(DATE).tar.gz *
+	cd $(IMAGEDIR) ; \
+	../bin/mk-disttools-install $(CONFIGURE_TOOL)-$(DATE).tar.gz $(DATE) $(CONFIGURE_TOOL)
+
+toolchain_clean: binutils_clean gcc_clean lib/$(LIBCDIR)_clean
+	rm -f .sgbuilt_toolchain
+	rm -rf $(TOOLSDIR)
+
+.PHONY: info
+info:
+	@echo DATE = $(DATE)
+	@echo PRODUCT = $(CONFIG_PRODUCT)
+	@echo VENDOR = $(CONFIG_VENDOR)
+	@echo ARCH = $(ARCH)
+	@echo MACHINE = $(MACHINE)
+	@echo ENDIAN = $(ENDIAN)
+	@echo FLOAT = $(FLOAT)
+	@echo CONFIGURE_HOST = $(CONFIGURE_HOST)
+	@echo CONFIGURE_TOOL = $(CONFIGURE_TOOL)
+	@echo CROSS_COMPILE = $(CROSS_COMPILE)
+
 .PHONY: automake
 automake:
 	$(MAKE) -C config automake
@@ -196,12 +275,14 @@ image:
 .PHONY: release
 release:
 	[ -d $(RELDIR) ] || mkdir -p $(RELDIR)
-	@for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt; do \
+	@prefix=$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d%H%M`; \
+	for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt; do \
 		s=`echo "$$f" | sed 's/^\([^,]*\)\(,.*\)\{0,1\}$$/\1/'`; \
 		d=`echo "$$s" | sed 's/\([^,]*\)\([.][^.]*,\)\{0,1\}/\1/'`; \
 		[ -f "$$s" ] || continue; \
-		echo $(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d`-`basename $$d`; \
-		cp $$s $(RELDIR)/$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d`-`basename $$d`; \
+		dest="$$prefix-`basename $$d`"; \
+		echo "$$dest"; \
+		cp "$$s" "$(RELDIR)/$$dest"; \
 	done
 
 .PHONY: single
@@ -222,8 +303,17 @@ linux:
 	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
 	    ( \
 		cd $(LINUXDIR) ; \
-		mkdir -p `dirname $$CONFIG_INITRAMFS_SOURCE`; \
-		touch $$CONFIG_INITRAMFS_SOURCE || exit 1; \
+		: For each target: check if file or directory, and create, if; \
+		: not exist; \
+		for f in $$CONFIG_INITRAMFS_SOURCE; do \
+			bn=`basename $$f`; \
+			if [ "$${bn##*.}" = "$$bn" ]; then \
+				mkdir -p $$f || exit 1; \
+			else \
+				mkdir -p `dirname $$f`; \
+				touch $$f || exit 1; \
+			fi; \
+		done; \
 	    ) \
 	fi
 	@if expr "$(LINUXDIR)" : 'linux-2\.[0-4].*' > /dev/null && \
@@ -290,7 +380,7 @@ real_clean mrproper: clean
 linux_distclean:
 	-$(MAKEARCH_KERNEL) -C $(LINUXDIR) distclean
 
-distclean: mrproper linux_distclean
+distclean: mrproper linux_distclean toolchain_clean
 	-rm -f user/tinylogin/applet_source_list user/tinylogin/config.h
 	-rm -f lib/uClibc lib/uClibc-ng lib/glibc lib/musl
 	-rm -f glibc/install musl/install
@@ -407,8 +497,11 @@ help:
 	@echo "make linux                 compile the selected kernel only"
 	@echo "make romfs                 install all files to romfs directory"
 	@echo "make image                 combine romfs and kernel into final image"
+	@echo "make info                  print out configured information"
 	@echo "make modules               build all modules"
 	@echo "make modules_install       install modules into romfs"
+	@echo "make toolchain_only        build gcc based toolchain for target"
+	@echo "make toolchain_package     package up host built toolchain"
 	@echo "make DIR_only              build just the directory DIR"
 	@echo "make DIR_romfs             install files from directory DIR to romfs"
 	@echo "make DIR_clean             clean just the directory DIR"

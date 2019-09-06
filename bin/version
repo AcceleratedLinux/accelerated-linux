@@ -50,11 +50,6 @@ for hash in $(git log --first-parent --pretty=format:"%H" --graph | sed 's/^\* *
 do
 	git branch -a --no-color --contains $hash 2> /dev/null | sed 's/^[*]\{0,1\} *//' | egrep -q '^(.*/)*master$' && break
 	CNT=$((CNT + 1))
-	# lets shutdown rogue development method and trees
-	if [ $CNT -gt 256 ]; then
-		CNT="NONDALTREE"
-		break
-	fi
 done
 
 # Move to 4 digit versions (always, old code kept for reference)
@@ -71,6 +66,18 @@ YEAR4=$(date -d "$LASTREVDATE" +%Y)
 MONTH=$(date -d "$LASTREVDATE" +%m | sed 's/^0*//')
 COUNT=$(git rev-list --first-parent --since="$YEAR4-$MONTH-01 00:00:00" $MASTER_COMMIT | wc -l)
 
-VERSIONSTR="$YEAR.$MONTH.$COUNT$BRANCH$CREV$DIRTY"
+# lets shutdown rogue version numbers
+DALDEV=
+if [ "$COUNT" -gt 255 ]; then
+	DALDEV="$DALDEV-$COUNT"
+	COUNT=255
+fi
+if [ "$CNT" -gt 255 ]; then
+	DALDEV="$DALDEV-$CNT"
+	CNT=255
+fi
+[ "$DALDEV" ] && DALDEV="-DEVONLY$DALDEV"
+
+VERSIONSTR="$YEAR.$MONTH.$COUNT$BRANCH$CREV$DALDEV$DIRTY"
 
 echo $VERSIONSTR

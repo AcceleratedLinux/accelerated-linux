@@ -27,6 +27,7 @@ static const char rcsid[] = "$Id: res_findzonecut.c,v 1.16 2005/03/17 20:15:18 d
 
 /* Import. */
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/time.h>

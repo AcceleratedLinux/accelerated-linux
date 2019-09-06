@@ -116,7 +116,7 @@ class Config(object):
             f.write('CONFIG_VENDOR=%s\n' % self.product['vendor'])
             f.write('CONFIG_PRODUCT=%s\n' % self.product['product'])
             f.write('CONFIG_LINUXDIR=linux\n')
-            f.write('CONFIG_LIBCDIR=uClibc\n')
+            f.write('CONFIG_LIBCDIR=%s\n' % self.product['libc'])
 
     # Test code
     def write_visible(self):
@@ -176,7 +176,7 @@ class Product(object):
     def load_product(self, product):
         self.item['device'][configify('DEFAULTS_' + product['vendor'])] = ('y', [])
         self.item['device'][configify('DEFAULTS_' + product['vendor'] + '_' + product['product'])] = ('y', [])
-        self.item['device'][configify('DEFAULTS_LIBC_UCLIBC')] = ('y', [])
+        self.item['device'][configify('DEFAULTS_LIBC_' + product['libc'])] = ('y', [])
         self.load_group(product)
 
     def load_group(self, group):

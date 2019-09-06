@@ -1,4 +1,4 @@
-IPTABLES_VERSION = 1.4.21
+IPTABLES_VERSION = 1.8.3
 URL = http://www.netfilter.org/projects/iptables/files/iptables-$(IPTABLES_VERSION).tar.bz2
 IPTABLES_INSTALL_DIR = build/iptables-$(IPTABLES_VERSION)-install
 AUTORECONF = autoreconf -i
@@ -20,6 +20,9 @@ CONFOPTS += --disable-ipv6
 endif
 ifdef CONFIG_IP_NF_QUEUE
 CONFOPTS += --enable-libipq
+endif
+ifndef CONFIG_USER_NFTABLES
+CONFOPTS += --disable-nftables
 endif
 
 ifdef CONFIG_DEFAULTS_LIBC_MUSL

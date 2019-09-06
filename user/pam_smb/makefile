@@ -14,7 +14,7 @@ clean:
 	@rm -f .build
 
 romfs:
-	$(ROMFSINST) /lib/security/pam_smb_auth.so
+	$(ROMFSINST) -d /lib/security/pam_smb_auth.so
 
 %: .build
 	$(MAKE) -f Makefile $@

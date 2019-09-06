@@ -16,10 +16,22 @@ sku="$(fw_printenv -n partnumber 2>/dev/null)" && runt set system.sku "$sku"
 runt set system.manufacturer "$(sed -e 's?/.*$??' < /etc/version)" 
 
 case "$(fw_printenv -n product_id | tr [A-Z] [a-z])" in
-0x0000d002) modelname="AnywhereUSB 2 Plus" ;;
-0x0000d003) modelname="AnywhereUSB 8 Plus" ;;
-0x0000d004) modelname="AnywhereUSB 24 Plus" ;;
-*) modelname="$(sed -e 's?^.*/??' -e 's? .*$??' < /etc/version)" ;;
+0x0000d002)
+	modelname="AnywhereUSB 2 Plus"
+	runt set manufacture.num_usb_groups 2
+	;;
+0x0000d003)
+	modelname="AnywhereUSB 8 Plus"
+	runt set manufacture.num_usb_groups 8
+	;;
+0x0000d004)
+	modelname="AnywhereUSB 24 Plus"
+	runt set manufacture.num_usb_groups 24
+	;;
+*)
+	modelname="$(sed -e 's?^.*/??' -e 's? .*$??' < /etc/version)"
+	runt set manufacture.num_usb_groups 0
+	;;
 esac
 runt set system.model "$modelname"
 

@@ -230,14 +230,27 @@ $(dir_base): baseprep
 basepost: $(dir_base)
 
 .PHONY: baseprep
+baseprep: REALCC = $(subst ucfront-gcc,,$(CC))
 baseprep:
 	mkdir -p $(STAGEDIR)/lib
 	$(MAKE) -j1 -C ../include || exit $$?
+	LIBGCC_S_FILES="$$(dirname $$(realpath "$$($(REALCC) -print-file-name=libgcc_s.so)"))/libgcc_s.so*"; \
+	LIBSTDCXX_FILES="$$(dirname $$(realpath "$$($(REALCC) -print-file-name=libstdc++.so)"))/libstdc++.so*"; \
+	for LIB in $${LIBGCC_S_FILES} $${LIBSTDCXX_FILES}; do \
+		[ -f "$${LIB}" ] || continue; \
+		echo "Symlink: $${LIB} under $(STAGEDIR)/lib"; \
+		ln -sf "$${LIB}" $(STAGEDIR)/lib; \
+	done
 
 .PHONY: basepost
 basepost:
 ifneq ($(findstring uClibc,$(LIBCDIR)),)
-	$(MAKE) -C $(LIBCDIR) install_headers PREFIX=$(STAGEDIR)/ DEVEL_PREFIX=uClibc/
+	$(MAKE) -C $(LIBCDIR) install PREFIX=$(STAGEDIR)/ DEVEL_PREFIX= RUNTIME_PREFIX=
+	for LIB in libc.so libpthread.so ; do \
+		if head -n 1 $(LIBCDIR)/lib/$$LIB | grep -q "GNU ld script" ; then \
+			sed -e 's/lib\///g' < $(LIBCDIR)/lib/$$LIB > $(STAGEDIR)/lib/$$LIB ; \
+		fi ; \
+	done
 endif
 
 .PHONY: $(dir_extra)

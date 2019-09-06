@@ -14,8 +14,9 @@ Now, we can nominate a profile index when creating the bearer e.g.
   mmcli ... --create-bearer='apn=vzwinternet,number=3'
 and if not specified, the bearer behaves as it did before.
 
---- ModemManager/src/mm-bearer-qmi.c	2019-03-01 11:45:49.105660911 +1000
-+++ ModemManager/src/mm-bearer-qmi.c	2019-03-01 11:51:39.235547791 +1000
+diff -Nurd ModemManager.orig/src/mm-bearer-qmi.c ModemManager/src/mm-bearer-qmi.c
+--- ModemManager.orig/src/mm-bearer-qmi.c	2019-05-29 11:08:19.640306659 +1000
++++ ModemManager/src/mm-bearer-qmi.c	2019-05-29 11:08:19.664306778 +1000
 @@ -413,6 +413,7 @@
      MMBearerQmi *self;
      ConnectStep step;

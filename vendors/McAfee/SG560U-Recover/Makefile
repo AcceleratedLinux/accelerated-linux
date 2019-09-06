@@ -33,7 +33,7 @@ romfs: romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc.static romfs.v
 	$(ROMFSINST) -p 550 /etc/mkffs
 	$(ROMFSINST) -p 550 /etc/rc.hd
 
-romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode
+romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode romfs.cleanup
 
 image: image.configs image.dir image.arm.zimage image.squashfs image.bin image.size image.tag image.copy image.flash
 

@@ -5,6 +5,7 @@
 .EXPORT_ALL_VARIABLES:
 
 CONFIGTARGET ?= configured
+include $(ROOTDIR)/tools/base.inc
 include $(ROOTDIR)/tools/download.inc
 
 #

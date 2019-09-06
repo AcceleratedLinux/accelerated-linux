@@ -1,5 +1,6 @@
---- ModemManager/src/mm-log.c	2018-11-23 13:57:45.523720821 +1000
-+++ ModemManager/src/mm-log.c.new	2018-11-26 15:27:38.692943949 +1000
+diff -Nurd ModemManager.orig/src/mm-log.c ModemManager/src/mm-log.c
+--- ModemManager.orig/src/mm-log.c	2019-05-29 11:08:19.476305853 +1000
++++ ModemManager/src/mm-log.c	2019-05-29 11:08:19.496305950 +1000
 @@ -308,7 +308,7 @@
      } else
  #endif

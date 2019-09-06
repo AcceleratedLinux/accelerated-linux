@@ -8,9 +8,10 @@ would not time out at the requested 5 seconds, or at the mmcli default of 30
 seconds. It would time out after 25 seconds, which is a default timeout in
 dbus.
 
---- ModemManager/cli/mmcli-bearer.c.old	2019-04-23 14:42:11.343665147 +1000
-+++ ModemManager/cli/mmcli-bearer.c	2019-04-23 14:42:06.703626443 +1000
-@@ -345,6 +345,9 @@
+diff -Nurd ModemManager.orig/cli/mmcli-bearer.c ModemManager/cli/mmcli-bearer.c
+--- ModemManager.orig/cli/mmcli-bearer.c	2019-05-29 11:08:19.308305021 +1000
++++ ModemManager/cli/mmcli-bearer.c	2019-05-29 11:08:19.772307313 +1000
+@@ -342,6 +342,9 @@
                                             &ctx->manager,
                                             &ctx->object);
  
@@ -20,7 +21,7 @@ dbus.
      if (info_flag)
          g_assert_not_reached ();
  
-@@ -400,6 +403,9 @@
+@@ -397,6 +400,9 @@
                                           &ctx->manager,
                                           &ctx->object);
  

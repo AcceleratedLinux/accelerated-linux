@@ -996,6 +996,11 @@ extern char *getpass (__const char *__prompt) __nonnull ((1));
 extern int fsync (int __fd);
 #endif /* Use BSD || X/Open.  */
 
+#ifdef __USE_GNU
+/* Make all changes done to all files on the file system associated
+ *    with FD actually appear on disk.  */
+extern int syncfs (int __fd) __THROW;
+#endif
 
 #if defined __USE_BSD || defined __USE_XOPEN_EXTENDED
 

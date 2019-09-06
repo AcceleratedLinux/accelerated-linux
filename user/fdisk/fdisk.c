@@ -40,6 +40,7 @@
 #include <setjmp.h>
 #include <errno.h>
 #include <getopt.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 
 #include <linux/hdreg.h>       /* for HDIO_GETGEO */

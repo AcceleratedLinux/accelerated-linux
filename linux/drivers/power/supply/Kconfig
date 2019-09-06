@@ -660,4 +660,10 @@ config FUEL_GAUGE_SC27XX
 	 Say Y here to enable support for fuel gauge with SC27XX
 	 PMIC chips.
 
+config BATTERY_MCU_TX54
+	tristate "Battery driver for MCU of TX54"
+	depends on MFD_MCU_TX54
+	help
+	  Say Y here to enable support for battery in TX54's MCU.
+
 endif # POWER_SUPPLY

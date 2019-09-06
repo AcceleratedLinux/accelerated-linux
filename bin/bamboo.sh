@@ -8,6 +8,31 @@ function html_footer() {
 	echo "</body></html>" >>"$1"
 }
 
+# filter out which targets are valid for this build, bamboo
+# always builds a superset of all targets at this time.  Branches can
+# override valid targets with a BUILD_TARGETS file at the top
+# level.  User can override further with a custom BUILD_TARGETS
+# variable when building manual builds.
+
+function valid_target() {
+	_target="$1"
+
+	[ -z "${bamboo_BUILD_TARGETS}" -a -f BUILD_TARGETS ] &&
+		bamboo_BUILD_TARGETS="$(tr '[\n]' '[ ]' < BUILD_TARGETS)"
+
+	# sanitise variables to prevent simple user typos
+	bamboo_BUILD_TARGETS=$(echo -n "${bamboo_BUILD_TARGETS}" | sed -e 's/^[ ]*//g' -e 's/[ 	]$//')
+
+	if [ -n "${bamboo_BUILD_TARGETS}" ]; then
+		if ! echo " ${bamboo_BUILD_TARGETS} " | grep -q " ${_target} "; then
+			# this target is not a valid build
+			return 1
+		fi
+	fi
+
+	return 0
+}
+
 function info() {
 	if [ -z "$1" ]; then 
 		usage
@@ -15,17 +40,29 @@ function info() {
 
 	version=$(ON_BUILD_MACHINE=1 bin/version)
 	group=$(expr match "$version" '\([0-9]*\.[0-9]*\)')
+	branch_regexp='^[1-9][0-9]\.(2|5|8|11)\.[0-9]{1,3}_branch$'
+	if [[ "${bamboo_repository_branch_name}" =~ $branch_regexp ]]; then
+		type=candidate
+	else
+		type=development
+	fi
+	artifacts=/public/builds/DAL/${type}/${group}/${version}
 
 	start=$(date -u -R)
 	
 	echo	"export BUILD_COMMIT=${bamboo_repository_revision_number}" >"$1"
+	echo	"export BUILD_TYPE=${type}" >>"$1"
 	echo	"export BUILD_GROUP=${group}" >>"$1"
 	echo	"export BUILD_VERSION=${version}" >>"$1"
-	echo	"export BUILD_ARTIFACT_DIR=/public/builds/DAL/development/${group}/${version}" >>"$1"
+	echo	"export BUILD_ARTIFACT_DIR=${artifacts}" >>"$1"
 	echo -e	"export BUILD_START_STRING=\"${start}\"" >>"$1"
 	echo	"export NO_BUILD_INTO_TFTPBOOT=1" >>"$1"
 	echo	"export ON_BUILD_MACHINE=1" >>"$1"
 	
+	mkdir -p ${artifacts}
+	cp "$1" ${artifacts}
+	touch "${artifacts}/valid_artifacts.txt"
+
 	exit 0
 }
 
@@ -42,12 +79,16 @@ function build() {
 	git checkout "${BUILD_COMMIT}"
 
 	target=$(echo "${bamboo_shortJobName}" | tr ' ' '/')
+	if ! valid_target $target; then
+		exit 0
+	fi
+
 	make ${target}_default && make release
 	ec=$?
 	
 	# do kcheck after the build so we have the Kconfig* files handy
 	case "$target" in
-	*Factory82*|*8200-kboot*|*TX64*)
+	*Factory82*|*8200-kboot*)
 		;;
 	*)
 		tools/kcheck/check 2>&1
@@ -65,6 +106,10 @@ function build() {
 		# copy the artifacts if successful
 		cp -rat ${artifacts} release/*
 		ec=$?
+	fi
+
+	if [ ${ec} -eq 0 ]; then
+		echo ${target} >> ${BUILD_ARTIFACT_DIR}/valid_artifacts.txt
 	fi
 
 	out=${artifacts}/result.html

@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/dir.h>
 #include <sys/types.h>
 #include <sys/stat.h>

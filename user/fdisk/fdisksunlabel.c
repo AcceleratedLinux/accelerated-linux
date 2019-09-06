@@ -14,6 +14,7 @@
 #include <stdlib.h>		/* uint */
 #include <string.h>		/* strstr */
 #include <unistd.h>		/* write */
+#include <sys/types.h>		/* types */
 #include <sys/ioctl.h>		/* ioctl */
 #include <sys/stat.h>		/* stat */
 #include "nls.h"

@@ -145,6 +145,14 @@ config DA8XX_DDRCTL
 	  Texas Instruments da8xx SoCs. It's used to tweak various memory
 	  controller configuration options.
 
+config SYSFS_PERSISTENT_MEM
+	tristate "SYSFS persistent memory driver"
+	depends on SYSFS
+	help
+	  This selects the SYSFS persistent memory interface.  This is memory that
+	  is not "reset" across warm boots.  This requires the u-boot CONFIG_PRAM
+	  option or some other bootloader feature that does a similar thing.
+
 config PL353_SMC
 	tristate "ARM PL35X Static Memory Controller(SMC) driver"
 	default y

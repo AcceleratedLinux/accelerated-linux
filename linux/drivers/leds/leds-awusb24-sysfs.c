@@ -75,7 +75,6 @@ cpld_swver_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 static ssize_t
 cpld_regs_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
-	int rc;
 	int reg;
 	char *bptr = buf;
 

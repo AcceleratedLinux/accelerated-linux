@@ -1,7 +1,8 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# uClibc-ng 1.0.12 C Library Configuration
+# uClibc-ng 1.0.22 C Library Configuration
 #
+# TARGET_aarch64 is not set
 # TARGET_alpha is not set
 # TARGET_arc is not set
 # TARGET_arm is not set
@@ -9,6 +10,7 @@
 # TARGET_bfin is not set
 # TARGET_c6x is not set
 # TARGET_cris is not set
+# TARGET_frv is not set
 # TARGET_h8300 is not set
 # TARGET_hppa is not set
 # TARGET_i386 is not set
@@ -18,6 +20,7 @@
 # TARGET_metag is not set
 # TARGET_microblaze is not set
 # TARGET_mips is not set
+# TARGET_nds32 is not set
 # TARGET_nios2 is not set
 # TARGET_or1k is not set
 # TARGET_powerpc is not set
@@ -76,6 +79,7 @@ LDSO_LD_LIBRARY_PATH=y
 UCLIBC_CTOR_DTOR=y
 # LDSO_GNU_HASH_SUPPORT is not set
 # HAS_NO_THREADS is not set
+# UCLIBC_HAS_LINUXTHREADS is not set
 UCLIBC_HAS_THREADS_NATIVE=y
 UCLIBC_HAS_THREADS=y
 UCLIBC_HAS_TLS=y
@@ -85,8 +89,6 @@ UCLIBC_HAS_LFS=y
 # MALLOC is not set
 # MALLOC_SIMPLE is not set
 MALLOC_STANDARD=y
-MALLOC_GLIBC_COMPAT=y
-UCLIBC_HAS_OBSTACK=y
 UCLIBC_DYNAMIC_ATEXIT=y
 COMPAT_ATEXIT=y
 UCLIBC_HAS_UTMPX=y
@@ -122,8 +124,6 @@ UCLIBC_GRP_BUFFER_SIZE=1024
 #
 # Support various families of functions
 #
-UCLIBC_LINUX_MODULE_26=y
-# UCLIBC_LINUX_MODULE_24 is not set
 UCLIBC_LINUX_SPECIFIC=y
 UCLIBC_HAS_GNU_ERROR=y
 UCLIBC_BSD_SPECIFIC=y
@@ -154,8 +154,6 @@ UCLIBC_HAS_BSD_RES_CLOSE=y
 UCLIBC_HAS_COMPAT_RES_STATE=y
 UCLIBC_HAS_EXTRA_COMPAT_RES_STATE=y
 UCLIBC_HAS_RESOLVER_SUPPORT=y
-UCLIBC_HAS_LIBRESOLV_STUB=y
-UCLIBC_HAS_LIBNSL_STUB=y
 
 #
 # String and Stdio Support
@@ -169,9 +167,9 @@ UCLIBC_HAS_CTYPE_UNSAFE=y
 # UCLIBC_HAS_CTYPE_CHECKED is not set
 # UCLIBC_HAS_CTYPE_ENFORCED is not set
 UCLIBC_HAS_WCHAR=y
+UCLIBC_HAS_LIBICONV=y
+# UCLIBC_HAS_LIBINTL is not set
 # UCLIBC_HAS_LOCALE is not set
-UCLIBC_ICONV_NOLOCALE_HACK=y
-UCLIBC_ICONV_TRANSLIT_HACK=y
 # UCLIBC_HAS_HEXADECIMAL_FLOATS is not set
 UCLIBC_HAS_GLIBC_CUSTOM_PRINTF=y
 UCLIBC_PRINTF_SCANF_POSITIONAL_ARGS=9
@@ -247,4 +245,3 @@ UCLIBC_EXTRA_CFLAGS="$(CPUFLAGS)"
 UCLIBC_HAS_BACKTRACE=y
 WARNINGS="-Wall"
 # EXTRA_WARNINGS is not set
-# DOMULTI is not set

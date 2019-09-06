@@ -6,6 +6,7 @@ IMAGE="${1:-${ROOTDIR:-.}/images/image.bin}"
 ZIMAGE="${2:-${ROOTDIR:-.}/images/vmlinuz}"
 INITRD="${3:-${ROOTDIR:-.}/images/rootfs}"
 DISKRAW="${4:-${ROOTDIR:-.}/images/tx64_mfg.img}"
+GRUBIMG="${5:-${ROOTDIR:-.}/images/grub.img}"
 
 # Disk size in sectors
 DISKSECTS="${5:-6000000}"
@@ -16,20 +17,41 @@ rm -f "${DISKRAW}"
 # Create sparse file
 dd if=/dev/zero of="${DISKRAW}" bs=512 count=0 seek=${DISKSECTS}
 
+# Are we generating a new bootloader for signing/non-signed use ?
+GRUB_UPDATE=
+[ "${ROMFSDIR}" -a -f ${ROMFSDIR}/boot/grub/grub.cfg ] && GRUB_UPDATE=1
+
+if [ "$GRUB_UPDATE" ]; then
+	echo "Making GRUB store..." # 8MB image for storing standalone grub image
+	dd if=/dev/zero of=${GRUBIMG} bs=512 count=$((8 * 1024 * 1024 / 512))
+	GRUB_ARG="-drive id=diskC,file=${GRUBIMG},if=none -device ahci,id=ahci2 -device ide-drive,drive=diskC,bus=ahci2.0"
+	GRUB_OPT=grub=/dev/sdc
+fi
+
 echo "Run qemu to build image..."
 # Boot kernel and run mkffs
 
 qemu-system-x86_64 -net none \
 	-nographic \
 	$(groups | grep -wq kvm && echo -enable-kvm) \
-	-append "root=/dev/ram0 init=/etc/mkffs console=ttyS0" \
+	-append "root=/dev/ram0 init=/etc/mkffs console=ttyS0 ${GRUB_OPT}" \
 	-kernel $ZIMAGE -initrd $INITRD \
 	-drive id=diskA,file=$DISKRAW,if=none \
 	-device ahci,id=ahci -device ide-drive,drive=diskA,bus=ahci.0 \
 	-drive id=diskB,file=$IMAGE,if=none \
-	-device ahci,id=ahci1 -device ide-drive,drive=diskB,bus=ahci1.0
+	-device ahci,id=ahci1 -device ide-drive,drive=diskB,bus=ahci1.0 \
+	${GRUB_ARG}
+[ $? != 0 ] && exit 1
+
+if [ "$GRUB_UPDATE" ]; then
+	(cd ${IMAGEDIR}; tar xvf ${GRUBIMG} || exit 1) || exit 1
+	rm -f ${GRUBIMG}
+fi
 
 echo "Creating bmap..."
 bmaptool create "${DISKRAW}" -o "${DISKRAW}.bmap"
+
+echo "Compressing RAW disk..."
+bzip2 -9 -v "${DISKRAW}"
 
 exit 0

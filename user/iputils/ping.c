@@ -652,8 +652,15 @@ int send_probe()
 
         do {
 		static struct iovec iov = {outpack, 0};
-		static struct msghdr m = { &whereto, sizeof(whereto),
-						   &iov, 1, &cmsg, 0, 0 };
+		static struct msghdr m = {
+			.msg_name = &whereto,
+			.msg_namelen = sizeof(whereto),
+			.msg_iov = &iov,
+			.msg_iovlen = 1,
+			.msg_control = &cmsg,
+			.msg_controllen = 0,
+			.msg_flags = 0
+		};
 		m.msg_controllen = cmsg_len;
 		iov.iov_len = cc;
 

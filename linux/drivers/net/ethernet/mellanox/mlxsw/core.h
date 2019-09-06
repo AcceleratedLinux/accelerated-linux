@@ -28,6 +28,8 @@ unsigned int mlxsw_core_max_ports(const struct mlxsw_core *mlxsw_core);
 
 void *mlxsw_core_driver_priv(struct mlxsw_core *mlxsw_core);
 
+bool mlxsw_core_res_query_enabled(const struct mlxsw_core *mlxsw_core);
+
 int mlxsw_core_driver_register(struct mlxsw_driver *mlxsw_driver);
 void mlxsw_core_driver_unregister(struct mlxsw_driver *mlxsw_driver);
 
@@ -182,6 +184,8 @@ int mlxsw_core_port_get_phys_port_name(struct mlxsw_core *mlxsw_core,
 int mlxsw_core_schedule_dw(struct delayed_work *dwork, unsigned long delay);
 bool mlxsw_core_schedule_work(struct work_struct *work);
 void mlxsw_core_flush_owq(void);
+int mlxsw_core_resources_query(struct mlxsw_core *mlxsw_core, char *mbox,
+			       struct mlxsw_res *res);
 
 #define MLXSW_CONFIG_PROFILE_SWID_COUNT 8
 
@@ -344,6 +348,7 @@ struct mlxsw_bus_info {
 	struct mlxsw_fw_rev fw_rev;
 	u8 vsd[MLXSW_CMD_BOARDINFO_VSD_LEN];
 	u8 psid[MLXSW_CMD_BOARDINFO_PSID_LEN];
+	u8 low_frequency;
 };
 
 struct mlxsw_hwmon;
@@ -393,5 +398,10 @@ static inline void mlxsw_thermal_fini(struct mlxsw_thermal *thermal)
 }
 
 #endif
+
+enum mlxsw_devlink_param_id {
+	MLXSW_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
+	MLXSW_DEVLINK_PARAM_ID_ACL_REGION_REHASH_INTERVAL,
+};
 
 #endif

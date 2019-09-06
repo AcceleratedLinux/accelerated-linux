@@ -18,8 +18,9 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
-	usr usr/var \
+	usr usr/bin usr/sbin usr/var \
 	var
 
 DEVICES = \

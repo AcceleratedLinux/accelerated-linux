@@ -89,6 +89,12 @@ then
 fi
 [ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
 
+if nexcom-tool -f 2> /dev/null | grep -q 'set$'; then
+	# force erase if factory flag is set, this allows for it to be
+	# set while DAL is not actually running
+	touch /etc/config/.init
+fi
+
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
 	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
@@ -99,6 +105,9 @@ if [ -f /etc/config/.init ]; then
 		xargs rm -rf
 	cp -ra /etc/default/. /etc/config/.
 	echo "Factory default settings restored" > /etc/config/reboot_msg
+
+	# safe to clear factory flag now we are done
+	nexcom-tool -F 0 >/dev/null
 else
 	rm -f /etc/config/.init2
 fi
@@ -115,6 +124,9 @@ modprobe ath10k_pci
 # load I2C driver with modified frequency (100kHz, because of the ATECC508)
 modprobe i2c-designware-core bus_speed=100
 modprobe i2c-designware-pci
+
+# instantiate ATECC508 device
+echo "atsha204-i2c 0x60" > /sys/bus/i2c/devices/i2c-1/new_device
 
 # do the rc script processing
 actiond &

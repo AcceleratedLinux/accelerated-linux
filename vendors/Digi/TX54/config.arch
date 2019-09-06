@@ -16,6 +16,7 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 RELFILES = images/image.bin \
 	   images/u-boot.bin \
 	   images/u-boot.nand \
+	   images/tx54_mfg.tar.gz \
 	   images/configs.tar.gz \
 	   images/romfs-inst.log \
 	   images/acl-licenses.txt \
@@ -25,11 +26,14 @@ RELFILES = images/image.bin \
 
 ############################################################################
 
+# We run the mediatek MT7621 in little endian mode.
+CONFIGURE_TOOL = mipsel-linux$(LIBCSUFFIX)
+ENDIAN = little
+FLOAT = hard
 
-CROSS_COMPILE = mips-linux-20170624-
-CPUFLAGS      = -EL
-CPU_CFLAGS    = -EL
-CPULDFLAGS    += -EL
+CPUFLAGS = -EL
+CPU_CFLAGS = -EL
+CPULDFLAGS += -EL
 
 include $(ROOTDIR)/vendors/config/mips/config.arch
 

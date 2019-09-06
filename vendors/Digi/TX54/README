@@ -13,7 +13,7 @@ When using MediaTeks legacy u-boot code you can load and run a kernel
 and filesystem using the following commands. You need to enter through the
 menu system they use, and select the u-boot console to run this.
 
-    setenv bootargs console=ttyS1,115200 rd_start=0x84000000 rd_size=0x01000000
+    setenv bootargs console=ttyS1,115200 rd_start=0x84000000 rd_size=0x02000000
     setenv ipaddr 192.168.1.1 ; setenv serverip 192.168.1.22
     tftpboot 0x84000000 rootfs.bin
     tftpboot 0x80100000 ukernel.bin

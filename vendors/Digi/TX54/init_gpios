@@ -1,6 +1,6 @@
 #!/bin/sh
 ##############################################################################
-# Copyright (c) 2018 Digi International Inc., All Rights Reserved
+# Copyright (c) 2018-2019 Digi International Inc., All Rights Reserved
 #
 # This software contains proprietary and confidential information of Digi
 # International Inc.  By accepting transfer of this copy, Recipient agrees
@@ -18,7 +18,7 @@
 # subparagraphs (c)(1) and (2) of the Commercial Computer Software -
 # Restricted Rights at 48 CFR 52.227-19, as applicable.
 #
-# Digi International Inc. 11001 Bren Road East, Minnetonka, MN 55343
+# Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
 #
 ##############################################################################
 
@@ -32,13 +32,13 @@
 gpio_index() {
 	local index=$1
 	if [ ${index} -ge 96 ] ; then
-		echo $((496 + ${index} - 96))
+		echo $((400 + ${index} - 96))
 	elif [ ${index} -ge 64 ] ; then
-		echo $((400 + ${index} - 64))
+		echo $((416 + ${index} - 64))
 	elif [ ${index} -ge 32 ] ; then
-		echo $((432 + ${index} - 32))
+		echo $((448 + ${index} - 32))
 	else
-		echo $((464 + ${index}))
+		echo $((480 + ${index}))
 	fi
 }
 
@@ -98,9 +98,5 @@ init_gpio 22 low
 ### User buttons
 # Reset pin as input
 init_gpio 29 in
-
-### MCU
-# MCU interrupt as input
-init_gpio 32 in
 
 echo "OK"
