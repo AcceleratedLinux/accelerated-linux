@@ -1,8 +1,0 @@
-Wireless for the IX14
-----------------------
-The IX14 shipped without wireless. To enable wireles, edit tools/kcheck/product.py and uncomment the wireless lines (search for wireless).
-
-Execute tools/kcheck/set to enable building the wireless drivers and utilities. The vendors directory can be updated with the new config.linux, condig.modules and config.vendor.
-
-Update the IX14.schema to include wireless functionality.
-
