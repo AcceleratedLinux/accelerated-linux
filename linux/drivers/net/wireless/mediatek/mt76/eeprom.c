@@ -1,18 +1,8 @@
+// SPDX-License-Identifier: ISC
 /*
  * Copyright (C) 2016 Felix Fietkau <nbd@nbd.name>
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include <linux/firmware.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <linux/mtd/mtd.h>
@@ -83,6 +73,45 @@ out_put_node:
 #endif
 }
 
+static int
+mt76_get_of_eeprom_file(struct mt76_dev *dev, int len)
+{
+#if defined(CONFIG_OF)
+	struct device_node *np = dev->dev->of_node;
+	int ret;
+	const char *eeprom_file;
+	const struct firmware *eeprom;
+
+	if (!np)
+		return -ENOENT;
+
+	ret = of_property_read_string(np, "mediatek,file-eeprom",
+				      &eeprom_file);
+	if (ret < 0)
+		return -ENOENT;
+
+	ret = request_firmware(&eeprom, eeprom_file, dev->dev);
+	if (ret)
+		return ret;
+
+	if (!eeprom || !eeprom->data || eeprom->size != len) {
+		dev_err(dev->dev, "Invalid EEPROM file\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	memcpy(dev->eeprom.data, eeprom->data, eeprom->size);
+
+out:
+	release_firmware(eeprom);
+
+	return ret;
+
+#else
+	return -ENOENT;
+#endif
+}
+
 void
 mt76_eeprom_override(struct mt76_dev *dev)
 {
@@ -94,8 +123,8 @@ mt76_eeprom_override(struct mt76_dev *dev)
 		return;
 
 	mac = of_get_mac_address(np);
-	if (mac)
-		memcpy(dev->macaddr, mac, ETH_ALEN);
+	if (!IS_ERR(mac))
+		ether_addr_copy(dev->macaddr, mac);
 #endif
 
 	if (!is_valid_ether_addr(dev->macaddr)) {
@@ -115,6 +144,7 @@ mt76_eeprom_init(struct mt76_dev *dev, int len)
 	if (!dev->eeprom.data)
 		return -ENOMEM;
 
-	return !mt76_get_of_eeprom(dev, len);
+	return !mt76_get_of_eeprom_file(dev, len) ||
+	       !mt76_get_of_eeprom(dev, len);
 }
 EXPORT_SYMBOL_GPL(mt76_eeprom_init);

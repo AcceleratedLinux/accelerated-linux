@@ -12,8 +12,8 @@ diff -Naur shadow.org/lib/getdef.c shadow/lib/getdef.c
  };
  
 diff -Naur shadow.org/src/login.c shadow/src/login.c
---- shadow.org/src/login.c	2018-04-30 02:42:37.000000000 +1000
-+++ shadow/src/login.c	2019-07-18 11:29:34.206240484 +1000
+--- shadow-4.6/src/login.c.orig	2018-04-30 02:42:37.000000000 +1000
++++ shadow-4.6/src/login.c	2020-02-07 17:13:52.114959942 +1000
 @@ -707,7 +707,6 @@
  		(void) alarm (timeout);
  	}
@@ -22,7 +22,7 @@ diff -Naur shadow.org/src/login.c shadow/src/login.c
  	delay   = getdef_unum ("FAIL_DELAY", 1);
  	retries = getdef_unum ("LOGIN_RETRIES", RETRIES);
  
-@@ -885,6 +884,16 @@
+@@ -885,6 +885,16 @@
  
  	pwd = xgetpwnam (username);
  	if (NULL == pwd) {
@@ -39,7 +39,7 @@ diff -Naur shadow.org/src/login.c shadow/src/login.c
  		SYSLOG ((LOG_ERR, "cannot find user %s", failent_user));
  		fprintf (stderr,
  		         _("Cannot find user (%s)\n"),
-@@ -1118,6 +1127,8 @@
+@@ -1118,6 +1128,8 @@
  		addenv ("IFS= \t\n", NULL);	/* ... instead, set a safe IFS */
  	}
  

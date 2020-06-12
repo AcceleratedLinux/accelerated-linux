@@ -1,0 +1,10 @@
+--- libvirt-1.2.20/src/storage/storage_backend_fs.c.org	2020-01-29 10:38:59.374354225 +1000
++++ libvirt-1.2.20/src/storage/storage_backend_fs.c	2020-01-29 10:40:08.339312341 +1000
+@@ -181,6 +181,7 @@
+ 
+ #if WITH_STORAGE_FS
+ 
++# include <paths.h>
+ # include <mntent.h>
+ 
+ struct _virNetfsDiscoverState {

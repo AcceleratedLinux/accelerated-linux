@@ -1,13 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*  D-Link DL2000-based Gigabit Ethernet Adapter Linux driver */
 /*
     Copyright (c) 2001, 2002 by D-Link Corporation
     Written by Edward Peng.<edward_peng@dlink.com.tw>
     Created 03-May-2001, base on Linux' sundance.c.
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
 */
 
 #define DRV_NAME	"DL2000/TC902x-based linux driver"
@@ -69,7 +66,7 @@ static const int multicast_filter_limit = 0x40;
 
 static int rio_open (struct net_device *dev);
 static void rio_timer (struct timer_list *t);
-static void rio_tx_timeout (struct net_device *dev);
+static void rio_tx_timeout (struct net_device *dev, unsigned int txqueue);
 static netdev_tx_t start_xmit (struct sk_buff *skb, struct net_device *dev);
 static irqreturn_t rio_interrupt (int irq, void *dev_instance);
 static void rio_free_tx (struct net_device *dev, int irq);
@@ -699,7 +696,7 @@ rio_timer (struct timer_list *t)
 }
 
 static void
-rio_tx_timeout (struct net_device *dev)
+rio_tx_timeout (struct net_device *dev, unsigned int txqueue)
 {
 	struct netdev_private *np = netdev_priv(dev);
 	void __iomem *ioaddr = np->ioaddr;

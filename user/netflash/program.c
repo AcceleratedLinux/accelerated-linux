@@ -477,16 +477,16 @@ int program_flash_open(const char *rdev)
 		    (major(stat_rdev.st_rdev) == SCSI_DISK1_MAJOR) ||
 		    (major(stat_rdev.st_rdev) == SCSI_DISK2_MAJOR) ||
 		    (major(stat_rdev.st_rdev) == SCSI_DISK3_MAJOR)) {
-			struct hd_geometry geo;
+			long size;
 
 			program_segment = program_generic_segment;
 			preserveconfig = dolock = dounlock = 0;
-			if (ioctl(rd, HDIO_GETGEO, &geo) < 0) {
-				error("ioctl(HDIO_GETGEO) failed, "
-					"errno=%d", errno);
+			if (ioctl(rd, BLKGETSIZE, &size) < 0) {
+				error("ioctl(BLKGETSIZE) failed, errno=%d",
+					errno);
 				exit(BAD_OPEN_FLASH);
 			}
-			devsize = geo.heads * geo.cylinders * geo.sectors * 512LL;
+			devsize = size * 512LL;
 			/*
 			 * Use a larger sgsize for efficiency, but it
 			 * must divide evenly into devsize.

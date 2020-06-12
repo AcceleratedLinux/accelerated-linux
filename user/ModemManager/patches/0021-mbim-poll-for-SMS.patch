@@ -1,0 +1,61 @@
+From: Samuel Brian <samuel.brian@digi.com>
+Date: Fri, 16 Aug 2019 14:35:18 +1000
+Subject: mbim: poll for SMS
+
+The Telit LE910NA-V2 does not send MBIM events for received SMSs even though
+ModemManager subscribes to them.
+This means that SMSs were read from the modem only when it was transitioning
+from disabled to enabled state.
+This HACK re-runs the SMS enabling process on the signal strength poll
+timer in order to receive SMSs without having to disable and then enable
+the modem.
+
+This will affect all MBIM modems that do the periodic poll, which right now
+is only the Telit MBIM modems we use.
+---
+ src/mm-iface-modem.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/mm-iface-modem.c b/src/mm-iface-modem.c
+index 5ec495a8..560aacb0 100644
+--- a/src/mm-iface-modem.c
++++ b/src/mm-iface-modem.c
+@@ -22,6 +22,7 @@
+ #include "mm-iface-modem.h"
+ #include "mm-iface-modem-3gpp.h"
+ #include "mm-iface-modem-cdma.h"
++#include "mm-iface-modem-messaging.h"
+ #include "mm-base-modem.h"
+ #include "mm-base-modem-at.h"
+ #include "mm-base-sim.h"
+@@ -29,6 +30,10 @@
+ #include "mm-log-object.h"
+ #include "mm-context.h"
+ 
++#if defined WITH_MBIM
++#include "mm-broadband-modem-mbim.h"
++#endif
++
+ #define SIGNAL_QUALITY_RECENT_TIMEOUT_SEC 60
+ 
+ #define SIGNAL_CHECK_INITIAL_RETRIES      5
+@@ -1379,6 +1384,19 @@ periodic_signal_check_cb (MMIfaceModem *self)
+     ctx->access_technologies_mask = MM_MODEM_ACCESS_TECHNOLOGY_ANY;
+     peridic_signal_check_step (self);
+ 
++#if defined WITH_MBIM
++    /* HACK: LE910NA-V2 does not send the "I've got a new SMS" event over
++     * MBIM, so periodically re-enable the messaging interface to recheck
++     * for SMSs manually. Just do it for all MBIM modems for now. */
++    if (MM_IS_BROADBAND_MODEM_MBIM(self)) {
++        mm_obj_dbg (self, "Periodic SMS check, re-enabling the Messaging interface...");
++        mm_iface_modem_messaging_enable (MM_IFACE_MODEM_MESSAGING (self),
++                                         NULL,
++                                         (GAsyncReadyCallback)mm_iface_modem_messaging_enable_finish,
++                                         NULL);
++    }
++#endif
++
+     /* Remove the timeout and clear the source id */
+     if (ctx->timeout_source)
+         ctx->timeout_source = 0;

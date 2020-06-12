@@ -47,6 +47,7 @@ int amdgpu_allocate_static_csa(struct amdgpu_device *adev, struct amdgpu_bo **bo
 		return -ENOMEM;
 
 	memset(ptr, 0, size);
+	adev->virt.csa_cpu_addr = ptr;
 	return 0;
 }
 
@@ -90,15 +91,6 @@ int amdgpu_map_static_csa(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		ttm_eu_backoff_reservation(&ticket, &list);
 		DRM_ERROR("failed to create bo_va for static CSA\n");
 		return -ENOMEM;
-	}
-
-	r = amdgpu_vm_alloc_pts(adev, (*bo_va)->base.vm, csa_addr,
-				size);
-	if (r) {
-		DRM_ERROR("failed to allocate pts for static CSA, err=%d\n", r);
-		amdgpu_vm_bo_rmv(adev, *bo_va);
-		ttm_eu_backoff_reservation(&ticket, &list);
-		return r;
 	}
 
 	r = amdgpu_vm_bo_map(adev, *bo_va, csa_addr, 0, size,

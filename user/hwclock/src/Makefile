@@ -18,4 +18,4 @@ clean:
 	-rm -f *.o *~ core $(SBIN)
 
 romfs:
-	$(ROMFSINST) /bin/hwclock
+	$(ROMFSINST) /sbin/hwclock

@@ -158,12 +158,19 @@ config USER_E2FSPROGS_TUNE2FS
 config USER_E2FSPROGS_UUIDD
 	bool "uuidd"
 	depends on USER_E2FSPROGS
+	depends on !USER_UTIL_LINUX_LIBUUID
 	help
 	  A filesystem tool.
 
 config USER_E2FSPROGS_UUIDGEN
 	bool "uuidgen"
 	depends on USER_E2FSPROGS
+	depends on !USER_UTIL_LINUX_LIBUUID
 	help
 	  A filesystem tool.
 
+config USER_E2FSPROGS_E4CRYPT
+	bool "e4crypt"
+	depends on USER_E2FSPROGS
+	help
+	  A filesystem tool to support linux kernel fscrypt management.

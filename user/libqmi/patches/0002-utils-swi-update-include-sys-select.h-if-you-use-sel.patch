@@ -1,0 +1,22 @@
+From: Greg Ungerer <gregory.ungerer@digi.com>
+Date: Sun, 9 Sep 2018 22:51:34 +1000
+Subject: utils,swi-update: include sys/select.h if you use select()
+
+You must include the sys/select.h include file if you are using the
+select() system call.
+---
+ utils/swi-update.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/utils/swi-update.c b/utils/swi-update.c
+index d046d88..3b00e8c 100644
+--- a/utils/swi-update.c
++++ b/utils/swi-update.c
+@@ -43,6 +43,7 @@
+ #include <sys/select.h>
+ #include <termios.h>
+ #include <unistd.h>
++#include <sys/select.h>
+ 
+ /* FIXME: endianness - this works on LE for now... */
+ 

@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * GCM: Galois/Counter Mode.
  *
  * Copyright (c) 2007 Nokia Siemens Networks - Mikko Herranen <mh1@iki.fi>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published
- * by the Free Software Foundation.
  */
 
 #include <crypto/gf128mul.h>
@@ -16,7 +13,6 @@
 #include <crypto/scatterwalk.h>
 #include <crypto/gcm.h>
 #include <crypto/hash.h>
-#include "internal.h"
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -114,8 +110,6 @@ static int crypto_gcm_setkey(struct crypto_aead *aead, const u8 *key,
 	crypto_skcipher_set_flags(ctr, crypto_aead_get_flags(aead) &
 				       CRYPTO_TFM_REQ_MASK);
 	err = crypto_skcipher_setkey(ctr, key, keylen);
-	crypto_aead_set_flags(aead, crypto_skcipher_get_flags(ctr) &
-				    CRYPTO_TFM_RES_MASK);
 	if (err)
 		return err;
 
@@ -144,9 +138,6 @@ static int crypto_gcm_setkey(struct crypto_aead *aead, const u8 *key,
 	crypto_ahash_set_flags(ghash, crypto_aead_get_flags(aead) &
 			       CRYPTO_TFM_REQ_MASK);
 	err = crypto_ahash_setkey(ghash, (u8 *)&data->hash, sizeof(be128));
-	crypto_aead_set_flags(aead, crypto_ahash_get_flags(ghash) &
-			      CRYPTO_TFM_RES_MASK);
-
 out:
 	kzfree(data);
 	return err;
@@ -155,20 +146,7 @@ out:
 static int crypto_gcm_setauthsize(struct crypto_aead *tfm,
 				  unsigned int authsize)
 {
-	switch (authsize) {
-	case 4:
-	case 8:
-	case 12:
-	case 13:
-	case 14:
-	case 15:
-	case 16:
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
+	return crypto_gcm_check_authsize(authsize);
 }
 
 static void crypto_gcm_init_common(struct aead_request *req)
@@ -601,11 +579,11 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 				    const char *ghash_name)
 {
 	struct crypto_attr_type *algt;
+	u32 mask;
 	struct aead_instance *inst;
-	struct skcipher_alg *ctr;
-	struct crypto_alg *ghash_alg;
-	struct hash_alg_common *ghash;
 	struct gcm_instance_ctx *ctx;
+	struct skcipher_alg *ctr;
+	struct hash_alg_common *ghash;
 	int err;
 
 	algt = crypto_get_attr_type(tb);
@@ -615,39 +593,28 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
 		return -EINVAL;
 
-	ghash_alg = crypto_find_alg(ghash_name, &crypto_ahash_type,
-				    CRYPTO_ALG_TYPE_HASH,
-				    CRYPTO_ALG_TYPE_AHASH_MASK |
-				    crypto_requires_sync(algt->type,
-							 algt->mask));
-	if (IS_ERR(ghash_alg))
-		return PTR_ERR(ghash_alg);
+	mask = crypto_requires_sync(algt->type, algt->mask);
 
-	ghash = __crypto_hash_alg_common(ghash_alg);
-
-	err = -ENOMEM;
 	inst = kzalloc(sizeof(*inst) + sizeof(*ctx), GFP_KERNEL);
 	if (!inst)
-		goto out_put_ghash;
-
+		return -ENOMEM;
 	ctx = aead_instance_ctx(inst);
-	err = crypto_init_ahash_spawn(&ctx->ghash, ghash,
-				      aead_crypto_instance(inst));
+
+	err = crypto_grab_ahash(&ctx->ghash, aead_crypto_instance(inst),
+				ghash_name, 0, mask);
 	if (err)
 		goto err_free_inst;
+	ghash = crypto_spawn_ahash_alg(&ctx->ghash);
 
 	err = -EINVAL;
 	if (strcmp(ghash->base.cra_name, "ghash") != 0 ||
 	    ghash->digestsize != 16)
-		goto err_drop_ghash;
+		goto err_free_inst;
 
-	crypto_set_skcipher_spawn(&ctx->ctr, aead_crypto_instance(inst));
-	err = crypto_grab_skcipher(&ctx->ctr, ctr_name, 0,
-				   crypto_requires_sync(algt->type,
-							algt->mask));
+	err = crypto_grab_skcipher(&ctx->ctr, aead_crypto_instance(inst),
+				   ctr_name, 0, mask);
 	if (err)
-		goto err_drop_ghash;
-
+		goto err_free_inst;
 	ctr = crypto_spawn_skcipher_alg(&ctx->ctr);
 
 	/* The skcipher algorithm must be CTR mode, using 16-byte blocks. */
@@ -655,18 +622,18 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 	if (strncmp(ctr->base.cra_name, "ctr(", 4) != 0 ||
 	    crypto_skcipher_alg_ivsize(ctr) != 16 ||
 	    ctr->base.cra_blocksize != 1)
-		goto out_put_ctr;
+		goto err_free_inst;
 
 	err = -ENAMETOOLONG;
 	if (snprintf(inst->alg.base.cra_name, CRYPTO_MAX_ALG_NAME,
 		     "gcm(%s", ctr->base.cra_name + 4) >= CRYPTO_MAX_ALG_NAME)
-		goto out_put_ctr;
+		goto err_free_inst;
 
 	if (snprintf(inst->alg.base.cra_driver_name, CRYPTO_MAX_ALG_NAME,
 		     "gcm_base(%s,%s)", ctr->base.cra_driver_name,
-		     ghash_alg->cra_driver_name) >=
+		     ghash->base.cra_driver_name) >=
 	    CRYPTO_MAX_ALG_NAME)
-		goto out_put_ctr;
+		goto err_free_inst;
 
 	inst->alg.base.cra_flags = (ghash->base.cra_flags |
 				    ctr->base.cra_flags) & CRYPTO_ALG_ASYNC;
@@ -689,20 +656,11 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 	inst->free = crypto_gcm_free;
 
 	err = aead_register_instance(tmpl, inst);
-	if (err)
-		goto out_put_ctr;
-
-out_put_ghash:
-	crypto_mod_put(ghash_alg);
-	return err;
-
-out_put_ctr:
-	crypto_drop_skcipher(&ctx->ctr);
-err_drop_ghash:
-	crypto_drop_ahash(&ctx->ghash);
+	if (err) {
 err_free_inst:
-	kfree(inst);
-	goto out_put_ghash;
+		crypto_gcm_free(inst);
+	}
+	return err;
 }
 
 static int crypto_gcm_create(struct crypto_template *tmpl, struct rtattr **tb)
@@ -743,7 +701,6 @@ static int crypto_rfc4106_setkey(struct crypto_aead *parent, const u8 *key,
 {
 	struct crypto_rfc4106_ctx *ctx = crypto_aead_ctx(parent);
 	struct crypto_aead *child = ctx->child;
-	int err;
 
 	if (keylen < 4)
 		return -EINVAL;
@@ -754,26 +711,18 @@ static int crypto_rfc4106_setkey(struct crypto_aead *parent, const u8 *key,
 	crypto_aead_clear_flags(child, CRYPTO_TFM_REQ_MASK);
 	crypto_aead_set_flags(child, crypto_aead_get_flags(parent) &
 				     CRYPTO_TFM_REQ_MASK);
-	err = crypto_aead_setkey(child, key, keylen);
-	crypto_aead_set_flags(parent, crypto_aead_get_flags(child) &
-				      CRYPTO_TFM_RES_MASK);
-
-	return err;
+	return crypto_aead_setkey(child, key, keylen);
 }
 
 static int crypto_rfc4106_setauthsize(struct crypto_aead *parent,
 				      unsigned int authsize)
 {
 	struct crypto_rfc4106_ctx *ctx = crypto_aead_ctx(parent);
+	int err;
 
-	switch (authsize) {
-	case 8:
-	case 12:
-	case 16:
-		break;
-	default:
-		return -EINVAL;
-	}
+	err = crypto_rfc4106_check_authsize(authsize);
+	if (err)
+		return err;
 
 	return crypto_aead_setauthsize(ctx->child, authsize);
 }
@@ -821,8 +770,11 @@ static struct aead_request *crypto_rfc4106_crypt(struct aead_request *req)
 
 static int crypto_rfc4106_encrypt(struct aead_request *req)
 {
-	if (req->assoclen != 16 && req->assoclen != 20)
-		return -EINVAL;
+	int err;
+
+	err = crypto_ipsec_check_assoclen(req->assoclen);
+	if (err)
+		return err;
 
 	req = crypto_rfc4106_crypt(req);
 
@@ -831,8 +783,11 @@ static int crypto_rfc4106_encrypt(struct aead_request *req)
 
 static int crypto_rfc4106_decrypt(struct aead_request *req)
 {
-	if (req->assoclen != 16 && req->assoclen != 20)
-		return -EINVAL;
+	int err;
+
+	err = crypto_ipsec_check_assoclen(req->assoclen);
+	if (err)
+		return err;
 
 	req = crypto_rfc4106_crypt(req);
 
@@ -881,6 +836,7 @@ static int crypto_rfc4106_create(struct crypto_template *tmpl,
 				 struct rtattr **tb)
 {
 	struct crypto_attr_type *algt;
+	u32 mask;
 	struct aead_instance *inst;
 	struct crypto_aead_spawn *spawn;
 	struct aead_alg *alg;
@@ -894,6 +850,8 @@ static int crypto_rfc4106_create(struct crypto_template *tmpl,
 	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
 		return -EINVAL;
 
+	mask = crypto_requires_sync(algt->type, algt->mask);
+
 	ccm_name = crypto_attr_alg_name(tb[1]);
 	if (IS_ERR(ccm_name))
 		return PTR_ERR(ccm_name);
@@ -903,9 +861,8 @@ static int crypto_rfc4106_create(struct crypto_template *tmpl,
 		return -ENOMEM;
 
 	spawn = aead_instance_ctx(inst);
-	crypto_set_aead_spawn(spawn, aead_crypto_instance(inst));
-	err = crypto_grab_aead(spawn, ccm_name, 0,
-			       crypto_requires_sync(algt->type, algt->mask));
+	err = crypto_grab_aead(spawn, aead_crypto_instance(inst),
+			       ccm_name, 0, mask);
 	if (err)
 		goto out_free_inst;
 
@@ -970,7 +927,6 @@ static int crypto_rfc4543_setkey(struct crypto_aead *parent, const u8 *key,
 {
 	struct crypto_rfc4543_ctx *ctx = crypto_aead_ctx(parent);
 	struct crypto_aead *child = ctx->child;
-	int err;
 
 	if (keylen < 4)
 		return -EINVAL;
@@ -981,11 +937,7 @@ static int crypto_rfc4543_setkey(struct crypto_aead *parent, const u8 *key,
 	crypto_aead_clear_flags(child, CRYPTO_TFM_REQ_MASK);
 	crypto_aead_set_flags(child, crypto_aead_get_flags(parent) &
 				     CRYPTO_TFM_REQ_MASK);
-	err = crypto_aead_setkey(child, key, keylen);
-	crypto_aead_set_flags(parent, crypto_aead_get_flags(child) &
-				      CRYPTO_TFM_RES_MASK);
-
-	return err;
+	return crypto_aead_setkey(child, key, keylen);
 }
 
 static int crypto_rfc4543_setauthsize(struct crypto_aead *parent,
@@ -1048,12 +1000,14 @@ static int crypto_rfc4543_copy_src_to_dst(struct aead_request *req, bool enc)
 
 static int crypto_rfc4543_encrypt(struct aead_request *req)
 {
-	return crypto_rfc4543_crypt(req, true);
+	return crypto_ipsec_check_assoclen(req->assoclen) ?:
+	       crypto_rfc4543_crypt(req, true);
 }
 
 static int crypto_rfc4543_decrypt(struct aead_request *req)
 {
-	return crypto_rfc4543_crypt(req, false);
+	return crypto_ipsec_check_assoclen(req->assoclen) ?:
+	       crypto_rfc4543_crypt(req, false);
 }
 
 static int crypto_rfc4543_init_tfm(struct crypto_aead *tfm)
@@ -1115,6 +1069,7 @@ static int crypto_rfc4543_create(struct crypto_template *tmpl,
 				struct rtattr **tb)
 {
 	struct crypto_attr_type *algt;
+	u32 mask;
 	struct aead_instance *inst;
 	struct crypto_aead_spawn *spawn;
 	struct aead_alg *alg;
@@ -1129,6 +1084,8 @@ static int crypto_rfc4543_create(struct crypto_template *tmpl,
 	if ((algt->type ^ CRYPTO_ALG_TYPE_AEAD) & algt->mask)
 		return -EINVAL;
 
+	mask = crypto_requires_sync(algt->type, algt->mask);
+
 	ccm_name = crypto_attr_alg_name(tb[1]);
 	if (IS_ERR(ccm_name))
 		return PTR_ERR(ccm_name);
@@ -1139,9 +1096,8 @@ static int crypto_rfc4543_create(struct crypto_template *tmpl,
 
 	ctx = aead_instance_ctx(inst);
 	spawn = &ctx->aead;
-	crypto_set_aead_spawn(spawn, aead_crypto_instance(inst));
-	err = crypto_grab_aead(spawn, ccm_name, 0,
-			       crypto_requires_sync(algt->type, algt->mask));
+	err = crypto_grab_aead(spawn, aead_crypto_instance(inst),
+			       ccm_name, 0, mask);
 	if (err)
 		goto out_free_inst;
 
@@ -1246,7 +1202,7 @@ static void __exit crypto_gcm_module_exit(void)
 				    ARRAY_SIZE(crypto_gcm_tmpls));
 }
 
-module_init(crypto_gcm_module_init);
+subsys_initcall(crypto_gcm_module_init);
 module_exit(crypto_gcm_module_exit);
 
 MODULE_LICENSE("GPL");

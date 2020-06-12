@@ -1,0 +1,50 @@
+OPENGEAR/ACM7004-5
+------------------
+
+These notes are to assist in transitioning to running DAL firmware on
+an OpenGear/ACM7004-5.
+
+
+CONSOLE SETUP
+-------------
+
+The native CPU serial port is brought out on CON7 of the PCB. It is a
+true RS-232 port (+5/-5V levels), with GND/RX/TX pins only. Wiring that
+out you can connect directly to a PC (or similar) serial port. The
+default is the usual 115200/8/1/n.
+
+On unit power up you will see the Marvell memory initializer and u-boot
+console trace come out. If you hit keys while it is booting you can break
+into the u-boot console.
+
+
+NETWORK LOADING
+---------------
+
+With the serial console setup and at the u-boot prompt you can manually
+network load a DAL firmware image. Run commands like this:
+
+    dhcp
+    tftp 0x3000000 image.bin
+    setenv bootargs "console=ttyS4,115200 root=/dev/ram0 initrd=0x3000000,16M"
+    gofsk 0x3000000
+
+Note that I have maintained the primary linux console on this internal
+serial port for now. So after booting linux you will be able to login
+on this internal serial port.
+
+
+FLASHING IMAGE
+--------------
+
+The generated DAL firmware binary image is compatible with the OpenGear
+firmware images. So you can flash in a DAL firmaware image to replace the
+existing OpenGear firmware.
+
+From a shell login (when running DAL):
+
+    netflash 192.168.210.2 image.bin
+
+(Of course substituing appropriate server IP address in that netflash)
+
+

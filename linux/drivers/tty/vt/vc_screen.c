@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Provide access to virtual console memory.
- * /dev/vcs0: the screen as it is being viewed right now (possibly scrolled)
+ * /dev/vcs: the screen as it is being viewed right now (possibly scrolled)
  * /dev/vcsN: the screen of /dev/ttyN (1 <= N <= 63)
  *            [minor: N]
  *
@@ -455,6 +455,9 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 	u16 *org0 = NULL, *org = NULL;
 	size_t ret;
 	char *con_buf;
+
+	if (use_unicode(inode))
+		return -EOPNOTSUPP;
 
 	con_buf = (char *) __get_free_page(GFP_KERNEL);
 	if (!con_buf)

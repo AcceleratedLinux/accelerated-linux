@@ -181,7 +181,6 @@ int lis2hh12_set_fifo_mode(struct lis2hh12_data *cdata, enum fifo_mode fm)
 	int err;
 	u8 reg_value;
 	u8 set_bit = LIS2HH12_DIS_BIT;
-	struct timespec ts;
 
 	switch (fm) {
 	case BYPASS:
@@ -202,8 +201,7 @@ int lis2hh12_set_fifo_mode(struct lis2hh12_data *cdata, enum fifo_mode fm)
 	if (err < 0)
 		return err;
 
-	ts = ktime_to_timespec(ktime_get_boottime());
-	cdata->sensor_timestamp = timespec_to_ns(&ts);
+	cdata->sensor_timestamp = ktime_to_ns(ktime_get_boottime());
 
 	err = lis2hh12_write_register(cdata, LIS2HH12_FIFO_EN_ADDR,
 				LIS2HH12_FIFO_EN_MASK, set_bit);

@@ -9,7 +9,7 @@
 #error "Do not include this directly, instead #include <asm/hardware.h>"
 #endif
 
-#include <asm/sizes.h>
+#include <linux/sizes.h>
 
 /*
  * ixp4xx_exp_bus_size is not available during uncompress,

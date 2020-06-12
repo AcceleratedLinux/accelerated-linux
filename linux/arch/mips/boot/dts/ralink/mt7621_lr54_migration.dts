@@ -1,0 +1,57 @@
+/dts-v1/;
+
+#include "mt7621_lr54.dts"
+
+&nand {
+	/* XOS partition layout... */
+	partition@0 {
+		label = "all";
+		reg = <0x00000000 0>;
+	};
+	partition@1 {
+		label = "u-boot";
+		reg = <0x00000000 0x00200000>;
+	};
+	partition@2 {
+		label = "u-boot-env";
+		reg = <0x00200000 0x00100000>;
+	};
+	partition@3 {
+		label = "u-boot-env1";
+		reg = <0x00300000 0x00100000>;
+	};
+	partition@4 {
+		label = "Kernel1";
+		reg = <0x00400000 0x00500000>;
+	};
+	partition@5 {
+		label = "RootFS1";
+		reg = <0x00900000 0x04640000>;
+	};
+	partition@6 {
+		label = "Kernel2";
+		reg = <0x04f40000 0x00500000>;
+	};
+	partition@7 {
+		label = "RootFS2";
+		reg = <0x05440000 0x04640000>;
+	};
+	partition@8 {
+		label = "userfs";
+		reg = <0x09a80000 0x064c0000>;
+	};
+	partition@9 {
+		label = "csid";
+		reg = <0x0ff40000 0x00020000>;
+	};
+	partition@10 {
+		label = "odm";
+		reg = <0x0ff60000 0x00020000>;
+	};
+
+	/* ... plus DAL's merged boot partition space */
+	partition@11 {
+		label = "flash";
+		reg = <0x00400000 0x09680000>;
+	};
+};

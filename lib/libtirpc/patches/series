@@ -6,3 +6,4 @@
 0006-rpc-types.h-fix-musl-build.patch
 0007-no-undefined.patch
 0008-stop-multiple.patch
+0009-use-endian-h.patch

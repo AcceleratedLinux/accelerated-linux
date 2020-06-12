@@ -8,7 +8,8 @@ ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 KERNEL    = $(IMAGEDIR)/kernel
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
-IMAGESIZE = 7864320
+# IMAGESIZE = 7864320
+IMAGESIZE = 16000000
 
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
 ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var

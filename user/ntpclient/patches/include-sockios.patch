@@ -1,0 +1,12 @@
+--- ntpclient-2015/ntpclient.c.org	2020-01-24 00:35:53.939266777 +1000
++++ ntpclient-2015/ntpclient.c	2020-01-24 00:36:12.694487732 +1000
+@@ -42,6 +42,9 @@
+ #include <errno.h>
+ #ifdef PRECISION_SIOCGSTAMP
+ #include <sys/ioctl.h>
++#ifndef SIOCGSTAMP
++#include <linux/sockios.h>
++#endif
+ #endif
+ #ifdef USE_OBSOLETE_GETTIMEOFDAY
+ #include <sys/time.h>

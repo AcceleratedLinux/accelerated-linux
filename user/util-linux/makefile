@@ -1,11 +1,16 @@
-
 URL = https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.28/util-linux-2.28.2.tar.gz
 MAKEVARS = 
+
+AUTORECONF = autoreconf -i
 
 CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_LIBUUID),--enable-libuuid,--disable-libuuid)
 CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_LIBBLKID),--enable-libblkid,--disable-libblkid)
 CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_LIBMOUNT),--enable-libmount,--disable-libmount)
+CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_UUIDD),--enable-uuidd,--disable-uuidd)
 CONFOPTS += $(if $(CONFIG_LIB_NCURSES),--with-ncurses,--without-ncurses)
+CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_FALLOCATE),--enable-fallocate,--disable-fallocate)
+CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_LOSETUP),--enable-losetup,--disable-losetup)
+CONFOPTS += $(if $(CONFIG_USER_UTIL_LINUX_SWITCH_ROOT),--enable-switch_root,--disable-switch_root)
 
 # bring these options up above as needed,  suggest using busybox version if
 # possible
@@ -13,12 +18,9 @@ CONFOPTS += $(if $(CONFIG_LIB_NCURSES),--with-ncurses,--without-ncurses)
 # CONFOPTS += --enable-deprecated-mount
 CONFOPTS += --disable-nls
 CONFOPTS += --disable-mount
-CONFOPTS += --disable-losetup
 CONFOPTS += --disable-fsck
 CONFOPTS += --disable-partx
-CONFOPTS += --disable-uuidd
 CONFOPTS += --disable-mountpoint
-CONFOPTS += --disable-fallocate
 CONFOPTS += --disable-unshare
 CONFOPTS += --disable-arch
 CONFOPTS += --disable-ddate
@@ -26,7 +28,6 @@ CONFOPTS += --disable-eject
 CONFOPTS += --disable-agetty
 CONFOPTS += --disable-cramfs
 CONFOPTS += --disable-wdctl
-CONFOPTS += --disable-switch_root
 CONFOPTS += --disable-pivot_root
 CONFOPTS += --disable-elvtune
 CONFOPTS += --disable-kill
@@ -67,3 +68,7 @@ my_romfs:
 	[ ! -d build/util-linux-2.28.2-install/lib ] || \
 		$(ROMFSINST) -v -f build/util-linux-2.28.2-install/lib /lib
 
+	$(ROMFSINST) -e CONFIG_USER_UTIL_LINUX_FALLOCATE build/util-linux-2.28.2-install/bin/fallocate /bin/fallocate
+	$(ROMFSINST) -e CONFIG_USER_UTIL_LINUX_LOSETUP build/util-linux-2.28.2-install/sbin/losetup /sbin/losetup
+	$(ROMFSINST) -e CONFIG_USER_UTIL_LINUX_FSTRIM build/util-linux-2.28.2-install/sbin/fstrim /sbin/fstrim
+	$(ROMFSINST) -e CONFIG_USER_UTIL_LINUX_SWITCH_ROOT build/util-linux-2.28.2-install/sbin/switch_root /sbin/switch_root

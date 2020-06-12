@@ -38,12 +38,12 @@ Index: openssh-6.6p1/auth.c
  	options->fingerprint_hash = -1;
  	options->disable_forwarding = -1;
  }
-@@ -492,6 +493,7 @@
+@@ -543,6 +543,7 @@
  	sAuthenticationMethods, sHostKeyAgent, sPermitUserRC,
  	sStreamLocalBindMask, sStreamLocalBindUnlink,
  	sAllowStreamLocalForwarding, sFingerprintHash, sDisableForwarding,
 +	sVirtualUser,
- 	sExposeAuthInfo, sRDomain,
+ 	sExposeAuthInfo, sRDomain, sPubkeyAuthOptions, sSecurityKeyProvider,
  	sDeprecated, sIgnore, sUnsupported
  } ServerOpCodes;
 @@ -638,6 +640,7 @@
@@ -72,10 +72,10 @@ Index: openssh-6.6p1/auth.c
  	case sDeprecated:
  		logit("%s line %d: Deprecated option %s",
  		    filename, linenum, arg);
-@@ -2173,6 +2187,7 @@
- 	    o->hostbased_key_types : KEX_DEFAULT_PK_ALG);
- 	dump_cfg_string(sPubkeyAcceptedKeyTypes, o->pubkey_key_types ?
- 	    o->pubkey_key_types : KEX_DEFAULT_PK_ALG);
+@@ -2846,6 +2847,7 @@
+ 	dump_cfg_string(sHostbasedAcceptedKeyTypes, o->hostbased_key_types);
+ 	dump_cfg_string(sHostKeyAlgorithms, o->hostkeyalgorithms);
+ 	dump_cfg_string(sPubkeyAcceptedKeyTypes, o->pubkey_key_types);
 +	dump_cfg_string(sVirtualUser, o->virtual_user);
  	dump_cfg_string(sRDomain, o->routing_domain);
  

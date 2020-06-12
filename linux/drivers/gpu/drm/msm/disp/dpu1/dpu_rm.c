@@ -1,15 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 
 #define pr_fmt(fmt)	"[drm:%s] " fmt, __func__
@@ -150,11 +141,11 @@ int dpu_rm_destroy(struct dpu_rm *rm)
 
 static int _dpu_rm_hw_blk_create(
 		struct dpu_rm *rm,
-		struct dpu_mdss_cfg *cat,
+		const struct dpu_mdss_cfg *cat,
 		void __iomem *mmio,
 		enum dpu_hw_blk_type type,
 		uint32_t id,
-		void *hw_catalog_info)
+		const void *hw_catalog_info)
 {
 	struct dpu_rm_hw_blk *blk;
 	void *hw;
@@ -224,7 +215,7 @@ int dpu_rm_init(struct dpu_rm *rm,
 
 	/* Interrogate HW catalog and create tracking items for hw blocks */
 	for (i = 0; i < cat->mixer_count; i++) {
-		struct dpu_lm_cfg *lm = &cat->mixer[i];
+		const struct dpu_lm_cfg *lm = &cat->mixer[i];
 
 		if (lm->pingpong == PINGPONG_MAX) {
 			DPU_DEBUG("skip mixer %d without pingpong\n", lm->id);

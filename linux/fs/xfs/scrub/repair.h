@@ -15,7 +15,7 @@ static inline int xrep_notsupported(struct xfs_scrub *sc)
 
 /* Repair helpers */
 
-int xrep_attempt(struct xfs_inode *ip, struct xfs_scrub *sc, bool *fixed);
+int xrep_attempt(struct xfs_inode *ip, struct xfs_scrub *sc);
 void xrep_failure(struct xfs_mount *mp);
 int xrep_roll_ag_trans(struct xfs_scrub *sc);
 bool xrep_ag_has_space(struct xfs_perag *pag, xfs_extlen_t nr_blocks,
@@ -64,8 +64,7 @@ int xrep_agi(struct xfs_scrub *sc);
 
 static inline int xrep_attempt(
 	struct xfs_inode	*ip,
-	struct xfs_scrub	*sc,
-	bool			*fixed)
+	struct xfs_scrub	*sc)
 {
 	return -EOPNOTSUPP;
 }
@@ -76,7 +75,6 @@ static inline xfs_extlen_t
 xrep_calc_ag_resblks(
 	struct xfs_scrub	*sc)
 {
-	ASSERT(!(sc->sm->sm_flags & XFS_SCRUB_IFLAG_REPAIR));
 	return 0;
 }
 

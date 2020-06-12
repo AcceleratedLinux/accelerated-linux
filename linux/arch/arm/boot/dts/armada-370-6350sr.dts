@@ -42,8 +42,8 @@
 				clock-frequency = <200000000>;
 				pinctrl-0 = <&uart1_full_pins &uart1_dtr_pin &uart1_dcd_pin>;
 				pinctrl-names = "default";
-				uart-has-dtr-gpio = <&gpio1 29 GPIO_ACTIVE_LOW>;
-				uart-has-dcd-gpio = <&gpio1 30 GPIO_ACTIVE_LOW>;
+				dtr-gpios = <&gpio1 29 GPIO_ACTIVE_LOW>;
+				dcd-gpios = <&gpio1 30 GPIO_ACTIVE_LOW>;
 				status = "okay";
 			};
 

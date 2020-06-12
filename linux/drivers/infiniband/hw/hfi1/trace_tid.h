@@ -53,7 +53,7 @@ u16 hfi1_trace_get_tid_idx(u32 ent);
 			    "tid_r_comp %u pending_tid_r_segs %u " \
 			    "s_flags 0x%x ps_flags 0x%x iow_flags 0x%lx " \
 			    "s_state 0x%x hw_flow_index %u generation 0x%x " \
-			    "fpsn 0x%x flow_flags 0x%x"
+			    "fpsn 0x%x"
 
 #define TID_REQ_PRN "[%s] qpn 0x%x newreq %u opcode 0x%x psn 0x%x lpsn 0x%x " \
 		    "cur_seg %u comp_seg %u ack_seg %u alloc_seg %u " \
@@ -71,7 +71,7 @@ u16 hfi1_trace_get_tid_idx(u32 ent);
 			    "pending_tid_w_segs %u sync_pt %s " \
 			    "ps_nak_psn 0x%x ps_nak_state 0x%x " \
 			    "prnr_nak_state 0x%x hw_flow_index %u generation "\
-			    "0x%x fpsn 0x%x flow_flags 0x%x resync %s" \
+			    "0x%x fpsn 0x%x resync %s" \
 			    "r_next_psn_kdeth 0x%x"
 
 #define TID_WRITE_SENDER_PRN "[%s] qpn 0x%x newreq %u s_tid_cur %u " \
@@ -138,10 +138,10 @@ TRACE_EVENT(/* put_tid */
 	TP_ARGS(dd, index, type, pa, order),
 	TP_STRUCT__entry(/* entry */
 		DD_DEV_ENTRY(dd)
-		__field(unsigned long, pa);
-		__field(u32, index);
-		__field(u32, type);
-		__field(u16, order);
+		__field(unsigned long, pa)
+		__field(u32, index)
+		__field(u32, type)
+		__field(u16, order)
 	),
 	TP_fast_assign(/* assign */
 		DD_DEV_ASSIGN(dd);
@@ -627,6 +627,12 @@ DEFINE_EVENT(/* event */
 	TP_ARGS(qp, index, flow)
 );
 
+DEFINE_EVENT(/* event */
+	hfi1_tid_flow_template, hfi1_tid_flow_read_kdeth_eflags,
+	TP_PROTO(struct rvt_qp *qp, int index, struct tid_rdma_flow *flow),
+	TP_ARGS(qp, index, flow)
+);
+
 DECLARE_EVENT_CLASS(/* tid_node */
 	hfi1_tid_node_template,
 	TP_PROTO(struct rvt_qp *qp, const char *msg, u32 index, u32 base,
@@ -851,6 +857,12 @@ DEFINE_EVENT(/* event */
 	TP_ARGS(qp, psn)
 );
 
+DEFINE_EVENT(/* event */
+	hfi1_responder_info_template, hfi1_rsp_read_kdeth_eflags,
+	TP_PROTO(struct rvt_qp *qp, u32 psn),
+	TP_ARGS(qp, psn)
+);
+
 DECLARE_EVENT_CLASS(/* sender_info */
 	hfi1_sender_info_template,
 	TP_PROTO(struct rvt_qp *qp),
@@ -955,6 +967,12 @@ DEFINE_EVENT(/* event */
 	TP_ARGS(qp)
 );
 
+DEFINE_EVENT(/* event */
+	hfi1_sender_info_template, hfi1_sender_read_kdeth_eflags,
+	TP_PROTO(struct rvt_qp *qp),
+	TP_ARGS(qp)
+);
+
 DECLARE_EVENT_CLASS(/* tid_read_sender */
 	hfi1_tid_read_sender_template,
 	TP_PROTO(struct rvt_qp *qp, char newreq),
@@ -973,7 +991,6 @@ DECLARE_EVENT_CLASS(/* tid_read_sender */
 		__field(u32, hw_flow_index)
 		__field(u32, generation)
 		__field(u32, fpsn)
-		__field(u32, flow_flags)
 	),
 	TP_fast_assign(/* assign */
 		struct hfi1_qp_priv *priv = qp->priv;
@@ -991,7 +1008,6 @@ DECLARE_EVENT_CLASS(/* tid_read_sender */
 		__entry->hw_flow_index = priv->flow_state.index;
 		__entry->generation = priv->flow_state.generation;
 		__entry->fpsn = priv->flow_state.psn;
-		__entry->flow_flags = priv->flow_state.flags;
 	),
 	TP_printk(/* print */
 		TID_READ_SENDER_PRN,
@@ -1007,13 +1023,18 @@ DECLARE_EVENT_CLASS(/* tid_read_sender */
 		__entry->s_state,
 		__entry->hw_flow_index,
 		__entry->generation,
-		__entry->fpsn,
-		__entry->flow_flags
+		__entry->fpsn
 	)
 );
 
 DEFINE_EVENT(/* event */
 	hfi1_tid_read_sender_template, hfi1_tid_read_sender_make_req,
+	TP_PROTO(struct rvt_qp *qp, char newreq),
+	TP_ARGS(qp, newreq)
+);
+
+DEFINE_EVENT(/* event */
+	hfi1_tid_read_sender_template, hfi1_tid_read_sender_kdeth_eflags,
 	TP_PROTO(struct rvt_qp *qp, char newreq),
 	TP_ARGS(qp, newreq)
 );
@@ -1219,6 +1240,13 @@ DEFINE_EVENT(/* event */
 );
 
 DEFINE_EVENT(/* event */
+	hfi1_tid_rdma_request_template, hfi1_tid_req_read_kdeth_eflags,
+	TP_PROTO(struct rvt_qp *qp, char newreq, u8 opcode, u32 psn, u32 lpsn,
+		 struct tid_rdma_request *req),
+	TP_ARGS(qp, newreq, opcode, psn, lpsn, req)
+);
+
+DEFINE_EVENT(/* event */
 	hfi1_tid_rdma_request_template, hfi1_tid_req_make_rc_ack_write,
 	TP_PROTO(struct rvt_qp *qp, char newreq, u8 opcode, u32 psn, u32 lpsn,
 		 struct tid_rdma_request *req),
@@ -1227,6 +1255,13 @@ DEFINE_EVENT(/* event */
 
 DEFINE_EVENT(/* event */
 	hfi1_tid_rdma_request_template, hfi1_tid_req_make_req_write,
+	TP_PROTO(struct rvt_qp *qp, char newreq, u8 opcode, u32 psn, u32 lpsn,
+		 struct tid_rdma_request *req),
+	TP_ARGS(qp, newreq, opcode, psn, lpsn, req)
+);
+
+DEFINE_EVENT(/* event */
+	hfi1_tid_rdma_request_template, hfi1_tid_req_update_num_rd_atomic,
 	TP_PROTO(struct rvt_qp *qp, char newreq, u8 opcode, u32 psn, u32 lpsn,
 		 struct tid_rdma_request *req),
 	TP_ARGS(qp, newreq, opcode, psn, lpsn, req)
@@ -1338,7 +1373,6 @@ DECLARE_EVENT_CLASS(/* tid_write_sp */
 		__field(u32, hw_flow_index)
 		__field(u32, generation)
 		__field(u32, fpsn)
-		__field(u32, flow_flags)
 		__field(bool, resync)
 		__field(u32, r_next_psn_kdeth)
 	),
@@ -1360,7 +1394,6 @@ DECLARE_EVENT_CLASS(/* tid_write_sp */
 		__entry->hw_flow_index = priv->flow_state.index;
 		__entry->generation = priv->flow_state.generation;
 		__entry->fpsn = priv->flow_state.psn;
-		__entry->flow_flags = priv->flow_state.flags;
 		__entry->resync = priv->resync;
 		__entry->r_next_psn_kdeth = priv->r_next_psn_kdeth;
 	),
@@ -1381,7 +1414,6 @@ DECLARE_EVENT_CLASS(/* tid_write_sp */
 		__entry->hw_flow_index,
 		__entry->generation,
 		__entry->fpsn,
-		__entry->flow_flags,
 		__entry->resync ? "yes" : "no",
 		__entry->r_next_psn_kdeth
 	)

@@ -30,7 +30,7 @@
 
 /* Print out an SMB pkt in all its gory detail ... */
 
-void SMB_Print_Pkt(FILE fd, RFCNB_Pkt *pkt, BOOL command, int Offset, int Len)
+void SMB_Print_Pkt(FILE *fd, RFCNB_Pkt *pkt, BOOL command, int Offset, int Len)
 
 {
 

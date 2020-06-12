@@ -1,0 +1,5 @@
+config USER_LIBGUDEV
+	bool "libgudev"
+	depends on LIB_GLIB && USER_UDEV
+	help
+	  A library providing GObject bindings for libudev.

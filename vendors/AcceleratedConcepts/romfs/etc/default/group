@@ -3,7 +3,7 @@ daemon:x:1:
 bin:x:2:
 sys:x:3:
 adm:x:4:
-tty:x:5:
+tty:x:5:nobody
 disk:x:6:root
 lp:x:7:daemon,lp
 kmem:x:9:

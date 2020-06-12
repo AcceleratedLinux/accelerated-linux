@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * VFIO PCI config space virtualization
  *
  * Copyright (C) 2012 Red Hat, Inc.  All rights reserved.
  *     Author: Alex Williamson <alex.williamson@redhat.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  *
  * Derived from original vfio:
  * Copyright 2010 Cisco Systems, Inc.  All rights reserved.
@@ -412,8 +409,7 @@ static void vfio_bar_restore(struct vfio_pci_device *vdev)
 	if (pdev->is_virtfn)
 		return;
 
-	pr_info("%s: %s reset recovery - restoring bars\n",
-		__func__, dev_name(&pdev->dev));
+	pci_info(pdev, "%s: reset recovery - restoring BARs\n", __func__);
 
 	for (i = PCI_BASE_ADDRESS_0; i <= PCI_BASE_ADDRESS_5; i += 4, rbar++)
 		pci_user_write_config_dword(pdev, i, *rbar);
@@ -454,30 +450,32 @@ static void vfio_bar_fixup(struct vfio_pci_device *vdev)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	int i;
-	__le32 *bar;
+	__le32 *vbar;
 	u64 mask;
 
-	bar = (__le32 *)&vdev->vconfig[PCI_BASE_ADDRESS_0];
+	vbar = (__le32 *)&vdev->vconfig[PCI_BASE_ADDRESS_0];
 
-	for (i = PCI_STD_RESOURCES; i <= PCI_STD_RESOURCE_END; i++, bar++) {
-		if (!pci_resource_start(pdev, i)) {
-			*bar = 0; /* Unmapped by host = unimplemented to user */
+	for (i = 0; i < PCI_STD_NUM_BARS; i++, vbar++) {
+		int bar = i + PCI_STD_RESOURCES;
+
+		if (!pci_resource_start(pdev, bar)) {
+			*vbar = 0; /* Unmapped by host = unimplemented to user */
 			continue;
 		}
 
-		mask = ~(pci_resource_len(pdev, i) - 1);
+		mask = ~(pci_resource_len(pdev, bar) - 1);
 
-		*bar &= cpu_to_le32((u32)mask);
-		*bar |= vfio_generate_bar_flags(pdev, i);
+		*vbar &= cpu_to_le32((u32)mask);
+		*vbar |= vfio_generate_bar_flags(pdev, bar);
 
-		if (*bar & cpu_to_le32(PCI_BASE_ADDRESS_MEM_TYPE_64)) {
-			bar++;
-			*bar &= cpu_to_le32((u32)(mask >> 32));
+		if (*vbar & cpu_to_le32(PCI_BASE_ADDRESS_MEM_TYPE_64)) {
+			vbar++;
+			*vbar &= cpu_to_le32((u32)(mask >> 32));
 			i++;
 		}
 	}
 
-	bar = (__le32 *)&vdev->vconfig[PCI_ROM_ADDRESS];
+	vbar = (__le32 *)&vdev->vconfig[PCI_ROM_ADDRESS];
 
 	/*
 	 * NB. REGION_INFO will have reported zero size if we weren't able
@@ -487,14 +485,14 @@ static void vfio_bar_fixup(struct vfio_pci_device *vdev)
 	if (pci_resource_start(pdev, PCI_ROM_RESOURCE)) {
 		mask = ~(pci_resource_len(pdev, PCI_ROM_RESOURCE) - 1);
 		mask |= PCI_ROM_ADDRESS_ENABLE;
-		*bar &= cpu_to_le32((u32)mask);
+		*vbar &= cpu_to_le32((u32)mask);
 	} else if (pdev->resource[PCI_ROM_RESOURCE].flags &
 					IORESOURCE_ROM_SHADOW) {
 		mask = ~(0x20000 - 1);
 		mask |= PCI_ROM_ADDRESS_ENABLE;
-		*bar &= cpu_to_le32((u32)mask);
+		*vbar &= cpu_to_le32((u32)mask);
 	} else
-		*bar = 0;
+		*vbar = 0;
 
 	vdev->bardirty = false;
 }
@@ -1298,8 +1296,8 @@ static int vfio_cap_len(struct vfio_pci_device *vdev, u8 cap, u8 pos)
 		else
 			return PCI_SATA_SIZEOF_SHORT;
 	default:
-		pr_warn("%s: %s unknown length for pci cap 0x%x@0x%x\n",
-			dev_name(&pdev->dev), __func__, cap, pos);
+		pci_warn(pdev, "%s: unknown length for PCI cap %#x@%#x\n",
+			 __func__, cap, pos);
 	}
 
 	return 0;
@@ -1372,8 +1370,8 @@ static int vfio_ext_cap_len(struct vfio_pci_device *vdev, u16 ecap, u16 epos)
 		}
 		return PCI_TPH_BASE_SIZEOF;
 	default:
-		pr_warn("%s: %s unknown length for pci ecap 0x%x@0x%x\n",
-			dev_name(&pdev->dev), __func__, ecap, epos);
+		pci_warn(pdev, "%s: unknown length for PCI ecap %#x@%#x\n",
+			 __func__, ecap, epos);
 	}
 
 	return 0;
@@ -1474,8 +1472,8 @@ static int vfio_cap_init(struct vfio_pci_device *vdev)
 		}
 
 		if (!len) {
-			pr_info("%s: %s hiding cap 0x%x\n",
-				__func__, dev_name(&pdev->dev), cap);
+			pci_info(pdev, "%s: hiding cap %#x@%#x\n", __func__,
+				 cap, pos);
 			*prev = next;
 			pos = next;
 			continue;
@@ -1486,9 +1484,8 @@ static int vfio_cap_init(struct vfio_pci_device *vdev)
 			if (likely(map[pos + i] == PCI_CAP_ID_INVALID))
 				continue;
 
-			pr_warn("%s: %s pci config conflict @0x%x, was cap 0x%x now cap 0x%x\n",
-				__func__, dev_name(&pdev->dev),
-				pos + i, map[pos + i], cap);
+			pci_warn(pdev, "%s: PCI config conflict @%#x, was cap %#x now cap %#x\n",
+				 __func__, pos + i, map[pos + i], cap);
 		}
 
 		BUILD_BUG_ON(PCI_CAP_ID_MAX >= PCI_CAP_ID_INVALID_VIRT);
@@ -1549,8 +1546,8 @@ static int vfio_ecap_init(struct vfio_pci_device *vdev)
 		}
 
 		if (!len) {
-			pr_info("%s: %s hiding ecap 0x%x@0x%x\n",
-				__func__, dev_name(&pdev->dev), ecap, epos);
+			pci_info(pdev, "%s: hiding ecap %#x@%#x\n",
+				 __func__, ecap, epos);
 
 			/* If not the first in the chain, we can skip over it */
 			if (prev) {
@@ -1572,9 +1569,8 @@ static int vfio_ecap_init(struct vfio_pci_device *vdev)
 			if (likely(map[epos + i] == PCI_CAP_ID_INVALID))
 				continue;
 
-			pr_warn("%s: %s pci config conflict @0x%x, was ecap 0x%x now ecap 0x%x\n",
-				__func__, dev_name(&pdev->dev),
-				epos + i, map[epos + i], ecap);
+			pci_warn(pdev, "%s: PCI config conflict @%#x, was ecap %#x now ecap %#x\n",
+				 __func__, epos + i, map[epos + i], ecap);
 		}
 
 		/*

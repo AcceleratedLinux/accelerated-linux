@@ -1,0 +1,43 @@
+From 9dfe41b2a10ef34a7bdc47fb1a3b22e5c26dab73 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 16 Apr 2020 14:06:58 +0100
+Subject: [PATCH 1/1] zebra: use administrative distance for metric
+
+Insert routes with metric equal to the protocol's standardised
+administrative distance. Previously, metric 20 was used for all
+protocols.
+
+DAL-2651
+---
+ zebra/rt_netlink.c | 2 +-
+ zebra/rt_netlink.h | 1 -
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/zebra/rt_netlink.c b/zebra/rt_netlink.c
+index fc6e373..4166568 100644
+--- a/zebra/rt_netlink.c
++++ b/zebra/rt_netlink.c
+@@ -1728,7 +1728,7 @@ netlink_route_multipath (int cmd, struct prefix *p, struct rib *rib)
+   addattr_l (&req.n, sizeof req, RTA_DST, &p->u.prefix, bytelen);
+ 
+   /* Metric. */
+-  addattr32 (&req.n, sizeof req, RTA_PRIORITY, NL_DEFAULT_ROUTE_METRIC);
++  addattr32 (&req.n, sizeof req, RTA_PRIORITY, rib->distance);
+ 
+   if (rib->mtu || rib->nexthop_mtu)
+     {
+diff --git a/zebra/rt_netlink.h b/zebra/rt_netlink.h
+index 9fc7001..b783fda 100644
+--- a/zebra/rt_netlink.h
++++ b/zebra/rt_netlink.h
+@@ -25,7 +25,6 @@
+ #ifdef HAVE_NETLINK
+ 
+ #define NL_PKT_BUF_SIZE 8192
+-#define NL_DEFAULT_ROUTE_METRIC 20
+ 
+ extern int
+ addattr32 (struct nlmsghdr *n, size_t maxlen, int type, int data);
+-- 
+2.17.1
+

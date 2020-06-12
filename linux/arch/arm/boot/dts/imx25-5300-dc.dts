@@ -148,8 +148,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart5>;
 	fsl,uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio1 30 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio1 29 GPIO_ACTIVE_HIGH>;
+	dtr-gpios = <&gpio1 30 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio1 29 GPIO_ACTIVE_LOW>;
 	fsl,dte-mode;
 	status = "okay";
 };

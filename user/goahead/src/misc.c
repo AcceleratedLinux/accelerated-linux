@@ -58,7 +58,7 @@ enum flag {
 
 static int 	dsnprintf(char_t **s, int size, char_t *fmt, va_list arg,
 				int msize);
-static int	strnlen(char_t *s, unsigned int n);
+static int	local_strnlen(char_t *s, unsigned int n);
 static void	put_char(strbuf_t *buf, char_t c);
 static void	put_string(strbuf_t *buf, char_t *s, int len,
 				int width, int prec, enum flag f);
@@ -425,7 +425,7 @@ static int dsnprintf(char_t **s, int size, char_t *fmt, va_list arg, int msize)
  *	Return the length of a string limited by a given length
  */
 
-static int strnlen(char_t *s, unsigned int n)
+static int local_strnlen(char_t *s, unsigned int n)
 {
 	unsigned int 	len;
 
@@ -475,7 +475,7 @@ static void put_string(strbuf_t *buf, char_t *s, int len, int width,
 	int		i;
 
 	if (len < 0) { 
-		len = strnlen(s, prec >= 0 ? prec : ULONG_MAX); 
+		len = local_strnlen(s, prec >= 0 ? prec : ULONG_MAX); 
 	} else if (prec >= 0 && prec < len) { 
 		len = prec; 
 	}
@@ -514,7 +514,7 @@ static void put_ulong(strbuf_t *buf, unsigned long int value, int base,
 	zeros = (prec > len) ? prec - len : 0;
 	width -= zeros + len;
 	if (prefix != NULL) { 
-		width -= strnlen(prefix, ULONG_MAX); 
+		width -= local_strnlen(prefix, ULONG_MAX); 
 	}
 	if (!(f & flag_minus)) {
 		if (f & flag_zero) {

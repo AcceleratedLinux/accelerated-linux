@@ -1,0 +1,11 @@
+--- powerman/libcommon/xpoll.h.org	2019-11-13 20:00:48.688484147 +1000
++++ powerman/libcommon/xpoll.h	2019-11-13 20:01:06.451816780 +1000
+@@ -1,6 +1,8 @@
+ #ifndef PM_XPOLL_H
+ #define PM_XPOLL_H
+ 
++#include <sys/time.h>
++
+ typedef struct xpollfd *xpollfd_t;
+ 
+ int         xpoll(xpollfd_t pfd, struct timeval *timeout);

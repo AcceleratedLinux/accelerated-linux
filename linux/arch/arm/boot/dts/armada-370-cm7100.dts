@@ -1,0 +1,296 @@
+/*
+ * Device Tree file for Opengear CM7100
+ *
+ * Ken Wilson <ken.wilson@opengear.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+#include "armada-370.dtsi"
+
+/ {
+	model = "Opengear CM7100";
+	compatible = "opengear,cm7100", "marvell,armada370", "marvell,armada-370-xp";
+
+	chosen {
+		bootargs = "console=ttyS0,115200 earlyprintk debug root=/dev/ram0";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x80000000>; /* 2GB  */
+	};
+
+	soc {
+		ranges = <MBUS_ID(0xf0, 0x01) 0 0xd0000000 0x100000
+			  MBUS_ID(0x01, 0xe0) 0 0xfff00000 0x100000
+			  MBUS_ID(0x09, 0x01) 0 0xf1100000 0x10000>;
+
+		internal-regs {
+			serial@12000 {
+				clock-frequency = <200000000>;
+				pinctrl-0 = <&uart0_pins>;
+				pinctrl-names = "default";
+				status = "okay";
+			};
+
+			timer@20300 {
+				clock-frequency = <600000000>;
+				status = "okay";
+			};
+
+			gpio_keys {
+				compatible = "gpio-keys";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				button@0 {
+					label = "Erase Button";
+					linux,code = <84>; /* Delete */
+					gpios = <&gpio0 4 1>;
+				};
+			};
+
+			ethernet@70000 {
+				status = "okay";
+				phy = <&phy0>;
+				phy-mode = "rgmii-id";
+				pinctrl-0 = <&ge0_pins>;
+				pinctrl-names = "default";
+				
+			};
+
+			ethernet@74000 {
+				status = "okay";
+				phy = <&phy1>;
+				phy-mode = "rgmii-id";
+				pinctrl-0 = <&ge1_pins>;
+				pinctrl-names = "default";
+			};
+
+			mvsdio@d4000 {
+				status = "okay";
+				cd-gpios = <&gpio1 0 1>;
+				cd-inverted;
+				no-1-8-v;
+				pinctrl-0 = <&sdio_pins2>;
+				pinctrl-names = "default";
+			};
+
+			usb@50000 {
+				status = "okay";
+			};
+
+			usb@51000 {
+				status = "okay";
+			};
+		};
+	};
+
+	gpio_leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&led_1_pin &led_2_pin &led_3_pin &led_4_pin>;
+
+		green_power_led {
+			label = "cm7100:green:power";
+			gpios = <&gpio1 21 0>;
+			default-state = "on";
+		};
+
+		green_hb_led {
+			label = "cm7100:green:heartbeat";
+			gpios = <&gpio1 22 0>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		green_led3_led {
+			label = "cm7100:green:serial";
+			gpios = <&gpio1 23 0>;
+			linux,default-trigger = "serial";
+		};
+		
+		green_led4_led {
+			label = "cm7100:green:network";
+			gpios = <&gpio1 24 0>;
+			linux,default-trigger = "network";
+		};
+	};
+};
+
+&pinctrl {
+	/* UART Pins */
+	uart0_pins: uart0-pins {
+		marvell,pins = "mpp0", "mpp1", "mpp38", "mpp40";
+		marvell,function = "uart0";
+	};
+
+	/* Ge0 Pins */
+	ge0_pins: ge0-pins {
+		marvell,pins = "mpp5", "mpp6", "mpp7", "mpp8",
+				"mpp9", "mpp10", "mpp11", "mpp12",
+				"mpp13", "mpp14", "mpp15", "mpp16";
+		marvell,function = "ge0";
+	};
+
+	/* MDIO Pins */
+	mdio_pins: mdio-pins { 
+		marvell,pins = "mpp17", "mpp18";
+		marvell,function = "ge";
+	};
+
+	/* Ge1 Pins */
+	ge1_pins: ge1-pins {
+		marvell,pins = "mpp19", "mpp20", "mpp21", "mpp22",
+				"mpp23", "mpp24", "mpp25", "mpp26",
+				"mpp27", "mpp28", "mpp29", "mpp30";
+		marvell,function = "ge1";
+	};
+
+	/* SPI */
+	spi_pins0: spi-pins0 {
+		marvell,pins = "mpp33", "mpp34", "mpp35", "mpp36";
+		marvell,function = "spi0";
+	};
+
+	/* GPIOS */
+	led_1_pin: led-1-pin {
+		marvell,pins = "mpp53";
+		marvell,function = "gpio";
+	};
+
+	led_2_pin: led-2-pin {
+		marvell,pins = "mpp54";
+		marvell,function = "gpo";
+	};
+
+	led_3_pin: led-3-pin {
+		marvell,pins = "mpp55";
+		marvell,function = "gpio";
+	};
+
+	led_4_pin: led-4-pin {
+		marvell,pins = "mpp56";
+		marvell,function = "gpio";
+	};
+
+	usb_enable_pin_a: usb-enable-pin-a {
+		marvell,pins = "mpp59";
+		marvell,function = "gpo";
+	};
+
+	usb_enable_pin_b: usb-enable-pin-b {
+		marvell,pins = "mpp61";
+		marvell,function = "gpo";
+	};
+
+	pex_int_pin: pex-int-pin {
+		marvell,pins = "mpp60";
+		marvell,function = "gpio";
+	};
+
+	erase_button_pin: erase-button-pin {	
+		marvell,pins = "mpp4";
+		marvell,function = "gpio";
+	};
+
+	sd_detect_pin: sd-detect-pin {	
+		marvell,pins = "mpp32";
+		marvell,function = "gpio";
+	};
+
+	console_enable_pin: console-enable-pin {	
+		marvell,pins = "mpp42";
+		marvell,function = "gpo";
+	};
+
+	console_dtr_pin: console-dtr-pin {	
+		marvell,pins = "mpp37";
+		marvell,function = "gpio";
+	};
+
+	console_dcd_pin: console-dcd-pin {	
+		marvell,pins = "mpp41";
+		marvell,function = "gpio";
+	};
+
+	reset_3v3_pin: reset-3v3-pin {	
+		marvell,pins = "mpp43";
+		marvell,function = "gpo";
+	};
+
+	wdt_tickle_pin: wdt-tickle-pin {	
+		marvell,pins = "mpp46";
+		marvell,function = "gpo";
+	};
+};
+			
+&pciec {
+	status = "okay";
+
+	/* Internal mini-PCIe connector */
+	pcie@1,0 {
+		/* Port 0, Lane 0 */
+		status = "okay";
+	};
+
+	/* Connected on the PCB to a USB 3.0 XHCI controller */
+	pcie@2,0 {
+		/* Port 1, Lane 0 */
+		status = "okay";
+	};
+};
+
+&mdio {
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+
+	phy0: ethernet-phy@0 {
+		reg = <3>;
+	};
+
+	phy1: ethernet-phy@1 {
+		reg = <7>;
+	};
+};
+
+&spi0 {
+      status = "okay";
+      pinctrl-0 = <&spi_pins0>;
+      pinctrl-names = "default";
+
+      spi-flash@0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "n25q256a", "mt25ql256a", "jedec,spi-nor";
+		reg = <0>; /* Chip select 0 */
+		spi-max-frequency = <50000000>;
+
+		u-boot@0 {
+			label = "u-boot";
+			reg = <0x00000000 0x00100000>;
+		};
+
+		u-boot-config-block@100000 {
+			label = "u-boot config block";
+			reg = <0x00100000 0x00020000>;
+		};
+
+		config@120000 {
+			label = "config";
+			reg = <0x00120000 0x200000>;
+		};
+
+		image@320000 {
+			label = "image";
+			reg = <0x00320000 0x1400000>;
+		};
+
+		all@0 {
+			label = "all";
+			reg = <0x0 0x2000000>;
+		};
+	};
+};

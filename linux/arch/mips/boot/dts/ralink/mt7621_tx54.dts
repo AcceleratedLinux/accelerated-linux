@@ -12,65 +12,73 @@
 		reg = <0x0 0x10000000>;
 	};
 
+	/* Have to swap serial port 0 and 1, because of historical reasons
+	 * (bootloader is passing ttyS1 as console port) */
+	aliases {
+		serial0 = &uartlite1;
+		serial1 = &uartlite0;
+		serial2 = &uartlite2;
+	};
+
 	leds {
 		compatible = "gpio-leds";
 
 		wwan2_signal_yellow {
-			label = "WWAN2_SIGNAL_Y";
+			label = "WWAN2_SIGNAL_YELLOW";
 			gpios = <&mcp23017 0 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan2_signal_green {
-			label = "WWAN2_SIGNAL_G";
+			label = "WWAN2_SIGNAL_GREEN";
 			gpios = <&mcp23017 1 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan2_service_yellow {
-			label = "WWAN2_SERVICE_Y";
+			label = "WWAN2_SERVICE_YELLOW";
 			gpios = <&mcp23017 2 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan2_service_green {
-			label = "WWAN2_SERVICE_G";
+			label = "WWAN2_SERVICE_GREEN";
 			gpios = <&mcp23017 3 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan1_signal_yellow {
-			label = "WWAN1_SIGNAL_Y";
+			label = "WWAN1_SIGNAL_YELLOW";
 			gpios = <&mcp23017 4 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan1_signal_green {
-			label = "WWAN1_SIGNAL_G";
+			label = "WWAN1_SIGNAL_GREEN";
 			gpios = <&mcp23017 5 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan1_service_yellow {
-			label = "WWAN1_SERVICE_Y";
+			label = "WWAN1_SERVICE_YELLOW";
 			gpios = <&mcp23017 6 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wwan1_service_green {
-			label = "WWAN1_SERVICE_G";
+			label = "WWAN1_SERVICE_GREEN";
 			gpios = <&mcp23017 7 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
 		};
 
 		wifi1_green {
-			label = "WIFI1_G";
+			label = "WIFI1";
 			gpios = <&gpio 28 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
 
 		gnss_green {
-			label = "GNSS_G";
+			label = "GNSS";
 			gpios = <&gpio 30 GPIO_ACTIVE_LOW>;
 			default-state = "off";
 		};
@@ -87,7 +95,6 @@
 	status = "okay";
 	pin-ctrl-names = "default";
 	pinctrl-0 = <&nand_pins>;
-	mediatek,nand-bbt-compat;
 
 	partition@0 {
 		label = "all";
@@ -236,7 +243,7 @@
 
 		mcu_pwr_led: mcu_led {
 			compatible = "digi,mcu-tx54-led";
-			label = "POWER_B";
+			label = "POWER";
 			linux,default-trigger = "timer";
 		};
 
@@ -254,21 +261,10 @@
 	};
 };
 
-/*
- * The mediatek legacy 3.10 kernel probes the UARTs in a different order.
- * To preserve the ports associated with ttyS0 and ttyS1 switch the MMIO
- * addresses and IRQs for UART 0 and UART 1.
- */
-&uartlite0 {
-	status = "okay";
-	reg = <0xd00 0x100>;
-	interrupts = <GIC_SHARED 27 IRQ_TYPE_LEVEL_HIGH>;
-};
-
 &uartlite1 {
 	status = "okay";
-	reg = <0xc00 0x100>;
-	interrupts = <GIC_SHARED 26 IRQ_TYPE_LEVEL_HIGH>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_pins>;
 };
 
 &pinctrl {
@@ -285,4 +281,23 @@
 			function = "gpio";
 		};
 	};
+};
+
+&gpio {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "factory", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
+};
+
+&crypto {
+	status = "okay";
 };

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  *	Adaptec AAC series RAID controller driver
  *	(c) Copyright 2001 Red Hat Inc.	<alan@redhat.com>
@@ -9,25 +10,10 @@
  *               2010-2015 PMC-Sierra, Inc. (aacraid@pmc-sierra.com)
  *		 2016-2017 Microsemi Corp. (aacraid@microsemi.com)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; see the file COPYING.  If not, write to
- * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
- *
  * Module Name:
  *  aacraid.h
  *
  * Abstract: Contains all routines for control of the aacraid driver
- *
  */
 
 #ifndef _AACRAID_H_
@@ -99,7 +85,7 @@ enum {
 #define	PMC_GLOBAL_INT_BIT0		0x00000001
 
 #ifndef AAC_DRIVER_BUILD
-# define AAC_DRIVER_BUILD 50877
+# define AAC_DRIVER_BUILD 50983
 # define AAC_DRIVER_BRANCH "-custom"
 #endif
 #define MAXIMUM_NUM_CONTAINERS	32
@@ -122,6 +108,8 @@ enum {
 #define AAC_BUS_TARGET_LOOP		(AAC_MAX_BUSES * AAC_MAX_TARGETS)
 #define AAC_MAX_NATIVE_SIZE		2048
 #define FW_ERROR_BUFFER_SIZE		512
+#define AAC_SA_TIMEOUT			180
+#define AAC_ARC_TIMEOUT			60
 
 #define get_bus_number(x)	(x/AAC_MAX_TARGETS)
 #define get_target_number(x)	(x%AAC_MAX_TARGETS)
@@ -1342,7 +1330,7 @@ struct fib {
 #define AAC_DEVTYPE_ARC_RAW		2
 #define AAC_DEVTYPE_NATIVE_RAW		3
 
-#define AAC_SAFW_RESCAN_DELAY		(10 * HZ)
+#define AAC_RESCAN_DELAY		(10 * HZ)
 
 struct aac_hba_map_info {
 	__le32	rmw_nexus;		/* nexus for native HBA devices */
@@ -1615,6 +1603,7 @@ struct aac_dev
 	struct fsa_dev_info	*fsa_dev;
 	struct task_struct	*thread;
 	struct delayed_work	safw_rescan_work;
+	struct delayed_work	src_reinit_aif_worker;
 	int			cardtype;
 	/*
 	 *This lock will protect the two 32-bit
@@ -1687,6 +1676,7 @@ struct aac_dev
 	u8			adapter_shutdown;
 	u32			handle_pci_error;
 	bool			init_reset;
+	u8			soft_reset_support;
 };
 
 #define aac_adapter_interrupt(dev) \
@@ -2658,7 +2648,12 @@ int aac_scan_host(struct aac_dev *dev);
 
 static inline void aac_schedule_safw_scan_worker(struct aac_dev *dev)
 {
-	schedule_delayed_work(&dev->safw_rescan_work, AAC_SAFW_RESCAN_DELAY);
+	schedule_delayed_work(&dev->safw_rescan_work, AAC_RESCAN_DELAY);
+}
+
+static inline void aac_schedule_src_reinit_aif_worker(struct aac_dev *dev)
+{
+	schedule_delayed_work(&dev->src_reinit_aif_worker, AAC_RESCAN_DELAY);
 }
 
 static inline void aac_safw_rescan_worker(struct work_struct *work)
@@ -2672,10 +2667,10 @@ static inline void aac_safw_rescan_worker(struct work_struct *work)
 	aac_scan_host(dev);
 }
 
-static inline void aac_cancel_safw_rescan_worker(struct aac_dev *dev)
+static inline void aac_cancel_rescan_worker(struct aac_dev *dev)
 {
-	if (dev->sa_firmware)
-		cancel_delayed_work_sync(&dev->safw_rescan_work);
+	cancel_delayed_work_sync(&dev->safw_rescan_work);
+	cancel_delayed_work_sync(&dev->src_reinit_aif_worker);
 }
 
 /* SCp.phase values */
@@ -2685,6 +2680,7 @@ static inline void aac_cancel_safw_rescan_worker(struct aac_dev *dev)
 #define AAC_OWNER_FIRMWARE	0x106
 
 void aac_safw_rescan_worker(struct work_struct *work);
+void aac_src_reinit_aif_worker(struct work_struct *work);
 int aac_acquire_irq(struct aac_dev *dev);
 void aac_free_irq(struct aac_dev *dev);
 int aac_setup_safw_adapter(struct aac_dev *dev);
@@ -2742,6 +2738,7 @@ int aac_probe_container(struct aac_dev *dev, int cid);
 int _aac_rx_init(struct aac_dev *dev);
 int aac_rx_select_comm(struct aac_dev *dev, int comm);
 int aac_rx_deliver_producer(struct fib * fib);
+void aac_reinit_aif(struct aac_dev *aac, unsigned int index);
 
 static inline int aac_is_src(struct aac_dev *dev)
 {

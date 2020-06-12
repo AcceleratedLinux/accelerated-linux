@@ -1,0 +1,22 @@
+--- libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c.orig	2020-02-13 08:45:07.920876444 +1000
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c	2020-02-13 08:45:09.960853319 +1000
+@@ -57,6 +57,8 @@
+     "$GCGI: GCGI " VERSION " Copyright (C) 2001-2002 Julian Catchen $\n"
+     "$Authors:  Julian Catchen, topeka@catchen.org $";
+ 
++FILE *gcgiOut;
++
+ gcgiReturnType 
+ initCgi( ) 
+ {
+--- libgcgi-debian-0.9.5.dfsg-7/src/gcgi.h.orig	2020-02-13 08:42:46.932216419 +1000
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.h	2020-02-13 08:42:52.652263452 +1000
+@@ -185,7 +185,7 @@
+ gcgiReturnType  printQuery(FILE *stream);
+ 
+ /*------ Global Variables ------*/
+-FILE *gcgiOut;
++extern FILE *gcgiOut;
+ 
+ #ifdef __cplusplus
+ };

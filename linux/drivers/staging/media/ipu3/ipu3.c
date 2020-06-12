@@ -236,16 +236,45 @@ int imgu_queue_buffers(struct imgu_device *imgu, bool initial, unsigned int pipe
 	dev_dbg(&imgu->pci_dev->dev, "Queue buffers to pipe %d", pipe);
 	mutex_lock(&imgu->lock);
 
+	if (!imgu_css_pipe_queue_empty(&imgu->css, pipe)) {
+		mutex_unlock(&imgu->lock);
+		return 0;
+	}
+
 	/* Buffer set is queued to FW only when input buffer is ready */
 	for (node = IMGU_NODE_NUM - 1;
 	     imgu_queue_getbuf(imgu, IMGU_NODE_IN, pipe);
 	     node = node ? node - 1 : IMGU_NODE_NUM - 1) {
-
 		if (node == IMGU_NODE_VF &&
 		    !imgu_pipe->nodes[IMGU_NODE_VF].enabled) {
 			dev_warn(&imgu->pci_dev->dev,
 				 "Vf not enabled, ignore queue");
 			continue;
+		} else if (node == IMGU_NODE_PARAMS &&
+			   imgu_pipe->nodes[node].enabled) {
+			struct vb2_buffer *vb;
+			struct imgu_vb2_buffer *ivb;
+
+			/* No parameters for this frame */
+			if (list_empty(&imgu_pipe->nodes[node].buffers))
+				continue;
+
+			ivb = list_first_entry(&imgu_pipe->nodes[node].buffers,
+					       struct imgu_vb2_buffer, list);
+			vb = &ivb->vbb.vb2_buf;
+			r = imgu_css_set_parameters(&imgu->css, pipe,
+						    vb2_plane_vaddr(vb, 0));
+			if (r) {
+				vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
+				dev_warn(&imgu->pci_dev->dev,
+					 "set parameters failed.");
+				continue;
+			}
+
+			vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
+			dev_dbg(&imgu->pci_dev->dev,
+				"queue user parameters %d to css.", vb->index);
+			list_del(&ivb->list);
 		} else if (imgu_pipe->queue_enabled[node]) {
 			struct imgu_css_buffer *buf =
 				imgu_queue_getbuf(imgu, node, pipe);
@@ -749,8 +778,7 @@ out:
 
 static int __maybe_unused imgu_resume(struct device *dev)
 {
-	struct pci_dev *pci_dev = to_pci_dev(dev);
-	struct imgu_device *imgu = pci_get_drvdata(pci_dev);
+	struct imgu_device *imgu = dev_get_drvdata(dev);
 	int r = 0;
 	unsigned int pipe;
 

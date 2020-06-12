@@ -31,6 +31,8 @@ cflags-$(CONFIG_SOC_MT7620)	+= -I$(srctree)/arch/mips/include/asm/mach-ralink/mt
 # Ralink MT7621
 #
 load-$(CONFIG_SOC_MT7621)	= 0xffffffff80001000
+load-$(CONFIG_DTB_MT7621_LR54)	= 0xffffffff81001000
+load-$(CONFIG_DTB_MT7621_LR54_MIGRATION)	= 0xffffffff81001000
 load-$(CONFIG_DTB_MT7621_TX54)	= 0xffffffff81001000
 load-$(CONFIG_DTB_MT7621_TX54_MIGRATION)	= 0xffffffff81001000
 cflags-$(CONFIG_SOC_MT7621)	+= -I$(srctree)/arch/mips/include/asm/mach-ralink/mt7621

@@ -1,0 +1,52 @@
+--- busybox-1.31.0/libbb/time.c.org	2020-02-28 11:40:22.875945141 +1000
++++ busybox-1.31.0/libbb/time.c	2020-02-28 11:40:49.810999722 +1000
+@@ -253,11 +253,9 @@
+ #define CLOCK_MONOTONIC 1
+ #endif
+ 
+-/* libc has incredibly messy way of doing this,
+- * typically requiring -lrt. We just skip all this mess */
+ static void get_mono(struct timespec *ts)
+ {
+-	if (syscall(__NR_clock_gettime, CLOCK_MONOTONIC, ts))
++	if (clock_gettime(CLOCK_MONOTONIC, ts))
+ 		bb_error_msg_and_die("clock_gettime(MONOTONIC) failed");
+ }
+ unsigned long long FAST_FUNC monotonic_ns(void)
+--- busybox-1.31.0/coreutils/date.c.org	2020-03-02 13:33:12.862692628 +1000
++++ busybox-1.31.0/coreutils/date.c	2020-03-02 13:37:03.488226639 +1000
+@@ -36,7 +36,7 @@
+ //config:# defaults to "no": stat's nanosecond field is a bit non-portable
+ //config:config FEATURE_DATE_NANO
+ //config:	bool "Support %[num]N nanosecond format specifier"
+-//config:	default n  # syscall(__NR_clock_gettime)
++//config:	default n
+ //config:	depends on DATE
+ //config:	select PLATFORM_LINUX
+ //config:	help
+@@ -272,9 +272,7 @@
+ #endif
+ 	} else {
+ #if ENABLE_FEATURE_DATE_NANO
+-		/* libc has incredibly messy way of doing this,
+-		 * typically requiring -lrt. We just skip all this mess */
+-		syscall(__NR_clock_gettime, CLOCK_REALTIME, &ts);
++		clock_gettime(CLOCK_REALTIME, &ts);
+ #else
+ 		time(&ts.tv_sec);
+ #endif
+--- busybox-1.31.0/runit/runsv.c.org	2020-03-02 13:37:53.321692244 +1000
++++ busybox-1.31.0/runit/runsv.c	2020-03-02 13:41:27.891361492 +1000
+@@ -51,11 +51,9 @@
+ #if ENABLE_MONOTONIC_SYSCALL
+ #include <sys/syscall.h>
+ 
+-/* libc has incredibly messy way of doing this,
+- * typically requiring -lrt. We just skip all this mess */
+ static void gettimeofday_ns(struct timespec *ts)
+ {
+-	syscall(__NR_clock_gettime, CLOCK_REALTIME, ts);
++	clock_gettime(CLOCK_REALTIME, ts);
+ }
+ #else
+ static void gettimeofday_ns(struct timespec *ts)

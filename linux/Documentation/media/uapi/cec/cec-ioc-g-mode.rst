@@ -177,7 +177,7 @@ Available follower modes are:
       - ``CEC_MODE_MONITOR``
       - 0xe0
       - Put the file descriptor into monitor mode. Can only be used in
-	combination with :ref:`CEC_MODE_NO_INITIATOR <CEC-MODE-NO-INITIATOR>`,i
+	combination with :ref:`CEC_MODE_NO_INITIATOR <CEC-MODE-NO-INITIATOR>`,
 	otherwise the ``EINVAL`` error code will be returned.
 	In monitor mode all messages this CEC
 	device transmits and all messages it receives (both broadcast
@@ -294,7 +294,8 @@ EINVAL
     The requested mode is invalid.
 
 EPERM
-    Monitor mode is requested without having root permissions
+    Monitor mode is requested, but the process does have the ``CAP_NET_ADMIN``
+    capability.
 
 EBUSY
     Someone else is already an exclusive follower or initiator.

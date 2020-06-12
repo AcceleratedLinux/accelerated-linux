@@ -1,9 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2004, 2007-2010, 2011-2012 Synopsys, Inc. (www.synopsys.com)
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  *
  * vineetg: March 2009
  *  -Implemented task_pt_regs( )
@@ -17,15 +14,7 @@
 #ifndef __ASSEMBLY__
 
 #include <asm/ptrace.h>
-
-#ifdef CONFIG_ARC_FPU_SAVE_RESTORE
-/* These DPFP regs need to be saved/restored across ctx-sw */
-struct arc_fpu {
-	struct {
-		unsigned int l, h;
-	} aux_dpfp[2];
-};
-#endif
+#include <asm/fpu.h>
 
 #ifdef CONFIG_ARC_PLAT_EZNPS
 struct eznps_dp {

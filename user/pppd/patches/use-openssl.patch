@@ -1,0 +1,88 @@
+From 3c7b86229f7bd2600d74db14b1fe5b3896be3875 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jaroslav=20=C5=A0karvada?= <jskarvad@redhat.com>
+Date: Fri, 6 Apr 2018 14:27:18 +0200
+Subject: [PATCH] pppd: Use openssl for the DES instead of the libcrypt / glibc
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It seems the latest glibc (in Fedora glibc-2.27.9000-12.fc29) dropped
+libcrypt.  The libxcrypt standalone package can be used instead, but
+it dropped the old setkey/encrypt API which ppp uses for DES.  There
+is support for using openssl in pppcrypt.c, but it contains typos
+preventing it from compiling and seems to be written for an ancient
+openssl version.
+
+This updates the code to use current openssl.
+
+[paulus@ozlabs.org - wrote the commit description, fixed comment in
+ Makefile.linux.]
+
+Signed-off-by: Jaroslav Škarvada <jskarvad@redhat.com>
+Signed-off-by: Paul Mackerras <paulus@ozlabs.org>
+Signed-off-by: Fabrice Fontaine <fontaine.fabrice@gmail.com>
+[Retrieved from:
+https://github.com/paulusmack/ppp/commit/3c7b86229f7bd2600d74db14b1fe5b3896be3875]
+---
+ pppd/Makefile.linux |  7 ++++---
+ pppd/pppcrypt.c     | 18 +++++++++---------
+ 2 files changed, 13 insertions(+), 12 deletions(-)
+
+--- ppp-ppp-2.4.7/pppd/Makefile.linux.orig	2019-08-20 22:59:05.801956744 +1000
++++ ppp-ppp-2.4.7/pppd/Makefile.linux	2019-08-23 22:54:55.195771933 +1000
+@@ -30,10 +30,12 @@
+ include .depend
+ endif
+ 
+-# Uncomment the next 2 lines to include support for Microsoft's
++# Uncomment the next line to include support for Microsoft's
+ # MS-CHAP authentication protocol.  Also, edit plugins/radius/Makefile.linux.
+ CHAPMS=y
++ifneq ($(CONFIG_USER_PPPD_USE_OPENSSL),y)
+ USE_CRYPT=y
++endif
+ 
+ # Don't use MSLANMAN unless you really know what you're doing.
+ #MSLANMAN=y
+@@ -152,7 +154,12 @@
+ 
+ ifdef NEEDDES
+ ifndef USE_CRYPT
++ifeq ($(CONFIG_USER_PPPD_USE_OPENSSL),y)
++CFLAGS   += -DUSE_OPENSSL=1 -I$(STAGEDIR)/include/openssl
++LIBS     += -lcrypto
++else
+ LIBS     += -ldes $(LIBS)
++endif
+ else
+ CFLAGS   += -DUSE_CRYPT=1
+ endif
+--- ppp-ppp-2.4.7/pppd/pppcrypt.c.orig	2019-08-23 23:58:49.767543620 +1000
++++ ppp-ppp-2.4.7/pppd/pppcrypt.c	2019-08-23 23:59:25.826163253 +1000
+@@ -34,6 +34,17 @@
+ #include "pppd.h"
+ #include "pppcrypt.h"
+ 
++#ifdef USE_OPENSSL
++#undef des_set_key
++#undef des_set_odd_parity
++#undef des_ecb_encrypt
++#define des_cblock			DES_cblock
++#define des_key_schedule		DES_key_schedule
++#define des_set_key(k,s)		DES_set_key((k),&(s))
++#define des_set_odd_parity(k)		DES_set_odd_parity(k)
++#define des_ecb_encrypt(i,o,s,f)	DES_ecb_encrypt((i),(o),&(s),(f))
++#endif
++
+ static u_char
+ Get7Bits(input, startBit)
+ u_char *input;
+@@ -171,7 +180,7 @@
+ }
+ 
+ bool
+-DesEncrypt(clear, key, cipher)
++DesEncrypt(clear, cipher)
+ u_char *clear;	/* IN  8 octets */
+ u_char *cipher;	/* OUT 8 octets */
+ {

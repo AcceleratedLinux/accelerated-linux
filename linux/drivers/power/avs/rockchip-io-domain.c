@@ -1,17 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Rockchip IO Voltage Domain driver
  *
  * Copyright 2014 MundoReader S.L.
  * Copyright 2014 Google, Inc.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/kernel.h>
@@ -160,18 +152,18 @@ static void px30_iodomain_init(struct rockchip_iodomain *iod)
 	int ret;
 	u32 val;
 
-	/* if no VCCIO0 supply we should leave things alone */
+	/* if no VCCIO6 supply we should leave things alone */
 	if (!iod->supplies[PX30_IO_VSEL_VCCIO6_SUPPLY_NUM].reg)
 		return;
 
 	/*
-	 * set vccio0 iodomain to also use this framework
+	 * set vccio6 iodomain to also use this framework
 	 * instead of a special gpio.
 	 */
 	val = PX30_IO_VSEL_VCCIO6_SRC | (PX30_IO_VSEL_VCCIO6_SRC << 16);
 	ret = regmap_write(iod->grf, PX30_IO_VSEL, val);
 	if (ret < 0)
-		dev_warn(iod->dev, "couldn't update vccio0 ctrl\n");
+		dev_warn(iod->dev, "couldn't update vccio6 ctrl\n");
 }
 
 static void rk3288_iodomain_init(struct rockchip_iodomain *iod)

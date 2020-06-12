@@ -4,8 +4,8 @@ CONFOPTS :=	-C --prefix=					\
 		--with-named-thread-libs=-lpthread \
 		--without-readline --disable-shared			\
 		--with-mysql=$(ROOTDIR)/lib/libmysqlclient		\
-		--with-pic
-MY_EXTRA_CFLAGS := -DHAVE_GETHOSTBYNAME_R_GLIBC2_STYLE=1
+		--with-pic						\
+		mysql_cv_gethostname_style=glibc2
 
 
 all: configured

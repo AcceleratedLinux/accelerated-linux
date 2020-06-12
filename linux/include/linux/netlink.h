@@ -115,6 +115,19 @@ static inline void nl_set_extack_cookie_u64(struct netlink_ext_ack *extack,
 {
 	u64 __cookie = cookie;
 
+	if (!extack)
+		return;
+	memcpy(extack->cookie, &__cookie, sizeof(__cookie));
+	extack->cookie_len = sizeof(__cookie);
+}
+
+static inline void nl_set_extack_cookie_u32(struct netlink_ext_ack *extack,
+					    u32 cookie)
+{
+	u32 __cookie = cookie;
+
+	if (!extack)
+		return;
 	memcpy(extack->cookie, &__cookie, sizeof(__cookie));
 	extack->cookie_len = sizeof(__cookie);
 }
@@ -192,7 +205,14 @@ struct netlink_callback {
 	bool			strict_check;
 	u16			answer_flags;
 	unsigned int		prev_seq, seq;
-	long			args[6];
+	union {
+		u8		ctx[48];
+
+		/* args is deprecated. Cast a struct over ctx instead
+		 * for proper type safety.
+		 */
+		long		args[6];
+	};
 };
 
 struct netlink_notify {

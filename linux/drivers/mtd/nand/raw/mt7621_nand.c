@@ -42,6 +42,9 @@ struct mt7621_nand_host {
 	u8	*data_buf;
 	bool	cmdstatus;
 	bool	legacybbt;
+	u32	legacybbt_block_num;
+
+	u32	last_failed;
 };
 
 static struct mt7621_nand_host *host;
@@ -90,8 +93,6 @@ static struct nand_ecclayout nand_oob_128 = {
 		120, 121, 122, 123, 124, 125, 126, 127},
 	.oobfree = {{1, 7}, {9, 7}, {17, 7}, {25, 7}, {33, 7}, {41, 7}, {49, 7}, {57, 6}}
 };
-
-#define IOMEM(addr)	((volatile void __iomem *) (addr))
 
 /*
  * Local read/write/set/clear register operations.
@@ -247,22 +248,24 @@ static void ecc_encode_end(void)
 	eccwrite16(ECC_ENCCON_REG16, ENC_DE);
 }
 
-static bool mt7621_nand_check_bch_error(struct mtd_info *mtd, u8 *buf,
+static int mt7621_nand_check_bch_error(struct mtd_info *mtd, u8 *buf,
 					u32 sector, u32 page)
 {
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct mt7621_nand_host *host = nand_get_controller_data(chip);
 	u16 SectorDoneMask = 1 << sector;
 	u32 ErrorNumDebug, i, ErrNum;
 	u32 timeout = 0xFFFF;
 	u32 ErrBitLoc[6];
 	u32 ErrByteLoc, BitOffset;
 	u32 ErrBitLoc1th, ErrBitLoc2nd;
-	bool ret = true;
+	int bits_corrected = 0;
 
 	/* Wait for Decode Done */
 	while (0 == (SectorDoneMask & eccread16(ECC_DECDONE_REG16))) {
 		timeout--;
 		if (0 == timeout)
-			return false;
+			return -EIO;
 	}
 
 	/*
@@ -276,40 +279,54 @@ static bool mt7621_nand_check_bch_error(struct mtd_info *mtd, u8 *buf,
 
 	if (ErrNum) {
 		if (0xF == ErrNum) {
-			mtd->ecc_stats.failed++;
-			ret = false;
-			pr_err("mt7621-nand: uncorrectable ECC errors at "
-				"page=%d\n", page);
+			/*
+			 * Increment the last read's failed counter only. The
+			 * caller supposed to check if it is a blank page with
+			 * bit-flips, or a real ECC error. If the latter, it
+			 * should increment the failed counter with this last
+			 * read's failed counter
+			 */
+			host->last_failed++;
+			bits_corrected = -EBADMSG;
 		} else {
+			bits_corrected = ErrNum;
+
 			for (i = 0; i < ((ErrNum + 1) >> 1); ++i) {
 				ErrBitLoc[i] = eccread32(ECC_DECEL0_REG32 + i);
 				ErrBitLoc1th = ErrBitLoc[i] & 0x1FFF;
+				/*
+				 * Check if bitflip is in data block (< 0x1000)
+				 * or OOB. Fix it only in data block.
+				 */
 				if (ErrBitLoc1th < 0x1000) {
 					ErrByteLoc = ErrBitLoc1th / 8;
 					BitOffset = ErrBitLoc1th % 8;
 					buf[ErrByteLoc] = buf[ErrByteLoc] ^ (1 << BitOffset);
-					mtd->ecc_stats.corrected++;
-				} else {
-					mtd->ecc_stats.failed++;
 				}
+
+				mtd->ecc_stats.corrected++;
+
 				ErrBitLoc2nd = (ErrBitLoc[i] >> 16) & 0x1FFF;
 				if (0 != ErrBitLoc2nd) {
+					/*
+					 * Check if bitflip is in data block
+					 * (< 0x1000) or OOB. Fix it only in
+					 * data block.
+					 */
 					if (ErrBitLoc2nd < 0x1000) {
 						ErrByteLoc = ErrBitLoc2nd / 8;
 						BitOffset = ErrBitLoc2nd % 8;
 						buf[ErrByteLoc] = buf[ErrByteLoc] ^ (1 << BitOffset);
-						mtd->ecc_stats.corrected++;
-					} else {
-						mtd->ecc_stats.failed++;
-						pr_err("mt7621-nand: uncorrectable High ErrLoc=%d\n", ErrBitLoc[i]);
 					}
+
+					mtd->ecc_stats.corrected++;
 				}
 			}
 		}
 		if (0 == (eccread16(ECC_DECFER_REG16) & (1 << sector)))
-			ret = false;
+			bits_corrected = -EIO;
 	}
-	return ret;
+	return bits_corrected;
 }
 
 static bool mt7621_nand_RFIFOValidSize(u16 size)
@@ -740,31 +757,257 @@ static void mt7621_nand_stop_write(void)
 	regwrite16(NFI_INTR_EN_REG16, 0);
 }
 
-static bool mt7621_nand_exec_read_page(struct mtd_info *mtd, u32 row,
+/*
+ * This is a copy of the nand_check_erased_buf() function from nand_base.c, to
+ * keep the nand_base.c clean
+ */
+static int mt7621_nand_check_erased_buf(void *buf, int len,
+					int bitflips_threshold)
+{
+	const unsigned char *bitmap = buf;
+	int bitflips = 0;
+	int weight;
+
+	for (; len && ((uintptr_t)bitmap) % sizeof(long);
+	     len--, bitmap++) {
+		weight = hweight8(*bitmap);
+		bitflips += BITS_PER_BYTE - weight;
+		if (unlikely(bitflips > bitflips_threshold))
+			return -EBADMSG;
+	}
+
+	for (; len >= sizeof(long);
+	     len -= sizeof(long), bitmap += sizeof(long)) {
+		unsigned long d = *((unsigned long *)bitmap);
+
+		if (d == ~0UL)
+			continue;
+		weight = hweight_long(d);
+		bitflips += BITS_PER_LONG - weight;
+		if (unlikely(bitflips > bitflips_threshold))
+			return -EBADMSG;
+	}
+
+	for (; len > 0; len--, bitmap++) {
+		weight = hweight8(*bitmap);
+		bitflips += BITS_PER_BYTE - weight;
+		if (unlikely(bitflips > bitflips_threshold))
+			return -EBADMSG;
+	}
+
+	return bitflips;
+}
+
+/*
+ * This is the modified version of the nand_check_erased_ecc_chunk() in
+ * nand_base.c. This driver cannot use the generic function, as the ECC layout
+ * is slightly different (the 2k(data)+64(OOB) page is splitted up to 4
+ * (512-byte data + 16-byte OOB) pages. Each of these sectors have 4-bit ECC, so
+ * we check them separately, and allow 4 bitflips / sector.
+ * We'll fix up the page to all-0xFF only if all sectors in the page appears to
+ * be blank
+ */
+static int mt7621_nand_check_erased_ecc_chunk(void *data, int datalen,
+					      void *oob, int ooblen,
+					      int bitflips_threshold)
+{
+	int data_bitflips = 0, oob_bitflips = 0;
+
+	data_bitflips = mt7621_nand_check_erased_buf(data, datalen,
+						     bitflips_threshold);
+	if (data_bitflips < 0)
+		return data_bitflips;
+
+	bitflips_threshold -= data_bitflips;
+
+	oob_bitflips = mt7621_nand_check_erased_buf(oob, ooblen,
+						    bitflips_threshold);
+	if (oob_bitflips < 0)
+		return oob_bitflips;
+
+	bitflips_threshold -= oob_bitflips;
+
+	return data_bitflips + oob_bitflips;
+}
+
+static int mt7621_nand_read_oob_raw(struct mtd_info *mtd, u8 *buf,
+				    int page, int len)
+{
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	u32 column = 0;
+	u32 sector = 0;
+	int res = 0;
+	int read_len = 0;
+	int sec_num = 1 << (chip->page_shift - 9);
+	int spare_per_sector = mtd->oobsize / sec_num;
+
+	if (len > NAND_MAX_OOBSIZE || len % OOB_AVAI_PER_SECTOR || !buf) {
+		pr_warn("mt7621-nand: invalid parameter, len: %d, buf: %p\n", len, buf);
+		return -EINVAL;
+	}
+
+	while (len > 0) {
+		read_len = min(len, spare_per_sector);
+		column = NAND_SECTOR_SIZE + sector * (NAND_SECTOR_SIZE + spare_per_sector); /* TODO: Fix this hard-code 16 */
+		if (!mt7621_nand_ready_for_read(chip, page, column, false, NULL)) {
+			pr_warn("mt7621-nand: mt7621_nand_ready_for_read() return failed\n");
+			res = -EIO;
+			goto error;
+		}
+		if (!mt7621_nand_mcu_read_data(buf + spare_per_sector * sector, read_len)) {
+			pr_warn("mt7621-nand: mt7621_nand_mcu_read_data() return failed\n");
+			res = -EIO;
+			goto error;
+		}
+		mt7621_nand_check_RW_count(read_len);
+		mt7621_nand_stop_read();
+		sector++;
+		len -= read_len;
+	}
+
+error:
+	regclr16(NFI_CON_REG16, CON_NFI_BRD);
+	return res;
+}
+
+static int mt7621_nand_write_oob_raw(struct mtd_info *mtd, const u8 *buf,
+				     int page, int len)
+{
+	struct nand_chip *chip = mtd_to_nand(mtd);
+	u32 column = 0;
+	u32 sector = 0;
+	int write_len = 0;
+	int status;
+	int sec_num = 1 << (chip->page_shift - 9);
+	int spare_per_sector = mtd->oobsize / sec_num;
+
+	if (len > NAND_MAX_OOBSIZE || len % OOB_AVAI_PER_SECTOR || !buf) {
+		pr_warn("mt7621-nand: invalid parameter, len: %d, buf: %p\n", len, buf);
+		return -EINVAL;
+	}
+
+	while (len > 0) {
+		write_len = min(len, spare_per_sector);
+		column = sector * (NAND_SECTOR_SIZE + spare_per_sector) + NAND_SECTOR_SIZE;
+		if (!mt7621_nand_ready_for_write(chip, page, column, false, NULL))
+			return -EIO;
+		if (!mt7621_nand_mcu_write_data(mtd, buf + sector * spare_per_sector, write_len))
+			return -EIO;
+		mt7621_nand_check_RW_count(write_len);
+		regclr16(NFI_CON_REG16, CON_NFI_BWR);
+		mt7621_nand_set_command(NAND_CMD_PAGEPROG);
+		while (regread32(NFI_STA_REG32) & STA_NAND_BUSY)
+			;
+		status = chip->legacy.waitfunc(chip);
+		if (status & NAND_STATUS_FAIL) {
+			pr_warn("mt7621-nand: failed status: %d\n", status);
+			return -EIO;
+		}
+		len -= write_len;
+		sector++;
+	}
+
+	return 0;
+}
+
+static int mt7621_nand_exec_read_page(struct mtd_info *mtd, u32 row,
 				       u32 PageSize, u8 *buf, u8 *FDMbuf)
 {
 	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct mt7621_nand_host *host = nand_get_controller_data(chip);
 	u32 sec = PageSize >> 9;
-	bool ret = true;
+	int bits_corrected = 0;
+
+	host->last_failed = 0;
 
 	if (mt7621_nand_ready_for_read(chip, row, 0, true, buf)) {
 		int j;
 		for (j = 0; j < sec; j++) {
-			if (!mt7621_nand_read_page_data(mtd, buf + j * 512, 512))
-				ret = false;
-			if (!mt7621_nand_check_dececc_done(j + 1))
-				ret = false;
-			if (!mt7621_nand_check_bch_error(mtd, buf + j * 512, j, row))
-				ret = false;
+			int ret;
+
+			if (!mt7621_nand_read_page_data(mtd, buf + j * 512, 512)) {
+				bits_corrected = -EIO;
+				break;
+			}
+			if (!mt7621_nand_check_dececc_done(j + 1)) {
+				bits_corrected = -EIO;
+				break;
+			}
+			ret = mt7621_nand_check_bch_error(mtd, buf + j * 512,
+							  j, row);
+			if (ret < 0) {
+				bits_corrected = ret;
+				if (ret != -EBADMSG)
+					break;
+			} else if (bits_corrected >= 0) {
+				bits_corrected = max_t(int, bits_corrected,
+						       ret);
+			}
 		}
 		if (!mt7621_nand_status_ready(STA_NAND_BUSY))
-			ret = false;
+			bits_corrected = -EIO;
 
 		mt7621_nand_read_fdm_data(FDMbuf, sec);
 		mt7621_nand_stop_read();
+	} else {
+		bits_corrected = -EIO;
 	}
 
-	return ret;
+	if (bits_corrected == -EBADMSG) {
+		u32 local_oob_aligned[NAND_MAX_OOBSIZE / sizeof(u32)];
+		u8 *local_oob = (u8 *)local_oob_aligned;
+		int ret;
+
+		/*
+		 * If there was an uncorrectable ECC error, check if it is a
+		 * blank page with bit-flips. For this, we check the number of
+		 * 0s in each sector (including the OOB), which should not
+		 * exceed the ECC strength. Until the number of 0s is lower or
+		 * equal, we consider it as a blank page
+		 */
+
+		ret = mt7621_nand_read_oob_raw(mtd, local_oob, row,
+					       mtd->oobsize);
+		if (ret == 0) {
+			int spare_per_sector = mtd->oobsize / sec;
+			int sector_size = PageSize / sec;
+			int i;
+			u32 corrected = 0;
+			int max_bitflips = 0;
+
+			for (i = 0; i < sec; i++) {
+				ret = mt7621_nand_check_erased_ecc_chunk(
+					&buf[i * sector_size], sector_size,
+					&local_oob[i * spare_per_sector],
+					spare_per_sector, chip->ecc.strength);
+				if (ret < 0)
+					break;
+
+				max_bitflips = max_t(int, max_bitflips, ret);
+				corrected += ret;
+			}
+
+			if (ret >= 0) {
+				mtd->ecc_stats.corrected += corrected;
+
+				memset(buf, 0xff, PageSize);
+				memset(FDMbuf, 0xff, sizeof(u32) * 2 * sec);
+
+				bits_corrected = max_bitflips;
+			} else {
+				mtd->ecc_stats.failed += host->last_failed;
+				pr_err("mt7621-nand: uncorrectable ECC errors at page=%d\n",
+				       row);
+			}
+		} else {
+			mtd->ecc_stats.failed += host->last_failed;
+			pr_warn("mt7621-nand: [%s] failed to read oob after ECC error\n",
+				__func__);
+			/* Keep return value as -EBADMSG */
+		}
+	}
+
+	return bits_corrected;
 }
 
 static int mt7621_nand_exec_write_page(struct mtd_info *mtd, u32 row,
@@ -907,6 +1150,7 @@ static void mt7621_nand_set_ecc_mode(struct mtd_info *mtd)
 	} else {
 		pr_warn("nand: NFI not support oobsize: %x\n", spare_per_sector);
 	}
+	chip->ecc.strength = ecc_bit;
 	mtd->oobsize = spare_per_sector * (mtd->writesize / 512);
 	pr_info("nand: ecc bit: %d, spare_per_sector: %d\n", ecc_bit, spare_per_sector);
 	/* Setup PageFormat */
@@ -1022,89 +1266,12 @@ static int mt7621_nand_read_page_hwecc(struct nand_chip *chip, u8 *buf,
 				       int oob_required, int page)
 {
 	struct mtd_info *mtd = nand_to_mtd(chip);
-	/* FIXME: need to return max bitflips */
-	mt7621_nand_exec_read_page(mtd, page, mtd->writesize, buf, chip->oob_poi);
-	return 0;
-}
+	int bits_corrected;
 
-static int mt7621_nand_read_oob_raw(struct mtd_info *mtd, u8 *buf,
-				    int page, int len)
-{
-	struct nand_chip *chip = mtd_to_nand(mtd);
-	u32 column = 0;
-	u32 sector = 0;
-	int res = 0;
-	int read_len = 0;
-	int sec_num = 1 << (chip->page_shift - 9);
-	int spare_per_sector = mtd->oobsize / sec_num;
+	bits_corrected = mt7621_nand_exec_read_page(mtd, page, mtd->writesize,
+						    buf, chip->oob_poi);
 
-	if (len > NAND_MAX_OOBSIZE || len % OOB_AVAI_PER_SECTOR || !buf) {
-		pr_warn("mt7621-nand: invalid parameter, len: %d, buf: %p\n", len, buf);
-		return -EINVAL;
-	}
-
-	while (len > 0) {
-		read_len = min(len, spare_per_sector);
-		column = NAND_SECTOR_SIZE + sector * (NAND_SECTOR_SIZE + spare_per_sector); /* TODO: Fix this hard-code 16 */
-		if (!mt7621_nand_ready_for_read(chip, page, column, false, NULL)) {
-			pr_warn("mt7621-nand: mt7621_nand_ready_for_read() return failed\n");
-			res = -EIO;
-			goto error;
-		}
-		if (!mt7621_nand_mcu_read_data(buf + spare_per_sector * sector, read_len)) {
-			pr_warn("mt7621-nand: mt7621_nand_mcu_read_data() return failed\n");
-			res = -EIO;
-			goto error;
-		}
-		mt7621_nand_check_RW_count(read_len);
-		mt7621_nand_stop_read();
-		sector++;
-		len -= read_len;
-	}
-
-error:
-	regclr16(NFI_CON_REG16, CON_NFI_BRD);
-	return res;
-}
-
-static int mt7621_nand_write_oob_raw(struct mtd_info *mtd, const u8 *buf,
-				     int page, int len)
-{
-	struct nand_chip *chip = mtd_to_nand(mtd);
-	u32 column = 0;
-	u32 sector = 0;
-	int write_len = 0;
-	int status;
-	int sec_num = 1 << (chip->page_shift - 9);
-	int spare_per_sector = mtd->oobsize / sec_num;
-
-	if (len > NAND_MAX_OOBSIZE || len % OOB_AVAI_PER_SECTOR || !buf) {
-		pr_warn("mt7621-nand: invalid parameter, len: %d, buf: %p\n", len, buf);
-		return -EINVAL;
-	}
-
-	while (len > 0) {
-		write_len = min(len, spare_per_sector);
-		column = sector * (NAND_SECTOR_SIZE + spare_per_sector) + NAND_SECTOR_SIZE;
-		if (!mt7621_nand_ready_for_write(chip, page, column, false, NULL))
-			return -EIO;
-		if (!mt7621_nand_mcu_write_data(mtd, buf + sector * spare_per_sector, write_len))
-			return -EIO;
-		mt7621_nand_check_RW_count(write_len);
-		regclr16(NFI_CON_REG16, CON_NFI_BWR);
-		mt7621_nand_set_command(NAND_CMD_PAGEPROG);
-		while (regread32(NFI_STA_REG32) & STA_NAND_BUSY)
-			;
-		status = chip->legacy.waitfunc(chip);
-		if (status & NAND_STATUS_FAIL) {
-			pr_warn("mt7621-nand: failed status: %d\n", status);
-			return -EIO;
-		}
-		len -= write_len;
-		sector++;
-	}
-
-	return 0;
+	return (bits_corrected == -EBADMSG) ? 0 : bits_corrected;
 }
 
 static int mt7621_nand_write_oob_hw(struct nand_chip *chip, int page)
@@ -1277,7 +1444,7 @@ static int oob_mt7621_ooblayout_free(struct mtd_info *mtd, int section,
  * BBT format, and this code implements that. There is a devicetree
  * binding that enables use of this.
  */
-#define BBT_BLOCK_NUM		32
+#define BBT_BLOCK_NUM_DEFAULT	32
 #define BBT_OOB_SIGNATURE	1
 #define BBT_SIGNATURE_LEN	7
 
@@ -1289,6 +1456,8 @@ static int mt7621_read_legacy_bbt_page(struct mtd_info *mtd, unsigned int page)
 	struct nand_chip *chip = mtd_to_nand(mtd);
 
 	if (mt7621_nand_read_oob_hw(chip, page) == 0) {
+		int bits_corrected;
+
 		if (chip->oob_poi[0] != 0xff) {
 			pr_info("mt7621-nand: Bad Block on page=%d\n", page);
 			return -ENODEV;
@@ -1297,7 +1466,10 @@ static int mt7621_read_legacy_bbt_page(struct mtd_info *mtd, unsigned int page)
 			pr_info("mt7621-nand: no BBT signature, page=%d\n", page);
 			return -EINVAL;
 		}
-		if (mt7621_nand_exec_read_page(mtd, page, mtd->writesize, chip->data_buf, chip->oob_poi)) {
+		bits_corrected = mt7621_nand_exec_read_page(
+			mtd, page, mtd->writesize, chip->data_buf,
+			chip->oob_poi);
+		if (bits_corrected >= 0) {
 			int bbt_bytes = (bbt_size <= mtd->writesize) ? bbt_size : mtd->writesize;
 			pr_info("mt7621-nand: BBT signature match, page=%d\n", page);
 			memcpy(chip->bbt, chip->data_buf, bbt_bytes);
@@ -1312,6 +1484,7 @@ static int mt7621_read_legacy_bbt_page(struct mtd_info *mtd, unsigned int page)
 static int mt7621_load_legacy_bbt(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd_to_nand(mtd);
+	struct mt7621_nand_host *host = nand_get_controller_data(chip);
 	u32 blocks;
 	int i;
 
@@ -1324,7 +1497,7 @@ static int mt7621_load_legacy_bbt(struct mtd_info *mtd)
 			return -ENOMEM;
 	}
 
-	for (i = blocks - 1; i >= (blocks - BBT_BLOCK_NUM); i--) {
+	for (i = blocks - 1; i >= (blocks - host->legacybbt_block_num); i--) {
 		int page = i << (chip->phys_erase_shift - chip->page_shift);
 		if (mt7621_read_legacy_bbt_page(mtd, page) == 0) {
 			pr_info("mt7621-nand: loading BBT success (%d)\n", page);
@@ -1343,7 +1516,7 @@ static int mt7621_nand_attach(struct nand_chip *chip)
 
 	mt7621_nand_set_ecc_mode(mtd);
 
-	if (chip->chipsize < (256*1024*1024))
+	if (nanddev_target_size(&chip->base) < (256*1024*1024))
 		host->addr_cycles = 4;
 
 	/* allocate buffers or call select_chip here or a bit earlier*/
@@ -1421,12 +1594,19 @@ static int mt7621_nand_probe(struct platform_device *pdev)
 		pr_info("mt7621-nand: using legacy BBT format\n");
 		host->legacybbt = true;
 	}
+	if (host->legacybbt) {
+		err = of_property_read_u32(dev->of_node,
+					   "mediatek,nand-bbt-block-num",
+					   &host->legacybbt_block_num);
+		if (err)
+			host->legacybbt_block_num = BBT_BLOCK_NUM_DEFAULT;
+	}
 
 	/* init mtd data structure */
 	chip = &host->nand_chip;
 	chip->priv = host;
 
-	mtd = host->mtd = &chip->mtd;
+	mtd = host->mtd = nand_to_mtd(chip);
 	mtd->priv = chip;
 	mtd->owner = THIS_MODULE;
 	mtd->name = "MT7621-NAND";
@@ -1467,6 +1647,9 @@ static int mt7621_nand_probe(struct platform_device *pdev)
 		pr_err("mt7621-nand: failed to identify NAND device\n");
 		goto out;
 	}
+
+	/* Don't use OOB for JFFS2, as that's not compatible with the ECC */
+	mtd->flags &= ~MTD_OOB_WRITEABLE;
 
 	platform_set_drvdata(pdev, host);
 

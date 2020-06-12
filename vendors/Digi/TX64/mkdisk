@@ -2,14 +2,16 @@
 #
 # Create a complete disk image for the TX64
 
+
 IMAGE="${1:-${ROOTDIR:-.}/images/image.bin}"
 ZIMAGE="${2:-${ROOTDIR:-.}/images/vmlinuz}"
 INITRD="${3:-${ROOTDIR:-.}/images/rootfs}"
 DISKRAW="${4:-${ROOTDIR:-.}/images/tx64_mfg.img}"
-GRUBIMG="${5:-${ROOTDIR:-.}/images/grub.img}"
+MFGTAR="${5:-${ROOTDIR:-.}/images/tx64_mfg.tar.bz2}"
+GRUBIMG="${6:-${ROOTDIR:-.}/images/grub.img}"
 
 # Disk size in sectors
-DISKSECTS="${5:-6000000}"
+DISKSECTS="${7:-6000000}"
 
 echo "Making RAW disk..."
 # Remove previous file, if any
@@ -32,8 +34,9 @@ echo "Run qemu to build image..."
 # Boot kernel and run mkffs
 
 qemu-system-x86_64 -net none \
+	-m 512 \
 	-nographic \
-	$(groups | grep -wq kvm && echo -enable-kvm) \
+	$(kvm-ok >/dev/null && echo -enable-kvm) \
 	-append "root=/dev/ram0 init=/etc/mkffs console=ttyS0 ${GRUB_OPT}" \
 	-kernel $ZIMAGE -initrd $INITRD \
 	-drive id=diskA,file=$DISKRAW,if=none \
@@ -51,7 +54,12 @@ fi
 echo "Creating bmap..."
 bmaptool create "${DISKRAW}" -o "${DISKRAW}.bmap"
 
+echo "Creating manufacturing tar file..."
+BASE_DISKRAW="$(basename ${DISKRAW})"
+tar -jcvf "${MFGTAR}" -C "${IMAGEDIR}" "${BASE_DISKRAW}" "${BASE_DISKRAW}.bmap"
+
+# compress this one, we do not want 3G files sitting around on servers :-)
 echo "Compressing RAW disk..."
-bzip2 -9 -v "${DISKRAW}"
+bzip2 -9 -v -f "${DISKRAW}"
 
 exit 0

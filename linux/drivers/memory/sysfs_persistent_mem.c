@@ -77,7 +77,9 @@ static int __init pmem_init(void)
 	persistent_mem_io.name = "Warm boot persistent memory space";
 	persistent_mem_io.start = memblock_end_of_DRAM();
 	persistent_mem_io.end = persistent_mem_io.start + SZ_4K;
-	pr_debug("start: 0x%llx, end: 0x%llx\n", persistent_mem_io.start, persistent_mem_io.end);
+	pr_debug("start: 0x%llx, end: 0x%llx\n",
+		 (unsigned long long)persistent_mem_io.start,
+		 (unsigned long long)persistent_mem_io.end);
 
 	ret = request_resource(&iomem_resource, &persistent_mem_io);
 	if (ret != 0)

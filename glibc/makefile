@@ -3,11 +3,7 @@
 # So select an appropriate version for some architectures. Right now we
 # only want to user a newer glibc on arm64 targets.
 #
-ifeq ($(TARGETARCH),aarch64-linux)
-GLIBC_VERSION = 2.26
-else
-GLIBC_VERSION = 2.23
-endif
+GLIBC_VERSION = 2.30
 
 URL = http://ftp.gnu.org/gnu/glibc/glibc-$(GLIBC_VERSION).tar.bz2
 
@@ -19,21 +15,27 @@ CONFOPTS += --prefix=
 CFLAGS =
 LDFLAGS =
 
-# i386 is depracated in glibc, so choose new 686 instead
+# i386 is deprecated in glibc, so choose new 686 instead
 ifeq ($(TARGETARCH),i386-linux)
-TARGETARCH = i686-linux
+override TARGETARCH = i686-linux
 CFLAGS += -march=i686 -O2
-CONFIGURE_OPTS = --host=$(TARGETARCH) --build=$(HOSTARCH)
 endif
+
+# Override the default to remove "--target" not wanted by glibc
+override CONFIGURE_OPTS = --host=$(TARGETARCH) --build=$(HOSTARCH)
 
 CONFVARS += libc_cv_ssp=no
 CONFVARS += CC="$(subst ucfront-gcc,,$(CC))"
 CONFVARS += CXX="$(subst ucfront-g++,,$(CXX))"
 
 glibc-$(GLIBC_VERSION)_CONFIGURE = ../glibc-$(GLIBC_VERSION)/configure
+glibc-$(GLIBC_VERSION)_SRCDIR = glibc-$(GLIBC_VERSION)
 glibc-$(GLIBC_VERSION)_BUILDDIR = glibc-$(GLIBC_VERSION)-build
 glibc-$(GLIBC_VERSION)_BUILD = all
 glibc-$(GLIBC_VERSION)_INSTALL = MAKEFILE_LIST= install
+
+# hack to reduce environment size or build fails in deep directories
+BUILDVARS = env - PATH='$(PATH)' CC='$(CC)' CXX='$(CXX)'
 
 include $(ROOTDIR)/tools/automake.inc
 

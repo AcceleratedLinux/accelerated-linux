@@ -1,0 +1,4 @@
+config LIB_LIBAIO
+	bool "libaio"
+	help
+	  Linux kernel AIO interface access library

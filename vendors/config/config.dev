@@ -478,13 +478,13 @@ MAKE_DEVICES = \
 			*,*) \
 				if [ '$(1)' ]; then \
 					node=$(ROMFSDIR)/$(2)/$$d/`basename $$i` ;	\
-					$(1) rm -f `echo $$node | sed 's/,.*//g'`* ; \
+					$(1) rm -f `echo $$node | sed 's/,.*/,/g'`* ; \
 					echo mknod `echo $$node | sed 's/,/ /g'`; \
 					$(1) mknod `echo $$node | sed 's/,/ /g'`; \
 					$(1) chmod $$mode `echo $$node | sed 's/,.*$$//g'`; \
 				else \
 					node=$(ROMFSDIR)/$(2)/$$d/@`basename $$i` ;	\
-					rm -f `echo $$node | sed 's/,.*//g'`* ; \
+					rm -f `echo $$node | sed 's/,.*/,/g'`* ; \
 					echo touching $$node; \
 					touch $$node;					\
 					chmod $$mode $$node;				\

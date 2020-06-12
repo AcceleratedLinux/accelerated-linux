@@ -1,0 +1,19 @@
+--- pam_ldap/Makefile.in.orig	2020-04-25 19:28:11.776361486 +1000
++++ pam_ldap/Makefile.in	2020-04-25 19:28:13.980372478 +1000
+@@ -611,7 +611,7 @@
+ 	@$(NORMAL_UNINSTALL)
+ 
+ vers.c: $(top_srcdir)/CVSVersionInfo.txt
+-	$(top_srcdir)/vers_string -v
++	PERL5LIB=$(top_srcdir) $(top_srcdir)/vers_string -v
+ # Tell versions [3.59,3.63) of GNU make to not export all variables.
+ # Otherwise a system limit (for SysV at least) may be exceeded.
+ .NOEXPORT:
+--- pam_ldap/Makefile.am.orig	2020-04-25 19:28:27.740441099 +1000
++++ pam_ldap/Makefile.am	2020-04-25 19:28:29.544450093 +1000
+@@ -44,4 +44,4 @@
+ 	@$(NORMAL_UNINSTALL)
+ 
+ vers.c: $(top_srcdir)/CVSVersionInfo.txt
+-	$(top_srcdir)/vers_string -v
++	PERL5LIB=$(top_srcdir) $(top_srcdir)/vers_string -v

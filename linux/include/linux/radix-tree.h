@@ -1,22 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * Copyright (C) 2001 Momchil Velikov
  * Portions Copyright (C) 2001 Christoph Hellwig
  * Copyright (C) 2006 Nick Piggin
  * Copyright (C) 2012 Konstantin Khlebnikov
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2, or (at
- * your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 #ifndef _LINUX_RADIX_TREE_H
 #define _LINUX_RADIX_TREE_H
@@ -326,24 +313,6 @@ radix_tree_iter_lookup(const struct radix_tree_root *root,
 {
 	radix_tree_iter_init(iter, index);
 	return radix_tree_next_chunk(root, iter, RADIX_TREE_ITER_CONTIG);
-}
-
-/**
- * radix_tree_iter_find - find a present entry
- * @root: radix tree root
- * @iter: iterator state
- * @index: start location
- *
- * This function returns the slot containing the entry with the lowest index
- * which is at least @index.  If @index is larger than any present entry, this
- * function returns NULL.  The @iter is updated to describe the entry found.
- */
-static inline void __rcu **
-radix_tree_iter_find(const struct radix_tree_root *root,
-			struct radix_tree_iter *iter, unsigned long index)
-{
-	radix_tree_iter_init(iter, index);
-	return radix_tree_next_chunk(root, iter, 0);
 }
 
 /**

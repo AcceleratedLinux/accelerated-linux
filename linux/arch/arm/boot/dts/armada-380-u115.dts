@@ -77,8 +77,8 @@
 				status = "okay";
 				pinctrl-0 = <&uart1_full_pins &uart1_dtr_pin &uart1_dcd_pin>;
 				pinctrl-names = "default";
-				uart-has-dtr-gpio = <&gpio1 27 GPIO_ACTIVE_LOW>;
-				uart-has-dcd-gpio = <&gpio0 6 GPIO_ACTIVE_LOW>;
+				dtr-gpios = <&gpio1 27 GPIO_ACTIVE_LOW>;
+				dcd-gpios = <&gpio0 6 GPIO_ACTIVE_LOW>;
 			};
 
 			i2c@11000 {

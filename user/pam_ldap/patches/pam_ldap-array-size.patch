@@ -1,0 +1,58 @@
+--- pam_ldap/pam_ldap.c	2020-04-25 19:23:23.203034313 +1000
++++ pam_ldap/pam_ldap.c	2020-04-25 19:23:14.135011587 +1000
+@@ -131,6 +131,8 @@
+ #include "pam_ldap.h"
+ #include "md5.h"
+ 
++#define SALTBUFSIZE	16
++
+ #if defined(HAVE_SECURITY_PAM_MISC_H) || defined(HAVE_PAM_PAM_MISC_H) || defined(OPENPAM)
+  /* FIXME: is there something better to check? */
+ #define CONST_ARG const
+@@ -264,8 +266,8 @@
+ static int _has_value (char **src, const char *tgt);
+ static int _host_ok (pam_ldap_session_t * session);
+ static int _service_ok (pam_handle_t * handle, pam_ldap_session_t * session);
+-static char *_get_md5_salt (char saltbuf[16]);
+-static char *_get_salt (char salt[16]);
++static char *_get_md5_salt (char saltbuf[SALTBUFSIZE]);
++static char *_get_salt (char salt[SALTBUFSIZE]);
+ static int _escape_string (const char *str, char *buf, size_t buflen);
+ static int _get_user_info (pam_ldap_session_t * session, const char *user);
+ static int _pam_ldap_get_session (pam_handle_t * pamh, const char *username,
+@@ -2578,7 +2580,7 @@
+ }
+ 
+ static char *
+-_get_md5_salt (char saltbuf[16])
++_get_md5_salt (char saltbuf[SALTBUFSIZE])
+ {
+   md5_state_t state;
+   md5_byte_t digest[16];
+@@ -2592,7 +2594,7 @@
+   _pam_ldap_md5_append (&state, (unsigned char *) &i, sizeof (i));
+   i = clock ();
+   _pam_ldap_md5_append (&state, (unsigned char *) &i, sizeof (i));
+-  _pam_ldap_md5_append (&state, (unsigned char *) saltbuf, sizeof (saltbuf));
++  _pam_ldap_md5_append (&state, (unsigned char *) saltbuf, SALTBUFSIZE);
+   _pam_ldap_md5_finish (&state, digest);
+ 
+   strcpy (saltbuf, "$1$");
+@@ -2605,7 +2607,7 @@
+ }
+ 
+ static char *
+-_get_salt (char salt[16])
++_get_salt (char salt[SALTBUFSIZE])
+ {
+   int i;
+   int j;
+@@ -3082,7 +3084,7 @@
+   char *strvalsnew[2];
+   LDAPMod mod, mod2;
+   LDAPMod *mods[3];
+-  char buf[64], saltbuf[16];
++  char buf[64], saltbuf[SALTBUFSIZE];
+   int rc = PAM_SUCCESS;
+   size_t i;
+ 

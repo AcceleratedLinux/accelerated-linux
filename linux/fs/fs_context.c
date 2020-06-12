@@ -1,16 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /* Provide a way to create a superblock configuration context within the kernel
  * that allows a superblock to be set up prior to mounting.
  *
  * Copyright (C) 2017 Red Hat, Inc. All Rights Reserved.
  * Written by David Howells (dhowells@redhat.com)
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public Licence
- * as published by the Free Software Foundation; either version
- * 2 of the Licence, or (at your option) any later version.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#include <linux/module.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include <linux/fs.h>
@@ -23,6 +20,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
 #include <net/net_namespace.h>
+#include <asm/sections.h>
 #include "mount.h"
 #include "internal.h"
 
@@ -47,6 +45,7 @@ static const struct constant_table common_set_sb_flag[] = {
 	{ "posixacl",	SB_POSIXACL },
 	{ "ro",		SB_RDONLY },
 	{ "sync",	SB_SYNCHRONOUS },
+	{ },
 };
 
 static const struct constant_table common_clear_sb_flag[] = {
@@ -55,6 +54,7 @@ static const struct constant_table common_clear_sb_flag[] = {
 	{ "nomand",	SB_MANDLOCK },
 	{ "rw",		SB_RDONLY },
 	{ "silent",	SB_SILENT },
+	{ },
 };
 
 static const char *const forbidden_sb_flag[] = {
@@ -177,14 +177,15 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 
 	struct fs_parameter param = {
 		.key	= key,
-		.type	= fs_value_is_string,
+		.type	= fs_value_is_flag,
 		.size	= v_size,
 	};
 
-	if (v_size > 0) {
+	if (value) {
 		param.string = kmemdup_nul(value, v_size, GFP_KERNEL);
 		if (!param.string)
 			return -ENOMEM;
+		param.type = fs_value_is_string;
 	}
 
 	ret = vfs_parse_fs_param(fc, &param);
@@ -270,6 +271,9 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	fc->fs_type	= get_filesystem(fs_type);
 	fc->cred	= get_current_cred();
 	fc->net_ns	= get_net(current->nsproxy->net_ns);
+	fc->log.prefix	= fs_type->name;
+
+	mutex_init(&fc->uapi_mutex);
 
 	switch (purpose) {
 	case FS_CONTEXT_FOR_MOUNT:
@@ -279,10 +283,8 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 		fc->user_ns = get_user_ns(reference->d_sb->s_user_ns);
 		break;
 	case FS_CONTEXT_FOR_RECONFIGURE:
-		/* We don't pin any namespaces as the superblock's
-		 * subscriptions cannot be changed at this point.
-		 */
 		atomic_inc(&reference->d_sb->s_active);
+		fc->user_ns = get_user_ns(reference->d_sb->s_user_ns);
 		fc->root = dget(reference);
 		break;
 	}
@@ -353,6 +355,8 @@ struct fs_context *vfs_dup_fs_context(struct fs_context *src_fc)
 	if (!fc)
 		return ERR_PTR(-ENOMEM);
 
+	mutex_init(&fc->uapi_mutex);
+
 	fc->fs_private	= NULL;
 	fc->s_fs_info	= NULL;
 	fc->source	= NULL;
@@ -361,6 +365,8 @@ struct fs_context *vfs_dup_fs_context(struct fs_context *src_fc)
 	get_net(fc->net_ns);
 	get_user_ns(fc->user_ns);
 	get_cred(fc->cred);
+	if (fc->log.log)
+		refcount_inc(&fc->log.log->usage);
 
 	/* Can't call put until we've called ->dup */
 	ret = fc->ops->dup(fc, src_fc);
@@ -378,35 +384,78 @@ err_fc:
 }
 EXPORT_SYMBOL(vfs_dup_fs_context);
 
-#ifdef CONFIG_PRINTK
 /**
  * logfc - Log a message to a filesystem context
  * @fc: The filesystem context to log to.
  * @fmt: The format of the buffer.
  */
-void logfc(struct fs_context *fc, const char *fmt, ...)
+void logfc(struct fc_log *log, const char *prefix, char level, const char *fmt, ...)
 {
 	va_list va;
+	struct va_format vaf = {.fmt = fmt, .va = &va};
 
 	va_start(va, fmt);
+	if (!log) {
+		switch (level) {
+		case 'w':
+			printk(KERN_WARNING "%s%s%pV\n", prefix ? prefix : "",
+						prefix ? ": " : "", &vaf);
+			break;
+		case 'e':
+			printk(KERN_ERR "%s%s%pV\n", prefix ? prefix : "",
+						prefix ? ": " : "", &vaf);
+			break;
+		default:
+			printk(KERN_NOTICE "%s%s%pV\n", prefix ? prefix : "",
+						prefix ? ": " : "", &vaf);
+			break;
+		}
+	} else {
+		unsigned int logsize = ARRAY_SIZE(log->buffer);
+		u8 index;
+		char *q = kasprintf(GFP_KERNEL, "%c %s%s%pV\n", level,
+						prefix ? prefix : "",
+						prefix ? ": " : "", &vaf);
 
-	switch (fmt[0]) {
-	case 'w':
-		vprintk_emit(0, LOGLEVEL_WARNING, NULL, 0, fmt, va);
-		break;
-	case 'e':
-		vprintk_emit(0, LOGLEVEL_ERR, NULL, 0, fmt, va);
-		break;
-	default:
-		vprintk_emit(0, LOGLEVEL_NOTICE, NULL, 0, fmt, va);
-		break;
+		index = log->head & (logsize - 1);
+		BUILD_BUG_ON(sizeof(log->head) != sizeof(u8) ||
+			     sizeof(log->tail) != sizeof(u8));
+		if ((u8)(log->head - log->tail) == logsize) {
+			/* The buffer is full, discard the oldest message */
+			if (log->need_free & (1 << index))
+				kfree(log->buffer[index]);
+			log->tail++;
+		}
+
+		log->buffer[index] = q ? q : "OOM: Can't store error string";
+		if (q)
+			log->need_free |= 1 << index;
+		else
+			log->need_free &= ~(1 << index);
+		log->head++;
 	}
-
-	pr_cont("\n");
 	va_end(va);
 }
 EXPORT_SYMBOL(logfc);
-#endif
+
+/*
+ * Free a logging structure.
+ */
+static void put_fc_log(struct fs_context *fc)
+{
+	struct fc_log *log = fc->log.log;
+	int i;
+
+	if (log) {
+		if (refcount_dec_and_test(&log->usage)) {
+			fc->log.log = NULL;
+			for (i = 0; i <= 7; i++)
+				if (log->need_free & (1 << i))
+					kfree(log->buffer[i]);
+			kfree(log);
+		}
+	}
+}
 
 /**
  * put_fs_context - Dispose of a superblock configuration context.
@@ -430,7 +479,7 @@ void put_fs_context(struct fs_context *fc)
 	put_net(fc->net_ns);
 	put_user_ns(fc->user_ns);
 	put_cred(fc->cred);
-	kfree(fc->subtype);
+	put_fc_log(fc);
 	put_filesystem(fc->fs_type);
 	kfree(fc->source);
 	kfree(fc);
@@ -492,17 +541,6 @@ static int legacy_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		if (fc->source)
 			return invalf(fc, "VFS: Legacy: Multiple sources");
 		fc->source = param->string;
-		param->string = NULL;
-		return 0;
-	}
-
-	if ((fc->fs_type->fs_flags & FS_HAS_SUBTYPE) &&
-	    strcmp(param->key, "subtype") == 0) {
-		if (param->type != fs_value_is_string)
-			return invalf(fc, "VFS: Legacy: Non-string subtype");
-		if (fc->subtype)
-			return invalf(fc, "VFS: Legacy: Multiple subtype");
-		fc->subtype = param->string;
 		param->string = NULL;
 		return 0;
 	}
@@ -639,4 +677,53 @@ int parse_monolithic_mount_data(struct fs_context *fc, void *data)
 		monolithic_mount_data = generic_parse_monolithic;
 
 	return monolithic_mount_data(fc, data);
+}
+
+/*
+ * Clean up a context after performing an action on it and put it into a state
+ * from where it can be used to reconfigure a superblock.
+ *
+ * Note that here we do only the parts that can't fail; the rest is in
+ * finish_clean_context() below and in between those fs_context is marked
+ * FS_CONTEXT_AWAITING_RECONF.  The reason for splitup is that after
+ * successful mount or remount we need to report success to userland.
+ * Trying to do full reinit (for the sake of possible subsequent remount)
+ * and failing to allocate memory would've put us into a nasty situation.
+ * So here we only discard the old state and reinitialization is left
+ * until we actually try to reconfigure.
+ */
+void vfs_clean_context(struct fs_context *fc)
+{
+	if (fc->need_free && fc->ops && fc->ops->free)
+		fc->ops->free(fc);
+	fc->need_free = false;
+	fc->fs_private = NULL;
+	fc->s_fs_info = NULL;
+	fc->sb_flags = 0;
+	security_free_mnt_opts(&fc->security);
+	kfree(fc->source);
+	fc->source = NULL;
+
+	fc->purpose = FS_CONTEXT_FOR_RECONFIGURE;
+	fc->phase = FS_CONTEXT_AWAITING_RECONF;
+}
+
+int finish_clean_context(struct fs_context *fc)
+{
+	int error;
+
+	if (fc->phase != FS_CONTEXT_AWAITING_RECONF)
+		return 0;
+
+	if (fc->fs_type->init_fs_context)
+		error = fc->fs_type->init_fs_context(fc);
+	else
+		error = legacy_init_fs_context(fc);
+	if (unlikely(error)) {
+		fc->phase = FS_CONTEXT_FAILED;
+		return error;
+	}
+	fc->need_free = true;
+	fc->phase = FS_CONTEXT_RECONF_PARAMS;
+	return 0;
 }

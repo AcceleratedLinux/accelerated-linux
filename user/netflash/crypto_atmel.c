@@ -30,7 +30,11 @@
 
 #define CRYPTOCHIP_RETRIES 	5
 
-#if defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI) || defined(CONFIG_DEFAULTS_DIGI_EX12)
+#if defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI) || \
+    defined(CONFIG_DEFAULTS_DIGI_EX12) || \
+    defined(CONFIG_DEFAULTS_DIGI_IX10) || \
+    defined(CONFIG_DEFAULTS_DIGI_IX15) || \
+    defined(CONFIG_DEFAULTS_DIGI_IX20)
 #define DEVKEY_GPIO "/sys/class/gpio/gpio86/value"
 #endif
 
@@ -104,9 +108,7 @@ static int signature_valid(atecc_ctx *ctx, int key_slot,
 {
 	int ret;
 #if defined(CONFIG_USER_NETFLASH_ATECC508A_ALG_ECDSA)
-	ret = nonce(ctx, sha256);
-	if (!ret)
-		ret = verify(ctx, key_slot, signature->r, signature->s);
+	ret = verify(ctx, key_slot, sha256, signature->r, signature->s);
 #elif defined(CONFIG_USER_NETFLASH_ATECC508A_ALG_HMAC)
 	ret = hmac(ctx, key_slot, sha256, signature->hmac);
 #endif
@@ -239,7 +241,11 @@ static int is_development_key_allowed()
 	return 0;
 }
 
-#elif defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI) || defined(CONFIG_DEFAULTS_DIGI_EX12)
+#elif defined(CONFIG_DEFAULTS_DIGI_CONNECTIT_MINI) || \
+      defined(CONFIG_DEFAULTS_DIGI_EX12) || \
+      defined(CONFIG_DEFAULTS_DIGI_IX10) || \
+      defined(CONFIG_DEFAULTS_DIGI_IX15) || \
+      defined(CONFIG_DEFAULTS_DIGI_IX20)
 
 static int is_development_key_allowed() {
 	int fd = open(DEVKEY_GPIO, O_RDONLY);

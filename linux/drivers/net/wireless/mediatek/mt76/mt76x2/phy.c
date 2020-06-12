@@ -1,18 +1,7 @@
+// SPDX-License-Identifier: ISC
 /*
  * Copyright (C) 2016 Felix Fietkau <nbd@nbd.name>
  * Copyright (C) 2018 Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include "mt76x2.h"
@@ -25,7 +14,8 @@ mt76x2_adjust_high_lna_gain(struct mt76x02_dev *dev, int reg, s8 offset)
 {
 	s8 gain;
 
-	gain = FIELD_GET(MT_BBP_AGC_LNA_HIGH_GAIN, mt76_rr(dev, MT_BBP(AGC, reg)));
+	gain = FIELD_GET(MT_BBP_AGC_LNA_HIGH_GAIN,
+			 mt76_rr(dev, MT_BBP(AGC, reg)));
 	gain -= offset / 2;
 	mt76_rmw_field(dev, MT_BBP(AGC, reg), MT_BBP_AGC_LNA_HIGH_GAIN, gain);
 }
@@ -161,12 +151,12 @@ void mt76x2_phy_set_txpower(struct mt76x02_dev *dev)
 		delta = txp.delta_bw80;
 
 	mt76x2_get_rate_power(dev, &t, chan);
-	mt76x02_add_rate_power_offset(&t, txp.chain[0].target_power);
+	mt76x02_add_rate_power_offset(&t, txp.target_power + delta);
 	mt76x02_limit_rate_power(&t, dev->mt76.txpower_conf);
 	dev->mt76.txpower_cur = mt76x02_get_max_rate_power(&t);
 
 	base_power = mt76x2_get_min_rate_power(&t);
-	delta += base_power - txp.chain[0].target_power;
+	delta = base_power - txp.target_power;
 	txp_0 = txp.chain[0].target_power + txp.chain[0].delta + delta;
 	txp_1 = txp.chain[1].target_power + txp.chain[1].delta + delta;
 
@@ -182,7 +172,7 @@ void mt76x2_phy_set_txpower(struct mt76x02_dev *dev)
 	}
 
 	mt76x02_add_rate_power_offset(&t, -base_power);
-	dev->target_power = txp.chain[0].target_power;
+	dev->target_power = txp.target_power;
 	dev->target_power_delta[0] = txp_0 - txp.chain[0].target_power;
 	dev->target_power_delta[1] = txp_1 - txp.chain[0].target_power;
 	dev->mt76.rate_power = t;
@@ -295,7 +285,7 @@ void mt76x2_phy_update_channel_gain(struct mt76x02_dev *dev)
 		dev->cal.avg_rssi_all = -75;
 
 	low_gain = (dev->cal.avg_rssi_all > mt76x02_get_rssi_gain_thresh(dev)) +
-		   (dev->cal.avg_rssi_all > mt76x02_get_low_rssi_gain_thresh(dev));
+		(dev->cal.avg_rssi_all > mt76x02_get_low_rssi_gain_thresh(dev));
 
 	gain_change = dev->cal.low_gain < 0 ||
 		      (dev->cal.low_gain & 2) ^ (low_gain & 2);

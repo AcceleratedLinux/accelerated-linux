@@ -6,8 +6,6 @@ ROMFSIMG  = $(IMAGEDIR)/rootfs
 ROMFSIMGZ = $(IMAGEDIR)/rootfs.gz
 ZIMAGE    = $(IMAGEDIR)/vmlinuz
 IMAGE     = $(IMAGEDIR)/image.bin
-ISOFILE   = $(IMAGEDIR)/$(CONFIG_PRODUCT).iso
-ISODIR    = $(IMAGEDIR)/iso
 
 SIGNING_ALG   = ecdsa
 SIGNING_EXTRA = -e
@@ -122,17 +120,6 @@ romfs.post:: romfs.cleanup
 
 image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.sign-atmel image.tag image.copy
 	gzip -9 -c -f $(ROMFSIMG) > $(ROMFSIMGZ)
-	mkdir -p $(ISODIR)/boot/isolinux
-	cp isolinux.bin $(ISODIR)/boot/isolinux/
-	cp ldlinux.c32 $(ISODIR)/boot/isolinux/
-	cp boot.msg $(ISODIR)/boot/isolinux/
-	cp isolinux.cfg $(ISODIR)/boot/isolinux/
-	cp $(ZIMAGE) $(ISODIR)/boot/isolinux/
-	cp $(ROMFSIMGZ) $(ISODIR)/boot/isolinux/initrd.gz
-	mkisofs -o $(ISOFILE) -b boot/isolinux/isolinux.bin \
-		-c boot/isolinux/boot.cat -no-emul-boot \
-		-boot-load-size 4 -boot-info-table $(ISODIR)
-	isohybrid $(ISOFILE)
 	./mkdisk
 
 include $(ROOTDIR)/vendors/config/config.dev

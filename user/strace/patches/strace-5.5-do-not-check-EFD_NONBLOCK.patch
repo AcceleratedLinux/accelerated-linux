@@ -1,0 +1,22 @@
+--- strace-5.5/xlat/efd_flags.in.org	2020-03-03 22:10:56.144561822 +1000
++++ strace-5.5/xlat/efd_flags.in	2020-03-03 22:11:00.620393116 +1000
+@@ -2,4 +2,3 @@
+ #if defined EFD_CLOEXEC || defined O_CLOEXEC
+ EFD_CLOEXEC	O_CLOEXEC
+ #endif
+-EFD_NONBLOCK	O_NONBLOCK
+--- strace-5.5/xlat/efd_flags.h.org	2020-03-03 22:25:37.079185999 +1000
++++ strace-5.5/xlat/efd_flags.h	2020-03-03 22:26:11.309885482 +1000
+@@ -19,11 +19,7 @@
+ # define EFD_CLOEXEC O_CLOEXEC
+ #endif
+ #endif
+-#if defined(EFD_NONBLOCK) || (defined(HAVE_DECL_EFD_NONBLOCK) && HAVE_DECL_EFD_NONBLOCK)
+-DIAG_PUSH_IGNORE_TAUTOLOGICAL_COMPARE
+-static_assert((EFD_NONBLOCK) == (O_NONBLOCK), "EFD_NONBLOCK != O_NONBLOCK");
+-DIAG_POP_IGNORE_TAUTOLOGICAL_COMPARE
+-#else
++#if !defined(EFD_NONBLOCK)
+ # define EFD_NONBLOCK O_NONBLOCK
+ #endif
+ 

@@ -1,0 +1,11 @@
+config USER_NTPCLIENT_NTPCLIENT
+	bool "ntpclient: ntpclient"
+	help
+	  Larry Doolittles ntpclient
+	  http://doolittle.faludi.com/ntpclient/
+
+config USER_NTPCLIENT_ADJTIMEX
+	bool "ntpclient: adjtimex"
+	help
+	  Larry Doolittles adjtimex
+	  http://doolittle.faludi.com/ntpclient/

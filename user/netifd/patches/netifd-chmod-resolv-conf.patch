@@ -1,0 +1,27 @@
+Fix resolv conf file permissions to u=rw,g=r,o=r to override any umask
+setting that would otherwise prevent the file being read by a DNS server
+running with a different uid/gid.
+
+--- nettifd.orig/interface-ip.c	2020-01-23 12:15:12.015444124 +1000
++++ netifd/interface-ip.c	2020-01-29 15:38:56.844375632 +1000
+@@ -16,6 +16,7 @@
+ #include <stdlib.h>
+ #include <stdio.h>
+ 
++#include <sys/stat.h>
+ #include <limits.h>
+ #include <arpa/inet.h>
+ #include <netinet/in.h>
+@@ -1229,6 +1230,12 @@
+ 	crcnew = crc32_file(f);
+ 	fclose(f);
+ 
++	/* Ensure resolv conf is readable by *others* as netifd is run as root,
++	 * but dnsmasq is not. */
++	if (chmod(path, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) == -1) {
++		D(INTERFACE, "Failed chmod %s: %m\n", path);
++	}
++
+ 	crcold = crcnew + 1;
+ 	f = fopen(resolv_conf, "r");
+ 	if (f) {

@@ -299,20 +299,17 @@ static netdev_tx_t mlxsw_sx_port_xmit(struct sk_buff *skb,
 	u64 len;
 	int err;
 
+	if (skb_cow_head(skb, MLXSW_TXHDR_LEN)) {
+		this_cpu_inc(mlxsw_sx_port->pcpu_stats->tx_dropped);
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	memset(skb->cb, 0, sizeof(struct mlxsw_skb_cb));
+
 	if (mlxsw_core_skb_transmit_busy(mlxsw_sx->core, &tx_info))
 		return NETDEV_TX_BUSY;
 
-	if (unlikely(skb_headroom(skb) < MLXSW_TXHDR_LEN)) {
-		struct sk_buff *skb_orig = skb;
-
-		skb = skb_realloc_headroom(skb, MLXSW_TXHDR_LEN);
-		if (!skb) {
-			this_cpu_inc(mlxsw_sx_port->pcpu_stats->tx_dropped);
-			dev_kfree_skb_any(skb_orig);
-			return NETDEV_TX_OK;
-		}
-		dev_consume_skb_any(skb_orig);
-	}
 	mlxsw_sx_txhdr_construct(skb, &tx_info);
 	/* TX header is consumed by HW on the way so we shouldn't count its
 	 * bytes as being sent.
@@ -379,26 +376,14 @@ mlxsw_sx_port_get_stats64(struct net_device *dev,
 	stats->tx_dropped	= tx_dropped;
 }
 
-static int mlxsw_sx_port_get_phys_port_name(struct net_device *dev, char *name,
-					    size_t len)
-{
-	struct mlxsw_sx_port *mlxsw_sx_port = netdev_priv(dev);
-
-	return mlxsw_core_port_get_phys_port_name(mlxsw_sx_port->mlxsw_sx->core,
-						  mlxsw_sx_port->local_port,
-						  name, len);
-}
-
-static int mlxsw_sx_port_get_port_parent_id(struct net_device *dev,
-					    struct netdev_phys_item_id *ppid)
+static struct devlink_port *
+mlxsw_sx_port_get_devlink_port(struct net_device *dev)
 {
 	struct mlxsw_sx_port *mlxsw_sx_port = netdev_priv(dev);
 	struct mlxsw_sx *mlxsw_sx = mlxsw_sx_port->mlxsw_sx;
 
-	ppid->id_len = sizeof(mlxsw_sx->hw_id);
-	memcpy(&ppid->id, &mlxsw_sx->hw_id, ppid->id_len);
-
-	return 0;
+	return mlxsw_core_port_devlink_port_get(mlxsw_sx->core,
+						mlxsw_sx_port->local_port);
 }
 
 static const struct net_device_ops mlxsw_sx_port_netdev_ops = {
@@ -407,8 +392,7 @@ static const struct net_device_ops mlxsw_sx_port_netdev_ops = {
 	.ndo_start_xmit		= mlxsw_sx_port_xmit,
 	.ndo_change_mtu		= mlxsw_sx_port_change_mtu,
 	.ndo_get_stats64	= mlxsw_sx_port_get_stats64,
-	.ndo_get_phys_port_name = mlxsw_sx_port_get_phys_port_name,
-	.ndo_get_port_parent_id	= mlxsw_sx_port_get_port_parent_id,
+	.ndo_get_devlink_port	= mlxsw_sx_port_get_devlink_port,
 };
 
 static void mlxsw_sx_port_get_drvinfo(struct net_device *dev,
@@ -646,12 +630,6 @@ static const struct mlxsw_sx_port_link_mode mlxsw_sx_port_link_mode[] = {
 				  MLXSW_REG_PTYS_ETH_SPEED_50GBASE_CR2 |
 				  MLXSW_REG_PTYS_ETH_SPEED_50GBASE_KR2,
 		.speed		= 50000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_56GBASE_R4,
-		.supported	= SUPPORTED_56000baseKR4_Full,
-		.advertised	= ADVERTISED_56000baseKR4_Full,
-		.speed		= 56000,
 	},
 	{
 		.mask		= MLXSW_REG_PTYS_ETH_SPEED_100GBASE_CR4 |
@@ -1009,6 +987,7 @@ static int __mlxsw_sx_port_eth_create(struct mlxsw_sx *mlxsw_sx, u8 local_port,
 	if (!dev)
 		return -ENOMEM;
 	SET_NETDEV_DEV(dev, mlxsw_sx->bus_info->dev);
+	dev_net_set(dev, mlxsw_core_net(mlxsw_sx->core));
 	mlxsw_sx_port = netdev_priv(dev);
 	mlxsw_sx_port->dev = dev;
 	mlxsw_sx_port->mlxsw_sx = mlxsw_sx;
@@ -1102,7 +1081,7 @@ static int __mlxsw_sx_port_eth_create(struct mlxsw_sx *mlxsw_sx, u8 local_port,
 	}
 
 	mlxsw_core_port_eth_set(mlxsw_sx->core, mlxsw_sx_port->local_port,
-				mlxsw_sx_port, dev, module + 1, false, 0);
+				mlxsw_sx_port, dev);
 	mlxsw_sx->ports[local_port] = mlxsw_sx_port;
 	return 0;
 
@@ -1127,7 +1106,9 @@ static int mlxsw_sx_port_eth_create(struct mlxsw_sx *mlxsw_sx, u8 local_port,
 {
 	int err;
 
-	err = mlxsw_core_port_init(mlxsw_sx->core, local_port);
+	err = mlxsw_core_port_init(mlxsw_sx->core, local_port,
+				   module + 1, false, 0,
+				   mlxsw_sx->hw_id, sizeof(mlxsw_sx->hw_id));
 	if (err) {
 		dev_err(mlxsw_sx->bus_info->dev, "Port %d: Failed to init core port\n",
 			local_port);
@@ -1578,7 +1559,8 @@ static int mlxsw_sx_basic_trap_groups_set(struct mlxsw_core *mlxsw_core)
 }
 
 static int mlxsw_sx_init(struct mlxsw_core *mlxsw_core,
-			 const struct mlxsw_bus_info *mlxsw_bus_info)
+			 const struct mlxsw_bus_info *mlxsw_bus_info,
+			 struct netlink_ext_ack *extack)
 {
 	struct mlxsw_sx *mlxsw_sx = mlxsw_core_driver_priv(mlxsw_core);
 	int err;

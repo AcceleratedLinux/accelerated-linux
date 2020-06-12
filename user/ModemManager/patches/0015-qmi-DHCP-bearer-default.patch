@@ -1,0 +1,32 @@
+From: David McCullough <david.mccullough@accelerated.com>
+Date: Thu, 6 Jul 2017 17:00:43 +1000
+Subject: qmi: DHCP bearer default
+
+With the old 4.4 kernel we only ever ran DHCP on QMI modems because the
+kernel did not support the ioctl to query raw-ip mode.
+
+With the new kernel the ioctl is now supported and w4e are using static
+for
+Sierra modems.  Since this is a major change to what we have used in the
+past we are going to temporarily turn this off in ModemManager to ensure
+less change in the next release and less chance of a stuff up.
+---
+ src/mm-bearer-qmi.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/mm-bearer-qmi.c b/src/mm-bearer-qmi.c
+index 28e5f74c..13fb6c12 100644
+--- a/src/mm-bearer-qmi.c
++++ b/src/mm-bearer-qmi.c
+@@ -1328,9 +1328,11 @@ connect_context_step (GTask *task)
+          * to request. If the LLP is raw-ip, we force Static IP, because not
+          * all DHCP clients support the raw-ip interfaces; otherwise default
+          * to DHCP as always. */
++#if 0
+         if (mm_port_qmi_llp_is_raw_ip (ctx->qmi))
+             ctx->ip_method = MM_BEARER_IP_METHOD_STATIC;
+         else
++#endif
+             ctx->ip_method = MM_BEARER_IP_METHOD_DHCP;
+ 
+         mm_obj_dbg (self, "defaulting to use %s IP method", mm_bearer_ip_method_get_string (ctx->ip_method));

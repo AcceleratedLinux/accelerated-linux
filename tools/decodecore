@@ -123,6 +123,10 @@ proc load_coredump {filename} {
 		if {[regexp {pc *: *\[<([0-9a-f]+)>\]} $line dummy val]} {
 			set ::pc($::coredumps) 0x$val
 		}
+		# The ARM64 program counter
+		if {[regexp {pc : ([0-9a-f]+)} $line dummy val]} {
+			set ::pc($::coredumps) 0x$val
+		}
 		# The i386 program counter
 		if {[regexp {EIP:[ 0-9a-fA-F]*:*\[<([0-9a-f]+)>\]} $line dummy val]} {
 			set ::pc($::coredumps) 0x$val
@@ -141,6 +145,10 @@ proc load_coredump {filename} {
 		}
 		# The ARM return address
 		if {[regexp {lr *: *[[]<([0-9a-f]+)>\]} $line dummy val]} {
+			set ::ra($::coredumps) 0x$val
+		}
+		# The ARM64 return address
+		if {[regexp {lr : ([0-9a-f]+)} $line dummy val]} {
 			set ::ra($::coredumps) 0x$val
 		}
 		# The MIPS return address register

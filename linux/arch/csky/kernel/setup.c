@@ -47,9 +47,6 @@ static void __init csky_memblock_init(void)
 	signed long size;
 
 	memblock_reserve(__pa(_stext), _end - _stext);
-#ifdef CONFIG_BLK_DEV_INITRD
-	memblock_reserve(__pa(initrd_start), initrd_end - initrd_start);
-#endif
 
 	early_init_fdt_reserve_self();
 	early_init_fdt_scan_reserved_mem();
@@ -133,27 +130,31 @@ void __init setup_arch(char **cmdline_p)
 
 	sparse_init();
 
+	fixaddr_init();
+
 #ifdef CONFIG_HIGHMEM
 	kmap_init();
 #endif
-
-#if defined(CONFIG_VT) && defined(CONFIG_DUMMY_CONSOLE)
-	conswitchp = &dummy_con;
-#endif
 }
 
-asmlinkage __visible void __init csky_start(unsigned int unused, void *param)
+unsigned long va_pa_offset;
+EXPORT_SYMBOL(va_pa_offset);
+
+asmlinkage __visible void __init csky_start(unsigned int unused,
+					    void *dtb_start)
 {
 	/* Clean up bss section */
 	memset(__bss_start, 0, __bss_stop - __bss_start);
 
+	va_pa_offset = read_mmu_msa0() & ~(SSEG_SIZE - 1);
+
 	pre_trap_init();
 	pre_mmu_init();
 
-	if (param == NULL)
+	if (dtb_start == NULL)
 		early_init_dt_scan(__dtb_start);
 	else
-		early_init_dt_scan(param);
+		early_init_dt_scan(dtb_start);
 
 	start_kernel();
 

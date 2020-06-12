@@ -1,5 +1,20 @@
 config USER_AIRCRACK_NG
 	bool "aircrack-ng"
-	select LIB_INSTALL_LIBSTDCPLUS
+	select CONFIG_LIB_INSTALL_LIBSTDCPLUS
 	help
 		aircrack-ng is a complete suite of tools to assess WiFi network security.
+config USER_AIRCRACK_FULL_INSTALL
+	bool "install all aircrack applications/files"
+	depends on USER_AIRCRACK_NG
+	help
+		aircrack full install
+config USER_AIRCRACK_NG_AIRODUMP
+	bool "airodump"
+	depends on USER_AIRCRACK_NG
+	help
+		airodump module for wifi scanner
+config USER_AIRCRACK_NG_OSDEP
+	bool "libaircrack-osdep"
+	depends on USER_AIRCRACK_NG
+	help
+		aircrack library needed by airodump

@@ -70,7 +70,7 @@ bundle: image.tag
 			md5sum -c $$f.md5 || return 1; \
 			cd $(ROOTDIR); \
 		}; \
-		cp $(IMAGE) $$d/$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d`-`basename $(IMAGE)`; \
+		cp $(IMAGE) $$d/$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date -u "-d$(BUILD_START_STRING)" +%Y%m%d`-`basename $(IMAGE)`; \
 		tar -C $$d -caf $(IMAGEDIR)/`basename $${f}` `echo $$d/* | sed "s|$$d/||g"`; \
 		rm -rf $$d; \
 	done

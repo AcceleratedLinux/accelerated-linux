@@ -1,0 +1,11 @@
+--- busybox-1.31.0/libbb/appletlib.c.orig	2020-02-26 20:32:11.798856447 +1000
++++ busybox-1.31.0/libbb/appletlib.c	2020-02-26 20:32:58.177878361 +1000
+@@ -1101,7 +1101,7 @@
+ #else
+ 
+ 	lbb_prepare("busybox" IF_FEATURE_INDIVIDUAL(, argv));
+-# if !ENABLE_BUSYBOX
++# if 0 && !ENABLE_BUSYBOX
+ 	if (argv[1] && is_prefixed_with(bb_basename(argv[0]), "busybox"))
+ 		argv++;
+ # endif

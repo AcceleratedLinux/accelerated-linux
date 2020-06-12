@@ -1,0 +1,56 @@
+--- shellinabox/libhttp/ssl.c.orig	2019-07-18 10:34:55.274508696 +1000
++++ shellinabox/libhttp/ssl.c	2019-07-18 10:55:06.278534974 +1000
+@@ -1009,53 +1009,7 @@
+ void sslFreeHndl(SSL **sslHndl) {
+ #if defined(HAVE_OPENSSL)
+   if (*sslHndl) {
+-    // OpenSSL does not always correctly perform reference counting for stacked
+-    // BIOs. This is particularly a problem if an SSL connection has two
+-    // different BIOs for the read and the write end, with one being a stacked
+-    // derivative of the other. Unfortunately, this is exactly the scenario
+-    // that we set up.
+-    // As a work-around, we un-stack the BIOs prior to freeing the SSL
+-    // connection.
+     ERR_clear_error();
+-    BIO *writeBIO, *readBIO;
+-    check(writeBIO    = SSL_get_wbio(*sslHndl));
+-    check(readBIO     = SSL_get_rbio(*sslHndl));
+-    if (writeBIO != readBIO) {
+-      if (readBIO->next_bio == writeBIO) {
+-        // OK, that's exactly the bug we are looking for. We know how to
+-        // fix it.
+-        check(BIO_pop(readBIO) == writeBIO);
+-        check(readBIO->references == 1);
+-        check(writeBIO->references == 1);
+-        check(!readBIO->next_bio);
+-        check(!writeBIO->prev_bio);
+-      } else if (readBIO->next_bio == writeBIO->next_bio &&
+-                 writeBIO->next_bio->prev_bio == writeBIO) {
+-        // Things get even more confused, if the SSL handshake is aborted
+-        // prematurely.
+-        // OpenSSL appears to internally stack a BIO onto the read end that
+-        // does not get removed afterwards. We end up with the original
+-        // socket BIO having two different BIOs prepended to it (one for
+-        // reading and one for writing). In this case, not only is the
+-        // reference count wrong, but the chain of next_bio/prev_bio pairs
+-        // is corrupted, too.
+-        BIO *sockBIO;
+-        check(sockBIO = BIO_pop(readBIO));
+-        check(sockBIO == BIO_pop(writeBIO));
+-        check(readBIO->references == 1);
+-        check(writeBIO->references == 1);
+-        check(sockBIO->references == 1);
+-        check(!readBIO->next_bio);
+-        check(!writeBIO->next_bio);
+-        check(!sockBIO->prev_bio);
+-        BIO_free_all(sockBIO);
+-      } else {
+-        // We do not know, how to fix this situation. Something must have
+-        // changed in the OpenSSL internals. Either, this is a new bug, or
+-        // somebody fixed the code in a way that we did not anticipate.
+-        fatal("[ssl] Unexpected corruption of OpenSSL data structures");
+-      }
+-    }
+     SSL_free(*sslHndl);
+     dcheck(!ERR_peek_error());
+   }

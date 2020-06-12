@@ -17,6 +17,8 @@ function html_footer() {
 function valid_target() {
 	_target="$1"
 
+	[ -d vendors/$_target ] || return 1
+
 	[ -z "${bamboo_BUILD_TARGETS}" -a -f BUILD_TARGETS ] &&
 		bamboo_BUILD_TARGETS="$(tr '[\n]' '[ ]' < BUILD_TARGETS)"
 
@@ -34,7 +36,7 @@ function valid_target() {
 }
 
 function info() {
-	if [ -z "$1" ]; then 
+	if [ -z "$1" ]; then
 		usage
 	fi
 
@@ -46,46 +48,58 @@ function info() {
 	else
 		type=development
 	fi
-	artifacts=/public/builds/DAL/${type}/${group}/${version}
+
+	artifact_dir=/public/builds/DAL/${type}/${group}/${version}
+	mkdir -p ${artifact_dir}
+
+	artifacts_file=${artifact_dir}/unconfirmed_artifacts.txt
+	touch ${artifacts_file}
 
 	start=$(date -u -R)
-	
+
 	echo	"export BUILD_COMMIT=${bamboo_repository_revision_number}" >"$1"
 	echo	"export BUILD_TYPE=${type}" >>"$1"
 	echo	"export BUILD_GROUP=${group}" >>"$1"
 	echo	"export BUILD_VERSION=${version}" >>"$1"
-	echo	"export BUILD_ARTIFACT_DIR=${artifacts}" >>"$1"
+	echo	"export BUILD_ARTIFACT_DIR=${artifact_dir}" >>"$1"
+	echo	"export BUILD_ARTIFACTS_FILE=${artifacts_file}" >>"$1"
 	echo -e	"export BUILD_START_STRING=\"${start}\"" >>"$1"
 	echo	"export NO_BUILD_INTO_TFTPBOOT=1" >>"$1"
 	echo	"export ON_BUILD_MACHINE=1" >>"$1"
-	
-	mkdir -p ${artifacts}
-	cp "$1" ${artifacts}
-	touch "${artifacts}/valid_artifacts.txt"
+
+	cp "$1" ${artifact_dir}
 
 	exit 0
 }
 
 function build() {
-	if [ -z "$1" ]; then 
-		usage
+	target=$(echo "${bamboo_shortJobName}" | tr ' ' '/')
+	if ! valid_target $target; then
+		echo "Skipping invalid target: $target."
+		exit 0
 	fi
-	. "$1"
-	
-	if [ -z "${BUILD_COMMIT}" ]; then 
+
+	if grep --silent "^${target}$" ${BUILD_ARTIFACTS_FILE}; then
+		echo "Previous artifacts found."
+		exit 1
+	fi
+
+	if [ -z "${BUILD_COMMIT}" ]; then
 		echo "No commit hash found."
 		exit 1
 	fi
 	git checkout "${BUILD_COMMIT}"
 
-	target=$(echo "${bamboo_shortJobName}" | tr ' ' '/')
-	if ! valid_target $target; then
-		exit 0
-	fi
+	# enable static analysis by default (can disable from bamboo)
+	export ANALYZE=1
+	[ "$bamboo_ANALYZE" ] && ANALYZE="$bamboo_ANALYZE"
 
 	make ${target}_default && make release
 	ec=$?
-	
+
+	artifacts=${BUILD_ARTIFACT_DIR}/${target}
+	mkdir -p ${artifacts}
+
 	# do kcheck after the build so we have the Kconfig* files handy
 	case "$target" in
 	*Factory82*|*8200-kboot*)
@@ -93,15 +107,13 @@ function build() {
 	*)
 		tools/kcheck/check 2>&1
 		ec=$(($ec + $?))
+		tools/kcheck/test >> "${artifacts}/features.json" 2>&1
 		;;
 	esac
 
 	git diff --exit-code
 	ec=$(($ec + $?))
-	
-	artifacts=${BUILD_ARTIFACT_DIR}/${target}
-	mkdir -p ${artifacts}
-	
+
 	if [ ${ec} -eq 0 ]; then
 		# copy the artifacts if successful
 		cp -rat ${artifacts} release/*
@@ -109,7 +121,8 @@ function build() {
 	fi
 
 	if [ ${ec} -eq 0 ]; then
-		echo ${target} >> ${BUILD_ARTIFACT_DIR}/valid_artifacts.txt
+		echo "${target}" >> "${BUILD_ARTIFACTS_FILE}"
+		ec=$?
 	fi
 
 	out=${artifacts}/result.html
@@ -117,29 +130,50 @@ function build() {
 	echo	"The exit code was ${ec}.<br/>" >>"${out}"
 	echo -e "More information can be found on <a href=\"https://bamboo.digi.com/browse/${bamboo_buildResultKey}\">Bamboo</a>.<br/>" >>"${out}"
 	html_footer "${out}"
-	
+
 	exit ${ec}
 }
 
 function report() {
-	if [ -z "$1" -o -z "$2" ]; then 
+	if [ -z "$1" ]; then
 		usage
 	fi
-	. "$1"
 
-	html_header "$2"
-	echo "Version: ${BUILD_VERSION}<br/>" >>"$2"
-	echo "<ul>" >>"$2"
+	html_header "$1"
+	echo "Version: ${BUILD_VERSION}<br/>" >>"$1"
+	echo "<ul>" >>"$1"
 	for file in $(find ${BUILD_ARTIFACT_DIR} -name result.html); do
 		dir=$(dirname $file)
 		noname=${dir%/*/*}
 		name=${dir#$noname}
-		echo -e "<li><a href=\"http://eng.digi.com/${dir#/public/}\">${name#/}</a>" >>"$2"
+		echo -e "<li><a href=\"http://eng.digi.com/${dir#/public/}\">${name#/}</a>" >>"$1"
 	done
-	echo "</ul>" >>"$2"
-	html_footer "$2"
-	
+	echo "</ul>" >>"$1"
+	html_footer "$1"
+
 	exit 0
+}
+
+function ratify() {
+	mv ${BUILD_ARTIFACT_DIR}/unconfirmed_artifacts.txt ${BUILD_ARTIFACT_DIR}/valid_artifacts.txt
+	ec=$?
+
+    exit ${ec}
+}
+
+function upload() {
+	uploader="$1"
+	instance="$2"
+
+	descriptors=$(find $BUILD_ARTIFACT_DIR -name \*-rci_descriptors.tar.gz)
+	if [ -z "$descriptors" ]; then
+		echo "No descriptors found."
+		exit 1
+	fi
+	$uploader ${bamboo_RM_USERNAME} ${bamboo_RM_PASSWORD} $instance $descriptors
+	ec=$?
+
+    exit ${ec}
 }
 
 function usage() {
@@ -150,9 +184,13 @@ function usage() {
 case "$1" in
 info)	info "$2"
 		;;
-build)	build "$2"
+build)	build
 		;;
-report)	report "$2" "$3"
+report)	report "$2"
+		;;
+ratify)	ratify
+		;;
+upload)	upload "$2" "$3"
 		;;
 *)		usage
 		;;

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -x
+# grub bootstrap mode
+
+DRIVE=$(sed -n 's?.*root=/dev/\(sd.\).*?/dev/\1?p' < /proc/cmdline)
+[ "${DRIVE}" ] || DRIVE=/dev/sda
+
+/usr/sbin/grub-install --removable --recheck --target=i386-pc \
+	--boot-directory=/boot \
+	--bootloader-id=grub ${DRIVE}
+
+cp /usr/lib/grub/grub.cfg /boot/grub/grub.cfg
+
+exit 0
+

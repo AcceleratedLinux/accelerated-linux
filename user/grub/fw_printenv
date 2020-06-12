@@ -10,7 +10,11 @@
 # fw_setenv/fw_printenv-workalike wrapper for grub-editenv.
 # bootpart=a/bootpart=b translates to default=0/default=1
 
-GRUBENV=/efi/grub/grubenv
+if [ -d /efi ]; then
+	GRUBENV=/efi/grub/grubenv
+else
+	GRUBENV=/boot/grub/grubenv
+fi
 
 case $0 in
 *fw_setenv)

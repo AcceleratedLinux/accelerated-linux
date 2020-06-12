@@ -1,0 +1,12 @@
+diff -Naur iproute2-5.5.0.orig/genl/Makefile iproute2-5.5.0/genl/Makefile
+--- iproute2-5.5.0.orig/genl/Makefile	2020-01-27 23:53:09.000000000 +1000
++++ iproute2-5.5.0/genl/Makefile	2020-03-09 09:40:48.090875754 +1000
+@@ -20,7 +20,7 @@
+ 
+ all: genl
+ 
+-genl: $(GENLOBJ) $(LIBNETLINK) $(LIBUTIL) $(GENLLIB)
++genl: $(GENLOBJ) $(LIBNETLINK) $(GENLLIB)
+ 	$(QUIET_LINK)$(CC) $^ $(LDFLAGS) $(LDLIBS) -o $@
+ 
+ install: all

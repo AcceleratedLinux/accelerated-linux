@@ -21,7 +21,9 @@ ROMFS_DIRS += boot/grub efi etc etc/config etc/inittab.d home mnt proc sys tmp u
 
 DEVICES += $(DEVICE_PTY_64) \
 	ledman,c,126,0 \
-	serial/port1,c,4,64
+	serial/port1,c,4,64 \
+	ttyBLE,c,4,65 \
+	ttyGPS,c,4,67
 
 FLASH_DEVICES = \
 	efi,b,8,1 \
@@ -53,6 +55,8 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -d -p 755 pwrbtn.sh /etc/acpi/events/PWRF/00000080
 	# Add version tag to the GRUB
 	sed -e 's/<GRUB_VERSION>/$(VERSIONPKG)/g' <grub.cfg.in >$(ROMFSDIR)/boot/grub/grub.cfg
+	# Create an mtab file (symlink to /proc/self/mounts) for e2fsprogs
+	$(ROMFSINST) -s /proc/self/mounts /etc/mtab
 
 romfs.post:: romfs.cleanup
 	# We munge the grub installation to allow for read-only root

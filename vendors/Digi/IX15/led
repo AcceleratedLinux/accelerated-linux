@@ -1,0 +1,155 @@
+#!/bin/sh
+#
+# Action for IX15 LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+case "$1" in
+start)
+	ledcmd -a -N COM -N ETH -N ONLINE
+	exit 0
+	;;
+reload)
+	;;
+stop)
+	# Firmware flash
+	ledcmd -a -n COM -n ETH -n ONLINE -o COM -f ETH -O ONLINE
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+# Cellular status
+##############################################################
+# Find the primary modem, or alternatively *any* modem
+idx="$(modem name=modem idx 2> /dev/null)" || idx="$(modem idx 2> /dev/null)"
+# Find the first interface on the modem
+for i in $(runt keys mm.map.interface_idx); do
+	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
+		&& intf=$i && break
+done
+
+if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
+	if [ "$(runt get netmon.ipv4_interface_$intf.passed)" = n \
+			-o "$(runt get netmon.ipv6_interface_$intf.passed)" = n ]; then
+		CELL=1
+	elif [ "$(runt get mm.modem.$idx.status.gtech)" = 4g ]; then
+		CELL=3
+	else
+		CELL=2
+	fi
+elif [ "$(runt get network.interface.$intf.ipv4.pending)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.pending)" = 1 ]; then
+	CELL=1
+else
+	CELL=0 # not-valid, never going to work
+fi
+
+# WWAN Signal LEDs
+##############################################################
+#  Excellent signal	(5 bars)
+#  Good signal		(4 bars)
+#  Fair signal		(3 bars)
+#  Poor signal		(2 bars)
+#  Very Poor signal	(1 bars)
+#  No signal		(0 bars)
+if [ "$CELL" != 0 ]; then
+	case "$(runt get mm.modem.$idx.status.bars)" in
+	5) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
+	4) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
+	3) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;
+	2) SIGNAL="-o RSS1 -o RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	1) SIGNAL="-o RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	*) SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	esac
+else
+	SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5"
+fi
+
+# Ethernet (LAN) status
+##############################################################
+LINK=$(ip link show eth1 2> /dev/null | grep -c "state UP")
+LAN4=-1
+LAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.eth1.ipv4.up) in
+	1) [ "$(runt get netmon.ipv4_interface_eth1.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	0) [ "$(runt get network.interface.lan1.eth1.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.eth1.ipv6.up) in
+	1) [ "$(runt get netmon.ipv6_interface_eth1.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	0) [ "$(runt get network.interface.eth1.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
+	esac
+fi
+
+if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
+	LAN=$((LINK ? 2 : 0))
+elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
+	LAN=2
+elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
+	LAN=1
+else
+	LAN=0
+fi
+
+# Online LED
+##############################################################
+# This LED is the BLUE component of the POWER RGB LED. This means that the
+# color and state of this LED will be always combined with the SOLID GREEN
+# color of the POWER LED, resulting in a TURQUOISE color.
+#   Off: No interface connected.
+#   Solid blue:  Either Ethernet or Cellular networks or both are connected.
+#   Flashing blue:  Either Ethernet or Cellular networks are connecting.
+
+ONLINE="LAN3_RX"
+
+case "$CELL$LAN" in
+*2|[23]*) ONLINE_LED="-o $ONLINE";;
+*1|1*) ONLINE_LED="-f $ONLINE";;
+*) ONLINE_LED="-O $ONLINE";;
+esac
+
+# XBee LED
+##############################################################
+# When XBee is disabled, LED is off.
+# When XBee is enabled:
+#    Solid green:  XNM is running.
+#    Solid red: XNM is not running.
+if [ "$(config get xbee.enable)" = 0 ]; then
+	XBEE="-O XBEE1 -O XBEE2 -O XBEE3"
+elif [ -f "/var/run/xnm.pid" ] && sumo /bin/kill -0 $(admin-file cat /var/run/xnm.pid) >/dev/null 2>&1; then
+	XBEE="-O XBEE1 -o XBEE2 -O XBEE3"
+else
+	XBEE="-o XBEE1 -O XBEE2 -O XBEE3"
+fi
+
+# The LED table of states based on all possible cellular/lan values
+##############################################################
+LED00="-f COM -O ONLINE -f ETH" # flashing yellow
+LED10="-f COM -O ONLINE -f ETH" # flashing yellow
+LED20="-O COM -O ONLINE -f ETH" # flashing green
+LED30="-O COM -f ONLINE -O ETH" # flashing blue
+LED01="-f COM -O ONLINE -f ETH" # flashing yellow
+LED11="-f COM -O ONLINE -f ETH" # flashing yellow
+LED21="-O COM -O ONLINE -f ETH" # flashing green
+LED31="-O COM -f ONLINE -O ETH" # flashing blue
+LED02="-f COM -f ONLINE -f ETH" # flashing white
+LED12="-f COM -f ONLINE -f ETH" # flashing white
+LED22="-O COM -O ONLINE -o ETH" # solid green
+LED32="-O COM -o ONLINE -O ETH" # solid blue
+
+# Final LED command
+##############################################################
+eval ledcmd $SIGNAL $ONLINE_LED $XBEE \$LED$CELL$LAN
+
+exit 0

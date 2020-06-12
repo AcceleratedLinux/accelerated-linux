@@ -1,0 +1,20 @@
+#!/bin/sh
+# initialise /dev correctly at boot
+
+# initialise devices before we need any to function
+cp -ra /lib/udev/devices/. /dev
+
+# if the console is non-functional,  make it /dev/null
+if ! (echo -n "" > /dev/console) 2> /dev/null; then
+	rm -f /dev/console
+	ln /dev/null /dev/console
+fi
+
+# ensure we boot with a reasonable date, we don't have a real date
+# so use firmware build date minus 1 year to ensure we do not go backwards.
+if date | grep 1970 > /dev/null; then
+	YEAR=$(sed -n 's/^.* -- *.*\([0-9][0-9][0-9][0-9]\) [0-9][0-9]:.*$/\1/p' < /etc/version)
+	date -s "$((YEAR-1))-01-01 00:00:00"
+fi
+
+exit 0

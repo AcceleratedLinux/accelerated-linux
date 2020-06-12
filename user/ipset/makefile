@@ -1,4 +1,4 @@
-PKG = ipset-7.1
+PKG = ipset-7.6
 URL = http://ipset.netfilter.org/$(PKG).tar.bz2
 AUTORECONF = autoreconf
 UCFRONT_ENV = 

@@ -1,0 +1,24 @@
+From 67270ede9d6d4bf8f4651a40297d0c700f148f61 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Thu, 31 Oct 2019 10:59:35 +0100
+Subject: [PATCH 2/2] Force symlink creation in the Makefile to prevent install
+ rule error
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 837e7f7..7c116c9 100644
+--- a/Makefile
++++ b/Makefile
+@@ -238,7 +238,7 @@ install: $(RUN) libs
+ 	$(INSTALL) -d $(INST_LIBRARY)
+ 	$(INSTALL) -m 0644 $(LIBRARIES) $(INST_LIBRARY)
+ ifdef LINKED_LIB_SH
+-	cd $(INST_LIBRARY) && ln -s $(notdir $(LIB_SH) $(LINKED_LIB_SH))
++	cd $(INST_LIBRARY) && ln -sf $(notdir $(LIB_SH) $(LINKED_LIB_SH))
+ endif
+ 	$(INSTALL) -d $(INST_BINARY)
+ 	$(INSTALL) $(RUN) $(INST_BINARY)

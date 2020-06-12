@@ -68,8 +68,13 @@
 #define LEDMAN_VM		47
 #define LEDMAN_SIM1		48
 #define LEDMAN_SIM2		49
+#define LEDMAN_SIM_FAIL		50
 
-#define	LEDMAN_MAX		50	/* one more than the highest LED above */
+#define LEDMAN_XBEE1		51
+#define LEDMAN_XBEE2		52
+#define LEDMAN_XBEE3		53
+
+#define	LEDMAN_MAX		54	/* one more than the highest LED above */
 
 #define LEDMAN_MAX_NAME		16
 

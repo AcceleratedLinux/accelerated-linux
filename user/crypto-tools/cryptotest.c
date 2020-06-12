@@ -105,7 +105,6 @@
 #include <string.h>
 #include <err.h>
 
-#include <sys/sysctl.h>
 #include <time.h>
 #include <sys/time.h>
 #include <crypto/cryptodev.h>
@@ -116,6 +115,10 @@
 
 #if !defined(__UCLIBC__) && defined(__GLIBC__)
 #define	strlcpy	strncpy
+#endif
+
+#ifndef WAIT_MYPGRP
+#define WAIT_MYPGRP	0
 #endif
 
 void	hexdump(char *, int);

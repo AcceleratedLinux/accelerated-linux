@@ -1,19 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Driver for Gigabit Ethernet adapters based on the Session Layer
  * Interface (SLIC) technology by Alacritech. The driver does not
  * support the hardware acceleration features provided by these cards.
  *
  * Copyright (C) 2016 Lino Sanfilippo <LinoSanfilippo@gmx.de>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
  */
 
 #include <linux/kernel.h>
@@ -345,8 +336,6 @@ static void slic_set_rx_mode(struct net_device *dev)
 	if (sdev->promisc != set_promisc) {
 		sdev->promisc = set_promisc;
 		slic_configure_rcv(sdev);
-		/* make sure writes to receiver cant leak out of the lock */
-		mmiowb();
 	}
 	spin_unlock_bh(&sdev->link_lock);
 }
@@ -1461,8 +1450,6 @@ static netdev_tx_t slic_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (slic_get_free_tx_descs(txq) < SLIC_MAX_REQ_TX_DESCS)
 		netif_stop_queue(dev);
-	/* make sure writes to io-memory cant leak out of tx queue lock */
-	mmiowb();
 
 	return NETDEV_TX_OK;
 drop_skb:
@@ -1804,7 +1791,7 @@ static int slic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	sdev->is_fiber = slic_is_fiber(pdev->subsystem_device);
 	sdev->pdev = pdev;
 	sdev->netdev = dev;
-	sdev->regs = ioremap_nocache(pci_resource_start(pdev, 0),
+	sdev->regs = ioremap(pci_resource_start(pdev, 0),
 				     pci_resource_len(pdev, 0));
 	if (!sdev->regs) {
 		dev_err(&pdev->dev, "failed to map registers\n");

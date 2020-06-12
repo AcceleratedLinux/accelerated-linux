@@ -302,7 +302,7 @@ static void copy_two_pixels(struct vim2m_q_data *q_data_in,
 	switch (in->fourcc) {
 	case V4L2_PIX_FMT_RGB565: /* rrrrrggg gggbbbbb */
 		for (i = 0; i < 2; i++) {
-			u16 pix = *(u16 *)(src[i]);
+			u16 pix = le16_to_cpu(*(__le16 *)(src[i]));
 
 			*r++ = (u8)(((pix & 0xf800) >> 11) << 3) | 0x07;
 			*g++ = (u8)((((pix & 0x07e0) >> 5)) << 2) | 0x03;
@@ -311,12 +311,11 @@ static void copy_two_pixels(struct vim2m_q_data *q_data_in,
 		break;
 	case V4L2_PIX_FMT_RGB565X: /* gggbbbbb rrrrrggg */
 		for (i = 0; i < 2; i++) {
-			u16 pix = *(u16 *)(src[i]);
+			u16 pix = be16_to_cpu(*(__be16 *)(src[i]));
 
-			*r++ = (u8)(((0x00f8 & pix) >> 3) << 3) | 0x07;
-			*g++ = (u8)(((pix & 0x7) << 2) |
-				    ((pix & 0xe000) >> 5)) | 0x03;
-			*b++ = (u8)(((pix & 0x1f00) >> 8) << 3) | 0x07;
+			*r++ = (u8)(((pix & 0xf800) >> 11) << 3) | 0x07;
+			*g++ = (u8)((((pix & 0x07e0) >> 5)) << 2) | 0x03;
+			*b++ = (u8)((pix & 0x1f) << 3) | 0x07;
 		}
 		break;
 	default:
@@ -345,21 +344,26 @@ static void copy_two_pixels(struct vim2m_q_data *q_data_in,
 	switch (out->fourcc) {
 	case V4L2_PIX_FMT_RGB565: /* rrrrrggg gggbbbbb */
 		for (i = 0; i < 2; i++) {
-			u16 *pix = (u16 *)*dst;
+			u16 pix;
+			__le16 *dst_pix = (__le16 *)*dst;
 
-			*pix = ((*r << 8) & 0xf800) | ((*g << 3) & 0x07e0) |
-			       (*b >> 3);
+			pix = ((*r << 8) & 0xf800) | ((*g << 3) & 0x07e0) |
+			      (*b >> 3);
+
+			*dst_pix = cpu_to_le16(pix);
 
 			*dst += 2;
 		}
 		return;
 	case V4L2_PIX_FMT_RGB565X: /* gggbbbbb rrrrrggg */
 		for (i = 0; i < 2; i++) {
-			u16 *pix = (u16 *)*dst;
-			u8 green = *g++ >> 2;
+			u16 pix;
+			__be16 *dst_pix = (__be16 *)*dst;
 
-			*pix = ((green << 8) & 0xe000) | (green & 0x07) |
-			       ((*b++ << 5) & 0x1f00) | ((*r++ & 0xf8));
+			pix = ((*r << 8) & 0xf800) | ((*g << 3) & 0x07e0) |
+			      (*b >> 3);
+
+			*dst_pix = cpu_to_be16(pix);
 
 			*dst += 2;
 		}
@@ -655,8 +659,8 @@ static void device_work(struct work_struct *w)
 static int vidioc_querycap(struct file *file, void *priv,
 			   struct v4l2_capability *cap)
 {
-	strncpy(cap->driver, MEM2MEM_NAME, sizeof(cap->driver) - 1);
-	strncpy(cap->card, MEM2MEM_NAME, sizeof(cap->card) - 1);
+	strscpy(cap->driver, MEM2MEM_NAME, sizeof(cap->driver));
+	strscpy(cap->card, MEM2MEM_NAME, sizeof(cap->card));
 	snprintf(cap->bus_info, sizeof(cap->bus_info),
 		 "platform:%s", MEM2MEM_NAME);
 	return 0;
@@ -1069,6 +1073,9 @@ static int vim2m_start_streaming(struct vb2_queue *q, unsigned int count)
 	if (!q_data)
 		return -EINVAL;
 
+	if (V4L2_TYPE_IS_OUTPUT(q->type))
+		ctx->aborting = 0;
+
 	q_data->sequence = 0;
 	return 0;
 }
@@ -1268,6 +1275,9 @@ static void vim2m_device_release(struct video_device *vdev)
 
 	v4l2_device_unregister(&dev->v4l2_dev);
 	v4l2_m2m_release(dev->m2m_dev);
+#ifdef CONFIG_MEDIA_CONTROLLER
+	media_device_cleanup(&dev->mdev);
+#endif
 	kfree(dev);
 }
 
@@ -1339,6 +1349,7 @@ static int vim2m_probe(struct platform_device *pdev)
 	if (IS_ERR(dev->m2m_dev)) {
 		v4l2_err(&dev->v4l2_dev, "Failed to init mem2mem device\n");
 		ret = PTR_ERR(dev->m2m_dev);
+		dev->m2m_dev = NULL;
 		goto error_dev;
 	}
 
@@ -1355,7 +1366,7 @@ static int vim2m_probe(struct platform_device *pdev)
 						 MEDIA_ENT_F_PROC_VIDEO_SCALER);
 	if (ret) {
 		v4l2_err(&dev->v4l2_dev, "Failed to init mem2mem media controller\n");
-		goto error_m2m;
+		goto error_dev;
 	}
 
 	ret = media_device_register(&dev->mdev);
@@ -1369,11 +1380,11 @@ static int vim2m_probe(struct platform_device *pdev)
 #ifdef CONFIG_MEDIA_CONTROLLER
 error_m2m_mc:
 	v4l2_m2m_unregister_media_controller(dev->m2m_dev);
-error_m2m:
-	v4l2_m2m_release(dev->m2m_dev);
 #endif
 error_dev:
 	video_unregister_device(&dev->vfd);
+	/* vim2m_device_release called by video_unregister_device to release various objects */
+	return ret;
 error_v4l2:
 	v4l2_device_unregister(&dev->v4l2_dev);
 error_free:
@@ -1391,7 +1402,6 @@ static int vim2m_remove(struct platform_device *pdev)
 #ifdef CONFIG_MEDIA_CONTROLLER
 	media_device_unregister(&dev->mdev);
 	v4l2_m2m_unregister_media_controller(dev->m2m_dev);
-	media_device_cleanup(&dev->mdev);
 #endif
 	video_unregister_device(&dev->vfd);
 

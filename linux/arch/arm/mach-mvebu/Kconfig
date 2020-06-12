@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 menuconfig ARCH_MVEBU
 	bool "Marvell Engineering Business Unit (MVEBU) SoCs"
 	depends on ARCH_MULTI_V7 || ARCH_MULTI_V5
@@ -127,6 +128,14 @@ config MACH_6330MX
 	  Say 'Y' here if you want to support the Accelerated 6330-MX board.
 	  This adds code to support the miscellaneous IO and power controls,
 	  specific LED code, etc.
+
+config MACH_CM71xx
+	bool "Opengear CM71xx"
+	help
+	  Say 'Y' here if you want to support the Opengear CM7100 boards
+	  (this includes the CM7116, CM7132 and CM7148). This adds code to
+	  support the miscellaneous IO and power controls, specific LED
+	  code, etc.
 
 config MACH_6350SR
 	bool "Accelerated Concepts 6350SR"

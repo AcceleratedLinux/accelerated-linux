@@ -1,0 +1,84 @@
+#!/bin/sh
+#
+# Action for Digi/LR54 LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+case "$1" in
+start)
+	# Enable POWER LED
+	ledcmd -o POWER
+
+	exit 0
+	;;
+reload)
+	;;
+stop)
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+LEDCMD=
+
+##############################################################
+# Cellular LEDs
+
+# The LR54 has one LED per modem for signal strength
+# Off: No service.
+# Yellow: Poor / Fair signal.
+# Green: Good / Excellent signal.
+update_signal_led() {
+	local idx=$1
+
+	case "$(runt get mm.modem.${idx}.status.bars)" in
+		4|5) SIGNAL="-o WWAN1_SIGNAL_GREEN -O WWAN1_SIGNAL_YELLOW" ;;
+		1|2|3) SIGNAL="-o WWAN1_SIGNAL_YELLOW -O WWAN1_SIGNAL_GREEN" ;;
+		*) SIGNAL="-O WWAN1_SIGNAL_YELLOW -O WWAN1_SIGNAL_GREEN" ;;
+	esac
+}
+
+# LR54 service LED
+# Off: No service.
+# Blinking Green: 2G/3G/4G connection is coming up.
+# Solid Yellow: 2G or 3G connection is up.
+# Solid Green: 4G connection is up.
+update_service_led() {
+	local idx=$1
+
+	if [ "$(runt get mm.modem.${idx}.status.state)" = connected ]; then
+		case "$(runt get mm.modem.${idx}.status.gtech)" in
+			4g) SERVICE="-o WWAN1_SERVICE_GREEN -O WWAN1_SERVICE_YELLOW" ;;
+			3g|2g) SERVICE="-o WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN" ;;
+			*) SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN" ;;
+		esac
+	elif [ "$(runt get mm.modem.${idx}.status.state)" = disabled ]; then
+		SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN"
+	else
+		SERVICE="-f WWAN1_SERVICE_GREEN -O WWAN1_SERVICE_YELLOW"
+	fi
+}
+
+idx="$(modem idx 2>/dev/null)"
+
+SIGNAL=
+SERVICE=
+update_signal_led ${idx}
+update_service_led ${idx}
+
+LEDCMD="${LEDCMD} ${SERVICE} ${SIGNAL}"
+
+##############################################################
+
+[ -z "${LEDCMD}" ] || eval ledcmd ${LEDCMD}
+
+exit 0

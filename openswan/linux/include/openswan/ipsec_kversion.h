@@ -167,7 +167,9 @@
 #endif
 
 /* how to reset an skb we are reusing after encrpytion/decryption etc */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+# define ipsec_nf_reset(skb)	nf_reset_ct((skb))
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
 # define ipsec_nf_reset(skb)	nf_reset((skb))
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,50) && defined(CONFIG_NETFILTER)
 # define ipsec_nf_reset(skb)	do { \
@@ -245,11 +247,14 @@
 # define ipsec_register_sysctl_table(a,b) register_sysctl_table(a,b)
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
 #  define HAVE_KERNEL_TSTAMP
-#  define grab_socket_timeval(tv, sock)  { (tv) = ktime_to_timeval((sock).sk_stamp); }
+#  define grab_socket_timeval(sec, usec, sock)  { u64 s; s = ktime_to_us((sock).sk_stamp); (usec) = do_div(s, 1000000); (sec) = s; }
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22)
+#  define HAVE_KERNEL_TSTAMP
+#  define grab_socket_timeval(sec, usec, sock)  { struct timeval t; t = ktime_to_timeval((sock).sk_stamp); (usec) = t.tv_usec; (sec) = t.tv_sec; }
 #else
-#  define grab_socket_timeval(tv, sock)  { (tv) = (sock).sk_stamp; }
+#  define grab_socket_timeval(sec, usec, sock)  { (usec) = (sock).sk_stamp.usec; (sec) = (sock).sk_stamp.sec; }
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,22) || (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(5,2))
@@ -448,8 +453,10 @@
 # define	CTL_NAME(n)
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35)
-# define HAVE_SOCKET_WQ
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,3,0)
+# define HAVE_SOCKET_WQ_STRUCT
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35)
+# define HAVE_SOCKET_WQ_PTR
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36)

@@ -1,6 +1,2 @@
-iproute2-3.15.0-arpd.patch
-iproute2-3.15.0-libutil.patch
-iproute2-3.15.0-static.patch
-iproute2-3.15.0-diet.patch
-iproute2-3.15.0-ioctl-compat.patch
-iproute2-3.15.0-stdint.patch
+iproute2-5.5.0-tc-diet.patch
+iproute2-5.5.0-libutil.patch

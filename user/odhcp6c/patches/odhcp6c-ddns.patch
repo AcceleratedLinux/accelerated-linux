@@ -1,0 +1,108 @@
+diff -ru odhcp6c.orig/src/dhcpv6.c odhcp6c/src/dhcpv6.c
+--- odhcp6c.orig/src/dhcpv6.c	2019-04-15 11:40:39.000000000 +1000
++++ odhcp6c/src/dhcpv6.c	2019-08-21 15:51:30.604503047 +1000
+@@ -107,11 +107,12 @@
+ 
+ // client options
+ static unsigned int client_options = 0;
++static const char *cmd_hostname;
+ 
+-
+-int init_dhcpv6(const char *ifname, unsigned int options, int sol_timeout)
++int init_dhcpv6(const char *ifname, unsigned int options, const char *hostname, int sol_timeout)
+ {
+ 	client_options = options;
++	cmd_hostname = hostname;
+ 	dhcpv6_retx[DHCPV6_MSG_SOLICIT].max_timeo = sol_timeout;
+ 
+ 	sock = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
+@@ -235,7 +236,10 @@
+ {
+ 	// Build FQDN
+ 	char fqdn_buf[256];
+-	gethostname(fqdn_buf, sizeof(fqdn_buf));
++	if(cmd_hostname)
++		strncpy( fqdn_buf, cmd_hostname, sizeof(fqdn_buf));
++	else
++		gethostname(fqdn_buf, sizeof(fqdn_buf));
+ 	struct {
+ 		uint16_t type;
+ 		uint16_t len;
+@@ -478,6 +482,9 @@
+ 
+ 	if (!(client_options & DHCPV6_CLIENT_FQDN))
+ 		iov[IOV_FQDN].iov_len = 0;
++	else if( (client_options & DHCPV6_CLIENT_DDNS)) {
++		fqdn.flags = 1;	/* Set the 'S' bit to ask the DHCP server to cascade a DDNS update */
++	}
+ 
+ 	struct sockaddr_in6 srv = {AF_INET6, htons(DHCPV6_SERVER_PORT),
+ 		0, ALL_DHCPV6_RELAYS, ifindex};
+diff -ru odhcp6c.orig/src/odhcp6c.c odhcp6c/src/odhcp6c.c
+--- odhcp6c.orig/src/odhcp6c.c	2019-04-15 11:40:39.000000000 +1000
++++ odhcp6c/src/odhcp6c.c	2019-08-21 16:07:17.727671529 +1000
+@@ -73,8 +73,9 @@
+ 	int logopt = LOG_PID;
+ 	int c;
+ 	unsigned int client_options = DHCPV6_CLIENT_FQDN | DHCPV6_ACCEPT_RECONFIGURE;
++	const char *cmd_hostname = NULL;
+ 
+-	while ((c = getopt(argc, argv, "S::N:V:P:FB:c:i:r:Ru:s:kt:m:hedp:fav")) != -1) {
++	while ((c = getopt(argc, argv, "S::N:V:P:FB:c:i:r:Ru:s:kt:m:hedp:favDH:")) != -1) {
+ 		switch (c) {
+ 		case 'S':
+ 			allow_slaac_only = (optarg) ? atoi(optarg) : -1;
+@@ -207,6 +208,15 @@
+ 		case 'f':
+ 			client_options &= ~DHCPV6_CLIENT_FQDN;
+ 			break;
++			
++		case 'D':
++			client_options |= DHCPV6_CLIENT_DDNS;
++			break;
++			
++		case 'H':
++			cmd_hostname = optarg;
++			printf("DHCPv6 hostname set to : '%s'\n", cmd_hostname);
++			break;
+ 
+ 		case 'a':
+ 			client_options &= ~DHCPV6_ACCEPT_RECONFIGURE;
+@@ -240,7 +250,7 @@
+ 	signal(SIGUSR2, sighandler);
+ 
+ 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) < 0 ||
+-			init_dhcpv6(ifname, client_options, sol_timeout) ||
++			init_dhcpv6(ifname, client_options, cmd_hostname, sol_timeout) ||
+ 			ra_init(ifname, &ifid) || script_init(script, ifname)) {
+ 		syslog(LOG_ERR, "failed to initialize: %s", strerror(errno));
+ 		return 3;
+@@ -443,6 +453,8 @@
+ 	"\nInvocation options:\n"
+ 	"	-p <pidfile>	Set pidfile (/var/run/odhcp6c.pid)\n"
+ 	"	-d		Daemonize\n"
++	"   -D      Request DNS update\n"
++	"   -H <hostname>   Set hostname from command line\n"
+ 	"	-e		Write logmessages to stderr\n"
+ 	"	-v		Increase logging verbosity\n"
+ 	"	-h		Show this help\n\n";
+diff -ru odhcp6c.orig/src/odhcp6c.h odhcp6c/src/odhcp6c.h
+--- odhcp6c.orig/src/odhcp6c.h	2019-04-15 11:40:39.000000000 +1000
++++ odhcp6c/src/odhcp6c.h	2019-08-21 15:46:52.348554920 +1000
+@@ -116,6 +116,7 @@
+ 	DHCPV6_STRICT_OPTIONS = 1,
+ 	DHCPV6_CLIENT_FQDN = 2,
+ 	DHCPV6_ACCEPT_RECONFIGURE = 4,
++	DHCPV6_CLIENT_DDNS = (1 << 15)	/* Keep this option clear of any that may be added upstream */
+ };
+ 
+ typedef int(reply_handler)(enum dhcpv6_msg orig, const int rc,
+@@ -307,7 +308,7 @@
+ 	uint16_t length;
+ };
+ 
+-int init_dhcpv6(const char *ifname, unsigned int client_options, int sol_timeout);
++int init_dhcpv6(const char *ifname, unsigned int options, const char *hostname, int sol_timeout);
+ int dhcpv6_set_ia_mode(enum odhcp6c_ia_mode na, enum odhcp6c_ia_mode pd);
+ int dhcpv6_request(enum dhcpv6_msg type);
+ int dhcpv6_poll_reconfigure(void);

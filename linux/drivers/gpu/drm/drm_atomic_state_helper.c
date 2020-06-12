@@ -24,12 +24,13 @@
  * Daniel Vetter <daniel.vetter@ffwll.ch>
  */
 
-#include <drm/drm_atomic_state_helper.h>
-#include <drm/drm_crtc.h>
-#include <drm/drm_plane.h>
-#include <drm/drm_connector.h>
 #include <drm/drm_atomic.h>
+#include <drm/drm_atomic_state_helper.h>
+#include <drm/drm_connector.h>
+#include <drm/drm_crtc.h>
 #include <drm/drm_device.h>
+#include <drm/drm_plane.h>
+#include <drm/drm_print.h>
 #include <drm/drm_writeback.h>
 
 #include <linux/slab.h>
@@ -57,6 +58,45 @@
  */
 
 /**
+ * __drm_atomic_helper_crtc_state_reset - reset the CRTC state
+ * @crtc_state: atomic CRTC state, must not be NULL
+ * @crtc: CRTC object, must not be NULL
+ *
+ * Initializes the newly allocated @crtc_state with default
+ * values. This is useful for drivers that subclass the CRTC state.
+ */
+void
+__drm_atomic_helper_crtc_state_reset(struct drm_crtc_state *crtc_state,
+				     struct drm_crtc *crtc)
+{
+	crtc_state->crtc = crtc;
+}
+EXPORT_SYMBOL(__drm_atomic_helper_crtc_state_reset);
+
+/**
+ * __drm_atomic_helper_crtc_reset - reset state on CRTC
+ * @crtc: drm CRTC
+ * @crtc_state: CRTC state to assign
+ *
+ * Initializes the newly allocated @crtc_state and assigns it to
+ * the &drm_crtc->state pointer of @crtc, usually required when
+ * initializing the drivers or when called from the &drm_crtc_funcs.reset
+ * hook.
+ *
+ * This is useful for drivers that subclass the CRTC state.
+ */
+void
+__drm_atomic_helper_crtc_reset(struct drm_crtc *crtc,
+			       struct drm_crtc_state *crtc_state)
+{
+	if (crtc_state)
+		__drm_atomic_helper_crtc_state_reset(crtc_state, crtc);
+
+	crtc->state = crtc_state;
+}
+EXPORT_SYMBOL(__drm_atomic_helper_crtc_reset);
+
+/**
  * drm_atomic_helper_crtc_reset - default &drm_crtc_funcs.reset hook for CRTCs
  * @crtc: drm CRTC
  *
@@ -65,14 +105,13 @@
  */
 void drm_atomic_helper_crtc_reset(struct drm_crtc *crtc)
 {
-	if (crtc->state)
-		__drm_atomic_helper_crtc_destroy_state(crtc->state);
-
-	kfree(crtc->state);
-	crtc->state = kzalloc(sizeof(*crtc->state), GFP_KERNEL);
+	struct drm_crtc_state *crtc_state =
+		kzalloc(sizeof(*crtc->state), GFP_KERNEL);
 
 	if (crtc->state)
-		crtc->state->crtc = crtc;
+		crtc->funcs->atomic_destroy_state(crtc, crtc->state);
+
+	__drm_atomic_helper_crtc_reset(crtc, crtc_state);
 }
 EXPORT_SYMBOL(drm_atomic_helper_crtc_reset);
 
@@ -105,7 +144,11 @@ void __drm_atomic_helper_crtc_duplicate_state(struct drm_crtc *crtc,
 	state->zpos_changed = false;
 	state->commit = NULL;
 	state->event = NULL;
-	state->pageflip_flags = 0;
+	state->async_flip = false;
+
+	/* Self refresh should be canceled when a new update is available */
+	state->active = drm_atomic_crtc_effectively_active(state);
+	state->self_refresh_active = false;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_crtc_duplicate_state);
 
@@ -185,23 +228,43 @@ void drm_atomic_helper_crtc_destroy_state(struct drm_crtc *crtc,
 EXPORT_SYMBOL(drm_atomic_helper_crtc_destroy_state);
 
 /**
- * __drm_atomic_helper_plane_reset - resets planes state to default values
+ * __drm_atomic_helper_plane_state_reset - resets plane state to default values
+ * @plane_state: atomic plane state, must not be NULL
  * @plane: plane object, must not be NULL
- * @state: atomic plane state, must not be NULL
  *
- * Initializes plane state to default. This is useful for drivers that subclass
- * the plane state.
+ * Initializes the newly allocated @plane_state with default
+ * values. This is useful for drivers that subclass the CRTC state.
+ */
+void __drm_atomic_helper_plane_state_reset(struct drm_plane_state *plane_state,
+					   struct drm_plane *plane)
+{
+	plane_state->plane = plane;
+	plane_state->rotation = DRM_MODE_ROTATE_0;
+
+	plane_state->alpha = DRM_BLEND_ALPHA_OPAQUE;
+	plane_state->pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
+}
+EXPORT_SYMBOL(__drm_atomic_helper_plane_state_reset);
+
+/**
+ * __drm_atomic_helper_plane_reset - reset state on plane
+ * @plane: drm plane
+ * @plane_state: plane state to assign
+ *
+ * Initializes the newly allocated @plane_state and assigns it to
+ * the &drm_crtc->state pointer of @plane, usually required when
+ * initializing the drivers or when called from the &drm_plane_funcs.reset
+ * hook.
+ *
+ * This is useful for drivers that subclass the plane state.
  */
 void __drm_atomic_helper_plane_reset(struct drm_plane *plane,
-				     struct drm_plane_state *state)
+				     struct drm_plane_state *plane_state)
 {
-	state->plane = plane;
-	state->rotation = DRM_MODE_ROTATE_0;
+	if (plane_state)
+		__drm_atomic_helper_plane_state_reset(plane_state, plane);
 
-	state->alpha = DRM_BLEND_ALPHA_OPAQUE;
-	state->pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
-
-	plane->state = state;
+	plane->state = plane_state;
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_reset);
 
@@ -309,12 +372,28 @@ void drm_atomic_helper_plane_destroy_state(struct drm_plane *plane,
 EXPORT_SYMBOL(drm_atomic_helper_plane_destroy_state);
 
 /**
+ * __drm_atomic_helper_connector_state_reset - reset the connector state
+ * @conn_state: atomic connector state, must not be NULL
+ * @connector: connectotr object, must not be NULL
+ *
+ * Initializes the newly allocated @conn_state with default
+ * values. This is useful for drivers that subclass the connector state.
+ */
+void
+__drm_atomic_helper_connector_state_reset(struct drm_connector_state *conn_state,
+					  struct drm_connector *connector)
+{
+	conn_state->connector = connector;
+}
+EXPORT_SYMBOL(__drm_atomic_helper_connector_state_reset);
+
+/**
  * __drm_atomic_helper_connector_reset - reset state on connector
  * @connector: drm connector
  * @conn_state: connector state to assign
  *
  * Initializes the newly allocated @conn_state and assigns it to
- * the &drm_conector->state pointer of @connector, usually required when
+ * the &drm_connector->state pointer of @connector, usually required when
  * initializing the drivers or when called from the &drm_connector_funcs.reset
  * hook.
  *
@@ -325,7 +404,7 @@ __drm_atomic_helper_connector_reset(struct drm_connector *connector,
 				    struct drm_connector_state *conn_state)
 {
 	if (conn_state)
-		conn_state->connector = connector;
+		__drm_atomic_helper_connector_state_reset(conn_state, connector);
 
 	connector->state = conn_state;
 }
@@ -353,6 +432,24 @@ void drm_atomic_helper_connector_reset(struct drm_connector *connector)
 EXPORT_SYMBOL(drm_atomic_helper_connector_reset);
 
 /**
+ * drm_atomic_helper_connector_tv_reset - Resets TV connector properties
+ * @connector: DRM connector
+ *
+ * Resets the TV-related properties attached to a connector.
+ */
+void drm_atomic_helper_connector_tv_reset(struct drm_connector *connector)
+{
+	struct drm_cmdline_mode *cmdline = &connector->cmdline_mode;
+	struct drm_connector_state *state = connector->state;
+
+	state->tv.margins.left = cmdline->tv_margins.left;
+	state->tv.margins.right = cmdline->tv_margins.right;
+	state->tv.margins.top = cmdline->tv_margins.top;
+	state->tv.margins.bottom = cmdline->tv_margins.bottom;
+}
+EXPORT_SYMBOL(drm_atomic_helper_connector_tv_reset);
+
+/**
  * __drm_atomic_helper_connector_duplicate_state - copy atomic connector state
  * @connector: connector object
  * @state: atomic connector state
@@ -368,6 +465,9 @@ __drm_atomic_helper_connector_duplicate_state(struct drm_connector *connector,
 	if (state->crtc)
 		drm_connector_get(connector);
 	state->commit = NULL;
+
+	if (state->hdr_output_metadata)
+		drm_property_blob_get(state->hdr_output_metadata);
 
 	/* Don't copy over a writeback job, they are used only once */
 	state->writeback_job = NULL;
@@ -416,6 +516,8 @@ __drm_atomic_helper_connector_destroy_state(struct drm_connector_state *state)
 
 	if (state->writeback_job)
 		drm_writeback_cleanup_job(state->writeback_job);
+
+	drm_property_blob_put(state->hdr_output_metadata);
 }
 EXPORT_SYMBOL(__drm_atomic_helper_connector_destroy_state);
 

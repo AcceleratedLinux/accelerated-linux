@@ -90,6 +90,19 @@ int mcu_tx54_transaction_(struct mcu_tx54 *mcu, struct mcu_tx_pkt *tx,
 	int retry = 10;
 	int ret;
 
+	/*
+	 * If we are in power-off-only mode, don't allow any other command go
+	 * out
+	 */
+	if (mcu->pwroff_only) {
+		typeof(tx->cmd) cmd = get_unaligned(&tx->cmd);
+
+		if (cmd != MCU_CMD_SET_POWER) {
+			dev_dbg(mcu->dev, "only power off command allowed\n");
+			return -EPERM;
+		}
+	}
+
 	/* Set packet length */
 	tx->len = tx_len;
 
@@ -406,6 +419,8 @@ static ssize_t bloader_mode_store(struct device *dev,
 	 */
 	disable_irq(mcu->irq);
 
+	mcu->pwroff_only = true;
+
 	return count;
 }
 
@@ -519,8 +534,10 @@ static int mcu_tx54_i2c_probe(struct i2c_client *i2c,
 			"Communication error on device probing. Disabling interrupts\n");
 		disable_irq(mcu->irq);
 
-		/* Load the driver anyway, otherwise if MCU stuck in the
-		 * bootloader, we won't be able to power off the board */
+		/* Load the driver in power-off only mode anyway, otherwise if
+		 * MCU stuck in the bootloader, we won't be able to power off
+		 * the board */
+		mcu->pwroff_only = true;
 	}
 
 	return mcu_tx54_device_init(mcu);

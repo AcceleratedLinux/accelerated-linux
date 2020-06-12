@@ -71,29 +71,14 @@ crfind(int crid)
  * Convert a little endian byte string in 'p' that
  * is 'plen' bytes long to a BIGNUM. If 'dst' is NULL,
  * a new BIGNUM is allocated.  Returns NULL on failure.
- *
- * XXX there has got to be a more efficient way to do
- * this, but I haven't figured out enough of the OpenSSL
- * magic.
  */
 BIGNUM *
 le_to_bignum(BIGNUM *dst, u_int8_t *p, int plen)
 {
-	u_int8_t *pd;
-	int i;
-
 	if (plen == 0)
 		return (NULL);
 
-	if ((pd = (u_int8_t *)malloc(plen)) == NULL)
-		return (NULL);
-
-	for (i = 0; i < plen; i++)
-		pd[i] = p[plen - i - 1];
-
-	dst = BN_bin2bn(pd, plen, dst);
-	free(pd);
-	return (dst);
+	return (BN_lebin2bn(p, plen, dst));
 }
 
 /*
@@ -105,7 +90,6 @@ le_to_bignum(BIGNUM *dst, u_int8_t *p, int plen)
 u_int8_t *
 bignum_to_le(BIGNUM *n, u_int8_t *rd)
 {
-	int i, j, k;
 	int blen = BN_num_bytes(n);
 
 	if (blen == 0)
@@ -115,15 +99,8 @@ bignum_to_le(BIGNUM *n, u_int8_t *rd)
 	if (rd == NULL)
 		return (NULL);
 
-	for (i = 0, j = 0; i < n->top; i++) {
-		for (k = 0; k < BN_BITS2 / 8; k++) {
-			if ((j + k) >= blen)
-				goto out;
-			rd[j + k] = n->d[i] >> (k * 8);
-		}
-		j += BN_BITS2 / 8;
-	}
-out:
+	if (BN_bn2lebinpad(n, rd, blen) < 0)
+		return (NULL);
 	return (rd);
 }
 

@@ -22,10 +22,8 @@ static irqreturn_t lis2hh12_irq_management(int irq, void *private)
 {
 	struct lis2hh12_data *cdata = private;
 	u8 status;
-	struct timespec ts;
 
-	ts = ktime_to_timespec(ktime_get_boottime());
-	cdata->timestamp = timespec_to_ns(&ts);
+	cdata->timestamp = ktime_to_ns(ktime_get_boottime());
 
 	if (cdata->hwfifo_enabled) {
 		cdata->tf->read(cdata, LIS2HH12_FIFO_STATUS_ADDR, 1, &status);

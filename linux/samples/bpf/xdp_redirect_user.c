@@ -1,13 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016 John Fastabend <john.r.fastabend@intel.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of version 2 of the GNU General Public
- * License as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
  */
 #include <linux/bpf.h>
 #include <linux/if_link.h>
@@ -18,13 +10,14 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <net/if.h>
 #include <unistd.h>
 #include <libgen.h>
 #include <sys/resource.h>
 
 #include "bpf_util.h"
 #include <bpf/bpf.h>
-#include "bpf/libbpf.h"
+#include <bpf/libbpf.h>
 
 static int ifindex_in;
 static int ifindex_out;
@@ -93,7 +86,7 @@ static void poll_stats(int interval, int ifindex)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"usage: %s [OPTS] IFINDEX_IN IFINDEX_OUT\n\n"
+		"usage: %s [OPTS] <IFNAME|IFINDEX>_IN <IFNAME|IFINDEX>_OUT\n\n"
 		"OPTS:\n"
 		"    -S    use skb-mode\n"
 		"    -N    enforce native mode\n"
@@ -124,7 +117,7 @@ int main(int argc, char **argv)
 			xdp_flags |= XDP_FLAGS_SKB_MODE;
 			break;
 		case 'N':
-			xdp_flags |= XDP_FLAGS_DRV_MODE;
+			/* default, set below */
 			break;
 		case 'F':
 			xdp_flags &= ~XDP_FLAGS_UPDATE_IF_NOEXIST;
@@ -135,8 +128,11 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (!(xdp_flags & XDP_FLAGS_SKB_MODE))
+		xdp_flags |= XDP_FLAGS_DRV_MODE;
+
 	if (optind == argc) {
-		printf("usage: %s IFINDEX_IN IFINDEX_OUT\n", argv[0]);
+		printf("usage: %s <IFNAME|IFINDEX>_IN <IFNAME|IFINDEX>_OUT\n", argv[0]);
 		return 1;
 	}
 
@@ -145,8 +141,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	ifindex_in = strtoul(argv[optind], NULL, 0);
-	ifindex_out = strtoul(argv[optind + 1], NULL, 0);
+	ifindex_in = if_nametoindex(argv[optind]);
+	if (!ifindex_in)
+		ifindex_in = strtoul(argv[optind], NULL, 0);
+
+	ifindex_out = if_nametoindex(argv[optind + 1]);
+	if (!ifindex_out)
+		ifindex_out = strtoul(argv[optind + 1], NULL, 0);
+
 	printf("input: %d output: %d\n", ifindex_in, ifindex_out);
 
 	snprintf(filename, sizeof(filename), "%s_kern.o", argv[0]);
@@ -197,7 +199,7 @@ int main(int argc, char **argv)
 	}
 
 	memset(&info, 0, sizeof(info));
-	ret = bpf_obj_get_info_by_fd(prog_fd, &info, &info_len);
+	ret = bpf_obj_get_info_by_fd(dummy_prog_fd, &info, &info_len);
 	if (ret) {
 		printf("can't get prog info - %s\n", strerror(errno));
 		return ret;

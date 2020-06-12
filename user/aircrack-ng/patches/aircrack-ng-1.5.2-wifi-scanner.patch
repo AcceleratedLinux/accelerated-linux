@@ -1,0 +1,634 @@
+--- aircrack-ng-1.5.2/src/airodump-ng.c	2018-12-09 22:53:44.000000000 +0000
++++ aircrack-ng-1.5.2/src/airodump-ng.c	2019-09-07 02:31:33.776000000 +0000
+@@ -255,11 +255,9 @@
+ 			{
+ 				snprintf(G.message, sizeof(G.message), "][ paused output");
+ 				pthread_mutex_lock(&(G.mx_print));
+-
+ 				moveto(1, 1);
+ 				dump_print(G.ws.ws_row, G.ws.ws_col, G.num_cards);
+ 				erase_display(0);
+-
+ 				pthread_mutex_unlock(&(G.mx_print));
+ 			}
+ 			else
+@@ -374,11 +372,9 @@
+ 		if (G.do_exit == 0 && !G.do_pause)
+ 		{
+ 			pthread_mutex_lock(&(G.mx_print));
+-
+ 			moveto(1, 1);
+ 			dump_print(G.ws.ws_row, G.ws.ws_col, G.num_cards);
+ 			erase_display(0);
+-
+ 			pthread_mutex_unlock(&(G.mx_print));
+ 		}
+ 	}
+@@ -723,7 +719,9 @@
+ 	"      --output-format\n"
+ 	"                  <formats> : Output format. Possible values:\n"
+ 	"                              pcap, ivs, csv, gps, kismet, netxml, "
+-	"logcsv\n"
++	"logcsv, wifi_scanner\n"
++	"      --sys-name            : Unique System Name\n"
++	"      --loc-name            : Unique Location Name\n"
+ 	"      --ignore-negative-one : Removes the message that says\n"
+ 	"                              fixed channel <interface>: -1\n"
+ 	"      --write-interval\n"
+@@ -934,6 +932,17 @@
+ 		return (0);
+ 	}
+ 
++	if (G.output_format_wifi_scanner)
++	{
++		if ((G.f_txt = fopen(prefix, "wb+")) == NULL)
++		{
++			perror("fopen failed");
++			fprintf(stderr, "Could not create \"%s\".\n", prefix);
++			return 1;
++		}
++		return 0;
++	}
++
+ 	/* Create a buffer of the length of the prefix + '-' + 2 numbers + '.'
+ 	   + longest extension ("kismet.netxml") + terminating 0. */
+ 	ofn_len = strlen(prefix) + 1 + 2 + 1 + 13 + 1;
+@@ -1372,11 +1381,11 @@
+ 	struct timeval tv;
+ 	struct ivs2_pkthdr ivs2;
+ 	unsigned char *p, *org_p, c;
+-	unsigned char bssid[6];
+-	unsigned char stmac[6];
+-	unsigned char namac[6];
+-	unsigned char clear[2048];
+-	int weight[16];
++	unsigned char bssid[6] = {0};
++	unsigned char stmac[6] = {0};
++	unsigned char namac[6] = {0};
++	unsigned char clear[2048] = {0};
++	int weight[16] = {0};
+ 	int num_xor = 0;
+ 
+ 	struct AP_info * ap_cur = NULL;
+@@ -1482,6 +1491,7 @@
+ 
+ 		ap_cur->tinit = time(NULL);
+ 		ap_cur->tlast = time(NULL);
++		ap_cur->time_printed = 0;
+ 
+ 		ap_cur->avg_power = -1;
+ 		ap_cur->best_power = -1;
+@@ -1490,6 +1500,7 @@
+ 		for (i = 0; i < NB_PWR; i++) ap_cur->power_lvl[i] = -1;
+ 
+ 		ap_cur->channel = -1;
++		ap_cur->old_channel = -1;
+ 		ap_cur->max_speed = -1;
+ 		ap_cur->security = 0;
+ 
+@@ -1779,6 +1790,7 @@
+ 		st_cur->tinit = time(NULL);
+ 		st_cur->tlast = time(NULL);
+ 
++		st_cur->time_printed = 0;
+ 		st_cur->power = -1;
+ 		st_cur->best_power = -1;
+ 		st_cur->rate_to = -1;
+@@ -1790,7 +1802,7 @@
+ 		st_cur->qos_fr_ds = 0;
+ 		st_cur->qos_to_ds = 0;
+ 		st_cur->channel = 0;
+-
++		st_cur->old_channel = 0;
+ 		gettimeofday(&(st_cur->ftimer), NULL);
+ 
+ 		memcpy(st_cur->gps_loc_min, G.gps_loc, sizeof(st_cur->gps_loc_min));
+@@ -4339,8 +4351,10 @@
+ 	}
+ }
+ 
++
+ static char * format_text_for_csv(const unsigned char * input, int len)
+ {
++	#define ESSID_LENGTH 32
+ 	// Unix style encoding
+ 	char *ret, *rret;
+ 	int i, pos, contains_space_end;
+@@ -4358,6 +4372,11 @@
+ 		return ret;
+ 	}
+ 
++	if ( G.output_format_wifi_scanner && (len > ESSID_LENGTH))
++	{
++		len = ESSID_LENGTH;
++	}
++
+ 	pos = 0;
+ 	contains_space_end = (input[0] == ' ') || input[len - 1] == ' ';
+ 
+@@ -4371,6 +4390,11 @@
+ 
+ 	for (i = 0; i < len; i++)
+ 	{
++		if( G.output_format_wifi_scanner && (input[i] == 0) )
++		{ //stop parsing at first encounter of NULL
++			goto done_parsing;
++		}
++
+ 		if (!isprint(input[i]) || input[i] == ',' || input[i] == '\\'
+ 			|| input[i] == '"')
+ 		{
+@@ -4399,6 +4423,7 @@
+ 		ret[pos++] = '"';
+ 	}
+ 
++done_parsing:
+ 	ret[pos++] = '\0';
+ 
+ 	rret = realloc(ret, pos);
+@@ -4664,6 +4689,284 @@
+ 	return 0;
+ }
+ 
++static void clear_wifi_scanner_cache(void)
++{
++	struct AP_info *ap_cur = NULL, *ap_next = NULL, *ap_prv = NULL;
++	struct ST_info *st_cur = NULL, *st_next = NULL;
++	struct NA_info *na_cur = NULL, *na_next = NULL;
++	struct oui *oui_cur = NULL, *oui_next = NULL;
++
++	time_t curr_time = 0;
++
++	/* check if it's time to clear the wifi packet cache */
++	curr_time = time(NULL);
++	if ( (curr_time - G.last_cache_reset) > G.cache_reset_interval)
++	{
++		G.last_cache_reset = curr_time;
++
++		//Clean content of ap_cur list
++		ap_cur = G.ap_1st;
++		while (ap_cur != NULL)
++		{
++			uniqueiv_wipe(ap_cur->uiv_root);
++			list_tail_free(&(ap_cur->packets));
++			if (NULL != ap_cur->manuf) free(ap_cur->manuf);
++			if (G.detect_anomaly) data_wipe(ap_cur->data_root);
++			ap_prv = ap_cur;
++			ap_cur = ap_cur->next;
++        	}
++
++		//free AP linked list
++		ap_cur = G.ap_1st;
++		while (ap_cur != NULL)
++		{
++			ap_next = ap_cur->next;
++			free(ap_cur);
++			ap_cur = ap_next;
++		}
++		G.ap_1st = NULL;
++		G.ap_end = NULL;
++
++		//free wifi client linked list
++		st_cur = G.st_1st;
++		st_next = NULL;
++
++		while (st_cur != NULL)
++		{
++			st_next = st_cur->next;
++			if (NULL != st_cur->manuf) free(st_cur->manuf);
++			free(st_cur);
++			st_cur = st_next;
++		}
++		G.st_1st = NULL;
++		G.st_end = NULL;
++
++		//free other linked lists
++		na_cur = G.na_1st;
++		na_next = NULL;
++
++		while (na_cur != NULL)
++		{
++			na_next = na_cur->next;
++			free(na_cur);
++			na_cur = na_next;
++		}
++		G.na_1st = NULL;
++		G.na_end = NULL;
++
++		if (G.manufList)
++		{
++			oui_cur = G.manufList;
++			while (oui_cur != NULL)
++			{
++			    oui_next = oui_cur->next;
++			    free(oui_cur);
++			    oui_cur = oui_next;
++			}
++			G.manufList = NULL;
++		}
++	
++	}
++}
++
++static int dump_write_wifi_scanner(void)
++{
++	struct AP_info *ap_cur = NULL;
++	struct ST_info *st_cur = NULL;
++	time_t curr_time = 0;
++
++	if (!G.record_data || !G.output_format_wifi_scanner) return 0;
++
++	ap_cur = G.ap_1st;
++	/* Access Points */
++	while (ap_cur != NULL)
++	{
++		if (((time(NULL) - ap_cur->time_printed) < G.filter_seconds) && (ap_cur->old_channel == ap_cur->channel))
++		{
++			ap_cur = ap_cur->next;
++			continue;
++		}
++
++		if (memcmp(ap_cur->bssid, BROADCAST, 6) == 0)
++		{
++			ap_cur = ap_cur->next;
++			continue;
++		}
++
++		if (ap_cur->security != 0 && G.f_encrypt != 0
++			&& ((ap_cur->security & G.f_encrypt) == 0))
++		{
++                        ap_cur = ap_cur->next;
++			continue;
++		}
++
++		if (is_filtered_essid(ap_cur->essid))
++		{
++			ap_cur = ap_cur->next;
++			continue;
++		}
++
++		ap_cur->time_printed = time(NULL);
++		ap_cur->old_channel = ap_cur->channel;
++
++		fprintf(G.f_txt, "%s|%s|",G.sys_name, G.loc_name);
++
++		struct tm * ts_struct;
++		ts_struct = localtime(&ap_cur->tlast);
++		fprintf(G.f_txt, "%d-%02d-%02d %02d:%02d:%02d|", ts_struct->tm_year + 1900, ts_struct->tm_mon+1, ts_struct->tm_mday,
++								ts_struct->tm_hour, ts_struct->tm_min, ts_struct->tm_sec);
++
++		fprintf(G.f_txt,
++				"%02X:%02X:%02X:%02X:%02X:%02X|",
++				ap_cur->bssid[0],
++				ap_cur->bssid[1],
++				ap_cur->bssid[2],
++				ap_cur->bssid[3],
++				ap_cur->bssid[4],
++				ap_cur->bssid[5]);
++
++		fprintf(G.f_txt,                                       /*printed twice to maintain output format*/
++				"%02X:%02X:%02X:%02X:%02X:%02X|",
++				ap_cur->bssid[0],
++				ap_cur->bssid[1],
++				ap_cur->bssid[2],
++				ap_cur->bssid[3],
++				ap_cur->bssid[4],
++				ap_cur->bssid[5]);
++
++		fprintf(G.f_txt, "%2d|", ap_cur->channel);
++
++		if ((ap_cur->ssid_length == 0) || (ap_cur->essid[0] == 0) )
++		{
++			fprintf(G.f_txt, "<hidden-ssid>|");
++		}
++		else
++		{
++			if (verifyssid(ap_cur->essid))
++			{
++				fprintf(G.f_txt, "%s|",ap_cur->essid);
++			}
++			else
++			{
++				char *essid = NULL;
++				essid = format_text_for_csv(ap_cur->essid, ap_cur->ssid_length);
++				if(essid != NULL)
++				{
++				   fprintf(G.f_txt, "%s|",essid);
++				   free(essid);
++				}
++				else
++				{
++				   fprintf(G.f_txt,"|");
++				}
++			}
++		}
++
++		fprintf(G.f_txt, "%3d\r\n", ap_cur->avg_power);
++		ap_cur = ap_cur->next;
++	}
++
++
++	/*   Process Clients */
++	st_cur = G.st_1st;
++	while (st_cur != NULL)
++	{
++		ap_cur = st_cur->base;
++		if (ap_cur->nb_pkt < 2)
++		{
++			st_cur = st_cur->next;
++			continue;
++		}
++		if (((time(NULL) - st_cur->time_printed) < G.filter_seconds) && (st_cur->old_channel == st_cur->channel))
++		{
++			st_cur = st_cur->next;
++			continue;
++		}
++		st_cur->time_printed = time(NULL);
++		st_cur->old_channel = st_cur->channel;
++		fprintf(G.f_txt, "%s|%s|", G.sys_name, G.loc_name);
++
++		struct tm * ts_struct;
++
++		ts_struct = localtime(&st_cur->tlast);
++		fprintf(G.f_txt, "%d-%02d-%02d %02d:%02d:%02d|", ts_struct->tm_year + 1900, ts_struct->tm_mon+1, ts_struct->tm_mday,
++								 ts_struct->tm_hour, ts_struct->tm_min, ts_struct->tm_sec);
++
++		fprintf(G.f_txt,
++				"%02X:%02X:%02X:%02X:%02X:%02X|",
++				st_cur->stmac[0],
++				st_cur->stmac[1],
++				st_cur->stmac[2],
++				st_cur->stmac[3],
++				st_cur->stmac[4],
++				st_cur->stmac[5]);
++
++		if (!memcmp(ap_cur->bssid, BROADCAST, 6))
++		{
++			fprintf(G.f_txt, "|");
++		}
++		else
++			fprintf(G.f_txt,
++				"%02X:%02X:%02X:%02X:%02X:%02X|",
++					ap_cur->bssid[0],
++					ap_cur->bssid[1],
++					ap_cur->bssid[2],
++					ap_cur->bssid[3],
++					ap_cur->bssid[4],
++					ap_cur->bssid[5]);
++
++		fprintf(G.f_txt, "%2d|", st_cur->channel);
++
++		if( !memcmp( ap_cur->bssid, BROADCAST, 6 ) )
++		{
++			fprintf( G.f_txt, "|" );
++		}
++		else
++		{
++			if ((ap_cur->ssid_length == 0) || (ap_cur->essid[0] == 0))
++			{
++				fprintf( G.f_txt, "<hidden-ssid>|");
++			}
++			else
++			{
++				if (verifyssid(ap_cur->essid))
++				{
++					fprintf(G.f_txt, "%s|",ap_cur->essid);
++				}
++				else
++				{
++					char *essid = NULL;
++					essid = format_text_for_csv(ap_cur->essid, ap_cur->ssid_length);
++					if(essid != NULL)
++					{
++					   fprintf(G.f_txt, "%s|", essid );
++					   free(essid);
++					}
++					else
++					{
++					   fprintf(G.f_txt,"|");
++					}
++				}
++			}
++		}
++		fprintf( G.f_txt, "%3d", st_cur->power);
++		fprintf( G.f_txt, "\r\n" );
++		st_cur = st_cur->next;
++	}
++
++	fflush(G.f_txt);
++
++	curr_time = time(NULL);
++	if (( (curr_time - G.last_file_reset) > G.file_reset_minutes) && (G.dump_prefix != NULL) && (G.f_txt != NULL))
++	{
++		G.f_txt = freopen(G.dump_prefix, "w", G.f_txt);
++		G.last_file_reset = curr_time;
++	}
++
++	clear_wifi_scanner_cache();
++	return 0;
++}
++
+ static char * sanitize_xml(unsigned char * text, int length)
+ {
+ 	int i;
+@@ -7116,6 +7419,9 @@
+ 
+ int main(int argc, char * argv[])
+ {
++	#define ONE_HOUR (60*60)
++	#define ONE_MIN (60)
++
+ 	long time_slept, cycle_time, cycle_time2;
+ 	char * output_format_string;
+ 	int caplen = 0, i, j, fdh, fd_is_set, chan_count, freq_count, unused;
+@@ -7129,6 +7435,8 @@
+ 	char ifnam[64];
+ 	int wi_read_failed = 0;
+ 	int n = 0;
++	int reset_val = 0;
++
+ 	int output_format_first_time = 1;
+ #ifdef HAVE_PCRE
+ 	const char * pcreerror;
+@@ -7188,6 +7496,11 @@
+ 		   {"showack", 0, 0, 'A'},
+ 		   {"detect-anomaly", 0, 0, 'E'},
+ 		   {"output-format", 1, 0, 'o'},
++ 		   {"sys-name", 1, 0, 'X'},
++		   {"loc-name", 1, 0, 'y'},
++		   {"filter-seconds", 1, 0, 'F'},
++		   {"file-reset-minutes", 1, 0, 'P'},
++		   {"cache-reset-minutes", 1, 0, 'v'},
+ 		   {"ignore-negative-one", 0, &G.ignore_negative_one, 1},
+ 		   {"manufacturer", 0, 0, 'M'},
+ 		   {"uptime", 0, 0, 'U'},
+@@ -7282,6 +7595,7 @@
+ 	G.output_format_kismet_csv = 1;
+ 	G.output_format_kismet_netxml = 1;
+ 	G.output_format_log_csv = 1;
++	G.output_format_wifi_scanner = 1;
+ 	G.gps_valid_interval
+ 		= 5; // If we dont get a new GPS update in 5 seconds - invalidate it
+ 	G.file_write_interval = 5; // Write file every 5 seconds by default
+@@ -7289,6 +7603,12 @@
+ 	G.show_wps = 0;
+ 	G.background_mode = -1;
+ 	G.do_exit = 0;
++	G.sys_name[0] = '\0';
++	G.loc_name[0] = '\0';
++	G.filter_seconds = ONE_HOUR;
++	G.file_reset_minutes = ONE_MIN;
++	G.last_file_reset = 0;
++	G.cache_reset_interval = 0;
+ #ifdef CONFIG_LIBNL
+ 	G.htval = CHANNEL_NO_HT;
+ #endif
+@@ -7386,7 +7706,7 @@
+ 
+ 		option = getopt_long(argc,
+ 							 argv,
+-							 "b:c:egiw:s:t:u:m:d:N:R:aHDB:Ahf:r:EC:o:x:MUI:WK:",
++							 "b:c:egiw:s:t:u:m:d:N:R:aHDB:Ahf:r:EC:o:x:MUI:WK:F:P:v:X:y:",
+ 							 long_options,
+ 							 &option_index);
+ 
+@@ -7748,6 +8068,28 @@
+ 				set_encryption_filter(optarg);
+ 				break;
+ 
++			case 'X':
++				strncpy(G.sys_name, optarg, sizeof G.sys_name);
++				break;
++
++			case 'y':
++				strncpy(G.loc_name, optarg, sizeof G.loc_name);
++				break;
++
++			case 'F':
++				G.filter_seconds = atoi(optarg);
++				break;
++
++			case 'P':
++				reset_val = atoi(optarg);
++				G.file_reset_minutes = reset_val * 60;
++				break;
++
++			case 'v':
++				reset_val = atoi(optarg);
++				G.cache_reset_interval = reset_val * 60; // value expected in minutes
++				break;
++
+ 			case 'o':
+ 
+ 				// Reset output format if it's the first time the option is
+@@ -7841,6 +8183,10 @@
+ 						{
+ 							G.output_format_log_csv = 1;
+ 						}
++						else if ( strncasecmp(output_format_string, "wifi_scanner", 12) == 0 )
++						{
++							G.output_format_wifi_scanner = 1;
++						}
+ 						else if (strncasecmp(output_format_string, "default", 6)
+ 								 == 0)
+ 						{
+@@ -8171,8 +8517,10 @@
+ 		waitpid(-1, NULL, WNOHANG);
+ 	}
+ 
++	
+ 	hide_cursor();
+ 	erase_display(2);
++	
+ 
+ 	start_time = time(NULL);
+ 	tt1 = time(NULL);
+@@ -8213,6 +8561,9 @@
+ 		return 1;
+ 	}
+ 
++	G.last_cache_reset = time(NULL);
++	G.last_file_reset = time(NULL);
++
+ 	while (1)
+ 	{
+ 		if (G.do_exit)
+@@ -8226,6 +8577,7 @@
+ 
+ 			tt1 = time(NULL);
+ 			if (G.output_format_csv) dump_write_csv();
++			if (G.output_format_wifi_scanner) dump_write_wifi_scanner();
+ 			if (G.output_format_kismet_csv) dump_write_kismet_csv();
+ 			if (G.output_format_kismet_netxml) dump_write_kismet_netxml();
+ 		}
+@@ -8449,11 +8801,9 @@
+ 			if (!G.do_pause && !G.background_mode)
+ 			{
+ 				pthread_mutex_lock(&(G.mx_print));
+-
+ 				moveto(1, 1);
+ 				dump_print(G.ws.ws_row, G.ws.ws_col, G.num_cards);
+ 				erase_display(0);
+-
+ 				pthread_mutex_unlock(&(G.mx_print));
+ 			}
+ 			continue;
+@@ -8547,6 +8897,7 @@
+ 		if (G.output_format_csv) dump_write_csv();
+ 		if (G.output_format_kismet_csv) dump_write_kismet_csv();
+ 		if (G.output_format_kismet_netxml) dump_write_kismet_netxml();
++		if (G.output_format_wifi_scanner) dump_write_wifi_scanner();
+ 
+ 		if (G.output_format_csv || G.f_txt != NULL) fclose(G.f_txt);
+ 		if (G.output_format_kismet_csv || G.f_kis != NULL) fclose(G.f_kis);
+--- aircrack-ng-1.5.2/src/airodump-ng.h	2018-12-09 22:53:44.000000000 +0000
++++ aircrack-ng-1.5.2/src/airodump-ng.h	2019-09-07 02:31:43.492000000 +0000
+@@ -237,8 +237,10 @@
+ 	struct AP_info * next; /* next  AP in list         */
+ 
+ 	time_t tinit, tlast; /* first and last time seen */
++	time_t time_printed;    /* last time printed */
+ 
+ 	int channel; /* AP radio channel         */
++	int old_channel; /* previously seen channel */
+ 	enum channel_width_enum channel_width; /* Channel width            */
+ 	char standard[3]; /* 802.11 standard: n or ac */
+ 	struct n_channel_info n_channel; /* 802.11n channel info     */
+@@ -313,6 +315,7 @@
+ 	struct ST_info * next; /* the next client in list   */
+ 	struct AP_info * base; /* AP this client belongs to */
+ 	time_t tinit, tlast; /* first and last time seen  */
++	time_t time_printed; /* last time printed */
+ 	unsigned long nb_pkt; /* total number of packets   */
+ 	unsigned char stmac[6]; /* the client's MAC address  */
+ 	char * manuf; /* the client's manufacturer */
+@@ -331,6 +334,7 @@
+ 	int qos_to_ds; /* does it use 802.11e to ds */
+ 	int qos_fr_ds; /* does it receive 802.11e   */
+ 	int channel; /* Channel station is seen   */
++	int old_channel; /* previously seen channel */
+ 	float gps_loc_min[5]; /* min gps coordinates      */
+ 	float gps_loc_max[5]; /* max gps coordinates      */
+ 	float gps_loc_best[5]; /* best gps coordinates     */
+@@ -492,6 +496,7 @@
+ 	int output_format_kismet_csv;
+ 	int output_format_kismet_netxml;
+ 	int output_format_log_csv;
++	int output_format_wifi_scanner; /* custom format */
+ 	pthread_t input_tid;
+ 	pthread_t gps_tid;
+ 	int sort_by;
+@@ -526,6 +531,13 @@
+ 	u_int maxsize_wps_seen;
+ 	int show_wps;
+ 	struct tm gps_time; /* the timestamp from the gps data */
++	char sys_name[256];  /* system name value for wifi scanner custom format */
++	char loc_name[256];  /* location name value for wifi scanner custom format */
++	time_t filter_seconds;
++	int file_reset_minutes;
++	time_t last_file_reset;
++	int cache_reset_interval;
++	time_t last_cache_reset;
+ #ifdef CONFIG_LIBNL
+ 	int htval;
+ #endif

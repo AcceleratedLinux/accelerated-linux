@@ -1,0 +1,149 @@
+From: Samuel Brian <samuel.brian@digi.com>
+Date: Mon, 18 Feb 2019 09:44:04 +1000
+Subject: port: prevent bearers from trying to use the same data port
+
+When two bearers on a modem attempt to grab a data port to start their
+connection setups, there is a chance they may grab the same data port.
+As a result, ModemManager gets very confused and bad things happen.
+
+Previously, the criteria for an available data port was only that it
+was not yet connected. Now we require bearer connect and disconnect
+procedures "claim" the data port during connect and disconnect
+procedures.
+
+The states during connection are:
+	claimed -> connected -> unclaimed
+The states during disconnection are:
+	claimed -> disconnected -> unclaimed
+---
+ src/mm-base-modem.c |  1 +
+ src/mm-bearer-qmi.c | 14 ++++++++++++++
+ src/mm-port.c       | 22 ++++++++++++++++++++++
+ src/mm-port.h       |  2 ++
+ 4 files changed, 39 insertions(+)
+
+diff --git a/src/mm-base-modem.c b/src/mm-base-modem.c
+index 0805cedb..05ae5d9b 100644
+--- a/src/mm-base-modem.c
++++ b/src/mm-base-modem.c
+@@ -853,6 +853,7 @@ mm_base_modem_peek_best_data_port (MMBaseModem *self,
+     /* Return first not-connected data port */
+     for (l = self->priv->data; l; l = g_list_next (l)) {
+         if (!mm_port_get_connected ((MMPort *)l->data) &&
++            !mm_port_get_claimed ((MMPort *)l->data) &&
+             (mm_port_get_port_type ((MMPort *)l->data) == type ||
+              type == MM_PORT_TYPE_UNKNOWN)) {
+             return (MMPort *)l->data;
+diff --git a/src/mm-bearer-qmi.c b/src/mm-bearer-qmi.c
+index 7a6c2941..28e5f74c 100644
+--- a/src/mm-bearer-qmi.c
++++ b/src/mm-bearer-qmi.c
+@@ -463,6 +463,9 @@ connect_context_free (ConnectContext *ctx)
+     g_free (ctx->user);
+     g_free (ctx->password);
+ 
++    if (ctx->data)
++        mm_port_set_claimed ((MMPort *)ctx->data, FALSE);
++
+     if (ctx->packet_service_status_ipv4_indication_id) {
+         common_setup_cleanup_packet_service_status_unsolicited_events (ctx->self,
+                                                                        ctx->client_ipv4,
+@@ -1788,6 +1791,10 @@ _connect (MMBaseBearer *_self,
+                            g_object_ref (operation_cancellable),
+                            g_object_unref);
+ 
++    /* Claim the data port so other bearers do not try to use it while this
++     * bearer is connecting. */
++    mm_port_set_claimed ((MMPort *)ctx->data, TRUE);
++
+     /* Run! */
+     connect_context_step (task);
+ 
+@@ -1820,6 +1827,8 @@ typedef struct {
+     QmiClientWds *client_ipv6;
+     guint32 packet_data_handle_ipv6;
+     GError *error_ipv6;
++
++    MMPort *data;
+ } DisconnectContext;
+ 
+ static void
+@@ -1833,6 +1842,8 @@ disconnect_context_free (DisconnectContext *ctx)
+         g_object_unref (ctx->client_ipv4);
+     if (ctx->client_ipv6)
+         g_object_unref (ctx->client_ipv6);
++    if (ctx->data)
++        mm_port_set_claimed ((MMPort *)ctx->data, FALSE);
+     g_slice_free (DisconnectContext, ctx);
+ }
+ 
+@@ -2069,6 +2080,7 @@ disconnect (MMBaseBearer *_self,
+     }
+ 
+     ctx = g_slice_new0 (DisconnectContext);
++    ctx->data = g_object_ref (self->priv->data);
+     ctx->client_ipv4 = self->priv->client_ipv4 ? g_object_ref (self->priv->client_ipv4) : NULL;
+     ctx->packet_data_handle_ipv4 = self->priv->packet_data_handle_ipv4;
+     ctx->client_ipv6 = self->priv->client_ipv6 ? g_object_ref (self->priv->client_ipv6) : NULL;
+@@ -2077,6 +2089,8 @@ disconnect (MMBaseBearer *_self,
+ 
+     g_task_set_task_data (task, ctx, (GDestroyNotify)disconnect_context_free);
+ 
++    mm_port_set_claimed ((MMPort *)ctx->data, TRUE);
++
+     /* Run! */
+     disconnect_context_step (task);
+ }
+diff --git a/src/mm-port.c b/src/mm-port.c
+index 285c89a7..d710140d 100644
+--- a/src/mm-port.c
++++ b/src/mm-port.c
+@@ -42,6 +42,7 @@ struct _MMPortPrivate {
+     MMPortSubsys subsys;
+     MMPortType ptype;
+     gboolean connected;
++    gboolean claimed;
+     MMKernelDevice *kernel_device;
+ };
+ 
+@@ -96,6 +97,27 @@ mm_port_set_connected (MMPort *self, gboolean connected)
+     }
+ }
+ 
++gboolean
++mm_port_get_claimed (MMPort *self)
++{
++    g_return_val_if_fail (self != NULL, FALSE);
++    g_return_val_if_fail (MM_IS_PORT (self), FALSE);
++
++    return self->priv->claimed;
++}
++
++void
++mm_port_set_claimed (MMPort *self, gboolean claimed)
++{
++    g_return_if_fail (self != NULL);
++    g_return_if_fail (MM_IS_PORT (self));
++
++    if (self->priv->claimed != claimed) {
++        self->priv->claimed = claimed;
++        mm_obj_dbg (self, "port now %s", claimed ? "claimed" : "unclaimed");
++    }
++}
++
+ MMKernelDevice *
+ mm_port_peek_kernel_device (MMPort *self)
+ {
+diff --git a/src/mm-port.h b/src/mm-port.h
+index 33b07d97..c1626fbb 100644
+--- a/src/mm-port.h
++++ b/src/mm-port.h
+@@ -78,6 +78,8 @@ MMPortSubsys    mm_port_get_subsys         (MMPort *self);
+ MMPortType      mm_port_get_port_type      (MMPort *self);
+ gboolean        mm_port_get_connected      (MMPort *self);
+ void            mm_port_set_connected      (MMPort *self, gboolean connected);
++gboolean        mm_port_get_claimed        (MMPort *self);
++void            mm_port_set_claimed        (MMPort *self, gboolean claimed);
+ MMKernelDevice *mm_port_peek_kernel_device (MMPort *self);
+ 
+ #endif /* MM_PORT_H */

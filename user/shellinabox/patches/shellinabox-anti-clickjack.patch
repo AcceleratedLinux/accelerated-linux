@@ -1,0 +1,33 @@
+diff -Naur shellinabox.orig/shellinabox/cgi_root.html shellinabox/shellinabox/cgi_root.html
+--- shellinabox.orig/shellinabox/cgi_root.html	2019-03-20 16:13:50.000000000 +1000
++++ shellinabox/shellinabox/cgi_root.html	2020-02-26 14:21:20.936303559 +1000
+@@ -3,6 +3,17 @@
+ <html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xml:lang="en" lang="en">
+   <head>
+     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
++    <!-- ClickJack protection for legacy browsers.  -->
++    <style id="antiClickjack">body{display:none !important;}</style>
++    <script type="text/javascript">
++        if (self === top) {
++            var antiClickjack = document.getElementById("antiClickjack");
++            antiClickjack.parentNode.removeChild(antiClickjack);
++        } else {
++            top.location = self.location;
++        }
++    </script>
++
+     <!--
+     ShellInABox - Make command line applications available as AJAX web applications
+     Copyright (C) 2008-2009 Markus Gutschke markus@shellinabox.com
+diff -Naur shellinabox.orig/shellinabox/shellinaboxd.c shellinabox/shellinabox/shellinaboxd.c
+--- shellinabox.orig/shellinabox/shellinaboxd.c	2020-02-26 14:18:12.772003031 +1000
++++ shellinabox/shellinabox/shellinaboxd.c	2020-02-26 14:19:01.848098818 +1000
+@@ -630,6 +630,8 @@
+                                   "HTTP/1.1 200 OK\r\n"
+                                   "Content-Type: %s\r\n"
+                                   "Content-Length: %ld\r\n"
++                                  "Content-Security-Policy: frame-ancestors 'self';\r\n"
++                                  "X-Frame-Options: sameorigin\r\n"
+                                   "%s\r\n",
+                                   contentType, (long)(bodyEnd - body),
+                                   body == start ? "" :

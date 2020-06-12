@@ -2,8 +2,9 @@
 
 import kcheck
 import product
+from operator import itemgetter
 
-for p in product.products.values():
+for p in sorted(product.products.values(), key=itemgetter('vendor', 'product')):
     print('Setting: %s/%s' % (p['vendor'], p['product']))
     kconfig = kcheck.Config(product.products, 'vendors/%s/%s' % (p['vendor'], p['product']))
     kproduct = kcheck.Product(kconfig, product.products, product.groups)

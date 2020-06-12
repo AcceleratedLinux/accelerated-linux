@@ -1,0 +1,41 @@
+#!/bin/sh
+# set -x
+#
+# Create a complete disk image for the VirtualDAL
+
+IMAGE="${1:-${ROOTDIR:-.}/images/image.bin}"
+ZIMAGE="${2:-${ROOTDIR:-.}/images/vmlinuz}"
+INITRD="${3:-${ROOTDIR:-.}/images/rootfs}"
+DISKRAW="${4:-${ROOTDIR:-.}/images/VirtualDAL-$VERSIONPKG/VirtualDAL.img}"
+
+# Disk size in sectors
+DISKSECTS="${6:-500000}"
+
+RAWDIR=$(dirname $DISKRAW)
+[ -d "$RAWDIR" ] || mkdir "$RAWDIR"
+
+echo "Making RAW disk..."
+# Remove previous file, if any
+rm -f "${DISKRAW}"
+# Create sparse file
+dd if=/dev/zero of="${DISKRAW}" bs=512 count=0 seek=${DISKSECTS}
+
+echo "Run qemu to build image..."
+# Boot kernel and run mkffs
+
+qemu-system-x86_64 -net none -net none -nographic -serial mon:stdio \
+	-m 512 \
+	$(kvm-ok >/dev/null && echo -enable-kvm) \
+	-append "root=/dev/ram0 init=/etc/mkffs console=ttyS0,115200 ${GRUB_OPT}" \
+	-kernel $ZIMAGE -initrd $INITRD \
+	-drive id=diskA,file=$DISKRAW,if=none \
+	-device ahci,id=ahci -device ide-drive,drive=diskA,bus=ahci.0 \
+	-drive id=diskB,file=$IMAGE,if=none \
+	-device ahci,id=ahci1 -device ide-drive,drive=diskB,bus=ahci1.0 \
+	$GRUB_ARG
+[ $? != 0 ] && exit 1
+
+# echo "Compressing RAW disk..."
+# bzip2 -9 -v -f "${DISKRAW}"
+
+exit 0

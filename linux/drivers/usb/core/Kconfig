@@ -17,6 +17,27 @@ config USB_ANNOUNCE_NEW_DEVICES
 
 comment "Miscellaneous USB options"
 
+config USB_AWUSB_DEFAULT_CLAIM_PORT
+	bool "USB claim ports by default"
+	default n
+	help
+	  Say Y here if you want the USB core to always claim USB ports.
+	  This will isolate USB devices from the kernel, allowing awusbd
+	  full control of all USB devices without the kernel possibly
+	  changing the state of said devices.  All hubs and a white list
+	  of paths are provided to allow these devices to enumerate and
+	  interact with the kernel.
+
+	  If you do not want the kernel to ignore most USB devices by
+	  default,  say N here.
+
+config USB_AWUSB_NUM_PORTS
+	int "Number of AWUSB physical ports"
+	depends on USB_AWUSB_DEFAULT_CLAIM_PORT
+	default 2
+	help
+	  Number of physical USB ports on an AWUSB device.
+
 config USB_DEFAULT_PERSIST
 	bool "Enable USB persist by default"
 	default y
@@ -52,7 +73,6 @@ config USB_DYNAMIC_MINORS
 config USB_OTG
 	bool "OTG support"
 	depends on PM
-	default n
 	help
 	  The most notable feature of USB OTG is support for a
 	  "Dual-Role" device, which can act as either a device

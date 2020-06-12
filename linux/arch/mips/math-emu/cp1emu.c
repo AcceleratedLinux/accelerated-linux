@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * cp1emu.c: a MIPS coprocessor 1 (FPU) instruction emulator
  *
@@ -6,19 +7,6 @@
  *
  * Kevin D. Kissell, kevink@mips.com and Carsten Langgaard, carstenl@mips.com
  * Copyright (C) 2000  MIPS Technologies, Inc.
- *
- *  This program is free software; you can distribute it and/or modify it
- *  under the terms of the GNU General Public License (Version 2) as
- *  published by the Free Software Foundation.
- *
- *  This program is distributed in the hope it will be useful, but WITHOUT
- *  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- *  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- *  for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA.
  *
  * A complete emulator for MIPS coprocessor 1 instructions.  This is
  * required for #float(switch) or #float(trap), where it catches all
@@ -1526,16 +1514,28 @@ static int fpux_emu(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
 			break;
 
 		case madd_s_op:
-			handler = fpemu_sp_madd;
+			if (cpu_has_mac2008_only)
+				handler = ieee754sp_madd;
+			else
+				handler = fpemu_sp_madd;
 			goto scoptop;
 		case msub_s_op:
-			handler = fpemu_sp_msub;
+			if (cpu_has_mac2008_only)
+				handler = ieee754sp_msub;
+			else
+				handler = fpemu_sp_msub;
 			goto scoptop;
 		case nmadd_s_op:
-			handler = fpemu_sp_nmadd;
+			if (cpu_has_mac2008_only)
+				handler = ieee754sp_nmadd;
+			else
+				handler = fpemu_sp_nmadd;
 			goto scoptop;
 		case nmsub_s_op:
-			handler = fpemu_sp_nmsub;
+			if (cpu_has_mac2008_only)
+				handler = ieee754sp_nmsub;
+			else
+				handler = fpemu_sp_nmsub;
 			goto scoptop;
 
 		      scoptop:
@@ -1622,15 +1622,27 @@ static int fpux_emu(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
 			break;
 
 		case madd_d_op:
-			handler = fpemu_dp_madd;
+			if (cpu_has_mac2008_only)
+				handler = ieee754dp_madd;
+			else
+				handler = fpemu_dp_madd;
 			goto dcoptop;
 		case msub_d_op:
-			handler = fpemu_dp_msub;
+			if (cpu_has_mac2008_only)
+				handler = ieee754dp_msub;
+			else
+				handler = fpemu_dp_msub;
 			goto dcoptop;
 		case nmadd_d_op:
-			handler = fpemu_dp_nmadd;
+			if (cpu_has_mac2008_only)
+				handler = ieee754dp_nmadd;
+			else
+				handler = fpemu_dp_nmadd;
 			goto dcoptop;
 		case nmsub_d_op:
+			if (cpu_has_mac2008_only)
+				handler = ieee754dp_nmsub;
+			else
 			handler = fpemu_dp_nmsub;
 			goto dcoptop;
 

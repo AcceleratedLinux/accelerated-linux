@@ -1,18 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  Driver for the NXP SAA7164 PCIe bridge
  *
  *  Copyright (c) 2010-2015 Steven Toth <stoth@kernellabs.com>
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *
- *  GNU General Public License for more details.
  */
 
 #include "saa7164.h"
@@ -126,8 +116,8 @@ static int si2157_attach(struct saa7164_port *port, struct i2c_adapter *adapter,
 
 	request_module(bi.type);
 
-	tuner = i2c_new_device(adapter, &bi);
-	if (tuner == NULL || tuner->dev.driver == NULL)
+	tuner = i2c_new_client_device(adapter, &bi);
+	if (!i2c_client_has_driver(tuner))
 		return -ENODEV;
 
 	if (!try_module_get(tuner->dev.driver->owner)) {
@@ -647,9 +637,8 @@ int saa7164_dvb_register(struct saa7164_port *port)
 			info.addr = 0xc8 >> 1;
 			info.platform_data = &si2168_config;
 			request_module(info.type);
-			client_demod = i2c_new_device(&dev->i2c_bus[2].i2c_adap,
-						      &info);
-			if (!client_demod || !client_demod->dev.driver)
+			client_demod = i2c_new_client_device(&dev->i2c_bus[2].i2c_adap, &info);
+			if (!i2c_client_has_driver(client_demod))
 				goto frontend_detach;
 
 			if (!try_module_get(client_demod->dev.driver->owner)) {
@@ -667,9 +656,8 @@ int saa7164_dvb_register(struct saa7164_port *port)
 			info.addr = 0xc0 >> 1;
 			info.platform_data = &si2157_config;
 			request_module(info.type);
-			client_tuner = i2c_new_device(&dev->i2c_bus[0].i2c_adap,
-						      &info);
-			if (!client_tuner || !client_tuner->dev.driver) {
+			client_tuner = i2c_new_client_device(&dev->i2c_bus[0].i2c_adap, &info);
+			if (!i2c_client_has_driver(client_tuner)) {
 				module_put(client_demod->dev.driver->owner);
 				i2c_unregister_device(client_demod);
 				goto frontend_detach;
@@ -692,9 +680,8 @@ int saa7164_dvb_register(struct saa7164_port *port)
 			info.addr = 0xcc >> 1;
 			info.platform_data = &si2168_config;
 			request_module(info.type);
-			client_demod = i2c_new_device(&dev->i2c_bus[2].i2c_adap,
-						      &info);
-			if (!client_demod || !client_demod->dev.driver)
+			client_demod = i2c_new_client_device(&dev->i2c_bus[2].i2c_adap, &info);
+			if (!i2c_client_has_driver(client_demod))
 				goto frontend_detach;
 
 			if (!try_module_get(client_demod->dev.driver->owner)) {
@@ -712,9 +699,8 @@ int saa7164_dvb_register(struct saa7164_port *port)
 			info.addr = 0xc0 >> 1;
 			info.platform_data = &si2157_config;
 			request_module(info.type);
-			client_tuner = i2c_new_device(&dev->i2c_bus[1].i2c_adap,
-						      &info);
-			if (!client_tuner || !client_tuner->dev.driver) {
+			client_tuner = i2c_new_client_device(&dev->i2c_bus[1].i2c_adap, &info);
+			if (!i2c_client_has_driver(client_tuner)) {
 				module_put(client_demod->dev.driver->owner);
 				i2c_unregister_device(client_demod);
 				goto frontend_detach;

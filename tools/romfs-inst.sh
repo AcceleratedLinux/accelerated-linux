@@ -9,6 +9,7 @@
 
 # Provide a default PATH setting to avoid potential problems...
 PATH="/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:$PATH"
+FAKEROOT_SCRIPT="${ROOTDIR}/tools/fakeroot-build.sh"
 
 usage()
 {
@@ -22,6 +23,9 @@ $0: [options] [src] dst
     -O option   : only take action if option is not set to "y".
     -c          : process with cpp+cflags
     -p perms    : chmod style permissions for dst.
+    -w usr:grp  : chown style ownership for dst.
+    -C caps     : setcap style capabilities for dst.
+    -m          : modify file permissions/ownership/capabilities without copy
     -d          : make dst directory if it doesn't exist
     -S          : don't strip after installing
     -a text     : append text to dst.
@@ -62,6 +66,44 @@ setperm()
 	return $rc
 }
 
+setcaps()
+{
+	# Can't arbitrarily change capabilities in non-root build. Write the
+	# commands into the script that runs under fakeroot before the final
+	# romfs is built.
+	if [ "$caps" ]
+	then
+		cmd="setcap ${caps} ${ROMFSDIR}${dst}"
+		sed -i'' "\?^setcap .* ${ROMFSDIR}${dst}\$?d" "${FAKEROOT_SCRIPT}"
+		[ "$v" ] && echo "defer to fakeroot: $cmd"
+		echo "$cmd" >> "${FAKEROOT_SCRIPT}"
+		# setcap changes the owner to the build user, so force to root if not
+		# a custom ownership.
+		[ -z "$owner" ] && owner="root:root"
+	fi
+}
+
+setowner()
+{
+	# Can't arbitrarily change user/group as non-root build. Write the commands
+	# into the script that runs under fakeroot before the final romfs is built.
+	if [ "$owner" ]
+	then
+		cmd="chown ${owner} ${ROMFSDIR}${dst}"
+		sed -i'' "\?^chown .* ${ROMFSDIR}${dst}\$?d" "${FAKEROOT_SCRIPT}" 2>/dev/null
+		[ "$v" ] && echo "defer to fakeroot: $cmd"
+		echo "$cmd" >> "${FAKEROOT_SCRIPT}"
+	fi
+}
+
+
+setattrs()
+{
+	setcaps
+	setowner
+	setperm
+}
+
 #############################################################################
 
 file_copy()
@@ -87,7 +129,7 @@ file_copy()
 			rc=$?
 			# And make sure these files are still writable
 			find . -print | grep -E -v '/CVS|/\.svn' | ( cd ${ROMFSDIR}${dst}; xargs chmod u+w )
-			setperm ${ROMFSDIR}${dst}
+			setattrs ${ROMFSDIR}${dst}
 			find . -type f | grep -E -v '/CVS|/\.svn|\.ko$' | while read t; do
 				if [ -n "$strip" ]; then
 					${STRIPTOOL} ${ROMFSDIR}${dst}/$t 2>/dev/null
@@ -111,7 +153,7 @@ file_copy()
 			/*) echo "${src} ${dstfile}" ;;
 			*)  echo "`pwd`/${src} ${dstfile}" ;;
 		esac >> $IMAGEDIR/romfs-inst.log
-		echo "${ACL_PKG}:${ACL_LICENSE:-UNKNOWN}:${ACL_URL}:${dstfile}" >> $IMAGEDIR/license.log
+		echo "${ACL_PKG}:${ACL_LICENSE:-UNKNOWN}:${ACL_URL}:${dstfile#${ROMFSDIR}}" >> $IMAGEDIR/license.log
 		cp ${src} ${dstfile}
 		rc=$?
 		if [ $rc -eq 0 ]; then
@@ -120,7 +162,7 @@ file_copy()
 				${STRIPTOOL} ${dstfile} 2>/dev/null
 				${STRIPTOOL} -R .comment -R .note ${dstfile} 2>/dev/null
 			fi
-			setperm ${dstfile}
+			setattrs ${dstfile}
 			rc=$?
 		fi
 	fi
@@ -148,7 +190,16 @@ file_append()
 		fi
 		echo "${src}" >> ${ROMFSDIR}${dst} || return 1
 	fi
-	setperm ${ROMFSDIR}${dst}
+	setattrs ${ROMFSDIR}${dst}
+	return $?
+}
+
+#############################################################################
+
+file_modify()
+{
+	[ -f ${ROMFSDIR}${dst} ] || return 1
+	setattrs ${ROMFSDIR}${dst}
 	return $?
 }
 
@@ -176,7 +227,6 @@ sym_link()
 
 cpp_file()
 {
-	set -x
 	if [ -d ${ROMFSDIR}${dst} ]; then
 		dstfile=${ROMFSDIR}${dst}/`basename ${src}`
 	else
@@ -223,8 +273,10 @@ strip=1
 kernmod=
 r=
 follow=L
+caps=
+owner=
 
-while getopts 'VdRfSMvce:E:o:O:A:p:a:l:s:r:' opt "$@"
+while getopts 'VdRfSMvcme:E:o:O:A:p:a:l:s:r:C:w:' opt "$@"
 do
 	case "$opt" in
 	v) v="1";                           ;;
@@ -245,6 +297,9 @@ do
 	r) ROMFSDIR="$OPTARG"; r=1;         ;;
 	c) func=cpp_file;                   ;;
 	R) func=rm_file;                    ;;
+	C) caps="$OPTARG";                  ;;
+	w) owner="$OPTARG";                 ;;
+	m) func=file_modify;                ;;
 
 	*)  break ;;
 	esac

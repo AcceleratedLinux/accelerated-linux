@@ -56,7 +56,7 @@ instead of ``double-indenting`` the ``case`` labels.  E.g.:
 	case 'K':
 	case 'k':
 		mem <<= 10;
-		/* fall through */
+		fallthrough;
 	default:
 		break;
 	}
@@ -686,7 +686,7 @@ filesystems) should advertise this prominently in their prompt string::
 	...
 
 For full documentation on the configuration files, see the file
-Documentation/kbuild/kconfig-language.txt.
+Documentation/kbuild/kconfig-language.rst.
 
 
 11) Data structures
@@ -843,7 +843,8 @@ used.
 The kernel provides the following general purpose memory allocators:
 kmalloc(), kzalloc(), kmalloc_array(), kcalloc(), vmalloc(), and
 vzalloc().  Please refer to the API documentation for further information
-about them.
+about them.  :ref:`Documentation/core-api/memory-allocation.rst
+<memory_allocation>`
 
 The preferred form for passing a size of a struct is the following:
 
@@ -874,6 +875,9 @@ The preferred form for allocating a zeroed array is the following:
 Both forms check for overflow on the allocation size n * sizeof(...),
 and return NULL if that occurred.
 
+These generic allocation functions all emit a stack dump on failure when used
+without __GFP_NOWARN so there is no use in emitting an additional failure
+message when NULL is returned.
 
 15) The inline disease
 ----------------------
@@ -984,7 +988,7 @@ Similarly, if you need to calculate the size of some structure member, use
 
 .. code-block:: c
 
-	#define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
+	#define sizeof_field(t, f) (sizeof(((t*)0)->f))
 
 There are also min() and max() macros that do strict type checking if you
 need them.  Feel free to peruse that header file to see what else is already

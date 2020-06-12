@@ -2,7 +2,7 @@
 /*
  * ZynqMP Generic PM domain support
  *
- *  Copyright (C) 2015-2018 Xilinx, Inc.
+ *  Copyright (C) 2015-2019 Xilinx, Inc.
  *
  *  Davorin Mista <davorin.mista@aggios.com>
  *  Jolly Shah <jollys@xilinx.com>
@@ -22,6 +22,10 @@
 #define ZYNQMP_NUM_DOMAINS		(100)
 /* Flag stating if PM nodes mapped to the PM domain has been requested */
 #define ZYNQMP_PM_DOMAIN_REQUESTED	BIT(0)
+
+static const struct zynqmp_eemi_ops *eemi_ops;
+
+static int min_capability;
 
 /**
  * struct zynqmp_pm_domain - Wrapper around struct generic_pm_domain
@@ -71,9 +75,8 @@ static int zynqmp_gpd_power_on(struct generic_pm_domain *domain)
 {
 	int ret;
 	struct zynqmp_pm_domain *pd;
-	const struct zynqmp_eemi_ops *eemi_ops = zynqmp_pm_get_eemi_ops();
 
-	if (!eemi_ops || !eemi_ops->set_requirement)
+	if (!eemi_ops->set_requirement)
 		return -ENXIO;
 
 	pd = container_of(domain, struct zynqmp_pm_domain, gpd);
@@ -105,11 +108,10 @@ static int zynqmp_gpd_power_off(struct generic_pm_domain *domain)
 	int ret;
 	struct pm_domain_data *pdd, *tmp;
 	struct zynqmp_pm_domain *pd;
-	u32 capabilities = 0;
+	u32 capabilities = min_capability;
 	bool may_wakeup;
-	const struct zynqmp_eemi_ops *eemi_ops = zynqmp_pm_get_eemi_ops();
 
-	if (!eemi_ops || !eemi_ops->set_requirement)
+	if (!eemi_ops->set_requirement)
 		return -ENXIO;
 
 	pd = container_of(domain, struct zynqmp_pm_domain, gpd);
@@ -160,9 +162,8 @@ static int zynqmp_gpd_attach_dev(struct generic_pm_domain *domain,
 {
 	int ret;
 	struct zynqmp_pm_domain *pd;
-	const struct zynqmp_eemi_ops *eemi_ops = zynqmp_pm_get_eemi_ops();
 
-	if (!eemi_ops || !eemi_ops->request_node)
+	if (!eemi_ops->request_node)
 		return -ENXIO;
 
 	pd = container_of(domain, struct zynqmp_pm_domain, gpd);
@@ -197,9 +198,8 @@ static void zynqmp_gpd_detach_dev(struct generic_pm_domain *domain,
 {
 	int ret;
 	struct zynqmp_pm_domain *pd;
-	const struct zynqmp_eemi_ops *eemi_ops = zynqmp_pm_get_eemi_ops();
 
-	if (!eemi_ops || !eemi_ops->release_node)
+	if (!eemi_ops->release_node)
 		return;
 
 	pd = container_of(domain, struct zynqmp_pm_domain, gpd);
@@ -266,6 +266,10 @@ static int zynqmp_gpd_probe(struct platform_device *pdev)
 	struct zynqmp_pm_domain *pd;
 	struct device *dev = &pdev->dev;
 
+	eemi_ops = zynqmp_pm_get_eemi_ops();
+	if (IS_ERR(eemi_ops))
+		return PTR_ERR(eemi_ops);
+
 	pd = devm_kcalloc(dev, ZYNQMP_NUM_DOMAINS, sizeof(*pd), GFP_KERNEL);
 	if (!pd)
 		return -ENOMEM;
@@ -280,6 +284,10 @@ static int zynqmp_gpd_probe(struct platform_device *pdev)
 			       GFP_KERNEL);
 	if (!domains)
 		return -ENOMEM;
+
+	if (!of_device_is_compatible(dev->parent->of_node,
+				     "xlnx,zynqmp-firmware"))
+		min_capability = ZYNQMP_PM_CAPABILITY_UNUSABLE;
 
 	for (i = 0; i < ZYNQMP_NUM_DOMAINS; i++, pd++) {
 		pd->node_id = 0;

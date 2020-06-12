@@ -36,6 +36,18 @@ fail_led() {
 	done
 }
 
+success_led() {
+	# Platforms with a software controlled fw_update LED should stop
+	# flashing when successful, just prior to reboot, to help avoid
+	# interrupted i2c operations.
+	echo none > /sys/class/leds/b01/trigger || true
+	echo none > /sys/class/leds/g01/trigger || true
+	echo none > /sys/class/leds/r01/trigger || true
+	echo 255 > /sys/class/leds/b01/brightness || true
+	echo 255 > /sys/class/leds/g01/brightness || true
+	echo 255 > /sys/class/leds/r01/brightness || true
+}
+
 cleanup () {
 	[ "$1" == "0" ] || {
 		fail_led
@@ -103,7 +115,7 @@ usage() {
 	echo "Usage: $0 [-L] [-t] [-b] [-U] [-k] new_firmware" >&6
 	exit 1
 }
-O=$(getopt -l $0: -- L:tbUk "$@") || usage
+O=$(getopt -l $0: -- L:tbUki "$@") || usage
 eval set -- "$O"
 while true; do
 	case "$1" in
@@ -112,6 +124,7 @@ while true; do
 		-U) opt_dual_boot_update=1; shift;;
 		-k) shift;;
 		-b) opt_no_reboot=1; shift;;
+		-i) shift;;
 		--) shift; break;;
 		*) usage;;
 	esac
@@ -315,5 +328,9 @@ set_boot_partition $next_boot || {
 fi
 echo Update complete.
 /usr/bin/logger -t fwupdate -p local5.info "!Firmware update complete."
+
+success_led
+sleep 5
+
 cleanup 0
 exit 0

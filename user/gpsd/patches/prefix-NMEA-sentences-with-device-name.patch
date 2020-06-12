@@ -1,0 +1,96 @@
+From 4cbb61e9d6611ca057c44a0a30edabfaeb36db02 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Wed, 27 May 2020 16:11:52 +0100
+Subject: [PATCH] user/gpsd: prefix NMEA sentences with device name
+
+NMEA sentences sent by gpsd to subscribers over its socket interface are
+now prefixed with the name of the device (e.g. /dev/ttyGPS) to which it
+relates. This allows subscribers to determine the source of each
+sentence.
+
+DAL-2577
+---
+ gpsd.c | 32 +++++++++++++++++++++++++-------
+ 1 file changed, 25 insertions(+), 7 deletions(-)
+
+diff --git a/gpsd.c b/gpsd.c
+index 9ce4fc6..5449840 100644
+--- a/gpsd.c
++++ b/gpsd.c
+@@ -644,6 +644,13 @@ static ssize_t throttled_write(struct subscriber_t *sub, char *buf,
+     return status;
+ }
+ 
++static void throttled_write_with_prefix(struct subscriber_t *sub, char *buf,
++			                   size_t len, char *prefix)
++{
++    (void)throttled_write(sub, prefix, strlen(prefix));
++    (void)throttled_write(sub, buf, len);
++}
++
+ static void notify_watchers(struct gps_device_t *device,
+ 			    bool onjson, bool onpps,
+ 			    const char *sentence, ...)
+@@ -1390,9 +1397,16 @@ static void raw_report(struct subscriber_t *sub, struct gps_device_t *device)
+      */
+     if (TEXTUAL_PACKET_TYPE(device->lexer.type)
+ 	&& (sub->policy.raw > 0 || sub->policy.nmea)) {
+-	(void)throttled_write(sub,
+-			      (char *)device->lexer.outbuffer,
+-			      device->lexer.outbuflen);
++	if (sub->policy.nmea) {
++	    throttled_write_with_prefix(sub,
++	    	                        (char *)device->lexer.outbuffer,
++	    	                        device->lexer.outbuflen,
++	    	                        device->gpsdata.dev.path);
++	} else {
++	    (void)throttled_write(sub,
++			          (char *)device->lexer.outbuffer,
++			          device->lexer.outbuflen);
++	}
+ 	return;
+     }
+ 
+@@ -1435,7 +1449,8 @@ static void pseudonmea_report(struct subscriber_t *sub,
+ 	    gpsd_log(&context.errout, LOG_IO,
+ 		     "<= GPS (binary tpv) %s: %s\n",
+ 		     device->gpsdata.dev.path, buf);
+-	    (void)throttled_write(sub, buf, strlen(buf));
++	    throttled_write_with_prefix(sub, buf, strlen(buf),
++	    				device->gpsdata.dev.path);
+ 	}
+ 
+ 	if ((changed & (SATELLITE_SET|USED_IS)) != 0) {
+@@ -1443,7 +1458,8 @@ static void pseudonmea_report(struct subscriber_t *sub,
+ 	    gpsd_log(&context.errout, LOG_IO,
+ 		     "<= GPS (binary sky) %s: %s\n",
+ 		     device->gpsdata.dev.path, buf);
+-	    (void)throttled_write(sub, buf, strlen(buf));
++	    throttled_write_with_prefix(sub, buf, strlen(buf),
++	    				device->gpsdata.dev.path);
+ 	}
+ 
+ 	if ((changed & SUBFRAME_SET) != 0) {
+@@ -1451,7 +1467,8 @@ static void pseudonmea_report(struct subscriber_t *sub,
+ 	    gpsd_log(&context.errout, LOG_IO,
+ 		     "<= GPS (binary subframe) %s: %s\n",
+ 		     device->gpsdata.dev.path, buf);
+-	    (void)throttled_write(sub, buf, strlen(buf));
++	    throttled_write_with_prefix(sub, buf, strlen(buf),
++	    				device->gpsdata.dev.path);
+ 	}
+ #ifdef AIVDM_ENABLE
+ 	if ((changed & AIS_SET) != 0) {
+@@ -1459,7 +1476,8 @@ static void pseudonmea_report(struct subscriber_t *sub,
+ 	    gpsd_log(&context.errout, LOG_IO,
+ 		     "<= AIS (binary ais) %s: %s\n",
+ 		     device->gpsdata.dev.path, buf);
+-	    (void)throttled_write(sub, buf, strlen(buf));
++	    throttled_write_with_prefix(sub, buf, strlen(buf),
++	    				device->gpsdata.dev.path);
+ 	}
+ #endif /* AIVDM_ENABLE */
+     }
+-- 
+2.17.1
+

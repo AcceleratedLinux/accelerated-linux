@@ -1,0 +1,6 @@
+pam_ldap-arm64.patch
+pam_ldap-groupname.patch
+pam_ldap-install-no-root.patch
+pam_ldap-array-size.patch
+pam_ldap-vers.patch
+pam_ldap-no-autogen.patch

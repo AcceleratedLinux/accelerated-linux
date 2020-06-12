@@ -1,0 +1,101 @@
+--- parted-3.3/libparted/labels/Makefile.am.org	2019-11-20 14:58:19.718638507 +1000
++++ parted-3.3/libparted/labels/Makefile.am	2019-11-20 14:58:26.230258613 +1000
+@@ -19,7 +19,6 @@
+ liblabels_la_SOURCES = \
+   $(S390_SRCS)	\
+   aix.c		\
+-  atari.c	\
+   bsd.c		\
+   dos.c		\
+   dvh.c		\
+--- parted-3.3/libparted/labels/Makefile.in.org	2019-11-20 15:03:14.382636966 +1000
++++ parted-3.3/libparted/labels/Makefile.in	2019-11-20 15:03:45.925041310 +1000
+@@ -206,11 +206,11 @@
+ am__DEPENDENCIES_1 =
+ liblabels_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+ 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+-am__liblabels_la_SOURCES_DIST = dasd.c fdasd.c vtoc.c aix.c atari.c \
++am__liblabels_la_SOURCES_DIST = dasd.c fdasd.c vtoc.c aix.c \
+ 	bsd.c dos.c dvh.c dvh.h efi_crc32.c gpt.c loop.c mac.c misc.h \
+ 	pc98.c pt-common.h pt-tools.c pt-tools.h rdb.c sun.c
+ @COMPILE_FOR_S390_TRUE@am__objects_1 = dasd.lo fdasd.lo vtoc.lo
+-am_liblabels_la_OBJECTS = $(am__objects_1) aix.lo atari.lo bsd.lo \
++am_liblabels_la_OBJECTS = $(am__objects_1) aix.lo bsd.lo \
+ 	dos.lo dvh.lo efi_crc32.lo gpt.lo loop.lo mac.lo pc98.lo \
+ 	pt-tools.lo rdb.lo sun.lo
+ liblabels_la_OBJECTS = $(am_liblabels_la_OBJECTS)
+@@ -233,7 +233,7 @@
+ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/lib
+ depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
+ am__maybe_remake_depfiles = depfiles
+-am__depfiles_remade = ./$(DEPDIR)/aix.Plo ./$(DEPDIR)/atari.Plo \
++am__depfiles_remade = ./$(DEPDIR)/aix.Plo \
+ 	./$(DEPDIR)/bsd.Plo ./$(DEPDIR)/dasd.Plo ./$(DEPDIR)/dos.Plo \
+ 	./$(DEPDIR)/dvh.Plo ./$(DEPDIR)/efi_crc32.Plo \
+ 	./$(DEPDIR)/fdasd.Plo ./$(DEPDIR)/gpt.Plo ./$(DEPDIR)/loop.Plo \
+@@ -1416,7 +1416,6 @@
+ liblabels_la_SOURCES = \
+   $(S390_SRCS)	\
+   aix.c		\
+-  atari.c	\
+   bsd.c		\
+   dos.c		\
+   dvh.c		\
+@@ -1501,7 +1500,6 @@
+ 	-rm -f *.tab.c
+ 
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aix.Plo@am__quote@ # am--include-marker
+-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/atari.Plo@am__quote@ # am--include-marker
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bsd.Plo@am__quote@ # am--include-marker
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dasd.Plo@am__quote@ # am--include-marker
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dos.Plo@am__quote@ # am--include-marker
+@@ -1683,7 +1681,6 @@
+ 
+ distclean: distclean-am
+ 		-rm -f ./$(DEPDIR)/aix.Plo
+-	-rm -f ./$(DEPDIR)/atari.Plo
+ 	-rm -f ./$(DEPDIR)/bsd.Plo
+ 	-rm -f ./$(DEPDIR)/dasd.Plo
+ 	-rm -f ./$(DEPDIR)/dos.Plo
+@@ -1744,7 +1741,6 @@
+ 
+ maintainer-clean: maintainer-clean-am
+ 		-rm -f ./$(DEPDIR)/aix.Plo
+-	-rm -f ./$(DEPDIR)/atari.Plo
+ 	-rm -f ./$(DEPDIR)/bsd.Plo
+ 	-rm -f ./$(DEPDIR)/dasd.Plo
+ 	-rm -f ./$(DEPDIR)/dos.Plo
+--- parted-3.3/libparted/libparted.c.org	2019-11-20 15:06:13.485796015 +1000
++++ parted-3.3/libparted/libparted.c	2019-11-20 15:06:37.664639021 +1000
+@@ -75,7 +75,6 @@
+ extern void ped_disk_sun_init ();
+ extern void ped_disk_amiga_init ();
+ extern void ped_disk_dasd_init ();
+-extern void ped_disk_atari_init ();
+ 
+ static void
+ init_disk_types ()
+@@ -86,7 +85,6 @@
+ #if defined __s390__ || defined __s390x__
+ 	ped_disk_dasd_init();
+ #endif
+-	ped_disk_atari_init (); /* easy false positives, so probe others first */
+ 	ped_disk_sun_init ();
+ #ifdef ENABLE_PC98
+ 	ped_disk_pc98_init ();
+@@ -143,7 +141,6 @@
+ extern void ped_disk_sun_done ();
+ extern void ped_disk_amiga_done ();
+ extern void ped_disk_dasd_done ();
+-extern void ped_disk_atari_done ();
+ 
+ static void
+ done_disk_types ()
+@@ -163,7 +160,6 @@
+ 	ped_disk_bsd_done ();
+ 	ped_disk_amiga_done ();
+ 	ped_disk_aix_done ();
+-	ped_disk_atari_done ();
+ }
+ 
+ static void _init() __attribute__ ((constructor));

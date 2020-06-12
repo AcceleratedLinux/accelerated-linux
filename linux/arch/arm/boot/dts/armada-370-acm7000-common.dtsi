@@ -1,0 +1,266 @@
+/*
+ * Device Tree file for Opengear ACM7000
+ *
+ * Ken Wilson <ken.wilson@opengear.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+#include "armada-370.dtsi"
+
+/ {
+	model = "Opengear ACM7000";
+	compatible = "opengear,cm7000", "marvell,armada370", "marvell,armada-370-xp";
+
+	chosen {
+		bootargs = "console=ttyS0,115200 earlyprintk debug root=/dev/ram0";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x80000000>; /* 2 GB */
+	};
+
+	soc {
+		ranges = <MBUS_ID(0xf0, 0x01) 0 0xd0000000 0x100000
+			  MBUS_ID(0x01, 0xe0) 0 0xfff00000 0x100000
+			  MBUS_ID(0x09, 0x01) 0 0xf1100000 0x10000>;
+
+		internal-regs {
+			serial@12000 {
+				clock-frequency = <200000000>;
+				pinctrl-0 = <&uart0_pins>;
+				pinctrl-names = "default";
+				status = "okay";
+			};
+
+			timer@20300 {
+				clock-frequency = <600000000>;
+				status = "okay";
+			};
+
+			watchdog@20300 {
+				compatible = "marvell,armada-370-wdt";
+				reg = <0x20300 0x34>, <0x20704 0x4>;
+				clocks = <&coreclk 2>;
+				status = "okay";
+			};
+
+			gpio_keys {
+				compatible = "gpio-keys";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				button@0 {
+					label = "Erase Button";
+					linux,code = <84>; /* Delete */
+					gpios = <&gpio1 23 1>;
+				};
+			};
+
+			mdio {
+				pinctrl-0 = <&mdio_pins>;
+				pinctrl-names = "default";
+			};
+
+			eth0: ethernet@70000 {
+				status = "okay";
+				phy = <&phy0>;
+				phy-mode = "rgmii-id";
+				
+			};
+
+			usb@50000 {
+				status = "okay";
+			};
+
+			usb@51000 {
+				status = "okay";
+			};
+		};
+	};
+
+	gpio_leds {
+		compatible = "gpio-leds";
+
+		green_power_led {
+			label = "acm7000:green:power";
+			gpios = <&tca6424 0 0>;
+			default-state = "on";
+		};
+
+		green_hb_led {
+			label = "acm7000:green:heartbeat";
+			gpios = <&tca6424 1 0>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		green_serial_led {
+			label = "acm7000:green:serial";
+			gpios = <&tca6424 2 0>;
+			linux,default-trigger = "serial";
+		};
+
+		green_service_led {
+			label = "acm7000:green:service";
+			gpios = <&tca6424 3 0>;
+			linux,default-trigger = "none";
+		};
+
+		green_sig1_led {
+			label = "acm7000:green:sig_1";
+			gpios = <&tca6424 4 0>;
+			default-state = "off";
+		};
+
+		green_sig_2_led {
+			label = "acm7000:green:sig_2";
+			gpios = <&tca6424 5 0>;
+			default-state = "off";
+		};
+
+		green_sig_3_led {
+			label = "acm7000:green:sig_3";
+			gpios = <&tca6424 6 0>;
+			default-state = "off";
+		};
+
+		green_sig_4_led {
+			label = "acm7000:green:sig_4";
+			gpios = <&tca6424 7 0>;
+			default-state = "off";
+		};
+	};
+};
+
+&nand_controller {
+	status = "okay";
+	pinctrl-0 = <&nand_pins>;
+	pinctrl-names = "default";
+
+	nand@0 {
+		reg = <0>;
+		label = "ubi";
+		nand-rb = <0>;
+		nand-on-flash-bbt;
+		nand-ecc-strength = <40>;
+		nand-ecc-step-size = <1024>;
+		nand-ecc-algo = "bch";
+		nand-ecc-mode = "soft";
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "ubi";
+				reg = <0x00000000 0xFFE00000>;
+			};
+		};
+	};
+};
+
+&spi0 {
+	status = "okay";
+	pinctrl-0 = <&spi0_pins2>;
+	pinctrl-names = "default";
+
+	spi-flash@0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "n25q256a", "jedec,spi-nor";
+		reg = <0>; /* Chip select 0 */
+		spi-max-frequency = <50000000>;
+
+		u-boot@0 {
+			label = "u-boot";
+			reg = <0x00000000 0x00100000>;
+		};
+
+		u-boot-config-block@100000 {
+			label = "u-boot config block";
+			reg = <0x00100000 0x00020000>;
+		};
+
+		factory-img@120000 {
+			label = "factory_img";
+			reg = <0x00120000 0x1400000>;
+		};
+
+		system-log@1520000 {
+			label = "system_log";
+			reg = <0x1520000 0x00200000>;
+		};
+
+		mtd-oops@1720000 {
+			label = "mtd-oops";
+			reg = <0x1720000 0x00080000>;
+		};
+
+		reserved@17A0000 {
+			label = "reserved";
+			reg = <0x17A0000 0x860000>;
+		};
+
+		all-spi@0 {
+			label = "all-spi";
+			reg = <0x0 0x2000000>;
+		};
+	};
+};
+
+&i2c0 {
+	status = "okay";
+	clock-frequency = <100000>;
+
+	tca6424: gpio@22 {
+		compatible = "ti,tca6424";
+		reg = <0x22>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+
+	lm75: lm75@48 {
+		compatible = "national,lm75";
+		reg = <0x48>;
+	};
+};
+
+&pinctrl {
+	/* NAND */
+	nand_pins: nand-pins {
+		marvell,pins = "mpp34", "mpp35", "mpp36", "mpp37", "mpp38",
+				"mpp39", "mpp40", "mpp41", "mpp42", "mpp43", 
+				"mpp44", "mpp45", "mpp46", "mpp33";
+		marvell,function = "dev";
+	};
+
+	erase_button_pin: erase-button-pin {	
+		marvell,pins = "mpp55";
+		marvell,function = "gpo";
+	};
+
+	wdt_tickle_pin: wdt-tickle-pin {	
+		marvell,pins = "mpp61";
+		marvell,function = "gpio";
+	};
+};
+
+&pciec {
+	status = "okay";
+
+	/* Internal mini-PCIe connector */
+	pcie@1,0 {
+		/* Port 0, Lane 0 */
+		status = "okay";
+	};
+
+	/* Connected on the PCB to a USB 3.0 XHCI controller */
+	pcie@2,0 {
+		/* Port 1, Lane 0 */
+		status = "okay";
+	};
+};
+

@@ -1,0 +1,32 @@
+From: David McCullough <david.mccullough@accelecon.com>
+Date: Tue, 2 Jun 2015 13:47:28 +1000
+Subject: qmi: clear active data port on disconnect
+
+Without this on the Beam (340u) the data port is left in use and we
+cannot reconnect without restarting ModemManager or replugging the
+modem.
+---
+ src/mm-bearer-qmi.c | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/src/mm-bearer-qmi.c b/src/mm-bearer-qmi.c
+index 13fb6c12..4d3909f7 100644
+--- a/src/mm-bearer-qmi.c
++++ b/src/mm-bearer-qmi.c
+@@ -1943,13 +1943,11 @@ stop_network_ready (QmiClientWds *client,
+             ctx->error_ipv4 = error;
+         else
+             ctx->error_ipv6 = error;
+-    } else {
+-        /* Clear internal status */
+-        reset_bearer_connection (self,
+-                                 ctx->running_ipv4,
+-                                 ctx->running_ipv6);
+     }
+ 
++    /* Clear internal status */
++    reset_bearer_connection (self, TRUE, TRUE);
++
+     if (output)
+         qmi_message_wds_stop_network_output_unref (output);
+ 

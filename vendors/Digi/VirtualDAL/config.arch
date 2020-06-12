@@ -1,0 +1,32 @@
+############################################################################
+
+#
+# Vendor specific settings
+#
+
+KERNEL_EXTRA_CFLAGS =
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+# VENDOR_TOPDIRS = boot
+# DPDK_CONFIG = x86_64-btver2-linuxapp-gcc
+# export VENDOR_TOPDIRS
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES = $(IMAGEDIR)/VM.tar.gz \
+           $(IMAGEDIR)/acl-licenses.txt \
+           $(IMAGEDIR)/license.log \
+           $(IMAGEDIR)/romfs-inst.log \
+           $(IMAGEDIR)/rootfs.gz \
+           $(IMAGEDIR)/configs.tar.gz \
+           $(IMAGEDIR)/image.bin \
+           $(IMAGEDIR)/rci_descriptors.tar.gz \
+           $(IMAGEDIR)/rootfs \
+           $(IMAGEDIR)/vmlinuz \
+	   prop/config/cc_acl/app/runt/FE00000A*
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/x86_64/config.arch
+
+############################################################################

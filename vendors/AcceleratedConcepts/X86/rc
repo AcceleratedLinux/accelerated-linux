@@ -13,8 +13,9 @@ mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
-# init devices before we need any
-cp -ra /lib/udev/devices/. /dev
+
+# initialise devices before we need them
+/etc/rc.dev
 
 echo "Loading crypto modules..."
 modprobe ocf
@@ -33,7 +34,7 @@ mount -t tmpfs -o size=4M tmpfs /etc/config
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2)"
 	[ -f /etc/config/.init2 ] && filter='$'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -45,6 +46,15 @@ else
 	rm -f /etc/config/.init2
 fi
 cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
 
 # do the rc script processing
 actiond &

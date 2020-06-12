@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Real Time Clock interface for StrongARM SA1x00 and XScale PXA2xx
  *
@@ -14,11 +15,6 @@
  *
  * Converted to the RTC subsystem and Driver Model
  *   by Richard Purdie <rpurdie@rpsys.net>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version
- * 2 of the License, or (at your option) any later version.
  */
 
 #include <linux/platform_device.h>
@@ -256,7 +252,6 @@ EXPORT_SYMBOL_GPL(sa1100_rtc_init);
 static int sa1100_rtc_probe(struct platform_device *pdev)
 {
 	struct sa1100_rtc *info;
-	struct resource *iores;
 	void __iomem *base;
 	int irq_1hz, irq_alarm;
 	int ret;
@@ -285,8 +280,7 @@ static int sa1100_rtc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	iores = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&pdev->dev, iores);
+	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 

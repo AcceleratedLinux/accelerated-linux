@@ -36,21 +36,6 @@ config LIB_LIBIBERTY
 	bool "Build libiberty"
 	default n
 
-config LIB_LIBSSL
-	bool "Build libSSL"
-	default n
-	help
-	  SSL library.
-	  Only enable this if you want to force the library to be built.
-	  The Config will make sure this library is built if it is needed.
-
-config LIB_LIBSSL_FIPS
-	bool "Build libSSL with FIPs"
-	default n
-	depends on LIB_LIBSSL
-	help
-	  Build OpenSSL for use with the openssl FIPs certification.
-
 config LIB_LIBG
 	bool "Build libG"
 	default n
@@ -261,7 +246,7 @@ config LIB_STATIC_LIBSTDCPLUS
 	depends on ! LIB_INSTALL_LIBSTDCPLUS
 	select C_PLUS_PLUS
 	help
-	  Tool chani provides a static libstdc++
+	  Tool chain provides a static libstdc++
 
 config C_PLUS_PLUS
 	bool "c++" if LIB_INSTALL_LIBSTDCPLUS || LIB_STLPORT

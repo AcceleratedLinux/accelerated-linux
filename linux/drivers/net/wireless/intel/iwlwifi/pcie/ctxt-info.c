@@ -6,7 +6,7 @@
  * GPL LICENSE SUMMARY
  *
  * Copyright(c) 2017 Intel Deutschland GmbH
- * Copyright(c) 2018 Intel Corporation
+ * Copyright(c) 2018 - 2019 Intel Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -20,7 +20,7 @@
  * BSD LICENSE
  *
  * Copyright(c) 2017 Intel Deutschland GmbH
- * Copyright(c) 2018 Intel Corporation
+ * Copyright(c) 2018 - 2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,6 +56,42 @@
 #include "iwl-context-info.h"
 #include "internal.h"
 #include "iwl-prph.h"
+
+static void *_iwl_pcie_ctxt_info_dma_alloc_coherent(struct iwl_trans *trans,
+						    size_t size,
+						    dma_addr_t *phys,
+						    int depth)
+{
+	void *result;
+
+	if (WARN(depth > 2,
+		 "failed to allocate DMA memory not crossing 2^32 boundary"))
+		return NULL;
+
+	result = dma_alloc_coherent(trans->dev, size, phys, GFP_KERNEL);
+
+	if (!result)
+		return NULL;
+
+	if (unlikely(iwl_pcie_crosses_4g_boundary(*phys, size))) {
+		void *old = result;
+		dma_addr_t oldphys = *phys;
+
+		result = _iwl_pcie_ctxt_info_dma_alloc_coherent(trans, size,
+								phys,
+								depth + 1);
+		dma_free_coherent(trans->dev, size, old, oldphys);
+	}
+
+	return result;
+}
+
+static void *iwl_pcie_ctxt_info_dma_alloc_coherent(struct iwl_trans *trans,
+						   size_t size,
+						   dma_addr_t *phys)
+{
+	return _iwl_pcie_ctxt_info_dma_alloc_coherent(trans, size, phys, 0);
+}
 
 void iwl_pcie_ctxt_info_free_paging(struct iwl_trans *trans)
 {
@@ -161,13 +197,16 @@ int iwl_pcie_ctxt_info_init(struct iwl_trans *trans,
 	struct iwl_context_info *ctxt_info;
 	struct iwl_context_info_rbd_cfg *rx_cfg;
 	u32 control_flags = 0, rb_size;
+	dma_addr_t phys;
 	int ret;
 
-	ctxt_info = dma_alloc_coherent(trans->dev, sizeof(*ctxt_info),
-				       &trans_pcie->ctxt_info_dma_addr,
-				       GFP_KERNEL);
+	ctxt_info = iwl_pcie_ctxt_info_dma_alloc_coherent(trans,
+							  sizeof(*ctxt_info),
+							  &phys);
 	if (!ctxt_info)
 		return -ENOMEM;
+
+	trans_pcie->ctxt_info_dma_addr = phys;
 
 	ctxt_info->version.version = 0;
 	ctxt_info->version.mac_id =
@@ -193,11 +232,12 @@ int iwl_pcie_ctxt_info_init(struct iwl_trans *trans,
 		rb_size = IWL_CTXT_INFO_RB_SIZE_4K;
 	}
 
-	BUILD_BUG_ON(RX_QUEUE_CB_SIZE(MQ_RX_TABLE_SIZE) > 0xF);
-	control_flags = IWL_CTXT_INFO_TFD_FORMAT_LONG |
-			(RX_QUEUE_CB_SIZE(MQ_RX_TABLE_SIZE) <<
-			 IWL_CTXT_INFO_RB_CB_SIZE_POS) |
-			(rb_size << IWL_CTXT_INFO_RB_SIZE_POS);
+	WARN_ON(RX_QUEUE_CB_SIZE(trans->cfg->num_rbds) > 12);
+	control_flags = IWL_CTXT_INFO_TFD_FORMAT_LONG;
+	control_flags |=
+		u32_encode_bits(RX_QUEUE_CB_SIZE(trans->cfg->num_rbds),
+				IWL_CTXT_INFO_RB_CB_SIZE);
+	control_flags |= u32_encode_bits(rb_size, IWL_CTXT_INFO_RB_SIZE);
 	ctxt_info->control.control_flags = cpu_to_le32(control_flags);
 
 	/* initialize RX default queue */
@@ -210,7 +250,7 @@ int iwl_pcie_ctxt_info_init(struct iwl_trans *trans,
 	ctxt_info->hcmd_cfg.cmd_queue_addr =
 		cpu_to_le64(trans_pcie->txq[trans_pcie->cmd_queue]->dma_addr);
 	ctxt_info->hcmd_cfg.cmd_queue_size =
-		TFD_QUEUE_CB_SIZE(TFD_CMD_SLOTS);
+		TFD_QUEUE_CB_SIZE(IWL_CMD_QUEUE_SIZE);
 
 	/* allocate ucode sections in dram and set addresses */
 	ret = iwl_pcie_init_fw_sec(trans, fw, &ctxt_info->dram);
@@ -222,7 +262,7 @@ int iwl_pcie_ctxt_info_init(struct iwl_trans *trans,
 
 	trans_pcie->ctxt_info = ctxt_info;
 
-	iwl_enable_interrupts(trans);
+	iwl_enable_fw_load_int_ctx_info(trans);
 
 	/* Configure debug, if exists */
 	if (iwl_pcie_dbg_on(trans))

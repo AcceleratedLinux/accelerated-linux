@@ -1,0 +1,58 @@
+From: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+Date: Wed, 23 Dec 2015 11:51:31 +0100
+Subject: [PATCH 23/31] Add an option to disable decimal
+
+This patch replaces the existing --with-system-libmpdec option with a
+--with-libmpdec={system,builtin,none} option, which allows to tell
+Python whether we want to use the system libmpdec (already installed),
+the libmpdec builtin the Python sources, or no libmpdec at all.
+
+Signed-off-by: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+---
+ configure.ac | 17 ++++++++++++-----
+ setup.py     |  2 +-
+ 2 files changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 7ac589e58e..99bb615b7c 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -2969,13 +2969,20 @@ AC_SUBST(LIBFFI_INCLUDEDIR)
+ AC_MSG_RESULT($with_system_ffi)
+ 
+ # Check for use of the system libmpdec library
+-AC_MSG_CHECKING(for --with-system-libmpdec)
+-AC_ARG_WITH(system_libmpdec,
+-            AS_HELP_STRING([--with-system-libmpdec], [build _decimal module using an installed libmpdec library]),
++AC_MSG_CHECKING(for --with-libmpdec)
++AC_ARG_WITH(libmpdec,
++            AS_HELP_STRING([--with-libmpdec], [select which libmpdec version to use: system, builtin, none]),
+             [],
+-            [with_system_libmpdec="no"])
++            [with_libmpdec="builtin"])
+ 
+-AC_MSG_RESULT($with_system_libmpdec)
++AC_MSG_RESULT($with_libmpdec)
++if test "$with_libmpdec" != "none"; then
++   MPDEC=yes
++else
++   DISABLED_EXTENSIONS="${DISABLED_EXTENSIONS} _decimal"
++   MPDEC=no
++fi
++AC_SUBST(MPDEC)
+ 
+ # Check for support for loadable sqlite extensions
+ AC_MSG_CHECKING(for --enable-loadable-sqlite-extensions)
+diff --git a/setup.py b/setup.py
+index 31bf72a312..ec5f3a7a27 100644
+--- a/setup.py
++++ b/setup.py
+@@ -2103,7 +2103,7 @@ class PyBuildExt(build_ext):
+     def _decimal_ext(self):
+         extra_compile_args = []
+         undef_macros = []
+-        if '--with-system-libmpdec' in sysconfig.get_config_var("CONFIG_ARGS"):
++        if '--with-libmpdec=system' in sysconfig.get_config_var("CONFIG_ARGS"):
+             include_dirs = []
+             libraries = [':libmpdec.so.2']
+             sources = ['_decimal/_decimal.c']

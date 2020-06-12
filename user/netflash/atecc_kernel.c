@@ -21,6 +21,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/atsha204-i2c.h>
+#include <sys/ioctl.h>
 
 #define NONCE_SIZE		32
 
@@ -63,39 +65,25 @@ void atecc_close(atecc_ctx *ctx)
 	ctx->fd = -1;
 }
 
-static int send_cmd(atecc_ctx *ctx, const uint8_t *data_buffer,
-		    uint8_t data_len, uint8_t *rx_buffer, size_t rx_len)
-{
-	int ret;
-
-	ret = write(ctx->fd, data_buffer, data_len);
-	if (ret != data_len) {
-		/* For positive ret (incomplete writes) report IO error */
-		return ret > 0 ? -EIO : ret;
-	}
-
-	// Read response
-	ret = read(ctx->fd, rx_buffer, rx_len);
-	if (ret <= 0)
-		return ret;
-	if (ret != rx_len)
-		return -EIO;
-
-	return 0;
-}
-
 /*
  * return value:
  *  < 0: IO error
  *    0: Verification OK
  *  > 0: Verification FAILED (see 'atecc_parse_status')
  */
-int verify(atecc_ctx *ctx, uint8_t slot_id,
+int verify(atecc_ctx *ctx, uint8_t slot_id, const uint8_t *message,
 	   const uint8_t *r, const uint8_t *s)
 {
 	int ret;
-	uint8_t rx_buff[1];
-	uint8_t cmd[4 + 32 + 32] = {
+	uint8_t rx_buff_nonce[2];
+	uint8_t rx_buff_verify[2] = {0, -1};
+	uint8_t cmd_nonce[4 + NONCE_SIZE] = {
+		ATECC_OP_NONCE,
+		0x03, 		/* Param1: Pass-through mode */
+		0x00,		/* Param2: (2 bytes)         */
+		0x00		/*         no TempKey usage  */
+	};
+	uint8_t cmd_verify[4 + 32 + 32] = {
 		ATECC_OP_VERIFY,
 		0x00, 		/* stored mode        */
 		slot_id,	/* key slot (2 bytes) */
@@ -103,35 +91,32 @@ int verify(atecc_ctx *ctx, uint8_t slot_id,
 		/* 32 bytes for r */
 		/* 32 bytes for s */
 	};
+	struct atsha204_i2c_exec_data msgset;
+	struct atsha204_i2c_msg msgs[2];
 
-	memcpy(cmd + 4, r, 32);
-	memcpy(cmd + 4 + 32, s, 32);
+	memcpy(cmd_nonce + 4, message, NONCE_SIZE);
 
-	ret = send_cmd(ctx, cmd, sizeof(cmd), rx_buff, sizeof(rx_buff));
+	memcpy(cmd_verify + 4, r, 32);
+	memcpy(cmd_verify + 4 + 32, s, 32);
+
+	msgs[0].cmd = cmd_nonce;
+	msgs[0].cmd_len = sizeof(cmd_nonce);
+	msgs[0].resp = rx_buff_nonce;
+	msgs[0].resp_len = sizeof(rx_buff_nonce);
+
+	msgs[1].cmd = cmd_verify;
+	msgs[1].cmd_len = sizeof(cmd_verify);
+	msgs[1].resp = rx_buff_verify;
+	msgs[1].resp_len = sizeof(rx_buff_verify);
+
+	msgset.msgs = msgs;
+	msgset.nmsgs = 2;
+
+	ret = ioctl(ctx->fd, ATSHA204_I2C_IOCTL_EXEC, &msgset);
 	if (ret < 0)
 		return ret;
 
-	return rx_buff[0];
-}
-
-/*
- * return value:
- *  < 0: IO error
- *    0: OK
- */
-int nonce(atecc_ctx *ctx, const uint8_t *message)
-{
-	uint8_t rx_buff[1];
-	uint8_t cmd[4 + NONCE_SIZE] = {
-		ATECC_OP_NONCE,
-		0x03, 		/* Param1: Pass-through mode */
-		0x00,		/* Param2: (2 bytes)         */
-		0x00		/*         no TempKey usage  */
-	};
-
-	memcpy(cmd + 4, message, NONCE_SIZE);
-
-	return send_cmd(ctx, cmd, sizeof(cmd), rx_buff, sizeof(rx_buff));
+	return rx_buff_verify[1];
 }
 
 /*
@@ -144,7 +129,7 @@ int hmac(atecc_ctx *ctx, uint8_t slot_id,
 	 const uint8_t *message, const uint8_t *hmac)
 {
 	int ret;
-	uint8_t rx_buff[1];
+	uint8_t rx_buff[2] = {0, -1};
 	uint8_t cmd[4 + 32 + 32 + 13] = {
 		ATECC_OP_CHECKMAC,
 		0x00, 		/* mode: sources: ClientChal and Slot[SlotID] */
@@ -154,6 +139,8 @@ int hmac(atecc_ctx *ctx, uint8_t slot_id,
 		/* 32 bytes for signature */
 		/* 13 bytes for other data (not used, should be zero) */
 	};
+	struct atsha204_i2c_exec_data msgset;
+	struct atsha204_i2c_msg msg;
 
 	/* Copy digest */
 	memcpy(cmd + 4, message, 32);
@@ -162,9 +149,17 @@ int hmac(atecc_ctx *ctx, uint8_t slot_id,
 	/* Other data is 0 */
 	memset(cmd + 4 + 32 + 32, 0, 13);
 
-	ret = send_cmd(ctx, cmd, sizeof(cmd), rx_buff, sizeof(rx_buff));
+	msg.cmd = cmd;
+	msg.cmd_len = sizeof(cmd);
+	msg.resp = rx_buff;
+	msg.resp_len = sizeof(rx_buff);
+
+	msgset.msgs = &msg;
+	msgset.nmsgs = 1;
+
+	ret = ioctl(ctx->fd, ATSHA204_I2C_IOCTL_EXEC, &msgset);
 	if (ret < 0)
 		return ret;
 
-	return rx_buff[0];
+	return rx_buff[1];
 }

@@ -1,18 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright (C) 2017 Joe Lawrence <joe.lawrence@redhat.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 /*
@@ -107,7 +95,7 @@ struct dummy {
 static __used noinline struct dummy *dummy_alloc(void)
 {
 	struct dummy *d;
-	void *leak;
+	int *leak;
 
 	d = kzalloc(sizeof(*d), GFP_KERNEL);
 	if (!d)
@@ -117,7 +105,7 @@ static __used noinline struct dummy *dummy_alloc(void)
 		msecs_to_jiffies(1000 * EXPIRE_PERIOD);
 
 	/* Oops, forgot to save leak! */
-	leak = kzalloc(sizeof(int), GFP_KERNEL);
+	leak = kzalloc(sizeof(*leak), GFP_KERNEL);
 	if (!leak) {
 		kfree(d);
 		return NULL;

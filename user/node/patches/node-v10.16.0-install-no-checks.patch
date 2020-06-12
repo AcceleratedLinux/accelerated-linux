@@ -1,0 +1,11 @@
+--- node-v10.16.0/Makefile.save	2020-02-11 11:30:48.975865200 +1000
++++ node-v10.16.0/Makefile	2020-02-11 11:30:56.455751891 +1000
+@@ -138,7 +138,7 @@
+ 	fi
+ 
+ .PHONY: install
+-install: all ## Installs node into $PREFIX (default=/usr/local).
++install: ## Installs node into $PREFIX (default=/usr/local).
+ 	$(PYTHON) tools/install.py $@ '$(DESTDIR)' '$(PREFIX)'
+ 
+ .PHONY: uninstall

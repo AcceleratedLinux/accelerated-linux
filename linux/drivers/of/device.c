@@ -17,7 +17,7 @@
 
 /**
  * of_match_device - Tell if a struct device matches an of_device_id list
- * @ids: array of of device match structures to search in
+ * @matches: array of of device match structures to search in
  * @dev: the of device structure to match against
  *
  * Used by a driver to check whether an platform_device present in the
@@ -93,7 +93,7 @@ int of_dma_configure(struct device *dev, struct device_node *np, bool force_dma)
 	bool coherent;
 	unsigned long offset;
 	const struct iommu_ops *iommu;
-	u64 mask;
+	u64 mask, end;
 
 	ret = of_dma_get_range(np, &dma_addr, &paddr, &size);
 	if (ret < 0) {
@@ -148,19 +148,20 @@ int of_dma_configure(struct device *dev, struct device_node *np, bool force_dma)
 	 * Limit coherent and dma mask based on size and default mask
 	 * set by the driver.
 	 */
-	mask = DMA_BIT_MASK(ilog2(dma_addr + size - 1) + 1);
+	end = dma_addr + size - 1;
+	mask = DMA_BIT_MASK(ilog2(end) + 1);
 	dev->coherent_dma_mask &= mask;
 	*dev->dma_mask &= mask;
-	/* ...but only set bus mask if we found valid dma-ranges earlier */
+	/* ...but only set bus limit if we found valid dma-ranges earlier */
 	if (!ret)
-		dev->bus_dma_mask = mask;
+		dev->bus_dma_limit = end;
 
 	coherent = of_dma_is_coherent(np);
 	dev_dbg(dev, "device is%sdma coherent\n",
 		coherent ? " " : " not ");
 
 	iommu = of_iommu_configure(dev, np);
-	if (IS_ERR(iommu) && PTR_ERR(iommu) == -EPROBE_DEFER)
+	if (PTR_ERR(iommu) == -EPROBE_DEFER)
 		return -EPROBE_DEFER;
 
 	dev_dbg(dev, "device is%sbehind an iommu\n",

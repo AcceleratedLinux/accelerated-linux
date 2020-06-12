@@ -1,0 +1,6 @@
+ifdef CONFIG_USER_UDEV
+libqmi: udev
+endif
+ifdef CONFIG_USER_LIBGUDEV
+libqmi: libgudev
+endif

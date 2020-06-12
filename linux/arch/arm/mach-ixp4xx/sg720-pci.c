@@ -23,6 +23,8 @@
 #include <asm/irq.h>
 #include <asm/mach/pci.h>
 
+#include "irqs.h"
+
 #define IRQ_SG720_PCI_INTA	IRQ_IXP4XX_GPIO8
 #define IRQ_SG720_PCI_INTB	IRQ_IXP4XX_GPIO9
 

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * r8a7796 Clock Pulse Generator / Module Standby and Software Reset
+ * r8a7796 (R-Car M3-W/W+) Clock Pulse Generator / Module Standby and Software
+ * Reset
  *
- * Copyright (C) 2016 Glider bvba
+ * Copyright (C) 2016-2019 Glider bvba
+ * Copyright (C) 2018-2019 Renesas Electronics Corp.
  *
  * Based on r8a7795-cpg-mssr.c
  *
@@ -13,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/of.h>
 #include <linux/soc/renesas/rcar-rst.h>
 
 #include <dt-bindings/clock/r8a7796-cpg-mssr.h>
@@ -73,8 +76,8 @@ static const struct cpg_core_clk r8a7796_core_clks[] __initconst = {
 	DEF_GEN3_OSC(".r",      CLK_RINT,          CLK_EXTAL,      32),
 
 	/* Core Clock Outputs */
-	DEF_BASE("z",           R8A7796_CLK_Z,     CLK_TYPE_GEN3_Z, CLK_PLL0),
-	DEF_BASE("z2",          R8A7796_CLK_Z2,    CLK_TYPE_GEN3_Z2, CLK_PLL2),
+	DEF_GEN3_Z("z",         R8A7796_CLK_Z,     CLK_TYPE_GEN3_Z,  CLK_PLL0, 2, 8),
+	DEF_GEN3_Z("z2",        R8A7796_CLK_Z2,    CLK_TYPE_GEN3_Z,  CLK_PLL2, 2, 0),
 	DEF_FIXED("ztr",        R8A7796_CLK_ZTR,   CLK_PLL1_DIV2,  6, 1),
 	DEF_FIXED("ztrd2",      R8A7796_CLK_ZTRD2, CLK_PLL1_DIV2, 12, 1),
 	DEF_FIXED("zt",         R8A7796_CLK_ZT,    CLK_PLL1_DIV2,  4, 1),
@@ -115,7 +118,7 @@ static const struct cpg_core_clk r8a7796_core_clks[] __initconst = {
 	DEF_BASE("r",           R8A7796_CLK_R,     CLK_TYPE_GEN3_R, CLK_RINT),
 };
 
-static const struct mssr_mod_clk r8a7796_mod_clks[] __initconst = {
+static struct mssr_mod_clk r8a7796_mod_clks[] __initdata = {
 	DEF_MOD("fdp1-0",		 119,	R8A7796_CLK_S0D1),
 	DEF_MOD("scif5",		 202,	R8A7796_CLK_S3D4),
 	DEF_MOD("scif4",		 203,	R8A7796_CLK_S3D4),
@@ -133,6 +136,7 @@ static const struct mssr_mod_clk r8a7796_mod_clks[] __initconst = {
 	DEF_MOD("cmt2",			 301,	R8A7796_CLK_R),
 	DEF_MOD("cmt1",			 302,	R8A7796_CLK_R),
 	DEF_MOD("cmt0",			 303,	R8A7796_CLK_R),
+	DEF_MOD("tpu0",			 304,	R8A7796_CLK_S3D4),
 	DEF_MOD("scif2",		 310,	R8A7796_CLK_S3D4),
 	DEF_MOD("sdif3",		 311,	R8A7796_CLK_SD3),
 	DEF_MOD("sdif2",		 312,	R8A7796_CLK_SD2),
@@ -148,14 +152,14 @@ static const struct mssr_mod_clk r8a7796_mod_clks[] __initconst = {
 	DEF_MOD("intc-ap",		 408,	R8A7796_CLK_S0D3),
 	DEF_MOD("audmac1",		 501,	R8A7796_CLK_S1D2),
 	DEF_MOD("audmac0",		 502,	R8A7796_CLK_S1D2),
-	DEF_MOD("drif7",		 508,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif6",		 509,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif5",		 510,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif4",		 511,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif3",		 512,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif2",		 513,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif1",		 514,	R8A7796_CLK_S3D2),
-	DEF_MOD("drif0",		 515,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif31",		 508,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif30",		 509,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif21",		 510,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif20",		 511,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif11",		 512,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif10",		 513,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif01",		 514,	R8A7796_CLK_S3D2),
+	DEF_MOD("drif00",		 515,	R8A7796_CLK_S3D2),
 	DEF_MOD("hscif4",		 516,	R8A7796_CLK_S3D1),
 	DEF_MOD("hscif3",		 517,	R8A7796_CLK_S3D1),
 	DEF_MOD("hscif2",		 518,	R8A7796_CLK_S3D1),
@@ -176,9 +180,12 @@ static const struct mssr_mod_clk r8a7796_mod_clks[] __initconst = {
 	DEF_MOD("vspd0",		 623,	R8A7796_CLK_S0D2),
 	DEF_MOD("vspb",			 626,	R8A7796_CLK_S0D1),
 	DEF_MOD("vspi0",		 631,	R8A7796_CLK_S0D1),
-	DEF_MOD("ehci1",		 702,	R8A7796_CLK_S3D4),
-	DEF_MOD("ehci0",		 703,	R8A7796_CLK_S3D4),
-	DEF_MOD("hsusb",		 704,	R8A7796_CLK_S3D4),
+	DEF_MOD("ehci1",		 702,	R8A7796_CLK_S3D2),
+	DEF_MOD("ehci0",		 703,	R8A7796_CLK_S3D2),
+	DEF_MOD("hsusb",		 704,	R8A7796_CLK_S3D2),
+	DEF_MOD("cmm2",			 709,	R8A7796_CLK_S2D1),
+	DEF_MOD("cmm1",			 710,	R8A7796_CLK_S2D1),
+	DEF_MOD("cmm0",			 711,	R8A7796_CLK_S2D1),
 	DEF_MOD("csi20",		 714,	R8A7796_CLK_CSI0),
 	DEF_MOD("csi40",		 716,	R8A7796_CLK_CSI0),
 	DEF_MOD("du2",			 722,	R8A7796_CLK_S2D1),
@@ -299,6 +306,14 @@ static const struct rcar_gen3_cpg_pll_config cpg_pll_configs[16] __initconst = {
 	{ 2,		192,	1,	192,	1,	32,	},
 };
 
+	/*
+	 * Fixups for R-Car M3-W+
+	 */
+
+static const unsigned int r8a77961_mod_nullify[] __initconst = {
+	MOD_CLK_ID(617),			/* FCPCI0  */
+};
+
 static int __init r8a7796_cpg_mssr_init(struct device *dev)
 {
 	const struct rcar_gen3_cpg_pll_config *cpg_pll_config;
@@ -314,6 +329,12 @@ static int __init r8a7796_cpg_mssr_init(struct device *dev)
 		dev_err(dev, "Prohibited setting (cpg_mode=0x%x)\n", cpg_mode);
 		return -EINVAL;
 	}
+
+	if (of_device_is_compatible(dev->of_node, "renesas,r8a77961-cpg-mssr"))
+		mssr_mod_nullify(r8a7796_mod_clks,
+				 ARRAY_SIZE(r8a7796_mod_clks),
+				 r8a77961_mod_nullify,
+				 ARRAY_SIZE(r8a77961_mod_nullify));
 
 	return rcar_gen3_cpg_init(cpg_pll_config, CLK_EXTALR, cpg_mode);
 }

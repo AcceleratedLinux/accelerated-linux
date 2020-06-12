@@ -60,16 +60,13 @@ static int pfe_get_gemac_if_proprties(struct device_node *parent, int port, int
 
 	mac_addr = of_get_mac_address(gem);
 
-	if (mac_addr) {
+	if (!IS_ERR(mac_addr)) {
 		memcpy(pdata->ls1012a_eth_pdata[port].mac_addr, mac_addr,
 		       ETH_ALEN);
 	}
 
-	pdata->ls1012a_eth_pdata[port].mii_config = of_get_phy_mode(gem);
-
-	if ((pdata->ls1012a_eth_pdata[port].mii_config) < 0)
-		pr_err("%s:%d Incorrect Phy mode....\n", __func__,
-		       __LINE__);
+	if (of_get_phy_mode(gem, &(pdata->ls1012a_eth_pdata[port].mii_config)))
+		pr_err("%s:%d Incorrect Phy mode....\n", __func__, __LINE__);
 
 	addr = of_get_property(gem, "fsl,gemac-bus-id", &size);
 	if (!addr)

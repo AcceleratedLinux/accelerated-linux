@@ -9,6 +9,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
@@ -250,8 +251,6 @@ struct csi_state {
 
 	struct mipi_csis_event events[MIPI_CSIS_NUM_EVENTS];
 
-	struct v4l2_async_notifier subdev_notifier;
-
 	struct csis_hw_reset hw_reset;
 	struct regulator *mipi_phy_regulator;
 	bool sink_linked;
@@ -292,7 +291,7 @@ static int mipi_csis_dump_regs(struct csi_state *state)
 	struct device *dev = &state->pdev->dev;
 	unsigned int i;
 	u32 cfg;
-	struct {
+	static const struct {
 		u32 offset;
 		const char * const name;
 	} registers[] = {
@@ -349,6 +348,8 @@ static void mipi_csis_sw_reset(struct csi_state *state)
 static int mipi_csis_phy_init(struct csi_state *state)
 {
 	state->mipi_phy_regulator = devm_regulator_get(state->dev, "phy");
+	if (IS_ERR(state->mipi_phy_regulator))
+		return PTR_ERR(state->mipi_phy_regulator);
 
 	return regulator_set_voltage(state->mipi_phy_regulator, 1000000,
 				     1000000);
@@ -455,13 +456,9 @@ static void mipi_csis_set_params(struct csi_state *state)
 			MIPI_CSIS_CMN_CTRL_UPDATE_SHADOW_CTRL);
 }
 
-static void mipi_csis_clk_enable(struct csi_state *state)
+static int mipi_csis_clk_enable(struct csi_state *state)
 {
-	int ret;
-
-	ret = clk_bulk_prepare_enable(state->num_clks, state->clks);
-	if (ret < 0)
-		dev_err(state->dev, "failed to enable clocks\n");
+	return clk_bulk_prepare_enable(state->num_clks, state->clks);
 }
 
 static void mipi_csis_clk_disable(struct csi_state *state)
@@ -491,7 +488,7 @@ static int mipi_csis_clk_get(struct csi_state *state)
 
 	state->wrap_clk = devm_clk_get(dev, "wrap");
 	if (IS_ERR(state->wrap_clk))
-		return IS_ERR(state->wrap_clk);
+		return PTR_ERR(state->wrap_clk);
 
 	/* Set clock rate */
 	ret = clk_set_rate(state->wrap_clk, state->clk_frequency);
@@ -706,7 +703,7 @@ static int mipi_csis_set_fmt(struct v4l2_subdev *mipi_sd,
 	fmt = mipi_csis_get_format(state, cfg, sdformat->which, sdformat->pad);
 
 	mutex_lock(&state->lock);
-	if (fmt && sdformat->pad == CSIS_PAD_SOURCE) {
+	if (sdformat->pad == CSIS_PAD_SOURCE) {
 		sdformat->format = *fmt;
 		goto unlock;
 	}
@@ -879,6 +876,13 @@ static int mipi_csis_subdev_init(struct v4l2_subdev *mipi_sd,
 
 	v4l2_set_subdevdata(mipi_sd, &pdev->dev);
 
+	state->pads[CSIS_PAD_SINK].flags = MEDIA_PAD_FL_SINK;
+	state->pads[CSIS_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
+	ret = media_entity_pads_init(&mipi_sd->entity, CSIS_PADS_NUM,
+				     state->pads);
+	if (ret)
+		return ret;
+
 	ret = v4l2_async_register_fwnode_subdev(mipi_sd,
 						sizeof(struct v4l2_async_subdev),
 						&sink_port, 1,
@@ -889,9 +893,6 @@ static int mipi_csis_subdev_init(struct v4l2_subdev *mipi_sd,
 	return ret;
 }
 
-#ifdef CONFIG_DEBUG_FS
-#include <linux/debugfs.h>
-
 static int mipi_csis_dump_regs_show(struct seq_file *m, void *private)
 {
 	struct csi_state *state = m->private;
@@ -900,7 +901,7 @@ static int mipi_csis_dump_regs_show(struct seq_file *m, void *private)
 }
 DEFINE_SHOW_ATTRIBUTE(mipi_csis_dump_regs);
 
-static int __init_or_module mipi_csis_debugfs_init(struct csi_state *state)
+static int mipi_csis_debugfs_init(struct csi_state *state)
 {
 	struct dentry *d;
 
@@ -934,23 +935,11 @@ static void mipi_csis_debugfs_exit(struct csi_state *state)
 	debugfs_remove_recursive(state->debugfs_root);
 }
 
-#else
-static int mipi_csis_debugfs_init(struct csi_state *state __maybe_unused)
-{
-	return 0;
-}
-
-static void mipi_csis_debugfs_exit(struct csi_state *state __maybe_unused)
-{
-}
-#endif
-
 static int mipi_csis_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct resource *mem_res;
 	struct csi_state *state;
-	int ret = -ENOMEM;
+	int ret;
 
 	state = devm_kzalloc(dev, sizeof(*state), GFP_KERNEL);
 	if (!state)
@@ -967,25 +956,29 @@ static int mipi_csis_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	mipi_csis_phy_init(state);
+	ret = mipi_csis_phy_init(state);
+	if (ret < 0)
+		return ret;
+
 	mipi_csis_phy_reset(state);
 
-	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	state->regs = devm_ioremap_resource(dev, mem_res);
+	state->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(state->regs))
 		return PTR_ERR(state->regs);
 
 	state->irq = platform_get_irq(pdev, 0);
-	if (state->irq < 0) {
-		dev_err(dev, "Failed to get irq\n");
+	if (state->irq < 0)
 		return state->irq;
-	}
 
 	ret = mipi_csis_clk_get(state);
 	if (ret < 0)
 		return ret;
 
-	mipi_csis_clk_enable(state);
+	ret = mipi_csis_clk_enable(state);
+	if (ret < 0) {
+		dev_err(state->dev, "failed to enable clocks: %d\n", ret);
+		return ret;
+	}
 
 	ret = devm_request_irq(dev, state->irq, mipi_csis_irq_handler,
 			       0, dev_name(dev), state);
@@ -1001,13 +994,6 @@ static int mipi_csis_probe(struct platform_device *pdev)
 				    &mipi_csis_subdev_ops);
 	if (ret < 0)
 		goto disable_clock;
-
-	state->pads[CSIS_PAD_SINK].flags = MEDIA_PAD_FL_SINK;
-	state->pads[CSIS_PAD_SOURCE].flags = MEDIA_PAD_FL_SOURCE;
-	ret = media_entity_pads_init(&state->mipi_sd.entity, CSIS_PADS_NUM,
-				     state->pads);
-	if (ret < 0)
-		goto unregister_subdev;
 
 	memcpy(state->events, mipi_csis_events, sizeof(state->events));
 
@@ -1028,7 +1014,6 @@ static int mipi_csis_probe(struct platform_device *pdev)
 unregister_all:
 	mipi_csis_debugfs_exit(state);
 	media_entity_cleanup(&state->mipi_sd.entity);
-unregister_subdev:
 	v4l2_async_unregister_subdev(&state->mipi_sd);
 disable_clock:
 	mipi_csis_clk_disable(state);
@@ -1039,8 +1024,7 @@ disable_clock:
 
 static int mipi_csis_pm_suspend(struct device *dev, bool runtime)
 {
-	struct platform_device *pdev = to_platform_device(dev);
-	struct v4l2_subdev *mipi_sd = platform_get_drvdata(pdev);
+	struct v4l2_subdev *mipi_sd = dev_get_drvdata(dev);
 	struct csi_state *state = mipi_sd_to_csis_state(mipi_sd);
 	int ret = 0;
 
@@ -1064,8 +1048,7 @@ unlock:
 
 static int mipi_csis_pm_resume(struct device *dev, bool runtime)
 {
-	struct platform_device *pdev = to_platform_device(dev);
-	struct v4l2_subdev *mipi_sd = platform_get_drvdata(pdev);
+	struct v4l2_subdev *mipi_sd = dev_get_drvdata(dev);
 	struct csi_state *state = mipi_sd_to_csis_state(mipi_sd);
 	int ret = 0;
 
@@ -1119,7 +1102,6 @@ static int mipi_csis_remove(struct platform_device *pdev)
 
 	mipi_csis_debugfs_exit(state);
 	v4l2_async_unregister_subdev(&state->mipi_sd);
-	v4l2_async_notifier_unregister(&state->subdev_notifier);
 
 	pm_runtime_disable(&pdev->dev);
 	mipi_csis_pm_suspend(&pdev->dev, true);

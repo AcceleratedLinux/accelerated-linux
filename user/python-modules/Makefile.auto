@@ -7,6 +7,12 @@ dir_$(CONFIG_USER_PYTHON_MODULES_BCRYPT)        += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_PEXPECT)       += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_PTYPROCESS)    += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_DIGI_XBEE_LIB) += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_AWS_SDK)       += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_SRP)           += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_PAHO_MQTT)     += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_HID)           += python-modules
 
-python-modules: python
+dep_python_modules_y=
+dep_python_modules_$(CONFIG_USER_PYTHON_MODULES_HID) += hidapi
+
+python-modules: python $(dep_python_modules_y)

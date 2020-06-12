@@ -24,16 +24,20 @@ static enum power_supply_property mcu_tx54_battery_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
 
+/* ADC: 10-bit, Vfs=3.346V, divider=11 */
+#define ADC_TO_MV(_raw)		(((_raw) * 11 * 3346 + 512) / 1023)
+#define MV_TO_ADC(_v)		(((_v) * 1023 + (11 * 3346 / 2)) / 11 / 3346)
+
+/* Voltage threshold min. value (raw) */
+#define VOLTAGE_THRESHOLD_MIN		222
 /* Voltage threshold max. value (raw) */
 #define VOLTAGE_THRESHOLD_MAX		1023
 /* Voltage threshold min. value (uV) */
-#define VOLTAGE_THRESHOLD_MIN_IN_UV	9000000
+#define VOLTAGE_THRESHOLD_MIN_IN_UV	\
+	(ADC_TO_MV(VOLTAGE_THRESHOLD_MIN) * 1000)
 /* Voltage threshold max. value (uV) */
-#define VOLTAGE_THRESHOLD_MAX_IN_UV	36300000
-
-/* ADC: 10-bit, Vfs=3.27V, divider=11 */
-#define ADC_TO_MV(_raw)			((_raw) * 11 * 3300 / 1023)
-#define MV_TO_ADC(_v)			((_v) * 1023 / 11 / 3300)
+#define VOLTAGE_THRESHOLD_MAX_IN_UV	\
+	(ADC_TO_MV(VOLTAGE_THRESHOLD_MAX) * 1000)
 
 static int mcu_tx54_battery_get_prop(struct power_supply *psy,
 				     enum power_supply_property psp,

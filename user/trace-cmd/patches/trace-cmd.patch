@@ -1,0 +1,48 @@
+diff --git a/Makefile b/Makefile
+index 48d88e7..2ab568c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -223,12 +223,12 @@ export INCLUDES
+ # Required CFLAGS
+ override CFLAGS += -D_GNU_SOURCE
+ 
+-ifndef NO_PTRACE
+-ifneq ($(call try-cc,$(SOURCE_PTRACE),),y)
+-	NO_PTRACE = 1
+-	override CFLAGS += -DWARN_NO_PTRACE
+-endif
+-endif
++#ifndef NO_PTRACE
++#ifneq ($(call try-cc,$(SOURCE_PTRACE),),y)
++#	NO_PTRACE = 1
++#	override CFLAGS += -DWARN_NO_PTRACE
++#endif
++#endif
+ 
+ ifdef NO_PTRACE
+ override CFLAGS += -DNO_PTRACE
+diff --git a/lib/trace-cmd/trace-input.c b/lib/trace-cmd/trace-input.c
+index 3b187e3..e1ca7bc 100644
+--- a/lib/trace-cmd/trace-input.c
++++ b/lib/trace-cmd/trace-input.c
+@@ -14,6 +14,7 @@
+ #include <errno.h>
+ 
+ #include <linux/time64.h>
++#include <linux/limits.h>
+ 
+ #include "trace-cmd-local.h"
+ #include "trace-local.h"
+diff --git a/tracecmd/trace-hist.c b/tracecmd/trace-hist.c
+index 384a7ff..be28425 100644
+--- a/tracecmd/trace-hist.c
++++ b/tracecmd/trace-hist.c
+@@ -27,7 +27,7 @@ static int kernel_stack_type;
+ 
+ static int long_size;
+ 
+-struct tep_format_field *common_type_field;
++static struct tep_format_field *common_type_field;
+ struct tep_format_field *common_pid_field;
+ struct tep_format_field *sched_wakeup_comm_field;
+ struct tep_format_field *sched_wakeup_new_comm_field;

@@ -10,6 +10,8 @@
 #include <linux/nvme.h>
 #include <linux/nvme-fc.h>
 
+#include "qla_dsd.h"
+
 #define MBS_CHECKSUM_ERROR	0x4010
 #define MBS_INVALID_PRODUCT_KEY	0x4020
 
@@ -339,9 +341,9 @@ struct init_cb_24xx {
 
 	uint16_t prio_request_q_length;
 
-	uint32_t request_q_address[2];
-	uint32_t response_q_address[2];
-	uint32_t prio_request_q_address[2];
+	__le64	 request_q_address __packed;
+	__le64	 response_q_address __packed;
+	__le64	 prio_request_q_address __packed;
 
 	uint16_t msix;
 	uint16_t msix_atio;
@@ -349,7 +351,7 @@ struct init_cb_24xx {
 
 	uint16_t atio_q_inpointer;
 	uint16_t atio_q_length;
-	uint32_t atio_q_address[2];
+	__le64	 atio_q_address __packed;
 
 	uint16_t interrupt_delay_timer;		/* 100us increments. */
 	uint16_t login_timeout;
@@ -453,7 +455,7 @@ struct cmd_bidir {
 #define BD_WRITE_DATA			BIT_0
 
 	uint16_t fcp_cmnd_dseg_len;		/* Data segment length. */
-	uint32_t fcp_cmnd_dseg_address[2];	/* Data segment address. */
+	__le64	 fcp_cmnd_dseg_address __packed;/* Data segment address. */
 
 	uint16_t reserved[2];			/* Reserved */
 
@@ -463,8 +465,7 @@ struct cmd_bidir {
 	uint8_t port_id[3];			/* PortID of destination port.*/
 	uint8_t vp_index;
 
-	uint32_t fcp_data_dseg_address[2];	/* Data segment address. */
-	uint16_t fcp_data_dseg_len;		/* Data segment length. */
+	struct dsd64 fcp_dsd;
 };
 
 #define COMMAND_TYPE_6	0x48		/* Command Type 6 entry */
@@ -491,18 +492,18 @@ struct cmd_type_6 {
 #define CF_READ_DATA			BIT_1
 #define CF_WRITE_DATA			BIT_0
 
-	uint16_t fcp_cmnd_dseg_len;		/* Data segment length. */
-	uint32_t fcp_cmnd_dseg_address[2];	/* Data segment address. */
-
-	uint32_t fcp_rsp_dseg_address[2];	/* Data segment address. */
+	uint16_t fcp_cmnd_dseg_len;	/* Data segment length. */
+					/* Data segment address. */
+	__le64	 fcp_cmnd_dseg_address __packed;
+					/* Data segment address. */
+	__le64	 fcp_rsp_dseg_address __packed;
 
 	uint32_t byte_count;		/* Total byte count. */
 
 	uint8_t port_id[3];		/* PortID of destination port. */
 	uint8_t vp_index;
 
-	uint32_t fcp_data_dseg_address[2];	/* Data segment address. */
-	uint32_t fcp_data_dseg_len;		/* Data segment length. */
+	struct dsd64 fcp_dsd;
 };
 
 #define COMMAND_TYPE_7	0x18		/* Command Type 7 entry */
@@ -548,8 +549,7 @@ struct cmd_type_7 {
 	uint8_t port_id[3];		/* PortID of destination port. */
 	uint8_t vp_index;
 
-	uint32_t dseg_0_address[2];	/* Data segment 0 address. */
-	uint32_t dseg_0_len;		/* Data segment 0 length. */
+	struct dsd64 dsd;
 };
 
 #define COMMAND_TYPE_CRC_2	0x6A	/* Command Type CRC_2 (Type 6)
@@ -573,17 +573,17 @@ struct cmd_type_crc_2 {
 
 	uint16_t control_flags;		/* Control flags. */
 
-	uint16_t fcp_cmnd_dseg_len;		/* Data segment length. */
-	uint32_t fcp_cmnd_dseg_address[2];	/* Data segment address. */
-
-	uint32_t fcp_rsp_dseg_address[2];	/* Data segment address. */
+	uint16_t fcp_cmnd_dseg_len;	/* Data segment length. */
+	__le64	 fcp_cmnd_dseg_address __packed;
+					/* Data segment address. */
+	__le64	 fcp_rsp_dseg_address __packed;
 
 	uint32_t byte_count;		/* Total byte count. */
 
 	uint8_t port_id[3];		/* PortID of destination port. */
 	uint8_t vp_index;
 
-	uint32_t crc_context_address[2];	/* Data segment address. */
+	__le64	 crc_context_address __packed;	/* Data segment address. */
 	uint16_t crc_context_len;		/* Data segment length. */
 	uint16_t reserved_1;			/* MUST be set to 0. */
 };
@@ -717,10 +717,7 @@ struct ct_entry_24xx {
 	uint32_t rsp_byte_count;
 	uint32_t cmd_byte_count;
 
-	uint32_t dseg_0_address[2];	/* Data segment 0 address. */
-	uint32_t dseg_0_len;		/* Data segment 0 length. */
-	uint32_t dseg_1_address[2];	/* Data segment 1 address. */
-	uint32_t dseg_1_len;		/* Data segment 1 length. */
+	struct dsd64 dsd[2];
 };
 
 /*
@@ -764,13 +761,13 @@ struct els_entry_24xx {
 #define ECF_CLR_PASSTHRU_PEND	BIT_12
 #define ECF_INCL_FRAME_HDR	BIT_11
 
-	uint32_t rx_byte_count;
-	uint32_t tx_byte_count;
+	__le32	 rx_byte_count;
+	__le32	 tx_byte_count;
 
-	uint32_t tx_address[2];		/* Data segment 0 address. */
-	uint32_t tx_len;		/* Data segment 0 length. */
-	uint32_t rx_address[2];		/* Data segment 1 address. */
-	uint32_t rx_len;		/* Data segment 1 length. */
+	__le64	 tx_address __packed;	/* Data segment 0 address. */
+	__le32	 tx_len;		/* Data segment 0 length. */
+	__le64	 rx_address __packed;	/* Data segment 1 address. */
+	__le32	 rx_len;		/* Data segment 1 length. */
 };
 
 struct els_sts_entry_24xx {
@@ -1357,12 +1354,12 @@ struct vp_rpt_id_entry_24xx {
 	uint8_t port_id[3];
 	uint8_t format;
 	union {
-		struct {
+		struct _f0 {
 			/* format 0 loop */
 			uint8_t vp_idx_map[16];
 			uint8_t reserved_4[32];
 		} f0;
-		struct {
+		struct _f1 {
 			/* format 1 fabric */
 			uint8_t vpstat1_subcode; /* vp_status=1 subcode */
 			uint8_t flags;
@@ -1384,21 +1381,22 @@ struct vp_rpt_id_entry_24xx {
 			uint16_t bbcr;
 			uint8_t reserved_5[6];
 		} f1;
-		struct { /* format 2: N2N direct connect */
-		    uint8_t vpstat1_subcode;
-		    uint8_t flags;
-		    uint16_t rsv6;
-		    uint8_t rsv2[12];
+		struct _f2 { /* format 2: N2N direct connect */
+			uint8_t vpstat1_subcode;
+			uint8_t flags;
+			uint16_t fip_flags;
+			uint8_t rsv2[12];
 
-		    uint8_t ls_rjt_vendor;
-		    uint8_t ls_rjt_explanation;
-		    uint8_t ls_rjt_reason;
-		    uint8_t rsv3[5];
+			uint8_t ls_rjt_vendor;
+			uint8_t ls_rjt_explanation;
+			uint8_t ls_rjt_reason;
+			uint8_t rsv3[5];
 
-		    uint8_t port_name[8];
-		    uint8_t node_name[8];
-		    uint8_t remote_nport_id[4];
-		    uint32_t reserved_5;
+			uint8_t port_name[8];
+			uint8_t node_name[8];
+			uint16_t bbcr;
+			uint8_t reserved_5[2];
+			uint8_t remote_nport_id[4];
 		} f2;
 	} u;
 };
@@ -1422,9 +1420,9 @@ struct vf_evfp_entry_24xx {
         uint16_t control_flags;
         uint32_t io_parameter_0;
         uint32_t io_parameter_1;
-        uint32_t tx_address[2];         /* Data segment 0 address. */
+	__le64	 tx_address __packed;	/* Data segment 0 address. */
         uint32_t tx_len;                /* Data segment 0 length. */
-        uint32_t rx_address[2];         /* Data segment 1 address. */
+	__le64	 rx_address __packed;	/* Data segment 1 address. */
         uint32_t rx_len;                /* Data segment 1 length. */
 };
 
@@ -1473,13 +1471,6 @@ struct qla_flt_location {
 	uint16_t checksum;
 };
 
-struct qla_flt_header {
-	uint16_t version;
-	uint16_t length;
-	uint16_t checksum;
-	uint16_t unused;
-};
-
 #define FLT_REG_FW		0x01
 #define FLT_REG_BOOT_CODE	0x07
 #define FLT_REG_VPD_0		0x14
@@ -1515,12 +1506,42 @@ struct qla_flt_header {
 #define FLT_REG_VPD_SEC_27XX_2	0xD8
 #define FLT_REG_VPD_SEC_27XX_3	0xDA
 
+/* 28xx */
+#define FLT_REG_AUX_IMG_PRI_28XX	0x125
+#define FLT_REG_AUX_IMG_SEC_28XX	0x126
+#define FLT_REG_VPD_SEC_28XX_0		0x10C
+#define FLT_REG_VPD_SEC_28XX_1		0x10E
+#define FLT_REG_VPD_SEC_28XX_2		0x110
+#define FLT_REG_VPD_SEC_28XX_3		0x112
+#define FLT_REG_NVRAM_SEC_28XX_0	0x10D
+#define FLT_REG_NVRAM_SEC_28XX_1	0x10F
+#define FLT_REG_NVRAM_SEC_28XX_2	0x111
+#define FLT_REG_NVRAM_SEC_28XX_3	0x113
+#define FLT_REG_MPI_PRI_28XX		0xD3
+#define FLT_REG_MPI_SEC_28XX		0xF0
+#define FLT_REG_PEP_PRI_28XX		0xD1
+#define FLT_REG_PEP_SEC_28XX		0xF1
+
 struct qla_flt_region {
-	uint32_t code;
+	uint16_t code;
+	uint8_t attribute;
+	uint8_t reserved;
 	uint32_t size;
 	uint32_t start;
 	uint32_t end;
 };
+
+struct qla_flt_header {
+	uint16_t version;
+	uint16_t length;
+	uint16_t checksum;
+	uint16_t unused;
+	struct qla_flt_region region[0];
+};
+
+#define FLT_REGION_SIZE		16
+#define FLT_MAX_REGIONS		0xFF
+#define FLT_REGIONS_SIZE	(FLT_REGION_SIZE * FLT_MAX_REGIONS)
 
 /* Flash NPIV Configuration Table ********************************************/
 
@@ -1588,8 +1609,7 @@ struct verify_chip_entry_84xx {
 	uint32_t fw_seq_size;
 	uint32_t relative_offset;
 
-	uint32_t dseg_address[2];
-	uint32_t dseg_length;
+	struct dsd64 dsd;
 };
 
 struct verify_chip_rsp_84xx {
@@ -1646,8 +1666,7 @@ struct access_chip_84xx {
 	uint32_t total_byte_cnt;
 	uint32_t reserved4;
 
-	uint32_t dseg_address[2];
-	uint32_t dseg_length;
+	struct dsd64 dsd;
 };
 
 struct access_chip_rsp_84xx {
@@ -1711,6 +1730,10 @@ struct access_chip_rsp_84xx {
 #define LR_DIST_FW_SHIFT	(LR_DIST_FW_POS - LR_DIST_NV_POS)
 #define LR_DIST_FW_FIELD(x)	((x) << LR_DIST_FW_SHIFT & 0xf000)
 
+/* FAC semaphore defines */
+#define FAC_SEMAPHORE_UNLOCK    0
+#define FAC_SEMAPHORE_LOCK      1
+
 struct nvram_81xx {
 	/* NVRAM header. */
 	uint8_t id[4];
@@ -1757,7 +1780,7 @@ struct nvram_81xx {
 	uint16_t reserved_6_3[14];
 
 	/* Offset 192. */
-	uint8_t min_link_speed;
+	uint8_t min_supported_speed;
 	uint8_t reserved_7_0;
 	uint16_t reserved_7[31];
 
@@ -1911,15 +1934,15 @@ struct init_cb_81xx {
 
 	uint16_t prio_request_q_length;
 
-	uint32_t request_q_address[2];
-	uint32_t response_q_address[2];
-	uint32_t prio_request_q_address[2];
+	__le64	 request_q_address __packed;
+	__le64	 response_q_address __packed;
+	__le64	 prio_request_q_address __packed;
 
 	uint8_t reserved_4[8];
 
 	uint16_t atio_q_inpointer;
 	uint16_t atio_q_length;
-	uint32_t atio_q_address[2];
+	__le64	 atio_q_address __packed;
 
 	uint16_t interrupt_delay_timer;		/* 100us increments. */
 	uint16_t login_timeout;
@@ -2005,6 +2028,8 @@ struct ex_init_cb_81xx {
 
 #define FARX_ACCESS_FLASH_CONF_81XX	0x7FFD0000
 #define FARX_ACCESS_FLASH_DATA_81XX	0x7F800000
+#define FARX_ACCESS_FLASH_CONF_28XX	0x7FFD0000
+#define FARX_ACCESS_FLASH_DATA_28XX	0x7F7D0000
 
 /* FCP priority config defines *************************************/
 /* operations */
@@ -2079,6 +2104,9 @@ struct qla_fcp_prio_cfg {
 #define FA_NPIV_CONF1_ADDR_81	0xD2000
 
 /* 83XX Flash locations -- occupies second 8MB region. */
-#define FA_FLASH_LAYOUT_ADDR_83	0xFC400
+#define FA_FLASH_LAYOUT_ADDR_83	(0x3F1000/4)
+#define FA_FLASH_LAYOUT_ADDR_28	(0x11000/4)
+
+#define NVRAM_DUAL_FCP_NVME_FLAG_OFFSET	0x196
 
 #endif

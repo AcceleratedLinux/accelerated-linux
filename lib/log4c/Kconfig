@@ -1,0 +1,9 @@
+
+config LIB_LOG4C
+	bool "Build log4c"
+	default n
+	select LIB_EXPAT
+	help
+		Log4c is a library of C for flexible logging to files,
+		syslog and other destinations.
+

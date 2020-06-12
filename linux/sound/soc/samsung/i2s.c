@@ -88,12 +88,6 @@ struct samsung_i2s_priv {
 	struct platform_device *pdev;
 	struct platform_device *pdev_sec;
 
-	/* Memory mapped SFR region */
-	void __iomem *addr;
-
-	/* Spinlock protecting access to the device's registers */
-	spinlock_t lock;
-
 	/* Lock for cross interface checks */
 	spinlock_t pcm_lock;
 
@@ -122,21 +116,21 @@ struct samsung_i2s_priv {
 	/* The clock provider's data */
 	struct clk *clk_table[3];
 	struct clk_onecell_data clk_data;
+
+	/* Spinlock protecting member fields below */
+	spinlock_t lock;
+
+	/* Memory mapped SFR region */
+	void __iomem *addr;
+
+	/* A flag indicating the I2S slave mode operation */
+	bool slave_mode;
 };
 
 /* Returns true if this is the 'overlay' stereo DAI */
 static inline bool is_secondary(struct i2s_dai *i2s)
 {
 	return i2s->drv->id == SAMSUNG_I2S_ID_SECONDARY;
-}
-
-/* If operating in SoC-Slave mode */
-static inline bool is_slave(struct i2s_dai *i2s)
-{
-	struct samsung_i2s_priv *priv = i2s->priv;
-
-	u32 mod = readl(priv->addr + I2SMOD);
-	return (mod & (1 << priv->variant_regs->mss_off)) ? true : false;
 }
 
 /* If this interface of the controller is transmitting data */
@@ -715,6 +709,7 @@ static int i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	mod &= ~(sdf_mask | lrp_rlow | mod_slave);
 	mod |= tmp;
 	writel(mod, priv->addr + I2SMOD);
+	priv->slave_mode = (mod & mod_slave);
 	spin_unlock_irqrestore(&priv->lock, flags);
 	pm_runtime_put(dai->dev);
 
@@ -917,7 +912,7 @@ static int config_setup(struct i2s_dai *i2s)
 	set_rfs(i2s, rfs);
 
 	/* Don't bother with PSR in Slave mode */
-	if (is_slave(i2s))
+	if (priv->slave_mode)
 		return 0;
 
 	if (!(priv->quirks & QUIRK_NO_MUXPSR)) {
@@ -1029,14 +1024,14 @@ i2s_delay(struct snd_pcm_substream *substream, struct snd_soc_dai *dai)
 }
 
 #ifdef CONFIG_PM
-static int i2s_suspend(struct snd_soc_dai *dai)
+static int i2s_suspend(struct snd_soc_component *component)
 {
-	return pm_runtime_force_suspend(dai->dev);
+	return pm_runtime_force_suspend(component->dev);
 }
 
-static int i2s_resume(struct snd_soc_dai *dai)
+static int i2s_resume(struct snd_soc_component *component)
 {
-	return pm_runtime_force_resume(dai->dev);
+	return pm_runtime_force_resume(component->dev);
 }
 #else
 #define i2s_suspend NULL
@@ -1145,6 +1140,9 @@ static const struct snd_soc_component_driver samsung_i2s_component = {
 
 	.dapm_routes = samsung_i2s_dapm_routes,
 	.num_dapm_routes = ARRAY_SIZE(samsung_i2s_dapm_routes),
+
+	.suspend = i2s_suspend,
+	.resume = i2s_resume,
 };
 
 #define SAMSUNG_I2S_FMTS (SNDRV_PCM_FMTBIT_S8 | SNDRV_PCM_FMTBIT_S16_LE | \
@@ -1176,8 +1174,6 @@ static int i2s_alloc_dais(struct samsung_i2s_priv *priv,
 
 		dai_drv->probe = samsung_i2s_dai_probe;
 		dai_drv->remove = samsung_i2s_dai_remove;
-		dai_drv->suspend = i2s_suspend;
-		dai_drv->resume = i2s_resume;
 
 		dai_drv->symmetric_rates = 1;
 		dai_drv->ops = &samsung_i2s_dai_ops;

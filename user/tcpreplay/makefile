@@ -5,7 +5,7 @@ CONFVARS :=
 CONFVARS += ac_cv_linux_vers=2
 CONFVARS += td_cv_buggygetaddrinfo=false
 
-CONFOPTS += --with-libpcap=$(ROOTDIR)/lib/libpcap/build/libpcap-1.6.2
+CONFOPTS += --with-libpcap=$(ROOTDIR)/lib/libpcap/build/libpcap-1.9.1
 ifdef CCONFIG_LIB_LIBNL_GENERIC
 LDFLAGS += -lnl
 endif

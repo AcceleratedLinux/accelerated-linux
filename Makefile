@@ -26,6 +26,32 @@ include vendors/config/common/config.arch
 
 DIRS    = $(VENDOR_TOPDIRS) include lib include user
 
+############################################################################
+ifeq ($(ANALYZE),1)
+
+# currently only the clang static analyzer is supported so that is all we
+# handle
+export UCFRONT_ANALYZER=clang
+
+# a list of : or white space seperated directories to scan
+export UCFRONT_ANALYZE_PATH=prop
+
+# helper funcitons for process the scan info
+# do not consider reported bugs and eerror just yet
+ANALYZE_CLEAN   = rm -rf $(STAGEDIR)/clang/$(1)
+ANALYZE_SUMMARY = echo "Producing static analysis results"; \
+                   tools/clang/scanreport \
+			-e $(ROOTDIR)/tools/clang/scan-exceptions.txt \
+			-o $(STAGEDIR)/clang; \
+                   rc=$$?; \
+                   tar Cczf $(STAGEDIR)/clang \
+                        $(IMAGEDIR)/static-analysis.tar.gz .; \
+                   exit $$rc
+else
+ANALYZE_CLEAN = :
+ANALYZE_SUMMARY = :
+endif
+############################################################################
 
 .PHONY: tools
 tools: ucfront cksum
@@ -50,18 +76,18 @@ TOOLSARCHDIR = $(TOOLSPREFIX)/$(CONFIGURE_TOOL)
 
 .PHONY: binutils_only
 binutils_only:
-	$(MAKE) TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/binutils/
+	$(MAKE) TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) MABI=$(MABI) -C tools/binutils/
 
 binutils_clean:
 	$(MAKE) -C tools/binutils/ clean
 
 .PHONY: gcc-pass1_only
 gcc-pass1_only:
-	$(MAKE) PASS1=1 TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/gcc/
+	$(MAKE) PASS1=1 TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) MABI=$(MABI) -C tools/gcc/
 
 .PHONY: gcc-pass2_only
 gcc-pass2_only: gcc_clean
-	$(MAKE) PASS2=1 TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/gcc/
+	$(MAKE) PASS2=1 TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) MABI=$(MABI) -C tools/gcc/
 
 gcc_clean:
 	$(MAKE) -C tools/gcc/ clean
@@ -74,23 +100,44 @@ toolchain_headers:
 .PHONY: toolchain_uClibc
 toolchain_uClibc:
 	$(MAKE) CROSS_COMPILE=$(CONFIGURE_TOOL)- STAGEDIR=$(TOOLSARCHDIR) -C $(LIBCDIR) install PREFIX=$(TOOLSARCHDIR)/ DEVEL_PREFIX= RUNTIME_PREFIX=
-	sed -e 's/lib\///g' < $(LIBCDIR)/lib/libc.so > $(TOOLSARCHDIR)/lib/libc.so
-	sed -e 's/lib\///g' < $(LIBCDIR)/lib/libpthread.so > $(TOOLSARCHDIR)/lib/libpthread.so
+	if [ -f $(LIBCDIR)/lib/libc.so ] ; then \
+		sed -e 's/lib\///g' < $(LIBCDIR)/lib/libc.so > $(TOOLSARCHDIR)/lib/libc.so ; \
+		sed -e 's/lib\///g' < $(LIBCDIR)/lib/libpthread.so > $(TOOLSARCHDIR)/lib/libpthread.so ; \
+	fi
 
 .PHONY: toolchain_musl
 toolchain_musl:
-	$(MAKE) UCFRONT_ENV= CC=$(CONFIGURE_TOOL)-gcc musl_only
+	$(MAKE) UCFRONT_ENV= MACHINE=$(MACHINE) CROSS_COMPILE=$(CONFIGURE_TOOL)- musl_only
 	cp -a $(ROOTDIR)/$(LIBCDIR)/install/lib/* $(TOOLSARCHDIR)/lib/
 	cp -a $(ROOTDIR)/$(LIBCDIR)/install/include/* $(TOOLSARCHDIR)/include/
 
 .PHONY: toolchain_glibc
 toolchain_glibc:
 	echo Makefile CONFIGURE_OPTS=$(CONFIGURE_OPTS)
-	$(MAKE) UCFRONT_ENV= CC=$(CONFIGURE_TOOL)-gcc CONFIGURE_OPTS="$(CONFIGURE_OPTS)" TARGETARCH=$(TARGETARCH) STAGEDIR=$(TOOLSARCHDIR) glibc_only
+	$(MAKE) UCFRONT_ENV= CC=$(CONFIGURE_TOOL)-gcc CXX=$(CONFIGURE_TOOL)-g++ CONFIGURE_OPTS="$(CONFIGURE_OPTS)" TARGETARCH=$(TARGETARCH) STAGEDIR=$(TOOLSARCHDIR) glibc_only
 	cp -rp --remove-destination $(ROOTDIR)/$(LIBCDIR)/install/* $(TOOLSARCHDIR)/
 
+.PHONY: gdb_only
+gdb_only:
+	$(MAKE) TARGET=$(CONFIGURE_TOOL) ENDIAN=$(ENDIAN) FLOAT=$(FLOAT) -C tools/gdb/
+
+gdb_clean:
+	$(MAKE) -C tools/gdb/ clean
+
+ifneq ($(ELF2FLT),)
+# ELF2FLT only defined for non-MMU targets
+TOOLCHAIN_ELF2FLT=toolchain_elf2flt
+endif
+
+.PHONY: toolchain_elf2flt
+toolchain_elf2flt:
+	$(MAKE) TARGET=$(CONFIGURE_TOOL) -C tools/elf2flt/
+
+elf2flt_clean:
+	$(MAKE) -C tools/elf2flt/ clean
+
 .PHONY: toolchain_only
-toolchain_only: binutils_only gcc-pass1_only toolchain_headers toolchain_$(LIBCDIR) gcc-pass2_only
+toolchain_only: binutils_only gcc-pass1_only toolchain_headers toolchain_$(LIBCDIR) gcc-pass2_only gdb_only $(TOOLCHAIN_ELF2FLT)
 	echo "CROSS_COMPILE=$(CONFIGURE_TOOL)-" > .sgbuilt_toolchain
 	echo "Toolchain built successfully"
 
@@ -108,7 +155,7 @@ toolchain_package:
 	cd $(IMAGEDIR) ; \
 	../bin/mk-disttools-install $(CONFIGURE_TOOL)-$(DATE).tar.gz $(DATE) $(CONFIGURE_TOOL)
 
-toolchain_clean: binutils_clean gcc_clean lib/$(LIBCDIR)_clean
+toolchain_clean: binutils_clean gcc_clean gdb_clean lib/uClibc_clean lib/musl_clean lib/glibc_clean elf2flt_clean
 	rm -f .sgbuilt_toolchain
 	rm -rf $(TOOLSDIR)
 
@@ -121,6 +168,7 @@ info:
 	@echo MACHINE = $(MACHINE)
 	@echo ENDIAN = $(ENDIAN)
 	@echo FLOAT = $(FLOAT)
+	@echo MABI = $(MABI)
 	@echo CONFIGURE_HOST = $(CONFIGURE_HOST)
 	@echo CONFIGURE_TOOL = $(CONFIGURE_TOOL)
 	@echo CROSS_COMPILE = $(CROSS_COMPILE)
@@ -210,7 +258,7 @@ modules_install:
 		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_CMD="$(ROMFSINST) -S -r \"\"" INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=$(ROOTDIR)/tools/depmod.sh modules_install; \
 		rm -f $(ROMFSDIR)/lib/modules/*/build; \
 		rm -f $(ROMFSDIR)/lib/modules/*/source; \
-		find $(ROMFSDIR)/lib/modules -type f -name "*o" | xargs -r $(STRIP) -R .comment -R .note -g --strip-unneeded; \
+		find $(ROMFSDIR)/lib/modules -type f -name "*.ko" | xargs -r $(STRIP) -R .comment -R .note -g --strip-unneeded; \
 	fi
 
 SYNCCONFIG = KCONFIG_AUTOCONFIG=auto.conf \
@@ -238,12 +286,16 @@ oldconfig_uClibc:
 #
 
 .PHONY: romfs
-romfs: romfs.newlog romfs.subdirs modules_install romfs.post
+romfs: romfs.newlog romfs.newfakeroot romfs.subdirs modules_install romfs.post
 
 .PHONY: romfs.newlog
 romfs.newlog:
 	rm -f $(IMAGEDIR)/romfs-inst.log
 	rm -f ${IMAGEDIR}/license.log
+
+.PHONY: romfs.newfakeroot
+romfs.newfakeroot:
+	rm -f $(ROOTDIR)/tools/fakeroot-build.sh
 
 .PHONY: romfs.subdirs
 romfs.subdirs:
@@ -256,6 +308,14 @@ romfs.post:
 	. $(LINUXDIR)/.config; if [ "$$CONFIG_INITRAMFS_SOURCE" != "" ]; then \
 		$(MAKEARCH_KERNEL) -j$(HOST_NCPU) -C $(LINUXDIR) $(LINUXTARGET) || exit 1; \
 	fi
+ifdef CONFIG_USER_PYTHON_REMOVE_SOURCE
+	for i in $(ROMFSDIR)/usr/lib/python*; do \
+		python=$(ROOTDIR)/user/python/build/Python-Hostinstall/bin/`basename $$i`; \
+		$$python -m compileall -b $$i || exit 1; \
+		find $$i -type d -name __pycache__ -exec rm -r {} + ; \
+		find $$i -type f -name "*.py" -delete ; \
+	done
+endif
 
 .PHONY: image
 image:
@@ -271,11 +331,12 @@ image:
 	    grep -qe "CONFIG_PROP.*=y" $(ROOTDIR)/config/.config && \
 		exit 1; \
 	fi
+	-$(call ANALYZE_SUMMARY)
 
 .PHONY: release
 release:
 	[ -d $(RELDIR) ] || mkdir -p $(RELDIR)
-	@prefix=$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date "-d$(BUILD_START_STRING)" +%Y%m%d%H%M`; \
+	@prefix=$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date -u "-d$(BUILD_START_STRING)" +%Y%m%d%H%M`; \
 	for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt; do \
 		s=`echo "$$f" | sed 's/^\([^,]*\)\(,.*\)\{0,1\}$$/\1/'`; \
 		d=`echo "$$s" | sed 's/\([^,]*\)\([.][^.]*,\)\{0,1\}/\1/'`; \
@@ -367,6 +428,7 @@ clean: modules_clean
 	rm -f $(LINUXDIR)/usr/include/linux/autoconf.h
 	rm -rf $(LINUXDIR)/net/ipsec/alg/libaes $(LINUXDIR)/net/ipsec/alg/perlasm
 	rm -f $(LINUXDIR)/net/ipsec/.linked
+	$(call ANALYZE_CLEAN,"")
 
 real_clean mrproper: clean
 	[ -d "$(LINUXDIR)" ] && $(MAKEARCH_KERNEL) -C $(LINUXDIR) mrproper || :
@@ -409,7 +471,7 @@ bugreport:
 	tar czf bugreport.tar.gz bugreport
 	rm -rf ./bugreport
 
-%_only:
+%_only: tools
 	@case "$(@)" in \
 	single*) $(MAKE) NON_SMP_BUILD=1 `expr $(@) : 'single[_]*\(.*\)'` ;; \
 	*/*) d=`expr $(@) : '\([^/]*\)/.*'`; \
@@ -417,14 +479,17 @@ bugreport:
 	     $(MAKEARCH) -C $$d $$t;; \
 	*)   $(MAKEARCH) -C $(*);; \
 	esac
+	-$(call ANALYZE_SUMMARY)
 
 %_clean:
 	@case "$(@)" in \
 	single*) $(MAKE) NON_SMP_BUILD=1 `expr $(@) : 'single[_]*\(.*\)'` ;; \
 	*/*) d=`expr $(@) : '\([^/]*\)/.*'`; \
 	     t=`expr $(@) : '[^/]*/\(.*\)'`; \
+	     $(call ANALYZE_CLEAN,$$d); \
 	     $(MAKEARCH) -C $$d $$t;; \
-	*)   $(MAKEARCH) -C $(*) clean;; \
+	*)   $(call ANALYZE_CLEAN,$(*)); \
+	     $(MAKEARCH) -C $(*) clean;; \
 	esac
 
 %_romfs:
@@ -446,6 +511,7 @@ vendors/%_defconfig:
 	 fi
 	-$(MAKE) clean > /dev/null 2>&1
 	cp vendors/$(*)/config.device$(ALTDEF) .config
+	yes "" | make oldconfig
 	chmod u+x config/setconfig
 	yes "" | config/setconfig defconfig
 	config/setconfig final

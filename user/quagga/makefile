@@ -57,4 +57,6 @@ endif
 
 CURSES = -lncurses
 
+MAKEVARS = 
+
 include $(ROOTDIR)/tools/automake.inc

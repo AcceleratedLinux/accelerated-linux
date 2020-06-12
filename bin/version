@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# ensure everyones time is the same
+TZ=UTC
+export TZ
+
 # no git info,  generate suitable public version based on build date
 if [  ! -d ${ROOTDIR:-`pwd`}/.git ]; then
 	YEAR=$(date +%y)
@@ -9,10 +13,6 @@ if [  ! -d ${ROOTDIR:-`pwd`}/.git ]; then
 	echo $VERSIONSTR
 	exit 0
 fi
-
-# ensure everyones time is the same
-TZ=UTC
-export TZ
 
 # are we on the build machine
 if [ "$ON_BUILD_MACHINE" ]; then

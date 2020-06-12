@@ -1,0 +1,127 @@
+From: Samuel Brian <samuel.brian@digi.com>
+Date: Mon, 25 Feb 2019 16:13:23 +1000
+Subject: mbim: support multiple VLAN sessions
+
+These changes support using multiple bearers on MBIM modems:
+  1. The bearer "number" parameter is the requested MBIM Session ID.
+  2. The bearer grabs the net port associated with the MBIM Session ID.
+
+E.g.:
+  Session ID 0 -> wwan0
+  Session ID 1 -> wwan0.1
+  Session ID 2 -> wwan0.2
+  etc...
+
+If no bearer "number" is provided, the search for the first unused session ID
+will occur as before.
+
+Unfortunately, the mapping of PDP profile index to Session ID is based on the
+assumption that the modem has been pre-configured to do this.
+E.g. for Telit LE910-NA V2 in AT&T mode, if you run
+  AT#MBIMCFG=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+Then Session ID 0 is mapped to PDP profile 1, Session ID 1 is mapped to PDP
+profile 2, etc.
+The default #MBIMCFG value is usually "14" (for AT&T) or "3" (for Verizon),
+which means that only Session ID 0 works by default as other sessions are not
+mapped to a PDP profile.
+---
+ src/mm-bearer-mbim.c          | 37 ++++++++++++++++++++++++++++++++++-
+ src/mm-broadband-modem-mbim.c | 11 ++++++++++-
+ 2 files changed, 46 insertions(+), 2 deletions(-)
+
+diff --git a/src/mm-bearer-mbim.c b/src/mm-bearer-mbim.c
+index 57f10cb7..41ae097d 100644
+--- a/src/mm-bearer-mbim.c
++++ b/src/mm-bearer-mbim.c
+@@ -22,6 +22,7 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ 
++#define MM_LOG_NO_OBJECT
+ #include <ModemManager.h>
+ #define _LIBMM_INSIDE_MM
+ #include <libmm-glib.h>
+@@ -31,6 +32,7 @@
+ #include "mm-port-enums-types.h"
+ #include "mm-bearer-mbim.h"
+ #include "mm-log-object.h"
++#include "mm-log.h"
+ 
+ G_DEFINE_TYPE (MMBearerMbim, mm_bearer_mbim, MM_TYPE_BASE_BEARER)
+ 
+@@ -51,6 +53,39 @@ struct _MMBearerMbimPrivate {
+ 
+ /*****************************************************************************/
+ 
++static MMPort*
++peek_data_port_by_session_id(MMBaseModem *modem,
++                            guint32       session_id)
++{
++    GList *l;
++    MMPort *data;
++    const gchar *name, *s;
++    guint64 v;
++
++    /* Return the not-connected data port that is setup to use the session id */
++    for (l = mm_base_modem_peek_data_ports (modem); l; l = g_list_next (l)) {
++        data = (MMPort *)l->data;
++        if (mm_port_get_connected (data) ||
++            mm_port_get_claimed (data) ||
++            mm_port_get_port_type (data) != MM_PORT_TYPE_NET)
++            continue;
++
++        name = mm_port_get_device (data);
++        if (name && (s = strchr (name, '.')) && s[1]) {
++            v = g_ascii_strtoull (s + 1, NULL, 10);
++            if (v == session_id) {
++                mm_dbg ("Bearer with session id %d to use net port %s", session_id, name);
++                return data;
++            }
++        } else if (session_id == 0) {
++            /* Session ID 0 corresponds to the data port with no VLAN number */
++            mm_dbg ("Bearer with session id %d to use net port %s", session_id, name);
++            return data;
++        }
++    }
++    return NULL;
++}
++
+ static gboolean
+ peek_ports (gpointer self,
+             MbimDevice **o_device,
+@@ -88,7 +123,7 @@ peek_ports (gpointer self,
+         MMPort *port;
+ 
+         /* Grab a data port */
+-        port = mm_base_modem_peek_best_data_port (modem, MM_PORT_TYPE_NET);
++        port = peek_data_port_by_session_id (modem, MM_BEARER_MBIM(self)->priv->session_id);
+         if (!port) {
+             g_task_report_new_error (self,
+                                      callback,
+diff --git a/src/mm-broadband-modem-mbim.c b/src/mm-broadband-modem-mbim.c
+index 8954889b..27e0631e 100644
+--- a/src/mm-broadband-modem-mbim.c
++++ b/src/mm-broadband-modem-mbim.c
+@@ -1894,12 +1894,21 @@ modem_create_bearer (MMIfaceModem *_self,
+     MMBroadbandModemMbim *self = MM_BROADBAND_MODEM_MBIM (_self);
+     MMBaseBearer *bearer;
+     GTask *task;
+-    gint session_id;
++    gint session_id = -1;
++    const gchar *number;
+ 
+     task = g_task_new (self, NULL, callback, user_data);
+ 
++    number = mm_bearer_properties_get_number (properties);
++    if (number && *number) {
++        session_id = g_ascii_strtoull (number, NULL, 10);
++        if (session_id > 255)
++            session_id = -1;
++    }
++    if (session_id < 0) {
+     /* Find a new session ID */
+     session_id = find_next_bearer_session_id (self);
++    }
+     if (session_id < 0) {
+         g_task_return_new_error (task,
+                                  MM_CORE_ERROR,

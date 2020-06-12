@@ -453,7 +453,7 @@
 		phys = <&pcie0_port>, <&pcie1_port>, <&pcie2_port>;
 		phy-names = "pcie-phy0", "pcie-phy1", "pcie-phy2";
 
-		pcie@0,0 {
+		pcie0: pcie@0,0 {
 			reg = <0x0000 0 0 0 0>;
 			#address-cells = <3>;
 			#size-cells = <2>;
@@ -464,7 +464,7 @@
 			bus-range = <0x00 0xff>;
 		};
 
-		pcie@1,0 {
+		pcie1: pcie@1,0 {
 			reg = <0x0800 0 0 0 0>;
 			#address-cells = <3>;
 			#size-cells = <2>;
@@ -475,7 +475,7 @@
 			bus-range = <0x00 0xff>;
 		};
 
-		pcie@2,0 {
+		pcie2: pcie@2,0 {
 			reg = <0x1000 0 0 0 0>;
 			#address-cells = <3>;
 			#size-cells = <2>;
@@ -514,5 +514,15 @@
 			reg = <0>;
 			#phy-cells = <0>;
 		};
+	};
+
+	crypto: crypto@1e004000 {
+		status = "disabled";
+
+		compatible = "mediatek,mtk-eip93";
+		reg = <0x1e004000 0x1000>;
+
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SHARED 19 IRQ_TYPE_LEVEL_HIGH>;
 	};
 };

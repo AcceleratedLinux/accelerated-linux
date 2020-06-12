@@ -1,0 +1,20 @@
+--- libvirt-1.2.20/src/lxc/lxc_controller.c.org	2020-01-29 10:53:03.333757831 +1000
++++ libvirt-1.2.20/src/lxc/lxc_controller.c	2020-01-29 10:53:35.456912080 +1000
+@@ -28,6 +28,7 @@
+ #include <sys/wait.h>
+ #include <sys/socket.h>
+ #include <sys/types.h>
++#include <sys/sysmacros.h>
+ #include <sys/un.h>
+ #include <sys/personality.h>
+ #include <unistd.h>
+--- libvirt-1.2.20/src/util/vircgroup.c.org	2020-01-29 11:02:47.297891507 +1000
++++ libvirt-1.2.20/src/util/vircgroup.c	2020-01-29 11:03:27.213266286 +1000
+@@ -25,6 +25,7 @@
+ 
+ #include <stdio.h>
+ #if defined HAVE_MNTENT_H && defined HAVE_GETMNTENT_R
++# include <sys/sysmacros.h>
+ # include <mntent.h>
+ #endif
+ #if defined HAVE_SYS_MOUNT_H

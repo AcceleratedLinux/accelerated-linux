@@ -82,6 +82,7 @@ enum qdio_irq_states {
 #define QDIO_SIGA_WRITE		0x00
 #define QDIO_SIGA_READ		0x01
 #define QDIO_SIGA_SYNC		0x02
+#define QDIO_SIGA_WRITEM	0x03
 #define QDIO_SIGA_WRITEQ	0x04
 #define QDIO_SIGA_QEBSM_FLAG	0x80
 
@@ -181,11 +182,9 @@ enum qdio_queue_irq_states {
 };
 
 struct qdio_input_q {
-	/* input buffer acknowledgement flag */
-	int polling;
 	/* first ACK'ed buffer */
 	int ack_start;
-	/* how much sbals are acknowledged with qebsm */
+	/* how many SBALs are acknowledged */
 	int ack_count;
 	/* last time of noticing incoming data */
 	u64 timestamp;
@@ -206,8 +205,6 @@ struct qdio_output_q {
 	struct qdio_outbuf_state *sbal_state;
 	/* timer to check for more outbound work */
 	struct timer_list timer;
-	/* used SBALs before tasklet schedule */
-	int scan_threshold;
 };
 
 /*
@@ -227,9 +224,6 @@ struct qdio_q {
 	 * outbound: next buffer to check if adapter processed it
 	 */
 	int first_to_check;
-
-	/* first_to_check of the last time */
-	int last_move;
 
 	/* beginning position for calling the program */
 	int first_to_kick;
@@ -257,9 +251,6 @@ struct qdio_q {
 	/* input or output queue */
 	int is_input_q;
 
-	/* list of thinint input queues */
-	struct list_head entry;
-
 	/* upper-layer program handler */
 	qdio_handler_t (*handler);
 
@@ -277,6 +268,7 @@ struct qdio_irq {
 	struct qib qib;
 	u32 *dsci;		/* address of device state change indicator */
 	struct ccw_device *cdev;
+	struct list_head entry;		/* list of thinint devices */
 	struct dentry *debugfs_dev;
 	struct dentry *debugfs_perf;
 
@@ -298,6 +290,7 @@ struct qdio_irq {
 	struct qdio_ssqd_desc ssqd_desc;
 	void (*orig_handler) (struct ccw_device *, unsigned long, struct irb *);
 
+	unsigned int scan_threshold;	/* used SBALs before tasklet schedule */
 	int perf_stat_enabled;
 
 	struct qdr *qdr;
@@ -321,12 +314,14 @@ struct qdio_irq {
 
 #define qperf(__qdev, __attr)	((__qdev)->perf_stat.(__attr))
 
-#define qperf_inc(__q, __attr)						\
+#define QDIO_PERF_STAT_INC(__irq, __attr)				\
 ({									\
-	struct qdio_irq *qdev = (__q)->irq_ptr;				\
+	struct qdio_irq *qdev = __irq;					\
 	if (qdev->perf_stat_enabled)					\
 		(qdev->perf_stat.__attr)++;				\
 })
+
+#define qperf_inc(__q, __attr)	QDIO_PERF_STAT_INC((__q)->irq_ptr, __attr)
 
 static inline void account_sbals_error(struct qdio_q *q, int count)
 {
@@ -341,8 +336,7 @@ static inline int multicast_outbound(struct qdio_q *q)
 	       (q->nr == q->irq_ptr->nr_output_qs - 1);
 }
 
-#define pci_out_supported(q) \
-	(q->irq_ptr->qib.ac & QIB_AC_OUTBOUND_PCI_SUPPORTED)
+#define pci_out_supported(irq) ((irq)->qib.ac & QIB_AC_OUTBOUND_PCI_SUPPORTED)
 #define is_qebsm(q)			(q->irq_ptr->sch_token != 0)
 
 #define need_siga_in(q)			(q->irq_ptr->siga_flag.input)
@@ -360,14 +354,10 @@ static inline int multicast_outbound(struct qdio_q *q)
 	for (i = 0; i < irq_ptr->nr_output_qs &&	\
 		({ q = irq_ptr->output_qs[i]; 1; }); i++)
 
-#define prev_buf(bufnr)	\
-	((bufnr + QDIO_MAX_BUFFERS_MASK) & QDIO_MAX_BUFFERS_MASK)
-#define next_buf(bufnr)	\
-	((bufnr + 1) & QDIO_MAX_BUFFERS_MASK)
-#define add_buf(bufnr, inc) \
-	((bufnr + inc) & QDIO_MAX_BUFFERS_MASK)
-#define sub_buf(bufnr, dec) \
-	((bufnr - dec) & QDIO_MAX_BUFFERS_MASK)
+#define add_buf(bufnr, inc)	QDIO_BUFNR((bufnr) + (inc))
+#define next_buf(bufnr)		add_buf(bufnr, 1)
+#define sub_buf(bufnr, dec)	QDIO_BUFNR((bufnr) - (dec))
+#define prev_buf(bufnr)		sub_buf(bufnr, 1)
 
 #define queue_irqs_enabled(q)			\
 	(test_bit(QDIO_QUEUE_IRQS_DISABLED, &q->u.in.queue_irq_state) == 0)
@@ -380,8 +370,8 @@ extern u64 last_ai_time;
 void qdio_setup_thinint(struct qdio_irq *irq_ptr);
 int qdio_establish_thinint(struct qdio_irq *irq_ptr);
 void qdio_shutdown_thinint(struct qdio_irq *irq_ptr);
-void tiqdio_add_input_queues(struct qdio_irq *irq_ptr);
-void tiqdio_remove_input_queues(struct qdio_irq *irq_ptr);
+void tiqdio_add_device(struct qdio_irq *irq_ptr);
+void tiqdio_remove_device(struct qdio_irq *irq_ptr);
 void tiqdio_inbound_processing(unsigned long q);
 int tiqdio_allocate_memory(void);
 void tiqdio_free_memory(void);

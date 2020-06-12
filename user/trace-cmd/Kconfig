@@ -1,0 +1,4 @@
+config USER_TRACECMD
+  bool "trace-cmd"
+  help
+	 trace-cmd is the cli front end of ftrace.

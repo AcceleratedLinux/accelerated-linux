@@ -1,0 +1,12 @@
+diff -Naur udns-0.4.orig/udns_resolver.c udns-0.4/udns_resolver.c
+--- udns-0.4.orig/udns_resolver.c	2020-02-28 11:22:56.001305067 +1000
++++ udns-0.4/udns_resolver.c	2020-02-28 11:50:45.528189587 +1000
+@@ -819,7 +819,7 @@
+   q->dnsq_servwait |= 1 << servi;	/* expect reply from this ns */
+ 
+   q->dnsq_deadline = now +
+-    (dns_find_serv(ctx, q) ? 1 : ctx->dnsc_timeout << q->dnsq_try);
++    (dns_find_serv(ctx, q) ? 1 : ctx->dnsc_timeout);
+ 
+   /* move the query to the proper place, according to the new deadline */
+   qlist_remove(&ctx->dnsc_qactive, q);

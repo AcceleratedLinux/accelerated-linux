@@ -62,7 +62,7 @@ Legal Issues
 The Linux kernel source code is released under the GPL.  Please see the file
 COPYING in the main directory of the source tree. The Linux kernel licensing
 rules and how to use `SPDX <https://spdx.org/>`_ identifiers in source code are
-descibed in :ref:`Documentation/process/license-rules.rst <kernel_licensing>`.
+described in :ref:`Documentation/process/license-rules.rst <kernel_licensing>`.
 If you have further questions about the license, please contact a lawyer, and do
 not ask on the Linux kernel mailing list.  The people on the mailing lists are
 not lawyers, and you should not rely on their statements on legal matters.
@@ -123,7 +123,7 @@ required reading:
 		https://www.ozlabs.org/~akpm/stuff/tpp.txt
 
 	"Linux kernel patch submission format"
-		http://linux.yyz.us/patch-format.html
+		https://web.archive.org/web/20180829112450/http://linux.yyz.us/patch-format.html
 
   :ref:`Documentation/process/stable-api-nonsense.rst <stable_api_nonsense>`
     This file describes the rationale behind the conscious decision to

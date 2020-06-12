@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Action for Connect IT 4 LEDs
+# Action for ConnectIT-Mini 4 LEDs
 #
 ##############################################################
 # allow script override
@@ -96,37 +96,9 @@ else
 	LAN=0
 fi
 
-##############################################################
-
 ONLINE="LAN3_RX"
 
-LINK=$(ip link show eth 2> /dev/null | grep -c "state UP")
-LAN4=-1
-LAN6=-1
-if [ "$LINK" = 1 ]; then
-	case $(runt get network.interface.eth.ipv4.up) in
-	1) [ "$(runt get netmon.ipv4_interface_eth.passed)" = n ] && LAN4=1 || LAN4=2 ;;
-	0) [ "$(runt get network.interface.eth.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
-	esac
-
-	case $(runt get network.interface.eth.ipv6.up) in
-	1) [ "$(runt get netmon.ipv6_interface_eth.passed)" = n ] && LAN6=1 || LAN6=2 ;;
-	0) [ "$(runt get network.interface.eth.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
-	esac
-fi
-
-# working out ETH state
-if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
-	ETH=$((LINK ? 2 : 0))
-elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
-	ETH=2
-elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
-	ETH=1
-else
-	ETH=0
-fi
-
-case "$CELL$ETH" in
+case "$CELL$LAN" in
 *2|[23]*) ONLINE_LED="-o $ONLINE";;
 *1|1*) ONLINE_LED="-f $ONLINE";;
 *) ONLINE_LED="-O $ONLINE";;

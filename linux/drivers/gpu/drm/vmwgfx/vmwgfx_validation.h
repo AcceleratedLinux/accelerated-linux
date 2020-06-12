@@ -28,10 +28,15 @@
 #ifndef _VMWGFX_VALIDATION_H_
 #define _VMWGFX_VALIDATION_H_
 
-#include <drm/drm_hashtab.h>
 #include <linux/list.h>
 #include <linux/ww_mutex.h>
+
+#include <drm/drm_hashtab.h>
 #include <drm/ttm/ttm_execbuf_util.h>
+
+#define VMW_RES_DIRTY_NONE 0
+#define VMW_RES_DIRTY_SET BIT(0)
+#define VMW_RES_DIRTY_CLEAR BIT(1)
 
 /**
  * struct vmw_validation_mem - Custom interface to provide memory reservations
@@ -169,20 +174,6 @@ vmw_validation_bo_reserve(struct vmw_validation_context *ctx,
 }
 
 /**
- * vmw_validation_bo_backoff - Unreserve buffer objects registered with a
- * validation context
- * @ctx: The validation context
- *
- * This function unreserves the buffer objects previously reserved using
- * vmw_validation_bo_reserve. It's typically used as part of an error path
- */
-static inline void
-vmw_validation_bo_backoff(struct vmw_validation_context *ctx)
-{
-	ttm_eu_backoff_reservation(&ctx->ticket, &ctx->bo_list);
-}
-
-/**
  * vmw_validation_bo_fence - Unreserve and fence buffer objects registered
  * with a validation context
  * @ctx: The validation context
@@ -237,6 +228,7 @@ void vmw_validation_unref_lists(struct vmw_validation_context *ctx);
 int vmw_validation_add_resource(struct vmw_validation_context *ctx,
 				struct vmw_resource *res,
 				size_t priv_size,
+				u32 dirty,
 				void **p_node,
 				bool *first_usage);
 void vmw_validation_drop_ht(struct vmw_validation_context *ctx);
@@ -261,4 +253,8 @@ void *vmw_validation_mem_alloc(struct vmw_validation_context *ctx,
 int vmw_validation_preload_bo(struct vmw_validation_context *ctx);
 int vmw_validation_preload_res(struct vmw_validation_context *ctx,
 			       unsigned int size);
+void vmw_validation_res_set_dirty(struct vmw_validation_context *ctx,
+				  void *val_private, u32 dirty);
+void vmw_validation_bo_backoff(struct vmw_validation_context *ctx);
+
 #endif

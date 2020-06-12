@@ -1,11 +1,5 @@
 #ifndef __DRM_DRM_LEGACY_H__
 #define __DRM_DRM_LEGACY_H__
-
-#include <drm/drm_auth.h>
-#include <drm/drm_hashtab.h>
-
-struct drm_device;
-
 /*
  * Legacy driver interfaces for the Direct Rendering Manager
  *
@@ -39,6 +33,14 @@ struct drm_device;
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <drm/drm.h>
+#include <drm/drm_auth.h>
+#include <drm/drm_hashtab.h>
+
+struct drm_device;
+struct drm_driver;
+struct file;
+struct pci_driver;
 
 /*
  * Legacy Support for palateontologic DRM drivers
@@ -162,8 +164,6 @@ int drm_legacy_addmap(struct drm_device *d, resource_size_t offset,
 struct drm_local_map *drm_legacy_findmap(struct drm_device *dev, unsigned int token);
 void drm_legacy_rmmap(struct drm_device *d, struct drm_local_map *map);
 int drm_legacy_rmmap_locked(struct drm_device *d, struct drm_local_map *map);
-void drm_legacy_master_rmmaps(struct drm_device *dev,
-			      struct drm_master *master);
 struct drm_local_map *drm_legacy_getsarea(struct drm_device *dev);
 int drm_legacy_mmap(struct file *filp, struct vm_area_struct *vma);
 
@@ -190,8 +190,33 @@ do {										\
 void drm_legacy_idlelock_take(struct drm_lock_data *lock);
 void drm_legacy_idlelock_release(struct drm_lock_data *lock);
 
-/* drm_pci.c dma alloc wrappers */
+/* drm_pci.c */
+
+#ifdef CONFIG_PCI
+
 void __drm_legacy_pci_free(struct drm_device *dev, drm_dma_handle_t * dmah);
+int drm_legacy_pci_init(struct drm_driver *driver, struct pci_driver *pdriver);
+void drm_legacy_pci_exit(struct drm_driver *driver, struct pci_driver *pdriver);
+
+#else
+
+static inline void __drm_legacy_pci_free(struct drm_device *dev,
+					 drm_dma_handle_t *dmah)
+{
+}
+
+static inline int drm_legacy_pci_init(struct drm_driver *driver,
+				      struct pci_driver *pdriver)
+{
+	return -EINVAL;
+}
+
+static inline void drm_legacy_pci_exit(struct drm_driver *driver,
+				       struct pci_driver *pdriver)
+{
+}
+
+#endif
 
 /* drm_memory.c */
 void drm_legacy_ioremap(struct drm_local_map *map, struct drm_device *dev);

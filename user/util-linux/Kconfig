@@ -20,6 +20,13 @@ config USER_UTIL_LINUX_LIBUUID
 	help
 	  libuuid
 
+config USER_UTIL_LINUX_UUIDD
+	bool "uuidd"
+	depends on USER_UTIL_LINUX_LIBUUID
+	default n
+	help
+	  uuidd
+
 config USER_UTIL_LINUX_LIBMOUNT
 	bool "libmount"
 	depends on USER_UTIL_LINUX
@@ -27,3 +34,31 @@ config USER_UTIL_LINUX_LIBMOUNT
 	help
 	  libmount
 
+config USER_UTIL_LINUX_FALLOCATE
+	bool "fallocate"
+	depends on USER_UTIL_LINUX
+	default n
+	help
+	  fallocate
+
+config USER_UTIL_LINUX_LOSETUP
+	bool "losetup"
+	depends on USER_UTIL_LINUX
+	default n
+	help
+	  losetup
+
+config USER_UTIL_LINUX_FSTRIM
+	bool "fstrim"
+	depends on USER_UTIL_LINUX
+	select USER_UTIL_LINUX_LIBMOUNT
+	default n
+	help
+	  fstrim
+
+config USER_UTIL_LINUX_SWITCH_ROOT
+	bool "switch_root"
+	depends on USER_UTIL_LINUX
+	default n
+	help
+	  switch_root

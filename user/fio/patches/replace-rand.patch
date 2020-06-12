@@ -1,0 +1,38 @@
+diff --git a/t/io_uring.c b/t/io_uring.c
+index c2e5e09..493becf 100644
+--- a/t/io_uring.c
++++ b/t/io_uring.c
+@@ -12,6 +12,7 @@
+ #include <sys/syscall.h>
+ #include <sys/resource.h>
+ #include <sys/mman.h>
++#include <sys/random.h>
+ #include <sys/uio.h>
+ #include <linux/fs.h>
+ #include <fcntl.h>
+@@ -63,7 +64,6 @@ struct file {
+ struct submitter {
+ 	pthread_t thread;
+ 	int ring_fd;
+-	struct drand48_data rand;
+ 	struct io_sq_ring sq_ring;
+ 	struct io_uring_sqe *sqes;
+ 	struct io_cq_ring cq_ring;
+@@ -170,7 +170,7 @@ static void init_io(struct submitter *s, unsigned index)
+ 	}
+ 	f->pending_ios++;
+ 
+-	lrand48_r(&s->rand, &r);
++	getrandom((void *)&r, sizeof(r), GRND_NONBLOCK);
+ 	offset = (r % (f->max_blocks - 1)) * BS;
+ 
+ 	if (register_files) {
+@@ -288,8 +288,6 @@ static void *submitter_fn(void *data)
+ 
+ 	printf("submitter=%d\n", gettid());
+ 
+-	srand48_r(pthread_self(), &s->rand);
+-
+ 	prepped = 0;
+ 	do {
+ 		int to_wait, to_submit, this_reap, to_prep;

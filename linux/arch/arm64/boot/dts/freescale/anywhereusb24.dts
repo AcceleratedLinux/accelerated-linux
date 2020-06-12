@@ -36,10 +36,11 @@
 			reg = <0x0 0x1560000 0x0 0x10000>;
 			interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clockgen 2 1>;
-			voltage-ranges = <1800 1800 3300 3300>;
+			voltage-ranges = <3300 3300>;
 			sdhci,auto-cmd12;
 			big-endian;
 			bus-width = <4>;
+			max-frequency = <12500000>;
 		};
 
 		 pcie@3400000 {
@@ -617,6 +618,16 @@
 	status = "okay";
 };
 
+&i2c3 {
+	clock-frequency = <100000>;
+	status = "okay";
+
+	rng: atecc508a@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
+};
+
 &qspi {
 	num-cs = <1>;
 	bus-num = <0>;
@@ -707,3 +718,9 @@
 	};
 };
 
+&gpio0 {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "factory";
+};

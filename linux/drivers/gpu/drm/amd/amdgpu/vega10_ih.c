@@ -20,7 +20,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#include <drm/drmP.h>
+
+#include <linux/pci.h>
+
 #include "amdgpu.h"
 #include "amdgpu_ih.h"
 #include "soc15.h"
@@ -31,7 +33,7 @@
 #include "soc15_common.h"
 #include "vega10_ih.h"
 
-
+#define MAX_REARM_RETRY 10
 
 static void vega10_ih_set_interrupt_funcs(struct amdgpu_device *adev);
 
@@ -48,14 +50,29 @@ static void vega10_ih_enable_interrupts(struct amdgpu_device *adev)
 
 	ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL, RB_ENABLE, 1);
 	ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL, ENABLE_INTR, 1);
-	WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL, ih_rb_cntl);
+	if (amdgpu_sriov_vf(adev)) {
+		if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL, ih_rb_cntl)) {
+			DRM_ERROR("PSP program IH_RB_CNTL failed!\n");
+			return;
+		}
+	} else {
+		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL, ih_rb_cntl);
+	}
 	adev->irq.ih.enabled = true;
 
 	if (adev->irq.ih1.ring_size) {
 		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1);
 		ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL_RING1,
 					   RB_ENABLE, 1);
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1, ih_rb_cntl);
+		if (amdgpu_sriov_vf(adev)) {
+			if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL_RING1,
+						ih_rb_cntl)) {
+				DRM_ERROR("program IH_RB_CNTL_RING1 failed!\n");
+				return;
+			}
+		} else {
+			WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1, ih_rb_cntl);
+		}
 		adev->irq.ih1.enabled = true;
 	}
 
@@ -63,7 +80,15 @@ static void vega10_ih_enable_interrupts(struct amdgpu_device *adev)
 		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2);
 		ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL_RING2,
 					   RB_ENABLE, 1);
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2, ih_rb_cntl);
+		if (amdgpu_sriov_vf(adev)) {
+			if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL_RING2,
+						ih_rb_cntl)) {
+				DRM_ERROR("program IH_RB_CNTL_RING2 failed!\n");
+				return;
+			}
+		} else {
+			WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2, ih_rb_cntl);
+		}
 		adev->irq.ih2.enabled = true;
 	}
 }
@@ -81,7 +106,15 @@ static void vega10_ih_disable_interrupts(struct amdgpu_device *adev)
 
 	ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL, RB_ENABLE, 0);
 	ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL, ENABLE_INTR, 0);
-	WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL, ih_rb_cntl);
+	if (amdgpu_sriov_vf(adev)) {
+		if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL, ih_rb_cntl)) {
+			DRM_ERROR("PSP program IH_RB_CNTL failed!\n");
+			return;
+		}
+	} else {
+		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL, ih_rb_cntl);
+	}
+
 	/* set rptr, wptr to 0 */
 	WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR, 0);
 	WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR, 0);
@@ -92,7 +125,15 @@ static void vega10_ih_disable_interrupts(struct amdgpu_device *adev)
 		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1);
 		ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL_RING1,
 					   RB_ENABLE, 0);
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1, ih_rb_cntl);
+		if (amdgpu_sriov_vf(adev)) {
+			if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL_RING1,
+						ih_rb_cntl)) {
+				DRM_ERROR("program IH_RB_CNTL_RING1 failed!\n");
+				return;
+			}
+		} else {
+			WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1, ih_rb_cntl);
+		}
 		/* set rptr, wptr to 0 */
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR_RING1, 0);
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR_RING1, 0);
@@ -104,7 +145,16 @@ static void vega10_ih_disable_interrupts(struct amdgpu_device *adev)
 		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2);
 		ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL_RING2,
 					   RB_ENABLE, 0);
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2, ih_rb_cntl);
+		if (amdgpu_sriov_vf(adev)) {
+			if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL_RING2,
+						ih_rb_cntl)) {
+				DRM_ERROR("program IH_RB_CNTL_RING2 failed!\n");
+				return;
+			}
+		} else {
+			WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2, ih_rb_cntl);
+		}
+
 		/* set rptr, wptr to 0 */
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR_RING2, 0);
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR_RING2, 0);
@@ -136,6 +186,25 @@ static uint32_t vega10_ih_rb_cntl(struct amdgpu_ih_ring *ih, uint32_t ih_rb_cntl
 	return ih_rb_cntl;
 }
 
+static uint32_t vega10_ih_doorbell_rptr(struct amdgpu_ih_ring *ih)
+{
+	u32 ih_doorbell_rtpr = 0;
+
+	if (ih->use_doorbell) {
+		ih_doorbell_rtpr = REG_SET_FIELD(ih_doorbell_rtpr,
+						 IH_DOORBELL_RPTR, OFFSET,
+						 ih->doorbell_index);
+		ih_doorbell_rtpr = REG_SET_FIELD(ih_doorbell_rtpr,
+						 IH_DOORBELL_RPTR,
+						 ENABLE, 1);
+	} else {
+		ih_doorbell_rtpr = REG_SET_FIELD(ih_doorbell_rtpr,
+						 IH_DOORBELL_RPTR,
+						 ENABLE, 0);
+	}
+	return ih_doorbell_rtpr;
+}
+
 /**
  * vega10_ih_irq_init - init and enable the interrupt ring
  *
@@ -150,14 +219,14 @@ static uint32_t vega10_ih_rb_cntl(struct amdgpu_ih_ring *ih, uint32_t ih_rb_cntl
 static int vega10_ih_irq_init(struct amdgpu_device *adev)
 {
 	struct amdgpu_ih_ring *ih;
+	u32 ih_rb_cntl, ih_chicken;
 	int ret = 0;
-	u32 ih_rb_cntl, ih_doorbell_rtpr;
 	u32 tmp;
 
 	/* disable irqs */
 	vega10_ih_disable_interrupts(adev);
 
-	adev->nbio_funcs->ih_control(adev);
+	adev->nbio.funcs->ih_control(adev);
 
 	ih = &adev->irq.ih;
 	/* Ring Buffer base. [39:8] of 40-bit address of the beginning of the ring buffer*/
@@ -168,7 +237,28 @@ static int vega10_ih_irq_init(struct amdgpu_device *adev)
 	ih_rb_cntl = vega10_ih_rb_cntl(ih, ih_rb_cntl);
 	ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL, RPTR_REARM,
 				   !!adev->irq.msi_enabled);
-	WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL, ih_rb_cntl);
+	if (amdgpu_sriov_vf(adev)) {
+		if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL, ih_rb_cntl)) {
+			DRM_ERROR("PSP program IH_RB_CNTL failed!\n");
+			return -ETIMEDOUT;
+		}
+	} else {
+		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL, ih_rb_cntl);
+	}
+
+	if ((adev->asic_type == CHIP_ARCTURUS &&
+	     adev->firmware.load_type == AMDGPU_FW_LOAD_DIRECT) ||
+	    adev->asic_type == CHIP_RENOIR) {
+		ih_chicken = RREG32_SOC15(OSSSYS, 0, mmIH_CHICKEN);
+		if (adev->irq.ih.use_bus_addr) {
+			ih_chicken = REG_SET_FIELD(ih_chicken, IH_CHICKEN,
+						   MC_SPACE_GPA_ENABLE, 1);
+		} else {
+			ih_chicken = REG_SET_FIELD(ih_chicken, IH_CHICKEN,
+						   MC_SPACE_FBPA_ENABLE, 1);
+		}
+		WREG32_SOC15(OSSSYS, 0, mmIH_CHICKEN, ih_chicken);
+	}
 
 	/* set the writeback address whether it's enabled or not */
 	WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR_ADDR_LO,
@@ -177,23 +267,11 @@ static int vega10_ih_irq_init(struct amdgpu_device *adev)
 		     upper_32_bits(ih->wptr_addr) & 0xFFFF);
 
 	/* set rptr, wptr to 0 */
-	WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR, 0);
 	WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR, 0);
+	WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR, 0);
 
-	ih_doorbell_rtpr = RREG32_SOC15(OSSSYS, 0, mmIH_DOORBELL_RPTR);
-	if (adev->irq.ih.use_doorbell) {
-		ih_doorbell_rtpr = REG_SET_FIELD(ih_doorbell_rtpr,
-						 IH_DOORBELL_RPTR, OFFSET,
-						 adev->irq.ih.doorbell_index);
-		ih_doorbell_rtpr = REG_SET_FIELD(ih_doorbell_rtpr,
-						 IH_DOORBELL_RPTR,
-						 ENABLE, 1);
-	} else {
-		ih_doorbell_rtpr = REG_SET_FIELD(ih_doorbell_rtpr,
-						 IH_DOORBELL_RPTR,
-						 ENABLE, 0);
-	}
-	WREG32_SOC15(OSSSYS, 0, mmIH_DOORBELL_RPTR, ih_doorbell_rtpr);
+	WREG32_SOC15(OSSSYS, 0, mmIH_DOORBELL_RPTR,
+		     vega10_ih_doorbell_rptr(ih));
 
 	ih = &adev->irq.ih1;
 	if (ih->ring_size) {
@@ -203,11 +281,26 @@ static int vega10_ih_irq_init(struct amdgpu_device *adev)
 
 		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1);
 		ih_rb_cntl = vega10_ih_rb_cntl(ih, ih_rb_cntl);
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1, ih_rb_cntl);
+		ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL,
+					   WPTR_OVERFLOW_ENABLE, 0);
+		ih_rb_cntl = REG_SET_FIELD(ih_rb_cntl, IH_RB_CNTL,
+					   RB_FULL_DRAIN_ENABLE, 1);
+		if (amdgpu_sriov_vf(adev)) {
+			if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL_RING1,
+						ih_rb_cntl)) {
+				DRM_ERROR("program IH_RB_CNTL_RING1 failed!\n");
+				return -ETIMEDOUT;
+			}
+		} else {
+			WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1, ih_rb_cntl);
+		}
 
 		/* set rptr, wptr to 0 */
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR_RING1, 0);
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR_RING1, 0);
+		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR_RING1, 0);
+
+		WREG32_SOC15(OSSSYS, 0, mmIH_DOORBELL_RPTR_RING1,
+			     vega10_ih_doorbell_rptr(ih));
 	}
 
 	ih = &adev->irq.ih2;
@@ -216,13 +309,25 @@ static int vega10_ih_irq_init(struct amdgpu_device *adev)
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_BASE_HI_RING2,
 			     (ih->gpu_addr >> 40) & 0xff);
 
-		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING1);
+		ih_rb_cntl = RREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2);
 		ih_rb_cntl = vega10_ih_rb_cntl(ih, ih_rb_cntl);
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2, ih_rb_cntl);
+
+		if (amdgpu_sriov_vf(adev)) {
+			if (psp_reg_program(&adev->psp, PSP_REG_IH_RB_CNTL_RING2,
+						ih_rb_cntl)) {
+				DRM_ERROR("program IH_RB_CNTL_RING2 failed!\n");
+				return -ETIMEDOUT;
+			}
+		} else {
+			WREG32_SOC15(OSSSYS, 0, mmIH_RB_CNTL_RING2, ih_rb_cntl);
+		}
 
 		/* set rptr, wptr to 0 */
-		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR_RING2, 0);
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_WPTR_RING2, 0);
+		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR_RING2, 0);
+
+		WREG32_SOC15(OSSSYS, 0, mmIH_DOORBELL_RPTR_RING2,
+			     vega10_ih_doorbell_rptr(ih));
 	}
 
 	tmp = RREG32_SOC15(OSSSYS, 0, mmIH_STORM_CLIENT_LIST_CNTL);
@@ -365,6 +470,38 @@ static void vega10_ih_decode_iv(struct amdgpu_device *adev,
 }
 
 /**
+ * vega10_ih_irq_rearm - rearm IRQ if lost
+ *
+ * @adev: amdgpu_device pointer
+ *
+ */
+static void vega10_ih_irq_rearm(struct amdgpu_device *adev,
+			       struct amdgpu_ih_ring *ih)
+{
+	uint32_t reg_rptr = 0;
+	uint32_t v = 0;
+	uint32_t i = 0;
+
+	if (ih == &adev->irq.ih)
+		reg_rptr = SOC15_REG_OFFSET(OSSSYS, 0, mmIH_RB_RPTR);
+	else if (ih == &adev->irq.ih1)
+		reg_rptr = SOC15_REG_OFFSET(OSSSYS, 0, mmIH_RB_RPTR_RING1);
+	else if (ih == &adev->irq.ih2)
+		reg_rptr = SOC15_REG_OFFSET(OSSSYS, 0, mmIH_RB_RPTR_RING2);
+	else
+		return;
+
+	/* Rearm IRQ / re-wwrite doorbell if doorbell write is lost */
+	for (i = 0; i < MAX_REARM_RETRY; i++) {
+		v = RREG32_NO_KIQ(reg_rptr);
+		if ((v < ih->ring_size) && (v != ih->rptr))
+			WDOORBELL32(ih->doorbell_index, ih->rptr);
+		else
+			break;
+	}
+}
+
+/**
  * vega10_ih_set_rptr - set the IH ring buffer rptr
  *
  * @adev: amdgpu_device pointer
@@ -378,6 +515,9 @@ static void vega10_ih_set_rptr(struct amdgpu_device *adev,
 		/* XXX check if swapping is necessary on BE */
 		*ih->rptr_cpu = ih->rptr;
 		WDOORBELL32(ih->doorbell_index, ih->rptr);
+
+		if (amdgpu_sriov_vf(adev))
+			vega10_ih_irq_rearm(adev, ih);
 	} else if (ih == &adev->irq.ih) {
 		WREG32_SOC15(OSSSYS, 0, mmIH_RB_RPTR, ih->rptr);
 	} else if (ih == &adev->irq.ih1) {
@@ -449,19 +589,22 @@ static int vega10_ih_sw_init(void *handle)
 	if (r)
 		return r;
 
-	if (adev->asic_type == CHIP_VEGA10) {
-		r = amdgpu_ih_ring_init(adev, &adev->irq.ih1, PAGE_SIZE, true);
-		if (r)
-			return r;
-
-		r = amdgpu_ih_ring_init(adev, &adev->irq.ih2, PAGE_SIZE, true);
-		if (r)
-			return r;
-	}
-
-	/* TODO add doorbell for IH1 & IH2 as well */
 	adev->irq.ih.use_doorbell = true;
 	adev->irq.ih.doorbell_index = adev->doorbell_index.ih << 1;
+
+	r = amdgpu_ih_ring_init(adev, &adev->irq.ih1, PAGE_SIZE, true);
+	if (r)
+		return r;
+
+	adev->irq.ih1.use_doorbell = true;
+	adev->irq.ih1.doorbell_index = (adev->doorbell_index.ih + 1) << 1;
+
+	r = amdgpu_ih_ring_init(adev, &adev->irq.ih2, PAGE_SIZE, true);
+	if (r)
+		return r;
+
+	adev->irq.ih2.use_doorbell = true;
+	adev->irq.ih2.doorbell_index = (adev->doorbell_index.ih + 2) << 1;
 
 	r = amdgpu_irq_init(adev);
 
@@ -534,10 +677,49 @@ static int vega10_ih_soft_reset(void *handle)
 	return 0;
 }
 
+static void vega10_ih_update_clockgating_state(struct amdgpu_device *adev,
+					       bool enable)
+{
+	uint32_t data, def, field_val;
+
+	if (adev->cg_flags & AMD_CG_SUPPORT_IH_CG) {
+		def = data = RREG32_SOC15(OSSSYS, 0, mmIH_CLK_CTRL);
+		field_val = enable ? 0 : 1;
+		/**
+		 * Vega10 does not have IH_RETRY_INT_CAM_MEM_CLK_SOFT_OVERRIDE
+		 * and IH_BUFFER_MEM_CLK_SOFT_OVERRIDE field.
+		 */
+		if (adev->asic_type > CHIP_VEGA10) {
+			data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     IH_RETRY_INT_CAM_MEM_CLK_SOFT_OVERRIDE, field_val);
+			data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     IH_BUFFER_MEM_CLK_SOFT_OVERRIDE, field_val);
+		}
+
+		data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     DBUS_MUX_CLK_SOFT_OVERRIDE, field_val);
+		data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     OSSSYS_SHARE_CLK_SOFT_OVERRIDE, field_val);
+		data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     LIMIT_SMN_CLK_SOFT_OVERRIDE, field_val);
+		data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     DYN_CLK_SOFT_OVERRIDE, field_val);
+		data = REG_SET_FIELD(data, IH_CLK_CTRL,
+				     REG_CLK_SOFT_OVERRIDE, field_val);
+		if (def != data)
+			WREG32_SOC15(OSSSYS, 0, mmIH_CLK_CTRL, data);
+	}
+}
+
 static int vega10_ih_set_clockgating_state(void *handle,
 					  enum amd_clockgating_state state)
 {
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	vega10_ih_update_clockgating_state(adev,
+				state == AMD_CG_STATE_GATE);
 	return 0;
+
 }
 
 static int vega10_ih_set_powergating_state(void *handle,

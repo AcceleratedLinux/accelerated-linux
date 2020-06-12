@@ -1,4 +1,4 @@
-URL = https://w1.fi/releases/wpa_supplicant-2.6.tar.gz
+URL = https://w1.fi/releases/wpa_supplicant-2.9.tar.gz
 FINALTARGET = my_build
 AUTOMAKE_ROMFS = my_romfs
 

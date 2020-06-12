@@ -85,18 +85,6 @@ enum kgd_memory_pool {
 	KGD_POOL_FRAMEBUFFER = 3,
 };
 
-enum kgd_engine_type {
-	KGD_ENGINE_PFP = 1,
-	KGD_ENGINE_ME,
-	KGD_ENGINE_CE,
-	KGD_ENGINE_MEC1,
-	KGD_ENGINE_MEC2,
-	KGD_ENGINE_RLC,
-	KGD_ENGINE_SDMA1,
-	KGD_ENGINE_SDMA2,
-	KGD_ENGINE_MAX
-};
-
 /**
  * enum kfd_sched_policy
  *
@@ -186,6 +174,7 @@ struct tile_config {
 #define ALLOC_MEM_FLAGS_GTT		(1 << 1)
 #define ALLOC_MEM_FLAGS_USERPTR		(1 << 2)
 #define ALLOC_MEM_FLAGS_DOORBELL	(1 << 3)
+#define ALLOC_MEM_FLAGS_MMIO_REMAP	(1 << 4)
 
 /*
  * Allocation flags attributes/access options.
@@ -230,8 +219,6 @@ struct tile_config {
  * @hqd_sdma_destroy: Destructs and preempts the SDMA queue assigned to that
  * SDMA hqd slot.
  *
- * @get_fw_version: Returns FW versions from the header
- *
  * @set_scratch_backing_va: Sets VA for scratch backing memory of a VMID.
  * Only used for no cp scheduling mode
  *
@@ -269,6 +256,10 @@ struct kfd2kgd_calls {
 			uint32_t wptr_shift, uint32_t wptr_mask,
 			struct mm_struct *mm);
 
+	int (*hiq_mqd_load)(struct kgd_dev *kgd, void *mqd,
+			    uint32_t pipe_id, uint32_t queue_id,
+			    uint32_t doorbell_off);
+
 	int (*hqd_sdma_load)(struct kgd_dev *kgd, void *mqd,
 			     uint32_t __user *wptr, struct mm_struct *mm);
 
@@ -304,23 +295,22 @@ struct kfd2kgd_calls {
 	uint32_t (*address_watch_get_offset)(struct kgd_dev *kgd,
 					unsigned int watch_point_id,
 					unsigned int reg_offset);
-	bool (*get_atc_vmid_pasid_mapping_valid)(
+	bool (*get_atc_vmid_pasid_mapping_info)(
 					struct kgd_dev *kgd,
-					uint8_t vmid);
-	uint16_t (*get_atc_vmid_pasid_mapping_pasid)(
-					struct kgd_dev *kgd,
-					uint8_t vmid);
+					uint8_t vmid,
+					uint16_t *p_pasid);
 
-	uint16_t (*get_fw_version)(struct kgd_dev *kgd,
-				enum kgd_engine_type type);
+	/* No longer needed from GFXv9 onward. The scratch base address is
+	 * passed to the shader by the CP. It's the user mode driver's
+	 * responsibility.
+	 */
 	void (*set_scratch_backing_va)(struct kgd_dev *kgd,
 				uint64_t va, uint32_t vmid);
+
 	int (*get_tile_config)(struct kgd_dev *kgd, struct tile_config *config);
 
 	void (*set_vm_context_page_table_base)(struct kgd_dev *kgd,
 			uint32_t vmid, uint64_t page_table_base);
-	int (*invalidate_tlbs)(struct kgd_dev *kgd, uint16_t pasid);
-	int (*invalidate_tlbs_vmid)(struct kgd_dev *kgd, uint16_t vmid);
 	uint32_t (*read_vmid_from_vmfault_reg)(struct kgd_dev *kgd);
 	uint64_t (*get_hive_id)(struct kgd_dev *kgd);
 

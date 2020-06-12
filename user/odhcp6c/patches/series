@@ -1,3 +1,5 @@
 odhcp6c-ra-refresh.patch
 odhcp6c-memstream.patch
 odhcp6c-ra-prefix-route.patch
+odhcp6c-ddns.patch
+odhcp6c-use-clock_gettime.patch

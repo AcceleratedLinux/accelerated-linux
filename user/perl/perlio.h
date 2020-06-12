@@ -63,6 +63,7 @@
  * avoids issues where stdio.h has strange side effects
  */
 #include <stdio.h>
+#include <fcntl.h>
 
 #ifdef __BEOS__
 int fseeko(FILE *stream, off_t offset, int whence);

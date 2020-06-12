@@ -1,13 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * CBC: Cipher Block Chaining mode
  *
  * Copyright (c) 2006-2016 Herbert Xu <herbert@gondor.apana.org.au>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
- *
  */
 
 #include <crypto/algapi.h>
@@ -59,9 +54,11 @@ static int crypto_cbc_create(struct crypto_template *tmpl, struct rtattr **tb)
 	struct crypto_alg *alg;
 	int err;
 
-	inst = skcipher_alloc_instance_simple(tmpl, tb, &alg);
+	inst = skcipher_alloc_instance_simple(tmpl, tb);
 	if (IS_ERR(inst))
 		return PTR_ERR(inst);
+
+	alg = skcipher_ialg_simple(inst);
 
 	err = -EINVAL;
 	if (!is_power_of_2(alg->cra_blocksize))
@@ -71,14 +68,11 @@ static int crypto_cbc_create(struct crypto_template *tmpl, struct rtattr **tb)
 	inst->alg.decrypt = crypto_cbc_decrypt;
 
 	err = skcipher_register_instance(tmpl, inst);
-	if (err)
-		goto out_free_inst;
-	goto out_put_alg;
-
+	if (err) {
 out_free_inst:
-	inst->free(inst);
-out_put_alg:
-	crypto_mod_put(alg);
+		inst->free(inst);
+	}
+
 	return err;
 }
 
@@ -98,7 +92,7 @@ static void __exit crypto_cbc_module_exit(void)
 	crypto_unregister_template(&crypto_cbc_tmpl);
 }
 
-module_init(crypto_cbc_module_init);
+subsys_initcall(crypto_cbc_module_init);
 module_exit(crypto_cbc_module_exit);
 
 MODULE_LICENSE("GPL");

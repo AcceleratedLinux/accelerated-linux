@@ -79,7 +79,7 @@ endif
 
 CROSS          = $(CROSS_COMPILE)
 CONFIGURE_HOST = arm-linux
-CONFIGURE_TOOL ?= arm-uclinuxeabi$(LIBCSUFFIX)
+CONFIGURE_TOOL ?= arm-uclinuxeabi
 
 CONFIG_UCLINUX=y
 

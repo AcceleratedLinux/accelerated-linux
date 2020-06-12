@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0+
 /* Copyright (c) 2018 Jernej Skrabec <jernej.skrabec@siol.net> */
 
-#include <drm/drmP.h>
-
-#include <dt-bindings/clock/sun8i-tcon-top.h>
 
 #include <linux/bitfield.h>
 #include <linux/component.h>
 #include <linux/device.h>
+#include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
+
+#include <dt-bindings/clock/sun8i-tcon-top.h>
 
 #include "sun8i_tcon_top.h"
 
@@ -269,12 +269,12 @@ static int sun8i_tcon_top_remove(struct platform_device *pdev)
 	return 0;
 }
 
-const struct sun8i_tcon_top_quirks sun8i_r40_tcon_top_quirks = {
+static const struct sun8i_tcon_top_quirks sun8i_r40_tcon_top_quirks = {
 	.has_tcon_tv1	= true,
 	.has_dsi	= true,
 };
 
-const struct sun8i_tcon_top_quirks sun50i_h6_tcon_top_quirks = {
+static const struct sun8i_tcon_top_quirks sun50i_h6_tcon_top_quirks = {
 	/* Nothing special */
 };
 

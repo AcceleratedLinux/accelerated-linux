@@ -21,6 +21,7 @@
    Scott G. Miller's sha1.c
 */
 
+#include <endian.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <unistd.h>

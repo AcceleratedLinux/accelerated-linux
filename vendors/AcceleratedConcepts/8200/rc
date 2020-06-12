@@ -25,7 +25,8 @@ echo "1-1" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
 echo "1-2" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
 echo "1-3" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
 sleep 1
-cp -a /lib/udev/devices/* /dev/
+# initialise devices before we need them
+/etc/rc.dev
 cp /etc/default/group /etc/config/
 echo "" > /proc/sys/kernel/hotplug
 /etc/init.d/S10udev start

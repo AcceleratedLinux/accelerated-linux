@@ -324,10 +324,9 @@ static int mca_gpio_irq_setup(struct mca_gpio *gpio)
 	for (i = 0; i < MCA_MAX_GPIO_IRQ_BANKS; i++) {
 		if (gpio->irq[i] < 0)
 			continue;
-		gpiochip_set_chained_irqchip(&gpio->gc,
-					     &mca_gpio_irq_chip,
-					     gpio->irq[i],
-					     NULL);
+		gpiochip_set_nested_irqchip(&gpio->gc,
+					    &mca_gpio_irq_chip,
+					    gpio->irq[i]);
 	}
 
 	return 0;

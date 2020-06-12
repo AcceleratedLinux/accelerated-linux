@@ -27,7 +27,16 @@
 
 export ACL_LICENSE = BSD (2/3 clause)
 
-ALL=	cryptotest cryptokeytest cmactest
+ALL =
+ifdef CONFIG_USER_CRYPTO_TOOLS_CMACTEST
+ALL += cmactest
+endif
+ifdef CONFIG_USER_CRYPTO_TOOLS_CRYPTOTEST
+ALL += cryptotest
+endif
+ifdef CONFIG_USER_CRYPTO_TOOLS_CRYPTOKEYTEST
+ALL += cryptokeytest
+endif
 
 all:	${ALL}
 

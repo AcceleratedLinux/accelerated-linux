@@ -1,18 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Hardware monitoring driver for Texas Instruments TPS53679
  *
  * Copyright (c) 2017 Mellanox Technologies. All rights reserved.
  * Copyright (c) 2017 Vadim Pasternak <vadimp@mellanox.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
  */
 
 #include <linux/err.h>
@@ -33,27 +24,29 @@ static int tps53679_identify(struct i2c_client *client,
 			     struct pmbus_driver_info *info)
 {
 	u8 vout_params;
-	int ret;
+	int i, ret;
 
-	/* Read the register with VOUT scaling value.*/
-	ret = pmbus_read_byte_data(client, 0, PMBUS_VOUT_MODE);
-	if (ret < 0)
-		return ret;
+	for (i = 0; i < TPS53679_PAGE_NUM; i++) {
+		/* Read the register with VOUT scaling value.*/
+		ret = pmbus_read_byte_data(client, i, PMBUS_VOUT_MODE);
+		if (ret < 0)
+			return ret;
 
-	vout_params = ret & GENMASK(4, 0);
+		vout_params = ret & GENMASK(4, 0);
 
-	switch (vout_params) {
-	case TPS53679_PROT_VR13_10MV:
-	case TPS53679_PROT_VR12_5_10MV:
-		info->vrm_version = vr13;
-		break;
-	case TPS53679_PROT_VR13_5MV:
-	case TPS53679_PROT_VR12_5MV:
-	case TPS53679_PROT_IMVP8_5MV:
-		info->vrm_version = vr12;
-		break;
-	default:
-		return -EINVAL;
+		switch (vout_params) {
+		case TPS53679_PROT_VR13_10MV:
+		case TPS53679_PROT_VR12_5_10MV:
+			info->vrm_version[i] = vr13;
+			break;
+		case TPS53679_PROT_VR13_5MV:
+		case TPS53679_PROT_VR12_5MV:
+		case TPS53679_PROT_IMVP8_5MV:
+			info->vrm_version[i] = vr12;
+			break;
+		default:
+			return -EINVAL;
+		}
 	}
 
 	return 0;
@@ -92,13 +85,15 @@ static int tps53679_probe(struct i2c_client *client,
 
 static const struct i2c_device_id tps53679_id[] = {
 	{"tps53679", 0},
+	{"tps53688", 0},
 	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, tps53679_id);
 
-static const struct of_device_id tps53679_of_match[] = {
+static const struct of_device_id __maybe_unused tps53679_of_match[] = {
 	{.compatible = "ti,tps53679"},
+	{.compatible = "ti,tps53688"},
 	{}
 };
 MODULE_DEVICE_TABLE(of, tps53679_of_match);

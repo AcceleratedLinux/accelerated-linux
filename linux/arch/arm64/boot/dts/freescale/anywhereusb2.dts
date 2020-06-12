@@ -169,7 +169,13 @@
 };
 
 &i2c1 {
+	clock-frequency = <100000>;
 	status = "okay";
+
+	rng: atecc508a@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
 };
 
 &qspi {
@@ -201,7 +207,7 @@
 		fsl,gemac-bus-id = <0x1>; /* BUS_ID */
 		fsl,gemac-phy-id = <0x0>; /* PHY_ID */
 		fsl,mdio-mux-val = <0x0>;
-		phy-mode = "rgmii"; /* use strapped tx/rx delay */
+		phy-mode = "rgmii-id"; /* use strapped tx/rx delay */
 		fsl,pfe-phy-if-flags = <0x0>;
 
 		mdio {
@@ -228,4 +234,11 @@
 
 &esdhc1 {
 	status = "disabled";
+};
+
+&gpio0 {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "factory", "", "", "", "", "", "", "";
 };

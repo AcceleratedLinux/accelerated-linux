@@ -27,49 +27,39 @@ DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);
 
 struct kretprobe_blackpoint kretprobe_blacklist[] = { };
 
-DEFINE_INSN_CACHE_OPS(dmainsn);
+DEFINE_INSN_CACHE_OPS(s390_insn);
 
-static void *alloc_dmainsn_page(void)
+static int insn_page_in_use;
+static char insn_page[PAGE_SIZE] __aligned(PAGE_SIZE);
+
+static void *alloc_s390_insn_page(void)
 {
-	void *page;
-
-	page = (void *) __get_free_page(GFP_KERNEL | GFP_DMA);
-	if (page)
-		set_memory_x((unsigned long) page, 1);
-	return page;
+	if (xchg(&insn_page_in_use, 1) == 1)
+		return NULL;
+	set_memory_x((unsigned long) &insn_page, 1);
+	return &insn_page;
 }
 
-static void free_dmainsn_page(void *page)
+static void free_s390_insn_page(void *page)
 {
 	set_memory_nx((unsigned long) page, 1);
-	free_page((unsigned long)page);
+	xchg(&insn_page_in_use, 0);
 }
 
-struct kprobe_insn_cache kprobe_dmainsn_slots = {
-	.mutex = __MUTEX_INITIALIZER(kprobe_dmainsn_slots.mutex),
-	.alloc = alloc_dmainsn_page,
-	.free = free_dmainsn_page,
-	.pages = LIST_HEAD_INIT(kprobe_dmainsn_slots.pages),
+struct kprobe_insn_cache kprobe_s390_insn_slots = {
+	.mutex = __MUTEX_INITIALIZER(kprobe_s390_insn_slots.mutex),
+	.alloc = alloc_s390_insn_page,
+	.free = free_s390_insn_page,
+	.pages = LIST_HEAD_INIT(kprobe_s390_insn_slots.pages),
 	.insn_size = MAX_INSN_SIZE,
 };
 
 static void copy_instruction(struct kprobe *p)
 {
-	unsigned long ip = (unsigned long) p->addr;
 	s64 disp, new_disp;
 	u64 addr, new_addr;
 
-	if (ftrace_location(ip) == ip) {
-		/*
-		 * If kprobes patches the instruction that is morphed by
-		 * ftrace make sure that kprobes always sees the branch
-		 * "jg .+24" that skips the mcount block or the "brcl 0,0"
-		 * in case of hotpatch.
-		 */
-		ftrace_generate_nop_insn((struct ftrace_insn *)p->ainsn.insn);
-		p->ainsn.is_ftrace_insn = 1;
-	} else
-		memcpy(p->ainsn.insn, p->addr, insn_length(*p->addr >> 8));
+	memcpy(p->ainsn.insn, p->addr, insn_length(*p->addr >> 8));
 	p->opcode = p->ainsn.insn[0];
 	if (!probe_is_insn_relative_long(p->ainsn.insn))
 		return;
@@ -102,7 +92,7 @@ static int s390_get_insn_slot(struct kprobe *p)
 	 */
 	p->ainsn.insn = NULL;
 	if (is_kernel_addr(p->addr))
-		p->ainsn.insn = get_dmainsn_slot();
+		p->ainsn.insn = get_s390_insn_slot();
 	else if (is_module_addr(p->addr))
 		p->ainsn.insn = get_insn_slot();
 	return p->ainsn.insn ? 0 : -ENOMEM;
@@ -114,7 +104,7 @@ static void s390_free_insn_slot(struct kprobe *p)
 	if (!p->ainsn.insn)
 		return;
 	if (is_kernel_addr(p->addr))
-		free_dmainsn_slot(p->ainsn.insn, 0);
+		free_s390_insn_slot(p->ainsn.insn, 0);
 	else
 		free_insn_slot(p->ainsn.insn, 0);
 	p->ainsn.insn = NULL;
@@ -135,11 +125,6 @@ int arch_prepare_kprobe(struct kprobe *p)
 }
 NOKPROBE_SYMBOL(arch_prepare_kprobe);
 
-int arch_check_ftrace_location(struct kprobe *p)
-{
-	return 0;
-}
-
 struct swap_insn_args {
 	struct kprobe *p;
 	unsigned int arm_kprobe : 1;
@@ -148,28 +133,11 @@ struct swap_insn_args {
 static int swap_instruction(void *data)
 {
 	struct swap_insn_args *args = data;
-	struct ftrace_insn new_insn, *insn;
 	struct kprobe *p = args->p;
-	size_t len;
+	u16 opc;
 
-	new_insn.opc = args->arm_kprobe ? BREAKPOINT_INSTRUCTION : p->opcode;
-	len = sizeof(new_insn.opc);
-	if (!p->ainsn.is_ftrace_insn)
-		goto skip_ftrace;
-	len = sizeof(new_insn);
-	insn = (struct ftrace_insn *) p->addr;
-	if (args->arm_kprobe) {
-		if (is_ftrace_nop(insn))
-			new_insn.disp = KPROBE_ON_FTRACE_NOP;
-		else
-			new_insn.disp = KPROBE_ON_FTRACE_CALL;
-	} else {
-		ftrace_generate_call_insn(&new_insn, (unsigned long)p->addr);
-		if (insn->disp == KPROBE_ON_FTRACE_NOP)
-			ftrace_generate_nop_insn(&new_insn);
-	}
-skip_ftrace:
-	s390_kernel_write(p->addr, &new_insn, len);
+	opc = args->arm_kprobe ? BREAKPOINT_INSTRUCTION : p->opcode;
+	s390_kernel_write(p->addr, &opc, sizeof(opc));
 	return 0;
 }
 NOKPROBE_SYMBOL(swap_instruction);
@@ -463,24 +431,6 @@ static void resume_execution(struct kprobe *p, struct pt_regs *regs)
 	unsigned long ip = regs->psw.addr;
 	int fixup = probe_get_fixup_type(p->ainsn.insn);
 
-	/* Check if the kprobes location is an enabled ftrace caller */
-	if (p->ainsn.is_ftrace_insn) {
-		struct ftrace_insn *insn = (struct ftrace_insn *) p->addr;
-		struct ftrace_insn call_insn;
-
-		ftrace_generate_call_insn(&call_insn, (unsigned long) p->addr);
-		/*
-		 * A kprobe on an enabled ftrace call site actually single
-		 * stepped an unconditional branch (ftrace nop equivalent).
-		 * Now we need to fixup things and pretend that a brasl r0,...
-		 * was executed instead.
-		 */
-		if (insn->disp == KPROBE_ON_FTRACE_CALL) {
-			ip += call_insn.disp * 2 - MCOUNT_INSN_SIZE;
-			regs->gprs[0] = (unsigned long)p->addr + sizeof(*insn);
-		}
-	}
-
 	if (fixup & FIXUP_PSW_NORMAL)
 		ip += (unsigned long) p->addr - (unsigned long) p->ainsn.insn;
 
@@ -572,7 +522,7 @@ static int kprobe_trap_handler(struct pt_regs *regs, int trapnr)
 		 * In case the user-specified fault handler returned
 		 * zero, try to fix up.
 		 */
-		entry = search_exception_tables(regs->psw.addr);
+		entry = s390_search_extables(regs->psw.addr);
 		if (entry) {
 			regs->psw.addr = extable_fixup(entry);
 			return 1;

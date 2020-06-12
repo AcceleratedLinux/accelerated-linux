@@ -374,6 +374,12 @@ out:
 	return 0;
 }
 
+static int bcm53118_slave_eth_change_mtu(struct net_device *dev, int new_mtu)
+{
+	dev->mtu = new_mtu;
+	return 0;
+}
+
 static const struct net_device_ops bcm53118_slave_netdev_ops = {
 	.ndo_init = bcm53118_slave_init,
 	.ndo_open = bcm53118_slave_open,
@@ -381,7 +387,7 @@ static const struct net_device_ops bcm53118_slave_netdev_ops = {
 	.ndo_start_xmit = bcm53118_slave_xmit,
 	.ndo_change_rx_flags = bcm53118_slave_change_rx_flags,
 	.ndo_set_rx_mode = bcm53118_slave_set_rx_mode,
-	.ndo_change_mtu = eth_change_mtu,
+	.ndo_change_mtu = bcm53118_slave_eth_change_mtu,
 	.ndo_do_ioctl = bcm53118_slave_ioctl,
 	.ndo_get_iflink = bcm53118_get_iflink,
 };
@@ -728,7 +734,7 @@ static int bcm53118_mdio_write(struct mii_bus *bus, int phyid, int regnum, u16 v
 	return -ENODEV;
 }
 
-static int bcm53118_match_node(struct device *dev, void *data)
+static int bcm53118_match_node(struct device *dev, const void *data)
 {
 	return dev->of_node == data;
 }

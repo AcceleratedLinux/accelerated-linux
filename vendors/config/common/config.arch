@@ -29,7 +29,7 @@ LIBCSUFFIX  := $(subst musl,-musl,$(LIBCSUFFIX))
 LIBCSUFFIX  := $(subst glibc,,$(LIBCSUFFIX))
 export LIBCSUFFIX
 
-PATH	 := $(PATH):$(ROOTDIR)/tools:$(TOOLSPREFIX)/bin
+PATH	 := $(ROOTDIR)/tools:$(TOOLSPREFIX)/bin:$(PATH)
 ROMFSINST = romfs-inst.sh
 LIBTOOL   = jlibtool
 export PATH ROMFSINST LIBTOOL
@@ -100,7 +100,8 @@ export LINUX_CONFIG CONFIG_CONFIG MODULES_CONFIG ARCH_CONFIG
 -include $(MODULES_CONFIG)
 
 HOSTCC ?= cc
-export HOSTCC
+HOSTCXX ?= c++
+export HOSTCC HOSTCXX
 
 ifndef HOSTBUILD
 -include $(ARCH_CONFIG)

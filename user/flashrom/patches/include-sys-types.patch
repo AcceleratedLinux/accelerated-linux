@@ -1,0 +1,20 @@
+--- flashrom-0.9.8/Makefile.org	2020-01-24 17:10:59.343762480 +1000
++++ flashrom-0.9.8/Makefile	2020-01-24 17:11:13.703147834 +1000
+@@ -889,6 +889,7 @@
+ #if IS_WINDOWS
+ #include <lusb0_usb.h>
+ #else
++#include <sys/types.h>
+ #include <usb.h>
+ #endif
+ int main(int argc, char **argv)
+--- flashrom-0.9.8/pickit2_spi.c.org	2020-01-24 17:25:13.004490983 +1000
++++ flashrom-0.9.8/pickit2_spi.c	2020-01-24 17:25:27.788840962 +1000
+@@ -47,6 +47,7 @@
+ #if IS_WINDOWS
+ #include <lusb0_usb.h>
+ #else
++#include <sys/types.h>
+ #include <usb.h>
+ #endif
+ 

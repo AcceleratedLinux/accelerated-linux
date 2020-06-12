@@ -6,12 +6,16 @@ IMAGE="${1:-${ROOTDIR:-.}/images/image.bin}"
 ZIMAGE="${2:-${ROOTDIR:-.}/images/vmlinuz}"
 INITRD="${3:-${ROOTDIR:-.}/images/rootfs}"
 DISKRAW="${4:-${ROOTDIR:-.}/images/disk.raw}"
+MFGTAR="${5:-${ROOTDIR:-.}/images/connect-it-16.mfg.tar.bz2}"
 
 # Disk size in sectors
-DISKSECTS="${5:-6000000}"
+DISKSECTS="${6:-6000000}"
 
 echo "Making RAW disk..."
-dd if=/dev/zero of=$DISKRAW bs=512 count=$DISKSECTS
+# Remove previous file, if any
+rm -f "${DISKRAW}"
+# Create sparse file
+dd if=/dev/zero of="${DISKRAW}" bs=512 count=0 seek=${DISKSECTS}
 
 # Are we generating a new bootloader for signing/non-signed use ?
 GRUB_UPDATE=
@@ -28,7 +32,8 @@ echo "Run qemu to build image..."
 # Boot kernel and run mkffs
 
 qemu-system-x86_64 -net none -net none -nographic -serial mon:stdio \
-	$(groups | grep -wq kvm && echo -enable-kvm) \
+	-m 512 \
+	$(kvm-ok >/dev/null && echo -enable-kvm) \
 	-append "root=/dev/ram0 init=/etc/mkffs ${GRUB_OPT}" \
 	-kernel $ZIMAGE -initrd $INITRD \
 	-drive id=diskA,file=$DISKRAW,if=none \
@@ -45,6 +50,6 @@ if [ "$GRUB_UPDATE" ]; then
 fi
 
 echo "Compressing RAW disk..."
-bzip2 -9 -v "${DISKRAW}"
+bzip2 -9 -v -f "${DISKRAW}"
 
 exit 0

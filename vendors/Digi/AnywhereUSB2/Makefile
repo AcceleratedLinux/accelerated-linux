@@ -18,7 +18,7 @@ endif
 
 ifneq ($(PRODUCTION_BUILD),1)
 $(info Developer Build $(BUILD_TYPE))
-FIRMWARE_CA_PEM = firmware_ca.pem
+FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/devkeys/awusb/firmware_ca.pem
 SIGN_IMAGE_SCRIPT = $(ROOTDIR)/prop/sign_image/sign_image.py
 SIGNER_CERT_PEM = $(ROOTDIR)/prop/sign_image/devkeys/awusb/development.pem
 SIGNER_OPTS =
@@ -45,16 +45,17 @@ FLASH_DEVICES = \
 all:
 
 clean: image.clean
+	-rm version.info
 
 romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
+	$(ROMFSINST) -d -p 555 /etc/action.d/led
 	$(ROMFSINST) /etc/fw_env.config
-	$(ROMFSINST) -p 400 $(FIRMWARE_CA_PEM) /etc/ssl/firmware/firmware_ca.pem
+	[ ! -d $(ROOTDIR)/prop ] || $(ROMFSINST) -p 400 $(FIRMWARE_CA_PEM) /etc/ssl/firmware/firmware_ca.pem
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) -d /etc/inittab.d/console
-	$(ROMFSINST) -p 555 ../AnywhereUSB8/startup.product /etc/runt.d/startup.product
 	$(ROMFSINST) -p 555 ../AnywhereUSB8/digi_check_firmware_update /usr/sbin/digi_check_firmware_update
 	$(ROMFSINST) -p 555 ../AnywhereUSB8/digi_update_firmware /usr/sbin/digi_update_firmware
 	$(ROMFSINST) -p 555 ../AnywhereUSB8/digi_update_firmware /bin/netflash

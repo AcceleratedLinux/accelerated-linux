@@ -1,0 +1,64 @@
+config USER_IPUTILS_IPUTILS
+	bool "iputils apps"
+	help
+	  The iputils package of ip utilities :)
+	  glibc is recommended.
+
+if USER_IPUTILS_IPUTILS
+
+config USER_IPUTILS_PING
+	bool "ping"
+	help
+	  Send IPv4 ICMP ECHO_REQUEST packets to network hosts.
+
+config USER_IPUTILS_PING6
+	bool "ping6"
+	depends on USER_IPUTILS_PING
+	help
+	  Send IPv6 ICMP ECHO_REQUEST packets to network hosts.
+
+config USER_IPUTILS_TRACEROUTE6
+	bool "traceroute6"
+	help
+	  Print the IPv6 route packets take to a network host.
+
+config USER_IPUTILS_RDISC
+	bool "rdisc"
+	help
+	  Client side of the ICMP router discovery protocol.
+
+config USER_IPUTILS_CLOCKDIFF
+	bool "clockdiff"
+	help
+	  Measures the clock difference between the local host and
+	  a remote host using either ICMP TIMESTAMP packets or the
+	  IP TIMESTAMP option in a ICMP ECHO.
+
+config USER_IPUTILS_TFTPD
+	bool "tftpd"
+	help
+	  IPv4 TFTP server.
+
+config USER_IPUTILS_TRACEPATH
+	bool "tracepath"
+	help
+	  Traces a path to a network host discovering MTU along the way.
+
+config USER_IPUTILS_TRACEPATH6
+	bool "tracepath6"
+	depends on USER_IPUTILS_TRACEPATH
+	help
+	  Traces a path to a IPv6 network host discovering MTU
+	  along the way.
+
+config USER_IPUTILS_ARPING
+	bool "arping"
+	help
+	  Send ARP REQUEST to a neighbouring host
+
+config USER_IPUTILS_RARPD
+	bool "rarpd"
+	help
+	  Reverse Address Resolution Protocol (RARP) Daemon.
+
+endif

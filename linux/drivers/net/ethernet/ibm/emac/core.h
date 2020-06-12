@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * drivers/net/ethernet/ibm/emac/core.h
  *
@@ -15,12 +16,6 @@
  *      Armin Kuster <akuster@mvista.com>
  * 	Johnnie Peters <jpeters@mvista.com>
  *      Copyright 2000, 2001 MontaVista Softare Inc.
- *
- * This program is free software; you can redistribute  it and/or modify it
- * under  the terms of  the GNU General  Public License as published by the
- * Free Software Foundation;  either version 2 of the  License, or (at your
- * option) any later version.
- *
  */
 #ifndef __IBM_NEWEMAC_CORE_H
 #define __IBM_NEWEMAC_CORE_H
@@ -176,7 +171,7 @@ struct emac_instance {
 	struct mal_commac		commac;
 
 	/* PHY infos */
-	int				phy_mode;
+	phy_interface_t			phy_mode;
 	u32				phy_map;
 	u32				phy_address;
 	u32				phy_feat_exc;

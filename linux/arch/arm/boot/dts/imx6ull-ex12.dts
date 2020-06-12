@@ -204,8 +204,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2>;
 	uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio4 22 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
+	dtr-gpios = <&gpio4 22 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio4 21 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
@@ -274,10 +274,18 @@
 };
 
 &i2c2 {
-	clock-frequency = <100000>;
-	pinctrl-names = "default";
+	clock-frequency = <400000>;
+	pinctrl-names = "default", "gpio";
 	pinctrl-0 = <&pinctrl_i2c2>;
+	pinctrl-1 = <&pinctrl_i2c2_gpio>;
+	scl-gpios = <&gpio1 30 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio1 31 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 	status = "okay";
+
+	rng: atecc508a@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
 };
 
 &iomuxc {
@@ -374,8 +382,15 @@
 
 	pinctrl_i2c2: i2c2grp {
 		fsl,pins = <
-			MX6UL_PAD_UART5_TX_DATA__I2C2_SCL	0x4001b8b0		
-			MX6UL_PAD_UART5_RX_DATA__I2C2_SDA	0x4001b8b0		
+			MX6UL_PAD_UART5_TX_DATA__I2C2_SCL	0x4001b8b0
+			MX6UL_PAD_UART5_RX_DATA__I2C2_SDA	0x4001b8b0
+		>;
+	};
+
+	pinctrl_i2c2_gpio: i2c2gpiogrp {
+		fsl,pins = <
+			MX6UL_PAD_UART5_TX_DATA__GPIO1_IO30	0x4001b8b0
+			MX6UL_PAD_UART5_RX_DATA__GPIO1_IO31	0x4001b8b0
 		>;
 	};
 

@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * AD7787/AD7788/AD7789/AD7790/AD7791 SPI ADC driver
  *
  * Copyright 2012 Analog Devices Inc.
  *  Author: Lars-Peter Clausen <lars@metafoo.de>
- *
- * Licensed under the GPL-2.
  */
 
 #include <linux/interrupt.h>
@@ -206,6 +205,7 @@ static const struct ad_sigma_delta_info ad7791_sigma_delta_info = {
 	.has_registers = true,
 	.addr_shift = 4,
 	.read_mask = BIT(3),
+	.irq_flags = IRQF_TRIGGER_LOW,
 };
 
 static int ad7791_read_raw(struct iio_dev *indio_dev,

@@ -5,6 +5,7 @@ config USER_MODEMMANAGER
 	select LIB_DBUS
 	select USER_LIBQMI
 	select USER_UDEV
+	select USER_LIBGUDEV
 	help
 	  USB/Serial modem mananger.
 

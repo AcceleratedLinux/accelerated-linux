@@ -1,18 +1,8 @@
-export ACL_LICENSE = Public Domain
+ACL_LICENSE = Public Domain
+URL = https://nchc.dl.sourceforge.net/project/expect/Expect/5.45.4/expect5.45.4.tar.gz
 
-CONFOPTS=--disable-shared --with-tcl=$(ROOTDIR)/staging/lib --with-tclinclude=$(ROOTDIR)/user/tcl/build/tcl*/generic/
+CONFOPTS += --with-tcl=$(ROOTDIR)/staging/lib
+CONFOPTS += --with-tclinclude=$(ROOTDIR)/staging/include
 
-all: build/build
-	$(MAKE) -C build
+include $(ROOTDIR)/tools/automake.inc
 
-build/build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
-
-clean:
-	rm -rf build
-
-romfs:
-	$(ROMFSINST) build/expect /bin/expect

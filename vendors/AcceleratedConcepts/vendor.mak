@@ -60,7 +60,7 @@ endif
 
 # You probably want to add this to ROMFS_DIRS
 DEFAULT_ROMFS_DIRS := $(COMMON_ROMFS_DIRS) \
-	bin sbin etc/config lib/modules var \
+	bin sbin etc/config,700 lib/modules var \
 	home/httpd/cgi-bin usr/bin usr/sbin
 
 FACTORY_ROMFS_DIRS := $(COMMON_ROMFS_DIRS) \
@@ -204,7 +204,8 @@ image.mips.vmlinux:
 	cp $(ROOTDIR)/$(LINUXDIR)/vmlinux $(VMLINUX)
 
 image.cramfs: mkcramfs
-	./mkcramfs -z -r $(ROMFSDIR) $(ROMFSIMG)
+	rm -f $(ROMFSIMG)
+	$(ROOTDIR)/tools/fakeroot-env ./mkcramfs -z -r $(ROMFSDIR) $(ROMFSIMG)
 
 SQUASH_BCJ =
 ifeq ($(ARCH),arm)
@@ -215,15 +216,19 @@ endif
 
 image.squashfs: mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR); \
-	$$mksquashfs . $(ROMFSIMG) -all-root -noappend $(SQUASH_BCJ) $(SQUASH_ENDIAN)
+	$(ROOTDIR)/tools/fakeroot-env $$mksquashfs . $(ROMFSIMG) \
+		$(CONFIG_SQUASHFS_XATTR:y=-xattrs) \
+		-noappend $(SQUASH_BCJ) $(SQUASH_ENDIAN)
 
 image.squashfs7z: mksquashfs7z
 	rm -f $(ROMFSIMG); mksquashfs7z=`pwd`/mksquashfs7z; cd $(ROMFSDIR); \
-	$$mksquashfs7z . $(ROMFSIMG) -all-root -noappend $(SQUASH_ENDIAN)
+	$(ROOTDIR)/tools/fakeroot-env $$mksquashfs7z . $(ROMFSIMG) \
+		$(CONFIG_SQUASHFS_XATTR:y=-xattrs) \
+		-noappend $(SQUASH_ENDIAN)
 
 image.romfs:
 	rm -f $(ROMFSIMG)
-	genromfs -f $(ROMFSIMG) -d $(ROMFSDIR)
+	$(ROOTDIR)/tools/fakeroot-env genromfs -f $(ROMFSIMG) -d $(ROMFSDIR)
 
 # Create (possibly) mbr + cramfs + zimage/linuz
 image.bin:
@@ -274,7 +279,8 @@ image.configs:
 romfs.dirs:
 	mkdir -p $(ROMFSDIR)
 	@for i in $(ROMFS_DIRS); do \
-		mkdir -p $(ROMFSDIR)/$$i; \
+		mkdir -p $(ROMFSDIR)/$${i%,*}; \
+		[ "$${i##*,}" = "$$i" ] || chmod $${i##*,} $(ROMFSDIR)/$${i%,*}; \
 	done
 
 romfs.symlinks:

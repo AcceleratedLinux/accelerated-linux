@@ -244,10 +244,10 @@ nettel_probe(int ram, unsigned long addr, int size, int buswidth)
 			ram ? "ram" : "flash",
 			addr, size, buswidth, map_ptr->size, map_ptr->map_priv_2);
 
-	map_ptr->virt = ioremap_nocache(map_ptr->map_priv_2, map_ptr->size);
+	map_ptr->virt = ioremap(map_ptr->map_priv_2, map_ptr->size);
 
 	if (!map_ptr->virt) {
-		printk("Failed to ioremap_nocache\n");
+		printk("Failed to ioremap\n");
 		return -EIO;
 	}
 

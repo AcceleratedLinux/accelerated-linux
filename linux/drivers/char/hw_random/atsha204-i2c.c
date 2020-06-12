@@ -28,14 +28,21 @@
 #include <linux/hw_random.h>
 #include <linux/mutex.h>
 
+#include <uapi/linux/atsha204-i2c.h>
+
 #define ATSHA204_I2C_VERSION "0.2"
 #define ATSHA204_SLEEP 0x01
 #define ATSHA204_RNG_NAME "atsha-rng"
 
-/* 500us for ATECC108A */
-#define ATECC108_W_HI (1500)
+/* 1.5ms for ATECC108A */
+#define ATECC108_W_HI_MIN (1500)
+#define ATECC108_W_HI_MAX (1550)
 /* 2.5ms for ATSHA204 */
-#define ATSHA204_W_HI (2500)
+#define ATSHA204_W_HI_MIN (2500)
+#define ATSHA204_W_HI_MAX (2550)
+
+/* No full I2C support, only SMBUS */
+#define ATSHA204_QUIRK_SMBUS	(1 << 0)
 
 struct atsha204_chip {
 	struct device *dev;
@@ -43,6 +50,7 @@ struct atsha204_chip {
 	int dev_num;
 	char devname[7];
 	unsigned long is_open;
+	int quirks;
 
 	struct i2c_client *client;
 	struct miscdevice miscdev;
@@ -90,6 +98,95 @@ void atsha204_set_params(struct atsha204_cmd_metadata *cmd,
 static struct atsha204_chip *global_chip = NULL;
 static atomic_t atsha204_avail = ATOMIC_INIT(1);
 
+static int atsha204_i2c_master_send(const struct i2c_client *client,
+				const char *buf, int count)
+{
+	struct atsha204_chip *chip = dev_get_drvdata(&client->dev);
+	int retval;
+	char cmd;
+	char send_buf[I2C_SMBUS_BLOCK_MAX - 1];
+
+	if (!(chip->quirks & ATSHA204_QUIRK_SMBUS))
+		return i2c_master_send(client, buf, count);
+
+	/* Special case */
+	if (count == 1)
+		return i2c_smbus_write_byte(client, *buf);
+
+	/* Split transactions up to I2C_SMBUS_BLOCK_MAX chunks */
+
+	/* Each transaction should start with the word address */
+	cmd = *buf++;
+	count--;
+
+	retval = 0;
+	while (count > 0) {
+		int ret;
+		/* Max. is (I2C_SMBUS_BLOCK_MAX - <word_address>) */
+		size_t len = min(count, I2C_SMBUS_BLOCK_MAX - 1);
+
+		/* Copy the rest of the data bytes */
+		memcpy(send_buf, buf, len);
+
+		ret = i2c_smbus_write_i2c_block_data(client, cmd, len,
+						     send_buf);
+		if (ret < 0) {
+			retval = ret;
+			goto err;
+		}
+
+		/* Don't count the word address */
+		retval += len;
+		count -= len;
+		buf += len;
+	}
+
+	/* +1 because of the word address */
+	retval++;
+
+err:
+	return retval;
+}
+
+static int atsha204_i2c_master_recv(const struct i2c_client *client,
+				    char *buf, int count)
+{
+	struct atsha204_chip *chip = dev_get_drvdata(&client->dev);
+	int retval = 0;
+
+	if (!(chip->quirks & ATSHA204_QUIRK_SMBUS))
+		return i2c_master_recv(client, buf, count);
+
+	/* Split transactions up to I2C_SMBUS_BLOCK_MAX chunks */
+	while (count > 0) {
+		int ret;
+		size_t len = min(count, I2C_SMBUS_BLOCK_MAX);
+
+		/*
+		 * As we send a command byte before each packet, we have to set
+		 * it to an invalid one, to not mislead the chip.
+		 * According the chip's datasheet, the 0xFF is a reserved word
+		 * address, so we'll use that one
+		 */
+		ret = i2c_smbus_read_i2c_block_data(client, 0xFF, len, buf);
+		if (ret < 0) {
+			retval = ret;
+			goto err;
+		}
+
+		retval += ret;
+
+		if (ret != len)
+			goto err;
+
+		count -= len;
+		buf += len;
+	}
+
+err:
+	return retval;
+}
+
 static u16 atsha204_crc16(const u8 *buf, const u8 len)
 {
 	u8 i;
@@ -131,15 +228,17 @@ static int atsha204_i2c_wakeup(const struct i2c_client *client)
 	const struct device *dev = &client->dev;
 	bool is_awake = false;
 	int retval = -ENODEV;
-	struct i2c_msg msg;
 	u8 buf[4] = {0};
 	unsigned short int try_con = 1;
+	unsigned long delay_min, delay_max;
 
-	/* Set wake-up token message */
-	msg.addr = 0;
-	msg.flags = 0;
-	msg.buf = buf;
-	msg.len = 1;
+	if (client->addr == 0x60) {
+		delay_min = ATECC108_W_HI_MIN;
+		delay_max = ATECC108_W_HI_MAX;
+	} else {
+		delay_min = ATSHA204_W_HI_MIN;
+		delay_max = ATSHA204_W_HI_MAX;
+	}
 
 	while (!is_awake && try_con++ <= 5) {
 		int retry_resp = 4;
@@ -159,12 +258,13 @@ static int atsha204_i2c_wakeup(const struct i2c_client *client)
 			 * low for 8 clock cycles, which will work, as long as
 			 * the I2C speed is less than 133kHz. */
 			buf[0] = 0;
-			i2c_transfer(client->adapter, &msg, 1);
+			atsha204_i2c_master_send(client, buf, 1);
 		}
 		/* Delay for tWHI before reading the response. */
-		udelay(client->addr == 0x60 ? ATECC108_W_HI : ATSHA204_W_HI);
+		usleep_range(delay_min, delay_max);
 		/* Read the response. */
-		while (4 != i2c_master_recv(client, buf, 4) || buf[0] == 0xFF) {
+		while (4 != atsha204_i2c_master_recv(client, buf, 4) ||
+		       buf[0] == 0xFF) {
 			if (--retry_resp < 0) {
 				break;
 			}
@@ -217,23 +317,21 @@ static int atsha204_i2c_idle(const struct i2c_client *client)
 	u8 idle_cmd[1] = {0x02};
 
 	dev_dbg(dev, "Send idle\n");
-	rc = i2c_master_send(client, idle_cmd, 1);
+	rc = atsha204_i2c_master_send(client, idle_cmd, 1);
 
 	return rc;
 }
 
 
-static int atsha204_i2c_transaction(struct atsha204_chip *chip,
-				    const u8 *to_send, size_t to_send_len,
-				    struct atsha204_buffer *buf)
+static int __atsha204_i2c_transaction(struct atsha204_chip *chip,
+				      const u8 *to_send, size_t to_send_len,
+				      struct atsha204_buffer *buf)
 {
 	int rc;
 	u8 status_packet[4];
 	u8 *recv_buf;
 	int total_sleep = 120;	/* Max exec time is GenKey (115msec) */
 	int packet_len;
-
-	mutex_lock(&chip->transaction_mutex);
 
 	dev_dbg(chip->dev, "%s\n", "About to send to device.");
 
@@ -245,13 +343,13 @@ static int atsha204_i2c_transaction(struct atsha204_chip *chip,
 /*	print_hex_dump_bytes("Sending : ", DUMP_PREFIX_OFFSET,
 			     to_send, to_send_len); */
 
-	rc = i2c_master_send(chip->client, to_send, to_send_len);
+	rc = atsha204_i2c_master_send(chip->client, to_send, to_send_len);
 	if (rc != to_send_len)
 		goto out;
 
 	/* Poll for the response - if 1st byte of the response is 0xFF, chip is
 	 * still working */
-	while (4 != i2c_master_recv(chip->client, status_packet, 4) ||
+	while (4 != atsha204_i2c_master_recv(chip->client, status_packet, 4) ||
 	       status_packet[0] == 0xFF) {
 
 		total_sleep = total_sleep - 4;
@@ -279,7 +377,8 @@ static int atsha204_i2c_transaction(struct atsha204_chip *chip,
 	/* The min. response length is 4. Check message length here, and if we
 	 * received a full packet, we're done. */
 	if (packet_len > 4) {
-		rc = i2c_master_recv(chip->client, recv_buf + 4, packet_len - 4);
+		rc = atsha204_i2c_master_recv(chip->client, recv_buf + 4,
+					      packet_len - 4);
 		if (rc != packet_len - 4) {
 			dev_err(chip->dev, "Short response from device.\n");
 			kfree(recv_buf);
@@ -300,9 +399,20 @@ static int atsha204_i2c_transaction(struct atsha204_chip *chip,
 
 	rc = to_send_len;
 out:
-	mutex_unlock(&chip->transaction_mutex);
 	return rc;
+}
 
+static int atsha204_i2c_transaction(struct atsha204_chip *chip,
+				    const u8 *to_send, size_t to_send_len,
+				    struct atsha204_buffer *buf)
+{
+	int rc;
+
+	mutex_lock(&chip->transaction_mutex);
+	rc = __atsha204_i2c_transaction(chip, to_send, to_send_len, buf);
+	mutex_unlock(&chip->transaction_mutex);
+
+	return rc;
 }
 
 static int atsha204_i2c_get_random(u8 *to_fill, const size_t max)
@@ -345,6 +455,7 @@ static int atsha204_i2c_rng_read(struct hwrng *rng, void *data,
 static struct hwrng atsha204_i2c_rng = {
 	.name = ATSHA204_RNG_NAME,
 	.read = atsha204_i2c_rng_read,
+	.quality = 1023,
 };
 
 
@@ -378,7 +489,7 @@ static int atsha204_i2c_sleep(const struct i2c_client *client)
 	char to_send[1] = {ATSHA204_SLEEP};
 
 	dev_dbg(dev, "Send sleep\n");
-	retval = i2c_master_send(client, to_send, 1);
+	retval = atsha204_i2c_master_send(client, to_send, 1);
 	if (retval == 1)
 		retval = 0;
 	else
@@ -521,6 +632,157 @@ out:
 	return rc;
 }
 
+static long atsha204_i2c_ioctl_exec(struct file *filep, unsigned int nmsgs,
+				   struct atsha204_i2c_msg *msgs)
+{
+	struct atsha204_file_priv *priv = filep->private_data;
+	struct atsha204_chip *chip = priv->chip;
+	u8 **tx_bufs = NULL;
+	struct atsha204_buffer *rx_bufs = NULL;
+	int rc;
+	int i;
+
+	tx_bufs = kcalloc(nmsgs, sizeof(*tx_bufs), GFP_KERNEL);
+	if (tx_bufs == NULL) {
+		rc = -ENOMEM;
+		goto err;
+	}
+
+	rx_bufs = kcalloc(nmsgs, sizeof(*rx_bufs), GFP_KERNEL);
+	if (rx_bufs == NULL) {
+		rc = -ENOMEM;
+		goto err;
+	}
+
+	for (i = 0; i < nmsgs; i++) {
+		/* Add command byte + length + 2 byte crc */
+		const int SEND_SIZE = msgs[i].cmd_len + 4;
+		static const u8 COMMAND_BYTE = 0x03;
+		struct atsha204_i2c_msg *msg = &msgs[i];
+		u8 *tx;
+
+		rc = validate_write_size(msg->cmd_len);
+		if (rc)
+			goto err;
+
+		tx = tx_bufs[i] = kmalloc(SEND_SIZE, GFP_KERNEL);
+		if (!tx) {
+			rc = -ENOMEM;
+			goto err;
+		}
+
+		/* Write the header */
+		tx[0] = COMMAND_BYTE;
+		/* Length byte = user size + crc size + length byte */
+		tx[1] = msg->cmd_len + 2 + 1;
+
+		if (copy_from_user(&tx[2], msg->cmd, msg->cmd_len)) {
+			rc = -EFAULT;
+			goto err;
+		}
+
+		atsha204_i2c_crc_command(tx, SEND_SIZE);
+	}
+
+	mutex_lock(&chip->transaction_mutex);
+	for (i = 0; i < nmsgs; i++) {
+		/* Add command byte + length + 2 byte crc */
+		const int SEND_SIZE = msgs[i].cmd_len + 4;
+		struct atsha204_buffer *rx = &rx_bufs[i];
+
+		rc = __atsha204_i2c_transaction(chip, tx_bufs[i], SEND_SIZE,
+						rx);
+		if (rc != SEND_SIZE) {
+			if (rc >= 0)
+				rc = -EIO;
+			mutex_unlock(&chip->transaction_mutex);
+			goto err;
+		}
+
+		if (!rx->ptr)
+			continue;
+
+		/* Check the CRC on the rec buffer on the first read */
+		if (!atsha204_check_rsp_crc16(rx->ptr, rx->len)) {
+			rc = -EBADMSG;
+			dev_err(chip->dev, "%s\n",
+				"CRC on received buffer failed.");
+			mutex_unlock(&chip->transaction_mutex);
+			goto err;
+		}
+	}
+	mutex_unlock(&chip->transaction_mutex);
+
+	for (i = 0; i < nmsgs; i++) {
+		struct atsha204_buffer *rx = &rx_bufs[i];
+		struct atsha204_i2c_msg *msg = &msgs[i];
+		size_t len;
+
+		if (!rx->ptr) {
+			/* Return with 0-length message */
+			msg->resp_len = 0;
+			dev_dbg(chip->dev, "No rsp stored\n");
+			continue;
+		}
+
+		/*
+		 * The 2 CRC bytes should not be returned. Also, we have to
+		 * subtract those bytes from the length (1st byte)
+		 */
+		len = rx->len - 2;
+		if (len > msg->resp_len) {
+			dev_err(chip->dev, "Short response buffer\n");
+			rc = -EINVAL;
+			goto err;
+		}
+
+		if (put_user(len, msg->resp) != 0 ||
+		    copy_to_user(&msg->resp[1], &rx->ptr[1], len - 1)) {
+			rc = -EFAULT;
+			goto err;
+		}
+	}
+
+err:
+	if (tx_bufs) {
+		for (i = 0; i < nmsgs; i++)
+			kfree(tx_bufs[i]);
+	}
+	kfree(rx_bufs);
+	kfree(tx_bufs);
+	kfree(msgs);
+	return rc;
+}
+
+static long atsha204_i2c_ioctl(struct file *filep, unsigned int cmd,
+			       unsigned long arg)
+{
+	switch (cmd) {
+	case ATSHA204_I2C_IOCTL_EXEC: {
+		struct atsha204_i2c_exec_data data;
+		struct atsha204_i2c_msg *msgs;
+
+		if (copy_from_user(&data,
+				   (struct atsha204_i2c_exec_data __user *)arg,
+				   sizeof(data)))
+			return -EFAULT;
+
+		/* Limit the number of allowed messages */
+		if (data.nmsgs > ATSHA204_I2C_EXEC_MSGS_MAX)
+			return -EINVAL;
+
+		msgs = memdup_user(data.msgs,
+			data.nmsgs * sizeof(struct atsha204_i2c_msg));
+		if (IS_ERR(msgs))
+			return PTR_ERR(msgs);
+
+		return atsha204_i2c_ioctl_exec(filep, data.nmsgs, msgs);
+
+	}
+	default:
+		return -EINVAL;
+	}
+}
 
 static int atsha204_i2c_open(struct inode *inode, struct file *filep)
 {
@@ -638,6 +900,7 @@ static const struct file_operations atsha204_i2c_fops = {
 	.open = atsha204_i2c_open,
 	.read = atsha204_i2c_read,
 	.write = atsha204_i2c_write,
+	.unlocked_ioctl = atsha204_i2c_ioctl,
 	.release = atsha204_i2c_release,
 };
 
@@ -666,8 +929,19 @@ static int atsha204_i2c_add_device(struct atsha204_chip *chip)
 	return retval;
 }
 
+static int atsha204_test_access(struct i2c_client *client)
+{
+	int result;
+
+	result = atsha204_i2c_wakeup(client);
+	if (result == 0)
+		atsha204_i2c_idle(client);
+
+	return result;
+}
+
 static struct atsha204_chip *atsha204_i2c_register_hardware(struct device *dev,
-						     struct i2c_client *client)
+		struct i2c_client *client, int quirks)
 {
 	struct atsha204_chip *chip;
 	int rc;
@@ -683,7 +957,15 @@ static struct atsha204_chip *atsha204_i2c_register_hardware(struct device *dev,
 	chip->dev = get_device(dev);
 	dev_set_drvdata(dev, chip);
 
+	chip->quirks = quirks;
+
 	chip->client = client;
+
+	rc = atsha204_test_access(client);
+	if (rc < 0) {
+		dev_err(dev, "Device failed to wake\n");
+		goto put_device;
+	}
 
 	mutex_init(&chip->transaction_mutex);
 
@@ -805,28 +1087,29 @@ static int atsha204_i2c_probe(struct i2c_client *client,
 	int result = -1;
 	struct device *dev = &client->dev;
 	struct atsha204_chip *chip;
+	u32 i2c_func;
+	int quirks = 0;
 
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
-		return -ENODEV;
-
-	result = atsha204_i2c_wakeup(client);
-	if (result == 0) {
-		atsha204_i2c_idle(client);
-
-		chip = atsha204_i2c_register_hardware(dev, client);
-		if (chip == NULL)
+	i2c_func = i2c_get_functionality(client->adapter);
+	if (!(i2c_func & I2C_FUNC_I2C)) {
+		if (!(i2c_func & I2C_FUNC_SMBUS_I2C_BLOCK))
 			return -ENODEV;
 
-		global_chip = chip;
-		result = atsha204_sysfs_add_device(chip);
-		if (result < 0)
-			goto err;
-#ifdef CONFIG_HW_RANDOM_SHA204_LOCKCFG
-		result = lockcfg(chip);
-#endif
-	} else{
-		dev_err(dev, "Device failed to wake\n");
+		quirks |= ATSHA204_QUIRK_SMBUS;
 	}
+
+	chip = atsha204_i2c_register_hardware(dev, client, quirks);
+	if (chip == NULL)
+		return -ENODEV;
+
+	global_chip = chip;
+	result = atsha204_sysfs_add_device(chip);
+	if (result < 0)
+		goto err;
+#ifdef CONFIG_HW_RANDOM_SHA204_LOCKCFG
+	result = lockcfg(chip);
+#endif
+
 err:
 	return result;
 }

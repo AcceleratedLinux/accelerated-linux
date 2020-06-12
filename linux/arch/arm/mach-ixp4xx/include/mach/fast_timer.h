@@ -7,6 +7,8 @@
 #include <mach/hardware.h>
 #include <asm/irq.h>
 
+#include "../../irqs.h"
+
 static irqreturn_t
 fast_timer_interrupt(int irq, void *dev_id)
 {

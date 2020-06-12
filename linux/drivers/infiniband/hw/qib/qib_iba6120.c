@@ -1417,7 +1417,6 @@ static void qib_6120_quiet_serdes(struct qib_pportdata *ppd)
  *
  * The exact combo of LEDs if on is true is determined by looking
  * at the ibcstatus.
-
  * These LEDs indicate the physical and logical state of IB link.
  * For this chip (at least with recommended board pinouts), LED1
  * is Yellow (logical state) and LED2 is Green (physical state),
@@ -1884,7 +1883,6 @@ static void qib_6120_put_tid(struct qib_devdata *dd, u64 __iomem *tidptr,
 	qib_write_kreg(dd, kr_scratch, 0xfeeddeaf);
 	writel(pa, tidp32);
 	qib_write_kreg(dd, kr_scratch, 0xdeadbeef);
-	mmiowb();
 	spin_unlock_irqrestore(tidlockp, flags);
 }
 
@@ -1928,7 +1926,6 @@ static void qib_6120_put_tid_2(struct qib_devdata *dd, u64 __iomem *tidptr,
 			pa |= 2 << 29;
 	}
 	writel(pa, tidp32);
-	mmiowb();
 }
 
 
@@ -2053,9 +2050,7 @@ static void qib_update_6120_usrhead(struct qib_ctxtdata *rcd, u64 hd,
 {
 	if (updegr)
 		qib_write_ureg(rcd->dd, ur_rcvegrindexhead, egrhd, rcd->ctxt);
-	mmiowb();
 	qib_write_ureg(rcd->dd, ur_rcvhdrhead, hd, rcd->ctxt);
-	mmiowb();
 }
 
 static u32 qib_6120_hdrqempty(struct qib_ctxtdata *rcd)

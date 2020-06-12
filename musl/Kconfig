@@ -1,0 +1,20 @@
+menu "musl options"
+comment "musl options apply only when CONFIG_DEFAULTS_LIBC_MUSL=y"
+
+config LIB_MUSL_HAS_TZ_FILE
+	bool "Has TZ file"
+	help
+		Read a Posix timezone formatted string from a file if the TZ
+		environment variable is not set.
+		This overrides the use of /etc/localtime.
+
+config LIB_MUSL_TZ_FILE_PATH
+	string "TZ file path"
+	depends on LIB_MUSL_HAS_TZ_FILE
+	default "/etc/TZ"
+	help
+		The path to the file containing a Posix timezone formatted string,
+		used when the TZ environment variable is not set.
+		This overrides the use of /etc/localtime.
+
+endmenu

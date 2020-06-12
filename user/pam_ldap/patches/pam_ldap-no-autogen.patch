@@ -1,0 +1,18 @@
+--- pam_ldap/Makefile.in	2020-04-27 21:44:01.607839168 +1000
++++ pam_ldap/Makefile.in	2020-04-27 21:44:59.111515186 +1000
+@@ -190,6 +190,7 @@
+ 
+ .SUFFIXES:
+ .SUFFIXES: .c .o .obj
++ifdef NOTDEF
+ am--refresh:
+ 	@:
+ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
+@@ -237,6 +238,7 @@
+ 	cd $(top_srcdir) && $(AUTOHEADER)
+ 	rm -f stamp-h1
+ 	touch $@
++endif
+ 
+ distclean-hdr:
+ 	-rm -f config.h stamp-h1

@@ -215,8 +215,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1>;
 	uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio4 22 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
+	dtr-gpios = <&gpio4 22 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio4 21 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
@@ -224,8 +224,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2>;
 	uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio4 24 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio4 23 GPIO_ACTIVE_HIGH>;
+	dtr-gpios = <&gpio4 24 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio4 23 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
@@ -233,8 +233,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart3>;
 	uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio4 26 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio4 25 GPIO_ACTIVE_HIGH>;
+	dtr-gpios = <&gpio4 26 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio4 25 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
@@ -242,8 +242,8 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart4>;
 	uart-has-rtscts;
-	fsl,uart-has-dtr-gpio = <&gpio4 28 GPIO_ACTIVE_HIGH>;
-	fsl,uart-has-dcd-gpio = <&gpio4 27 GPIO_ACTIVE_HIGH>;
+	dtr-gpios = <&gpio4 28 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio4 27 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 

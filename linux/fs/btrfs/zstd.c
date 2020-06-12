@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/zstd.h>
+#include "misc.h"
 #include "compression.h"
 #include "ctree.h"
 
@@ -90,6 +91,8 @@ static inline struct workspace *list_to_workspace(struct list_head *list)
 	return container_of(list, struct workspace, list);
 }
 
+void zstd_free_workspace(struct list_head *ws);
+struct list_head *zstd_alloc_workspace(unsigned int level);
 /*
  * zstd_reclaim_timer_fn - reclaim timer
  * @t: timer
@@ -124,7 +127,7 @@ static void zstd_reclaim_timer_fn(struct timer_list *timer)
 		level = victim->level;
 		list_del(&victim->lru_list);
 		list_del(&victim->list);
-		wsm.ops->free_workspace(&victim->list);
+		zstd_free_workspace(&victim->list);
 
 		if (list_empty(&wsm.idle_ws[level - 1]))
 			clear_bit(level - 1, &wsm.active_map);
@@ -164,7 +167,7 @@ static void zstd_calc_ws_mem_sizes(void)
 	}
 }
 
-static void zstd_init_workspace_manager(void)
+void zstd_init_workspace_manager(void)
 {
 	struct list_head *ws;
 	int i;
@@ -180,7 +183,7 @@ static void zstd_init_workspace_manager(void)
 	for (i = 0; i < ZSTD_BTRFS_MAX_LEVEL; i++)
 		INIT_LIST_HEAD(&wsm.idle_ws[i]);
 
-	ws = wsm.ops->alloc_workspace(ZSTD_BTRFS_MAX_LEVEL);
+	ws = zstd_alloc_workspace(ZSTD_BTRFS_MAX_LEVEL);
 	if (IS_ERR(ws)) {
 		pr_warn(
 		"BTRFS: cannot preallocate zstd compression workspace\n");
@@ -190,7 +193,7 @@ static void zstd_init_workspace_manager(void)
 	}
 }
 
-static void zstd_cleanup_workspace_manager(void)
+void zstd_cleanup_workspace_manager(void)
 {
 	struct workspace *workspace;
 	int i;
@@ -202,7 +205,7 @@ static void zstd_cleanup_workspace_manager(void)
 						 struct workspace, list);
 			list_del(&workspace->list);
 			list_del(&workspace->lru_list);
-			wsm.ops->free_workspace(&workspace->list);
+			zstd_free_workspace(&workspace->list);
 		}
 	}
 	spin_unlock_bh(&wsm.lock);
@@ -257,7 +260,7 @@ static struct list_head *zstd_find_workspace(unsigned int level)
  * attempt to allocate a new workspace.  If we fail to allocate one due to
  * memory pressure, go to sleep waiting for the max level workspace to free up.
  */
-static struct list_head *zstd_get_workspace(unsigned int level)
+struct list_head *zstd_get_workspace(unsigned int level)
 {
 	struct list_head *ws;
 	unsigned int nofs_flag;
@@ -272,7 +275,7 @@ again:
 		return ws;
 
 	nofs_flag = memalloc_nofs_save();
-	ws = wsm.ops->alloc_workspace(level);
+	ws = zstd_alloc_workspace(level);
 	memalloc_nofs_restore(nofs_flag);
 
 	if (IS_ERR(ws)) {
@@ -298,7 +301,7 @@ again:
  * isn't set, it is also set here.  Only the max level workspace tries and wakes
  * up waiting workspaces.
  */
-static void zstd_put_workspace(struct list_head *ws)
+void zstd_put_workspace(struct list_head *ws)
 {
 	struct workspace *workspace = list_to_workspace(ws);
 
@@ -328,7 +331,7 @@ static void zstd_put_workspace(struct list_head *ws)
 		cond_wake_up(&wsm.wait);
 }
 
-static void zstd_free_workspace(struct list_head *ws)
+void zstd_free_workspace(struct list_head *ws)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 
@@ -337,7 +340,7 @@ static void zstd_free_workspace(struct list_head *ws)
 	kfree(workspace);
 }
 
-static struct list_head *zstd_alloc_workspace(unsigned int level)
+struct list_head *zstd_alloc_workspace(unsigned int level)
 {
 	struct workspace *workspace;
 
@@ -363,13 +366,9 @@ fail:
 	return ERR_PTR(-ENOMEM);
 }
 
-static int zstd_compress_pages(struct list_head *ws,
-		struct address_space *mapping,
-		u64 start,
-		struct page **pages,
-		unsigned long *out_pages,
-		unsigned long *total_in,
-		unsigned long *total_out)
+int zstd_compress_pages(struct list_head *ws, struct address_space *mapping,
+		u64 start, struct page **pages, unsigned long *out_pages,
+		unsigned long *total_in, unsigned long *total_out)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	ZSTD_CStream *stream;
@@ -544,7 +543,7 @@ out:
 	return ret;
 }
 
-static int zstd_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
+int zstd_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	struct page **pages_in = cb->compressed_pages;
@@ -622,10 +621,9 @@ done:
 	return ret;
 }
 
-static int zstd_decompress(struct list_head *ws, unsigned char *data_in,
-		struct page *dest_page,
-		unsigned long start_byte,
-		size_t srclen, size_t destlen)
+int zstd_decompress(struct list_head *ws, unsigned char *data_in,
+		struct page *dest_page, unsigned long start_byte, size_t srclen,
+		size_t destlen)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	ZSTD_DStream *stream;
@@ -707,23 +705,9 @@ finish:
 	return ret;
 }
 
-static unsigned int zstd_set_level(unsigned int level)
-{
-	if (!level)
-		return ZSTD_BTRFS_DEFAULT_LEVEL;
-
-	return min_t(unsigned int, level, ZSTD_BTRFS_MAX_LEVEL);
-}
-
 const struct btrfs_compress_op btrfs_zstd_compress = {
-	.init_workspace_manager = zstd_init_workspace_manager,
-	.cleanup_workspace_manager = zstd_cleanup_workspace_manager,
-	.get_workspace = zstd_get_workspace,
-	.put_workspace = zstd_put_workspace,
-	.alloc_workspace = zstd_alloc_workspace,
-	.free_workspace = zstd_free_workspace,
-	.compress_pages = zstd_compress_pages,
-	.decompress_bio = zstd_decompress_bio,
-	.decompress = zstd_decompress,
-	.set_level = zstd_set_level,
+	/* ZSTD uses own workspace manager */
+	.workspace_manager = NULL,
+	.max_level	= ZSTD_BTRFS_MAX_LEVEL,
+	.default_level	= ZSTD_BTRFS_DEFAULT_LEVEL,
 };

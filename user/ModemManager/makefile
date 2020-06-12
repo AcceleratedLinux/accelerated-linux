@@ -2,7 +2,7 @@
 PKG        = ModemManager
 URL        = git://anongit.freedesktop.org/ModemManager/ModemManager
 METHOD     = git
-VERSION    = 5a25776807081fc83b89781de5fba8325862daca
+VERSION    = 98fa83a693c24002dc0087c4304ea1143b498d1f # master 2020-5-19
 #BUILDDIR  = ModemManager-1.2.0
 #URL       = http://cgit.freedesktop.org/ModemManager/ModemManager/snapshot/ModemManager-1.2.0.tar.gz
 CONFIGURE  = autogen.sh

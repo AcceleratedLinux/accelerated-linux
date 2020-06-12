@@ -1,12 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * Broadcom Starfighter2 private context
  *
  * Copyright (C) 2014, Broadcom Corporation
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #ifndef __BCM_SF2_H
@@ -22,6 +18,7 @@
 #include <linux/types.h>
 #include <linux/bitops.h>
 #include <linux/if_vlan.h>
+#include <linux/reset.h>
 
 #include <net/dsa.h>
 
@@ -67,6 +64,8 @@ struct bcm_sf2_priv {
 	void __iomem			*intrl2_1;
 	void __iomem			*fcb;
 	void __iomem			*acb;
+
+	struct reset_control		*rcdev;
 
 	/* Register offsets indirection tables */
 	u32 				type;

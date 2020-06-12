@@ -1,0 +1,3 @@
+0001-calling-pthread_exit-on-uClibc-caused-segmentation-f.patch
+0002-Force-symlink-creation-in-the-Makefile-to-prevent-in.patch
+0003-Don-t-use-march-native-as-that-break-cross-compilati.patch

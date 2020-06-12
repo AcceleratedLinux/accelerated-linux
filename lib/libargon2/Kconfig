@@ -1,0 +1,4 @@
+config LIB_LIBARGON2
+	bool "libargon2"
+	help
+	  Argon2 password-hashing tool

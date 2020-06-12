@@ -91,9 +91,49 @@ Currently Available
 * large block (up to pagesize) support
 * efficient new ordered mode in JBD2 and ext4 (avoid using buffer head to force
   the ordering)
+* Case-insensitive file name lookups
+* file-based encryption support (fscrypt)
+* file-based verity support (fsverity)
 
 [1] Filesystems with a block size of 1k may see a limit imposed by the
 directory hash tree having a maximum depth of two.
+
+case-insensitive file name lookups
+======================================================
+
+The case-insensitive file name lookup feature is supported on a
+per-directory basis, allowing the user to mix case-insensitive and
+case-sensitive directories in the same filesystem.  It is enabled by
+flipping the +F inode attribute of an empty directory.  The
+case-insensitive string match operation is only defined when we know how
+text in encoded in a byte sequence.  For that reason, in order to enable
+case-insensitive directories, the filesystem must have the
+casefold feature, which stores the filesystem-wide encoding
+model used.  By default, the charset adopted is the latest version of
+Unicode (12.1.0, by the time of this writing), encoded in the UTF-8
+form.  The comparison algorithm is implemented by normalizing the
+strings to the Canonical decomposition form, as defined by Unicode,
+followed by a byte per byte comparison.
+
+The case-awareness is name-preserving on the disk, meaning that the file
+name provided by userspace is a byte-per-byte match to what is actually
+written in the disk.  The Unicode normalization format used by the
+kernel is thus an internal representation, and not exposed to the
+userspace nor to the disk, with the important exception of disk hashes,
+used on large case-insensitive directories with DX feature.  On DX
+directories, the hash must be calculated using the casefolded version of
+the filename, meaning that the normalization format used actually has an
+impact on where the directory entry is stored.
+
+When we change from viewing filenames as opaque byte sequences to seeing
+them as encoded strings we need to address what happens when a program
+tries to create a file with an invalid name.  The Unicode subsystem
+within the kernel leaves the decision of what to do in this case to the
+filesystem, which select its preferred behavior by enabling/disabling
+the strict mode.  When Ext4 encounters one of those strings and the
+filesystem did not require strict mode, it falls back to considering the
+entire string as an opaque byte sequence, which still allows the user to
+operate on that file, but the case-insensitive lookups won't work.
 
 Options
 =======
@@ -143,14 +183,17 @@ When mounting an ext4 filesystem, the following option are accepted:
         system after its metadata has been committed to the journal.
 
   commit=nrsec	(*)
-        Ext4 can be told to sync all its data and metadata every 'nrsec'
-        seconds. The default value is 5 seconds.  This means that if you lose
-        your power, you will lose as much as the latest 5 seconds of work (your
-        filesystem will not be damaged though, thanks to the journaling).  This
-        default value (or any low value) will hurt performance, but it's good
-        for data-safety.  Setting it to 0 will have the same effect as leaving
-        it at the default (5 seconds).  Setting it to very large values will
-        improve performance.
+        This setting limits the maximum age of the running transaction to
+        'nrsec' seconds.  The default value is 5 seconds.  This means that if
+        you lose your power, you will lose as much as the latest 5 seconds of
+        metadata changes (your filesystem will not be damaged though, thanks
+        to the journaling). This default value (or any low value) will hurt
+        performance, but it's good for data-safety.  Setting it to 0 will have
+        the same effect as leaving it at the default (5 seconds).  Setting it
+        to very large values will improve performance.  Note that due to
+        delayed allocation even older data can be lost on power failure since
+        writeback of those data begins only after time set in
+        /proc/sys/vm/dirty_expire_centisecs.
 
   barrier=<0|1(*)>, barrier(*), nobarrier
         This enables/disables the use of write barriers in the jbd code.

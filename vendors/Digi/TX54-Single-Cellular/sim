@@ -1,0 +1,69 @@
+#!/bin/sh
+#
+# TX54 SIM switching utility for single cellular with WWAN interface name
+# SIM slot control is over AT commands for both EM7511 modems.
+# No need to reset the modem after changing active slot -- ModemManager will
+# detect it from AT#QSS unsolicited messages.
+
+# If named simX, change modem WWANX SIM slot
+idx="$(runt find mm.modem modem.port "modem/wwan")"
+idx="${idx##mm.modem.}"
+
+sim_file="/etc/config/sim.conf"
+
+WWAN_POWER_GPIO="/sys/class/gpio/gpio414/value"
+
+case "$1" in
+-n)
+	echo 2
+	;;
+-p)
+	state=`cat $WWAN_POWER_GPIO`
+	echo "Current state: $state"
+	;;
+-o)
+	echo 1 > $WWAN_POWER_GPIO
+	;;
+-O)
+	echo 0 > $WWAN_POWER_GPIO
+	;;
+-m)
+	# Built-in modem module is always present
+	echo "Cell module detected: yes"
+	exit 0
+	;;
+1|2)
+	[ -z "$idx" ] && exit 1
+	/bin/modem idx=$idx softsim $1
+	echo "$1" > "$sim_file"
+	;;
+'')
+	[ -z "$idx" ] && exit 1
+	current=`/bin/modem idx=$idx softsim`
+	expected="$(cat "$sim_file" 2>/dev/null)"
+
+	# The modem always boots with slot 1 active, so it may be out of sync
+	# with the .conf when we read it. So re-set it if required.
+	if [ "$expected" != "current" ]; then
+		echo "$current"
+		/bin/modem idx=$idx softsim $expected
+	else
+		echo "$expected"
+	fi
+	;;
+*)
+	echo "usage: $(basename $0) [none|1|2|-dDnoOp]
+Get, set and control WWAN SIM selection (MM idx $idx)
+
+	-h	help	- this help
+	-n	number	- print number of SIM slots
+	-o	on	- turn on power to the cell module
+	-O	off	- turn off power to the cell module
+	-m	module detect	- detect cell module
+	-p	power	- report the modem's current power state"
+	[ "$1" = -h ] && exit 0 || exit 1
+	;;
+esac
+
+exit 0
+

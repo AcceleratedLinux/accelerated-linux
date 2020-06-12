@@ -145,7 +145,7 @@
 #endif
 #define NETFLASH_KILL_LIST_FILE "/etc/netflash_kill_list.txt"
 
-#ifdef CONFIG_USER_BUSYBOX_WATCHDOGD
+#ifdef CONFIG_USER_BUSYBOX_WATCHDOG
 #define CONFIG_USER_NETFLASH_WATCHDOG 1
 #endif
 
@@ -423,7 +423,7 @@ static int filefetch(char *filename)
 	else if (strcmp(filename, "-") == 0)
 		fd = STDIN_FILENO;
 #ifndef CONFIG_USER_NETFLASH_CRYPTO /* Need to decrypt in place */
-	else if (!dothrow && fb_init_file(filename) == 0) {
+	else if (fb_init_file(filename) == 0) {
 		/*
 		 * We're not loading the file into ram.
 		 * The checksum is normally calculated while loading,
@@ -1702,6 +1702,9 @@ int netflashmain(int argc, char *argv[])
 		sleep(1);
 	}
 	if (doreboot) {
+#ifdef CONFIG_USER_NETFLASH_WATCHDOG
+		killprocname("watchdog", SIGKILL);
+#endif
 		if (!doflashingrootfs)
 			umount_all();
 		sync();

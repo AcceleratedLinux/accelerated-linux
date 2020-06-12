@@ -1,22 +1,7 @@
-/*
- * da9210-regulator.c - Regulator device driver for DA9210
- * Copyright (C) 2013  Dialog Semiconductor Ltd.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Library General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Library General Public License for more details.
- *
- * You should have received a copy of the GNU Library General Public
- * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
- * Boston, MA  02110-1301, USA.
- */
+// SPDX-License-Identifier: GPL-2.0+
+//
+// da9210-regulator.c - Regulator device driver for DA9210
+// Copyright (C) 2013  Dialog Semiconductor Ltd.
 
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -146,8 +131,7 @@ static const struct of_device_id da9210_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, da9210_dt_ids);
 
-static int da9210_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+static int da9210_i2c_probe(struct i2c_client *i2c)
 {
 	struct da9210 *chip;
 	struct device *dev = &i2c->dev;
@@ -243,7 +227,7 @@ static struct i2c_driver da9210_regulator_driver = {
 		.name = "da9210",
 		.of_match_table = of_match_ptr(da9210_dt_ids),
 	},
-	.probe = da9210_i2c_probe,
+	.probe_new = da9210_i2c_probe,
 	.id_table = da9210_i2c_id,
 };
 

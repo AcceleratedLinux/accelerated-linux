@@ -20,8 +20,8 @@ watchdog /dev/watchdog
 # make sure we dont see all errors
 echo 6 > /proc/sys/kernel/printk
 
-# init devices before we need any
-cp -ra /lib/udev/devices/. /dev
+# initialise devices before we need them
+/etc/rc.dev
 
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
@@ -44,7 +44,7 @@ echo high > /sys/class/gpio/gpio59/direction
 echo 47 > /sys/class/gpio/export
 echo high > /sys/class/gpio/gpio47/direction
 
-echo "Initializing WiFi interface control..."
+echo "Initializing Wi-Fi interface control..."
 # GPIO49 = WiFi W_disable (output, disable low)
 echo 49 > /sys/class/gpio/export
 echo high > /sys/class/gpio/gpio49/direction
@@ -52,14 +52,12 @@ echo high > /sys/class/gpio/gpio49/direction
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	#load wifi module for testing
 	modprobe ath9k
-	modprobe ath10k_pci
 	/etc/factory
 	exit 0
 fi
 if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	#load wifi module for testing
 	modprobe ath9k
-	modprobe ath10k_pci
 	# Use the same setup as for factory testing
 	/etc/factory
 	exit 0
@@ -83,8 +81,8 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
-	[ -f /etc/config/.init2 ] && filter='$'
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
 		egrep -v "/etc/config$filter" |
@@ -95,6 +93,12 @@ else
 	rm -f /etc/config/.init2
 fi
 cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
 
 # handle /opt,  contains modem firmware and maybe other goodies
 if grep -q '"opt"' /proc/mtd
@@ -118,7 +122,11 @@ fi
 
 #load wifi module before we come up
 modprobe ath9k
-modprobe ath10k_pci
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
 
 # do the rc script processing
 actiond &

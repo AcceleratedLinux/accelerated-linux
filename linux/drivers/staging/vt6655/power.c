@@ -48,11 +48,8 @@
  *
  */
 
-void
-PSvEnablePowerSaving(
-	struct vnt_private *priv,
-	unsigned short wListenInterval
-)
+void PSvEnablePowerSaving(struct vnt_private *priv,
+			  unsigned short wListenInterval)
 {
 	u16 wAID = priv->current_aid | BIT(14) | BIT(15);
 
@@ -100,10 +97,7 @@ PSvEnablePowerSaving(
  *
  */
 
-void
-PSvDisablePowerSaving(
-	struct vnt_private *priv
-)
+void PSvDisablePowerSaving(struct vnt_private *priv)
 {
 	/* disable power saving hw function */
 	MACbPSWakeup(priv);
@@ -129,10 +123,7 @@ PSvDisablePowerSaving(
  *
  */
 
-bool
-PSbIsNextTBTTWakeUp(
-	struct vnt_private *priv
-)
+bool PSbIsNextTBTTWakeUp(struct vnt_private *priv)
 {
 	struct ieee80211_hw *hw = priv->hw;
 	struct ieee80211_conf *conf = &hw->conf;

@@ -1,0 +1,11 @@
+--- keepalive-2.0.20/configure.ac	2020-05-11 20:29:14.615108302 +0100
++++ keepalive-2.0.20/configure.ac	2020-05-11 20:29:36.999100192 +0100
+@@ -930,8 +930,6 @@
+ 
+ # Checks for library functions.
+ AC_FUNC_FORK
+-AC_FUNC_MALLOC
+-AC_FUNC_REALLOC
+ AC_CHECK_FUNCS([dup2 getcwd gettimeofday memmove memset select setenv socket strcasecmp strchr strdup strerror strpbrk strstr strtol strtoul uname])
+ dnl - pipe2() since Linux 2.6.27 and glibc 2.9.
+ AC_CHECK_FUNCS([pipe2], [add_system_opt([PIPE2])])

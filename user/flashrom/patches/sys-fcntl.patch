@@ -1,0 +1,11 @@
+--- flashrom-0.9.8/linux_spi.c.org	2020-01-24 17:29:56.287735685 +1000
++++ flashrom-0.9.8/linux_spi.c	2020-01-24 17:30:08.623738606 +1000
+@@ -22,7 +22,7 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <stdlib.h>
+-#include <sys/fcntl.h>
++#include <fcntl.h>
+ #include <errno.h>
+ #include <ctype.h>
+ #include <unistd.h>

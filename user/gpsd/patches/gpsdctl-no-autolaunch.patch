@@ -1,0 +1,21 @@
+diff --git a/gpsdctl.c b/gpsdctl.c
+index 91352e1..f12df29 100644
+--- a/gpsdctl.c
++++ b/gpsdctl.c
+@@ -34,6 +34,8 @@ static int gpsd_control(char *action, char *argument)
+ 	    (connect = netlib_localsocket(control_socket, SOCK_STREAM)) >= 0)
+ 	syslog(LOG_INFO, "reached a running gpsd");
+     else if (strcmp(action, "add") == 0) {
++/* Don't auto-launch gpsd, the system will handle this */
++#if 0
+ 	(void)snprintf(buf, sizeof(buf),
+ 		       "gpsd %s -F %s", gpsd_options, control_socket);
+ 	(void)syslog(LOG_NOTICE, "launching %s", buf);
+@@ -41,6 +43,7 @@ static int gpsd_control(char *action, char *argument)
+ 	    (void)syslog(LOG_ERR, "launch of gpsd failed");
+ 	    return -1;
+ 	}
++#endif
+ 	if (access(control_socket, F_OK) == 0)
+ 	    connect = netlib_localsocket(control_socket, SOCK_STREAM);
+     }

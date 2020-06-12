@@ -2,8 +2,8 @@
 /*
  * Performance event support for s390x - CPU-measurement Counter Facility
  *
- *  Copyright IBM Corp. 2012, 2017
- *  Author(s): Hendrik Brueckner <brueckner@linux.vnet.ibm.com>
+ *  Copyright IBM Corp. 2012, 2019
+ *  Author(s): Hendrik Brueckner <brueckner@linux.ibm.com>
  */
 #define KMSG_COMPONENT	"cpum_cf"
 #define pr_fmt(fmt)	KMSG_COMPONENT ": " fmt
@@ -26,7 +26,7 @@ static enum cpumf_ctr_set get_counter_set(u64 event)
 		set = CPUMF_CTR_SET_USER;
 	else if (event < 128)
 		set = CPUMF_CTR_SET_CRYPTO;
-	else if (event < 256)
+	else if (event < 288)
 		set = CPUMF_CTR_SET_EXT;
 	else if (event >= 448 && event < 496)
 		set = CPUMF_CTR_SET_MT_DIAG;
@@ -50,12 +50,19 @@ static int validate_ctr_version(const struct hw_perf_event *hwc)
 			err = -EOPNOTSUPP;
 		break;
 	case CPUMF_CTR_SET_CRYPTO:
+		if ((cpuhw->info.csvn >= 1 && cpuhw->info.csvn <= 5 &&
+		     hwc->config > 79) ||
+		    (cpuhw->info.csvn >= 6 && hwc->config > 83))
+			err = -EOPNOTSUPP;
+		break;
 	case CPUMF_CTR_SET_EXT:
 		if (cpuhw->info.csvn < 1)
 			err = -EOPNOTSUPP;
 		if ((cpuhw->info.csvn == 1 && hwc->config > 159) ||
 		    (cpuhw->info.csvn == 2 && hwc->config > 175) ||
-		    (cpuhw->info.csvn  > 2 && hwc->config > 255))
+		    (cpuhw->info.csvn >= 3 && cpuhw->info.csvn <= 5
+		     && hwc->config > 255) ||
+		    (cpuhw->info.csvn >= 6 && hwc->config > 287))
 			err = -EOPNOTSUPP;
 		break;
 	case CPUMF_CTR_SET_MT_DIAG:
@@ -192,7 +199,7 @@ static const int cpumf_generic_events_user[] = {
 	[PERF_COUNT_HW_BUS_CYCLES]	    = -1,
 };
 
-static int __hw_perf_event_init(struct perf_event *event)
+static int __hw_perf_event_init(struct perf_event *event, unsigned int type)
 {
 	struct perf_event_attr *attr = &event->attr;
 	struct hw_perf_event *hwc = &event->hw;
@@ -200,7 +207,7 @@ static int __hw_perf_event_init(struct perf_event *event)
 	int err = 0;
 	u64 ev;
 
-	switch (attr->type) {
+	switch (type) {
 	case PERF_TYPE_RAW:
 		/* Raw events are used to access counters directly,
 		 * hence do not permit excludes */
@@ -287,17 +294,16 @@ static int __hw_perf_event_init(struct perf_event *event)
 
 static int cpumf_pmu_event_init(struct perf_event *event)
 {
+	unsigned int type = event->attr.type;
 	int err;
 
-	switch (event->attr.type) {
-	case PERF_TYPE_HARDWARE:
-	case PERF_TYPE_HW_CACHE:
-	case PERF_TYPE_RAW:
-		err = __hw_perf_event_init(event);
-		break;
-	default:
+	if (type == PERF_TYPE_HARDWARE || type == PERF_TYPE_RAW)
+		err = __hw_perf_event_init(event, type);
+	else if (event->pmu->type == type)
+		/* Registered as unknown PMU */
+		err = __hw_perf_event_init(event, PERF_TYPE_RAW);
+	else
 		return -ENOENT;
-	}
 
 	if (unlikely(err) && event->destroy)
 		event->destroy(event);
@@ -546,7 +552,7 @@ static int __init cpumf_pmu_init(void)
 		return -ENODEV;
 
 	cpumf_pmu.attr_groups = cpumf_cf_event_group();
-	rc = perf_pmu_register(&cpumf_pmu, "cpum_cf", PERF_TYPE_RAW);
+	rc = perf_pmu_register(&cpumf_pmu, "cpum_cf", -1);
 	if (rc)
 		pr_err("Registering the cpum_cf PMU failed with rc=%i\n", rc);
 	return rc;

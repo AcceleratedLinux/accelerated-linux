@@ -1,28 +1,15 @@
+URL = https://web.mit.edu/kerberos/dist/krb5/1.17/krb5-1.17.tar.gz
 
-CONF_OPTS = --prefix= --disable-thread-support
+BUILDDIR = krb5-1.17/src
+PATCH_LEVEL = -p2
+
+CONFOPTS += --disable-thread-support
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
-CONF_OPTS += --sysconfdir=/etc/config
+CONFOPTS += --sysconfdir=/etc/config
 endif
 
-all: build
-	$(MAKE) -C build
+CONFVARS += ac_cv_printf_positional=yes
+CONFVARS += ac_cv_func_regcomp=yes
+CONFVARS += krb5_cv_attr_constructor_destructor=yes,yes
 
-build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONF_OPTS))
-
-romfs:
-	$(ROMFSINST) build/lib/libkrb5.so.3 /lib/
-	$(ROMFSINST) build/lib/libk5crypto.so.3 /lib/
-	$(ROMFSINST) build/lib/libkrb5support.so.0 /lib/
-	$(ROMFSINST) build/lib/libgssapi_krb5.so.2 /lib/
-	$(ROMFSINST) build/lib/libcom_err.so /lib/
-	$(ROMFSINST) build/lib/libcom_err.so.3 /lib/
-	$(ROMFSINST) build/lib/libcom_err.so.3.0 /lib/
-	$(ROMFSINST) build/clients/kinit/kinit /bin/
-	$(ROMFSINST) build/clients/klist/klist /bin/
-	$(ROMFSINST) build/clients/kdestroy/kdestroy /bin/	
-clean:
-	rm -rf build
-
+include $(ROOTDIR)/tools/automake.inc

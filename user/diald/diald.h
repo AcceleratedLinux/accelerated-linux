@@ -24,8 +24,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <sys/termios.h>
-#include <sys/bitypes.h>
+#include <termios.h>
 #include <net/if.h>
 #include <netdb.h>
 
@@ -39,14 +38,14 @@
 
 #include <arpa/inet.h>
 #include <netinet/if_ether.h>
-#include <net/if_slip.h>
+#include <linux/if_slip.h>
 
 #include <linux/version.h>
 #include <config/autoconf.h>
 /* This only exists in kernels >= 1.3.75 */
 #if LINUX_VERSION_CODE >= 66379
 #define HAS_SOCKADDR_PKT
-#include <net/if_packet.h>
+#include <linux/if_packet.h>
 #define SOCKADDR sockaddr_pkt
 #else
 #include <sys/socket.h>

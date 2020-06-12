@@ -28,6 +28,11 @@
 char *pname;
 int nop = 0;
 
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+#define RSA_get0_e(r) ((r)->e)
+#define RSA_get0_n(r) ((r)->n)
+#endif
+
 /*
  * Different boot loaders require different command sequences to read
  * and write the key. So we need separate methods for each type.
@@ -151,17 +156,17 @@ int main(int argc, char *argv[]) {
 	rsa = PEM_read_bio_RSA_PUBKEY(in, NULL, NULL, NULL);
 	if (rsa == NULL)
 		error("cannot read public key");
-	if (rsa->e->neg || rsa->n->neg)
+	if (BN_is_negative(RSA_get0_e(rsa)) || BN_is_negative(RSA_get0_n(rsa)))
 		error("cannot deal with negative numbers");
 
-	se = BN_bn2mpi(rsa->e, NULL);
-	sn = BN_bn2mpi(rsa->n, NULL);
+	se = BN_bn2mpi(RSA_get0_e(rsa), NULL);
+	sn = BN_bn2mpi(RSA_get0_n(rsa), NULL);
 	tbuf = malloc(se>sn?se:sn);
 	cbuf = malloc((se+sn) * 4 + 1);
 	if (tbuf == NULL || cbuf == NULL)
 		error("unable to allocate temporary memory");
 
-	copy(rsa->n, copy(rsa->e, cbuf, tbuf), tbuf)[-1] = '\0';
+	copy(RSA_get0_n(rsa), copy(RSA_get0_e(rsa), cbuf, tbuf), tbuf)[-1] = '\0';
 	free(tbuf);
 
 	return flashkey(cbuf);

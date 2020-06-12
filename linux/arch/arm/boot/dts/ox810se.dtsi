@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * ox810se.dtsi - Device tree file for Oxford Semiconductor OX810SE SoC
  *
  * Copyright (C) 2016 Neil Armstrong <narmstrong@baylibre.com>
- *
- * Licensed under GPLv2 or later
  */
 
 #include <dt-bindings/clock/oxsemi,ox810se.h>
@@ -324,8 +323,8 @@
 					interrupt-controller;
 					reg = <0 0x200>;
 					#interrupt-cells = <1>;
-					valid-mask = <0xFFFFFFFF>;
-					clear-mask = <0>;
+					valid-mask = <0xffffffff>;
+					clear-mask = <0xffffffff>;
 				};
 
 				timer0: timer@200 {

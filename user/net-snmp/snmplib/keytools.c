@@ -104,7 +104,11 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
     u_char          buf[USM_LENGTH_KU_HASHBLOCK], *bufp;
 
 #ifdef NETSNMP_USE_OPENSSL
-    EVP_MD_CTX     *ctx = (EVP_MD_CTX *)malloc(sizeof(EVP_MD_CTX));
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+    EVP_MD_CTX     *ctx = EVP_MD_CTX_create();
+#else
+    EVP_MD_CTX     *ctx = EVP_MD_CTX_new();
+#endif
     unsigned int    tmp_len;
 #else
     MDstruct        MD;
@@ -192,7 +196,11 @@ generate_Ku(const oid * hashtype, u_int hashtype_len,
   generate_Ku_quit:
     memset(buf, 0, sizeof(buf));
 #ifdef NETSNMP_USE_OPENSSL
-    free(ctx);
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+    EVP_MD_CTX_destroy(ctx);
+#else
+    EVP_MD_CTX_free(ctx);
+#endif
 #endif
     return rval;
 

@@ -783,7 +783,13 @@ pfkey_create(struct socket *sock, int protocol)
 	sk->sk_protocol = protocol;
 	key_pid(sk) = CURRENT_UID();
 
-#ifdef HAVE_SOCKET_WQ
+#if defined(HAVE_SOCKET_WQ_STRUCT)
+	KLIPS_PRINT(debug_pfkey,
+		    "klips_debug:pfkey_create: "
+		    "sock->wq.fasync_list=0p%p sk_sleep(sk)=0p%p.\n",
+		    sock->wq.fasync_list,
+		    sk_sleep(sk));
+#elif defined(HAVE_SOCKET_WQ_PTR)
 	KLIPS_PRINT(debug_pfkey,
 		    "klips_debug:pfkey_create: "
 		    "sock->wq->fasync_list=0p%p sk_sleep(sk)=0p%p.\n",
@@ -1209,14 +1215,16 @@ pfkey_show(struct seq_file *seq, void *offset)
 					sk->sk_socket->type,
 					sk->sk_socket->state);
 		} else {
-			struct timeval t;
-			grab_socket_timeval(t, *sk);
+			unsigned int tv_sec, tv_usec;
+			grab_socket_timeval(tv_sec, tv_usec, *sk);
 			seq_printf(seq,
 					"%8p %5d %d %8p %8p %d %d %d %d %5d %d.%06d %08lX %8X %2X\n",
 					sk,
 					key_pid(sk),
 					sock_flag(sk, SOCK_DEAD),
-#ifdef HAVE_SOCKET_WQ
+#if defined(HAVE_SOCKET_WQ_STRUCT)
+					&sk->sk_wq,
+#elif defined(HAVE_SOCKET_WQ_PTR)
 					sk->sk_wq,
 #else
 					sk->sk_sleep,
@@ -1231,8 +1239,8 @@ pfkey_show(struct seq_file *seq, void *offset)
 #endif
 					sk->sk_protocol,
 					sk->sk_sndbuf,
-					(unsigned int)t.tv_sec,
-					(unsigned int)t.tv_usec,
+					tv_sec,
+					tv_usec,
 					sk->sk_socket->flags,
 					sk->sk_socket->type,
 					sk->sk_socket->state);

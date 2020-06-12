@@ -22,7 +22,6 @@ dbc_dma_alloc_coherent(struct xhci_hcd *xhci, size_t size,
 
 	vaddr = dma_alloc_coherent(xhci_to_hcd(xhci)->self.sysdev,
 				   size, dma_handle, flags);
-	memset(vaddr, 0, size);
 	return vaddr;
 }
 
@@ -420,8 +419,6 @@ static int xhci_dbc_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	/* Setup strings and contexts: */
 	string_length = xhci_dbc_populate_strings(dbc->string);
 	xhci_dbc_init_contexts(xhci, string_length);
-
-	mmiowb();
 
 	xhci_dbc_eps_init(xhci);
 	dbc->state = DS_INITIALIZED;

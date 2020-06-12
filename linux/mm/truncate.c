@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * mm/truncate.c - code for taking down pages from address_spaces
  *
@@ -591,6 +592,16 @@ unsigned long invalidate_mapping_pages(struct address_space *mapping,
 					unlock_page(page);
 					continue;
 				}
+
+				/* Take a pin outside pagevec */
+				get_page(page);
+
+				/*
+				 * Drop extra pins before trying to invalidate
+				 * the huge page.
+				 */
+				pagevec_remove_exceptionals(&pvec);
+				pagevec_release(&pvec);
 			}
 
 			ret = invalidate_inode_page(page);
@@ -601,6 +612,8 @@ unsigned long invalidate_mapping_pages(struct address_space *mapping,
 			 */
 			if (!ret)
 				deactivate_file_page(page);
+			if (PageTransHuge(page))
+				put_page(page);
 			count += ret;
 		}
 		pagevec_remove_exceptionals(&pvec);

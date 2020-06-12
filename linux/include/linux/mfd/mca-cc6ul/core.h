@@ -12,6 +12,7 @@
 
 #include <linux/interrupt.h>
 #include <linux/mfd/mca-cc6ul/registers.h>
+#include <linux/syscore_ops.h>
 
 /* MCA CC6UL modules */
 #define MCA_CC6UL_DRVNAME_CORE		"mca-cc6ul-core"
@@ -86,7 +87,6 @@ struct mca_cc6ul {
 	u32 flags;
 	struct regmap *regmap;
 	struct regmap_irq_chip_data *regmap_irq;
-	struct notifier_block restart_handler;
 	int chip_irq;
 	u32 irq_base;
 	int gpio_base;
@@ -95,6 +95,7 @@ struct mca_cc6ul {
 	u32 last_mca_reset;
 	u32 last_mpu_reset;
 	struct bin_attribute *nvram;
+	struct syscore_ops syscore;
 };
 
 int mca_cc6ul_device_init(struct mca_cc6ul *mca, u32 irq);

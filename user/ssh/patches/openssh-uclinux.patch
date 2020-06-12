@@ -1,8 +1,8 @@
 diff -ur openssh-6.6p1/clientloop.c openssh-6.6p1/clientloop.c
 --- openssh-6.6p1/clientloop.c	2011-01-16 22:18:35.000000000 +1000
 +++ openssh-6.6p1/clientloop.c	2014-05-23 17:00:39.673183196 +1000
-@@ -1059,14 +1059,22 @@
- 				buffer_append(berr, string, strlen(string));
+@@ -1101,14 +1101,22 @@
+ 					    __func__, ssh_err(r));
  
  				/* Fork into background. */
 +#ifdef __uClinux__
@@ -10,7 +10,7 @@ diff -ur openssh-6.6p1/clientloop.c openssh-6.6p1/clientloop.c
 +#else
  				pid = fork();
 +#endif
- 				if (pid < 0) {
+ 				if (pid == -1) {
  					error("fork: %.100s", strerror(errno));
  					continue;
  				}
@@ -23,7 +23,7 @@ diff -ur openssh-6.6p1/clientloop.c openssh-6.6p1/clientloop.c
 +#endif
  				}
  				/* The child continues serving connections. */
- 				if (compat20) {
+ 				/* fake EOF on stdin */
 diff -ur openssh-6.6p1/config.sub openssh-6.6p1/config.sub
 --- openssh-6.6p1/config.sub	2010-03-02 09:57:43.000000000 +1000
 +++ openssh-6.6p1/config.sub	2014-05-23 17:00:39.673183196 +1000
@@ -74,19 +74,19 @@ diff -ur openssh-6.6p1/readpass.c openssh-6.6p1/readpass.c
 @@ -66,7 +66,11 @@
  		return NULL;
  	}
- 	osigchld = signal(SIGCHLD, SIG_DFL);
+ 	osigchld = ssh_signal(SIGCHLD, SIG_DFL);
 +#ifdef __uClinux__
-+	if ((pid = vfork()) < 0) {
++	if ((pid = vfork()) == -1) {
 +#else
- 	if ((pid = fork()) < 0) {
+ 	if ((pid = fork()) == -1) {
 +#endif
- 		error("ssh_askpass: fork: %s", strerror(errno));
- 		signal(SIGCHLD, osigchld);
+ 		error("%s: fork: %s", __func__, strerror(errno));
+ 		ssh_signal(SIGCHLD, osigchld);
  		return NULL;
-@@ -78,6 +82,11 @@
- 			fatal("ssh_askpass: dup2: %s", strerror(errno));
- 		execlp(askpass, askpass, msg, (char *) 0);
- 		fatal("ssh_askpass: exec(%s): %s", askpass, strerror(errno));
+@@ -79,6 +83,11 @@
+ 			setenv("SSH_ASKPASS_PROMPT", env_hint, 1);
+ 		execlp(askpass, askpass, msg, (char *)NULL);
+ 		fatal("%s: exec(%s): %s", __func__, askpass, strerror(errno));
 +#ifdef __uClinux__
 +		_exit(0);
 +#else
@@ -187,23 +187,22 @@ diff -ur openssh-6.6p1/session.c openssh-6.6p1/session.c
  	case -1:
  		error("%s: fork: %.100s", __func__, strerror(errno));
  		close(fdout);
-@@ -690,18 +709,20 @@
+@@ -630,18 +630,19 @@
  		close(ptyfd);
  
  		/* Make the pseudo tty our controlling tty. */
 -		pty_make_controlling_tty(&ttyfd, s->tty);
-+		
 +		pty_make_controlling_tty(&tfd, s->tty);
  
  		/* Redirect stdin/stdout/stderr from the pseudo tty. */
--		if (dup2(ttyfd, 0) < 0)
-+		if (dup2(tfd, 0) < 0)
+-		if (dup2(ttyfd, 0) == -1)
++		if (dup2(tfd, 0) == -1)
  			error("dup2 stdin: %s", strerror(errno));
--		if (dup2(ttyfd, 1) < 0)
-+		if (dup2(tfd, 1) < 0)
+-		if (dup2(ttyfd, 1) == -1)
++		if (dup2(tfd, 1) == -1)
  			error("dup2 stdout: %s", strerror(errno));
--		if (dup2(ttyfd, 2) < 0)
-+		if (dup2(tfd, 2) < 0)
+-		if (dup2(ttyfd, 2) == -1)
++		if (dup2(tfd, 2) == -1)
  			error("dup2 stderr: %s", strerror(errno));
  
  		/* Close the extra descriptor for the pseudo tty. */
@@ -344,16 +343,16 @@ diff -ur openssh-6.6p1/session.c openssh-6.6p1/session.c
 diff -ur openssh-6.6p1/ssh.c openssh-6.6p1/ssh.c
 --- openssh-6.6p1/ssh.c	2011-02-04 10:42:15.000000000 +1000
 +++ openssh-6.6p1/ssh.c	2014-05-23 17:00:39.833432575 +1000
-@@ -975,7 +975,9 @@
+@@ -1690,7 +1690,9 @@
  		control_persist_detach();
  	debug("forking to background");
  	fork_after_authentication_flag = 0;
 +#ifndef __uClinux__
- 	if (daemon(1, 1) < 0)
+ 	if (daemon(1, 1) == -1)
 +#endif
  		fatal("daemon() failed: %.200s", strerror(errno));
  }
- 
+
 @@ -1947,8 +1972,10 @@
  			fork_postauth();
  	}
@@ -370,16 +369,16 @@ diff -ur openssh-6.6p1/ssh.c openssh-6.6p1/ssh.c
 diff -ur openssh-6.6p1/sshconnect2.c openssh-6.6p1/sshconnect2.c
 --- openssh-6.6p1/sshconnect2.c	2010-12-01 11:21:51.000000000 +1000
 +++ openssh-6.6p1/sshconnect2.c	2014-05-23 17:00:39.833432575 +1000
-@@ -1594,7 +1594,11 @@
- 		error("ssh_keysign: pipe: %s", strerror(errno));
+@@ -1939,7 +1939,11 @@
+ 		error("%s: pipe: %s", __func__, strerror(errno));
  		return -1;
  	}
 +#ifdef __uClinux__
-+	if ((pid = vfork()) < 0) {
++	if ((pid = vfork()) == -1) {
 +#else
- 	if ((pid = fork()) < 0) {
+ 	if ((pid = fork()) == -1) {
 +#endif
-		error("%s: fork: %s", __func__, strerror(errno));
+ 		error("%s: fork: %s", __func__, strerror(errno));
  		return -1;
  	}
 @@ -1613,6 +1617,11 @@
@@ -511,7 +510,7 @@ diff -ur openssh-6.6p1/sshd.c openssh-6.6p1/sshd.c
  	if (!(debug_flag || inetd_flag || no_daemon_flag || already_daemon)) {
  
 +#ifndef __uClinux__
- 		if (daemon(0, 0) < 0)
+ 		if (daemon(0, 0) == -1)
  			fatal("daemon() failed: %.200s", strerror(errno));
 +#else
 +		fatal("Cannot use daemon() under uClinux");

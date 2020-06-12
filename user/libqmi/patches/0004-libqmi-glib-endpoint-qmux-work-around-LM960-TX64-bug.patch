@@ -1,0 +1,31 @@
+From: Charles Gordon <Charles.Gordon@digi.com>
+Date: Wed, 6 Nov 2019 19:50:56 -0500
+Subject: libqmi-glib,endpoint-qmux: work around LM960/TX64 bug
+
+There is an incompatibility between the Telit LM960 modem
+and the ASMedia ASM-1024A USB controller.  The LM960 crashes
+when connected over USB3 to this controller due to a USB
+protocol error:  The LM960 delays in sending an LCRD_x frame
+to the USB controller for longer than the 1042A can wait.
+This change to libqmi is a workaround to this issue.  It
+adds a 2ms delay to one of the input callback routines
+in libqmi.
+
+The Telit LM960 and ASM-1024A combination is used on the
+TX64.
+---
+ src/libqmi-glib/qmi-endpoint-qmux.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/libqmi-glib/qmi-endpoint-qmux.c b/src/libqmi-glib/qmi-endpoint-qmux.c
+index 5709f85..65660b7 100644
+--- a/src/libqmi-glib/qmi-endpoint-qmux.c
++++ b/src/libqmi-glib/qmi-endpoint-qmux.c
+@@ -70,6 +70,7 @@ input_ready_cb (GInputStream *istream,
+     GError *error = NULL;
+     gssize r;
+ 
++    usleep(2000);
+     r = g_pollable_input_stream_read_nonblocking (G_POLLABLE_INPUT_STREAM (istream),
+                                                   buffer,
+                                                   BUFFER_SIZE,

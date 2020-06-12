@@ -39,14 +39,11 @@ ip link set eth1 name sfp2
 ip link set eth2 name eth1
 ip link set eth3 name eth2
 
-# init devices before we need any
-cp -ra /lib/udev/devices/. /dev
+# initialise devices before we need them
+/etc/rc.dev
 
-# test /dev/console and if not present make it /dev/null
-if ! (echo -n "" > /dev/console) 2> /dev/null; then
-	rm -f /dev/console
-	ln /dev/null /dev/console
-fi
+# instantiate ATECC508 device
+echo "atsha204-i2c 0x60" > /sys/bus/i2c/devices/i2c-1/new_device
 
 # the active main boot drive in /dev/sdX format
 DRIVE=$(stat -c "%t%02T %n" /dev/sd[a-z][0-9] | sed -n 's?'$(stat -c %D /)' \(/dev/sd.\).*?\1?p')
@@ -137,29 +134,37 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2)"
-	[ -f /etc/config/.init2 ] && filter='$'
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
 		egrep -v "/etc/config$filter" |
 		xargs rm -rf
 	cp -ra /etc/default/. /etc/config/.
 	echo "Factory default settings restored" > /etc/config/reboot_msg
-
-	# safe to clear factory flag now we are done
-	nexcom-tool -F 0
 else
 	rm -f /etc/config/.init2
 fi
+
+# safe to clear factory flag now we are done with factory default stuff
+nexcom-tool -F 0 > /dev/null
+
 cat /etc/inittab.d/* > /etc/inittab
 
-# speed up crypto
-echo "Enabling parrallel crypto ..."
-crconf add driver "pcrypt(authenc(hmac(sha1),cbc(aes)))" type 3 2> /dev/null
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
 
 # restore SIM slot selection, or otherwise just power
 SIM_SLOT="$(cat /etc/config/sim.conf 2>/dev/null)"
 [ "$SIM_SLOT" -a "$(sim)" != "$SIM_SLOT" ] && sim "$SIM_SLOT" || sim -o
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
 
 # do the rc script processing
 actiond &

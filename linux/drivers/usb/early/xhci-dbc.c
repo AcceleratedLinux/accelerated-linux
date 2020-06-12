@@ -533,8 +533,6 @@ static int xdbc_handle_external_reset(void)
 
 	xdbc_mem_init();
 
-	mmiowb();
-
 	ret = xdbc_start();
 	if (ret < 0)
 		goto reset_out;
@@ -586,8 +584,6 @@ static int __init xdbc_early_setup(void)
 		return ret;
 
 	xdbc_mem_init();
-
-	mmiowb();
 
 	ret = xdbc_start();
 	if (ret < 0) {
@@ -975,7 +971,7 @@ static int __init xdbc_init(void)
 		goto free_and_quit;
 	}
 
-	base = ioremap_nocache(xdbc.xhci_start, xdbc.xhci_length);
+	base = ioremap(xdbc.xhci_start, xdbc.xhci_length);
 	if (!base) {
 		xdbc_trace("failed to remap the io address\n");
 		ret = -ENOMEM;

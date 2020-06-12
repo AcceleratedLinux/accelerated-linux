@@ -43,6 +43,10 @@ romfs: romfs.first romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc ro
 	$(ROMFSINST) -s /etc/config/group /etc/group
 	$(ROMFSINST) -s /etc/config/udhcpd.conf /etc/udhcpd.conf
 
+romfs.post:: romfs.cleanup
+	rm -rf $(ROMFSDIR)/share
+	rm -rf $(ROMFSDIR)/usr/share/terminfo
+
 ./lzma: Makefile
 	make -C $(ROOTDIR)/user/lzma clean
 	make -C $(ROOTDIR)/user/lzma CC="$(HOSTCC)"

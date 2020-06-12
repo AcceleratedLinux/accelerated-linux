@@ -80,6 +80,10 @@ while :; do
 				echo "Skipping libstdc++ file $so"
 				echo "`basename $so`: plugin" >> $TMPF
 				;;
+			*libmm*)
+				echo "Skipping ModemManager plugin file $so"
+				echo "`basename $so`: plugin" >> $TMPF
+				;;
 			*plugin*)
 				echo "Skipping plugin file $so"
 				echo "`basename $so`: plugin" >> $TMPF
@@ -116,7 +120,7 @@ while :; do
 				echo "Skipping libnss file $so"
 				echo "`basename $so`: libnss" >> $TMPF
 				;;
-			*cpython*|*dist-packages*)
+			*cpython*|*dist-packages*|*site-packages*)
 				echo "Skipping python file $so"
 				echo "`basename $so`: python" >> $TMPF
 				;;
@@ -127,6 +131,10 @@ while :; do
 			*valgrind*)
 				echo "Skipping valgrind file $so"
 				echo "`basename $so`: valgrind" >> $TMPF
+				;;
+			*libhidapi*)
+				echo "Skipping HID file $so"
+				echo "`basename $so`: libhidapi" >> $TMPF
 				;;
 			*)
 				touch $TMPW

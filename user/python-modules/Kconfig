@@ -3,6 +3,7 @@ menu "python modules"
 
 config USER_PYTHON_MODULES_PIP
 	bool "pip"
+	select USER_PYTHON_MODULES_SETUPTOOLS
 	help
 		The PyPA recommended tool for installing Python packages.
 
@@ -47,15 +48,31 @@ config USER_PYTHON_MODULES_PTYPROCESS
 config USER_PYTHON_MODULES_DIGI_XBEE_LIB
 	bool "Digi XBee Python library"
 	select USER_PYTHON_MODULES_PYSERIAL
-	select USER_PYTHON_MODULES_SRP
 	help
 		Digi XBee Python library.
+
+config USER_PYTHON_MODULES_AWS_SDK
+	bool "AWS SDK Python library"
+	help
+		AWS SDK Python library.
 
 config USER_PYTHON_MODULES_SRP
 	bool "Secure Remote Password protocol (SRP)"
 	select USER_PYTHON_MODULES_SIX
 	help
 		Secure Remote Password protocol (SRP)
+
+config USER_PYTHON_MODULES_PAHO_MQTT
+	bool "paho-mqtt"
+	help
+		Eclipse Paho MQTT Python client library.
+
+config USER_PYTHON_MODULES_HID
+	bool "hid"
+	select USER_PYTHON_MODULES_SETUPTOOLS
+	select USER_HID_API
+	help
+		ctypes bindings for hidapi.
 
 endmenu
 endif

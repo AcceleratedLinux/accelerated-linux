@@ -3,6 +3,8 @@
 EXEC = kwbootflash
 OBJS = kwbootflash.o ecc_kw.o
 
+CFLAGS += -D_GNU_SOURCE
+
 all: $(EXEC)
 
 $(EXEC): $(OBJS)

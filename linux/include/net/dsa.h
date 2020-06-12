@@ -1,11 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * include/net/dsa.h - Driver for Distributed Switch Architecture switch chips
  * Copyright (c) 2008-2009 Marvell Semiconductor
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #ifndef __LINUX_NET_DSA_H
@@ -22,6 +18,7 @@
 #include <linux/net_tstamp.h>
 #include <linux/phy.h>
 #include <linux/platform_data/dsa.h>
+#include <linux/phylink.h>
 #include <net/devlink.h>
 #include <net/switchdev.h>
 
@@ -30,20 +27,42 @@ struct phy_device;
 struct fixed_phy_status;
 struct phylink_link_state;
 
+#define DSA_TAG_PROTO_NONE_VALUE		0
+#define DSA_TAG_PROTO_BRCM_VALUE		1
+#define DSA_TAG_PROTO_BRCM_PREPEND_VALUE	2
+#define DSA_TAG_PROTO_DSA_VALUE			3
+#define DSA_TAG_PROTO_EDSA_VALUE		4
+#define DSA_TAG_PROTO_GSWIP_VALUE		5
+#define DSA_TAG_PROTO_KSZ9477_VALUE		6
+#define DSA_TAG_PROTO_KSZ9893_VALUE		7
+#define DSA_TAG_PROTO_LAN9303_VALUE		8
+#define DSA_TAG_PROTO_MTK_VALUE			9
+#define DSA_TAG_PROTO_QCA_VALUE			10
+#define DSA_TAG_PROTO_TRAILER_VALUE		11
+#define DSA_TAG_PROTO_8021Q_VALUE		12
+#define DSA_TAG_PROTO_SJA1105_VALUE		13
+#define DSA_TAG_PROTO_KSZ8795_VALUE		14
+#define DSA_TAG_PROTO_OCELOT_VALUE		15
+#define DSA_TAG_PROTO_AR9331_VALUE		16
+
 enum dsa_tag_protocol {
-	DSA_TAG_PROTO_NONE = 0,
-	DSA_TAG_PROTO_BRCM,
-	DSA_TAG_PROTO_BRCM_PREPEND,
-	DSA_TAG_PROTO_DSA,
-	DSA_TAG_PROTO_EDSA,
-	DSA_TAG_PROTO_GSWIP,
-	DSA_TAG_PROTO_KSZ9477,
-	DSA_TAG_PROTO_KSZ9893,
-	DSA_TAG_PROTO_LAN9303,
-	DSA_TAG_PROTO_MTK,
-	DSA_TAG_PROTO_QCA,
-	DSA_TAG_PROTO_TRAILER,
-	DSA_TAG_LAST,		/* MUST BE LAST */
+	DSA_TAG_PROTO_NONE		= DSA_TAG_PROTO_NONE_VALUE,
+	DSA_TAG_PROTO_BRCM		= DSA_TAG_PROTO_BRCM_VALUE,
+	DSA_TAG_PROTO_BRCM_PREPEND	= DSA_TAG_PROTO_BRCM_PREPEND_VALUE,
+	DSA_TAG_PROTO_DSA		= DSA_TAG_PROTO_DSA_VALUE,
+	DSA_TAG_PROTO_EDSA		= DSA_TAG_PROTO_EDSA_VALUE,
+	DSA_TAG_PROTO_GSWIP		= DSA_TAG_PROTO_GSWIP_VALUE,
+	DSA_TAG_PROTO_KSZ9477		= DSA_TAG_PROTO_KSZ9477_VALUE,
+	DSA_TAG_PROTO_KSZ9893		= DSA_TAG_PROTO_KSZ9893_VALUE,
+	DSA_TAG_PROTO_LAN9303		= DSA_TAG_PROTO_LAN9303_VALUE,
+	DSA_TAG_PROTO_MTK		= DSA_TAG_PROTO_MTK_VALUE,
+	DSA_TAG_PROTO_QCA		= DSA_TAG_PROTO_QCA_VALUE,
+	DSA_TAG_PROTO_TRAILER		= DSA_TAG_PROTO_TRAILER_VALUE,
+	DSA_TAG_PROTO_8021Q		= DSA_TAG_PROTO_8021Q_VALUE,
+	DSA_TAG_PROTO_SJA1105		= DSA_TAG_PROTO_SJA1105_VALUE,
+	DSA_TAG_PROTO_KSZ8795		= DSA_TAG_PROTO_KSZ8795_VALUE,
+	DSA_TAG_PROTO_OCELOT		= DSA_TAG_PROTO_OCELOT_VALUE,
+	DSA_TAG_PROTO_AR9331		= DSA_TAG_PROTO_AR9331_VALUE,
 };
 
 struct packet_type;
@@ -55,8 +74,33 @@ struct dsa_device_ops {
 			       struct packet_type *pt);
 	int (*flow_dissect)(const struct sk_buff *skb, __be16 *proto,
 			    int *offset);
+	/* Used to determine which traffic should match the DSA filter in
+	 * eth_type_trans, and which, if any, should bypass it and be processed
+	 * as regular on the master net device.
+	 */
+	bool (*filter)(const struct sk_buff *skb, struct net_device *dev);
 	unsigned int overhead;
+	const char *name;
+	enum dsa_tag_protocol proto;
 };
+
+#define DSA_TAG_DRIVER_ALIAS "dsa_tag-"
+#define MODULE_ALIAS_DSA_TAG_DRIVER(__proto)				\
+	MODULE_ALIAS(DSA_TAG_DRIVER_ALIAS __stringify(__proto##_VALUE))
+
+struct dsa_skb_cb {
+	struct sk_buff *clone;
+};
+
+struct __dsa_skb_cb {
+	struct dsa_skb_cb cb;
+	u8 priv[48 - sizeof(struct dsa_skb_cb)];
+};
+
+#define DSA_SKB_CB(skb) ((struct dsa_skb_cb *)((skb)->cb))
+
+#define DSA_SKB_CB_PRIV(skb)			\
+	((void *)(skb)->cb + offsetof(struct __dsa_skb_cb, priv))
 
 struct dsa_switch_tree {
 	struct list_head	list;
@@ -79,15 +123,11 @@ struct dsa_switch_tree {
 	 */
 	struct dsa_platform_data	*pd;
 
-	/*
-	 * The switch port to which the CPU is attached.
-	 */
-	struct dsa_port		*cpu_dp;
+	/* List of switch ports */
+	struct list_head ports;
 
-	/*
-	 * Data for the individual switch chips.
-	 */
-	struct dsa_switch	*ds[DSA_MAX_SWITCHES];
+	/* List of DSA links composing the routing table */
+	struct list_head rtable;
 };
 
 /* TC matchall action types, only mirroring for now */
@@ -128,6 +168,7 @@ struct dsa_port {
 	struct dsa_switch_tree *dst;
 	struct sk_buff *(*rcv)(struct sk_buff *skb, struct net_device *dev,
 			       struct packet_type *pt);
+	bool (*filter)(const struct sk_buff *skb, struct net_device *dev);
 
 	enum {
 		DSA_PORT_TYPE_UNUSED = 0,
@@ -139,13 +180,25 @@ struct dsa_port {
 	struct dsa_switch	*ds;
 	unsigned int		index;
 	const char		*name;
-	const struct dsa_port	*cpu_dp;
+	struct dsa_port		*cpu_dp;
+	const char		*mac;
 	struct device_node	*dn;
 	unsigned int		ageing_time;
+	bool			vlan_filtering;
 	u8			stp_state;
 	struct net_device	*bridge_dev;
 	struct devlink_port	devlink_port;
 	struct phylink		*pl;
+	struct phylink_config	pl_config;
+
+	struct list_head list;
+
+	/*
+	 * Give the switch driver somewhere to hang its per-port private data
+	 * structures (accessible from the tagger).
+	 */
+	void *priv;
+
 	/*
 	 * Original copy of the master netdev ethtool_ops
 	 */
@@ -155,9 +208,24 @@ struct dsa_port {
 	 * Original copy of the master netdev net_device_ops
 	 */
 	const struct net_device_ops *orig_ndo_ops;
+
+	bool setup;
+};
+
+/* TODO: ideally DSA ports would have a single dp->link_dp member,
+ * and no dst->rtable nor this struct dsa_link would be needed,
+ * but this would require some more complex tree walking,
+ * so keep it stupid at the moment and list them all.
+ */
+struct dsa_link {
+	struct dsa_port *dp;
+	struct dsa_port *link_dp;
+	struct list_head list;
 };
 
 struct dsa_switch {
+	bool setup;
+
 	struct device *dev;
 
 	/*
@@ -186,13 +254,6 @@ struct dsa_switch {
 	const struct dsa_switch_ops	*ops;
 
 	/*
-	 * An array of which element [a] indicates which port on this
-	 * switch should be used to send packets to that are destined
-	 * for switch a. Can be NULL if there is only one switch chip.
-	 */
-	s8		rtable[DSA_MAX_SWITCHES];
-
-	/*
 	 * Slave mii_bus and devices for the individual ports.
 	 */
 	u32			phys_mii_mask;
@@ -208,17 +269,34 @@ struct dsa_switch {
 	/* Number of switch port queues */
 	unsigned int		num_tx_queues;
 
-	unsigned long		*bitmap;
-	unsigned long		_bitmap;
+	/* Disallow bridge core from requesting different VLAN awareness
+	 * settings on ports if not hardware-supported
+	 */
+	bool			vlan_filtering_is_global;
 
-	/* Dynamically allocated ports, keep last */
+	/* In case vlan_filtering_is_global is set, the VLAN awareness state
+	 * should be retrieved from here and not from the per-port settings.
+	 */
+	bool			vlan_filtering;
+
+	/* MAC PCS does not provide link state change interrupt, and requires
+	 * polling. Flag passed on to PHYLINK.
+	 */
+	bool			pcs_poll;
+
 	size_t num_ports;
-	struct dsa_port ports[];
 };
 
-static inline const struct dsa_port *dsa_to_port(struct dsa_switch *ds, int p)
+static inline struct dsa_port *dsa_to_port(struct dsa_switch *ds, int p)
 {
-	return &ds->ports[p];
+	struct dsa_switch_tree *dst = ds->dst;
+	struct dsa_port *dp;
+
+	list_for_each_entry(dp, &dst->ports, list)
+		if (dp->ds == ds && dp->index == p)
+			return dp;
+
+	return NULL;
 }
 
 static inline bool dsa_is_unused_port(struct dsa_switch *ds, int p)
@@ -253,6 +331,19 @@ static inline u32 dsa_user_ports(struct dsa_switch *ds)
 	return mask;
 }
 
+/* Return the local port used to reach an arbitrary switch device */
+static inline unsigned int dsa_routing_port(struct dsa_switch *ds, int device)
+{
+	struct dsa_switch_tree *dst = ds->dst;
+	struct dsa_link *dl;
+
+	list_for_each_entry(dl, &dst->rtable, list)
+		if (dl->dp->ds == ds && dl->link_dp->ds->index == device)
+			return dl->dp->index;
+
+	return ds->num_ports;
+}
+
 /* Return the local port used to reach an arbitrary switch port */
 static inline unsigned int dsa_towards_port(struct dsa_switch *ds, int device,
 					    int port)
@@ -260,7 +351,7 @@ static inline unsigned int dsa_towards_port(struct dsa_switch *ds, int device,
 	if (device == ds->index)
 		return port;
 	else
-		return ds->rtable[device];
+		return dsa_routing_port(ds, device);
 }
 
 /* Return the local port used to reach the dedicated CPU port */
@@ -275,22 +366,25 @@ static inline unsigned int dsa_upstream_port(struct dsa_switch *ds, int port)
 	return dsa_towards_port(ds, cpu_dp->ds->index, cpu_dp->index);
 }
 
+static inline bool dsa_port_is_vlan_filtering(const struct dsa_port *dp)
+{
+	const struct dsa_switch *ds = dp->ds;
+
+	if (ds->vlan_filtering_is_global)
+		return ds->vlan_filtering;
+	else
+		return dp->vlan_filtering;
+}
+
 typedef int dsa_fdb_dump_cb_t(const unsigned char *addr, u16 vid,
 			      bool is_static, void *data);
 struct dsa_switch_ops {
-#if IS_ENABLED(CONFIG_NET_DSA_LEGACY)
-	/*
-	 * Legacy probing.
-	 */
-	const char	*(*probe)(struct device *dsa_dev,
-				  struct device *host_dev, int sw_addr,
-				  void **priv);
-#endif
-
 	enum dsa_tag_protocol (*get_tag_protocol)(struct dsa_switch *ds,
-						  int port);
+						  int port,
+						  enum dsa_tag_protocol mprot);
 
 	int	(*setup)(struct dsa_switch *ds);
+	void	(*teardown)(struct dsa_switch *ds);
 	u32	(*get_phy_flags)(struct dsa_switch *ds, int port);
 
 	/*
@@ -452,6 +546,8 @@ struct dsa_switch_ops {
 				   bool ingress);
 	void	(*port_mirror_del)(struct dsa_switch *ds, int port,
 				   struct dsa_mall_mirror_tc_entry *mirror);
+	int	(*port_setup_tc)(struct dsa_switch *ds, int port,
+				 enum tc_setup_type type, void *type_data);
 
 	/*
 	 * Cross-chip operations
@@ -472,6 +568,46 @@ struct dsa_switch_ops {
 				 struct sk_buff *clone, unsigned int type);
 	bool	(*port_rxtstamp)(struct dsa_switch *ds, int port,
 				 struct sk_buff *skb, unsigned int type);
+
+	/* Devlink parameters */
+	int	(*devlink_param_get)(struct dsa_switch *ds, u32 id,
+				     struct devlink_param_gset_ctx *ctx);
+	int	(*devlink_param_set)(struct dsa_switch *ds, u32 id,
+				     struct devlink_param_gset_ctx *ctx);
+};
+
+#define DSA_DEVLINK_PARAM_DRIVER(_id, _name, _type, _cmodes)		\
+	DEVLINK_PARAM_DRIVER(_id, _name, _type, _cmodes,		\
+			     dsa_devlink_param_get, dsa_devlink_param_set, NULL)
+
+int dsa_devlink_param_get(struct devlink *dl, u32 id,
+			  struct devlink_param_gset_ctx *ctx);
+int dsa_devlink_param_set(struct devlink *dl, u32 id,
+			  struct devlink_param_gset_ctx *ctx);
+int dsa_devlink_params_register(struct dsa_switch *ds,
+				const struct devlink_param *params,
+				size_t params_count);
+void dsa_devlink_params_unregister(struct dsa_switch *ds,
+				   const struct devlink_param *params,
+				   size_t params_count);
+int dsa_devlink_resource_register(struct dsa_switch *ds,
+				  const char *resource_name,
+				  u64 resource_size,
+				  u64 resource_id,
+				  u64 parent_resource_id,
+				  const struct devlink_resource_size_params *size_params);
+
+void dsa_devlink_resources_unregister(struct dsa_switch *ds);
+
+void dsa_devlink_resource_occ_get_register(struct dsa_switch *ds,
+					   u64 resource_id,
+					   devlink_resource_occ_get_t *occ_get,
+					   void *occ_get_priv);
+void dsa_devlink_resource_occ_get_unregister(struct dsa_switch *ds,
+					     u64 resource_id);
+
+struct dsa_devlink_priv {
+	struct dsa_switch *ds;
 };
 
 struct dsa_switch_driver {
@@ -479,20 +615,6 @@ struct dsa_switch_driver {
 	const struct dsa_switch_ops *ops;
 };
 
-#if IS_ENABLED(CONFIG_NET_DSA_LEGACY)
-/* Legacy driver registration */
-void register_switch_driver(struct dsa_switch_driver *type);
-void unregister_switch_driver(struct dsa_switch_driver *type);
-struct mii_bus *dsa_host_dev_to_mii_bus(struct device *dev);
-
-#else
-static inline void register_switch_driver(struct dsa_switch_driver *type) { }
-static inline void unregister_switch_driver(struct dsa_switch_driver *type) { }
-static inline struct mii_bus *dsa_host_dev_to_mii_bus(struct device *dev)
-{
-	return NULL;
-}
-#endif
 struct net_device *dsa_dev_to_net_device(struct device *dev);
 
 /* Keep inline for faster access in hot path */
@@ -504,7 +626,15 @@ static inline bool netdev_uses_dsa(struct net_device *dev)
 	return false;
 }
 
-struct dsa_switch *dsa_switch_alloc(struct device *dev, size_t n);
+static inline bool dsa_can_decode(const struct sk_buff *skb,
+				  struct net_device *dev)
+{
+#if IS_ENABLED(CONFIG_NET_DSA)
+	return !dev->dsa_ptr->filter || dev->dsa_ptr->filter(skb, dev);
+#endif
+	return false;
+}
+
 void dsa_unregister_switch(struct dsa_switch *ds);
 int dsa_register_switch(struct dsa_switch *ds);
 #ifdef CONFIG_PM_SLEEP
@@ -572,9 +702,76 @@ static inline int call_dsa_notifiers(unsigned long val, struct net_device *dev,
 #define BRCM_TAG_GET_QUEUE(v)		((v) & 0xff)
 
 
+netdev_tx_t dsa_enqueue_skb(struct sk_buff *skb, struct net_device *dev);
 int dsa_port_get_phy_strings(struct dsa_port *dp, uint8_t *data);
 int dsa_port_get_ethtool_phy_stats(struct dsa_port *dp, uint64_t *data);
 int dsa_port_get_phy_sset_count(struct dsa_port *dp);
 void dsa_port_phylink_mac_change(struct dsa_switch *ds, int port, bool up);
 
+struct dsa_tag_driver {
+	const struct dsa_device_ops *ops;
+	struct list_head list;
+	struct module *owner;
+};
+
+void dsa_tag_drivers_register(struct dsa_tag_driver *dsa_tag_driver_array[],
+			      unsigned int count,
+			      struct module *owner);
+void dsa_tag_drivers_unregister(struct dsa_tag_driver *dsa_tag_driver_array[],
+				unsigned int count);
+
+#define dsa_tag_driver_module_drivers(__dsa_tag_drivers_array, __count)	\
+static int __init dsa_tag_driver_module_init(void)			\
+{									\
+	dsa_tag_drivers_register(__dsa_tag_drivers_array, __count,	\
+				 THIS_MODULE);				\
+	return 0;							\
+}									\
+module_init(dsa_tag_driver_module_init);				\
+									\
+static void __exit dsa_tag_driver_module_exit(void)			\
+{									\
+	dsa_tag_drivers_unregister(__dsa_tag_drivers_array, __count);	\
+}									\
+module_exit(dsa_tag_driver_module_exit)
+
+/**
+ * module_dsa_tag_drivers() - Helper macro for registering DSA tag
+ * drivers
+ * @__ops_array: Array of tag driver strucutres
+ *
+ * Helper macro for DSA tag drivers which do not do anything special
+ * in module init/exit. Each module may only use this macro once, and
+ * calling it replaces module_init() and module_exit().
+ */
+#define module_dsa_tag_drivers(__ops_array)				\
+dsa_tag_driver_module_drivers(__ops_array, ARRAY_SIZE(__ops_array))
+
+#define DSA_TAG_DRIVER_NAME(__ops) dsa_tag_driver ## _ ## __ops
+
+/* Create a static structure we can build a linked list of dsa_tag
+ * drivers
+ */
+#define DSA_TAG_DRIVER(__ops)						\
+static struct dsa_tag_driver DSA_TAG_DRIVER_NAME(__ops) = {		\
+	.ops = &__ops,							\
+}
+
+/**
+ * module_dsa_tag_driver() - Helper macro for registering a single DSA tag
+ * driver
+ * @__ops: Single tag driver structures
+ *
+ * Helper macro for DSA tag drivers which do not do anything special
+ * in module init/exit. Each module may only use this macro once, and
+ * calling it replaces module_init() and module_exit().
+ */
+#define module_dsa_tag_driver(__ops)					\
+DSA_TAG_DRIVER(__ops);							\
+									\
+static struct dsa_tag_driver *dsa_tag_driver_array[] =	{		\
+	&DSA_TAG_DRIVER_NAME(__ops)					\
+};									\
+module_dsa_tag_drivers(dsa_tag_driver_array)
 #endif
+

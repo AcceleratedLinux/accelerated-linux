@@ -1,0 +1,125 @@
+config USER_LINUX_FIRMWARE
+	bool "Include linux firmware."
+	help
+	  Include firmware for a variety of devices.
+
+config USER_LINUX_FIRMWARE_ALL_FIRMWARE
+	bool "Include all firmware."
+	depends on USER_LINUX_FIRMWARE
+	help
+	  Include all firmware on this device.
+
+config USER_LINUX_FIRMWARE_QCA988X
+	bool "Firmware for QCA988X."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the QCA988X ath10k device.
+
+config USER_LINUX_FIRMWARE_QCA988X_CT
+	bool "CT firmware for QCA988X."
+	depends on USER_LINUX_FIRMWARE_QCA988X || USER_LINUX_FIRMWARE_ALL_FIRMWARE
+	help
+	  Use CT firmware for the QCA988X ath10k device.
+
+config USER_LINUX_FIRMWARE_QCA9984
+	bool "Firmware for QCA9984."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the QCA9984 ath10k device.
+
+config USER_LINUX_FIRMWARE_QCA9984_CT
+	bool "CT firmware for QCA9984."
+	depends on USER_LINUX_FIRMWARE_QCA9984 || USER_LINUX_FIRMWARE_ALL_FIRMWARE
+	help
+	  Use CT firmware for the QCA9984 ath10k device.
+
+config USER_LINUX_FIRMWARE_QCA6174
+	bool "Firmware for QCA6174."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the QCA6174 ath10k device.
+
+config USER_LINUX_FIRMWARE_RT2561
+	bool "Firmware for RT2561."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT2561 on the device.
+
+config USER_LINUX_FIRMWARE_RT2661
+	bool "Firmware for RT2661."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT2661 on the device.
+
+config USER_LINUX_FIRMWARE_RT2870
+	bool "Firmware for RT2870."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT2870 on the device.
+
+config USER_LINUX_FIRMWARE_RT3071
+	bool "Firmware for RT3071."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT3071 on the device.
+
+config USER_LINUX_FIRMWARE_RT3290
+	bool "Firmware for RT3290."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT3290 on the device.
+
+config USER_LINUX_FIRMWARE_RT2561S
+	bool "Firmware for RT2561S."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT2561S on the device.
+
+config USER_LINUX_FIRMWARE_RT2860
+	bool "Firmware for RT2860."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT2860 on the device.
+
+config USER_LINUX_FIRMWARE_RT3070
+	bool "Firmware for RT3070."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT3070 on the device.
+
+config USER_LINUX_FIRMWARE_RT3090
+	bool "Firmware for RT3090."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT3090 on the device.
+
+config USER_LINUX_FIRMWARE_RT73
+	bool "Firmware for RT73."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RT73 on the device.
+
+config USER_LINUX_FIRMWARE_RTL_NIC
+	bool "Firmware for RTL_NIC."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the RTL_NIC on the device.
+
+config USER_LINUX_FIRMWARE_SDMA_IMX6Q
+	bool "Firmware for SDMA_IMX6Q."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the SDMA_IMX6Q on the device.
+
+config USER_LINUX_FIRMWARE_MT7662
+	bool "Firmware for MT7662."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the MT7662 on the device.
+
+config USER_LINUX_FIRMWARE_MT7662_ROM_PATCH
+	bool "Firmware for MT7662_ROM_PATCH."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the MT7662_ROM_PATCH on the device.
+

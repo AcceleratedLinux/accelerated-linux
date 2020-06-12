@@ -1,0 +1,39 @@
+diff --git a/gpsd.hotplug b/gpsd.hotplug
+index 9f622cd..fe1b3da
+--- a/gpsd.hotplug
++++ b/gpsd.hotplug
+@@ -39,10 +39,32 @@ if [ -n "$GPSD_SOCKET" ]; then
+   export GPSD_SOCKET
+ fi
+ 
+-if [ -n "$USBAUTO" ]; then
+-  [ "$USBAUTO" = "true" ] || exit 0
++eval $(config start)
++config load
++LOCATION_ENABLE="$(config get service.location.enable)"
++USB_ENABLE="$(config get service.location.usb)"
++USB_PORT_PATHS=
++for port in $(config keys device.usb.port); do
++	for path in $(config get device.usb.port.${port}.path); do
++		USB_PORT_PATHS="${USB_PORT_PATHS} ${path}"
++	done
++done
++eval $(config stop)
++if [ "$LOCATION_ENABLE" -eq 0 ] || [ "$USB_ENABLE" -eq 0 ]; then
++  exit 0
+ fi
+ 
++# Check if the device is on an external USB port
++path_valid=
++for path in ${USB_PORT_PATHS}; do
++	case ${ID_USB_DEVICE_PATH} in
++	${path}|${path}.*)
++		path_valid=1
++		;;
++	esac
++done
++[ -n "${path_valid}" ] || exit 0
++
+ if [ "$ACTION" = "remove" ] ; then
+   if echo $DEVLINKS | grep -q /dev/gps; then
+     :

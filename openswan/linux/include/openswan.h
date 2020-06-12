@@ -387,12 +387,6 @@ const char *ipsec_version_code(void);
 const char *ipsec_version_string(void);
 const char **ipsec_copyright_notice(void);
 
-const char *dns_string_rr(int rr, char *buf, int bufsize);
-const char *dns_string_datetime(time_t seconds,
-				char *buf,
-				int bufsize);
-
-
 /*
  * old functions, to be deleted eventually
  */

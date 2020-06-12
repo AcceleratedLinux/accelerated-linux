@@ -22,6 +22,8 @@
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
 
+#include "irqs.h"
+
 #define IRQ_ESS710_PCI_INTA	IRQ_IXP4XX_GPIO6
 #define IRQ_ESS710_PCI_INTB	IRQ_IXP4XX_GPIO7
 #define IRQ_ESS710_PCI_INTC	IRQ_IXP4XX_GPIO8

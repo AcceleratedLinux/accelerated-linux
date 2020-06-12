@@ -1,0 +1,10 @@
+--- krb5-1.17/src/include/krb5/krb5.hin.org	2019-11-20 10:30:47.734471197 +1000
++++ krb5-1.17/src/include/krb5/krb5.hin	2019-11-20 10:30:54.790580545 +1000
+@@ -92,6 +92,7 @@
+ #include <limits.h>             /* for *_MAX */
+ #include <stdarg.h>
+ #include <stdint.h>
++#include <time.h>
+ 
+ #ifndef KRB5INT_BEGIN_DECLS
+ #if defined(__cplusplus)

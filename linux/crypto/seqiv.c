@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * seqiv: Sequence Number IV Generator
  *
@@ -5,12 +6,6 @@
  * with a salt.  This algorithm is mainly useful for CTR and similar modes.
  *
  * Copyright (c) 2007 Herbert Xu <herbert@gondor.apana.org.au>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
- *
  */
 
 #include <crypto/internal/geniv.h>
@@ -22,8 +17,6 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-
-static void seqiv_free(struct crypto_instance *inst);
 
 static void seqiv_aead_encrypt_complete2(struct aead_request *req, int err)
 {
@@ -164,15 +157,11 @@ static int seqiv_aead_create(struct crypto_template *tmpl, struct rtattr **tb)
 	inst->alg.base.cra_ctxsize += inst->alg.ivsize;
 
 	err = aead_register_instance(tmpl, inst);
-	if (err)
-		goto free_inst;
-
-out:
-	return err;
-
+	if (err) {
 free_inst:
-	aead_geniv_free(inst);
-	goto out;
+		inst->free(inst);
+	}
+	return err;
 }
 
 static int seqiv_create(struct crypto_template *tmpl, struct rtattr **tb)
@@ -189,15 +178,9 @@ static int seqiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 	return seqiv_aead_create(tmpl, tb);
 }
 
-static void seqiv_free(struct crypto_instance *inst)
-{
-	aead_geniv_free(aead_instance(inst));
-}
-
 static struct crypto_template seqiv_tmpl = {
 	.name = "seqiv",
 	.create = seqiv_create,
-	.free = seqiv_free,
 	.module = THIS_MODULE,
 };
 
@@ -211,7 +194,7 @@ static void __exit seqiv_module_exit(void)
 	crypto_unregister_template(&seqiv_tmpl);
 }
 
-module_init(seqiv_module_init);
+subsys_initcall(seqiv_module_init);
 module_exit(seqiv_module_exit);
 
 MODULE_LICENSE("GPL");

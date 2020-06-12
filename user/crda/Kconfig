@@ -1,12 +1,25 @@
 config USER_CRDA
 	bool "crda"
+	select USER_CRDA_REGDB
 	help
 	  CRDA acts as the udev helper for communication between the kernel and
 	  userspace for regulatory compliance for 802.11 WiFi.
 
+config USER_CRDA_REGDB
+	bool "wireless-regdb"
+	help
+	  Wireless regulatory database.
+
+	  Since linux-4.15 the kernel supports loading the files
+	  regulatory.db/regulatory.db.p7s directly from the /lib/firmware
+	  directory, for earlier versions the crda helper application
+	  is needed.
+
+	  https://wireless.wiki.kernel.org/en/developers/regulatory/wireless-regdb
+
 config USER_CRDA_REGDB_UNRESTRICTED_WORLD
 	bool "Unrestricted world regulatory domain"
-	depends on USER_CRDA
+	depends on USER_CRDA_REGDB
 	help
 	  Rebuild the wireless-regdb's regulatory.bin with an unrestricted "00"
 	  world regulatory domain. This domain is usually the most restrictive.

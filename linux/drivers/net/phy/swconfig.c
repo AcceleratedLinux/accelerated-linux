@@ -924,52 +924,42 @@ static struct genl_ops swconfig_ops[] = {
 	{
 		.cmd = SWITCH_CMD_LIST_GLOBAL,
 		.doit = swconfig_list_attrs,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_LIST_VLAN,
 		.doit = swconfig_list_attrs,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_LIST_PORT,
 		.doit = swconfig_list_attrs,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_GET_GLOBAL,
 		.doit = swconfig_get_attr,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_GET_VLAN,
 		.doit = swconfig_get_attr,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_GET_PORT,
 		.doit = swconfig_get_attr,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_SET_GLOBAL,
 		.doit = swconfig_set_attr,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_SET_VLAN,
 		.doit = swconfig_set_attr,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_SET_PORT,
 		.doit = swconfig_set_attr,
-		.policy = switch_policy,
 	},
 	{
 		.cmd = SWITCH_CMD_GET_SWITCH,
 		.dumpit = swconfig_dump_switches,
-		.policy = switch_policy,
 		.done = swconfig_done,
 	}
 };
@@ -979,6 +969,7 @@ static struct genl_family switch_fam = {
 	.hdrsize = 0,
 	.version = 1,
 	.maxattr = SWITCH_ATTR_MAX,
+	.policy = switch_policy,
 	.module = THIS_MODULE,
 	.ops = swconfig_ops,
 	.n_ops = ARRAY_SIZE(swconfig_ops),

@@ -1,0 +1,52 @@
+Set an environment variable when the proto shell script is being run
+because of a "reload" event.
+This can be observed in the proto "setup" after a configuration change
+is made to the interface.
+When the variable is not present, one can assume that an up/down event
+is responsible for the setup.
+
+diff -Naur netifd/interface.c netifd/interface.c
+--- netifd/interface.c	2020-02-20 14:15:41.474728212 +1000
++++ netifd/interface.c	2020-02-20 14:15:15.142642498 +1000
+@@ -203,6 +203,8 @@
+ 	struct interface_user *dep, *tmp;
+ 	struct device *adev = NULL;
+ 
++	iface->last_ev = ev;
++
+ 	list_for_each_entry_safe(dep, tmp, &iface->users, list)
+ 		dep->cb(dep, iface, ev);
+ 
+diff -Naur netifd/interface.h netifd/interface.h
+--- netifd/interface.h	2020-02-20 14:15:41.462728173 +1000
++++ netifd/interface.h	2020-02-20 14:15:15.142642498 +1000
+@@ -100,6 +100,7 @@
+ 	struct vlist_node node;
+ 	struct list_head hotplug_list;
+ 	enum interface_event hotplug_ev;
++	enum interface_event last_ev;
+ 
+ 	const char *name;
+ 	const char *ifname;
+diff -Naur netifd/proto-shell.c netifd/proto-shell.c
+--- netifd/proto-shell.c	2020-02-20 14:15:41.474728212 +1000
++++ netifd/proto-shell.c	2020-02-20 14:18:54.063343988 +1000
+@@ -156,7 +156,7 @@
+ 	struct netifd_process *proc;
+ 	static char error_buf[32];
+ 	const char *argv[7];
+-	char *envp[2];
++	char *envp[3];
+ 	const char *action;
+ 	char *config;
+ 	int ret, i = 0, j = 0;
+@@ -230,6 +230,9 @@
+ 	if (!config)
+ 		return -1;
+ 
++	if (proto->iface->last_ev == IFEV_RELOAD)
++		envp[j++] = "EVENT=RELOAD";
++
+ 	argv[i++] = handler->script_name;
+ 	argv[i++] = handler->proto.name;
+ 	argv[i++] = action;

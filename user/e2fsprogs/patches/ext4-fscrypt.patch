@@ -1,0 +1,80 @@
+--- e2fsprogs-1.45.3/misc/e4crypt.c.orig	2019-07-15 11:03:14.000000000 +1000
++++ e2fsprogs-1.45.3/misc/e4crypt.c	2020-01-24 12:06:04.159571423 +1000
+@@ -73,6 +73,7 @@
+ 
+ #define OPT_VERBOSE	0x0001
+ #define OPT_QUIET	0x0002
++#define OPT_FSCRYPT	0x0004
+ 
+ int options;
+ 
+@@ -107,8 +108,9 @@
+ 
+ #define SHA512_LENGTH 64
+ #define EXT2FS_KEY_TYPE_LOGON "logon"
+-#define EXT2FS_KEY_DESC_PREFIX "ext4:"
+-#define EXT2FS_KEY_DESC_PREFIX_SIZE 5
++#define EXT2FS_KEY_DESC_PREFIX_EXT4 "ext:"
++#define EXT2FS_KEY_DESC_PREFIX_FSCRYPT "fscrypt:"
++#define EXT2FS_KEY_DESC_PREFIX_MAX_SIZE 10
+ 
+ #define EXT4_IOC_SET_ENCRYPTION_POLICY      _IOR('f', 19, struct ext4_encryption_policy)
+ #define EXT4_IOC_GET_ENCRYPTION_POLICY      _IOW('f', 21, struct ext4_encryption_policy)
+@@ -547,16 +549,18 @@
+ {
+ 	int keyring_id = get_keyring_id(keyring);
+ 	struct ext4_encryption_key key;
+-	char key_ref_full[EXT2FS_KEY_DESC_PREFIX_SIZE +
++	char key_ref_full[EXT2FS_KEY_DESC_PREFIX_MAX_SIZE +
+ 			  EXT4_KEY_REF_STR_BUF_SIZE];
++	const char * const key_prefix = (options & OPT_FSCRYPT) ?
++		EXT2FS_KEY_DESC_PREFIX_FSCRYPT :
++		EXT2FS_KEY_DESC_PREFIX_EXT4;
+ 	int rc;
+ 
+ 	if (keyring_id == 0) {
+ 		printf("Invalid keyring [%s].\n", keyring);
+ 		exit(1);
+ 	}
+-	sprintf(key_ref_full, "%s%s", EXT2FS_KEY_DESC_PREFIX,
+-		salt->key_ref_str);
++	sprintf(key_ref_full, "%s%s", key_prefix, salt->key_ref_str);
+ 	rc = keyctl(KEYCTL_SEARCH, keyring_id, EXT2FS_KEY_TYPE_LOGON,
+ 		    key_ref_full, 0);
+ 	if (rc != -1) {
+@@ -641,13 +645,14 @@
+ 
+ #define add_key_desc "adds a key to the user's keyring"
+ #define add_key_help \
+-"e4crypt add_key -S salt [ -k keyring ] [-v] [-q] [ -p pad ] [ path ... ]\n\n" \
++"e4crypt add_key -S salt [ -k keyring ] [-v] [-q] [-f] [ -p pad ] [ path ... ]\n\n" \
+ "Prompts the user for a passphrase and inserts it into the specified\n" \
+ "keyring.  If no keyring is specified, e4crypt will use the session\n" \
+ "keyring if it exists or the user session keyring if it does not.\n\n" \
+ "If one or more directory paths are specified, e4crypt will try to\n" \
+ "set the policy of those directories to use the key just entered by\n" \
+-"the user.\n"
++"the user. Supply the 'f' option to select the 'fscrypt:' key prefix\n" \
++"instead of the default 'ext4:' key prefix.\n"
+ 
+ static void do_add_key(int argc, char **argv, const struct cmd_desc *cmd)
+ {
+@@ -656,7 +661,7 @@
+ 	int i, opt, pad = 4;
+ 	unsigned j;
+ 
+-	while ((opt = getopt(argc, argv, "k:S:p:vq")) != -1) {
++	while ((opt = getopt(argc, argv, "k:S:p:vqf")) != -1) {
+ 		switch (opt) {
+ 		case 'k':
+ 			/* Specify a keyring. */
+@@ -669,6 +674,9 @@
+ 			/* Salt value for passphrase. */
+ 			parse_salt(optarg, 0);
+ 			break;
++		case 'f':
++			options |= OPT_FSCRYPT;
++			break;
+ 		case 'v':
+ 			options |= OPT_VERBOSE;
+ 			break;

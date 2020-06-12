@@ -60,6 +60,7 @@ unsigned char mactable[MAXETHS * 6] = {
 	0x00, 0x27, 0x04, 0x03, 0x02, 0x10,
 };
 
+int starteths = 0;
 int numeths = DEFAULTETHS;
 int debug = 0;
 char *ethname[MAXETHS];
@@ -186,7 +187,7 @@ void readmacredboot(char *flash, char *redbootconfig)
 		return;
 	}
 
-	for (i = 0; (i < numeths); i++) {
+	for (i = starteths; i < (starteths + numeths); i++) {
 		snprintf(name, sizeof(name), redbootconfig, i);
 		mac = memstr(m, name, flashsize);
 		if (!mac) {
@@ -220,7 +221,7 @@ void readmacflash(char *flash, off_t macoffset)
 		return;
 	}
 
-	for (i = 0; (i < numeths); i++) {
+	for (i = starteths; i < (starteths + numeths); i++) {
 		off = macoffset + (i * 6);
 		if (lseek(fd, off, SEEK_SET) != off) {
 			perror("setmac: failed to find eth MACS");
@@ -254,7 +255,7 @@ void runflashmac(void)
 	char cmd[32], result[32], *cp;
 	unsigned int i, mac[6];
 
-	for (i = 0; i < numeths; i++) {
+	for (i = starteths; i < (starteths + numeths); i++) {
 
 		sprintf(cmd, "flash mac%d", i);
 		fp = popen(cmd, "r");
@@ -296,7 +297,7 @@ void readmacuboot(void)
 	unsigned int i, mac[6];
 	FILE *fp;
 
-	for (i = 0; i < numeths; i++) {
+	for (i = starteths; i < (starteths + numeths); i++) {
 
 		if (i == 0)
 			sprintf(ethnam, "ethaddr");
@@ -383,16 +384,34 @@ void setmac(int port, unsigned char *mac)
 
 /****************************************************************************/
 
+static void incmac(unsigned int *mac)
+{
+	int i;
+
+	for (i = 5; i > 0; i--) {
+		mac[i]++;
+		if (mac[i] != 256)
+			break;
+		mac[i] = 0;
+	}
+}
+
+/****************************************************************************/
+
 static int basemac(const char *p)
 {
-	unsigned int i, j, mac[6];
-
+	unsigned int i, mac[6];
 
 	if (sscanf(p, "%02x%*c%02x%*c%02x%*c%02x%*c%02x%*c%02x",
-				mac, mac+1, mac+2, mac+3, mac+4, mac+5) != 6)
+				mac, mac+1, mac+2, mac+3, mac+4, mac+5) != 6) {
+		fprintf(stderr, "ERROR: invalid base MAC\n");
 		return -1;
+	}
 
-	for (i = 0; i < numeths; i++) {
+	for (i = 0; i < starteths; i++)
+		incmac(mac);
+
+	for (; i < (starteths + numeths); i++) {
 		mactable[i*6+0] = mac[0];
 		mactable[i*6+1] = mac[1];
 		mactable[i*6+2] = mac[2];
@@ -400,15 +419,47 @@ static int basemac(const char *p)
 		mactable[i*6+4] = mac[4];
 		mactable[i*6+5] = mac[5];
 
-		for (j=5; j>0; j--) {
-			mac[j]++;
-			if (mac[j] != 256)
-				break;
-			mac[j] = 0;
+		incmac(mac);
+	}
+
+	return 0;
+}
+
+static int laamac(const char *p)
+{
+	unsigned int i, mac[6];
+
+	if (sscanf(p, "%02x%*c%02x%*c%02x%*c%02x%*c%02x%*c%02x",
+				mac, mac+1, mac+2, mac+3, mac+4, mac+5) != 6) {
+		fprintf(stderr, "ERROR: invalid base MAC\n");
+		return -1;
+	}
+
+	for (i = starteths; i < (starteths + numeths); i++) {
+		unsigned char *m = &mactable[i*6];
+		m[0] = mac[0];
+		m[1] = mac[1];
+		m[2] = mac[2];
+		m[3] = mac[3];
+		m[4] = mac[4];
+		m[5] = mac[5];
+
+		/* Generate LAA (locally administered address) for MACx where (x > 0) */
+		if (i != 0) {
+			m[0] |= 0x2;
+			m[0] ^= (i - 1) << 2;
 		}
 	}
 
 	return 0;
+}
+
+/****************************************************************************/
+
+static void printmac(unsigned char *mac)
+{
+	printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
+		   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 /****************************************************************************/
@@ -420,12 +471,15 @@ void usage(int rc)
 		"\t-s\n"
 		"\t-f <flash-device>\n"
 		"\t-m <mtd-name>\n"
+		"\t-a <eth-offset>\n"
 		"\t-n <num-eth-interfaces>\n"
 		"\t-o <offset>\n"
 		"\t-p\n"
 		"\t-u\n"
 		"\t-i interface[,interface[,interface[,...]]]\n"
-		"\t-r <redboot-config-name>\n");
+		"\t-r <redboot-config-name>\n"
+		"\t-e\n"
+		"\t-l\n");
 	exit(rc);
 }
 
@@ -442,17 +496,20 @@ int main(int argc, char *argv[])
 	int swapmacs = 0;
 	int runflash = 0;
 	int uboot = 0;
+	int printonly = 0;
+	const char *macbase = NULL;
+	int laa = 0;
 
-	while ((c = getopt(argc, argv, "h?b:dspui:m:n:o:r:f:")) > 0) {
+	while ((c = getopt(argc, argv, "h?a:b:dspui:m:n:o:r:f:el")) > 0) {
 		switch (c) {
 		case '?':
 		case 'h':
 			usage(0);
+		case 'a':
+			starteths = atoi(optarg);
+			break;
 		case 'b':
-			if (basemac(optarg) < 0) {
-				printf("ERROR: invalid base MAC\n");
-				exit(1);
-			}
+			macbase = optarg;
 			flash = NULL;
 			break;
 		case 's':
@@ -467,6 +524,9 @@ int main(int argc, char *argv[])
 		case 'd':
 			debug++;
 			break;
+		case 'e':
+			printonly++;
+			break;
 		case 'f':
 			flash = optarg;
 			break;
@@ -478,10 +538,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'n':
 			numeths = atoi(optarg);
-			if ((numeths < 0) || (numeths > MAXETHS)) {
-				printf("ERROR: bad number of ethernets?\n");
-				exit(1);
-			}
 			break;
 		case 'o':
 			macoffset = strtoul(optarg, NULL, 0);
@@ -489,8 +545,27 @@ int main(int argc, char *argv[])
 		case 'r':
 			redboot = optarg;
 			break;
+		case 'l':
+			laa++;
+			break;
 		default:
 			usage(1);
+		}
+	}
+
+	if (starteths < 0 || numeths < 0 || (starteths + numeths) > MAXETHS) {
+		fprintf(stderr,
+				"ERROR: bad Ethernet offset or number of Ethernets\n");
+		exit(1);
+	}
+
+	if (macbase) {
+		if (laa) {
+			if (laamac(macbase) < 0)
+				exit(1);
+		} else {
+			if (basemac(macbase) < 0)
+				exit(1);
 		}
 	}
 
@@ -508,10 +583,13 @@ int main(int argc, char *argv[])
 			readmacflash(flash, macoffset);
 	}
 
-	for (i = 0; (i < numeths); i++) {
+	for (i = starteths; i < (starteths + numeths); i++) {
 		p = (swapmacs) ? (i^1) : i;
 		getmac(p, &mac[0]);
-		setmac(i, &mac[0]);
+		if (printonly)
+			printmac(&mac[0]);
+		else
+			setmac(i, &mac[0]);
 	}
 
 	return 0;

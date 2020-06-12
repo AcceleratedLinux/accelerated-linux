@@ -136,7 +136,6 @@ static void __init i2c_quirk(void)
 
 		of_update_property(np, new_compat);
 	}
-	return;
 }
 
 static struct map_desc armada_370_xp_io_desc[] __initdata = {

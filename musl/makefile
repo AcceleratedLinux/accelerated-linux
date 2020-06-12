@@ -1,17 +1,21 @@
-MUSL_VERSION = 1.1.22
+MUSL_VERSION = 1.2.0
 MUSL = musl-$(MUSL_VERSION)
 URL = http://www.musl-libc.org/releases/$(MUSL).tar.gz
 
-CONFVARS += CC="$(subst ucfront-gcc,,$(CC))"
-CONFVARS += CXX="$(subst ucfront-g++,,$(CXX))"
-CONFVARS += LD="$(subst ucfront-ld,,$(LD))"
+CONFVARS += CROSS_COMPILE="$(CROSS_COMPILE)"
 
-# Carry out any translations of kernel ARCH to MUSL expected ARCH
-MUSLARCH = $(subst arm64,aarch64,$(ARCH))
+# Carry out any translations of kernel MACHINE to MUSL expected ARCH
+MUSLARCH = $(subst arm64,aarch64,$(MACHINE))
 MAKEVARS += ARCH=$(MUSLARCH)
 
 CFLAGS =
 LDFLAGS =
+
+PATCHES = sys-cdefs.patch sys-queue.patch
+ifdef CONFIG_LIB_MUSL_HAS_TZ_FILE
+PATCHES += tz-file-path.patch
+CFLAGS += -DTZ_FILE_PATH='\"$(CONFIG_LIB_MUSL_TZ_FILE_PATH)\"'
+endif
 
 $(MUSL)_CONFIGURE = ./configure
 $(MUSL)_ROMFS = musl_romfs
@@ -20,6 +24,7 @@ include $(ROOTDIR)/tools/automake.inc
 
 # Do not use any of the automake.inc CONFOPTS, they disable static libs
 CONFOPTS := --prefix=
+CONFOPTS += --target=$(MUSLARCH)
 
 complete_target:
 	rm -f install

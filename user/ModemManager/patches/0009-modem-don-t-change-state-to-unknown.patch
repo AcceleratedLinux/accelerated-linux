@@ -1,0 +1,47 @@
+From: Philip Craig <philip.craig@accelecon.com>
+Date: Fri, 21 Mar 2014 17:13:11 +1000
+Subject: modem: don't change state to unknown
+
+For the huawei plugin, connect_3gpp() can take 60 seconds to reach a
+final state, but mm_iface_modem_wait_for_final_state() has a 10 second
+timeout, after which it returns the unknown state.
+
+Fixes this assertion:
+ERROR:mm-broadband-modem.c:8736:enable: code should not be reached
+
+After this sequence of commands:
+
+	$ mmcli -m 1 -e --simple-connect apn=bad
+	error: couldn't connect the modem: 'Timeout was reached'
+	$ mmcli -m 1 -d
+	error: couldn't disable the modem: 'GDBus.Error:org.freedesktop.ModemManager1.Error.Core.Retry: Too much time waiti
+	$ mmcli -m 1 -e
+	error: couldn't enable the modem: 'GDBus.Error:org.freedesktop.DBus.Error.NoReply: Message did not receive a reply
+---
+ src/mm-broadband-modem.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/mm-broadband-modem.c b/src/mm-broadband-modem.c
+index a56ae354..0f7dd38d 100644
+--- a/src/mm-broadband-modem.c
++++ b/src/mm-broadband-modem.c
+@@ -10463,7 +10463,8 @@ disabling_context_free (DisablingContext *ctx)
+         mm_iface_modem_update_state (MM_IFACE_MODEM (ctx->self),
+                                      MM_MODEM_STATE_DISABLED,
+                                      MM_MODEM_STATE_CHANGE_REASON_USER_REQUESTED);
+-    else if (ctx->previous_state != MM_MODEM_STATE_DISABLED) {
++    else if (ctx->previous_state != MM_MODEM_STATE_DISABLED &&
++             ctx->previous_state != MM_MODEM_STATE_UNKNOWN) {
+         /* Fallback to previous state */
+         mm_iface_modem_update_state (MM_IFACE_MODEM (ctx->self),
+                                      ctx->previous_state,
+@@ -10830,7 +10831,8 @@ enabling_context_free (EnablingContext *ctx)
+         mm_iface_modem_update_state (MM_IFACE_MODEM (ctx->self),
+                                      MM_MODEM_STATE_ENABLED,
+                                      MM_MODEM_STATE_CHANGE_REASON_USER_REQUESTED);
+-    else if (ctx->previous_state != MM_MODEM_STATE_ENABLED) {
++    else if (ctx->previous_state != MM_MODEM_STATE_ENABLED &&
++             ctx->previous_state != MM_MODEM_STATE_UNKNOWN) {
+         /* Fallback to previous state */
+         mm_iface_modem_update_state (MM_IFACE_MODEM (ctx->self),
+                                      ctx->previous_state,

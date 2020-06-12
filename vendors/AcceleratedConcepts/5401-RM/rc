@@ -17,8 +17,8 @@ mkdir -m 755 /var/mnt
 # make sure we dont see all errors
 echo 6 > /proc/sys/kernel/printk
 
-# init devices before we need any
-cp -ra /lib/udev/devices/. /dev
+# initialise devices before we need them
+/etc/rc.dev
 
 echo "Loading serial modules..."
 modprobe 8250_pci
@@ -57,8 +57,8 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.init2|/.nocrypt)"
-	[ -f /etc/config/.init2 ] && filter='$'
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
 		egrep -v "/etc/config$filter" |
@@ -95,6 +95,11 @@ fi
 
 # modem firmware updates
 #[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
 
 # do the rc script processing
 actiond &

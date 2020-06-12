@@ -1,0 +1,85 @@
+diff --git a/mDNSCore/mDNS.c b/mDNSCore/mDNS.c
+index 8deada2..7873c4a 100755
+--- a/mDNSCore/mDNS.c
++++ b/mDNSCore/mDNS.c
+@@ -2178,7 +2178,7 @@
+     rr->resrec.RecordType = kDNSRecordTypeShared;
+     rr->RequireGoodbye    = mDNSfalse;
+     rr->WakeUp.HMAC       = zeroEthAddr;
+-    if (rr->AnsweredLocalQ) { AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, mDNSfalse); rr->AnsweredLocalQ = mDNSfalse; }
++    if (rr->AnsweredLocalQ) { AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, QC_rmv); rr->AnsweredLocalQ = mDNSfalse; }
+     mDNS_Deregister_internal(m, rr, mDNS_Dereg_normal);     // Don't touch rr after this
+ }
+ 
+@@ -4778,7 +4778,7 @@
+                         m->CurrentRecord = mDNSNULL;
+                         return mDNStrue;
+                     }
+-                    AnswerLocalQuestionWithLocalAuthRecord(m, rr, mDNStrue);
++                    AnswerLocalQuestionWithLocalAuthRecord(m, rr, QC_add);
+                     if (m->CurrentQuestion != q)
+                         break;     // If callback deleted q, then we're finished here
+                 }
+@@ -5047,7 +5047,7 @@
+             if (LocalOnlyRecordAnswersQuestion(rr, q))
+             {
+                 retEv = mDNStrue;
+-                AnswerLocalQuestionWithLocalAuthRecord(m, rr, mDNStrue);
++                AnswerLocalQuestionWithLocalAuthRecord(m, rr, QC_add);
+                 if (m->CurrentQuestion != q) break;     // If callback deleted q, then we're finished here
+             }
+         }
+@@ -5064,7 +5064,7 @@
+             if (ResourceRecordAnswersQuestion(&rr->resrec, q))
+             {
+                 retEv = mDNStrue;
+-                AnswerLocalQuestionWithLocalAuthRecord(m, rr, mDNStrue);
++                AnswerLocalQuestionWithLocalAuthRecord(m, rr, QC_add);
+                 if (m->CurrentQuestion != q) break;     // If callback deleted q, then we're finished here
+             }
+         }
+@@ -5287,7 +5287,7 @@
+         {
+             debugf("CheckRmvEventsForLocalRecords: Generating local RMV events for %s", ARDisplayString(m, rr));
+             rr->resrec.RecordType = kDNSRecordTypeShared;
+-            AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, mDNSfalse);
++            AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, QC_rmv);
+             if (m->CurrentRecord == rr) // If rr still exists in list, restore its state now
+             {
+                 rr->resrec.RecordType = kDNSRecordTypeDeregistering;
+@@ -5498,7 +5498,7 @@
+             if (LocalRecordReady(rr))
+             {
+                 debugf("mDNS_Execute: Delivering Add event with LocalAuthRecord %s", ARDisplayString(m, rr));
+-                AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, mDNStrue);
++                AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, QC_add);
+             }
+             else if (!rr->next)
+             {
+@@ -5555,7 +5555,7 @@
+                         if (LocalRecordReady(rr))
+                         {
+                             debugf("mDNS_Execute: Delivering Add event with LocalAuthRecord %s", ARDisplayString(m, rr));
+-                            AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, mDNStrue);
++                            AnswerAllLocalQuestionsWithLocalAuthRecord(m, rr, QC_add);
+                         }
+                         else LogMsg("mDNS_Execute: LocalOnlyRecord %s not ready", ARDisplayString(m, rr));
+                     }
+@@ -12414,7 +12414,7 @@
+             {
+                 // Don't use mDNS_DropLockBeforeCallback() here, since we don't allow API calls
+                 if (question->QuestionCallback)
+-                    question->QuestionCallback(m, question, &rr->resrec, mDNSfalse);
++                    question->QuestionCallback(m, question, &rr->resrec, QC_rmv);
+             }
+     }
+     mDNS_Unlock(m);
+@@ -12955,7 +12955,7 @@
+         if (m->SPSBrowseCallback)
+         {
+             mDNS_DropLockBeforeCallback();      // Allow client to legally make mDNS API calls from the callback
+-            m->SPSBrowseCallback(m, &set->NetWakeBrowse, mDNSNULL, mDNSfalse);
++            m->SPSBrowseCallback(m, &set->NetWakeBrowse, mDNSNULL, QC_rmv);
+             mDNS_ReclaimLockAfterCallback();    // Decrement mDNS_reentrancy to block mDNS API calls again
+         }
+ 

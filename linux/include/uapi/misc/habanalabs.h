@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
  *
- * Copyright 2016-2018 HabanaLabs, Ltd.
+ * Copyright 2016-2019 HabanaLabs, Ltd.
  * All Rights Reserved.
  *
  */
@@ -20,38 +20,100 @@
 /*
  * Queue Numbering
  *
- * The external queues (DMA channels + CPU) MUST be before the internal queues
- * and each group (DMA channels + CPU and internal) must be contiguous inside
+ * The external queues (PCI DMA channels) MUST be before the internal queues
+ * and each group (PCI DMA channels and internal) must be contiguous inside
  * itself but there can be a gap between the two groups (although not
  * recommended)
  */
 
 enum goya_queue_id {
 	GOYA_QUEUE_ID_DMA_0 = 0,
-	GOYA_QUEUE_ID_DMA_1,
-	GOYA_QUEUE_ID_DMA_2,
-	GOYA_QUEUE_ID_DMA_3,
-	GOYA_QUEUE_ID_DMA_4,
-	GOYA_QUEUE_ID_CPU_PQ,
-	GOYA_QUEUE_ID_MME,
-	GOYA_QUEUE_ID_TPC0,
-	GOYA_QUEUE_ID_TPC1,
-	GOYA_QUEUE_ID_TPC2,
-	GOYA_QUEUE_ID_TPC3,
-	GOYA_QUEUE_ID_TPC4,
-	GOYA_QUEUE_ID_TPC5,
-	GOYA_QUEUE_ID_TPC6,
-	GOYA_QUEUE_ID_TPC7,
+	GOYA_QUEUE_ID_DMA_1 = 1,
+	GOYA_QUEUE_ID_DMA_2 = 2,
+	GOYA_QUEUE_ID_DMA_3 = 3,
+	GOYA_QUEUE_ID_DMA_4 = 4,
+	GOYA_QUEUE_ID_CPU_PQ = 5,
+	GOYA_QUEUE_ID_MME = 6,	/* Internal queues start here */
+	GOYA_QUEUE_ID_TPC0 = 7,
+	GOYA_QUEUE_ID_TPC1 = 8,
+	GOYA_QUEUE_ID_TPC2 = 9,
+	GOYA_QUEUE_ID_TPC3 = 10,
+	GOYA_QUEUE_ID_TPC4 = 11,
+	GOYA_QUEUE_ID_TPC5 = 12,
+	GOYA_QUEUE_ID_TPC6 = 13,
+	GOYA_QUEUE_ID_TPC7 = 14,
 	GOYA_QUEUE_ID_SIZE
 };
 
-/* Opcode for management ioctl */
-#define HL_INFO_HW_IP_INFO	0
-#define HL_INFO_HW_EVENTS	1
-#define HL_INFO_DRAM_USAGE	2
-#define HL_INFO_HW_IDLE		3
+/*
+ * Engine Numbering
+ *
+ * Used in the "busy_engines_mask" field in `struct hl_info_hw_idle'
+ */
+
+enum goya_engine_id {
+	GOYA_ENGINE_ID_DMA_0 = 0,
+	GOYA_ENGINE_ID_DMA_1,
+	GOYA_ENGINE_ID_DMA_2,
+	GOYA_ENGINE_ID_DMA_3,
+	GOYA_ENGINE_ID_DMA_4,
+	GOYA_ENGINE_ID_MME_0,
+	GOYA_ENGINE_ID_TPC_0,
+	GOYA_ENGINE_ID_TPC_1,
+	GOYA_ENGINE_ID_TPC_2,
+	GOYA_ENGINE_ID_TPC_3,
+	GOYA_ENGINE_ID_TPC_4,
+	GOYA_ENGINE_ID_TPC_5,
+	GOYA_ENGINE_ID_TPC_6,
+	GOYA_ENGINE_ID_TPC_7,
+	GOYA_ENGINE_ID_SIZE
+};
+
+enum hl_device_status {
+	HL_DEVICE_STATUS_OPERATIONAL,
+	HL_DEVICE_STATUS_IN_RESET,
+	HL_DEVICE_STATUS_MALFUNCTION
+};
+
+/* Opcode for management ioctl
+ *
+ * HW_IP_INFO            - Receive information about different IP blocks in the
+ *                         device.
+ * HL_INFO_HW_EVENTS     - Receive an array describing how many times each event
+ *                         occurred since the last hard reset.
+ * HL_INFO_DRAM_USAGE    - Retrieve the dram usage inside the device and of the
+ *                         specific context. This is relevant only for devices
+ *                         where the dram is managed by the kernel driver
+ * HL_INFO_HW_IDLE       - Retrieve information about the idle status of each
+ *                         internal engine.
+ * HL_INFO_DEVICE_STATUS - Retrieve the device's status. This opcode doesn't
+ *                         require an open context.
+ * HL_INFO_DEVICE_UTILIZATION  - Retrieve the total utilization of the device
+ *                               over the last period specified by the user.
+ *                               The period can be between 100ms to 1s, in
+ *                               resolution of 100ms. The return value is a
+ *                               percentage of the utilization rate.
+ * HL_INFO_HW_EVENTS_AGGREGATE - Receive an array describing how many times each
+ *                               event occurred since the driver was loaded.
+ * HL_INFO_CLK_RATE            - Retrieve the current and maximum clock rate
+ *                               of the device in MHz. The maximum clock rate is
+ *                               configurable via sysfs parameter
+ * HL_INFO_RESET_COUNT   - Retrieve the counts of the soft and hard reset
+ *                         operations performed on the device since the last
+ *                         time the driver was loaded.
+ */
+#define HL_INFO_HW_IP_INFO		0
+#define HL_INFO_HW_EVENTS		1
+#define HL_INFO_DRAM_USAGE		2
+#define HL_INFO_HW_IDLE			3
+#define HL_INFO_DEVICE_STATUS		4
+#define HL_INFO_DEVICE_UTILIZATION	6
+#define HL_INFO_HW_EVENTS_AGGREGATE	7
+#define HL_INFO_CLK_RATE		8
+#define HL_INFO_RESET_COUNT		9
 
 #define HL_INFO_VERSION_MAX_LEN	128
+#define HL_INFO_CARD_NAME_MAX_LEN	16
 
 struct hl_info_hw_ip_info {
 	__u64 sram_base_address;
@@ -70,6 +132,7 @@ struct hl_info_hw_ip_info {
 	__u8 dram_enabled;
 	__u8 pad[2];
 	__u8 armcp_version[HL_INFO_VERSION_MAX_LEN];
+	__u8 card_name[HL_INFO_CARD_NAME_MAX_LEN];
 };
 
 struct hl_info_dram_usage {
@@ -79,7 +142,31 @@ struct hl_info_dram_usage {
 
 struct hl_info_hw_idle {
 	__u32 is_idle;
+	/*
+	 * Bitmask of busy engines.
+	 * Bits definition is according to `enum <chip>_enging_id'.
+	 */
+	__u32 busy_engines_mask;
+};
+
+struct hl_info_device_status {
+	__u32 status;
 	__u32 pad;
+};
+
+struct hl_info_device_utilization {
+	__u32 utilization;
+	__u32 pad;
+};
+
+struct hl_info_clk_rate {
+	__u32 cur_clk_rate_mhz;
+	__u32 max_clk_rate_mhz;
+};
+
+struct hl_info_reset_count {
+	__u32 hard_reset_cnt;
+	__u32 soft_reset_cnt;
 };
 
 struct hl_info_args {
@@ -97,8 +184,15 @@ struct hl_info_args {
 	/* HL_INFO_* */
 	__u32 op;
 
-	/* Context ID - Currently not in use */
-	__u32 ctx_id;
+	union {
+		/* Context ID - Currently not in use */
+		__u32 ctx_id;
+		/* Period value for utilization rate (100ms - 1000ms, in 100ms
+		 * resolution.
+		 */
+		__u32 period_ms;
+	};
+
 	__u32 pad;
 };
 
@@ -107,13 +201,15 @@ struct hl_info_args {
 /* Opcode to destroy previously created command buffer */
 #define HL_CB_OP_DESTROY	1
 
+#define HL_MAX_CB_SIZE		0x200000	/* 2MB */
+
 struct hl_cb_in {
 	/* Handle of CB or 0 if we want to create one */
 	__u64 cb_handle;
 	/* HL_CB_OP_* */
 	__u32 op;
-	/* Size of CB. Maximum size is 2MB. The minimum size that will be
-	 * allocated, regardless of this parameter's value, is PAGE_SIZE
+	/* Size of CB. Maximum size is HL_MAX_CB_SIZE. The minimum size that
+	 * will be allocated, regardless of this parameter's value, is PAGE_SIZE
 	 */
 	__u32 cb_size;
 	/* Context ID - Currently not in use */
@@ -159,6 +255,8 @@ struct hl_cs_chunk {
 
 #define HL_CS_STATUS_SUCCESS		0
 
+#define HL_MAX_JOBS_PER_CS		512
+
 struct hl_cs_in {
 	/* this holds address of array of hl_cs_chunk for restore phase */
 	__u64 chunks_restore;
@@ -168,9 +266,13 @@ struct hl_cs_in {
 	 * Currently not in use
 	 */
 	__u64 chunks_store;
-	/* Number of chunks in restore phase array */
+	/* Number of chunks in restore phase array. Maximum number is
+	 * HL_MAX_JOBS_PER_CS
+	 */
 	__u32 num_chunks_restore;
-	/* Number of chunks in execution array */
+	/* Number of chunks in execution array. Maximum number is
+	 * HL_MAX_JOBS_PER_CS
+	 */
 	__u32 num_chunks_execute;
 	/* Number of chunks in restore phase array - Currently not in use */
 	__u32 num_chunks_store;
@@ -181,7 +283,10 @@ struct hl_cs_in {
 };
 
 struct hl_cs_out {
-	/* this holds the sequence number of the CS to pass to wait ioctl */
+	/*
+	 * seq holds the sequence number of the CS to pass to wait ioctl. All
+	 * values are valid except for 0 and ULLONG_MAX
+	 */
 	__u64 seq;
 	/* HL_CS_STATUS_* */
 	__u32 status;
@@ -252,12 +357,12 @@ struct hl_mem_in {
 		struct {
 			/*
 			 * Requested virtual address of mapped memory.
-			 * KMD will try to map the requested region to this
-			 * hint address, as long as the address is valid and
-			 * not already mapped. The user should check the
+			 * The driver will try to map the requested region to
+			 * this hint address, as long as the address is valid
+			 * and not already mapped. The user should check the
 			 * returned address of the IOCTL to make sure he got
-			 * the hint address. Passing 0 here means that KMD
-			 * will choose the address itself.
+			 * the hint address. Passing 0 here means that the
+			 * driver will choose the address itself.
 			 */
 			__u64 hint_addr;
 			/* Handle returned from HL_MEM_OP_ALLOC */
@@ -270,12 +375,12 @@ struct hl_mem_in {
 			__u64 host_virt_addr;
 			/*
 			 * Requested virtual address of mapped memory.
-			 * KMD will try to map the requested region to this
-			 * hint address, as long as the address is valid and
-			 * not already mapped. The user should check the
+			 * The driver will try to map the requested region to
+			 * this hint address, as long as the address is valid
+			 * and not already mapped. The user should check the
 			 * returned address of the IOCTL to make sure he got
-			 * the hint address. Passing 0 here means that KMD
-			 * will choose the address itself.
+			 * the hint address. Passing 0 here means that the
+			 * driver will choose the address itself.
 			 */
 			__u64 hint_addr;
 			/* Size of allocated host memory */
@@ -320,6 +425,114 @@ union hl_mem_args {
 	struct hl_mem_out out;
 };
 
+#define HL_DEBUG_MAX_AUX_VALUES		10
+
+struct hl_debug_params_etr {
+	/* Address in memory to allocate buffer */
+	__u64 buffer_address;
+
+	/* Size of buffer to allocate */
+	__u64 buffer_size;
+
+	/* Sink operation mode: SW fifo, HW fifo, Circular buffer */
+	__u32 sink_mode;
+	__u32 pad;
+};
+
+struct hl_debug_params_etf {
+	/* Address in memory to allocate buffer */
+	__u64 buffer_address;
+
+	/* Size of buffer to allocate */
+	__u64 buffer_size;
+
+	/* Sink operation mode: SW fifo, HW fifo, Circular buffer */
+	__u32 sink_mode;
+	__u32 pad;
+};
+
+struct hl_debug_params_stm {
+	/* Two bit masks for HW event and Stimulus Port */
+	__u64 he_mask;
+	__u64 sp_mask;
+
+	/* Trace source ID */
+	__u32 id;
+
+	/* Frequency for the timestamp register */
+	__u32 frequency;
+};
+
+struct hl_debug_params_bmon {
+	/* Two address ranges that the user can request to filter */
+	__u64 start_addr0;
+	__u64 addr_mask0;
+
+	__u64 start_addr1;
+	__u64 addr_mask1;
+
+	/* Capture window configuration */
+	__u32 bw_win;
+	__u32 win_capture;
+
+	/* Trace source ID */
+	__u32 id;
+	__u32 pad;
+};
+
+struct hl_debug_params_spmu {
+	/* Event types selection */
+	__u64 event_types[HL_DEBUG_MAX_AUX_VALUES];
+
+	/* Number of event types selection */
+	__u32 event_types_num;
+	__u32 pad;
+};
+
+/* Opcode for ETR component */
+#define HL_DEBUG_OP_ETR		0
+/* Opcode for ETF component */
+#define HL_DEBUG_OP_ETF		1
+/* Opcode for STM component */
+#define HL_DEBUG_OP_STM		2
+/* Opcode for FUNNEL component */
+#define HL_DEBUG_OP_FUNNEL	3
+/* Opcode for BMON component */
+#define HL_DEBUG_OP_BMON	4
+/* Opcode for SPMU component */
+#define HL_DEBUG_OP_SPMU	5
+/* Opcode for timestamp (deprecated) */
+#define HL_DEBUG_OP_TIMESTAMP	6
+/* Opcode for setting the device into or out of debug mode. The enable
+ * variable should be 1 for enabling debug mode and 0 for disabling it
+ */
+#define HL_DEBUG_OP_SET_MODE	7
+
+struct hl_debug_args {
+	/*
+	 * Pointer to user input structure.
+	 * This field is relevant to specific opcodes.
+	 */
+	__u64 input_ptr;
+	/* Pointer to user output structure */
+	__u64 output_ptr;
+	/* Size of user input structure */
+	__u32 input_size;
+	/* Size of user output structure */
+	__u32 output_size;
+	/* HL_DEBUG_OP_* */
+	__u32 op;
+	/*
+	 * Register index in the component, taken from the debug_regs_index enum
+	 * in the various ASIC header files
+	 */
+	__u32 reg_idx;
+	/* Enable/disable */
+	__u32 enable;
+	/* Context ID - Currently not in use */
+	__u32 ctx_id;
+};
+
 /*
  * Various information operations such as:
  * - H/W IP information
@@ -361,6 +574,12 @@ union hl_mem_args {
  * Each JOB will be enqueued on a specific queue, according to the user's input.
  * There can be more then one JOB per queue.
  *
+ * The CS IOCTL will receive three sets of JOBS. One set is for "restore" phase,
+ * a second set is for "execution" phase and a third set is for "store" phase.
+ * The JOBS on the "restore" phase are enqueued only after context-switch
+ * (or if its the first CS for this context). The user can also order the
+ * driver to run the "restore" phase explicitly
+ *
  * There are two types of queues - external and internal. External queues
  * are DMA queues which transfer data from/to the Host. All other queues are
  * internal. The driver will get completion notifications from the device only
@@ -377,19 +596,18 @@ union hl_mem_args {
  * relevant queues. Therefore, the user mustn't assume the CS has been completed
  * or has even started to execute.
  *
- * Upon successful enqueue, the IOCTL returns an opaque handle which the user
+ * Upon successful enqueue, the IOCTL returns a sequence number which the user
  * can use with the "Wait for CS" IOCTL to check whether the handle's CS
  * external JOBS have been completed. Note that if the CS has internal JOBS
  * which can execute AFTER the external JOBS have finished, the driver might
  * report that the CS has finished executing BEFORE the internal JOBS have
  * actually finish executing.
  *
- * The CS IOCTL will receive three sets of JOBS. One set is for "restore" phase,
- * a second set is for "execution" phase and a third set is for "store" phase.
- * The JOBS on the "restore" phase are enqueued only after context-switch
- * (or if its the first CS for this context). The user can also order the
- * driver to run the "restore" phase explicitly
- *
+ * Even though the sequence number increments per CS, the user can NOT
+ * automatically assume that if CS with sequence number N finished, then CS
+ * with sequence number N-1 also finished. The user can make this assumption if
+ * and only if CS N and CS N-1 are exactly the same (same CBs for the same
+ * queues).
  */
 #define HL_IOCTL_CS			\
 		_IOWR('H', 0x03, union hl_cs_args)
@@ -399,7 +617,7 @@ union hl_mem_args {
  *
  * The user can call this IOCTL with a handle it received from the CS IOCTL
  * to wait until the handle's CS has finished executing. The user will wait
- * inside the kernel until the CS has finished or until the user-requeusted
+ * inside the kernel until the CS has finished or until the user-requested
  * timeout has expired.
  *
  * The return value of the IOCTL is a standard Linux error code. The possible
@@ -444,7 +662,34 @@ union hl_mem_args {
 #define HL_IOCTL_MEMORY		\
 		_IOWR('H', 0x05, union hl_mem_args)
 
+/*
+ * Debug
+ * - Enable/disable the ETR/ETF/FUNNEL/STM/BMON/SPMU debug traces
+ *
+ * This IOCTL allows the user to get debug traces from the chip.
+ *
+ * Before the user can send configuration requests of the various
+ * debug/profile engines, it needs to set the device into debug mode.
+ * This is because the debug/profile infrastructure is shared component in the
+ * device and we can't allow multiple users to access it at the same time.
+ *
+ * Once a user set the device into debug mode, the driver won't allow other
+ * users to "work" with the device, i.e. open a FD. If there are multiple users
+ * opened on the device, the driver won't allow any user to debug the device.
+ *
+ * For each configuration request, the user needs to provide the register index
+ * and essential data such as buffer address and size.
+ *
+ * Once the user has finished using the debug/profile engines, he should
+ * set the device into non-debug mode, i.e. disable debug mode.
+ *
+ * The driver can decide to "kick out" the user if he abuses this interface.
+ *
+ */
+#define HL_IOCTL_DEBUG		\
+		_IOWR('H', 0x06, struct hl_debug_args)
+
 #define HL_COMMAND_START	0x01
-#define HL_COMMAND_END		0x06
+#define HL_COMMAND_END		0x07
 
 #endif /* HABANALABS_H_ */

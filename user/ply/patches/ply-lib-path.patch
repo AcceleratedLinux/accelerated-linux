@@ -1,0 +1,10 @@
+diff -Naur ply.orig/src/ply/Makefile.am ply/src/ply/Makefile.am
+--- ply.orig/src/ply/Makefile.am	2020-02-21 15:28:41.000000000 +1000
++++ ply/src/ply/Makefile.am	2020-02-22 16:21:36.777841519 +1000
+@@ -1,5 +1,5 @@
+ sbin_PROGRAMS = ply
+ 
+ ply_CPPFLAGS = -include $(top_srcdir)/config.h -I $(top_srcdir)/include
+-ply_LDADD    = ../libply/libply.la
++ply_LDADD    = -L../libply/ -lply
+ ply_SOURCES  = ply.c

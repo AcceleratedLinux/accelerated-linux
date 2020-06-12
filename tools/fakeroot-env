@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# A wrapper to execute the fakeroot-build.sh script and then run a
+# command e.g. mksquashfs in a single fakeroot session.
+#
+# fakeroot-build.sh performs file attribute manipulations that cannot be
+# done by a non-root user, except in the fakeroot environment.
+# Use romfs-inst.sh's chown (-w) and setcap (-C) arguments to generate
+# fakeroot-build.sh during the romfs step.
+#
+
+# Map user/group names to uid/gid to replace in the fakeroot script,
+# otherwise the build system's /etc/passwd and /etc/group file is used.
+eval "$(awk -F : '{print "UID_" $1 "=" $3}' ${ROOTDIR}/romfs/etc/passwd)"
+eval "$(awk -F : '{print "GID_" $1 "=" $3}' ${ROOTDIR}/romfs/etc/group)"
+
+echo 'Setting file attributes in fakeroot environment'
+fakeroot <<EOF
+set -xe
+
+$(FAKEROOT_SCRIPT="${ROOTDIR}/tools/fakeroot-build.sh"
+touch "$FAKEROOT_SCRIPT"
+while read cmd arg filename; do
+	if [ "$cmd" = chown ]; then
+		user="${arg%%:*}"
+		group="${arg#*:}"
+		uid="$(eval "echo \$UID_$user")"
+		gid="$(eval "echo \$GID_$group")"
+		echo "$cmd ${uid:-$user}:${gid:-$group} $filename"
+	else
+		echo "$cmd $arg $filename"
+	fi
+done < "$FAKEROOT_SCRIPT")
+
+$@
+EOF

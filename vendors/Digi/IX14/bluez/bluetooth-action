@@ -1,0 +1,91 @@
+#!/bin/sh
+
+##################################################################
+#exec 2>/dev/console
+#set -x
+##################################################################
+
+CONF_FILE="/var/run/bluetoothd.conf"
+
+write_conf()
+{
+cat <<-EOF > "${CONF_FILE}"
+	[General]
+
+	# Default adapter name
+	Name = IX14
+
+	# Restricts all controllers to the specified transport. Default value
+	# is "dual", i.e. both BR/EDR and LE enabled (when supported by the HW).
+	# Possible values: "dual", "bredr", "le"
+	ControllerMode = le
+
+	[Policy]
+
+	# AutoEnable defines option to enable all controllers when they are found.
+	# This includes adapters present on start as well as adapters that are plugged
+	# in later on. Defaults to 'false'.
+	AutoEnable = true
+EOF
+}
+
+is_bt_enabled() {
+	local STATE
+
+	STATE="$(bluetooth state)"
+
+	[ "${STATE}" != "off" ] && [ "${STATE}" != "down" ]
+}
+
+bt_start() {
+	[ "${enable}" = "0" ] && return 0
+
+	write_conf
+	! is_bt_enabled && bluetooth on >/dev/null 2>&1 && sleep 1
+
+	# Check if the default name value is being restored
+	[ -z "${new_name}" ] && new_name="$(bluetooth defname)"
+
+	if is_bt_enabled; then
+		[ "$(bluetooth name)" = "${new_name}" ] && return 0
+		bluetooth name "${new_name}" >/dev/null 2>&1
+	else
+		return 1
+	fi
+}
+
+bt_stop() {
+	[ "${enable}" = "1" ] && return 0
+
+	is_bt_enabled && bluetooth off >/dev/null 2>&1
+}
+
+eval "$(config start)"
+config load
+if [ "$(config get service.bluetooth.enable)" = "1" ] \
+		&& [ "$(config get auth.user.admin.enable)" = "1" ] \
+		&& [ -z "$(config get auth.user.admin.password)" ]; then
+	enable="1"
+	new_name="$(config get service.bluetooth.name)"
+else
+	enable="0"
+fi
+eval "$(config stop)"
+
+case "${1}" in
+	start)
+		bt_start
+		;;
+	stop)
+		bt_stop
+		;;
+	reload)
+		bt_stop
+		sleep 1
+		bt_start
+		;;
+	*)
+		echo "Usage: ${0} {start|stop|reload}"
+		exit 1
+		;;
+esac

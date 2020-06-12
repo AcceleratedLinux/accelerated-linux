@@ -1,4 +1,4 @@
-URL = https://strace.io/files/4.25/strace-4.25.tar.xz
+URL = https://strace.io/files/5.5/strace-5.5.tar.xz
 
 ifeq ($(ARCH),arm64)
 MAKEVARS += ARCH=aarch64

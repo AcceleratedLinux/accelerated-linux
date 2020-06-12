@@ -274,10 +274,24 @@ struct crypt_kop {
 #define CIOCKEY2	_IOWR('c', 107, struct crypt_kop)
 #define CIOCFINDDEV	_IOWR('c', 108, struct crypt_find_op)
 
+/*
+ * The kernel "struct timespec" does not exist in all versions of the linux
+ * kernel (it is available in user-space environments via the kernels usual
+ * time.h include - just not inside the kernel). It was removed in newer
+ * kernels for improved 64bit time counters. For our purposes here it doesn't
+ * really matter, we can define and use our own local struct to use instead.
+ * Field names are the same as the original "struct timespec". No kernel
+ * internal API use harmed by this change.
+ */
+struct iptime {
+        u_int32_t       tv_sec;
+        u_int32_t       tv_usec;
+};
+
 struct cryptotstat {
-	struct timespec	acc;		/* total accumulated time */
-	struct timespec	min;		/* min time */
-	struct timespec	max;		/* max time */
+	struct iptime	acc;		/* total accumulated time */
+	struct iptime	min;		/* min time */
+	struct iptime	max;		/* max time */
 	u_int32_t	count;		/* number of observations */
 };
 

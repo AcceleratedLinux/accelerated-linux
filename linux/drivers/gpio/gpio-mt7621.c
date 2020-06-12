@@ -14,6 +14,8 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
+#include "gpiolib.h"
+
 #define MTK_BANK_CNT	3
 #define MTK_BANK_WIDTH	32
 
@@ -231,7 +233,7 @@ mediatek_gpio_dir_out(struct gpio_chip *chip, unsigned int gpio, int val)
 	spin_lock_irqsave(&chip->bgpio_lock, flags);
 
 	chip->bgpio_dir |= BIT(gpio);
-	chip->write_reg(chip->reg_dir, chip->bgpio_dir);
+	chip->write_reg(chip->reg_dir_out, chip->bgpio_dir);
 
 	spin_unlock_irqrestore(&chip->bgpio_lock, flags);
 
@@ -275,6 +277,56 @@ static const struct irq_domain_ops mediatek_gpio_irq_domain_ops = {
 	.map	= mediatek_gpio_irq_domain_map,
 	.xlate	= irq_domain_xlate_twocell,
 };
+
+static void mediatek_gpio_fixup_line_names(struct gpio_chip *chip, int bank)
+{
+	struct gpio_device *gdev = chip->gpiodev;
+	const char **names;
+	int ret, i = 0;
+	int count;
+	int offs = bank * MTK_BANK_WIDTH;
+
+	/*
+	 * Without this fixup function, bank 0's line names will be set for all
+	 * banks. We'll fix up the names for all banks, except bank 0, which is
+	 * already good
+	 */
+	if (bank == 0)
+		return;
+
+	count = of_property_count_strings(chip->of_node, "gpio-line-names");
+
+	/* Get the right chunk from all the GPIO names */
+	count -= offs;
+
+	if (count < 0)
+		goto err;
+
+	if (count > gdev->ngpio)
+		count = gdev->ngpio;
+
+	names = kcalloc(count, sizeof(*names), GFP_KERNEL);
+	if (!names)
+		goto err;
+
+	ret = of_property_read_string_helper(chip->of_node, "gpio-line-names",
+					     names, count, offs);
+	if (ret < 0) {
+		dev_warn(&gdev->dev, "failed to read GPIO line names\n");
+		kfree(names);
+		goto err;
+	}
+
+	for (; i < count; i++)
+		gdev->descs[i].name = names[i];
+
+	kfree(names);
+
+err:
+	/* Clear out the rest */
+	for (; i < gdev->ngpio; i++)
+		gdev->descs[i].name = NULL;
+}
 
 static int
 mediatek_gpio_bank_probe(struct device *dev,
@@ -320,6 +372,9 @@ mediatek_gpio_bank_probe(struct device *dev,
 		return ret;
 	}
 
+	/* Fix up gpio-line-names */
+	mediatek_gpio_fixup_line_names(&rg->chip, bank);
+
 	/* set polarity to low for all gpios */
 	mtk_gpio_w32(rg, GPIO_REG_POL, 0);
 
@@ -331,7 +386,6 @@ mediatek_gpio_bank_probe(struct device *dev,
 static int
 mediatek_gpio_probe(struct platform_device *pdev)
 {
-	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct mtk *mtk;
@@ -343,7 +397,7 @@ mediatek_gpio_probe(struct platform_device *pdev)
 	if (!mtk)
 		return -ENOMEM;
 
-	mtk->base = devm_ioremap_resource(dev, res);
+	mtk->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(mtk->base))
 		return PTR_ERR(mtk->base);
 

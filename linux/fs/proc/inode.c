@@ -72,15 +72,9 @@ static struct inode *proc_alloc_inode(struct super_block *sb)
 	return &ei->vfs_inode;
 }
 
-static void proc_i_callback(struct rcu_head *head)
+static void proc_free_inode(struct inode *inode)
 {
-	struct inode *inode = container_of(head, struct inode, i_rcu);
 	kmem_cache_free(proc_inode_cachep, PROC_I(inode));
-}
-
-static void proc_destroy_inode(struct inode *inode)
-{
-	call_rcu(&inode->i_rcu, proc_i_callback);
 }
 
 static void init_once(void *foo)
@@ -123,7 +117,7 @@ static int proc_show_options(struct seq_file *seq, struct dentry *root)
 
 const struct super_operations proc_sops = {
 	.alloc_inode	= proc_alloc_inode,
-	.destroy_inode	= proc_destroy_inode,
+	.free_inode	= proc_free_inode,
 	.drop_inode	= generic_delete_inode,
 	.evict_inode	= proc_evict_inode,
 	.statfs		= simple_statfs,
@@ -169,7 +163,7 @@ static void close_pdeo(struct proc_dir_entry *pde, struct pde_opener *pdeo)
 		pdeo->closing = true;
 		spin_unlock(&pde->pde_unload_lock);
 		file = pdeo->file;
-		pde->proc_fops->release(file_inode(file), file);
+		pde->proc_ops->proc_release(file_inode(file), file);
 		spin_lock(&pde->pde_unload_lock);
 		/* After ->release. */
 		list_del(&pdeo->lh);
@@ -206,11 +200,12 @@ static loff_t proc_reg_llseek(struct file *file, loff_t offset, int whence)
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	loff_t rv = -EINVAL;
 	if (use_pde(pde)) {
-		loff_t (*llseek)(struct file *, loff_t, int);
-		llseek = pde->proc_fops->llseek;
-		if (!llseek)
-			llseek = default_llseek;
-		rv = llseek(file, offset, whence);
+		typeof_member(struct proc_ops, proc_lseek) lseek;
+
+		lseek = pde->proc_ops->proc_lseek;
+		if (!lseek)
+			lseek = default_llseek;
+		rv = lseek(file, offset, whence);
 		unuse_pde(pde);
 	}
 	return rv;
@@ -218,11 +213,12 @@ static loff_t proc_reg_llseek(struct file *file, loff_t offset, int whence)
 
 static ssize_t proc_reg_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
-	ssize_t (*read)(struct file *, char __user *, size_t, loff_t *);
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	ssize_t rv = -EIO;
 	if (use_pde(pde)) {
-		read = pde->proc_fops->read;
+		typeof_member(struct proc_ops, proc_read) read;
+
+		read = pde->proc_ops->proc_read;
 		if (read)
 			rv = read(file, buf, count, ppos);
 		unuse_pde(pde);
@@ -232,11 +228,12 @@ static ssize_t proc_reg_read(struct file *file, char __user *buf, size_t count, 
 
 static ssize_t proc_reg_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
-	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *);
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	ssize_t rv = -EIO;
 	if (use_pde(pde)) {
-		write = pde->proc_fops->write;
+		typeof_member(struct proc_ops, proc_write) write;
+
+		write = pde->proc_ops->proc_write;
 		if (write)
 			rv = write(file, buf, count, ppos);
 		unuse_pde(pde);
@@ -248,9 +245,10 @@ static __poll_t proc_reg_poll(struct file *file, struct poll_table_struct *pts)
 {
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	__poll_t rv = DEFAULT_POLLMASK;
-	__poll_t (*poll)(struct file *, struct poll_table_struct *);
 	if (use_pde(pde)) {
-		poll = pde->proc_fops->poll;
+		typeof_member(struct proc_ops, proc_poll) poll;
+
+		poll = pde->proc_ops->proc_poll;
 		if (poll)
 			rv = poll(file, pts);
 		unuse_pde(pde);
@@ -262,9 +260,10 @@ static long proc_reg_unlocked_ioctl(struct file *file, unsigned int cmd, unsigne
 {
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	long rv = -ENOTTY;
-	long (*ioctl)(struct file *, unsigned int, unsigned long);
 	if (use_pde(pde)) {
-		ioctl = pde->proc_fops->unlocked_ioctl;
+		typeof_member(struct proc_ops, proc_ioctl) ioctl;
+
+		ioctl = pde->proc_ops->proc_ioctl;
 		if (ioctl)
 			rv = ioctl(file, cmd, arg);
 		unuse_pde(pde);
@@ -277,9 +276,10 @@ static long proc_reg_compat_ioctl(struct file *file, unsigned int cmd, unsigned 
 {
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	long rv = -ENOTTY;
-	long (*compat_ioctl)(struct file *, unsigned int, unsigned long);
 	if (use_pde(pde)) {
-		compat_ioctl = pde->proc_fops->compat_ioctl;
+		typeof_member(struct proc_ops, proc_compat_ioctl) compat_ioctl;
+
+		compat_ioctl = pde->proc_ops->proc_compat_ioctl;
 		if (compat_ioctl)
 			rv = compat_ioctl(file, cmd, arg);
 		unuse_pde(pde);
@@ -292,9 +292,10 @@ static int proc_reg_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	int rv = -EIO;
-	int (*mmap)(struct file *, struct vm_area_struct *);
 	if (use_pde(pde)) {
-		mmap = pde->proc_fops->mmap;
+		typeof_member(struct proc_ops, proc_mmap) mmap;
+
+		mmap = pde->proc_ops->proc_mmap;
 		if (mmap)
 			rv = mmap(file, vma);
 		unuse_pde(pde);
@@ -311,9 +312,9 @@ proc_reg_get_unmapped_area(struct file *file, unsigned long orig_addr,
 	unsigned long rv = -EIO;
 
 	if (use_pde(pde)) {
-		typeof(proc_reg_get_unmapped_area) *get_area;
+		typeof_member(struct proc_ops, proc_get_unmapped_area) get_area;
 
-		get_area = pde->proc_fops->get_unmapped_area;
+		get_area = pde->proc_ops->proc_get_unmapped_area;
 #ifdef CONFIG_MMU
 		if (!get_area)
 			get_area = current->mm->get_unmapped_area;
@@ -332,8 +333,8 @@ static int proc_reg_open(struct inode *inode, struct file *file)
 {
 	struct proc_dir_entry *pde = PDE(inode);
 	int rv = 0;
-	int (*open)(struct inode *, struct file *);
-	int (*release)(struct inode *, struct file *);
+	typeof_member(struct proc_ops, proc_open) open;
+	typeof_member(struct proc_ops, proc_release) release;
 	struct pde_opener *pdeo;
 
 	/*
@@ -350,7 +351,7 @@ static int proc_reg_open(struct inode *inode, struct file *file)
 	if (!use_pde(pde))
 		return -ENOENT;
 
-	release = pde->proc_fops->release;
+	release = pde->proc_ops->proc_release;
 	if (release) {
 		pdeo = kmem_cache_alloc(pde_opener_cache, GFP_KERNEL);
 		if (!pdeo) {
@@ -359,7 +360,7 @@ static int proc_reg_open(struct inode *inode, struct file *file)
 		}
 	}
 
-	open = pde->proc_fops->open;
+	open = pde->proc_ops->proc_open;
 	if (open)
 		rv = open(inode, file);
 
@@ -467,21 +468,23 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 			inode->i_size = de->size;
 		if (de->nlink)
 			set_nlink(inode, de->nlink);
-		WARN_ON(!de->proc_iops);
-		inode->i_op = de->proc_iops;
-		if (de->proc_fops) {
-			if (S_ISREG(inode->i_mode)) {
+
+		if (S_ISREG(inode->i_mode)) {
+			inode->i_op = de->proc_iops;
+			inode->i_fop = &proc_reg_file_ops;
 #ifdef CONFIG_COMPAT
-				if (!de->proc_fops->compat_ioctl)
-					inode->i_fop =
-						&proc_reg_file_ops_no_compat;
-				else
-#endif
-					inode->i_fop = &proc_reg_file_ops;
-			} else {
-				inode->i_fop = de->proc_fops;
+			if (!de->proc_ops->proc_compat_ioctl) {
+				inode->i_fop = &proc_reg_file_ops_no_compat;
 			}
-		}
+#endif
+		} else if (S_ISDIR(inode->i_mode)) {
+			inode->i_op = de->proc_iops;
+			inode->i_fop = de->proc_dir_ops;
+		} else if (S_ISLNK(inode->i_mode)) {
+			inode->i_op = de->proc_iops;
+			inode->i_fop = NULL;
+		} else
+			BUG();
 	} else
 	       pde_put(de);
 	return inode;

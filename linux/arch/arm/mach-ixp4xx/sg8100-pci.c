@@ -22,6 +22,8 @@
 #include <asm/irq.h>
 #include <asm/mach/pci.h>
 
+#include "irqs.h"
+
 #define IRQ_SG8100_PCI_INTA	IRQ_IXP4XX_GPIO8
 
 void __init sg8100_pci_preinit(void)

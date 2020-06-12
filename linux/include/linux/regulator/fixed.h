@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * fixed.h
  *
@@ -7,11 +8,6 @@
  *
  * Copyright (c) 2009 Nokia Corporation
  * Roger Quadros <ext-roger.quadros@nokia.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
  */
 
 #ifndef __REGULATOR_FIXED_H
@@ -40,6 +36,7 @@ struct fixed_voltage_config {
 	const char *input_supply;
 	int microvolts;
 	unsigned startup_delay;
+	unsigned int off_on_delay;
 	unsigned enabled_at_boot:1;
 	struct regulator_init_data *init_data;
 };

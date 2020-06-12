@@ -1,0 +1,128 @@
+--- pam_ldap-185/pam_ldap.c.orig	2009-11-06 04:29:34.000000000 -0600
++++ pam_ldap-185/pam_ldap.c	2020-04-06 21:24:31.816834333 -0500
+@@ -175,6 +175,9 @@
+   "Password Insufficient"
+ };
+ 
++/* Device group list attribute name */
++static const char *groupname = NULL;
++
+ #ifdef __GNUC__
+ #define DEBUG_MSG(level, fmt, args...)		\
+ 	do {					\
+@@ -557,6 +560,11 @@
+       free ((void *) (*info)->tmpluser);
+     }
+ 
++  if ((*info)->group_list != NULL)
++    {
++      ldap_value_free ((*info)->group_list);
++    }
++
+   free ((void *) (*info)->username);
+   free (*info);
+ 
+@@ -2681,9 +2689,12 @@
+   "shadowMin",
+   "shadowWarning",
+   "uidNumber",
++  NULL,  // group attribute name filled in here
+   NULL 
+ };
+ 
++#define ATTRS_SIZE	(sizeof _pam_ldap_attrs/sizeof _pam_ldap_attrs[0])
++
+ static int
+ _get_user_info (pam_ldap_session_t * session, const char *user)
+ {
+@@ -2860,6 +2871,13 @@
+   _get_long_integer_value (session->ld, msg, "shadowFlag",
+ 			   &session->info->shadow.flag);
+ 
++  /* Get device group list */
++  if (groupname != NULL)
++    {
++      _get_string_values (session->ld, msg, groupname,
++			  &session->info->group_list);
++    }
++
+   ldap_msgfree (res);
+ 
+   return PAM_SUCCESS;
+@@ -3404,6 +3422,30 @@
+ 		      &resp, aconv->appdata_ptr);
+ }
+ 
++/* Set device group list in environment */
++static void
++_set_group_list(pam_handle_t * pamh, char **group_list)
++{
++  if (group_list == NULL)
++    return;
++
++  char buf[256] = "GROUPNAME=";
++  char **p;
++  int n = 10;
++  for (p = group_list; *p; p++)
++  {
++    if (n + strlen(*p) + 1 < sizeof buf)
++      n += snprintf (buf+n, (sizeof buf)-n, "%s,", *p);
++    else
++      syslog (LOG_WARNING, "group list too long: %s", *p);
++  }
++  
++  if (n > 10)
++    buf[n-1] = '\0';
++
++  pam_putenv(pamh, buf);
++}
++
+ PAM_EXTERN int
+ pam_sm_authenticate (pam_handle_t * pamh,
+ 		     int flags, int argc, const char **argv)
+@@ -3432,6 +3473,13 @@
+ 	;
+       else if (!strcmp (argv[i], "debug"))
+ 	;
++      else if (!strncmp (argv[i], "groupname=", 10))
++      {
++        groupname = argv[i] + 10;
++
++        /* Add groupname to search attribute list */
++        _pam_ldap_attrs[ATTRS_SIZE-2] = (char *) groupname;
++      }
+       else
+ 	syslog (LOG_ERR, "illegal option %s", argv[i]);
+     }
+@@ -3470,6 +3518,10 @@
+                                   _cleanup_data);
+               rc = pam_set_item (pamh, PAM_USER, (void *) session->info->username);
+             }
++
++	  if (rc == PAM_SUCCESS)
++	    _set_group_list(pamh, session->info->group_list);
++
+ 	  return rc;
+ 	}
+     }
+@@ -3508,6 +3560,9 @@
+       rc = pam_set_item (pamh, PAM_USER, (void *) session->info->username);
+     }
+ 
++  if (rc == PAM_SUCCESS)
++    _set_group_list(pamh, session->info->group_list);
++  
+   return rc;
+ }
+ 
+--- pam_ldap-185/pam_ldap.h.orig	2009-11-06 04:29:34.000000000 -0600
++++ pam_ldap-185/pam_ldap.h	2020-04-06 20:59:27.363061473 -0500
+@@ -250,6 +250,8 @@
+     char *tmpluser;
+     /* shadow stuff */
+     pam_ldap_shadow_t shadow;
++    /* device group list */
++    char **group_list;
+   }
+ pam_ldap_user_info_t;
+ 

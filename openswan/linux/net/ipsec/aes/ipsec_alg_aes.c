@@ -31,8 +31,10 @@
  *	special case: ipsec core modular with this static algo inside:
  *	must avoid MODULE magic for this file
  */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
 #if defined(CONFIG_KLIPS_MODULE) && defined(CONFIG_KLIPS_ENC_AES)
 #undef MODULE
+#endif
 #endif
 
 #include <linux/module.h>

@@ -87,7 +87,7 @@ Flash Control IDs
 ``V4L2_CID_FLASH_STROBE_SOURCE (menu)``
     Defines the source of the flash LED strobe.
 
-.. tabularcolumns:: |p{7.0cm}|p{10.5cm}|
+.. tabularcolumns:: |p{7.5cm}|p{10.0cm}|
 
 .. flat-table::
     :header-rows:  0
@@ -98,7 +98,7 @@ Flash Control IDs
 	V4L2_CID_FLASH_STROBE control.
     * - ``V4L2_FLASH_STROBE_SOURCE_EXTERNAL``
       - The flash strobe is triggered by an external source. Typically
-	this is a sensor, which makes it possible to synchronises the
+	this is a sensor, which makes it possible to synchronise the
 	flash strobe start to exposure start.
 
 
@@ -146,7 +146,7 @@ Flash Control IDs
     an effect is chip dependent. Reading the faults resets the control
     and returns the chip to a usable state if possible.
 
-.. tabularcolumns:: |p{8.0cm}|p{9.5cm}|
+.. tabularcolumns:: |p{8.4cm}|p{9.1cm}|
 
 .. flat-table::
     :header-rows:  0

@@ -76,6 +76,7 @@
     defined(CONFIG_MACH_SG640) || defined(CONFIG_MACH_SG720) || \
     defined(CONFIG_MACH_SG590) || defined(CONFIG_MACH_SE5100)
 	#include <asm/io.h>
+	#include <mach/ixp4xx-gpio.h>
 
 	static inline void enable_dog(void)
 	{
@@ -94,6 +95,7 @@
 
 #if defined(CONFIG_MACH_SG8100)
 	#include <asm/io.h>
+	#include <mach/ixp4xx-gpio.h>
 
 	static inline void enable_dog(void)
 	{
@@ -177,10 +179,14 @@
 
 #if defined(CONFIG_MACH_8300) || defined(CONFIG_MACH_6300CX) || \
     defined(CONFIG_MACH_6300LX) || defined(CONFIG_MACH_6330MX) || \
-    defined(CONFIG_MACH_6350SR)
+    defined(CONFIG_MACH_6350SR) || defined(CONFIG_MACH_CM71xx)
 	#include <asm/gpio.h>
 
+#ifdef CONFIG_MACH_CM71xx
+	#define GPIO_WATCHDOG   46
+#else
 	#define GPIO_WATCHDOG	54
+#endif
 
 	static int wdt_state;
 	static int dog_initted;
@@ -283,13 +289,14 @@
 	 * the kernels own GPIO services - they are setup up too late
 	 * in the boot process.
 	 */
-#if defined(CONFIG_SNAPDOG_EX12)
-	#define GPIO_ADDR	0x0209c000	/* GPIO bank 1 address */
-	#define GPIO_WDT	28		/* GPIO 28 */
-#else
-	#define GPIO_ADDR	0x020a0000	/* GPIO bank 2 address */
-	#define GPIO_WDT	16		/* GPIO 16 */
-#endif
+	static const u32 bankaddr[] = {
+		0,
+		0x0209c000,
+		0x020a0000,
+		0x020a4000,
+		0x020a8000,
+		0x020ac000,
+	};
 
 	static int wdt_state;
 	static void __iomem *snapdog_regp;
@@ -302,9 +309,9 @@
 			/* Toggle WDI value */
 			v = readl(snapdog_regp + 0x0);
 			if (wdt_state++ & 0x1)
-				v &= ~(0x1 << GPIO_WDT);
+				v &= ~(0x1 << CONFIG_SNAPDOG_GPIO_BIT);
 			else
-				v |= (0x1 << GPIO_WDT);
+				v |= (0x1 << CONFIG_SNAPDOG_GPIO_BIT);
 			writel(v, snapdog_regp + 0x0);
 		}
 	}
@@ -314,11 +321,13 @@
 		u32 v;
 
 		if (snapdog_regp == NULL) {
-			snapdog_regp = ioremap(GPIO_ADDR, 0x40);
+			const u32 addr = bankaddr[CONFIG_SNAPDOG_GPIO_BANK];
+
+			snapdog_regp = ioremap(addr, 0x40);
 
 			/* Set WDT GPIO as output */
 			v = readl(snapdog_regp + 0x4);
-			v |= (0x1 << GPIO_WDT);
+			v |= (0x1 << CONFIG_SNAPDOG_GPIO_BIT);
 			writel(v, snapdog_regp + 0x4);
 		}
 
@@ -590,7 +599,7 @@
 	#define HAS_HW_SERVICE 1
 #endif
 
-#if defined(CONFIG_DTB_MT7621_EX15) || defined(CONFIG_DTB_MT7621_EX55)
+#if defined(CONFIG_DTB_MT7621_EX15)
 	#include <linux/io.h>
 	/*
 	 * We need to be able to start kicking the dog early in kernel
@@ -598,15 +607,9 @@
 	 * the kernels own GPIO services - they are setup up too late
 	 * in the boot process.
 	 */
-#if defined(CONFIG_DTB_MT7621_EX55)
-	#define WDT_GPIO_CTRL		0x604
-	#define WDT_GPIO_DATA		0x624
-	#define WDT_GPIO_PIN		1 /* GPIO33 */
-#else
 	#define WDT_GPIO_CTRL		0x600
 	#define WDT_GPIO_DATA		0x620
 	#define WDT_GPIO_PIN		29 /* GPIO29 */
-#endif
 
 	static int wdt_state = 0;
 	static void *snapdog_regp;
@@ -648,7 +651,7 @@
 	core_initcall(enable_dog);
 
 	#define HAS_HW_SERVICE 1
-#endif /* CONFIG_DTB_MT7621_EX15 || CONFIG_DTB_MT7621_EX55 */
+#endif /* CONFIG_DTB_MT7621_EX15 */
 
 
 #ifndef HAS_HW_SERVICE

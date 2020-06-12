@@ -25,6 +25,8 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
+#include "irqs.h"
+
 #ifdef	__ARMEB__
 #define	REG_OFFSET	3
 #else
@@ -316,7 +318,7 @@ MACHINE_END
  *  128M that the hardware has.
  */
 
-static void __init ess710_fixup(struct machine_desc *mdesc, struct tag *tags, char **cmdline, struct meminfo *mi)
+static void __init ess710_fixup(struct tag *tags, char **cmdline)
 {
 	struct tag *t = tags;
 

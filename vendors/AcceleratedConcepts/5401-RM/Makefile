@@ -41,7 +41,6 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) /etc/default/start
 	$(ROMFSINST) -p 555 /etc/mkffs
-	$(ROMFSINST) -p 555 /etc/nocrypt
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
 	$(ROMFSINST) /etc/fw_env.config
 	$(ROMFSINST) -d /libexec/udev/rules.d/77-mm-pci-blacklist.rules

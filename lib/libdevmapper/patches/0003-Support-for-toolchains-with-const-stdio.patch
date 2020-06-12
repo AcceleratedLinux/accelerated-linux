@@ -1,0 +1,60 @@
+From d90064efa2020af41e1203788751839617c84066 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 3 Dec 2019 13:51:17 +0100
+Subject: [PATCH] Support for toolchains with const stdio
+
+Patch from buildroot
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ lib/commands/toolcontext.c | 4 ++--
+ tools/lvmcmdline.c         | 7 +++++++
+ 2 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 1e03ea2..219b34c 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1594,7 +1594,7 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
+ 	/* FIXME Make this configurable? */
+ 	reset_lvm_errno(1);
+ 
+-#ifndef VALGRIND_POOL
++#if defined(__GLIBC__) && !defined(VALGRIND_POOL)
+ 	/* Set in/out stream buffering before glibc */
+ 	if (set_buffering
+ #ifdef SYS_gettid
+@@ -1962,7 +1962,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
+ 	if (cmd->libmem)
+ 		dm_pool_destroy(cmd->libmem);
+ 
+-#ifndef VALGRIND_POOL
++#if defined(__GLIBC__) && !defined(VALGRIND_POOL)
+ 	if (cmd->linebuffer) {
+ 		/* Reset stream buffering to defaults */
+ 		if (is_valid_fd(STDIN_FILENO) &&
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 3fec702..5771600 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3132,6 +3132,7 @@ int lvm_split(char *str, int *argc, char **argv, int max)
+ /* Make sure we have always valid filedescriptors 0,1,2 */
+ static int _check_standard_fds(void)
+ {
++#ifdef __GLIBC__
+ 	int err = is_valid_fd(STDERR_FILENO);
+ 
+ 	if (!is_valid_fd(STDIN_FILENO) &&
+@@ -3158,6 +3159,12 @@ static int _check_standard_fds(void)
+ 		       strerror(errno));
+ 		return 0;
+ 	}
++#else
++	if (!is_valid_fd(STDERR_FILENO) ||
++	    !is_valid_fd(STDOUT_FILENO) ||
++	    !is_valid_fd(STDIN_FILENO))
++		return 0;
++#endif
+ 
+ 	return 1;
+ }

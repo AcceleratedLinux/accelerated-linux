@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * at76c503/at76c505 USB driver
  *
@@ -9,11 +10,6 @@
  * Copyright (c) 2007 Kalle Valo <kalle.valo@iki.fi>
  * Copyright (c) 2010 Sebastian Smolorz <sesmo@gmx.net>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
  * This file is part of the Berlios driver for WLAN USB devices based on the
  * Atmel AT76C503A/505/505A.
  *
@@ -22,7 +18,6 @@
  * TODO list is at the wiki:
  *
  * http://wireless.kernel.org/en/users/Drivers/at76c50x-usb#TODO
- *
  */
 
 #include <linux/init.h>
@@ -2241,7 +2236,7 @@ static int at76_alloc_urbs(struct at76_priv *priv,
 	at76_dbg(DBG_PROC_ENTRY, "%s: ENTER", __func__);
 
 	at76_dbg(DBG_URB, "%s: NumEndpoints %d ", __func__,
-		 interface->altsetting[0].desc.bNumEndpoints);
+		 interface->cur_altsetting->desc.bNumEndpoints);
 
 	ep_in = NULL;
 	ep_out = NULL;

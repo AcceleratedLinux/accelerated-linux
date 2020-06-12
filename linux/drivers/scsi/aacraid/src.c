@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *	Adaptec AAC series RAID controller driver
  *	(c) Copyright 2001 Red Hat Inc.
@@ -9,25 +10,10 @@
  *               2010-2015 PMC-Sierra, Inc. (aacraid@pmc-sierra.com)
  *		 2016-2017 Microsemi Corp. (aacraid@microsemi.com)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; see the file COPYING.  If not, write to
- * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
- *
  * Module Name:
  *  src.c
  *
  * Abstract: Hardware Device Interface for PMC SRC based controllers
- *
  */
 
 #include <linux/kernel.h>
@@ -747,10 +733,20 @@ static bool aac_is_ctrl_up_and_running(struct aac_dev *dev)
 	return ctrl_up;
 }
 
+static void aac_src_drop_io(struct aac_dev *dev)
+{
+	if (!dev->soft_reset_support)
+		return;
+
+	aac_adapter_sync_cmd(dev, DROP_IO,
+			0, 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL, NULL);
+}
+
 static void aac_notify_fw_of_iop_reset(struct aac_dev *dev)
 {
 	aac_adapter_sync_cmd(dev, IOP_RESET_ALWAYS, 0, 0, 0, 0, 0, 0, NULL,
 						NULL, NULL, NULL, NULL);
+	aac_src_drop_io(dev);
 }
 
 static void aac_send_iop_reset(struct aac_dev *dev)

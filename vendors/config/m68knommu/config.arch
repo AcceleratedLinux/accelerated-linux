@@ -69,7 +69,7 @@ CROSS_COMPILE = m68k-uclinux-
 endif
 CROSS         = $(CROSS_COMPILE)
 CONFIGURE_HOST = m68k-elf
-CONFIGURE_TOOL ?= m68k-uclinux$(LIBCSUFFIX)
+CONFIGURE_TOOL ?= m68k-uclinux
 
 CONFIG_UCLINUX=y
 

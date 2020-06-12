@@ -1,0 +1,48 @@
+/*
+ * Device Tree file for Opengear ACM7004-5
+ *
+ * Ken Wilson <ken.wilson@opengear.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+/dts-v1/;
+#include "armada-370-acm7000-common.dtsi"
+
+/ {
+	model = "Opengear ACM7004-5";
+	compatible = "opengear,cm7000", "marvell,armada370", "marvell,armada-370-xp";
+	
+	soc {
+		internal-regs {
+			
+			ethernet@74000 {
+				status = "okay";
+				phy-mode = "rgmii-id";
+				fixed-link {
+					/* to MV88E6350R port 5 */
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+		};
+	};
+};
+
+&mdio {	
+	status = "okay";
+
+	phy0: ethernet-phy@0 {
+		reg = <0>;
+		marvell,reg-init =
+			< 3 16 0xf000 0x004a>,
+			< 3 17 0xffc3 0x0014>,
+			< 3 18 0xff7f 0x0000>,
+			<18 20 0x0000 0x0226>;
+	};
+	switch@1 { /* MV88E6350R */
+		reg = <1>;
+		id = <0xdeadbeef>;
+	};
+};

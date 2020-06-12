@@ -1,21 +1,17 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include "dpu_hw_mdss.h"
 
 static const uint32_t qcom_compressed_supported_formats[] = {
 	DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_BGR565,
+
+	DRM_FORMAT_NV12,
 };
 
 static const uint32_t plane_formats[] = {

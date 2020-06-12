@@ -1,0 +1,31 @@
+From: Samuel Brian <sam.brian@accelerated.com>
+Date: Mon, 23 Jan 2017 16:24:54 +1000
+Subject: qmi-firmware-update,helpers: don't match sysfs path
+
+Some modems (e.g. MC7430) have different sysfs device paths when in QDL
+mode, so cannot use that to identify the modem.
+
+This patch predates any thought of multi-modem support.
+Removing the sysfs path check and providing no replacement check is likely
+to be problematic if there is more than one modem, and the *another* modem
+triggers a udev add while waiting for the first modem to reboot.
+---
+ src/qmi-firmware-update/qfu-udev-helpers.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/qmi-firmware-update/qfu-udev-helpers.c b/src/qmi-firmware-update/qfu-udev-helpers.c
+index f100937..4a76afc 100644
+--- a/src/qmi-firmware-update/qfu-udev-helpers.c
++++ b/src/qmi-firmware-update/qfu-udev-helpers.c
+@@ -393,8 +393,9 @@ device_matches_sysfs_and_type (GUdevDevice             *device,
+     if (!device_sysfs_path)
+         goto out;
+ 
+-    if (g_strcmp0 (device_sysfs_path, sysfs_path) != 0)
+-        goto out;
++    // Don't match the device path - some modems (e.g. MC7430) have different device paths when in QDL mode
++    // if (g_strcmp0 (device_sysfs_path, sysfs_path) != 0)
++    //     goto out;
+ 
+     if (!udev_helper_get_udev_interface_details (device,
+                                                  &device_driver,

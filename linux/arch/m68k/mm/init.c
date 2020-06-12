@@ -130,8 +130,10 @@ static inline void init_pointer_tables(void)
 	/* insert pointer tables allocated so far into the tablelist */
 	init_pointer_table((unsigned long)kernel_pg_dir);
 	for (i = 0; i < PTRS_PER_PGD; i++) {
-		if (pgd_present(kernel_pg_dir[i]))
-			init_pointer_table(__pgd_page(kernel_pg_dir[i]));
+		pud_t *pud = (pud_t *)(&kernel_pg_dir[i]);
+
+		if (pud_present(*pud))
+			init_pointer_table(pgd_page_vaddr(kernel_pg_dir[i]));
 	}
 
 	/* insert also pointer table that we used to unmap the zero page */
@@ -147,10 +149,3 @@ void __init mem_init(void)
 	init_pointer_tables();
 	mem_init_print_info(NULL);
 }
-
-#ifdef CONFIG_BLK_DEV_INITRD
-void free_initrd_mem(unsigned long start, unsigned long end)
-{
-	free_reserved_area((void *)start, (void *)end, -1, "initrd");
-}
-#endif

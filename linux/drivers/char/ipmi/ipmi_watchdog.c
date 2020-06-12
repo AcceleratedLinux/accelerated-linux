@@ -837,7 +837,7 @@ static int ipmi_open(struct inode *ino, struct file *filep)
 		 * first heartbeat.
 		 */
 		ipmi_start_timer_on_heartbeat = 1;
-		return nonseekable_open(ino, filep);
+		return stream_open(ino, filep);
 
 	default:
 		return (-ENODEV);
@@ -893,6 +893,7 @@ static const struct file_operations ipmi_wdog_fops = {
 	.poll    = ipmi_poll,
 	.write   = ipmi_write,
 	.unlocked_ioctl = ipmi_unlocked_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
 	.open    = ipmi_open,
 	.release = ipmi_close,
 	.fasync  = ipmi_fasync,

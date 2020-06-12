@@ -1,0 +1,1 @@
+dir_$(CONFIG_USER_CRDA_REGDB) += crda

@@ -1,0 +1,24 @@
+From 467339af41c3a738bcd5f39a2216a98c5652d149 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Thu, 31 Oct 2019 10:56:39 +0100
+Subject: [PATCH 1/2] calling pthread_exit on uClibc caused segmentation
+ faults, so removed that
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ src/thread.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/thread.c b/src/thread.c
+index e099a00..64dee96 100644
+--- a/src/thread.c
++++ b/src/thread.c
+@@ -50,7 +50,7 @@ void argon2_thread_exit(void) {
+ #if defined(_WIN32)
+     _endthreadex(0);
+ #else
+-    pthread_exit(NULL);
++    /*pthread_exit(NULL);*/
+ #endif
+ }
+ 

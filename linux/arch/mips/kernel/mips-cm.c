@@ -1,11 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright (C) 2013 Imagination Technologies
  * Author: Paul Burton <paul.burton@mips.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the
- * Free Software Foundation;  either version 2 of the  License, or (at your
- * option) any later version.
  */
 
 #include <linux/errno.h>
@@ -198,7 +194,7 @@ static void mips_cm_probe_l2sync(void)
 	write_gcr_l2_only_sync_base(addr | CM_GCR_L2_ONLY_SYNC_BASE_SYNCEN);
 
 	/* Map the region */
-	mips_cm_l2sync_base = ioremap_nocache(addr, MIPS_CM_L2SYNC_SIZE);
+	mips_cm_l2sync_base = ioremap(addr, MIPS_CM_L2SYNC_SIZE);
 }
 
 int mips_cm_probe(void)
@@ -219,7 +215,7 @@ int mips_cm_probe(void)
 	if (!addr)
 		return -ENODEV;
 
-	mips_gcr_base = ioremap_nocache(addr, MIPS_CM_GCR_SIZE);
+	mips_gcr_base = ioremap(addr, MIPS_CM_GCR_SIZE);
 	if (!mips_gcr_base)
 		return -ENXIO;
 

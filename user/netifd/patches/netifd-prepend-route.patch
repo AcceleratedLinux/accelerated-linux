@@ -1,0 +1,25 @@
+The original behaviour is for netifd to add routes into the kernel with
+the equivalent of an "ip route replace" command.
+This causes an issue with default routes with the same metric -- only the
+last added route is left in the routing table. And if netifd removes that
+default route, then the *other* one that was overwritten is not re-added.
+
+
+The issue is fixed by adding routes with the equivalent of the command
+"ip route prepend".
+This risk is that if netifd for some reason does not remove a stale route
+(which would be problematic regardless of the change in this patch) then
+the routing table may end up with multiple of the same route if it gets
+added again.
+
+--- netifd/system-linux.c.orig	2020-02-05 11:23:25.932051325 +1000
++++ netifd/system-linux.c	2020-02-05 11:23:30.980037847 +1000
+@@ -1532,7 +1532,7 @@
+ 	struct nl_msg *msg;
+ 
+ 	if (cmd == RTM_NEWROUTE) {
+-		flags |= NLM_F_CREATE | NLM_F_REPLACE;
++		flags |= NLM_F_CREATE;
+ 
+ 		if (!dev) { // Add null-route
+ 			rtm.rtm_scope = RT_SCOPE_UNIVERSE;

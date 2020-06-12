@@ -1,0 +1,6 @@
+config LIB_LIBDEVMAPPER
+	bool "libdevmapper"
+	select LIB_LIBAIO
+	help
+	  The Linux Kernel Device Mapper userspace library. Required by
+	  cryptsetup.

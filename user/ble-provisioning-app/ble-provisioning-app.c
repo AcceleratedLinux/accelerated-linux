@@ -63,6 +63,8 @@
 
 #define PROVISIONING_SERVICE_VERSION	0x02
 
+#define CONFIG_SET "/bin/ble-provisioning-app-config-set "
+
 static bool verbose = false;
 static bool keep_running = true;
 
@@ -305,7 +307,7 @@ static struct {
 	const char *description;
 } sim_lock_status[] = {
 	/* Override 0 to mean 'OK' (no lock) */
-	{ 0  , "none" },
+	{ 0  , "--" },
 	/* The rest of values are CME error codes */
 	{ 11 , "sim-pin" },
 	{ 17 , "sim-pin2" },
@@ -342,7 +344,7 @@ static void sim_lock_status_read_cb(struct gatt_db_attribute *attrib,
 		goto done;
 	}
 
-	mm_lock_status = get_cmd_output("mmcli -m $(modem idx) | sed -ne \"s,.*lock: '\\([^']\\+\\)'$,\\1,g;T;p\"");
+	mm_lock_status = get_cmd_output("modem cli -K | sed -rn 's/^modem.generic.unlock-required *: *//p'");
 	printf("mm_lock_status: %s\n", mm_lock_status);
 	if (!mm_lock_status)
 		goto done;
@@ -583,8 +585,7 @@ static void drm_enable_write_cb(struct gatt_db_attribute *attrib,
 {
 	struct server *server = user_data;
 	uint8_t error = 0;
-	bool request_enable;
-	char *cmd = NULL;
+	const char *cmd;
 	char *config_service = NULL;
 	int status = 0;
 
@@ -604,40 +605,17 @@ static void drm_enable_write_cb(struct gatt_db_attribute *attrib,
 	}
 
 	if (*value == DRM_DISABLED)
-		request_enable = false;
+		cmd = CONFIG_SET "drm false";
 	else if (*value == DRM_ENABLED)
-		request_enable = true;
-	else
+		cmd = CONFIG_SET "drm true";
+	else {
 		error = BT_ATT_ERROR_INVALID_HANDLE;
+		goto done;
+	}
 
-	if (!error) {
-		config_service = get_cmd_output("config get cloud.service");
-		/* When enabling, we also need to establish DRM (no matter previous cloud.service) */
-		if (request_enable) {
-			if (safe_execute("config set cloud.service drm", &status) < 0 || status) {
-				syslog(LOG_ERR, "Failed to set DRM cnonection, error(%d)\n", status);
-				error = BT_ATT_ERROR_INVALID_HANDLE;
-				goto done;
-			}
-		}
-
-		if (!request_enable && (!config_service || strcmp(config_service, "drm"))) {
-			/*
-			 * In this specific case:
-			 *    - We are requested to disable the DRM service
-			 *    - cloud.service is not drm
-			 *
-			 * So take no actions regarding the cloud.enable setting
-			 */
-		} else {
-			if (asprintf(&cmd, "config set cloud.enable %s", request_enable ? "1" : "0" ) < 0  ||
-			    safe_execute(cmd, &status) < 0                                                  ||
-			    status) {
-				syslog(LOG_ERR, "Failed to set DRM cnonection, error(%d)\n", status);
-				error = BT_ATT_ERROR_INVALID_HANDLE;
-			}
-			free(cmd);
-		}
+	if (safe_execute(cmd, &status) < 0 || status) {
+		syslog(LOG_ERR, "Failed to set DRM connection, error(%d)\n", status);
+		error = BT_ATT_ERROR_INVALID_HANDLE;
 	}
 
 done:
@@ -721,7 +699,7 @@ static void cellular_apn_write_cb(struct gatt_db_attribute *attrib,
 	memcpy(new_apn, value, len);
 	new_apn[len] = '\0';
 
-	if (asprintf(&cmd, "config set modem.modem.apn.0.apn %s", new_apn) < 0  ||
+	if (asprintf(&cmd, CONFIG_SET "apn %s", new_apn) < 0  ||
 	    safe_execute(cmd, &status) < 0                                      ||
 	    status) {
 		syslog(LOG_ERR, "Failed to set APN, error(%d)\n", status);
@@ -828,7 +806,7 @@ static void cellular_pin_write_cb(struct gatt_db_attribute *attrib,
 	free(cmd);
 	cmd = NULL;
 
-	if (asprintf(&cmd, "config set modem.modem.pin %s", new_pin) < 0 ||
+	if (asprintf(&cmd, CONFIG_SET "pin %s", new_pin) < 0 ||
 	    safe_execute(cmd, &status) < 0                               ||
 	    status) {
 		syslog(LOG_ERR, "Failed to set PIN, error (%d)\n", status);

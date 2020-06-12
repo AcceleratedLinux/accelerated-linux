@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright(c) 2013-2015 Intel Corporation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/platform_device.h>
@@ -436,10 +428,9 @@ static int nd_intel_test_finish_query(struct nfit_test *t,
 			dev_dbg(dev, "%s: still verifying\n", __func__);
 			break;
 		}
-
 		dev_dbg(dev, "%s: transition out verify\n", __func__);
 		fw->state = FW_STATE_UPDATED;
-		/* we are going to fall through if it's "done" */
+		/* fall through */
 	case FW_STATE_UPDATED:
 		nd_cmd->status = 0;
 		/* bogus test version */
@@ -3171,6 +3162,9 @@ static __init int nfit_test_init(void)
 	acpi_nfit_test();
 	device_dax_test();
 	mcsafe_test();
+	dax_pmem_test();
+	dax_pmem_core_test();
+	dax_pmem_compat_test();
 
 	nfit_test_setup(nfit_test_lookup, nfit_test_evaluate_dsm);
 

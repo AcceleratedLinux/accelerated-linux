@@ -1,12 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * Copyright IBM Corporation, 2013
  * Author Aneesh Kumar K.V <aneesh.kumar@linux.vnet.ibm.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License or (at your optional) any later version of the license.
- *
  */
 
 #ifndef __POWERPC_KVM_BOOK3S_H__
@@ -36,5 +31,8 @@ extern void kvmppc_emulate_tabort(struct kvm_vcpu *vcpu, int ra_val);
 #else
 static inline void kvmppc_emulate_tabort(struct kvm_vcpu *vcpu, int ra_val) {}
 #endif
+
+extern void kvmppc_set_msr_hv(struct kvm_vcpu *vcpu, u64 msr);
+extern void kvmppc_inject_interrupt_hv(struct kvm_vcpu *vcpu, int vec, u64 srr1_flags);
 
 #endif

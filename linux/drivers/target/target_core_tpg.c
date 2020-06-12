@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*******************************************************************************
  * Filename:  target_core_tpg.c
  *
@@ -6,20 +7,6 @@
  * (c) Copyright 2002-2013 Datera, Inc.
  *
  * Nicholas A. Bellinger <nab@kernel.org>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
  ******************************************************************************/
 
@@ -44,9 +31,6 @@
 #include "target_core_ua.h"
 
 extern struct se_device *g_lun0_dev;
-
-static DEFINE_SPINLOCK(tpg_lock);
-static LIST_HEAD(tpg_list);
 
 /*	__core_tpg_get_initiator_node_acl():
  *
@@ -488,7 +472,6 @@ int core_tpg_register(
 	se_tpg->se_tpg_wwn = se_wwn;
 	atomic_set(&se_tpg->tpg_pr_ref_count, 0);
 	INIT_LIST_HEAD(&se_tpg->acl_node_list);
-	INIT_LIST_HEAD(&se_tpg->se_tpg_node);
 	INIT_LIST_HEAD(&se_tpg->tpg_sess_list);
 	spin_lock_init(&se_tpg->session_lock);
 	mutex_init(&se_tpg->tpg_lun_mutex);
@@ -506,10 +489,6 @@ int core_tpg_register(
 			return ret;
 		}
 	}
-
-	spin_lock_bh(&tpg_lock);
-	list_add_tail(&se_tpg->se_tpg_node, &tpg_list);
-	spin_unlock_bh(&tpg_lock);
 
 	pr_debug("TARGET_CORE[%s]: Allocated portal_group for endpoint: %s, "
 		 "Proto: %d, Portal Tag: %u\n", se_tpg->se_tpg_tfo->fabric_name,
@@ -531,10 +510,6 @@ int core_tpg_deregister(struct se_portal_group *se_tpg)
 		 "Proto: %d, Portal Tag: %u\n", tfo->fabric_name,
 		tfo->tpg_get_wwn(se_tpg) ? tfo->tpg_get_wwn(se_tpg) : NULL,
 		se_tpg->proto_id, tfo->tpg_get_tag(se_tpg));
-
-	spin_lock_bh(&tpg_lock);
-	list_del(&se_tpg->se_tpg_node);
-	spin_unlock_bh(&tpg_lock);
 
 	while (atomic_read(&se_tpg->tpg_pr_ref_count) != 0)
 		cpu_relax();

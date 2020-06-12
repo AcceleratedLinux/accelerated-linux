@@ -11,59 +11,131 @@
 #include <linux/genalloc.h>
 #include <linux/slab.h>
 
-static struct pgt_info *get_pgt_info(struct hl_ctx *ctx, u64 addr)
+static inline u64 get_phys_addr(struct hl_ctx *ctx, u64 shadow_addr);
+
+static struct pgt_info *get_pgt_info(struct hl_ctx *ctx, u64 hop_addr)
 {
 	struct pgt_info *pgt_info = NULL;
 
-	hash_for_each_possible(ctx->mmu_hash, pgt_info, node,
-				(unsigned long) addr)
-		if (addr == pgt_info->addr)
+	hash_for_each_possible(ctx->mmu_shadow_hash, pgt_info, node,
+				(unsigned long) hop_addr)
+		if (hop_addr == pgt_info->shadow_addr)
 			break;
 
 	return pgt_info;
+}
+
+static void _free_hop(struct hl_ctx *ctx, struct pgt_info *pgt_info)
+{
+	struct hl_device *hdev = ctx->hdev;
+
+	gen_pool_free(hdev->mmu_pgt_pool, pgt_info->phys_addr,
+			hdev->asic_prop.mmu_hop_table_size);
+	hash_del(&pgt_info->node);
+	kfree((u64 *) (uintptr_t) pgt_info->shadow_addr);
+	kfree(pgt_info);
 }
 
 static void free_hop(struct hl_ctx *ctx, u64 hop_addr)
 {
 	struct pgt_info *pgt_info = get_pgt_info(ctx, hop_addr);
 
-	gen_pool_free(pgt_info->ctx->hdev->mmu_pgt_pool, pgt_info->addr,
-			ctx->hdev->asic_prop.mmu_hop_table_size);
-	hash_del(&pgt_info->node);
-
-	kfree(pgt_info);
+	_free_hop(ctx, pgt_info);
 }
 
 static u64 alloc_hop(struct hl_ctx *ctx)
 {
 	struct hl_device *hdev = ctx->hdev;
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
 	struct pgt_info *pgt_info;
-	u64 addr;
+	u64 phys_addr, shadow_addr;
 
 	pgt_info = kmalloc(sizeof(*pgt_info), GFP_KERNEL);
 	if (!pgt_info)
 		return ULLONG_MAX;
 
-	addr = (u64) gen_pool_alloc(hdev->mmu_pgt_pool,
-			hdev->asic_prop.mmu_hop_table_size);
-	if (!addr) {
+	phys_addr = (u64) gen_pool_alloc(hdev->mmu_pgt_pool,
+					prop->mmu_hop_table_size);
+	if (!phys_addr) {
 		dev_err(hdev->dev, "failed to allocate page\n");
-		kfree(pgt_info);
-		return ULLONG_MAX;
+		goto pool_add_err;
 	}
 
-	pgt_info->addr = addr;
+	shadow_addr = (u64) (uintptr_t) kzalloc(prop->mmu_hop_table_size,
+						GFP_KERNEL);
+	if (!shadow_addr)
+		goto shadow_err;
+
+	pgt_info->phys_addr = phys_addr;
+	pgt_info->shadow_addr = shadow_addr;
 	pgt_info->ctx = ctx;
 	pgt_info->num_of_ptes = 0;
-	hash_add(ctx->mmu_hash, &pgt_info->node, addr);
+	hash_add(ctx->mmu_shadow_hash, &pgt_info->node, shadow_addr);
 
-	return addr;
+	return shadow_addr;
+
+shadow_err:
+	gen_pool_free(hdev->mmu_pgt_pool, phys_addr, prop->mmu_hop_table_size);
+pool_add_err:
+	kfree(pgt_info);
+
+	return ULLONG_MAX;
 }
 
-static inline void clear_pte(struct hl_device *hdev, u64 pte_addr)
+static inline u64 get_phys_hop0_addr(struct hl_ctx *ctx)
 {
-	/* clear the last and present bits */
-	hdev->asic_funcs->write_pte(hdev, pte_addr, 0);
+	return ctx->hdev->asic_prop.mmu_pgt_addr +
+			(ctx->asid * ctx->hdev->asic_prop.mmu_hop_table_size);
+}
+
+static inline u64 get_hop0_addr(struct hl_ctx *ctx)
+{
+	return (u64) (uintptr_t) ctx->hdev->mmu_shadow_hop0 +
+			(ctx->asid * ctx->hdev->asic_prop.mmu_hop_table_size);
+}
+
+static inline void flush(struct hl_ctx *ctx)
+{
+	/* flush all writes from all cores to reach PCI */
+	mb();
+	ctx->hdev->asic_funcs->read_pte(ctx->hdev, get_phys_hop0_addr(ctx));
+}
+
+/* transform the value to physical address when writing to H/W */
+static inline void write_pte(struct hl_ctx *ctx, u64 shadow_pte_addr, u64 val)
+{
+	/*
+	 * The value to write is actually the address of the next shadow hop +
+	 * flags at the 12 LSBs.
+	 * Hence in order to get the value to write to the physical PTE, we
+	 * clear the 12 LSBs and translate the shadow hop to its associated
+	 * physical hop, and add back the original 12 LSBs.
+	 */
+	u64 phys_val = get_phys_addr(ctx, val & HOP_PHYS_ADDR_MASK) |
+				(val & FLAGS_MASK);
+
+	ctx->hdev->asic_funcs->write_pte(ctx->hdev,
+					get_phys_addr(ctx, shadow_pte_addr),
+					phys_val);
+
+	*(u64 *) (uintptr_t) shadow_pte_addr = val;
+}
+
+/* do not transform the value to physical address when writing to H/W */
+static inline void write_final_pte(struct hl_ctx *ctx, u64 shadow_pte_addr,
+					u64 val)
+{
+	ctx->hdev->asic_funcs->write_pte(ctx->hdev,
+					get_phys_addr(ctx, shadow_pte_addr),
+					val);
+	*(u64 *) (uintptr_t) shadow_pte_addr = val;
+}
+
+/* clear the last and present bits */
+static inline void clear_pte(struct hl_ctx *ctx, u64 pte_addr)
+{
+	/* no need to transform the value to physical address */
+	write_final_pte(ctx, pte_addr, 0);
 }
 
 static inline void get_pte(struct hl_ctx *ctx, u64 hop_addr)
@@ -93,15 +165,9 @@ static inline int put_pte(struct hl_ctx *ctx, u64 hop_addr)
 	 */
 	num_of_ptes_left = pgt_info->num_of_ptes;
 	if (!num_of_ptes_left)
-		free_hop(ctx, hop_addr);
+		_free_hop(ctx, pgt_info);
 
 	return num_of_ptes_left;
-}
-
-static inline u64 get_hop0_addr(struct hl_ctx *ctx)
-{
-	return ctx->hdev->asic_prop.mmu_pgt_addr +
-			(ctx->asid * ctx->hdev->asic_prop.mmu_hop_table_size);
 }
 
 static inline u64 get_hopN_pte_addr(struct hl_ctx *ctx, u64 hop_addr,
@@ -111,35 +177,50 @@ static inline u64 get_hopN_pte_addr(struct hl_ctx *ctx, u64 hop_addr,
 			((virt_addr & mask) >> shift);
 }
 
-static inline u64 get_hop0_pte_addr(struct hl_ctx *ctx, u64 hop_addr, u64 vaddr)
+static inline u64 get_hop0_pte_addr(struct hl_ctx *ctx,
+					struct hl_mmu_properties *mmu_prop,
+					u64 hop_addr, u64 vaddr)
 {
-	return get_hopN_pte_addr(ctx, hop_addr, vaddr, HOP0_MASK, HOP0_SHIFT);
+	return get_hopN_pte_addr(ctx, hop_addr, vaddr, mmu_prop->hop0_mask,
+					mmu_prop->hop0_shift);
 }
 
-static inline u64 get_hop1_pte_addr(struct hl_ctx *ctx, u64 hop_addr, u64 vaddr)
+static inline u64 get_hop1_pte_addr(struct hl_ctx *ctx,
+					struct hl_mmu_properties *mmu_prop,
+					u64 hop_addr, u64 vaddr)
 {
-	return get_hopN_pte_addr(ctx, hop_addr, vaddr, HOP1_MASK, HOP1_SHIFT);
+	return get_hopN_pte_addr(ctx, hop_addr, vaddr, mmu_prop->hop1_mask,
+					mmu_prop->hop1_shift);
 }
 
-static inline u64 get_hop2_pte_addr(struct hl_ctx *ctx, u64 hop_addr, u64 vaddr)
+static inline u64 get_hop2_pte_addr(struct hl_ctx *ctx,
+					struct hl_mmu_properties *mmu_prop,
+					u64 hop_addr, u64 vaddr)
 {
-	return get_hopN_pte_addr(ctx, hop_addr, vaddr, HOP2_MASK, HOP2_SHIFT);
+	return get_hopN_pte_addr(ctx, hop_addr, vaddr, mmu_prop->hop2_mask,
+					mmu_prop->hop2_shift);
 }
 
-static inline u64 get_hop3_pte_addr(struct hl_ctx *ctx, u64 hop_addr, u64 vaddr)
+static inline u64 get_hop3_pte_addr(struct hl_ctx *ctx,
+					struct hl_mmu_properties *mmu_prop,
+					u64 hop_addr, u64 vaddr)
 {
-	return get_hopN_pte_addr(ctx, hop_addr, vaddr, HOP3_MASK, HOP3_SHIFT);
+	return get_hopN_pte_addr(ctx, hop_addr, vaddr, mmu_prop->hop3_mask,
+					mmu_prop->hop3_shift);
 }
 
-static inline u64 get_hop4_pte_addr(struct hl_ctx *ctx, u64 hop_addr, u64 vaddr)
+static inline u64 get_hop4_pte_addr(struct hl_ctx *ctx,
+					struct hl_mmu_properties *mmu_prop,
+					u64 hop_addr, u64 vaddr)
 {
-	return get_hopN_pte_addr(ctx, hop_addr, vaddr, HOP4_MASK, HOP4_SHIFT);
+	return get_hopN_pte_addr(ctx, hop_addr, vaddr, mmu_prop->hop4_mask,
+					mmu_prop->hop4_shift);
 }
 
-static inline u64 get_next_hop_addr(u64 curr_pte)
+static inline u64 get_next_hop_addr(struct hl_ctx *ctx, u64 curr_pte)
 {
 	if (curr_pte & PAGE_PRESENT_MASK)
-		return curr_pte & PHYS_ADDR_MASK;
+		return curr_pte & HOP_PHYS_ADDR_MASK;
 	else
 		return ULLONG_MAX;
 }
@@ -147,7 +228,7 @@ static inline u64 get_next_hop_addr(u64 curr_pte)
 static inline u64 get_alloc_next_hop_addr(struct hl_ctx *ctx, u64 curr_pte,
 						bool *is_new_hop)
 {
-	u64 hop_addr = get_next_hop_addr(curr_pte);
+	u64 hop_addr = get_next_hop_addr(ctx, curr_pte);
 
 	if (hop_addr == ULLONG_MAX) {
 		hop_addr = alloc_hop(ctx);
@@ -157,108 +238,33 @@ static inline u64 get_alloc_next_hop_addr(struct hl_ctx *ctx, u64 curr_pte,
 	return hop_addr;
 }
 
-/*
- * hl_mmu_init - init the mmu module
- *
- * @hdev: pointer to the habanalabs device structure
- *
- * This function does the following:
- * - Allocate max_asid zeroed hop0 pgts so no mapping is available
- * - Enable mmu in hw
- * - Invalidate the mmu cache
- * - Create a pool of pages for pgts
- * - Returns 0 on success
- *
- * This function depends on DMA QMAN to be working!
- */
-int hl_mmu_init(struct hl_device *hdev)
+/* translates shadow address inside hop to a physical address */
+static inline u64 get_phys_addr(struct hl_ctx *ctx, u64 shadow_addr)
 {
-	struct asic_fixed_properties *prop = &hdev->asic_prop;
-	int rc;
+	u64 page_mask = (ctx->hdev->asic_prop.mmu_hop_table_size - 1);
+	u64 shadow_hop_addr = shadow_addr & ~page_mask;
+	u64 pte_offset = shadow_addr & page_mask;
+	u64 phys_hop_addr;
 
-	if (!hdev->mmu_enable)
-		return 0;
+	if (shadow_hop_addr != get_hop0_addr(ctx))
+		phys_hop_addr = get_pgt_info(ctx, shadow_hop_addr)->phys_addr;
+	else
+		phys_hop_addr = get_phys_hop0_addr(ctx);
 
-	/* MMU HW init was already done in device hw_init() */
-
-	mutex_init(&hdev->mmu_cache_lock);
-
-	hdev->mmu_pgt_pool =
-			gen_pool_create(__ffs(prop->mmu_hop_table_size), -1);
-
-	if (!hdev->mmu_pgt_pool) {
-		dev_err(hdev->dev, "Failed to create page gen pool\n");
-		rc = -ENOMEM;
-		goto err_pool_create;
-	}
-
-	rc = gen_pool_add(hdev->mmu_pgt_pool, prop->mmu_pgt_addr +
-			prop->mmu_hop0_tables_total_size,
-			prop->mmu_pgt_size - prop->mmu_hop0_tables_total_size,
-			-1);
-	if (rc) {
-		dev_err(hdev->dev, "Failed to add memory to page gen pool\n");
-		goto err_pool_add;
-	}
-
-	return 0;
-
-err_pool_add:
-	gen_pool_destroy(hdev->mmu_pgt_pool);
-err_pool_create:
-	mutex_destroy(&hdev->mmu_cache_lock);
-
-	return rc;
+	return phys_hop_addr + pte_offset;
 }
 
-/*
- * hl_mmu_fini - release the mmu module.
- *
- * @hdev: pointer to the habanalabs device structure
- *
- * This function does the following:
- * - Disable mmu in hw
- * - free the pgts pool
- *
- * All ctxs should be freed before calling this func
- */
-void hl_mmu_fini(struct hl_device *hdev)
-{
-	if (!hdev->mmu_enable)
-		return;
-
-	gen_pool_destroy(hdev->mmu_pgt_pool);
-
-	mutex_destroy(&hdev->mmu_cache_lock);
-
-	/* MMU HW fini will be done in device hw_fini() */
-}
-
-/**
- * hl_mmu_ctx_init() - initialize a context for using the MMU module.
- * @ctx: pointer to the context structure to initialize.
- *
- * Initialize a mutex to protect the concurrent mapping flow, a hash to hold all
- * page tables hops related to this context and an optional DRAM default page
- * mapping.
- * Return: 0 on success, non-zero otherwise.
- */
-int hl_mmu_ctx_init(struct hl_ctx *ctx)
+static int dram_default_mapping_init(struct hl_ctx *ctx)
 {
 	struct hl_device *hdev = ctx->hdev;
 	struct asic_fixed_properties *prop = &hdev->asic_prop;
-	u64 num_of_hop3, total_hops, hop1_addr, hop2_addr, hop2_pte_addr,
-		hop3_pte_addr, pte_val;
+	u64 num_of_hop3, total_hops, hop0_addr, hop1_addr, hop2_addr,
+		hop2_pte_addr, hop3_pte_addr, pte_val;
 	int rc, i, j, hop3_allocated = 0;
 
-	if (!hdev->mmu_enable)
-		return 0;
-
-	mutex_init(&ctx->mmu_lock);
-	hash_init(ctx->mmu_hash);
-
-	if (!hdev->dram_supports_virtual_memory ||
-			!hdev->dram_default_page_mapping)
+	if ((!hdev->dram_supports_virtual_memory) ||
+			(!hdev->dram_default_page_mapping) ||
+			(ctx->asid == HL_KERNEL_ASID_ID))
 		return 0;
 
 	num_of_hop3 = prop->dram_size_for_default_page_mapping;
@@ -269,10 +275,10 @@ int hl_mmu_ctx_init(struct hl_ctx *ctx)
 	total_hops = num_of_hop3 + 2;
 
 	ctx->dram_default_hops = kzalloc(HL_PTE_SIZE * total_hops,  GFP_KERNEL);
-	if (!ctx->dram_default_hops) {
-		rc = -ENOMEM;
-		goto alloc_err;
-	}
+	if (!ctx->dram_default_hops)
+		return -ENOMEM;
+
+	hop0_addr = get_hop0_addr(ctx);
 
 	hop1_addr = alloc_hop(ctx);
 	if (hop1_addr == ULLONG_MAX) {
@@ -303,53 +309,194 @@ int hl_mmu_ctx_init(struct hl_ctx *ctx)
 	}
 
 	/* need only pte 0 in hops 0 and 1 */
-	pte_val = (hop1_addr & PTE_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
-	hdev->asic_funcs->write_pte(hdev, get_hop0_addr(ctx), pte_val);
+	pte_val = (hop1_addr & HOP_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
+	write_pte(ctx, hop0_addr, pte_val);
 
-	pte_val = (hop2_addr & PTE_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
-	hdev->asic_funcs->write_pte(hdev, hop1_addr, pte_val);
+	pte_val = (hop2_addr & HOP_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
+	write_pte(ctx, hop1_addr, pte_val);
 	get_pte(ctx, hop1_addr);
 
 	hop2_pte_addr = hop2_addr;
 	for (i = 0 ; i < num_of_hop3 ; i++) {
-		pte_val = (ctx->dram_default_hops[i] & PTE_PHYS_ADDR_MASK) |
+		pte_val = (ctx->dram_default_hops[i] & HOP_PHYS_ADDR_MASK) |
 				PAGE_PRESENT_MASK;
-		hdev->asic_funcs->write_pte(hdev, hop2_pte_addr, pte_val);
+		write_pte(ctx, hop2_pte_addr, pte_val);
 		get_pte(ctx, hop2_addr);
 		hop2_pte_addr += HL_PTE_SIZE;
 	}
 
-	pte_val = (prop->mmu_dram_default_page_addr & PTE_PHYS_ADDR_MASK) |
+	pte_val = (prop->mmu_dram_default_page_addr & HOP_PHYS_ADDR_MASK) |
 			LAST_MASK | PAGE_PRESENT_MASK;
 
 	for (i = 0 ; i < num_of_hop3 ; i++) {
 		hop3_pte_addr = ctx->dram_default_hops[i];
 		for (j = 0 ; j < PTE_ENTRIES_IN_HOP ; j++) {
-			hdev->asic_funcs->write_pte(hdev, hop3_pte_addr,
-					pte_val);
+			write_final_pte(ctx, hop3_pte_addr, pte_val);
 			get_pte(ctx, ctx->dram_default_hops[i]);
 			hop3_pte_addr += HL_PTE_SIZE;
 		}
 	}
 
-	/* flush all writes to reach PCI */
-	mb();
-	hdev->asic_funcs->read_pte(hdev, hop2_addr);
+	flush(ctx);
 
 	return 0;
 
 hop3_err:
 	for (i = 0 ; i < hop3_allocated ; i++)
 		free_hop(ctx, ctx->dram_default_hops[i]);
+
 	free_hop(ctx, hop2_addr);
 hop2_err:
 	free_hop(ctx, hop1_addr);
 hop1_err:
 	kfree(ctx->dram_default_hops);
-alloc_err:
-	mutex_destroy(&ctx->mmu_lock);
 
 	return rc;
+}
+
+static void dram_default_mapping_fini(struct hl_ctx *ctx)
+{
+	struct hl_device *hdev = ctx->hdev;
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	u64 num_of_hop3, total_hops, hop0_addr, hop1_addr, hop2_addr,
+		hop2_pte_addr, hop3_pte_addr;
+	int i, j;
+
+	if ((!hdev->dram_supports_virtual_memory) ||
+			(!hdev->dram_default_page_mapping) ||
+			(ctx->asid == HL_KERNEL_ASID_ID))
+		return;
+
+	num_of_hop3 = prop->dram_size_for_default_page_mapping;
+	do_div(num_of_hop3, prop->dram_page_size);
+	do_div(num_of_hop3, PTE_ENTRIES_IN_HOP);
+
+	hop0_addr = get_hop0_addr(ctx);
+	/* add hop1 and hop2 */
+	total_hops = num_of_hop3 + 2;
+	hop1_addr = ctx->dram_default_hops[total_hops - 1];
+	hop2_addr = ctx->dram_default_hops[total_hops - 2];
+
+	for (i = 0 ; i < num_of_hop3 ; i++) {
+		hop3_pte_addr = ctx->dram_default_hops[i];
+		for (j = 0 ; j < PTE_ENTRIES_IN_HOP ; j++) {
+			clear_pte(ctx, hop3_pte_addr);
+			put_pte(ctx, ctx->dram_default_hops[i]);
+			hop3_pte_addr += HL_PTE_SIZE;
+		}
+	}
+
+	hop2_pte_addr = hop2_addr;
+	hop2_pte_addr = hop2_addr;
+	for (i = 0 ; i < num_of_hop3 ; i++) {
+		clear_pte(ctx, hop2_pte_addr);
+		put_pte(ctx, hop2_addr);
+		hop2_pte_addr += HL_PTE_SIZE;
+	}
+
+	clear_pte(ctx, hop1_addr);
+	put_pte(ctx, hop1_addr);
+	clear_pte(ctx, hop0_addr);
+
+	kfree(ctx->dram_default_hops);
+
+	flush(ctx);
+}
+
+/**
+ * hl_mmu_init() - initialize the MMU module.
+ * @hdev: habanalabs device structure.
+ *
+ * This function does the following:
+ * - Create a pool of pages for pgt_infos.
+ * - Create a shadow table for pgt
+ *
+ * Return: 0 for success, non-zero for failure.
+ */
+int hl_mmu_init(struct hl_device *hdev)
+{
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	int rc;
+
+	if (!hdev->mmu_enable)
+		return 0;
+
+	hdev->mmu_pgt_pool =
+			gen_pool_create(__ffs(prop->mmu_hop_table_size), -1);
+
+	if (!hdev->mmu_pgt_pool) {
+		dev_err(hdev->dev, "Failed to create page gen pool\n");
+		return -ENOMEM;
+	}
+
+	rc = gen_pool_add(hdev->mmu_pgt_pool, prop->mmu_pgt_addr +
+			prop->mmu_hop0_tables_total_size,
+			prop->mmu_pgt_size - prop->mmu_hop0_tables_total_size,
+			-1);
+	if (rc) {
+		dev_err(hdev->dev, "Failed to add memory to page gen pool\n");
+		goto err_pool_add;
+	}
+
+	hdev->mmu_shadow_hop0 = kvmalloc_array(prop->max_asid,
+					prop->mmu_hop_table_size,
+					GFP_KERNEL | __GFP_ZERO);
+	if (!hdev->mmu_shadow_hop0) {
+		rc = -ENOMEM;
+		goto err_pool_add;
+	}
+
+	/* MMU H/W init will be done in device hw_init() */
+
+	return 0;
+
+err_pool_add:
+	gen_pool_destroy(hdev->mmu_pgt_pool);
+
+	return rc;
+}
+
+/**
+ * hl_mmu_fini() - release the MMU module.
+ * @hdev: habanalabs device structure.
+ *
+ * This function does the following:
+ * - Disable MMU in H/W.
+ * - Free the pgt_infos pool.
+ *
+ * All contexts should be freed before calling this function.
+ */
+void hl_mmu_fini(struct hl_device *hdev)
+{
+	if (!hdev->mmu_enable)
+		return;
+
+	/* MMU H/W fini was already done in device hw_fini() */
+
+	kvfree(hdev->mmu_shadow_hop0);
+	gen_pool_destroy(hdev->mmu_pgt_pool);
+}
+
+/**
+ * hl_mmu_ctx_init() - initialize a context for using the MMU module.
+ * @ctx: pointer to the context structure to initialize.
+ *
+ * Initialize a mutex to protect the concurrent mapping flow, a hash to hold all
+ * page tables hops related to this context.
+ * Return: 0 on success, non-zero otherwise.
+ */
+int hl_mmu_ctx_init(struct hl_ctx *ctx)
+{
+	struct hl_device *hdev = ctx->hdev;
+
+	if (!hdev->mmu_enable)
+		return 0;
+
+	mutex_init(&ctx->mmu_lock);
+	hash_init(ctx->mmu_phys_hash);
+	hash_init(ctx->mmu_shadow_hash);
+
+	return dram_default_mapping_init(ctx);
 }
 
 /*
@@ -365,117 +512,75 @@ alloc_err:
 void hl_mmu_ctx_fini(struct hl_ctx *ctx)
 {
 	struct hl_device *hdev = ctx->hdev;
-	struct asic_fixed_properties *prop = &hdev->asic_prop;
 	struct pgt_info *pgt_info;
 	struct hlist_node *tmp;
-	u64 num_of_hop3, total_hops, hop1_addr, hop2_addr, hop2_pte_addr,
-		hop3_pte_addr;
-	int i, j;
+	int i;
 
-	if (!ctx->hdev->mmu_enable)
+	if (!hdev->mmu_enable)
 		return;
 
-	if (hdev->dram_supports_virtual_memory &&
-			hdev->dram_default_page_mapping) {
+	dram_default_mapping_fini(ctx);
 
-		num_of_hop3 = prop->dram_size_for_default_page_mapping;
-		do_div(num_of_hop3, prop->dram_page_size);
-		do_div(num_of_hop3, PTE_ENTRIES_IN_HOP);
+	if (!hash_empty(ctx->mmu_shadow_hash))
+		dev_err(hdev->dev, "ctx %d is freed while it has pgts in use\n",
+			ctx->asid);
 
-		/* add hop1 and hop2 */
-		total_hops = num_of_hop3 + 2;
-		hop1_addr = ctx->dram_default_hops[total_hops - 1];
-		hop2_addr = ctx->dram_default_hops[total_hops - 2];
-
-		for (i = 0 ; i < num_of_hop3 ; i++) {
-			hop3_pte_addr = ctx->dram_default_hops[i];
-			for (j = 0 ; j < PTE_ENTRIES_IN_HOP ; j++) {
-				clear_pte(hdev, hop3_pte_addr);
-				put_pte(ctx, ctx->dram_default_hops[i]);
-				hop3_pte_addr += HL_PTE_SIZE;
-			}
-		}
-
-		hop2_pte_addr = hop2_addr;
-		for (i = 0 ; i < num_of_hop3 ; i++) {
-			clear_pte(hdev, hop2_pte_addr);
-			put_pte(ctx, hop2_addr);
-			hop2_pte_addr += HL_PTE_SIZE;
-		}
-
-		clear_pte(hdev, hop1_addr);
-		put_pte(ctx, hop1_addr);
-		clear_pte(hdev, get_hop0_addr(ctx));
-
-		kfree(ctx->dram_default_hops);
-
-		/* flush all writes to reach PCI */
-		mb();
-		hdev->asic_funcs->read_pte(hdev, hop2_addr);
-	}
-
-	if (!hash_empty(ctx->mmu_hash))
-		dev_err(hdev->dev, "ctx is freed while it has pgts in use\n");
-
-	hash_for_each_safe(ctx->mmu_hash, i, tmp, pgt_info, node) {
-		dev_err(hdev->dev,
+	hash_for_each_safe(ctx->mmu_shadow_hash, i, tmp, pgt_info, node) {
+		dev_err_ratelimited(hdev->dev,
 			"pgt_info of addr 0x%llx of asid %d was not destroyed, num_ptes: %d\n",
-			pgt_info->addr, ctx->asid, pgt_info->num_of_ptes);
-		free_hop(ctx, pgt_info->addr);
+			pgt_info->phys_addr, ctx->asid, pgt_info->num_of_ptes);
+		_free_hop(ctx, pgt_info);
 	}
 
 	mutex_destroy(&ctx->mmu_lock);
 }
 
-static int _hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr)
+static int _hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr, bool is_dram_addr)
 {
 	struct hl_device *hdev = ctx->hdev;
 	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	struct hl_mmu_properties *mmu_prop;
 	u64 hop0_addr = 0, hop0_pte_addr = 0,
 		hop1_addr = 0, hop1_pte_addr = 0,
 		hop2_addr = 0, hop2_pte_addr = 0,
 		hop3_addr = 0, hop3_pte_addr = 0,
 		hop4_addr = 0, hop4_pte_addr = 0,
 		curr_pte;
-	int clear_hop3 = 1;
-	bool is_dram_addr, is_huge, is_dram_default_page_mapping;
+	bool is_huge, clear_hop3 = true;
 
-	is_dram_addr = hl_mem_area_inside_range(virt_addr, PAGE_SIZE_2MB,
-				prop->va_space_dram_start_address,
-				prop->va_space_dram_end_address);
+	mmu_prop = is_dram_addr ? &prop->dmmu : &prop->pmmu;
 
 	hop0_addr = get_hop0_addr(ctx);
+	hop0_pte_addr = get_hop0_pte_addr(ctx, mmu_prop, hop0_addr, virt_addr);
 
-	hop0_pte_addr = get_hop0_pte_addr(ctx, hop0_addr, virt_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop0_pte_addr;
 
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop0_pte_addr);
-
-	hop1_addr = get_next_hop_addr(curr_pte);
+	hop1_addr = get_next_hop_addr(ctx, curr_pte);
 
 	if (hop1_addr == ULLONG_MAX)
 		goto not_mapped;
 
-	hop1_pte_addr = get_hop1_pte_addr(ctx, hop1_addr, virt_addr);
+	hop1_pte_addr = get_hop1_pte_addr(ctx, mmu_prop, hop1_addr, virt_addr);
 
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop1_pte_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop1_pte_addr;
 
-	hop2_addr = get_next_hop_addr(curr_pte);
+	hop2_addr = get_next_hop_addr(ctx, curr_pte);
 
 	if (hop2_addr == ULLONG_MAX)
 		goto not_mapped;
 
-	hop2_pte_addr = get_hop2_pte_addr(ctx, hop2_addr, virt_addr);
+	hop2_pte_addr = get_hop2_pte_addr(ctx, mmu_prop, hop2_addr, virt_addr);
 
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop2_pte_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop2_pte_addr;
 
-	hop3_addr = get_next_hop_addr(curr_pte);
+	hop3_addr = get_next_hop_addr(ctx, curr_pte);
 
 	if (hop3_addr == ULLONG_MAX)
 		goto not_mapped;
 
-	hop3_pte_addr = get_hop3_pte_addr(ctx, hop3_addr, virt_addr);
+	hop3_pte_addr = get_hop3_pte_addr(ctx, mmu_prop, hop3_addr, virt_addr);
 
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop3_pte_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop3_pte_addr;
 
 	is_huge = curr_pte & LAST_MASK;
 
@@ -485,27 +590,25 @@ static int _hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr)
 		return -EFAULT;
 	}
 
-	is_dram_default_page_mapping =
-			hdev->dram_default_page_mapping && is_dram_addr;
-
 	if (!is_huge) {
-		hop4_addr = get_next_hop_addr(curr_pte);
+		hop4_addr = get_next_hop_addr(ctx, curr_pte);
 
 		if (hop4_addr == ULLONG_MAX)
 			goto not_mapped;
 
-		hop4_pte_addr = get_hop4_pte_addr(ctx, hop4_addr, virt_addr);
+		hop4_pte_addr = get_hop4_pte_addr(ctx, mmu_prop, hop4_addr,
+							virt_addr);
 
-		curr_pte = hdev->asic_funcs->read_pte(hdev, hop4_pte_addr);
+		curr_pte = *(u64 *) (uintptr_t) hop4_pte_addr;
 
-		clear_hop3 = 0;
+		clear_hop3 = false;
 	}
 
-	if (is_dram_default_page_mapping) {
-		u64 zero_pte = (prop->mmu_dram_default_page_addr &
-				PTE_PHYS_ADDR_MASK) | LAST_MASK |
+	if (hdev->dram_default_page_mapping && is_dram_addr) {
+		u64 default_pte = (prop->mmu_dram_default_page_addr &
+				HOP_PHYS_ADDR_MASK) | LAST_MASK |
 					PAGE_PRESENT_MASK;
-		if (curr_pte == zero_pte) {
+		if (curr_pte == default_pte) {
 			dev_err(hdev->dev,
 				"DRAM: hop3 PTE points to zero page, can't unmap, va: 0x%llx\n",
 					virt_addr);
@@ -519,40 +622,43 @@ static int _hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr)
 			goto not_mapped;
 		}
 
-		hdev->asic_funcs->write_pte(hdev, hop3_pte_addr, zero_pte);
+		write_final_pte(ctx, hop3_pte_addr, default_pte);
 		put_pte(ctx, hop3_addr);
 	} else {
 		if (!(curr_pte & PAGE_PRESENT_MASK))
 			goto not_mapped;
 
-		clear_pte(hdev, hop4_addr ? hop4_pte_addr : hop3_pte_addr);
+		if (hop4_addr)
+			clear_pte(ctx, hop4_pte_addr);
+		else
+			clear_pte(ctx, hop3_pte_addr);
 
 		if (hop4_addr && !put_pte(ctx, hop4_addr))
-			clear_hop3 = 1;
+			clear_hop3 = true;
 
 		if (!clear_hop3)
 			goto flush;
-		clear_pte(hdev, hop3_pte_addr);
+
+		clear_pte(ctx, hop3_pte_addr);
 
 		if (put_pte(ctx, hop3_addr))
 			goto flush;
-		clear_pte(hdev, hop2_pte_addr);
+
+		clear_pte(ctx, hop2_pte_addr);
 
 		if (put_pte(ctx, hop2_addr))
 			goto flush;
-		clear_pte(hdev, hop1_pte_addr);
+
+		clear_pte(ctx, hop1_pte_addr);
 
 		if (put_pte(ctx, hop1_addr))
 			goto flush;
-		clear_pte(hdev, hop0_pte_addr);
+
+		clear_pte(ctx, hop0_pte_addr);
 	}
 
 flush:
-	/* flush all writes from all cores to reach PCI */
-	mb();
-
-	hdev->asic_funcs->read_pte(hdev,
-				hop4_addr ? hop4_pte_addr : hop3_pte_addr);
+	flush(ctx);
 
 	return 0;
 
@@ -583,25 +689,36 @@ not_mapped:
 int hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr, u32 page_size)
 {
 	struct hl_device *hdev = ctx->hdev;
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	struct hl_mmu_properties *mmu_prop;
 	u64 real_virt_addr;
 	u32 real_page_size, npages;
 	int i, rc;
+	bool is_dram_addr;
 
 	if (!hdev->mmu_enable)
 		return 0;
 
+	is_dram_addr = hl_mem_area_inside_range(virt_addr, prop->dmmu.page_size,
+				prop->va_space_dram_start_address,
+				prop->va_space_dram_end_address);
+
+	mmu_prop = is_dram_addr ? &prop->dmmu : &prop->pmmu;
+
 	/*
-	 * The H/W handles mapping of 4KB/2MB page. Hence if the host page size
-	 * is bigger, we break it to sub-pages and unmap them separately.
+	 * The H/W handles mapping of specific page sizes. Hence if the page
+	 * size is bigger, we break it to sub-pages and unmap them separately.
 	 */
-	if ((page_size % PAGE_SIZE_2MB) == 0) {
-		real_page_size = PAGE_SIZE_2MB;
-	} else if ((page_size % PAGE_SIZE_4KB) == 0) {
-		real_page_size = PAGE_SIZE_4KB;
+	if ((page_size % mmu_prop->huge_page_size) == 0) {
+		real_page_size = mmu_prop->huge_page_size;
+	} else if ((page_size % mmu_prop->page_size) == 0) {
+		real_page_size = mmu_prop->page_size;
 	} else {
 		dev_err(hdev->dev,
-			"page size of %u is not 4KB nor 2MB aligned, can't unmap\n",
-				page_size);
+			"page size of %u is not %uKB nor %uMB aligned, can't unmap\n",
+			page_size,
+			mmu_prop->page_size >> 10,
+			mmu_prop->huge_page_size >> 20);
 
 		return -EFAULT;
 	}
@@ -610,7 +727,7 @@ int hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr, u32 page_size)
 	real_virt_addr = virt_addr;
 
 	for (i = 0 ; i < npages ; i++) {
-		rc = _hl_mmu_unmap(ctx, real_virt_addr);
+		rc = _hl_mmu_unmap(ctx, real_virt_addr, is_dram_addr);
 		if (rc)
 			return rc;
 
@@ -621,10 +738,11 @@ int hl_mmu_unmap(struct hl_ctx *ctx, u64 virt_addr, u32 page_size)
 }
 
 static int _hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr,
-		u32 page_size)
+			u32 page_size, bool is_dram_addr)
 {
 	struct hl_device *hdev = ctx->hdev;
 	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	struct hl_mmu_properties *mmu_prop;
 	u64 hop0_addr = 0, hop0_pte_addr = 0,
 		hop1_addr = 0, hop1_pte_addr = 0,
 		hop2_addr = 0, hop2_pte_addr = 0,
@@ -632,81 +750,66 @@ static int _hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr,
 		hop4_addr = 0, hop4_pte_addr = 0,
 		curr_pte = 0;
 	bool hop1_new = false, hop2_new = false, hop3_new = false,
-		hop4_new = false, is_huge, is_dram_addr,
-		is_dram_default_page_mapping;
+		hop4_new = false, is_huge;
 	int rc = -ENOMEM;
 
-	/*
-	 * This mapping function can map a 4KB/2MB page. For 2MB page there are
-	 * only 3 hops rather than 4. Currently the DRAM allocation uses 2MB
-	 * pages only but user memory could have been allocated with one of the
-	 * two page sizes. Since this is a common code for all the three cases,
-	 * we need this hugs page check.
-	 */
-	is_huge = page_size == PAGE_SIZE_2MB;
+	mmu_prop = is_dram_addr ? &prop->dmmu : &prop->pmmu;
 
-	is_dram_addr = hl_mem_area_inside_range(virt_addr, page_size,
-				prop->va_space_dram_start_address,
-				prop->va_space_dram_end_address);
+	/*
+	 * This mapping function can map a page or a huge page. For huge page
+	 * there are only 3 hops rather than 4. Currently the DRAM allocation
+	 * uses huge pages only but user memory could have been allocated with
+	 * one of the two page sizes. Since this is a common code for all the
+	 * three cases, we need this hugs page check.
+	 */
+	is_huge = page_size == mmu_prop->huge_page_size;
 
 	if (is_dram_addr && !is_huge) {
 		dev_err(hdev->dev, "DRAM mapping should use huge pages only\n");
 		return -EFAULT;
 	}
 
-	is_dram_default_page_mapping =
-			hdev->dram_default_page_mapping && is_dram_addr;
-
 	hop0_addr = get_hop0_addr(ctx);
-
-	hop0_pte_addr = get_hop0_pte_addr(ctx, hop0_addr, virt_addr);
-
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop0_pte_addr);
+	hop0_pte_addr = get_hop0_pte_addr(ctx, mmu_prop, hop0_addr, virt_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop0_pte_addr;
 
 	hop1_addr = get_alloc_next_hop_addr(ctx, curr_pte, &hop1_new);
-
 	if (hop1_addr == ULLONG_MAX)
 		goto err;
 
-	hop1_pte_addr = get_hop1_pte_addr(ctx, hop1_addr, virt_addr);
-
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop1_pte_addr);
+	hop1_pte_addr = get_hop1_pte_addr(ctx, mmu_prop, hop1_addr, virt_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop1_pte_addr;
 
 	hop2_addr = get_alloc_next_hop_addr(ctx, curr_pte, &hop2_new);
-
 	if (hop2_addr == ULLONG_MAX)
 		goto err;
 
-	hop2_pte_addr = get_hop2_pte_addr(ctx, hop2_addr, virt_addr);
-
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop2_pte_addr);
+	hop2_pte_addr = get_hop2_pte_addr(ctx, mmu_prop, hop2_addr, virt_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop2_pte_addr;
 
 	hop3_addr = get_alloc_next_hop_addr(ctx, curr_pte, &hop3_new);
-
 	if (hop3_addr == ULLONG_MAX)
 		goto err;
 
-	hop3_pte_addr = get_hop3_pte_addr(ctx, hop3_addr, virt_addr);
-
-	curr_pte = hdev->asic_funcs->read_pte(hdev, hop3_pte_addr);
+	hop3_pte_addr = get_hop3_pte_addr(ctx, mmu_prop, hop3_addr, virt_addr);
+	curr_pte = *(u64 *) (uintptr_t) hop3_pte_addr;
 
 	if (!is_huge) {
 		hop4_addr = get_alloc_next_hop_addr(ctx, curr_pte, &hop4_new);
-
 		if (hop4_addr == ULLONG_MAX)
 			goto err;
 
-		hop4_pte_addr = get_hop4_pte_addr(ctx, hop4_addr, virt_addr);
-
-		curr_pte = hdev->asic_funcs->read_pte(hdev, hop4_pte_addr);
+		hop4_pte_addr = get_hop4_pte_addr(ctx, mmu_prop, hop4_addr,
+							virt_addr);
+		curr_pte = *(u64 *) (uintptr_t) hop4_pte_addr;
 	}
 
-	if (is_dram_default_page_mapping) {
-		u64 zero_pte = (prop->mmu_dram_default_page_addr &
-					PTE_PHYS_ADDR_MASK) | LAST_MASK |
+	if (hdev->dram_default_page_mapping && is_dram_addr) {
+		u64 default_pte = (prop->mmu_dram_default_page_addr &
+					HOP_PHYS_ADDR_MASK) | LAST_MASK |
 						PAGE_PRESENT_MASK;
 
-		if (curr_pte != zero_pte) {
+		if (curr_pte != default_pte) {
 			dev_err(hdev->dev,
 				"DRAM: mapping already exists for virt_addr 0x%llx\n",
 					virt_addr);
@@ -722,66 +825,58 @@ static int _hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr,
 		}
 	} else if (curr_pte & PAGE_PRESENT_MASK) {
 		dev_err(hdev->dev,
-				"mapping already exists for virt_addr 0x%llx\n",
-					virt_addr);
+			"mapping already exists for virt_addr 0x%llx\n",
+				virt_addr);
 
 		dev_dbg(hdev->dev, "hop0 pte: 0x%llx (0x%llx)\n",
-				hdev->asic_funcs->read_pte(hdev, hop0_pte_addr),
-				hop0_pte_addr);
+			*(u64 *) (uintptr_t) hop0_pte_addr, hop0_pte_addr);
 		dev_dbg(hdev->dev, "hop1 pte: 0x%llx (0x%llx)\n",
-				hdev->asic_funcs->read_pte(hdev, hop1_pte_addr),
-				hop1_pte_addr);
+			*(u64 *) (uintptr_t) hop1_pte_addr, hop1_pte_addr);
 		dev_dbg(hdev->dev, "hop2 pte: 0x%llx (0x%llx)\n",
-				hdev->asic_funcs->read_pte(hdev, hop2_pte_addr),
-				hop2_pte_addr);
+			*(u64 *) (uintptr_t) hop2_pte_addr, hop2_pte_addr);
 		dev_dbg(hdev->dev, "hop3 pte: 0x%llx (0x%llx)\n",
-				hdev->asic_funcs->read_pte(hdev, hop3_pte_addr),
-				hop3_pte_addr);
+			*(u64 *) (uintptr_t) hop3_pte_addr, hop3_pte_addr);
 
 		if (!is_huge)
 			dev_dbg(hdev->dev, "hop4 pte: 0x%llx (0x%llx)\n",
-				hdev->asic_funcs->read_pte(hdev,
-							hop4_pte_addr),
-							hop4_pte_addr);
+				*(u64 *) (uintptr_t) hop4_pte_addr,
+				hop4_pte_addr);
 
 		rc = -EINVAL;
 		goto err;
 	}
 
-	curr_pte = (phys_addr & PTE_PHYS_ADDR_MASK) | LAST_MASK
+	curr_pte = (phys_addr & HOP_PHYS_ADDR_MASK) | LAST_MASK
 			| PAGE_PRESENT_MASK;
 
-	hdev->asic_funcs->write_pte(hdev,
-				is_huge ? hop3_pte_addr : hop4_pte_addr,
-				curr_pte);
+	if (is_huge)
+		write_final_pte(ctx, hop3_pte_addr, curr_pte);
+	else
+		write_final_pte(ctx, hop4_pte_addr, curr_pte);
 
 	if (hop1_new) {
-		curr_pte = (hop1_addr & PTE_PHYS_ADDR_MASK) |
-				PAGE_PRESENT_MASK;
-		ctx->hdev->asic_funcs->write_pte(ctx->hdev, hop0_pte_addr,
-				curr_pte);
+		curr_pte =
+			(hop1_addr & HOP_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
+		write_pte(ctx, hop0_pte_addr, curr_pte);
 	}
 	if (hop2_new) {
-		curr_pte = (hop2_addr & PTE_PHYS_ADDR_MASK) |
-				PAGE_PRESENT_MASK;
-		ctx->hdev->asic_funcs->write_pte(ctx->hdev, hop1_pte_addr,
-				curr_pte);
+		curr_pte =
+			(hop2_addr & HOP_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
+		write_pte(ctx, hop1_pte_addr, curr_pte);
 		get_pte(ctx, hop1_addr);
 	}
 	if (hop3_new) {
-		curr_pte = (hop3_addr & PTE_PHYS_ADDR_MASK) |
-				PAGE_PRESENT_MASK;
-		ctx->hdev->asic_funcs->write_pte(ctx->hdev, hop2_pte_addr,
-				curr_pte);
+		curr_pte =
+			(hop3_addr & HOP_PHYS_ADDR_MASK) | PAGE_PRESENT_MASK;
+		write_pte(ctx, hop2_pte_addr, curr_pte);
 		get_pte(ctx, hop2_addr);
 	}
 
 	if (!is_huge) {
 		if (hop4_new) {
-			curr_pte = (hop4_addr & PTE_PHYS_ADDR_MASK) |
+			curr_pte = (hop4_addr & HOP_PHYS_ADDR_MASK) |
 					PAGE_PRESENT_MASK;
-			ctx->hdev->asic_funcs->write_pte(ctx->hdev,
-					hop3_pte_addr, curr_pte);
+			write_pte(ctx, hop3_pte_addr, curr_pte);
 			get_pte(ctx, hop3_addr);
 		}
 
@@ -790,11 +885,7 @@ static int _hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr,
 		get_pte(ctx, hop3_addr);
 	}
 
-	/* flush all writes from all cores to reach PCI */
-	mb();
-
-	hdev->asic_funcs->read_pte(hdev,
-				is_huge ? hop3_pte_addr : hop4_pte_addr);
+	flush(ctx);
 
 	return 0;
 
@@ -832,28 +923,43 @@ err:
 int hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr, u32 page_size)
 {
 	struct hl_device *hdev = ctx->hdev;
+	struct asic_fixed_properties *prop = &hdev->asic_prop;
+	struct hl_mmu_properties *mmu_prop;
 	u64 real_virt_addr, real_phys_addr;
 	u32 real_page_size, npages;
 	int i, rc, mapped_cnt = 0;
+	bool is_dram_addr;
 
 	if (!hdev->mmu_enable)
 		return 0;
 
+	is_dram_addr = hl_mem_area_inside_range(virt_addr, prop->dmmu.page_size,
+				prop->va_space_dram_start_address,
+				prop->va_space_dram_end_address);
+
+	mmu_prop = is_dram_addr ? &prop->dmmu : &prop->pmmu;
+
 	/*
-	 * The H/W handles mapping of 4KB/2MB page. Hence if the host page size
-	 * is bigger, we break it to sub-pages and map them separately.
+	 * The H/W handles mapping of specific page sizes. Hence if the page
+	 * size is bigger, we break it to sub-pages and map them separately.
 	 */
-	if ((page_size % PAGE_SIZE_2MB) == 0) {
-		real_page_size = PAGE_SIZE_2MB;
-	} else if ((page_size % PAGE_SIZE_4KB) == 0) {
-		real_page_size = PAGE_SIZE_4KB;
+	if ((page_size % mmu_prop->huge_page_size) == 0) {
+		real_page_size = mmu_prop->huge_page_size;
+	} else if ((page_size % mmu_prop->page_size) == 0) {
+		real_page_size = mmu_prop->page_size;
 	} else {
 		dev_err(hdev->dev,
-			"page size of %u is not 4KB nor 2MB aligned, can't map\n",
-				page_size);
+			"page size of %u is not %dKB nor %dMB aligned, can't unmap\n",
+			page_size,
+			mmu_prop->page_size >> 10,
+			mmu_prop->huge_page_size >> 20);
 
 		return -EFAULT;
 	}
+
+	WARN_ONCE((phys_addr & (real_page_size - 1)),
+		"Mapping 0x%llx with page size of 0x%x is erroneous! Address must be divisible by page size",
+		phys_addr, real_page_size);
 
 	npages = page_size / real_page_size;
 	real_virt_addr = virt_addr;
@@ -861,7 +967,7 @@ int hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr, u32 page_size)
 
 	for (i = 0 ; i < npages ; i++) {
 		rc = _hl_mmu_map(ctx, real_virt_addr, real_phys_addr,
-				real_page_size);
+				real_page_size, is_dram_addr);
 		if (rc)
 			goto err;
 
@@ -875,7 +981,7 @@ int hl_mmu_map(struct hl_ctx *ctx, u64 virt_addr, u64 phys_addr, u32 page_size)
 err:
 	real_virt_addr = virt_addr;
 	for (i = 0 ; i < mapped_cnt ; i++) {
-		if (_hl_mmu_unmap(ctx, real_virt_addr))
+		if (_hl_mmu_unmap(ctx, real_virt_addr, is_dram_addr))
 			dev_warn_ratelimited(hdev->dev,
 				"failed to unmap va: 0x%llx\n", real_virt_addr);
 

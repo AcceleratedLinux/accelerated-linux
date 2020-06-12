@@ -1,0 +1,22 @@
+From: Dan Williams <dcbw@redhat.com>
+Date: Sat, 28 Jan 2017 21:54:13 -0600
+Subject: telit: add LTE access technology reporting
+
+---
+ plugins/telit/mm-broadband-modem-telit.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/plugins/telit/mm-broadband-modem-telit.c b/plugins/telit/mm-broadband-modem-telit.c
+index 48ae4de1..fd86c459 100644
+--- a/plugins/telit/mm-broadband-modem-telit.c
++++ b/plugins/telit/mm-broadband-modem-telit.c
+@@ -1171,6 +1171,9 @@ response_processor_service_ignore_at_errors (MMBaseModem *self,
+         case 3:
+             *result = g_variant_new_uint32 (MM_MODEM_ACCESS_TECHNOLOGY_EVDOA);
+             return TRUE;
++        case 4:
++            *result = g_variant_new_uint32 (MM_MODEM_ACCESS_TECHNOLOGY_LTE);
++            return TRUE;
+         default:
+             break;
+         }

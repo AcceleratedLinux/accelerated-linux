@@ -81,17 +81,23 @@ void snd_hdac_display_power(struct hdac_bus *bus, unsigned int idx, bool enable)
 
 	if (bus->display_power_status) {
 		if (!bus->display_power_active) {
+			unsigned long cookie = -1;
+
 			if (acomp->ops->get_power)
-				acomp->ops->get_power(acomp->dev);
+				cookie = acomp->ops->get_power(acomp->dev);
+
 			snd_hdac_set_codec_wakeup(bus, true);
 			snd_hdac_set_codec_wakeup(bus, false);
-			bus->display_power_active = true;
+			bus->display_power_active = cookie;
 		}
 	} else {
 		if (bus->display_power_active) {
+			unsigned long cookie = bus->display_power_active;
+
 			if (acomp->ops->put_power)
-				acomp->ops->put_power(acomp->dev);
-			bus->display_power_active = false;
+				acomp->ops->put_power(acomp->dev, cookie);
+
+			bus->display_power_active = 0;
 		}
 	}
  unlock:
@@ -256,6 +262,7 @@ EXPORT_SYMBOL_GPL(snd_hdac_acomp_register_notifier);
 /**
  * snd_hdac_acomp_init - Initialize audio component
  * @bus: HDA core bus
+ * @aops: audio component ops
  * @match_master: match function for finding components
  * @extra_size: Extra bytes to allocate
  *
@@ -329,9 +336,9 @@ int snd_hdac_acomp_exit(struct hdac_bus *bus)
 		return 0;
 
 	if (WARN_ON(bus->display_power_active) && acomp->ops)
-		acomp->ops->put_power(acomp->dev);
+		acomp->ops->put_power(acomp->dev, bus->display_power_active);
 
-	bus->display_power_active = false;
+	bus->display_power_active = 0;
 	bus->display_power_status = 0;
 
 	component_master_del(dev, &hdac_component_master_ops);

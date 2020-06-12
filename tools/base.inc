@@ -79,7 +79,7 @@ $(foreach pkg,$(PKG_y),$(eval $(call base_pkg_def,$(pkg))))
 all: $(foreach pkg,$(PKG_y),build/$(pkg)-$($(pkg)_FINALTARGET)) $(COMPLETETARGET)
 
 define base_pkg_dep
-build/%-$(CONFIGTARGET): $(foreach dep,$(1)_DEP,build/$(dep)-$($(dep)_FINALTARGET))
+build/$(1)-$(CONFIGTARGET): $(foreach dep,$($(1)_DEP),build/$(dep)-$($(dep)_FINALTARGET))
 endef
 $(foreach pkg,$(PKG_y),$(eval $(call base_pkg_dep,$(pkg))))
 
@@ -165,6 +165,7 @@ romfs_post:
 	for i in $(foreach pkg,$(PKG_y),$(pkg):$($(pkg)_ROMFS)); do \
 		pkg=`expr $$i : '\(.*\):'`; \
 		tgt=`expr $$i : '.*:\(.*\)'`; \
+		[ "$$tgt" ] || continue; \
 		echo "Loading license $$pkg-license ..."; \
 		unset ACL_PKG; unset ACL_URL; unset ACL_LICENSE; \
 		. build/$$pkg-license; \

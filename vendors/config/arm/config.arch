@@ -62,6 +62,16 @@ ARCH    = arm
 ENDIAN ?= little
 FLOAT  ?= hard
 
+ifndef CROSS_COMPILE
+  ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
+    ifneq ($(shell which arm-linux-musleabi-20191126-gcc),)
+      CROSS_COMPILE = arm-linux-musleabi-20191126-
+    else
+      CROSS_COMPILE = arm-linux-musleabi-
+    endif
+  endif
+endif
+#
 # older kernels need an older compiler
 ifeq ($(filter-out linux-2.0% linux-2.2% linux-2.4%, $(LINUXDIR)),)
   ifneq ($(shell which arm-linux-20061213-gcc),)
@@ -98,8 +108,11 @@ endif
 CROSS          = $(CROSS_COMPILE)
 CONFIGURE_HOST = arm-linux
 
-LIBCSUFFIX := $(patsubst -%,-%eabi,$(LIBCSUFFIX))
-LIBCSUFFIX := $(LIBCSUFFIX)$(subst glibc,-gnueabi,$(LIBSDIR))
+# ARM suffix requirements are different and "special"
+LIBCSUFFIX  := $(subst uClibc,-uclibceabi,$(LIBCDIR))
+LIBCSUFFIX  := $(subst uClibc-ng,-uclibceabi,$(LIBCSUFFIX))
+LIBCSUFFIX  := $(subst musl,-musleabi,$(LIBCSUFFIX))
+LIBCSUFFIX  := $(subst glibc,-gnueabi,$(LIBCSUFFIX))
 CONFIGURE_TOOL ?= arm-linux$(LIBCSUFFIX)
 
 CC        = $(ucfront_cc) $(CROSS_COMPILE)gcc $(CPUFLAGS)

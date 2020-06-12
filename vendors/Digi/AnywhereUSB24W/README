@@ -1,0 +1,38 @@
+DIGI ANYWHEREUSB24W
+-------------------
+
+This is just some random notes on building and running on the AnywhereUSB24W
+platform. This is very much a work in progress.
+
+The Digi/AnywhereUSB24W board is built around an NXP/Freescale Layerscape
+1046 SoC. (This is an ARM64 CPU based device).
+
+Generate images for this board using the Digi/AnywhereUSB24W accelerated
+target. The default is to select the glibc when building. The build will
+generate a single "itb" u-boot mutli-image format binary,
+images/anywhereusb24w.itb. A number of the build artifacts, line kernel and
+root filesystem, are also present in that images/ directory.
+
+You can load onto the AnywhereUSB24W board using the usual uboot loader
+installed in the boot ROM of the board. (You can break to the uboot serial
+port prompt, by hitting a key during the early uboot startup).
+
+    setenv bootargs console=ttyS0,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0500 mtdparts=1550000.spi:1m(rcw),1m(u-boot),1m(env),1m(ucode)
+    dhcp 0xa0000000 anywhereusb24w-initrd.itb
+    bootm 0xa0000000
+
+This assumes you have a local network with addresses setup with DHCP and
+tftp server.
+
+The console is the external serial port (at the default 115200,8,n,1).
+
+Legacy loading of the kernel, rootfs and devicetree is possible if you
+really need to. The generated binaries images/kernel.bin, images/rootfs.bin
+and images/anywhereusb24.dtb can be loaded using u-boot commands:
+
+    setenv bootargs console=ttyS0,115200 root=/dev/ram0 initrd=0x98000000,24M earlycon=uart8250,mmio,0x21c0500 mtdparts=1550000.spi:1m(rcw),1m(u-boot),1m(env),1m(ucode)
+    dhcp 0x90000000 kernel.bin
+    tftpboot 0x97000000 anywhereusb24.dtb
+    tftpboot 0x98000000 rootfs.bin
+    booti 0x90000000 - 0x97000000
+

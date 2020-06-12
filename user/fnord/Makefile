@@ -71,8 +71,4 @@ ifndef CONFIG_PROP_CONFIG_LIBCONFIG
 ifndef CONFIG_USER_CGI_HTTPS_ONLY
 	$(ROMFSINST) -a "80 stream tcp nowait root /bin/httpd /home/httpd" -A "80 stream" /etc/default/inetd.conf
 endif
-ifdef CONFIG_USER_SSLWRAP_SSLWRAP
-	$(ROMFSINST) -a "443 stream tcp nowait root /bin/sslwrap -cert /etc/config/ssl_cert.pem -key /etc/config/ssl_key.pem -exec /bin/httpd /home/httpd" \
-		-A "443 stream" /etc/default/inetd.conf
-endif
 endif

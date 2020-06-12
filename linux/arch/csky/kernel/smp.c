@@ -120,7 +120,7 @@ void __init setup_smp_ipi(void)
 	int rc;
 
 	if (ipi_irq == 0)
-		panic("%s IRQ mapping failed\n", __func__);
+		return;
 
 	rc = request_percpu_irq(ipi_irq, handle_ipi, "IPI Interrupt",
 				&ipi_dummy_dev);
@@ -211,8 +211,6 @@ void csky_start_secondary(void)
 	write_mmu_pagemask(0);
 	TLBMISS_HANDLER_SETUP_PGD(swapper_pg_dir);
 	TLBMISS_HANDLER_SETUP_PGD_KERNEL(swapper_pg_dir);
-
-	asid_cache(smp_processor_id()) = ASID_FIRST_VERSION;
 
 #ifdef CONFIG_CPU_HAS_FPU
 	init_fpu();

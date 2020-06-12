@@ -1,0 +1,160 @@
+--- a/configure.org	2019-11-27 16:53:11.967530673 +1000
++++ b/configure	2019-11-27 16:53:14.879412158 +1000
+@@ -8824,7 +8824,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking if WNOHANG requires _POSIX_SOURCE" >&5
+ $as_echo_n "checking if WNOHANG requires _POSIX_SOURCE... " >&6; }
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -8859,7 +8860,10 @@
+ $as_echo_n "checking if any value exists for WNOHANG... " >&6; }
+ rm -rf wnohang
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
++$as_echo "yes" >&6; }
++	$as_echo "#define WNOHANG_BACKUP_VALUE 1" >>confdefs.h
++
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -8927,8 +8931,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking if signals need to be re-armed" >&5
+ $as_echo_n "checking if signals need to be re-armed... " >&6; }
+ if test "$cross_compiling" = yes; then :
+-  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Expect can't be cross compiled" >&5
+-$as_echo "$as_me: WARNING: Expect can't be cross compiled" >&2;}
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9227,7 +9231,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for struct sgttyb" >&5
+ $as_echo_n "checking for struct sgttyb... " >&6; }
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9268,7 +9273,11 @@
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for struct termio" >&5
+ $as_echo_n "checking for struct termio... " >&6; }
+   if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  $as_echo "#define HAVE_TERMIO 1" >>confdefs.h
++
++    PTY_TYPE=termios
++	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
++$as_echo "yes" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9301,7 +9310,11 @@
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for struct termios" >&5
+ $as_echo_n "checking for struct termios... " >&6; }
+   if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  $as_echo "#define HAVE_TERMIOS 1" >>confdefs.h
++
++        PTY_TYPE=termios
++        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
++$as_echo "yes" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9339,7 +9352,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking if TCGETS or TCGETA in termios.h" >&5
+ $as_echo_n "checking if TCGETS or TCGETA in termios.h... " >&6; }
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9377,7 +9391,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking if TIOCGWINSZ in termios.h" >&5
+ $as_echo_n "checking if TIOCGWINSZ in termios.h... " >&6; }
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9417,7 +9432,8 @@
+ $as_echo_n "checking for Cray-style ptys... " >&6; }
+ SETUID=":"
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -9510,46 +9526,9 @@
+ 
+ 
+ # following test sets SETPGRP_VOID if setpgrp takes 0 args, else takes 2
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether setpgrp takes no argument" >&5
+-$as_echo_n "checking whether setpgrp takes no argument... " >&6; }
+-if ${ac_cv_func_setpgrp_void+:} false; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "cannot check setpgrp when cross compiling" "$LINENO" 5
+-else
+-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-$ac_includes_default
+-int
+-main ()
+-{
+-/* If this system has a BSD-style setpgrp which takes arguments,
+-  setpgrp(1, 1) will fail with ESRCH and return -1, in that case
+-  exit successfully. */
+-  return setpgrp (1,1) != -1;
+-  ;
+-  return 0;
+-}
++cat >>expect_cf.h <<\_ACEOF
++#define SETPGRP_VOID 1
+ _ACEOF
+-if ac_fn_c_try_run "$LINENO"; then :
+-  ac_cv_func_setpgrp_void=no
+-else
+-  ac_cv_func_setpgrp_void=yes
+-fi
+-rm -f core *.core core.conftest.* gmon.out bb.out conftest$ac_exeext \
+-  conftest.$ac_objext conftest.beam conftest.$ac_ext
+-fi
+-
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_func_setpgrp_void" >&5
+-$as_echo "$ac_cv_func_setpgrp_void" >&6; }
+-if test $ac_cv_func_setpgrp_void = yes; then
+-
+-$as_echo "#define SETPGRP_VOID 1" >>confdefs.h
+-
+-fi
+-
+ 
+ #
+ # check for timezones
+@@ -9557,7 +9536,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: checking for SV-style timezone" >&5
+ $as_echo_n "checking for SV-style timezone... " >&6; }
+ if test "$cross_compiling" = yes; then :
+-  as_fn_error $? "Expect can't be cross compiled" "$LINENO" 5
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
++$as_echo "yes" >&6; }
+ 
+ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext

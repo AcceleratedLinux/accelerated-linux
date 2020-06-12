@@ -599,12 +599,25 @@ static int ipsec_proc_open(struct inode *inode, struct file *file)
     return single_open(file, it->proc_open, it->data);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
+
 static const struct file_operations ipsec_proc_fops = {
     .open       = ipsec_proc_open,
     .read       = seq_read,
     .llseek     = seq_lseek,
     .release    = single_release,
 };
+
+#else
+
+static const struct proc_ops ipsec_proc_fops = {
+    .proc_open       = ipsec_proc_open,
+    .proc_read       = seq_read,
+    .proc_lseek      = seq_lseek,
+    .proc_release    = single_release,
+};
+
+#endif
 
 static struct ipsec_proc_list proc_items[]={
 	NODE("klipsdebug",     &proc_net_ipsec_dir, ipsec_klipsdebug_show,     0),

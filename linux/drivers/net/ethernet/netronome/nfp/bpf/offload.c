@@ -22,6 +22,7 @@
 #include <net/tc_act/tc_mirred.h>
 
 #include "main.h"
+#include "../ccm.h"
 #include "../nfp_app.h"
 #include "../nfp_net_ctrl.h"
 #include "../nfp_net.h"
@@ -45,9 +46,7 @@ nfp_map_ptr_record(struct nfp_app_bpf *bpf, struct nfp_prog *nfp_prog,
 	/* Grab a single ref to the map for our record.  The prog destroy ndo
 	 * happens after free_used_maps().
 	 */
-	map = bpf_map_inc(map, false);
-	if (IS_ERR(map))
-		return PTR_ERR(map);
+	bpf_map_inc(map);
 
 	record = kmalloc(sizeof(*record), GFP_KERNEL);
 	if (!record) {
@@ -375,7 +374,7 @@ nfp_bpf_map_alloc(struct nfp_app_bpf *bpf, struct bpf_offloaded_map *offmap)
 	}
 
 	use_map_size = DIV_ROUND_UP(offmap->map.value_size, 4) *
-		       FIELD_SIZEOF(struct nfp_bpf_map, use_map[0]);
+		       sizeof_field(struct nfp_bpf_map, use_map[0]);
 
 	nfp_map = kzalloc(sizeof(*nfp_map) + use_map_size, GFP_USER);
 	if (!nfp_map)
@@ -384,6 +383,7 @@ nfp_bpf_map_alloc(struct nfp_app_bpf *bpf, struct bpf_offloaded_map *offmap)
 	offmap->dev_priv = nfp_map;
 	nfp_map->offmap = offmap;
 	nfp_map->bpf = bpf;
+	spin_lock_init(&nfp_map->cache_lock);
 
 	res = nfp_bpf_ctrl_alloc_map(bpf, &offmap->map);
 	if (res < 0) {
@@ -406,6 +406,8 @@ nfp_bpf_map_free(struct nfp_app_bpf *bpf, struct bpf_offloaded_map *offmap)
 	struct nfp_bpf_map *nfp_map = offmap->dev_priv;
 
 	nfp_bpf_ctrl_free_map(bpf, nfp_map);
+	dev_consume_skb_any(nfp_map->cache);
+	WARN_ON_ONCE(nfp_map->cache_blockers);
 	list_del_init(&nfp_map->l);
 	bpf->map_elems_in_use -= offmap->map.max_entries;
 	bpf->maps_in_use--;
@@ -452,12 +454,12 @@ int nfp_bpf_event_output(struct nfp_app_bpf *bpf, const void *data,
 
 	if (len < sizeof(struct cmsg_bpf_event) + pkt_size + data_size)
 		return -EINVAL;
-	if (cbe->hdr.ver != CMSG_MAP_ABI_VERSION)
+	if (cbe->hdr.ver != NFP_CCM_ABI_VERSION)
 		return -EINVAL;
 
 	rcu_read_lock();
-	record = rhashtable_lookup_fast(&bpf->maps_neutral, &map_id,
-					nfp_bpf_maps_neutral_params);
+	record = rhashtable_lookup(&bpf->maps_neutral, &map_id,
+				   nfp_bpf_maps_neutral_params);
 	if (!record || map_id_full > U32_MAX) {
 		rcu_read_unlock();
 		cmsg_warn(bpf, "perf event: map id %lld (0x%llx) not recognized, dropping event\n",

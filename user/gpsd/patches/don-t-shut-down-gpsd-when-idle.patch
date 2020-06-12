@@ -1,0 +1,41 @@
+From 14588416d1ad7e506941f503292877e1d018a540 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Tue, 26 May 2020 18:09:22 +0100
+Subject: [PATCH] user/gpsd: don't shut down gpsd when idle
+
+Previously, if the USB GNSS device was unplugged and the internal GNSS
+module was disabled by configuration, the gpsd daemon would shut down
+and not start up again when the USB device was plugged back in.
+
+Starting and stopping of the gpsd daemon is handled by the
+action.d/location script, so we don't want gpsd shutting itself down.
+
+DAL-2577
+---
+ gpsd.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/gpsd.c b/gpsd.c
+index a10a27c..9ce4fc6 100644
+--- a/gpsd.c
++++ b/gpsd.c
+@@ -2488,6 +2488,8 @@ int main(int argc, char *argv[])
+ 	}
+ #endif /* SOCKET_EXPORT_ENABLE */
+ 
++/* Don't shut down gpsd, the system will handle this */
++#if 0
+ 	/*
+ 	 * Might be time for graceful shutdown if no command-line
+ 	 * devices were specified, there are no subscribers, there are
+@@ -2515,6 +2517,7 @@ int main(int argc, char *argv[])
+ 		goto shutdown;
+ 	    }
+ 	}
++#endif
+     }
+ 
+     /* if we make it here, we got a signal... deal with it */
+-- 
+2.17.1
+

@@ -1,16 +1,5 @@
-CONFOPTS=
+VERSION = 2.1.0
+URL = https://downloads.sourceforge.net/project/traceroute/traceroute/traceroute-$(VERSION)/traceroute-$(VERSION).tar.gz
+MAKEVARS = env=yes prefix=/
 
-all: build/build
-	$(MAKE) -C build
-
-build/build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
-
-clean:
-	rm -rf build
-
-romfs:
-	$(ROMFSINST) build/traceroute /bin/traceroute
+include $(ROOTDIR)/tools/automake.inc

@@ -55,6 +55,7 @@ void args_add_prefix(ARGS *args, const char *s);
 void args_pop(ARGS *args, int n);
 void args_strip(ARGS *args, const char *prefix);
 void args_remove_first(ARGS *args);
+void args_free(ARGS *args);
 
 #if HAVE_COMPAR_FN_T
 #define COMPAR_FN_T __compar_fn_t

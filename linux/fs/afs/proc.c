@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /* /proc interface for AFS
  *
  * Copyright (C) 2002 Red Hat, Inc. All Rights Reserved.
  * Written by David Howells (dhowells@redhat.com)
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version
- * 2 of the License, or (at your option) any later version.
  */
 
 #include <linux/slab.h>
@@ -53,7 +49,7 @@ static int afs_proc_cells_show(struct seq_file *m, void *v)
 	seq_printf(m, "%3u %6lld %2u %s\n",
 		   atomic_read(&cell->usage),
 		   cell->dns_expiry - ktime_get_real_seconds(),
-		   vllist ? vllist->nr_servers : 0,
+		   vllist->nr_servers,
 		   cell->name);
 	return 0;
 }
@@ -217,13 +213,14 @@ static int afs_proc_cell_volumes_show(struct seq_file *m, void *v)
 
 	/* Display header on line 1 */
 	if (v == &cell->proc_volumes) {
-		seq_puts(m, "USE VID      TY\n");
+		seq_puts(m, "USE VID      TY NAME\n");
 		return 0;
 	}
 
-	seq_printf(m, "%3d %08llx %s\n",
+	seq_printf(m, "%3d %08llx %s %s\n",
 		   atomic_read(&vol->usage), vol->vid,
-		   afs_vol_types[vol->type]);
+		   afs_vol_types[vol->type],
+		   vol->name);
 
 	return 0;
 }
@@ -296,8 +293,8 @@ static int afs_proc_cell_vlservers_show(struct seq_file *m, void *v)
 
 	if (v == SEQ_START_TOKEN) {
 		seq_printf(m, "# source %s, status %s\n",
-			   dns_record_sources[vllist->source],
-			   dns_lookup_statuses[vllist->status]);
+			   dns_record_sources[vllist ? vllist->source : 0],
+			   dns_lookup_statuses[vllist ? vllist->status : 0]);
 		return 0;
 	}
 
@@ -336,7 +333,7 @@ static void *afs_proc_cell_vlservers_start(struct seq_file *m, loff_t *_pos)
 	if (pos == 0)
 		return SEQ_START_TOKEN;
 
-	if (!vllist || pos - 1 >= vllist->nr_servers)
+	if (pos - 1 >= vllist->nr_servers)
 		return NULL;
 
 	return &vllist->servers[pos - 1];

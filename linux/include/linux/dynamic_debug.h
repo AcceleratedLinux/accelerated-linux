@@ -71,6 +71,13 @@ void __dynamic_netdev_dbg(struct _ddebug *descriptor,
 			  const struct net_device *dev,
 			  const char *fmt, ...);
 
+struct ib_device;
+
+extern __printf(3, 4)
+void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
+			 const struct ib_device *ibdev,
+			 const char *fmt, ...);
+
 #define DEFINE_DYNAMIC_DEBUG_METADATA(name, fmt)		\
 	static struct _ddebug  __aligned(8)			\
 	__attribute__((section("__verbose"))) name = {		\
@@ -154,6 +161,10 @@ void __dynamic_netdev_dbg(struct _ddebug *descriptor,
 	_dynamic_func_call(fmt, __dynamic_netdev_dbg,		\
 			   dev, fmt, ##__VA_ARGS__)
 
+#define dynamic_ibdev_dbg(dev, fmt, ...)			\
+	_dynamic_func_call(fmt, __dynamic_ibdev_dbg,		\
+			   dev, fmt, ##__VA_ARGS__)
+
 #define dynamic_hex_dump(prefix_str, prefix_type, rowsize,		\
 			 groupsize, buf, len, ascii)			\
 	_dynamic_func_call_no_desc(__builtin_constant_p(prefix_str) ? prefix_str : "hexdump", \
@@ -193,6 +204,12 @@ static inline int ddebug_dyndbg_module_param_cb(char *param, char *val,
 	do { if (0) printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__); } while (0)
 #define dynamic_dev_dbg(dev, fmt, ...)					\
 	do { if (0) dev_printk(KERN_DEBUG, dev, fmt, ##__VA_ARGS__); } while (0)
+#define dynamic_hex_dump(prefix_str, prefix_type, rowsize,		\
+			 groupsize, buf, len, ascii)			\
+	do { if (0)							\
+		print_hex_dump(KERN_DEBUG, prefix_str, prefix_type,	\
+				rowsize, groupsize, buf, len, ascii);	\
+	} while (0)
 #endif
 
 #endif

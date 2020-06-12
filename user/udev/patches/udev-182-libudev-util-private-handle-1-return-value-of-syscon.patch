@@ -1,0 +1,60 @@
+From f14f9ce8cd3fd8d2fb5c16c456e5964bafc430c4 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 7 Jan 2020 13:38:01 +0100
+Subject: [PATCH] libudev-util-private: handle -1 return value of
+ sysconf(_SC_GET{PW,GR}_R_SIZE_MAX
+
+sysconf(_SC_GET{PW,GR}_R_SIZE_MAX may return with -1 if there's no hard
+limit on the buffer size.
+
+As musl returns with -1, group and owner changing is not working.
+---
+ src/libudev-util-private.c | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/libudev-util-private.c b/src/libudev-util-private.c
+index 08f0ba2..6acfd37 100644
+--- a/src/libudev-util-private.c
++++ b/src/libudev-util-private.c
+@@ -116,12 +116,18 @@ int util_delete_path(struct udev *udev, const char *path)
+ uid_t util_lookup_user(struct udev *udev, const char *user)
+ {
+         char *endptr;
+-        size_t buflen = sysconf(_SC_GETPW_R_SIZE_MAX);
+-        char buf[buflen];
++        long buflen;
++        char *buf;
+         struct passwd pwbuf;
+         struct passwd *pw;
+         uid_t uid;
+ 
++        buflen = sysconf(_SC_GETPW_R_SIZE_MAX);
++        if (buflen <= 0)
++                buflen = 4096;
++
++        buf = alloca(buflen);
++
+         if (strcmp(user, "root") == 0)
+                 return 0;
+         uid = strtoul(user, &endptr, 10);
+@@ -141,12 +147,16 @@ uid_t util_lookup_user(struct udev *udev, const char *user)
+ gid_t util_lookup_group(struct udev *udev, const char *group)
+ {
+         char *endptr;
+-        size_t buflen = sysconf(_SC_GETGR_R_SIZE_MAX);
++        long buflen;
+         char *buf;
+         struct group grbuf;
+         struct group *gr;
+         gid_t gid = 0;
+ 
++        buflen = sysconf(_SC_GETGR_R_SIZE_MAX);
++        if (buflen <= 0)
++                buflen = 4096;
++
+         if (strcmp(group, "root") == 0)
+                 return 0;
+         gid = strtoul(group, &endptr, 10);
+-- 
+2.20.1
+

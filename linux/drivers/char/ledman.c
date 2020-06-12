@@ -1613,6 +1613,8 @@ ledman_tick(void)
 
 #include <mach/hardware.h>
 #include <mach/sg.h>
+#include <mach/ixp4xx-gpio.h>
+#include <mach/../../irqs.h>
 
 /*
  *	Here is the definition of the LED's on the Intel/MonteJade platform.
@@ -1698,6 +1700,8 @@ ledman_initarch(void)
 #define LEDMAN_PLATFORM_DEFINED
 
 #include <mach/hardware.h>
+#include <mach/ixp4xx-gpio.h>
+#include <mach/../../irqs.h>
 
 #if defined(CONFIG_MACH_ESS710) || defined(CONFIG_MACH_SG720)
 /*
@@ -4218,6 +4222,8 @@ struct ledgpiomap {
 #define AC6310DX_LED_MASK	0xfff
 #define AC6310DX_LED_NR		12
 
+#define AC6310DX_GPIO_ERASE	49
+
 static struct ledgpiomap ac6310dx_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
 	{ .name = "BLUE", .gpio = 1, },
@@ -4279,6 +4285,8 @@ static leddef_t ac6310dx_ledman_def = {
 #define CONNECTIT_MINI_LED_MASK		0x3ff
 #define CONNECTIT_MINI_LED_NR		10
 
+#define CONNECTIT_MINI_GPIO_ERASE	49
+
 static struct ledgpiomap connectit_mini_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
 	{ .name = "BLUE", .gpio = 1, },
@@ -4339,7 +4347,7 @@ static leddef_t connectit_mini_ledman_def = {
 #define CONNECTIT4_LED_NR	14
 
 #define GPIO_ERASE		49
-#define GPIO_EX12_ERASE		120
+#define EX12_GPIO_ERASE		120
 #define GPIO_BUZZER		65
 
 static struct ledgpiomap connectit4_ledgpio[] = {
@@ -4394,6 +4402,214 @@ static leddef_t connectit4_ledman_def = {
 	[LEDS_ON] = CONNECTIT4_LED_POWER | CONNECTIT4_LED_RED | CONNECTIT4_LED_GREEN,
 };
 
+
+#define IX20_LED_RED	0x1
+#define IX20_LED_BLUE	0x2
+#define IX20_LED_GREEN	0x4
+#define IX20_LED_RSS1	0x8
+#define IX20_LED_RSS2	0x10
+#define IX20_LED_RSS3	0x20
+#define IX20_LED_RSS4	0x40
+#define IX20_LED_RSS5	0x80
+#define IX20_LED_INT	0x100
+#define IX20_LED_WIFI	0x200
+#define IX20_LED_SIM1	0x400
+#define IX20_LED_SIM2	0x800
+#define IX20_LED_MASK	0xfff
+#define IX20_LED_NR	12
+
+#define IX20_GPIO_ERASE	115
+
+static struct ledgpiomap ix20_ledgpio[] = {
+	{ .name = "RED", .gpio = 0, },
+	{ .name = "BLUE", .gpio = 1, },
+	{ .name = "GREEN", .gpio = 2, },
+	{ .name = "RSS1", .gpio = 3, },
+	{ .name = "RSS2", .gpio = 4, },
+	{ .name = "RSS3", .gpio = 5, },
+	{ .name = "RSS4", .gpio = 64, },
+	{ .name = "RSS5", .gpio = 65, },
+	{ .name = "INT", .gpio = 8, },
+	{ .name = "WIFI", .gpio = 9, },
+	{ .name = "SIM1", .gpio = 128, },
+	{ .name = "SIM2", .gpio = 129, },
+};
+
+static ledmap_t ix20_ledman_std = {
+	[LEDMAN_ALL]       = IX20_LED_MASK,
+
+	[LEDMAN_NVRAM_1]   = 0,
+	[LEDMAN_NVRAM_2]   = IX20_LED_RED | IX20_LED_GREEN |
+			     IX20_LED_RSS1 | IX20_LED_RSS2 |
+			     IX20_LED_RSS3 | IX20_LED_RSS4 |
+			     IX20_LED_RSS5 |
+			     IX20_LED_SIM1 | IX20_LED_SIM2 |
+			     IX20_LED_INT | IX20_LED_WIFI,
+	[LEDMAN_NVRAM_ALL] = IX20_LED_MASK,
+
+	[LEDMAN_RSS1]      = IX20_LED_RSS1,
+	[LEDMAN_RSS2]      = IX20_LED_RSS2,
+	[LEDMAN_RSS3]      = IX20_LED_RSS3,
+	[LEDMAN_RSS4]      = IX20_LED_RSS4,
+	[LEDMAN_RSS5]      = IX20_LED_RSS5,
+
+	[LEDMAN_ETH]       = IX20_LED_GREEN,
+	[LEDMAN_ONLINE]    = IX20_LED_BLUE,
+	[LEDMAN_COM]       = IX20_LED_RED,
+
+	[LEDMAN_SIM1]      = IX20_LED_SIM1,
+	[LEDMAN_SIM2]      = IX20_LED_SIM2,
+
+	[LEDMAN_LAN3_RX]   = IX20_LED_INT,
+	[LEDMAN_LAN3_TX]   = IX20_LED_WIFI,
+};
+
+static leddef_t ix20_ledman_def = {
+	[LEDS_ON] = IX20_LED_RED | IX20_LED_GREEN,
+};
+
+
+#define IX10_LED_RED		0x1
+#define IX10_LED_BLUE		0x2
+#define IX10_LED_GREEN		0x4
+#define IX10_LED_RSS1		0x8
+#define IX10_LED_RSS2		0x10
+#define IX10_LED_RSS3		0x20
+#define IX10_LED_RSS4		0x40
+#define IX10_LED_RSS5		0x80
+#define IX10_LED_ONLINE		0x100
+#define IX10_LED_SIM_RED	0x200
+#define IX10_LED_SIM_GREEN	0x400
+#define IX10_LED_SIM_BLUE	0x800
+#define IX10_LED_MASK		0xfff
+#define IX10_LED_NR		12
+
+#define IX10_GPIO_ERASE		115
+
+static struct ledgpiomap ix10_ledgpio[] = {
+	{ .name = "RED", .gpio = 0, },
+	{ .name = "BLUE", .gpio = 1, },
+	{ .name = "GREEN", .gpio = 2, },
+	{ .name = "RSS1", .gpio = 3, },
+	{ .name = "RSS2", .gpio = 4, },
+	{ .name = "RSS3", .gpio = 5, },
+	{ .name = "RSS4", .gpio = 64, },
+	{ .name = "RSS5", .gpio = 65, },
+	{ .name = "ONLINE", .gpio = 8, },
+	{ .name = "SIM-RED", .gpio = 9, },
+	{ .name = "SIM-GREEN", .gpio = 128, },
+	{ .name = "SIM-BLUE", .gpio = 129, },
+};
+
+static ledmap_t ix10_ledman_std = {
+	[LEDMAN_ALL]       = IX10_LED_MASK,
+
+	[LEDMAN_NVRAM_1]   = 0,
+	[LEDMAN_NVRAM_2]   = IX10_LED_RED | IX10_LED_GREEN |
+			     IX10_LED_RSS1 | IX10_LED_RSS2 |
+			     IX10_LED_RSS3 | IX10_LED_RSS4 |
+			     IX10_LED_RSS5 | IX10_LED_ONLINE |
+			     IX10_LED_SIM_RED | IX10_LED_SIM_GREEN,
+	[LEDMAN_NVRAM_ALL] = IX10_LED_MASK,
+
+	[LEDMAN_RSS1]      = IX10_LED_RSS1,
+	[LEDMAN_RSS2]      = IX10_LED_RSS2,
+	[LEDMAN_RSS3]      = IX10_LED_RSS3,
+	[LEDMAN_RSS4]      = IX10_LED_RSS4,
+	[LEDMAN_RSS5]      = IX10_LED_RSS5,
+
+	[LEDMAN_ETH]       = IX10_LED_GREEN,
+	[LEDMAN_ONLINE]    = IX10_LED_BLUE,
+	[LEDMAN_COM]       = IX10_LED_RED,
+
+	[LEDMAN_SIM1]      = IX10_LED_SIM_GREEN,
+	[LEDMAN_SIM2]      = IX10_LED_SIM_BLUE,
+
+	[LEDMAN_LAN3_RX]   = IX10_LED_ONLINE,
+	[LEDMAN_LAN3_TX]   = IX10_LED_ONLINE,
+};
+
+static leddef_t ix10_ledman_def = {
+	[LEDS_ON] = IX10_LED_RED | IX10_LED_GREEN,
+};
+
+
+#define IX15_LED_RED		0x1
+#define IX15_LED_BLUE		0x2
+#define IX15_LED_GREEN		0x4
+#define IX15_LED_RSS1		0x8
+#define IX15_LED_RSS2		0x10
+#define IX15_LED_RSS3		0x20
+#define IX15_LED_RSS4		0x40
+#define IX15_LED_RSS5		0x80
+#define IX15_LED_ONLINE		0x100
+#define IX15_LED_SIM_RED	0x200
+#define IX15_LED_SIM_GREEN	0x400
+#define IX15_LED_SIM_BLUE	0x800
+#define IX15_LED_XBEE_RED	0x1000
+#define IX15_LED_XBEE_GREEN	0x2000
+#define IX15_LED_XBEE_BLUE	0x4000
+#define IX15_LED_MASK		0xffff
+#define IX15_LED_NR		15
+
+#define IX15_GPIO_ERASE		115
+
+static struct ledgpiomap ix15_ledgpio[] = {
+	{ .name = "RED", .gpio = 45, },
+	{ .name = "BLUE", .gpio = 43, },
+	{ .name = "GREEN", .gpio = 44, },
+	{ .name = "RSS1", .gpio = 14, },
+	{ .name = "RSS2", .gpio = 11, },
+	{ .name = "RSS3", .gpio = 13, },
+	{ .name = "RSS4", .gpio = 12, },
+	{ .name = "RSS5", .gpio = 15, },
+	{ .name = "ONLINE", .gpio = 114, },
+	{ .name = "SIM-RED", .gpio = 40, },
+	{ .name = "SIM-GREEN", .gpio = 46, },
+	{ .name = "SIM-BLUE", .gpio = 117, },
+	{ .name = "XBEE-RED", .gpio = 42, },
+	{ .name = "XBEE-GREEN", .gpio = 47, },
+	{ .name = "XBEE-BLUE", .gpio = 41, },
+};
+
+static ledmap_t ix15_ledman_std = {
+	[LEDMAN_ALL]       = IX15_LED_MASK,
+
+	[LEDMAN_NVRAM_1]   = 0,
+	[LEDMAN_NVRAM_2]   = IX15_LED_RED | IX15_LED_GREEN |
+			     IX15_LED_RSS1 | IX15_LED_RSS2 |
+			     IX15_LED_RSS3 | IX15_LED_RSS4 |
+			     IX15_LED_RSS5 | IX15_LED_ONLINE |
+			     IX15_LED_SIM_RED | IX15_LED_SIM_GREEN |
+			     IX15_LED_XBEE_RED | IX15_LED_XBEE_GREEN,
+	[LEDMAN_NVRAM_ALL] = IX15_LED_MASK,
+
+	[LEDMAN_RSS1]      = IX15_LED_RSS1,
+	[LEDMAN_RSS2]      = IX15_LED_RSS2,
+	[LEDMAN_RSS3]      = IX15_LED_RSS3,
+	[LEDMAN_RSS4]      = IX15_LED_RSS4,
+	[LEDMAN_RSS5]      = IX15_LED_RSS5,
+
+	[LEDMAN_ETH]       = IX15_LED_GREEN,
+	[LEDMAN_ONLINE]    = IX15_LED_BLUE,
+	[LEDMAN_COM]       = IX15_LED_RED,
+
+	[LEDMAN_SIM1]      = IX15_LED_SIM_GREEN,
+	[LEDMAN_SIM2]      = IX15_LED_SIM_BLUE,
+	[LEDMAN_SIM_FAIL]  = IX15_LED_SIM_RED,
+
+	[LEDMAN_LAN3_RX]   = IX15_LED_ONLINE,
+	[LEDMAN_LAN3_TX]   = IX15_LED_ONLINE,
+
+	[LEDMAN_XBEE1]   = IX15_LED_XBEE_RED,
+	[LEDMAN_XBEE2]   = IX15_LED_XBEE_GREEN,
+	[LEDMAN_XBEE3]   = IX15_LED_XBEE_BLUE,
+};
+
+static leddef_t ix15_ledman_def = {
+	[LEDS_ON] = IX15_LED_RED | IX15_LED_GREEN,
+};
+
 /*
  * The Connect IT 4 has a buzzer, and we want to use that on button press.
  */
@@ -4446,6 +4662,33 @@ static void connectit_mini_ledman_init(void)
 	memcpy(&ledman_def, &connectit_mini_ledman_def, sizeof(ledman_def));
 }
 
+static void ix20_ledman_init(void)
+{
+	led_nr = IX20_LED_NR;
+	leds_state = IX20_LED_MASK;
+	ledgpio = ix20_ledgpio;
+	memcpy(&ledman_std, &ix20_ledman_std, sizeof(ledman_std));
+	memcpy(&ledman_def, &ix20_ledman_def, sizeof(ledman_def));
+}
+
+static void ix10_ledman_init(void)
+{
+	led_nr = IX10_LED_NR;
+	leds_state = IX10_LED_MASK;
+	ledgpio = ix10_ledgpio;
+	memcpy(&ledman_std, &ix10_ledman_std, sizeof(ledman_std));
+	memcpy(&ledman_def, &ix10_ledman_def, sizeof(ledman_def));
+}
+
+static void ix15_ledman_init(void)
+{
+	led_nr = IX15_LED_NR;
+	leds_state = IX15_LED_MASK;
+	ledgpio = ix15_ledgpio;
+	memcpy(&ledman_std, &ix15_ledman_std, sizeof(ledman_std));
+	memcpy(&ledman_def, &ix15_ledman_def, sizeof(ledman_def));
+}
+
 static void ledman_set(unsigned long bits)
 {
 	unsigned int i, b;
@@ -4493,24 +4736,36 @@ static void ledman_initarch(void)
 		return;
 	}
 
-	if (of_machine_is_compatible("accelerated,6310dx"))
+	if (of_machine_is_compatible("accelerated,6310dx")) {
 		ac6310dx_ledman_init();
-	else if (of_machine_is_compatible("digi,connectit-mini") || of_machine_is_compatible("digi,ex12"))
+		ledman_setup_erase(AC6310DX_GPIO_ERASE);
+	} else if (of_machine_is_compatible("digi,ix10")) {
+		ix10_ledman_init();
+		ledman_setup_erase(IX10_GPIO_ERASE);
+	} else if (of_machine_is_compatible("digi,ix15")) {
+		ix15_ledman_init();
+		ledman_setup_erase(IX15_GPIO_ERASE);
+	} else if (of_machine_is_compatible("digi,ix20")) {
+		ix20_ledman_init();
+		ledman_setup_erase(IX20_GPIO_ERASE);
+	} else if (of_machine_is_compatible("digi,connectit-mini")) {
 		connectit_mini_ledman_init();
-	else if (of_machine_is_compatible("digi,connectit4"))
+		ledman_setup_erase(CONNECTIT_MINI_GPIO_ERASE);
+	} else if (of_machine_is_compatible("digi,ex12")) {
+		connectit_mini_ledman_init();
+		ledman_setup_erase(EX12_GPIO_ERASE);
+	} else if (of_machine_is_compatible("digi,connectit4")) {
 		connectit4_ledman_init();
-	else
+		ledman_setup_erase(GPIO_ERASE);
+	} else {
 		return;
+	}
 
 	for (i = 0; i < led_nr; i++) {
 		gpio_request(ledgpio[i].gpio, ledgpio[i].name);
 		gpio_direction_output(ledgpio[i].gpio, 1);
 	}
 	ledman_set(0);
-	if (of_machine_is_compatible("digi,ex12"))
-		ledman_setup_erase(GPIO_EX12_ERASE);
-	else
-		ledman_setup_erase(GPIO_ERASE);
 
 	if (buzzer_use) {
 		gpio_request(GPIO_BUZZER, "Buzzer");
@@ -4701,220 +4956,6 @@ static void ledman_initarch(void)
 
 /****************************************************************************/
 #endif /* CONFIG_DTB_MT7621_EX15 */
-/****************************************************************************/
-/****************************************************************************/
-#if defined(CONFIG_DTB_MT7621_EX55)
-/****************************************************************************/
-#define LEDMAN_PLATFORM_DEFINED
-
-#include <linux/gpio.h>
-
-struct ledgpiomap {
-	char		*name;
-	unsigned int	gpio;
-	unsigned int	flags;
-};
-
-#define	F_INITED	0x1
-
-#define LED_MODEM1_RED		0x1
-#define LED_MODEM1_BLUE		0x2
-#define LED_MODEM1_GREEN	0x4
-#define LED_MODEM1_RSS1		0x8
-#define LED_MODEM1_RSS2		0x10
-#define LED_MODEM1_RSS3		0x20
-#define LED_MODEM1_RSS4		0x40
-#define LED_MODEM1_RSS5		0x80
-#define LED_MODEM1_SIM1		0x100
-#define LED_MODEM1_SIM2		0x200
-#define LED_MODEM2_RED		0x400
-#define LED_MODEM2_BLUE		0x800
-#define LED_MODEM2_GREEN	0x1000
-#define LED_MODEM2_RSS1		0x2000
-#define LED_MODEM2_RSS2		0x4000
-#define LED_MODEM2_RSS3		0x8000
-#define LED_MODEM2_RSS4		0x10000
-#define LED_MODEM2_RSS5		0x20000
-#define LED_MODEM2_SIM1		0x40000
-#define LED_MODEM2_SIM2		0x80000
-#define LED_ETH0		0x100000
-#define LED_ETH1		0x200000
-#define LED_MASK		0x3fffff
-#define LED_NR			22
-
-#define GPIO_ERASE		416
-
-static struct ledgpiomap ledgpio[] = {
-	{ .name = "RED", .gpio = 496, },
-	{ .name = "BLUE", .gpio = 497, },
-	{ .name = "GREEN", .gpio = 498, },
-	{ .name = "RSS1", .gpio = 499, },
-	{ .name = "RSS2", .gpio = 500, },
-	{ .name = "RSS3", .gpio = 501, },
-	{ .name = "RSS4", .gpio = 502, },
-	{ .name = "RSS5", .gpio = 503, },
-	{ .name = "SIM1", .gpio = 504, },
-	{ .name = "SIM2", .gpio = 505, },
-	{ .name = "RED", .gpio = 480, },
-	{ .name = "BLUE", .gpio = 481, },
-	{ .name = "GREEN", .gpio = 482, },
-	{ .name = "RSS1", .gpio = 483, },
-	{ .name = "RSS2", .gpio = 484, },
-	{ .name = "RSS3", .gpio = 485, },
-	{ .name = "RSS4", .gpio = 486, },
-	{ .name = "RSS5", .gpio = 487, },
-	{ .name = "SIM1", .gpio = 488, },
-	{ .name = "SIM2", .gpio = 489, },
-	{ .name = "ETH0", .gpio = 460, },
-	{ .name = "ETH1", .gpio = 479, },
-};
-
-static ledmap_t ledman_std = {
-	[LEDMAN_ALL]       = LED_MASK,
-
-	[LEDMAN_LAN1_LINK] = LED_ETH0,
-	[LEDMAN_LAN2_LINK] = LED_ETH1,
-
-	[LEDMAN_NVRAM_1]   = LED_MODEM1_RED | LED_MODEM1_RSS1 |
-			     LED_MODEM1_RSS2 | LED_MODEM1_RSS3 |
-			     LED_MODEM1_RSS4 | LED_MODEM1_RSS5 |
-			     LED_MODEM1_SIM1 | LED_MODEM1_SIM2 |
-			     LED_MODEM2_RED | LED_MODEM2_RSS1 |
-			     LED_MODEM2_RSS2 | LED_MODEM2_RSS3 |
-			     LED_MODEM2_RSS4 | LED_MODEM2_RSS5 |
-			     LED_MODEM2_SIM1 | LED_MODEM2_SIM2 |
-			     LED_ETH0 | LED_ETH1,
-	[LEDMAN_NVRAM_2]   = LED_MODEM1_RED | LED_MODEM1_GREEN |
-			     LED_MODEM2_RED | LED_MODEM2_GREEN,
-	[LEDMAN_NVRAM_ALL] = LED_MODEM1_RED | LED_MODEM1_GREEN |
-			     LED_MODEM1_BLUE | LED_MODEM1_RSS1 |
-			     LED_MODEM1_RSS2 | LED_MODEM1_RSS3 |
-			     LED_MODEM1_RSS4 | LED_MODEM1_RSS5 |
-			     LED_MODEM1_SIM1 | LED_MODEM1_SIM2 |
-			     LED_MODEM2_RED | LED_MODEM2_GREEN |
-			     LED_MODEM2_BLUE | LED_MODEM2_RSS1 |
-			     LED_MODEM2_RSS2 | LED_MODEM2_RSS3 |
-			     LED_MODEM2_RSS4 | LED_MODEM2_RSS5 |
-			     LED_MODEM2_SIM1 | LED_MODEM2_SIM2 |
-			     LED_ETH0 | LED_ETH1,
-
-	[LEDMAN_ETH]       = LED_MODEM1_GREEN,
-	[LEDMAN_ONLINE]    = LED_MODEM1_BLUE,
-	[LEDMAN_COM]       = LED_MODEM1_RED,
-
-	[LEDMAN_RSS1]      = LED_MODEM1_RSS1,
-	[LEDMAN_RSS2]      = LED_MODEM1_RSS2,
-	[LEDMAN_RSS3]      = LED_MODEM1_RSS3,
-	[LEDMAN_RSS4]      = LED_MODEM1_RSS4,
-	[LEDMAN_RSS5]      = LED_MODEM1_RSS5,
-
-	[LEDMAN_SIM1]      = LED_MODEM1_SIM1,
-	[LEDMAN_SIM2]      = LED_MODEM1_SIM2,
-};
-
-static leddef_t ledman_def = {
-	[LEDS_ON]	   = LED_MODEM1_GREEN | LED_MODEM1_RED |
-			     LED_MODEM2_GREEN | LED_MODEM2_RED,
-};
-
-static unsigned int leds_state = LED_MASK;
-static unsigned int leds_bits = LED_MASK;
-static struct work_struct leds_work;
-static int leds_scheduled;
-static int leds_deferedsetup;
-static int leds_irq;
-
-static void ledman_set(unsigned long bits)
-{
-	leds_bits = bits;
-	if (!leds_scheduled) {
-		leds_scheduled++;
-		schedule_work(&leds_work);
-	}
-}
-
-static irqreturn_t ledman_interrupt(int irq, void *dev_id)
-{
-	ledman_signalreset();
-	return IRQ_HANDLED;
-}
-
-static void ledman_initgpio(void)
-{
-	int i, rc;
-
-	leds_deferedsetup = 0;
-	for (i = 0; i < LED_NR; i++) {
-		if (ledgpio[i].flags & F_INITED)
-			continue;
-
-		rc = gpio_request(ledgpio[i].gpio, ledgpio[i].name);
-		if (rc < 0) {
-			leds_deferedsetup++;
-			continue;
-		}
-		gpio_direction_output(ledgpio[i].gpio, 1);
-		ledgpio[i].flags |= F_INITED;
-	}
-}
-
-/*
- * GPIO interrupts may not become configurable until late in the boot
- * sequence. So we need to be prepared to retry ERASE IRQ acquisition
- * multiple times.
- */
-static void ledman_initerase(void)
-{
-	gpio_request(GPIO_ERASE, "Erase");
-	gpio_direction_input(GPIO_ERASE);
-	leds_irq = gpio_to_irq(GPIO_ERASE);
-	if (leds_irq < 0)
-		return;
-
-	if (request_irq(leds_irq, ledman_interrupt, IRQF_TRIGGER_FALLING, "Erase", NULL))
-		pr_err("failed to register IRQ%d for ERASE switch\n", leds_irq);
-	else
-		pr_info("registered ERASE switch on IRQ%d\n", leds_irq);
-}
-
-static void ledman_work(struct work_struct *work)
-{
-	unsigned int i, changed;
-	unsigned int b, bits;
-
-	if (leds_deferedsetup)
-		ledman_initgpio();
-	if (leds_irq < 0)
-		ledman_initerase();
-
-	/*
-	 * Get new state and mark that we have processed that.
-	 * This ordering avoids need for preempt protection.
-	 */
-	bits = leds_bits;
-	leds_scheduled = 0;
-
-	changed = bits ^ leds_state;
-	if (changed) {
-		for (i = 0; i < LED_NR; i++) {
-			b = 0x1 << i;
-			if (changed & b)
-				gpio_set_value_cansleep(ledgpio[i].gpio, (bits & b) ? 0 : 1);
-		}
-		leds_state = bits;
-	}
-}
-
-static void ledman_initarch(void)
-{
-	INIT_WORK(&leds_work, ledman_work);
-	ledman_initgpio();
-	ledman_set(0);
-	ledman_initerase();
-}
-
-/****************************************************************************/
-#endif /* CONFIG_DTB_MT7621_EX55 */
 /****************************************************************************/
 /****************************************************************************/
 #if defined(CONFIG_GPIO_AMDFCH)

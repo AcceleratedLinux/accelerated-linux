@@ -201,11 +201,10 @@
 &uart3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart3_4wires>;
+	dtr-gpios = <&gpio3 27 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio3 24 GPIO_ACTIVE_LOW>;
 	dsr-gpios = <&gpio3 25 GPIO_ACTIVE_LOW>;
 	rng-gpios = <&gpio3 26 GPIO_ACTIVE_LOW>;
-	fsl,uart-has-dtrdcd;
-	fsl,uart-has-dtr-gpio = <&gpio3 27 GPIO_ACTIVE_LOW>;
-	fsl,uart-has-dcd-gpio = <&gpio3 24 GPIO_ACTIVE_LOW>;
 	uart-has-rtscts;
 	fsl,dte-mode;
 	status = "disabled";

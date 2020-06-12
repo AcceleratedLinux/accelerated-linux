@@ -123,7 +123,9 @@ static int i10nm_get_all_munits(void)
 }
 
 static const struct x86_cpu_id i10nm_cpuids[] = {
-	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ATOM_TREMONT_X, 0, 0 },
+	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ATOM_TREMONT_D, 0, 0 },
+	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ICELAKE_X, 0, 0 },
+	{ X86_VENDOR_INTEL, 6, INTEL_FAM6_ICELAKE_D, 0, 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(x86cpu, i10nm_cpuids);
@@ -152,8 +154,7 @@ static int i10nm_get_dimm_config(struct mem_ctl_info *mci)
 
 		ndimms = 0;
 		for (j = 0; j < I10NM_NUM_DIMMS; j++) {
-			dimm = EDAC_DIMM_PTR(mci->layers, mci->dimms,
-					     mci->n_layers, i, j, 0);
+			dimm = edac_get_dimm(mci, i, j, 0);
 			mtr = I10NM_GET_DIMMMTR(imc, i, j);
 			mcddrtcfg = I10NM_GET_MCDDRTCFG(imc, i, j);
 			edac_dbg(1, "dimmmtr 0x%x mcddrtcfg 0x%x (mc%d ch%d dimm%d)\n",
@@ -166,9 +167,9 @@ static int i10nm_get_dimm_config(struct mem_ctl_info *mci)
 				ndimms += skx_get_nvdimm_info(dimm, imc, i, j,
 							      EDAC_MOD_STR);
 		}
-		if (ndimms && !i10nm_check_ecc(imc, 0)) {
-			i10nm_printk(KERN_ERR, "ECC is disabled on imc %d\n",
-				     imc->mc);
+		if (ndimms && !i10nm_check_ecc(imc, i)) {
+			i10nm_printk(KERN_ERR, "ECC is disabled on imc %d channel %d\n",
+				     imc->mc, i);
 			return -ENODEV;
 		}
 	}
@@ -180,6 +181,54 @@ static struct notifier_block i10nm_mce_dec = {
 	.notifier_call	= skx_mce_check_error,
 	.priority	= MCE_PRIO_EDAC,
 };
+
+#ifdef CONFIG_EDAC_DEBUG
+/*
+ * Debug feature.
+ * Exercise the address decode logic by writing an address to
+ * /sys/kernel/debug/edac/i10nm_test/addr.
+ */
+static struct dentry *i10nm_test;
+
+static int debugfs_u64_set(void *data, u64 val)
+{
+	struct mce m;
+
+	pr_warn_once("Fake error to 0x%llx injected via debugfs\n", val);
+
+	memset(&m, 0, sizeof(m));
+	/* ADDRV + MemRd + Unknown channel */
+	m.status = MCI_STATUS_ADDRV + 0x90;
+	/* One corrected error */
+	m.status |= BIT_ULL(MCI_STATUS_CEC_SHIFT);
+	m.addr = val;
+	skx_mce_check_error(NULL, 0, &m);
+
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(fops_u64_wo, NULL, debugfs_u64_set, "%llu\n");
+
+static void setup_i10nm_debug(void)
+{
+	i10nm_test = edac_debugfs_create_dir("i10nm_test");
+	if (!i10nm_test)
+		return;
+
+	if (!edac_debugfs_create_file("addr", 0200, i10nm_test,
+				      NULL, &fops_u64_wo)) {
+		debugfs_remove(i10nm_test);
+		i10nm_test = NULL;
+	}
+}
+
+static void teardown_i10nm_debug(void)
+{
+	debugfs_remove_recursive(i10nm_test);
+}
+#else
+static inline void setup_i10nm_debug(void) {}
+static inline void teardown_i10nm_debug(void) {}
+#endif /*CONFIG_EDAC_DEBUG*/
 
 static int __init i10nm_init(void)
 {
@@ -217,7 +266,7 @@ static int __init i10nm_init(void)
 		goto fail;
 
 	list_for_each_entry(d, i10nm_edac_list, list) {
-		rc = skx_get_src_id(d, &src_id);
+		rc = skx_get_src_id(d, 0xf8, &src_id);
 		if (rc < 0)
 			goto fail;
 
@@ -249,7 +298,7 @@ static int __init i10nm_init(void)
 
 	opstate_init();
 	mce_register_decode_chain(&i10nm_mce_dec);
-	setup_skx_debug("i10nm_test");
+	setup_i10nm_debug();
 
 	i10nm_printk(KERN_INFO, "%s\n", I10NM_REVISION);
 
@@ -262,7 +311,7 @@ fail:
 static void __exit i10nm_exit(void)
 {
 	edac_dbg(2, "\n");
-	teardown_skx_debug();
+	teardown_i10nm_debug();
 	mce_unregister_decode_chain(&i10nm_mce_dec);
 	skx_adxl_put();
 	skx_remove();

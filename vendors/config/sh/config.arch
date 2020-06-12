@@ -90,7 +90,6 @@ AR        = $(CROSS_COMPILE)ar
 LD        = $(ucfront_ld) $(CROSS_COMPILE)ld
 OBJCOPY   = $(CROSS_COMPILE)objcopy
 RANLIB    = $(CROSS_COMPILE)ranlib
-ELF2FLT   = :
 STRIPTOOL = $(CROSS_COMPILE)strip
 STRIP     = $(STRIPTOOL)
 NM        = $(CROSS_COMPILE)nm

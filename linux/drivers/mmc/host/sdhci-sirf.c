@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * SDHCI support for SiRF primaII and marco SoCs
  *
  * Copyright (c) 2011 Cambridge Silicon Radio Limited, a CSR plc group company.
- *
- * Licensed under GPLv2 or later.
  */
 
 #include <linux/delay.h>
@@ -195,7 +194,7 @@ static int sdhci_sirf_probe(struct platform_device *pdev)
 	 * We must request the IRQ after sdhci_add_host(), as the tasklet only
 	 * gets setup in sdhci_add_host() and we oops.
 	 */
-	ret = mmc_gpiod_request_cd(host->mmc, "cd", 0, false, 0, NULL);
+	ret = mmc_gpiod_request_cd(host->mmc, "cd", 0, false, 0);
 	if (ret == -EPROBE_DEFER)
 		goto err_request_cd;
 	if (!ret)

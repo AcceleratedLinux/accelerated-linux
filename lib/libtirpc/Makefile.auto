@@ -1,0 +1,9 @@
+#
+# If we are building with uClibc-ng or musl as the C-library then we will
+# need libtirpc built to supply the RPC library functions. We force a build
+# of that here for those cases.
+#
+libtirpc_$(CONFIG_DEFAULTS_LIBC_MUSL) = y
+libtirpc_$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG) = y
+libtirpc_$(CONFIG_LIB_LIBTIRPC) = y
+dir_$(libtirpc_y) += libtirpc

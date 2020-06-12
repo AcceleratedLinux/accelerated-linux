@@ -212,6 +212,9 @@
 #define MT_AGG_PCR_RTS_THR		GENMASK(19, 0)
 #define MT_AGG_PCR_RTS_PKT_THR		GENMASK(31, 25)
 
+#define MT_AGG_ASRCR			MT_WF_AGG(0x060)
+#define MT_AGG_ASRCR_RANGE(val, n)	(((val) >> ((n) << 3)) & GENMASK(5, 0))
+
 #define MT_AGG_CONTROL			MT_WF_AGG(0x070)
 #define MT_AGG_CONTROL_NO_BA_RULE	BIT(0)
 #define MT_AGG_CONTROL_NO_BA_AR_RULE	BIT(1)
@@ -233,6 +236,10 @@
 #define MT_WF_DMA(ofs)			(MT_WF_DMA_BASE + (ofs))
 
 #define MT_DMA_DCR0			MT_WF_DMA(0x000)
+#define MT_DMA_DCR0_MAX_RX_LEN		GENMASK(15, 0)
+#define MT_DMA_DCR0_DAMSDU		BIT(16)
+#define MT_DMA_DCR0_RX_VEC_DROP		BIT(17)
+
 #define MT_DMA_DCR1			MT_WF_DMA(0x004)
 
 #define MT_DMA_FQCR0			MT_WF_DMA(0x008)
@@ -476,6 +483,12 @@ enum {
 #define MT_LPON_BASE			0x24000
 #define MT_LPON(n)			(MT_LPON_BASE + (n))
 
+#define MT_LPON_T0CR			MT_LPON(0x010)
+#define MT_LPON_T0CR_MODE		GENMASK(1, 0)
+
+#define MT_LPON_UTTR0			MT_LPON(0x018)
+#define MT_LPON_UTTR1			MT_LPON(0x01c)
+
 #define MT_LPON_BTEIR			MT_LPON(0x020)
 #define MT_LPON_BTEIR_MBSS_MODE		GENMASK(31, 29)
 
@@ -544,6 +557,8 @@ enum {
 
 #define MT_MIB_STAT_PSCCA		MT_MIB_STAT(16)
 #define MT_MIB_STAT_PSCCA_MASK		GENMASK(23, 0)
+
+#define MT_TX_AGG_CNT(n)		MT_MIB(0xa8 + ((n) << 2))
 
 #define MT_MIB_STAT_ED			MT_MIB_STAT(18)
 #define MT_MIB_STAT_ED_MASK		GENMASK(23, 0)

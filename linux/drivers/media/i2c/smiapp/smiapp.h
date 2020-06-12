@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * drivers/media/i2c/smiapp/smiapp.h
  *
@@ -5,15 +6,6 @@
  *
  * Copyright (C) 2010--2012 Nokia Corporation
  * Contact: Sakari Ailus <sakari.ailus@iki.fi>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
  */
 
 #ifndef __SMIAPP_PRIV_H_
@@ -206,7 +198,6 @@ struct smiapp_sensor {
 
 	u8 hvflip_inv_mask; /* H/VFLIP inversion due to sensor orientation */
 	u8 frame_skip;
-	bool active; /* is the sensor powered on? */
 	u16 embedded_start; /* embedded data start line */
 	u16 embedded_end;
 	u16 image_start; /* image data start line */
@@ -215,9 +206,6 @@ struct smiapp_sensor {
 	bool streaming;
 	bool dev_init_done;
 	u8 compressed_min_bpp;
-
-	u8 *nvm;		/* nvm memory buffer */
-	unsigned int nvm_size;	/* bytes */
 
 	struct smiapp_module_info minfo;
 

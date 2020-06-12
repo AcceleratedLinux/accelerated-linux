@@ -22,6 +22,7 @@
 #include <mach/hardware.h>
 #include <asm/irq.h>
 #include <asm/mach/pci.h>
+#include "irqs.h"
 
 void __init sg5xx_pci_preinit(void)
 {

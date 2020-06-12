@@ -18,6 +18,19 @@
 #define MALIDP_CORE_ID_STATUS(__core_id)     (((__u32)(__core_id)) & 0xFF)
 
 /* Mali-display product IDs */
-#define MALIDP_D71_PRODUCT_ID   0x0071
+#define MALIDP_D71_PRODUCT_ID	0x0071
+#define MALIDP_D32_PRODUCT_ID	0x0032
+
+union komeda_config_id {
+	struct {
+		__u32	max_line_sz:16,
+			n_pipelines:2,
+			n_scalers:2, /* number of scalers per pipeline */
+			n_layers:3, /* number of layers per pipeline */
+			n_richs:3, /* number of rich layers per pipeline */
+			reserved_bits:6;
+	};
+	__u32 value;
+};
 
 #endif /* _MALIDP_PRODUCT_H_ */

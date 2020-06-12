@@ -44,7 +44,9 @@ To enumerate image formats applications initialize the ``type`` and
 the :ref:`VIDIOC_ENUM_FMT` ioctl with a pointer to this structure. Drivers
 fill the rest of the structure or return an ``EINVAL`` error code. All
 formats are enumerable by beginning at index zero and incrementing by
-one until ``EINVAL`` is returned.
+one until ``EINVAL`` is returned. If applicable, drivers shall return
+formats in preference order, where preferred formats are returned before
+(that is, with lower ``index`` value) less-preferred formats.
 
 .. note::
 
@@ -127,6 +129,22 @@ one until ``EINVAL`` is returned.
       - This format is not native to the device but emulated through
 	software (usually libv4l2), where possible try to use a native
 	format instead for better performance.
+    * - ``V4L2_FMT_FLAG_CONTINUOUS_BYTESTREAM``
+      - 0x0004
+      - The hardware decoder for this compressed bytestream format (aka coded
+	format) is capable of parsing a continuous bytestream. Applications do
+	not need to parse the bytestream themselves to find the boundaries
+	between frames/fields. This flag can only be used in combination with
+	the ``V4L2_FMT_FLAG_COMPRESSED`` flag, since this applies to compressed
+	formats only. This flag is valid for stateful decoders only.
+    * - ``V4L2_FMT_FLAG_DYN_RESOLUTION``
+      - 0x0008
+      - Dynamic resolution switching is supported by the device for this
+	compressed bytestream format (aka coded format). It will notify the user
+	via the event ``V4L2_EVENT_SOURCE_CHANGE`` when changes in the video
+	parameters are detected. This flag can only be used in combination
+	with the ``V4L2_FMT_FLAG_COMPRESSED`` flag, since this applies to
+	compressed formats only. It is also only applies to stateful codecs.
 
 
 Return Value

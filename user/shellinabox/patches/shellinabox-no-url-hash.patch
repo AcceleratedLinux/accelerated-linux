@@ -1,0 +1,83 @@
+Removed URL hash handling.
+
+The URL hash handling for non-daemon single-session mode creates a DOM XSS
+vulnerability.
+
+E.g.
+    https://<device_ip>/terminal_frame/#javascript:alert(document.cookie)
+and click "Connect" to trigger the javascript.
+
+diff -Naur shellinabox.orig/shellinabox/shell_in_a_box.jspp shellinabox/shellinabox/shell_in_a_box.jspp
+--- shellinabox.orig/shellinabox/shell_in_a_box.jspp	2020-04-22 14:04:59.390562468 +1000
++++ shellinabox/shellinabox/shell_in_a_box.jspp	2020-04-27 13:32:16.741708000 +1000
+@@ -97,15 +97,8 @@
+     this.rooturl    = url;
+     this.url        = url;
+   }
+-  if (document.location.hash != '') {
+-    var hash        = decodeURIComponent(document.location.hash).
+-                      replace(/^#/, '');
+-    this.nextUrl    = hash.replace(/,.*/, '');
+-    this.session    = hash.replace(/[^,]*,/, '');
+-  } else {
+     this.nextUrl    = this.url;
+     this.session    = null;
+-  }
+   this.pendingKeys  = '';
+   this.keysInFlight = false;
+   this.connected    = false;
+@@ -146,13 +139,6 @@
+ ShellInABox.prototype.reconnect = function() {
+   this.showReconnect(false);
+   if (!this.session) {
+-    if (document.location.hash != '') {
+-      // A shellinaboxd daemon launched from a CGI only allows a single
+-      // session. In order to reconnect, we must reload the frame definition
+-      // and obtain a new port number. As this is a different origin, we
+-      // need to get enclosing page to help us.
+-      parent.location        = this.nextUrl;
+-    } else {
+       if (this.url != this.nextUrl) {
+         document.location.replace(this.nextUrl);
+       } else {
+@@ -161,7 +147,6 @@
+         this.reset(true);
+         this.sendRequest();
+       }
+-    }
+   }
+   return false;
+ };
+@@ -311,20 +296,9 @@
+ };
+ 
+ ShellInABox.prototype.toggleSSL = function() {
+-  if (document.location.hash != '') {
+-    if (this.nextUrl.match(/\?plain$/)) {
+-      this.nextUrl    = this.nextUrl.replace(/\?plain$/, '');
+-    } else {
+-      this.nextUrl    = this.nextUrl.replace(/[?#].*/, '') + '?plain';
+-    }
+-    if (!this.session) {
+-      parent.location = this.nextUrl;
+-    }
+-  } else {
+     this.nextUrl      = this.nextUrl.match(/^https:/)
+            ? this.nextUrl.replace(/^https:/, 'http:').replace(/\/*$/, '/plain')
+            : this.nextUrl.replace(/^http/, 'https').replace(/\/*plain$/, '');
+-  }
+   if (this.nextUrl.match(/^[:]*:\/\/[^/]*$/)) {
+     this.nextUrl     += '/';
+   }
+@@ -352,11 +326,7 @@
+           // provide a menu entry to switch between the two.
+           var newNode       = document.createElement('li');
+           var isSecure;
+-          if (document.location.hash != '') {
+-            isSecure        = !this.nextUrl.match(/\?plain$/);
+-          } else {
+             isSecure        =  this.nextUrl.match(/^https:/);
+-          }
+           newNode.innerHTML = (isSecure ? '&#10004; ' : '') + 'Secure';
+           if (node.nextSibling) {
+             entries.insertBefore(newNode, node.nextSibling);

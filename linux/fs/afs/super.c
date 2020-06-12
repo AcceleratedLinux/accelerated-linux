@@ -33,19 +33,20 @@ static void afs_i_init_once(void *foo);
 static void afs_kill_super(struct super_block *sb);
 static struct inode *afs_alloc_inode(struct super_block *sb);
 static void afs_destroy_inode(struct inode *inode);
+static void afs_free_inode(struct inode *inode);
 static int afs_statfs(struct dentry *dentry, struct kstatfs *buf);
 static int afs_show_devname(struct seq_file *m, struct dentry *root);
 static int afs_show_options(struct seq_file *m, struct dentry *root);
 static int afs_init_fs_context(struct fs_context *fc);
-static const struct fs_parameter_description afs_fs_parameters;
+static const struct fs_parameter_spec afs_fs_parameters[];
 
 struct file_system_type afs_fs_type = {
 	.owner			= THIS_MODULE,
 	.name			= "afs",
 	.init_fs_context	= afs_init_fs_context,
-	.parameters		= &afs_fs_parameters,
+	.parameters		= afs_fs_parameters,
 	.kill_sb		= afs_kill_super,
-	.fs_flags		= 0,
+	.fs_flags		= FS_RENAME_DOES_D_MOVE,
 };
 MODULE_ALIAS_FS("afs");
 
@@ -56,6 +57,7 @@ static const struct super_operations afs_super_ops = {
 	.alloc_inode	= afs_alloc_inode,
 	.drop_inode	= afs_drop_inode,
 	.destroy_inode	= afs_destroy_inode,
+	.free_inode	= afs_free_inode,
 	.evict_inode	= afs_evict_inode,
 	.show_devname	= afs_show_devname,
 	.show_options	= afs_show_options,
@@ -67,19 +69,24 @@ static atomic_t afs_count_active_inodes;
 enum afs_param {
 	Opt_autocell,
 	Opt_dyn,
+	Opt_flock,
 	Opt_source,
 };
 
-static const struct fs_parameter_spec afs_param_specs[] = {
-	fsparam_flag  ("autocell",	Opt_autocell),
-	fsparam_flag  ("dyn",		Opt_dyn),
-	fsparam_string("source",	Opt_source),
+static const struct constant_table afs_param_flock[] = {
+	{"local",	afs_flock_mode_local },
+	{"openafs",	afs_flock_mode_openafs },
+	{"strict",	afs_flock_mode_strict },
+	{"write",	afs_flock_mode_write },
 	{}
 };
 
-static const struct fs_parameter_description afs_fs_parameters = {
-	.name		= "kAFS",
-	.specs		= afs_param_specs,
+static const struct fs_parameter_spec afs_fs_parameters[] = {
+	fsparam_flag  ("autocell",	Opt_autocell),
+	fsparam_flag  ("dyn",		Opt_dyn),
+	fsparam_enum  ("flock",		Opt_flock, afs_param_flock),
+	fsparam_string("source",	Opt_source),
+	{}
 };
 
 /*
@@ -182,11 +189,22 @@ static int afs_show_devname(struct seq_file *m, struct dentry *root)
 static int afs_show_options(struct seq_file *m, struct dentry *root)
 {
 	struct afs_super_info *as = AFS_FS_S(root->d_sb);
+	const char *p = NULL;
 
 	if (as->dyn_root)
 		seq_puts(m, ",dyn");
 	if (test_bit(AFS_VNODE_AUTOCELL, &AFS_FS_I(d_inode(root))->flags))
 		seq_puts(m, ",autocell");
+	switch (as->flock_mode) {
+	case afs_flock_mode_unset:	break;
+	case afs_flock_mode_local:	p = "local";	break;
+	case afs_flock_mode_openafs:	p = "openafs";	break;
+	case afs_flock_mode_strict:	p = "strict";	break;
+	case afs_flock_mode_write:	p = "write";	break;
+	}
+	if (p)
+		seq_printf(m, ",flock=%s", p);
+
 	return 0;
 }
 
@@ -299,7 +317,7 @@ static int afs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	struct afs_fs_context *ctx = fc->fs_private;
 	int opt;
 
-	opt = fs_parse(fc, &afs_fs_parameters, param, &result);
+	opt = fs_parse(fc, afs_fs_parameters, param, &result);
 	if (opt < 0)
 		return opt;
 
@@ -313,6 +331,10 @@ static int afs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 
 	case Opt_dyn:
 		ctx->dyn_root = true;
+		break;
+
+	case Opt_flock:
+		ctx->flock_mode = result.uint_32;
 		break;
 
 	default:
@@ -376,6 +398,7 @@ static int afs_test_super(struct super_block *sb, struct fs_context *fc)
 	return (as->net_ns == fc->net_ns &&
 		as->volume &&
 		as->volume->vid == ctx->volume->vid &&
+		as->cell == ctx->cell &&
 		!as->dyn_root);
 }
 
@@ -398,7 +421,7 @@ static int afs_set_super(struct super_block *sb, struct fs_context *fc)
 static int afs_fill_super(struct super_block *sb, struct afs_fs_context *ctx)
 {
 	struct afs_super_info *as = AFS_FS_S(sb);
-	struct afs_fid fid;
+	struct afs_iget_data iget_data;
 	struct inode *inode = NULL;
 	int ret;
 
@@ -407,6 +430,7 @@ static int afs_fill_super(struct super_block *sb, struct afs_fs_context *ctx)
 	/* fill in the superblock */
 	sb->s_blocksize		= PAGE_SIZE;
 	sb->s_blocksize_bits	= PAGE_SHIFT;
+	sb->s_maxbytes		= MAX_LFS_FILESIZE;
 	sb->s_magic		= AFS_FS_MAGIC;
 	sb->s_op		= &afs_super_ops;
 	if (!as->dyn_root)
@@ -419,15 +443,16 @@ static int afs_fill_super(struct super_block *sb, struct afs_fs_context *ctx)
 	/* allocate the root inode and dentry */
 	if (as->dyn_root) {
 		inode = afs_iget_pseudo_dir(sb, true);
-		sb->s_flags	|= SB_RDONLY;
 	} else {
 		sprintf(sb->s_id, "%llu", as->volume->vid);
 		afs_activate_volume(as->volume);
-		fid.vid		= as->volume->vid;
-		fid.vnode	= 1;
-		fid.vnode_hi	= 0;
-		fid.unique	= 1;
-		inode = afs_iget(sb, ctx->key, &fid, NULL, NULL, NULL);
+		iget_data.fid.vid	= as->volume->vid;
+		iget_data.fid.vnode	= 1;
+		iget_data.fid.vnode_hi	= 0;
+		iget_data.fid.unique	= 1;
+		iget_data.cb_v_break	= as->volume->cb_v_break;
+		iget_data.cb_s_break	= 0;
+		inode = afs_iget(sb, ctx->key, &iget_data, NULL, NULL, NULL);
 	}
 
 	if (IS_ERR(inode))
@@ -466,6 +491,7 @@ static struct afs_super_info *afs_alloc_sbi(struct fs_context *fc)
 	as = kzalloc(sizeof(struct afs_super_info), GFP_KERNEL);
 	if (as) {
 		as->net_ns = get_net(fc->net_ns);
+		as->flock_mode = ctx->flock_mode;
 		if (ctx->dyn_root) {
 			as->dyn_root = true;
 		} else {
@@ -550,6 +576,7 @@ static int afs_get_tree(struct fs_context *fc)
 	}
 
 	fc->root = dget(sb->s_root);
+	trace_afs_get_tree(as->cell, as->volume);
 	_leave(" = 0 [%p]", sb);
 	return 0;
 
@@ -647,24 +674,23 @@ static struct inode *afs_alloc_inode(struct super_block *sb)
 	vnode->volume		= NULL;
 	vnode->lock_key		= NULL;
 	vnode->permit_cache	= NULL;
-	vnode->cb_interest	= NULL;
+	RCU_INIT_POINTER(vnode->cb_interest, NULL);
 #ifdef CONFIG_AFS_FSCACHE
 	vnode->cache		= NULL;
 #endif
 
 	vnode->flags		= 1 << AFS_VNODE_UNSET;
-	vnode->cb_type		= 0;
 	vnode->lock_state	= AFS_VNODE_LOCK_NONE;
+
+	init_rwsem(&vnode->rmdir_lock);
 
 	_leave(" = %p", &vnode->vfs_inode);
 	return &vnode->vfs_inode;
 }
 
-static void afs_i_callback(struct rcu_head *head)
+static void afs_free_inode(struct inode *inode)
 {
-	struct inode *inode = container_of(head, struct inode, i_rcu);
-	struct afs_vnode *vnode = AFS_FS_I(inode);
-	kmem_cache_free(afs_inode_cachep, vnode);
+	kmem_cache_free(afs_inode_cachep, AFS_FS_I(inode));
 }
 
 /*
@@ -678,9 +704,8 @@ static void afs_destroy_inode(struct inode *inode)
 
 	_debug("DESTROY INODE %p", inode);
 
-	ASSERTCMP(vnode->cb_interest, ==, NULL);
+	ASSERTCMP(rcu_access_pointer(vnode->cb_interest), ==, NULL);
 
-	call_rcu(&inode->i_rcu, afs_i_callback);
 	atomic_dec(&afs_count_active_inodes);
 }
 
@@ -712,7 +737,7 @@ static int afs_statfs(struct dentry *dentry, struct kstatfs *buf)
 		return PTR_ERR(key);
 
 	ret = -ERESTARTSYS;
-	if (afs_begin_vnode_operation(&fc, vnode, key)) {
+	if (afs_begin_vnode_operation(&fc, vnode, key, true)) {
 		fc.flags |= AFS_FS_CURSOR_NO_VSLEEP;
 		while (afs_select_fileserver(&fc)) {
 			fc.cb_break = afs_calc_vnode_cb_break(vnode);
@@ -720,7 +745,6 @@ static int afs_statfs(struct dentry *dentry, struct kstatfs *buf)
 		}
 
 		afs_check_for_remote_deletion(&fc, fc.vnode);
-		afs_vnode_commit_status(&fc, vnode, fc.cb_break);
 		ret = afs_end_vnode_operation(&fc);
 	}
 

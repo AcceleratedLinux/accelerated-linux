@@ -363,8 +363,8 @@ int send_cmd(atecc_ctx *ctx, const uint8_t *data_buffer, uint8_t data_len,
  *    0: Verification OK
  *  > 0: Verification FAILED (see 'atecc_parse_status')
  */
-int verify(atecc_ctx *ctx, uint8_t slot_id,
-	   const uint8_t *r, const uint8_t *s)
+static int __verify(atecc_ctx *ctx, uint8_t slot_id,
+		    const uint8_t *r, const uint8_t *s)
 {
 	int ret;
 	uint8_t rx_buff[MAX_BUFFER];
@@ -380,7 +380,8 @@ int verify(atecc_ctx *ctx, uint8_t slot_id,
 	memcpy(cmd + 4, r, 32);
 	memcpy(cmd + 4 + 32, s, 32);
 
-	ret = send_cmd(ctx, cmd, sizeof(cmd), VERIFY_WAIT_TIME_MS, rx_buff, sizeof(rx_buff));
+	ret = send_cmd(ctx, cmd, sizeof(cmd), VERIFY_WAIT_TIME_MS, rx_buff,
+		       sizeof(rx_buff));
 	if (ret < 0)
 		return ret;
 
@@ -392,7 +393,7 @@ int verify(atecc_ctx *ctx, uint8_t slot_id,
  *  < 0: IO error
  *    0: OK
  */
-int nonce(atecc_ctx *ctx, const uint8_t *message)
+static int nonce(atecc_ctx *ctx, const uint8_t *message)
 {
 	uint8_t rx_buff[MAX_BUFFER];
 	uint8_t cmd[4 + NONCE_SIZE] = {
@@ -404,7 +405,20 @@ int nonce(atecc_ctx *ctx, const uint8_t *message)
 
 	memcpy(cmd + 4, message, NONCE_SIZE);
 
-	return send_cmd(ctx, cmd, sizeof(cmd), NONCE_WAIT_TIME_MS, rx_buff, sizeof(rx_buff));
+	return send_cmd(ctx, cmd, sizeof(cmd), NONCE_WAIT_TIME_MS, rx_buff,
+			sizeof(rx_buff));
+}
+
+int verify(atecc_ctx *ctx, uint8_t slot_id, const uint8_t *message,
+	   const uint8_t *r, const uint8_t *s)
+{
+	int ret;
+
+	ret = nonce(ctx, message);
+	if (!ret)
+		ret = __verify(ctx, slot_id, r, s);
+
+	return ret;
 }
 
 /*

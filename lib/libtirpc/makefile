@@ -2,6 +2,8 @@ URL = https://nchc.dl.sourceforge.net/project/libtirpc/libtirpc/1.0.3/libtirpc-1
 
 CONFOPTS += --disable-gssapi
 
+AUTORECONF = autoreconf -i
+
 AUTOMAKE_PRESTAGE = libtirpc_prestage
 
 include $(ROOTDIR)/tools/automake.inc

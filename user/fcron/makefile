@@ -11,6 +11,7 @@ CONFOPTS += --with-run-non-privileged=yes
 CONFOPTS += --with-sendmail="/bin/true"
 CONFOPTS += --with-editor="/bin/vi"
 CONFOPTS += --with-spooldir="/etc/config/fcron"
+CONFOPTS += --with-shell="/bin/sh"
 CONFOPTS += --with-username=root
 CONFOPTS += --with-groupname=root
 

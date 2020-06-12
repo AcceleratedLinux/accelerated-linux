@@ -1,0 +1,238 @@
+From: Samuel Brian <samuel.brian@digi.com>
+Date: Mon, 25 Feb 2019 14:28:22 +1000
+Subject: port: find parent device of virtual net port
+
+Both QMI QMUX and MBIM VLAN network interfaces are "virtual" devices in the
+Linux sysfs as they have no parent device.
+ModemManager ignores virtual devices.
+
+Now, when probing virtual network ports (e.g. VLAN and QMI mux ports),
+ModemManager associates the port with the master network port's parent.
+This relies on the virtual port to be named as "<master-port>.<some-id>"
+e.g. "wwan0.1" gets the same parent as "wwan0" even though in the Linux
+sysfs it is a virtual device (no parent).
+---
+ src/kerneldevice/mm-kernel-device-udev.c | 65 ++++++++++++++++++------
+ src/kerneldevice/mm-kernel-device-udev.h |  4 +-
+ src/mm-base-manager.c                    |  6 +--
+ 3 files changed, 55 insertions(+), 20 deletions(-)
+
+diff --git a/src/kerneldevice/mm-kernel-device-udev.c b/src/kerneldevice/mm-kernel-device-udev.c
+index f07c46bc..b009f2f2 100644
+--- a/src/kerneldevice/mm-kernel-device-udev.c
++++ b/src/kerneldevice/mm-kernel-device-udev.c
+@@ -41,6 +41,7 @@ struct _MMKernelDeviceUdevPrivate {
+     GUdevDevice *device;
+     GUdevDevice *interface;
+     GUdevDevice *physdev;
++    GUdevClient *client;
+     guint16      vendor;
+     guint16      product;
+     guint16      revision;
+@@ -50,11 +51,35 @@ struct _MMKernelDeviceUdevPrivate {
+ 
+ /*****************************************************************************/
+ 
++static GUdevDevice*
++get_parent (GUdevDevice *device,
++            GUdevClient *client)
++{
++    GUdevDevice *parent;
++    gchar *name, *c;
++
++    parent = g_udev_device_get_parent (device);
++    if (!parent && g_str_equal ( g_udev_device_get_subsystem (device), "net")) {
++        /* Associate VLAN interface with parent interface's parent */
++        name = g_strdup (g_udev_device_get_name (device));
++        if (name && (c = strchr (name, '.'))) {
++            *c = 0;
++            parent = g_udev_client_query_by_subsystem_and_name (client, "net", name);
++            if (parent)
++                parent = g_udev_device_get_parent (parent);
++        }
++        g_free(name);
++    }
++
++    return parent;
++}
++
+ static gboolean
+ get_device_ids (GUdevDevice *device,
+                 guint16     *vendor,
+                 guint16     *product,
+-                guint16     *revision)
++                guint16     *revision,
++                GUdevClient *client)
+ {
+     GUdevDevice *parent = NULL;
+     const gchar *vid = NULL, *pid = NULL, *rid = NULL, *parent_subsys;
+@@ -63,7 +88,7 @@ get_device_ids (GUdevDevice *device,
+ 
+     g_assert (vendor != NULL && product != NULL);
+ 
+-    parent = g_udev_device_get_parent (device);
++    parent = get_parent (device, client);
+     if (parent) {
+         parent_subsys = g_udev_device_get_subsystem (parent);
+         if (parent_subsys) {
+@@ -92,7 +117,7 @@ get_device_ids (GUdevDevice *device,
+                 /* Need to look for vendor/product in the parent of the QMI/MBIM device */
+                 GUdevDevice *qmi_parent;
+ 
+-                qmi_parent = g_udev_device_get_parent (parent);
++                qmi_parent = get_parent (parent, client);
+                 if (qmi_parent) {
+                     vid = g_udev_device_get_property (qmi_parent, "ID_VENDOR_ID");
+                     pid = g_udev_device_get_property (qmi_parent, "ID_MODEL_ID");
+@@ -176,14 +201,15 @@ ensure_device_ids (MMKernelDeviceUdev *self)
+     if (!self->priv->device)
+         return;
+ 
+-    if (!get_device_ids (self->priv->device, &self->priv->vendor, &self->priv->product, &self->priv->revision))
++    if (!get_device_ids (self->priv->device, &self->priv->vendor, &self->priv->product, &self->priv->revision, self->priv->client))
+         mm_obj_dbg (self, "could not get vendor/product id");
+ }
+ 
+ /*****************************************************************************/
+ 
+ static GUdevDevice *
+-find_physical_gudevdevice (GUdevDevice *child)
++find_physical_gudevdevice (GUdevDevice *child,
++                           GUdevClient *client)
+ {
+     GUdevDevice *iter, *old = NULL;
+     GUdevDevice *physdev = NULL;
+@@ -222,7 +248,7 @@ find_physical_gudevdevice (GUdevDevice *child)
+                  * for the base PCMCIA device, not the PCMCIA controller which
+                  * is usually PCI or some other bus type.
+                  */
+-                pcmcia_parent = g_udev_device_get_parent (iter);
++                pcmcia_parent = get_parent (iter, client);
+                 if (pcmcia_parent) {
+                     tmp_subsys = g_udev_device_get_subsystem (pcmcia_parent);
+                     if (tmp_subsys && strcmp (tmp_subsys, "pcmcia"))
+@@ -242,7 +268,7 @@ find_physical_gudevdevice (GUdevDevice *child)
+         }
+ 
+         old = iter;
+-        iter = g_udev_device_get_parent (old);
++        iter = get_parent (old, client);
+         g_object_unref (old);
+     }
+ 
+@@ -255,7 +281,7 @@ ensure_physdev (MMKernelDeviceUdev *self)
+     if (self->priv->physdev)
+         return;
+     if (self->priv->device)
+-        self->priv->physdev = find_physical_gudevdevice (self->priv->device);
++        self->priv->physdev = find_physical_gudevdevice (self->priv->device, self->priv->client);
+ }
+ 
+ /*****************************************************************************/
+@@ -274,7 +300,7 @@ ensure_interface (MMKernelDeviceUdev *self)
+ 
+     ensure_physdev (self);
+ 
+-    parent = g_udev_device_get_parent (self->priv->device);
++    parent =get_parent (self->priv->device, self->priv->client);
+     while (1) {
+         /* Abort if no parent found */
+         if (!parent)
+@@ -350,7 +376,7 @@ kernel_device_get_driver (MMKernelDevice *_self)
+     if (!driver) {
+         GUdevDevice *parent;
+ 
+-        parent = g_udev_device_get_parent (self->priv->device);
++        parent = get_parent (self->priv->device, self->priv->client);
+         if (parent)
+             driver = g_udev_device_get_driver (parent);
+ 
+@@ -788,7 +814,8 @@ kernel_device_get_global_property_as_int_hex (MMKernelDevice *_self,
+ /*****************************************************************************/
+ 
+ MMKernelDevice *
+-mm_kernel_device_udev_new (GUdevDevice *udev_device)
++mm_kernel_device_udev_new (GUdevDevice *udev_device,
++                           GUdevClient *client)
+ {
+     GError *error = NULL;
+     MMKernelDevice *self;
+@@ -801,6 +828,7 @@ mm_kernel_device_udev_new (GUdevDevice *udev_device)
+                                              "udev-device", udev_device,
+                                              NULL));
+     g_assert_no_error (error);
++    MM_KERNEL_DEVICE_UDEV(self)->priv->client = client;
+     return self;
+ }
+ 
+@@ -808,13 +836,18 @@ mm_kernel_device_udev_new (GUdevDevice *udev_device)
+ 
+ MMKernelDevice *
+ mm_kernel_device_udev_new_from_properties (MMKernelEventProperties  *props,
++                                           GUdevClient              *client,
+                                            GError                  **error)
+ {
+-    return MM_KERNEL_DEVICE (g_initable_new (MM_TYPE_KERNEL_DEVICE_UDEV,
+-                                             NULL,
+-                                             error,
+-                                             "properties", props,
+-                                             NULL));
++    MMKernelDevice *self;
++    self = MM_KERNEL_DEVICE (g_initable_new (MM_TYPE_KERNEL_DEVICE_UDEV,
++                                              NULL,
++                                              error,
++                                              "properties", properties,
++                                              NULL));
++
++    MM_KERNEL_DEVICE_UDEV(self)->priv->client = client;
++    return self;
+ }
+ 
+ /*****************************************************************************/
+diff --git a/src/kerneldevice/mm-kernel-device-udev.h b/src/kerneldevice/mm-kernel-device-udev.h
+index 9096ca71..e47989fe 100644
+--- a/src/kerneldevice/mm-kernel-device-udev.h
++++ b/src/kerneldevice/mm-kernel-device-udev.h
+@@ -46,8 +46,10 @@ struct _MMKernelDeviceUdevClass {
+ };
+ 
+ GType           mm_kernel_device_udev_get_type            (void);
+-MMKernelDevice *mm_kernel_device_udev_new                 (GUdevDevice              *udev_device);
++MMKernelDevice *mm_kernel_device_udev_new                 (GUdevDevice              *udev_device,
++                                                           GUdevClient              *client);
+ MMKernelDevice *mm_kernel_device_udev_new_from_properties (MMKernelEventProperties  *properties,
++                                                           GUdevClient              *client,
+                                                            GError                  **error);
+ 
+ #endif /* MM_KERNEL_DEVICE_UDEV_H */
+diff --git a/src/mm-base-manager.c b/src/mm-base-manager.c
+index 653adb5c..20dd0ab2 100644
+--- a/src/mm-base-manager.c
++++ b/src/mm-base-manager.c
+@@ -429,7 +429,7 @@ handle_kernel_event (MMBaseManager            *self,
+     mm_obj_dbg (self, "  uid:       %s", uid ? uid : "n/a");
+ 
+ #if defined WITH_UDEV
+-    kernel_device = mm_kernel_device_udev_new_from_properties (properties, error);
++    kernel_device = mm_kernel_device_udev_new_from_properties (properties, self->priv->udev, error);
+ #else
+     kernel_device = mm_kernel_device_generic_new (properties, error);
+ #endif
+@@ -469,7 +469,7 @@ handle_uevent (GUdevClient *client,
+     g_return_if_fail (subsys != NULL);
+     g_return_if_fail (g_str_equal (subsys, "tty") || g_str_equal (subsys, "net") || g_str_has_prefix (subsys, "usb"));
+ 
+-    kernel_device = mm_kernel_device_udev_new (device);
++    kernel_device = mm_kernel_device_udev_new (device, client);
+ 
+     /* We only care about tty/net and usb/cdc-wdm devices when adding modem ports,
+      * but for remove, also handle usb parent device remove events
+@@ -495,7 +495,7 @@ start_device_added_idle (StartDeviceAdded *ctx)
+ {
+     MMKernelDevice *kernel_device;
+ 
+-    kernel_device = mm_kernel_device_udev_new (ctx->device);
++    kernel_device = mm_kernel_device_udev_new (ctx->device, ctx->self->priv->udev);
+     device_added (ctx->self, kernel_device, FALSE, ctx->manual_scan);
+     g_object_unref (kernel_device);
+ 

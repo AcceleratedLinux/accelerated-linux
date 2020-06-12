@@ -1,0 +1,5 @@
+config USER_HID_API
+	bool "hidapi"
+	help
+		A Simple library for communicating with USB and Bluetooth HID devices.
+

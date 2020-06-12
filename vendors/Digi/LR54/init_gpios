@@ -1,0 +1,73 @@
+#!/bin/sh
+##############################################################################
+# Copyright (c) 2018-2019 Digi International Inc., All Rights Reserved
+#
+# This software contains proprietary and confidential information of Digi
+# International Inc.  By accepting transfer of this copy, Recipient agrees
+# to retain this software in confidence, to prevent disclosure to others,
+# and to make no use of this software other than that for which it was
+# delivered.  This is an unpublished copyrighted work of Digi International
+# Inc.  Except as permitted by federal law, 17 USC 117, copying is strictly
+# prohibited.
+#
+# Restricted Rights Legend
+#
+# Use, duplication, or disclosure by the Government is subject to
+# restrictions set forth in sub-paragraph (c)(1)(ii) of The Rights in
+# Technical Data and Computer Software clause at DFARS 252.227-7031 or
+# subparagraphs (c)(1) and (2) of the Commercial Computer Software -
+# Restricted Rights at 48 CFR 52.227-19, as applicable.
+#
+# Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
+#
+##############################################################################
+
+[ "$1" == "start" ] || exit 0
+
+#
+# Modern linux kernels probe/discover/enumerate the GPIO banks and pins
+# in a different order. Mangle the index numbers to match conventional
+# GPIO pin name and ordering.
+#
+gpio_index() {
+	local index=$1
+	if [ ${index} -ge 96 ] ; then
+		echo $((400 + ${index} - 96))
+	elif [ ${index} -ge 64 ] ; then
+		echo $((416 + ${index} - 64))
+	elif [ ${index} -ge 32 ] ; then
+		echo $((448 + ${index} - 32))
+	else
+		echo $((480 + ${index}))
+	fi
+}
+
+init_gpio() {
+	local index
+	local dir=$2
+
+	index=$(gpio_index $1)
+	echo ${index} > /sys/class/gpio/export
+	echo ${dir} > /sys/class/gpio/gpio${index}/direction
+}
+
+echo -n "Initilizing GPIOs... "
+
+### Cellular module
+# Assert W_DISABLE (not populated)
+#init_gpio 8 low
+# Deassert PERST
+init_gpio 12 high
+# Switch off regulator
+init_gpio 6 low
+# SIM select GPIO, default SIM1
+init_gpio 17 low
+
+### DSL
+# Deassert reset pin
+#init_gpio 10 low
+# Deasser GPIO0_REBOOT
+#init_gpio 7 low
+
+
+echo "OK"

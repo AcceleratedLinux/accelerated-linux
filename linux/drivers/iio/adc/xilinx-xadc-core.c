@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Xilinx XADC driver
  *
  * Copyright 2013-2014 Analog Devices Inc.
  *  Author: Lars-Peter Clauen <lars@metafoo.de>
- *
- * Licensed under the GPL-2.
  *
  * Documentation for the parts can be found at:
  *  - XADC hardmacro: Xilinx UG480
@@ -1151,7 +1150,6 @@ static int xadc_probe(struct platform_device *pdev)
 	const struct of_device_id *id;
 	struct iio_dev *indio_dev;
 	unsigned int bipolar_mask;
-	struct resource *mem;
 	unsigned int conf0;
 	struct xadc *xadc;
 	int ret;
@@ -1181,8 +1179,7 @@ static int xadc_probe(struct platform_device *pdev)
 	spin_lock_init(&xadc->lock);
 	INIT_DELAYED_WORK(&xadc->zynq_unmask_work, xadc_zynq_unmask_worker);
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	xadc->base = devm_ioremap_resource(&pdev->dev, mem);
+	xadc->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(xadc->base))
 		return PTR_ERR(xadc->base);
 

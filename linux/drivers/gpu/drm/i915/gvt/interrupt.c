@@ -536,7 +536,7 @@ static void gen8_init_irq(
 	SET_BIT_INFO(irq, 4, VCS_MI_FLUSH_DW, INTEL_GVT_IRQ_INFO_GT1);
 	SET_BIT_INFO(irq, 8, VCS_AS_CONTEXT_SWITCH, INTEL_GVT_IRQ_INFO_GT1);
 
-	if (HAS_BSD2(gvt->dev_priv)) {
+	if (HAS_ENGINE(gvt->dev_priv, VCS1)) {
 		SET_BIT_INFO(irq, 16, VCS2_MI_USER_INTERRUPT,
 			INTEL_GVT_IRQ_INFO_GT1);
 		SET_BIT_INFO(irq, 20, VCS2_MI_FLUSH_DW,
@@ -672,7 +672,7 @@ void intel_gvt_clean_irq(struct intel_gvt *gvt)
 	hrtimer_cancel(&irq->vblank_timer.timer);
 }
 
-#define VBLNAK_TIMER_PERIOD 16000000
+#define VBLANK_TIMER_PERIOD 16000000
 
 /**
  * intel_gvt_init_irq - initialize GVT-g IRQ emulation subsystem
@@ -704,7 +704,7 @@ int intel_gvt_init_irq(struct intel_gvt *gvt)
 
 	hrtimer_init(&vblank_timer->timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
 	vblank_timer->timer.function = vblank_timer_fn;
-	vblank_timer->period = VBLNAK_TIMER_PERIOD;
+	vblank_timer->period = VBLANK_TIMER_PERIOD;
 
 	return 0;
 }

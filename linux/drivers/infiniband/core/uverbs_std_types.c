@@ -40,14 +40,17 @@
 #include "uverbs.h"
 
 static int uverbs_free_ah(struct ib_uobject *uobject,
-			  enum rdma_remove_reason why)
+			  enum rdma_remove_reason why,
+			  struct uverbs_attr_bundle *attrs)
 {
-	return rdma_destroy_ah((struct ib_ah *)uobject->object,
-			       RDMA_DESTROY_AH_SLEEPABLE);
+	return rdma_destroy_ah_user((struct ib_ah *)uobject->object,
+				    RDMA_DESTROY_AH_SLEEPABLE,
+				    &attrs->driver_udata);
 }
 
 static int uverbs_free_flow(struct ib_uobject *uobject,
-			    enum rdma_remove_reason why)
+			    enum rdma_remove_reason why,
+			    struct uverbs_attr_bundle *attrs)
 {
 	struct ib_flow *flow = (struct ib_flow *)uobject->object;
 	struct ib_uflow_object *uflow =
@@ -66,13 +69,15 @@ static int uverbs_free_flow(struct ib_uobject *uobject,
 }
 
 static int uverbs_free_mw(struct ib_uobject *uobject,
-			  enum rdma_remove_reason why)
+			  enum rdma_remove_reason why,
+			  struct uverbs_attr_bundle *attrs)
 {
 	return uverbs_dealloc_mw((struct ib_mw *)uobject->object);
 }
 
 static int uverbs_free_qp(struct ib_uobject *uobject,
-			  enum rdma_remove_reason why)
+			  enum rdma_remove_reason why,
+			  struct uverbs_attr_bundle *attrs)
 {
 	struct ib_qp *qp = uobject->object;
 	struct ib_uqp_object *uqp =
@@ -93,19 +98,20 @@ static int uverbs_free_qp(struct ib_uobject *uobject,
 		ib_uverbs_detach_umcast(qp, uqp);
 	}
 
-	ret = ib_destroy_qp(qp);
+	ret = ib_destroy_qp_user(qp, &attrs->driver_udata);
 	if (ib_is_destroy_retryable(ret, why, uobject))
 		return ret;
 
 	if (uqp->uxrcd)
 		atomic_dec(&uqp->uxrcd->refcnt);
 
-	ib_uverbs_release_uevent(uobject->context->ufile, &uqp->uevent);
+	ib_uverbs_release_uevent(&uqp->uevent);
 	return ret;
 }
 
 static int uverbs_free_rwq_ind_tbl(struct ib_uobject *uobject,
-				   enum rdma_remove_reason why)
+				   enum rdma_remove_reason why,
+				   struct uverbs_attr_bundle *attrs)
 {
 	struct ib_rwq_ind_table *rwq_ind_tbl = uobject->object;
 	struct ib_wq **ind_tbl = rwq_ind_tbl->ind_tbl;
@@ -120,23 +126,25 @@ static int uverbs_free_rwq_ind_tbl(struct ib_uobject *uobject,
 }
 
 static int uverbs_free_wq(struct ib_uobject *uobject,
-			  enum rdma_remove_reason why)
+			  enum rdma_remove_reason why,
+			  struct uverbs_attr_bundle *attrs)
 {
 	struct ib_wq *wq = uobject->object;
 	struct ib_uwq_object *uwq =
 		container_of(uobject, struct ib_uwq_object, uevent.uobject);
 	int ret;
 
-	ret = ib_destroy_wq(wq);
+	ret = ib_destroy_wq(wq, &attrs->driver_udata);
 	if (ib_is_destroy_retryable(ret, why, uobject))
 		return ret;
 
-	ib_uverbs_release_uevent(uobject->context->ufile, &uwq->uevent);
+	ib_uverbs_release_uevent(&uwq->uevent);
 	return ret;
 }
 
 static int uverbs_free_srq(struct ib_uobject *uobject,
-			   enum rdma_remove_reason why)
+			   enum rdma_remove_reason why,
+			   struct uverbs_attr_bundle *attrs)
 {
 	struct ib_srq *srq = uobject->object;
 	struct ib_uevent_object *uevent =
@@ -144,7 +152,7 @@ static int uverbs_free_srq(struct ib_uobject *uobject,
 	enum ib_srq_type  srq_type = srq->srq_type;
 	int ret;
 
-	ret = ib_destroy_srq(srq);
+	ret = ib_destroy_srq_user(srq, &attrs->driver_udata);
 	if (ib_is_destroy_retryable(ret, why, uobject))
 		return ret;
 
@@ -155,12 +163,13 @@ static int uverbs_free_srq(struct ib_uobject *uobject,
 		atomic_dec(&us->uxrcd->refcnt);
 	}
 
-	ib_uverbs_release_uevent(uobject->context->ufile, uevent);
+	ib_uverbs_release_uevent(uevent);
 	return ret;
 }
 
 static int uverbs_free_xrcd(struct ib_uobject *uobject,
-			    enum rdma_remove_reason why)
+			    enum rdma_remove_reason why,
+			    struct uverbs_attr_bundle *attrs)
 {
 	struct ib_xrcd *xrcd = uobject->object;
 	struct ib_uxrcd_object *uxrcd =
@@ -171,15 +180,16 @@ static int uverbs_free_xrcd(struct ib_uobject *uobject,
 	if (ret)
 		return ret;
 
-	mutex_lock(&uobject->context->ufile->device->xrcd_tree_mutex);
-	ret = ib_uverbs_dealloc_xrcd(uobject, xrcd, why);
-	mutex_unlock(&uobject->context->ufile->device->xrcd_tree_mutex);
+	mutex_lock(&attrs->ufile->device->xrcd_tree_mutex);
+	ret = ib_uverbs_dealloc_xrcd(uobject, xrcd, why, attrs);
+	mutex_unlock(&attrs->ufile->device->xrcd_tree_mutex);
 
 	return ret;
 }
 
 static int uverbs_free_pd(struct ib_uobject *uobject,
-			  enum rdma_remove_reason why)
+			  enum rdma_remove_reason why,
+			  struct uverbs_attr_bundle *attrs)
 {
 	struct ib_pd *pd = uobject->object;
 	int ret;
@@ -188,28 +198,45 @@ static int uverbs_free_pd(struct ib_uobject *uobject,
 	if (ret)
 		return ret;
 
-	ib_dealloc_pd(pd);
+	ib_dealloc_pd_user(pd, &attrs->driver_udata);
 	return 0;
 }
 
-static int uverbs_hot_unplug_completion_event_file(struct ib_uobject *uobj,
-						   enum rdma_remove_reason why)
+void ib_uverbs_free_event_queue(struct ib_uverbs_event_queue *event_queue)
 {
-	struct ib_uverbs_completion_event_file *comp_event_file =
-		container_of(uobj, struct ib_uverbs_completion_event_file,
-			     uobj);
-	struct ib_uverbs_event_queue *event_queue = &comp_event_file->ev_queue;
+	struct ib_uverbs_event *entry, *tmp;
 
 	spin_lock_irq(&event_queue->lock);
+	/*
+	 * The user must ensure that no new items are added to the event_list
+	 * once is_closed is set.
+	 */
 	event_queue->is_closed = 1;
 	spin_unlock_irq(&event_queue->lock);
+	wake_up_interruptible(&event_queue->poll_wait);
+	kill_fasync(&event_queue->async_queue, SIGIO, POLL_IN);
 
-	if (why == RDMA_REMOVE_DRIVER_REMOVE) {
-		wake_up_interruptible(&event_queue->poll_wait);
-		kill_fasync(&event_queue->async_queue, SIGIO, POLL_IN);
+	spin_lock_irq(&event_queue->lock);
+	list_for_each_entry_safe(entry, tmp, &event_queue->event_list, list) {
+		if (entry->counter)
+			list_del(&entry->obj_list);
+		list_del(&entry->list);
+		kfree(entry);
 	}
+	spin_unlock_irq(&event_queue->lock);
+}
+
+static int
+uverbs_completion_event_file_destroy_uobj(struct ib_uobject *uobj,
+					  enum rdma_remove_reason why)
+{
+	struct ib_uverbs_completion_event_file *file =
+		container_of(uobj, struct ib_uverbs_completion_event_file,
+			     uobj);
+
+	ib_uverbs_free_event_queue(&file->ev_queue);
 	return 0;
-};
+}
 
 int uverbs_destroy_def_handler(struct uverbs_attr_bundle *attrs)
 {
@@ -220,7 +247,7 @@ EXPORT_SYMBOL(uverbs_destroy_def_handler);
 DECLARE_UVERBS_NAMED_OBJECT(
 	UVERBS_OBJECT_COMP_CHANNEL,
 	UVERBS_TYPE_ALLOC_FD(sizeof(struct ib_uverbs_completion_event_file),
-			     uverbs_hot_unplug_completion_event_file,
+			     uverbs_completion_event_file_destroy_uobj,
 			     &uverbs_event_fops,
 			     "[infinibandevent]",
 			     O_RDONLY));

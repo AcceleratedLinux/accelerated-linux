@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/sysmacros.h>
 #include <arpa/inet.h>
 #include <mtd/mtd-user.h>
 #define MTD_CHAR_MAJOR 90

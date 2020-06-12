@@ -246,7 +246,10 @@ config USER_NOOOM_BINARIES
 
 config USER_BLE_PROVISIONING_APP
 	bool "ble-provisioning-app"
-	depends on PROP_BLUETOOTH
+	select USER_BLUEZ_BLUETOOTHD
+	select USER_BLUEZ_BLUETOOTHCTRL
+	select USER_BLUEZ_TOOLS
+	select USER_BLUEZ_TOOLS_DEPRECATED
 	help
 	  enables Bluetooth GATT server for Digi Remote Manager provisioning
 
@@ -1522,64 +1525,6 @@ config USER_IPREDIR_IPREDIR
 	  IP port redirector
 	  Approx. binary size: 23k
 
-config USER_IPROUTE2
-	bool "iproute2"
-
-config USER_IPROUTE2_TC_TC
-	bool "tc"
-	depends on USER_IPROUTE2
-	help
-	  Traffic shaper from iproute2 package.
-
-config USER_IPROUTE2_IP_IFCFG
-	bool "ifcfg (complex scripting reqd.)"
-	depends on USER_IPROUTE2
-	help
-	  Prints interface configuration.  This script requires
-	  advanced shell scripts and other iproute2 apps.
-
-config USER_IPROUTE2_IP_IP
-	bool "ip"
-	depends on USER_IPROUTE2
-	help
-	  The core app for iproute2.
-
-config USER_IPROUTE2_IP_ROUTEF
-	bool "routef"
-	depends on USER_IPROUTE2
-	help
-	  routef from the iproute2 package.
-
-config USER_IPROUTE2_IP_ROUTEL
-	bool "routel"
-	depends on USER_IPROUTE2
-	help
-	  routel from the iproute2 package.
-
-config USER_IPROUTE2_IP_RTACCT
-	bool "rtacct"
-	depends on USER_IPROUTE2
-	help
-	  rtacct from the iproute2 package.
-
-config USER_IPROUTE2_IP_RTMON
-	bool "rtmon"
-	depends on USER_IPROUTE2
-	help
-	  Route monitor.
-
-config USER_IPROUTE2_IP_GENL
-	bool "genl"
-	depends on USER_IPROUTE2
-	help
-	  genl utility frontend.
-
-config USER_IPROUTE2_IP_RTPR
-	bool "rtpr"
-	depends on USER_BUSYBOX_TR && USER_BASH_BASH
-	help
-	  Print routes.
-
 config USER_IPSENTINEL_IPSENTINEL
 	bool "ipsentinel"
 	help
@@ -1593,75 +1538,6 @@ config USER_LAYER7_PROTOCOLS
 	help
 	  Layer 7 Protocol patterns for iptables use
 	  Approx. size: 160k
-
-config USER_IPUTILS_IPUTILS
-	bool "iputils apps"
-	help
-	  The iputils package of ip utilities :)
-	  glibc is recommended.
-
-config USER_IPUTILS_PING
-	bool "ping"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Send IPv4 ICMP ECHO_REQUEST packets to network hosts.
-
-config USER_IPUTILS_PING6
-	bool "ping6"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Send IPv6 ICMP ECHO_REQUEST packets to network hosts.
-
-config USER_IPUTILS_TRACEROUTE6
-	bool "traceroute6"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Print the IPv6 route packets take to a network host.
-
-config USER_IPUTILS_RDISC
-	bool "rdisc"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Client side of the ICMP router discovery protocol.
-
-config USER_IPUTILS_CLOCKDIFF
-	bool "clockdiff"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Measures the clock difference between the local host and
-	  a remote host using either ICMP TIMESTAMP packets or the 
-	  IP TIMESTAMP option in a ICMP ECHO.
-
-config USER_IPUTILS_TFTPD
-	bool "tftpd"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  IPv4 TFTP server.
-
-config USER_IPUTILS_TRACEPATH
-	bool "tracepath"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Traces a path to a network host discovering MTU along the way.
-
-config USER_IPUTILS_TRACEPATH6
-	bool "tracepath6"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Traces a path to a IPv6 network host discovering MTU 
-	  along the way.
-
-config USER_IPUTILS_ARPING
-	bool "arping"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Send ARP REQUEST to a neighbouring host
-
-config USER_IPUTILS_RARPD
-	bool "rarpd"
-	depends on USER_IPUTILS_IPUTILS
-	help
-	  Reverse Address Resolution Protocol (RARP) Daemon.
 
 config USER_KENDIN_CONFIG
 	bool "kendin-config"
@@ -2175,18 +2051,6 @@ config USER_NOVNC_ROMFSDIR
 	help
 	  Directory to install noVNC into the romfs.
 
-config USER_NTPCLIENT_NTPCLIENT
-	bool "ntpclient: ntpclient"
-	help
-	  Larry Doolittles ntpclient
-	  http://doolittle.faludi.com/ntpclient/
-
-config USER_NTPCLIENT_ADJTIMEX
-	bool "ntpclient: adjtimex"
-	help
-	  Larry Doolittles adjtimex
-	  http://doolittle.faludi.com/ntpclient/
-
 config USER_OPENSSL_APPS
 	bool "openssl"
 	select LIB_LIBSSL
@@ -2485,12 +2349,6 @@ config USER_SPEEDTOUCH_MODEM_RUN
 config USER_STUNNEL_STUNNEL
 	bool "stunnel"
 
-config USER_SSLWRAP_SSLWRAP
-	bool "sslwrap"
-	help
-	  Allows plain services to be accessed via SSL.
-	  Smaller and simpler than stunnel.
-
 config USER_SSH_SSH
 	bool "ssh"
 	select LIB_LIBSSL
@@ -2616,6 +2474,12 @@ config USER_TCPDUMP_TCPDUMP
 	  Monitor network traffic
 	  Approx. binary size: 22k
 
+config USER_MERGECAP
+	bool "mergecap"
+	select LIB_LIBPCAP
+	help
+	  Utility to combine multiple pcap files into one.
+
 config USER_TCPREPLAY
 	bool "tcpreplay"
 	help
@@ -2677,12 +2541,6 @@ config USER_TINYPROXY_TINYPROXY
 	bool "tinyproxy"
 	help
 	  Tiny HTTP proxy
-
-config USER_TRACEROUTE_TRACEROUTE
-	bool "traceroute"
-	help
-	  A tool for tracing the route packets take on the network.
-	  Approx. binary size: 32k
 
 config USER_UDEV
 	bool "udev"
@@ -2899,6 +2757,12 @@ endmenu
 
 menu "Miscellaneous Applications"
 
+config USER_PYTHON_REMOVE_SOURCE
+	bool "Remove python source files"
+	help
+		Remove *.py files from the python library. Build and use the equivalent
+		*.pyc files to minimise startup time.
+
 config USER_P7ZIP_7ZA
 	bool "7za"
 	help
@@ -2991,6 +2855,7 @@ config USER_CRYPTO_TOOLS_CRYPTOKEYTEST
 	bool "cryptokeytest"
 	help
 	  OpenBSD's cryptokeytest program for testing OCF
+	  Requires older version of OpenSSL (1.0.2)
 
 config USER_CAL_DATE
 	bool "date"
@@ -3000,14 +2865,6 @@ config USER_CAL_DATE
 
 config USER_DE2TSCAL_DE2TSCAL
 	bool "de2ts-cal"
-
-config USER_EXPAT_EXAMPLES
-	bool "expat-examples"
-	select LIB_EXPAT
-
-config USER_EXPECT_EXPECT
-	bool "expect"
-	select USER_TCL_LIBTCL
 
 config USER_TCL_LIBTCL
 	bool
@@ -3022,31 +2879,6 @@ config USER_FROB_LED_FROB_LED
 	bool "frob-led"
 	help
 	  Utility to send commands to the ledman driver.
-
-config USER_GDB_GDBREPLAY
-	bool "gdbreplay"
-	help
-	  install gdbreplay onto target.
-	  ** NEED TO ENABLE 'PTHREADS_DEBUG_SUPPORT' in uClibc config ** 
-
-config USER_GDB_GDBSERVER
-	bool "gdbserver"
-	help
-	  gdbserver is used to remotely debug user applications running on the
-	  server.
-	  ** NEED TO ENABLE 'PTHREADS_DEBUG_SUPPORT' in uClibc config **
-
-config USER_GDB_TARGET
-	bool "gdb (target)"
-	select LIB_TERMCAP
-	help
-	  A full gdb which runs on the target.
-	  ** NEED TO ENABLE 'PTHREADS_DEBUG_SUPPORT' in uClibc config **
-
-config USER_GDB_HOST
-	bool "gdb (host)"
-	help
-	  The host-side gdb which can connect to the gdbserver on the target.
 
 config USER_GDBSERVER_GDBREPLAY
 	bool "gdbreplay (old)"
@@ -3108,6 +2940,11 @@ config USER_SIGS_SIGS
 	  Report and set the RS-232 signals on a serial port. This tool lets
 	  you set the DTR and RTS signals of a serial, and also report what
 	  all the signals are currently set to.
+
+config USER_RS485_RS485
+	bool "rs485"
+	help
+	  Report and set the RS-485 mode on a serial port.
 
 config USER_LCD_LCD
 	bool "lcd"
@@ -3612,6 +3449,11 @@ comment "QSPI"
 
 config MCF_QSPI
 	bool "Enable Coldfire QSPI test programs"
+
+config USER_REMSERIAL
+	bool "Enable the remserial utility"
+	help
+	  Enable the remserial utility for use with QCDM.
 
 config USER_QSPITEST_TEST
 	bool "qspitest"

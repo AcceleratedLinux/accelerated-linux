@@ -33,6 +33,8 @@
 #ifndef pam_krb5_options_h
 #define pam_krb5_options_h
 
+#include <sys/types.h>
+
 struct _pam_krb5_options {
 	int debug;
 	int save_cred;

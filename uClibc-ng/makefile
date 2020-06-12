@@ -1,4 +1,4 @@
-UCLIBC_VERSION = 1.0.22
+UCLIBC_VERSION = 1.0.31
 UCLIBC = uClibc-ng-$(UCLIBC_VERSION)
 URL = http://downloads.uclibc-ng.org/releases/$(UCLIBC_VERSION)/$(UCLIBC).tar.xz
 

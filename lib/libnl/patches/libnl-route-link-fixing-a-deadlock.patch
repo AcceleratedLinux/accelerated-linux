@@ -1,0 +1,27 @@
+From cd74e56d62f3cdb231823c47f6a73d6427529b43 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Wed, 22 Jan 2020 16:34:23 +1000
+Subject: [PATCH] route/link: fixing a deadlock
+
+Because of a typo, rtnl_link_af_unregister tried to acquire a lock at
+the end of the function, instead of releasing it, which caused a deadlock.
+---
+ lib/route/link/api.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/route/link/api.c b/lib/route/link/api.c
+index 63ff99c..e0b43e6 100644
+--- a/lib/route/link/api.c
++++ b/lib/route/link/api.c
+@@ -345,7 +345,7 @@ int rtnl_link_af_unregister(struct rtnl_link_af_ops *ops)
+ 		ops->ao_family);
+ 
+ errout:
+-	nl_write_lock(&info_lock);
++	nl_write_unlock(&info_lock);
+ 
+ 	return err;
+ }
+-- 
+2.20.1
+

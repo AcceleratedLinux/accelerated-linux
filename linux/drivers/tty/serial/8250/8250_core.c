@@ -14,6 +14,7 @@
  *	      serial8250_register_8250_port() ports
  */
 
+#include <linux/acpi.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/ioport.h>
@@ -33,7 +34,6 @@
 #include <linux/uaccess.h>
 #include <linux/pm_runtime.h>
 #include <linux/io.h>
-#include <linux/gpio.h>
 #ifdef CONFIG_SPARC
 #include <linux/sunserialcore.h>
 #endif
@@ -142,18 +142,6 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
 	return IRQ_RETVAL(handled);
 }
 
-static irqreturn_t serial8250_gpiointerrupt(int irq, void *data)
-{
-	struct uart_8250_port *up = data;
-	struct uart_port *p = &up->port;
-	unsigned long flags;
-
-	spin_lock_irqsave(&p->lock, flags);
-	uart_handle_dcd_change(p, gpio_get_value(up->gpio_dcd) ? 0 : 1);
-	spin_unlock_irqrestore(&p->lock, flags);
-	return IRQ_HANDLED;
-}
-
 /*
  * To support ISA shared interrupts, we need to have one interrupt
  * handler that ensures that the IRQ line has been deasserted
@@ -186,7 +174,7 @@ static int serial_link_irq_chain(struct uart_8250_port *up)
 	struct hlist_head *h;
 	struct hlist_node *n;
 	struct irq_info *i;
-	int ret, irq_flags = up->port.flags & UPF_SHARE_IRQ ? IRQF_SHARED : 0;
+	int ret;
 
 	mutex_lock(&hash_mutex);
 
@@ -221,23 +209,10 @@ static int serial_link_irq_chain(struct uart_8250_port *up)
 		INIT_LIST_HEAD(&up->list);
 		i->head = &up->list;
 		spin_unlock_irq(&i->lock);
-		irq_flags |= up->port.irqflags;
 		ret = request_irq(up->port.irq, serial8250_interrupt,
-				  irq_flags, up->port.name, i);
+				  up->port.irqflags, up->port.name, i);
 		if (ret < 0)
 			serial_do_unlink(i, up);
-
-		if (up->gpio_dcd) {
-			int irq = gpio_to_irq(up->gpio_dcd);
-			ret = request_irq(irq, serial8250_gpiointerrupt,
-					  IRQF_TRIGGER_RISING |
-					  IRQF_TRIGGER_FALLING,
-					  "uartDCD", up);
-			if (ret) {
-				dev_err(up->port.dev, "failed to request "
-					"modem DCD irq=%d\n", irq);
-			}
-		}
 	}
 
 	return ret;
@@ -268,8 +243,6 @@ static void serial_unlink_irq_chain(struct uart_8250_port *up)
 
 	if (list_empty(i->head))
 		free_irq(up->port.irq, i);
-	if (up->gpio_dcd)
-		free_irq(gpio_to_irq(up->gpio_dcd), up);
 
 	serial_do_unlink(i, up);
 	mutex_unlock(&hash_mutex);
@@ -842,6 +815,7 @@ static int serial8250_probe(struct platform_device *dev)
 		uart.port.flags		= p->flags;
 		uart.port.mapbase	= p->mapbase;
 		uart.port.hub6		= p->hub6;
+		uart.port.has_sysrq	= p->has_sysrq;
 		uart.port.private_data	= p->private_data;
 		uart.port.type		= p->type;
 		uart.port.serial_in	= p->serial_in;
@@ -1009,6 +983,8 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 
 	uart = serial8250_find_match_or_unused(&up->port);
 	if (uart && uart->port.type != PORT_8250_CIR) {
+		struct mctrl_gpios *gpios;
+
 		if (uart->port.dev)
 			uart_remove_one_port(&serial8250_reg, &uart->port);
 
@@ -1021,8 +997,6 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 		uart->port.regshift     = up->port.regshift;
 		uart->port.iotype       = up->port.iotype;
 		uart->port.flags        = up->port.flags | UPF_BOOT_AUTOCONF;
-		uart->gpio_dtr		= up->gpio_dtr;
-		uart->gpio_dcd		= up->gpio_dcd;
 		uart->bugs		= up->bugs;
 		uart->port.mapbase      = up->port.mapbase;
 		uart->port.mapsize      = up->port.mapsize;
@@ -1044,6 +1018,20 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 
 		if (up->port.flags & UPF_FIXED_TYPE)
 			uart->port.type = up->port.type;
+
+		/*
+		 * Only call mctrl_gpio_init(), if the device has no ACPI
+		 * companion device
+		 */
+		if (!has_acpi_companion(uart->port.dev)) {
+			gpios = mctrl_gpio_init(&uart->port, 0);
+			if (IS_ERR(gpios)) {
+				ret = PTR_ERR(gpios);
+				goto out_unlock;
+			} else {
+				uart->gpios = gpios;
+			}
+		}
 
 		serial8250_set_defaults(uart);
 
@@ -1111,6 +1099,7 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 		}
 	}
 
+out_unlock:
 	mutex_unlock(&serial_mutex);
 
 	return ret;

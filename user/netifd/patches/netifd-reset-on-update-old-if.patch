@@ -1,0 +1,26 @@
+--- netifd/interface.c.orig	2019-08-19 13:28:04.182037291 +1000
++++ netifd/interface.c	2019-08-19 13:31:36.354039872 +1000
+@@ -1224,20 +1224,23 @@
+ {
+ 	struct interface *if_old = container_of(node_old, struct interface, node);
+ 	struct interface *if_new = container_of(node_new, struct interface, node);
+ 
+ 	if (node_old && node_new) {
++		if (if_old->config_state == IFC_REMOVE) {
++			if_old->config_state = IFC_NORMAL;
++		}
+ 		D(INTERFACE, "Update interface '%s'\n", if_new->name);
+ 		interface_change_config(if_old, if_new);
+ 	} else if (node_old) {
+ 		D(INTERFACE, "Remove interface '%s'\n", if_old->name);
+ 		set_config_state(if_old, IFC_REMOVE);
+ 	} else if (node_new) {
+ 		D(INTERFACE, "Create interface '%s'\n", if_new->name);
+ 		proto_init_interface(if_new, if_new->config);
+ 		interface_claim_device(if_new);
+ 		interface_refresh_assignments(true);
+ 		netifd_ubus_add_interface(if_new);
+ 	}
+ }
+ 
+ 

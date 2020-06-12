@@ -1,0 +1,6 @@
+dal-gpsd-hotplug.patch
+sconstruct-hotplug-path.patch
+gpsdctl-no-autolaunch.patch
+poll-for-one-packet-at-a-time.patch
+don-t-shut-down-gpsd-when-idle.patch
+prefix-NMEA-sentences-with-device-name.patch

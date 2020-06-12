@@ -14,13 +14,13 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 
-#include <linux/backlight.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 
@@ -77,10 +77,6 @@ struct tpg110 {
 	 */
 	struct drm_panel panel;
 	/**
-	 * @backlight: backlight for this panel
-	 */
-	struct backlight_device *backlight;
-	/**
 	 * @panel_type: the panel mode as detected
 	 */
 	const struct tpg110_panel_mode *panel_mode;
@@ -118,7 +114,7 @@ static const struct tpg110_panel_mode tpg110_modes[] = {
 			.vtotal = 480 + 10 + 1 + 35,
 			.vrefresh = 60,
 		},
-		.bus_flags = DRM_BUS_FLAG_PIXDATA_POSEDGE,
+		.bus_flags = DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 	},
 	{
 		.name = "640x480 RGB",
@@ -135,7 +131,7 @@ static const struct tpg110_panel_mode tpg110_modes[] = {
 			.vtotal = 480 + 18 + 1 + 27,
 			.vrefresh = 60,
 		},
-		.bus_flags = DRM_BUS_FLAG_PIXDATA_POSEDGE,
+		.bus_flags = DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 	},
 	{
 		.name = "480x272 RGB",
@@ -152,7 +148,7 @@ static const struct tpg110_panel_mode tpg110_modes[] = {
 			.vtotal = 272 + 2 + 1 + 12,
 			.vrefresh = 60,
 		},
-		.bus_flags = DRM_BUS_FLAG_PIXDATA_POSEDGE,
+		.bus_flags = DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 	},
 	{
 		.name = "480x640 RGB",
@@ -169,7 +165,7 @@ static const struct tpg110_panel_mode tpg110_modes[] = {
 			.vtotal = 640 + 4 + 1 + 8,
 			.vrefresh = 60,
 		},
-		.bus_flags = DRM_BUS_FLAG_PIXDATA_POSEDGE,
+		.bus_flags = DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 	},
 	{
 		.name = "400x240 RGB",
@@ -186,7 +182,7 @@ static const struct tpg110_panel_mode tpg110_modes[] = {
 			.vtotal = 240 + 2 + 1 + 20,
 			.vrefresh = 60,
 		},
-		.bus_flags = DRM_BUS_FLAG_PIXDATA_POSEDGE,
+		.bus_flags = DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 	},
 };
 
@@ -356,8 +352,6 @@ static int tpg110_disable(struct drm_panel *panel)
 	val &= ~TPG110_CTRL2_PM;
 	tpg110_write_reg(tpg, TPG110_CTRL2_PM, val);
 
-	backlight_disable(tpg->backlight);
-
 	return 0;
 }
 
@@ -365,8 +359,6 @@ static int tpg110_enable(struct drm_panel *panel)
 {
 	struct tpg110 *tpg = to_tpg110(panel);
 	u8 val;
-
-	backlight_enable(tpg->backlight);
 
 	/* Take chip out of standby */
 	val = tpg110_read_reg(tpg, TPG110_CTRL2_PM);
@@ -384,19 +376,17 @@ static int tpg110_enable(struct drm_panel *panel)
  * presents the mode that is configured for the system under use,
  * and which is detected by reading the registers of the display.
  */
-static int tpg110_get_modes(struct drm_panel *panel)
+static int tpg110_get_modes(struct drm_panel *panel,
+			    struct drm_connector *connector)
 {
-	struct drm_connector *connector = panel->connector;
 	struct tpg110 *tpg = to_tpg110(panel);
 	struct drm_display_mode *mode;
 
-	strncpy(connector->display_info.name, tpg->panel_mode->name,
-		DRM_DISPLAY_INFO_LEN);
 	connector->display_info.width_mm = tpg->width;
 	connector->display_info.height_mm = tpg->height;
 	connector->display_info.bus_flags = tpg->panel_mode->bus_flags;
 
-	mode = drm_mode_duplicate(panel->drm, &tpg->panel_mode->mode);
+	mode = drm_mode_duplicate(connector->dev, &tpg->panel_mode->mode);
 	drm_mode_set_name(mode);
 	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
 
@@ -434,11 +424,6 @@ static int tpg110_probe(struct spi_device *spi)
 	if (ret)
 		DRM_DEV_ERROR(dev, "no panel height specified\n");
 
-	/* Look for some optional backlight */
-	tpg->backlight = devm_of_find_backlight(dev);
-	if (IS_ERR(tpg->backlight))
-		return PTR_ERR(tpg->backlight);
-
 	/* This asserts the GRESTB signal, putting the display into reset */
 	tpg->grestb = devm_gpiod_get(dev, "grestb", GPIOD_OUT_HIGH);
 	if (IS_ERR(tpg->grestb)) {
@@ -459,9 +444,13 @@ static int tpg110_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	drm_panel_init(&tpg->panel);
-	tpg->panel.dev = dev;
-	tpg->panel.funcs = &tpg110_drm_funcs;
+	drm_panel_init(&tpg->panel, dev, &tpg110_drm_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
+
+	ret = drm_panel_of_backlight(&tpg->panel);
+	if (ret)
+		return ret;
+
 	spi_set_drvdata(spi, tpg);
 
 	return drm_panel_add(&tpg->panel);

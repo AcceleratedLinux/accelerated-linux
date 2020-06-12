@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* cg3.c: CGTHREE frame buffer driver
  *
  * Copyright (C) 2003, 2006 David S. Miller (davem@davemloft.net)
@@ -38,7 +39,7 @@ static int cg3_ioctl(struct fb_info *, unsigned int, unsigned long);
  *  Frame buffer operations
  */
 
-static struct fb_ops cg3_ops = {
+static const struct fb_ops cg3_ops = {
 	.owner			= THIS_MODULE,
 	.fb_setcolreg		= cg3_setcolreg,
 	.fb_blank		= cg3_blank,

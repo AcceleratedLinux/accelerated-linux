@@ -14,10 +14,15 @@
 #include "exit_codes.h"
 #include "util.h"
 
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+#define X509_STORE_get0_param(store) (store->param)
+#endif
+
 static X509_STORE *load_ca(const char *path)
 {
 	X509_STORE *store;
 	X509_LOOKUP *lookup;
+	X509_VERIFY_PARAM *param;
 
 	store = X509_STORE_new();
 	if (!store) {
@@ -25,7 +30,8 @@ static X509_STORE *load_ca(const char *path)
 		exit(BAD_CRYPT_CA);
 	}
 
-	X509_VERIFY_PARAM_set_flags(store->param, X509_V_FLAG_X509_STRICT);
+	param = X509_STORE_get0_param(store);
+	X509_VERIFY_PARAM_set_flags(param, X509_V_FLAG_X509_STRICT);
 
 	lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
 	if (!lookup) {
@@ -45,6 +51,7 @@ static void load_crl(X509_STORE *store, const char *path)
 {
 	FILE *f;
 	X509_CRL *crl;
+	X509_VERIFY_PARAM *param;
 	unsigned long flags;
 
 	if (!path)
@@ -69,9 +76,10 @@ static void load_crl(X509_STORE *store, const char *path)
 		exit(BAD_CRYPT_CRL);
 	}
 
-	flags = X509_VERIFY_PARAM_get_flags(store->param);
+	param = X509_STORE_get0_param(store);
+	flags = X509_VERIFY_PARAM_get_flags(param);
 	flags |= X509_V_FLAG_CRL_CHECK;
-	X509_VERIFY_PARAM_set_flags(store->param, flags);
+	X509_VERIFY_PARAM_set_flags(param, flags);
 }
 
 static X509 *check_cert(const unsigned char *buf, unsigned int len, X509_STORE *store)

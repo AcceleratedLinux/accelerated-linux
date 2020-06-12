@@ -21,3 +21,8 @@ netifd-failover-trigger-actiond-event.patch
 netifd-wireless-never-give-up.patch
 netifd-remove-is-error.patch
 netifd-long-teardown-timeout.patch
+netifd-reset-on-update-old-if.patch
+netifd-chmod-resolv-conf.patch
+netifd-prepend-route.patch
+netifd-set-var-on-config-reload.patch
+netifd-use-clock_gettime.patch

@@ -1,19 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; either version 2 of the License, or
- *   (at your option) any later version.
- *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
- *
  */
 
 /*
@@ -1159,7 +1145,7 @@ find_next_free_scb (struct snd_cs46xx * chip, struct dsp_scb_descriptor * from)
 	return scb;
 }
 
-static u32 pcm_reader_buffer_addr[DSP_MAX_PCM_CHANNELS] = {
+static const u32 pcm_reader_buffer_addr[DSP_MAX_PCM_CHANNELS] = {
 	0x0600, /* 1 */
 	0x1500, /* 2 */
 	0x1580, /* 3 */
@@ -1194,7 +1180,7 @@ static u32 pcm_reader_buffer_addr[DSP_MAX_PCM_CHANNELS] = {
 	0x2400, /* 32 */
 };
 
-static u32 src_output_buffer_addr[DSP_MAX_SRC_NR] = {
+static const u32 src_output_buffer_addr[DSP_MAX_SRC_NR] = {
 	0x2B80,
 	0x2BA0,
 	0x2BC0,
@@ -1211,7 +1197,7 @@ static u32 src_output_buffer_addr[DSP_MAX_SRC_NR] = {
 	0x2E20
 };
 
-static u32 src_delay_buffer_addr[DSP_MAX_SRC_NR] = {
+static const u32 src_delay_buffer_addr[DSP_MAX_SRC_NR] = {
 	0x2480,
 	0x2500,
 	0x2580,
@@ -1307,7 +1293,7 @@ cs46xx_dsp_create_pcm_channel (struct snd_cs46xx * chip,
 	if (src_scb == NULL) {
 		if (ins->nsrc_scb >= DSP_MAX_SRC_NR) {
 			dev_err(chip->card->dev,
-				"dsp_spos: to many SRC instances\n!");
+				"dsp_spos: too many SRC instances\n!");
 			return NULL;
 		}
 

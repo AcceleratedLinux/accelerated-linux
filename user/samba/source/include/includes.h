@@ -116,6 +116,9 @@
 #include "system/time.h"
 #include "system/wait.h"
 
+/* some c libs like musl require explicit include of sysmacros */
+#include <sys/sysmacros.h>
+
 #if defined(HAVE_RPC_RPC_H)
 /*
  * Check for AUTH_ERROR define conflict with rpc/rpc.h in prot.h.

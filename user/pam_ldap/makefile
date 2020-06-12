@@ -1,5 +1,6 @@
-VERSION = 185
-URL = https://www.padl.com/download/pam_ldap-$(VERSION).tar.gz
+METHOD  = git
+URL     = https://github.com/PADL/pam_ldap.git
+VERSION = 6082484b2b85626f31e998557323503cd03de32f
 
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
 CONFOPTS  = --with-ldap-conf-file=/etc/config/ldap.conf
@@ -9,8 +10,6 @@ CONFOPTS  = --with-ldap-conf-file=/etc/ldap.conf
 CONFOPTS += --with-ldap-secret-file=/etc/ldap.secret
 endif
 
-# padl.com uses Let's Encrypt which many Linux distros don't trust the certs
-# of, even though major web browsers accept LE certs.
-WGETOPTS = --no-check-certificate
+BUILDVARS = touch build/pam_ldap/Makefile;
 
 include $(ROOTDIR)/tools/automake.inc

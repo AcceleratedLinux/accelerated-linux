@@ -1,0 +1,22 @@
+--- bluez-5.46/tools/l2test.c.org	2019-07-23 13:12:46.037400076 +1000
++++ bluez-5.46/tools/l2test.c	2019-07-23 13:13:17.912147148 +1000
+@@ -42,6 +42,8 @@
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
+ 
++#include <linux/sockios.h>
++
+ #include "lib/bluetooth.h"
+ #include "lib/hci.h"
+ #include "lib/hci_lib.h"
+--- bluez-5.46/tools/rctest.c.org	2019-07-23 13:12:54.333073958 +1000
++++ bluez-5.46/tools/rctest.c	2019-07-23 13:13:25.391853184 +1000
+@@ -40,6 +40,8 @@
+ #include <sys/socket.h>
+ #include <sys/stat.h>
+ 
++#include <linux/sockios.h>
++
+ #include "lib/bluetooth.h"
+ #include "lib/hci.h"
+ #include "lib/hci_lib.h"

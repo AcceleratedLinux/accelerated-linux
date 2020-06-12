@@ -19,7 +19,6 @@
 #include <asm/tlbflush.h>
 #include <asm/pgalloc.h>
 #include <asm/elf.h>
-#include <asm/mpx.h>
 
 #if 0	/* This is just for testing */
 struct page *
@@ -151,10 +150,6 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 	if (len & ~huge_page_mask(h))
 		return -EINVAL;
 
-	addr = mpx_unmapped_area_check(addr, len, flags);
-	if (IS_ERR_VALUE(addr))
-		return addr;
-
 	if (len > TASK_SIZE)
 		return -ENOMEM;
 
@@ -203,7 +198,7 @@ static __init int setup_hugepagesz(char *opt)
 }
 __setup("hugepagesz=", setup_hugepagesz);
 
-#if (defined(CONFIG_MEMORY_ISOLATION) && defined(CONFIG_COMPACTION)) || defined(CONFIG_CMA)
+#ifdef CONFIG_CONTIG_ALLOC
 static __init int gigantic_pages_init(void)
 {
 	/* With compaction or CMA we can allocate gigantic pages at runtime */

@@ -161,14 +161,14 @@ static inline bool nvmet_tcp_has_data_in(struct nvmet_tcp_cmd *cmd)
 
 static inline bool nvmet_tcp_need_data_in(struct nvmet_tcp_cmd *cmd)
 {
-	return nvmet_tcp_has_data_in(cmd) && !cmd->req.rsp->status;
+	return nvmet_tcp_has_data_in(cmd) && !cmd->req.cqe->status;
 }
 
 static inline bool nvmet_tcp_need_data_out(struct nvmet_tcp_cmd *cmd)
 {
 	return !nvme_is_write(cmd->req.cmd) &&
 		cmd->req.transfer_len > 0 &&
-		!cmd->req.rsp->status;
+		!cmd->req.cqe->status;
 }
 
 static inline bool nvmet_tcp_has_inline_data(struct nvmet_tcp_cmd *cmd)
@@ -320,7 +320,7 @@ static int nvmet_tcp_map_data(struct nvmet_tcp_cmd *cmd)
 	struct nvme_sgl_desc *sgl = &cmd->req.cmd->common.dptr.sgl;
 	u32 len = le32_to_cpu(sgl->length);
 
-	if (!cmd->req.data_len)
+	if (!len)
 		return 0;
 
 	if (sgl->type == ((NVME_SGL_FMT_DATA_DESC << 4) |
@@ -371,13 +371,14 @@ static void nvmet_setup_c2h_data_pdu(struct nvmet_tcp_cmd *cmd)
 	cmd->state = NVMET_TCP_SEND_DATA_PDU;
 
 	pdu->hdr.type = nvme_tcp_c2h_data;
-	pdu->hdr.flags = NVME_TCP_F_DATA_LAST;
+	pdu->hdr.flags = NVME_TCP_F_DATA_LAST | (queue->nvme_sq.sqhd_disabled ?
+						NVME_TCP_F_DATA_SUCCESS : 0);
 	pdu->hdr.hlen = sizeof(*pdu);
 	pdu->hdr.pdo = pdu->hdr.hlen + hdgst;
 	pdu->hdr.plen =
 		cpu_to_le32(pdu->hdr.hlen + hdgst +
 				cmd->req.transfer_len + ddgst);
-	pdu->command_id = cmd->req.rsp->command_id;
+	pdu->command_id = cmd->req.cqe->command_id;
 	pdu->data_length = cpu_to_le32(cmd->req.transfer_len);
 	pdu->data_offset = cpu_to_le32(cmd->wbytes_done);
 
@@ -514,7 +515,7 @@ static int nvmet_try_send_data_pdu(struct nvmet_tcp_cmd *cmd)
 	return 1;
 }
 
-static int nvmet_try_send_data(struct nvmet_tcp_cmd *cmd)
+static int nvmet_try_send_data(struct nvmet_tcp_cmd *cmd, bool last_in_batch)
 {
 	struct nvmet_tcp_queue *queue = cmd->queue;
 	int ret;
@@ -522,9 +523,15 @@ static int nvmet_try_send_data(struct nvmet_tcp_cmd *cmd)
 	while (cmd->cur_sg) {
 		struct page *page = sg_page(cmd->cur_sg);
 		u32 left = cmd->cur_sg->length - cmd->offset;
+		int flags = MSG_DONTWAIT;
+
+		if ((!last_in_batch && cmd->queue->send_list_len) ||
+		    cmd->wbytes_done + left < cmd->req.transfer_len ||
+		    queue->data_digest || !queue->nvme_sq.sqhd_disabled)
+			flags |= MSG_MORE;
 
 		ret = kernel_sendpage(cmd->queue->sock, page, cmd->offset,
-					left, MSG_DONTWAIT | MSG_MORE);
+					left, flags);
 		if (ret <= 0)
 			return ret;
 
@@ -542,8 +549,19 @@ static int nvmet_try_send_data(struct nvmet_tcp_cmd *cmd)
 		cmd->state = NVMET_TCP_SEND_DDGST;
 		cmd->offset = 0;
 	} else {
-		nvmet_setup_response_pdu(cmd);
+		if (queue->nvme_sq.sqhd_disabled) {
+			cmd->queue->snd_cmd = NULL;
+			nvmet_tcp_put_cmd(cmd);
+		} else {
+			nvmet_setup_response_pdu(cmd);
+		}
 	}
+
+	if (queue->nvme_sq.sqhd_disabled) {
+		kfree(cmd->iov);
+		sgl_free(cmd->req.sg);
+	}
+
 	return 1;
 
 }
@@ -619,7 +637,13 @@ static int nvmet_try_send_ddgst(struct nvmet_tcp_cmd *cmd)
 		return ret;
 
 	cmd->offset += ret;
-	nvmet_setup_response_pdu(cmd);
+
+	if (queue->nvme_sq.sqhd_disabled) {
+		cmd->queue->snd_cmd = NULL;
+		nvmet_tcp_put_cmd(cmd);
+	} else {
+		nvmet_setup_response_pdu(cmd);
+	}
 	return 1;
 }
 
@@ -642,7 +666,7 @@ static int nvmet_tcp_try_send_one(struct nvmet_tcp_queue *queue,
 	}
 
 	if (cmd->state == NVMET_TCP_SEND_DATA) {
-		ret = nvmet_try_send_data(cmd);
+		ret = nvmet_try_send_data(cmd, last_in_batch);
 		if (ret <= 0)
 			goto done_send;
 	}
@@ -756,12 +780,6 @@ static int nvmet_tcp_handle_icreq(struct nvmet_tcp_queue *queue)
 		return -EPROTO;
 	}
 
-	if (icreq->maxr2t != 0) {
-		pr_err("queue %d: unsupported maxr2t %d\n", queue->idx,
-			le32_to_cpu(icreq->maxr2t) + 1);
-		return -EPROTO;
-	}
-
 	queue->hdr_digest = !!(icreq->digest & NVME_TCP_HDR_DIGEST_ENABLE);
 	queue->data_digest = !!(icreq->digest & NVME_TCP_DATA_DIGEST_ENABLE);
 	if (queue->hdr_digest || queue->data_digest) {
@@ -801,13 +819,11 @@ free_crypto:
 static void nvmet_tcp_handle_req_failure(struct nvmet_tcp_queue *queue,
 		struct nvmet_tcp_cmd *cmd, struct nvmet_req *req)
 {
+	size_t data_len = le32_to_cpu(req->cmd->common.dptr.sgl.length);
 	int ret;
 
-	/* recover the expected data transfer length */
-	req->data_len = le32_to_cpu(req->cmd->common.dptr.sgl.length);
-
 	if (!nvme_is_write(cmd->req.cmd) ||
-	    req->data_len > cmd->req.port->inline_data_size) {
+	    data_len > cmd->req.port->inline_data_size) {
 		nvmet_prepare_receive_pdu(queue);
 		return;
 	}
@@ -920,7 +936,7 @@ static int nvmet_tcp_done_recv_pdu(struct nvmet_tcp_queue *queue)
 		goto out;
 	}
 
-	nvmet_req_execute(&queue->cmd->req);
+	queue->cmd->req.execute(&queue->cmd->req);
 out:
 	nvmet_prepare_receive_pdu(queue);
 	return ret;
@@ -1040,7 +1056,7 @@ static int nvmet_tcp_try_recv_data(struct nvmet_tcp_queue *queue)
 			nvmet_tcp_prep_recv_ddgst(cmd);
 			return 0;
 		}
-		nvmet_req_execute(&cmd->req);
+		cmd->req.execute(&cmd->req);
 	}
 
 	nvmet_prepare_receive_pdu(queue);
@@ -1080,7 +1096,7 @@ static int nvmet_tcp_try_recv_ddgst(struct nvmet_tcp_queue *queue)
 
 	if (!(cmd->flags & NVMET_TCP_F_INIT_FAILED) &&
 	    cmd->rbytes_done == cmd->req.transfer_len)
-		nvmet_req_execute(&cmd->req);
+		cmd->req.execute(&cmd->req);
 	ret = 0;
 out:
 	nvmet_prepare_receive_pdu(queue);
@@ -1206,7 +1222,7 @@ static int nvmet_tcp_alloc_cmd(struct nvmet_tcp_queue *queue,
 			sizeof(*c->rsp_pdu) + hdgst, GFP_KERNEL | __GFP_ZERO);
 	if (!c->rsp_pdu)
 		goto out_free_cmd;
-	c->req.rsp = &c->rsp_pdu->cqe;
+	c->req.cqe = &c->rsp_pdu->cqe;
 
 	c->data_pdu = page_frag_alloc(&queue->pf_cache,
 			sizeof(*c->data_pdu) + hdgst, GFP_KERNEL | __GFP_ZERO);
@@ -1294,6 +1310,7 @@ static void nvmet_tcp_finish_cmd(struct nvmet_tcp_cmd *cmd)
 {
 	nvmet_req_uninit(&cmd->req);
 	nvmet_tcp_unmap_pdu_iovec(cmd);
+	kfree(cmd->iov);
 	sgl_free(cmd->req.sg);
 }
 
@@ -1398,6 +1415,7 @@ done:
 static int nvmet_tcp_set_queue_sock(struct nvmet_tcp_queue *queue)
 {
 	struct socket *sock = queue->sock;
+	struct inet_sock *inet = inet_sk(sock->sk);
 	struct linger sol = { .l_onoff = 1, .l_linger = 0 };
 	int ret;
 
@@ -1420,6 +1438,16 @@ static int nvmet_tcp_set_queue_sock(struct nvmet_tcp_queue *queue)
 			(char *)&sol, sizeof(sol));
 	if (ret)
 		return ret;
+
+	/* Set socket type of service */
+	if (inet->rcv_tos > 0) {
+		int tos = inet->rcv_tos;
+
+		ret = kernel_setsockopt(sock, SOL_IP, IP_TOS,
+				(char *)&tos, sizeof(tos));
+		if (ret)
+			return ret;
+	}
 
 	write_lock_bh(&sock->sk->sk_callback_lock);
 	sock->sk->sk_user_data = queue;

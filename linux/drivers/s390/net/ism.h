@@ -6,6 +6,7 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <net/smc.h>
+#include <asm/pci_insn.h>
 
 #define UTIL_STR_LEN	16
 
@@ -30,8 +31,6 @@
 #define ISM_SIGNAL_IEQ	0xE
 #define ISM_UNREG_SBA	0x11
 #define ISM_UNREG_IEQ	0x12
-
-#define ISM_ERROR	0xFFFF
 
 struct ism_req_hdr {
 	u32 cmd;
@@ -194,8 +193,6 @@ struct ism_dev {
 	struct pci_dev *pdev;
 	struct smcd_dev *smcd;
 
-	void __iomem *ctl;
-
 	struct ism_sba *sba;
 	dma_addr_t sba_dma_addr;
 	DECLARE_BITMAP(sba_bitmap, ISM_NR_DMBS);
@@ -209,13 +206,37 @@ struct ism_dev {
 #define ISM_CREATE_REQ(dmb, idx, sf, offset)		\
 	((dmb) | (idx) << 24 | (sf) << 23 | (offset))
 
+static inline void __ism_read_cmd(struct ism_dev *ism, void *data,
+				  unsigned long offset, unsigned long len)
+{
+	struct zpci_dev *zdev = to_zpci(ism->pdev);
+	u64 req = ZPCI_CREATE_REQ(zdev->fh, 2, 8);
+
+	while (len > 0) {
+		__zpci_load(data, req, offset);
+		offset += 8;
+		data += 8;
+		len -= 8;
+	}
+}
+
+static inline void __ism_write_cmd(struct ism_dev *ism, void *data,
+				   unsigned long offset, unsigned long len)
+{
+	struct zpci_dev *zdev = to_zpci(ism->pdev);
+	u64 req = ZPCI_CREATE_REQ(zdev->fh, 2, len);
+
+	if (len)
+		__zpci_store_block(data, req, offset);
+}
+
 static inline int __ism_move(struct ism_dev *ism, u64 dmb_req, void *data,
 			     unsigned int size)
 {
 	struct zpci_dev *zdev = to_zpci(ism->pdev);
 	u64 req = ZPCI_CREATE_REQ(zdev->fh, 0, size);
 
-	return zpci_write_block(req, data, dmb_req);
+	return __zpci_store_block(data, req, dmb_req);
 }
 
 #endif /* S390_ISM_H */

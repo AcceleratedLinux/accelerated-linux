@@ -125,3 +125,9 @@ void args_strip(ARGS *args, const char *prefix)
 		}
 	}
 }
+
+void args_free(ARGS *args)
+{
+	args_pop(args, args->argc);
+	free(args);
+}

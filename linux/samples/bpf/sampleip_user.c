@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * sampleip: sample instruction pointer and frequency count in a BPF map.
  *
  * Copyright 2016 Netflix, Inc.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of version 2 of the GNU General Public
- * License as published by the Free Software Foundation.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,7 +15,7 @@
 #include <linux/ptrace.h>
 #include <linux/bpf.h>
 #include <sys/ioctl.h>
-#include "libbpf.h"
+#include <bpf/libbpf.h>
 #include "bpf_load.h"
 #include "perf-sys.h"
 #include "trace_helpers.h"
@@ -109,6 +106,11 @@ static void print_ip_map(int fd)
 	for (i = 0; i < max; i++) {
 		if (counts[i].ip > PAGE_OFFSET) {
 			sym = ksym_search(counts[i].ip);
+			if (!sym) {
+				printf("ksym not found. Is kallsyms loaded?\n");
+				continue;
+			}
+
 			printf("0x%-17llx %-32s %u\n", counts[i].ip, sym->name,
 			       counts[i].count);
 		} else {

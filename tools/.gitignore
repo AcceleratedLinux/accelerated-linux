@@ -5,3 +5,4 @@ ucfront-gcc
 ucfront-ld
 ucfront-env
 ucfront/ucfront
+fakeroot-build.sh

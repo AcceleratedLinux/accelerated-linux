@@ -7,7 +7,7 @@
 
 #include <linux/linkage.h>
 
-#define PGM_CHECK(handler)	.long handler
+#define PGM_CHECK(handler)	.quad handler
 #define PGM_CHECK_DEFAULT	PGM_CHECK(default_trap_handler)
 
 /*
@@ -81,7 +81,7 @@ PGM_CHECK_DEFAULT			/* 3c */
 PGM_CHECK_DEFAULT			/* 3d */
 PGM_CHECK_DEFAULT			/* 3e */
 PGM_CHECK_DEFAULT			/* 3f */
-PGM_CHECK_DEFAULT			/* 40 */
+PGM_CHECK(monitor_event_exception)	/* 40 */
 PGM_CHECK_DEFAULT			/* 41 */
 PGM_CHECK_DEFAULT			/* 42 */
 PGM_CHECK_DEFAULT			/* 43 */

@@ -1,15 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Asynchronous Compression operations
  *
  * Copyright (c) 2016, Intel Corporation
  * Authors: Weigang Li <weigang.li@intel.com>
  *          Giovanni Cabiddu <giovanni.cabiddu@intel.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
- *
  */
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -156,9 +151,9 @@ int crypto_register_acomp(struct acomp_alg *alg)
 }
 EXPORT_SYMBOL_GPL(crypto_register_acomp);
 
-int crypto_unregister_acomp(struct acomp_alg *alg)
+void crypto_unregister_acomp(struct acomp_alg *alg)
 {
-	return crypto_unregister_alg(&alg->base);
+	crypto_unregister_alg(&alg->base);
 }
 EXPORT_SYMBOL_GPL(crypto_unregister_acomp);
 

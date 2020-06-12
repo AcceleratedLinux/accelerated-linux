@@ -44,8 +44,6 @@
 	fan0: pwm-fan {
 		compatible = "pwm-fan";
 		pwms = <&pwm 0 20972 0>;
-		cooling-min-state = <0>;
-		cooling-max-state = <3>;
 		#cooling-cells = <2>;
 		cooling-levels = <0 130 170 230>;
 	};
@@ -109,7 +107,7 @@
 				/*
 				 * When reaching cpu0_alert3, reduce CPU
 				 * by 2 steps. On Exynos5422/5800 that would
-				 * be: 1600 MHz and 1100 MHz.
+				 * (usually) be: 1800 MHz and 1200 MHz.
 				 */
 				map3 {
 					trip = <&cpu0_alert3>;
@@ -124,19 +122,19 @@
 				};
 				/*
 				 * When reaching cpu0_alert4, reduce CPU
-				 * further, down to 600 MHz (12 steps for big,
-				 * 7 steps for LITTLE).
+				 * further, down to 600 MHz (14 steps for big,
+				 * 8 steps for LITTLE).
 				 */
-				map4 {
+				cpu0_cooling_map4: map4 {
 					trip = <&cpu0_alert4>;
-					cooling-device = <&cpu0 3 7>,
-							 <&cpu1 3 7>,
-							 <&cpu2 3 7>,
-							 <&cpu3 3 7>,
-							 <&cpu4 3 12>,
-							 <&cpu5 3 12>,
-							 <&cpu6 3 12>,
-							 <&cpu7 3 12>;
+					cooling-device = <&cpu0 3 8>,
+							 <&cpu1 3 8>,
+							 <&cpu2 3 8>,
+							 <&cpu3 3 8>,
+							 <&cpu4 3 14>,
+							 <&cpu5 3 14>,
+							 <&cpu6 3 14>,
+							 <&cpu7 3 14>;
 				};
 			};
 		};
@@ -200,16 +198,16 @@
 							 <&cpu6 0 2>,
 							 <&cpu7 0 2>;
 				};
-				map4 {
+				cpu1_cooling_map4: map4 {
 					trip = <&cpu1_alert4>;
-					cooling-device = <&cpu0 3 7>,
-							 <&cpu1 3 7>,
-							 <&cpu2 3 7>,
-							 <&cpu3 3 7>,
-							 <&cpu4 3 12>,
-							 <&cpu5 3 12>,
-							 <&cpu6 3 12>,
-							 <&cpu7 3 12>;
+					cooling-device = <&cpu0 3 8>,
+							 <&cpu1 3 8>,
+							 <&cpu2 3 8>,
+							 <&cpu3 3 8>,
+							 <&cpu4 3 14>,
+							 <&cpu5 3 14>,
+							 <&cpu6 3 14>,
+							 <&cpu7 3 14>;
 				};
 			};
 		};
@@ -273,16 +271,16 @@
 							 <&cpu6 0 2>,
 							 <&cpu7 0 2>;
 				};
-				map4 {
+				cpu2_cooling_map4: map4 {
 					trip = <&cpu2_alert4>;
-					cooling-device = <&cpu0 3 7>,
-							 <&cpu1 3 7>,
-							 <&cpu2 3 7>,
-							 <&cpu3 3 7>,
-							 <&cpu4 3 12>,
-							 <&cpu5 3 12>,
-							 <&cpu6 3 12>,
-							 <&cpu7 3 12>;
+					cooling-device = <&cpu0 3 8>,
+							 <&cpu1 3 8>,
+							 <&cpu2 3 8>,
+							 <&cpu3 3 8>,
+							 <&cpu4 3 14>,
+							 <&cpu5 3 14>,
+							 <&cpu6 3 14>,
+							 <&cpu7 3 14>;
 				};
 			};
 		};
@@ -346,20 +344,26 @@
 							 <&cpu6 0 2>,
 							 <&cpu7 0 2>;
 				};
-				map4 {
+				cpu3_cooling_map4: map4 {
 					trip = <&cpu3_alert4>;
-					cooling-device = <&cpu0 3 7>,
-							 <&cpu1 3 7>,
-							 <&cpu2 3 7>,
-							 <&cpu3 3 7>,
-							 <&cpu4 3 12>,
-							 <&cpu5 3 12>,
-							 <&cpu6 3 12>,
-							 <&cpu7 3 12>;
+					cooling-device = <&cpu0 3 8>,
+							 <&cpu1 3 8>,
+							 <&cpu2 3 8>,
+							 <&cpu3 3 8>,
+							 <&cpu4 3 14>,
+							 <&cpu5 3 14>,
+							 <&cpu6 3 14>,
+							 <&cpu7 3 14>;
 				};
 			};
 		};
 	};
+};
+
+&buck10_reg {
+	/* Supplies vmmc-supply of mmc_0 */
+	regulator-always-on;
+	regulator-boot-on;
 };
 
 &hdmi {

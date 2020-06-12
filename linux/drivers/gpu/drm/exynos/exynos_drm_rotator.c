@@ -1,29 +1,28 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2012 Samsung Electronics Co.Ltd
  * Authors:
  *	YoungJun Cho <yj44.cho@samsung.com>
  *	Eunchul Kim <chulspro.kim@samsung.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundationr
  */
 
-#include <linux/kernel.h>
+#include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
-#include <linux/platform_device.h>
-#include <linux/clk.h>
+#include <linux/kernel.h>
 #include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sizes.h>
 
-#include <drm/drmP.h>
+#include <drm/drm_fourcc.h>
 #include <drm/exynos_drm.h>
-#include "regs-rotator.h"
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_ipp.h"
+#include "regs-rotator.h"
 
 /*
  * Rotator supports image crop/rotator and input/output DMA operations.
@@ -57,6 +56,7 @@ struct rot_variant {
 struct rot_context {
 	struct exynos_drm_ipp ipp;
 	struct drm_device *drm_dev;
+	void		*dma_priv;
 	struct device	*dev;
 	void __iomem	*regs;
 	struct clk	*clock;
@@ -243,9 +243,10 @@ static int rotator_bind(struct device *dev, struct device *master, void *data)
 	struct exynos_drm_ipp *ipp = &rot->ipp;
 
 	rot->drm_dev = drm_dev;
-	exynos_drm_register_dma(drm_dev, dev);
+	ipp->drm_dev = drm_dev;
+	exynos_drm_register_dma(drm_dev, dev, &rot->dma_priv);
 
-	exynos_drm_ipp_register(drm_dev, ipp, &ipp_funcs,
+	exynos_drm_ipp_register(dev, ipp, &ipp_funcs,
 			   DRM_EXYNOS_IPP_CAP_CROP | DRM_EXYNOS_IPP_CAP_ROTATE,
 			   rot->formats, rot->num_formats, "rotator");
 
@@ -258,11 +259,10 @@ static void rotator_unbind(struct device *dev, struct device *master,
 			void *data)
 {
 	struct rot_context *rot = dev_get_drvdata(dev);
-	struct drm_device *drm_dev = data;
 	struct exynos_drm_ipp *ipp = &rot->ipp;
 
-	exynos_drm_ipp_unregister(drm_dev, ipp);
-	exynos_drm_unregister_dma(rot->drm_dev, rot->dev);
+	exynos_drm_ipp_unregister(dev, ipp);
+	exynos_drm_unregister_dma(rot->drm_dev, rot->dev, &rot->dma_priv);
 }
 
 static const struct component_ops rotator_component_ops = {

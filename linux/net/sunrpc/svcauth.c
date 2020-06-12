@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * linux/net/sunrpc/svcauth.c
  *
@@ -17,6 +18,8 @@
 #include <linux/sunrpc/svcauth.h>
 #include <linux/err.h>
 #include <linux/hash.h>
+
+#include <trace/events/sunrpc.h>
 
 #define RPCDBG_FACILITY	RPCDBG_AUTH
 

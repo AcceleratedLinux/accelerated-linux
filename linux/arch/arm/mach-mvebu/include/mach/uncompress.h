@@ -30,6 +30,14 @@ static inline void arch_decomp_wdog(void)
 }
 #endif /* CONFIG_MACH_8300 || CONFIG_MACH_6300CX || CONFIG_MACH_6300LX */
 
+#if defined(CONFIG_MACH_CM71xx)
+#define ARCH_HAS_DECOMP_WDOG
+static inline void arch_decomp_wdog(void)
+{
+	*((volatile u32 *)(0xd0018140)) ^= 0x00004000;
+}
+#endif /* CONFIG_MACH_CM71xx */
+
 #if defined(CONFIG_MACH_ARMADA_38X)
 #define ARCH_HAS_DECOMP_WDOG
 static inline void arch_decomp_wdog(void)

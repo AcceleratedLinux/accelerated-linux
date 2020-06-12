@@ -1,0 +1,6 @@
+config USER_CRYPTSETUP
+	bool "cryptsetup"
+	select LIB_LIBDEVMAPPER
+	select LIB_LIBARGON2
+	help
+	  Setup cryptographic volumes for dm-crypt (including LUKS extension)

@@ -518,8 +518,6 @@ char *line;
 	struct utmp ut;
 	time_t t;
 	int mypid = getpid();
-	long time();
-	long lseek();
 	struct utmp *utp;
 
 	/*

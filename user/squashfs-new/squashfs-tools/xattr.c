@@ -132,10 +132,16 @@ static int read_xattrs_from_system(char *filename, struct xattr_list **xattrs)
 	while(1) {
 		size = llistxattr(filename, NULL, 0);
 		if(size <= 0) {
+#if 0
+			/*
+			 * These errors are commonly caused by the files using the @
+			 * extension to mksquashfs.
+			 */
 			if(size < 0 && errno != ENOTSUP)
 				ERROR("llistxattr for %s failed in read_attrs,"
 					" because %s\n", filename,
 					strerror(errno));
+#endif
 			return 0;
 		}
 

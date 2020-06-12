@@ -1,3 +1,4 @@
+
 .. The Linux Kernel documentation master file, created by
    sphinx-quickstart on Fri Feb 12 13:51:46 2016.
    You can adapt this file completely to your liking, but it should at least
@@ -34,6 +35,17 @@ trying to get it to work optimally on a given system.
    :maxdepth: 2
 
    admin-guide/index
+   kbuild/index
+
+Firmware-related documentation
+------------------------------
+The following holds information on the kernel's expectations regarding the
+platform firmwares.
+
+.. toctree::
+   :maxdepth: 2
+
+   firmware-guide/index
 
 Application-developer documentation
 -----------------------------------
@@ -65,6 +77,9 @@ merged much easier.
    kernel-hacking/index
    trace/index
    maintainer/index
+   fault-injection/index
+   livepatch/index
+
 
 Kernel API documentation
 ------------------------
@@ -80,9 +95,32 @@ needed).
 
    driver-api/index
    core-api/index
+   locking/index
+   accounting/index
+   block/index
+   cdrom/index
+   ide/index
+   fb/index
+   fpga/index
+   hid/index
+   i2c/index
+   iio/index
+   isdn/index
+   infiniband/index
+   leds/index
    media/index
+   netlabel/index
    networking/index
+   pcmcia/index
+   power/index
+   target/index
+   timers/index
+   spi/index
+   w1/index
+   watchdog/index
+   virt/index
    input/index
+   hwmon/index
    gpu/index
    security/index
    sound/index
@@ -90,7 +128,19 @@ needed).
    filesystems/index
    vm/index
    bpf/index
+   usb/index
+   PCI/index
    misc-devices/index
+   mic/index
+   scheduler/index
+
+Architecture-agnostic documentation
+-----------------------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   asm-annotations
 
 Architecture-specific documentation
 -----------------------------------
@@ -101,8 +151,21 @@ implementation.
 .. toctree::
    :maxdepth: 2
 
+   arm/index
+   arm64/index
+   ia64/index
+   m68k/index
+   mips/index
+   nios2/nios2
+   openrisc/index
+   parisc/index
+   powerpc/index
+   riscv/index
+   s390/index
    sh/index
+   sparc/index
    x86/index
+   xtensa/index
 
 Filesystem Documentation
 ------------------------

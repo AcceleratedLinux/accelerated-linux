@@ -580,14 +580,6 @@ void qede_update_rx_prod(struct qede_dev *edev, struct qede_rx_queue *rxq)
 
 	internal_ram_wr(rxq->hw_rxq_prod_addr, sizeof(rx_prods),
 			(u32 *)&rx_prods);
-
-	/* mmiowb is needed to synchronize doorbell writes from more than one
-	 * processor. It guarantees that the write arrives to the device before
-	 * the napi lock is released and another qede_poll is called (possibly
-	 * on another CPU). Without this barrier, the next doorbell can bypass
-	 * this doorbell. This is applicable to IA64/Altix systems.
-	 */
-	mmiowb();
 }
 
 static void qede_get_rxhash(struct sk_buff *skb, u8 bitfields, __le32 rss_hash)
@@ -787,8 +779,7 @@ qede_rx_build_skb(struct qede_dev *edev,
 			return NULL;
 
 		skb_reserve(skb, pad);
-		memcpy(skb_put(skb, len),
-		       page_address(bd->data) + offset, len);
+		skb_put_data(skb, page_address(bd->data) + offset, len);
 		qede_reuse_page(rxq, bd);
 		goto out;
 	}
@@ -857,13 +848,13 @@ static void qede_tpa_start(struct qede_dev *edev,
 	qede_set_gro_params(edev, tpa_info->skb, cqe);
 
 cons_buf: /* We still need to handle bd_len_list to consume buffers */
-	if (likely(cqe->ext_bd_len_list[0]))
+	if (likely(cqe->bw_ext_bd_len_list[0]))
 		qede_fill_frag_skb(edev, rxq, cqe->tpa_agg_index,
-				   le16_to_cpu(cqe->ext_bd_len_list[0]));
+				   le16_to_cpu(cqe->bw_ext_bd_len_list[0]));
 
-	if (unlikely(cqe->ext_bd_len_list[1])) {
+	if (unlikely(cqe->bw_ext_bd_len_list[1])) {
 		DP_ERR(edev,
-		       "Unlikely - got a TPA aggregation with more than one ext_bd_len_list entry in the TPA start\n");
+		       "Unlikely - got a TPA aggregation with more than one bw_ext_bd_len_list entry in the TPA start\n");
 		tpa_info->state = QEDE_AGG_STATE_ERROR;
 	}
 }
@@ -1665,12 +1656,12 @@ netdev_tx_t qede_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	txq->tx_db.data.bd_prod =
 		cpu_to_le16(qed_chain_get_prod_idx(&txq->tx_pbl));
 
-	if (!skb->xmit_more || netif_xmit_stopped(netdev_txq))
+	if (!netdev_xmit_more() || netif_xmit_stopped(netdev_txq))
 		qede_update_tx_producer(txq);
 
 	if (unlikely(qed_chain_get_elem_left(&txq->tx_pbl)
 		      < (MAX_SKB_FRAGS + 1))) {
-		if (skb->xmit_more)
+		if (netdev_xmit_more())
 			qede_update_tx_producer(txq);
 
 		netif_tx_stop_queue(netdev_txq);
@@ -1696,8 +1687,7 @@ netdev_tx_t qede_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 }
 
 u16 qede_select_queue(struct net_device *dev, struct sk_buff *skb,
-		      struct net_device *sb_dev,
-		      select_queue_fallback_t fallback)
+		      struct net_device *sb_dev)
 {
 	struct qede_dev *edev = netdev_priv(dev);
 	int total_txq;
@@ -1705,7 +1695,7 @@ u16 qede_select_queue(struct net_device *dev, struct sk_buff *skb,
 	total_txq = QEDE_TSS_COUNT(edev) * edev->dev_info.num_tc;
 
 	return QEDE_TSS_COUNT(edev) ?
-		fallback(dev, skb, NULL) % total_txq :  0;
+		netdev_pick_tx(dev, skb, NULL) % total_txq :  0;
 }
 
 /* 8B udp header + 8B base tunnel header + 32B option length */

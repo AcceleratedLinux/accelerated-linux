@@ -42,6 +42,11 @@
 	status = "okay";
 };
 
+/* UART2 (XBee) */
+&uart2 {
+	status = "okay";
+};
+
 /* UART3 */
 &uart3 {
 	status = "okay";

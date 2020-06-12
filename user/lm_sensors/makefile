@@ -1,6 +1,6 @@
+URL = https://github.com/lm-sensors/lm-sensors/archive/V3-6-0.tar.gz
 
-CONFOPTS :=
-
-URL = http://pkgs.fedoraproject.org/repo/pkgs/lm_sensors/lm_sensors-3.4.0.tar.bz2/c03675ae9d43d60322110c679416901a/lm_sensors-3.4.0.tar.bz2
+BUILDDIR = lm-sensors-3-6-0
+ACL_PKG  = lm-sensors-3-6-0
 
 include $(ROOTDIR)/tools/automake.inc

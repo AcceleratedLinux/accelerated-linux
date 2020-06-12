@@ -43,10 +43,12 @@ umask 0022
 # PRODUCT_VERSION is a dotted quad version number, 0-255 for each number.
 # SUPPORTED_PRODUCT_IDS is a comma-separated list of hex numbers,
 #    leading 0x optional, case-insensitive.
+# OLDEST_SUPPORTED_VERSION is a dotted quad version, min fw update allowed
 export $(grep "^PRODUCT_VERSION=" ./version) >/dev/null
 export $(grep "^MIN_RUNNING_RELEASE=" ./version) >/dev/null
 export $(grep "^SUPPORTED_PRODUCT_IDS=" ./version | tr 'abcdefX' 'ABCDEFx') >/dev/null
 
+export $(grep "^OLDEST_SUPPORTED_VERSION=" /etc/version.info) >/dev/null
 export CURRENT_$(grep "^PRODUCT_VERSION=" /etc/version.info) >/dev/null
 NV_PRODUCT_ID=$(/bin/fw_printenv product_id | cut -d'=' -f2 | tr 'abcdefX' 'ABCDEFx')
 
@@ -79,6 +81,17 @@ echo "Current version: $CURRENT_PRODUCT_VERSION, New version: $PRODUCT_VERSION"
 cur_prod=$(parse_version "$CURRENT_PRODUCT_VERSION")
 new_prod=$(parse_version "$PRODUCT_VERSION")
 echo $cur_prod, $new_prod
+
+echo "OLDEST: $OLDEST_SUPPORTED_VERSION, NEW: $PRODUCT_VERSION"
+# Check PRODUCT_VERSION against minimum version
+if [ -n "$OLDEST_SUPPORTED_VERSION" ]; then
+	oldest_supported_version=$(parse_version "$OLDEST_SUPPORTED_VERSION")
+	echo "oldest: $oldest_supported_version"
+	if [ "$new_prod" -lt "$oldest_supported_version" ]; then
+		/usr/bin/logger -t fwupdate -p local5.err "![ERROR] Device cannot be downgraded to a version older than $OLDEST_SUPPORTED_VERSION.\n"
+		exit 1
+	fi
+fi
 
 # See if we have a min version for this update.
 if [ -n "$MIN_RUNNING_RELEASE" ]; then

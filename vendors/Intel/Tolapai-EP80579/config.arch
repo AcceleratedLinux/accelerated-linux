@@ -2,7 +2,7 @@
 
 LINUXTARGET = bzImage
 
-VENDOR_CFLAGS  = -DCONFIG_SNAPGEAR
+VENDOR_CFLAGS  = -DCONFIG_SNAPGEAR -march=i586
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/SecureComputing
 
 include $(ROOTDIR)/vendors/SecureComputing/config.version

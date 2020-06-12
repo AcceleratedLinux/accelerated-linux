@@ -51,7 +51,7 @@ choice
 		select MIPS_GIC
 		select COMMON_CLK
 		select CLKSRC_MIPS_GIC
-		select HAVE_PCI
+		select HAVE_PCI if PCI_MT7621
 endchoice
 
 choice
@@ -103,8 +103,13 @@ choice
 		depends on SOC_MT7621
 		select BUILTIN_DTB
 
-	config DTB_MT7621_EX55
-		bool "Digi EX55"
+	config DTB_MT7621_LR54
+		bool "Digi LR54"
+		depends on SOC_MT7621
+		select BUILTIN_DTB
+
+	config DTB_MT7621_LR54_MIGRATION
+		bool "Digi LR54 Migration"
 		depends on SOC_MT7621
 		select BUILTIN_DTB
 

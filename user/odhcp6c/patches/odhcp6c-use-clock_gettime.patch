@@ -1,0 +1,11 @@
+--- odhcp6c/src/odhcp6c.c.org	2020-02-28 12:48:54.181164498 +1000
++++ odhcp6c/src/odhcp6c.c	2020-02-28 12:47:38.987910663 +1000
+@@ -467,7 +467,7 @@
+ uint64_t odhcp6c_get_milli_time(void)
+ {
+ 	struct timespec t = {0, 0};
+-	syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &t);
++	clock_gettime(CLOCK_MONOTONIC, &t);
+ 	return ((uint64_t)t.tv_sec) * 1000 + ((uint64_t)t.tv_nsec) / 1000000;
+ }
+ 

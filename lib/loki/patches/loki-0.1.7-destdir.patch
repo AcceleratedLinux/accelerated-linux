@@ -1,0 +1,40 @@
+--- a/src/Makefile	2020-02-13 13:39:09.604771019 +1000
++++ b/src/Makefile	2020-02-13 13:39:11.892771071 +1000
+@@ -74,13 +74,13 @@
+ install: install-static install-shared
+ 
+ install-static: $(RESULT_DIR)$(STATIC_LIB)
+-	mkdir -p $(prefix)/lib
+-	$(INSTALL_DATA) $(RESULT_DIR)$(STATIC_LIB) $(prefix)/lib
++	mkdir -p $(DESTDIR)$(prefix)/lib
++	$(INSTALL_DATA) $(RESULT_DIR)$(STATIC_LIB) $(DESTDIR)$(prefix)/lib
+ 
+ install-shared: $(RESULT_DIR)$(SHARED_LIB_VERSIONED)
+-	mkdir -p $(prefix)/lib
+-	$(INSTALL_DATA) $(RESULT_DIR)$(SHARED_LIB_VERSIONED) $(prefix)/lib
+-	cd $(prefix)/lib; ln -s $(SHARED_LIB_VERSIONED) $(SHARED_LIB_BASE)
++	mkdir -p $(DESTDIR)$(prefix)/lib
++	$(INSTALL_DATA) $(RESULT_DIR)$(SHARED_LIB_VERSIONED) $(DESTDIR)$(prefix)/lib
++	cd $(DESTDIR)$(prefix)/lib; ln -s $(SHARED_LIB_VERSIONED) $(SHARED_LIB_BASE)
+ 
+ %.lo : %.cpp
+ 	$(CXX) -c $(CXXFLAGS) -fPIC $(CPPFLAGS) -o $@ $<
+--- a/include/Makefile	2020-02-13 13:39:46.128771855 +1000
++++ b/include/Makefile	2020-02-13 13:39:48.348771907 +1000
+@@ -2,10 +2,10 @@
+ 
+ .PHONY: install
+ install:
+-	mkdir -p $(prefix)/include/loki
+-	mkdir -p $(prefix)/include/loki/flex
+-	mkdir -p $(prefix)/include/loki/yasli
++	mkdir -p $(DESTDIR)$(prefix)/include/loki
++	mkdir -p $(DESTDIR)$(prefix)/include/loki/flex
++	mkdir -p $(DESTDIR)$(prefix)/include/loki/yasli
+ 	
+-	install -m 644 loki/*.h $(prefix)/include/loki
+-	install -m 644 loki/flex/*.h $(prefix)/include/loki/flex
+-	install -m 644 loki/yasli/*.h $(prefix)/include/loki/yasli
++	install -m 644 loki/*.h $(DESTDIR)$(prefix)/include/loki
++	install -m 644 loki/flex/*.h $(DESTDIR)$(prefix)/include/loki/flex
++	install -m 644 loki/yasli/*.h $(DESTDIR)$(prefix)/include/loki/yasli

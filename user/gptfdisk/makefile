@@ -1,7 +1,11 @@
-
 URL     = https://downloads.sourceforge.net/project/gptfdisk/gptfdisk/1.0.4/gptfdisk-1.0.4.tar.gz
+
 BUILD   = gdisk sgdisk
-LDFLAGS += -lstdc++ -lintl
+
+LDFLAGS += -lstdc++ -lm
+ifndef CONFIG_DEFAULTS_LIBC_MUSL
+LDFLAGS += -lintl
+endif
 
 include $(ROOTDIR)/tools/automake.inc
 

@@ -1,4 +1,4 @@
-VERSION = 2.4.45
+VERSION = 2.4.48
 URL = ftp://ftp.openldap.org/pub/OpenLDAP/openldap-release/openldap-$(VERSION).tgz
 
 CONFOPTS += --without-yielding-select
@@ -20,12 +20,7 @@ endif
 
 CONFOPTS += ac_cv_func_memcmp_working=yes
 
-AUTOMAKE_ROMFS = my_romfs
+MAKEVARS =
 
 include $(ROOTDIR)/tools/automake.inc
 
-my_romfs:
-	set -x; cd build/$($(PKG)_BUILDDIR)-install/lib; for lib in *.so; do \
-		$(ROMFSINST) /lib/$$lib; done
-	set -x; cd build/$($(PKG)_BUILDDIR)-install/bin; for bin in $(INSTALL_PROGRAMS); do \
-		$(ROMFSINST) /bin/$$bin; done

@@ -1,0 +1,25 @@
+From: David McCullough <david.mccullough@accelerated.com>
+Date: Tue, 1 Mar 2016 09:16:48 +1000
+Subject: pantech: support UML295VW
+
+These patches provide full UML295VW support.  We switch it to QMI
+mode in the kernel to save needing a usb_modeswitch as user time.  We
+only have have few seconds to switch it correctly and if we miss we are
+stuck in windows mode.
+---
+ plugins/pantech/mm-plugin-pantech.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/plugins/pantech/mm-plugin-pantech.c b/plugins/pantech/mm-plugin-pantech.c
+index 5301ea94..a1556d2a 100644
+--- a/plugins/pantech/mm-plugin-pantech.c
++++ b/plugins/pantech/mm-plugin-pantech.c
+@@ -131,7 +131,7 @@ G_MODULE_EXPORT MMPlugin *
+ mm_plugin_create (void)
+ {
+     static const gchar *subsystems[] = { "tty", "net", "usb", NULL };
+-    static const guint16 vendor_ids[] = { 0x106c, 0 };
++    static const guint16 vendor_ids[] = { 0x106c, 0x10a9, 0 };
+ 
+     return MM_PLUGIN (
+         g_object_new (MM_TYPE_PLUGIN_PANTECH,

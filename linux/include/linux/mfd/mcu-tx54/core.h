@@ -29,6 +29,8 @@ struct mcu_tx54 {
 	struct irq_domain	*irq_domain;
 	struct mutex		irq_lock;
 	uint32_t		irq_en;
+
+	bool			pwroff_only;
 };
 
 #define mcu_tx54_tx_pkt_size(_type) \

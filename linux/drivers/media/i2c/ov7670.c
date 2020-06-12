@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * A V4L2 driver for OmniVision OV7670 cameras.
  *
@@ -6,9 +7,6 @@
  * McClelland's ovcamchip code.
  *
  * Copyright 2006-7 Jonathan Corbet <corbet@lwn.net>
- *
- * This file may be distributed under the terms of the GNU General
- * Public License, version 2.
  */
 #include <linux/clk.h>
 #include <linux/init.h>
@@ -864,7 +862,15 @@ static int ov7675_set_framerate(struct v4l2_subdev *sd,
 	/* Recalculate frame rate */
 	ov7675_get_framerate(sd, tpf);
 
-	return ov7675_apply_framerate(sd);
+	/*
+	 * If the device is not powered up by the host driver do
+	 * not apply any changes to H/W at this time. Instead
+	 * the framerate will be restored right after power-up.
+	 */
+	if (info->on)
+		return ov7675_apply_framerate(sd);
+
+	return 0;
 }
 
 static void ov7670_get_framerate_legacy(struct v4l2_subdev *sd,
@@ -895,7 +901,16 @@ static int ov7670_set_framerate_legacy(struct v4l2_subdev *sd,
 	info->clkrc = (info->clkrc & 0x80) | div;
 	tpf->numerator = 1;
 	tpf->denominator = info->clock_speed / div;
-	return ov7670_write(sd, REG_CLKRC, info->clkrc);
+
+	/*
+	 * If the device is not powered up by the host driver do
+	 * not apply any changes to H/W at this time. Instead
+	 * the framerate will be restored right after power-up.
+	 */
+	if (info->on)
+		return ov7670_write(sd, REG_CLKRC, info->clkrc);
+
+	return 0;
 }
 
 /*
@@ -1095,19 +1110,21 @@ static int ov7670_set_fmt(struct v4l2_subdev *sd,
 #ifdef CONFIG_VIDEO_V4L2_SUBDEV_API
 		mbus_fmt = v4l2_subdev_get_try_format(sd, cfg, format->pad);
 		*mbus_fmt = format->format;
-		return 0;
-#else
-		return -ENOTTY;
 #endif
+		return 0;
 	}
 
 	ret = ov7670_try_fmt_internal(sd, &format->format, &info->fmt, &info->wsize);
 	if (ret)
 		return ret;
 
-	ret = ov7670_apply_fmt(sd);
-	if (ret)
-		return ret;
+	/*
+	 * If the device is not powered up by the host driver do
+	 * not apply any changes to H/W at this time. Instead
+	 * the frame format will be restored right after power-up.
+	 */
+	if (info->on)
+		return ov7670_apply_fmt(sd);
 
 	return 0;
 }
@@ -1127,7 +1144,7 @@ static int ov7670_get_fmt(struct v4l2_subdev *sd,
 		format->format = *mbus_fmt;
 		return 0;
 #else
-		return -ENOTTY;
+		return -EINVAL;
 #endif
 	} else {
 		format->format = info->format;

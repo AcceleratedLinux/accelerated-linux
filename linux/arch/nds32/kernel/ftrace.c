@@ -7,7 +7,6 @@
 #ifndef CONFIG_DYNAMIC_FTRACE
 extern void (*ftrace_trace_function)(unsigned long, unsigned long,
 				     struct ftrace_ops*, struct pt_regs*);
-extern int ftrace_graph_entry_stub(struct ftrace_graph_ent *trace);
 extern void ftrace_graph_caller(void);
 
 noinline void __naked ftrace_stub(unsigned long ip, unsigned long parent_ip,
@@ -87,18 +86,6 @@ void _ftrace_caller(unsigned long parent_ip)
 
 int __init ftrace_dyn_arch_init(void)
 {
-	return 0;
-}
-
-int ftrace_arch_code_modify_prepare(void)
-{
-	set_all_modules_text_rw();
-	return 0;
-}
-
-int ftrace_arch_code_modify_post_process(void)
-{
-	set_all_modules_text_ro();
 	return 0;
 }
 

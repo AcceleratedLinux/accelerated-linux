@@ -1,6 +1,6 @@
 
 METHOD    = git
-VERSION   = 1.23.1
+VERSION   = 9d75bb2fad2329601bfb0be14294d6256df8bbd7 # 1.25.4+ master 2020-05-13
 URL       = git://anongit.freedesktop.org/libqmi
 
 CONFIGURE = autogen.sh
@@ -12,6 +12,10 @@ CONFVARS = LIBS="-lgmodule-2.0 -lglib-2.0 -lffi -lz -lpthread -ldl"
 endif
 MAKEVARS = 
 ROMFS    = libqmi_romfs
+
+ifdef CONFIG_DEFAULTS_DIGI_TX64
+PATCH_SERIES = series-TX64
+endif
 
 include $(ROOTDIR)/tools/automake.inc
 

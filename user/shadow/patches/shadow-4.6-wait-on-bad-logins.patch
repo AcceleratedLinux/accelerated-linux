@@ -1,0 +1,11 @@
+diff -Naur shadow.org/src/login.c shadow/src/login.c
+--- shadow-4.6/src/login.c.orig	2018-04-30 02:42:37.000000000 +1000
++++ shadow-4.6/src/login.c	2020-02-07 17:13:52.114959942 +1000
+@@ -840,6 +841,7 @@
+ 				fprintf (stderr,
+ 				         _("Maximum number of tries exceeded (%u)\n"),
+ 				         failcount);
++				sleep(10);
+ 				PAM_END;
+ 				exit(0);
+ 			}

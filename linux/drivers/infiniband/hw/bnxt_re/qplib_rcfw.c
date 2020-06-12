@@ -136,6 +136,13 @@ static int __send_message(struct bnxt_qplib_rcfw *rcfw, struct cmdq_base *req,
 		spin_unlock_irqrestore(&cmdq->lock, flags);
 		return -EBUSY;
 	}
+
+	size = req->cmd_size;
+	/* change the cmd_size to the number of 16byte cmdq unit.
+	 * req->cmd_size is modified here
+	 */
+	bnxt_qplib_set_cmd_slots(req);
+
 	memset(resp, 0, sizeof(*resp));
 	crsqe->resp = (struct creq_qp_event *)resp;
 	crsqe->resp->cookie = req->cookie;
@@ -150,7 +157,6 @@ static int __send_message(struct bnxt_qplib_rcfw *rcfw, struct cmdq_base *req,
 
 	cmdq_ptr = (struct bnxt_qplib_cmdqe **)cmdq->pbl_ptr;
 	preq = (u8 *)req;
-	size = req->cmd_size * BNXT_QPLIB_CMDQE_UNITS;
 	do {
 		/* Locate the next cmdq slot */
 		sw_prod = HWQ_CMP(cmdq->prod, cmdq);
@@ -488,8 +494,10 @@ int bnxt_qplib_init_rcfw(struct bnxt_qplib_rcfw *rcfw,
 	 * shall setup this area for VF. Skipping the
 	 * HW programming
 	 */
-	if (is_virtfn || bnxt_qplib_is_chip_gen_p5(rcfw->res->cctx))
+	if (is_virtfn)
 		goto skip_ctx_setup;
+	if (bnxt_qplib_is_chip_gen_p5(rcfw->res->cctx))
+		goto config_vf_res;
 
 	level = ctx->qpc_tbl.level;
 	req.qpc_pg_size_qpc_lvl = (level << CMDQ_INITIALIZE_FW_QPC_LVL_SFT) |
@@ -534,6 +542,7 @@ int bnxt_qplib_init_rcfw(struct bnxt_qplib_rcfw *rcfw,
 	req.number_of_srq = cpu_to_le32(ctx->srqc_tbl.max_elements);
 	req.number_of_cq = cpu_to_le32(ctx->cq_tbl.max_elements);
 
+config_vf_res:
 	req.max_qp_per_vf = cpu_to_le32(ctx->vf_res.max_qp_per_vf);
 	req.max_mrw_per_vf = cpu_to_le32(ctx->vf_res.max_mrw_per_vf);
 	req.max_srq_per_vf = cpu_to_le32(ctx->vf_res.max_srq_per_vf);
@@ -569,7 +578,7 @@ int bnxt_qplib_alloc_rcfw_channel(struct pci_dev *pdev,
 	rcfw->pdev = pdev;
 	rcfw->creq.max_elements = BNXT_QPLIB_CREQE_MAX_CNT;
 	hwq_type = bnxt_qplib_get_hwq_type(rcfw->res);
-	if (bnxt_qplib_alloc_init_hwq(rcfw->pdev, &rcfw->creq, NULL, 0,
+	if (bnxt_qplib_alloc_init_hwq(rcfw->pdev, &rcfw->creq, NULL,
 				      &rcfw->creq.max_elements,
 				      BNXT_QPLIB_CREQE_UNITS,
 				      0, PAGE_SIZE, hwq_type)) {
@@ -584,7 +593,7 @@ int bnxt_qplib_alloc_rcfw_channel(struct pci_dev *pdev,
 
 	rcfw->cmdq.max_elements = rcfw->cmdq_depth;
 	if (bnxt_qplib_alloc_init_hwq
-			(rcfw->pdev, &rcfw->cmdq, NULL, 0,
+			(rcfw->pdev, &rcfw->cmdq, NULL,
 			 &rcfw->cmdq.max_elements,
 			 BNXT_QPLIB_CMDQE_UNITS, 0,
 			 bnxt_qplib_cmdqe_page_size(rcfw->cmdq_depth),
@@ -708,7 +717,7 @@ int bnxt_qplib_enable_rcfw_channel(struct pci_dev *pdev,
 	if (!res_base)
 		return -ENOMEM;
 
-	rcfw->cmdq_bar_reg_iomem = ioremap_nocache(res_base +
+	rcfw->cmdq_bar_reg_iomem = ioremap(res_base +
 					      RCFW_COMM_BASE_OFFSET,
 					      RCFW_COMM_SIZE);
 	if (!rcfw->cmdq_bar_reg_iomem) {
@@ -730,7 +739,7 @@ int bnxt_qplib_enable_rcfw_channel(struct pci_dev *pdev,
 			"CREQ BAR region %d resc start is 0!\n",
 			rcfw->creq_bar_reg);
 	/* Unconditionally map 8 bytes to support 57500 series */
-	rcfw->creq_bar_reg_iomem = ioremap_nocache(res_base + cp_bar_reg_off,
+	rcfw->creq_bar_reg_iomem = ioremap(res_base + cp_bar_reg_off,
 						   8);
 	if (!rcfw->creq_bar_reg_iomem) {
 		dev_err(&rcfw->pdev->dev, "CREQ BAR region %d mapping failed\n",

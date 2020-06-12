@@ -52,6 +52,8 @@ struct dmcu {
 	enum dmcu_state dmcu_state;
 	struct dmcu_version dmcu_version;
 	unsigned int cached_wait_loop_number;
+	uint32_t psp_version;
+	bool auto_load_dmcu;
 };
 
 struct dmcu_funcs {
@@ -70,6 +72,8 @@ struct dmcu_funcs {
 	void (*get_psr_wait_loop)(struct dmcu *dmcu,
 			unsigned int *psr_wait_loop_number);
 	bool (*is_dmcu_initialized)(struct dmcu *dmcu);
+	bool (*lock_phy)(struct dmcu *dmcu);
+	bool (*unlock_phy)(struct dmcu *dmcu);
 };
 
 #endif

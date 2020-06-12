@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright 2018 Google Inc.
  * Author: Eric Dumazet (edumazet@google.com)
@@ -44,21 +45,6 @@
  *   cpu usage user:0.046 sys:3.559, 110.016 usec per MB, 65529 c-switches
  * received 32768 MB (99.9939 % mmap'ed) in 7.43764 s, 36.9577 Gbit
  *   cpu usage user:0.035 sys:3.467, 106.873 usec per MB, 65530 c-switches
- *
- * License (GPLv2):
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. * See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  */
 #define _GNU_SOURCE
 #include <pthread.h>
@@ -85,7 +71,7 @@
 #define MSG_ZEROCOPY    0x4000000
 #endif
 
-#define FILE_SZ (1UL << 35)
+#define FILE_SZ (1ULL << 35)
 static int cfg_family = AF_INET6;
 static socklen_t cfg_alen = sizeof(struct sockaddr_in6);
 static int cfg_port = 8787;
@@ -96,7 +82,9 @@ static int zflg; /* zero copy option. (MSG_ZEROCOPY for sender, mmap() for recei
 static int xflg; /* hash received data (simple xor) (-h option) */
 static int keepflag; /* -k option: receiver shall keep all received file in memory (no munmap() calls) */
 
-static int chunk_size  = 512*1024;
+static size_t chunk_size  = 512*1024;
+
+static size_t map_align;
 
 unsigned long htotal;
 
@@ -132,6 +120,9 @@ void hash_zone(void *zone, unsigned int length)
 	htotal = temp;
 }
 
+#define ALIGN_UP(x, align_to)	(((x) + ((align_to)-1)) & ~((align_to)-1))
+#define ALIGN_PTR_UP(p, ptr_align_to)	((typeof(p))ALIGN_UP((unsigned long)(p), ptr_align_to))
+
 void *child_thread(void *arg)
 {
 	unsigned long total_mmap = 0, total = 0;
@@ -140,6 +131,7 @@ void *child_thread(void *arg)
 	int flags = MAP_SHARED;
 	struct timeval t0, t1;
 	char *buffer = NULL;
+	void *raddr = NULL;
 	void *addr = NULL;
 	double throughput;
 	struct rusage ru;
@@ -156,9 +148,13 @@ void *child_thread(void *arg)
 		goto error;
 	}
 	if (zflg) {
-		addr = mmap(NULL, chunk_size, PROT_READ, flags, fd, 0);
-		if (addr == (void *)-1)
+		raddr = mmap(NULL, chunk_size + map_align, PROT_READ, flags, fd, 0);
+		if (raddr == (void *)-1) {
+			perror("mmap");
 			zflg = 0;
+		} else {
+			addr = ALIGN_PTR_UP(raddr, map_align);
+		}
 	}
 	while (1) {
 		struct pollfd pfd = { .fd = fd, .events = POLLIN, };
@@ -169,7 +165,7 @@ void *child_thread(void *arg)
 			socklen_t zc_len = sizeof(zc);
 			int res;
 
-			zc.address = (__u64)addr;
+			zc.address = (__u64)((unsigned long)addr);
 			zc.length = chunk_size;
 			zc.recv_skip_hint = 0;
 			res = getsockopt(fd, IPPROTO_TCP, TCP_ZEROCOPY_RECEIVE,
@@ -236,7 +232,7 @@ error:
 	free(buffer);
 	close(fd);
 	if (zflg)
-		munmap(addr, chunk_size);
+		munmap(raddr, chunk_size + map_align);
 	pthread_exit(0);
 }
 
@@ -284,6 +280,11 @@ static void setup_sockaddr(int domain, const char *str_addr,
 
 static void do_accept(int fdlisten)
 {
+	pthread_attr_t attr;
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
 	if (setsockopt(fdlisten, SOL_SOCKET, SO_RCVLOWAT,
 		       &chunk_size, sizeof(chunk_size)) == -1) {
 		perror("setsockopt SO_RCVLOWAT");
@@ -302,7 +303,7 @@ static void do_accept(int fdlisten)
 			perror("accept");
 			continue;
 		}
-		res = pthread_create(&th, NULL, child_thread,
+		res = pthread_create(&th, &attr, child_thread,
 				     (void *)(unsigned long)fd);
 		if (res) {
 			errno = res;
@@ -312,18 +313,42 @@ static void do_accept(int fdlisten)
 	}
 }
 
+/* Each thread should reserve a big enough vma to avoid
+ * spinlock collisions in ptl locks.
+ * This size is 2MB on x86_64, and is exported in /proc/meminfo.
+ */
+static unsigned long default_huge_page_size(void)
+{
+	FILE *f = fopen("/proc/meminfo", "r");
+	unsigned long hps = 0;
+	size_t linelen = 0;
+	char *line = NULL;
+
+	if (!f)
+		return 0;
+	while (getline(&line, &linelen, f) > 0) {
+		if (sscanf(line, "Hugepagesize:       %lu kB", &hps) == 1) {
+			hps <<= 10;
+			break;
+		}
+	}
+	free(line);
+	fclose(f);
+	return hps;
+}
+
 int main(int argc, char *argv[])
 {
 	struct sockaddr_storage listenaddr, addr;
 	unsigned int max_pacing_rate = 0;
-	unsigned long total = 0;
+	size_t total = 0;
 	char *host = NULL;
 	int fd, c, on = 1;
 	char *buffer;
 	int sflg = 0;
 	int mss = 0;
 
-	while ((c = getopt(argc, argv, "46p:svr:w:H:zxkP:M:")) != -1) {
+	while ((c = getopt(argc, argv, "46p:svr:w:H:zxkP:M:C:a:")) != -1) {
 		switch (c) {
 		case '4':
 			cfg_family = PF_INET;
@@ -363,9 +388,23 @@ int main(int argc, char *argv[])
 		case 'P':
 			max_pacing_rate = atoi(optarg) ;
 			break;
+		case 'C':
+			chunk_size = atol(optarg);
+			break;
+		case 'a':
+			map_align = atol(optarg);
+			break;
 		default:
 			exit(1);
 		}
+	}
+	if (!map_align) {
+		map_align = default_huge_page_size();
+		/* if really /proc/meminfo is not helping,
+		 * we use the default x86_64 hugepagesize.
+		 */
+		if (!map_align)
+			map_align = 2*1024*1024;
 	}
 	if (sflg) {
 		int fdlisten = socket(cfg_family, SOCK_STREAM, 0);
@@ -431,7 +470,7 @@ int main(int argc, char *argv[])
 		zflg = 0;
 	}
 	while (total < FILE_SZ) {
-		long wr = FILE_SZ - total;
+		ssize_t wr = FILE_SZ - total;
 
 		if (wr > chunk_size)
 			wr = chunk_size;

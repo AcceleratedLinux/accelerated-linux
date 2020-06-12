@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * linux/drivers/video/w100fb.c
  *
@@ -17,11 +18,6 @@
  *
  * Hardware acceleration support by Alberto Mardegan
  * <mardy@users.sourceforge.net>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
  */
 
 #include <linux/delay.h>
@@ -167,6 +163,15 @@ static ssize_t fastpllclk_store(struct device *dev, struct device_attribute *att
 }
 
 static DEVICE_ATTR_RW(fastpllclk);
+
+static struct attribute *w100fb_attrs[] = {
+	&dev_attr_fastpllclk.attr,
+	&dev_attr_reg_read.attr,
+	&dev_attr_reg_write.attr,
+	&dev_attr_flip.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(w100fb);
 
 /*
  * Some touchscreens need hsync information from the video driver to
@@ -544,7 +549,7 @@ static int w100fb_set_par(struct fb_info *info)
 /*
  *  Frame buffer operations
  */
-static struct fb_ops w100fb_ops = {
+static const struct fb_ops w100fb_ops = {
 	.owner        = THIS_MODULE,
 	.fb_check_var = w100fb_check_var,
 	.fb_set_par   = w100fb_set_par,
@@ -643,12 +648,12 @@ int w100fb_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	/* Remap the chip base address */
-	remapped_base = ioremap_nocache(mem->start+W100_CFG_BASE, W100_CFG_LEN);
+	remapped_base = ioremap(mem->start+W100_CFG_BASE, W100_CFG_LEN);
 	if (remapped_base == NULL)
 		goto out;
 
 	/* Map the register space */
-	remapped_regs = ioremap_nocache(mem->start+W100_REG_BASE, W100_REG_LEN);
+	remapped_regs = ioremap(mem->start+W100_REG_BASE, W100_REG_LEN);
 	if (remapped_regs == NULL)
 		goto out;
 
@@ -667,7 +672,7 @@ int w100fb_probe(struct platform_device *pdev)
 	printk(" at 0x%08lx.\n", (unsigned long) mem->start+W100_CFG_BASE);
 
 	/* Remap the framebuffer */
-	remapped_fbuf = ioremap_nocache(mem->start+MEM_WINDOW_BASE, MEM_WINDOW_SIZE);
+	remapped_fbuf = ioremap(mem->start+MEM_WINDOW_BASE, MEM_WINDOW_SIZE);
 	if (remapped_fbuf == NULL)
 		goto out;
 
@@ -756,14 +761,6 @@ int w100fb_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	err = device_create_file(&pdev->dev, &dev_attr_fastpllclk);
-	err |= device_create_file(&pdev->dev, &dev_attr_reg_read);
-	err |= device_create_file(&pdev->dev, &dev_attr_reg_write);
-	err |= device_create_file(&pdev->dev, &dev_attr_flip);
-
-	if (err != 0)
-		fb_warn(info, "failed to register attributes (%d)\n", err);
-
 	fb_info(info, "%s frame buffer device\n", info->fix.id);
 	return 0;
 out:
@@ -787,11 +784,6 @@ static int w100fb_remove(struct platform_device *pdev)
 {
 	struct fb_info *info = platform_get_drvdata(pdev);
 	struct w100fb_par *par=info->par;
-
-	device_remove_file(&pdev->dev, &dev_attr_fastpllclk);
-	device_remove_file(&pdev->dev, &dev_attr_reg_read);
-	device_remove_file(&pdev->dev, &dev_attr_reg_write);
-	device_remove_file(&pdev->dev, &dev_attr_flip);
 
 	unregister_framebuffer(info);
 
@@ -1629,6 +1621,7 @@ static struct platform_driver w100fb_driver = {
 	.resume		= w100fb_resume,
 	.driver		= {
 		.name	= "w100fb",
+		.dev_groups	= w100fb_groups,
 	},
 };
 

@@ -6,6 +6,9 @@ CONFOPTS       += --without-ntpsnmpd
 
 AUTOMAKE_ROMFS  = my_romfs
 
+# For ntp-4.2.8p13-inline-ntp-syscalls-fallback.patch
+AUTORECONF = autoreconf -i
+
 include $(ROOTDIR)/tools/automake.inc
 
 ifndef CONFIG_USER_NTP_ENABLE_HARDENFILE

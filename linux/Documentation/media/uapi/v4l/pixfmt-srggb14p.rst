@@ -13,7 +13,7 @@
 .. _v4l2-pix-fmt-sgrbg14p:
 
 *******************************************************************************************************************************
-V4L2_PIX_FMT_SRGGB14P ('pRCC'), V4L2_PIX_FMT_SGRBG14P ('pgCC'), V4L2_PIX_FMT_SGBRG14P ('pGCC'), V4L2_PIX_FMT_SBGGR14P ('pBCC'),
+V4L2_PIX_FMT_SRGGB14P ('pREE'), V4L2_PIX_FMT_SGRBG14P ('pgEE'), V4L2_PIX_FMT_SGBRG14P ('pGEE'), V4L2_PIX_FMT_SBGGR14P ('pBEE'),
 *******************************************************************************************************************************
 
 *man V4L2_PIX_FMT_SRGGB14P(2)*
@@ -41,17 +41,21 @@ of one of these formats:
 **Byte Order.**
 Each cell is one byte.
 
+.. raw:: latex
 
+    \footnotesize
+
+.. tabularcolumns:: |p{1.8cm}|p{1.0cm}|p{1.0cm}|p{1.0cm}|p{1.1cm}|p{3.3cm}|p{3.3cm}|p{3.3cm}|
 
 .. flat-table::
     :header-rows:  0
     :stub-columns: 0
-    :widths:       2 1 1 1 1 1 1 1
+    :widths:       2 1 1 1 1 3 3 3
 
 
     -  .. row 1
 
-       -  start + 0:
+       -  start + 0
 
        -  B\ :sub:`00high`
 
@@ -62,17 +66,20 @@ Each cell is one byte.
        -  G\ :sub:`03high`
 
        -  G\ :sub:`01low bits 1--0`\ (bits 7--6)
+
 	  B\ :sub:`00low bits 5--0`\ (bits 5--0)
 
        -  R\ :sub:`02low bits 3--0`\ (bits 7--4)
+
 	  G\ :sub:`01low bits 5--2`\ (bits 3--0)
 
        -  G\ :sub:`03low bits 5--0`\ (bits 7--2)
+
 	  R\ :sub:`02low bits 5--4`\ (bits 1--0)
 
     -  .. row 2
 
-       -  start + 7:
+       -  start + 7
 
        -  G\ :sub:`00high`
 
@@ -83,12 +90,15 @@ Each cell is one byte.
        -  R\ :sub:`03high`
 
        -  R\ :sub:`01low bits 1--0`\ (bits 7--6)
+
 	  G\ :sub:`00low bits 5--0`\ (bits 5--0)
 
        -  G\ :sub:`02low bits 3--0`\ (bits 7--4)
+
 	  R\ :sub:`01low bits 5--2`\ (bits 3--0)
 
        -  R\ :sub:`03low bits 5--0`\ (bits 7--2)
+
 	  G\ :sub:`02low bits 5--4`\ (bits 1--0)
 
     -  .. row 3
@@ -104,12 +114,15 @@ Each cell is one byte.
        -  G\ :sub:`23high`
 
        -  G\ :sub:`21low bits 1--0`\ (bits 7--6)
+
 	  B\ :sub:`20low bits 5--0`\ (bits 5--0)
 
        -  R\ :sub:`22low bits 3--0`\ (bits 7--4)
+
 	  G\ :sub:`21low bits 5--2`\ (bits 3--0)
 
        -  G\ :sub:`23low bits 5--0`\ (bits 7--2)
+
 	  R\ :sub:`22low bits 5--4`\ (bits 1--0)
 
     -  .. row 4
@@ -132,3 +145,8 @@ Each cell is one byte.
 
        -  R\ :sub:`33low bits 5--0`\ (bits 7--2)
 	  G\ :sub:`32low bits 5--4`\ (bits 1--0)
+
+.. raw:: latex
+
+    \normalsize
+

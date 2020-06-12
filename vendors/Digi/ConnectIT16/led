@@ -46,13 +46,24 @@ wwan_led_update()
 	fi
 }
 
+findme_update()
+{
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-f STATUS_BLUE -f STATUS_REAR_BLUE"
+	else
+		FINDME="-o STATUS_BLUE -o STATUS_REAR_BLUE"
+	fi
+}
+
 case "$1" in
 start)
 	ledcmd -O ALL -o POWER_BLUE -o STATUS_BLUE -o STATUS_REAR_BLUE
 	;;
 reload)
+	findme_update
 	wwan_led_update
-	ledcmd $WWAN_SERV $WWAN_SIG
+	ledcmd $WWAN_SERV $WWAN_SIG $FINDME
 	;;
 stop)
 	ledcmd -O ALL -f STATUS_BLUE -f STATUS_REAR_BLUE -o POWER_BLUE

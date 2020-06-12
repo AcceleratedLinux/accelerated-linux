@@ -1,0 +1,15 @@
+--- src/util/support/plugins.c	2020-02-13 11:41:08.426605312 +1000
++++ src/util/support/plugins.c	2020-02-13 11:41:10.214579432 +1000
+@@ -64,10 +64,12 @@
+  */
+ #ifdef __linux__
+ #include <features.h>
++#ifdef __GLIBC_PREREQ
+ #if ! __GLIBC_PREREQ(2, 25)
+ #define dlclose(x)
+ #endif
+ #endif
++#endif
+ 
+ #if USE_DLOPEN && USE_CFBUNDLE
+ #include <CoreFoundation/CoreFoundation.h>

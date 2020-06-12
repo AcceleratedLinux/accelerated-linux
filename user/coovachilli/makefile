@@ -1,12 +1,20 @@
-VERSION = 1.4
+VERSION = 1.5
 URL = https://github.com/coova/coova-chilli.git
 METHOD = git
+MAKEVARS=
 
 AUTORECONF = ./bootstrap
-CONFOPTS += --$(if $(CONFIG_LIB_LIBSSL),with,without)-openssl
+CONFOPTS += --$(if $(CONFIG_LIB_LIBSSL),with,without)-openssl --enable-json --enable-libjson --enable-debug2
+
+ifdef CONFIG_DEFAULTS_LIBC_MUSL
+#
+# Musl sys/sysinfo.h clashes with the kernel sysinfo.h. We don't need or
+# want the kernel one, so this define stops it being included.
+#
+CFLAGS += -D_LINUX_SYSINFO_H
+endif
 
 include $(ROOTDIR)/tools/automake.inc
-
 
 # TODO: Be more selective about required features
 ifdef NOT_DEFINED

@@ -35,10 +35,6 @@ dir_$(CONFIG_LIB_FLEX) += flex
 lib_flex = build/*.a
 inc_flex = build/FlexLexer.h,.
 
-dir_$(CONFIG_LIB_LIBSSL)+= libssl
-lib_libssl = build/*.so* build/*.a
-inc_libssl = build/include/*,.
-
 dir_$(CONFIG_LIB_LIBGMP) += libgmp
 lib_libgmp = build/install/lib/*.a
 inc_libgmp = build/install/include/*.h,.
@@ -53,6 +49,14 @@ inc_libpam = */include/security/*.h,security
 dir_$(CONFIG_LIB_LIBPCAP) += libpcap
 lib_libpcap = *.a
 inc_libpcap = \
+	pcap*.h,. \
+	pcap/*.h,pcap \
+	net/bpf.h,net
+
+dir_$(CONFIG_LIB_LIBPCAP) += libpcapng
+lib_libpcapng = *.a
+dep_libpcapng = libpcap
+inc_libpcapng = \
 	pcap*.h,. \
 	pcap/*.h,pcap \
 	net/bpf.h,net
@@ -85,10 +89,6 @@ inc_libjpeg = *.h,.
 dir_$(CONFIG_LIB_LIBUPNP) += libupnp
 lib_libupnp = upnp/bin/*.so*
 inc_libupnp = upnp/inc/upnp,.
-
-dir_$(CONFIG_LIB_EXPAT) += expat
-lib_expat = *.a *.so*
-inc_expat = lib/expat.h,.
 
 dir_$(CONFIG_LIB_LIBKRB5) += libkrb5
 dep_libkrb5 = termcap ncurses
@@ -311,10 +311,19 @@ romfs:
 		[ ! -d $$i ] || $(MAKE) $(SUBDIR_SMP_BUILD) -C $$i romfs || exit $$? ; \
 	done
 	FNAME=$$($(CC) $(CFLAGS) -print-file-name=libgcc_s.so.1) ; \
+	export ACL_LICENSE="GPLv3 with GCC Runtime Library Exception"; \
+	export ACL_PKG=gcc-`$(CC) -dumpversion)`; \
+	export ACL_URL=https://gcc.gnu.org/; \
 	$(ROMFSINST) -e CONFIG_LIB_INSTALL_LIBGCC_S $$FNAME /lib/`basename $$FNAME`
 	FNAME=$$($(CC) $(CFLAGS) -print-file-name=libatomic.so.1) ; \
+	export ACL_LICENSE="GPLv3 with GCC Runtime Library Exception"; \
+	export ACL_PKG=gcc-`$(CC) -dumpversion)`; \
+	export ACL_URL=https://gcc.gnu.org/; \
 	$(ROMFSINST) -e CONFIG_LIB_INSTALL_LIBATOMIC $$FNAME /lib/`basename $$FNAME`
 	FNAME=$$($(CC) $(CFLAGS) -print-file-name=libstdc++.so.6) ; \
+	export ACL_LICENSE="GPLv3 with GCC Runtime Library Exception"; \
+	export ACL_PKG=gcc-`$(CC) -dumpversion)`; \
+	export ACL_URL=https://gcc.gnu.org/; \
 	$(ROMFSINST) -e CONFIG_LIB_INSTALL_LIBSTDCPLUS $$FNAME /lib/`basename $$FNAME`
 
 ##############################################################################

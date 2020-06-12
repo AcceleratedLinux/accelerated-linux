@@ -1,0 +1,14 @@
+cache = "/opt/node/.npm"
+prefix = "/opt/node"
+editor = "vi"
+global = true
+global-style = false
+globalconfig = "/etc/npmrc"
+globalignorefile = "/etc/config/npmignore"
+init-module = "/etc/config/npm-init.js"
+shell = "/bin/sh"
+tmp = "/tmp"
+umask = 63
+unsafe-perm = false
+user = 0
+userconfig = "/etc/config/npmrc"

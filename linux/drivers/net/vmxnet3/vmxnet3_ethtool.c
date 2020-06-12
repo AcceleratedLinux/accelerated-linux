@@ -257,6 +257,16 @@ vmxnet3_get_strings(struct net_device *netdev, u32 stringset, u8 *buf)
 	}
 }
 
+netdev_features_t vmxnet3_fix_features(struct net_device *netdev,
+				       netdev_features_t features)
+{
+	/* If Rx checksum is disabled, then LRO should also be disabled */
+	if (!(features & NETIF_F_RXCSUM))
+		features &= ~NETIF_F_LRO;
+
+	return features;
+}
+
 int vmxnet3_set_features(struct net_device *netdev, netdev_features_t features)
 {
 	struct vmxnet3_adapter *adapter = netdev_priv(netdev);
@@ -545,10 +555,8 @@ vmxnet3_set_ringparam(struct net_device *netdev,
 	}
 
 	if (VMXNET3_VERSION_GE_3(adapter)) {
-		if (param->rx_mini_pending < 0 ||
-		    param->rx_mini_pending > VMXNET3_RXDATA_DESC_MAX_SIZE) {
+		if (param->rx_mini_pending > VMXNET3_RXDATA_DESC_MAX_SIZE)
 			return -EINVAL;
-		}
 	} else if (param->rx_mini_pending != 0) {
 		return -EINVAL;
 	}

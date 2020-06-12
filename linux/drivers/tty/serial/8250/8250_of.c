@@ -13,7 +13,6 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
-#include <linux/of_gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/clk.h>
 #include <linux/reset.h>
@@ -49,6 +48,36 @@ static inline void tegra_serial_handle_break(struct uart_port *port)
 }
 #endif
 
+static int of_8250_rs485_config(struct uart_port *port,
+				  struct serial_rs485 *rs485)
+{
+	struct uart_8250_port *up = up_to_u8250p(port);
+
+	/* Clamp the delays to [0, 100ms] */
+	rs485->delay_rts_before_send = min(rs485->delay_rts_before_send, 100U);
+	rs485->delay_rts_after_send  = min(rs485->delay_rts_after_send, 100U);
+
+	port->rs485 = *rs485;
+
+	/*
+	 * Both serial8250_em485_init and serial8250_em485_destroy
+	 * are idempotent
+	 */
+	if (rs485->flags & SER_RS485_ENABLED) {
+		int ret = serial8250_em485_init(up);
+
+		if (ret) {
+			rs485->flags &= ~SER_RS485_ENABLED;
+			port->rs485.flags &= ~SER_RS485_ENABLED;
+		}
+		return ret;
+	}
+
+	serial8250_em485_destroy(up);
+
+	return 0;
+}
+
 /*
  * Fill a struct uart_port for a given device node
  */
@@ -71,9 +100,10 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 		/* Get clk rate through clk driver if present */
 		info->clk = devm_clk_get(&ofdev->dev, NULL);
 		if (IS_ERR(info->clk)) {
-			dev_warn(&ofdev->dev,
-				"clk or clock-frequency not defined\n");
 			ret = PTR_ERR(info->clk);
+			if (ret != -EPROBE_DEFER)
+				dev_warn(&ofdev->dev,
+					 "failed to get clock: %d\n", ret);
 			goto err_pmruntime;
 		}
 
@@ -172,12 +202,12 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 
 	port->type = type;
 	port->uartclk = clk;
-	port->irqflags |= IRQF_SHARED;
 
 	if (of_property_read_bool(np, "no-loopback-test"))
 		port->flags |= UPF_SKIP_TEST;
 
 	port->dev = &ofdev->dev;
+	port->rs485_config = of_8250_rs485_config;
 
 	switch (type) {
 	case PORT_TEGRA:
@@ -191,8 +221,10 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 
 	if (IS_ENABLED(CONFIG_SERIAL_8250_FSL) &&
 	    (of_device_is_compatible(np, "fsl,ns16550") ||
-	     of_device_is_compatible(np, "fsl,16550-FIFO64")))
+	     of_device_is_compatible(np, "fsl,16550-FIFO64"))) {
 		port->handle_irq = fsl8250_handle_irq;
+		port->has_sysrq = IS_ENABLED(CONFIG_SERIAL_8250_CONSOLE);
+	}
 
 	return 0;
 err_unprepare:
@@ -206,36 +238,25 @@ err_pmruntime:
 /*
  * Try to register a serial port
  */
-static const struct of_device_id of_platform_serial_table[];
 static int of_platform_serial_probe(struct platform_device *ofdev)
 {
-	struct device_node *np = ofdev->dev.of_node;
-	const struct of_device_id *match;
 	struct of_serial_info *info;
 	struct uart_8250_port port8250;
+	unsigned int port_type;
 	u32 tx_threshold;
-	int port_type, gpio;
 	int ret;
 
-	match = of_match_device(of_platform_serial_table, &ofdev->dev);
-	if (!match)
+	port_type = (unsigned long)of_device_get_match_data(&ofdev->dev);
+	if (port_type == PORT_UNKNOWN)
 		return -EINVAL;
 
-	if (of_property_read_bool(np, "used-by-rtas"))
+	if (of_property_read_bool(ofdev->dev.of_node, "used-by-rtas"))
 		return -EBUSY;
-
-	/* Defer probe until later if we need GPIOs setup first */
-	if (of_get_property(np, "dtr-gpios", NULL)) {
-		gpio = of_get_named_gpio(np, "dtr-gpios", 0);
-		if (gpio == -EPROBE_DEFER)
-			return -EPROBE_DEFER;
-	}
 
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (info == NULL)
 		return -ENOMEM;
 
-	port_type = (unsigned long)match->data;
 	memset(&port8250, 0, sizeof(port8250));
 	ret = of_platform_serial_setup(ofdev, port_type, &port8250.port, info);
 	if (ret)
@@ -245,35 +266,18 @@ static int of_platform_serial_probe(struct platform_device *ofdev)
 		port8250.capabilities = UART_CAP_FIFO;
 
 	/* Check for TX FIFO threshold & set tx_loadsz */
-	if ((of_property_read_u32(np, "tx-threshold", &tx_threshold) == 0) &&
+	if ((of_property_read_u32(ofdev->dev.of_node, "tx-threshold",
+				  &tx_threshold) == 0) &&
 	    (tx_threshold < port8250.port.fifosize))
 		port8250.tx_loadsz = port8250.port.fifosize - tx_threshold;
 
-	if (of_property_read_bool(np, "auto-flow-control"))
+	if (of_property_read_bool(ofdev->dev.of_node, "auto-flow-control"))
 		port8250.capabilities |= UART_CAP_AFE;
 
 	if (of_property_read_u32(ofdev->dev.of_node,
 			"overrun-throttle-ms",
 			&port8250.overrun_backoff_time_ms) != 0)
 		port8250.overrun_backoff_time_ms = 0;
-
-	/* Check for GPIO driven DTR and DCD */
-	if (of_get_property(np, "dtr-gpios", NULL)) {
-		gpio = of_get_named_gpio(np, "dtr-gpios", 0);
-		if (gpio_is_valid(gpio)) {
-			port8250.gpio_dtr = gpio;
-			devm_gpio_request(&ofdev->dev, gpio, "UART DTR");
-			gpio_direction_output(gpio, 0);
-		}
-	}
-	if (of_get_property(np, "dcd-gpios", NULL)) {
-		gpio = of_get_named_gpio(np, "dcd-gpios", 0);
-		if (gpio_is_valid(gpio)) {
-			port8250.gpio_dcd = gpio;
-			devm_gpio_request(&ofdev->dev, gpio, "UART DCD");
-			gpio_direction_input(gpio);
-		}
-	}
 
 	ret = serial8250_register_8250_port(&port8250);
 	if (ret < 0)

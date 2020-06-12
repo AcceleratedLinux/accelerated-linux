@@ -1,23 +1,13 @@
+// SPDX-License-Identifier: ISC
 /*
  * Copyright (C) 2016 Felix Fietkau <nbd@nbd.name>
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <linux/delay.h>
 #include "mt76x2.h"
 #include "eeprom.h"
 #include "mcu.h"
+#include "../mt76x02_mac.h"
 
 static void
 mt76x2_mac_pbf_init(struct mt76x02_dev *dev)
@@ -120,7 +110,7 @@ int mt76x2_mac_reset(struct mt76x02_dev *dev, bool hard)
 	mt76_clear(dev, MT_FCE_L2_STUFF, MT_FCE_L2_STUFF_WR_MPDU_LEN_EN);
 
 	mt76x02_mac_setaddr(dev, macaddr);
-	mt76x02_init_beacon_config(dev);
+	mt76x02e_init_beacon_config(dev);
 	if (!hard)
 		return 0;
 
@@ -143,32 +133,7 @@ int mt76x2_mac_reset(struct mt76x02_dev *dev, bool hard)
 	for (i = 0; i < 16; i++)
 		mt76_rr(dev, MT_TX_STAT_FIFO);
 
-	mt76_wr(dev, MT_CH_TIME_CFG,
-		MT_CH_TIME_CFG_TIMER_EN |
-		MT_CH_TIME_CFG_TX_AS_BUSY |
-		MT_CH_TIME_CFG_RX_AS_BUSY |
-		MT_CH_TIME_CFG_NAV_AS_BUSY |
-		MT_CH_TIME_CFG_EIFS_AS_BUSY |
-		MT_CH_CCA_RC_EN |
-		FIELD_PREP(MT_CH_TIME_CFG_CH_TIMER_CLR, 1));
-
 	mt76x02_set_tx_ackto(dev);
-
-	return 0;
-}
-
-int mt76x2_mac_start(struct mt76x02_dev *dev)
-{
-	int i;
-
-	for (i = 0; i < 16; i++)
-		mt76_rr(dev, MT_TX_AGG_CNT(i));
-
-	for (i = 0; i < 16; i++)
-		mt76_rr(dev, MT_TX_STAT_FIFO);
-
-	memset(dev->aggr_stats, 0, sizeof(dev->aggr_stats));
-	mt76x02_mac_start(dev);
 
 	return 0;
 }
@@ -275,9 +240,7 @@ static int mt76x2_init_hardware(struct mt76x02_dev *dev)
 		return ret;
 
 	set_bit(MT76_STATE_INITIALIZED, &dev->mt76.state);
-	ret = mt76x2_mac_start(dev);
-	if (ret)
-		return ret;
+	mt76x02_mac_start(dev);
 
 	ret = mt76x2_mcu_init(dev);
 	if (ret)
@@ -291,7 +254,7 @@ static int mt76x2_init_hardware(struct mt76x02_dev *dev)
 void mt76x2_stop_hardware(struct mt76x02_dev *dev)
 {
 	cancel_delayed_work_sync(&dev->cal_work);
-	cancel_delayed_work_sync(&dev->mac_work);
+	cancel_delayed_work_sync(&dev->mt76.mac_work);
 	cancel_delayed_work_sync(&dev->wdt_work);
 	mt76x02_mcu_set_radio_state(dev, false);
 	mt76x2_mac_stop(dev, false);
@@ -300,7 +263,7 @@ void mt76x2_stop_hardware(struct mt76x02_dev *dev)
 void mt76x2_cleanup(struct mt76x02_dev *dev)
 {
 	tasklet_disable(&dev->dfs_pd.dfs_tasklet);
-	tasklet_disable(&dev->pre_tbtt_tasklet);
+	tasklet_disable(&dev->mt76.pre_tbtt_tasklet);
 	mt76x2_stop_hardware(dev);
 	mt76x02_dma_cleanup(dev);
 	mt76x02_mcu_cleanup(dev);
@@ -335,5 +298,4 @@ fail:
 	mt76x2_stop_hardware(dev);
 	return ret;
 }
-
 

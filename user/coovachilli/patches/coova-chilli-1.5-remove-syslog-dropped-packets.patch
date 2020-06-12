@@ -1,0 +1,25 @@
+diff --git a/src/net.c b/src/net.c
+index 2e4a0cf..a0e7da3 100644
+--- a/src/net.c
++++ b/src/net.c
+@@ -939,7 +939,9 @@ ssize_t net_write_eth(net_interface *netif, void *d, size_t dlen, struct sockadd
+   if (len < 0) {
+     switch (errno) {
+       case EWOULDBLOCK:
+-        syslog(LOG_ERR, "%s: packet dropped due to congestion", strerror(errno));
++        // We see lots of dropped packets with high throughput, this fills up the log
++       if (_options.debug)
++            syslog(LOG_ERR, "%s: packet dropped due to congestion", strerror(errno));
+         break;
+ 
+ #ifdef ENETDOWN
+@@ -960,7 +962,8 @@ ssize_t net_write_eth(net_interface *netif, void *d, size_t dlen, struct sockadd
+ #endif
+     }
+ 
+-    syslog(LOG_ERR, "%s: net_write_eth(fd=%d, len=%zu) failed", strerror(errno), netif->fd, dlen);
++    if (_options.debug)
++        syslog(LOG_ERR, "%s: net_write_eth(fd=%d, len=%zu) failed", strerror(errno), netif->fd, dlen);
+     return -1;
+   }
+ 

@@ -1,0 +1,61 @@
+From: Samuel Brian <sam.brian@accelerated.com>
+Date: Wed, 7 Dec 2016 14:44:39 +1000
+Subject: log: reopen the log file on SIGHUP
+
+To support log rotation.
+---
+ src/main.c   | 19 +++++++++++++++++++
+ src/mm-log.c |  4 +++-
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/src/main.c b/src/main.c
+index 9963c7cc..fcbf3fed 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -55,6 +55,24 @@ quit_cb (gpointer user_data)
+         exit (0);
+     return FALSE;
+ }
++static gboolean
++hup_cb (gpointer user_data)
++{
++    GError *err = NULL;
++
++    mm_info ("Reloading log file...");
++    mm_log_shutdown ();
++    if (!mm_log_setup (mm_context_get_log_level (),
++       mm_context_get_log_file (),
++       mm_context_get_log_timestamps (),
++       mm_context_get_log_relative_timestamps (),
++       mm_context_get_debug (),
++       &err)) {
++            g_warning ("Failed to set up logging: %s", err->message);
++            g_error_free (err);
++    }
++    return G_SOURCE_CONTINUE;
++}
+ 
+ #if defined WITH_SYSTEMD_SUSPEND_RESUME
+ 
+@@ -175,6 +193,7 @@ main (int argc, char *argv[])
+ 
+     g_unix_signal_add (SIGTERM, quit_cb, NULL);
+     g_unix_signal_add (SIGINT, quit_cb, NULL);
++    g_unix_signal_add (SIGHUP, hup_cb, NULL);
+ 
+     /* Early register all known errors */
+     register_dbus_errors ();
+diff --git a/src/mm-log.c b/src/mm-log.c
+index 658e0c12..36862cec 100644
+--- a/src/mm-log.c
++++ b/src/mm-log.c
+@@ -368,6 +368,8 @@ mm_log_shutdown (void)
+ {
+     if (logfd < 0)
+         closelog ();
+-    else
++    else {
+         close (logfd);
++        logfd = -1;
++    }
+ }

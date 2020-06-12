@@ -93,7 +93,6 @@ dir_$(CONFIG_USER_ELVISTINY_VI)             += elvis-tiny
 dir_$(CONFIG_USER_ETHATTACH_ETHATTACH)      += ethattach
 dir_$(CONFIG_USER_ETHERWAKE)		    += etherwake
 dir_$(CONFIG_USER_ETHTOOL_ETHTOOL)          += ethtool
-dir_$(CONFIG_USER_EXPAT_EXAMPLES)           += expat-examples
 dir_$(CONFIG_USER_EXPECT_EXPECT)            += expect
 dir_$(CONFIG_USER_EZIPUPDATE_EZIPUPDATE)    += ez-ipupdate
 dir_$(CONFIG_USER_FAKEIDENTD_IDENTD)        += fakeidentd
@@ -159,12 +158,10 @@ dir_$(CONFIG_USER_IPFWADM_IPFWADM)          += ipfwadm
 dir_$(CONFIG_USER_IPMASQADM_IPMASQADM)      += ipmasqadm
 dir_$(CONFIG_USER_IPPORTFW_IPPORTFW)        += ipportfw
 dir_$(CONFIG_USER_IPREDIR_IPREDIR)          += ipredir
-dir_$(CONFIG_USER_IPROUTE2)                 += iproute2
 dir_$(CONFIG_USER_IPSENTINEL_IPSENTINEL)    += ip-sentinel
 dir_$(CONFIG_USER_IPSET_IPSET)              += ipset
 dir_$(CONFIG_USER_IPTABLES_IPTABLES)        += iptables
 dir_$(CONFIG_USER_IPTABLES_IP6TABLES)       += iptables
-dir_$(CONFIG_USER_IPUTILS_IPUTILS)          += iputils
 dir_$(CONFIG_USER_JAMVM_JAMVM)              += jamvm
 dir_$(CONFIG_USER_JPEGVIEW_JPEGVIEW)        += jpegview
 dir_$(CONFIG_USER_JQUERY_UI)                += jquery-ui
@@ -196,6 +193,7 @@ dir_$(CONFIG_USER_LSOF_LSOF)                += lsof
 dir_$(CONFIG_USER_MAIL_MAIL_IP)             += mail
 dir_$(CONFIG_USER_MATH_TEST)                += mathtest
 dir_$(CONFIG_USER_MAWK_AWK)                 += mawk
+dir_$(CONFIG_USER_MERGECAP)                 += mergecap
 dir_$(CONFIG_USER_MGETTY_MGETTY)            += mgetty
 dir_$(CONFIG_USER_MTDUTILS)                 += mtd-utils
 dir_$(CONFIG_USER_MICROWIN)                 += microwin
@@ -280,6 +278,7 @@ dir_$(CONFIG_USER_PROCPS_VMSTAT)            += procps
 dir_$(CONFIG_USER_PROCPS_W)                 += procps
 dir_$(CONFIG_USER_PROCPS_WATCH)             += procps
 dir_$(CONFIG_USER_PROFTPD_PROFTPD)          += proftpd
+dir_$(CONFIG_USER_REMSERIAL)                += remserial
 dir_$(CONFIG_USER_QSPITEST_TEST)            += qspitest
 dir_$(CONFIG_USER_QSPITEST_RX)              += qspitest
 dir_$(CONFIG_USER_RADVD_RADVD)              += radvd
@@ -334,6 +333,7 @@ dir_$(CONFIG_USER_SHUTILS_WHICH)            += shutils
 dir_$(CONFIG_USER_SHUTILS_WHOAMI)           += shutils
 dir_$(CONFIG_USER_SHUTILS_YES)              += shutils
 dir_$(CONFIG_USER_SIGS_SIGS)                += sigs
+dir_$(CONFIG_USER_RS485_RS485)              += rs485
 dir_$(CONFIG_USER_SIPROXD_SIPROXD)          += siproxd
 dir_$(CONFIG_USER_SLATTACH_SLATTACH)        += slattach
 dir_$(CONFIG_USER_SMBMOUNT_SMBMOUNT)        += smbmount
@@ -342,7 +342,6 @@ dir_$(CONFIG_USER_SMTP_SMTPCLIENT)          += smtpclient
 dir_$(CONFIG_USER_SNMPD_SNMPD)              += snmpd
 dir_$(CONFIG_USER_SPEEDTOUCH_MODEM_RUN)     += speedtouch/src
 dir_$(CONFIG_USER_STUNNEL_STUNNEL)          += stunnel
-dir_$(CONFIG_USER_SSLWRAP_SSLWRAP)          += sslwrap
 dir_$(CONFIG_USER_SQUASHFS_MKSQUASHFS)      += squashfs
 dir_$(CONFIG_USER_SQUASHFS_MKSQUASHFS7Z)    += squashfs
 dir_$(CONFIG_USER_SSCEP)		    += sscep
@@ -362,7 +361,7 @@ dir_$(CONFIG_USER_SYSUTILS_SHUTDOWN)        += sysutils
 dir_$(CONFIG_USER_TCPBLAST_TCPBLAST)        += tcpblast
 dir_$(CONFIG_USER_TCPWRAP_TCPD)             += tcpwrappers
 dir_$(CONFIG_USER_TCPDUMP_TCPDUMP)          += tcpdump
-dir_$(CONFIG_USER_TCPREPLAY)                += tcpreplay mergecap
+dir_$(CONFIG_USER_TCPREPLAY)                += tcpreplay
 dir_$(CONFIG_USER_TCSH_TCSH)                += tcsh
 dir_$(CONFIG_USER_TELNET_TELNET)            += telnet
 dir_$(CONFIG_USER_TELNETD_TELNETD)          += telnetd
@@ -376,7 +375,6 @@ dir_$(CONFIG_USER_TINYPROXY_TINYPROXY)      += tinyproxy
 dir_$(CONFIG_USER_TINYTCL_TCLSH)            += tinytcl
 dir_$(CONFIG_USER_TIP_TIP)                  += tip
 dir_$(CONFIG_USER_TIMEPEG_TPT)              += tpt
-dir_$(CONFIG_USER_TRACEROUTE_TRACEROUTE)    += traceroute
 dir_$(CONFIG_USER_TRIPWIRE_SIGGEN)          += tripwire
 dir_$(CONFIG_USER_TRIPWIRE_TRIPWIRE)        += tripwire
 dir_$(CONFIG_USER_NETSNMP_SNMPD)            += net-snmp
@@ -437,21 +435,19 @@ all::
 .PHONY: $(sort $(dir_y) $(dir_p))
 
 ###################################
-# add directory dependancies here #
+# add directory dependencies here #
 ###################################
 
 snort: mysql
 asterisk: sqlite
+expect: tcl
 ifdef CONFIG_USER_IPTABLES_IPTABLES
-iproute2: iptables
 miniupnpd: iptables
 endif
 udev : util-linux kmod
 ntp : readline
 udev: util-linux
-libmbim: udev
-libqmi: udev
-ModemManager: udev libmbim libqmi
+ModemManager: libgudev udev libmbim libqmi
 mtd-utils: util-linux
 netifd: ubus uci
 netflash: i2c-tools
@@ -460,7 +456,9 @@ ovs: dpdk
 swconfig: uci
 bluez: readline
 ble-provisioning-app: bluez
-$(ROOTDIR)/prop: ubus ModemManager hostapd ipset
+e2fsprogs: util-linux
+cryptsetup: util-linux
+$(ROOTDIR)/prop: ubus ModemManager hostapd ipset i2c-tools powerman python python-modules apparmor
 
 ###################################
 

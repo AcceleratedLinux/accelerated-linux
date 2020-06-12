@@ -1,0 +1,168 @@
+diff -aur ../orig/powermand/parse_tab.y powerman/powermand/parse_tab.y
+--- ../orig/powermand/parse_tab.y	2019-06-04 16:27:32.000000000 -0500
++++ powerman/powermand/parse_tab.y	2019-09-23 15:07:00.627537664 -0500
+@@ -361,10 +361,44 @@
+ int scanner_line(void);
+ char *scanner_file(void);
+ 
++/* Print (part of) config in JSON format */
++static void print_config(void)
++{
++    ListIterator itr, itr2;
++    Spec *spec;
++    char *plug;
++    bool first = TRUE;
++
++    if (device_specs) {
++	itr = list_iterator_create(device_specs);
++	while((spec = list_next(itr))) {
++	    if (!first)
++		printf(",\n");
++	    first = FALSE;
++	    printf("\"%s\":{", spec->name);
++
++	    if (spec->plugs) {
++		printf("\"plug_name\":[");
++		itr2 = list_iterator_create(spec->plugs);
++		plug = list_next(itr2);
++		if(plug) {
++		    printf("\"%s\"", plug);
++		    while((plug = list_next(itr2)))
++			printf(",\"%s\"", plug);
++		}
++		list_iterator_destroy(itr2);
++		printf("]");
++	    }
++	    printf("}");
++	}
++	list_iterator_destroy(itr);
++    }
++}
++
+ /*
+  * Entry point into the yacc/lex parser.
+  */
+-int parse_config_file (char *filename)
++int parse_config_file (char *filename, bool print)
+ {
+     extern FILE *yyin; /* part of lexer */
+ 
+@@ -382,6 +420,9 @@
+ 
+     scanner_fini();
+ 
++    if (print)
++    	print_config();
++
+     list_destroy(device_specs);
+ 
+     return 0;
+diff -ur ../orig/powerman/powermand/parse_util.c powerman/powermand/parse_util.c
+--- ../orig/powerman/powermand/parse_util.c	2019-06-04 16:27:32.000000000 -0500
++++ powerman/powermand/parse_util.c	2019-10-04 13:56:15.489287945 -0500
+@@ -60,13 +60,13 @@
+ static bool _validate_config(void);
+ static void _alias_destroy(alias_t *a);
+ 
+-extern int parse_config_file(char *filename); /* yacc/lex parser */
++extern int parse_config_file(char *filename, bool print); /* yacc/lex parser */
+ 
+ /*
+  * initialize module
+  * parse the named config file - on error, exit with a message to stderr
+  */
+-void conf_init(char *filename)
++void conf_init(char *filename, bool print)
+ {
+     struct stat stbuf;
+     bool valid;
+@@ -89,12 +89,13 @@
+      * 'conf_cluster', 'conf_specs' (config.c), and various other
+      * conf_* attributes (config.c).
+      */
+-    parse_config_file(filename);
++    parse_config_file(filename, print);
+
+-    valid = _validate_config();
+-
+-    if (!valid)
+-        exit(1);
++    if (!print) {
++        valid = _validate_config();
++        if (!valid)
++            exit(1);
++    }
+ }
+
+ /* finalize module */
+diff -aur ../orig/powermand/parse_util.h powerman/powermand/parse_util.h
+--- ../orig/powermand/parse_util.h	2019-06-04 16:27:32.000000000 -0500
++++ powerman/powermand/parse_util.h	2019-09-23 14:45:09.408241781 -0500
+@@ -1,7 +1,7 @@
+ #ifndef PM_PARSE_UTIL_H
+ #define PM_PARSE_UTIL_H
+ 
+-void conf_init(char *filename);
++void conf_init(char *filename, bool print);
+ void conf_fini(void);
+ 
+ bool conf_addnodes(char *nodelist);
+diff -aur ../orig/powermand/powermand.c powerman/powermand/powermand.c
+--- ../orig/powermand/powermand.c	2019-06-04 16:27:32.000000000 -0500
++++ powerman/powermand/powermand.c	2019-09-23 14:54:49.372976531 -0500
+@@ -64,7 +64,7 @@
+ static void _exit_handler(int signum);
+ static void _select_loop(void);
+ 
+-#define OPTIONS "c:fhd:VsY1"
++#define OPTIONS "c:fhd:VsY1p"
+ #if HAVE_GETOPT_LONG
+ #define GETOPT(ac,av,opt,lopt) getopt_long(ac,av,opt,lopt,NULL)
+ static const struct option longopts[] = {
+@@ -76,6 +76,7 @@
+     {"stdio",           no_argument,        0, 's'},
+     {"short-circuit-delay", no_argument,    0, 'Y'},
+     {"one-client",      no_argument,        0, '1'},
++    {"print-config",    no_argument,        0, 'p'},
+     {0, 0, 0, 0}
+ };
+ #else
+@@ -90,6 +91,7 @@
+     bool use_stdio = FALSE;
+     bool short_circuit_delay = FALSE;
+     bool one_client = FALSE;
++    bool print = FALSE;
+ 
+     /* parse command line options */
+     err_init(argv[0]);
+@@ -126,6 +128,9 @@
+         case '1': /* --one-client */
+             one_client = TRUE;
+             break;
++        case 'p': /* --print-config */
++            print = TRUE;
++            break;
+         case 'h': /* --help */
+         default:
+             _usage(argv[0]);
+@@ -144,8 +149,11 @@
+     dev_init(short_circuit_delay);
+     cli_init();
+ 
+-    conf_init(config_filename);
++    conf_init(config_filename, print);
+     xfree(config_filename);
++    
++    if (print)
++    	return 0;
+ 
+     xsignal(SIGHUP, _noop_handler);
+     xsignal(SIGTERM, _exit_handler);
+@@ -182,6 +190,7 @@
+     printf("  -V --version           Report powerman version\n");
+     printf("  -s --stdio             Talk to client on stdin/stdout\n");
+     printf("  -1 --one-client        Terminate when client disconnects\n");
++    printf("  -p --print-config      Print config and exit\n");
+     exit(0);
+ }
+ 

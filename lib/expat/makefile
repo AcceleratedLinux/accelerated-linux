@@ -1,0 +1,2 @@
+URL = https://github.com/libexpat/libexpat/releases/download/R_2_2_9/expat-2.2.9.tar.bz2
+include $(ROOTDIR)/tools/automake.inc

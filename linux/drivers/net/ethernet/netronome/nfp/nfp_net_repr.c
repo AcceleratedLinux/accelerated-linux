@@ -267,13 +267,14 @@ const struct net_device_ops nfp_repr_netdev_ops = {
 	.ndo_set_vf_mac		= nfp_app_set_vf_mac,
 	.ndo_set_vf_vlan	= nfp_app_set_vf_vlan,
 	.ndo_set_vf_spoofchk	= nfp_app_set_vf_spoofchk,
+	.ndo_set_vf_trust	= nfp_app_set_vf_trust,
 	.ndo_get_vf_config	= nfp_app_get_vf_config,
 	.ndo_set_vf_link_state	= nfp_app_set_vf_link_state,
 	.ndo_fix_features	= nfp_repr_fix_features,
 	.ndo_set_features	= nfp_port_set_features,
 	.ndo_set_mac_address    = eth_mac_addr,
 	.ndo_get_port_parent_id	= nfp_port_get_port_parent_id,
-	.ndo_get_devlink	= nfp_devlink_get_devlink,
+	.ndo_get_devlink_port	= nfp_devlink_get_devlink_port,
 };
 
 void
@@ -298,22 +299,6 @@ static void nfp_repr_clean(struct nfp_repr *repr)
 	nfp_port_free(repr->port);
 }
 
-static struct lock_class_key nfp_repr_netdev_xmit_lock_key;
-static struct lock_class_key nfp_repr_netdev_addr_lock_key;
-
-static void nfp_repr_set_lockdep_class_one(struct net_device *dev,
-					   struct netdev_queue *txq,
-					   void *_unused)
-{
-	lockdep_set_class(&txq->_xmit_lock, &nfp_repr_netdev_xmit_lock_key);
-}
-
-static void nfp_repr_set_lockdep_class(struct net_device *dev)
-{
-	lockdep_set_class(&dev->addr_list_lock, &nfp_repr_netdev_addr_lock_key);
-	netdev_for_each_tx_queue(dev, nfp_repr_set_lockdep_class_one, NULL);
-}
-
 int nfp_repr_init(struct nfp_app *app, struct net_device *netdev,
 		  u32 cmsg_port_id, struct nfp_port *port,
 		  struct net_device *pf_netdev)
@@ -322,8 +307,6 @@ int nfp_repr_init(struct nfp_app *app, struct net_device *netdev,
 	struct nfp_net *nn = netdev_priv(pf_netdev);
 	u32 repr_cap = nn->tlv_caps.repr_cap;
 	int err;
-
-	nfp_repr_set_lockdep_class(netdev);
 
 	repr->port = port;
 	repr->dst = metadata_dst_alloc(0, METADATA_HW_PORT_MUX, GFP_KERNEL);

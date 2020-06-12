@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *   Driver for ARTPEC-6 crypto block using the kernel asynchronous crypto api.
  *
@@ -1248,10 +1249,8 @@ static int artpec6_crypto_aead_set_key(struct crypto_aead *tfm, const u8 *key,
 {
 	struct artpec6_cryptotfm_context *ctx = crypto_tfm_ctx(&tfm->base);
 
-	if (len != 16 && len != 24 && len != 32) {
-		crypto_aead_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
-		return -1;
-	}
+	if (len != 16 && len != 24 && len != 32)
+		return -EINVAL;
 
 	ctx->key_length = len;
 
@@ -1605,8 +1604,6 @@ artpec6_crypto_cipher_set_key(struct crypto_skcipher *cipher, const u8 *key,
 	case 32:
 		break;
 	default:
-		crypto_skcipher_set_flags(cipher,
-					  CRYPTO_TFM_RES_BAD_KEY_LEN);
 		return -EINVAL;
 	}
 
@@ -1633,8 +1630,6 @@ artpec6_crypto_xts_set_key(struct crypto_skcipher *cipher, const u8 *key,
 	case 64:
 		break;
 	default:
-		crypto_skcipher_set_flags(cipher,
-					  CRYPTO_TFM_RES_BAD_KEY_LEN);
 		return -EINVAL;
 	}
 
@@ -2247,8 +2242,6 @@ artpec6_crypto_hash_set_key(struct crypto_ahash *tfm,
 		SHASH_DESC_ON_STACK(hdesc, tfm_ctx->child_hash);
 
 		hdesc->tfm = tfm_ctx->child_hash;
-		hdesc->flags = crypto_ahash_get_flags(tfm) &
-			       CRYPTO_TFM_REQ_MAY_SLEEP;
 
 		tfm_ctx->hmac_key_length = blocksize;
 		ret = crypto_shash_digest(hdesc, key, keylen,
@@ -2855,7 +2848,6 @@ static int artpec6_crypto_probe(struct platform_device *pdev)
 	struct artpec6_crypto *ac;
 	struct device *dev = &pdev->dev;
 	void __iomem *base;
-	struct resource *res;
 	int irq;
 	int err;
 
@@ -2868,8 +2860,7 @@ static int artpec6_crypto_probe(struct platform_device *pdev)
 
 	variant = (enum artpec6_crypto_variant)match->data;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&pdev->dev, res);
+	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 

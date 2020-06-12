@@ -18,8 +18,8 @@ CFLAGS += -Wall -Werror -Wmissing-prototypes
 # CFLAGS += -DDEBUG
 
 # build start time in seconds
-BUILD_START_STRING ?= $(shell date -R)
-BUILD_START_UNIX   := $(shell date "-d$(BUILD_START_STRING)" +%s)
+BUILD_START_STRING ?= $(shell date -u -R)
+BUILD_START_UNIX   := $(shell date -u "-d$(BUILD_START_STRING)" +%s)
 CFLAGS += -DBUILD_START_UNIX=$(BUILD_START_UNIX)
 
 ######################################################

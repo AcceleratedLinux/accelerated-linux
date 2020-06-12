@@ -1,0 +1,20 @@
+--- node-v10.16.0/deps/npm/node_modules/node-gyp/lib/configure.js	2020-02-18 17:07:26.157597716 +1000
++++ node-v10.16.0/deps/npm/node_modules/node-gyp/lib/configure.js	2020-02-18 17:07:28.521804146 +1000
+@@ -432,7 +432,7 @@
+     var env = extend({}, this.env)
+     env.TERM = 'dumb'
+ 
+-    var launcherArgs = ['-2', '-c', 'import sys; print sys.executable']
++    var launcherArgs = ['-2', '-c', 'import sys; print(sys.executable);']
+     this.execFile('py.exe', launcherArgs, { env: env }, function (err, stdout) {
+       if (err) {
+         this.guessPython()
+@@ -448,7 +448,7 @@
+   },
+ 
+   checkPythonVersion: function checkPythonVersion () {
+-    var args = ['-c', 'import sys; print "%s.%s.%s" % sys.version_info[:3];']
++    var args = ['-c', 'import sys; print("%s.%s.%s" % sys.version_info[:3]);']
+     var env = extend({}, this.env)
+     env.TERM = 'dumb'
+ 

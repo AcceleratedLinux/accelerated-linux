@@ -19,7 +19,8 @@ ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
 
 DEVICES += $(DEVICE_PTY_64) \
 	ledman,c,126,0 \
-	serial/port1,c,207,18
+	serial/port1,c,207,18 \
+	ttyXBee,c,207,17
 
 FLASH_DEVICES = \
 	boot,c,90,0 \
@@ -39,15 +40,15 @@ clean: image.clean
 
 romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
-	$(ROMFSINST) -p 555 ../IX14-common/scripts/clear-bootcount.sh /etc/clear-bootcount.sh
+	$(ROMFSINST) -p 555 scripts/clear-bootcount.sh /etc/clear-bootcount.sh
 	$(ROMFSINST) -p 555 /etc/mkffs
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/bluetooth /bin/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/bluetooth-action /etc/action.d/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/bluetooth-update /etc/runt.d/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_BLUETOOTH -d -p 555 ../IX14-common/bluez/main.conf /etc/bluetooth/main.conf
+	$(ROMFSINST) -d -p 555 bluez/bluetooth /bin/bluetooth
+	$(ROMFSINST) -d -p 555 bluez/bluetooth-action /etc/action.d/bluetooth
+	$(ROMFSINST) -d -p 555 bluez/bluetooth-update /etc/runt/update.d/bluetooth
+	$(ROMFSINST) -e CONFIG_PROP_XBEE -d -p 555 scripts/xbee.sh /bin/xbee
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
-	$(ROMFSINST) -p 555 ../IX14-common/scripts/cellular_power.sh /bin/cellular_power.sh
-	$(ROMFSINST) ../IX14-common/config/fw_env.config /etc/fw_env.config
+	$(ROMFSINST) -p 555 scripts/cellular_power.sh /bin/cellular_power.sh
+	$(ROMFSINST) config/fw_env.config /etc/fw_env.config
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf

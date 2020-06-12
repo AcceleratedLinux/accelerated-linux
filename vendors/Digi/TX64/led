@@ -29,33 +29,33 @@ esac
 
 ##############################################################
 # Update wifi leds
-runt update network.wireless
+runt update network.wifi
 eval $(config stop)
 eval $(config start)
 config load
 
 led1=0
 led2=0
-aps=$(config keys network.wireless.ap)
+aps=$(config keys network.wifi.ap)
 for ap in $aps ; do
     ap=${ap%%.*}
-    device="$(runt get network.wireless.ap.$ap.device)"
+    device="$(runt get network.wifi.ap.$ap.device)"
     if [ -n "$device" ]; then
         if ip link show $device up | grep -q "state UP"; then
-            radio=$(config dump network.wireless.ap.$ap.radio)
+            radio=$(config dump network.wifi.ap.$ap.radio)
             num="${radio//[![0-9]/}"
             [ $num = "1" ] && led1=1 || led2=1
         fi
     fi
 done
 
-clients=$(config keys network.wireless.client)
+clients=$(config keys network.wifi.client)
 for client in $clients ; do
     client=${client%%.*}
-    device="$(runt get network.wireless.client.$client.device)"
+    device="$(runt get network.wifi.client.$client.device)"
     if [ -n "$device" ]; then
         if ip link show $device up | grep -q "state UP"; then
-            radio=$(config dump network.wireless.client.$client.radio)
+            radio=$(config dump network.wifi.client.$client.radio)
             num="${radio//[![0-9]/}"
             [ $num = "1" ] && led1=1 || led2=1
         fi
@@ -73,61 +73,98 @@ eval ledcmd \$LED$led1$led2
 ##############################################################
 # Cellular LEDs
 
+eval $(config start)
+config load
+MODEM_NAMES="$(config keys network.modem)"
+eval $(config stop)
+
+WWAN_LEDS="WWAN1 WWAN2"
+
 # The TX64 has one LED per modem for signal strength
 # Off: No service.
 # Yellow: Poor / Fair signal.
 # Green: Good / Excellent signal.
-update_signal_led() {
-	idx=$1
-	wan=$2
+create_signal_led_args() {
+	wwan=$1
+	bars=$2
 
-	case "$(runt get mm.modem.$idx.status.bars)" in
-		5) SIGNAL="-o ${wan}_SIG_GREEN" ;;
-		4) SIGNAL="-o ${wan}_SIG_GREEN" ;;
-		3) SIGNAL="-o ${wan}_SIG_YELLOW" ;;
-		2) SIGNAL="-o ${wan}_SIG_YELLOW" ;;
-		1) SIGNAL="-o ${wan}_SIG_YELLOW" ;;
-		*) SIGNAL="-O ${wan}_SIG_YELLOW -O ${wan}_SIG_GREEN" ;;
+	case "$bars" in
+		5) SIGNAL="-o ${wwan}_SIGNAL_GREEN" ;;
+		4) SIGNAL="-o ${wwan}_SIGNAL_GREEN" ;;
+		3) SIGNAL="-o ${wwan}_SIGNAL_YELLOW" ;;
+		2) SIGNAL="-o ${wwan}_SIGNAL_YELLOW" ;;
+		1) SIGNAL="-o ${wwan}_SIGNAL_YELLOW" ;;
+		*) SIGNAL="-O ${wwan}_SIGNAL_YELLOW -O ${wwan}_SIGNAL_GREEN" ;;
 	esac
 }
 
 # TX64 service LED
-# Off: No service.
 # Blinking Green: 2G/3G/4G connection is coming up.
 # Solid Yellow: 2G or 3G connection is up.
 # Solid Green: 4G connection is up.
-update_service_led() {
-	idx=$1
-	wan=$2
+# Off: Everything else.
+create_service_led_args() {
+	wwan=$1
+	state=$2
+	tech=$3
 
-	if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
-		case "$(runt get mm.modem.$idx.status.gtech)" in
-			4g) SERVICE="-o ${wan}_SERV_GREEN" ;;
-			3g) SERVICE="-o ${wan}_SERV_YELLOW" ;;
-			2g) SERVICE="-o ${wan}_SERV_YELLOW" ;;
-			*) SERVICE="-O ${wan}_SIG_YELLOW -O WWAN${wwan_id}_SIG_GREEN" ;;
+	if [ "$state" = connected ]; then
+		case "$tech" in
+			4g) SERVICE="-o ${wwan}_SERVICE_GREEN" ;;
+			3g) SERVICE="-o ${wwan}_SERVICE_YELLOW" ;;
+			2g) SERVICE="-o ${wwan}_SERVICE_YELLOW" ;;
+			*) SERVICE="-O ${wwan}_SERVICE_YELLOW -O ${wwan}_SERVICE_GREEN" ;;
 		esac
-	elif [ "$(runt get mm.modem.$idx.status.state)" = disabled ]; then
-		SERVICE="-O ${wan}_SERV_GREEN"
+	elif [ "$state" = connecting ]; then
+		SERVICE="-f ${wwan}_SERVICE_GREEN"
 	else
-		 SERVICE="-f ${wan}_SERV_GREEN"
+		SERVICE="-O ${wwan}_SERVICE_GREEN"
 	fi
 }
 
-idxs="$(modem idxs 2>/dev/null)"
+get_modem_information() {
+	modem_name=$1
+	modem_idx="$(modem port=modem/${modem_name} idx)"
 
-for idx in $idxs; do
-	port="$(runt get mm.modem.$idx.modem.port)"
+	# Note that it can happen that although the port is present in runt,
+	# nothing else (e.g. signal) relating to the modem is.
+	if [ -n "$modem_idx" ]; then
+		state="$(runt get mm.modem.$modem_idx.status.state)"
+		if [ -n "$state" ]; then
+			STATE="$state"
+		fi
 
-	if [ -n  "$port" ]; then
-		wan_port=${port#*/}
-		wan="$(printf '%s\n' "$wan_port" | awk '{ print toupper($0) }')"
+		bars="$(runt get mm.modem.$modem_idx.status.bars)"
+		if [ -n "$bars" ]; then
+			BARS="$bars"
+		fi
 
-		update_signal_led "$idx" "$wan"
-		update_service_led "$idx" "$wan"
+		tech="$(runt get mm.modem.$modem_idx.status.gtech)"
+		if [ -n "$tech" ]; then
+			TECHNOLOGY="$tech"
+		fi
 
-		eval ledcmd $SERVICE $SIGNAL
+		return
 	fi
+}
+
+name_idx=1
+for wwan in $WWAN_LEDS; do
+	# Assign default modem states as the associated modem information may
+	# not be available.
+	STATE=disabled
+	TECHNOLOGY=""
+	BARS=0
+
+	# Adjust the values if information is available from the associated modem.
+	modem_name=$(echo ${MODEM_NAMES} | awk -v N=$name_idx '{print $N}')
+	get_modem_information "$modem_name"
+
+	create_signal_led_args "$wwan" "$BARS"
+	create_service_led_args "$wwan" "$STATE" "$TECHNOLOGY"
+
+	eval ledcmd $SERVICE $SIGNAL
+	name_idx=$(($name_idx + 1))
 done
 
 ##############################################################

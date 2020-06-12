@@ -94,6 +94,7 @@ static struct oswcrypto_meth soft_meth;
 static int soft_meth_loaded = 0;
 
 /****************************************************************************/
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
 /*
  * Convert a BIGNUM to the representation that /dev/crypto needs.
  */
@@ -196,6 +197,7 @@ bn2mp(const BIGNUM *a, MP_INT *mp)
 	return 1;
 }
 
+#endif /* (OPENSSL_VERSION_NUMBER < 0x10100000L) */
 /****************************************************************************/
 /*
  * Return a fd if /dev/crypto seems usable, 0 otherwise.
@@ -244,6 +246,8 @@ get_dev_crypto(void)
 /****************************************************************************/
 /* mod-exp routines */
 /****************************************************************************/
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
+
 /*
  * Perform the ioctl 
  */
@@ -378,6 +382,7 @@ err:
 	soft_meth.mod_exp(dst, mp_g, secret, modulus);
 }
 
+#endif /* (OPENSSL_VERSION_NUMBER < 0x10100000L) */
 /****************************************************************************/
 /* DES routines */
 /****************************************************************************/
@@ -830,6 +835,7 @@ void load_cryptodev(void)
 		return;
 	}
 
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
 	/* find out what asymmetric crypto algorithms we support */
 	if (ioctl(cryptodev_fd, CIOCASYMFEAT, &feat) != -1) {
 		if (feat & CRF_MOD_EXP) {
@@ -844,6 +850,7 @@ void load_cryptodev(void)
 			assisted++;
 		}
 	}
+#endif
 
 	/* test we can do AES */
 	memset(&ses, 0, sizeof(ses));

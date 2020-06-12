@@ -36,25 +36,19 @@ config SNAPDOG
 	help
 	  Support the SnapGear common watchdog driver.
 
-config SNAPDOG_CONNECTITMINI
-	bool "Digi/ConnectIT-Mini watchdog timer"
+config SNAPDOG_GPIO_BANK
+	int "Snapdog watchdog GPIO bank"
 	depends on SNAPDOG && SOC_IMX6UL
+	default 2
 	help
-	  Support the specific watchdog timer setup of the Digi ConnectIT-Mini
-	  board. It uses a different GPIO than all the other Digi iMX6 based
-	  boards. (We need a separate configuration selection because we need
-	  to know the hardware configuration during the kernel decompress -
-	  way before devicetree is parsed).
+	  Specify which GPIO bank contains the GPIO pin that is the watchdog.
 
-config SNAPDOG_EX12
-	bool "Digi/EX12 watchdog timer"
+config SNAPDOG_GPIO_BIT
+	int "Snapdog watchdog GPIO ping"
 	depends on SNAPDOG && SOC_IMX6UL
+	default 16
 	help
-	  Support the specific watchdog timer setup of the Digi EX12
-	  board. It uses a different GPIO than other all Digi iMX6 boards except
-	  the ConnectIT-Mini. (We need a separate configuration selection
-	  because we need to know the hardware configuration during the kernel
-	  decompress - way before devicetree is parsed).
+	  Specify which GPIO bit within a bank is the watchdog pin.
 
 config SNAPSHOW
 	bool "SnapGear Showtime support"
@@ -351,7 +345,7 @@ config RTC
 	  and set the RTC in an SMP compatible fashion.
 
 	  If you think you have a use for such a device (such as periodic data
-	  sampling), then say Y here, and read <file:Documentation/rtc.txt>
+	  sampling), then say Y here, and read <file:Documentation/admin-guide/rtc.rst>
 	  for details.
 
 	  To compile this driver as a module, choose M here: the
@@ -373,7 +367,7 @@ config JS_RTC
 	  /dev/rtc.
 
 	  If you think you have a use for such a device (such as periodic data
-	  sampling), then say Y here, and read <file:Documentation/rtc.txt>
+	  sampling), then say Y here, and read <file:Documentation/admin-guide/rtc.rst>
 	  for details.
 
 	  To compile this driver as a module, choose M here: the
@@ -442,7 +436,7 @@ config SONYPI
 	  Device which can be found in many (all ?) Sony Vaio laptops.
 
 	  If you have one of those laptops, read
-	  <file:Documentation/laptops/sonypi.txt>, and say Y or M here.
+	  <file:Documentation/admin-guide/laptops/sonypi.rst>, and say Y or M here.
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called sonypi.
@@ -521,8 +515,8 @@ config RAW_DRIVER
 	  Once bound, I/O against /dev/raw/rawN uses efficient zero-copy I/O.
 	  See the raw(8) manpage for more details.
 
-          Applications should preferably open the device (eg /dev/hda1)
-          with the O_DIRECT flag.
+	  Applications should preferably open the device (eg /dev/hda1)
+	  with the O_DIRECT flag.
 
 config MAX_RAW_DEVS
 	int "Maximum number of RAW devices to support (1-65536)"
@@ -676,3 +670,12 @@ config RANDOM_TRUST_CPU
 	has not installed a hidden back door to compromise the CPU's
 	random number generation facilities. This can also be configured
 	at boot with "random.trust_cpu=on/off".
+
+config RANDOM_TRUST_BOOTLOADER
+	bool "Trust the bootloader to initialize Linux's CRNG"
+	help
+	Some bootloaders can provide entropy to increase the kernel's initial
+	device randomness. Say Y here to assume the entropy provided by the
+	booloader is trustworthy so it will be added to the kernel's entropy
+	pool. Otherwise, say N here so it will be regarded as device input that
+	only mixes the entropy pool.

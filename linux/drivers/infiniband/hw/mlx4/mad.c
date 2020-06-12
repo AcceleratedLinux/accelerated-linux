@@ -966,7 +966,6 @@ static int iboe_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 	}
 	mutex_unlock(&dev->counters_table[port_num - 1].mutex);
 	if (stats_avail) {
-		memset(out_mad->data, 0, sizeof out_mad->data);
 		switch (counter_stats.counter_mode & 0xf) {
 		case 0:
 			edit_counter(&counter_stats,
@@ -984,38 +983,31 @@ static int iboe_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 
 int mlx4_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
 			const struct ib_wc *in_wc, const struct ib_grh *in_grh,
-			const struct ib_mad_hdr *in, size_t in_mad_size,
-			struct ib_mad_hdr *out, size_t *out_mad_size,
-			u16 *out_mad_pkey_index)
+			const struct ib_mad *in, struct ib_mad *out,
+			size_t *out_mad_size, u16 *out_mad_pkey_index)
 {
 	struct mlx4_ib_dev *dev = to_mdev(ibdev);
-	const struct ib_mad *in_mad = (const struct ib_mad *)in;
-	struct ib_mad *out_mad = (struct ib_mad *)out;
 	enum rdma_link_layer link = rdma_port_get_link_layer(ibdev, port_num);
-
-	if (WARN_ON_ONCE(in_mad_size != sizeof(*in_mad) ||
-			 *out_mad_size != sizeof(*out_mad)))
-		return IB_MAD_RESULT_FAILURE;
 
 	/* iboe_process_mad() which uses the HCA flow-counters to implement IB PMA
 	 * queries, should be called only by VFs and for that specific purpose
 	 */
 	if (link == IB_LINK_LAYER_INFINIBAND) {
 		if (mlx4_is_slave(dev->dev) &&
-		    (in_mad->mad_hdr.mgmt_class == IB_MGMT_CLASS_PERF_MGMT &&
-		     (in_mad->mad_hdr.attr_id == IB_PMA_PORT_COUNTERS ||
-		      in_mad->mad_hdr.attr_id == IB_PMA_PORT_COUNTERS_EXT ||
-		      in_mad->mad_hdr.attr_id == IB_PMA_CLASS_PORT_INFO)))
-			return iboe_process_mad(ibdev, mad_flags, port_num, in_wc,
-						in_grh, in_mad, out_mad);
+		    (in->mad_hdr.mgmt_class == IB_MGMT_CLASS_PERF_MGMT &&
+		     (in->mad_hdr.attr_id == IB_PMA_PORT_COUNTERS ||
+		      in->mad_hdr.attr_id == IB_PMA_PORT_COUNTERS_EXT ||
+		      in->mad_hdr.attr_id == IB_PMA_CLASS_PORT_INFO)))
+			return iboe_process_mad(ibdev, mad_flags, port_num,
+						in_wc, in_grh, in, out);
 
-		return ib_process_mad(ibdev, mad_flags, port_num, in_wc,
-				      in_grh, in_mad, out_mad);
+		return ib_process_mad(ibdev, mad_flags, port_num, in_wc, in_grh,
+				      in, out);
 	}
 
 	if (link == IB_LINK_LAYER_ETHERNET)
 		return iboe_process_mad(ibdev, mad_flags, port_num, in_wc,
-					in_grh, in_mad, out_mad);
+					in_grh, in, out);
 
 	return -EINVAL;
 }
@@ -1371,9 +1363,9 @@ int mlx4_ib_send_to_wire(struct mlx4_ib_dev *dev, int slave, u8 port,
 	struct ib_ah *ah;
 	struct ib_qp *send_qp = NULL;
 	unsigned wire_tx_ix = 0;
-	int ret = 0;
 	u16 wire_pkey_ix;
 	int src_qpnum;
+	int ret;
 
 	sqp_ctx = dev->sriov.sqps[port-1];
 
@@ -1393,12 +1385,20 @@ int mlx4_ib_send_to_wire(struct mlx4_ib_dev *dev, int slave, u8 port,
 
 	send_qp = sqp->qp;
 
-	/* create ah */
-	ah = mlx4_ib_create_ah_slave(sqp_ctx->pd, attr,
-				     rdma_ah_retrieve_grh(attr)->sgid_index,
-				     s_mac, vlan_id);
-	if (IS_ERR(ah))
+	ah = rdma_zalloc_drv_obj(sqp_ctx->pd->device, ib_ah);
+	if (!ah)
 		return -ENOMEM;
+
+	ah->device = sqp_ctx->pd->device;
+	ah->pd = sqp_ctx->pd;
+
+	/* create ah */
+	ret = mlx4_ib_create_ah_slave(ah, attr,
+				      rdma_ah_retrieve_grh(attr)->sgid_index,
+				      s_mac, vlan_id);
+	if (ret)
+		goto out;
+
 	spin_lock(&sqp->tx_lock);
 	if (sqp->tx_ix_head - sqp->tx_ix_tail >=
 	    (MLX4_NUM_TUNNEL_BUFS - 1))
@@ -1410,8 +1410,7 @@ int mlx4_ib_send_to_wire(struct mlx4_ib_dev *dev, int slave, u8 port,
 		goto out;
 
 	sqp_mad = (struct mlx4_mad_snd_buf *) (sqp->tx_ring[wire_tx_ix].buf.addr);
-	if (sqp->tx_ring[wire_tx_ix].ah)
-		mlx4_ib_destroy_ah(sqp->tx_ring[wire_tx_ix].ah, 0);
+	kfree(sqp->tx_ring[wire_tx_ix].ah);
 	sqp->tx_ring[wire_tx_ix].ah = ah;
 	ib_dma_sync_single_for_cpu(&dev->ib_dev,
 				   sqp->tx_ring[wire_tx_ix].buf.map,
@@ -1450,7 +1449,7 @@ int mlx4_ib_send_to_wire(struct mlx4_ib_dev *dev, int slave, u8 port,
 	spin_unlock(&sqp->tx_lock);
 	sqp->tx_ring[wire_tx_ix].ah = NULL;
 out:
-	mlx4_ib_destroy_ah(ah, 0);
+	kfree(ah);
 	return ret;
 }
 
@@ -1670,8 +1669,6 @@ tx_err:
 				    tx_buf_size, DMA_TO_DEVICE);
 		kfree(tun_qp->tx_ring[i].buf.addr);
 	}
-	kfree(tun_qp->tx_ring);
-	tun_qp->tx_ring = NULL;
 	i = MLX4_NUM_TUNNEL_BUFS;
 err:
 	while (i > 0) {
@@ -1680,6 +1677,8 @@ err:
 				    rx_buf_size, DMA_FROM_DEVICE);
 		kfree(tun_qp->ring[i].addr);
 	}
+	kfree(tun_qp->tx_ring);
+	tun_qp->tx_ring = NULL;
 	kfree(tun_qp->ring);
 	tun_qp->ring = NULL;
 	return -ENOMEM;
@@ -1902,8 +1901,8 @@ static void mlx4_ib_sqp_comp_worker(struct work_struct *work)
 		if (wc.status == IB_WC_SUCCESS) {
 			switch (wc.opcode) {
 			case IB_WC_SEND:
-				mlx4_ib_destroy_ah(sqp->tx_ring[wc.wr_id &
-					      (MLX4_NUM_TUNNEL_BUFS - 1)].ah, 0);
+				kfree(sqp->tx_ring[wc.wr_id &
+				      (MLX4_NUM_TUNNEL_BUFS - 1)].ah);
 				sqp->tx_ring[wc.wr_id & (MLX4_NUM_TUNNEL_BUFS - 1)].ah
 					= NULL;
 				spin_lock(&sqp->tx_lock);
@@ -1931,8 +1930,8 @@ static void mlx4_ib_sqp_comp_worker(struct work_struct *work)
 				 " status = %d, wrid = 0x%llx\n",
 				 ctx->slave, wc.status, wc.wr_id);
 			if (!MLX4_TUN_IS_RECV(wc.wr_id)) {
-				mlx4_ib_destroy_ah(sqp->tx_ring[wc.wr_id &
-					      (MLX4_NUM_TUNNEL_BUFS - 1)].ah, 0);
+				kfree(sqp->tx_ring[wc.wr_id &
+				      (MLX4_NUM_TUNNEL_BUFS - 1)].ah);
 				sqp->tx_ring[wc.wr_id & (MLX4_NUM_TUNNEL_BUFS - 1)].ah
 					= NULL;
 				spin_lock(&sqp->tx_lock);

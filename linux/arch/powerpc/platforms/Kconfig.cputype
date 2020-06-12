@@ -1,10 +1,18 @@
 # SPDX-License-Identifier: GPL-2.0
+config PPC32
+	bool
+	default y if !PPC64
+	select KASAN_VMALLOC if KASAN && MODULES
+
 config PPC64
 	bool "64-bit kernel"
 	select ZLIB_DEFLATE
 	help
 	  This option selects whether a 32-bit or a 64-bit kernel
 	  will be built.
+
+config PPC_BOOK3S_32
+	bool
 
 menu "Processor support"
 choice
@@ -21,10 +29,21 @@ choice
 
 	  If unsure, select 52xx/6xx/7xx/74xx/82xx/83xx/86xx.
 
-config PPC_BOOK3S_32
-	bool "512x/52xx/6xx/7xx/74xx/82xx/83xx/86xx"
+config PPC_BOOK3S_6xx
+	bool "512x/52xx/6xx/7xx/74xx/82xx/83xx/86xx except 601"
+	select PPC_BOOK3S_32
 	select PPC_FPU
 	select PPC_HAVE_PMU_SUPPORT
+	select PPC_HAVE_KUEP
+	select PPC_HAVE_KUAP
+	select HAVE_ARCH_VMAP_STACK
+
+config PPC_BOOK3S_601
+	bool "PowerPC 601"
+	select PPC_BOOK3S_32
+	select PPC_FPU
+	select PPC_HAVE_KUAP
+	select HAVE_ARCH_VMAP_STACK
 
 config PPC_85xx
 	bool "Freescale 85xx"
@@ -34,6 +53,10 @@ config PPC_8xx
 	bool "Freescale 8xx"
 	select FSL_SOC
 	select SYS_SUPPORTS_HUGETLBFS
+	select PPC_HAVE_KUEP
+	select PPC_HAVE_KUAP
+	select PPC_MM_SLICES if HUGETLB_PAGE
+	select HAVE_ARCH_VMAP_STACK
 
 config 40x
 	bool "AMCC 40x"
@@ -75,6 +98,7 @@ config PPC_BOOK3S_64
 	select ARCH_ENABLE_THP_MIGRATION if TRANSPARENT_HUGEPAGE
 	select ARCH_SUPPORTS_NUMA_BALANCING
 	select IRQ_WORK
+	select PPC_MM_SLICES
 
 config PPC_BOOK3E_64
 	bool "Embedded processors"
@@ -324,8 +348,10 @@ config ARCH_ENABLE_SPLIT_PMD_PTLOCK
 
 config PPC_RADIX_MMU
 	bool "Radix MMU Support"
-	depends on PPC_BOOK3S_64 && HUGETLB_PAGE
-	select ARCH_HAS_GIGANTIC_PAGE if (MEMORY_ISOLATION && COMPACTION) || CMA
+	depends on PPC_BOOK3S_64
+	select ARCH_HAS_GIGANTIC_PAGE
+	select PPC_HAVE_KUEP
+	select PPC_HAVE_KUAP
 	default y
 	help
 	  Enable support for the Power ISA 3.0 Radix style MMU. Currently this
@@ -345,6 +371,37 @@ config PPC_RADIX_MMU_DEFAULT
 
 	  If you're unsure, say Y.
 
+config PPC_HAVE_KUEP
+	bool
+
+config PPC_KUEP
+	bool "Kernel Userspace Execution Prevention"
+	depends on PPC_HAVE_KUEP
+	default y
+	help
+	  Enable support for Kernel Userspace Execution Prevention (KUEP)
+
+	  If you're unsure, say Y.
+
+config PPC_HAVE_KUAP
+	bool
+
+config PPC_KUAP
+	bool "Kernel Userspace Access Protection"
+	depends on PPC_HAVE_KUAP
+	default y
+	help
+	  Enable support for Kernel Userspace Access Protection (KUAP)
+
+	  If you're unsure, say Y.
+
+config PPC_KUAP_DEBUG
+	bool "Extra debugging for Kernel Userspace Access Protection"
+	depends on PPC_HAVE_KUAP && (PPC_RADIX_MMU || PPC_32)
+	help
+	  Add extra debugging for Kernel Userspace Access Protection (KUAP)
+	  If you're unsure, say N.
+
 config ARCH_ENABLE_HUGEPAGE_MIGRATION
 	def_bool y
 	depends on PPC_BOOK3S_64 && HUGETLB_PAGE && MIGRATION
@@ -354,23 +411,25 @@ config PPC_MMU_NOHASH
 	def_bool y
 	depends on !PPC_BOOK3S
 
+config PPC_MMU_NOHASH_32
+	def_bool y
+	depends on PPC_MMU_NOHASH && PPC32
+
 config PPC_BOOK3E_MMU
 	def_bool y
 	depends on FSL_BOOKE || PPC_BOOK3E
 
 config PPC_MM_SLICES
 	bool
-	default y if PPC_BOOK3S_64
-	default y if PPC_8xx && HUGETLB_PAGE
 
 config PPC_HAVE_PMU_SUPPORT
-       bool
+	bool
 
 config PPC_PERF_CTRS
-       def_bool y
-       depends on PERF_EVENTS && PPC_HAVE_PMU_SUPPORT
-       help
-         This enables the powerpc-specific perf_event back-end.
+	def_bool y
+	depends on PERF_EVENTS && PPC_HAVE_PMU_SUPPORT
+	help
+	 This enables the powerpc-specific perf_event back-end.
 
 config FORCE_SMP
 	# Allow platforms to force SMP=y by selecting this
@@ -408,9 +467,10 @@ config NOT_COHERENT_CACHE
 	bool
 	depends on 4xx || PPC_8xx || E200 || PPC_MPC512x || \
 		GAMECUBE_COMMON || AMIGAONE
-	select ARCH_HAS_DMA_COHERENT_TO_PFN
+	select ARCH_HAS_DMA_PREP_COHERENT
 	select ARCH_HAS_SYNC_DMA_FOR_DEVICE
 	select ARCH_HAS_SYNC_DMA_FOR_CPU
+	select DMA_DIRECT_REMAP
 	default n if PPC_47x
 	default y
 

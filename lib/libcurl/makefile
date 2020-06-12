@@ -30,11 +30,9 @@ CONFOPTS :=	--enable-dependency-tracking \
 		--enable-cookies \
 		--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt \
 		--with-random=/dev/urandom \
-		--with-ssl=$(ROOTDIR)/lib/libssl/build/install \
-		--with-zlib=$(ROOTDIR)/lib/zlib \
 		--with-libidn2
 
-URL := https://curl.haxx.se/download/curl-7.64.1.tar.bz2
+URL := https://curl.haxx.se/download/curl-7.69.0.tar.bz2
 ROMFS = curl_romfs
 MAKEVARS = 
 include $(ROOTDIR)/tools/automake.inc

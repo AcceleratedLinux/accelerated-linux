@@ -1,0 +1,38 @@
+From f12a687dc3d3b71d5de057f0c6ae3049c6b18532 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 21 May 2020 16:49:19 +0100
+Subject: [PATCH] user/gpsd: poll for one packet at a time
+
+Exit the device polling loop when a full packet has been received and
+parsed, allowing other devices to be serviced - and gpsd clients to
+connect - even if the device delivers a full packet at every single
+read, as does, for example, the Navilock NL-82012U external USB device.
+
+DAL-2577
+---
+ libgpsd_core.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/libgpsd_core.c b/libgpsd_core.c
+index 344b728..1298e72 100644
+--- a/libgpsd_core.c
++++ b/libgpsd_core.c
+@@ -1626,7 +1626,6 @@ int gpsd_multipoll(const bool data_ready,
+ 	    if (device->lexer.type != BAD_PACKET)
+ 		handler(device, changed);
+ 
+-#ifdef __future__
+ 	    /*
+ 	     * Bernd Ocklin suggests:
+ 	     * Exit when a full packet was received and parsed.
+@@ -1638,7 +1637,6 @@ int gpsd_multipoll(const bool data_ready,
+ 	     */
+ 	    if ((changed & PACKET_SET) != 0)
+                break;
+-#endif /* __future__ */
+ 	}
+     }
+     else if (device->reawake>0 && time(NULL) >device->reawake) {
+-- 
+2.17.1
+

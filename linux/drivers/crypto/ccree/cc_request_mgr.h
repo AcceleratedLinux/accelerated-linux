@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (C) 2012-2018 ARM Limited or its affiliates. */
+/* Copyright (C) 2012-2019 ARM Limited (or its affiliates). */
 
 /* \file cc_request_mgr.h
  * Request Manager
@@ -39,13 +39,5 @@ int send_request_init(struct cc_drvdata *drvdata, struct cc_hw_desc *desc,
 void complete_request(struct cc_drvdata *drvdata);
 
 void cc_req_mgr_fini(struct cc_drvdata *drvdata);
-
-#if defined(CONFIG_PM)
-int cc_resume_req_queue(struct cc_drvdata *drvdata);
-
-int cc_suspend_req_queue(struct cc_drvdata *drvdata);
-
-bool cc_req_queue_suspended(struct cc_drvdata *drvdata);
-#endif
 
 #endif /*__REQUEST_MGR_H__*/

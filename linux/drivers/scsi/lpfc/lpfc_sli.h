@@ -327,6 +327,10 @@ struct lpfc_sli {
 #define LPFC_SLI_ASYNC_MBX_BLK    0x2000 /* Async mailbox is blocked */
 #define LPFC_SLI_SUPPRESS_RSP     0x4000 /* Suppress RSP feature is supported */
 #define LPFC_SLI_USE_EQDR         0x8000 /* EQ Delay Register is supported */
+#define LPFC_QUEUE_FREE_INIT	  0x10000 /* Queue freeing is in progress */
+#define LPFC_QUEUE_FREE_WAIT	  0x20000 /* Hold Queue free as it is being
+					   * used outside worker thread
+					   */
 
 	struct lpfc_sli_ring *sli3_ring;
 
@@ -361,9 +365,18 @@ struct lpfc_io_buf {
 	/* Common fields */
 	struct list_head list;
 	void *data;
+
 	dma_addr_t dma_handle;
 	dma_addr_t dma_phys_sgl;
-	struct sli4_sge *dma_sgl;
+
+	struct sli4_sge *dma_sgl; /* initial segment chunk */
+
+	/* linked list of extra sli4_hybrid_sge */
+	struct list_head dma_sgl_xtra_list;
+
+	/* list head for fcp_cmd_rsp buf */
+	struct list_head dma_cmd_rsp_list;
+
 	struct lpfc_iocbq cur_iocbq;
 	struct lpfc_sli4_hdw_queue *hdwq;
 	uint16_t hdwq_no;
@@ -371,14 +384,13 @@ struct lpfc_io_buf {
 
 	struct lpfc_nodelist *ndlp;
 	uint32_t timeout;
-	uint16_t flags;  /* TBD convert exch_busy to flags */
+	uint16_t flags;
 #define LPFC_SBUF_XBUSY		0x1	/* SLI4 hba reported XB on WCQE cmpl */
 #define LPFC_SBUF_BUMP_QDEPTH	0x2	/* bumped queue depth counter */
 					/* External DIF device IO conversions */
 #define LPFC_SBUF_NORMAL_DIF	0x4	/* normal mode to insert/strip */
 #define LPFC_SBUF_PASS_DIF	0x8	/* insert/strip mode to passthru */
 #define LPFC_SBUF_NOT_POSTED    0x10    /* SGL failed post to FW. */
-	uint16_t exch_busy;     /* SLI4 hba reported XB on complete WCQE */
 	uint16_t status;	/* From IOCB Word 7- ulpStatus */
 	uint32_t result;	/* From IOCB Word 4. */
 
@@ -427,14 +439,13 @@ struct lpfc_io_buf {
 		struct {
 			struct nvmefc_fcp_req *nvmeCmd;
 			uint16_t qidx;
-
-#ifdef CONFIG_SCSI_LPFC_DEBUG_FS
-			uint64_t ts_cmd_start;
-			uint64_t ts_last_cmd;
-			uint64_t ts_cmd_wqput;
-			uint64_t ts_isr_cmpl;
-			uint64_t ts_data_nvme;
-#endif
 		};
 	};
+#ifdef CONFIG_SCSI_LPFC_DEBUG_FS
+	uint64_t ts_cmd_start;
+	uint64_t ts_last_cmd;
+	uint64_t ts_cmd_wqput;
+	uint64_t ts_isr_cmpl;
+	uint64_t ts_data_nvme;
+#endif
 };

@@ -92,7 +92,7 @@ static void orion_nand_read_buf(struct nand_chip *chip, uint8_t *buf, int len)
 static int orion_nand_ecc = NAND_ECC_SOFT;
 static int orion_nand_algo = NAND_ECC_HAMMING;
 
-#ifdef CONFIG_MTD_NAND_ECC_BCH
+#ifdef CONFIG_MTD_NAND_ECC_SW_BCH
 /*
  * If we have BCH kernel support then allow it to be selected for use
  * on orion devices. BCH offers 4 bit of ECC code, it is required on

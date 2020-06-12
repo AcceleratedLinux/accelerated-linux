@@ -1,0 +1,10 @@
+config LIB_NCURSES
+	bool "ncurses library for terminal emulation."
+	help
+	  Include the ncurses library for interaction with terminal devices.
+
+config LIB_NCURSES_MINIMAL
+	bool "Minimal terminfo files only."
+	depends on LIB_NCURSES
+	help
+	  Include only a minimal set of terminfo files (vt100 and ansi).

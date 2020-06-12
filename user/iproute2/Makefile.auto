@@ -1,0 +1,5 @@
+dir_$(CONFIG_USER_IPROUTE2) += iproute2
+
+ifdef CONFIG_USER_IPTABLES_IPTABLES
+iproute2: iptables
+endif

@@ -1,0 +1,23 @@
+From 8c6d0c8879920ae9bd767d4778db5fbf35b3a74d Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 22 Oct 2019 14:03:31 +0200
+Subject: [PATCH] Make 'prefix' overridable
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index c1fb831..09498d9 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4,7 +4,7 @@ VERSION=$(shell awk '/Version:/ { print $$2 }' $(SPECFILE))
+ TAG = $(NAME)-$(VERSION)
+ RPMBUILD=$(shell `which rpmbuild >&/dev/null` && echo "rpmbuild" || echo "rpm")
+ 
+-prefix=/usr
++prefix?=/usr
+ includedir=$(prefix)/include
+ libdir=$(prefix)/lib
+ 

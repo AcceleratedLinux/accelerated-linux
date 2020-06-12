@@ -293,11 +293,12 @@ static const struct irq_domain_ops msi_domain_ops = {
 
 static inline u32 decode_msi_hwirq(struct iproc_msi *msi, u32 eq, u32 head)
 {
-	u32 *msg, hwirq;
+	u32 __iomem *msg;
+	u32 hwirq;
 	unsigned int offs;
 
 	offs = iproc_msi_eq_offset(msi, eq) + head * sizeof(u32);
-	msg = (u32 *)(msi->eq_cpu + offs);
+	msg = (u32 __iomem *)(msi->eq_cpu + offs);
 	hwirq = readl(msg);
 	hwirq = (hwirq >> 5) + (hwirq & 0x1f);
 
@@ -367,7 +368,7 @@ static void iproc_msi_handler(struct irq_desc *desc)
 
 		/*
 		 * Now go read the tail pointer again to see if there are new
-		 * oustanding events that came in during the above window.
+		 * outstanding events that came in during the above window.
 		 */
 	} while (true);
 

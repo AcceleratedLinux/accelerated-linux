@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 /*
  *    Copyright (C) 2004 Benjamin Herrenschmidt, IBM Corp.
  *			 <benh@kernel.crashing.org>
- *
- *  This program is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU General Public License
- *  as published by the Free Software Foundation; either version
- *  2 of the License, or (at your option) any later version.
  */
 
 #include <linux/errno.h>
@@ -98,28 +94,6 @@ static struct vdso_patch_def vdso_patches[] = {
 		CPU_FTR_COHERENT_ICACHE, CPU_FTR_COHERENT_ICACHE,
 		"__kernel_sync_dicache", "__kernel_sync_dicache_p5"
 	},
-#ifdef CONFIG_PPC32
-	{
-		CPU_FTR_USE_RTC, CPU_FTR_USE_RTC,
-		"__kernel_gettimeofday", NULL
-	},
-	{
-		CPU_FTR_USE_RTC, CPU_FTR_USE_RTC,
-		"__kernel_clock_gettime", NULL
-	},
-	{
-		CPU_FTR_USE_RTC, CPU_FTR_USE_RTC,
-		"__kernel_clock_getres", NULL
-	},
-	{
-		CPU_FTR_USE_RTC, CPU_FTR_USE_RTC,
-		"__kernel_get_tbfreq", NULL
-	},
-	{
-		CPU_FTR_USE_RTC, CPU_FTR_USE_RTC,
-		"__kernel_time", NULL
-	},
-#endif
 };
 
 /*
@@ -754,11 +728,6 @@ static int __init vdso_init(void)
 	 */
 	vdso64_pages = (&vdso64_end - &vdso64_start) >> PAGE_SHIFT;
 	DBG("vdso64_kbase: %p, 0x%x pages\n", vdso64_kbase, vdso64_pages);
-#else
-	vdso_data->dcache_block_size = L1_CACHE_BYTES;
-	vdso_data->dcache_log_block_size = L1_CACHE_SHIFT;
-	vdso_data->icache_block_size = L1_CACHE_BYTES;
-	vdso_data->icache_log_block_size = L1_CACHE_SHIFT;
 #endif /* CONFIG_PPC64 */
 
 

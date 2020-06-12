@@ -40,6 +40,7 @@ romfs: romfs_dev romfs.dirs romfs.symlinks romfs.default romfs.rc romfs.version 
 	$(ROMFSINST) ../pam.init.min /etc/pam.init
 
 romfs.post:: romfs.no-ixp400-modules romfs.ixp425-microcode romfs.cleanup
+	rm -rf $(ROMFSDIR)/usr/share/terminfo
 
 image: image.configs image.dir image.arm.zimage image.squashfs7z image.bin image.size image.tag image.copy image.flash
 

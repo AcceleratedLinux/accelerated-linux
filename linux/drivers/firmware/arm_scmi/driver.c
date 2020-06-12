@@ -29,9 +29,18 @@
 
 #include "common.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/scmi.h>
+
 #define MSG_ID_MASK		GENMASK(7, 0)
+#define MSG_XTRACT_ID(hdr)	FIELD_GET(MSG_ID_MASK, (hdr))
 #define MSG_TYPE_MASK		GENMASK(9, 8)
+#define MSG_XTRACT_TYPE(hdr)	FIELD_GET(MSG_TYPE_MASK, (hdr))
+#define MSG_TYPE_COMMAND	0
+#define MSG_TYPE_DELAYED_RESP	2
+#define MSG_TYPE_NOTIFICATION	3
 #define MSG_PROTOCOL_ID_MASK	GENMASK(17, 10)
+#define MSG_XTRACT_PROT_ID(hdr)	FIELD_GET(MSG_PROTOCOL_ID_MASK, (hdr))
 #define MSG_TOKEN_ID_MASK	GENMASK(27, 18)
 #define MSG_XTRACT_TOKEN(hdr)	FIELD_GET(MSG_TOKEN_ID_MASK, (hdr))
 #define MSG_TOKEN_MAX		(MSG_XTRACT_TOKEN(MSG_TOKEN_ID_MASK) + 1)
@@ -55,6 +64,8 @@ enum scmi_error_codes {
 static LIST_HEAD(scmi_list);
 /* Protection for the entire list */
 static DEFINE_MUTEX(scmi_list_mutex);
+/* Track the unique id for the transfers for debug & profiling purpose */
+static atomic_t transfer_last_id;
 
 /**
  * struct scmi_xfers_info - Structure to manage transfer information
@@ -86,7 +97,7 @@ struct scmi_desc {
 };
 
 /**
- * struct scmi_chan_info - Structure representing a SCMI channel informfation
+ * struct scmi_chan_info - Structure representing a SCMI channel information
  *
  * @cl: Mailbox Client
  * @chan: Transmit/Receive mailbox channel
@@ -111,8 +122,9 @@ struct scmi_chan_info {
  * @handle: Instance of SCMI handle to send to clients
  * @version: SCMI revision information containing protocol version,
  *	implementation version and (sub-)vendor identification.
- * @minfo: Message info
- * @tx_idr: IDR object to map protocol id to channel info pointer
+ * @tx_minfo: Universal Transmit Message management info
+ * @tx_idr: IDR object to map protocol id to Tx channel info pointer
+ * @rx_idr: IDR object to map protocol id to Rx channel info pointer
  * @protocols_imp: List of protocols implemented, currently maximum of
  *	MAX_PROTOCOLS_IMP elements allocated by the base protocol
  * @node: List head
@@ -123,8 +135,9 @@ struct scmi_info {
 	const struct scmi_desc *desc;
 	struct scmi_revision_info version;
 	struct scmi_handle handle;
-	struct scmi_xfers_info minfo;
+	struct scmi_xfers_info tx_minfo;
 	struct idr tx_idr;
+	struct idr rx_idr;
 	u8 *protocols_imp;
 	struct list_head node;
 	int users;
@@ -182,7 +195,7 @@ static inline int scmi_to_linux_errno(int errno)
 static inline void scmi_dump_header_dbg(struct device *dev,
 					struct scmi_msg_hdr *hdr)
 {
-	dev_dbg(dev, "Command ID: %x Sequence ID: %x Protocol: %x\n",
+	dev_dbg(dev, "Message ID: %x Sequence ID: %x Protocol: %x\n",
 		hdr->id, hdr->seq, hdr->protocol_id);
 }
 
@@ -190,55 +203,11 @@ static void scmi_fetch_response(struct scmi_xfer *xfer,
 				struct scmi_shared_mem __iomem *mem)
 {
 	xfer->hdr.status = ioread32(mem->msg_payload);
-	/* Skip the length of header and statues in payload area i.e 8 bytes*/
+	/* Skip the length of header and status in payload area i.e 8 bytes */
 	xfer->rx.len = min_t(size_t, xfer->rx.len, ioread32(&mem->length) - 8);
 
 	/* Take a copy to the rx buffer.. */
 	memcpy_fromio(xfer->rx.buf, mem->msg_payload + 4, xfer->rx.len);
-}
-
-/**
- * scmi_rx_callback() - mailbox client callback for receive messages
- *
- * @cl: client pointer
- * @m: mailbox message
- *
- * Processes one received message to appropriate transfer information and
- * signals completion of the transfer.
- *
- * NOTE: This function will be invoked in IRQ context, hence should be
- * as optimal as possible.
- */
-static void scmi_rx_callback(struct mbox_client *cl, void *m)
-{
-	u16 xfer_id;
-	struct scmi_xfer *xfer;
-	struct scmi_chan_info *cinfo = client_to_scmi_chan_info(cl);
-	struct device *dev = cinfo->dev;
-	struct scmi_info *info = handle_to_scmi_info(cinfo->handle);
-	struct scmi_xfers_info *minfo = &info->minfo;
-	struct scmi_shared_mem __iomem *mem = cinfo->payload;
-
-	xfer_id = MSG_XTRACT_TOKEN(ioread32(&mem->msg_header));
-
-	/* Are we even expecting this? */
-	if (!test_bit(xfer_id, minfo->xfer_alloc_table)) {
-		dev_err(dev, "message for %d is not expected!\n", xfer_id);
-		return;
-	}
-
-	xfer = &minfo->xfer_block[xfer_id];
-
-	scmi_dump_header_dbg(dev, &xfer->hdr);
-	/* Is the message of valid length? */
-	if (xfer->rx.len > info->desc->max_msg_size) {
-		dev_err(dev, "unable to handle %zu xfer(max %d)\n",
-			xfer->rx.len, info->desc->max_msg_size);
-		return;
-	}
-
-	scmi_fetch_response(xfer, mem);
-	complete(&xfer->done);
 }
 
 /**
@@ -247,13 +216,25 @@ static void scmi_rx_callback(struct mbox_client *cl, void *m)
  * @hdr: pointer to header containing all the information on message id,
  *	protocol id and sequence id.
  *
- * Return: 32-bit packed command header to be sent to the platform.
+ * Return: 32-bit packed message header to be sent to the platform.
  */
 static inline u32 pack_scmi_header(struct scmi_msg_hdr *hdr)
 {
 	return FIELD_PREP(MSG_ID_MASK, hdr->id) |
 		FIELD_PREP(MSG_TOKEN_ID_MASK, hdr->seq) |
 		FIELD_PREP(MSG_PROTOCOL_ID_MASK, hdr->protocol_id);
+}
+
+/**
+ * unpack_scmi_header() - unpacks and records message and protocol id
+ *
+ * @msg_hdr: 32-bit packed message header sent from the platform
+ * @hdr: pointer to header to fetch message and protocol id.
+ */
+static inline void unpack_scmi_header(u32 msg_hdr, struct scmi_msg_hdr *hdr)
+{
+	hdr->id = MSG_XTRACT_ID(msg_hdr);
+	hdr->protocol_id = MSG_XTRACT_PROT_ID(msg_hdr);
 }
 
 /**
@@ -271,6 +252,14 @@ static void scmi_tx_prepare(struct mbox_client *cl, void *m)
 	struct scmi_chan_info *cinfo = client_to_scmi_chan_info(cl);
 	struct scmi_shared_mem __iomem *mem = cinfo->payload;
 
+	/*
+	 * Ideally channel must be free by now unless OS timeout last
+	 * request and platform continued to process the same, wait
+	 * until it releases the shared memory, otherwise we may endup
+	 * overwriting its response with new message payload or vice-versa
+	 */
+	spin_until_cond(ioread32(&mem->channel_status) &
+			SCMI_SHMEM_CHAN_STAT_CHANNEL_FREE);
 	/* Mark channel busy + clear error */
 	iowrite32(0x0, &mem->channel_status);
 	iowrite32(t->hdr.poll_completion ? 0 : SCMI_SHMEM_FLAG_INTR_ENABLED,
@@ -285,8 +274,9 @@ static void scmi_tx_prepare(struct mbox_client *cl, void *m)
  * scmi_xfer_get() - Allocate one message
  *
  * @handle: Pointer to SCMI entity handle
+ * @minfo: Pointer to Tx/Rx Message management info based on channel type
  *
- * Helper function which is used by various command functions that are
+ * Helper function which is used by various message functions that are
  * exposed to clients of this driver for allocating a message traffic event.
  *
  * This function can sleep depending on pending requests already in the system
@@ -295,13 +285,13 @@ static void scmi_tx_prepare(struct mbox_client *cl, void *m)
  *
  * Return: 0 if all went fine, else corresponding error.
  */
-static struct scmi_xfer *scmi_xfer_get(const struct scmi_handle *handle)
+static struct scmi_xfer *scmi_xfer_get(const struct scmi_handle *handle,
+				       struct scmi_xfers_info *minfo)
 {
 	u16 xfer_id;
 	struct scmi_xfer *xfer;
 	unsigned long flags, bit_pos;
 	struct scmi_info *info = handle_to_scmi_info(handle);
-	struct scmi_xfers_info *minfo = &info->minfo;
 
 	/* Keep the locked section as small as possible */
 	spin_lock_irqsave(&minfo->xfer_lock, flags);
@@ -319,23 +309,23 @@ static struct scmi_xfer *scmi_xfer_get(const struct scmi_handle *handle)
 	xfer = &minfo->xfer_block[xfer_id];
 	xfer->hdr.seq = xfer_id;
 	reinit_completion(&xfer->done);
+	xfer->transfer_id = atomic_inc_return(&transfer_last_id);
 
 	return xfer;
 }
 
 /**
- * scmi_xfer_put() - Release a message
+ * __scmi_xfer_put() - Release a message
  *
- * @handle: Pointer to SCMI entity handle
+ * @minfo: Pointer to Tx/Rx Message management info based on channel type
  * @xfer: message that was reserved by scmi_xfer_get
  *
  * This holds a spinlock to maintain integrity of internal data structures.
  */
-void scmi_xfer_put(const struct scmi_handle *handle, struct scmi_xfer *xfer)
+static void
+__scmi_xfer_put(struct scmi_xfers_info *minfo, struct scmi_xfer *xfer)
 {
 	unsigned long flags;
-	struct scmi_info *info = handle_to_scmi_info(handle);
-	struct scmi_xfers_info *minfo = &info->minfo;
 
 	/*
 	 * Keep the locked section as small as possible
@@ -345,6 +335,72 @@ void scmi_xfer_put(const struct scmi_handle *handle, struct scmi_xfer *xfer)
 	spin_lock_irqsave(&minfo->xfer_lock, flags);
 	clear_bit(xfer->hdr.seq, minfo->xfer_alloc_table);
 	spin_unlock_irqrestore(&minfo->xfer_lock, flags);
+}
+
+/**
+ * scmi_rx_callback() - mailbox client callback for receive messages
+ *
+ * @cl: client pointer
+ * @m: mailbox message
+ *
+ * Processes one received message to appropriate transfer information and
+ * signals completion of the transfer.
+ *
+ * NOTE: This function will be invoked in IRQ context, hence should be
+ * as optimal as possible.
+ */
+static void scmi_rx_callback(struct mbox_client *cl, void *m)
+{
+	u8 msg_type;
+	u32 msg_hdr;
+	u16 xfer_id;
+	struct scmi_xfer *xfer;
+	struct scmi_chan_info *cinfo = client_to_scmi_chan_info(cl);
+	struct device *dev = cinfo->dev;
+	struct scmi_info *info = handle_to_scmi_info(cinfo->handle);
+	struct scmi_xfers_info *minfo = &info->tx_minfo;
+	struct scmi_shared_mem __iomem *mem = cinfo->payload;
+
+	msg_hdr = ioread32(&mem->msg_header);
+	msg_type = MSG_XTRACT_TYPE(msg_hdr);
+	xfer_id = MSG_XTRACT_TOKEN(msg_hdr);
+
+	if (msg_type == MSG_TYPE_NOTIFICATION)
+		return; /* Notifications not yet supported */
+
+	/* Are we even expecting this? */
+	if (!test_bit(xfer_id, minfo->xfer_alloc_table)) {
+		dev_err(dev, "message for %d is not expected!\n", xfer_id);
+		return;
+	}
+
+	xfer = &minfo->xfer_block[xfer_id];
+
+	scmi_dump_header_dbg(dev, &xfer->hdr);
+
+	scmi_fetch_response(xfer, mem);
+
+	trace_scmi_rx_done(xfer->transfer_id, xfer->hdr.id,
+			   xfer->hdr.protocol_id, xfer->hdr.seq,
+			   msg_type);
+
+	if (msg_type == MSG_TYPE_DELAYED_RESP)
+		complete(xfer->async_done);
+	else
+		complete(&xfer->done);
+}
+
+/**
+ * scmi_xfer_put() - Release a transmit message
+ *
+ * @handle: Pointer to SCMI entity handle
+ * @xfer: message that was reserved by scmi_xfer_get
+ */
+void scmi_xfer_put(const struct scmi_handle *handle, struct scmi_xfer *xfer)
+{
+	struct scmi_info *info = handle_to_scmi_info(handle);
+
+	__scmi_xfer_put(&info->tx_minfo, xfer);
 }
 
 static bool
@@ -393,6 +449,10 @@ int scmi_do_xfer(const struct scmi_handle *handle, struct scmi_xfer *xfer)
 	if (unlikely(!cinfo))
 		return -EINVAL;
 
+	trace_scmi_xfer_begin(xfer->transfer_id, xfer->hdr.id,
+			      xfer->hdr.protocol_id, xfer->hdr.seq,
+			      xfer->hdr.poll_completion);
+
 	ret = mbox_send_message(cinfo->chan, xfer);
 	if (ret < 0) {
 		dev_dbg(dev, "mbox send fail %d\n", ret);
@@ -432,11 +492,43 @@ int scmi_do_xfer(const struct scmi_handle *handle, struct scmi_xfer *xfer)
 	 */
 	mbox_client_txdone(cinfo->chan, ret);
 
+	trace_scmi_xfer_end(xfer->transfer_id, xfer->hdr.id,
+			    xfer->hdr.protocol_id, xfer->hdr.seq,
+			    xfer->hdr.status);
+
+	return ret;
+}
+
+#define SCMI_MAX_RESPONSE_TIMEOUT	(2 * MSEC_PER_SEC)
+
+/**
+ * scmi_do_xfer_with_response() - Do one transfer and wait until the delayed
+ *	response is received
+ *
+ * @handle: Pointer to SCMI entity handle
+ * @xfer: Transfer to initiate and wait for response
+ *
+ * Return: -ETIMEDOUT in case of no delayed response, if transmit error,
+ *	return corresponding error, else if all goes well, return 0.
+ */
+int scmi_do_xfer_with_response(const struct scmi_handle *handle,
+			       struct scmi_xfer *xfer)
+{
+	int ret, timeout = msecs_to_jiffies(SCMI_MAX_RESPONSE_TIMEOUT);
+	DECLARE_COMPLETION_ONSTACK(async_response);
+
+	xfer->async_done = &async_response;
+
+	ret = scmi_do_xfer(handle, xfer);
+	if (!ret && !wait_for_completion_timeout(xfer->async_done, timeout))
+		ret = -ETIMEDOUT;
+
+	xfer->async_done = NULL;
 	return ret;
 }
 
 /**
- * scmi_xfer_get_init() - Allocate and initialise one message
+ * scmi_xfer_get_init() - Allocate and initialise one message for transmit
  *
  * @handle: Pointer to SCMI entity handle
  * @msg_id: Message identifier
@@ -457,6 +549,7 @@ int scmi_xfer_get_init(const struct scmi_handle *handle, u8 msg_id, u8 prot_id,
 	int ret;
 	struct scmi_xfer *xfer;
 	struct scmi_info *info = handle_to_scmi_info(handle);
+	struct scmi_xfers_info *minfo = &info->tx_minfo;
 	struct device *dev = info->dev;
 
 	/* Ensure we have sane transfer sizes */
@@ -464,7 +557,7 @@ int scmi_xfer_get_init(const struct scmi_handle *handle, u8 msg_id, u8 prot_id,
 	    tx_size > info->desc->max_msg_size)
 		return -ERANGE;
 
-	xfer = scmi_xfer_get(handle);
+	xfer = scmi_xfer_get(handle, minfo);
 	if (IS_ERR(xfer)) {
 		ret = PTR_ERR(xfer);
 		dev_err(dev, "failed to get free message slot(%d)\n", ret);
@@ -597,27 +690,13 @@ int scmi_handle_put(const struct scmi_handle *handle)
 	return 0;
 }
 
-static const struct scmi_desc scmi_generic_desc = {
-	.max_rx_timeout_ms = 30,	/* We may increase this if required */
-	.max_msg = 20,		/* Limited by MBOX_TX_QUEUE_LEN */
-	.max_msg_size = 128,
-};
-
-/* Each compatible listed below must have descriptor associated with it */
-static const struct of_device_id scmi_of_match[] = {
-	{ .compatible = "arm,scmi", .data = &scmi_generic_desc },
-	{ /* Sentinel */ },
-};
-
-MODULE_DEVICE_TABLE(of, scmi_of_match);
-
 static int scmi_xfer_info_init(struct scmi_info *sinfo)
 {
 	int i;
 	struct scmi_xfer *xfer;
 	struct device *dev = sinfo->dev;
 	const struct scmi_desc *desc = sinfo->desc;
-	struct scmi_xfers_info *info = &sinfo->minfo;
+	struct scmi_xfers_info *info = &sinfo->tx_minfo;
 
 	/* Pre-allocated messages, no more than what hdr.seq can support */
 	if (WARN_ON(desc->max_msg >= MSG_TOKEN_MAX)) {
@@ -652,11 +731,228 @@ static int scmi_xfer_info_init(struct scmi_info *sinfo)
 	return 0;
 }
 
-static int scmi_mailbox_check(struct device_node *np)
+static int scmi_mailbox_check(struct device_node *np, int idx)
 {
-	struct of_phandle_args arg;
+	return of_parse_phandle_with_args(np, "mboxes", "#mbox-cells",
+					  idx, NULL);
+}
 
-	return of_parse_phandle_with_args(np, "mboxes", "#mbox-cells", 0, &arg);
+static int scmi_mbox_chan_setup(struct scmi_info *info, struct device *dev,
+				int prot_id, bool tx)
+{
+	int ret, idx;
+	struct resource res;
+	resource_size_t size;
+	struct device_node *shmem, *np = dev->of_node;
+	struct scmi_chan_info *cinfo;
+	struct mbox_client *cl;
+	struct idr *idr;
+	const char *desc = tx ? "Tx" : "Rx";
+
+	/* Transmit channel is first entry i.e. index 0 */
+	idx = tx ? 0 : 1;
+	idr = tx ? &info->tx_idr : &info->rx_idr;
+
+	/* check if already allocated, used for multiple device per protocol */
+	cinfo = idr_find(idr, prot_id);
+	if (cinfo)
+		return 0;
+
+	if (scmi_mailbox_check(np, idx)) {
+		cinfo = idr_find(idr, SCMI_PROTOCOL_BASE);
+		if (unlikely(!cinfo)) /* Possible only if platform has no Rx */
+			return -EINVAL;
+		goto idr_alloc;
+	}
+
+	cinfo = devm_kzalloc(info->dev, sizeof(*cinfo), GFP_KERNEL);
+	if (!cinfo)
+		return -ENOMEM;
+
+	cinfo->dev = dev;
+
+	cl = &cinfo->cl;
+	cl->dev = dev;
+	cl->rx_callback = scmi_rx_callback;
+	cl->tx_prepare = tx ? scmi_tx_prepare : NULL;
+	cl->tx_block = false;
+	cl->knows_txdone = tx;
+
+	shmem = of_parse_phandle(np, "shmem", idx);
+	ret = of_address_to_resource(shmem, 0, &res);
+	of_node_put(shmem);
+	if (ret) {
+		dev_err(dev, "failed to get SCMI %s payload memory\n", desc);
+		return ret;
+	}
+
+	size = resource_size(&res);
+	cinfo->payload = devm_ioremap(info->dev, res.start, size);
+	if (!cinfo->payload) {
+		dev_err(dev, "failed to ioremap SCMI %s payload\n", desc);
+		return -EADDRNOTAVAIL;
+	}
+
+	cinfo->chan = mbox_request_channel(cl, idx);
+	if (IS_ERR(cinfo->chan)) {
+		ret = PTR_ERR(cinfo->chan);
+		if (ret != -EPROBE_DEFER)
+			dev_err(dev, "failed to request SCMI %s mailbox\n",
+				desc);
+		return ret;
+	}
+
+idr_alloc:
+	ret = idr_alloc(idr, cinfo, prot_id, prot_id + 1, GFP_KERNEL);
+	if (ret != prot_id) {
+		dev_err(dev, "unable to allocate SCMI idr slot err %d\n", ret);
+		return ret;
+	}
+
+	cinfo->handle = &info->handle;
+	return 0;
+}
+
+static inline int
+scmi_mbox_txrx_setup(struct scmi_info *info, struct device *dev, int prot_id)
+{
+	int ret = scmi_mbox_chan_setup(info, dev, prot_id, true);
+
+	if (!ret) /* Rx is optional, hence no error check */
+		scmi_mbox_chan_setup(info, dev, prot_id, false);
+
+	return ret;
+}
+
+static inline void
+scmi_create_protocol_device(struct device_node *np, struct scmi_info *info,
+			    int prot_id, const char *name)
+{
+	struct scmi_device *sdev;
+
+	sdev = scmi_device_create(np, info->dev, prot_id, name);
+	if (!sdev) {
+		dev_err(info->dev, "failed to create %d protocol device\n",
+			prot_id);
+		return;
+	}
+
+	if (scmi_mbox_txrx_setup(info, &sdev->dev, prot_id)) {
+		dev_err(&sdev->dev, "failed to setup transport\n");
+		scmi_device_destroy(sdev);
+		return;
+	}
+
+	/* setup handle now as the transport is ready */
+	scmi_set_handle(sdev);
+}
+
+#define MAX_SCMI_DEV_PER_PROTOCOL	2
+struct scmi_prot_devnames {
+	int protocol_id;
+	char *names[MAX_SCMI_DEV_PER_PROTOCOL];
+};
+
+static struct scmi_prot_devnames devnames[] = {
+	{ SCMI_PROTOCOL_POWER,  { "genpd" },},
+	{ SCMI_PROTOCOL_PERF,   { "cpufreq" },},
+	{ SCMI_PROTOCOL_CLOCK,  { "clocks" },},
+	{ SCMI_PROTOCOL_SENSOR, { "hwmon" },},
+	{ SCMI_PROTOCOL_RESET,  { "reset" },},
+};
+
+static inline void
+scmi_create_protocol_devices(struct device_node *np, struct scmi_info *info,
+			     int prot_id)
+{
+	int loop, cnt;
+
+	for (loop = 0; loop < ARRAY_SIZE(devnames); loop++) {
+		if (devnames[loop].protocol_id != prot_id)
+			continue;
+
+		for (cnt = 0; cnt < ARRAY_SIZE(devnames[loop].names); cnt++) {
+			const char *name = devnames[loop].names[cnt];
+
+			if (name)
+				scmi_create_protocol_device(np, info, prot_id,
+							    name);
+		}
+	}
+}
+
+static int scmi_probe(struct platform_device *pdev)
+{
+	int ret;
+	struct scmi_handle *handle;
+	const struct scmi_desc *desc;
+	struct scmi_info *info;
+	struct device *dev = &pdev->dev;
+	struct device_node *child, *np = dev->of_node;
+
+	/* Only mailbox method supported, check for the presence of one */
+	if (scmi_mailbox_check(np, 0)) {
+		dev_err(dev, "no mailbox found in %pOF\n", np);
+		return -EINVAL;
+	}
+
+	desc = of_device_get_match_data(dev);
+	if (!desc)
+		return -EINVAL;
+
+	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+
+	info->dev = dev;
+	info->desc = desc;
+	INIT_LIST_HEAD(&info->node);
+
+	ret = scmi_xfer_info_init(info);
+	if (ret)
+		return ret;
+
+	platform_set_drvdata(pdev, info);
+	idr_init(&info->tx_idr);
+	idr_init(&info->rx_idr);
+
+	handle = &info->handle;
+	handle->dev = info->dev;
+	handle->version = &info->version;
+
+	ret = scmi_mbox_txrx_setup(info, dev, SCMI_PROTOCOL_BASE);
+	if (ret)
+		return ret;
+
+	ret = scmi_base_protocol_init(handle);
+	if (ret) {
+		dev_err(dev, "unable to communicate with SCMI(%d)\n", ret);
+		return ret;
+	}
+
+	mutex_lock(&scmi_list_mutex);
+	list_add_tail(&info->node, &scmi_list);
+	mutex_unlock(&scmi_list_mutex);
+
+	for_each_available_child_of_node(np, child) {
+		u32 prot_id;
+
+		if (of_property_read_u32(child, "reg", &prot_id))
+			continue;
+
+		if (!FIELD_FIT(MSG_PROTOCOL_ID_MASK, prot_id))
+			dev_err(dev, "Out of range protocol %d\n", prot_id);
+
+		if (!scmi_is_protocol_implemented(handle, prot_id)) {
+			dev_err(dev, "SCMI protocol %d not implemented\n",
+				prot_id);
+			continue;
+		}
+
+		scmi_create_protocol_devices(child, info, prot_id);
+	}
+
+	return 0;
 }
 
 static int scmi_mbox_free_channel(int id, void *p, void *data)
@@ -694,170 +990,78 @@ static int scmi_remove(struct platform_device *pdev)
 	ret = idr_for_each(idr, scmi_mbox_free_channel, idr);
 	idr_destroy(&info->tx_idr);
 
+	idr = &info->rx_idr;
+	ret = idr_for_each(idr, scmi_mbox_free_channel, idr);
+	idr_destroy(&info->rx_idr);
+
 	return ret;
 }
 
-static inline int
-scmi_mbox_chan_setup(struct scmi_info *info, struct device *dev, int prot_id)
+static ssize_t protocol_version_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
 {
-	int ret;
-	struct resource res;
-	resource_size_t size;
-	struct device_node *shmem, *np = dev->of_node;
-	struct scmi_chan_info *cinfo;
-	struct mbox_client *cl;
+	struct scmi_info *info = dev_get_drvdata(dev);
 
-	if (scmi_mailbox_check(np)) {
-		cinfo = idr_find(&info->tx_idr, SCMI_PROTOCOL_BASE);
-		goto idr_alloc;
-	}
-
-	cinfo = devm_kzalloc(info->dev, sizeof(*cinfo), GFP_KERNEL);
-	if (!cinfo)
-		return -ENOMEM;
-
-	cinfo->dev = dev;
-
-	cl = &cinfo->cl;
-	cl->dev = dev;
-	cl->rx_callback = scmi_rx_callback;
-	cl->tx_prepare = scmi_tx_prepare;
-	cl->tx_block = false;
-	cl->knows_txdone = true;
-
-	shmem = of_parse_phandle(np, "shmem", 0);
-	ret = of_address_to_resource(shmem, 0, &res);
-	of_node_put(shmem);
-	if (ret) {
-		dev_err(dev, "failed to get SCMI Tx payload mem resource\n");
-		return ret;
-	}
-
-	size = resource_size(&res);
-	cinfo->payload = devm_ioremap(info->dev, res.start, size);
-	if (!cinfo->payload) {
-		dev_err(dev, "failed to ioremap SCMI Tx payload\n");
-		return -EADDRNOTAVAIL;
-	}
-
-	/* Transmit channel is first entry i.e. index 0 */
-	cinfo->chan = mbox_request_channel(cl, 0);
-	if (IS_ERR(cinfo->chan)) {
-		ret = PTR_ERR(cinfo->chan);
-		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "failed to request SCMI Tx mailbox\n");
-		return ret;
-	}
-
-idr_alloc:
-	ret = idr_alloc(&info->tx_idr, cinfo, prot_id, prot_id + 1, GFP_KERNEL);
-	if (ret != prot_id) {
-		dev_err(dev, "unable to allocate SCMI idr slot err %d\n", ret);
-		return ret;
-	}
-
-	cinfo->handle = &info->handle;
-	return 0;
+	return sprintf(buf, "%u.%u\n", info->version.major_ver,
+		       info->version.minor_ver);
 }
+static DEVICE_ATTR_RO(protocol_version);
 
-static inline void
-scmi_create_protocol_device(struct device_node *np, struct scmi_info *info,
-			    int prot_id)
+static ssize_t firmware_version_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
 {
-	struct scmi_device *sdev;
+	struct scmi_info *info = dev_get_drvdata(dev);
 
-	sdev = scmi_device_create(np, info->dev, prot_id);
-	if (!sdev) {
-		dev_err(info->dev, "failed to create %d protocol device\n",
-			prot_id);
-		return;
-	}
-
-	if (scmi_mbox_chan_setup(info, &sdev->dev, prot_id)) {
-		dev_err(&sdev->dev, "failed to setup transport\n");
-		scmi_device_destroy(sdev);
-		return;
-	}
-
-	/* setup handle now as the transport is ready */
-	scmi_set_handle(sdev);
+	return sprintf(buf, "0x%x\n", info->version.impl_ver);
 }
+static DEVICE_ATTR_RO(firmware_version);
 
-static int scmi_probe(struct platform_device *pdev)
+static ssize_t vendor_id_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
 {
-	int ret;
-	struct scmi_handle *handle;
-	const struct scmi_desc *desc;
-	struct scmi_info *info;
-	struct device *dev = &pdev->dev;
-	struct device_node *child, *np = dev->of_node;
+	struct scmi_info *info = dev_get_drvdata(dev);
 
-	/* Only mailbox method supported, check for the presence of one */
-	if (scmi_mailbox_check(np)) {
-		dev_err(dev, "no mailbox found in %pOF\n", np);
-		return -EINVAL;
-	}
-
-	desc = of_match_device(scmi_of_match, dev)->data;
-
-	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
-	if (!info)
-		return -ENOMEM;
-
-	info->dev = dev;
-	info->desc = desc;
-	INIT_LIST_HEAD(&info->node);
-
-	ret = scmi_xfer_info_init(info);
-	if (ret)
-		return ret;
-
-	platform_set_drvdata(pdev, info);
-	idr_init(&info->tx_idr);
-
-	handle = &info->handle;
-	handle->dev = info->dev;
-	handle->version = &info->version;
-
-	ret = scmi_mbox_chan_setup(info, dev, SCMI_PROTOCOL_BASE);
-	if (ret)
-		return ret;
-
-	ret = scmi_base_protocol_init(handle);
-	if (ret) {
-		dev_err(dev, "unable to communicate with SCMI(%d)\n", ret);
-		return ret;
-	}
-
-	mutex_lock(&scmi_list_mutex);
-	list_add_tail(&info->node, &scmi_list);
-	mutex_unlock(&scmi_list_mutex);
-
-	for_each_available_child_of_node(np, child) {
-		u32 prot_id;
-
-		if (of_property_read_u32(child, "reg", &prot_id))
-			continue;
-
-		if (!FIELD_FIT(MSG_PROTOCOL_ID_MASK, prot_id))
-			dev_err(dev, "Out of range protocol %d\n", prot_id);
-
-		if (!scmi_is_protocol_implemented(handle, prot_id)) {
-			dev_err(dev, "SCMI protocol %d not implemented\n",
-				prot_id);
-			continue;
-		}
-
-		scmi_create_protocol_device(child, info, prot_id);
-	}
-
-	return 0;
+	return sprintf(buf, "%s\n", info->version.vendor_id);
 }
+static DEVICE_ATTR_RO(vendor_id);
+
+static ssize_t sub_vendor_id_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct scmi_info *info = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%s\n", info->version.sub_vendor_id);
+}
+static DEVICE_ATTR_RO(sub_vendor_id);
+
+static struct attribute *versions_attrs[] = {
+	&dev_attr_firmware_version.attr,
+	&dev_attr_protocol_version.attr,
+	&dev_attr_vendor_id.attr,
+	&dev_attr_sub_vendor_id.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(versions);
+
+static const struct scmi_desc scmi_generic_desc = {
+	.max_rx_timeout_ms = 30,	/* We may increase this if required */
+	.max_msg = 20,		/* Limited by MBOX_TX_QUEUE_LEN */
+	.max_msg_size = 128,
+};
+
+/* Each compatible listed below must have descriptor associated with it */
+static const struct of_device_id scmi_of_match[] = {
+	{ .compatible = "arm,scmi", .data = &scmi_generic_desc },
+	{ /* Sentinel */ },
+};
+
+MODULE_DEVICE_TABLE(of, scmi_of_match);
 
 static struct platform_driver scmi_driver = {
 	.driver = {
 		   .name = "arm-scmi",
 		   .of_match_table = scmi_of_match,
+		   .dev_groups = versions_groups,
 		   },
 	.probe = scmi_probe,
 	.remove = scmi_remove,

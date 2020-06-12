@@ -1,6 +1,3 @@
-
-CFLAGS +=  -D_GLIBCXX_USE_CXX11_ABI=1
-
 AA_VERSION = 2.13
 AA_DIR     = apparmor-$(AA_VERSION)
 
@@ -12,9 +9,7 @@ ifdef CONFIG_DEFAULTS_LIBC_UCLIBC
 AALIB     += -lintl
 endif
 AALIB     += -lm
-ifeq ($(CONFIG_MIPS),)
 AALIB     += -lgcc_s
-endif
 
 CFLAGS += -D_GLIBCXX_HAVE_MBSTATE_T
 CFLAGS += -DNEED_REALLOCARRAY=1
@@ -26,7 +21,7 @@ MAKEVARS= USE_SYSTEM=1
 
 ifndef CONFIG_USER_APPARMOR_FULL_INSTALL
 AUTOMAKE_ROMFS      = my_romfs
-INSTALLDIR          = build/full-install
+INSTALLDIR          = build/$(AA_DIR)-install
 MAKEVARS            += DESTDIR=$(CURDIR)/$(INSTALLDIR)
 endif
 

@@ -9,12 +9,12 @@
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 2 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
@@ -43,6 +43,7 @@ static enum {
 	MODE_COMPILE,
 	MODE_LINK,
 	MODE_LINK_SHARED,
+	MODE_LINK_PIE,
 	MODE_DEPEND,
 } mode = MODE_LINK;
 
@@ -128,7 +129,7 @@ static void invoke_original_compiler(void)
 		}
 		args_add_prefix(orig_args, p);
 	}
-	
+
 	if (ucfront_debug) {
 		cc_log("Bypass: ");
 		log_args(orig_args);
@@ -140,7 +141,7 @@ static void invoke_original_compiler(void)
 	exit(1);
 }
 
-/* find the real compiler. We just search the PATH to find a executable of the 
+/* find the real compiler. We just search the PATH to find a executable of the
    same name that isn't a link to ourselves */
 static void find_compiler(int argc, char **argv)
 {
@@ -206,7 +207,7 @@ static char *find_gcc_file(const char *path, const char *filename)
 	if (pid == -1) {
 		fatal("Failed to fork");
 	}
-	
+
 	if (pid == 0) {
 		char *arg;
 
@@ -282,7 +283,7 @@ static void parse_map_dirs(const char *mapping)
 
 /**
  * 'lib' is something like -labc
- * 
+ *
  */
 static void add_shared_lib(ARGS *args, const char *lib)
 {
@@ -343,7 +344,7 @@ const char *find_on_path(const char *prog, const char *path)
 
 		x_asprintf(&fullpath, "%s/%s", pt, prog);
 
-		if (stat(fullpath, &st) == 0 && ((uid == 0 && (st.st_mode & (S_IXUSR|S_IXGRP|S_IXOTH))) || 
+		if (stat(fullpath, &st) == 0 && ((uid == 0 && (st.st_mode & (S_IXUSR|S_IXGRP|S_IXOTH))) ||
 					    (uid == st.st_uid && (st.st_mode & S_IXUSR)) ||
 					    (gid == st.st_gid && (st.st_mode & S_IXGRP)) ||
 					    (st.st_mode & S_IXOTH))) {
@@ -466,7 +467,7 @@ static void find_lib_env(void)
 		}
 	}
 	else {
-		fatal("Could not determine libc. Are $CONFIG_DEFAULTS_LIBC_... and $CONFIG_LIBCDIR set correctly?"); 
+		fatal("Could not determine libc. Are $CONFIG_DEFAULTS_LIBC_... and $CONFIG_LIBCDIR set correctly?");
 	}
 }
 
@@ -485,7 +486,7 @@ static void process_args(int argc, char **argv)
 	static const char *opts[] = {
 				  "-iprefix", "-imacros",
 				  "-iwithprefix", "-iwithprefixbefore",
-				  "-D", "-U", "-x", "-MF", 
+				  "-D", "-U", "-x", "-MF",
 				  "-MT", "-MQ", "-aux-info",
 				  "--param", "-A", "-Xlinker", "-u",
 				  "-x",
@@ -524,6 +525,13 @@ static void process_args(int argc, char **argv)
 		if (strcmp(argv[i], "-shared") == 0) {
 			args_add(stripped_args, argv[i]);
 			mode = MODE_LINK_SHARED;
+			continue;
+		}
+
+		/* -pie is shared linking */
+		if (strcmp(argv[i], "-pie") == 0) {
+			args_add(stripped_args, argv[i]);
+			mode = MODE_LINK_PIE;
 			continue;
 		}
 
@@ -634,7 +642,7 @@ static void process_args(int argc, char **argv)
 				if (i == argc-1) {
 					fatal("missing argument to %s\n", argv[i]);
 				}
-					
+
 				args_add(stripped_args, argv[i]);
 				args_add(stripped_args, argv[i+1]);
 				i++;
@@ -682,7 +690,7 @@ static void process_args(int argc, char **argv)
 			args_add(stripped_args, argv[i]);
 			continue;
 		}
-			
+
 		/* other options */
 		if (argv[i][0] == '-') {
 			args_add(stripped_args, argv[i]);
@@ -694,7 +702,7 @@ static void process_args(int argc, char **argv)
 		   cope better with unusual compiler options */
 		if (stat(argv[i], &st) != 0 || !S_ISREG(st.st_mode)) {
 			args_add(stripped_args, argv[i]);
-			continue;			
+			continue;
 		}
 
 		/* Not an option, so this as an input file */
@@ -742,6 +750,10 @@ static void process_args(int argc, char **argv)
 				args_add_prefix(stripped_args, startfile);
 				if (mode == MODE_LINK) {
 					x_asprintf(&startfile, "%s/crt1.o", libc_libdir);
+					args_add_prefix(stripped_args, startfile);
+				}
+				if (mode == MODE_LINK_PIE) {
+					x_asprintf(&startfile, "%s/Scrt1.o", libc_libdir);
 					args_add_prefix(stripped_args, startfile);
 				}
 			}
@@ -910,10 +922,10 @@ static void process_args(int argc, char **argv)
 		args_add_prefix(stripped_args, p);
 	}
 
-	/* Hack by JW to allow forcing specific args right at the 
+	/* Hack by JW to allow forcing specific args right at the
 	   end of the stripped arg list.  This works around cruftiness
 	   in mb-gcc-2.95.x, however it may be useful somewhere else */
-	if((e=getenv("UCFRONT_LINK_SUFFIX")) && (mode==MODE_LINK) ) 
+	if((e=getenv("UCFRONT_LINK_SUFFIX")) && (mode==MODE_LINK) )
 	{
 		/* Break up potentially multiple words into substrings */
 		char *p1;
@@ -932,6 +944,231 @@ static void process_args(int argc, char **argv)
 		free(e2);
 	}
 }
+
+
+static void analyze_code_clang(void)
+{
+	int lang = 0;
+	int i, status;
+	pid_t pid;
+	struct CLANGLIST {
+		char *clang, *clangpp;
+	} clangx[] = {
+		{ getenv("UCFRONT_CLANG"), getenv("UCFRONT_CLANGPP") },
+		{ "clang-8",               "clang++-8"               },
+		{ "clang-7",               "clang++-7"               },
+		{ "clang-6",               "clang++-6"               },
+		{ "clang-3.9",             "clang++-3.9"             },
+		{ "clang",                 "clang++"                 }
+	};
+	int clang_max = sizeof(clangx) / sizeof(clangx[0]);
+	char *clang = NULL;
+	char *outdir, *pt, *cwd;
+	ARGS *clang_args;
+
+	/* we only handle compiles */
+	if (mode != MODE_COMPILE)
+		return;
+
+	for (i = 0; i < clang_max; i++) {
+		char *cp = cplusplus ? clangx[i].clangpp : clangx[i].clang;
+		if (cp == NULL)
+			continue;
+		clang = find_executable(cp, "");
+		if (clang)
+			break;
+	}
+	if (clang == NULL)
+		fatal("Failed to find clang executable");
+
+	cwd = getcwd(NULL, 0);
+	if (strncmp(cwd, rootdir, strlen(rootdir)) == 0)
+		x_asprintf(&outdir, "%s/clang/%s", stagedir, cwd + strlen(rootdir));
+	else
+		x_asprintf(&outdir, "%s/clang/%s", stagedir, cwd);
+	free(cwd);
+
+	/* create our clang args */
+	clang_args = args_init(0, NULL);
+
+	args_add(clang_args, clang);
+
+	args_add(clang_args, "-cc1");
+
+	args_add(clang_args, "-analyze");
+
+	if (ucfront_debug)
+		args_add_prefix(clang_args, "-v");
+
+	/* analyzer options */
+	args_add(clang_args, "-analyzer-opt-analyze-headers");
+	args_add(clang_args, "-analyzer-output=html");
+	args_add(clang_args, "-analyzer-config");
+	args_add(clang_args, "stable-report-filename=true");
+
+	args_add(clang_args, "-disable-free");
+	args_add(clang_args, "-disable-llvm-verifier");
+	args_add(clang_args, "-discard-value-names");
+	//args_add(clang_args, "-main-file-name");
+	//args_add(clang_args, "accns_schema.c");
+	args_add(clang_args, "-analyzer-opt-analyze-nested-blocks");
+	//args_add(clang_args, "-analyzer-eagerly-assume");
+	args_add(clang_args, "-analyzer-store=region");
+	args_add(clang_args, "-analyzer-checker=core");
+	args_add(clang_args, "-analyzer-checker=unix");
+	args_add(clang_args, "-analyzer-checker=deadcode");
+	args_add(clang_args, "-analyzer-checker=security.insecureAPI.UncheckedReturn");
+	args_add(clang_args, "-analyzer-checker=security.insecureAPI.getpw");
+	args_add(clang_args, "-analyzer-checker=security.insecureAPI.gets");
+	args_add(clang_args, "-analyzer-checker=security.insecureAPI.mktemp");
+	args_add(clang_args, "-analyzer-checker=security.insecureAPI.mkstemp");
+	args_add(clang_args, "-analyzer-checker=security.insecureAPI.vfork");
+	args_add(clang_args, "-analyzer-checker=nullability.NullPassedToNonnull");
+	args_add(clang_args, "-analyzer-checker=nullability.NullReturnedFromNonnull");
+
+	/* machine type,  sbsoluetly needed for mips  */
+	x_asprintf(&pt, "%s-unknown-linux-gnu", getenv("ARCH"));
+	args_add(clang_args, "-triple");
+	args_add(clang_args, pt);
+	free(pt);
+
+	/* unknown args */
+	args_add(clang_args, "-mthread-model");
+	args_add(clang_args, "posix");
+	args_add(clang_args, "-fmath-errno");
+	args_add(clang_args, "-fobjc-runtime=gcc");
+
+	/* add extra args */
+	pt = getenv("UCFRONT_CLANG_ARGS");
+	if (pt)
+		args_add_with_spaces(clang_args, pt);
+
+	/* skip compile, add compiler args, remove some and rename others */
+	for (i = 1; i < stripped_args->argc; i++) {
+		char *ap = stripped_args->argv[i];
+
+		if (strcmp(ap, "-x") == 0)
+			lang = 1;
+
+		if (strcmp(ap, "-E") == 0)
+			goto done; /* preprocessing,  no analyze required */
+
+		if (strcmp(ap, "-nostdinc") == 0) {
+			args_add(clang_args, "-nostdsysteminc");
+			args_add(clang_args, "-nobuiltininc");
+			continue;
+		}
+
+		if (strcmp(ap, "-g") == 0) {
+			args_add(clang_args, "-debugger-tuning=gdb");
+			continue;
+		}
+
+
+		if (strcmp(ap, "-fomit-frame-pointer") == 0
+			|| strcmp(ap, "-fno-stack-protector") == 0
+			|| strcmp(ap, "-pipe") == 0
+			|| strcmp(ap, "-fPIC") == 0
+			|| strcmp(ap, "-MMD") == 0
+			|| strcmp(ap, "-EB") == 0
+			|| strcmp(ap, "-EL") == 0
+			|| strcmp(ap, "-MD") == 0
+			|| strcmp(ap, "-c") == 0
+			|| strcmp(ap, "-fno-strict-aliasing") == 0
+			) {
+			continue;
+		}
+
+		args_add(clang_args, ap);
+	}
+
+	if (!lang) {
+		args_add(clang_args, "-x");
+		args_add(clang_args, cplusplus ? "c++" : "c");
+	}
+
+	/* output dir last */
+	args_add(clang_args, "-o");
+	args_add(clang_args, outdir);
+
+	if (ucfront_debug) {
+		cc_log("Analyze: ");
+		log_args(clang_args);
+	}
+
+	pid = fork();
+	if (pid == -1)
+		fatal("Failed to fork");
+
+	if (pid == 0) {
+		close(0); /* just in case we read things we should not */
+		exit(execvp(clang, clang_args->argv));
+	}
+
+	if (waitpid(pid, &status, 0) != pid)
+		fatal("clang waitpid failed: %d", errno);
+
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		fatal("clang exit status failure: %d",
+			WEXITSTATUS(status));
+
+done:
+	args_free(clang_args);
+	free(outdir);
+}
+
+
+static void analyze_code(const char *analyzer)
+{
+	char *dirp = getenv("UCFRONT_ANALYZE_PATH");
+
+	/* only run on limited directories, absolute or ROOTDIR relative */
+	if (dirp) {
+		ARGS *dirs = args_init(0, NULL);
+		char *ep = strdup(dirp);
+		char *pp, *cwd;
+		int i, match = 0;
+
+		pp = strtok(ep, ": \t\n");
+		while (pp) {
+			if (*pp == '/') {
+				args_add(dirs, pp);
+			} else {
+				char *p = (char *) malloc(strlen(rootdir) + strlen(pp) + 2);
+				strcpy(p, rootdir);
+				while (p[strlen(p) - 1] == '/')
+					p[strlen(p) - 1] = '\0';
+				sprintf(&p[strlen(p)], "/%s", pp);
+				args_add(dirs, p);
+				free(p);
+			}
+			pp = strtok(NULL, ": \t\n");
+		}
+		free(ep);
+
+		cwd = getcwd(NULL, 0);
+
+		for (i = 0; i < dirs->argc; i++) {
+			if (strncmp(dirs->argv[i], cwd, strlen(dirs->argv[i])) == 0) {
+				match = 1;
+				break;
+			}
+		}
+		free(cwd);
+		args_free(dirs);
+
+		/* directory not found,  no scan for you */
+		if (!match)
+			return;
+	}
+
+	if (strcmp(analyzer, "clang") == 0)
+		analyze_code_clang();
+
+	if (strcmp(analyzer, "coverity") == 0)
+		/* analyze_code_coverity()*/ ;
+}
+
 
 /* the main ucfront driver function */
 static void ucfront(int argc, char *argv[])
@@ -958,7 +1195,7 @@ static void ucfront(int argc, char *argv[])
 
 	/* load remapped directories */
 	parse_map_dirs(getenv("UCFRONT_MAPDIRS"));
-	
+
 	/* process argument list, returning a new set of arguments for pre-processing */
 	process_args(orig_args->argc, orig_args->argv);
 
@@ -969,6 +1206,10 @@ static void ucfront(int argc, char *argv[])
 		/* Don't log this to stderr since it can confuse configure */
 		/*print_args(stderr, stripped_args);*/
 	}
+
+	pt = getenv("UCFRONT_ANALYZER");
+	if (pt)
+		analyze_code(pt);
 
 	/* Now execute the actual command */
 	execv(stripped_args->argv[0], stripped_args->argv);
@@ -983,7 +1224,7 @@ static void usage(void)
 {
 	printf("ucfront, a uClinux compiler front end. Version %s\n", UCFRONT_VERSION);
 	printf("Copyright Steve Bennett, 2005\n\n");
-	
+
 	printf("Usage:\n");
 	printf("\tucfront [options]\n");
 	printf("\tucfront<anything> compiler [compile options]\n");
@@ -1011,7 +1252,7 @@ static int ucfront_main(int argc, char *argv[])
 		case 'h':
 			usage();
 			exit(0);
-			
+
 		default:
 			usage();
 			exit(1);

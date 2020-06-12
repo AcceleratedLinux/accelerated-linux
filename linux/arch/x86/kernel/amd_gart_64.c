@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Dynamic DMA mapping support for AMD Hammer.
  *
@@ -8,7 +9,6 @@
  * See Documentation/DMA-API-HOWTO.txt for the interface specification.
  *
  * Copyright 2002 Andi Kleen, SuSE Labs.
- * Subject to the GNU General Public License v2 only.
  */
 
 #include <linux/types.h>
@@ -185,13 +185,13 @@ static void iommu_full(struct device *dev, size_t size, int dir)
 static inline int
 need_iommu(struct device *dev, unsigned long addr, size_t size)
 {
-	return force_iommu || !dma_capable(dev, addr, size);
+	return force_iommu || !dma_capable(dev, addr, size, true);
 }
 
 static inline int
 nonforced_iommu(struct device *dev, unsigned long addr, size_t size)
 {
-	return !dma_capable(dev, addr, size);
+	return !dma_capable(dev, addr, size, true);
 }
 
 /* Map a single continuous physical area into the IOMMU.
@@ -232,9 +232,6 @@ static dma_addr_t gart_map_page(struct device *dev, struct page *page,
 {
 	unsigned long bus;
 	phys_addr_t paddr = page_to_phys(page) + offset;
-
-	if (!dev)
-		dev = &x86_dma_fallback_dev;
 
 	if (!need_iommu(dev, paddr, size))
 		return paddr;
@@ -392,9 +389,6 @@ static int gart_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	if (nents == 0)
 		return 0;
 
-	if (!dev)
-		dev = &x86_dma_fallback_dev;
-
 	out		= 0;
 	start		= 0;
 	start_sg	= sg;
@@ -516,10 +510,9 @@ static __init unsigned long check_iommu_size(unsigned long aper, u64 aper_size)
 	iommu_size -= round_up(a, PMD_PAGE_SIZE) - a;
 
 	if (iommu_size < 64*1024*1024) {
-		pr_warning(
-			"PCI-DMA: Warning: Small IOMMU %luMB."
+		pr_warn("PCI-DMA: Warning: Small IOMMU %luMB."
 			" Consider increasing the AGP aperture in BIOS\n",
-				iommu_size >> 20);
+			iommu_size >> 20);
 	}
 
 	return iommu_size;
@@ -671,8 +664,7 @@ static __init int init_amd_gatt(struct agp_kern_info *info)
 
  nommu:
 	/* Should not happen anymore */
-	pr_warning("PCI-DMA: More than 4GB of RAM and no IOMMU\n"
-	       "falling back to iommu=soft.\n");
+	pr_warn("PCI-DMA: More than 4GB of RAM and no IOMMU - falling back to iommu=soft.\n");
 	return -1;
 }
 
@@ -683,7 +675,10 @@ static const struct dma_map_ops gart_dma_ops = {
 	.unmap_page			= gart_unmap_page,
 	.alloc				= gart_alloc_coherent,
 	.free				= gart_free_coherent,
+	.mmap				= dma_common_mmap,
+	.get_sgtable			= dma_common_get_sgtable,
 	.dma_supported			= dma_direct_supported,
+	.get_required_mask		= dma_direct_get_required_mask,
 };
 
 static void gart_iommu_shutdown(void)
@@ -736,8 +731,8 @@ int __init gart_iommu_init(void)
 	    !gart_iommu_aperture ||
 	    (no_agp && init_amd_gatt(&info) < 0)) {
 		if (max_pfn > MAX_DMA32_PFN) {
-			pr_warning("More than 4GB of memory but GART IOMMU not available.\n");
-			pr_warning("falling back to iommu=soft.\n");
+			pr_warn("More than 4GB of memory but GART IOMMU not available.\n");
+			pr_warn("falling back to iommu=soft.\n");
 		}
 		return 0;
 	}

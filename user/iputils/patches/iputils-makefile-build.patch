@@ -1,0 +1,76 @@
+diff -Naur iputils.org/git-version.h iputils/git-version.h
+--- iputils.org/git-version.h	1970-01-01 10:00:00.000000000 +1000
++++ iputils/git-version.h	2020-03-13 14:48:32.046417288 +1000
+@@ -0,0 +1,1 @@
++#define IPUTILS_VERSION(_prog) "%s from %s %s\n", _prog, PACKAGE_NAME, PACKAGE_VERSION
+diff -Naur iputils.org/Makefile iputils/Makefile
+--- iputils.org/Makefile	2020-01-07 14:47:42.000000000 +1000
++++ iputils/Makefile	2020-03-13 14:53:45.822007393 +1000
+@@ -1,14 +1,53 @@
+-all:
+-	ninja -C builddir
+-
+-clean:
+-	ninja -C builddir clean
+-
+-install:
+-	DESTDIR=$(DESTDIR) ninja -C builddir install
+-
+-dist:
+-	ninja -C builddir dist
+-
+-check:
+-	ninja -C builddir test
++#
++# A simple Makefile to avoid the meson/ninja build system.
++#
++
++TARGETS_y =
++TARGETS_$(BUILD_ARPING) += arping
++TARGETS_$(BUILD_CLOCKDIFF) += clockdiff
++TARGETS_$(BUILD_PING) += ping
++TARGETS_$(BUILD_RARPD) += rarpd
++TARGETS_$(BUILD_RDISC) += rdisc
++TARGETS_$(BUILD_TFTPD) += tftpd
++TARGETS_$(BUILD_TRACEPATH) += tracepath
++TARGETS_$(BUILD_TRACEROUTE6) += traceroute6
++
++CFLAGS += -D_GNU_SOURCE
++CFLAGS += -include git-version.h -DPACKAGE_NAME=\"iputils\"
++LDLIBS += -lresolv
++
++ifdef HAVE_OPENSSL
++CFLAGS += -DUSE_OPENSSL $(shell pkg-config --cflags libcrypto)
++LDLIBS += $(shell pkg-config --libs libcrypto)
++else
++CFLAGS += -DPING6_NONCE_MEMORY
++endif
++ifdef HAVE_LIBCAP
++CFLAGS += -DHAVE_LIBCAP $(shell pkg-config --cflags libcap)
++LDLIBS += $(shell pkg-config --libs libcap)
++endif
++ifdef HAVE_LIBIDN
++CFLAGS += -DUSE_IDN $(shell pkg-config --cflags libidn2)
++LDLIBS += $(shell pkg-config --libs libidn2)
++endif
++
++all: $(TARGETS_y)
++
++install:
++	mkdir -p $(INSTALLDIR)/bin
++	cp $(TARGETS_y) $(INSTALLDIR)/bin
++
++clean:
++	rm -f *.o *.d $(TARGETS_y) $(TARGETS_)
++
++arping: arping.o iputils_common.o
++clockdiff: clockdiff.o iputils_common.o
++ping: ping.o ping_common.o ping6_common.o iputils_common.o
++traceroute6: traceroute6.o iputils_common.o
++tftpd: tftpd.o tftpsubs.o iputils_common.o
++tracepath: tracepath.o iputils_common.o
++rarpd: rarpd.o iputils_common.o
++rdisc: rdisc.o iputils_common.o
++
++CFLAGS += -MMD -MP
++-include $(OBJS:%.o=%.d)

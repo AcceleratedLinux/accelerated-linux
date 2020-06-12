@@ -1830,8 +1830,7 @@ static int pfe_eth_send_packet(struct sk_buff *skb, struct net_device *ndev)
  *
  */
 static u16 pfe_eth_select_queue(struct net_device *ndev, struct sk_buff *skb,
-				struct net_device *sb_dev,
-				select_queue_fallback_t fallback)
+				struct net_device *sb_dev)
 {
 	struct pfe_eth_priv_s *priv = netdev_priv(ndev);
 
@@ -2433,7 +2432,10 @@ phy_init:
 		}
 	}
 
-	if (priv->einfo->mii_config == PHY_INTERFACE_MODE_RGMII) {
+	if ((priv->einfo->mii_config == PHY_INTERFACE_MODE_RGMII) ||
+	    (priv->einfo->mii_config == PHY_INTERFACE_MODE_RGMII_ID) ||
+	    (priv->einfo->mii_config == PHY_INTERFACE_MODE_RGMII_RXID) ||
+	    (priv->einfo->mii_config == PHY_INTERFACE_MODE_RGMII_TXID)) {
 		u32 rgmii_pcr;
 		regmap_read(pfe->scfg, RGMIIPCR, &rgmii_pcr);
 		rgmii_pcr  &= ~(0xFF);

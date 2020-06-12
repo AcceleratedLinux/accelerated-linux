@@ -1,0 +1,78 @@
+config USER_IPROUTE2
+	bool "iproute2"
+
+if USER_IPROUTE2
+
+config USER_IPROUTE2_IP_IP
+	bool "ip"
+	help
+	  The core app for iproute2.
+
+config USER_IPROUTE2_IP_IFCFG
+	bool "ifcfg"
+	depends on USER_IPROUTE2_IP_IP
+	help
+		Simplistic script which replaces ifconfig IP management.
+		This script requires advanced shell scripts.
+
+config USER_IPROUTE2_IP_ROUTEF
+	bool "routef"
+	depends on USER_IPROUTE2_IP_IP
+	help
+		Flush routes.
+
+config USER_IPROUTE2_IP_ROUTEL
+	bool "routel"
+	depends on USER_IPROUTE2_IP_IP
+	help
+		List routes with pretty output format.
+
+config USER_IPROUTE2_IP_RTACCT
+	bool "rtacct"
+	help
+		Network statistics tool.
+
+config USER_IPROUTE2_IP_RTMON
+	bool "rtmon"
+	help
+		Listens to and monitors RTnetlink.
+
+config USER_IPROUTE2_IP_GENL
+	bool "genl"
+	help
+		Generic network utility frontend.
+
+config USER_IPROUTE2_IP_RTPR
+	bool "rtpr"
+	help
+		Replace backslashes with newlinews.
+		A trivial shell script which converts backslashes in standard input
+		to newlines. It's sole purpose is to be fed with input from ip when
+		executed with it's --oneline flag.
+
+config USER_IPROUTE2_BRIDGE
+	bool "bridge"
+	help
+		Show/manipulate bridge addresses and devices.
+
+config USER_IPROUTE2_DEVLINK
+	bool "devlink"
+	help
+		Devlink tool
+
+config USER_IPROUTE2_LNSTAT
+	bool "lnstat/rtstat/ctstat"
+	help
+		Network statistics tools.
+
+config USER_IPROUTE2_SS_SS
+	bool "ss"
+	help
+		Utility to investigate sockets.
+
+config USER_IPROUTE2_TC_TC
+	bool "tc"
+	help
+		Show/manipulate traffic control settings.
+
+endif

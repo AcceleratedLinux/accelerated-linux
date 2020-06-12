@@ -1,18 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- *
+ * Copyright (c) 2003-2018, Intel Corporation. All rights reserved.
  * Intel Management Engine Interface (Intel MEI) Linux driver
- * Copyright (c) 2003-2018, Intel Corporation.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
  */
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kernel.h>
@@ -36,6 +27,12 @@
 
 #include "mei_dev.h"
 #include "client.h"
+
+static struct class *mei_class;
+static dev_t mei_devt;
+#define MEI_MAX_DEVS  MINORMASK
+static DEFINE_MUTEX(mei_minor_lock);
+static DEFINE_IDR(mei_idr);
 
 /**
  * mei_open - the open function
@@ -536,24 +533,6 @@ out:
 }
 
 /**
- * mei_compat_ioctl - the compat IOCTL function
- *
- * @file: pointer to file structure
- * @cmd: ioctl command
- * @data: pointer to mei message structure
- *
- * Return: 0 on success , <0 on error
- */
-#ifdef CONFIG_COMPAT
-static long mei_compat_ioctl(struct file *file,
-			unsigned int cmd, unsigned long data)
-{
-	return mei_ioctl(file, cmd, (unsigned long)compat_ptr(data));
-}
-#endif
-
-
-/**
  * mei_poll - the poll function
  *
  * @file: pointer to file structure
@@ -704,6 +683,29 @@ static int mei_fasync(int fd, struct file *file, int band)
 }
 
 /**
+ * trc_show - mei device trc attribute show method
+ *
+ * @device: device pointer
+ * @attr: attribute pointer
+ * @buf:  char out buffer
+ *
+ * Return: number of the bytes printed into buf or error
+ */
+static ssize_t trc_show(struct device *device,
+			struct device_attribute *attr, char *buf)
+{
+	struct mei_device *dev = dev_get_drvdata(device);
+	u32 trc;
+	int ret;
+
+	ret = mei_trc_status(dev, &trc);
+	if (ret)
+		return ret;
+	return sprintf(buf, "%08X\n", trc);
+}
+static DEVICE_ATTR_RO(trc);
+
+/**
  * fw_status_show - mei device fw_status attribute show method
  *
  * @device: device pointer
@@ -838,12 +840,59 @@ static ssize_t fw_ver_show(struct device *device,
 }
 static DEVICE_ATTR_RO(fw_ver);
 
+/**
+ * dev_state_show - display device state
+ *
+ * @device: device pointer
+ * @attr: attribute pointer
+ * @buf:  char out buffer
+ *
+ * Return: number of the bytes printed into buf or error
+ */
+static ssize_t dev_state_show(struct device *device,
+			      struct device_attribute *attr, char *buf)
+{
+	struct mei_device *dev = dev_get_drvdata(device);
+	enum mei_dev_state dev_state;
+
+	mutex_lock(&dev->device_lock);
+	dev_state = dev->dev_state;
+	mutex_unlock(&dev->device_lock);
+
+	return sprintf(buf, "%s", mei_dev_state_str(dev_state));
+}
+static DEVICE_ATTR_RO(dev_state);
+
+/**
+ * dev_set_devstate: set to new device state and notify sysfs file.
+ *
+ * @dev: mei_device
+ * @state: new device state
+ */
+void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state)
+{
+	struct device *clsdev;
+
+	if (dev->dev_state == state)
+		return;
+
+	dev->dev_state = state;
+
+	clsdev = class_find_device_by_devt(mei_class, dev->cdev.dev);
+	if (clsdev) {
+		sysfs_notify(&clsdev->kobj, NULL, "dev_state");
+		put_device(clsdev);
+	}
+}
+
 static struct attribute *mei_attrs[] = {
 	&dev_attr_fw_status.attr,
 	&dev_attr_hbm_ver.attr,
 	&dev_attr_hbm_ver_drv.attr,
 	&dev_attr_tx_queue_limit.attr,
 	&dev_attr_fw_ver.attr,
+	&dev_attr_dev_state.attr,
+	&dev_attr_trc.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(mei);
@@ -855,9 +904,7 @@ static const struct file_operations mei_fops = {
 	.owner = THIS_MODULE,
 	.read = mei_read,
 	.unlocked_ioctl = mei_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = mei_compat_ioctl,
-#endif
+	.compat_ioctl = compat_ptr_ioctl,
 	.open = mei_open,
 	.release = mei_release,
 	.write = mei_write,
@@ -866,12 +913,6 @@ static const struct file_operations mei_fops = {
 	.fasync = mei_fasync,
 	.llseek = no_llseek
 };
-
-static struct class *mei_class;
-static dev_t mei_devt;
-#define MEI_MAX_DEVS  MINORMASK
-static DEFINE_MUTEX(mei_minor_lock);
-static DEFINE_IDR(mei_idr);
 
 /**
  * mei_minor_get - obtain next free device minor number
@@ -940,16 +981,10 @@ int mei_register(struct mei_device *dev, struct device *parent)
 		goto err_dev_create;
 	}
 
-	ret = mei_dbgfs_register(dev, dev_name(clsdev));
-	if (ret) {
-		dev_err(clsdev, "cannot register debugfs ret = %d\n", ret);
-		goto err_dev_dbgfs;
-	}
+	mei_dbgfs_register(dev, dev_name(clsdev));
 
 	return 0;
 
-err_dev_dbgfs:
-	device_destroy(mei_class, devno);
 err_dev_create:
 	cdev_del(&dev->cdev);
 err_dev_add:

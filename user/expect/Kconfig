@@ -1,0 +1,5 @@
+config USER_EXPECT_EXPECT
+	bool "expect"
+	select USER_TCL_LIBTCL
+
+

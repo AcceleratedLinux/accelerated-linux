@@ -22,12 +22,17 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <linux/pci.h>
-#include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/export.h>
+#include <linux/pci.h>
+#include <linux/slab.h>
+
+#include <drm/drm.h>
+#include <drm/drm_agpsupport.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_pci.h>
-#include <drm/drmP.h>
+#include <drm/drm_print.h>
+
 #include "drm_internal.h"
 #include "drm_legacy.h"
 
@@ -119,8 +124,6 @@ void drm_pci_free(struct drm_device * dev, drm_dma_handle_t * dmah)
 }
 
 EXPORT_SYMBOL(drm_pci_free);
-
-#ifdef CONFIG_PCI
 
 static int drm_get_pci_domain(struct drm_device *dev)
 {
@@ -279,6 +282,8 @@ err_free:
 }
 EXPORT_SYMBOL(drm_get_pci_dev);
 
+#ifdef CONFIG_DRM_LEGACY
+
 /**
  * drm_legacy_pci_init - shadow-attach a legacy DRM PCI driver
  * @driver: DRM device driver
@@ -326,17 +331,6 @@ int drm_legacy_pci_init(struct drm_driver *driver, struct pci_driver *pdriver)
 }
 EXPORT_SYMBOL(drm_legacy_pci_init);
 
-#else
-
-void drm_pci_agp_destroy(struct drm_device *dev) {}
-
-int drm_irq_by_busid(struct drm_device *dev, void *data,
-		     struct drm_file *file_priv)
-{
-	return -EINVAL;
-}
-#endif
-
 /**
  * drm_legacy_pci_exit - unregister shadow-attach legacy DRM driver
  * @driver: DRM device driver
@@ -362,3 +356,5 @@ void drm_legacy_pci_exit(struct drm_driver *driver, struct pci_driver *pdriver)
 	DRM_INFO("Module unloaded\n");
 }
 EXPORT_SYMBOL(drm_legacy_pci_exit);
+
+#endif

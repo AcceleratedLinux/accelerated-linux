@@ -1,0 +1,13 @@
+diff --git a/mDNSCore/DNSCommon.c b/mDNSCore/DNSCommon.c
+index a249b96..1b9b666 100644
+--- a/mDNSCore/DNSCommon.c
++++ b/mDNSCore/DNSCommon.c
+@@ -1166,7 +1166,7 @@ mDNSexport const mDNSu8 *NSEC3HashName(c
+     AlgContext *ctx;
+     unsigned int i;
+     unsigned int iterations;
+-    domainname lname;
++    static domainname lname;
+     mDNSu8 *p = (mDNSu8 *)&nsec3->salt;
+     const mDNSu8 *digest;
+     int digestlen;
