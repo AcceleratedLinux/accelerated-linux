@@ -61,7 +61,18 @@ int usb_choose_configuration(struct usb_device *udev)
 	struct usb_host_config *c, *best;
 
 	if (usb_device_is_owned(udev))
+	{
+#ifdef CONFIG_USB_AWUSB_DEFAULT_CLAIM_PORT
+		/* If we are claiming all ports, then no configuration
+		 * should be set at discovery, the client driving
+		 * the device should set the configuration it wants.
+		 * Return -1 so caller does not set any configuration now.
+		 */
+		return -1;
+#else
 		return 0;
+#endif
+	}
 
 	best = NULL;
 	c = udev->config;
@@ -214,7 +225,38 @@ int usb_choose_configuration(struct usb_device *udev)
 }
 EXPORT_SYMBOL_GPL(usb_choose_configuration);
 
-static int generic_probe(struct usb_device *udev)
+static int __check_usb_generic(struct device_driver *drv, void *data)
+{
+	struct usb_device *udev = data;
+	struct usb_device_driver *udrv;
+
+	if (!is_usb_device_driver(drv))
+		return 0;
+	udrv = to_usb_device_driver(drv);
+	if (udrv == &usb_generic_driver)
+		return 0;
+	if (!udrv->id_table)
+		return 0;
+
+	return usb_device_match_id(udev, udrv->id_table) != NULL;
+}
+
+static bool usb_generic_driver_match(struct usb_device *udev)
+{
+	if (udev->use_generic_driver)
+		return true;
+
+	/*
+	 * If any other driver wants the device, leave the device to this other
+	 * driver.
+	 */
+	if (bus_for_each_drv(&usb_bus_type, NULL, udev, __check_usb_generic))
+		return false;
+
+	return true;
+}
+
+int usb_generic_driver_probe(struct usb_device *udev)
 {
 	int err, c;
 
@@ -241,7 +283,7 @@ static int generic_probe(struct usb_device *udev)
 	return 0;
 }
 
-static void generic_disconnect(struct usb_device *udev)
+void usb_generic_driver_disconnect(struct usb_device *udev)
 {
 	usb_notify_remove_device(udev);
 
@@ -253,7 +295,7 @@ static void generic_disconnect(struct usb_device *udev)
 
 #ifdef	CONFIG_PM
 
-static int generic_suspend(struct usb_device *udev, pm_message_t msg)
+int usb_generic_driver_suspend(struct usb_device *udev, pm_message_t msg)
 {
 	int rc;
 
@@ -281,7 +323,7 @@ static int generic_suspend(struct usb_device *udev, pm_message_t msg)
 	return rc;
 }
 
-static int generic_resume(struct usb_device *udev, pm_message_t msg)
+int usb_generic_driver_resume(struct usb_device *udev, pm_message_t msg)
 {
 	int rc;
 
@@ -304,11 +346,12 @@ static int generic_resume(struct usb_device *udev, pm_message_t msg)
 
 struct usb_device_driver usb_generic_driver = {
 	.name =	"usb",
-	.probe = generic_probe,
-	.disconnect = generic_disconnect,
+	.match = usb_generic_driver_match,
+	.probe = usb_generic_driver_probe,
+	.disconnect = usb_generic_driver_disconnect,
 #ifdef	CONFIG_PM
-	.suspend = generic_suspend,
-	.resume = generic_resume,
+	.suspend = usb_generic_driver_suspend,
+	.resume = usb_generic_driver_resume,
 #endif
 	.supports_autosuspend = 1,
 };

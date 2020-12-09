@@ -27,7 +27,7 @@ CONFOPTS := --prefix=
 CONFOPTS += --target=$(MUSLARCH)
 
 complete_target:
-	rm -f install
+	rm -rf install
 	ln -sf build/$(MUSL)-install install
 
 LDSOGCC := $(shell $(CC) $(LIBGCC_CFLAGS) -v -Wl,-verbose 2>&1 | sed -n 's/.*-dynamic-linker *\([^ ]*\) .*$$/\1/p')

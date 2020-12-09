@@ -21,8 +21,14 @@
 #include "util.h"
 
 #define SQUASHFS_SIZE_OFFSET 	0x28
+
+#define UIMAGE_HDR_MAGIC_OFFSET	0x00
+#define UIMAGE_HDR_MAGIC	0x27051956
 #define UIMAGE_HDR_SIZE_OFFSET	0x0C
 #define UIMAGE_HDR_SIZE		0x40
+
+#define FDT_HDR_MAGIC		0xd00dfeed
+#define FDT_HDR_SIZE_OFFSET	0x04
 
 #define SHA256_BLOCKSIZE	1024
 
@@ -36,6 +42,10 @@
     defined(CONFIG_DEFAULTS_DIGI_IX15) || \
     defined(CONFIG_DEFAULTS_DIGI_IX20)
 #define DEVKEY_GPIO "/sys/class/gpio/gpio86/value"
+#endif
+
+#if defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ)
+#define DEVKEY_GPIO "/sys/class/gpio/gpio425/value"
 #endif
 
 #if defined(CONFIG_DEFAULTS_DIGI_IX14)
@@ -56,7 +66,7 @@
 static uint32_t get_blobsize()
 {
 	uint32_t squashfs_size;
-	uint32_t uimage_size;
+	uint32_t uimage_magic, uimage_size;
 
 	/* Read and round SquashFS size */
 	if (fb_seek_set(SQUASHFS_SIZE_OFFSET))
@@ -68,14 +78,28 @@ static uint32_t get_blobsize()
 	squashfs_size = (squashfs_size + 0xfff) & 0xfffff000;
 
 #ifndef CONFIG_USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL
-	/* Read uImage size */
-	if (fb_seek_set(squashfs_size + UIMAGE_HDR_SIZE_OFFSET))
+	/* Read uImage magic number */
+	if (fb_seek_set(squashfs_size + UIMAGE_HDR_MAGIC_OFFSET))
+		return 0;
+	if (fb_read(&uimage_magic, sizeof(uimage_magic)) != sizeof(uimage_magic))
 		return 0;
 
-	if (fb_read(&uimage_size, sizeof(uimage_size)) != sizeof(uimage_size))
-		return 0;
-
-	uimage_size = htonl(uimage_size) + UIMAGE_HDR_SIZE;
+	uimage_magic = ntohl(uimage_magic);
+	if (uimage_magic == 0xd00dfeed) {
+		/* FDT uImage format, read size */
+		if (fb_seek_set(squashfs_size + FDT_HDR_SIZE_OFFSET))
+			return 0;
+		if (fb_read(&uimage_size, sizeof(uimage_size)) != sizeof(uimage_size))
+			return 0;
+		uimage_size = htonl(uimage_size);
+	} else {
+		/* Legacy uImage format, read size */
+		if (fb_seek_set(squashfs_size + UIMAGE_HDR_SIZE_OFFSET))
+			return 0;
+		if (fb_read(&uimage_size, sizeof(uimage_size)) != sizeof(uimage_size))
+			return 0;
+		uimage_size = htonl(uimage_size) + UIMAGE_HDR_SIZE;
+	}
 #else
 	uimage_size = 0;
 #endif
@@ -245,7 +269,8 @@ static int is_development_key_allowed()
       defined(CONFIG_DEFAULTS_DIGI_EX12) || \
       defined(CONFIG_DEFAULTS_DIGI_IX10) || \
       defined(CONFIG_DEFAULTS_DIGI_IX15) || \
-      defined(CONFIG_DEFAULTS_DIGI_IX20)
+      defined(CONFIG_DEFAULTS_DIGI_IX20) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ)
 
 static int is_development_key_allowed() {
 	int fd = open(DEVKEY_GPIO, O_RDONLY);

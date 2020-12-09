@@ -16,15 +16,15 @@ ifeq ($(BUILD_TYPE),candidate)
 PRODUCTION_BUILD=1
 endif
 
+FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/production/awusb/firmware_ca.pem
+DEV_FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/devkeys/awusb/firmware_ca.pem
 ifneq ($(PRODUCTION_BUILD),1)
 $(info Developer Build $(BUILD_TYPE))
-FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/devkeys/awusb/firmware_ca.pem
 SIGN_IMAGE_SCRIPT = $(ROOTDIR)/prop/sign_image/sign_image.py
 SIGNER_CERT_PEM = $(ROOTDIR)/prop/sign_image/devkeys/awusb/development.pem
 SIGNER_OPTS =
 else
 $(info PRODUCTION BUILD)
-FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/production/awusb/firmware_ca.pem
 SIGN_IMAGE_SCRIPT = $(ROOTDIR)/prop/sign_image/sign_awusb.py
 SIGNER_CERT_PEM = $(ROOTDIR)/prop/sign_image/production/awusb/signer_cert.pem
 SIGNER_OPTS = -p
@@ -52,6 +52,7 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
 	$(ROMFSINST) /etc/fw_env.config
 	[ ! -d $(ROOTDIR)/prop ] || $(ROMFSINST) -p 400 $(FIRMWARE_CA_PEM) /etc/ssl/firmware/firmware_ca.pem
+	[ ! -d $(ROOTDIR)/prop ] || $(ROMFSINST) -p 400 $(DEV_FIRMWARE_CA_PEM) /etc/ssl/firmware/dev_firmware_ca.pem
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf

@@ -23,6 +23,7 @@ RELFILES = $(IMAGEDIR)/VM.tar.gz \
            $(IMAGEDIR)/rci_descriptors.tar.gz \
            $(IMAGEDIR)/rootfs \
            $(IMAGEDIR)/vmlinuz \
+	   prop/config/schema/accns.schema \
 	   prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################

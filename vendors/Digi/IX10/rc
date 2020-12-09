@@ -24,10 +24,10 @@ echo 6 > /proc/sys/kernel/printk
 /etc/rc.dev
 
 echo "Initializing network interfaces..."
-ip link set eth0 name eth1
+ip link set eth0 name eth
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
-setmac -i eth1 -u -n 1
+setmac -i eth -u -n 1
 
 echo "Initializing CELL interface control..."
 # GPIO66 = Cell Module Reset (output, active low)

@@ -468,7 +468,7 @@ int program_flash_open(const char *rdev)
 					break;
 		}
 #endif
-#if defined(CONFIG_IDE) || defined(CONFIG_SCSI)
+#if defined(CONFIG_IDE) || defined(CONFIG_SCSI) || defined(CONFIG_MMC)
 		if ((major(stat_rdev.st_rdev) == IDE0_MAJOR) ||
 		    (major(stat_rdev.st_rdev) == IDE1_MAJOR) ||
 		    (major(stat_rdev.st_rdev) == IDE2_MAJOR) ||
@@ -476,7 +476,8 @@ int program_flash_open(const char *rdev)
 		    (major(stat_rdev.st_rdev) == SCSI_DISK0_MAJOR) ||
 		    (major(stat_rdev.st_rdev) == SCSI_DISK1_MAJOR) ||
 		    (major(stat_rdev.st_rdev) == SCSI_DISK2_MAJOR) ||
-		    (major(stat_rdev.st_rdev) == SCSI_DISK3_MAJOR)) {
+		    (major(stat_rdev.st_rdev) == SCSI_DISK3_MAJOR) ||
+		    (major(stat_rdev.st_rdev) == MMC_BLOCK_MAJOR)) {
 			long size;
 
 			program_segment = program_generic_segment;

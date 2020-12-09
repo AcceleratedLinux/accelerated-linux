@@ -1193,7 +1193,6 @@ groups['hardware_imx6'] = dict(
         CRYPTO_GCM='y',
         XZ_DEC_ARM='y',
         XZ_DEC_ARMTHUMB='y',
-        HW_RANDOM_IMX_RNGC='y',
         MFD_SYSCON='y',
         SRAM='y',
         WATCHDOG='y',
@@ -1401,6 +1400,55 @@ groups['hardware_layerscape_1046'] = dict(
         FSL_XGMAC_MDIO='y',
         FSL_DPAA='y',
         FSL_DPAA_ETH='y',
+        ),
+    )
+
+groups['hardware_connectez'] = dict(
+    include = [
+        'hardware_layerscape_1012',
+        ],
+    linux = dict(
+        SERIAL_8250_PCI='y',
+        SERIAL_8250_NR_UARTS=8,
+        SERIAL_8250_RUNTIME_UARTS=8,
+        SERIAL_8250_EXAR='y',
+        SERIAL_8250_EXTENDED='y',
+        HW_RANDOM_SHA204='y',
+        ),
+    user = dict(
+        PROP_SECUREBOOT='y',
+        PROP_SECUREBOOT_PROGRAM_ECC508='y',
+        PROP_SECUREBOOT_TOOLS='y',
+        USER_NETFLASH_AUTODECOMPRESS='y',
+        USER_NETFLASH_CRYPTO_V3='y',
+        USER_NETFLASH_DUAL_IMAGES='y',
+        USER_NETFLASH_ATECC508A='y',
+        USER_NETFLASH_ATECC508A_PRODUCTION_KEY_SLOT=15,
+        USER_NETFLASH_ATECC508A_DEVELOPMENT_KEY_SLOT=9,
+        USER_NETFLASH_ATECC508A_KERNEL_DRIVER='y',
+        USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL='n',
+        USER_NETFLASH_MINIMUM_VERSION='20.5.0',
+        USER_MMC_UTILS='y',
+        ),
+    )
+
+groups['hardware_connectez1'] = dict(
+    include = [
+        'hardware_connectez',
+        ],
+    user = dict(
+        BOOT_UBOOT_FREESCALE_QORIQ='y',
+        BOOT_UBOOT_FREESCALE_QORIQ_TARGET='cez1012mini_qspi',
+        ),
+    )
+
+groups['hardware_connectez4'] = dict(
+    include = [
+        'hardware_connectez',
+        ],
+    user = dict(
+        BOOT_UBOOT_FREESCALE_QORIQ='y',
+        BOOT_UBOOT_FREESCALE_QORIQ_TARGET='cez1012_qspi',
         ),
     )
 
@@ -1649,6 +1697,7 @@ groups['linux_kvm'] = dict(
         KVM='y',
         KVM_INTEL='y',
         KVM_AMD='y',
+        VHOST_MENU='y',
         VHOST_NET='y',
         VIRT_DRIVERS='y',
         VIRTIO_MENU='y',
@@ -1827,6 +1876,7 @@ groups['hardware_bluetooth'] = dict(
         BT_DEBUGFS='y',
         BT_HCIUART='y',
         BT_HCIUART_H4='y',
+        DEBUG_FS='y',
         )
     )
 
@@ -1963,6 +2013,20 @@ groups['hardware_power'] = dict(
         PROP_POWER='y',
     )
 )
+
+groups['hardware_accelerometer'] = dict(
+    linux = dict (
+        IIO='y',
+        IIO_BUFFER='y',
+        IIO_KFIFO_BUF='y',
+        IIO_TRIGGERED_BUFFER='y',
+        IIO_TRIGGER='y',
+        IIO_CONSUMERS_PER_TRIGGER='2',
+        IIO_ST_ACCEL_3AXIS='y',
+        IIO_ST_LIS2HH12='y',
+        IIO_ST_LIS2HH12_I2C='y',
+        )
+    )
 
 groups['wireless_ixx4'] = dict(
     include = [
@@ -2450,6 +2514,8 @@ groups['hardware_ix15'] = dict(
         'hardware_ix',
         'hardware_cellular_quectel',
         'hardware_bluetooth',
+        'hardware_imx6_mmc',
+        'hardware_accelerometer',
         'linux_rtc',
         'linux_rtc_imx',
         ],
@@ -3034,7 +3100,6 @@ groups['hardware_mt7621'] = dict(
         SERIAL_8250_NR_UARTS='3',
         SERIAL_8250_RUNTIME_UARTS='3',
         SERIAL_OF_PLATFORM='y',
-        EARLY_PRINTK='y',
         RTC_DRV_CMOS='y',
         RESET_CONTROLLER='y',
         MFD_SYSCON='y',
@@ -3307,7 +3372,6 @@ groups['hardware_lr54_minimal'] = dict(
         SERIAL_8250_NR_UARTS='3',
         SERIAL_8250_RUNTIME_UARTS='3',
         SERIAL_OF_PLATFORM='y',
-        EARLY_PRINTK='y',
         RTC_DRV_CMOS='y',
         RESET_CONTROLLER='y',
         MFD_SYSCON='y',
@@ -3358,6 +3422,7 @@ groups['hardware_tx54'] = dict(
         'hardware_mt7621',
         'hardware_cellular_sierra',
         'hardware_cellular_telit',
+        'hardware_cellular_quectel',
         'hardware_wireless_ath10k',
         'hardware_gnss',
         'hardware_power',
@@ -3595,7 +3660,6 @@ groups['hardware_tx54_minimal'] = dict(
         SERIAL_8250_NR_UARTS='3',
         SERIAL_8250_RUNTIME_UARTS='3',
         SERIAL_OF_PLATFORM='y',
-        EARLY_PRINTK='y',
         RESET_CONTROLLER='y',
         MFD_SYSCON='y',
         NEW_LEDS='y',
@@ -3723,6 +3787,7 @@ groups['hardware_tx64'] = dict(
         'hardware_x86',
         'hardware_cellular_sierra',
         'hardware_cellular_telit',
+        'hardware_cellular_quectel',
         'hardware_cellular_external',
         'hardware_wireless_ath10k',
         'hardware_gnss',
@@ -5130,6 +5195,7 @@ groups['user_common'] = dict(
         'pppd',
         'ipv6',
         'tcpdump',
+        'config_dnsmasq2',
         ],
     user = dict(
         LIB_FLEX='y',
@@ -5172,6 +5238,7 @@ groups['user_common'] = dict(
         PROP_CONFIG_ACTIOND='y',
         USER_BUSYBOX_FEATURE_SORT_BIG='y',
         USER_INIT_INIT='y',
+        USER_INIT_RUN_CONFIGRC=['n', 'y'],
         USER_GETTYD_GETTYD='y',
         USER_FCRON='y',
         USER_FLASHW_FLASHW='y',
@@ -5187,7 +5254,6 @@ groups['user_common'] = dict(
         USER_BRCTL_BRCTL='y',
         USER_DISCARD_DISCARD='y',
         USER_DISCARD_NO_INSTALL='y',
-        USER_DNSMASQ2_DNSMASQ2='y',
         USER_EBTABLES_EBTABLES='y',
         USER_FTP_FTP_FTP='y',
         USER_INETD_INETD='y',
@@ -5262,6 +5328,7 @@ groups['user_factory'] = dict(
         'busybox_ash',
         'init_overlay',
         'tcpdump',
+        'config_dnsmasq2',
         ],
     user = dict(
         LIB_LIBSSL='y',
@@ -5293,7 +5360,6 @@ groups['user_factory'] = dict(
         USER_FLATFSD_EXTERNAL_INIT='y',
         USER_DISCARD_DISCARD='y',
         USER_DISCARD_NO_INSTALL='y',
-        USER_DNSMASQ2_DNSMASQ2='y',
         USER_EBTABLES_EBTABLES='y',
         USER_FTP_FTP_FTP='y',
         USER_INETD_INETD='y',
@@ -5348,7 +5414,6 @@ groups['user_minimal'] = dict(
         'busybox_ash',
         ],
     user = dict(
-        PROP_CONFIG_AVIEW='y',
         USER_SYSKLOGD='y',
         USER_SYSKLOGD_LOG_PRIORITY='y',
         USER_UTIL_LINUX='y',
@@ -5623,8 +5688,9 @@ groups['config_iperf'] = dict(
         )
     )
 
-groups['config_webfilter'] = dict(
+groups['config_dnsmasq2'] = dict(
     user = dict(
+        USER_DNSMASQ2_DNSMASQ2='y',
         PROP_WEBFILTER='y',
     )
 )
@@ -5815,7 +5881,7 @@ groups['virtualisation_extras'] = dict(
     )
 
 # Dependencies for features under prop/config
-groups['config_no_aview'] = dict(
+groups['config'] = dict(
     include = [
         'linux_bridge',
         'linux_common',
@@ -5830,15 +5896,10 @@ groups['config_no_aview'] = dict(
         USER_BUSYBOX_FLOCK='y',
         USER_RESOLVEIP_RESOLVEIP='y',
         USER_JERRYSCRIPT='y',
-        PROP_CONFIG_AVIEW=['n','y'],
-        PROP_ACCNS_CERTIFICATES='y'
         )
     )
 
-groups['config'] = dict(
-    include = [
-        'config_no_aview',
-        ],
+groups['config_aview'] = dict(
     user = dict(
         PROP_CONFIG_AVIEW='y',
         PROP_ACCNS_CERTIFICATES='y',
@@ -5860,7 +5921,6 @@ groups['config_factory'] = dict(
     user = dict (
         PROP_FACTORY_FACTORY='y',
         USER_EMCTEST_EMCECHO='y',
-        PROP_CM1002JIG='y',
         USER_INIT_DEFAULT_ENTRIES='y',
         USER_NETFLASH_AUTODECOMPRESS='y',
         USER_FLATFSD_USE_FLASH_FS='y',
@@ -5910,6 +5970,7 @@ groups['config_cellular'] = dict(
         USER_MOBILE_BROADBAND_PROVIDER_INFO_INSTALL_FULL='y',
         USER_MODEMMANAGER_ALLPLUGINS='y',
         USER_BUSYBOX_MICROCOM='y',
+        PROP_CONFIG_NEMO='y',
         )
     )
 
@@ -5979,6 +6040,7 @@ groups['config_python'] = dict(
         USER_PYTHON='y',
         PROP_DIGI_DIGIDEVICE='y',
         USER_PYTHON_REMOVE_SOURCE='y',
+        USER_PYTHON_MODULES_PAHO_MQTT='y',
         )
     )
 
@@ -5995,6 +6057,7 @@ groups['config_xbeegw'] = dict(
     ],
     user = dict(
         PROP_XBEE='y',
+        PROP_XBEE_BLUETOOTH='y',
         PROP_XBEE_NETWORK_MANAGER='y',
         )
     )
@@ -6213,6 +6276,15 @@ groups['config_iptunnel'] = dict(
         )
     )
 
+groups['config_bonding'] = dict(
+    linux = dict(
+        BONDING='y',
+        ),
+    user = dict(
+        PROP_CONFIG_BONDING='y',
+        )
+    )
+
 
 groups['config_snmp'] = dict(
     user = dict(
@@ -6336,6 +6408,7 @@ groups['config_base_features'] = dict(
     include = [
         'config_cli',
         'config_cloud',
+        'config_aview',
         'config_quagga',
         'config_nagios',
         'config_vrrp',
@@ -6351,12 +6424,33 @@ groups['config_base_features'] = dict(
         'config_digimdns',
         'config_iperf',
         'config_analyzer',
+        'config_custdefcfg',
         ],
+    )
+
+groups['config_duplicate_flash_image'] = dict(
+    user = dict(
+        PROP_CONFIG_RUNT_FIRMWARE_ALT_BOOT='y',
+        PROP_DUPLICATE_FLASH_IMAGE='y',
+        ),
+    )
+
+groups['config_usb_serial_ch341'] = dict(
+    linux = dict(
+        USB_SERIAL_CH341='y',
+        ),
+    )
+
+groups['config_modbus_gateway'] = dict(
+    user = dict(
+        PROP_MODBUS_GATEWAY='y',
+        ),
     )
 
 groups['config_5300_dc'] = dict(
     include = [
         'config',
+        'config_aview',
         'config_cli_legacy',
         'config_cellular_small',
         'config_vrrp',
@@ -6368,6 +6462,7 @@ groups['config_5300_dc'] = dict(
 groups['config_5301_dc'] = dict(
     include = [
         'config',
+        'config_aview',
         'config_cli_legacy',
         'config_vrrp',
         'config_ddns',
@@ -6380,7 +6475,6 @@ groups['config_5301_dc'] = dict(
 
 groups['config_5400_rm'] = dict(
     include = [
-        'config',
         'config_5401_rm',
         'config_cellular',
         ],
@@ -6391,6 +6485,7 @@ groups['config_5401_rm'] = dict(
         'config',
         'config_cli',
         'config_cloud',
+        'config_aview',
         'config_serial',
         'config_quagga',
         'config_nagios',
@@ -6400,6 +6495,7 @@ groups['config_5401_rm'] = dict(
         'config_ddns',
         'config_qos',
         'config_iptunnel',
+        'config_duplicate_flash_image',
         # OLD PRODUCT: ESSENTIAL FEATURES ONLY
         ],
     )
@@ -6423,10 +6519,10 @@ groups['config_connectit_mini'] = dict(
         'config_stdcpp',
         'config_apparmor',
         'config_python',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
-    user = dict(
-        PROP_CONFIG_HIDE_AVIEW='y',
-        ),
     )
 
 groups['config_ex12'] = dict(
@@ -6438,12 +6534,16 @@ groups['config_ex12'] = dict(
         'config_apparmor',
         'config_python',
         'config_serial',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     )
 
 groups['config_ix'] = dict(
     include = [
-        'config_no_aview',
+        'config',
         'config_base_features',
         'config_stdcpp',
         'config_apparmor',
@@ -6451,6 +6551,9 @@ groups['config_ix'] = dict(
         'config_cellular',
         'config_serial',
         'config_imx_temp_scaling',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     )
 
@@ -6472,6 +6575,7 @@ groups['config_ix15'] = dict(
 groups['config_ix20'] = dict(
     include = [
         'config_ix',
+        'config_bonding',
         ],
     )
 
@@ -6500,6 +6604,10 @@ groups['config_connectit48'] = dict(
         'config_python_hid',
         'config_powerman',
         'config_rtc',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     user = dict(
         USER_BUSYBOX_MKFS_VFAT='y',
@@ -6511,19 +6619,19 @@ groups['config_connectit48'] = dict(
         PROP_CONFIG_SERIAL_EXCLUSIVE_ACCESS='y',
         PROP_CONFIG_SERIALD_LED='y',
         USER_DMIDECODE='y',
-        PROP_CONFIG_HIDE_AVIEW='y',
         PROP_CONFIG_FINDME='y',
         ),
     )
 
 groups['config_virtualdal'] = dict(
     include = [
-        'config_no_aview',
+        'config',
         'config_serial',
         'config_base_features',
         'config_apparmor',
         'config_python',
         'config_rtc',
+        'config_bonding',
         ],
     user = dict(
         USER_BUSYBOX_MKFS_VFAT='y',
@@ -6533,7 +6641,6 @@ groups['config_virtualdal'] = dict(
         USER_ETHTOOL_ETHTOOL='y',
         USER_PARTED='y',
         USER_DMIDECODE='y',
-        PROP_CONFIG_AVIEW='n',
         ),
     )
 
@@ -6546,6 +6653,7 @@ groups['config_6300_cx'] = dict(
         'config_python',
         'config_python_hid',
         'config_cellular',
+        'config_duplicate_flash_image',
         ],
     )
 
@@ -6566,14 +6674,12 @@ groups['config_ix14-base'] = dict(
         'config_cellular',
         'config_serial',
         'config_apparmor',
-        'config_cloud',
         'config_python',
         'config_rtc',
         ],
     user = dict(
         USER_BLE_PROVISIONING_APP='y',
         PROP_BLUETOOTH_QCA65x4_FW='y',
-        PROP_CONFIG_HIDE_AVIEW='y',
         USER_PYTHON_MODULES_PYSERIAL='y',
         ),
     )
@@ -6581,12 +6687,15 @@ groups['config_ix14-base'] = dict(
 groups['config_ix14'] = dict(
     include = [
         'config_ix14-base',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ]
     )
 
 groups['config_lr54'] = dict(
     include = [
-        'config_no_aview',
+        'config',
         'config_base_features',
         'config_cellular',
         'config_serial',
@@ -6597,10 +6706,12 @@ groups['config_lr54'] = dict(
         'config_python_hid',
         'config_rtc',
         'config_scep_client',
-        'config_webfilter',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     user = dict(
-        PROP_CONFIG_AVIEW='n',
         USER_PYTHON_MODULES_PYSERIAL='y',
         PROP_DIGI_RESET_BUTTON='y',
         PROP_DIGI_RESET_USE_LEDCMD='y',
@@ -6615,6 +6726,8 @@ groups['config_6310_dx'] = dict(
         'config_apparmor',
         'config_python',
         'config_cellular',
+        'config_bonding',
+        'config_duplicate_flash_image',
         ],
     )
 
@@ -6627,6 +6740,10 @@ groups['config_ex15'] = dict(
         'config_apparmor',
         'config_python',
         'config_serial',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     )
 
@@ -6652,7 +6769,7 @@ groups['config_ex15w'] = dict(
 
 groups['config_tx54'] = dict(
     include = [
-        'config_no_aview',
+        'config',
         'config_base_features',
         'config_cellular',
         'config_wireless',
@@ -6667,13 +6784,15 @@ groups['config_tx54'] = dict(
         'config_aircrack_ng',
         'config_scep_client',
         'config_stdcpp',
-        'config_webfilter',
         'strongswan_netkey',
         'config_hotspot',
         'config_rtc',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     user = dict(
-        PROP_CONFIG_AVIEW='n',
         USER_PYTHON_MODULES_PYSERIAL='y',
         PROP_DIGI_RESET_BUTTON='y',
         PROP_DIGI_RESET_USE_LEDCMD='y',
@@ -6685,7 +6804,7 @@ groups['config_tx54'] = dict(
 
 groups['config_tx64'] = dict(
     include = [
-        'config_no_aview',
+        'config',
         'config_base_features',
         'config_cellular',
         'config_wireless',
@@ -6699,13 +6818,15 @@ groups['config_tx64'] = dict(
         'config_python_hid',
         'config_aircrack_ng',
         'config_scep_client',
-        'config_webfilter',
         'config_hotspot',
         'config_encrypted_loop_configfs',
         'config_rtc',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     user = dict(
-        PROP_CONFIG_AVIEW='n',
         USER_BUSYBOX_MKFS_VFAT='y',
         USER_E2FSPROGS='y',
         USER_E2FSPROGS_MKFS_EXT4='y',
@@ -6732,7 +6853,6 @@ groups['config_anywhereusb'] = dict(
         MQ_IOSCHED_DEADLINE='y',
         STACKPROTECTOR_STRONG='y',
         RANDOMIZE_BASE='y',
-        BONDING='m',
         USB_AWUSB_DEFAULT_CLAIM_PORT='y',
         USB_MON='y',
         ),
@@ -6749,7 +6869,6 @@ groups['config_anywhereusb'] = dict(
         USER_NETFLASH_DECOMPRESS='n',
         USER_NTP_ENABLE_HARDENFILE='y',
         PROP_APP_WATCHDOG='y',
-        PROP_CONFIG_HIDE_AVIEW='y',
         PROP_AWUSBD='y',
         PROP_MIGRATE_TO_DAL='y',
         PROP_CONFIG_FINDME='y',
@@ -6792,7 +6911,7 @@ groups['config_anywhereusb2'] = dict(
         ),
     )
 
-groups['config_anywhereusb_8_24'] = dict(
+groups['config_anywhereusb8'] = dict(
     include = [
         'config_anywhereusb',
         ],
@@ -6822,7 +6941,15 @@ groups['config_anywhereusb_8_24'] = dict(
         PROP_DIGI_RESET_USE_LEDCMD='n',
         LIB_LIBGPIOD='y',
         PROP_USBLEDD='y',
+        PROP_SIM_SIM='y',
         ),
+    )
+
+groups['config_anywhereusb24'] = dict(
+    include = [
+        'config_anywhereusb8',
+        'config_bonding',
+        ],
     )
 
 groups['config_connectez'] = dict(
@@ -6832,6 +6959,8 @@ groups['config_connectez'] = dict(
         'config_serial',
         'config_cellular',
         'config_rtc',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
         ],
     linux = dict(
         NR_CPUS='4',
@@ -6839,7 +6968,6 @@ groups['config_connectez'] = dict(
         MQ_IOSCHED_DEADLINE='y',
         STACKPROTECTOR_STRONG='y',
         RANDOMIZE_BASE='y',
-        BONDING='m',
         LEDS_LP5569='y',
         MICREL_PHY='y',
         DP83867_PHY='y',
@@ -6861,7 +6989,6 @@ groups['config_connectez'] = dict(
         LIB_LIBCAP='y',
         LIB_LIBGPIOD='y',
         PROP_APP_WATCHDOG='y',
-        PROP_CONFIG_HIDE_AVIEW='y',
         PROP_MIGRATE_TO_DAL='y',
         PROP_CONFIG_FINDME='y',
         PROP_LEDCMD_SYSFS='y',
@@ -6872,22 +6999,21 @@ groups['config_connectez'] = dict(
         PROP_DIGI_RESET_USE_LEDCMD='n',
         PROP_DIGI_RESET_NUM_LEDS=2,
         PROP_USBLEDD='y',
+        PROP_CONFIG_SERIALD_AUTOCONNECT='y',
+        PROP_CONFIG_SERIALD_DATAFRAMING='y',
+        PROP_CONFIG_SERIALD_UDPSERIAL='y',
         USER_BUSYBOX_READAHEAD='y',
         USER_BUSYBOX_UNICODE_SUPPORT='y',
         USER_E2FSPROGS='y',
         USER_E2FSPROGS_FSCK_EXT4='y',
         USER_E2FSPROGS_MKFS_EXT4='y',
-        USER_NETFLASH_NETFLASH='n',
-        USER_NETFLASH_WITH_FTP='n',
-        USER_NETFLASH_WITH_CGI='n',
-        USER_NETFLASH_HARDWARE='n',
-        USER_NETFLASH_DECOMPRESS='n',
         USER_NTP_ENABLE_HARDENFILE='y',
         USER_LEDCMD_LEDCMD='n',
         USER_SHELLINABOX='y',
         USER_MERGECAP='y',
         USER_BUSYBOX_GETTY='y',
         USER_BUSYBOX_LSPCI='y',
+        USER_PARTED='y',
         ),
     )
 
@@ -6900,6 +7026,10 @@ groups['config_6335_mx'] = dict(
         'config_apparmor',
         'config_python',
         'config_serial',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     )
 
@@ -6920,6 +7050,10 @@ groups['config_6355_sr'] = dict(
         'config_python',
         'config_python_hid',
         'config_serial',
+        'config_bonding',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ],
     )
 
@@ -6933,6 +7067,7 @@ groups['config_6350_sr'] = dict(
 groups['config_8300'] = dict(
     include = [
         'config',
+        'config_aview',
         'config_cli',
         'config_cellular',
         'config_intelliflow',
@@ -6941,12 +7076,14 @@ groups['config_8300'] = dict(
         'config_vrrp',
         'config_ddns',
         'config_iptunnel',
+        'config_bonding',
         ]
     )
 
 groups['config_u115'] = dict(
     include = [
         'config',
+        'config_aview',
         'config_cli',
         'config_cellular',
         'config_intelliflow',
@@ -6957,12 +7094,14 @@ groups['config_u115'] = dict(
         'config_serial',
         'config_iptunnel',
         'config_cloud',
+        'config_bonding',
         ]
     )
 
 groups['config_9400_ua'] = dict(
     include = [
         'config',
+        'config_aview',
         'config_cli',
         'config_cellular',
         'config_virt',
@@ -6972,12 +7111,14 @@ groups['config_9400_ua'] = dict(
         'config_vrrp',
         'config_ddns',
         'config_rtc',
+        'config_bonding',
         ]
     )
 
 groups['config_sprite'] = dict(
     include = [
         'config',
+        'config_aview',
         'config_cli',
         'config_cellular',
         ],
@@ -6997,7 +7138,7 @@ products['AC 5300-DC'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '5300-DC',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_5300_dc',
@@ -7012,7 +7153,7 @@ products['AC 5301-DC'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '5301-DC',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_5301_dc',
@@ -7027,7 +7168,7 @@ products['AC 5400-RM'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '5400-RM',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_5400_rm',
@@ -7043,7 +7184,7 @@ products['AC 5401-RM'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '5401-RM',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_5401_rm',
@@ -7059,7 +7200,7 @@ products['Digi Connect IT Mini'] = dict(
     vendor = 'Digi',
     product = 'ConnectIT-Mini',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_connectit_mini',
@@ -7074,7 +7215,7 @@ products['Digi EX12'] = dict(
     vendor = 'Digi',
     product = 'EX12',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_ex12',
@@ -7089,7 +7230,7 @@ products['Digi IX10'] = dict(
     vendor = 'Digi',
     product = 'IX10',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_ix10',
@@ -7105,7 +7246,7 @@ products['Digi IX15'] = dict(
     vendor = 'Digi',
     product = 'IX15',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_ix15',
@@ -7121,7 +7262,7 @@ products['Digi IX20'] = dict(
     vendor = 'Digi',
     product = 'IX20',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_ix20',
@@ -7137,7 +7278,7 @@ products['Digi IX20W'] = dict(
     vendor = 'Digi',
     product = 'IX20W',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_ix20w',
@@ -7153,10 +7294,10 @@ products['Digi ConnectEZ1'] = dict(
     vendor = 'Digi',
     product = 'ConnectEZ1',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
-        'hardware_layerscape_1012',
+        'hardware_connectez1',
         'hardware_nor',
         'hardware_mmc',
         'linux_pci_layerscape',
@@ -7176,10 +7317,10 @@ products['Digi ConnectEZ2'] = dict(
     vendor = 'Digi',
     product = 'ConnectEZ2',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
-        'hardware_layerscape_1012',
+        'hardware_connectez4',
         'hardware_nor',
         'hardware_mmc',
         'hardware_wireless_mwifiex_sdio',
@@ -7189,6 +7330,7 @@ products['Digi ConnectEZ2'] = dict(
         'linux_hugepages',
         'config_connectez',
         'config_wireless',
+        'config_bonding',
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
@@ -7201,10 +7343,10 @@ products['Digi ConnectEZ4'] = dict(
     vendor = 'Digi',
     product = 'ConnectEZ4',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
-        'hardware_layerscape_1012',
+        'hardware_connectez4',
         'hardware_nor',
         'hardware_mmc',
         'hardware_wireless_mwifiex_sdio',
@@ -7214,6 +7356,7 @@ products['Digi ConnectEZ4'] = dict(
         'linux_hugepages',
         'config_connectez',
         'config_wireless',
+        'config_bonding',
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
@@ -7226,7 +7369,7 @@ products['Digi Connect IT 4'] = dict(
     vendor = 'Digi',
     product = 'ConnectIT4',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_connectit4',
@@ -7235,6 +7378,9 @@ products['Digi Connect IT 4'] = dict(
         'linux_crypto_arm',
         'config_security_dac_y',
         'config_stdcpp',
+        'config_duplicate_flash_image',
+        'config_modbus_gateway',
+        'config_usb_serial_ch341',
         ]
     )
 
@@ -7242,7 +7388,7 @@ products['Digi Connect IT 16'] = dict(
     vendor = 'Digi',
     product = 'ConnectIT16',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_connectit16',
@@ -7259,7 +7405,7 @@ products['Digi Connect IT 48'] = dict(
     vendor = 'Digi',
     product = 'ConnectIT48',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_connectit48',
@@ -7276,7 +7422,7 @@ products['VirtualDAL'] = dict(
     vendor = 'Digi',
     product = 'VirtualDAL',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_virtualdal',
@@ -7292,7 +7438,7 @@ products['AC 6300-CX'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6300-CX',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6300_cx',
@@ -7307,7 +7453,7 @@ products['AC 6300-LX'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6300-LX',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6300_lx',
@@ -7322,7 +7468,7 @@ products['AC 6310-DX'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6310-DX',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6310_dx',
@@ -7336,7 +7482,7 @@ products['Digi IX14'] = dict(
     vendor = 'Digi',
     product = 'IX14',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_ix14',
@@ -7352,7 +7498,7 @@ products['Digi EX15'] = dict(
     vendor = 'Digi',
     product = 'EX15',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_ex15',
@@ -7366,7 +7512,7 @@ products['Digi EX15W'] = dict(
     vendor = 'Digi',
     product = 'EX15W',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_ex15w',
@@ -7379,7 +7525,7 @@ products['Digi LR54'] = dict(
     vendor = 'Digi',
     product = 'LR54',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_lr54',
@@ -7397,7 +7543,7 @@ products['Digi LR54W'] = dict(
     vendor = 'Digi',
     product = 'LR54W',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_lr54',
@@ -7421,7 +7567,7 @@ products['Digi LR54 Migration'] = dict(
     vendor = 'Digi',
     product = 'LR54-Migration',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_lr54_minimal',
@@ -7450,12 +7596,11 @@ products['Digi TX54 Dual Cellular'] = dict(
     vendor = 'Digi',
     product = 'TX54-Dual-Cellular',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_tx54',
         'config_tx54',
-        'config_custdefcfg',
         ]
     )
 
@@ -7463,7 +7608,7 @@ products['Digi TX54 NYC DOT'] = dict(
     vendor = 'Digi',
     product = 'TX54-NYC-DOT',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_tx54',
@@ -7475,7 +7620,7 @@ products['Digi TX54 Dual Wi-Fi'] = dict(
     vendor = 'Digi',
     product = 'TX54-Dual-Wi-Fi',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_tx54',
@@ -7487,7 +7632,7 @@ products['Digi TX54 Single Cellular'] = dict(
     vendor = 'Digi',
     product = 'TX54-Single-Cellular',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_tx54',
@@ -7499,7 +7644,7 @@ products['Digi TX54 Migration'] = dict(
     vendor = 'Digi',
     product = 'TX54-Migration',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_tx54_minimal',
@@ -7528,7 +7673,7 @@ products['Digi TX54 Manuf Revert'] = dict(
     vendor = 'Digi',
     product = 'TX54-Manuf-Revert',
     arch = 'mips',
-    cc = 'mips-linux-musl-20191115-gcc',
+    tools = 'mips-linux-musl-20191115',
     libc = 'musl',
     include = [
         'hardware_tx54_minimal',
@@ -7548,7 +7693,7 @@ products['Digi TX64'] = dict(
     vendor = 'Digi',
     product = 'TX64',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_tx64',
@@ -7570,7 +7715,7 @@ products['Digi TX64 Migration'] = dict(
     vendor = 'Digi',
     product = 'TX64-Migration',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_tx64_minimal',
@@ -7614,7 +7759,7 @@ products['Digi AnywhereUSB2'] = dict(
     vendor = 'Digi',
     product = 'AnywhereUSB2',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
         'hardware_layerscape_1012',
@@ -7647,7 +7792,7 @@ products['Digi AnywhereUSB8'] = dict(
     vendor = 'Digi',
     product = 'AnywhereUSB8',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
         'hardware_layerscape_1046',
@@ -7658,7 +7803,7 @@ products['Digi AnywhereUSB8'] = dict(
         'linux_crypto_arm64',
         'linux_crypto_smp',
         'linux_hugepages',
-        'config_anywhereusb_8_24',
+        'config_anywhereusb8',
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
@@ -7681,7 +7826,7 @@ products['Digi AnywhereUSB8W'] = dict(
     vendor = 'Digi',
     product = 'AnywhereUSB8W',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
         'hardware_layerscape_1046',
@@ -7693,7 +7838,7 @@ products['Digi AnywhereUSB8W'] = dict(
         'linux_crypto_arm64',
         'linux_crypto_smp',
         'linux_hugepages',
-        'config_anywhereusb_8_24',
+        'config_anywhereusb8',
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
@@ -7718,7 +7863,7 @@ products['Digi AnywhereUSB24'] = dict(
     vendor = 'Digi',
     product = 'AnywhereUSB24',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
         'hardware_layerscape_1046',
@@ -7729,7 +7874,7 @@ products['Digi AnywhereUSB24'] = dict(
         'linux_crypto_arm64',
         'linux_crypto_smp',
         'linux_hugepages',
-        'config_anywhereusb_8_24',
+        'config_anywhereusb24',
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
@@ -7752,7 +7897,7 @@ products['Digi AnywhereUSB24W'] = dict(
     vendor = 'Digi',
     product = 'AnywhereUSB24W',
     arch = 'arm64',
-    cc = 'aarch64-linux-musl-20191114-gcc',
+    tools = 'aarch64-linux-musl-20191114',
     libc = 'musl',
     include = [
         'hardware_layerscape_1046',
@@ -7764,7 +7909,7 @@ products['Digi AnywhereUSB24W'] = dict(
         'linux_crypto_arm64',
         'linux_crypto_smp',
         'linux_hugepages',
-        'config_anywhereusb_8_24',
+        'config_anywhereusb24',
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
@@ -7789,7 +7934,7 @@ products['AC 6330-MX'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6330-MX',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6330_mx',
@@ -7805,7 +7950,7 @@ products['AC 6335-MX'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6335-MX',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6335_mx',
@@ -7821,7 +7966,7 @@ products['AC 6350-SR'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6350-SR',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6350_sr',
@@ -7837,7 +7982,7 @@ products['AC 6355-SR'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '6355-SR',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_6355_sr',
@@ -7853,7 +7998,7 @@ products['AC 8300'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '8300',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_8300',
@@ -7872,7 +8017,7 @@ products['AC 9400-UA'] = dict(
     vendor = 'AcceleratedConcepts',
     product = '9400-UA',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_9400_ua',
@@ -7895,7 +8040,7 @@ products['AC Factory8300'] = dict(
     vendor = 'AcceleratedConcepts',
     product = 'Factory8300',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_factory8300',
@@ -7903,34 +8048,30 @@ products['AC Factory8300'] = dict(
         'config_all_firmware',
         'config_security_dac_y',
         'config_stdcpp',
-        ],
-    user = dict(
-        PROP_CONFIG_AVIEW='y',
-        )
+        'config_aview',
+        ]
     )
 
 products['AC FactoryU115'] = dict(
     vendor = 'AcceleratedConcepts',
     product = 'FactoryU115',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_factoryU115',
         'config_factory',
         'config_security_dac_y',
         'config_stdcpp',
-        ],
-    user = dict(
-        PROP_CONFIG_AVIEW='y',
-        )
+        'config_aview',
+        ]
     )
 
 products['AC Sprite'] = dict(
     vendor = 'AcceleratedConcepts',
     product = 'sprite',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_sprite',
@@ -7946,7 +8087,7 @@ products['AC U115'] = dict(
     vendor = 'AcceleratedConcepts',
     product = 'U115',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_u115',
@@ -7958,6 +8099,7 @@ products['AC U115'] = dict(
         'strongswan_netkey',
         'config_security_dac_y',
         'config_stdcpp',
+        'config_custdefcfg',
         ]
     )
 
@@ -7965,7 +8107,7 @@ products['AC Porter'] = dict(
     vendor = 'AcceleratedConcepts',
     product = 'porter',
     arch = 'x86',
-    cc = 'x86_64-linux-musl-20191112-gcc',
+    tools = 'x86_64-linux-musl-20191112',
     libc = 'musl',
     include = [
         'hardware_porter',
@@ -7982,7 +8124,7 @@ products['ATT U115'] = dict(
     vendor = 'ATT',
     product = 'U115',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_att_u115',
@@ -8004,6 +8146,7 @@ products['ATT U115'] = dict(
         USER_NETFLASH_CRYPTO_OPTIONAL='y',
         USER_INIT_DEFAULT_ENTRIES='y',
         USER_INIT_CONSOLE_SH='y',
+        USER_INIT_RUN_CONFIGRC='y',
         LIB_LIBUNBOUND='y',
         LIB_LIBLDNS='y',
         )
@@ -8013,7 +8156,7 @@ products['OpenGear ACM7004-5'] = dict(
     vendor = 'OpenGear',
     product = 'ACM7004-5',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_acm7004_5',
@@ -8029,7 +8172,7 @@ products['OpenGear CM7116'] = dict(
     vendor = 'OpenGear',
     product = 'CM7116',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_cm7116',
@@ -8046,7 +8189,7 @@ products['OpenGear CM7132'] = dict(
     vendor = 'OpenGear',
     product = 'CM7132',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_cm7132',
@@ -8063,7 +8206,7 @@ products['OpenGear CM7148'] = dict(
     vendor = 'OpenGear',
     product = 'CM7148',
     arch = 'arm',
-    cc = 'arm-linux-musleabi-20191126-gcc',
+    tools = 'arm-linux-musleabi-20191126',
     libc = 'musl',
     include = [
         'hardware_cm7148',

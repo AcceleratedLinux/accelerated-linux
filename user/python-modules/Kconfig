@@ -7,8 +7,15 @@ config USER_PYTHON_MODULES_PIP
 	help
 		The PyPA recommended tool for installing Python packages.
 
+config USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	bool "setuptools - host build"
+	help
+		Easily download, build, install, upgrade, and uninstall Python packages.
+		Host build only.
+
 config USER_PYTHON_MODULES_SETUPTOOLS
-	bool "setuptools"
+	bool "setuptools - install on target"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
 	help
 		Easily download, build, install, upgrade, and uninstall Python packages.
 
@@ -26,6 +33,22 @@ config USER_PYTHON_MODULES_PYSERIAL
 	bool "pyserial"
 	help
 		Python Serial Port Extension.
+
+config USER_PYTHON_MODULES_PYSERIAL_ASYNCIO
+	bool "pyserial-asyncio"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	select USER_PYTHON_MODULES_PYSERIAL
+	help
+		Async I/O extension package for the Python Serial Port Extension.
+
+config USER_PYTHON_MODULES_PYMODBUS
+	bool "pymodbus"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	select USER_PYTHON_MODULES_SIX
+	select USER_PYTHON_MODULES_PYSERIAL
+	select USER_PYTHON_MODULES_PYSERIAL_ASYNCIO
+	help
+		Pymodbus is a full Modbus protocol implementation.
 
 config USER_PYTHON_MODULES_BCRYPT
 	bool "bcrypt"
@@ -47,6 +70,7 @@ config USER_PYTHON_MODULES_PTYPROCESS
 
 config USER_PYTHON_MODULES_DIGI_XBEE_LIB
 	bool "Digi XBee Python library"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
 	select USER_PYTHON_MODULES_PYSERIAL
 	help
 		Digi XBee Python library.
@@ -64,12 +88,13 @@ config USER_PYTHON_MODULES_SRP
 
 config USER_PYTHON_MODULES_PAHO_MQTT
 	bool "paho-mqtt"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
 	help
 		Eclipse Paho MQTT Python client library.
 
 config USER_PYTHON_MODULES_HID
 	bool "hid"
-	select USER_PYTHON_MODULES_SETUPTOOLS
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
 	select USER_HID_API
 	help
 		ctypes bindings for hidapi.

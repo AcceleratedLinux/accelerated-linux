@@ -1,5 +1,5 @@
 VERSION = v0.0.4
-URL = ftp://ftp.netfilter.org/pub/arptables/arptables-$(VERSION).tar.gz
+URL = https://www.netfilter.org/pub/arptables/arptables-$(VERSION).tar.gz
 
 AUTOMAKE_ROMFS = my_romfs
 

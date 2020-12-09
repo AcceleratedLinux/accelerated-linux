@@ -26,3 +26,4 @@ netifd-chmod-resolv-conf.patch
 netifd-prepend-route.patch
 netifd-set-var-on-config-reload.patch
 netifd-use-clock_gettime.patch
+netifd-bonding.patch

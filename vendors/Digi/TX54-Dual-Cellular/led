@@ -84,6 +84,8 @@ WWAN_LEDS="WWAN1"
 # Off: No service.
 # Yellow: Poor / Fair signal.
 # Green: Good / Excellent signal.
+# Flashing Yellow with service: Modem firmware update
+# Flashing Green with service: Modem firmware recovery
 create_signal_led_args() {
 	wwan=$1
 	bars=$2
@@ -100,6 +102,8 @@ create_signal_led_args() {
 # Solid Yellow: 2G or 3G connection is up.
 # Solid Green: 4G connection is up.
 # Off: Everything else.
+# Flashing Yellow with signal: Modem firmware update
+# Flashing Green with signal: Modem firmware recovery
 create_service_led_args() {
 	wwan=$1
 	state=$2
@@ -156,8 +160,18 @@ for wwan in $WWAN_LEDS; do
 	modem_name=$(echo ${MODEM_NAMES} | awk -v N=$name_idx '{print $N}')
 	get_modem_information "$modem_name"
 
-	create_signal_led_args "$wwan" "$BARS"
-	create_service_led_args "$wwan" "$STATE" "$TECHNOLOGY"
+	MODEM_STATUS="$(runt get mm.persist.modem.$modem_name.status)"
+
+	if [ "$MODEM_STATUS" = "Updating firmware" ]; then
+		SERVICE="-O ${wwan}_SERVICE_GREEN -f ${wwan}_SERVICE_YELLOW"
+		SIGNAL="-O ${wwan}_SIGNAL_GREEN -f ${wwan}_SIGNAL_YELLOW"
+	elif [ "$MODEM_STATUS" = "Recovering firmware" ]; then
+		SERVICE="-O ${wwan}_SERVICE_YELLOW -f ${wwan}_SERVICE_GREEN"
+		SIGNAL="-O ${wwan}_SIGNAL_YELLOW -f ${wwan}_SIGNAL_GREEN"
+	else
+		create_signal_led_args "$wwan" "$BARS"
+		create_service_led_args "$wwan" "$STATE" "$TECHNOLOGY"
+	fi
 
 	LEDCMD="${LEDCMD} ${SERVICE} ${SIGNAL}"
 	name_idx=$(($name_idx + 1))

@@ -21,7 +21,6 @@ RELFILES = images/image.bin \
 	   images/static-analysis.tar.gz \
 	   images/rci_descriptors.tar.gz \
 	   prop/config/schema/accns.schema \
-	   prop/config/schema/accns-aview.schema \
 	   prop/config/cc_acl/app/runt/FE00000A*
 
 ############################################################################

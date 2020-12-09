@@ -11,3 +11,4 @@ udhcp.patch
 watchdog-oom.patch
 no-busybox-applet-allowed.patch
 use-clock_gettime.patch
+telnet-extra-opts.patch

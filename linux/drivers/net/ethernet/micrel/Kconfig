@@ -6,8 +6,7 @@
 config NET_VENDOR_MICREL
 	bool "Micrel devices"
 	default y
-	depends on (HAS_IOMEM && DMA_ENGINE) || SPI || PCI || HAS_IOMEM || \
-		   (ARM && ARCH_KS8692)
+	depends on (HAS_IOMEM && DMA_ENGINE) || SPI || PCI || HAS_IOMEM
 	---help---
 	  If you have a network (Ethernet) card belonging to this class, say Y.
 
@@ -17,14 +16,6 @@ config NET_VENDOR_MICREL
 	  for your specific card in the following questions.
 
 if NET_VENDOR_MICREL
-
-config ARM_KS8692_ETHER
-	tristate "Pegasus Gigabit Ethernet support"
-	depends on ARM && ARCH_KS8692
-	---help---
-	  This is not an option for Micrel Pegasus KSZ8692 family.  Say Y
-	  to include the network driver in the kernel or M to load the
-	  driver as a module.
 
 config KS8842
 	tristate "Micrel KSZ8841/42 with generic bus interface"

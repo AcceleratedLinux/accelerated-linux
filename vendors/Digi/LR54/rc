@@ -23,6 +23,9 @@ echo 6 > /proc/sys/kernel/printk
 # initialise devices before we need them
 /etc/rc.dev
 
+# Fix ENV vars
+/sbin/fwenv_fixup.sh
+
 # Create external serial port device link.
 # Variable USB discovery order means we need to actively link it.
 mkdir -p /dev/serial

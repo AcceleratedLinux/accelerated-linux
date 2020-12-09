@@ -26,7 +26,7 @@ CPPFLAGS += -I$(STAGEDIR)/include -I$(STAGEDIR)/usr/include
 LDFLAGS += -L$(STAGEDIR)/lib -L$(STAGEDIR)/usr/lib
 
 ###############################################################################
-ifdef CONFIG_USER_PYTHON_MODULES_SETUPTOOLS
+ifeq ($(or $(CONFIG_USER_PYTHON_MODULES_SETUPTOOLS),$(CONFIG_USER_PYTHON_MODULES_SETUPTOOLS_HOST)),y)
 
 SETUPTOOLS_VERSION = 41.0.1
 SETUPTOOLS_PKG = setuptools-$(SETUPTOOLS_VERSION)
@@ -36,6 +36,9 @@ $(SETUPTOOLS_PKG)_DOWNLOADNAME = $(SETUPTOOLS_PKG).tar.gz
 # currently we can only hostinstall non compiled modules,  a little more
 # work will be needed if we need to compile modules for the build python
 $(SETUPTOOLS_PKG)_HOSTINSTALL = 1
+ifndef CONFIG_USER_PYTHON_MODULES_SETUPTOOLS
+$(SETUPTOOLS_PKG)_NOTARGETINSTALL = 1
+endif
 
 AUTOMAKE_y += $(SETUPTOOLS_PKG)
 endif
@@ -85,6 +88,28 @@ AUTOMAKE_y += $(PYSERIAL_PKG)
 endif
 
 ###############################################################################
+ifdef CONFIG_USER_PYTHON_MODULES_PYSERIAL_ASYNCIO
+
+PYSERIAL_ASYNCIO_VERSION = 0.4
+PYSERIAL_ASYNCIO_PKG = pyserial-asyncio-$(PYSERIAL_ASYNCIO_VERSION)
+$(PYSERIAL_ASYNCIO_PKG)_URL = https://github.com/pyserial/pyserial-asyncio/archive/v$(PYSERIAL_ASYNCIO_VERSION).tar.gz
+$(PYSERIAL_ASYNCIO_PKG)_DOWNLOADNAME = $(PYSERIAL_ASYNCIO_PKG).tar.gz
+
+AUTOMAKE_y += $(PYSERIAL_ASYNCIO_PKG)
+endif
+
+###############################################################################
+ifdef CONFIG_USER_PYTHON_MODULES_PYMODBUS
+
+PYMODBUS_VERSION = 2.3.0
+PYMODBUS_PKG = pymodbus-$(PYMODBUS_VERSION)
+$(PYMODBUS_PKG)_URL = https://github.com/riptideio/pymodbus/archive/v$(PYMODBUS_VERSION).tar.gz
+$(PYMODBUS_PKG)_DOWNLOADNAME = $(PYMODBUS_PKG).tar.gz
+
+AUTOMAKE_y += $(PYMODBUS_PKG)
+endif
+
+###############################################################################
 ifdef CONFIG_USER_PYTHON_MODULES_BCRYPT
 
 BCRYPT_VERSION = 3.1.6
@@ -120,9 +145,10 @@ endif
 ifdef CONFIG_USER_PYTHON_MODULES_DIGI_XBEE_LIB
 
 XBEE_LIB_PKG = python-xbee
-$(XBEE_LIB_PKG)_VERSION = 2971725bb227694c6ca76bea0c5f95459ba19c4a
+$(XBEE_LIB_PKG)_VERSION = 9fb070ba9c4bcd88bfe4ed289d9d033b5a02120b
 $(XBEE_LIB_PKG)_METHOD = git
 $(XBEE_LIB_PKG)_URL = https://github.com/digidotcom/xbee-python.git
+$(XBEE_LIB_PKG)_DEP = $(SETUPTOOLS_PKG)
 
 AUTOMAKE_y += $(XBEE_LIB_PKG)
 endif
@@ -155,6 +181,7 @@ PAHO_MQTT_VERSION = 1.5.0
 PAHO_MQTT_PKG = paho.mqtt.python-$(PAHO_MQTT_VERSION)
 $(PAHO_MQTT_PKG)_URL = https://github.com/eclipse/paho.mqtt.python/archive/v$(PAHO_MQTT_VERSION).tar.gz
 $(PAHO_MQTT_PKG)_DOWNLOADNAME = $(PAHO_MQTT_PKG).tar.gz
+$(PAHO_MQTT_PKG)_DEP = $(SETUPTOOLS_PKG)
 
 AUTOMAKE_y += $(PAHO_MQTT_PKG)
 endif
@@ -187,6 +214,13 @@ build/%-pkg_build: build/%-patched $(SYSCONFIGDATA)
 	$(AT)cd build/$*; $($*_BUILDENV) $(PYTHON) setup.py build $($*_BUILDVARS)
 	@touch $@
 
+#
+# Patching python path (shebang) in the installed python scripts at the end.
+#
+# setup.py '--executable' and '-e' should be able to update the python path but
+# it does not work. Seems to be because setup.py is not listing package scripts,
+# so do our own.
+#
 build/%-pkg_install: build/%-pkg_build
 	@echo
 	@echo "Installing $* $(PYTHON) module with setup.py ..."
@@ -196,14 +230,15 @@ build/%-pkg_install: build/%-pkg_build
 		cd build/$*; \
 		$(PYTHON) setup.py install --root=$(PYTHON_HOSTINSTALL) --prefix= || exit 1; \
 	fi
-	$(AT)cd build/$*; $(PYTHON) setup.py install --root=../$*-install --prefix=/usr
-	$(AT)# --executable and -e should be able to update the python path but
-	$(AT)# it does nto work.  Seems to be because setup.py is not listing
-	$(AT)# package scripts,  so do our own
-	$(AT)grep -rl '#!$(PYTHON_HOSTINSTALL)' build/$*-install | while read t; do \
-		echo "Patching python path in '$t' ..."; \
-		sed -i "1s|^#!$(PYTHON_HOSTINSTALL).*$$|#!/usr/bin/python$(PYTHON_VERSION_SHORT)|" "$$t"; \
-	done
+	$(AT)if [ "$($*_NOTARGETINSTALL)" != 1 ]; then \
+		cd build/$*; \
+		$(PYTHON) setup.py install --root=../$*-install --prefix=/usr || exit 1; \
+		grep -rl '#!$(PYTHON_HOSTINSTALL)' ../$*-install | while read t; do \
+			echo "Patching python path in '$$t' ..."; \
+			sed -i "1s|^#!$(PYTHON_HOSTINSTALL).*$$|#!/usr/bin/python$(PYTHON_VERSION_SHORT)|" "$$t"; \
+		done; \
+		find ../$*-install -iname "*.exe" -delete; \
+	fi
 
 	@touch $@
 

@@ -27,18 +27,13 @@ diff -ur openssh-6.6p1/clientloop.c openssh-6.6p1/clientloop.c
 diff -ur openssh-6.6p1/config.sub openssh-6.6p1/config.sub
 --- openssh-6.6p1/config.sub	2010-03-02 09:57:43.000000000 +1000
 +++ openssh-6.6p1/config.sub	2014-05-23 17:00:39.673183196 +1000
-@@ -314,6 +314,11 @@
- 		basic_machine=mt-unknown
+@@ -314,2 +314,6 @@
+ 		os=ose
  		;;
- 
 +	nios2 | nios2-* | nios2 | nios2-*)
 +		basic_machine=nios2-altera
 +		os=-linux
 +		;;
-+
- 	# We use `pc' rather than `unknown'
- 	# because (1) that's what they normally are, and
- 	# (2) the word "unknown" tends to confuse beginning users.
 diff -ur openssh-6.6p1/pathnames.h openssh-6.6p1/pathnames.h
 --- openssh-6.6p1/pathnames.h	2010-08-31 22:41:14.000000000 +1000
 +++ openssh-6.6p1/pathnames.h	2014-05-23 17:00:39.802963772 +1000

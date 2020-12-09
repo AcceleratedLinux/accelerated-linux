@@ -56,6 +56,7 @@ romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cr
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) -d $(THIS_DIR)/console /etc/inittab.d/console
 	$(ROMFSINST) -d -p 755 $(THIS_DIR)/pwrbtn.sh /etc/acpi/events/PWRF/00000080
+	$(ROMFSINST) -d -p 555 $(THIS_DIR)/fwenv_fixup.sh /sbin/fwenv_fixup.sh
 
 romfs.post:: romfs.cleanup
 

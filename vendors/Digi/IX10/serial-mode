@@ -11,10 +11,8 @@
 #
 
 #
-# GPIO28  = (GPIO1.28) RS485 terminate enable (output, active low)
-# GPIO29  = (GPIO1.29) RS485 mode (output, active low)
-# GPIO114 = (GPIO4.18) RS422 TX enable (output, active low)
-# GPIO124 = (GPIO4.28) RS232 enable (output, active high)
+# GPIO28  = (GPIO1.28) RS485 terminate enable (output, active high)
+# GPIO124 = (GPIO4.28) RS232/RS485 select (output, low=RS485, high=RS232)
 #
 
 #

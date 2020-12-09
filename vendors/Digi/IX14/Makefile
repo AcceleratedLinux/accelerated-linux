@@ -45,7 +45,7 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -d -p 555 bluez/bluetooth /bin/bluetooth
 	$(ROMFSINST) -d -p 555 bluez/bluetooth-action /etc/action.d/bluetooth
 	$(ROMFSINST) -d -p 555 bluez/bluetooth-update /etc/runt/update.d/bluetooth
-	$(ROMFSINST) -e CONFIG_PROP_XBEE -d -p 555 scripts/xbee.sh /bin/xbee
+	$(ROMFSINST) -e CONFIG_PROP_XBEE -p 644 /etc/xbee.conf
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
 	$(ROMFSINST) -p 555 scripts/cellular_power.sh /bin/cellular_power.sh
 	$(ROMFSINST) config/fw_env.config /etc/fw_env.config

@@ -1,4 +1,3 @@
 0001-build-allow-old-autoconf-version.patch
 0002-utils-swi-update-include-sys-select.h-if-you-use-sel.patch
-0003-qmi-firmware-update-helpers-don-t-match-sysfs-path.patch
 0004-libqmi-glib-endpoint-qmux-work-around-LM960-TX64-bug.patch

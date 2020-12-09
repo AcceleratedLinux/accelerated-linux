@@ -8,3 +8,4 @@ openssh-fwd_opts.patch
 openssh-uclinux-sshd-config.patch
 openssh-deny-socket.patch
 openssh-gettime64.patch
+openssh-bidirectional-break.patch

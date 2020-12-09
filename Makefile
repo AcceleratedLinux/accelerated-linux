@@ -8,6 +8,17 @@
 #
 
 ############################################################################
+############################################################################
+# first ensure we are running with a suitable umask for firmware builds
+ifneq ($(shell umask),0022)
+.PHONY: all $(MAKECMDGOALS)
+all $(MAKECMDGOALS): fixup_umask_for_build
+.PHONY: fixup_umask_for_build
+fixup_umask_for_build:
+	@umask 0022; $(MAKE) $(MAKECMDGOALS)
+else
+############################################################################
+############################################################################
 #
 # Lets work out what the user wants, and if they have configured us yet
 #
@@ -36,7 +47,7 @@ export UCFRONT_ANALYZER=clang
 # a list of : or white space seperated directories to scan
 export UCFRONT_ANALYZE_PATH=prop
 
-# helper funcitons for process the scan info
+# helper functions for process the scan info
 # do not consider reported bugs and eerror just yet
 ANALYZE_CLEAN   = rm -rf $(STAGEDIR)/clang/$(1)
 ANALYZE_SUMMARY = echo "Producing static analysis results"; \
@@ -584,4 +595,7 @@ help:
 	@exit 0
 	
 
+############################################################################
+############################################################################
+endif # umask check
 ############################################################################

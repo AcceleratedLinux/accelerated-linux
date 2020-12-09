@@ -18,3 +18,27 @@ We now support boards:
 bus=sdio,vendor=0271,device=050a,subsystem-vendor=0000,subsystem-device=0000
 bus=sdio,vendor=0271,device=050a,subsystem-vendor=0000,subsystem-device=0000,variant=US.bin
 bus=sdio,vendor=0271,device=050a,subsystem-vendor=0000,subsystem-device=0000,variant=WW.bin
+
+QCA9984
+-------
+Wireless firmware used by the ath10k driver for QCA9984 chipset on TX64.
+
+To support up to 128 stations, the firmware MUST be a trimmed version (as noted in the
+following links as the "diet" version). The board-2-ct.bin and firmware-5-ct-community.bin
+are downloaded from:
+
+https://www.candelatech.com/downloads/ath10k-9984-10-4/board-2-ct.bin
+https://www.candelatech.com/downloads/ath10k-9984-10-4b/ath10k-fw-beta/
+
+Note:
+1. No CT-HTT-MGT feature. Swbmiss, beacon filtering, roaming code, descriptor-mgt
+is compiled out.
+
+2. The community version may be used for any purpose allowed by the official firmware
+from Qualcom-Atheros, including commercial applications.
+
+3. hw.h of ath10k driver is changed to support up to 128 stations, and the change
+should not affect QCA988X chipset.
+
+4. CDRouter tests shows that it's stable and performance is comparable with the
+upstream driver.

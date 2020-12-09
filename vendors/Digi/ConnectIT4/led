@@ -39,8 +39,8 @@ done
 
 if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
 		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
-	if [ "$(runt get netmon.ipv4_interface_$intf.passed)" = n \
-			-o "$(runt get netmon.ipv6_interface_$intf.passed)" = n ]; then
+	if [ "$(runt get surelink.ipv4_interface_$intf.passed)" = n \
+			-o "$(runt get surelink.ipv6_interface_$intf.passed)" = n ]; then
 		CELL=1
 	elif [ "$(runt get mm.modem.$idx.status.gtech)" = 4g ]; then
 		CELL=3
@@ -75,12 +75,12 @@ LAN4=-1
 LAN6=-1
 if [ "$LINK" = 1 ]; then
 	case $(runt get network.interface.lan.ipv4.up) in
-	1) [ "$(runt get netmon.ipv4_interface_lan.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	1) [ "$(runt get surelink.ipv4_interface_lan.passed)" = n ] && LAN4=1 || LAN4=2 ;;
 	0) [ "$(runt get network.interface.lan.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
 	esac
 
 	case $(runt get network.interface.lan.ipv6.up) in
-	1) [ "$(runt get netmon.ipv6_interface_lan.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	1) [ "$(runt get surelink.ipv6_interface_lan.passed)" = n ] && LAN6=1 || LAN6=2 ;;
 	0) [ "$(runt get network.interface.lan.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
 	esac
 fi
@@ -115,12 +115,12 @@ WAN4=-1
 WAN6=-1
 if [ "$LINK" = 1 ]; then
 	case $(runt get network.interface.wan.ipv4.up) in
-	1) [ "$(runt get netmon.ipv4_interface_wan.passed)" = n ] && WAN4=1 || WAN4=2 ;;
+	1) [ "$(runt get surelink.ipv4_interface_wan.passed)" = n ] && WAN4=1 || WAN4=2 ;;
 	0) [ "$(runt get network.interface.wan.ipv4.pending)" = 1 ] && WAN4=1 || WAN4=0 ;;
 	esac
 
 	case $(runt get network.interface.wan.ipv6.up) in
-	1) [ "$(runt get netmon.ipv6_interface_wan.passed)" = n ] && WAN6=1 || WAN6=2 ;;
+	1) [ "$(runt get surelink.ipv6_interface_wan.passed)" = n ] && WAN6=1 || WAN6=2 ;;
 	0) [ "$(runt get network.interface.wan.ipv6.pending)" = 1 ] && WAN6=1 || WAN6=0 ;;
 	esac
 fi

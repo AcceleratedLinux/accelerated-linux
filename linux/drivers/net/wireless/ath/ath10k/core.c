@@ -591,6 +591,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.num_peers = TARGET_QCA9377_HL_NUM_PEERS,
 		.ast_skid_limit = 0x10,
 		.num_wds_entries = 0x20,
+		.uart_pin_workaround = true,
 	},
 	{
 		.id = QCA4019_HW_1_0_DEV_VERSION,
@@ -926,6 +927,13 @@ static int ath10k_core_get_board_id_from_otp(struct ath10k *ar)
 		return -ENODATA;
 	}
 
+	if (ar->id.bmi_ids_valid) {
+		ath10k_dbg(ar, ATH10K_DBG_BOOT,
+			   "boot already acquired valid otp board id,skip download, board_id %d chip_id %d\n",
+			   ar->id.bmi_board_id, ar->id.bmi_chip_id);
+		goto skip_otp_download;
+	}
+
 	ath10k_dbg(ar, ATH10K_DBG_BOOT,
 		   "boot upload otp to 0x%x len %zd for board id\n",
 		   address, ar->normal_mode_fw.fw_file.otp_len);
@@ -972,6 +980,8 @@ static int ath10k_core_get_board_id_from_otp(struct ath10k *ar)
 	ar->id.bmi_ids_valid = true;
 	ar->id.bmi_board_id = board_id;
 	ar->id.bmi_chip_id = chip_id;
+
+skip_otp_download:
 
 	return 0;
 }
@@ -1104,11 +1114,11 @@ static int ath10k_download_fw(struct ath10k *ar)
 	}
 
 	memset(&latency_qos, 0, sizeof(latency_qos));
-	pm_qos_add_request(&latency_qos, PM_QOS_CPU_DMA_LATENCY, 0);
+	cpu_latency_qos_add_request(&latency_qos, 0);
 
 	ret = ath10k_bmi_fast_download(ar, address, data, data_len);
 
-	pm_qos_remove_request(&latency_qos);
+	cpu_latency_qos_remove_request(&latency_qos);
 
 	return ret;
 }
@@ -2171,6 +2181,40 @@ done:
 	return 0;
 }
 
+static void ath10k_core_fetch_btcoex_dt(struct ath10k *ar)
+{
+	struct device_node *node;
+	u8 coex_support = 0;
+	int ret;
+
+	node = ar->dev->of_node;
+	if (!node)
+		goto out;
+
+	ret = of_property_read_u8(node, "qcom,coexist-support", &coex_support);
+	if (ret) {
+		ar->coex_support = true;
+		goto out;
+	}
+
+	if (coex_support) {
+		ar->coex_support = true;
+	} else {
+		ar->coex_support = false;
+		ar->coex_gpio_pin = -1;
+		goto out;
+	}
+
+	ret = of_property_read_u32(node, "qcom,coexist-gpio-pin",
+				   &ar->coex_gpio_pin);
+	if (ret)
+		ar->coex_gpio_pin = -1;
+
+out:
+	ath10k_dbg(ar, ATH10K_DBG_BOOT, "boot coex_support %d coex_gpio_pin %d\n",
+		   ar->coex_support, ar->coex_gpio_pin);
+}
+
 static int ath10k_init_uart(struct ath10k *ar)
 {
 	int ret;
@@ -2466,6 +2510,16 @@ static int ath10k_core_init_firmware_features(struct ath10k *ar)
 		ar->max_spatial_stream = ar->hw_params.max_spatial_stream;
 		ar->max_num_tdls_vdevs = TARGET_10_4_NUM_TDLS_VDEVS;
 
+		/* Overwrite these values on QCA9984 only */
+		if (ar->dev_id == QCA9984_1_0_DEVICE_ID
+			&& ar->chip_id == QCA9984_HW_1_0_CHIP_ID_REV
+			&& ar->hw_rev == ATH10K_HW_QCA9984) {
+				max_num_peers = TARGET_10_4_NUM_PEERS_QCA9984;
+				ar->max_num_stations = TARGET_10_4_NUM_STATIONS_QCA9984;
+				ar->num_active_peers = TARGET_10_4_NUM_ACTIVE_PEERS_QCA9984;
+				ar->num_tids = TARGET_10_4_TGT_NUM_TIDS_QCA9984;
+		}
+
 		if (test_bit(ATH10K_FW_FEATURE_PEER_FLOW_CONTROL,
 			     fw_file->fw_features))
 			ar->htt.max_num_pending_tx = TARGET_10_4_NUM_MSDU_DESC_PFC;
@@ -2751,14 +2805,22 @@ int ath10k_core_start(struct ath10k *ar, enum ath10k_firmware_mode mode,
 		if (test_bit(WMI_SERVICE_BSS_CHANNEL_INFO_64, ar->wmi.svc_map))
 			val |= WMI_10_4_BSS_CHANNEL_INFO_64;
 
+		ath10k_core_fetch_btcoex_dt(ar);
+
 		/* 10.4 firmware supports BT-Coex without reloading firmware
 		 * via pdev param. To support Bluetooth coexistence pdev param,
 		 * WMI_COEX_GPIO_SUPPORT of extended resource config should be
 		 * enabled always.
+		 *
+		 * We can still enable BTCOEX if firmware has the support
+		 * eventhough btceox_support value is
+		 * ATH10K_DT_BTCOEX_NOT_FOUND
 		 */
+
 		if (test_bit(WMI_SERVICE_COEX_GPIO, ar->wmi.svc_map) &&
 		    test_bit(ATH10K_FW_FEATURE_BTCOEX_PARAM,
-			     ar->running_fw->fw_file.fw_features))
+			     ar->running_fw->fw_file.fw_features) &&
+		    ar->coex_support)
 			val |= WMI_10_4_COEX_GPIO_SUPPORT;
 
 		if (test_bit(WMI_SERVICE_TDLS_EXPLICIT_MODE_ONLY,
@@ -2920,6 +2982,7 @@ void ath10k_core_stop(struct ath10k *ar)
 	ath10k_htt_rx_free(&ar->htt);
 	ath10k_wmi_detach(ar);
 	ar->is_started = false;
+	ar->id.bmi_ids_valid = false;
 }
 EXPORT_SYMBOL(ath10k_core_stop);
 

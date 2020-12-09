@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/m68k 5.6.0-ac0 Kernel Configuration
+# Linux/m68k 5.7.0-ac0 Kernel Configuration
 #
 
 #
@@ -8,9 +8,9 @@
 #
 CONFIG_CC_IS_GCC=y
 CONFIG_GCC_VERSION=50400
+CONFIG_LD_VERSION=225010000
 CONFIG_CLANG_VERSION=0
 CONFIG_CC_HAS_ASM_GOTO=y
-CONFIG_CC_HAS_WARN_MAYBE_UNINITIALIZED=y
 CONFIG_IRQ_WORK=y
 
 #
@@ -231,8 +231,6 @@ CONFIG_COMPAT_32BIT_TIME=y
 # GCOV-based kernel profiling
 #
 # end of GCOV-based kernel profiling
-
-CONFIG_PLUGIN_HOSTCC=""
 # end of General architecture-dependent options
 
 CONFIG_RT_MUTEXES=y
@@ -300,6 +298,7 @@ CONFIG_COREDUMP=y
 CONFIG_FLATMEM=y
 CONFIG_FLAT_NODE_MEM_MAP=y
 CONFIG_SPLIT_PTLOCK_CPUS=999999
+# CONFIG_PAGE_REPORTING is not set
 CONFIG_VIRT_TO_BUS=y
 CONFIG_NOMMU_INITIAL_TRIM_EXCESS=1
 CONFIG_NEED_PER_CPU_KM=y
@@ -449,6 +448,7 @@ CONFIG_GENERIC_CPU_DEVICES=y
 #
 # Bus devices
 #
+# CONFIG_MHI_BUS is not set
 # end of Bus devices
 
 # CONFIG_CONNECTOR is not set
@@ -673,6 +673,7 @@ CONFIG_NET_CORE=y
 # CONFIG_IPVLAN is not set
 # CONFIG_VXLAN is not set
 # CONFIG_GENEVE is not set
+# CONFIG_BAREUDP is not set
 # CONFIG_GTP is not set
 # CONFIG_MACSEC is not set
 # CONFIG_NETCONSOLE is not set
@@ -758,6 +759,7 @@ CONFIG_NET_VENDOR_WIZNET=y
 # CONFIG_WIZNET_W5300 is not set
 CONFIG_NET_VENDOR_XILINX=y
 # CONFIG_XILINX_AXI_EMAC is not set
+# CONFIG_XILINX_LL_TEMAC is not set
 # CONFIG_MDIO_DEVICE is not set
 # CONFIG_PHYLIB is not set
 # CONFIG_MICREL_KS8995MA is not set
@@ -905,19 +907,7 @@ CONFIG_VT_HW_CONSOLE_BINDING=y
 CONFIG_UNIX98_PTYS=y
 CONFIG_LEGACY_PTYS=y
 CONFIG_LEGACY_PTY_COUNT=256
-# CONFIG_SERIAL_NONSTANDARD is not set
-# CONFIG_N_GSM is not set
-# CONFIG_TRACE_SINK is not set
-# CONFIG_NULL_TTY is not set
 CONFIG_LDISC_AUTOLOAD=y
-CONFIG_DEVMEM=y
-CONFIG_DEVKMEM=y
-# CONFIG_LEDMAN is not set
-# CONFIG_SNAPDOG is not set
-# CONFIG_SNAPSHOW is not set
-# CONFIG_NEXCOMM_LCM is not set
-# CONFIG_FAST_TIMER is not set
-# CONFIG_RESETSWITCH is not set
 
 #
 # Serial drivers
@@ -941,6 +931,10 @@ CONFIG_DEVKMEM=y
 # CONFIG_SERIAL_FSL_LINFLEXUART is not set
 # end of Serial drivers
 
+# CONFIG_SERIAL_NONSTANDARD is not set
+# CONFIG_N_GSM is not set
+# CONFIG_NULL_TTY is not set
+# CONFIG_TRACE_SINK is not set
 # CONFIG_SERIAL_DEV_BUS is not set
 # CONFIG_TTY_PRINTK is not set
 # CONFIG_IPMI_HANDLER is not set
@@ -948,9 +942,17 @@ CONFIG_DEVKMEM=y
 CONFIG_HW_RANDOM=y
 # CONFIG_HW_RANDOM_TIMERIOMEM is not set
 # CONFIG_HW_RANDOM_SHA204 is not set
+CONFIG_DEVMEM=y
+CONFIG_DEVKMEM=y
 # CONFIG_RAW_DRIVER is not set
 # CONFIG_TCG_TPM is not set
 # CONFIG_M41T11M6 is not set
+# CONFIG_LEDMAN is not set
+# CONFIG_SNAPDOG is not set
+# CONFIG_SNAPSHOW is not set
+# CONFIG_NEXCOMM_LCM is not set
+# CONFIG_FAST_TIMER is not set
+# CONFIG_RESETSWITCH is not set
 # CONFIG_SNAPI2C is not set
 # CONFIG_SNAPSPI is not set
 # CONFIG_M532X_PCM is not set
@@ -1030,6 +1032,11 @@ CONFIG_SPI_MASTER=y
 # CONFIG_SPI_XCOMM is not set
 # CONFIG_SPI_XILINX is not set
 # CONFIG_SPI_ZYNQMP_GQSPI is not set
+
+#
+# SPI Multiplexer support
+#
+# CONFIG_SPI_MUX is not set
 
 #
 # SPI Protocol Masters
@@ -1132,6 +1139,7 @@ CONFIG_BCMA_POSSIBLE=y
 # CONFIG_MFD_MC13XXX_I2C is not set
 # CONFIG_HTC_PASIC3 is not set
 # CONFIG_HTC_I2CPLD is not set
+# CONFIG_MFD_IQS62X is not set
 # CONFIG_MFD_KEMPLD is not set
 # CONFIG_MFD_88PM800 is not set
 # CONFIG_MFD_88PM805 is not set
@@ -1201,11 +1209,6 @@ CONFIG_BCMA_POSSIBLE=y
 # ARM devices
 #
 # end of ARM devices
-
-#
-# ACP (Audio CoProcessor) Configuration
-#
-# end of ACP (Audio CoProcessor) Configuration
 
 #
 # Frame buffer Devices
@@ -1299,6 +1302,7 @@ CONFIG_HID_GENERIC=y
 # CONFIG_HID_EZKEY is not set
 # CONFIG_HID_GEMBIRD is not set
 # CONFIG_HID_GFRM is not set
+# CONFIG_HID_GLORIOUS is not set
 # CONFIG_HID_KEYTOUCH is not set
 # CONFIG_HID_KYE is not set
 # CONFIG_HID_WALTOP is not set
@@ -1488,6 +1492,7 @@ CONFIG_RTC_I2C_AND_SPI=y
 # DMABUF options
 #
 # CONFIG_SYNC_FILE is not set
+# CONFIG_DMABUF_MOVE_NOTIFY is not set
 # CONFIG_DMABUF_HEAPS is not set
 # end of DMABUF options
 
@@ -1495,6 +1500,11 @@ CONFIG_RTC_I2C_AND_SPI=y
 # CONFIG_VIRT_DRIVERS is not set
 CONFIG_VIRTIO_MENU=y
 # CONFIG_VIRTIO_MMIO is not set
+# CONFIG_VDPA is not set
+CONFIG_VHOST_DPN=y
+CONFIG_VHOST_MENU=y
+# CONFIG_VHOST_NET is not set
+# CONFIG_VHOST_CROSS_ENDIAN_LEGACY is not set
 
 #
 # Microsoft Hyper-V guest support
@@ -1658,7 +1668,7 @@ CONFIG_INOTIFY_USER=y
 # end of CD-ROM/DVD Filesystems
 
 #
-# DOS/FAT/NT Filesystems
+# DOS/FAT/EXFAT/NT Filesystems
 #
 CONFIG_FAT_FS=y
 # CONFIG_MSDOS_FS is not set
@@ -1666,8 +1676,9 @@ CONFIG_VFAT_FS=y
 CONFIG_FAT_DEFAULT_CODEPAGE=437
 CONFIG_FAT_DEFAULT_IOCHARSET="iso8859-1"
 # CONFIG_FAT_DEFAULT_UTF8 is not set
+# CONFIG_EXFAT_FS is not set
 # CONFIG_NTFS_FS is not set
-# end of DOS/FAT/NT Filesystems
+# end of DOS/FAT/EXFAT/NT Filesystems
 
 #
 # Pseudo filesystems
@@ -2055,6 +2066,7 @@ CONFIG_CONSOLE_LOGLEVEL_DEFAULT=7
 CONFIG_CONSOLE_LOGLEVEL_QUIET=4
 CONFIG_MESSAGE_LOGLEVEL_DEFAULT=4
 # CONFIG_BOOT_PRINTK_DELAY is not set
+# CONFIG_DYNAMIC_DEBUG is not set
 CONFIG_SYMBOLIC_ERRNAME=y
 CONFIG_DEBUG_BUGVERBOSE=y
 # end of printk and dmesg options
@@ -2068,7 +2080,6 @@ CONFIG_FRAME_WARN=1024
 # CONFIG_STRIP_ASM_SYMS is not set
 # CONFIG_READABLE_ASM is not set
 # CONFIG_HEADERS_INSTALL is not set
-CONFIG_OPTIMIZE_INLINING=y
 # CONFIG_DEBUG_SECTION_MISMATCH is not set
 CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 # CONFIG_FRAME_POINTER is not set
@@ -2081,7 +2092,6 @@ CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_DEBUG_FS is not set
 # CONFIG_UBSAN is not set
-CONFIG_UBSAN_ALIGNMENT=y
 # end of Generic Kernel Debugging Instruments
 
 CONFIG_DEBUG_KERNEL=y
@@ -2115,6 +2125,7 @@ CONFIG_PANIC_TIMEOUT=0
 # CONFIG_SOFTLOCKUP_DETECTOR is not set
 # CONFIG_DETECT_HUNG_TASK is not set
 # CONFIG_WQ_WATCHDOG is not set
+# CONFIG_TEST_LOCKUP is not set
 # end of Debug Oops, Lockups and Hangs
 
 #
@@ -2187,6 +2198,7 @@ CONFIG_FULLDEBUG=y
 # CONFIG_FAULT_INJECTION is not set
 CONFIG_RUNTIME_TESTING_MENU=y
 # CONFIG_TEST_LIST_SORT is not set
+# CONFIG_TEST_MIN_HEAP is not set
 # CONFIG_TEST_SORT is not set
 # CONFIG_BACKTRACE_SELF_TEST is not set
 # CONFIG_RBTREE_TEST is not set

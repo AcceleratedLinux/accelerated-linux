@@ -47,8 +47,8 @@ done
 
 if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
 		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
-	if [ "$(runt get netmon.ipv4_interface_$intf.passed)" = n \
-			-o "$(runt get netmon.ipv6_interface_$intf.passed)" = n ]; then
+	if [ "$(runt get surelink.ipv4_interface_$intf.passed)" = n \
+			-o "$(runt get surelink.ipv6_interface_$intf.passed)" = n ]; then
 		CELL=1
 	elif [ "$(runt get mm.modem.$idx.status.gtech)" = 4g ]; then
 		CELL=3

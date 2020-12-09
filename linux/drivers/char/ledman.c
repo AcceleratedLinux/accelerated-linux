@@ -2570,67 +2570,6 @@ ledman_initarch(void)
 #endif /* CONFIG_MACH_CM41xx || CONFIG_MACH_IM42xx */
 /****************************************************************************/
 /****************************************************************************/
-#if defined(CONFIG_MACH_ACM500X)
-/****************************************************************************/
-#define LEDMAN_PLATFORM_DEFINED
-
-#include <linux/interrupt.h>
-#include <asm/io.h>
-#include <mach/platform.h>
-
-/*
- *	Definitions of the LED's on the OpenGear/ACM500X circuit board, as
- *	per the labels next to them. There are 4 software controlled LEDs.
- */
-#define	LED_D1	0x00080000
-#define	LED_D2	0x00040000
-#define	LED_D3	0x00020000
-#define	LED_D4	0x00010000
-#define	LEDMASK	0x000f0000
-
-static ledmap_t	ledman_std = {
-	[LEDMAN_ALL]		= LEDMASK,
-	[LEDMAN_COM1_RX]	= LED_D4,
-	[LEDMAN_COM1_TX]	= LED_D3,
-	[LEDMAN_COM2_RX]	= LED_D2,
-	[LEDMAN_COM2_TX]	= LED_D1,
-};
-
-static leddef_t	ledman_def;
-
-irqreturn_t ledman_interrupt(int irq, void *dev_id)
-{
-	ledman_signalreset();
-	return IRQ_HANDLED;
-}
-
-static void
-ledman_set(unsigned long bits)
-{
-	unsigned int gpio;
-	gpio = __raw_readl(VIO(KS8692_GPIO_DATA));
-	gpio = (gpio & ~LEDMASK) | (bits & LEDMASK);
-	__raw_writel(gpio, VIO(KS8692_GPIO_DATA));
-}
-
-static void
-ledman_initarch(void)
-{
-	unsigned int gpio;
-
-	/* Enable LED GPIO lines as outputs */
-	gpio = __raw_readl(VIO(KS8692_GPIO_MODE));
-	gpio |= LEDMASK;
-	__raw_writel(gpio, VIO(KS8692_GPIO_MODE));
-
-	/* Turn LEDs off */
-	ledman_set(0);
-}
-
-/****************************************************************************/
-#endif /* CONFIG_MACH_ACM500X */
-/****************************************************************************/
-/****************************************************************************/
 #if defined(CONFIG_ARCH_EP9312)
 /****************************************************************************/
 #define LEDMAN_PLATFORM_DEFINED
@@ -4563,7 +4502,7 @@ static struct ledgpiomap ix15_ledgpio[] = {
 	{ .name = "RSS3", .gpio = 13, },
 	{ .name = "RSS4", .gpio = 12, },
 	{ .name = "RSS5", .gpio = 15, },
-	{ .name = "ONLINE", .gpio = 114, },
+	{ .name = "ONLINE", .gpio = 28, },
 	{ .name = "SIM-RED", .gpio = 40, },
 	{ .name = "SIM-GREEN", .gpio = 46, },
 	{ .name = "SIM-BLUE", .gpio = 117, },

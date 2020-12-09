@@ -341,67 +341,6 @@
 	#define HAS_HW_SERVICE 1
 #endif
 
-#if defined(CONFIG_MACH_ACM500X) || defined(CONFIG_MACH_IM42xx) || \
-	defined(CONFIG_MACH_CM41xx) || defined(CONFIG_MACH_IM4004)
-#ifdef CONFIG_MACH_ACM500X
-#include <mach/platform.h>
-#include <mach/ks8692_utils.h>
-#endif
-	extern void service_watchdog(void);
-
-	static inline void enable_dog(void)
-	{
-#ifdef CONFIG_MACH_ACM500X
-		/* Use GPIO 4 as Output */
-		u32 reg = KS8692_READ_REG(KS8692_GPIO_MODE);
-		reg |= (1 << 4);
-		KS8692_WRITE_REG(KS8692_GPIO_MODE, reg);
-#endif
-	}
-
-	static inline void poke_the_dog(void)
-	{
-#ifdef CONFIG_MACH_ACM500X
-		/* Toggle GPIO4 */
-		u32 reg = KS8692_READ_REG(KS8692_GPIO_DATA);
-		reg ^= (1 << 4); 
-		KS8692_WRITE_REG(KS8692_GPIO_DATA, reg);
-#endif
-		service_watchdog();		
-	}
-
-	static inline void the_dog_is_dead(void) 
-	{
-		emergency_restart();
-	}
-
-	#define HAS_HW_SERVICE 1
-#endif
-
-#if defined(CONFIG_MACH_ACM550X)
-#include <mach/ks8692_utils.h>
-
-	static inline void enable_dog(void)
-	{
-		/* Use GPIO 4 as Output */
-		u32 reg = KS8692_READ_REG(KS8692_GPIO_MODE);
-		reg |= (1 << 4);
-		KS8692_WRITE_REG(KS8692_GPIO_MODE, reg);
-	}
-
-	static inline void poke_the_dog(void)
-	{
-		/* Toggle GPIO4 */
-		u32 reg = KS8692_READ_REG(KS8692_GPIO_DATA);
-		reg ^= (1 << 4); 
-		KS8692_WRITE_REG(KS8692_GPIO_DATA, reg);
-	}
-
-	static inline void the_dog_is_dead(void) {}
-
-	#define HAS_HW_SERVICE 1
-#endif
-
 #if defined(CONFIG_MACH_UTM400)
 	#include <asm/gpio.h>
 

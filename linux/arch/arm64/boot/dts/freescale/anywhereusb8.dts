@@ -102,6 +102,7 @@
 	awusb24_cpld@59 {
 		compatible = "digi,awusb24_cpld";
 		reg = <0x59>;
+
 		fan1r {
 		    name = "fan1r";
 		    reg = /bits/ 8 <0x32>;
@@ -634,7 +635,7 @@
 	status = "okay";
 
 	qflash0: mx25u3235f@0 {
-		compatible = "spi-nor";
+		compatible = "jedec,spi-nor";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		spi-max-frequency = <20000000>;
@@ -677,7 +678,7 @@
 	};
 
 	enet1: ethernet@f2000 {
-		phy-connection-type = "xgmii";
+		status = "disabled";
 	};
 
 	enet2: ethernet@e0000 {

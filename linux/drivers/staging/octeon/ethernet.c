@@ -858,7 +858,6 @@ static int cvm_oct_probe(struct platform_device *pdev)
 			SET_NETDEV_DEV(dev, &pdev->dev);
 			priv = netdev_priv(dev);
 			priv->netdev = dev;
-			SET_NETDEV_DEV(dev, &pdev->dev);;
 			priv->of_node = cvm_oct_node_for_port(pip, interface,
 							      port_index);
 

@@ -173,6 +173,9 @@ rm -rf ${DSTDIR}/vendors/ATT
 rm -rf ${DSTDIR}/vendors/AcceleratedConcepts/Factory*
 rm -rf ${DSTDIR}/vendors/AcceleratedConcepts/*[Ss]prite*
 rm -rf ${DSTDIR}/vendors/AcceleratedConcepts/*[Pp]orter*
+rm -rf ${DSTDIR}/vendors/Digi/TX54-NYC-DOT
+rm -rf ${DSTDIR}/vendors/Digi/*-Migration
+rm -rf ${DSTDIR}/vendors/Digi/*-Manuf-Revert
 
 
 #
@@ -256,9 +259,9 @@ echo "Packaging ${DSTDIR}..."
 cd ${CURPWD}
 tar cf ${PACKAGE}.tar ${NAME}
 echo "gziping ${PACKAGE}.tar..."
-bzip2 -9 -k ${PACKAGE}.tar
+xz -k ${PACKAGE}.tar
 gzip -9 ${PACKAGE}.tar
 
-mv ${PACKAGE}.tar.gz ${PACKAGE}.tar.bz2 ${PKGDIR}
+mv ${PACKAGE}.tar.gz ${PACKAGE}.tar.xz ${PKGDIR}
 
 exit 0

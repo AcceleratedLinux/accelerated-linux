@@ -19,8 +19,8 @@ ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
 
 DEVICES += $(DEVICE_PTY_64) \
 	ledman,c,126,0 \
-	serial/port1,c,207,18 \
-	ttyXBee,c,207,17
+	serial/port1,c,207,17 \
+	ttyXBee,c,207,20
 
 FLASH_DEVICES = \
 	boot,c,90,0 \
@@ -41,7 +41,7 @@ clean: image.clean
 romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
 	$(ROMFSINST) -p 555 /etc/mkffs
-	$(ROMFSINST) -e CONFIG_PROP_XBEE -d -p 555 xbee.sh /bin/xbee
+	$(ROMFSINST) -e CONFIG_PROP_XBEE -p 644 /etc/xbee.conf
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
 	$(ROMFSINST) /etc/fw_env.config
 	$(ROMFSINST) -s /var/tmp/log /dev/log

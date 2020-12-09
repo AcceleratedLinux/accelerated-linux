@@ -72,14 +72,14 @@ Index: openssh-6.6p1/auth.c
  	case sDeprecated:
  		logit("%s line %d: Deprecated option %s",
  		    filename, linenum, arg);
-@@ -2846,6 +2847,7 @@
+@@ -2861,6 +2861,7 @@
  	dump_cfg_string(sHostbasedAcceptedKeyTypes, o->hostbased_key_types);
  	dump_cfg_string(sHostKeyAlgorithms, o->hostkeyalgorithms);
  	dump_cfg_string(sPubkeyAcceptedKeyTypes, o->pubkey_key_types);
 +	dump_cfg_string(sVirtualUser, o->virtual_user);
+ #if defined(__OpenBSD__) || defined(HAVE_SYS_SET_PROCESS_RDOMAIN)
  	dump_cfg_string(sRDomain, o->routing_domain);
- 
- 	/* string arguments requiring a lookup */
+ #endif
 --- openssh-6.8p1/servconf.h.orig	2015-03-19 10:15:51.640525369 +1000
 +++ openssh-6.8p1/servconf.h	2015-03-19 10:23:09.460515228 +1000
 @@ -206,6 +206,8 @@

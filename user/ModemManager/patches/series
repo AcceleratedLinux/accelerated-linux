@@ -27,3 +27,6 @@
 0027-huawei-add-support-for-MU709.patch
 0028-novatel-fix-sscanf-format-for-uClibc.patch
 0029-pantech-support-UML295VW.patch
+0030-sierra-disable-qcdm.patch
+0031-sierra-device-blacklist.patch
+

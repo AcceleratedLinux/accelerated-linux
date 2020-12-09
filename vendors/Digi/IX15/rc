@@ -25,31 +25,31 @@ echo 6 > /proc/sys/kernel/printk
 /etc/rc.dev
 
 echo "Initializing network interfaces..."
-ip link set eth0 name eth1
+ip link set eth0 name eth
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
-setmac -i eth1 -u -n 1
+setmac -i eth -u -n 1
 
 echo "Initializing CELL interface control..."
 # GPIO66 = Cell Module Reset (output, active low)
 # GPIO118 = Cell Module SIM switch button (input, active low)
 # GPIO119 = Cell Module Power (output, active low)
 # GPIO120 = Cell Module SIM select (output)
-# GPIO115 = SIM1 detect (input, 0=SIM detected)
-# GPIO116 = SIM2 detect (input, 0=SIM detected)
+# GPIO18 = SIM1 detect (input, 0=SIM detected)
+# GPIO19 = SIM2 detect (input, 0=SIM detected)
 echo 119 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio119/direction
+echo low > /sys/class/gpio/gpio119/direction
 echo 120 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio120/direction
+echo high > /sys/class/gpio/gpio120/direction
 echo 66 > /sys/class/gpio/export
 echo high > /sys/class/gpio/gpio66/direction
 echo 118 > /sys/class/gpio/export
 echo in > /sys/class/gpio/gpio118/direction
 echo falling > /sys/class/gpio/gpio118/edge
-echo 115 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio115/direction
-echo 116 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio116/direction
+echo 18 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio18/direction
+echo 19 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio19/direction
 
 serial-mode /dev/serial/port1 init
 

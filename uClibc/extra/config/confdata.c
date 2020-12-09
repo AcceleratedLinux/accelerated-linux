@@ -394,7 +394,7 @@ int conf_write(const char *name)
 	struct symbol *sym;
 	struct menu *menu;
 	const char *basename;
-	char dirname[128], tmpname[128], newname[128];
+	char dirname[128], tmpname[256], newname[128];
 	int type, l;
 	const char *str;
 	time_t now;

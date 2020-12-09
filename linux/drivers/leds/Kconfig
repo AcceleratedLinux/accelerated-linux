@@ -879,6 +879,17 @@ config LEDS_MCU_TX54
 	help
 	  This option enables support for the LED of MCU on TX54.
 
+config LEDS_IP30
+	tristate "LED support for SGI Octane machines"
+	depends on LEDS_CLASS
+	depends on SGI_MFD_IOC3
+	help
+	  This option enables support for the Red and White LEDs of
+	  SGI Octane machines.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called leds-ip30.
+
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"
 

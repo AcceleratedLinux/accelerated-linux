@@ -293,7 +293,4 @@
 /* Freescale LINFlexD UART */
 #define PORT_LINFLEXUART	122
 
-/* Micrel KSZ8692 */
-#define PORT_KS8692	123
-
 #endif /* _UAPILINUX_SERIAL_CORE_H */

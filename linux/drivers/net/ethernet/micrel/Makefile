@@ -7,5 +7,3 @@ obj-$(CONFIG_KS8842) += ks8842.o
 obj-$(CONFIG_KS8851) += ks8851.o
 obj-$(CONFIG_KS8851_MLL) += ks8851_mll.o
 obj-$(CONFIG_KSZ884X_PCI) += ksz884x.o
-
-obj-$(CONFIG_ARM_KS8692_ETHER) += ks8692/

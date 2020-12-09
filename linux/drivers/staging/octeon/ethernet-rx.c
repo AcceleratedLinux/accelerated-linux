@@ -9,7 +9,6 @@
 #include <linux/kernel.h>
 #include <linux/cache.h>
 #include <linux/cpumask.h>
-#include <linux/interrupt.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ip.h>
@@ -356,7 +355,6 @@ static int cvm_oct_poll(struct oct_rx_group *rx_group, int budget)
 					dev->stats.rx_packets++;
 					dev->stats.rx_bytes += skb->len;
 				}
-
 				netif_receive_skb(skb);
 			} else {
 				/*

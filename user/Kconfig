@@ -20,6 +20,13 @@ config USER_INIT_CONSOLE_SH
 	help
 	  Init will automatically spawn a shell on the console.
 
+config USER_INIT_RUN_CONFIGRC
+	bool "execute startup script"
+	depends on USER_INIT_INIT
+	default y
+	help
+	  Init will automatically run the start script on start up.
+
 config USER_INIT_RUN_FIREWALL
 	bool "execute firewall rules"
 	depends on USER_INIT_INIT

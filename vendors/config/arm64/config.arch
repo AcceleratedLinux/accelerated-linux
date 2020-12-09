@@ -31,7 +31,9 @@ ifndef HW_VENDOR
 endif
 
 ifndef EXTRA_MODULE_DIRS
-#EXTRA_MODULE_DIRS = $(ROOTDIR)/modules
+ifeq ($(ROOTDIR)/modules,$(wildcard $(ROOTDIR)/modules))
+EXTRA_MODULE_DIRS = $(ROOTDIR)/modules/
+endif
 endif
 
 ifndef NFIMAGE

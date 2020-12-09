@@ -55,7 +55,8 @@ class Config(object):
         self.product = self.find_product(products)
         os.environ['ARCH'] = self.product['arch']
         os.environ['SRCARCH'] = self.product['arch']
-        os.environ['CC'] = self.product['cc']
+        os.environ['CC'] = self.product['tools'] + "-gcc"
+        os.environ['LD'] = self.product['tools'] + "-ld"
         os.environ['KERNELVERSION'] = 'unknown'
 
         self.load_config('linux', '/linux/Kconfig', '/linux', False)

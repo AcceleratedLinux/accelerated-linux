@@ -790,6 +790,16 @@ ath10k_is_rssi_enable(struct ath10k_hw_params *hw,
 
 #define NUM_TARGET_CE_CONFIG_WLAN ar->hw_values->num_target_ce_config_wlan
 
+/*
+ * Target specific defines for 10.4 firmware and for QCA9984
+ * only for 128 stations support
+ */
+#define TARGET_10_4_NUM_STATIONS_QCA9984		130
+#define TARGET_10_4_NUM_PEERS_QCA9984			130
+#define TARGET_10_4_NUM_ACTIVE_PEERS_QCA9984	130
+#define TARGET_10_4_TGT_NUM_TIDS_QCA9984		((TARGET_10_4_NUM_PEERS_QCA9984) * 2)
+#define TARGET_10_4_AST_SKID_LIMIT_QCA9984		360
+
 /* Target specific defines for 10.4 firmware */
 #define TARGET_10_4_NUM_VDEVS			16
 #define TARGET_10_4_NUM_STATIONS		32

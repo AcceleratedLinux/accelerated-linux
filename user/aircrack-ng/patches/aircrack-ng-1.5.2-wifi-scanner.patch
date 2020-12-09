@@ -1,6 +1,37 @@
---- aircrack-ng-1.5.2/src/airodump-ng.c	2018-12-09 22:53:44.000000000 +0000
-+++ aircrack-ng-1.5.2/src/airodump-ng.c	2019-09-07 02:31:33.776000000 +0000
-@@ -255,11 +255,9 @@
+From 0f1acbc91730fddd48884cb9366c6a3acb6defa9 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Fri, 24 Jul 2020 08:56:44 +0100
+Subject: [PATCH] airodump-ng: add custom 'wifi_scanner' output format
+
+This presents AP and client information in the format required by the
+Wi-Fi scanner. Also add several new command line options to provide
+additional scan controls - see usage for details.
+---
+ src/airodump-ng.c | 917 +++++++++++++++++++++++++++++++++++++++++++++-
+ src/airodump-ng.h |  35 ++
+ 2 files changed, 937 insertions(+), 15 deletions(-)
+
+diff --git a/src/airodump-ng.c b/src/airodump-ng.c
+index 7fdd9a1..b7a2be7 100644
+--- a/src/airodump-ng.c
++++ b/src/airodump-ng.c
+@@ -39,6 +39,7 @@
+ #include <sys/ioctl.h>
+ #include <sys/wait.h>
+ #include <sys/time.h>
++#include <sys/stat.h>
+ 
+ #ifndef TIOCGWINSZ
+ #include <sys/termios.h>
+@@ -60,6 +61,7 @@
+ #include <pthread.h>
+ #include <termios.h>
+ #include <limits.h>
++#include <stdbool.h>
+ 
+ #include <sys/wait.h>
+ 
+@@ -255,11 +257,9 @@ static void input_thread(void * arg)
  			{
  				snprintf(G.message, sizeof(G.message), "][ paused output");
  				pthread_mutex_lock(&(G.mx_print));
@@ -12,7 +43,7 @@
  				pthread_mutex_unlock(&(G.mx_print));
  			}
  			else
-@@ -374,11 +372,9 @@
+@@ -374,11 +374,9 @@ static void input_thread(void * arg)
  		if (G.do_exit == 0 && !G.do_pause)
  		{
  			pthread_mutex_lock(&(G.mx_print));
@@ -24,18 +55,60 @@
  			pthread_mutex_unlock(&(G.mx_print));
  		}
  	}
-@@ -723,7 +719,9 @@
+@@ -723,7 +721,38 @@ char usage[] =
  	"      --output-format\n"
  	"                  <formats> : Output format. Possible values:\n"
  	"                              pcap, ivs, csv, gps, kismet, netxml, "
 -	"logcsv\n"
 +	"logcsv, wifi_scanner\n"
-+	"      --sys-name            : Unique System Name\n"
-+	"      --loc-name            : Unique Location Name\n"
++	"      --sys-name     <name> : Unique System Name\n"
++	"      --loc-name     <name> : Unique Location Name\n"
++	"      --filter-seconds\n"
++	"                     <secs> : Min time in secs before reporting same "
++	"AP or client again (Default: 3600 secs)\n"
++	"      --cache-reset-minutes\n"
++	"                     <mins> : Cache reset interval in mins "
++	"(Default: after every write to output file)\n"
++	"      --min-rssi     <rssi> : Ignore APs/clients with lower RSSI "
++	"(Default: %d)\n"
++	"      --static-blocklist\n"
++	"                     <file> : Ignore APs/clients matching any OUI or "
++	"MAC address listed in file\n"
++	"\n"
++	"  Options to detect and ignore immobile APs/clients:\n"
++	"      --dynamic-blocklist\n"
++	"                     <file> : Store immobile APs/clients in file\n"
++	"      --candidate-blocklist\n"
++	"                     <file> : Snapshot candidate immobile APs/clients in file\n"
++	"      --observation-period\n"
++	"                     <secs> : Test RSSI of clients/APs over this time "
++	"(Default: %u)\n"
++	"      --max-variance\n"
++	"                    <float> : Max RSSI variance to be considered "
++	"immobile (Default: %.2f)\n"
++	"      --min-observation\n"
++	"                  <percent> : Min proportion of observation period "
++	"AP/client must be seen (Default: %u)\n"
++	"\n"
++	"      --no-access-points    : Do not report APs\n"
++	"      --no-clients          : Do not report clients\n"
  	"      --ignore-negative-one : Removes the message that says\n"
  	"                              fixed channel <interface>: -1\n"
  	"      --write-interval\n"
-@@ -934,6 +932,17 @@
+@@ -762,7 +791,11 @@ static void airodump_usage(void)
+ {
+ 	char * const l_usage = getVersion(
+ 		"Airodump-ng", _MAJ, _MIN, _SUB_MIN, _REVISION, _BETA, _RC);
+-	printf(usage, l_usage);
++	printf(usage, l_usage,
++		DEFAULT_MIN_RSSI,
++		DEFAULT_CANDIDATE_OBSERVATION_PERIOD,
++		DEFAULT_MAX_CANDIDATE_VARIANCE,
++		DEFAULT_MIN_CANDIDATE_OBSERVATION);
+ 	free(l_usage);
+ }
+ 
+@@ -934,6 +967,23 @@ static int dump_initialize(char * prefix, int ivs_only)
  		return (0);
  	}
  
@@ -47,13 +120,19 @@
 +			fprintf(stderr, "Could not create \"%s\".\n", prefix);
 +			return 1;
 +		}
++
++		char const * const suffix = ".0";
++		size_t const dump_prefix_rotated_size = strlen(prefix) + strlen(suffix) + 1;
++		G.dump_prefix_rotated = malloc(dump_prefix_rotated_size);
++		snprintf(G.dump_prefix_rotated, dump_prefix_rotated_size, "%s%s", prefix, suffix);
++
 +		return 0;
 +	}
 +
  	/* Create a buffer of the length of the prefix + '-' + 2 numbers + '.'
  	   + longest extension ("kismet.netxml") + terminating 0. */
  	ofn_len = strlen(prefix) + 1 + 2 + 1 + 13 + 1;
-@@ -1372,11 +1381,11 @@
+@@ -1372,11 +1422,11 @@ static int dump_add_packet(unsigned char * h80211,
  	struct timeval tv;
  	struct ivs2_pkthdr ivs2;
  	unsigned char *p, *org_p, c;
@@ -70,7 +149,19 @@
  	int num_xor = 0;
  
  	struct AP_info * ap_cur = NULL;
-@@ -1482,6 +1491,7 @@
+@@ -1425,6 +1475,11 @@ static int dump_add_packet(unsigned char * h80211,
+ 			break; // WDS -> Transmitter taken as BSSID
+ 	}
+ 
++	if (memcmp(bssid, NULL_MAC, 6) == 0)
++	{
++		return 0;
++	}
++
+ 	if (memcmp(G.f_bssid, NULL_MAC, 6) != 0)
+ 	{
+ 		if (memcmp(G.f_netmask, NULL_MAC, 6) != 0)
+@@ -1482,6 +1537,7 @@ static int dump_add_packet(unsigned char * h80211,
  
  		ap_cur->tinit = time(NULL);
  		ap_cur->tlast = time(NULL);
@@ -78,7 +169,7 @@
  
  		ap_cur->avg_power = -1;
  		ap_cur->best_power = -1;
-@@ -1490,6 +1500,7 @@
+@@ -1490,6 +1546,7 @@ static int dump_add_packet(unsigned char * h80211,
  		for (i = 0; i < NB_PWR; i++) ap_cur->power_lvl[i] = -1;
  
  		ap_cur->channel = -1;
@@ -86,7 +177,19 @@
  		ap_cur->max_speed = -1;
  		ap_cur->security = 0;
  
-@@ -1779,6 +1790,7 @@
+@@ -1731,6 +1788,11 @@ static int dump_add_packet(unsigned char * h80211,
+ 			goto skip_station;
+ 	}
+ 
++	if (memcmp(stmac, NULL_MAC, 6) == 0)
++	{
++		return 0;
++	}
++
+ 	/* update our chained list of wireless stations */
+ 
+ 	st_cur = G.st_1st;
+@@ -1779,6 +1841,7 @@ static int dump_add_packet(unsigned char * h80211,
  		st_cur->tinit = time(NULL);
  		st_cur->tlast = time(NULL);
  
@@ -94,7 +197,7 @@
  		st_cur->power = -1;
  		st_cur->best_power = -1;
  		st_cur->rate_to = -1;
-@@ -1790,7 +1802,7 @@
+@@ -1790,7 +1853,7 @@ static int dump_add_packet(unsigned char * h80211,
  		st_cur->qos_fr_ds = 0;
  		st_cur->qos_to_ds = 0;
  		st_cur->channel = 0;
@@ -103,7 +206,7 @@
  		gettimeofday(&(st_cur->ftimer), NULL);
  
  		memcpy(st_cur->gps_loc_min, G.gps_loc, sizeof(st_cur->gps_loc_min));
-@@ -4339,8 +4351,10 @@
+@@ -4339,8 +4402,10 @@ static void dump_print(int ws_row, int ws_col, int if_num)
  	}
  }
  
@@ -114,7 +217,7 @@
  	// Unix style encoding
  	char *ret, *rret;
  	int i, pos, contains_space_end;
-@@ -4358,6 +4372,11 @@
+@@ -4358,6 +4423,11 @@ static char * format_text_for_csv(const unsigned char * input, int len)
  		return ret;
  	}
  
@@ -126,7 +229,7 @@
  	pos = 0;
  	contains_space_end = (input[0] == ' ') || input[len - 1] == ' ';
  
-@@ -4371,6 +4390,11 @@
+@@ -4371,6 +4441,11 @@ static char * format_text_for_csv(const unsigned char * input, int len)
  
  	for (i = 0; i < len; i++)
  	{
@@ -138,7 +241,7 @@
  		if (!isprint(input[i]) || input[i] == ',' || input[i] == '\\'
  			|| input[i] == '"')
  		{
-@@ -4399,6 +4423,7 @@
+@@ -4399,6 +4474,7 @@ static char * format_text_for_csv(const unsigned char * input, int len)
  		ret[pos++] = '"';
  	}
  
@@ -146,10 +249,393 @@
  	ret[pos++] = '\0';
  
  	rret = realloc(ret, pos);
-@@ -4664,6 +4689,284 @@
+@@ -4664,6 +4740,717 @@ static int dump_write_csv(void)
  	return 0;
  }
  
++#define OUI_SIZE 3
++#define MAC_SIZE 6
++
++typedef struct mac_list_t
++{
++	unsigned char mac[MAC_SIZE]; // MAC or OUI
++	struct mac_list_t * next;
++	char data[0];
++} mac_list_t;
++
++#define BLOCKLIST_NUM_SLOTS 256
++
++typedef unsigned (*blocklist_hashfunc_t)(unsigned char const * const mac);
++typedef int (*blocklist_compfunc_t)(unsigned char const * const mac_a, unsigned char const * const mac_b);
++
++typedef struct blocklist_t
++{
++	mac_list_t * slots[BLOCKLIST_NUM_SLOTS];
++	blocklist_hashfunc_t hashfunc;
++	blocklist_compfunc_t compfunc;
++	size_t data_size;
++} blocklist_t;
++
++static unsigned mac_blocklist_hashfunc(unsigned char const * const mac)
++{
++	return mac[MAC_SIZE - 1];
++}
++
++static int mac_blocklist_compfunc(unsigned char const * const mac_a, unsigned char const * const mac_b)
++{
++	return memcmp(mac_a, mac_b, MAC_SIZE);
++}
++
++static unsigned oui_blocklist_hashfunc(unsigned char const * const mac)
++{
++	return (mac[0] << 16) | (mac[1] << 8) | mac[2];
++}
++
++static int oui_blocklist_compfunc(unsigned char const * const mac_a, unsigned char const * const mac_b)
++{
++	return memcmp(mac_a, mac_b, OUI_SIZE);
++}
++
++static mac_list_t ** blocklist_slot(blocklist_t * const blocklist, unsigned char const * const mac)
++{
++	unsigned const hash = blocklist->hashfunc(mac);
++	size_t const index = hash % BLOCKLIST_NUM_SLOTS;
++
++	return &blocklist->slots[index];
++}
++
++static mac_list_t * blocklist_lookup_by_slot(blocklist_t * const blocklist, mac_list_t ** const slot, unsigned char const * const mac)
++{
++	mac_list_t * mac_list = *slot;
++
++	for (mac_list = *slot; mac_list != NULL; mac_list = mac_list->next)
++	{
++		if (blocklist->compfunc(mac, mac_list->mac) == 0)
++		{
++			break;
++		}
++	}
++
++	return mac_list;
++}
++
++static mac_list_t * blocklist_lookup(blocklist_t * const blocklist, unsigned char const * const mac)
++{
++	if (blocklist == NULL)
++	{
++		return NULL;
++	}
++
++	mac_list_t ** const slot = blocklist_slot(blocklist, mac);
++
++	return blocklist_lookup_by_slot(blocklist, slot, mac);
++}
++
++static void blocklist_iterate(blocklist_t * const blocklist, void (*callback)(mac_list_t *))
++{
++	if (blocklist == NULL)
++	{
++		return;
++	}
++
++	for (size_t i = 0; i < BLOCKLIST_NUM_SLOTS; i++)
++	{
++		for (mac_list_t * mac_list = blocklist->slots[i]; mac_list != NULL; mac_list = mac_list->next)
++		{
++			callback(mac_list);
++		}
++	}
++}
++
++static mac_list_t * blocklist_insert(blocklist_t * const blocklist, unsigned char const * const mac)
++{
++	mac_list_t ** const slot = blocklist_slot(blocklist, mac);
++	mac_list_t * mac_list = blocklist_lookup_by_slot(blocklist, slot, mac);
++
++	if (mac_list != NULL)
++	{
++		// Already in list so nothing to do.
++		return mac_list;
++	}
++
++	mac_list = calloc(1, sizeof(*mac_list) + blocklist->data_size);
++
++	if (mac_list != NULL)
++	{
++		memcpy(mac_list->mac, mac, sizeof(mac_list->mac));
++		mac_list->next = *slot;
++		*slot = mac_list;
++	}
++
++	return mac_list;
++}
++
++
++static blocklist_t * blocklist_alloc(blocklist_hashfunc_t const hashfunc, blocklist_compfunc_t const compfunc, size_t const data_size)
++{
++	blocklist_t * const blocklist = calloc(1, sizeof(*blocklist));
++
++	if (blocklist != NULL)
++	{
++		blocklist->hashfunc = hashfunc;
++		blocklist->compfunc = compfunc;
++		blocklist->data_size = data_size;
++	}
++
++	return blocklist;
++}
++
++static void blocklist_free_slot(mac_list_t ** const slot)
++{
++	for (mac_list_t * mac_list = *slot; mac_list != NULL;)
++	{
++		mac_list_t * const next = mac_list->next;
++		free(mac_list);
++		mac_list = next;
++	}
++}
++
++static void blocklist_free(blocklist_t ** const blocklist)
++{
++	if (*blocklist == NULL)
++	{
++		return;
++	}
++
++	for (size_t i = 0; i < BLOCKLIST_NUM_SLOTS; i++)
++	{
++		mac_list_t ** const slot = &(*blocklist)->slots[i];
++		blocklist_free_slot(slot);
++		*slot = NULL;
++	}
++
++	free(*blocklist);
++	*blocklist = NULL;
++}
++
++static bool is_blocklisted_mac(unsigned char const * const mac)
++{
++	return (blocklist_lookup(G.static_oui_blocklist, mac) != NULL
++		|| blocklist_lookup(G.static_mac_blocklist, mac) != NULL
++		|| blocklist_lookup(G.dynamic_blocklist, mac) != NULL);
++}
++
++static bool is_static_blocklist_file_modified(void)
++{
++	char const * const file = G.static_blocklist_file;
++
++	if (file == NULL || *file == '\0')
++	{
++		return false;
++	}
++
++	struct stat stat_buf;
++
++	if (stat(file, &stat_buf) != 0)
++	{
++		// File may not exist or have been deleted.
++		blocklist_free(&G.static_mac_blocklist);
++		blocklist_free(&G.static_oui_blocklist);
++		G.static_blocklist_file_mtime = 0;
++		return false;
++	}
++
++	bool const is_modified = (stat_buf.st_mtime > G.static_blocklist_file_mtime);
++	G.static_blocklist_file_mtime = stat_buf.st_mtime;
++
++	return is_modified;
++}
++
++static void parse_blocklist_file(char const * const file, blocklist_t ** const mac_blocklist, blocklist_t ** const oui_blocklist)
++{
++	if (file == NULL || *file == '\0')
++	{
++		return;
++	}
++
++	if (mac_blocklist != NULL)
++	{
++		blocklist_free(mac_blocklist);
++		*mac_blocklist = blocklist_alloc(mac_blocklist_hashfunc, mac_blocklist_compfunc, 0);
++	}
++	if (oui_blocklist != NULL)
++	{
++		blocklist_free(oui_blocklist);
++		*oui_blocklist = blocklist_alloc(oui_blocklist_hashfunc, oui_blocklist_compfunc, 0);
++	}
++
++	FILE * const fp = fopen(file, "r");
++	if (fp == NULL)
++	{
++		return;
++	}
++
++	char buffer[BUFSIZ];
++
++	while (fgets(buffer, sizeof(buffer), fp) != NULL)
++	{
++		unsigned char mac[MAC_SIZE];
++
++		// Remove leading/trailing whitespaces.
++		trim(buffer);
++
++		int const mac_len = sscanf(buffer, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
++
++		// Support OUIs (3 bytes) and full MAC addresses (6 bytes).
++		switch (mac_len)
++		{
++			case OUI_SIZE:
++				if (oui_blocklist != NULL && *oui_blocklist != NULL)
++				{
++					blocklist_insert(*oui_blocklist, mac);
++				}
++				break;
++			case MAC_SIZE:
++				if (mac_blocklist != NULL && *mac_blocklist != NULL)
++				{
++					blocklist_insert(*mac_blocklist, mac);
++				}
++				break;
++			default:
++				continue;
++
++		}
++	}
++
++	fclose(fp);
++}
++
++typedef enum
++{
++	candidate_type_access_point,
++	candidate_type_client,
++} candidate_type_t;
++
++typedef struct
++{
++	candidate_type_t type;
++	size_t num_observations;
++	int min_rssi;
++	int max_rssi;
++	float mean;
++	float q;
++} candidate_t;
++
++static void blocklist_file_append(FILE * const fp, unsigned char const * const mac, candidate_t const * const candidate, unsigned const observation_percent, float const variance)
++{
++	fprintf(fp, "%02X:%02X:%02X:%02X:%02X:%02X %-6s %3zu %3u %4d %4d %7.2f\n",
++		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
++		candidate->type == candidate_type_access_point ? "AP" : "client",
++		candidate->num_observations,
++		observation_percent,
++		candidate->min_rssi,
++		candidate->max_rssi,
++		variance);
++}
++
++static void test_candidate_mobility(mac_list_t * const mac_list)
++{
++	candidate_t const * const candidate = (candidate_t *)mac_list->data;
++	unsigned const observation_percent = (candidate->num_observations * G.file_write_interval * 100) / G.candidate_observation_period;
++	float const variance = candidate->q / candidate->num_observations; // population variance
++
++	if (observation_percent < G.min_candidate_observation
++		|| variance > G.max_candidate_variance)
++	{
++		// Write out non-immobile candidates for observation.
++		blocklist_file_append(G.candidate_blocklist_fp, mac_list->mac, candidate, observation_percent, variance);
++	}
++	else
++	{
++		// Candidate was considered to be immobile.
++		blocklist_insert(G.dynamic_blocklist, mac_list->mac);
++		blocklist_file_append(G.dynamic_blocklist_fp, mac_list->mac, candidate, observation_percent, variance);
++	}
++}
++
++static FILE * open_file_for_append(char const * const file)
++{
++	if (file == NULL || *file == '\0')
++	{
++		return NULL;
++	}
++
++	return fopen(file, "a");
++}
++
++static void close_file(FILE ** const fp)
++{
++	if (*fp != NULL)
++	{
++		fclose(*fp);
++		*fp = NULL;
++	}
++}
++
++static void candidate_blocklist_process(void)
++{
++	if (!G.dynamic_blocklist_enabled)
++	{
++		return;
++	}
++
++	time_t const time_now = time(NULL);
++
++	if ((time_now - G.last_candidate_process) < G.candidate_observation_period)
++	{
++		return;
++	}
++
++	G.last_candidate_process = time_now;
++
++	if (G.candidate_blocklist_file != NULL && *G.candidate_blocklist_file != '\0')
++	{
++		remove(G.candidate_blocklist_file);
++	}
++
++	G.dynamic_blocklist_fp = open_file_for_append(G.dynamic_blocklist_file);
++	G.candidate_blocklist_fp = open_file_for_append(G.candidate_blocklist_file);
++	blocklist_iterate(G.candidate_blocklist, test_candidate_mobility);
++	close_file(&G.dynamic_blocklist_fp);
++	close_file(&G.candidate_blocklist_fp);
++
++	blocklist_free(&G.candidate_blocklist);
++	G.candidate_blocklist = blocklist_alloc(mac_blocklist_hashfunc, mac_blocklist_compfunc, sizeof(candidate_t));
++}
++
++static void candidate_blocklist_update(candidate_type_t const type, unsigned char const * const mac, int const rssi)
++{
++	if (!G.dynamic_blocklist_enabled)
++	{
++		return;
++	}
++
++	mac_list_t * const mac_list = blocklist_insert(G.candidate_blocklist, mac);
++
++	if (mac_list == NULL)
++	{
++		return;
++	}
++
++	candidate_t * const candidate = (candidate_t *)mac_list->data;
++
++	candidate->type = type;
++	candidate->num_observations++;
++	if (rssi < candidate->min_rssi)
++	{
++		candidate->min_rssi = rssi;
++	}
++	if (candidate->max_rssi == 0 || rssi > candidate->max_rssi)
++	{
++		candidate->max_rssi = rssi;
++	}
++
++	// From: https://en.wikipedia.org/wiki/Standard_deviation#Rapid_calculation_methods
++	float const old_mean = candidate->mean;
++	candidate->mean += (rssi - old_mean) / candidate->num_observations;
++	candidate->q += (rssi - old_mean) * (rssi - candidate->mean);
++}
++
 +static void clear_wifi_scanner_cache(void)
 +{
 +	struct AP_info *ap_cur = NULL, *ap_next = NULL, *ap_prv = NULL;
@@ -226,51 +712,51 @@
 +			}
 +			G.manufList = NULL;
 +		}
-+	
++
 +	}
 +}
 +
-+static int dump_write_wifi_scanner(void)
++static void write_wifi_scanner_access_points(void)
 +{
-+	struct AP_info *ap_cur = NULL;
-+	struct ST_info *st_cur = NULL;
-+	time_t curr_time = 0;
-+
-+	if (!G.record_data || !G.output_format_wifi_scanner) return 0;
-+
-+	ap_cur = G.ap_1st;
-+	/* Access Points */
-+	while (ap_cur != NULL)
++	for (struct AP_info * ap_cur = G.ap_1st; ap_cur != NULL; ap_cur = ap_cur->next)
 +	{
-+		if (((time(NULL) - ap_cur->time_printed) < G.filter_seconds) && (ap_cur->old_channel == ap_cur->channel))
++		if (is_blocklisted_mac(ap_cur->bssid))
 +		{
-+			ap_cur = ap_cur->next;
++			continue;
++		}
++
++		if (ap_cur->avg_power < G.min_rssi)
++		{
 +			continue;
 +		}
 +
 +		if (memcmp(ap_cur->bssid, BROADCAST, 6) == 0)
 +		{
-+			ap_cur = ap_cur->next;
 +			continue;
 +		}
 +
 +		if (ap_cur->security != 0 && G.f_encrypt != 0
 +			&& ((ap_cur->security & G.f_encrypt) == 0))
 +		{
-+                        ap_cur = ap_cur->next;
 +			continue;
 +		}
 +
 +		if (is_filtered_essid(ap_cur->essid))
 +		{
-+			ap_cur = ap_cur->next;
++			continue;
++		}
++
++		candidate_blocklist_update(candidate_type_access_point, ap_cur->bssid, ap_cur->avg_power);
++
++		if (((time(NULL) - ap_cur->time_printed) < G.filter_seconds) && (ap_cur->old_channel == ap_cur->channel))
++		{
 +			continue;
 +		}
 +
 +		ap_cur->time_printed = time(NULL);
 +		ap_cur->old_channel = ap_cur->channel;
 +
-+		fprintf(G.f_txt, "%s|%s|",G.sys_name, G.loc_name);
++		fprintf(G.f_txt, "%s|%s|", G.sys_name ?: "", G.loc_name ?: "");
 +
 +		struct tm * ts_struct;
 +		ts_struct = localtime(&ap_cur->tlast);
@@ -324,28 +810,40 @@
 +		}
 +
 +		fprintf(G.f_txt, "%3d\r\n", ap_cur->avg_power);
-+		ap_cur = ap_cur->next;
 +	}
++}
 +
-+
-+	/*   Process Clients */
-+	st_cur = G.st_1st;
-+	while (st_cur != NULL)
++static void write_wifi_scanner_clients(void)
++{
++	for (struct ST_info * st_cur = G.st_1st; st_cur != NULL; st_cur = st_cur->next)
 +	{
-+		ap_cur = st_cur->base;
++		struct AP_info const * const ap_cur = st_cur->base;
++
 +		if (ap_cur->nb_pkt < 2)
 +		{
-+			st_cur = st_cur->next;
 +			continue;
 +		}
++
++		if (is_blocklisted_mac(st_cur->stmac))
++		{
++			continue;
++		}
++
++		if (st_cur->power < G.min_rssi)
++		{
++			continue;
++		}
++
++		candidate_blocklist_update(candidate_type_client, st_cur->stmac, st_cur->power);
++
 +		if (((time(NULL) - st_cur->time_printed) < G.filter_seconds) && (st_cur->old_channel == st_cur->channel))
 +		{
-+			st_cur = st_cur->next;
 +			continue;
 +		}
++
 +		st_cur->time_printed = time(NULL);
 +		st_cur->old_channel = st_cur->channel;
-+		fprintf(G.f_txt, "%s|%s|", G.sys_name, G.loc_name);
++		fprintf(G.f_txt, "%s|%s|", G.sys_name ?: "", G.loc_name ?: "");
 +
 +		struct tm * ts_struct;
 +
@@ -412,26 +910,64 @@
 +		}
 +		fprintf( G.f_txt, "%3d", st_cur->power);
 +		fprintf( G.f_txt, "\r\n" );
-+		st_cur = st_cur->next;
++	}
++}
++
++static bool truncate_output_file(void)
++{
++	// By rotating to an old file, 'tail -F' reports the data reliably
++	// without any missing or corrupt lines. The previous method (using
++	// freopen()) caused missing output.
++	if (G.f_txt != NULL)
++	{
++		fclose(G.f_txt);
++	}
++
++	rename(G.dump_prefix, G.dump_prefix_rotated);
++
++	G.f_txt = fopen(G.dump_prefix, "w+");
++
++	return (G.f_txt != NULL);
++}
++
++static void dump_write_wifi_scanner(void)
++{
++	if (!G.record_data || !G.output_format_wifi_scanner)
++	{
++		return;
++	}
++
++	if (!truncate_output_file())
++	{
++		return;
++	}
++
++	if (is_static_blocklist_file_modified())
++	{
++		parse_blocklist_file(G.static_blocklist_file, &G.static_mac_blocklist, &G.static_oui_blocklist);
++	}
++
++	candidate_blocklist_process();
++
++	if (!G.no_access_points)
++	{
++		write_wifi_scanner_access_points();
++	}
++
++	if (!G.no_clients)
++	{
++		write_wifi_scanner_clients();
 +	}
 +
 +	fflush(G.f_txt);
 +
-+	curr_time = time(NULL);
-+	if (( (curr_time - G.last_file_reset) > G.file_reset_minutes) && (G.dump_prefix != NULL) && (G.f_txt != NULL))
-+	{
-+		G.f_txt = freopen(G.dump_prefix, "w", G.f_txt);
-+		G.last_file_reset = curr_time;
-+	}
-+
 +	clear_wifi_scanner_cache();
-+	return 0;
 +}
 +
  static char * sanitize_xml(unsigned char * text, int length)
  {
  	int i;
-@@ -7116,6 +7419,9 @@
+@@ -7116,6 +7903,9 @@ static int rearrange_frequencies(void)
  
  int main(int argc, char * argv[])
  {
@@ -441,7 +977,7 @@
  	long time_slept, cycle_time, cycle_time2;
  	char * output_format_string;
  	int caplen = 0, i, j, fdh, fd_is_set, chan_count, freq_count, unused;
-@@ -7129,6 +7435,8 @@
+@@ -7129,6 +7919,8 @@ int main(int argc, char * argv[])
  	char ifnam[64];
  	int wi_read_failed = 0;
  	int n = 0;
@@ -450,19 +986,27 @@
  	int output_format_first_time = 1;
  #ifdef HAVE_PCRE
  	const char * pcreerror;
-@@ -7188,6 +7496,11 @@
+@@ -7188,6 +7980,19 @@ int main(int argc, char * argv[])
  		   {"showack", 0, 0, 'A'},
  		   {"detect-anomaly", 0, 0, 'E'},
  		   {"output-format", 1, 0, 'o'},
 + 		   {"sys-name", 1, 0, 'X'},
 +		   {"loc-name", 1, 0, 'y'},
 +		   {"filter-seconds", 1, 0, 'F'},
-+		   {"file-reset-minutes", 1, 0, 'P'},
 +		   {"cache-reset-minutes", 1, 0, 'v'},
++		   {"min-rssi", 1, 0, 'p'},
++		   {"static-blocklist", 1, 0, 'l'},
++		   {"dynamic-blocklist", 1, 0, 'L'},
++		   {"candidate-blocklist", 1, 0, 'k'},
++		   {"observation-period", 1, 0, 'O'},
++		   {"max-variance", 1, 0, 'V'},
++		   {"min-observation", 1, 0, 'P'},
++		   {"no-access-points", 0, 0, 'z'},
++		   {"no-clients", 0, 0, 'Z'},
  		   {"ignore-negative-one", 0, &G.ignore_negative_one, 1},
  		   {"manufacturer", 0, 0, 'M'},
  		   {"uptime", 0, 0, 'U'},
-@@ -7282,6 +7595,7 @@
+@@ -7282,6 +8087,7 @@ int main(int argc, char * argv[])
  	G.output_format_kismet_csv = 1;
  	G.output_format_kismet_netxml = 1;
  	G.output_format_log_csv = 1;
@@ -470,20 +1014,19 @@
  	G.gps_valid_interval
  		= 5; // If we dont get a new GPS update in 5 seconds - invalidate it
  	G.file_write_interval = 5; // Write file every 5 seconds by default
-@@ -7289,6 +7603,12 @@
+@@ -7289,6 +8095,11 @@ int main(int argc, char * argv[])
  	G.show_wps = 0;
  	G.background_mode = -1;
  	G.do_exit = 0;
-+	G.sys_name[0] = '\0';
-+	G.loc_name[0] = '\0';
 +	G.filter_seconds = ONE_HOUR;
-+	G.file_reset_minutes = ONE_MIN;
-+	G.last_file_reset = 0;
-+	G.cache_reset_interval = 0;
++	G.min_rssi = DEFAULT_MIN_RSSI;
++	G.candidate_observation_period = DEFAULT_CANDIDATE_OBSERVATION_PERIOD;
++	G.max_candidate_variance = DEFAULT_MAX_CANDIDATE_VARIANCE;
++	G.min_candidate_observation = DEFAULT_MIN_CANDIDATE_OBSERVATION;
  #ifdef CONFIG_LIBNL
  	G.htval = CHANNEL_NO_HT;
  #endif
-@@ -7386,7 +7706,7 @@
+@@ -7386,7 +8197,7 @@ int main(int argc, char * argv[])
  
  		option = getopt_long(argc,
  							 argv,
@@ -492,25 +1035,20 @@
  							 long_options,
  							 &option_index);
  
-@@ -7748,6 +8068,28 @@
+@@ -7748,6 +8559,59 @@ int main(int argc, char * argv[])
  				set_encryption_filter(optarg);
  				break;
  
 +			case 'X':
-+				strncpy(G.sys_name, optarg, sizeof G.sys_name);
++				G.sys_name = optarg;
 +				break;
 +
 +			case 'y':
-+				strncpy(G.loc_name, optarg, sizeof G.loc_name);
++				G.loc_name = optarg;
 +				break;
 +
 +			case 'F':
 +				G.filter_seconds = atoi(optarg);
-+				break;
-+
-+			case 'P':
-+				reset_val = atoi(optarg);
-+				G.file_reset_minutes = reset_val * 60;
 +				break;
 +
 +			case 'v':
@@ -518,10 +1056,46 @@
 +				G.cache_reset_interval = reset_val * 60; // value expected in minutes
 +				break;
 +
++			case 'p':
++				G.min_rssi = atoi(optarg);
++				break;
++
++			case 'l':
++				G.static_blocklist_file = optarg;
++				break;
++
++			case 'L':
++				G.dynamic_blocklist_file = optarg;
++				break;
++
++			case 'k':
++				G.candidate_blocklist_file = optarg;
++				break;
++
++			case 'O':
++				G.candidate_observation_period = atoi(optarg);
++				break;
++
++			case 'V':
++				G.max_candidate_variance = atof(optarg);
++				break;
++
++			case 'P':
++				G.min_candidate_observation = atoi(optarg);
++				break;
++
++			case 'z':
++				G.no_access_points = true;
++				break;
++
++			case 'Z':
++				G.no_clients = true;
++				break;
++
  			case 'o':
  
  				// Reset output format if it's the first time the option is
-@@ -7841,6 +8183,10 @@
+@@ -7841,6 +8705,10 @@ int main(int argc, char * argv[])
  						{
  							G.output_format_log_csv = 1;
  						}
@@ -532,28 +1106,36 @@
  						else if (strncasecmp(output_format_string, "default", 6)
  								 == 0)
  						{
-@@ -8171,8 +8517,10 @@
+@@ -8171,9 +9039,11 @@ int main(int argc, char * argv[])
  		waitpid(-1, NULL, WNOHANG);
  	}
  
-+	
++
  	hide_cursor();
  	erase_display(2);
-+	
  
++
  	start_time = time(NULL);
  	tt1 = time(NULL);
-@@ -8213,6 +8561,9 @@
+ 	tt2 = time(NULL);
+@@ -8213,6 +9083,16 @@ int main(int argc, char * argv[])
  		return 1;
  	}
  
 +	G.last_cache_reset = time(NULL);
-+	G.last_file_reset = time(NULL);
++
++	if (G.dynamic_blocklist_file != NULL
++		&& *G.dynamic_blocklist_file != '\0'
++		&& G.candidate_observation_period > 0)
++	{
++		G.dynamic_blocklist_enabled = true;
++		parse_blocklist_file(G.dynamic_blocklist_file, &G.dynamic_blocklist, NULL);
++	}
 +
  	while (1)
  	{
  		if (G.do_exit)
-@@ -8226,6 +8577,7 @@
+@@ -8226,6 +9106,7 @@ int main(int argc, char * argv[])
  
  			tt1 = time(NULL);
  			if (G.output_format_csv) dump_write_csv();
@@ -561,7 +1143,7 @@
  			if (G.output_format_kismet_csv) dump_write_kismet_csv();
  			if (G.output_format_kismet_netxml) dump_write_kismet_netxml();
  		}
-@@ -8449,11 +8801,9 @@
+@@ -8449,11 +9330,9 @@ int main(int argc, char * argv[])
  			if (!G.do_pause && !G.background_mode)
  			{
  				pthread_mutex_lock(&(G.mx_print));
@@ -573,7 +1155,7 @@
  				pthread_mutex_unlock(&(G.mx_print));
  			}
  			continue;
-@@ -8547,6 +8897,7 @@
+@@ -8547,6 +9426,7 @@ int main(int argc, char * argv[])
  		if (G.output_format_csv) dump_write_csv();
  		if (G.output_format_kismet_csv) dump_write_kismet_csv();
  		if (G.output_format_kismet_netxml) dump_write_kismet_netxml();
@@ -581,9 +1163,36 @@
  
  		if (G.output_format_csv || G.f_txt != NULL) fclose(G.f_txt);
  		if (G.output_format_kismet_csv || G.f_kis != NULL) fclose(G.f_kis);
---- aircrack-ng-1.5.2/src/airodump-ng.h	2018-12-09 22:53:44.000000000 +0000
-+++ aircrack-ng-1.5.2/src/airodump-ng.h	2019-09-07 02:31:43.492000000 +0000
-@@ -237,8 +237,10 @@
+@@ -8627,6 +9507,13 @@ int main(int argc, char * argv[])
+ 		}
+ 	}
+ 
++	blocklist_free(&G.static_mac_blocklist);
++	blocklist_free(&G.static_oui_blocklist);
++	blocklist_free(&G.dynamic_blocklist);
++	blocklist_free(&G.candidate_blocklist);
++
++	free(G.dump_prefix_rotated);
++
+ 	show_cursor();
+ 
+ 	return (0);
+diff --git a/src/airodump-ng.h b/src/airodump-ng.h
+index 5bb0672..1811281 100644
+--- a/src/airodump-ng.h
++++ b/src/airodump-ng.h
+@@ -39,6 +39,10 @@
+ #define REFRESH_RATE 100000 /* default delay in us between updates */
+ #define DEFAULT_HOPFREQ 250 /* default delay in ms between channel hopping */
+ #define DEFAULT_CWIDTH 20 /* 20 MHz channels by default */
++#define DEFAULT_MIN_RSSI -200 /* by default, do not filter by RSSI */
++#define DEFAULT_CANDIDATE_OBSERVATION_PERIOD 900
++#define DEFAULT_MAX_CANDIDATE_VARIANCE 1.00
++#define DEFAULT_MIN_CANDIDATE_OBSERVATION 80
+ 
+ #define NB_PWR 5 /* size of signal power ring buffer */
+ #define NB_PRB 10 /* size of probed ESSID ring buffer */
+@@ -237,8 +241,10 @@ struct AP_info
  	struct AP_info * next; /* next  AP in list         */
  
  	time_t tinit, tlast; /* first and last time seen */
@@ -594,7 +1203,7 @@
  	enum channel_width_enum channel_width; /* Channel width            */
  	char standard[3]; /* 802.11 standard: n or ac */
  	struct n_channel_info n_channel; /* 802.11n channel info     */
-@@ -313,6 +315,7 @@
+@@ -313,6 +319,7 @@ struct ST_info
  	struct ST_info * next; /* the next client in list   */
  	struct AP_info * base; /* AP this client belongs to */
  	time_t tinit, tlast; /* first and last time seen  */
@@ -602,7 +1211,7 @@
  	unsigned long nb_pkt; /* total number of packets   */
  	unsigned char stmac[6]; /* the client's MAC address  */
  	char * manuf; /* the client's manufacturer */
-@@ -331,6 +334,7 @@
+@@ -331,6 +338,7 @@ struct ST_info
  	int qos_to_ds; /* does it use 802.11e to ds */
  	int qos_fr_ds; /* does it receive 802.11e   */
  	int channel; /* Channel station is seen   */
@@ -610,7 +1219,16 @@
  	float gps_loc_min[5]; /* min gps coordinates      */
  	float gps_loc_max[5]; /* max gps coordinates      */
  	float gps_loc_best[5]; /* best gps coordinates     */
-@@ -492,6 +496,7 @@
+@@ -358,6 +366,8 @@ struct NA_info
+ };
+ /* bunch of global stuff */
+ 
++struct blocklist_t;
++
+ struct globals
+ {
+ 	struct AP_info *ap_1st, *ap_end;
+@@ -492,6 +502,7 @@ struct globals
  	int output_format_kismet_csv;
  	int output_format_kismet_netxml;
  	int output_format_log_csv;
@@ -618,17 +1236,37 @@
  	pthread_t input_tid;
  	pthread_t gps_tid;
  	int sort_by;
-@@ -526,6 +531,13 @@
+@@ -526,6 +537,30 @@ struct globals
  	u_int maxsize_wps_seen;
  	int show_wps;
  	struct tm gps_time; /* the timestamp from the gps data */
-+	char sys_name[256];  /* system name value for wifi scanner custom format */
-+	char loc_name[256];  /* location name value for wifi scanner custom format */
++	char * sys_name; /* system name value for wifi scanner custom format */
++	char * loc_name; /* location name value for wifi scanner custom format */
 +	time_t filter_seconds;
-+	int file_reset_minutes;
-+	time_t last_file_reset;
 +	int cache_reset_interval;
 +	time_t last_cache_reset;
++	int min_rssi;
++	char * static_blocklist_file;
++	time_t static_blocklist_file_mtime; /* to detect file changes */
++	struct blocklist_t * static_mac_blocklist; /* MACs parsed from static_blocklist_file */
++	struct blocklist_t * static_oui_blocklist; /* OUIs parsed from static_blocklist_file */
++	bool dynamic_blocklist_enabled;
++	char * dynamic_blocklist_file;
++	FILE * dynamic_blocklist_fp;
++	struct blocklist_t * dynamic_blocklist; /* transmitters in dynamic_blocklist_file */
++	struct blocklist_t * candidate_blocklist; /* transmitters being considered for blocklisting */
++	char * candidate_blocklist_file;
++	FILE * candidate_blocklist_fp;
++	time_t last_candidate_process;
++	time_t candidate_observation_period;
++	float max_candidate_variance; /* ...to be considered immobile */
++	unsigned min_candidate_observation; /* ...to be considered immobile; expressed as a percentage */
++	char * dump_prefix_rotated;
++	bool no_access_points;
++	bool no_clients;
  #ifdef CONFIG_LIBNL
  	int htval;
  #endif
+-- 
+2.17.1
+

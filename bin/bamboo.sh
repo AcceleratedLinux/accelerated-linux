@@ -67,6 +67,13 @@ function info() {
 	echo	"export NO_BUILD_INTO_TFTPBOOT=1" >>"$1"
 	echo	"export ON_BUILD_MACHINE=1" >>"$1"
 
+	if [ "${bamboo_MIGRATE_RELEASE_VERSION}" ]; then
+		version=$(echo "$bamboo_MIGRATE_RELEASE_VERSION" | awk -F "-" '{print $1}')
+		migrate_build_dir="/public/builds/DAL/release/$version"
+		echo "export MIGRATE_BUILD_DIR=${migrate_build_dir}" >>"$1"
+		echo "export MIGRATE_RELEASE_VERSION=${bamboo_MIGRATE_RELEASE_VERSION}" >>"$1"
+	fi
+
 	cp "$1" ${artifact_dir}
 
 	exit 0
@@ -168,7 +175,7 @@ function upload() {
 	descriptors=$(find $BUILD_ARTIFACT_DIR -name \*-rci_descriptors.tar.gz)
 	if [ -z "$descriptors" ]; then
 		echo "No descriptors found."
-		exit 1
+		exit 0
 	fi
 	$uploader ${bamboo_RM_USERNAME} ${bamboo_RM_PASSWORD} $instance $descriptors
 	ec=$?

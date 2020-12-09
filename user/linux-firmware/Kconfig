@@ -123,3 +123,8 @@ config USER_LINUX_FIRMWARE_MT7662_ROM_PATCH
 	help
 	  Include firmware for the MT7662_ROM_PATCH on the device.
 
+config USER_LINUX_FIRMWARE_MARVELL_SD8887
+	bool "Firmware for Marvel SD8887."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the MARVEL SD8887 on the device.

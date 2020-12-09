@@ -3,7 +3,7 @@
 PATH=/bin:/usr/bin
 
 # redirect output
-exec 5>&1 6>&2 1>/tmp/update.log 2>&1
+exec 5>&1 6>&2 1>/var/log/update.log 2>&1
 
 /bin/date
 
@@ -96,6 +96,29 @@ set_boot_partition() {
 		printf "![ERROR] Unable to update next boot partition!" >&6
 		exit 1
 	}
+}
+
+dev_mode() {
+	local product_id="$(runt get manufacture.product_id)"
+	local CURR_PRODUCT_ID=$(printf "0x%08x" $((0x${product_id#0x})))
+	local gpio=0
+	echo $product_id, $CURR_PRODUCT_ID
+	case "$CURR_PRODUCT_ID" in
+	0x0000d002)
+		gpio=505;;
+	0x0000d003|0x0000d004|0x0000d005|0x0000d006|0x0000d007|0x0000d008)
+		gpio=419;;
+	0x0000d009)
+		gpio=455;;
+	0x0000d00a|0x0000d00b)
+		gpio=425;;
+	*) return 1 ;;
+	esac
+	echo $gpio > /sys/class/gpio/export 2>/dev/null || true
+	if [ "$(cat /sys/class/gpio/gpio$gpio/value)" = "0" ]; then
+		return 0
+	fi
+	return 1
 }
 
 flash_led
@@ -193,9 +216,17 @@ echo "10% Checking new firmware image..." >&5
 /bin/tar xvzf $updatefile version signer_cert.pem
 /bin/openssl x509 -in signer_cert.pem -noout -pubkey >public.pem
 if ! /bin/openssl verify -verbose -CAfile /etc/ssl/firmware/firmware_ca.pem signer_cert.pem | /bin/grep "^signer_cert.pem: OK$"; then
-	echo "Invalid signer cert!" >&6
-	/bin/openssl verify -verbose -CAfile /etc/ssl/firmware/firmware_ca.pem signer_cert.pem
-	exit 1
+	if dev_mode ; then
+		if ! /bin/openssl verify -verbose -CAfile /etc/ssl/firmware/dev_firmware_ca.pem signer_cert.pem | /bin/grep "^signer_cert.pem: OK$"; then
+			echo "Invalid signer cert!" >&6
+			/bin/openssl verify -verbose -CAfile /etc/ssl/firmware/dev_firmware_ca.pem signer_cert.pem
+			exit 1
+		fi
+	else
+		echo "Invalid signer cert!" >&6
+		/bin/openssl verify -verbose -CAfile /etc/ssl/firmware/firmware_ca.pem signer_cert.pem
+		exit 1
+	fi
 fi
 echo "15% Checking new firmware image..." >&5
 
@@ -226,11 +257,17 @@ fi
 if /bin/tar xvzf $updatefile u-boot.bin ; then
 	echo "Programming U-boot"
 	size="$(/bin/stat -c%s ./u-boot.bin)"
-	/bin/dd if=u-boot.bin of=/dev/mtdblock3
+	/bin/dd if=/dev/mtd1 of=/tmp/u-boot-just-in-case.bin
+	/usr/sbin/flash_eraseall /dev/mtd1
+	/bin/dd if=u-boot.bin of=/dev/mtd1
 	sum="$(/usr/bin/md5sum <u-boot.bin)"
-	verify="$(/bin/dd if=/dev/mtdblock3 bs=$size count=1 |/usr/bin/md5sum)"
+	verify="$(/bin/dd if=/dev/mtd1 bs=$size count=1 |/usr/bin/md5sum)"
 	if [ "$sum" != "$verify" ]; then
-		printf "![ERROR] Invalid verify of u-boot!" >&6
+		printf "![ERROR] Invalid verify of u-boot, attempting to reload old u-boot!" >&6
+		/usr/sbin/flash_eraseall /dev/mtd1 || true
+		/bin/dd if=/tmp/u-boot-just-in-case.bin of=/dev/mtd1 || true
+		rm -rf /tmp/u-boot-just-in-case.bin || true
+		printf "![ERROR] Reloading old u-boot attempted!" >&6
 		exit 1
 	fi
 	/bin/rm -f u-boot.bin

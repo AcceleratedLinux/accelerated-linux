@@ -60,7 +60,7 @@ endif
 
 CONFVARS = INSTALL="install -c --strip-program=$(STRIP)"
 
-OPENSSH_VERSION = 8.2p1
+OPENSSH_VERSION = 8.3p1
 URL = http://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$(OPENSSH_VERSION).tar.gz
 
 AUTOMAKE_ROMFS = my_romfs

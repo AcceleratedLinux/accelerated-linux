@@ -282,7 +282,7 @@ static int do_rc(void)
 	if (rc)
 		err(_PATH_FIREWALL " failed!");
 #endif
-#ifdef CONFIG_USER_FLATFSD_FLATFSD
+#if defined(CONFIG_USER_INIT_RUN_CONFIGRC) && defined(CONFIG_USER_FLATFSD_FLATFSD)
 	rc = do_command(_PATH_BSHELL, _PATH_CONFIGRC, 1);
 	if (rc)
 		err(_PATH_CONFIGRC " failed!");
