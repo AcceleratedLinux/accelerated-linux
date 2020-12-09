@@ -1,0 +1,27 @@
+--- keepalived-2.0.20/keepalived/vrrp/vrrp_data.c	2019-11-28 11:05:44.000000000 +0000
++++ keepalived-2.0.20/keepalived/vrrp/vrrp_data.c	2020-06-14 14:52:51.949736716 +0100
+@@ -484,13 +484,13 @@
+ #endif
+ 		conf_write(fp, "   Number of track scripts init = %u", vrrp->num_script_init);
+ 		ctime_r(&vrrp->last_transition.tv_sec, time_str);
+-		conf_write(fp, "   Last transition = %ld.%6.6ld (%.24s.%6.6ld)", vrrp->last_transition.tv_sec, vrrp->last_transition.tv_usec, time_str, vrrp->last_transition.tv_usec);
++		conf_write(fp, "   Last transition = %lld.%6.6lld (%.24s.%6.6lld)", vrrp->last_transition.tv_sec, vrrp->last_transition.tv_usec, time_str, vrrp->last_transition.tv_usec);
+ 		if (!ctime_r(&vrrp->sands.tv_sec, time_str))
+ 			strcpy(time_str, "invalid time ");
+ 		if (vrrp->sands.tv_sec == TIMER_DISABLED)
+ 			conf_write(fp, "   Read timeout = DISABLED");
+ 		else
+-			conf_write(fp, "   Read timeout = %ld.%6.6ld (%.19s.%6.6ld)", vrrp->sands.tv_sec, vrrp->sands.tv_usec, time_str, vrrp->sands.tv_usec);
++			conf_write(fp, "   Read timeout = %lld.%6.6lld (%.19s.%6.6lld)", vrrp->sands.tv_sec, vrrp->sands.tv_usec, time_str, vrrp->sands.tv_usec);
+ 		conf_write(fp, "   Master down timer = %u usecs", vrrp->ms_down_timer);
+ 	}
+ #ifdef _HAVE_VRRP_VMAC_
+@@ -538,7 +538,7 @@
+ 	conf_write(fp, "   Gratuitous ARP delay = %u",
+ 		       vrrp->garp_delay/TIMER_HZ);
+ 	conf_write(fp, "   Gratuitous ARP repeat = %u", vrrp->garp_rep);
+-	conf_write(fp, "   Gratuitous ARP refresh = %ld",
++	conf_write(fp, "   Gratuitous ARP refresh = %lld",
+ 		       vrrp->garp_refresh.tv_sec);
+ 	conf_write(fp, "   Gratuitous ARP refresh repeat = %u", vrrp->garp_refresh_rep);
+ 	conf_write(fp, "   Gratuitous ARP lower priority delay = %u", vrrp->garp_lower_prio_delay / TIMER_HZ);

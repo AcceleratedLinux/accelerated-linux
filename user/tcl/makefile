@@ -1,5 +1,5 @@
 
-URL       = http://downloads.sourceforge.net/project/tcl/Tcl/8.6.10/tcl8.6.10-src.tar.gz
+URL       = https://sourceforge.net/projects/tcl/files/Tcl/8.6.10/tcl8.6.10-src.tar.gz
 BUILDDIR  = tcl8.6.10/unix
 CONFVARS  = ac_cv_func_strtod=yes tcl_cv_strtod_unbroken=ok
 CONFOPTS  = --disable-symbols --disable-langinfo --disable-framework

@@ -15,7 +15,8 @@ endif
 #
 # we use wget to download
 #
-WGET ?= wget
+WGET ?= wget $(if $(V:0=),,--quiet)
+AWS ?= aws $(if $(V:0=),,--quiet)
 GIT ?= git
 METHOD ?= default
 PATCH_SERIES ?= series
@@ -73,14 +74,18 @@ endif
 	$(AT)rm -rf build/$($(1)_BUILDDIR)
 	$(AT)mkdir -p build
 	$(AT)case "$$<" in \
-	*zip) rm -rf build/$(1); mkdir -p build/$(1); pkg=`pwd`/$$<; (cd build/$(1); unzip $$$$pkg);; \
-	*bz2) bunzip2 < $$< | (cd build; tar xf -);; \
-	*xz) unxz < $$< | (cd build; tar xf -);; \
-	*lz) lzip -d < $$< | (cd build; tar xf -);; \
-	*) gunzip < $$< | (cd build; tar xf -);; \
+	*zip) rm -rf build/$(1); mkdir -p build/$(1); pkg=`pwd`/$$<; (cd build/$(1); unzip $(if $($(1)_SUBDIR),-d $($(1)_SUBDIR),) $$$$pkg);; \
+	*bz2) bunzip2 < $$< | (cd build; tar xf - $(if $($(1)_SUBDIR),--one-top-level=$($(1)_SUBDIR),));; \
+	*xz) unxz < $$< | (cd build; tar xf - $(if $($(1)_SUBDIR),--one-top-level=$($(1)_SUBDIR),));; \
+	*lz) lzip -d < $$< | (cd build; tar xf - $(if $($(1)_SUBDIR),--one-top-level=$($(1)_SUBDIR),));; \
+	*) gunzip < $$< | (cd build; tar xf - $(if $($(1)_SUBDIR),--one-top-level=$($(1)_SUBDIR),));; \
 	esac || exit 1
 	$(AT)touch $$@
 
+endef
+
+define beginswith
+  case $2 in "$1"*) true;; *) false;; esac
 endef
 
 #
@@ -90,11 +95,18 @@ define download_dep_default
 
 .PRECIOUS: downloads/$$($(1)_DOWNLOADNAME)
 downloads/$$($(1)_DOWNLOADNAME):
-	@echo "Downloading $$($(1)_DOWNLOADNAME) from $($(1)_URL) ..."
+	@echo "Downloading $$($(1)_DOWNLOADNAME) ..."
 	$(AT)[ -d "$(UC_DOWNLOADS)" ] || mkdir -p "$(UC_DOWNLOADS)"
 	$(AT)if [ ! -f "$(UC_DOWNLOADS)/`basename $$@`" ]; then \
 		cd "$(UC_DOWNLOADS)"; \
-		$(WGET) $(WGETOPTS) -O `basename $$@` "$($(1)_URL)" || rm -f `basename $$@`; \
+		for U in $$(if $$(UC_MIRROR),$$(addprefix $$(UC_MIRROR),$$(notdir $$($(1)_URL))),) $$($(1)_URL); do \
+			echo " ... from $$$$U ..."; \
+			if $(call beginswith,"s3://","$$$$U"); then \
+				$(AWS) s3 cp "$$$$U" `basename $$@` && break || rm -f `basename $$@`;\
+			else \
+				$(WGET) $(WGETOPTS) -O `basename $$@` "$$$$U" && break || rm -f `basename $$@`; \
+			fi \
+		done \
 	fi
 	$(AT)mkdir -p `dirname $$@`
 	$(AT)if [ -f "$(UC_DOWNLOADS)/`basename $$@`" ]; then \
@@ -144,13 +156,18 @@ downloads/$$($(1)_DOWNLOADNAME): $(MAKEFILE_LIST)
 		( \
 			cd `dirname $$@`;\
 			rm -rf $(1); \
-			$(GIT) clone $($(1)_URL) $(1) || exit 1;\
-			cd $(1); \
-			$(GIT) checkout $$$${REF} || exit 1; \
-			$(GIT) submodule update --init --recursive || exit 1; \
-			cd ..; \
-			rm -rf $(1)/.git; \
-			tar cvzf "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" $(1) || exit 1;\
+			if [ "$($(1)_METHOD_OPTS)" = archive ]; then \
+				$(GIT) archive --remote=$($(1)_URL) --format=tar.gz --output=$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz $$$$VERSION  $($(1)_SUBDIR) || \
+				rm -f $(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz; \
+			else \
+				$(GIT) clone $($(1)_URL) $(1) || exit 1;\
+				cd $(1); \
+				$(GIT) checkout $$$${REF} || exit 1; \
+				$(GIT) submodule update --init --recursive || exit 1; \
+				cd ..; \
+				rm -rf $(1)/.git; \
+				tar cvzf "$(UC_DOWNLOADS)/$(1)-$$$${HASH}.tar.gz" $(1) || exit 1;\
+			fi; \
 			rm -rf $(1); \
 		) \
 	fi; \

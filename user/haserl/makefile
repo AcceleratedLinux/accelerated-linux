@@ -1,5 +1,5 @@
 HASERL_VERSION = 0.9.35
-URL = http://downloads.sourceforge.net/project/haserl/haserl-devel/haserl-$(HASERL_VERSION).tar.gz
+URL = https://sourceforge.net/projects/haserl/files/haserl-devel/haserl-$(HASERL_VERSION).tar.gz
 
 AUTOMAKE_ROMFS = romfs_exe
 

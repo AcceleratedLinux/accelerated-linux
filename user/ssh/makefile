@@ -99,6 +99,8 @@ my_romfs:
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSHD \
 		-e CONFIG_USER_FLATFSD_ETC_CONFIG \
 		-a "#ssh details are now in $(SYSDEFDIR)/inetd.conf" /etc/inetd.conf
+	# Install the default sshd config for Opengear builds
+	$(ROMFSINST) -e CONFIG_DEFAULTS_OPENGEAR $(OPENSSH_INSTALL_DIR)$(SSHCONFDIR)/sshd_config /etc/default/sshd_config
 ifdef CONFIG_USER_SSH_SSHD
 ifdef CONFIG_USER_FLATFSD_FLATFSD
 ifndef CONFIG_USER_FLATFSD_ETC_CONFIG
@@ -128,3 +130,4 @@ endif
 		$(ROMFSINST) -o "$(CONFIG_USER_SSH_SSHD)" \
 			-A "nobody:" -a "nobody:x:65534:" /etc/default-static/group ;\
 	fi
+

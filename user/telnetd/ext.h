@@ -192,6 +192,13 @@ extern int (*decrypt_input)(int);
 extern char *nclearto;
 #endif
 
+#ifdef RFC2217
+int rfc2217_enabled(void);
+int rfc2217_open(const char *device);
+void rfc2217_close(void);
+void rfc2217_poll(void);
+void com_port_option(unsigned char *option, int optlen);
+#endif
 
 /*
  * The following are some clocks used to decide how to interpret

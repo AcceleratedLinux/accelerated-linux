@@ -160,12 +160,12 @@ for wwan in $WWAN_LEDS; do
 	modem_name=$(echo ${MODEM_NAMES} | awk -v N=$name_idx '{print $N}')
 	get_modem_information "$modem_name"
 
-	MODEM_STATUS="$(runt get mm.persist.modem.$modem_name.status)"
+	MODEM_STATUS=$(runt get mm.persist.port.$modem_name.status)
 
-	if [ "$MODEM_STATUS" = "Updating firmware" ]; then
+	if [ "$MODEM_STATUS" = "updating" ]; then
 		SERVICE="-O ${wwan}_SERVICE_GREEN -f ${wwan}_SERVICE_YELLOW"
 		SIGNAL="-O ${wwan}_SIGNAL_GREEN -f ${wwan}_SIGNAL_YELLOW"
-	elif [ "$MODEM_STATUS" = "Recovering firmware" ]; then
+	elif [ "$MODEM_STATUS" = "recovering" ]; then
 		SERVICE="-O ${wwan}_SERVICE_YELLOW -f ${wwan}_SERVICE_GREEN"
 		SIGNAL="-O ${wwan}_SIGNAL_YELLOW -f ${wwan}_SIGNAL_GREEN"
 	else

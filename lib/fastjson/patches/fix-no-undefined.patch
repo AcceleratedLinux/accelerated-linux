@@ -1,0 +1,24 @@
+diff -Naur a/Makefile.am b/Makefile.am
+--- a/Makefile.am	2017-10-16 20:19:27.000000000 +1000
++++ b/Makefile.am	2018-02-21 07:51:16.664752630 +1000
+@@ -25,7 +25,7 @@
+ libfastjson_la_LDFLAGS = \
+ 	-version-info 6:0:2 \
+ 	-export-symbols-regex '^fjson_.*' \
+-	-no-undefined \
++	-Wl,--no-undefined \
+ 	@JSON_BSYMBOLIC_LDFLAGS@
+ libfastjson_la_LIBADD = libfastjson-internal.la
+ 
+diff -Naur a/Makefile.in b/Makefile.in
+--- a/Makefile.in	2017-12-18 21:04:52.000000000 +1000
++++ b/Makefile.in	2018-02-21 07:51:22.040711463 +1000
+@@ -439,7 +439,7 @@
+ libfastjson_la_LDFLAGS = \
+ 	-version-info 6:0:2 \
+ 	-export-symbols-regex '^fjson_.*' \
+-	-no-undefined \
++	-Wl,--no-undefined \
+ 	@JSON_BSYMBOLIC_LDFLAGS@
+ 
+ libfastjson_la_LIBADD = libfastjson-internal.la

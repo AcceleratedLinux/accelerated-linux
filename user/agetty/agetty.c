@@ -14,7 +14,7 @@ char sccsid[] = "@(#) agetty.c 1.29 9/1/91 23:22:00";
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
-#include <termio.h>
+#include <termios.h>
 #include <signal.h>
 #include <errno.h>
 #include <sys/types.h>

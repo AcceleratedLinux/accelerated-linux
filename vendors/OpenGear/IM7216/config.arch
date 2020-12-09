@@ -1,0 +1,29 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+
+LINUXTARGET = zImage dtbs
+
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+RELFILES = images/image.bin \
+	   images/u-boot.bin \
+	   images/u-boot-nand.imx \
+	   images/configs.tar.gz \
+	   images/romfs-inst.log \
+	   images/rci_descriptors.tar.gz \
+	   images/acl-licenses.txt \
+	   images/static-analysis.tar.gz \
+	   prop/config/schema/accns.schema \
+	   prop/config/cc_acl/app/runt/FE00000A*
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/arm/config.arch
+
+############################################################################

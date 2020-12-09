@@ -26,12 +26,15 @@ enum qcserial_layouts {
 	QCSERIAL_G1K = 1,	/* Gobi 1000 */
 	QCSERIAL_SWI = 2,	/* Sierra Wireless */
 	QCSERIAL_HWI = 3,	/* Huawei */
+	QCSERIAL_SWM = 4,	/* Sierra Wireless (MBIM) */
 };
 
 #define DEVICE_G1K(v, p) \
 	USB_DEVICE(v, p), .driver_info = QCSERIAL_G1K
 #define DEVICE_SWI(v, p) \
 	USB_DEVICE(v, p), .driver_info = QCSERIAL_SWI
+#define DEVICE_SWM(v, p) \
+	USB_DEVICE(v, p), .driver_info = QCSERIAL_SWM
 #define DEVICE_HWI(v, p) \
 	USB_DEVICE(v, p), .driver_info = QCSERIAL_HWI
 
@@ -168,6 +171,8 @@ static const struct usb_device_id id_table[] = {
 	{DEVICE_SWI(0x1199, 0x907b)},	/* Sierra Wireless EM74xx */
 	{DEVICE_SWI(0x1199, 0x9090)},	/* Sierra Wireless EM7565 QDL */
 	{DEVICE_SWI(0x1199, 0x9091)},	/* Sierra Wireless EM7565 */
+	{DEVICE_SWM(0x1199, 0x90D2)},	/* Sierra Wireless EM919X QDL */
+	{DEVICE_SWM(0x1199, 0x90D3)},	/* Sierra Wireless EM919X (MBIM) */
 	{DEVICE_SWI(0x413c, 0x81a2)},	/* Dell Wireless 5806 Gobi(TM) 4G LTE Mobile Broadband Card */
 	{DEVICE_SWI(0x413c, 0x81a3)},	/* Dell Wireless 5570 HSPA+ (42Mbps) Mobile Broadband Card */
 	{DEVICE_SWI(0x413c, 0x81a4)},	/* Dell Wireless 5570e HSPA+ (42Mbps) Mobile Broadband Card */
@@ -177,6 +182,7 @@ static const struct usb_device_id id_table[] = {
 	{DEVICE_SWI(0x413c, 0x81b3)},	/* Dell Wireless 5809e Gobi(TM) 4G LTE Mobile Broadband Card (rev3) */
 	{DEVICE_SWI(0x413c, 0x81b5)},	/* Dell Wireless 5811e QDL */
 	{DEVICE_SWI(0x413c, 0x81b6)},	/* Dell Wireless 5811e QDL */
+	{DEVICE_SWI(0x413c, 0x81cb)},	/* Dell Wireless 5816e QDL */
 	{DEVICE_SWI(0x413c, 0x81cc)},	/* Dell Wireless 5816e */
 	{DEVICE_SWI(0x413c, 0x81cf)},   /* Dell Wireless 5819 */
 	{DEVICE_SWI(0x413c, 0x81d0)},   /* Dell Wireless 5819 */
@@ -361,6 +367,35 @@ static int qcprobe(struct usb_serial *serial, const struct usb_device_id *id)
 			break;
 		}
 		break;
+		case QCSERIAL_SWM:
+			/*
+			 * Sierra Wireless MBIM enabled layout:
+			 * 0: MBIM Control
+			 * 1: MBIM Data
+			 * 2: GNSS
+			 * 3: AT port
+			 * 4: DM
+			 */
+			switch (ifnum) {
+				case 2:
+					dev_dbg(dev, "NMEA GPS interface found\n");
+					sendsetup = true;
+					break;
+				case 3:
+					dev_dbg(dev, "Modem port found\n");
+					sendsetup = true;
+					break;
+				case 4:
+					dev_dbg(dev, "DM (QXDM) port found\n");
+					sendsetup = true;
+					break;
+				default:
+					/* don't claim any unsupported interface */
+					altsetting = -1;
+					break;
+			}
+			break;
+
 	case QCSERIAL_HWI:
 		/*
 		 * Huawei devices map functions by subclass + protocol

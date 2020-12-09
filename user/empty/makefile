@@ -1,4 +1,4 @@
-URL = https://downloads.sourceforge.net/project/empty/empty/empty-0.6.20b/empty-0.6.20b.tgz
+URL = https://sourceforge.net/projects/empty/files/empty/empty-0.6.20b/empty-0.6.20b.tgz
 MAKEVARS = CC="$(CC)" PREFIX=""
 FINALTARGET = built
 ROMFS = my_romfs

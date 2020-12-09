@@ -1,0 +1,31 @@
+COMPEX WPQ618
+-------------
+
+This is just some random notes on building and running on the WPQ618
+platform. This is very much a work in progress.
+
+The Compex/WPQ618 board is built around a Qualcomm IPQ6018 SoC. (This is an
+ARM64 CPU based device).
+
+Generate images for this board using the Compex/WPQ618 accelerated linux
+target. The default is to select the musl C-library when building.
+The build will generate a single "itb" u-boot mutli-image format binary,
+images/wpq618.itb. A number of the build artifacts, like kernel and
+root filesystem, are also present in that images/ directory.
+
+You can load onto the WPQ618 board using the usual u-boot loader installed
+in the boot ROM of the WPQ618 board. Break into the u-boot command line
+as it boots (hitting a key when it is waiting for input) and then run the
+following commands:
+
+    setenv bootargs console=ttyMSM0,115200n8 root=/dev/ram0 
+    dhcp 0x60000000 wpq618.itb
+    bootm 0x60000000
+
+This assumes you have a local network with addresses setup with DHCP and
+tftp server.
+
+The console is on a 4-pin inline header. You will need a TTL-to-RS232
+converter connected and in place to use it. The console serial port is at
+the default 115200,8,n,1.
+

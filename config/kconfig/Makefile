@@ -39,7 +39,7 @@ qconf: LDLIBS += `pkg-config --libs QtCore QtGui` -ldl -lstdc++
 
 xconf: qconf
 
-zconf.tab.o: zconf.tab.c zconf.lex.c
+zconf.tab.o: zconf.tab.c zconf.lex.c confdata.c
 
 %.c: %.c_shipped
 	cp $< $@

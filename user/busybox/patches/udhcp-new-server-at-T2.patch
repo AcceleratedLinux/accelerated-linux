@@ -1,0 +1,37 @@
+Author: Qingtao Cao <qingtao.cao@gmail.com>
+Date:   Tue Feb 26 13:21:47 2019 +1000
+
+    OG-6686 udhcpc: update server address on reception of DHCPACK
+    
+    If the DHCP server restarts on a different address but agrees upon the address
+    already leased to the client, the client will fail to renew its lease at T1
+    timeout via unicast request but will succeed at T2 timeout via broadcast
+    request
+    
+    If this is the case, update the client's copy of the server's address, if the
+    serverid option is available in the DHCP ACK
+    
+    This helps improve the efficiency for the client to renew successfully at the
+    next T1 timeout.
+Index: busybox-1.31.0/networking/udhcp/dhcpc.c
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/dhcpc.c
++++ busybox-1.31.0/networking/udhcp/dhcpc.c
+@@ -1813,6 +1813,17 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 				struct in_addr temp_addr;
+ 				uint8_t *temp;
+ 
++				/*
++				 * A success to rebind at T2 implies failure to renew
++				 * at T1. Update server's address
++				 */
++				if (client_data.state == REBINDING) {
++					temp = udhcp_get_option32(&packet, DHCP_SERVER_ID);
++					if (temp) {
++						move_from_unaligned32(server_addr, temp);
++					}
++				}
++
+ 				temp = udhcp_get_option32(&packet, DHCP_LEASE_TIME);
+ 				if (!temp) {
+ 					bb_info_msg("no lease time with ACK, using 1 hour lease");

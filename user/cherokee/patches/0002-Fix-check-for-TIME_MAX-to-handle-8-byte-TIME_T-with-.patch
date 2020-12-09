@@ -1,0 +1,26 @@
+From fb491a02417eabe848c3d06e0ad5a6cbf437d1ba Mon Sep 17 00:00:00 2001
+From: Ken Wilson <ken.wilson@opengear.com>
+Date: Wed, 26 Aug 2020 14:16:11 +1000
+Subject: [PATCH 2/2] Fix check for TIME_MAX to handle 8 byte TIME_T with 4
+ byte longs
+
+---
+ webserver/cherokee/common-internal.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git webserver-a/cherokee/common-internal.h webserver-b/cherokee/common-internal.h
+index 5c28da9..a6d6a24 100644
+--- webserver-a/cherokee/common-internal.h
++++ webserver-b/cherokee/common-internal.h
+@@ -229,6 +229,8 @@ char *strcasestr(char *s, char *find);
+ #  define TIME_MAX ((time_t)INT_MAX)
+ # elif (SIZEOF_TIME_T == SIZEOF_LONG)
+ #  define TIME_MAX ((time_t)LONG_MAX)
++# elif (SIZEOF_TIME_T == SIZEOF_UNSIGNED_LONG_LONG)
++#  define TIME_MAX ((time_t)LLONG_MAX)
+ # else
+ #  error "Can't define TIME_MAX"
+ # endif
+-- 
+2.17.1
+

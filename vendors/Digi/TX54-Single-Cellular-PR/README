@@ -1,0 +1,51 @@
+
+DIGI/TX54-Single-Cellular
+---------
+
+You will need the serial debug console hookup and enabled to see and use
+u-boot on this platform. On the TX54-Single-Cellular this console is at
+115200,8n1.
+
+
+NETWORK LOADING
+---------------
+
+You can load an image from TFTP and run it through U-Boot's recovery-mode:
+
+    - Connect the device with your PC through the ETH2 port
+    - Copy the image.bin into your TFTP directory
+    - Set your PC's IP to 192.168.1.100 (the device will use 192.168.1.1)
+    - Power off the board
+    - Keep reset button pressed
+    - Power on the board
+    - After ~5 seconds, all the GREEN LEDs will blink
+    - Still keep the button pressed for ~5 seconds, until all LEDs (except the
+    power LED) will go off, and only the first ORANGE will light. That means,
+    U-Boot is in recovery-mode
+
+The U-Boot will fetch the image from the PC's TFTP, verifies it, and boot it.
+
+
+FLASH INSTALL
+-------------
+
+If you're running an DAL image on the device, you can install a new image
+on the flash with the following shell commands:
+
+    netflash -bUk 192.168.1.100 image.bin
+
+That will take care about the dual-boot parameters.
+
+Or if you want to manually update a boot partition:
+
+Update partition 0:
+
+    netflash -kb -r /dev/flash/image 192.168.1.22 image.bin
+    fw_setenv part0_valid 1
+    fw_setenv boot_part 0
+
+Update partition 1:
+
+    netflash -kb -r /dev/flash/image1 192.168.1.22 image.bin
+    fw_setenv part1_valid 1
+    fw_setenv boot_part 1

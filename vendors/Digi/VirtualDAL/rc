@@ -1,3 +1,4 @@
+[ ! -d /boot ] && exec /etc/rc.docker
 
 hostname "Digi Virtual DAL"
 

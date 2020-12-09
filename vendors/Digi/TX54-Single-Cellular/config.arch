@@ -16,6 +16,7 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 RELFILES = images/image.bin \
 	   images/u-boot.bin \
 	   images/u-boot.nand \
+	   images/bloader.bin \
 	   images/tx54_single_cellular_mfg.tar.gz \
 	   images/configs.tar.gz \
 	   images/romfs-inst.log \

@@ -38,6 +38,9 @@
 #endif
 #include <ctype.h>
 #include "fileblock.h"
+#ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+#include "squashfs.h"
+#endif
 #include "versioning.h"
 
 #ifndef VENDOR
@@ -222,6 +225,95 @@ int get_string(char *str, int len)
 
 	return 0;
 }
+
+#ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+
+/* check_vendor_from_version_file
+ *
+ * Checks vendor and product info from a squashfs /etc/hwdetails file.
+ *
+ * inputs:
+ *
+ * ret:
+ *
+ * -1 - failed to open/read file
+ * 0  - everything is correct
+ * 1  - the product name is incorrect
+ * 2  - the vendor name is incorrect
+ */
+int check_vendor_from_squashfs(void)
+{
+	int success = -1;
+	struct squashfs_img *img = NULL;
+	struct squashfs_file *hwdetails_file = NULL;
+	char buff[MAX_PRODUCT_SIZE + 1];
+	int read_len;
+	char *str, *tmp;
+
+	img = squashfs_img_open();
+	if (img == NULL) {
+		success = -1;
+		goto err;
+	}
+
+	hwdetails_file = squashfs_file_open(img, "/etc/hwdetails");
+	if (hwdetails_file == NULL) {
+		success = -1;
+		goto err;
+	}
+
+	read_len = squashfs_file_read(hwdetails_file, 0, buff,
+				      sizeof(buff) - 1);
+	if (read_len < 0) {
+		success = -1;
+		goto err;
+	}
+	buff[read_len] = '\0';
+
+	tmp = strchr(buff, '/');
+	if (tmp == NULL) {
+		success = 2;
+		goto err;
+	}
+	*tmp = '\0';
+
+	if (!check_match(buff, our_vendor_name)) {
+		success = 2;
+		goto err;
+	}
+
+	/* If we read in the complete file already, don't read again */
+	str = tmp + 1;
+	if (read_len == (sizeof(buff) - 1)) {
+		read_len = squashfs_file_read(hwdetails_file, str - buff, buff,
+					      sizeof(buff) - 1);
+		if (read_len < 0) {
+			success = -1;
+			goto err;
+		}
+		buff[read_len] = '\0';
+
+		str = buff;
+	}
+
+	/* Read either until new line, or end of string */
+	tmp = strchr(str, '\n');
+	if (tmp != NULL)
+		*tmp = '\0';
+
+	if (!check_match(str, our_product_name)) {
+		success = 1;
+		goto err;
+	}
+
+	success = 0;
+err:
+	squashfs_file_close(hwdetails_file);
+	squashfs_img_close(img);
+
+	return success;
+}
+#endif
 
 #endif /* VERSIONTEST */
 /****************************************************************************/

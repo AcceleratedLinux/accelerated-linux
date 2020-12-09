@@ -1,0 +1,25 @@
+From d78a0ccbd75975f40134b5a59a5c7a15dcbb3e24 Mon Sep 17 00:00:00 2001
+From: Matthew Smith <matthew.smith@digi.com>
+Date: Fri, 28 Aug 2020 11:52:06 +1000
+Subject: [PATCH 3/3] Fixup bad initialisation
+
+Fix up a bad index initialisation which was causing a SEGV
+---
+ src/gcgi.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gcgi.c b/src/gcgi.c
+index 8d0290a..060a91f 100644
+--- a/src/gcgi.c
++++ b/src/gcgi.c
+@@ -1289,6 +1289,7 @@ createCgiQuery( )
+   
+     /* Set the queryStringColl pointer to NULL for now. */
+     cgiQuery->query = NULL;
++    cgiQuery->queryCount = 0;
+     
+     return GCGISUCCESS;
+ }
+-- 
+2.17.1
+

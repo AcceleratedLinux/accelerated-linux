@@ -1,4 +1,6 @@
 #!/bin/sh -e
+# shellcheck disable=SC1091
+# SC1091: Not following: <file> was not specified as input (see shellcheck -x).
 
 PATH=/bin:/usr/bin
 
@@ -14,10 +16,10 @@ flash_led() {
 	# to flash LED during a firmware update.
 	for d in ${UPDATE_LED_PATTERN}
 	do
-		if [ -w $d/trigger ]; then
-			echo timer > $d/trigger || true
-			echo 250 > $d/delay_on || true
-			echo 250 > $d/delay_off || true
+		if [ -w "$d/trigger" ]; then
+			echo timer > "$d/trigger" || true
+			echo 250 > "$d/delay_on" || true
+			echo 250 > "$d/delay_off" || true
 		fi
 	done
 }
@@ -27,11 +29,12 @@ fail_led() {
 	# flashing until reboot on success, but go red on failure exit.
 	for d in ${UPDATE_LED_PATTERN}
 	do
-		if [ -w $d/brightness ]; then
-			echo 0 > $d/brightness || true  # force no timer
-			expr "$d" : ".*leds/r.*" >/dev/null &&
-				echo 255 > $d/brightness || true
+		if [ -w "$d/brightness" ]; then
+			echo 0 > "$d/brightness" || true  # force no timer
+			if expr "$d" : ".*leds/r.*" >/dev/null; then
+				echo 255 > "$d/brightness" || true
 				# turn on led if it is red
+			fi
 		fi
 	done
 }
@@ -49,15 +52,15 @@ success_led() {
 }
 
 cleanup () {
-	[ "$1" == "0" ] || {
+	[ "$1" = "0" ] || {
 		fail_led
 		/usr/bin/logger -t fwupdate -p local5.err "!Firmware update failed!"
 	}
 	/bin/rm -rf /opt/tmp/fw.*
 	/bin/umount /opt/mnt 2>/dev/null || true
-	[ -n "$updatefile" ] && /bin/rm -f $updatefile
+	[ -n "$updatefile" ] && /bin/rm -f "$updatefile"
 	trap - INT TERM EXIT
-	exit $1
+	exit "$1"
 }
 
 next_rootfs () {
@@ -84,7 +87,7 @@ reset_boot_counter() {
 
 invalidate_nextboot() {
 	local next_boot="$1"
-	/bin/fw_setenv avail${next_boot} 0 || {
+	/bin/fw_setenv avail"${next_boot}" 0 || {
 		printf "![ERROR] Unable to update next boot!" >&6
 		exit 1
 	}
@@ -92,17 +95,21 @@ invalidate_nextboot() {
 
 set_boot_partition() {
 	local next_boot="$1"
-	/bin/fw_setenv avail${next_boot} 1 && /bin/fw_setenv last_updated ${next_boot} || {
+	if /bin/fw_setenv avail"${next_boot}" 1 && /bin/fw_setenv last_updated "${next_boot}"; then
+	    :
+	else
 		printf "![ERROR] Unable to update next boot partition!" >&6
 		exit 1
-	}
+	fi
 }
 
 dev_mode() {
-	local product_id="$(runt get manufacture.product_id)"
-	local CURR_PRODUCT_ID=$(printf "0x%08x" $((0x${product_id#0x})))
+	local product_id
+	product_id="$(/bin/runt get manufacture.product_id)"
+	local CURR_PRODUCT_ID
+	CURR_PRODUCT_ID="$(printf "0x%08x" $((0x${product_id#0x})))"
 	local gpio=0
-	echo $product_id, $CURR_PRODUCT_ID
+	echo "$product_id, $CURR_PRODUCT_ID"
 	case "$CURR_PRODUCT_ID" in
 	0x0000d002)
 		gpio=505;;
@@ -114,8 +121,8 @@ dev_mode() {
 		gpio=425;;
 	*) return 1 ;;
 	esac
-	echo $gpio > /sys/class/gpio/export 2>/dev/null || true
-	if [ "$(cat /sys/class/gpio/gpio$gpio/value)" = "0" ]; then
+	echo "$gpio" > /sys/class/gpio/export 2>/dev/null || true
+	if [ "$(/bin/cat /sys/class/gpio/gpio"$gpio"/value)" = "0" ]; then
 		return 0
 	fi
 	return 1
@@ -138,20 +145,18 @@ usage() {
 	echo "Usage: $0 [-L] [-t] [-b] [-U] [-k] new_firmware" >&6
 	exit 1
 }
-O=$(getopt -l $0: -- L:tbUki "$@") || usage
-eval set -- "$O"
-while true; do
-	case "$1" in
-		-L) shift 2;;
-		-t) opt_just_check=1; shift;;
-		-U) opt_dual_boot_update=1; shift;;
-		-k) shift;;
-		-b) opt_no_reboot=1; shift;;
-		-i) shift;;
-		--) shift; break;;
-		*) usage;;
-	esac
+while getopts L:tbUki opt; do
+    case "$opt" in
+	L) ;;
+	t) opt_just_check=1 ;;
+	U) opt_dual_boot_update=1 ;;
+	k) ;;
+	b) opt_no_reboot=1 ;;
+	i) ;;
+	*) usage ;;
+    esac
 done
+shift "$(( OPTIND - 1 ))"
 
 if [ ! -f "$1" ]; then
 	echo "Invalid update file!" >&6
@@ -164,56 +169,56 @@ fi
 /bin/chown root:root /opt/firmware/system
 /bin/chmod 755 /opt/firmware/system
 
-if ! cp "$1" $updatefile; then
+if ! cp "$1" "$updatefile"; then
 	echo "Unable to read update file!" >&6
 	exit 1
 fi
 
-export $(/bin/grep "^NETWORK_PRODUCT=" /etc/version.info) >/dev/null
+export "$(/bin/grep "^NETWORK_PRODUCT=" /etc/version.info)" >/dev/null
 # Default awusb if we don't have a platform name.
 [ "${NETWORK_PRODUCT}x" != "x" ] || NETWORK_PRODUCT=awusb
 /bin/rm -rf /opt/tmp/fw.*
 /bin/mkdir -p /opt/tmp
 /bin/chmod 700 /opt/tmp
-tmpdir=`/bin/mktemp -d "/opt/tmp/fw.XXXXXXXXXX"` || {
+tmpdir="$(/bin/mktemp -d "/opt/tmp/fw.XXXXXXXXXX")" || {
 	echo "Unable to create tmpdir!" >&6
 	exit 1
 }
-cd $tmpdir
+cd "$tmpdir"
 
-/bin/chown root:root $updatefile 2>/dev/null || true
-/bin/chmod 0660 $updatefile 2>/dev/null || true
+/bin/chown root:root "$updatefile" 2>/dev/null || true
+/bin/chmod 0660 "$updatefile" 2>/dev/null || true
 
 echo "1% Preparing..." >&5
 
-/usr/sbin/digi_check_firmware_update "$updatefile" || exit 1
-
-echo "5% Checking new firmware image..." >&5
-
 unset UPDATE_SIZE
 unset SIG_SIZE
-footer=`/usr/bin/tail -1 $updatefile | /bin/sed 's/|/\n/g'`
+footer="$(/usr/bin/tail -1 "$updatefile" | /bin/sed 's/|/\n/g')"
 for ITEM in $footer; do
 	case "$ITEM" in
-	UPDATE_SIZE=*|SIG_SIZE=*) ;;
+	UPDATE_SIZE=*)
+	export "UPDATE_SIZE=${ITEM#*=}" ;;
+	SIG_SIZE=*)
+	export "SIG_SIZE=${ITEM#*=}" ;;
 	*)
 	printf "![ERROR] Invalid firmware file." >&6
 	exit 1;;
 	esac
-	export "$ITEM"
 done
-if [ -z "$UPDATE_SIZE" -o -z "$SIG_SIZE" ]; then
+if [ "$UPDATE_SIZE" -ne 0 ] && [ "$SIG_SIZE" -ne 0 ]; then
+    :
+else
 	echo "Invalid update file!" >&6
 	exit 1
 fi
-echo UPDATE_SIZE = $UPDATE_SIZE, SIG_SIZE = $SIG_SIZE
-/bin/dd if=$updatefile of=sig bs=1 skip=$UPDATE_SIZE count=$SIG_SIZE >/dev/null 2>&1
+echo UPDATE_SIZE = "$UPDATE_SIZE", SIG_SIZE = "$SIG_SIZE"
+/bin/dd if="$updatefile" of=sig bs=1 skip="$UPDATE_SIZE" count="$SIG_SIZE" >/dev/null 2>&1
 # Truncate the file in place.
-/bin/dd if=/dev/null of=$updatefile seek=$UPDATE_SIZE bs=1 >/dev/null 2>&1
+/bin/dd if=/dev/null of="$updatefile" seek="$UPDATE_SIZE" bs=1 >/dev/null 2>&1
 
-echo "10% Checking new firmware image..." >&5
+echo "5% Checking new firmware image..." >&5
 
-/bin/tar xvzf $updatefile version signer_cert.pem
+/bin/tar xvzf "$updatefile" version signer_cert.pem
 /bin/openssl x509 -in signer_cert.pem -noout -pubkey >public.pem
 if ! /bin/openssl verify -verbose -CAfile /etc/ssl/firmware/firmware_ca.pem signer_cert.pem | /bin/grep "^signer_cert.pem: OK$"; then
 	if dev_mode ; then
@@ -228,9 +233,14 @@ if ! /bin/openssl verify -verbose -CAfile /etc/ssl/firmware/firmware_ca.pem sign
 		exit 1
 	fi
 fi
+
+echo "10% Checking new firmware image..." >&5
+
+/usr/sbin/digi_check_firmware_update "$updatefile" || exit 1
+
 echo "15% Checking new firmware image..." >&5
 
-HASH=$(/bin/openssl dgst -sha256 <$updatefile)
+HASH="$(/bin/openssl dgst -sha256 <"$updatefile")"
 echo "${HASH#(stdin)= }" >hash
 /bin/openssl rsautl -verify -inkey public.pem -keyform PEM -pubin -in sig > verify
 if ! /usr/bin/diff -s hash verify; then
@@ -238,30 +248,30 @@ if ! /usr/bin/diff -s hash verify; then
 	exit 1
 fi
 /bin/rm -f hash sig verify
-if [ "$opt_just_check" == 0 ]; then
+if [ "$opt_just_check" = 0 ]; then
 echo "20% Checking new firmware image..." >&5
 else
 echo "100% Valid firmware image..." >&5
 cleanup 0
 fi
 # Extract the optional update scripts.
-/bin/tar xvzf $updatefile \*-update.sh 2>/dev/null || true
+/bin/tar xvzf "$updatefile" \*-update.sh 2>/dev/null || true
 echo version:
 /bin/cat version
-[ -r "pre-update.sh" ] && if ! . ./pre-update.sh $updatefile; then
+[ -r "pre-update.sh" ] && if ! . ./pre-update.sh "$updatefile"; then
 	echo "Pre-update failed!" >&6
 	exit 1
 fi
 
 # Program uboot
-if /bin/tar xvzf $updatefile u-boot.bin ; then
+if /bin/tar xvzf "$updatefile" u-boot.bin ; then
 	echo "Programming U-boot"
 	size="$(/bin/stat -c%s ./u-boot.bin)"
 	/bin/dd if=/dev/mtd1 of=/tmp/u-boot-just-in-case.bin
 	/usr/sbin/flash_eraseall /dev/mtd1
 	/bin/dd if=u-boot.bin of=/dev/mtd1
 	sum="$(/usr/bin/md5sum <u-boot.bin)"
-	verify="$(/bin/dd if=/dev/mtd1 bs=$size count=1 |/usr/bin/md5sum)"
+	verify="$(/bin/dd if=/dev/mtd1 bs="$size" count=1 |/usr/bin/md5sum)"
 	if [ "$sum" != "$verify" ]; then
 		printf "![ERROR] Invalid verify of u-boot, attempting to reload old u-boot!" >&6
 		/usr/sbin/flash_eraseall /dev/mtd1 || true
@@ -280,36 +290,41 @@ GUID_ROOTFS1="5c3ef832-cad7-4b30-875d-ae884e2f40c4"
 
 # Determine partition to replace.
 rootfs_info="$(next_rootfs)"
-next_part=${rootfs_info% [0-9]}
-next_kernel_part=$(( next_part - 1 ))
-next_boot=${rootfs_info#[0-9] }
-eval kernel_guid="\$GUID_KERNEL$next_boot"
-eval rootfs_guid="\$GUID_ROOTFS$next_boot"
+next_part="${rootfs_info% [0-9]}"
+next_kernel_part="$(( next_part - 1 ))"
+next_boot="${rootfs_info#[0-9] }"
+if [ "$next_boot" -eq 0 ]; then
+	kernel_guid="$GUID_KERNEL0"
+	rootfs_guid="$GUID_ROOTFS0"
+else
+	kernel_guid="$GUID_KERNEL1"
+	rootfs_guid="$GUID_ROOTFS1"
+fi
 
 /bin/umount /opt/mnt 2>/dev/null || true
 /bin/mkdir -p /opt/mnt 2>/dev/null
 /bin/chmod 700 /opt/mnt 2>/dev/null
 
-[ -r "pre-rootfs-update.sh" ] && if ! . ./pre-rootfs-update.sh $updatefile ${rootfs_info}; then
+[ -r "pre-rootfs-update.sh" ] && if ! . ./pre-rootfs-update.sh "$updatefile" "${rootfs_info}"; then
 	echo "Pre-rootfs-update failed!" >&6
 	exit 1
 fi
 # Program rootfs and kernel
-if /bin/tar xvzf $updatefile rootfs rootfs.sig rootfs.size kernel kernel.sig; then
-	[ -n "${avail_marked}" ] || invalidate_nextboot $next_boot
+if /bin/tar xvzf "$updatefile" rootfs rootfs.sig rootfs.size kernel kernel.sig; then
+	[ -n "${avail_marked}" ] || invalidate_nextboot "$next_boot"
 	avail_marked="y"
-	echo "30% Performing firmware update on system "$next_boot >&5
+	echo "30% Performing firmware update on system $next_boot" >&5
 	echo "Programming rootfs"
-	size=$(/bin/cat ./rootfs.size)
+	size="$(/bin/cat ./rootfs.size)"
 	[ "$size" -ne "$(/bin/stat -c%s ./rootfs)" ] && {
 		printf "rootfs rootfs.size mismatch!" >&6
 		exit 1
 	}
-	/bin/dd if=rootfs of=/dev/mmcblk0p${next_part}
+	/bin/dd if=rootfs of=/dev/mmcblk0p"${next_part}"
 	echo "Updating rootfs"
-	echo "50% Performing firmware update on system "$next_boot >&5
+	echo "50% Performing firmware update on system $next_boot" >&5
 	sum="$(/usr/bin/md5sum <rootfs)"
-	verify="$(/bin/dd if=/dev/mmcblk0p${next_part} bs=$size count=1 |/usr/bin/md5sum)"
+	verify="$(/bin/dd if=/dev/mmcblk0p"${next_part}" bs="$size" count=1 |/usr/bin/md5sum)"
 	if [ "$sum" != "$verify" ]; then
 		printf "![ERROR] Invalid verify of rootfs!" >&6
 		exit 1
@@ -318,15 +333,15 @@ if /bin/tar xvzf $updatefile rootfs rootfs.sig rootfs.size kernel kernel.sig; th
 	rootfs_programmed="y"
 
 	echo "Programming linux"
-	echo "70% Performing firmware update on system "$next_boot >&5
-	/bin/dd if=/dev/zero of=/dev/mmcblk0p${next_kernel_part} bs=4096 count=1 && /sbin/mkfs.ext4 -O ^has_journal -b 4096 -U ${kernel_guid} /dev/mmcblk0p${next_kernel_part}
-	/bin/mount -t ext4 -o sync,rw,noatime /dev/mmcblk0p${next_kernel_part} /opt/mnt >/dev/null 2>&1
+	echo "70% Performing firmware update on system $next_boot" >&5
+	/bin/dd if=/dev/zero of=/dev/mmcblk0p"${next_kernel_part}" bs=4096 count=1 && /sbin/mkfs.ext4 -O ^has_journal -b 4096 -U "${kernel_guid}" /dev/mmcblk0p"${next_kernel_part}"
+	/bin/mount -t ext4 -o sync,rw,noatime /dev/mmcblk0p"${next_kernel_part}" /opt/mnt >/dev/null 2>&1
 	/bin/cp kernel kernel.sig rootfs.sig rootfs.size /opt/mnt/ && /bin/sync
 	/bin/chown -R root:root /opt/mnt/*
 	/bin/chmod -R 0644 /opt/mnt/*
 	/bin/umount /opt/mnt
-	echo "90% Performing firmware update on system "$next_boot >&5
-	/bin/mount -t ext4 -o sync,ro,noatime /dev/mmcblk0p${next_kernel_part} /opt/mnt >/dev/null 2>&1
+	echo "90% Performing firmware update on system $next_boot" >&5
+	/bin/mount -t ext4 -o sync,ro,noatime /dev/mmcblk0p"${next_kernel_part}" /opt/mnt >/dev/null 2>&1
 	sum="$(/usr/bin/md5sum <kernel)"
 	verify="$(/usr/bin/md5sum </opt/mnt/kernel)"
 	if [ "$sum" != "$verify" ]; then
@@ -344,7 +359,7 @@ if /bin/tar xvzf $updatefile rootfs rootfs.sig rootfs.size kernel kernel.sig; th
 	kernel_programmed="y"
 fi
 
-[ -r "pre-nvram-update.sh" ] && if ! . ./pre-nvram-update.sh $updatefile ${rootfs_info}; then
+[ -r "pre-nvram-update.sh" ] && if ! . ./pre-nvram-update.sh "$updatefile" "${rootfs_info}"; then
 	echo "Pre-nvram-update failed!" >&6
 	exit 1
 fi
@@ -354,12 +369,12 @@ echo "100% Finishing firmware update" >&5
 reset_boot_counter
 
 # Toggle dualboot partition index
-set_boot_partition $next_boot || {
+set_boot_partition "$next_boot" || {
 	printf "![ERROR] Unable to set next boot partition!" >&6
 	exit 1
 }
 
-[ -r "post-update.sh" ] && if ! . ./post-update.sh $updatefile ${rootfs_info}; then
+[ -r "post-update.sh" ] && if ! . ./post-update.sh "$updatefile" "${rootfs_info}"; then
 	echo "Post-update failed!" >&6
 	exit 1
 fi

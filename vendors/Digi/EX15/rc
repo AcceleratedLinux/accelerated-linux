@@ -1,4 +1,4 @@
-hostname EX15
+hostname "$(sed -e 's?^.*/??' -e 's? .*$??' < /etc/version)"
 
 echo "Mounting filesystems..."
 mount -t proc proc /proc
@@ -51,10 +51,16 @@ echo high > /sys/class/gpio/gpio491/direction
 echo 489 > /sys/class/gpio/export
 echo high > /sys/class/gpio/gpio489/direction
 
-echo "Initializing Wi-Fi interface control..."
-# GPIO30 = WiFi W_disable (output, disable low) [sysgpio=494]
-echo 494 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio494/direction
+case "$(cat /etc/version)" in
+*EX15W*)
+	echo "Initializing Wi-Fi interface control..."
+	# GPIO30 = WiFi W_disable (output, disable low) [sysgpio=494]
+	echo 494 > /sys/class/gpio/export
+	echo high > /sys/class/gpio/gpio494/direction
+
+	modprobe ath10k_pci
+	;;
+esac
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory
@@ -132,5 +138,8 @@ random_seed restore
 actiond &
 
 cat /etc/motd
+
+# Clear bootcount.
+/etc/reset_bootcounter.sh
 
 exit 0

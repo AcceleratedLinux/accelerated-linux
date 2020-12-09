@@ -1,0 +1,83 @@
+diff -Naur c/runtime/net.c d/runtime/net.c
+--- c/runtime/net.c	2018-01-08 22:42:31.000000000 +1000
++++ d/runtime/net.c	2018-03-21 14:50:42.479071535 +1000
+@@ -1161,11 +1161,6 @@
+  * in, which on exit points to the local hostname. This buffer is dynamically
+  * allocated and must be free()ed by the caller. If the functions returns an
+  * error, the pointer is NULL.
+- * This function always tries to return a FQDN, even so be quering DNS. So it
+- * is safe to assume for the caller that when the function does not return
+- * a FQDN, it simply is not available. The domain part of that string is
+- * normalized to lower case. The hostname is kept in mixed case for historic
+- * reasons.
+  */
+ #define EMPTY_HOSTNAME_REPLACEMENT "localhost-empty-hostname"
+ static rsRetVal
+@@ -1174,63 +1169,24 @@
+ 	DEFiRet;
+ 	char hnbuf[8192];
+ 	uchar *fqdn = NULL;
+-	int empty_hostname = 1;
+ 
+ 	if(gethostname(hnbuf, sizeof(hnbuf)) != 0) {
++		DBGPRINTF("getLocalHostname gethostname(hnbuf, sizeof(hnbuf)) != 0\n");
+ 		strcpy(hnbuf, EMPTY_HOSTNAME_REPLACEMENT);
+ 	} else {
++		hnbuf[sizeof(hnbuf)-1] = '\0'; /* be on the safe side... */
++		DBGPRINTF("getLocalHostname hostname = %s\n", hnbuf);
+ 		/* now guard against empty hostname
+ 		 * see https://github.com/rsyslog/rsyslog/issues/1040
+ 		 */
+ 		if(hnbuf[0] == '\0') {
+ 			strcpy(hnbuf, EMPTY_HOSTNAME_REPLACEMENT);
+-		} else {
+-			empty_hostname = 0;
+-			hnbuf[sizeof(hnbuf)-1] = '\0'; /* be on the safe side... */
+ 		}
+ 	}
+-
+-	char *dot = strstr(hnbuf, ".");
+-	struct addrinfo *res = NULL;
+-	if(!empty_hostname && dot == NULL) {
+-		/* we need to (try) to find the real name via resolver */
+-		struct addrinfo flags;
+-		memset(&flags, 0, sizeof(flags));
+-		flags.ai_flags = AI_CANONNAME;
+-		int error = getaddrinfo((char*)hnbuf, NULL, &flags, &res);
+-		if (error != 0 &&
+-		    error != EAI_NONAME && error != EAI_AGAIN && error != EAI_FAIL) {
+-			/* If we get one of errors above, network is probably
+-			 * not working yet, so we fall back to local hostname below
+-			 */
+-			LogError(0, RS_RET_ERR, "getaddrinfo failed obtaining local "
+-				"hostname - using '%s' instead; error: %s",
+-				hnbuf, gai_strerror(error));
+-		}
+-		if (res != NULL) {
+-			/* When AI_CANONNAME is set first member of res linked-list */
+-			/* should contain what we need */
+-			if (res->ai_canonname != NULL && res->ai_canonname[0] != '\0') {
+-				CHKmalloc(fqdn = (uchar*)strdup(res->ai_canonname));
+-				dot = strstr((char*)fqdn, ".");
+-			}
+-		}
+-	}
+-
+-	if(fqdn == NULL) {
+-		/* already was FQDN or we could not obtain a better one */
+-		CHKmalloc(fqdn = (uchar*) strdup(hnbuf));
+-	}
+-
+-	if(dot != NULL)
+-		for(char *p = dot+1 ; *p ; ++p)
+-			*p = tolower(*p);
++	CHKmalloc(fqdn = (uchar*) strdup(hnbuf));
+ 
+ 	*ppName = fqdn;
+ finalize_it:
+-	if (res != NULL) {
+-		freeaddrinfo(res);
+-	}
+ 	RETiRet;
+ }
+ 

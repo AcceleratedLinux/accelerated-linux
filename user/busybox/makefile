@@ -21,7 +21,9 @@ include $(ROOTDIR)/tools/automake.inc
 # a list of binaries that we want to handle specifically,  so symlinking
 # to busybox is not appropriate (ie., apparmor profile use)
 
+ifeq ($(CONFIG_USER_BUSYBOX_SH_IS_NONE),)
 SPECIAL_BINARIES = /bin/sh
+endif
 
 secure_symlinks:
 	@for i in $(SPECIAL_BINARIES); do \

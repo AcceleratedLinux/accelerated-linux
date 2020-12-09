@@ -12,10 +12,7 @@ set GRUB_NO_EDIT=1
 set default="0"
 set part0_valid="false"
 set part1_valid="false"
-set DUALBOOT_ENV_VARS="default part0_valid part1_valid arg"
-
-# Space-separated list of blacklisted items in 'arg'
-set ARG_BLACKLIST="dev_mode="
+set DUALBOOT_ENV_VARS="default part0_valid part1_valid"
 
 set BOOTCNTR_RESET_VALUE=3
 
@@ -61,13 +58,10 @@ function load_kernel {
 	PART="$1"
 	KERNEL_ARG_EXTRA="$2"
 
-	# Filter out offending words from 'arg'
-	filter_arg
-
 	if [ "$dev_mode" == "1" ]; then
-		KERNEL_ARG_EXTRA="$KERNEL_ARG_EXTRA console=ttyS0,115200 dev_mode=1 ${arg}"
+		KERNEL_ARG_EXTRA="$KERNEL_ARG_EXTRA console=ttyS0,115200 dev_mode=1"
 	else
-		KERNEL_ARG_EXTRA="$KERNEL_ARG_EXTRA quiet console=null ${arg}"
+		KERNEL_ARG_EXTRA="$KERNEL_ARG_EXTRA quiet console=null"
 	fi
 
 	bootcntr_dec
@@ -89,25 +83,6 @@ function load_kernel {
 	mcu set_led wifi1_service green 0
 
 	watchdog_set 120
-}
-
-function filter_arg {
-	set arg_old="${arg}"
-	set arg=""
-
-	for a in ${arg_old}; do
-		should_set=1
-		for f in ${ARG_BLACKLIST}; do
-			if regexp "^${f}.*" "${a}"; then
-				should_set=0
-				break
-			fi
-		done
-
-		if [ ${should_set} = 1 ]; then
-			arg="${arg} ${a}"
-		fi
-	done
 }
 
 # Set MCU communication port

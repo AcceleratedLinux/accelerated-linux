@@ -24,6 +24,9 @@
 #ifndef _BITS_BYTESWAP_H
 #define _BITS_BYTESWAP_H 1
 
+#include <features.h>
+#include <bits/types.h>
+
 /* Swap bytes in 16 bit value.  */
 #define __bswap_constant_16(x) \
      ((((x) >> 8) & 0xffu) | (((x) & 0xffu) << 8))
@@ -73,8 +76,40 @@ __bswap_32 (unsigned int __bsx)
 }
 #endif
 
-#if defined __GNUC__ && __GNUC__ >= 2
 /* Swap bytes in 64 bit value.  */
+#if __GNUC_PREREQ (2, 0)
+# define __bswap_constant_64(x) \
+     (__extension__ ((((x) & 0xff00000000000000ull) >> 56)		      \
+		     | (((x) & 0x00ff000000000000ull) >> 40)		      \
+		     | (((x) & 0x0000ff0000000000ull) >> 24)		      \
+		     | (((x) & 0x000000ff00000000ull) >> 8)		      \
+		     | (((x) & 0x00000000ff000000ull) << 8)		      \
+		     | (((x) & 0x0000000000ff0000ull) << 24)		      \
+		     | (((x) & 0x000000000000ff00ull) << 40)		      \
+		     | (((x) & 0x00000000000000ffull) << 56)))
+
+# if __GNUC_PREREQ (4, 3)
+static __inline __uint64_t
+__bswap_64 (__uint64_t __bsx)
+{
+  return __builtin_bswap64 (__bsx);
+}
+# else
+#  define __bswap_64(x) \
+     (__extension__							      \
+      ({ union { __extension__ __uint64_t __ll;				      \
+		 unsigned int __l[2]; } __w, __r;			      \
+	 if (__builtin_constant_p (x))					      \
+	   __r.__ll = __bswap_constant_64 (x);				      \
+	 else								      \
+	   {								      \
+	     __w.__ll = (x);						      \
+	     __r.__l[0] = __bswap_32 (__w.__l[1]);			      \
+	     __r.__l[1] = __bswap_32 (__w.__l[0]);			      \
+	   }								      \
+	 __r.__ll; }))
+# endif
+#else
 # define __bswap_constant_64(x) \
      ((((x) & 0xff00000000000000ull) >> 56)				      \
       | (((x) & 0x00ff000000000000ull) >> 40)				      \
@@ -85,24 +120,11 @@ __bswap_32 (unsigned int __bsx)
       | (((x) & 0x000000000000ff00ull) << 40)				      \
       | (((x) & 0x00000000000000ffull) << 56))
 
-# ifndef __bswap_non_constant_64
-#  define __bswap_non_constant_64(x) \
-     (__extension__							      \
-      ({ union { __extension__ unsigned long long int __ll;		      \
-		 unsigned int __l[2]; } __w, __r;			      \
-	 __w.__ll = (x);						      \
-	 __r.__l[0] = __bswap_non_constant_32 (__w.__l[1]);		      \
-	 __r.__l[1] = __bswap_non_constant_32 (__w.__l[0]);		      \
-	 __r.__ll; }))
-# endif
-# define __bswap_64(x) \
-     (__extension__							      \
-      ({ __extension__ unsigned long long int __ll;			      \
-         if (__builtin_constant_p (x))					      \
-	   __ll = __bswap_constant_64 (x);				      \
-	 else								      \
-	   __ll = __bswap_non_constant_64 (x);				      \
-	 __ll; }))
+static __inline __uint64_t
+__bswap_64 (__uint64_t __bsx)
+{
+  return __bswap_constant_64 (__bsx);
+}
 #endif
 
 #endif /* _BITS_BYTESWAP_H */

@@ -14,35 +14,149 @@ wwan_led_update()
 	WWAN_SERV=
 	WWAN_SIG=
 
-	idx="$(modem name=wwan idx || modem idx)" 2>/dev/null
-	if [ -z "$idx" ]; then
-		if sim -m 2>/dev/null | grep -qw yes; then
-			# Slow flash SERV while waiting for modem to appear
-			WWAN_SERV="-f wanserg"
-			WWAN_SIG="-O wansigg -O wansigr"
-		else
-			# No modem present at all. Everything off
-			WWAN_SERV="-O wanserg -O wanserr"
-			WWAN_SIG="-O wansigg -O wansigr"
-		fi
+	MODEM_STATUS=$(runt get mm.persist.port.module.status)
+	if [ "$MODEM_STATUS" = "Updating firmware" ]; then
+		WWAN_SERV="-O wanserg -f wanserr"
+		WWAN_SIG="-O wansigg -f wansigr"
+	elif [ "$MODEM_STATUS" = "Recovering firmware" ]; then
+		WWAN_SERV="-f wanserg -O wanserr"
+		WWAN_SIG="-f wansigg -O wansigr"
 	else
-		case "$(runt get mm.modem.$idx.status.bars)" in
-		5)   WWAN_SIG="-o wansigg -O wansigr" ;;
-		4|3) WWAN_SIG="-F wansigg -O wansigr" ;;
-		2|1) WWAN_SIG="-f wansigg -O wansigr" ;;
-		0)   WWAN_SIG="-O wansigg -f wansigr" ;;
-		*)   WWAN_SIG="-O wansigg -O wansigr" ;;
-		esac
-
-		if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
-			WWAN_SERV="-o wanserg"
-		elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
-			# No SIM present
-			WWAN_SERV="-o wanserr"
+		idx="$(modem name=modem idx || modem idx)" 2>/dev/null
+		if [ -z "$idx" ]; then
+			if sim -m 2>/dev/null | grep -qw yes; then
+				# Slow flash SERV while waiting for modem to appear
+				WWAN_SERV="-f wanserg -O wanserr"
+				WWAN_SIG="-O wansigg -O wansigr"
+			else
+				# No modem present at all. Everything off
+				WWAN_SERV="-O wanserg -O wanserr"
+				WWAN_SIG="-O wansigg -O wansigr"
+			fi
 		else
-			# Connecting
-			WWAN_SERV="-F wanserg"
+			case "$(runt get mm.modem.$idx.status.bars)" in
+			5)   WWAN_SIG="-o wansigg -O wansigr" ;;
+			4|3) WWAN_SIG="-F wansigg -O wansigr" ;;
+			2|1) WWAN_SIG="-f wansigg -O wansigr" ;;
+			0)   WWAN_SIG="-O wansigg -f wansigr" ;;
+			*)   WWAN_SIG="-O wansigg -O wansigr" ;;
+			esac
+
+			if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
+				WWAN_SERV="-o wanserg -O wanserr"
+			elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
+				# No SIM present
+				WWAN_SERV="-O wanserg -o wanserr"
+			else
+				# Connecting
+				WWAN_SERV="-F wanserg -O wanserr"
+			fi
 		fi
+	fi
+}
+
+wifi_led_update()
+{
+	WIFI_SERV=
+
+	eval "$(config stop)"
+	eval "$(config start)"
+	config load
+
+	error=0
+	ap_up=0
+	client_connected=0
+	client_searching=0
+	if config exists network wifi; then
+		runt update network.wifi
+		aps=$(config keys network.wifi.ap)
+		for ap in $aps ; do
+			ap=${ap%%.*}
+			device="$(runt get network.wifi.ap."$ap".device)"
+			if [ -n "$device" ]; then
+				if ip link show "$device" up 2>&1 | grep -q "state UP"; then
+					ap_up=1
+				fi
+			fi
+		done
+
+		clients=$(config keys network.wifi.client)
+		for client in $clients ; do
+			client=${client%%.*}
+			device="$(runt get network.wifi.client."$client".device)"
+			if [ -n "$device" ]; then
+				if ip link show "$device" up 2>&1 | grep -q "state UP"; then
+					client_connected=1
+				else
+					client_connected=0
+					client_searching=1
+				fi
+			fi
+		done
+	fi
+	eval "$(config stop)"
+		
+####################################################################################
+#
+# Wifi LED table
+#
+# We have wifig and wifir to work with.
+#
+#--------------------------------------------------------------------------|
+# State                      |   wifig    |   wifir    |   Color           |
+#--------------------------------------------------------------------------|
+# Unconfigured               |    Off     |    Off     |      No Light     |
+#--------------------------------------------------------------------------|
+# Client Connected (No AP)   |    On      |    Off     |    Green Solid    |
+#--------------------------------------------------------------------------|
+# Client Searching (No AP)   | Slow Flash |    Off     |    Green Flash    |
+#--------------------------------------------------------------------------|
+# Client Connected - AP up   |    On      |    On      |    Amber Solid    |
+#--------------------------------------------------------------------------|
+# Client Searching - AP up   |    On      | Slow Flash | Amber/Green Flash |
+#--------------------------------------------------------------------------|
+# Error                      |    Off     |    On      |     Red Solid     |
+#--------------------------------------------------------------------------|
+	if [ "$error" = "1" ]; then
+		WIFI_SERV="-o wifir -O wifig"
+	else
+# TODO: Remove these when the hardware is fixed
+		if [ "$client_searching" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/wifig/delay_on)" = "500" ] && [ "$(cat /sys/class/leds/wifig/delay_off)" = "500" ]; then
+				WIFI_SERV=
+			else
+				WIFI_SERV="-f wifig -O wifir"
+			fi
+		elif [ "$client_connected" = "1" ] || [ "$ap_up" = "1" ]; then
+			WIFI_SERV="-o wifig -O wifir"
+		else
+			WIFI_SERV="-O wifig -O wifir"
+		fi
+
+# 
+# The red wifi LED is too strong, or the green is too weak so amber looks red.
+# Disable the amber codes until the hardware is fixed to support a good amber.
+#
+#		if [ "$client_connected" = "1" ] && [ "$ap_up" = "0" ]; then
+#			WIFI_SERV="-o wifig -O wifir"
+#		elif [ "$client_connected" = "0" ] && [ "$ap_up" = "1" ]; then
+#			WIFI_SERV="-o wifig -O wifir"
+#		elif [ "$client_searching" = "1" ] && [ "$ap_up" = "0" ]; then
+#			# Don't glitch the flash if we're already flashing
+#			if [ "$(cat /sys/class/leds/wifig/delay_on)" != "500" ]; then
+#				WIFI_SERV="-f wifig -O wifir"
+#			fi
+#		elif [ "$client_connected" = "1" ] && [ "$ap_up" = "1" ]; then
+#			WIFI_SERV="-o wifig -o wifir"
+#		elif [ "$client_searching" = "1" ] && [ "$ap_up" = "1" ]; then
+#			# Don't glitch the flash if we're already flashing
+#			if [ "$(cat /sys/class/leds/wifir/delay_on)" != "500" ]; then
+#				WIFI_SERV="-o wifig -f wifir"
+#			fi
+#		else
+#			WIFI_SERV="-O wifig -O wifir"
+#		fi
 	fi
 }
 
@@ -61,11 +175,13 @@ start|stop)
 	ledcmd -O usrg -O usrr
 	ledcmd -O wansigg -O wansigr
 	ledcmd -O wanserg -O wanserr
+	ledcmd -O wifig -O wifir
 	;;
 reload)
 	findme_update
 	wwan_led_update
-	ledcmd $WWAN_SERV $WWAN_SIG $FINDME
+	wifi_led_update
+	ledcmd $WWAN_SERV $WWAN_SIG $FINDME $WIFI_SERV
 	;;
 *)
 	echo "Usage: $0 {start|stop|reload}"

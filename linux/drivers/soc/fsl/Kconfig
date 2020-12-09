@@ -50,4 +50,13 @@ config FSL_RCPM
 	  tasks associated with power management, such as wakeup source control.
 	  Note that currently this driver will not support PowerPC based
 	  QorIQ processor.
+
+config FSL_SYSFS_SFP
+	tristate "Freescale SFP support"
+	depends on ARCH_LAYERSCAPE
+	help
+	  The NXP Layerscape processors have a Security Fuse Processor (SFP)
+	  hardware module to support reading and programming the SoC fuse
+	  block. This driver makes the SFP accessible via the /sys pseudo
+	  filesystem interface.
 endmenu

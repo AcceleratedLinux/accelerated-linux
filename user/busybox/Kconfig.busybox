@@ -1714,7 +1714,7 @@ config USER_BUSYBOX_FEATURE_DATE_ISOFMT
 # defaults to "no": stat's nanosecond field is a bit non-portable
 config USER_BUSYBOX_FEATURE_DATE_NANO
 	bool "Support %[num]N nanosecond format specifier"
-	default n  # syscall(__USER_BUSYBOX_NR_clock_gettime)
+	default n
 	depends on USER_BUSYBOX_DATE
 	select USER_BUSYBOX_PLATFORM_LINUX
 	help
@@ -5611,6 +5611,31 @@ config USER_BUSYBOX_FEATURE_CROND_DIR
 	depends on USER_BUSYBOX_CROND || USER_BUSYBOX_CRONTAB
 	help
 	Location of crond spool.
+
+config USER_BUSYBOX_FEATURE_CRONTABS_DIR
+	string "directory for user crontabs"
+	default "/var/spool/cron/crontabs"
+	depends on USER_BUSYBOX_CROND || USER_BUSYBOX_CRONTAB
+	help
+	Specifies the directory for holding user crontabs.
+	If a relative path is specified, it will be relative to
+	the crond spool directory.
+
+config USER_BUSYBOX_FEATURE_CRONTAB_PREFIX
+	string "filename prefix for user crontabs"
+	default ""
+	depends on USER_BUSYBOX_CROND || USER_BUSYBOX_CRONTAB
+	help
+	Compatibility prefix prepended to usernames for files in the
+	crontabs directory.
+
+config USER_BUSYBOX_FEATURE_CRONTAB_UPDATE_PATH
+	string "communication file between crontab and crond"
+	default "cron.update"
+	depends on USER_BUSYBOX_CROND || USER_BUSYBOX_CRONTAB
+	help
+	Path to a file used by crontab to inform crond of changed
+	crontabs. If not absolute, is opened relative to CROND_DIR.
 config USER_BUSYBOX_CRONTAB
 	bool "crontab (10 kb)"
 	default y
@@ -7434,6 +7459,24 @@ config USER_BUSYBOX_UDHCPC_DEFAULT_SCRIPT
 	examples/udhcp for a working example. Normally it is safe
 	to leave this untouched.
 
+config USER_BUSYBOX_FEATURE_UDHCPC_ALWAYS_SEND_HOST_NAME
+	bool "Always send a hostname"
+	default n
+	depends on USER_BUSYBOX_UDHCPC
+	help
+	If selected, udhcpc will default to sending the system's
+	hostname as a HOST_NAME option.
+
+config USER_BUSYBOX_FEATURE_UDHCPC_USE_PRIVATE_VENDORSPEC
+	bool "Treat received option 239 as 43 (vendorspec)"
+	default n
+	depends on USER_BUSYBOX_UDHCPC
+	help
+	If selected, received options 239 will be treated as
+	a vendorspec, unless a vendorspec option was also sent.
+	This is for compatibility with sites using private-use
+	options.
+
 # udhcpc6 config is inserted here:
 config USER_BUSYBOX_UDHCPC6
 	bool "udhcpc6 (21 kb)"
@@ -7528,6 +7571,15 @@ config USER_BUSYBOX_FEATURE_UDHCP_RFC3397
 	If selected, both client and server will support passing of domain
 	search lists via option 119, specified in RFC 3397,
 	and SIP servers option 120, specified in RFC 3361.
+
+config USER_BUSYBOX_FEATURE_UDHCP_RFC3397_REQUEST
+	bool "Always send domain-search in request-paramater"
+	default n
+	depends on USER_BUSYBOX_FEATURE_UDHCP_RFC3397
+	help
+	If selected, option 119 is added to the request-parameter list.
+	Helps with isc-dhcpd will only includes the domain-search parameter in
+	its offer when the client explicitly requests it.
 
 config USER_BUSYBOX_FEATURE_UDHCP_8021Q
 	bool "Support 802.1Q VLAN parameters options"

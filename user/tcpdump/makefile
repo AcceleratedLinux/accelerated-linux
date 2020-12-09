@@ -4,7 +4,7 @@ URL = http://www.tcpdump.org/release/tcpdump-4.6.2.tar.gz
 PATCHES = tcpdump-embed.patch tcpdump-no-version-binary.patch
 else
 URL = http://www.tcpdump.org/release/tcpdump-4.9.3.tar.gz
-PATCHES = tcpdump-no-version-binary.patch
+PATCHES = tcpdump-no-version-binary.patch ppp-memory-allocation-fix.patch
 endif
 
 CONFVARS :=

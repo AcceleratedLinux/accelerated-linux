@@ -15,7 +15,7 @@
 -	cd $(prefix)/lib; ln -s $(SHARED_LIB_VERSIONED) $(SHARED_LIB_BASE)
 +	mkdir -p $(DESTDIR)$(prefix)/lib
 +	$(INSTALL_DATA) $(RESULT_DIR)$(SHARED_LIB_VERSIONED) $(DESTDIR)$(prefix)/lib
-+	cd $(DESTDIR)$(prefix)/lib; ln -s $(SHARED_LIB_VERSIONED) $(SHARED_LIB_BASE)
++	cd $(DESTDIR)$(prefix)/lib; ln -sf $(SHARED_LIB_VERSIONED) $(SHARED_LIB_BASE)
  
  %.lo : %.cpp
  	$(CXX) -c $(CXXFLAGS) -fPIC $(CPPFLAGS) -o $@ $<

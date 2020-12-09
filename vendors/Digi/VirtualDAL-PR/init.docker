@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Cache the environment provided by "docker start" before /bin/init runs
+# /etc/rc with the environment sanitized.
+touch /tmp/init-env.sh || mount -t tmpfs -o size=256M tmpfs /tmp
+env | grep '^DAL_' >/tmp/init-env.sh
+
+exec /bin/init

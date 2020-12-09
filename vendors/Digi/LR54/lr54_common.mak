@@ -13,8 +13,6 @@ LZKERNEL  = $(IMAGEDIR)/kernel.lzma
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
 
 SIGNING_ALG = hmac
-SIGNING_EXTRA =
-# use our dev key by default
 SIGNING_KEY = $(ROOTDIR)/prop/sign_image/devkeys/lr54/developer_key
 
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts

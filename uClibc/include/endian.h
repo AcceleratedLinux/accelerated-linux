@@ -56,7 +56,7 @@
 #endif
 
 
-#ifdef __USE_BSD
+#if defined(__USE_BSD) && !defined(__ASSEMBLER__)
 /* Conversion interfaces.  */
 # include <byteswap.h>
 

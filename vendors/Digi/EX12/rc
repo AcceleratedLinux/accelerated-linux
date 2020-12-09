@@ -1,4 +1,4 @@
-hostname "Digi EX12"
+hostname "$(sed -e 's?^.*/??' -e 's? .*$??' < /etc/version)"
 
 echo "Mounting filesystems..."
 mount -t proc proc /proc

@@ -1,4 +1,4 @@
-VERSION = 1.6.9
+VERSION = 1.6.12
 PKG = mosquitto-$(VERSION)
 URL = https://mosquitto.org/files/source/mosquitto-$(VERSION).tar.gz
 

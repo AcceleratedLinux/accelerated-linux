@@ -4,7 +4,7 @@
 
 ifndef CONFIG_LIB_LIBSSL_FIPS
 
-OPENSSL_PKG = openssl-1.1.1g
+OPENSSL_PKG = openssl-1.1.1h
 
 else
 
@@ -109,9 +109,9 @@ endif
 
 $(OPENSSL_PKG)_CONFOPTS += --prefix=// --libdir=/lib
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
-$(OPENSSL_PKG)_CONFOPTS += --openssldir=/etc/config
+$(OPENSSL_PKG)_CONFOPTS += --openssldir=/etc/config/ssl
 else
-$(OPENSSL_PKG)_CONFOPTS += --openssldir=/etc
+$(OPENSSL_PKG)_CONFOPTS += --openssldir=/etc/ssl
 endif
 
 ##############################################################################
@@ -226,6 +226,7 @@ $(OPENSSL_PKG)_CONFVARS  += FIPSDIR=$(FIPS_INSTALL)
 $(OPENSSL_PKG)_CONFOPTS  += fips --with-fipslibdir=$(FIPS_INSTALL)/lib/
 $(OPENSSL_PKG)_CFLAGS    += -I$(FIPS_INSTALL)/include -Wl,-L$(FIPS_INSTALL)/lib
 $(OPENSSL_PKG)_BUILDVARS += FIPS_SIG=$(FIPS_SRC)/util/incore
+$(OPENSSL_PKG)_DEP       += $(FIPS_PKG)
 endif
 
 # Extra post-configure pre-make steps
@@ -246,6 +247,7 @@ $(FIPS_PKG)_CONFVARS  += INSTALL_PREFIX=$(FIPS_INSTALL)
 $(FIPS_PKG)_CONFVARS  += FIPSDIR="/"
 $(FIPS_PKG)_CONFOPTS  += no-asm
 $(FIPS_PKG)_BUILDVARS += FIPS_SIG=$(FIPS_SRC)/util/incore
+$(FIPS_PKG)_MAKEVARS  += -j1
 
 ifdef BUILD_FIPS_ALGVS
 $(FIPS_PKG)_BUILD = all build_algvs
@@ -270,9 +272,9 @@ openssl_romfs:
 	done
 	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS $(OPENSSL_INSTALL)/bin/openssl /bin/openssl
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
-	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS $(OPENSSL_SRC)/apps/openssl.cnf /etc/default/openssl.cnf
+	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS -d $(OPENSSL_SRC)/apps/openssl.cnf /etc/default/ssl/openssl.cnf
 else
-	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS $(OPENSSL_SRC)/apps/openssl.cnf /etc/openssl.cnf
+	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS -d $(OPENSSL_SRC)/apps/openssl.cnf /etc/ssl/openssl.cnf
 endif
 	# $(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS $(OPENSSL_INSTALL)/bin/c_rehash /bin/c_rehash
 

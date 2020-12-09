@@ -1,0 +1,6 @@
+config LIB_FASTJSON
+	bool "fastjson"
+	default n
+	help
+	   A fork of the json-c library, which is optimized for liblognorm processing.
+

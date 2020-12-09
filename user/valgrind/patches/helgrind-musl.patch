@@ -1,0 +1,181 @@
+--- valgrind-3.16.1/include/pub_tool_redir.h.orig	2019-12-27 08:51:44.000000000 -0600
++++ valgrind-3.16.1/include/pub_tool_redir.h	2020-07-31 15:06:29.753179451 -0500
+@@ -278,7 +278,7 @@
+ 
+ #if defined(VGO_linux)
+ # if defined(MUSL_LIBC)
+-#  define  VG_Z_LIBPTHREAD_SONAME  libcZdZa              // libc.*
++#  define  VG_Z_LIBPTHREAD_SONAME  NONE
+ #else
+ #  define  VG_Z_LIBPTHREAD_SONAME  libpthreadZdsoZd0     // libpthread.so.0
+ #endif
+
+--- valgrind-3.16.1/helgrind/hg_intercepts.c.orig	2019-12-27 08:51:44.000000000 -0600
++++ valgrind-3.16.1/helgrind/hg_intercepts.c	2020-07-31 15:03:23.055433726 -0500
+@@ -452,11 +452,19 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined (MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucreate, // pthread_create
++                 pthread_t *thread, const pthread_attr_t *attr,
++                 void *(*start) (void *), void *arg) {
++      return pthread_create_WRK(thread, attr, start, arg);
++   }
++#else
+    PTH_FUNC(int, pthreadZucreateZAZa, // pthread_create@*
+                  pthread_t *thread, const pthread_attr_t *attr,
+                  void *(*start) (void *), void *arg) {
+       return pthread_create_WRK(thread, attr, start, arg);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucreate, // pthread_create
+                  pthread_t *thread, const pthread_attr_t *attr,
+@@ -1223,10 +1231,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined (MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucondZuwait, // pthread_cond_wait
++                 pthread_cond_t* cond, pthread_mutex_t* mutex) {
++      return pthread_cond_wait_WRK(cond, mutex);
++   }
++#else
+    PTH_FUNC(int, pthreadZucondZuwaitZAZa, // pthread_cond_wait@*
+                  pthread_cond_t* cond, pthread_mutex_t* mutex) {
+       return pthread_cond_wait_WRK(cond, mutex);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucondZuwaitZa, // pthread_cond_wait*
+                  pthread_cond_t* cond, pthread_mutex_t* mutex) {
+@@ -1322,11 +1337,19 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucondZutimedwait, // pthread_cond_timedwait@*
++                 pthread_cond_t* cond, pthread_mutex_t* mutex, 
++                 struct timespec* abstime) {
++      return pthread_cond_timedwait_WRK(cond, mutex, abstime, ETIMEDOUT);
++   }
++#else
+    PTH_FUNC(int, pthreadZucondZutimedwaitZAZa, // pthread_cond_timedwait@*
+                  pthread_cond_t* cond, pthread_mutex_t* mutex, 
+                  struct timespec* abstime) {
+       return pthread_cond_timedwait_WRK(cond, mutex, abstime, ETIMEDOUT);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucondZutimedwait, // pthread_cond_timedwait
+                  pthread_cond_t* cond, pthread_mutex_t* mutex, 
+@@ -1398,10 +1421,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucondZusignal, // pthread_cond_signal
++                 pthread_cond_t* cond) {
++      return pthread_cond_signal_WRK(cond);
++   }
++#else
+    PTH_FUNC(int, pthreadZucondZusignalZAZa, // pthread_cond_signal@*
+                  pthread_cond_t* cond) {
+       return pthread_cond_signal_WRK(cond);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucondZusignal, // pthread_cond_signal
+                  pthread_cond_t* cond) {
+@@ -1459,10 +1489,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucondZubroadcast, // pthread_cond_broadcast@*
++                 pthread_cond_t* cond) {
++      return pthread_cond_broadcast_WRK(cond);
++   }
++#else
+    PTH_FUNC(int, pthreadZucondZubroadcastZAZa, // pthread_cond_broadcast@*
+                  pthread_cond_t* cond) {
+       return pthread_cond_broadcast_WRK(cond);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucondZubroadcast, // pthread_cond_broadcast
+                  pthread_cond_t* cond) {
+@@ -1515,10 +1552,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucondZuinit, // pthread_cond_init
++	    pthread_cond_t* cond, pthread_condattr_t* cond_attr) {
++     return pthread_cond_init_WRK(cond, cond_attr);
++   }
++#else
+    PTH_FUNC(int, pthreadZucondZuinitZAZa, // pthread_cond_init@*
+ 	    pthread_cond_t* cond, pthread_condattr_t* cond_attr) {
+      return pthread_cond_init_WRK(cond, cond_attr);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucondZuinit, // pthread_cond_init
+ 	    pthread_cond_t* cond, pthread_condattr_t * cond_attr) {
+@@ -1605,10 +1649,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, pthreadZucondZudestroy, // pthread_cond_destroy@*
++                 pthread_cond_t* cond) {
++      return pthread_cond_destroy_WRK(cond);
++   }
++#else
+    PTH_FUNC(int, pthreadZucondZudestroyZAZa, // pthread_cond_destroy@*
+                  pthread_cond_t* cond) {
+       return pthread_cond_destroy_WRK(cond);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, pthreadZucondZudestroy, // pthread_cond_destroy
+                  pthread_cond_t* cond) {
+@@ -2635,10 +2686,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, semZuinit, // sem_init
++                 sem_t* sem, int pshared, unsigned long value) {
++      return sem_init_WRK(sem, pshared, value);
++   }
++#else
+    PTH_FUNC(int, semZuinitZAZa, // sem_init@*
+                  sem_t* sem, int pshared, unsigned long value) {
+       return sem_init_WRK(sem, pshared, value);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, semZuinit, // sem_init
+                  sem_t* sem, int pshared, unsigned long value) {
+@@ -2717,10 +2775,17 @@
+    return ret;
+ }
+ #if defined(VGO_linux)
++#if defined(MUSL_LIBC)
++   PTH_FUNC(int, semZudestroy,  // sem_destroy
++                 sem_t* sem) {
++      return sem_destroy_WRK(sem);
++   }
++#else
+    PTH_FUNC(int, semZudestroyZAZa,  // sem_destroy*
+                  sem_t* sem) {
+       return sem_destroy_WRK(sem);
+    }
++#endif
+ #elif defined(VGO_darwin)
+    PTH_FUNC(int, semZudestroy,  // sem_destroy
+                  sem_t* sem) {
+

@@ -1,0 +1,2 @@
+0001-Disable-libtool-check.patch
+0002-Fix-check-for-TIME_MAX-to-handle-8-byte-TIME_T-with-.patch

@@ -216,19 +216,7 @@ dir_$(CONFIG_USER_NETFLASH_NETFLASH)        += netflash
 dir_$(CONFIG_USER_NETPERF_NETPERF)          += netperf
 dir_$(CONFIG_USER_NETPERF_NETSERVER)        += netperf
 dir_$(CONFIG_USER_NETPIPE_NETPIPE)          += netpipe
-dir_$(CONFIG_USER_NET_TOOLS_ARP)            += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_HOSTNAME)       += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_IFCONFIG)       += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_NAMEIF)         += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_NETSTAT)        += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_PLIPCONFIG)     += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_RARP)           += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_ROUTE)          += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_SLATTACH)       += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_IPMADDR)        += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_IPTUNNEL)       += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_MII_TOOL)       += net-tools
-dir_$(CONFIG_USER_NET_TOOLS_MII_TOOL_FEC)   += mii-tool-fec
+dir_$(CONFIG_USER_MII_TOOL_FEC)             += mii-tool-fec
 dir_$(CONFIG_USER_NETSTAT_NAT_NETSTAT_NAT)  += netstat-nat
 dir_$(CONFIG_USER_NOOOM_NOOOM)              += nooom
 dir_$(CONFIG_USER_NOVNC)                    += novnc
@@ -411,6 +399,8 @@ dir_$(CONFIG_USER_ZEBRA_BGPD_BGPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_OSPFD_OSPFD)        += zebra
 dir_$(CONFIG_USER_ZEBRA_RIPD_RIPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
+dir_$(CONFIG_USER_IFMETRIC)                 += ifmetric
+dir_$(CONFIG_USER_IPSETD)                   += ipsetd
 
 dir_y += games
 
@@ -451,6 +441,9 @@ ModemManager: libgudev udev libmbim libqmi
 mtd-utils: util-linux
 netifd: ubus uci
 netflash: i2c-tools
+ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+netflash: squashfs-tools-ng
+endif
 flashrom: pciutils
 ovs: dpdk
 swconfig: uci

@@ -1,0 +1,57 @@
+Author: David Leonard <david.leonard@opengear.com>
+Date:   Wed Jan 28 11:44:35 2015 +1000
+
+    OG-762 treat DHCP option 239 just like option 43
+    
+    Rob's spec:
+    
+      "support option 239 in exactly the same way, if both are set
+       option 43 takes precedence"
+    
+    Use of option 239 is reserved by RFC3942 for site use, so there is a
+    small risk of collision here. In the worst case, the system will
+    reset every 5-minutes until its primary interface is configured.
+Index: busybox-1.31.0/networking/udhcp/dhcpc.c
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/dhcpc.c
++++ busybox-1.31.0/networking/udhcp/dhcpc.c
+@@ -1734,6 +1734,18 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 			continue;
+ 		}
+ 
++#if ENABLE_FEATURE_UDHCPC_USE_PRIVATE_VENDORSPEC
++		/* For sites using private-use options, convert option 239
++		 * into option 43 (vendorspec), unless there is an option 43
++		 * already. */
++		if (!udhcp_get_option(&packet, DHCP_VENDOR_SPEC)) {
++			uint8_t *temp = udhcp_get_option(&packet, 239);
++			if (temp) {
++				temp[OPT_CODE - 2] = DHCP_VENDOR_SPEC;
++			}
++		}
++#endif
++
+ 		message = udhcp_get_option(&packet, DHCP_MESSAGE_TYPE);
+ 		if (message == NULL) {
+ 			bb_info_msg("no message type option, ignoring packet");
+Index: busybox-1.31.0/networking/udhcp/Config.src
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/Config.src
++++ busybox-1.31.0/networking/udhcp/Config.src
+@@ -108,6 +108,16 @@ config FEATURE_UDHCPC_ALWAYS_SEND_HOST_N
+ 	If selected, udhcpc will default to sending the system's
+ 	hostname as a HOST_NAME option.
+ 
++config FEATURE_UDHCPC_USE_PRIVATE_VENDORSPEC
++	bool "Treat received option 239 as 43 (vendorspec)"
++	default n
++	depends on UDHCPC
++	help
++	If selected, received options 239 will be treated as
++	a vendorspec, unless a vendorspec option was also sent.
++	This is for compatibility with sites using private-use
++	options.
++
+ # udhcpc6 config is inserted here:
+ INSERT
+ 

@@ -87,6 +87,9 @@ void telrcv(void) {
 
     while (ncc > 0) {
 	if ((&ptyobuf[BUFSIZ] - pfrontp) < 2) break;
+#ifdef RFC2217
+	if ((&netobuf[BUFSIZ] - nfrontp) < 14) break;
+#endif
 	c = *netip++ & 0377;
 	ncc--;
 
@@ -571,6 +574,13 @@ void willoption(int option) {
 		break;
 #endif
 
+#ifdef RFC2217
+	    case TELOPT_COMPORT:
+		if (rfc2217_enabled())
+		    changeok++;
+		break;
+#endif
+
 	    default:
 		break;
 	    }
@@ -908,6 +918,14 @@ void dooption(int option) {
 	    changeok++;
 	    break;
 #endif
+
+#ifdef RFC2217
+	case TELOPT_COMPORT:
+	    if (rfc2217_enabled())
+		changeok++;
+	break;
+#endif
+
 	case TELOPT_LINEMODE:
 	case TELOPT_TTYPE:
 	case TELOPT_NAWS:
@@ -1046,7 +1064,7 @@ void suboption(void) {
 
 	settimer(tspeedsubopt);
 	if (SB_EOF() || SB_GET() != TELQUAL_IS) return;
-	xspeed = atoi(subpointer);
+	xspeed = atoi((char *)subpointer);
 
 	while (SB_GET() != ',' && !SB_EOF());
 	if (SB_EOF()) return;
@@ -1306,6 +1324,12 @@ void suboption(void) {
 	default:
 	    break;
 	}
+	break;
+#endif
+
+#ifdef RFC2217
+    case TELOPT_COMPORT:
+	com_port_option(subpointer, SB_LEN());
 	break;
 #endif
 

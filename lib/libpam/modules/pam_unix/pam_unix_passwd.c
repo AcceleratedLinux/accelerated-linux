@@ -123,8 +123,17 @@ extern char *bigcrypt(const char *key, const char *salt);
 #define _UNIX_NEW_AUTHTOK	"-UN*X-NEW-PASS"
 
 #define MAX_PASSWD_TRIES	3
+#ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
+#define PW_TMPFILE		"/etc/config/npasswd"
+#define SH_TMPFILE		"/etc/config/nshadow"
+#define PW_FILE			"/etc/config/passwd"
+#define SH_FILE			"/etc/config/shadow"
+#else
 #define PW_TMPFILE		"/etc/npasswd"
 #define SH_TMPFILE		"/etc/nshadow"
+#define PW_FILE			"/etc/passwd"
+#define SH_FILE			"/etc/shadow"
+#endif
 #ifndef CRACKLIB_DICTS
 #define CRACKLIB_DICTS		NULL
 #endif
@@ -606,7 +615,7 @@ static int _update_passwd(pam_handle_t *pamh,
 
 done:
     if (!err) {
-	if (!rename(PW_TMPFILE, "/etc/passwd"))
+	if (!rename(PW_TMPFILE, PW_FILE))
 	    pam_syslog(pamh, LOG_NOTICE, "password changed for %s", forwho);
 	else
 	    err = 1;
@@ -722,7 +731,7 @@ static int _update_shadow(pam_handle_t *pamh, const char *forwho, char *towhat)
 
  done:
     if (!err) {
-	if (!rename(SH_TMPFILE, "/etc/shadow"))
+	if (!rename(SH_TMPFILE, SH_FILE))
 	    pam_syslog(pamh, LOG_NOTICE, "password changed for %s", forwho);
 	else
 	    err = 1;

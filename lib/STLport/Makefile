@@ -13,7 +13,7 @@ CXXFLAGS := $(subst -Os,,$(CXXFLAGS))
 STLPORT_CFLAGS = -D_GLIBCXX_HAVE_MBSTATE_T=1
 
 STLPORT_PKG := STLport-5.2.1
-$(STLPORT_PKG)_URL := http://downloads.sourceforge.net/project/stlport/STLport/STLport-5.2.1/STLport-5.2.1.tar.bz2
+$(STLPORT_PKG)_URL := https://sourceforge.net/projects/stlport/files/STLport/STLport-5.2.1/STLport-5.2.1.tar.bz2
 $(STLPORT_PKG)_NODEFCONF := 1
 $(STLPORT_PKG)_CONFOPTS := \
 	--prefix= \

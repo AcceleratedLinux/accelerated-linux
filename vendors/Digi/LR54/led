@@ -13,14 +13,17 @@
 
 case "$1" in
 start)
-	# Enable POWER LED
-	ledcmd -o POWER
+	# Turn off all LEDs
+	ledcmd -O ALL -o POWER
 
 	exit 0
 	;;
 reload)
 	;;
 stop)
+	# Flash POWER LED
+	ledcmd -F POWER
+	exit 0
 	;;
 *)
 	echo "Usage: $0 {start|stop|reload}"
@@ -61,10 +64,10 @@ update_service_led() {
 			3g|2g) SERVICE="-o WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN" ;;
 			*) SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN" ;;
 		esac
-	elif [ "$(runt get mm.modem.${idx}.status.state)" = disabled ]; then
-		SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN"
-	else
+	elif [ "$(runt get mm.modem.${idx}.status.state)" = connecting ]; then
 		SERVICE="-f WWAN1_SERVICE_GREEN -O WWAN1_SERVICE_YELLOW"
+	else
+		SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN"
 	fi
 }
 

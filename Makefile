@@ -23,6 +23,7 @@ else
 # Lets work out what the user wants, and if they have configured us yet
 #
 
+.NOTPARALLEL:
 ifeq (.config,$(wildcard .config))
 all: tools automake subdirs romfs image
 else
@@ -266,7 +267,7 @@ modules_install:
 	. $(CONFIG_CONFIG); \
 	if [ "$$CONFIG_MODULES" = "y" ]; then \
 		[ -d $(ROMFSDIR)/lib/modules ] || mkdir -p $(ROMFSDIR)/lib/modules; \
-		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_CMD="$(ROMFSINST) -S -r \"\"" INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=$(ROOTDIR)/tools/depmod.sh modules_install; \
+		$(MAKEARCH_KERNEL) -C $(LINUXDIR) INSTALL_MOD_CMD="$(ROMFSINST) -S -r \"\"" INSTALL_MOD_PATH=$(ROMFSDIR) DEPMOD=$(ROOTDIR)/tools/depmod.sh modules_install || exit 1; \
 		rm -f $(ROMFSDIR)/lib/modules/*/build; \
 		rm -f $(ROMFSDIR)/lib/modules/*/source; \
 		find $(ROMFSDIR)/lib/modules -type f -name "*.ko" | xargs -r $(STRIP) -R .comment -R .note -g --strip-unneeded; \

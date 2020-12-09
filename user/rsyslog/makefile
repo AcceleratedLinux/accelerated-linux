@@ -1,21 +1,18 @@
-PREFIX=
-DESTDIR=$(shell pwd)/install
-CONFOPTS = --prefix=$(PREFIX) --disable-klog
-#--disable-shared
 
-all: build/build
-	$(MAKE) -C build
-	$(MAKE) -C build install DESTDIR=$(DESTDIR)
+RSYSLOG        = rsyslog-8.33.0
+URL            = http://www.rsyslog.com/files/download/rsyslog/$(RSYSLOG).tar.gz
+DOWNLOADHASH   = 2df39d91baddb75c575aa03525cd9d4d20aad75011c6d6d25ef773ac26ff5c12
 
-build/build: makefile
-	rm -rf build install
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
+$(RSYSLOG)_ROMFS = rsyslog_romfs
 
-clean:
-	rm -rf build install
+# override using jlibtool and use packages libtool
+MAKEVARS = 
 
-romfs:
-	$(ROMFSINST) -f $(DESTDIR)/sbin /sbin
-	$(ROMFSINST) -f $(DESTDIR)/lib /lib
+CONFOPTS += --enable-libgcrypt=no
+CONFOPTS += --enable-liblogging-stdlog=no
+
+include $(ROOTDIR)/tools/automake.inc
+
+rsyslog_romfs:
+	$(ROMFSINST) -e CONFIG_DEFAULTS_OPENGEAR -p 0644 config/rsyslog.conf /etc/default/rsyslog.conf
+	rm -f $(ROMFSDIR)/lib/rsyslog/*.la

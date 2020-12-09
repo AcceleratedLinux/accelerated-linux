@@ -1,0 +1,12 @@
+diff -ur loki-0.1.7/src/Makefile loki-0.1.7-patchy/src/Makefile
+--- a/src/Makefile	2020-06-16 20:11:53.026740580 +1000
++++ b/src/Makefile	2020-06-16 20:10:44.270035775 +1000
+@@ -17,7 +17,7 @@
+ ifeq ($(OS), Linux)
+   SHARED_LIB_BASE := libloki.so
+   SHARED_LIB_VERSIONED := libloki.so.$(VERSION)
+-  override LDFLAGS += --shared -Wl,-soname=$(SHARED_LIB_VERSIONED) -fPIC
++  override LDFLAGS += -shared -Wl,-soname=$(SHARED_LIB_VERSIONED) -fPIC
+   LDLIBS := -lpthread
+ else
+ ifeq ($(OS), GNU/kFreeBSD)

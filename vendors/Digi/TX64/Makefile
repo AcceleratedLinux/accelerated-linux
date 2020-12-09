@@ -7,11 +7,10 @@ ZIMAGE      = $(IMAGEDIR)/vmlinuz
 IMAGE       = $(IMAGEDIR)/image.bin
 
 SIGNED_GRUB = bootx64.efi.signed
+BLOADER_IMG = $(SIGNED_GRUB)
+BLOADER_IMG_VERSION = $(shell strings $(BLOADER_IMG) | grep -oP 'set GRUB_VERSION="\K[^"]+')
 
 SIGNING_ALG = hmac
-# Add '-e', because the kernel is embedded in the rootfs
-SIGNING_EXTRA = -e
-# use our dev key by default
 SIGNING_KEY = $(ROOTDIR)/prop/sign_image/devkeys/tx64/developer_key
 
 
@@ -65,7 +64,7 @@ romfs.post:: romfs.cleanup
 	# installation, otherwise setup for building a signed image
 	if [ -f "$(SIGNED_GRUB)" ]; then \
 		rm -rf $(ROMFSDIR)/boot/grub ; \
-		$(ROMFSINST) -S -d /boot/grub/${SIGNED_GRUB}; \
+		$(ROMFSINST) -S -d $(SIGNED_GRUB) /boot/grub/$(notdir $(SIGNED_GRUB)); \
 	else \
 		mv $(ROMFSDIR)/usr/lib/grub/x86_64-efi $(ROMFSDIR)/boot/grub/; \
 	fi
@@ -81,6 +80,9 @@ romfs.post:: romfs.cleanup
 image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.sign-atmel image.tag image.copy
 	# Create manufacturing image
 	./mkdisk
+
+# Comment it out to stop generating the bootloader update file
+image: bloader.pack
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

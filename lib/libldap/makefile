@@ -1,5 +1,5 @@
 VERSION = 2.4.48
-URL = ftp://ftp.openldap.org/pub/OpenLDAP/openldap-release/openldap-$(VERSION).tgz
+URL = https://openldap.org/software/download/OpenLDAP/openldap-release/openldap-$(VERSION).tgz
 
 CONFOPTS += --without-yielding-select
 CONFOPTS += --disable-slapd

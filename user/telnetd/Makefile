@@ -1,11 +1,11 @@
 
 EXEC = telnetd
 OBJS = telnetd.o state.o termstat.o slc.o sys_term.o \
-	utility.o global.o authenc.o logwtmp.o logout.o
+	utility.o global.o authenc.o logwtmp.o logout.o rfc2217.o
 
 FLTFLAGS += -s 6144
 
-CFLAGS += -DPARANOID_TTYS -DUSE_TERMIO -DKLUDGELINEMODE -D_GNU_SOURCE -Wall
+CFLAGS += -DPARANOID_TTYS -DUSE_TERMIO -DKLUDGELINEMODE -D_GNU_SOURCE -DRFC2217 -Wall
 
 ifdef CONFIG_DEFAULTS_LIBC_UCLIBC
 LDLIBS := -lutil $(LDLIBS)

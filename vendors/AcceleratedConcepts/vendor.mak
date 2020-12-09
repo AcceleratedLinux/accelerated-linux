@@ -128,7 +128,7 @@ mksquashfs7z:
 
 image.sign-atmel:
 	if [ -x $(ROOTDIR)/prop/sign_image/sign_atmel.sh ] ; then \
-		$(ROOTDIR)/prop/sign_image/sign_atmel.sh -k "$(if $(SIGNING_KEY),$(SIGNING_KEY),$(ROOTDIR)/prop/sign_image/devkeys/DAL-image/atmel_private.pem)" -a "$(SIGNING_ALG)" $(SIGNING_EXTRA) $(IMAGE) ; \
+		$(ROOTDIR)/prop/sign_image/sign_atmel.sh -k "$(if $(SIGNING_KEY),$(SIGNING_KEY),$(ROOTDIR)/prop/sign_image/devkeys/DAL-image/atmel_private.pem)" -a "$(SIGNING_ALG)" $(IMAGE) ; \
 	else \
 		echo "warning: not signing image" ; \
 	fi
@@ -439,4 +439,69 @@ ovf:
 		(cd $(IMAGEDIR)/$(HDDBASE)-ovf; $(OVFTOOL) ../$(HDDBASE)/$(IMGBASE).vmx $(IMGBASE).ovf);	\
 		rm -f $(IMAGEDIR)/$(HDDBASE)-ovf.zip;	\
 		(cd $(IMAGEDIR)/$(HDDBASE)-ovf; zip -r ../$(HDDBASE)-ovf.zip .); \
+	fi
+
+# Generates bootloader update package
+# It expects the following variables to be set:
+#  - BLOADER_IMG:           bootloader image
+#  - BLOADER_IMG_VERSION:   version of the bootloader image. If it is not a
+#                           pre-built bootloader, but a freshly built one, set
+#                           it to "$(VERSIONPKG)" to tag the bootloader with the
+#                           current tree's version
+#  - BLOADER_UPDATE_SCRIPT: (OPTIONAL) bootloader update script. It is run after
+#                           a successful bootloader image update, and can be
+#                           used to set different U-Boot ENV variables, etc.
+bloader.pack.prop:
+	@[ "$(BLOADER_IMG)" ] || { \
+		echo "Bootloader image is not set"; \
+		exit 1; \
+	}
+
+	@[ "$(BLOADER_IMG_VERSION)" ] || { \
+		echo "Bootloader image version is not set"; \
+		exit 1; \
+	}
+
+	@echo "Creating bootloader update package with:"
+	@echo " - Bootloader:         $(BLOADER_IMG)"
+	@echo " - Version:            $(BLOADER_IMG_VERSION)"
+	@echo " - Post-update script: $(if $(BLOADER_UPDATE_SCRIPT),$(BLOADER_UPDATE_SCRIPT),<none>)"
+
+	rm -Rf $(IMAGEDIR)/bloader_pack
+	mkdir -p $(IMAGEDIR)/bloader_pack
+
+	@# Creating version number file
+	echo $(BLOADER_IMG_VERSION) >> $(IMAGEDIR)/bloader_pack/version
+
+	@# Creating signed bootloader to write with netflash
+	if [ "$(SIGNING_ALG)" ]; then \
+		$(ROOTDIR)/prop/sign_image/sign_atmel.sh \
+			-k "$(if $(SIGNING_KEY),$(SIGNING_KEY),$(ROOTDIR)/prop/sign_image/devkeys/DAL-image/atmel_private.pem)" \
+			-a "$(SIGNING_ALG)" $(BLOADER_IMG) \
+			$(IMAGEDIR)/bloader_pack/bloader.img; \
+	else \
+		echo "warning: not signing bootloader"; \
+		cp $(BLOADER_IMG) $(IMAGEDIR)/bloader_pack/bloader.img; \
+	fi
+
+	@# Adding tag
+	printf '\0%s\0%s\0%s' $(BLOADER_IMG_VERSION) $(HW_VENDOR) $(HW_PRODUCT) >> $(IMAGEDIR)/bloader_pack/bloader.img
+	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGEDIR)/bloader_pack/bloader.img >> $(IMAGEDIR)/bloader_pack/bloader.img
+
+	if [ "$(BLOADER_UPDATE_SCRIPT)" ]; then \
+		cp "$(BLOADER_UPDATE_SCRIPT)" $(IMAGEDIR)/bloader_pack/update.sh; \
+		chmod +x $(IMAGEDIR)/bloader_pack/update.sh; \
+	fi
+
+	@# Compress files into the update package. cd into the directory to omit
+	@# the './' prefix
+	cd $(IMAGEDIR)/bloader_pack && tar zcf $(IMAGEDIR)/bloader.bin *
+
+	rm -Rf $(IMAGEDIR)/bloader_pack
+
+bloader.pack:
+	@if [ -d $(ROOTDIR)/prop ] ; then \
+		make bloader.pack.prop ; \
+	else \
+		echo "warning: skipping boot loader packaging" ; \
 	fi

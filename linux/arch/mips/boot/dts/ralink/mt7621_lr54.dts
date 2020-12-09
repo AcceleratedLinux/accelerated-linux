@@ -17,6 +17,10 @@
 		serial1 = &uartlite0;
 	};
 
+	chosen {
+		stdout-path = "serial1:115200";
+	};
+
 	leds {
 		compatible = "gpio-leds";
 
@@ -24,6 +28,7 @@
 			label = "POWER";
 			gpios = <&gpio 22 GPIO_ACTIVE_LOW>;
 			default-state = "on";
+			linux,default-trigger = "timer";
 		};
 
 		wwan1_signal_green {

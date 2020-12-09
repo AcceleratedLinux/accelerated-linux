@@ -1,4 +1,4 @@
-URL := http://prdownloads.sourceforge.net/cryptopp/cryptopp561.zip
+URL := https://sourceforge.net/projects/cryptopp/files/cryptopp/5.6.1/cryptopp561.zip
 AUTOMAKE_ROMFS = cryptopp_romfs
 include $(ROOTDIR)/tools/automake.inc
 

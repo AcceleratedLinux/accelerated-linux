@@ -1,0 +1,134 @@
+hostname TX54-Single-Cellular-PR
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=40M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+echo "Starting watchdog..."
+watchdog /dev/watchdog
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# initialise devices before we need them
+/etc/rc.dev
+
+# Fix ENV vars
+/sbin/fwenv_fixup.sh
+
+# Create external serial port device link.
+# Variable USB discovery order means we need to actively link it.
+mkdir -p /dev/serial
+ln -sf /dev/serial/by-usb/1-1-if01-port0 /dev/serial/port1
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+
+# Set eth IRQ affinity to improve throughput
+#echo 8 > /proc/irq/22/smp_affinity
+
+setmac -n 4 -i eth1,eth2,eth3,eth4 -b $(fw_printenv -n ethaddr)
+ifconfig eth0 up
+
+/etc/init_gpios start
+
+# Power up modem
+/bin/sim -o
+
+#factory=true
+[ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ] && factory=true
+[ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ] && factory=true
+if [ "$factory" ] ; then
+	#load wifi module for testing
+	modprobe ath10k_pci
+	/etc/factory
+	# Override factory script settings on TX54-Single-Cellular
+	ifconfig eth0 0.0.0.0
+	ifconfig eth2 192.168.0.1
+	exit 0
+fi
+
+ubiattach -p /dev/flash/userfs -d 1
+echo "Mounting opt filesystem...."
+if ! mount -t ubifs ubi1:UserFS /opt
+then
+	echo "Cannot mount /opt as ubifs, reformatting..."
+	flash_erase /dev/flash/opt 0 0
+	echo "Mounting opt filesystem after reformat..."
+	if ! mount -t ubifs ubi1:UserFS /opt
+	then
+		echo "Failed to mount flash based UserFS filesystem"
+	fi
+fi
+
+if ! mount --bind /opt/config /etc/config
+then
+	echo "Cannot bind mount /etc/config, recreating..."
+	mkdir /opt/config
+	echo "Mounting config filesystem after recreate..."
+	if ! mount --bind /opt/config /etc/config
+	then
+		echo "Failed to mount flash based config filesystem"
+		echo "Using tmpfs for /etc/config."
+		mount -t tmpfs -o size=4M tmpfs /etc/config
+	fi
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+
+	# Factory reset the MCU
+	echo enabled > /sys/bus/i2c/devices/0-0078/factory_default
+
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
+
+# modem firmware updates
+[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+#load wifi module before we come up
+modprobe ath10k_pci
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+# Clear bootcount.
+/etc/reset_bootcounter.sh
+
+exit 0

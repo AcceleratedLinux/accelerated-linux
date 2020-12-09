@@ -14,7 +14,7 @@
 eval "$(awk -F : '{print "UID_" $1 "=" $3}' ${ROOTDIR}/romfs/etc/passwd)"
 eval "$(awk -F : '{print "GID_" $1 "=" $3}' ${ROOTDIR}/romfs/etc/group)"
 
-echo 'Setting file attributes in fakeroot environment'
+echo 'Setting file attributes in fakeroot environment' >&2
 fakeroot <<EOF
 set -xe
 

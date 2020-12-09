@@ -127,6 +127,9 @@ else
 	rm -f /etc/config/.init2
 fi
 
+# Run TRIM on all filesystems
+fstrim -a
+
 cat /etc/inittab.d/* > /etc/inittab
 
 # cryptography disabled mode

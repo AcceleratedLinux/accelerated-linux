@@ -1,0 +1,46 @@
+
+serial --unit=0 --speed=115200
+# let serial port settle before transmitting or we corrupt output
+sleep 1
+
+set default="0"
+set timeout=5
+
+set GRUB_NO_EDIT=0
+set GRUB_NO_OUTPUT=0
+# unset GRUB_NO_EDIT
+# unset GRUB_NO_OUTPUT
+
+set BOOT_VER="1.2.3.4"
+
+insmod regexp
+insmod squash4
+
+# handle USB mass storage disabled
+if [ -f (hd0,gpt2)/grubenv ]; then
+	set HD=hd0
+else
+	set HD=hd1
+fi
+
+# We can override settings in the system environment
+load_env -f ($HD,gpt2)/grubenv
+
+# allow serial output if timeout is set
+unset GRUB_NO_OUTPUT
+# full kernel boot log to all consoles
+set common_args="boot_ver=${BOOT_VER} panic=30 console=tty0 console=ttyS0,115200"
+
+
+menuentry "OpenGear Virtual OGCS (image1)" {
+	set root=($HD,gpt3)
+	probe -U $root --set=partuuid
+	linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=a $common_args $arg
+}
+
+menuentry "OpenGear Virtual OGCS (image2)" {
+	set root=($HD,gpt4)
+	probe -U $root --set=partuuid
+	linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=b $common_args $arg
+}
+

@@ -1,4 +1,4 @@
-URL     = https://downloads.sourceforge.net/project/gptfdisk/gptfdisk/1.0.4/gptfdisk-1.0.4.tar.gz
+URL     = https://sourceforge.net/projects/gptfdisk/files/gptfdisk/1.0.4/gptfdisk-1.0.4.tar.gz
 
 BUILD   = gdisk sgdisk
 

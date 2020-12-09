@@ -33,21 +33,13 @@
 		clock-frequency = <25000000>;
 	};
 
-	soc {
-		qspi: quadspi@1550000 {
-			compatible = "fsl,ls1012a-qspi", "fsl,ls1021a-qspi";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			reg = <0x0 0x1550000 0x0 0x10000>,
-				<0x0 0x40000000 0x0 0x10000000>;
-			reg-names = "QuadSPI", "QuadSPI-memory";
-			interrupts = <0 99 IRQ_TYPE_LEVEL_HIGH>;
-			clock-names = "qspi_en", "qspi";
-			clocks = <&clockgen 4 0>, <&clockgen 4 0>;
-			big-endian;
-			status = "disabled";
-		};
+	uartclk: clock-uartclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <14745600>;
+	};
 
+	soc {
 		rcpm: rcpm@1ee2000 {
 			compatible = "fsl,ls1012a-rcpm", "fsl,qoriq-rcpm-2.1";
 			reg = <0x0 0x1ee2000 0x0 0x1000>;
@@ -82,6 +74,24 @@
 		clocks = <&clockgen 4 0>;
 		clock-names = "pfe";
 	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		power-led {
+			label = "power";
+			pinctrl-names = "default";
+			gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "default-on";
+		};
+
+		serial-led {
+			label = "serial";
+			pinctrl-names = "default";
+			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+		};
+	};
 };
 
 &duart0 {
@@ -90,77 +100,6 @@
 
 &i2c0 {
 	status = "okay";
-
-	lp5569:lp5569@32 {
-		compatible = "ti,lp5569";
-		reg = <0x32>;
-		label = "lp5569";
-		clock-mode = /bits/ 8 <1>;  /* internal */
-
-		chan0 {
-			chan-name = "pwr1b";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			invert = /bits/ 8 <0x01>;   /* inverted LED */
-			linux,default-trigger = "timer";
-		};
-
-		chan1 {
-			chan-name = "pwr1g";
-			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan2 {
-			chan-name = "pwr1r";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan3 {
-			chan-name = "b01";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan4 {
-			chan-name = "g01";
-			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan5 {
-			chan-name = "r01";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan6 {
-			chan-name = "b02";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan7 {
-			chan-name = "g02";
-			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan8 {
-			chan-name = "r02";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-	};
 
 	temperature-sensor@4d {
 		compatible = "onnn,nct1008"; /* nct72 reg/pin compatible */
@@ -203,11 +142,11 @@
 		compatible = "fsl,pfe-gemac-port";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x1>;    /* GEM_ID */
-		fsl,gemac-bus-id = <0x1>; /* BUS_ID */
+		reg = <0x0>;    /* GEM_ID */
+		fsl,gemac-bus-id = <0x0>; /* BUS_ID */
 		fsl,gemac-phy-id = <0x0>; /* PHY_ID */
 		fsl,mdio-mux-val = <0x0>;
-		phy-mode = "rgmii-id"; /* use strapped tx/rx delay */
+		phy-mode = "sgmii";
 		fsl,pfe-phy-if-flags = <0x0>;
 
 		mdio {
@@ -236,9 +175,25 @@
 	status = "disabled";
 };
 
-&gpio0 {
-	gpio-line-names = "", "", "", "", "", "", "", "",
+&gpio1 {
+	gpio-line-names = "", "", "", "", "", "", "", "dbg",
+			  "", "", "", "", "factory", "", "", "",
 			  "", "", "", "", "", "", "", "",
-			  "", "", "", "", "", "", "", "",
-			  "factory", "", "", "", "", "", "", "";
+			  "", "", "", "", "", "", "", "";
+};
+
+&dspi {
+	status = "okay";
+	bus-num = <0>;
+
+	spiuart: xr20m1280@0 {
+		compatible = "nxp,xr20m1280";
+		reg = <0>;
+		clocks = <&uartclk>;
+		spi-max-frequency = <26000000>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <13 IRQ_TYPE_EDGE_FALLING>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
 };

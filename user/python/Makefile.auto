@@ -1,0 +1,2 @@
+dir_$(CONFIG_USER_PYTHON)      += python
+dir_$(CONFIG_USER_PYTHON_HOST) += python

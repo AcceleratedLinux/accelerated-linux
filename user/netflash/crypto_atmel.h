@@ -1,6 +1,7 @@
 #ifndef NETFLASH_CRYPTO_ATMEL_H
 #define NETFLASH_CRYPTO_ATMEL_H
 
+#include <config/autoconf.h>
 #include <stdint.h>
 
 #define ATMEL_SIGN_MAGIC 0x54361782

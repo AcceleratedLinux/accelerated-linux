@@ -56,6 +56,7 @@ class Config(object):
         os.environ['ARCH'] = self.product['arch']
         os.environ['SRCARCH'] = self.product['arch']
         os.environ['CC'] = self.product['tools'] + "-gcc"
+        os.environ['CC_VERSION_TEXT'] = os.popen('$CC --version 2> /dev/null | head -n 1 | tr -d "\n"').read()
         os.environ['LD'] = self.product['tools'] + "-ld"
         os.environ['KERNELVERSION'] = 'unknown'
 

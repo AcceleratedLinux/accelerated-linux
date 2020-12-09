@@ -266,3 +266,45 @@ void check(const struct check_opt *opt)
 	}
 #endif
 }
+
+#ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+void check_fw_product_info(void)
+{
+	static const char squashfs_magic[4] = "hsqs";
+	char buff[sizeof(squashfs_magic)];
+	int ret;
+
+	/*
+	 * This feature is only available for squashfs-based firmware images.
+	 * First 4 characters should match with the squashfs magic. If not,
+	 * won't fail, as this is not a firmware image
+	 */
+	fb_seek_set(0);
+	fb_read(buff, sizeof(squashfs_magic));
+
+	if (memcmp(buff, squashfs_magic, sizeof(squashfs_magic)) != 0)
+		return;
+
+	ret = check_vendor_from_squashfs();
+	if (ret != 0) {
+		switch (ret) {
+		case -1:
+			error("failed to read version file.");
+			break;
+		case 1:
+			error("product name is incorrect.");
+			break;
+		case 2:
+			error("vendor name is incorrect.");
+			break;
+		default:
+			error("unknown error while verifying vendor/product name.");
+			break;
+		}
+
+		exit(BAD_ROOTFS);
+	}
+
+	notice("vendor and product names are verified.");
+}
+#endif

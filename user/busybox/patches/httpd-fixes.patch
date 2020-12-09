@@ -1460,7 +1460,7 @@
 +		if (prequest == request_GET && cookie) {
 +			c = xstrdup(cookie);
 +			delim = "; ";
-+		} else if (g_query) {
++		} else if (prequest != request_GET && g_query) {
 +			c = xstrdup(g_query);
 +			delim = "&";
 +		}

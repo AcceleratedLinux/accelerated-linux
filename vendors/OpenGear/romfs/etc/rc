@@ -1,150 +1,736 @@
 #!/bin/sh
-hostname OpenGear
-mount -t proc proc /proc
+######################################################################
 
-echo "Mounting /dev/flash/configblock on /etc/config"
-if grep jffs2 /proc/filesystems >&/dev/null; then
+VENDOR=OpenGear
+hostname $VENDOR
+cat /etc/version
+MODEL=`cut -f1 -d' ' /etc/version  | cut -f2 -d'/' | tr '[A-Z]' '[a-z]'`
 
-    if ! mount -t jffs2 /dev/flash/configblock /etc/config
-    then
-	echo "Bad or corrupted configuration filesystem, recreating..."
-	eraseall /dev/flash/config
-	echo "Mounting /dev/flash/configblock on /etc/config"
-	if ! mount -t jffs2 /dev/flash/configblock /etc/config
-	then
-	    echo "Failed to create new configuration filesystem"
-	    echo "Falling back to temporary config filesystem"
-	    mount -t tmpfs -o size=256k tmpfs /etc/config
+######################################################################
+
+progressbar()
+{
+	if [ $# != 1 ]; then
+		echo "Usage: progressbar {progress}"
+		exit 1
 	fi
-    fi # jffs2 mount failed
+	if [ -f /proc/splash ]; then
+		echo "show $(( 65534 * $1 / 100 ))" > /proc/splash
+	fi
+	if [ -f /etc/scripts/bootprogress ]; then
+		/etc/scripts/bootprogress "System Booting..." $1
+	fi
+}
 
-else
-    echo "No JFFS2 support - mounting tmpfs as /etc/config"
-    mount -t tmpfs -o size=256k tmpfs /etc/config
-fi # jffs2 is present in the kernel
+######################################################################
+# fix all the infrastructure things first
 
-#
-# Remove config if erase has been pressed
-#
-if [ -f /etc/config/.init ]; then
-    (
-	cd /etc/config
-	echo "Cleaning /etc/config filesystem"
-	rm .init
-	find ./ -type f | while read f; do rm -f "$f" >& /dev/null; done
-	find ./ -type d | while read d; do rm -rf "$d" >& /dev/null; done
-    )
+mount -t proc proc /proc
+if [ -d /sys ]; then
+	mount -t sysfs sysfs /sys
 fi
 
-#
-# Copy over missing files
-#
-(
-    cd /etc/default
-    echo "Restoring files from /etc/default to /etc/config"
-    find ./ -type d | while read d;do
-	if [ ! -d /etc/config/"$d" ]; then
- 	    mkdir -p -m 0755 /etc/config/"$d"
- 	fi
-    done
-    find ./ -type f | while read f; do
- 	if [ -f "$f" -a ! -f /etc/config/"$f" ]; then 
- 	    cp -a "$f" /etc/config/"$f"
- 	fi
-    done
-#     if [ `find /etc/config/ -type f | wc -l` = 0 ]; then
-#  	echo "Restoring files from /etc/default to /etc/config"
-#  	cp -a . /etc/config
-#     fi
-)
+mount -t devtmpfs none /dev
+source /etc/rc.dev
 
-NPORTS=`tail +2 /proc/tty/driver/serial | grep -cv uart:unknown`
+# Permissions
+chmod 620 /dev/[pt]ty[pqrsPQRS][0-9a-f]
+chmod 660 /dev/tty
+chmod 666 /dev/null
 
-# Create the /etc/config filesystem if it isn't present
-# flatfsd -r
+#Pseudo Terminals
+mkdir /dev/pts
+mount -t devpts devpts /dev/pts
 
-# Set the host name to the proper thing
-if [ -f /etc/config/hostname ]; then
-    hostname `cat /etc/config/hostname`
+progressbar 1
+
+# use memory size in Kib to determine /var size
+
+MEMSIZE=`free | sed -ne 's/^ *Mem:  *\([^ ]*\) .*/\1/p'`
+if [ "${MEMSIZE}" -le 16384 ]; then
+    VARSIZE="256k"
+    CNFSIZE="512k"
+elif [ "${MEMSIZE}" -le 65536 ]; then
+    VARSIZE="512k"
+    CNFSIZE="512k"
 else
-    # Pull the model name from the version string
-    BUILD=`cut -f1 -d' ' /etc/version  | cut -f2 -d'/' | tr '[A-Z]' '[a-z]'`
-    if echo $BUILD | grep 41xx >& /dev/null; then
-	hostname `echo $BUILD | sed s/41xx/41$NPORTS/`
+    VARSIZE="50%"
+    CNFSIZE="20%"
+fi
+
+mount -t tmpfs -o size=${VARSIZE} tmpfs /var
+mkdir /var/tmp
+chmod 1777 /var/tmp
+mkdir /var/log
+mkdir /var/log/enviro
+mkdir /var/log/enviro/emd
+mkdir /var/log/enviro/rpc
+mkdir /var/log/enviro/ups
+mkdir /var/log/enviro/powersupply
+mkdir /var/mnt
+mkdir /var/run
+mkdir /var/run/config
+mkdir /var/run/config/mnt
+mkdir /var/run/dbus
+mkdir /var/run/power
+mkdir /var/run/portmanager
+mkdir /var/run/cascade
+mkdir /var/run/sshforwards
+mkdir /var/run/.switch
+mkdir /var/run/.modem
+mkdir /var/run/.sessions
+chmod 700 /var/run/.sessions
+if [ -f /libexec/udev/udevd ]; then
+	mkdir /var/run/udev
+fi
+mkdir /var/state
+mkdir /var/lock
+mkdir /var/empty
+mkdir -p /dev/bus/usb
+mkdir -p /var/spool/cron/crontabs
+touch /var/log/wtmp
+touch /var/run/utmp
+chmod a-w /var/run/utmp
+
+# Start loopback interface
+ifconfig lo 127.0.0.1 up
+route add -net 127.0.0.0 netmask 255.0.0.0 lo
+
+# Start infod
+if [ -x /bin/infod ]; then
+	/bin/infod
+
+	# Populate the model, serial number and factory options from factory settings into infod
+	kv_pairs=($(/bin/setfset -r | awk '/^factory_opts=|^serial_no=|^model=/ {print}'))
+	for kv in "${kv_pairs[@]}"; do
+		infod_client -o push -p "fset.${kv%%=*}" -d "${kv##*=}"
+	done
+fi
+
+# Set the interface MAC addressses now if we need to.
+if [ -f /etc/virt ]; then
+	:
+elif [ -x /bin/setifmac ]; then
+	setifmac
+elif [ -x /bin/setfset ]; then
+	MAC0=`setfset -q0 | cut -f5 -d" "`
+	if [ -n "$MAC0" ]; then
+		ifconfig eth0 hw ether ${MAC0}
+	else
+		echo "WARNING: device has no MAC addresses set"
+	fi
+	MAC1=`setfset -q1 | cut -f5 -d" "`
+	if [ -n "$MAC1" ]; then
+		ifconfig eth1 hw ether ${MAC1}
+	fi
+fi
+
+# Start up watchdogd
+if [ -e /dev/watchdog ]; then
+	watchdog /dev/watchdog
+fi
+
+progressbar 10
+
+KVERSION=$(uname -r)
+
+if [ -f /lib/modules/${KVERSION}/kernel/net/ipv4/netfilter/ip_tables.ko ]; then
+    modprobe ip_tables
+    modprobe nf_conntrack_tftp
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/net/netfilter/nf_conntrack_pptp.ko ]; then
+    modprobe nf_conntrack_pptp
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/net/netfilter/nf_conntrack_ftp.ko ]; then
+    modprobe nf_conntrack_ftp
+fi
+
+if [ -x /bin/ftpd -a -f /lib/modules/${KVERSION}/kernel/net/netfilter/nf_nat_ftp.ko ]; then
+    modprobe nf_nat_ftp
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/host/xhci-hcd.ko ]; then
+    modprobe xhci_hcd
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/host/ehci-hcd.ko ]; then
+    modprobe ehci_hcd
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/host/ehci-orion.ko ]; then
+    modprobe ehci_orion
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/host/usb-ohci.ko ]; then
+    modprobe usb-ohci
+fi
+
+if [ -e /dev/flash/serialno ]; then
+    echo "Mounting /etc/serialno"
+    mount -t cramfs /dev/flash/serialno /etc/serialno
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/net/tun.ko ]; then
+    modprobe tun
+fi
+
+ASIX=`grep ASIX /sys/bus/usb/devices/*/manufacturer`
+if [ -n "$ASIX" -a /lib/modules/${KVERSION}/kernel/asix/ax88172a/ax88172a.ko ]; then
+    modprobe ax88172a
+    > /var/run/.switch/switch_is_asix
+
+    #Now that we know what the switch is, we can set the mac addresses
+    (set -- `ifconfig eth0 | grep "HWaddr"`; setifmac -n 6 -b $5)
+fi
+
+I210_VENDOR=`grep 0x8086 /sys/bus/pci/devices/0000\:06\:00.0/vendor`
+I210_DEVICE=`grep 0x1537 /sys/bus/pci/devices/0000\:06\:00.0/device`
+if [ -n "$I210_VENDOR" -a  -n "$I210_DEVICE" ]; then
+        touch /var/run/.switch/switch_is_mvl88e6390
+fi
+
+progressbar 20
+echo "Mounting /etc/config"
+
+# mount /etc/config as the last SpeedStor partition (USB get priority
+# over IDE) we need to delay a little for USB devices :-(
+
+if [ -d /sys/bus/usb/drivers ]; then
+    sleep 2
+    if [ -d /sys/bus/usb/drivers/usb-storage ]; then
+	sleep 5
+    fi
+fi
+if sfdisk -l 2>/dev/null | grep SpeedStor > /dev/null; then
+    DEV=`sfdisk -l 2>/dev/null | grep SpeedStor | tail -1 | awk '{ print $1 }'`
+    if mount -t ext3 -o data=journal $DEV /etc/config 2> /dev/null; then
+	:
+    elif mount -t vfat $DEV /etc/config 2> /dev/null; then
+	:
     else
-	hostname $BUILD
+	mke2fs -j $DEV
+	mount -t ext3 -o data=journal $DEV /etc/config
     fi
 fi
 
-mount -t tmpfs -o size=256k tmpfs /var
-mkdir /var/tmp
-mkdir /var/log
-mkdir /var/run
-mkdir /var/lock
-mkdir /var/empty
-mkdir /var/dev
+# if we managed to mount it we are done, otherwise try alternatives
 
-#
-# if /dev/port01 is a symlink,  then we are on a system that needs to
-# autogen it's port device nodes.
-#
-# skip over the serial console if it has been selected
-#
-
-if [ -L /dev/port01 ]
-then
-	rm -f /var/run/serial-ports
-	CONS=`dmesg | grep console= | sed 's/.*console=\([^ ,][^ ,]*\).*/\1/'`
-	SKIP="$CONS"
-	PORT=1
-	tail +2 /proc/tty/driver/serial | grep -v "uart:unknown" |
-			sed 's/^\([0-9]*\):.*$/\1/' | while read m
-	do
-		if [ "ttyS$m" = "$SKIP" ]
-		then
-			SKIP=""
-			continue
-		fi
-		PNAME=`printf "port%02d" $PORT`
-		mknod /var/dev/$PNAME c 4 `expr $m + 64`
-		echo "$PNAME --> ttyS$m" >> /var/run/serial-ports
-		PORT=`expr $PORT + 1`
-	done
-	#
-	# remove old auto added console entries
-	# add in the current one
-	#
-	if [ "$CONS" ]
-	then
-		touch /etc/config/inittab 
-		cp /etc/config/inittab /tmp/.inittab
-		grep -v "# auto console" < /tmp/.inittab | (
-			cat; echo "$CONS:vt100:/bin/agetty /dev/$CONS 115200 # auto console"
-			) > /etc/config/inittab
-		rm -f /tmp/.inittab
+if mount | grep /etc/config > /dev/null; then
+    # it's mounted move on.
+    :
+elif grep ubifs /proc/filesystems >&/dev/null; then
+    if ! mount -t ubifs ubi0_0 -o sync /etc/config; then
+	echo "Bad or corrupted configuration filesystem, recreating..."
+	mkfs.ubifs /dev/ubi0_0;
+	echo "Mounting new ubifs config partition"
+	if ! mount -t ubifs ubi0_0 -o sync /etc/config; then
+	    echo "Failed to create new configuration filesystem"
+	    echo "Falling back to temporary config filesystem"
+	    mount -t tmpfs -o size=512k tmpfs /etc/config
 	fi
+	mount -t tmpfs -o size=${CNFSIZE} tmpfs /etc/config
+    fi
+ elif grep jffs2 /proc/filesystems >&/dev/null; then
+    if ! mount -t jffs2 /dev/flash/configblock /etc/config; then
+	echo "Bad or corrupted configuration filesystem, recreating..."
+	flash_erase /dev/flash/config 0 0
+	echo "Mounting /dev/flash/configblock on /etc/config"
+	if ! mount -t jffs2 /dev/flash/configblock /etc/config; then
+	    echo "Failed to create new configuration filesystem"
+	    echo "Falling back to temporary config filesystem"
+	    mount -t tmpfs -o size=512k tmpfs /etc/config
+	fi
+    fi
+ else
+    echo "No flash config support - mounting tmpfs as /etc/config"
+    mount -t tmpfs -o size=${CNFSIZE} tmpfs /etc/config
 fi
 
-if [ -x /bin/hwclock ]; then
-	hwclock --hctosys
+progressbar 30
+# Remove config if erase has been pressed or erase-config selected
+RESET_CONFIG=0
+
+if grep erase-config /proc/cmdline > /dev/null 2>&1; then
+    echo "Manual clean of /etc/config forced"
+    touch /etc/config/.init
 fi
 
+if [ -f /etc/config/.init ]; then
+    RESET_CONFIG=1
+    echo "Cleaning /etc/config filesystem"
+    find /etc/config/ -type f | while read f; do rm -f "$f" >& /dev/null; done
+    find /etc/config/ -type d | while read d; do rm -rf "$d" >& /dev/null; done
+    # replace this so that we can restore from USB if needed
+    touch /etc/config/.init
+else
+    # Mark the config as initialised so that initconf will not run
+    touch /etc/config/.initialised
+fi
+
+# Copy over any files from /etc/default that are not in /etc/config
+
+(
+    cd /etc/default
+    echo "Restoring files from /etc/default to /etc/config"
+    find ./ -type d | while read d
+    do
+	if [ ! -d /etc/config/"$d" ]; then
+	    mkdir -p -m 0755 /etc/config/"$d"
+	fi
+    done
+    find ./ -type f | while read f
+    do
+	if [ ! -f /etc/config/"$f" ]; then
+	    cp -a "$f" /etc/config/"$f"
+	fi
+    done
+    find ./ -type l | while read f
+    do
+    if [ ! -L /etc/config/"$f" ]; then
+        cp -a "$f" /etc/config/"$f"
+    fi
+    done
+)
+
+# Create folder for flag files whether MTUs have been specified by user
+mkdir -p /etc/config/.mtu
+
+# Create folder for firewall rules files
+mkdir -p /etc/config/firewall
+
+# Create folder for EAPOL certificate and key files
+if [ ! -d /etc/config/eapol ]; then
+    mkdir -p /etc/config/eapol
+fi
+
+# If we have a reset config, we should check if we need to replace the root passwd hash
+if [ "$RESET_CONFIG" -eq 1 ]; then
+    if [ -f /bin/setfset ]; then
+        PWD_HASH=`setfset -r | grep root_pwd_hash= | cut -f2 -d'='`
+	if [ -n "$PWD_HASH" ]; then
+	    echo "root:$PWD_HASH:0:0:Super User:/:/bin/sh" > /tmp/passwd.tmp
+	    grep -v "^root:" /etc/config/passwd >> /tmp/passwd.tmp
+	    mv /tmp/passwd.tmp /etc/config/passwd
+	    config -s config.users.user1.password_nvflash=on
+	fi
+    fi
+fi
+
+# Load manifest.og from flash drive if necessary
+# TODO: wait for USB to settle?
+if [ -x /etc/scripts/load-manifest ]; then
+	/etc/scripts/load-manifest
+fi
+
+# config command complains if serial port file doesnt exist
+touch /var/run/serial-ports
+
+# Fixup users and groups
+if [ ! -d /etc/config/users ]; then
+    rm -rf /etc/config/users
+    mkdir -p /etc/config/users
+fi
+
+if [ -f /etc/scripts/system-fix-groups ]; then
+    echo "Checking for standard system groups"
+    sh /etc/scripts/system-fix-groups
+fi
+
+# Load drivers for devices that we rely on for determining port numbers later.
+# This is done before devices are cold plugged to increase the probability
+# of the devices being available when legacy dynamic port numbers are assigned
+# in rc.serial-dynamic below.
+# Initialise USB modem and USB consoles
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/class/cdc-acm.ko ]; then
+    modprobe cdc-acm
+fi
+
+# Initialise 8250 VLIO uarts if they're modularised
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/tty/serial/8250/8250.ko ]; then
+    modprobe 8250
+fi
+
+# Initialise 8250 PCI uarts if they're modularised
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/tty/serial/8250/8250_pci.ko ]; then
+    modprobe 8250_pci
+fi
+
+# Prepare internal cellular modem before udev starts
+if [ -x /etc/config/rc.cellmodem ]; then
+	sh -x /etc/config/rc.cellmodem "$MODEL"
+else
+	ACTION=boot /etc/rc.cellmodem
+fi >& /var/run/.modem/.rc.cellmodem.log
+
+# Start udev
+if [ -f /libexec/udev/udevd ]; then
+	/libexec/udev/udevd --daemon --children-max=1
+	/bin/udevadm trigger
+	/bin/udevadm settle
+fi
+
+# Start mdev
+if [ -f /sbin/mdev ]; then
+	echo >/dev/mdev.seq
+	echo /sbin/mdev > /proc/sys/kernel/hotplug
+	/sbin/mdev -s
+fi
+
+
+# Run the i/o port configuration script
+if [ -f /bin/ioc ]; then
+	ioc -l &> /dev/null
+fi
+
+# Probe for sensor enabled power supplies
+if [ -f /bin/psmon ]; then
+	psmon -c
+fi
+
+progressbar 35
+
+# Run any product specific init
+if [ -f  /etc/rc.product ]; then
+	sh /etc/rc.product
+fi
+
+# Power cycle the internal modem if we have one and can do that
+if [ -f /sys/kernel/modemctl/modem_reset ]; then
+	echo 1 > /sys/kernel/modemctl/modem_reset
+fi
+
+# Initialise USB serial ports if their drivers are modularised
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/serial/keyspan.ko ]; then
+    modprobe keyspan
+fi
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/serial/ftdi_sio.ko ]; then
+    modprobe ftdi_sio
+fi
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/usb/serial/pl2303.ko ]; then
+    modprobe pl2303
+fi
+
+# Run the serial dynamic port mapping and config rc script
+progressbar 40
+if [ "$MODEL" != im72xx ] &&
+	[ "$MODEL" != cm7196 ] &&
+	[ "$MODEL" != cm71xx ] &&
+	[ "$MODEL" != acm700x ] &&
+	[ "$MODEL" != acm7004-5 ]; then
+	sh /etc/rc.serial-dynamic
+fi
+
+# How many ports did it find ?
+NPORTS=$(wc -l /var/run/serial-ports| sed 's/[ \t]*\([0-9]*\).*/\1/')
+
+# And how many of those were hardware ports (not gps)
+NPORTS_HW=$(grep -v cellnmea /var/run/serial-ports | wc -l | sed 's/[ \t]*\([0-9]*\).*/\1/')
+
+progressbar 50
+if [ "$MODEL" = "im72xx" ]; then
+    device=$(config -g config.interfaces.lan.device.type | cut -f2- -d' ')
+
+    # Management LAN switch setup
+    device=$(config -g config.interfaces.lan.device.type | cut -f2- -d' ')
+    if [ "$device" = "mvl88e6390" ]; then
+        # Don't initialise the switch, because conman will do
+        # that for us.
+        # /bin/bash /etc/scripts/switch-config reset
+        :
+    elif [ "$device" = "unknown" -o -z "$device" ]; then
+        if [ -n "$I210_VENDOR" -a  -n "$I210_DEVICE" ]; then
+            # We've got Intel I210 on the bus, we're an IM7216-2-24E
+            config -s config.interfaces.lan.device.type=mvl88e6390 \
+                -s config.interfaces.lan.disabled=on
+
+            /bin/bash /etc/scripts/switch-config reset
+
+            # Disable the oob/fo port by default.
+            mode=$(config -g config.interfaces.oobfo.mode | cut -f2- -d' ')
+            if [ -z "$mode" ]; then
+                config -s config.interfaces.oobfo.disabled=on
+            fi
+        else
+            # No switch detected
+            # Initialise lan configuration
+            config -s config.interfaces.lan.device.type=marvell \
+                -s config.interfaces.lan.disabled=on
+
+            # Disable the oob/fo port by default.
+            mode=$(config -g config.interfaces.oobfo.mode | cut -f2- -d' ')
+            if [ -z "$mode" ]; then
+                config -s config.interfaces.oobfo.disabled=on
+            fi
+        fi
+    fi
+elif [ "$MODEL" = "cm71xx" -o "$MODEL" = "cm7196" ]; then
+    device=$(config -g config.interfaces.lan.device.type | cut -f2- -d' ')
+    if [ -z "$device" ]; then
+        # Initialise lan configuration
+        config -s config.interfaces.lan.device.type=marvell \
+            -s config.interfaces.lan.disabled=on
+
+        # Disable the oob/fo port by default.
+        mode=$(config -g config.interfaces.oobfo.mode | cut -f2- -d' ')
+        if [ -z "$mode" ]; then
+            config -s config.interfaces.oobfo.disabled=on
+        fi
+    fi
+elif [ "$MODEL" = "acm700x" ]; then
+    device=$(config -g config.interfaces.lan.device.type | cut -f2- -d' ')
+    if [ -z "$device" ]; then
+        # Initialise lan configuration
+        config -s config.interfaces.lan.device.type=marvell \
+            -s config.interfaces.lan.disabled=on
+
+        # Disable the oob/fo port by default.
+        mode=$(config -g config.interfaces.oobfo.mode | cut -f2- -d' ')
+        if [ -z "$mode" ]; then
+            config -s config.interfaces.oobfo.disabled=on
+        fi
+    fi
+elif [ "$MODEL" = "acm7004-5" ]; then
+    device=$(config -g config.interfaces.lan.device.type | cut -f2- -d' ')
+    if [ -z "$device" ]; then
+        # Initialise lan configuration
+        config -s config.interfaces.lan.device.type=88e6350r \
+            -s config.interfaces.lan.disabled=on
+
+        # Disable the oob/fo port by default.
+        mode=$(config -g config.interfaces.oobfo.mode | cut -f2- -d' ')
+        if [ -z "$mode" ]; then
+            config -s config.interfaces.oobfo.disabled=on
+        fi
+    fi
+elif [ -x /bin/setfset ]; then
+    ETHERNET=`/bin/setfset -qe | cut -f2 -d" "`
+    if [ "$ETHERNET" = "dual" ]; then
+        device=$(config -g config.interfaces.lan.device.type | cut -f2- -d' ')
+        if [ -z "$device" ]; then
+            config -s config.interfaces.lan.device.type=ks8692 \
+                -s config.interfaces.lan.disabled=on
+        fi
+        > /var/run/.switch/ethernet_is_dual
+    elif [ "$ETHERNET" = "single" ]; then
+        > /var/run/.switch/ethernet_is_single
+    fi
+fi
+
+# Initialise wireless LAN
+if [ -f /bin/iwconfig ]; then
+    if [ -f /lib/modules/${KVERSION}/kernel/drivers/net/wireless/rt2x00/rt73usb.ko ]; then
+    	modprobe rt73usb 2> /dev/null
+    fi
+    if [ -f /lib/modules/${KVERSION}/kernel/drivers/net/wireless/rt2x00/rt2800usb.ko ]; then
+    	modprobe rt2800usb 2> /dev/null
+    fi
+    if [ -f /lib/modules/${KVERSION}/kernel/drivers/net/wireless/rt2x00/rt2800pci.ko ]; then
+    	modprobe rt2800pci 2> /dev/null
+    fi
+    if [ -f /lib/modules/${KVERSION}/kernel/drivers/net/wireless/ath/ath9k/ath9k.ko ]; then
+    	modprobe ath9k 2> /dev/null
+    fi
+    # Disable the WLAN port by default
+    mode=$(config -g config.interfaces.wlan.mode | cut -f2- -d' ')
+    if [ -z "$mode" ]; then
+		config -s config.interfaces.wlan.disabled=on
+    fi
+fi
+
+# Initialise PCMCIA modem
+if [ -f /lib/modules/${KVERSION}/kernel/drivers/serial/serial_cs.ko ]; then
+    modprobe serial_cs
+fi
+
+progressbar 60
+# Set the host and model name as displayed to the user
+
+modelname=$(config -g config.system.model | cut -f2- -d' ')
+
+# if the model name hasn't been set at all, construct it from the model code
+if [ -z "$modelname" ]; then
+	# Pull the model code from the version string, then parse it
+	# and try to build up a more complete code if the product needs it.
+	# also, try and determine a model name for products that have a name.
+	modelcode="$MODEL"
+	if echo "$MODEL" | grep im72 >& /dev/null; then
+		modelcode=`/bin/setfset -qm | cut -f2 -d" " | tr [A-Z] [a-z]`
+	elif echo "$MODEL" | grep cm71 >& /dev/null; then
+		modelcode=`/bin/setfset -qm | cut -f2 -d" " | tr [A-Z] [a-z]`
+	elif echo "$MODEL" | grep acm7 >& /dev/null; then
+		modelcode=`/bin/setfset -qm | cut -f2 -d" " | tr [A-Z] [a-z]`
+	fi
+
+	# if the new name has been specified explicitly, use that;
+	# otherwise, use the model code in all caps as the name
+	if [ -z "$modelname" ]; then
+		modelname=`echo "$modelcode" | tr '[a-z]' '[A-Z]'`
+	fi
+
+	config -s config.system.model="$modelname"
+fi
+
+if [ -f /etc/config/hostname ]; then
+    hostname=`cat /etc/config/hostname`
+else
+    hostname=`echo "$modelname" | tr '[A-Z]' '[a-z]' | tr ' ' '-'`
+fi
+hostname "$hostname"
+
+# Load IPv6 kernel support if built as modules
+if [ -f /lib/modules/${KVERSION}/kernel/net/ipv6/ipv6.ko ]; then
+	modprobe ipv6
+	for m in $(ls -1 /lib/modules/${KVERSION}/kernel/net/ipv6/netfilter); do
+		modprobe `echo $m | cut -f1 -d"."`
+	done
+fi
+
+progressbar 70
+echo "Syncing the system clock with the RTC"
+hwclock --hctosys --utc 2> /dev/null
+
+# If DHCP auto-config has imported an xml config, configurators need to be re-run
+if [ -f /etc/config/.run_configurators ]; then
+    rm /etc/config/.run_configurators
+    config -a
+fi
+
+if [ -f /etc/scripts/migrate ]; then
+    NPORTS=$NPORTS MODEL=$MODEL sh /etc/scripts/migrate
+fi
+
+# Initialise OCF
+if [ -f /lib/modules/${KVERSION}/kernel/ocf/ocf.ko ]; then
+	modprobe ocf
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/ocf/kirkwood/cesa_ocf.ko ]; then
+	modprobe cesa_ocf
+fi
+if [ -f /lib/modules/${KVERSION}/kernel/ocf/armada/cesa_ocf.ko ]; then
+	modprobe cesa_ocf
+fi
+
+if [ -f /lib/modules/${KVERSION}/kernel/ocf/cryptosoft.ko ]; then
+	modprobe cryptosoft
+fi
+
+progressbar 80
 sh /etc/netstart
+sh /etc/rc.firewall boot
+sh /etc/rc.firewall6 boot
 
-if [ -x /sbin/syslogd ]; then
-	echo "Starting syslogd"
-	/sbin/syslogd
-	/sbin/klogd
-fi
+progressbar 90
+
+# Set default group ownership of log files
+chgrp admin /var/log
+chmod g+s /var/log
+
 if [ -x /bin/portmap ]; then
-	echo "Starting RPC portmapper"
-	/bin/portmap &
+    echo "Starting RPC portmapper"
+    /bin/portmap &
 fi
-if [ -x /bin/ntpd -a -f /etc/ntpd.conf ]; then
-	echo "Starting NTP Daemon"
-	/bin/ntpd -s &
+if [ -f /etc/config/crontab.root ]; then
+    echo "Configuring Cron Daemon"
+    crontab /etc/config/crontab.root
 fi
-if [ -x /bin/portmanager ]; then
-	echo "Starting serial port manager"
-	/bin/portmanager
+if [ -x /bin/swmon ]; then
+    echo "Starting Switch Monitoring Daemon"
+    /bin/swmon
 fi
+if [ -x /bin/tftpd -a -f /etc/scripts/system-init-fileserver ]; then
+    echo "Initialising TFTP Server environment"
+    sh /etc/scripts/system-init-fileserver
+fi
+if [ -x /bin/dhcpd -a -f /etc/scripts/switch-config ]; then
+    echo "Initialising DHCP Server environment"
+    touch /var/run/dhcpd-eth1.leases
+fi
+if [ -x /bin/pango-querymodules -a ! -f /etc/config/pango/pango.modules ]; then
+    [ -d /etc/config/pango ] || mkdir /etc/config/pango
+    pango-querymodules > /etc/config/pango/pango.modules
+fi
+
+progressbar 95
+
+
+if [ -x /bin/upsd ]; then
+    echo "Initialising NUT Server environment"
+    mkdir -p -m 700 /var/state/ups
+    mkdir -p -m 700 /var/log/ups
+    chown ups:nobody /var/state/ups /var/log/ups
+    chown root:serial /dev/port*
+
+fi
+
+if [ -x /bin/smsd ]; then
+    echo "Initialising SMS Gateway environment"
+    mkdir /var/spool/sms
+    mkdir /var/spool/sms/incoming
+    mkdir /var/spool/sms/outgoing
+    mkdir /var/spool/sms/outgoing/processing
+    mkdir /var/spool/sms/outgoing/error
+    mkdir /var/spool/sms/checked
+    chgrp -R admin /var/spool/sms/
+    chmod -R g+wrx /var/spool/sms/
+fi
+
+if [ -x /bin/vsftpd ]; then
+	mkdir -p -m 0644 /var/run/vsftpd/empty
+fi
+
+# Suppress unwanted SNMP system notifications
+mkdir -p /var/run/snmpd/
+touch /var/run/snmpd/.dont_send_shutdown
+
+echo "Running product specific configuration"
+if [ -f /etc/scripts/initconf ]; then
+	bash -x /etc/scripts/initconf
+fi
+
+if [ -f /etc/config/.init ]; then
+
+    # Load custom default config from USB
+    rm /etc/config/.init
+    usbconf='f'
+
+    if [ -e /sys/bus/usb/devices -a -f /etc/scripts/backup-usb ]; then
+		if ls -l /sys/bus/usb/devices/*/driver | grep usb-storage > /dev/null 2>&1; then
+			/bin/sh /etc/scripts/backup-usb load-default
+			usbconf='t'
+		fi
+    fi
+
+    # If this model has as internal NAND flash, and the usb drive was not
+    # used for the config erase, default to the internal flash.
+    if [ -e /dev/ubi0_4 ] && [ "$usbconf" = 'f' ]; then
+	    /etc/scripts/backup-internal load-init &
+    fi
+fi
+
+# This section is a bit of a special case: to be done at the *end* of startup,
+# which is why it's not in the migration script above. It only uses the
+# migration directory as a placeholder to persist state, similar to the way
+# the migration scripts work.
+
+if [ ! -f /etc/config/migrate/initialboot.001 ]
+then
+	# run this in a subshell so we can force stdin to be from the console as
+	# well. (during startup, stdin is /dev/null, stdout/stderr is /dev/console.
+    # to check, can add an 'ls -la /proc/$$/fd' in the rc.local.)
+	(modelname=$modelname VENDOR=$VENDOR bash /etc/scripts/initialboot.001) < /dev/console
+	touch /etc/config/migrate/initialboot.001
+fi
+
+# Check/re-generate host keys in the background (SSH, HTTPS)
+nice /etc/scripts/gen-keys &
+
+progressbar 99
+if [ -f /etc/config/rc.local ]; then
+    sh /etc/config/rc.local
+fi
+
+progressbar 100
+exit 0

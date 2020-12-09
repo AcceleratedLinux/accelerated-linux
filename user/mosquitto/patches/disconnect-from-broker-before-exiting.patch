@@ -1,0 +1,100 @@
+From 03ef2b2cfcf87e3ad247552b7096c58a539a3b53 Mon Sep 17 00:00:00 2001
+From: Tatiana Leon <Tatiana.Leon@digi.com>
+Date: Fri, 23 Oct 2020 14:11:24 +0200
+Subject: [PATCH] mosquito_rr: disconnect from broker before exiting
+
+Signed-off-by: Tatiana Leon <Tatiana.Leon@digi.com>
+---
+ client/rr_client.c | 45 ++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/client/rr_client.c b/client/rr_client.c
+index 27a12e26..875817a3 100644
+--- a/client/rr_client.c
++++ b/client/rr_client.c
+@@ -66,6 +66,17 @@ void my_signal_handler(int signum)
+ 
+ void print_message(struct mosq_config *cfg, const struct mosquitto_message *message);
+ 
++void my_disconnect_callback(struct mosquitto *mosq, void *obj, int rc, const mosquitto_property *properties)
++{
++	UNUSED(mosq);
++	UNUSED(obj);
++	UNUSED(rc);
++	UNUSED(properties);
++
++	if(rc == 0){
++		client_state = rr_s_disconnect;
++	}
++}
+ 
+ int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadlen, void *payload, int qos, bool retain)
+ {
+@@ -75,20 +86,24 @@ int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadl
+ 
+ void my_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message, const mosquitto_property *properties)
+ {
++	if(process_messages == false) return;
++
+ 	if(message->retain && cfg.no_retain) return;
+ 
++	process_messages = false;
+ 	print_message(&cfg, message);
+ 	switch(cfg.pub_mode){
+ 		case MSGMODE_CMD:
+ 		case MSGMODE_FILE:
+ 		case MSGMODE_STDIN_FILE:
+ 		case MSGMODE_NULL:
+-			client_state = rr_s_disconnect;
++			mosquitto_disconnect_v5(mosq, 0, cfg.disconnect_props);
+ 			break;
+ 		case MSGMODE_STDIN_LINE:
+ 			client_state = rr_s_ready_to_publish;
+ 			break;
+ 	}
++
+ 	/* FIXME - check all below
+ 	if(process_messages == false) return;
+ 
+@@ -314,6 +329,7 @@ int main(int argc, char *argv[])
+ 		mosquitto_log_callback_set(mosq, my_log_callback);
+ 	}
+ 	mosquitto_connect_v5_callback_set(mosq, my_connect_callback);
++	mosquitto_disconnect_v5_callback_set(mosq, my_disconnect_callback);
+ 	mosquitto_subscribe_callback_set(mosq, my_subscribe_callback);
+ 	mosquitto_message_v5_callback_set(mosq, my_message_callback);
+ 
+@@ -357,6 +373,33 @@ int main(int argc, char *argv[])
+ 		}
+ 	}while(rc == MOSQ_ERR_SUCCESS && client_state != rr_s_disconnect);
+ 
++	if(rc != MOSQ_ERR_SUCCESS){
++		process_messages = false;
++		switch(rc){
++			case MOSQ_ERR_INVAL:
++				err_printf(&cfg, "Error: Invalid input. Does your topic contain '+' or '#'?\n");
++				break;
++			case MOSQ_ERR_NOMEM:
++				err_printf(&cfg, "Error: Out of memory when trying to publish message.\n");
++				break;
++			case MOSQ_ERR_NO_CONN:
++				err_printf(&cfg, "Error: Client not connected when trying to publish.\n");
++				break;
++			case MOSQ_ERR_PROTOCOL:
++				err_printf(&cfg, "Error: Protocol error when communicating with broker.\n");
++				break;
++			case MOSQ_ERR_PAYLOAD_SIZE:
++				err_printf(&cfg, "Error: Message payload is too large.\n");
++				break;
++			case MOSQ_ERR_QOS_NOT_SUPPORTED:
++				err_printf(&cfg, "Error: Message QoS not supported on broker, try a lower QoS.\n");
++				break;
++		}
++		if (client_state != rr_s_disconnect){
++			mosquitto_disconnect_v5(mosq, 0, cfg.disconnect_props);
++		}
++	}
++
+ 	mosquitto_destroy(mosq);
+ 	mosquitto_lib_cleanup();
+ 

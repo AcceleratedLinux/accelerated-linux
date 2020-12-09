@@ -188,6 +188,77 @@ function usage() {
 	exit 1
 }
 
+function signing_intermediate() {
+
+	if [ "$BUILD_TYPE" == "candidate" ]; then
+		# temporarily validate some artifacts for signing.
+		cp ${BUILD_ARTIFACT_DIR}/unconfirmed_artifacts.txt ${BUILD_ARTIFACT_DIR}/valid_artifacts.txt
+		python3 dal/prop/bin/sign-images.py "$BUILD_ARTIFACT_DIR"
+		rc=$?
+		rm -f ${BUILD_ARTIFACT_DIR}/valid_artifacts.txt
+		exit $rc
+	fi
+	exit 0
+}
+
+function signing_final() {
+
+	if [ "$BUILD_TYPE" == "candidate" ]; then
+		python3 dal/prop/bin/sign-images.py "$BUILD_ARTIFACT_DIR"
+		exit $?
+	fi
+	exit 0
+}
+
+#retry a command usage: retry "command" number_of_retries sleep_between_retries_in_seconds
+function retry() {
+
+	local cmd="$1"
+	local max_tries="$2"
+	local sleep_period="$3"
+
+	counter=0
+	until [ "$counter" -eq $max_tries ]
+	do
+		$cmd && break
+		counter=$((counter+1))
+		sleep $sleep_period
+	done
+
+	if [ "$counter" -eq $max_tries ]; then
+		echo "Unable to excute $cmd"
+		return 1
+	fi
+}
+
+function docker_clean() {
+
+	if [ -n "$1" ]; then
+
+		#Copy docker_dal_build_tag file
+		retry "cp /public/DAL/docker_dal_build_tag ." 5 3 || exit 1
+
+		#Extract the tag from file
+		tag=$(sed -n -e 's/buildtag=//p' < docker_dal_build_tag)
+
+	else
+		tag=${bamboo_docker_buildtag}
+	fi
+
+	if [ -n "$tag" ]; then
+
+		#Check if docker image is available with tag
+		doc_img=$(docker images | grep $tag)
+
+		#Delete old images, required to free up memory.
+		if [ -z "$doc_img" ]; then
+			docker rmi $(docker images | grep 'dal_build')
+		fi
+	fi
+
+	exit 0
+}
+
 case "$1" in
 info)	info "$2"
 		;;
@@ -198,6 +269,12 @@ report)	report "$2"
 ratify)	ratify
 		;;
 upload)	upload "$2" "$3"
+		;;
+signing_intermediate) signing_intermediate
+		;;
+signing_final) signing_final
+		;;
+docker_clean) docker_clean "$2"
 		;;
 *)		usage
 		;;

@@ -1,0 +1,107 @@
+--- busybox-1.31.0.org/networking/telnet.c	2019-01-22 03:09:17.000000000 -0600
++++ busybox-1.31.0/networking/telnet.c	2020-06-10 17:38:00.614586000 -0500
+@@ -71,6 +71,7 @@
+ 
+ #include <arpa/telnet.h>
+ #include <netinet/in.h>
++#include <netinet/tcp.h>
+ #include "libbb.h"
+ #include "common_bufsiz.h"
+ 
+@@ -120,6 +121,8 @@
+ 	byte    charmode;
+ 	byte    telflags;
+ 	byte	do_termios;
++	byte	enable_escape_char;
++	byte	suppress_status;
+ #if ENABLE_FEATURE_TELNET_TTYPE
+ 	char	*ttype;
+ #endif
+@@ -220,7 +223,7 @@
+ 
+ 	while (src < end) {
+ 		byte c = *src++;
+-		if (c == 0x1d) {
++		if (c == 0x1d && G.enable_escape_char) {
+ 			con_escape();
+ 			return;
+ 		}
+@@ -415,15 +418,17 @@
+ 	if (G.telflags & UF_ECHO) {
+ 		if (G.charmode == CHM_TRY) {
+ 			G.charmode = CHM_ON;
+-			printf("\r\nEntering %s mode"
+-				"\r\nEscape character is '^%c'.\r\n", "character", ']');
++			if (!G.suppress_status)
++				printf("\r\nEntering %s mode"
++					"\r\nEscape character is '^%c'.\r\n", "character", ']');
+ 			rawmode();
+ 		}
+ 	} else {
+ 		if (G.charmode != CHM_OFF) {
+ 			G.charmode = CHM_OFF;
+-			printf("\r\nEntering %s mode"
+-				"\r\nEscape character is '^%c'.\r\n", "line", 'C');
++			if (!G.suppress_status)
++				printf("\r\nEntering %s mode"
++					"\r\nEscape character is '^%c'.\r\n", "line", 'C');
+ 			cookmode();
+ 		}
+ 	}
+@@ -607,6 +612,7 @@
+ 	char *host;
+ 	int port;
+ 	int len;
++	int opts;
+ 	struct pollfd ufds[2];
+ 
+ 	INIT_G();
+@@ -622,14 +628,18 @@
+ 	}
+ 
+ #if ENABLE_FEATURE_TELNET_AUTOLOGIN
+-	if (1 == getopt32(argv, "al:", &G.autologin)) {
++	opts = getopt32(argv, "nKEqal:", &G.autologin);
++	if (16 == (opts & 48)) {
+ 		/* Only -a without -l USER picks $USER from envvar */
+ 		G.autologin = getenv("USER");
+ 	}
+-	argv += optind;
+ #else
+-	argv++;
++	opts = getopt32(argv, "nKEq");
+ #endif
++	G.enable_escape_char = (4 != (opts & 4));
++	G.suppress_status = (8 == (opts & 8));
++
++	argv += optind;
+ 	if (!*argv)
+ 		bb_show_usage();
+ 	host = *argv++;
+@@ -639,9 +649,14 @@
+ 		bb_show_usage();
+ 
+ 	xmove_fd(create_and_connect_stream_or_die(host, port), netfd);
+-	printf("Connected to %s\n", host);
++	if (!G.suppress_status)
++		printf("Connected to %s\n", host);
++
++	if (1 == (opts & 1))
++		setsockopt_1(netfd, IPPROTO_TCP, TCP_NODELAY);
+ 
+-	setsockopt_keepalive(netfd);
++	if (0 == (opts & 2))
++		setsockopt_keepalive(netfd);
+ 
+ #if ENABLE_FEATURE_TELNET_WIDTH
+ 	get_terminal_width_height(0, &G.win_width, &G.win_height);
+@@ -677,7 +692,8 @@
+ 		if (ufds[1].revents) {
+ 			len = safe_read(netfd, G.buf, DATABUFSIZE);
+ 			if (len <= 0) {
+-				full_write1_str("Connection closed by foreign host\r\n");
++				if (!G.suppress_status)
++					full_write1_str("Connection closed by foreign host\r\n");
+ 				doexit(EXIT_FAILURE);
+ 			}
+ 			handle_net_input(len);

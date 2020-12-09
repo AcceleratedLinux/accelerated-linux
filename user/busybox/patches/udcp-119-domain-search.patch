@@ -1,0 +1,43 @@
+Author: David Leonard <david.leonard@opengear.com>
+Date:   Wed Jul 25 13:30:10 2018 +1000
+
+    OG-5906 udhcpc: request domain-search parameter
+    
+    Add option 119 to the request-parameter list because isc-dhcpd will
+    only include the domain-search parameter in the offer if the client
+    explicitly requests it.
+Index: busybox-1.31.0/networking/udhcp/common.c
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/common.c
++++ busybox-1.31.0/networking/udhcp/common.c
+@@ -58,7 +58,9 @@ const struct dhcp_optflag dhcp_optflags[
+ 	{ OPTION_STRING                           , 0x64 }, /* DHCP_PCODE         */
+ 	{ OPTION_STRING                           , 0x65 }, /* DHCP_TCODE         */
+ #if ENABLE_FEATURE_UDHCP_RFC3397
+-	{ OPTION_DNS_STRING | OPTION_LIST         , 0x77 }, /* DHCP_DOMAIN_SEARCH */
++	{ OPTION_DNS_STRING | OPTION_LIST
++	  IF_FEATURE_UDHCP_RFC3397_REQUEST(|OPTION_REQ),
++	                                            0x77 }, /* DHCP_DOMAIN_SEARCH */
+ 	{ OPTION_SIP_SERVERS                      , 0x78 }, /* DHCP_SIP_SERVERS   */
+ #endif
+ 	{ OPTION_STATIC_ROUTES | OPTION_LIST      , 0x79 }, /* DHCP_STATIC_ROUTES */
+Index: busybox-1.31.0/networking/udhcp/Config.src
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/Config.src
++++ busybox-1.31.0/networking/udhcp/Config.src
+@@ -176,6 +176,15 @@ config FEATURE_UDHCP_RFC3397
+ 	search lists via option 119, specified in RFC 3397,
+ 	and SIP servers option 120, specified in RFC 3361.
+ 
++config FEATURE_UDHCP_RFC3397_REQUEST
++	bool "Always send domain-search in request-paramater"
++	default n
++	depends on FEATURE_UDHCP_RFC3397
++	help
++	If selected, option 119 is added to the request-parameter list.
++	Helps with isc-dhcpd will only includes the domain-search parameter in
++	its offer when the client explicitly requests it.
++
+ config FEATURE_UDHCP_8021Q
+ 	bool "Support 802.1Q VLAN parameters options"
+ 	default y

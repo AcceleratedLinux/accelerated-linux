@@ -25,9 +25,9 @@ With the serial console setup and at the u-boot prompt you can manually
 network load a DAL firmware image. Run commands like this:
 
     dhcp
-    tftp 0x3000000 image.bin
-    setenv bootargs "console=ttyS4,115200 root=/dev/ram0 initrd=0x3000000,16M"
-    gofsk 0x3000000
+    tftp image.bin
+    setenv bootargs "console=ttyS0,115200 root=/dev/ram0 initrd=$loadaddr,16M"
+    gofsk $loadaddr
 
 Note that I have maintained the primary linux console on this internal
 serial port for now. So after booting linux you will be able to login

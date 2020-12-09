@@ -1,0 +1,68 @@
+From 7af462702e9751b05123bf1226baaf58ae247bce Mon Sep 17 00:00:00 2001
+From: Ken Wilson <ken.wilson@opengear.com>
+Date: Thu, 2 Jul 2020 08:07:21 +1000
+Subject: [PATCH 2/3] Adjust Makefile for DAL, also removing unnecessary alert
+ functions
+
+---
+ lib/libopengear/Makefile.in | 20 ++++++++++++++------
+ 1 file changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/lib/libopengear/Makefile.in b/lib/libopengear/Makefile.in
+index 9e3164b..5c1ad7e 100644
+--- a/lib/libopengear/Makefile.in
++++ b/lib/libopengear/Makefile.in
+@@ -9,15 +9,16 @@ vpath % $(srcdir)
+ vpath test/% $(top_srcdir)
+ 
+ LDFLAGS ?= -L$(STAGEDIR)/lib
+-LIBS = -lscew -lexpat -lz -lm $(STAGEDIR)/lib/libjansson.a -lcrypto @LIBS@
++LIBS = -lscew -lexpat -lz -lm -ljansson -lcrypto @LIBS@
+ RANLIB = @RANLIB@
+ 
++INSTALL ?= install
+ LIB = libopengear.a
+ SHAREDLIB = libopengear.so
+ 
+-OBJS = alert.o pmctl.o process.o serial.o network.o modem.o users.o \
+-	xmldb.o xml.o xmlalert.o pmxmlalert.o envxmlalert.o sdtxmlalert.o stringlib.o \
+-	upsxmlalert.o dataxmlalert.o ifprobe.o fset.o session.o libinfod.o pidfile.o \
++OBJS = pmctl.o process.o serial.o network.o modem.o users.o \
++	xmldb.o xml.o stringlib.o \
++	fset.o session.o libinfod.o pidfile.o \
+ 	zipstream.o portusers.o
+ OBJS += roles.o
+ OBJS += pwgrp.o
+@@ -31,7 +32,7 @@ ifndef ROOTDIR
+ 	CFLAGS += -D_GNU_SOURCE
+ 	CFLAGS += -DCONFIG_PRODUCT=\"x86\"
+ else
+-	include $(ROOTDIR)/tools/brief.mk
++	-include $(ROOTDIR)/tools/brief.mk
+ 	CFLAGS = @CFLAGS@
+ 	CFLAGS += -DCONFIG_PRODUCT=\"$(CONFIG_PRODUCT)\"
+ 	CFLAGS += -I../include
+@@ -81,12 +82,19 @@ $(SHAREDLIB):	$(SHAREDOBJS)
+ 	$(COMPILE.c) $(CFLAGS) -fPIC -DPIC -o $@ -c $<
+ 
+ clean:
+-	$(RM) $(OBJS) $(LIB) $(wildcard test/*.o) regress
++	$(RM) $(OBJS) $(LIB) $(SHAREDLIB) $(wildcard test/*.o) $(wildcard *.shared.o) regress
+ 	$(RM) -r docs
+ 
+ distclean:	clean
+ 	$(RM) config.log config.status Makefile
+ 
++install:
++	$(INSTALL) -d $(DESTDIR)/lib/
++	$(INSTALL) $(SHAREDLIB) $(DESTDIR)/lib/
++	$(INSTALL) $(LIB)		$(DESTDIR)/lib/
++	$(INSTALL) -d $(DESTDIR)/include/opengear/
++	$(INSTALL) include/opengear/*.h $(DESTDIR)/include/opengear/
++
+ romfs:
+ 
+ opengear:
+-- 
+2.17.1
+

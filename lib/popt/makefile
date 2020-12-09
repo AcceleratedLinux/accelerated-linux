@@ -1,4 +1,4 @@
-URL = http://downloads.sourceforge.net/project/cross-stuff/cross-stuff/1.0/popt-1.7.tar.gz
+URL = https://sourceforge.net/projects/cross-stuff/files/cross-stuff/1.0/popt-1.7.tar.gz
 
 CONFOPTS += --without-libiconv-prefix --without-libintl-prefix
 

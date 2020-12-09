@@ -85,6 +85,12 @@ replace_line()
 
 fix_conf_files()
 {
+	# ensure header files etc are good
+	HOSTCC=$HOSTCC CC=$CC CXX=$CXX make -C config/kconfig conf
+	KCONFIG_AUTOCONFIG=auto.conf \
+		KCONFIG_TRISTATE=tristate.conf \
+		KCONFIG_AUTOHEADER=autoconf.h \
+		$ROOTDIR/config/kconfig/conf --syncconfig Kconfig || exit 1
 	#
 	# add some bits for convienence, must be done after each stage
 	#
@@ -227,7 +233,7 @@ if [ "$PASS" != "final" ]; then
 		fi
 	fi
 
-    # once before the oldconfig stuff is run
+	# once before the oldconfig stuff is run
 	fix_conf_files
 
 	rm -f config.arch

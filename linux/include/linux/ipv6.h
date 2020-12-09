@@ -75,6 +75,9 @@ struct ipv6_devconf {
 	__s32		disable_policy;
 	__s32           ndisc_tclass;
 	__s32		rpl_seg_enabled;
+#ifdef CONFIG_IP_DEF_RT_METRIC
+	__s32           def_rt_metric;
+#endif
 
 	struct ctl_table_header *sysctl_header;
 };

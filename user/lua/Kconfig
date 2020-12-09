@@ -1,6 +1,8 @@
 
 config USER_LUA
   bool "lua"
+  select USER_READLINE
+  select LIB_NCURSES
   help
      The lua programming language compiler and interpreter.
      See http://www.lua.org/

@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# Action for ConnectEZ specific LED setting
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+findme_update()
+{
+	FINDME=
+	if find-me state &>/dev/null; then
+		# power flashing
+		FINDME="-F power"
+	else
+		# power on
+		FINDME="-o power"
+	fi
+}
+
+case "$1" in
+start|stop)
+	# power on
+	ledcmd -o power
+	;;
+reload)
+	findme_update
+	ledcmd $FINDME
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+exit 0

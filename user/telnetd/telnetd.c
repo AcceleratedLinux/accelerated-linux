@@ -67,6 +67,7 @@ static void doit(struct sockaddr_in *who);
 static int terminaltypeok(char *s);
 
 #define	REALLY_SMALL_TELNETD 1
+#define RFC2217_POLL_INTERVAL_MS 100
 
 /*
  * I/O data buffers,
@@ -87,9 +88,7 @@ int keepalive = 1;
 char *loginprg = _PATH_LOGIN;
 char *progname;
 
-#ifndef EMBED
 static void usage(void);
-#endif /* EMBED */
 
 int
 main(int argc, char *argv[])
@@ -97,10 +96,10 @@ main(int argc, char *argv[])
 	struct sockaddr_in from;
 	int on = 1;
 	socklen_t fromlen;
-#ifndef REALLY_SMALL_TELNETD
+//#ifndef REALLY_SMALL_TELNETD
 	register int ch;
-#endif
-	
+//#endif
+
 #if	defined(IPPROTO_IP) && defined(IP_TOS)
 	int tos = -1;
 #endif
@@ -122,8 +121,8 @@ main(int argc, char *argv[])
 	highpty = getnpty();
 #endif /* CRAY */
 
-#ifndef REALLY_SMALL_TELNETD
-	while ((ch = getopt(argc, argv, "d:a:e:lhnr:I:D:B:sS:a:X:L:")) != EOF) {
+//#ifndef REALLY_SMALL_TELNETD
+	while ((ch = getopt(argc, argv, "d:a:e:lhnr:I:D:B:sS:a:X:L:p:")) != EOF) {
 		switch(ch) {
 
 #ifdef	AUTHENTICATE
@@ -230,6 +229,13 @@ main(int argc, char *argv[])
 			keepalive = 0;
 			break;
 
+#ifdef RFC2217
+		case 'p':
+		    {
+			rfc2217_open(optarg);
+			break;
+		    }
+#endif	/* RFC2217 */
 #ifdef CRAY
 		case 'r':
 		    {
@@ -296,7 +302,7 @@ main(int argc, char *argv[])
 
 	argc -= optind;
 	argv += optind;
-#endif
+//#endif
 
 #ifndef REALLY_SMALL_TELNETD
 	if (debug) {
@@ -363,9 +369,8 @@ main(int argc, char *argv[])
 	}
 #endif
 
-#ifndef REALLY_SMALL_TELNETD
 	openlog("telnetd", LOG_PID | LOG_ODELAY, LOG_DAEMON);
-#endif
+
 	fromlen = sizeof (from);
 	if (getpeername(0, (struct sockaddr *)&from, &fromlen) < 0) {
 		fprintf(stderr, "%s: ", progname);
@@ -398,10 +403,10 @@ main(int argc, char *argv[])
 	return 0;
 }  /* end of main */
 
-#ifndef EMBED
 static void
 usage(void)
 {
+#ifndef EMBED
 	fprintf(stderr, "Usage: telnetd");
 #ifdef	AUTHENTICATE
 	fprintf(stderr, " [-a (debug|other|user|valid|off)]\n\t");
@@ -425,6 +430,9 @@ usage(void)
 #endif
 	fprintf(stderr, " [-L login_program]");
 	fprintf(stderr, " [-n]");
+#ifdef	RFC2217
+	fprintf(stderr, " [-p serial-device]");
+#endif
 #ifdef	CRAY
 	fprintf(stderr, " [-r[lowpty]-[highpty]]");
 #endif
@@ -435,9 +443,9 @@ usage(void)
 	fprintf(stderr, " [-X auth-type]");
 #endif
 	fprintf(stderr, " [port]\n");
+#endif /* EMBED */
 	exit(1);
 }
-#endif /* EMBED */
 
 /*
  * getterminaltype
@@ -752,6 +760,10 @@ void telnet(int f, int p, char *host)
     char *HE;
     const char *IM;
 #endif
+    struct timeval *timeout = NULL;
+#ifdef RFC2217
+    struct timeval rfc2217_timeout;
+#endif
 
     /*
      * Initialize the slc mapping table.
@@ -1006,8 +1018,16 @@ void telnet(int f, int p, char *host)
 	    FD_SET(f, &xbits);
 	    if (f >= hifd) hifd = f+1;
 	}
-	if ((c = select(hifd, &ibits, &obits, &xbits,
-			(struct timeval *)0)) < 1) {
+#ifdef RFC2217
+	if (his_state_is_will(TELOPT_COMPORT)) {
+	    rfc2217_timeout.tv_sec = RFC2217_POLL_INTERVAL_MS / 1000;
+	    rfc2217_timeout.tv_usec = 1000*(RFC2217_POLL_INTERVAL_MS % 1000);
+	    timeout = &rfc2217_timeout;
+	}
+	else
+	    timeout = NULL;
+#endif
+	if ((c = select(hifd, &ibits, &obits, &xbits, timeout)) < 0) {
 	    if (c == -1) {
 		if (errno == EINTR) {
 		    continue;
@@ -1204,6 +1224,9 @@ void telnet(int f, int p, char *host)
 	    telrcv();
 	if (FD_ISSET(p, &obits) && (pfrontp - pbackp) > 0)
 	    ptyflush();
+#ifdef RFC2217
+	rfc2217_poll();
+#endif
     }
     cleanup(0);
 }  /* end of telnet */

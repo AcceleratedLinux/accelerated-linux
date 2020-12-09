@@ -136,6 +136,21 @@ path_iptables = ../user/iptables
 lib_iptables = install/lib/*.a install/lib/*.so*
 inc_iptables = install/include/*,.
 
+dir_$(CONFIG_LIB_LUA) += lua
+dep_lua = readline ncurses
+path_lua = ../user/lua
+lib_lua = build/lua-5.1.4/src/*.a
+inc_lua = build/lua-5.1.4/src/lua.h,. \
+	build/lua-5.1.4/src/luaconf.h,. \
+	build/lua-5.1.4/src/lualib.h,. \
+	build/lua-5.1.4/src/lauxlib.h,.
+
+dir_$(CONFIG_LIB_READLINE) += readline
+path_readline = ../user/readline
+lib_readline = build/readline-7.0-install/lib/*.so*
+inc_readline = build/readline-7.0-install/include/readline/*.h,readline
+dep_readline = termcap
+
 dir_$(CONFIG_LIB_LIBIBERTY) += libiberty
 lib_libiberty = build/*.a
 
@@ -177,6 +192,12 @@ dep_libopenh323 = pwlib
 
 dir_$(CONFIG_LIB_MINI_LIBINTL) += mini-libintl
 inc_mini-libintl = libintl.h,.
+
+dir_$(CONFIG_LIB_LIBOPENGEAR) += libopengear
+dep_libopengear = jansson scew libssl
+lib_libopengear = build/*.a \
+	build/*.so*
+inc_libopengear = include/opengear/*.h,opengear
 
 dep_libftdi = libusb STLport
 dep_libunbound = libldns expat

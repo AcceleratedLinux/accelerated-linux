@@ -1631,7 +1631,7 @@ static int mt7621_nand_probe(struct platform_device *pdev)
 	chip->ecc.write_oob = mt7621_nand_write_oob;
 	chip->ecc.read_oob = mt7621_nand_read_oob;
 
-	chip->options |= NAND_USE_BOUNCE_BUFFER;
+	chip->options |= NAND_USES_DMA;
 	chip->bbt_options |= NAND_BBT_USE_FLASH;
 	chip->buf_align = 16;
 
@@ -1667,7 +1667,7 @@ static int mt7621_nand_probe(struct platform_device *pdev)
 
 out:
 	pr_err("mt7621-nand: probe failed, err=%d\n", err);
-	nand_release(chip);
+	nand_cleanup(chip);
 	platform_set_drvdata(pdev, NULL);
 
 	return err;
@@ -1678,7 +1678,7 @@ static int mt7621_nand_remove(struct platform_device *pdev)
 	struct mt7621_nand_host *host = platform_get_drvdata(pdev);
 	struct nand_chip *chip = &host->nand_chip;
 
-	nand_release(chip);
+	nand_cleanup(chip);
 	return 0;
 }
 

@@ -1,0 +1,28 @@
+
+--- a/libc.in
++++ b/libc.in
+@@ -74,6 +74,24 @@ keys_remove()
+ 
+ local_nameservers="127.* 0.0.0.0 255.255.255.255 ::1"
+ 
++# Clear variables that should only be set by resolvconf.conf,
++# instead of being accidentally obtained from environment.
++# (udhcpc was setting $domain and then running resolvconf -u)
++unset base
++unset domain
++unset libc_restart
++unset libc_service
++unset list_resolv
++unset newconf
++unset prepend_nameservers
++unset prepend_search
++unset resolv_conf
++unset resolv_conf_head
++unset resolv_conf_options
++unset resolv_conf_passthrough
++unset resolv_conf_sortlist
++unset resolv_conf_tail
++
+ # Support original resolvconf configuration layout
+ # as well as the openresolv config file
+ if [ -f "$SYSCONFDIR"/resolvconf.conf ]; then

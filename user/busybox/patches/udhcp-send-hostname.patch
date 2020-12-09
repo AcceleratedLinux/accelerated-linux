@@ -1,0 +1,50 @@
+
+Author: Robert Waldie <robert.waldie@opengear.com>
+Date:   Fri Mar 1 18:21:27 2013 +0000
+
+    #3756
+    Get & send hostname by default.
+
+From Zendesk Ticket #2693 Our DHCP client (udhcpc) is not sending the
+hostname in the dhcp ip request, meaning that you can't do addressing
+based on that name, or automagically insert hosts into your dns.
+
+Index: busybox-1.31.0/networking/udhcp/dhcpc.c
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/dhcpc.c
++++ busybox-1.31.0/networking/udhcp/dhcpc.c
+@@ -1351,6 +1351,15 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 		free(optstr);
+ 	}
+ 
++#if ENABLE_FEATURE_UDHCPC_ALWAYS_SEND_HOST_NAME
++	if (!client_data.hostname) {
++		char buf[HOST_NAME_MAX];
++		if (gethostname(buf, sizeof(buf)) == 0) {
++			client_data.hostname = alloc_dhcp_option(DHCP_HOST_NAME, buf, 0);
++		}
++	}
++#endif
++
+ 	if (udhcp_read_interface(client_data.interface,
+ 			&client_data.ifindex,
+ 			NULL,
+Index: busybox-1.31.0/networking/udhcp/Config.src
+===================================================================
+--- busybox-1.31.0.orig/networking/udhcp/Config.src
++++ busybox-1.31.0/networking/udhcp/Config.src
+@@ -100,6 +100,14 @@ config UDHCPC_DEFAULT_SCRIPT
+ 	examples/udhcp for a working example. Normally it is safe
+ 	to leave this untouched.
+ 
++config FEATURE_UDHCPC_ALWAYS_SEND_HOST_NAME
++	bool "Always send a hostname"
++	default n
++	depends on UDHCPC
++	help
++	If selected, udhcpc will default to sending the system's
++	hostname as a HOST_NAME option.
++
+ # udhcpc6 config is inserted here:
+ INSERT
+ 

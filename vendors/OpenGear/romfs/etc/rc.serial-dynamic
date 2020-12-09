@@ -1,0 +1,38 @@
+#!/bin/sh
+
+. /etc/scripts/serial-helper
+
+# Get port number of last static port
+PORT=$(serial_get_max_ports)
+
+# Increment to get first dynamic port
+PORT=`expr $PORT + 1`
+
+# Set path to GPS NMEA stream device if it exists
+if [ -L /dev/cellnmea01 ]; then
+	NMEA="/dev/cellnmea01"
+fi
+
+# Handle any Modems with GPS serial ports
+if [ -n "$NMEA" ]; then
+	PNAME=`printf "port%02d" $PORT`
+	ln -s $NMEA /dev/$PNAME
+	echo "$PNAME --> $NMEA" >> /var/run/serial-ports
+	infod_client -s -o push -p config.ports.port$PORT\.dev.deflabel -d "GPS" &
+	infod_client -s -o push -p config.ports.port$PORT\.dev.typedesc -d "usb-af" &
+	PORT=`expr $PORT + 1`
+fi
+
+# Handle a single Cisco USB Console for now
+if [ -d "/sys/bus/usb/drivers" ]; then
+	/etc/scripts/usb-console-enum $PORT
+fi
+
+exit 0
+# this __MUST__ be at the VERY end of the file - do NOT move!!
+#
+# Local Variables:
+# c-basic-offset: 4
+# tab-width: 8
+# end:
+# vi: tabstop=8 shiftwidth=4 textwidth=79 noexpandtab

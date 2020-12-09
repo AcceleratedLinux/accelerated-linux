@@ -1,0 +1,66 @@
+
+config USER_NET_TOOLS
+	bool "net-tools"
+
+config USER_NET_TOOLS_ARP
+	bool "arp"
+	select USER_NET_TOOLS
+	help
+	  Manipulate the system ARP cache.
+
+config USER_NET_TOOLS_HOSTNAME
+	bool "hostname"
+	select USER_NET_TOOLS
+	help
+	  Show or set the system's host name.
+
+config USER_NET_TOOLS_IFCONFIG
+	bool "ifconfig"
+	select USER_NET_TOOLS
+	help
+	  Configure a network interface.
+
+config USER_NET_TOOLS_NAMEIF
+	bool "nameif"
+	select USER_NET_TOOLS
+	help
+	  Name network interfaces based on MAC addresses.
+
+config USER_NET_TOOLS_NETSTAT
+	bool "netstat"
+	select USER_NET_TOOLS
+	help
+	  Print  network  connections,  routing  tables,
+	  interface statistics, masquerade connections,  and
+	  multicast memberships.
+
+config USER_NET_TOOLS_PLIPCONFIG
+	bool "plipconfig"
+	select USER_NET_TOOLS
+	help
+	  Fine tune PLIP device parameters.
+
+config USER_NET_TOOLS_RARP
+	bool "rarp"
+	select USER_NET_TOOLS
+	help
+	  Manipulate the system RARP table.
+
+config USER_NET_TOOLS_ROUTE
+	bool "route"
+	select USER_NET_TOOLS
+	help
+	  Show / manipulate the IP routing table.
+
+config USER_NET_TOOLS_SLATTACH
+	bool "slattach"
+	select USER_NET_TOOLS
+	help
+	  Attach a network interface to a serial line.
+
+config USER_NET_TOOLS_MII_TOOL
+	bool "mii-tool"
+	select USER_NET_TOOLS
+	help
+	  Manipulate media-independent interface status.
+

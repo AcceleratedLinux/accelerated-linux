@@ -1,0 +1,5 @@
+config USER_CHEROKEE
+	bool "cherokee"
+	help
+	  Cherokee Webserver
+

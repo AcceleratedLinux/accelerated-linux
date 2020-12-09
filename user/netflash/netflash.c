@@ -57,6 +57,9 @@
 #ifdef CONFIG_USER_NETFLASH_ATECC508A
 #include "crypto_atmel.h"
 #endif
+#ifdef CONFIG_USER_NETFLASH_CRYPTO_ECDSA_SW
+#include "crypto_ecdsa_sw.h"
+#endif
 #if defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
 #include <mtd/mtd-user.h>
@@ -132,7 +135,7 @@
 #define	UBOOT_OPTIONS
 #endif
 
-#define CMD_LINE_OPTIONS "abB:c:Cd:efFhiHjkKlL:Mno:pr:R:sStuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS
+#define CMD_LINE_OPTIONS "abB:c:Cd:eEfFhiHjkKlL:Mno:pr:R:sStTuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS
 
 #define PID_DIR "/var/run"
 #if defined(CONFIG_USER_DHCPCD_DHCPCD) || defined(CONFIG_USER_DHCPCD_NEW_DHCPCD)
@@ -1032,6 +1035,7 @@ static int usage(int rc)
 	"\t-C\tcheck that image was written correctly\n"
 	"\t-d\tspecify seconds to wait before programming flash\n"
 	"\t-e\tdo not erase flash segments if they are already blank\n"
+	"\t-E\terase config just before programming flash\n"
 	"\t-f\tuse FTP as load protocol\n"
 	"\t-F\tforce overwrite (do not preserve special regions)\n"
 	"\t-h\tprint help\n"
@@ -1055,6 +1059,7 @@ static int usage(int rc)
 	"\t-s\tstop erasing/programming at end of input data\n"
 	"\t-S\tdo not stop erasing/programming at end of input data\n"
 	"\t-t\tcheck the image and then throw it away \n"
+	"\t-T\tremove signature from image\n"
 #if CONFIG_USER_NETFLASH_DUAL_IMAGES
 	"\t-U\tupdate the bootpart environment variable of u-boot\n"
 #endif
@@ -1102,6 +1107,7 @@ int netflashmain(int argc, char *argv[])
 	int kill_processes_run = 0;
 	int dokill, dokillpartial, doreboot, doftp;
 	int dopreserve, doflashingrootfs;
+	int doerase_config;
 	int blocksize = BLOCKSIZE_DEFAULT;
 #if defined(CONFIG_USER_NETFLASH_WITH_CGI) && !defined(RECOVER_PROGRAM)
 	char options[64];
@@ -1136,6 +1142,7 @@ int netflashmain(int argc, char *argv[])
 		.ca = NULL,
 		.crl = NULL,
 #endif
+		.doremovesig = 0,
 	};
 
 	rdev = "/dev/flash/image";
@@ -1155,6 +1162,7 @@ int netflashmain(int argc, char *argv[])
 	checkimage = 0;
 	checkblank = 0;
 	dojffs2 = 0;
+	doerase_config = 0;
 #ifdef CONFIG_USER_NETFLASH_WITH_FILE
 	dofileautoname = 1;
 	dofilesave = 1;
@@ -1283,6 +1291,9 @@ int netflashmain(int argc, char *argv[])
 		case 'e':
 			checkblank = 1;
 			break;
+		case 'E':
+			doerase_config = 1;
+			break;
 		case 'd':
 			delay = (atoi(optarg));
 			break;
@@ -1363,6 +1374,9 @@ int netflashmain(int argc, char *argv[])
 			break;
 		case 't':
 			dothrow = 1;
+			break;
+		case 'T':
+			check_opt.doremovesig = 1;
 			break;
 		case 'u':
 			dounlock++;
@@ -1560,10 +1574,10 @@ int netflashmain(int argc, char *argv[])
 	}
 
 #if defined(CONFIG_USER_NETFLASH_ATECC508A)
-	check_crypto_atmel();
-#endif
-
-#if defined(CONFIG_USER_NETFLASH_CRYPTO_V3)
+	check_crypto_atmel(&check_opt);
+#elif defined(CONFIG_USER_NETFLASH_CRYPTO_ECDSA_SW)
+	check_crypto_ecdsa_sw(&check_opt);
+#elif defined(CONFIG_USER_NETFLASH_CRYPTO_V3)
 	check_crypto_v3(&check_opt);
 #elif defined(CONFIG_USER_NETFLASH_CRYPTO_V2)
 	check_crypto_v2(&check_opt);
@@ -1577,6 +1591,10 @@ int netflashmain(int argc, char *argv[])
 	image_length = check_decompression();
 #else
 	image_length = fb_len();
+#endif
+
+#ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+	check_fw_product_info();
 #endif
 
 	if (dofilesave) {
@@ -1642,6 +1660,18 @@ int netflashmain(int argc, char *argv[])
 
 		/* A new filesystem means we must reboot */
 		doreboot = 1;
+
+		if (doerase_config) {
+			/* This could be system("flatfsd -i") to be portable. */
+			const char *marker = "/etc/config/.init";
+			int f = open(marker, O_CREAT|O_RDONLY, 0666);
+			if (f == -1) {
+				error("%s: %s", marker, strerror(errno));
+			} else {
+				if (close(f) == -1)
+					error("%s: %s", marker, strerror(errno));
+			}
+		}
 
 		/*
 		 * If we are flashing root then unmount everything now.

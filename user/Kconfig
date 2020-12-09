@@ -158,11 +158,20 @@ config USER_LOGIN_LOGIN
 	  A login program.
 	  Approx. binary size: 8k
 
-config USER_ONLY_ROOT
-	bool "only allow root login"
+config USER_LOGIN_PAM
+	bool "pam"
 	help
-	  Only allow root to login.  All other users will be denied login
-	  access.
+	  login PAM support
+
+config USER_LOGIN_PORTMANAGER
+	bool "portmanager"
+	help
+	  login portmanager support
+
+config USER_LOGIN_TTY
+	bool "tty"
+	help
+	  login tty support
 
 config USER_AGETTY_AGETTY
 	bool "agetty"
@@ -433,7 +442,7 @@ config USER_NETFLASH_ATECC508A
 	bool "netflash supports ATECC508A cryptochip authentication"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
 	help
-	  Netflash requires the image to include a ECDSA signature which will
+	  Netflash requires the image to include an ECDSA signature which will
 	  be authenticated using the ATECC508A cryptochip.
 
 choice
@@ -490,9 +499,9 @@ config USER_NETFLASH_ATECC508A_I2C_ADDRESS
 	help
 	  The I2C bus address of the ATECC508A chip.
 
-config USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL
+config USER_NETFLASH_EMBEDDED_KERNEL
 	bool "netflash support for embedded kernel image inside the rootfs"
-	depends on USER_NETFLASH_ATECC508A
+	depends on USER_NETFLASH_ATECC508A || USER_NETFLASH_CRYPTO_ECDSA_SW
 	default n
 	help
 	  If enabled, Netflash expects the kernel image is embedded in the
@@ -501,12 +510,49 @@ config USER_NETFLASH_ATECC508A_EMBEDDED_KERNEL
 
 config USER_NETFLASH_DEVMODE_KERNEL_CMDLINE
 	bool "netflash checking development mode in kernel command line"
-	depends on USER_NETFLASH_ATECC508A
+	depends on USER_NETFLASH_ATECC508A || USER_NETFLASH_CRYPTO_ECDSA_SW
 	default n
 	help
 	  If enabled, Netflash will check the kernel command line for "dev_mode"
 	  argument. If it is there, will verify the signature with the
 	  development key as well.
+
+config USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+	bool "netflash checks production info stored in rootfs /etc/hwdetails"
+	depends on USER_NETFLASH_ATECC508A || USER_NETFLASH_CRYPTO_ECDSA_SW
+	select USER_SQUASHFS_TOOLS_NG
+	default y
+	help
+	  If enabled, Netflash will verify the vendor-name and product-name,
+	  stored in the /etc/hwdetails file of the rootfs. If not matching,
+	  Netflash will fail.
+
+config USER_NETFLASH_CRYPTO_ECDSA_SW
+	bool "netflash support for software ECDSA authentication"
+	depends on USER_NETFLASH_NETFLASH
+	help
+	  Netflash requires the image to include an ECDSA signature which will
+	  be authenticated through OpenSSL.
+
+choice
+	prompt "Netflash public key source for software ECDSA authentication"
+	depends on USER_NETFLASH_CRYPTO_ECDSA_SW
+	default USER_NETFLASH_PUBKEY_KERNEL_CMDLINE
+
+config USER_NETFLASH_PUBKEY_KERNEL_CMDLINE
+	bool "Kernel command line"
+	help
+	  Public key is passed through the kernel command line, as arguments:
+	  - "pk_prod=": production key (mandatory)
+	  - "pk_dev=": development key (optional)
+endchoice
+
+config USER_NETFLASH_CRYPTO_ECDSA_SW_OPTIONAL
+	bool "netflash software ECDSA authentication is optional"
+	depends on USER_NETFLASH_CRYPTO_ECDSA_SW
+	help
+	  If public keys are not found (e.g. not passed through kernel command
+	  line), the authentication succeeds.
 
 config USER_NETFLASH_CRYPTO_OPTIONAL
 	bool "netflash optional public key encryption"
@@ -1051,6 +1097,16 @@ endmenu
 #############################################################################
 
 menu "Network Applications"
+
+config USER_IFMETRIC
+	bool "ifmetric"
+	help
+	  Change routes metric for the specified network interface
+
+config USER_IPSETD
+	bool "ipsetd"
+	help
+	  The daemon for setting IP address with ARP+Ping in user-space
 
 config USER_APPWEB_APPWEB
 	bool "appWeb"
@@ -1699,6 +1755,11 @@ config USER_MARADNS_MARADNS
 	  The MaraDNS nameserver (UDP query daemon); see also zoneserver.
 	  Approx. binary size: 55k
 
+config USER_MII_TOOL_FEC
+	bool "mii-tool-fec"
+	help
+	   Manipulate media-independent interface status.
+	   Specific to extensions for 5272 FEC driver
 
 config USER_MINI_HTTPD_MINI_HTTPD
 	bool "mini_httpd"
@@ -2011,6 +2072,14 @@ config USER_NETSNMP_DEFENTERPRISEOID
 	  The enterprise number assigned by IANA
 	  (Warning: this should be used with caution.)
 
+config USER_NETSNMP_DEFENTERPRISESYSOID
+	string "System OID"
+	depends on USER_NETSNMP_OVRDEFAULTS
+	default ".1.3.6.1.4.1.8072.1.1"
+	help
+	  The system oid that corresponds to this system type
+	  (Warning: this should be used with caution.)
+
 config USER_NETSNMP_ADDMIBS
 	bool "Additional MIBS"
 	depends on USER_NETSNMP_SNMPD
@@ -2031,6 +2100,12 @@ config USER_NETSNMP_ADDITIONAL_MIB_DIRS
 	help
 	  Directories to final external MIB sources for building into
 	  net-snmp (space spearated list).
+
+config USER_NETSNMP_INSTALL_CORE_MIBS
+	bool "Install Core MIBs"
+	depends on USER_NETSNMP_SNMPD
+	help
+	  Install the core MIB files into romfs.
 
 config USER_MARADNS_ZONESERVER
 	bool "zoneserver"
@@ -2290,11 +2365,6 @@ config USER_RSYNC_RSYNC
 	help
 	  network file copying utility that copies only the differences
 	  between files Approx. binary size on SH4: 255k
-
-config USER_RSYSLOG_RSYSLOGD
-	bool "rsyslog"
-	help
-	  Full featured syslog daemon.
 
 config USER_RSYSLOGD_RSYSLOGD
 	bool "rsyslogd"
@@ -2626,68 +2696,6 @@ config USER_ZEBRA_RIPD_RIPD
 	help
 	  The GNU Zebra RIP daemon.
 	  Approx. binary size: 167k
-
-
-comment "Net-tools"
-
-config USER_NET_TOOLS_ARP
-	bool "arp"
-	help
-	  Manipulate the system ARP cache.
-
-config USER_NET_TOOLS_HOSTNAME
-	bool "hostname"
-	help
-	  Show or set the system's host name.
-
-config USER_NET_TOOLS_IFCONFIG
-	bool "ifconfig"
-	help
-	  Configure a network interface.
-
-config USER_NET_TOOLS_NAMEIF
-	bool "nameif"
-	help
-	  Name network interfaces based on MAC addresses.
-
-config USER_NET_TOOLS_NETSTAT
-	bool "netstat"
-	help
-	  Print  network  connections,  routing  tables,
-	  interface statistics, masquerade connections,  and
-	  multicast memberships.
-
-config USER_NET_TOOLS_PLIPCONFIG
-	bool "plipconfig"
-	help
-	  Fine tune PLIP device parameters.
-
-config USER_NET_TOOLS_RARP
-	bool "rarp"
-	help
-	  Manipulate the system RARP table.
-
-config USER_NET_TOOLS_ROUTE
-	bool "route"
-	help
-	  Show / manipulate the IP routing table.
-
-config USER_NET_TOOLS_SLATTACH
-	bool "slattach"
-	help
-	  Attach a network interface to a serial line.
-
-config USER_NET_TOOLS_MII_TOOL
-	bool "mii-tool"
-	help
-	  Manipulate media-independent interface status.
-
-config USER_NET_TOOLS_MII_TOOL_FEC
-	bool "mii-tool-fec"
-	help
-	   Manipulate media-independent interface status.
-	   Specific to extensions for 5272 FEC driver
-
 
 comment "Wireless-tools"
 

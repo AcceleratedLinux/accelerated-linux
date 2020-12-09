@@ -149,12 +149,10 @@ struct usbdevfs_hub_portinfo {
 	char port [127];	/* e.g. port 3 connects to device 27 */
 };
 
-#if defined(CONFIG_MACH_SG560USB) || defined(CONFIG_MACH_SG560ADSL)
 struct usbdevfs_hub_portctrl {
 	char port;
 	char value;
 };
-#endif
 
 /* System and bus capability flags */
 #define USBDEVFS_CAP_ZERO_PACKET		0x01
@@ -235,8 +233,6 @@ struct usbdevfs_streams {
 #define USBDEVFS_ALLOW_SUSPEND     _IO('U', 34)
 #define USBDEVFS_WAIT_FOR_RESUME   _IO('U', 35)
 
-#if defined(CONFIG_MACH_SG560USB) || defined(CONFIG_MACH_SG560ADSL)
-#define USBDEVFS_HUB_PORTCTRL      _IOW('U', 30, struct usbdevfs_hub_portctrl)
-#endif
+#define USBDEVFS_HUB_PORTCTRL      _IOW('U', 99, struct usbdevfs_hub_portctrl)
 
 #endif /* _UAPI_LINUX_USBDEVICE_FS_H */

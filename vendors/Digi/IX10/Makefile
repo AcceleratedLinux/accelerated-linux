@@ -9,7 +9,6 @@ IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
 
 SIGNING_ALG = ecdsa
-SIGNING_EXTRA =
 
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)

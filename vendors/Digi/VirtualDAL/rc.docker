@@ -1,0 +1,133 @@
+hostname "Digi Virtual DAL" 2>/dev/null
+
+echo "Starting VirtualDAL Docker container"
+
+. /tmp/init-env.sh
+
+DAL_MAC="${DAL_MAC:-00:27:04:03:02:00}"
+DAL_SERIAL="${DAL_SERIAL:-VIRTUALDAL012345}"
+DAL_ADMIN_PASSWORD="${DAL_ADMIN_PASSWORD:-default}"
+
+# fetch the network addressing that Docker assigned to the container
+DOCKER_IP="$(ip -br addr show dev eth0 | awk '{ print $3 }')"
+DOCKER_GW="$(ip route show default dev eth0 | sed -rn 's/.*via ([^ ]+).*/\1/p')"
+
+# If running without CAP_SYS_ADMIN then setting the hostname failed, and
+# a random string will be assigned by Docker.
+echo "Hostname:   $(hostname)"
+echo "MAC:        $DAL_MAC"
+echo "Serial:     $DAL_SERIAL"
+echo "IP address: $DOCKER_IP"
+echo "Gateway:    $DOCKER_GW"
+
+mount()
+{
+	/bin/mount "$@" 2>/dev/null
+}
+
+for fs in $(mount | grep -E '/proc|/sys' | cut -d' ' -f 3 | sort -r) /etc/resolv.conf /etc/hostname /etc/hosts; do
+	umount "$fs" 2>/dev/null && echo "Unmounted Docker filesystem: $fs"
+done
+
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+[ -d /dev/pts ] || mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+# /tmp mounted by init.docker
+mount -t tmpfs -o size=256M tmpfs /var
+mkdir -m 755 /dev/hugepages
+mount -t hugetlbfs none /dev/hugepages
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -p -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# make sure we dont see all errors
+(echo 6 > /proc/sys/kernel/printk) 2>/dev/null
+
+# initialise devices before we need them
+/etc/rc.dev
+
+if mount | grep -wq /opt; then
+	echo "Using supplied /opt filesystem"
+elif mount -t tmpfs -o size=32M tmpfs /opt; then
+	echo "Using tmpfs for /opt"
+fi
+
+if mount | grep -wq /etc/config; then
+	echo "Using supplied /etc/config filesystem"
+else
+	mkdir -p /opt/config
+	if mount --bind /opt/config /etc/config; then
+		echo "Mounted /etc/config to /opt/config"
+	elif mount -t tmpfs -o size=4M tmpfs /etc/config; then
+		echo "Using tmpfs for /etc/config"
+	fi
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+
+	config set auth.user.admin.password "${DAL_ADMIN_PASSWORD:-default}"
+
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+
+if [ ! -f /etc/config/grubenv ]; then
+	echo "Creating boot environment"
+	grub-editenv /etc/config/grubenv set ethaddr="${DAL_MAC:-00:27:04:03:02:00}"
+	grub-editenv /etc/config/grubenv set serial="${DAL_SERIAL:-VIRTUALDAL012345}"
+fi
+
+echo "Initializing network interfaces..."
+
+# rename eth0 provided by Docker to the expected "lan" interface.
+# there is no equivalent for the "wan".
+ip link set dev eth0 down
+ip link set eth0 name lan
+ip link set dev lan up
+
+(echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries) 2>/dev/null
+ifconfig lo 127.0.0.1
+setmac -i lan -u -n 1
+
+cat /etc/inittab.d/* > /etc/inittab
+
+random_seed restore
+
+# reconfigure to match the networking that Docker assigned to the container
+eval $(config start)
+config update
+config set network.interface.lan.ipv4.type static
+config set network.interface.lan.ipv4.address "$DOCKER_IP"
+config set network.interface.lan.ipv4.gateway "$DOCKER_GW"
+config set network.interface.lan.ipv4.dhcp_server.enable 0
+config commit
+eval $(config stop)
+
+# HACK: If running with a writable rootfs, we expect to not have CAP_SYS_ADMIN
+# and thus any setting of the time will fail. Failing ntpdate holds up some
+# important system services. So let the action succeed even if ntpdate fails.
+sed -i'' 's/rc=1/rc=0/g' /etc/action.d/ntpdate 2>/dev/null
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

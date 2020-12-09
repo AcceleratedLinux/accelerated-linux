@@ -1,0 +1,51 @@
+From b6839ee98c5d72c9848467d4137144f256540e8d Mon Sep 17 00:00:00 2001
+From: Matthew Smith <matthew.smith@digi.com>
+Date: Fri, 28 Aug 2020 11:50:24 +1000
+Subject: [PATCH 2/3] Add extra environment variables
+
+Add extra CGI headers to libgcgi to support Opengear CGI
+---
+ src/gcgi.c | 4 +++-
+ src/gcgi.h | 2 ++
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/gcgi.c b/src/gcgi.c
+index 68a4d2d..8d0290a 100644
+--- a/src/gcgi.c
++++ b/src/gcgi.c
+@@ -35,7 +35,9 @@ static const char* const envVars[] =
+ 	"REMOTE_HOST",
+ 	"REMOTE_IDENT",
+ 	"REMOTE_USER",
++    "REMOTE_PORT",
+ 	"REQUEST_METHOD",
++    "HTTPS",
+ 	"SCRIPT_NAME",
+ 	"SERVER_NAME",
+ 	"SERVER_PORT",
+@@ -43,7 +45,7 @@ static const char* const envVars[] =
+ 	"SERVER_SOFTWARE"
+     };
+ 
+-#define ENVCOUNT 19
++#define ENVCOUNT 21
+ 
+ /*------ Global Variables ------*/
+ static CgiQuery *cgiQuery         = NULL;
+diff --git a/src/gcgi.h b/src/gcgi.h
+index 305fae0..5415ac2 100644
+--- a/src/gcgi.h
++++ b/src/gcgi.h
+@@ -42,7 +42,9 @@ typedef enum {
+     gcgiRemoteHost,
+     gcgiRemoteIdent,
+     gcgiRemoteUser,
++    gcgiRemotePort,
+     gcgiRequestMethod,
++    gcgiHttps,
+     gcgiScriptName,
+     gcgiServerName,
+     gcgiServerPort,
+-- 
+2.17.1
+

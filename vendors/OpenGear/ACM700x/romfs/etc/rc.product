@@ -1,0 +1,32 @@
+# This file contains product specific bringup steps
+
+# Bring the TinyModem (if present) out of reset
+# If no modem exists, then this is harmless
+echo "508" > /sys/class/gpio/export
+echo "high" > /sys/class/gpio/gpio508/direction
+
+# Huawei modems (ME209u-526 specifcally) can
+# retain bad state from previous boot
+echo "499" > /sys/class/gpio/export
+echo "low" > /sys/class/gpio/gpio499/direction
+sleep 1
+
+# Match power state to configuration
+/etc/scripts/cellmodem-power matchconfig
+echo "high" > /sys/class/gpio/gpio499/direction
+
+# The RJ45 LEDs have the wrong polarity, and
+# won't be corrected until their link is
+# brought up. This is a cosmetic early fix.
+for bus in /sys/bus/mdio_bus/devices/d0072004.mdio-mi:0?; do
+   echo 22 > $bus/pagereg
+   echo 3 > $bus/page
+   echo 4414 > $bus/17
+done
+
+# Tickle 88E1512 PHYs so that the incorrect LED drive state is corrected.
+# Some bootloaders left the LEDs with the wrong drive level.
+ip link set eth0 up
+ip link set eth0 down
+ip link set eth1 up
+ip link set eth1 down

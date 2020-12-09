@@ -8,7 +8,6 @@ ZIMAGE    = $(IMAGEDIR)/vmlinuz
 IMAGE     = $(IMAGEDIR)/image.bin
 
 SIGNING_ALG   = ecdsa
-SIGNING_EXTRA = -e
 
 SIGNED_GRUB   = bootx64.efi.signed
 

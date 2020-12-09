@@ -133,6 +133,26 @@ else
 	XBEE="-o XBEE1 -O XBEE2 -O XBEE3"
 fi
 
+# SIM LED
+##############################################################
+# When cellular is disabled, LED is off.
+# When cellular is enabled:
+#    Solid green:  SIM 1 is being used.
+#    Solid blue: SIM 2 is being used.
+#    Solid red: error reading SIM number.
+if [ "${CELL}" != "0" ]; then
+	SIM_NUM="$(sim)"
+	if [ "${SIM_NUM}" = "1" ]; then
+		SIM="-o SIM1 -O SIM2 -O SIM_FAIL"
+	elif [ "${SIM_NUM}" = "2" ]; then
+		SIM="-O SIM1 -o SIM2 -O SIM_FAIL"
+	else
+		SIM="-O SIM1 -O SIM2 -o SIM_FAIL"
+	fi
+else
+	SIM="-O SIM1 -O SIM2 -O SIM_FAIL"
+fi
+
 # The LED table of states based on all possible cellular/lan values
 ##############################################################
 LED00="-f COM -O ONLINE -f ETH" # flashing yellow
@@ -150,6 +170,6 @@ LED32="-O COM -o ONLINE -O ETH" # solid blue
 
 # Final LED command
 ##############################################################
-eval ledcmd $SIGNAL $ONLINE_LED $XBEE \$LED$CELL$LAN
+eval ledcmd $SIGNAL $ONLINE_LED $XBEE $SIM \$LED$CELL$LAN
 
 exit 0

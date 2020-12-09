@@ -1,0 +1,7 @@
+
+config USER_SETFSET_SETFSET
+	bool "setfset"
+	help
+	  OpenGear Console Server utility to write boot arguments to flash
+
+

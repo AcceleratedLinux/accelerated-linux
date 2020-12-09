@@ -1176,6 +1176,17 @@ printsub(char direction, unsigned char *pointer, int length)
 	    break;
 #endif
 
+#ifdef RFC2217
+	case TELOPT_COMPORT:
+	    sprintf(nfrontp, "COM-PORT");
+	    nfrontp += strlen(nfrontp);
+	    for (i = 1; i < length; i++) {
+		sprintf(nfrontp, " %d", pointer[i]);
+		nfrontp += strlen(nfrontp);
+	    }
+	    break;
+#endif
+
 	default:
 	    if (TELOPT_OK(pointer[0]))
 	        sprintf(nfrontp, "%s (unknown)", TELOPT(pointer[0]));

@@ -1,0 +1,5 @@
+dir_$(CONFIG_USER_RSYSLOG) += rsyslog
+
+#rsyslog needs libuuid
+rsyslog: util-linux
+

@@ -25,12 +25,13 @@ $(REGDB)_URL = https://mirrors.edge.kernel.org/pub/software/network/wireless-reg
 $(REGDB)_LICENSE = ISC
 
 $(REGDB)_MAKEVARS = PREFIX=/
+$(REGDB)_BUILDVARS = REGDB_AUTHOR=$(CONFIG_VENDOR)-$(CONFIG_PRODUCT)
 
-ifndef CONFIG_USER_CRDA_REGDB_UNRESTRICTED_WORLD
-# Don't rebuild. The downloaded regulatory.bin has been signed by the
-# wireless-regdb maintiner, Seth Forshee.
-$(REGDB)_BUILD = nop
+$(REGDB)_PATCHES =
+ifdef CONFIG_USER_CRDA_REGDB_UNRESTRICTED_WORLD
+$(REGDB)_PATCHES += wireless-regdb-2018.09.07-world-all-channels.patch
 endif
+$(REGDB)_PATCHES += wireless-regdb-2018.09.07-parallel-make.patch
 
 AUTOMAKE_y += $(REGDB)
 endif

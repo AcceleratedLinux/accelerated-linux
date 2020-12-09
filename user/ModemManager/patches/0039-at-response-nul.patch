@@ -1,0 +1,48 @@
+commit d757f8d2b38e1efcee0b52feebeb1b9cd01d6dd3
+Author: pchunt <peter.hunt@opengear.com>
+Date:   Wed Jul 19 15:46:27 2017 -0600
+
+    OG-4812 Undo erroneous '\0' interpretation in AT command responses
+
+Index: ModemManager/src/mm-port-serial.c
+===================================================================
+--- ModemManager.orig/src/mm-port-serial.c
++++ ModemManager/src/mm-port-serial.c
+@@ -947,7 +947,7 @@ common_input_available (MMPortSerial *se
+                         GIOCondition condition)
+ {
+     char buf[SERIAL_BUF_SIZE + 1];
+-    gsize bytes_read;
++    gsize bytes_read = 0, data_len = 0, i = 0, j = 0;
+     GIOStatus status = G_IO_STATUS_NORMAL;
+     CommandContext *ctx;
+     GError *error = NULL;
+@@ -986,6 +986,28 @@ common_input_available (MMPortSerial *se
+                 if (error)
+                     mm_obj_warn (self, "read error: %s", error->message);
+                 g_clear_error (&error);
++            } else {
++                /* convert NULs to "\\0" */
++                if (bytes_read > 0) {
++                    data_len = bytes_read;
++                    for (i = bytes_read - 1; i > 0; --i) {
++                        if (buf[i] == '\0') {
++                            /* Shuffle over by one to sub 2 char "\0" for '\0' */
++                            if (data_len + 1 < SERIAL_BUF_SIZE) {
++                                buf[data_len + 1] = '\0';
++                            }
++                            for (j = data_len; j >= i; --j) {
++                                if (j + 1 < SERIAL_BUF_SIZE) {
++                                    buf[j + 1] = buf[j];
++                                }
++                            }
++                            buf[i] = '\\';
++                            buf[i + 1] = '0';
++                            data_len++;
++                        }
++                    }
++                    bytes_read = data_len;
++                }
+             }
+         } else if (self->priv->socket) {
+             gssize sbytes_read;

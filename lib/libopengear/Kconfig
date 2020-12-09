@@ -1,0 +1,10 @@
+ 
+config LIB_LIBOPENGEAR
+	bool "Build libopengear"
+	default n
+	select LIB_JANSSON
+	select LIB_EXPAT
+	select LIB_SCEW
+	help
+	  Force libopengear to be built.
+

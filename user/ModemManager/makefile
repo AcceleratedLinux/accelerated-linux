@@ -1,11 +1,5 @@
-
-PKG        = ModemManager
-URL        = git://anongit.freedesktop.org/ModemManager/ModemManager
-METHOD     = git
-VERSION    = 98fa83a693c24002dc0087c4304ea1143b498d1f # master 2020-5-19
-#BUILDDIR  = ModemManager-1.2.0
-#URL       = http://cgit.freedesktop.org/ModemManager/ModemManager/snapshot/ModemManager-1.2.0.tar.gz
-CONFIGURE  = autogen.sh
+URL                               = https://www.freedesktop.org/software/ModemManager/ModemManager-1.14.0.tar.xz
+SHASUM_ModemManager-1.14.0.tar.xz = 2af06f619e716eeb75577f74a3e2c444d84d011d
 
 CFLAGS    += -Wno-error
 
@@ -23,6 +17,8 @@ else
 CONFOPTS   += --without-mbim
 endif
 MAKEVARS   = 
+
+AUTORECONF = NOCONFIGURE=true ./autogen.sh
 
 # the tool versions need to match the library, so don't use the host system tools
 $(shell mkdir -p build/bin; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.57.1-install/bin/gdbus-codegen build/bin/.; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.57.1-install/bin/glib-mkenums build/bin/.)

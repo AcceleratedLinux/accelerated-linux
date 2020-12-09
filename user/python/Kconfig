@@ -1,0 +1,14 @@
+
+config USER_PYTHON_HOST
+	bool "python-host"
+	help
+		Build python for the build system,  this is used for
+		building python and other python related services throughout
+		the build process.
+
+config USER_PYTHON
+	bool "python-target"
+	select USER_PYTHON_HOST
+	help
+		Build python for the target device,  requires a host build
+

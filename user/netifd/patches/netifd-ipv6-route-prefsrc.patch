@@ -1,0 +1,31 @@
+Install IPv6 routes with the source address as the preferred source (used
+to nominate a source address when generating packets destined for the route
+destination) rather than the route selector source (matches the source
+address).
+
+This change makes netifd's IPv6 route source attribute match the use of
+that same attribute with IPv4.
+
+--- a/system-linux.c.orig	2020-09-29 13:22:08.765771391 +1000
++++ b/system-linux.c	2020-09-29 13:22:47.509687789 +1000
+@@ -1522,7 +1522,7 @@
+ 	struct rtmsg rtm = {
+ 		.rtm_family = (alen == 4) ? AF_INET : AF_INET6,
+ 		.rtm_dst_len = route->mask,
+-		.rtm_src_len = route->sourcemask,
++		.rtm_src_len = (alen == 4) ? route->sourcemask : 0,
+ 		.rtm_table = (table < 256) ? table : RT_TABLE_UNSPEC,
+ 		.rtm_protocol = (route->flags & DEVADDR_KERNEL) ? RTPROT_KERNEL : RTPROT_STATIC,
+ 		.rtm_scope = RT_SCOPE_NOWHERE,
+@@ -1572,10 +1572,7 @@
+ 		nla_put(msg, RTA_DST, alen, &route->addr);
+ 
+ 	if (route->sourcemask) {
+-		if (rtm.rtm_family == AF_INET)
+-			nla_put(msg, RTA_PREFSRC, alen, &route->source);
+-		else
+-			nla_put(msg, RTA_SRC, alen, &route->source);
++		nla_put(msg, RTA_PREFSRC, alen, &route->source);
+ 	}
+ 
+ 	if (route->metric > 0)

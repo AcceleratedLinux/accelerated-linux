@@ -54,6 +54,17 @@ config LIB_IPTABLES
 	bool "Iptables libraries"
 	default n
 
+config LIB_LUA
+	bool "Lua libraries"
+	select LIB_READLINE
+	select LIB_NCURSES
+	default n
+
+config LIB_READLINE
+	bool "Readline library"
+	default n
+	select LIB_TERMCAP
+
 config LIB_LIBLZMA
 	bool "Build liblzma"
 	default n

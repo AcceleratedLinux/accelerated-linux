@@ -242,9 +242,14 @@
 		marvell,function = "gpo";
 	};
 
+	wdt_enable_pin: wdt-enable-pin {
+		marvell,pins = "mpp60";
+		marvell,function = "gpio";
+	};
+
 	wdt_tickle_pin: wdt-tickle-pin {	
 		marvell,pins = "mpp61";
-		marvell,function = "gpio";
+		marvell,function = "gpo";
 	};
 };
 

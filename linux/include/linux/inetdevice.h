@@ -119,6 +119,10 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 #define IN_DEV_NET_ROUTE_LOCALNET(in_dev, net)	\
 	IN_DEV_NET_ORCONF(in_dev, net, ROUTE_LOCALNET)
 
+#ifdef CONFIG_IP_DEF_RT_METRIC
+#define IN_DEV_DEF_RT_METRIC(in_dev)	IN_DEV_CONF_GET((in_dev), DEF_RT_METRIC)
+#endif
+
 #define IN_DEV_RX_REDIRECTS(in_dev) \
 	((IN_DEV_FORWARD(in_dev) && \
 	  IN_DEV_ANDCONF((in_dev), ACCEPT_REDIRECTS)) \

@@ -35,3 +35,7 @@ extern char imageVersion[MAX_VERSION_SIZE];
 
 extern int check_vendor(int endOffset, int *versionLength);
 extern void log_upgrade(char *devname);
+
+#ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+extern int check_vendor_from_squashfs(void);
+#endif

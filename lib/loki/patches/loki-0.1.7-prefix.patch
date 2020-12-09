@@ -1,0 +1,8 @@
+--- loki-0.1.7/Makefile.common.orig    2020-10-01 19:46:22.895253327 +1000
++++ loki-0.1.7/Makefile.common 2020-10-01 19:46:24.815266618 +1000
+@@ -4,4 +4,4 @@
+ CXXWARNFLAGS := -Wall -Wold-style-cast -Wundef -Wsign-compare -Wconversion -Wpointer-arith -pedantic
+ CXXFLAGS := $(CXXWARNFLAGS) -g -O2
+ 
+-prefix := /usr
++prefix ?= /usr

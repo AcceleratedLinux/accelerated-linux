@@ -1,0 +1,15 @@
+diff --git a/src/77-mm-usb-device-blacklist.rules b/src/77-mm-usb-device-blacklist.rules
+index 983fe43400..22adc47666 100644
+--- a/src/77-mm-usb-device-blacklist.rules
++++ b/src/77-mm-usb-device-blacklist.rules
+@@ -205,6 +205,10 @@ ATTRS{idVendor}=="04d8", ATTRS{idProduct}=="f012", ENV{ID_MM_TTY_BLACKLIST}="1"
+ # Pycom Pytrack
+ ATTRS{idVendor}=="04d8", ATTRS{idProduct}=="f013", ENV{ID_MM_TTY_BLACKLIST}="1"
+ 
++# Sierra Boothold
++ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9070", ENV{ID_MM_TTY_BLACKLIST}="1"
++ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9090", ENV{ID_MM_TTY_BLACKLIST}="1"
++
+ # All devices from Prusa Research
+ ATTRS{idVendor}=="2c99", ENV{ID_MM_TTY_BLACKLIST}="1"
+ 

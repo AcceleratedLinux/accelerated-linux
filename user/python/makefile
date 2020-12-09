@@ -26,12 +26,14 @@ ifdef CONFIG_USER_PYTHON_REMOVE_SOURCE
 COMMON_CONFOPTS += --disable-pyc-build
 endif
 
-PKG_y = Python-$(PYTHON_VERSION) Python-Host
+# if we are here we are build everything
+PKG_y += Python-$(PYTHON_VERSION)
+PKG_y += Python-Host
 
 Python-Host_FINALTARGET = extracted
 Python-Host_METHOD      = none
 
-ifneq ($(CONFIG_X86)$(CONFIG_MIPS),)
+ifneq ($(CONFIG_X86)$(CONFIG_MIPS)$(CONFIG_ARM64),)
 # HACK to fix module builds for now
 CFLAGS += -fPIC
 endif
@@ -59,6 +61,11 @@ Python-$(PYTHON_VERSION)_ROMFS = python_romfs
 CPPFLAGS += -I$(STAGEDIR)/include -I$(STAGEDIR)/usr/include
 LDFLAGS += -L$(STAGEDIR)/lib -L$(STAGEDIR)/usr/lib
 
+ifndef CONFIG_USER_PYTHON
+# nothing to be installed for python
+Python-$(PYTHON_VERSION)_FINALTARGET = autoconf
+endif
+
 include $(ROOTDIR)/tools/automake.inc
 
 # For python host we force install to Python-Hostinstall so it does not
@@ -85,6 +92,7 @@ build/Python-Host-build: build/Python-$(PYTHON_VERSION)-patched
 	touch $@
 
 python_romfs:
+ifdef CONFIG_USER_PYTHON
 	$(ROMFSINST) -s python$(PYTHON_VERSION_SHORT) /usr/bin/python
 	# Symlink dynamic library under '/lib' (otherwise uclibc dynamic loader does not find it)
 	if [ -f "$(ROMFSDIR)/usr/lib/libpython$(PYTHON_VERSION_SHORT)m.so.1.0" ]; then \
@@ -97,3 +105,4 @@ python_romfs:
 		find $(ROMFSDIR) -type f -name 'libpython*.a' -delete; \
 		find $(ROMFSDIR)/usr/include/python$(PYTHON_VERSION_SHORT)m -type f -not -name pyconfig.h -delete; \
 	fi
+endif

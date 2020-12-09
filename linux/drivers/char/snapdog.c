@@ -179,11 +179,15 @@
 
 #if defined(CONFIG_MACH_8300) || defined(CONFIG_MACH_6300CX) || \
     defined(CONFIG_MACH_6300LX) || defined(CONFIG_MACH_6330MX) || \
-    defined(CONFIG_MACH_6350SR) || defined(CONFIG_MACH_CM71xx)
+    defined(CONFIG_MACH_6350SR) || defined(CONFIG_MACH_CM71xx) || \
+    defined(CONFIG_MACH_ACM700x)
 	#include <asm/gpio.h>
 
 #ifdef CONFIG_MACH_CM71xx
 	#define GPIO_WATCHDOG   46
+#elif CONFIG_MACH_ACM700x
+	#define GPIO_WATCHDOG 61
+	#define GPIO_WATCHDOG_EN 60
 #else
 	#define GPIO_WATCHDOG	54
 #endif
@@ -193,6 +197,10 @@
 
 	static inline void enable_dog(void)
 	{
+#ifdef GPIO_WATCHDOG_EN
+		gpio_request(GPIO_WATCHDOG_EN, "Watchdog Enable");
+		gpio_direction_output(GPIO_WATCHDOG_EN, 1);
+#endif
 		gpio_request(GPIO_WATCHDOG, "Watchdog");
 		gpio_direction_output(GPIO_WATCHDOG, 1);
 		dog_initted = 1;
@@ -538,6 +546,58 @@
 	#define HAS_HW_SERVICE 1
 #endif
 
+#if defined(CONFIG_MACH_IM72xx)
+	#include <linux/io.h>
+	/*
+	 * We need to be able to start kicking the dog early in kernel
+	 * boot, so we setup the GPIO as soon as possble. We avoid using
+	 * the kernels own GPIO services - they are setup up too late
+	 * in the boot process.
+	 */
+	#define GPIO_WDT		7 /* Low bank GPIO7 */
+
+	static int wdt_state = 0;
+	static void *snapdog_regp;
+
+	static void poke_the_dog(void)
+	{
+		u32 v;
+
+		if (snapdog_regp) {
+			/* Toggle WDI value */
+			v = readl(snapdog_regp + 0x10100);
+			if (wdt_state++ & 0x1)
+				v &= ~(0x1 << GPIO_WDT);
+			else
+				v |= (0x1 << GPIO_WDT);
+			writel(v, snapdog_regp + 0x10100);
+		}
+	}
+
+	static int enable_dog(void)
+	{
+		u32 v;
+
+		if (snapdog_regp == NULL) {
+			snapdog_regp = ioremap(0xf1000000, 128*1024);
+
+			/* Set WDI GPIO as output */
+			v = readl(snapdog_regp + 0x10104);
+			v &= ~(0x1 << GPIO_WDT);
+			writel(v, snapdog_regp + 0x10104);
+
+			poke_the_dog();
+			poke_the_dog();
+		}
+		return 0;
+	}
+	static inline void the_dog_is_dead(void) {}
+
+	core_initcall(enable_dog);
+
+	#define HAS_HW_SERVICE 1
+#endif
+
 #if defined(CONFIG_DTB_MT7621_EX15)
 	#include <linux/io.h>
 	/*
@@ -616,6 +676,8 @@ static int           snapdog_use_long_timeout = 0;
 static int           snapdog_quiet = 0;
 static int           snapdog_warned = 0;
 static int           snapdog_stackdump = 64;
+static int           snapdog_reboot_requested = 0;
+
 
 module_param(snapdog_kernel, int, 0);
 MODULE_PARM_DESC(snapdog_kernel,
@@ -710,6 +772,9 @@ EXPORT_SYMBOL(snapdog_service);
 static inline void
 snapdog_user_service(void)
 {
+	if (snapdog_reboot_requested)
+		return;
+
 	snapdog_last = jiffies;
 	if (snapdog_use_long_timeout)
 		snapdog_next = snapdog_last + HZ * snapdog_ltimeout;
@@ -843,6 +908,23 @@ snapdog_ioctl(
 	}
 }
 
+static int
+snapdog_reboot(
+	struct notifier_block *n,
+	unsigned long code,
+	void *x)
+{
+	if (code == SYS_DOWN || SYS_HALT || SYS_POWER_OFF) {
+		snapdog_use_long_timeout = 0;
+		snapdog_service_required = 1;
+		snapdog_kernel = 0;
+		snapdog_user_service();
+		snapdog_reboot_requested = 1;
+	}
+
+	return NOTIFY_DONE;
+}
+
 /****************************************************************************/
 
 static struct file_operations snapdog_fops = {
@@ -858,6 +940,11 @@ static struct miscdevice snapdog_miscdev = {
 	.minor		= WATCHDOG_MINOR,
 	.name		= "watchdog",
 	.fops		= &snapdog_fops,
+};
+
+static struct notifier_block reboot = {
+	.notifier_call = snapdog_reboot,
+	.priority = INT_MAX, /* before any real devices */
 };
 
 /****************************************************************************/
@@ -876,6 +963,8 @@ watchdog_init(void)
 	if (ret)
 		return ret;
 
+	(void) register_reboot_notifier(&reboot);
+
 	printk(banner);
 
 	return 0;
@@ -887,6 +976,7 @@ static void __exit
 watchdog_exit(void)
 {
 	misc_deregister(&snapdog_miscdev);
+	unregister_reboot_notifier(&reboot);
 }
 
 /****************************************************************************/

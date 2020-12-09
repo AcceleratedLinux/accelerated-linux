@@ -1,0 +1,23 @@
+From: David McCullough <David.McCullough@digi.com>
+Date:   Wed Jul 15 15:20:44 2020 +1000
+Subject: allow builds without gtkdocize installed
+
+All the support was there but autogen.sh would fail,
+causing the build to fail, if doc building support
+was missing,  so only use gtkdocize if it is there.
+---
+ autogen.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/autogen.sh b/autogen.sh
+--- a/autogen.sh	2020-07-15 13:53:26.038304401 +1000
++++ b/autogen.sh	2020-07-15 13:53:29.614223518 +1000
+@@ -33,7 +33,7 @@
+ fi
+ 
+ aclocal --install || exit 1
+-gtkdocize --copy || exit 1
++[ -z "$GTKDOCIZE" ] || gtkdocize --copy || exit 1
+ autoreconf --verbose --force --install || exit 1
+ 
+ cd "$olddir"

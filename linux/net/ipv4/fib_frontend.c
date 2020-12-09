@@ -723,6 +723,10 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 	struct nlattr *attr;
 	int err, remaining;
 	struct rtmsg *rtm;
+#ifdef CONFIG_IP_DEF_RT_METRIC
+	struct net_device *dev = NULL;
+	struct in_device *in_dev = NULL;
+#endif
 
 	err = nlmsg_validate_deprecated(nlh, sizeof(*rtm), RTA_MAX,
 					rtm_ipv4_policy, extack);
@@ -826,6 +830,21 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 			       "Nexthop configuration can not contain both GATEWAY and VIA");
 		goto errout;
 	}
+
+#ifdef CONFIG_IP_DEF_RT_METRIC
+	/* Apply the default route metric of the out interface if needed */
+	if (cfg->fc_priority == 0 && cfg->fc_oif) {
+		dev = dev_get_by_index(net, cfg->fc_oif);
+		if (dev) {
+			in_dev = in_dev_get(dev);
+			if (in_dev) {
+				cfg->fc_priority = IN_DEV_DEF_RT_METRIC(in_dev);
+				in_dev_put(in_dev);
+			}
+			dev_put(dev);
+		}
+	}
+#endif
 
 	return 0;
 errout:
@@ -1079,6 +1098,15 @@ static void fib_magic(int cmd, int type, __be32 dst, int dst_len,
 		cfg.fc_scope = RT_SCOPE_LINK;
 	else
 		cfg.fc_scope = RT_SCOPE_HOST;
+
+#ifdef CONFIG_IP_DEF_RT_METRIC
+	/*
+	 * If the netlink message doesn't have the IFA_RT_PRIORITY attribute,
+	 * fall back on the interface's default route metric
+	 */
+	if (cfg.fc_priority == 0)
+		cfg.fc_priority = IN_DEV_DEF_RT_METRIC(ifa->ifa_dev);
+#endif
 
 	if (cmd == RTM_NEWROUTE)
 		fib_table_insert(net, tb, &cfg, NULL);

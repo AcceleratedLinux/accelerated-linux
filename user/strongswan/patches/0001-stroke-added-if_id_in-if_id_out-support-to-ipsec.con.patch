@@ -1,0 +1,191 @@
+From 6fae7b09375e499634a11bf44cbcff0da77d3041 Mon Sep 17 00:00:00 2001
+From: Samuel Brian <samuel.brian@digi.com>
+Date: Wed, 22 Jul 2020 09:11:07 +1000
+Subject: stroke: added if_id_in/if_id_out support to ipsec.conf
+
+stroke (and ipsec.conf) has been deprecated in favour of swanctl (and
+swanctl.conf) so is not receiving support for new features.
+We're not ready to make the move to swanctl but do want to use the new
+XFRM interface feature. So the required parameters have been added into
+ipsec.conf.
+---
+ src/libcharon/plugins/stroke/stroke_config.c |  2 +
+ src/starter/args.c                           |  3 ++
+ src/starter/cmp.c                            |  2 +
+ src/starter/confread.c                       | 51 ++++++++++++++++++++
+ src/starter/confread.h                       |  2 +
+ src/starter/keywords.h.in                    |  3 ++
+ src/starter/keywords.txt                     |  3 ++
+ src/starter/starterstroke.c                  |  2 +
+ src/stroke/stroke_msg.h                      |  2 +
+ 9 files changed, 70 insertions(+)
+
+diff --git a/src/libcharon/plugins/stroke/stroke_config.c b/src/libcharon/plugins/stroke/stroke_config.c
+index 175b6b549..0d746c269 100644
+--- a/src/libcharon/plugins/stroke/stroke_config.c
++++ b/src/libcharon/plugins/stroke/stroke_config.c
+@@ -1076,6 +1076,8 @@ static child_cfg_t *build_child_cfg(private_stroke_config_t *this,
+ 				.jitter = msg->add_conn.rekey.margin_packets * msg->add_conn.rekey.fuzz / 100
+ 			},
+ 		},
++		.if_id_in = msg->add_conn.if_id_in,
++		.if_id_out = msg->add_conn.if_id_out,
+ 		.mark_in = {
+ 			.value = msg->add_conn.mark_in.value,
+ 			.mask = msg->add_conn.mark_in.mask
+diff --git a/src/starter/args.c b/src/starter/args.c
+index a37ce6a3e..342e57961 100644
+--- a/src/starter/args.c
++++ b/src/starter/args.c
+@@ -175,6 +175,9 @@ static const token_info_t token_info[] =
+ 	{ ARG_STR,  offsetof(starter_conn_t, me_peerid), NULL                          },
+ 	{ ARG_UINT, offsetof(starter_conn_t, reqid), NULL                              },
+ 	{ ARG_UINT, offsetof(starter_conn_t, replay_window), NULL                      },
++	{ ARG_MISC, 0, NULL  /* KW_IF_ID */                                            },
++	{ ARG_MISC, 0, NULL  /* KW_IF_ID_IN */                                         },
++	{ ARG_MISC, 0, NULL  /* KW_IF_ID_OUT */                                        },
+ 	{ ARG_MISC, 0, NULL  /* KW_MARK */                                             },
+ 	{ ARG_MISC, 0, NULL  /* KW_MARK_IN */                                          },
+ 	{ ARG_MISC, 0, NULL  /* KW_MARK_OUT */                                         },
+diff --git a/src/starter/cmp.c b/src/starter/cmp.c
+index aee55d94c..b19f1451a 100644
+--- a/src/starter/cmp.c
++++ b/src/starter/cmp.c
+@@ -42,6 +42,8 @@ bool starter_cmp_conn(starter_conn_t *c1, starter_conn_t *c2)
+ 	VARCMP(mode);
+ 	VARCMP(proxy_mode);
+ 	VARCMP(options);
++	VARCMP(if_id_in);
++	VARCMP(if_id_out);
+ 	VARCMP(mark_in.value);
+ 	VARCMP(mark_in.mask);
+ 	VARCMP(mark_out.value);
+diff --git a/src/starter/confread.c b/src/starter/confread.c
+index 407ef5e13..ac530dc69 100644
+--- a/src/starter/confread.c
++++ b/src/starter/confread.c
+@@ -443,6 +443,57 @@ static void handle_keyword(kw_token_t token, starter_conn_t *conn, char *key,
+ 		case KW_COMPRESS:
+ 			KW_SA_OPTION_FLAG("yes", "no", SA_OPTION_COMPRESS)
+ 			break;
++		case KW_IF_ID:
++		{
++			char *endptr;
++			uint32_t v;
++
++			v = strtoul(value, &endptr, 10);
++			if (*endptr != '\0')
++			{
++				DBG1(DBG_APP, "# bad integer value: %s=%s", key, value);
++				cfg->err++;
++			}
++			else
++			{
++				conn->if_id_in = conn->if_id_out = v;
++			}
++			break;
++		}
++		case KW_IF_ID_IN:
++		{
++			char *endptr;
++			uint32_t v;
++
++			v = strtoul(value, &endptr, 10);
++			if (*endptr != '\0')
++			{
++				DBG1(DBG_APP, "# bad integer value: %s=%s", key, value);
++				cfg->err++;
++			}
++			else
++			{
++				conn->if_id_in = v;
++			}
++			break;
++		}
++		case KW_IF_ID_OUT:
++		{
++			char *endptr;
++			uint32_t v;
++
++			v = strtoul(value, &endptr, 10);
++			if (*endptr != '\0')
++			{
++				DBG1(DBG_APP, "# bad integer value: %s=%s", key, value);
++				cfg->err++;
++			}
++			else
++			{
++				conn->if_id_out = v;
++			}
++			break;
++		}
+ 		case KW_MARK:
+ 			if (!mark_from_string(value, MARK_OP_UNIQUE, &conn->mark_in))
+ 			{
+diff --git a/src/starter/confread.h b/src/starter/confread.h
+index 0c22481f0..825a12e19 100644
+--- a/src/starter/confread.h
++++ b/src/starter/confread.h
+@@ -141,6 +141,8 @@ struct starter_conn {
+ 		unsigned long   sa_keying_tries;
+ 		unsigned long   sa_rekey_fuzz;
+ 		uint32_t       reqid;
++		uint32_t       if_id_in;
++		uint32_t       if_id_out;
+ 		mark_t          mark_in;
+ 		mark_t          mark_out;
+ 		uint32_t       replay_window;
+diff --git a/src/starter/keywords.h.in b/src/starter/keywords.h.in
+index 60ec2723a..c0dbaff01 100644
+--- a/src/starter/keywords.h.in
++++ b/src/starter/keywords.h.in
+@@ -74,6 +74,9 @@ enum kw_token_t {
+ 	KW_ME_PEERID,
+ 	KW_REQID,
+ 	KW_REPLAY_WINDOW,
++	KW_IF_ID,
++	KW_IF_ID_IN,
++	KW_IF_ID_OUT,
+ 	KW_MARK,
+ 	KW_MARK_IN,
+ 	KW_MARK_OUT,
+diff --git a/src/starter/keywords.txt b/src/starter/keywords.txt
+index e696dce8e..3cf30ab4e 100644
+--- a/src/starter/keywords.txt
++++ b/src/starter/keywords.txt
+@@ -72,6 +72,9 @@ mediated_by,       KW_MEDIATED_BY
+ me_peerid,         KW_ME_PEERID
+ reqid,             KW_REQID
+ replay_window,     KW_REPLAY_WINDOW
++if_id,             KW_IF_ID
++if_id_in,          KW_IF_ID_IN
++if_id_out,         KW_IF_ID_OUT
+ mark,              KW_MARK
+ mark_in,           KW_MARK_IN
+ mark_out,          KW_MARK_OUT
+diff --git a/src/starter/starterstroke.c b/src/starter/starterstroke.c
+index 90ba1cd72..cf591796a 100644
+--- a/src/starter/starterstroke.c
++++ b/src/starter/starterstroke.c
+@@ -227,6 +227,8 @@ int starter_stroke_add_conn(starter_config_t *cfg, starter_conn_t *conn)
+ 	push_string(&msg, add_conn.ikeme.peerid, conn->me_peerid);
+ 	msg->add_conn.reqid = conn->reqid;
+ 	msg->add_conn.replay_window = conn->replay_window;
++	msg->add_conn.if_id_in = conn->if_id_in;
++	msg->add_conn.if_id_out = conn->if_id_out;
+ 	msg->add_conn.mark_in.value = conn->mark_in.value;
+ 	msg->add_conn.mark_in.mask = conn->mark_in.mask;
+ 	msg->add_conn.mark_out.value = conn->mark_out.value;
+diff --git a/src/stroke/stroke_msg.h b/src/stroke/stroke_msg.h
+index 08560d36f..862b3d7d9 100644
+--- a/src/stroke/stroke_msg.h
++++ b/src/stroke/stroke_msg.h
+@@ -296,6 +296,8 @@ struct stroke_msg_t {
+ 				char *mediated_by;
+ 				char *peerid;
+ 			} ikeme;
++			uint32_t if_id_in;
++			uint32_t if_id_out;
+ 			struct {
+ 				uint32_t value;
+ 				uint32_t mask;

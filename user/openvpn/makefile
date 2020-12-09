@@ -1,5 +1,5 @@
 
-VERSION = 2.4.4
+VERSION = 2.4.9
 URL = https://swupdate.openvpn.org/community/releases/openvpn-$(VERSION).tar.gz
 
 MAKEVARS = 

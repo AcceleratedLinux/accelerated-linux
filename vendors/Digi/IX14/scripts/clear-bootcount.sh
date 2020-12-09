@@ -23,7 +23,7 @@
 # Description: Clear the boot count attempts from the MCA NVRAM registers.
 #
 
-NVRAM_FILE="/sys/devices/soc0/soc/2100000.bus/21a0000.i2c/i2c-0/0-007e/nvram"
+NVRAM_FILE="/sys/devices/platform/soc/2100000.bus/21a0000.i2c/i2c-0/0-007e/nvram"
 
 if [ ! -f "${NVRAM_FILE}" ]; then
 	echo "Warning! Could not clear bootcount number, MCA NVRAM is not accessible"

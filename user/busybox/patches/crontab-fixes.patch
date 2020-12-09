@@ -1,0 +1,242 @@
+
+* Add new kconfig options to control where crontabs are stored.
+  User crontabs are stored in a file named
+
+    ${FEATURE_CRONTABS_DIR}/${FEATURE_CRONTAB_PREFIX}${username}
+
+* Make sure crontab clears out old user entries when loading new ones
+* Fix up the paths so that edited crontabs go in the right place
+
+Author: Ken Wilson <ken.wilson@opengear.com>
+Date:   Fri Aug 24 03:38:22 2012 +0000
+
+    #3661
+    AutoMerged
+    > Make sure crontab clears out old user entries when loading new ones
+
+Author: Ken Wilson <ken.wilson@opengear.com>
+Date:   Fri Aug 24 00:18:12 2012 +0000
+
+    #3660
+    AutoMerged
+    > Some stuff that I'd changed in cron was breaking crontab, which is required
+    > for failover checking
+
+Author: Ken Wilson <ken.wilson@opengear.com>
+Date:   Tue Aug 14 06:15:34 2012 +0000
+
+    #3640
+    AutoMerged
+    > Crontab has other options that should work too.
+
+Author: Ken Wilson <ken.wilson@opengear.com>
+Date:   Tue Aug 14 00:07:38 2012 +0000
+
+    #3640
+    AutoMerged
+    > Fix up a few issues with crontab -e
+    > -Merge back some FD fixes from later busybox versions.
+    > -Fix up the paths so that edited crontabs go in the right place
+
+Index: busybox-1.31.0/miscutils/crond.c
+===================================================================
+--- busybox-1.31.0.orig/miscutils/crond.c
++++ busybox-1.31.0/miscutils/crond.c
+@@ -57,6 +57,31 @@
+ //config:	depends on CROND || CRONTAB
+ //config:	help
+ //config:	Location of crond spool.
++//config:
++//config:config FEATURE_CRONTABS_DIR
++//config:	string "directory for user crontabs"
++//config:	default "/var/spool/cron/crontabs"
++//config:	depends on CROND || CRONTAB
++//config:	help
++//config:	Specifies the directory for holding user crontabs.
++//config:	If a relative path is specified, it will be relative to
++//config:	the crond spool directory.
++//config:
++//config:config FEATURE_CRONTAB_PREFIX
++//config:	string "filename prefix for user crontabs"
++//config:	default ""
++//config:	depends on CROND || CRONTAB
++//config:	help
++//config:	Compatibility prefix prepended to usernames for files in the
++//config:	crontabs directory.
++//config:
++//config:config FEATURE_CRONTAB_UPDATE_PATH
++//config:	string "communication file between crontab and crond"
++//config:	default "cron.update"
++//config:	depends on CROND || CRONTAB
++//config:	help
++//config:	Path to a file used by crontab to inform crond of changed
++//config:	crontabs. If not absolute, is opened relative to CROND_DIR.
+ 
+ //applet:IF_CROND(APPLET(crond, BB_DIR_USR_SBIN, BB_SUID_DROP))
+ 
+@@ -89,7 +114,7 @@
+ 
+ 
+ #define CRON_DIR        CONFIG_FEATURE_CROND_DIR
+-#define CRONTABS        CONFIG_FEATURE_CROND_DIR "/crontabs"
++#define CRONTABS        CONFIG_FEATURE_CRONTABS_DIR
+ #define CRON_REBOOT     CONFIG_PID_FILE_PATH "/crond.reboot"
+ #ifndef SENDMAIL
+ # define SENDMAIL       "sendmail"
+@@ -97,9 +122,7 @@
+ #ifndef SENDMAIL_ARGS
+ # define SENDMAIL_ARGS  "-ti"
+ #endif
+-#ifndef CRONUPDATE
+-# define CRONUPDATE     "cron.update"
+-#endif
++#define CRONUPDATE      CONFIG_FEATURE_CRONTAB_UPDATE_PATH
+ #ifndef MAXLINES
+ # define MAXLINES       256  /* max lines in non-root crontabs */
+ #endif
+@@ -421,10 +444,11 @@ static void load_crontab(const char *fil
+ 	char *mailTo = NULL;
+ #endif
+ 	char *shell = NULL;
++	const char *userName = fileName + strlen(CONFIG_FEATURE_CRONTAB_PREFIX);
+ 
+-	delete_cronfile(fileName);
++	delete_cronfile(userName);
+ 
+-	if (!getpwnam(fileName)) {
++	if (!getpwnam(userName)) {
+ 		log7("ignoring file '%s' (no such user)", fileName);
+ 		return;
+ 	}
+@@ -433,14 +457,14 @@ static void load_crontab(const char *fil
+ 	if (!parser)
+ 		return;
+ 
+-	maxLines = (strcmp(fileName, "root") == 0) ? 65535 : MAXLINES;
++	maxLines = (strcmp(userName, "root") == 0) ? 65535 : MAXLINES;
+ 
+ 	if (fstat(fileno(parser->fp), &sbuf) == 0 && sbuf.st_uid == DAEMON_UID) {
+ 		CronFile *file = xzalloc(sizeof(CronFile));
+ 		CronLine **pline;
+ 		int n;
+ 
+-		file->cf_username = xstrdup(fileName);
++		file->cf_username = xstrdup(userName);
+ 		pline = &file->cf_lines;
+ 
+ 		while (1) {
+@@ -623,12 +647,14 @@ static void rescan_crontab_dir(void)
+ 	{
+ 		DIR *dir = opendir(".");
+ 		struct dirent *den;
++		const char *prefix = CONFIG_FEATURE_CRONTAB_PREFIX;
+ 
+ 		/* xopendir exists, but "can't open '.'" is not informative */
+ 		if (!dir)
+ 			bb_error_msg_and_die("can't open '%s'", G.crontab_dir_name);
+ 		while ((den = readdir(dir)) != NULL) {
+-			if (strchr(den->d_name, '.') != NULL) {
++			if (strncmp(den->d_name, prefix, strlen(prefix)) != 0 ||
++			    strchr(den->d_name + strlen(prefix), '.') != NULL) {
+ 				continue;
+ 			}
+ 			load_crontab(den->d_name);
+Index: busybox-1.31.0/miscutils/crontab.c
+===================================================================
+--- busybox-1.31.0.orig/miscutils/crontab.c
++++ busybox-1.31.0/miscutils/crontab.c
+@@ -35,10 +35,8 @@
+ 
+ #include "libbb.h"
+ 
+-#define CRONTABS        CONFIG_FEATURE_CROND_DIR "/crontabs"
+-#ifndef CRONUPDATE
+-#define CRONUPDATE      "cron.update"
+-#endif
++#define CRONTABS        CONFIG_FEATURE_CRONTABS_DIR
++#define CRONUPDATE      CONFIG_FEATURE_CRONTAB_UPDATE_PATH
+ 
+ static void edit_file(const struct passwd *pas, const char *file)
+ {
+@@ -73,6 +71,7 @@ int crontab_main(int argc UNUSED_PARAM,
+ {
+ 	const struct passwd *pas;
+ 	const char *crontab_dir = CRONTABS;
++	char *crontab_fname;
+ 	char *tmp_fname;
+ 	char *new_fname;
+ 	char *user_name;  /* -u USER */
+@@ -137,45 +136,47 @@ int crontab_main(int argc UNUSED_PARAM,
+ 	xchdir(crontab_dir);
+ 
+ 	tmp_fname = NULL;
++	crontab_fname = xasprintf("%s%s", CONFIG_FEATURE_CRONTAB_PREFIX, pas->pw_name);
+ 
+ 	/* Handle requested operation */
+ 	switch (opt_ler) {
+ 
+ 	default: /* case OPT_r: Delete */
+-		unlink(pas->pw_name);
++		unlink(crontab_fname);
+ 		break;
+ 
+ 	case OPT_l: /* List */
+ 		{
+-			char *args[2] = { pas->pw_name, NULL };
++			char *args[2] = { crontab_fname, NULL };
+ 			return bb_cat(args);
+ 			/* list exits,
+ 			 * the rest go play with cron update file */
+ 		}
+ 
+ 	case OPT_e: /* Edit */
+-		tmp_fname = xasprintf("%s.%u", crontab_dir, (unsigned)getpid());
+ 		/* No O_EXCL: we don't want to be stuck if earlier crontabs
+ 		 * were killed, leaving stale temp file behind */
+-		src_fd = xopen3(tmp_fname, O_RDWR|O_CREAT|O_TRUNC, 0600);
++		tmp_fname = xasprintf("/tmp/crontab.XXXXXX");
++		src_fd = xmkstemp(tmp_fname);
+ 		fchown(src_fd, pas->pw_uid, pas->pw_gid);
+-		fd = open(pas->pw_name, O_RDONLY);
++		fd = open(crontab_fname, O_RDONLY);
+ 		if (fd >= 0) {
+ 			bb_copyfd_eof(fd, src_fd);
+ 			close(fd);
+-			xlseek(src_fd, 0, SEEK_SET);
+ 		}
+-		close_on_exec_on(src_fd); /* don't want editor to see this fd */
++		close(src_fd);
+ 		edit_file(pas, tmp_fname);
++		/* Re-open as editor may have created new file */
++		src_fd = open(tmp_fname, O_RDONLY);
+ 		/* fall through */
+ 
+ 	case 0: /* Replace (no -l, -e, or -r were given) */
+-		new_fname = xasprintf("%s.new", pas->pw_name);
++		new_fname = xasprintf("%s.new", crontab_fname);
+ 		fd = open(new_fname, O_WRONLY|O_CREAT|O_TRUNC|O_APPEND, 0600);
+ 		if (fd >= 0) {
+ 			bb_copyfd_eof(src_fd, fd);
+ 			close(fd);
+-			xrename(new_fname, pas->pw_name);
++			xrename(new_fname, crontab_fname);
+ 		} else {
+ 			bb_error_msg("can't create %s/%s",
+ 					crontab_dir, new_fname);
+@@ -185,6 +186,7 @@ int crontab_main(int argc UNUSED_PARAM,
+ 		/*free(tmp_fname);*/
+ 		/*free(new_fname);*/
+ 	} /* switch */
++	/*free(crontab_fname);*/
+ 
+ 	/* Bump notification file.  Handle window where crond picks file up
+ 	 * before we can write our entry out.
+@@ -192,7 +194,7 @@ int crontab_main(int argc UNUSED_PARAM,
+ 	while ((fd = open(CRONUPDATE, O_WRONLY|O_CREAT|O_APPEND, 0600)) >= 0) {
+ 		struct stat st;
+ 
+-		fdprintf(fd, "%s\n", pas->pw_name);
++		fdprintf(fd, "%s%s\n", CONFIG_FEATURE_CRONTAB_PREFIX, pas->pw_name);
+ 		if (fstat(fd, &st) != 0 || st.st_nlink != 0) {
+ 			/*close(fd);*/
+ 			break;

@@ -102,7 +102,7 @@ build/%-built: build/%-$(CONFIGTARGET)
 	@echo "Building $* ..."
 	$(AT)$(BUILDVARS) \
 	$($*_BUILDVARS) \
-		$(UCFRONT_ENV) $(MAKE) -C build/$($*_BUILDDIR) $($*_BUILD) $(MAKEVARS) $($*_MAKEVARS)
+		$(UCFRONT_ENV) $(MAKE) -j$(HOST_NCPU) -C build/$($*_BUILDDIR) $($*_BUILD) $(MAKEVARS) $($*_MAKEVARS)
 	$(AT)touch $@
 
 build/%-installed: build/%-$(BUILDTARGET)

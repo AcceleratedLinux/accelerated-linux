@@ -18,25 +18,16 @@ RELFILES = boot/boot.elf images/image.bin,.sgu $(LINUXDIR)/vmlinux
 
 ############################################################################
 
-CPUFLAGS      = -march=octeon -mabi=64 #-muclibc -melf32btsmipn32
-CPULDFLAGS    += -melf64btsmip
-CPU_CFLAGS    = -march=octeon -mabi=64 #-muclibc -melf32btsmipn32
-TARGETARCH    = mips64-linux
-CONFIGURE_HOST= mips64-linux
-ENDIAN        = big
+CPUFLAGS      = -march=octeon
+CPU_CFLAGS    = -march=octeon
 
-CROSS_COMPILE := mips64-linux-20160421-
-ifeq ($(shell which $(CROSS_COMPILE)gcc),)
-CROSS_COMPILE := mips64-linux-
-endif
-
-OCTEON_MODEL := OCTEON_CN52XX
+OCTEON_MODEL := OCTEON_CN50XX
 OCTEON_CPPFLAGS_GLOBAL_ADD :=
 export OCTEON_MODEL OCTEON_CPPFLAGS_GLOBAL_ADD
 
 ############################################################################
 
-include $(ROOTDIR)/vendors/config/mips/config.arch
+include $(ROOTDIR)/vendors/config/mips64/config.arch
 
 RELFILES += images/configs.tar.gz
 

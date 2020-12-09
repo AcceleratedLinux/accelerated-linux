@@ -1,0 +1,18 @@
+#!/bin/sh
+NO_RESET=0
+
+while getopts ":n" OPT; do
+	case $OPT in
+		"n") NO_RESET=1;;
+	esac
+done
+
+shift $[ $OPTIND - 1 ]
+SELECTED_SIM=$1
+
+if [ $NO_RESET -eq 1 ]; then
+	/bin/cellctl --sim=$SELECTED_SIM
+else
+	/bin/cellctl -r --sim=$SELECTED_SIM
+fi
+exit $?;

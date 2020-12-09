@@ -99,5 +99,76 @@ config USER_PYTHON_MODULES_HID
 	help
 		ctypes bindings for hidapi.
 
+config USER_PYTHON_MODULES_PYSOCKS
+	bool "PySocks"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		PySocks lets you send traffic through SOCKS proxy servers. It is
+		a modern fork of SocksiPy with bug fixes and extra features.
+
+config USER_PYTHON_MODULES_CHARDET
+	bool "chardet"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		The Universal Character Encoding Detector.
+
+config USER_PYTHON_MODULES_CERTIFI
+	bool "certifi"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		Python SSL Certificates. Certifi provides Mozilla's carefully
+		curated collection of Root Certificates for validating the
+		trustworthiness of SSL certificates while verifying the identity
+		of TLS hosts.
+
+config USER_PYTHON_MODULES_URLLIB3
+	bool "urllib3"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		urllib3 is a powerful, sanity-friendly HTTP client for Python.
+
+config USER_PYTHON_MODULES_IDNA
+	bool "idna"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		Support for the Internationalised Domain Names in Applications
+		(IDNA) protocol as specified in RFC 5891.
+
+config USER_PYTHON_MODULES_REQUESTS
+	bool "requests"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	select USER_PYTHON_MODULES_CHARDET
+	select USER_PYTHON_MODULES_CERTIFI
+	select USER_PYTHON_MODULES_URLLIB3
+	select USER_PYTHON_MODULES_IDNA
+	help
+		Requests is an elegant and simple HTTP library for Python.
+
+config USER_PYTHON_MODULES_REQUESTS_UNIXSOCKET
+	bool "requests-unixsocket"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		Use requests to talk HTTP via a UNIX domain socket.
+
+config USER_PYTHON_MODULES_JANUS
+	bool "janus"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	help
+		Thread-safe asyncio-aware queue for Python.
+
+config USER_PYTHON_MODULES_AZURE_IOT_DEVICE
+	bool "six"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	select USER_PYTHON_MODULES_SIX
+	select USER_PYTHON_MODULES_PYSOCKS
+	select USER_PYTHON_MODULES_REQUESTS
+	select USER_PYTHON_MODULES_REQUESTS_UNIXSOCKET
+	select USER_PYTHON_MODULES_JANUS
+	select USER_PYTHON_MODULES_PAHO_MQTT
+	select USER_PYTHON_MODULES_URLLIB3
+	help
+		The Azure IoTHub Service SDK for Python provides functionality
+		for communicating with the Azure IoT Hub.
+
 endmenu
 endif

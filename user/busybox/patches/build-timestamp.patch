@@ -1,0 +1,35 @@
+
+use BUILD_START_STRING timestamp
+
+Author: Matthew Smith <matthew.smith@opengear.com>
+Date:   Mon Apr 30 08:56:28 2018 +1000
+
+    OG-5080: Reproducible build changes for user/busybox
+
+    Change Makefile of user/busybox to modify the AUTOCONF_TIMESTAMP of
+    ./include/autoconf.h to be BUILDTIMESTAMP if it exists once
+    ./include/autoconf.h has been built.
+
+Author: Matthew Smith <matthew.smith@opengear.com>
+Date:   Wed May 9 11:59:37 2018 +1000
+
+    OG-5080: Reproducible builds: Use UTC timestamps.
+
+    For files that store the build time, use UTC so that the builds are
+    independent of the server's timezone.
+
+Index: busybox-1.31.0/Makefile
+===================================================================
+--- busybox-1.31.0.orig/Makefile
++++ busybox-1.31.0/Makefile
+@@ -524,6 +524,10 @@ include $(srctree)/Makefile.flags
+ # we execute the config step to be sure to catch updated Kconfig files
+ include/autoconf.h: .kconfig.d .config $(wildcard $(srctree)/*/*.c) $(wildcard $(srctree)/*/*/*.c) | gen_build_files
+ 	$(Q)$(MAKE) -f $(srctree)/Makefile silentoldconfig
++ifneq ($(BUILD_START_STRING),)
++	sed -i -e '/^#define AUTOCONF_TIMESTAMP / \
++	    s/".*"/"$(shell date -d "$(BUILD_START_STRING)" -u +'%Y-%m-%d %H:%M:%S %Z')"/' $@
++endif
+ 
+ include/usage.h: gen_build_files
+ 

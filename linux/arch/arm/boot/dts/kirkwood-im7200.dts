@@ -1,0 +1,209 @@
+/*
+ * Device Tree file for OpenGear IM7200
+ *
+ * Greg Ungerer <gregory.ungerer@digi.com>
+ *
+ * This file is licensed under the terms of the GNU General Public
+ * License version 2.  This program is licensed "as is" without any
+ * warranty of any kind, whether express or implied.
+ */
+
+/dts-v1/;
+
+#include "kirkwood.dtsi"
+#include "kirkwood-6282.dtsi"
+
+/ {
+	model = "OpenGear IM7200";
+	compatible = "opengear,im7200", "marvell,kirkwood-88f6282", "marvell,kirkwood";
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x10000000>;
+	};
+
+	chosen {
+		bootargs = "console=ttyS0,115200n8 earlyprintk";
+		/*stdout-path = &uart0;*/
+	};
+
+	ocp@f1000000 {
+		ehci@50000 {
+			status = "okay";
+		};
+
+		crypto@30000 {
+			status = "okay";
+		};
+
+		i2c@11000 {
+			status = "okay";
+
+			gpio2: tca6464@22 {
+				compatible = "ti,tca6424";
+				reg = <0x22>;
+				gpio-controller;
+				#gpio-cells = <2>;
+			};
+
+			gpio3: tca6464@23 {
+				compatible = "ti,tca6424";
+				reg = <0x23>;
+				gpio-controller;
+				#gpio-cells = <2>;
+			};
+		};
+
+		spi@10600 {
+			status = "okay";
+
+			flash@0 {
+				#address-cells = <1>;
+                                #size-cells = <1>;
+                                compatible = "jedec,spi-nor";
+                                reg = <0>;
+                                spi-max-frequency = <40000000>;
+                                mode = <0>;
+
+				u-boot@0 {
+					label = "u-boot";
+					reg = <0x0 0x40000>;
+				};
+
+				u-boot-env@40000 {
+					label = "u-boot config block";
+					reg = <0x40000 0x20000>;
+				};
+
+				config@600000 {
+					label = "config";
+					reg = <0x60000 0x200000>;
+				};
+
+				image1@2600000 {
+					label = "image #1";
+					reg = <0x260000 0x1400000>;
+				};
+
+				image2@16600000 {
+					label = "image #2";
+					reg = <0x1660000 0x1400000>;
+				};
+
+				all@0 {
+					label = "all";
+					reg = <0x0 0x0>;
+				};
+			};
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys-polled";
+		poll-interval = <100>;
+
+		gpio_key_1 {
+			label = "Keypad Back";
+			linux,code = <KEY_BACKSPACE>;
+			.desc = <&gpio2 0 GPIO_ACTIVE_LOW>;
+		};
+
+		gpio_key_2 {
+			label = "Keypad OK";
+			linux,code = <KEY_ENTER>;
+			.desc = <&gpio2 1 GPIO_ACTIVE_LOW>;
+		};
+
+		gpio_key_3 {
+			label = "Keypad Down";
+			linux,code = <KEY_DOWN>;
+			.desc = <&gpio2 2 GPIO_ACTIVE_LOW>;
+		};
+
+		gpio_key_4 {
+			label = "Keypad Up";
+			linux,code = <KEY_UP>;
+			.desc = <&gpio2 3 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	gpio-leds {
+		compatible = "gpio-leds";
+
+		power {
+			label = "power";
+			gpios = <&gpio2 8 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		heartbeat {
+			label = "heartbeat";
+			gpios = <&gpio2 9 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "heartbeat";
+			default-state = "on";
+		};
+
+		serial {
+			label = "serial";
+			gpios = <&gpio2 10 GPIO_ACTIVE_HIGH>;
+		};
+
+		network {
+			label = "network";
+			gpios = <&gpio2 11 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
+
+&pciec {
+	status = "okay";
+};
+
+&pcie0 {
+	status = "okay";
+};
+
+&pcie1 {
+	status = "okay";
+};
+
+&mdio {
+	status = "okay";
+
+	ethphy0: ethernet-phy@0 {
+		reg = <0>;
+	};
+
+	ethphy1: ethernet-phy@1 {
+		reg = <1>;
+	};
+};
+
+&eth0 {
+	status = "okay";
+
+	ethernet0-port@0 {
+		phy-handle = <&ethphy0>;
+	};
+};
+
+&eth1 {
+	status = "okay";
+
+	ethernet1-port@0 {
+		phy-handle = <&ethphy1>;
+	};
+};
+
+&pinctrl {
+	usb_a_enable_pin {
+		marvell,pins = "mpp18";
+		marvell.functions = "gpo";
+	};
+
+	usb_b_enable_pin {
+		marvell,pins = "mpp19";
+		marvell.functions = "gpo";
+	};
+};
+

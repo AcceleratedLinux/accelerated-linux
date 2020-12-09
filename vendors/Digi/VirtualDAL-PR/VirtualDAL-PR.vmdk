@@ -1,0 +1,12 @@
+# VirtualDAL-PR VMWare Disk descriptor file
+version=1
+CID=ffffffff
+parentCID=ffffffff
+createType="monolithicFlat"
+# Extent description
+RW 500000 FLAT "VirtualDAL-PR.img" 0
+ddb.virtualHWVersion = "4"
+ddb.adapterType = "lsilogic"
+ddb.geometry.cylinders = "15935"
+ddb.geometry.heads = "255"
+ddb.geometry.sectors = "63"

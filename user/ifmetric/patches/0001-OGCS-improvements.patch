@@ -1,0 +1,306 @@
+Index: ifmetric/build/ifmetric-0.3/src/ifmetric.c
+===================================================================
+--- a/src/ifmetric.c
++++ b/src/ifmetric.c
+@@ -7,6 +7,9 @@
+ #include <linux/if.h>
+ #include <stdlib.h>
+ #include <assert.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
+ 
+ #include "nlrequest.h"
+ #include "getifn.h"
+@@ -32,7 +35,7 @@ int enumerate_callback(struct nlmsghdr *
+ 
+     if (r->rtm_table != RT_TABLE_MAIN)
+         return 0;
+-    
++
+     while(RTA_OK(a, l)) {
+         switch(a->rta_type) {
+             case RTA_OIF:
+@@ -41,7 +44,7 @@ int enumerate_callback(struct nlmsghdr *
+                     fprintf(stderr, "NETLINK: Recieved corrupt RTA_OIF payload.\n");
+                     return -1;
+                 }
+-                
++
+                 if (*((int*) RTA_DATA(a)) == *ifn) {
+ 
+                     if (n_routes < MAX_ROUTES) {
+@@ -51,40 +54,38 @@ int enumerate_callback(struct nlmsghdr *
+                             fprintf(stderr, "Could not allocate memory.\n");
+                             return -1;
+                         }
+-                            
++
+                         memcpy(copy, n, n->nlmsg_len);
+                         routes[n_routes++] = copy;
+ 
+                     } else
+                         fprintf(stderr, "Found too many routes.\n");
+-                            
++
+                     break;
+                 }
+-
+-                
+         }
+-        
++
+         a = RTA_NEXT(a, l);
+     }
+ 
+     return 0;
+ }
+ 
+-int enumerate(int s, int ifn) {
++int enumerate(int s, int ifn, unsigned char family) {
+     struct {
+         struct nlmsghdr n;
+         struct rtmsg r;
+         char a[1024];
+     } req;
+-    
++
+     memset(&req, 0, sizeof(req));
+     req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+     req.n.nlmsg_flags = NLM_F_REQUEST|NLM_F_MATCH;
+     req.n.nlmsg_type = RTM_GETROUTE;
+-    
+-    req.r.rtm_family = AF_INET;
++
++    req.r.rtm_family = family;
+     req.r.rtm_table = RT_TABLE_MAIN;
+-    
++
+     return netlink_request(s, (struct nlmsghdr*) &req, enumerate_callback, &ifn);
+ }
+ 
+@@ -96,7 +97,7 @@ struct nlmsghdr* set_route_metric(struct
+     r = NLMSG_DATA(n);
+     l = NLMSG_PAYLOAD(n, sizeof(struct rtmsg));
+     a = RTM_RTA(r);
+-    
++
+     while(RTA_OK(a, l)) {
+         switch(a->rta_type) {
+             case RTA_PRIORITY:
+@@ -109,7 +110,7 @@ struct nlmsghdr* set_route_metric(struct
+                 *((int*) RTA_DATA(a)) = metric;
+                 return n;
+         }
+-        
++
+         a = RTA_NEXT(a, l);
+     }
+ 
+@@ -123,7 +124,7 @@ struct nlmsghdr* set_route_metric(struct
+ 
+ int delete_route(int s, struct nlmsghdr* n) {
+     assert(s >= 0 && n);
+-    
++
+     n->nlmsg_type = RTM_DELROUTE;
+     n->nlmsg_flags = NLM_F_REQUEST;
+ 
+@@ -132,73 +133,108 @@ int delete_route(int s, struct nlmsghdr*
+ 
+ int add_route(int s, struct nlmsghdr* n) {
+     assert(s >= 0 && n);
+-    
++
+     n->nlmsg_type = RTM_NEWROUTE;
++    /* MUST not use NLM_F_REPLACE or it will duplicate routes! */
+     n->nlmsg_flags = NLM_F_REQUEST|NLM_F_CREATE;
+ 
+     return netlink_request(s, n, NULL, NULL);
+ }
+ 
+ 
+-int go(char *iface, int metric) {
++int go(char *iface, int metric, unsigned char family) {
+     int r = -1, j;
+     int s = -1, ifn;
++    char buf[128], data[32];
++    snprintf(data, sizeof(data), "%d", metric);
+ 
+-    if ((s = netlink_open()) < 0)
++    if ((s = netlink_open(family)) < 0)
+         return -1;
+-    
++
+     if ((ifn = getifn(s, iface)) < 0)
+         goto finish;
+ 
+     n_routes = 0;
+-    if (enumerate(s, ifn) < 0)
++    if (enumerate(s, ifn, family) < 0)
+         goto finish;
+ 
+     if (n_routes) {
+         for (j = 0; j < n_routes; j++) {
+-             if (delete_route(s, routes[j]) >= 0)
+-                 if ((routes[j] = set_route_metric(routes[j], metric)))
++             if (delete_route(s, routes[j]) >= 0) {
++                 if ((routes[j] = set_route_metric(routes[j], metric))) {
+                      add_route(s, routes[j]);
+-            
++                 }
++             }
++
+             free(routes[j]);
+         }
+     }
+-    
++
++    /*
++     * Write into def_rt_metric will advise kernel to make use of it
++     * on RTM_NEWROUTE handler, will have unexpected effect on above
++     * delete-modify-add approach, so set it up at last here
++     */
++    if (family == AF_INET) {
++	snprintf(buf, sizeof(buf), "/proc/sys/net/ipv4/conf/%s/def_rt_metric", iface);
++	int fd = open(buf, O_WRONLY);
++	if (fd > 0) {
++		if (write(fd, data, strlen(data)) != strlen(data)) {
++			fprintf(stderr, "Failed to write %s\n", buf);
++		}
++		close(fd);
++	} else {
++		fprintf(stderr, "Failed to open %s\n", buf);
++	}
++    } else if (family == AF_INET6) {
++	snprintf(buf, sizeof(buf), "/proc/sys/net/ipv6/conf/%s/def_rt_metric", iface);
++	int fd = open(buf, O_WRONLY);
++	if (fd > 0) {
++		if (write(fd, data, strlen(data)) != strlen(data)) {
++			fprintf(stderr, "Failed to write %s\n", buf);
++		}
++		close(fd);
++	} else {
++		fprintf(stderr, "Failed to open %s\n", buf);
++	}
++    }
+     r = 0;
+-    
++
+ finish:
+-    
++
+     if (s >= 0)
+         close(s);
+-    
++
+     return r;
+ }
+ 
+ int main(int argc, char *argv[]) {
+     char *iface;
+     int metric;
++    unsigned char family;
+ 
+     if (argc <= 1 || (argc > 1 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")))) {
+         char *b;
+-        
++
+         if ((b = strrchr(argv[0], '/')))
+             b++;
+         else
+             b = argv[0];
+-        
++
+         printf("Usage: %s <iface> [metric]\n"
+                "\n"
+                "%s is a tool for setting the metrics of all IPv4 routes\n"
+                "attached to a given network interface at once.\n"
+                "\n"
+                "   <iface>    The interface\n"
+-               "   <metric>   The new metric (default: 0)\n", b, b);
++               "   <metric>   The new metric (default: 0)\n"
++               "   <family>   The family 4 or 6 (default: 4)\n", b, b);
+         return 0;
+     }
+-    
++
+     iface = argv[1];
+     metric = argc > 2 ? atoi(argv[2]) : 0;
++    family = argc > 3 ? (!strcmp(argv[3], "6") ? AF_INET6 : AF_INET) : AF_INET;
+ 
+-    return go(iface, metric) < 0 ? 1 : 0;
+-
++    return go(iface, metric, family) < 0 ? 1 : 0;
+ }
+Index: ifmetric/build/ifmetric-0.3/src/nlrequest.c
+===================================================================
+--- a/src/nlrequest.c
++++ b/src/nlrequest.c
+@@ -6,7 +6,7 @@
+ 
+ #include "nlrequest.h"
+ 
+-int netlink_open(void) {
++int netlink_open(int family) {
+     struct sockaddr_nl addr;
+     int s;
+     
+@@ -17,7 +17,8 @@ int netlink_open(void) {
+ 
+     memset(&addr, 0, sizeof(addr));
+     addr.nl_family = AF_NETLINK;
+-    addr.nl_groups = 0;
++    addr.nl_groups = (family == AF_INET) ? RTMGRP_IPV4_ROUTE : RTMGRP_IPV6_ROUTE;
++    addr.nl_groups |= RTMGRP_LINK;
+     addr.nl_pid = getpid();
+ 
+     if (bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+@@ -44,7 +45,7 @@ int netlink_request(int s, struct nlmsgh
+ 
+     for (;;) {
+         int bytes;
+-        char replybuf[2048];
++        char replybuf[8192];
+         struct nlmsghdr *p = (struct nlmsghdr *) replybuf;
+         
+         if ((bytes = recv(s, &replybuf, sizeof(replybuf), 0)) < 0) {
+@@ -66,11 +67,20 @@ int netlink_request(int s, struct nlmsgh
+             if (p->nlmsg_type == NLMSG_ERROR) {
+                 struct nlmsgerr *e = (struct nlmsgerr *) NLMSG_DATA (p);
+ 
+-                if (e->error) {
+-                    fprintf(stderr, "NETLINK: Error: %s\n", strerror(-e->error));
+-                    return -1;
+-                } else
+-                    return 0;
++		errno = -e->error;
++		if ((e->msg.nlmsg_type == RTM_NEWROUTE && errno == EEXIST) ||
++			(e->msg.nlmsg_type == RTM_DELROUTE && errno == ESRCH)) {
++			return 0;
++		} else if (errno){
++			fprintf(stderr, "NETLINK: Error: %s for nlmsg type %d"
++					" flags 0x%x\n",
++					strerror(errno),
++					e->msg.nlmsg_type,
++					e->msg.nlmsg_flags);
++			return -1;
++		} else {
++			return 0;
++		}
+             }
+ 
+             if (p->nlmsg_pid != pid)
+Index: ifmetric/build/ifmetric-0.3/src/nlrequest.h
+===================================================================
+--- a/src/nlrequest.h
++++ b/src/nlrequest.h
+@@ -13,7 +13,7 @@ int netlink_request(int s, struct nlmsgh
+ int addattr32(struct nlmsghdr *n, int maxlen, int type, int data);
+ int addattr_l(struct nlmsghdr *n, int maxlen, int type, void *data, int alen);
+ 
+-int netlink_open(void);
++int netlink_open(int family);
+     
+ 
+ #endif

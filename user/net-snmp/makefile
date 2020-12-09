@@ -8,6 +8,10 @@ NET_SNMP_CFG = --prefix=$(STAGEDIR) --disable-debugging
 
 NET_SNMP_CFG += --disable-embedded-perl
 
+ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
+NET_SNMP_CFG += --sysconfdir=/etc/config
+endif
+
 ifdef CONFIG_CPU_BIG_ENDIAN
 NET_SNMP_CFG += --with-endianness=big
 else
@@ -64,6 +68,7 @@ ifndef CONFIG_IPV6
 $(error CONFIG_IPV6 not defined)
 else
 NET_SNMP_CFG += --enable-ipv6
+CONFVARS += ac_cv_have_struct_sockaddr_in6_sin6_addr=yes
 endif
 endif
 
@@ -86,6 +91,7 @@ NET_SNMP_CFG += --with-sys-location=$(CONFIG_USER_NETSNMP_DEFSYSLOCATION)
 NET_SNMP_CFG += --with-logfile=$(CONFIG_USER_NETSNMP_DEFLOGFILE)
 NET_SNMP_CFG += --with-persistent-directory=$(CONFIG_USER_NETSNMP_DEFPERSISDIR)
 NET_SNMP_CFG += --with-enterprise-oid=$(CONFIG_USER_NETSNMP_DEFENTERPRISEOID)
+NET_SNMP_CFG += --with-enterprise-sysoid=$(CONFIG_USER_NETSNMP_DEFENTERPRISESYSOID)
 else
 NET_SNMP_CFG += --with-defaults
 endif
@@ -119,10 +125,10 @@ endif
 	( \
 		cd build; \
 		CC="$(CC) $(CFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="$(LDLIBS)" \
-			sh ../source/configure $(CONFIGURE_OPTS) $(NET_SNMP_CFG) $(NET_SNMP_CFG_EXTRA); \
+			$(CONFVARS) sh ../source/configure $(CONFIGURE_OPTS) $(NET_SNMP_CFG) $(NET_SNMP_CFG_EXTRA); \
 		if [ $$? -ne 0 ]; then \
 			CC="$(CC) $(CFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="$(LDLIBS)" \
-				sh ../source/configure $(CONFIGURE_OPTS) $(NET_SNMP_CFG); \
+				$(CONFVARS) sh ../source/configure $(CONFIGURE_OPTS) $(NET_SNMP_CFG); \
 		fi; \
 	)
 
@@ -189,6 +195,41 @@ ifdef CONFIG_USER_NETSNMP_APPS_WALK
 endif
 ifdef CONFIG_USER_NETSNMP_APPS_NETSTAT
 	$(ROMFSINST) build/apps/snmpnetstat/${NET_SNMP_EXE_DIR}snmpnetstat /bin/snmpnetstat
+endif
+ifdef CONFIG_USER_NETSNMP_INSTALL_CORE_MIBS
+	$(ROMFSINST) -d mibs/stripped/SNMPv2-TC /etc/snmp/mibs/SNMPv2-TC
+	$(ROMFSINST) mibs/stripped/SNMPv2-SMI /etc/snmp/mibs/SNMPv2-SMI
+	$(ROMFSINST) mibs/stripped/SNMPv2-MIB /etc/snmp/mibs/SNMPv2-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-TARGET-MIB /etc/snmp/mibs/SNMP-TARGET-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-VIEW-BASED-ACM-MIB /etc/snmp/mibs/SNMP-VIEW-BASED-ACM-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-COMMUNITY-MIB /etc/snmp/mibs/SNMP-COMMUNITY-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-FRAMEWORK-MIB /etc/snmp/mibs/SNMP-FRAMEWORK-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-MPD-MIB /etc/snmp/mibs/SNMP-MPD-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-PROXY-MIB /etc/snmp/mibs/SNMP-PROXY-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-USER-BASED-SM-MIB /etc/snmp/mibs/SNMP-USER-BASED-SM-MIB
+	$(ROMFSINST) mibs/stripped/RFC1155-SMI /etc/snmp/mibs/RFC1155-SMI
+	$(ROMFSINST) mibs/stripped/RFC1213-MIB /etc/snmp/mibs/RFC1213-MIB
+	$(ROMFSINST) mibs/stripped/RFC-1215 /etc/snmp/mibs/RFC-1215
+	$(ROMFSINST) mibs/stripped/IF-MIB /etc/snmp/mibs/IF-MIB
+	$(ROMFSINST) mibs/stripped/IP-MIB /etc/snmp/mibs/IP-MIB
+	$(ROMFSINST) mibs/stripped/IPV6-ICMP-MIB /etc/snmp/mibs/IPV6-ICMP-MIB
+	$(ROMFSINST) mibs/stripped/IPV6-MIB /etc/snmp/mibs/IPV6-MIB
+	$(ROMFSINST) mibs/stripped/IPV6-TCP-MIB /etc/snmp/mibs/IPV6-TCP-MIB
+	$(ROMFSINST) mibs/stripped/IPV6-UDP-MIB /etc/snmp/mibs/IPV6-UDP-MIB
+	$(ROMFSINST) mibs/stripped/IPV6-TC /etc/snmp/mibs/IPV6-TC
+	$(ROMFSINST) mibs/stripped/INET-ADDRESS-MIB /etc/snmp/mibs/INET-ADDRESS-MIB
+	$(ROMFSINST) mibs/stripped/IANAifType-MIB /etc/snmp/mibs/IANAifType-MIB
+	$(ROMFSINST) mibs/stripped/HOST-RESOURCES-MIB /etc/snmp/mibs/HOST-RESOURCES-MIB
+	$(ROMFSINST) mibs/stripped/HOST-RESOURCES-TYPES /etc/snmp/mibs/HOST-RESOURCES-TYPES
+	$(ROMFSINST) mibs/stripped/DISMAN-EVENT-MIB /etc/snmp/mibs/DISMAN-EVENT-MIB
+	$(ROMFSINST) mibs/stripped/SNMP-NOTIFICATION-MIB /etc/snmp/mibs/SNMP-NOTIFICATION-MIB
+	$(ROMFSINST) mibs/stripped/SNMPv2-TM /etc/snmp/mibs/SNMPv2-TM
+	$(ROMFSINST) mibs/stripped/UCD-SNMP-MIB /etc/snmp/mibs/UCD-SNMP-MIB
+	$(ROMFSINST) mibs/stripped/UCD-DEMO-MIB /etc/snmp/mibs/UCD-DEMO-MIB
+	$(ROMFSINST) mibs/stripped/UCD-DLMOD-MIB /etc/snmp/mibs/UCD-DLMOD-MIB
+	$(ROMFSINST) mibs/stripped/NET-SNMP-MIB /etc/snmp/mibs/NET-SNMP-MIB
+	$(ROMFSINST) mibs/stripped/NET-SNMP-AGENT-MIB /etc/snmp/mibs/NET-SNMP-AGENT-MIB
+	$(ROMFSINST) mibs/stripped/NET-SNMP-EXTEND-MIB /etc/snmp/mibs/NET-SNMP-EXTEND-MIB
 endif
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_ETC_CONFIG -s config /etc/snmp
 

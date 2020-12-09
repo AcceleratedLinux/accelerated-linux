@@ -11,7 +11,7 @@
 # ./bjam install toolset=gcc-arm --prefix=/usr/local/boost
 #
 
-URL := http://downloads.sourceforge.net/project/boost/boost/1.73.0/boost_1_73_0.tar.bz2
+URL := https://sourceforge.net/projects/boost/files/boost/1.73.0/boost_1_73_0.tar.bz2
 
 AUTORECONF = CC="$(HOSTCC)" CXX="$(HOSTCXX)" CXXFLAGS= \
 	     CPUFLAGS= CFLAGS= LIBS= LDFLAGS= \

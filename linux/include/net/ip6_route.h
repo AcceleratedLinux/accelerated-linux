@@ -118,12 +118,13 @@ void ip6_route_init_special_entries(void);
 int ip6_route_init(void);
 void ip6_route_cleanup(void);
 
-int ipv6_route_ioctl(struct net *net, unsigned int cmd, void __user *arg);
+int ipv6_route_ioctl(struct net *net, unsigned int cmd,
+		struct in6_rtmsg *rtmsg);
 
 int ip6_route_add(struct fib6_config *cfg, gfp_t gfp_flags,
 		  struct netlink_ext_ack *extack);
 int ip6_ins_rt(struct net *net, struct fib6_info *f6i);
-int ip6_del_rt(struct net *net, struct fib6_info *f6i);
+int ip6_del_rt(struct net *net, struct fib6_info *f6i, bool skip_notify);
 
 void rt6_flush_exceptions(struct fib6_info *f6i);
 void rt6_age_exceptions(struct fib6_info *f6i, struct fib6_gc_args *gc_args,
@@ -335,4 +336,19 @@ u32 ip6_mtu_from_fib6(const struct fib6_result *res,
 struct neighbour *ip6_neigh_lookup(const struct in6_addr *gw,
 				   struct net_device *dev, struct sk_buff *skb,
 				   const void *daddr);
+
+#ifdef CONFIG_IP_DEF_RT_METRIC
+static inline void rt6_get_dev_dflt_metric(struct net_device *dev, struct fib6_config *cfg)
+{
+	struct inet6_dev *idev = NULL;
+
+	idev = in6_dev_get(dev);
+	if (idev) {
+		if (idev->cnf.def_rt_metric)
+			cfg->fc_metric = idev->cnf.def_rt_metric;
+		in6_dev_put(idev);
+	}
+}
+#endif
+
 #endif

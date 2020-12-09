@@ -35,13 +35,31 @@ case "$1" in
 	exit 0
 	;;
 1|2)
-	/bin/modem idx=$idx softsim $1 2>/dev/null || exit 1
-	echo "$1" > "$sim_file"	
-	;;
+
+	model="$(/bin/modem idx=$idx model)" || exit 1
+
+	case "$model" in
+		EM919* | EM7690)
+			/bin/sim_tx64 -w ${wwan} $1 || exit 1
+			;;
+		*)
+			/bin/modem idx=$idx softsim $1 2>/dev/null || exit 1
+			;;
+	esac
+	echo "$1" > "$sim_file"
+    ;;
 '')
 	expected="$(cat "$sim_file" 2>/dev/null)"
 	#expected="${expected:-1}"
-	current="$(/bin/modem idx=$idx softsim 2>/dev/null || echo "$expected")"
+	model="$(/bin/modem idx=$idx model)" || exit 1
+	case "$model" in
+		EM919* | EM7690)
+			current="$(/bin/sim_tx64 -w ${wwan} 2>/dev/null || echo "$expected")"
+			;;
+		*)
+			current="$(/bin/modem idx=$idx softsim 2>/dev/null || echo "$expected")"
+			;;
+	esac
 	echo "$current"
 	;;
 *)

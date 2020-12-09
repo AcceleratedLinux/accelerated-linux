@@ -20,6 +20,10 @@
 		serial2 = &uartlite2;
 	};
 
+	chosen {
+		stdout-path = "serial1:115200";
+	};
+
 	leds {
 		compatible = "gpio-leds";
 

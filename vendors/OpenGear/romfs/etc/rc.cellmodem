@@ -1,0 +1,327 @@
+#!/bin/sh
+# This script has two modes
+# ACTION=boot is called from /etc/rc at boot (before udev is started)
+# ACTION=add is delay-triggered from udev-cellmodem when a potential cellmodem is detected
+#            and should only be called when DEVTYPE=usb_device.
+#            Note: This script will only be called once via udev. See scripts/udev-cellmodem
+
+set -xv +e
+
+if [ "$ACTION" = boot ]; then
+	# Setup modem directory
+	rm -rf /var/run/.modem/cellmodem*
+
+	modprobe usbserial
+
+	# Remove the services we used to keep in the main inittab
+	# which was where rc.cellmodem used to put them.
+	# Now edinittab puts them in /var/run/inittab
+	# TODO: move this to migrate
+	edinittab -n -f /etc/config/inittab del 'cellctld'
+	edinittab    -f /etc/config/inittab del 'ledmon'
+
+	exit 0
+fi
+
+# Check to see if cellmodem power is configured as disabled ie powered down.
+# If that is the case we do not need to run cellctld and ModemManager, so exit immediatley.
+#
+# It can happen that the modem is powered down during device startup but before udev
+# has detected it as active, this covers such case.
+if [ -e /etc/config/cellmodem.conf ]; then
+	. /etc/config/cellmodem.conf
+	if [ "$CELLMODEM_DISABLE" ]; then
+		exit 0;
+	fi
+fi
+
+# ignore non-USB invocations
+if [ "$DEVTYPE" != usb_device ]; then
+	exit 0
+fi
+
+# get MODEL as lowercase device string
+MODEL=$(tr A-Z a-z </etc/version | sed -e 's, .*,,;s,.*/,,')
+
+read Vendor       </sys$DEVPATH/idVendor
+read ProdID       </sys$DEVPATH/idProduct
+read Manufacturer </sys$DEVPATH/manufacturer
+read Product      </sys$DEVPATH/product
+# for debug
+: Vendor="$Vendor" ProdID="$ProdID"
+: Manufacturer="$Manufacturer" Product="$Product"
+
+rescan_ttys () {
+	# Find all the tty-like interfaces on this USB device
+	# and assign their /dev/ttyUSB* paths to $ttyUSB[0] $ttyUSB[1] etc.
+	# This has to be called after modprobe.
+
+	local intf devname array
+	ttyUSB=()
+	ttyACM=()
+
+	# The *.?/*.?? is to get numerical sorting of interfaces.
+	for intf in /sys$DEVPATH/*:*.?/tty* /sys$DEVPATH/*:*.??/tty*; do
+	    [ -d "$intf" ] || continue
+	    devname=${intf##*/}
+	    array=${devname%[0-9]*}
+	    eval "$array[\${#$array[*]}]=/dev/$devname"
+	done
+
+	# Pad entries so we can keep the 'ln' commands simple
+	while [ ${#ttyUSB[*]} -lt 6 ]; do ttyUSB[${#ttyUSB[*]}]=/missing/${#ttyUSB[*]}; done
+	while [ ${#ttyACM[*]} -lt 6 ]; do ttyACM[${#ttyACM[*]}]=/missing/${#ttyACM[*]}; done
+
+	# debug:
+	: "ttyUSB[*]=(${ttyUSB[*]})"
+	: "ttyACM[*]=(${ttyACM[*]})"
+}
+
+ln_tty () { # cf.fn /dev/newfile
+	# creates the symlink /dev/newfile if the given
+	# interface has a tty driver.
+	set -- $2 /sys$DEVPATH/*:$1/tty*
+	[ -d $2 ] && ln -sf /dev/${2##*/} $1
+}
+
+CELLMODEM=0
+DBUS=0
+
+if [ -x /sbin/ModemManager ]; then
+
+	# Initialise Modem Manager cellmodem
+	PROBE_COUNT=0
+	PROBE_MAX=12
+
+	if [[ $Manufacturer == "Sierra Wireless"* ]]; then
+
+		modprobe option      # for USB modems with mystery TTYs
+		modprobe cdc_ether   # for USB modems that do USBECM
+		rescan_ttys
+		> /var/run/.modem/cellmodem_is_mm_ether
+		> /var/run/.modem/cellmodem_is_lte
+		> /var/run/.modem/cellmodem_is_internal
+
+		if [[ $ProdID == 68a2 ]]; then
+			# MC77x0 (MDM9200/MDM9600 UMTS) in QMI mode
+			# (Ref: AirCard/AirPrime USB Driver Developer's Guide)
+			#   1.0 DM    (Qualcomm diag)
+			#   1.2 NMEA
+			#   1.3 AT    (Modem port with AT commands)
+			#   1.8 NET   (QMI network interface)
+			ln_tty 1.0 /dev/cellmodem01
+			ln_tty 1.2 /dev/cellnmea01 &&
+				> /var/run/.modem/cellmodem_has_gps
+			ln_tty 1.3 /dev/cellcommand01
+		elif [[ $ProdID == 68c0 ]]; then
+			# MC73xx in QMI mode
+			# (Ref: AirPrime MC73xx USB Driver Developer's Guide)
+			#   1.0 DIAG   (fw download, logs) [ttyUSB0]
+			#   1.2 NMEA   (GNSS sentences)    [ttyUSB1]
+			#   1.3 MODEM  (AT port)           [ttyUSB2]
+			#   1.4 AT     (control and status)
+			#   1.8 RMNET1
+			#  1.10 RMNET2
+			#  1.11 RMNET3
+			#  1.16 AUDIO
+			#  1.17 AUDIO
+			#  1.18 AUDIO
+			ln_tty 1.3 /dev/cellmodem01
+			ln_tty 1.2 /dev/cellnmea01 &&
+				> /var/run/.modem/cellmodem_has_gps
+			ln_tty 1.3 /dev/cellcommand01
+		elif [[ $ProdID == 9071 ]]; then
+			# MC74xx in QMI mode
+			ln_tty 1.3 /dev/cellmodem01
+			ln_tty 1.2 /dev/cellnmea01 &&
+				> /var/run/.modem/cellmodem_has_gps
+			ln_tty 1.3 /dev/cellcommand01
+		elif [[ $ProdID == 9091 ]]; then
+			#  EM7565 in QMI mode
+			ln_tty 1.3 /dev/cellmodem01
+			ln_tty 1.2 /dev/cellnmea01 &&
+				> /var/run/.modem/cellmodem_has_gps
+			ln_tty 1.3 /dev/cellcommand01
+		fi
+
+
+		# Note: MC7430's Product string is "Sierra Wireless MC7455 Qualcomm® Snapdragon™ X7 LTE-A"
+		# so we can't rely on it but can use vendor ID and product ID
+		if [[ $Product == *MC7354* ]] ||
+		   [[ $Product == *MC7304* ]] ||
+		   [[ $Vendor == 1199 && $ProdID == 9071 ]]  # MC7430
+		then
+			> /var/run/.modem/cellmodem_is_multicarrier
+			# Set cellmodem firmware directory, if not present
+			cellfwdir=`/bin/config -g config.cellmodem.firmware.directory | cut -d' ' -f 2`
+			if [ -z "$cellfwdir" ]; then
+				case $MODEL in
+				im72xx | les17xxa)
+					cellfwdir=/var/mnt/storage.usb/cellfw
+					;;
+				acm700x | les160xa | acm7004-5 | b093)
+					cellfwdir=/var/mnt/storage.nvlog/cellfw
+					;;
+				esac
+				config -s config.cellmodem.firmware.directory="$cellfwdir" -r storage
+			fi
+		elif [[ $Product == *MC7750* ]]; then
+			# MC7750 is CDMA/3GPP2 only.
+			# ModemManager needs this to know what format Rx SMS will be.
+			> /var/run/.modem/cellmodem_is_cdma_gobi
+			> /var/run/.modem/cellmodem_is_profile_ro
+		elif  [[ $Product == *EM7565* ]]; then
+			> /var/run/.modem/cellmodem_is_multicarrier
+			> /var/run/.modem/cellmodem_disable_updates
+			> /var/run/.modem/cellmodem_change_sim_by_at
+			> /var/run/.modem/cellmodem_change_carrier_by_sim
+		fi
+
+		echo "$Product" > /var/run/.modem/cellmodem_product
+
+		# Force update of preferred info and prl version
+		rm -f /var/run/.modem/.cellmodem_fw_pref
+		rm -f /var/run/.modem/.cellmodem_prl_ver
+
+		DBUS=1
+		CELLMODEM=1
+	elif [[ $Manufacturer == "HUAWEI Technology"* ]]; then
+		modprobe option      # for USB modems with mystery TTYs
+		modprobe cdc_ether   # for USB modems that do USBECM
+		rescan_ttys
+		> /var/run/.modem/cellmodem_is_mm_ether
+		> /var/run/.modem/cellmodem_is_lte
+		> /var/run/.modem/cellmodem_is_internal
+
+		# 12d1/1573 ME909u-521 & ME209u-526
+		# (Ref: HUAWEI ME909u-521 LTE LGA Module Application Guide,
+		#       Guide to Kernel Driver Integration in Linux for Huawei)
+		# When in configuration 2:
+		#  2.0 CDC-ECM  control
+		#  2.1 CDC-ECM  data
+		#  2.2 MODEM    modem
+		#  2.3 DIAG     application
+		#  2.4 PCUI
+		#  2.5 GPS      (ME909u-521 only)
+		#  2.6 SERIALB  (n/a)
+		ln -sf ${ttyUSB[0]} /dev/cellmodem01
+		ln -sf ${ttyUSB[2]} /dev/cellcommand01
+		if [ "$MODEL" != im72xx ] &&
+			[ "$MODEL" != cm7196 ] &&
+			[ "$MODEL" != cm71xx ] &&
+			[ "$MODEL" != acm700x ] &&
+			[ "$MODEL" != b093 ] &&
+			[ "$MODEL" != b097 ] &&
+			[ "$MODEL" != b098 ] &&
+			[ "$MODEL" != les160xa ] &&
+			[ "$MODEL" != les17xxa ] &&
+			[ "$MODEL" != acm7004-5 ]; then
+			ln -sf ${ttyUSB[0]} /dev/cellcommand01
+			ln -sf ${ttyUSB[1]} /dev/cellmodem01
+			# Some models do not support NMEA
+			if [ -e "${ttyUSB[3]}" ]; then
+				> /var/run/.modem/cellmodem_has_gps
+				ln -sf ${ttyUSB[3]} /dev/cellnmea01
+			fi
+		else
+			if [ -e "/dev/cellnmea01" ]; then
+				> /var/run/.modem/cellmodem_has_gps
+			fi
+		fi
+
+		DBUS=1
+		CELLMODEM=1
+	fi
+fi
+
+if [ $DBUS = 1 ]; then
+	logger -t rc.cellmodem "Starting dbus"
+	edinittab add "dbus:unknown:/bin/dbus-daemon --system --nofork --nopidfile"
+	# wait a little while for dbus to come up
+	for retry in 1 2 3 4 5; do
+	    [ -e /var/run/dbus/system_bus_socket ] && break
+	    sleep 1
+	done
+fi
+
+
+# If on a dual-sim device which needs it, initialize the current sim to default.
+# This is done in cellctld now, the first time it comes up
+
+# On units with a resettable cellmodem USB slot - if we are supposed to
+# have a cellmodem but we don't find it - reset the slot up to 5 times
+# to try and get it running. If that doesn't work, we reboot; but we'll only
+# do that once.
+
+if [ -x /bin/setfset ] && [ -f /sys/kernel/cellctl/cell_reset ]; then
+	OPTS=`/bin/setfset -qf | cut -f3 -d' '`
+	if echo $OPTS | grep "3g" &> /dev/null ; then
+		if [ ! -d /var/run/.modem ]; then
+			CTR=0
+			if [ -f /var/run/.modem_probe_ctr ]; then
+				CTR=`cat /var/run/.modem_probe_ctr`
+			fi
+			if [ "$CTR" -lt "5" ]; then
+				logger "Resetting cellmodem slot - attempt $CTR"
+				echo 10 > /sys/kernel/cellctl/cell_reset
+				CTR=$[CTR + 1]
+				echo $CTR > /var/run/.modem_probe_ctr
+				sleep 30;
+				. /etc/rc.cellmodem
+				exit
+			fi
+			if [ ! -f /etc/config/.modem_reboot ]; then
+				touch /etc/config/.modem_reboot
+				logger "Failed to find cellmodem - rebooting"
+				reboot
+			else
+				logger "Failed to find cellmodem - giving up"
+			fi
+		fi
+		rm -f /etc/config/.modem_reboot
+		rm -f /var/run/.modem_probe_ctr
+	fi
+fi
+
+# Setup GPS (re-enumerate ports)
+if [ "$SETUP_GPS" == "1" ]; then
+	# Taken from rc.serial-dynamic (deprecated)
+	logger -t rc.cellmodem "Setting up GPS"
+
+	. /etc/scripts/serial-helper
+
+	# Get port number of last static port
+	PORT=$(serial_get_max_ports)
+
+	# Increment to get first dynamic port
+	PORT=`expr $PORT + 1`
+
+	# Set path to GPS NMEA stream device if it exists
+	if [ -L /dev/cellnmea01 ]; then
+		NMEA="/dev/cellnmea01"
+	fi
+
+	# Handle any Modems with GPS serial ports
+	if [ -n "$NMEA" ]; then
+		PNAME=`printf "port%02d" $PORT`
+		ln -s $NMEA /dev/$PNAME
+		echo "$PNAME --> $NMEA" >> /var/run/serial-ports
+		infod_client -s -o push -p config.ports.port$PORT\.dev.deflabel -d "GPS" &
+		infod_client -s -o push -p config.ports.port$PORT\.dev.typedesc -d "usb-af" &
+		PORT=`expr $PORT + 1`
+	fi
+fi
+
+# Start cellctld & ledmon if required
+if [ "$CELLMODEM" == "1" ]; then
+	if [ -x /bin/cellctl ]; then
+		logger -t rc.cellmodem "Starting cellctld"
+		edinittab add 'cellctld:unknown:/bin/cellctld'
+		# $RESET handling has been moved to cellctld
+	fi
+
+	if [ -x /bin/ledmon ]; then
+		logger -t rc.cellmodem "Starting ledmon"
+		edinittab add 'ledmon:unknown:/bin/ledmon'
+	fi
+fi

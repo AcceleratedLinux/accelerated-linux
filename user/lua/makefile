@@ -2,11 +2,6 @@ ifndef ROOTDIR
 ROOTDIR=$(shell pwd)/../..
 endif
 
-ncurses-5.7_URL       = ftp://ftp.gnu.org/gnu/ncurses/ncurses-5.7.tar.gz
-ncurses-5.7_CONFOPTS  = --without-cxx --without-cxx-binding
-
-readline-6.1_URL      = ftp://ftp.cwru.edu/pub/bash/readline-6.1.tar.gz
-
 lua-5.1.4_URL         = http://www.lua.org/ftp/lua-5.1.4.tar.gz
 lua-5.1.4_MAKEVARS    = CC="$(CC) $(CFLAGS)" INSTALL_TOP='$(ROMFSDIR)/usr' linux
 lua-5.1.4_CONFOPTS    = --prefix=/usr
@@ -30,8 +25,6 @@ sqlite-amalgamation-3.6.23.1_BUILDDIR = sqlite-3.6.23.1
 sqlite-amalgamation-3.6.23.1_CONFOPTS = --disable-threadsafe
 
 AUTOMAKE_y =
-AUTOMAKE_$(CONFIG_USER_LUA) += ncurses-5.7
-AUTOMAKE_$(CONFIG_USER_LUA) += readline-6.1
 AUTOMAKE_$(CONFIG_USER_LUA_LUASQL_SQLITE3) += sqlite-amalgamation-3.6.23.1
 AUTOMAKE_$(CONFIG_USER_LUA) += lua-5.1.4
 

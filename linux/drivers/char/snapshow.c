@@ -40,11 +40,11 @@ static int showt_proc_open(struct inode *inode, struct file *file)
 
 /****************************************************************************/
 
-static const struct file_operations showt_proc_fops = {
-	.open		= showt_proc_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops showt_proc_fops = {
+	.proc_open	= showt_proc_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
 /****************************************************************************/

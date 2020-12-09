@@ -1,0 +1,115 @@
+# VirtualDAL-PR Docker
+
+The VirtualDAL-PR Docker image provides a limited container environment
+for testing software-only features.
+It is limited by not having fully capable networking, access to real devices
+such as modems and serial ports, and uses the host kernel rather than the
+kernel shipped with VirtualDAL-PR VM and real products.
+If you need these features, please use the VirtualDAL-PR VM.
+
+## Importing the Docker image
+
+Import the Docker image into Docker using this command:
+
+	docker import Docker.tar.gz virtual-dal:latest
+
+For release versions, it is convenient to tag the image with the release's
+version number rather than the Docker convention "latest".
+
+## Starting the container
+
+Start VirtualDAL-PR as an unprivileged container using this command:
+
+	docker run --name dal \
+		--cap-add NET_ADMIN \
+		--cpus=1 -m 256m \
+		--entrypoint /bin/init.docker \
+		--env DAL_SERIAL=VIRTUALDAL012345 \
+		--env DAL_MAC=00:27:04:03:02:00 \
+		--env DAL_ADMIN_PASSWORD=default \
+		-p 4443:443 \
+		-p 2222:22 \
+		virtual-dal:latest
+
+Using this method, the container only requires the NET_ADMIN capability
+in order to setup networking and firewalling inside the container's network
+namespace. The root filesystem is mounted as writeable to avoid requiring
+the container to mount tmpfs, or needing directories from the host system
+to be mounted inside the container for persistent storage.
+
+For a more *normal* DAL experience, where the root filesystem is mounted as
+read-only and more capabilities are required inside the container, use
+the following command to start a privileged container:
+
+	docker run --name dal \
+		--rm \
+		--read-only=true --cap-add all --security-opt apparmor=unconfined \
+		--cpus=1 -m 256m \
+		--entrypoint /bin/init.docker \
+		--env DAL_SERIAL=VIRTUALDAL012345 \
+		--env DAL_MAC=00:27:04:03:02:00 \
+		--env DAL_ADMIN_PASSWORD=default \
+		-p 4443:443 \
+		-p 2222:22 \
+		--volume ~/virtual-dal-opt:/opt \
+		virtual-dal:latest
+
+Configurable parameters:
+
+	--name dal
+		The name of the container. Change this when running multiple
+		containers. Used for stopping the container e.g. "docker stop dal".
+
+	--env DAL_SERIAL=VIRTUALDAL012345
+		The serial number for this container.
+		Omit this parameter to use the default "VIRTUALDAL012345".
+
+	--env DAL_MAC=00:27:04:03:02:00
+		The primary MAC address used by DAL. The DRM Device ID is derived
+		from this.
+		Omit this parameter to use the default "00:27:04:03:02:00".
+
+	--env DAL_ADMIN_PASSWORD=default
+		The password to set into the DAL configuration.
+		This is required in order to pass configuration validation when
+		reconfiguring to match the Docker-assigned networking at startup.
+		Omit this parameter to use the default "Default123!".
+
+	-p 4443:443
+		Port forward from a port on the host machine (e.g. 4443) to the
+		DAL WebUI HTTPS service inside the container.
+
+	-p 2222:22
+		Port forward from a port on the host machine (e.g. 2222) to the
+		DAL SSH service inside the container.
+
+	--volume ~/virtual-dal-config:/etc/config
+	--volume ~/virtual-dal-opt:/opt
+		Mount a path on the host filesystem (e.g. ~/virtual-dal-opt) to
+		/opt or /etc/config inside the container.
+		if /etc/config is not provided, then it is bind mounted to
+		/opt/config (if permitted).
+		This provides persistent storage for the container.
+		Omit this to have the container use the writable root filesystem
+		(for unprivileged containers) or a temporary filesystem (for
+		privileged containers).
+		NOTE: Files created by the container will be owned by the root user
+		even in the host system environment.
+		NOTE: The DAL_* environment variables are used to populate
+		/etc/config, so are required on every start with a temporary
+		filesystem, but only the first start with a mounted volume.
+
+## Accessing the container
+
+SSH:
+
+	ssh -p 2222 admin@<host-address>
+
+WebUI:
+
+	https://<host-address>:4443
+
+Shell inside the container:
+
+	docker exec -it dal /bin/sh
+

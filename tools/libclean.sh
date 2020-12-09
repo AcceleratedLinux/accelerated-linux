@@ -136,6 +136,14 @@ while :; do
 				echo "Skipping HID file $so"
 				echo "`basename $so`: libhidapi" >> $TMPF
 				;;
+			*rsyslog*)
+				echo "Skipping plugin file $so"
+				echo "`basename $so`: plugin" >> $TMPF
+				;;
+			*lua*)
+				echo "Skipping Lua module $so"
+				echo "`basename $so`: lua" >> $TMPF
+				;;
 			*)
 				touch $TMPW
 				echo "Removing $so ..."

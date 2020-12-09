@@ -34,5 +34,5 @@ distclean: 	clean
 # 		@$(MAKE) -C $(NET_LIB_PATH) $(MDEFINES)
 
 romfs:
-	$(ROMFSINST) -e CONFIG_USER_NET_TOOLS_MII_TOOL_FEC /bin/mii-tool-fec
+	$(ROMFSINST) -e CONFIG_USER_MII_TOOL_FEC /bin/mii-tool-fec
 

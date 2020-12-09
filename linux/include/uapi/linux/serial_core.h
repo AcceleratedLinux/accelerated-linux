@@ -293,4 +293,7 @@
 /* Freescale LINFlexD UART */
 #define PORT_LINFLEXUART	122
 
+/* Exar XR20M1280 UART */
+#define PORT_XR20M1280	123
+
 #endif /* _UAPILINUX_SERIAL_CORE_H */

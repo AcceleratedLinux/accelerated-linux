@@ -1,0 +1,22 @@
+DAL Virtual Device
+------------------
+
+Take the VM image and extract it.
+change to the versioned directory
+run the appropriate VM script
+
+Qemu example
+------------
+
+    tar xvf VirtualDAL-XXXX-VM.tar.gz
+    cd VirtualDAL-XXXX
+    ./run-qemu.sh
+
+
+VMware example (linux)
+----------------------
+
+    tar xvf VirtualDAL-XXXX-VM.tar.gz
+    cd VirtualDAL-XXXX
+    ./run-vmplayer.sh
+

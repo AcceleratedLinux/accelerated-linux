@@ -1364,6 +1364,9 @@ void cleanup(int sig) {
     chown(line, 0, 0);
 	}
     shutdown(net, 2);
+#ifdef RFC2217
+    rfc2217_close();
+#endif
     exit(1);
 #else
     void rmut();

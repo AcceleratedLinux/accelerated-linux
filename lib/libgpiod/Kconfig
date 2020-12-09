@@ -3,3 +3,8 @@ config LIB_LIBGPIOD
 	help
 	  C library and tools for interacting with the linux GPIO
 	  character device (gpiod stands for GPIO device)
+
+config LIB_LIBGPIOD_TOOLS
+	bool "libgpiod tools"
+	help
+	  enable libgpiod command-line tools

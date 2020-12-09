@@ -109,7 +109,8 @@ struct stService {
 	unsigned	  enabled :1;		// Service enabled
 	unsigned	  changed :1;
 	unsigned	  tcp :1;		// TCP or UDP
-	unsigned	  ipv6 :1;		// ipv6 or ipv4
+	unsigned	  ipv6only :1;		// ipv6 only
+	unsigned	  ipv4v6 :1;		// ipv4 or ipv6
 	unsigned	  reconfig :1;
 	unsigned	  discard :1;		// Should this service be discarded when finished reconfig?
 	
@@ -178,10 +179,10 @@ static void add_env(const char *format, ...)
 }
 
 static pid_t
-start_child(struct stService *p, int fd, int tcp, int ipv6, int local_port, union sa *remote)
+start_child(struct stService *p, int fd, int tcp, int ipv6only, int ipv4v6, int local_port, union sa *remote)
 {
   pid_t pid;
-  const char *af = ipv6 ? "inet6" : "inet";
+  const char *af = (ipv6only || ipv4v6) ? "inet6" : "inet";
   const char *proto = tcp ? "TCP" : "UDP";
 #ifdef CONFIG_IPV6
   char buf[INET6_ADDRSTRLEN];
@@ -195,7 +196,7 @@ start_child(struct stService *p, int fd, int tcp, int ipv6, int local_port, unio
     socklen_t local_size = sizeof(local);
 
 #ifdef CONFIG_IPV6
-    if (ipv6) {
+    if (ipv6only || ipv4v6) {
       if (getsockname(fd, &local.sa, &local_size) == 0) {
         add_env("TCPLOCALIP=%s", inet_ntop(AF_INET6, &local.sin6.sin6_addr, buf, sizeof(buf)));
       }
@@ -224,7 +225,7 @@ start_child(struct stService *p, int fd, int tcp, int ipv6, int local_port, unio
 #ifdef DEBUG
   fprintf(stderr, "start_child(%s port %d from %s)\n", proto, local_port, 
 #ifdef CONFIG_IPV6
-        ipv6 ? inet_ntop(AF_INET6, &remote->sin6.sin6_addr, buf, sizeof(buf)) :
+        (ipv6only | ipv4v6) ? inet_ntop(AF_INET6, &remote->sin6.sin6_addr, buf, sizeof(buf)) :
 #endif
         inet_ntoa(remote->sin.sin_addr));
 
@@ -293,7 +294,7 @@ static inline void handle_incoming_fds(fd_set * readmask, fd_set * writemask)
       }
 
       p->current++;
-      if ((p->pid[j] = start_child(p, fd, p->tcp, p->ipv6, p->port, &remote)) == -1) {
+      if ((p->pid[j] = start_child(p, fd, p->tcp, p->ipv6only, p->ipv4v6 , p->port, &remote)) == -1) {
         /*
          * if we fail to start the child,  disable the service
          */
@@ -325,7 +326,7 @@ static inline void start_services(void) {
     p->enabled = 0;
 
 #ifdef CONFIG_IPV6
-    if (p->ipv6) {
+    if (p->ipv6only || p->ipv4v6) {
       family = AF_INET6;
     } else
 #endif
@@ -345,13 +346,15 @@ static inline void start_services(void) {
 
       server_sockaddr.sa.sa_family = family;
 #ifdef CONFIG_IPV6
-      if (p->ipv6) {
+      if (p->ipv6only || p->ipv4v6) {
         server_sockaddr.sin6.sin6_port = htons(p->port);
         memcpy(&server_sockaddr.sin6.sin6_addr.s6_addr, &in6addr_any, sizeof(in6addr_any));
 
-	if((setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&true, 
-	   sizeof(true))) == -1) {
-	  perror("setsockopt v6only: ");
+        if (p->ipv6only) {
+	  if((setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&true,
+             sizeof(true))) == -1) {
+	    perror("setsockopt v6only: ");
+	  }
 	}
       } else
 #endif
@@ -389,7 +392,7 @@ static inline void start_services(void) {
 
       server_sockaddr.sa.sa_family = family;
 #ifdef CONFIG_IPV6
-      if (p->ipv6) {
+      if (p->ipv6only || p->ipv4v6) {
         server_sockaddr.sin6.sin6_port = htons(p->port);
         memcpy(&server_sockaddr.sin6.sin6_addr.s6_addr, &in6addr_any, sizeof(in6addr_any));
       } else
@@ -602,20 +605,33 @@ read_config_lines(FILE *cfp)
 
     if (strcmp(args[2], "tcp") == 0) {
       p->tcp = 1;
-      p->ipv6 = 0;
+      p->ipv6only = 0;
+      p->ipv4v6 = 0;
     } else if (strcmp(args[2], "udp") == 0) {
       p->tcp = 0;
-      p->ipv6 = 0;
+      p->ipv6only = 0;
+      p->ipv4v6 = 0;
     }
 #ifdef CONFIG_IPV6
     else if (strcmp(args[2], "tcp6") == 0) {
       p->tcp = 1;
-      p->ipv6 = 1;
+      p->ipv6only = 1;
+      p->ipv4v6 = 0;
     } else if (strcmp(args[2], "udp6") == 0) {
       p->tcp = 0;
-      p->ipv6 = 1;
+      p->ipv6only = 1;
+      p->ipv4v6 = 0;
+    } else if (strcmp(args[2], "tcp46") == 0) {
+      p->tcp = 1;
+      p->ipv4v6 = 1;
+      p->ipv6only = 0;
+    } else if (strcmp(args[2], "udp46") == 0) {
+      p->tcp = 0;
+      p->ipv4v6 = 1;
+      p->ipv6only = 0;
     } 
 #endif
+
     else {
         fprintf(stderr, "unknown service type %s\n", args[2]);
         free(p);
@@ -655,13 +671,13 @@ read_config_lines(FILE *cfp)
        * If it is not, add this one to the list.
        */
 #ifdef DEBUG
-      fprintf(stderr, "Searching for existing service: port=%d, tcp=%d, ipv6=%d, cmd=%s\n", p->port, p->tcp, p->ipv6, p->args[0]);
+      fprintf(stderr, "Searching for existing service: port=%d, tcp=%d, ipv6only=%d, ipv4v6=%d, cmd=%s\n", p->port, p->tcp, p->ipv6only, p->ipv4v6, p->args[0]);
 #endif
 
       for (q = servicelist; q; q = q->next) {
         if (p->port == q->port && p->tcp == q->tcp
 #ifdef CONFIG_IPV6
-	    && p->ipv6 == q->ipv6
+	    && p->ipv6only == q->ipv6only && p->ipv4v6 == q->ipv4v6
 #endif
 	    ) {
           /* We have a match. Are they identical? */
@@ -691,7 +707,7 @@ read_config_lines(FILE *cfp)
     /* Add this one to the list */
     if (p) {
 #ifdef DEBUG
-      fprintf(stderr, "Adding service: port=%d, tcp=%d, ipv6=%d, cmd=%s\n", p->port, p->tcp, p->ipv6, p->args[0]);
+      fprintf(stderr, "Adding service: port=%d, tcp=%d, ipv6only=%d, ipv4v6=%d  cmd=%s\n", p->port, p->tcp, p->ipv6only, p->ipv4v6, p->args[0]);
 #endif
       p->next = servicelist;
       servicelist = p;
@@ -751,14 +767,14 @@ read_config()
 
     if (p->discard) {
 #ifdef DEBUG
-      fprintf(stderr, "Discarding service: port=%d, tcp=%d, ipv6=%d, cmd=%s\n", p->port, p->tcp, p->ipv6, p->args[0]);
+      fprintf(stderr, "Discarding service: port=%d, tcp=%d, ipv6only=%d, ipv4v6=%d, cmd=%s\n", p->port, p->tcp, p->ipv6only, p->ipv4v6, p->args[0]);
 #endif
       close_service(p);
       free(p);
     }
     else {
 #ifdef DEBUG
-      fprintf(stderr, "Keeping service: port=%d, tcp=%d, ipv6=%d, cmd=%s\n", p->port, p->tcp, p->ipv6, p->args[0]);
+      fprintf(stderr, "Keeping service: port=%d, tcp=%d, ipv6only=%d, ipv4v6=%d cmd=%s\n", p->port, p->tcp, p->ipv6only, p->ipv4v6, p->args[0]);
 #endif
       p->next = servicelist;
       servicelist = p;
@@ -780,7 +796,7 @@ read_config()
              p->args[0],
              p->port,
              p->tcp ? "tcp" : "udp",
-             p->ipv6 ? "IPv6" : "IPv4",
+             (p->ipv6only | p->ipv4v6) ? "IPv6" : "IPv4",
              p->discard ? "discard" : "active",
              p->enabled ? "enabled" : "disabled");
   }

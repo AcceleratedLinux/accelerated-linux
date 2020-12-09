@@ -34,6 +34,8 @@ romfs: grub.cfg romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.
 	$(ROMFSINST) -p 555 /etc/mkffs
 	$(ROMFSINST) -p 555 /bin/update-grub
 	$(ROMFSINST) -d /usr/lib/grub/grub.cfg
+	$(ROMFSINST) -p 555 /etc/rc.docker
+	$(ROMFSINST) -p 555 /bin/init.docker
 	$(ROMFSINST) $(ROOTDIR)/$(LINUXDIR)/arch/x86/boot/bzImage /boot/vmlinuz
 	echo "Digi Virtual DAL" > $(ROMFSDIR)/etc/issue
 
@@ -56,6 +58,9 @@ image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin ima
 	rm -f $(IMAGEDIR)/VM.tar*
 	tar cvCf $(IMAGEDIR) $(IMAGEDIR)/VM.tar VirtualDAL-$(VERSIONPKG)
 	gzip -9 $(IMAGEDIR)/VM.tar
+	$(ROOTDIR)/tools/fakeroot-env tar -C $(ROMFSDIR) \
+		--exclude=boot --exclude="*/@*" \
+		-czf $(IMAGEDIR)/Docker.tar.gz .
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

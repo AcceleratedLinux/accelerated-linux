@@ -1,0 +1,13 @@
+config USER_SQUASHFS_TOOLS_NG
+	bool "Build squashfs-tools-ng"
+	default n
+	select LIB_XZ
+	help
+	  New set of tools and libraries for working with SquashFS images.
+	  Selecting this only builds and installs the libsquashfs library.
+
+config USER_SQUASHFS_TOOLS_NG_TOOLS
+	bool "Build Squashfs tools"
+	default n
+	help
+	  Build Squashfs tool as well.

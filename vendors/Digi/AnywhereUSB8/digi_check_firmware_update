@@ -4,9 +4,9 @@ PATH=/bin:/usr/bin
 
 cleanup () {
 	/bin/rm -f /opt/firmware/system/version
-	[ "$1" -ne 0 -a -n "$updatefile" ] && /bin/rm -f $updatefile
+	[ "$1" -ne 0 ] && [ -n "$updatefile" ] && /bin/rm -f "$updatefile"
 	trap - INT TERM EXIT
-	exit $1
+	exit "$1"
 }
 
 /bin/date
@@ -17,51 +17,53 @@ trap 'echo "Caught trap, cleaning up, returning 1"; cleanup 1;' INT TERM EXIT
 
 /usr/bin/logger -t fwupdate -p local5.info "!Received firmware update"
 
-/bin/chmod 0660 $updatefile 2>/dev/null || true
+/bin/chmod 0660 "$updatefile" 2>/dev/null || true
 
 [ -r "$updatefile" ] || {
-	printf "\n![ERROR] The firmware update file not readable.\n"
+	printf "\\n![ERROR] The firmware update file not readable.\\n"
 	exit 1
 }
 
 # Basic verification of FW file: should be a regular file, and not symlink
-[ -f "$updatefile" -a ! -h "$updatefile" ] || {
-	printf "\n![ERROR] The firmware update file is invalid.\n"
+if [ -f "$updatefile" ] && [ ! -h "$updatefile" ]; then
+    :
+else
+	printf "\\n![ERROR] The firmware update file is invalid.\\n"
 	exit 1
-}
+fi
 
 cd /opt/firmware/system
 umask 0022
 
 /bin/rm -f ./version
-/bin/tar xvzf $updatefile version >/dev/null 2>&1 || true
+/bin/tar xvzf "$updatefile" version >/dev/null 2>&1 || true
 
 [ -r "./version" ] || {
-	printf "\n![ERROR] Invalid firmware update file.\n"
+	printf "\\n![ERROR] Invalid firmware update file.\\n"
 	exit 1
 }
 # PRODUCT_VERSION is a dotted quad version number, 0-255 for each number.
 # SUPPORTED_PRODUCT_IDS is a comma-separated list of hex numbers,
 #    leading 0x optional, case-insensitive.
 # OLDEST_SUPPORTED_VERSION is a dotted quad version, min fw update allowed
-export $(grep "^PRODUCT_VERSION=" ./version) >/dev/null
-export $(grep "^MIN_RUNNING_RELEASE=" ./version) >/dev/null
-export $(grep "^SUPPORTED_PRODUCT_IDS=" ./version | tr 'abcdefX' 'ABCDEFx') >/dev/null
+export "$(/bin/grep "^PRODUCT_VERSION=" ./version)" >/dev/null
+export "$(/bin/grep "^MIN_RUNNING_RELEASE=" ./version)" >/dev/null
+export "$(/bin/grep "^SUPPORTED_PRODUCT_IDS=" ./version | /usr/bin/tr 'abcdefX' 'ABCDEFx')" >/dev/null
 
-export $(grep "^OLDEST_SUPPORTED_VERSION=" /etc/version.info) >/dev/null
-export CURRENT_$(grep "^PRODUCT_VERSION=" /etc/version.info) >/dev/null
-NV_PRODUCT_ID=$(/bin/fw_printenv product_id | cut -d'=' -f2 | tr 'abcdefX' 'ABCDEFx')
+export "$(/bin/grep "^OLDEST_SUPPORTED_VERSION=" /etc/version.info)" >/dev/null
+export CURRENT_"$(/bin/grep "^PRODUCT_VERSION=" /etc/version.info)" >/dev/null
+NV_PRODUCT_ID="$(/bin/fw_printenv product_id | /usr/bin/cut -d'=' -f2 | /usr/bin/tr 'abcdefX' 'ABCDEFx')"
 
 if [ -z "$NV_PRODUCT_ID" ]; then
-	printf "\n[ERROR] Device not manufactured properly!\n"
+	printf "\\n[ERROR] Device not manufactured properly!\\n"
 	exit 1
 fi
 
 # Convert hex to decimal
-PRODUCT_ID=$((0x${NV_PRODUCT_ID#0x}))
+PRODUCT_ID="$((0x${NV_PRODUCT_ID#0x}))"
 
-if [ -z "$PRODUCT_VERSION" -o -z "$SUPPORTED_PRODUCT_IDS" -o -z "$CURRENT_PRODUCT_VERSION" -o -z "$PRODUCT_ID" ]; then
-	printf "\n[ERROR] Incomplete update file.\n"
+if [ -z "$PRODUCT_VERSION" ] || [ -z "$SUPPORTED_PRODUCT_IDS" ] || [ -z "$CURRENT_PRODUCT_VERSION" ] || [ -z "$PRODUCT_ID" ]; then
+	printf "\\n[ERROR] Incomplete update file.\\n"
 	exit 1
 fi
 
@@ -70,51 +72,51 @@ parse_version () {
 	local number=0
 	local num
 	for i in 1 2 3 4; do
-		num=$(echo $1 |cut -d'.' -f$i)
-		num=${num:-0}
-		number=$(( number * 256 + $num ))
+		num="$(echo "$1" | /usr/bin/cut -d'.' -f"$i")"
+		num="${num:-0}"
+		number="$(( number * 256 + num ))"
 	done
-	echo $number
+	echo "$number"
 }
 
 echo "Current version: $CURRENT_PRODUCT_VERSION, New version: $PRODUCT_VERSION"
-cur_prod=$(parse_version "$CURRENT_PRODUCT_VERSION")
-new_prod=$(parse_version "$PRODUCT_VERSION")
-echo $cur_prod, $new_prod
+cur_prod="$(parse_version "$CURRENT_PRODUCT_VERSION")"
+new_prod="$(parse_version "$PRODUCT_VERSION")"
+echo "$cur_prod, $new_prod"
 
 echo "OLDEST: $OLDEST_SUPPORTED_VERSION, NEW: $PRODUCT_VERSION"
 # Check PRODUCT_VERSION against minimum version
 if [ -n "$OLDEST_SUPPORTED_VERSION" ]; then
-	oldest_supported_version=$(parse_version "$OLDEST_SUPPORTED_VERSION")
+	oldest_supported_version="$(parse_version "$OLDEST_SUPPORTED_VERSION")"
 	echo "oldest: $oldest_supported_version"
 	if [ "$new_prod" -lt "$oldest_supported_version" ]; then
-		/usr/bin/logger -t fwupdate -p local5.err "![ERROR] Device cannot be downgraded to a version older than $OLDEST_SUPPORTED_VERSION.\n"
+		/usr/bin/logger -t fwupdate -p local5.err "![ERROR] Device cannot be downgraded to a version older than $OLDEST_SUPPORTED_VERSION.\\n"
 		exit 1
 	fi
 fi
 
 # See if we have a min version for this update.
 if [ -n "$MIN_RUNNING_RELEASE" ]; then
-	min_prod=$(parse_version "$MIN_RUNNING_RELEASE.0")
-	echo Min: $cur_prod, $min_prod
+	min_prod="$(parse_version "$MIN_RUNNING_RELEASE.0")"
+	echo Min: "$cur_prod, $min_prod"
 	if [ "$cur_prod" -lt "$min_prod" ]; then
-		printf "\n![ERROR] Please update the device to version $MIN_RUNNING_RELEASE.x before installing this version.\n"
+		printf "\\n![ERROR] Please update the device to version %s.x before installing this version.\\n" "$MIN_RUNNING_RELEASE"
 		exit 1
 	fi
 fi
 
 # Check SUPPORTED_PRODUCT_IDS matches
 found_p=0
-printf "ProductID %x in list: %s\n" "$PRODUCT_ID" "$SUPPORTED_PRODUCT_IDS"
+printf "ProductID %x in list: %s\\n" "$PRODUCT_ID" "$SUPPORTED_PRODUCT_IDS"
 for i in ${SUPPORTED_PRODUCT_IDS//[ ,]/ }; do
-	SUP_PROD=$((0x${i#0x}))
+	SUP_PROD="$((0x${i#0x}))"
 	if [ "$PRODUCT_ID" -eq "$SUP_PROD" ]; then
 		found_p=1
 		break
 	fi
 done
-if [ $found_p -eq 0 ]; then
-	printf "\n![ERROR] This firmware update file is not compatible with this device.\n"
+if [ "$found_p" -eq 0 ]; then
+	printf "\\n![ERROR] This firmware update file is not compatible with this device.\\n"
 	exit 1
 fi
 

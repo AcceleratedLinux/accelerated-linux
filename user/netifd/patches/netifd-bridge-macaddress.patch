@@ -1,0 +1,45 @@
+--- netifd/bridge.c.orig	2019-03-20 09:59:02.000000000 +1000
++++ netifd/bridge.c	2020-11-05 16:43:22.592242405 +1000
+@@ -183,8 +183,9 @@
+ 	struct bridge_state *bst = bm->bst;
+ 	int ret;
+ 
+-	if (!bm->present)
+-		return 0;
++	/* as we only add devices to the uci file that are enabled,
++	   ignore the present indicator. */
++	bm->present = true;
+ 
+ 	ret = bridge_enable_interface(bst);
+ 	if (ret)
+@@ -285,7 +286,8 @@
+ 
+ 	switch (ev) {
+ 	case DEV_EVENT_ADD:
+-		assert(!bm->present);
++		if (bm->present)
++			return;
+ 
+ 		bm->present = true;
+ 		bst->n_present++;
+@@ -400,8 +402,10 @@
+ 	// created pointer will be freed in case the bridge member
+ 	// already existed
+ 	bm = vlist_find(&bst->members, dev->ifname, bm, node);
+-	if (hotplug && bm)
++	if (hotplug && bm) {
+ 		bm->node.version = -1;
++		bm->present = true;
++	}
+ 
+ 	return bm;
+ }
+@@ -438,7 +442,7 @@
+ bridge_add_member(struct bridge_state *bst, const char *name)
+ {
+ 	struct device *dev;
+-
++	
+ 	dev = device_get(name, true);
+ 	if (!dev)
+ 		return;

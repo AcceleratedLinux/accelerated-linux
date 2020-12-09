@@ -32,12 +32,13 @@ diff -Naur busybox-1.31.0.org/coreutils/sync.c busybox-1.31.0/coreutils/sync.c
  # if ENABLE_FEATURE_SYNC_FANCY
  		if (opts & OPT_SYNCFS) {
  			/*
-@@ -89,12 +99,22 @@
+@@ -89,12 +99,23 @@
  int sync_main(int argc UNUSED_PARAM, char **argv IF_NOT_DESKTOP(UNUSED_PARAM))
  {
  # if !ENABLE_FEATURE_SYNC_FANCY
++	unsigned opts = 0;
 +#ifdef CONFIG_USER_FLATFSD_FLATFSD
-+	unsigned opts = getopt32(argv, "F");
++	opts = getopt32(argv, "F");
 +
 +	if (opts) {
 +		system("exec flatfsd -s");

@@ -8,9 +8,10 @@ ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
 
-VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
+VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/OpenGear
+
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
-ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
+ROMFS_DIRS += etc etc/config home proc sys usr/var var opt
 
 DEVICES += $(DEVICE_PTY_64) \
 	serial/port1,c,4,64 \
@@ -36,15 +37,17 @@ all:
 
 clean: image.clean
 
-romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
+romfs: romfs_dev romfs.dirs romfs.default romfs.version romfs.cryptokey
 	$(ROMFSINST) /etc/default/start
 	$(ROMFSINST) -d -p 555 /etc/action.d/led
 	$(ROMFSINST) /etc/fw_env.config
 	$(ROMFSINST) -s /var/tmp/log /dev/log
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
-	$(ROMFSINST) -d /etc/inittab.d/console
 	echo "OpenGear/ACM7004-5" > $(ROMFSDIR)/etc/issue
+	$(ROMFSINST) -A "cons:" -a "cons:unknown:/bin/agetty ttyS0 115200" /etc/default/inittab
+	$(ROMFSINST) romfs /
+	make -f ../common.mk romfs
 
 romfs.post:: romfs.cleanup
 

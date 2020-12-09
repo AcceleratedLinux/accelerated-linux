@@ -145,7 +145,7 @@ endif
 ifdef CONFIG_USER_PYTHON_MODULES_DIGI_XBEE_LIB
 
 XBEE_LIB_PKG = python-xbee
-$(XBEE_LIB_PKG)_VERSION = 9fb070ba9c4bcd88bfe4ed289d9d033b5a02120b
+$(XBEE_LIB_PKG)_VERSION = 9976d553f7f5543b52fb6b203fd97713542d8e23
 $(XBEE_LIB_PKG)_METHOD = git
 $(XBEE_LIB_PKG)_URL = https://github.com/digidotcom/xbee-python.git
 $(XBEE_LIB_PKG)_DEP = $(SETUPTOOLS_PKG)
@@ -177,7 +177,7 @@ endif
 ###############################################################################
 ifdef CONFIG_USER_PYTHON_MODULES_PAHO_MQTT
 
-PAHO_MQTT_VERSION = 1.5.0
+PAHO_MQTT_VERSION = 1.5.1
 PAHO_MQTT_PKG = paho.mqtt.python-$(PAHO_MQTT_VERSION)
 $(PAHO_MQTT_PKG)_URL = https://github.com/eclipse/paho.mqtt.python/archive/v$(PAHO_MQTT_VERSION).tar.gz
 $(PAHO_MQTT_PKG)_DOWNLOADNAME = $(PAHO_MQTT_PKG).tar.gz
@@ -196,6 +196,125 @@ $(HID_PKG)_URL = https://github.com/apmorton/pyhidapi.git
 $(HID_PKG)_DEP = $(SETUPTOOLS_PKG)
 
 AUTOMAKE_y += $(HID_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_PYSOCKS
+
+PYSOCKS_VERSION = 1.7.0
+PYSOCKS_PKG = PySocks-$(PYSOCKS_VERSION)
+$(PYSOCKS_PKG)_URL = https://github.com/Anorov/PySocks/archive/$(PYSOCKS_VERSION).tar.gz
+$(PYSOCKS_PKG)_DOWNLOADNAME = $(PYSOCKS_PKG).tar.gz
+$(PYSOCKS_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(PYSOCKS_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_CHARDET
+
+CHARDET_VERSION = 3.0.4
+CHARDET_PKG = chardet-$(CHARDET_VERSION)
+$(CHARDET_PKG)_URL = https://github.com/chardet/chardet/archive/$(CHARDET_VERSION).tar.gz
+$(CHARDET_PKG)_DOWNLOADNAME = $(CHARDET_PKG).tar.gz
+$(CHARDET_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(CHARDET_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_CERTIFI
+
+CERTIFI_VERSION = 2020.06.20
+CERTIFI_PKG = python-certifi-$(CERTIFI_VERSION)
+$(CERTIFI_PKG)_URL = https://github.com/certifi/python-certifi/archive/$(CERTIFI_VERSION).tar.gz
+$(CERTIFI_PKG)_DOWNLOADNAME = $(CERTIFI_PKG).tar.gz
+$(CERTIFI_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(CERTIFI_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_URLLIB3
+
+URLLIB3_VERSION = 1.25.10
+URLLIB3_PKG = urllib3-$(URLLIB3_VERSION)
+$(URLLIB3_PKG)_URL = https://github.com/urllib3/urllib3/archive/$(URLLIB3_VERSION).tar.gz
+$(URLLIB3_PKG)_DOWNLOADNAME = $(URLLIB3_PKG).tar.gz
+$(URLLIB3_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(URLLIB3_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_IDNA
+
+IDNA_VERSION = 2.10
+IDNA_PKG = idna-$(IDNA_VERSION)
+$(IDNA_PKG)_URL = https://github.com/kjd/idna/archive/v$(IDNA_VERSION).tar.gz
+$(IDNA_PKG)_DOWNLOADNAME = $(IDNA_PKG).tar.gz
+$(IDNA_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(IDNA_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_REQUESTS
+
+REQUESTS_VERSION = 2.24.0
+REQUESTS_PKG = requests-$(REQUESTS_VERSION)
+$(REQUESTS_PKG)_URL = https://github.com/psf/requests/archive/v$(REQUESTS_VERSION).tar.gz
+$(REQUESTS_PKG)_DOWNLOADNAME = $(REQUESTS_PKG).tar.gz
+$(REQUESTS_PKG)_DEP = $(SETUPTOOLS_PKG) $(CHARDET_PKG) $(CERTIFI_PKG) \
+		    = $(URLLIB3_PKG) $(IDNA_PKG)
+
+AUTOMAKE_y += $(REQUESTS_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_REQUESTS_UNIXSOCKET
+
+REQUESTS_UNIXSOCKET_VERSION = 0.1.5
+REQUESTS_UNIXSOCKET_PKG = requests-unixsocket-$(REQUESTS_UNIXSOCKET_VERSION)
+$(REQUESTS_UNIXSOCKET_PKG)_URL = https://github.com/msabramo/requests-unixsocket/archive/$(REQUESTS_UNIXSOCKET_VERSION).tar.gz
+$(REQUESTS_UNIXSOCKET_PKG)_DOWNLOADNAME = $(REQUESTS_UNIXSOCKET_PKG).tar.gz
+$(REQUESTS_UNIXSOCKET_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(REQUESTS_UNIXSOCKET_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_JANUS
+
+JANUS_VERSION = 0.5.0
+JANUS_PKG = janus-$(JANUS_VERSION)
+$(JANUS_PKG)_URL = https://github.com/aio-libs/janus/archive/v$(JANUS_VERSION).tar.gz
+$(JANUS_PKG)_DOWNLOADNAME = $(JANUS_PKG).tar.gz
+$(JANUS_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(JANUS_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_AZURE_IOT_DEVICE
+
+AZURE_IOT_DEVICE_VERSION = 2.1.4
+AZURE_IOT_DEVICE_DATE = 2020-07-02
+AZURE_IOT_DEVICE_PKG = azure-iot-device-$(AZURE_IOT_DEVICE_VERSION)
+$(AZURE_IOT_DEVICE_PKG)_URL = https://github.com/Azure/azure-iot-sdk-python/releases/download/$(AZURE_IOT_DEVICE_DATE)/azure-iot-device-$(AZURE_IOT_DEVICE_VERSION).tar.gz
+$(AZURE_IOT_DEVICE_PKG)_DEP = $(SETUPTOOLS_PKG) $(SIX_PKG) $(PYSOCKS_PKG) \
+			      $(REQUESTS_PKG) $(URLLIB3_PKG)
+
+AUTOMAKE_y += $(AZURE_IOT_DEVICE_PKG)
 endif
 
 ###############################################################################

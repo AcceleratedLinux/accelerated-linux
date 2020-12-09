@@ -19,6 +19,8 @@
 #ifndef SHA256_H
 #define SHA256_H 1
 
+#define SHA256_HASH_BYTESIZE    32
+
 typedef unsigned int uint32_t;
 
 /* Structure to save state of computation between the single steps.  */

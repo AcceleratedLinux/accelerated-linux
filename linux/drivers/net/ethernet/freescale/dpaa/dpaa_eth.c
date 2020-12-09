@@ -2107,7 +2107,7 @@ workaround:
 
 	/* Workaround for DPAA_A050385 requires data start to be aligned */
 	start = PTR_ALIGN(new_skb->data, DPAA_A050385_ALIGN);
-	if (start - new_skb->data != 0)
+	if (start - new_skb->data)
 		skb_reserve(new_skb, start - new_skb->data);
 
 	skb_put(new_skb, skb->len);
@@ -2130,6 +2130,16 @@ workaround:
 }
 #endif
 
+static inline int dpaa_skb_pad(struct sk_buff *skb)
+{
+	unsigned int len;
+
+	len = ETH_ZLEN;
+	if (skb->protocol == htons(ETH_P_8021Q))
+		len = VLAN_ETH_ZLEN;
+	return skb_put_padto(skb, len);
+}
+
 static netdev_tx_t
 dpaa_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 {
@@ -2146,6 +2156,11 @@ dpaa_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
 	priv = netdev_priv(net_dev);
 	percpu_priv = this_cpu_ptr(priv->percpu_priv);
 	percpu_stats = &percpu_priv->stats;
+
+	if (dpaa_skb_pad(skb)) {
+		netif_warn(priv, tx_err, net_dev, "Tx padding failed!\n");
+		return NETDEV_TX_OK;
+	}
 
 	qm_fd_clear_fd(&fd);
 
@@ -2938,7 +2953,7 @@ static int dpaa_eth_probe(struct platform_device *pdev)
 						   DMA_BIT_MASK(40));
 	if (err) {
 		netdev_err(net_dev, "dma_coerce_mask_and_coherent() failed\n");
-		return err;
+		goto free_netdev;
 	}
 
 	/* If fsl_fm_max_frm is set to a higher value than the all-common 1500,

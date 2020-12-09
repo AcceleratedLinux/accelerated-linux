@@ -1,0 +1,27 @@
+# This file contains product specific bringup steps
+
+# Bring the TinyModem (if present) out of reset
+# If no modem exists, then this is harmless
+echo "508" > /sys/class/gpio/export
+echo "high" > /sys/class/gpio/gpio508/direction
+
+# Huawei modems (ME209u-526 specifcally) can
+# retain bad state from previous boot
+echo "499" > /sys/class/gpio/export
+echo "low" > /sys/class/gpio/gpio499/direction
+
+# Match power state to configuration
+/etc/scripts/cellmodem-power matchconfig
+
+# Tickle 88E1512 PHYs so that the incorrect LED drive state is corrected.
+# Some bootloaders left the LEDs with the wrong drive level.
+ip link set eth0 up
+ip link set eth0 down
+
+# Enable 'downshift' feature on all switch ports to improve link likelihood.
+# This is because some ports prevent full speed links (bad magnetics?).
+# The switch is at PHYAD=1
+for p in 0 1 2 3; do
+   /etc/scripts/swtool write_phy 1 $p 16_0 '[11]=1'  # enable downshift
+   /etc/scripts/swtool write_phy 1 $p 0_0 '[15]=1'   # reset PHY to apply
+done

@@ -1,0 +1,62 @@
+DIGI CONNECTEZ-2
+----------------
+
+This is just some random notes on building and running on the ConnectEZ-2
+platform. This is very much a work in progress.
+
+The Digi/ConnectEZ-2 board is built around an NXP/Freescale Layerscape
+1012a SoC. (This is an ARM64 CPU based device).
+
+Generate images for this board using the Digi/ConnectEZ2 accelerated
+linux target. The default is to select the musl C-library when building.
+The build will generate a single "itb" u-boot mutli-image format binary,
+images/connectez2.itb. A number of the build artifacts, like kernel and
+root filesystem, are also present in that images/ directory.
+
+You can load onto the ConnectEZ-2 board using the usual uboot loader
+installed in the boot ROM of the board. You will need a debug enabled
+u-boot loader installed to network load as described below.
+
+    setenv bootargs console=ttyS5,115200 root=/dev/ram0 earlycon=uart8250,mmio,0x21c0600 mtdparts=1550000.quadspi:1m(rcw),1m(u-boot),1m(env),1m(ucode)
+    dhcp 0x90000000 connectez2-initrd.itb
+    pfe stop
+    bootm 0x90000000
+
+This assumes you have a local network with addresses setup with DHCP and
+tftp server.
+
+The console is on an internal serial port, and you will need the console/USB
+port debug cable assembly to access it. The console serial port is at the
+default 115200,8,n,1.
+
+Legacy loading of the kernel, rootfs and devicetree is possible if you
+really need to. The generated binaries images/kernel.bin, images/rootfs.bin
+and images/connectez2.dtb can be loaded using u-boot commands:
+
+    setenv bootargs console=ttyS5,115200 root=/dev/ram0 initrd=0x98000000,24M earlycon=uart8250,mmio,0x21c0600 mtdparts=1550000.quadspi:1m(rcw),1m(u-boot),1m(env),1m(ucode)
+    dhcp 0x90000000 kernel.bin
+    tftpboot 0x97000000 connectez2.dtb
+    tftpboot 0x98000000 rootfs.bin
+    pfe stop
+    booti 0x90000000 - 0x97000000
+
+You can also load images via the manufacturing load mechanism using
+generated binaries by naming them appropriately:
+
+    cp images/connectez4.itb /tftpboot/itbImage-cez1012.manuf
+    cp images/urootfs.bin /tftpboot/manuf-image-cez1012.cpio.gz.u-boot
+
+With the unit jumpered for manufacture mode it will load and run these
+files.
+
+
+FIRMWARE FLASH
+--------------
+
+Flashing of firmware uses the DAL firmware loading program "netflash".
+From the command line you would typically use something like:
+
+    netflash -Uk 192.168.210.22 image.bin
+or
+    netflash -kb -r /dev/mmcblk0p3 image.bin
+

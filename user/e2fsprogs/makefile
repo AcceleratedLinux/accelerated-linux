@@ -1,5 +1,5 @@
 E2FSPROGS_VERSION = 1.45.5
-URL = http://downloads.sourceforge.net/e2fsprogs/e2fsprogs-$(E2FSPROGS_VERSION).tar.gz
+URL = https://sourceforge.net/projects/e2fsprogs/files/e2fsprogs/v$(E2FSPROGS_VERSION)/e2fsprogs-$(E2FSPROGS_VERSION).tar.gz
 
 CONFOPTS += --disable-defrag
 CONFOPTS += --disable-tls

@@ -47,7 +47,6 @@ config MACH_ARMADA_375
 	select ARMADA_375_CLK
 	select HAVE_ARM_SCU
 	select HAVE_ARM_TWD if SMP
-	select HAVE_SMP
 	select MACH_MVEBU_V7
 	select PINCTRL_ARMADA_375
 	help
@@ -66,7 +65,6 @@ config MACH_ARMADA_38X
 	select ARMADA_38X_CLK
 	select HAVE_ARM_SCU
 	select HAVE_ARM_TWD if SMP
-	select HAVE_SMP
 	select MACH_MVEBU_V7
 	select PINCTRL_ARMADA_38X
 	help
@@ -82,7 +80,6 @@ config MACH_ARMADA_39X
 	select CACHE_L2X0
 	select HAVE_ARM_SCU
 	select HAVE_ARM_TWD if SMP
-	select HAVE_SMP
 	select MACH_MVEBU_V7
 	select PINCTRL_ARMADA_39X
 	help
@@ -129,6 +126,14 @@ config MACH_6330MX
 	  This adds code to support the miscellaneous IO and power controls,
 	  specific LED code, etc.
 
+config MACH_ACM700x
+	bool "Opengear ACM700x"
+	help
+	  Say 'Y' here if you want to support the Opengear ACM700x boards
+	  (this includes the ACM7004, ACM7008 and ACM7004-5). This adds code to
+	  support the miscellaneous IO and power controls, specific LED
+	  code, etc.
+
 config MACH_CM71xx
 	bool "Opengear CM71xx"
 	help
@@ -136,6 +141,14 @@ config MACH_CM71xx
 	  (this includes the CM7116, CM7132 and CM7148). This adds code to
 	  support the miscellaneous IO and power controls, specific LED
 	  code, etc.
+
+config MACH_IM72xx
+	bool "Opengear IM72xx"
+	help
+	  Say 'Y' here if you want to support the Opengear IM7200 boards
+	  (this includes the IM7216, IM7232, IM7248 and others). This adds
+	  code to support the miscellaneous IO and power controls, specific
+	  LED code, etc.
 
 config MACH_6350SR
 	bool "Accelerated Concepts 6350SR"

@@ -96,7 +96,7 @@ module_param(old_scheme_first, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(old_scheme_first,
 		 "start with the old device initialization scheme");
 
-static bool use_both_schemes = 1;
+static bool use_both_schemes = true;
 module_param(use_both_schemes, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(use_both_schemes,
 		"try the other device initialization scheme if the "
@@ -5054,17 +5054,25 @@ static int descriptors_changed(struct usb_device *udev,
 	char		*buf;
 
 	if (memcmp(&udev->descriptor, old_device_descriptor,
-			sizeof(*old_device_descriptor)) != 0)
+			sizeof(*old_device_descriptor)) != 0) {
+		dev_warn(&udev->dev, "dc: descriptor changed\n");
 		return 1;
+	}
 
-	if ((old_bos && !udev->bos) || (!old_bos && udev->bos))
+	if ((old_bos && !udev->bos) || (!old_bos && udev->bos)) {
+		dev_warn(&udev->dev, "dc: device bos %s\n", old_bos ? "disappeared": "appeared");
 		return 1;
+	}
 	if (udev->bos) {
 		len = le16_to_cpu(udev->bos->desc->wTotalLength);
-		if (len != le16_to_cpu(old_bos->desc->wTotalLength))
+		if (len != le16_to_cpu(old_bos->desc->wTotalLength)) {
+			dev_warn(&udev->dev, "dc: bos desc wTotalLen was %u now %u\n", le16_to_cpu(old_bos->desc->wTotalLength), len);
 			return 1;
-		if (memcmp(udev->bos->desc, old_bos->desc, len))
+		}
+		if (memcmp(udev->bos->desc, old_bos->desc, len)) {
+			dev_warn(&udev->dev, "dc: bos desc changed\n");
 			return 1;
+		}
 	}
 
 	/* Since the idVendor, idProduct, and bcdDevice values in the
@@ -5083,23 +5091,25 @@ static int descriptors_changed(struct usb_device *udev,
 	}
 
 	buf = kmalloc(len, GFP_NOIO);
-	if (!buf)
+	if (!buf) {
 		/* assume the worst */
+		dev_warn(&udev->dev, "dc: unable to alloc %u\n", len);
 		return 1;
+	}
 
 	for (index = 0; index < udev->descriptor.bNumConfigurations; index++) {
 		old_length = le16_to_cpu(udev->config[index].desc.wTotalLength);
 		length = usb_get_descriptor(udev, USB_DT_CONFIG, index, buf,
 				old_length);
 		if (length != old_length) {
-			dev_dbg(&udev->dev, "config index %d, error %d\n",
+			dev_warn(&udev->dev, "config index %d, error %d\n",
 					index, length);
 			changed = 1;
 			break;
 		}
 		if (memcmp(buf, udev->rawdescriptors[index], old_length)
 				!= 0) {
-			dev_dbg(&udev->dev, "config index %d changed (#%d)\n",
+			dev_warn(&udev->dev, "config index %d changed (#%d)\n",
 				index,
 				((struct usb_config_descriptor *) buf)->
 					bConfigurationValue);
@@ -5112,11 +5122,11 @@ static int descriptors_changed(struct usb_device *udev,
 		length = usb_string(udev, udev->descriptor.iSerialNumber,
 				buf, serial_len);
 		if (length + 1 != serial_len) {
-			dev_dbg(&udev->dev, "serial string error %d\n",
+			dev_warn(&udev->dev, "serial string error %d\n",
 					length);
 			changed = 1;
 		} else if (memcmp(buf, udev->serial, length) != 0) {
-			dev_dbg(&udev->dev, "serial string changed\n");
+			dev_warn(&udev->dev, "serial string changed\n");
 			changed = 1;
 		}
 	}

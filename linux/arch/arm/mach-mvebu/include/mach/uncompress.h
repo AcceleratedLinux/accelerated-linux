@@ -38,6 +38,23 @@ static inline void arch_decomp_wdog(void)
 }
 #endif /* CONFIG_MACH_CM71xx */
 
+#if defined(CONFIG_MACH_ACM700x)
+#define ARCH_HAS_DECOMP_WDOG
+static inline void arch_decomp_wdog(void)
+{
+	*((volatile u32 *)(0xd0018140)) |= 0x10000000;
+	*((volatile u32 *)(0xd0018140)) ^= 0x20000000;
+}
+#endif /* CONFIG_MACH_ACM700x */
+
+#if defined(CONFIG_MACH_IM72xx)
+#define ARCH_HAS_DECOMP_WDOG
+static inline void arch_decomp_wdog(void)
+{
+	*((volatile u32 *)(0xf1010100)) ^= 0x00000080;
+}
+#endif /* CONFIG_MACH_IM72xx */
+
 #if defined(CONFIG_MACH_ARMADA_38X)
 #define ARCH_HAS_DECOMP_WDOG
 static inline void arch_decomp_wdog(void)

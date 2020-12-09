@@ -12,8 +12,10 @@
 
 if [ -d /efi ]; then
 	GRUBENV=/efi/grub/grubenv
-else
+elif [ -d /boot ]; then
 	GRUBENV=/boot/grub/grubenv
+else
+	GRUBENV=/etc/config/grubenv
 fi
 
 case $0 in

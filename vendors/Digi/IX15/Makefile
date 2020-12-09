@@ -9,7 +9,6 @@ IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
 
 SIGNING_ALG = ecdsa
-SIGNING_EXTRA =
 
 DTB       = imx6ull-ix15.dtb
 

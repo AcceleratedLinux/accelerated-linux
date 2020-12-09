@@ -1,9 +1,6 @@
+URL = https://www.freedesktop.org/software/libqmi/libqmi-1.26.4.tar.xz
+DOWNLOADHASH = c0adcb84ba452e3e13edeb3f94f7b003ea927b354bc187629e05efb333ce270b
 
-METHOD    = git
-VERSION   = 9d75bb2fad2329601bfb0be14294d6256df8bbd7 # 1.25.4+ master 2020-05-13
-URL       = git://anongit.freedesktop.org/libqmi
-
-CONFIGURE = autogen.sh
 CONFOPTS = --without-docs --without-tests
 CONFOPTS += --enable-more-warnings=no
 ifdef CONFIG_LIB_GLIB_STATIC
@@ -13,7 +10,9 @@ endif
 MAKEVARS = 
 ROMFS    = libqmi_romfs
 
-ifdef CONFIG_DEFAULTS_DIGI_TX64
+AUTORECONF = autoreconf -i
+
+ifneq ($(CONFIG_DEFAULTS_DIGI_TX64)$(CONFIG_DEFAULTS_DIGI_TX64_PR),)
 PATCH_SERIES = series-TX64
 endif
 

@@ -1,0 +1,34 @@
+diff --git a/plugins/sierra/77-mm-sierra.rules b/plugins/sierra/77-mm-sierra.rules
+index dfa4cf56..bc27ae0b 100644
+--- a/plugins/sierra/77-mm-sierra.rules
++++ b/plugins/sierra/77-mm-sierra.rules
+@@ -24,6 +24,16 @@ ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9071", ENV{.MM_USBIFNUM}=="00", ENV{
+ #  if 00: diag/qcdm port
+ ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9091", ENV{.MM_USBIFNUM}=="03", ENV{ID_MM_PORT_TYPE_AT_PRIMARY}="1"
+ ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9091", ENV{.MM_USBIFNUM}=="02", ENV{ID_MM_PORT_TYPE_GPS}="1"
+-ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9091", ENV{.MM_USBIFNUM}=="00", ENV{ID_MM_PORT_TYPE_QCDM}="1"
++ATTRS{idVendor}=="1199", ATTRS{idProduct}=="9091", ENV{.MM_USBIFNUM}=="00", ENV{ID_MM_PORT_IGNORE}="1"
++
++# EM9190: Add port hints
++# 0x00 MBIM network
++# 0x01 MBIM control
++# 0x02 GNSS
++# 0x03 AT Command Port
++# 0x04 DM Port
++ATTRS{idVendor}=="1199", ATTRS{idProduct}=="90d3", ENV{.MM_USBIFNUM}=="03", ENV{ID_MM_PORT_TYPE_AT_PRIMARY}="1"
++ATTRS{idVendor}=="1199", ATTRS{idProduct}=="90d3", ENV{.MM_USBIFNUM}=="02", ENV{ID_MM_PORT_TYPE_GPS}="1"
++ATTRS{idVendor}=="1199", ATTRS{idProduct}=="90d3", ENV{.MM_USBIFNUM}=="04", ENV{ID_MM_PORT_IGNORE}="1"
+ 
+ LABEL="mm_sierra_end"
+diff --git a/plugins/sierra/mm-plugin-sierra.c b/plugins/sierra/mm-plugin-sierra.c
+index 6622c5e1..895e78bf 100644
+--- a/plugins/sierra/mm-plugin-sierra.c
++++ b/plugins/sierra/mm-plugin-sierra.c
+@@ -96,7 +96,6 @@ mm_plugin_create (void)
+                       MM_PLUGIN_ALLOWED_VENDOR_IDS, vendor_ids,
+                       MM_PLUGIN_ALLOWED_DRIVERS,    drivers,
+                       MM_PLUGIN_ALLOWED_AT,         TRUE,
+-                      MM_PLUGIN_ALLOWED_QCDM,       TRUE,
+                       MM_PLUGIN_ALLOWED_QMI,        TRUE,
+                       MM_PLUGIN_ALLOWED_MBIM,       TRUE,
+                       NULL));

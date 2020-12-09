@@ -4,18 +4,19 @@
 
 THIS_DIR = $(ROOTDIR)/vendors/Digi/TX54-Dual-Cellular
 
-ROMFSIMG  = $(IMAGEDIR)/rootfs.bin
-ZIMAGE    = $(IMAGEDIR)/zImage
-IMAGE     = $(IMAGEDIR)/image.bin
-VMLINUX   = $(IMAGEDIR)/vmlinux
-KERNEL    = $(IMAGEDIR)/kernel
-LZKERNEL  = $(IMAGEDIR)/kernel.lzma
-UKERNEL   = $(IMAGEDIR)/ukernel.bin
-HWNAME    = $(shell echo $(CONFIG_PRODUCT) | tr '[:upper:]' '[:lower:]' | tr '-' '_')
-MFGIMG    = $(IMAGEDIR)/$(HWNAME)_mfg.tar.gz
+ROMFSIMG    = $(IMAGEDIR)/rootfs.bin
+ZIMAGE      = $(IMAGEDIR)/zImage
+IMAGE       = $(IMAGEDIR)/image.bin
+VMLINUX     = $(IMAGEDIR)/vmlinux
+KERNEL      = $(IMAGEDIR)/kernel
+LZKERNEL    = $(IMAGEDIR)/kernel.lzma
+UKERNEL     = $(IMAGEDIR)/ukernel.bin
+HWNAME      = $(shell echo $(CONFIG_PRODUCT) | tr '[:upper:]' '[:lower:]' | tr '-' '_')
+MFGIMG      = $(IMAGEDIR)/$(HWNAME)_mfg.tar.gz
+BLOADER_IMG = $(IMAGEDIR)/u-boot.nand
+BLOADER_IMG_VERSION = $(shell strings $(BLOADER_IMG) | grep -oE "[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,4}\.[0-9]{1,4}(-.*|$$)")
 
 SIGNING_ALG = ecdsa
-SIGNING_EXTRA =
 
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
@@ -83,6 +84,9 @@ image: image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin imag
 	else \
 		echo "!!! Warning: manufacturing package is not generated in open-source builds !!!"; \
 	fi
+
+# Comment it out to stop generating the bootloader update file
+image: bloader.pack
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

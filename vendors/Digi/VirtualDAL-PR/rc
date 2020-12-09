@@ -1,0 +1,119 @@
+[ ! -d /boot ] && exec /etc/rc.docker
+
+hostname "Digi Virtual DAL PR"
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=256M tmpfs /tmp
+mount -t tmpfs -o size=256M tmpfs /var
+mkdir -m 755 /dev/hugepages
+mount -t hugetlbfs none /dev/hugepages
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/log
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# rename interfaces to match front label
+ip link set eth0 name lan
+ip link set eth1 name wan
+
+# initialise devices before we need them
+/etc/rc.dev
+
+# the active main boot drive in /dev/sdX format
+DRIVE=$(stat -c "%t%02T %n" /dev/sd[a-z][0-9] | sed -n 's?'$(stat -c %D /)' \(/dev/sd.\).*?\1?p')
+
+# Fix our /dev/flash devices depending on boot device
+# we use symbolic links otherwise grub-install gets it wrong
+rm -f /dev/flash/*
+ln -s ${DRIVE}  /dev/flash/all
+ln -s ${DRIVE}1 /dev/flash/bios
+ln -s ${DRIVE}2 /dev/flash/grub
+ln -s ${DRIVE}3 /dev/flash/image
+ln -s ${DRIVE}4 /dev/flash/image1
+ln -s ${DRIVE}5 /dev/flash/opt
+
+# /boot/grub filesystem
+mount /dev/flash/grub /boot/grub
+
+# opt filesystem
+# if we have a disk, no opt, and 4 partitions then add an opt that uses the
+# rest of the disk at partition 5
+NUM=$(parted --script -- $DRIVE print 2> /dev/null | egrep '^ *[0-9] ' | wc -l)
+OPT=$(parted --script -- $DRIVE print 2> /dev/null | egrep '^ *5 ' | grep ext4)
+if [ "$DRIVE" -a -z "$OPT" -a "$NUM" -eq 4 ]; then
+    echo "Creating new OPT filesystem..."
+    last=$(parted --script -- $DRIVE unit s print | awk '/^ *[0-9]/ { gsub("s","",$3); print $3 }' | tail -1)
+    free=$((${last:-0}+1))
+    parted --script -- $DRIVE mkpart primary ext4  ${free}s -0
+    parted --script -- $DRIVE name 5 Opt
+    mkfs.ext4 -F ${DRIVE}5
+    mount -t ext4 ${DRIVE}5 /opt
+    mkdir /opt/config
+    touch /opt/config/.init /opt/config/.init2
+    umount /opt
+else
+    echo "Mounting OPT filesystem..."
+fi
+
+fsck.ext4 -p /dev/flash/opt
+mount -t ext4 /dev/flash/opt /opt
+
+rm -f /opt/boot
+ln -s /boot/grub /opt/boot
+
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+if [ "$(fw_printenv -n ethaddr 2> /dev/null)" ]; then
+	setmac -i eth1,eth2,sfp1,sfp2 -u -n 4
+fi
+
+echo "Mounting config filesystem ..."
+if ! mount --bind /opt/config /etc/config
+then
+	echo "Cannot bind mount /etc/config to /opt/config..."
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=4M tmpfs /etc/config
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+
+cat /etc/inittab.d/* > /etc/inittab
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

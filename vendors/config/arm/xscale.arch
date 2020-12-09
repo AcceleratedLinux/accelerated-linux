@@ -10,3 +10,4 @@ CPULDFLAGS := -EB
 
 include $(ROOTDIR)/vendors/config/arm/config.arch
 
+CONFIGURE_TOOL = armeb-linux$(LIBCSUFFIX)
