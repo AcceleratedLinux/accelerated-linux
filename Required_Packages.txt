@@ -1,9 +1,23 @@
-For a ubuntu 10.04/12.04/14.04 system, here are some packages/directories
+For a ubuntu 20.04 system, here are some packages/directories
 that you will need installed. Other systems will need similar packages
 installed.
 
-  sudo apt-get update
-  sudo apt-get install build-essential doxygen libncurses5-dev xutils-dev pkg-config gettext lzma-dev liblzma-dev flex bison autoconf libtool bin86 zlib1g-dev genisoimage genext2fs tcl libssl-dev cmake libdbus-glib-1-dev gtk-doc-tools autogen lynx-cur u-boot-tools byacc haserl ruby-sass git iasl libc6-dev-i386 genisoimage syslinux lib32stdc++6 liblzma-dev:i386 zlib1g:i386 gawk intltool autopoint bc
+sudo apt update
+sudo apt install \
+  ant autoconf autoconf-archive autogen autopoint bc bin86 bison \
+  bmap-tools build-essential byacc cmake curl device-tree-compiler \
+  doxygen flex gawk genext2fs gengetopt genisoimage gettext git gperf \
+  gtk-doc-tools haserl iasl intltool lib32stdc++6 libc6-dev-i386 \
+  libc6-i386 libdbus-glib-1-dev libelf-dev libgmp3-dev liblzma-dev \
+  liblzma-dev:i386 libmpc-dev libncurses5-dev libssl-dev libtool lynx \
+  lzma-dev ninja-build pkg-config python2-dev python3-pip python3-venv \
+  ruby-sass scons syslinux syslinux-utils tcl tftpd-hpa u-boot-tools \
+  xutils-dev zlib1g-dev zlib1g:i386
+
+# The following installs python2 m2crypto for building user/crda
+sudo apt install swig python-is-python3
+curl https://bootstrap.pypa.io/pip/2.7/get-pip.py | sudo python2 -
+sudo pip2 install m2crypto future
 
 For 64bit systems you needs some 32bit compat packages:
 
