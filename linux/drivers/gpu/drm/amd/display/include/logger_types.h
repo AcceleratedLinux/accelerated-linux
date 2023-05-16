@@ -36,6 +36,9 @@
 #define DC_LOG_DC(...) DRM_DEBUG_KMS(__VA_ARGS__)
 #define DC_LOG_DTN(...) DRM_DEBUG_KMS(__VA_ARGS__)
 #define DC_LOG_SURFACE(...) pr_debug("[SURFACE]:"__VA_ARGS__)
+#define DC_LOG_CURSOR(...) pr_debug("[CURSOR]:"__VA_ARGS__)
+#define DC_LOG_PFLIP(...) pr_debug("[PFLIP]:"__VA_ARGS__)
+#define DC_LOG_VBLANK(...) pr_debug("[VBLANK]:"__VA_ARGS__)
 #define DC_LOG_HW_HOTPLUG(...) DRM_DEBUG_KMS(__VA_ARGS__)
 #define DC_LOG_HW_LINK_TRAINING(...) pr_debug("[HW_LINK_TRAINING]:"__VA_ARGS__)
 #define DC_LOG_HW_SET_MODE(...) DRM_DEBUG_KMS(__VA_ARGS__)
@@ -67,7 +70,9 @@
 #define DC_LOG_ALL_GAMMA(...) pr_debug("[GAMMA]:"__VA_ARGS__)
 #define DC_LOG_ALL_TF_CHANNELS(...) pr_debug("[GAMMA]:"__VA_ARGS__)
 #define DC_LOG_DSC(...) DRM_DEBUG_KMS(__VA_ARGS__)
+#define DC_LOG_SMU(...) pr_debug("[SMU_MSG]:"__VA_ARGS__)
 #define DC_LOG_DWB(...) DRM_DEBUG_KMS(__VA_ARGS__)
+#define DC_LOG_DP2(...) DRM_DEBUG_KMS(__VA_ARGS__)
 
 struct dal_logger;
 
@@ -113,11 +118,13 @@ enum dc_log_type {
 	LOG_DISPLAYSTATS,
 	LOG_HDMI_RETIMER_REDRIVER,
 	LOG_DSC,
+	LOG_SMU_MSG,
 	LOG_DWB,
 	LOG_GAMMA_DEBUG,
 	LOG_MAX_HW_POINTS,
 	LOG_ALL_TF_CHANNELS,
 	LOG_SAMPLE_1DLUT,
+	LOG_DP2,
 	LOG_SECTION_TOTAL_COUNT
 };
 
@@ -147,11 +154,11 @@ enum dc_log_type {
 		(1ULL << LOG_I2C_AUX) | \
 		(1ULL << LOG_IF_TRACE) | \
 		(1ULL << LOG_HDMI_FRL) | \
+		(1ULL << LOG_SCALER) | \
 		(1ULL << LOG_DTN) /* | \
 		(1ULL << LOG_DEBUG) | \
 		(1ULL << LOG_BIOS) | \
 		(1ULL << LOG_SURFACE) | \
-		(1ULL << LOG_SCALER) | \
 		(1ULL << LOG_DML) | \
 		(1ULL << LOG_HW_LINK_TRAINING) | \
 		(1ULL << LOG_HW_AUDIO)| \

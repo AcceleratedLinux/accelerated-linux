@@ -39,6 +39,8 @@ struct nvkm_acr {
 	struct list_head hsfw, hsf;
 	struct list_head lsfw, lsf;
 
+	u64 managed_falcons;
+
 	struct nvkm_memory *wpr;
 	u64 wpr_start;
 	u64 wpr_end;
@@ -57,12 +59,12 @@ struct nvkm_acr {
 bool nvkm_acr_managed_falcon(struct nvkm_device *, enum nvkm_acr_lsf_id);
 int nvkm_acr_bootstrap_falcons(struct nvkm_device *, unsigned long mask);
 
-int gm200_acr_new(struct nvkm_device *, int, struct nvkm_acr **);
-int gm20b_acr_new(struct nvkm_device *, int, struct nvkm_acr **);
-int gp102_acr_new(struct nvkm_device *, int, struct nvkm_acr **);
-int gp108_acr_new(struct nvkm_device *, int, struct nvkm_acr **);
-int gp10b_acr_new(struct nvkm_device *, int, struct nvkm_acr **);
-int tu102_acr_new(struct nvkm_device *, int, struct nvkm_acr **);
+int gm200_acr_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_acr **);
+int gm20b_acr_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_acr **);
+int gp102_acr_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_acr **);
+int gp108_acr_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_acr **);
+int gp10b_acr_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_acr **);
+int tu102_acr_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_acr **);
 
 struct nvkm_acr_lsfw {
 	const struct nvkm_acr_lsf_func *func;
@@ -107,6 +109,7 @@ struct nvkm_acr_lsf_func {
 	void (*bld_write)(struct nvkm_acr *, u32 bld, struct nvkm_acr_lsfw *);
 	void (*bld_patch)(struct nvkm_acr *, u32 bld, s64 adjust);
 	int (*boot)(struct nvkm_falcon *);
+	u64 bootstrap_falcons;
 	int (*bootstrap_falcon)(struct nvkm_falcon *, enum nvkm_acr_lsf_id);
 	int (*bootstrap_multiple_falcons)(struct nvkm_falcon *, u32 mask);
 };

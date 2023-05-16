@@ -1,0 +1,135 @@
+# -*- makefile -*- # Emacs makefile mode
+
+SHELL = /bin/sh
+top_srcdir = @top_srcdir@
+srcdir = @srcdir@/src
+
+vpath % $(srcdir)
+vpath test/% $(top_srcdir)
+
+LDFLAGS ?= -L$(STAGEDIR)/lib
+LIBS = -lscew -lexpat -ljansson -lz -lm -lcrypto @LIBS@
+RANLIB = @RANLIB@
+INSTALL ?= install
+
+LIB = libopengear.a
+SHAREDLIB = libopengear.so
+
+OBJS = pmctl.o process.o serial.o network.o modem.o users.o \
+	xmldb.o xml.o xmlalert.o pmxmlalert.o envxmlalert.o sdtxmlalert.o stringlib.o \
+	upsxmlalert.o dataxmlalert.o ifprobe.o fset.o session.o libinfod.o pidfile.o \
+	zipstream.o portusers.o
+OBJS += roles.o
+OBJS += pwgrp.o
+SHAREDOBJS = $(patsubst %.o, %.shared.o, $(OBJS))
+
+ifndef ROOTDIR
+	PREBUILD = opengear
+	CFLAGS += -ggdb -O0 -Wall -Wextra -ansi -pedantic
+	#CFLAGS += -ggdb -O1 -Wall -Wextra -Werror -ansi -pedantic
+	CFLAGS += -I.
+	CFLAGS += -D_GNU_SOURCE
+	CFLAGS += -DCONFIG_PRODUCT=\"x86\"
+else
+	CFLAGS = @CFLAGS@
+	CFLAGS += -DCONFIG_PRODUCT=\"$(CONFIG_PRODUCT)\"
+	CFLAGS += -I../include
+endif
+
+ifndef COMPILE.c
+	COMPILE.c = $(CC)
+endif
+ifndef LINK.c
+	LINK.c = $(CC)
+endif
+
+
+ifeq ($(PROD_FAMILY), NGCS)
+CFLAGS += -DEMBED -D$(PROD_FAMILY) -fPIC
+CONFIG_PROP_LH5_NODE = 1
+endif
+
+CXXFLAGS += -DNDEBUG
+
+LH5ALL =
+ifdef CONFIG_PROP_LH5_NODE
+  LH5ALL += libopengear_lua.so
+endif
+
+## Memory leak checking
+#CFLAGS += -DDMALLOC -I$(ROOTDIR)/lib/dmalloc/build/dmalloc-5.5.2/
+#CXXFLAGS += -DDMALLOC -I$(ROOTDIR)/lib/dmalloc/build/dmalloc-5.5.2/
+#LIBS += -ldmallocth
+
+all:	$(PREBUILD) $(LIB) $(SHAREDLIB) $(LH5ALL)
+
+libopengear_lua.so: $(SHAREDLIB) $(top_srcdir)/lua/libopengear_lua.i
+	swig -Werror -lua -o libopengear_lua_wrap.c $(top_srcdir)/lua/libopengear_lua.i
+	$(COMPILE.c) $(CFLAGS) -c libopengear_lua_wrap.c -o libopengear_lua_wrap.o
+	$(LINK.c) $(CFLAGS) $(LDFLAGS) -shared -Wl,-soname,libopengear_lua.so libopengear_lua_wrap.o -L. -lopengear $(LIBS) -o $@
+
+$(LIB):	$(OBJS)
+	$(RM) $@
+	$(AR) $(ARFLAGS) $@ $^
+	$(RANLIB) $@
+
+$(SHAREDLIB):	$(SHAREDOBJS)
+	$(LINK.c) $(LDFLAGS) -shared -Wl,-soname,libopengear.so -o $@ $^ $(LIBS)
+
+%.shared.o:	%.c
+	$(COMPILE.c) $(CFLAGS) -fPIC -DPIC -o $@ -c $<
+
+clean:
+	$(RM) $(OBJS) $(LIB) $(wildcard test/*.o) regress
+	$(RM) -r docs
+
+distclean:	clean
+	$(RM) config.log config.status makefile
+
+install:
+	$(INSTALL) -d $(STAGEDIR)/lib/
+	$(INSTALL) $(SHAREDLIB) $(STAGEDIR)/lib/
+	$(INSTALL) -d $(STAGEDIR)/include/opengear/
+	$(INSTALL) $(srcdir)/../include/opengear/*.h $(STAGEDIR)/include/opengear/
+
+romfs:
+
+opengear:
+	ln -s $(top_srcdir)/include opengear
+
+docs: doxygen.conf
+	doxygen doxygen.conf
+
+SNOW_ARGS =
+ifeq ($(if $(V:0=),N,Y),Y)
+	SNOW_ARGS += --quiet
+endif
+
+HAS_C11 = $(if $(strip $(shell $(CC) -v --help 2>/dev/null | grep '\-std=c11')),yes,)
+
+.PHONY: check
+ifeq ($(HAS_C11),yes)
+check: t-users_whitebox t-users_blackbox
+	$(Q) command -v $(QEMU) > /dev/null 2>&1 && $(QEMU) t-users_whitebox $(SNOW_ARGS)
+	$(Q) command -v $(QEMU) > /dev/null 2>&1 && $(QEMU) t-users_blackbox $(SNOW_ARGS)
+
+T_USERS_WHITEBOX_C_INCLUDES = test/serial_count_mock.c test/usergroup_mocks.c test/usergroup_setup.c test/xml_config_setup.c
+
+t-users_whitebox.o: test/t-users_whitebox.c $(T_USERS_WHITEBOX_C_INCLUDES) $(LIB)
+	$(COMPILE.c) $(CFLAGS) -std=c11 -DSNOW_ENABLED -o $@ -c $<
+
+t-users_whitebox: t-users_whitebox.o xmldb.o xml.o roles.o
+	$(LINK.c) -o $@ $^ $(LIBS)
+
+T_USERS_BLACKBOX_C_INCLUDES = test/serial_count_mock.c test/usergroup_mocks.c test/usergroup_setup.c test/xml_config_setup.c
+
+t-users_blackbox.o: test/t-users_blackbox.c $(T_USERS_BLACKBOX_C_INCLUDES) $(LIB)
+	$(COMPILE.c) $(CFLAGS) -std=c11 -DSNOW_ENABLED -o $@ -c $<
+
+t-users_blackbox: t-users_blackbox.o $(LIB)
+	$(LINK.c) -o $@ $^ $(LIBS)
+else
+# VACM's compiler predates C++11 so snow.h won't compile.
+check:
+	@echo "Compiler doesn't support c++11. Can't compile snow.h. Skipping snow based unit tests"
+endif

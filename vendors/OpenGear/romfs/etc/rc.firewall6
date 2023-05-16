@@ -1,0 +1,106 @@
+#!/bin/sh
+
+REASON=$1
+
+source /etc/scripts/mutex
+
+export IPTABLES=/bin/ip6tables
+
+# Script paths
+CUSTOMFILE=/etc/config/filter6-custom
+
+# Run custom rules and exit if user script exists
+if [ -f ${CUSTOMFILE} ]; then
+	. ${CUSTOMFILE}
+	exit 0
+fi
+
+for table in filter nat mangle; do
+	OLDFILE=/etc/config/firewall/fwipv6.$table
+	NEWFILE=/etc/config/firewall/.fwipv6.$table
+	TMPFILE=/var/run/.fwipv6.$table.diff
+	USERFILE=/var/run/.fwipv6.filter.user
+
+	if [ "$REASON" = "boot" ]; then
+		if [ -s $OLDFILE ]; then
+			if ! grep -qE "^\*$table$" $OLDFILE || ! grep -qE "^COMMIT$" $OLDFILE ; then
+				continue;
+			fi
+
+			cat $OLDFILE | ip6tables-restore
+			if [ "$table" = "mangle" ]; then
+				pkill -HUP perifrouted
+			fi
+
+			continue
+		else
+			logger -t rc.firewall6 "$OLDFILE is missing!"
+		fi
+	fi
+
+	if [ ! -e $OLDFILE ] && [ -s $NEWFILE ]; then
+		if ! grep -qE "^\*$table$" $NEWFILE || ! grep -qE "^COMMIT$" $NEWFILE ; then
+			continue;
+		fi
+
+		cat $NEWFILE | ip6tables-restore
+		if [ "$table" = "mangle" ]; then
+			pkill -HUP perifrouted
+		fi
+
+		cp $NEWFILE $OLDFILE
+		continue
+	fi
+
+	if [ -s $OLDFILE ] && [ -s $NEWFILE ] ; then
+		if ! grep -qE "^\*$table$" $OLDFILE || ! grep -qE "^COMMIT$" $OLDFILE ; then
+			continue;
+		fi
+		if ! grep -qE "^\*$table$" $NEWFILE || ! grep -qE "^COMMIT$" $NEWFILE ; then
+			continue;
+		fi
+
+		diff -U 0 $OLDFILE $NEWFILE | sed '1,2d;s,^@@.*$,,' > $TMPFILE
+
+		if [ -s $TMPFILE ] ; then
+
+			rm -f $USERFILE
+			if [ "$table" = "filter" ]; then
+				if grep -q "\-A UserInput" $TMPFILE || grep -q "\-A UserOutput" $TMPFILE ||
+						grep -q "\-A UserForward" $TMPFILE ; then
+					echo "*filter" > $USERFILE
+					if grep -q "\-A UserInput" $TMPFILE ; then
+						echo ":UserInput - [0:0]" >> $USERFILE
+						grep "\-A UserInput" $NEWFILE >> $USERFILE
+					fi
+					if grep -q "\-A UserOutput" $TMPFILE ; then
+						echo ":UserOutput - [0:0]" >> $USERFILE
+						grep "\-A UserOutput" $NEWFILE >> $USERFILE
+					fi
+					if grep -q "\-A UserForward" $TMPFILE ; then
+						echo ":UserForward - [0:0]" >> $USERFILE
+						grep "\-A UserForward" $NEWFILE >> $USERFILE
+					fi
+					echo "COMMIT" >> $USERFILE
+				fi
+			fi
+
+			sed -i "s,^+:\(.*\)[ ]*-.*,ip6tables -t $table -N \1," $TMPFILE
+			sed -i "s,^-:\(.*\)[ ]*-.*,ip6tables -t $table -X \1," $TMPFILE
+
+			sed -i "s,^+-A,ip6tables -t $table -A," $TMPFILE
+
+			sed -i "s,^--A,ip6tables -t $table -D," $TMPFILE
+
+			sh $TMPFILE > /dev/null 2>&1
+
+			if [ -s $USERFILE ] ; then
+				cat $USERFILE | ip6tables-restore -n
+			fi
+		fi
+
+		cp $NEWFILE $OLDFILE
+
+		continue
+	fi
+done

@@ -1,0 +1,109 @@
+#! /bin/bash
+
+# This script acts as a wrapper for deleting users using the 'config' command 
+# in the CLI. The administrator provides the username(s) to delete
+# and the script then invokes the CGI's directly to handle the actual
+# deleting.
+# see also "user-add" and "user-mod" scripts.
+
+usage()
+{
+        echo 'usage: user-del [-h] username ...'
+}
+
+if [ $# -lt  1 ]
+then
+        echo "Provide at least one username"
+        usage
+        exit 1
+fi
+
+while getopts "h" OPTION                                                  
+do                                                                              
+        case "$OPTION" in                                                       
+           h)                                                                   
+                usage                                                           
+                exit 1                                               
+                ;;                                                   
+           [?])                         
+                usage                   
+                exit                    
+                ;;                 
+         esac                      
+done                
+
+# Do a shift in order to retrieve the usernames in $@
+shift $[ $OPTIND - 1]      
+
+for USERNAME in $@
+do
+	# Test whether this user exists
+	USEREXISTS=`grep -e "^$USERNAME:" /etc/passwd`
+	if [ -z "$USEREXISTS" ]
+	then
+        	echo "Error: User \"$USERNAME\" does not exist. "
+		exit 1
+	fi
+	if [ "$USERNAME" = "root" ]; then
+		echo "Error: root user cannot be deleted. "
+		exit 1
+	fi
+done
+
+# Backup /etc/config.xml file
+cp /etc/config/config.xml /etc/config/config.bak
+echo "backup of /etc/config/config.xml saved in /etc/config/config.bak"
+
+TOTAL_USERS=`config -g config.users.total | cut -f2 -d" "`
+if [ -z "$TOTAL_USERS" ]; then
+	TOTAL_USERS=0
+fi
+
+for USERNAME in $@
+do
+	echo "Deleting user $USERNAME"
+	
+	# Get the config index of the user.
+	USERINDEX=`config -g config.users | grep -e \
+	"config\.users\.user.*\.username $USERNAME$" | \
+	sed 's/[a-zA-Z.]*\([0-9]*\).* .*/\1/'`
+
+	if [ -z "$USERINDEX" ]
+	then
+		echo "Unable to delete user $USERNAME"
+		echo "Does that user exist?"
+	fi
+	
+	config -d config.users.user$USERINDEX
+	
+	# Need to move users down to fill in the gap created by deleting 
+	# this user
+	NEXT_USER=`expr $USERINDEX + 1`
+	HOLE=$USERINDEX
+	for ((i=$HOLE ; i < $TOTAL_USERS; i++)); do
+		args=$(config -g config.users.user${NEXT_USER})
+		ifs="$IFS"
+		IFS=$'\n'
+		for arg in $args; do
+			arg="$(echo $arg | sed "s/\(config\.users\.user${NEXT_USER}\.\)\([a-zA-Z0-9\._]*\) \(.*\)/config.users.user${i}.\2=\3/")"
+			config -s "$arg"
+		done
+		IFS="$ifs"
+		config -d config.users.user${NEXT_USER}
+		NEXT_USER=`expr $NEXT_USER + 1`
+	done
+
+	TOTAL_USERS=`expr $TOTAL_USERS - 1`
+	if [ $TOTAL_USERS -lt 0 ]; then
+		TOTAL_USERS=0
+	fi
+	config -s config.users.total=$TOTAL_USERS
+done
+	
+#echo "Running configurators..."
+config -r users
+
+echo
+echo "done"
+
+exit 0

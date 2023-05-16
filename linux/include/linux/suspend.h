@@ -430,15 +430,7 @@ struct platform_hibernation_ops {
 
 #ifdef CONFIG_HIBERNATION
 /* kernel/power/snapshot.c */
-extern void __register_nosave_region(unsigned long b, unsigned long e, int km);
-static inline void __init register_nosave_region(unsigned long b, unsigned long e)
-{
-	__register_nosave_region(b, e, 0);
-}
-static inline void __init register_nosave_region_late(unsigned long b, unsigned long e)
-{
-	__register_nosave_region(b, e, 1);
-}
+extern void register_nosave_region(unsigned long b, unsigned long e);
 extern int swsusp_page_is_forbidden(struct page *);
 extern void swsusp_set_page_free(struct page *);
 extern void swsusp_unset_page_free(struct page *);
@@ -446,6 +438,7 @@ extern unsigned long get_safe_page(gfp_t gfp_mask);
 extern asmlinkage int swsusp_arch_suspend(void);
 extern asmlinkage int swsusp_arch_resume(void);
 
+extern u32 swsusp_hardware_signature;
 extern void hibernation_set_ops(const struct platform_hibernation_ops *ops);
 extern int hibernate(void);
 extern bool system_entering_hibernation(void);
@@ -453,9 +446,10 @@ extern bool hibernation_available(void);
 asmlinkage int swsusp_save(void);
 extern struct pbe *restore_pblist;
 int pfn_is_nosave(unsigned long pfn);
+
+int hibernate_quiet_exec(int (*func)(void *data), void *data);
 #else /* CONFIG_HIBERNATION */
 static inline void register_nosave_region(unsigned long b, unsigned long e) {}
-static inline void register_nosave_region_late(unsigned long b, unsigned long e) {}
 static inline int swsusp_page_is_forbidden(struct page *p) { return 0; }
 static inline void swsusp_set_page_free(struct page *p) {}
 static inline void swsusp_unset_page_free(struct page *p) {}
@@ -464,12 +458,16 @@ static inline void hibernation_set_ops(const struct platform_hibernation_ops *op
 static inline int hibernate(void) { return -ENOSYS; }
 static inline bool system_entering_hibernation(void) { return false; }
 static inline bool hibernation_available(void) { return false; }
+
+static inline int hibernate_quiet_exec(int (*func)(void *data), void *data) {
+	return -ENOTSUPP;
+}
 #endif /* CONFIG_HIBERNATION */
 
 #ifdef CONFIG_HIBERNATION_SNAPSHOT_DEV
-int is_hibernate_resume_dev(const struct inode *);
+int is_hibernate_resume_dev(dev_t dev);
 #else
-static inline int is_hibernate_resume_dev(const struct inode *i) { return 0; }
+static inline int is_hibernate_resume_dev(dev_t dev) { return 0; }
 #endif
 
 /* Hibernation and suspend events */
@@ -499,14 +497,14 @@ extern void ksys_sync_helper(void);
 
 /* drivers/base/power/wakeup.c */
 extern bool events_check_enabled;
-extern unsigned int pm_wakeup_irq;
 extern suspend_state_t pm_suspend_target_state;
 
 extern bool pm_wakeup_pending(void);
 extern void pm_system_wakeup(void);
 extern void pm_system_cancel_wakeup(void);
-extern void pm_wakeup_clear(bool reset);
+extern void pm_wakeup_clear(unsigned int irq_number);
 extern void pm_system_irq_wakeup(unsigned int irq_number);
+extern unsigned int pm_wakeup_irq(void);
 extern bool pm_get_wakeup_count(unsigned int *count, bool block);
 extern bool pm_save_wakeup_count(unsigned int count);
 extern void pm_wakep_autosleep_enabled(bool set);
@@ -544,22 +542,56 @@ static inline void unlock_system_sleep(void) {}
 #ifdef CONFIG_PM_SLEEP_DEBUG
 extern bool pm_print_times_enabled;
 extern bool pm_debug_messages_on;
-extern __printf(2, 3) void __pm_pr_dbg(bool defer, const char *fmt, ...);
+static inline int pm_dyn_debug_messages_on(void)
+{
+#ifdef CONFIG_DYNAMIC_DEBUG
+	return 1;
+#else
+	return 0;
+#endif
+}
+#ifndef pr_fmt
+#define pr_fmt(fmt) "PM: " fmt
+#endif
+#define __pm_pr_dbg(fmt, ...)					\
+	do {							\
+		if (pm_debug_messages_on)			\
+			printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__);	\
+		else if (pm_dyn_debug_messages_on())		\
+			pr_debug(fmt, ##__VA_ARGS__);	\
+	} while (0)
+#define __pm_deferred_pr_dbg(fmt, ...)				\
+	do {							\
+		if (pm_debug_messages_on)			\
+			printk_deferred(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__);	\
+	} while (0)
 #else
 #define pm_print_times_enabled	(false)
 #define pm_debug_messages_on	(false)
 
 #include <linux/printk.h>
 
-#define __pm_pr_dbg(defer, fmt, ...) \
-	no_printk(KERN_DEBUG fmt, ##__VA_ARGS__)
+#define __pm_pr_dbg(fmt, ...) \
+	no_printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__)
+#define __pm_deferred_pr_dbg(fmt, ...) \
+	no_printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__)
 #endif
 
+/**
+ * pm_pr_dbg - print pm sleep debug messages
+ *
+ * If pm_debug_messages_on is enabled, print message.
+ * If pm_debug_messages_on is disabled and CONFIG_DYNAMIC_DEBUG is enabled,
+ *	print message only from instances explicitly enabled on dynamic debug's
+ *	control.
+ * If pm_debug_messages_on is disabled and CONFIG_DYNAMIC_DEBUG is disabled,
+ *	don't print message.
+ */
 #define pm_pr_dbg(fmt, ...) \
-	__pm_pr_dbg(false, fmt, ##__VA_ARGS__)
+	__pm_pr_dbg(fmt, ##__VA_ARGS__)
 
 #define pm_deferred_pr_dbg(fmt, ...) \
-	__pm_pr_dbg(true, fmt, ##__VA_ARGS__)
+	__pm_deferred_pr_dbg(fmt, ##__VA_ARGS__)
 
 #ifdef CONFIG_PM_AUTOSLEEP
 

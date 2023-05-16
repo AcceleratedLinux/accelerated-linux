@@ -2441,6 +2441,23 @@ class Kconfig(object):
                                     self._expect_sym(),
                                     self._parse_cond()))
 
+            elif t0 == _T_MODULES:
+                # To reduce warning spam, only warn if 'option modules' is
+                # set on some symbol that isn't MODULES, which should be
+                # safe. I haven't run into any projects that make use
+                # modules besides the kernel yet, and there it's likely to
+                # keep being called "MODULES".
+                if node.item is not self.modules:
+                    self._warn("the 'modules' attribute is not supported. "
+                               "Let me know if this is a problem for you, "
+                               "as it wouldn't be that hard to implement. "
+                               "Note that modules are supported -- "
+                               "Kconfiglib just assumes the symbol name "
+                               "MODULES, like older versions of the C "
+                               "implementation did when 'modules' "
+                               "wasn't used.",
+                               self._filename, self._linenr)
+
             elif t0 == _T_OPTION:
                 if self._check_token(_T_ENV):
                     if not self._check_token(_T_EQUAL):

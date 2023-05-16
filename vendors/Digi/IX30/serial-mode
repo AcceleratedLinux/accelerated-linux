@@ -1,0 +1,121 @@
+#!/bin/sh
+
+#
+# serial-mode.sh - setup and control serial port interface mode
+#
+# Digi International Inc. is the copyright holder for the contents of this file.
+# More information can be found in the file named COPYRIGHT in the root of thi
+# package.
+#
+
+#
+# GPIO117 = (GPIO4.21) RS485 shutdown (output, active high)
+# GPIO118 = (GPIO4.22) RS232 shutdown (output, active low)
+# GPIO119 = (GPIO4.23) RS485 terminate enable (output, active high)
+# GPIO120 = (GPIO4.24) RS485-mode (4-wire / 2-wire) (output, 0:4W; 1:2W)
+#
+
+readonly RS485_SHDN=117
+readonly RS232_SHDN=118
+readonly RS485_TERM=119
+readonly RS485_MODE=120
+
+readonly RS485_MODE_4W=0
+readonly RS485_MODE_2W=1
+
+serial_init() {
+	# The initialization disables all transceivers, seriald will configure
+	# the port as needed
+	echo $RS485_MODE > /sys/class/gpio/export
+	echo low > /sys/class/gpio/gpio$RS485_MODE/direction
+	echo $RS485_TERM > /sys/class/gpio/export
+	echo low > /sys/class/gpio/gpio$RS485_TERM/direction
+	echo $RS485_SHDN > /sys/class/gpio/export
+	echo high > /sys/class/gpio/gpio$RS485_SHDN/direction
+	echo $RS232_SHDN > /sys/class/gpio/export
+	echo 1 > /sys/class/gpio/gpio$RS232_SHDN/active_low
+	# NOTE: direction doesn't care about the active_low property, we want
+	# the physical line to be LOW (which with active-low, would be HIGH)
+	echo low > /sys/class/gpio/gpio$RS232_SHDN/direction
+}
+
+serial_powerdown() {
+	echo 1 > /sys/class/gpio/gpio$RS232_SHDN/value
+	echo 1 > /sys/class/gpio/gpio$RS485_SHDN/value
+	echo $RS485_MODE_4W > /sys/class/gpio/gpio$RS485_MODE/value
+	serial_nonterminate
+}
+
+serial_rs232() {
+	echo $RS485_MODE_4W > /sys/class/gpio/gpio$RS485_MODE/value
+	echo 0 > /sys/class/gpio/gpio$RS485_TERM/value
+	echo 1 > /sys/class/gpio/gpio$RS485_SHDN/value
+	echo 0 > /sys/class/gpio/gpio$RS232_SHDN/value
+}
+
+serial_rs422() {
+	echo $RS485_MODE_4W > /sys/class/gpio/gpio$RS485_MODE/value
+	echo 0 > /sys/class/gpio/gpio$RS485_TERM/value
+	echo 1 > /sys/class/gpio/gpio$RS232_SHDN/value
+	echo 0 > /sys/class/gpio/gpio$RS485_SHDN/value
+}
+
+serial_rs485() {
+	echo $RS485_MODE_2W > /sys/class/gpio/gpio$RS485_MODE/value
+	echo 0 > /sys/class/gpio/gpio$RS485_TERM/value
+	echo 1 > /sys/class/gpio/gpio$RS232_SHDN/value
+	echo 0 > /sys/class/gpio/gpio$RS485_SHDN/value
+}
+
+serial_nonterminate() {
+	echo 0 > /sys/class/gpio/gpio$RS485_TERM/value
+}
+
+serial_terminate() {
+	echo 1 > /sys/class/gpio/gpio$RS485_TERM/value
+}
+
+usage() {
+	echo "usage: serial-mode <device> (init|powerdown|rs-232|rs-422|rs-485) [terminate]"
+	echo
+	echo "        init      -- initialize port control"
+	echo "        powerdown -- powerdown port (default)"
+	echo "        rs-232    -- set port into RS-232 mode"
+	echo "        rs-422    -- set port into RS-422 mode"
+	echo "        rs-485    -- set port into RS-485 mode"
+	echo "        terminate -- enable line termination"
+	echo
+	exit 1
+}
+
+#
+# Check arguments, and error out on anything invalid.
+#
+if [ $# -lt 2 -o $# -gt 3 ] ; then
+	usage
+fi
+if [ "$1" != "/dev/serial/port1" ] ; then
+	echo "ERROR: serial-mode only supported on /dev/serial/port1"
+	exit 1
+fi
+
+case "$2" in
+init)	serial_init ;;
+powerdown)
+	serial_powerdown
+	# Don't parse 'terminate'
+	exit 0
+	;;
+rs-232)	serial_rs232 ;;
+rs-422)	serial_rs422 ;;
+rs-485)	serial_rs485 ;;
+*)	usage ;;
+esac
+
+if [ "$3" = "terminate" ] ; then
+	serial_terminate
+else
+	serial_nonterminate
+fi
+
+exit 0

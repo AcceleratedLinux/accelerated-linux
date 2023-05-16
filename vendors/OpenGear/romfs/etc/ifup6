@@ -1,0 +1,7 @@
+#!/bin/sh
+
+#
+# Re-install/restore firewall rules
+#
+
+exit 0

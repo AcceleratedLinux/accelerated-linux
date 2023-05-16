@@ -1,0 +1,103 @@
+#!/bin/sh
+
+syslog () { logger -s -t gen-keys "$@"; }
+
+# Generate SSH host key of the given type (rsa, etc)
+# unless a working one exists
+gen_ssh_key () { # type [ssh-keygen-args...]
+	file=/etc/config/ssh_host_$1_key
+
+	if [ -s $file ] && ssh-keygen -y -f $file >/dev/null; then
+		return 0 # Host key exists and is intact
+	fi
+
+	syslog "generating $file"
+	rm -f $file $file.pub
+	if ! ssh-keygen -q -C "" -N "" -f $file -t "$@"; then
+		syslog -p user.err "$file: failed to create"
+		return 1
+	fi
+
+	ssh_changed=true
+}
+ssh_changed=false
+
+# Restart the sshd service if a previous gen_ssh_key changed something
+restart_sshd_if_changed () {
+	if $ssh_changed; then
+		if [ -s /var/run/sshd.pid ] && read pid < /var/run/sshd.pid; then
+			kill -HUP -- "$pid"
+		else
+			pkill -HUP sshd
+			kill -HUP 1       # init may be in backoff
+		fi
+		ssh_changed=false
+	fi
+}
+
+# Runs a command in the context of a given permission mask
+with_umask () {
+	local save=$(umask)
+	umask $1; shift
+	"$@"; local ret=$?
+	umask $save
+	return $ret
+}
+
+# Generate the self-signed certificate for 192.168.0.1 used by cherokee
+# unless a working one exists.
+gen_ssl_cert () {  # <rsa-bits>
+	bits=$1
+	cert=/etc/config/ssl_cert.pem
+	key=/etc/config/ssl_key.pem
+	conf=/etc/config/openssl.conf
+
+	# Skip early if the cert exists and looks valid for the month.
+	#  - If the local RTC has gone back to 1970 (eg bad battery), an
+	#    actually-good cert will still look OK here because only the
+	#    expiry (end date) is tested.
+	if [ -s $cert ] && openssl x509 -noout -checkend 2592000 -in $cert; then
+		return 0
+	fi
+
+	# Detect user-installed certificates and leave them alone.
+	# These are certs with a subject other than /CN=192.168.0.1.
+	if [ -s $cert -a -s $key ] &&
+	   ! openssl x509 -in $cert -noout -subject | grep -q /CN=192.168.0.1
+	then
+		syslog -p user.warn "$cert: user certificate near/past expiry"
+		return 1
+	fi
+
+	# alternative: cp /etc/config/ssh_host_rsa_key $key
+	syslog "generating $key"
+	if ! with_umask 077 \
+	     openssl genpkey -algorithm rsa -pkeyopt rsa_keygen_bits:$bits \
+		-out $key
+	then
+		syslog -p user.err "$key: failed to generate"
+		return 1
+	fi
+
+	syslog "generating $cert"
+	rm -f $cert
+	openssl req -x509 -new -out $cert -key $key \
+	    -days 365 -config $conf
+	if [ $? -ne 0 ]; then
+		syslog -p user.err "$cert: failed to create new certificate"
+		return 1
+	fi
+
+	syslog "$cert: self-signed certificate has been updated"
+	pkill -HUP cherokee
+}
+
+# Generate the stronger host keys first
+gen_ssh_key ecdsa
+gen_ssh_key ed25519
+restart_sshd_if_changed
+
+# Generate the RSA keypairs. These take some time on slower devices.
+# 2048-bit length RSA keys will be sufficient until 2030.
+gen_ssl_cert 2048
+gen_ssh_key rsa -b 2048 && restart_sshd_if_changed

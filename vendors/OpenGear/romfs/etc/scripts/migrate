@@ -1,0 +1,2952 @@
+#!/bin/sh
+
+# detect if we have *any* migration files existing at the moment;
+# if not, we can probably safely assume that this boot is a clean
+# boot (ie. initial or factory erase boot). If so, set a flag
+# in /var/run to note that, so we can refer to it later if needed.
+if [ ! -e /etc/config/migrate ]
+then
+	touch /var/run/boot_has_clean_config
+fi
+
+# Fix migration environment
+if [ -f /etc/config/migrate ]; then
+	mv /etc/config/migrate /etc/config/migrate.old
+fi
+if [ ! -d /etc/config/migrate ]; then
+	mkdir -p /etc/config/migrate
+fi
+# the /var/run/config/migrate directory should contain a file
+# for each configurator that has been run as part of the migration
+# process (this boot only).  This is to ensure that we don't run
+# the same configurator multiple times, eg. on a factory erase.
+if [ ! -d /var/run/config/migrate ]; then
+	mkdir -p /var/run/config/migrate
+fi
+
+# Migrate to shadow passwords
+if [ ! -f /etc/config/migrate/auth.003 ]; then
+	# Backup the passwd and group files and make them a little harder to access
+	cp /etc/config/passwd /etc/config/passwd.bak
+	chown root:root /etc/config/passwd.bak
+	chmod 0600 /etc/config/passwd.bak
+	cp /etc/config/group /etc/config/group.bak
+	chown root:root /etc/config/group.bak
+	chmod 0600 /etc/config/group.bak
+
+	echo "Migrating groups to shadow file"
+	touch /etc/config/gshadow
+	# group fields - name:passwd:gid:mem
+	# shadow - name:passwd:adm:mem
+	while read line; do
+		gname=$(echo "$line" | cut -d: -f 1)
+		# If this group isn't already in the shadow file
+		if ! grep -q "^$gname:" /etc/config/gshadow; then
+			echo "$line" | awk -F: '{print $1 ":" $2 "::" $4}' >> /etc/config/gshadow
+		fi
+	done < /etc/config/group
+	chown root:root /etc/config/gshadow
+	chmod 0600 /etc/config/gshadow
+
+	echo "Securing group passwords"
+	# Now that the group passwords have been copied to the shadow file, the
+	# public group file should have all passwords replaced with 'x'. Some
+	# passwords are set to special chars so preserve those.
+	:> /tmp/group
+	while read line; do
+		passwd=$(echo "$line" | cut -d: -f 2)
+		# Have to escape the special case ! char
+		passwd=$(echo "${passwd}" | sed 's/!/\\!/')
+		if [ "${passwd}" = "x" -o "${passwd}" = '*' -o "${passwd}" = "\!" ]; then
+			echo "$line" >> /tmp/group
+		else
+			echo "${line}" | awk -F: '{print $1 ":x:" $3 ":" $4}' \
+			>> /tmp/group
+		fi
+	done < /etc/config/group
+	mv /tmp/group /etc/config/group
+	# There should be no passwords in the group file so read access is ok.
+	chown root:root /etc/config/group
+	chmod 0644 /etc/config/group
+
+	echo "Migrating users to shadow file"
+	touch /etc/config/shadow
+	# passwd fields - name:passwd:uid:gid:fullname:homedir:shell
+	# shadow - name:passwd:lstchg:min:max:warn:inact:expire:flag
+	while read line; do
+		pname=$(echo "$line" | cut -d: -f 1)
+		# If this user isn't already in the shadow file
+		if ! grep -q "^$pname:" /etc/config/shadow; then
+			lstchg=
+			# If this is 'root', and this is a fresh config,
+			# and preserved passwords are not in use, then
+			# expire the default password immediately
+			if [ $pname = root ] &&
+			   [ -e /var/run/boot_has_clean_config ] &&
+			   ! setfset -r | grep -q ^root_pwd_hash=
+			then
+				lstchg=0 # means expire immediately
+			fi
+			echo "$line" |
+			    awk -F: '{print $1 ":" $2 ":" lstchg "::::::"}' \
+				lstchg=$lstchg >> /etc/config/shadow
+		fi
+	done < /etc/config/passwd
+	chown root:root /etc/config/shadow
+	chmod 0600 /etc/config/shadow
+
+	echo "Securing user passwords"
+	# Now that the user passwords have been copied to the shadow file, the
+	# public user file should have all passwords replaced with 'x'. Some
+	# passwords are set to special chars so preserve those.
+	:> /tmp/passwd
+	while read line; do
+		passwd=$(echo "$line" | cut -d: -f 2)
+		# Have to escape the special case ! char
+		passwd=$(echo "${passwd}" | sed 's/!/\\!/')
+		if [ "${passwd}" = "x" -o "${passwd}" = '*' -o "${passwd}" = "\!" ]; then
+			echo "$line" >> /tmp/passwd
+		else
+			echo "$line" \
+				| awk -F: '{print $1 ":x:" $3 ":" $4 ":" $5 ":" $6 ":" $7}' \
+				>> /tmp/passwd
+		fi
+	done < /etc/config/passwd
+	mv /tmp/passwd /etc/config/passwd
+	# There should be no passwords in the passwd file so read access is ok.
+	chown root:root /etc/config/passwd
+	chmod 0644 /etc/config/passwd
+
+	touch /etc/config/migrate/auth.003
+fi
+
+
+# 002 - Turn off all insecure services such as Telnet & HTTP by default
+# 003 - switch sshd and https to inittab rather than inetd (FIPS + performance)
+# 004 - switch https to stunnel in inittab rather than sslwrap (FIPS+performance)
+if [ ! -f /etc/config/migrate/services.004 ]; then
+	echo "Migrating network services to new configuration"
+	config --run=services >& /dev/null
+	touch /etc/config/migrate/services.004
+fi
+
+# Migrate from fnord to lighttpd
+if [ ! -f /etc/config/migrate/httpd.001 ]; then
+	echo "Migrating web server to new configuration"
+	cp /etc/default/https.conf /etc/config/https.conf
+	grep -v "80 stream tcp" /etc/config/inetd.conf \
+		> /etc/config/inetd.conf.bak
+	mv /etc/config/inetd.conf.bak /etc/config/inetd.conf
+	pkill -HUP inetd
+	touch /etc/config/migrate/httpd.001
+fi
+
+# Migrate lighttpd proxy
+if [ ! -f /etc/config/migrate/httpd.002 ]; then
+	echo "Migrating web server proxy"
+	cp /etc/default/lighttpd.conf /etc/config/lighttpd.conf
+	mv /etc/config/mod_proxy.conf /etc/config/lighttpd.d/webshell.conf
+	pkill -HUP lighttpd-angel
+	touch /etc/config/migrate/httpd.002
+fi
+
+# Migrate old PAM configuration to new defaults
+if [ ! -f /etc/config/migrate/auth.002 ]; then
+	echo "Migrating authentication system to new configuration"
+	server=`config -g config.auth.server | cut -f2- -d' '`
+	secret=`config -g config.auth.password | cut -f2- -d' '`
+	config -s config.auth.tacacs.auth_server="${server}" \
+		-s config.auth.radius.auth_server="${server}" \
+		-s config.auth.ldap.auth_server="${server}" \
+		-s config.auth.tacacs.password="${secret}" \
+		-s config.auth.radius.password="${secret}" \
+		-s config.auth.ldap.password="${secret}"
+	config --run=auth >& /dev/null
+	touch /etc/config/migrate/auth.002
+fi
+
+# Remove wrongly moved groups
+if [ ! -f /etc/config/migrate/auth.004 ]; then
+	tmpfile=/var/tmp/groups.auth.004
+	grep -v "^nobody.*:x:1000:" /etc/config/group > $tmpfile
+	if [ -f $tmpfile ]; then mv $tmpfile /etc/config/group; fi
+	touch /etc/config/migrate/auth.004
+fi
+
+# SD4002 & similar hardware has Local Console on by default
+getNod() {
+	ls -l "$1" | sed 's/\(.\).* \([0-9]\+\),[ \t]*\([0-9]\+\) .*/\1 \2 \3/'
+}
+if [ ! -f /etc/config/migrate/serialconfig.001 ]; then
+	sercon=$(getNod /dev/sercon)
+	port01=$(getNod /dev/port01)
+	if [ "$sercon" == "$port01" ]; then
+		echo "Migrating Local Console to new configuration"
+		mode=`config -g config.ports.port1.mode`
+		if [ -z "$mode" ]; then
+			config -s config.ports.port1.mode=console
+		fi
+	fi
+	touch /etc/config/migrate/serialconfig.001
+fi
+
+# Adds a system user to /etc/config/passwd, if it isn't already there
+# The default parameters are:
+#     gid=2 home=/var/empty shell=/bin/false desc=""
+# New UIDs are allocated starting at 101
+# (Don't forget to teach the users configurator not to delete new users)
+make_user () { # name [gid [home [shell [desc]]]]
+	if ! grep -q "^$1:" /etc/config/passwd; then
+	    uid=$(next_id </etc/config/passwd)
+	    echo "Creating user $1 ($uid)"
+	    echo "$1:x:$uid:${2-2}:$5:${3-/var/empty}:${4-/bin/false}" >> /etc/config/passwd
+	    echo "$1:x:::::::" >> /etc/config/shadow
+	fi
+}
+
+# Adds a system group to /etc/group, if it isn't already there
+make_group () { # name
+	if ! grep -q "^$1:" /etc/config/group; then
+	    gid=$(next_id </etc/config/group)
+	    echo "Creating group $1 ($gid)"
+	    echo "$1:x:$gid:" >> /etc/config/group
+	    echo "$1:!::" >> /etc/config/gshadow
+	fi
+}
+
+# Finds the next unused ID (field 3) from a system db
+next_id () { # [minimum_id=101]
+    awk -F: '{ used[$3] = 1; }
+	     END {
+	         while (used[id])
+		     id++;
+		 print id;
+	     }' id=${1-101}
+}
+
+# removes a user
+rm_user () {
+	sed -i "/^$1:/d" /etc/config/passwd
+	sed -i "/^$1:/d" /etc/config/shadow
+}
+
+# Make sure nrpe and nsca users exist
+if [ -e /bin/nrpe ]; then
+	make_user nrpe
+	make_user nsca
+fi
+
+# Make sure ups user exists
+if [ -e /bin/upsd ]; then
+	make_user ups
+fi
+
+# Make sure mysql user exists
+if [ -e /bin/mysqld ]; then
+	make_user mysql
+fi
+
+# Make sure D-Bus user exists
+if [ -e /bin/dbus-daemon ]; then
+	make_user messagebus
+fi
+
+# Make sure lldpd privsep user exists
+if [ -e /sbin/lldpd ]; then
+	make_user _lldpd
+fi
+
+# Make udev standard groups
+if [ -e /libexec/udev/udevd ]; then
+	for group in audio cdrom dialout disk floppy kmem lp tape tty usb video; do
+	    make_group $group
+	done
+fi
+
+# Make sure non-priviledged telnet user exists - must still be an admin
+make_user unauth 1 /var/empty /bin/ursh
+
+# cms.002
+# cms.003
+# cms.004
+
+# Migrate old PAM configuration to new defaults
+if [ ! -f /etc/config/migrate/perms.001 ]; then
+	echo "Make groups file world readable"
+	chmod a+r /etc/config/group
+	touch /etc/config/migrate/perms.001
+fi
+
+# Migrate old DHCP client to busybox DHCP client
+if [ ! -f /etc/config/migrate/dhcpc.001 ]; then
+	echo "Upgrade DHCP client configuration"
+	config --run=ipconfig
+	touch /etc/config/migrate/dhcpc.001
+fi
+
+# Migrate interface configuration to role based storage
+if [ ! -f /etc/config/migrate/ipconfig.001 ]; then
+	VERSION=$(config -g config.version | cut -f2- -d' ')
+	if [ "$VERSION" != "0.1" -a "$VERSION" != "0.2" ]; then
+		touch /etc/config/migrate/ipconfig.001
+	fi
+fi
+if [ ! -f /etc/config/migrate/ipconfig.001 ]; then
+
+	ID=""
+	CMD="config "
+	HASLAN=""
+	HASWAN=""
+	HASOOBFO=""
+
+	for i in `config -g config.interfaces`; do
+		if [ -z "$ID" ]; then
+			IFACE=$(echo $i | cut -f3 -d'.')
+			if [ -z $IFACE ]; then
+                        	echo "Migration error: invalid config field $i"
+	                        continue
+        	        fi
+			FIELD=$(echo $i | cut -f4- -d'.')
+			if [ "$IFACE" = "eth0" ]; then
+				ID="config.interfaces.wan.$FIELD"
+				HASWAN="-s config.interfaces.wan.ifname=eth0"
+			elif [ "$IFACE" = "eth1" ]; then
+				ID="config.interfaces.lan.$FIELD"
+				HASLAN="-s config.interfaces.lan.ifname=eth1"
+			elif [ "$IFACE" = "eth1:0" ]; then
+				ID="config.interfaces.oobfo.$FIELD"
+				HASOOB="-s config.interfaces.oobfo.ifname=eth1:0"
+			fi
+		else
+			CMD="$CMD -s '$ID=$i'"
+			ID=""
+		fi
+
+	done
+	CMD="$CMD $HASWAN $HASLAN $HASOOB"
+	echo "Running: $CMD"
+	RESULT=`eval "$CMD"`
+	echo "Result: $RESULT"
+	config -s config.version=0.3
+	touch /etc/config/migrate/ipconfig.001
+fi
+
+# Sanitise interface configuration fields
+if [ ! -f /etc/config/migrate/ipconfig.002 ]; then
+	ifs="$IFS"
+	IFS=$'\n'
+
+	for id in $(config -g config.interfaces | cut -f1 -d' '); do
+		val=$(config -g $id | cut -f2 -d' ')
+		if [ ${val:0-1} == \' ]; then
+			len=$(( ${#val}-1 ))
+			eval "config -s $id='${val:0:$len}'"
+		fi
+	done
+
+	IFS="$ifs"
+	touch /etc/config/migrate/ipconfig.002
+fi
+
+# Clean up old configuration settings that may conflict
+if [ ! -f /etc/config/migrate/ipconfig.003 ]; then
+	config -d config.interfaces.eth0 -d config.interfaces.eth1 -d config.interfaces.eth1:0
+	touch /etc/config/migrate/ipconfig.003
+fi
+
+# powersupplies.001 was for IM42xx only
+
+# Migrate UPS driver options
+if [ ! -f /etc/config/migrate/ups.001 ]; then
+	echo "Migrate UPS driver options"
+	total=$(config -g config.ups.monitors.total | cut -f2- -d' ')
+	for (( i=1; i <= ${total:-0}; i++ )); do
+		prefix="config.ups.monitors.monitor${i}.options"
+		opt_total=$(config -g ${prefix}.total | cut -f2- -d' ')
+		for (( j=1; j <= ${opt_total:-0}; j++ )); do
+			opt_prefix="${prefix}.option${j}"
+			opt=$(config -g ${opt_prefix}.opt | cut -f2- -d' ')
+			new_opt=$(echo $opt | sed 's/[ \t]*$//;s/=$//')
+			if [ "$opt" != "$new_opt" ]; then
+				config -s ${opt_prefix}.opt="$new_opt"
+			else
+				arg=$(config -g ${opt_prefix}.arg | cut -f2- -d' ')
+				new_arg=$(echo $arg | sed 's/^[ \t]*//;s/^=//')
+				if [ "$arg" != "$new_arg" ]; then
+					config -s ${opt_prefix}.arg="$new_arg"
+				fi
+			fi
+		done
+	done
+	touch /etc/config/migrate/ups.001
+fi
+
+# Set device type on UPS serial ports and powerstrip network hosts
+# and serial ports
+if [ ! -f /etc/config/migrate/devicetype.001 ]; then
+	echo "Set UPS and RPC device type"
+	for (( i=1; i <= $NPORTS; i++ )); do
+		prefix="config.ports.port${i}"
+		mode=$(config -g ${prefix}.mode | cut -f2- -d' ')
+		if [[ "$mode" == "ups" ]]; then
+			config -s ${prefix}.mode=reserved
+			config -s ${prefix}.device.type=ups
+			continue
+		fi
+		powertype=$(config -g ${prefix}.power.type | cut -f2- -d' ')
+		if [[ "$powertype" != "" ]]; then
+			config -s ${prefix}.device.type=rpc
+			config -s ${prefix}.power.name="Serial Port $i"
+		fi
+	done
+	total=$(config -g config.sdt.hosts.total | cut -f2- -d' ')
+	for (( i=1; i <= ${total:-0}; i++ )); do
+		prefix="config.sdt.hosts.host${i}"
+		powertype=$(config -g ${prefix}.power.type | cut -f2- -d' ')
+		if [[ "$powertype" != "" ]]; then
+			config -s ${prefix}.device.type=rpc
+			address=$(config -g ${prefix}.address | cut -f2- -d' ')
+			config -s ${prefix}.power.name="Network Host $address"
+		fi
+	done
+	touch /etc/config/migrate/devicetype.001
+fi
+
+# Migrate hosts, RPCs, UPSes and EMDs to managed devices
+if [ ! -f /etc/config/migrate/devices.001 ]; then
+	VERSION=$(config -g config.version | cut -f2- -d' ')
+	if [ "$VERSION" != "0.3" ]; then
+		touch /etc/config/migrate/devices.001
+	fi
+fi
+function managed_rpc {
+		name=$(config -g ${prefix}.power.name | cut -f2- -d' ')
+		if [[ "$name" == "" ]]; then
+			return
+		fi
+		desc=$(config -g ${prefix}.power.description | cut -f2- -d' ')
+
+		outlets=0
+		for (( i=1 ;; i++ )); do
+			label=$(config -g ${prefix}.power.outlet${i}.label | cut -f2- -d' ')
+			if [[ "$label" == "" ]]; then
+				break
+			fi
+			outlets=$(( outlets + 1 ))
+		done
+
+		dev_prefix=config.devices.device$(( ++device ))
+		config -s ${prefix}.power.outlets=$outlets \
+			-s ${dev_prefix}.name="$name" \
+			-s ${dev_prefix}.description="$desc" \
+			-s ${dev_prefix}.connections.connection1.name="$name" \
+			-s ${dev_prefix}.connections.connection1.type="RPC Unit"
+}
+function managed_host {
+		name=$(config -g ${prefix}.name | cut -f2- -d' ')
+		address=$(config -g ${prefix}.address | cut -f2- -d' ')
+		if [[ "$name" == "" ]]; then
+			name=$address
+		fi
+		desc=$(config -g ${prefix}.description | cut -f2- -d' ')
+
+		dev_prefix=config.devices.device$(( ++device ))
+		config -s ${dev_prefix}.name="$name" \
+			-s ${dev_prefix}.description="$desc" \
+			-s ${dev_prefix}.connections.connection1.name="$address" \
+			-s ${dev_prefix}.connections.connection1.type="Host"
+}
+function managed_emd {
+		name=$(config -g ${prefix}.enviro.name | cut -f2- -d' ')
+		if [[ "$name" == "" ]]; then
+			return
+		fi
+		desc=$(config -g ${prefix}.enviro.description | cut -f2- -d' ')
+
+		dev_prefix=config.devices.device$(( ++device ))
+		config -s ${dev_prefix}.name="$name" \
+			-s ${dev_prefix}.description="$desc" \
+			-s ${dev_prefix}.connections.connection1.name="$name" \
+			-s ${dev_prefix}.connections.connection1.type="EMD Unit"
+}
+function managed_ups {
+		name=$(config -g ${prefix}.name | cut -f2- -d' ')
+		if [[ "$name" == "" ]]; then
+			return
+		fi
+		desc=$(config -g ${prefix}.description | cut -f2- -d' ')
+
+		dev_prefix=config.devices.device$(( ++device ))
+		config -s ${dev_prefix}.name="$name" \
+			-s ${dev_prefix}.description="$desc" \
+			-s ${dev_prefix}.connections.connection1.name="$name" \
+			-s ${dev_prefix}.connections.connection1.type="UPS Unit"
+
+		# Save name and description to sync later
+		port=$(config -g ${prefix}.port | cut -f2- -d' ')
+		if [[ "$port" == "auto" || ${port:0:4} == "/dev" ]]; then
+			return
+		fi
+		id=$(echo $port | sed -e 's%.*://\(.*\)%\1%' -e 's%\.%_%g')
+		eval "host_name_${id}=\"$name\""
+		eval "host_desc_${id}=\"$desc\""
+}
+if [ ! -f /etc/config/migrate/devices.001 ]; then
+	echo "Migrating managed devices"
+	device=0
+
+	total=$(config -g config.ups.monitors.total | cut -f2- -d' ')
+	for (( ups=1; ups <= ${total:-0}; ups++ )); do
+		prefix="config.ups.monitors.monitor${ups}"
+
+		managed_ups
+	done
+
+	total=$(config -g config.sdt.hosts.total | cut -f2- -d' ')
+	for (( host=1; host <= ${total:-0}; host++ )); do
+		prefix="config.sdt.hosts.host${host}"
+
+		type=$(config -g ${prefix}.device.type | cut -f2- -d' ')
+		if [[ "$type" == "ups" ]]; then
+			id=$(config -g ${prefix}.address | cut -f2- -d' ' | sed -e 's%\.%_%g')
+			name=$(eval echo "\$host_name_${id}")
+			desc=$(eval echo "\$host_desc_${id}")
+		elif [[ "$type" == "rpc" ]]; then
+			managed_rpc
+		else
+			managed_host
+		fi
+
+		if [[ "$name" != "" ]]; then
+			# Ensure host name and description are synced
+			config -s ${prefix}.name="$name"
+			config -s ${prefix}.description="$desc"
+		else
+			# Handle unconfigured RPC, EMD, UPS connections
+			# where no device has been added
+			address=$(config -g ${prefix}.address | cut -f2- -d' ')
+			config -s ${prefix}.name="$address"
+		fi
+	done
+
+	for (( port=1; port <= $NPORTS; port++ )); do
+		prefix="config.ports.port${port}"
+
+		type=$(config -g ${prefix}.device.type | cut -f2- -d' ')
+		if [[ "$type" == "ups" ]]; then
+			# Do nothing
+			continue
+		elif [[ "$type" == "rpc" ]]; then
+			managed_rpc
+		elif [[ "$type" == "enviro" ]]; then
+			managed_emd
+		fi
+	done
+
+	config -s config.devices.total=$device
+	config -s config.version=0.4
+	touch /etc/config/migrate/devices.001
+fi
+
+# usb.001: was for the defunct IM4004
+
+function configShuffle {
+	OLD=$1
+	NEW=$2
+
+	OLDV=`config -g $OLD | cut -f2 -d" "`
+	config -s $NEW="$OLDV"
+}
+
+
+# Migrate power supplies to remote UPSes
+if [ ! -f /etc/config/migrate/ups.002 ]; then
+	echo "Migrating power supplies to remote UPSes"
+	REM=`config -g config.ups.remotes.total | cut -f2 -d" "`
+	if [ -z "$REM" ]; then
+		REM=0
+	fi
+
+	ONE=`config -g config.ups.powers.power1.address`
+	if [ ! -z "$ONE" ]; then
+		REM=$(($REM+1))
+		configShuffle "config.ups.powers.power1.address" \
+				"config.ups.remotes.remote$REM.address"
+		configShuffle "config.ups.powers.power1.address" \
+				"config.ups.remotes.remote$REM.address"
+		configShuffle "config.ups.powers.power1.name" \
+				"config.ups.remotes.remote$REM.name"
+		configShuffle "config.ups.powers.power1.description" \
+				"config.ups.remotes.remote$REM.description"
+		configShuffle "config.ups.powers.power1.log.enabled" \
+				"config.ups.remotes.remote$REM.log.enabled"
+		configShuffle "config.ups.powers.power1.log.interval" \
+				"config.ups.remotes.remote$REM.log.interval"
+		configShuffle "config.ups.powers.power1.enabled" \
+				"config.ups.remotes.remote$REM.script.enabled"
+
+	fi
+	TWO=`config -g config.ups.powers.power2.address`
+	if [ ! -z "$TWO" ]; then
+		REM=$(($REM+1))
+		configShuffle "config.ups.powers.power2.address" \
+				"config.ups.remotes.remote$REM.address"
+		configShuffle "config.ups.powers.power2.address" \
+				"config.ups.remotes.remote$REM.address"
+		configShuffle "config.ups.powers.power2.name" \
+				"config.ups.remotes.remote$REM.name"
+		configShuffle "config.ups.powers.power2.description" \
+				"config.ups.remotes.remote$REM.description"
+		configShuffle "config.ups.powers.power2.log.enabled" \
+				"config.ups.remotes.remote$REM.log.enabled"
+		configShuffle "config.ups.powers.power2.log.interval" \
+				"config.ups.remotes.remote$REM.log.interval"
+		configShuffle "config.ups.powers.power2.enabled" \
+				"config.ups.remotes.remote$REM.script.enabled"
+	fi
+
+	if [ $REM -gt 0 ]; then
+		config -s config.ups.remotes.total=$REM
+		config -d config.ups.powers
+	fi
+
+	touch /etc/config/migrate/ups.002
+fi
+
+# Migrate UPS shutdown scripts
+if [ ! -f /etc/config/migrate/ups.003 ]; then
+	echo "Migrating UPS shutdown script"
+	if [ -f /etc/config/upsmon.conf ]; then
+		if [ ! -e /var/run/config/migrate/ups ]; then
+			config -r ups
+			touch /var/run/config/migrate/ups
+		fi
+	fi
+	touch /etc/config/migrate/ups.003
+fi
+
+# Migrate dialout interface names for OOB access
+if [ ! -f /etc/config/migrate/dialin.001 ]; then
+	echo "Migrating dialout firewall"
+	if [ -d /etc/config/peers ]; then
+		if [ ! -e /var/run/config/migrate/dialin ]; then
+			config -r dialin
+			touch /var/run/config/migrate/dialin
+		fi
+	fi
+	touch /etc/config/migrate/dialin.001
+fi
+
+# Migrate cellular radio to always on
+if [ ! -f /etc/config/migrate/cellmodem.001 ]; then
+	echo "Migrating cellular radio state"
+	if [ -e /dev/cellmodem01 -a ! -e /var/run/.modem/cellmodem_is_cdma ]; then
+		if [ ! -e /var/run/config/migrate/dialin ]; then
+			config -r dialin
+			touch /var/run/config/migrate/dialin
+		fi
+	fi
+	touch /etc/config/migrate/cellmodem.001
+fi
+# Migrate cellular modem to use cellctl
+if [ ! -f /etc/config/migrate/cellmodem.002 ]; then
+	echo "Migrating from 'sierractl' to 'cellctl'"
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/cellmodem.002
+fi
+# Migrate cellular modem to use cellctld
+if [ ! -f /etc/config/migrate/cellmodem.003 ]; then
+	echo "Migrating from 'cellctl --infod' to 'cellctld'"
+	grep '^cellctl:' /etc/config/inittab
+	if [ "$?" == "0" ]; then
+		echo "Removing cellctl --infod as a start-up service"
+		grep -v "^cellctl:" /etc/config/inittab > /etc/config/inittab.cellctl
+		mv /etc/config/inittab.cellctl /etc/config/inittab
+		kill -HUP 1
+		config -r dialin
+	fi
+	touch /etc/config/migrate/cellmodem.003
+fi
+# Migrate gobi modem conman to not kill smsd on sim select
+if [ ! -f /etc/config/migrate/cellmodem.004 ]; then
+	if [ /var/run/.modem/cellmodem_is_multicarrier ]; then
+		if [ -f /etc/config/conman.conf ]; then
+			# Re-generate conman.conf
+			config -r dialin
+		fi
+	fi
+	touch /etc/config/migrate/cellmodem.004
+fi
+
+# Migrate modem RAT to use SELRAT type values
+# (cellmodem.005 is now extended by cellmodem.006)
+if [ ! -f /etc/config/migrate/cellmodem.006 ]; then
+	echo "Migrating RAT for legacy 3G Sierra Wireless modems"
+	RATFIXES=
+	for conf in config.cellmodem.rat \
+	            config.cellmodem.sims.sim1.rat \
+	            config.cellmodem.sims.sim2.rat
+	do
+		RAT=`config -g $conf | cut -f2 -d" "`
+		case "$RAT" in
+		    "") continue;;		# not set
+		    [A-Z]*) continue;;		# already migrated
+		    0) NEWRAT="AUTOMATIC";;
+		    1) NEWRAT="GSM";;
+		    2) NEWRAT="UMTS";;
+		    3) NEWRAT="GSM+UMTS";;
+		    4) NEWRAT="LTE";;
+		    5) NEWRAT="GSM+UMTS+LTE";;
+		    # 6 - No specific support for AMPS
+		    7) NEWRAT="CDMA";;
+		    8) NEWRAT="HRPD";;
+		    *) NEWRAT="AUTOMATIC";;	# everything else
+		esac
+		RATFIXES="$RATFIXES -s $conf=$NEWRAT"
+	done
+	if [ -n "$RATFIXES" -o ! -e /var/run/config/migrate/dialin ]; then
+		config $RATFIXES -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/cellmodem.006
+fi
+
+# - Migrate cellular modem to use cellctl
+# - Fix empty start command in smsd-simselect
+# - Use new SIM to SIM fail ping test
+if [ ! -f /etc/config/migrate/cellmodem.006 -o ! -f /etc/config/migrate/cellmodem.009 ]; then
+	echo "Migrating RAT for legacy 3G Sierra Wireless modems and fix broken conman rule"
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/cellmodem.006
+	touch /etc/config/migrate/cellmodem.009
+fi
+
+# Migrate older modem SELRAT to use ModemManager capabilities and modes
+if [ ! -f /etc/config/migrate/cellmodem.007 ]; then
+	CHANGE=0
+	for PREFIX in "config.cellmodem" "config.cellmodem.sims.sim1" "config.cellmodem.sims.sim2" ; do
+		RAT=`config -g $PREFIX.rat | cut -f2 -d" "`
+		if [ -f "/var/run/.modem/cellmodem_is_mm_ether" -a ! -z "$RAT" ]; then
+			# AUTOMATIC
+			PREF_MODE="NONE"
+			ALLOW_MODES="2G,3G,4G"
+			CAPABILITIES="CDMA-EVDO,GSM-UMTS,LTE"
+			# Use defaults for AUTOMATIC type RATs
+			if [ "$RAT" = "GSM" ]; then
+				ALLOW_MODES="2G"
+				CAPABILITIES="GSM-UMTS"
+			elif [ "$RAT" = "UMTS" ]; then
+				ALLOW_MODES="3G"
+				CAPABILITIES="GSM-UMTS"
+			elif [ "$RAT" = "GSM+UMTS" ]; then
+				ALLOW_MODES="2G,3G"
+				CAPABILITIES="GSM-UMTS"
+			elif [ "$RAT" = "LTE" ]; then
+				ALLOW_MODES="4G"
+				CAPABILITIES="LTE"
+			elif [ "$RAT" = "GSM+UMTS+LTE" ]; then
+				ALLOW_MODES="2G,3G,4G"
+				CAPABILITIES="GSM-UMTS,LTE"
+			elif [ "$RAT" = "CDMA" ]; then
+				ALLOW_MODES="2G"
+				CAPABILITIES="CDMA-EVDO"
+			elif [ "$RAT" = "HRPD" ]; then
+				ALLOW_MODES="3G"
+				CAPABILITIES="CDMA-EVDO"
+			elif [ "$RAT" = "CDMA+HRPD" ]; then
+				ALLOW_MODES="2G,3G"
+				CAPABILITIES="CDMA-EVDO"
+			elif [ "$RAT" = "CDMA+LTE" ]; then
+				ALLOW_MODES="2G,4G"
+				CAPABILITIES="CDMA-EVDO,LTE"
+			elif [ "$RAT" = "HRPD+LTE" ]; then
+				ALLOW_MODES="3G,4G"
+				CAPABILITIES="CDMA-EVDO,LTE"
+			elif [ "$RAT" = "CDMA+HRPD+LTE" ]; then
+				ALLOW_MODES="2G,3G,4G"
+				CAPABILITIES="CDMA-EVDO,LTE"
+			elif [ "$RAT" = "CDMA+GSM+LTE" ]; then
+				ALLOW_MODES="2G,4G"
+				CAPABILITIES="CDMA-EVDO,GSM-UMTS,LTE"
+			elif [ "$RAT" = "CDMA+HRPD+GSM+UMTS" ]; then
+				ALLOW_MODES="2G,3G"
+				CAPABILITIES="CDMA-EVDO,GSM-UMTS"
+			elif [ "$RAT" = "UMTS+LTE" ]; then
+				ALLOW_MODES="3G,4G"
+				CAPABILITIES="GSM-UMTS,LTE"
+			elif [ "$RAT" = "GSM+LTE" ]; then
+				ALLOW_MODES="2G,4G"
+				CAPABILITIES="GSM-UMTS,LTE"
+			elif [ "$RAT" = "GSM-PREFERRED" ]; then
+				PREF_MODE="2G"
+				ALLOW_MODES="2G,3G,4G"
+				CAPABILITIES="GSM-UMTS,LTE"
+			fi
+			config -d $PREFIX.rat \
+				-s $PREFIX.preferred_mode=$PREF_MODE \
+				-s $PREFIX.allowed_modes=$ALLOW_MODES \
+				-s $PREFIX.capabilities=$CAPABILITIES
+			CHANGE=1
+		fi
+	done
+	if [ "$CHANGE" = "1" ]; then
+		config -r dialin
+	fi
+	touch /etc/config/migrate/cellmodem.007
+fi
+
+# Remove dbus-watchdog from init
+if [ ! -f /etc/config/migrate/cellmodem.008 ]; then
+	edinittab -f /etc/config/inittab del dbus-watchdog
+	touch /etc/config/migrate/cellmodem.008
+fi
+
+# Migrate to modularised firewall (may cause errors, fixed by rc.firewall)
+if [ ! -f /etc/config/migrate/services.005 ]; then
+	echo "Migrating firewall rules"
+	if [ ! -e /var/run/config/migrate/services -o ! -e /var/run/config/migrate/serialconfig ]; then
+		config -r services -r serialconfig 2> /dev/null
+		touch /var/run/config/migrate/services
+		touch /var/run/config/migrate/serialconfig
+	fi
+	touch /etc/config/migrate/services.005
+	if [ ! -f /etc/config/migrate/serialconfig.002 ]; then
+		echo "Migrated SSH Serial redirects"
+		touch /etc/config/migrate/serialconfig.002
+	fi
+fi
+
+# Migrate SSH Serial redirects to their own filter file
+if [ ! -f /etc/config/migrate/serialconfig.002 ]; then
+	echo "Migrating SSH Serial redirects"
+	if [ -f /etc/config/filter-serial ]; then
+		if [ ! -e /var/run/config/migrate/serialconfig ]; then
+			config -r serialconfig
+			touch /var/run/config/migrate/serialconfig
+		fi
+	fi
+	touch /etc/config/migrate/serialconfig.002
+fi
+
+# Migrate DNS settings for interfaces with static addresses
+# 3G PPP options, and failover config
+if [ ! -f /etc/config/migrate/ipconfig.005 ]; then
+	echo "Migrate DNS settings, 3G PPP options, and failover config"
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.005
+fi
+
+# Migrate Fahrenheit settings from individual EMDs to a global
+# setting
+if [ ! -f /etc/config/migrate/enviro.001 ]; then
+	echo "Consolidating temperature unit settings"
+	FAHREN="false"
+	for (( port=1; port <= $NPORTS; port++ )); do
+		infahren=`config -g config.ports.port${port}.enviro.fahrenheit | cut -f2 -d" "`
+		if [ ! -z $infahren ]; then
+			FAHREN="true"
+		fi
+	done
+
+	infahren=`config -g config.internals.internal1.enviro.fahrenheit | cut -f2 -d" "`
+	if [ ! -z $infahren ]; then
+		FAHREN="true"
+	fi
+
+	if [ $FAHREN == "true" ]; then
+		config -s config.enviro.fahrenheit=true
+		config -r enviro
+		touch /var/run/config/migrate/enviro
+	fi
+	touch /etc/config/migrate/enviro.001
+fi
+
+# Rerun the intsensors configurator to add internal EMDs to managed devices
+if [ ! -f /etc/config/migrate/enviro.002 ]; then
+	echo "Adding internal emds to managed devices"
+	if [ ! -e /var/run/config/migrate/intsensors ]; then
+		config -r intsensors
+		touch /var/run/config/migrate/intsensors
+	fi
+	touch /etc/config/migrate/enviro.002
+fi
+
+# Migrate to new Firewall and DHCP settings
+if [ ! -f /etc/config/migrate/ipconfig.006 ]; then
+	echo "Migrating Firewall and DHCP settings"
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.006
+fi
+
+# Migrate to new NTP daemon, and update our firewall for ntp
+if [ ! -f /etc/config/migrate/time.001 ]; then
+	echo "Migrating ntp configuration"
+	if [ ! -e /var/run/config/migrate/portforwards ]; then
+		config -r portforwards
+		touch /var/run/config/migrate/portforwards
+	fi
+	if [ ! -e /var/run/config/migrate/time ]; then
+		config -r time
+		touch /var/run/config/migrate/time
+	fi
+	touch /etc/config/migrate/time.001
+fi
+
+# Fix NTP default settings
+if [ ! -f /etc/config/migrate/time.002 ]; then
+	echo "Fixing NTP default settings"
+	if [ ! -e /var/run/config/migrate/time ]; then
+		config -r time
+		touch /var/run/config/migrate/time
+	fi
+	touch /etc/config/migrate/time.002
+fi
+
+# Move across fixed ldapdownlocal pam config
+if [ ! -f /etc/config/migrate/auth.005 ]; then
+	echo "Fixing ldapdownlocal auth config"
+	cp /etc/default/pam.d/ldapdownlocal /etc/config/pam.d/
+	touch /etc/config/migrate/auth.005
+fi
+
+# Enable MOTD banner
+if [ ! -f /etc/config/migrate/auth.006 ]; then
+	echo "Enabling PAM MOTD support"
+	cp /etc/default/pam.d/* /etc/config/pam.d/
+	touch /etc/config/migrate/auth.006
+fi
+
+# Migrate root & user shells
+if [ ! -f /etc/config/migrate/auth.007 ]; then
+	echo "Migrating CLI shell policy"
+	sed -i 's:/bin/sh:/bin/bash:g' /etc/config/passwd
+	config -r users
+	touch /var/run/config/migrate/users
+	touch /etc/config/migrate/auth.007
+fi
+
+# Migrate our ssh forwards so they're not exposed with firewall holes by default
+if [ ! -f /etc/config/migrate/sshforwards.001 ]; then
+	echo "Migrating ssh forwards"
+	if [ ! -e /var/run/config/migrate/sshforwards ]; then
+		config -r sshforwards
+		touch /var/run/config/migrate/sshforwards
+	fi
+	touch /etc/config/migrate/sshforwards.001
+fi
+
+# Disable reverse DNS lookups for incoming SSH
+if [ ! -f /etc/config/migrate/sshd.001 ]; then
+	echo "Disabling sshd UseDNS"
+	sed -i 's/^#\(UseDNS\) yes/\1 no/' /etc/config/sshd_config
+	touch /etc/config/migrate/sshd.001
+fi
+
+# Allow SSH compression for Call Home
+if [ ! -f /etc/config/migrate/callhome.002 ]; then
+	echo "Enabling Call Home compression"
+	sed -i '/^Compression no/d' /etc/config/sshd_config
+# Previous versions of this migration incorrectly add a User stanza for CMS,
+# which means that cms is used as the default username, breaking callhome
+	if grep -A 1 'User cms' /etc/config/ssh_config; then
+		grep -v "   Compression yes\|User cms" /etc/config/ssh_config \
+			> /etc/config/ssh_config.fixed
+		mv /etc/config/ssh_config.fixed /etc/config/ssh_config
+	fi
+# Rerun the sshforwards configurator to make sure our init line has compression enabled
+	config -r sshforwards
+	touch /var/run/config/migrate/sshforwards
+	touch /etc/config/migrate/callhome.002
+fi
+
+# Migrate inetd serial entries so singleconn is respected
+if [ ! -f /etc/config/migrate/serialconfig.003 ]; then
+	echo "Migrating inetd entries"
+	if [ ! -e /var/run/config/migrate/serialconfig ]; then
+		config -r serialconfig
+		touch /var/run/config/migrate/serialconfig
+	fi
+	touch /etc/config/migrate/serialconfig.003
+fi
+
+# Regenerate our dialin settings, so that we update our modem initialisation script
+# to fix bogus +++ handling
+if [ ! -f /etc/config/migrate/dialin.002 ]; then
+	echo "Fixing dialin configuration"
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.002
+fi
+
+# Fix KCS fnord migration remnants
+if [ ! -f /etc/config/migrate/httpd.003 ]; then
+	echo "Removing any KCS fnord remnants"
+	grep -v "8181 stream" /etc/config/inetd.conf \
+		> /etc/config/inetd.conf.bak
+	mv /etc/config/inetd.conf.bak /etc/config/inetd.conf
+	pkill -HUP inetd
+	pkill -HUP lighttpd-angel
+	touch /etc/config/migrate/httpd.003
+fi
+
+# Infod initial migration
+if [ ! -f /etc/config/migrate/infod.001 ]; then
+	echo "Migrate logging for serial/ups/emd to infod"
+	if [ ! -e /var/run/config/migrate/serialconfig ]; then
+		config -r serialconfig
+		touch /var/run/config/migrate/serialconfig
+	fi
+	if [ ! -e /var/run/config/migrate/ups ]; then
+		config -r ups
+		touch /var/run/config/migrate/ups
+	fi
+	if [ ! -e /var/run/config/migrate/enviro ]; then
+		config -r enviro
+		touch /var/run/config/migrate/enviro
+	fi
+	touch /etc/config/migrate/infod.001
+fi
+
+# Migrate to cellctl tool
+if [ ! -f /etc/config/migrate/dialin.003 ]; then
+	echo "Updating dialin/dialout settings for cellctl"
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.003
+fi
+
+# Migrate to autoresponse
+if [ ! -f /etc/config/migrate/autoresponse.001 ]; then
+	echo "Migrating existing alerts to autoresponse"
+	/bin/ar_migrate
+	grep -v "/bin/monitor" /etc/config/inittab \
+		> /tmp/inittab
+	mv /tmp/inittab /etc/config/inittab
+	pkill -HUP init
+	config -r autoresponse
+	touch /var/run/config/migrate/autoresponse
+	touch /etc/config/migrate/autoresponse.001
+fi
+
+# Migrate dialin users to localusers and the dialin group
+if [ ! -f /etc/config/migrate/dialin.004 ]; then
+	echo "Migrating exisiting dialin user to the dialin group"
+
+	if [ -f /etc/scripts/system-fix-groups ]; then
+		echo "Fixing system groups"
+		sh /etc/scripts/system-fix-groups
+	fi
+
+	# see if there are dialin users
+	# if so, add them as local users, and add them only to dialin
+	# and then delete the old config
+	# modem names are console, modem, pcmodem,
+	# usbmodem, cellmodem and unkown
+	# Old:
+	# config.<modem-name>.ppp.enabled == dialin enabled
+	# config.<modem-name>.ppp.username == dialin username
+	# config.<modem-name>.ppp.password == dialin password
+	# config.<modem-name>.ppp.callback.phone1 == callback phone number
+	# config.<modem-name>.ppp.callback.enabled == callback enabled
+	# New:
+	# config.users.user<N>.groups.group<M>.name = dialin == dialin enabled
+	# config.users.user<N>.username == dialin username
+	# config.users.user<N>.callback.enabled == callback enabled
+	# config.users.user<N>.callback.phone == callback phone number
+
+	for MODEM in console modem pcmodem usbmodem cellmodem unknown
+	do
+		DIALIN_ENABLED=`config -g config.$MODEM.ppp.enabled | cut -f2 -d" "`
+		DIALIN_USERNAME=`config -g config.$MODEM.ppp.username | cut -f2 -d" "`
+		DIALIN_PASSWORD=`config -g config.$MODEM.ppp.password | cut -f2 -d" "`
+		CALLBACK_ENABLED=`config -g config.$MODEM.ppp.callback.enabled | cut -f2 -d" "`
+		CALLBACK_NUMBER=`config -g config.$MODEM.ppp.callback.phone1 | cut -f2 -d" "`
+
+		if [ -z "$DIALIN_USERNAME" -o -z "$DIALIN_ENABLED" -o x$DIALIN_ENABLED == xoff ]; then
+			continue
+		fi
+
+		echo "Found old dialin user configured as $MODEM:$DIALIN_ENABLED:$DIALIN_USERNAME:$DIALIN_PASSWORD:$CALLBACK_ENABLED:$CALLBACK_NUMBER"
+
+		#can't use the user-add script, as it prompts for a password
+		#/etc/scripts/user-add -d "Migrated dialin user" $DIALIN_USERNAME
+		TOTAL_USERS=`config -g config.users.total | cut -f2 -d" "`
+		if [ -z "$TOTAL_USERS" ]; then
+			TOTAL_USERS=0
+		fi
+		FOUND_USER="no"
+		for (( USERINDEX=1; USERINDEX<=TOTAL_USERS; USERINDEX++ ))
+		do
+			INDEX_USERNAME=`config -g config.users.user$USERINDEX.username | cut -f2 -d " "`
+			if [ x$DIALIN_USERNAME == x$INDEX_USERNAME ]; then
+				FOUND_USER="yes"
+
+				if [ ! -z "$DIALIN_CALLBACK" -a x$CALLBACK_ENABLED == xon ]; then
+					config -s config.users.user$USERINDEX.callback.enabled=on
+					config -s config.users.user$USERINDEX.callback.phone=$DIALIN_CALLBACK
+				fi
+
+				# Don't override the user's password on the offchance it's different
+				# their hashed password.
+				#config -s config.users.user$USERINDEX.plaintext_password=$DIALIN_PASSWORD
+				# Also can't add them to the dialin group until they have a plaintext
+				# password
+				#/etc/scripts/user-mod -g "+dialin" $DIALIN_USERNAME
+
+				echo "    user \"$DIALIN_USERNAME\" matches existing local user - not changing password and group memberships"
+				break
+			fi
+		done
+
+		#still think it's a new user - lets be sure and ensure he's
+		#not in /etc/passwd
+
+		if [ x$FOUND_USER == "xno" ]; then
+			#if the user clashes with one in passwd or shadow
+			#then do nothing...
+			if grep "^$DIALIN_USERNAME:" /etc/config/passwd &> /dev/null ; then
+				FOUND_USER=yes
+			fi
+
+			if grep "^$DIALIN_USERNAME:" /etc/config/shadow &> /dev/null ; then
+				FOUND_USER=yes
+			fi
+		fi
+
+		if [ x$FOUND_USER == "xno" ]; then
+			TOTAL_USERS=`expr $TOTAL_USERS + 1`
+			# need to add said user
+			config -s config.users.total=$TOTAL_USERS
+			config -s config.users.user$TOTAL_USERS.username=$DIALIN_USERNAME
+			config -s config.users.user$TOTAL_USERS.password=$DIALIN_PASSWORD
+			config -s config.users.user$TOTAL_USERS.plaintext_password=$DIALIN_PASSWORD
+			config -s config.users.user$TOTAL_USERS.groups.total=1
+			config -s config.users.user$TOTAL_USERS.groups.group1=dialin
+			config -s config.users.user$TOTAL_USERS.description="Migrated dialin user"
+			if [ ! -z "$CALLBACK_NUMBER" -a x$CALLBACK_ENABLED == xon ]; then
+				config -s config.users.user$TOTAL_USERS.callback.enabled=on
+				config -s config.users.user$TOTAL_USERS.callback.phone=$CALLBACK_NUMBER
+			fi
+		fi
+
+		# We could delete the old config here, but it's probably
+		# safer not to.
+		#config -d config.$MODEM.ppp.username
+		#config -d config.$MODEM.ppp.password
+		#config -d config.$MODEM.ppp.callback
+	done
+
+	config -r users
+	touch /var/run/config/migrate/users
+
+	touch /etc/config/migrate/dialin.004
+fi
+
+
+# Migrate to new https.conf - switch off SSLv2
+if [ ! -f /etc/config/migrate/https.001 ]; then
+	cp /etc/default/https.conf /etc/config/https.conf
+	touch /etc/config/migrate/https.001
+fi
+
+# Migrate to new https.conf - switch off CBC Ciphers
+if [ ! -f /etc/config/migrate/https.002 ]; then
+	cp /etc/default/https.conf /etc/config/https.conf
+	touch /etc/config/migrate/https.002
+fi
+
+# Migrate to new https.conf - switch off SSLv3
+if [ ! -f /etc/config/migrate/https.003 ]; then
+	OLD_CS="RC4:-EXP:-SSLv2:@STRENGTH"
+	NEW_CS="ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA"
+	CUR_CS=`config -g config.https.customciphers | cut -f2 -d" "`
+	if [ -f "/etc/config/https.conf" ]; then
+		# sha1sum of old /etc/default/https.conf
+		OLD_SUM1="82e32a8e2ae4f367fdb9404db8a962a2d52a0917"
+		CUR_SUM1=`sha1sum /etc/config/https.conf | cut -d" " -f1`
+		if [ "$OLD_SUM1" == "$CUR_SUM1" ]; then
+			cp /etc/default/https.conf /etc/config/https.conf
+		fi
+	fi
+	if [ -f "/etc/config/cherokee/conf.d/https.conf" ]; then
+  		# sha1sum of old /etc/default/cherokee/conf.d/https.conf
+		OLD_SUM2="253bd39684e8a75231edff67aedc60a40082e9f3"
+		CUR_SUM2=`sha1sum /etc/config/cherokee/conf.d/https.conf | cut -d" " -f1`
+		if [ "$OLD_SUM2" == "$CUR_SUM2" ]; then
+			cp /etc/default/cherokee/conf.d/https.conf /etc/config/cherokee/conf.d/https.conf
+		fi
+		killall cherokee
+	fi
+	mkdir -p /etc/config/cherokee/conf.d/
+	cp /etc/default/cherokee/conf.d/https.conf /etc/config/cherokee/conf.d/https.conf
+	if [ "$CUR_CS" == "$OLD_CS" ]; then
+		config -s "config.https.customciphers=${NEW_CS}" -r ssl
+	fi
+	touch /etc/config/migrate/https.003
+fi
+
+# Migrate to fix up dyns.cx DDNS config files -- cvstrac #3445
+if [ ! -f /etc/config/migrate/ipconfig.007 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig -o ! -e /var/run/config/migrate/dialin ]; then
+		config -r ipconfig -r dialin
+		touch /var/run/config/migrate/ipconfig
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/ipconfig.007
+fi
+
+# Migrate any existing authorized keys into the users configuration
+if [ ! -f /etc/config/migrate/auth.008 ]; then
+	TOTAL_USERS=`config -g config.users.total | cut -f2 -d" "`
+	if [ -z "$TOTAL_USERS" ]; then
+		TOTAL_USERS=0
+	fi
+	for (( USERINDEX=1; USERINDEX<=TOTAL_USERS; USERINDEX++ ))
+	do
+		INDEX_USERNAME=`config -g config.users.user$USERINDEX.username | cut -f2 -d " "`
+		SSH_AUTHORIZED_KEYS=`cat /etc/config/users/$INDEX_USERNAME/.ssh/authorized_keys`
+		if [ ! -z "$SSH_AUTHORIZED_KEYS" ]; then
+			config -s config.users.user$USERINDEX.ssh_auth_keys="$SSH_AUTHORIZED_KEYS"
+		fi
+	done
+	config -r users
+	touch /var/run/config/migrate/users
+	touch /etc/config/migrate/auth.008
+fi
+
+# Migrate to add an enabled field for the modem watchdog -- cvstrac #3483
+is_int() {
+	return $(test "$@" -eq "$@" > /dev/null 2>&1);
+}
+
+if [ ! -f /etc/config/migrate/dialin.005 ]; then
+	for MODEM in console modem pcmodem usbmodem cellmodem unknown
+	do
+		WD_COUNT=`config -g config.$MODEM.watchdog.threshold | cut -f2 -d" "`
+		if $(is_int "$WD_COUNT"); then
+			if [ "$WD_COUNT" -ge 0 ]; then
+				config -s config.$MODEM.watchdog.enabled=on
+			fi
+		fi
+	done
+	touch /etc/config/migrate/dialin.005
+fi
+
+# Migrate back to having a per-service enabled field
+if [ ! -f /etc/config/migrate/services.006 ]; then
+
+	#defaults - turn on default on services, others are left disabled
+	for service in http https telnet ssh; do
+		config -s config.services.$service.enabled=on
+	done
+
+	#overides - based on modified firewall settings
+	for service in https telnet ssh ftp tftp vnc vncs dns; do
+		enabled=0
+		modified=0
+		for interface in wan lan oobfo dialin dialout wlan vpn; do
+			if config -g config.$interface.services.modified | grep " on$" &> /dev/null; then
+				modified=1;
+			else
+				#no need to keep looking at this interface
+				continue;
+			fi
+
+			if config -g config.$interface.services.$service.enabled | grep " on$" &> /dev/null; then
+				enabled=1
+
+				#we know this service is enabled,
+				#no need to check more
+				break
+			fi
+		done
+
+		if [ $modified -eq 1 ]; then
+			if [ $enabled -eq 1 ]; then
+				config -s config.services.$service.enabled=on
+			else
+				config -d config.services.$service.enabled
+			fi
+		fi
+	done
+
+	config -r services
+	touch /var/run/config/migrate/services
+	touch /etc/config/migrate/services.006
+fi
+
+if [ ! -f /etc/config/migrate/auth.009 ]; then
+		# If the root user doesn't exist, add it
+		if [ -z "`config --list-base config.users --list-item-prefix user --list-item-key username --list-get-by-value root`" ]; then
+			ROOTIDX=`config --list-base config.users --list-item-prefix user --list-insert 1`
+			config -s $ROOTIDX.username=root -s "$ROOTIDX.description=Root User" -r users
+		fi
+		touch /etc/config/migrate/auth.009
+fi
+
+if [ ! -f /etc/config/migrate/auth.010 ]; then
+		cp /etc/default/pam.d/*tacacs* /etc/config/pam.d/
+		touch /etc/config/migrate/auth.010
+fi
+
+# dialin.006 was for OPENGEAR_SERIAL_CLIENT (CMS only)
+
+# Regenerate the ipconfig if we've got ethtool onboard
+if [ ! -f /etc/config/migrate/ipconfig.008 ]; then
+	if [ -x /bin/ethtool ]; then
+		if [ ! -e /var/run/config/migrate/ipconfig ]; then
+			config -r ipconfig
+			touch /var/run/config/migrate/ipconfig
+		fi
+	fi
+	touch /etc/config/migrate/ipconfig.008
+fi
+
+# Regenerate the ipconfig if we don't have ethtool onboard
+if [ ! -f /etc/config/migrate/ipconfig.009 ]; then
+	if [ ! -x /bin/ethtool ]; then
+		if [ ! -e /var/run/config/migrate/ipconfig ]; then
+			config -r ipconfig
+			touch /var/run/config/migrate/ipconfig
+		fi
+	fi
+	touch /etc/config/migrate/ipconfig.009
+fi
+
+# Remove references to Stunnel
+if [ ! -f /etc/config/migrate/services.007 ]; then
+	if [ ! -e /var/run/config/migrate/services ]; then
+		config -r services
+		touch /var/run/config/migrate/services
+	fi
+	touch /etc/config/migrate/services.007
+fi
+
+# Migrate our https config so IPv6 works
+if [ ! -f /etc/config/migrate/httpd.004 ]; then
+	if [ ! -e /var/run/config/migrate/ssl ]; then
+		config -r ssl
+		touch /var/run/config/migrate/ssl
+	fi
+	touch /etc/config/migrate/httpd.004
+fi
+
+# Migrate our webserver config to cherokee
+if [ ! -f /etc/config/migrate/httpd.005 ]; then
+	if [ ! -e /var/run/config/migrate/services -o ! -e /var/run/config/migrate/ssl ]; then
+		config -r services ssl
+		touch /var/run/config/migrate/services
+		touch /var/run/config/migrate/ssl
+	fi
+	touch /etc/config/migrate/httpd.005
+fi
+
+# Migrate to conman: first pass is dial connections and network failover
+if [ ! -f /etc/config/migrate/conman.001 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/conman.001
+fi
+
+# Solve migration problems with previous cherokee migration
+if [ ! -f /etc/config/migrate/httpd.006 ]; then
+	if [ ! -e /var/run/config/migrate/services -o ! -e /var/run/config/migrate/ssl ]; then
+		config -r services -r ssl
+		touch /var/run/config/migrate/services
+		touch /var/run/config/migrate/ssl
+	fi
+	touch /etc/config/migrate/httpd.006
+fi
+
+# bug fix for smtp configurator in 3.9.0u2: starting smsd via conman properly
+if [ ! -f /etc/config/migrate/smtp.001 ]; then
+	if [ ! -e /var/run/config/migrate/smtp ]; then
+		config -r smtp
+		touch /var/run/config/migrate/smtp
+	fi
+	touch /etc/config/migrate/smtp.001
+fi
+
+# Migrate to conman: second pass is network connections (direct migration)
+if [ ! -f /etc/config/migrate/conman.002 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/conman.002
+fi
+
+# Strip trailing white space from conman.conf
+if [ ! -f /etc/config/migrate/conman.003 ]; then
+	CMTMP="/etc/config/.conman.conf.tmp"
+	rm -f ${CMTMP}
+	shopt -s extglob
+	while IFS= read -r line; do
+		echo "${line%%*( )}" >> ${CMTMP}
+	done < /etc/config/conman.conf
+	shopt -u extglob
+	mv ${CMTMP} /etc/config/conman.conf
+	touch /etc/config/migrate/conman.003
+fi
+
+# Migrate our SNMP infod config so that we pick up the serial port changes
+if [ ! -f /etc/config/migrate/snmp.001 ]; then
+	if [ ! -e /var/run/config/migrate/snmp ]; then
+		config -r snmp
+		touch /var/run/config/migrate/snmp
+	fi
+	touch /etc/config/migrate/snmp.001
+fi
+
+# Migrate SNMP traps
+if [ ! -f /etc/config/migrate/snmp.002 ]; then
+	address1=`config -g config.system.snmp.address | cut -f2 -d' '`
+	address2=`config -g config.system.snmp.address2 | cut -f2 -d' '`
+	if [ ! -z "$address1" -o ! -z "$address2" ]; then
+		config -s config.system.snmp.legacytraps=on
+	fi
+	touch /etc/config/migrate/snmp.002
+fi
+
+# Run ipconfig to regenerate the firewall to add the DialoutOutput chain
+if [ ! -f /etc/config/migrate/ipconfig.010 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.010
+fi
+
+# Run ipconfig to regenerate the conman config
+if [ ! -f /etc/config/migrate/ipconfig.011 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.011
+fi
+
+if [ -x /etc/devmon.d/migrate ]; then
+	/etc/devmon.d/migrate
+fi
+
+if [ ! -f /etc/config/migrate/auth.011 ]; then
+		cp /etc/default/pam.d/*radius* /etc/config/pam.d/
+		touch /etc/config/migrate/auth.011
+fi
+
+# SNMP controlled Raritan PX naming is incorrect on old releases
+if [ ! -f /etc/config/migrate/devicetype.002 ]; then
+	total=$(config -g config.sdt.hosts.total | cut -f2- -d' ')
+	for (( i=1; i <= ${total:-0}; i++ )); do
+		prefix="config.sdt.hosts.host${i}"
+		powertype=$(config -g ${prefix}.power.type | cut -f2- -d' ')
+		if [[ "$powertype" == "SNMP Controlled Raritan PX" ]]; then
+			config -s "${prefix}.power.type=SNMP Controlled Raritan PX2"
+		fi
+	done
+
+	touch /etc/config/migrate/devicetype.002
+fi
+
+# Regenerate the ipsec conman config
+if [ ! -f /etc/config/migrate/ipsec.001 ]; then
+	if [ ! -e /var/run/config/migrate/ipsec ]; then
+		config -r ipsec
+		touch /var/run/config/migrate/ipsec
+	fi
+	touch /etc/config/migrate/ipsec.001
+fi
+
+# Disable LCP Echo for users who have not enabled it
+if [ ! -f /etc/config/migrate/lcpecho.001 ]; then
+	if [ "$(config -g config.console.ppp.enabled | cut -f2- -d' ')" == "on" ]; then
+		if [ -z "$(config -g config.console.ppp.lcpechointerval)" ]; then
+			config -s config.console.ppp.lcpechodisabled="on"
+		fi
+	fi
+	if [ "$(config -g config.console.ppp.dialer.enabled | cut -f2- -d' ')" == "on" ]; then
+                if [ -z "$(config -g config.console.ppp.dialer.lcpechointerval)" ]; then
+                        config -s config.console.ppp.dialer.lcpechodisabled="on"
+                fi
+        fi
+	if [ "$(config -g config.modem.ppp.enabled | cut -f2- -d' ')" == "on" ]; then
+                if [ -z "$(config -g config.modem.ppp.lcpechointerval)" ]; then
+                        config -s config.modem.ppp.lcpechodisabled="on"
+                fi
+        fi
+	if [ "$(config -g config.modem.ppp.dialer.enabled | cut -f2- -d' ')" == "on" ]; then
+                if [ -z "$(config -g config.modem.ppp.dialer.lcpechointerval)" ]; then
+                        config -s config.modem.ppp.dialer.lcpechodisabled="on"
+                fi
+        fi
+
+	touch /etc/config/migrate/lcpecho.001
+fi
+
+# Migrate per interface default routing
+if [ ! -e /etc/config/migrate/perifroutes.001 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig -o ! -e /var/run/config/migrate/dialin ]; then
+		config -r ipconfig -r dialin
+		touch /var/run/config/migrate/ipconfig
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/perifroutes.001
+fi
+
+# Migrate devlog configuration
+if [ ! -f /etc/config/migrate/devlog.001 ]; then
+	echo "Migrating cell data log config"
+	MD5=`md5sum /etc/config/.log4crc | cut -d' ' -f1`
+	if [ "${MD5}" == "a532f0246c23a0321025855d254d428d" ]; then
+		cp /etc/default/.log4crc /etc/config/.log4crc
+	fi
+	touch /etc/config/migrate/devlog.001
+fi
+
+# Migrate per interface default routing fixes
+if [ ! -e /etc/config/migrate/perifroutes.002 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/perifroutes.002
+fi
+
+# Migrate CDMA conman fix
+if [ ! -e /etc/config/migrate/perifroutes.003 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/perifroutes.003
+fi
+
+# Migrate failover conman scripts
+if [ ! -e /etc/config/migrate/ipconfig.012 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.012
+fi
+
+# Migrate conman ipsec test command
+if [ ! -f /etc/config/migrate/ipsec.002 ]; then
+	if [ ! -e /var/run/config/migrate/ipsec ]; then
+		config -r ipsec
+		touch /var/run/config/migrate/ipsec
+	fi
+	touch /etc/config/migrate/ipsec.002
+fi
+
+# Migrate dual sim failover fix
+if [ ! -f /etc/config/migrate/dialin.007 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.007
+fi
+
+# Migrate interface bonding fix
+if [ ! -f /etc/config/migrate/bonding.001 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/bonding.001
+fi
+
+# Migrate new pam_tacplus config
+if [ ! -e /etc/config/migrate/auth.012 ]; then
+	for f in /etc/config/pam.d/*; do
+	    if [ -f $f -a ! -h $f ]; then
+		# remove defunct options 'encrypt', 'first_hit'
+		# and add 'try_first_pass' option
+	        sed -ri '/pam_tacplus/s/ (encrypt|first_hit)\b//g
+		         /^auth.*pam_tacplus/{/_first_pass/!s/$/ try_first_pass/}' $f
+	    fi
+	done
+	# no need to run configurator, pam modules always re-read pam.d/*
+	touch /etc/config/migrate/auth.012
+fi
+
+# Migrate pam_faildelay
+if [ ! -e /etc/config/migrate/auth.013 ]; then
+	for f in /etc/config/pam.d/*; do
+	    if [ -f $f -a ! -h $f ]; then
+		# insert pam_faildelay first into every auth
+		if ! grep -q pam_faildelay $f; then
+		    sed -i '1iauth optional pam_faildelay.so delay=5000000' $f
+		fi
+	    fi
+	done
+	# no need to run configurator, pam modules always re-read pam.d/*
+	touch /etc/config/migrate/auth.013
+fi
+
+# Migrate ppp conn timeout
+if [ ! -f /etc/config/migrate/dialin.008 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.008
+fi
+
+# OG-1001 Migrate OpenVPN AR fix
+# OG-1159 Migrate OpenVPN cipher fix
+if [ ! -f /etc/config/migrate/openvpn.001 ]; then
+	if [ ! -e /var/run/config/migrate/openvpn ]; then
+		config -r openvpn
+		touch /var/run/config/migrate/openvpn
+	fi
+	touch /etc/config/migrate/openvpn.001
+fi
+
+# Migrate ppp route conn timeout
+if [ ! -f /etc/config/migrate/dialin.009 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.009
+fi
+
+# Migrate DDNS conman fix
+if [ ! -f /etc/config/migrate/ipconfig.013 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.013
+fi
+
+# Migrate MGMT Lan Non-Dormant Failover Fix
+if [ ! -f /etc/config/migrate/ipconfig.014 ]; then
+	# Need to check whether failover is configured to an ethernet
+	# interface in non-dormant mode. If so, to keep behaviour the same
+	# post-upgrade we set to dormant mode.
+	failover=`config -g config.interfaces.wan.failover.interface | cut -f2 -d' '`
+	dormant=`config -g config.interfaces.wan.failover.dormant | cut -f2 -d' '`
+
+	# Check whether failover is configured to an ethernet interface (i.e. ifname is
+	# eth* or switch*.
+	case $failover in eth* | switch*)
+		# Check whether dormant mode is on
+		if [ ! "${dormant}" = "on" ]; then
+			# Set dormant mode to on
+			config -s config.interfaces.wan.failover.dormant=on
+			config -r ipconfig
+			touch /var/run/config/migrate/ipconfig
+		fi
+	esac
+	touch /etc/config/migrate/ipconfig.014
+fi
+
+# Migrate fix for IP aliases not coming up
+if [ ! -f /etc/config/migrate/ipconfig.015 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.015
+fi
+
+# Migrate ftp/tftp to independent storage mounts
+# This was previously using services.008 but has been modified to include
+# CM71 default SD storage, so now on services.009
+if [ ! -f /etc/config/migrate/services.009 ]; then
+	MODEL=$MODEL /etc/scripts/storage-initboot
+	case $MODEL in
+	   acm70* | les160* | b093* ) ftpdir=/var/mnt/storage.nvlog/tftpboot;;
+	   cm71*) ftpdir=/var/mnt/storage.sd/tftpboot;;
+	   *)      ftpdir=/var/mnt/storage.usb/tftpboot;;
+	esac
+	config -s config.services.ftp.directory="$ftpdir"
+	config -s config.services.tftp.directory="$ftpdir"
+	config -r storage -r services
+	touch /var/run/config/migrate/storage
+	touch /var/run/config/migrate/services
+	touch /etc/config/migrate/services.009
+fi
+
+# Migrate from legacy stock USB mount opts (sync) to fast opts (no sync)
+if [ ! -f /etc/config/migrate/storage.001 ]; then
+	new_opts='-t vfat -o flush,gid=9,umask=002'
+	old_opts=`config -g config.storage.usb.mountopts | cut -f2- -d' '`
+	if [ "$old_opts" == "-t vfat -o sync,flush,gid=9,umask=002" ]; then
+		echo "Upgrading usb mount options"
+		usb_dev=`config -g config.storage.usb.device | cut -f2- -d' '`
+		usb_mnt="/var/mnt/storage.usb"
+		config -s "config.storage.usb.mountopts=$new_opts" -r storage
+		if /bin/mount | grep -q "^$usb_dev on " ; then
+			/bin/mount $new_opts,remount $usb_dev "$usb_mnt" 2>&1
+		fi
+	fi
+	touch /etc/config/migrate/storage.001
+fi
+
+# Fix incorrect micro sd path for im72xx
+if [ ! -f /etc/config/migrate/storage.002 ]; then
+	if [ "$MODEL" == im72xx ]; then
+		dev=$(config -g config.storage.sd.device | cut -d' ' -f2-)
+		if [ "$dev" == "/dev/disk/by-path/platform-d00d4000.mvsdio-part1" ]; then
+			killall -TERM pmloggerd >& /dev/null
+			echo "Correcting micro SD device path"
+			config -s "config.storage.sd.device=/dev/disk/by-path/platform-mvsdio-part1" -r storage
+			config -r serialconfig
+		fi
+	fi
+	touch /etc/config/migrate/storage.002
+fi
+
+# Migrate fix for Dialback issue on IM72
+if [ ! -f /etc/config/migrate/dialin.010 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.010
+fi
+
+# Migrate Sierra watchdog for cdma
+if [ ! -f /etc/config/migrate/modemwatchdog.001 ]; then
+	sed -i 's/sierra-gsm-watchdog/sierra-watchdog/g' /etc/config/crontab.root
+	config -r modemwatchdog
+	touch /var/run/config/migrate/modemwatchdog
+	touch /etc/config/migrate/modemwatchdog.001
+fi
+
+# OG-1695 Migrate reordering of link status and if up commands
+if [ ! -f /etc/config/migrate/ipconfig.016 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.016
+fi
+
+# OG-1492 - Move to extended session IDs as default
+if [ ! -f /etc/config/migrate/auth.014 ]; then
+	config -s config.auth.extendedsessionids=on
+	config -r auth
+	touch /var/run/config/migrate/auth
+	touch /etc/config/migrate/auth.014
+fi
+
+if [ ! -f /etc/config/migrate/auth.015 ]; then
+	# Force the unauth user to be recreated with the right shell
+	rm_user unauth
+	# copy in a new ursh config
+	cp /etc/default/ursh.conf /etc/config/
+	# Make sure non-priviledged telnet user exists - must still be an admin
+	make_user unauth 1 /var/empty /bin/ursh
+	touch /etc/config/migrate/auth.015
+fi
+
+#OG-1367 - RADIUS accounting UDP port off by 1
+if [ ! -f /etc/config/migrate/auth.016 ]; then
+	old_config=`config -g config.auth.radius.acct_server | cut -f2- -d' '`
+	if [ ! -z "$old_config" ]; then
+		new_config=""
+
+		#put our comma-separated list of cidr addresses into a bash array
+		savedIFS=$IFS
+		IFS=,
+		acct_servers=($old_config)
+		IFS=$savedIFS
+
+		first=0
+		#process each address in turn
+		for acct_server in "${acct_servers[@]}"; do
+			#xargs strips leading and trailing whitespace
+			trimmed_acct_server=$(echo $acct_server | xargs)
+
+			just_colons=${trimmed_acct_server//[^:]}
+			number_of_colons=${#just_colons}
+			if [ "$number_of_colons" -gt 1 ]; then
+				#we have an ipv6 formatted address
+				if echo $trimmed_acct_server | grep "]:" &> /dev/null; then
+					#we have a port on the end
+					server=${trimmed_acct_server%:*}
+					old_server_port=$(echo $trimmed_acct_server | awk -F: '{print $NF}')
+				else
+					server=$trimmed_acct_server
+					old_server_port=""
+				fi
+
+			else
+				#we have either a hostname, or ipv4 formatted address
+				server=$(echo $trimmed_acct_server | cut -f1 -d ':')
+				#-s stops cut from printing lines that don't match
+				old_server_port=$(echo $trimmed_acct_server | cut -s -f2 -d ':')
+			fi
+
+			#add the server, sans port to the new_config
+			if [ "$first" -ne "0" ]; then
+				new_config=${new_config},${server}
+			else
+				new_config=${server}
+				first=1
+			fi
+
+			if [ ! -z "$old_server_port" ]; then
+				if $(is_int "$old_server_port"); then
+					new_server_port=$(($old_server_port + 1))
+				else
+					new_server_port=$old_server_port
+				fi
+				new_config=${new_config}:${new_server_port}
+			fi
+		done
+		config -s config.auth.radius.acct_server=$new_config
+		config -r auth
+		touch /var/run/config/migrate/auth
+	fi
+	touch /etc/config/migrate/auth.016
+fi
+
+# Migrate for admin users being part of serial group
+if [ ! -f /etc/config/migrate/users.001 ]; then
+	if [ ! -e /var/run/config/migrate/users ]; then
+		config -r users
+		touch /var/run/config/migrate/users
+	fi
+	touch /etc/config/migrate/users.001
+fi
+
+# Migrate to new ssh_config
+if [ ! -f /etc/config/migrate/ssh.001 ]; then
+	if [ -f "/etc/config/ssh_config" ]; then
+		# Compare SHA1SUM of current /etc/config/ssh_config with
+		# old /etc/default/ssh_config, to avoid overwriting user-defined
+		# configuration
+		OLD_SUM1="abf91217a246050bc1bf835b03bf9812f52de70e"
+		CUR_SUM1=`sha1sum /etc/config/ssh_config | cut -d" " -f1`
+		if [ "$OLD_SUM1" == "$CUR_SUM1" ]; then
+			cp /etc/default/ssh_config /etc/config/ssh_config
+		fi
+	fi
+	touch /etc/config/migrate/ssh.001
+fi
+
+# OG-2493 fix bridging in DHCP mode
+if [ ! -f /etc/config/migrate/ipconfig.017 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.017
+fi
+
+# Run the api configurator once to set up the REST API
+if [ ! -f /etc/config/migrate/api.001 ]; then
+	if [ ! -e /var/run/config/migrate/api ]; then
+		config -r api
+		touch /var/run/config/migrate/api
+	fi
+	touch /etc/config/migrate/api.001
+fi
+
+# Migrate changes for cellctl rework
+if [ ! -f /etc/config/migrate/ipconfig.018 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.018
+fi
+if [ ! -f /etc/config/migrate/dialin.011 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.011
+fi
+
+# Migrate changes for 3.16.4u6 cellctl changes
+if [ ! -f /etc/config/migrate/dialin.012 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.012
+fi
+
+# Move across fixed kerberosdownlocal pam config
+if [ ! -f /etc/config/migrate/auth.017 ]; then
+	cp /etc/default/pam.d/kerberosdownlocal /etc/config/pam.d/
+	touch /etc/config/migrate/auth.017
+fi
+
+# Fix ~/.ssh ownerships for remote AAA users
+if [ ! -f /etc/config/migrate/auth.018 ]; then
+	for i in `ls /etc/config/users` ; do
+		if [ -d "/etc/config/users/$i/.ssh" ]; then
+			echo "User $i owns /etc/config/users/$i/.ssh"
+			chown -R $i "/etc/config/users/$i/.ssh"
+		fi
+	done
+	touch /etc/config/migrate/auth.018
+fi
+
+# Migrate pam_infod configuration
+if [ ! -f /etc/config/migrate/auth.019 ]; then
+	DEF_PAM="/etc/default/pam.d"
+	CFG_PAM="/etc/config/pam.d"
+	if  [[ $(md5sum ${CFG_PAM}/local) = b7a9a9f68146f86f32ece4d8cbb9dee8* ]]
+	then
+		cp ${DEF_PAM}/local ${CFG_PAM}/
+	fi
+
+	if  [[ $(md5sum ${CFG_PAM}/kerberos) = 29ea0c1cb8dfe2e9390859adb8829772* ]]
+	then
+		cp ${DEF_PAM}/kerberos ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/localkerberos) = b935e17a3c39f6bfbeb4c6a04134764c* ]]
+	then
+		cp ${DEF_PAM}/localkerberos ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/kerberosdownlocal) = e70f4c8a0c64b971314b2833ac12ddcb* ]]
+	then
+		cp ${DEF_PAM}/kerberosdownlocal ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/kerberoslocal) = f65457c529afe45ceb95765cc9a2b346* ]]
+	then
+		cp ${DEF_PAM}/kerberoslocal ${CFG_PAM}/
+	fi
+
+	if  [[ $(md5sum ${CFG_PAM}/ldap) = 07512f37aa07dcadbf3d443d101db9dd* ]]
+	then
+		cp ${DEF_PAM}/ldap ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/localldap) = 9bbde5459912802daa7954ab12b8e537* ]]
+	then
+		cp ${DEF_PAM}/localldap ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/ldapdownlocal) = ca42171ddaf20336d6c8e182aba5e347* ]]
+	then
+		cp ${DEF_PAM}/ldapdownlocal ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/ldaplocal) = c57734ab07a6452c7bf33aee4581321e* ]]
+	then
+		cp ${DEF_PAM}/ldaplocal ${CFG_PAM}/
+	fi
+
+	if  [[ $(md5sum ${CFG_PAM}/radius) = 579f484c9ea4bdd73cfe3efa16933741* ]]
+	then
+		cp ${DEF_PAM}/radius ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/localradius) = b2ef7053e1bd2aa58036b7a4d1f22075* ]]
+	then
+		cp ${DEF_PAM}/localradius ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/radiusdownlocal) = e6adf11858bbf0b2edf71b2e548230f9* ]]
+	then
+		cp ${DEF_PAM}/radiusdownlocal ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/radiuslocal) = ddc576a66e0090b1ef7b2112c806f3c1* ]]
+	then
+		cp ${DEF_PAM}/radiuslocal ${CFG_PAM}/
+	fi
+
+	if  [[ $(md5sum ${CFG_PAM}/tacacs) = fb7b5b07acb7beae6097a1ee57bbf522* ]]
+	then
+		cp ${DEF_PAM}/tacacs ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/localtacacs) = bbd46a0c177b134bf8897eee99ca52f7* ]]
+	then
+		cp ${DEF_PAM}/localtacacs ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/tacacsdownlocal) = 5951e3bfc6f36174066a1192e293550f* ]]
+	then
+		cp ${DEF_PAM}/tacacsdownlocal ${CFG_PAM}/
+	fi
+	if  [[ $(md5sum ${CFG_PAM}/tacacslocal) = 6764debbc7afb08f1c1a762b0a204e13* ]]
+	then
+		cp ${DEF_PAM}/tacacslocal ${CFG_PAM}/
+	fi
+
+	touch /etc/config/migrate/auth.019
+fi
+
+# Migrate ppp test delay
+if [ ! -f /etc/config/migrate/dialin.013 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.013
+fi
+
+# Migrate ipv6 apn types
+if [ ! -f /etc/config/migrate/dialin.015 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.015
+fi
+
+# Migrate to dynamic cell ifnames (wwan0/wwan1)
+if [ ! -f /etc/config/migrate/dialin.016 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	MD5SUM=$(md5sum /etc/config/.log4crc | cut -d' ' -f1)
+	if [ "$MD5SUM" == "5bf019c1fa543b8f2716bb80788e26f4" ]; then
+		cp /etc/default/.log4crc /etc/config/.log4crc
+	fi
+	touch /etc/config/migrate/dialin.016
+fi
+
+# Move ntpd from inittab to conman and update default config
+if [ ! -f /etc/config/migrate/time.003 ]; then
+	echo "Moving ntpd to conman and fixing NTP default settings"
+	grep -v "/bin/ntpd" /etc/config/inittab > /tmp/inittab
+	mv /tmp/inittab /etc/config/inittab
+	pkill -HUP init
+	if [ ! -e /var/run/config/migrate/time ]; then
+		config -r time
+		touch /var/run/config/migrate/time
+	fi
+	touch /etc/config/migrate/time.003
+fi
+
+if [ ! -f /etc/config/migrate/time.004 ]; then
+	# Previously tzlist was copied from /etc/default into /etc/config
+	# Now we use a symlink in /etc/config (if it has not been
+	# customized). Future upgrades to tzlist will need
+	# to re-run the time configurator.
+	if [ -e /etc/config/tzlist -a ! -h /etc/config/tzlist ] &&
+   	[[ $(md5sum /etc/config/tzlist) = 864c64e3a07757bd465d2672783afd86* ]]
+	then
+	      echo "Upgrading /etc/config/tzlist"
+	      ln -sf ../default/tzlist /etc/config/tzlist
+	fi
+
+	# Updates to tzlist (2016f)
+	echo "Updating timezone"
+	config -r time
+	touch /etc/config/migrate/time.004
+fi
+
+# Change the LLDP default port ID to interface name
+if [ ! -f /etc/config/migrate/services.010 ]; then
+	if [ ! -e /var/run/config/migrate/services ]; then
+		config -r services
+		touch /var/run/config/migrate/services
+	fi
+	touch /etc/config/migrate/services.010
+fi
+
+# Update the cherokee config and webshell forwards to use
+# the X-Frame-Options and CSP headers to stop clickjacking
+if [ ! -f /etc/config/migrate/services.011 ]; then
+	if [ ! -e /var/run/config/migrate/services ]; then
+		config -r services
+		touch /var/run/config/migrate/services
+	fi
+	cp /etc/default/cherokee/cherokee.conf /etc/config/cherokee/cherokee.conf
+	touch /etc/config/migrate/services.011
+fi
+
+# Split group role "users" into roles "basic_webui_user" and "shell_user"
+if [ ! -f /etc/config/migrate/groups.001 ]; then
+	# avoid a pipeline deadlock by saving search in a temporary file
+	config -g config.groups |
+	    grep '^config\.groups\.group[0-9]*\.roles.role[0-9]* users$' >/tmp/groups.001.out
+	while read k v; do
+		g=${k%.roles.role*}
+		# k is an existing role key with value "users"
+		# g is the group key prefix, eg config.groups.group13
+		echo "Upgrading users role in group '$(config -g $g.name | cut -f2- -d' ')'"
+		n=$(($(config -g $g.roles.total | cut -f2- -d' ') + 1))
+		config  -s $k=basic_webui_user \
+			-s $g.roles.role$n=shell_user \
+			-s $g.roles.total=$n
+	done </tmp/groups.001.out
+	rm -f /tmp/groups.001.out
+	config -r users
+	touch /var/run/config/migrate/users
+	touch /etc/config/migrate/groups.001
+fi
+
+# 012 - pick up new default parameters for lldpd
+if [ ! -f /etc/config/migrate/services.012 ]; then
+	echo "Migrating to new default parameters for lldpd"
+	if [ ! -e /var/run/config/migrate/services ]; then
+		config -r services
+		touch /var/run/config/migrate/services
+	fi
+	touch /etc/config/migrate/services.012
+fi
+
+# 013 - Ensure shellinabox command is re-written to inittab
+if [ ! -f /etc/config/migrate/services.013 ]; then
+	config -r services
+	touch /etc/config/migrate/services.013
+fi
+
+# Migrate changes to autonegotiation for 10/100baseT ethernet
+if [ ! -f /etc/config/migrate/ipconfig.019 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.019
+fi
+
+# OG-4608 fix the any-up conn by adding -unconfigured conn, so ntp can start.
+if [ ! -f /etc/config/migrate/ipconfig.020 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.020
+fi
+
+# OG-4697 log permissions should include admin group members
+if [ ! -f /etc/config/migrate/eventlog.001 ]; then
+	chown -R root:admin /var/mnt/storage.*/port*.log*
+	chmod -R g+r /var/mnt/storage.*/port*.log*
+	touch /etc/config/migrate/eventlog.001
+fi
+
+# OG-4932 Obliterating the existing resolv.conf and run ipconfig
+if [ ! -f /etc/config/migrate/ipconfig.021 ]; then
+	rm -f /etc/config/resolv.conf
+	config -r ipconfig
+	# Flag that we have run ipconfig as part of the migration
+	touch /var/run/config/migrate/ipconfig
+	touch /etc/config/migrate/ipconfig.021
+fi
+
+# OG-6486 Copy default gai.conf file for configuring IPv4/IPv6 address lookup result precedence
+if [ ! -f /etc/config/migrate/uclibc.001 ]; then
+	cp /etc/default/gai.conf /etc/config/
+	touch /etc/config/migrate/uclibc.001
+fi
+
+# IM-3447 Lighthouse VPN - move to UDP, reconfigure lhvpn_tunnel config to use UDP
+if [ ! -f /etc/config/migrate/lhvpn_tunnel.001 ]; then
+	if [ ! -e /var/run/config/migrate/lhvpn_tunnel ]; then
+		config -r lhvpn_tunnel
+		touch /var/run/config/migrate/lhvpn_tunnel
+	fi
+	touch /etc/config/migrate/lhvpn_tunnel.001
+fi
+
+# 022 - OG-4884 and OG-4902 The ipconfig configurator has changed
+# 023 - OG-5435 The ipconfig configurator has changed (4.1.1 release)
+# 024 - OG-5480 The ipconfig configurator has changed
+if [ ! -f /etc/config/migrate/ipconfig.024 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.024
+fi
+
+# Fix for LHVPN connection not working with a separate OpenVPN server instance running
+if [ ! -f /etc/config/migrate/lhvpn_tunnel.002 ]; then
+	if [ ! -e /var/run/config/migrate/lhvpn_tunnel ]; then
+		config -r lhvpn_tunnel
+		touch /var/run/config/migrate/lhvpn_tunnel
+	fi
+	touch /etc/config/migrate/lhvpn_tunnel.002
+fi
+
+# LPK needs variants of config options in ldap.conf
+if [ ! -f /etc/config/migrate/auth.020 ]; then
+	if [ ! -e /var/run/config/migrate/auth ]; then
+		config -r auth
+		touch /var/run/config/migrate/auth
+	fi
+	touch /etc/config/migrate/auth.020
+fi
+
+# Leave this at the bottom of the list
+# Dodgy hack warning. Run lhvpn configurator every boot to either
+# a) Complete ztp auto enrollments or
+# b) Resume incomplete enrollments from a previous boot (once we fix the status handling)
+if [ ! -e /var/run/config/migrate/lhvpn ]; then
+	config -r lhvpn
+	touch /var/run/config/migrate/lhvpn
+fi
+
+# 025 - the network-connifs-* conns removed and failover from wlan disabled
+if [ ! -f /etc/config/migrate/ipconfig.025 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	config -d config.interfaces.wlan.failover
+	touch /etc/config/migrate/ipconfig.025
+fi
+
+VERSION=$(config -g config.version | cut -f2- -d' ')
+if [[ "$VERSION" < 0.6 ]]; then
+
+	# config.syslog.server -> config.syslog.servers
+	hostname=$(config -g config.syslog.server.hostname | cut -d' ' -f2-)
+	if [ -n "$hostname" ]; then
+		port=$(config -g config.syslog.server.port | cut -d' ' -f2-)
+		protocol=$(config -g config.syslog.server.protocol | cut -d' ' -f2-)
+		loglevel=$(config -g config.syslog.loglevel | cut -d' ' -f2-)
+		config \
+			-s config.syslog.servers.server1.address="$hostname" \
+			-s config.syslog.servers.server1.port="${port:-514}" \
+			-s config.syslog.servers.server1.protocol="${protocol:-udp}" \
+			-s config.syslog.servers.server1.loglevel="${loglevel:-info}" \
+			-s config.syslog.servers.total=1 \
+			-d config.syslog.server.hostname \
+			-d config.syslog.server.port \
+			-d config.syslog.server.protocol \
+			-r systemlog
+		touch /var/run/config/migrate/systemlog
+	fi
+
+	VERSION=0.6
+	config -s config.version=$VERSION
+fi
+
+if [[ "$VERSION" < 0.7 ]]; then
+	# When upgrading, users have to opt-in for SHA-512 passwords.
+	# This is because of the risk that they may downgrade
+	# after persisting the root_hash_pwd, and forgotten to
+	# make a configuraion backup.
+	config -s config.auth.local.crypt=md5
+
+	VERSION=0.7
+	config -s config.version=$VERSION
+fi
+
+if [[ "$VERSION" < 0.8 ]]; then
+	# rename config.cascade.slaves to config.cascade.nodes
+	sargs=() dargs=() saved_ifs="$IFS" IFS=$'\n'
+	for kv in $(config -g config.cascade.slaves); do
+		k=${kv%% *}
+		v=${kv##$k }
+		nk=config.cascade.nodes.${k#config.cascade.slaves.}
+		sargs+=(-s $nk="$v")
+		dargs=(-d "$k" "${dargs[@]}" -d "$k")
+	done
+	IFS="$saved_ifs"
+
+	# adjust snmp passwordtype values: master -> primary
+	for k in config.services.snmp.roauthpasswordtype \
+		 config.services.snmp.roprivpasswordtype
+	do
+		if [ "$(config -g $k | cut -f1 -d' ')" = master ]; then
+			sargs+=(-s $k=primary)
+		fi
+	done
+
+	VERSION=0.8
+	sargs+=(-s config.version=$VERSION)
+	config "${sargs[@]}" "${dargs[@]}"	# all updates at once
+fi
+
+# Setup rsyslog and logrotate
+if [ ! -f /etc/config/migrate/systemlog.001 ]; then
+	if [ ! -e /var/run/config/migrate/systemlog ]; then
+		config -r systemlog
+		touch /var/run/config/migrate/systemlog
+	fi
+	touch /etc/config/migrate/systemlog.001
+fi
+
+# 013 - the dailin configurator no longer setup cellmodem related
+# firewall rules nor perif route tables for IPv6 perifroute feature
+if [ ! -f /etc/config/migrate/dialin.013 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.013
+fi
+
+# 026 - the redundant start command to set default route metric as 100
+# removed from network-connection-ROLE-static-gw
+if [ ! -f /etc/config/migrate/ipconfig.026 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.026
+fi
+
+# 027 - the network-connection-ROLE-[dhcp|static](-active)?-gw conn added
+# dedicating to failover
+if [ ! -f /etc/config/migrate/ipconfig.027 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.027
+fi
+
+# 028 - the network-connection-ROLE-dhcp-active-test conn added to test
+# and to restore missing default route
+if [ ! -f /etc/config/migrate/ipconfig.028 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.028
+fi
+
+# OG-5906 Move /etc/resolv.conf to /var/run/
+if [ ! -f /etc/config/migrate/ipconfig.029 ]; then
+	MD5SUM=$(md5sum /etc/config/resolvconf.conf | cut -d' ' -f1)
+	if [ "$MD5SUM" == "95a4c38113765149f468d8b8cde67ad6" ]; then
+		cp /etc/default/resolvconf.conf /etc/config/resolvconf.conf
+		rm -f /etc/config/resolv.conf
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.029
+fi
+
+# 014 - dial-cellmodem-sim1-pre-test and dial-cellmodem-simX-post-test added
+# for sim auto selection
+if [ ! -f /etc/config/migrate/dialin.014 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.014
+fi
+
+# 015 - delete undefined dial-cellmodem-failover or dial-cellmodem-simX-failover
+# members from network-default-gateway
+if [ ! -f /etc/config/migrate/dialin.015 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.015
+fi
+
+# 017 - changes to conman conf and firewall settings
+if [ ! -f /etc/config/migrate/dialin.017 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.017
+fi
+
+# 018 - simplification to cellmodem conns for dual sims
+if [ ! -f /etc/config/migrate/dialin.018 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.018
+fi
+
+# 003 - Conn added to start a daemon listening to infod
+# to signal LH to resync data
+if [ ! -f /etc/config/migrate/lhvpn_tunnel.003 ]; then
+	if [ ! -e /var/run/config/migrate/lhvpn_tunnel ]; then
+		config -r lhvpn_tunnel
+		touch /var/run/config/migrate/lhvpn_tunnel
+	fi
+	touch /etc/config/migrate/lhvpn_tunnel.003
+fi
+
+# Deprecate /etc/config/start
+if [ ! -f /etc/config/migrate/init.001 ]; then
+	if [ -e /etc/config/start ]; then
+		sed -i '/^gen-keys /d' /etc/config/start
+		# handle customised start
+		if grep -q '^[^#]' /etc/config/start; then
+		    echo "Migrating /etc/config/start to rc.local"
+		    {	echo "# (migrated from /etc/config/start)"
+			cat /etc/config/start
+		    } >> /etc/config/rc.local
+		fi
+		rm -f /etc/config/start
+	fi
+	touch /etc/config/migrate/init.001
+fi
+
+# 019 - better conns for V.92 modem
+if [ ! -f /etc/config/migrate/dialin.019 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.019
+fi
+
+# 020 - conman no longer setup perif route table and firewall rules for cellmodem/modem
+if [ ! -f /etc/config/migrate/dialin.020 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.020
+fi
+
+# OpenVPN deprecated options
+if [ ! -f /etc/config/migrate/openvpn.002 ]; then
+	if [ ! -e /var/run/config/migrate/openvpn ]; then
+		config -r openvpn
+		touch /var/run/config/migrate/openvpn
+	fi
+	touch /etc/config/migrate/openvpn.002
+fi
+
+# 029b - conman no longer setup perif route table and firewall rules for ethernet/wifi
+# 030 - allow switches to be bridged but not bonded
+if [ ! -f /etc/config/migrate/ipconfig.030 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.030
+fi
+
+# 031 - make use of common code to create restart-on-change and -restarter conns
+if [ ! -f /etc/config/migrate/ipconfig.031 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.031
+fi
+
+# 032 - IPv6 failover support
+if [ ! -f /etc/config/migrate/ipconfig.032 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.032
+fi
+
+# 021 - increase test failure threshold for dial-cellmodem-sim1-pre-test
+# to better cope with cellmodem being reset
+if [ ! -f /etc/config/migrate/dialin.021 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.021
+fi
+
+# 022 - Fix APNTYPE in cellmodem-simX.cfg
+if [ ! -f /etc/config/migrate/dialin.022 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.022
+fi
+
+# 023 - make dial-cellmodem-simX to test .cellmodem_sim_index content
+if [ ! -f /etc/config/migrate/dialin.023 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.023
+fi
+
+# 024 - IP Passthrough fixes on cellmodem routes
+if [ ! -f /etc/config/migrate/dialin.024 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.024
+fi
+
+# 033 - Avoid resetting switch when bonding is enabled on 24E
+if [ ! -f /etc/config/migrate/ipconfig.033 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.033
+fi
+
+# 034 - Avoid deprecated calls into switch-config script for
+# switch devices
+if [ ! -f /etc/config/migrate/ipconfig.034 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.034
+fi
+
+# 003 - OG-6610: Throttle repeated up action retries on abnormal exit
+if [ ! -f /etc/config/migrate/openvpn.003 ]; then
+	if [ ! -e /var/run/config/migrate/openvpn ]; then
+		config -r openvpn
+		touch /var/run/config/migrate/openvpn
+	fi
+	touch /etc/config/migrate/openvpn.003
+fi
+
+# 035 - Avoid overriding def_rt_metric when greater than zero
+if [ ! -f /etc/config/migrate/ipconfig.035 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.035
+fi
+
+# 036 - Keep disabled WLAN as disabled with aggregation
+if [ ! -f /etc/config/migrate/ipconfig.036 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.036
+fi
+
+
+# 002 - Fixup number of powersupplies for 72xx boards
+if [ ! -f /etc/config/migrate/powersupplies.002 ]; then
+	if grep IM72xx /etc/version >& /dev/null; then
+		config -s config.powersupplies.total=2
+	fi
+	touch /etc/config/migrate/powersupplies.002
+fi
+
+# 004 - Start openvpn after any network connection is setup
+if [ ! -f /etc/config/migrate/openvpn.004 ]; then
+	if [ ! -e /var/run/config/migrate/openvpn ]; then
+		config -r openvpn
+		touch /var/run/config/migrate/openvpn
+	fi
+	touch /etc/config/migrate/openvpn.004
+fi
+
+# 037 - Fix config.interfaces.lan.device.type for cm7196
+if [ ! -f /etc/config/migrate/ipconfig.037 ]; then
+	if grep -q CM7196 /etc/version ; then
+		config -s config.interfaces.lan.device.type=marvell
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.037
+fi
+
+# 038 - Get cellmodem interface for static routes
+if [ ! -f /etc/config/migrate/ipconfig.038 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.038
+fi
+
+# 039 - cellular connectivity test script
+if [ ! -f /etc/config/migrate/ipconfig.039 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.039
+fi
+
+# 005 - Move ntpd from conman back to inittab
+if [ ! -f /etc/config/migrate/time.005 ]; then
+	echo "Removing ntpd to init and fixing redundant restarts"
+	# Can't check /var/run/config/migrate/time in case time.003
+	# was just executed, need to counter strike that
+	config -r time
+	# In case NTP is enabled and added to inittab
+	pkill -HUP init
+	touch /etc/config/migrate/time.005
+fi
+
+# 025 - No more than 6 attempts to re-connect cellmodem within half an hour
+if [ ! -f /etc/config/migrate/dialin.025 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.025
+fi
+
+# 026 - Fix SIM selection for EM7565 modems
+if [ ! -f /etc/config/migrate/dialin.026 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.026
+fi
+
+if [ ! -f /etc/config/migrate/firewall.001 ]; then
+	# Remove old firewall rules files and ensure the new table specific
+	# files are generated
+	rm -f /etc/config/fw.rules
+	rm -f /etc/config/fwipv6.rules
+	config -r forwards
+
+	# Remove obsolete files
+	rm -f /etc/config/filter-services
+	rm -f /etc/config/filter6-services
+
+	# If enabled, re-generate Cascading firewall rules
+	# which are no longer in separate file
+	config -r cascade
+	rm -f /etc/config/filter-cascade
+
+	touch /etc/config/migrate/firewall.001
+fi
+
+# 040 - add test commands for -aliasX and -static conns
+if [ ! -f /etc/config/migrate/ipconfig.040 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.040
+fi
+
+# 021 - suppress error message when radius accounting is disabled
+if [ ! -f /etc/config/migrate/auth.021 ]; then
+	if [ ! -e /var/run/config/migrate/auth ]; then
+		config -r auth
+		touch /var/run/config/migrate/auth
+	fi
+	touch /etc/config/migrate/auth.021
+fi
+
+# 014 - FTP server changes (vsftpd)
+if [ ! -f /etc/config/migrate/services.014 ]; then
+	make_user _vsftpd
+
+	# The inetd.conf entry changes from "21 stream tcp.." to
+	# "ftp stream tcp...". Remove any old entry and allow the
+	# services configurator to regenerate it.
+	sed -i -e '/^21 stream tcp/d' /etc/config/inetd.conf
+	config -r services
+	touch /var/run/config/migrate/services
+
+	touch /etc/config/migrate/services.014
+fi
+
+# 041 - add dhcp relay support
+if [ ! -f /etc/config/migrate/ipconfig.041 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.041
+fi
+
+# 027 - Fix Auto Response control on cellmodem with SIM in TOP slot
+if [ ! -f /etc/config/migrate/dialin.027 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.027
+fi
+
+# 003 - Fix ipsec (restart) conns
+if [ ! -f /etc/config/migrate/ipsec.003 ]; then
+	if [ ! -e /var/run/config/migrate/ipsec ]; then
+		config -r ipsec
+		touch /var/run/config/migrate/ipsec
+	fi
+	touch /etc/config/migrate/ipsec.003
+fi
+
+# 028 - Fix dial-cellmodem-ddns conn to enquire wwan interface on the fly
+if [ ! -f /etc/config/migrate/dialin.028 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.028
+fi
+
+# 029 - Adjust failoverTimeout for -dualsimgroup ordered group
+# when AUTO-SIM is enabled on cellmodem
+if [ ! -f /etc/config/migrate/dialin.029 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.029
+fi
+
+# OG-6568 - Default local loglevel is "info"
+if [ ! -f /etc/config/migrate/systemlog.002 ]; then
+	loglevel=$(config -g config.syslog.loglevel | cut -d' ' -f2-)
+	config -s config.syslog.loglevel="${loglevel:-info}"
+	touch /etc/config/migrate/systemlog.002
+fi
+
+# OG-7626 OpenVPN UI: Fix for openvpn breaking config
+# Since 4.4.0 release
+if [ ! -f /etc/config/migrate/openvpn.005 ]; then
+
+	# Remove openvpn tunnel duplicate elements
+	config -d config.compress -d config.device -d config.localifconfig -d config.localport -d config.mode -d config.name -d config.protocol -d config.remoteifconfig
+
+	# if corrupted by openvpn 'config -g config.auth' may return giberish like this:
+	#   config.auth
+	#
+	#   secret
+	#   config.auth.extendedsessionids on
+	#   config.auth.type Local
+	#
+	# Recreate config.auth
+
+	auth_path="config.auth"
+	auth_elem_count=$(echo config -g $auth_path | wc -l)
+	if (( auth_elem_count > 0 )) ; then
+		declare -A auth_data
+		IFS=$'\n'
+		for kv in $(config -g config.auth)
+		do
+			key=${kv%% *}
+			value=${kv##$key }
+
+			if [[ "$key" == "$auth_path" ]]; then
+				# This key should not exist, it implies corruption
+				continue
+			fi
+
+			if [[ -z "$key" || -z "$value" ]]; then
+				continue
+			fi
+
+			if [[ ! $key =~ \. ]]; then
+				continue
+			fi
+
+			if [[ -n "$key" && -n "$value" ]]; then
+				auth_data["$key"]="$value"
+			fi
+		done
+
+		cmd="config -d $auth_path"
+		for key in "${!auth_data[@]}"; do
+			cmd="$cmd -s $key=${auth_data[$key]}"
+		done
+		bash -c $cmd
+
+	fi
+	touch /etc/config/migrate/openvpn.005
+fi
+
+# OG-8116 rsyslog and logrotate
+if [ ! -f /etc/config/migrate/systemlog.003 ]; then
+	rm -f /etc/config/rsyslog.d/50-opengear.conf
+	rm -f /etc/config/logrotate.d/50-opengear
+	if [ ! -e /var/run/config/migrate/systemlog ]; then
+		config -r systemlog
+		touch /var/run/config/migrate/systemlog
+	fi
+	touch /etc/config/migrate/systemlog.003
+fi
+
+# OG-8311 Ensure only one openvpn process per LHVPN tunnel
+if [ ! -f /etc/config/migrate/lhvpn_tunnel.004 ]; then
+	if [ ! -e /var/run/config/migrate/lhvpn_tunnel ]; then
+		config -r lhvpn_tunnel
+		touch /var/run/config/migrate/lhvpn_tunnel
+	fi
+	touch /etc/config/migrate/lhvpn_tunnel.004
+fi
+
+# OG-6835 - fix forwarding to wlan
+if [ ! -f /etc/config/migrate/forwards.001 ]; then
+	if [ ! -e /var/run/config/migrate/forwards ]; then
+		config -r forwards
+		touch /var/run/config/migrate/forwards
+	fi
+	touch /etc/config/migrate/forwards.001
+fi
+
+# OG-8263 new content for SNMPv2-MIB::sysDescr
+if [ ! -f /etc/config/migrate/snmp.003 ]; then
+	if [ ! -e /var/run/config/migrate/snmp ]; then
+		config -r snmp
+		touch /var/run/config/migrate/snmp
+	fi
+	touch /etc/config/migrate/snmp.003
+fi
+
+# OG-8472 sudo password policy for admin
+if [ ! -f /etc/config/migrate/sudo.001 ]; then
+	if [ ! -e /var/run/config/migrate/users ]; then
+		config -r users
+		touch /var/run/config/migrate/users
+	fi
+	touch /etc/config/migrate/sudo.001
+fi
+
+# OG-6973 - adjust modem-watchdog period
+if [ ! -f /etc/config/migrate/dialin.030 ]; then
+	enabled=$(config -g config.cellmodem.watchdog.enabled | head -n 1 | cut -f2 -d' ')
+	threshold=$(config -g config.cellmodem.watchdog.threshold | head -n 1 | cut -f2 -d' ')
+	period_old=$(config -g config.cellmodem.watchdog.period | head -n 1 | cut -f2 -d' ')
+	total_cellmodem_backoff=1800
+	if [[ "$enabled" ]] && (( $threshold*$period_old <= $total_cellmodem_backoff )); then
+		period_new=$(( $total_cellmodem_backoff/$threshold + 1 ))
+		echo "Adjusting modem-watchdog period from $period_old to $period_new"
+		config -s config.cellmodem.watchdog.period=$period_new
+		config -r dialin
+	fi
+	touch /etc/config/migrate/dialin.030
+fi
+
+# Re-arrange ipsec-daemon parent when there is one tunnel
+if [ ! -f /etc/config/migrate/ipsec.004 ]; then
+	if [ ! -e /var/run/config/migrate/ipsec ]; then
+		config -r ipsec
+		touch /var/run/config/migrate/ipsec
+	fi
+	touch /etc/config/migrate/ipsec.004
+fi
+
+# OG-8118 Fixup number of powersupplies
+if [ ! -f /etc/config/migrate/powersupplies.003 ]; then
+	if [[ "$MODEL" =~ b098 ]]; then
+		config -s config.powersupplies.total=2
+	fi
+	touch /etc/config/migrate/powersupplies.003
+fi
+
+# 042 - remove network-connection-wan-ipsetd conn
+if [ ! -f /etc/config/migrate/ipconfig.042 ]; then
+	if [ ! -e /var/run/config/migrate/ipconfig ]; then
+		config -r ipconfig
+		touch /var/run/config/migrate/ipconfig
+	fi
+	touch /etc/config/migrate/ipconfig.042
+fi
+
+# OG-8636 mitigate timing issue between conman and cellctld
+if [ ! -f /etc/config/migrate/dialin.030 ]; then
+	if [ ! -e /var/run/config/migrate/dialin ]; then
+		config -r dialin
+		touch /var/run/config/migrate/dialin
+	fi
+	touch /etc/config/migrate/dialin.030
+fi
+
+# OG-2634 - copy new ldapdownlocal config
+if [ ! -f /etc/config/migrate/auth.022 ]; then
+	if [[ $(md5sum /etc/config/pam.d/ldapdownlocal) = 782a3422ce2ef8b97990c936ee276de9* ]]; then
+		echo "Fixing ldapdownlocal auth config"
+		cp /etc/default/pam.d/ldapdownlocal /etc/config/pam.d/
+	else
+		echo "Leaving modified ldapdownlocal auth config alone"
+	fi
+	touch /etc/config/migrate/auth.022
+fi
+
+# OG-8677 - inclusive language
+if [ ! -f /etc/config/migrate/cascade.001 ]; then
+	# cascaded node-side updates
+	sed -ie '/^slave[0-9]/s/^slave/cascade/' /etc/config/inittab
+	if [ -e /etc/config/node.xml ]; then
+		# cascade controller was upgraded earlier?
+		config -r cascadenode
+	fi
+	# cascade controller-side updates
+	if [ ! -e /var/run/config/migrate/cascade ]; then
+		config -r cascade
+		touch /var/run/config/migrate/cascade
+	fi
+	touch /etc/config/migrate/cascade.001
+fi
+
+# OG-8677 - upsmon username change
+if [ ! -f /etc/config/migrate/ups.002 ]; then
+	if [ ! -e /var/run/config/migrate/ups ]; then
+		config -r ups
+		touch /var/run/config/migrate/ups
+	fi
+	touch /etc/config/migrate/ups.002
+fi
+
+# OG-8798 - SSL serverAuth extended key usage
+if [ ! -f /etc/config/migrate/https.004 ]; then
+	cp /etc/default/openssl.conf /etc/config/openssl.conf
+
+	# Remove the current pki if they're default.
+	# These are certs with a subject of /CN=192.168.0.1.
+	CERT=/etc/config/ssl_cert.pem
+	KEY=/etc/config/ssl_key.pem
+	if [[ -s $CERT && -s $KEY ]] &&
+		openssl x509 -in $CERT -noout -subject | grep -q /CN=192.168.0.1
+	then
+		rm $CERT $KEY
+		# pki will be regenerated later during boot by /etc/scripts/gen-keys
+	fi
+
+	# Add cron job to check and regenerate any expired certs at midnight every sunday
+	CRONTAB=/etc/config/crontab.root
+	job='0 0 * * 0 /etc/scripts/gen-keys'
+	if ! grep -F -q "$job" $CRONTAB; then
+		echo "$job" >> $CRONTAB
+	fi
+	touch /etc/config/migrate/https.004
+fi
+
+# OG-8721 unauthenticated SSH handling
+if [ ! -f /etc/config/migrate/auth.023 ]; then
+	for f in /etc/config/pam.d/*; do
+		# update pam.conf files with pam_portauth.so
+		if ! grep -q pam_portauth $f; then
+			sed -i '/^auth optional pam_echo/a\
+auth sufficient pam_portauth.so' $f
+			if [[ $f = *downlocal ]]; then
+				# insert before first account rule, if any
+				sed -i '1,/^account/{/^account/i\
+account sufficient pam_portauth.so
+}' $f
+			fi
+		fi
+	done
+	touch /etc/config/migrate/auth.023
+fi
+
+# OG-8821 write LHVPN config only for defined tunnels
+if [ ! -f /etc/config/migrate/lhvpn_tunnel.005 ]; then
+	if [ ! -e /var/run/config/migrate/lhvpn_tunnel ]; then
+		config -r lhvpn_tunnel
+		touch /var/run/config/migrate/lhvpn_tunnel
+	fi
+	touch /etc/config/migrate/lhvpn_tunnel.005
+fi
+
+exit 0

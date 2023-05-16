@@ -1,0 +1,28 @@
+From 42a3a2d50b30580cf13e57b69c14a9c7611e49c2 Mon Sep 17 00:00:00 2001
+From: Aleksander Morgado <aleksander@aleksander.es>
+Date: Mon, 11 Jan 2021 14:18:36 +0100
+Subject: [PATCH] iface-modem: avoid leaking the MmGdbusModem when bearers are
+ updated
+
+See See https://gitlab.freedesktop.org/mobile-broadband/ModemManager/-/issues/302
+
+(cherry picked from commit d12ab8a25a60323a753e3437c81a984a503deb40)
+---
+ src/mm-iface-modem.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/mm-iface-modem.c b/src/mm-iface-modem.c
+index 91beed77..4bf9d32a 100644
+--- a/src/mm-iface-modem.c
++++ b/src/mm-iface-modem.c
+@@ -422,6 +422,7 @@ bearer_list_updated (MMBearerList *bearer_list,
+     g_strfreev (paths);
+ 
+     g_dbus_interface_skeleton_flush (G_DBUS_INTERFACE_SKELETON (skeleton));
++    g_object_unref (skeleton);
+ }
+ 
+ /*****************************************************************************/
+-- 
+2.25.1
+

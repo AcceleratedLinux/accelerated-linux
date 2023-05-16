@@ -1381,7 +1381,7 @@ static int dcbnl_notify(struct net_device *dev, int event, int cmd,
 
 	skb = dcbnl_newmsg(event, cmd, portid, seq, 0, &nlh);
 	if (!skb)
-		return -ENOBUFS;
+		return -ENOMEM;
 
 	if (dcbx_ver == DCB_CAP_DCBX_VER_IEEE)
 		err = dcbnl_ieee_fill(skb, dev);
@@ -1426,6 +1426,7 @@ static int dcbnl_ieee_set(struct net_device *netdev, struct nlmsghdr *nlh,
 {
 	const struct dcbnl_rtnl_ops *ops = netdev->dcbnl_ops;
 	struct nlattr *ieee[DCB_ATTR_IEEE_MAX + 1];
+	int prio;
 	int err;
 
 	if (!ops)
@@ -1474,6 +1475,13 @@ static int dcbnl_ieee_set(struct net_device *netdev, struct nlmsghdr *nlh,
 	if (ieee[DCB_ATTR_DCB_BUFFER] && ops->dcbnl_setbuffer) {
 		struct dcbnl_buffer *buffer =
 			nla_data(ieee[DCB_ATTR_DCB_BUFFER]);
+
+		for (prio = 0; prio < ARRAY_SIZE(buffer->prio2buffer); prio++) {
+			if (buffer->prio2buffer[prio] >= DCBX_MAX_BUFFERS) {
+				err = -EINVAL;
+				goto err;
+			}
+		}
 
 		err = ops->dcbnl_setbuffer(netdev, buffer);
 		if (err)
@@ -1736,7 +1744,7 @@ static int dcb_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct net_device *netdev;
 	struct dcbmsg *dcb = nlmsg_data(nlh);
 	struct nlattr *tb[DCB_ATTR_MAX + 1];
-	u32 portid = skb ? NETLINK_CB(skb).portid : 0;
+	u32 portid = NETLINK_CB(skb).portid;
 	int ret = -EINVAL;
 	struct sk_buff *reply_skb;
 	struct nlmsghdr *reply_nlh = NULL;
@@ -1757,6 +1765,8 @@ static int dcb_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 	fn = &reply_funcs[dcb->cmd];
 	if (!fn->cb)
 		return -EOPNOTSUPP;
+	if (fn->type == RTM_SETDCB && !netlink_capable(skb, CAP_NET_ADMIN))
+		return -EPERM;
 
 	if (!tb[DCB_ATTR_IFNAME])
 		return -EINVAL;
@@ -1771,7 +1781,7 @@ static int dcb_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 	reply_skb = dcbnl_newmsg(fn->type, dcb->cmd, portid, nlh->nlmsg_seq,
 				 nlh->nlmsg_flags, &reply_nlh);
 	if (!reply_skb)
-		return -ENOBUFS;
+		return -ENOMEM;
 
 	ret = fn->cb(netdev, nlh, nlh->nlmsg_seq, tb, reply_skb);
 	if (ret < 0) {
@@ -1819,6 +1829,8 @@ static int dcb_app_add(const struct dcb_app *app, int ifindex)
 
 /**
  * dcb_getapp - retrieve the DCBX application user priority
+ * @dev: network interface
+ * @app: application to get user priority of
  *
  * On success returns a non-zero 802.1p user priority bitmap
  * otherwise returns 0 as the invalid user priority bitmap to
@@ -1841,6 +1853,8 @@ EXPORT_SYMBOL(dcb_getapp);
 
 /**
  * dcb_setapp - add CEE dcb application data to app list
+ * @dev: network interface
+ * @new: application data to add
  *
  * Priority 0 is an invalid priority in CEE spec. This routine
  * removes applications from the app list if the priority is
@@ -1882,6 +1896,8 @@ EXPORT_SYMBOL(dcb_setapp);
 
 /**
  * dcb_ieee_getapp_mask - retrieve the IEEE DCB application priority
+ * @dev: network interface
+ * @app: where to store the retrieve application data
  *
  * Helper routine which on success returns a non-zero 802.1Qaz user
  * priority bitmap otherwise returns 0 to indicate the dcb_app was
@@ -1904,6 +1920,8 @@ EXPORT_SYMBOL(dcb_ieee_getapp_mask);
 
 /**
  * dcb_ieee_setapp - add IEEE dcb application data to app list
+ * @dev: network interface
+ * @new: application data to add
  *
  * This adds Application data to the list. Multiple application
  * entries may exists for the same selector and protocol as long
@@ -1938,6 +1956,8 @@ EXPORT_SYMBOL(dcb_ieee_setapp);
 
 /**
  * dcb_ieee_delapp - delete IEEE dcb application data from list
+ * @dev: network interface
+ * @del: application data to delete
  *
  * This removes a matching APP data from the APP list
  */
@@ -1967,7 +1987,7 @@ int dcb_ieee_delapp(struct net_device *dev, struct dcb_app *del)
 }
 EXPORT_SYMBOL(dcb_ieee_delapp);
 
-/**
+/*
  * dcb_ieee_getapp_prio_dscp_mask_map - For a given device, find mapping from
  * priorities to the DSCP values assigned to that priority. Initialize p_map
  * such that each map element holds a bit mask of DSCP values configured for
@@ -1996,7 +2016,7 @@ void dcb_ieee_getapp_prio_dscp_mask_map(const struct net_device *dev,
 }
 EXPORT_SYMBOL(dcb_ieee_getapp_prio_dscp_mask_map);
 
-/**
+/*
  * dcb_ieee_getapp_dscp_prio_mask_map - For a given device, find mapping from
  * DSCP values to the priorities assigned to that DSCP value. Initialize p_map
  * such that each map element holds a bit mask of priorities configured for a
@@ -2023,7 +2043,7 @@ dcb_ieee_getapp_dscp_prio_mask_map(const struct net_device *dev,
 }
 EXPORT_SYMBOL(dcb_ieee_getapp_dscp_prio_mask_map);
 
-/**
+/*
  * Per 802.1Q-2014, the selector value of 1 is used for matching on Ethernet
  * type, with valid PID values >= 1536. A special meaning is then assigned to
  * protocol value of 0: "default priority. For use when priority is not
@@ -2053,9 +2073,51 @@ u8 dcb_ieee_getapp_default_prio_mask(const struct net_device *dev)
 }
 EXPORT_SYMBOL(dcb_ieee_getapp_default_prio_mask);
 
+static void dcbnl_flush_dev(struct net_device *dev)
+{
+	struct dcb_app_type *itr, *tmp;
+
+	spin_lock_bh(&dcb_lock);
+
+	list_for_each_entry_safe(itr, tmp, &dcb_app_list, list) {
+		if (itr->ifindex == dev->ifindex) {
+			list_del(&itr->list);
+			kfree(itr);
+		}
+	}
+
+	spin_unlock_bh(&dcb_lock);
+}
+
+static int dcbnl_netdevice_event(struct notifier_block *nb,
+				 unsigned long event, void *ptr)
+{
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+
+	switch (event) {
+	case NETDEV_UNREGISTER:
+		if (!dev->dcbnl_ops)
+			return NOTIFY_DONE;
+
+		dcbnl_flush_dev(dev);
+
+		return NOTIFY_OK;
+	default:
+		return NOTIFY_DONE;
+	}
+}
+
+static struct notifier_block dcbnl_nb __read_mostly = {
+	.notifier_call  = dcbnl_netdevice_event,
+};
+
 static int __init dcbnl_init(void)
 {
-	INIT_LIST_HEAD(&dcb_app_list);
+	int err;
+
+	err = register_netdevice_notifier(&dcbnl_nb);
+	if (err)
+		return err;
 
 	rtnl_register(PF_UNSPEC, RTM_GETDCB, dcb_doit, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_SETDCB, dcb_doit, NULL, 0);

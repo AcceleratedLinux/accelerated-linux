@@ -1,0 +1,102 @@
+
+# applied this change to version 2.9
+# https://github.com/ivkos/hostap-force-ht40/commit/004876e562b310d85ffab0f1d671b7a51ff0ce51
+
+--- hostapd-2.9/hostapd/hostapd.conf	2020-12-23 09:25:57.735997758 +1000
++++ hostapd-2.9/hostapd/hostapd.conf	2020-12-23 09:25:56.039981838 +1000
+@@ -629,6 +629,13 @@
+ # Require stations to support HT PHY (reject association if they do not)
+ #require_ht=1
+ 
++# Skip checks for 40 MHz intolerance or overlapping stations and force
++# 40 MHz channel width
++# Please note that this violates IEEE Std 802.11-2012, 10.15.3.2
++# 0 = disabled (default)
++# 1 = enabled
++#force_ht40=0
++
+ # If set non-zero, require stations to perform scans of overlapping
+ # channels to test for stations which would be affected by 40 MHz traffic.
+ # This parameter sets the interval in seconds between these scans. Setting this
+--- hostapd-2.9/hostapd/config_file.c	2020-12-23 09:25:04.071494133 +1000
++++ hostapd-2.9/hostapd/config_file.c	2020-12-23 09:25:02.267477206 +1000
+@@ -3484,6 +3484,8 @@
+ 		}
+ 	} else if (os_strcmp(buf, "require_ht") == 0) {
+ 		conf->require_ht = atoi(pos);
++	} else if (os_strcmp(buf, "force_ht40") == 0) {
++		conf->force_ht40 = atoi(pos);
+ 	} else if (os_strcmp(buf, "obss_interval") == 0) {
+ 		conf->obss_interval = atoi(pos);
+ #ifdef CONFIG_IEEE80211AC
+--- hostapd-2.9/src/ap/ap_config.h	2020-12-23 09:27:21.548784313 +1000
++++ hostapd-2.9/src/ap/ap_config.h	2020-12-23 09:27:19.896768806 +1000
+@@ -1018,6 +1018,7 @@
+ 	int secondary_channel;
+ 	int no_pri_sec_switch;
+ 	int require_ht;
++	int force_ht40;
+ 	int obss_interval;
+ 	u32 vht_capab;
+ 	int ieee80211ac;
+--- hostapd-2.9/src/ap/ap_config.c	2020-12-23 09:26:48.120470600 +1000
++++ hostapd-2.9/src/ap/ap_config.c	2020-12-23 09:26:46.248453027 +1000
+@@ -247,6 +247,8 @@
+ 
+ 	conf->ht_capab = HT_CAP_INFO_SMPS_DISABLED;
+ 
++	conf->force_ht40 = 0;
++
+ 	conf->ap_table_max_size = 255;
+ 	conf->ap_table_expiration_time = 60;
+ 	conf->track_sta_max_age = 180;
+--- hostapd-2.9/src/ap/ieee802_11_ht.c	2020-12-23 11:10:36.863202775 +1000
++++ hostapd-2.9/src/ap/ieee802_11_ht.c	2020-12-23 11:08:17.575450389 +1000
+@@ -184,6 +184,9 @@
+ 
+ 	if (iface->current_mode->mode != HOSTAPD_MODE_IEEE80211G)
+ 		return 1;
++
++	if (iface->conf->force_ht40)
++		return 1;
+ 
+ 	pri_freq = hostapd_hw_get_freq(iface->bss[0], iface->conf->channel);
+ 
+@@ -277,7 +280,7 @@
+ 			       HOSTAPD_MODULE_IEEE80211,
+ 			       HOSTAPD_LEVEL_DEBUG,
+ 			       "20 MHz BSS width request bit is set in BSS coexistence information field");
+-		is_ht40_allowed = 0;
++		is_ht40_allowed = iface->conf->force_ht40;
+ 	}
+ 
+ 	if (bc_ie->coex_param & WLAN_20_40_BSS_COEX_40MHZ_INTOL) {
+@@ -287,7 +290,7 @@
+ 			       HOSTAPD_MODULE_IEEE80211,
+ 			       HOSTAPD_LEVEL_DEBUG,
+ 			       "40 MHz intolerant bit is set in BSS coexistence information field");
+-		is_ht40_allowed = 0;
++		is_ht40_allowed = iface->conf->force_ht40;
+ 	}
+ 
+ 	/* 20/40 BSS Intolerant Channel Report element (zero or more times) */
+@@ -319,7 +322,7 @@
+ 				       HOSTAPD_LEVEL_DEBUG,
+ 				       "20_40_INTOLERANT channel %d reported",
+ 				       chan);
+-			is_ht40_allowed = 0;
++			is_ht40_allowed = iface->conf->force_ht40;
+ 		}
+ 
+ 		data += 2 + ielen;
+--- hostapd-2.9/src/ap/hw_features.c	2020-12-24 11:18:20.863539318 +1000
++++ hostapd-2.9/src/ap/hw_features.c	2020-12-24 11:18:23.311529300 +1000
+@@ -333,7 +333,7 @@
+ 	wpa_scan_results_free(scan_res);
+ 
+ 	iface->secondary_ch = iface->conf->secondary_channel;
+-	if (!oper40) {
++	if (!iface->conf->force_ht40 && !oper40) {
+ 		wpa_printf(MSG_INFO, "20/40 MHz operation not permitted on "
+ 			   "channel pri=%d sec=%d based on overlapping BSSes",
+ 			   iface->conf->channel,

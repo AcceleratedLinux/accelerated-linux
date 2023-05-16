@@ -11,7 +11,9 @@
 
 #include <linux/sched.h>
 #include <linux/ptrace.h>
+#include <linux/audit_arch.h>
 #include <uapi/linux/audit.h>
+#include <uapi/linux/netfilter/nf_tables.h>
 
 #define AUDIT_INO_UNSET ((unsigned long)-1)
 #define AUDIT_DEV_UNSET ((dev_t)-1)
@@ -98,6 +100,23 @@ enum audit_nfcfgop {
 	AUDIT_XT_OP_REGISTER,
 	AUDIT_XT_OP_REPLACE,
 	AUDIT_XT_OP_UNREGISTER,
+	AUDIT_NFT_OP_TABLE_REGISTER,
+	AUDIT_NFT_OP_TABLE_UNREGISTER,
+	AUDIT_NFT_OP_CHAIN_REGISTER,
+	AUDIT_NFT_OP_CHAIN_UNREGISTER,
+	AUDIT_NFT_OP_RULE_REGISTER,
+	AUDIT_NFT_OP_RULE_UNREGISTER,
+	AUDIT_NFT_OP_SET_REGISTER,
+	AUDIT_NFT_OP_SET_UNREGISTER,
+	AUDIT_NFT_OP_SETELEM_REGISTER,
+	AUDIT_NFT_OP_SETELEM_UNREGISTER,
+	AUDIT_NFT_OP_GEN_REGISTER,
+	AUDIT_NFT_OP_OBJ_REGISTER,
+	AUDIT_NFT_OP_OBJ_UNREGISTER,
+	AUDIT_NFT_OP_OBJ_RESET,
+	AUDIT_NFT_OP_FLOWTABLE_REGISTER,
+	AUDIT_NFT_OP_FLOWTABLE_UNREGISTER,
+	AUDIT_NFT_OP_INVALID,
 };
 
 extern int is_audit_feature_set(int which);
@@ -268,13 +287,15 @@ static inline int audit_signal_info(int sig, struct task_struct *t)
 /* These are defined in auditsc.c */
 				/* Public API */
 extern int  audit_alloc(struct task_struct *task);
+extern int  audit_alloc_kernel(struct task_struct *task);
 extern void __audit_free(struct task_struct *task);
+extern void __audit_uring_entry(u8 op);
+extern void __audit_uring_exit(int success, long code);
 extern void __audit_syscall_entry(int major, unsigned long a0, unsigned long a1,
 				  unsigned long a2, unsigned long a3);
 extern void __audit_syscall_exit(int ret_success, long ret_value);
 extern struct filename *__audit_reusename(const __user char *uptr);
 extern void __audit_getname(struct filename *name);
-
 extern void __audit_inode(struct filename *name, const struct dentry *dentry,
 				unsigned int flags);
 extern void __audit_file(const struct file *);
@@ -305,6 +326,21 @@ static inline void audit_free(struct task_struct *task)
 {
 	if (unlikely(task->audit_context))
 		__audit_free(task);
+}
+static inline void audit_uring_entry(u8 op)
+{
+	/*
+	 * We intentionally check audit_context() before audit_enabled as most
+	 * Linux systems (as of ~2021) rely on systemd which forces audit to
+	 * be enabled regardless of the user's audit configuration.
+	 */
+	if (unlikely(audit_context() && audit_enabled))
+		__audit_uring_entry(op);
+}
+static inline void audit_uring_exit(int success, long code)
+{
+	if (unlikely(audit_context()))
+		__audit_uring_exit(success, code);
 }
 static inline void audit_syscall_entry(int major, unsigned long a0,
 				       unsigned long a1, unsigned long a2,
@@ -381,12 +417,13 @@ extern int __audit_log_bprm_fcaps(struct linux_binprm *bprm,
 				  const struct cred *old);
 extern void __audit_log_capset(const struct cred *new, const struct cred *old);
 extern void __audit_mmap_fd(int fd, int flags);
+extern void __audit_openat2_how(struct open_how *how);
 extern void __audit_log_kern_module(char *name);
 extern void __audit_fanotify(unsigned int response);
 extern void __audit_tk_injoffset(struct timespec64 offset);
 extern void __audit_ntp_log(const struct audit_ntp_data *ad);
 extern void __audit_log_nfcfg(const char *name, u8 af, unsigned int nentries,
-			      enum audit_nfcfgop op);
+			      enum audit_nfcfgop op, gfp_t gfp);
 
 static inline void audit_ipc_obj(struct kern_ipc_perm *ipcp)
 {
@@ -477,6 +514,12 @@ static inline void audit_mmap_fd(int fd, int flags)
 		__audit_mmap_fd(fd, flags);
 }
 
+static inline void audit_openat2_how(struct open_how *how)
+{
+	if (unlikely(!audit_dummy_context()))
+		__audit_openat2_how(how);
+}
+
 static inline void audit_log_kern_module(char *name)
 {
 	if (!audit_dummy_context())
@@ -524,10 +567,10 @@ static inline void audit_ntp_log(const struct audit_ntp_data *ad)
 
 static inline void audit_log_nfcfg(const char *name, u8 af,
 				   unsigned int nentries,
-				   enum audit_nfcfgop op)
+				   enum audit_nfcfgop op, gfp_t gfp)
 {
 	if (audit_enabled)
-		__audit_log_nfcfg(name, af, nentries, op);
+		__audit_log_nfcfg(name, af, nentries, op, gfp);
 }
 
 extern int audit_n_rules;
@@ -537,7 +580,15 @@ static inline int audit_alloc(struct task_struct *task)
 {
 	return 0;
 }
+static inline int audit_alloc_kernel(struct task_struct *task)
+{
+	return 0;
+}
 static inline void audit_free(struct task_struct *task)
+{ }
+static inline void audit_uring_entry(u8 op)
+{ }
+static inline void audit_uring_exit(int success, long code)
 { }
 static inline void audit_syscall_entry(int major, unsigned long a0,
 				       unsigned long a1, unsigned long a2,
@@ -560,14 +611,6 @@ static inline struct filename *audit_reusename(const __user char *name)
 	return NULL;
 }
 static inline void audit_getname(struct filename *name)
-{ }
-static inline void __audit_inode(struct filename *name,
-					const struct dentry *dentry,
-					unsigned int flags)
-{ }
-static inline void __audit_inode_child(struct inode *parent,
-					const struct dentry *dentry,
-					const unsigned char type)
 { }
 static inline void audit_inode(struct filename *name,
 				const struct dentry *dentry,
@@ -636,6 +679,9 @@ static inline void audit_log_capset(const struct cred *new,
 static inline void audit_mmap_fd(int fd, int flags)
 { }
 
+static inline void audit_openat2_how(struct open_how *how)
+{ }
+
 static inline void audit_log_kern_module(char *name)
 {
 }
@@ -665,7 +711,7 @@ static inline void audit_ptrace(struct task_struct *t)
 
 static inline void audit_log_nfcfg(const char *name, u8 af,
 				   unsigned int nentries,
-				   enum audit_nfcfgop op)
+				   enum audit_nfcfgop op, gfp_t gfp)
 { }
 
 #define audit_n_rules 0
@@ -675,11 +721,6 @@ static inline void audit_log_nfcfg(const char *name, u8 af,
 static inline bool audit_loginuid_set(struct task_struct *tsk)
 {
 	return uid_valid(audit_get_loginuid(tsk));
-}
-
-static inline void audit_log_string(struct audit_buffer *ab, const char *buf)
-{
-	audit_log_n_string(ab, buf, strlen(buf));
 }
 
 #endif

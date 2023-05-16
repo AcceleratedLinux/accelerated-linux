@@ -1,0 +1,6 @@
+config USER_OPENCONNECT
+	bool 'openconnect'
+	select LIB_LIBXML2
+	help
+		openconnect client (Cisco anywhereconnect)
+

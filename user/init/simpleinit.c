@@ -237,10 +237,6 @@ static int do_command(const char *path, const char *filename, int dowait)
 		strcat(tz, tzone);
 		env[envc++] = tz;
 #endif
-#ifdef INCLUDE_FIPS
-		if (getenv("fips"))
-			env[envc++] = "OPENSSL_FIPS=1";
-#endif
 		env[envc++] = NULL;
 
 		execve(path, argv, env);
@@ -613,10 +609,6 @@ void spawn(int i)
 		strcat(tz, tzone);
 		env[envc++] = tz;
 #endif
-#ifdef INCLUDE_FIPS
-		if (getenv("fips"))
-			env[envc++] = "OPENSSL_FIPS=1";
-#endif
 		env[envc++] = NULL;
 
 		prog = it->toks[0];
@@ -681,6 +673,15 @@ void read_inittab(void)
 
 #ifdef CONFIG_USER_FLATFSD_FLATFSD
 	if (read_initfile(_PATH_CONFIGTAB) == 0)
+		i++;
+#endif
+
+
+#ifdef CONFIG_USER_INIT_EDINITTAB
+	/* On OGCS devices configurators uses edinittab command to
+	 * write into /var/run/inittab, which is a separate regular
+	 * file than /etc/inittab */
+	if (read_initfile(_PATH_VARRUNTAB) == 0)
 		i++;
 #endif
 

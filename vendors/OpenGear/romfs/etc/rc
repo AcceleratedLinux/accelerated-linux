@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ######################################################################
 
 VENDOR=OpenGear
@@ -26,11 +26,8 @@ progressbar()
 # fix all the infrastructure things first
 
 mount -t proc proc /proc
-if [ -d /sys ]; then
-	mount -t sysfs sysfs /sys
-fi
-
-mount -t devtmpfs none /dev
+mount -t sysfs sysfs /sys
+#mount -t devtmpfs none /dev		# automatic
 source /etc/rc.dev
 
 # Permissions
@@ -58,7 +55,7 @@ else
     CNFSIZE="20%"
 fi
 
-mount -t tmpfs -o size=${VARSIZE} tmpfs /var
+mount -t ramfs -o size=${VARSIZE} ramfs /var
 mkdir /var/tmp
 chmod 1777 /var/tmp
 mkdir /var/log
@@ -76,6 +73,7 @@ mkdir /var/run/power
 mkdir /var/run/portmanager
 mkdir /var/run/cascade
 mkdir /var/run/sshforwards
+mkdir /var/run/lhvpn
 mkdir /var/run/.switch
 mkdir /var/run/.modem
 mkdir /var/run/.sessions
@@ -84,6 +82,7 @@ if [ -f /libexec/udev/udevd ]; then
 	mkdir /var/run/udev
 fi
 mkdir /var/state
+mkdir /var/sudo
 mkdir /var/lock
 mkdir /var/empty
 mkdir -p /dev/bus/usb
@@ -91,10 +90,14 @@ mkdir -p /var/spool/cron/crontabs
 touch /var/log/wtmp
 touch /var/run/utmp
 chmod a-w /var/run/utmp
+touch /var/run/serial-ports
 
 # Start loopback interface
-ifconfig lo 127.0.0.1 up
-route add -net 127.0.0.0 netmask 255.0.0.0 lo
+ip -b - <<.
+  addr add 127.0.0.1/8 dev lo
+  addr add ::1/128 dev lo
+  link set dev lo up
+.
 
 # Start infod
 if [ -x /bin/infod ]; then
@@ -127,7 +130,7 @@ fi
 
 # Start up watchdogd
 if [ -e /dev/watchdog ]; then
-	watchdog /dev/watchdog
+	watchdog -t 1 /dev/watchdog
 fi
 
 progressbar 10
@@ -294,6 +297,17 @@ fi
     done
 )
 
+if [ -d /etc/config/inittab.d ]; then
+	cat /etc/config/inittab.d/* >> /etc/config/inittab
+	rm -fr /etc/config/inittab.d
+	pkill -HUP init
+fi
+
+if [ -d /etc/config/passwd.d ]; then
+	cat /etc/config/passwd.d/* >> /etc/config/passwd
+	rm -fr /etc/config/passwd.d
+fi
+
 # Create folder for flag files whether MTUs have been specified by user
 mkdir -p /etc/config/.mtu
 
@@ -304,6 +318,10 @@ mkdir -p /etc/config/firewall
 if [ ! -d /etc/config/eapol ]; then
     mkdir -p /etc/config/eapol
 fi
+
+# Create folders for rsyslog and logrotate
+mkdir -p /etc/config/rsyslog.d
+mkdir -p /etc/config/logrotate.d
 
 # If we have a reset config, we should check if we need to replace the root passwd hash
 if [ "$RESET_CONFIG" -eq 1 ]; then
@@ -323,9 +341,6 @@ fi
 if [ -x /etc/scripts/load-manifest ]; then
 	/etc/scripts/load-manifest
 fi
-
-# config command complains if serial port file doesnt exist
-touch /var/run/serial-ports
 
 # Fixup users and groups
 if [ ! -d /etc/config/users ]; then
@@ -681,8 +696,12 @@ if [ -x /bin/vsftpd ]; then
 	mkdir -p -m 0644 /var/run/vsftpd/empty
 fi
 
+# /var/run/snmpd needs to persist across reboots
+mkdir -p /etc/config/.snmpd_persistent_cache
+ln -s /etc/config/.snmpd_persistent_cache /var/run/snmpd
+# send a coldstart on boot
+rm -f /var/run/snmpd/.dont_send_coldstart
 # Suppress unwanted SNMP system notifications
-mkdir -p /var/run/snmpd/
 touch /var/run/snmpd/.dont_send_shutdown
 
 echo "Running product specific configuration"

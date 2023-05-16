@@ -42,7 +42,7 @@ function info() {
 
 	version=$(ON_BUILD_MACHINE=1 bin/version)
 	group=$(expr match "$version" '\([0-9]*\.[0-9]*\)')
-	branch_regexp='^[1-9][0-9]\.(2|5|8|11)\.[0-9]{1,3}_branch$'
+	branch_regexp='^[1-9][0-9]\.(2|5|8|11)\.[0-9]{1,3}_branch$|_sprint$'
 	if [[ "${bamboo_repository_branch_name}" =~ $branch_regexp ]]; then
 		type=candidate
 	else
@@ -114,7 +114,7 @@ function build() {
 	*)
 		tools/kcheck/check 2>&1
 		ec=$(($ec + $?))
-		tools/kcheck/test >> "${artifacts}/features.json" 2>&1
+		tools/kcheck/test > "${artifacts}/features.json" 2>/dev/null
 		;;
 	esac
 
@@ -177,7 +177,11 @@ function upload() {
 		echo "No descriptors found."
 		exit 0
 	fi
-	$uploader ${bamboo_RM_USERNAME} ${bamboo_RM_PASSWORD} $instance $descriptors
+    options=""
+	if [[ $string == *DEVONLY* ]]; then
+    	options="$options -f"
+    fi
+	$uploader ${options} ${bamboo_RM_USERNAME} ${bamboo_RM_PASSWORD} $instance $descriptors
 	ec=$?
 
     exit ${ec}

@@ -564,7 +564,7 @@
 			clocks = <&sys_clk 6>;
 			reset-names = "ether";
 			resets = <&sys_rst 6>;
-			phy-mode = "rgmii";
+			phy-mode = "rgmii-id";
 			local-mac-address = [00 00 00 00 00 00];
 			socionext,syscon-phy-mode = <&soc_glue 0>;
 
@@ -585,7 +585,7 @@
 			clocks = <&sys_clk 7>;
 			reset-names = "ether";
 			resets = <&sys_rst 7>;
-			phy-mode = "rgmii";
+			phy-mode = "rgmii-id";
 			local-mac-address = [00 00 00 00 00 00];
 			socionext,syscon-phy-mode = <&soc_glue 1>;
 
@@ -833,7 +833,9 @@
 			compatible = "socionext,uniphier-pxs3-pcie-phy";
 			reg = <0x66038000 0x4000>;
 			#phy-cells = <0>;
+			clock-names = "link";
 			clocks = <&sys_clk 24>;
+			reset-names = "link";
 			resets = <&sys_rst 24>;
 			socionext,syscon = <&soc_glue>;
 		};

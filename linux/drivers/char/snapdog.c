@@ -71,71 +71,6 @@
 	#define HAS_HW_SERVICE 1
 #endif
 
-#if defined(CONFIG_MACH_ESS710) || defined(CONFIG_MACH_IVPN) || \
-    defined(CONFIG_MACH_SG560) || defined(CONFIG_MACH_SG580) || \
-    defined(CONFIG_MACH_SG640) || defined(CONFIG_MACH_SG720) || \
-    defined(CONFIG_MACH_SG590) || defined(CONFIG_MACH_SE5100)
-	#include <asm/io.h>
-	#include <mach/ixp4xx-gpio.h>
-
-	static inline void enable_dog(void)
-	{
-		*IXP4XX_GPIO_GPCLKR &= 0xffff0000;
-	}
-
-	static inline void poke_the_dog(void)
-	{
-		*IXP4XX_GPIO_GPOUTR ^= 0x4000;
-	}
-
-	static inline void the_dog_is_dead(void) {}
-
-	#define HAS_HW_SERVICE 1
-#endif
-
-#if defined(CONFIG_MACH_SG8100)
-	#include <asm/io.h>
-	#include <mach/ixp4xx-gpio.h>
-
-	static inline void enable_dog(void)
-	{
-	}
-
-	static inline void poke_the_dog(void)
-	{
-		*IXP4XX_GPIO_GPOUTR ^= 0x2000;
-	}
-
-	static inline void the_dog_is_dead(void) {}
-
-	#define HAS_HW_SERVICE 1
-#endif
-
-#if defined(CONFIG_MACH_SG560USB) || defined(CONFIG_MACH_SG560ADSL) || \
-    defined(CONFIG_MACH_SG565) || defined(CONFIG_MACH_SHIVA1100)
-	#include <asm/io.h>
-	#include <mach/sg.h>
-
-	static volatile unsigned char *wdtcs2;
-
-	static inline void enable_dog(void)
-	{
-		/* CS7 is watchdog alive. Set it to 8bit and writable */
-		*SG565_WATCHDOG_EXP_CS = 0xbfff0003;
-		wdtcs2 = (volatile unsigned char *) ioremap(SG565_WATCHDOG_BASE_PHYS, 512);
-	}
-
-	static inline void poke_the_dog(void)
-	{
-		if (wdtcs2)
-			*wdtcs2 = 0;
-	}
-
-	static inline void the_dog_is_dead(void) {}
-
-	#define HAS_HW_SERVICE 1
-#endif
-
 #ifdef CONFIG_GEODEWATCHDOG
 	#include <asm/io.h>
 
@@ -178,14 +113,13 @@
 #endif
 
 #if defined(CONFIG_MACH_8300) || defined(CONFIG_MACH_6300CX) || \
-    defined(CONFIG_MACH_6300LX) || defined(CONFIG_MACH_6330MX) || \
-    defined(CONFIG_MACH_6350SR) || defined(CONFIG_MACH_CM71xx) || \
-    defined(CONFIG_MACH_ACM700x)
+    defined(CONFIG_MACH_6330MX) || defined(CONFIG_MACH_6350SR) || \
+    defined(CONFIG_MACH_CM71xx) || defined(CONFIG_MACH_ACM700x)
 	#include <asm/gpio.h>
 
-#ifdef CONFIG_MACH_CM71xx
+#if defined(CONFIG_MACH_CM71xx)
 	#define GPIO_WATCHDOG   46
-#elif CONFIG_MACH_ACM700x
+#elif defined(CONFIG_MACH_ACM700x)
 	#define GPIO_WATCHDOG 61
 	#define GPIO_WATCHDOG_EN 60
 #else
@@ -652,6 +586,37 @@
 	#define HAS_HW_SERVICE 1
 #endif /* CONFIG_DTB_MT7621_EX15 */
 
+#if defined(CONFIG_PINCTRL_IPQ6018)
+	#include <linux/gpio.h>
+
+	#define GPIO_WATCHDOG		463	/* GPIO31 */
+	#define GPIO_WATCHDOG_EN	506	/* GPIO74 */
+
+	static int wdt_state;
+	static int dog_initted;
+
+	static inline void enable_dog(void)
+	{
+		if (of_machine_is_compatible("digi,ex50")) {
+			gpio_request(GPIO_WATCHDOG_EN, "Watchdog Enable");
+			gpio_direction_output(GPIO_WATCHDOG_EN, 1);
+			gpio_request(GPIO_WATCHDOG, "Watchdog");
+			gpio_direction_output(GPIO_WATCHDOG, 1);
+			dog_initted = 1;
+		}
+	}
+
+	static inline void poke_the_dog(void)
+	{
+		if (dog_initted)
+			gpio_set_value(GPIO_WATCHDOG, (wdt_state++ & 0x1));
+	}
+
+	static inline void the_dog_is_dead(void) {}
+
+	#define HAS_HW_SERVICE 1
+#endif
+
 
 #ifndef HAS_HW_SERVICE
 	static inline void enable_dog(void) {}
@@ -677,6 +642,7 @@ static int           snapdog_quiet = 0;
 static int           snapdog_warned = 0;
 static int           snapdog_stackdump = 64;
 static int           snapdog_reboot_requested = 0;
+static int           snapdog_boot_timeout = CONFIG_SNAPDOG_BOOT_TIMEOUT;
 
 
 module_param(snapdog_kernel, int, 0);
@@ -694,6 +660,10 @@ MODULE_PARM_DESC(snapdog_ltimeout,
 module_param(snapdog_stackdump, int, 0);
 MODULE_PARM_DESC(snapdog_stackdump,
 		"Number of long words to dump from the stack");
+
+module_param(snapdog_boot_timeout, int, 0);
+MODULE_PARM_DESC(snapdog_boot_timeout,
+		 "Watchdog timeout at boot-time in seconds");
 
 /****************************************************************************/
 /*
@@ -966,6 +936,18 @@ watchdog_init(void)
 	(void) register_reboot_notifier(&reboot);
 
 	printk(banner);
+
+	if (snapdog_boot_timeout > 0) {
+		snapdog_use_long_timeout = 1;
+		snapdog_service_required = 1;
+
+		snapdog_last = jiffies;
+		snapdog_next = snapdog_last + HZ * snapdog_boot_timeout;
+		snapdog_warned = 0;
+
+		printk(KERN_INFO "snapdog: %d-second boot timeout started",
+		       snapdog_boot_timeout);
+	}
 
 	return 0;
 }

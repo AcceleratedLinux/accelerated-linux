@@ -18,6 +18,8 @@ CFLAGS += -DFILTER_RULES -DNO_UNRAR
 LDFLAGS += -Wl,--unresolved-symbols=ignore-in-shared-libs
 endif
 
+CONFOPTS += 'LIBS=-ltinfo'
+
 all: build/build
 	$(MAKE) -C build
 

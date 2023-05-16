@@ -1,0 +1,224 @@
+#! /bin/bash
+#set -x
+
+# This script acts as a wrapper for adding a user using the 'config' command
+# in the CLI. The administrator simply runs this script with a few parameters
+# and the script then runs the relevant config commands and configurators.
+# Currenlty this script only supports giving a user serial port and group access.
+# see also "user-del" and "user-mod" scripts.
+
+usage()
+{
+	echo 'usage: user-add [-h] [-p "port list"] [-g "group list"]
+			[ --password "plain text password" ]
+			[-d description] name'
+	echo
+}
+
+if [ $# -lt  1 ]
+then
+	echo "Wrong number of arguments"
+	usage
+	exit 2
+fi
+
+OPTS=`getopt -o 'hp:g:d:e:' -l 'password:' -- "$@"`
+if [ $? != 0 ]
+then
+	usage
+	exit 1
+fi
+
+eval set -- "$OPTS";
+
+while true
+do
+	case "$1" in
+		-h)
+			usage
+			exit 1
+			;;
+		-p)
+			PORTLIST=$2
+			shift 2
+			;;
+		-g)
+			GROUPLIST=$2
+			shift 2
+			;;
+		-d)
+			DESCRIPTION=$2
+			shift 2
+			;;
+		--password)
+			PLAINTEXT_PASS=$2
+			shift 2
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			usage
+			exit
+			;;
+	esac
+done
+
+
+ 
+if [ $# -lt $OPTIND ]
+then
+	echo "You must specify a username"
+	usage
+	exit 1
+fi
+
+# Check that the new username is the last argument
+if [ "$OPTIND" -lt $# ]
+then
+	usage
+	exit 1
+fi
+
+# Do a shift in order to retrieve the username in $1
+shift $[ $OPTIND - 1]
+
+# Do type validation
+VALIDATION=`echo $1 | sed 's/[a-zA-Z0-9]*//'`
+if [ -n "$VALIDATION" ]
+then
+	echo "Error: The name must contain numbers and letters only"
+	exit 0
+fi
+
+
+# Get number of existing users
+TOTALUSERS=`config -g config.users.total | sed 's/.* //'`
+
+# Test whether this user already exists
+USEREXISTS=`grep -e "^$1:" /etc/passwd`
+if [ -n "$USEREXISTS" ]
+then 
+	echo "User \"$1\" already exists. "
+	exit 1
+fi
+
+# Make sure that the port parameters contain numbers only
+for PORT in $PORTLIST
+do
+	VALIDATION=`echo $PORT | sed 's/[0-9]*//'`
+	if [ -n "$VALIDATION" ]
+	then
+		echo "Error: The port parameter must contain numbers only."
+		exit 1
+	fi
+done
+
+# Check for out-of-range port numbers
+NPORTS=$(wc -l /var/run/serial-ports | sed 's/[ \t]*\([0-9]*\).*/\1/')
+NODES=`config -g config.cascade.nodes.total | sed 's/.* //'`
+if [ -z "$NODES" ]
+then
+	CASPORTS=0
+else
+	for ((NODE=1; NODE <= NODES; NODE++))
+	do
+		NODEPORTS=`config -g config.cascade.nodes.node$[NODE].ports \
+                | sed 's/.* //'`
+
+		CASPORTS=$[ $CASPORTS + $NODEPORTS ]
+	done
+fi
+
+NPORTS=$[ $NPORTS + $CASPORTS ]
+for PORT in $PORTLIST
+do
+	if [ "$PORT" -gt "$NPORTS" ]
+	then
+		echo "Port $PORT does not exist"
+		exit 1
+	fi
+done
+
+# Make sure the groups exist
+for GROUP in $GROUPLIST
+do
+	GROUPEXISTS=`grep -e "^$GROUP:" /etc/group`
+	if [ -z "$GROUPEXISTS" ]
+	then 
+		echo "Invalid group name \"$GROUP\""
+		exit 1
+	fi
+done
+
+# check for duplicate group inputs
+DUPLICATES=`echo "$GROUPLIST" | tr ' ' '\n' | sort | uniq -d`
+if [ -n "$DUPLICATES" ]
+then
+	echo "cannot add duplicate group(s):"
+	echo "$DUPLICATES"
+	exit 1
+fi
+
+# Make backup copy of config file                    
+cp /etc/config/config.xml /etc/config/config.bak
+echo "backup of /etc/config/config.xml saved in /etc/config/config.bak"
+
+# Create user
+NEWTOTAL=$[ $TOTALUSERS +1 ]
+config -s config.users.user$NEWTOTAL.username="$1"
+config -s config.users.user$NEWTOTAL.description="$DESCRIPTION"
+if [ "$PLAINTEXT_PASS" = "" ]
+then
+	echo "Please provide a new user password"
+	config -P config.users.user$NEWTOTAL.password
+else
+	# configurators will delete this config variable with encrypted one
+	# saved in /etc/shadow
+	config -s config.users.user$NEWTOTAL.plaintext_password="$PLAINTEXT_PASS"
+fi
+config -s config.users.total=$NEWTOTAL
+
+# Assign the groups to the new user
+GROUPNUM=1
+GROUPCOMMAND=
+for GROUP in $GROUPLIST
+do
+	echo "+$GROUP"
+	GROUPCOMMAND="$GROUPCOMMAND -s \
+config.users.user$NEWTOTAL.groups.group$GROUPNUM=$GROUP"
+	GROUPNUM=$[ $GROUPNUM + 1 ]
+done
+
+if [ -n "$GROUPLIST" ]
+then
+	GROUPCOMMAND="config $GROUPCOMMAND"
+	$GROUPCOMMAND
+fi
+
+PORTCOMMAND=
+for PORT in $PORTLIST
+do
+	# remove leading zeroes
+        PORT=`echo $PORT | sed 's/^0*//'`
+
+        echo "+Port $PORT"
+	PORTCOMMAND="$PORTCOMMAND -s \
+config.users.user$NEWTOTAL.port$PORT=on"
+
+done
+
+if [ -n "$PORTLIST" ]
+then
+	PORTCOMMAND="config $PORTCOMMAND"
+	$PORTCOMMAND
+fi
+
+echo "Running configurator..."
+config -r users
+
+echo "done"
+
+#set +x
+exit 0

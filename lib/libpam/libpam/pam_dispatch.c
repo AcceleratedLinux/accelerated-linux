@@ -69,6 +69,15 @@ static int _pam_dispatch_aux(pam_handle_t *pamh, int flags, struct handler *h,
     for (depth=0 ; h != NULL ; h = h->next, ++depth) {
 	int retval, cached_retval, action;
 
+#ifdef DEBUG
+	char buf[128];
+	int i, n = 0;
+
+	n += snprintf(buf + n, sizeof buf - n, "%s", h->mod_name);
+	for (i = 0; i < h->argc; i++)
+		n += snprintf(buf + n, sizeof buf - n, " %s", h->argv[i]);
+	D(("processing: [%d] %s", depth, buf));
+#endif
 	/* skip leading modules if they have already returned */
 	if (depth < skip_depth) {
 	    continue;

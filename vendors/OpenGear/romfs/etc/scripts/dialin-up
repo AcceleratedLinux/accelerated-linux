@@ -1,0 +1,22 @@
+#!/bin/bash
+
+MODEM=$6
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/dialin-up.${MODEM}"
+scripts[1]="/etc/config/scripts/dialin-up"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+        if [ -f "${scripts[$i]}" ]; then
+                exec /bin/sh "${scripts[$i]}" "$@"
+        fi
+done
+
+# check if this is a CMS node with some dialin callhome set up;
+# if so, run the cms callhome dialin script
+if config -g config.cms | grep config.cms.cms.*.node.dialin.callhome_address
+then
+	/etc/scripts/dialin-cms-callhome $@
+fi
+
+# record dial info into infod
+/etc/scripts/dial-info "connected"

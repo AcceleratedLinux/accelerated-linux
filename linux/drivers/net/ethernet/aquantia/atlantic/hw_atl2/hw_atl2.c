@@ -21,6 +21,7 @@ static int hw_atl2_act_rslvr_table_set(struct aq_hw_s *self, u8 location,
 
 #define DEFAULT_BOARD_BASIC_CAPABILITIES \
 	.is_64_dma = true,		  \
+	.op64bit = true,		  \
 	.msix_irqs = 8U,		  \
 	.irq_mask = ~0U,		  \
 	.vecs = HW_ATL2_RSS_MAX,	  \
@@ -64,6 +65,23 @@ const struct aq_hw_caps_s hw_atl2_caps_aqc113 = {
 			  AQ_NIC_RATE_5G  |
 			  AQ_NIC_RATE_2G5 |
 			  AQ_NIC_RATE_1G  |
+			  AQ_NIC_RATE_100M      |
+			  AQ_NIC_RATE_10M,
+};
+
+const struct aq_hw_caps_s hw_atl2_caps_aqc115c = {
+	DEFAULT_BOARD_BASIC_CAPABILITIES,
+	.media_type = AQ_HW_MEDIA_TYPE_TP,
+	.link_speed_msk = AQ_NIC_RATE_2G5 |
+			  AQ_NIC_RATE_1G  |
+			  AQ_NIC_RATE_100M      |
+			  AQ_NIC_RATE_10M,
+};
+
+const struct aq_hw_caps_s hw_atl2_caps_aqc116c = {
+	DEFAULT_BOARD_BASIC_CAPABILITIES,
+	.media_type = AQ_HW_MEDIA_TYPE_TP,
+	.link_speed_msk = AQ_NIC_RATE_1G  |
 			  AQ_NIC_RATE_100M      |
 			  AQ_NIC_RATE_10M,
 };
@@ -178,6 +196,8 @@ static int hw_atl2_hw_qos_set(struct aq_hw_s *self)
 
 		threshold = (rx_buff_size * (1024U / 32U) * 50U) / 100U;
 		hw_atl_rpb_rx_buff_lo_threshold_per_tc_set(self, threshold, tc);
+
+		hw_atl_b0_set_fc(self, self->aq_nic_cfg->fc.req, tc);
 	}
 
 	/* QoS 802.1p priority -> TC mapping */
@@ -510,7 +530,7 @@ static int hw_atl2_hw_init_rx_path(struct aq_hw_s *self)
 	return aq_hw_err_from_flags(self);
 }
 
-static int hw_atl2_hw_init(struct aq_hw_s *self, u8 *mac_addr)
+static int hw_atl2_hw_init(struct aq_hw_s *self, const u8 *mac_addr)
 {
 	static u32 aq_hw_atl2_igcr_table_[4][2] = {
 		[AQ_HW_IRQ_INVALID] = { 0x20000000U, 0x20000000U },
@@ -838,4 +858,6 @@ const struct aq_hw_ops hw_atl2_ops = {
 	.hw_get_hw_stats             = hw_atl2_utils_get_hw_stats,
 	.hw_get_fw_version           = hw_atl2_utils_get_fw_version,
 	.hw_set_offload              = hw_atl_b0_hw_offload_set,
+	.hw_set_loopback             = hw_atl_b0_set_loopback,
+	.hw_set_fc                   = hw_atl_b0_set_fc,
 };

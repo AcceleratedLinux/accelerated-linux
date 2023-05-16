@@ -236,7 +236,6 @@ struct eg20t_port {
 	void				*rx_buf_virt;
 	dma_addr_t			rx_buf_dma;
 
-	struct dentry	*debugfs;
 #define IRQ_NAME_SIZE 17
 	char				irq_name[IRQ_NAME_SIZE];
 
@@ -291,8 +290,6 @@ static const int trigger_level_256[4] = { 1, 64, 128, 224 };
 static const int trigger_level_64[4] = { 1, 16, 32, 56 };
 static const int trigger_level_16[4] = { 1, 4, 8, 14 };
 static const int trigger_level_1[4] = { 1, 1, 1, 1 };
-
-#ifdef CONFIG_DEBUG_FS
 
 #define PCH_REGS_BUFSIZE	1024
 
@@ -353,7 +350,6 @@ static const struct file_operations port_regs_ops = {
 	.read		= port_show_regs,
 	.llseek		= default_llseek,
 };
-#endif	/* CONFIG_DEBUG_FS */
 
 static const struct dmi_system_id pch_uart_dmi_table[] = {
 	{
@@ -554,18 +550,6 @@ static u8 pch_uart_hal_get_modem(struct eg20t_port *priv)
 	return (u8)msr;
 }
 
-static void pch_uart_hal_write(struct eg20t_port *priv,
-			      const unsigned char *buf, int tx_size)
-{
-	int i;
-	unsigned int thr;
-
-	for (i = 0; i < tx_size;) {
-		thr = buf[i++];
-		iowrite8(thr, priv->membase + PCH_UART_THR);
-	}
-}
-
 static int pch_uart_hal_read(struct eg20t_port *priv, unsigned char *buf,
 			     int rx_size)
 {
@@ -626,22 +610,6 @@ static int push_rx(struct eg20t_port *priv, const unsigned char *buf,
 	tty_flip_buffer_push(tport);
 
 	return 0;
-}
-
-static int pop_tx_x(struct eg20t_port *priv, unsigned char *buf)
-{
-	int ret = 0;
-	struct uart_port *port = &priv->port;
-
-	if (port->x_char) {
-		dev_dbg(priv->port.dev, "%s:X character send %02x (%lu)\n",
-			__func__, port->x_char, jiffies);
-		buf[0] = port->x_char;
-		port->x_char = 0;
-		ret = 1;
-	}
-
-	return ret;
 }
 
 static int dma_push_rx(struct eg20t_port *priv, int size)
@@ -789,31 +757,6 @@ static void pch_dma_tx_complete(void *arg)
 	pch_uart_hal_enable_interrupt(priv, PCH_UART_HAL_TX_INT);
 }
 
-static int pop_tx(struct eg20t_port *priv, int size)
-{
-	int count = 0;
-	struct uart_port *port = &priv->port;
-	struct circ_buf *xmit = &port->state->xmit;
-
-	if (uart_tx_stopped(port) || uart_circ_empty(xmit) || count >= size)
-		goto pop_tx_end;
-
-	do {
-		int cnt_to_end =
-		    CIRC_CNT_TO_END(xmit->head, xmit->tail, UART_XMIT_SIZE);
-		int sz = min(size - count, cnt_to_end);
-		pch_uart_hal_write(priv, &xmit->buf[xmit->tail], sz);
-		xmit->tail = (xmit->tail + sz) & (UART_XMIT_SIZE - 1);
-		count += sz;
-	} while (!uart_circ_empty(xmit) && count < size);
-
-pop_tx_end:
-	dev_dbg(priv->port.dev, "%d characters. Remained %d characters.(%lu)\n",
-		 count, size - count, jiffies);
-
-	return count;
-}
-
 static int handle_rx_to(struct eg20t_port *priv)
 {
 	struct pch_uart_buffer *buf;
@@ -879,8 +822,6 @@ static unsigned int handle_tx(struct eg20t_port *priv)
 	struct uart_port *port = &priv->port;
 	struct circ_buf *xmit = &port->state->xmit;
 	int fifo_size;
-	int tx_size;
-	int size;
 	int tx_empty;
 
 	if (!priv->start_tx) {
@@ -893,19 +834,19 @@ static unsigned int handle_tx(struct eg20t_port *priv)
 
 	fifo_size = max(priv->fifo_size, 1);
 	tx_empty = 1;
-	if (pop_tx_x(priv, xmit->buf)) {
-		pch_uart_hal_write(priv, xmit->buf, 1);
+	if (port->x_char) {
+		iowrite8(port->x_char, priv->membase + PCH_UART_THR);
 		port->icount.tx++;
+		port->x_char = 0;
 		tx_empty = 0;
 		fifo_size--;
 	}
-	size = min(xmit->head - xmit->tail, fifo_size);
-	if (size < 0)
-		size = fifo_size;
 
-	tx_size = pop_tx(priv, size);
-	if (tx_size > 0) {
-		port->icount.tx += tx_size;
+	while (!uart_tx_stopped(port) && !uart_circ_empty(xmit) && fifo_size) {
+		iowrite8(xmit->buf[xmit->tail], priv->membase + PCH_UART_THR);
+		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
+		port->icount.tx++;
+		fifo_size--;
 		tx_empty = 0;
 	}
 
@@ -950,9 +891,11 @@ static unsigned int dma_handle_tx(struct eg20t_port *priv)
 	}
 
 	fifo_size = max(priv->fifo_size, 1);
-	if (pop_tx_x(priv, xmit->buf)) {
-		pch_uart_hal_write(priv, xmit->buf, 1);
+
+	if (port->x_char) {
+		iowrite8(port->x_char, priv->membase + PCH_UART_THR);
 		port->icount.tx++;
+		port->x_char = 0;
 		fifo_size--;
 	}
 
@@ -981,7 +924,7 @@ static unsigned int dma_handle_tx(struct eg20t_port *priv)
 
 	priv->tx_dma_use = 1;
 
-	priv->sg_tx_p = kcalloc(num, sizeof(struct scatterlist), GFP_ATOMIC);
+	priv->sg_tx_p = kmalloc_array(num, sizeof(struct scatterlist), GFP_ATOMIC);
 	if (!priv->sg_tx_p) {
 		dev_err(priv->port.dev, "%s:kzalloc Failed\n", __func__);
 		return 0;
@@ -1604,7 +1547,7 @@ static const struct uart_ops pch_uart_ops = {
 
 #ifdef CONFIG_SERIAL_PCH_UART_CONSOLE
 
-static void pch_console_putchar(struct uart_port *port, int ch)
+static void pch_console_putchar(struct uart_port *port, unsigned char ch)
 {
 	struct eg20t_port *priv =
 		container_of(port, struct eg20t_port, port);
@@ -1735,9 +1678,7 @@ static struct eg20t_port *pch_uart_init_port(struct pci_dev *pdev,
 	int fifosize;
 	int port_type;
 	struct pch_uart_driver_data *board;
-#ifdef CONFIG_DEBUG_FS
-	char name[32];	/* for debugfs file name */
-#endif
+	char name[32];
 
 	board = &drv_dat[id->driver_data];
 	port_type = board->port_type;
@@ -1813,11 +1754,9 @@ static struct eg20t_port *pch_uart_init_port(struct pci_dev *pdev,
 	if (ret < 0)
 		goto init_port_hal_free;
 
-#ifdef CONFIG_DEBUG_FS
-	snprintf(name, sizeof(name), "uart%d_regs", board->line_no);
-	priv->debugfs = debugfs_create_file(name, S_IFREG | S_IRUGO,
-				NULL, priv, &port_regs_ops);
-#endif
+	snprintf(name, sizeof(name), "uart%d_regs", priv->port.line);
+	debugfs_create_file(name, S_IFREG | S_IRUGO, NULL, priv,
+			    &port_regs_ops);
 
 	return priv;
 
@@ -1835,10 +1774,10 @@ init_port_alloc_err:
 
 static void pch_uart_exit_port(struct eg20t_port *priv)
 {
+	char name[32];
 
-#ifdef CONFIG_DEBUG_FS
-	debugfs_remove(priv->debugfs);
-#endif
+	snprintf(name, sizeof(name), "uart%d_regs", priv->port.line);
+	debugfs_remove(debugfs_lookup(name, NULL));
 	uart_remove_one_port(&pch_uart_driver, &priv->port);
 	free_page((unsigned long)priv->rxbuf.buf);
 }
@@ -1857,41 +1796,24 @@ static void pch_uart_pci_remove(struct pci_dev *pdev)
 	kfree(priv);
 	return;
 }
-#ifdef CONFIG_PM
-static int pch_uart_pci_suspend(struct pci_dev *pdev, pm_message_t state)
+
+static int __maybe_unused pch_uart_pci_suspend(struct device *dev)
 {
-	struct eg20t_port *priv = pci_get_drvdata(pdev);
+	struct eg20t_port *priv = dev_get_drvdata(dev);
 
 	uart_suspend_port(&pch_uart_driver, &priv->port);
 
-	pci_save_state(pdev);
-	pci_set_power_state(pdev, pci_choose_state(pdev, state));
 	return 0;
 }
 
-static int pch_uart_pci_resume(struct pci_dev *pdev)
+static int __maybe_unused pch_uart_pci_resume(struct device *dev)
 {
-	struct eg20t_port *priv = pci_get_drvdata(pdev);
-	int ret;
-
-	pci_set_power_state(pdev, PCI_D0);
-	pci_restore_state(pdev);
-
-	ret = pci_enable_device(pdev);
-	if (ret) {
-		dev_err(&pdev->dev,
-		"%s-pci_enable_device failed(ret=%d) ", __func__, ret);
-		return ret;
-	}
+	struct eg20t_port *priv = dev_get_drvdata(dev);
 
 	uart_resume_port(&pch_uart_driver, &priv->port);
 
 	return 0;
 }
-#else
-#define pch_uart_pci_suspend NULL
-#define pch_uart_pci_resume NULL
-#endif
 
 static const struct pci_device_id pch_uart_pci_id[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, 0x8811),
@@ -1945,13 +1867,16 @@ probe_error:
 	return ret;
 }
 
+static SIMPLE_DEV_PM_OPS(pch_uart_pci_pm_ops,
+			 pch_uart_pci_suspend,
+			 pch_uart_pci_resume);
+
 static struct pci_driver pch_uart_pci_driver = {
 	.name = "pch_uart",
 	.id_table = pch_uart_pci_id,
 	.probe = pch_uart_pci_probe,
 	.remove = pch_uart_pci_remove,
-	.suspend = pch_uart_pci_suspend,
-	.resume = pch_uart_pci_resume,
+	.driver.pm = &pch_uart_pci_pm_ops,
 };
 
 static int __init pch_uart_module_init(void)

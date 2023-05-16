@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# This script is run by perifrouted when it flushes the content of
+# a perif route table. This happens when a link is deleted and when
+# the perifrouted is shutting down
+
+action=$1
+ifname=$2
+ifindex=$3
+table=$4
+
+disable_ipv6="/proc/sys/net/ipv6/conf/all/disable_ipv6"
+
+case $action in
+	del)
+		ip route flush table $table
+
+		if [ -f $disable_ipv6 -a `cat $disable_ipv6` = "0" ]; then
+			ip -6 route flush table $table
+		fi
+		;;
+esac
+
+exit 0

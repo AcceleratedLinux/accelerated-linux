@@ -1,0 +1,92 @@
+
+VACM image.bin structure
+
+  Like other Opengear products, the VACM firmware makes use of an
+  "FSK" construction. But as a convenience, this is wrapped in a
+  bootable QCOW2 disk container.
+
+  image.bin:
+  ┌─QCOW2──────────────────┐
+  │┌──────────────────────┐│
+  ││ MBR + FSK86          ││
+  │┝━━━━━━━━━━━━━━━━━━━━━━┥│
+  ││sda1  bootarg/fset    ││
+  │├──────────────────────┤│
+  ││sda2  image (FSK)     ││ ← extracted by netflash-vm
+  │├──────────────────────┤│
+  ││sda3  /etc/config     ││
+  │├──────────────────────┤│
+  ││sda4  /var/mnt/nvlog  ││
+  │└──────────────────────┘│
+  └────────────────────────┘
+  Partitions other than sda2 are initialised empty or with defaults.
+
+
+QEMU examples
+
+   This command is enough to boot an image.bin and login on the serial console:
+
+     qemu-system-x86_64 -display none -serial stdio -hda images/image.bin
+
+  Serial Ports
+
+   Additional -serial options add more virtual "COM" ports, up to max total of 4.
+
+   For example, if you want three loopbacks port02,port03,port04:
+
+     qemu-system-x86_64 -display none -serial stdio -hda images/image.bin \
+        -chardev ringbuf,id=loop1 -serial chardev:loop1 \
+        -chardev ringbuf,id=loop2 -serial chardev:loop2 \
+        -chardev ringbuf,id=loop3 -serial chardev:loop3
+
+   The 'ringbuf' backend is a simple character loopback.
+
+   If 4 ports isn't enough, you can add a quad-uart PCI device:
+
+     qemu-system-x86_64 ... \
+        -chardev ringbuf,id=loop4 \
+        -chardev ringbuf,id=loop5 \
+        -chardev ringbuf,id=loop6 \
+        -chardev ringbuf,id=loop7 \
+        -device pci-serial-4x,chardev1=loop4,chardev2=loop5,chardev3=loop6,chardev4=loop7
+
+   You can redirect a serial port to a listening TCP socket; eg, for the COM ports
+   this is sufficient:
+
+        -serial telnet::7000,server,nowait
+
+  Networking
+
+   If you only need a handful of TCP connections, use:
+
+     qemu-system-x86_64 ... \
+        -nic user,hostfwd=tcp:localhost:22:2222
+
+   For more complicated arrangements, use namespaces(8) to create an
+   isolated network. Use unshare(1) to start a shell in an isolated
+   environment, then build up some virtual network infrastructure using
+   ip(1). Finally, use qemu-system's "bridge" or "tap" device because
+   its default helper scripts will be able to create a tun/tap interface.
+   None of this should need root access, so it is handy for writing tests:
+
+        unshare -Urn
+          echo $$
+          ip link add br0 type bridge
+          ip addr add 192.168.0.254 dev br0
+          ip link set br0 up
+          dnsmasq -qKa -C /dev/null R -8- -i br0 -F 192.168.0.0/24 &
+          qemu-system-x86_64 ... \
+                -nic bridge,br=br0,model=virtio-net-pci
+
+   If you do need to connect your isolated network to the outside, then
+   you will need to use sudo. First, find the unshared leader's PID
+   (from the "echo $$" line above, eg 3694768). Then, in a separate
+   window, create a virtual ethernet pair between the two network spaces:
+
+        sudo ip link add v0 type veth peer v0 netns 3694768
+        sudo nsenter -t 3694768 -n ip link set v0 master br0 up
+
+   You can then give the (outside) interface v0 its own IP address and
+   enable packet forwarding, or add it to a desklan virtual bridge with
+   'ip link set master'.
+

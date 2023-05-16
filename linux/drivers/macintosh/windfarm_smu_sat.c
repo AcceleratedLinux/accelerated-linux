@@ -13,7 +13,7 @@
 #include <linux/wait.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>
-#include <asm/prom.h>
+
 #include <asm/smu.h>
 #include <asm/pmac_low_i2c.h>
 
@@ -216,8 +216,7 @@ static int wf_sat_probe(struct i2c_client *client,
 
 	vsens[0] = vsens[1] = -1;
 	isens[0] = isens[1] = -1;
-	child = NULL;
-	while ((child = of_get_next_child(dev, child)) != NULL) {
+	for_each_child_of_node(dev, child) {
 		reg = of_get_property(child, "reg", NULL);
 		loc = of_get_property(child, "location", NULL);
 		if (reg == NULL || loc == NULL)

@@ -12,13 +12,11 @@
 /*
  * Presentation of attributes which are defined for INT3407 and INT3532.
  * They are:
- * PMAX : Maximum platform powe
+ * PMAX : Maximum platform power
  * PSRC : Platform power source
  * ARTG : Adapter rating
  * CTYP : Charger type
- * PBSS : Battery steady power
  * PROP : Rest of worst case platform Power
- * PBSS : Power Battery Steady State
  * PBSS : Power Battery Steady State
  * RBHF : High Frequency Impedance
  * VBNL : Instantaneous No-Load Voltage
@@ -117,7 +115,7 @@ static const struct attribute_group dptf_battery_attribute_group = {
 #define POWER_STATE_CHANGED		0x81
 #define STEADY_STATE_POWER_CHANGED	0x83
 #define POWER_PROP_CHANGE_EVENT	0x84
-#define IMPEDANCED_CHNGED		0x85
+#define IMPEDANCE_CHANGED		0x85
 #define VOLTAGE_CURRENT_CHANGED	0x86
 
 static long long dptf_participant_type(acpi_handle handle)
@@ -149,6 +147,9 @@ static void dptf_power_notify(acpi_handle handle, u32 event, void *data)
 		break;
 	case STEADY_STATE_POWER_CHANGED:
 		attr = "max_steady_state_power_mw";
+		break;
+	case IMPEDANCE_CHANGED:
+		attr = "high_freq_impedance_mohm";
 		break;
 	case VOLTAGE_CURRENT_CHANGED:
 		attr = "no_load_voltage_mv";
@@ -229,6 +230,12 @@ static const struct acpi_device_id int3407_device_ids[] = {
 	{"INT3532", 0},
 	{"INTC1047", 0},
 	{"INTC1050", 0},
+	{"INTC1060", 0},
+	{"INTC1061", 0},
+	{"INTC1065", 0},
+	{"INTC1066", 0},
+	{"INTC10A4", 0},
+	{"INTC10A5", 0},
 	{"", 0},
 };
 MODULE_DEVICE_TABLE(acpi, int3407_device_ids);
@@ -237,7 +244,7 @@ static struct platform_driver dptf_power_driver = {
 	.probe = dptf_power_add,
 	.remove = dptf_power_remove,
 	.driver = {
-		.name = "DPTF Platform Power",
+		.name = "dptf_power",
 		.acpi_match_table = int3407_device_ids,
 	},
 };

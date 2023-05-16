@@ -33,7 +33,7 @@ LINUXTARGET = bzImage
 endif
 
 ifndef VENDOR_CFLAGS
-VENDOR_CFLAGS = -DCONFIG_SECUREEDGE -DCONFIG_NETtel -DCONFIG_X86
+VENDOR_CFLAGS = -DCONFIG_NETtel -DCONFIG_X86
 endif
 
 ifndef VERSIONPKG
@@ -85,8 +85,8 @@ ENDIAN  = little
 FLOAT   = hard
 
 ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-  ifneq ($(shell which i386-linux-musl-20191114-gcc),)
-    CROSS_COMPILE ?= i386-linux-musl-20191114-
+  ifneq ($(shell which i386-linux-musl-20220202-gcc),)
+    CROSS_COMPILE ?= i386-linux-musl-20220202-
   else
     CROSS_COMPILE ?= i386-linux-musl-
   endif

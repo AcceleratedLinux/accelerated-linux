@@ -40,4 +40,5 @@
 
 #define _PATH_CONFIGRC	"/etc/config/start"
 #define _PATH_CONFIGTAB	"/etc/config/inittab"
+#define _PATH_VARRUNTAB	"/var/run/inittab"
 #define _PATH_FIREWALL  "/bin/firewall"

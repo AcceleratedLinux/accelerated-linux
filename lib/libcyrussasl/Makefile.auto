@@ -1,2 +1,2 @@
 dir_$(CONFIG_LIB_CYRUSSASL) += libcyrussasl
-dep_libcyrussasl = libkrb5 libssl
+dep_libcyrussasl = libkrb5 openssl

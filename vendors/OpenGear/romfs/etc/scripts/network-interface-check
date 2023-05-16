@@ -1,0 +1,188 @@
+#!/bin/sh
+
+CFGPATH="/etc/config"
+
+# If there's a user-configured script, run it instead
+script="$CFGPATH/scripts/$(basename $0)"
+if [ -f "$script" ]; then
+	exec /bin/sh "$script" "$@"
+fi
+
+#
+# Fail forward is permitted when failed over, after $RECOVER
+# successful consecutive probe
+#
+canfailforward() {
+	if [ ! -f $FOFILE ]; then
+		return 1
+	fi
+	# Bump fail forward counter
+	echo $$ >> $FOFILE
+	if [ $(cat $FOFILE | wc -l) -gt $RECOVER ]; then
+		return 0
+	fi
+	return 1
+}
+
+#
+# Fail over is permitted when not failed over
+#
+canfailover() {
+	retval=1
+	if [ ! -f $FOFILE ]; then
+		retval=0
+	fi
+	# Reset fail forward counter
+	> $FOFILE
+	return $retval
+}
+
+failover() {
+	if ! canfailover; then
+		exit 0
+	fi
+
+	interface=$1
+	fo_interface=$2
+	echo "Failing over from $interface to $fo_interface"
+	if [ -f "$CFGPATH/network/$interface-failover-custom" ]; then
+		$CFGPATH/network/$interface-failover-custom
+	elif [ -f "$CFGPATH/network/$interface-failover" ]; then
+		$CFGPATH/network/$interface-failover
+	fi
+	if [ -f "/etc/scripts/interface-failover-alert" ]; then
+		ALERT_PRIMARY="$interface"
+		ALERT_SECONDARY="$fo_interface"
+		source /etc/scripts/interface-failover-alert
+	fi
+}
+
+failforward() {
+	if ! canfailforward; then
+		exit 0
+	fi
+
+	interface=$2
+	fo_interface=$1
+	echo "Failing forward from $fo_interface to $interface"
+	if [ -f "$CFGPATH/network/$interface-failforward-custom" ]; then
+		$CFGPATH/network/$interface-failforward-custom
+	elif [ -f "$CFGPATH/network/$interface-failforward" ]; then
+		$CFGPATH/network/$interface-failforward
+	fi
+
+	#
+	# Restore original network state
+	#
+	/bin/config -r ipconfig
+	
+	if [ -f "/etc/scripts/interface-failforward-alert" ]; then
+		ALERT_PRIMARY="$interface"
+		ALERT_SECONDARY="$fo_interface"
+		source /etc/scripts/interface-failforward-alert
+	fi
+}
+
+#
+# Run the probe command, return non-zero on failure
+#
+probe() {
+	script=$1
+	address=$2
+	interface=$3
+	interval=$4
+	retries=$5
+
+	while [ "$retries" -gt 0 ]; do
+		/bin/sh $script $interface $address 
+		if [ "$?" == 0 ]; then
+			echo "command returns: $?"
+			return 0
+		fi
+		sleep $interval
+		retries=`expr $retries - 1`
+	done
+	
+	return 1
+}
+
+#
+# Get command line arguments
+#
+if [ $# -lt 2 ]; then
+	echo "Usage: script INTERFACE ROLE"
+	exit 1
+fi
+INTERFACE=$1
+ROLE=$2
+FOFILE=/var/run/${INTERFACE}-failed-over
+
+#
+# Override default script if necessary
+#
+SCRIPT="$CFGPATH/network/$INTERFACE-host-reachable"
+if [ ! -f "$SCRIPT" ]; then
+	PWD=`dirname $0`
+	if [ -z "$PWD" -o "$PWD" == "bash" ]; then
+		PWD=`pwd`
+	fi
+	SCRIPT="$PWD/network-host-reachable"
+fi
+
+#
+# Get configured probe interval and retry count otherwise default
+#
+INTERVAL=$(config -g config.interfaces.$ROLE.failover.interval | cut -f2- -d' ')
+if [ -z "$INTERVAL" ]; then
+	INTERVAL=1
+fi
+
+RETRIES=$(config -g config.interfaces.$ROLE.failover.retries | cut -f2- -d' ')
+if [ -z "$RETRIES" ]; then
+	RETRIES=3
+fi
+
+#
+# Get configured successful consecutive probes required to fail forward
+#
+RECOVER=$(config -g config.interfaces.$ROLE.failover.recover | cut -f2- -d' ')
+if [ -z "$RECOVER" ]; then
+	RECOVER=3
+fi
+
+#
+# Get configured probe addresses
+#
+PROBE1=$(config -g config.interfaces.$ROLE.failover.address1 | cut -f2- -d' ')
+PROBE2=$(config -g config.interfaces.$ROLE.failover.address2 | cut -f2- -d' ')
+
+#
+# No possible hosts to probe so assume all is OK.
+#
+if [ -z "$PROBE1" -a -z "$PROBE2" -a -z "$GATEWAY" ]; then
+	exit 0
+fi
+
+#
+# Get configured failover interface
+#
+FO_INTERFACE=$(config -g config.interfaces.$ROLE.failover.interface | cut -f2- -d' ')
+if [ -z "$FO_INTERFACE" ]; then
+	exit 1
+fi
+
+#
+# Reach configured probe addresses
+#
+for probe in $PROBE1 $PROBE2; do
+	if probe $SCRIPT $probe $INTERFACE $INTERVAL $RETRIES; then
+		failforward $INTERFACE $FO_INTERFACE $ROLE
+		exit 0
+	fi
+done
+
+#
+# Fail by default
+#
+failover $INTERFACE $FO_INTERFACE $ROLE
+exit 1

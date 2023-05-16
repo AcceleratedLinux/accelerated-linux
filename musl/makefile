@@ -1,4 +1,4 @@
-MUSL_VERSION = 1.2.0
+MUSL_VERSION = 1.2.3
 MUSL = musl-$(MUSL_VERSION)
 URL = http://www.musl-libc.org/releases/$(MUSL).tar.gz
 

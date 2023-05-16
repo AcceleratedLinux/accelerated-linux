@@ -1,0 +1,147 @@
+#!/bin/bash
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/$(basename $0)"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+	if [ -f "${scripts[$i]}" ]; then
+		exec /bin/bash "${scripts[$i]}" "$@"
+	fi
+done
+
+log() {
+	logger -s -t "$PROG_NAME" $1
+}
+
+recover() {
+	log "$* - rebooting to recover cell modem..."
+	sleep 3
+	reboot
+}
+
+export PROG_NAME="$(basename $0)"
+
+log "Modem watchdog starting"
+
+name=$1
+[ -z "$name" ] && exit 1
+
+probe=$(config -g config.${name}.watchdog.probe | head -n 1 | cut -f2 -d' ')
+threshold=$(config -g config.${name}.watchdog.threshold | head -n 1 | cut -f2 -d' ')
+period=$(config -g config.${name}.watchdog.period | head -n 1 | cut -f2 -d' ')
+count=$(config -g config.${name}.watchdog.count | cut -f2 -d' ')
+
+if [ -z "$probe" -o -z "$threshold" ]; then
+	log "Incorrectly configured: probe & threshold are needed"
+	exit 1
+fi
+
+[ -z "$count" ] && count=5
+[ -z "$period" ] && period=30
+
+# dial-cellmodem-simX-wwan conn's commandTimeout = 1800s, this is because the
+# modem-backoff script (called by wwan-conn script's connect())will take up to
+# (0.5 + 0.5 + 1 + 2 + 8 + 16) = 28m in total. In line with that threshold
+total_cellmodem_backoff=1800
+if [ "$name" = "cellmodem" -a $(($period * $threshold)) -le $total_cellmodem_backoff ]; then
+	log "Incorrectly configured: period x threshold must be greater than $total_cellmodem_backoff"
+	exit 1
+fi
+
+if [ "$name" = "cellmodem" -a -f "/var/run/.modem/cellmodem_change_carrier_by_sim" ]; then
+	# With AUTO-SIM enabled it may take up to 3.5m to bring up cellmodem connection
+	# when the current selected SIM will require a different carrier PRI
+	sleep 240
+else
+	# Normally it may take around 2 minutes to setup data connection on cellmodem
+	sleep 120
+fi
+
+failurecount=0
+while :; do
+	if [ "$name" = "cellmodem" ]; then
+		CONFIG_CELLMODEM_DISABLE=$(config -g config.cellmodem.hardware.disable | cut -f2 -d' ')
+		if [[ "$CONFIG_CELLMODEM_DISABLE" == "on" || "$CONFIG_CELLMODEM_DISABLE" == "true" ]]; then
+			log "cellmodem hardware is disabled by configuration"
+			sleep $period
+			continue
+		fi
+	fi
+
+	if [ "$(config -g config.${name}.ppp.dialer.enabled | cut -f2 -d' ')" != "on" ]; then
+		log "$name is not enabled"
+		sleep $period
+		continue
+	fi
+
+	if [ "$(config -g config.${name}.managed_ar | cut -f2 -d' ')" == "on" ]; then
+		if [ "$(infod_client -o get -q -p config.${name}.ar_ctl)" != "up" ]; then
+			# log "modem is under AR control, and not active, disregarding..."
+			sleep $period
+			continue
+		fi
+	fi
+
+	# If non-dormant failover has been setup and the modem interface
+	# has not been activated yet, skip over testing
+	if [ "$(config -g config.interfaces.wan.disabled | cut -f2 -d' ')" != "on" ] &&
+			[ "$(config -g config.interfaces.wan.failover.interface | cut -f2 -d' ')" = "${name}" ] &&
+			[ "$(config -g config.interfaces.wan.failover.dormant | cut -f2 -d' ')" != "on" ] &&
+			[ "$(infod_client -q -o get -p conman.network-default-gateway.active-connection-index)" = "0" ]; then
+		sleep $period
+		continue
+	fi
+
+	if [ -e /var/run/ppp-$name.pid ]; then
+		ifname=$(tail -1 /var/run/ppp-$name.pid)
+	elif [ "$name" = "cellmodem" ]; then
+		# get cellmodem network interface from the first connected bearer
+		mmpath=`mmcli -L | grep ModemManager1 | awk '{print $1}'`
+		if [ -n "$mmpath" ]; then
+			bearerpaths=`mmcli -m $mmpath --list-bearers | grep ModemManager1 | awk '{print $1}'`
+			if [ -n "$bearerpaths" ]; then
+				for i in $bearerpaths; do
+					if mmcli -b $i | grep connected | grep -q "no" ; then
+						continue
+					fi
+
+					ifname=`mmcli -b $i | grep interface | sed 's/.*\(wwan[0-9]\)./\1/'`
+					if [ -n "$ifname" -a "$ifname" != "unknown" ]; then
+						break
+					fi
+				done
+			fi
+		fi
+	else
+		unset ifname
+	fi
+
+	ifuperror=0
+	pingerror=0
+
+	if [ -z "$ifname" ]; then
+		ifuperror=1
+		log "Failed to find ${name}'s interface"
+	else
+		ping -c $count -I $ifname $probe &> /dev/null
+		pingerror=$?
+		if [ $pingerror -ne 0 ]; then
+			log "Failed to ping $ifname"
+		fi
+	fi
+
+	if [ $pingerror -ne 0 -o $ifuperror -ne 0 ]; then
+		failurecount=`expr $failurecount + 1`
+		log "Failed $failurecount times"
+		if [ $failurecount -gt $threshold ]; then
+			recover "Threshold of $threshold exceeded"
+			exit 1
+		fi
+	else
+		if [ $failurecount -gt 0 ]; then
+			log "Detected modem recovery after $failurecount failures"
+		fi
+		failurecount=0
+	fi
+
+	sleep $period
+done

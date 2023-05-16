@@ -10,7 +10,7 @@ Introduction
 ============
 
 The kernel provides a variety of locking primitives which can be divided
-into two categories:
+into three categories:
 
  - Sleeping locks
  - CPU local locks
@@ -164,14 +164,14 @@ by disabling preemption or interrupts.
 On non-PREEMPT_RT kernels local_lock operations map to the preemption and
 interrupt disabling and enabling primitives:
 
- =========================== ======================
- local_lock(&llock)          preempt_disable()
- local_unlock(&llock)        preempt_enable()
- local_lock_irq(&llock)      local_irq_disable()
- local_unlock_irq(&llock)    local_irq_enable()
- local_lock_save(&llock)     local_irq_save()
- local_lock_restore(&llock)  local_irq_save()
- =========================== ======================
+ ===============================  ======================
+ local_lock(&llock)               preempt_disable()
+ local_unlock(&llock)             preempt_enable()
+ local_lock_irq(&llock)           local_irq_disable()
+ local_unlock_irq(&llock)         local_irq_enable()
+ local_lock_irqsave(&llock)       local_irq_save()
+ local_unlock_irqrestore(&llock)  local_irq_restore()
+ ===============================  ======================
 
 The named scope of local_lock has two advantages over the regular
 primitives:
@@ -211,9 +211,6 @@ raw_spinlock_t and spinlock_t
 raw_spinlock_t
 --------------
 
-raw_spinlock_t is a strict spinning lock implementation regardless of the
-kernel configuration including PREEMPT_RT enabled kernels.
-
 raw_spinlock_t is a strict spinning lock implementation in all kernels,
 including PREEMPT_RT kernels.  Use raw_spinlock_t only in real critical
 core code, low-level interrupt handling and places where disabling
@@ -247,7 +244,7 @@ based on rt_mutex which changes the semantics:
    Non-PREEMPT_RT kernels disable preemption to get this effect.
 
    PREEMPT_RT kernels use a per-CPU lock for serialization which keeps
-   preemption disabled. The lock disables softirq handlers and also
+   preemption enabled. The lock disables softirq handlers and also
    prevents reentrancy due to task preemption.
 
 PREEMPT_RT kernels preserve all other spinlock_t semantics:
@@ -353,14 +350,14 @@ protection scope. So the following substitution is wrong::
   {
     local_irq_save(flags);    -> local_lock_irqsave(&local_lock_1, flags);
     func3();
-    local_irq_restore(flags); -> local_lock_irqrestore(&local_lock_1, flags);
+    local_irq_restore(flags); -> local_unlock_irqrestore(&local_lock_1, flags);
   }
 
   func2()
   {
     local_irq_save(flags);    -> local_lock_irqsave(&local_lock_2, flags);
     func3();
-    local_irq_restore(flags); -> local_lock_irqrestore(&local_lock_2, flags);
+    local_irq_restore(flags); -> local_unlock_irqrestore(&local_lock_2, flags);
   }
 
   func3()
@@ -379,14 +376,14 @@ PREEMPT_RT-specific semantics of spinlock_t. The correct substitution is::
   {
     local_irq_save(flags);    -> local_lock_irqsave(&local_lock, flags);
     func3();
-    local_irq_restore(flags); -> local_lock_irqrestore(&local_lock, flags);
+    local_irq_restore(flags); -> local_unlock_irqrestore(&local_lock, flags);
   }
 
   func2()
   {
     local_irq_save(flags);    -> local_lock_irqsave(&local_lock, flags);
     func3();
-    local_irq_restore(flags); -> local_lock_irqrestore(&local_lock, flags);
+    local_irq_restore(flags); -> local_unlock_irqrestore(&local_lock, flags);
   }
 
   func3()
@@ -439,11 +436,9 @@ preemption. The following substitution works on both kernels::
   spin_lock(&p->lock);
   p->count += this_cpu_read(var2);
 
-On a non-PREEMPT_RT kernel migrate_disable() maps to preempt_disable()
-which makes the above code fully equivalent. On a PREEMPT_RT kernel
 migrate_disable() ensures that the task is pinned on the current CPU which
 in turn guarantees that the per-CPU access to var1 and var2 are staying on
-the same CPU.
+the same CPU while the task remains preemptible.
 
 The migrate_disable() substitution is not valid for the following
 scenario::
@@ -456,9 +451,8 @@ scenario::
     p = this_cpu_ptr(&var1);
     p->val = func2();
 
-While correct on a non-PREEMPT_RT kernel, this breaks on PREEMPT_RT because
-here migrate_disable() does not protect against reentrancy from a
-preempting task. A correct substitution for this case is::
+This breaks because migrate_disable() does not protect against reentrancy from
+a preempting task. A correct substitution for this case is::
 
   func()
   {

@@ -1,0 +1,102 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+port=$1
+outlets=$2
+cmd=$3
+
+function pduLogout {
+	pmchat -t 5 "" "\n" "> " "exit" < $port > $port
+}
+
+function pduLogin {
+
+	# Try sending the username straight off, in case we're sitting at a username prompt
+	pmchat -t 3 "" "\n" "login: " "${username}" "Password: " "${password}" ">> " "E" "> "  > $port < $port
+	
+	# If that didn't work we were probably sitting just after the login screen, so we should be at the username prompt now
+	if [ "$?" -ne 0 ]
+	then
+		pmchat -t 5 "" "\n" "login: " "${username}" "Password: " "${password}" ">> " "E" "" "> " > $port < $port
+		if [ "$?" -ne 0 ]
+		then
+			power_error_login "${username}"
+			exit 1
+		fi
+	fi
+}
+
+function usage {
+	appname=`basename $0`
+	echo "Usage: $appname <port> \"<outlet> [outlet..]\" on|off|cycle|status"
+	exit 1
+}
+
+# Sanity check command line options
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]
+then
+	usage
+	exit 1
+fi
+if [ "$cmd" != "on" -a "$cmd" != "off" -a "$cmd" != "cycle" -a "$cmd" != "status" ]
+then
+	usage
+	exit 1
+fi
+
+# Start a new session
+pduLogin
+
+if [ "$cmd" != "status" ]
+then
+	if [ "$cmd" != "on" -a "$cmd" != "off" -a "$cmd" != "cycle" ]
+	then
+		for outlet in $outlets
+		do
+			power_outlet_error_unsupported $outlet $cmd
+		done
+		pduLogout
+		exit 1
+	fi
+	
+	for outlet in $outlets
+	do
+		pmchat -t 5 "" "\n" "> " "loadctl $cmd -o $outlet" "[y/n]? " "y" "> "  < $port > $port
+		if [ "$?" -eq 0 ]
+		then
+			echo "Success"
+		else
+			power_outlet_error_timeout $outlet $cmd
+			pduLogout
+			exit 1
+		fi
+	done
+fi
+
+outlets_on=`pmchat -t 5 ECHO ON "" "devstatus" "> " < $port 2>&1 |grep 'Outlets On'|cut -d ' ' -f 3-`
+for outlet in $outlets
+do
+	if [ $outlet -gt 16 -o $outlet -lt 1 ]
+	then
+		power_outlet_error_range $outlet 24
+		continue
+	fi
+
+	found=0
+	for outlet_on in $outlets_on
+	do
+		if [ "$outlet_on" == "$outlet" ]
+		then
+			found=1
+			power_outlet_status $outlet on
+			break
+		fi
+	done
+	if [ $found -eq 0 ]
+	then
+		power_outlet_status $outlet off
+	fi
+done
+
+pduLogout

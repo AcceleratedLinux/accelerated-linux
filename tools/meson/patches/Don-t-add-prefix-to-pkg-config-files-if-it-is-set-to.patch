@@ -1,0 +1,27 @@
+From 34c479f2769d04b37efb39eefa8a3def02254a82 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Sat, 15 Jan 2022 00:00:06 +0100
+Subject: [PATCH] Don't add prefix to pkg-config files, if it is set to '/'
+
+If prefix is set to '/', include directories in CFLAGS may have the
+format like '//include', which may cause build errors.
+---
+ mesonbuild/modules/pkgconfig.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mesonbuild/modules/pkgconfig.py b/mesonbuild/modules/pkgconfig.py
+index ffced12..e7d7542 100644
+--- a/mesonbuild/modules/pkgconfig.py
++++ b/mesonbuild/modules/pkgconfig.py
+@@ -344,7 +344,7 @@ class PkgConfigModule(ExtensionModule):
+         fname = os.path.join(outdir, pcfile)
+         with open(fname, 'w', encoding='utf-8') as ofile:
+             if not dataonly:
+-                ofile.write('prefix={}\n'.format(self._escape(prefix)))
++                ofile.write('prefix={}\n'.format(self._escape(prefix) if str(prefix) != '/' else ''))
+                 if uninstalled:
+                     ofile.write('srcdir={}\n'.format(self._escape(srcdir)))
+                 ofile.write('libdir={}\n'.format(self._escape('${prefix}' / libdir)))
+-- 
+2.27.0
+

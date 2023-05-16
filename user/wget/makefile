@@ -1,6 +1,6 @@
 
 CONFOPTS :=
-ifdef CONFIG_LIB_LIBSSL
+ifdef CONFIG_LIB_OPENSSL
 CONFOPTS += --with-ssl=openssl
 CONFVARS  = OPENSSL_CFLAGS=" " OPENSSL_LIBS="-lssl -lcrypto"
 else

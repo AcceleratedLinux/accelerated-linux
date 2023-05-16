@@ -1,0 +1,22 @@
+diff --git a/tinyrl.c b/tinyrl.c
+index ac7f71c..eac7a84 100644
+--- a/tinyrl.c
++++ b/tinyrl.c
+@@ -112,7 +112,7 @@ static void tty_set_raw_mode(FILE *istream, struct termios *old_termios)
+ 		new_termios.c_cc[VMIN] = 1;
+ 		new_termios.c_cc[VTIME] = 0;
+ 		/* Do the mode switch */
+-		status = tcsetattr(fd, TCSAFLUSH, &new_termios);
++		status = tcsetattr(fd, TCSADRAIN, &new_termios);
+ 		assert(-1 != status);
+ 	}
+ }
+@@ -121,7 +121,7 @@ static void tty_restore_mode(FILE *istream, struct termios *old_termios)
+ {
+ 	int fd = fileno(istream);
+ 
+-	tcsetattr(fd, TCSAFLUSH, old_termios);
++	tcsetattr(fd, TCSADRAIN, old_termios);
+ }
+ 
+ /*

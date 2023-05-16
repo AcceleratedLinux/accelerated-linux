@@ -1,0 +1,9 @@
+ATH10K-FIRMWARE
+---------------
+
+Files stored here are overrides for what is supplied in the ath10k-firmware
+package. 
+
+Typically they are newer versions, supplied by vendors that for some reason
+have not made it into the ath10k-firmware package yet.
+

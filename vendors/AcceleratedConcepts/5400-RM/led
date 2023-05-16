@@ -9,12 +9,27 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+LED_4G='LAN3_RX'
+LED_3G='LAN3_TX'
+
+# flash Online, LTE, 3G, Backup, and signal strength LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -n $LED_4G -n $LED_3G -n ONLINE -n ETH -n COM -n RSS1 -n RSS2 -n RSS3 -n RSS4 -n RSS5 -f $LED_4G -f $LED_3G -f ETH -f COM -f ONLINE -f RSS1 -f RSS2 -f RSS3 -f RSS4 -f RSS5"
+	else
+		FINDME="-a -N $LED_4G -N $LED_3G -N COM -N ETH -N ONLINE -N RSS1 -N RSS2 -N RSS3 -N RSS4 -N RSS5"
+	fi
+	ledcmd $FINDME
+}
+
 case "$1" in
 start)
 	ledcmd -a -N ALL
 	exit 0
 	;;
 reload)
+	findme_update
 	;;
 stop)
 	# Firmware flash

@@ -9,12 +9,56 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+# flash LTE and signal strength LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -n ONLINE -n ETH -n COM -n RSS1 -n RSS2 -n RSS3 -n RSS4 -n RSS5 -f ETH -O COM -O ONLINE -f RSS1 -f RSS2 -f RSS3 -f RSS4 -f RSS5"
+	else
+		FINDME="-a -N COM -N ETH -N ONLINE -N RSS1 -N RSS2 -N RSS3 -N RSS4 -N RSS5"
+	fi
+	ledcmd $FINDME
+}
+
+wifi_led_update() {
+	runt update network.wifi
+	eval $(config stop)
+	eval $(config start)
+	config load
+	wifi_led_state="-O"
+	aps=$(config keys network.wifi.ap)
+	for ap in $aps ; do
+	  ap=${ap%%.*}
+	  device="$(runt get network.wifi.ap.$ap.device)"
+	  if [ -n "$device" ]; then
+	    if ip link show $device up | grep -q "state UP"; then
+	      wifi_led_state="-o"
+	    fi
+	  fi
+	done
+	
+	clients=$(config keys network.wifi.client)
+	for client in $clients ; do
+	  client=${client%%.*}
+	  device="$(runt get network.wifi.client.$client.device)"
+	  if [ -n "$device" ]; then
+	    if ip link show $device up | grep -q "state UP"; then
+	      wifi_led_state="-o"
+	    fi
+	  fi
+	done
+
+	eval $(config stop)
+	echo "${wifi_led_state} $WIFI"
+}
+
 case "$1" in
 start)
 	ledcmd -a -N COM -N ETH -N ONLINE
 	exit 0
 	;;
 reload)
+	findme_update
 	;;
 stop)
 	# Firmware flash
@@ -133,14 +177,13 @@ case "$CELL$ETH" in
 esac
 
 ##############################################################
-
+# Update wifi led (on if at least one AP or client is enabled)
+# the IX20 has no wifi, the IX20W does
 WIFI="LAN3_TX"
 
-# the IX20 has no wifi, the IX20W does
 WIFI_ENABLED=$([ -x /bin/iwconfig ] && config get network.wifi.radio.phy0.enable)
-
 case "$WIFI_ENABLED" in
-1) WIFI_LED="-o $WIFI";;
+1) WIFI_LED="$(wifi_led_update)";;
 *) WIFI_LED="-O $WIFI";;
 esac
 

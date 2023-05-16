@@ -1,0 +1,134 @@
+#!/bin/sh
+
+GREP="/bin/grep"
+CONFIG="/bin/config"
+CUT="/usr/bin/cut"
+SED="/bin/sed"
+
+sync_system_user() {
+	name=$1
+	uid=$2
+	gid=$3
+	homedir=$4
+	shell=$5
+
+	match="$($GREP "^$name:" /etc/passwd)"
+	if [ -z "$match" ]; then
+		echo "$name:x:$uid:$gid::$homedir:$shell" >> /etc/passwd
+		echo "$name:x:::::::" >> /etc/shadow
+	fi
+}
+
+sync() {
+	name=$1
+	desc=$2
+	gid=$3
+	users=$4
+	roles=$5
+
+	match="$($GREP "^$name:" /etc/group)"
+
+	if [ -z "$match" ]; then
+		addgroup -g ${gid} ${name}
+	elif [ $gid != $(echo "$match" | $CUT -f 3 -d ':') ]; then
+		# Change clashing user configured group name
+		while true; do
+			new_name="${name}$RANDOM"
+			if ! $GREP "^$new_name:" /etc/group; then
+				break
+			fi
+		done
+
+		# Update per-group config DB
+		arg="$($CONFIG -g config.groups | $GREP "^config\.groups\.group[0-9]*\.name ${name}$" | $SED "s/ ${name}$/=${new_name}/")"
+		$CONFIG -s "$arg"
+
+		# Update per-user config DB
+		args=$($CONFIG -g config.users | $GREP "^config\.users\.user[0-9]*\.groups\.group[0-9]* ${name}$")
+		ifs="$IFS"
+		IFS=$'\n'
+		for arg in $args; do
+			arg="$(echo $arg | $SED "s/ ${name}$/=${new_name}/")"
+			$CONFIG -s "$arg"
+		done
+		IFS="$ifs"
+
+		# Update group file
+		$SED -i "s/^${name}:/${new_name}:/" /etc/config/group
+		addgroup -g ${gid} ${name}
+	fi
+
+	# Make sure the users we expect to be in the group are always there
+	if [ -n "$users" ]; then
+		(
+			IFS=","
+			for user in ${users};do
+				addgroup ${user} ${name}
+			done
+		)
+	fi
+
+	match="$($CONFIG -g config.groups | $GREP " ${name}$")"
+	if [ -z "$match" ]; then
+		total=$($CONFIG -g config.groups.total | cut -f2- -d' ')
+		if [ -z "$total" ]; then
+			total=0
+		fi
+		total=$(($total + 1))
+		$CONFIG -s "config.groups.group$total.name=$name" \
+			-s "config.groups.group$total.description=$desc" \
+			-s "config.groups.total=$total"
+	fi
+
+	# rebuild the default roles if specified
+	if [ -n "$roles" ]; then
+		groupidx=$($CONFIG --list-base config.groups --list-item-key name --list-get-by-value $name | head -1 | cut -f 3 -d '.')
+		(
+			IFS=","
+			roleidx=0
+			for role in ${roles};do
+				roleidx=$(($roleidx + 1))
+				$CONFIG -s "config.groups.$groupidx.roles.role$roleidx=$role"
+			done
+			$CONFIG -s "config.groups.$groupidx.roles.total=$roleidx";
+
+		)
+	fi
+}
+
+sync root "Default system super user group" 0 root
+sync admin "Provides users with unlimited configuration and management privileges" 1 root admin,shell_user
+sync nobody "Provides users with minimal privileges" 2 root
+if [ -e /lib/security/pam_adduser.so ]; then
+	sync netgrp "Group for users created automatically via network authentication" 3 root
+fi
+if [ -e /bin/upsd -a -e /lib/libusb-0.1.so.4 ]; then
+	# 4.7-4.9 incorrectly failed to run this logic, so they will have a usb
+	# group with no users and a different gid. Remove this group, so that
+	# sync() does not treat it like a user group that needs to be renamed.
+	$SED -i "/^usb:x:110:$/d" /etc/config/group
+	sync usb "Group to allow USB access to NUT UPS service" 4 root,ups
+fi
+if [ -e /bin/upsd ]; then
+	sync serial "Group to allow serial access to NUT UPS service" 5 root,ups
+fi
+# nagcmd removed
+if [ -e /bin/pptpd ]; then
+	sync pptpd "Group to allow access to the PPTP VPN server" 7 
+fi
+sync dialin "Group to allow dialin access via modems" 8
+# the GID here has to match that used in system-init-fileserver
+sync ftp "Group to allow ftp access and file access to storage devices" 9
+sync pmshell "Group to set default shell to pmshell" 10 "" pmshell_user
+
+# Unauth SSH needs ursh for the unauth user
+sync_system_user unauth 104 1 "/var/empty" "/bin/ursh"
+# We need a messagebus user
+if [ -e /bin/dbus-daemon ]; then
+	# Create the messagebus user first
+	sync_system_user messagebus 111 11 "/var/empty" "/bin/false"
+	sync messagebus "Group for dbus to run as" 11 messagebus
+fi
+sync pmoperator "Group to allow access to all serial ports and managed devices, including portmanager shell access. Please note that portmanager shell access overrides UNIX shell access" 12 "" all_ports_user,pmshell_user
+sync users "Provides users with basic management privileges" 1000 root basic_webui_user,shell_user
+sync pmadmin "Group to allow basic web access and administration of serial ports" 13 "" basic_webui_user,port_admin

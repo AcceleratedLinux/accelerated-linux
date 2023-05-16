@@ -9,8 +9,11 @@
 #define _LINUX_RADIX_TREE_H
 
 #include <linux/bitops.h>
-#include <linux/kernel.h>
+#include <linux/gfp.h>
 #include <linux/list.h>
+#include <linux/lockdep.h>
+#include <linux/math.h>
+#include <linux/percpu.h>
 #include <linux/preempt.h>
 #include <linux/rcupdate.h>
 #include <linux/spinlock.h>
@@ -376,7 +379,7 @@ radix_tree_chunk_size(struct radix_tree_iter *iter)
  * radix_tree_next_slot - find next slot in chunk
  *
  * @slot:	pointer to current slot
- * @iter:	pointer to interator state
+ * @iter:	pointer to iterator state
  * @flags:	RADIX_TREE_ITER_*, should be constant
  * Returns:	pointer to next slot, or NULL if there no more left
  *

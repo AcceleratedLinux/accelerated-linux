@@ -1,0 +1,49 @@
+#!/bin/sh
+
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="/$subnet"
+
+old_addr_file=/var/run/udhcpc-$interface.addr
+
+case $1 in
+	deconfig)
+		if [ -r $old_addr_file ]; then
+		   read old_addr <$old_addr_file
+		   /bin/ip addr del $old_addr dev $interface
+		   rm -f $old_addr_file
+		fi
+		;;
+
+	renew|bound)
+		# Remove duplicate IP assigned by ipsetd
+		interface2=`echo $interface | cut -f1 -d':'`:1
+		ip2=`/bin/ip addr show $interface | grep $interface2 | cut -f6 -d' ' | cut -f1 -d'/'`
+		[ "$ip2" = "$ip" ] && /bin/ip addr del $ip2 dev $interface label $interface2
+
+		# Set DHCP address
+		if [ $lease -gt 0 ]; then
+			# Employs kernel to delete the address once lifetime expires
+			/bin/ip addr replace $ip$NETMASK $BROADCAST dev $interface valid_lft $lease preferred_lft $lease
+		else
+			/bin/ip addr replace $ip$NETMASK $BROADCAST dev $interface
+		fi
+
+		# Save IP address because udhcpc does not pass that
+		# information to deconfig
+		echo $ip >$old_addr_file
+
+		# Restart network daemons on configuration change
+		envfile=/var/run/udhcpc-${interface}.env
+		tmpfile=${envfile}.$$
+
+		trap "mv $tmpfile $envfile" EXIT
+		env > $tmpfile
+
+		if [ "$RUNNING_UNDER_CONMAN" != "yes" ]; then
+			if ! cmp $envfile $tmpfile >& /dev/null ; then
+				sh /etc/ifup
+			fi
+		fi
+		;;
+esac
+exit 0

@@ -9,6 +9,7 @@ ITBIMG    = $(IMAGEDIR)/connectez1.itb
 ITBRAMIMG = $(IMAGEDIR)/connectez1-initrd.itb
 UKERNEL   = $(ITBIMG)
 IMAGE     = $(IMAGEDIR)/image.bin
+IMAGESIZE = 94371840 # 90MB
 
 SIGNING_ALG = ecdsa
 
@@ -82,7 +83,7 @@ uimage.bin:
 	( cd $(IMAGEDIR) ; mkimage -f connectez1-initrd.its $(ITBRAMIMG) )
 	rm -f $(IMAGEDIR)/connectez1*.its
 
-image: image.configs image.dir image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+image: image.configs image.dir image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ITBIMG) /tftpboot/
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ITBRAMIMG) /tftpboot/
 

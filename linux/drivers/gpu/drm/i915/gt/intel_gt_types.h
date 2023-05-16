@@ -8,26 +8,65 @@
 
 #include <linux/ktime.h>
 #include <linux/list.h>
+#include <linux/llist.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 #include "uc/intel_uc.h"
+#include "intel_gsc.h"
 
 #include "i915_vma.h"
 #include "intel_engine_types.h"
 #include "intel_gt_buffer_pool_types.h"
+#include "intel_hwconfig.h"
 #include "intel_llc_types.h"
 #include "intel_reset_types.h"
 #include "intel_rc6_types.h"
 #include "intel_rps_types.h"
+#include "intel_migrate_types.h"
 #include "intel_wakeref.h"
+#include "pxp/intel_pxp_types.h"
 
 struct drm_i915_private;
 struct i915_ggtt;
 struct intel_engine_cs;
 struct intel_uncore;
+
+struct intel_mmio_range {
+	u32 start;
+	u32 end;
+};
+
+/*
+ * The hardware has multiple kinds of multicast register ranges that need
+ * special register steering (and future platforms are expected to add
+ * additional types).
+ *
+ * During driver startup, we initialize the steering control register to
+ * direct reads to a slice/subslice that are valid for the 'subslice' class
+ * of multicast registers.  If another type of steering does not have any
+ * overlap in valid steering targets with 'subslice' style registers, we will
+ * need to explicitly re-steer reads of registers of the other type.
+ *
+ * Only the replication types that may need additional non-default steering
+ * are listed here.
+ */
+enum intel_steering_type {
+	L3BANK,
+	MSLICE,
+	LNCF,
+
+	NUM_STEERING_TYPES
+};
+
+enum intel_submission_method {
+	INTEL_SUBMISSION_RING,
+	INTEL_SUBMISSION_ELSP,
+	INTEL_SUBMISSION_GUC,
+};
 
 struct intel_gt {
 	struct drm_i915_private *i915;
@@ -35,14 +74,15 @@ struct intel_gt {
 	struct i915_ggtt *ggtt;
 
 	struct intel_uc uc;
+	struct intel_gsc gsc;
+
+	struct mutex tlb_invalidate_lock;
+
+	struct i915_wa_list wa_list;
 
 	struct intel_gt_timelines {
 		spinlock_t lock; /* protects active_list */
 		struct list_head active_list;
-
-		/* Pack multiple timelines' seqnos into the same page */
-		spinlock_t hwsp_lock;
-		struct list_head hwsp_free_list;
 	} timelines;
 
 	struct intel_gt_requests {
@@ -55,6 +95,11 @@ struct intel_gt {
 		 */
 		struct delayed_work retire_work;
 	} requests;
+
+	struct {
+		struct llist_head list;
+		struct work_struct work;
+	} watchdog;
 
 	struct intel_wakeref wakeref;
 	atomic_t user_wakeref;
@@ -75,6 +120,7 @@ struct intel_gt {
 	intel_wakeref_t awake;
 
 	u32 clock_frequency;
+	u32 clock_period_ns;
 
 	struct intel_llc llc;
 	struct intel_rc6 rc6;
@@ -87,9 +133,34 @@ struct intel_gt {
 
 	u32 pm_guc_events;
 
+	struct {
+		bool active;
+
+		/**
+		 * @lock: Lock protecting the below fields.
+		 */
+		seqcount_mutex_t lock;
+
+		/**
+		 * @total: Total time this engine was busy.
+		 *
+		 * Accumulated time not counting the most recent block in cases
+		 * where engine is currently busy (active > 0).
+		 */
+		ktime_t total;
+
+		/**
+		 * @start: Timestamp of the last idle to active transition.
+		 *
+		 * Idle is defined as active == 0, active is active > 0.
+		 */
+		ktime_t start;
+	} stats;
+
 	struct intel_engine_cs *engine[I915_NUM_ENGINES];
 	struct intel_engine_cs *engine_class[MAX_ENGINE_CLASS + 1]
 					    [MAX_ENGINE_INSTANCE + 1];
+	enum intel_submission_method submission_method;
 
 	/*
 	 * Default address space (either GGTT or ppGTT depending on arch).
@@ -109,6 +180,53 @@ struct intel_gt {
 	struct intel_gt_buffer_pool buffer_pool;
 
 	struct i915_vma *scratch;
+
+	struct intel_migrate migrate;
+
+	const struct intel_mmio_range *steering_table[NUM_STEERING_TYPES];
+
+	struct {
+		u8 groupid;
+		u8 instanceid;
+	} default_steering;
+
+	/*
+	 * Base of per-tile GTTMMADR where we can derive the MMIO and the GGTT.
+	 */
+	phys_addr_t phys_addr;
+
+	struct intel_gt_info {
+		unsigned int id;
+
+		intel_engine_mask_t engine_mask;
+
+		u32 l3bank_mask;
+
+		u8 num_engines;
+
+		/* General presence of SFC units */
+		u8 sfc_mask;
+
+		/* Media engine access to SFC per instance */
+		u8 vdbox_sfc_access;
+
+		/* Slice/subslice/EU info */
+		struct sseu_dev_info sseu;
+
+		unsigned long mslice_mask;
+
+		/** @hwconfig: hardware configuration data */
+		struct intel_hwconfig hwconfig;
+	} info;
+
+	struct {
+		u8 uc_index;
+	} mocs;
+
+	struct intel_pxp pxp;
+
+	/* gt/gtN sysfs */
+	struct kobject sysfs_gt;
 };
 
 enum intel_gt_scratch_field {

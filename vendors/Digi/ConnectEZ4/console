@@ -1,1 +1,1 @@
-ttyS5:unknown:/sbin/getty 115200 ttyS5
+ttyS0:unknown:/sbin/getty 115200 ttyS0

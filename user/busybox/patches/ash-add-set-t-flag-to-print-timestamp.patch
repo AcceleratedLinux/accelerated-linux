@@ -1,0 +1,82 @@
+From af49ea204b99170fcaddb55278d1993f4e2f2e92 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Thu, 3 Mar 2022 12:02:30 +0100
+Subject: [PATCH] ash: add 'set -t' flag to print timestamp
+
+'-t' together with '-x' flag, prints the commands with the timestamp.
+---
+ shell/ash.c | 29 ++++++++++++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/shell/ash.c b/shell/ash.c
+index 668df37..0ff1f96 100644
+--- a/shell/ash.c
++++ b/shell/ash.c
+@@ -153,6 +153,13 @@
+ //config:	you to run the specified command or builtin,
+ //config:	even when there is a function with the same name.
+ //config:
++//config:config ASH_TIMESTAMP_FLAG
++//config:	bool "set -t support"
++//config:	default n
++//config:	depends on SHELL_ASH
++//config:	help
++//config:	Enable timestamping together with 'set -x'.
++//config:
+ //config:endif # ash options
+ 
+ //applet:IF_ASH(APPLET(ash, BB_DIR_BIN, BB_SUID_DROP))
+@@ -356,6 +363,9 @@ static const char *const optletters_optnames[] = {
+ 	,"\0"  "nolog"
+ 	,"\0"  "debug"
+ #endif
++#if ENABLE_ASH_TIMESTAMP_FLAG
++	,"t"   "timestamp"
++#endif
+ };
+ //bash 4.4.23 also has these opts (with these defaults):
+ //braceexpand           on
+@@ -451,6 +461,9 @@ struct globals_misc {
+ #if DEBUG
+ # define nolog optlist[15 + BASH_PIPEFAIL]
+ # define debug optlist[16 + BASH_PIPEFAIL]
++#endif
++#if ENABLE_ASH_TIMESTAMP_FLAG
++# define tflag optlist[15 + BASH_PIPEFAIL + 2 * DEBUG]
+ #endif
+ 
+ 	/* trap handler commands */
+@@ -10427,6 +10440,17 @@ evalcommand(union node *cmd, int flags)
+ 
+ 		fdprintf(preverrout_fd, "%s", expandstr(ps4val(), DQSYNTAX));
+ 
++#if ENABLE_ASH_TIMESTAMP_FLAG
++		if (tflag) {
++			struct timespec ts;
++
++			clock_gettime(CLOCK_MONOTONIC, &ts);
++
++			fdprintf(preverrout_fd, "(%lld.%09ld) ", ts.tv_sec,
++				 ts.tv_nsec);
++		}
++#endif
++
+ 		sp = varlist.list;
+ 		while (sp) {
+ 			char *varval = sp->text;
+@@ -11360,8 +11384,11 @@ options(int *login_sh)
+ 			val = 1;
+ 			if (p[0] == '\0' || LONE_DASH(p)) {
+ 				if (!login_sh) {
+-					/* "-" means turn off -x and -v */
++					/* "-" means turn off -t, -x and -v */
+ 					if (p[0] == '\0')
++#if ENABLE_ASH_TIMESTAMP_FLAG
++						tflag =
++#endif
+ 						xflag = vflag = 0;
+ 					/* "--" means reset params */
+ 					else if (*argptr == NULL)
+-- 
+2.27.0
+

@@ -1,0 +1,142 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+DEBUG=0
+OPTS="-t 5 ECHO ON"
+if [ "$DEBUG" == "1" ]; then
+	OPTS="-v -t 5 ECHO ON"
+fi
+
+username=$1
+password=$2
+outletmode=$3
+port=$4
+outlets=$5
+cmd=$6
+
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <username> <password> <outletmode> <port> \"<outlet> [outlet..]\" on|off|cycle|status"
+	exit 1
+fi
+
+function outletId {
+	num=$1
+	offs=$(( $num - 1 ))
+
+	# .A1-.A32
+	if [[ "$outletmode" == "0" ]]; then
+		echo ".A${num}"
+
+	# .A1-.A16,.B1-.B16,etc
+	elif [[ "$outletmode" == "1" ]]; then
+		if [[ "$num" -le "16" ]]; then
+			printf '.A%d\n' $(( $num ))
+		elif [[ "$num" -le "32" ]]; then
+			printf '.B%d\n' $(( $num - 16 ))
+		elif [[ "$num" -le "48" ]]; then
+			printf '.C%d\n' $(( $num - 32 ))
+		elif [[ "$num" -le "64" ]]; then
+			printf '.D%d\n' $(( $num - 48 ))
+		elif [[ "$num" -le "80" ]]; then
+			printf '.E%d\n' $(( $num - 64 ))
+		elif [[ "$num" -le "96" ]]; then
+			printf '.F%d\n' $(( $num - 80 ))
+		fi
+
+	# .AA1-.AA16,.AB1-.AB16,.AC1-.AC16,.BA1-.BA16,etc
+	elif [[ "$outletmode" == "2" ]]; then
+		if [[ "$num" -le "16" ]]; then
+			printf '.AA%d\n' $(( $num ))
+		elif [[ "$num" -le "32" ]]; then
+			printf '.AB%d\n' $(( $num - 16 ))
+		elif [[ "$num" -le "48" ]]; then
+			printf '.AC%d\n' $(( $num - 32 ))
+		elif [[ "$num" -le "64" ]]; then
+			printf '.BA%d\n' $(( $num - 48 ))
+		elif [[ "$num" -le "80" ]]; then
+			printf '.BB%d\n' $(( $num - 64 ))
+		elif [[ "$num" -le "96" ]]; then
+			printf '.BC%d\n' $(( $num - 80 ))
+		elif [[ "$num" -le "112" ]]; then
+			printf '.CA%d\n' $(( $num - 96 ))
+		elif [[ "$num" -le "128" ]]; then
+			printf '.CB%d\n' $(( $num - 112 ))
+		elif [[ "$num" -le "144" ]]; then
+			printf '.CC%d\n' $(( $num - 128 ))
+		fi
+	fi
+}
+
+function pduLogin {
+	/bin/pmchat $OPTS "" "\r" "Username: " "$username" "Password: " "$password" ": " "\r" "commands are:" < $port 2>&1
+	return $?
+}
+
+function pduLogout {
+	/bin/pmchat $OPTS "" "logout" "Session ended" < $port 2>&1
+	return $?
+}
+
+function outletCommand {
+	command="$1"
+	/bin/pmchat $OPTS "" "$command" "Command successful" < $port 2>&1
+	return $?
+}
+
+if ! pduLogin >& /dev/null; then
+	pduLogout >& /dev/null
+	sleep 5
+	if ! pduLogin >& /dev/null; then
+		power_error_login "$username"
+		#for outlet in $outlets; do
+		#	power_outlet_error_login $outlet $username
+		#done
+		exit 1
+	fi
+fi
+
+if [[ "$cmd" == "probe" ]]; then
+	numoutlets=0
+	for (( i=1 ;; i++ )); do
+		id=$(outletId $i)
+		if ! outletCommand "status $id" >& /dev/null; then
+			break
+		fi
+		numoutlets=$(( numoutlets + 1 ))
+	done
+	echo $numoutlets
+else
+	for outlet in $outlets; do
+		id=$(outletId $outlet)
+
+		case $cmd in
+		"on" )
+		outletCommand "on $id" >& /dev/null
+		;;
+		"off" )
+		outletCommand "off $id" >& /dev/null
+		;;
+		"cycle" )
+		outletCommand "reboot $id" >& /dev/null
+		;;
+		esac
+
+		status=$(outletCommand "status $id" | grep "$id" | tail -n1 | tr -s ' ' | cut -f4 -d' ' | tr 'A-Z' 'a-z' )
+		if [ -z "$status" ]; then
+			power_outlet_error_timeout $outlet $cmd
+		else
+			power_outlet_status $outlet $status
+		fi
+
+		# Do not saturate portmanager write buffer
+		usleep 50
+	done
+fi
+
+if ! pduLogout >& /dev/null; then
+	power_warn_logout "$username"
+fi
+
+exit 0

@@ -8,6 +8,8 @@
 #include <linux/bpf.h>
 #include <sys/types.h> /* pid_t */
 
+#define event_contains(obj, mem) ((obj).header.size > offsetof(typeof(obj), mem))
+
 struct perf_record_mmap {
 	struct perf_event_header header;
 	__u32			 pid, tid;
@@ -23,10 +25,20 @@ struct perf_record_mmap2 {
 	__u64			 start;
 	__u64			 len;
 	__u64			 pgoff;
-	__u32			 maj;
-	__u32			 min;
-	__u64			 ino;
-	__u64			 ino_generation;
+	union {
+		struct {
+			__u32	 maj;
+			__u32	 min;
+			__u64	 ino;
+			__u64	 ino_generation;
+		};
+		struct {
+			__u8	 build_id_size;
+			__u8	 __reserved_1;
+			__u16	 __reserved_2;
+			__u8	 build_id[20];
+		};
+	};
 	__u32			 prot;
 	__u32			 flags;
 	char			 filename[PATH_MAX];
@@ -111,6 +123,14 @@ struct perf_record_cgroup {
 	char			 path[PATH_MAX];
 };
 
+struct perf_record_text_poke_event {
+	struct perf_event_header header;
+	__u64			addr;
+	__u16			old_len;
+	__u16			new_len;
+	__u8			bytes[];
+};
+
 struct perf_record_sample {
 	struct perf_event_header header;
 	__u64			 array[];
@@ -193,10 +213,20 @@ struct perf_record_header_tracing_data {
 	__u32			 size;
 };
 
+#define PERF_RECORD_MISC_BUILD_ID_SIZE (1 << 15)
+
 struct perf_record_header_build_id {
 	struct perf_event_header header;
 	pid_t			 pid;
-	__u8			 build_id[24];
+	union {
+		__u8		 build_id[24];
+		struct {
+			__u8	 data[20];
+			__u8	 size;
+			__u8	 reserved1__;
+			__u16	 reserved2__;
+		};
+	};
 	char			 filename[];
 };
 
@@ -210,7 +240,7 @@ struct id_index_entry {
 struct perf_record_id_index {
 	struct perf_event_header header;
 	__u64			 nr;
-	struct id_index_entry	 entries[0];
+	struct id_index_entry	 entries[];
 };
 
 struct perf_record_auxtrace_info {
@@ -257,6 +287,11 @@ struct perf_record_itrace_start {
 	struct perf_event_header header;
 	__u32			 pid;
 	__u32			 tid;
+};
+
+struct perf_record_aux_output_hw_id {
+	struct perf_event_header header;
+	__u64			hw_id;
 };
 
 struct perf_record_thread_map_entry {
@@ -316,6 +351,11 @@ struct perf_record_time_conv {
 	__u64			 time_shift;
 	__u64			 time_mult;
 	__u64			 time_zero;
+	__u64			 time_cycles;
+	__u64			 time_mask;
+	__u8			 cap_user_time_zero;
+	__u8			 cap_user_time_short;
+	__u8			 reserved[6];	/* For alignment */
 };
 
 struct perf_record_header_feature {
@@ -367,6 +407,7 @@ union perf_event {
 	struct perf_record_sample		sample;
 	struct perf_record_bpf_event		bpf;
 	struct perf_record_ksymbol		ksymbol;
+	struct perf_record_text_poke_event	text_poke;
 	struct perf_record_header_attr		attr;
 	struct perf_record_event_update		event_update;
 	struct perf_record_header_event_type	event_type;
@@ -378,6 +419,7 @@ union perf_event {
 	struct perf_record_auxtrace_error	auxtrace_error;
 	struct perf_record_aux			aux;
 	struct perf_record_itrace_start		itrace_start;
+	struct perf_record_aux_output_hw_id	aux_output_hw_id;
 	struct perf_record_switch		context_switch;
 	struct perf_record_thread_map		thread_map;
 	struct perf_record_cpu_map		cpu_map;

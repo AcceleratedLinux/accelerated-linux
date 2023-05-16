@@ -13,6 +13,9 @@
 #include <linux/ptp_clock_kernel.h>
 #include <soc/mscc/ocelot.h>
 
+#define OCELOT_MAX_PTP_ID		63
+#define OCELOT_PTP_FIFO_SIZE		128
+
 #define PTP_PIN_CFG_RSZ			0x20
 #define PTP_PIN_TOD_SEC_MSB_RSZ		PTP_PIN_CFG_RSZ
 #define PTP_PIN_TOD_SEC_LSB_RSZ		PTP_PIN_CFG_RSZ
@@ -37,8 +40,6 @@ enum {
 
 #define PTP_CFG_MISC_PTP_EN		BIT(2)
 
-#define PSEC_PER_SEC			1000000000000LL
-
 #define PTP_CFG_CLK_ADJ_CFG_ENA		BIT(0)
 #define PTP_CFG_CLK_ADJ_CFG_DIR		BIT(1)
 
@@ -53,6 +54,7 @@ int ocelot_ptp_verify(struct ptp_clock_info *ptp, unsigned int pin,
 		      enum ptp_pin_function func, unsigned int chan);
 int ocelot_ptp_enable(struct ptp_clock_info *ptp,
 		      struct ptp_clock_request *rq, int on);
-int ocelot_init_timestamp(struct ocelot *ocelot, struct ptp_clock_info *info);
+int ocelot_init_timestamp(struct ocelot *ocelot,
+			  const struct ptp_clock_info *info);
 int ocelot_deinit_timestamp(struct ocelot *ocelot);
 #endif

@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# Script to execute the emc test
+#
+
+# Initialize variables.
+IP_ADDR="192.168.1.10"
+CONFIG_FILE="/etc/emc.conf"
+
+# Parse possible arguments.
+for ARGUMENT in "$@"; do
+	case "$ARGUMENT" in
+		ip=*)       IP_ADDR="$(echo "${ARGUMENT}" | cut -f2 -d=)";;
+		config=*)   CONFIG_FILE="$(echo "${ARGUMENT}" | cut -f2 -d=)";;
+	esac
+done
+
+# Start required services.
+echo "Starting services..."
+ps | grep -qs "[d]bus-daemon" || { echo " - Starting dbus..."; /etc/action.d/dbus start; }
+ps | grep -qs "[u]devd " || { echo " - Starting udev..."; /etc/action.d/udev start; }
+ps | grep -qs "[s]yslogd " || { echo " - Starting syslog..."; /etc/action.d/syslog start; }
+ps | grep -qs "[M]odemManager" || { echo " - Starting Modem Manager..."; /etc/action.d/ModemManager start; }
+
+# Switch-on modem interface.
+echo "Enabling modem..."
+sim -p | grep -qs "state: on" || sim -o
+
+# Wait for modem to appear.
+echo "Waiting for modem..."
+while mmcli -L | grep -qs "No modems"; do
+	sleep 1
+done
+
+# Switch-on XBee interface.
+echo "Enabling XBee interface..."
+xbee on
+
+# Configure ETH interface.
+echo "Configuring ethernet interface..."
+ifconfig eth "${IP_ADDR}"
+
+# Execute the test.
+python3 /etc/test_interfaces.py --config "${CONFIG_FILE}"

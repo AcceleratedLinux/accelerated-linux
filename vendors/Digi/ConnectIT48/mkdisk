@@ -24,7 +24,7 @@ GRUB_UPDATE=
 if [ "$GRUB_UPDATE" ]; then
 	echo "Making GRUB store..." # 4MB image for storing standalone grub image
 	dd if=/dev/zero of=${DISKRAW}2 bs=512 count=$((8 * 1024 * 1024 / 512))
-	GRUB_ARG="-drive id=diskC,file=${DISKRAW}2,if=none -device ahci,id=ahci2 -device ide-drive,drive=diskC,bus=ahci2.0"
+	GRUB_ARG="-drive id=diskC,file=${DISKRAW}2,if=none -device ahci,id=ahci2 -device ide-hd,drive=diskC,bus=ahci2.0"
 	GRUB_OPT=grub=/dev/sdc
 fi
 
@@ -37,9 +37,9 @@ qemu-system-x86_64 -net none -net none -nographic -serial mon:stdio \
 	-append "root=/dev/ram0 init=/etc/mkffs ${GRUB_OPT}" \
 	-kernel $ZIMAGE -initrd $INITRD \
 	-drive id=diskA,file=$DISKRAW,if=none \
-	-device ahci,id=ahci -device ide-drive,drive=diskA,bus=ahci.0 \
+	-device ahci,id=ahci -device ide-hd,drive=diskA,bus=ahci.0 \
 	-drive id=diskB,file=$IMAGE,if=none \
-	-device ahci,id=ahci1 -device ide-drive,drive=diskB,bus=ahci1.0 \
+	-device ahci,id=ahci1 -device ide-hd,drive=diskB,bus=ahci1.0 \
 	$GRUB_ARG
 [ $? != 0 ] && exit 1
 

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+port=$1
+outlet=$2
+cmd=$3
+username=$4
+password=$5
+safeport=`echo $port | tr -cd "[a-zA-Z0-9]"`
+tmpfile=/tmp/wti-$safeport.$$
+offs=$(( $outlet - 1 ))
+outletId=`printf '%X%d\n' $(( 0xA + $offs / 2 )) $(( $offs % 2 + 1 ))`
+
+
+
+status() {
+        output="$1"
+        echo "PLUG    |           NAME           | STATUS | DELAY | DEF | PRI | AMPS |" > $tmpfile
+        echo "--------+--------------------------+--------+-------+-----+-----+------+" >> $tmpfile
+        echo "$output" >> $tmpfile
+        cat $tmpfile | tee /var/run/power-status
+        rm $tmpfile
+}
+
+pmout=""
+case $cmd in
+        "on")
+                pmout=`pmchat -t 3 ECHO ON "ogin: --ogin: " "${username}" "assword: " "${password}" "> " "/ON ${outletId}"  "(Y/N): " "Y" "> " "\s" "> " "/X" "Mode." < ${port} 2>&1 | grep "${outletId}" | grep "[ON|OFF]"`
+                ;;
+        "off")
+                pmout=`pmchat -t 3 ECHO ON "ogin: --ogin: " "${username}" "assword: " "${password}" "> " "/OFF ${outletId}"  "(Y/N): " "Y" "> " "\s" "> " "/X" "Mode." < ${port} 2>&1 | grep "${outletId}" | grep "[ON|OFF]"`
+                ;;
+        "cycle")
+                pmout=`pmchat -t 3 ECHO ON "ogin: --ogin: " "${username}" "assword: " "${password}" "> " "/BOOT ${outletId}"  "(Y/N): " "Y" "> " "\s" "> " "/X" "Mode." < ${port} 2>&1 | grep "${outletId}" | grep "[ON|OFF]"`
+                ;;
+        "status")
+                pmout=`pmchat -t 3 ECHO ON "ogin: --ogin: " "${username}" "assword: " "${password}" "> " "/S"  "> " "/X" "Mode." < ${port} 2>&1 | grep "${outletId}" | grep "[ON|OFF]"`
+                ;;
+
+esac
+result=`echo "${pmout}" | tail -n1`
+status "$result"

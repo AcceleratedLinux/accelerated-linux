@@ -1,0 +1,29 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+	
+	export AGENT=""
+	export UPTIME=""
+	export TRAP_NAME="${ups_oid_prefix}EventOccurred"
+	export MIB_NAME="${ups_mib_name}"
+
+	ALERT_UPS=$2
+	ALERT_STATUS=$3
+
+	/bin/sh /etc/scripts/alert-snmpv1 \
+		"${ups_oid_prefix}EventName" \
+		"s" \
+		"$ALERT_UPS" \
+		"${ups_oid_prefix}EventType" \
+		"s" \
+		"$ALERT_STATUS"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

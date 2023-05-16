@@ -2,6 +2,7 @@
 // Copyright (C) 2020 Facebook
 
 #define _GNU_SOURCE
+#include <unistd.h>
 #include <linux/err.h>
 #include <bpf/libbpf.h>
 
@@ -9,11 +10,13 @@
 
 static int do_pin(int argc, char **argv)
 {
+	DECLARE_LIBBPF_OPTS(bpf_iter_attach_opts, iter_opts);
+	union bpf_iter_link_info linfo;
 	const char *objfile, *path;
 	struct bpf_program *prog;
 	struct bpf_object *obj;
 	struct bpf_link *link;
-	int err;
+	int err = -1, map_fd = -1;
 
 	if (!REQ_ARGS(2))
 		usage();
@@ -21,10 +24,32 @@ static int do_pin(int argc, char **argv)
 	objfile = GET_ARG();
 	path = GET_ARG();
 
+	/* optional arguments */
+	if (argc) {
+		if (is_prefix(*argv, "map")) {
+			NEXT_ARG();
+
+			if (!REQ_ARGS(2)) {
+				p_err("incorrect map spec");
+				return -1;
+			}
+
+			map_fd = map_parse_fd(&argc, &argv);
+			if (map_fd < 0)
+				return -1;
+
+			memset(&linfo, 0, sizeof(linfo));
+			linfo.map.map_fd = map_fd;
+			iter_opts.link_info = &linfo;
+			iter_opts.link_info_len = sizeof(linfo);
+		}
+	}
+
 	obj = bpf_object__open(objfile);
-	if (IS_ERR(obj)) {
+	err = libbpf_get_error(obj);
+	if (err) {
 		p_err("can't open objfile %s", objfile);
-		return -1;
+		goto close_map_fd;
 	}
 
 	err = bpf_object__load(obj);
@@ -33,15 +58,15 @@ static int do_pin(int argc, char **argv)
 		goto close_obj;
 	}
 
-	prog = bpf_program__next(NULL, obj);
+	prog = bpf_object__next_program(obj, NULL);
 	if (!prog) {
 		p_err("can't find bpf program in objfile %s", objfile);
 		goto close_obj;
 	}
 
-	link = bpf_program__attach_iter(prog, NULL);
-	if (IS_ERR(link)) {
-		err = PTR_ERR(link);
+	link = bpf_program__attach_iter(prog, &iter_opts);
+	err = libbpf_get_error(link);
+	if (err) {
 		p_err("attach_iter failed for program %s",
 		      bpf_program__name(prog));
 		goto close_obj;
@@ -62,14 +87,20 @@ close_link:
 	bpf_link__destroy(link);
 close_obj:
 	bpf_object__close(obj);
+close_map_fd:
+	if (map_fd >= 0)
+		close(map_fd);
 	return err;
 }
 
 static int do_help(int argc, char **argv)
 {
 	fprintf(stderr,
-		"Usage: %1$s %2$s pin OBJ PATH\n"
+		"Usage: %1$s %2$s pin OBJ PATH [map MAP]\n"
 		"       %1$s %2$s help\n"
+		"\n"
+		"       " HELP_SPEC_MAP "\n"
+		"       " HELP_SPEC_OPTIONS " }\n"
 		"",
 		bin_name, "iter");
 

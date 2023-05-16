@@ -1,0 +1,39 @@
+#!/bin/sh
+
+RETRY_FILE="/var/run/.modem/retry_count"
+
+# Write a syslog message
+log () {
+	logger -t "modem-backoff[$$]" "$@"
+}
+
+count=0
+if [ -f "$RETRY_FILE" ]; then
+    count=`cat $RETRY_FILE`
+fi
+
+if [ "$count" = "0" ]; then
+    echo 1 > "$RETRY_FILE"
+    log "Failed to connect, waiting 30 seconds before retrying..."
+    sleep 30 & wait
+elif [ "$count" = "1" ]; then
+    echo 2 > "$RETRY_FILE"
+    log "Failed to connect, waiting 30 seconds before retrying..."
+    sleep 30 & wait
+elif [ "$count" = "2" ]; then
+    echo 3 > "$RETRY_FILE"
+    log "Failed to connect, waiting 1 minute before retrying..."
+    sleep 60 & wait
+elif [ "$count" = "3" ]; then
+    echo 4 > "$RETRY_FILE"
+    log "Failed to connect, waiting 2 minutes before retrying..."
+    sleep 120 & wait
+elif [ "$count" = "4" ]; then
+    echo 5 > "$RETRY_FILE"
+    log "Failed to connect, waiting 8 minutes before retrying..."
+    sleep 480 & wait
+else
+    log "Failed to connect, waiting 16 minutes before retrying or timed out by conman..."
+    sleep 960 & wait
+fi
+exit 0

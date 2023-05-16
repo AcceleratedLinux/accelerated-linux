@@ -3,4 +3,5 @@
 makefile-strip.patch
 use-openssl.patch
 plugins-Makefile-handle-dynamic-plugins.patch
-2.4.8+3-changes.patch
+ppp-fixups.patch
+sif6down-fix.patch

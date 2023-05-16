@@ -113,7 +113,7 @@ DIV_TO_REG(long val)
 struct w83l786ng_data {
 	struct i2c_client *client;
 	struct mutex update_lock;
-	char valid;			/* !=0 if following fields are valid */
+	bool valid;			/* true if following fields are valid */
 	unsigned long last_updated;	/* In jiffies */
 	unsigned long last_nonvolatile;	/* In jiffies, last time we update the
 					 * nonvolatile registers */
@@ -209,7 +209,7 @@ static struct w83l786ng_data *w83l786ng_update_device(struct device *dev)
 		data->tolerance[1] = (reg_tmp >> 4) & 0x0f;
 
 		data->last_updated = jiffies;
-		data->valid = 1;
+		data->valid = true;
 
 	}
 
@@ -706,7 +706,7 @@ static void w83l786ng_init_client(struct i2c_client *client)
 }
 
 static int
-w83l786ng_probe(struct i2c_client *client, const struct i2c_device_id *id)
+w83l786ng_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct w83l786ng_data *data;
@@ -752,7 +752,7 @@ static struct i2c_driver w83l786ng_driver = {
 	.driver = {
 		   .name = "w83l786ng",
 	},
-	.probe		= w83l786ng_probe,
+	.probe_new	= w83l786ng_probe,
 	.id_table	= w83l786ng_id,
 	.detect		= w83l786ng_detect,
 	.address_list	= normal_i2c,

@@ -1008,7 +1008,7 @@ static void slic_set_link_autoneg(struct slic_device *sdev)
 
 static void slic_set_mac_address(struct slic_device *sdev)
 {
-	u8 *addr = sdev->netdev->dev_addr;
+	const u8 *addr = sdev->netdev->dev_addr;
 	u32 val;
 
 	val = addr[5] | addr[4] << 8 | addr[3] << 16 | addr[2] << 24;
@@ -1660,7 +1660,7 @@ static int slic_read_eeprom(struct slic_device *sdev)
 		goto free_eeprom;
 	}
 	/* set mac address */
-	ether_addr_copy(sdev->netdev->dev_addr, mac[devfn]);
+	eth_hw_addr_set(sdev->netdev, mac[devfn]);
 free_eeprom:
 	dma_free_coherent(&sdev->pdev->dev, SLIC_EEPROM_SIZE, eeprom, paddr);
 
@@ -1712,13 +1712,13 @@ static bool slic_is_fiber(unsigned short subdev)
 {
 	switch (subdev) {
 	/* Mojave */
-	case PCI_SUBDEVICE_ID_ALACRITECH_1000X1F: /* fallthrough */
-	case PCI_SUBDEVICE_ID_ALACRITECH_SES1001F: /* fallthrough */
+	case PCI_SUBDEVICE_ID_ALACRITECH_1000X1F:
+	case PCI_SUBDEVICE_ID_ALACRITECH_SES1001F: fallthrough;
 	/* Oasis */
-	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2002XF: /* fallthrough */
-	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2001XF: /* fallthrough */
-	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2104EF: /* fallthrough */
-	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2102EF: /* fallthrough */
+	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2002XF:
+	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2001XF:
+	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2104EF:
+	case PCI_SUBDEVICE_ID_ALACRITECH_SEN2102EF:
 		return true;
 	}
 	return false;
@@ -1803,7 +1803,7 @@ static int slic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto unmap;
 	}
 
-	netif_napi_add(dev, &sdev->napi, slic_poll, SLIC_NAPI_WEIGHT);
+	netif_napi_add(dev, &sdev->napi, slic_poll, NAPI_POLL_WEIGHT);
 	netif_carrier_off(dev);
 
 	err = register_netdev(dev);

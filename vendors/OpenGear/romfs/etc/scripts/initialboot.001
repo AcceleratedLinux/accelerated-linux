@@ -1,0 +1,17 @@
+#!/bin/bash
+# This script is run on first boot (either factory fresh, or config erase).
+
+# Setup storage requirements
+/etc/scripts/storage-initboot
+
+# Work out number of power supplies.
+detected_psus="$(psmon -n)"
+if (( detected_psus > 0 )); then
+    config -s config.powersupplies.total="$detected_psus"
+else
+    modelname=$(echo $modelname | awk '{print toupper($0)}')
+    case "$modelname" in
+	    IM72*|B098*) config -s config.powersupplies.total=2 ;;
+	    *) config -s config.powersupplies.total=1 ;;
+    esac
+fi

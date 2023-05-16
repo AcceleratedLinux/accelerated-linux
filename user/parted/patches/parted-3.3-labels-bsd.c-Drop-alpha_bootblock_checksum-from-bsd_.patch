@@ -1,0 +1,35 @@
+From 92e6b10305b248a4943b7aa147d0c43bca7c71e3 Mon Sep 17 00:00:00 2001
+From: "Brian C. Lane" <bcl@redhat.com>
+Date: Fri, 4 Dec 2020 15:56:14 -0800
+Subject: [PATCH] labels/bsd.c: Drop alpha_bootblock_checksum from bsd_probe
+
+Thanks to Alpine Linux for catching this. In commit
+a5f69f396713ab8ac1e57458cbb9af552d2c1659 I change label to actually
+point to the label and failed to pass the new s0 to
+alpha_bootblock_checksum() instead of label. So it was writing the
+so-called checksum off the end of the 512b sector buffer.
+
+bug: https://gitlab.alpinelinux.org/alpine/aports/-/issues/12161
+upstream report: https://debbugs.gnu.org/cgi/bugreport.cgi?bug=45026
+
+Signed-off-by: Brian C. Lane <bcl@redhat.com>
+---
+ libparted/labels/bsd.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/libparted/labels/bsd.c b/libparted/labels/bsd.c
+index 8483641..0a2b891 100644
+--- a/libparted/labels/bsd.c
++++ b/libparted/labels/bsd.c
+@@ -164,8 +164,6 @@ bsd_probe (const PedDevice *dev)
+ 
+ 	label = &((BSDDiskData*) s0)->label;
+ 
+-	alpha_bootblock_checksum(label);
+-
+ 	/* check magic */
+         bool found = PED_LE32_TO_CPU (label->d_magic) == BSD_DISKMAGIC;
+ 	free (s0);
+-- 
+2.27.0
+

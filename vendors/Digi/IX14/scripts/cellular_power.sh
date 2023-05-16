@@ -64,9 +64,12 @@ usage() {
 Usage: ${SW_SCRIPTNAME} MODE
 
 MODE
-    on     Turn on the cellular interface
-    off    Turn off the cellular interface
-
+    init     Initialize cellular interface
+    on       Turn on the cellular interface
+    off      Turn off the cellular interface
+    forceon  Force power on the cellular module
+    forceoff Force power off the cellular module
+    help     This help message
 EOF
 }
 
@@ -267,6 +270,16 @@ poweron_automatic()
 	gpio_set $CEL_GPIO_CELL_PWR_EN 1 && sleep 0.1
 }
 
+init_cell_gpios()
+{
+	# First make sure the power is disabled
+	set_gpio_value $CEL_GPIO_CELL_PWR_EN 0
+
+	# Then set all control GPIOs to default state
+	set_gpio_value $CEL_GPIO_CELL_EMERG_OFF 0
+	set_gpio_value $CEL_GPIO_CELL_IGN 0
+}
+
 # Get board_id from OTP bits
 BOARD_ID_OTP="/sys/bus/nvmem/devices/imx-ocotp0/nvmem"
 [ -f "${BOARD_ID_OTP}" ] && BOARD_ID=$((($(hd -w -s 0x98 -m -n 1 -p ${BOARD_ID_OTP}) >> 4) & 0xFF))
@@ -295,6 +308,8 @@ MODE="$(echo "${1}" | tr '[:upper:]' '[:lower:]')"
 case "${MODE}" in
 	help)
 		usage;;
+	init)
+		init_cell_gpios;;
 	on)
 		poweron_cellular && log_info "cellular successfully turned on";;
 	off)

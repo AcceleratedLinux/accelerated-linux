@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# udhcpc wwan up subscript - only for deconfig, in a delayed state.
+# This script is invoked by wwan-up, and is used to work around bad modem
+# or carrier DHCP commands. Specifically, in some cases we should be given
+# a 'renew', but are given a 'deconfig' followed immediately by a 'bound'.
+# This can cause severe flappiness when using ippassthrough.
+
+# To work around it, we will try to wait for some seconds and check state,
+# to see if a different command (ie. a new bound) has come through instead.
+
+interface=$1
+calling_timestamp=$2
+
+sleep 10
+
+{
+	flock -n 9 || { logger -t wwan-up-delayed-deconfig "can't get lock, skipping deconfig"; exit 1; }
+
+	timestamp=$(/bin/infod_client -o get -q -p "udhcpc.$interface.command_timestamp")
+	logger -t wwan-up-delayed-deconfig "interface=$interface calling_timestamp=$calling_timestamp timestamp=$timestamp"
+
+	if [ "$timestamp" == "$calling_timestamp" ]
+	then
+		logger -t wwan-up-delayed-deconfig "deconfiguring interface"
+		/bin/infod_client -o delete -p "udhcpc.$interface.interface"
+		/bin/infod_client -o delete -p "udhcpc.$interface.ip"
+		/bin/infod_client -o delete -p "udhcpc.$interface.subnet"
+		/bin/infod_client -o delete -p "udhcpc.$interface.router"
+		/bin/infod_client -o delete -p "udhcpc.$interface.dns"
+		/bin/infod_client -o delete -p "udhcpc.$interface.action"
+		/sbin/ifconfig $interface 0.0.0.0
+	else
+		logger -t wwan-up-delayed-deconfig "newer invocation of wwan-up, skipping deconfig"
+	fi
+} 9>/tmp/wwan-up-$interface

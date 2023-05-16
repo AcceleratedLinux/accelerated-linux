@@ -189,8 +189,10 @@ nouveau_fbcon_open(struct fb_info *info, int user)
 	struct nouveau_fbdev *fbcon = info->par;
 	struct nouveau_drm *drm = nouveau_drm(fbcon->helper.dev);
 	int ret = pm_runtime_get_sync(drm->dev->dev);
-	if (ret < 0 && ret != -EACCES)
+	if (ret < 0 && ret != -EACCES) {
+		pm_runtime_put(drm->dev->dev);
 		return ret;
+	}
 	return 0;
 }
 
@@ -254,13 +256,13 @@ nouveau_fbcon_accel_fini(struct drm_device *dev)
 			fbcon->helper.fbdev->flags |= FBINFO_HWACCEL_DISABLED;
 		console_unlock();
 		nouveau_channel_idle(drm->channel);
-		nvif_object_fini(&fbcon->twod);
-		nvif_object_fini(&fbcon->blit);
-		nvif_object_fini(&fbcon->gdi);
-		nvif_object_fini(&fbcon->patt);
-		nvif_object_fini(&fbcon->rop);
-		nvif_object_fini(&fbcon->clip);
-		nvif_object_fini(&fbcon->surf2d);
+		nvif_object_dtor(&fbcon->twod);
+		nvif_object_dtor(&fbcon->blit);
+		nvif_object_dtor(&fbcon->gdi);
+		nvif_object_dtor(&fbcon->patt);
+		nvif_object_dtor(&fbcon->rop);
+		nvif_object_dtor(&fbcon->clip);
+		nvif_object_dtor(&fbcon->surf2d);
 	}
 }
 
@@ -339,7 +341,7 @@ nouveau_fbcon_create(struct drm_fb_helper *helper,
 	if (ret)
 		goto out_unref;
 
-	ret = nouveau_bo_pin(nvbo, TTM_PL_FLAG_VRAM, false);
+	ret = nouveau_bo_pin(nvbo, NOUVEAU_GEM_DOMAIN_VRAM, false);
 	if (ret) {
 		NV_ERROR(drm, "failed to pin fb: %d\n", ret);
 		goto out_unref;
@@ -376,12 +378,11 @@ nouveau_fbcon_create(struct drm_fb_helper *helper,
 			      FBINFO_HWACCEL_FILLRECT |
 			      FBINFO_HWACCEL_IMAGEBLIT;
 	info->fbops = &nouveau_fbcon_sw_ops;
-	info->fix.smem_start = nvbo->bo.mem.bus.base +
-			       nvbo->bo.mem.bus.offset;
-	info->fix.smem_len = nvbo->bo.mem.num_pages << PAGE_SHIFT;
+	info->fix.smem_start = nvbo->bo.resource->bus.offset;
+	info->fix.smem_len = nvbo->bo.base.size;
 
 	info->screen_base = nvbo_kmap_obj_iovirtual(nvbo);
-	info->screen_size = nvbo->bo.mem.num_pages << PAGE_SHIFT;
+	info->screen_size = nvbo->bo.base.size;
 
 	drm_fb_helper_fill_info(info, &fbcon->helper, sizes);
 
@@ -393,9 +394,11 @@ nouveau_fbcon_create(struct drm_fb_helper *helper,
 
 	/* To allow resizeing without swapping buffers */
 	NV_INFO(drm, "allocated %dx%d fb: 0x%llx, bo %p\n",
-		fb->width, fb->height, nvbo->bo.offset, nvbo);
+		fb->width, fb->height, nvbo->offset, nvbo);
 
-	vga_switcheroo_client_fb_set(dev->pdev, info);
+	if (dev_is_pci(dev->dev))
+		vga_switcheroo_client_fb_set(to_pci_dev(dev->dev), info);
+
 	return 0;
 
 out_unlock:
@@ -547,7 +550,7 @@ nouveau_fbcon_init(struct drm_device *dev)
 	int ret;
 
 	if (!dev->mode_config.num_crtc ||
-	    (dev->pdev->class >> 8) != PCI_CLASS_DISPLAY_VGA)
+	    (to_pci_dev(dev->dev)->class >> 8) != PCI_CLASS_DISPLAY_VGA)
 		return 0;
 
 	fbcon = kzalloc(sizeof(struct nouveau_fbdev), GFP_KERNEL);

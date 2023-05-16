@@ -3,16 +3,6 @@
 # Platform support for Chrome OS hardware (Chromebooks and Chromeboxes)
 #
 
-config MFD_CROS_EC
-	tristate "Platform support for Chrome hardware (transitional)"
-	select CHROME_PLATFORMS
-	select CROS_EC
-	select MFD_CROS_EC_DEV
-	depends on X86 || ARM || ARM64 || COMPILE_TEST
-	help
-	  This is a transitional Kconfig option and will be removed after
-	  everyone enables the parts individually.
-
 menuconfig CHROME_PLATFORMS
 	bool "Platform support for Chrome hardware"
 	depends on X86 || ARM || ARM64 || COMPILE_TEST
@@ -24,6 +14,17 @@ menuconfig CHROME_PLATFORMS
 	  If you say N, all options in this submenu will be skipped and disabled.
 
 if CHROME_PLATFORMS
+
+config CHROMEOS_ACPI
+	tristate "ChromeOS specific ACPI extensions"
+	depends on ACPI
+	help
+	  This driver provides the firmware interface for the services
+	  exported through the ChromeOS interfaces when using ChromeOS
+	  ACPI firmware.
+
+	  If you have an ACPI-compatible Chromebook, say Y or M here.
+	  The module will be called chromeos_acpi.
 
 config CHROMEOS_LAPTOP
 	tristate "Chrome OS Laptop"
@@ -218,6 +219,7 @@ config CROS_EC_TYPEC
 	tristate "ChromeOS EC Type-C Connector Control"
 	depends on MFD_CROS_EC_DEV && TYPEC
 	depends on CROS_USBPD_NOTIFY
+	depends on USB_ROLE_SWITCH
 	default MFD_CROS_EC_DEV
 	help
 	  If you say Y here, you get support for accessing Type C connector
@@ -251,6 +253,17 @@ config CROS_USBPD_NOTIFY
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called cros_usbpd_notify.
+
+config CHROMEOS_PRIVACY_SCREEN
+	tristate "ChromeOS Privacy Screen support"
+	depends on ACPI
+	depends on DRM
+	select DRM_PRIVACY_SCREEN
+	help
+	  This driver provides the support needed for the in-built electronic
+	  privacy screen that is present on some ChromeOS devices. When enabled,
+	  this should probably always be built into the kernel to avoid or
+	  minimize drm probe deferral.
 
 source "drivers/platform/chrome/wilco_ec/Kconfig"
 

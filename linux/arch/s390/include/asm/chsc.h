@@ -12,6 +12,13 @@
 #include <uapi/asm/chsc.h>
 
 /**
+ * Operation codes for CHSC PNSO:
+ *    PNSO_OC_NET_BRIDGE_INFO - only addresses that are visible to a bridgeport
+ *    PNSO_OC_NET_ADDR_INFO   - all addresses
+ */
+#define PNSO_OC_NET_BRIDGE_INFO		0
+#define PNSO_OC_NET_ADDR_INFO		3
+/**
  * struct chsc_pnso_naid_l2 - network address information descriptor
  * @nit:  Network interface token
  * @addr_lnid: network address and logical network id (VLAN ID)
@@ -56,7 +63,7 @@ struct chsc_pnso_area {
 	struct chsc_header response;
 	u32:32;
 	struct chsc_pnso_naihdr naihdr;
-	struct chsc_pnso_naid_l2 entries[0];
+	struct chsc_pnso_naid_l2 entries[];
 } __packed __aligned(PAGE_SIZE);
 
 #endif /* _ASM_S390_CHSC_H */

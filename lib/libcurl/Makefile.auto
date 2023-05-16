@@ -1,1 +1,1 @@
-dep_libcurl = libidn zlib libbzip2 libssl
+dep_libcurl = libidn zlib libbzip2 openssl

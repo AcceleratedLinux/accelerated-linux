@@ -118,7 +118,7 @@ ifdef UCLINUX_BUILD_LIB
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
 
   ifdef BUILD_SHARED
-	CFLAGS  += -mid-shared-library
+	CFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
   else
 	ifndef DISABLE_XIP
 	  CFLAGS  += -msep-data
@@ -134,13 +134,8 @@ ifdef UCLINUX_BUILD_LIB
   ifndef DISABLE_MOVE_RODATA
   	LDFLAGS += -Wl,-move-rodata
   endif
-
   ifdef BUILD_SHARED
-	LDFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
-  else
-	ifndef DISABLE_XIP
-	  LDFLAGS  += -msep-data
-	endif
+	LDFLAGS += -shared-lib-id,0
   endif
 
 	UCLINUX_BUILD_SET=1
@@ -167,7 +162,7 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
 
   ifdef BUILD_SHARED
-	CFLAGS  += -mid-shared-library -mshared-library-id=0
+	CFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
   else
 	ifndef DISABLE_XIP
 	  CFLAGS  += -msep-data
@@ -187,13 +182,8 @@ ifdef UCLINUX_BUILD_USER
   ifndef DISABLE_MOVE_RODATA
   	LDFLAGS += -Wl,-move-rodata
   endif
-
   ifdef BUILD_SHARED
-	LDFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
-  else
-	ifndef DISABLE_XIP
-	  LDFLAGS  += -msep-data
-	endif
+	LDFLAGS += -shared-lib-id,0
   endif
 
   ifndef FLTFLAGS

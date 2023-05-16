@@ -449,7 +449,16 @@ static int atsha204_i2c_get_random(u8 *to_fill, const size_t max)
 static int atsha204_i2c_rng_read(struct hwrng *rng, void *data,
 				 size_t max, bool wait)
 {
-	return atsha204_i2c_get_random(data, max);
+	int ret;
+	int retry = 3;
+
+	while (retry-- > 0) {
+		ret = atsha204_i2c_get_random(data, max);
+		if (ret > 0)
+			break;
+	}
+
+	return ret;
 }
 
 static struct hwrng atsha204_i2c_rng = {

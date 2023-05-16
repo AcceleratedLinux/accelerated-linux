@@ -1,89 +1,1249 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 
 <powerstrips>
-	<powerstrip>
+
+	<serial>
+		<id>WTI Metered Switch PDU VMR-HD4D32</id>
+		<outlets>4</outlets>
+		<on>/etc/scripts/power-wti-VMR-HD4D32 "${port}" "${outlet}" on "${username}" "${password}"</on>
+		<off>/etc/scripts/power-wti-VMR-HD4D32 "${port}" "${outlet}" off "${username}" "${password}"</off>
+		<cycle>/etc/scripts/power-wti-VMR-HD4D32 "${port}" "${outlet}" cycle "${username}" "${password}"</cycle>
+		<status>/etc/scripts/power-wti-VMR-HD4D32 "${port}" "${outlet}" status "${username}" "${password}"</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<network>
+		<id>IPMI 1.5</id>
+		<outlets>1</outlets>
+		<on>if [ -z "$username" ]; then ipmitool -I lan -P ${password} -H ${host} chassis power on; else ipmitool -I lan -U ${username} -P ${password} -H ${host} chassis power on; fi</on>
+		<off>if [ -z "$username" ]; then ipmitool -I lan -P ${password} -H ${host} chassis power off; else ipmitool -I lan -U ${username} -P ${password} -H ${host} chassis power off; fi</off>
+		<cycle>if [ -z "$username" ]; then ipmitool -I lan -P ${password} -H ${host} chassis power cycle; else ipmitool -I lan -U ${username} -P ${password} -H ${host} chassis power cycle; fi</cycle>
+		<status>if [ -z "$username" ]; then ipmitool -I lan -P ${password} -H ${host} chassis power status; else ipmitool -I lan -U ${username} -P ${password} -H ${host} chassis power status; fi</status>
+	</network>
+
+	<network>
+		<id>IPMI 2.0</id>
+		<outlets>1</outlets>
+		<on>if [ -z "$username" ]; then ipmitool -I lanplus -P ${password} -H ${host} chassis power on; else ipmitool -I lanplus -U ${username} -P ${password} -H ${host} chassis power on; fi</on>
+		<off>if [ -z "$username" ]; then ipmitool -I lanplus -P ${password} -H ${host} chassis power off; else ipmitool -I lanplus -U ${username} -P ${password} -H ${host} chassis power off; fi</off>
+		<cycle>if [ -z "$username" ]; then ipmitool -I lanplus -P ${password} -H ${host} chassis power cycle; else ipmitool -I lanplus -U ${username} -P ${password} -H ${host} chassis power cycle; fi</cycle>
+		<status>if [ -z "$username" ]; then ipmitool -I lanplus -P ${password} -H ${host} chassis power status; else ipmitool -I lanplus -U ${username} -P ${password} -H ${host} chassis power status; fi</status>
+	</network>
+
+	<serial>
+		<id>IP Power 9258 via RS232</id>
+
+		<outlets>4</outlets>
+
+		<async/>
+		<on>/etc/scripts/power-ip9258 "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-ip9258 "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-ip9258 "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-ip9258 "$port" "$outlets" status</status>
+		<speed>19200</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Black Box Elite Managed Power Controller</id>
+		<outlets>8</outlets>
+		<on>/etc/scripts/power-wti "${port}" "${outlet}" on "${username}" "${password}"</on>
+		<off>/etc/scripts/power-wti "${port}" "${outlet}" off "${username}" "${password}"</off>
+		<cycle>/etc/scripts/power-wti "${port}" "${outlet}" cycle "${username}" "${password}"</cycle>
+		<status>/etc/scripts/power-wti "${port}" "${outlet}" status "${username}" "${password}"</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
 		<id>Dataprobe CP-815</id>
 
-		<outlet port="1">1</outlet>
-		<outlet port="2">2</outlet>
-		<outlet port="3">3</outlet>
-		<outlet port="4">4</outlet>
-		<outlet port="5">5</outlet>
-		<outlet port="6">6</outlet>
-		<outlet port="7">7</outlet>
-		<outlet port="8">8</outlet>
+		<outlets>8</outlets>
 
-		<on>pmchat -t 3 "" "^[PASS${outlet}ON" "${outlet} ON"</on>
-		<off>pmchat -t 3 "" "^[PASS${outlet}OFF" "${outlet} OFF"</off>
-		<cycle>pmchat -t 3 "" "^[PASS${outlet}C" "${outlet} CYCLE"</cycle>
-		<status>pmchat -t 3 -r /var/run/power-status "^[PASS?" REPORT "${outlet} " "8 "</status>
+		<on>pmchat -t 3 "" "^[PASS${outlet}ON" "${outlet} ON" &lt; ${port} &gt; ${port}</on>
+		<off>pmchat -t 3 "" "^[PASS${outlet}OFF" "${outlet} OFF" &lt; ${port} &gt; ${port}</off>
+		<cycle>pmchat -t 3 "" "^[PASS${outlet}C" "${outlet} CYCLE" &lt; ${port} &gt; ${port}</cycle>
+		<status>pmchat -t 3 -r /var/run/power-status "^[PASS?" REPORT "${outlet} " "8 " &lt; ${port} &gt; ${port}</status>
 		<speed>9600</speed>
 		<charsize>8</charsize>
 		<stop>1</stop>
 		<parity>None</parity>
-	</powerstrip>
+	</serial>
 
-	<powerstrip>
+	<serial>
 		<id>Western Telematic RPB-115</id>
 
-		<outlet port="*">All</outlet>
-		<outlet port="1">1</outlet>
-		<outlet port="2">2</outlet>
-		<outlet port="3">3</outlet>
-		<outlet port="4">4</outlet>
-		<outlet port="5">5</outlet>
+		<outlets>5</outlets>
 
-		<cycle>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}"</cycle>
+		<cycle>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}" &lt; ${port} &gt; ${port}</cycle>
 		<speed>9600</speed>
 		<charsize>8</charsize>
 		<stop>1</stop>
 		<parity>None</parity>
-	</powerstrip>
+	</serial>
 
-	<powerstrip>
+	<serial>
 		<id>Western Telematic RPS-110</id>
 
-		<outlet port="*">All</outlet>
-		<outlet port="0">0</outlet>
-		<outlet port="1">1</outlet>
-		<outlet port="2">2</outlet>
-		<outlet port="3">3</outlet>
-		<outlet port="4">4</outlet>
-		<outlet port="5">5</outlet>
-		<outlet port="6">6</outlet>
-		<outlet port="7">7</outlet>
-		<outlet port="8">8</outlet>
-		<outlet port="9">9</outlet>
+		<outlets>10</outlets>
 
-		<on>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}1" "COMPLETE"</on>
-		<off>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}0" "COMPLETE"</off>
-		<cycle>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}T" "COMPLETE"</cycle>
-		<status>pmchat -t 3 -r /var/run/power-status "" "^B^X^X^B^X^X${outlet}?" REPORT "" "COMPLETE"</status>
+		<on>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}1" "COMPLETE" &lt; ${port} &gt; ${port}</on>
+		<off>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}0" "COMPLETE" &lt; ${port} &gt; ${port}</off>
+		<cycle>pmchat -t 3 "" "^B^X^X^B^X^X${outlet}T" "COMPLETE" &lt; ${port} &gt; ${port}</cycle>
+		<status>pmchat -t 3 -r /var/run/power-status "" "^B^X^X^B^X^X${outlet}?" REPORT "" "COMPLETE" &lt; ${port} &gt; ${port}</status>
 		<speed>9600</speed>
 		<charsize>8</charsize>
 		<stop>1</stop>
 		<parity>None</parity>
-	</powerstrip>
+	</serial>
 
-	<powerstrip>
+	<serial>
+		<id>WTI Metered Switch PDU</id>
+		<outlets>8</outlets>
+		<on>/etc/scripts/power-wti "${port}" "${outlet}" on "${username}" "${password}"</on>
+		<off>/etc/scripts/power-wti "${port}" "${outlet}" off "${username}" "${password}"</off>
+		<cycle>/etc/scripts/power-wti "${port}" "${outlet}" cycle "${username}" "${password}"</cycle>
+		<status>/etc/scripts/power-wti "${port}" "${outlet}" status "${username}" "${password}"</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
 		<id>MicroEnergetics RPC S6</id>
 
-		<outlet port="*">All</outlet>
-		<outlet port="1">1</outlet>
-		<outlet port="2">2</outlet>
-		<outlet port="3">3</outlet>
-		<outlet port="4">4</outlet>
-		<outlet port="5">5</outlet>
-		<outlet port="6">6</outlet>
+		<outlets>6</outlets>
 
-		<on>pmchat -t 3 "" "//${outlet},0,*;" "OK"</on>
-		<off>pmchat -t 3 "" "//${outlet},0,0" "OK"</off>
-		<cycle>pmchat -t 3 "" "//${outlet},0,0;//${outlet},10,*;" "OK"</cycle>
+		<on>pmchat -t 3 "" "//${outlet},0,*;" "OK" &lt; ${port} &gt; ${port}</on>
+		<off>pmchat -t 3 "" "//${outlet},0,0" "OK" &lt; ${port} &gt; ${port}</off>
+		<cycle>pmchat -t 3 "" "//${outlet},0,0;//${outlet},10,*;" "OK" &lt; ${port} &gt; ${port}</cycle>
 		<speed>9600</speed>
 		<charsize>8</charsize>
 		<stop>1</stop>
 		<parity>None</parity>
-	</powerstrip>
+	</serial>
 
+	<serial>
+		<id>PDUeX SL2</id>
+
+		<outlets>2</outlets>
+
+		<async/>
+		<on>/etc/scripts/power-pduex "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-pduex "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-pduex "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-pduex "$port" "$outlets" status</status>
+		<speed>115200</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>CyberPower PDUxxSWHVIEC8FNET</id>
+		<outlets>8</outlets>
+		<async/>
+		<on>/etc/scripts/power-cyberpower "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-cyberpower "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-cyberpower "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-cyberpower "$port" "$outlets" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Raritan Dominion PX</id>
+
+		<async/>
+		<probe>/etc/scripts/power-raritan "$port" "0" probe</probe>
+		<on>/etc/scripts/power-raritan "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-raritan "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-raritan "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-raritan "$port" "$outlets" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Raritan Dominion PX2</id>
+
+		<async/>
+		<probe>/etc/scripts/power-raritan-px2 "$port" "0" probe</probe>
+		<on>/etc/scripts/power-raritan-px2 "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-raritan-px2 "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-raritan-px2 "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-raritan-px2 "$port" "$outlets" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Raritan Dominion PX3</id>
+
+		<async/>
+		<probe>/etc/scripts/power-raritan-px2 "$port" "0" probe</probe>
+		<on>/etc/scripts/power-raritan-px2 "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-raritan-px2 "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-raritan-px2 "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-raritan-px2 "$port" "$outlets" status</status>
+		<speed>115200</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Rose UltraPower</id>
+
+		<outlets>12</outlets>
+
+		<on>if [ "${outlet}" -lt 10 ]; then outlet="0${outlet}"; fi; pmchat -t 2 "ASSWORD? >--ASSWORD? >" "${password}" ">" "ON${outlet}" "OK" &lt; ${port} &gt; ${port}</on>
+		<off>if [ "${outlet}" -lt 10 ]; then outlet="0${outlet}"; fi; pmchat -t 2 "ASSWORD? >--ASSWORD? >" "${password}" ">" "OF${outlet}" "OK" &lt; ${port} &gt; ${port}</off>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>APC PDU</id>
+		<outlets>24</outlets>
+
+		<on>pmchat -t 5 "" "\r\r" "User Name :" "${username}" "${username}" "${password}" "&gt; " "1" "&gt; " "3" "&gt; " "\r" "&gt; " "${outlet}" "&gt; " "1" "&gt; " "1" "to cancel : " "yes" "continue..." "\r" "&gt; " "^[" "&gt; " "^[" "&gt; " "^[" "&gt; " "^[" "&gt; " "4" &lt; ${port} &gt; ${port}; if [ "$?" ]; then echo "Success"; else echo "ERROR: APC PDU is not responding"; fi</on>
+		<off>pmchat -t 5 "" "\r\r" "User Name :" "${username}" "${username}" "${password}" "&gt; " "1" "&gt; " "3" "&gt; " "\r" "&gt; " "${outlet}" "&gt; " "1" "&gt; " "2" "to cancel : " "yes" "continue..." "\r" "&gt; " "^[" "&gt; " "^[" "&gt; " "^[" "&gt; " "^[" "&gt; " "4" &lt; ${port} &gt; ${port}; if [ "$?" ]; then echo "Success"; else echo "ERROR: APC PDU is not responding"; fi</off>
+		<cycle>pmchat -t 5 "" "\r\r" "User Name :" "${username}" "${username}" "${password}" "&gt; " "1" "&gt; " "3" "&gt; " "\r" "&gt; " "${outlet}" "&gt; " "1" "&gt; " "6" "to cancel : " "yes" "continue..." "\r" "&gt; " "^[" "&gt; " "^[" "&gt; " "^[" "&gt; " "^[" "&gt; " "4" &lt; ${port} &gt; ${port};if [ "$?" ]; then echo "Success"; else echo "ERROR: APC PDU is not responding"; fi</cycle>
+		<status>pmout=`pmchat -t 5 ECHO ON "" "\r\r" "User Name :" "${username}" "${username}" "${password}" "&gt; " "1" "&gt; " "3" "&gt; " "\r" "&gt; " "^[" "&gt; " "^[" "&gt; " "4" &lt; ${port} 2&gt;&amp;1 | grep " ${outlet}- " | grep "[ON|OFF]" | tail -n 1`; echo "Power status: ${pmout}"</status>
+
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>APC PDU AP8959 (APPv6.1.3/AOSv6.1.3)</id>
+
+		<async/>
+		<probe>/etc/scripts/power-apc "$port" "0" probe</probe>
+		<on>/etc/scripts/power-apc "$port" "$outlets" on</on>
+		<off>/etc/scripts/power-apc "$port" "$outlets" off</off>
+		<cycle>/etc/scripts/power-apc "$port" "$outlets" cycle</cycle>
+		<status>/etc/scripts/power-apc "$port" "$outlets" status</status>
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>APC PDU AP8959 (APPv5.1.6/AOSv5.1.9)</id>
+		<outlets>24</outlets>
+
+		<on>pmchat -t 5 "" "\r\r" "User Name : " "${username}" "${username}" "${password}" "&gt;" "olOn ${outlet}" "&gt;" "exit" &lt; ${port} &gt; ${port}; if [ "$?" ]; then echo "Success"; else echo "ERROR: APC PDU is not responding"; fi</on>
+		<off>pmchat -t 5 "" "\r\r" "User Name : " "${username}" "${username}" "${password}" "&gt;" "olOff ${outlet}" "&gt;" "exit" &lt; ${port} &gt; ${port}; if [ "$?" ]; then echo "Success"; else echo "ERROR: APC PDU is not responding"; fi</off>
+		<cycle>pmchat -t 5 "" "\r\r" "User Name : " "${username}" "${username}" "${password}" "&gt;" "olReboot ${outlet}" "&gt;" "exit" &lt; ${port} &gt; ${port};if [ "$?" ]; then echo "Success"; else echo "ERROR: APC PDU is not responding"; fi</cycle>
+		<status>pmout=`pmchat -t 5 ECHO ON "" "\r\r" "User Name : " "${username}" "${username}" "${password}" "&gt;" "olStatus all" "&gt;" "exit" &lt; ${port} 2&gt;&amp;1 | grep "[On|Off]" | tail -n 24`; echo -e "Power status:\r\n${pmout}"</status>
+
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+        <serial>
+                <id>APC PDU AP8953 AP8959 (APPv6.4.6/AOSv6.4.6)</id>
+
+                <async/>
+                <probe>/etc/scripts/power-apc "$port" "0" probe</probe>
+                <on>/etc/scripts/power-apc "$port" "$outlets" on</on>
+                <off>/etc/scripts/power-apc "$port" "$outlets" off</off>
+                <cycle>/etc/scripts/power-apc "$port" "$outlets" cycle</cycle>
+                <status>/etc/scripts/power-apc "$port" "$outlets" status</status>
+
+                <speed>9600</speed>
+                <charsize>8</charsize>
+                <stop>1</stop>
+                <parity>None</parity>
+        </serial>
+
+	<serial>
+		<id>Server Technology Sentry Switched CDU (Single Bank)</id>
+
+		<async/>
+		<probe>/etc/scripts/power-servertech "${username}" "${password}" 0 ${port} 0 probe</probe>
+		<on>/etc/scripts/power-servertech "${username}" "${password}" 0 ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-servertech "${username}" "${password}" 0 ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-servertech "${username}" "${password}" 0 ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-servertech "${username}" "${password}" 0 ${port} "${outlets}" status</status>
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Server Technology Sentry Switched CDU (Multi Bank)</id>
+
+		<async/>
+		<probe>/etc/scripts/power-servertech "${username}" "${password}" 1 ${port} 0 probe</probe>
+		<on>/etc/scripts/power-servertech "${username}" "${password}" 1 ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-servertech "${username}" "${password}" 1 ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-servertech "${username}" "${password}" 1 ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-servertech "${username}" "${password}" 1 ${port} "${outlets}" status</status>
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Server Technology Sentry Switched CDU V8.0 (Multi Bank)</id>
+
+		<async/>
+		<probe>/etc/scripts/power-servertech-v8 "${username}" "${password}" 2 ${port} 0 probe</probe>
+		<on>/etc/scripts/power-servertech-v8 "${username}" "${password}" 2 ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-servertech-v8 "${username}" "${password}" 2 ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-servertech-v8 "${username}" "${password}" 2 ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-servertech-v8 "${username}" "${password}" 2 ${port} "${outlets}" status</status>
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Server Technology Sentry Switched CDU (Multi Tower, Multi Bank)</id>
+
+		<async/>
+		<probe>/etc/scripts/power-servertech "${username}" "${password}" 2 ${port} 0 probe</probe>
+		<on>/etc/scripts/power-servertech "${username}" "${password}" 2 ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-servertech "${username}" "${password}" 2 ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-servertech "${username}" "${password}" 2 ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-servertech "${username}" "${password}" 2 ${port} "${outlets}" status</status>
+
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+        <serial>
+                <id>Avocent PM3000</id>
+		<async/>
+                <outlets>20</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+                <speed>9600</speed>
+                <charsize>8</charsize>
+                <stop>1</stop>
+                <parity>None</parity>
+                <powerman>
+                        <name>avocent-pm3000</name>
+                </powerman>
+        </serial>
+
+	<serial>
+		<id>Baytech RPC-3</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>baytech</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Baytech RPC3-20NC</id>
+		<async/>
+		<outlets>8</outlets>
+
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>baytech-rpc3-nc</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Baytech RPC28-30NC</id>
+		<async/>
+		<outlets>20</outlets>
+
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>baytech-rpc28-nc</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Baytech RPC52NC</id>
+		<async/>
+		<outlets>21</outlets>
+
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>baytech-rpc52-nc</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Baytech RPC53NC</id>
+		<async/>
+                <outlets>18</outlets>
+
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+                <speed>9600</speed>
+                <charsize>8</charsize>
+                <stop>1</stop>
+                <parity>None</parity>
+                <powerman>
+                        <name>baytech-rpc53-nc</name>
+                </powerman>
+       </serial>
+
+	<serial>
+		<id>Baytech Serial IPDU Devices (SNMP)</id>
+		<async/>
+		<outlets>8</outlets>
+
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>baytechOG</name>
+			<command>/bin/baytech -i -l $port</command>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 7900 (APPv2.7.3/AOSv2.7.0)</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apc7900</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 7900 (APPv3.7.3/AOSv3.7.3)</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apc7900new</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 7900B (APPv6.4.6/AOSv6.4.6)</id>
+		<async/>
+		<outlets>8</outlets>
+		<on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apc7900b</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 8 Port (APPv2.0.0/AOSv2.5.4)</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apc</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 8 Port (APPv2.2.0/AOSv3.0.3)</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apcnew</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 8 Port (APPv2.0.2/AOSv2.5.3)</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apcnew</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 8 Port (AP9210)</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apcold</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 24 Port (AP7998)</id>
+		<async/>
+		<outlets>24</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apcpdu4</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 24 Port (APPv3.3.3/AOSv3.4.4)</id>
+		<async/>
+		<outlets>24</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apcpdu3</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>APC 24 Port (APPv2.6.5/AOSv2.6.4)</id>
+		<async/>
+		<outlets>24</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>apcpdu</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Measurement Computing Corp. CB-7050</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+                <load>/etc/scripts/power-powerman-async ${port} "${outlets}" load</load>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>cb-7050</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Cyclades PM8</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+                <load>/etc/scripts/power-powerman-async ${port} "${outlets}" load</load>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>cyclades-pm8</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Cyclades PM10</id>
+		<async/>
+		<outlets>10</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+                <load>/etc/scripts/power-powerman-async ${port} "${outlets}" load</load>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>cyclades-pm10</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Cyclades PM20</id>
+		<async/>
+		<outlets>20</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+                <load>/etc/scripts/power-powerman-async ${port} "${outlets}" load</load>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>cyclades-pm20</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Digital Loggers</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>dli</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>HP 3488</id>
+		<async/>
+		<outlets>1</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>hp3488</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>IBM Blade Center</id>
+		<async/>
+		<outlets>15</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>ibmbladecenter</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>IBM H8</id>
+		<async/>
+		<outlets>1</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>ibmh8</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Linux Networx ICE Box v3.x, v4.x</id>
+		<async/>
+		<outlets>10</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>icebox3</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Linux Networx ICE Box v2.x</id>
+		<async/>
+		<outlets>10</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>icebox</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>ICS 8064</id>
+		<async/>
+		<outlets>16</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>ics8064</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Sun Integrated Lights Out Management</id>
+		<async/>
+		<outlets>1</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>ilom</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Phantom v3, v4</id>
+		<async/>
+		<outlets>1</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>phantom</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>Appro</id>
+		<async/>
+		<outlets>48</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>swpdu</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>WTI NetPowerSeries</id>
+		<async/>
+		<outlets>8</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>wti</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>WTI RPS10</id>
+		<async/>
+		<outlets>10</outlets>
+                <on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+                <off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+                <cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+                <temp>/etc/scripts/power-powerman-async ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<powerman>
+			<name>wti-rps10</name>
+		</powerman>
+	</serial>
+
+	<serial>
+		<id>TrippLite PowerAlert Engine Version 12.06.0061</id>
+		<async />
+		<outlets>24</outlets>
+		<on>/etc/scripts/power-tripplite ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-tripplite ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-tripplite ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-tripplite ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>TrippLite PowerAlert Engine Version 15.04</id>
+		<async />
+		<outlets>8</outlets>
+		<on>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" status</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>TrippLite PowerAlert Engine Version 15.05</id>
+		<async/>
+		<outlets>8</outlets>
+		<on>/etc/scripts/power-tripplite-v15-05 ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-tripplite-v15-05 ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-tripplite-v15-05 ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-tripplite-v15-05 ${port} "${outlets}" status</status>
+		<speed>115200</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<serial>
+		<id>Panduit G5 Series</id>
+		<async/>
+		<outlets>16</outlets>
+		<on>/etc/scripts/power-panduit-g5-series ${username} ${password} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-panduit-g5-series ${username} ${password} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-panduit-g5-series ${username} ${password} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-panduit-g5-series ${username} ${password} ${port} "${outlets}" status</status>
+		<speed>115200</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</serial>
+
+	<network>
+		<id>SNMP Controlled Raritan PX</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>raritan_px</mib>
+			<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Raritan PX2</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>raritan_px2</mib>
+			<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled TrippLite</id>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+		<on>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.on</on>
+		<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+		<status>status=`/bin/upsc rpc_${host} outlet.${outlet}.status`; echo "outlet ${outlet} is ${status}"</status>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>tripplite</mib>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled TrippLite LX Platform</id>
+		<async/>
+		<probe>/etc/scripts/power-tripplite-lx ${host} 0 probe</probe>
+		<on>/etc/scripts/power-tripplite-lx ${host} "${outlets}" on</on>
+		<off>/etc/scripts/power-tripplite-lx ${host} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-tripplite-lx ${host} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-tripplite-lx ${host} "${outlets}" status</status>
+	</network>
+
+	<network>
+		<id>SNMP Controlled TrippLite ATS LX Platform</id>
+		<async/>
+		<probe>/etc/scripts/power-tripplite-lx-ats ${host} 0 probe</probe>
+		<on>/etc/scripts/power-tripplite-lx-ats ${host} "${outlets}" on</on>
+		<off>/etc/scripts/power-tripplite-lx-ats ${host} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-tripplite-lx-ats ${host} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-tripplite-lx-ats ${host} "${outlets}" status</status>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Avocent</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>avocent</mib>
+			<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Baytech</id>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.on</on>
+		<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+		<status>status=`/bin/upsc rpc_${host} outlet.${outlet}.status`; echo "outlet ${outlet} is ${status}"</status>
+		<temp>/bin/upsc rpc_${host} ups.temperature</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>baytech</mib>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Emerson Rack PDU</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>emerson_pdu</mib>
+			<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Servertech</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>servertech</mib>
+			<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Servertech PRO2</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+				<mib>sentry4</mib>
+				<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Leviton</id>
+		<async/>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+		<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+		<temp>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" temp</temp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+		<snmp>
+			<mib>servertech</mib>
+			<version>v2c</version>
+		</snmp>
+	</network>
+
+	<network>
+		<id>SNMP Controlled Eaton/Aphel Revelation</id>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.on</on>
+		<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+		<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+		<cycle>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.cycle</cycle>
+		<status>status=`/bin/upsc rpc_${host} outlet.${outlet}.status`; echo "outlet ${outlet} is ${status}"</status>
+		<temp>/bin/upsc rpc_${host} ups.temperature</temp>
+		<load>/bin/upsc rpc_${host} ups.current</load>
+		<outlet_load>/bin/upsc rpc_${host} outlet.${outlet}.current</outlet_load>
+		<snmp>
+			<mib>aphel_revelation</mib>
+		</snmp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</network>
+
+	<network>
+		<id>SNMP Controlled APC</id>
+		<probe>/bin/upsc rpc_${host} outlet.count</probe>
+
+		<on>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.on</on>
+		<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+		<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+		<cycle>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.cycle</cycle>
+		<status>status=`/bin/upsc rpc_${host} outlet.${outlet}.status`; echo "outlet ${outlet} is ${status}"</status>
+		<load>/bin/upsc rpc_${host} ups.load</load>
+		<snmp>
+			<mib>apcc_rpc</mib>
+		</snmp>
+		<speed>9600</speed>
+		<charsize>8</charsize>
+		<stop>1</stop>
+		<parity>None</parity>
+	</network>
+
+	<network>
+		<async/>
+		<id>SNMP Controlled Opengear IP-PDU 9108</id>
+		<probe>/etc/scripts/power-digipower ${host} 0 probe</probe>
+		<on>/etc/scripts/power-digipower ${host} "${outlets}" on</on>
+		<off>/etc/scripts/power-digipower ${host} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-digipower ${host} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-digipower ${host} "${outlets}" status</status>
+		<load>/etc/scripts/power-digipower ${host} 0 load</load>
+	</network>
+
+	<network>
+		<async/>
+		<id>SNMP Controlled DigiPower</id>
+		<probe>/etc/scripts/power-digipower ${host} 0 probe</probe>
+		<on>/etc/scripts/power-digipower ${host} "${outlets}" on</on>
+		<off>/etc/scripts/power-digipower ${host} "${outlets}" off</off>
+		<cycle>/etc/scripts/power-digipower ${host} "${outlets}" cycle</cycle>
+		<status>/etc/scripts/power-digipower ${host} "${outlets}" status</status>
+		<load>/etc/scripts/power-digipower ${host} 0 load</load>
+	</network>
 </powerstrips>
-

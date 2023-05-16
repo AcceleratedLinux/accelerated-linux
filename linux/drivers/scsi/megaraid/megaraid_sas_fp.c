@@ -80,21 +80,20 @@ u32 mega_mod64(u64 dividend, u32 divisor)
 }
 
 /**
- * @param dividend    : Dividend
- * @param divisor    : Divisor
+ * mega_div64_32 - Do a 64-bit division
+ * @dividend:	Dividend
+ * @divisor:	Divisor
  *
  * @return quotient
  **/
 static u64 mega_div64_32(uint64_t dividend, uint32_t divisor)
 {
-	u32 remainder;
-	u64 d;
+	u64 d = dividend;
 
 	if (!divisor)
 		printk(KERN_ERR "megasas : DIVISOR is zero in mod fn\n");
 
-	d = dividend;
-	remainder = do_div(d, divisor);
+	do_div(d, divisor);
 
 	return d;
 }
@@ -350,6 +349,10 @@ u8 MR_ValidateMapInfo(struct megasas_instance *instance, u64 map_id)
 
 	num_lds = le16_to_cpu(drv_map->raidMap.ldCount);
 
+	memcpy(instance->ld_ids_prev,
+	       instance->ld_ids_from_raidmap,
+	       sizeof(instance->ld_ids_from_raidmap));
+	memset(instance->ld_ids_from_raidmap, 0xff, MEGASAS_MAX_LD_IDS);
 	/*Convert Raid capability values to CPU arch */
 	for (i = 0; (num_lds > 0) && (i < MAX_LOGICAL_DRIVES_EXT); i++) {
 		ld = MR_TargetIdToLdGet(i, drv_map);
@@ -360,7 +363,7 @@ u8 MR_ValidateMapInfo(struct megasas_instance *instance, u64 map_id)
 
 		raid = MR_LdRaidGet(ld, drv_map);
 		le32_to_cpus((u32 *)&raid->capability);
-
+		instance->ld_ids_from_raidmap[i] = i;
 		num_lds--;
 	}
 

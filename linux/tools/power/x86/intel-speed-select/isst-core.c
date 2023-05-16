@@ -201,6 +201,7 @@ void isst_get_uncore_mem_freq(int cpu, int config_index,
 {
 	unsigned int resp;
 	int ret;
+
 	ret = isst_send_mbox_command(cpu, CONFIG_TDP, CONFIG_TDP_GET_MEM_FREQ,
 				     0, config_index, &resp);
 	if (ret) {
@@ -209,6 +210,20 @@ void isst_get_uncore_mem_freq(int cpu, int config_index,
 	}
 
 	ctdp_level->mem_freq = resp & GENMASK(7, 0);
+	if (is_spr_platform()) {
+		ctdp_level->mem_freq *= 200;
+	} else if (is_icx_platform()) {
+		if (ctdp_level->mem_freq < 7) {
+			ctdp_level->mem_freq = (12 - ctdp_level->mem_freq) * 133.33 * 2 * 10;
+			ctdp_level->mem_freq /= 10;
+			if (ctdp_level->mem_freq % 10 > 5)
+				ctdp_level->mem_freq++;
+		} else {
+			ctdp_level->mem_freq = 0;
+		}
+	} else {
+		ctdp_level->mem_freq = 0;
+	}
 	debug_printf(
 		"cpu:%d ctdp:%d CONFIG_TDP_GET_MEM_FREQ resp:%x uncore mem_freq:%d\n",
 		cpu, config_index, resp, ctdp_level->mem_freq);
@@ -396,7 +411,7 @@ int isst_get_pbf_info(int cpu, int level, struct isst_pbf_info *pbf_info)
 {
 	struct isst_pkg_ctdp_level_info ctdp_level;
 	struct isst_pkg_ctdp pkg_dev;
-	int i, ret, core_cnt, max;
+	int i, ret, max_punit_core, max_mask_index;
 	unsigned int req, resp;
 
 	ret = isst_get_ctdp_levels(cpu, &pkg_dev);
@@ -421,10 +436,10 @@ int isst_get_pbf_info(int cpu, int level, struct isst_pbf_info *pbf_info)
 
 	pbf_info->core_cpumask_size = alloc_cpu_set(&pbf_info->core_cpumask);
 
-	core_cnt = get_core_count(get_physical_package_id(cpu), get_physical_die_id(cpu));
-	max = core_cnt > 32 ? 2 : 1;
+	max_punit_core = get_max_punit_core_id(get_physical_package_id(cpu), get_physical_die_id(cpu));
+	max_mask_index = max_punit_core > 32 ? 2 : 1;
 
-	for (i = 0; i < max; ++i) {
+	for (i = 0; i < max_mask_index; ++i) {
 		unsigned long long mask;
 		int count;
 
@@ -665,6 +680,17 @@ int isst_get_fact_info(int cpu, int level, int fact_bucket, struct isst_fact_inf
 	return 0;
 }
 
+int isst_get_trl(int cpu, unsigned long long *trl)
+{
+	int ret;
+
+	ret = isst_send_msr_command(cpu, 0x1AD, 0, trl);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 int isst_set_trl(int cpu, unsigned long long trl)
 {
 	int ret;
@@ -804,7 +830,7 @@ int isst_get_process_ctdp(int cpu, int tdp_level, struct isst_pkg_ctdp *pkg_dev)
 				return ret;
 		}
 
-		if (!pkg_dev->enabled) {
+		if (!pkg_dev->enabled && is_skx_based_platform()) {
 			int freq;
 
 			freq = get_cpufreq_base_freq(cpu);

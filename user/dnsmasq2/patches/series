@@ -1,5 +1,5 @@
 dhcp-lease-netmask-0.patch
 nxdomain.patch
 option-value-error-ignore.patch
-include-sockios.patch
-Added-option-to-send-Cisco-Umbrella-EDNS0-header.patch
+Fix-Umbrella-device-ID-parsing.patch
+Don-t-send-IP-address-to-Umbrella-by-default.patch

@@ -1,0 +1,72 @@
+#!/bin/sh
+
+if [ -f "/etc/config/scripts/alert-email" ]; then
+	exec "/etc/config/scripts/alert-email" $@
+fi
+
+suffix=$1
+prefix="config.system.smtp"
+
+mailhost=$(config -g $prefix.server$suffix | cut -f2- -d' ')
+if [ -z "$mailhost" ]; then
+	exit 1
+fi
+fromaddr=$(config -g $prefix.sender$suffix | cut -f2- -d' ')
+if [ -z "$fromaddr" ]; then
+	fromaddr="alert@$(hostname)";
+fi
+subject=$(config -g $prefix.subject$suffix | cut -f2- -d' ')
+if [ -z "$subject" ]; then
+	subject="$SUBJECT"
+fi
+user=$(config -g $prefix.username$suffix | cut -f2- -d' ')
+getpass="config -g $prefix.password$suffix | cut -f2- -d ' '"
+mode=$(config -g $prefix.encryption$suffix | cut -f2- -d' ')
+port=$(config -g $prefix.port$suffix | cut -f2- -d' ')
+auth=$(config -g $prefix.auth$suffix | cut -f2- -d' ')
+
+options="--connect-timeout=60"
+
+if [ ! -z $mode ]; then
+	case "$mode" in
+	"TLS")
+		options="$options --tls=on --tls-certcheck=off --tls-starttls=on"
+	;;
+	"SSL")
+		options="$options --tls=on --tls-certcheck=off --tls-starttls=off"
+	;;
+	esac
+fi
+tmpfile=""
+
+if [ ! -z $user ]; then
+	# Create a temp bash script to get our password for us
+	tmpfile=$(mktemp /tmp/msmtp-pwhlp-XXXXXX)
+cat >$tmpfile <<EOL
+#!/bin/sh
+$getpass
+EOL
+	chmod u+x $tmpfile
+	if [ ! -z $auth ]; then
+		options="$options --auth=$auth --user=$user --passwordeval=$tmpfile"
+	else
+		options="$options --auth=on --user=$user --passwordeval=$tmpfile"
+	fi
+fi
+
+if [ ! -z $port ]; then
+	options="$options --port=$port"
+fi
+
+echo "$BODY" | /bin/sh /etc/scripts/send-mail "$TOADDR" $fromaddr "$subject" $mailhost "$options"
+ret=$?
+
+if [ -f $tmpfile ]; then
+	rm $tmpfile
+fi
+
+[ $ret != 0 ] || exit 0
+
+# Failed, retry
+sleep 60
+exec "$0" "$@"

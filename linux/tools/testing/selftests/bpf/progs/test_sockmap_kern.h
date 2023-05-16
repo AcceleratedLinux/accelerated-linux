@@ -131,39 +131,55 @@ int bpf_prog2(struct __sk_buff *skb)
 
 }
 
-SEC("sk_skb3")
-int bpf_prog3(struct __sk_buff *skb)
+static inline void bpf_write_pass(struct __sk_buff *skb, int offset)
 {
-	const int one = 1;
-	int err, *f, ret = SK_PASS;
+	int err = bpf_skb_pull_data(skb, 6 + offset);
 	void *data_end;
 	char *c;
 
-	err = bpf_skb_pull_data(skb, 19);
 	if (err)
-		goto tls_out;
+		return;
 
 	c = (char *)(long)skb->data;
 	data_end = (void *)(long)skb->data_end;
 
-	if (c + 18 < data_end)
-		memcpy(&c[13], "PASS", 4);
+	if (c + 5 + offset < data_end)
+		memcpy(c + offset, "PASS", 4);
+}
+
+SEC("sk_skb3")
+int bpf_prog3(struct __sk_buff *skb)
+{
+	int err, *f, ret = SK_PASS;
+	const int one = 1;
+
 	f = bpf_map_lookup_elem(&sock_skb_opts, &one);
 	if (f && *f) {
 		__u64 flags = 0;
 
 		ret = 0;
 		flags = *f;
+
+		err = bpf_skb_adjust_room(skb, -13, 0, 0);
+		if (err)
+			return SK_DROP;
+		err = bpf_skb_adjust_room(skb, 4, 0, 0);
+		if (err)
+			return SK_DROP;
+		bpf_write_pass(skb, 0);
 #ifdef SOCKMAP
 		return bpf_sk_redirect_map(skb, &tls_sock_map, ret, flags);
 #else
 		return bpf_sk_redirect_hash(skb, &tls_sock_map, &ret, flags);
 #endif
 	}
-
 	f = bpf_map_lookup_elem(&sock_skb_opts, &one);
 	if (f && *f)
 		ret = SK_DROP;
+	err = bpf_skb_adjust_room(skb, 4, 0, 0);
+	if (err)
+		return SK_DROP;
+	bpf_write_pass(skb, 13);
 tls_out:
 	return ret;
 }
@@ -219,7 +235,7 @@ SEC("sk_msg1")
 int bpf_prog4(struct sk_msg_md *msg)
 {
 	int *bytes, zero = 0, one = 1, two = 2, three = 3, four = 4, five = 5;
-	int *start, *end, *start_push, *end_push, *start_pop, *pop;
+	int *start, *end, *start_push, *end_push, *start_pop, *pop, err = 0;
 
 	bytes = bpf_map_lookup_elem(&sock_apply_bytes, &zero);
 	if (bytes)
@@ -233,8 +249,11 @@ int bpf_prog4(struct sk_msg_md *msg)
 		bpf_msg_pull_data(msg, *start, *end, 0);
 	start_push = bpf_map_lookup_elem(&sock_bytes, &two);
 	end_push = bpf_map_lookup_elem(&sock_bytes, &three);
-	if (start_push && end_push)
-		bpf_msg_push_data(msg, *start_push, *end_push, 0);
+	if (start_push && end_push) {
+		err = bpf_msg_push_data(msg, *start_push, *end_push, 0);
+		if (err)
+			return SK_DROP;
+	}
 	start_pop = bpf_map_lookup_elem(&sock_bytes, &four);
 	pop = bpf_map_lookup_elem(&sock_bytes, &five);
 	if (start_pop && pop)
@@ -247,6 +266,7 @@ int bpf_prog6(struct sk_msg_md *msg)
 {
 	int zero = 0, one = 1, two = 2, three = 3, four = 4, five = 5, key = 0;
 	int *bytes, *start, *end, *start_push, *end_push, *start_pop, *pop, *f;
+	int err = 0;
 	__u64 flags = 0;
 
 	bytes = bpf_map_lookup_elem(&sock_apply_bytes, &zero);
@@ -263,8 +283,11 @@ int bpf_prog6(struct sk_msg_md *msg)
 
 	start_push = bpf_map_lookup_elem(&sock_bytes, &two);
 	end_push = bpf_map_lookup_elem(&sock_bytes, &three);
-	if (start_push && end_push)
-		bpf_msg_push_data(msg, *start_push, *end_push, 0);
+	if (start_push && end_push) {
+		err = bpf_msg_push_data(msg, *start_push, *end_push, 0);
+		if (err)
+			return SK_DROP;
+	}
 
 	start_pop = bpf_map_lookup_elem(&sock_bytes, &four);
 	pop = bpf_map_lookup_elem(&sock_bytes, &five);
@@ -322,7 +345,7 @@ SEC("sk_msg5")
 int bpf_prog10(struct sk_msg_md *msg)
 {
 	int *bytes, *start, *end, *start_push, *end_push, *start_pop, *pop;
-	int zero = 0, one = 1, two = 2, three = 3, four = 4, five = 5;
+	int zero = 0, one = 1, two = 2, three = 3, four = 4, five = 5, err = 0;
 
 	bytes = bpf_map_lookup_elem(&sock_apply_bytes, &zero);
 	if (bytes)
@@ -336,8 +359,11 @@ int bpf_prog10(struct sk_msg_md *msg)
 		bpf_msg_pull_data(msg, *start, *end, 0);
 	start_push = bpf_map_lookup_elem(&sock_bytes, &two);
 	end_push = bpf_map_lookup_elem(&sock_bytes, &three);
-	if (start_push && end_push)
-		bpf_msg_push_data(msg, *start_push, *end_push, 0);
+	if (start_push && end_push) {
+		err = bpf_msg_push_data(msg, *start_push, *end_push, 0);
+		if (err)
+			return SK_PASS;
+	}
 	start_pop = bpf_map_lookup_elem(&sock_bytes, &four);
 	pop = bpf_map_lookup_elem(&sock_bytes, &five);
 	if (start_pop && pop)
@@ -345,5 +371,4 @@ int bpf_prog10(struct sk_msg_md *msg)
 	return SK_DROP;
 }
 
-int _version SEC("version") = 1;
 char _license[] SEC("license") = "GPL";

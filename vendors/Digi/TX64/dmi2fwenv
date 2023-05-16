@@ -8,8 +8,9 @@ DMI_LIST="$DMI_LIST system-serial-number:serial"
 DMI_LIST="$DMI_LIST system-version:hardware_version"
 DMI_LIST="$DMI_LIST system-family:part_number"
 DMI_LIST="$DMI_LIST system-sku-number:ethaddr"
-DMI_LIST="$DMI_LIST system-uuid:uuid"
 DMI_LIST="$DMI_LIST baseboard-asset-tag:upasswd"
+DMI_LIST="$DMI_LIST chassis-asset-tag:wifi_module1"
+DMI_LIST="$DMI_LIST system-uuid:wifi_module2"
 
 for i in $DMI_LIST; do
 	dmi=${i%:*}

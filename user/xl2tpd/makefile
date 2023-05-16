@@ -1,23 +1,10 @@
+PKG = xl2tpd
+VERSION = 1.3.16
+URL = https://github.com/xelerance/$(PKG)/archive/refs/tags/v$(VERSION).tar.gz
+DOWNLOADNAME = $(PKG)-$(VERSION).tar.gz
+BUILDDIR = $(PKG)-$(VERSION)
 
-KERNELSRC = $(ROOTDIR)/$(LINUXDIR)/.
-export KERNELSRC
+PREFIX = /usr
+CFLAGS += -DPPPD='"/bin/pppd"'
 
-#OSFLAGS = -DLINUX -I$(KERNELSRC)/include/
-OSFLAGS = -DLINUX
-export OSFLAGS
-
-ifdef CONFIG_USER_FLATFSD_FLATFSD
-OSFLAGS += -DPPPD='"/bin/pppd"'
-endif
-
-# only enable kernel mode on 2.6 systems
-ifdef CONFIG_PPPOL2TP
-OSFLAGS += -DUSE_KERNEL
-endif
-
-all clean:
-	$(MAKE) -f Makefile $@
-
-romfs:
-	$(MAKE) -f Makefile $@
-
+include $(ROOTDIR)/tools/automake.inc

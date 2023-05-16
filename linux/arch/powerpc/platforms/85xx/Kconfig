@@ -16,15 +16,6 @@ if FSL_SOC_BOOKE
 
 if PPC32
 
-config FSL_85XX_CACHE_SRAM
-	bool
-	select PPC_LIB_RHEAP
-	help
-	  When selected, this option enables cache-sram support
-	  for memory allocation on P1/P2 QorIQ platforms.
-	  cache-sram-size and cache-sram-offset kernel boot
-	  parameters should be passed when this option is enabled.
-
 config BSC9131_RDB
 	bool "Freescale BSC9131RDB"
 	select DEFAULT_UIMAGE
@@ -160,7 +151,7 @@ config XES_MPC85xx
 	  computers from Extreme Engineering Solutions (X-ES) based on
 	  Freescale MPC85xx processors.
 	  Manufacturer: Extreme Engineering Solutions, Inc.
-	  URL: <http://www.xes-inc.com/>
+	  URL: <https://www.xes-inc.com/>
 
 config STX_GP3
 	bool "Silicon Turnkey Express GP3"
@@ -207,12 +198,6 @@ config TQM8560
 	select DEFAULT_UIMAGE
 	select TQM85xx
 	select CPM2
-
-config SBC8548
-	bool "Wind River SBC8548"
-	select DEFAULT_UIMAGE
-	help
-	  This option enables support for the Wind River SBC8548 board
 
 config PPA8548
 	bool "Prodrive PPA8548"

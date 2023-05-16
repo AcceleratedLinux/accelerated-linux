@@ -9,12 +9,37 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+PRIMARY="LAN3_RX"
+BACKUP="LAN3_TX"
+
+# work out if WAN is really our primary interface (WAN_LED LED) or not
+wan4_metric="$(config get network.interface.wan.ipv4.metric)"
+cell4_metric="$(config get modem.ipv4.metric)"
+
+if [ ${cell4_metric} -lt ${wan4_metric} ]; then
+	PRIMARY="LAN3_TX"
+	BACKUP="LAN3_RX"
+fi
+
+# flash Online, backup, LTE and signal strength LEDs green
+findme_update()
+{
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -n $BACKUP -n ONLINE -n ETH -n COM -n RSS1 -n RSS2 -n RSS3 -n RSS4 -n RSS5 -f $BACKUP -f ETH -O COM -f ONLINE -f RSS1 -f RSS2 -f RSS3 -f RSS4 -f RSS5"
+	else
+		FINDME="-a -N COM -N ETH -N ONLINE -N RSS1 -N RSS2 -N RSS3 -N RSS4 -N RSS5"
+	fi
+	ledcmd $FINDME
+}
+
 case "$1" in
 start)
 	ledcmd -a -N COM -N ETH -N ONLINE
 	exit 0
 	;;
 reload)
+	findme_update
 	;;
 stop)
 	# Firmware flash
@@ -97,18 +122,6 @@ else
 fi
 
 ##############################################################
-
-PRIMARY="LAN3_RX"
-BACKUP="LAN3_TX"
-
-# work out if WAN is really our primary interface (WAN_LED LED) or not
-wan4_metric="$(config get network.interface.wan.ipv4.metric)"
-cell4_metric="$(config get modem.ipv4.metric)"
-
-if [ ${cell4_metric} -lt ${wan4_metric} ]; then
-	PRIMARY="LAN3_TX"
-	BACKUP="LAN3_RX"
-fi
 
 LINK=$(ip link show wan 2> /dev/null | grep -c "state UP")
 WAN4=-1

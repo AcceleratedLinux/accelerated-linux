@@ -168,45 +168,50 @@
 	pinctrl-names = "default";
 
 	spi-flash@0 {
-		#address-cells = <1>;
-		#size-cells = <1>;
-		compatible = "n25q256a", "jedec,spi-nor";
+		compatible = "micron,n25q256a", "jedec,spi-nor";
 		reg = <0>; /* Chip select 0 */
 		spi-max-frequency = <50000000>;
+		m25p,fast-read; /* 2x speedup */
 
-		u-boot@0 {
-			label = "u-boot";
-			reg = <0x00000000 0x00100000>;
-		};
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
 
-		u-boot-config-block@100000 {
-			label = "u-boot config block";
-			reg = <0x00100000 0x00020000>;
-		};
+			boot@0 {
+				label = "boot";
+				reg = <0x00000000 0x00100000>;
+			};
 
-		factory-img@120000 {
-			label = "factory_img";
-			reg = <0x00120000 0x1400000>;
-		};
+			bootarg@100000 {
+				label = "bootarg";
+				reg = <0x00100000 0x00020000>;
+			};
 
-		system-log@1520000 {
-			label = "system_log";
-			reg = <0x1520000 0x00200000>;
-		};
+			factory-img@120000 {
+				label = "factory_img";
+				reg = <0x00120000 0x1400000>;
+			};
 
-		mtd-oops@1720000 {
-			label = "mtd-oops";
-			reg = <0x1720000 0x00080000>;
-		};
+			system-log@1520000 {
+				label = "system-log";
+				reg = <0x1520000 0x00200000>;
+			};
 
-		reserved@17A0000 {
-			label = "reserved";
-			reg = <0x17A0000 0x860000>;
-		};
+			mtd-oops@1720000 {
+				label = "mtd-oops";
+				reg = <0x1720000 0x00080000>;
+			};
 
-		all-spi@0 {
-			label = "all-spi";
-			reg = <0x0 0x2000000>;
+			reserved@17A0000 {
+				label = "reserved";
+				reg = <0x17A0000 0x860000>;
+			};
+
+			all-spi@0 {
+				label = "all-spi";
+				reg = <0x0 0x2000000>;
+			};
 		};
 	};
 };

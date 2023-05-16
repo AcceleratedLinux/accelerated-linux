@@ -58,9 +58,9 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 		goto out_err;
 	}
 
-	virtio_cread(vpmem->vdev, struct virtio_pmem_config,
+	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config,
 			start, &vpmem->start);
-	virtio_cread(vpmem->vdev, struct virtio_pmem_config,
+	virtio_cread_le(vpmem->vdev, struct virtio_pmem_config,
 			size, &vpmem->size);
 
 	res.start = vpmem->start;
@@ -105,7 +105,7 @@ static void virtio_pmem_remove(struct virtio_device *vdev)
 
 	nvdimm_bus_unregister(nvdimm_bus);
 	vdev->config->del_vqs(vdev);
-	vdev->config->reset(vdev);
+	virtio_reset_device(vdev);
 }
 
 static struct virtio_driver virtio_pmem_driver = {

@@ -7,7 +7,8 @@
 # set it.
 #
 
-COMMON="*COPYRIGHT* *GPL* AUTHORS COPYING* *LICENSE* *LICENCE* *.c"
+COMMON="*COPYRIGHT* *GPL* AUTHORS COPYING* *LICENSE* *LICENCE* *README*"
+COMMON_SRC="*.c"
 
 license_detect() {
 	#
@@ -72,6 +73,11 @@ license_detect() {
 		echo "ISC" ; return 0
 	fi
 	#
+	# SQLITE is odd, and free (public domain)
+	#
+	if grep -iq "The author disclaims copyright" "$1"; then
+		echo "PublicDomain" ; return 0
+	fi
 	# no luck
 	#
 	return 255
@@ -79,8 +85,12 @@ license_detect() {
 
 [ "$1" ] && cd "$1"
 
-PATTERN="-name $(echo $COMMON | sed 's/ / -o -name /g')"
-find . -depth \( $PATTERN \) -print 2> /dev/null | tac | while read i; do
+PATTERN="-iname $(echo $COMMON | sed 's/ / -o -iname /g')"
+PATTERN_SRC="-iname $(echo $COMMON_SRC | sed 's/ / -o -iname /g')"
+(
+	find . -depth \( $PATTERN_SRC \) -print 2> /dev/null
+	find . -depth \( $PATTERN \) -print 2> /dev/null
+) | tac | while read i; do
 	[ -f "$i" ] || continue
 	license_detect "$i" && exit 0
 done

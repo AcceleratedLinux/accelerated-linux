@@ -912,7 +912,7 @@ The keyctl syscall functions are:
 
      One application of restricted keyrings is to verify X.509 certificate
      chains or individual certificate signatures using the asymmetric key type.
-     See Documentation/crypto/asymmetric-keys.txt for specific restrictions
+     See Documentation/crypto/asymmetric-keys.rst for specific restrictions
      applicable to the asymmetric key type.
 
 
@@ -1040,8 +1040,8 @@ The keyctl syscall functions are:
 
      "key" is the ID of the key to be watched.
 
-     "queue_fd" is a file descriptor referring to an open "/dev/watch_queue"
-     which manages the buffer into which notifications will be delivered.
+     "queue_fd" is a file descriptor referring to an open pipe which
+     manages the buffer into which notifications will be delivered.
 
      "filter" is either NULL to remove a watch or a filter specification to
      indicate what events are required from the key.

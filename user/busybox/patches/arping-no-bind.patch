@@ -1,7 +1,7 @@
-diff -Naur busybox-1.31.0.org/networking/arping.c busybox-1.31.0/networking/arping.c
---- busybox-1.31.0.org/networking/arping.c	2018-12-31 01:14:20.000000000 +1000
-+++ busybox-1.31.0/networking/arping.c	2019-07-02 14:33:07.783106403 +1000
-@@ -31,6 +31,7 @@
+diff -Naur busybox-1.34.1.org/networking/arping.c busybox-1.34.1/networking/arping.c
+--- busybox-1.34.1.org/networking/arping.c	2018-12-31 01:14:20.000000000 +1000
++++ busybox-1.34.1/networking/arping.c	2019-07-02 14:33:07.783106403 +1000
+@@ -30,6 +30,7 @@
  //NB: in iputils-s20160308, iface is mandatory, no default
  //usage:     "\n	-I IFACE	Interface to use (default eth0)"
  //usage:     "\n	-s SRC_IP	Sender IP address"
@@ -9,7 +9,7 @@ diff -Naur busybox-1.31.0.org/networking/arping.c busybox-1.31.0/networking/arpi
  //usage:     "\n	DST_IP		Target IP address"
  
  #include <arpa/inet.h>
-@@ -54,13 +55,13 @@
+@@ -53,13 +54,13 @@
  	UNICASTING    = 1 << 6,
  	TIMEOUT       = 1 << 7,
  };
@@ -26,7 +26,7 @@ diff -Naur busybox-1.31.0.org/networking/arping.c busybox-1.31.0/networking/arpi
  	);
  
  struct globals {
-@@ -297,6 +298,7 @@
+@@ -296,6 +297,7 @@
  {
  	const char *device = "eth0";
  	char *source = NULL;
@@ -34,7 +34,7 @@ diff -Naur busybox-1.31.0.org/networking/arping.c busybox-1.31.0/networking/arpi
  	char *target;
  	char *err_str;
  
-@@ -312,7 +314,7 @@
+@@ -311,7 +313,7 @@
  		unsigned opt;
  		char *str_timeout;
  
@@ -43,7 +43,7 @@ diff -Naur busybox-1.31.0.org/networking/arping.c busybox-1.31.0/networking/arpi
  		if (opt & TIMEOUT)
  			timeout_us = xatou_range(str_timeout, 0, INT_MAX/2000000) * 1000000 + 500000;
  	}
-@@ -411,6 +413,10 @@
+@@ -410,6 +412,10 @@
  	signal_SA_RESTART_empty_mask(SIGINT,  (void (*)(int))finish);
  	signal_SA_RESTART_empty_mask(SIGALRM, (void (*)(int))catcher);
  

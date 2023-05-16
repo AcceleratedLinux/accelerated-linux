@@ -2,7 +2,6 @@
 CONFOPTS  = --libexecdir=/usr/libexec
 CONFOPTS += --sbindir=/bin
 CONFOPTS += --disable-etc-default-login
-CONFOPTS += --without-pie
 INSTALL = install-nokeys
 
 ifdef HAS_SHADOW
@@ -14,7 +13,7 @@ endif
 # CONFOPTS += --disable-shared
 # CONFOPTS += --disable-static
 
-CONFOPTS += --without-stackprotect
+CONFOPTS += --without-stackprotect --disable-lastlog --disable-wtmp
 
 ifdef CONFIG_USER_FLATFSD_FLATFSD
 SYSCONFDIR = /etc/config
@@ -60,7 +59,7 @@ endif
 
 CONFVARS = INSTALL="install -c --strip-program=$(STRIP)"
 
-OPENSSH_VERSION = 8.3p1
+OPENSSH_VERSION = 8.8p1
 URL = http://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$(OPENSSH_VERSION).tar.gz
 
 AUTOMAKE_ROMFS = my_romfs
@@ -94,6 +93,11 @@ my_romfs:
 	$(ROMFSINST) -o "$(CONFIG_USER_SSH_SSHD)" \
 		-A "sshd:" -a "sshd:x:100:65534::/var/run/sshd:/bin/false" \
 		$(SYSDEFDIR)/passwd
+ifdef CONFIG_PROP_OGCS
+	$(ROMFSINST) -o "$(CONFIG_USER_SSH_SSHD)" \
+		-a "sshd:x:100:65534::/var/run/sshd:/bin/false" \
+		$(SYSDEFDIR)/passwd.d/sshd
+endif
 	$(ROMFSINST) -o "$(CONFIG_USER_SSH_SSHD)" \
 		-A "nobody:" -a "nobody:x:65534:" $(SYSDEFDIR)/group
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSHD \
@@ -104,12 +108,27 @@ my_romfs:
 ifdef CONFIG_USER_SSH_SSHD
 ifdef CONFIG_USER_FLATFSD_FLATFSD
 ifndef CONFIG_USER_FLATFSD_ETC_CONFIG
-	for i in ssh_host_key ssh_host_rsa_key ssh_host_dsa_key; do \
+	for i in ssh_host_key ssh_host_rsa_key ssh_host_dsa_key ssh_host_ecdsa_key ssh_host_ed25519_key; do \
 		$(ROMFSINST) -s /etc/config/$$i $(SSHDEFDIR)/$$i; \
 		$(ROMFSINST) -s /etc/config/$$i.pub $(SSHDEFDIR)/$$i.pub; \
 	done
+	$(ROMFSINST) -s /etc/config/moduli $(SSHDEFDIR)/moduli
 endif
 endif
+endif
+ifdef CONFIG_LIB_OPENSSL_FIPS
+	#
+	# Install FIPS versions of ssh*_config files
+	#
+	rm -f $(ROMFSDIR)$(SSHDEFDIR)/ssh_config
+	$(ROMFSINST) $(OPENSSH_INSTALL_DIR)$(SSHCONFDIR)/ssh_config $(SSHDEFDIR)/ssh_config.org
+	$(ROMFSINST) $(OPENSSH_INSTALL_DIR)$(SSHCONFDIR)/ssh_config $(SSHDEFDIR)/ssh_config.fips
+	rm -f $(ROMFSDIR)$(SSHDEFDIR)/sshd_config
+	$(ROMFSINST) $(OPENSSH_INSTALL_DIR)$(SSHCONFDIR)/sshd_config $(SSHDEFDIR)/sshd_config.org
+	$(ROMFSINST) $(OPENSSH_INSTALL_DIR)$(SSHCONFDIR)/sshd_config $(SSHDEFDIR)/sshd_config.fips
+	patch -d $(ROMFSDIR)$(SSHDEFDIR) --no-backup-if-mismatch -p1 < patches/ssh_config-fips.patch
+	$(ROMFSINST) -s /var/run/ssh_config $(SSHCONFDIR)/ssh_config
+	$(ROMFSINST) -s /var/run/sshd_config $(SSHCONFDIR)/sshd_config
 endif
 	##
 	# Optionally add the startup stuff to the /etc/default-static dir.

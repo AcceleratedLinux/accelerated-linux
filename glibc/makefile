@@ -1,12 +1,8 @@
-#
-# Toolchain issues prevent use of new glibc on most targets currently.
-# So select an appropriate version for some architectures. Right now we
-# only want to user a newer glibc on arm64 targets.
-#
-GLIBC_VERSION = 2.30
+GLIBC_VERSION = 2.34
 
 URL = http://ftp.gnu.org/gnu/glibc/glibc-$(GLIBC_VERSION).tar.bz2
 
+CONFOPTS += --without-selinux
 CONFOPTS += --disable-sanity-checks
 CONFOPTS += --enable-obsolete-rpc
 CONFOPTS += --with-headers=$(STAGEDIR)/include

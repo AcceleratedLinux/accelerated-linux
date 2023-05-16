@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -129,10 +130,12 @@ static void check_segment(int rd, unsigned char *sgdata, int sgpos, int sglength
 		int i;
 		error("check failed, pos=%x", sgpos);
 		for (i = 0; i < sglength; i++) {
-			if (sgdata[i] != check_buf[i])
+			if (sgdata[i] != check_buf[i]) {
 				printf("%x(%x,%x) ", sgpos + i,
 						sgdata[i] & 0xff,
 						check_buf[i] & 0xff);
+				break;
+			}
 		}
 		printf("\n");
 		exitstatus = BAD_SEG_CHECK;
@@ -337,6 +340,30 @@ static void program_generic_segment(int rd, unsigned char *sgdata,
 	}
 }
 
+/* Compare all segments until we find one that is different */
+void check_flash(int rd, uint64_t devsize, unsigned char *sgdata, int sgsize)
+{
+	int sglength;
+	uint64_t sgpos;
+
+	if (fb_seek_set(0) != 0) {
+		exitstatus = NO_IMAGE;
+		return;
+	};
+	for (sgpos = offset - (offset % sgsize); sgpos < devsize; sgpos += sgsize)
+	{
+		sglength = get_segment(rd, sgdata, sgpos, sgsize);
+		check_segment(rd, sgdata, sgpos, sglength);
+		if (exitstatus) {
+			notice("check_segment failed at pos %x, status %d",
+				sgpos, exitstatus);
+			break;
+		}
+		printf("\r%"PRIu64"K", (sgpos + sglength) / 1024); fflush(stdout);
+	}
+	lseek(rd, 0, SEEK_SET);
+	printf("\n");fflush(stdout);
+}
 
 void program_flash(int rd, unsigned long image_length, long long devsize, unsigned char *sgdata, int sgsize)
 {

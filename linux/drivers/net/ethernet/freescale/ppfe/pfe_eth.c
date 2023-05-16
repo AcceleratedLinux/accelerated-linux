@@ -619,7 +619,9 @@ static void pfe_eth_set_msglevel(struct net_device *ndev, uint32_t data)
  *
  */
 static int pfe_eth_set_coalesce(struct net_device *ndev,
-				struct ethtool_coalesce *ec)
+				struct ethtool_coalesce *ec,
+				struct kernel_ethtool_coalesce *kernel_coal,
+				struct netlink_ext_ack *extack)
 {
 	if (ec->rx_coalesce_usecs > HIF_RX_COAL_MAX_USECS)
 		return -EINVAL;
@@ -640,7 +642,9 @@ static int pfe_eth_set_coalesce(struct net_device *ndev,
  *
  */
 static int pfe_eth_get_coalesce(struct net_device *ndev,
-				struct ethtool_coalesce *ec)
+				struct ethtool_coalesce *ec,
+				struct kernel_ethtool_coalesce *kernel_coal,
+				struct netlink_ext_ack *extack)
 {
 	int reg_val = readl(HIF_INT_COAL);
 
@@ -1862,7 +1866,7 @@ static int pfe_eth_set_mac_address(struct net_device *ndev, void *addr)
 	if (!is_valid_ether_addr(sa->sa_data))
 		return -EADDRNOTAVAIL;
 
-	memcpy(ndev->dev_addr, sa->sa_data, ETH_ALEN);
+	dev_addr_set(ndev, sa->sa_data);
 
 	gemac_set_laddrN(priv->EMAC_baseaddr,
 			 (struct pfe_mac_addr *)ndev->dev_addr, 1);
@@ -2359,7 +2363,7 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
 	pfe_eth_fast_tx_timeout_init(priv);
 
 	/* Copy the station address into the dev structure, */
-	memcpy(ndev->dev_addr, einfo[id].mac_addr, ETH_ALEN);
+	dev_addr_set(ndev, einfo[id].mac_addr);
 
 	/* Initialize mdio */
 	if (minfo[id].enabled) {

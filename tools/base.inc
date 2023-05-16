@@ -157,8 +157,9 @@ else
 		[ ! -d $$i/etc ] || $(ROMFSINST) -v -f $$i/etc /etc; \
 		[ ! -d $$i/share ] || $(ROMFSINST) -v -f $$i/share /share; \
 	done
-	rm -f $(ROMFSDIR)/lib/*.a
-	rm -f $(ROMFSDIR)/lib/*.la
+	find $(ROMFSDIR) -name "*.o" | xargs rm -f
+	find $(ROMFSDIR) -name "*.a" | xargs rm -f
+	find $(ROMFSDIR) -name "*.la" | xargs rm -f
 endif
 
 romfs_post:

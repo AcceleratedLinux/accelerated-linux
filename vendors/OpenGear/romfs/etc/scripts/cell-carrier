@@ -1,0 +1,164 @@
+#!/bin/sh
+
+# This script attempts to determine the current cell carrier automatically from
+# available information. It checks, in order of priority, the following:
+#     - Carrier defined in config
+#     - Modem firmware's carrier
+#     - Carrier based on carrier code in SIM card IMSI
+#     - Default carrier based on device model
+# If a carrier is found, it prints it on stdout and exits with success,
+# else prints nothing and returns with failure.
+set +e
+
+save_carrier()
+{
+	carrier_string=$(canonicalise_carrier_string "$1")
+	logger "$0: carrier is: $carrier_string"
+
+	# Communicate the carrier to libconfig's Modem::getCarrier()
+	mkdir -p /var/run/.modem
+	echo "$carrier_string" > /var/run/.modem/cellmodem_carrier
+}
+
+canonicalise_carrier_string() # stringz
+{
+	local lower1=$(echo "$1" | tr A-Z a-z) # lowercase form of string
+
+	# If a carrier-canon.txt file is available, scan
+	# it for conversion patterns
+	local cellfwdir=$(config -g config.cellmodem.firmware.directory | cut -f2 -d' ')
+	if [ -n "$cellfwdir" -a -e "$cellfwdir/carrier-canon.txt" ]; then
+	    while read -r cid expr; do
+		case $cid in "#"*|"") continue;; esac # ignore blanks/comments
+	        if expr "$1" : "$expr" "|" "$lower1" : "$expr" >/dev/null; then
+		    echo $cid
+		    return
+		fi
+	    done <"$cellfwdir/carrier-canon.txt"
+	fi
+
+	# a fallback list of carriers known at release time
+	case "$1" in
+	"ATT"*|"att"*|"AT&T"*)
+		echo "att";;
+	"verizon"*|"Verizon"*|"VERIZON"*|"VZW"*)
+		echo "verizon";;
+	"sprint"*|"Sprint"*|"SPRINT"*)
+		echo "sprint";;
+	"rogers"*|"Rogers"*|"ROGERS"*)
+		echo "rogers";;
+	"telus"*|"Telus"*|"TELUS"*)
+		echo "telus";;
+	"bell"*|"Bell"*|"BELL"*)
+		echo "bell";;
+	"generic"|"Generic"|"GENERIC"|"GENNA-UMTS")
+		echo "generic";;
+	*)
+		echo "$lower1"
+	esac
+}
+
+cleanup_and_exit()
+{
+	set -e
+	exit "$1"
+}
+
+carrier=""
+rm -f /var/run/.modem/cellmodem_carrier
+
+# For cellmodems supporting per-SIM carrier selection, the preferred
+# carrier name could be AUTO-SIM and the current active carrier name
+# should be told by relevant QMI or the AT!IMPREF? command
+if [ -f "/var/run/.modem/cellmodem_change_carrier_by_sim" ]; then
+	. /etc/scripts/modem-utils
+	carrier="$(qmi_query_active_carrier)"
+	if [ "$carrier" ]; then
+		save_carrier "$carrier"
+		cleanup_and_exit 0
+	fi
+fi
+
+# See if there is a carrier defined in config
+carrier=$(/bin/config -g config.cellmodem.carrier | cut -f2 -d' ')
+if [ "$carrier" ]; then
+	save_carrier "$carrier"
+	cleanup_and_exit 0
+fi
+
+# Use cellctl to probe the modem's carrier
+if [ -x /bin/cellctl ]; then
+	carrier=$(infod_client -o get -q -p "config.cellmodem.cellctl.status.preferred-carrier")
+	if [ "$carrier" ]; then
+		save_carrier "$carrier"
+		cleanup_and_exit 0
+	fi
+fi
+
+# If that didn't work, try to determine carrier from MCC/MNC in the SIM IMSI
+if [ -x /bin/cellctl ] && [ -f /etc/config/carrier_prefixes ]; then
+	carrier=$(infod_client -o get -q -p "config.cellmodem.cellctl.status.current-carrier")
+	if [ "$carrier" ]; then
+		save_carrier "$carrier"
+		cleanup_and_exit 0
+	fi
+fi
+
+# If that's not working then try the preferred firmware's build ID
+if [ -e /dev/cdc-wdm0 -a -x /bin/qmicli ]; then
+	carrier=$(qmicli -p -d /dev/cdc-wdm0 --device-open-qmi \
+		         --dms-get-firmware-preference 2>/dev/null |
+		  awk '/Build ID:/ {sub(/^[^_]*_/, ""); sub(/\x27.*/,"");
+				    print; exit; }')
+	if [ "$carrier" ]; then
+		save_carrier "$carrier"
+		cleanup_and_exit 0
+	fi
+fi
+
+
+# If that didn't work, look for default carrier based on multicarrier device model
+if [ -x /bin/setfset ]; then
+	case $(/bin/setfset -q m) in
+	*-LMA)
+		save_carrier "att"
+		;;
+	*-LMS)
+		save_carrier "sprint"
+		;;
+	*-LMV | *-LV)
+		save_carrier "verizon"
+		;;
+	*-LMCR)
+		save_carrier "rogers"
+		;;
+	*-LMCT)
+		save_carrier "telus"
+		;;
+	*-LMCB)
+		save_carrier "bell"
+		;;
+	*-L)
+		# Try to guess the carrier from Profile settings
+		mmpath=`mmcli -L | grep ModemManager1 | awk '{print $1}'`
+		if [ -n "$mmpath" ]; then
+			apn_1=`mmcli -m $mmpath --command="+CGDCONT?" | grep "+CGDCONT: 1," | cut -d "\"" -f 4`
+			apn_2=`mmcli -m $mmpath --command="+CGDCONT?" | grep "+CGDCONT: 2," | cut -d "\"" -f 4`
+
+			if [[ "$apn_1" = *vzw* ]] && [[ "$apn_2" = *vzw* ]] ; then
+				# Devices registered for Verizon will have the first two Profiles setup
+				# as "vzmims" and "vzmadmin" respectively by auto-provisioning
+				save_carrier "verizon"
+			else
+				save_carrier "generic"
+			fi
+		else
+			save_carrier "generic"
+		fi
+		;;
+	esac
+
+	cleanup_and_exit 0
+fi
+
+cleanup_and_exit 0

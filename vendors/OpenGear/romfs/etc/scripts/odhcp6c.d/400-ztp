@@ -1,0 +1,61 @@
+#!/bin/sh
+
+infod_prefix=odhcp6c.$1
+
+# Return true when both configs are undefined, which is the case
+# when the "Network Interface" is unconfigured
+unconfigured () {
+	[ -z "$(/bin/config -g config.interfaces.wan.mode -g config.lhvpn)" ]
+}
+
+has_opengear_vendor_ztp_options() {
+	# Fetch the sub-options from infod
+	# Note the vendor sub-options are only set by the infod script if
+	# OPTION_17 is set and the vendor ID is opengear (25049)
+	found=
+	for opt in 1 2 3; do
+		# Value from infod run through sed to remove leading spaces
+		val="$(/bin/infod_client -o get -q -p "${infod_prefix}.vendorspec_$opt" | sed -e 's/^[[:space:]]*//')"
+		if [ -n "$val" ]; then
+			return 0 #true
+		fi
+	done
+	return 1 # false
+}
+
+has_ztp_options() {
+	has_opengear_vendor_ztp_options || [ -n "$OPTION_59" ]
+}
+
+# log only if $ZTPLOG does not exist
+log1 () {
+	if [ ! -f $ZTPLOG ]; then
+		logger -s -p daemon.info -t "ztp6" "$@" 2>$ZTPLOG
+	fi
+}
+
+case $2 in
+bound|updated|rebound|informed)
+	export ZTPLOG=/tmp/ztp.log
+	if unconfigured; then
+		# DHCPv6 Vendor Specific Information option ($OPTION_17)
+		# received in MODE_UNCONFIGURED triggers the ZTP process.
+		if has_ztp_options; then
+			# ztp.script will pull its arguments from infod.
+			# We run the ZTP process in the background
+			# so that we don't slow down the DHCP lease process.
+			log1 "DHCPv6 $2 on $1 configuring with ZTP"
+			/etc/scripts/ztp.script $infod_prefix $1 &
+		else
+			# For ztp.log feature, record the fact that we got
+			# a DHCP lease, and that it has no vendor specific option.
+			# Only record this once so that /tmp doesn't fill up
+			log1 "DHCPv6 $2 on $1, but no vendor-specific or bootfile-url options received; unable to configure"
+		fi
+	else # configured
+		if has_ztp_options; then
+			log1 "DHCPv6 $2 on $1, received vendor-specific / bootfile-url options, and ignored them because system is already configured"
+		fi
+	fi
+	;;
+esac

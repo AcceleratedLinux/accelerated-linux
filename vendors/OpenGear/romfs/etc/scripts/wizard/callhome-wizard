@@ -1,0 +1,149 @@
+#!/bin/bash
+#
+# This script applies all templated Call Home configurations. Some config
+# parameters of note:
+#
+# /etc/config/scripts/callhome-wizard.rc
+#
+#   Runs the symlinked bash script on boot, useful for auto provisioning.
+#   This script deletes the symlink after successful wizard completion.
+#
+# config.wizard.callhome.enroll
+#
+#   Enroll in CMS after Calling Home (interactive CMS root
+#   password and local root password required).
+#
+# config.ssh.servers.server[1..n].address
+#
+#   Config template must contain at least the CMS address(es).
+#
+# config.wizard.callhome.server[1..n].plaintext_password
+#
+#   Set CMS Call Home password(s) here, otherwise interactive password
+#   entry is required.
+#
+#   NOTE: Non-interactive operation requires enroll to be *unset* and
+#   plaintext Call Home password(s) to be *set*.
+#
+
+source /etc/scripts/wizard/wizard.inc
+
+logit "*** Starting Call Home wizard"
+
+numservers=$(config -g config.ssh.servers.total | cut -f2 -d' ')
+if [[ "$numservers" -lt 1 ]]; then
+	logit "*** ERROR *** No Call Home servers configured"
+	exit 1
+fi
+
+function generate_keys {
+	if [[ ! -f /etc/config/ssh_root_rsa_key ]]; then
+		logit "*** No Call Home keys found, please wait while new keys are generated"
+		ssh-keygen -t rsa -f /etc/config/ssh_root_rsa_key -N ''
+	fi
+}
+
+function callhome_setup {
+	servernum=$1
+	prefix=config.ssh.servers.server$servernum
+	
+	cmsaddr=$(config -g ${prefix}.address | cut -f2 -d' ')
+	cmsport=$(config -g ${prefix}.sshport | cut -f2 -d' ')
+	[[ -z "$cmsport" ]] && cmsport=22
+	logit "*** Calling Home to CMS (${cmsaddr}:${cmsport})"
+
+	cmspass=$(config -g config.wizard.callhome.server${servernum}.plaintext_password | cut -f2 -d' ')
+	[[ -z "$cmspass" ]] && get_pass "Enter Call Home password" cmspass
+
+	# Guard against config write race condition with setup-wizard	
+	RESTART=false LOCKNAME=wizard source /etc/scripts/mutex
+
+	data="form=sshforwards&${prefix}.address=${cmsaddr}&authkey.password=${cmspass}&${prefix}.sshport=${cmsport}&${prefix}.username=cms&${prefix}.forwards.forward1.endpoint=remote&${prefix}.forwards.forward1.host=127.0.0.1&${prefix}.forwards.forward1.hostport=22&${prefix}.forwards.forward1.is_exposed=on&forwards.total=1&action=Save&prefix=${prefix}"
+	if ! hit_ui "$data"; then
+		logit "*** Call Home failed"
+		return 1
+	fi
+	port=$(config -g ${prefix}.forwards.forward1.port | cut -f2 -d' ')
+	logit "*** CMS (${cmsaddr}:${cmsport}) Call Home redirected port is: $port"
+	return 0
+}
+
+function management_setup {
+	servernum=$1
+	prefix=config.ssh.servers.server$servernum
+	
+	cmsaddr=$(config -g ${prefix}.address | cut -f2 -d' ')
+	cmsport=$(config -g ${prefix}.sshport | cut -f2 -d' ')
+	[[ -z "$cmsport" ]] && cmsport=22
+	logit "*** Enrolling in CMS (${cmsaddr}:${cmsport})"
+
+	get_pass "root password for this console server (blank to use pre-authed keys)" mypass
+	
+	sshport=$(config -g ${prefix}.forwards.forward1.port | cut -f2 -d' ')
+	numserial=$(wc -l /var/run/serial-ports | sed 's/[ \t]*\([0-9]*\).*/\1/')
+	hostname=$(hostname)
+
+	echo "*** When prompted, enter CMS (${cmsaddr}:${cmsport}) password for $(whoami), it will not be stored or confirmed"
+	if ! ssh -p $cmsport $cmsaddr bash /etc/scripts/wizard/enroller localhost $sshport $hostname $numserial "$mypass"; then
+		logit "*** Enrollment failed"
+		return 1
+	fi
+	return 0
+}
+
+function cms_setup {
+	servernum=$1
+	prefix=config.ssh.servers.server$servernum
+	
+	retval=1
+	# Allocate unique Call Home port
+	if callhome_setup $servernum; then
+		# Optional, run script on CMS to place this console
+		# server under management
+		enroll=$(config -g config.wizard.callhome.enroll | cut -f2 -d' ')
+		if [[ -z "$enroll" ]] || management_setup $servernum; then
+			retval=0
+		fi
+	fi
+	return $retval
+}
+
+generate_keys
+
+# Load Call Home server IDs from config into a list, so they don't have
+# to be configured in strict config order
+servernums=()
+for (( servernum=1; servernum <= ${numservers:-0}; servernum++ )); do
+	servernums=(${servernums[@]} $servernum)
+done
+
+while [[ ${#servernums[@]} -gt 0 ]]; do
+	for servernum in ${servernums[@]}; do
+		prefix=config.ssh.servers.server$servernum
+		
+		cmsaddr=$(config -g ${prefix}.address | cut -f2 -d' ')
+		cmsport=$(config -g ${prefix}.sshport | cut -f2 -d' ')
+		[[ -z "$cmsport" ]] && cmsport=22
+		
+		# Set up Call Home as servers become available
+		logit "*** Testing availability of CMS (${cmsaddr}:${cmsport})"
+		if nc -z -w 10 $cmsaddr $cmsport; then
+			if cms_setup $servernum; then
+				# Success, remove it
+				for (( i=0; i < $numservers; i++ )); do
+					if [[ ${servernums[$i]} -eq $servernum ]]; then
+						unset servernums[$i]
+						break
+					fi
+				done
+				# Re-evalulate the list
+				continue 2
+			fi
+		fi
+	done
+done
+
+# Wizard complete, disable autorun
+sed -i "/^# Start $(basename $0) autorun/,/^# End $(basename $0) autorun/d" /etc/config/rc.local
+
+logit "*** Call Home setup successful"

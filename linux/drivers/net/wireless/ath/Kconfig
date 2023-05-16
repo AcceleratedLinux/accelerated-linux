@@ -15,11 +15,11 @@ config WLAN_VENDOR_ATH
 
 	  For more information and documentation on this module you can visit:
 
-	  http://wireless.kernel.org/en/users/Drivers/ath
+	  https://wireless.wiki.kernel.org/en/users/Drivers/ath
 
 	  For information on all Atheros wireless drivers visit:
 
-	  http://wireless.kernel.org/en/users/Drivers/Atheros
+	  https://wireless.wiki.kernel.org/en/users/Drivers/Atheros
 
 if WLAN_VENDOR_ATH
 
@@ -59,7 +59,7 @@ config ATH_REG_NO_FORCED_RADAR
 	bool "Atheros regulatory radar/IR override"
 	depends on CFG80211_CERTIFICATION_ONUS
 	default n
-	---help---
+	help
 	  Do not force radar or IR flags channels. This option should be
 	  enabled with the intent to have userspace manage the regulatory
 	  domain through e.g. CRDA.
@@ -72,14 +72,14 @@ choice
 config ATH_REG_FORCE_NONE
 	bool
 	prompt "No forced regulatory domain"
-	---help---
+	help
 	  Select this option to respect the country code read from the
 	  radio's EEPROM.
 
 config ATH_REG_FORCE_UNRESTRICTED
 	bool
 	prompt "Unrestricted regulatory domain"
-	---help---
+	help
 	  Select this option to ignore the country code from the EEPROM
 	  and use an unrestricted "global" regulatory domain.
 	  This option should be enabled with the intent to have userspace
@@ -88,7 +88,7 @@ config ATH_REG_FORCE_UNRESTRICTED
 config ATH_REG_FORCE_DEFAULT
 	bool
 	prompt "Default regulatory domain"
-	---help---
+	help
 	  Select this option to pretend the country code read from the
 	  EEPROM was 0x00 which corresponds to the "default" country
 	  which is hardcoded in the driver as the UNITED STATES.

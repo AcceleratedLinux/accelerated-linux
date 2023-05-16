@@ -7,7 +7,7 @@
  * Copyright 2011 Intel Corporation; author Matt Fleming
  */
 
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #include <linux/ctype.h>
 #include <linux/efi.h>
@@ -20,10 +20,10 @@
 
 bool efi_nochunk;
 bool efi_nokaslr = !IS_ENABLED(CONFIG_RANDOMIZE_BASE);
-bool efi_noinitrd;
 int efi_loglevel = CONSOLE_LOGLEVEL_DEFAULT;
 bool efi_novamap;
 
+static bool efi_noinitrd;
 static bool efi_nosoftreserve;
 static bool efi_disable_pci_dma = IS_ENABLED(CONFIG_EFI_DISABLE_PCI_DMA);
 
@@ -187,20 +187,28 @@ int efi_printk(const char *fmt, ...)
  */
 efi_status_t efi_parse_options(char const *cmdline)
 {
-	size_t len = strlen(cmdline) + 1;
+	size_t len;
 	efi_status_t status;
 	char *str, *buf;
 
+	if (!cmdline)
+		return EFI_SUCCESS;
+
+	len = strnlen(cmdline, COMMAND_LINE_SIZE - 1) + 1;
 	status = efi_bs_call(allocate_pool, EFI_LOADER_DATA, len, (void **)&buf);
 	if (status != EFI_SUCCESS)
 		return status;
 
-	str = skip_spaces(memcpy(buf, cmdline, len));
+	memcpy(buf, cmdline, len - 1);
+	buf[len - 1] = '\0';
+	str = skip_spaces(buf);
 
 	while (*str) {
 		char *param, *val;
 
 		str = next_arg(str, &param, &val);
+		if (!val && !strcmp(param, "--"))
+			break;
 
 		if (!strcmp(param, "nokaslr")) {
 			efi_nokaslr = true;
@@ -231,6 +239,102 @@ efi_status_t efi_parse_options(char const *cmdline)
 }
 
 /*
+ * The EFI_LOAD_OPTION descriptor has the following layout:
+ *	u32 Attributes;
+ *	u16 FilePathListLength;
+ *	u16 Description[];
+ *	efi_device_path_protocol_t FilePathList[];
+ *	u8 OptionalData[];
+ *
+ * This function validates and unpacks the variable-size data fields.
+ */
+static
+bool efi_load_option_unpack(efi_load_option_unpacked_t *dest,
+			    const efi_load_option_t *src, size_t size)
+{
+	const void *pos;
+	u16 c;
+	efi_device_path_protocol_t header;
+	const efi_char16_t *description;
+	const efi_device_path_protocol_t *file_path_list;
+
+	if (size < offsetof(efi_load_option_t, variable_data))
+		return false;
+	pos = src->variable_data;
+	size -= offsetof(efi_load_option_t, variable_data);
+
+	if ((src->attributes & ~EFI_LOAD_OPTION_MASK) != 0)
+		return false;
+
+	/* Scan description. */
+	description = pos;
+	do {
+		if (size < sizeof(c))
+			return false;
+		c = *(const u16 *)pos;
+		pos += sizeof(c);
+		size -= sizeof(c);
+	} while (c != L'\0');
+
+	/* Scan file_path_list. */
+	file_path_list = pos;
+	do {
+		if (size < sizeof(header))
+			return false;
+		header = *(const efi_device_path_protocol_t *)pos;
+		if (header.length < sizeof(header))
+			return false;
+		if (size < header.length)
+			return false;
+		pos += header.length;
+		size -= header.length;
+	} while ((header.type != EFI_DEV_END_PATH && header.type != EFI_DEV_END_PATH2) ||
+		 (header.sub_type != EFI_DEV_END_ENTIRE));
+	if (pos != (const void *)file_path_list + src->file_path_list_length)
+		return false;
+
+	dest->attributes = src->attributes;
+	dest->file_path_list_length = src->file_path_list_length;
+	dest->description = description;
+	dest->file_path_list = file_path_list;
+	dest->optional_data_size = size;
+	dest->optional_data = size ? pos : NULL;
+
+	return true;
+}
+
+/*
+ * At least some versions of Dell firmware pass the entire contents of the
+ * Boot#### variable, i.e. the EFI_LOAD_OPTION descriptor, rather than just the
+ * OptionalData field.
+ *
+ * Detect this case and extract OptionalData.
+ */
+void efi_apply_loadoptions_quirk(const void **load_options, int *load_options_size)
+{
+	const efi_load_option_t *load_option = *load_options;
+	efi_load_option_unpacked_t load_option_unpacked;
+
+	if (!IS_ENABLED(CONFIG_X86))
+		return;
+	if (!load_option)
+		return;
+	if (*load_options_size < sizeof(*load_option))
+		return;
+	if ((load_option->attributes & ~EFI_LOAD_OPTION_BOOT_MASK) != 0)
+		return;
+
+	if (!efi_load_option_unpack(&load_option_unpacked, load_option, *load_options_size))
+		return;
+
+	efi_warn_once(FW_BUG "LoadOptions is an EFI_LOAD_OPTION descriptor\n");
+	efi_warn_once(FW_BUG "Using OptionalData as a workaround\n");
+
+	*load_options = load_option_unpacked.optional_data;
+	*load_options_size = load_option_unpacked.optional_data_size;
+}
+
+/*
  * Convert the unicode UEFI command line to ASCII to pass to kernel.
  * Size of memory allocated return in *cmd_line_len.
  * Returns NULL on error.
@@ -239,11 +343,14 @@ char *efi_convert_cmdline(efi_loaded_image_t *image, int *cmd_line_len)
 {
 	const u16 *s2;
 	unsigned long cmdline_addr = 0;
-	int options_chars = efi_table_attr(image, load_options_size) / 2;
+	int options_chars = efi_table_attr(image, load_options_size);
 	const u16 *options = efi_table_attr(image, load_options);
 	int options_bytes = 0, safe_options_bytes = 0;  /* UTF-8 bytes */
 	bool in_quote = false;
 	efi_status_t status;
+
+	efi_apply_loadoptions_quirk((const void **)&options, &options_chars);
+	options_chars /= sizeof(*options);
 
 	if (options) {
 		s2 = options;
@@ -518,13 +625,54 @@ efi_status_t efi_load_initrd_cmdline(efi_loaded_image_t *image,
 				    load_addr, load_size);
 }
 
+static const struct {
+	efi_tcg2_event_t	event_data;
+	efi_tcg2_tagged_event_t tagged_event;
+	u8			tagged_event_data[];
+} initrd_tcg2_event = {
+	{
+		sizeof(initrd_tcg2_event) + sizeof("Linux initrd"),
+		{
+			sizeof(initrd_tcg2_event.event_data.event_header),
+			EFI_TCG2_EVENT_HEADER_VERSION,
+			9,
+			EV_EVENT_TAG,
+		},
+	},
+	{
+		INITRD_EVENT_TAG_ID,
+		sizeof("Linux initrd"),
+	},
+	{ "Linux initrd" },
+};
+
+static void efi_measure_initrd(unsigned long load_addr, unsigned long load_size)
+{
+	efi_guid_t tcg2_guid = EFI_TCG2_PROTOCOL_GUID;
+	efi_tcg2_protocol_t *tcg2 = NULL;
+	efi_status_t status;
+
+	efi_bs_call(locate_protocol, &tcg2_guid, NULL, (void **)&tcg2);
+	if (tcg2) {
+		status = efi_call_proto(tcg2, hash_log_extend_event,
+					0, load_addr, load_size,
+					&initrd_tcg2_event.event_data);
+		if (status != EFI_SUCCESS)
+			efi_warn("Failed to measure initrd data: 0x%lx\n",
+				 status);
+		else
+			efi_info("Measured initrd data into PCR %d\n",
+				 initrd_tcg2_event.event_data.event_header.pcr_index);
+	}
+}
+
 /**
  * efi_load_initrd() - Load initial RAM disk
  * @image:	EFI loaded image protocol
  * @load_addr:	pointer to loaded initrd
  * @load_size:	size of loaded initrd
- * @soft_limit:	preferred size of allocated memory for loading the initrd
- * @hard_limit:	minimum size of allocated memory
+ * @soft_limit:	preferred address for loading the initrd
+ * @hard_limit:	upper limit address for loading the initrd
  *
  * Return:	status code
  */
@@ -536,17 +684,25 @@ efi_status_t efi_load_initrd(efi_loaded_image_t *image,
 {
 	efi_status_t status;
 
-	if (!load_addr || !load_size)
-		return EFI_INVALID_PARAMETER;
-
-	status = efi_load_initrd_dev_path(load_addr, load_size, hard_limit);
-	if (status == EFI_SUCCESS) {
-		efi_info("Loaded initrd from LINUX_EFI_INITRD_MEDIA_GUID device path\n");
-	} else if (status == EFI_NOT_FOUND) {
-		status = efi_load_initrd_cmdline(image, load_addr, load_size,
-						 soft_limit, hard_limit);
-		if (status == EFI_SUCCESS && *load_size > 0)
-			efi_info("Loaded initrd from command line option\n");
+	if (efi_noinitrd) {
+		*load_addr = *load_size = 0;
+		status = EFI_SUCCESS;
+	} else {
+		status = efi_load_initrd_dev_path(load_addr, load_size, hard_limit);
+		if (status == EFI_SUCCESS) {
+			efi_info("Loaded initrd from LINUX_EFI_INITRD_MEDIA_GUID device path\n");
+			if (*load_size > 0)
+				efi_measure_initrd(*load_addr, *load_size);
+		} else if (status == EFI_NOT_FOUND) {
+			status = efi_load_initrd_cmdline(image, load_addr, load_size,
+							 soft_limit, hard_limit);
+			if (status == EFI_SUCCESS && *load_size > 0)
+				efi_info("Loaded initrd from command line option\n");
+		}
+		if (status != EFI_SUCCESS) {
+			efi_err("Failed to load initrd: 0x%lx\n", status);
+			*load_addr = *load_size = 0;
+		}
 	}
 
 	return status;

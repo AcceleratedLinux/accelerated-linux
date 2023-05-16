@@ -4,125 +4,126 @@
 #ifndef __MLX5E_KTLS_H__
 #define __MLX5E_KTLS_H__
 
+#include <linux/tls.h>
+#include <net/tls.h>
 #include "en.h"
 
 #ifdef CONFIG_MLX5_EN_TLS
-#include <net/tls.h>
-#include "accel/tls.h"
-#include "en_accel/tls_rxtx.h"
+int mlx5_ktls_create_key(struct mlx5_core_dev *mdev,
+			 struct tls_crypto_info *crypto_info,
+			 u32 *p_key_id);
+void mlx5_ktls_destroy_key(struct mlx5_core_dev *mdev, u32 key_id);
 
-#define MLX5E_KTLS_STATIC_UMR_WQE_SZ \
-	(offsetof(struct mlx5e_umr_wqe, tls_static_params_ctx) + \
-	 MLX5_ST_SZ_BYTES(tls_static_params))
-#define MLX5E_KTLS_STATIC_WQEBBS \
-	(DIV_ROUND_UP(MLX5E_KTLS_STATIC_UMR_WQE_SZ, MLX5_SEND_WQE_BB))
-
-#define MLX5E_KTLS_PROGRESS_WQE_SZ \
-	(offsetof(struct mlx5e_tx_wqe, tls_progress_params_ctx) + \
-	 MLX5_ST_SZ_BYTES(tls_progress_params))
-#define MLX5E_KTLS_PROGRESS_WQEBBS \
-	(DIV_ROUND_UP(MLX5E_KTLS_PROGRESS_WQE_SZ, MLX5_SEND_WQE_BB))
-
-struct mlx5e_dump_wqe {
-	struct mlx5_wqe_ctrl_seg ctrl;
-	struct mlx5_wqe_data_seg data;
-};
-
-#define MLX5E_TLS_FETCH_UMR_WQE(sq, pi) \
-	((struct mlx5e_umr_wqe *)mlx5e_fetch_wqe(&(sq)->wq, pi, MLX5E_KTLS_STATIC_UMR_WQE_SZ))
-#define MLX5E_TLS_FETCH_PROGRESS_WQE(sq, pi) \
-	((struct mlx5e_tx_wqe *)mlx5e_fetch_wqe(&(sq)->wq, pi, MLX5E_KTLS_PROGRESS_WQE_SZ))
-#define MLX5E_TLS_FETCH_DUMP_WQE(sq, pi) \
-	((struct mlx5e_dump_wqe *)mlx5e_fetch_wqe(&(sq)->wq, pi, \
-						  sizeof(struct mlx5e_dump_wqe)))
-
-#define MLX5E_KTLS_DUMP_WQEBBS \
-	(DIV_ROUND_UP(sizeof(struct mlx5e_dump_wqe), MLX5_SEND_WQE_BB))
-
-enum {
-	MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_NO_OFFLOAD     = 0,
-	MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_OFFLOAD        = 1,
-	MLX5E_TLS_PROGRESS_PARAMS_AUTH_STATE_AUTHENTICATION = 2,
-};
-
-enum {
-	MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_START     = 0,
-	MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_TRACKING  = 1,
-	MLX5E_TLS_PROGRESS_PARAMS_RECORD_TRACKER_STATE_SEARCHING = 2,
-};
-
-struct mlx5e_ktls_offload_context_tx {
-	struct tls_offload_context_tx *tx_ctx;
-	struct tls12_crypto_info_aes_gcm_128 crypto_info;
-	u32 expected_seq;
-	u32 tisn;
-	u32 key_id;
-	bool ctx_post_pending;
-};
-
-struct mlx5e_ktls_offload_context_tx_shadow {
-	struct tls_offload_context_tx         tx_ctx;
-	struct mlx5e_ktls_offload_context_tx *priv_tx;
-};
-
-static inline void
-mlx5e_set_ktls_tx_priv_ctx(struct tls_context *tls_ctx,
-			   struct mlx5e_ktls_offload_context_tx *priv_tx)
+static inline bool mlx5e_is_ktls_device(struct mlx5_core_dev *mdev)
 {
-	struct tls_offload_context_tx *tx_ctx = tls_offload_ctx_tx(tls_ctx);
-	struct mlx5e_ktls_offload_context_tx_shadow *shadow;
+	if (is_kdump_kernel())
+		return false;
 
-	BUILD_BUG_ON(sizeof(*shadow) > TLS_OFFLOAD_CONTEXT_SIZE_TX);
+	if (!MLX5_CAP_GEN(mdev, tls_tx) && !MLX5_CAP_GEN(mdev, tls_rx))
+		return false;
 
-	shadow = (struct mlx5e_ktls_offload_context_tx_shadow *)tx_ctx;
+	if (!MLX5_CAP_GEN(mdev, log_max_dek))
+		return false;
 
-	shadow->priv_tx = priv_tx;
-	priv_tx->tx_ctx = tx_ctx;
+	return MLX5_CAP_TLS(mdev, tls_1_2_aes_gcm_128);
 }
 
-static inline struct mlx5e_ktls_offload_context_tx *
-mlx5e_get_ktls_tx_priv_ctx(struct tls_context *tls_ctx)
+static inline bool mlx5e_ktls_type_check(struct mlx5_core_dev *mdev,
+					 struct tls_crypto_info *crypto_info)
 {
-	struct tls_offload_context_tx *tx_ctx = tls_offload_ctx_tx(tls_ctx);
-	struct mlx5e_ktls_offload_context_tx_shadow *shadow;
+	switch (crypto_info->cipher_type) {
+	case TLS_CIPHER_AES_GCM_128:
+		if (crypto_info->version == TLS_1_2_VERSION)
+			return MLX5_CAP_TLS(mdev,  tls_1_2_aes_gcm_128);
+		break;
+	}
 
-	BUILD_BUG_ON(sizeof(*shadow) > TLS_OFFLOAD_CONTEXT_SIZE_TX);
-
-	shadow = (struct mlx5e_ktls_offload_context_tx_shadow *)tx_ctx;
-
-	return shadow->priv_tx;
+	return false;
 }
 
 void mlx5e_ktls_build_netdev(struct mlx5e_priv *priv);
-void mlx5e_ktls_tx_offload_set_pending(struct mlx5e_ktls_offload_context_tx *priv_tx);
+int mlx5e_ktls_init_rx(struct mlx5e_priv *priv);
+void mlx5e_ktls_cleanup_rx(struct mlx5e_priv *priv);
+int mlx5e_ktls_set_feature_rx(struct net_device *netdev, bool enable);
+struct mlx5e_ktls_resync_resp *
+mlx5e_ktls_rx_resync_create_resp_list(void);
+void mlx5e_ktls_rx_resync_destroy_resp_list(struct mlx5e_ktls_resync_resp *resp_list);
 
-bool mlx5e_ktls_handle_tx_skb(struct tls_context *tls_ctx, struct mlx5e_txqsq *sq,
-			      struct sk_buff *skb, int datalen,
-			      struct mlx5e_accel_tx_tls_state *state);
-void mlx5e_ktls_tx_handle_resync_dump_comp(struct mlx5e_txqsq *sq,
-					   struct mlx5e_tx_wqe_info *wi,
-					   u32 *dma_fifo_cc);
-u16 mlx5e_ktls_get_stop_room(struct mlx5e_txqsq *sq);
-
-static inline u8
-mlx5e_ktls_dumps_num_wqes(struct mlx5e_txqsq *sq, unsigned int nfrags,
-			  unsigned int sync_len)
+static inline bool mlx5e_is_ktls_tx(struct mlx5_core_dev *mdev)
 {
-	/* Given the MTU and sync_len, calculates an upper bound for the
-	 * number of DUMP WQEs needed for the TX resync of a record.
-	 */
-	return nfrags + DIV_ROUND_UP(sync_len, sq->hw_mtu);
+	return !is_kdump_kernel() && MLX5_CAP_GEN(mdev, tls_tx);
 }
-#else
 
+static inline bool mlx5e_is_ktls_rx(struct mlx5_core_dev *mdev)
+{
+	return !is_kdump_kernel() && MLX5_CAP_GEN(mdev, tls_rx);
+}
+
+struct mlx5e_tls_sw_stats {
+	atomic64_t tx_tls_ctx;
+	atomic64_t tx_tls_del;
+	atomic64_t rx_tls_ctx;
+	atomic64_t rx_tls_del;
+};
+
+struct mlx5e_tls {
+	struct mlx5e_tls_sw_stats sw_stats;
+	struct workqueue_struct *rx_wq;
+};
+
+int mlx5e_ktls_init(struct mlx5e_priv *priv);
+void mlx5e_ktls_cleanup(struct mlx5e_priv *priv);
+
+int mlx5e_ktls_get_count(struct mlx5e_priv *priv);
+int mlx5e_ktls_get_strings(struct mlx5e_priv *priv, uint8_t *data);
+int mlx5e_ktls_get_stats(struct mlx5e_priv *priv, u64 *data);
+
+#else
 static inline void mlx5e_ktls_build_netdev(struct mlx5e_priv *priv)
 {
 }
 
+static inline int mlx5e_ktls_init_rx(struct mlx5e_priv *priv)
+{
+	return 0;
+}
+
+static inline void mlx5e_ktls_cleanup_rx(struct mlx5e_priv *priv)
+{
+}
+
+static inline int mlx5e_ktls_set_feature_rx(struct net_device *netdev, bool enable)
+{
+	netdev_warn(netdev, "kTLS is not supported\n");
+	return -EOPNOTSUPP;
+}
+
+static inline struct mlx5e_ktls_resync_resp *
+mlx5e_ktls_rx_resync_create_resp_list(void)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
+
 static inline void
-mlx5e_ktls_tx_handle_resync_dump_comp(struct mlx5e_txqsq *sq,
-				      struct mlx5e_tx_wqe_info *wi,
-				      u32 *dma_fifo_cc) {}
+mlx5e_ktls_rx_resync_destroy_resp_list(struct mlx5e_ktls_resync_resp *resp_list) {}
+
+static inline bool mlx5e_is_ktls_rx(struct mlx5_core_dev *mdev)
+{
+	return false;
+}
+
+static inline int mlx5e_ktls_init(struct mlx5e_priv *priv) { return 0; }
+static inline void mlx5e_ktls_cleanup(struct mlx5e_priv *priv) { }
+static inline int mlx5e_ktls_get_count(struct mlx5e_priv *priv) { return 0; }
+static inline int mlx5e_ktls_get_strings(struct mlx5e_priv *priv, uint8_t *data)
+{
+	return 0;
+}
+
+static inline int mlx5e_ktls_get_stats(struct mlx5e_priv *priv, u64 *data)
+{
+	return 0;
+}
 #endif
 
 #endif /* __MLX5E_TLS_H__ */

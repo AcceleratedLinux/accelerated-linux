@@ -1,0 +1,16 @@
+# This script is sourced by rc, and creates the required dev nodes for this platform,
+
+# Flash devices
+mkdir -p /dev/flash
+ln -s ../mtd0      /dev/flash/boot
+ln -s ../mtd1      /dev/flash/ethmac
+ln -s ../mtd1      /dev/flash/bootarg
+ln -s ../mtd2      /dev/flash/config
+ln -s ../mtdblock2 /dev/flash/configblock
+ln -s ../mtd3      /dev/flash/image
+ln -s ../mtd4      /dev/flash/all
+
+# Misc
+mknod /dev/ipsec c 36 10
+mknod /dev/ledman c 126 0
+mknod /dev/crypto c 10 70

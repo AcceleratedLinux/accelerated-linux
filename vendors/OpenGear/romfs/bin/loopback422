@@ -1,0 +1,2 @@
+#!/bin/sh
+loopback -e eth0 -d -f /dev/port02

@@ -1,0 +1,100 @@
+From 9e924e8b204175e3215cec1b8c033b0095908a77 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Thu, 9 Dec 2021 15:59:33 +0100
+Subject: [PATCH] dummy_verifier: adding a dummy verifier which passes
+ everything
+
+If secure-boot is enabled in UEFI, GRUB needs a mandatory file
+verification for everything. As DAL is doing a different kind of
+verification for its platforms, it doesn't need to rely on this security
+measure. Without this dummy verifier, GRUB is complaining about:
+
+  "error: verification requested but nobody cares"
+---
+ grub-core/Makefile.core.def         |  5 +++
+ grub-core/commands/dummy_verifier.c | 59 +++++++++++++++++++++++++++++
+ 2 files changed, 64 insertions(+)
+ create mode 100644 grub-core/commands/dummy_verifier.c
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index b112a09..cd467e1 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -2586,3 +2586,8 @@ module = {
+   name = watchdog;
+   common = commands/watchdog.c;
+ };
++
++module = {
++  name = dummy_verifier;
++  common = commands/dummy_verifier.c;
++};
+diff --git a/grub-core/commands/dummy_verifier.c b/grub-core/commands/dummy_verifier.c
+new file mode 100644
+index 0000000..ae6ed16
+--- /dev/null
++++ b/grub-core/commands/dummy_verifier.c
+@@ -0,0 +1,60 @@
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2018  Free Software Foundation, Inc.
++ *  Copyright (C) 2021  Digi International Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ *  Dummy verifier to pass all verifications.
++ */
++
++#include <grub/verify.h>
++#include <grub/dl.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++static grub_err_t
++grub_dummy_verify_init (grub_file_t io __attribute__ ((unused)),
++			enum grub_file_type type __attribute__ ((unused)),
++			void **context __attribute__ ((unused)),
++			enum grub_verify_flags *flags __attribute__ ((unused)))
++{
++  /* No flags set (=0), so we'll be used for verification */
++  return GRUB_ERR_NONE;
++}
++
++static grub_err_t
++grub_dummy_verify_write (void *context __attribute__ ((unused)),
++			 void *buf __attribute__ ((unused)),
++			 grub_size_t size __attribute__ ((unused)))
++{
++  /* Mark everything as verified */
++  return GRUB_ERR_NONE;
++}
++
++struct grub_file_verifier grub_dummy_verifier = {
++  .name = "dummy_verifier",
++  .init = grub_dummy_verify_init,
++  .write = grub_dummy_verify_write,
++};
++
++GRUB_MOD_INIT (dummy_verifier)
++{
++  grub_verifier_register (&grub_dummy_verifier);
++}
++
++GRUB_MOD_FINI (dummy_verifier)
++{
++  grub_verifier_unregister (&grub_dummy_verifier);
++}
+-- 
+2.27.0
+

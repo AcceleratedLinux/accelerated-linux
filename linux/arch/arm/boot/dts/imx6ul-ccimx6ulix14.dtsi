@@ -9,6 +9,8 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+#include <dt-bindings/leds/common.h>
+
 / {
 	model = "Digi International IX14 Transport.";
 	compatible = "digi,imx6ulix14", "digi,ccimx6ulsbc", "digi,ccimx6ul", "fsl,imx6ul";
@@ -55,6 +57,8 @@
 			compatible = "ethernet-phy-ieee802.3-c22";
 			smsc,disable-energy-detect;
 			reg = <0>;
+			clocks = <&clks IMX6UL_CLK_ENET_REF>;
+			clock-names = "rmii-ref";
 		};
 	};
 };
@@ -76,21 +80,30 @@
 		compatible = "ti,lp5569";
 		reg = <0x32>;
 		clock-mode = /bits/ 8 <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
 		chan0 {
 			chan-name = "PWR_B";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <0>;
 			linux,default-trigger = "timer";
 		};
 		chan1 {
 			chan-name = "PWR_G";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <1>;
 		};
 		chan2 {
 			chan-name = "PWR_R";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_RED>;
+			reg = <2>;
 		};
 		/*
 		 * This LED is not used in non-XBee non-GPS variants
@@ -99,32 +112,44 @@
 			chan-name = "TBD_B";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <3>;
 		};
 		chan4 {
 			chan-name = "TBD_G";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <4>;
 		};
 		chan5 {
 			chan-name = "TBD_R";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_RED>;
+			reg = <5>;
 		};
 		*/
 		chan6 {
 			chan-name = "WIFI_B";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <6>;
 		};
 		chan7 {
 			chan-name = "WIFI_G";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <7>;
 		};
 		chan8 {
 			chan-name = "WIFI_R";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_RED>;
+			reg = <8>;
 		};
 	};
 
@@ -132,35 +157,50 @@
 		compatible = "ti,lp5569";
 		reg = <0x33>;
 		clock-mode = /bits/ 8 <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
 		chan0 {
 			chan-name = "WWAN_SIGNAL_B";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <0>;
 		};
 		chan1 {
 			chan-name = "WWAN_SIGNAL_G";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <1>;
 		};
 		chan2 {
 			chan-name = "WWAN_SIGNAL_R";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_RED>;
+			reg = <2>;
 		};
 		chan3 {
 			chan-name = "WWAN_SERVICE_B";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <3>;
 		};
 		chan4 {
 			chan-name = "WWAN_SERVICE_G";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <4>;
 		};
 		chan5 {
 			chan-name = "WWAN_SERVICE_R";
 			led-cur = /bits/ 8 <0xaf>;
 			max-cur = /bits/ 8 <0xff>;
+			color = <LED_COLOR_ID_RED>;
+			reg = <5>;
 		};
 	};
 

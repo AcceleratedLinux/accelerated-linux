@@ -1,0 +1,11 @@
+--- arptables-v0.0.4/Makefile.org	2022-01-27 15:45:50.305907181 +1000
++++ arptables-v0.0.4/Makefile	2022-01-27 15:46:05.013298453 +1000
+@@ -11,7 +11,7 @@ SYSCONFIGDIR:=/etc/sysconfig
+ DESTDIR:=
+ 
+ COPT_FLAGS:=-O2
+-CFLAGS:=$(COPT_FLAGS) -Wall -Wunused -I$(KERNEL_DIR)/include/ -Iinclude/ -DARPTABLES_VERSION=\"$(ARPTABLES_VERSION)\" #-g -DDEBUG #-pg # -DARPTC_DEBUG
++CFLAGS+=$(COPT_FLAGS) -Wall -Wunused -I$(KERNEL_DIR)/include/ -Iinclude/ -DARPTABLES_VERSION=\"$(ARPTABLES_VERSION)\" #-g -DDEBUG #-pg # -DARPTC_DEBUG
+ 
+ ifndef ARPT_LIBDIR
+ ARPT_LIBDIR:=$(LIBDIR)/arptables

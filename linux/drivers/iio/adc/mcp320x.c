@@ -27,13 +27,13 @@
  * MCP3553
  *
  * Datasheet can be found here:
- * http://ww1.microchip.com/downloads/en/DeviceDoc/21293C.pdf  mcp3001
- * http://ww1.microchip.com/downloads/en/DeviceDoc/21294E.pdf  mcp3002
- * http://ww1.microchip.com/downloads/en/DeviceDoc/21295d.pdf  mcp3004/08
+ * https://ww1.microchip.com/downloads/en/DeviceDoc/21293C.pdf  mcp3001
+ * https://ww1.microchip.com/downloads/en/DeviceDoc/21294E.pdf  mcp3002
+ * https://ww1.microchip.com/downloads/en/DeviceDoc/21295d.pdf  mcp3004/08
  * http://ww1.microchip.com/downloads/en/DeviceDoc/21290D.pdf  mcp3201
  * http://ww1.microchip.com/downloads/en/DeviceDoc/21034D.pdf  mcp3202
  * http://ww1.microchip.com/downloads/en/DeviceDoc/21298c.pdf  mcp3204/08
- * http://ww1.microchip.com/downloads/en/DeviceDoc/21700E.pdf  mcp3301
+ * https://ww1.microchip.com/downloads/en/DeviceDoc/21700E.pdf  mcp3301
  * http://ww1.microchip.com/downloads/en/DeviceDoc/21950D.pdf  mcp3550/1/3
  */
 
@@ -41,6 +41,7 @@
 #include <linux/delay.h>
 #include <linux/spi/spi.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/iio/iio.h>
 #include <linux/regulator/consumer.h>
 
@@ -384,8 +385,6 @@ static int mcp320x_probe(struct spi_device *spi)
 	adc = iio_priv(indio_dev);
 	adc->spi = spi;
 
-	indio_dev->dev.parent = &spi->dev;
-	indio_dev->dev.of_node = spi->dev.of_node;
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->info = &mcp320x_info;
@@ -460,18 +459,15 @@ reg_disable:
 	return ret;
 }
 
-static int mcp320x_remove(struct spi_device *spi)
+static void mcp320x_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 	struct mcp320x *adc = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
 	regulator_disable(adc->reg);
-
-	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id mcp320x_dt_ids[] = {
 	/* NOTE: The use of compatibles with no vendor prefix is deprecated. */
 	{ .compatible = "mcp3001" },
@@ -499,7 +495,6 @@ static const struct of_device_id mcp320x_dt_ids[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(of, mcp320x_dt_ids);
-#endif
 
 static const struct spi_device_id mcp320x_id[] = {
 	{ "mcp3001", mcp3001 },
@@ -522,7 +517,7 @@ MODULE_DEVICE_TABLE(spi, mcp320x_id);
 static struct spi_driver mcp320x_driver = {
 	.driver = {
 		.name = "mcp320x",
-		.of_match_table = of_match_ptr(mcp320x_dt_ids),
+		.of_match_table = mcp320x_dt_ids,
 	},
 	.probe = mcp320x_probe,
 	.remove = mcp320x_remove,

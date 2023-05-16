@@ -1,6 +1,6 @@
 
-GRUB_VERSION = 2.02
-URL = ftp://ftp.gnu.org/gnu/grub/grub-$(GRUB_VERSION).tar.gz
+GRUB_VERSION = 2.06
+URL = https://ftp.gnu.org/gnu/grub/grub-$(GRUB_VERSION).tar.gz
 
 CONFOPTS += --exec-prefix="/usr"
 CONFOPTS += --datarootdir="/usr/share"
@@ -30,13 +30,15 @@ ifdef CONFIG_USER_GRUB_DISABLE_VGA_CONSOLE
   CONFOPTS += --disable-vga-console
 endif
 
-grub-$(GRUB_VERSION)_ROMFS = grub_romfs
+AUTOMAKE_ROMFS = grub_romfs
 
 AUTORECONF = ./autogen.sh
 
 ifneq (,$(CONFIG_DEFAULTS_DIGI_CONNECTIT16)$(CONFIG_DEFAULTS_DIGI_CONNECTIT48))
 CFLAGS += -DDIGI_CONNECTITXX
 endif
+
+CFLAGS += -fno-stack-protector
 
 include $(ROOTDIR)/tools/automake.inc
 
@@ -49,7 +51,12 @@ grub_romfs:
 	ARCH=`ls` ; \
 	cd $$ARCH ; \
 	for i in * ; do \
-		$(ROMFSINST) -S /usr/lib/grub/$$ARCH/$$i ; \
+		$(ROMFSINST) -d -S /usr/lib/grub/$$ARCH/$$i ; \
 	done
-	ACL_LICENSE=GPLv2 ACL_URL=https://github.com/AcceleratedLinux/accelerated-linux ACL_PKG=fw_env_emulation $(ROMFSINST) -e CONFIG_USER_GRUB_ENVTOOLS -p 755 /bin/fw_printenv
+
+	$(ROMFSINST) -d -p 755 build/grub-$(GRUB_VERSION)-install/usr/bin/grub-editenv /usr/bin/grub-editenv
+	$(ROMFSINST) -p 755 build/grub-$(GRUB_VERSION)-install/usr/bin/grub-mkstandalone /usr/bin/grub-mkstandalone
+	$(ROMFSINST) -d -p 755 build/grub-$(GRUB_VERSION)-install/usr/sbin/grub-install /usr/sbin/grub-install
+
+	ACL_LICENSE=GPLv2 ACL_URL=https://github.com/AcceleratedLinux/accelerated-linux ACL_PKG=fw_env_emulation $(ROMFSINST) -d -e CONFIG_USER_GRUB_ENVTOOLS -p 755 /bin/fw_printenv
 	ACL_LICENSE=GPLv2 ACL_URL=https://github.com/AcceleratedLinux/accelerated-linux ACL_PKG=fw_env_emulation $(ROMFSINST) -e CONFIG_USER_GRUB_ENVTOOLS -s /bin/fw_printenv /bin/fw_setenv

@@ -1,0 +1,16 @@
+ setup.py | 3 ++-
+ 1 file changed, 2 insertion(+), 1 deletion(-)
+
+diff --git a/setup.py b/setup.py
+--- a/setup.py
++++ b/setup.py
+@@ -1648,6 +1648,9 @@
+                                libraries=["sqlite3",]))
+         else:
+             self.missing.append('_sqlite3')
++            if CROSS_COMPILING:
++                print("ERROR: sqlite3.h can not be found and is required.")
++                sys.exit(1)
+ 
+     def detect_platform_specific_exts(self):
+         # Unix-only modules

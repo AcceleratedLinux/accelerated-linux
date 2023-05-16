@@ -112,7 +112,7 @@ lirc_mode2_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_trace_printk:
 		if (perfmon_capable())
 			return bpf_get_trace_printk_proto();
-		/* fall through */
+		fallthrough;
 	default:
 		return NULL;
 	}
@@ -160,7 +160,7 @@ static int lirc_bpf_attach(struct rc_dev *rcdev, struct bpf_prog *prog)
 		goto unlock;
 	}
 
-	ret = bpf_prog_array_copy(old_array, NULL, prog, &new_array);
+	ret = bpf_prog_array_copy(old_array, NULL, prog, 0, &new_array);
 	if (ret < 0)
 		goto unlock;
 
@@ -193,7 +193,7 @@ static int lirc_bpf_detach(struct rc_dev *rcdev, struct bpf_prog *prog)
 	}
 
 	old_array = lirc_rcu_dereference(raw->progs);
-	ret = bpf_prog_array_copy(old_array, prog, NULL, &new_array);
+	ret = bpf_prog_array_copy(old_array, prog, NULL, 0, &new_array);
 	/*
 	 * Do not use bpf_prog_array_delete_safe() as we would end up
 	 * with a dummy entry in the array, and the we would free the
@@ -216,8 +216,12 @@ void lirc_bpf_run(struct rc_dev *rcdev, u32 sample)
 
 	raw->bpf_sample = sample;
 
-	if (raw->progs)
-		BPF_PROG_RUN_ARRAY(raw->progs, &raw->bpf_sample, BPF_PROG_RUN);
+	if (raw->progs) {
+		rcu_read_lock();
+		bpf_prog_run_array(rcu_dereference(raw->progs),
+				   &raw->bpf_sample, bpf_prog_run);
+		rcu_read_unlock();
+	}
 }
 
 /*
@@ -326,7 +330,8 @@ int lirc_prog_query(const union bpf_attr *attr, union bpf_attr __user *uattr)
 	}
 
 	if (attr->query.prog_cnt != 0 && prog_ids && cnt)
-		ret = bpf_prog_array_copy_to_user(progs, prog_ids, cnt);
+		ret = bpf_prog_array_copy_to_user(progs, prog_ids,
+						  attr->query.prog_cnt);
 
 unlock:
 	mutex_unlock(&ir_raw_handler_lock);

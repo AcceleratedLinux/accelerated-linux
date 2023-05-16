@@ -167,8 +167,6 @@ struct macInfo {
 struct vxge_config {
 	int		tx_pause_enable;
 	int		rx_pause_enable;
-
-#define	NEW_NAPI_WEIGHT	64
 	int		napi_weight;
 	int		intr_type;
 #define INTA	0
@@ -454,49 +452,49 @@ int vxge_fw_upgrade(struct vxgedev *vdev, char *fw_name, int override);
 #define vxge_debug_ll_config(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_LL_CONFIG, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_ll_config(level, fmt, ...)
+#define vxge_debug_ll_config(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #if (VXGE_DEBUG_INIT & VXGE_DEBUG_MASK)
 #define vxge_debug_init(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_INIT, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_init(level, fmt, ...)
+#define vxge_debug_init(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #if (VXGE_DEBUG_TX & VXGE_DEBUG_MASK)
 #define vxge_debug_tx(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_TX, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_tx(level, fmt, ...)
+#define vxge_debug_tx(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #if (VXGE_DEBUG_RX & VXGE_DEBUG_MASK)
 #define vxge_debug_rx(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_RX, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_rx(level, fmt, ...)
+#define vxge_debug_rx(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #if (VXGE_DEBUG_MEM & VXGE_DEBUG_MASK)
 #define vxge_debug_mem(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_MEM, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_mem(level, fmt, ...)
+#define vxge_debug_mem(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #if (VXGE_DEBUG_ENTRYEXIT & VXGE_DEBUG_MASK)
 #define vxge_debug_entryexit(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_ENTRYEXIT, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_entryexit(level, fmt, ...)
+#define vxge_debug_entryexit(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #if (VXGE_DEBUG_INTR & VXGE_DEBUG_MASK)
 #define vxge_debug_intr(level, fmt, ...) \
 	vxge_debug_ll(level, VXGE_DEBUG_INTR, fmt, ##__VA_ARGS__)
 #else
-#define vxge_debug_intr(level, fmt, ...)
+#define vxge_debug_intr(level, fmt, ...) no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 #define VXGE_DEVICE_DEBUG_LEVEL_SET(level, mask, vdev) {\

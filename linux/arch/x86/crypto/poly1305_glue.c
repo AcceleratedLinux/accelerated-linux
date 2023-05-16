@@ -11,11 +11,12 @@
 #include <linux/jump_label.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/sizes.h>
 #include <asm/intel-family.h>
 #include <asm/simd.h>
 
 asmlinkage void poly1305_init_x86_64(void *ctx,
-				     const u8 key[POLY1305_KEY_SIZE]);
+				     const u8 key[POLY1305_BLOCK_SIZE]);
 asmlinkage void poly1305_blocks_x86_64(void *ctx, const u8 *inp,
 				       const size_t len, const u32 padbit);
 asmlinkage void poly1305_emit_x86_64(void *ctx, u8 mac[POLY1305_DIGEST_SIZE],
@@ -80,7 +81,7 @@ static void convert_to_base2_64(void *ctx)
 	state->is_base2_26 = 0;
 }
 
-static void poly1305_simd_init(void *ctx, const u8 key[POLY1305_KEY_SIZE])
+static void poly1305_simd_init(void *ctx, const u8 key[POLY1305_BLOCK_SIZE])
 {
 	poly1305_init_x86_64(ctx, key);
 }
@@ -128,7 +129,7 @@ static void poly1305_simd_emit(void *ctx, u8 mac[POLY1305_DIGEST_SIZE],
 		poly1305_emit_avx(ctx, mac, nonce);
 }
 
-void poly1305_init_arch(struct poly1305_desc_ctx *dctx, const u8 *key)
+void poly1305_init_arch(struct poly1305_desc_ctx *dctx, const u8 key[POLY1305_KEY_SIZE])
 {
 	poly1305_simd_init(&dctx->h, key);
 	dctx->s[0] = get_unaligned_le32(&key[16]);
@@ -157,8 +158,6 @@ static unsigned int crypto_poly1305_setdctxkey(struct poly1305_desc_ctx *dctx,
 			dctx->s[1] = get_unaligned_le32(&inp[4]);
 			dctx->s[2] = get_unaligned_le32(&inp[8]);
 			dctx->s[3] = get_unaligned_le32(&inp[12]);
-			inp += POLY1305_BLOCK_SIZE;
-			len -= POLY1305_BLOCK_SIZE;
 			acc += POLY1305_BLOCK_SIZE;
 			dctx->sset = true;
 		}
@@ -211,7 +210,7 @@ void poly1305_final_arch(struct poly1305_desc_ctx *dctx, u8 *dst)
 	}
 
 	poly1305_simd_emit(&dctx->h, dst, dctx->s);
-	*dctx = (struct poly1305_desc_ctx){};
+	memzero_explicit(dctx, sizeof(*dctx));
 }
 EXPORT_SYMBOL(poly1305_final_arch);
 

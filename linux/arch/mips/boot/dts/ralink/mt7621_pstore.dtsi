@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (C) 2022 Digi International
+ */
+/ {
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/*
+		 * 64KiB reserved for pstore (ramoops) on platforms with 256MB
+                 * memory. This leaves ~7MiB stack for U-Boot
+		 */
+		ramoops@f000000 {
+			compatible = "ramoops";
+			reg = <0x0f000000 0x10000>;
+			ecc-size = <16>;
+			record-size = <0x1000>;
+			console-size = <0x1000>;
+		};
+	};
+};

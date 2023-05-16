@@ -27,7 +27,6 @@
 #include <asm/pgalloc.h>
 #include <asm/machdep.h>
 #include <asm/io.h>
-#include <asm/dma.h>
 #ifdef CONFIG_ATARI
 #include <asm/atari_stram.h>
 #endif
@@ -226,8 +225,8 @@ static pte_t * __init kernel_page_table(void)
 {
 	pte_t *pte_table = last_pte_table;
 
-	if (((unsigned long)last_pte_table & ~PAGE_MASK) == 0) {
-		pte_table = (pte_t *)memblock_alloc_low(PAGE_SIZE, PAGE_SIZE);
+	if (PAGE_ALIGNED(last_pte_table)) {
+		pte_table = memblock_alloc_low(PAGE_SIZE, PAGE_SIZE);
 		if (!pte_table) {
 			panic("%s: Failed to allocate %lu bytes align=%lx\n",
 					__func__, PAGE_SIZE, PAGE_SIZE);
@@ -274,9 +273,8 @@ static pmd_t * __init kernel_ptr_table(void)
 	}
 
 	last_pmd_table += PTRS_PER_PMD;
-	if (((unsigned long)last_pmd_table & ~PAGE_MASK) == 0) {
-		last_pmd_table = (pmd_t *)memblock_alloc_low(PAGE_SIZE,
-							   PAGE_SIZE);
+	if (PAGE_ALIGNED(last_pmd_table)) {
+		last_pmd_table = memblock_alloc_low(PAGE_SIZE, PAGE_SIZE);
 		if (!last_pmd_table)
 			panic("%s: Failed to allocate %lu bytes align=%lx\n",
 			      __func__, PAGE_SIZE, PAGE_SIZE);
@@ -411,7 +409,8 @@ void __init paging_init(void)
 
 	min_addr = m68k_memory[0].addr;
 	max_addr = min_addr + m68k_memory[0].size;
-	memblock_add_node(m68k_memory[0].addr, m68k_memory[0].size, 0);
+	memblock_add_node(m68k_memory[0].addr, m68k_memory[0].size, 0,
+			  MEMBLOCK_NONE);
 	for (i = 1; i < m68k_num_memory;) {
 		if (m68k_memory[i].addr < min_addr) {
 			printk("Ignoring memory chunk at 0x%lx:0x%lx before the first chunk\n",
@@ -422,7 +421,8 @@ void __init paging_init(void)
 				(m68k_num_memory - i) * sizeof(struct m68k_mem_info));
 			continue;
 		}
-		memblock_add_node(m68k_memory[i].addr, m68k_memory[i].size, i);
+		memblock_add_node(m68k_memory[i].addr, m68k_memory[i].size, i,
+				  MEMBLOCK_NONE);
 		addr = m68k_memory[i].addr + m68k_memory[i].size;
 		if (addr > max_addr)
 			max_addr = addr;
@@ -456,6 +456,8 @@ void __init paging_init(void)
 
 	flush_tlb_all();
 
+	early_memtest(min_addr, max_addr);
+
 	/*
 	 * initialize the bad page table and bad page to point
 	 * to a couple of allocated pages
@@ -468,7 +470,7 @@ void __init paging_init(void)
 	/*
 	 * Set up SFC/DFC registers
 	 */
-	set_fs(KERNEL_DS);
+	set_fc(USER_DATA);
 
 #ifdef DEBUG
 	printk ("before free_area_init\n");

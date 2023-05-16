@@ -1,0 +1,135 @@
+#!/bin/sh
+#
+# Script to start and stop UPS services
+
+if [ -f /etc/config/scripts/upsctl ]; then
+	exec /bin/sh /etc/config/scripts/upsctl "$@"
+fi
+
+TIMEOUT=300 source /etc/scripts/mutex
+
+upsctl_stop ()
+{
+	if [ -f /etc/config/upsmon.conf ]; then
+		echo "Stopping UPS Monitoring Daemon"
+		pid=""
+		if [ -f /var/run/upsmon.pid ]; then
+			pid=`cat /var/run/upsmon.pid`
+		fi
+		upsmon -c stop
+		if [ ! -z "$pid" ]; then
+			for i in 1 2 3; do
+				kill -0 $pid
+				if [ "$?" != 0 ]; then break; fi
+				if [ $i = 3 ]; then
+					kill -KILL $pid
+					rm -f /var/run/upsmon.pid
+				fi
+				sleep 1
+			done
+		fi
+	fi
+	if [ -f /etc/config/ups.conf ]; then
+		echo "Stopping UPS Network Daemon"
+		upsd -c stop
+		upsdrvctl stop
+		# Ensure drivers are really stopped before exiting
+		stop_timeout=10
+		ifs="$IFS"
+		IFS=$'\n'
+		for section in $(grep '^\[.*]$' /etc/config/ups.conf); do
+			upsname=$(echo $section | sed 's/^\[\(.*\)\]$/\1/');
+			for (( i=0 ; i < $stop_timeout ; i++ )); do
+				if ! ps w | grep "ups.*/bin/.* -a $upsname" | grep -v grep &> /dev/null; then
+					break
+				fi
+				sleep 1
+			done
+		done
+		IFS="$ifs"
+	fi
+}
+
+upsctl_start_drivers()
+{
+	batch_size=20
+	started_upses=0
+
+	# iterate through any rpc_* UPSes in the ups.conf file. start them, one at a time,
+	# but at the end of every "batch", wait for any outstanding ones to finish, to not
+	# overload the system when we have large number of UPSes.
+	grep '^\[' /etc/config/ups.conf | sed 's/\[\(.*\)\]/\1/g' | while read -r ups
+	do
+		upsdrvctl start $ups >/dev/null 2>&1 &
+		started_upses=$(( started_upses + 1 ))
+		if [ "$started_upses" -ge "$batch_size" ]
+		then
+			wait $(jobs -p)
+			started_upses=0
+		fi
+	done
+	wait $(jobs -p)
+}
+
+upsctl_start()
+{
+	if [ -f /etc/config/ups.conf ]; then
+		echo "Starting UPS Network Daemon"
+		echo "Setting usb permissions"
+		chown -R root:usb /dev/bus/usb
+		chmod -R g+rw /dev/bus/usb
+		upsd
+		( /bin/sh /etc/scripts/upsctl _start_drivers ) & disown
+	fi
+	if [ -f /etc/config/upsmon.conf ]; then
+		echo "Starting UPS Monitoring Daemon"
+		upsmon -p
+	fi
+}
+
+# Start services by default
+cmd=${1:-start}
+
+case "$cmd" in
+"stop" )
+	upsctl_stop
+;;
+
+"start" )
+	upsctl_start
+;;
+
+"_start_drivers" )
+	upsctl_start_drivers
+;;
+
+"restart" )
+	if [ ! -z "$2" ]; then
+		if [ -f "$2" ]; then
+			# Load new UPS definitions 
+			mv "$2" /etc/config/ups.conf
+		else
+			rm /etc/config/ups.conf
+		fi
+	fi
+	if [ ! -z "$3" ]; then
+		if [ -f "$3" ]; then
+			# Load new UPS monitor config
+			mv "$3" /etc/config/upsmon.conf
+		else
+			rm /etc/config/upsmon.conf
+		fi
+	fi
+
+	upsctl_stop
+	upsctl_start
+;;
+
+"probe" )
+	shift
+	/bin/pmpower "$@"
+	exit $?
+;;
+esac
+
+exit 0

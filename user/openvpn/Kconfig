@@ -1,4 +1,4 @@
 config USER_OPENVPN_OPENVPN
 	bool "openvpn"
 	select LIB_LIBLZO
-	select LIB_LIBSSL
+	select LIB_OPENSSL

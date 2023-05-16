@@ -8,6 +8,9 @@
 
 /*****************************************************************************/
 
+#include <stdlib.h>
+#include <unistd.h>
+
 /*
  *	Temporary buffer to use when working.
  */

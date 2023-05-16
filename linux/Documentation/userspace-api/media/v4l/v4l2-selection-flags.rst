@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 .. _v4l2-selection-flags:
 
@@ -13,9 +6,15 @@
 Selection flags
 ***************
 
-.. tabularcolumns:: |p{5.2cm}|p{2.0cm}|p{6.5cm}|p{1.2cm}|p{1.6cm}|
-
 .. _v4l2-selection-flags-table:
+
+.. raw:: latex
+
+   \small
+
+.. tabularcolumns:: |p{5.6cm}|p{2.0cm}|p{6.5cm}|p{1.2cm}|p{1.2cm}|
+
+.. cssclass:: longtable
 
 .. flat-table:: Selection flag definitions
     :header-rows:  1
@@ -49,3 +48,7 @@ Selection flags
 	inside the subdevice to all further processing steps.
       - No
       - Yes
+
+.. raw:: latex
+
+   \normalsize

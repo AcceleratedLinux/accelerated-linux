@@ -19,6 +19,16 @@ config ACPI_CPPC_CPUFREQ
 
 	  If in doubt, say N.
 
+config ACPI_CPPC_CPUFREQ_FIE
+	bool "Frequency Invariance support for CPPC cpufreq driver"
+	depends on ACPI_CPPC_CPUFREQ && GENERIC_ARCH_TOPOLOGY
+	default y
+	help
+	  This extends frequency invariance support in the CPPC cpufreq driver,
+	  by using CPPC delivered and reference performance counters.
+
+	  If in doubt, say N.
+
 config ARM_ALLWINNER_SUN50I_CPUFREQ_NVMEM
 	tristate "Allwinner nvmem based SUN50I CPUFreq driver"
 	depends on ARCH_SUNXI
@@ -41,6 +51,7 @@ config ARM_ARMADA_37XX_CPUFREQ
 config ARM_ARMADA_8K_CPUFREQ
 	tristate "Armada 8K CPUFreq driver"
 	depends on ARCH_MVEBU && CPUFREQ_DT
+	select ARMADA_AP_CPU_CLK
 	help
 	  This enables the CPUFreq driver support for Marvell
 	  Armada8k SOCs.
@@ -93,6 +104,7 @@ config ARM_IMX6Q_CPUFREQ
 	tristate "Freescale i.MX6 cpufreq support"
 	depends on ARCH_MXC
 	depends on REGULATOR_ANATOP
+	depends on NVMEM_IMX_OCOTP || COMPILE_TEST
 	select PM_OPP
 	help
 	  This adds cpufreq driver support for Freescale i.MX6 series SoCs.
@@ -120,6 +132,18 @@ config ARM_MEDIATEK_CPUFREQ
 	select PM_OPP
 	help
 	  This adds the CPUFreq driver support for MediaTek SoCs.
+
+config ARM_MEDIATEK_CPUFREQ_HW
+	tristate "MediaTek CPUFreq HW driver"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	default m
+	help
+	  Support for the CPUFreq HW driver.
+	  Some MediaTek chipsets have a HW engine to offload the steps
+	  necessary for changing the frequency of the CPUs. Firmware loaded
+	  in this engine exposes a programming interface to the OS.
+	  The driver implements the cpufreq interface for this HW engine.
+	  Say Y if you want to support CPUFreq HW.
 
 config ARM_OMAP2PLUS_CPUFREQ
 	bool "TI OMAP2+"
@@ -194,7 +218,6 @@ config ARM_S3C24XX_CPUFREQ_DEBUGFS
 config ARM_S3C2410_CPUFREQ
 	bool
 	depends on ARM_S3C24XX_CPUFREQ && CPU_S3C2410
-	select S3C2410_CPUFREQ_UTILS
 	help
 	  CPU Frequency scaling support for S3C2410
 
@@ -231,7 +254,6 @@ config ARM_S3C2416_CPUFREQ_VCORESCALE
 config ARM_S3C2440_CPUFREQ
 	bool "S3C2440/S3C2442 CPU Frequency scaling support"
 	depends on ARM_S3C24XX_CPUFREQ && (CPU_S3C2440 || CPU_S3C2442)
-	select S3C2410_CPUFREQ_UTILS
 	default y
 	help
 	  CPU Frequency scaling support for S3C2440 and S3C2442 SoC CPUs.
@@ -281,18 +303,13 @@ config ARM_SPEAR_CPUFREQ
 
 config ARM_STI_CPUFREQ
 	tristate "STi CPUFreq support"
-	depends on SOC_STIH407
+	depends on CPUFREQ_DT && SOC_STIH407
 	help
 	  This driver uses the generic OPP framework to match the running
 	  platform with a predefined set of suitable values.  If not provided
 	  we will fall-back so safe-values contained in Device Tree.  Enable
 	  this config option if you wish to add CPUFreq support for STi based
 	  SoCs.
-
-config ARM_TANGO_CPUFREQ
-	bool
-	depends on CPUFREQ_DT && ARCH_TANGO
-	default y
 
 config ARM_TEGRA20_CPUFREQ
 	tristate "Tegra20/30 CPUFreq support"
@@ -313,6 +330,13 @@ config ARM_TEGRA186_CPUFREQ
 	depends on ARCH_TEGRA && TEGRA_BPMP
 	help
 	  This adds the CPUFreq driver support for Tegra186 SOCs.
+
+config ARM_TEGRA194_CPUFREQ
+	tristate "Tegra194 CPUFreq support"
+	depends on ARCH_TEGRA_194_SOC && TEGRA_BPMP
+	default y
+	help
+	  This adds CPU frequency driver support for Tegra194 SOCs.
 
 config ARM_TI_CPUFREQ
 	bool "Texas Instruments CPUFreq support"

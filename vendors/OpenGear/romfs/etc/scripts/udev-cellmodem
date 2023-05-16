@@ -1,0 +1,29 @@
+#!/bin/sh
+# Invoked via libexec/udev/rules.d/80-cellmodem.rules
+# Triggers rc.cellmodem to run in a little while
+exec >>/var/run/.modem/.rc.cellmodem.log 2>&1
+set -xv
+
+# need this test here because unfiltered mdev can call us
+[ "$DEVTYPE" = "usb_device" ] || exit 0
+read idVendor < /sys$DEVPATH/idVendor || exit 1
+case $idVendor in
+    1199|12d1) : ok;;
+    *) exit 0;;         # unknown device
+esac
+
+DELAY=3
+
+# run-once lock
+mkdir /var/run/.modem/cellmodem_once 2>/dev/null || exit 0
+
+# /etc/rc.cellmodem to run in 1 second
+(
+  logger -t udev "check cellmodem in $DELAY s $ACTION@$DEVPATH"
+  sleep $DELAY
+  export ACTION=${ACTION-unknown}
+  if [ -x /etc/config/rc.cellmodem ]; then
+      exec /etc/config/rc.cellmodem "$@"
+  fi
+  exec /etc/rc.cellmodem "$@"
+) &

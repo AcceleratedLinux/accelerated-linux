@@ -1,0 +1,42 @@
+#!/bin/sh
+
+# 
+# Rerun routes
+#
+if [ ! -e /etc/config/conman.conf ]; then 
+	ACTION=del /etc/config/routes-remove &> /dev/null
+	ACTION=add /etc/config/routes-install &> /dev/null
+else 
+	conman_command global-routes restart
+fi
+#
+# Restart daemons that need to be started after the interface is configured
+#
+if [ -x /bin/upsd ]; then
+	sh /etc/scripts/upsctl restart
+fi
+if [ -x /bin/ifprobe ]; then
+	/bin/ifprobe >& /dev/null &
+fi
+
+# skip these items if they are managed by conman now. (ultimately, all
+# services will move to conman; this is a temporary migration step.)
+if [ ! -e /etc/config/conman.conf ]; then
+	if [ -x /bin/ipsec -a -f /etc/config/ipsec.config.conf ]; then
+		/bin/ipsec setup restart
+	fi
+	if [ -x /bin/ez-ipupdate ]; then
+		killall -10 ez-ipupdate
+	fi
+else
+# Check if ipsec is configured and up - if so, we should restart it 
+	if [ "$(infod_client -o get -p conman.ipsec-daemon.status | cut -f2)" == "up" ]; then
+		conman_command ipsec-daemon restart
+	fi
+fi	
+ 
+
+if [ -f /var/run/portmanager.pid ]; then
+	kill -HUP $(cat /var/run/portmanager.pid)
+fi
+killall -HUP logd

@@ -128,12 +128,12 @@ static inline unsigned int bcm_sf2_get_num_udf_slices(const u8 *layout)
 	return count;
 }
 
-static inline u32 udf_upper_bits(unsigned int num_udf)
+static inline u32 udf_upper_bits(int num_udf)
 {
 	return GENMASK(num_udf - 1, 0) >> (UDFS_PER_SLICE - 1);
 }
 
-static inline u32 udf_lower_bits(unsigned int num_udf)
+static inline u32 udf_lower_bits(int num_udf)
 {
 	return (u8)GENMASK(num_udf - 1, 0);
 }
@@ -348,8 +348,8 @@ static int bcm_sf2_cfp_ipv4_rule_set(struct bcm_sf2_priv *priv, int port,
 				     unsigned int queue_num,
 				     struct ethtool_rx_flow_spec *fs)
 {
+	__be16 vlan_tci = 0, vlan_m_tci = htons(0xffff);
 	struct ethtool_rx_flow_spec_input input = {};
-	__be16 vlan_tci = 0 , vlan_m_tci = 0xffff;
 	const struct cfp_udf_layout *layout;
 	unsigned int slice_num, rule_index;
 	struct ethtool_rx_flow_rule *flow;
@@ -567,14 +567,14 @@ static void bcm_sf2_cfp_slice_ipv6(struct bcm_sf2_priv *priv,
 static struct cfp_rule *bcm_sf2_cfp_rule_find(struct bcm_sf2_priv *priv,
 					      int port, u32 location)
 {
-	struct cfp_rule *rule = NULL;
+	struct cfp_rule *rule;
 
 	list_for_each_entry(rule, &priv->cfp.rules_list, next) {
 		if (rule->port == port && rule->fs.location == location)
-			break;
+			return rule;
 	}
 
-	return rule;
+	return NULL;
 }
 
 static int bcm_sf2_cfp_rule_cmp(struct bcm_sf2_priv *priv, int port,
@@ -629,8 +629,8 @@ static int bcm_sf2_cfp_ipv6_rule_set(struct bcm_sf2_priv *priv, int port,
 				     unsigned int queue_num,
 				     struct ethtool_rx_flow_spec *fs)
 {
+	__be16 vlan_tci = 0, vlan_m_tci = htons(0xffff);
 	struct ethtool_rx_flow_spec_input input = {};
-	__be16 vlan_tci = 0, vlan_m_tci = 0xffff;
 	unsigned int slice_num, rule_index[2];
 	const struct cfp_udf_layout *layout;
 	struct ethtool_rx_flow_rule *flow;
@@ -885,18 +885,15 @@ static int bcm_sf2_cfp_rule_insert(struct dsa_switch *ds, int port,
 			return -EINVAL;
 
 		vid = be16_to_cpu(fs->h_ext.vlan_tci) & VLAN_VID_MASK;
-		vlan.vid_begin = vid;
-		vlan.vid_end = vid;
-		if (cpu_to_be32(fs->h_ext.data[1]) & 1)
+		vlan.vid = vid;
+		if (be32_to_cpu(fs->h_ext.data[1]) & 1)
 			vlan.flags = BRIDGE_VLAN_INFO_UNTAGGED;
 		else
 			vlan.flags = 0;
 
-		ret = ds->ops->port_vlan_prepare(ds, port_num, &vlan);
+		ret = ds->ops->port_vlan_add(ds, port_num, &vlan, NULL);
 		if (ret)
 			return ret;
-
-		ds->ops->port_vlan_add(ds, port_num, &vlan);
 	}
 
 	/*
@@ -942,8 +939,7 @@ static int bcm_sf2_cfp_rule_set(struct dsa_switch *ds, int port,
 		return -EINVAL;
 
 	if ((fs->flow_type & FLOW_EXT) &&
-	    !(ds->ops->port_vlan_prepare || ds->ops->port_vlan_add ||
-	      ds->ops->port_vlan_del))
+	    !(ds->ops->port_vlan_add || ds->ops->port_vlan_del))
 		return -EOPNOTSUPP;
 
 	if (fs->location != RX_CLS_LOC_ANY &&

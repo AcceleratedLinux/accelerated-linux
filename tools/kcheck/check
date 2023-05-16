@@ -12,5 +12,9 @@ args = parser.parse_args()
 
 kconfig = kcheck.Config(product.products, args.dir)
 kproduct = kcheck.Product(kconfig, product.products, product.groups)
-if kproduct.check(kconfig):
-    sys.exit(1)
+errors = kproduct.check()
+if errors:
+	kproduct.print_errors(errors)
+
+sys.exit(1 if errors else 0)
+

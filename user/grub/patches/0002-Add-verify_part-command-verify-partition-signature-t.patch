@@ -1,0 +1,305 @@
+From 4b6c8e57230e720417e557288995761e7dd83258 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 7 Dec 2021 18:22:45 +0100
+Subject: [PATCH 02/11] Add verify_part command (verify partition signature
+ through the ATECC chip)
+
+The signature should be appended right to the end of the squashfs image
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ grub-core/Makefile.core.def      |   8 +
+ grub-core/commands/verify_part.c | 262 +++++++++++++++++++++++++++++++
+ 2 files changed, 270 insertions(+)
+ create mode 100644 grub-core/commands/verify_part.c
+
+diff --git a/grub-core/Makefile.core.def b/grub-core/Makefile.core.def
+index b9240d3..d030ed8 100644
+--- a/grub-core/Makefile.core.def
++++ b/grub-core/Makefile.core.def
+@@ -946,6 +946,14 @@ module = {
+   cppflags = '-I$(srcdir)/lib/posix_wrap';
+ };
+ 
++module = {
++  name = verify_part;
++  common = commands/verify_part.c;
++  cflags = '$(CFLAGS_POSIX)';
++  cppflags = '-I$(srcdir)/lib/posix_wrap';
++  enable = efi;
++};
++
+ module = {
+   name = hdparm;
+   common = commands/hdparm.c;
+diff --git a/grub-core/commands/verify_part.c b/grub-core/commands/verify_part.c
+new file mode 100644
+index 0000000..17b2e36
+--- /dev/null
++++ b/grub-core/commands/verify_part.c
+@@ -0,0 +1,262 @@
++/*
++ *  GRUB  --  GRand Unified Bootloader
++ *  Copyright (C) 2013  Free Software Foundation, Inc.
++ *
++ *  GRUB is free software: you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation, either version 3 of the License, or
++ *  (at your option) any later version.
++ *
++ *  GRUB is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include <grub/types.h>
++#include <grub/err.h>
++#include <grub/file.h>
++#include <grub/gcrypt/gcrypt.h>
++#include <grub/dl.h>
++#include <grub/command.h>
++#include <grub/atecc.h>
++
++GRUB_MOD_LICENSE ("GPLv3+");
++
++/*******************************************************************************
++ * Squashfs structure from fs/squashfs4.c
++ ******************************************************************************/
++struct grub_squash_super
++{
++  grub_uint32_t magic;
++#define SQUASH_MAGIC 0x73717368
++  grub_uint32_t dummy1;
++  grub_uint32_t creation_time;
++  grub_uint32_t block_size;
++  grub_uint32_t dummy2;
++  grub_uint16_t compression;
++  grub_uint16_t dummy3;
++  grub_uint64_t dummy4;
++  grub_uint16_t root_ino_offset;
++  grub_uint32_t root_ino_chunk;
++  grub_uint16_t dummy5;
++  grub_uint64_t total_size;
++  grub_uint64_t exttbloffset;
++  grub_uint64_t dummy6;
++  grub_uint64_t inodeoffset;
++  grub_uint64_t diroffset;
++  grub_uint64_t unk1offset;
++  grub_uint64_t unk2offset;
++} GRUB_PACKED;
++
++static const char ATMEL_MAGIC[] = {0x54, 0x36, 0x17, 0x82};
++
++static grub_err_t
++grub_verify_part_get_info(grub_disk_t disk, grub_uint64_t *img_size,
++			  grub_atecc_signature_t *signature,
++			  grub_atecc_signature_t *signature2)
++{
++  grub_err_t err;
++  struct grub_squash_super sb;
++  grub_disk_addr_t sector;
++  grub_size_t ofs;
++  char buf[sizeof(ATMEL_MAGIC)];
++
++  /* Read the first sector to read the squashfs header */
++  err = grub_disk_read (disk, 0, 0, sizeof (sb), &sb);
++  if (grub_errno == GRUB_ERR_OUT_OF_RANGE)
++    {
++      err = grub_error (GRUB_ERR_BAD_FS, "not a squash4");
++      goto err;
++    }
++  if (err)
++    goto err;
++  if (sb.magic != grub_cpu_to_le32_compile_time (SQUASH_MAGIC)
++      || sb.block_size == 0
++      || ((sb.block_size - 1) & sb.block_size))
++    {
++      err = grub_error (GRUB_ERR_BAD_FS, "not squash4");
++      goto err;
++    }
++
++  /* Get the total size of the image */
++  *img_size = (grub_le_to_cpu64 (sb.total_size) + 0xFFF) & ~0xFFF;
++
++  /* Calculate signature disk offsets */
++  sector = (*img_size >> (GRUB_DISK_SECTOR_BITS + 2)) * 4;
++  ofs = *img_size & (GRUB_DISK_SECTOR_SIZE * 4 - 1);
++
++  /* The first 4 bytes are the "Atmel magic" */
++  err = grub_disk_read (disk, sector, ofs, sizeof(ATMEL_MAGIC), buf);
++  if (err)
++    goto err;
++
++  /* Verify magic */
++  if ( grub_memcmp(ATMEL_MAGIC, buf, sizeof(ATMEL_MAGIC)) != 0)
++    {
++      err = grub_error (GRUB_ERR_BAD_SIGNATURE, "no signature");
++      goto err;
++    }
++
++  err = grub_disk_read (disk, sector, ofs + sizeof(ATMEL_MAGIC),
++			sizeof(*signature), signature);
++  if (err)
++    goto err;
++
++  if (signature2) {
++    err = grub_disk_read (disk, sector, ofs + sizeof(ATMEL_MAGIC) +
++			  sizeof(*signature), sizeof(*signature2), signature2);
++    if (err)
++      goto err;
++  }
++
++  err = GRUB_ERR_NONE;
++err:
++  return err;
++}
++
++static grub_err_t
++grub_verify_part_calc_hash (grub_disk_t disk, grub_uint64_t img_size,
++			    unsigned char **digest)
++{
++  grub_err_t err;
++  const gcry_md_spec_t *hash;
++  void *context = NULL;
++  grub_uint8_t *readbuf = NULL;
++  grub_disk_addr_t sector;
++
++  hash = grub_crypto_lookup_md_by_name ("sha256");
++  if (!hash)
++    return grub_error (GRUB_ERR_FILE_NOT_FOUND, "couldn't load hash");
++
++  context = grub_zalloc (hash->contextsize);
++  readbuf = grub_zalloc (GRUB_DISK_SECTOR_SIZE * 4);
++  if (!context || !readbuf)
++    {
++      err = grub_error (GRUB_ERR_OUT_OF_MEMORY, "no mem");
++      goto err;
++    }
++
++  /* Initialize hash */
++  hash->init (context);
++
++  /* Read partition, and calculate hash */
++  sector = 0;
++  while (img_size)
++    {
++      grub_size_t len;
++
++      len = img_size;
++      if (len > (GRUB_DISK_SECTOR_SIZE * 4))
++        len = (GRUB_DISK_SECTOR_SIZE * 4);
++
++      if (grub_disk_read (disk, sector, 0, len, readbuf))
++        {
++          err = grub_error (GRUB_ERR_FILE_READ_ERROR, "disk read error");
++          goto err;
++        }
++
++      hash->write (context, readbuf, len);
++
++      sector += 4;
++      img_size -= len;
++    }
++
++  hash->final (context);
++
++  /* Get digest */
++  *digest = hash->read (context);
++
++  err = GRUB_ERR_NONE;
++err:
++  if (context)
++    grub_free (context);
++  if (readbuf)
++    grub_free (readbuf);
++
++  return err;
++}
++
++enum atecc_alg { NONE, HMAC, ECDSA };
++
++static grub_err_t
++grub_cmd_verify_partition (grub_command_t cmd  __attribute__ ((unused)),
++			   int argc, char **args)
++{
++  char *device_name = NULL;
++  grub_device_t dev = NULL;
++  grub_err_t err;
++  grub_atecc_signature_t signature, signature2;
++  grub_uint64_t img_size = 0;
++  unsigned char *digest = NULL;
++  enum atecc_alg hwalg = NONE;
++  unsigned int hwkey;
++
++  if (argc != 3)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("3 arguments expected"));
++
++  hwkey = grub_strtoul (args[1], 0, 0);
++  if (hwkey >= GRUB_ATECC_SLOT_NUM)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid key slot index"));
++
++  if (grub_strcmp (args[2], "ecdsa") == 0)
++    hwalg = ECDSA;
++  if (grub_strcmp (args[2], "hmac") == 0)
++    hwalg = HMAC;
++  if (hwalg == NONE)
++    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid algorithm"));
++
++  device_name = grub_file_get_device_name (args[0]);
++  dev = grub_device_open (device_name);
++  if (! dev)
++    {
++      err = grub_error (GRUB_ERR_BAD_DEVICE, N_("invalid partition"));
++      goto err;
++    }
++
++  /* Get squashfs size, and the signature */
++  err = grub_verify_part_get_info (dev->disk, &img_size, &signature,
++				   (hwalg == ECDSA) ? &signature2 : NULL);
++  if (err)
++	  goto err;
++
++  /* Calculate the hash of the squashfs */
++  err = grub_verify_part_calc_hash (dev->disk, img_size, &digest);
++  if (err)
++	  goto err;
++
++  /* Send signature to the ATECC chip for verification */
++  if (hwalg == ECDSA) {
++    err = grub_atecc_nonce (digest);
++    if (err == GRUB_ERR_NONE)
++	err = grub_atecc_verify (hwkey, signature, signature2);
++  } else if (hwalg == HMAC) {
++    err = grub_atecc_checkmac (hwkey, digest, signature);
++  }
++
++err:
++  if (dev)
++    grub_device_close (dev);
++
++  if (device_name)
++    grub_free (device_name);
++
++  return err;
++}
++
++static grub_command_t cmd;
++
++GRUB_MOD_INIT(verify_part)
++{
++  cmd = grub_register_command ("verify_part", grub_cmd_verify_partition,
++			       N_("PARTITION HWKEY <hmac/ecdsa>"),
++			       N_("Verify partition's signature. "));
++}
++
++GRUB_MOD_FINI(verify)
++{
++  grub_unregister_command (cmd);
++}
+-- 
+2.27.0
+

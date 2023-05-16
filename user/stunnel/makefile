@@ -1,6 +1,6 @@
 
-VERSION  = 5.55
-URL      = http://www.stunnel.org/downloads/archive/5.x/stunnel-$(VERSION).tar.gz
+VERSION  = 5.66
+URL      = http://www.stunnel.org/archive/5.x/stunnel-$(VERSION).tar.gz
 CONFOPTS = --with-ssl=$(STAGEDIR) --with-random=/dev/urandom --prefix=
 CONFOPTS += --sysconfdir=/etc
 CONFVARS = ax_cv_check_cflags___fstack_protector=no

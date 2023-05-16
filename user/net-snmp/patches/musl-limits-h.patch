@@ -1,0 +1,12 @@
+--- net-snmp.orig/agent/mibgroup/util_funcs/get_pid_from_inode.c	2021-03-04 12:31:10.790228014 +1000
++++ net-snmp/agent/mibgroup/util_funcs/get_pid_from_inode.c	2021-03-04 12:31:45.250195420 +1000
+@@ -18,6 +18,9 @@
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
++#if HAVE_LIMITS_H
++#include <limits.h>
++#endif
+ 
+ # define PROC_PATH          "/proc"
+ # define SOCKET_TYPE_1      "socket:["

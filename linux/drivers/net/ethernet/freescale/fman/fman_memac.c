@@ -111,6 +111,7 @@ do {									\
 
 #define IF_MODE_MASK		0x00000003 /* 30-31 Mask on i/f mode bits */
 #define IF_MODE_10G		0x00000000 /* 30-31 10G interface */
+#define IF_MODE_MII		0x00000001 /* 30-31 MII interface */
 #define IF_MODE_GMII		0x00000002 /* 30-31 GMII (1G) interface */
 #define IF_MODE_RGMII		0x00000004
 #define IF_MODE_RGMII_AUTO	0x00008000
@@ -353,7 +354,7 @@ struct fman_mac {
 	bool allmulti_enabled;
 };
 
-static void add_addr_in_paddr(struct memac_regs __iomem *regs, u8 *adr,
+static void add_addr_in_paddr(struct memac_regs __iomem *regs, const u8 *adr,
 			      u8 paddr_num)
 {
 	u32 tmp0, tmp1;
@@ -442,6 +443,9 @@ static int init(struct memac_regs __iomem *regs, struct memac_cfg *cfg,
 	case PHY_INTERFACE_MODE_XGMII:
 		tmp |= IF_MODE_10G;
 		break;
+	case PHY_INTERFACE_MODE_MII:
+		tmp |= IF_MODE_MII;
+		break;
 	default:
 		tmp |= IF_MODE_GMII;
 		if (phy_if == PHY_INTERFACE_MODE_RGMII ||
@@ -528,7 +532,7 @@ static void setup_sgmii_internal_phy(struct fman_mac *memac,
 		case 100:
 			tmp_reg16 |= IF_MODE_SGMII_SPEED_100M;
 		break;
-		case 1000: /* fallthrough */
+		case 1000:
 		default:
 			tmp_reg16 |= IF_MODE_SGMII_SPEED_1G;
 		break;
@@ -852,7 +856,6 @@ int memac_set_tx_pause_frames(struct fman_mac *memac, u8 priority,
 
 	tmp = ioread32be(&regs->command_config);
 	tmp &= ~CMD_CFG_PFC_MODE;
-	priority = 0;
 
 	iowrite32be(tmp, &regs->command_config);
 
@@ -894,12 +897,12 @@ int memac_accept_rx_pause_frames(struct fman_mac *memac, bool en)
 	return 0;
 }
 
-int memac_modify_mac_address(struct fman_mac *memac, enet_addr_t *enet_addr)
+int memac_modify_mac_address(struct fman_mac *memac, const enet_addr_t *enet_addr)
 {
 	if (!is_init_done(memac->memac_drv_param))
 		return -EINVAL;
 
-	add_addr_in_paddr(memac->regs, (u8 *)(*enet_addr), 0);
+	add_addr_in_paddr(memac->regs, (const u8 *)(*enet_addr), 0);
 
 	return 0;
 }
@@ -982,7 +985,7 @@ int memac_del_hash_mac_address(struct fman_mac *memac, enet_addr_t *eth_addr)
 
 	list_for_each(pos, &memac->multicast_addr_hash->lsts[hash]) {
 		hash_entry = ETH_HASH_ENTRY_OBJ(pos);
-		if (hash_entry->addr == addr) {
+		if (hash_entry && hash_entry->addr == addr) {
 			list_del_init(&hash_entry->node);
 			kfree(hash_entry);
 			break;
@@ -1055,7 +1058,7 @@ int memac_init(struct fman_mac *memac)
 	/* MAC Address */
 	if (memac->addr != 0) {
 		MAKE_ENET_ADDR_FROM_UINT64(memac->addr, eth_addr);
-		add_addr_in_paddr(memac->regs, (u8 *)eth_addr, 0);
+		add_addr_in_paddr(memac->regs, (const u8 *)eth_addr, 0);
 	}
 
 	fixed_link = memac_drv_param->fixed_link;

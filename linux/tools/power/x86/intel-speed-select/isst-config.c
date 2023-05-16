@@ -15,7 +15,8 @@ struct process_cmd_struct {
 	int arg;
 };
 
-static const char *version_str = "v1.4";
+static const char *version_str = "v1.12";
+
 static const int supported_api_ver = 1;
 static struct isst_if_platform_info isst_platform_info;
 static char *progname;
@@ -43,6 +44,9 @@ static int cmd_help;
 static int force_online_offline;
 static int auto_mode;
 static int fact_enable_fail;
+
+static int mbox_delay;
+static int mbox_retries = 3;
 
 /* clos related */
 static int current_clos = -1;
@@ -98,6 +102,22 @@ int is_clx_n_platform(void)
 int is_skx_based_platform(void)
 {
 	if (cpu_model == 0x55)
+		return 1;
+
+	return 0;
+}
+
+int is_spr_platform(void)
+{
+	if (cpu_model == 0x8F)
+		return 1;
+
+	return 0;
+}
+
+int is_icx_platform(void)
+{
+	if (cpu_model == 0x6A || cpu_model == 0x6C)
 		return 1;
 
 	return 0;
@@ -198,7 +218,7 @@ int out_format_is_json(void)
 
 static int get_stored_topology_info(int cpu, int *core_id, int *pkg_id, int *die_id)
 {
-	const char *pathname = "/tmp/isst_cpu_topology.dat";
+	const char *pathname = "/var/run/isst_cpu_topology.dat";
 	struct cpu_topology cpu_top;
 	FILE *fp;
 	int ret;
@@ -230,7 +250,7 @@ err_ret:
 
 static void store_cpu_topology(void)
 {
-	const char *pathname = "/tmp/isst_cpu_topology.dat";
+	const char *pathname = "/var/run/isst_cpu_topology.dat";
 	FILE *fp;
 	int i;
 
@@ -246,6 +266,8 @@ static void store_cpu_topology(void)
 		fprintf(stderr, "Can't create file:%s\n", pathname);
 		return;
 	}
+
+	fprintf(stderr, "Caching topology information\n");
 
 	for (i = 0; i < topo_max_cpus; ++i) {
 		struct cpu_topology cpu_top;
@@ -323,8 +345,12 @@ int get_physical_die_id(int cpu)
 		int core_id, pkg_id, die_id;
 
 		ret = get_stored_topology_info(cpu, &core_id, &pkg_id, &die_id);
-		if (!ret)
+		if (!ret) {
+			if (die_id < 0)
+				die_id = 0;
+
 			return die_id;
+		}
 	}
 
 	if (ret < 0)
@@ -343,7 +369,7 @@ int get_topo_max_cpus(void)
 	return topo_max_cpus;
 }
 
-static void set_cpu_online_offline(int cpu, int state)
+void set_cpu_online_offline(int cpu, int state)
 {
 	char buffer[128];
 	int fd, ret;
@@ -372,12 +398,22 @@ static void set_cpu_online_offline(int cpu, int state)
 	close(fd);
 }
 
-#define MAX_PACKAGE_COUNT 8
-#define MAX_DIE_PER_PACKAGE 2
-static void for_each_online_package_in_set(void (*callback)(int, void *, void *,
-							    void *, void *),
-					   void *arg1, void *arg2, void *arg3,
-					   void *arg4)
+static void force_all_cpus_online(void)
+{
+	int i;
+
+	fprintf(stderr, "Forcing all CPUs online\n");
+
+	for (i = 0; i < topo_max_cpus; ++i)
+		set_cpu_online_offline(i, 1);
+
+	unlink("/var/run/isst_cpu_topology.dat");
+}
+
+void for_each_online_package_in_set(void (*callback)(int, void *, void *,
+						     void *, void *),
+				    void *arg1, void *arg2, void *arg3,
+				    void *arg4)
 {
 	int max_packages[MAX_PACKAGE_COUNT * MAX_PACKAGE_COUNT];
 	int pkg_index = 0, i;
@@ -540,20 +576,23 @@ static void set_cpu_present_cpu_mask(void)
 	}
 }
 
-int get_core_count(int pkg_id, int die_id)
+int get_max_punit_core_id(int pkg_id, int die_id)
 {
-	int cnt = 0;
+	int max_id = 0;
+	int i;
 
-	if (pkg_id < MAX_PACKAGE_COUNT && die_id < MAX_DIE_PER_PACKAGE) {
-		int i;
+	for (i = 0; i < topo_max_cpus; ++i)
+	{
+		if (!CPU_ISSET_S(i, present_cpumask_size, present_cpumask))
+			continue;
 
-		for (i = 0; i < sizeof(long long) * 8; ++i) {
-			if (core_mask[pkg_id][die_id] & (1ULL << i))
-				cnt++;
-		}
+		if (cpu_map[i].pkg_id == pkg_id &&
+			cpu_map[i].die_id == die_id &&
+			cpu_map[i].punit_cpu_core > max_id)
+			max_id = cpu_map[i].punit_cpu_core;
 	}
 
-	return cnt;
+	return max_id;
 }
 
 int get_cpu_count(int pkg_id, int die_id)
@@ -734,7 +773,7 @@ int isst_send_mbox_command(unsigned int cpu, unsigned char command,
 			   unsigned int req_data, unsigned int *resp)
 {
 	const char *pathname = "/dev/isst_interface";
-	int fd;
+	int fd, retry;
 	struct isst_if_mbox_cmds mbox_cmds = { 0 };
 
 	debug_printf(
@@ -786,29 +825,42 @@ int isst_send_mbox_command(unsigned int cpu, unsigned char command,
 	mbox_cmds.mbox_cmd[0].parameter = parameter;
 	mbox_cmds.mbox_cmd[0].req_data = req_data;
 
+	if (mbox_delay)
+		usleep(mbox_delay * 1000);
+
 	fd = open(pathname, O_RDWR);
 	if (fd < 0)
 		err(-1, "%s open failed", pathname);
 
-	if (ioctl(fd, ISST_IF_MBOX_COMMAND, &mbox_cmds) == -1) {
-		if (errno == ENOTTY) {
-			perror("ISST_IF_MBOX_COMMAND\n");
-			fprintf(stderr, "Check presence of kernel modules: isst_if_mbox_pci or isst_if_mbox_msr\n");
-			exit(0);
+	retry = mbox_retries;
+
+	do {
+		if (ioctl(fd, ISST_IF_MBOX_COMMAND, &mbox_cmds) == -1) {
+			if (errno == ENOTTY) {
+				perror("ISST_IF_MBOX_COMMAND\n");
+				fprintf(stderr, "Check presence of kernel modules: isst_if_mbox_pci or isst_if_mbox_msr\n");
+				exit(0);
+			}
+			debug_printf(
+				"Error: mbox_cmd cpu:%d command:%x sub_command:%x parameter:%x req_data:%x errorno:%d\n",
+				cpu, command, sub_command, parameter, req_data, errno);
+			--retry;
+		} else {
+			*resp = mbox_cmds.mbox_cmd[0].resp_data;
+			debug_printf(
+				"mbox_cmd response: cpu:%d command:%x sub_command:%x parameter:%x req_data:%x resp:%x\n",
+				cpu, command, sub_command, parameter, req_data, *resp);
+			break;
 		}
-		debug_printf(
-			"Error: mbox_cmd cpu:%d command:%x sub_command:%x parameter:%x req_data:%x errorno:%d\n",
-			cpu, command, sub_command, parameter, req_data, errno);
-		return -1;
-	} else {
-		*resp = mbox_cmds.mbox_cmd[0].resp_data;
-		debug_printf(
-			"mbox_cmd response: cpu:%d command:%x sub_command:%x parameter:%x req_data:%x resp:%x\n",
-			cpu, command, sub_command, parameter, req_data, *resp);
-	}
+	} while (retry);
 
 	close(fd);
 
+	if (!retry) {
+		debug_printf("Failed mbox command even after retries\n");
+		return -1;
+
+	}
 	return 0;
 }
 
@@ -934,6 +986,10 @@ static void isst_print_extended_platform_info(void)
 		fprintf(outf, "Intel(R) SST-BF (feature base-freq) is not supported\n");
 
 	ret = isst_read_pm_config(i, &cp_state, &cp_cap);
+	if (ret) {
+		fprintf(outf, "Intel(R) SST-CP (feature core-power) status is unknown\n");
+		return;
+	}
 	if (cp_cap)
 		fprintf(outf, "Intel(R) SST-CP (feature core-power) is supported\n");
 	else
@@ -1224,6 +1280,8 @@ static void dump_isst_config(int arg)
 	isst_ctdp_display_information_end(outf);
 }
 
+static void adjust_scaling_max_from_base_freq(int cpu);
+
 static void set_tdp_level_for_cpu(int cpu, void *arg1, void *arg2, void *arg3,
 				  void *arg4)
 {
@@ -1242,10 +1300,17 @@ static void set_tdp_level_for_cpu(int cpu, void *arg1, void *arg2, void *arg3,
 			int pkg_id = get_physical_package_id(cpu);
 			int die_id = get_physical_die_id(cpu);
 
+			/* Wait for updated base frequencies */
+			usleep(2000);
+
 			fprintf(stderr, "Option is set to online/offline\n");
 			ctdp_level.core_cpumask_size =
 				alloc_cpu_set(&ctdp_level.core_cpumask);
-			isst_get_coremask_info(cpu, tdp_level, &ctdp_level);
+			ret = isst_get_coremask_info(cpu, tdp_level, &ctdp_level);
+			if (ret) {
+				isst_display_error_info_message(1, "Can't get coremask, online/offline option is ignored", 0, 0);
+				return;
+			}
 			if (ctdp_level.cpu_count) {
 				int i, max_cpus = get_topo_max_cpus();
 				for (i = 0; i < max_cpus; ++i) {
@@ -1254,6 +1319,7 @@ static void set_tdp_level_for_cpu(int cpu, void *arg1, void *arg2, void *arg3,
 					if (CPU_ISSET_S(i, ctdp_level.core_cpumask_size, ctdp_level.core_cpumask)) {
 						fprintf(stderr, "online cpu %d\n", i);
 						set_cpu_online_offline(i, 1);
+						adjust_scaling_max_from_base_freq(i);
 					} else {
 						fprintf(stderr, "offline cpu %d\n", i);
 						set_cpu_online_offline(i, 0);
@@ -1411,6 +1477,31 @@ static int set_cpufreq_scaling_min_max(int cpu, int max, int freq)
 	return 0;
 }
 
+static int no_turbo(void)
+{
+	return parse_int_file(0, "/sys/devices/system/cpu/intel_pstate/no_turbo");
+}
+
+static void adjust_scaling_max_from_base_freq(int cpu)
+{
+	int base_freq, scaling_max_freq;
+
+	scaling_max_freq = parse_int_file(0, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq", cpu);
+	base_freq = get_cpufreq_base_freq(cpu);
+	if (scaling_max_freq < base_freq || no_turbo())
+		set_cpufreq_scaling_min_max(cpu, 1, base_freq);
+}
+
+static void adjust_scaling_min_from_base_freq(int cpu)
+{
+	int base_freq, scaling_min_freq;
+
+	scaling_min_freq = parse_int_file(0, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_min_freq", cpu);
+	base_freq = get_cpufreq_base_freq(cpu);
+	if (scaling_min_freq < base_freq)
+		set_cpufreq_scaling_min_max(cpu, 0, base_freq);
+}
+
 static int set_clx_pbf_cpufreq_scaling_min_max(int cpu)
 {
 	struct isst_pkg_ctdp_level_info *ctdp_level;
@@ -1507,7 +1598,9 @@ static void set_scaling_min_to_cpuinfo_max(int cpu)
 		    die_id != get_physical_die_id(i))
 			continue;
 
+		adjust_scaling_max_from_base_freq(i);
 		set_cpufreq_scaling_min_max_from_cpuinfo(i, 1, 0);
+		adjust_scaling_min_from_base_freq(i);
 	}
 }
 
@@ -1522,6 +1615,7 @@ static void set_scaling_min_to_cpuinfo_min(int cpu)
 		    die_id != get_physical_die_id(i))
 			continue;
 
+		adjust_scaling_max_from_base_freq(i);
 		set_cpufreq_scaling_min_max_from_cpuinfo(i, 0, 0);
 	}
 }
@@ -1797,6 +1891,12 @@ static void set_fact_for_cpu(int cpu, void *arg1, void *arg2, void *arg3,
 	struct isst_pkg_ctdp pkg_dev;
 	int ret;
 	int status = *(int *)arg4;
+
+	if (status && no_turbo()) {
+		isst_display_error_info_message(1, "Turbo mode is disabled", 0, 0);
+		ret = -1;
+		goto disp_results;
+	}
 
 	ret = isst_get_ctdp_levels(cpu, &pkg_dev);
 	if (ret) {
@@ -2243,6 +2343,102 @@ static void get_clos_assoc(int arg)
 	isst_ctdp_display_information_end(outf);
 }
 
+static void set_turbo_mode_for_cpu(int cpu, int status)
+{
+	int base_freq;
+
+	if (status) {
+		base_freq = get_cpufreq_base_freq(cpu);
+		set_cpufreq_scaling_min_max(cpu, 1, base_freq);
+	} else {
+		set_scaling_max_to_cpuinfo_max(cpu);
+	}
+
+	if (status) {
+		isst_display_result(cpu, outf, "turbo-mode", "enable", 0);
+	} else {
+		isst_display_result(cpu, outf, "turbo-mode", "disable", 0);
+	}
+}
+
+static void set_turbo_mode(int arg)
+{
+	int i, enable = arg;
+
+	if (cmd_help) {
+		if (enable)
+			fprintf(stderr, "Set turbo mode enable\n");
+		else
+			fprintf(stderr, "Set turbo mode disable\n");
+		exit(0);
+	}
+
+	isst_ctdp_display_information_start(outf);
+
+	for (i = 0; i < topo_max_cpus; ++i) {
+		int online;
+
+		if (i)
+			online = parse_int_file(
+				1, "/sys/devices/system/cpu/cpu%d/online", i);
+		else
+			online =
+				1; /* online entry for CPU 0 needs some special configs */
+
+		if (online)
+			set_turbo_mode_for_cpu(i, enable);
+
+	}
+	isst_ctdp_display_information_end(outf);
+}
+
+static void get_set_trl(int cpu, void *arg1, void *arg2, void *arg3,
+			void *arg4)
+{
+	unsigned long long trl;
+	int set = *(int *)arg4;
+	int ret;
+
+	if (set && !fact_trl) {
+		isst_display_error_info_message(1, "Invalid TRL. Specify with [-t|--trl]", 0, 0);
+		exit(0);
+	}
+
+	if (set) {
+		ret = isst_set_trl(cpu, fact_trl);
+		isst_display_result(cpu, outf, "turbo-mode", "set-trl", ret);
+		return;
+	}
+
+	ret = isst_get_trl(cpu, &trl);
+	if (ret)
+		isst_display_result(cpu, outf, "turbo-mode", "get-trl", ret);
+	else
+		isst_trl_display_information(cpu, outf, trl);
+}
+
+static void process_trl(int arg)
+{
+	if (cmd_help) {
+		if (arg) {
+			fprintf(stderr, "Set TRL (turbo ratio limits)\n");
+			fprintf(stderr, "\t t|--trl: Specify turbo ratio limit for setting TRL\n");
+		} else {
+			fprintf(stderr, "Get TRL (turbo ratio limits)\n");
+		}
+		exit(0);
+	}
+
+	isst_ctdp_display_information_start(outf);
+	if (max_target_cpus)
+		for_each_online_target_cpu_in_set(get_set_trl, NULL,
+						  NULL, NULL, &arg);
+	else
+		for_each_online_package_in_set(get_set_trl, NULL,
+					       NULL, NULL, &arg);
+	isst_ctdp_display_information_end(outf);
+}
+
 static struct process_cmd_struct clx_n_cmds[] = {
 	{ "perf-profile", "info", dump_isst_config, 0 },
 	{ "base-freq", "info", dump_pbf_config, 0 },
@@ -2273,6 +2469,10 @@ static struct process_cmd_struct isst_cmds[] = {
 	{ "core-power", "get-config", dump_clos_config, 0 },
 	{ "core-power", "assoc", set_clos_assoc, 0 },
 	{ "core-power", "get-assoc", get_clos_assoc, 0 },
+	{ "turbo-mode", "enable", set_turbo_mode, 0 },
+	{ "turbo-mode", "disable", set_turbo_mode, 1 },
+	{ "turbo-mode", "get-trl", process_trl, 0 },
+	{ "turbo-mode", "set-trl", process_trl, 1 },
 	{ NULL, NULL, NULL }
 };
 
@@ -2488,6 +2688,16 @@ static void fact_help(void)
 	printf("\tcommand : disable\n");
 }
 
+static void turbo_mode_help(void)
+{
+	printf("turbo-mode:\tEnables users to enable/disable turbo mode by adjusting frequency settings. Also allows to get and set turbo ratio limits (TRL).\n");
+	printf("\tcommand : enable\n");
+	printf("\tcommand : disable\n");
+	printf("\tcommand : get-trl\n");
+	printf("\tcommand : set-trl\n");
+}
+
+
 static void core_power_help(void)
 {
 	printf("core-power:\tInterface that allows user to define per core/tile\n\
@@ -2512,6 +2722,7 @@ static struct process_cmd_help_struct isst_help_cmds[] = {
 	{ "base-freq", pbf_help },
 	{ "turbo-freq", fact_help },
 	{ "core-power", core_power_help },
+	{ "turbo-mode", turbo_mode_help },
 	{ NULL, NULL }
 };
 
@@ -2575,7 +2786,7 @@ static void usage(void)
 	if (is_clx_n_platform())
 		printf("\nFEATURE : [perf-profile|base-freq]\n");
 	else
-		printf("\nFEATURE : [perf-profile|base-freq|turbo-freq|core-power]\n");
+		printf("\nFEATURE : [perf-profile|base-freq|turbo-freq|core-power|turbo-mode]\n");
 	printf("\nFor help on each feature, use -h|--help\n");
 	printf("\tFor example:  intel-speed-select perf-profile -h\n");
 
@@ -2591,10 +2802,15 @@ static void usage(void)
 	printf("\t[-f|--format] : output format [json|text]. Default: text\n");
 	printf("\t[-h|--help] : Print help\n");
 	printf("\t[-i|--info] : Print platform information\n");
+	printf("\t[-a|--all-cpus-online] : Force online every CPU in the system\n");
 	printf("\t[-o|--out] : Output file\n");
 	printf("\t\t\tDefault : stderr\n");
+	printf("\t[-p|--pause] : Delay between two mail box commands in milliseconds\n");
+	printf("\t[-r|--retry] : Retry count for mail box commands on failure, default 3\n");
 	printf("\t[-v|--version] : Print version\n");
-
+	printf("\t[-b|--oob : Start a daemon to process HFI events for perf profile change from Out of Band agent.\n");
+	printf("\t[-n|--no-daemon : Don't run as daemon. By default --oob will turn on daemon mode\n");
+	printf("\t[-w|--delay : Delay for reading config level state change in OOB poll mode.\n");
 	printf("\nResult format\n");
 	printf("\tResult display uses a common format for each command:\n");
 	printf("\tResults are formatted in text/JSON with\n");
@@ -2617,26 +2833,35 @@ static void usage(void)
 static void print_version(void)
 {
 	fprintf(outf, "Version %s\n", version_str);
-	fprintf(outf, "Build date %s time %s\n", __DATE__, __TIME__);
 	exit(0);
 }
 
 static void cmdline(int argc, char **argv)
 {
 	const char *pathname = "/dev/isst_interface";
+	char *ptr;
 	FILE *fp;
-	int opt;
+	int opt, force_cpus_online = 0;
 	int option_index = 0;
 	int ret;
+	int oob_mode = 0;
+	int poll_interval = -1;
+	int no_daemon = 0;
 
 	static struct option long_options[] = {
+		{ "all-cpus-online", no_argument, 0, 'a' },
 		{ "cpu", required_argument, 0, 'c' },
 		{ "debug", no_argument, 0, 'd' },
 		{ "format", required_argument, 0, 'f' },
 		{ "help", no_argument, 0, 'h' },
 		{ "info", no_argument, 0, 'i' },
+		{ "pause", required_argument, 0, 'p' },
 		{ "out", required_argument, 0, 'o' },
+		{ "retry", required_argument, 0, 'r' },
 		{ "version", no_argument, 0, 'v' },
+		{ "oob", no_argument, 0, 'b' },
+		{ "no-daemon", no_argument, 0, 'n' },
+		{ "poll-interval", required_argument, 0, 'w' },
 		{ 0, 0, 0, 0 }
 	};
 
@@ -2663,9 +2888,12 @@ static void cmdline(int argc, char **argv)
 	}
 
 	progname = argv[0];
-	while ((opt = getopt_long_only(argc, argv, "+c:df:hio:v", long_options,
+	while ((opt = getopt_long_only(argc, argv, "+c:df:hio:vabw:n", long_options,
 				       &option_index)) != -1) {
 		switch (opt) {
+		case 'a':
+			force_cpus_online = 1;
+			break;
 		case 'c':
 			parse_cpu_command(optarg);
 			break;
@@ -2688,22 +2916,63 @@ static void cmdline(int argc, char **argv)
 				fclose(outf);
 			outf = fopen_or_exit(optarg, "w");
 			break;
+		case 'p':
+			ret = strtol(optarg, &ptr, 10);
+			if (!ret)
+				fprintf(stderr, "Invalid pause interval, ignore\n");
+			else
+				mbox_delay = ret;
+			break;
+		case 'r':
+			ret = strtol(optarg, &ptr, 10);
+			if (!ret)
+				fprintf(stderr, "Invalid retry count, ignore\n");
+			else
+				mbox_retries = ret;
+			break;
 		case 'v':
 			print_version();
+			break;
+		case 'b':
+			oob_mode = 1;
+			break;
+		case 'n':
+			no_daemon = 1;
+			break;
+		case 'w':
+			ret = strtol(optarg, &ptr, 10);
+			if (!ret) {
+				fprintf(stderr, "Invalid poll interval count\n");
+				exit(0);
+			}
+			poll_interval = ret;
 			break;
 		default:
 			usage();
 		}
 	}
 
-	if (optind > (argc - 2)) {
+	if (optind > (argc - 2) && !oob_mode) {
 		usage();
 		exit(0);
 	}
 	set_max_cpu_num();
+	if (force_cpus_online)
+		force_all_cpus_online();
 	store_cpu_topology();
 	set_cpu_present_cpu_mask();
 	set_cpu_target_cpu_mask();
+
+	if (oob_mode) {
+		create_cpu_map();
+		if (debug_flag)
+			fprintf(stderr, "OOB mode is enabled in debug mode\n");
+
+		ret = isst_daemon(debug_flag, poll_interval, no_daemon);
+		if (ret)
+			fprintf(stderr, "OOB mode enable failed\n");
+		goto out;
+	}
 
 	if (!is_clx_n_platform()) {
 		ret = isst_fill_platform_info();

@@ -7,6 +7,7 @@ UROMFSIMG = $(IMAGEDIR)/urootfs.bin
 ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
+IMAGESIZE = 47185920 # 45MB
 
 SIGNING_ALG = ecdsa
 
@@ -56,7 +57,7 @@ uimage.bin:
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x83800000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-ix10.dtb $(IMAGEDIR)/
 
-image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

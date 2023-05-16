@@ -8,11 +8,14 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs -o size=40M tmpfs /tmp
 mount -t tmpfs -o size=32M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -28,35 +31,6 @@ ip link set eth0 name eth2
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
 setmac -i eth1,eth2 -u -n 2
-
-echo "Initializing CELL interface control..."
-# GPIO24  = Cell Module Power (output, active low)
-# GPIO25  = Cell Module Presence Detect (input, active low) SW_RDY GPIO8
-# GPIO64  = Cell Module On/Off Toggle (output, active low) ON_OFF
-# GPIO65  = Cell Module Shutdown (output, active high) HW_SHTDWN
-# GPIO124 = Cell Module SIM switch button (input, active low)
-
-# Startup sequence:
-#     ensure power is off (ie. GPIO24 is high - set in u-boot)
-#     ensure ON/OFF pin is low (ie. GPIO64 is high)
-#     ensure shutdown pin is high (ie. GPIO65 is low)
-#     enable power pin by setting low (ie. set GPIO24 low)
-
-echo 25  > /sys/class/gpio/export
-echo in  > /sys/class/gpio/gpio25/direction
-
-echo 64  > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio64/direction
-
-echo 65  > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio65/direction
-
-echo 124  > /sys/class/gpio/export
-echo in  > /sys/class/gpio/gpio124/direction
-echo falling > /sys/class/gpio/gpio124/edge
-
-echo 24  > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio24/direction
 
 # developer key
 echo 86 > /sys/class/gpio/export
@@ -95,7 +69,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -106,6 +80,10 @@ if [ -f /etc/config/.init ]; then
 else
 	rm -f /etc/config/.init2
 fi
+
+echo "Initializing CELL interface control..."
+/bin/sim -i
+
 cat /etc/inittab.d/* > /etc/inittab
 
 # cryptography disabled mode

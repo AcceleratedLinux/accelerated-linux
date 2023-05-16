@@ -5,11 +5,6 @@
  * core.c - Top level support
  *
  * Copyright 2017 IBM Corporation
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #include <linux/kernel.h>
@@ -36,6 +31,7 @@ void ast_vhub_done(struct ast_vhub_ep *ep, struct ast_vhub_req *req,
 		   int status)
 {
 	bool internal = req->internal;
+	struct ast_vhub *vhub = ep->vhub;
 
 	EPVDBG(ep, "completing request @%p, status %d\n", req, status);
 
@@ -46,7 +42,7 @@ void ast_vhub_done(struct ast_vhub_ep *ep, struct ast_vhub_req *req,
 
 	if (req->req.dma) {
 		if (!WARN_ON(!ep->dev))
-			usb_gadget_unmap_request(&ep->dev->gadget,
+			usb_gadget_unmap_request_by_dev(&vhub->pdev->dev,
 						 &req->req, ep->epn.is_in);
 		req->req.dma = 0;
 	}
@@ -135,13 +131,9 @@ static irqreturn_t ast_vhub_irq(int irq, void *data)
 
 	/* Handle device interrupts */
 	if (istat & vhub->port_irq_mask) {
-		unsigned long bitmap = istat;
-		int offset = VHUB_IRQ_DEV1_BIT;
-		int size = VHUB_IRQ_DEV1_BIT + vhub->max_ports;
-
-		for_each_set_bit_from(offset, &bitmap, size) {
-			i = offset - VHUB_IRQ_DEV1_BIT;
-			ast_vhub_dev_irq(&vhub->ports[i].dev);
+		for (i = 0; i < vhub->max_ports; i++) {
+			if (istat & VHUB_DEV_IRQ(i))
+				ast_vhub_dev_irq(&vhub->ports[i].dev);
 		}
 	}
 

@@ -52,12 +52,15 @@
 enum ad5686_supported_device_ids {
 	ID_AD5310R,
 	ID_AD5311R,
+	ID_AD5338R,
 	ID_AD5671R,
 	ID_AD5672R,
+	ID_AD5673R,
 	ID_AD5674R,
 	ID_AD5675R,
 	ID_AD5676,
 	ID_AD5676R,
+	ID_AD5677R,
 	ID_AD5679R,
 	ID_AD5681R,
 	ID_AD5682R,
@@ -104,7 +107,7 @@ typedef int (*ad5686_read_func)(struct ad5686_state *st, u8 addr);
 struct ad5686_chip_info {
 	u16				int_vref_mv;
 	unsigned int			num_channels;
-	struct iio_chan_spec		*channels;
+	const struct iio_chan_spec	*channels;
 	enum ad5686_regmap_type		regmap_type;
 };
 
@@ -151,7 +154,7 @@ int ad5686_probe(struct device *dev,
 		 const char *name, ad5686_write_func write,
 		 ad5686_read_func read);
 
-int ad5686_remove(struct device *dev);
+void ad5686_remove(struct device *dev);
 
 
 #endif /* __DRIVERS_IIO_DAC_AD5686_H__ */

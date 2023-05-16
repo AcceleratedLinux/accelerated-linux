@@ -1,6 +1,6 @@
-VERSION = 8.44
-URL = https://ftp.pcre.org/pub/pcre/pcre-$(VERSION).tar.gz
-DOWNLOADHASH = aecafd4af3bd0f3935721af77b889d9024b2e01d96b58471bd91a3063fb47728
+VERSION = 8.45
+URL = https://sourceforge.net/projects/pcre/files/pcre/$(VERSION)/pcre-$(VERSION).tar.gz
+DOWNLOADHASH = 4e6ce03e0336e8b4a3d6c2b70b1c5e18590a5673a98186da90d4f33c23defc09
 
 MAKEVARS =
 CONFOPTS = --disable-cpp --enable-utf --enable-unicode-properties

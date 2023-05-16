@@ -20,6 +20,7 @@
 #define VIMC_CID_VIMC_CLASS		(0x00f00000 | 1)
 #define VIMC_CID_TEST_PATTERN		(VIMC_CID_VIMC_BASE + 0)
 #define VIMC_CID_MEAN_WIN_SIZE		(VIMC_CID_VIMC_BASE + 1)
+#define VIMC_CID_OSD_TEXT_MODE		(VIMC_CID_VIMC_BASE + 2)
 
 #define VIMC_FRAME_MAX_WIDTH 4096
 #define VIMC_FRAME_MAX_HEIGHT 2160
@@ -33,6 +34,13 @@
 #define VIMC_IS_SINK(pad)	(!(pad))
 
 #define VIMC_PIX_FMT_MAX_CODES 8
+
+extern unsigned int vimc_allocator;
+
+enum vimc_allocator_type {
+	VIMC_ALLOCATOR_VMALLOC = 0,
+	VIMC_ALLOCATOR_DMA_CONTIG = 1,
+};
 
 /**
  * vimc_colorimetry_clamp - Adjust colorimetry parameters

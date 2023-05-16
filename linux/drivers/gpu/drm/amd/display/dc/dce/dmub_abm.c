@@ -50,80 +50,25 @@
 
 #define DISABLE_ABM_IMMEDIATELY 255
 
-static bool dmub_abm_set_pipe(struct abm *abm, uint32_t otg_inst, uint32_t panel_inst)
-{
-	union dmub_rb_cmd cmd;
-	struct dc_context *dc = abm->ctx;
-	uint32_t ramping_boundary = 0xFFFF;
 
-	cmd.abm_set_pipe.header.type = DMUB_CMD__ABM;
-	cmd.abm_set_pipe.header.sub_type = DMUB_CMD__ABM_SET_PIPE;
-	cmd.abm_set_pipe.abm_set_pipe_data.otg_inst = otg_inst;
-	cmd.abm_set_pipe.abm_set_pipe_data.panel_inst = panel_inst;
-	cmd.abm_set_pipe.abm_set_pipe_data.ramping_boundary = ramping_boundary;
-	cmd.abm_set_pipe.header.payload_bytes = sizeof(struct dmub_cmd_abm_set_pipe_data);
-
-	dc_dmub_srv_cmd_queue(dc->dmub_srv, &cmd);
-	dc_dmub_srv_cmd_execute(dc->dmub_srv);
-	dc_dmub_srv_wait_idle(dc->dmub_srv);
-
-	return true;
-}
-
-static void dmcub_set_backlight_level(
-	struct dce_abm *dce_abm,
-	uint32_t backlight_pwm_u16_16,
-	uint32_t frame_ramp,
-	uint32_t otg_inst,
-	uint32_t panel_inst)
-{
-	union dmub_rb_cmd cmd;
-	struct dc_context *dc = dce_abm->base.ctx;
-	unsigned int backlight_8_bit = 0;
-	uint32_t s2;
-
-	if (backlight_pwm_u16_16 & 0x10000)
-		// Check for max backlight condition
-		backlight_8_bit = 0xFF;
-	else
-		// Take MSB of fractional part since backlight is not max
-		backlight_8_bit = (backlight_pwm_u16_16 >> 8) & 0xFF;
-
-	dmub_abm_set_pipe(&dce_abm->base, otg_inst, panel_inst);
-
-	REG_UPDATE(BL1_PWM_USER_LEVEL, BL1_PWM_USER_LEVEL, backlight_pwm_u16_16);
-
-	if (otg_inst == 0)
-		frame_ramp = 0;
-
-	cmd.abm_set_backlight.header.type = DMUB_CMD__ABM;
-	cmd.abm_set_backlight.header.sub_type = DMUB_CMD__ABM_SET_BACKLIGHT;
-	cmd.abm_set_backlight.abm_set_backlight_data.frame_ramp = frame_ramp;
-	cmd.abm_set_backlight.header.payload_bytes = sizeof(struct dmub_cmd_abm_set_backlight_data);
-
-	dc_dmub_srv_cmd_queue(dc->dmub_srv, &cmd);
-	dc_dmub_srv_cmd_execute(dc->dmub_srv);
-	dc_dmub_srv_wait_idle(dc->dmub_srv);
-
-	// Update requested backlight level
-	s2 = REG_READ(BIOS_SCRATCH_2);
-
-	s2 &= ~ATOM_S2_CURRENT_BL_LEVEL_MASK;
-	backlight_8_bit &= (ATOM_S2_CURRENT_BL_LEVEL_MASK >>
-				ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
-	s2 |= (backlight_8_bit << ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
-
-	REG_WRITE(BIOS_SCRATCH_2, s2);
-}
 
 static void dmub_abm_enable_fractional_pwm(struct dc_context *dc)
 {
 	union dmub_rb_cmd cmd;
 	uint32_t fractional_pwm = (dc->dc->config.disable_fractional_pwm == false) ? 1 : 0;
+	uint32_t edp_id_count = dc->dc_edp_id_count;
+	int i;
+	uint8_t panel_mask = 0;
 
+	for (i = 0; i < edp_id_count; i++)
+		panel_mask |= 0x01 << i;
+
+	memset(&cmd, 0, sizeof(cmd));
 	cmd.abm_set_pwm_frac.header.type = DMUB_CMD__ABM;
 	cmd.abm_set_pwm_frac.header.sub_type = DMUB_CMD__ABM_SET_PWM_FRAC;
 	cmd.abm_set_pwm_frac.abm_set_pwm_frac_data.fractional_pwm = fractional_pwm;
+	cmd.abm_set_pwm_frac.abm_set_pwm_frac_data.version = DMUB_CMD_ABM_CONTROL_VERSION_1;
+	cmd.abm_set_pwm_frac.abm_set_pwm_frac_data.panel_mask = panel_mask;
 	cmd.abm_set_pwm_frac.header.payload_bytes = sizeof(struct dmub_cmd_abm_set_pwm_frac_data);
 
 	dc_dmub_srv_cmd_queue(dc->dmub_srv, &cmd);
@@ -135,11 +80,11 @@ static void dmub_abm_init(struct abm *abm, uint32_t backlight)
 {
 	struct dce_abm *dce_abm = TO_DMUB_ABM(abm);
 
-	REG_WRITE(DC_ABM1_HG_SAMPLE_RATE, 0x103);
-	REG_WRITE(DC_ABM1_HG_SAMPLE_RATE, 0x101);
-	REG_WRITE(DC_ABM1_LS_SAMPLE_RATE, 0x103);
-	REG_WRITE(DC_ABM1_LS_SAMPLE_RATE, 0x101);
-	REG_WRITE(BL1_PWM_BL_UPDATE_SAMPLE_RATE, 0x101);
+	REG_WRITE(DC_ABM1_HG_SAMPLE_RATE, 0x3);
+	REG_WRITE(DC_ABM1_HG_SAMPLE_RATE, 0x1);
+	REG_WRITE(DC_ABM1_LS_SAMPLE_RATE, 0x3);
+	REG_WRITE(DC_ABM1_LS_SAMPLE_RATE, 0x1);
+	REG_WRITE(BL1_PWM_BL_UPDATE_SAMPLE_RATE, 0x1);
 
 	REG_SET_3(DC_ABM1_HG_MISC_CTRL, 0,
 			ABM1_HG_NUM_OF_BINS_SEL, 0,
@@ -198,10 +143,24 @@ static bool dmub_abm_set_level(struct abm *abm, uint32_t level)
 {
 	union dmub_rb_cmd cmd;
 	struct dc_context *dc = abm->ctx;
+	struct dc_link *edp_links[MAX_NUM_EDP];
+	int i;
+	int edp_num;
+	uint8_t panel_mask = 0;
 
+	get_edp_links(dc->dc, edp_links, &edp_num);
+
+	for (i = 0; i < edp_num; i++) {
+		if (edp_links[i]->link_status.link_active)
+			panel_mask |= (0x01 << i);
+	}
+
+	memset(&cmd, 0, sizeof(cmd));
 	cmd.abm_set_level.header.type = DMUB_CMD__ABM;
 	cmd.abm_set_level.header.sub_type = DMUB_CMD__ABM_SET_LEVEL;
 	cmd.abm_set_level.abm_set_level_data.level = level;
+	cmd.abm_set_level.abm_set_level_data.version = DMUB_CMD_ABM_CONTROL_VERSION_1;
+	cmd.abm_set_level.abm_set_level_data.panel_mask = panel_mask;
 	cmd.abm_set_level.header.payload_bytes = sizeof(struct dmub_cmd_abm_set_level_data);
 
 	dc_dmub_srv_cmd_queue(dc->dmub_srv, &cmd);
@@ -211,37 +170,14 @@ static bool dmub_abm_set_level(struct abm *abm, uint32_t level)
 	return true;
 }
 
-static bool dmub_abm_immediate_disable(struct abm *abm, uint32_t panel_inst)
-{
-	dmub_abm_set_pipe(abm, DISABLE_ABM_IMMEDIATELY, panel_inst);
-
-	return true;
-}
-
-static bool dmub_abm_set_backlight_level_pwm(
-		struct abm *abm,
-		unsigned int backlight_pwm_u16_16,
-		unsigned int frame_ramp,
-		unsigned int otg_inst,
-		uint32_t panel_inst)
-{
-	struct dce_abm *dce_abm = TO_DMUB_ABM(abm);
-
-	dmcub_set_backlight_level(dce_abm,
-			backlight_pwm_u16_16,
-			frame_ramp,
-			otg_inst,
-			panel_inst);
-
-	return true;
-}
-
 static bool dmub_abm_init_config(struct abm *abm,
 	const char *src,
-	unsigned int bytes)
+	unsigned int bytes,
+	unsigned int inst)
 {
 	union dmub_rb_cmd cmd;
 	struct dc_context *dc = abm->ctx;
+	uint8_t panel_mask = 0x01 << inst;
 
 	// TODO: Optimize by only reading back final 4 bytes
 	dmub_flush_buffer_mem(&dc->dmub_srv->dmub->scratch_mem_fb);
@@ -249,12 +185,36 @@ static bool dmub_abm_init_config(struct abm *abm,
 	// Copy iramtable into cw7
 	memcpy(dc->dmub_srv->dmub->scratch_mem_fb.cpu_addr, (void *)src, bytes);
 
+	memset(&cmd, 0, sizeof(cmd));
 	// Fw will copy from cw7 to fw_state
 	cmd.abm_init_config.header.type = DMUB_CMD__ABM;
 	cmd.abm_init_config.header.sub_type = DMUB_CMD__ABM_INIT_CONFIG;
 	cmd.abm_init_config.abm_init_config_data.src.quad_part = dc->dmub_srv->dmub->scratch_mem_fb.gpu_addr;
 	cmd.abm_init_config.abm_init_config_data.bytes = bytes;
+	cmd.abm_init_config.abm_init_config_data.version = DMUB_CMD_ABM_CONTROL_VERSION_1;
+	cmd.abm_init_config.abm_init_config_data.panel_mask = panel_mask;
+
 	cmd.abm_init_config.header.payload_bytes = sizeof(struct dmub_cmd_abm_init_config_data);
+
+	dc_dmub_srv_cmd_queue(dc->dmub_srv, &cmd);
+	dc_dmub_srv_cmd_execute(dc->dmub_srv);
+	dc_dmub_srv_wait_idle(dc->dmub_srv);
+
+	return true;
+}
+
+static bool dmub_abm_set_pause(struct abm *abm, bool pause, unsigned int panel_inst, unsigned int stream_inst)
+{
+	union dmub_rb_cmd cmd;
+	struct dc_context *dc = abm->ctx;
+	uint8_t panel_mask = 0x01 << panel_inst;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.abm_pause.header.type = DMUB_CMD__ABM;
+	cmd.abm_pause.header.sub_type = DMUB_CMD__ABM_PAUSE;
+	cmd.abm_pause.abm_pause_data.enable = pause;
+	cmd.abm_pause.abm_pause_data.panel_mask = panel_mask;
+	cmd.abm_set_level.header.payload_bytes = sizeof(struct dmub_cmd_abm_pause_data);
 
 	dc_dmub_srv_cmd_queue(dc->dmub_srv, &cmd);
 	dc_dmub_srv_cmd_execute(dc->dmub_srv);
@@ -266,12 +226,10 @@ static bool dmub_abm_init_config(struct abm *abm,
 static const struct abm_funcs abm_funcs = {
 	.abm_init = dmub_abm_init,
 	.set_abm_level = dmub_abm_set_level,
-	.set_pipe = dmub_abm_set_pipe,
-	.set_backlight_level_pwm = dmub_abm_set_backlight_level_pwm,
 	.get_current_backlight = dmub_abm_get_current_backlight,
 	.get_target_backlight = dmub_abm_get_target_backlight,
-	.set_abm_immediate_disable = dmub_abm_immediate_disable,
 	.init_abm_config = dmub_abm_init_config,
+	.set_abm_pause = dmub_abm_set_pause,
 };
 
 static void dmub_abm_construct(

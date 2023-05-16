@@ -12,15 +12,15 @@
  *
  * All of the kthreads used for idle injection are created at init time.
  *
- * Next, the users of the the idle injection framework provide a cpumask via
+ * Next, the users of the idle injection framework provide a cpumask via
  * its register function. The kthreads will be synchronized with respect to
  * this cpumask.
  *
  * The idle + run duration is specified via separate helpers and that allows
  * idle injection to be started.
  *
- * The idle injection kthreads will call play_idle() with the idle duration
- * specified as per the above.
+ * The idle injection kthreads will call play_idle_precise() with the idle
+ * duration and max allowed latency specified as per the above.
  *
  * After all of them have been woken up, a timer is set to start the next idle
  * injection cycle.
@@ -43,6 +43,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/smpboot.h>
+#include <linux/idle_inject.h>
 
 #include <uapi/linux/sched/types.h>
 
@@ -100,7 +101,7 @@ static void idle_inject_wakeup(struct idle_inject_device *ii_dev)
  *
  * This function is called when the idle injection timer expires.  It wakes up
  * idle injection tasks associated with the timer and they, in turn, invoke
- * play_idle() to inject a specified amount of CPU idle time.
+ * play_idle_precise() to inject a specified amount of CPU idle time.
  *
  * Return: HRTIMER_RESTART.
  */
@@ -124,8 +125,8 @@ static enum hrtimer_restart idle_inject_timer_fn(struct hrtimer *timer)
  * idle_inject_fn - idle injection work function
  * @cpu: the CPU owning the task
  *
- * This function calls play_idle() to inject a specified amount of CPU idle
- * time.
+ * This function calls play_idle_precise() to inject a specified amount of CPU
+ * idle time.
  */
 static void idle_inject_fn(unsigned int cpu)
 {
@@ -268,9 +269,7 @@ void idle_inject_stop(struct idle_inject_device *ii_dev)
  */
 static void idle_inject_setup(unsigned int cpu)
 {
-	struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO / 2 };
-
-	sched_setscheduler(current, SCHED_FIFO, &param);
+	sched_set_fifo(current);
 }
 
 /**

@@ -15,5 +15,74 @@
 / {
 	model = "Digi ConnectEZ-4";
 	compatible = "digi,connectez4", "digi,connectez", "fsl,ls1012a";
+
+	leds {
+		compatible = "gpio-leds";
+
+		ser1link {
+			label = "serlnk1";
+			gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser2link {
+			label = "serlnk2";
+			gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser3link {
+			label = "serlnk3";
+			gpios = <&gpio3 2 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser4link {
+			label = "serlnk4";
+			gpios = <&gpio3 3 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+	};
 };
 
+&i2c0 {
+	lp5569b:lp5569@35 {
+		compatible = "ti,lp5569";
+		reg = <0x35>;
+		label = "lp5569b";
+		clock-mode = /bits/ 8 <1>;  /* internal */
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		chan0 {
+			chan-name = "wifib";
+			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <0>;
+			linux,default-trigger = "timer";
+		};
+
+		chan1 {
+			chan-name = "wifig";
+			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
+			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <1>;
+			linux,default-trigger = "timer";
+		};
+
+		chan2 {
+			chan-name = "wifir";
+			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <2>;
+			linux,default-trigger = "timer";
+		};
+	};
+};

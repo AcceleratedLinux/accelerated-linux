@@ -368,8 +368,8 @@ const char *find_on_path(const char *prog, const char *path)
  *
  * 2. If $ROOTDIR is set, but not the others, look in $ROOTDIR/.config for settings
  *
- * 3. If $ROOTDIR is not set, look at our path (which we expect to be $ROOTDIR/tools) to
- *    determine ROOTDIR and then proceed as in (2).
+ * 3. If $ROOTDIR is not set, look at our path (which we expect to be $ROOTDIR/tools or
+ *    $ROOTDIR/bin) to determine ROOTDIR and then proceed as in (2).
  */
 static void find_lib_env(void)
 {
@@ -385,6 +385,8 @@ static void find_lib_env(void)
 		rootdir = strdup(argv0);
 
 		pt = strstr(rootdir, "/tools/");
+		if (!pt)
+			pt = strstr(rootdir, "/bin/");
 		if (!pt) {
 			fatal("Could not determine ROOTDIR from argv[0]=%s\n", argv0);
 		}
@@ -782,6 +784,14 @@ static void process_args(int argc, char **argv)
 
 		libpaths[num_lib_paths++] = e;
 
+		e = find_gcc_file(compiler, "libatomic.so");
+		if (e) {
+			e = dirname(e);
+			x_asprintf(&rpath, "-Wl,-rpath-link,%s", e);
+			args_add(stripped_args, rpath);
+			libpaths[num_lib_paths++] = e;
+		}
+
 		if (!nodefaultlibs) {
 			char *libgcc = "-lgcc";
 			char *libgcc_eh = NULL;
@@ -1067,14 +1077,19 @@ static void analyze_code_clang(void)
 
 		if (strcmp(ap, "-fomit-frame-pointer") == 0
 			|| strcmp(ap, "-fno-stack-protector") == 0
+			|| strcmp(ap, "-funsigned-char") == 0
 			|| strcmp(ap, "-pipe") == 0
 			|| strcmp(ap, "-fPIC") == 0
+			|| strcmp(ap, "-funsigned-char") == 0
 			|| strcmp(ap, "-MMD") == 0
 			|| strcmp(ap, "-EB") == 0
 			|| strcmp(ap, "-EL") == 0
 			|| strcmp(ap, "-MD") == 0
 			|| strcmp(ap, "-c") == 0
 			|| strcmp(ap, "-fno-strict-aliasing") == 0
+			|| strcmp(ap, "-Wl,-z,relro,-z,now") == 0
+			|| strcmp(ap, "-fstack-protector-strong") == 0
+			|| strcmp(ap, "-Wl,-z,noexecstack") == 0
 			) {
 			continue;
 		}

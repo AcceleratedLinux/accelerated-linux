@@ -1,16 +1,28 @@
-diff -Naur busybox-1.31.0.org/networking/udhcp/dhcpc.c busybox-1.31.0/networking/udhcp/dhcpc.c
---- busybox-1.31.0.org/networking/udhcp/dhcpc.c	2019-06-10 19:09:31.000000000 +1000
-+++ busybox-1.31.0/networking/udhcp/dhcpc.c	2019-07-02 14:02:22.732337825 +1000
-@@ -1397,7 +1397,7 @@
+diff -Naur busybox-1.34.1.org/networking/udhcp/dhcpc.c busybox-1.34.1/networking/udhcp/dhcpc.c
+--- busybox-1.34.1.org/networking/udhcp/dhcpc.c	2019-06-10 19:09:31.000000000 +1000
++++ busybox-1.34.1/networking/udhcp/dhcpc.c	2019-07-02 14:02:22.732337825 +1000
+@@ -590,6 +590,11 @@
+ 	d4_run_script(NULL, "deconfig");
+ }
+ 
++static void d4_run_script_started(void)
++{
++	d4_run_script(NULL, "started");
++}
++
+ /*** Sending/receiving packets ***/
+ 
+ static ALWAYS_INLINE uint32_t random_xid(void)
+@@ -1369,7 +1374,7 @@
  	srand(monotonic_us());
  
  	client_data.state = INIT_SELECTING;
--	udhcp_run_script(NULL, "deconfig");
-+	udhcp_run_script(NULL, "started");
- 	change_listen_mode(LISTEN_RAW);
+-	d4_run_script_deconfig();
++	d4_run_script_started();
  	packet_num = 0;
  	timeout = 0;
-@@ -1795,8 +1795,6 @@
+ 	lease_remaining = 0;
+@@ -1789,8 +1794,6 @@
  				if (opt & OPT_q) { /* quit after lease */
  					goto ret0;
  				}

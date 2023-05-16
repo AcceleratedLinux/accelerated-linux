@@ -1,0 +1,13 @@
+#
+# Address/Size data for the various NAND flash sections.
+# Section filename MUST match entries below.
+#
+sbl1        0x00000000 0x00180000
+mibib       0x00180000 0x00100000
+bootconfig  0x00280000 0x00080000
+bootconfig1 0x00300000 0x00080000
+tz          0x00380000 0x00380000
+devcfg      0x00a80000 0x00080000
+rpm         0x00b80000 0x00080000
+ddr         0x00c80000 0x00080000
+u-boot      0x00e00000 0x00180000

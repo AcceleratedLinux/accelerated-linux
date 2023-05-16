@@ -9,19 +9,6 @@
  *
  * Copyright (c) 2020 Oracle and/or its affiliates.
  * Author: Daniel Jordan <daniel.m.jordan@oracle.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 #include <linux/completion.h>
@@ -194,7 +181,7 @@ int padata_do_parallel(struct padata_shell *ps,
 		goto out;
 
 	if (!cpumask_test_cpu(*cb_cpu, pd->cpumask.cbcpu)) {
-		if (!cpumask_weight(pd->cpumask.cbcpu))
+		if (cpumask_empty(pd->cpumask.cbcpu))
 			goto out;
 
 		/* Select an alternate fallback CPU and notify the caller. */
@@ -211,16 +198,17 @@ int padata_do_parallel(struct padata_shell *ps,
 	if ((pinst->flags & PADATA_RESET))
 		goto out;
 
-	atomic_inc(&pd->refcnt);
+	refcount_inc(&pd->refcnt);
 	padata->pd = pd;
 	padata->cb_cpu = *cb_cpu;
-
-	rcu_read_unlock_bh();
 
 	spin_lock(&padata_works_lock);
 	padata->seq_nr = ++pd->seq_nr;
 	pw = padata_work_alloc();
 	spin_unlock(&padata_works_lock);
+
+	rcu_read_unlock_bh();
+
 	if (pw) {
 		padata_work_init(pw, padata_parallel_worker, padata, 0);
 		queue_work(pinst->parallel_wq, &pw->pw_work);
@@ -250,13 +238,11 @@ EXPORT_SYMBOL(padata_do_parallel);
 static struct padata_priv *padata_find_next(struct parallel_data *pd,
 					    bool remove_object)
 {
-	struct padata_parallel_queue *next_queue;
 	struct padata_priv *padata;
 	struct padata_list *reorder;
 	int cpu = pd->cpu;
 
-	next_queue = per_cpu_ptr(pd->pqueue, cpu);
-	reorder = &next_queue->reorder;
+	reorder = per_cpu_ptr(pd->reorder_list, cpu);
 
 	spin_lock(&reorder->lock);
 	if (list_empty(&reorder->list)) {
@@ -291,7 +277,7 @@ static void padata_reorder(struct parallel_data *pd)
 	int cb_cpu;
 	struct padata_priv *padata;
 	struct padata_serial_queue *squeue;
-	struct padata_parallel_queue *next_queue;
+	struct padata_list *reorder;
 
 	/*
 	 * We need to ensure that only one cpu can work on dequeueing of
@@ -339,9 +325,8 @@ static void padata_reorder(struct parallel_data *pd)
 	 */
 	smp_mb();
 
-	next_queue = per_cpu_ptr(pd->pqueue, pd->cpu);
-	if (!list_empty(&next_queue->reorder.list) &&
-	    padata_find_next(pd, false))
+	reorder = per_cpu_ptr(pd->reorder_list, pd->cpu);
+	if (!list_empty(&reorder->list) && padata_find_next(pd, false))
 		queue_work(pinst->serial_wq, &pd->reorder_work);
 }
 
@@ -385,7 +370,7 @@ static void padata_serial_worker(struct work_struct *serial_work)
 	}
 	local_bh_enable();
 
-	if (atomic_sub_and_test(cnt, &pd->refcnt))
+	if (refcount_sub_and_test(cnt, &pd->refcnt))
 		padata_free_pd(pd);
 }
 
@@ -401,17 +386,16 @@ void padata_do_serial(struct padata_priv *padata)
 {
 	struct parallel_data *pd = padata->pd;
 	int hashed_cpu = padata_cpu_hash(pd, padata->seq_nr);
-	struct padata_parallel_queue *pqueue = per_cpu_ptr(pd->pqueue,
-							   hashed_cpu);
+	struct padata_list *reorder = per_cpu_ptr(pd->reorder_list, hashed_cpu);
 	struct padata_priv *cur;
 
-	spin_lock(&pqueue->reorder.lock);
+	spin_lock(&reorder->lock);
 	/* Sort in ascending order of sequence number. */
-	list_for_each_entry_reverse(cur, &pqueue->reorder.list, list)
+	list_for_each_entry_reverse(cur, &reorder->list, list)
 		if (cur->seq_nr < padata->seq_nr)
 			break;
 	list_add(&padata->list, &cur->list);
-	spin_unlock(&pqueue->reorder.lock);
+	spin_unlock(&reorder->lock);
 
 	/*
 	 * Ensure the addition to the reorder list is ordered correctly
@@ -438,28 +422,6 @@ static int padata_setup_cpumasks(struct padata_instance *pinst)
 	err = apply_workqueue_attrs(pinst->parallel_wq, attrs);
 	free_workqueue_attrs(attrs);
 
-	return err;
-}
-
-static int pd_setup_cpumasks(struct parallel_data *pd,
-			     const struct cpumask *pcpumask,
-			     const struct cpumask *cbcpumask)
-{
-	int err = -ENOMEM;
-
-	if (!alloc_cpumask_var(&pd->cpumask.pcpu, GFP_KERNEL))
-		goto out;
-	if (!alloc_cpumask_var(&pd->cpumask.cbcpu, GFP_KERNEL))
-		goto free_pcpu_mask;
-
-	cpumask_copy(pd->cpumask.pcpu, pcpumask);
-	cpumask_copy(pd->cpumask.cbcpu, cbcpumask);
-
-	return 0;
-
-free_pcpu_mask:
-	free_cpumask_var(pd->cpumask.pcpu);
-out:
 	return err;
 }
 
@@ -575,17 +537,15 @@ static void padata_init_squeues(struct parallel_data *pd)
 	}
 }
 
-/* Initialize all percpu queues used by parallel workers */
-static void padata_init_pqueues(struct parallel_data *pd)
+/* Initialize per-CPU reorder lists */
+static void padata_init_reorder_list(struct parallel_data *pd)
 {
 	int cpu;
-	struct padata_parallel_queue *pqueue;
+	struct padata_list *list;
 
 	for_each_cpu(cpu, pd->cpumask.pcpu) {
-		pqueue = per_cpu_ptr(pd->pqueue, cpu);
-
-		__padata_list_init(&pqueue->reorder);
-		atomic_set(&pqueue->num_obj, 0);
+		list = per_cpu_ptr(pd->reorder_list, cpu);
+		__padata_list_init(list);
 	}
 }
 
@@ -593,43 +553,46 @@ static void padata_init_pqueues(struct parallel_data *pd)
 static struct parallel_data *padata_alloc_pd(struct padata_shell *ps)
 {
 	struct padata_instance *pinst = ps->pinst;
-	const struct cpumask *cbcpumask;
-	const struct cpumask *pcpumask;
 	struct parallel_data *pd;
-
-	cbcpumask = pinst->rcpumask.cbcpu;
-	pcpumask = pinst->rcpumask.pcpu;
 
 	pd = kzalloc(sizeof(struct parallel_data), GFP_KERNEL);
 	if (!pd)
 		goto err;
 
-	pd->pqueue = alloc_percpu(struct padata_parallel_queue);
-	if (!pd->pqueue)
+	pd->reorder_list = alloc_percpu(struct padata_list);
+	if (!pd->reorder_list)
 		goto err_free_pd;
 
 	pd->squeue = alloc_percpu(struct padata_serial_queue);
 	if (!pd->squeue)
-		goto err_free_pqueue;
+		goto err_free_reorder_list;
 
 	pd->ps = ps;
-	if (pd_setup_cpumasks(pd, pcpumask, cbcpumask))
-		goto err_free_squeue;
 
-	padata_init_pqueues(pd);
+	if (!alloc_cpumask_var(&pd->cpumask.pcpu, GFP_KERNEL))
+		goto err_free_squeue;
+	if (!alloc_cpumask_var(&pd->cpumask.cbcpu, GFP_KERNEL))
+		goto err_free_pcpu;
+
+	cpumask_and(pd->cpumask.pcpu, pinst->cpumask.pcpu, cpu_online_mask);
+	cpumask_and(pd->cpumask.cbcpu, pinst->cpumask.cbcpu, cpu_online_mask);
+
+	padata_init_reorder_list(pd);
 	padata_init_squeues(pd);
 	pd->seq_nr = -1;
-	atomic_set(&pd->refcnt, 1);
+	refcount_set(&pd->refcnt, 1);
 	spin_lock_init(&pd->lock);
 	pd->cpu = cpumask_first(pd->cpumask.pcpu);
 	INIT_WORK(&pd->reorder_work, invoke_padata_reorder);
 
 	return pd;
 
+err_free_pcpu:
+	free_cpumask_var(pd->cpumask.pcpu);
 err_free_squeue:
 	free_percpu(pd->squeue);
-err_free_pqueue:
-	free_percpu(pd->pqueue);
+err_free_reorder_list:
+	free_percpu(pd->reorder_list);
 err_free_pd:
 	kfree(pd);
 err:
@@ -640,7 +603,7 @@ static void padata_free_pd(struct parallel_data *pd)
 {
 	free_cpumask_var(pd->cpumask.pcpu);
 	free_cpumask_var(pd->cpumask.cbcpu);
-	free_percpu(pd->pqueue);
+	free_percpu(pd->reorder_list);
 	free_percpu(pd->squeue);
 	kfree(pd);
 }
@@ -682,12 +645,6 @@ static int padata_replace(struct padata_instance *pinst)
 
 	pinst->flags |= PADATA_RESET;
 
-	cpumask_and(pinst->rcpumask.pcpu, pinst->cpumask.pcpu,
-		    cpu_online_mask);
-
-	cpumask_and(pinst->rcpumask.cbcpu, pinst->cpumask.cbcpu,
-		    cpu_online_mask);
-
 	list_for_each_entry(ps, &pinst->pslist, list) {
 		err = padata_replace_one(ps);
 		if (err)
@@ -697,7 +654,7 @@ static int padata_replace(struct padata_instance *pinst)
 	synchronize_rcu();
 
 	list_for_each_entry_continue_reverse(ps, &pinst->pslist, list)
-		if (atomic_dec_and_test(&ps->opd->refcnt))
+		if (refcount_dec_and_test(&ps->opd->refcnt))
 			padata_free_pd(ps->opd);
 
 	pinst->flags &= ~PADATA_RESET;
@@ -763,7 +720,7 @@ int padata_set_cpumask(struct padata_instance *pinst, int cpumask_type,
 	struct cpumask *serial_mask, *parallel_mask;
 	int err = -EINVAL;
 
-	get_online_cpus();
+	cpus_read_lock();
 	mutex_lock(&pinst->lock);
 
 	switch (cpumask_type) {
@@ -783,48 +740,11 @@ int padata_set_cpumask(struct padata_instance *pinst, int cpumask_type,
 
 out:
 	mutex_unlock(&pinst->lock);
-	put_online_cpus();
+	cpus_read_unlock();
 
 	return err;
 }
 EXPORT_SYMBOL(padata_set_cpumask);
-
-/**
- * padata_start - start the parallel processing
- *
- * @pinst: padata instance to start
- *
- * Return: 0 on success or negative error code
- */
-int padata_start(struct padata_instance *pinst)
-{
-	int err = 0;
-
-	mutex_lock(&pinst->lock);
-
-	if (pinst->flags & PADATA_INVALID)
-		err = -EINVAL;
-
-	__padata_start(pinst);
-
-	mutex_unlock(&pinst->lock);
-
-	return err;
-}
-EXPORT_SYMBOL(padata_start);
-
-/**
- * padata_stop - stop the parallel processing
- *
- * @pinst: padata instance to stop
- */
-void padata_stop(struct padata_instance *pinst)
-{
-	mutex_lock(&pinst->lock);
-	__padata_stop(pinst);
-	mutex_unlock(&pinst->lock);
-}
-EXPORT_SYMBOL(padata_stop);
 
 #ifdef CONFIG_HOTPLUG_CPU
 
@@ -907,9 +827,6 @@ static void __padata_free(struct padata_instance *pinst)
 
 	WARN_ON(!list_empty(&pinst->pslist));
 
-	padata_stop(pinst);
-	free_cpumask_var(pinst->rcpumask.cbcpu);
-	free_cpumask_var(pinst->rcpumask.pcpu);
 	free_cpumask_var(pinst->cpumask.pcpu);
 	free_cpumask_var(pinst->cpumask.cbcpu);
 	destroy_workqueue(pinst->serial_wq);
@@ -1044,18 +961,12 @@ static struct kobj_type padata_attr_type = {
 };
 
 /**
- * padata_alloc - allocate and initialize a padata instance and specify
- *                cpumasks for serial and parallel workers.
- *
+ * padata_alloc - allocate and initialize a padata instance
  * @name: used to identify the instance
- * @pcpumask: cpumask that will be used for padata parallelization
- * @cbcpumask: cpumask that will be used for padata serialization
  *
  * Return: new instance on success, NULL on error
  */
-static struct padata_instance *padata_alloc(const char *name,
-					    const struct cpumask *pcpumask,
-					    const struct cpumask *cbcpumask)
+struct padata_instance *padata_alloc(const char *name)
 {
 	struct padata_instance *pinst;
 
@@ -1068,7 +979,7 @@ static struct padata_instance *padata_alloc(const char *name,
 	if (!pinst->parallel_wq)
 		goto err_free_inst;
 
-	get_online_cpus();
+	cpus_read_lock();
 
 	pinst->serial_wq = alloc_workqueue("%s_serial", WQ_MEM_RECLAIM |
 					   WQ_CPU_INTENSIVE, 1, name);
@@ -1081,26 +992,16 @@ static struct padata_instance *padata_alloc(const char *name,
 		free_cpumask_var(pinst->cpumask.pcpu);
 		goto err_free_serial_wq;
 	}
-	if (!padata_validate_cpumask(pinst, pcpumask) ||
-	    !padata_validate_cpumask(pinst, cbcpumask))
-		goto err_free_masks;
-
-	if (!alloc_cpumask_var(&pinst->rcpumask.pcpu, GFP_KERNEL))
-		goto err_free_masks;
-	if (!alloc_cpumask_var(&pinst->rcpumask.cbcpu, GFP_KERNEL))
-		goto err_free_rcpumask_pcpu;
 
 	INIT_LIST_HEAD(&pinst->pslist);
 
-	cpumask_copy(pinst->cpumask.pcpu, pcpumask);
-	cpumask_copy(pinst->cpumask.cbcpu, cbcpumask);
-	cpumask_and(pinst->rcpumask.pcpu, pcpumask, cpu_online_mask);
-	cpumask_and(pinst->rcpumask.cbcpu, cbcpumask, cpu_online_mask);
+	cpumask_copy(pinst->cpumask.pcpu, cpu_possible_mask);
+	cpumask_copy(pinst->cpumask.cbcpu, cpu_possible_mask);
 
 	if (padata_setup_cpumasks(pinst))
-		goto err_free_rcpumask_cbcpu;
+		goto err_free_masks;
 
-	pinst->flags = 0;
+	__padata_start(pinst);
 
 	kobject_init(&pinst->kobj, &padata_attr_type);
 	mutex_init(&pinst->lock);
@@ -1112,42 +1013,24 @@ static struct padata_instance *padata_alloc(const char *name,
 						    &pinst->cpu_dead_node);
 #endif
 
-	put_online_cpus();
+	cpus_read_unlock();
 
 	return pinst;
 
-err_free_rcpumask_cbcpu:
-	free_cpumask_var(pinst->rcpumask.cbcpu);
-err_free_rcpumask_pcpu:
-	free_cpumask_var(pinst->rcpumask.pcpu);
 err_free_masks:
 	free_cpumask_var(pinst->cpumask.pcpu);
 	free_cpumask_var(pinst->cpumask.cbcpu);
 err_free_serial_wq:
 	destroy_workqueue(pinst->serial_wq);
 err_put_cpus:
-	put_online_cpus();
+	cpus_read_unlock();
 	destroy_workqueue(pinst->parallel_wq);
 err_free_inst:
 	kfree(pinst);
 err:
 	return NULL;
 }
-
-/**
- * padata_alloc_possible - Allocate and initialize padata instance.
- *                         Use the cpu_possible_mask for serial and
- *                         parallel workers.
- *
- * @name: used to identify the instance
- *
- * Return: new instance on success, NULL on error
- */
-struct padata_instance *padata_alloc_possible(const char *name)
-{
-	return padata_alloc(name, cpu_possible_mask, cpu_possible_mask);
-}
-EXPORT_SYMBOL(padata_alloc_possible);
+EXPORT_SYMBOL(padata_alloc);
 
 /**
  * padata_free - free a padata instance
@@ -1178,9 +1061,9 @@ struct padata_shell *padata_alloc_shell(struct padata_instance *pinst)
 
 	ps->pinst = pinst;
 
-	get_online_cpus();
+	cpus_read_lock();
 	pd = padata_alloc_pd(ps);
-	put_online_cpus();
+	cpus_read_unlock();
 
 	if (!pd)
 		goto out_free_ps;

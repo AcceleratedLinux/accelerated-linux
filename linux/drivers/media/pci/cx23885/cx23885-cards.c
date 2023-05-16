@@ -15,7 +15,7 @@
 #include <linux/firmware.h>
 #include <misc/altera.h>
 
-#include "tuner-xc2028.h"
+#include "xc2028.h"
 #include "netup-eeprom.h"
 #include "netup-init.h"
 #include "altera-ci.h"
@@ -657,14 +657,11 @@ struct cx23885_board cx23885_boards[] = {
 		.porta		= CX23885_ANALOG_VIDEO,
 		.input          = {{
 			.type   = CX23885_VMUX_COMPOSITE1,
-			.vmux   = CX25840_VIN7_CH3 |
-				  CX25840_VIN4_CH2 |
-				  CX25840_VIN6_CH1,
+			.vmux   = CX25840_VIN6_CH1,
 			.amux   = CX25840_AUDIO7,
 		}, {
 			.type   = CX23885_VMUX_SVIDEO,
-			.vmux   = CX25840_VIN7_CH3 |
-				  CX25840_VIN4_CH2 |
+			.vmux   = CX25840_VIN4_CH2 |
 				  CX25840_VIN8_CH1 |
 				  CX25840_SVIDEO_ON,
 			.amux   = CX25840_AUDIO7,
@@ -715,6 +712,16 @@ struct cx23885_board cx23885_boards[] = {
 					CX25840_VIN2_CH1 |
 					CX25840_DIF_ON,
 			.amux   = CX25840_AUDIO8,
+		}, {
+			.type   = CX23885_VMUX_COMPOSITE1,
+			.vmux   = CX25840_VIN6_CH1,
+			.amux   = CX25840_AUDIO7,
+		}, {
+			.type   = CX23885_VMUX_SVIDEO,
+			.vmux   = CX25840_VIN7_CH3 |
+				  CX25840_VIN8_CH1 |
+				  CX25840_SVIDEO_ON,
+			.amux   = CX25840_AUDIO7,
 		} },
 	},
 	[CX23885_BOARD_VIEWCAST_260E] = {
@@ -823,16 +830,9 @@ struct cx23885_board cx23885_boards[] = {
 					CX25840_DIF_ON,
 			.amux   = CX25840_AUDIO8,
 		}, {
-			.type   = CX23885_VMUX_COMPOSITE1,
-			.vmux   =	CX25840_VIN7_CH3 |
-					CX25840_VIN4_CH2 |
-					CX25840_VIN6_CH1,
-			.amux   = CX25840_AUDIO7,
-		}, {
 			.type   = CX23885_VMUX_SVIDEO,
-			.vmux   =	CX25840_VIN7_CH3 |
-					CX25840_VIN4_CH2 |
-					CX25840_VIN8_CH1 |
+			.vmux   =	CX25840_VIN4_CH2 |
+					CX25840_VIN6_CH1 |
 					CX25840_SVIDEO_ON,
 			.amux   = CX25840_AUDIO7,
 		} },
@@ -2209,7 +2209,7 @@ void cx23885_card_setup(struct cx23885_dev *dev)
 		ts2->gen_ctrl_val  = 0xc; /* Serial bus + punctured clock */
 		ts2->ts_clk_en_val = 0x1; /* Enable TS_CLK */
 		ts2->src_sel_val   = CX23885_SRC_SEL_PARALLEL_MPEG_VIDEO;
-		/* fall-through */
+		fallthrough;
 	case CX23885_BOARD_DVICO_FUSIONHDTV_5_EXP:
 		ts1->gen_ctrl_val  = 0xc; /* Serial bus + punctured clock */
 		ts1->ts_clk_en_val = 0x1; /* Enable TS_CLK */
@@ -2370,7 +2370,7 @@ void cx23885_card_setup(struct cx23885_dev *dev)
 		/* Currently only enabled for the integrated IR controller */
 		if (!enable_885_ir)
 			break;
-		/* fall-through */
+		fallthrough;
 	case CX23885_BOARD_HAUPPAUGE_HVR1250:
 	case CX23885_BOARD_HAUPPAUGE_HVR1800:
 	case CX23885_BOARD_HAUPPAUGE_IMPACTVCBE:

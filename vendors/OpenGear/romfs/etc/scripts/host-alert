@@ -1,0 +1,100 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+#DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/host-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	HostPingNotification=4
+	hostPingDown=7
+	hostPingUp=8
+	unknown=65535
+
+	export AGENT=""
+	export UPTIME="0"
+	export TRAP=$HostPingNotification
+	export NOTIFICATION="HostPingNotification"
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_DEVICE=$6
+	ALERT_TYPE=$7
+	ALERT_VALUE=$8
+
+	ALERT_TYPE=$unknown
+	ALERT_OLD_VALUE="-1"
+	ALERT_USER="icmp"
+
+	if [ "$ALERT_VALUE" != "0" ]; then
+		ALERT_TYPE=$hostPingDown
+		ALERT_SUMMARY="Host '$ALERT_DEVICE' is no longer pingable"
+		ALERT_OLD_VALUE="0"
+	elif [ "$ALERT_VALUE" == "0" ]; then
+		ALERT_TYPE=$hostPingUp
+		ALERT_SUMMARY="Host '$ALERT_DEVICE' is responding to pings"
+		ALERT_OLD_VALUE="1"
+	else
+		exit 1
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmUser" \
+		"s" \
+		"$ALERT_USER" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$ALERT_OLD_VALUE" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

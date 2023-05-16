@@ -1,0 +1,93 @@
+#!/bin/bash
+#
+# Configure templated console server with personality and security settings.
+#
+
+source /etc/scripts/wizard/wizard.inc
+
+stty sane
+
+logit "*** Starting setup wizard"
+
+config_set_args=()
+
+function queue_config_set {
+	config_set_args[${#config_set_args[@]}]="$1"
+}
+
+function run_config_set {
+	for arg in "${config_set_args[@]}"; do
+		config -s "$arg"
+	done
+}
+
+read -p "*** Hostname: " hostname
+template_host=$(cat /etc/version | cut -f1 -d' ' | cut -f2 -d'/' | awk '{print tolower($0)}')
+refs=$(config -g config | grep $template_host)
+ifs="$IFS"                               
+IFS=$'\n'                                                                                     
+for ref in $refs; do
+	id=$(echo "$ref" | cut -f1 -d' ')
+	old=$(echo "$ref" | cut -f2- -d' ')
+	new=$(echo "$old" | sed "s/$template_host/$hostname/g")
+	echo "*** Setting \"$id=$new\""
+	queue_config_set "$id=$new"
+done
+IFS="$ifs"
+
+if confirm "*** Enable DHCP"; then
+	queue_config_set "config.interfaces.wan.mode=dhcp"
+else 
+	read -p "*** IP address: " address
+	read -p "*** Netmask: " netmask
+	read -p "*** Gateway: " gateway
+	queue_config_set "config.interfaces.wan.mode=static"
+	queue_config_set "config.interfaces.wan.address=$address"
+	queue_config_set "config.interfaces.wan.netmask=$netmask"
+	queue_config_set "config.interfaces.wan.gateway=$gateway"
+fi
+
+interface=$(config -g config.wizard.saved.interfaces.wan.failover.interface | cut -f2 -d' ')
+if [[ -n "$interface" ]]; then
+	queue_config_set "config.interfaces.wan.failover.interface=$interface"
+fi
+
+numipsec=$(config -g config.ipsec.tunnels.total | cut -f2 -d' ')
+for (( i=1; i <= ${numipsec:-0}; i++ )); do
+	secret=$(config -g config.wizard.saved.ipsec.tunnels.tunnel${i}.secret | cut -f2 -d' ')
+	[[ -z "$secret" ]] && continue
+
+	addr=$(config -g config.ipsec.tunnels.tunnel${i}.right | cut -f2 -d' ')
+
+	get_pass "*** IPsec tunnel ($addr) shared secret" secret
+	queue_config_set "config.ipsec.tunnels.tunnel${i}.secret=$secret"
+done
+		
+methods=$(config -g config.wizard.saved.auth | cut -f5 -d'.' | uniq)
+for method in $methods; do
+	get_pass "*** Auth server ($method) password" aaapass
+	queue_config_set "config.auth.${method}.password=$aaapass"
+done	
+
+if confirm "*** Set root password"; then
+	get_pass "*** New root password for this device" mypass
+	queue_config_set "config.users.user1.plaintext_password=$mypass"
+fi
+
+echo "*** Writing config (may need to wait for lock)"
+
+# Guard against config write race with callhome-wizard
+RESTART=false LOCKNAME=wizard source /etc/scripts/mutex
+
+run_config_set
+
+echo "*** Applying config (may take a couple of minutes)"
+if ! config -a; then
+	logit "*** ERROR *** Failed to apply config"
+	exit 1
+fi
+
+# Wizard complete, disable autorun
+sed -i "/^# Start $(basename $0) autorun/,/^# End $(basename $0) autorun/d" /etc/config/profile
+
+logit "*** Setup wizard successful"

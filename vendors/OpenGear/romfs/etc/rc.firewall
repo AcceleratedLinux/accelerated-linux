@@ -1,0 +1,151 @@
+#!/bin/sh
+
+REASON=$1
+
+source /etc/scripts/mutex
+
+IPTABLES="/bin/iptables"
+
+# Script paths
+CUSTOMFILE=/etc/config/filter-custom
+
+# Run custom rules and exit if user script exists
+if [ -f ${CUSTOMFILE} ]; then
+	. ${CUSTOMFILE}
+	exit 0
+fi
+
+# For each firewall rule table, compare the currently effective rules and
+# the new rules, apply changes specifically
+for table in filter nat mangle; do
+	OLDFILE=/etc/config/firewall/fw.$table
+	NEWFILE=/etc/config/firewall/.fw.$table
+	TMPFILE=/var/run/.fw.$table.diff
+	USERFILE=/var/run/.fw.filter.user
+
+	# Invoked by /etc/rc when firewall rules have been setup
+	if [ "$REASON" = "boot" ]; then
+		if [ -s $OLDFILE ]; then
+			# Sanity check of the firewall rules file
+			if ! grep -qE "^\*$table$" $OLDFILE || ! grep -qE "^COMMIT$" $OLDFILE ; then
+				continue;
+			fi
+
+			cat $OLDFILE | iptables-restore
+			if [ "$table" = "mangle" ]; then
+				# Notify perifrouted to rebuild its firewall rules once
+				# the mangle table is flushed
+				pkill -HUP perifrouted
+			fi
+
+			continue
+		else
+			logger -t rc.firewall "$OLDFILE is missing or empty!"
+		fi
+	fi
+
+	# During upgrade when the new files make their debut
+	if [ ! -e $OLDFILE ] && [ -s $NEWFILE ]; then
+		if ! grep -qE "^\*$table$" $NEWFILE || ! grep -qE "^COMMIT$" $NEWFILE ; then
+			continue;
+		fi
+
+		cat $NEWFILE | iptables-restore
+		if [ "$table" = "mangle" ]; then
+			pkill -HUP perifrouted
+		fi
+
+		cp $NEWFILE $OLDFILE
+		continue
+	fi
+
+	# The subsequential firewall rules setup, e.g., during config erase
+	# or configurators introduce any changes
+	if [ -s $OLDFILE ] && [ -s $NEWFILE ] ; then
+		if ! grep -qE "^\*$table$" $OLDFILE || ! grep -qE "^COMMIT$" $OLDFILE ; then
+			continue;
+		fi
+		if ! grep -qE "^\*$table$" $NEWFILE || ! grep -qE "^COMMIT$" $NEWFILE ; then
+			continue;
+		fi
+
+		# Apply new rules and delete obsolete ones
+
+		# Get the diff without any context and prune the header and line
+		# numbers
+		# NOTE:	line numbers are useless if there is any rules added on
+		#	CLI directly
+		diff -U 0 $OLDFILE $NEWFILE | sed '1,2d;s,^@@.*$,,' > $TMPFILE
+
+		if [ -s $TMPFILE ] ; then
+
+			# Abstract entire User*** subchains in the filter table if new rules
+			# are added to them
+			rm -f $USERFILE
+			if [ "$table" = "filter" ]; then
+				if grep -q "\-A UserInput" $TMPFILE || grep -q "\-A UserOutput" $TMPFILE ||
+						grep -q "\-A UserForward" $TMPFILE ; then
+					echo "*filter" > $USERFILE
+					if grep -q "\-A UserInput" $TMPFILE ; then
+						echo ":UserInput - [0:0]" >> $USERFILE
+						grep "\-A UserInput" $NEWFILE >> $USERFILE
+					fi
+					if grep -q "\-A UserOutput" $TMPFILE ; then
+						echo ":UserOutput - [0:0]" >> $USERFILE
+						grep "\-A UserOutput" $NEWFILE >> $USERFILE
+					fi
+					if grep -q "\-A UserForward" $TMPFILE ; then
+						echo ":UserForward - [0:0]" >> $USERFILE
+						grep "\-A UserForward" $NEWFILE >> $USERFILE
+					fi
+					echo "COMMIT" >> $USERFILE
+				fi
+			fi
+
+			# Chains first, they may come and go during upgrade/downgrade
+			sed -i "s,^+:\(.*\)[ ]*-.*,iptables -t $table -N \1," $TMPFILE
+			sed -i "s,^-:\(.*\)[ ]*-.*,iptables -t $table -X \1," $TMPFILE
+
+			# The ordering of firewall rules are largely settled down by
+			# pre-defined subchains, whose ordering never changes
+			# Moreover, rules inside subchains should be independent to
+			# each other
+			sed -i "s,^+-A,iptables -t $table -A," $TMPFILE
+
+			# Take advantage of the fact that ConfigManager just creates
+			# add commands for still needed rules
+			sed -i "s,^--A,iptables -t $table -D," $TMPFILE
+
+			# Avoid applying changes to ip passthrough rules if it has been
+			# started, which are directly updated by the dialin configurator
+			if [ "$table" = "nat" ]; then
+				enabled=`config -g config.ippassthrough.enabled | cut -d' ' -f2`
+				status=`infod_client -q -o get -p conman.ippassthrough.status`
+				if [ "$enabled" = "on" ] && [ "$status" = "up" ]; then
+					sed -i 's,.*IPPassthroughNat.*,,' $TMPFILE
+				fi
+			fi
+
+			sh $TMPFILE > /dev/null 2>&1
+
+			# Flush and restore User*** subchains so that their ordering is
+			# same as on UI (the arrow buttons can change their ordering)
+			if [ -s $USERFILE ] ; then
+				cat $USERFILE | iptables-restore -n
+			fi
+		fi
+
+		cp $NEWFILE $OLDFILE
+		continue
+	fi
+done
+
+# Enable IP forwarding between network interfaces
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+#
+# Run custom post firewall rules
+#
+if [ -f /etc/config/scripts/firewall-post ]; then
+	/bin/sh /etc/config/scripts/firewall-post
+fi

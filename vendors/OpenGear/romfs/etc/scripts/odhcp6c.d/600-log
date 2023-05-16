@@ -1,0 +1,14 @@
+#!/bin/sh -
+
+# Disable this script to suppress debug noises in normal situation
+exit 0
+
+fmt="Action: $2, Device: $1, MTU:`cat /sys/class/net/${1}/mtu`"
+file="/var/log/odhcp6c.${1}.log"
+
+# Keep log under 8kB; restart on overflow
+ulimit -f 4; trap '' XFSZ
+if ! echo "$fmt" >> $file; then
+	mv $file ${file}.0
+	echo "$fmt" > $file
+fi

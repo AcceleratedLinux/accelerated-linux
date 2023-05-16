@@ -17,9 +17,13 @@ properties:
     pattern: "^i2c@[0-9a-f]+$"
 
   compatible:
-    enum:
-      - ingenic,jz4780-i2c
-      - ingenic,x1000-i2c
+    oneOf:
+      - enum:
+          - ingenic,jz4770-i2c
+          - ingenic,x1000-i2c
+      - items:
+          - const: ingenic,jz4780-i2c
+          - const: ingenic,jz4770-i2c
 
   reg:
     maxItems: 1
@@ -56,17 +60,16 @@ unevaluatedProperties: false
 
 examples:
   - |
-    #include <dt-bindings/clock/jz4780-cgu.h>
+    #include <dt-bindings/clock/ingenic,jz4780-cgu.h>
     #include <dt-bindings/dma/jz4780-dma.h>
     #include <dt-bindings/interrupt-controller/irq.h>
     i2c@10054000 {
-      compatible = "ingenic,jz4780-i2c";
+      compatible = "ingenic,jz4780-i2c", "ingenic,jz4770-i2c";
       #address-cells = <1>;
       #size-cells = <0>;
       reg = <0x10054000 0x1000>;
 
-      interrupt-parent = <&intc>;
-      interrupts = <56>;
+      interrupts = <56 IRQ_TYPE_LEVEL_LOW>;
 
       clocks = <&cgu JZ4780_CLK_SMB4>;
       pinctrl-names = "default";
@@ -82,7 +85,6 @@ examples:
         compatible = "nxp,pcf8563";
         reg = <0x51>;
 
-        interrupt-parent = <&gpf>;
         interrupts = <30 IRQ_TYPE_LEVEL_LOW>;
       };
     };

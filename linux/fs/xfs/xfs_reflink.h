@@ -8,8 +8,7 @@
 
 static inline bool xfs_is_always_cow_inode(struct xfs_inode *ip)
 {
-	return ip->i_mount->m_always_cow &&
-		xfs_sb_version_hasreflink(&ip->i_mount->m_sb);
+	return ip->i_mount->m_always_cow && xfs_has_reflink(ip->i_mount);
 }
 
 static inline bool xfs_is_cow_inode(struct xfs_inode *ip)
@@ -56,7 +55,5 @@ extern int xfs_reflink_remap_blocks(struct xfs_inode *src, loff_t pos_in,
 		loff_t *remapped);
 extern int xfs_reflink_update_dest(struct xfs_inode *dest, xfs_off_t newlen,
 		xfs_extlen_t cowextsize, unsigned int remap_flags);
-extern void xfs_reflink_remap_unlock(struct file *file_in,
-		struct file *file_out);
 
 #endif /* __XFS_REFLINK_H */

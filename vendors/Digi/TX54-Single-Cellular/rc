@@ -5,14 +5,17 @@ mount -t proc proc /proc
 mount -t sysfs sys /sys
 mkdir -m 755 /dev/pts
 mount -t devpts devpts /dev/pts
-mount -t tmpfs -o size=40M tmpfs /tmp
+mount -t tmpfs -o size=70M tmpfs /tmp
 mount -t tmpfs -o size=32M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -59,7 +62,20 @@ if [ "$factory" ] ; then
 	exit 0
 fi
 
-ubiattach -p /dev/flash/userfs -d 1
+ubiattach -p /dev/flash/userfs -d 1 || {
+	echo "Failed to attach UserFS partition, re-creating it..."
+	ubiformat -q -y /dev/flash/userfs &&
+		ubiattach -p /dev/flash/userfs -d 1 ||
+		echo "Failed to create UserFS partition"
+}
+
+# Check if UserFS volume is there
+ubinfo -d 1 -N UserFS &>/dev/null || {
+	echo "UserFS volume doesn't exist, creating it..."
+	ubimkvol /dev/ubi1 -N UserFS -m ||
+		echo "Failed to create UserFS volume"
+}
+
 echo "Mounting opt filesystem...."
 if ! mount -t ubifs ubi1:UserFS /opt
 then
@@ -89,7 +105,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -119,6 +135,9 @@ fi
 modprobe ath10k_pci
 
 random_seed restore
+
+# Clear any temporary power off delay
+/bin/set_temp_pwr_off_delay 0
 
 # init processing
 [ -x /etc/rcS ] && /etc/rcS

@@ -1,0 +1,62 @@
+#!/bin/sh
+#
+# Script to execute the emc ul test
+#
+
+# Initialize variables.
+IP_ADDR="192.168.1.10"
+CONFIG_FILE="/etc/emc-ul.conf"
+
+# Parse possible arguments.
+for ARGUMENT in "$@"; do
+	case "$ARGUMENT" in
+		ip=*)       IP_ADDR="$(echo "${ARGUMENT}" | cut -f2 -d=)";;
+		config=*)   CONFIG_FILE="$(echo "${ARGUMENT}" | cut -f2 -d=)";;
+	esac
+done
+
+# Start required services.
+echo "Starting services..."
+ps | grep -qs "[u]busd" || { echo " - Starting ubus..."; /etc/action.d/ubus start; }
+ps | grep -qs "[d]bus-daemon" || { echo " - Starting dbus..."; /etc/action.d/dbus start; }
+ps | grep -qs "[u]devd " || { echo " - Starting udev..."; /etc/action.d/udev start; }
+ps | grep -qs "[s]yslogd " || { echo " - Starting syslog..."; /etc/action.d/syslog start; }
+ps | grep -qs "[r]untd" || { echo " - Starting runt..."; /etc/action.d/runtd start; }
+ps | grep -qs "[m]odem_monitor" || { echo " - Starting modem monitor..."; /etc/action.d/modem_monitor start; }
+ps | grep -qs "[M]odemManager" || { echo " - Starting Modem Manager..."; /etc/action.d/ModemManager start; }
+ps | grep -qs "[n]etifd " || { echo " - Starting netifd..."; /etc/action.d/netifd start; }
+
+# Switch-on modem interface.
+echo "Enabling modem..."
+sim -p | grep -qs "state: on" || sim -o
+
+# Wait for modem to appear.
+echo "Waiting for modem..."
+while mmcli -L | grep -qs "No modems"; do
+        sleep 1
+done
+
+# Notify services about modem appearance.
+/etc/action.d/modem_monitor reload
+/etc/action.d/netifd reload
+
+# Retrieve modem index.
+MODEM_INDEX="$(runt get mm.map.interface_idx.modem)"
+echo " - Modem index: ${MODEM_INDEX}"
+
+# Wait until modem is fully connected.
+echo "Waiting for modem connection..."
+while [ "$(runt get mm.modem.${MODEM_INDEX}.status.state)" != "connected" ]; do
+        sleep 1
+done
+
+# Switch-on XBee interface.
+echo "Enabling XBee interface..."
+xbee on
+
+# Configure ETH interface.
+echo "Configuring ethernet interface..."
+ifconfig eth "${IP_ADDR}"
+
+# Execute the test.
+python3 /etc/test_interfaces.py --config "${CONFIG_FILE}"

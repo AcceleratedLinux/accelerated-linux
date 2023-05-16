@@ -11,29 +11,6 @@
 #include <linux/xattr.h>
 #include "internal.h"
 
-static const char afs_xattr_list[] =
-	"afs.acl\0"
-	"afs.cell\0"
-	"afs.fid\0"
-	"afs.volume\0"
-	"afs.yfs.acl\0"
-	"afs.yfs.acl_inherited\0"
-	"afs.yfs.acl_num_cleaned\0"
-	"afs.yfs.vol_acl";
-
-/*
- * Retrieve a list of the supported xattrs.
- */
-ssize_t afs_listxattr(struct dentry *dentry, char *buffer, size_t size)
-{
-	if (size == 0)
-		return sizeof(afs_xattr_list);
-	if (size < sizeof(afs_xattr_list))
-		return -ERANGE;
-	memcpy(buffer, afs_xattr_list, sizeof(afs_xattr_list));
-	return sizeof(afs_xattr_list);
-}
-
 /*
  * Deal with the result of a successful fetch ACL operation.
  */
@@ -85,7 +62,7 @@ static int afs_xattr_get_acl(const struct xattr_handler *handler,
 			if (acl->size <= size)
 				memcpy(buffer, acl->data, acl->size);
 			else
-				op->error = -ERANGE;
+				ret = -ERANGE;
 		}
 	}
 
@@ -120,6 +97,7 @@ static const struct afs_operation_ops afs_store_acl_operation = {
  * Set a file's AFS3 ACL.
  */
 static int afs_xattr_set_acl(const struct xattr_handler *handler,
+			     struct user_namespace *mnt_userns,
                              struct dentry *dentry,
                              struct inode *inode, const char *name,
                              const void *buffer, size_t size, int flags)
@@ -147,11 +125,6 @@ static const struct xattr_handler afs_xattr_afs_acl_handler = {
 	.get    = afs_xattr_get_acl,
 	.set    = afs_xattr_set_acl,
 };
-
-static void yfs_acl_put(struct afs_operation *op)
-{
-	yfs_free_opaque_acl(op->yacl);
-}
 
 static const struct afs_operation_ops yfs_fetch_opaque_acl_operation = {
 	.issue_yfs_rpc	= yfs_fs_fetch_opaque_acl,
@@ -235,6 +208,8 @@ static int afs_xattr_get_yfs(const struct xattr_handler *handler,
 			else
 				ret = -ERANGE;
 		}
+	} else if (ret == -ENOTSUPP) {
+		ret = -ENODATA;
 	}
 
 error_yacl:
@@ -246,19 +221,21 @@ error:
 static const struct afs_operation_ops yfs_store_opaque_acl2_operation = {
 	.issue_yfs_rpc	= yfs_fs_store_opaque_acl2,
 	.success	= afs_acl_success,
-	.put		= yfs_acl_put,
+	.put		= afs_acl_put,
 };
 
 /*
  * Set a file's YFS ACL.
  */
 static int afs_xattr_set_yfs(const struct xattr_handler *handler,
+			     struct user_namespace *mnt_userns,
                              struct dentry *dentry,
                              struct inode *inode, const char *name,
                              const void *buffer, size_t size, int flags)
 {
 	struct afs_operation *op;
 	struct afs_vnode *vnode = AFS_FS_I(inode);
+	int ret;
 
 	if (flags == XATTR_CREATE ||
 	    strcmp(name, "acl") != 0)
@@ -273,7 +250,10 @@ static int afs_xattr_set_yfs(const struct xattr_handler *handler,
 		return afs_put_operation(op);
 
 	op->ops = &yfs_store_opaque_acl2_operation;
-	return afs_do_sync_operation(op);
+	ret = afs_do_sync_operation(op);
+	if (ret == -ENOTSUPP)
+		ret = -ENODATA;
+	return ret;
 }
 
 static const struct xattr_handler afs_xattr_yfs_handler = {

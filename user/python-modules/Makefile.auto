@@ -13,6 +13,7 @@ dir_$(CONFIG_USER_PYTHON_MODULES_AWS_SDK)       += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_SRP)           += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_PAHO_MQTT)     += python-modules
 dir_$(CONFIG_USER_PYTHON_MODULES_HID)           += python-modules
+dir_$(CONFIG_USER_PYTHON_MODULES_TACACS_PLUS)   += python-modules
 
 dep_python_modules_y=
 dep_python_modules_$(CONFIG_USER_PYTHON_MODULES_HID) += hidapi

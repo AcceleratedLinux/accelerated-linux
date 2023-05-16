@@ -1,0 +1,18 @@
+###############################################################################
+# LDAP or local
+###############################################################################
+auth optional pam_faildelay.so delay=5000000
+auth optional pam_echo.so file=/etc/config/motd
+auth sufficient pam_portauth.so
+auth [success=done default=ignore] pam_unix.so
+auth [success=1] pam_ldap.so use_first_pass
+auth [default=die] pam_infod.so # post auth_error and deny
+auth optional pam_adduser.so
+
+account sufficient pam_unix.so
+account required pam_ldap.so
+account optional pam_adduser.so
+
+session optional pam_ldap.so
+session required pam_unix.so
+session optional pam_infod.so # post login/logout

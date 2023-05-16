@@ -1,1 +1,4 @@
 0001-Add-survey-data-fallback-instead-of-failing-immediat.patch
+0004-Force-HT40.patch
+0001-Fix-build-error-because-of-conflicting-env-variable-.patch
+0001-Allow-00-as-a-valid-country-code.patch

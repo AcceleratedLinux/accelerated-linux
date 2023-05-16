@@ -1,0 +1,4 @@
+ENV{SERIAL_IGNORE_TTY}=="true", GOTO="serial_end"
+SUBSYSTEM=="tty",RUN="/etc/scripts/udev-serial"
+SUBSYSTEM=="usb",RUN="/etc/scripts/udev-serial"
+LABEL="serial_end"

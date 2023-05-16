@@ -6,19 +6,14 @@
  *   Author: Lars-Peter Clausen <lars@metafoo.de>
  */
 
-#include <linux/interrupt.h>
-#include <linux/delay.h>
-#include <linux/mutex.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/spi/spi.h>
-#include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-#include <linux/iio/buffer.h>
 #include <linux/iio/imu/adis.h>
 
 #include <linux/debugfs.h>
@@ -223,13 +218,12 @@ static ssize_t adis16136_read_frequency(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct adis16136 *adis16136 = iio_priv(indio_dev);
-	struct mutex *slock = &adis16136->adis.state_lock;
 	unsigned int freq;
 	int ret;
 
-	mutex_lock(slock);
+	adis_dev_lock(&adis16136->adis);
 	ret = __adis16136_get_freq(adis16136, &freq);
-	mutex_unlock(slock);
+	adis_dev_unlock(&adis16136->adis);
 	if (ret)
 		return ret;
 
@@ -254,11 +248,10 @@ static const unsigned adis16136_3db_divisors[] = {
 static int adis16136_set_filter(struct iio_dev *indio_dev, int val)
 {
 	struct adis16136 *adis16136 = iio_priv(indio_dev);
-	struct mutex *slock = &adis16136->adis.state_lock;
 	unsigned int freq;
 	int i, ret;
 
-	mutex_lock(slock);
+	adis_dev_lock(&adis16136->adis);
 	ret = __adis16136_get_freq(adis16136, &freq);
 	if (ret)
 		goto out_unlock;
@@ -270,7 +263,7 @@ static int adis16136_set_filter(struct iio_dev *indio_dev, int val)
 
 	ret = __adis_write_reg_16(&adis16136->adis, ADIS16136_REG_AVG_CNT, i);
 out_unlock:
-	mutex_unlock(slock);
+	adis_dev_unlock(&adis16136->adis);
 
 	return ret;
 }
@@ -278,12 +271,11 @@ out_unlock:
 static int adis16136_get_filter(struct iio_dev *indio_dev, int *val)
 {
 	struct adis16136 *adis16136 = iio_priv(indio_dev);
-	struct mutex *slock = &adis16136->adis.state_lock;
 	unsigned int freq;
 	uint16_t val16;
 	int ret;
 
-	mutex_lock(slock);
+	adis_dev_lock(&adis16136->adis);
 
 	ret = __adis_read_reg_16(&adis16136->adis, ADIS16136_REG_AVG_CNT,
 				 &val16);
@@ -297,7 +289,7 @@ static int adis16136_get_filter(struct iio_dev *indio_dev, int *val)
 	*val = freq / adis16136_3db_divisors[val16 & 0x07];
 
 err_unlock:
-	mutex_unlock(slock);
+	adis_dev_unlock(&adis16136->adis);
 
 	return ret ? ret : IIO_VAL_INT;
 }
@@ -523,6 +515,11 @@ static const struct adis16136_chip_info adis16136_chip_info[] = {
 	},
 };
 
+static void adis16136_stop(void *data)
+{
+	adis16136_stop_device(data);
+}
+
 static int adis16136_probe(struct spi_device *spi)
 {
 	const struct spi_device_id *id = spi_get_device_id(spi);
@@ -540,7 +537,6 @@ static int adis16136_probe(struct spi_device *spi)
 	adis16136 = iio_priv(indio_dev);
 
 	adis16136->chip_info = &adis16136_chip_info[id->driver_data];
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->channels = adis16136_channels;
 	indio_dev->num_channels = ARRAY_SIZE(adis16136_channels);
@@ -553,38 +549,23 @@ static int adis16136_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = adis_setup_buffer_and_trigger(&adis16136->adis, indio_dev, NULL);
+	ret = devm_adis_setup_buffer_and_trigger(&adis16136->adis, indio_dev, NULL);
 	if (ret)
 		return ret;
 
 	ret = adis16136_initial_setup(indio_dev);
 	if (ret)
-		goto error_cleanup_buffer;
+		return ret;
 
-	ret = iio_device_register(indio_dev);
+	ret = devm_add_action_or_reset(&spi->dev, adis16136_stop, indio_dev);
 	if (ret)
-		goto error_stop_device;
+		return ret;
+
+	ret = devm_iio_device_register(&spi->dev, indio_dev);
+	if (ret)
+		return ret;
 
 	adis16136_debugfs_init(indio_dev);
-
-	return 0;
-
-error_stop_device:
-	adis16136_stop_device(indio_dev);
-error_cleanup_buffer:
-	adis_cleanup_buffer_and_trigger(&adis16136->adis, indio_dev);
-	return ret;
-}
-
-static int adis16136_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct adis16136 *adis16136 = iio_priv(indio_dev);
-
-	iio_device_unregister(indio_dev);
-	adis16136_stop_device(indio_dev);
-
-	adis_cleanup_buffer_and_trigger(&adis16136->adis, indio_dev);
 
 	return 0;
 }
@@ -604,10 +585,10 @@ static struct spi_driver adis16136_driver = {
 	},
 	.id_table = adis16136_ids,
 	.probe = adis16136_probe,
-	.remove = adis16136_remove,
 };
 module_spi_driver(adis16136_driver);
 
 MODULE_AUTHOR("Lars-Peter Clausen <lars@metafoo.de>");
 MODULE_DESCRIPTION("Analog Devices ADIS16133/ADIS16135/ADIS16136 gyroscope driver");
 MODULE_LICENSE("GPL v2");
+MODULE_IMPORT_NS(IIO_ADISLIB);

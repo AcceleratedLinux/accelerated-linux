@@ -57,7 +57,7 @@ enum ad5761_supported_device_ids {
  * @use_intref:		true when the internal voltage reference is used
  * @vref:		actual voltage reference in mVolts
  * @range:		output range mode used
- * @lock		lock to protect the data buffer during SPI ops
+ * @lock:		lock to protect the data buffer during SPI ops
  * @data:		cache aligned spi buffer
  */
 struct ad5761_state {
@@ -376,7 +376,6 @@ static int ad5761_probe(struct spi_device *spi)
 	if (ret)
 		goto disable_regulator_err;
 
-	iio_dev->dev.parent = &spi->dev;
 	iio_dev->info = &ad5761_info;
 	iio_dev->modes = INDIO_DIRECT_MODE;
 	iio_dev->channels = &chip_info->channel;
@@ -395,7 +394,7 @@ disable_regulator_err:
 	return ret;
 }
 
-static int ad5761_remove(struct spi_device *spi)
+static void ad5761_remove(struct spi_device *spi)
 {
 	struct iio_dev *iio_dev = spi_get_drvdata(spi);
 	struct ad5761_state *st = iio_priv(iio_dev);
@@ -404,8 +403,6 @@ static int ad5761_remove(struct spi_device *spi)
 
 	if (!IS_ERR_OR_NULL(st->vref_reg))
 		regulator_disable(st->vref_reg);
-
-	return 0;
 }
 
 static const struct spi_device_id ad5761_id[] = {

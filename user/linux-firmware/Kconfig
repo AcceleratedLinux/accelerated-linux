@@ -9,6 +9,12 @@ config USER_LINUX_FIRMWARE_ALL_FIRMWARE
 	help
 	  Include all firmware on this device.
 
+config USER_LINUX_FIRMWARE_AX210
+	bool "Firmware for Intel AX210."
+	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+	help
+	  Include firmware for the Intel ax210 device.
+
 config USER_LINUX_FIRMWARE_QCA988X
 	bool "Firmware for QCA988X."
 	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y

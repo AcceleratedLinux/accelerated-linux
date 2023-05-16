@@ -4,7 +4,9 @@ obj-$(CONFIG_MLX5_INFINIBAND) += mlx5_ib.o
 mlx5_ib-y := ah.o \
 	     cmd.o \
 	     cong.o \
+	     counters.o \
 	     cq.o \
+	     dm.o \
 	     doorbell.o \
 	     gsi.o \
 	     ib_virt.o \
@@ -17,10 +19,12 @@ mlx5_ib-y := ah.o \
 	     restrack.o \
 	     srq.o \
 	     srq_cmd.o \
+	     umr.o \
 	     wr.o
 
 mlx5_ib-$(CONFIG_INFINIBAND_ON_DEMAND_PAGING) += odp.o
 mlx5_ib-$(CONFIG_MLX5_ESWITCH) += ib_rep.o
 mlx5_ib-$(CONFIG_INFINIBAND_USER_ACCESS) += devx.o \
-					    flow.o \
-					    qos.o
+					    fs.o \
+					    qos.o \
+					    std_types.o

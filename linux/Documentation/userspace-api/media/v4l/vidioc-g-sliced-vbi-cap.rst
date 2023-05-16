@@ -1,11 +1,5 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_G_SLICED_VBI_CAP:
 
@@ -18,23 +12,21 @@ Name
 
 VIDIOC_G_SLICED_VBI_CAP - Query sliced VBI capabilities
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_G_SLICED_VBI_CAP, struct v4l2_sliced_vbi_cap *argp )
-    :name: VIDIOC_G_SLICED_VBI_CAP
+.. c:macro:: VIDIOC_G_SLICED_VBI_CAP
 
+``int ioctl(int fd, VIDIOC_G_SLICED_VBI_CAP, struct v4l2_sliced_vbi_cap *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_sliced_vbi_cap`.
-
 
 Description
 ===========
@@ -51,10 +43,9 @@ the sliced VBI API is unsupported or ``type`` is invalid.
    The ``type`` field was added, and the ioctl changed from read-only
    to write-read, in Linux 2.6.19.
 
-
 .. c:type:: v4l2_sliced_vbi_cap
 
-.. tabularcolumns:: |p{1.2cm}|p{4.2cm}|p{4.1cm}|p{4.0cm}|p{4.0cm}|
+.. tabularcolumns:: |p{1.4cm}|p{4.4cm}|p{4.5cm}|p{3.6cm}|p{3.6cm}|
 
 .. flat-table:: struct v4l2_sliced_vbi_cap
     :header-rows:  0
@@ -127,12 +118,11 @@ the sliced VBI API is unsupported or ``type`` is invalid.
 
    See also :ref:`vbi-525` and :ref:`vbi-625`.
 
-
 .. raw:: latex
 
     \scriptsize
 
-.. tabularcolumns:: |p{3.5cm}|p{1.0cm}|p{2.0cm}|p{2.0cm}|p{8.0cm}|
+.. tabularcolumns:: |p{3.9cm}|p{1.0cm}|p{2.0cm}|p{3.0cm}|p{7.0cm}|
 
 .. _vbi-services:
 
@@ -172,13 +162,7 @@ the sliced VBI API is unsupported or ``type`` is invalid.
 
 	:ref:`itu1119`
       - PAL/SECAM line 23
-      -
-
-	::
-
-	    Byte        0                 1
-		 msb         lsb  msb           lsb
-	    Bit  7 6 5 4 3 2 1 0  x x 13 12 11 10 9
+      - See :ref:`v4l2-sliced-vbi-cap-wss-625-payload` below.
     * - ``V4L2_SLICED_VBI_525``
       - 0x1000
       - :cspan:`2` Set of services applicable to 525 line systems.
@@ -186,9 +170,25 @@ the sliced VBI API is unsupported or ``type`` is invalid.
       - 0x4401
       - :cspan:`2` Set of services applicable to 625 line systems.
 
+
 .. raw:: latex
 
     \normalsize
+
+.. _v4l2-sliced-vbi-cap-wss-625-payload:
+
+V4L2_SLICED_VBI_CAP WSS_625 payload
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The payload for ``V4L2_SLICED_WSS_625`` is:
+
+	    +-----+------------------+-----------------------+
+	    |Byte |        0         |           1           |
+	    +-----+--------+---------+-----------+-----------+
+	    |     | msb    | lsb     | msb       | lsb       |
+	    |     +-+-+-+--+--+-+-+--+--+-+--+---+---+--+-+--+
+	    | Bit |7|6|5|4 | 3|2|1|0 | x|x|13|12 | 11|10|9|8 |
+	    +-----+-+-+-+--+--+-+-+--+--+-+--+---+---+--+-+--+
 
 
 Return Value

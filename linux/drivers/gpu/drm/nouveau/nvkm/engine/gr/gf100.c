@@ -741,7 +741,7 @@ gf100_gr_fecs_ctrl_ctxsw(struct gf100_gr *gr, u32 mthd)
 	return -ETIMEDOUT;
 }
 
-int
+static int
 gf100_gr_fecs_start_ctxsw(struct nvkm_gr *base)
 {
 	struct gf100_gr *gr = gf100_gr(base);
@@ -756,7 +756,7 @@ gf100_gr_fecs_start_ctxsw(struct nvkm_gr *base)
 	return ret;
 }
 
-int
+static int
 gf100_gr_fecs_stop_ctxsw(struct nvkm_gr *base)
 {
 	struct gf100_gr *gr = gf100_gr(base);
@@ -2032,7 +2032,7 @@ gf100_gr_fini(struct nvkm_gr *base, bool suspend)
 	return 0;
 }
 
-void *
+static void *
 gf100_gr_dtor(struct nvkm_gr *base)
 {
 	struct gf100_gr *gr = gf100_gr(base);
@@ -2087,8 +2087,8 @@ gf100_gr_flcn = {
 };
 
 int
-gf100_gr_new_(const struct gf100_gr_fwif *fwif,
-	      struct nvkm_device *device, int index, struct nvkm_gr **pgr)
+gf100_gr_new_(const struct gf100_gr_fwif *fwif, struct nvkm_device *device,
+	      enum nvkm_subdev_type type, int inst, struct nvkm_gr **pgr)
 {
 	struct gf100_gr *gr;
 	int ret;
@@ -2097,13 +2097,13 @@ gf100_gr_new_(const struct gf100_gr_fwif *fwif,
 		return -ENOMEM;
 	*pgr = &gr->base;
 
-	ret = nvkm_gr_ctor(&gf100_gr_, device, index, true, &gr->base);
+	ret = nvkm_gr_ctor(&gf100_gr_, device, type, inst, true, &gr->base);
 	if (ret)
 		return ret;
 
 	fwif = nvkm_firmware_load(&gr->base.engine.subdev, fwif, "Gr", gr);
 	if (IS_ERR(fwif))
-		return -ENODEV;
+		return PTR_ERR(fwif);
 
 	gr->func = fwif->func;
 
@@ -2483,7 +2483,7 @@ gf100_gr_fwif[] = {
 };
 
 int
-gf100_gr_new(struct nvkm_device *device, int index, struct nvkm_gr **pgr)
+gf100_gr_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst, struct nvkm_gr **pgr)
 {
-	return gf100_gr_new_(gf100_gr_fwif, device, index, pgr);
+	return gf100_gr_new_(gf100_gr_fwif, device, type, inst, pgr);
 }

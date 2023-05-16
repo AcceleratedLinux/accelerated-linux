@@ -1,27 +1,5 @@
-#
-# $Id: Makefile,v 1.0 2003/01/12 13:17:37 jt Exp $
-#
+VERSION  = 23891c2a375e110375325b6f5b8e8ef0953f6615
+METHOD   = git
+URL      = https://github.com/certnanny/sscep.git
 
-BINDIR = /usr/local/bin
-MANDIR = /usr/local/man/man8
-
-#CC	= gcc
-#WITH_DEBUG   = -g
-CFLAGS	+= $(WITH_DEBUG)
-
-MAN	= sscep.8
-PROG	= sscep
-OBJS    = sscep.o init.o net.o sceputils.o pkcs7.o ias.o fileutils.o vars.o
-
-$(PROG): $(OBJS)
-	$(CC) $(CFLAGS) -lcrypto -o $(PROG) $(OBJS) 
-
-clean:
-	rm -f $(PROG) $(OBJS) $(MAN) core
-
-install:
-	./install-sh $(PROG) $(BINDIR)
-	./install-sh $(MAN) $(MANDIR)
-
-romfs:
-	$(ROMFSINST) /bin/$(PROG)
+include $(ROOTDIR)/tools/cmake.inc

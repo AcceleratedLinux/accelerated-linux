@@ -1,22 +1,23 @@
-From: David Escalona <david.escalona@digi.com>
-Date: Thu, 27 Feb 2020 12:22:51 +0100
+From: Tatiana Leon <Tatiana.Leon@digi.com>
+Date: Mon, 13 Jun 2022 13:33:01 +0200
 Subject: [PATCH] mosquito_rr: fix '-R' argument
 
 Signed-off-by: David Escalona <david.escalona@digi.com>
+Signed-off-by: Tatiana Leon <Tatiana.Leon@digi.com>
 ---
  client/rr_client.c | 2 ++
  1 file changed, 2 insertions(+)
 
 diff --git a/client/rr_client.c b/client/rr_client.c
-index 4e22fa3b76c3..75b8e2f54fcd 100644
+index e74536f7..9dca6d74 100644
 --- a/client/rr_client.c
 +++ b/client/rr_client.c
-@@ -74,6 +74,8 @@ int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadl
+@@ -84,6 +84,8 @@ static void my_message_callback(struct mosquitto *mosq, void *obj, const struct
+ 	UNUSED(obj);
+ 	UNUSED(properties);
  
- void my_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message, const mosquitto_property *properties)
- {
 +	if(message->retain && cfg.no_retain) return;
 +
- 	print_message(&cfg, message);
+ 	print_message(&cfg, message, properties);
  	switch(cfg.pub_mode){
  		case MSGMODE_CMD:

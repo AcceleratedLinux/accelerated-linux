@@ -48,7 +48,7 @@ romfs.post:: romfs.cleanup
 	$(ROMFSINST) -R /usr/share/locale
 	mkdir -p $(ROMFSDIR)/usr/share/locale
 
-image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.tag image.copy
+image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.tag image.copy image.size
 	gzip -9 -c -f $(ROMFSIMG) > $(ROMFSIMGZ)
 	./mkdisk
 	cp VirtualDAL-PR.vmx $(IMAGEDIR)/VirtualDAL-PR-$(VERSIONPKG)/.

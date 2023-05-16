@@ -1,0 +1,3 @@
+.pbi
+write 0xee0200,  0x40100000
+.end

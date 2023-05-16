@@ -1,0 +1,6 @@
+# Trigger rc.cellmodem only when a known cellular modem device appears.
+#  1199 = Sierra Wireles
+#  12d1 = Huawei
+ACTION=="add|change", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
+	ENV{ID_VENDOR_ID}=="1199|12d1", \
+	RUN+="/etc/scripts/udev-cellmodem"

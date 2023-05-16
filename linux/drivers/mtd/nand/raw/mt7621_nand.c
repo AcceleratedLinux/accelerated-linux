@@ -14,7 +14,6 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/rawnand.h>
 #include <linux/mtd/partitions.h>
-#include <linux/mtd/nand_ecc.h>
 #include <linux/platform_device.h>
 #include <asm/io.h>
 #include "mt7621_nand.h"
@@ -55,6 +54,13 @@ static struct mt7621_nand_host *host;
  */
 #define NAND_MAX_OOBSIZE 774
 static u8 local_oob_buf[NAND_MAX_OOBSIZE];
+
+/*
+ * These constants used to be part of the linux mtd.h header.
+ * They were removed in v5.16. We can keep them locally for now.
+ */
+#define MTD_MAX_OOBFREE_ENTRIES_LARGE	32
+#define MTD_MAX_ECCPOS_ENTRIES_LARGE	640
 
 struct nand_ecclayout {
 	u32 eccbytes;
@@ -1401,7 +1407,7 @@ static void mt7621_nand_init_hw(struct mt7621_nand_host *host)
 	mt7621_nand_reset();
 
 	/* Set the ECC engine */
-	if (host->nand_chip.ecc.mode == NAND_ECC_HW) {
+	if (host->nand_chip.ecc.engine_type == NAND_ECC_ENGINE_TYPE_ON_HOST) {
 		regset16(NFI_CNFG_REG16, CNFG_HW_ECC_EN);
 		ecc_config(4);
 		mt7621_nand_configure_fdm(8);
@@ -1624,7 +1630,7 @@ static int mt7621_nand_probe(struct platform_device *pdev)
 	chip->legacy.cmd_ctrl = mt7621_cmd_ctrl;
 	chip->legacy.dummy_controller.ops = &mt7621_controller_ops;
 
-	chip->ecc.mode = NAND_ECC_HW;
+	chip->ecc.engine_type = NAND_ECC_ENGINE_TYPE_ON_HOST;
 	chip->ecc.strength = 1;
 	chip->ecc.read_page = mt7621_nand_read_page_hwecc;
 	chip->ecc.write_page = mt7621_nand_write_page_hwecc;

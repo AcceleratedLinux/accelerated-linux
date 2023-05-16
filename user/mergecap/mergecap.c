@@ -76,8 +76,8 @@ typedef struct _dump_header {
 typedef struct _packet_header {
 	unsigned int seconds;
 	unsigned int microseconds;
+	unsigned int cap_length;
 	unsigned int orig_length;
-	unsigned int length;
 } packet_header;
 
 /*
@@ -243,8 +243,8 @@ int main(int argc, char *argv[]) {
 	while (any_left(head) == true) {
 		current = get_lowest_timestamp(head);
 		fwrite(&(current->header), sizeof(packet_header), 1, output);
-		fread(buffer, current->header.length, 1, current->file);
-		fwrite(buffer, current->header.length, 1, output);
+		fread(buffer, current->header.cap_length, 1, current->file);
+		fwrite(buffer, current->header.cap_length, 1, output);
 		current->timestamp = get_timestamp(current->file, &(current->header));
 	}
 	fclose(output);

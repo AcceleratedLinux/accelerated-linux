@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# generic platform script: no SIM select supported
+exit 1;

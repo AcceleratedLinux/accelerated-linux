@@ -14,6 +14,8 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+#include "fsl-pstore-512MB.dtsi"
 
 / {
 	model = "Digi ConnectEZ";
@@ -35,7 +37,7 @@
 	};
 
 	soc {
-		rcpm: rcpm@1ee2000 {
+		rcpm@1ee2000 {
 			compatible = "fsl,ls1012a-rcpm", "fsl,qoriq-rcpm-2.1";
 			reg = <0x0 0x1ee2000 0x0 0x1000>;
 			fsl,#rcpm-wakeup-cells = <1>;
@@ -71,7 +73,7 @@
 	};
 };
 
-&pcie {
+&pcie1 {
     status = "okay";
 };
 
@@ -91,96 +93,89 @@
 		reg = <0x32>;
 		label = "lp5569";
 		clock-mode = /bits/ 8 <1>;  /* internal */
+		gpio-strobe-sec = /bits/ 8 <0x4>; /* strobe gpio every 4 seconds for external watchdog */
+		#address-cells = <1>;
+		#size-cells = <0>;
 
 		chan0 {
-			chan-name = "pwr1b";
+			chan-name = "pwrb";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			invert = /bits/ 8 <0x01>;   /* inverted LED */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <0>;
 			linux,default-trigger = "timer";
 		};
 
 		chan1 {
-			chan-name = "pwr1g";
+			chan-name = "pwrg";
 			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <1>;
 			linux,default-trigger = "timer";
 		};
 
 		chan2 {
-			chan-name = "pwr1r";
+			chan-name = "pwrr";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <2>;
 			linux,default-trigger = "timer";
 		};
 
 		chan3 {
-			chan-name = "b01";
+			chan-name = "wanserb";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <3>;
 			linux,default-trigger = "timer";
 		};
 
 		chan4 {
-			chan-name = "g01";
+			chan-name = "wanserg";
 			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <4>;
 			linux,default-trigger = "timer";
 		};
 
 		chan5 {
-			chan-name = "r01";
+			chan-name = "wanserr";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <5>;
 			linux,default-trigger = "timer";
 		};
 
 		chan6 {
-			chan-name = "b02";
+			chan-name = "wansigb";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <6>;
 			linux,default-trigger = "timer";
 		};
 
 		chan7 {
-			chan-name = "g02";
+			chan-name = "wansigg";
 			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <7>;
 			linux,default-trigger = "timer";
 		};
 
 		chan8 {
-			chan-name = "r02";
+			chan-name = "wansigr";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-	};
-
-	lp5569b:lp5569@35 {
-		compatible = "ti,lp5569";
-		reg = <0x35>;
-		label = "lp5569b";
-		clock-mode = /bits/ 8 <1>;  /* internal */
-
-		chan0 {
-			chan-name = "b03";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan1 {
-			chan-name = "g03";
-			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan2 {
-			chan-name = "r03";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <8>;
 			linux,default-trigger = "timer";
 		};
 	};
@@ -202,6 +197,7 @@
 		reg = <0x73>;
 		pinctrl-names = "default";
 		gpio-controller;
+		#gpio-cells = <2>;
 	};
 
 	gpio4: pca9538@71 {
@@ -209,6 +205,7 @@
 		reg = <0x71>;
 		pinctrl-names = "default";
 		gpio-controller;
+		gpio-line-names = "", "", "factory", "sim_switch", "", "", "", "";
 	};
 
 	accelerometer@1e {
@@ -218,8 +215,13 @@
 };
 
 &i2c1 {
-	clock-frequency = <100000>;
+	clock-frequency = <400000>;
 	status = "okay";
+
+	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	pmux-reg-offset = <0x430>;
+	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -282,7 +284,7 @@
 };
 
 &usb0 {
-	status = "disabled";
+	status = "okay";
 };
 
 &usb1 {
@@ -290,17 +292,14 @@
 };
 
 &esdhc0 {
-	mmc-ddr-1_8v;
-	mmc-hs200-1_8v;
-	mmc-hs400-1_8v;
-	mmc-hs200-1_8v;
+	sd-uhs-sdr104;
+	non-removable;
 	status = "okay";
 };
 
 &esdhc1 {
-	mmc-ddr-1_8v;
+	mmc-hs200-1_8v;
 	non-removable;
-	max-frequency = <1000000>;
 	status = "okay";
 };
 
@@ -308,5 +307,5 @@
 	gpio-line-names = "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "",
-			  "factory", "", "", "", "", "", "", "";
+			  "", "", "", "", "", "", "", "";
 };

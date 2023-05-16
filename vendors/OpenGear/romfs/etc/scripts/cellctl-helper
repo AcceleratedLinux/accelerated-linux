@@ -1,0 +1,104 @@
+#!/bin/bash
+
+# This script contains useful functions for working with ModemManager / mmcli
+set +e
+
+CC_IFACE="unknown"
+CC_INFO_STATUS=""
+
+cc_get_info_status()
+{
+	if [ -z "$CC_INFO_STATUS" ]
+	then
+		i=0
+		while [ $i -lt 5 ]
+		do
+			CC_INFO_STATUS=`/bin/cellctl -is`
+			if [ ! -z "$CC_INFO_STATUS" ]
+			then
+				break
+			fi
+			sleep 1
+			let i=i+1
+		done
+	fi
+	echo "$CC_INFO_STATUS"
+}
+
+cc_get_value()
+{
+	buf=$(cc_get_info_status)
+	echo "$buf" | while read line
+	do
+		name=$(echo "$line" | cut -d' ' -f1)
+		if [ "$name" == "$1" ]; then
+			value=$(echo "$line" | cut -d' ' -f2-)
+			echo "$value"
+			return
+		fi
+	done
+}
+
+cc_get_net_device()
+{
+	if [ -f /var/run/.modem/cellmodem_is_mm_ether ];
+	then
+		iface=$(cc_get_value "bearer-interface")
+	else
+		iface="wwan0"
+	fi
+	echo "$iface"
+}
+
+cc_get_ipv6_network()
+{
+	ip=$(cc_get_value "ipv6address")
+	pf=$(cc_get_value "ipv6prefix")
+
+	# Only return network if meaningful values for
+	# net and prefix are returned to limit the amount
+	# of checking required by caller.
+	if [ ! -z "$ip" -a "$ip" != "::" -a ! -z "$pf"  ]
+	then
+		echo "$ip/$pf"
+	else
+		echo ""
+	fi
+}
+
+cc_get_ipv4_dns()
+{
+	dns=$(cc_get_value "ipv4dns")
+	echo $dns
+}
+
+cc_get_ipv4_mtu()
+{
+	mtu=$(cc_get_value "ipv4mtu")
+	echo $mtu
+}
+
+cc_get_ipv6_mtu()
+{
+	mtu=$(cc_get_value "ipv6mtu")
+	echo $mtu
+}
+
+cc_get_ipv6_dns()
+{
+	dns=$(cc_get_value "ipv6dns")
+	echo $dns
+}
+
+cc_get_ipv6_gateway()
+{
+	gw=$(cc_get_value "ipv6gateway")
+	# Return empty string in the case of no 
+	# meaningful gateway info being found to
+	# limit checking required by caller.
+	if [ "$gw" == "::" ]
+	then
+		gw=""
+	fi
+	echo "$gw"
+}

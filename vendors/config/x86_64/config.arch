@@ -33,7 +33,7 @@ LINUXTARGET = bzImage
 endif
 
 ifndef VENDOR_CFLAGS
-VENDOR_CFLAGS = -DCONFIG_SECUREEDGE -DCONFIG_NETtel -DCONFIG_X86
+VENDOR_CFLAGS = -DCONFIG_NETtel -DCONFIG_X86
 endif
 
 ifndef VERSIONPKG
@@ -74,16 +74,22 @@ ENDIAN  = little
 FLOAT   = hard
 
 ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-  ifneq ($(shell which x86_64-linux-musl-20191112-gcc),)
-    CROSS_COMPILE ?= x86_64-linux-musl-20191112-
+  ifneq ($(shell which x86_64-linux-musl-20220202-gcc),)
+    CROSS_COMPILE ?= x86_64-linux-musl-20220202-
   else
     CROSS_COMPILE ?= x86_64-linux-musl-
   endif
 endif
 
-ifneq ($(shell which x86_64-linux-20151029-gcc),)
-CROSS_COMPILE ?= x86_64-linux-20151029-
-else
+ifneq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
+  ifneq ($(shell which x86_64-linux-uclibc-20220202-gcc),)
+    CROSS_COMPILE ?= x86_64-linux-uclibc-20220202-
+  else
+    CROSS_COMPILE ?= x86_64-linux-uclibc-
+  endif
+endif
+
+ifndef CROSS_COMPILE
 CROSS_COMPILE ?= x86_64-linux-
 endif
 
@@ -166,12 +172,17 @@ ifdef UCLINUX_BUILD_LIB
   else
 	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
   endif
-	CFLAGS  += -fno-stack-protector
+  ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
+	CFLAGS  += -fstack-protector-strong
+  endif
+	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
 	# don't want all the CFLAGS for uClibc/Config
 	ARCH_CFLAGS := $(CFLAGS)
+
+	LDFLAGS += -Wl,-z,relro,-z,now
 
 	UCLINUX_BUILD_SET=1
 endif
@@ -187,11 +198,15 @@ ifdef UCLINUX_BUILD_USER
   else
 	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
   endif
-	CFLAGS  += -fno-stack-protector
+  ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
+	CFLAGS  += -fstack-protector-strong
+  endif
+	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
-
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
+
+	LDFLAGS += -Wl,-z,relro,-z,now
 
 	CXXFLAGS = $(CFLAGS) -nostdinc++
 	CXXSUP := $(shell $(CXX) -print-file-name=libsupc++.a)

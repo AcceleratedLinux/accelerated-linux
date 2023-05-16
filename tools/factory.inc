@@ -11,22 +11,21 @@ ZIPFILENAME = $(DIR)-$(NAME)-$(DATE).zip
 INSTALL = build/$(DIR)-install
 
 SSH = $(COM)/enable_shell.expect $(COM)/enable_factory_reboot.expect $(COM)/wait_ssh.expect
-MT = $(COM)/mt/factory.sh $(COM)/dynamicip.sh $(COM)/configure_test_station_auto.txt $(COM)/configure_test_station_manual.txt
+MT = $(COM)/mt/factory.sh $(COM)/dynamicip.sh $(COM)/configure_test_station_auto.txt $(COM)/configure_test_station_manual.txt $(COM)/configure_label_printer.txt
 TOOLS = $(COM)/tools.sh
 
 $(foreach item,$(DL),$(eval $(call download_pkg_def,$(item))))
 $(foreach item,$(DL),$(eval $(call download_dep_default,$(item))))
 DOWNLOADED_FILES = $(foreach item,$(DL),downloads/$($(item)_DOWNLOADNAME))
-DOWNLOADED_FILES += $(foreach item,$(PKG_y),build/$($(item)_SUBDIR))
-
-$(foreach item,$(CP_FILES),$(/bin/cp $(COM)/$(item) build/))
+DOWNLOADED_FILES += $(foreach item,$(PKG_y),$(if $($(item)_SUBDIR),$(build/$(item)_SUBDIR),build/$(item)))
 
 all: $(INSTALL)/$(ZIPFILENAME)
 
 $(INSTALL)/$(ZIPFILENAME): $(DOWNLOADED_FILES) $(CP_FILES) $(MAKEFILE_LIST)
 	rm -rf $(INSTALL)
 	mkdir -p $(INSTALL)
-	/bin/cp -r $(DOWNLOADED_FILES) $(CP_FILES) $(INSTALL)
+	$(foreach item,$(DOWNLOADED_FILES),/bin/cp -r $(item) $(INSTALL);)
+	$(foreach item,$(CP_FILES),/bin/cp $(item) $(INSTALL);)
 	if [ -f $(DIR).cfg ]; then \
 		/bin/cp $(DIR).cfg $(INSTALL) ;\
 		sed -i "1iinfo --------------------------------------------------------------" $(INSTALL)/$(DIR).cfg ;\

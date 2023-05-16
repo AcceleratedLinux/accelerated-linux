@@ -1,4 +1,4 @@
-VERSION = 1.5.2
+VERSION = 1.6
 URL = http://download.aircrack-ng.org/aircrack-ng-$(VERSION).tar.gz
 
 CFLAGS += -D_GLIBCXX_HAVE_MBSTATE_T=1 -fno-stack-protector
@@ -25,6 +25,6 @@ include $(ROOTDIR)/tools/automake.inc
 ifndef USER_AIRCRACK_FULL_INSTALL
 my_romfs:
 	$(ROMFSINST) -e CONFIG_USER_AIRCRACK_NG_AIRODUMP build/aircrack-ng-$(VERSION)-install/sbin/airodump-ng /sbin/airodump-ng
-	$(ROMFSINST) -e CONFIG_USER_AIRCRACK_NG_OSDEP build/aircrack-ng-$(VERSION)-install/lib/libaircrack-osdep-1.3.0.so /lib/libaircrack-osdep-1.3.0.so
+	$(ROMFSINST) -e CONFIG_USER_AIRCRACK_NG_OSDEP build/aircrack-ng-$(VERSION)-install/lib/libaircrack-osdep-1.6.0.so /lib/libaircrack-osdep-1.6.0.so
 endif
 

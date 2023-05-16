@@ -398,8 +398,7 @@ static irqreturn_t synquacer_i2c_isr(int irq, void *dev_id)
 
 		if (i2c->state == STATE_READ)
 			goto prepare_read;
-
-		/* fall through */
+		fallthrough;
 
 	case STATE_WRITE:
 		if (bsr & SYNQUACER_I2C_BSR_LRB) {
@@ -579,7 +578,7 @@ static int synquacer_i2c_probe(struct platform_device *pdev)
 
 	i2c->irq = platform_get_irq(pdev, 0);
 	if (i2c->irq < 0)
-		return -ENODEV;
+		return i2c->irq;
 
 	ret = devm_request_irq(&pdev->dev, i2c->irq, synquacer_i2c_isr,
 			       0, dev_name(&pdev->dev), i2c);

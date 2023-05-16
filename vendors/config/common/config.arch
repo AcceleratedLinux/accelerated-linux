@@ -29,7 +29,7 @@ LIBCSUFFIX  := $(subst musl,-musl,$(LIBCSUFFIX))
 LIBCSUFFIX  := $(subst glibc,,$(LIBCSUFFIX))
 export LIBCSUFFIX
 
-PATH	 := $(ROOTDIR)/tools:$(TOOLSPREFIX)/bin:$(PATH)
+PATH	 := $(ROOTDIR)/bin:$(TOOLSPREFIX)/bin:$(PATH)
 ROMFSINST = romfs-inst.sh
 LIBTOOL   = jlibtool
 export PATH ROMFSINST LIBTOOL

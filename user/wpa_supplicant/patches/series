@@ -1,1 +1,2 @@
-rebased-v2.9-hostapd-fix-roaming-handover.patch
+0001-Fix-build-error-because-of-conflicting-env-variable-.patch
+0002-Fix-Makefile-to-be-able-to-build-libwpa_client.so.patch

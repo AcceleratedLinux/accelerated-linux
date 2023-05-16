@@ -1,0 +1,17 @@
+
+The $(buildir) was misspelt causing a link error.
+Replaced it with libdnsres.la which is simpler anyway.
+
+Index: libdnsres-0.1a/Makefile.am
+===================================================================
+--- libdnsres-0.1a.orig/Makefile.am
++++ libdnsres-0.1a/Makefile.am
+@@ -23,7 +23,7 @@ man_MANS = dnsres.3
+ noinst_PROGRAMS = simple_test
+ simple_test_SOURCES = test/simple_test.c
+ simple_test_INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/compat @EVENTINC@
+-simple_test_LDADD = -L$(top_buildir) -ldnsres @EVENTLIB@
++simple_test_LDADD = libdnsres.la @EVENTLIB@
+ 
+ verify: libdnsres.a
+ 	cd $(srcdir)/test && make verify	

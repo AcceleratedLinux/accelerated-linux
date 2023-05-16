@@ -4,9 +4,14 @@ Required properties:
 - compatible: must be "mediatek,mt7621-wdt"
 - reg: physical base address of the controller and length of the register range
 
+Optional properties:
+- mt7621,register-reset-handler: If property is present, watchdog timer will be
+				 registered as reset handler
+
 Example:
 
 	watchdog@100 {
 		compatible = "mediatek,mt7621-wdt";
 		reg = <0x100 0x10>;
+		mt7621,register-reset-handler;
 	};

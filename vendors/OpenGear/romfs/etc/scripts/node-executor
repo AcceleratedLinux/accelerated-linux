@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# If there's a user-configured script, run it instead
+script=$(basename $0)
+if [ -f "/etc/config/scripts/$script" ]; then
+	exec "/etc/config/scripts/$script" $@
+fi
+
+source /etc/scripts/mutex
+
+case "$CMD" in
+netflash )
+	if [ -z "$URL" -o "${URL:0:7}" != "http://" ]; then
+		"URL '$URL' is not valid"
+		exit 1
+	fi
+	echo "Firmware upgrade commenced from $URL at $(date)"
+	netflash "$URL" &
+	exit 0
+	;;
+user-mod )
+	if [ -z "$USERNAME" ]; then
+		"You must specify a USERNAME"
+		exit 1
+	fi
+	case "$ACTION" in
+	lock )
+		opt="-L"
+		;;
+	unlock )
+		opt="-U"
+		;;
+	* )
+		echo "ACTION '$ACTION' is unknown"
+		exit 1
+		;;
+	esac
+	if ! /etc/scripts/user-mod $opt $USERNAME >& /dev/null; then
+		echo "Failed to $ACTION user $USERNAME"
+		exit 2
+	fi
+	echo "User $USERNAME ${ACTION}ed at $(date)"
+	exit 0
+	;;
+reboot )
+	echo "System rebooted at $(date)"
+	/bin/flatfsd -b &
+	;;
+shutdown )
+	echo "System halted at $(date)"
+	/sbin/halt &
+	;;
+* )
+	echo "Unknown command $CMD"
+	exit 3
+	;;
+esac
+
+exit 0

@@ -1,0 +1,38 @@
+#include <ls1046a.rcwi>
+SYS_PLL_RAT=4
+MEM_PLL_RAT=16
+CGA_PLL1_RAT=12
+CGA_PLL2_RAT=10
+SRDS_PRTCL_S1=4403
+SRDS_PRTCL_S2=21879
+SRDS_PLL_REF_CLK_SEL_S1=1
+SRDS_PLL_PD_S1=2
+DDR_FDBK_MULT=2
+PBI_SRC=4
+IFC_MODE=64
+HWA_CGA_M1_CLK_SEL=6
+DRAM_LAT=1
+UART_BASE=6
+ASLEEP=1
+IRQ_OUT=1
+IRQ_BASE=31 /* 0x1f 000011111 */
+IFC_GRP_A_BASE=1
+IFC_GRP_F_EXT=1
+IFC_GRP_D_BASE=1
+IFC_GRP_E1_BASE=1
+EMI1_DMODE=1
+EMI1_CMODE=1
+EMI2_DMODE=1
+EMI2_CMODE=1
+DVDD_VSEL=2
+SYSCLK_FREQ=600
+HWA_CGA_M2_CLK_SEL=1
+
+#include <uboot_address.rcw>
+#include <secure_boot.rcw>
+#include <cci_barrier_disable.rcw>
+#include <usb_phy_freq.rcw>
+#include <serdes_sata.rcw>
+// Pcie gen3
+#include <pex_gen3_link.rcw>
+#include <qspi_endianness.rcw>

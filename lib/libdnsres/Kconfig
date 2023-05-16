@@ -1,0 +1,3 @@
+config LIB_LIBDNSRES
+    bool "libdnsres"
+    select LIB_LIBEVENT

@@ -11,7 +11,7 @@ static struct ctx {
 	int fd;
 } ctx;
 
-static void validate()
+static void validate(void)
 {
 	if (env.producer_cnt != 1) {
 		fprintf(stderr, "benchmark doesn't support multi-producer!\n");
@@ -43,7 +43,7 @@ static void measure(struct bench_res *res)
 	res->hits = atomic_swap(&ctx.hits.value, 0);
 }
 
-static void setup_ctx()
+static void setup_ctx(void)
 {
 	setup_libbpf();
 
@@ -65,51 +65,45 @@ static void attach_bpf(struct bpf_program *prog)
 	struct bpf_link *link;
 
 	link = bpf_program__attach(prog);
-	if (IS_ERR(link)) {
+	if (!link) {
 		fprintf(stderr, "failed to attach program!\n");
 		exit(1);
 	}
 }
 
-static void setup_base()
+static void setup_base(void)
 {
 	setup_ctx();
 }
 
-static void setup_kprobe()
+static void setup_kprobe(void)
 {
 	setup_ctx();
 	attach_bpf(ctx.skel->progs.prog1);
 }
 
-static void setup_kretprobe()
+static void setup_kretprobe(void)
 {
 	setup_ctx();
 	attach_bpf(ctx.skel->progs.prog2);
 }
 
-static void setup_rawtp()
+static void setup_rawtp(void)
 {
 	setup_ctx();
 	attach_bpf(ctx.skel->progs.prog3);
 }
 
-static void setup_fentry()
+static void setup_fentry(void)
 {
 	setup_ctx();
 	attach_bpf(ctx.skel->progs.prog4);
 }
 
-static void setup_fexit()
+static void setup_fexit(void)
 {
 	setup_ctx();
 	attach_bpf(ctx.skel->progs.prog5);
-}
-
-static void setup_fmodret()
-{
-	setup_ctx();
-	attach_bpf(ctx.skel->progs.prog6);
 }
 
 static void *consumer(void *input)
@@ -176,17 +170,6 @@ const struct bench bench_rename_fexit = {
 	.name = "rename-fexit",
 	.validate = validate,
 	.setup = setup_fexit,
-	.producer_thread = producer,
-	.consumer_thread = consumer,
-	.measure = measure,
-	.report_progress = hits_drops_report_progress,
-	.report_final = hits_drops_report_final,
-};
-
-const struct bench bench_rename_fmodret = {
-	.name = "rename-fmodret",
-	.validate = validate,
-	.setup = setup_fmodret,
 	.producer_thread = producer,
 	.consumer_thread = consumer,
 	.measure = measure,

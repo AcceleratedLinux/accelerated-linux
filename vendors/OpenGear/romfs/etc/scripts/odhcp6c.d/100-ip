@@ -1,0 +1,156 @@
+#!/bin/sh
+
+setup_interface () {
+	local device="$1"
+
+	# Apply RA_MTU only if unspecified by user
+	# odhcp6c program defaults RA_MTU to zero
+	if [ ! -e /etc/config/.mtu/${device}_specified -a "$RA_MTU" -gt 0 ]; then
+		mtu=`cat /sys/class/net/${device}/mtu`
+		if [ -n "$mtu" -a ! "$RA_MTU" -eq "$mtu" ]; then
+			ip link set dev $device mtu $RA_MTU
+		fi
+	fi
+
+	local prefixpart=""
+	for entry in $PREFIXES; do
+		local addr="${entry%%,*}"
+		entry="${entry#*,}"
+                local preferred="${entry%%,*}"
+		entry="${entry#*,}"
+                local valid="${entry%%,*}"
+                entry="${entry#*,}"
+		[ "$entry" = "$valid" ] && entry=
+
+		local class=""
+		local excluded=""
+
+		while [ -n "$entry" ]; do
+			local key="${entry%%=*}"
+			entry="${entry#*=}"
+			local val="${entry%%,*}"
+			entry="${entry#*,}"
+			[ "$entry" = "$val" ] && entry=
+
+			if [ "$key" = "class" ]; then
+				class=", \"class\": $val"
+			elif [ "$key" = "excluded" ]; then
+				excluded=", \"excluded\": \"$val\""
+			fi
+		done
+
+		local prefix="{\"address\": \"$addr\", \"preferred\": $preferred, \"valid\": $valid $class $excluded}"
+
+		if [ -z "$prefixpart" ]; then
+			prefixpart="$prefix"
+		else
+			prefixpart="$prefixpart, $prefix"
+		fi
+
+		# TODO: delete this somehow when the prefix disappears
+		ip -6 route add unreachable "$addr"
+	done
+
+	# Merge addresses
+	for entry in $RA_ADDRESSES; do
+		local duplicate=0
+		local addr="${entry%%/*}"
+		for dentry in $ADDRESSES; do
+			local daddr="${dentry%%/*}"
+			[ "$addr" = "$daddr" ] && duplicate=1
+		done
+		[ "$duplicate" = "0" ] && ADDRESSES="$ADDRESSES $entry"
+	done
+
+	for entry in $ADDRESSES; do
+		local addr="${entry%%,*}"
+		entry="${entry#*,}"
+		local preferred="${entry%%,*}"
+		entry="${entry#*,}"
+		local valid="${entry%%,*}"
+
+		ip -6 address replace "$addr" dev "$device" preferred_lft "$preferred" valid_lft "$valid"
+	done
+
+	# Parse and add routes into the main routing table whereas
+	# The perifrouted will further populate them into device-specific route tables
+	#
+	# RA_ROUTES may contain default routes or prefix routes, kernel will also
+	# automatically add default routes upon reception of RA. However, when userspace
+	# changes routes (e.g., by ifmetric) relevant flags will be dropped resulting
+	# kernel to duplicate default routes and ended up in failure
+	#
+	# TODO: work around this issue by avoiding kernel to install default
+	# routes if already added here
+	#
+	# Avoid setting metrics explicitly so that the default values specified by conman
+	# can take effective
+	#
+	# NOTE: when kernel automatically adds perfix routes, their expiry is set according
+	# to the lifetime of relevant addresses. When kernel adds default routes from RA,
+	# they also have expiry threshold
+	# However, the RTM_NEWROUTE handler in kernel won't setup expiry at all (see
+	# rtm_to_fib6_config) which means:
+	# . ip route can only adds static routes
+	# . ifmetric will change dynamic routes into static ones (since it deletes, modifies
+	#   and finally adds it back)
+
+	echo 1 > /proc/sys/net/ipv6/conf/$device/accept_ra_defrtr
+	for entry in $RA_ROUTES; do
+		local addr="${entry%%,*}"
+		entry="${entry#*,}"
+		local gw="${entry%%,*}"
+		entry="${entry#*,}"
+		local valid="${entry%%,*}"
+		entry="${entry#*,}"
+		local metric="${entry%%,*}"
+
+		# RA_ROUTES may contain routes with same addres / gateway but with
+		# different lifetime or metric, the first one wins
+		if ! ip -6 route show dev "$device" | grep -q ${addr} ; then
+			if [ -n "$gw" ]; then
+				ip -6 route add "$addr" via "$gw" dev "$device"
+				if [ "$addr" = "::/0" ]; then
+					echo 0 > /proc/sys/net/ipv6/conf/$device/accept_ra_defrtr
+				fi
+			else
+				ip -6 route add "$addr" dev "$device"
+			fi
+		fi
+
+		for prefix in $PREFIXES; do
+			local paddr="${prefix%%,*}"
+			[ -n "$gw" ] && ip -6 route add "$addr" via "$gw" dev "$device" from "$paddr"
+		done
+	done
+}
+
+teardown_interface() {
+	local device="$1"
+
+	for entry in $ADDRESSES; do
+		local addr="${entry%%,*}"
+		entry="${entry#*,}"
+		local preferred="${entry%%,*}"
+		entry="${entry#*,}"
+		local valid="${entry%%,*}"
+
+		ip -6 address del "$addr" dev "$device" preferred_lft "$preferred" valid_lft "$valid"
+	done
+}
+
+case "$2" in
+	bound)
+		teardown_interface "$1"
+		setup_interface "$1"
+	;;
+	informed|updated|rebound|ra-updated)
+		setup_interface "$1"
+	;;
+	stopped|unbound)
+		teardown_interface "$1"
+	;;
+	started)
+		teardown_interface "$1"
+	;;
+esac

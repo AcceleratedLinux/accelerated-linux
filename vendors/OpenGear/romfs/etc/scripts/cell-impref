@@ -1,0 +1,146 @@
+#!/bin/sh
+# A wrapper around qmicli commands to adjust the preferred image.
+# This should be portable across 73xx, 74xx and 75xx series modems.
+# AUTO-SIM is not supported.
+
+# usage:
+usage () {
+	cat <<-. >&2
+	usage: $0 [<command>]
+	Commands:
+	  list                  - list image names to stdout
+	  list -v               - print tab-delimited table of images to stdout
+	  get         [default] - retrieves currently-prefered image name, if known
+	  set <name>|<pair>     - sets modem to new image or by modem#,pri# pair
+.
+}
+
+# Finds the first modem and performs a qmi command on it
+do_qmicli () {
+	if [ ! "$qmidev" ]; then
+		mmpath=$(mmcli -L | grep ModemManager1 | awk '{print $1;exit}')
+		qmidev=$(mmcli -m $mmpath | sed -ne "s,.*primary.port: *'*\\([^']*\\)'*,\\1,p")
+		if [ ! "$qmidev" ]; then
+			echo "no modems?" >&2
+			return 1
+		fi
+	fi
+	qmicli -p -d /dev/$qmidev --device-open-qmi "$@"
+}
+
+# Converts --dms-list-stored-images into tab-delimited lines of the form
+#   <name> \t [*] \t <modem#>,<pri#> \t <full-version>
+# If print_*=1 then only print that column
+# If select_*=<value> then print only those matching rows.
+dms_list () {  # [print_name=1|print_slot=1] [select_current=1|select_name=<name>]
+	do_qmicli --dms-list-stored-images |
+	awk '
+	{
+		# each line is in the form of:  [key:] 'val'
+		gsub(/^[ \t]*|\047[ \t]*$/,"");
+		sub(/[ \t]*:[ \t]*\047/,":");
+		i = index($0,":");
+		key = substr($0, 1, i - 1);
+		val = substr($0, i + 1);
+	}
+
+	!key && slot {
+		# handle end of a slot
+		build_id = vals["Build ID"];
+		i = index(build_id, "_");
+		if (slot ~ /^pri/ && i) {
+			name = substr(build_id, i+1);
+
+			if (select_name != "" && name != select_name)
+				continue;
+			if (select_current != "" && !vals["current"])
+				continue;
+
+			mslot = modem[substr(build_id, 1, i)];
+			star = (vals["current"] ? "*" : " ");
+			if (print_name)
+				print name;
+			else if (print_slot)
+				print mslot "," slot;
+			else
+				print name "\t" \
+				      star "\t" \
+				      mslot","slot "\t" \
+				      build_id "_" vals["Unique ID"];
+		}
+		if (slot ~ /^modem/) {
+			modem[substr(build_id,1,i)] = slot;
+		}
+		current = 0;
+	}
+
+	!key {
+		# between slots
+		slot = "";
+		delete vals;
+	}
+	!key && val ~ /^\[/ {
+		# handle start of a slot
+		slot = substr(val,2,length(val)-2);
+		vals["current"] = current;
+		current = 0;
+	}
+	key && slot {
+		# handle slot data
+		vals[key] = val;
+	}
+	/>>> \[CURRENT\] <<</ {
+		current = 1;
+	}
+	' "$@"
+}
+
+do_set () { # name
+	local slots current_slots
+
+	case $1 in
+	*,*)
+		slots=$1
+		;;
+	*)
+		slots=$(dms_list print_slot=1 select_name="$1" | head -1)
+		if [ ! "$slots" ]; then
+			echo "$0: no modem#,pri# found for name '$1'" >&2
+			exit 1
+		fi
+		;;
+	esac
+
+	current_slots=$(dms_list print_slot=1 select_current=1)
+	if [ "$current_slots" = "$slots" ]; then
+		echo "$0: $slots is already current preference" >&2
+		return 0
+	fi
+
+	# Apply immediately
+	if do_qmicli --dms-select-stored-image=$slots; then
+		echo "$0: reseting modem due to preference change" >&2
+		mmcli -m $mmpath -r
+	fi
+}
+
+
+case $#:"$*" in
+1:list)
+	dms_list print_name=1
+	;;
+2:"list -v")
+	dms_list
+	;;
+1:get | 0:)
+	dms_list print_name=1 select_current=1
+	;;
+2:set\ *)
+	do_set $2
+	;;
+*)
+	usage
+	exit 1
+	;;
+esac
+

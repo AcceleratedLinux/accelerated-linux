@@ -28,7 +28,8 @@ struct watch_type_filter {
 struct watch_filter {
 	union {
 		struct rcu_head	rcu;
-		unsigned long	type_filter[2];	/* Bitmask of accepted types */
+		/* Bitmask of accepted types */
+		DECLARE_BITMAP(type_filter, WATCH_TYPE__NR);
 	};
 	u32			nr_filters;	/* Number of filters */
 	struct watch_type_filter filters[];
@@ -121,6 +122,12 @@ static inline void remove_watch_list(struct watch_list *wlist, u64 id)
  * given the structure size.
  */
 #define watch_sizeof(STRUCT) (sizeof(STRUCT) << WATCH_INFO_LENGTH__SHIFT)
+
+#else
+static inline int watch_queue_init(struct pipe_inode_info *pipe)
+{
+	return -ENOPKG;
+}
 
 #endif
 

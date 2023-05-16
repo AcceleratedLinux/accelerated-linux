@@ -8,6 +8,12 @@
 #include <linux/slab.h>
 #include "ar-internal.h"
 
+static struct rxrpc_bundle rxrpc_service_dummy_bundle = {
+	.ref		= REFCOUNT_INIT(1),
+	.debug_id	= UINT_MAX,
+	.channel_lock	= __SPIN_LOCK_UNLOCKED(&rxrpc_service_dummy_bundle.channel_lock),
+};
+
 /*
  * Find a service connection under RCU conditions.
  *
@@ -93,7 +99,7 @@ conn_published:
 	return;
 
 found_extant_conn:
-	if (atomic_read(&cursor->usage) == 0)
+	if (refcount_read(&cursor->ref) == 0)
 		goto replace_old_connection;
 	write_sequnlock_bh(&peer->service_conn_lock);
 	/* We should not be able to get here.  rxrpc_incoming_connection() is
@@ -126,7 +132,8 @@ struct rxrpc_connection *rxrpc_prealloc_service_connection(struct rxrpc_net *rxn
 		 * the rxrpc_connections list.
 		 */
 		conn->state = RXRPC_CONN_SERVICE_PREALLOC;
-		atomic_set(&conn->usage, 2);
+		refcount_set(&conn->ref, 2);
+		conn->bundle = rxrpc_get_bundle(&rxrpc_service_dummy_bundle);
 
 		atomic_inc(&rxnet->nr_conns);
 		write_lock(&rxnet->conn_lock);
@@ -135,7 +142,7 @@ struct rxrpc_connection *rxrpc_prealloc_service_connection(struct rxrpc_net *rxn
 		write_unlock(&rxnet->conn_lock);
 
 		trace_rxrpc_conn(conn->debug_id, rxrpc_conn_new_service,
-				 atomic_read(&conn->usage),
+				 refcount_read(&conn->ref),
 				 __builtin_return_address(0));
 	}
 
@@ -149,7 +156,6 @@ struct rxrpc_connection *rxrpc_prealloc_service_connection(struct rxrpc_net *rxn
 void rxrpc_new_incoming_connection(struct rxrpc_sock *rx,
 				   struct rxrpc_connection *conn,
 				   const struct rxrpc_security *sec,
-				   struct key *key,
 				   struct sk_buff *skb)
 {
 	struct rxrpc_skb_priv *sp = rxrpc_skb(skb);
@@ -163,7 +169,6 @@ void rxrpc_new_incoming_connection(struct rxrpc_sock *rx,
 	conn->security_ix	= sp->hdr.securityIndex;
 	conn->out_clientflag	= 0;
 	conn->security		= sec;
-	conn->server_key	= key_get(key);
 	if (conn->security_ix)
 		conn->state	= RXRPC_CONN_SERVICE_UNSECURED;
 	else

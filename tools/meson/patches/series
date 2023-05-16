@@ -1,0 +1,2 @@
+Add-ucfront-compatibility.patch
+Don-t-add-prefix-to-pkg-config-files-if-it-is-set-to.patch

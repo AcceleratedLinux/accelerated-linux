@@ -1,0 +1,54 @@
+CERTIFICATION TESTING
+---------------------
+
+For lab certification testing of the Wi-Fi hardware module it may be
+necessary to use the Qualcomm/Atheros qca-ilq driver instead of the mainline
+ath10k Wi-Fi driver that we use in the shipping product.
+
+To do that you will need to enable a number of extra switches and flags at
+configure and compile time.
+
+Specifically in the kernel you need to enable:
+
+    CONFIG_MODULE_TAINT_OVERRIDE
+
+And you will have to disable the ath10k driver in the kernel:
+
+    # CONFIG_WLAN_VENDOR_ATH is not set
+    # CONFIG_ATH_COMMON is not set
+
+In the modules configuration you need to enable:
+
+    CONFIG_QCA_ILQ_WLAN=y
+
+And in the user/vendor configuration you need to enable:
+
+    CONFIG_PROP_QCMBR_QCMBR=y
+    CONFIG_PROP_QCA_ILQ=y
+
+That will build firmware capable of using the qca-ilq wlan driver.
+
+For actual testing you need to put the EX15W into emctest enabled mode:
+
+    fw_setenv emctest enabled
+
+And finally the tools need to be launched at boot time so that the
+Qualcomm Radio Control Tool (QRCT) program can talk to the WLE600VX module
+on the EX15W. The simplest method to do that is to modify the factory
+test script (vendors/AcceleratedConcepts/romfs/etc/factory) installed on
+the EX15W (before building firmware) and adding lines like this at about
+line 36:
+
+    if [ "$(fw_printenv emctest)" = "emctest=enabled" ] ; then
+           modprobe qca_ol testmode=1
+           echo "qcmbr:unknown:/bin/Qcmbr" >> /var/run/inittab
+    fi
+
+When the EX15W boots now it will enter emctest mode with the Qcmbr test
+daemon running and ready to communicate with the QRCT testing tool over
+the LAN ethernet interface.
+
+Note that when using the QRCT tool you need to select the "Chipset" as
+"QC9800" and in the "Chip Selection" you need to choose the firmware file
+"fakeBoardData_AR6004.bin" (from prop/qca-ilq) as the BDF file.
+

@@ -1,0 +1,3 @@
+# Set permissions on mtd device nodes
+SUBSYSTEM=="mtd", MODE="0644"
+KERNEL=="mtdblock[0-9]", MODE="0644"

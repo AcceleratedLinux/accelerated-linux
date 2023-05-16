@@ -1,0 +1,38 @@
+BananaPI BPI-R64
+----------------
+
+This is just some random notes on building and running on the BananaPi
+BPI-R64 platform. This is very much a work in progress.
+
+The BananaPI/BPI-R64 board is built around a Mediatek MT7622 SoC.
+This is an ARM64 (aarch64) CPU based device.
+
+Generate images for this board using the BananaPI/BPI-R64 accelerated linux
+target. The default is to select the musl C-library when building.
+The build will generate a single "itb" u-boot mutli-image format binary,
+images/bpi-r64.itb. A number of the build artifacts, like kernel and
+root filesystem, are also present in that images/ directory.
+
+Currently the BPI-R64 is only capable of booting from the SD-card
+interface. So you will need to setup an appropriately formatted SD-card
+to test with. I used these instructions to get started, and to provide
+the initial u-boot binary:
+
+    https://forum.banana-pi.org/t/bpi-r64-download-and-setup-separate-atf-image-for-booting-directly-into-kernel-or-u-boot/12806
+
+Booting the SD-card will take you directly to the u-boot console on the
+debug serial port.
+
+Copy the generated bpi-r64.itb file onto the EXT4 partition of the SD-card.
+With this in place when you boot up you can load and run that from the
+u-boot command line:
+
+    ext4load mmc 1 0x60000000 bpi-r64.itb
+    setenv bootargs console=ttyS0,115200 root=/dev/ram0
+    bootm 0x60000000
+
+The console is on a 3-pin inline header. You will need a TTL-to-RS232
+converter connected and in place to use it. The three pins are GND, RX, TX,
+so you need to wire across to the 40-pin DIP header to get 3.3V (it is on
+pin 1). The console serial port is at the default 115200,8,n,1.
+

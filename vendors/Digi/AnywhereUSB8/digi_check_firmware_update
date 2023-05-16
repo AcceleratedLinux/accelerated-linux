@@ -50,7 +50,8 @@ export "$(/bin/grep "^PRODUCT_VERSION=" ./version)" >/dev/null
 export "$(/bin/grep "^MIN_RUNNING_RELEASE=" ./version)" >/dev/null
 export "$(/bin/grep "^SUPPORTED_PRODUCT_IDS=" ./version | /usr/bin/tr 'abcdefX' 'ABCDEFx')" >/dev/null
 
-export "$(/bin/grep "^OLDEST_SUPPORTED_VERSION=" /etc/version.info)" >/dev/null
+oldest="$(/bin/grep "^OLDEST_SUPPORTED_VERSION=" /etc/version.info)" >/dev/null || true
+export "OLDEST_SUPPORTED_VERSION=${oldest##*=}"
 export CURRENT_"$(/bin/grep "^PRODUCT_VERSION=" /etc/version.info)" >/dev/null
 NV_PRODUCT_ID="$(/bin/fw_printenv product_id | /usr/bin/cut -d'=' -f2 | /usr/bin/tr 'abcdefX' 'ABCDEFx')"
 

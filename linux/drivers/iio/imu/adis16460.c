@@ -5,7 +5,6 @@
  * Copyright 2019 Analog Devices Inc.
  */
 
-#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 
@@ -320,20 +319,6 @@ static const struct iio_info adis16460_info = {
 	.debugfs_reg_access = adis_debugfs_reg_access,
 };
 
-static int adis16460_enable_irq(struct adis *adis, bool enable)
-{
-	/*
-	 * There is no way to gate the data-ready signal internally inside the
-	 * ADIS16460 :(
-	 */
-	if (enable)
-		enable_irq(adis->spi->irq);
-	else
-		disable_irq(adis->spi->irq);
-
-	return 0;
-}
-
 #define ADIS16460_DIAG_STAT_IN_CLK_OOS	7
 #define ADIS16460_DIAG_STAT_FLASH_MEM	6
 #define ADIS16460_DIAG_STAT_SELF_TEST	5
@@ -374,7 +359,7 @@ static const struct adis_data adis16460_data = {
 		BIT(ADIS16460_DIAG_STAT_OVERRANGE) |
 		BIT(ADIS16460_DIAG_STAT_SPI_COMM) |
 		BIT(ADIS16460_DIAG_STAT_FLASH_UPT),
-	.enable_irq = adis16460_enable_irq,
+	.unmasked_drdy = true,
 	.timeouts = &adis16460_timeouts,
 };
 
@@ -388,12 +373,9 @@ static int adis16460_probe(struct spi_device *spi)
 	if (indio_dev == NULL)
 		return -ENOMEM;
 
-	spi_set_drvdata(spi, indio_dev);
-
 	st = iio_priv(indio_dev);
 
 	st->chip_info = &adis16460_chip_info;
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->channels = st->chip_info->channels;
 	indio_dev->num_channels = st->chip_info->num_channels;
@@ -404,37 +386,19 @@ static int adis16460_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = adis_setup_buffer_and_trigger(&st->adis, indio_dev, NULL);
+	ret = devm_adis_setup_buffer_and_trigger(&st->adis, indio_dev, NULL);
 	if (ret)
 		return ret;
 
-	adis16460_enable_irq(&st->adis, 0);
-
 	ret = __adis_initial_startup(&st->adis);
 	if (ret)
-		goto error_cleanup_buffer;
+		return ret;
 
-	ret = iio_device_register(indio_dev);
+	ret = devm_iio_device_register(&spi->dev, indio_dev);
 	if (ret)
-		goto error_cleanup_buffer;
+		return ret;
 
 	adis16460_debugfs_init(indio_dev);
-
-	return 0;
-
-error_cleanup_buffer:
-	adis_cleanup_buffer_and_trigger(&st->adis, indio_dev);
-	return ret;
-}
-
-static int adis16460_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct adis16460 *st = iio_priv(indio_dev);
-
-	iio_device_unregister(indio_dev);
-
-	adis_cleanup_buffer_and_trigger(&st->adis, indio_dev);
 
 	return 0;
 }
@@ -458,10 +422,10 @@ static struct spi_driver adis16460_driver = {
 	},
 	.id_table = adis16460_ids,
 	.probe = adis16460_probe,
-	.remove = adis16460_remove,
 };
 module_spi_driver(adis16460_driver);
 
 MODULE_AUTHOR("Dragos Bogdan <dragos.bogdan@analog.com>");
 MODULE_DESCRIPTION("Analog Devices ADIS16460 IMU driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(IIO_ADISLIB);

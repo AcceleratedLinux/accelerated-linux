@@ -1,0 +1,87 @@
+# IM7208 IM7216 IM7232 IM7248
+sercon "Console" 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:01.0/0000:03:00.0/tty/ttyS1
+modem01 "V.92 Modem" 6p4c-f /devices/pci0000:01/0000:01:01.0/0000:02:01.0/0000:03:00.0/tty/ttyS2
+
+port01 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS3 pinoutgpio="0000:05:00.0 0"
+port02 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS4 pinoutgpio="0000:05:00.0 1"
+port03 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS5 pinoutgpio="0000:05:00.0 2"
+port04 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS6 pinoutgpio="0000:05:00.0 3"
+port05 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS7 pinoutgpio="0000:05:00.0 4"
+port06 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS8 pinoutgpio="0000:05:00.0 5"
+port07 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS9 pinoutgpio="0000:05:00.0 6"
+port08 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS10 pinoutgpio="0000:05:00.0 7"
+port09 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS11 pinoutgpio="0000:05:00.0 16"
+port10 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS12 pinoutgpio="0000:05:00.0 17"
+port11 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS13 pinoutgpio="0000:05:00.0 18"
+port12 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS14 pinoutgpio="0000:05:00.0 19"
+port13 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS15 pinoutgpio="0000:05:00.0 20"
+port14 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS16 pinoutgpio="0000:05:00.0 21"
+port15 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS17 pinoutgpio="0000:05:00.0 22"
+port16 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:05.0/0000:05:00.0/tty/ttyS18 pinoutgpio="0000:05:00.0 23"
+port17 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS19 pinoutgpio="0000:06:00.0 0"
+port18 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS20 pinoutgpio="0000:06:00.0 1"
+port19 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS21 pinoutgpio="0000:06:00.0 2"
+port20 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS22 pinoutgpio="0000:06:00.0 3"
+port21 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS23 pinoutgpio="0000:06:00.0 4"
+port22 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS24 pinoutgpio="0000:06:00.0 5"
+port23 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS25 pinoutgpio="0000:06:00.0 6"
+port24 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS26 pinoutgpio="0000:06:00.0 7"
+port25 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS27 pinoutgpio="0000:06:00.0 16"
+port26 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS28 pinoutgpio="0000:06:00.0 17"
+port27 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS29 pinoutgpio="0000:06:00.0 18"
+port28 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS30 pinoutgpio="0000:06:00.0 19"
+port29 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS31 pinoutgpio="0000:06:00.0 20"
+port30 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS32 pinoutgpio="0000:06:00.0 21"
+port31 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS33 pinoutgpio="0000:06:00.0 22"
+port32 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/tty/ttyS34 pinoutgpio="0000:06:00.0 23"
+port33 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS35 pinoutgpio="0000:07:00.0 0"
+port34 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS36 pinoutgpio="0000:07:00.0 1"
+port35 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS37 pinoutgpio="0000:07:00.0 2"
+port36 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS38 pinoutgpio="0000:07:00.0 3"
+port37 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS39 pinoutgpio="0000:07:00.0 4"
+port38 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS40 pinoutgpio="0000:07:00.0 5"
+port39 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS41 pinoutgpio="0000:07:00.0 6"
+port40 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS42 pinoutgpio="0000:07:00.0 7"
+port41 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS43 pinoutgpio="0000:07:00.0 16"
+port42 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS44 pinoutgpio="0000:07:00.0 17"
+port43 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS45 pinoutgpio="0000:07:00.0 18"
+port44 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS46 pinoutgpio="0000:07:00.0 19"
+port45 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS47 pinoutgpio="0000:07:00.0 20"
+port46 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS48 pinoutgpio="0000:07:00.0 21"
+port47 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS49 pinoutgpio="0000:07:00.0 22"
+port48 - 8p8c-f /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/tty/ttyS50 pinoutgpio="0000:07:00.0 23"
+
+# 309062
+port17 "Port 17 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-1.1/*
+port18 "Port 18 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-1.2/*
+port19 "Port 19 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-1.3/*
+port20 "Port 20 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-1.4/*
+port21 "Port 21 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-1.5/*
+port22 "Port 22 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-1.6/*
+port23 "Port 23 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-2.1/*
+port24 "Port 24 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-2.2/*
+port25 "Port 25 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-2.3/*
+port26 "Port 26 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-2.4/*
+port27 "Port 27 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-2.5/*
+port28 "Port 28 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:07.0/0000:06:00.0/usb*/?-2.6/*
+port29 "Port 29 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-3.1/*
+port30 "Port 30 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-3.2/*
+port31 "Port 31 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-3.3/*
+port32 "Port 32 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-3.4/*
+port33 "Port 33 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-3.5/*
+port34 "Port 34 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-3.6/*
+port35 "Port 35 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-4.1/*
+port36 "Port 36 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-4.2/*
+port37 "Port 37 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-4.3/*
+port38 "Port 38 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-4.4/*
+port39 "Port 39 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-4.5/*
+port40 "Port 40 (USB)" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:09.0/0000:07:00.0/usb*/?-4.6/*
+
+portN+1 "Front, Upper USB" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:04.0/0000:04:00.0/usb*/?-1/*
+portN+2 "Front, Lower USB" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:04.0/0000:04:00.0/usb*/?-2/*
+
+# Cell modem
+[gps]portN+3 "GPS" usb-af /devices/pci0000:01/0000:01:01.0/0000:02:04.0/0000:04:00.0/usb1/1-3/1-3:1.2/* cellnmea01
+cellcommand01 - usb-af /devices/pci0000:01/0000:01:01.0/0000:02:04.0/0000:04:00.0/usb1/1-3/1-3:1.3/* cellmodem01
+ignore -              - /devices/pci0000:01/0000:01:01.0/0000:02:04.0/0000:04:00.0/usb1/1-3/*
+

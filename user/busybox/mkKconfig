@@ -13,7 +13,7 @@
 # version - to create a new Kconfig for the automake busybox. This is
 # a manual step, done by the person doing the busybox update.
 #
-# It needs to br run from the top level of a busybox tree.
+# It needs to be run from the top level of a busybox tree.
 #
 
 mk_Kconfig()

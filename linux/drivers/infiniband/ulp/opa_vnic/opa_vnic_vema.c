@@ -1,5 +1,6 @@
 /*
  * Copyright(c) 2017 Intel Corporation.
+ * Copyright(c) 2021 Cornelis Networks.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
@@ -46,7 +47,7 @@
  */
 
 /*
- * This file contains OPA Virtual Network Interface Controller (VNIC)
+ * This file contains OPX Virtual Network Interface Controller (VNIC)
  * Ethernet Management Agent (EMA) driver
  */
 
@@ -233,7 +234,7 @@ static void vema_get_class_port_info(struct opa_vnic_vema_port *port,
 
 	port_info = (struct opa_class_port_info *)rsp_mad->data;
 	memcpy(port_info, &port->class_port_info, sizeof(*port_info));
-	port_info->base_version = OPA_MGMT_BASE_VERSION,
+	port_info->base_version = OPA_MGMT_BASE_VERSION;
 	port_info->class_version = OPA_EMA_CLASS_VERSION;
 
 	/*
@@ -547,7 +548,6 @@ static void vema_get(struct opa_vnic_vema_port *port,
 		vema_get_mac_entries(port, recvd_mad, rsp_mad);
 		break;
 	case OPA_EM_ATTR_IFACE_UCAST_MACS:
-		/* fall through */
 	case OPA_EM_ATTR_IFACE_MCAST_MACS:
 		vema_get_mac_list(port, recvd_mad, rsp_mad, attr_id);
 		break;
@@ -1052,5 +1052,5 @@ static void opa_vnic_deinit(void)
 module_exit(opa_vnic_deinit);
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("Intel OPA Virtual Network driver");
+MODULE_AUTHOR("Cornelis Networks");
+MODULE_DESCRIPTION("Cornelis OPX Virtual Network driver");

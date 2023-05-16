@@ -1,0 +1,11 @@
+# initial variables for the bootarg sector
+console=dedicated
+cmdline=console=ttyS0 root=/dev/sda2
+#factory_opts=rs485
+model=VACM
+pinout=cisco
+ports=4
+power=external/dc
+root_pwd_hash=$1$eLRzeRxt$zgHgqEKId1i/1ZhwGzdE80
+sensors=1/2
+serial_no=00000000000001

@@ -1,0 +1,149 @@
+From 01a86a320ac5f7a7e1bd01814583c7558aa590f7 Mon Sep 17 00:00:00 2001
+From: Ming Liu-Chan <ming.liu-chan@digi.com>
+Date: Fri, 1 Jul 2022 08:39:23 -0400
+Subject: [PATCH] Telit has added ID_MM_TELIT_PORT_DELAY for certain modems
+ (i.e. LM940 & LN920) for an initial delay for the ports to be responsive.
+
+Increased initial QMI probing version info timeout.
+---
+ plugins/telit/mm-common-telit.c | 81 ++++++++++++++++++++++++++++++++-
+ src/mm-port-qmi.c               |  2 +-
+ 2 files changed, 81 insertions(+), 2 deletions(-)
+
+diff --git a/plugins/telit/mm-common-telit.c b/plugins/telit/mm-common-telit.c
+index 0493fd54..615bf533 100644
+--- a/plugins/telit/mm-common-telit.c
++++ b/plugins/telit/mm-common-telit.c
+@@ -28,6 +28,11 @@
+ 
+ #define TELIT_GE910_FAMILY_PID     0x0022
+ 
++/* The following number of retries of the port responsiveness
++ * check allows having up to 30 seconds of wait, that should
++ * be fine for most of the modems */
++#define TELIT_PORT_CHECK_RETRIES   6
++
+ gboolean
+ telit_grab_port (MMPlugin *self,
+                  MMBaseModem *modem,
+@@ -88,6 +93,7 @@ typedef struct {
+     MMPortSerialAt *port;
+     gboolean getportcfg_done;
+     guint getportcfg_retries;
++    guint port_responsive_retries;
+ } TelitCustomInitContext;
+ 
+ gboolean
+@@ -274,6 +280,67 @@ out:
+     g_object_unref (task);
+ }
+ 
++static void at_ready (MMPortSerialAt *port,
++                      GAsyncResult   *res,
++                      GTask          *task);
++
++static void
++wait_for_ready (GTask *task)
++{
++    TelitCustomInitContext *ctx;
++
++    ctx = g_task_get_task_data (task);
++
++    if (ctx->port_responsive_retries == 0) {
++        telit_custom_init_step (task);
++        return;
++    }
++    ctx->port_responsive_retries--;
++
++    mm_port_serial_at_command (
++        ctx->port,
++        "AT",
++        5,
++        FALSE, /* raw */
++        FALSE, /* allow_cached */
++        g_task_get_cancellable (task),
++        (GAsyncReadyCallback)at_ready,
++        task);
++}
++
++static void
++at_ready (MMPortSerialAt *port,
++          GAsyncResult   *res,
++          GTask          *task)
++{
++    MMPortProbe       *probe;
++    g_autoptr(GError)  error = NULL;
++
++    probe = g_task_get_source_object (task);
++
++    mm_port_serial_at_command_finish (port, res, &error);
++    if (error) {
++        /* On a timeout or send error, wait */
++        if (g_error_matches (error, MM_SERIAL_ERROR, MM_SERIAL_ERROR_RESPONSE_TIMEOUT) ||
++            g_error_matches (error, MM_SERIAL_ERROR, MM_SERIAL_ERROR_SEND_FAILED)) {
++            wait_for_ready (task);
++            return;
++        }
++        /* On an unknown error, make it fatal */
++        if (!mm_serial_parser_v1_is_known_error (error)) {
++            mm_obj_warn (probe, "custom port initialization logic failed: %s", error->message);
++            g_task_return_boolean (task, TRUE);
++            g_object_unref (task);
++            return;
++        }
++    }
++
++    /* When successful mark the port as AT and continue checking #PORTCFG */
++    mm_obj_dbg (probe, "port is AT found");
++    mm_port_probe_set_result_at (probe, TRUE);
++    telit_custom_init_step (task);
++}
++
+ void
+ telit_custom_init (MMPortProbe *probe,
+                    MMPortSerialAt *port,
+@@ -283,15 +350,27 @@ telit_custom_init (MMPortProbe *probe,
+ {
+     TelitCustomInitContext *ctx;
+     GTask *task;
++    gboolean wait_needed;
+ 
+     ctx = g_slice_new (TelitCustomInitContext);
+     ctx->port = g_object_ref (port);
+     ctx->getportcfg_done = FALSE;
+     ctx->getportcfg_retries = 3;
+-
++    ctx->port_responsive_retries = TELIT_PORT_CHECK_RETRIES;
+     task = g_task_new (probe, cancellable, callback, user_data);
+     g_task_set_check_cancellable (task, FALSE);
+     g_task_set_task_data (task, ctx, (GDestroyNotify)telit_custom_init_context_free);
+ 
++    /* Some Telit modems require an initial delay for the ports to be responsive
++     * If no explicit tag is present, the modem does not need this step
++     * and can directly look for #PORTCFG support */
++    wait_needed = mm_kernel_device_get_global_property_as_boolean (mm_port_probe_peek_port (probe),
++                                                                   "ID_MM_TELIT_PORT_DELAY");
++    if (wait_needed) {
++        mm_obj_dbg (probe, "Start polling for port responsiveness");
++        wait_for_ready (task);
++        return;
++    }
++
+     telit_custom_init_step (task);
+ }
+diff --git a/src/mm-port-qmi.c b/src/mm-port-qmi.c
+index 0ac6d206..91f0aa07 100644
+--- a/src/mm-port-qmi.c
++++ b/src/mm-port-qmi.c
+@@ -538,7 +538,7 @@ port_open_step (GTask *task)
+         qmi_device_open (ctx->device,
+                          (QMI_DEVICE_OPEN_FLAGS_VERSION_INFO |
+                           QMI_DEVICE_OPEN_FLAGS_PROXY),
+-                         20,
++                         45,
+                          g_task_get_cancellable (task),
+                          (GAsyncReadyCallback) qmi_device_open_first_ready,
+                          task);
+-- 
+2.25.1
+

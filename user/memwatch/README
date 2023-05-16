@@ -1,0 +1,10 @@
+memwatch is a tool used to read/write physical memory from linux.
+
+It depends on the following kernel config options:
+CONFIG_DEVMEM=y
+# CONFIG_STRICT_DEVMEM is not set
+
+Examples:
+memwatch -rsw -a 0x1ae4000 -l 4096
+
+memwatch -rsw -a 0x1afc030 -l 32

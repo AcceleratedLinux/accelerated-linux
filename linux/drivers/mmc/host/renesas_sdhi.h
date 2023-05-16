@@ -18,6 +18,8 @@ struct renesas_sdhi_scc {
 	u32 tap_hs400_4tap;	/* sampling clock position for HS400 (4 TAP) */
 };
 
+#define SDHI_FLAG_NEED_CLKH_FALLBACK	BIT(0)
+
 struct renesas_sdhi_of_data {
 	unsigned long tmio_flags;
 	u32	      tmio_ocr_mask;
@@ -31,12 +33,23 @@ struct renesas_sdhi_of_data {
 	int taps_num;
 	unsigned int max_blk_count;
 	unsigned short max_segs;
+	unsigned long sdhi_flags;
 };
+
+#define SDHI_CALIB_TABLE_MAX 32
 
 struct renesas_sdhi_quirks {
 	bool hs400_disabled;
 	bool hs400_4taps;
+	bool fixed_addr_mode;
+	bool dma_one_rx_only;
 	u32 hs400_bad_taps;
+	const u8 (*hs400_calib_table)[SDHI_CALIB_TABLE_MAX];
+};
+
+struct renesas_sdhi_of_data_with_quirks {
+	const struct renesas_sdhi_of_data *of_data;
+	const struct renesas_sdhi_quirks *quirks;
 };
 
 struct tmio_mmc_dma {
@@ -49,6 +62,7 @@ struct tmio_mmc_dma {
 
 struct renesas_sdhi {
 	struct clk *clk;
+	struct clk *clkh;
 	struct clk *clk_cd;
 	struct tmio_mmc_data mmc_data;
 	struct tmio_mmc_dma dma_priv;
@@ -58,7 +72,8 @@ struct renesas_sdhi {
 	void __iomem *scc_ctl;
 	u32 scc_tappos;
 	u32 scc_tappos_hs400;
-	bool doing_tune;
+	const u8 *adjust_hs400_calib_table;
+	bool needs_adjust_hs400;
 
 	/* Tuning values: 1 for success, 0 for failure */
 	DECLARE_BITMAP(taps, BITS_PER_LONG);
@@ -66,12 +81,16 @@ struct renesas_sdhi {
 	DECLARE_BITMAP(smpcmp, BITS_PER_LONG);
 	unsigned int tap_num;
 	unsigned int tap_set;
+
+	struct reset_control *rstc;
 };
 
 #define host_to_priv(host) \
 	container_of((host)->pdata, struct renesas_sdhi, mmc_data)
 
 int renesas_sdhi_probe(struct platform_device *pdev,
-		       const struct tmio_mmc_dma_ops *dma_ops);
+		       const struct tmio_mmc_dma_ops *dma_ops,
+		       const struct renesas_sdhi_of_data *of_data,
+		       const struct renesas_sdhi_quirks *quirks);
 int renesas_sdhi_remove(struct platform_device *pdev);
 #endif

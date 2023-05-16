@@ -73,26 +73,41 @@ static struct {
 	{ NULL, -1 }
 };
 
+static void print_led_names(void);
+
 void
 usage(int rc)
 {
-	int i;
 	printf("usage: ledcmd [-h?] [-a] ((-s|-o|-O|-f|-r|-n|-N) <led#|name>) ...\n\n"
-		"\t-h?\thelp    - what you see below\n"
-		"\t-s\tset     - turn LED on briefly\n"
-		"\t-o\ton      - turn LED on\n"
-		"\t-O\toff     - turn LED off\n"
-		"\t-f\tflash   - make LED flash\n"
-		"\t-r\treset   - return LED to default behaviour\n"
-		"\t-n\talton   - use alternate LED mode\n"
-		"\t-N\taltoff  - stop alternate LED mode\n"
-		"\t-a\taltbit  - alt LED mode applies to following commands\n"
-		"\t-A\t~altbit - alt LED mode does not apply to following commands\n"
+		"\t-h?\thelp  \t- what you see below\n"
+		"\t-s\tset    \t- turn LED on briefly\n"
+		"\t-o\ton     \t- turn LED on\n"
+		"\t-O\toff    \t- turn LED off\n"
+		"\t-f\tflash  \t- make LED flash\n"
+		"\t-r\treset  \t- return LED to default behaviour\n"
+		"\t-n\talton  \t- use alternate LED mode\n"
+		"\t-N\taltoff \t- stop alternate LED mode\n"
+		"\t-a\taltbit \t- alt LED mode applies to following commands\n"
+		"\t-A\t~altbit\t- alt LED mode does not apply to following commands\n"
+		"\t-l\tlist   \t- list LEDs\n"
+		"\t-L\tstates \t- list LED states\n"
 		"\n");
-	for (i = 0; led_name[i].name; i++)
-		printf("%s%s", led_name[i].name, i % 8 == 7 ? "\n" : " ");
-	printf("\n");
+	print_led_names();
 	exit(rc);
+}
+
+static void print_led_names(void)
+{
+	int i;
+	for (i = 0; led_name[i].name; i++) {
+		printf("%s%s", led_name[i].name, i % 8 == 7 ? "\n" : " ");
+	}
+	printf("\n\n");
+}
+
+static void print_led_states(void)
+{
+	printf("OFF ON FLASH RESET\n\n");
 }
 
 static void
@@ -124,7 +139,7 @@ main(int argc, char *argv[])
 
 	alt = 0;
 
-	while ((c = getopt(argc, argv, "?haAs:o:O:f:r:n:N:")) != -1) {
+	while ((c = getopt(argc, argv, "?haAlLqs:o:O:f:r:n:N:")) != -1) {
 		switch (c) {
 		case 's': set_led(LEDMAN_CMD_SET    | alt, optarg); break;
 		case 'o': set_led(LEDMAN_CMD_ON     | alt, optarg); break;
@@ -137,10 +152,15 @@ main(int argc, char *argv[])
 		case 'a': alt |= LEDMAN_CMD_ALTBIT;  break;
 		case 'A': alt &= ~LEDMAN_CMD_ALTBIT; break;
 
+		case 'l': print_led_names(); return 0;
+		case 'L': print_led_states(); return 0;
+
 		case '?':
 		case 'h':
 			usage(0);
 			break;
+		case 'q':
+			printf("\"query led\" not supported for this device\n");
 		default:
 			usage(1);
 			break;

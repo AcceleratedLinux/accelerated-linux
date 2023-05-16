@@ -10,7 +10,6 @@ netifd-refresh-assignments.patch
 netifd-status-assignment.patch
 netifd-device-claim.patch
 netifd-data-flush.patch
-netifd-fallsafe-dns-server.patch
 netifd-link-loss-dynamic.patch
 netifd-ip-events.patch
 netifd-pkgconfig-libnl.patch
@@ -22,10 +21,11 @@ netifd-wireless-never-give-up.patch
 netifd-remove-is-error.patch
 netifd-long-teardown-timeout.patch
 netifd-reset-on-update-old-if.patch
-netifd-chmod-resolv-conf.patch
 netifd-prepend-route.patch
 netifd-set-var-on-config-reload.patch
 netifd-use-clock_gettime.patch
 netifd-bonding.patch
 netifd-ipv6-route-prefsrc.patch
 netifd-bridge-macaddress.patch
+netifd-wireless-wpa3.patch
+netifd-vlan-filtering.patch

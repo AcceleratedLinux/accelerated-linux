@@ -13,6 +13,15 @@
  
  # This is the directory where sensors3.conf will be installed, if no other
  # configuration file is found
+@@ -55,7 +55,7 @@
+ # library files (both static and shared) will be installed.
+ LIBDIR := $(PREFIX)/lib
+ 
+-EXLDFLAGS := -Wl,-rpath,$(LIBDIR)
++EXLDFLAGS := $(LDFLAGS) -Wl,-rpath,$(LIBDIR)
+ 
+ # You should not need to change this. It is the directory into which the
+ # executable program files will be installed. BINDIR for programs that are
 @@ -121,7 +121,7 @@
  MV := mv -f
  BISON := bison

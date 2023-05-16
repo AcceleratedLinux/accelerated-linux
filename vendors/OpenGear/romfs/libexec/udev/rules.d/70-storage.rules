@@ -1,0 +1,2 @@
+SUBSYSTEM=="block",RUN="/etc/scripts/udev-storage"
+SUBSYSTEM=="ubi",RUN="/etc/scripts/udev-storage"

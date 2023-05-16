@@ -1,4 +1,0 @@
-dir_$(CONFIG_USER_QUAGGA) += quagga
-
-quagga: readline
-

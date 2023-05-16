@@ -1,0 +1,12 @@
+
+# The IM7200's miniPCIe slot keeps providing power over reboot,
+# so reset it now.  This ensures that all cellmodems have had a
+# power-on reset.  We've seen MC7750s come up in a partial state
+# that could only be resolved with an AT!GRESET or power cycling.
+
+echo 0 >/sys/class/gpio/gpio29/value
+sleep 1
+
+# Match power state to configuration
+/etc/scripts/cellmodem-power matchconfig
+

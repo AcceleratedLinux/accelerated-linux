@@ -225,12 +225,13 @@ struct atmel_mci_dma {
  * @lock: Spinlock protecting the queue and associated data.
  * @regs: Pointer to MMIO registers.
  * @sg: Scatterlist entry currently being processed by PIO or PDC code.
+ * @sg_len: Size of the scatterlist
  * @pio_offset: Offset into the current scatterlist entry.
  * @buffer: Buffer used if we don't have the r/w proof capability. We
  *      don't have the time to switch pdc buffers so we have to use only
  *      one buffer for the full transaction.
  * @buf_size: size of the buffer.
- * @phys_buf_addr: buffer address needed for pdc.
+ * @buf_phys_addr: buffer address needed for pdc.
  * @cur_slot: The slot which is currently using the controller.
  * @mrq: The request currently being processed on @cur_slot,
  *	or NULL if the controller is idle.
@@ -240,6 +241,7 @@ struct atmel_mci_dma {
  * @data_size: just data->blocks * data->blksz.
  * @dma: DMA client state.
  * @data_chan: DMA channel being used for the current data transfer.
+ * @dma_conf: Configuration for the DMA slave
  * @cmd_status: Snapshot of SR taken upon completion of the current
  *	command. Only valid when EVENT_CMD_COMPLETE is pending.
  * @data_status: Snapshot of SR taken upon completion of the current
@@ -1120,12 +1122,11 @@ atmci_prepare_data_dma(struct atmel_mci *host, struct mmc_data *data)
 	}
 
 	/* If we don't have a channel, we can't do DMA */
-	chan = host->dma.chan;
-	if (chan)
-		host->data_chan = chan;
-
-	if (!chan)
+	if (!host->dma.chan)
 		return -ENODEV;
+
+	chan = host->dma.chan;
+	host->data_chan = chan;
 
 	if (data->flags & MMC_DATA_READ) {
 		host->dma_conf.direction = slave_dirn = DMA_DEV_TO_MEM;
@@ -1717,9 +1718,9 @@ static void atmci_detect_change(struct timer_list *t)
 	}
 }
 
-static void atmci_tasklet_func(unsigned long priv)
+static void atmci_tasklet_func(struct tasklet_struct *t)
 {
-	struct atmel_mci	*host = (struct atmel_mci *)priv;
+	struct atmel_mci        *host = from_tasklet(host, t, tasklet);
 	struct mmc_request	*mrq = host->mrq;
 	struct mmc_data		*data = host->data;
 	enum atmel_mci_state	state = host->state;
@@ -2399,45 +2400,45 @@ static void atmci_get_cap(struct atmel_mci *host)
 	dev_info(&host->pdev->dev,
 			"version: 0x%x\n", version);
 
-	host->caps.has_dma_conf_reg = 0;
-	host->caps.has_pdc = 1;
-	host->caps.has_cfg_reg = 0;
-	host->caps.has_cstor_reg = 0;
-	host->caps.has_highspeed = 0;
-	host->caps.has_rwproof = 0;
-	host->caps.has_odd_clk_div = 0;
-	host->caps.has_bad_data_ordering = 1;
-	host->caps.need_reset_after_xfer = 1;
-	host->caps.need_blksz_mul_4 = 1;
-	host->caps.need_notbusy_for_read_ops = 0;
+	host->caps.has_dma_conf_reg = false;
+	host->caps.has_pdc = true;
+	host->caps.has_cfg_reg = false;
+	host->caps.has_cstor_reg = false;
+	host->caps.has_highspeed = false;
+	host->caps.has_rwproof = false;
+	host->caps.has_odd_clk_div = false;
+	host->caps.has_bad_data_ordering = true;
+	host->caps.need_reset_after_xfer = true;
+	host->caps.need_blksz_mul_4 = true;
+	host->caps.need_notbusy_for_read_ops = false;
 
 	/* keep only major version number */
 	switch (version & 0xf00) {
 	case 0x600:
 	case 0x500:
-		host->caps.has_odd_clk_div = 1;
-		/* Fall through */
+		host->caps.has_odd_clk_div = true;
+		fallthrough;
 	case 0x400:
 	case 0x300:
-		host->caps.has_dma_conf_reg = 1;
-		host->caps.has_pdc = 0;
-		host->caps.has_cfg_reg = 1;
-		host->caps.has_cstor_reg = 1;
-		host->caps.has_highspeed = 1;
-		/* Fall through */
+		host->caps.has_dma_conf_reg = true;
+		host->caps.has_pdc = false;
+		host->caps.has_cfg_reg = true;
+		host->caps.has_cstor_reg = true;
+		host->caps.has_highspeed = true;
+		fallthrough;
 	case 0x200:
-		host->caps.has_rwproof = 1;
-		host->caps.need_blksz_mul_4 = 0;
-		host->caps.need_notbusy_for_read_ops = 1;
-		/* Fall through */
+		host->caps.has_rwproof = true;
+		host->caps.need_blksz_mul_4 = false;
+		host->caps.need_notbusy_for_read_ops = true;
+		fallthrough;
 	case 0x100:
-		host->caps.has_bad_data_ordering = 0;
-		host->caps.need_reset_after_xfer = 0;
-		/* Fall through */
+		host->caps.has_bad_data_ordering = false;
+		host->caps.need_reset_after_xfer = false;
+		fallthrough;
 	case 0x0:
 		break;
 	default:
-		host->caps.has_pdc = 0;
+		host->caps.has_pdc = false;
 		dev_warn(&host->pdev->dev,
 				"Unmanaged mci version, set minimum capabilities\n");
 		break;
@@ -2494,7 +2495,7 @@ static int atmci_probe(struct platform_device *pdev)
 
 	host->mapbase = regs->start;
 
-	tasklet_init(&host->tasklet, atmci_tasklet_func, (unsigned long)host);
+	tasklet_setup(&host->tasklet, atmci_tasklet_func);
 
 	ret = request_irq(irq, atmci_interrupt, 0, dev_name(&pdev->dev), host);
 	if (ret) {
@@ -2666,6 +2667,7 @@ static struct platform_driver atmci_driver = {
 	.remove		= atmci_remove,
 	.driver		= {
 		.name		= "atmel_mci",
+		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,
 		.of_match_table	= of_match_ptr(atmci_dt_ids),
 		.pm		= &atmci_dev_pm_ops,
 	},

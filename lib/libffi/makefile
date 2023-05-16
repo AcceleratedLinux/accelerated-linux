@@ -1,5 +1,7 @@
+URL := https://github.com/libffi/libffi/releases/download/v3.4.2/libffi-3.4.2.tar.gz
 
-URL := ftp://sourceware.org/pub/libffi/libffi-3.0.13.tar.gz
+CONFOPTS += --disable-multi-os-directory
+
 include $(ROOTDIR)/tools/automake.inc
 
 

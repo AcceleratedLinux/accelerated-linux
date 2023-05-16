@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 .. _dvb_introdution:
 
@@ -114,7 +107,7 @@ Audio and video decoder
       a Systems on a Chip (SoC) integrated circuit.
 
       It may also not be needed for certain usages (e.g. for data-only
-      uses like “internet over satellite”).
+      uses like "internet over satellite").
 
 :ref:`stb_components` shows a crude schematic of the control and data
 flow between those components.
@@ -155,9 +148,9 @@ individual devices are called:
 
 -  ``/dev/dvb/adapterN/caM``,
 
-where ``N`` enumerates the Digital TV cards in a system starting from 0, and
+where ``N`` enumerates the Digital TV cards in a system starting from 0, and
 ``M`` enumerates the devices of each type within each adapter, starting
-from 0, too. We will omit the “``/dev/dvb/adapterN/``\ ” in the further
+from 0, too. We will omit the "``/dev/dvb/adapterN/``\ " in the further
 discussion of these devices.
 
 More details about the data structures and function calls of all the

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# When the ippassthrough conn starts, it flushes all routes associated with the
+# cellmodem including the user defined ones that are installed by the
+# global-routes conn. Therefore, this script re-adds these user defined routes
+# by restarting the global-routes conn if it is in the up state.
+
+GLOBAL_ROUTES_CONN="global-routes"
+
+if config -g config.network.routes | grep -q ".interface cellmodem" && \
+        /bin/conman_status | grep -q "$GLOBAL_ROUTES_CONN up"
+then
+    /bin/conman_command "$GLOBAL_ROUTES_CONN" restart
+fi
+
+exit 0

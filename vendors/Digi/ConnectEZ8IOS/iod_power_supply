@@ -1,0 +1,71 @@
+#!/bin/sh
+#
+# Action for enable/disable of AIO/DIO power supplies
+#
+##############################################################
+# allow script override
+[ -x /etc/config/iod_power_supply ] && exec /etc/config/iod_power_supply "$@"
+##############################################################
+# exec 2>> /tmp/iod_power_supply.log
+# set -x
+
+ANALOG_POWER_GPIO="/sys/class/gpio/gpio369"
+DIO1_POWER_GPIO="/sys/class/gpio/gpio373"
+DIO2_POWER_GPIO="/sys/class/gpio/gpio374"
+
+init_gpio()
+{
+	echo 369 > /sys/class/gpio/export
+	echo low > "$ANALOG_POWER_GPIO"/direction
+
+	echo 373 > /sys/class/gpio/export
+	echo low > "$DIO1_POWER_GPIO"/direction
+
+	echo 374 > /sys/class/gpio/export
+	echo low > "$DIO2_POWER_GPIO"/direction
+}
+
+power_supply_update()
+{
+	eval "$(config start)"
+	config load
+
+	if config exists io; then
+		if [ "$(config get io.analog.ain1.power_supply_en)" = "1" ]; then
+			echo 1 > "$ANALOG_POWER_GPIO"/value
+		else
+			echo 0 > "$ANALOG_POWER_GPIO"/value
+		fi
+
+		if [ "$(config get io.digital.dio1.power_supply_en)" = "1" ]; then
+			echo 1 > "$DIO1_POWER_GPIO"/value
+		else
+			echo 0 > "$DIO1_POWER_GPIO"/value
+		fi
+
+		if [ "$(config get io.digital.dio2.power_supply_en)" = "1" ]; then
+			echo 1 > "$DIO2_POWER_GPIO"/value
+		else
+			echo 0 > "$DIO2_POWER_GPIO"/value
+		fi
+	fi
+
+	eval "$(config stop)"
+}
+
+case "$1" in
+start)
+	init_gpio
+	power_supply_update
+	;;
+stop|reload)
+	power_supply_update
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+exit 0

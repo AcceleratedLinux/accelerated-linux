@@ -1,0 +1,27 @@
+#!/bin/sh
+ifname=$1
+localip=$4
+remoteip=$5
+portnr=$6
+chain=fwd_sdt${portnr}
+
+RDP_BASEPORT=7300
+VNC_BASEPORT=7900
+ICA_BASEPORT=7400
+
+removeRedirect()
+{
+    iptables -t nat -D PREROUTING -p tcp --dport $(expr $2 + $1) \
+	-j DNAT --to-destination ${3}:${4}
+}
+removeRedirect $portnr $RDP_BASEPORT $remoteip 3389
+removeRedirect $portnr $VNC_BASEPORT $remoteip 5900
+removeRedirect $portnr $ICA_BASEPORT $remoteip 1494
+
+iptables -t nat -D POSTROUTING -p tcp -j SNAT -o ${ifname} \
+    --to-source ${localip}
+iptables -D SDT --jump $chain
+iptables -F $chain
+iptables -X $chain
+
+rm -f /var/run/sdt/port${portnr},*

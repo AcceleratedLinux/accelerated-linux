@@ -1,0 +1,118 @@
+#!/bin/sh
+#
+# Action for ConnectEZ 2/4 specific LED setting
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+wwan_led_update()
+{
+	WWAN_SERV=
+	WWAN_SIG=
+
+	MODEM_STATUS=$(runt get mm.persist.port.module.status)
+	if [ "$MODEM_STATUS" = "Updating firmware" ]; then
+		# Don't glitch the flash if we're already flashing
+		if [ "$(cat /sys/class/leds/wanserr/delay_on)" != "500" ]; then
+			WWAN_SERV="-O wanserg -f wanserr"
+			WWAN_SIG="-O wansigg -f wansigr"
+		fi
+	elif [ "$MODEM_STATUS" = "Recovering firmware" ]; then
+		# Don't glitch the flash if we're already flashing
+		if [ "$(cat /sys/class/leds/wanserg/delay_on)" != "500" ]; then
+			WWAN_SERV="-f wanserg -O wanserr"
+			WWAN_SIG="-f wansigg -O wansigr"
+		fi
+	else
+		idx="$(modem name=modem idx || modem idx)" 2>/dev/null
+		if [ -z "$idx" ]; then
+			if sim -m 2>/dev/null | grep -qw yes; then
+				# Don't glitch the flash if we're already flashing
+				if [ "$(cat /sys/class/leds/wanserg/delay_on)" != "500" ]; then
+					# Slow flash SERV while waiting for modem to appear
+					WWAN_SERV="-f wanserg -O wanserr"
+					WWAN_SIG="-O wansigg -O wansigr"
+				fi
+			else
+				# No modem present at all. Everything off
+				WWAN_SERV="-O wanserg -O wanserr"
+				WWAN_SIG="-O wansigg -O wansigr"
+			fi
+		else
+			case "$(runt get mm.modem."$idx".status.bars)" in
+			5) WWAN_SIG="-O wansigg -O wansigr -o wansigb" ;; # blue
+			4) WWAN_SIG="-o wansigg -O wansigr -O wansigb" ;; # green
+			3) WWAN_SIG="-o wansigg -o wansigr -O wansigb" ;; # amber
+			2) WWAN_SIG="-O wansigg -o wansigr -O wansigb" ;; # red
+			1)	# Don't glitch the flash if we're already flashing
+				if [ "$(cat /sys/class/leds/wansigr/delay_on)" != "500" ]; then
+					WWAN_SIG="-O wansigg -f wansigr -O wansigb" # red slow flash
+				fi
+				;;
+			0)  # Don't glitch the flash if we're already flashing
+				if [ "$(cat /sys/class/leds/wansigr/delay_on)" != "250" ]; then
+					WWAN_SIG="-O wansigg -F wansigr -O wansigb" # red fast flash
+				fi
+				;;
+			*) WWAN_SIG="-O wansigg -O wansigr -O wansigb" ;; # off
+			esac
+
+			if [ "$(runt get mm.modem."$idx".modem.sim_present)" = true ]; then
+				if [ "$(runt get mm.modem."$idx".status.state)" = connected ]; then
+					case "$(runt get mm.modem."$idx".status.gtech)" in
+					2g) WWAN_SERV="-o wanserg -o wanserr -O wanserb" ;;    # amber
+					3g) WWAN_SERV="-o wanserg -O wanserr -O wanserb" ;;    # green
+					4g|5g) WWAN_SERV="-O wanserg -O wanserr -o wanserb" ;; # blue
+					*) WWAN_SERV="-O wanserg -O wanserr -O wanserb" ;; # off
+					esac
+				else
+					# Connecting/searching
+					if [ "$(cat /sys/class/leds/wanserr/delay_on)" != "500" ]; then
+						# Slow flash SERV while waiting for modem to appear
+						WWAN_SERV="-f wanserg -f wanserr -O wanserb" # slow flash amber
+					fi
+				fi
+			else
+				# No sim present
+				if [ "$(cat /sys/class/leds/wanserr/delay_on)" != "250" ]; then
+					# Slow flash SERV while waiting for modem to appear
+					WWAN_SERV="-O wanserg -F wanserr -O wanserb" # fast flash red
+				fi
+			fi
+		fi
+	fi
+}
+
+findme_update()
+{
+	FINDME=
+	if find-me state > /dev/null 2>&1; then
+		FINDME="-f pwrg -f pwrr" # slow flash white/blue
+	else
+		FINDME="-O pwrg -O pwrr"
+	fi
+}
+
+case "$1" in
+start|stop)
+	ledcmd -O pwrg -O pwrr
+	ledcmd -O wansigg -O wansigr -O wansigb
+	ledcmd -O wanserg -O wanserr -O wanserb
+	;;
+reload)
+	findme_update
+	wwan_led_update
+	ledcmd $WWAN_SERV $WWAN_SIG $FINDME
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+exit 0

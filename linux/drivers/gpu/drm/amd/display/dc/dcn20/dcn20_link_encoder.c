@@ -309,7 +309,6 @@ bool dcn20_link_encoder_is_in_alt_mode(struct link_encoder *enc)
 void enc2_hw_init(struct link_encoder *enc)
 {
 	struct dcn10_link_encoder *enc10 = TO_DCN10_LINK_ENC(enc);
-
 /*
 	00 - DP_AUX_DPHY_RX_DETECTION_THRESHOLD__1to2 : 1/2
 	01 - DP_AUX_DPHY_RX_DETECTION_THRESHOLD__3to4 : 3/4
@@ -333,9 +332,17 @@ void enc2_hw_init(struct link_encoder *enc)
 	AUX_RX_PHASE_DETECT_LEN,  [21,20] = 0x3 default is 3
 	AUX_RX_DETECTION_THRESHOLD [30:28] = 1
 */
-	AUX_REG_WRITE(AUX_DPHY_RX_CONTROL0, 0x103d1110);
+	if (enc->ctx->dc_bios->golden_table.dc_golden_table_ver > 0) {
+		AUX_REG_WRITE(AUX_DPHY_RX_CONTROL0, enc->ctx->dc_bios->golden_table.aux_dphy_rx_control0_val);
 
-	AUX_REG_WRITE(AUX_DPHY_TX_CONTROL, 0x21c7a);
+		AUX_REG_WRITE(AUX_DPHY_TX_CONTROL, enc->ctx->dc_bios->golden_table.aux_dphy_tx_control_val);
+
+		AUX_REG_WRITE(AUX_DPHY_RX_CONTROL1, enc->ctx->dc_bios->golden_table.aux_dphy_rx_control1_val);
+	} else {
+		AUX_REG_WRITE(AUX_DPHY_RX_CONTROL0, 0x103d1110);
+
+		AUX_REG_WRITE(AUX_DPHY_TX_CONTROL, 0x21c7a);
+	}
 
 	//AUX_DPHY_TX_REF_CONTROL'AUX_TX_REF_DIV HW default is 0x32;
 	// Set AUX_TX_REF_DIV Divider to generate 2 MHz reference from refclk
@@ -355,7 +362,7 @@ static const struct link_encoder_funcs dcn20_link_enc_funcs = {
 		dcn10_link_encoder_validate_output_with_stream,
 	.hw_init = enc2_hw_init,
 	.setup = dcn10_link_encoder_setup,
-	.enable_tmds_output = dcn10_link_encoder_enable_tmds_output,
+	.enable_tmds_output = dcn10_link_encoder_enable_tmds_output_with_clk_pattern_wa,
 	.enable_dp_output = dcn20_link_encoder_enable_dp_output,
 	.enable_dp_mst_output = dcn10_link_encoder_enable_dp_mst_output,
 	.disable_output = dcn10_link_encoder_disable_output,

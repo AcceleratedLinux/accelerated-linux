@@ -1,0 +1,44 @@
+--- bzip2-1.0.8/Makefile.org	2021-12-19 23:16:41.363825126 +1000
++++ bzip2-1.0.8/Makefile	2021-12-19 23:33:00.043952792 +1000
+@@ -35,7 +35,7 @@
+       decompress.o \
+       bzlib.o
+ 
+-all: libbz2.a bzip2 bzip2recover test
++all: libbz2.a libbz2.so bzip2 bzip2recover
+ 
+ bzip2: libbz2.a bzip2.o
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o bzip2 bzip2.o -L. -lbz2
+@@ -52,6 +52,12 @@
+ 		$(RANLIB) libbz2.a ; \
+ 	fi
+ 
++libbz2.so: $(OBJS)
++	$(CC) -shared -Wl,-soname -Wl,libbz2.so.1.0 -o libbz2.so.1.0.8 $(OBJS)
++	$(CC) $(CFLAGS) -o bzip2-shared bzip2.c libbz2.so.1.0.8
++	ln -s -f libbz2.so.1.0.8 libbz2.so.1.0
++	ln -s -f libbz2.so.1.0.8 libbz2.so
++
+ check: test
+ test: bzip2
+ 	@cat words1
+@@ -89,6 +95,10 @@
+ 	chmod a+r $(PREFIX)/include/bzlib.h
+ 	cp -f libbz2.a $(PREFIX)/lib
+ 	chmod a+r $(PREFIX)/lib/libbz2.a
++	cp -f libbz2.so.1.0.8 $(PREFIX)/lib
++	chmod a+r $(PREFIX)/lib/libbz2.so.1.0.8
++	ln -s -f libbz2.so.1.0.8 $(PREFIX)/lib/libbz2.so.1.0
++	ln -s -f libbz2.so.1.0.8 $(PREFIX)/lib/libbz2.so
+ 	cp -f bzgrep $(PREFIX)/bin/bzgrep
+ 	ln -s -f $(PREFIX)/bin/bzgrep $(PREFIX)/bin/bzegrep
+ 	ln -s -f $(PREFIX)/bin/bzgrep $(PREFIX)/bin/bzfgrep
+@@ -109,7 +119,7 @@
+ 	echo ".so man1/bzdiff.1" > $(PREFIX)/man/man1/bzcmp.1
+ 
+ clean: 
+-	rm -f *.o libbz2.a bzip2 bzip2recover \
++	rm -f *.o libbz2.a libbz2.so* bzip2 bzip2recover \
+ 	sample1.rb2 sample2.rb2 sample3.rb2 \
+ 	sample1.tst sample2.tst sample3.tst
+ 

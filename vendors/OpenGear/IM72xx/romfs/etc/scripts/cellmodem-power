@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# This script can:
+#   Power the cellular modem on or off via GPIO pins
+#   Match power state based on configuration permmisions in /etc/config/cellmodem.conf
+#
+
+#TODO: adjust the GPIO pin ID that controls cellmodem power for IM72xx on DAL
+PWR_GPIO=29
+COMMAND=$1
+GPIODIR=/sys/class/gpio/gpio$PWR_GPIO
+
+# Look for  "CELLMODEM_DISABLE" to determine if cell modem can be enabled.
+if [ -f /etc/config/cellmodem.conf ]; then
+	 . /etc/config/cellmodem.conf
+fi
+
+if [ "$COMMAND" == "matchconfig" ]; then
+	if [ "$CELLMODEM_DISABLE" ]; then
+		COMMAND=off
+	else
+		COMMAND=on
+	fi
+fi
+
+read VALUE <$GPIODIR/value
+
+if [ "$COMMAND" == "off" ]
+then
+	if [ "$VALUE" == "1" ]; then
+		echo `basename "$0"` "Powering down cellular modem."
+		echo 0 >  $GPIODIR/value
+	fi
+elif [ "$COMMAND" == "on" ]
+then
+	if [ "$CELLMODEM_DISABLE" == "" ] && [ "$VALUE" == "0" ]; then
+		echo `basename "$0"` " Powering up cellular modem."
+		echo 1 > $GPIODIR/value
+	fi
+fi
+
+exit $?

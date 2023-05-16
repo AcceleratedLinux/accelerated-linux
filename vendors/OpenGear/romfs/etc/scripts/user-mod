@@ -1,0 +1,321 @@
+#! /bin/bash
+
+#set -x
+
+# This script acts as a wrapper for editing user details using the 'config' command
+# in the CLI. The administrator runs this script with a few parameters
+# and the script then runs the relevant config commands and configurators.
+# Currenlty this script only supports giving a user serial port and group access.
+# see also "user-del" and "user-add" scripts.
+
+usage()
+{
+	echo 'usage: user-mod [-h] [-p "+/-portlist"] [-g "+/-grouplist"] 
+				[ --password "plain text password" ]
+				[-d description] [-P] [-L] [-U] name'
+	echo
+	echo '	Each port number can be preceded by a "+" or a "-".'
+	echo '	If a port number is preceded by a "+", e.g. "+5" the port will be'
+	echo '	added to the user access. If a port number is preceded by a "-"'
+	echo '	instead, the port will be removed from the user access.'
+	echo '	The "+" and "-" options can also be used for adding and'
+	echo '	removing group access from a user. If neither "+" or "-" precedes'
+	echo '	a port or group, then a "+" will be assumed.'
+	echo
+	echo '	-P, If this option is present, you will be prompted for a new user'
+	echo '	password.'
+	echo
+	echo '	-L, Lock account for user "name".'
+	echo
+	echo '	-U, Unlock account for user "name".'
+	echo
+}
+
+if [ "$#" -lt  1 ]
+then
+	echo "Wrong number of arguments"
+	usage
+	exit 1
+fi
+
+PASSFLAG=false
+LOCKFLAG=false
+UNLOCKFLAG=false
+
+OPTS=`getopt -o 'hp:g:d:e:PLU' -l 'password:' -- "$@"`
+if [ $? != 0 ]
+then
+	usage
+	exit 1
+fi
+
+eval set -- "$OPTS";
+
+while true
+do
+	case "$1" in
+	   -h)
+	   	usage
+	   	exit 1
+	   	;;
+	   -p)
+	   	PORTLIST=$2
+	   	shift 2
+	   	;;
+	   -g)
+	   	GROUPLIST=$2
+	   	shift 2
+	   	;;
+	   -d)
+	   	DESCRIPTION=$2
+	   	shift 2
+	   	;;
+	   --password)
+		PLAINTEXT_PASS=$2
+		shift 2
+		;;
+	   -P)
+	   	PASSFLAG=true
+	   	shift
+	   	;;
+	   -U)
+	   	UNLOCKFLAG=true
+	   	shift
+	   	;;
+	   -L)
+	   	LOCKFLAG=true
+	   	shift
+	   	;;
+	   --)
+		shift
+		break
+		;;
+	   [?])
+	   	usage
+	   	exit
+	   	;;
+	 esac
+done
+
+if [ "$#" -lt "$OPTIND" ]
+then
+	echo "You must specify a username"
+	usage
+	exit 1
+fi
+
+# Check that the new username is the last argument
+if [ "$OPTIND" -lt "$#" ]
+then
+	usage
+	exit 1
+fi
+
+# Do a shift in order to retrieve the username in $1
+shift $[ $OPTIND - 1]
+
+# Get number of existing users
+TOTALUSERS=`config -g config.users.total | sed 's/.* //'`
+
+# Test whether this user exists
+USEREXISTS=`grep -e "^$1:" /etc/passwd`
+if [ -z "$USEREXISTS" ]
+then
+        echo "Error: User \"$1\" does not exist. "
+        exit 1
+fi
+
+# Get the config index of the edited user.
+USERINDEX=`config -g config.users | grep -e \
+"config\.users\.user.*\.username $1$" | sed 's/[a-zA-Z.]*\([0-9]*\).* .*/\1/'` 
+
+# Make sure that the port parameters contain numbers only
+for PORT in $PORTLIST
+do
+	# remove leading +/- from port temporarily
+        PORTTEMP=`echo $PORT | sed 's/^[\+\-]//'`
+        VALIDATION=`echo $PORTTEMP | sed 's/[0-9]*//'`
+        if [ -n "$VALIDATION" ]
+        then
+                echo "Error: The port parameter must contain numbers and leading +- characters only."
+                exit 0
+        fi
+done
+
+# Check for out-of-range port numbers
+NPORTS=$(wc -l /var/run/serial-ports | sed 's/[ \t]*\([0-9]*\).*/\1/')
+NODES=`config -g config.cascade.nodes.total | sed 's/.* //'`
+if [ -z "$NODES" ]
+then
+        CASPORTS=0
+else
+        for ((NODE=1; NODE <= NODES; NODE++))
+        do
+                NODEPORTS=`config -g config.cascade.nodes.node$[NODE].ports \
+		| sed 's/.* //'`
+                CASPORTS=$[ $CASPORTS + $NODEPORTS ]
+        done
+fi
+
+NPORTS=$[ $NPORTS + $CASPORTS ]
+for PORT in $PORTLIST
+do
+	# remove leading +/- from port temporarily
+        PORTTEMP=`echo $PORT | sed 's/^[\+\-]//'`
+        if [ "$PORTTEMP" -gt "$NPORTS" ]
+        then
+                echo "Port $PORTTEMP does not exist"
+                exit 1
+        fi
+done
+
+
+
+# Make sure the groups being added exist
+for GROUP in $GROUPLIST
+do
+	# Get the first character from $GROUP
+        MODIFIER=${GROUP:0:1}
+
+        if [ "$MODIFIER" != "-" ]
+        then
+		# remove leading + from groupname
+                GROUP=`echo $GROUP | sed 's/^[\+]//'`
+
+		GROUPEXISTS=`grep -e "^$GROUP:" /etc/group`
+		if [ -z "$GROUPEXISTS" ]
+ 		then
+              		echo "Invalid group name \"$GROUP\""
+        		exit 1
+		fi
+	fi
+
+done
+
+# Check that they're not trying to set the password two different ways
+if [ -n "$PLAINTEXT_PASS" ] && [ $PASSFLAG = true ]
+then         
+        echo "You cannot provide both password change arguments"
+        usage
+        exit 1
+fi
+
+# Edit user
+# Make backup copy of config file                    
+cp /etc/config/config.xml /etc/config/config.bak
+echo "backup of /etc/config/config.xml saved in /etc/config/config.bak"
+
+if [ -n "$DESCRIPTION" ]
+then
+	config -s config.users.user$USERINDEX.description="$DESCRIPTION"
+fi
+
+if [ -n "$PLAINTEXT_PASS" ]
+then
+	# configurators will delete this config variable with encrypted one
+	# saved in /etc/shadow
+	config -s config.users.user$USERINDEX.plaintext_password="$PLAINTEXT_PASS"
+fi
+
+if [ $PASSFLAG = true ]
+then
+	echo "Please provide a new user password"
+	config -P config.users.user$USERINDEX.password
+fi
+
+if [ $UNLOCKFLAG = true ]
+then
+	config -d config.users.user$USERINDEX.disabled
+fi
+
+if [ $LOCKFLAG = true ]
+then
+	config -s config.users.user$USERINDEX.disabled=on
+fi
+
+# Edit the user's groups 
+for GROUP in $GROUPLIST
+do
+	# Get the first character from $GROUP
+	MODIFIER=${GROUP:0:1}
+
+	# Remove the "+/-"
+	GROUP="${GROUP/+/}"
+	GROUP="${GROUP/-/}"
+	
+	if [ "$MODIFIER" = "-" ]
+	then
+		# Get the config index of the groupname.
+		DELGROUPNUM=`config -g config.users | grep -e \
+		"config\.users\.user$USERINDEX\.groups\.group[0-9]* $GROUP$" | \
+		sed 's/[a-zA-Z0-9.]*group\([0-9]*\) .*/\1/'` 
+
+		if [ -z "$DELGROUPNUM" ]
+		then
+			echo "Group \"$GROUP\" is not configured"
+		else
+			echo "-$GROUP"
+			/etc/scripts/delete-node "config.users.user$USERINDEX.groups.group$DELGROUPNUM" > /dev/null
+		fi
+	else
+		# Test if group has already been added 
+		GROUPISADDED=`config -g config.users | grep -e \
+		"config\.users\.user$USERINDEX\.groups\.group[0-9]* $GROUP$"`
+
+		if [ -n "$GROUPISADDED" ]
+		then
+			echo "Group \"$GROUP\" has already been added"
+		else
+			echo "+$GROUP"
+
+			TOTALGROUPS=`config -g config.users.user$USERINDEX.groups \
+				| grep -c config`
+			TOTALGROUPS=$[$TOTALGROUPS +1]
+			config -s config.users.user$USERINDEX.groups.group$TOTALGROUPS="$GROUP"
+		fi
+	fi
+done
+
+PORTCOMMAND=
+
+# Activate appropriate ports
+for PORT in $PORTLIST
+do
+	# Get the first character from $PORT
+	MODIFIER=${PORT:0:1}
+
+	# Remove the "+/-"
+	PORT="${PORT/+/}"
+	PORT="${PORT/-/}"
+	# remove leading zeroes
+	PORT=`echo $PORT | sed 's/^0*//'`
+	
+	if [ "$MODIFIER" = "+" ]
+	then
+		echo "+Port $PORT"
+		PORTCOMMAND="$PORTCOMMAND -s config.users.user$USERINDEX.port$PORT=on"
+		
+	elif [ "$MODIFIER" = "-" ]
+	then	
+		echo "-Port$PORT"
+		PORTCOMMAND="$PORTCOMMAND -d config.users.user$USERINDEX.port$PORT"
+	else
+		echo "+Port $PORT"
+		PORTCOMMAND="$PORTCOMMAND -s config.users.user$USERINDEX.port$PORT=on"
+	fi
+done
+
+if [ -n "$PORTLIST" ]
+then
+	PORTCOMMAND="config $PORTCOMMAND"
+	$PORTCOMMAND
+fi
+
+echo "Running configurator..."
+config -r users
+
+echo "done"
+
+#set +x 
+exit 0
+

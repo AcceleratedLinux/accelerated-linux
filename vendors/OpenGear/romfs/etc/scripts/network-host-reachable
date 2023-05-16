@@ -1,0 +1,21 @@
+#!/bin/sh
+
+#
+# Get command line arguments.
+#
+if [ $# -lt 2 ]; then
+	echo "Usage: script INTERFACE ADDRESS"
+	exit 1
+fi
+INTERFACE=$1
+ADDRESS=$2
+
+#
+# Contact network address using a simple ping.
+#
+ping -c 1 -i 1 -I $INTERFACE $ADDRESS >& /dev/null
+if [ $? != 0 ]; then
+	echo "Failed to contact $ADDRESS via $INTERFACE"
+	exit 1
+fi
+exit 0

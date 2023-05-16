@@ -14,6 +14,11 @@ config USER_INIT_INIT
 	  Include the init executable (highly recommended).
 	  Approx. binary size: 14k
 
+config USER_INIT_EDINITTAB
+	bool "edinittab"
+	help
+	  Include the edinittab executable (needed by Opengear devices)
+
 config USER_INIT_CONSOLE_SH
 	bool "enable console shell"
 	depends on USER_INIT_INIT
@@ -86,6 +91,11 @@ config USER_MSH_SH
 	bool "msh"
 	help
 	  A little linux shell (small)
+
+config USER_BASH_SH
+	bool "bash"
+	help
+	  A big linux shell
 
 config USER_OTHER_SH
 	bool "other"
@@ -269,11 +279,18 @@ config USER_BLE_PROVISIONING_APP
 	help
 	  enables Bluetooth GATT server for Digi Remote Manager provisioning
 
+config USER_ATH11K_FIRMWARE
+bool "ath11k-firmware"
+help
+        ath11k firmware
+
 endmenu
 
 #############################################################################
 
 menu "Flash Tools"
+
+source ../user/setfset/Kconfig
 
 config USER_FLASHW_FLASHW
 	bool "flashw"
@@ -411,7 +428,7 @@ config USER_RECOVER_BIOS
 config USER_NETFLASH_CRYPTO
 	bool "netflash needs public key encryption"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  Netflash requires a public key authentication to be attached to an
 	  image and won't commit an image without this or with an invalid
@@ -420,7 +437,7 @@ config USER_NETFLASH_CRYPTO
 config USER_NETFLASH_CRYPTO_V2
 	bool "netflash supports public key encryption using SHA256 checksum"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	select USER_NETFLASH_CRYPTO
 	help
 	  Netflash requires a public key authentication to be attached to an
@@ -432,7 +449,7 @@ config USER_NETFLASH_CRYPTO_V3
 	bool "netflash supports extended authentication options"
 	depends on USER_NETFLASH_NETFLASH || USER_RECOVER_RECOVER
 	depends on !USER_NETFLASH_CRYPTO
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  Netflash requires the image to include a public key certificate
 	  and a signature of the image using that certificate. The
@@ -527,6 +544,14 @@ config USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
 	  stored in the /etc/hwdetails file of the rootfs. If not matching,
 	  Netflash will fail.
 
+config USER_NETFLASH_STRICT_HW_VERSION_CHECK
+	bool "netflash always checks the HW version"
+	depends on USER_NETFLASH_HARDWARE || USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
+	default n
+	help
+	  If enabled, '-H' option is disabled, and hardware version checking is
+	  always active.
+
 config USER_NETFLASH_CRYPTO_ECDSA_SW
 	bool "netflash support for software ECDSA authentication"
 	depends on USER_NETFLASH_NETFLASH
@@ -590,6 +615,13 @@ config USER_NETFLASH_MINIMUM_VERSION
 	default "17.6.181"
 	help
 	  Minimum version which the current system can be safely downgraded to.
+
+config USER_NETFLASH_VM_NETFLASH
+	bool "netflash-vm"
+	help
+	  This is a rewrite of netflash designed to support reading
+	  firmware out of complex containers such as QCOW2 images of
+	  DOS partitions.
 
 config USER_RECOVER_STATIC_TFTP
 	bool "bootloader uses server config from flash"
@@ -994,6 +1026,7 @@ comment "SAMBA"
 
 config USER_SAMBA
 	bool "samba"
+	select LIB_GNUTLS
 
 config USER_SAMBA_SMBD
 	bool "smbd"
@@ -1124,7 +1157,7 @@ config USER_APPWEB_CGI
 config USER_APPWEB_SSL
 	bool "AppWeb supports SSL"
 	depends on USER_APPWEB_APPWEB
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  Do you want AppWeb to support SSL. AppWeb can support both standard
 	  HTTP and secure HTTPS/SSL at the same time on different virtual hosts.
@@ -1215,7 +1248,7 @@ config USER_BOA_SRC_BOA
 config USER_BOA_WITH_SSL
 	bool "boa uses SSL"
 	depends on USER_BOA_SRC_BOA
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  Do you want BOA to use SSL for all connections.
 
@@ -1257,7 +1290,7 @@ config USER_CLAMAV_CLAMAV
 	bool "clamav"
 	select LIB_LIBBZ2
 	select LIB_ZLIB
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  Clam anti-virus checker.  This option builds the clam library but
 	  does not install any of the executables.
@@ -1769,41 +1802,13 @@ config USER_MINI_HTTPD_MINI_HTTPD
 config USER_MINI_HTTPD_WITH_SSL
 	bool "mini_httpd uses SSL"
 	depends on USER_MINI_HTTPD_MINI_HTTPD
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 
 config USER_MSNTP_MSNTP
 	bool "msntp"
 	help
 	  Simple Network Time Protocol utility.
 	  Approx. binary size: 66k
-
-
-config USER_NESSUS
-	bool "nessus"
-	select USER_NESSUS_NASL
-	select USER_NESSUS_CORE
-	select USER_NESSUS_PLUGINS
-	help
-	  The Nessus security scanner
-
-config USER_NESSUS_NASL
-	bool "nasl"
-	select USER_NESSUS_LIBRARIES
-	select LIB_LIBPCAP
-	help
-	  The Nessus scripting language (NASL) interpreter.
-
-config USER_NESSUS_CORE
-	bool
-	default n
-
-config USER_NESSUS_PLUGINS
-	bool
-	default n
-
-config USER_NESSUS_LIBRARIES
-	bool
-	default n
 
 config USER_NETCAT_NETCAT
 	bool "netcat"
@@ -1835,278 +1840,6 @@ config USER_NETSTAT_NAT_NETSTAT_NAT
 	help
 	  Pretty print the ipfilter NAT translations.
 
-config USER_NETSNMP_SNMPD
-	bool "net-snmp"
-	help
-	  net-snmp (www.net-snmp.org) Simple Network Management Protocol
-	  implementation.  Build/Install the agent (snmpd).
-
-config USER_NETSNMP_SNMPD_MINI
-	bool "Build mini agent"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Build a minimal agent.
-
-config USER_NETSNMP_APPS
-	bool "Build Applications"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Build the applications (snmpget, ...)
-
-config USER_NETSNMP_APPS_BULKGET
-	bool "snmpbulkget"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpbulkget.
-
-config USER_NETSNMP_APPS_BULKWALK
-	bool "snmpbulkwalk"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpbulkwalk.
-
-config USER_NETSNMP_APPS_DELTA
-	bool "snmpdelta"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpdelta.
-
-config USER_NETSNMP_APPS_DF
-	bool "snmpdf"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpdf.
-
-config USER_NETSNMP_APPS_GET
-	bool "snmpget"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpget.
-
-config USER_NETSNMP_APPS_GETNEXT
-	bool "snmpgetnext"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpgetnext.
-
-config USER_NETSNMP_APPS_SET
-	bool "snmpset"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpset.
-
-config USER_NETSNMP_APPS_STATUS
-	bool "snmpstatus"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpstatus.
-
-config USER_NETSNMP_APPS_TABLE
-	bool "snmptable"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmptable.
-
-config USER_NETSNMP_APPS_TEST
-	bool "snmptest"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmptest.
-
-config USER_NETSNMP_APPS_TRANSLATE
-	bool "snmptranslate"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmptranslate.
-
-config USER_NETSNMP_APPS_TRAP
-	bool "snmptrap"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmptrap.
-
-config USER_NETSNMP_APPS_TRAPD
-	bool "snmptrapd"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmptrapd.
-
-config USER_NETSNMP_APPS_USM
-	bool "snmpusm"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpusm.
-
-config USER_NETSNMP_APPS_VACM
-	bool "snmpvacm"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpvacm.
-
-config USER_NETSNMP_APPS_WALK
-	bool "snmpwalk"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpwalk.
-
-config USER_NETSNMP_APPS_NETSTAT
-	bool "snmpnetstat"
-	depends on USER_NETSNMP_APPS
-	help
-	  Install snmpnetstat.
-
-config USER_NETSNMP_BUILDSTATIC
-	bool "Build static"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Link with static libraries.
-
-config USER_NETSNMP_MANUALS
-	bool "Install manuals"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Install the manuals.
-
-config USER_NETSNMP_SCRIPTS
-	bool "Install scripts"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Install the scripts (mib2c, ...).
-
-config USER_NETSNMP_MIBS
-	bool "Install MIBs"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Install the mib files.
-
-config USER_NETSNMP_MIBLOADING
-	bool "Enable MIB loading"
-	depends on USER_NETSNMP_MIBS
-	help
-	  Include code that parses and manipulates the mib files.
-
-config USER_NETSNMP_NOV1
-	bool "Disable SNMP v1"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Do not include code that implements SNMPv1.
-
-config USER_NETSNMP_NOV2C
-	bool "Disable SNMP v2c"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Do not include code that implements SNMPv2c.
-
-config USER_NETSNMP_IPV6
-	bool "IPv6 support"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Generate IPv6 ready version.
-
-config USER_NETSNMP_NOTRANSPORTS
-	bool "Exclude transports"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Exclude listed SNMP transports.
-	  (UDP UDPIPv6 TCPIPv6 TCP Unix Callback AAL5PVC IPX)
-
-config USER_NETSNMP_EXTRANSPORTS
-	string "Exclude Transports"
-	depends on USER_NETSNMP_NOTRANSPORTS
-	default "TCP"
-	help
-	  Transports to exclude (space separated list).
-
-config USER_NETSNMP_OPENSSL
-	bool "With OpenSSL"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Look for openssl in PATH/lib.
-
-config USER_NETSNMP_OVRDEFAULTS
-	bool "Override defaults"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Override defaults for prompted values.
-
-config USER_NETSNMP_DEFVERSION
-	string "Default version"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default "3"
-	help
-	  Default version of SNMP to use.
-
-config USER_NETSNMP_DEFSYSCONTACT
-	string "Default Sys Contact"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default "unknown"
-	help
-	  Default system contact.
-
-config USER_NETSNMP_DEFSYSLOCATION
-	string "Default Sys Location"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default "unknown"
-	help
-	  Default system location.
-
-config USER_NETSNMP_DEFLOGFILE
-	string "Default Log file"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default "/var/log/snmp.log"
-	help
-	  Default log file location.
-
-config USER_NETSNMP_DEFPERSISDIR
-	string "Default Persistent Directory"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default "/var/net-snmp"
-	help
-	  Default directory for persistent data storage.
-
-config USER_NETSNMP_DEFENTERPRISEOID
-	string "Enterprise OID"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default "8072"
-	help
-	  The enterprise number assigned by IANA
-	  (Warning: this should be used with caution.)
-
-config USER_NETSNMP_DEFENTERPRISESYSOID
-	string "System OID"
-	depends on USER_NETSNMP_OVRDEFAULTS
-	default ".1.3.6.1.4.1.8072.1.1"
-	help
-	  The system oid that corresponds to this system type
-	  (Warning: this should be used with caution.)
-
-config USER_NETSNMP_ADDMIBS
-	bool "Additional MIBS"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Compile with additional MIB modules.
-
-config USER_NETSNMP_ADDITIONALMIBS
-	string "Additional MIBS"
-	depends on USER_NETSNMP_ADDMIBS
-	default ""
-	help
-	  Additional MIB modules (space spearated list).
-
-config USER_NETSNMP_ADDITIONAL_MIB_DIRS
-	string "Additional MIB Dirs"
-	depends on USER_NETSNMP_ADDMIBS
-	default ""
-	help
-	  Directories to final external MIB sources for building into
-	  net-snmp (space spearated list).
-
-config USER_NETSNMP_INSTALL_CORE_MIBS
-	bool "Install Core MIBs"
-	depends on USER_NETSNMP_SNMPD
-	help
-	  Install the core MIB files into romfs.
-
 config USER_MARADNS_ZONESERVER
 	bool "zoneserver"
 	help
@@ -2135,7 +1868,7 @@ config USER_NOVNC_ROMFSDIR
 
 config USER_OPENSSL_APPS
 	bool "openssl"
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  OpenSSL is a cryptography toolkit implementing the Secure Sockets
 	  Layer (SSL v2/v3) and Transport Layer Security (TLS v1) network
@@ -2149,13 +1882,6 @@ config USER_OPENSSL_APPS
 	   o  Encryption and Decryption with Ciphers
 	   o  SSL/TLS Client and Server Tests
 	   o  Handling of S/MIME signed or encrypted mail
-
-config USER_SSCEP
-	bool "sscep"
-	select LIB_LIBSSL
-	help
-		SSCEP is a Simple SCEP client. SCEP is a protocol used
-		for certificate management
 
 config USER_PING_PING
 	bool "ping"
@@ -2360,12 +2086,6 @@ config USER_ROUTED_ROUTED
 	help
 	  A RIPv1 routed
 
-config USER_RSYNC_RSYNC
-	bool "rsync"
-	help
-	  network file copying utility that copies only the differences
-	  between files Approx. binary size on SH4: 255k
-
 config USER_RSYSLOGD_RSYSLOGD
 	bool "rsyslogd"
 	help
@@ -2428,7 +2148,7 @@ config USER_STUNNEL_STUNNEL
 
 config USER_SSH_SSH
 	bool "ssh"
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  A secure shell client.  You can set up a vpn connection using both
 	  the client and the server.
@@ -2436,7 +2156,7 @@ config USER_SSH_SSH
 
 config USER_SSH_SSHD
 	bool "sshd"
-	select LIB_LIBSSL
+	select LIB_OPENSSL
         select LIB_ZLIB
 	help
 	  A secure shell server.  This one is the openssh variant and supports
@@ -2445,6 +2165,13 @@ config USER_SSH_SSHD
 	  properly.
 	  Approx. binary size: 580k
 
+config USER_SSH_SSHD_CUSTOM_CONFIG
+	bool "sshd custom configuration"
+	default n
+	depends on USER_SSH_SSHD
+	help
+	  Allow user customization of the SSH server configuration.
+
 config USER_SSH_SSHD_CONFIG
 	bool 'Install sshd_config'
 	default y
@@ -2452,7 +2179,7 @@ config USER_SSH_SSHD_CONFIG
 
 config USER_SSH_SSHKEYGEN
 	bool "ssh-keygen"
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 	  This program generates and manages authentication keys for ssh and
 	  sshd.
@@ -3391,6 +3118,14 @@ config USER_WATCHDOGD
 	help
 	  A simple watchdog daemon.
 
+config USER_WATCHDOG_ADVANCED
+	bool 'watchdog advanced'
+	select LIB_LIBCONFUSE
+	select LIB_LIBITE
+	select LIB_LIBUEV
+	help
+		Linux advanced watchdog
+
 config USER_LRZSZ_LRZSZ
 	bool "zmodem utils"
 
@@ -3813,60 +3548,6 @@ config USER_SYSUTILS_PS
 	help
 	  Show process status
 	  Approx. binary size: 12k
-
-
-comment "Procps tools"
-
-config USER_PROCPS_FREE
-	bool "free"
-
-config USER_PROCPS_KILL
-	bool "kill"
-
-config USER_PROCPS_PGREP
-	bool "pgrep"
-
-config USER_PROCPS_PKILL
-	bool "pkill"
-
-config USER_PROCPS_PS
-	bool "ps"
-
-config USER_PROCPS_SNICE
-	bool "snice"
-
-config USER_PROCPS_SYSCTL
-	bool "sysctl"
-
-config USER_PROCPS_TLOAD
-	bool "tload"
-
-config USER_PROCPS_TOP
-	bool "top"
-	select LIB_NCURSES
-
-config USER_PROCPS_UPTIME
-	bool "uptime"
-
-config USER_PROCPS_VMSTAT
-	bool "vmstat"
-
-config USER_PROCPS_W
-	bool "w"
-
-config USER_PROCPS_WATCH
-	bool "watch"
-	select LIB_NCURSES
-
-config USER_PROCPS_PMAP
-	bool "pmap"
-
-config USER_PROCPS_SLABTOP
-	bool "slabtop"
-	select LIB_NCURSES
-
-config USER_PROCPS_PWDX
-	bool "pwdx"
 
 comment "Test Applications"
 config USER_CXXTEST_CXXTEST

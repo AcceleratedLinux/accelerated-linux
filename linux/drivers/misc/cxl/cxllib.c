@@ -5,6 +5,7 @@
 
 #include <linux/hugetlb.h>
 #include <linux/sched/mm.h>
+#include <asm/opal-api.h>
 #include <asm/pnv-pci.h>
 #include <misc/cxllib.h>
 
@@ -170,8 +171,6 @@ int cxllib_get_PE_attributes(struct task_struct *task,
 			     unsigned long translation_mode,
 			     struct cxllib_pe_attributes *attr)
 {
-	struct mm_struct *mm = NULL;
-
 	if (translation_mode != CXL_TRANSLATED_MODE &&
 		translation_mode != CXL_REAL_MODE)
 		return -EINVAL;
@@ -182,7 +181,7 @@ int cxllib_get_PE_attributes(struct task_struct *task,
 				true);
 	attr->lpid = mfspr(SPRN_LPID);
 	if (task) {
-		mm = get_task_mm(task);
+		struct mm_struct *mm = get_task_mm(task);
 		if (mm == NULL)
 			return -EINVAL;
 		/*

@@ -1,0 +1,166 @@
+#!/bin/sh
+
+# This script contains common useful function for power scripts
+set +e
+
+#
+# Display a device specific temperature
+# $1 temp value
+#
+power_status_temp()
+{
+	temp=$1
+	echo "Device temperature is ${temp}"
+}
+
+#
+# Display a device specific login error
+# $1 username
+#
+power_error_login()
+{
+	username=$1
+	echo "error: login failed for $username"
+}
+
+#
+# Display a device specific logout warning
+# $1 username
+#
+power_warn_logout()
+{
+	username=$1
+	echo "warning: logout failed for $username"
+}
+
+#
+# Display the status of a given outlet
+# $1 outlet number
+# $2 status: on | off | unknown
+#
+power_outlet_status()
+{
+	outlet=$1
+	status=$2
+	echo "outlet $outlet is $status"
+}
+
+#
+# Display the power status of a given outlet
+# $1 outlet number
+# $2 power value
+#
+power_outlet_status_power()
+{
+	outlet=$1
+	power=$2
+	echo "outlet ${outlet} power is ${power}"
+}
+
+#
+# Display the voltage of a given outlet
+# $1 outlet number
+# $2 voltage value
+#
+power_outlet_status_volts()
+{
+	outlet=$1
+	volts=$2
+	echo "outlet ${outlet} voltage is ${volts}"
+}
+
+#
+# Display the power current of a given outlet
+# $1 outlet number
+# $2 current value
+#
+power_outlet_status_current()
+{
+	outlet=$1
+	current=$2
+	echo "outlet ${outlet} current is ${current}"
+}
+
+#
+# Display the power load of a given outlet
+# $1 outlet number
+# $2 load value
+#
+power_outlet_status_load()
+{
+	outlet=$1
+	load=$2
+	echo "outlet ${outlet} load is ${load}"
+}
+
+#
+# Display the temperature of a given outlet
+# $1 outlet number
+# $2 temperature value
+#
+power_outlet_status_temp()
+{
+	outlet=$1
+	temp=$2
+	echo "outlet ${outlet} temperature is ${temp}"
+}
+
+#
+# Display an outlet specific error for invalid configuration
+# $1 outlet number
+# $2 configuration path to invalid value
+#
+power_outlet_error_config()
+{
+	outlet=$1
+	config=$2
+	echo "outlet $outlet error: invalid configuration $config"
+}
+
+#
+# Display an error stating the outlet is out of range
+# $1 outlet number
+# $2 total number of outlets
+#
+power_outlet_error_range()
+{
+	outlet=$1
+	total=$2
+	echo "outlet $outlet error: out of range 1 - $total"
+}
+
+#
+# Display an outlet specific error because of auth
+# $1 outlet number
+# $2 username
+#
+power_outlet_error_login()
+{
+	outlet=$1
+	username=$2
+	echo "outlet $outlet error: login failure for $username"
+}
+
+#
+# Display an outlet specific error for command timeout
+# $1 outlet number
+# $2 command name
+#
+power_outlet_error_timeout()
+{
+	outlet=$1
+	cmd=$2
+	echo "outlet $outlet error: command timed out: $cmd"
+}
+
+#
+# Display an outlet specific error for an unsupported command
+# $1 outlet number
+# $2 command name
+#
+power_outlet_error_unsupported()
+{
+	outlet=$1
+	cmd=$2
+	echo "outlet $outlet error: unsupported command: $cmd"
+}

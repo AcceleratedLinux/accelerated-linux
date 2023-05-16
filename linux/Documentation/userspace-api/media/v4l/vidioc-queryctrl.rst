@@ -1,11 +1,5 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_QUERYCTRL:
 
@@ -18,30 +12,28 @@ Name
 
 VIDIOC_QUERYCTRL - VIDIOC_QUERY_EXT_CTRL - VIDIOC_QUERYMENU - Enumerate controls and menu control items
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, int VIDIOC_QUERYCTRL, struct v4l2_queryctrl *argp )
-    :name: VIDIOC_QUERYCTRL
+``int ioctl(int fd, int VIDIOC_QUERYCTRL, struct v4l2_queryctrl *argp)``
 
-.. c:function:: int ioctl( int fd, VIDIOC_QUERY_EXT_CTRL, struct v4l2_query_ext_ctrl *argp )
-    :name: VIDIOC_QUERY_EXT_CTRL
+.. c:macro:: VIDIOC_QUERY_EXT_CTRL
 
-.. c:function:: int ioctl( int fd, VIDIOC_QUERYMENU, struct v4l2_querymenu *argp )
-    :name: VIDIOC_QUERYMENU
+``int ioctl(int fd, VIDIOC_QUERY_EXT_CTRL, struct v4l2_query_ext_ctrl *argp)``
 
+.. c:macro:: VIDIOC_QUERYMENU
+
+``int ioctl(int fd, VIDIOC_QUERYMENU, struct v4l2_querymenu *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_queryctrl`, :c:type:`v4l2_query_ext_ctrl`
     or :c:type:`v4l2_querymenu` (depending on the ioctl).
-
 
 Description
 ===========
@@ -102,8 +94,7 @@ inclusive.
 
 See also the examples in :ref:`control`.
 
-
-.. tabularcolumns:: |p{1.2cm}|p{3.6cm}|p{12.7cm}|
+.. tabularcolumns:: |p{1.2cm}|p{3.6cm}|p{12.5cm}|
 
 .. _v4l2-queryctrl:
 
@@ -181,8 +172,7 @@ See also the examples in :ref:`control`.
 	zero.
 
 
-
-.. tabularcolumns:: |p{1.2cm}|p{5.0cm}|p{11.3cm}|
+.. tabularcolumns:: |p{1.2cm}|p{5.5cm}|p{10.6cm}|
 
 .. _v4l2-query-ext-ctrl:
 
@@ -282,8 +272,7 @@ See also the examples in :ref:`control`.
 	the array to zero.
 
 
-
-.. tabularcolumns:: |p{1.2cm}|p{1.0cm}|p{1.7cm}|p{13.0cm}|
+.. tabularcolumns:: |p{1.2cm}|p{3.0cm}|p{13.1cm}|
 
 .. _v4l2-querymenu:
 
@@ -317,11 +306,13 @@ See also the examples in :ref:`control`.
       - Reserved for future extensions. Drivers must set the array to
 	zero.
 
-
-
-.. tabularcolumns:: |p{5.8cm}|p{1.4cm}|p{1.0cm}|p{1.4cm}|p{6.9cm}|
-
 .. c:type:: v4l2_ctrl_type
+
+.. raw:: latex
+
+   \footnotesize
+
+.. tabularcolumns:: |p{6.5cm}|p{1.5cm}|p{1.1cm}|p{1.5cm}|p{6.8cm}|
 
 .. cssclass:: longtable
 
@@ -426,18 +417,24 @@ See also the examples in :ref:`control`.
       - any
       - An unsigned 32-bit valued control ranging from minimum to maximum
 	inclusive. The step value indicates the increment between values.
-    * - ``V4L2_CTRL_TYPE_MPEG2_SLICE_PARAMS``
+    * - ``V4L2_CTRL_TYPE_MPEG2_QUANTISATION``
       - n/a
       - n/a
       - n/a
-      - A struct :c:type:`v4l2_ctrl_mpeg2_slice_params`, containing MPEG-2
-	slice parameters for stateless video decoders.
-    * - ``V4L2_CTRL_TYPE_MPEG2_QUANTIZATION``
+      - A struct :c:type:`v4l2_ctrl_mpeg2_quantisation`, containing MPEG-2
+	quantisation matrices for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_MPEG2_SEQUENCE``
       - n/a
       - n/a
       - n/a
-      - A struct :c:type:`v4l2_ctrl_mpeg2_quantization`, containing MPEG-2
-	quantization matrices for stateless video decoders.
+      - A struct :c:type:`v4l2_ctrl_mpeg2_sequence`, containing MPEG-2
+	sequence parameters for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_MPEG2_PICTURE``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_mpeg2_picture`, containing MPEG-2
+	picture parameters for stateless video decoders.
     * - ``V4L2_CTRL_TYPE_AREA``
       - n/a
       - n/a
@@ -474,6 +471,12 @@ See also the examples in :ref:`control`.
       - n/a
       - A struct :c:type:`v4l2_ctrl_h264_decode_params`, containing H264
 	decode parameters for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_FWHT_PARAMS``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_fwht_params`, containing FWHT
+	parameters for stateless video decoders.
     * - ``V4L2_CTRL_TYPE_HEVC_SPS``
       - n/a
       - n/a
@@ -492,12 +495,46 @@ See also the examples in :ref:`control`.
       - n/a
       - A struct :c:type:`v4l2_ctrl_hevc_slice_params`, containing HEVC
 	slice parameters for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_HEVC_SCALING_MATRIX``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_hevc_scaling_matrix`, containing HEVC
+	scaling matrix for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_VP8_FRAME``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_vp8_frame`, containing VP8
+	frame parameters for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_HEVC_DECODE_PARAMS``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_hevc_decode_params`, containing HEVC
+	decoding parameters for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_VP9_COMPRESSED_HDR``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_vp9_compressed_hdr`, containing VP9
+	probabilities updates for stateless video decoders.
+    * - ``V4L2_CTRL_TYPE_VP9_FRAME``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_vp9_frame`, containing VP9
+	frame decode parameters for stateless video decoders.
 
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. raw:: latex
 
-.. _control-flags:
+   \normalsize
+
+.. tabularcolumns:: |p{7.3cm}|p{1.8cm}|p{8.2cm}|
 
 .. cssclass:: longtable
+
+.. _control-flags:
 
 .. flat-table:: Control Flags
     :header-rows:  0
@@ -588,7 +625,6 @@ See also the examples in :ref:`control`.
 	``V4L2_CTRL_FLAG_GRABBED`` flag when buffers are allocated or
 	streaming is in progress since most drivers do not support changing
 	the format in that case.
-
 
 Return Value
 ============

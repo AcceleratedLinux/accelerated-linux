@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 
 #include "8250.h"
 
@@ -42,6 +43,10 @@ struct bcm2835aux_data {
 	struct clk *clk;
 	int line;
 	u32 cntl;
+};
+
+struct bcm2835_aux_serial_driver_data {
+	resource_size_t offset;
 };
 
 static void bcm2835aux_rs485_start_tx(struct uart_8250_port *up)
@@ -80,9 +85,12 @@ static void bcm2835aux_rs485_stop_tx(struct uart_8250_port *up)
 
 static int bcm2835aux_serial_probe(struct platform_device *pdev)
 {
+	const struct bcm2835_aux_serial_driver_data *bcm_data;
 	struct uart_8250_port up = { };
 	struct bcm2835aux_data *data;
+	resource_size_t offset = 0;
 	struct resource *res;
+	unsigned int uartclk;
 	int ret;
 
 	/* allocate the custom structure */
@@ -109,13 +117,7 @@ static int bcm2835aux_serial_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, data);
 
 	/* get the clock - this also enables the HW */
-	data->clk = devm_clk_get(&pdev->dev, NULL);
-	ret = PTR_ERR_OR_ZERO(data->clk);
-	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "could not get clk: %d\n", ret);
-		return ret;
-	}
+	data->clk = devm_clk_get_optional(&pdev->dev, NULL);
 
 	/* get the interrupt */
 	ret = platform_get_irq(pdev, 0);
@@ -129,8 +131,24 @@ static int bcm2835aux_serial_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "memory resource not found");
 		return -EINVAL;
 	}
-	up.port.mapbase = res->start;
-	up.port.mapsize = resource_size(res);
+
+	bcm_data = device_get_match_data(&pdev->dev);
+
+	/* Some UEFI implementations (e.g. tianocore/edk2 for the Raspberry Pi)
+	 * describe the miniuart with a base address that encompasses the auxiliary
+	 * registers shared between the miniuart and spi.
+	 *
+	 * This is due to historical reasons, see discussion here :
+	 * https://edk2.groups.io/g/devel/topic/87501357#84349
+	 *
+	 * We need to add the offset between the miniuart and auxiliary
+	 * registers to get the real miniuart base address.
+	 */
+	if (bcm_data)
+		offset = bcm_data->offset;
+
+	up.port.mapbase = res->start + offset;
+	up.port.mapsize = resource_size(res) - offset;
 
 	/* Check for a fixed line number */
 	ret = of_alias_get_id(pdev->dev.of_node, "serial");
@@ -145,19 +163,24 @@ static int bcm2835aux_serial_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	uartclk = clk_get_rate(data->clk);
+	if (!uartclk) {
+		ret = device_property_read_u32(&pdev->dev, "clock-frequency", &uartclk);
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret, "could not get clk rate\n");
+	}
+
 	/* the HW-clock divider for bcm2835aux is 8,
 	 * but 8250 expects a divider of 16,
 	 * so we have to multiply the actual clock by 2
 	 * to get identical baudrates.
 	 */
-	up.port.uartclk = clk_get_rate(data->clk) * 2;
+	up.port.uartclk = uartclk * 2;
 
 	/* register the port */
 	ret = serial8250_register_8250_port(&up);
 	if (ret < 0) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev,
-				"unable to register 8250 port - %d\n", ret);
+		dev_err_probe(&pdev->dev, ret, "unable to register 8250 port\n");
 		goto dis_clk;
 	}
 	data->line = ret;
@@ -179,16 +202,27 @@ static int bcm2835aux_serial_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct bcm2835_aux_serial_driver_data bcm2835_acpi_data = {
+	.offset = 0x40,
+};
+
 static const struct of_device_id bcm2835aux_serial_match[] = {
 	{ .compatible = "brcm,bcm2835-aux-uart" },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, bcm2835aux_serial_match);
 
+static const struct acpi_device_id bcm2835aux_serial_acpi_match[] = {
+	{ "BCM2836", (kernel_ulong_t)&bcm2835_acpi_data },
+	{ }
+};
+MODULE_DEVICE_TABLE(acpi, bcm2835aux_serial_acpi_match);
+
 static struct platform_driver bcm2835aux_serial_driver = {
 	.driver = {
 		.name = "bcm2835-aux-uart",
 		.of_match_table = bcm2835aux_serial_match,
+		.acpi_match_table = bcm2835aux_serial_acpi_match,
 	},
 	.probe  = bcm2835aux_serial_probe,
 	.remove = bcm2835aux_serial_remove,

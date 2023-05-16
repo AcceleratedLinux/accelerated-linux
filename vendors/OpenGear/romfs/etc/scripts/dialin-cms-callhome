@@ -1,0 +1,29 @@
+#!/bin/bash
+
+IF=$1
+restart_forwards=0
+STATUS_UP=0
+
+if ifconfig $IF | grep " UP "
+then
+	STATUS_UP=1
+fi
+
+# if the interface has come up, add routes for any CMS servers that have set
+# the dialin callhome address through the given interface
+if [ $STATUS_UP -gt 0 ]
+then
+	for i in `config -g config.cms | grep config.cms.cms.*.node.dialin.callhome_address | cut -d' ' -f 2`
+	do
+		route add -host $i $IF
+		restart_forwards=1
+	done
+fi
+
+# restart the SSH forwards (ie. callhome) if we've changed routes
+# or the interface has come down
+if [ $restart_forwards -gt 0 -o $STATUS_UP -eq 0 ]
+then
+	config -r sshforwards
+fi
+

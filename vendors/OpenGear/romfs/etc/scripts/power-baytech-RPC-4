@@ -1,0 +1,27 @@
+#!/bin/bash
+
+port=$1
+cmd=$3
+safeport=`echo $port | tr -cd "[a-zA-Z0-9]"`
+tmpfile=/tmp/baytech-$safeport.$$
+
+status() {
+	pmchat -t5 "" "" "RPC" "status\c" < $port
+	pmchat -t5 -e "" "" "RPC" < $port 2> $tmpfile
+	cat $tmpfile | head -n 22 | tail -n 21
+	rm $tmpfile
+}
+
+case $cmd in
+	"on")
+		pmchat -t5 "" "" "RPC" "${cmd} ${outlet}" "Turn On Outlet" "Y" < $port
+		;;
+	"off")
+		pmchat -t5 "" "" "RPC" "${cmd} ${outlet}" "Turn Off Outlet" "Y" < $port
+		;;
+	"cycle")
+		pmchat -t15 "" "" "RPC" "reboot ${outlet}" "Reboot Outlet" "Y" "RPC" < $port
+		;;
+		
+esac
+status

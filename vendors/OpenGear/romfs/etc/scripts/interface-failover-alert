@@ -1,0 +1,89 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+if [ -z "$ALERT_PRIMARY" -o -z "$ALERT_SECONDARY" ]; then
+    echo "Script does not have mandatory environment"
+    exit 1
+fi
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/network/failover-alert.${ALERT_PRIMARY}"
+scripts[1]="/etc/config/scripts/network/interface-failover-alert"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+	if [ -f "${scripts[$i]}" ]; then
+		exec /bin/sh "${scripts[$i]}"
+	fi
+done
+
+retval=0
+
+snmp=$(config -g config.interfaces.$ROLE.failover.alert.snmp.enabled | cut -f2- -d' ')
+legacy=$(config -g config.system.snmp.legacytraps | cut -f2- -d' ')
+if [ "$snmp" == "on" -a "$legacy" == "on" ]; then
+
+    export AGENT=""
+    export UPTIME=""
+    export TRAP_NAME="${failover_oid_prefix}EventOccurred"
+    export MIB_NAME="${failover_mib_name}"
+
+    /bin/sh /etc/scripts/alert-snmpv1 \
+        "${failover_oid_prefix}EventPrimary" \
+        "s" \
+        "$ALERT_PRIMARY" \
+        "${failover_oid_prefix}EventSecondary" \
+        "s" \
+        "$ALERT_SECONDARY"
+
+    retval=$(( $? || $retval ))
+fi
+
+cms=$(config -g config.cms.enabled | cut -f2- -d' ')
+if [ "$cms" == "on" ]; then
+	alertnum=$(echo $ALERT_XMLID | sed 's/config.alerts.alert//')
+	nodename=$(config -g config.cms.node.name | cut -f2- -d' ')
+	/bin/run_check -c check_xmlalert_${alertnum}_${nodename}
+	retval=$(( $? || $retval ))
+fi
+
+for suffix in "" "2"; do
+
+	email=$(config -g config.interfaces.$ROLE.failover.alert.email$suffix | cut -f2- -d' ')
+	if [ -z "$email" ]; then
+		continue
+	fi
+
+	ipaddr=$(ifconfig $ALERT_SECONDARY | grep 'inet addr' | cut -f 2 -d':' | cut -f 1 -d' ')
+	if [ -z "$ipaddr" ]; then
+		ipaddr="unknown"
+	fi
+
+	export SUBJECT="Alert: failover on $(hostname)"
+	export TOADDR="$email"
+	export BODY="$(hostname): The $ROLE interface has failed over ($ALERT_PRIMARY to $ALERT_SECONDARY), IP address $ipaddr"
+
+	/bin/sh /etc/scripts/alert-email $suffix
+	retval=$(( $? || $retval ))
+done
+
+sms=$(config -g config.system.sms.method | cut -f2- -d' ')
+if [ "$sms" == "cellular" ]; then
+	number=$(config -g $ALERT_XMLID.sms_phone| cut -f2- -d' ')
+	if [ -z "$number" ]; then
+		continue
+	fi
+	HOSTNAME=$(hostname)	
+	export NUMBER="$number"
+	
+	ipaddr=$(ifconfig $ALERT_SECONDARY | grep 'inet addr' | cut -f 2 -d':' | cut -f 1 -d' ')
+	if [ -z "$ipaddr" ]; then
+		ipaddr="unknown"
+	fi
+	
+	export MSG="$HOSTNAME: The $ROLE interface has failed over ($ALERT_PRIMARY to $ALERT_SECONDARY), IP address $ipaddr"
+	
+	/bin/sh /etc/scripts/alert-sms
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

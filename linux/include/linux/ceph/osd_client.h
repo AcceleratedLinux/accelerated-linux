@@ -287,6 +287,9 @@ struct ceph_osd_linger_request {
 	rados_watcherrcb_t errcb;
 	void *data;
 
+	struct ceph_pagelist *request_pl;
+	struct page **notify_id_pages;
+
 	struct page ***preply_pages;
 	size_t *preply_len;
 };
@@ -404,7 +407,7 @@ void ceph_osdc_clear_abort_err(struct ceph_osd_client *osdc);
 	&__oreq->r_ops[__whch].typ.fld;					\
 })
 
-extern void osd_req_op_init(struct ceph_osd_request *osd_req,
+struct ceph_osd_req_op *osd_req_op_init(struct ceph_osd_request *osd_req,
 			    unsigned int which, u16 opcode, u32 flags);
 
 extern void osd_req_op_raw_data_in_pages(struct ceph_osd_request *,
@@ -475,6 +478,14 @@ extern void osd_req_op_alloc_hint_init(struct ceph_osd_request *osd_req,
 				       u64 expected_object_size,
 				       u64 expected_write_size,
 				       u32 flags);
+extern int osd_req_op_copy_from_init(struct ceph_osd_request *req,
+				     u64 src_snapid, u64 src_version,
+				     struct ceph_object_id *src_oid,
+				     struct ceph_object_locator *src_oloc,
+				     u32 src_fadvise_flags,
+				     u32 dst_fadvise_flags,
+				     u32 truncate_seq, u64 truncate_size,
+				     u8 copy_from_flags);
 
 extern struct ceph_osd_request *ceph_osdc_alloc_request(struct ceph_osd_client *osdc,
 					       struct ceph_snap_context *snapc,
@@ -514,17 +525,6 @@ int ceph_osdc_call(struct ceph_osd_client *osdc,
 		   unsigned int flags,
 		   struct page *req_page, size_t req_len,
 		   struct page **resp_pages, size_t *resp_len);
-
-int ceph_osdc_copy_from(struct ceph_osd_client *osdc,
-			u64 src_snapid, u64 src_version,
-			struct ceph_object_id *src_oid,
-			struct ceph_object_locator *src_oloc,
-			u32 src_fadvise_flags,
-			struct ceph_object_id *dst_oid,
-			struct ceph_object_locator *dst_oloc,
-			u32 dst_fadvise_flags,
-			u32 truncate_seq, u64 truncate_size,
-			u8 copy_from_flags);
 
 /* watch/notify */
 struct ceph_osd_linger_request *

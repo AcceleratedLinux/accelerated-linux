@@ -1,0 +1,224 @@
+#!/bin/bash
+# 
+# This script handles the backing up of configuration files to
+# the internal storage memory found on some devices. This is separated 
+# from the existing script due to differences between how the storage 
+# mediums are to be handled.
+# 
+# Currently this is hardcoded to refer to the internal storage as nvlog.
+# and will need to be changed in the future if a more dynamic scheme is 
+# required.
+#
+# Usage: backup-internal <command>
+#
+#    list
+#      List loadable <name>s to stdout, prefixing the file
+#      that load-default would use with a '*'.
+#    save <name>
+#      Saves the current configuration, giving it name <name>.
+#    load <name>
+#      Restores a saved configuration.
+#    delete <name>
+#      Deletes a saved configuration.
+#    set-default <name>
+#      Marks a previously saved config as the default to load.
+#    load-default
+#      Loads default.opg from the internal storage volume.
+#    check-internal
+#      Returns a code indicating if the device has a present internal storage
+#      volume.
+#    load-init waits for the storage.nvlog to become available, and then calls
+#     the load-default function. NOTE: This should only be used in a config-erase
+#     'load default' case, as it will block until the dir is available. This is
+#     designed to be run in a sub-shell.
+source /etc/scripts/mutex
+
+# load-init waits for the storage.nvlog to become available, and then calls
+# the load-default function. NOTE: This should only be used in a config-erase
+# 'load default' case, as it will block until the dir is available. This is
+# designed to be run in a sub-shell. This will wait up to 5 minutes for a storage
+# volume to be present and a default file to be found.
+function load_init {
+	count=0
+	while [ ! -f /var/mnt/storage.nvlog/default.opg ] && [ $count -lt 30 ]; do
+		sleep 10
+		(( count++ ))
+	done
+	if [ -f /var/mnt/storage.nvlog/default.opg ]; then
+		# --- XXX being a conscientious script ---
+		# Before loading configuration files on boot, there MUST be at
+		# least an fd 1,2 due to non-concurrency friendly ConfigManager.
+		[ -e /proc/self/fd/1 ] || exec 1>/dev/console
+		[ -e /proc/self/fd/2 ] || exec 2>/dev/console
+
+		# Attempt to load the default configuration file.
+		if ! load_from_volume default; then
+			echo "Failed to load default configuration file from internal storage." >&2
+			exit 1
+		else
+			# Run the configurators to prompt any changes made
+			# during config import.
+			/bin/config -a
+		fi
+	else
+			echo "Internal storage device not available to load configuration." >&2
+			exit 1
+	fi
+	return $?
+}
+
+# load_from_volume takes a filename as an argument, and reloads the configuration
+# file onto the device.
+function load_from_volume {
+	filename="$1"
+	mountpoint=$(volume_mount) || return 1
+	if [ -f "$mountpoint/${filename}.opg" ]; then
+		echo "Loading file ${filename}.opg from ${mountpoint}." >&2
+		/bin/config -p /etc/default/config.xml -i "$mountpoint/${filename}.opg"
+		ret=$?
+	else
+		echo "File ${filename}.opg not found on ${mountpoint}." >&2
+		ret=1
+	fi
+	return $ret
+}
+
+# volume_mount returns the mount dir of the nvlog storage device.
+function volume_mount {
+	if [ -e /var/mnt/storage.nvlog ]; then
+		echo "/var/mnt/storage.nvlog"
+	else 
+		echo "No volume available" >&2
+	fi
+}
+
+case $1 in
+	load-default )
+		# Attempt to load the default configuration file.
+		if ! load_from_volume default; then
+			echo "Failed to load default configuration file from internal storage." >&2
+		fi
+		;;
+	load )
+		# Attempt to load the provided configuration file.
+		filename="$2"
+		if ! load_from_volume "$filename"; then
+			echo "Failed to load $2 configuration file from internal storage." >&2
+		fi
+		;;
+	list )
+		path=$(volume_mount) || exit 1
+
+		ifs="$IFS"
+		IFS=$'\n'
+
+		shopt -s dotglob
+		files=$(ls -a "$path"/*.opg 2> /dev/null)
+		default_name=$(cat "$path"/default.txt 2> /dev/null)
+
+		# If there is a default.opg, but default.txt is empty, then
+		# we will list the default as the selected load on erase config.
+		old_default=0
+		if [ "${default_name}" == "" ] && [ -f "$path"/default.opg ]; then
+			old_default=1
+		fi
+
+		for f in $files; do
+			if [ $(basename $f) == 'default.opg' ]; then
+				continue
+			elif [ $old_default -eq 0 ]; then
+				if [ $(basename $f) == "${default_name}" ]; then
+					echo -n '* '
+				fi
+			else
+				# The old_default case - if the file matches
+				# the default.opg, it is the default.
+				if cmp -s "$path/default.opg" "$f"; then
+					echo -n '* '
+				fi
+			fi
+			basename "$f" .opg
+		done
+		shopt -u dotglob
+
+		IFS="$ifs"
+		;;
+	save )
+		# Save a configuration file to internal storage with the
+		# provided filename.
+		filename="$2"
+		path=$(volume_mount) || exit 1
+		/bin/config -e "/${path}/${filename}.opg"
+		;;
+	delete )
+		# Delete a configuration file from internal storage with the
+		# provided filename.
+		filename="$2"
+		path=$(volume_mount) || exit 1
+		if cmp -s "$path/default.opg" "$path/${filename}.opg"; then
+			rm "$path/default.opg"
+		fi
+		rm "$path/${filename}.opg"
+
+		# If this file was default, remove default.txt
+		default_name=$(cat "$path"/default.txt 2> /dev/null)
+		if [ "${default_name}" == "${filename}.opg" ]; then
+			rm "$path/default.txt"
+		fi
+		;;
+	set-default )
+		# Set the default configuration file to the provided file.
+		# This just saves a copy of the file under the default.opg name.
+		filename="$2"
+		path=$(volume_mount) || exit 1
+		if [ "$filename" == '' ]; then
+			# Load factory defaults on ERASE
+			rm "$path/default.opg"
+			rm -f "$path/default.txt"
+		else
+			cp "$path/${filename}.opg" "$path/default.opg"
+			echo "${filename}".opg > "$path/default.txt"
+		fi
+		;;
+	check-internal )
+		# Check if an internal nand storage volume exists. Return 1 if it
+		# doesnt exists and 0 if it does.
+		if [ ! -d /var/mnt/storage.nvlog ]; then
+			echo "Internal device not found." >&2
+			exit 1
+		fi
+		;;
+	load-init )
+		load_init
+		exit $?
+		;;
+	* )
+		# No command executed, echo usage.
+		echo "
+Usage: backup-internal <command> [name]
+    list
+      List loadable <name>s to stdout, prefixing the file
+      that load-default would use with a '*'.
+    save <name>
+      Saves the current configuration, giving it name <name>.
+    load <name>
+      Restores a saved configuration.
+    delete <name>
+      Deletes a saved configuration.
+    set-default <name>
+      Marks a previously saved config as the default to load.
+    load-default
+      Loads default.opg from the internal storage volume.
+    check-internal
+      Returns a code indicating if the device has a present internal storage
+      volume.
+    load-init waits for the storage.nvlog to become available, and then calls
+      the load-default function. NOTE: This should only be used in a config-erase
+      'load default' case, as it will block until the dir is available. This is
+      designed to be run in a sub-shell.
+      " >&2
+		exit 2
+		;;
+esac
+
+exit 0

@@ -1,0 +1,42 @@
+From: David Escalona <david.escalona@digi.com>
+Date: Tue, 20 Mar 2018 18:27:40 +0100
+Subject: [PATCH 29/31] do not search hardcoded paths
+
+Use '=' in-front to let compiler append sysroot, if it can
+
+Should fix things like
+
+configure:6972: arm-angstrom-linux-gnueabi-gcc  -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=neon -mtune=cortex-a8 -DNDEBUG -fno-inline -D__SOFTFP__ --sysroot=/build/v2013.06/build/tmp-angstrom_v2013_06-eglibc/sysroots/beaglebone -c -O2 -pipe -g -feliminate-unused-debug-types  -I/usr/include/ncursesw conftest.c >&5
+cc1: warning: include location "/usr/include/ncursesw" is unsafe for cross-compilation [-Wpoison-system-directories]
+
+Upstream-Status: Pending
+
+Signed-off-by: Khem Raj
+Signed-off-by: David Escalona <david.escalona@digi.com>
+---
+ setup.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/setup.py b/setup.py
+index ec5f3a7a27..b6eae6fbb6 100644
+--- a/setup.py
++++ b/setup.py
+@@ -1164,7 +1164,7 @@
+         if curses_library == 'ncursesw':
+             curses_defines.append(('HAVE_NCURSESW', '1'))
+             if not CROSS_COMPILING:
+-                curses_includes.append('/usr/include/ncursesw')
++                curses_includes.append('=/usr/include/ncursesw')
+             # Bug 1464056: If _curses.so links with ncursesw,
+             # _curses_panel.so must link with panelw.
+             panel_library = 'panelw'
+@@ -2283,7 +2283,7 @@
+                 else:
+                     # OS X 10.5 comes with libffi.dylib; the include files are
+                     # in /usr/include/ffi
+-                    ffi_inc_dirs.append('/usr/include/ffi')
++                    ffi_inc_dirs.append('=/usr/include/ffi')
+ 
+         if not ffi_inc:
+             found = find_file('ffi.h', [], ffi_inc_dirs)
+

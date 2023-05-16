@@ -2,7 +2,7 @@
 /*
  * tas5720.c - ALSA SoC Texas Instruments TAS5720 Mono Audio Amplifier
  *
- * Copyright (C)2015-2016 Texas Instruments Incorporated -  http://www.ti.com
+ * Copyright (C)2015-2016 Texas Instruments Incorporated -  https://www.ti.com
  *
  * Author: Andreas Dannenberg <dannenberg@ti.com>
  */
@@ -199,7 +199,7 @@ error_snd_soc_component_update_bits:
 	return ret;
 }
 
-static int tas5720_mute(struct snd_soc_dai *dai, int mute)
+static int tas5720_mute(struct snd_soc_dai *dai, int mute, int direction)
 {
 	struct snd_soc_component *component = dai->component;
 	int ret;
@@ -508,10 +508,10 @@ static int tas5722_volume_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	unsigned int val;
 
-	snd_soc_component_read(component, TAS5720_VOLUME_CTRL_REG, &val);
+	val = snd_soc_component_read(component, TAS5720_VOLUME_CTRL_REG);
 	ucontrol->value.integer.value[0] = val << 1;
 
-	snd_soc_component_read(component, TAS5722_DIGITAL_CTRL2_REG, &val);
+	val = snd_soc_component_read(component, TAS5722_DIGITAL_CTRL2_REG);
 	ucontrol->value.integer.value[0] |= val & TAS5722_VOL_CONTROL_LSB;
 
 	return 0;
@@ -604,7 +604,8 @@ static const struct snd_soc_dai_ops tas5720_speaker_dai_ops = {
 	.hw_params	= tas5720_hw_params,
 	.set_fmt	= tas5720_set_dai_fmt,
 	.set_tdm_slot	= tas5720_set_dai_tdm_slot,
-	.digital_mute	= tas5720_mute,
+	.mute_stream	= tas5720_mute,
+	.no_capture_mute = 1,
 };
 
 /*
@@ -632,12 +633,19 @@ static struct snd_soc_dai_driver tas5720_dai[] = {
 	},
 };
 
-static int tas5720_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static const struct i2c_device_id tas5720_id[] = {
+	{ "tas5720", TAS5720 },
+	{ "tas5722", TAS5722 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, tas5720_id);
+
+static int tas5720_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct tas5720_data *data;
 	const struct regmap_config *regmap_config;
+	const struct i2c_device_id *id;
 	int ret;
 	int i;
 
@@ -645,6 +653,7 @@ static int tas5720_probe(struct i2c_client *client,
 	if (!data)
 		return -ENOMEM;
 
+	id = i2c_match_id(tas5720_id, client);
 	data->tas5720_client = client;
 	data->devtype = id->driver_data;
 
@@ -703,13 +712,6 @@ static int tas5720_probe(struct i2c_client *client,
 	return 0;
 }
 
-static const struct i2c_device_id tas5720_id[] = {
-	{ "tas5720", TAS5720 },
-	{ "tas5722", TAS5722 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, tas5720_id);
-
 #if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tas5720_of_match[] = {
 	{ .compatible = "ti,tas5720", },
@@ -724,7 +726,7 @@ static struct i2c_driver tas5720_i2c_driver = {
 		.name = "tas5720",
 		.of_match_table = of_match_ptr(tas5720_of_match),
 	},
-	.probe = tas5720_probe,
+	.probe_new = tas5720_probe,
 	.id_table = tas5720_id,
 };
 

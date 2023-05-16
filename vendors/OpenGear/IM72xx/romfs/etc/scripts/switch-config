@@ -1,0 +1,129 @@
+#!/bin/bash
+
+if [ -x "/etc/config/scripts/switch-config" ]; then
+	exec /etc/config/scripts/switch-config "$@"
+fi
+
+info () { logger    -p daemon.info -t switch-config "$*"; }
+warn () { logger -s -p daemon.warn -t switch-config "$*"; return 1; }
++ () { if [ $verbose ]; then echo "+ $*" >&2; fi; "$@"; }
+
+# Low-level and register generic functions
+#
+# These wrappers are intended to be called all_external_ports/all_internal_ports
+# Refer to documentation for register layout
+#   switch:    MV-S110642 "88E6390 Switch Functional Specification"
+#   phy/serdes:MV-S110662 "Link Street PHY and SERDES Functional Specification"
+
+switch_write () { + /etc/scripts/swtool write_switch $switch $port "$@"; }
+phy_write ()    { + /etc/scripts/swtool write_phy    $switch $port "$@"; }
+xphy_write ()   { + /etc/scripts/swtool write_xphy   $switch $port "$@"; }
+serdes_write () { + /etc/scripts/swtool write_serdes $switch $port "$@"; }
+
+all_external_ports () { # <cmd> ...
+	local switch port
+	for switch in 4 2 3; do
+	  for port in 1 2 3 4 5 6 7 8; do # outside-facing Ethernet ports
+	    "$@"
+	  done
+	done
+}
+
+all_internal_ports () { # <cmd> ...
+	local switch port
+	for switch in 4 2 3; do
+	  for port in 9 10; do   # internal SERDES ports
+	    "$@"
+	  done
+	done
+}
+
+all_switches () { # <cmd> <virtual-port> ...
+	local switch port=
+	for switch in 4 2 3; do
+	    "$@"
+	done
+}
+
+#----
+# System functions
+
+sw_reset() {
+	info "resetting ports"
+	all_internal_ports	serdes_write 4 0x2000 "[15]=1"	# serdes reset
+	all_switches		switch_write 0x1b 4 "[15]=1"	# switch reset (global1)
+	sleep 1
+
+	# Enable internal SERDES
+	# After the reset, the value of register 4:0x2000 will be 0x0100.
+	# We configure it to 0x1140 for active links, and 0x0800 for inactive.
+	#  [15]=0 don't reset
+	#  [14]=0 don't enable loopback
+	#  [13]=0 select 1000Mb/s (LSB of 10)
+	#  [12]=1 enable 1000BASE-X auto-neg
+	#  [11]=0 enable power
+	#   [9]=0 don't restart autoneg
+	#   [8]=1 enable full duplex (RO)
+	#   [7]=0 don't start collision test
+	#   [6]=1 select 1000Mb/s (MSB of 10)
+	/etc/scripts/swtool write_serdes 4  9 4 0x2000 0x1140
+	/etc/scripts/swtool write_serdes 4 10 4 0x2000 0x1140
+	/etc/scripts/swtool write_serdes 2  9 4 0x2000 0x1140
+	/etc/scripts/swtool write_serdes 2 10 4 0x2000 0x1140
+	/etc/scripts/swtool write_serdes 3  9 4 0x2000 0x1140
+	/etc/scripts/swtool write_serdes 3 10 4 0x2000 0x0800 # power down
+
+	# Enable simple forwarding on internal SERDES ports
+	/etc/scripts/swtool write_switch 4  9 4 "[1:0]=3" # forwarding to eth2
+	/etc/scripts/swtool write_switch 4 10 4 "[1:0]=3" # forwarding
+	/etc/scripts/swtool write_switch 2  9 4 "[1:0]=3" # forwarding
+	/etc/scripts/swtool write_switch 2 10 4 "[1:0]=3" # forwarding
+	/etc/scripts/swtool write_switch 3  9 4 "[1:0]=3" # forwarding
+	/etc/scripts/swtool write_switch 3 10 4 "[1:0]=0" # disabled
+
+	# Configure external port LEDs:
+	#   led0 (left) [3:0]
+	#      0 = "off=no link, on=link, blink-slow/med/fast=activity"
+	#      3 = "off=no link, on=link, blink=activity"
+	#      8 = "off=no link, on=link"
+	#   led1 (right) [7:4]
+	#      3 = "off=no link, on=1000 link"
+	#      5 = "off=no link, on=link, blink=activity"
+	#      8 = "off=no link, on=1000 link, blink=100 link"
+	#
+	# We want to match the existing NET1/NET2 LEDs which exhibit
+	# LED0=blink:activity and LED0=on:link, but that wasn't
+	# possible with LED options available. The compromise is to
+	# use left LED0's mode 0 (variable speed blink) for link/activity
+	# and LED1's closest function is Gb-link.
+	all_external_ports	switch_write 0x16 "0 [15]=1 [7:4]=3 [3:0]=0"
+
+	# Disable EEE advertising on all ports, because EEE seems to
+	# cause a high link error rate at 1000BASE-T with some equipment.
+	all_external_ports	xphy_write 7 60 "[2]=0"
+
+	# Power up all PHYs, software reset and auto-negotiation are enforced
+	# NOTE: on PCB 309063, each '6390 switch’s NO_CPU configuration pin is
+	# strapped to ground (CPU is attached). This means at reset all ports
+	# are initialised disabled and all PHYs are powered off
+	all_external_ports	phy_write 16_0 "[2]=0" # clear phy powerdown
+	all_external_ports	phy_write 0_0 "[11]=0" # clear phy powerdown
+
+	# Port Control Register (offset 0x04) bits 1:0 controls Port State
+	all_external_ports	switch_write 4 "[1:0]=3" # enable forwarding
+}
+
+verbose=
+case $1 in
+     -v) shift; verbose=1;;
+esac
+
+case $1 in
+    reset) sw_reset;;
+    *) cat <<-. >&2
+		usage: $0 [-v] {command}
+		commands: reset
+.
+	exit 2
+	;;
+esac

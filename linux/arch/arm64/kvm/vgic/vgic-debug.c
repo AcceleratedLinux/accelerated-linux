@@ -82,7 +82,7 @@ static bool end_of_vgic(struct vgic_state_iter *iter)
 
 static void *vgic_debug_start(struct seq_file *s, loff_t *pos)
 {
-	struct kvm *kvm = (struct kvm *)s->private;
+	struct kvm *kvm = s->private;
 	struct vgic_state_iter *iter;
 
 	mutex_lock(&kvm->lock);
@@ -110,7 +110,7 @@ out:
 
 static void *vgic_debug_next(struct seq_file *s, void *v, loff_t *pos)
 {
-	struct kvm *kvm = (struct kvm *)s->private;
+	struct kvm *kvm = s->private;
 	struct vgic_state_iter *iter = kvm->arch.vgic.iter;
 
 	++*pos;
@@ -122,7 +122,7 @@ static void *vgic_debug_next(struct seq_file *s, void *v, loff_t *pos)
 
 static void vgic_debug_stop(struct seq_file *s, void *v)
 {
-	struct kvm *kvm = (struct kvm *)s->private;
+	struct kvm *kvm = s->private;
 	struct vgic_state_iter *iter;
 
 	/*
@@ -229,8 +229,8 @@ static void print_irq_state(struct seq_file *s, struct vgic_irq *irq,
 
 static int vgic_debug_show(struct seq_file *s, void *v)
 {
-	struct kvm *kvm = (struct kvm *)s->private;
-	struct vgic_state_iter *iter = (struct vgic_state_iter *)v;
+	struct kvm *kvm = s->private;
+	struct vgic_state_iter *iter = v;
 	struct vgic_irq *irq;
 	struct kvm_vcpu *vcpu = NULL;
 	unsigned long flags;
@@ -260,34 +260,14 @@ static int vgic_debug_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-static const struct seq_operations vgic_debug_seq_ops = {
+static const struct seq_operations vgic_debug_sops = {
 	.start = vgic_debug_start,
 	.next  = vgic_debug_next,
 	.stop  = vgic_debug_stop,
 	.show  = vgic_debug_show
 };
 
-static int debug_open(struct inode *inode, struct file *file)
-{
-	int ret;
-	ret = seq_open(file, &vgic_debug_seq_ops);
-	if (!ret) {
-		struct seq_file *seq;
-		/* seq_open will have modified file->private_data */
-		seq = file->private_data;
-		seq->private = inode->i_private;
-	}
-
-	return ret;
-};
-
-static const struct file_operations vgic_debug_fops = {
-	.owner   = THIS_MODULE,
-	.open    = debug_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.release = seq_release
-};
+DEFINE_SEQ_ATTRIBUTE(vgic_debug);
 
 void vgic_debug_init(struct kvm *kvm)
 {

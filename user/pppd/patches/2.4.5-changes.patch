@@ -63,9 +63,9 @@ Changes include:
  pppd/plugins/radius/radattr.c        |    5 +-
  pppd/plugins/radius/radius.c         |   54 +-
  pppd/plugins/radius/radrealms.c      |    5 +-
- pppd/plugins/rp-pppoe/Makefile.linux |   27 +-
- pppd/plugins/rp-pppoe/config.h       |    2 +-
- pppd/plugins/rp-pppoe/pppoe.h        |    4 +-
+ pppd/plugins/pppoe/Makefile.linux |   27 +-
+ pppd/plugins/pppoe/config.h       |    2 +-
+ pppd/plugins/pppoe/pppoe.h        |    4 +-
  pppd/plugins/tacacs.c                |  375 +++++
  pppd/plugins/tacc/.gitignore         |    1 +
  pppd/plugins/tacc/ChangeLog.tacacs   |   77 +
@@ -178,31 +178,33 @@ diff --git a/chat/Makefile.linux b/chat/Makefile.linux
 index 1065ac5..01ed85e 100644
 --- a/chat/Makefile.linux
 +++ b/chat/Makefile.linux
-@@ -10,15 +10,19 @@ CDEF3=	-UNO_SLEEP			# Use the usleep function
- CDEF4=	-DFNDELAY=O_NDELAY		# Old name value
- CDEFS=	$(CDEF1) $(CDEF2) $(CDEF3) $(CDEF4)
+@@ -1,6 +1,3 @@
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
  
--COPTS=	-O2 -g -pipe
--CFLAGS=	$(COPTS) $(CDEFS)
-+#COPTS=	-O2 -g -pipe
-+CFLAGS+=$(COPTS) $(CDEFS)
-+
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ BINDIR = $(DESTDIR)/sbin
+@@ -14,12 +11,16 @@
+ 
+ CFLAGS=	$(COPTS) $(CDEFS)
+ 
 +ifdef CONFIG_USER_CHAT_CHAT_NETWORK
-+CFLAGS += -DENABLE_NETWORK_SUPPORT=1
++	CFLAGS += -DENABLE_NETWORK_SUPPORT=1
 +endif
- 
++
  INSTALL= install
  
  all:	chat
  
  chat:	chat.o
--	$(CC) -o chat chat.o
+-	$(CC) $(LDFLAGS) -o chat chat.o
 +	$(CC) $(LDFLAGS) -o chat chat.o $(LDLIBS$(LDLIBS_$@))
  
  chat.o:	chat.c
  	$(CC) -c $(CFLAGS) -o chat.o chat.c
-@@ -28,5 +32,8 @@ install: chat
- 	$(INSTALL) -s -c chat $(BINDIR)
+@@ -29,5 +30,8 @@
+ 	$(INSTALL) -c chat $(BINDIR)
  	$(INSTALL) -c -m 644 chat.8 $(MANDIR)
  
 +romfs:
@@ -592,7 +594,7 @@ index 6a55e0f..2f09e67 100755
 +++ b/configure
 @@ -195,7 +195,7 @@ if [ -d "$ksrc" ]; then
      mkmkf $ksrc/Makedefs$compiletype Makedefs.com
-     for dir in pppd pppstats chat pppdump pppd/plugins pppd/plugins/rp-pppoe \
+     for dir in pppd pppstats chat pppdump pppd/plugins pppd/plugins/pppoe \
  	       pppd/plugins/radius pppd/plugins/pppoatm \
 -	       pppd/plugins/pppol2tp; do
 +	       pppd/plugins/pppol2tp pppd/plugins/pptp ; do
@@ -603,7 +605,7 @@ diff --git a/linux/Makefile.top b/linux/Makefile.top
 index f63d45e..ad08aab 100644
 --- a/linux/Makefile.top
 +++ b/linux/Makefile.top
-@@ -6,6 +6,17 @@ INCDIR = $(DESTDIR)/include
+@@ -6,6 +6,20 @@ INCDIR = $(DESTDIR)/include
  MANDIR = $(DESTDIR)/share/man
  ETCDIR = $(INSTROOT)@SYSCONF@/ppp
  
@@ -612,6 +614,9 @@ index f63d45e..ad08aab 100644
 +ifeq ($(CONFIG_USER_FLATFSD_FLATFSD),y)
 +ifeq ($(CONFIG_USER_FLATFSD_ETC_CONFIG),y)
 +CFLAGS += -DPATH_CONFIG='"/etc/config"'
++CFLAGS += -DPATH_SECRETS='"/etc/config"'
++else
++CFLAGS += -DPATH_SECRETS='"/var/run"'
 +endif
 +CFLAGS += -DPATH_AUTH='"/bin"'
 +CFLAGS += -DPATH_LOG='"/var/log"'
@@ -625,27 +630,24 @@ diff --git a/pppd/Makefile.linux b/pppd/Makefile.linux
 index a74c914..a962e1d 100644
 --- a/pppd/Makefile.linux
 +++ b/pppd/Makefile.linux
-@@ -30,25 +30,24 @@ ifeq (.depend,$(wildcard .depend))
- include .depend
- endif
+@@ -3,10 +3,6 @@
+ # Processed by configure to produce pppd/Makefile
+ #
  
--# CC = gcc
--#
--COPTS = -O2 -pipe -Wall -g
--LIBS =
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
 -
- # Uncomment the next 2 lines to include support for Microsoft's
- # MS-CHAP authentication protocol.  Also, edit plugins/radius/Makefile.linux.
- CHAPMS=y
- USE_CRYPT=y
-+
- # Don't use MSLANMAN unless you really know what you're doing.
+ # Default installation locations
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ BINDIR = $(DESTDIR)/sbin
+@@ -44,12 +40,14 @@
  #MSLANMAN=y
-+
  # Uncomment the next line to include support for MPPE.  CHAPMS (above) must
  # also be enabled.  Also, edit plugins/radius/Makefile.linux.
+-MPPE=y
 +ifeq ($(CONFIG_USER_PPPD_WITH_MPPE),y)
- MPPE=y
++	MPPE=y
 +endif
  
  # Uncomment the next line to include support for PPP packet filtering.
@@ -656,9 +658,9 @@ index a74c914..a962e1d 100644
  
  # Uncomment the next line to enable multilink PPP (enabled by default)
  # Linux distributions: Please leave multilink ENABLED in your builds
-@@ -60,13 +59,29 @@ HAVE_MULTILINK=y
- # Linux distributions: Please leave TDB ENABLED in your builds.
- USE_TDB=y
+@@ -66,13 +64,29 @@
+ # pppd will not detach and will notify systemd when up.
+ #SYSTEMD=y
  
 +ifneq ($(CONFIG_USER_SHADOW_UTILS)$(USER_BUSYBOX_USE_BB_SHADOW),)
  HAS_SHADOW=y
@@ -687,43 +689,28 @@ index a74c914..a962e1d 100644
  # Enable Microsoft proprietary Callback Control Protocol
  #CBCP=y
  
-@@ -74,15 +89,15 @@
- #USE_SRP=y
- 
- # Use libutil
-+ifneq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
- USE_LIBUTIL=y
-+endif
- 
- MAXOCTETS=y
+@@ -91,9 +107,9 @@
  
  INCLUDE_DIRS= -I../include
--
- COMPILE_FLAGS= -DHAVE_PATHS_H -DIPX_CHANGE -DHAVE_MMAP
--
+ 
+-COMPILE_FLAGS= -DHAVE_PATHS_H -DIPX_CHANGE -DHAVE_MMAP -pipe
++COMPILE_FLAGS= -DHAVE_PATHS_H -DHAVE_MMAP -pipe
+ 
 -CFLAGS= $(COPTS) $(COMPILE_FLAGS) $(INCLUDE_DIRS) '-DDESTDIR="@DESTDIR@"'
 +CFLAGS+= $(COPTS) $(COMPILE_FLAGS) $(INCLUDE_DIRS) '-DDESTDIR="@DESTDIR@"'
  
  ifdef CHAPMS
  CFLAGS   += -DCHAPMS=1
-@@ -97,10 +110,15 @@ CFLAGS   += -DMPPE=1
- endif
- endif
- 
-+ifeq ($(findstring glibc,$(LIBCDIR)),glibc)
-+LIBS += -lresolv
-+endif
-+
+@@ -112,7 +126,7 @@
  # EAP SRP-SHA1
  ifdef USE_SRP
  CFLAGS	+= -DUSE_SRP -DOPENSSL -I/usr/local/ssl/include
--LIBS	+= -lsrp -L/usr/local/ssl/lib -lcrypto
-+#LIBS	+= -lsrp -L/usr/local/ssl/lib -lcrypto
-+LIBS	+= -lsrp -lcrypto
+-LIBS	+= -lsrp -L/usr/local/ssl/lib
++LIBS	+= -lsrp
+ NEEDCRYPTOLIB = y
  TARGETS	+= srp-entry
- EXTRAINSTALL = $(INSTALL) -s -c -m 555 srp-entry $(BINDIR)/srp-entry
- MANPAGES += srp-entry.8
-@@ -143,7 +161,11 @@ endif
+ EXTRAINSTALL = $(INSTALL) -c -m 555 srp-entry $(BINDIR)/srp-entry
+@@ -171,7 +185,11 @@
  # For "Pluggable Authentication Modules", see ftp.redhat.com:/pub/pam/.
  ifdef USE_PAM
  CFLAGS   += -DUSE_PAM
@@ -736,13 +723,13 @@ index a74c914..a962e1d 100644
  endif
  
  # Multi-linnk
-@@ -172,8 +194,52 @@ endif
+@@ -205,8 +223,52 @@
  
  ifdef PLUGIN
  CFLAGS	+= -DPLUGIN
 +ifdef DYNAMIC_PLUGIN
-+CFLAGS	+= -DPLUGIN_DYNAMIC
- LDFLAGS	+= -Wl,-E
++CFLAGS += -DPLUGIN_DYNAMIC
+ LDFLAGS_PLUGIN	+= -Wl,-E
  LIBS	+= -ldl
 +else
 +ifeq ($(CONFIG_USER_PPPD_WITH_TACACS),y)
@@ -754,42 +741,42 @@ index a74c914..a962e1d 100644
 +CFLAGS += -DPLUGIN_RADIUS
 +endif
 +ifeq ($(CONFIG_USER_PPPD_WITH_PPPOA),y)
-+PLUGINOBJS += plugins/pppoatm/libpppoatm.o
++PLUGINOBJS += plugins/pppoatm/libpppoatm.o    
 +CFLAGS += -DPLUGIN_PPPOA
 +endif
 +ifeq ($(CONFIG_USER_PPPD_WITH_PPPOE),y)
-+PLUGINOBJS += plugins/rp-pppoe/libpppoe.o
++PLUGINOBJS += plugins/pppoe/libpppoe.o    
 +CFLAGS += -DPLUGIN_PPPOE
 +endif
-+ifeq ($(CONFIG_USER_PPPD_WITH_PPPPPOL2TP),y)
-+PLUGINOBJS += plugins/pppol2tp/libpppol2tp.o
-+CFLAGS += -DPLUGIN_PPPOL2TP
-+endif
-+ifeq ($(CONFIG_USER_PPPD_WITH_PPTP),y)
-+PLUGINOBJS += plugins/pptp/libpptp.o
-+CFLAGS += -DPLUGIN_PPTP
-+endif
-+ifeq ($(CONFIG_USER_PPPD_WITH_MINCONN),y)
-+PLUGINOBJS += plugins/minconn.o
-+CFLAGS += -DPLUGIN_MINCONN
-+endif
-+ifeq ($(CONFIG_USER_PPPD_WITH_PASSPROMPT),y)
-+PLUGINOBJS += plugins/passprompt.o
-+CFLAGS += -DPLUGIN_PASSPROMPT
-+endif
-+ifeq ($(CONFIG_USER_PPPD_WITH_PASSWORDFD),y)
-+PLUGINOBJS += plugins/passwordfd.o
-+CFLAGS += -DPLUGIN_PASSWORDFD
-+endif
-+ifeq ($(CONFIG_USER_PPPD_WITH_WINBIND),y)
-+PLUGINOBJS += plugins/winbind.o
-+CFLAGS += -DPLUGIN_WINBIND
-+endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PPPOL2TP),y)
++PLUGINOBJS += plugins/pppol2tp/libpppol2tp.o                                                                       
++CFLAGS += -DPLUGIN_PPPOL2TP                                                                                        
++endif                                                                                                              
++ifeq ($(CONFIG_USER_PPPD_WITH_PPTP),y)                                                                             
++PLUGINOBJS += plugins/pptp/libpptp.o                                                                               
++CFLAGS += -DPLUGIN_PPTP                                                                                            
++endif                                                                                                              
++ifeq ($(CONFIG_USER_PPPD_WITH_MINCONN),y)                                                                          
++PLUGINOBJS += plugins/minconn.o                                                                                    
++CFLAGS += -DPLUGIN_MINCONN                                                                                         
++endif                                                                                                              
++ifeq ($(CONFIG_USER_PPPD_WITH_PASSPROMPT),y)                                                                       
++PLUGINOBJS += plugins/passprompt.o                                                                                 
++CFLAGS += -DPLUGIN_PASSPROMPT                                                                                      
++endif                                                                                                              
++ifeq ($(CONFIG_USER_PPPD_WITH_PASSWORDFD),y)                                                                       
++PLUGINOBJS += plugins/passwordfd.o                                                                                 
++CFLAGS += -DPLUGIN_PASSWORDFD                                                                                      
++endif                                                                                                              
++ifeq ($(CONFIG_USER_PPPD_WITH_WINBIND),y)                                                                          
++PLUGINOBJS += plugins/winbind.o                                                                                    
++CFLAGS += -DPLUGIN_WINBIND                                                                                         
++endif                                                                                                              
 +endif
  endif
  
  ifdef FILTER
-@@ -200,6 +266,11 @@ endif
+@@ -231,6 +293,11 @@
  ifdef MAXOCTETS
       CFLAGS += -DMAXOCTETS
  endif
@@ -801,12 +788,12 @@ index a74c914..a962e1d 100644
  
  INSTALL= install
  
-@@ -214,10 +285,10 @@ install: pppd
+@@ -245,10 +312,10 @@
  	$(INSTALL) -c -m 444 pppd.8 $(MANDIR)
  
  pppd: $(PPPDOBJS)
--	$(CC) $(CFLAGS) $(LDFLAGS) -o pppd $(PPPDOBJS) $(LIBS)
-+	$(CC) $(CFLAGS) $(LDFLAGS) -o pppd $(PPPDOBJS) $(PLUGINOBJS) $(LIBS) $(LDLIBS$(LDLIBS_$@))
+-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_PLUGIN) -o pppd $(PPPDOBJS) $(LIBS)
++	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_PLUGIN) -o pppd $(PPPDOBJS) $(PLUGINNOBJS) $(LIBS) $(LDLIBS$(LDLIBS_$@))
  
  srp-entry:	srp-entry.c
 -	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ srp-entry.c $(LIBS)
@@ -818,7 +805,7 @@ diff --git a/pppd/auth.c b/pppd/auth.c
 index 4271af6..e8ab269 100644
 --- a/pppd/auth.c
 +++ b/pppd/auth.c
-@@ -83,7 +83,7 @@
+@@ -84,7 +84,7 @@
  #include <sys/socket.h>
  #include <utmp.h>
  #include <fcntl.h>
@@ -827,7 +814,7 @@ index 4271af6..e8ab269 100644
  #include <lastlog.h>
  #endif
  
-@@ -132,6 +132,9 @@ static int auth_pending[NUM_PPP];
+@@ -139,6 +139,9 @@
  /* Records which authentication operations have been completed. */
  int auth_done[NUM_PPP];
  
@@ -837,26 +824,26 @@ index 4271af6..e8ab269 100644
  /* List of addresses which the peer may use. */
  static struct permitted_ip *addresses[NUM_PPP];
  
-@@ -238,6 +241,15 @@ bool explicit_remote = 0;	/* User specified explicit remote name */
+@@ -250,6 +253,15 @@
  bool explicit_user = 0;		/* Set if "user" option supplied */
  bool explicit_passwd = 0;	/* Set if "password" option supplied */
  char remote_name[MAXNAMELEN];	/* Peer's name for authentication */
 +#if USE_PAM
-+bool explicit_pamservice = 0;	/* User specified explicit PAM service */
-+char pamservice[MAXNAMELEN];	/* Service for pam_start() */
-+bool obey_restrictions = 0; 	/* Obey PAM account restrictions */
++bool explicit_pamservice = 0;  /* User specified explicit PAM service */
++char pamservice[MAXNAMELEN];   /* Service for pam_start() */
++bool obey_restrictions = 0;    /* Obey PAM account restrictions */
 +#endif
-+const char *auth_group = NULL;	/* If our authentication source can provide us
-+				   				   with a group, put it here */
-+bool external_auth = 0;		/* If we're using an external authenticator (radius, tacas, etc)
-+				   set this flag */
- 
- static char *uafname;		/* name of most recent +ua file */
- 
-@@ -401,6 +413,13 @@ option_t auth_options[] = {
-       "Set telephone number(s) which are allowed to connect",
-       OPT_PRIV | OPT_A2LIST },
- 
++const char *auth_group = NULL; /* If our authentication source can provide us
++                                                                  with a group, put it here */
++bool external_auth = 0;                /* If we're using an external authenticator (radius, tacas, etc)
++                                  set this flag */
+ #ifdef USE_EAPTLS
+ char *cacert_file  = NULL;	/* CA certificate file (pem format) */
+ char *ca_path      = NULL;	/* directory with CA certificates */
+@@ -448,6 +460,13 @@
+     { "need-peer-eap", o_bool, &need_peer_eap,
+       "Require the peer to authenticate us", 1 },
+ #endif /* USE_EAPTLS */
 +#ifdef USE_PAM
 +    { "pamservice", o_string, pamservice,
 +      "Set PAM service for authentication", OPT_PRIO | OPT_STATIC,
@@ -867,7 +854,7 @@ index 4271af6..e8ab269 100644
      { NULL }
  };
  
-@@ -922,6 +941,11 @@ auth_peer_fail(unit, protocol)
+@@ -979,6 +998,11 @@
       * Authentication failure: take the link down
       */
      status = EXIT_PEER_AUTH_FAILED;
@@ -879,7 +866,7 @@ index 4271af6..e8ab269 100644
      lcp_close(unit, "Authentication failed");
  }
  
-@@ -982,6 +1006,11 @@ auth_peer_success(unit, protocol, prot_flavor, name, namelen)
+@@ -1037,6 +1061,11 @@
       */
      if ((auth_pending[unit] &= ~bit) == 0)
          network_phase(unit);
@@ -891,7 +878,7 @@ index 4271af6..e8ab269 100644
  }
  
  /*
-@@ -1341,6 +1370,7 @@ auth_reset(unit)
+@@ -1407,6 +1436,7 @@
  			      our_name, 1, NULL)))
  	    go->neg_chap = 0;
      }
@@ -899,11 +886,10 @@ index 4271af6..e8ab269 100644
      if (go->neg_eap &&
  	(hadchap == 0 || (hadchap == -1 &&
  	    !have_chap_secret((explicit_remote? remote_name: NULL), our_name,
-@@ -1484,6 +1514,235 @@ check_passwd(unit, auser, userlen, apasswd, passwdlen, msg)
-     return ret;
+@@ -1552,6 +1582,235 @@
  }
  
-+/*
+ /*
 + * This function is needed for PAM.
 + */
 +
@@ -1132,10 +1118,11 @@ index 4271af6..e8ab269 100644
 +}
 +
 +
- /*
++/*
   * null_login - Check if a username of "" and a password of "" are
   * acceptable, and iff so, set the list of acceptable IP addresses
-@@ -2355,7 +2614,76 @@ auth_script(script)
+  * and return 1.
+@@ -2384,12 +2643,78 @@
      argv[3] = user_name;
      argv[4] = devnam;
      argv[5] = strspeed;
@@ -1145,74 +1132,77 @@ index 4271af6..e8ab269 100644
  
      auth_script_pid = run_program(script, argv, 0, auth_script_done, NULL, 0);
  }
-+
+ 
+-
 +#ifdef USE_PAM
 +/* check_pam_account_restrictions - check if the authenticated user account is valid.
 +   This is useful when doing CHAPpy things, which don't support PAM as an authentication
 +   mechanism. It means we still obey PAM's account restrictions
 + */
 +int check_pam_account_restrictions(const char *user) {
-+	int pam_error;
-+	pam_handle_t *loc_handle;
++       int pam_error;
++       pam_handle_t *loc_handle;
 +
-+	if (obey_restrictions) {
-+		const char *username;
++       if (obey_restrictions) {
++               const char *username;
 +
-+		/* We should remove the domain first */
-+		if ((username = strrchr(user, '\\')) != NULL)
-+			++username;
-+		else
++               /* We should remove the domain first */
++               if ((username = strrchr(user, '\\')) != NULL)
++                       ++username;
++               else
 +            username = user;
-+		
-+		pam_error = pam_start(explicit_pamservice ? pamservice : "ppp", username, &PAM_conversation, &loc_handle);
++               
++               pam_error = pam_start(explicit_pamservice ? pamservice : "ppp", username, &PAM_conversation, &loc_handle);
 +
-+		if (pam_error != PAM_SUCCESS) {
-+			return 1;
-+		}
-+		/* If we have an authentication group, send it */
-+		if (auth_group != NULL) {
-+			char buf[128];
-+			snprintf(buf, 128, "SG-GROUP=%s", auth_group);
-+			pam_putenv(loc_handle, buf);
-+		}
-+		/* Call the account management function */
-+		pam_error = pam_acct_mgmt(loc_handle, 0);	
-+		pam_end(loc_handle, 0);
++               if (pam_error != PAM_SUCCESS) {
++                       return 1;
++               }
++               /* If we have an authentication group, send it */
++               if (auth_group != NULL) {
++                       char buf[128];
++                       snprintf(buf, 128, "SG-GROUP=%s", auth_group);
++                       pam_putenv(loc_handle, buf);
++               }
++               /* Call the account management function */
++               pam_error = pam_acct_mgmt(loc_handle, 0);       
++               pam_end(loc_handle, 0);
 +
-+		if (pam_error != PAM_SUCCESS)
-+			return 1;
-+	}
++               if (pam_error != PAM_SUCCESS)
++                       return 1;
++       }
 +
-+	return 0;
++       return 0;                                                                                                      
 +}
 +#endif /* USE_PAM */
-+
 +#ifdef USE_EXTERNAL_STATS_PROG
 +void notify_login_failure(const char *user) {
-+	char buf[500];
++       char buf[500];
 +        snprintf(buf, 500-1,
-+        	"statsd -a incr pam_failed_%s %s \\;"
++               "statsd -a incr pam_failed_%s %s \\;"
 +                " push pam_last_failure_%s %s \"Permission Denied\" 0 \\;"
 +                " incr pam_users %s \\; incr pam_services %s",
 +                        user,
 +                        explicit_pamservice ? pamservice : "ppp",
 +                        user,
-+			explicit_pamservice ? pamservice : "ppp",
-+			user,
-+			explicit_pamservice ? pamservice : "ppp");
++                       explicit_pamservice ? pamservice : "ppp",
++                       user,
++                       explicit_pamservice ? pamservice : "ppp");
 +        if (system(buf) == -1) {
 +            warn("%s - failed", buf);
 +        }
 +
-+	if (!external_auth) {
-+		/* Do the same for pcidssd */
-+		snprintf(buf, 500-1, "pcidssd -f %s", user);
-+		if (system(buf) == -1) {
-+			warn("%s - failed", buf);
-+		}
-+	}          
++       if (!external_auth) {
++               /* Do the same for pcidssd */
++               snprintf(buf, 500-1, "pcidssd -f %s", user);
++               if (system(buf) == -1) {
++                       warn("%s - failed", buf);
++               }
++       }          
 +}
 +#endif 
+ #ifdef USE_EAPTLS
+ static int
+ have_eaptls_secret_server(char *client, char *server,
 diff --git a/pppd/chap-new.c b/pppd/chap-new.c
 index 2714bff..e7719fc 100644
 --- a/pppd/chap-new.c
@@ -1242,7 +1232,7 @@ diff --git a/pppd/ipcp.c b/pppd/ipcp.c
 index e9738fe..2bf755b 100644
 --- a/pppd/ipcp.c
 +++ b/pppd/ipcp.c
-@@ -50,11 +50,13 @@
+@@ -48,12 +48,14 @@
  #include <string.h>
  #include <stdlib.h>
  #include <netdb.h>
@@ -1252,11 +1242,12 @@ index e9738fe..2bf755b 100644
  #include <sys/socket.h>
  #include <netinet/in.h>
  #include <arpa/inet.h>
+ #include <net/if.h>
 +#include <sys/stat.h>
  
  #include "pppd.h"
  #include "fsm.h"
-@@ -169,6 +171,11 @@ static option_t ipcp_option_list[] = {
+@@ -167,6 +169,11 @@
      { "ipcp-accept-remote", o_bool, &ipcp_wantoptions[0].accept_remote,
        "Accept peer's address for it", 1 },
  
@@ -1268,7 +1259,7 @@ index e9738fe..2bf755b 100644
      { "ipparam", o_string, &ipparam,
        "Set ip script parameter", OPT_PRIO },
  
-@@ -198,6 +205,12 @@ static option_t ipcp_option_list[] = {
+@@ -196,6 +203,12 @@
        "disable defaultroute option", OPT_ALIAS | OPT_A2CLR,
        &ipcp_wantoptions[0].default_route },
  
@@ -1278,19 +1269,19 @@ index e9738fe..2bf755b 100644
 +      "disable forcedefaultroute option", OPT_A2CLR,
 +      &ipcp_wantoptions[0].force_default_route },
 +
-     { "proxyarp", o_bool, &ipcp_wantoptions[0].proxy_arp,
-       "Add proxy ARP entry", OPT_ENABLE|1, &ipcp_allowoptions[0].proxy_arp },
-     { "noproxyarp", o_bool, &ipcp_allowoptions[0].proxy_arp,
-@@ -272,6 +285,8 @@ struct protent ipcp_protent = {
+ #ifdef __linux__
+     { "replacedefaultroute", o_bool,
+ 				&ipcp_wantoptions[0].replace_default_route,
+@@ -279,6 +292,8 @@
  };
  
- static void ipcp_clear_addrs __P((int, u_int32_t, u_int32_t));
-+static void ipcp_script_up __P((void));
-+static void ipcp_script_down __P((void));
- static void ipcp_script __P((char *, int));	/* Run an up/down script */
- static void ipcp_script_done __P((void *));
+ static void ipcp_clear_addrs (int, u_int32_t, u_int32_t, bool);
++static void ipcp_script_up (void);
++static void ipcp_script_down (void);
+ static void ipcp_script (char *, int);	/* Run an up/down script */
+ static void ipcp_script_done (void *);
  
-@@ -608,6 +623,7 @@ ipcp_init(unit)
+@@ -601,6 +616,7 @@
       */
      ao->proxy_arp = 1;
      ao->default_route = 1;
@@ -1298,7 +1289,7 @@ index e9738fe..2bf755b 100644
  }
  
  
-@@ -1758,10 +1774,13 @@ ip_demand_conf(u)
+@@ -1722,11 +1738,13 @@
      ipcp_script(_PATH_IPPREUP, 1);
      if (!sifup(u))
  	return 0;
@@ -1308,25 +1299,30 @@ index e9738fe..2bf755b 100644
      if (!sifnpmode(u, PPP_IP, NPMODE_QUEUE))
  	return 0;
      if (wo->default_route)
--	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr))
+-	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr,
+-					    wo->replace_default_route))
 +	if (sifdefaultroute(u, wo->ouraddr, wo->hisaddr, drmetric, wo->force_default_route))
  	    default_route_set[u] = 1;
      if (wo->proxy_arp)
  	if (sifproxyarp(u, wo->hisaddr))
-@@ -1872,9 +1891,11 @@ ipcp_up(f)
+@@ -1838,11 +1856,12 @@
  		return;
  	    }
  
 +	    rtmetricfixup(f->unit, ho->hisaddr, metric);
 +
  	    /* assign a default route through the interface if required */
- 	    if (ipcp_wantoptions[f->unit].default_route) 
--		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr))
-+		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric, ipcp_wantoptions[f->unit].force_default_route))
- 		    default_route_set[f->unit] = 1;
+-	    if (ipcp_wantoptions[f->unit].default_route) 
+-		if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr,
+-					     wo->replace_default_route))
+-		    default_route_set[f->unit] = 1;
++	    if (ipcp_wantoptions[f->unit].default_route)
++                if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric, ipcp_wantoptions[f->unit].force_default_route))
++			default_route_set[f->unit] = 1;
  
  	    /* Make a proxy ARP entry if requested. */
-@@ -1920,11 +1941,12 @@ ipcp_up(f)
+ 	    if (ho->hisaddr != 0 && ipcp_wantoptions[f->unit].proxy_arp)
+@@ -1896,13 +1915,13 @@
  	    return;
  	}
  #endif
@@ -1335,30 +1331,33 @@ index e9738fe..2bf755b 100644
  
  	/* assign a default route through the interface if required */
  	if (ipcp_wantoptions[f->unit].default_route) 
--	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr))
+-	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr,
+-					 wo->replace_default_route))
+-		default_route_set[f->unit] = 1;
 +	    if (sifdefaultroute(f->unit, go->ouraddr, ho->hisaddr, drmetric, ipcp_wantoptions[f->unit].force_default_route))
- 		default_route_set[f->unit] = 1;
++		    default_route_set[f->unit] = 1;
  
  	/* Make a proxy ARP entry if requested. */
-@@ -1958,7 +1980,7 @@ ipcp_up(f)
+ 	if (ho->hisaddr != 0 && ipcp_wantoptions[f->unit].proxy_arp)
+@@ -1935,7 +1954,7 @@
       */
      if (ipcp_script_state == s_down && ipcp_script_pid == 0) {
  	ipcp_script_state = s_up;
--	ipcp_script(_PATH_IPUP, 0);
+-	ipcp_script(path_ipup, 0);
 +	ipcp_script_up();
      }
  }
  
-@@ -2008,7 +2030,7 @@ ipcp_down(f)
+@@ -1984,7 +2003,7 @@
      /* Execute the ip-down script */
      if (ipcp_script_state == s_up && ipcp_script_pid == 0) {
  	ipcp_script_state = s_down;
--	ipcp_script(_PATH_IPDOWN, 0);
+-	ipcp_script(path_ipdown, 0);
 +	ipcp_script_down();
      }
  }
  
-@@ -2049,6 +2071,44 @@ ipcp_finished(f)
+@@ -2029,6 +2048,44 @@
  }
  
  
@@ -1403,8 +1402,8 @@ index e9738fe..2bf755b 100644
  /*
   * ipcp_script_done - called when the ip-up or ip-down script
   * has finished.
-@@ -2114,21 +2174,26 @@ create_resolv(peerdns1, peerdns2)
-     u_int32_t peerdns1, peerdns2;
+@@ -2090,21 +2147,26 @@
+ create_resolv(u_int32_t peerdns1, u_int32_t peerdns2)
  {
      FILE *f;
 +    char pathname[MAXPATHLEN];
@@ -1438,14 +1437,14 @@ diff --git a/pppd/ipcp.h b/pppd/ipcp.h
 index 6cf14c9..840e0db 100644
 --- a/pppd/ipcp.h
 +++ b/pppd/ipcp.h
-@@ -70,6 +70,7 @@ typedef struct ipcp_options {
+@@ -68,6 +68,7 @@
      bool old_addrs;		/* Use old (IP-Addresses) option? */
      bool req_addr;		/* Ask peer to send IP address? */
      bool default_route;		/* Assign default route through interface? */
 +    bool force_default_route;	/* Don't check for existing default route */
+     bool replace_default_route;	/* Replace default route through interface? */
      bool proxy_arp;		/* Make proxy ARP entry for peer? */
      bool neg_vj;		/* Van Jacobson Compression? */
-     bool old_vj;		/* use old (short) form of VJ option? */
 diff --git a/pppd/lcp.c b/pppd/lcp.c
 index 8ed2778..148d27c 100644
 --- a/pppd/lcp.c
@@ -1479,14 +1478,14 @@ index c81213b..0e4c4f9 100644
 +#define __P(args)       args
 +#endif
 +
- void magic_init __P((void));	/* Initialize the magic number generator */
- u_int32_t magic __P((void));	/* Returns the next magic number */
+ void magic_init (void);	/* Initialize the magic number generator */
+ u_int32_t magic (void);	/* Returns the next magic number */
  
 diff --git a/pppd/main.c b/pppd/main.c
 index 6d50d1b..65c307b 100644
 --- a/pppd/main.c
 +++ b/pppd/main.c
-@@ -196,7 +196,12 @@ int privopen;			/* don't lock, open device as root */
+@@ -192,7 +192,12 @@
  
  char *no_ppp_msg = "Sorry - this system lacks PPP kernel support\n";
  
@@ -1500,7 +1499,7 @@ index 6d50d1b..65c307b 100644
  int ngroups;			/* How many groups valid in groups */
  
  static struct timeval start_time;	/* Time when link was started. */
-@@ -338,7 +343,7 @@ main(argc, argv)
+@@ -318,7 +323,7 @@
      slprintf(numbuf, sizeof(numbuf), "%d", uid);
      script_setenv("ORIG_UID", numbuf, 0);
  
@@ -1509,7 +1508,7 @@ index 6d50d1b..65c307b 100644
  
      /*
       * Initialize magic number generator now so that protocols may
-@@ -760,6 +765,7 @@ detach()
+@@ -756,6 +761,7 @@
  	return;
      if (pipe(pipefd) == -1)
  	pipefd[0] = pipefd[1] = -1;
@@ -1517,15 +1516,15 @@ index 6d50d1b..65c307b 100644
      if ((pid = fork()) < 0) {
  	error("Couldn't detach (fork failed: %m)");
  	die(1);			/* or just return? */
-@@ -774,6 +780,7 @@ detach()
- 	    create_linkpidfile(pid);
+@@ -769,6 +775,7 @@
+ 	create_linkpidfile(pid);
  	exit(0);		/* parent dies */
      }
 +#endif /* __uClinux__ */
      setsid();
      chdir("/");
      dup2(fd_devnull, 0);
-@@ -810,10 +817,18 @@ create_pidfile(pid)
+@@ -804,10 +811,18 @@
  {
      FILE *pidfile;
  
@@ -1546,7 +1545,7 @@ index 6d50d1b..65c307b 100644
  	(void) fclose(pidfile);
      } else {
  	error("Failed to create pid file %s: %m", pidfilename);
-@@ -1530,6 +1545,279 @@ bad_signal(sig)
+@@ -1498,6 +1513,279 @@
      die(127);
  }
  
@@ -1826,14 +1825,12 @@ index 6d50d1b..65c307b 100644
  /*
   * safe_fork - Create a child process.  The child closes all the
   * file descriptors that we don't want to leak to a script.
-@@ -1615,35 +1903,6 @@ safe_fork(int infd, int outfd, int errfd)
+@@ -1584,32 +1872,6 @@
  	return 0;
  }
  
 -static bool
--add_script_env(pos, newstring)
--    int pos;
--    char *newstring;
+-add_script_env(int pos, char *newstring)
 -{
 -    if (pos + 1 >= s_env_nalloc) {
 -	int new_n = pos + 17;
@@ -1851,8 +1848,7 @@ index 6d50d1b..65c307b 100644
 -}
 -
 -static void
--remove_script_env(pos)
--    int pos;
+-remove_script_env(int pos)
 -{
 -    free(script_env[pos] - 1);
 -    while ((script_env[pos] = script_env[pos + 1]) != NULL)
@@ -1862,7 +1858,7 @@ index 6d50d1b..65c307b 100644
  /*
   * update_system_environment - process the list of set/unset options
   * and update the system environment.
-@@ -1723,7 +1982,6 @@ device_script(program, in, out, dont_wait)
+@@ -1686,7 +1948,6 @@
      /* NOTREACHED */
  }
  
@@ -1870,7 +1866,7 @@ index 6d50d1b..65c307b 100644
  /*
   * update_script_environment - process the list of set/unset options
   * and update the script environment.  Note that we intentionally do
-@@ -1844,6 +2102,7 @@ run_program(prog, args, must_exist, done, arg, wait)
+@@ -1801,6 +2062,7 @@
      _exit(99);
  }
  
@@ -1882,7 +1878,7 @@ diff --git a/pppd/options.c b/pppd/options.c
 index f66b765..4359863 100644
 --- a/pppd/options.c
 +++ b/pppd/options.c
-@@ -51,7 +51,7 @@
+@@ -50,7 +50,7 @@
  #include <syslog.h>
  #include <string.h>
  #include <pwd.h>
@@ -1891,7 +1887,7 @@ index f66b765..4359863 100644
  #include <dlfcn.h>
  #endif
  
-@@ -103,6 +103,8 @@ char	passwd[MAXSECRETLEN];	/* Password for PAP */
+@@ -104,6 +104,8 @@
  bool	persist = 0;		/* Reopen link after it goes down */
  char	our_name[MAXNAMELEN];	/* Our name for authentication purposes */
  bool	demand = 0;		/* do dial-on-demand */
@@ -1900,9 +1896,9 @@ index f66b765..4359863 100644
  char	*ipparam = NULL;	/* Extra parameter for ip up/down scripts */
  int	idle_time_limit = 0;	/* Disconnect if idle for this many seconds */
  int	holdoff = 30;		/* # seconds to pause before reconnecting */
-@@ -122,6 +124,10 @@ char	*domain;		/* domain name set by domain option */
- int	child_wait = 5;		/* # seconds to wait for children at exit */
+@@ -127,6 +129,10 @@
  struct userenv *userenv_list;	/* user environment variables */
+ int	dfl_route_metric = -1;	/* metric of the default route to set over the PPP link */
  
 +u_int32_t	metric = 0;	/* the metric to set the host route to */
 +u_int32_t	drmetric = 0;	/* the default route metric to set */
@@ -1911,7 +1907,7 @@ index f66b765..4359863 100644
  #ifdef MAXOCTETS
  unsigned int  maxoctets = 0;    /* default - no limit */
  int maxoctets_dir = 0;       /* default - sum of traffic */
-@@ -194,6 +200,14 @@ static struct option_list *extra_options = NULL;
+@@ -199,6 +205,14 @@
   * Valid arguments.
   */
  option_t general_options[] = {
@@ -1926,7 +1922,7 @@ index f66b765..4359863 100644
      { "debug", o_int, &debug,
        "Increase debugging level", OPT_INC | OPT_NOARG | 1 },
      { "-d", o_int, &debug,
-@@ -1590,10 +1604,41 @@ setmodir(argv)
+@@ -1569,9 +1583,40 @@
  #endif
  
  #ifdef PLUGIN
@@ -1961,14 +1957,13 @@ index f66b765..4359863 100644
 +#endif
 + 
  static int
- loadplugin(argv)
-     char **argv;
+ loadplugin(char **argv)
  {
 +#ifdef PLUGIN_DYNAMIC
      char *arg = *argv;
      void *handle;
      const char *err;
-@@ -1642,6 +1687,83 @@ loadplugin(argv)
+@@ -1620,6 +1665,83 @@
      if (path != arg)
  	free(path);
      return 0;
@@ -1998,7 +1993,7 @@ index f66b765..4359863 100644
 +    } else
 +#endif
 +#ifdef PLUGIN_PPPOE
-+    if(strcmp(arg, "rp-pppoe") == 0 || strcmp(arg, "pppoe") == 0) {
++    if(strcmp(arg, "pppoe") == 0 || strcmp(arg, "pppoe") == 0) {
 +        init = pppoe_plugin_init;
 +    } else
 +#endif
@@ -2056,13 +2051,20 @@ diff --git a/pppd/pathnames.h b/pppd/pathnames.h
 index a33f046..da2a73a 100644
 --- a/pppd/pathnames.h
 +++ b/pppd/pathnames.h
-@@ -18,26 +18,44 @@
+@@ -16,33 +16,53 @@
  #define _ROOT_PATH
  #endif
  
 -#define _PATH_UPAPFILE 	 _ROOT_PATH "/etc/ppp/pap-secrets"
 -#define _PATH_CHAPFILE 	 _ROOT_PATH "/etc/ppp/chap-secrets"
 -#define _PATH_SRPFILE 	 _ROOT_PATH "/etc/ppp/srp-secrets"
+-
+ #ifdef USE_EAPTLS
+ #define _PATH_EAPTLSCLIFILE	_ROOT_PATH "/etc/ppp/eaptls-client"
+ #define _PATH_EAPTLSSERVFILE	_ROOT_PATH "/etc/ppp/eaptls-server"
+ #define _PATH_OPENSSLCONFFILE	_ROOT_PATH "/etc/ppp/openssl.cnf"
+ #endif /* USE_EAPTLS */
+ 
 -#define _PATH_SYSOPTIONS _ROOT_PATH "/etc/ppp/options"
 -#define _PATH_IPUP	 _ROOT_PATH "/etc/ppp/ip-up"
 -#define _PATH_IPDOWN	 _ROOT_PATH "/etc/ppp/ip-down"
@@ -2074,35 +2076,38 @@ index a33f046..da2a73a 100644
 -#define _PATH_PEERFILES	 _ROOT_PATH "/etc/ppp/peers/"
 -#define _PATH_RESOLV	 _ROOT_PATH "/etc/ppp/resolv.conf"
 +#ifndef PATH_CONFIG
-+#define	PATH_CONFIG	"/etc/ppp"
++#define        PATH_CONFIG     "/etc/ppp"
++#endif
++#ifndef PATH_SECRETS
++#define        PATH_SECRETS    "/etc/ppp"
 +#endif
 +#ifndef PATH_AUTH
-+#define	PATH_AUTH	"/etc/ppp"
++#define        PATH_AUTH       "/etc/ppp"
 +#endif
 +#ifndef PATH_LOG
-+#define	PATH_LOG	"/etc/ppp"
++#define        PATH_LOG        "/etc/ppp"
 +#endif
 +#ifndef PATH_RESOLV
-+#define	PATH_RESOLV	"/etc/ppp"
++#define        PATH_RESOLV     "/etc/ppp"
 +#endif
 +
-+#define _PATH_UPAPFILE 	 _ROOT_PATH PATH_CONFIG "/pap-secrets"
-+#define _PATH_CHAPFILE 	 _ROOT_PATH PATH_CONFIG "/chap-secrets"
-+#define _PATH_SRPFILE 	 _ROOT_PATH PATH_CONFIG "/srp-secrets"
++#define _PATH_UPAPFILE          _ROOT_PATH PATH_SECRETS "/pap-secrets"
++#define _PATH_CHAPFILE          _ROOT_PATH PATH_SECRETS "/chap-secrets"
++#define _PATH_SRPFILE   _ROOT_PATH PATH_CONFIG "/srp-secrets"
 +#define _PATH_SYSOPTIONS _ROOT_PATH PATH_CONFIG "/options"
-+#define _PATH_IPUP	 _ROOT_PATH PATH_CONFIG "/ip-up"
-+#define _PATH_IPDOWN	 _ROOT_PATH PATH_CONFIG "/ip-down"
-+#define _PATH_IPPREUP	 _ROOT_PATH PATH_CONFIG "/ip-pre-up"
-+#define _PATH_AUTHUP	 _ROOT_PATH PATH_AUTH   "/auth-up"
-+#define _PATH_AUTHDOWN	 _ROOT_PATH PATH_AUTH   "/auth-down"
-+#define _PATH_TTYOPT	 _ROOT_PATH PATH_CONFIG "/options."
-+#define _PATH_CONNERRS	 _ROOT_PATH PATH_LOG    "/connect-errors"
-+#define _PATH_PEERFILES	 _ROOT_PATH PATH_CONFIG "/peers/"
-+#define _PATH_RESOLV	 _ROOT_PATH PATH_RESOLV "/%s.resolv"
++#define _PATH_IPUP      _ROOT_PATH PATH_CONFIG "/ip-up"
++#define _PATH_IPDOWN    _ROOT_PATH PATH_CONFIG "/ip-down"
++#define _PATH_IPPREUP   _ROOT_PATH PATH_CONFIG "/ip-pre-up"
++#define _PATH_AUTHUP    _ROOT_PATH PATH_AUTH   "/auth-up"
++#define _PATH_AUTHDOWN  _ROOT_PATH PATH_AUTH   "/auth-down"
++#define _PATH_TTYOPT    _ROOT_PATH PATH_CONFIG "/options."
++#define _PATH_CONNERRS  _ROOT_PATH PATH_LOG    "/connect-errors"
++#define _PATH_PEERFILES         _ROOT_PATH PATH_CONFIG "/peers/"
++#define _PATH_RESOLV    _ROOT_PATH PATH_RESOLV "/%s.resolv"
 +
 +#ifdef PATH_ETC_CONFIG
-+#define _PATH_DEFAULT_IPUP	"/etc/default/ip-up"
-+#define _PATH_DEFAULT_IPDOWN	"/etc/default/ip-down"
++#define _PATH_DEFAULT_IPUP     "/etc/default/ip-up"
++#define _PATH_DEFAULT_IPDOWN   "/etc/default/ip-down"
 +#endif
  
  #define _PATH_USEROPT	 ".ppprc"
@@ -2186,7 +2191,7 @@ index 0000000..62da5f3
 +server. 
 +
 +User guide for Cisco server. 
-+Send all bug report at Jean-Louis Noël (jln@stben.be). 
++Send all bug report at Jean-Louis No\EBl (jln@stben.be). 
 + 
 +http://www.stben.be/tacacs/
 \ No newline at end of file
@@ -2242,41 +2247,40 @@ diff --git a/pppd/plugins/pppoatm/Makefile.linux b/pppd/plugins/pppoatm/Makefile
 index 20f62e6..49a4e8e 100644
 --- a/pppd/plugins/pppoatm/Makefile.linux
 +++ b/pppd/plugins/pppoatm/Makefile.linux
-@@ -1,9 +1,16 @@
- #CC	= gcc
--COPTS	= -O2 -g
+@@ -1,18 +1,22 @@
+ #***********************************************************************
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
+ 
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
+ 
+ VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
+ 
 -CFLAGS	= $(COPTS) -I../.. -I../../../include -fPIC
--LDFLAGS	= -shared
-+#COPTS	= -O2 -g
 +CFLAGS	= $(COPTS) -I../.. -I../../../include
+ LDFLAGS_SHARED	= -shared
  INSTALL	= install
  
 +ifeq ($(CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS),y)
 +CFLAGS  += -fPIC
-+LDFLAGS = -shared
-+PLUGIN := pppoatm.so
++LDFLAGS = -shared  
+ PLUGIN := pppoatm.so
 +else
 +PLUGIN := libpppoatm.o
 +endif
 +
- #***********************************************************************
- 
- DESTDIR = $(INSTROOT)@DESTDIR@
-@@ -11,7 +18,6 @@ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
- 
- VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
- 
--PLUGIN := pppoatm.so
  PLUGIN_OBJS := pppoatm.o 
  
  #*******
-@@ -32,15 +38,18 @@ endif
+@@ -33,15 +37,18 @@
  #*********
  all: $(PLUGIN)
  
 -$(PLUGIN): $(PLUGIN_OBJS)
 +pppoatm.so: $(PLUGIN_OBJS)
- 	$(CC) $(CFLAGS) -o $@ -shared $^ $(LIBS)
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(LDFLAGS_SHARED) $^ $(LIBS)
  
 +libpppoatm.o: $(PLUGIN_OBJS)
 +	$(LD) -r -o $@ $^
@@ -2309,43 +2313,42 @@ index d693350..d6409cb 100644
  static char *qosstr = NULL;
 diff --git a/pppd/plugins/pppol2tp/Makefile.linux b/pppd/plugins/pppol2tp/Makefile.linux
 index ea3538e..9a7a702 100644
---- a/pppd/plugins/pppol2tp/Makefile.linux
-+++ b/pppd/plugins/pppol2tp/Makefile.linux
-@@ -1,9 +1,18 @@
- #CC	= gcc
--COPTS	= -O2 -g
+--- Makefile.linux.orig	2021-01-06 11:51:27.999212144 +1000
++++ Makefile.linux	2021-01-06 12:49:42.939108624 +1000
+@@ -1,24 +1,33 @@
+ #***********************************************************************
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
+ 
+ DESTDIR = $(INSTROOT)/@DESTDIR@
+ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
+ 
+ VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
+ 
 -CFLAGS	= $(COPTS) -I. -I../.. -I../../../include -fPIC
--LDFLAGS	= -shared
-+#COPTS	= -O2 -g
-+CFLAGS	+= $(COPTS) -I. -I../.. -I../../../include
++CFLAGS	= $(COPTS) -I. -I../.. -I../../../include
+ LDFLAGS_SHARED	= -shared
  INSTALL	= install
  
 +ifeq ($(CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS),y)
 +CFLAGS  += -fPIC -DDYNAMIC_PLUGINS=1
 +LDFLAGS = -shared
 +SO = so
-+PLUGINS := pppol2tp.so openl2tp.so
+ PLUGINS := pppol2tp.so openl2tp.so
 +else
 +PLUGINS := libpppol2tp.o
 +SO = o
 +endif
 +
- #***********************************************************************
  
- DESTDIR = @DESTDIR@
-@@ -11,13 +20,14 @@ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
- 
- VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
- 
--PLUGINS := pppol2tp.so openl2tp.so
--
  all: $(PLUGINS)
  
  %.so: %.o
- 	$(CC) $(CFLAGS) -o $@ -shared $^ $(LIBS)
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(LDFLAGS_SHARED) $^ $(LIBS)
  
 +libpppol2tp.o: pppol2tp.o openl2tp.o
-+	$(CC) $(CFLAGS) -c -o $@ $^
++	$(LD) -r -o $@ $^
 +
  install: all
  	$(INSTALL) -d -m 755 $(LIBDIR)
@@ -5518,12 +5521,23 @@ diff --git a/pppd/plugins/radius/Makefile.linux b/pppd/plugins/radius/Makefile.l
 index 24ed3e5..6556eb7 100644
 --- a/pppd/plugins/radius/Makefile.linux
 +++ b/pppd/plugins/radius/Makefile.linux
-@@ -11,14 +11,22 @@ VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
+@@ -3,10 +3,6 @@
+ # Copyright 2002 Roaring Penguin Software Inc.
+ #
+ 
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
+-
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ MANDIR = $(DESTDIR)/share/man/man8
+ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
+@@ -15,14 +11,22 @@
  
  INSTALL	= install
  
 -PLUGIN=radius.so radattr.so radrealms.so
--CFLAGS=-I. -I../.. -I../../../include -O2 -fPIC -DRC_LOG_FACILITY=LOG_DAEMON
+-CFLAGS = $(COPTS) -I. -I../.. -I../../../include -fPIC -DRC_LOG_FACILITY=LOG_DAEMON
 +ifeq ($(CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS),y)
 +PLUGIN = radius.so radattr.so radrealms.so
 +CFLAGS += -fPIC
@@ -5537,14 +5551,13 @@ index 24ed3e5..6556eb7 100644
  # MS-CHAP authentication protocol.
  CHAPMS=y
  # Uncomment the next line to include support for MPPE.
--MPPE=y
-+ifeq ($(CONFIG_USER_PPPD_WITH_MPPE),y)                                                                                  
-+MPPE=y                                                                                                                  
-+endif                                                                                                                   
++ifeq ($(CONFIG_USER_PPPD_WITH_MPPE),y)
+ MPPE=y
++endif
  # Uncomment the next lint to include support for traffic limiting
  MAXOCTETS=y
  
-@@ -53,9 +61,19 @@ radrealms.so: radrealms.o
+@@ -57,9 +61,19 @@
  
  CLIENTOBJS = avpair.o buildreq.o config.o dict.o ip_util.o \
  	clientid.o sendserver.o lock.o util.o md5.o
@@ -5806,33 +5819,41 @@ index 7a30370..301f2f1 100644
  
  char radrealms_config[MAXPATHLEN] = "/etc/radiusclient/realms";
  
-diff --git a/pppd/plugins/rp-pppoe/Makefile.linux b/pppd/plugins/rp-pppoe/Makefile.linux
+diff --git a/pppd/plugins/pppoe/Makefile.linux b/pppd/plugins/pppoe/Makefile.linux
 index 5d7a271..676f12e 100644
---- a/pppd/plugins/rp-pppoe/Makefile.linux
-+++ b/pppd/plugins/rp-pppoe/Makefile.linux
-@@ -25,9 +25,17 @@ INSTALL	= install
- # Version is set ONLY IN THE MAKEFILE!  Don't delete this!
- RP_VERSION=3.8p
+--- a/pppd/plugins/pppoe/Makefile.linux
++++ b/pppd/plugins/pppoe/Makefile.linux
+@@ -12,10 +12,6 @@
+ #
+ #***********************************************************************
  
--COPTS=-O2 -g
--CFLAGS=$(COPTS) -I../../../include '-DRP_VERSION="$(RP_VERSION)"'
--all: rp-pppoe.so pppoe-discovery
-+#COPTS=-O2 -g
-+CFLAGS+=$(COPTS) -I../../../include '-DRP_VERSION="$(RP_VERSION)"'
-+
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
+-
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ BINDIR = $(DESTDIR)/sbin
+ LIBDIR = $(DESTDIR)/lib/pppd/$(PPPDVERSION)
+@@ -25,8 +21,15 @@
+ INSTALL	= install
+ LN_S	= ln -sf
+ 
+-CFLAGS=$(COPTS) -I../../../include
+-all: pppoe.so pppoe-discovery
++CFLAGS+=$(COPTS) -I../../../include
 +ifeq ($(CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS),y)
 +CFLAGS += -fPIC
-+TARGET = rp-pppoe.so pppoe-discovery
++TARGET = pppoe.so pppoe-discovery
 +else
-+TARGET = libpppoe.o
++TARGET = libpppoe.o pppoe-discovery
 +endif
 +
 +all: $(TARGET)
  
  pppoe-discovery: pppoe-discovery.o debug.o
- 	$(CC) -o pppoe-discovery pppoe-discovery.o debug.o
-@@ -48,17 +56,20 @@ install: all
- 	$(INSTALL) -s -c -m 555 pppoe-discovery $(BINDIR)
+ 	$(CC) $(LDFLAGS) -o pppoe-discovery pppoe-discovery.o debug.o
+@@ -49,17 +52,20 @@
+ 	$(INSTALL) -c -m 555 pppoe-discovery $(BINDIR)
  
  clean:
 -	rm -f *.o *.so pppoe-discovery
@@ -5857,68 +5878,50 @@ index 5d7a271..676f12e 100644
 -	$(CC) $(CFLAGS) -I../../.. -c -o common.o -fPIC common.c
 +	$(CC) $(CFLAGS) -I../../.. -c -o common.o common.c
  
-diff --git a/pppd/plugins/rp-pppoe/config.h b/pppd/plugins/rp-pppoe/config.h
-index 5703087..5d2dada 100644
---- a/pppd/plugins/rp-pppoe/config.h
-+++ b/pppd/plugins/rp-pppoe/config.h
-@@ -102,7 +102,7 @@
- #define HAVE_NETPACKET_PACKET_H 1
- 
- /* Define if you have the <sys/cdefs.h> header file.  */
--#define HAVE_SYS_CDEFS_H 1
-+/* #undef HAVE_SYS_CDEFS_H */
- 
- /* Define if you have the <sys/dlpi.h> header file.  */
- /* #undef HAVE_SYS_DLPI_H */
-diff --git a/pppd/plugins/rp-pppoe/pppoe.h b/pppd/plugins/rp-pppoe/pppoe.h
+diff --git a/pppd/plugins/pppoe/pppoe.h b/pppd/plugins/pppoe/pppoe.h
 index 9ab2eee..b827620 100644
---- a/pppd/plugins/rp-pppoe/pppoe.h
-+++ b/pppd/plugins/rp-pppoe/pppoe.h
+--- pppoe.h.orig	2019-12-31 11:31:26.000000000 +1000
++++ pppoe.h	2021-01-06 13:03:01.699084965 +1000
 @@ -47,6 +47,8 @@
- #include <sys/socket.h>
- #endif
+  * gets dragged in. */
+ #include <netinet/in.h>
  
 +#include <netinet/in.h>
 +
  /* Ugly header files on some Linux boxes... */
  #if defined(HAVE_LINUX_IF_H)
  #include <linux/if.h>
-@@ -80,12 +82,6 @@
+@@ -80,20 +82,19 @@
  #error Could not find a 32-bit integer type
  #endif
  
 -#ifdef HAVE_LINUX_IF_ETHER_H
 -#include <linux/if_ether.h>
--#endif
--
--#include <netinet/in.h>
+-#else
 -
  #ifdef HAVE_NETINET_IF_ETHER_H
- #include <sys/types.h>
+-#include <sys/types.h>
++	#include <sys/types.h>
  
-@@ -97,6 +93,9 @@
+-#ifdef HAVE_SYS_SOCKET_H
+-#include <sys/socket.h>
+-#endif
+-#ifndef HAVE_SYS_DLPI_H
+-#include <netinet/if_ether.h>
+-#endif
++	#ifdef HAVE_SYS_SOCKET_H
++		#include <sys/socket.h>
++	#endif
++	#ifndef HAVE_SYS_DLPI_H
++		#include <netinet/if_ether.h>
++	#endif
  #endif
- #endif
- 
++
 +#ifdef HAVE_LINUX_IF_ETHER_H
-+#include <linux/if_ether.h>
-+#endif
- 
++	#include <linux/if_ether.h>
+ #endif
  
  /* Ethernet frame types according to RFC 2516 */
---- a/pppd/plugins/rp-pppoe/pppoe-discovery.c
-+++ b/pppd/plugins/rp-pppoe/pppoe-discovery.c
-@@ -47,6 +47,10 @@
- #include <net/if_arp.h>
- #endif
- 
-+#if !defined(__GLIBC__)
-+#define error(msg)	printf("pppoe-discovery: " msg)
-+#endif
-+
- char *xstrdup(const char *s);
- void usage(void);
- 
 diff --git a/pppd/plugins/tacacs.c b/pppd/plugins/tacacs.c
 new file mode 100644
 index 0000000..6475d14
@@ -12161,7 +12164,7 @@ index 0000000..ca16d63
 + INCLUDE_DIRS= -I../include
 + 
 +-COMPILE_FLAGS= -D_linux_=1 -DHAVE_PATHS_H -DIPX_CHANGE
-++COMPILE_FLAGS= -D_linux_=1 -DHAVE_PATHS_H -DIPX_CHANGE # -D__inet_ntoa=inet_ntoa -D__inet_addr=inet_addr
+++COMPILE_FLAGS= -D_linux_=1 -DHAVE_PATHS_H
 + 
 + CFLAGS= $(COPTS) $(COMPILE_FLAGS) $(INCLUDE_DIRS)
 + 
@@ -13612,17 +13615,17 @@ index bb05acd..2f92603 100644
      pap_auth_hook = winbind_pap_auth;
 diff --git a/pppd/pppd.h b/pppd/pppd.h
 index 247fa15..40bdb9b 100644
---- a/pppd/pppd.h
-+++ b/pppd/pppd.h
-@@ -81,6 +81,7 @@
- #define MAXNAMELEN	256	/* max length of hostname or name for auth */
- #define MAXSECRETLEN	256	/* max length of password or secret */
+--- pppd.h.orig	2019-12-31 11:31:26.000000000 +1000
++++ pppd.h	2021-01-06 13:23:55.179047837 +1000
+@@ -76,6 +76,7 @@
+ #define MAXIFNAMELEN	32	/* max length of interface name; or use IFNAMSIZ, can we
+ 				   always include net/if.h? */
  
 +
  /*
-  * Option descriptor structure.
-  */
-@@ -228,7 +229,7 @@ extern int	privileged;	/* We were run by real-uid root */
+  * If PPP_DRV_NAME is not defined, use the default "ppp" as the device name.
+  * Where should PPP_DRV_NAME come from? Do we include it here?
+@@ -232,7 +233,7 @@
  extern int	need_holdoff;	/* Need holdoff period after link terminates */
  extern char	**script_env;	/* Environment variables for scripts */
  extern int	detached;	/* Have detached from controlling tty */
@@ -13631,7 +13634,7 @@ index 247fa15..40bdb9b 100644
  extern int	ngroups;	/* How many groups valid in groups */
  extern struct pppd_stats link_stats; /* byte/packet counts etc. for link */
  extern int	link_stats_valid; /* set if link_stats is valid */
-@@ -253,6 +254,8 @@ extern bool	doing_multilink;
+@@ -257,6 +258,8 @@
  extern bool	multilink_master;
  extern bool	bundle_eof;
  extern bool	bundle_terminating;
@@ -13640,7 +13643,7 @@ index 247fa15..40bdb9b 100644
  
  extern struct notifier *pidchange;   /* for notifications of pid changing */
  extern struct notifier *phasechange; /* for notifications of phase changes */
-@@ -302,7 +305,10 @@ extern bool	session_mgmt;	/* Do session management (login records) */
+@@ -309,7 +312,10 @@
  extern char	our_name[MAXNAMELEN];/* Our name for authentication purposes */
  extern char	remote_name[MAXNAMELEN]; /* Peer's name for authentication */
  extern bool	explicit_remote;/* remote_name specified with remotename opt */
@@ -13651,9 +13654,9 @@ index 247fa15..40bdb9b 100644
  extern char	*ipparam;	/* Extra parameter for ip up/down scripts */
  extern bool	cryptpap;	/* Others' PAP passwords are encrypted */
  extern int	idle_time_limit;/* Shut down link if idle for this long */
-@@ -325,6 +331,10 @@ extern bool	dump_options;	/* print out option values */
- extern bool	dryrun;		/* check everything, print options, exit */
- extern int	child_wait;	/* # seconds to wait for children at end */
+@@ -341,6 +347,10 @@
+ extern char *max_tls_version;
+ #endif /* USE_EAPTLS */
  
 +extern u_int32_t	metric;	/* the metric to set the host route to */
 +extern u_int32_t	drmetric;	/* the default route metric to set */
@@ -13662,34 +13665,34 @@ index 247fa15..40bdb9b 100644
  #ifdef MAXOCTETS
  extern unsigned int maxoctets;	     /* Maximum octetes per session (in bytes) */
  extern int       maxoctets_dir;      /* Direction :
-@@ -577,6 +587,14 @@ int  auth_ip_addr __P((int, u_int32_t));
- int  auth_number __P((void));	/* check if remote number is authorized */
- int  bad_ip_adrs __P((u_int32_t));
+@@ -592,6 +602,14 @@
+ int  auth_number(void);	/* check if remote number is authorized */
+ int  bad_ip_adrs(u_int32_t);
  				/* check if IP address is unreasonable */
 +#ifdef USE_PAM
-+int check_pam_account_restrictions __P((const char *));
++int check_pam_account_restrictions(const char *);
 +				/* check PAM for user account restrictions */
 +#endif
 +#ifdef USE_EXTERNAL_STATS_PROG
-+void notify_login_failure __P((const char *));
++void notify_login_failure(const char *);
 +                                /* Notify statsd of any failures */
 +#endif
  
  /* Procedures exported from demand.c */
- void demand_conf __P((void));	/* config interface(s) for demand-dial */
-@@ -665,10 +683,11 @@ int  sif6addr __P((int, eui64_t, eui64_t));
- int  cif6addr __P((int, eui64_t, eui64_t));
+ void demand_conf(void);	/* config interface(s) for demand-dial */
+@@ -679,10 +697,11 @@
+ int  cif6addr(int, eui64_t, eui64_t);
  				/* Remove an IPv6 address from i/f */
  #endif
--int  sifdefaultroute __P((int, u_int32_t, u_int32_t));
-+int  sifdefaultroute __P((int, u_int32_t, u_int32_t, u_int32_t, bool));
+-int  sifdefaultroute(int, u_int32_t, u_int32_t, bool replace_default_rt);
++int  sifdefaultroute(int, u_int32_t, u_int32_t, u_int32_t, bool replace_default_rt);
  				/* Create default route through i/f */
- int  cifdefaultroute __P((int, u_int32_t, u_int32_t));
+ int  cifdefaultroute(int, u_int32_t, u_int32_t);
  				/* Delete default route through i/f */
-+int  rtmetricfixup __P((int, u_int32_t, u_int32_t));
- int  sifproxyarp __P((int, u_int32_t));
- 				/* Add proxy ARP entry for peer */
- int  cifproxyarp __P((int, u_int32_t));
++int rtmetricfixup(int, u_int32_t, u_int32_t); 
+ #ifdef INET6
+ int  sif6defaultroute(int, eui64_t, eui64_t);
+ 				/* Create default IPv6 route through i/f */
 diff --git a/pppd/sha1.c b/pppd/sha1.c
 index f4f975c..cdf9d7c 100644
 --- a/pppd/sha1.c
@@ -13704,9 +13707,9 @@ index f4f975c..cdf9d7c 100644
  #include <net/ppp_defs.h>
 diff --git a/pppd/sys-linux.c b/pppd/sys-linux.c
 index e5e9baf..813d045 100644
---- a/pppd/sys-linux.c
-+++ b/pppd/sys-linux.c
-@@ -127,12 +127,7 @@
+--- sys-linux.c.orig	2019-12-31 11:31:26.000000000 +1000
++++ sys-linux.c	2021-01-06 13:34:24.747029189 +1000
+@@ -133,12 +133,7 @@
  
  #ifdef IPX_CHANGE
  #include "ipxcp.h"
@@ -13719,29 +13722,33 @@ index e5e9baf..813d045 100644
  #endif /* IPX_CHANGE */
  
  #ifdef PPP_FILTER
-@@ -1616,11 +1611,11 @@ int have_route_to(u_int32_t addr)
-  * sifdefaultroute - assign a default route through the address given.
+@@ -1666,7 +1661,7 @@
+  * ppp connection when it has come up.
   */
  
--int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
-+int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, u_int32_t metric, bool force)
+-int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, bool replace)
++int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway, u_int32_t metric, bool replace)
  {
-     struct rtentry rt;
- 
--    if (defaultroute_exists(&rt) && strcmp(rt.rt_dev, ifname) != 0) {
-+    if (!force && defaultroute_exists(&rt) && strcmp(rt.rt_dev, ifname) != 0) {
- 	if (rt.rt_flags & RTF_GATEWAY)
- 	    error("not replacing existing default route via %I",
- 		  SIN_ADDR(rt.rt_gateway));
-@@ -1634,6 +1629,7 @@ int sifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
-     SET_SA_FAMILY (rt.rt_dst, AF_INET);
+     struct rtentry rt, tmp_rt;
+     struct rtentry *del_rt = NULL;
+@@ -1676,7 +1671,7 @@
+ 	 * are called again, we will delete the current default route
+ 	 * and set the new default route in this function.
+ 	 * - this is normally only the case the doing demand: */
+-	if (defaultroute_exists(&tmp_rt, -1))
++	if (defaultroute_exists(&tmp_rt, -1) && strcmp(rt.rt_dev, ifname) != 0)
+ 	    del_rt = &tmp_rt;
+     } else if (defaultroute_exists(&old_def_rt, -1           ) &&
+ 			    strcmp( old_def_rt.rt_dev, ifname) != 0) {
+@@ -1749,6 +1744,7 @@
+     SET_SA_FAMILY (rt.rt_gateway, AF_INET);
  
      rt.rt_dev = ifname;
 +    rt.rt_metric = metric + 1;
  
-     if (kernel_version > KVERSION(2,1,0)) {
- 	SET_SA_FAMILY (rt.rt_genmask, AF_INET);
-@@ -1685,6 +1681,31 @@ int cifdefaultroute (int unit, u_int32_t ouraddr, u_int32_t gateway)
+     rt.rt_dev = ifname;
+     rt.rt_metric = dfl_route_metric + 1; /* +1 for binary compatibility */
+@@ -1817,6 +1813,31 @@
      return 1;
  }
  
@@ -13772,27 +13779,27 @@ index e5e9baf..813d045 100644
 +
  /********************************************************************
   *
-  * sifproxyarp - Make a proxy ARP entry for the peer.
+  * read_route6_table - read the next entry from the route table
 diff --git a/pppd/tty.c b/pppd/tty.c
 index c9a0b33..538fa38 100644
 --- a/pppd/tty.c
 +++ b/pppd/tty.c
-@@ -112,12 +112,14 @@ static int setxonxoff __P((char **));
- static int setescape __P((char **));
- static void printescape __P((option_t *, void (*)(void *, char *,...),void *));
- static void finish_tty __P((void));
+@@ -109,12 +109,14 @@
+ static int setescape(char **);
+ static void printescape(option_t *, void (*)(void *, char *,...),void *);
+ static void finish_tty(void);
 +#ifndef __uClinux__
- static int start_charshunt __P((int, int));
- static void stop_charshunt __P((void *, int));
- static void charshunt_done __P((void *));
- static void charshunt __P((int, int, char *));
- static int record_write __P((FILE *, int code, u_char *buf, int nb,
- 			     struct timeval *));
+ static int start_charshunt(int, int);
+ static void stop_charshunt(void *, int);
+ static void charshunt_done(void *);
+ static void charshunt(int, int, char *);
+ static int record_write(FILE *, int code, u_char *buf, int nb,
+ 			struct timeval *);
 +#endif
- static int open_socket __P((char *));
- static void maybe_relock __P((void *, int));
+ static int open_socket(char *);
+ static void maybe_relock(void *, int);
  
-@@ -627,6 +629,7 @@ int connect_tty()
+@@ -613,6 +615,7 @@
  	 */
  	status = EXIT_PTYCMD_FAILED;
  	if (ptycommand != NULL) {
@@ -13800,7 +13807,7 @@ index c9a0b33..538fa38 100644
  		if (record_file != NULL) {
  			int ipipe[2], opipe[2], ok;
  
-@@ -646,8 +649,10 @@ int connect_tty()
+@@ -632,8 +635,10 @@
  			if (!ok)
  				goto errret;
  		} else {
@@ -13811,7 +13818,7 @@ index c9a0b33..538fa38 100644
  		}
  	} else if (pty_socket != NULL) {
  		int fd = open_socket(pty_socket);
-@@ -669,6 +674,7 @@ int connect_tty()
+@@ -655,6 +660,7 @@
  		int fd = dup(ttyfd);
  		if (!start_charshunt(fd, fd))
  			goto errret;
@@ -13819,7 +13826,7 @@ index c9a0b33..538fa38 100644
  	}
  
  	if (using_pty || record_file != NULL) {
-@@ -784,7 +790,9 @@ void disconnect_tty()
+@@ -770,7 +776,9 @@
  	} else {
  		info("Serial link disconnected.");
  	}
@@ -13828,8 +13835,8 @@ index c9a0b33..538fa38 100644
 +#endif
  }
  
- void tty_close_fds()
-@@ -918,6 +926,7 @@ open_socket(dest)
+ void tty_close_fds(void)
+@@ -898,6 +906,7 @@
      return sock;
  }
  
@@ -13837,7 +13844,7 @@ index c9a0b33..538fa38 100644
  
  /*
   * start_charshunt - create a child process to run the character shunt.
-@@ -1264,3 +1273,5 @@ record_write(f, code, buf, nb, tp)
+@@ -1233,3 +1242,5 @@
      }
      return 1;
  }
@@ -13876,23 +13883,20 @@ index 8a73621..40dbbfb 100644
      if (u->us_reqtimeout > 0)
 diff --git a/pppdump/Makefile.linux b/pppdump/Makefile.linux
 index ac028f6..3d73710 100644
---- a/pppdump/Makefile.linux
-+++ b/pppdump/Makefile.linux
-@@ -2,7 +2,8 @@ DESTDIR = $(INSTROOT)@DESTDIR@
+--- Makefile.linux.orig	2019-12-31 11:31:26.000000000 +1000
++++ Makefile.linux	2021-01-06 13:45:37.663009257 +1000
+@@ -1,6 +1,3 @@
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
+ 
+ DESTDIR = $(INSTROOT)@DESTDIR@
  BINDIR = $(DESTDIR)/sbin
- MANDIR = $(DESTDIR)/share/man/man8
- 
--CFLAGS= -O -I../include/net
-+#CFLAGS= -O -I../include/net
-+CFLAGS += -I../include/net
- OBJS = pppdump.o bsd-comp.o deflate.o zlib.o
- 
- INSTALL= install
-@@ -10,7 +11,7 @@ INSTALL= install
+@@ -14,7 +11,7 @@
  all:	pppdump
  
  pppdump: $(OBJS)
--	$(CC) -o pppdump $(OBJS)
+-	$(CC) $(LDFLAGS) -o pppdump $(OBJS)
 +	$(CC) $(CFLAGS) $(LDFLAGS) -o pppdump $(OBJS) $(LDLIBS$(LDLIBS_$@))
  
  clean:
@@ -13901,12 +13905,19 @@ diff --git a/pppstats/Makefile.linux b/pppstats/Makefile.linux
 index cca6f0f..f7d1156 100644
 --- a/pppstats/Makefile.linux
 +++ b/pppstats/Makefile.linux
-@@ -10,13 +10,14 @@ PPPSTATSRCS = pppstats.c
+@@ -1,9 +1,6 @@
+ #
+ # pppstats makefile
+ #
+-CROSS_COMPILE=@CROSS_COMPILE@
+-CC=$(CROSS_COMPILE)@CC@
+-COPTS=@CFLAGS@
+ 
+ DESTDIR = $(INSTROOT)@DESTDIR@
+ BINDIR = $(DESTDIR)/sbin
+@@ -13,11 +10,11 @@
  PPPSTATOBJS = pppstats.o
  
- #CC = gcc
--COPTS = -O
-+#COPTS = -O
  COMPILE_FLAGS = -I../include
 -LIBS =
 +#LIBS =
@@ -13914,16 +13925,15 @@ index cca6f0f..f7d1156 100644
  INSTALL= install
  
 -CFLAGS = $(COPTS) $(COMPILE_FLAGS)
-+#CFLAGS = $(COPTS) $(COMPILE_FLAGS)
 +CFLAGS += $(COPTS) $(COMPILE_FLAGS)
  
  all: pppstats
  
-@@ -26,7 +27,7 @@ install: pppstats
+@@ -27,7 +24,7 @@
  	$(INSTALL) -c -m 444 pppstats.8 $(MANDIR)
  
  pppstats: $(PPPSTATSRCS)
--	$(CC) $(CFLAGS) -o pppstats pppstats.c $(LIBS)
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o pppstats pppstats.c $(LIBS)
 +	$(CC) $(CFLAGS) $(LDFLAGS) -o pppstats pppstats.c $(LIBS) $(LDLIBS$(LDLIBS_$@))
  
  clean:

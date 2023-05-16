@@ -1,7 +1,7 @@
 /*
  * lp5569.c - LP5569 LED Driver
  *
- * Copyright (C) 2018 Digi Internalional Inc
+ * Copyright (C) 2018 Digi International Inc
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -51,6 +51,7 @@
 #define LP5569_REG_LED_CURRENT_BASE	0x22
 #define LP5569_REG_MISC			0x2F
 #define LP5569_REG_STATUS		0x3C
+#define LP5569_REG_IO			0x3D
 #define LP5569_REG_RESET		0x3F
 #define LP5569_REG_MASTER_FADER_BASE	0x46
 #define LP5569_REG_MASTER_FADER_PWM	0x4A
@@ -160,7 +161,8 @@ static int lp5569_post_init_device(struct lp55xx_chip *chip)
 	 * We only need to make sure the driver loads
 	 * to access the LEDs through the sysfs.
 	 */
-	lp5569_init_program_engine(chip);
+	if (chip->cfg->run_engine)
+		lp5569_init_program_engine(chip);
 
 	return ret;
 }
@@ -789,10 +791,34 @@ static struct lp55xx_device_config lp5569_cfg = {
 	.post_init_device   = lp5569_post_init_device,
 	.brightness_fn      = lp5569_led_brightness,
 	.set_led_current    = lp5569_set_led_current,
-	.firmware_cb        = lp5569_firmware_loaded,
-	.run_engine         = lp5569_run_engine,
 	.dev_attr_group     = &lp5569_group,
 };
+
+#define IO_PIN_VAL 0xe /* defaut to gpio output low */
+unsigned int gpio_strobe_count = 0;
+static int gpio_strobe_fn(void *arg)
+{
+	int ret;
+	struct device *dev = (struct device *)arg;
+	struct lp55xx_led *led = i2c_get_clientdata(to_i2c_client(dev));
+	struct lp55xx_chip *chip = led->chip;
+
+	while(!kthread_should_stop()) {
+		dev_dbg(dev, "Strobing GPIO\n");
+		mutex_lock(&chip->lock);
+		ret = lp55xx_write(chip, LP5569_REG_IO, IO_PIN_VAL | (gpio_strobe_count++ % 2));
+		mutex_unlock(&chip->lock);
+		if (ret)
+			dev_err(dev, "Error %d writing to GPIO strobe IO\n", ret);
+
+		ssleep(chip->pdata->gpio_strobe_sec);
+	}
+
+	dev_dbg(dev, "Exiting GPIO strobe task\n");
+	do_exit(0);
+
+	return 0;
+}
 
 static int lp5569_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -803,9 +829,16 @@ static int lp5569_probe(struct i2c_client *client,
 	struct lp55xx_platform_data *pdata = dev_get_platdata(&client->dev);
 	struct device_node *np = client->dev.of_node;
 
+	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
+	if (!chip)
+		return -ENOMEM;
+
+	chip->cfg = &lp5569_cfg;
+
 	if (!pdata) {
 		if (np) {
-			pdata = lp55xx_of_populate_pdata(&client->dev, np);
+			pdata = lp55xx_of_populate_pdata(&client->dev, np,
+							 chip);
 			if (IS_ERR(pdata))
 				return PTR_ERR(pdata);
 		} else {
@@ -814,10 +847,6 @@ static int lp5569_probe(struct i2c_client *client,
 		}
 	}
 
-	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
-	if (!chip)
-		return -ENOMEM;
-
 	led = devm_kzalloc(&client->dev,
 			sizeof(*led) * pdata->num_channels, GFP_KERNEL);
 	if (!led)
@@ -825,7 +854,6 @@ static int lp5569_probe(struct i2c_client *client,
 
 	chip->cl = client;
 	chip->pdata = pdata;
-	chip->cfg = &lp5569_cfg;
 
 	mutex_init(&chip->lock);
 
@@ -839,19 +867,24 @@ static int lp5569_probe(struct i2c_client *client,
 
 	ret = lp55xx_register_leds(led, chip);
 	if (ret)
-		goto err_register_leds;
+		goto err_out;
 
 	ret = lp55xx_register_sysfs(chip);
 	if (ret) {
 		dev_err(&client->dev, "registering sysfs failed\n");
-		goto err_register_sysfs;
+		goto err_out;
+	}
+
+	of_property_read_u8(np, "gpio-strobe-sec", &pdata->gpio_strobe_sec);
+	if (pdata->gpio_strobe_sec) {
+		dev_info(&client->dev, "Setting GPIO strobe task for %d seconds\n", pdata->gpio_strobe_sec);
+		pdata->gpio_strobe_task = kthread_create(gpio_strobe_fn, (void*)&client->dev, "gpio-strobe-task");
+		wake_up_process(pdata->gpio_strobe_task);
 	}
 
 	return 0;
 
-err_register_sysfs:
-	lp55xx_unregister_leds(led, chip);
-err_register_leds:
+err_out:
 	lp55xx_deinit_device(chip);
 err_init:
 	return ret;
@@ -864,7 +897,10 @@ static int lp5569_remove(struct i2c_client *client)
 
 	lp5569_stop_all_engines(chip);
 	lp55xx_unregister_sysfs(chip);
-	lp55xx_unregister_leds(led, chip);
+
+	if (chip->pdata->gpio_strobe_sec)
+		kthread_stop(chip->pdata->gpio_strobe_task);
+
 	lp55xx_deinit_device(chip);
 
 	return 0;

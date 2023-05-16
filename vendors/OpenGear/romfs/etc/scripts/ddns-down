@@ -1,0 +1,25 @@
+#!/bin/bash
+
+MODEM=$6
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/ddns-down.${MODEM}"
+scripts[1]="/etc/config/scripts/ddns-down"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+        if [ -f "${scripts[$i]}" ]; then
+                exec /bin/sh "${scripts[$i]}" "$@"
+        fi
+done
+
+if [ -z "$MODEM" ] 
+then 
+	exit 1
+fi          
+	
+kill -9 `cat /var/run/${MODEM}_ddns.pid`
+
+# If we're replacing default routes, now run that script
+if [ -f /etc/config/network/ip-down-${MODEM} ]
+then
+	/etc/config/network/ip-down-${MODEM} $@
+fi

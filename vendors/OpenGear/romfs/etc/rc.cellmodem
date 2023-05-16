@@ -144,12 +144,14 @@ if [ -x /sbin/ModemManager ]; then
 			ln_tty 1.3 /dev/cellcommand01
 		fi
 
-
-		# Note: MC7430's Product string is "Sierra Wireless MC7455 Qualcomm® Snapdragon™ X7 LTE-A"
-		# so we can't rely on it but can use vendor ID and product ID
+		# Some MC7430's product string contains "MC7455" so we fall back on
+		# vendor ID and product ID
 		if [[ $Product == *MC7354* ]] ||
 		   [[ $Product == *MC7304* ]] ||
-		   [[ $Vendor == 1199 && $ProdID == 9071 ]]  # MC7430
+		   [[ $Product == *MC7430* ]] ||
+		   [[ $Product == *MC7455* ]] ||
+		   [[ $Product == *EM7565* ]] ||
+		   [[ $Vendor == 1199 && $ProdID == 9071 ]]  # MC74xx
 		then
 			> /var/run/.modem/cellmodem_is_multicarrier
 			# Set cellmodem firmware directory, if not present
@@ -165,16 +167,26 @@ if [ -x /sbin/ModemManager ]; then
 				esac
 				config -s config.cellmodem.firmware.directory="$cellfwdir" -r storage
 			fi
-		elif [[ $Product == *MC7750* ]]; then
-			# MC7750 is CDMA/3GPP2 only.
-			# ModemManager needs this to know what format Rx SMS will be.
-			> /var/run/.modem/cellmodem_is_cdma_gobi
-			> /var/run/.modem/cellmodem_is_profile_ro
-		elif  [[ $Product == *EM7565* ]]; then
-			> /var/run/.modem/cellmodem_is_multicarrier
-			> /var/run/.modem/cellmodem_disable_updates
-			> /var/run/.modem/cellmodem_change_sim_by_at
+		fi
+
+		# SIM-based Image Switching support for EM7565, MC7430 and MC7455
+		# which have multiple firmware image slots
+		if  [[ $Product == *EM7565* ]] ||
+		    [[ $Product == *MC7430* ]] ||
+		    [[ $Product == *MC7455* ]]
+		then
 			> /var/run/.modem/cellmodem_change_carrier_by_sim
+		fi
+
+		# The EM7565 on new ACMs (-L) has two inbuilt SIM1/2 channels and the AT!UIMS=0/1
+		# command is used to select which channel to activate. Whereas older ACMs only use
+		# one SIM interface (UIM1) with a GPIO multiplexer to split 2 SIM slots out of it
+		#
+		# So cellmodems on older ACMs require AT!UIMS=0 (UIM1) and rely on relevant GPIO pin
+		# to select which external SIM sockets connecting to the UIM1 channel
+		if  [[ $Product == *EM7565* ]]
+		then
+			> /var/run/.modem/cellmodem_change_sim_by_at
 		fi
 
 		echo "$Product" > /var/run/.modem/cellmodem_product

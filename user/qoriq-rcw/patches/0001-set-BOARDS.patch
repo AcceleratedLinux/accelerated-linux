@@ -1,0 +1,30 @@
+From 23607909033b5488e344487a51b22bbcb940a1ce Mon Sep 17 00:00:00 2001
+From: Seth Bollinger <Seth.Bollinger@digi.com>
+Date: Wed, 20 Apr 2022 09:26:09 -0500
+Subject: [PATCH 1/2] Set boards
+
+---
+ Makefile | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 9f0587e..fabf0f2 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,12 +1,5 @@
+ DESTDIR = .
+-BOARDS = b4420qds b4860qds \
+-	 ls1012ardb ls1012a2g5rdb ls1012afrdm ls1012afrwy ls1012aqds \
+-	 ls1021aqds ls1021atwr ls1043aqds ls1043ardb ls1046ardb ls1046aqds \
+-	 ls1088ardb ls1088aqds\
+-	 ls2088ardb ls2088ardb_rev1.1 ls2088aqds \
+-	 p2041rdb p3041ds p4080ds p5020ds p5040ds \
+-	 t1024qds t1023rdb t1024rdb t1040rdb t1042rdb t1042rdb_pi t1040qds \
+-	 t2080rdb t2080qds t2081qds t4240qds t4240rdb t1040d4rdb t1042d4rdb
++BOARDS = awusb2-commercial  cez1012  cez1012mini cez1046 cez1046_no_sgmii
+ 
+ TCLSH := $(shell command -v tclsh 2> /dev/null)
+ 
+-- 
+2.30.2
+

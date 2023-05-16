@@ -7,7 +7,7 @@ UROMFSIMG = $(IMAGEDIR)/urootfs.bin
 ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
-IMAGESIZE = 7864320
+IMAGESIZE = 33554432 # 32MB
 
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
 ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
@@ -55,7 +55,7 @@ uimage.bin:
 	mkimage -A arm -O linux -T kernel -C none -a 0x2000000 -e 0x2000000 -n "Linux" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x3000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 
-image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.tag image.copy
+image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.tag image.copy image.size
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(UKERNEL)  /tftpboot/
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(UKERNEL)  /tftpboot/uImage
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(UROMFSIMG)  /tftpboot/

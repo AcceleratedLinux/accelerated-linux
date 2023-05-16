@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# Kills any existing openvpn process for a given LHVPN tunnel.
+#
+# Example: reap-openvpn 192.168.124.198.nodes-6
+#
+
+TUNNEL=$1
+PIDFILE="/var/run/lhvpn/${TUNNEL}.pid"
+if [[ -e "${PIDFILE}" ]]; then
+    read PID < "${PIDFILE}"
+    if [ -z "${PID}" ]; then
+        # pid file is empty?!
+        exit 1
+    fi
+    read COMM < "/proc/${PID}/comm"
+    if [ "${COMM}" == "openvpn" ]; then
+        logger -t reap-openvpn "Killing old ${TUNNEL} openvpn pid=${PID}"
+        kill -9 ${PID}
+    fi
+fi

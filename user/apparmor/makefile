@@ -1,5 +1,7 @@
-AA_VERSION = 2.13
-AA_DIR     = apparmor-$(AA_VERSION)
+AA_VERSION = 3.0.3
+AA_VERSION_STRIPPED = $(shell AA_VERSION=$(AA_VERSION); echo $${AA_VERSION%*.0})
+AA_LIB_VERSION = 1.8.1
+AA_DIR     = apparmor-$(AA_VERSION_STRIPPED)
 
 AALIB      = -L../libraries/libapparmor/src/.libs
 AALIB     += -lapparmor
@@ -25,7 +27,7 @@ INSTALLDIR          = build/$(AA_DIR)-install
 MAKEVARS            += DESTDIR=$(CURDIR)/$(INSTALLDIR)
 endif
 
-$(AA_DIR)_URL       = https://launchpad.net/apparmor/$(AA_VERSION)/$(AA_VERSION).0/+download/apparmor-$(AA_VERSION).tar.gz
+$(AA_DIR)_URL       = https://launchpad.net/apparmor/$(basename $(AA_VERSION))/$(AA_VERSION)/+download/apparmor-$(AA_VERSION_STRIPPED).tar.gz
 $(AA_DIR)_CONFOPTS += --disable-man-pages
 $(AA_DIR)_CONFOPTS += --without-perl
 $(AA_DIR)_CONFOPTS += --without-python
@@ -56,7 +58,7 @@ profiles_BUILDDIR  = $(AA_DIR)/profiles
 profiles_SRCDIR    = $(AA_DIR)
 profiles_DEP       = $(AA_DIR)
 
-PKG_y += apparmor-$(AA_VERSION) binutils utils parser profiles
+PKG_y += apparmor-$(AA_VERSION_STRIPPED) binutils utils parser profiles
 
 include $(ROOTDIR)/tools/automake.inc
 
@@ -71,11 +73,11 @@ PARSER_INST        = build/parser-install
 PROFILES_INST      = build/profiles-install
 
 my_romfs:
-	$(ROMFSINST) -d $(INSTALLDIR)/lib/libapparmor.so.1.5.0 /lib/libapparmor.so.1.5.0
-	$(ROMFSINST) -s libapparmor.so.1.5.0 /lib/libapparmor.so.1
-	$(ROMFSINST) -s libapparmor.so.1.5.0 /lib/libapparmor.so
+	$(ROMFSINST) -d $(INSTALLDIR)/lib/libapparmor.so.$(AA_LIB_VERSION) /lib/libapparmor.so.$(AA_LIB_VERSION)
+	$(ROMFSINST) -s libapparmor.so.$(AA_LIB_VERSION) /lib/libapparmor.so.1
+	$(ROMFSINST) -s libapparmor.so.$(AA_LIB_VERSION) /lib/libapparmor.so
 	$(ROMFSINST) -d $(INSTALLDIR)/etc/apparmor /etc/apparmor
-	$(ROMFSINST) -d $(INSTALLDIR)/etc/apparmor /etc/apparmor
+	$(ROMFSINST) -d $(INSTALLDIR)/etc/apparmor.d/tunables /etc/apparmor.d/tunables
 	$(ROMFSINST) -d $(INSTALLDIR)/sbin/apparmor_parser /sbin/apparmor_parser
 	$(ROMFSINST) -d $(INSTALLDIR)/usr/bin/aa-exec /usr/bin/aa-exec
 	$(ROMFSINST) -d $(INSTALLDIR)/usr/sbin/aa-status /usr/sbin/aa-status

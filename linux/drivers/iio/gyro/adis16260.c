@@ -5,17 +5,12 @@
  * Copyright 2010 Analog Devices Inc.
  */
 
-#include <linux/interrupt.h>
-#include <linux/mutex.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/spi/spi.h>
-#include <linux/sysfs.h>
 #include <linux/module.h>
 
 #include <linux/iio/iio.h>
-#include <linux/iio/sysfs.h>
-#include <linux/iio/buffer.h>
 #include <linux/iio/imu/adis.h>
 
 #define ADIS16260_STARTUP_DELAY	220 /* ms */
@@ -293,7 +288,7 @@ static int adis16260_write_raw(struct iio_dev *indio_dev,
 		addr = adis16260_addresses[chan->scan_index][1];
 		return adis_write_reg_16(adis, addr, val);
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		mutex_lock(&adis->state_lock);
+		adis_dev_lock(adis);
 		if (spi_get_device_id(adis->spi)->driver_data)
 			t = 256 / val;
 		else
@@ -310,7 +305,7 @@ static int adis16260_write_raw(struct iio_dev *indio_dev,
 			adis->spi->max_speed_hz = ADIS16260_SPI_FAST;
 		ret = __adis_write_reg_8(adis, ADIS16260_SMPL_PRD, t);
 
-		mutex_unlock(&adis->state_lock);
+		adis_dev_unlock(adis);
 		return ret;
 	}
 	return -EINVAL;
@@ -359,6 +354,11 @@ static const struct adis_data adis16260_data = {
 		BIT(ADIS16260_DIAG_STAT_POWER_LOW_BIT),
 };
 
+static void adis16260_stop(void *data)
+{
+	adis16260_stop_device(data);
+}
+
 static int adis16260_probe(struct spi_device *spi)
 {
 	const struct spi_device_id *id;
@@ -381,7 +381,6 @@ static int adis16260_probe(struct spi_device *spi)
 	adis16260->info = &adis16260_chip_info_table[id->driver_data];
 
 	indio_dev->name = id->name;
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->info = &adis16260_info;
 	indio_dev->channels = adis16260->info->channels;
 	indio_dev->num_channels = adis16260->info->num_channels;
@@ -391,35 +390,20 @@ static int adis16260_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = adis_setup_buffer_and_trigger(&adis16260->adis, indio_dev, NULL);
+	ret = devm_adis_setup_buffer_and_trigger(&adis16260->adis, indio_dev, NULL);
 	if (ret)
 		return ret;
 
 	/* Get the device into a sane initial state */
 	ret = adis_initial_startup(&adis16260->adis);
 	if (ret)
-		goto error_cleanup_buffer_trigger;
-	ret = iio_device_register(indio_dev);
+		return ret;
+
+	ret = devm_add_action_or_reset(&spi->dev, adis16260_stop, indio_dev);
 	if (ret)
-		goto error_cleanup_buffer_trigger;
+		return ret;
 
-	return 0;
-
-error_cleanup_buffer_trigger:
-	adis_cleanup_buffer_and_trigger(&adis16260->adis, indio_dev);
-	return ret;
-}
-
-static int adis16260_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct adis16260 *adis16260 = iio_priv(indio_dev);
-
-	iio_device_unregister(indio_dev);
-	adis16260_stop_device(indio_dev);
-	adis_cleanup_buffer_and_trigger(&adis16260->adis, indio_dev);
-
-	return 0;
+	return devm_iio_device_register(&spi->dev, indio_dev);
 }
 
 /*
@@ -442,7 +426,6 @@ static struct spi_driver adis16260_driver = {
 		.name = "adis16260",
 	},
 	.probe = adis16260_probe,
-	.remove = adis16260_remove,
 	.id_table = adis16260_id,
 };
 module_spi_driver(adis16260_driver);
@@ -450,3 +433,4 @@ module_spi_driver(adis16260_driver);
 MODULE_AUTHOR("Barry Song <21cnbao@gmail.com>");
 MODULE_DESCRIPTION("Analog Devices ADIS16260/5 Digital Gyroscope Sensor");
 MODULE_LICENSE("GPL v2");
+MODULE_IMPORT_NS(IIO_ADISLIB);

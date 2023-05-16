@@ -1,0 +1,131 @@
+From 3dd53250083e88b07ec9ba94868f4dbad3be5cdf Mon Sep 17 00:00:00 2001
+From: Chris Nisbet <cnisbet@digi.com>
+Date: Thu, 28 Apr 2022 06:09:33 +1200
+Subject: [PATCH] Improve auto-select of certificates
+
+If performing a GETCRL request and auto-selecting certificates, guess
+at the issuer certificate by using the certificate that has the same
+subject name as the issuer of the local certificate (specified with
+'-l').
+Previously, auto-selection would use the auto-selected 'cacert', which
+would most likely _not_ be the issuing certificate of the local
+certificate.
+
+This may still be overridden by using the -O command line option to
+specify the issuer certificate.
+---
+ src/fileutils.c | 13 +++++++++++--
+ src/sscep.c     | 15 ++++++++++++++-
+ src/sscep.h     |  4 +++-
+ 3 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/src/fileutils.c b/src/fileutils.c
+index cdffb6c..7b846b7 100644
+--- a/src/fileutils.c
++++ b/src/fileutils.c
+@@ -17,6 +17,7 @@ X509 *cacert;
+ X509 *encert;
+ X509 *localcert;
+ X509 *renewal_cert;
++X509 *issuer_cert;
+ X509_REQ *request;
+ EVP_PKEY *rsa;
+ EVP_PKEY *renewal_key;
+@@ -406,7 +407,8 @@ read_cert(const char *filename)
+ /* Read CA cert and optionally, encyption CA cert */
+ 
+ void
+-guess_ca_certs(const char* filename, X509 **sigc, X509 **encc)
++guess_ca_certs(const char* filename, X509_NAME *issuer_name,
++			   X509 **sigc, X509 **encc, X509 **issuer_cert)
+ {
+ 	int ccnt, i, j;
+ 	X509 *cert[20];
+@@ -439,6 +441,9 @@ guess_ca_certs(const char* filename, X509 **sigc, X509 **encc)
+ 			}
+ 		}
+ 
++		if (issuer_name != NULL && !X509_NAME_cmp(issuer_name, myname))
++			*issuer_cert = cert[i];
++
+ 		if (!is_issuer) {
+ 			/* X509_get_key_usage(cert[i]) is not in older openssl */
+ 			ASN1_BIT_STRING *usage = X509_get_ext_d2i(cert[i], NID_key_usage, NULL, NULL);
+@@ -456,7 +461,7 @@ guess_ca_certs(const char* filename, X509 **sigc, X509 **encc)
+ 
+ 	/* release those we don't use */
+ 	for (i = 0; i < ccnt; i++) {
+-		if (cert[i] != *sigc && cert[i] != *encc)
++		if (cert[i] != *sigc && cert[i] != *encc && cert[i] != *issuer_cert)
+ 			X509_free(cert[i]);
+ 	}
+ 
+@@ -471,6 +476,10 @@ guess_ca_certs(const char* filename, X509 **sigc, X509 **encc)
+ 			printf("%s: using RA encryption certificate: %s\n", pname,
+ 				X509_NAME_oneline(X509_get_subject_name(*encc),
+ 						buffer, sizeof(buffer)));
++		if (*issuer_cert)
++			printf("%s: using issuer certificate: %s\n", pname,
++				X509_NAME_oneline(X509_get_subject_name(*issuer_cert),
++						buffer, sizeof(buffer)));
+ 	}
+ 
+ }
+diff --git a/src/sscep.c b/src/sscep.c
+index 306f1a7..ff0686e 100644
+--- a/src/sscep.c
++++ b/src/sscep.c
+@@ -928,7 +928,8 @@ main(int argc, char **argv) {
+ 			/* try to read certificate from a file */
+ 			if (!(cacert = read_cert(c_char))) {
+ 				/* if that fails, try to guess both CA certificates */
+-				guess_ca_certs(c_char, &cacert, &encert);
++				X509_NAME *issuer_name = (operation_flag == SCEP_OPERATION_GETCRL) ? X509_get_issuer_name(localcert) : NULL;
++				guess_ca_certs(c_char, issuer_name, &cacert, &encert, &issuer_cert);
+ 
+ 				if (!cacert) {
+ 					fprintf(stderr, "%s: cannot read CA cert (-c) file %s\n",
+@@ -1055,6 +1056,18 @@ not_enroll:
+ 				exit (SCEP_PKISTATUS_ERROR);
+ 			}
+ 
++			/*
++			 * For GETCRL operations and auto-selected certificates, issuer_cert
++			 * may not be NULL. In that case, use it for the serial and issuer.
++			 * This may still be overridden if the user uses the '-O' option.
++			 */
++			if (issuer_cert != NULL) {
++				scep_t.ias_getcrl->serial =
++					X509_get_serialNumber(issuer_cert);
++				scep_t.ias_getcrl->issuer =
++					X509_get_issuer_name(issuer_cert);
++			}
++
+ 			/* Use an extra certificate to read the issuer/serial
+ 			information when calling getcert/getcrl */
+ 			if ( O_flag) {
+diff --git a/src/sscep.h b/src/sscep.h
+index 77e21e7..c0cab0f 100644
+--- a/src/sscep.h
++++ b/src/sscep.h
+@@ -179,6 +179,7 @@ extern X509 *cacert;
+ extern X509 *encert;
+ extern X509 *localcert;
+ extern X509 *renewal_cert;
++extern X509 *issuer_cert;
+ extern X509_REQ *request;
+ extern EVP_PKEY *rsa;
+ extern EVP_PKEY *renewal_key;
+@@ -317,7 +318,8 @@ EVP_PKEY *read_key(char* filename);
+ void read_key_Engine(EVP_PKEY** key, char* filename, ENGINE *e);
+ 
+ /* Read CA certificate file */
+-void guess_ca_certs(const char* filename, X509 **vercert, X509 **encert);
++void guess_ca_certs(const char* filename, X509_NAME *issuer_name,
++					X509 **vercert, X509 **encert, X509 **issuer_cert);
+ 
+ /* Read local certificate file */
+ X509 *read_cert(const char* filename);
+-- 
+2.30.2
+

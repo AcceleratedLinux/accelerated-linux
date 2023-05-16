@@ -25,12 +25,15 @@ properties:
     maxItems: 1
 
   power-domains:
-    maxItems: 2
+    minItems: 2
+    maxItems: 3
 
   power-domain-names:
+    minItems: 2
     items:
       - const: venus
       - const: vcodec0
+      - const: cx
 
   clocks:
     maxItems: 5
@@ -107,6 +110,8 @@ required:
   - memory-region
   - video-decoder
   - video-encoder
+
+additionalProperties: false
 
 examples:
   - |

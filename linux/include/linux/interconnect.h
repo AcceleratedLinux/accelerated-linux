@@ -23,6 +23,21 @@
 struct icc_path;
 struct device;
 
+/**
+ * struct icc_bulk_data - Data used for bulk icc operations.
+ *
+ * @path: reference to the interconnect path (internal use)
+ * @name: the name from the "interconnect-names" DT property
+ * @avg_bw: average bandwidth in icc units
+ * @peak_bw: peak bandwidth in icc units
+ */
+struct icc_bulk_data {
+	struct icc_path	*path;
+	const char *name;
+	u32 avg_bw;
+	u32 peak_bw;
+};
+
 #if IS_ENABLED(CONFIG_INTERCONNECT)
 
 struct icc_path *icc_get(struct device *dev, const int src_id,
@@ -36,6 +51,12 @@ int icc_disable(struct icc_path *path);
 int icc_set_bw(struct icc_path *path, u32 avg_bw, u32 peak_bw);
 void icc_set_tag(struct icc_path *path, u32 tag);
 const char *icc_get_name(struct icc_path *path);
+int __must_check of_icc_bulk_get(struct device *dev, int num_paths,
+				 struct icc_bulk_data *paths);
+void icc_bulk_put(int num_paths, struct icc_bulk_data *paths);
+int icc_bulk_set_bw(int num_paths, const struct icc_bulk_data *paths);
+int icc_bulk_enable(int num_paths, const struct icc_bulk_data *paths);
+void icc_bulk_disable(int num_paths, const struct icc_bulk_data *paths);
 
 #else
 
@@ -88,6 +109,29 @@ static inline void icc_set_tag(struct icc_path *path, u32 tag)
 static inline const char *icc_get_name(struct icc_path *path)
 {
 	return NULL;
+}
+
+static inline int of_icc_bulk_get(struct device *dev, int num_paths, struct icc_bulk_data *paths)
+{
+	return 0;
+}
+
+static inline void icc_bulk_put(int num_paths, struct icc_bulk_data *paths)
+{
+}
+
+static inline int icc_bulk_set_bw(int num_paths, const struct icc_bulk_data *paths)
+{
+	return 0;
+}
+
+static inline int icc_bulk_enable(int num_paths, const struct icc_bulk_data *paths)
+{
+	return 0;
+}
+
+static inline void icc_bulk_disable(int num_paths, const struct icc_bulk_data *paths)
+{
 }
 
 #endif /* CONFIG_INTERCONNECT */

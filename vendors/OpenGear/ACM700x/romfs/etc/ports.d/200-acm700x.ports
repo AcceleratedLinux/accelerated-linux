@@ -8,24 +8,28 @@ port06 - 8p8c-f /devices/platform/soc/soc:pcie@82000000/pci0000:00/0000:00:01.0/
 port07 - 8p8c-f /devices/platform/soc/soc:pcie@82000000/pci0000:00/0000:00:01.0/0000:01:00.0/tty/ttyS6
 port08 - 8p8c-f /devices/platform/soc/soc:pcie@82000000/pci0000:00/0000:00:01.0/0000:01:00.0/tty/ttyS7
 
+# Rear USB ports
+# d0051000.usb/usb2,			EHCI Host Controller
+# d0051000.usb/usb2/2-1,		USB 2.0 Hub
+# d0051000.usb/usb2/2-1/2-1.x,		Rear USB ports
+# NOTE, "*" matches any number of sub-pathnames
 portN+1 "Rear USB 1" usb-af /devices/platform/soc/soc:internal-regs/d0051000.usb/usb*/?-1.4/*
 portN+2 "Rear USB 2" usb-af /devices/platform/soc/soc:internal-regs/d0051000.usb/usb*/?-1.3/*
 portN+3 "Rear USB 3" usb-af /devices/platform/soc/soc:internal-regs/d0051000.usb/usb*/?-1.2/*
 portN+4 "Rear USB 4" usb-af /devices/platform/soc/soc:internal-regs/d0051000.usb/usb*/?-1.1/*
 
-# Sierra Gobi cellular modem
-[gps]portN+5 "GPS" usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/1-1/1-1:1.2* cellnmea01
-cellcommand01 - usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/1-1/1-1:1.3* cellmodem01
-modem01 "V.92 Modem" 6p4c-f /devices/platform/soc/soc:internal-regs/d0010600.spi/spi_master/spi0/spi0.3/tty/ttyXRM0
+# Sierra Wireless cellular modem
+# d0050000.usb/usb1,			EHCI Host Controller
+# d0050000.usb/usb1/1-1,		Internal cellmodem
+# d0050000.usb/usb1/1-1/1-1:1.x,	USB interfaces on the internal cellmodem
+[gps]portN+5 "GPS" usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/?-1:1.2/* cellnmea01
+cellcommand01 - usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/?-1:1.3/* cellmodem01
 
-# Huawei cellular modem
-[gps]portN+5 "GPS" usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/1-1/1-1:2.5* cellnmea01
-cellcommand01 - usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/1-1/1-1:2.2*
-cellmodem01 - usb-af /devices/platform/soc/soc:internal-regs/d0050000.usb/usb*/1-1/1-1:2.3*
+# V.92 Modem
+modem01 "V.92 Modem" 6p4c-f /devices/platform/soc/soc:internal-regs/d0010600.spi/spi_master/spi0/spi0.3/tty/ttyXRM0
 
 # ignore the internal UART connector
 ignore - - /devices/platform/serial8250/tty/ttyS*
 
 # ignore the cellular modem ports on the internal USB
 ignore - - /devices/platform/soc/soc:internal-regs/d0050000.usb/usb1/1-1/*
-

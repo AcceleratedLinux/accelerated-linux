@@ -1,0 +1,166 @@
+#!/bin/sh
+
+#
+# serial-mode.sh - setup and control serial port interface mode
+#
+# (C) Copyright 2020, Digi International.
+#
+
+#
+# GPIO376 = port 1 termination/biasing (output, active high, default low)
+# GPIO377 = port 2 termination/biasing (output, active high, default low)
+# GPIO378 = port 3 termination/biasing (output, active high, default low)
+# GPIO379 = port 4 termination/biasing (output, active high, default low)
+# GPIO380 = port 5 termination/biasing (output, active high, default low)
+# GPIO381 = port 6 termination/biasing (output, active high, default low)
+# GPIO382 = port 7 termination/biasing (output, active high, default low)
+# GPIO383 = port 8 termination/biasing (output, active high, default low)
+#
+# GPIO360 = port 9 termination/biasing (output, active high, default low)
+# GPIO361 = port 10 termination/biasing (output, active high, default low)
+# GPIO362 = port 11 termination/biasing (output, active high, default low)
+# GPIO363 = port 12 termination/biasing (output, active high, default low)
+# GPIO364 = port 13 termination/biasing (output, active high, default low)
+# GPIO365 = port 14 termination/biasing (output, active high, default low)
+# GPIO366 = port 15 termination/biasing (output, active high, default low)
+# GPIO367 = port 16 termination/biasing (output, active high, default low)
+#
+# GPIO368 = port 1 2-wire, half-duplex enable (output, active high, default low)
+# GPIO369 = port 2 2-wire, half-duplex enable (output, active high, default low)
+# GPIO370 = port 3 2-wire, half-duplex enable (output, active high, default low)
+# GPIO371 = port 4 2-wire, half-duplex enable (output, active high, default low)
+# GPIO372 = port 5 2-wire, half-duplex enable (output, active high, default low)
+# GPIO373 = port 6 2-wire, half-duplex enable (output, active high, default low)
+# GPIO374 = port 7 2-wire, half-duplex enable (output, active high, default low)
+# GPIO375 = port 8 2-wire, half-duplex enable (output, active high, default low)
+#
+# GPIO352 = port 9 2-wire, half-duplex enable (output, active high, default low)
+# GPIO353 = port 10 2-wire, half-duplex enable (output, active high, default low)
+# GPIO354 = port 11 2-wire, half-duplex enable (output, active high, default low)
+# GPIO355 = port 12 2-wire, half-duplex enable (output, active high, default low)
+# GPIO356 = port 13 2-wire, half-duplex enable (output, active high, default low)
+# GPIO357 = port 14 2-wire, half-duplex enable (output, active high, default low)
+# GPIO358 = port 15 2-wire, half-duplex enable (output, active high, default low)
+# GPIO359 = port 16 2-wire, half-duplex enable (output, active high, default low)
+
+get_term_gpio() {
+	if [ "$1" -ge "0" ] && [ "$1" -le "7" ] ; then
+		gpio="$((376 + $1))"
+	elif [ "$1" -ge "8" ] && [ "$1" -le "15" ] ; then
+		gpio="$((360 + ($1 - 8)))"
+	fi
+
+	echo "$gpio"
+}
+
+get_2w_gpio() {
+	if [ "$1" -ge "0" ] && [ "$1" -le "7" ] ; then
+		gpio="$((368 + $1))"
+	elif [ "$1" -ge "8" ] && [ "$1" -le "15" ] ; then
+		gpio="$((352 + ($1 - 8)))"
+	fi
+
+	echo "$gpio"
+}
+
+get_uart_index() {
+	if [ "$1" -ge "0" ] && [ "$1" -le "7" ] ; then
+		index="$1"
+	elif [ "$1" -ge "8" ] && [ "$1" -le "15" ] ; then
+		index=$(($1 - 8))
+	elif [ "$1" -ge "16" ] && [ "$1" -le "23" ] ; then
+		index=$(($1 - 16))
+	elif [ "$1" -ge "24" ] && [ "$1" -le "31" ] ; then
+		index=$(($1 - 24))
+	fi
+
+	echo "$index"
+}
+
+serial_init() {
+	# The initialization prepares GPIOs, but defers mode shift
+	# until mode is selected.
+	term=$(get_term_gpio $1)
+	wire=$(get_2w_gpio $1)
+	echo "${term}" > /sys/class/gpio/export
+	echo "${wire}" > /sys/class/gpio/export
+}
+
+serial_rs232() {
+	wire=$(get_2w_gpio $1)
+	uart_index=$(get_uart_index $1)
+	echo "low" > /sys/class/gpio/gpio${wire}/direction
+	echo "$uart_index,232" > /sys/class/tty/ttyS$((1 + $1))/device/uart_mode
+}
+
+serial_rs422() {
+	wire=$(get_2w_gpio $1)
+	uart_index=$(get_uart_index $1)
+	echo "low" > /sys/class/gpio/gpio${wire}/direction
+	echo "$uart_index,422" > /sys/class/tty/ttyS$((1 + $1))/device/uart_mode
+}
+
+serial_rs485() {  # 2-wire, half-duplex
+	wire=$(get_2w_gpio $1)
+	uart_index=$(get_uart_index $1)
+	echo "high" > /sys/class/gpio/gpio${wire}/direction
+	echo "$uart_index,485_2W" > /sys/class/tty/ttyS$((1 + $1))/device/uart_mode
+}
+
+serial_nonterminate() {
+	term=$(get_term_gpio $1)
+	echo "low" > /sys/class/gpio/gpio${term}/direction
+}
+
+serial_terminate() {
+	term=$(get_term_gpio $1)
+	echo "high" > /sys/class/gpio/gpio${term}/direction
+}
+
+usage() {
+	echo "usage: serial-mode <device> (init|rs-232|rs-422|rs-485) [terminate]"
+	echo
+	echo "        init      -- initialize port control"
+	echo "        powerdown -- not supported"
+	echo "        rs-232    -- set port into RS-232 mode (default)"
+	echo "        rs-422    -- set port into RS-422 mode"
+	echo "        rs-485    -- set port into RS-485 mode"
+	echo "        terminate -- enable line termination"
+	echo
+	exit 1
+}
+
+#
+# Check arguments, and error out on anything invalid.
+#
+if [ $# -lt 2 -o $# -gt 3 ] ; then
+	usage
+fi
+
+portnum="${1#/dev/serial/port}"
+if [ "${portnum}" -lt "1" ] || [ "${portnum}" -gt "16" ] ; then
+	echo "ERROR: serial-mode not supported on supplied port"
+	exit 1
+fi
+
+portnum=$((${portnum} - 1))
+
+case "$2" in
+init)	serial_init ${portnum} ;;
+powerdown)
+	# Not supported, exit with success
+	exit 0
+	;;
+rs-232)	serial_rs232 ${portnum} ;;
+rs-422)	serial_rs422 ${portnum} ;;
+rs-485)	serial_rs485 ${portnum} ;;
+*)	usage ;;
+esac
+
+if [ "$3" = "terminate" ] && [ "$2" != "rs-232" ] ; then
+	serial_terminate ${portnum}
+else
+	serial_nonterminate ${portnum}
+fi
+
+exit 0

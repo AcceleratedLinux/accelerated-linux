@@ -15,7 +15,10 @@ SCONS_OPTIONS = \
 	gpsd_group=tty \
 	gpsdclients=yes \
 	udevdir=$(STAGEDIR)/libexec/udev \
-	ublox=yes
+	ublox=yes \
+	ntpshm=yes \
+	shm_export=yes \
+	nostrip=yes
 
 SCONS = \
 	$(BUILDVARS) \
@@ -45,3 +48,10 @@ my_romfs:
 	$(ROMFSINST) build/$($(PKG)_BUILDDIR)/gpsd.hotplug /libexec/udev/gpsd.hotplug
 	chmod +x $(ROMFSDIR)/libexec/udev/gpsd.hotplug
 	$(ROMFSINST) build/$($(PKG)_BUILDDIR)/gpsd.rules /libexec/udev/rules.d/25-gpsd.rules
+	$(ROMFSINST) build/$($(PKG)_BUILDDIR)/ubxtool /usr/bin/ubxtool
+	$(ROMFSINST) -d -p 755 build/$($(PKG)_BUILDDIR)/gps/client.py /usr/bin/gps/client.py
+	$(ROMFSINST) -d -p 755 build/$($(PKG)_BUILDDIR)/gps/__init__.py /usr/bin/gps/__init__.py
+	$(ROMFSINST) -d -p 755 build/$($(PKG)_BUILDDIR)/gps/fake.py /usr/bin/gps/fake.py
+	$(ROMFSINST) -d -p 755 build/$($(PKG)_BUILDDIR)/gps/gps.py /usr/bin/gps/gps.py
+	$(ROMFSINST) -d -p 755 build/$($(PKG)_BUILDDIR)/gps/misc.py /usr/bin/gps/misc.py
+	$(ROMFSINST) -d -p 755 build/$($(PKG)_BUILDDIR)/gps/watch_options.py /usr/bin/gps/watch_options.py

@@ -5,7 +5,7 @@
 #   Match power state based on configured permissions in /etc/config/cellmodem.conf.
 #
 
-PWR_GPIO=243
+PWR_GPIO=499
 COMMAND=$1
 GPIODIR=/sys/class/gpio/gpio$PWR_GPIO
 

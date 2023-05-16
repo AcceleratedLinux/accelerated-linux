@@ -45,22 +45,18 @@ struct dw_spi_mmio {
 #define MSCC_SPI_MST_SW_MODE_SW_PIN_CTRL_MODE	BIT(13)
 #define MSCC_SPI_MST_SW_MODE_SW_SPI_CS(x)	(x << 5)
 
-/*
- * For Keem Bay, CTRLR0[31] is used to select controller mode.
- * 0: SSI is slave
- * 1: SSI is master
- */
-#define KEEMBAY_CTRLR0_SSIC_IS_MST		BIT(31)
+#define SPARX5_FORCE_ENA			0xa4
+#define SPARX5_FORCE_VAL			0xa8
 
 struct dw_spi_mscc {
 	struct regmap       *syscon;
-	void __iomem        *spi_mst;
+	void __iomem        *spi_mst; /* Not sparx5 */
 };
 
 /*
  * The Designware SPI controller (referred to as master in the documentation)
  * automatically deasserts chip select when the tx fifo is empty. The chip
- * selects then needs to be either driven as GPIOs or, for the first 4 using the
+ * selects then needs to be either driven as GPIOs or, for the first 4 using
  * the SPI boot controller registers. the final chip select is an OR gate
  * between the Designware SPI controller and the SPI boot controller.
  */
@@ -114,9 +110,6 @@ static int dw_spi_mscc_init(struct platform_device *pdev,
 	dwsmmio->dws.set_cs = dw_spi_mscc_set_cs;
 	dwsmmio->priv = dwsmscc;
 
-	/* Register hook to configure CTRLR0 */
-	dwsmmio->dws.update_cr0 = dw_spi_update_cr0;
-
 	return 0;
 }
 
@@ -134,53 +127,113 @@ static int dw_spi_mscc_jaguar2_init(struct platform_device *pdev,
 				JAGUAR2_IF_SI_OWNER_OFFSET);
 }
 
+/*
+ * The Designware SPI controller (referred to as master in the
+ * documentation) automatically deasserts chip select when the tx fifo
+ * is empty. The chip selects then needs to be driven by a CS override
+ * register. enable is an active low signal.
+ */
+static void dw_spi_sparx5_set_cs(struct spi_device *spi, bool enable)
+{
+	struct dw_spi *dws = spi_master_get_devdata(spi->master);
+	struct dw_spi_mmio *dwsmmio = container_of(dws, struct dw_spi_mmio, dws);
+	struct dw_spi_mscc *dwsmscc = dwsmmio->priv;
+	u8 cs = spi->chip_select;
+
+	if (!enable) {
+		/* CS override drive enable */
+		regmap_write(dwsmscc->syscon, SPARX5_FORCE_ENA, 1);
+		/* Now set CSx enabled */
+		regmap_write(dwsmscc->syscon, SPARX5_FORCE_VAL, ~BIT(cs));
+		/* Allow settle */
+		usleep_range(1, 5);
+	} else {
+		/* CS value */
+		regmap_write(dwsmscc->syscon, SPARX5_FORCE_VAL, ~0);
+		/* Allow settle */
+		usleep_range(1, 5);
+		/* CS override drive disable */
+		regmap_write(dwsmscc->syscon, SPARX5_FORCE_ENA, 0);
+	}
+
+	dw_spi_set_cs(spi, enable);
+}
+
+static int dw_spi_mscc_sparx5_init(struct platform_device *pdev,
+				   struct dw_spi_mmio *dwsmmio)
+{
+	const char *syscon_name = "microchip,sparx5-cpu-syscon";
+	struct device *dev = &pdev->dev;
+	struct dw_spi_mscc *dwsmscc;
+
+	if (!IS_ENABLED(CONFIG_SPI_MUX)) {
+		dev_err(dev, "This driver needs CONFIG_SPI_MUX\n");
+		return -EOPNOTSUPP;
+	}
+
+	dwsmscc = devm_kzalloc(dev, sizeof(*dwsmscc), GFP_KERNEL);
+	if (!dwsmscc)
+		return -ENOMEM;
+
+	dwsmscc->syscon =
+		syscon_regmap_lookup_by_compatible(syscon_name);
+	if (IS_ERR(dwsmscc->syscon)) {
+		dev_err(dev, "No syscon map %s\n", syscon_name);
+		return PTR_ERR(dwsmscc->syscon);
+	}
+
+	dwsmmio->dws.set_cs = dw_spi_sparx5_set_cs;
+	dwsmmio->priv = dwsmscc;
+
+	return 0;
+}
+
 static int dw_spi_alpine_init(struct platform_device *pdev,
 			      struct dw_spi_mmio *dwsmmio)
 {
-	dwsmmio->dws.cs_override = 1;
-
-	/* Register hook to configure CTRLR0 */
-	dwsmmio->dws.update_cr0 = dw_spi_update_cr0;
+	dwsmmio->dws.caps = DW_SPI_CAP_CS_OVERRIDE;
 
 	return 0;
 }
 
-static int dw_spi_dw_apb_init(struct platform_device *pdev,
-			      struct dw_spi_mmio *dwsmmio)
+static int dw_spi_pssi_init(struct platform_device *pdev,
+			    struct dw_spi_mmio *dwsmmio)
 {
-	/* Register hook to configure CTRLR0 */
-	dwsmmio->dws.update_cr0 = dw_spi_update_cr0;
-
 	dw_spi_dma_setup_generic(&dwsmmio->dws);
 
 	return 0;
 }
 
-static int dw_spi_dwc_ssi_init(struct platform_device *pdev,
-			       struct dw_spi_mmio *dwsmmio)
+static int dw_spi_hssi_init(struct platform_device *pdev,
+			    struct dw_spi_mmio *dwsmmio)
 {
-	/* Register hook to configure CTRLR0 */
-	dwsmmio->dws.update_cr0 = dw_spi_update_cr0_v1_01a;
+	dwsmmio->dws.ip = DW_HSSI_ID;
 
 	dw_spi_dma_setup_generic(&dwsmmio->dws);
 
 	return 0;
-}
-
-static u32 dw_spi_update_cr0_keembay(struct spi_controller *master,
-				     struct spi_device *spi,
-				     struct spi_transfer *transfer)
-{
-	u32 cr0 = dw_spi_update_cr0_v1_01a(master, spi, transfer);
-
-	return cr0 | KEEMBAY_CTRLR0_SSIC_IS_MST;
 }
 
 static int dw_spi_keembay_init(struct platform_device *pdev,
 			       struct dw_spi_mmio *dwsmmio)
 {
-	/* Register hook to configure CTRLR0 */
-	dwsmmio->dws.update_cr0 = dw_spi_update_cr0_keembay;
+	dwsmmio->dws.ip = DW_HSSI_ID;
+	dwsmmio->dws.caps = DW_SPI_CAP_KEEMBAY_MST;
+
+	return 0;
+}
+
+static int dw_spi_canaan_k210_init(struct platform_device *pdev,
+				   struct dw_spi_mmio *dwsmmio)
+{
+	/*
+	 * The Canaan Kendryte K210 SoC DW apb_ssi v4 spi controller is
+	 * documented to have a 32 word deep TX and RX FIFO, which
+	 * spi_hw_init() detects. However, when the RX FIFO is filled up to
+	 * 32 entries (RXFLR = 32), an RX FIFO overrun error occurs. Avoid this
+	 * problem by force setting fifo_len to 31.
+	 */
+	dwsmmio->dws.fifo_len = 31;
 
 	return 0;
 }
@@ -290,20 +343,22 @@ static int dw_spi_mmio_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id dw_spi_mmio_of_match[] = {
-	{ .compatible = "snps,dw-apb-ssi", .data = dw_spi_dw_apb_init},
+	{ .compatible = "snps,dw-apb-ssi", .data = dw_spi_pssi_init},
 	{ .compatible = "mscc,ocelot-spi", .data = dw_spi_mscc_ocelot_init},
 	{ .compatible = "mscc,jaguar2-spi", .data = dw_spi_mscc_jaguar2_init},
 	{ .compatible = "amazon,alpine-dw-apb-ssi", .data = dw_spi_alpine_init},
-	{ .compatible = "renesas,rzn1-spi", .data = dw_spi_dw_apb_init},
-	{ .compatible = "snps,dwc-ssi-1.01a", .data = dw_spi_dwc_ssi_init},
+	{ .compatible = "renesas,rzn1-spi", .data = dw_spi_pssi_init},
+	{ .compatible = "snps,dwc-ssi-1.01a", .data = dw_spi_hssi_init},
 	{ .compatible = "intel,keembay-ssi", .data = dw_spi_keembay_init},
+	{ .compatible = "microchip,sparx5-spi", dw_spi_mscc_sparx5_init},
+	{ .compatible = "canaan,k210-spi", dw_spi_canaan_k210_init},
 	{ /* end of table */}
 };
 MODULE_DEVICE_TABLE(of, dw_spi_mmio_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id dw_spi_mmio_acpi_match[] = {
-	{"HISI0173", (kernel_ulong_t)dw_spi_dw_apb_init},
+	{"HISI0173", (kernel_ulong_t)dw_spi_pssi_init},
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, dw_spi_mmio_acpi_match);
@@ -323,3 +378,4 @@ module_platform_driver(dw_spi_mmio_driver);
 MODULE_AUTHOR("Jean-Hugues Deschenes <jean-hugues.deschenes@octasic.com>");
 MODULE_DESCRIPTION("Memory-mapped I/O interface driver for DW SPI Core");
 MODULE_LICENSE("GPL v2");
+MODULE_IMPORT_NS(SPI_DW_CORE);

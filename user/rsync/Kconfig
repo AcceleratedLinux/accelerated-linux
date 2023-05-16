@@ -1,0 +1,2 @@
+config USER_RSYNC_RSYNC
+        bool "rsync"

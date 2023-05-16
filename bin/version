@@ -5,11 +5,12 @@ TZ=UTC
 export TZ
 
 # no git info,  generate suitable public version based on build date
-if [  ! -d ${ROOTDIR:-`pwd`}/.git ]; then
+if [  ! -e ${ROOTDIR:-`pwd`}/.git ]; then
 	YEAR=$(date +%y)
 	MONTH=$(date +%m | sed 's/^0*//')
 	DAY=$(date +%d | sed 's/^0*//')
-	VERSIONSTR="$YEAR.$MONTH.$DAY-public"
+	HOUR=$(date +%H | sed 's/^0*//')
+	VERSIONSTR="$YEAR.$MONTH.$DAY.$HOUR-public"
 	echo $VERSIONSTR
 	exit 0
 fi

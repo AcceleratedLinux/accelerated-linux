@@ -1,14 +1,6 @@
 .. SPDX-License-Identifier: GPL-2.0
 .. include:: <isonum.txt>
 
-.. |struct dev_pm_ops| replace:: :c:type:`struct dev_pm_ops <dev_pm_ops>`
-.. |struct dev_pm_domain| replace:: :c:type:`struct dev_pm_domain <dev_pm_domain>`
-.. |struct bus_type| replace:: :c:type:`struct bus_type <bus_type>`
-.. |struct device_type| replace:: :c:type:`struct device_type <device_type>`
-.. |struct class| replace:: :c:type:`struct class <class>`
-.. |struct wakeup_source| replace:: :c:type:`struct wakeup_source <wakeup_source>`
-.. |struct device| replace:: :c:type:`struct device <device>`
-
 .. _driverapi_pm_devices:
 
 ==============================
@@ -107,7 +99,7 @@ Device Power Management Operations
 
 Device power management operations, at the subsystem level as well as at the
 device driver level, are implemented by defining and populating objects of type
-|struct dev_pm_ops| defined in :file:`include/linux/pm.h`.  The roles of the
+struct dev_pm_ops defined in :file:`include/linux/pm.h`.  The roles of the
 methods included in it will be explained in what follows.  For now, it should be
 sufficient to remember that the last three methods are specific to runtime power
 management while the remaining ones are used during system-wide power
@@ -115,7 +107,7 @@ transitions.
 
 There also is a deprecated "old" or "legacy" interface for power management
 operations available at least for some subsystems.  This approach does not use
-|struct dev_pm_ops| objects and it is suitable only for implementing system
+struct dev_pm_ops objects and it is suitable only for implementing system
 sleep power management methods in a limited way.  Therefore it is not described
 in this document, so please refer directly to the source code for more
 information about it.
@@ -125,9 +117,9 @@ Subsystem-Level Methods
 -----------------------
 
 The core methods to suspend and resume devices reside in
-|struct dev_pm_ops| pointed to by the :c:member:`ops` member of
-|struct dev_pm_domain|, or by the :c:member:`pm` member of |struct bus_type|,
-|struct device_type| and |struct class|.  They are mostly of interest to the
+struct dev_pm_ops pointed to by the :c:member:`ops` member of
+struct dev_pm_domain, or by the :c:member:`pm` member of struct bus_type,
+struct device_type and struct class.  They are mostly of interest to the
 people writing infrastructure for platforms and buses, like PCI or USB, or
 device type and device class drivers.  They also are relevant to the writers of
 device drivers whose subsystems (PM domains, device types, device classes and
@@ -156,7 +148,7 @@ The :c:member:`power.can_wakeup` flag just records whether the device (and its
 driver) can physically support wakeup events.  The
 :c:func:`device_set_wakeup_capable()` routine affects this flag.  The
 :c:member:`power.wakeup` field is a pointer to an object of type
-|struct wakeup_source| used for controlling whether or not the device should use
+struct wakeup_source used for controlling whether or not the device should use
 its system wakeup mechanism and for notifying the PM core of system wakeup
 events signaled by the device.  This object is only present for wakeup-capable
 devices (i.e. devices whose :c:member:`can_wakeup` flags are set) and is created
@@ -225,7 +217,7 @@ system-wide transition to a sleep state even though its :c:member:`runtime_auto`
 flag is clear.
 
 For more information about the runtime power management framework, refer to
-:file:`Documentation/power/runtime_pm.rst`.
+Documentation/power/runtime_pm.rst.
 
 
 Calling Drivers to Enter and Leave System Sleep States
@@ -418,7 +410,7 @@ On many platforms they will gate off one or more clock sources; sometimes they
 will also switch off power supplies or reduce voltages.  [Drivers supporting
 runtime PM may already have performed some or all of these steps.]
 
-If :c:func:`device_may_wakeup(dev)` returns ``true``, the device should be
+If :c:func:`device_may_wakeup()` returns ``true``, the device should be
 prepared for generating hardware wakeup signals to trigger a system wakeup event
 when the system is in the sleep state.  For example, :c:func:`enable_irq_wake()`
 might identify GPIO signals hooked up to a switch or other external hardware,
@@ -663,7 +655,7 @@ been thawed.  Generally speaking, the PM notifiers are suitable for performing
 actions that either require user space to be available, or at least won't
 interfere with user space.
 
-For details refer to :doc:`notifiers`.
+For details refer to Documentation/driver-api/pm/notifiers.rst.
 
 
 Device Low-Power (suspend) States
@@ -713,8 +705,8 @@ nested inside another power domain. The nested domain is referred to as the
 sub-domain of the parent domain.
 
 Support for power domains is provided through the :c:member:`pm_domain` field of
-|struct device|.  This field is a pointer to an object of type
-|struct dev_pm_domain|, defined in :file:`include/linux/pm.h`, providing a set
+struct device.  This field is a pointer to an object of type
+struct dev_pm_domain, defined in :file:`include/linux/pm.h`, providing a set
 of power management callbacks analogous to the subsystem-level and device driver
 callbacks that are executed for the given device during all power transitions,
 instead of the respective subsystem-level callbacks.  Specifically, if a
@@ -734,7 +726,7 @@ it into account in any way.
 
 Devices may be defined as IRQ-safe which indicates to the PM core that their
 runtime PM callbacks may be invoked with disabled interrupts (see
-:file:`Documentation/power/runtime_pm.rst` for more information).  If an
+Documentation/power/runtime_pm.rst for more information).  If an
 IRQ-safe device belongs to a PM domain, the runtime PM of the domain will be
 disallowed, unless the domain itself is defined as IRQ-safe. However, it
 makes sense to define a PM domain as IRQ-safe only if all the devices in it
@@ -813,7 +805,7 @@ The ``DPM_FLAG_MAY_SKIP_RESUME`` Driver Flag
 --------------------------------------------
 
 During system-wide resume from a sleep state it's easiest to put devices into
-the full-power state, as explained in :file:`Documentation/power/runtime_pm.rst`.
+the full-power state, as explained in Documentation/power/runtime_pm.rst.
 [Refer to that document for more information regarding this particular issue as
 well as for information on the device runtime power management framework in
 general.]  However, it often is desirable to leave devices in suspend after

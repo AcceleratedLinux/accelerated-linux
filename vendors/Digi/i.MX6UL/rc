@@ -8,11 +8,14 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs -o size=40M tmpfs /tmp
 mount -t tmpfs -o size=32M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -63,7 +66,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2)"
 	[ -f /etc/config/.init2 ] && filter='$'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |

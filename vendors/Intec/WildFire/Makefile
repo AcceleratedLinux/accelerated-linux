@@ -54,7 +54,7 @@ image.linux:
 image.bin: image.linux
 	genromfs -V "ROMdisk" -f $(ROMFSIMG) -d $(ROMFSDIR)
 	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 	BSS=`$(CROSS)objdump --headers $(ROOTDIR)/$(LINUXDIR)/linux | \
 	  grep .bss` ; \
 	ADDR=`set -- $${BSS} ; echo 0x$${4}` ; \

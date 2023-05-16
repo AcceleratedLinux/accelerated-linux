@@ -1,0 +1,35 @@
+config USER_SAMBA
+        bool "samba"
+	select LIB_LIBNETTLE
+	select LIB_GNUTLS
+	help
+	  Samba is a windows network file sharing tool.
+
+config USER_SAMBA_SMBD
+        bool "smbd"
+        depends on USER_SAMBA
+
+config USER_SAMBA_NMBD
+        bool "nmbd"
+        depends on USER_SAMBA
+
+config USER_SAMBA_SMBMOUNT
+        bool "smbmount"
+        depends on USER_SAMBA
+
+config USER_SAMBA_SMBUMOUNT
+        bool "smbumount"
+        depends on USER_SAMBA
+
+config USER_SAMBA_MOUNT_CIFS
+        bool "mount.cifs"
+        depends on USER_SAMBA
+
+config USER_SAMBA_UMOUNT_CIFS
+        bool "umount.cifs"
+        depends on USER_SAMBA
+
+config USER_SAMBA_SHARED
+        bool "uses shared library"
+        depends on USER_SAMBA
+

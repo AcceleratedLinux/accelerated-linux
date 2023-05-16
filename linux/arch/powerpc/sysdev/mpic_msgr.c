@@ -7,12 +7,13 @@
  */
 
 #include <linux/list.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/slab.h>
-#include <asm/prom.h>
 #include <asm/hw_irq.h>
 #include <asm/ppc-pci.h>
 #include <asm/mpic_msgr.h>
@@ -99,7 +100,7 @@ void mpic_msgr_disable(struct mpic_msgr *msgr)
 EXPORT_SYMBOL_GPL(mpic_msgr_disable);
 
 /* The following three functions are used to compute the order and number of
- * the message register blocks.  They are clearly very inefficent.  However,
+ * the message register blocks.  They are clearly very inefficient.  However,
  * they are called *only* a few times during device initialization.
  */
 static unsigned int mpic_msgr_number_of_blocks(void)
@@ -191,7 +192,7 @@ static int mpic_msgr_probe(struct platform_device *dev)
 
 	/* IO map the message register block. */
 	of_address_to_resource(np, 0, &rsrc);
-	msgr_block_addr = ioremap(rsrc.start, resource_size(&rsrc));
+	msgr_block_addr = devm_ioremap(&dev->dev, rsrc.start, resource_size(&rsrc));
 	if (!msgr_block_addr) {
 		dev_err(&dev->dev, "Failed to iomap MPIC message registers");
 		return -EFAULT;

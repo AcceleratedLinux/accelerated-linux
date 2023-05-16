@@ -94,6 +94,8 @@
 		compatible = "n25q128a13", "jedec,spi-nor";  /* 16MB */
 		reg = <0>;
 		spi-max-frequency = <1000000>; /* input clock */
+		fsl,spi-cs-sck-delay = <100>;
+		fsl,spi-sck-cs-delay = <100>;
 	};
 
 	slic@2 {
@@ -208,4 +210,12 @@
 		fsl,siram-entry-id = <0>;
 		fsl,tdm-interface;
 	};
+};
+
+&usb0 {
+	status = "okay";
+};
+
+&usb1 {
+	status = "okay";
 };

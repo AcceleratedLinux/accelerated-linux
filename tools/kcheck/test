@@ -15,7 +15,7 @@ args = parser.parse_args()
 try:
 	kconfig = kcheck.Config(product.products, args.dir)
 	kproduct = kcheck.Product(kconfig, product.products, product.groups)
-	feature_dict = json.dumps({kconfig.product['product']: kproduct.test(kconfig)})
+	feature_dict = json.dumps({kconfig.product['product']: kcheck.test(kproduct)})
 	print(feature_dict)
 
 except Exception:

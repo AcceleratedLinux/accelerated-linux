@@ -34,7 +34,7 @@ provides host private data for that purpose that can be accessed with
 From the bridge driver perspective, you load the sub-device module and somehow
 obtain the :c:type:`v4l2_subdev` pointer. For i2c devices this is easy: you call
 ``i2c_get_clientdata()``. For other buses something similar needs to be done.
-Helper functions exists for sub-devices on an I2C bus that do most of this
+Helper functions exist for sub-devices on an I2C bus that do most of this
 tricky work for you.
 
 Each :c:type:`v4l2_subdev` contains function pointers that sub-device drivers
@@ -110,7 +110,7 @@ pads:
 	err = media_entity_pads_init(&sd->entity, npads, pads);
 
 The pads array must have been previously initialized. There is no need to
-manually set the struct :c:type:`media_entity` function and name fields, but the
+manually set the struct media_entity function and name fields, but the
 revision field must be initialized if needed.
 
 A reference to the entity will be automatically acquired/released when the
@@ -122,21 +122,21 @@ Don't forget to cleanup the media entity before the sub-device is destroyed:
 
 	media_entity_cleanup(&sd->entity);
 
-If the subdev driver intends to process video and integrate with the media
-framework, it must implement format related functionality using
-:c:type:`v4l2_subdev_pad_ops` instead of :c:type:`v4l2_subdev_video_ops`.
-
-In that case, the subdev driver may set the link_validate field to provide
-its own link validation function. The link validation function is called for
-every link in the pipeline where both of the ends of the links are V4L2
-sub-devices. The driver is still responsible for validating the correctness
-of the format configuration between sub-devices and video nodes.
+If a sub-device driver implements sink pads, the subdev driver may set the
+link_validate field in :c:type:`v4l2_subdev_pad_ops` to provide its own link
+validation function. For every link in the pipeline, the link_validate pad
+operation of the sink end of the link is called. In both cases the driver is
+still responsible for validating the correctness of the format configuration
+between sub-devices and video nodes.
 
 If link_validate op is not set, the default function
 :c:func:`v4l2_subdev_link_validate_default` is used instead. This function
 ensures that width, height and the media bus pixel code are equal on both source
 and sink of the link. Subdev drivers are also free to use this function to
 perform the checks mentioned above in addition to their own checks.
+
+Subdev registration
+~~~~~~~~~~~~~~~~~~~
 
 There are currently two ways to register subdevices with the V4L2 core. The
 first (traditional) possibility is to have subdevices registered by bridge
@@ -157,7 +157,7 @@ below.
 Using one or the other registration method only affects the probing process, the
 run-time bridge-subdevice interaction is in both cases the same.
 
-In the synchronous case a device (bridge) driver needs to register the
+In the **synchronous** case a device (bridge) driver needs to register the
 :c:type:`v4l2_subdev` with the v4l2_device:
 
 	:c:func:`v4l2_device_register_subdev <v4l2_device_register_subdev>`
@@ -179,7 +179,81 @@ You can unregister a sub-device using:
 Afterwards the subdev module can be unloaded and
 :c:type:`sd <v4l2_subdev>`->dev == ``NULL``.
 
-You can call an ops function either directly:
+In the **asynchronous** case subdevice probing can be invoked independently of
+the bridge driver availability. The subdevice driver then has to verify whether
+all the requirements for a successful probing are satisfied. This can include a
+check for a master clock availability. If any of the conditions aren't satisfied
+the driver might decide to return ``-EPROBE_DEFER`` to request further reprobing
+attempts. Once all conditions are met the subdevice shall be registered using
+the :c:func:`v4l2_async_register_subdev` function. Unregistration is
+performed using the :c:func:`v4l2_async_unregister_subdev` call. Subdevices
+registered this way are stored in a global list of subdevices, ready to be
+picked up by bridge drivers.
+
+Bridge drivers in turn have to register a notifier object. This is
+performed using the :c:func:`v4l2_async_nf_register` call. To
+unregister the notifier the driver has to call
+:c:func:`v4l2_async_nf_unregister`. The former of the two functions
+takes two arguments: a pointer to struct :c:type:`v4l2_device` and a
+pointer to struct :c:type:`v4l2_async_notifier`.
+
+Before registering the notifier, bridge drivers must do two things: first, the
+notifier must be initialized using the :c:func:`v4l2_async_nf_init`.
+Second, bridge drivers can then begin to form a list of subdevice descriptors
+that the bridge device needs for its operation. Several functions are available
+to add subdevice descriptors to a notifier, depending on the type of device and
+the needs of the driver.
+
+:c:func:`v4l2_async_nf_add_fwnode_remote` and
+:c:func:`v4l2_async_nf_add_i2c` are for bridge and ISP drivers for
+registering their async sub-devices with the notifier.
+
+:c:func:`v4l2_async_register_subdev_sensor` is a helper function for
+sensor drivers registering their own async sub-device, but it also registers a
+notifier and further registers async sub-devices for lens and flash devices
+found in firmware. The notifier for the sub-device is unregistered with the
+async sub-device.
+
+These functions allocate an async sub-device descriptor which is of type struct
+:c:type:`v4l2_async_subdev` embedded in a driver-specific struct. The &struct
+:c:type:`v4l2_async_subdev` shall be the first member of this struct:
+
+.. code-block:: c
+
+	struct my_async_subdev {
+		struct v4l2_async_subdev asd;
+		...
+	};
+
+	struct my_async_subdev *my_asd;
+	struct fwnode_handle *ep;
+
+	...
+
+	my_asd = v4l2_async_nf_add_fwnode_remote(&notifier, ep,
+						 struct my_async_subdev);
+	fwnode_handle_put(ep);
+
+	if (IS_ERR(asd))
+		return PTR_ERR(asd);
+
+The V4L2 core will then use these descriptors to match asynchronously
+registered subdevices to them. If a match is detected the ``.bound()``
+notifier callback is called. After all subdevices have been located the
+.complete() callback is called. When a subdevice is removed from the
+system the .unbind() method is called. All three callbacks are optional.
+
+Calling subdev operations
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The advantage of using :c:type:`v4l2_subdev` is that it is a generic struct and
+does not contain any knowledge about the underlying hardware. So a driver might
+contain several subdevs that use an I2C bus, but also a subdev that is
+controlled through GPIO pins. This distinction is only relevant when setting
+up the device, but once the subdev is registered it is completely transparent.
+
+Once the subdev has been registered you can call an ops function either
+directly:
 
 .. code-block:: c
 
@@ -191,7 +265,7 @@ but it is better and easier to use this macro:
 
 	err = v4l2_subdev_call(sd, core, g_std, &norm);
 
-The macro will to the right ``NULL`` pointer checks and returns ``-ENODEV``
+The macro will do the right ``NULL`` pointer checks and returns ``-ENODEV``
 if :c:type:`sd <v4l2_subdev>` is ``NULL``, ``-ENOIOCTLCMD`` if either
 :c:type:`sd <v4l2_subdev>`->core or :c:type:`sd <v4l2_subdev>`->core->g_std is ``NULL``, or the actual result of the
 :c:type:`sd <v4l2_subdev>`->ops->core->g_std ops.
@@ -231,46 +305,6 @@ If the sub-device needs to notify its v4l2_device parent of an event, then
 it can call ``v4l2_subdev_notify(sd, notification, arg)``. This macro checks
 whether there is a ``notify()`` callback defined and returns ``-ENODEV`` if not.
 Otherwise the result of the ``notify()`` call is returned.
-
-The advantage of using :c:type:`v4l2_subdev` is that it is a generic struct and
-does not contain any knowledge about the underlying hardware. So a driver might
-contain several subdevs that use an I2C bus, but also a subdev that is
-controlled through GPIO pins. This distinction is only relevant when setting
-up the device, but once the subdev is registered it is completely transparent.
-
-In the asynchronous case subdevice probing can be invoked independently of the
-bridge driver availability. The subdevice driver then has to verify whether all
-the requirements for a successful probing are satisfied. This can include a
-check for a master clock availability. If any of the conditions aren't satisfied
-the driver might decide to return ``-EPROBE_DEFER`` to request further reprobing
-attempts. Once all conditions are met the subdevice shall be registered using
-the :c:func:`v4l2_async_register_subdev` function. Unregistration is
-performed using the :c:func:`v4l2_async_unregister_subdev` call. Subdevices
-registered this way are stored in a global list of subdevices, ready to be
-picked up by bridge drivers.
-
-Bridge drivers in turn have to register a notifier object. This is
-performed using the :c:func:`v4l2_async_notifier_register` call. To
-unregister the notifier the driver has to call
-:c:func:`v4l2_async_notifier_unregister`. The former of the two functions
-takes two arguments: a pointer to struct :c:type:`v4l2_device` and a
-pointer to struct :c:type:`v4l2_async_notifier`.
-
-Before registering the notifier, bridge drivers must do two things:
-first, the notifier must be initialized using the
-:c:func:`v4l2_async_notifier_init`. Second, bridge drivers can then
-begin to form a list of subdevice descriptors that the bridge device
-needs for its operation. Subdevice descriptors are added to the notifier
-using the :c:func:`v4l2_async_notifier_add_subdev` call. This function
-takes two arguments: a pointer to struct :c:type:`v4l2_async_notifier`,
-and a pointer to the subdevice descripter, which is of type struct
-:c:type:`v4l2_async_subdev`.
-
-The V4L2 core will then use these descriptors to match asynchronously
-registered subdevices to them. If a match is detected the ``.bound()``
-notifier callback is called. After all subdevices have been located the
-.complete() callback is called. When a subdevice is removed from the
-system the .unbind() method is called. All three callbacks are optional.
 
 V4L2 sub-device userspace API
 -----------------------------
@@ -484,9 +518,76 @@ The :c:func:`v4l2_i2c_new_subdev` function will call
 :c:type:`i2c_board_info` structure using the ``client_type`` and the
 ``addr`` to fill it.
 
+Centrally managed subdev active state
+-------------------------------------
+
+Traditionally V4L2 subdev drivers maintained internal state for the active
+device configuration. This is often implemented as e.g. an array of struct
+v4l2_mbus_framefmt, one entry for each pad, and similarly for crop and compose
+rectangles.
+
+In addition to the active configuration, each subdev file handle has an array of
+struct v4l2_subdev_pad_config, managed by the V4L2 core, which contains the try
+configuration.
+
+To simplify the subdev drivers the V4L2 subdev API now optionally supports a
+centrally managed active configuration represented by
+:c:type:`v4l2_subdev_state`. One instance of state, which contains the active
+device configuration, is stored in the sub-device itself as part of
+the :c:type:`v4l2_subdev` structure, while the core associates a try state to
+each open file handle, to store the try configuration related to that file
+handle.
+
+Sub-device drivers can opt-in and use state to manage their active configuration
+by initializing the subdevice state with a call to v4l2_subdev_init_finalize()
+before registering the sub-device. They must also call v4l2_subdev_cleanup()
+to release all the allocated resources before unregistering the sub-device.
+The core automatically allocates and initializes a state for each open file
+handle to store the try configurations and frees it when closing the file
+handle.
+
+V4L2 sub-device operations that use both the :ref:`ACTIVE and TRY formats
+<v4l2-subdev-format-whence>` receive the correct state to operate on through
+the 'state' parameter. The state must be locked and unlocked by the
+caller by calling :c:func:`v4l2_subdev_lock_state()` and
+:c:func:`v4l2_subdev_unlock_state()`. The caller can do so by calling the subdev
+operation through the :c:func:`v4l2_subdev_call_state_active()` macro.
+
+Operations that do not receive a state parameter implicitly operate on the
+subdevice active state, which drivers can exclusively access by
+calling :c:func:`v4l2_subdev_lock_and_get_active_state()`. The sub-device active
+state must equally be released by calling :c:func:`v4l2_subdev_unlock_state()`.
+
+Drivers must never manually access the state stored in the :c:type:`v4l2_subdev`
+or in the file handle without going through the designated helpers.
+
+While the V4L2 core passes the correct try or active state to the subdevice
+operations, many existing device drivers pass a NULL state when calling
+operations with :c:func:`v4l2_subdev_call()`. This legacy construct causes
+issues with subdevice drivers that let the V4L2 core manage the active state,
+as they expect to receive the appropriate state as a parameter. To help the
+conversion of subdevice drivers to a managed active state without having to
+convert all callers at the same time, an additional wrapper layer has been
+added to v4l2_subdev_call(), which handles the NULL case by geting and locking
+the callee's active state with :c:func:`v4l2_subdev_lock_and_get_active_state()`,
+and unlocking the state after the call.
+
+The whole subdev state is in reality split into three parts: the
+v4l2_subdev_state, subdev controls and subdev driver's internal state. In the
+future these parts should be combined into a single state. For the time being
+we need a way to handle the locking for these parts. This can be accomplished
+by sharing a lock. The v4l2_ctrl_handler already supports this via its 'lock'
+pointer and the same model is used with states. The driver can do the following
+before calling v4l2_subdev_init_finalize():
+
+.. code-block:: c
+
+	sd->ctrl_handler->lock = &priv->mutex;
+	sd->state_lock = &priv->mutex;
+
+This shares the driver's private mutex between the controls and the states.
+
 V4L2 sub-device functions and data structures
 ---------------------------------------------
 
 .. kernel-doc:: include/media/v4l2-subdev.h
-
-.. kernel-doc:: include/media/v4l2-async.h

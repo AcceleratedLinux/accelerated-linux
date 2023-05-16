@@ -381,10 +381,10 @@ static int mv_cesa_get_sram(struct platform_device *pdev, int idx)
 	engine->pool = of_gen_pool_get(cesa->dev->of_node,
 				       "marvell,crypto-srams", idx);
 	if (engine->pool) {
-		engine->sram = gen_pool_dma_alloc(engine->pool,
-						  cesa->sram_size,
-						  &engine->sram_dma);
-		if (engine->sram)
+		engine->sram_pool = gen_pool_dma_alloc(engine->pool,
+						       cesa->sram_size,
+						       &engine->sram_dma);
+		if (engine->sram_pool)
 			return 0;
 
 		engine->pool = NULL;
@@ -422,7 +422,7 @@ static void mv_cesa_put_sram(struct platform_device *pdev, int idx)
 	struct mv_cesa_engine *engine = &cesa->engines[idx];
 
 	if (engine->pool)
-		gen_pool_free(engine->pool, (unsigned long)engine->sram,
+		gen_pool_free(engine->pool, (unsigned long)engine->sram_pool,
 			      cesa->sram_size);
 	else
 		dma_unmap_resource(cesa->dev, engine->sram_dma,
@@ -437,8 +437,7 @@ static int mv_cesa_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct mv_cesa_dev *cesa;
 	struct mv_cesa_engine *engines;
-	struct resource *res;
-	int irq, ret, i;
+	int irq, ret, i, cpu;
 	u32 sram_size;
 
 	if (cesa_dev) {
@@ -475,8 +474,7 @@ static int mv_cesa_probe(struct platform_device *pdev)
 
 	spin_lock_init(&cesa->lock);
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "regs");
-	cesa->regs = devm_ioremap_resource(dev, res);
+	cesa->regs = devm_platform_ioremap_resource_byname(pdev, "regs");
 	if (IS_ERR(cesa->regs))
 		return PTR_ERR(cesa->regs);
 
@@ -504,6 +502,8 @@ static int mv_cesa_probe(struct platform_device *pdev)
 			ret = irq;
 			goto err_cleanup;
 		}
+
+		engine->irq = irq;
 
 		/*
 		 * Not all platforms can gate the CESA clocks: do not complain
@@ -548,6 +548,10 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		if (ret)
 			goto err_cleanup;
 
+		/* Set affinity */
+		cpu = cpumask_local_spread(engine->id, NUMA_NO_NODE);
+		irq_set_affinity_hint(irq, get_cpu_mask(cpu));
+
 		crypto_init_queue(&engine->queue, CESA_CRYPTO_DEFAULT_MAX_QLEN);
 		atomic_set(&engine->load, 0);
 		INIT_LIST_HEAD(&engine->complete_queue);
@@ -570,6 +574,8 @@ err_cleanup:
 		clk_disable_unprepare(cesa->engines[i].zclk);
 		clk_disable_unprepare(cesa->engines[i].clk);
 		mv_cesa_put_sram(pdev, i);
+		if (cesa->engines[i].irq > 0)
+			irq_set_affinity_hint(cesa->engines[i].irq, NULL);
 	}
 
 	return ret;
@@ -586,6 +592,7 @@ static int mv_cesa_remove(struct platform_device *pdev)
 		clk_disable_unprepare(cesa->engines[i].zclk);
 		clk_disable_unprepare(cesa->engines[i].clk);
 		mv_cesa_put_sram(pdev, i);
+		irq_set_affinity_hint(cesa->engines[i].irq, NULL);
 	}
 
 	return 0;
@@ -608,7 +615,6 @@ static struct platform_driver marvell_cesa = {
 };
 module_platform_driver(marvell_cesa);
 
-MODULE_ALIAS("platform:mv_crypto");
 MODULE_AUTHOR("Boris Brezillon <boris.brezillon@free-electrons.com>");
 MODULE_AUTHOR("Arnaud Ebalard <arno@natisbad.org>");
 MODULE_DESCRIPTION("Support for Marvell's cryptographic engine");

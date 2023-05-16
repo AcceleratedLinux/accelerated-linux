@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  dal:
+    image: dal
+    build:
+      context: .
+      dockerfile: dal.Dockerfile
+      args:
+        USER: builder
+        UID: 1000
+        GID: 1000
+        USER_NAME: First Last
+        USER_EMAIL: someone@digi.com
+        #DAL_TOOLS_METHOD: localcopy
+        DAL_TOOLS_METHOD: download
+        DAL_TOOLS_URL: http://eng.digi.com/builds/DAL/tools/
+        #DAL_TOOLS_URL: http://BNE-SLN-ORANGE.digi.com:8080/downloads/tools/
+      network: "host"
+    environment:
+        SECRET_KEY_PATH: /run/secrets/private_key
+        DAL_CLONE_URL: ssh://git@stash.digi.com/acl/accelerated-linux.git
+        DAL_BRANCH: master
+    network_mode: "bridge"
+    secrets:
+      - source: private_key
+    volumes:
+      - type: bind
+        source: ~/dal-build
+        target: /home/builder/dal
+      - type: volume
+        source: dal-downloads
+        target: /home/builder/.downloads
+secrets:
+  private_key:
+    file: ~/.ssh/id_rsa
+volumes:
+  dal-downloads:

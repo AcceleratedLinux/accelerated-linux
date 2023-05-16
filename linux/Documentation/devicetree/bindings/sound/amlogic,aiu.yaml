@@ -9,6 +9,9 @@ title: Amlogic AIU audio output controller
 maintainers:
   - Jerome Brunet <jbrunet@baylibre.com>
 
+allOf:
+  - $ref: name-prefix.yaml#
+
 properties:
   $nodename:
     pattern: "^audio-controller@.*"
@@ -19,12 +22,11 @@ properties:
   compatible:
     items:
       - enum:
-        - amlogic,aiu-gxbb
-        - amlogic,aiu-gxl
-        - amlogic,aiu-meson8
-        - amlogic,aiu-meson8b
-      - const:
-          amlogic,aiu
+          - amlogic,aiu-gxbb
+          - amlogic,aiu-gxl
+          - amlogic,aiu-meson8
+          - amlogic,aiu-meson8b
+      - const: amlogic,aiu
 
   clocks:
     items:
@@ -66,6 +68,8 @@ properties:
   resets:
     maxItems: 1
 
+  sound-name-prefix: true
+
 required:
   - "#sound-dai-cells"
   - compatible
@@ -75,6 +79,8 @@ required:
   - interrupt-names
   - reg
   - resets
+
+additionalProperties: false
 
 examples:
   - |

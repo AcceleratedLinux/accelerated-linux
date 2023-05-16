@@ -1,0 +1,39 @@
+From 6e52e80d9b9f5bb0b1eb4bf9639cba13bb6cb7b5 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 7 Dec 2021 18:28:13 +0100
+Subject: [PATCH 09/11] Add GRUB_NO_EDIT env variable support to disable config
+ edit
+
+---
+ grub-core/normal/menu.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/grub-core/normal/menu.c b/grub-core/normal/menu.c
+index 8397886..cde16fc 100644
+--- a/grub-core/normal/menu.c
++++ b/grub-core/normal/menu.c
+@@ -772,17 +772,21 @@ run_menu (grub_menu_t menu, int nested, int *auto_boot)
+ 	      break;
+ 
+ 	    case 'c':
++	      if (!grub_env_get ("GRUB_NO_EDIT")) {
+ 	      menu_fini ();
+ 	      grub_cmdline_run (1, 0);
++	      }
+ 	      goto refresh;
+ 
+ 	    case 'e':
++	      if (!grub_env_get ("GRUB_NO_EDIT")) {
+ 	      menu_fini ();
+ 		{
+ 		  grub_menu_entry_t e = grub_menu_get_entry (menu, current_entry);
+ 		  if (e)
+ 		    grub_menu_entry_run (e);
+ 		}
++	      }
+ 	      goto refresh;
+ 
+ 	    default:
+-- 
+2.27.0
+

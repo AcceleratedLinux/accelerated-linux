@@ -12,7 +12,6 @@
 #include <linux/openvswitch.h>
 #include <linux/netlink.h>
 #include <linux/rculist.h>
-#include <linux/swap.h>
 
 #include <net/netlink.h>
 #include <net/genetlink.h>
@@ -392,7 +391,7 @@ static struct dp_meter *dp_meter_create(struct nlattr **a)
 		 *
 		 * Start with a full bucket.
 		 */
-		band->bucket = (band->burst_size + band->rate) * 1000ULL;
+		band->bucket = band->burst_size * 1000ULL;
 		band_max_delta_t = div_u64(band->bucket, band->rate);
 		if (band_max_delta_t > meter->max_delta_t)
 			meter->max_delta_t = band_max_delta_t;
@@ -423,7 +422,7 @@ static int ovs_meter_cmd_set(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	meter = dp_meter_create(a);
-	if (IS_ERR_OR_NULL(meter))
+	if (IS_ERR(meter))
 		return PTR_ERR(meter);
 
 	reply = ovs_meter_cmd_reply_start(info, OVS_METER_CMD_SET,
@@ -611,6 +610,14 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 	spin_lock(&meter->lock);
 
 	long_delta_ms = (now_ms - meter->used); /* ms */
+	if (long_delta_ms < 0) {
+		/* This condition means that we have several threads fighting
+		 * for a meter lock, and the one who received the packets a
+		 * bit later wins. Assuming that all racing threads received
+		 * packets at the same time to avoid overflow.
+		 */
+		long_delta_ms = 0;
+	}
 
 	/* Make sure delta_ms will not be too large, so that bucket will not
 	 * wrap around below.
@@ -641,7 +648,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 		long long int max_bucket_size;
 
 		band = &meter->bands[i];
-		max_bucket_size = (band->burst_size + band->rate) * 1000LL;
+		max_bucket_size = band->burst_size * 1000LL;
 
 		band->bucket += delta_ms * band->rate;
 		if (band->bucket > max_bucket_size)
@@ -672,7 +679,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 	return false;
 }
 
-static struct genl_ops dp_meter_genl_ops[] = {
+static const struct genl_small_ops dp_meter_genl_ops[] = {
 	{ .cmd = OVS_METER_CMD_FEATURES,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = 0,		  /* OK for unprivileged users. */
@@ -711,8 +718,8 @@ struct genl_family dp_meter_genl_family __ro_after_init = {
 	.policy = meter_policy,
 	.netnsok = true,
 	.parallel_ops = true,
-	.ops = dp_meter_genl_ops,
-	.n_ops = ARRAY_SIZE(dp_meter_genl_ops),
+	.small_ops = dp_meter_genl_ops,
+	.n_small_ops = ARRAY_SIZE(dp_meter_genl_ops),
 	.mcgrps = &ovs_meter_multicast_group,
 	.n_mcgrps = 1,
 	.module = THIS_MODULE,

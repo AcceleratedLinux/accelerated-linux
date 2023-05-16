@@ -1,0 +1,400 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Include file for Digi Connect EZ 8.
+ *
+ * Copyright 2016 Freescale Semiconductor, Inc.
+ * Copyright 2018.2021 Digi Inc.
+ *
+ * Mingkai Hu <mingkai.hu@nxp.com>
+ * Greg Ungerer <gregory.ungerer@digi.com>
+ */
+
+/dts-v1/;
+
+#include "fsl-ls1046a.dtsi"
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "Digi Connect EZ 8W";
+	compatible = "digi,connectez8w", "fsl,ls1046a";
+
+	aliases {
+		serial0 = &duart0;
+		serial1 = &duart1;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	pgpio0: pericom-gpio0 {
+		#gpio-cells = <2>;
+		gpio-controller;
+		gpio-line-names = "serlnk1", "serlnk2", "serlnk3", "serlnk4",
+		                  "serlnk5", "serlnk6", "serlnk7", "serlnk8";
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		serlnk1 {
+			label = "serlnk1";
+			gpios = <&pgpio0 0 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk2 {
+			label = "serlnk2";
+			gpios = <&pgpio0 1 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk3 {
+			label = "serlnk3";
+			gpios = <&pgpio0 2 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk4 {
+			label = "serlnk4";
+			gpios = <&pgpio0 3 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk5 {
+			label = "serlnk5";
+			gpios = <&pgpio0 4 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk6 {
+			label = "serlnk6";
+			gpios = <&pgpio0 5 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk7 {
+			label = "serlnk7";
+			gpios = <&pgpio0 6 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		serlnk8 {
+			label = "serlnk8";
+			gpios = <&pgpio0 7 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		pwr_blue {
+			label = "pwrb";
+			/* Actually active high but we want it to be on at boot */
+			gpios = <&exp3 0 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		pwr_red {
+			label = "pwrr";
+			gpios = <&exp3 1 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		wwan_sig_gr {
+			label = "wansigg";
+			gpios = <&exp3 2 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		wwan_sig_red {
+			label = "wansigr";
+			gpios = <&exp3 3 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+		};
+
+		wwan_serv_gr {
+			label = "wanserg";
+			gpios = <&exp3 4 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		wwan_serv_red {
+			label = "wanserr";
+			gpios = <&exp3 5 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		wifi_gr {
+			label = "wifig";
+			gpios = <&exp3 6 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		wifi_red {
+			label = "wifir";
+			gpios = <&exp3 7 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		usb1_red {
+			label = "r01";
+			gpios = <&exp3 8 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		usb1_gr {
+			label = "g01";
+			gpios = <&exp3 9 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		usb1_blue {
+			label = "b01";
+			gpios = <&exp3 10 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		usb2_red {
+			label = "r02";
+			gpios = <&exp3 11 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		usb2_gr {
+			label = "g02";
+			gpios = <&exp3 12 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		usb2_blue {
+			label = "b02";
+			gpios = <&exp3 13 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+
+		con_link {
+			label = "conlnk";
+			gpios = <&exp3 14 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "timer";
+			default-state = "off";
+		};
+	};
+
+	soc {
+		 pcie@3400000 {
+			compatible = "fsl,ls1046a-pcie", "snps,dw-pcie";
+			status = "okay";
+			num-ib-windows = <6>;
+			num-ob-windows = <6>;
+		 };
+		 pcie@3500000 {
+			status = "disabled";
+		 };
+		 pcie@3600000 {
+			status = "disabled";
+		 };
+
+		usb0: usb@2f00000 {
+			usb3-lpm-capable;
+			snps,dis-u1u2-when-u3-quirk;
+			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+			clock-names = "ref", "bus_early", "suspend";
+			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			status = "okay";
+		};
+
+		usb1: usb@3000000 {
+			usb3-lpm-capable;
+			snps,dis-u1u2-when-u3-quirk;
+			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+			clock-names = "ref", "bus_early", "suspend";
+			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			status = "okay";
+		};
+
+		usb2: usb@3100000 {
+			usb3-lpm-capable;
+			snps,dis-u1u2-when-u3-quirk;
+			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+			clock-names = "ref", "bus_early", "suspend";
+			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			status = "okay";
+		};
+	};
+};
+
+&duart0 {
+	status = "okay";
+	dtr-gpios = <&gpio0 27 GPIO_ACTIVE_LOW>;
+	dsr-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+	rng-gpios = <&gpio0 30 GPIO_ACTIVE_LOW>;
+	uart-has-rtscts;
+};
+
+&i2c0 {
+	status = "okay";
+	hm@2f {
+		compatible = "nuvoton,nct7802";
+		reg = <0x2f>;
+	};
+	rtc@68 {
+		compatible = "idt,ds1337";
+		reg = <0x68>;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	
+	scl-gpios = <&gpio3 10 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio3 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	pmux-reg-offset = <0x40C>;
+	pmux-mode-cfg = <0x00007700 0x00000000 0x00001100>;
+
+	exp3: tca6416@23 {
+		#gpio-cells = <2>;
+		compatible = "ti,tca6424";
+		reg = <0x23>;
+		gpio-controller;
+		gpio-line-names = "pwr_blue", "pwr_red", "wwan_gr", "wwan_red", "wwan_serv_gr", "wwan_serv_red", "wifi_gr", "wifi_red",
+		                  "usb1_red", "usb1_gr", "usb1_blue", "usb2_red", "usb2_gr", "usb2_blue", "con_link", "wifi_pcie_led",
+						  "sim_switch", "cell_pwr_en", "cell_det", "wifi_dis", "ta_prog_sfp", "", "", "";
+	};
+};
+
+&i2c3 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	scl-gpios = <&gpio3 12 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio3 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	pmux-reg-offset = <0x40C>;
+	pmux-mode-cfg = <0x00000077 0x00000000 0x00000011>;
+
+	rng: atecc608b@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
+};
+
+&qspi {
+	num-cs = <1>;
+	bus-num = <0>;
+	status = "okay";
+
+	qflash0: mx25u3235f@0 {
+		compatible = "jedec,spi-nor";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		spi-max-frequency = <20000000>;
+		spi-rx-bus-width = <1>;
+		spi-tx-bus-width = <1>;
+		reg = <0>;
+	};
+};
+
+&esdhc {
+	mmc-hs200-1_8v;
+	non-removable;
+	status = "okay";
+};
+
+&pcie1 {
+	status = "okay";
+};
+
+&pcie2 {
+	status = "okay";
+};
+
+&ifc {
+	status = "disabled";
+};
+
+#include "fsl-ls1046-post.dtsi"
+
+&fman0 {
+	ethernet@e0000 {
+		status = "disabled";
+	};
+
+	ethernet@e2000 {
+		status = "disabled";
+	};
+
+	ethernet@e4000 {
+		phy-handle = <&rgmii_phy1>;
+		phy-mode = "rgmii-id";
+	};
+
+	ethernet@e6000 {
+		phy-handle = <&rgmii_phy2>;
+		phy-mode = "rgmii-id";
+	};
+
+	ethernet@e8000 {
+		status = "disabled";
+	};
+
+	ethernet@ea000 {
+		phy-mode = "sgmii";
+		fixed-link {
+			speed = <1000>;
+			full-duplex;
+		};
+	};
+
+	ethernet@f0000 {
+		phy-mode = "xgmii";
+		fixed-link {
+			speed = <1000>;
+			full-duplex;
+		};
+	};
+
+	ethernet@f2000 {
+		phy-mode = "xgmii";
+		fixed-link {
+			speed = <1000>;
+			full-duplex;
+		};
+	};
+
+	mdio@fc000 {
+		rgmii_phy1: ethernet-phy@1 {
+			reg = <0x1>;
+		};
+
+		rgmii_phy2: ethernet-phy@2 {
+			reg = <0x3>;
+		};
+	};
+};
+
+&gpio0 {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "factory";
+};

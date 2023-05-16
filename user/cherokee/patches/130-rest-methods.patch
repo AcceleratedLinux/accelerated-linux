@@ -1,0 +1,23 @@
+
+commit 56c77f4b40f4777ad590796ddec4aca512b11195
+Author: Toby Smith <toby@tismith.id.au>
+Date:   Tue Dec 3 05:22:04 2013 +0000
+
+    #4387
+    Add HTTP PUT and DELETE to the list of request methods cherokee's cgi handle will deal with. Needed for REST cgi handlers.
+
+Index: cherokee-1.2.101/cherokee/handler_cgi.c
+===================================================================
+--- cherokee-1.2.101.orig/cherokee/handler_cgi.c
++++ cherokee-1.2.101/cherokee/handler_cgi.c
+@@ -71,9 +71,7 @@ static ret_t fork_and_execute_cgi_unix (
+ 
+ /* Plugin initialization
+  */
+-CGI_LIB_INIT (cgi, http_get | http_post | http_head);
+-
+-
++CGI_LIB_INIT (cgi, http_get | http_post | http_head | http_put | http_delete );
+ 
+ static ret_t
+ read_from_cgi (cherokee_handler_cgi_base_t *cgi_base, cherokee_buffer_t *buffer)

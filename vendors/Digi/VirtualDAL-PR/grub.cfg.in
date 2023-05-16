@@ -39,13 +39,13 @@ fi
 
 menuentry "Digi VirtualDAL-PR (image1)" {
 	set root=($HD,gpt3)
-	probe -U $root --set=partuuid
+	probe --part-uuid $root --set=partuuid
 	linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=a $common_args $arg
 }
 
 menuentry "Digi VirtualDAL-PR (image2)" {
 	set root=($HD,gpt4)
-	probe -U $root --set=partuuid
+	probe --part-uuid $root --set=partuuid
 	linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=b $common_args $arg
 }
 

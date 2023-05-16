@@ -3,17 +3,40 @@ ACL_URL     = http://www.digi.com/
 ACL_PKG     = Digi Accelerated Linux
 export ACL_PKG ACL_URL ACL_LICENSE
 
-PKG         = libopengear
-METHOD      = git
-METHOD_OPTS = archive
-SUBDIR      = lib/libopengear
-VERSION     = master
-URL         = git@bitbucket.org:opengear/opengear.git
+#
+# build using configure as best we can, should work for most targets
+# David McCullough <davidm@snapgear.com>
+#
 
-PATCH_LEVEL = -p3 -b
+all: build
 
-BUILDDIR    = lib/libopengear
+build/makefile: makefile makefile.in
+	rm -rf build
+	mkdir build
+	chmod u+x configure
+	( \
+		cd build; \
+		CC="$(CC) $(CFLAGS)" \
+		LDFLAGS="$(LDFLAGS)" \
+		LIBS="" \
+		/bin/bash ../configure $(CONFIGURE_OPTS) --prefix= ; \
+	)
 
-CFLAGS      += -Iinclude
+.PHONY: build
+build: build/makefile
+	$(MAKE) -C build all install
 
-include $(ROOTDIR)/tools/automake.inc
+.PHONY: romfs
+romfs:
+	$(ROMFSINST) build/libopengear.so /lib/libopengear.so
+ifdef CONFIG_PROP_LH5_NODE
+	$(ROMFSINST) -d build/libopengear_lua.so /lib/lua/libopengear_lua.so
+endif
+
+.PHONY: clean
+clean:
+	rm -rf build
+
+.PHONY: check
+check: build
+	$(MAKE) -C build check

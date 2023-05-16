@@ -10,14 +10,10 @@
 #include "sleep.h"
 #include "internal.h"
 
-#define _COMPONENT		ACPI_SYSTEM_COMPONENT
-
 /*
  * this file provides support for:
  * /proc/acpi/wakeup
  */
-
-ACPI_MODULE_NAME("sleep")
 
 static int
 acpi_system_wakeup_device_seq_show(struct seq_file *seq, void *offset)
@@ -131,7 +127,7 @@ static int
 acpi_system_wakeup_device_open_fs(struct inode *inode, struct file *file)
 {
 	return single_open(file, acpi_system_wakeup_device_seq_show,
-			   PDE_DATA(inode));
+			   pde_data(inode));
 }
 
 static const struct proc_ops acpi_system_wakeup_device_proc_ops = {

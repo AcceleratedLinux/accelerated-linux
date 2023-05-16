@@ -17,10 +17,10 @@ description:
 
 properties:
   compatible:
-    oneOf:
-      - const: "realtek,rtl8723bs-bt"
-      - const: "realtek,rtl8723cs-bt"
-      - const: "realtek,rtl8822cs-bt"
+    enum:
+      - realtek,rtl8723bs-bt
+      - realtek,rtl8723cs-bt
+      - realtek,rtl8822cs-bt
 
   device-wake-gpios:
     maxItems: 1
@@ -34,8 +34,12 @@ properties:
     maxItems: 1
     description: GPIO specifier, used to wakeup the host processor
 
+  max-speed: true
+
 required:
   - compatible
+
+additionalProperties: false
 
 examples:
   - |
@@ -44,11 +48,11 @@ examples:
     uart1 {
         pinctrl-names = "default";
         pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
-        uart-has-rtscts = <1>;
+        uart-has-rtscts;
 
         bluetooth {
             compatible = "realtek,rtl8723bs-bt";
             device-wake-gpios = <&r_pio 0 5 GPIO_ACTIVE_HIGH>; /* PL5 */
-            host-wakeup-gpios = <&r_pio 0 6 GPIO_ACTIVE_HIGH>; /* PL6 */
+            host-wake-gpios = <&r_pio 0 6 GPIO_ACTIVE_HIGH>; /* PL6 */
         };
     };

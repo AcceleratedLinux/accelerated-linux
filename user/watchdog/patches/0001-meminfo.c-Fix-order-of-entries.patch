@@ -1,0 +1,37 @@
+From 7eb58aee35a4bf8be32a4e7feb44ff0265692050 Mon Sep 17 00:00:00 2001
+From: Chris Nisbet <nischris@gmail.com>
+Date: Wed, 14 Sep 2022 17:52:30 +1200
+Subject: [PATCH] meminfo.c: Fix order of entries
+
+#define values didn't match the table descriptions and values, resulting
+in trigger warnings not working as designed.
+---
+ src/meminfo.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/meminfo.c b/src/meminfo.c
+index 7503f6b..9c345e7 100644
+--- a/src/meminfo.c
++++ b/src/meminfo.c
+@@ -50,12 +50,12 @@ static void cb(uev_t *w, void *arg, int events)
+ 	char buf[80];
+ 	FILE *fp;
+ 	meminfo_t meminfo[] = {
+-		{ "MemTotal:",   0 },
+-		{ "MemFree:",    0 },
+-		{ "Cached:",     0 },
+-		{ "SwapCached:", 0 },
+-		{ "SwapTotal:",  0 },
+-		{ "SwapFree:",   0 },
++		[MEMTOTAL]   = { "MemTotal:",   0 },
++		[MEMFREE]    = { "MemFree:",    0 },
++		[MEMCACHED]  = { "Cached:",     0 },
++		[SWAPTOTAL]  = { "SwapTotal:",  0 },
++		[SWAPFREE]   = { "SwapFree:",   0 },
++		[SWAPCACHED] = { "SwapCached:", 0 },
+ 		{ NULL, 0 }
+ 	};
+ 
+-- 
+2.30.2
+

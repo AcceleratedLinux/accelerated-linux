@@ -4,7 +4,7 @@
  *
  * Author: Gregory CLEMENT <gregory.clement@bootlin.com>
  *
- * Datasheet: http://www.ti.com/lit/ds/symlink/ads8344.pdf
+ * Datasheet: https://www.ti.com/lit/ds/symlink/ads8344.pdf
  */
 
 #include <linux/delay.h>
@@ -133,6 +133,11 @@ static const struct iio_info ads8344_info = {
 	.read_raw = ads8344_read_raw,
 };
 
+static void ads8344_reg_disable(void *data)
+{
+	regulator_disable(data);
+}
+
 static int ads8344_probe(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev;
@@ -148,8 +153,6 @@ static int ads8344_probe(struct spi_device *spi)
 	mutex_init(&adc->lock);
 
 	indio_dev->name = dev_name(&spi->dev);
-	indio_dev->dev.parent = &spi->dev;
-	indio_dev->dev.of_node = spi->dev.of_node;
 	indio_dev->info = &ads8344_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = ads8344_channels;
@@ -163,26 +166,11 @@ static int ads8344_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	spi_set_drvdata(spi, indio_dev);
-
-	ret = iio_device_register(indio_dev);
-	if (ret) {
-		regulator_disable(adc->reg);
+	ret = devm_add_action_or_reset(&spi->dev, ads8344_reg_disable, adc->reg);
+	if (ret)
 		return ret;
-	}
 
-	return 0;
-}
-
-static int ads8344_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct ads8344 *adc = iio_priv(indio_dev);
-
-	iio_device_unregister(indio_dev);
-	regulator_disable(adc->reg);
-
-	return 0;
+	return devm_iio_device_register(&spi->dev, indio_dev);
 }
 
 static const struct of_device_id ads8344_of_match[] = {
@@ -197,7 +185,6 @@ static struct spi_driver ads8344_driver = {
 		.of_match_table = ads8344_of_match,
 	},
 	.probe = ads8344_probe,
-	.remove = ads8344_remove,
 };
 module_spi_driver(ads8344_driver);
 

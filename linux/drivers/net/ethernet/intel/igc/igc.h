@@ -28,6 +28,13 @@ void igc_ethtool_set_ops(struct net_device *);
 #define MAX_ETYPE_FILTER		8
 #define IGC_RETA_SIZE			128
 
+/* SDP support */
+#define IGC_N_EXTTS	2
+#define IGC_N_PEROUT	2
+#define IGC_N_SDP	4
+
+#define MAX_FLEX_FILTER			32
+
 enum igc_mac_filter_type {
 	IGC_MAC_FILTER_TYPE_DST = 0,
 	IGC_MAC_FILTER_TYPE_SRC
@@ -91,6 +98,13 @@ struct igc_ring {
 	u32 start_time;
 	u32 end_time;
 
+	/* CBS parameters */
+	bool cbs_enable;                /* indicates if CBS is enabled */
+	s32 idleslope;                  /* idleSlope in kbps */
+	s32 sendslope;                  /* sendSlope in kbps */
+	s32 hicredit;                   /* hiCredit in bytes */
+	s32 locredit;                   /* loCredit in bytes */
+
 	/* everything past this point are written often */
 	u16 next_to_clean;
 	u16 next_to_use;
@@ -111,11 +125,17 @@ struct igc_ring {
 			struct sk_buff *skb;
 		};
 	};
+
+	struct xdp_rxq_info xdp_rxq;
+	struct xsk_buff_pool *xsk_pool;
 } ____cacheline_internodealigned_in_smp;
 
 /* Board specific private data structure */
 struct igc_adapter {
 	struct net_device *netdev;
+
+	struct ethtool_eee eee;
+	u16 eee_advert;
 
 	unsigned long state;
 	unsigned int flags;
@@ -207,13 +227,26 @@ struct igc_adapter {
 	struct sk_buff *ptp_tx_skb;
 	struct hwtstamp_config tstamp_config;
 	unsigned long ptp_tx_start;
-	unsigned long last_rx_ptp_check;
-	unsigned long last_rx_timestamp;
 	unsigned int ptp_flags;
 	/* System time value lock */
 	spinlock_t tmreg_lock;
 	struct cyclecounter cc;
 	struct timecounter tc;
+	struct timespec64 prev_ptp_time; /* Pre-reset PTP clock */
+	ktime_t ptp_reset_start; /* Reset time in clock mono */
+	struct system_time_snapshot snapshot;
+
+	char fw_version[32];
+
+	struct bpf_prog *xdp_prog;
+
+	bool pps_sys_wrap_on;
+
+	struct ptp_pin_desc sdp_config[IGC_N_SDP];
+	struct {
+		struct timespec64 start;
+		struct timespec64 period;
+	} perout[IGC_N_PEROUT];
 };
 
 void igc_up(struct igc_adapter *adapter);
@@ -231,15 +264,18 @@ int igc_reinit_queues(struct igc_adapter *adapter);
 void igc_write_rss_indir_tbl(struct igc_adapter *adapter);
 bool igc_has_link(struct igc_adapter *adapter);
 void igc_reset(struct igc_adapter *adapter);
-int igc_set_spd_dplx(struct igc_adapter *adapter, u32 spd, u8 dplx);
 void igc_update_stats(struct igc_adapter *adapter);
+void igc_disable_rx_ring(struct igc_ring *ring);
+void igc_enable_rx_ring(struct igc_ring *ring);
+void igc_disable_tx_ring(struct igc_ring *ring);
+void igc_enable_tx_ring(struct igc_ring *ring);
+int igc_xsk_wakeup(struct net_device *dev, u32 queue_id, u32 flags);
 
 /* igc_dump declarations */
 void igc_rings_dump(struct igc_adapter *adapter);
 void igc_regs_dump(struct igc_adapter *adapter);
 
 extern char igc_driver_name[];
-extern char igc_driver_version[];
 
 #define IGC_REGS_LEN			740
 
@@ -256,9 +292,14 @@ extern char igc_driver_version[];
 #define IGC_FLAG_MEDIA_RESET		BIT(10)
 #define IGC_FLAG_MAS_ENABLE		BIT(12)
 #define IGC_FLAG_HAS_MSIX		BIT(13)
+#define IGC_FLAG_EEE			BIT(14)
 #define IGC_FLAG_VLAN_PROMISC		BIT(15)
 #define IGC_FLAG_RX_LEGACY		BIT(16)
 #define IGC_FLAG_TSN_QBV_ENABLED	BIT(17)
+#define IGC_FLAG_TSN_QAV_ENABLED	BIT(18)
+
+#define IGC_FLAG_TSN_ANY_ENABLED \
+	(IGC_FLAG_TSN_QBV_ENABLED | IGC_FLAG_TSN_QAV_ENABLED)
 
 #define IGC_FLAG_RSS_FIELD_IPV4_UDP	BIT(6)
 #define IGC_FLAG_RSS_FIELD_IPV6_UDP	BIT(7)
@@ -298,18 +339,14 @@ extern char igc_driver_version[];
 #define IGC_RX_HDR_LEN			IGC_RXBUFFER_256
 
 /* Transmit and receive latency (for PTP timestamps) */
-/* FIXME: These values were estimated using the ones that i225 has as
- * basis, they seem to provide good numbers with ptp4l/phc2sys, but we
- * need to confirm them.
- */
-#define IGC_I225_TX_LATENCY_10		9542
-#define IGC_I225_TX_LATENCY_100		1024
-#define IGC_I225_TX_LATENCY_1000	178
-#define IGC_I225_TX_LATENCY_2500	64
-#define IGC_I225_RX_LATENCY_10		20662
-#define IGC_I225_RX_LATENCY_100		2213
-#define IGC_I225_RX_LATENCY_1000	448
-#define IGC_I225_RX_LATENCY_2500	160
+#define IGC_I225_TX_LATENCY_10		240
+#define IGC_I225_TX_LATENCY_100		58
+#define IGC_I225_TX_LATENCY_1000	80
+#define IGC_I225_TX_LATENCY_2500	1325
+#define IGC_I225_RX_LATENCY_10		6450
+#define IGC_I225_RX_LATENCY_100		185
+#define IGC_I225_RX_LATENCY_1000	300
+#define IGC_I225_RX_LATENCY_2500	1485
 
 /* RX and TX descriptor control thresholds.
  * PTHRESH - MAC will consider prefetch if it has fewer than this number of
@@ -348,6 +385,7 @@ extern char igc_driver_version[];
 
 /* VLAN info */
 #define IGC_TX_FLAGS_VLAN_MASK	0xffff0000
+#define IGC_TX_FLAGS_VLAN_SHIFT	16
 
 /* igc_test_staterr - tests bits within Rx descriptor status and error fields */
 static inline __le32 igc_test_staterr(union igc_adv_rx_desc *rx_desc,
@@ -388,13 +426,23 @@ enum igc_boards {
 #define TXD_USE_COUNT(S)	DIV_ROUND_UP((S), IGC_MAX_DATA_PER_TXD)
 #define DESC_NEEDED	(MAX_SKB_FRAGS + 4)
 
+enum igc_tx_buffer_type {
+	IGC_TX_BUFFER_TYPE_SKB,
+	IGC_TX_BUFFER_TYPE_XDP,
+	IGC_TX_BUFFER_TYPE_XSK,
+};
+
 /* wrapper around a pointer to a socket buffer,
  * so a DMA handle can be stored along with the buffer
  */
 struct igc_tx_buffer {
 	union igc_adv_tx_desc *next_to_watch;
 	unsigned long time_stamp;
-	struct sk_buff *skb;
+	enum igc_tx_buffer_type type;
+	union {
+		struct sk_buff *skb;
+		struct xdp_frame *xdpf;
+	};
 	unsigned int bytecount;
 	u16 gso_segs;
 	__be16 protocol;
@@ -405,14 +453,19 @@ struct igc_tx_buffer {
 };
 
 struct igc_rx_buffer {
-	dma_addr_t dma;
-	struct page *page;
+	union {
+		struct {
+			dma_addr_t dma;
+			struct page *page;
 #if (BITS_PER_LONG > 32) || (PAGE_SIZE >= 65536)
-	__u32 page_offset;
+			__u32 page_offset;
 #else
-	__u16 page_offset;
+			__u16 page_offset;
 #endif
-	__u16 pagecnt_bias;
+			__u16 pagecnt_bias;
+		};
+		struct xdp_buff *xdp;
+	};
 };
 
 struct igc_q_vector {
@@ -436,18 +489,28 @@ struct igc_q_vector {
 };
 
 enum igc_filter_match_flags {
-	IGC_FILTER_FLAG_ETHER_TYPE =	0x1,
-	IGC_FILTER_FLAG_VLAN_TCI   =	0x2,
-	IGC_FILTER_FLAG_SRC_MAC_ADDR =	0x4,
-	IGC_FILTER_FLAG_DST_MAC_ADDR =	0x8,
+	IGC_FILTER_FLAG_ETHER_TYPE =	BIT(0),
+	IGC_FILTER_FLAG_VLAN_TCI   =	BIT(1),
+	IGC_FILTER_FLAG_SRC_MAC_ADDR =	BIT(2),
+	IGC_FILTER_FLAG_DST_MAC_ADDR =	BIT(3),
+	IGC_FILTER_FLAG_USER_DATA =	BIT(4),
+	IGC_FILTER_FLAG_VLAN_ETYPE =	BIT(5),
 };
 
 struct igc_nfc_filter {
 	u8 match_flags;
 	u16 etype;
+	__be16 vlan_etype;
 	u16 vlan_tci;
 	u8 src_addr[ETH_ALEN];
 	u8 dst_addr[ETH_ALEN];
+	u8 user_data[8];
+	u8 user_mask[8];
+	u8 flex_index;
+	u8 rx_queue;
+	u8 prio;
+	u8 immediate_irq;
+	u8 drop;
 };
 
 struct igc_nfc_rule {
@@ -455,12 +518,24 @@ struct igc_nfc_rule {
 	struct igc_nfc_filter filter;
 	u32 location;
 	u16 action;
+	bool flex;
 };
 
-/* IGC supports a total of 32 NFC rules: 16 MAC address based,, 8 VLAN priority
- * based, and 8 ethertype based.
+/* IGC supports a total of 32 NFC rules: 16 MAC address based, 8 VLAN priority
+ * based, 8 ethertype based and 32 Flex filter based rules.
  */
-#define IGC_MAX_RXNFC_RULES		32
+#define IGC_MAX_RXNFC_RULES		64
+
+struct igc_flex_filter {
+	u8 index;
+	u8 data[128];
+	u8 mask[16];
+	u8 length;
+	u8 rx_queue;
+	u8 prio;
+	u8 immediate_irq;
+	u8 drop;
+};
 
 /* igc_desc_unused - calculate if we have unused descriptors */
 static inline u16 igc_desc_unused(const struct igc_ring *ring)
@@ -498,11 +573,16 @@ enum igc_ring_flags_t {
 	IGC_RING_FLAG_RX_SCTP_CSUM,
 	IGC_RING_FLAG_RX_LB_VLAN_BSWAP,
 	IGC_RING_FLAG_TX_CTX_IDX,
-	IGC_RING_FLAG_TX_DETECT_HANG
+	IGC_RING_FLAG_TX_DETECT_HANG,
+	IGC_RING_FLAG_AF_XDP_ZC,
 };
 
 #define ring_uses_large_buffer(ring) \
 	test_bit(IGC_RING_FLAG_RX_3K_BUFFER, &(ring)->flags)
+#define set_ring_uses_large_buffer(ring) \
+	set_bit(IGC_RING_FLAG_RX_3K_BUFFER, &(ring)->flags)
+#define clear_ring_uses_large_buffer(ring) \
+	clear_bit(IGC_RING_FLAG_RX_3K_BUFFER, &(ring)->flags)
 
 #define ring_uses_build_skb(ring) \
 	test_bit(IGC_RING_FLAG_RX_BUILD_SKB_ENABLED, &(ring)->flags)
@@ -533,7 +613,7 @@ static inline s32 igc_read_phy_reg(struct igc_hw *hw, u32 offset, u16 *data)
 	if (hw->phy.ops.read_reg)
 		return hw->phy.ops.read_reg(hw, offset, data);
 
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 void igc_reinit_locked(struct igc_adapter *);
@@ -546,12 +626,11 @@ void igc_ptp_init(struct igc_adapter *adapter);
 void igc_ptp_reset(struct igc_adapter *adapter);
 void igc_ptp_suspend(struct igc_adapter *adapter);
 void igc_ptp_stop(struct igc_adapter *adapter);
-void igc_ptp_rx_rgtstamp(struct igc_q_vector *q_vector, struct sk_buff *skb);
-void igc_ptp_rx_pktstamp(struct igc_q_vector *q_vector, void *va,
-			 struct sk_buff *skb);
+ktime_t igc_ptp_rx_pktstamp(struct igc_adapter *adapter, __le32 *buf);
 int igc_ptp_set_ts_config(struct net_device *netdev, struct ifreq *ifr);
 int igc_ptp_get_ts_config(struct net_device *netdev, struct ifreq *ifr);
 void igc_ptp_tx_hang(struct igc_adapter *adapter);
+void igc_ptp_read(struct igc_adapter *adapter, struct timespec64 *ts);
 
 #define igc_rx_pg_size(_ring) (PAGE_SIZE << igc_rx_pg_order(_ring))
 

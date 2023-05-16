@@ -1,0 +1,19 @@
+###############################################################################
+# RADIUS, no local
+###############################################################################
+auth optional pam_faildelay.so delay=5000000
+auth optional pam_echo.so file=/etc/config/motd
+auth sufficient pam_portauth.so
+auth [success=1 default=ignore] pam_succeed_if.so login != root quiet
+auth [success=done default=ignore] pam_unix.so
+auth [success=1] pam_radius_auth.so conf=/etc/config/pam_radius_auth.conf
+auth [default=die] pam_infod.so # post auth_error and deny
+auth optional pam_adduser.so
+
+account [success=1 default=ignore] pam_radius_auth.so conf=/etc/config/pam_radius_auth.conf
+account sufficient pam_unix.so
+account optional pam_adduser.so
+
+session optional pam_radius_auth.so conf=/etc/config/pam_radius_acct.conf
+session required pam_unix.so
+session optional pam_infod.so # post login/logout

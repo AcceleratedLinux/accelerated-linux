@@ -1,0 +1,27 @@
+Remove bdist_wininst, Filter out distutils deprecation
+
+See: https://github.com/pypa/setuptools/pull/2566/commits
+---
+--- a/setuptools/command/__init__.py	2019-04-23 06:07:03.000000000 +1000
++++ b/setuptools/command/__init__.py	2022-01-31 09:12:22.907847723 +1000
+@@ -2,7 +2,7 @@
+     'alias', 'bdist_egg', 'bdist_rpm', 'build_ext', 'build_py', 'develop',
+     'easy_install', 'egg_info', 'install', 'install_lib', 'rotate', 'saveopts',
+     'sdist', 'setopt', 'test', 'install_egg_info', 'install_scripts',
+-    'register', 'bdist_wininst', 'upload_docs', 'upload', 'build_clib',
++    'register', 'upload_docs', 'upload', 'build_clib',
+     'dist_info',
+ ]
+ 
+--- a/setuptools/command/install_scripts.py	2022-01-31 09:12:46.863847669 +1000
++++ b/setuptools/command/install_scripts.py	2022-01-31 09:12:54.831847651 +1000
+@@ -32,8 +32,7 @@
+         )
+         bs_cmd = self.get_finalized_command('build_scripts')
+         exec_param = getattr(bs_cmd, 'executable', None)
+-        bw_cmd = self.get_finalized_command("bdist_wininst")
+-        is_wininst = getattr(bw_cmd, '_is_running', False)
++        is_wininst = False # DAL does not need this
+         writer = ei.ScriptWriter
+         if is_wininst:
+             exec_param = "python.exe"

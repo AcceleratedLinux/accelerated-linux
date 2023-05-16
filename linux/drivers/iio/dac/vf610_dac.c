@@ -199,8 +199,6 @@ static int vf610_dac_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, indio_dev);
 
 	indio_dev->name = dev_name(&pdev->dev);
-	indio_dev->dev.parent = &pdev->dev;
-	indio_dev->dev.of_node = pdev->dev.of_node;
 	indio_dev->info = &vf610_dac_iio_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = vf610_dac_iio_channels;
@@ -244,7 +242,6 @@ static int vf610_dac_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int vf610_dac_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
@@ -270,9 +267,9 @@ static int vf610_dac_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(vf610_dac_pm_ops, vf610_dac_suspend, vf610_dac_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(vf610_dac_pm_ops, vf610_dac_suspend,
+				vf610_dac_resume);
 
 static struct platform_driver vf610_dac_driver = {
 	.probe          = vf610_dac_probe,
@@ -280,7 +277,7 @@ static struct platform_driver vf610_dac_driver = {
 	.driver         = {
 		.name   = "vf610-dac",
 		.of_match_table = vf610_dac_match,
-		.pm     = &vf610_dac_pm_ops,
+		.pm     = pm_sleep_ptr(&vf610_dac_pm_ops),
 	},
 };
 module_platform_driver(vf610_dac_driver);

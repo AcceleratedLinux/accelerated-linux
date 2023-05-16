@@ -141,10 +141,9 @@ Index: busybox-1.31.0/miscutils/crond.c
  				continue;
  			}
  			load_crontab(den->d_name);
-Index: busybox-1.31.0/miscutils/crontab.c
-===================================================================
---- busybox-1.31.0.orig/miscutils/crontab.c
-+++ busybox-1.31.0/miscutils/crontab.c
+Index: busybox-1.34.1/miscutils/crontab.c
+--- busybox-1.34.1.orig/miscutils/crontab.c
++++ busybox-1.34.1/miscutils/crontab.c
 @@ -35,10 +35,8 @@
  
  #include "libbb.h"
@@ -158,7 +157,7 @@ Index: busybox-1.31.0/miscutils/crontab.c
  
  static void edit_file(const struct passwd *pas, const char *file)
  {
-@@ -73,6 +71,7 @@ int crontab_main(int argc UNUSED_PARAM,
+@@ -73,6 +71,7 @@
  {
  	const struct passwd *pas;
  	const char *crontab_dir = CRONTABS;
@@ -166,7 +165,7 @@ Index: busybox-1.31.0/miscutils/crontab.c
  	char *tmp_fname;
  	char *new_fname;
  	char *user_name;  /* -u USER */
-@@ -137,45 +136,47 @@ int crontab_main(int argc UNUSED_PARAM,
+@@ -137,33 +136,33 @@
  	xchdir(crontab_dir);
  
  	tmp_fname = NULL;
@@ -204,11 +203,9 @@ Index: busybox-1.31.0/miscutils/crontab.c
  			close(fd);
 -			xlseek(src_fd, 0, SEEK_SET);
  		}
--		close_on_exec_on(src_fd); /* don't want editor to see this fd */
-+		close(src_fd);
+ 		close(src_fd);
  		edit_file(pas, tmp_fname);
-+		/* Re-open as editor may have created new file */
-+		src_fd = open(tmp_fname, O_RDONLY);
+@@ -174,12 +173,12 @@
  		/* fall through */
  
  	case 0: /* Replace (no -l, -e, or -r were given) */
@@ -223,7 +220,7 @@ Index: busybox-1.31.0/miscutils/crontab.c
  		} else {
  			bb_error_msg("can't create %s/%s",
  					crontab_dir, new_fname);
-@@ -185,6 +186,7 @@ int crontab_main(int argc UNUSED_PARAM,
+@@ -189,6 +188,7 @@
  		/*free(tmp_fname);*/
  		/*free(new_fname);*/
  	} /* switch */
@@ -231,7 +228,7 @@ Index: busybox-1.31.0/miscutils/crontab.c
  
  	/* Bump notification file.  Handle window where crond picks file up
  	 * before we can write our entry out.
-@@ -192,7 +194,7 @@ int crontab_main(int argc UNUSED_PARAM,
+@@ -196,7 +196,7 @@
  	while ((fd = open(CRONUPDATE, O_WRONLY|O_CREAT|O_APPEND, 0600)) >= 0) {
  		struct stat st;
  

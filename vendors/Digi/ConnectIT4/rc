@@ -8,11 +8,14 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs -o size=40M tmpfs /tmp
 mount -t tmpfs -o size=32M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -29,21 +32,6 @@ ip link set eth1 name wan
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
 setmac -i lan,wan -u -n 2
-
-echo "Initializing CELL interface control..."
-# GPIO50 = Cell Module Presence Detect (input, active low)
-# GPIO53 = Cell Module SIM Select (output, 0=SIM1, 1=SIM2)
-# GPIO52 = Cell MOdule Power On (output, active low)
-# GPIO51 = Cell Module Push Button (input, active low)
-echo 50 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio50/direction
-echo 51 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio51/direction
-echo falling > /sys/class/gpio/gpio51/edge
-echo 52 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio52/direction
-echo 53 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio53/direction
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory
@@ -78,7 +66,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -89,6 +77,10 @@ if [ -f /etc/config/.init ]; then
 else
 	rm -f /etc/config/.init2
 fi
+
+echo "Initializing CELL interface control..."
+/bin/sim -i
+
 cat /etc/inittab.d/* > /etc/inittab
 
 # cryptography disabled mode

@@ -25,6 +25,14 @@ struct imx_icc_node {
 	struct dev_pm_qos_request qos_req;
 };
 
+static int imx_icc_get_bw(struct icc_node *node, u32 *avg, u32 *peak)
+{
+	*avg = 0;
+	*peak = 0;
+
+	return 0;
+}
+
 static int imx_icc_node_set(struct icc_node *node)
 {
 	struct device *dev = node->provider->dev;
@@ -96,9 +104,10 @@ static int imx_icc_node_init_qos(struct icc_provider *provider,
 			return -ENODEV;
 		}
 		/* Allow scaling to be disabled on a per-node basis */
-		if (!dn || !of_device_is_available(dn)) {
+		if (!of_device_is_available(dn)) {
 			dev_warn(dev, "Missing property %s, skip scaling %s\n",
 				 adj->phandle_name, node->name);
+			of_node_put(dn);
 			return 0;
 		}
 
@@ -184,10 +193,8 @@ static int imx_icc_register_nodes(struct icc_provider *provider,
 
 		node = imx_icc_node_add(provider, node_desc);
 		if (IS_ERR(node)) {
-			ret = PTR_ERR(node);
-			if (ret != -EPROBE_DEFER)
-				dev_err(provider->dev, "failed to add %s: %d\n",
-					node_desc->name, ret);
+			ret = dev_err_probe(provider->dev, PTR_ERR(node),
+					    "failed to add %s\n", node_desc->name);
 			goto err;
 		}
 		provider_data->nodes[node->id] = node;
@@ -242,6 +249,7 @@ int imx_icc_register(struct platform_device *pdev,
 	if (!provider)
 		return -ENOMEM;
 	provider->set = imx_icc_set;
+	provider->get_bw = imx_icc_get_bw;
 	provider->aggregate = icc_std_aggregate;
 	provider->xlate = of_icc_xlate_onecell;
 	provider->data = data;
@@ -269,15 +277,10 @@ EXPORT_SYMBOL_GPL(imx_icc_register);
 int imx_icc_unregister(struct platform_device *pdev)
 {
 	struct icc_provider *provider = platform_get_drvdata(pdev);
-	int ret;
 
 	imx_icc_unregister_nodes(provider);
 
-	ret = icc_provider_del(provider);
-	if (ret)
-		return ret;
-
-	return 0;
+	return icc_provider_del(provider);
 }
 EXPORT_SYMBOL_GPL(imx_icc_unregister);
 

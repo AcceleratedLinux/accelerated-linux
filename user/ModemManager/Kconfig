@@ -36,6 +36,13 @@ config USER_MODEMMANAGER_PLUGIN_GENERIC
 	help
 	  Install generic plugin
 
+config USER_MODEMMANAGER_PLUGIN_UNITAC
+	bool 'plugin-unitac'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install unitac plugin
+
 config USER_MODEMMANAGER_PLUGIN_SAMSUNG
 	bool 'plugin-samsung'
 	depends on USER_MODEMMANAGER
@@ -183,3 +190,114 @@ config USER_MODEMMANAGER_PLUGIN_LINKTOP
 	help
 	  Install linktop plugin
 
+config USER_MODEMMANAGER_PLUGIN_ALTAIRLTE
+	bool 'plugin-altairlte'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install altair-lte plugin
+
+config USER_MODEMMANAGER_PLUGIN_BROADMOBI
+	bool 'plugin-broadmobi'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install broadmobi plugin
+
+config USER_MODEMMANAGER_PLUGIN_DELL
+	bool 'plugin-dell'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install dell plugin
+
+config USER_MODEMMANAGER_PLUGIN_DLINK
+	bool 'plugin-dlink'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install dlink plugin
+
+config USER_MODEMMANAGER_PLUGIN_ERICSSONMBM
+	bool 'plugin-ericssonmbm'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install ericsson-mbm plugin
+
+config USER_MODEMMANAGER_PLUGIN_FIBOCOM
+	bool 'plugin-fibocom'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install fibocom plugin
+
+config USER_MODEMMANAGER_PLUGIN_FOXCONN
+	bool 'plugin-foxconn'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install foxconn plugin
+
+config USER_MODEMMANAGER_PLUGIN_HAIER
+	bool 'plugin-haier'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install haier plugin
+
+config USER_MODEMMANAGER_PLUGIN_MTK
+	bool 'plugin-mtk'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install mtk plugin
+
+config USER_MODEMMANAGER_PLUGIN_OPTIONHSO
+	bool 'plugin-optionhso'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install option-hso plugin
+
+config USER_MODEMMANAGER_PLUGIN_QUECTEL
+	bool 'plugin-quectel'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install quectel plugin
+
+config USER_MODEMMANAGER_PLUGIN_SIERRALEGACY
+	bool 'plugin-sierralegacy'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install sierry-legacy plugin
+
+config USER_MODEMMANAGER_PLUGIN_TELIT
+	bool 'plugin-telit'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install telit plugin
+
+config USER_MODEMMANAGER_PLUGIN_THURAYA
+	bool 'plugin-thuraya'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install thuraya plugin
+
+config USER_MODEMMANAGER_PLUGIN_TPLINK
+	bool 'plugin-tplink'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install tplink plugin
+
+config USER_MODEMMANAGER_PLUGIN_UBLOX
+	bool 'plugin-ublox'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install ublox plugin

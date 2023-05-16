@@ -43,7 +43,8 @@ ifeq ($(ANALYZE),1)
 
 # currently only the clang static analyzer is supported so that is all we
 # handle
-export UCFRONT_ANALYZER=clang
+UCFRONT_ANALYZER ?= clang
+export UCFRONT_ANALYZER
 
 # a list of : or white space seperated directories to scan
 export UCFRONT_ANALYZE_PATH=prop
@@ -65,24 +66,39 @@ ANALYZE_SUMMARY = :
 endif
 ############################################################################
 
+TOOLS_SCRIPTS = tools/romfs-inst.sh
+TOOLS_SCRIPTS += tools/modules-alias.sh
+TOOLS_SCRIPTS += tools/build-udev-perms.sh
+
 .PHONY: tools
-tools: ucfront cksum
-	chmod +x tools/romfs-inst.sh tools/modules-alias.sh tools/build-udev-perms.sh
+tools: ucfront cksum meson_only tools_install
+
+.PHONY: tools_install
+tools_install:
+	chmod +x $(TOOLS_SCRIPTS)
+	ln -sfr -t bin/ $(TOOLS_SCRIPTS)
 
 .PHONY: ucfront
 ucfront: tools/ucfront/*.c
 	$(MAKE) -C tools/ucfront
-	ln -sf $(ROOTDIR)/tools/ucfront/ucfront tools/ucfront-gcc
-	ln -sf $(ROOTDIR)/tools/ucfront/ucfront tools/ucfront-g++
-	ln -sf $(ROOTDIR)/tools/ucfront/ucfront-ld tools/ucfront-ld
-	ln -sf $(ROOTDIR)/tools/ucfront/ucfront-env tools/ucfront-env
-	ln -sf $(ROOTDIR)/tools/ucfront/jlibtool tools/jlibtool
+	ln -sf $(ROOTDIR)/tools/ucfront/ucfront bin/ucfront-gcc
+	ln -sf $(ROOTDIR)/tools/ucfront/ucfront bin/ucfront-g++
+	ln -sf $(ROOTDIR)/tools/ucfront/ucfront-ld bin/ucfront-ld
+	ln -sf $(ROOTDIR)/tools/ucfront/ucfront-env bin/ucfront-env
+	ln -sf $(ROOTDIR)/tools/ucfront/jlibtool bin/jlibtool
 
 .PHONY: cksum
-cksum: tools/cksum
-tools/cksum: tools/sg-cksum/*.c
+cksum: bin/cksum
+bin/cksum: tools/sg-cksum/*.c
 	$(MAKE) -C tools/sg-cksum
-	ln -sf $(ROOTDIR)/tools/sg-cksum/cksum tools/cksum
+	ln -sf $(ROOTDIR)/tools/sg-cksum/cksum bin/cksum
+
+.PHONY: meson_only
+meson_only:
+	$(MAKE) -C tools/meson/
+
+meson_clean:
+	$(MAKE) -C tools/meson/ clean
 
 TOOLSARCHDIR = $(TOOLSPREFIX)/$(CONFIGURE_TOOL)
 
@@ -322,15 +338,18 @@ romfs.post:
 	fi
 ifdef CONFIG_USER_PYTHON_REMOVE_SOURCE
 	for i in $(ROMFSDIR)/usr/lib/python*; do \
+		[ -e "$$i" ] || continue; \
 		python=$(ROOTDIR)/user/python/build/Python-Hostinstall/bin/`basename $$i`; \
 		$$python -m compileall -b $$i || exit 1; \
 		find $$i -type d -name __pycache__ -exec rm -r {} + ; \
-		find $$i -type f -name "*.py" -delete ; \
+		find $$i -type f -name "*.py" \
+			! -name _in_process.py `# required by pip` \
+			-delete ; \
 	done
 endif
 
 .PHONY: image
-image:
+image: live_images
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	$(MAKEARCH) -C vendors image
 	@echo "Package:License:URL:Target Filesystem location" > $(IMAGEDIR)/acl-licenses.txt
@@ -349,7 +368,7 @@ image:
 release:
 	[ -d $(RELDIR) ] || mkdir -p $(RELDIR)
 	@prefix=$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date -u "-d$(BUILD_START_STRING)" +%Y%m%d%H%M`; \
-	for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt; do \
+	for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt `( cd images/live_images/ ; ls | xargs readlink -f $1 )` ; do \
 		s=`echo "$$f" | sed 's/^\([^,]*\)\(,.*\)\{0,1\}$$/\1/'`; \
 		d=`echo "$$s" | sed 's/\([^,]*\)\([.][^.]*,\)\{0,1\}/\1/'`; \
 		[ -f "$$s" ] || continue; \
@@ -431,7 +450,7 @@ relink:
 
 clean: modules_clean
 	for dir in $(LINUXDIR) $(DIRS) vendors config/kconfig; do [ ! -d $$dir ] || $(MAKEARCH) -C $$dir clean ; done
-	rm -rf $(ROMFSDIR)/*
+	rm -rf $(ROMFSDIR)/* $(ROMFSDIR)/.??*
 	rm -rf $(STAGEDIR)/*
 	rm -rf $(IMAGEDIR)/*
 	rm -f $(LINUXDIR)/linux
@@ -450,6 +469,7 @@ real_clean mrproper: clean
 	-$(MAKEARCH) -C config clean
 	rm -rf romfs Kconfig config.arch images
 	rm -rf .config .config.old .oldconfig autoconf.h auto.conf
+	rm -f $(TOOLS_SCRIPTS:tools/%=bin/%)
 
 linux_distclean:
 	-$(MAKEARCH_KERNEL) -C $(LINUXDIR) distclean
@@ -460,9 +480,9 @@ distclean: mrproper linux_distclean toolchain_clean
 	-rm -f glibc/install musl/install
 	-rm -f uClibc-ng/.config
 	-$(MAKE) -C tools/ucfront clean
-	-rm -f tools/ucfront-gcc tools/ucfront-g++ tools/ucfront-ld tools/ucfront-env tools/jlibtool
+	-rm -f bin/ucfront-gcc bin/ucfront-g++ bin/ucfront-ld bin/ucfront-env bin/jlibtool
 	-$(MAKE) -C tools/sg-cksum clean
-	-rm -f tools/cksum
+	-rm -f bin/cksum
 
 .PHONY: bugreport
 bugreport:
@@ -482,6 +502,33 @@ bugreport:
 	cp config/.config bugreport/config/
 	tar czf bugreport.tar.gz bugreport
 	rm -rf ./bugreport
+
+SQUASH_BCJ =
+ifeq ($(ARCH),arm)
+ifdef CONFIG_XZ_DEC_ARM
+SQUASH_BCJ = -comp xz -Xbcj arm
+endif
+endif
+ifneq ($(filter x86 x86_64,$(ARCH)),)
+ifdef CONFIG_XZ_DEC_X86
+SQUASH_BCJ = -comp xz -Xbcj x86
+endif
+endif
+
+PYTHON_LIVE_IMAGE_DIR = $(STAGEDIR)/live_images/python/rootfs
+
+.PHONY: live_images
+live_images:
+	CC=$(HOSTCC) CFLAGS=$(HOSTCFLAGS) EXTRA_CFLAGS= make -C $(ROOTDIR)/user/squashfs-new/squashfs-tools mksquashfs
+	mkdir -p $(IMAGEDIR)/live_images
+ifdef CONFIG_USER_PYTHON_LIVE_IMAGE
+	mksquashfs=$(ROOTDIR)/user/squashfs-new/squashfs-tools/mksquashfs; \
+	python_live_image=$(IMAGEDIR)/live_images/python_live_image.sqfs; \
+	rm -f $$python_live_image; \
+	$(ROOTDIR)/tools/fakeroot-env $$mksquashfs $(PYTHON_LIVE_IMAGE_DIR) $$python_live_image \
+		$(CONFIG_SQUASHFS_XATTR:y=-xattrs) \
+		-noappend $(SQUASH_BCJ) $(SQUASH_ENDIAN) ;
+endif
 
 %_only: tools
 	@case "$(@)" in \
@@ -578,6 +625,7 @@ help:
 	@echo "make info                  print out configured information"
 	@echo "make modules               build all modules"
 	@echo "make modules_install       install modules into romfs"
+	@echo "make live_images           package and build live images"
 	@echo "make toolchain_only        build gcc based toolchain for target"
 	@echo "make toolchain_package     package up host built toolchain"
 	@echo "make DIR_only              build just the directory DIR"
@@ -594,7 +642,7 @@ help:
 	@echo "make dep                   optional but safe even on newer kernels."
 	@echo "make                       build it as the creators intended."
 	@exit 0
-	
+
 
 ############################################################################
 ############################################################################

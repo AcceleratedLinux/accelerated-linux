@@ -11,9 +11,10 @@
 #include <linux/iio/timer/stm32-timer-trigger.h>
 #include <linux/iio/trigger.h>
 #include <linux/mfd/stm32-timers.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/of_device.h>
+#include <linux/property.h>
 
 #define MAX_TRIGGERS 7
 #define MAX_VALIDS 5
@@ -296,7 +297,7 @@ static ssize_t stm32_tt_show_master_mode(struct device *dev,
 	else
 		cr2 = (cr2 & TIM_CR2_MMS) >> TIM_CR2_MMS_SHIFT;
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", master_mode_table[cr2]);
+	return sysfs_emit(buf, "%s\n", master_mode_table[cr2]);
 }
 
 static ssize_t stm32_tt_store_master_mode(struct device *dev,
@@ -696,9 +697,9 @@ static const struct iio_chan_spec_ext_info stm32_trigger_count_info[] = {
 		.write = stm32_count_set_preset
 	},
 	IIO_ENUM("enable_mode", IIO_SEPARATE, &stm32_enable_mode_enum),
-	IIO_ENUM_AVAILABLE("enable_mode", &stm32_enable_mode_enum),
+	IIO_ENUM_AVAILABLE("enable_mode", IIO_SHARED_BY_TYPE, &stm32_enable_mode_enum),
 	IIO_ENUM("trigger_mode", IIO_SEPARATE, &stm32_trigger_mode_enum),
-	IIO_ENUM_AVAILABLE("trigger_mode", &stm32_trigger_mode_enum),
+	IIO_ENUM_AVAILABLE("trigger_mode", IIO_SHARED_BY_TYPE, &stm32_trigger_mode_enum),
 	{}
 };
 
@@ -723,12 +724,10 @@ static struct stm32_timer_trigger *stm32_setup_counter_device(struct device *dev
 		return NULL;
 
 	indio_dev->name = dev_name(dev);
-	indio_dev->dev.parent = dev;
 	indio_dev->info = &stm32_trigger_info;
 	indio_dev->modes = INDIO_HARDWARE_TRIGGERED;
 	indio_dev->num_channels = 1;
 	indio_dev->channels = &stm32_trigger_channel;
-	indio_dev->dev.of_node = dev->of_node;
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
@@ -773,11 +772,11 @@ static int stm32_timer_trigger_probe(struct platform_device *pdev)
 	unsigned int index;
 	int ret;
 
-	if (of_property_read_u32(dev->of_node, "reg", &index))
-		return -EINVAL;
+	ret = device_property_read_u32(dev, "reg", &index);
+	if (ret)
+		return ret;
 
-	cfg = (const struct stm32_timer_trigger_cfg *)
-		of_match_device(dev->driver->of_match_table, dev)->data;
+	cfg = device_get_match_data(dev);
 
 	if (index >= ARRAY_SIZE(triggers_table) ||
 	    index >= cfg->num_valids_table)
@@ -829,7 +828,7 @@ static int stm32_timer_trigger_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int __maybe_unused stm32_timer_trigger_suspend(struct device *dev)
+static int stm32_timer_trigger_suspend(struct device *dev)
 {
 	struct stm32_timer_trigger *priv = dev_get_drvdata(dev);
 
@@ -851,7 +850,7 @@ static int __maybe_unused stm32_timer_trigger_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused stm32_timer_trigger_resume(struct device *dev)
+static int stm32_timer_trigger_resume(struct device *dev)
 {
 	struct stm32_timer_trigger *priv = dev_get_drvdata(dev);
 	int ret;
@@ -877,9 +876,9 @@ static int __maybe_unused stm32_timer_trigger_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(stm32_timer_trigger_pm_ops,
-			 stm32_timer_trigger_suspend,
-			 stm32_timer_trigger_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(stm32_timer_trigger_pm_ops,
+				stm32_timer_trigger_suspend,
+				stm32_timer_trigger_resume);
 
 static const struct stm32_timer_trigger_cfg stm32_timer_trg_cfg = {
 	.valids_table = valids_table,
@@ -909,11 +908,11 @@ static struct platform_driver stm32_timer_trigger_driver = {
 	.driver = {
 		.name = "stm32-timer-trigger",
 		.of_match_table = stm32_trig_of_match,
-		.pm = &stm32_timer_trigger_pm_ops,
+		.pm = pm_sleep_ptr(&stm32_timer_trigger_pm_ops),
 	},
 };
 module_platform_driver(stm32_timer_trigger_driver);
 
-MODULE_ALIAS("platform: stm32-timer-trigger");
+MODULE_ALIAS("platform:stm32-timer-trigger");
 MODULE_DESCRIPTION("STMicroelectronics STM32 Timer Trigger driver");
 MODULE_LICENSE("GPL v2");

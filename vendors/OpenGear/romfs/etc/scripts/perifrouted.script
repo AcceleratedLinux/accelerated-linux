@@ -1,0 +1,8 @@
+#!/bin/bash -
+
+for f in /etc/scripts/perifrouted.d/*; do
+	$f "$@" || logger -p daemon.error -t perifrouted "$f: exit $?"
+
+done
+
+exit 0

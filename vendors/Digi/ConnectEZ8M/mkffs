@@ -1,0 +1,28 @@
+#!/bin/sh
+
+#
+# mkffs -- make MMC flash filesystem for ConnectEZ
+#
+# Setup and create partitions on the MMC flash device.
+#
+
+MMC=/dev/mmcblk0
+
+#
+# The image partition location/offset and size is based on compatibility
+# with older Digi layerscape layouts (though it used to be 2 separate
+# partitions, kernel and rootfs). image is at an offset of 1MiB with a size
+# of 90MiB, while image1 is at an offset of 91MiB with size 90MiB.
+# Note that we use sector start and end numbers to be precise here (since
+# u-boot uses these fixed offsets to find and boot images). For the other
+# general partitions we do not need to be so precise so we switch back to
+# using more human readable units.
+#
+parted -s ${MMC} mktable gpt
+parted -s ${MMC} mkpart image 2048s 186367s
+parted -s ${MMC} mkpart image1 186368s 370687s
+parted -s ${MMC} mkpart opt ext4 370688s 3666MB
+
+mkfs.ext4 -F ${MMC}p3
+
+exit 0

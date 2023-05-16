@@ -1,0 +1,37 @@
+#!/bin/sh
+
+[ -z "$TIMEOUT" ] && TIMEOUT=30
+[ -z "$LOCKNAME" ] && LOCKNAME=$(basename "$0")
+[ -z "$RESTART" ] && RESTART=true
+
+lockdir="/tmp/${LOCKNAME}.lock"
+pidfile="$lockdir/PID"
+if mkdir "$lockdir"; then
+	echo "$$" > "$pidfile"
+	trap 'rm -rf "$lockdir"' 0
+	trap "exit 0" 1 2 3 15
+else
+	timeout=$TIMEOUT
+	signal=0
+	while true; do
+		pid="$(cat "$pidfile")"
+		if [ -z "$pid" ] || ! kill -$signal $pid; then
+			rm -rf "$lockdir"
+			[ -n "$NOEXEC" ] && break
+			if $RESTART; then
+				# Default, restart calling script
+				exec "$0" "$@"
+			fi
+			# Return control flow to calling script
+			break
+		else
+			echo "Failed to lock $lockdir" >&2
+			if [ $(( timeout-- )) -eq 0 ]; then
+				echo "Killing $pid" >&2
+				signal=9
+			else
+				sleep 1
+			fi
+		fi
+	done
+fi

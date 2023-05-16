@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# user rules
+[ -f /etc/odhcp6c.user ] && . /etc/odhcp6c.user

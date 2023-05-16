@@ -167,6 +167,23 @@ enum __socket_type
 #define SOL_ATM		264	/* ATM layer (cell level).  */
 #define SOL_AAL		265	/* ATM Adaption Layer (packet level).  */
 #define SOL_IRDA	266
+#define SOL_NETBEUI	267
+#define SOL_LLC		268
+#define SOL_DCCP	269
+#define SOL_NETLINK	270
+#define SOL_TIPC	271
+#define SOL_RXRPC	272
+#define SOL_PPPOL2TP	273
+#define SOL_BLUETOOTH	274
+#define SOL_PNPIPE	275
+#define SOL_RDS		276
+#define SOL_IUCV	277
+#define SOL_CAIF	278
+#define SOL_ALG		279
+#define SOL_NFC		280
+#define SOL_KCM		281
+#define SOL_TLS		282
+#define SOL_XDP		283
 
 /* Maximum queue length specifiable by listen.  */
 #define SOMAXCONN	128

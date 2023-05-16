@@ -25,6 +25,7 @@ MODULE_ALIAS("ip6t_mac");
 static bool mac_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct xt_mac_info *info = par->matchinfo;
+	const unsigned char *m = info->srcmask;
 	bool ret;
 
 	if (skb->dev == NULL || skb->dev->type != ARPHRD_ETHER)
@@ -33,7 +34,8 @@ static bool mac_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		return false;
 	if (skb_mac_header(skb) + ETH_HLEN > skb->data)
 		return false;
-	ret  = ether_addr_equal(eth_hdr(skb)->h_source, info->srcaddr);
+	if (m[0] || m[1] || m[2] || m[3] || m[4] || m[5]) ret = ether_addr_equal_mask(eth_hdr(skb)->h_source, info->srcaddr, info->srcmask);
+	else ret = ether_addr_equal(eth_hdr(skb)->h_source, info->srcaddr);
 	ret ^= info->invert;
 	return ret;
 }

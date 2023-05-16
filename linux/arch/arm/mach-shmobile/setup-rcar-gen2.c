@@ -9,7 +9,7 @@
 
 #include <linux/clocksource.h>
 #include <linux/device.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/memblock.h>
@@ -59,7 +59,7 @@ static unsigned int __init get_extal_freq(void)
 #define CNTCR 0
 #define CNTFID0 0x20
 
-void __init rcar_gen2_timer_init(void)
+static void __init rcar_gen2_timer_init(void)
 {
 	bool need_update = true;
 	void __iomem *base;
@@ -174,7 +174,7 @@ static int __init rcar_gen2_scan_mem(unsigned long node, const char *uname,
 	return 0;
 }
 
-void __init rcar_gen2_reserve(void)
+static void __init rcar_gen2_reserve(void)
 {
 	struct memory_reserve_config mrc;
 
@@ -199,7 +199,7 @@ static const char * const rcar_gen2_boards_compat_dt[] __initconst = {
 	"renesas,r8a7792",
 	"renesas,r8a7793",
 	"renesas,r8a7794",
-	NULL,
+	NULL
 };
 
 DT_MACHINE_START(RCAR_GEN2_DT, "Generic R-Car Gen2 (Flattened Device Tree)")
@@ -215,7 +215,7 @@ static const char * const rz_g1_boards_compat_dt[] __initconst = {
 	"renesas,r8a7744",
 	"renesas,r8a7745",
 	"renesas,r8a77470",
-	NULL,
+	NULL
 };
 
 DT_MACHINE_START(RZ_G1_DT, "Generic RZ/G1 (Flattened Device Tree)")

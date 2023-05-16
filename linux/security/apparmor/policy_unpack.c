@@ -39,7 +39,7 @@
 
 /*
  * The AppArmor interface treats data as a type byte followed by the
- * actual data.  The interface has the notion of a a named entry
+ * actual data.  The interface has the notion of a named entry
  * which has a name (AA_NAME typecode followed by name string) followed by
  * the entries typecode and data.  Named types allow for optional
  * elements and extensions to be added and tested for without breaking
@@ -163,10 +163,10 @@ static void do_loaddata_free(struct work_struct *work)
 		aa_put_ns(ns);
 	}
 
-	kzfree(d->hash);
-	kzfree(d->name);
+	kfree_sensitive(d->hash);
+	kfree_sensitive(d->name);
 	kvfree(d->data);
-	kzfree(d);
+	kfree_sensitive(d);
 }
 
 void aa_loaddata_kref(struct kref *kref)
@@ -304,7 +304,7 @@ static bool unpack_u8(struct aa_ext *e, u8 *data, const char *name)
 		if (!inbounds(e, sizeof(u8)))
 			goto fail;
 		if (data)
-			*data = get_unaligned((u8 *)e->pos);
+			*data = *((u8 *)e->pos);
 		e->pos += sizeof(u8);
 		return true;
 	}
@@ -894,7 +894,7 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 		while (unpack_strdup(e, &key, NULL)) {
 			data = kzalloc(sizeof(*data), GFP_KERNEL);
 			if (!data) {
-				kzfree(key);
+				kfree_sensitive(key);
 				goto fail;
 			}
 
@@ -902,8 +902,8 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 			data->size = unpack_blob(e, &data->data, NULL);
 			data->data = kvmemdup(data->data, data->size);
 			if (data->size && !data->data) {
-				kzfree(data->key);
-				kzfree(data);
+				kfree_sensitive(data->key);
+				kfree_sensitive(data);
 				goto fail;
 			}
 
@@ -1037,7 +1037,7 @@ void aa_load_ent_free(struct aa_load_ent *ent)
 		aa_put_profile(ent->old);
 		aa_put_profile(ent->new);
 		kfree(ent->ns_name);
-		kzfree(ent);
+		kfree_sensitive(ent);
 	}
 }
 

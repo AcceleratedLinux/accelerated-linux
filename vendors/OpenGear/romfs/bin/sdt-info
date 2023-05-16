@@ -1,0 +1,18 @@
+#!/bin/sh
+LOGFILE=/tmp/foo
+
+port=$1; shift;
+if [ $# -lt 1 ]; then
+	exit 1;
+fi
+cmd=$1; shift;
+if [ ! -f /var/run/sdt/${port},* ]; then 
+    exit 1
+fi
+case $cmd in
+	localip) field=4;;
+	remoteip) field=5;;
+	*) exit 1;;
+esac
+echo /var/run/sdt/${port},* | awk -F, '{ print $field }' field=$field
+exit 0

@@ -1,0 +1,210 @@
+
+commit fc1aa88943cdf42fbf2656a97e456977791b9b47
+Author: Toby Smith <toby@tismith.id.au>
+Date:   Thu May 19 14:34:38 2016 +1000
+
+    IM-511 (IM-1152) Apply the patches to get cherokee working with certs
+
+    Applied verbatim from
+    https://github.com/smunaut/webserver/tree/feature_ssl_peer_cert
+    git diff 0db4004..79c6168 > patch
+    cp patch <src-dir>/user/cherokee
+    cd <srd-dir>/user/cherokee
+    patch -p1 < patch
+
+commit 5971cbc473ce92064cc9b18c8c371465af6741a0
+Author: Toby Smith <toby@tismith.id.au>
+Date:   Fri May 20 16:13:39 2016 +1000
+
+    IM-511 (IM-1152) Add peer cert subject names to a cgi env var
+
+commit 0f57228ba13122e96c5d0d85a8a47f652c06f132
+Author: Toby Smith <toby@tismith.id.au>
+Date:   Mon May 23 16:05:43 2016 +1000
+
+    IM-511 (IM-1156) Add auth requirements to various endpoints
+
+    * Make cherokee expose ssl variables in the same format as nginx does.
+    * Make the REST api check for the ssl variables like in ironman land.
+    * Make the console server REST api endpoints require auth.
+    * Still no user/password capabilities for auth.
+
+commit 11391f4cdec3eaf66fd583c5620947c99f5dab2c
+Author: Toby Smith <toby@tismith.id.au>
+Date:   Mon Jun 13 10:06:16 2016 +1000
+
+    IM-1112 Clean out TLS settings on socket clean
+
+    Otherwise after one successful HTTPS connection, all HTTP connections
+    masquerade as 'successfully peer authenticated'.
+
+--- a/cherokee/cryptor_libssl.c
++++ b/cherokee/cryptor_libssl.c
+@@ -709,6 +709,29 @@ socket_initialize (cherokee_cryptor_sock
+ }
+ 
+ 
++static int
++_x509_name_to_cherokee_buffer (cherokee_buffer_t *buf, X509_NAME *name)
++{
++	BIO* bio;
++	char *data;
++	int len;
++
++	if (!name)
++		return ret_error;
++
++	bio = BIO_new (BIO_s_mem ());
++	if (!bio)
++		return ret_error;
++
++	X509_NAME_print_ex (bio, name, 0, XN_FLAG_RFC2253);
++
++	len = BIO_get_mem_data (bio, &data);
++
++	cherokee_buffer_add (buf, data, len);
++
++	BIO_free(bio);
++}
++
+ static ret_t
+ _socket_init_tls (cherokee_cryptor_socket_libssl_t *cryp,
+                   cherokee_socket_t                *sock,
+@@ -800,6 +823,34 @@ _socket_init_tls (cherokee_cryptor_socke
+ 	}
+ #endif
+ 
++	/* Check for a peer certificate
++	 */
++	if (SSL_get_verify_result (cryp->session) == X509_V_OK)
++	{
++		X509 *peer = SSL_get_peer_certificate (cryp->session);
++
++		if (peer)
++		{
++			sock->tls_peer_tls_auth = peer_Authenticated;
++
++			_x509_name_to_cherokee_buffer (
++				&sock->tls_peer_subject_name,
++				X509_get_subject_name (peer)
++			);
++
++			_x509_name_to_cherokee_buffer (
++				&sock->tls_peer_issuer_name,
++				X509_get_issuer_name (peer)
++			);
++
++			X509_free (peer);
++		} else {
++			sock->tls_peer_tls_auth = peer_Nonauthenticated;
++		}
++	} else {
++		sock->tls_peer_tls_auth = peer_Nonauthenticated;
++	}
++
+ 	return ret_ok;
+ }
+ 
+--- a/cherokee/handler_cgi_base.c
++++ b/cherokee/handler_cgi_base.c
+@@ -395,6 +395,18 @@ cherokee_handler_cgi_base_build_basic_en
+ 		}
+ 	}
+ 
++	/* Certificate details */
++
++	if (conn->socket.tls_peer_tls_auth == peer_Authenticated) {
++		set_env (cgi, "SSL_CLIENT_VERIFY", "SUCCESS", strlen("SUCCESS"));
++
++		if (!cherokee_buffer_is_empty (&conn->socket.tls_peer_subject_name)) {
++			set_env (cgi, "SSL_CLIENT_S_DN", conn->socket.tls_peer_subject_name.buf, conn->socket.tls_peer_subject_name.len);
++		}
++	} else {
++		set_env (cgi, "SSL_CLIENT_VERIFY", "FAILURE", strlen("FAILURE"));
++	}
++
+ 	/* Content-Type
+ 	 */
+ 	cherokee_buffer_clean (tmp);
+--- a/cherokee/handler_proxy.c
++++ b/cherokee/handler_proxy.c
+@@ -614,6 +614,19 @@ build_request (cherokee_handler_proxy_t
+ 	}
+ 	cherokee_buffer_add_str (buf, CRLF);
+ 
++	/* X-Forwarded-SSL-Peer-{Subject,Issuer}-Name */
++	if (!cherokee_buffer_is_empty (&conn->socket.tls_peer_subject_name)) {
++		cherokee_buffer_add_str (buf, "X-Forwarded-SSL-Peer-Subject-Name: ");
++		cherokee_buffer_add_buffer (buf, &conn->socket.tls_peer_subject_name);
++		cherokee_buffer_add_str (buf, CRLF);
++	}
++
++	if (!cherokee_buffer_is_empty (&conn->socket.tls_peer_issuer_name)) {
++		cherokee_buffer_add_str (buf, "X-Forwarded-SSL-Peer-Issuer-Name: ");
++		cherokee_buffer_add_buffer (buf, &conn->socket.tls_peer_issuer_name);
++		cherokee_buffer_add_str (buf, CRLF);
++	}
++
+ 	/* Additional headers */
+ 	list_for_each (i, &props->in_headers_add) {
+ 		add_header (buf, &HEADER_ADD(i)->key, &HEADER_ADD(i)->val);
+--- a/cherokee/socket.c
++++ b/cherokee/socket.c
+@@ -118,6 +118,10 @@ cherokee_socket_init (cherokee_socket_t
+ 	socket->is_tls  = non_TLS;
+ 	socket->cryptor = NULL;
+ 
++	socket->tls_peer_tls_auth = peer_Nonauthenticated;
++	cherokee_buffer_init (&socket->tls_peer_subject_name);
++	cherokee_buffer_init (&socket->tls_peer_issuer_name);
++
+ 	return ret_ok;
+ }
+ 
+@@ -130,6 +134,9 @@ cherokee_socket_mrproper (cherokee_socke
+ 		socket->cryptor = NULL;
+ 	}
+ 
++	cherokee_buffer_mrproper (&socket->tls_peer_subject_name);
++	cherokee_buffer_mrproper (&socket->tls_peer_issuer_name);
++
+ 	return ret_ok;
+ }
+ 
+@@ -146,6 +153,10 @@ cherokee_socket_clean (cherokee_socket_t
+ 
+ 	socket->is_tls = non_TLS;
+ 
++	socket->tls_peer_tls_auth = peer_Nonauthenticated;
++	cherokee_buffer_clean (&socket->tls_peer_subject_name);
++	cherokee_buffer_clean (&socket->tls_peer_issuer_name);
++
+ 	/* Properties
+ 	 */
+ 	socket->socket = -1;
+--- a/cherokee/socket.h
++++ b/cherokee/socket.h
+@@ -50,6 +50,13 @@ typedef enum {
+ 	TLS
+ } cherokee_socket_type_t;
+ 
++/* Peer TLS authenticated
++ */
++typedef enum {
++	peer_Nonauthenticated,
++	peer_Authenticated
++} cherokee_peer_tls_auth_t;
++
+ 
+ /* Socket address
+  */
+@@ -75,6 +82,9 @@ typedef struct {
+ 	cherokee_socket_status_t   status;
+ 	cherokee_socket_type_t     is_tls;
+ 	cherokee_cryptor_socket_t *cryptor;
++	cherokee_peer_tls_auth_t   tls_peer_tls_auth;
++	cherokee_buffer_t          tls_peer_subject_name;
++	cherokee_buffer_t          tls_peer_issuer_name;
+ } cherokee_socket_t;
+ 
+ 

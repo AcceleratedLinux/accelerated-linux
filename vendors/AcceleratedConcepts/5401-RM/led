@@ -9,12 +9,24 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+# flash Online and Backup LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -n ONLINE -n ETH -f ETH -f ONLINE"
+	else
+		FINDME="-a -N ETH -N ONLINE"
+	fi
+	ledcmd $FINDME
+}
+
 case "$1" in
 start)
 	ledcmd -a -N ALL
 	exit 0
 	;;
 reload)
+	findme_update
 	;;
 stop)
 	# Firmware flash

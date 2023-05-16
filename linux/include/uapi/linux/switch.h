@@ -89,6 +89,7 @@ enum switch_val_type {
 	SWITCH_TYPE_PORTS,
 	SWITCH_TYPE_LINK,
 	SWITCH_TYPE_NOVAL,
+	SWITCH_TYPE_EXT,
 };
 
 /* port nested attributes */

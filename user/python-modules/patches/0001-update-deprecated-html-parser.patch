@@ -1,0 +1,38 @@
+Update for deprecated HTMLParser.unescape for python >=3.9
+
+https://github.com/coursera-dl/edx-dl/commit/5490a99a98b56f544661c131229ef640ace2b064
+considering backward compatibility
+Python 3.9.0 changelog:
+docs.python.org/release/3.9.0/whatsnew/changelog.html
+---
+--- a/setuptools/py33compat.py
++++ b/setuptools/py33compat.py
+@@ -1,14 +1,13 @@
+ import dis
+ import array
+ import collections
+-
+-try:
++import sys
++if sys.version_info[0] >= 3:
+     import html
+-except ImportError:
+-    html = None
+-
+-from setuptools.extern import six
+-from setuptools.extern.six.moves import html_parser
++else:
++    from setuptools.extern import six
++    from setuptools.extern.six.moves import html_parser
++    html = html_parser.HTMLParser()
+ 
+ __metaclass__ = type
+ 
+@@ -50,6 +49,4 @@
+ 
+ 
+ Bytecode = getattr(dis, 'Bytecode', Bytecode_compat)
+-
+-
+-unescape = getattr(html, 'unescape', html_parser.HTMLParser().unescape)
++unescape = getattr(html, 'unescape', html.unescape)

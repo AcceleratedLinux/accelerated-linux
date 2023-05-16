@@ -46,7 +46,7 @@ int lis2hh12_allocate_triggers(struct lis2hh12_data *cdata,
 	int err, i, n;
 
 	for (i = 0; i < LIS2HH12_SENSORS_NUMB; i++) {
-		cdata->iio_trig[i] = iio_trigger_alloc("%s-trigger",
+		cdata->iio_trig[i] = iio_trigger_alloc(cdata->dev, "%s-trigger",
 						cdata->iio_sensors_dev[i]->name);
 		if (!cdata->iio_trig[i]) {
 			dev_err(cdata->dev, "failed to allocate iio trigger.\n");

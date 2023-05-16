@@ -14,9 +14,9 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
-#include <linux/genhd.h>
 #include <linux/kernel.h>
 #include <linux/blkdev.h>
+#include <linux/pagemap.h>
 #include <linux/msdos_partition.h>
 #include <asm/unaligned.h>
 
@@ -32,17 +32,16 @@
  */
 unsigned char *scsi_bios_ptable(struct block_device *dev)
 {
-	struct address_space *mapping = dev->bd_contains->bd_inode->i_mapping;
+	struct address_space *mapping = bdev_whole(dev)->bd_inode->i_mapping;
 	unsigned char *res = NULL;
-	struct page *page;
+	struct folio *folio;
 
-	page = read_mapping_page(mapping, 0, NULL);
-	if (IS_ERR(page))
+	folio = read_mapping_folio(mapping, 0, NULL);
+	if (IS_ERR(folio))
 		return NULL;
 
-	if (!PageError(page))
-		res = kmemdup(page_address(page) + 0x1be, 66, GFP_KERNEL);
-	put_page(page);
+	res = kmemdup(folio_address(folio) + 0x1be, 66, GFP_KERNEL);
+	folio_put(folio);
 	return res;
 }
 EXPORT_SYMBOL(scsi_bios_ptable);

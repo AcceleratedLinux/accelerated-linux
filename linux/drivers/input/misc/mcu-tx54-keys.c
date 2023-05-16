@@ -298,11 +298,67 @@ static ssize_t ign_delay_off_store(struct device *dev,
 	return count;
 }
 
+static ssize_t temp_ign_delay_off_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct mcu_tx54_keys *keys = dev_get_drvdata(dev);
+	int ret;
+	struct mcu_tx_pkt tx_pkt;
+	struct mcu_rx_pkt rx_pkt;
+
+	put_unaligned(MCU_CMD_GET_TEMP_IGN_PWR_OFF_DELAY, &tx_pkt.cmd);
+	ret = mcu_tx54_transaction(keys->mcu, &tx_pkt, &rx_pkt,
+				   get_ign_pwr_off_delay);
+	if (ret < 0) {
+		dev_err(keys->dev,
+			"Get temp ignition OFF delay command failed (%d)\n", ret);
+		return ret;
+	}
+
+	return sprintf(buf, "%u\n",
+			   get_unaligned(&rx_pkt.get_ign_pwr_off_delay.value));
+}
+
+static ssize_t temp_ign_delay_off_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct mcu_tx54_keys *keys = dev_get_drvdata(dev);
+	int ret;
+	struct mcu_tx_pkt tx_pkt;
+	struct mcu_rx_pkt rx_pkt;
+	long val;
+
+	if (kstrtol(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > MCU_IGN_PWR_OFF_DELAY_MAX) {
+		dev_err(keys->dev,
+			"Invalid temp ignition OFF delay (%ld) [0 - %d]\n", val,
+			MCU_IGN_PWR_OFF_DELAY_MAX);
+		return -EINVAL;
+	}
+
+	put_unaligned(MCU_CMD_SET_TEMP_IGN_PWR_OFF_DELAY, &tx_pkt.cmd);
+	put_unaligned(val, &tx_pkt.set_temp_ign_pwr_off_delay.param);
+
+	ret = mcu_tx54_transaction(keys->mcu, &tx_pkt, &rx_pkt,
+				   set_temp_ign_pwr_off_delay);
+	if (ret < 0) {
+		dev_err(keys->dev,
+			"Couldn't set temp ignition OFF delay (%d)\n", ret);
+		return ret;
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(ignition);
 static DEVICE_ATTR_RO(pwr_button);
 static DEVICE_ATTR_RW(pwr_button_lock);
 static DEVICE_ATTR_RW(ign_delay_on);
 static DEVICE_ATTR_RW(ign_delay_off);
+static DEVICE_ATTR_RW(temp_ign_delay_off);
 
 static struct attribute *mcu_tx54_keys_attrs[] = {
 	&dev_attr_ignition.attr,
@@ -310,6 +366,7 @@ static struct attribute *mcu_tx54_keys_attrs[] = {
 	&dev_attr_pwr_button_lock.attr,
 	&dev_attr_ign_delay_on.attr,
 	&dev_attr_ign_delay_off.attr,
+	&dev_attr_temp_ign_delay_off.attr,
 	NULL
 };
 

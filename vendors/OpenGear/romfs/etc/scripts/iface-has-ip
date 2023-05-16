@@ -1,0 +1,12 @@
+#!/bin/sh
+# Tests if interface $1 has IPv4 address $2
+
+if [ $# -ne 2 ]; then
+    echo "usage: $0 <interface> <ipaddress>" >&2
+    exit 2
+fi
+
+ip -f inet -o address show dev $1 | awk '
+	{ sub(/\/.*/,"",$4); if ($4 == addr) ok=1; }
+	END { exit(ok ? 0 : 1); }
+' addr=$2

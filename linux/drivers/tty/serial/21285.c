@@ -50,25 +50,25 @@ static const char serial21285_name[] = "Footbridge UART";
 
 static bool is_enabled(struct uart_port *port, int bit)
 {
-	unsigned long private_data = (unsigned long)port->private_data;
+	unsigned long *private_data = (unsigned long *)&port->private_data;
 
-	if (test_bit(bit, &private_data))
+	if (test_bit(bit, private_data))
 		return true;
 	return false;
 }
 
 static void enable(struct uart_port *port, int bit)
 {
-	unsigned long private_data = (unsigned long)port->private_data;
+	unsigned long *private_data = (unsigned long *)&port->private_data;
 
-	set_bit(bit, &private_data);
+	set_bit(bit, private_data);
 }
 
 static void disable(struct uart_port *port, int bit)
 {
-	unsigned long private_data = (unsigned long)port->private_data;
+	unsigned long *private_data = (unsigned long *)&port->private_data;
 
-	clear_bit(bit, &private_data);
+	clear_bit(bit, private_data);
 }
 
 #define is_tx_enabled(port)	is_enabled(port, tx_enabled_bit)
@@ -403,7 +403,7 @@ static void serial21285_setup_ports(void)
 }
 
 #ifdef CONFIG_SERIAL_21285_CONSOLE
-static void serial21285_console_putchar(struct uart_port *port, int ch)
+static void serial21285_console_putchar(struct uart_port *port, unsigned char ch)
 {
 	while (*CSR_UARTFLG & 0x20)
 		barrier();

@@ -1,0 +1,9 @@
+ENV{DEVPATH}!="/devices/platform/soc/*/usb6/6-1*", GOTO="auto_mount_end"
+
+# SD card reader with no card inserted has size 0
+KERNEL=="sd[a-z]", ACTION=="add", ATTRS{size}!="0", RUN+="/bin/storage add /dev/%k sd"
+KERNEL=="sd[a-z]", ACTION=="change", ATTRS{size}!="0", ENV{DISK_MEDIA_CHANGE}=="1", RUN+="/bin/storage add /dev/%k sd"
+
+KERNEL=="sd[a-z]", ACTION=="change", ATTRS{size}=="0", RUN+="/bin/storage remove /dev/%k sd"
+
+LABEL="auto_mount_end"

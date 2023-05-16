@@ -126,9 +126,17 @@ properties:
       clock-frequency:
         const: 12288000
 
-  lochnagar-pinctrl:
+  pinctrl:
     type: object
     $ref: /schemas/pinctrl/cirrus,lochnagar.yaml#
+
+  lochnagar-hwmon:
+    type: object
+    $ref: /schemas/hwmon/cirrus,lochnagar.yaml#
+
+  lochnagar-sc:
+    type: object
+    $ref: /schemas/sound/cirrus,lochnagar.yaml#
 
   VDDCORE:
     description:
@@ -247,9 +255,9 @@ required:
   - reg
   - reset-gpios
   - lochnagar-clk
-  - lochnagar-pinctrl
+  - pinctrl
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |
@@ -285,7 +293,7 @@ examples:
                 clock-frequency = <32768>;
             };
 
-            lochnagar-pinctrl {
+            pinctrl {
                 compatible = "cirrus,lochnagar-pinctrl";
 
                 gpio-controller;

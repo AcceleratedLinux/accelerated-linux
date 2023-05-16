@@ -1,7 +1,7 @@
 /*
  * SPI access driver for TI TPS65912x PMICs
  *
- * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2015 Texas Instruments Incorporated - https://www.ti.com/
  *	Andrew F. Davis <afd@ti.com>
  *
  * This program is free software; you can redistribute it and/or
@@ -50,11 +50,11 @@ static int tps65912_spi_probe(struct spi_device *spi)
 	return tps65912_device_init(tps);
 }
 
-static int tps65912_spi_remove(struct spi_device *spi)
+static void tps65912_spi_remove(struct spi_device *spi)
 {
 	struct tps65912 *tps = spi_get_drvdata(spi);
 
-	return tps65912_device_exit(tps);
+	tps65912_device_exit(tps);
 }
 
 static const struct spi_device_id tps65912_spi_id_table[] = {

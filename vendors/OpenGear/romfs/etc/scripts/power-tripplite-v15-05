@@ -1,0 +1,157 @@
+#!/bin/bash
+
+port=$1
+outlets=$2
+cmd=$3
+
+if [ "$cmd" == "on" ]
+then
+	number=3
+fi
+
+if [ "$cmd" == "off" ]
+then
+	number=3
+fi
+
+if [ "$cmd" == "cycle" ]
+then
+	number=4
+fi
+
+function pduLogout {
+	pmchat -t 5 "" "X" ">> " "X" ">> " "X" ">> " "X" ">> " "X" ">> " "Q"  < $port > $port
+}
+
+function pduLogin {
+	# Try sending the username straight off, in case we're sitting at a username prompt
+	pmchat -t 3 "" "${username}" "Password: " "${password}" ">> " "1" ">> " "5" ">> " "1" ">> " > $port < $port
+
+	# If that didn't work we were probably sitting just after the login screen, so we should be at the username prompt now
+	if [ $? -ne 0 ]
+	then
+		pmchat -t 3 "" "${username}" "Password: " "${password}" ">> " "1" ">> " "5" ">> " "1" ">> " > $port < $port
+	fi
+
+	# If that didn't work there is the chance we were sitting at a command prompt all along, so try proceeding as if nothing went wrong
+}
+
+function pduStatus {
+
+	# Setup long enough sleep patterns for the PDU to finish commands before status is run, or else it could get incorrect status.
+	if [ "$cmd" != "status" ]
+	then
+		for outlet in $outlets
+		do
+			sleep 2
+		done
+		sleep 1
+
+		if [ "$cmd" == "cycle" ]
+		then
+			for outlet in $outlets
+			do
+				sleep 2
+			done
+			sleep 4
+		fi
+	fi
+
+	outlets_on=`pmchat -t 5 ECHO ON "" "\n" ">> " < $port 2>&1 | grep 'Yes' | grep On | grep -o '[0-9]'`
+
+	for outlet in $outlets
+	do
+		found=0
+		for outlet_on in $outlets_on
+		do
+			if [ "$outlet_on" == "$outlet" ]
+			then
+				found=1
+				echo "Outlet $outlet is on"
+				break
+			fi
+		done
+		if [ $found -eq 0 ]
+		then
+			echo "Outlet $outlet is off"
+		fi
+	done
+}
+
+pduLogin
+
+if [ "$cmd" != "status" ]
+then
+	if [ "$cmd" != "on" -a "$cmd" != "off" -a "$cmd" != "cycle" ]
+	then
+		echo "ERROR: Unrecognized command"
+		pduLogout
+		exit
+	fi
+
+	if [ "$cmd" == "on" ]
+	then
+		for outlet in $outlets
+		do
+			outlet_status=`pmchat -t 5 ECHO ON "" "$outlet" ">> " < $port 2>&1 | grep 'State:' | grep -o 'On\|Off'`
+			if [ "$outlet_status" == "Off" ]
+			then
+				pmchat -t 5 "" "$number" ">> " "Y" ">> " "X" ">> " < $port > $port
+				if [ $? -eq 0 ]
+				then
+					echo "Success"
+				else
+					echo "ERROR: Tripp Lite PDU is not responding"
+					pduLogout
+					exit
+				fi
+			else
+				pmchat -t 5 "" "X" ">> " < $port > $port
+				echo "ERROR: Outlet $outlet is already on"
+			fi
+		done
+	fi
+
+	if [ "$cmd" == "off" ]
+	then
+		for outlet in $outlets
+		do
+			outlet_status=`pmchat -t 5 ECHO ON "" "$outlet" ">> " < $port 2>&1 | grep 'State:' | grep -o 'On\|Off'`
+			if [ "$outlet_status" == "On" ]
+			then
+				pmchat -t 5 "" "$number" ">> " "Y" ">> " "X" ">> " < $port > $port
+				if [ $? -eq 0 ]
+				then
+					echo "Success"
+				else
+					echo "ERROR: Tripp Lite PDU is not responding"
+					pduLogout
+					exit
+				fi
+			else
+				pmchat -t 5 "" "X" ">> " < $port > $port
+				echo "ERROR: Outlet $outlet is already off"
+			fi
+		done
+	fi
+
+	if [ "$cmd" == "cycle" ]
+	then
+		for outlet in $outlets
+		do
+			pmchat -t 5 "" "\n" ">> " "$outlet" ">> " "$number" ">> " "Y" ">> " "X" ">> " < $port > $port
+			if [ $? -eq 0 ]
+			then
+				echo "Success"
+			else
+				echo "ERROR: Tripp Lite PDU is not responding"
+				pduLogout
+				exit
+			fi
+		done
+	fi
+
+fi
+
+pduStatus
+pduLogout

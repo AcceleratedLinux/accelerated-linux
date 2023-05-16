@@ -12,8 +12,10 @@
 #include <linux/semaphore.h>
 #include <linux/completion.h>
 #include <linux/slab.h>
+#include <net/devlink.h>
 #include <asm/barrier.h>
 
+#include "hinic_devlink.h"
 #include "hinic_hw_if.h"
 #include "hinic_hw_eqs.h"
 #include "hinic_hw_api_cmd.h"
@@ -45,7 +47,11 @@
 
 #define MGMT_MSG_TIMEOUT                5000
 
+#define SET_FUNC_PORT_MBOX_TIMEOUT	30000
+
 #define SET_FUNC_PORT_MGMT_TIMEOUT	25000
+
+#define UPDATE_FW_MGMT_TIMEOUT		20000
 
 #define mgmt_to_pfhwdev(pf_mgmt)        \
 		container_of(pf_mgmt, struct hinic_pfhwdev, pf_to_mgmt)
@@ -232,6 +238,7 @@ static int send_msg_to_mgmt(struct hinic_pf_to_mgmt *pf_to_mgmt,
  * @out_size: response length
  * @direction: the direction of the original message
  * @resp_msg_id: msg id to response for
+ * @timeout: time-out period of waiting for response
  *
  * Return 0 - Success, negative - Failure
  **/
@@ -274,6 +281,7 @@ static int msg_to_mgmt_sync(struct hinic_pf_to_mgmt *pf_to_mgmt,
 
 	if (!wait_for_completion_timeout(recv_done, timeo)) {
 		dev_err(&pdev->dev, "MGMT timeout, MSG id = %d\n", msg_id);
+		hinic_dump_aeq_info(pf_to_mgmt->hwdev);
 		err = -ETIMEDOUT;
 		goto unlock_sync_msg;
 	}
@@ -286,7 +294,7 @@ static int msg_to_mgmt_sync(struct hinic_pf_to_mgmt *pf_to_mgmt,
 		goto unlock_sync_msg;
 	}
 
-	if ((buf_out) && (recv_msg->msg_len <= MAX_PF_MGMT_BUF_SIZE)) {
+	if (buf_out && recv_msg->msg_len <= MAX_PF_MGMT_BUF_SIZE) {
 		memcpy(buf_out, recv_msg->msg, recv_msg->msg_len);
 		*out_size = recv_msg->msg_len;
 	}
@@ -358,16 +366,22 @@ int hinic_msg_to_mgmt(struct hinic_pf_to_mgmt *pf_to_mgmt,
 		return -EINVAL;
 	}
 
-	if (cmd == HINIC_PORT_CMD_SET_FUNC_STATE)
-		timeout = SET_FUNC_PORT_MGMT_TIMEOUT;
+	if (HINIC_IS_VF(hwif)) {
+		if (cmd == HINIC_PORT_CMD_SET_FUNC_STATE)
+			timeout = SET_FUNC_PORT_MBOX_TIMEOUT;
 
-	if (HINIC_IS_VF(hwif))
 		return hinic_mbox_to_pf(pf_to_mgmt->hwdev, mod, cmd, buf_in,
-					in_size, buf_out, out_size, 0);
-	else
+					in_size, buf_out, out_size, timeout);
+	} else {
+		if (cmd == HINIC_PORT_CMD_SET_FUNC_STATE)
+			timeout = SET_FUNC_PORT_MGMT_TIMEOUT;
+		else if (cmd == HINIC_PORT_CMD_UPDATE_FW)
+			timeout = UPDATE_FW_MGMT_TIMEOUT;
+
 		return msg_to_mgmt_sync(pf_to_mgmt, mod, cmd, buf_in, in_size,
 				buf_out, out_size, MGMT_DIRECT_SEND,
 				MSG_NOT_RESP, timeout);
+	}
 }
 
 static void recv_mgmt_msg_work_handler(struct work_struct *work)
@@ -397,7 +411,7 @@ static void recv_mgmt_msg_work_handler(struct work_struct *work)
 			   HINIC_MGMT_CB_ENABLED,
 			   HINIC_MGMT_CB_ENABLED | HINIC_MGMT_CB_RUNNING);
 
-	if ((cb_state == HINIC_MGMT_CB_ENABLED) && (mgmt_cb->cb))
+	if (cb_state == HINIC_MGMT_CB_ENABLED && mgmt_cb->cb)
 		mgmt_cb->cb(mgmt_cb->handle, mgmt_work->cmd,
 			    mgmt_work->msg, mgmt_work->msg_len,
 			    buf_out, &out_size);
@@ -426,18 +440,14 @@ static void mgmt_recv_msg_handler(struct hinic_pf_to_mgmt *pf_to_mgmt,
 				  struct hinic_recv_msg *recv_msg)
 {
 	struct hinic_mgmt_msg_handle_work *mgmt_work = NULL;
-	struct pci_dev *pdev = pf_to_mgmt->hwif->pdev;
 
 	mgmt_work = kzalloc(sizeof(*mgmt_work), GFP_KERNEL);
-	if (!mgmt_work) {
-		dev_err(&pdev->dev, "Allocate mgmt work memory failed\n");
+	if (!mgmt_work)
 		return;
-	}
 
 	if (recv_msg->msg_len) {
 		mgmt_work->msg = kzalloc(recv_msg->msg_len, GFP_KERNEL);
 		if (!mgmt_work->msg) {
-			dev_err(&pdev->dev, "Allocate mgmt msg memory failed\n");
 			kfree(mgmt_work);
 			return;
 		}
@@ -617,10 +627,15 @@ int hinic_pf_to_mgmt_init(struct hinic_pf_to_mgmt *pf_to_mgmt,
 	if (HINIC_IS_VF(hwif))
 		return 0;
 
+	err = hinic_health_reporters_create(hwdev->devlink_dev);
+	if (err)
+		return err;
+
 	sema_init(&pf_to_mgmt->sync_msg_lock, 1);
 	pf_to_mgmt->workq = create_singlethread_workqueue("hinic_mgmt");
 	if (!pf_to_mgmt->workq) {
 		dev_err(&pdev->dev, "Failed to initialize MGMT workqueue\n");
+		hinic_health_reporters_destroy(hwdev->devlink_dev);
 		return -ENOMEM;
 	}
 	pf_to_mgmt->sync_msg_id = 0;
@@ -628,12 +643,16 @@ int hinic_pf_to_mgmt_init(struct hinic_pf_to_mgmt *pf_to_mgmt,
 	err = alloc_msg_buf(pf_to_mgmt);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to allocate msg buffers\n");
+		destroy_workqueue(pf_to_mgmt->workq);
+		hinic_health_reporters_destroy(hwdev->devlink_dev);
 		return err;
 	}
 
 	err = hinic_api_cmd_init(pf_to_mgmt->cmd_chain, hwif);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to initialize cmd chains\n");
+		destroy_workqueue(pf_to_mgmt->workq);
+		hinic_health_reporters_destroy(hwdev->devlink_dev);
 		return err;
 	}
 
@@ -658,4 +677,5 @@ void hinic_pf_to_mgmt_free(struct hinic_pf_to_mgmt *pf_to_mgmt)
 	hinic_aeq_unregister_hw_cb(&hwdev->aeqs, HINIC_MSG_FROM_MGMT_CPU);
 	hinic_api_cmd_free(pf_to_mgmt->cmd_chain);
 	destroy_workqueue(pf_to_mgmt->workq);
+	hinic_health_reporters_destroy(hwdev->devlink_dev);
 }

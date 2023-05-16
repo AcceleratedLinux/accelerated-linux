@@ -1,0 +1,38 @@
+From b38e949334e39c38511263c57ccd3fc8f73085a2 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Wed, 28 Apr 2021 16:47:51 +0100
+Subject: [PATCH] zebra: use kernel route's metric for administrative distance
+
+Insert kernel routes into zebra with an administrative distance equal to
+the route's metric rather than zero. This allows for routes obtained via
+dynamic protocols (e.g. RIP) to take precedence over those from the
+kernel, if those routes have an administrative distance less than the
+kernel route's metric.
+
+Previously, kernel routes would always take precedence over dynamic
+routes to the same destination, resulting in, for example, default
+routes obtained via RIP not being added to the kernel's routing table.
+
+DAL-4799
+---
+ zebra/rt_netlink.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/zebra/rt_netlink.c b/zebra/rt_netlink.c
+index 6fd951a..f2a04ee 100644
+--- a/zebra/rt_netlink.c
++++ b/zebra/rt_netlink.c
+@@ -751,8 +751,8 @@ static int netlink_route_change_read_unicast(struct nlmsghdr *h, ns_id_t ns_id,
+ 	 *    will cause them to win for the purposes of zebra.
+ 	 */
+ 	if (proto == ZEBRA_ROUTE_KERNEL) {
+-		distance = (metric >> 24) & 0xFF;
+-		metric = (metric & 0x00FFFFFF);
++		distance = (metric & 0x00FFFFFF);
++		metric = distance;
+ 	}
+ 
+ 	if (IS_ZEBRA_DEBUG_KERNEL) {
+-- 
+2.17.1
+

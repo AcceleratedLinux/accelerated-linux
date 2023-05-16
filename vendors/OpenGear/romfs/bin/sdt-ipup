@@ -1,0 +1,68 @@
+#!/bin/sh
+ifname=$1
+portnr=$6
+localip=$4
+remoteip=$5
+chain=fwd_sdt${portnr}
+
+RDP_BASEPORT=7300
+VNC_BASEPORT=7900
+ICA_BASEPORT=7400
+TCP_PORTS="1494 3389 5900"
+UDP_PORTS=""
+
+addRedirect()
+{
+    iptables -t nat -I PREROUTING -p tcp --dport $(expr $2 + $1) \
+	-j DNAT --to-destination ${3}:${4}
+}
+
+# Make sure ip forwarding is on
+sysctl -w net.ipv4.ip_forward=1
+
+# Save the info somewhere
+mkdir -m 0755 -p /var/run/sdt
+rm -f /var/run/sdt/port${portnr},*
+touch /var/run/sdt/port${portnr},$chain,$ifname,$localip,$remoteip
+
+iptables -t nat -I POSTROUTING -p tcp -j SNAT -o $ifname --to-source ${localip}
+addRedirect $portnr $RDP_BASEPORT $remoteip 3389
+addRedirect $portnr $VNC_BASEPORT $remoteip 5900
+addRedirect $portnr $ICA_BASEPORT $remoteip 1494
+
+# Clean out stale instances of this chain
+iptables -D SDT --jump $chain >& /dev/null
+iptables -F $chain >& /dev/null
+iptables -X $chain >& /dev/null
+
+# Hook this port's chain in to the main SDT forwarding chain
+iptables -N $chain
+iptables -A SDT --jump $chain
+
+# Now fetch the trusted networks
+TRUSTED=$(config -g config.portaccess | awk 'BEGIN { lastid = ""; } \
+        { \
+                split($1, conf, "."); \
+                if (conf[3] != lastid) { \
+                        address = ""; netmask = ""; \
+                        lastid = conf[3]; \
+                } \
+                if (conf[4] == "address") address = $2; \
+                if (conf[4] == "netmask") netmask = $2; \
+                on = (conf[4] == portid && $2 == "on"); \
+		if (on && address!="" && netmask!="") \
+                        printf ("%s/%s ", address, netmask); \
+        } \
+        ' portid="port${portnr}")
+
+if [ -z "$TRUSTED" ]; then
+    # Allow anyone in if no trusted networks
+    TRUSTED="0.0.0.0/0.0.0.0"
+fi
+# Restrict access to only those hosts explicitly trusted
+for ip in $TRUSTED; do
+    for dport in $TCP_PORTS; do
+	iptables -A $chain -p tcp -s ${ip} -o $ifname -d ${remoteip} \
+	    --dport $dport -j ACCEPT
+    done
+done

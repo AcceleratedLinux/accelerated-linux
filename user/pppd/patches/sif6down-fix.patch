@@ -1,0 +1,19 @@
+
+
+Fix for when CONFIG_USER_PPPD_WITH_IPV6 is forgotten:
+pppd/sys-linux.c:352: undefined reference to `sif6down'
+Index: ppp-ppp-2.4.9/pppd/sys-linux.c
+===================================================================
+--- ppp-ppp-2.4.9.orig/pppd/sys-linux.c
++++ ppp-ppp-2.4.9/pppd/sys-linux.c
+@@ -348,8 +348,10 @@ void sys_cleanup(void)
+ 	if_is_up = 0;
+ 	sifdown(0);
+     }
++#ifdef INET6
+     if (if6_is_up)
+ 	sif6down(0);
++#endif
+ 
+ /*
+  * Delete any routes through the device.

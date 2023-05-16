@@ -38,6 +38,25 @@ config USB_AWUSB_NUM_PORTS
 	help
 	  Number of physical USB ports on an AWUSB device.
 
+config USB_AWUSB_HUB_WHITELIST
+	bool "USB ports to exclude from AWUSBD for the AnywhereUSB8 and AnywhereUSB24"
+	depends on USB_AWUSB_DEFAULT_CLAIM_PORT
+	help
+	  USB ports to exclude from AWUSBD for the AnywhereUSB8 and
+	  AnywhereUSB24.
+
+config USB_USBFS_MEMORY_MB
+	int "Maximum USBFS memory"
+	default 16
+	help
+	  Limit on the total amount of memory that can be allocated for
+	  USB transfers in megabytes.  Can be overridden with the
+	  usbcore.usbfs_memory_mb command line or module parameter.
+
+	  The value Linux currently uses is 16 MB.  Change
+	  this value if you want a different value and cannot modify
+	  the command line or module parameter.
+
 config USB_DEFAULT_PERSIST
 	bool "Enable USB persist by default"
 	default y
@@ -59,6 +78,20 @@ config USB_SIERRA_FORCE_QMI_CONFIG
 	  Allow forcing of compatability config for selected Sierra Wireless
 	  modems. This used to present a QMI modem with an AT interface rather
 	  than an MBIM modem.
+
+config USB_FEW_INIT_RETRIES
+	bool "Limit USB device initialization to only a few retries"
+	help
+	  When a new USB device is detected, the kernel tries very hard
+	  to initialize and enumerate it, with lots of nested retry loops.
+	  This almost always works, but when it fails it can take a long time.
+	  This option tells the kernel to make only a few retry attempts,
+	  so that the total time required for a failed initialization is
+	  no more than 30 seconds (as required by the USB OTG spec).
+
+	  Say N here unless you require new-device enumeration failure to
+	  occur within 30 seconds (as might be needed in an embedded
+	  application).
 
 config USB_DYNAMIC_MINORS
 	bool "Dynamic USB minor allocation"
@@ -83,18 +116,18 @@ config USB_OTG
 	  Select this only if your board has Mini-AB/Micro-AB
 	  connector.
 
-config USB_OTG_WHITELIST
+config USB_OTG_PRODUCTLIST
 	bool "Rely on OTG and EH Targeted Peripherals List"
 	depends on USB
 	help
-	  If you say Y here, the "otg_whitelist.h" file will be used as a
-	  product whitelist, so USB peripherals not listed there will be
+	  If you say Y here, the "otg_productlist.h" file will be used as a
+	  product list, so USB peripherals not listed there will be
 	  rejected during enumeration.  This behavior is required by the
 	  USB OTG and EH specification for all devices not on your product's
 	  "Targeted Peripherals List".  "Embedded Hosts" are likewise
 	  allowed to support only a limited number of peripherals.
 
-config USB_OTG_BLACKLIST_HUB
+config USB_OTG_DISABLE_EXTERNAL_HUB
 	bool "Disable external hubs"
 	depends on USB_OTG || EXPERT
 	help

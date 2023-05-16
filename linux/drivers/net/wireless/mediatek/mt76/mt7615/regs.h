@@ -14,7 +14,6 @@ enum mt7615_reg_base {
 	MT_CSR_BASE,
 	MT_PLE_BASE,
 	MT_PSE_BASE,
-	MT_PHY_BASE,
 	MT_CFG_BASE,
 	MT_AGG_BASE,
 	MT_TMAC_BASE,
@@ -29,6 +28,7 @@ enum mt7615_reg_base {
 	MT_PCIE_REMAP_BASE2,
 	MT_TOP_MISC_BASE,
 	MT_EFUSE_ADDR_BASE,
+	MT_PP_BASE,
 	__MT_BASE_MAX,
 };
 
@@ -61,6 +61,11 @@ enum mt7615_reg_base {
 #define MT_MCU_PCIE_REMAP_2_BASE	GENMASK(31, 19)
 #define MT_PCIE_REMAP_BASE_2		((dev)->reg_map[MT_PCIE_REMAP_BASE2])
 
+#define MT_MCU_CIRQ_BASE		0xc0000
+#define MT_MCU_CIRQ(ofs)		(MT_MCU_CIRQ_BASE + (ofs))
+
+#define MT_MCU_CIRQ_IRQ_SEL(n)		MT_MCU_CIRQ((n) << 2)
+
 #define MT_HIF(ofs)			((dev)->reg_map[MT_HIF_BASE] + (ofs))
 #define MT_HIF_RST			MT_HIF(0x100)
 #define MT_HIF_LOGIC_RST_N		BIT(4)
@@ -88,6 +93,10 @@ enum mt7615_reg_base {
 #define MT_CFG_LPCR_HOST_FW_OWN		BIT(0)
 #define MT_CFG_LPCR_HOST_DRV_OWN	BIT(1)
 
+#define MT_MCU2HOST_INT_STATUS		MT_HIF(0x1f0)
+#define MT_MCU2HOST_INT_ENABLE		MT_HIF(0x1f4)
+
+#define MT7663_MCU_INT_EVENT		MT_HIF(0x108)
 #define MT_MCU_INT_EVENT		MT_HIF(0x1f8)
 #define MT_MCU_INT_EVENT_PDMA_STOPPED	BIT(0)
 #define MT_MCU_INT_EVENT_PDMA_INIT	BIT(1)
@@ -102,6 +111,7 @@ enum mt7615_reg_base {
 #define MT_INT_RX_DONE_ALL		GENMASK(1, 0)
 #define MT_INT_TX_DONE_ALL		GENMASK(19, 4)
 #define MT_INT_TX_DONE(_n)		BIT((_n) + 4)
+#define MT7663_INT_MCU_CMD		BIT(29)
 #define MT_INT_MCU_CMD			BIT(30)
 
 #define MT_WPDMA_GLO_CFG		MT_HIF(0x208)
@@ -138,6 +148,7 @@ enum mt7615_reg_base {
 #define MT_MCU_CMD_PDMA_ERROR		BIT(27)
 #define MT_MCU_CMD_PCIE_ERROR		BIT(28)
 #define MT_MCU_CMD_ERROR_MASK		(GENMASK(5, 1) | GENMASK(28, 24))
+#define MT7663_MCU_CMD_ERROR_MASK	GENMASK(5, 2)
 
 #define MT_TX_RING_BASE			MT_HIF(0x300)
 #define MT_RX_RING_BASE			MT_HIF(0x400)
@@ -153,6 +164,8 @@ enum mt7615_reg_base {
 
 #define MT_PLE(ofs)			((dev)->reg_map[MT_PLE_BASE] + (ofs))
 
+#define MT_PLE_PG_HIF0_GROUP		MT_PLE(0x110)
+#define MT_HIF0_MIN_QUOTA		GENMASK(11, 0)
 #define MT_PLE_FL_Q0_CTRL		MT_PLE(0x1b0)
 #define MT_PLE_FL_Q1_CTRL		MT_PLE(0x1b4)
 #define MT_PLE_FL_Q2_CTRL		MT_PLE(0x1b8)
@@ -162,6 +175,10 @@ enum mt7615_reg_base {
 					       ((n) << 2))
 
 #define MT_PSE(ofs)			((dev)->reg_map[MT_PSE_BASE] + (ofs))
+#define MT_PSE_PG_HIF0_GROUP		MT_PSE(0x110)
+#define MT_HIF0_MIN_QUOTA		GENMASK(11, 0)
+#define MT_PSE_PG_HIF1_GROUP		MT_PSE(0x118)
+#define MT_HIF1_MIN_QUOTA		GENMASK(11, 0)
 #define MT_PSE_QUEUE_EMPTY		MT_PSE(0x0b4)
 #define MT_HIF_0_EMPTY_MASK		BIT(16)
 #define MT_HIF_1_EMPTY_MASK		BIT(17)
@@ -169,7 +186,12 @@ enum mt7615_reg_base {
 #define MT_PSE_PG_INFO			MT_PSE(0x194)
 #define MT_PSE_SRC_CNT			GENMASK(27, 16)
 
-#define MT_WF_PHY_BASE			((dev)->reg_map[MT_PHY_BASE])
+#define MT_PP(ofs)			((dev)->reg_map[MT_PP_BASE] + (ofs))
+#define MT_PP_TXDWCNT			MT_PP(0x0)
+#define MT_PP_TXDWCNT_TX0_ADD_DW_CNT	GENMASK(7, 0)
+#define MT_PP_TXDWCNT_TX1_ADD_DW_CNT	GENMASK(15, 8)
+
+#define MT_WF_PHY_BASE			0x82070000
 #define MT_WF_PHY(ofs)			(MT_WF_PHY_BASE + (ofs))
 
 #define MT_WF_PHY_WF2_RFCTRL0(n)	MT_WF_PHY(0x1900 + (n) * 0x400)
@@ -213,6 +235,9 @@ enum mt7615_reg_base {
 #define MT_WF_PHY_RXTD2_BASE		MT_WF_PHY(0x2a00)
 #define MT_WF_PHY_RXTD2(_n)		(MT_WF_PHY_RXTD2_BASE + ((_n) << 2))
 
+#define MT_WF_PHY_RFINTF3_0(_n)		MT_WF_PHY(0x1100 + (_n) * 0x400)
+#define MT_WF_PHY_RFINTF3_0_ANT		GENMASK(7, 4)
+
 #define MT_WF_CFG_BASE			((dev)->reg_map[MT_CFG_BASE])
 #define MT_WF_CFG(ofs)			(MT_WF_CFG_BASE + (ofs))
 
@@ -255,6 +280,13 @@ enum mt7615_reg_base {
 
 #define MT_WF_ARB_BASE			((dev)->reg_map[MT_ARB_BASE])
 #define MT_WF_ARB(ofs)			(MT_WF_ARB_BASE + (ofs))
+
+#define MT_ARB_RQCR			MT_WF_ARB(0x070)
+#define MT_ARB_RQCR_RX_START		BIT(0)
+#define MT_ARB_RQCR_RXV_START		BIT(4)
+#define MT_ARB_RQCR_RXV_R_EN		BIT(7)
+#define MT_ARB_RQCR_RXV_T_EN		BIT(8)
+#define MT_ARB_RQCR_BAND_SHIFT		16
 
 #define MT_ARB_SCR			MT_WF_ARB(0x080)
 #define MT_ARB_SCR_TX0_DISABLE		BIT(8)
@@ -312,6 +344,9 @@ enum mt7615_reg_base {
 #define MT_WF_RFCR_DROP_NDPA		BIT(20)
 #define MT_WF_RFCR_DROP_UNWANTED_CTL	BIT(21)
 
+#define MT_WF_RMAC_MORE(_band)		MT_WF_RMAC((_band) ? 0x124 : 0x024)
+#define MT_WF_RMAC_MORE_MUAR_MODE	GENMASK(31, 30)
+
 #define MT_WF_RFCR1(_band)		MT_WF_RMAC((_band) ? 0x104 : 0x004)
 #define MT_WF_RFCR1_DROP_ACK		BIT(4)
 #define MT_WF_RFCR1_DROP_BF_POLL	BIT(5)
@@ -320,6 +355,14 @@ enum mt7615_reg_base {
 #define MT_WF_RFCR1_DROP_CFACK		BIT(8)
 
 #define MT_CHFREQ(_band)		MT_WF_RMAC((_band) ? 0x130 : 0x030)
+
+#define MT_WF_RMAC_MAR0			MT_WF_RMAC(0x025c)
+#define MT_WF_RMAC_MAR1			MT_WF_RMAC(0x0260)
+#define MT_WF_RMAC_MAR1_ADDR		GENMASK(15, 0)
+#define MT_WF_RMAC_MAR1_START		BIT(16)
+#define MT_WF_RMAC_MAR1_WRITE		BIT(17)
+#define MT_WF_RMAC_MAR1_IDX		GENMASK(29, 24)
+#define MT_WF_RMAC_MAR1_GROUP		GENMASK(31, 30)
 
 #define MT_WF_RMAC_MIB_TIME0		MT_WF_RMAC(0x03c4)
 #define MT_WF_RMAC_MIB_RXTIME_CLR	BIT(31)
@@ -336,7 +379,9 @@ enum mt7615_reg_base {
 
 #define MT_DMA_DCR0			MT_WF_DMA(0x000)
 #define MT_DMA_DCR0_MAX_RX_LEN		GENMASK(15, 2)
+#define MT_DMA_DCR0_DAMSDU_EN		BIT(16)
 #define MT_DMA_DCR0_RX_VEC_DROP		BIT(17)
+#define MT_DMA_DCR0_RX_HDR_TRANS_EN	BIT(19)
 
 #define MT_DMA_RCFR0(_band)		MT_WF_DMA(0x070 + (_band) * 0x40)
 #define MT_DMA_RCFR0_MCU_RX_MGMT	BIT(2)
@@ -415,8 +460,12 @@ enum mt7615_reg_base {
 
 #define MT_LPON(_n)			((dev)->reg_map[MT_LPON_BASE] + (_n))
 
-#define MT_LPON_T0CR			MT_LPON(0x010)
-#define MT_LPON_T0CR_MODE		GENMASK(1, 0)
+#define MT_LPON_TCR0(_n)		MT_LPON(0x010 + ((_n) * 4))
+#define MT_LPON_TCR2(_n)		MT_LPON(0x0f8 + ((_n) - 2) * 4)
+#define MT_LPON_TCR_MODE		GENMASK(1, 0)
+#define MT_LPON_TCR_READ		GENMASK(1, 0)
+#define MT_LPON_TCR_WRITE		BIT(0)
+#define MT_LPON_TCR_ADJUST		BIT(1)
 
 #define MT_LPON_UTTR0			MT_LPON(0x018)
 #define MT_LPON_UTTR1			MT_LPON(0x01c)
@@ -549,5 +598,12 @@ enum mt7615_reg_base {
 #define MT_WL_TX_EN			BIT(23)
 #define MT_WL_RX_BUSY			BIT(30)
 #define MT_WL_TX_BUSY			BIT(31)
+
+#define MT_MCU_PTA_BASE			0x81060000
+#define MT_MCU_PTA(_n)			(MT_MCU_PTA_BASE + (_n))
+
+#define MT_ANT_SWITCH_CON(_n)		MT_MCU_PTA(0x0c8 + ((_n) - 1) * 4)
+#define MT_ANT_SWITCH_CON_MODE(_n)	(GENMASK(4, 0) << (_n * 8))
+#define MT_ANT_SWITCH_CON_MODE1(_n)	(GENMASK(3, 0) << (_n * 8))
 
 #endif

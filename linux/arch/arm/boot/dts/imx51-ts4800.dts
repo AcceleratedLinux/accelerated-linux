@@ -102,7 +102,7 @@
 	pinctrl-0 = <&pinctrl_i2c2>;
 	status = "okay";
 
-	rtc: m41t00@68 {
+	rtc: rtc@68 {
 		compatible = "st,m41t00";
 		reg = <0x68>;
 	};
@@ -113,6 +113,7 @@
 };
 
 &pwm1 {
+	#pwm-cells = <2>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pwm_backlight>;
 	status = "okay";

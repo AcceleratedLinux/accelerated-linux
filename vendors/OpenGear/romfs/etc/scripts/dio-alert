@@ -1,0 +1,110 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+# DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/dio-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	. /etc/scripts/environmental-alertv1 "$1" "$9" "DIO" "$6" "$7"
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	EmdDioNotification=10
+	dioSignalOpened=17
+	dioSignalClosed=18
+	unknown=65535
+
+	export AGENT=""
+	export UPTIME="0"
+	export TRAP=$EmdDioNotification
+	export NOTIFICATION="EmdDioNotification"
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_NAME=$6
+	ALERT_VALUE=$7
+	ALERT_OLD=$8
+	ALERT_SUMMARY=""
+	ALERT_TYPE=$unknown
+
+	HIGH=1
+	LOW=0
+
+	if [ "$ALERT_VALUE" == "open" -o "$ALERT_VALUE" == "0" ]; then
+		ALERT_VALUE=$LOW
+		ALERT_SUMMARY="Digital I/O input changed from 'closed' to 'open' on '$ALERT_NAME'"
+		ALERT_TYPE=$dioSignalOpened
+	elif [ "$ALERT_VALUE" == "closed" -o "$ALERT_VALUE" == "1" ]; then
+		ALERT_VALUE=$HIGH
+		ALERT_SUMMARY="Digital I/O input changed from 'open' to 'closed' on '$ALERT_NAME'"
+		ALERT_TYPE=$dioSignalClosed
+	else
+		exit 1
+	fi
+
+	if [ "$ALERT_OLD" == "open" -o "$ALERT_OLD" == "0" ]; then
+		ALERT_OLD=$LOW
+	elif [ "$ALERT_OLD" == "closed" -o "$ALERT_OLD" == "1" ]; then
+		ALERT_OLD=$HIGH
+	else
+		exit 1
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_NAME" \
+		"AlarmUser" \
+		"s" \
+		"$ALERT_NAME" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$ALERT_OLD" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

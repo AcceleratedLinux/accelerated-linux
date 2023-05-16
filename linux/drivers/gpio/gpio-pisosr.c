@@ -148,12 +148,9 @@ static int pisosr_gpio_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	gpio->load_gpio = devm_gpiod_get_optional(dev, "load", GPIOD_OUT_LOW);
-	if (IS_ERR(gpio->load_gpio)) {
-		ret = PTR_ERR(gpio->load_gpio);
-		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "Unable to allocate load GPIO\n");
-		return ret;
-	}
+	if (IS_ERR(gpio->load_gpio))
+		return dev_err_probe(dev, PTR_ERR(gpio->load_gpio),
+				     "Unable to allocate load GPIO\n");
 
 	mutex_init(&gpio->lock);
 
@@ -166,15 +163,13 @@ static int pisosr_gpio_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int pisosr_gpio_remove(struct spi_device *spi)
+static void pisosr_gpio_remove(struct spi_device *spi)
 {
 	struct pisosr_gpio *gpio = spi_get_drvdata(spi);
 
 	gpiochip_remove(&gpio->chip);
 
 	mutex_destroy(&gpio->lock);
-
-	return 0;
 }
 
 static const struct spi_device_id pisosr_gpio_id_table[] = {

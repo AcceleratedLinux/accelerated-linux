@@ -42,7 +42,7 @@ proc compress {} {
 }
 
 proc put_cksum {} {
-	run $::env(ROOTDIR)/tools/cksum -b -o 2 image.bin >> image.bin
+	run $::env(ROOTDIR)/bin/cksum -b -o 2 image.bin >> image.bin
 }
 
 proc put_version {} {

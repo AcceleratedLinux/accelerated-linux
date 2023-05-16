@@ -1,18 +1,21 @@
-hostname "$(fw_printenv -n serial_number)"
+hostname "$(fw_printenv -n serial)"
 
 echo "Mounting filesystems..."
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 mkdir -m 755 /dev/pts
 mount -t devpts devpts /dev/pts
-mount -t tmpfs -o size=40M tmpfs /tmp
-mount -t tmpfs -o size=32M tmpfs /var
+mount -t tmpfs -o size=64M tmpfs /tmp
+mount -t tmpfs -o size=46M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 32
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -22,6 +25,12 @@ echo 6 > /proc/sys/kernel/printk
 
 # initialise devices before we need them
 /etc/rc.dev
+
+echo "Configuring GPIOs..."
+# GPIO2/07 on is the dev/dbg mode jumper
+echo 455 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio455/direction
+echo 1 > /sys/class/gpio/gpio455/active_low
 
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
@@ -33,11 +42,6 @@ ip link set eth0 name eth
 setmac -i eth -u -n 1
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
-	/etc/factory
-	exit 0
-fi
-if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
-	# Use the same setup as for factory testing
 	/etc/factory
 	exit 0
 fi
@@ -66,9 +70,31 @@ then
 fi
 [ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
 
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+    # Since /etc/config is in place, we should have /etc/config/scripts
+    # available to us.  Make sure that a console without login required
+    # is available, create a writeable /usr/sbin, execute the custom
+    # emcinit script if there is one, then fix boot_attempts to make
+    # sure uBoot doesn't "fall back" after a few reboots.
+
+    stty -F /dev/ttyS0 115200
+
+    echo "ttyS0:unknown:-/bin/sh" > /var/run/inittab
+
+    scp -r /usr/sbin /var/tmp/sbin || true
+    mount --bind /var/tmp/sbin /usr/sbin || true
+
+    [ -e /etc/config/scripts/emcinit ] && \
+        /bin/sh /etc/config/scripts/emcinit
+
+    echo 0 > /sys/kernel/persistent_mem/boot_attempts
+
+    exit 0
+fi
+
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/factory.json|/cfd.json|/nv.json|/current.json|/validation.json|/shadow|/awusbdcerts|/descriptors|/.migrate|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/factory.json|/cfd.json|/nv.json|/current.json|/validation.json|/shadow|/awusbdcerts|/descriptors|/.migrate|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/.migrate|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -92,6 +118,7 @@ if [ -f /etc/config/nv.json -a ! -f /etc/config/.migrate ]; then
 		echo "Failed to pull configuration"
 	fi
 fi
+
 cat /etc/inittab.d/* > /etc/inittab
 
 # cryptography disabled mode
@@ -99,14 +126,6 @@ if [ -e /etc/config/.nocrypt ] ; then
 	sh /etc/nocrypt
 	exit 0
 fi
-
-# Reset device status LEDs before actions start... status LEDs all
-# default to timer trigger
-for delay_off in /sys/class/leds/*[rbg]/delay_off
-do
-	echo 86400 > $delay_off
-	echo 0 > $(dirname $delay_off)/delay_on
-done
 
 # modem firmware updates
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier

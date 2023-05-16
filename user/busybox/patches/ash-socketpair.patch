@@ -1,6 +1,6 @@
---- busybox-1.31.0/shell/ash.c.org	2019-07-01 16:40:16.397814456 +1000
-+++ busybox-1.31.0/shell/ash.c	2019-07-01 16:41:44.854362570 +1000
-@@ -9812,6 +9812,19 @@
+--- busybox-1.34.1/shell/ash.c.org	2019-07-01 16:40:16.397814456 +1000
++++ busybox-1.34.1/shell/ash.c	2019-07-01 16:41:44.854362570 +1000
+@@ -9995,6 +9995,19 @@
  }
  
  static int FAST_FUNC
@@ -20,7 +20,7 @@
  execcmd(int argc UNUSED_PARAM, char **argv)
  {
  	optionarg = NULL;
-@@ -9968,6 +9981,7 @@
+@@ -10162,6 +10175,7 @@
  	{ BUILTIN_SPEC_REG      "return"  , returncmd  },
  	{ BUILTIN_SPEC_REG      "set"     , setcmd     },
  	{ BUILTIN_SPEC_REG      "shift"   , shiftcmd   },

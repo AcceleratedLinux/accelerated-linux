@@ -3082,7 +3082,7 @@ iw_process_scan(int			skfd,
   if(iw_get_ext(skfd, ifname, SIOCGIWSCAN, &wrq) < 0)
     {
       /* Check if buffer was too small (WE-17 only) */
-      if((errno == E2BIG) && (we_version > 16))
+      if((errno == E2BIG) && (we_version > 16) && buflen < UINT16_MAX)
 	{
 	  /* Some driver may return very large scan results, either
 	   * because there are many cells, or because they have many
@@ -3093,10 +3093,19 @@ iw_process_scan(int			skfd,
 	   * various increasing sizes. Jean II */
 
 	  /* Check if the driver gave us any hints. */
-	  if(wrq.u.data.length > buflen)
+	  if(wrq.u.data.length > buflen) {
 	    buflen = wrq.u.data.length;
-	  else
+	  } else {
 	    buflen *= 2;
+	    /*
+	     * The length field in iwreq_data is only 16 bits wide, so
+	     * there's no point in allocating any more than that.
+	     * Without this the buffer grows and consumes all the memory
+	     * on the device.
+	     */
+	    if(buflen > UINT16_MAX)
+		    buflen = UINT16_MAX;
+	  }
 
 	  /* Try again */
 	  goto realloc;

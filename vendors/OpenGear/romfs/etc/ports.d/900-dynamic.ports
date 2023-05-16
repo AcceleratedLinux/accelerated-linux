@@ -1,0 +1,2 @@
+# dynamic port numbers for unhandled USB ports
+port* - usb */usb*/tty/*

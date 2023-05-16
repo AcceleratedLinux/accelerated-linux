@@ -1,0 +1,22 @@
+--- src/config.h.in
++++ src/config.h.in
+@@ -66,7 +66,7 @@
+ #undef HAVE_LINUX_IF_ETHER_H
+ 
+ /* Define if you have kernel-mode PPPoE in Linux file.  */
+-#undef HAVE_LINUX_KERNEL_PPPOE
++#define HAVE_LINUX_KERNEL_PPPOE 1
+ 
+ /* Define if you have the <linux/if_packet.h> header file.  */
+ #undef HAVE_LINUX_IF_PACKET_H
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -51,7 +51,7 @@ PPPD_PATH=@PPPD@
+ 
+ # Kernel-mode plugin gets installed here.
+ PLUGIN_DIR=/etc/ppp/plugins
+-PLUGIN_PATH=$(PLUGIN_DIR)/rp-pppoe.so
++PLUGIN_PATH=rp-pppoe.so
+ 
+ # Configuration file paths
+ PPPOESERVER_PPPD_OPTIONS=/etc/ppp/pppoe-server-options

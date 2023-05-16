@@ -9,6 +9,9 @@ title: Freescale i.MX PWM controller
 maintainers:
   - Philipp Zabel <p.zabel@pengutronix.de>
 
+allOf:
+  - $ref: pwm.yaml#
+
 properties:
   "#pwm-cells":
     description: |
@@ -19,9 +22,28 @@ properties:
       - 3
 
   compatible:
-    enum:
-      - fsl,imx1-pwm
-      - fsl,imx27-pwm
+    oneOf:
+      - enum:
+          - fsl,imx1-pwm
+          - fsl,imx27-pwm
+      - items:
+          - enum:
+              - fsl,imx25-pwm
+              - fsl,imx31-pwm
+              - fsl,imx50-pwm
+              - fsl,imx51-pwm
+              - fsl,imx53-pwm
+              - fsl,imx6q-pwm
+              - fsl,imx6sl-pwm
+              - fsl,imx6sll-pwm
+              - fsl,imx6sx-pwm
+              - fsl,imx6ul-pwm
+              - fsl,imx7d-pwm
+              - fsl,imx8mm-pwm
+              - fsl,imx8mn-pwm
+              - fsl,imx8mp-pwm
+              - fsl,imx8mq-pwm
+          - const: fsl,imx27-pwm
 
   reg:
     maxItems: 1
@@ -40,7 +62,6 @@ properties:
     maxItems: 1
 
 required:
-  - "#pwm-cells"
   - compatible
   - reg
   - clocks

@@ -1,0 +1,139 @@
+#!/bin/sh
+
+if [ -f /etc/config/scripts/alert-snmpv1 ]; then
+	exec /etc/config/scripts/alert-snmpv1 "$@"
+fi
+
+
+set -x
+
+. /etc/scripts/snmp-env
+
+suffix=""
+retval=0
+mibs="ALL"
+
+for (( i=1 ;; i++ )); do
+
+	if [ $i -gt 1 ]; then
+		suffix=$i
+	fi
+
+	address=$(config -g config.system.snmp.address$suffix | cut -f2- -d' ')
+	version=$(config -g config.system.snmp.version$suffix | cut -f2- -d' ')
+	if [ -z "$version" -o -z "$address" ]; then
+		exit $retval
+	fi
+
+	TRAP_TYPE=${mgmt_oid_name}
+	if [ "$version" = "1" ]; then
+		TRAP_TYPE=${legacy_mgmt_oid_name}
+	fi
+
+	protocol=$(config -g config.system.snmp.protocol$suffix | cut -f2- -d' ')
+	if [ -z "$protocol" ]; then
+		protocol=UDP
+	fi
+
+	trapport=$(config -g config.system.snmp.trapport$suffix | cut -f2- -d' ')
+	if [ -z "$trapport" ]; then
+		trapport=162
+	fi
+
+	manager="$protocol:$address:$trapport"
+
+	if [ "$version" == "1" ]; then
+
+		mibs="${trap_mib_name}"
+
+		community=$(config -g config.system.snmp.community$suffix | cut -f2- -d' ')
+		if [ -z "$community" ]; then
+			retval=1
+			continue
+		fi
+
+		trap_params=("$@")
+		for (( j=0 ; j < $# ; j+=3 )); do
+			trap_params[$j]="$trap_mib_name::{trap_params[$j]}"
+		done
+
+		MIBS="$mibs" snmptrap -v "$version" -c "$community" "$manager" \
+			"$trap_mib_name::$enterprise_name" "$AGENT" "$TRAP_TYPE" \
+			"$trap_mib_name::$TRAP_NAME" "$UPTIME" \
+			"${trap_params[@]}"
+		retval=$(( $? || $retval ))
+
+	elif [ "$version" == "2c" ]; then
+
+		community=$(config -g config.system.snmp.community$suffix | cut -f2- -d' ')
+		if [ -z "$community" ]; then
+			retval=1
+			continue
+		fi
+
+		trap_params=("$@")
+		for (( j=0 ; j < $# ; j+=3 )); do
+			trap_params[$j]="$MIB_NAME::${trap_params[$j]}"
+		done
+
+		MIBS="$mibs" snmptrap -v "$version" -c "$community" "$manager" \
+			"$UPTIME" "$MIB_NAME::$TRAP_NAME" \
+			"${trap_params[@]}"
+		retval=$(( $? || $retval ))
+
+	elif [ "$version" == "3" ]; then
+
+		engine=$(config -g config.system.snmp.engineid$suffix | cut -f2- -d' ')
+		user=$(config -g config.system.snmp.username$suffix | cut -f2- -d' ')
+		if [ -z "$user" ]; then
+			retval=1
+			continue
+		fi
+		seclevel=$(config -g config.system.snmp.seclevel$suffix | cut -f2- -d' ')
+		authprotocol=$(config -g config.system.snmp.authprotocol$suffix | cut -f2- -d' ')
+		authpassword=$(config -g config.system.snmp.authpassword$suffix | cut -f2- -d' ')
+		authtype=$(config -g config.system.snmp.authpasswordtype$suffix | cut -f2- -d' ')
+		privprotocol=$(config -g config.system.snmp.privprotocol$suffix | cut -f2- -d' ')
+		privpassword=$(config -g config.system.snmp.privpassword$suffix | cut -f2- -d' ')
+		privtype=$(config -g config.system.snmp.privpasswordtype$suffix | cut -f2- -d' ')
+
+		case $authtype in
+			localized) authopt="3k";;
+			primary)   authopt="3m";;
+			*)         authopt="A";;
+		esac
+
+		case $privtype in
+			localized) privopt="3K";;
+			primary)   privopt="3M";;
+			*)         privopt="X";;
+		esac
+
+		if [ ! -z "$engine" ]; then
+			engine="-e $engine"
+		fi
+
+		trap_params=("$@")
+		for (( j=0 ; j < $# ; j+=3 )); do
+			trap_params[$j]="$MIB_NAME::${trap_params[$j]}"
+		done
+
+		if [ "$seclevel" = "authPriv" ]; then
+			MIBS="$mibs" snmptrap -n "" $engine -v "$version" -u "$user" -l authPriv -a $authprotocol -$authopt "$authpassword" -x $privprotocol -$privopt "$privpassword" "$manager" \
+				"$UPTIME" "$MIB_NAME::$TRAP_NAME" \
+				"${trap_params[@]}"
+		elif [ "$seclevel" = "authNoPriv" ]; then
+			MIBS="$mibs" snmptrap -n "" $engine -v "$version" -u "$user" -l authNoPriv -a $authprotocol -$authopt "$authpassword" "$manager" \
+				"$UPTIME" "$MIB_NAME::$TRAP_NAME" \
+				"${trap_params[@]}"
+		else
+			MIBS="$mibs" snmptrap -n "" $engine -v "$version" -u "$user" -l noAuthNoPriv "$manager" \
+				"$UPTIME" "$MIB_NAME::$TRAP_NAME" \
+				"${trap_params[@]}"
+		fi
+
+		retval=$(( $? || $retval ))
+	fi
+done
+
+exit $retval

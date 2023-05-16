@@ -9,6 +9,9 @@ title: Ingenic SoCs UART controller devicetree bindings
 maintainers:
   - Paul Cercueil <paul@crapouillou.net>
 
+allOf:
+  - $ref: serial.yaml#
+
 properties:
   $nodename:
     pattern: "^serial@[0-9a-f]+$"
@@ -16,18 +19,18 @@ properties:
   compatible:
     oneOf:
       - enum:
-        - ingenic,jz4740-uart
-        - ingenic,jz4760-uart
-        - ingenic,jz4780-uart
-        - ingenic,x1000-uart
+          - ingenic,jz4740-uart
+          - ingenic,jz4760-uart
+          - ingenic,jz4780-uart
+          - ingenic,x1000-uart
       - items:
-        - enum:
-          - ingenic,jz4770-uart
-          - ingenic,jz4775-uart
-        - const: ingenic,jz4760-uart
+          - enum:
+              - ingenic,jz4770-uart
+              - ingenic,jz4775-uart
+          - const: ingenic,jz4760-uart
       - items:
-        - const: ingenic,jz4725b-uart
-        - const: ingenic,jz4740-uart
+          - const: ingenic,jz4725b-uart
+          - const: ingenic,jz4740-uart
 
   reg:
     maxItems: 1
@@ -64,9 +67,11 @@ required:
   - dmas
   - dma-names
 
+unevaluatedProperties: false
+
 examples:
   - |
-    #include <dt-bindings/clock/jz4780-cgu.h>
+    #include <dt-bindings/clock/ingenic,jz4780-cgu.h>
     #include <dt-bindings/dma/jz4780-dma.h>
     #include <dt-bindings/gpio/gpio.h>
     serial@10032000 {
@@ -86,7 +91,7 @@ examples:
       bluetooth {
         compatible = "brcm,bcm4330-bt";
         reset-gpios = <&gpf 8 GPIO_ACTIVE_HIGH>;
-        vcc-supply = <&wlan0_power>;
+        vbat-supply = <&wlan0_power>;
         device-wakeup-gpios = <&gpf 5 GPIO_ACTIVE_HIGH>;
         host-wakeup-gpios = <&gpf 6 GPIO_ACTIVE_HIGH>;
         shutdown-gpios = <&gpf 4 GPIO_ACTIVE_LOW>;

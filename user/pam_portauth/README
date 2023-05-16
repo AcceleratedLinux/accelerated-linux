@@ -1,0 +1,20 @@
+
+Usage:
+
+	auth sufficient pam_portauth.so
+
+Behaviour:
+
+	if pam_env variable OG-PMSHELL (portname) is unset or empty
+	   return PAM_IGNORE
+	otherwise if the username is empty
+	   returns PAM_IGNORE
+	otherwise if an entry <username>:<portname> is in /etc/config/portauth
+	   return PAM_SUCCESS
+	otherwise
+	   PAM_DENIED
+
+Format of the /etc/config/portauth file:
+
+	unauth:<portname>
+

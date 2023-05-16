@@ -20,6 +20,18 @@
 #define CEC_NUM_DEVICES	256
 #define CEC_NAME	"cec"
 
+/*
+ * 400 ms is the time it takes for one 16 byte message to be
+ * transferred and 5 is the maximum number of retries. Add
+ * another 100 ms as a margin. So if the transmit doesn't
+ * finish before that time something is really wrong and we
+ * have to time out.
+ *
+ * This is a sign that something it really wrong and a warning
+ * will be issued.
+ */
+#define CEC_XFER_TIMEOUT_MS (5 * 400 + 100)
+
 int cec_debug;
 module_param_named(debug, cec_debug, int, 0644);
 MODULE_PARM_DESC(debug, "debug level (0-2)");
@@ -106,7 +118,7 @@ static int __must_check cec_devnode_register(struct cec_devnode *devnode,
 
 	/* Part 1: Find a free minor number */
 	mutex_lock(&cec_devnode_lock);
-	minor = find_next_zero_bit(cec_devnode_nums, CEC_NUM_DEVICES, 0);
+	minor = find_first_zero_bit(cec_devnode_nums, CEC_NUM_DEVICES);
 	if (minor == CEC_NUM_DEVICES) {
 		mutex_unlock(&cec_devnode_lock);
 		pr_err("could not get a free minor\n");
@@ -166,12 +178,14 @@ static void cec_devnode_unregister(struct cec_adapter *adap)
 		mutex_unlock(&devnode->lock);
 		return;
 	}
-
-	list_for_each_entry(fh, &devnode->fhs, list)
-		wake_up_interruptible(&fh->wait);
-
 	devnode->registered = false;
 	devnode->unregistered = true;
+
+	mutex_lock(&devnode->lock_fhs);
+	list_for_each_entry(fh, &devnode->fhs, list)
+		wake_up_interruptible(&fh->wait);
+	mutex_unlock(&devnode->lock_fhs);
+
 	mutex_unlock(&devnode->lock);
 
 	mutex_lock(&adap->lock);
@@ -202,7 +216,7 @@ static ssize_t cec_error_inj_write(struct file *file,
 		line = strsep(&p, "\n");
 		if (!*line || *line == '#')
 			continue;
-		if (!adap->ops->error_inj_parse_line(adap, line)) {
+		if (!call_op(adap, error_inj_parse_line, line)) {
 			kfree(buf);
 			return -EINVAL;
 		}
@@ -215,7 +229,7 @@ static int cec_error_inj_show(struct seq_file *sf, void *unused)
 {
 	struct cec_adapter *adap = sf->private;
 
-	return adap->ops->error_inj_show(adap, sf);
+	return call_op(adap, error_inj_show, sf);
 }
 
 static int cec_error_inj_open(struct inode *inode, struct file *file)
@@ -265,7 +279,6 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	adap->sequence = 0;
 	adap->ops = ops;
 	adap->priv = priv;
-	memset(adap->phys_addrs, 0xff, sizeof(adap->phys_addrs));
 	mutex_init(&adap->lock);
 	INIT_LIST_HEAD(&adap->transmit_queue);
 	INIT_LIST_HEAD(&adap->wait_queue);
@@ -273,6 +286,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 
 	/* adap->devnode initialization */
 	INIT_LIST_HEAD(&adap->devnode.fhs);
+	mutex_init(&adap->devnode.lock_fhs);
 	mutex_init(&adap->devnode.lock);
 
 	adap->kthread = kthread_run(cec_thread_func, adap, "cec-%s", name);
@@ -310,7 +324,7 @@ struct cec_adapter *cec_allocate_adapter(const struct cec_adap_ops *ops,
 	adap->rc->allowed_protocols = RC_PROTO_BIT_CEC;
 	adap->rc->priv = adap;
 	adap->rc->map_name = RC_MAP_CEC;
-	adap->rc->timeout = MS_TO_NS(550);
+	adap->rc->timeout = MS_TO_US(550);
 #endif
 	return adap;
 }
@@ -329,6 +343,8 @@ int cec_register_adapter(struct cec_adapter *adap,
 
 	adap->owner = parent->driver->owner;
 	adap->devnode.dev.parent = parent;
+	if (!adap->xfer_timeout_ms)
+		adap->xfer_timeout_ms = CEC_XFER_TIMEOUT_MS;
 
 #ifdef CONFIG_MEDIA_CEC_RC
 	if (adap->capabilities & CEC_CAP_RC) {
@@ -360,27 +376,16 @@ int cec_register_adapter(struct cec_adapter *adap,
 	if (!top_cec_dir)
 		return 0;
 
-	adap->cec_dir = debugfs_create_dir(dev_name(&adap->devnode.dev), top_cec_dir);
-	if (IS_ERR_OR_NULL(adap->cec_dir)) {
-		pr_warn("cec-%s: Failed to create debugfs dir\n", adap->name);
-		return 0;
-	}
-	adap->status_file = debugfs_create_devm_seqfile(&adap->devnode.dev,
-		"status", adap->cec_dir, cec_adap_status);
-	if (IS_ERR_OR_NULL(adap->status_file)) {
-		pr_warn("cec-%s: Failed to create status file\n", adap->name);
-		debugfs_remove_recursive(adap->cec_dir);
-		adap->cec_dir = NULL;
-		return 0;
-	}
+	adap->cec_dir = debugfs_create_dir(dev_name(&adap->devnode.dev),
+					   top_cec_dir);
+
+	debugfs_create_devm_seqfile(&adap->devnode.dev, "status", adap->cec_dir,
+				    cec_adap_status);
+
 	if (!adap->ops->error_inj_show || !adap->ops->error_inj_parse_line)
 		return 0;
-	adap->error_inj_file = debugfs_create_file("error-inj", 0644,
-						   adap->cec_dir, adap,
-						   &cec_error_inj_fops);
-	if (IS_ERR_OR_NULL(adap->error_inj_file))
-		pr_warn("cec-%s: Failed to create error-inj file\n",
-			adap->name);
+	debugfs_create_file("error-inj", 0644, adap->cec_dir, adap,
+			    &cec_error_inj_fops);
 #endif
 	return 0;
 }
@@ -408,9 +413,9 @@ void cec_delete_adapter(struct cec_adapter *adap)
 {
 	if (IS_ERR_OR_NULL(adap))
 		return;
-	kthread_stop(adap->kthread);
 	if (adap->kthread_config)
 		kthread_stop(adap->kthread_config);
+	kthread_stop(adap->kthread);
 	if (adap->ops->adap_free)
 		adap->ops->adap_free(adap);
 #ifdef CONFIG_MEDIA_CEC_RC

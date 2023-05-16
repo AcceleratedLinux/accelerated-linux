@@ -1,0 +1,94 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+#DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/devlog-data-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	ON=1
+	. /etc/scripts/devlog-data-alertv1 "$1" "$6" "$8" "$ON"
+	exit
+fi
+
+ACTION=$1
+retval=0
+
+if [ "$ACTION" == "snmp" ]; then
+
+	cellDataUsage=75
+	CellDataNotification=22
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_MODEM=$6
+	ALERT_BYTES=$7
+	ALERT_SECONDS=$8
+	ALERT_LIMIT=$9
+	ALERT_SUMMARY=""
+	ALERT_TYPE=$cellDataUsage
+	ALERT_VALUE=$ALERT_BYTES
+	ALERT_TRIGGER_VALUE=$ALERT_LIMIT
+
+	TRIGGERED=2
+
+	export AGENT=""
+	export UPTIME=""
+	export TRAP=$CellDataNotification
+	export NOTIFICATION="CellDataNotification"
+
+	if [ "$ALERT_STATE" == "$TRIGGERED" ]; then
+		ALERT_SUMMARY="Cellular Modem '$ALERT_MODEM' total is $ALERT_BYTES which exceeded $ALERT_LIMIT bytes in $ALERT_SECONDS seconds"
+	else
+		ALERT_SUMMARY="Cellular Modem '$ALERT_MODEM' total is $ALERT_BYTES out of $ALERT_LIMIT bytes in $ALERT_SECONDS seconds"
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmTriggerValue" \
+		"i" \
+		"$ALERT_TRIGGER_VALUE" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

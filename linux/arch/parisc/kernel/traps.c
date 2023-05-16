@@ -30,6 +30,7 @@
 #include <linux/ratelimit.h>
 #include <linux/uaccess.h>
 #include <linux/kdebug.h>
+#include <linux/kfence.h>
 
 #include <asm/assembly.h>
 #include <asm/io.h>
@@ -75,7 +76,7 @@ static int printbinary(char *buf, unsigned long x, int nbits)
 		lvl, f, (x), (x+3), (r)[(x)+0], (r)[(x)+1],		\
 		(r)[(x)+2], (r)[(x)+3])
 
-static void print_gr(char *level, struct pt_regs *regs)
+static void print_gr(const char *level, struct pt_regs *regs)
 {
 	int i;
 	char buf[64];
@@ -89,7 +90,7 @@ static void print_gr(char *level, struct pt_regs *regs)
 		PRINTREGS(level, regs->gr, "r", RFMT, i);
 }
 
-static void print_fr(char *level, struct pt_regs *regs)
+static void print_fr(const char *level, struct pt_regs *regs)
 {
 	int i;
 	char buf[64];
@@ -119,7 +120,7 @@ static void print_fr(char *level, struct pt_regs *regs)
 void show_regs(struct pt_regs *regs)
 {
 	int i, user;
-	char *level;
+	const char *level;
 	unsigned long cr30, cr31;
 
 	user = user_mode(regs);
@@ -143,7 +144,7 @@ void show_regs(struct pt_regs *regs)
 	printk("%s IIR: %08lx    ISR: " RFMT "  IOR: " RFMT "\n",
 	       level, regs->iir, regs->isr, regs->ior);
 	printk("%s CPU: %8d   CR30: " RFMT " CR31: " RFMT "\n",
-	       level, current_thread_info()->cpu, cr30, cr31);
+	       level, task_cpu(current), cr30, cr31);
 	printk("%s ORIG_R28: " RFMT "\n", level, regs->orig_r28);
 
 	if (user) {
@@ -268,7 +269,7 @@ void die_if_kernel(char *str, struct pt_regs *regs, long err)
 		panic("Fatal exception");
 
 	oops_exit();
-	do_exit(SIGSEGV);
+	make_task_dead(SIGSEGV);
 }
 
 /* gdb uses break 4,8 */
@@ -301,7 +302,10 @@ static void handle_break(struct pt_regs *regs)
 		parisc_kprobe_break_handler(regs);
 		return;
 	}
-
+	if (unlikely(iir == PARISC_KPROBES_BREAK_INSN2)) {
+		parisc_kprobe_ss_handler(regs);
+		return;
+	}
 #endif
 
 #ifdef CONFIG_KGDB
@@ -437,7 +441,6 @@ void parisc_terminate(char *msg, struct pt_regs *regs, int code, unsigned long o
 		break;
 
 	default:
-		/* Fall through */
 		break;
 
 	}
@@ -466,7 +469,7 @@ void parisc_terminate(char *msg, struct pt_regs *regs, int code, unsigned long o
 	 * panic notifiers, and we should call panic
 	 * directly from the location that we wish. 
 	 * e.g. We should not call panic from
-	 * parisc_terminate, but rather the oter way around.
+	 * parisc_terminate, but rather the other way around.
 	 * This hack works, prints the panic message twice,
 	 * and it enables reboot timers!
 	 */
@@ -481,7 +484,7 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 
 	if (code == 1)
 	    pdc_console_restart();  /* switch back to pdc if HPMC */
-	else
+	else if (!irqs_disabled_flags(regs->gr[0]))
 	    local_irq_enable();
 
 	/* Security check:
@@ -538,11 +541,6 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 	case  3:
 		/* Recovery counter trap */
 		regs->gr[0] &= ~PSW_R;
-
-#ifdef CONFIG_KPROBES
-		if (parisc_kprobe_ss_handler(regs))
-			return;
-#endif
 
 #ifdef CONFIG_KGDB
 		if (kgdb_single_step) {
@@ -644,12 +642,12 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 
 	case 15:
 		/* Data TLB miss fault/Data page fault */
-		/* Fall through */
+		fallthrough;
 	case 16:
 		/* Non-access instruction TLB miss fault */
 		/* The instruction TLB entry needed for the target address of the FIC
 		   is absent, and hardware can't find it, so we get to cleanup */
-		/* Fall through */
+		fallthrough;
 	case 17:
 		/* Non-access data TLB miss fault/Non-access data page fault */
 		/* FIXME: 
@@ -662,6 +660,8 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 			 by hand. Technically we need to emulate:
 			 fdc,fdce,pdc,"fic,4f",prober,probeir,probew, probeiw
 		*/
+		if (code == 17 && handle_nadtlb_fault(regs))
+			return;
 		fault_address = regs->ior;
 		fault_space = regs->isr;
 		break;
@@ -673,7 +673,7 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 			handle_unaligned(regs);
 			return;
 		}
-		/* Fall Through */
+		fallthrough;
 	case 26: 
 		/* PCXL: Data memory access rights trap */
 		fault_address = regs->ior;
@@ -683,7 +683,7 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 	case 19:
 		/* Data memory break trap */
 		regs->gr[0] |= PSW_X; /* So we can single-step over the trap */
-		/* fall thru */
+		fallthrough;
 	case 21:
 		/* Page reference trap */
 		handle_gdb_break(regs, TRAP_HWBKPT);
@@ -730,7 +730,9 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 			}
 			mmap_read_unlock(current->mm);
 		}
-		/* Fall Through */
+		/* CPU could not fetch instruction, so clear stale IIR value. */
+		regs->iir = 0xbaadf00d;
+		fallthrough;
 	case 27: 
 		/* Data memory protection ID trap */
 		if (code == 27 && !user_mode(regs) &&
@@ -783,10 +785,14 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 	     * unless pagefault_disable() was called before.
 	     */
 
-	    if (fault_space == 0 && !faulthandler_disabled())
+	    if (faulthandler_disabled() || fault_space == 0)
 	    {
 		/* Clean up and return if in exception table. */
 		if (fixup_exception(regs))
+			return;
+		/* Clean up and return if handled by kfence. */
+		if (kfence_handle_page_fault(fault_address,
+			parisc_acctyp(code, regs->iir) == VM_WRITE, regs))
 			return;
 		pdc_chassis_send_status(PDC_CHASSIS_DIRECT_PANIC);
 		parisc_terminate("Kernel Fault", regs, code, fault_address);
@@ -799,14 +805,13 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 
 void __init initialize_ivt(const void *iva)
 {
-	extern u32 os_hpmc_size;
 	extern const u32 os_hpmc[];
 
 	int i;
 	u32 check = 0;
 	u32 *ivap;
 	u32 *hpmcp;
-	u32 length, instr;
+	u32 instr;
 
 	if (strcmp((const char *)iva, "cows can fly"))
 		panic("IVT invalid");
@@ -837,18 +842,14 @@ void __init initialize_ivt(const void *iva)
 
 	/* Setup IVA and compute checksum for HPMC handler */
 	ivap[6] = (u32)__pa(os_hpmc);
-	length = os_hpmc_size;
-	ivap[7] = length;
 
 	hpmcp = (u32 *)os_hpmc;
-
-	for (i=0; i<length/4; i++)
-	    check += *hpmcp++;
 
 	for (i=0; i<8; i++)
 	    check += ivap[i];
 
 	ivap[5] = -check;
+	pr_debug("initialize_ivt: IVA[6] = 0x%08x\n", ivap[6]);
 }
 	
 
@@ -864,8 +865,4 @@ void  __init early_trap_init(void)
 #endif
 
 	initialize_ivt(&fault_vector_20);
-}
-
-void __init trap_init(void)
-{
 }

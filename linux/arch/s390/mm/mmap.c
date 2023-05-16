@@ -17,7 +17,6 @@
 #include <linux/random.h>
 #include <linux/compat.h>
 #include <linux/security.h>
-#include <asm/pgalloc.h>
 #include <asm/elf.h>
 
 static unsigned long stack_maxrandom_size(void)
@@ -59,9 +58,9 @@ static inline unsigned long mmap_base(unsigned long rnd,
 
 	/*
 	 * Top of mmap area (just below the process stack).
-	 * Leave at least a ~32 MB hole.
+	 * Leave at least a ~128 MB hole.
 	 */
-	gap_min = 32 * 1024 * 1024UL;
+	gap_min = SZ_128M;
 	gap_max = (STACK_TOP / 6) * 5;
 
 	if (gap < gap_min)

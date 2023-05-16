@@ -20,9 +20,9 @@
 #include <math_support.h>
 #include <type_support.h>
 #include <platform_support.h>
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
-#if !defined(HAS_NO_INPUT_FORMATTER)
+#if !defined(ISP2401)
 #include "input_formatter.h"
 #endif
 #include "input_system.h"
@@ -86,14 +86,6 @@
 #define SH_CSS_MAX_IF_CONFIGS	3 /* Must match with IA_CSS_NR_OF_CONFIGS (not defined yet).*/
 #define SH_CSS_IF_CONFIG_NOT_NEEDED	0xFF
 
-#if defined(USE_INPUT_SYSTEM_VERSION_2) || defined(USE_INPUT_SYSTEM_VERSION_2401)
-#define SH_CSS_ENABLE_METADATA
-#endif
-
-#if defined(SH_CSS_ENABLE_METADATA) && !defined(USE_INPUT_SYSTEM_VERSION_2401)
-#define SH_CSS_ENABLE_METADATA_THREAD
-#endif
-
 /*
  * SH_CSS_MAX_SP_THREADS:
  *	 sp threads visible to host with connected communication queues
@@ -103,7 +95,7 @@
  *	 these threads can't be used as image pipe
  */
 
-#if defined(SH_CSS_ENABLE_METADATA_THREAD)
+#if !defined(ISP2401)
 #define SH_CSS_SP_INTERNAL_METADATA_THREAD	1
 #else
 #define SH_CSS_SP_INTERNAL_METADATA_THREAD	0
@@ -278,7 +270,7 @@ struct sh_css_binary_args {
 	struct ia_css_frame *in_frame;	     /* input frame */
 	const struct ia_css_frame
 		*delay_frames[MAX_NUM_VIDEO_DELAY_FRAMES];   /* reference input frame */
-	const struct ia_css_frame *tnr_frames[NUM_TNR_FRAMES];   /* tnr frames */
+	const struct ia_css_frame *tnr_frames[NUM_VIDEO_TNR_FRAMES];   /* tnr frames */
 	struct ia_css_frame
 		*out_frame[IA_CSS_BINARY_MAX_OUTPUT_PORTS];      /* output frame */
 	struct ia_css_frame *out_vf_frame;   /* viewfinder output frame */
@@ -320,15 +312,9 @@ struct sh_css_sp_debug_state {
 
 #elif SP_DEBUG == SP_DEBUG_TRACE
 
-#if 1
 /* Example of just one global trace */
 #define SH_CSS_SP_DBG_NR_OF_TRACES	(1)
 #define SH_CSS_SP_DBG_TRACE_DEPTH	(40)
-#else
-/* E.g. if you like separate traces for 4 threads */
-#define SH_CSS_SP_DBG_NR_OF_TRACES	(4)
-#define SH_CSS_SP_DBG_TRACE_DEPTH	(10)
-#endif
 
 #define SH_CSS_SP_DBG_TRACE_FILE_ID_BIT_POS (13)
 
@@ -371,7 +357,7 @@ struct sh_css_sp_debug_command {
 	u32 dma_sw_reg;
 };
 
-#if !defined(HAS_NO_INPUT_FORMATTER)
+#if !defined(ISP2401)
 /* SP input formatter configuration.*/
 struct sh_css_sp_input_formatter_set {
 	u32				stream_format;
@@ -391,7 +377,7 @@ struct sh_css_sp_config {
 	     frames are locked when their EOF event is successfully sent to the
 	     host (true) or when they are passed to the preview/video pipe
 	     (false). */
-#if !defined(HAS_NO_INPUT_FORMATTER)
+#if !defined(ISP2401)
 	struct {
 		u8					a_changed;
 		u8					b_changed;
@@ -400,7 +386,7 @@ struct sh_css_sp_config {
 			set[SH_CSS_MAX_IF_CONFIGS]; /* CSI-2 port is used as index. */
 	} input_formatter;
 #endif
-#if !defined(HAS_NO_INPUT_SYSTEM) && defined(USE_INPUT_SYSTEM_VERSION_2)
+#if !defined(ISP2401)
 	sync_generator_cfg_t	sync_gen;
 	tpg_cfg_t		tpg;
 	prbs_cfg_t		prbs;
@@ -423,7 +409,7 @@ enum sh_css_stage_type {
 #define SH_CSS_PIPE_CONFIG_SAMPLE_PARAMS_MASK \
 	((SH_CSS_PIPE_CONFIG_SAMPLE_PARAMS << SH_CSS_MAX_SP_THREADS) - 1)
 
-#if !defined(HAS_NO_INPUT_SYSTEM) && defined(USE_INPUT_SYSTEM_VERSION_2401)
+#if defined(ISP2401)
 struct sh_css_sp_pipeline_terminal {
 	union {
 		/* Input System 2401 */
@@ -534,7 +520,6 @@ struct sh_css_sp_pipeline {
 				  this struct; needs cleanup */
 	s32 num_execs; /* number of times to run if this is
 			      an acceleration pipe. */
-#if defined(SH_CSS_ENABLE_METADATA)
 	struct {
 		u32        format;   /* Metadata format in hrt format */
 		u32        width;    /* Width of a line */
@@ -543,10 +528,7 @@ struct sh_css_sp_pipeline {
 		u32        size;     /* Total size (in bytes) */
 		ia_css_ptr    cont_buf; /* Address of continuous buffer */
 	} metadata;
-#endif
-#if defined(SH_CSS_ENABLE_PER_FRAME_PARAMS)
 	u32	output_frame_queue_id;
-#endif
 	union {
 		struct {
 			u32	bytes_available;
@@ -559,14 +541,6 @@ struct sh_css_sp_pipeline {
 			u32	raw_bit_depth;
 		} raw;
 	} copy;
-
-/* ISP2401 */
-
-	/* Parameters passed to Shading Correction kernel. */
-	struct {
-		u32 internal_frame_origin_x_bqs_on_sctbl; /* Origin X (bqs) of internal frame on shading table */
-		u32 internal_frame_origin_y_bqs_on_sctbl; /* Origin Y (bqs) of internal frame on shading table */
-	} shading;
 };
 
 /*
@@ -588,9 +562,7 @@ struct ia_css_frames_sp {
 	struct ia_css_frame_sp_info internal_frame_info;
 	struct ia_css_buffer_sp s3a_buf;
 	struct ia_css_buffer_sp dvs_buf;
-#if defined SH_CSS_ENABLE_METADATA
 	struct ia_css_buffer_sp metadata_buf;
-#endif
 };
 
 /* Information for a single pipeline stage for an ISP */
@@ -679,7 +651,7 @@ struct sh_css_sp_stage {
 struct sh_css_sp_group {
 	struct sh_css_sp_config		config;
 	struct sh_css_sp_pipeline	pipe[SH_CSS_MAX_SP_THREADS];
-#if !defined(HAS_NO_INPUT_SYSTEM) && defined(USE_INPUT_SYSTEM_VERSION_2401)
+#if defined(ISP2401)
 	struct sh_css_sp_pipeline_io	pipe_io[SH_CSS_MAX_SP_THREADS];
 	struct sh_css_sp_pipeline_io_status	pipe_io_status;
 #endif
@@ -702,8 +674,6 @@ struct sh_css_sp_output {
 #endif
 	unsigned int		sw_interrupt_value[SH_CSS_NUM_SDW_IRQS];
 };
-
-#define CONFIG_ON_FRAME_ENQUEUE() 0
 
 /**
  * @brief Data structure for the circular buffer.
@@ -742,9 +712,6 @@ struct sh_css_hmm_buffer {
 			u32	exp_id;
 			u32	isp_parameters_id; /** Unique ID to track which config was
 								actually applied to a particular frame */
-#if CONFIG_ON_FRAME_ENQUEUE()
-			struct sh_css_config_on_frame_enqueue config_on_frame_enqueue;
-#endif
 		} frame;
 		ia_css_ptr ddr_ptrs;
 	} payload;
@@ -760,16 +727,9 @@ struct sh_css_hmm_buffer {
 	clock_value_t isys_eof_clock_tick;
 };
 
-#if CONFIG_ON_FRAME_ENQUEUE()
-#define SIZE_OF_FRAME_STRUCT						\
-	(SIZE_OF_HRT_VADDRESS +						\
-	(3 * sizeof(uint32_t)) +					\
-	sizeof(uint32_t))
-#else
 #define SIZE_OF_FRAME_STRUCT						\
 	(SIZE_OF_HRT_VADDRESS +						\
 	(3 * sizeof(uint32_t)))
-#endif
 
 #define SIZE_OF_PAYLOAD_UNION						\
 	(MAX(MAX(MAX(MAX(						\
@@ -828,11 +788,9 @@ struct host_sp_communication {
 	ia_css_ptr host2sp_offline_frames[NUM_CONTINUOUS_FRAMES];
 	ia_css_ptr host2sp_offline_metadata[NUM_CONTINUOUS_FRAMES];
 
-#if defined(USE_INPUT_SYSTEM_VERSION_2) || defined(USE_INPUT_SYSTEM_VERSION_2401)
 	ia_css_ptr host2sp_mipi_frames[N_CSI_PORTS][NUM_MIPI_FRAMES_PER_STREAM];
 	ia_css_ptr host2sp_mipi_metadata[N_CSI_PORTS][NUM_MIPI_FRAMES_PER_STREAM];
 	u32 host2sp_num_mipi_frames[N_CSI_PORTS];
-#endif
 	u32 host2sp_cont_avail_num_raw_frames;
 	u32 host2sp_cont_extra_num_raw_frames;
 	u32 host2sp_cont_target_num_raw_frames;
@@ -840,20 +798,12 @@ struct host_sp_communication {
 
 };
 
-#if defined(USE_INPUT_SYSTEM_VERSION_2) || defined(USE_INPUT_SYSTEM_VERSION_2401)
 #define SIZE_OF_HOST_SP_COMMUNICATION_STRUCT				\
 	(sizeof(uint32_t) +						\
 	(NUM_CONTINUOUS_FRAMES * SIZE_OF_HRT_VADDRESS * 2) +		\
 	(N_CSI_PORTS * NUM_MIPI_FRAMES_PER_STREAM * SIZE_OF_HRT_VADDRESS * 2) +			\
 	((3 + N_CSI_PORTS) * sizeof(uint32_t)) +						\
 	(NR_OF_PIPELINES * SIZE_OF_SH_CSS_EVENT_IRQ_MASK_STRUCT))
-#else
-#define SIZE_OF_HOST_SP_COMMUNICATION_STRUCT				\
-	(sizeof(uint32_t) +						\
-	(NUM_CONTINUOUS_FRAMES * SIZE_OF_HRT_VADDRESS * 2) +		\
-	(3 * sizeof(uint32_t)) +						\
-	(NR_OF_PIPELINES * SIZE_OF_SH_CSS_EVENT_IRQ_MASK_STRUCT))
-#endif
 
 struct host_sp_queues {
 	/*
@@ -925,10 +875,9 @@ struct host_sp_queues {
 #define SIZE_OF_HOST_SP_QUEUES_STRUCT		\
 	(SIZE_OF_QUEUES_ELEMS + SIZE_OF_QUEUES_DESC)
 
-extern int (*sh_css_printf)(const char *fmt, va_list args);
+extern int  __printf(1, 0) (*sh_css_printf)(const char *fmt, va_list args);
 
-static inline void
-sh_css_print(const char *fmt, ...)
+static inline void  __printf(1, 2) sh_css_print(const char *fmt, ...)
 {
 	va_list ap;
 
@@ -939,8 +888,7 @@ sh_css_print(const char *fmt, ...)
 	}
 }
 
-static inline void
-sh_css_vprint(const char *fmt, va_list args)
+static inline void  __printf(1, 0) sh_css_vprint(const char *fmt, va_list args)
 {
 	if (sh_css_printf)
 		sh_css_printf(fmt, args);
@@ -987,7 +935,7 @@ sh_css_frame_info_set_width(struct ia_css_frame_info *info,
 			    unsigned int width,
 			    unsigned int aligned);
 
-#if !defined(HAS_NO_INPUT_SYSTEM) && defined(USE_INPUT_SYSTEM_VERSION_2)
+#if !defined(ISP2401)
 
 unsigned int
 sh_css_get_mipi_sizes_for_check(const unsigned int port,
@@ -1036,7 +984,7 @@ sh_css_continuous_is_enabled(uint8_t pipe_num);
 struct ia_css_pipe *
 find_pipe_by_num(uint32_t pipe_num);
 
-#ifdef USE_INPUT_SYSTEM_VERSION_2401
+#ifdef ISP2401
 void
 ia_css_get_crop_offsets(
     struct ia_css_pipe *pipe,

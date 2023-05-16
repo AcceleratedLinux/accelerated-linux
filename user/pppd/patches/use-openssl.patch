@@ -30,33 +30,27 @@ https://github.com/paulusmack/ppp/commit/3c7b86229f7bd2600d74db14b1fe5b3896be387
 
 --- ppp-ppp-2.4.7/pppd/Makefile.linux.orig	2019-08-20 22:59:05.801956744 +1000
 +++ ppp-ppp-2.4.7/pppd/Makefile.linux	2019-08-23 22:54:55.195771933 +1000
-@@ -30,10 +30,12 @@
- include .depend
- endif
- 
--# Uncomment the next 2 lines to include support for Microsoft's
-+# Uncomment the next line to include support for Microsoft's
+@@ -39,7 +39,9 @@
+ # Uncomment the next line to include support for Microsoft's
  # MS-CHAP authentication protocol.  Also, edit plugins/radius/Makefile.linux.
  CHAPMS=y
+-#USE_CRYPT=y
 +ifneq ($(CONFIG_USER_PPPD_USE_OPENSSL),y)
- USE_CRYPT=y
++USE_CRYPT=y
 +endif
- 
  # Don't use MSLANMAN unless you really know what you're doing.
  #MSLANMAN=y
-@@ -152,7 +154,12 @@
+ # Uncomment the next line to include support for MPPE.  CHAPMS (above) must
+@@ -173,6 +175,9 @@
  
  ifdef NEEDDES
  ifndef USE_CRYPT
 +ifeq ($(CONFIG_USER_PPPD_USE_OPENSSL),y)
 +CFLAGS   += -DUSE_OPENSSL=1 -I$(STAGEDIR)/include/openssl
-+LIBS     += -lcrypto
-+else
- LIBS     += -ldes $(LIBS)
 +endif
+ CFLAGS   += -I$(shell $(CC) --print-sysroot)/usr/include/openssl
+ NEEDCRYPTOLIB = y
  else
- CFLAGS   += -DUSE_CRYPT=1
- endif
 --- ppp-ppp-2.4.7/pppd/pppcrypt.c.orig	2019-08-23 23:58:49.767543620 +1000
 +++ ppp-ppp-2.4.7/pppd/pppcrypt.c	2019-08-23 23:59:25.826163253 +1000
 @@ -34,6 +34,17 @@
@@ -77,12 +71,3 @@ https://github.com/paulusmack/ppp/commit/3c7b86229f7bd2600d74db14b1fe5b3896be387
  static u_char
  Get7Bits(input, startBit)
  u_char *input;
-@@ -171,7 +180,7 @@
- }
- 
- bool
--DesEncrypt(clear, key, cipher)
-+DesEncrypt(clear, cipher)
- u_char *clear;	/* IN  8 octets */
- u_char *cipher;	/* OUT 8 octets */
- {

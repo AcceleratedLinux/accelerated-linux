@@ -156,12 +156,13 @@ config USER_BUSYBOX_FEATURE_PIDFILE
 config USER_BUSYBOX_PID_FILE_PATH
 	string "Directory for pidfiles"
 	default "/var/run"
-	depends on USER_BUSYBOX_FEATURE_PIDFILE
+	depends on USER_BUSYBOX_FEATURE_PIDFILE || USER_BUSYBOX_FEATURE_CROND_SPECIAL_TIMES
 	help
 	This is the default path where pidfiles are created.  Applets which
 	allow you to set the pidfile path on the command line will override
 	this value.  The option has no effect on applets that require you to
-	specify a pidfile path.
+	specify a pidfile path.  When crond has the 'Support special times'
+	option enabled, the 'crond.reboot' file is also stored here.
 
 config USER_BUSYBOX_BUSYBOX
 	bool "Include busybox applet"
@@ -311,7 +312,6 @@ config USER_BUSYBOX_BUSYBOX_EXEC_PATH
 config USER_BUSYBOX_SELINUX
 	bool "Support NSA Security Enhanced Linux"
 	default n
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Enable support for SELinux in applets ls, ps, and id. Also provide
 	the option of compiling in SELinux applets.
@@ -356,17 +356,6 @@ config USER_BUSYBOX_FEATURE_SYSLOG
 	#help
 	#This option is auto-selected when you select any applet which may
 	#send its output to syslog. You do not need to select it manually.
-
-config USER_BUSYBOX_PLATFORM_LINUX
-	bool #No description makes it a hidden option
-	default n
-	#help
-	#For the most part, busybox requires only POSIX compatibility
-	#from the target system, but some applets and features use
-	#Linux-specific interfaces.
-	#
-	#This is automatically selected if any applet or feature requires
-	#Linux-specific interfaces. You do not need to select it manually.
 
 comment 'Build Options'
 
@@ -540,6 +529,14 @@ config USER_BUSYBOX_STACK_OPTIMIZATION_386
 	do not work with it (they use SSE instructions without
 	ensuring stack alignment).
 
+config USER_BUSYBOX_STATIC_LIBGCC
+	bool "Use -static-libgcc"
+	default y
+	help
+	This option instructs gcc to link in a static version of its
+	support library, libgcc. This means that the binary will require
+	one fewer dynamic library at run time.
+
 comment 'Installation Options ("make install" behavior)'
 
 choice
@@ -660,6 +657,19 @@ config USER_BUSYBOX_WERROR
 	This adds -Werror to gcc command line.
 
 	Most people should answer N.
+
+config USER_BUSYBOX_WARN_SIMPLE_MSG
+	bool "Warn about single parameter bb_xx_msg calls"
+	default n
+	help
+	This will cause warnings to be shown for any instances of
+	bb_error_msg(), bb_error_msg_and_die(), bb_perror_msg(),
+	bb_perror_msg_and_die(), bb_herror_msg() or bb_herror_msg_and_die()
+	being called with a single parameter. In these cases the equivalent
+	bb_simple_xx_msg function should be used instead.
+	Note that use of STRERROR_FMT may give false positives.
+
+	If you aren't developing busybox, say N here.
 
 choice
 	prompt "Additional debugging library"
@@ -1095,7 +1105,6 @@ config USER_BUSYBOX_FEATURE_VERBOSE_CP_MESSAGE
 config USER_BUSYBOX_FEATURE_USE_SENDFILE
 	bool "Use sendfile system call"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	When enabled, busybox will use the kernel sendfile() function
 	instead of read/write loops to copy data between file descriptors
@@ -1137,7 +1146,6 @@ config USER_BUSYBOX_FEATURE_SKIP_ROOTFS
 config USER_BUSYBOX_MONOTONIC_SYSCALL
 	bool "Use clock_gettime(CLOCK_MONOTONIC) syscall"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Use clock_gettime(CLOCK_MONOTONIC) syscall for measuring
 	time intervals (time, ping, traceroute etc need this).
@@ -1421,7 +1429,7 @@ config USER_BUSYBOX_FEATURE_GZIP_LEVELS
 	help
 	Enable support for compression levels 4-9. The default level
 	is 6. If levels 1-3 are specified, 4 is used.
-	If this option is not selected, -N options are ignored and -9
+	If this option is not selected, -N options are ignored and -6
 	is used.
 
 config USER_BUSYBOX_FEATURE_GZIP_DECOMPRESS
@@ -1664,8 +1672,10 @@ config USER_BUSYBOX_CHROOT
 config USER_BUSYBOX_CKSUM
 	bool "cksum (4.1 kb)"
 	default y
-	help
-	cksum is used to calculate the CRC32 checksum of a file.
+
+config USER_BUSYBOX_CRC32
+	bool "crc32 (4.1 kb)"
+	default y
 config USER_BUSYBOX_COMM
 	bool "comm (4.2 kb)"
 	default y
@@ -1696,6 +1706,13 @@ config USER_BUSYBOX_CUT
 	help
 	cut is used to print selected parts of lines from
 	each file to stdout.
+
+config USER_BUSYBOX_FEATURE_CUT_REGEX
+	bool "cut -F"
+	default y
+	depends on USER_BUSYBOX_CUT
+	help
+	Allow regex based delimiters.
 config USER_BUSYBOX_DATE
 	bool "date (7 kb)"
 	default y
@@ -1711,12 +1728,10 @@ config USER_BUSYBOX_FEATURE_DATE_ISOFMT
 	Enable option (-I) to output an ISO-8601 compliant
 	date/time string.
 
-# defaults to "no": stat's nanosecond field is a bit non-portable
 config USER_BUSYBOX_FEATURE_DATE_NANO
 	bool "Support %[num]N nanosecond format specifier"
-	default n
+	default n # stat's nanosecond field is a bit non-portable
 	depends on USER_BUSYBOX_DATE
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Support %[num]N format specifier. Adds ~250 bytes of code.
 
@@ -2237,7 +2252,6 @@ config USER_BUSYBOX_FEATURE_STAT_FILESYSTEM
 	bool "Enable display of filesystem status (-f)"
 	default y
 	depends on USER_BUSYBOX_STAT
-	select USER_BUSYBOX_PLATFORM_LINUX # statfs()
 	help
 	Without this, stat will not support the '-f' option to display
 	information about filesystem status.
@@ -2343,16 +2357,8 @@ config USER_BUSYBOX_TOUCH
 	touch is used to create or change the access and/or
 	modification timestamp of specified files.
 
-config USER_BUSYBOX_FEATURE_TOUCH_NODEREF
-	bool "Add support for -h"
-	default y
-	depends on USER_BUSYBOX_TOUCH
-	help
-	Enable touch to have the -h option.
-	This requires libc support for lutimes() function.
-
 config USER_BUSYBOX_FEATURE_TOUCH_SUSV3
-	bool "Add support for SUSV3 features (-d -t -r)"
+	bool "Add support for SUSV3 features (-a -d -m -t -r)"
 	default y
 	depends on USER_BUSYBOX_TOUCH
 	help
@@ -2438,6 +2444,11 @@ config USER_BUSYBOX_UUDECODE
 	default y
 	help
 	uudecode is used to decode a uuencoded file.
+config USER_BUSYBOX_BASE32
+	bool "base32 (4.9 kb)"
+	default y
+	help
+	Base32 encode and decode
 config USER_BUSYBOX_BASE64
 	bool "base64 (4.9 kb)"
 	default y
@@ -2536,7 +2547,6 @@ menu "Console Utilities"
 config USER_BUSYBOX_CHVT
 	bool "chvt (2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program is used to change to another terminal.
 	Example: chvt 4 (change to terminal /dev/tty4)
@@ -2548,39 +2558,33 @@ config USER_BUSYBOX_CLEAR
 config USER_BUSYBOX_DEALLOCVT
 	bool "deallocvt (1.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program deallocates unused virtual consoles.
 config USER_BUSYBOX_DUMPKMAP
 	bool "dumpkmap (1.6 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program dumps the kernel's keyboard translation table to
 	stdout, in binary format. You can then use loadkmap to load it.
 config USER_BUSYBOX_FGCONSOLE
 	bool "fgconsole (1.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program prints active (foreground) console number.
 config USER_BUSYBOX_KBD_MODE
 	bool "kbd_mode (4.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program reports and sets keyboard mode.
 config USER_BUSYBOX_LOADFONT
 	bool "loadfont (5.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program loads a console font from standard input.
 
 config USER_BUSYBOX_SETFONT
 	bool "setfont (24 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Allows to load console screen map. Useful for i18n.
 
@@ -2614,14 +2618,12 @@ config USER_BUSYBOX_FEATURE_LOADFONT_RAW
 config USER_BUSYBOX_LOADKMAP
 	bool "loadkmap (1.8 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program loads a keyboard translation table from
 	standard input.
 config USER_BUSYBOX_OPENVT
 	bool "openvt (7.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program is used to start a command on an unused
 	virtual terminal.
@@ -2650,7 +2652,6 @@ config USER_BUSYBOX_FEATURE_RESIZE_PRINT
 config USER_BUSYBOX_SETCONSOLE
 	bool "setconsole (3.6 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Redirect writes to /dev/console to another device,
 	like the current tty while logged in via telnet.
@@ -2664,20 +2665,17 @@ config USER_BUSYBOX_FEATURE_SETCONSOLE_LONG_OPTIONS
 config USER_BUSYBOX_SETKEYCODES
 	bool "setkeycodes (2.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program loads entries into the kernel's scancode-to-keycode
 	map, allowing unusual keyboards to generate usable keycodes.
 config USER_BUSYBOX_SETLOGCONS
 	bool "setlogcons (1.8 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This program redirects the output console of kernel messages.
 config USER_BUSYBOX_SHOWKEY
 	bool "showkey (4.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Shows keys pressed.
 
@@ -2767,7 +2765,7 @@ config USER_BUSYBOX_MINIPS
 	Alias to "ps".
 config USER_BUSYBOX_NUKE
 	bool "nuke (2.9 kb)"
-	default y
+	default n  # off by default: too "accidentally destructive"
 	help
 	Alias to "rm -rf".
 config USER_BUSYBOX_RESUME
@@ -2778,7 +2776,6 @@ config USER_BUSYBOX_RESUME
 config USER_BUSYBOX_RUN_INIT
 	bool "run-init (7.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The run-init utility is used from initramfs to select a new
 	root device. Under initramfs, you have to use this instead of
@@ -2907,6 +2904,14 @@ config USER_BUSYBOX_FEATURE_VI_COLON
 	Enable a limited set of colon commands. This does not
 	provide an "ex" mode.
 
+config USER_BUSYBOX_FEATURE_VI_COLON_EXPAND
+	bool "Expand \"%\" and \"#\" in colon commands"
+	default y
+	depends on USER_BUSYBOX_FEATURE_VI_COLON
+	help
+	Expand the special characters \"%\" (current filename)
+	and \"#\" (alternate filename) in colon commands.
+
 config USER_BUSYBOX_FEATURE_VI_YANKMARK
 	bool "Enable yank/put commands and mark cmds"
 	default y
@@ -3013,6 +3018,14 @@ config USER_BUSYBOX_FEATURE_VI_UNDO_QUEUE_MAX
 	and will generally malloc() larger objects and less frequently.
 	Unless you want more (or less) frequent "undo points" while typing,
 	you should probably leave this unchanged.
+
+config USER_BUSYBOX_FEATURE_VI_VERBOSE_STATUS
+	bool "Enable verbose status reporting"
+	default y
+	depends on USER_BUSYBOX_VI
+	help
+	Enable more verbose reporting of the results of yank, change,
+	delete, undo and substitution commands.
 
 config USER_BUSYBOX_FEATURE_ALLOW_EXEC
 	bool "Allow vi and awk to execute shell commands"
@@ -3183,6 +3196,14 @@ config USER_BUSYBOX_FEATURE_FIND_DELETE
 	Support the 'find -delete' option for deleting files and directories.
 	WARNING: This option can do much harm if used wrong. Busybox will not
 	try to protect the user from doing stupid things. Use with care.
+
+config USER_BUSYBOX_FEATURE_FIND_EMPTY
+	bool "Enable -empty: match empty files or directories"
+	default y
+	depends on USER_BUSYBOX_FIND
+	help
+	Support the 'find -empty' option to find empty regular files
+	or directories.
 
 config USER_BUSYBOX_FEATURE_FIND_PATH
 	bool "Enable -path: match pathname with shell pattern"
@@ -3860,7 +3881,6 @@ config USER_BUSYBOX_FSCK
 config USER_BUSYBOX_LSATTR
 	bool "lsattr (5.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	lsattr lists the file attributes on a second extended file system.
 config USER_BUSYBOX_TUNE2FS
@@ -3943,7 +3963,6 @@ config USER_BUSYBOX_MODPROBE_SMALL
 config USER_BUSYBOX_DEPMOD
 	bool "depmod (27 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	depmod generates modules.dep (and potentially modules.alias
 	and modules.symbols) that contain dependency information
@@ -3951,13 +3970,11 @@ config USER_BUSYBOX_DEPMOD
 config USER_BUSYBOX_INSMOD
 	bool "insmod (22 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	insmod is used to load specified modules in the running kernel.
 config USER_BUSYBOX_LSMOD
 	bool "lsmod (1.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	lsmod is used to display a list of loaded modules.
 
@@ -3972,13 +3989,11 @@ config USER_BUSYBOX_FEATURE_LSMOD_PRETTY_2_6_OUTPUT
 config USER_BUSYBOX_MODINFO
 	bool "modinfo (24 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Show information about a Linux Kernel module
 config USER_BUSYBOX_MODPROBE
 	bool "modprobe (28 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Handle the loading of modules, and their dependencies on a high
 	level.
@@ -3996,7 +4011,6 @@ config USER_BUSYBOX_FEATURE_MODPROBE_BLACKLIST
 config USER_BUSYBOX_RMMOD
 	bool "rmmod (3.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	rmmod is used to unload specified modules from the kernel.
 
@@ -4160,7 +4174,6 @@ menu "Linux System Utilities"
 config USER_BUSYBOX_ACPID
 	bool "acpid (9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	acpid listens to ACPI events coming either in textual form from
 	/proc/acpi/event (though it is marked deprecated it is still widely
@@ -4182,13 +4195,11 @@ config USER_BUSYBOX_FEATURE_ACPID_COMPAT
 config USER_BUSYBOX_BLKDISCARD
 	bool "blkdiscard (4.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	blkdiscard discards sectors on a given device.
 config USER_BUSYBOX_BLKID
 	bool "blkid (12 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_VOLUMEID
 	help
 	Lists labels and UUIDs of all filesystems.
@@ -4218,7 +4229,6 @@ config USER_BUSYBOX_CHRT
 config USER_BUSYBOX_DMESG
 	bool "dmesg (3.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	dmesg is used to examine or control the kernel ring buffer. When the
 	Linux kernel prints messages to the system log, they are stored in
@@ -4251,7 +4261,6 @@ config USER_BUSYBOX_FEATURE_DMESG_PRETTY
 config USER_BUSYBOX_EJECT
 	bool "eject (4 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Used to eject cdroms. (defaults to /dev/cdrom)
 
@@ -4270,13 +4279,11 @@ config USER_BUSYBOX_FALLOCATE
 config USER_BUSYBOX_FATATTR
 	bool "fatattr (1.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	fatattr lists or changes the file attributes on a fat file system.
 config USER_BUSYBOX_FBSET
 	bool "fbset (5.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	fbset is used to show or change the settings of a Linux frame buffer
 	device. The frame buffer device provides a simple and unique
@@ -4304,13 +4311,11 @@ config USER_BUSYBOX_FEATURE_FBSET_READMODE
 config USER_BUSYBOX_FDFORMAT
 	bool "fdformat (4.4 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	fdformat is used to low-level format a floppy disk.
 config USER_BUSYBOX_FDISK
 	bool "fdisk (37 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The fdisk utility is used to divide hard disks into one or more
 	logical disks, which are generally called partitions. This utility
@@ -4384,7 +4389,6 @@ config USER_BUSYBOX_FEATURE_FDISK_ADVANCED
 config USER_BUSYBOX_FINDFS
 	bool "findfs (12 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_VOLUMEID
 	help
 	Prints the name of a filesystem with given label or UUID.
@@ -4396,7 +4400,6 @@ config USER_BUSYBOX_FLOCK
 config USER_BUSYBOX_FDFLUSH
 	bool "fdflush (1.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	fdflush is only needed when changing media on slightly-broken
 	removable media drives. It is used to make Linux believe that a
@@ -4409,7 +4412,6 @@ config USER_BUSYBOX_FDFLUSH
 config USER_BUSYBOX_FREERAMDISK
 	bool "freeramdisk (1.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Linux allows you to create ramdisks. This utility allows you to
 	delete them and completely free all memory that was used for the
@@ -4430,14 +4432,12 @@ config USER_BUSYBOX_FSCK_MINIX
 config USER_BUSYBOX_FSFREEZE
 	bool "fsfreeze (3.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_LONG_OPTS
 	help
 	Halt new accesses and flush writes on a mounted filesystem.
 config USER_BUSYBOX_FSTRIM
 	bool "fstrim (4.4 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Discard unused blocks on a mounted filesystem.
 config USER_BUSYBOX_GETOPT
@@ -4464,16 +4464,6 @@ config USER_BUSYBOX_HEXDUMP
 	The hexdump utility is used to display binary data in a readable
 	way that is comparable to the output from most hex editors.
 
-config USER_BUSYBOX_FEATURE_HEXDUMP_REVERSE
-	bool "Support -R, reverse of 'hexdump -Cv'"
-	default y
-	depends on USER_BUSYBOX_HEXDUMP
-	help
-	The hexdump utility is used to display binary data in an ascii
-	readable way. This option creates binary data from an ascii input.
-	NB: this option is non-standard. It's unwise to use it in scripts
-	aimed to be portable.
-
 config USER_BUSYBOX_HD
 	bool "hd (7.8 kb)"
 	default y
@@ -4488,7 +4478,6 @@ config USER_BUSYBOX_XXD
 config USER_BUSYBOX_HWCLOCK
 	bool "hwclock (5.8 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The hwclock utility is used to read and set the hardware clock
 	on a system. This is primarily used to set the current time on
@@ -4509,7 +4498,6 @@ config USER_BUSYBOX_FEATURE_HWCLOCK_ADJTIME_FHS
 config USER_BUSYBOX_IONICE
 	bool "ionice (3.8 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Set/set program io scheduling class and priority
 	Requires kernel >= 2.6.13
@@ -4523,7 +4511,6 @@ config USER_BUSYBOX_IPCRM
 config USER_BUSYBOX_IPCS
 	bool "ipcs (11 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The ipcs utility is used to provide information on the currently
 	allocated System V interprocess (IPC) objects in the system.
@@ -4544,7 +4531,6 @@ config USER_BUSYBOX_FEATURE_LAST_FANCY
 config USER_BUSYBOX_LOSETUP
 	bool "losetup (5.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	losetup is used to associate or detach a loop device with a regular
 	file or block device, and to query the status of a loop device. This
@@ -4552,7 +4538,6 @@ config USER_BUSYBOX_LOSETUP
 config USER_BUSYBOX_LSPCI
 	bool "lspci (6.3 kb)"
 	default y
-	#select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	lspci is a utility for displaying information about PCI buses in the
 	system and devices connected to them.
@@ -4561,7 +4546,6 @@ config USER_BUSYBOX_LSPCI
 config USER_BUSYBOX_LSUSB
 	bool "lsusb (4.2 kb)"
 	default y
-	#select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	lsusb is a utility for displaying information about USB buses in the
 	system and devices connected to them.
@@ -4570,7 +4554,6 @@ config USER_BUSYBOX_LSUSB
 config USER_BUSYBOX_MDEV
 	bool "mdev (17 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	mdev is a mini-udev implementation for dynamically creating device
 	nodes in the /dev directory.
@@ -4656,20 +4639,17 @@ config USER_BUSYBOX_FEATURE_MESG_ENABLE_ONLY_GROUP
 config USER_BUSYBOX_MKE2FS
 	bool "mke2fs (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Utility to create EXT2 filesystems.
 
 config USER_BUSYBOX_MKFS_EXT2
 	bool "mkfs.ext2 (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Alias to "mke2fs".
 config USER_BUSYBOX_MKFS_MINIX
 	bool "mkfs.minix (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The minix filesystem is a nice, small, compact, read-write filesystem
 	with little overhead. If you wish to be able to create minix
@@ -4686,21 +4666,18 @@ config USER_BUSYBOX_FEATURE_MINIX2
 config USER_BUSYBOX_MKFS_REISER
 	bool "mkfs_reiser"
 	default n
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Utility to create ReiserFS filesystems.
 	Note: this applet needs a lot of testing and polishing.
 config USER_BUSYBOX_MKDOSFS
 	bool "mkdosfs (7.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Utility to create FAT32 filesystems.
 
 config USER_BUSYBOX_MKFS_VFAT
 	bool "mkfs.vfat (7.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Alias to "mkdosfs".
 config USER_BUSYBOX_MKSWAP
@@ -4734,7 +4711,6 @@ config USER_BUSYBOX_MORE
 config USER_BUSYBOX_MOUNT
 	bool "mount (23 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	All files and filesystems in Unix are arranged into one big directory
 	tree. The 'mount' utility is used to graft a filesystem onto a
@@ -4836,7 +4812,7 @@ config USER_BUSYBOX_NOLOGIN
 
 config USER_BUSYBOX_NOLOGIN_DEPENDENCIES
 	bool "Enable dependencies for nologin"
-	default y
+	default n  # Y default makes it harder to select single-applet test
 	depends on USER_BUSYBOX_NOLOGIN
 	select USER_BUSYBOX_CAT
 	select USER_BUSYBOX_ECHO
@@ -4850,13 +4826,11 @@ config USER_BUSYBOX_NOLOGIN_DEPENDENCIES
 config USER_BUSYBOX_NSENTER
 	bool "nsenter (6.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Run program with namespaces of other processes.
 config USER_BUSYBOX_PIVOT_ROOT
 	bool "pivot_root (1.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The pivot_root utility swaps the mount points for the root filesystem
 	with some other mounted filesystem. This allows you to do all sorts
@@ -4881,7 +4855,6 @@ config USER_BUSYBOX_RDEV
 config USER_BUSYBOX_READPROFILE
 	bool "readprofile (7.1 kb)"
 	default y
-	#select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This allows you to parse /proc/profile for basic profiling.
 config USER_BUSYBOX_RENICE
@@ -4898,7 +4871,6 @@ config USER_BUSYBOX_REV
 config USER_BUSYBOX_RTCWAKE
 	bool "rtcwake (6.8 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Enter a system sleep state until specified wakeup time.
 config USER_BUSYBOX_SCRIPT
@@ -4915,7 +4887,6 @@ config USER_BUSYBOX_SCRIPTREPLAY
 config USER_BUSYBOX_SETARCH
 	bool "setarch (3.6 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The linux32 utility is used to create a 32bit environment for the
 	specified program (usually a shell). It only makes sense to have
@@ -4925,20 +4896,17 @@ config USER_BUSYBOX_SETARCH
 config USER_BUSYBOX_LINUX32
 	bool "linux32 (3.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Alias to "setarch linux32".
 
 config USER_BUSYBOX_LINUX64
 	bool "linux64 (3.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Alias to "setarch linux64".
 config USER_BUSYBOX_SETPRIV
 	bool "setpriv (6.6 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_LONG_OPTS
 	help
 	Run a program with different Linux privilege settings.
@@ -4979,7 +4947,6 @@ config USER_BUSYBOX_SETSID
 config USER_BUSYBOX_SWAPON
 	bool "swapon (15 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Once you have created some swap space using 'mkswap', you also need
 	to enable your swap space with the 'swapon' utility. The 'swapoff'
@@ -5006,7 +4973,6 @@ config USER_BUSYBOX_FEATURE_SWAPON_PRI
 config USER_BUSYBOX_SWAPOFF
 	bool "swapoff (14 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 
 config USER_BUSYBOX_FEATURE_SWAPONOFF_LABEL
 	bool "Support specifying devices by label or UUID"
@@ -5019,7 +4985,6 @@ config USER_BUSYBOX_FEATURE_SWAPONOFF_LABEL
 config USER_BUSYBOX_SWITCH_ROOT
 	bool "switch_root (5.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The switch_root utility is used from initramfs to select a new
 	root device. Under initramfs, you have to use this instead of
@@ -5051,17 +5016,23 @@ config USER_BUSYBOX_FEATURE_TASKSET_FANCY
 	Needed for machines with more than 32-64 CPUs:
 	affinity parameter 0xHHHHHHHHHHHHHHHHHHHH can be arbitrarily long
 	in this case. Otherwise, it is limited to sizeof(long).
+
+config USER_BUSYBOX_FEATURE_TASKSET_CPULIST
+	bool "CPU list support (-c option)"
+	default y
+	depends on USER_BUSYBOX_FEATURE_TASKSET_FANCY
+	help
+	Add support for taking/printing affinity as CPU list when '-c'
+	option is used. For example, it prints '0-3,7' instead of mask '8f'.
 config USER_BUSYBOX_UEVENT
 	bool "uevent (3.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	uevent is a netlink listener for kernel uevent notifications
 	sent via netlink. It is usually used for dynamic device creation.
 config USER_BUSYBOX_UMOUNT
 	bool "umount (5.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	When you want to remove a mounted filesystem from its current mount
 	point, for example when you are shutting down the system, the
@@ -5078,7 +5049,6 @@ config USER_BUSYBOX_UNSHARE
 	bool "unshare (7.2 kb)"
 	default y
 	depends on !USER_BUSYBOX_NOMMU
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_LONG_OPTS
 	help
 	Run program with some namespaces unshared from parent.
@@ -5170,6 +5140,12 @@ config USER_BUSYBOX_FEATURE_VOLUMEID_CRAMFS
 	bool "cramfs filesystem"
 	default y
 	depends on USER_BUSYBOX_VOLUMEID
+config USER_BUSYBOX_FEATURE_VOLUMEID_EROFS
+	bool "erofs filesystem"
+	default y
+	depends on USER_BUSYBOX_VOLUMEID
+	help
+	Erofs is a compressed readonly filesystem for Linux.
 config USER_BUSYBOX_FEATURE_VOLUMEID_EXFAT
 	bool "exFAT filesystem"
 	default y
@@ -5355,10 +5331,15 @@ menu "Miscellaneous Utilities"
 config USER_BUSYBOX_ADJTIMEX
 	bool "adjtimex (4.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Adjtimex reads and optionally sets adjustment parameters for
 	the Linux clock adjustment algorithm.
+config USER_BUSYBOX_ASCII
+	bool "ascii"
+	default y
+	help
+	Print ascii table.
+
 config USER_BUSYBOX_BBCONFIG
 	bool "bbconfig (9.7 kb)"
 	default n
@@ -5468,7 +5449,6 @@ endif
 config USER_BUSYBOX_BEEP
 	bool "beep (2.4 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The beep applets beeps in a given freq/Hz.
 
@@ -5556,7 +5536,6 @@ config USER_BUSYBOX_FEATURE_CHAT_CLR_ABORT
 config USER_BUSYBOX_CONSPY
 	bool "conspy (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	A text-mode VNC like program for Linux virtual terminals.
 	example:  conspy NUM      shared access to console num
@@ -5647,7 +5626,6 @@ config USER_BUSYBOX_CRONTAB
 config USER_BUSYBOX_DEVFSD
 	bool "devfsd (obsolete)"
 	default n
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_FEATURE_SYSLOG
 	help
 	This is deprecated and should NOT be used anymore.
@@ -5690,7 +5668,6 @@ config USER_BUSYBOX_DEVFSD_VERBOSE
 config USER_BUSYBOX_FEATURE_DEVFS
 	bool "Use devfs names for all devices (obsolete)"
 	default n
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	This is obsolete and should NOT be used anymore.
 	Use linux >= 2.6 (optionally with hotplug) and mdev instead!
@@ -5708,7 +5685,6 @@ config USER_BUSYBOX_DEVMEM
 config USER_BUSYBOX_FBSPLASH
 	bool "fbsplash (26 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Shows splash image and progress bar on framebuffer device.
 	Can be used during boot phase of an embedded device.
@@ -5754,7 +5730,6 @@ config USER_BUSYBOX_FLASHCP
 config USER_BUSYBOX_HDPARM
 	bool "hdparm (25 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Get/Set hard drive parameters. Primarily intended for ATA
 	drives.
@@ -5816,35 +5791,30 @@ config USER_BUSYBOX_HEXEDIT
 config USER_BUSYBOX_I2CGET
 	bool "i2cget (5.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Read from I2C/SMBus chip registers.
 
 config USER_BUSYBOX_I2CSET
 	bool "i2cset (6.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Set I2C registers.
 
 config USER_BUSYBOX_I2CDUMP
 	bool "i2cdump (7.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Examine I2C registers.
 
 config USER_BUSYBOX_I2CDETECT
 	bool "i2cdetect (7.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Detect I2C chips.
 
 config USER_BUSYBOX_I2CTRANSFER
 	bool "i2ctransfer (4.0 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Send user-defined I2C messages in one transfer.
 
@@ -5953,7 +5923,6 @@ config USER_BUSYBOX_FEATURE_LESS_ENV
 config USER_BUSYBOX_LSSCSI
 	bool "lsscsi (2.5 kb)"
 	default y
-	#select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	lsscsi is a utility for displaying information about SCSI buses in the
 	system and devices connected to them.
@@ -6000,6 +5969,13 @@ config USER_BUSYBOX_MICROCOM
 	default y
 	help
 	The poor man's minicom utility for chatting with serial port devices.
+config USER_BUSYBOX_MIM
+	bool "mim (0.5 kb)"
+	default y
+	depends on USER_BUSYBOX_FEATURE_SH_EMBEDDED_SCRIPTS
+	help
+	Run a script from a Makefile-like specification file.
+	Unlike 'make' dependencies aren't supported.
 config USER_BUSYBOX_MT
 	bool "mt (2.5 kb)"
 	default y
@@ -6010,26 +5986,22 @@ config USER_BUSYBOX_MT
 config USER_BUSYBOX_NANDWRITE
 	bool "nandwrite (4.8 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Write to the specified MTD device, with bad blocks awareness
 
 config USER_BUSYBOX_NANDDUMP
 	bool "nanddump (5.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Dump the content of raw NAND chip
 config USER_BUSYBOX_PARTPROBE
 	bool "partprobe (3.5 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Ask kernel to rescan partition table.
 config USER_BUSYBOX_RAIDAUTORUN
 	bool "raidautorun (1.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	raidautorun tells the kernel md driver to
 	search and start RAID arrays.
@@ -6037,7 +6009,6 @@ config USER_BUSYBOX_READAHEAD
 	bool "readahead (1.5 kb)"
 	default y
 	depends on USER_BUSYBOX_LFS
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Preload the files listed on the command line into RAM cache so that
 	subsequent reads on these files will not block on disk I/O.
@@ -6053,7 +6024,6 @@ config USER_BUSYBOX_READAHEAD
 config USER_BUSYBOX_RFKILL
 	bool "rfkill (4.4 kb)"
 	default n # doesn't build on Ubuntu 9.04
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Enable/disable wireless devices.
 
@@ -6074,7 +6044,6 @@ config USER_BUSYBOX_RUNLEVEL
 config USER_BUSYBOX_RX
 	bool "rx (2.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Receive files using the Xmodem protocol.
 config USER_BUSYBOX_SETFATTR
@@ -6085,7 +6054,6 @@ config USER_BUSYBOX_SETFATTR
 config USER_BUSYBOX_SETSERIAL
 	bool "setserial (6.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Retrieve or set Linux serial port.
 config USER_BUSYBOX_STRINGS
@@ -6115,48 +6083,41 @@ config USER_BUSYBOX_TTYSIZE
 config USER_BUSYBOX_UBIATTACH
 	bool "ubiattach (4.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Attach MTD device to an UBI device.
 
 config USER_BUSYBOX_UBIDETACH
 	bool "ubidetach (4.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Detach MTD device from an UBI device.
 
 config USER_BUSYBOX_UBIMKVOL
 	bool "ubimkvol (5.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Create a UBI volume.
 
 config USER_BUSYBOX_UBIRMVOL
 	bool "ubirmvol (4.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Delete a UBI volume.
 
 config USER_BUSYBOX_UBIRSVOL
 	bool "ubirsvol (4.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Resize a UBI volume.
 
 config USER_BUSYBOX_UBIUPDATEVOL
 	bool "ubiupdatevol (5.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Update a UBI volume.
 config USER_BUSYBOX_UBIRENAME
 	bool "ubirename (2.4 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Utility to rename UBI volumes
 config USER_BUSYBOX_VOLNAME
@@ -6167,7 +6128,6 @@ config USER_BUSYBOX_VOLNAME
 config USER_BUSYBOX_WATCHDOG
 	bool "watchdog (5.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The watchdog utility is used with hardware or software watchdog
 	device drivers. It opens the specified watchdog device special file
@@ -6175,6 +6135,21 @@ config USER_BUSYBOX_WATCHDOG
 	watchdog applet ever fails to write the magic character within a
 	certain amount of time, the watchdog device assumes the system has
 	hung, and will cause the hardware to reboot.
+
+config USER_BUSYBOX_FEATURE_WATCHDOG_OPEN_TWICE
+	bool "Open watchdog device twice, closing it gracefully in between"
+	depends on USER_BUSYBOX_WATCHDOG
+	default n   # this behavior was essentially a hack for a broken driver
+	help
+	When enabled, the watchdog device is opened and then immediately
+	magic-closed, before being opened a second time. This may be necessary
+	for some watchdog devices, but can cause spurious warnings in the
+	kernel log if the nowayout feature is enabled. If this workaround
+	is really needed for you machine to work properly, consider whether
+	it should be fixed in the kernel driver instead. Even when disabled,
+	the behaviour is easily emulated with a "printf 'V' > /dev/watchdog"
+	immediately before starting the busybox watchdog daemon. Say n unless
+	you know that you absolutely need this.
 
 endmenu
 # DO NOT EDIT. This file is generated from Config.src
@@ -6240,19 +6215,16 @@ config USER_BUSYBOX_FEATURE_TLS_SHA1
 config USER_BUSYBOX_ARP
 	bool "arp (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Manipulate the system ARP cache.
 config USER_BUSYBOX_ARPING
 	bool "arping (9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Ping hosts by ARP packets.
 config USER_BUSYBOX_BRCTL
 	bool "brctl (4.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Manage ethernet bridges.
 	Supports addbr/delbr and addif/delif.
@@ -6283,7 +6255,6 @@ config USER_BUSYBOX_DNSD
 config USER_BUSYBOX_ETHER_WAKE
 	bool "ether-wake (4.9 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Send a magic packet to wake up sleeping machines.
 config USER_BUSYBOX_FTPD
@@ -6468,10 +6439,47 @@ config USER_BUSYBOX_FEATURE_HTTPD_GZIP
 	help
 	Makes httpd send files using GZIP content encoding if the
 	client supports it and a pre-compressed <file>.gz exists.
+
+config USER_BUSYBOX_FEATURE_HTTPD_ETAG
+	bool "Support caching via ETag header"
+	default y
+	depends on USER_BUSYBOX_HTTPD
+	help
+	If server responds with ETag then next time client (browser)
+	resend it via If-None-Match header.
+	Then httpd will check if file wasn't modified and if not,
+	return 304 Not Modified status code.
+	The ETag value is constructed from last modification date
+	in unix epoch, and size: "hex(last_mod)-hex(file_size)".
+	It's not completely reliable as hash functions but fair enough.
+
+config USER_BUSYBOX_FEATURE_HTTPD_LAST_MODIFIED
+	bool "Add Last-Modified header to response"
+	default y
+	depends on USER_BUSYBOX_HTTPD
+	help
+	The Last-Modified header is used for cache validation.
+	The client sends last seen mtime to server in If-Modified-Since.
+	Both headers MUST be an RFC 1123 formatted, which is hard to parse.
+	Use ETag header instead.
+
+config USER_BUSYBOX_FEATURE_HTTPD_DATE
+	bool "Add Date header to response"
+	default y
+	depends on USER_BUSYBOX_HTTPD
+	help
+	RFC2616 says that server MUST add Date header to response.
+	But it is almost useless and can be omitted.
+
+config USER_BUSYBOX_FEATURE_HTTPD_ACL_IP
+	bool "ACL IP"
+	default y
+	depends on USER_BUSYBOX_HTTPD
+	help
+	Support IP deny/allow rules
 config USER_BUSYBOX_IFCONFIG
 	bool "ifconfig (12 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Ifconfig is used to configure the kernel-resident network interfaces.
 
@@ -6518,14 +6526,12 @@ config USER_BUSYBOX_FEATURE_IFCONFIG_BROADCAST_PLUS
 config USER_BUSYBOX_IFENSLAVE
 	bool "ifenslave (13 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Userspace application to bind several interfaces
 	to a logical interface (use with kernel bonding driver).
 config USER_BUSYBOX_IFPLUGD
 	bool "ifplugd (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Network interface plug detection daemon.
 config USER_BUSYBOX_IFUP
@@ -6677,7 +6683,6 @@ config USER_BUSYBOX_FEATURE_INETD_RPC
 config USER_BUSYBOX_IP
 	bool "ip (35 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The "ip" applet is a TCP/IP interface configuration and routing
 	utility.
@@ -6689,7 +6694,6 @@ config USER_BUSYBOX_IPADDR
 	bool "ipaddr (14 kb)"
 	default y
 	select USER_BUSYBOX_FEATURE_IP_ADDRESS
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Short form of "ip addr"
 
@@ -6697,7 +6701,6 @@ config USER_BUSYBOX_IPLINK
 	bool "iplink (17 kb)"
 	default y
 	select USER_BUSYBOX_FEATURE_IP_LINK
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Short form of "ip link"
 
@@ -6705,7 +6708,6 @@ config USER_BUSYBOX_IPROUTE
 	bool "iproute (15 kb)"
 	default y
 	select USER_BUSYBOX_FEATURE_IP_ROUTE
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Short form of "ip route"
 
@@ -6713,7 +6715,6 @@ config USER_BUSYBOX_IPTUNNEL
 	bool "iptunnel (9.6 kb)"
 	default y
 	select USER_BUSYBOX_FEATURE_IP_TUNNEL
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Short form of "ip tunnel"
 
@@ -6721,7 +6722,6 @@ config USER_BUSYBOX_IPRULE
 	bool "iprule (10 kb)"
 	default y
 	select USER_BUSYBOX_FEATURE_IP_RULE
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Short form of "ip rule"
 
@@ -6729,7 +6729,6 @@ config USER_BUSYBOX_IPNEIGH
 	bool "ipneigh (8.3 kb)"
 	default y
 	select USER_BUSYBOX_FEATURE_IP_NEIGH
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Short form of "ip neigh"
 
@@ -6820,7 +6819,6 @@ config USER_BUSYBOX_FAKEIDENTD
 config USER_BUSYBOX_NAMEIF
 	bool "nameif (6.6 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_FEATURE_SYSLOG
 	help
 	nameif is used to rename network interface by its MAC address.
@@ -6892,7 +6890,6 @@ config USER_BUSYBOX_NC_110_COMPAT
 config USER_BUSYBOX_NETSTAT
 	bool "netstat (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	netstat prints information about the Linux networking subsystem.
 
@@ -6929,7 +6926,6 @@ config USER_BUSYBOX_FEATURE_NSLOOKUP_LONG_OPTIONS
 config USER_BUSYBOX_NTPD
 	bool "ntpd (22 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The NTP client/server daemon.
 
@@ -6956,7 +6952,6 @@ config USER_BUSYBOX_FEATURE_NTP_AUTH
 config USER_BUSYBOX_PING
 	bool "ping (10 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	ping uses the ICMP protocol's mandatory ECHO_REQUEST datagram to
 	elicit an ICMP ECHO_RESPONSE from a host or gateway.
@@ -6984,13 +6979,11 @@ config USER_BUSYBOX_PSCAN
 config USER_BUSYBOX_ROUTE
 	bool "route (8.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Route displays or manipulates the kernel's IP routing tables.
 config USER_BUSYBOX_SLATTACH
 	bool "slattach (6.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	slattach configures serial line as SLIP network interface.
 config USER_BUSYBOX_SSL_CLIENT
@@ -7190,7 +7183,6 @@ config USER_BUSYBOX_TLS
 config USER_BUSYBOX_TRACEROUTE
 	bool "traceroute (11 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Utility to trace the route of IP packets.
 
@@ -7216,7 +7208,6 @@ config USER_BUSYBOX_FEATURE_TRACEROUTE_USE_ICMP
 config USER_BUSYBOX_TUNCTL
 	bool "tunctl (6.2 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	tunctl creates or deletes tun devices.
 
@@ -7230,7 +7221,6 @@ config USER_BUSYBOX_FEATURE_TUNCTL_UG
 config USER_BUSYBOX_VCONFIG
 	bool "vconfig (2.3 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	Creates, removes, and configures VLAN interfaces
 config USER_BUSYBOX_WGET
@@ -7249,6 +7239,13 @@ config USER_BUSYBOX_FEATURE_WGET_STATUSBAR
 	bool "Enable progress bar (+2k)"
 	default y
 	depends on USER_BUSYBOX_WGET
+
+config USER_BUSYBOX_FEATURE_WGET_FTP
+	bool "Enable FTP protocol (+1k)"
+	default y
+	depends on USER_BUSYBOX_WGET
+	help
+	To support FTPS, enable FEATURE_WGET_HTTPS as well.
 
 config USER_BUSYBOX_FEATURE_WGET_AUTHENTICATION
 	bool "Enable HTTP authentication"
@@ -7278,6 +7275,7 @@ config USER_BUSYBOX_FEATURE_WGET_HTTPS
 	select USER_BUSYBOX_TLS
 	help
 	wget will use internal TLS code to connect to https:// URLs.
+	It also enables FTPS support, but it's not well tested yet.
 	Note:
 	On NOMMU machines, ssl_helper applet should be available
 	in the $PATH for this to work. Make sure to select that applet.
@@ -7314,6 +7312,9 @@ config USER_BUSYBOX_FEATURE_WGET_HTTPS
 	patches, but do want to waste bandwidth expaining how wrong
 	it is, you will be ignored.
 
+	FEATURE_WGET_OPENSSL does implement TLS verification
+	using the certificates available to OpenSSL.
+
 config USER_BUSYBOX_FEATURE_WGET_OPENSSL
 	bool "Try to connect to HTTPS using openssl"
 	default y
@@ -7338,6 +7339,9 @@ config USER_BUSYBOX_FEATURE_WGET_OPENSSL
 	If openssl can't be executed, internal TLS code will be used
 	(if you enabled it); if openssl can be executed but fails later,
 	wget can't detect this, and download will fail.
+
+	By default TLS verification is performed, unless
+	--no-check-certificate option is passed.
 config USER_BUSYBOX_WHOIS
 	bool "whois (6.3 kb)"
 	default y
@@ -7346,7 +7350,6 @@ config USER_BUSYBOX_WHOIS
 config USER_BUSYBOX_ZCIP
 	bool "zcip (8.4 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	select USER_BUSYBOX_FEATURE_SYSLOG
 	help
 	ZCIP provides ZeroConf IPv4 address selection, according to RFC 3927.
@@ -7365,7 +7368,6 @@ config USER_BUSYBOX_ZCIP
 config USER_BUSYBOX_UDHCPD
 	bool "udhcpd (21 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	udhcpd is a DHCP server geared primarily toward embedded systems,
 	while striving to be fully functional and RFC compliant.
@@ -7421,7 +7423,6 @@ config USER_BUSYBOX_DHCPRELAY
 config USER_BUSYBOX_UDHCPC
 	bool "udhcpc (24 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	udhcpc is a DHCP client geared primarily toward embedded systems,
 	while striving to be fully functional and RFC compliant.
@@ -7519,6 +7520,14 @@ config USER_BUSYBOX_FEATURE_UDHCPC6_RFC5970
 
 comment "Common options for DHCP applets"
         depends on USER_BUSYBOX_UDHCPD || USER_BUSYBOX_UDHCPC || USER_BUSYBOX_UDHCPC6 || USER_BUSYBOX_DHCPRELAY
+
+config USER_BUSYBOX_UDHCPC_DEFAULT_INTERFACE
+	string "Default interface name"
+	default "eth0"
+	depends on USER_BUSYBOX_UDHCPC || USER_BUSYBOX_UDHCPC6
+	help
+	The interface that will be used if no other interface is
+	specified on the commandline.
 
 config USER_BUSYBOX_FEATURE_UDHCP_PORT
 	bool "Enable '-P port' option for udhcpd and udhcpc"
@@ -7687,7 +7696,6 @@ menu "Process Utilities"
 config USER_BUSYBOX_FREE
 	bool "free (3.1 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX #sysinfo()
 	help
 	free displays the total amount of free and used physical and swap
 	memory in the system, as well as the buffers used by the kernel.
@@ -7822,7 +7830,6 @@ config USER_BUSYBOX_FEATURE_PS_TIME
 	bool "Enable -o time and -o etime specifiers"
 	default y
 	depends on (USER_BUSYBOX_PS || USER_BUSYBOX_MINIPS) && USER_BUSYBOX_DESKTOP
-	select USER_BUSYBOX_PLATFORM_LINUX
 
 config USER_BUSYBOX_FEATURE_PS_UNUSUAL_SYSTEMS
 	bool "Support Linux prior to 2.4.0 and non-ELF systems"
@@ -7921,7 +7928,6 @@ config USER_BUSYBOX_FEATURE_TOPMEM
 config USER_BUSYBOX_UPTIME
 	bool "uptime (3.7 kb)"
 	default y
-	select USER_BUSYBOX_PLATFORM_LINUX #sysinfo()
 	help
 	uptime gives a one line display of the current time, how long
 	the system has been running, how many users are currently logged
@@ -8166,6 +8172,7 @@ choice
 config USER_BUSYBOX_SH_IS_ASH
 	depends on !USER_BUSYBOX_NOMMU
 	bool "ash"
+	select USER_BUSYBOX_SHELL_ASH
 	help
 	Choose ash to be the shell executed by 'sh' name.
 	The ash code will be built into busybox. If you don't select
@@ -8174,6 +8181,7 @@ config USER_BUSYBOX_SH_IS_ASH
 
 config USER_BUSYBOX_SH_IS_HUSH
 	bool "hush"
+	select USER_BUSYBOX_SHELL_HUSH
 	help
 	Choose hush to be the shell executed by 'sh' name.
 	The hush code will be built into busybox. If you don't select
@@ -8206,6 +8214,7 @@ choice
 config USER_BUSYBOX_BASH_IS_ASH
 	depends on !USER_BUSYBOX_NOMMU
 	bool "ash"
+	select USER_BUSYBOX_SHELL_ASH
 	help
 	Choose ash to be the shell executed by 'bash' name.
 	The ash code will be built into busybox. If you don't select
@@ -8214,6 +8223,7 @@ config USER_BUSYBOX_BASH_IS_ASH
 
 config USER_BUSYBOX_BASH_IS_HUSH
 	bool "hush"
+	select USER_BUSYBOX_SHELL_HUSH
 	help
 	Choose hush to be the shell executed by 'bash' name.
 	The hush code will be built into busybox. If you don't select
@@ -8226,10 +8236,15 @@ config USER_BUSYBOX_BASH_IS_NONE
 endchoice
 
 
+config USER_BUSYBOX_SHELL_ASH
+	bool #hidden option
+	depends on !USER_BUSYBOX_NOMMU
+
 config USER_BUSYBOX_ASH
 	bool "ash (78 kb)"
 	default y
 	depends on !USER_BUSYBOX_NOMMU
+	select USER_BUSYBOX_SHELL_ASH
 	help
 	The most complete and most pedantically correct shell included with
 	busybox. This shell is actually a derivative of the Debian 'dash'
@@ -8239,17 +8254,17 @@ config USER_BUSYBOX_ASH
 # ash options
 # note: Don't remove !NOMMU part in the next line; it would break
 # menuconfig's indenting.
-if !USER_BUSYBOX_NOMMU && (USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH)
+if !USER_BUSYBOX_NOMMU && (USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH)
 
 config USER_BUSYBOX_ASH_OPTIMIZE_FOR_SIZE
 	bool "Optimize for size instead of speed"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_INTERNAL_GLOB
 	bool "Use internal glob() implementation"
 	default y	# Y is bigger, but because of uclibc glob() bug, let Y be default for now
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 	help
 	Do not use glob() function from libc, use internal implementation.
 	Use this if you are getting "glob.h: No such file or directory"
@@ -8260,7 +8275,7 @@ config USER_BUSYBOX_ASH_INTERNAL_GLOB
 config USER_BUSYBOX_ASH_BASH_COMPAT
 	bool "bash-compatible extensions"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_BASH_SOURCE_CURDIR
 	bool "'source' and '.' builtins search current directory after $PATH"
@@ -8281,17 +8296,17 @@ config USER_BUSYBOX_ASH_BASH_NOT_FOUND_HOOK
 config USER_BUSYBOX_ASH_JOB_CONTROL
 	bool "Job control"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_ALIAS
 	bool "Alias support"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_RANDOM_SUPPORT
 	bool "Pseudorandom generator and $RANDOM variable"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 	help
 	Enable pseudorandom generator and dynamic variable "$RANDOM".
 	Each read of "$RANDOM" will generate a new pseudorandom value.
@@ -8302,7 +8317,7 @@ config USER_BUSYBOX_ASH_RANDOM_SUPPORT
 config USER_BUSYBOX_ASH_EXPAND_PRMT
 	bool "Expand prompt string"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 	help
 	$PS# may contain volatile content, such as backquote commands.
 	This option recreates the prompt string from the environment
@@ -8311,14 +8326,14 @@ config USER_BUSYBOX_ASH_EXPAND_PRMT
 config USER_BUSYBOX_ASH_IDLE_TIMEOUT
 	bool "Idle timeout variable $TMOUT"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 	help
 	Enable bash-like auto-logout after $TMOUT seconds of idle time.
 
 config USER_BUSYBOX_ASH_MAIL
 	bool "Check for new mail in interactive shell"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 	help
 	Enable "check for new mail" function:
 	if set, $MAIL file and $MAILPATH list of files
@@ -8328,36 +8343,43 @@ config USER_BUSYBOX_ASH_MAIL
 config USER_BUSYBOX_ASH_ECHO
 	bool "echo builtin"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_PRINTF
 	bool "printf builtin"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_TEST
 	bool "test builtin"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_HELP
 	bool "help builtin"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_GETOPTS
 	bool "getopts builtin"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 
 config USER_BUSYBOX_ASH_CMDCMD
 	bool "command builtin"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH
+	depends on USER_BUSYBOX_SHELL_ASH
 	help
 	Enable support for the 'command' builtin, which allows
 	you to run the specified command or builtin,
 	even when there is a function with the same name.
+
+config USER_BUSYBOX_ASH_TIMESTAMP_FLAG
+	bool "set -t support"
+	default n
+	depends on USER_BUSYBOX_SHELL_ASH
+	help
+	Enable timestamping together with 'set -x'.
 
 endif # ash options
 config USER_BUSYBOX_CTTYHACK
@@ -8406,6 +8428,7 @@ config USER_BUSYBOX_CTTYHACK
 config USER_BUSYBOX_HUSH
 	bool "hush (68 kb)"
 	default y
+	select USER_BUSYBOX_SHELL_HUSH
 	help
 	hush is a small shell. It handles the normal flow control
 	constructs such as if/then/elif/else/fi, for/in/do/done, while loops,
@@ -8417,10 +8440,18 @@ config USER_BUSYBOX_HUSH
 	It does not handle select, aliases, tilde expansion,
 	&>file and >&file redirection of stdout+stderr.
 
+config USER_BUSYBOX_SHELL_HUSH
+	bool "Internal shell for embedded script support"
+	default n
+
+# hush options
+# It's only needed to get "nice" menuconfig indenting.
+if USER_BUSYBOX_SHELL_HUSH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+
 config USER_BUSYBOX_HUSH_BASH_COMPAT
 	bool "bash-compatible extensions"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_BRACE_EXPANSION
 	bool "Brace expansion"
@@ -8429,11 +8460,6 @@ config USER_BUSYBOX_HUSH_BRACE_EXPANSION
 	help
 	Enable {abc,def} extension.
 
-config USER_BUSYBOX_HUSH_LINENO_VAR
-	bool "$LINENO variable"
-	default y
-	depends on USER_BUSYBOX_HUSH_BASH_COMPAT
-
 config USER_BUSYBOX_HUSH_BASH_SOURCE_CURDIR
 	bool "'source' and '.' builtins search current directory after $PATH"
 	default n   # do not encourage non-standard behavior
@@ -8441,10 +8467,15 @@ config USER_BUSYBOX_HUSH_BASH_SOURCE_CURDIR
 	help
 	This is not compliant with standards. Avoid if possible.
 
+config USER_BUSYBOX_HUSH_LINENO_VAR
+	bool "$LINENO variable (bashism)"
+	default y
+	depends on USER_BUSYBOX_SHELL_HUSH
+
 config USER_BUSYBOX_HUSH_INTERACTIVE
 	bool "Interactive mode"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable interactive mode (prompt and command editing).
 	Without this, hush simply reads and executes commands
@@ -8470,31 +8501,31 @@ config USER_BUSYBOX_HUSH_JOB
 config USER_BUSYBOX_HUSH_TICK
 	bool "Support command substitution"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable `command` and $(command).
 
 config USER_BUSYBOX_HUSH_IF
 	bool "Support if/then/elif/else/fi"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_LOOPS
 	bool "Support for, while and until loops"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_CASE
 	bool "Support case ... esac statement"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable case ... esac statement. +400 bytes.
 
 config USER_BUSYBOX_HUSH_FUNCTIONS
 	bool "Support funcname() { commands; } syntax"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable support for shell functions. +800 bytes.
 
@@ -8508,7 +8539,7 @@ config USER_BUSYBOX_HUSH_LOCAL
 config USER_BUSYBOX_HUSH_RANDOM_SUPPORT
 	bool "Pseudorandom generator and $RANDOM variable"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable pseudorandom generator and dynamic variable "$RANDOM".
 	Each read of "$RANDOM" will generate a new pseudorandom value.
@@ -8516,7 +8547,7 @@ config USER_BUSYBOX_HUSH_RANDOM_SUPPORT
 config USER_BUSYBOX_HUSH_MODE_X
 	bool "Support 'hush -x' option and 'set -x' command"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	This instructs hush to print commands before execution.
 	Adds ~300 bytes.
@@ -8524,27 +8555,27 @@ config USER_BUSYBOX_HUSH_MODE_X
 config USER_BUSYBOX_HUSH_ECHO
 	bool "echo builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_PRINTF
 	bool "printf builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_TEST
 	bool "test builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_HELP
 	bool "help builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_EXPORT
 	bool "export builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_EXPORT_N
 	bool "Support 'export -n' option"
@@ -8556,83 +8587,85 @@ config USER_BUSYBOX_HUSH_EXPORT_N
 config USER_BUSYBOX_HUSH_READONLY
 	bool "readonly builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable support for read-only variables.
 
 config USER_BUSYBOX_HUSH_KILL
 	bool "kill builtin (supports kill %jobspec)"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_WAIT
 	bool "wait builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_COMMAND
 	bool "command builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_TRAP
 	bool "trap builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_TYPE
 	bool "type builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_TIMES
 	bool "times builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_READ
 	bool "read builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_SET
 	bool "set builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_UNSET
 	bool "unset builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_ULIMIT
 	bool "ulimit builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_UMASK
 	bool "umask builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_GETOPTS
 	bool "getopts builtin"
 	default y
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_HUSH_MEMLEAK
 	bool "memleak builtin (debugging)"
 	default n
-	depends on USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_HUSH
+
+endif # hush options
 
 
 comment "Options common to all shells"
-if USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+if USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 
 config USER_BUSYBOX_FEATURE_SH_MATH
 	bool "POSIX math support"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable math support in the shell via $((...)) syntax.
 
@@ -8653,14 +8686,14 @@ config USER_BUSYBOX_FEATURE_SH_MATH_BASE
 config USER_BUSYBOX_FEATURE_SH_EXTRA_QUIET
 	bool "Hide message on interactive shell startup"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	Remove the busybox introduction when starting a shell.
 
 config USER_BUSYBOX_FEATURE_SH_STANDALONE
 	bool "Standalone shell"
 	default n
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	This option causes busybox shells to use busybox applets
 	in preference to executables in the PATH whenever possible. For
@@ -8681,7 +8714,7 @@ config USER_BUSYBOX_FEATURE_SH_STANDALONE
 config USER_BUSYBOX_FEATURE_SH_NOFORK
 	bool "Run 'nofork' applets directly"
 	default n
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	This option causes busybox shells to not execute typical
 	fork/exec/wait sequence, but call <applet>_main directly,
@@ -8699,14 +8732,14 @@ config USER_BUSYBOX_FEATURE_SH_NOFORK
 config USER_BUSYBOX_FEATURE_SH_READ_FRAC
 	bool "read -t N.NNN support (+110 bytes)"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	Enable support for fractional second timeout in read builtin.
 
 config USER_BUSYBOX_FEATURE_SH_HISTFILESIZE
 	bool "Use $HISTFILESIZE"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	This option makes busybox shells to use $HISTFILESIZE variable
 	to set shell history size. Note that its max value is capped
@@ -8715,7 +8748,7 @@ config USER_BUSYBOX_FEATURE_SH_HISTFILESIZE
 config USER_BUSYBOX_FEATURE_SH_EMBEDDED_SCRIPTS
 	bool "Embed scripts in the binary"
 	default y
-	depends on USER_BUSYBOX_ASH || USER_BUSYBOX_HUSH || USER_BUSYBOX_SH_IS_ASH || USER_BUSYBOX_BASH_IS_ASH || USER_BUSYBOX_SH_IS_HUSH || USER_BUSYBOX_BASH_IS_HUSH
+	depends on USER_BUSYBOX_SHELL_ASH || USER_BUSYBOX_SHELL_HUSH
 	help
 	Allow scripts to be compressed and embedded in the busybox
 	binary. The scripts should be placed in the 'embed' directory
@@ -8754,7 +8787,6 @@ config USER_BUSYBOX_FEATURE_KLOGD_KLOGCTL
 	bool "Use the klogctl() interface"
 	default y
 	depends on USER_BUSYBOX_KLOGD
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	The klogd applet supports two interfaces for reading
 	kernel messages. Linux provides the klogctl() interface
@@ -8847,6 +8879,14 @@ config USER_BUSYBOX_FEATURE_SYSLOGD_CFG
 	help
 	Supports restricted syslogd config. See docs/syslog.conf.txt
 
+config USER_BUSYBOX_FEATURE_SYSLOGD_PRECISE_TIMESTAMPS
+	bool "Include milliseconds in timestamps"
+	default n
+	depends on USER_BUSYBOX_SYSLOGD
+	help
+	Includes milliseconds (HH:MM:SS.mmm) in timestamp when
+	timestamps are added.
+
 config USER_BUSYBOX_FEATURE_SYSLOGD_READ_BUFFER_SIZE
 	int "Read buffer size in bytes"
 	default 256
@@ -8884,7 +8924,6 @@ config USER_BUSYBOX_FEATURE_KMSG_SYSLOG
 	bool "Linux kernel printk buffer support"
 	default y
 	depends on USER_BUSYBOX_SYSLOGD
-	select USER_BUSYBOX_PLATFORM_LINUX
 	help
 	When you enable this feature, the syslogd utility will
 	write system log message to the Linux kernel's printk buffer.

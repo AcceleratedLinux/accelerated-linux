@@ -434,6 +434,7 @@ static int dpi_bridge_attach(struct drm_bridge *bridge,
 
 static enum drm_mode_status
 dpi_bridge_mode_valid(struct drm_bridge *bridge,
+		       const struct drm_display_info *info,
 		       const struct drm_display_mode *mode)
 {
 	struct dpi_data *dpi = drm_bridge_to_dpi(bridge);
@@ -640,7 +641,6 @@ static int dpi_init_output_port(struct dpi_data *dpi, struct device_node *port)
 	out->type = OMAP_DISPLAY_TYPE_DPI;
 	out->dispc_channel = dpi_get_channel(dpi);
 	out->of_port = port_num;
-	out->owner = THIS_MODULE;
 
 	r = omapdss_device_init_output(out, &dpi->bridge);
 	if (r < 0) {

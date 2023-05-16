@@ -1,0 +1,142 @@
+#!/bin/bash
+
+function usage {
+	appname=`basename $0`
+	echo "Usage: $appname first.ip.address netmask [interface]"
+	exit 1
+}
+
+function quad2dec {
+	quad=$1
+	q=( ${quad//./ } )
+	dec=$(printf %02x%02x%02x%02x ${q[0]} ${q[1]} ${q[2]} ${q[3]})
+	printf %lu 0x$dec
+}
+
+function dec2quad {
+	dec=$1
+	for (( j=3 ;; j-- )); do
+		echo -n	$(( dec >> (8 * j) & 0xff ))
+		[[ $j -eq 0 ]] && break
+		echo -n "."
+	done
+	echo ""
+}
+
+function dec2cidr {
+        dec=$1
+	for (( i=0; i < 32; i++ )); do
+		[[ $(( 1<<$i & $dec )) -eq $(( 1<<$i )) ]] && break
+	done
+	echo $(( 32 - $i ))
+}
+
+function confirm {
+	if [[ "$CONFIRM" == "n" ]]; then
+		true
+	else
+		cmd="$1"
+		echo "About to run:"
+		echo -e "---\n$cmd\n---"
+		read -p "Run command? [y/N] " response
+		case $response in
+		[yY][eE][sS]|[yY]) 
+			true
+			;;
+		*)
+			false
+			;;
+		esac
+	fi
+}
+
+address=$1
+netmask=$2
+interface=$3
+
+[[ -z "$address" ]] && usage
+[[ -z "$netmask" ]] && usage
+[[ -z "$interface" ]] && interface="wan"
+
+[[ -z "$NUMPORTS" ]] && NUMPORTS=$(cat /var/run/serial-ports | wc -l)
+[[ -z "$CONFIRM" ]] && CONFIRM="n"
+[[ -z "$UNAUTHTEL" ]] && UNAUTHTEL="n"
+
+echo "Calculating per-port addresses"
+
+addr=$(quad2dec $address)
+mask=$(quad2dec $netmask)
+
+declare -a addrs=( )
+for (( i=0; ${#addrs[@]} < $NUMPORTS; i++ )); do
+	addr=$(( $(quad2dec $address) + $i ))
+	
+	# Skip network and broadcast addresses
+	naddr=$(( $addr & $mask ))
+	baddr=$(( $naddr | ~$mask ))
+	[[ "$addr" -eq "$baddr" || "$addr" -eq "$naddr" ]] && continue
+	
+	addrs=( "${addrs[@]}" $(dec2quad $addr) )
+done
+
+echo "Configuring per-port IP aliases"
+
+cidrmask=$(dec2cidr $mask)
+alias=$(echo "${addrs[@]}" | sed "s: :/$cidrmask, :g")
+alias="$alias/$cidrmask"
+
+oldalias=$(config -g config.interfaces.$interface.alias | cut -f2 -d' ')
+[[ -n "$oldalias" ]] && alias="$alias, $oldalias"
+
+cmd="config -s config.interfaces.$interface.alias=\"$alias\""
+confirm "$cmd" && eval "$cmd"
+
+echo "Configuring port forward rules"
+
+sshbase=$(config -g config.services.ssh.portbase | cut -f2 -d' ')
+[[ -z "$sshbase" ]] && sshbase=3000
+sshport=$(config -g config.services.ssh.port | cut -f2 -d' ')
+[[ -z "$sshport" ]] && sshport=22
+
+if [[ "$UNAUTHTEL" == "n" ]]; then
+	telbase=$(config -g config.services.telnet.portbase | cut -f2 -d' ')
+	[[ -z "$telbase" ]] && telbase=2000
+else
+	telbase=$(config -g config.services.unauthtel.portbase | cut -f2 -d' ')
+	[[ -z "$telbase" ]] && telbase=6000
+fi
+telport=$(config -g config.services.telnet.port | cut -f2 -d' ')
+[[ -z "$telport" ]] && telport=23
+
+total=$(config -g config.firewall.portforwards.total | cut -f2 -d' ')
+[[ -z "$total" ]] && total=0
+
+for (( i=0; i < ${#addrs[@]}; i++ )); do
+	port=$(( i + 1 ))
+	total=$(( total + 1 ))
+	args="$args \
+-s config.firewall.portforwards.portforward${total}.in_interface=$interface \
+-s config.firewall.portforwards.portforward${total}.in_ports=$sshport \
+-s config.firewall.portforwards.portforward${total}.dst_ip=${addrs[$i]} \
+-s config.firewall.portforwards.portforward${total}.name=SSH\\ Serial\\ Port\\ $port \
+-s config.firewall.portforwards.portforward${total}.out_ports=$(( $sshbase + $port )) \
+-s config.firewall.portforwards.portforward${total}.protocol=tcp"
+	total=$(( total + 1 ))
+	args="$args \
+-s config.firewall.portforwards.portforward${total}.in_interface=$interface \
+-s config.firewall.portforwards.portforward${total}.in_ports=$telport \
+-s config.firewall.portforwards.portforward${total}.dst_ip=${addrs[$i]} \
+-s config.firewall.portforwards.portforward${total}.name=Telnet\\ Serial\\ Port\\ $port \
+-s config.firewall.portforwards.portforward${total}.out_ports=$(( $telbase + $port )) \
+-s config.firewall.portforwards.portforward${total}.protocol=tcp"
+done
+
+cmd="config $args -s config.firewall.portforwards.total=$total"
+confirm "$cmd" && eval "$cmd"
+
+echo "Applying configuration"
+
+cmd="config -r ipconfig"
+confirm "$cmd" && eval "$cmd"
+
+exit $?

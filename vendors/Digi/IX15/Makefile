@@ -7,6 +7,7 @@ UROMFSIMG = $(IMAGEDIR)/urootfs.bin
 ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
+IMAGESIZE = 67108864 # 64MB
 
 SIGNING_ALG = ecdsa
 
@@ -48,6 +49,11 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) -d /etc/inittab.d/console
 	$(ROMFSINST) -d -p 555 /bin/serial-mode
+	$(ROMFSINST) -p 644 /etc/test_interfaces.py
+	$(ROMFSINST) -p 644 /etc/emc.conf
+	$(ROMFSINST) -p 555 /etc/emc
+	$(ROMFSINST) -p 644 /etc/emc-ul.conf
+	$(ROMFSINST) -p 555 /etc/emc-ul
 	echo "Digi IX15" > $(ROMFSDIR)/etc/issue
 
 romfs.post:: romfs.cleanup
@@ -59,7 +65,7 @@ uimage.bin:
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x83800000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/$(DTB) $(IMAGEDIR)/
 
-image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

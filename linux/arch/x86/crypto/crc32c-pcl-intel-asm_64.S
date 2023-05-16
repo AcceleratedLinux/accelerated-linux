@@ -43,7 +43,6 @@
  * SOFTWARE.
  */
 
-#include <asm/inst.h>
 #include <linux/linkage.h>
 #include <asm/nospec-branch.h>
 
@@ -54,7 +53,7 @@
 .endm
 
 .macro JMPTBL_ENTRY i
-.word crc_\i - crc_array
+.quad crc_\i
 .endm
 
 .macro JNC_LESS_THAN j
@@ -169,10 +168,7 @@ continue_block:
 	xor     crc2, crc2
 
 	## branch into array
-	lea	jump_table(%rip), %bufp
-	movzxw  (%bufp, %rax, 2), len
-	lea	crc_array(%rip), %bufp
-	lea     (%bufp, len, 1), %bufp
+	mov	jump_table(,%rax,8), %bufp
 	JMP_NOSPEC bufp
 
 	################################################################
@@ -199,6 +195,7 @@ crc_array:
 .altmacro
 LABEL crc_ %i
 .noaltmacro
+	ENDBR
 	crc32q   -i*8(block_0), crc_init
 	crc32q   -i*8(block_1), crc1
 	crc32q   -i*8(block_2), crc2
@@ -208,6 +205,7 @@ LABEL crc_ %i
 .altmacro
 LABEL crc_ %i
 .noaltmacro
+	ENDBR
 	crc32q   -i*8(block_0), crc_init
 	crc32q   -i*8(block_1), crc1
 # SKIP  crc32  -i*8(block_2), crc2 ; Don't do this one yet
@@ -225,10 +223,10 @@ LABEL crc_ %i
 	subq    %rax, tmp			# tmp -= rax*24
 
 	movq    crc_init, %xmm1			# CRC for block 1
-	PCLMULQDQ 0x00,%xmm0,%xmm1		# Multiply by K2
+	pclmulqdq $0x00, %xmm0, %xmm1		# Multiply by K2
 
 	movq    crc1, %xmm2			# CRC for block 2
-	PCLMULQDQ 0x10, %xmm0, %xmm2		# Multiply by K1
+	pclmulqdq $0x10, %xmm0, %xmm2		# Multiply by K1
 
 	pxor    %xmm2,%xmm1
 	movq    %xmm1, %rax
@@ -241,6 +239,7 @@ LABEL crc_ %i
 	################################################################
 
 LABEL crc_ 0
+	ENDBR
 	mov     tmp, len
 	cmp     $128*24, tmp
 	jae     full_block
@@ -310,7 +309,7 @@ do_return:
 	popq    %rsi
 	popq    %rdi
 	popq    %rbx
-        ret
+        RET
 SYM_FUNC_END(crc_pcl)
 
 .section	.rodata, "a", @progbits

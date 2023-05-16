@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<plugins>
+	<network>
+		<id>check_sdt_tcp</id>
+		<path>/bin/check_sdt_tcp</path>
+		<label>Check Permitted TCP</label>
+		<nsca>check_tcp_%PORT%</nsca>
+		<defargs>-p %PORT% -H %HOST%</defargs>
+		<args>
+			<arg1>
+				<label>Port:</label>
+				<key>PORT</key>
+				<link>tcp</link>
+			</arg1>
+		</args>
+	</network>
+	<network>
+		<id>check_sdt_udp</id>
+		<path>/bin/check_sdt_udp</path>
+		<label>Check Permitted UDP</label>
+		<nsca>check_udp_%PORT%</nsca>
+		<defargs>-p %PORT% -H %HOST% -s %SEND% -e %EXPECT%</defargs>
+		<args>
+			<arg1>
+				<label>Port:</label>
+				<key>PORT</key>
+				<link>udp</link>
+			</arg1>
+			<arg2>
+				<label>Send String:</label>
+				<key>SEND</key>
+			</arg2>
+			<arg3>
+				<label>Expect String:</label>
+				<key>EXPECT</key>
+			</arg3>
+		</args>
+	</network>
+	<network>
+		<id>check_tcp</id>
+		<path>/bin/check_tcp</path>
+		<label>Check TCP</label>
+		<nsca>check_tcp_%PORT%</nsca>
+		<defargs>-p %PORT% -H %HOST%</defargs>
+		<args>
+			<arg1>
+				<label>Port:</label>
+				<key>PORT</key>
+			</arg1>
+		</args>
+	</network>
+	<network>
+		<id>check_udp</id>
+		<path>/bin/check_udp</path>
+		<label>Check UDP</label>
+		<nsca>check_udp_%PORT%</nsca>
+		<defargs>-p %PORT% -H %HOST% -s %SEND% -e %EXPECT%</defargs>
+		<args>
+			<arg1>
+				<label>Port:</label>
+				<key>PORT</key>
+			</arg1>
+			<arg2>
+				<label>Send String:</label>
+				<key>SEND</key>
+			</arg2>
+			<arg3>
+				<label>Expect String:</label>
+				<key>EXPECT</key>
+			</arg3>
+		</args>
+	</network>
+	<network>
+		<id>check_ping</id>
+		<path>/bin/check_ping</path>
+		<label>Check Ping</label>
+		<nsca>check_ping</nsca>
+		<defargs>-H %HOST% -w 50,5% -c 100,50%</defargs>
+	</network>
+	<network>
+		<id>check_nrpe</id>
+		<path>/bin/check_nrpe</path>
+		<label>Check NRPE</label>
+		<nsca>check_nrpe_command</nsca>
+		<defargs>-H %HOST% -c %COMMAND%</defargs>
+		<args>
+			<arg1>
+				<label>Command:</label>
+				<key>COMMAND</key>
+			</arg1>
+		</args>
+	</network>
+	<serial>
+		<id>check_serial_signals</id>
+		<path>/bin/check_serial_signals</path>
+		<label>Check Handshaking</label>
+		<nsca>check_serial_signals</nsca>
+		<defargs>-l %PORT%</defargs>
+	</serial>
+	<serial>
+		<id>check_port_log</id>
+		<path>/bin/check_port_log</path>
+		<label>Check Last Log Entry</label>
+		<nsca>check_port_log</nsca>
+		<defargs>-l %PORT%</defargs>
+	</serial>
+</plugins>

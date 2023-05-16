@@ -39,7 +39,7 @@ struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv,
 }
 EXPORT_SYMBOL(devm_alloc_etherdev_mqs);
 
-static void devm_netdev_release(struct device *dev, void *this)
+static void devm_unregister_netdev(struct device *dev, void *this)
 {
 	struct net_device_devres *res = this;
 
@@ -60,7 +60,7 @@ static int netdev_devres_match(struct device *dev, void *this, void *match_data)
  *	@ndev: device to register
  *
  *	This is a devres variant of register_netdev() for which the unregister
- *	function will be call automatically when the managing device is
+ *	function will be called automatically when the managing device is
  *	detached. Note: the net_device used must also be resource managed by
  *	the same struct device.
  */
@@ -77,7 +77,7 @@ int devm_register_netdev(struct device *dev, struct net_device *ndev)
 				 netdev_devres_match, ndev)))
 		return -EINVAL;
 
-	dr = devres_alloc(devm_netdev_release, sizeof(*dr), GFP_KERNEL);
+	dr = devres_alloc(devm_unregister_netdev, sizeof(*dr), GFP_KERNEL);
 	if (!dr)
 		return -ENOMEM;
 

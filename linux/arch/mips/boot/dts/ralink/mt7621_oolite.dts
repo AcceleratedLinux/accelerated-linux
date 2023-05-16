@@ -15,7 +15,7 @@
 		bootargs = "console=ttyS0,57600 rd_start=0x88000000 rd_size=0x01000000";
 	};
 
-        palmbus: palmbus@1E000000 {
+        palmbus: palmbus@1e000000 {
 		i2c@900 {
 			status = "okay";
 			clock-frequency = <400000>;
@@ -26,21 +26,6 @@
 				gpio-controller;
 				#gpio-cells = <2>;
 			};
-		};
-
-		uartlite@e00 {
-			compatible = "ns16550a";
-			reg = <0xe00 0x100>;
-
-			clocks = <&sysclock>;
-			clock-frequency = <50000000>;
-
-			interrupt-parent = <&gic>;
-			interrupts = <GIC_SHARED 28 IRQ_TYPE_LEVEL_HIGH>;
-
-			reg-shift = <2>;
-			reg-io-width = <4>;
-			no-loopback-test;
 		};
 	};
 };

@@ -1,0 +1,162 @@
+readonly LABEL_OPTFS="UserFS"
+readonly GUID_OPTFS="eceab4b2-cd57-49d9-b0b4-63b6808bfae9"
+readonly OPTFS_PART=8
+readonly DRIVE=/dev/sda
+readonly CONFIGFS_FILE=/opt/.configfs
+# Leave ~500MB for OPT (in MB)
+readonly CONFIGFS_FILE_SIZE=4700
+
+hostname TX64-Rail-Single-Cellular
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=256M tmpfs /tmp
+mount -t tmpfs -o size=256M tmpfs /var
+#mkdir -m 755 /dev/hugepages
+#mount -t hugetlbfs none /dev/hugepages
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 64
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# rename interfaces to match rear label
+ip link set eth3 name eth4
+ip link set eth2 name eth3
+ip link set eth1 name eth2
+ip link set eth0 name eth1
+
+# initialise devices before we need them
+/etc/rc.dev
+
+# /efi filesystem
+mount -o discard /dev/flash/efi /efi
+
+# load I2C driver with modified frequency (100kHz, because of the ATECC508)
+modprobe i2c-designware-core bus_speed=100
+modprobe i2c-designware-pci
+
+# instantiate ATECC508 device
+echo "atsha204-i2c 0x60" > /sys/bus/i2c/devices/i2c-1/new_device
+
+# Check if OPT filesystem exists
+if ! sgdisk ${DRIVE} -p | grep -q "${LABEL_OPTFS}"; then
+	echo "Creating new OPT filesystem..."
+
+	# Fix GPT
+	sgdisk ${DRIVE} -e
+	sgdisk ${DRIVE} -new 0::-0 --typecode=0:8300 --change-name=0:"${LABEL_OPTFS}" --partition-guid=0:"${GUID_OPTFS}" > /dev/null
+	partprobe
+
+	mkfs.ext4 -F ${DRIVE}${OPTFS_PART}
+	mount -t ext4 -o discard ${DRIVE}${OPTFS_PART} /opt
+
+	ln -s /efi/grub /opt/boot
+
+	umount /opt
+else
+	echo "Mounting OPT filesystem..."
+fi
+
+# Mount OPT
+fsck.ext4 -p /dev/flash/opt
+mount -t ext4 -o discard /dev/flash/opt /opt
+
+echo "Starting watchdog ..."
+watchdog /dev/watchdog
+
+# pull values from BIOS
+echo "Loading BIOS information ..."
+/etc/dmi2fwenv
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+#setmac -i eth4,eth1,eth2,eth3,bmc -u -n 5
+#/etc/switch.sh
+
+#if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+#	/etc/factory
+#	exit 0
+#fi
+#if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+#	# Use the same setup as for factory testing
+#	/etc/factory
+#	exit 0
+#fi
+
+# Power up modem
+/bin/sim -o
+
+. /lib/configfs_lib.sh
+
+factory_reset=
+if nexcom-tool -f 2> /dev/null | grep -q 'set$'; then
+	# force erase if factory flag is set, this allows for it to be
+	# set while DAL is not actually running
+	factory_reset=1
+fi
+
+echo "Mounting config filesystem ..."
+if ! mount_configfs ${factory_reset} ; then
+	echo "Cannot mount config filesystem..."
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=4M tmpfs /etc/config
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+
+	# safe to clear factory flag now we are done
+	nexcom-tool -F 0 >/dev/null
+else
+	rm -f /etc/config/.init2
+fi
+
+# Run TRIM on all filesystems
+fstrim -a
+
+cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
+
+#load wifi module before we come up
+modprobe ath10k_pci
+
+# Note: it is safe to do this here, as the configfs-tool (used before) is
+# using the crypto chip to get the random number
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

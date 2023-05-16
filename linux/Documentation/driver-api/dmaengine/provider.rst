@@ -95,7 +95,7 @@ accommodates that API in some cases, and made some design choices to
 ensure that it stayed compatible.
 
 For more information on the Async TX API, please look the relevant
-documentation file in Documentation/crypto/async-tx-api.txt.
+documentation file in Documentation/crypto/async-tx-api.rst.
 
 DMAEngine APIs
 ==============
@@ -162,6 +162,29 @@ Currently, the types available are:
 
   - The device is able to do memory to memory copies
 
+- - DMA_MEMCPY_SG
+
+  - The device supports memory to memory scatter-gather transfers.
+
+  - Even though a plain memcpy can look like a particular case of a
+    scatter-gather transfer, with a single chunk to copy, it's a distinct
+    transaction type in the mem2mem transfer case. This is because some very
+    simple devices might be able to do contiguous single-chunk memory copies,
+    but have no support for more complex SG transfers.
+
+  - No matter what the overall size of the combined chunks for source and
+    destination is, only as many bytes as the smallest of the two will be
+    transmitted. That means the number and size of the scatter-gather buffers in
+    both lists need not be the same, and that the operation functionally is
+    equivalent to a ``strncpy`` where the ``count`` argument equals the smallest
+    total size of the two scatter-gather list buffers.
+
+  - It's usually used for copying pixel data between host memory and
+    memory-mapped GPU device memory, such as found on modern PCI video graphics
+    cards. The most immediate example is the OpenGL API function
+    ``glReadPielx()``, which might require a verbatim copy of a huge framebuffer
+    from local device memory onto host memory.
+
 - DMA_XOR
 
   - The device is able to perform XOR operations on memory areas
@@ -182,6 +205,12 @@ Currently, the types available are:
 
   - The device is able to perform parity check using RAID6 P+Q
     algorithm against a memory buffer.
+
+- DMA_MEMSET
+
+  - The device is able to fill memory with the provided pattern
+
+  - The pattern is treated as a single byte signed value.
 
 - DMA_INTERRUPT
 
@@ -238,6 +267,43 @@ Currently, the types available are:
   - It's usually used for 2d content transfers, in which case you
     want to transfer a portion of uncompressed data directly to the
     display to print it
+
+- DMA_COMPLETION_NO_ORDER
+
+  - The device does not support in order completion.
+
+  - The driver should return DMA_OUT_OF_ORDER for device_tx_status if
+    the device is setting this capability.
+
+  - All cookie tracking and checking API should be treated as invalid if
+    the device exports this capability.
+
+  - At this point, this is incompatible with polling option for dmatest.
+
+  - If this cap is set, the user is recommended to provide an unique
+    identifier for each descriptor sent to the DMA device in order to
+    properly track the completion.
+
+- DMA_REPEAT
+
+  - The device supports repeated transfers. A repeated transfer, indicated by
+    the DMA_PREP_REPEAT transfer flag, is similar to a cyclic transfer in that
+    it gets automatically repeated when it ends, but can additionally be
+    replaced by the client.
+
+  - This feature is limited to interleaved transfers, this flag should thus not
+    be set if the DMA_INTERLEAVE flag isn't set. This limitation is based on
+    the current needs of DMA clients, support for additional transfer types
+    should be added in the future if and when the need arises.
+
+- DMA_LOAD_EOT
+
+  - The device supports replacing repeated transfers at end of transfer (EOT)
+    by queuing a new transfer with the DMA_PREP_LOAD_EOT flag set.
+
+  - Support for replacing a currently running transfer at another point (such
+    as end of burst instead of end of transfer) will be added in the future
+    based on DMA clients needs, if and when the need arises.
 
 These various types will also affect how the source and destination
 addresses change over time.
@@ -397,7 +463,10 @@ supported.
   - Should use dma_set_residue to report it
 
   - In the case of a cyclic transfer, it should only take into
-    account the current period.
+    account the total size of the cyclic buffer.
+
+  - Should return DMA_OUT_OF_ORDER if the device does not support in order
+    completion and is completing the operation out of order.
 
   - This function can be called in an interrupt context.
 
@@ -488,7 +557,7 @@ dma_cookie_t
 DMA_CTRL_ACK
 
 - If clear, the descriptor cannot be reused by provider until the
-  client acknowledges receipt, i.e. has has a chance to establish any
+  client acknowledges receipt, i.e. has a chance to establish any
   dependency chains
 
 - This can be acked by invoking async_tx_ack()
@@ -530,6 +599,34 @@ DMA_CTRL_REUSE
     used for issuing commands to other peripherals/register reads/register
     writes for which the descriptor should be in different format from
     normal data descriptors.
+
+- DMA_PREP_REPEAT
+
+  - If set, the transfer will be automatically repeated when it ends until a
+    new transfer is queued on the same channel with the DMA_PREP_LOAD_EOT flag.
+    If the next transfer to be queued on the channel does not have the
+    DMA_PREP_LOAD_EOT flag set, the current transfer will be repeated until the
+    client terminates all transfers.
+
+  - This flag is only supported if the channel reports the DMA_REPEAT
+    capability.
+
+- DMA_PREP_LOAD_EOT
+
+  - If set, the transfer will replace the transfer currently being executed at
+    the end of the transfer.
+
+  - This is the default behaviour for non-repeated transfers, specifying
+    DMA_PREP_LOAD_EOT for non-repeated transfers will thus make no difference.
+
+  - When using repeated transfers, DMA clients will usually need to set the
+    DMA_PREP_LOAD_EOT flag on all transfers, otherwise the channel will keep
+    repeating the last repeated transfer and ignore the new transfers being
+    queued. Failure to set DMA_PREP_LOAD_EOT will appear as if the channel was
+    stuck on the previous transfer.
+
+  - This flag is only supported if the channel reports the DMA_LOAD_EOT
+    capability.
 
 General Design Notes
 ====================

@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: GPL-2.0
 
 ATOMICDIR=$(dirname $0)
-ARCH=$2
 
 . ${ATOMICDIR}/atomic-tbl.sh
 
-#gen_template_fallback(template, meta, pfx, name, sfx, order, arch, atomic, int, args...)
+#gen_template_fallback(template, meta, pfx, name, sfx, order, atomic, int, args...)
 gen_template_fallback()
 {
 	local template="$1"; shift
@@ -15,11 +14,10 @@ gen_template_fallback()
 	local name="$1"; shift
 	local sfx="$1"; shift
 	local order="$1"; shift
-	local arch="$1"; shift
 	local atomic="$1"; shift
 	local int="$1"; shift
 
-	local atomicname="${arch}${atomic}_${pfx}${name}${sfx}${order}"
+	local atomicname="arch_${atomic}_${pfx}${name}${sfx}${order}"
 
 	local ret="$(gen_ret_type "${meta}" "${int}")"
 	local retstmt="$(gen_ret_stmt "${meta}")"
@@ -34,7 +32,7 @@ gen_template_fallback()
 	fi
 }
 
-#gen_proto_fallback(meta, pfx, name, sfx, order, arch, atomic, int, args...)
+#gen_proto_fallback(meta, pfx, name, sfx, order, atomic, int, args...)
 gen_proto_fallback()
 {
 	local meta="$1"; shift
@@ -65,43 +63,25 @@ gen_proto_order_variant()
 	local name="$1"; shift
 	local sfx="$1"; shift
 	local order="$1"; shift
-	local arch="$1"
-	local atomic="$2"
+	local atomic="$1"
 
-	local basename="${arch}${atomic}_${pfx}${name}${sfx}"
+	local basename="arch_${atomic}_${pfx}${name}${sfx}"
 
-	printf "#define arch_${basename}${order} ${basename}${order}\n"
+	printf "#define ${basename}${order} ${basename}${order}\n"
 }
 
-#gen_proto_order_variants(meta, pfx, name, sfx, arch, atomic, int, args...)
+#gen_proto_order_variants(meta, pfx, name, sfx, atomic, int, args...)
 gen_proto_order_variants()
 {
 	local meta="$1"; shift
 	local pfx="$1"; shift
 	local name="$1"; shift
 	local sfx="$1"; shift
-	local arch="$1"
-	local atomic="$2"
+	local atomic="$1"
 
-	local basename="${arch}${atomic}_${pfx}${name}${sfx}"
+	local basename="arch_${atomic}_${pfx}${name}${sfx}"
 
 	local template="$(find_fallback_template "${pfx}" "${name}" "${sfx}" "${order}")"
-
-	if [ -z "$arch" ]; then
-		gen_proto_order_variant "${meta}" "${pfx}" "${name}" "${sfx}" "" "$@"
-
-		if meta_has_acquire "${meta}"; then
-			gen_proto_order_variant "${meta}" "${pfx}" "${name}" "${sfx}" "_acquire" "$@"
-		fi
-		if meta_has_release "${meta}"; then
-			gen_proto_order_variant "${meta}" "${pfx}" "${name}" "${sfx}" "_release" "$@"
-		fi
-		if meta_has_relaxed "${meta}"; then
-			gen_proto_order_variant "${meta}" "${pfx}" "${name}" "${sfx}" "_relaxed" "$@"
-		fi
-
-		echo ""
-	fi
 
 	# If we don't have relaxed atomics, then we don't bother with ordering fallbacks
 	# read_acquire and set_release need to be templated, though
@@ -128,7 +108,7 @@ gen_proto_order_variants()
 	gen_basic_fallbacks "${basename}"
 
 	if [ ! -z "${template}" ]; then
-		printf "#endif /* ${arch}${atomic}_${pfx}${name}${sfx} */\n\n"
+		printf "#endif /* ${basename} */\n\n"
 		gen_proto_fallback "${meta}" "${pfx}" "${name}" "${sfx}" "" "$@"
 		gen_proto_fallback "${meta}" "${pfx}" "${name}" "${sfx}" "_acquire" "$@"
 		gen_proto_fallback "${meta}" "${pfx}" "${name}" "${sfx}" "_release" "$@"
@@ -144,15 +124,11 @@ gen_proto_order_variants()
 	printf "#endif /* ${basename}_relaxed */\n\n"
 }
 
-gen_xchg_fallbacks()
+gen_order_fallbacks()
 {
 	local xchg="$1"; shift
+
 cat <<EOF
-#ifndef ${xchg}_relaxed
-#define ${xchg}_relaxed		${xchg}
-#define ${xchg}_acquire		${xchg}
-#define ${xchg}_release		${xchg}
-#else /* ${xchg}_relaxed */
 
 #ifndef ${xchg}_acquire
 #define ${xchg}_acquire(...) \\
@@ -169,9 +145,63 @@ cat <<EOF
 	__atomic_op_fence(${xchg}, __VA_ARGS__)
 #endif
 
-#endif /* ${xchg}_relaxed */
+EOF
+}
+
+gen_xchg_fallbacks()
+{
+	local xchg="$1"; shift
+	printf "#ifndef ${xchg}_relaxed\n"
+
+	gen_basic_fallbacks ${xchg}
+
+	printf "#else /* ${xchg}_relaxed */\n"
+
+	gen_order_fallbacks ${xchg}
+
+	printf "#endif /* ${xchg}_relaxed */\n\n"
+}
+
+gen_try_cmpxchg_fallback()
+{
+	local cmpxchg="$1"; shift;
+	local order="$1"; shift;
+
+cat <<EOF
+#ifndef arch_try_${cmpxchg}${order}
+#define arch_try_${cmpxchg}${order}(_ptr, _oldp, _new) \\
+({ \\
+	typeof(*(_ptr)) *___op = (_oldp), ___o = *___op, ___r; \\
+	___r = arch_${cmpxchg}${order}((_ptr), ___o, (_new)); \\
+	if (unlikely(___r != ___o)) \\
+		*___op = ___r; \\
+	likely(___r == ___o); \\
+})
+#endif /* arch_try_${cmpxchg}${order} */
 
 EOF
+}
+
+gen_try_cmpxchg_fallbacks()
+{
+	local cmpxchg="$1"; shift;
+
+	printf "#ifndef arch_try_${cmpxchg}_relaxed\n"
+	printf "#ifdef arch_try_${cmpxchg}\n"
+
+	gen_basic_fallbacks "arch_try_${cmpxchg}"
+
+	printf "#endif /* arch_try_${cmpxchg} */\n\n"
+
+	for order in "" "_acquire" "_release" "_relaxed"; do
+		gen_try_cmpxchg_fallback "${cmpxchg}" "${order}"
+	done
+
+	printf "#else /* arch_try_${cmpxchg}_relaxed */\n"
+
+	gen_order_fallbacks "arch_try_${cmpxchg}"
+
+	printf "#endif /* arch_try_${cmpxchg}_relaxed */\n\n"
 }
 
 cat << EOF
@@ -187,12 +217,16 @@ cat << EOF
 
 EOF
 
-for xchg in "${ARCH}xchg" "${ARCH}cmpxchg" "${ARCH}cmpxchg64"; do
+for xchg in "arch_xchg" "arch_cmpxchg" "arch_cmpxchg64"; do
 	gen_xchg_fallbacks "${xchg}"
 done
 
+for cmpxchg in "cmpxchg" "cmpxchg64"; do
+	gen_try_cmpxchg_fallbacks "${cmpxchg}"
+done
+
 grep '^[a-z]' "$1" | while read name meta args; do
-	gen_proto "${meta}" "${name}" "${ARCH}" "atomic" "int" ${args}
+	gen_proto "${meta}" "${name}" "atomic" "int" ${args}
 done
 
 cat <<EOF
@@ -203,7 +237,7 @@ cat <<EOF
 EOF
 
 grep '^[a-z]' "$1" | while read name meta args; do
-	gen_proto "${meta}" "${name}" "${ARCH}" "atomic64" "s64" ${args}
+	gen_proto "${meta}" "${name}" "atomic64" "s64" ${args}
 done
 
 cat <<EOF

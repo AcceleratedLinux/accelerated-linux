@@ -120,10 +120,10 @@ image:
 	$(CROSS)objcopy -O binary $(ROOTDIR)/$(LINUXDIR)/linux \
 			$(IMAGEDIR)/linux.bin
 	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 	cp $(IMAGE) /tftpboot
 	gzip -c -9 $(IMAGE) > $(IMAGEZ)
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGEZ) >> $(IMAGEZ)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGEZ) >> $(IMAGEZ)
 	cp $(IMAGEZ) /tftpboot
 	BSS=`$(CROSS)objdump --headers $(ROOTDIR)/$(LINUXDIR)/linux | \
 	  grep .bss` ; \

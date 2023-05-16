@@ -2,12 +2,10 @@
 #ifndef __MARVELL_CESA_H__
 #define __MARVELL_CESA_H__
 
-#include <crypto/algapi.h>
-#include <crypto/hash.h>
 #include <crypto/internal/hash.h>
 #include <crypto/internal/skcipher.h>
 
-#include <linux/crypto.h>
+#include <linux/dma-direction.h>
 #include <linux/dmapool.h>
 
 #define CESA_ENGINE_OFF(i)			(((i) * 0x2000))
@@ -68,7 +66,7 @@
 #define CESA_SA_ST_ACT_1			BIT(1)
 
 /*
- * CESA_SA_FPGA_INT_STATUS looks like a FPGA leftover and is documented only
+ * CESA_SA_FPGA_INT_STATUS looks like an FPGA leftover and is documented only
  * in Errata 4.12. It looks like that it was part of an IRQ-controller in FPGA
  * and someone forgot to remove  it while switching to the core and moving to
  * CESA_SA_INT_STATUS.
@@ -239,7 +237,7 @@ struct mv_cesa_sec_accel_desc {
  * Context associated to a cipher operation.
  */
 struct mv_cesa_skcipher_op_ctx {
-	u32 key[8];
+	__le32 key[8];
 	u32 iv[4];
 };
 
@@ -252,7 +250,7 @@ struct mv_cesa_skcipher_op_ctx {
  */
 struct mv_cesa_hash_op_ctx {
 	u32 iv[16];
-	u32 hash[8];
+	__le32 hash[8];
 };
 
 /**
@@ -300,8 +298,14 @@ struct mv_cesa_op_ctx {
  */
 struct mv_cesa_tdma_desc {
 	__le32 byte_cnt;
-	__le32 src;
-	__le32 dst;
+	union {
+		__le32 src;
+		u32 src_dma;
+	};
+	union {
+		__le32 dst;
+		u32 dst_dma;
+	};
 	__le32 next_dma;
 
 	/* Software state */
@@ -424,6 +428,7 @@ struct mv_cesa_dev {
  * @id:			engine id
  * @regs:		engine registers
  * @sram:		SRAM memory region
+ * @sram_pool:		SRAM memory region from pool
  * @sram_dma:		DMA address of the SRAM memory region
  * @lock:		engine lock
  * @req:		current crypto request
@@ -444,7 +449,10 @@ struct mv_cesa_dev {
 struct mv_cesa_engine {
 	int id;
 	void __iomem *regs;
-	void __iomem *sram;
+	union {
+		void __iomem *sram;
+		void *sram_pool;
+	};
 	dma_addr_t sram_dma;
 	spinlock_t lock;
 	struct crypto_async_request *req;
@@ -457,6 +465,7 @@ struct mv_cesa_engine {
 	atomic_t load;
 	struct mv_cesa_tdma_chain chain;
 	struct list_head complete_queue;
+	int irq;
 };
 
 /**
@@ -505,7 +514,7 @@ struct mv_cesa_hash_ctx {
  */
 struct mv_cesa_hmac_ctx {
 	struct mv_cesa_ctx base;
-	u32 iv[16];
+	__be32 iv[16];
 };
 
 /**
@@ -861,6 +870,31 @@ int mv_cesa_dma_add_op_transfers(struct mv_cesa_tdma_chain *chain,
 				 struct mv_cesa_dma_iter *dma_iter,
 				 struct mv_cesa_sg_dma_iter *sgiter,
 				 gfp_t gfp_flags);
+
+size_t mv_cesa_sg_copy(struct mv_cesa_engine *engine,
+		       struct scatterlist *sgl, unsigned int nents,
+		       unsigned int sram_off, size_t buflen, off_t skip,
+		       bool to_sram);
+
+static inline size_t mv_cesa_sg_copy_to_sram(struct mv_cesa_engine *engine,
+					     struct scatterlist *sgl,
+					     unsigned int nents,
+					     unsigned int sram_off,
+					     size_t buflen, off_t skip)
+{
+	return mv_cesa_sg_copy(engine, sgl, nents, sram_off, buflen, skip,
+			       true);
+}
+
+static inline size_t mv_cesa_sg_copy_from_sram(struct mv_cesa_engine *engine,
+					       struct scatterlist *sgl,
+					       unsigned int nents,
+					       unsigned int sram_off,
+					       size_t buflen, off_t skip)
+{
+	return mv_cesa_sg_copy(engine, sgl, nents, sram_off, buflen, skip,
+			       false);
+}
 
 /* Algorithm definitions */
 

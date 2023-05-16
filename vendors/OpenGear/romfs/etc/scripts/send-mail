@@ -1,0 +1,22 @@
+#!/bin/bash
+
+source /etc/scripts/mutex
+
+toaddr="$1"
+fromaddr=$2
+subject="$3"
+mailhost=$4
+options="$5"
+
+if [ -z "$toaddr" -o -z "$fromaddr" -o -z "$subject" -o -z "$mailhost" ]; then
+	echo "Usage: send-mail <recipient> <sender> <subject> <smtp-server> [msmtp-options]"
+	exit 1
+fi
+
+( echo "From: $fromaddr
+To: $toaddr
+Subject: $subject
+
+"; cat ) | msmtp -f $fromaddr --read-recipients --host=$mailhost $options
+
+exit $?

@@ -1,0 +1,24 @@
+--- a/etc/ssl/openssl.cnf.fips
++++ b/etc/ssl/openssl.cnf.fips
+@@ -48,7 +48,7 @@
+ # fips provider. It contains a named section e.g. [fips_sect] which is
+ # referenced from the [provider_sect] below.
+ # Refer to the OpenSSL security policy for more information.
+-# .include fipsmodule.cnf
++.include /var/run/fipsmodule.cnf
+ 
+ [openssl_init]
+ providers = provider_sect
+@@ -58,7 +58,11 @@
+ default = default_sect
+ # The fips section name should match the section name inside the
+ # included fipsmodule.cnf.
+-# fips = fips_sect
++fips = fips_sect
++base = base_sect          
++
++[base_sect]                         
++activate = 1
+ 
+ # If no providers are activated explicitly, the default one is activated implicitly.
+ # See man 7 OSSL_PROVIDER-default for more details.

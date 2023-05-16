@@ -30,7 +30,7 @@ config QRTR_TUN
 
 config QRTR_MHI
 	tristate "MHI IPC Router channels"
-	depends on MHI_BUS
+	depends on (MHI_BUS || MHI_QCA_BUS)
 	help
 	  Say Y here to support MHI based ipcrouter channels. MHI is the
 	  transport used for communicating to external modems.

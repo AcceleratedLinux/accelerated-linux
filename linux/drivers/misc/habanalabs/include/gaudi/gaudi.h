@@ -38,11 +38,13 @@
 
 #define QMAN_PQ_ENTRY_SIZE	16			/* Bytes */
 
-#define MAX_ASID		1024
+#define MAX_ASID		2
 
 #define PROT_BITS_OFFS		0xF80
 
 #define MME_NUMBER_OF_MASTER_ENGINES	2
+
+#define MME_NUMBER_OF_SLAVE_ENGINES	2
 
 #define TPC_NUMBER_OF_ENGINES	8
 

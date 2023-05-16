@@ -63,7 +63,7 @@ static void tomoyo_bprm_committed_creds(struct linux_binprm *bprm)
 
 #ifndef CONFIG_SECURITY_TOMOYO_OMIT_USERSPACE_LOADER
 /**
- * tomoyo_bprm_for_exec - Target for security_bprm_creds_for_exec().
+ * tomoyo_bprm_creds_for_exec - Target for security_bprm_creds_for_exec().
  *
  * @bprm: Pointer to "struct linux_binprm".
  *
@@ -93,7 +93,7 @@ static int tomoyo_bprm_check_security(struct linux_binprm *bprm)
 	struct tomoyo_task *s = tomoyo_task(current);
 
 	/*
-	 * Execute permission is checked against pathname passed to do_execve()
+	 * Execute permission is checked against pathname passed to execve()
 	 * using current domain.
 	 */
 	if (!s->old_domain_info) {
@@ -113,8 +113,7 @@ static int tomoyo_bprm_check_security(struct linux_binprm *bprm)
 /**
  * tomoyo_inode_getattr - Target for security_inode_getattr().
  *
- * @mnt:    Pointer to "struct vfsmount".
- * @dentry: Pointer to "struct dentry".
+ * @path: Pointer to "struct path".
  *
  * Returns 0 on success, negative value otherwise.
  */
@@ -265,17 +264,26 @@ static int tomoyo_path_link(struct dentry *old_dentry, const struct path *new_di
  * @old_dentry: Pointer to "struct dentry".
  * @new_parent: Pointer to "struct path".
  * @new_dentry: Pointer to "struct dentry".
+ * @flags: Rename options.
  *
  * Returns 0 on success, negative value otherwise.
  */
 static int tomoyo_path_rename(const struct path *old_parent,
 			      struct dentry *old_dentry,
 			      const struct path *new_parent,
-			      struct dentry *new_dentry)
+			      struct dentry *new_dentry,
+			      const unsigned int flags)
 {
 	struct path path1 = { .mnt = old_parent->mnt, .dentry = old_dentry };
 	struct path path2 = { .mnt = new_parent->mnt, .dentry = new_dentry };
 
+	if (flags & RENAME_EXCHANGE) {
+		const int err = tomoyo_path2_perm(TOMOYO_TYPE_RENAME, &path2,
+				&path1);
+
+		if (err)
+			return err;
+	}
 	return tomoyo_path2_perm(TOMOYO_TYPE_RENAME, &path1, &path2);
 }
 
@@ -300,14 +308,13 @@ static int tomoyo_file_fcntl(struct file *file, unsigned int cmd,
 /**
  * tomoyo_file_open - Target for security_file_open().
  *
- * @f:    Pointer to "struct file".
- * @cred: Pointer to "struct cred".
+ * @f: Pointer to "struct file".
  *
  * Returns 0 on success, negative value otherwise.
  */
 static int tomoyo_file_open(struct file *f)
 {
-	/* Don't check read permission here if called from do_execve(). */
+	/* Don't check read permission here if called from execve(). */
 	if (current->in_execve)
 		return 0;
 	return tomoyo_check_open_permission(tomoyo_domain(), &f->f_path,
@@ -487,8 +494,8 @@ struct lsm_blob_sizes tomoyo_blob_sizes __lsm_ro_after_init = {
 /**
  * tomoyo_task_alloc - Target for security_task_alloc().
  *
- * @task:  Pointer to "struct task_struct".
- * @flags: clone() flags.
+ * @task:        Pointer to "struct task_struct".
+ * @clone_flags: clone() flags.
  *
  * Returns 0.
  */

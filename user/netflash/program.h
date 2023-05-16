@@ -16,6 +16,7 @@ extern int stop_early;		/* stop at end of input data, do not write full dev. */
 extern int dojffs2;		/* Write the jffs2 magic to unused segments */
 
 void program_flash(int rd, unsigned long image_length, long long devsize, unsigned char *sgdata, int sgsize);
+void check_flash(int rd, uint64_t devsize, unsigned char *sgdata, int sgsize);
 
 int program_flash_open(const char *rdev);
 

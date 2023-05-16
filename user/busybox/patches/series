@@ -10,14 +10,13 @@ nslookup-ipv6-fixes.patch
 udhcp.patch
 watchdog-oom.patch
 no-busybox-applet-allowed.patch
-use-clock_gettime.patch
 telnet-extra-opts.patch
 crontab-fixes.patch
 udhcp-send-hostname.patch
 udhcp-vendorspec.patch
-udhcp-warn-on-bad-tlv.patch
 udhcp-decode-239-as-vendorspec.patch
-udcp-119-domain-search.patch
-udhcp-bind-sending-interface.patch
+udhcp-119-domain-search.patch
 udhcp-new-server-at-T2.patch
 build-timestamp.patch
+ash-subevalvar.patch
+ash-add-set-t-flag-to-print-timestamp.patch

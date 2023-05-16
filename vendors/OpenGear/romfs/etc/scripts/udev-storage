@@ -1,0 +1,160 @@
+#!/bin/bash
+#
+# This script is invoked by udev when a block device changes state
+# (see libexec/udev/rules.d/70-storage.rules) and gives the storage
+# subsystem a chance to mount or unmount a 'device'-typed storage volume.
+#
+# The input envionment subset expected is:
+#  DEVNAME   full path to the primary device node, eg /dev/sda1
+#  DEVLINKS  space-separated list of symlinks, eg /dev/disk/by-id/123 ...
+#  ACTION    add|change|remove
+#
+# This script figures out which config.storage the $DEVNAME block device
+# belongs to by searching for a config.storage.S.type=device where
+# its associated config.storage.S.device is $DEVNAME or one of the $DEVLINKS.
+#
+# Once found, the device is mounted (optionally formatted) or umounted,
+# and all storage-consumers for that storage are notified.
+#
+#
+# This script only deals with "device"-typed storages, which have the
+# following config variables:
+#
+#  config.storage.S.type      = "device"
+#  config.storage.S.device    = The full /dev/ path to the device,
+#			        usually "/dev/disk/by-path/something" but
+#                               can be an order-dependent "/dev/sda1".
+#  config.storage.S.mountopts = Extra options to pass to /bin/mount,
+#				for example "-t vfat -o ro"
+#  config.storage.S.format    = Optional filesystem type to format
+#				the device if it fails to mount. eg "vfat"
+#
+# After mounting or unmounting the device, this script pushes the
+# following infod variables:
+#
+#  storage.S.devname	      = The udev <devname> used, eg "/dev/sda1"
+#  storage.<devname>	      = Backlink to storage, e.g. "storage.S"
+#  storage.S.optshash         = hash of the mount options passed to /bin/mount
+#
+
+. /etc/scripts/storage.sh
+
+# A hash function used to see if mount options changed
+md5hash () {
+	printf "%s" "$*" | md5sum - | tr -dc 0-9a-f
+}
+
+# If the device can't be mounted and has a .format config,
+# this is called to format it.
+format_device () {
+	# format $devname
+	local format="$(storage_getconf format)"
+	logger -t udev-storage -p daemon.warn \
+		"formatting $devname as $format"
+	mkfs.$format $devname
+}
+
+mount_device () {
+	#local devname="$(storage_getinfo devname)"  # set by caller
+	local existing_mnt="$(awk '$1 == devname { print $2; exit; }' devname="$devname" /proc/mounts)"
+	if [ -n "$existing_mnt" ]; then
+		logger -t udev-storage -p daemon.info \
+			"$storage ($devname) already mounted at $existing_mnt"
+		ln -s "$existing_mnt" "$mnt"
+		storage_setinfo 
+		storage_setinfo mount "$existing_mnt"
+	else
+		mkdir "$mnt"
+		local mountopts="$(storage_getconf mountopts)"
+		if ! error=$(mount $mountopts $devname "$mnt" 2>&1); then
+			if [ -n "$(storage_getconf format)" ] &&
+			   format_device &&
+			   error=$(mount $mountopts $devname "$mnt" 2>&1)
+			then
+			   : it worked
+			else
+			   rmdir "$mnt"
+			   return 1
+			fi
+		fi
+		storage_setinfo mount "$mnt"
+	fi
+	# (only set device-specific info here; the caller will set other
+	#  fields, like .available)
+	storage_setinfo devname "$devname"
+	storage_setinfo optshash $(md5hash "$mountopts")
+	infod_client -o push -t data -p storage.$devname -d "$storage"
+	return 0
+}
+
+umount_device () {
+	if [ -h "$mnt" ]; then
+		rm "$mnt"
+	else
+		(umount -f "$mnt"; rmdir "$mnt") 2>&1 |
+		    logger -t udev-storage -p daemon.err
+	fi
+	infod_client -o delete -p storage."$(storage_getinfo devname)"
+	storage_delinfo devname
+	storage_delinfo mount
+	storage_delinfo optshash
+}
+
+# Find which storage configuration is affected by this device event.
+storage="$(infod_client -q -o get -p storage.$DEVNAME)"
+if [ ! $storage ]; then
+	# We match DEVNAME and DEVLINKS to config.storage.*.device.
+	storages=($(config -g config.storage | awk '
+	BEGIN { split(ENVIRON["DEVLINKS"],dl);
+		for(i in dl) have_devlink[dl[i]]=1;
+		have_devlink[ENVIRON["DEVNAME"]]=1; }
+	$1 ~ /\.device$/ && have_devlink[$2] { split($1,key,"."); print "storage." key[3]; }
+	  # todo filter on .type=device
+	'))
+	case ${#storages[*]} in
+	0)
+		exit 0 			# matched none; give up
+		;;
+	1)
+		storage=${storages[0]}	# matched exactly one
+		;;
+	*)
+		storage=${storages[0]}	# matched multiple; use the 'first'
+		logger -t udev-storage -p daemon.warn \
+			"$DEVNAME matched multiple storages, using $storage"
+		;;
+	esac
+fi
+
+# Determine if the first partition of the disk is a FAT32/VFAT partition
+device_fat_partition () {
+	sfdisk $1 -l 2>/dev/null | grep "$11" | grep FAT32 | wc -l
+}
+
+storage_getconf  # pre-cache config values
+
+case $ACTION in
+add|change)
+	if [ "$(device_fat_partition $DEVNAME)" != 1 ]; then
+		# TODO check hashopts hasn't changed
+		info_devname="$(storage_getinfo devname)"
+		if [ -n "$info_devname" -a "$info_devname" != "$DEVNAME" ]; then
+			# User may have changed the device locator
+			# while it was mounted. Take it down.
+			# TODO check mountoptions haven't changed
+			storage_down $storage
+		fi
+		if [ "$(storage_getconf enabled)" = "on" ]; then
+			devname=$DEVNAME
+			storage_up $storage $DEVNAME
+		else
+			storage_down $storage
+		fi
+	fi
+	;;
+remove)
+	storage_down $storage
+	;;
+esac
+
+exit 0

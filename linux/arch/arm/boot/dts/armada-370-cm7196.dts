@@ -1,0 +1,451 @@
+/*
+ * Device Tree file for Opengear CM7300 309056_v01 (aka CM7196A)
+ *
+ * Note: prototype 309056_v00 (aka CM7196) had less RAM (256 MB)
+ * and smaller USB flash storage (16 GB).
+ *
+ * David Leonard, Opengear 2016
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+#include "armada-370.dtsi"
+
+/ {
+	model = "Opengear CM7196A";
+	compatible = "opengear,cm7196a",
+		     "opengear,cm7300",
+		     "marvell,armada370",
+		     "marvell,armada-370-xp";
+
+	aliases {
+		pciserial0 = &pciserial0;
+	};
+
+	chosen {
+		// stdout-path = "pciserial0:115200";
+		stdout-path = "uart0:115200";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x80000000>; /* 2 GB */
+	};
+
+	soc {
+		ranges = <MBUS_ID(0xf0, 0x01) 0 0xd0000000 0x100000
+			  MBUS_ID(0x01, 0xe0) 0 0xfff00000 0x100000>;
+		internal-regs {
+			console: serial@12000 {			/* console port */
+				serial = <96>;		/* UART0 at ttyS96 */
+				clock-frequency = <200000000>;
+				status = "okay";
+
+				rts-gpios = <&gpio1 (48 - 32) GPIO_ACTIVE_LOW>;
+				dtr-gpios = <&gpio1 (49 - 32) GPIO_ACTIVE_LOW>;
+				cts-gpios = <&gpio1 (50 - 32) GPIO_ACTIVE_LOW>;
+				dcd-gpios = <&gpio1 (51 - 32) GPIO_ACTIVE_LOW>;
+			};
+
+			timer@20300 {
+				clock-frequency = <600000000>;
+				status = "okay";
+			};
+
+			mdio {
+				pinctrl-0 = <&mdio_pins>;
+				pinctrl-names = "default";
+			};
+
+			ethernet@70000 {
+				pinctrl-0 = <&ge0_rgmii_pins>;
+				pinctrl-names = "default";
+				status = "okay";
+				phy = <&phy0>;
+				phy-mode = "rgmii-id";
+			};
+			ethernet@74000 {
+				pinctrl-0 = <&ge1_rgmii_pins>;
+				pinctrl-names = "default";
+				status = "okay";
+				phy = <&phy1>;
+				phy-mode = "rgmii-id";
+			};
+
+			usb@50000 {
+				status = "okay";
+			};
+
+			usb@51000 {
+				status = "okay";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				hub@1 {
+					compatible = "usb4b4,6572";
+					reg = <1>;
+					/* 64GB PHISON USB flash module at port 4 */
+				};
+			};
+
+			i2c@11000 {
+				status = "okay";
+				clock-frequency = <100000>;
+
+				tca6424: gpio@22 {
+					compatible = "ti,tca6424";
+					gpio-controller;
+					#gpio-cells = <2>;
+					reg = <0x22>;
+
+					pinctrl-0 = <&io_x_int_pin>;
+					pinctrl-names = "default";
+					interrupt-parent = <&gpio1>;
+					interrupts = <(53 - 32) GPIO_ACTIVE_LOW>;
+				};
+
+				lm75@48 {
+					compatible = "lm75";
+					reg = <0x48>;
+				};
+
+				/* PCIe switches have I2C interfaces */
+				// switch@5e { interrupts=<&gpio1 (58-32)>; }; // &pex0
+				// switch@5f { interrupts=<&gpio1 (57-32)>; }; // &pex1
+			};
+
+			nand@d0000 {
+				status = "okay";
+				pinctrl-0 = <&nand_pins>;
+				pinctrl-names = "default";
+				interrupts = <113>;
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				/*
+				num-cs = <1>;
+				marvell,nand-keep-config;
+				marvell,nand-enable-arbiter;
+				nand-on-flash-bbt;
+				wp-gpios = <&tca6424 0 GPIO_ACTIVE_LOW>;
+				*/
+
+				ubi@0 {
+					label = "ubi";
+					reg = <0x00000000 0xffe00000>;
+				};
+			};
+		};
+
+	};
+
+	sfp0 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c0>;
+		sfp,ethernet = <&eth0>;
+		tx-fault-gpio = <&tca6424 8 GPIO_ACTIVE_HIGH>;
+		tx-disable-gpio = <&tca6424 9 GPIO_ACTIVE_HIGH>;
+		//mod-pres-gpio = <&tca6424 10 GPIO_ACTIVE_HIGH>;
+		//rate-sel-gpio = <&tca6424 11 GPIO_ACTIVE_HIGH>;
+		los-gpio = <&tca6424 12 GPIO_ACTIVE_HIGH>;
+		//ready-gpio = <&tca6424 13 GPIO_ACTIVE_HIGH>;
+	};
+
+	sfp1 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c0>;
+		sfp,ethernet = <&eth1>;
+		tx-fault-gpio = <&tca6424 16 GPIO_ACTIVE_HIGH>;
+		tx-disable-gpio = <&tca6424 17 GPIO_ACTIVE_HIGH>;
+		//mod-pres-gpio = <&tca6424 18 GPIO_ACTIVE_HIGH>;
+		//rate-sel-gpio = <&tca6424 19 GPIO_ACTIVE_HIGH>;
+		los-gpio = <&tca6424 20 GPIO_ACTIVE_HIGH>;
+		//ready-gpio = <&tca6424 21 GPIO_ACTIVE_HIGH>;
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = <&erase_button_pin>;
+		pinctrl-names = "default";
+		button@0 {
+			reg = <0>;
+			label = "Erase Button";
+			linux,code = <KEY_DELETE>; /* was KEY_103RD */
+			gpios = <&gpio1 (55 - 32) GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	gpio_leds {
+		compatible = "gpio-leds";
+
+		green_power_led { /* pwr_led */
+			label = "cm7300:green:power";
+			gpios = <&tca6424 4 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		green_hb_led { /* hrtbt_led */
+			label = "cm7300:green:heartbeat";
+			gpios = <&tca6424 5 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		green_net_led { /* net_led */
+			label = "cm7300:green:net";
+			gpios = <&tca6424 6 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "net";
+		};
+
+		green_serial_led { /* serial_led */
+			label = "cm7300:green:serial";
+			gpios = <&tca6424 7 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "serial";
+		};
+	};
+
+	watchdog {
+		pinctrl-0 = <&wdt_tickle_pin>;
+		pinctrl-names = "default";
+		compatible = "ti,tps3823a", "linux,wdt-gpio";
+		gpios = <&gpio1 (61 - 32) GPIO_ACTIVE_LOW>;
+		hw_algo = "toggle";
+		hw_margin_ms = <500>;
+		always-running;
+	};
+
+};
+
+&pinctrl {
+
+	spi0_pins: spi0-pins {
+		marvell,pins = "mpp32",	/* cs0 */
+			       "mpp56", /* cs3 */
+			       "mpp63", /* sclk */
+			       "mpp64", /* miso */
+			       "mpp65"; /* mosi */
+		marvell,function = "spi0";
+	};
+
+	nand_pins: nand-pins {
+		marvell,pins = "mpp34", /* dev_we0 */
+			       "mpp35", /* dev_oe */
+			       "mpp36", /* dev_a1 */
+			       "mpp37", /* dev_a0 */
+			       "mpp38", /* dev_ready */
+			       "mpp39", /* dev_ad0 */
+			       "mpp40", /* dev_ad1 */
+			       "mpp41", /* dev_ad2 */
+			       "mpp42", /* dev_ad3 */
+			       "mpp43", /* dev_ad4 */
+			       "mpp44", /* dev_ad5 */
+			       "mpp45", /* dev_ad6 */
+			       "mpp46", /* dev_ad7 */
+			       /* "mpp47", dev_ad8 */
+			       "mpp33";	/* devboot_cs */
+		marvell,function = "dev";
+	};
+
+	erase_button_pin: erase-button-pin {
+		marvell,pins = "mpp55"; /* pushbutton */
+		marvell,function = "gpio";
+	};
+
+	console_232en_pin: console-232en-pin {
+		marvell,pins = "mpp62";	/* console_232_en, active-high out */
+		/* should be asseted by the operating system
+		 * if the console is secure */
+	};
+
+	console_modem_pins: console-modem-pins {
+		marvell,pins = "mpp48",	/* console_rts */
+			       "mpp49",	/* console_dtr */
+			       "mpp50",	/* console_cts */
+			       "mpp51";	/* console_dcd */
+		marvell,function = "gpio";
+	};
+
+	reset_3v3_pin: reset-3v3-pin {
+		marvell,pins = "mpp52"; /* gpio_reset_3v3 */
+		marvell,function = "gpio";
+	};
+
+	wdt_tickle_pin: wdt-tickle-pin {
+		marvell,pins = "mpp61"; /* wd_tickle */
+		marvell,function = "gpo";
+	};
+	wdt_en_pin: wdt-en-pin {
+		marvell,pins = "mpp60"; /* wd_en */
+		marvell,function = "gpio";
+	};
+	io_x_int_pin: io-x-int-pin {
+		marvell,pins = "mpp53"; /* io_x_int# */
+		marvell,function = "gpio";
+	};
+
+};
+
+&spi0 {
+	status = "okay";
+	pinctrl-0 = <&spi0_pins>;
+	pinctrl-names = "default";
+	spi-flash@0 {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "micron,n25q256a", "jedec,spi-nor";
+		reg = <0>; /* Chip select 0 */
+		spi-max-frequency = <50000000>;
+		u-boot@0 {
+			label = "u-boot";
+			reg = <0x00000000 0x00100000>;
+		};
+
+		u-boot-config-block@100000 {
+			label = "u-boot config block";
+			reg = <0x00100000 0x00020000>;
+		};
+
+		factory-img@120000 {
+			label = "factory_img";
+			reg = <0x00120000 0x1400000>;
+		};
+
+		system-log@1520000 {
+			label = "system_log";
+			reg = <0x1520000 0x00200000>;
+		};
+
+		mtd-oops@1720000 {
+			label = "mtd-oops";
+			reg = <0x1720000 0x00080000>;
+		};
+
+		reserved@17A0000 {
+			label = "reserved";
+			reg = <0x17A0000 0x860000>;
+		};
+		all-spi@0 {
+			label = "all-spi";
+			reg = <0x0 0x2000000>;
+		};
+	};
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&mdio {
+	phy0: ethernet-phy@0 {
+		reg = <0>;
+		/* auto-select SFP/copper; prefer SFP */
+		marvell,reg-init = <18 20 0xffff 0x0226>;
+	};
+
+	phy1: ethernet-phy@1 {
+		reg = <1>;
+		/* auto-select SFP/copper; prefer SFP */
+		marvell,reg-init = <18 20 0xffff 0x0226>;
+	};
+};
+
+&pciec {
+	status = "okay";
+};
+
+&pcie0 { /* port 0, lane 0 */
+	status = "okay";
+
+	/*
+	 * It's not strictly necessary to include the PCIe
+	 * buses here, since they get probed. But it allows
+	 * us to refer to pciserial0 as a boot console.
+	 */
+	pex0: switch@0,0 {
+		compatible = "plx,pex8605";
+		#address-cells = <3>;
+		#size-cells = <2>;
+		reg = <0x0000 0 0 0 0>;
+		switch@0,1 {
+			compatible = "plx,pex8605";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			reg = <0x0800 0 0 0 0>;
+			serial@0 {
+				compatible = "exar,xr17v358";
+				reg = <0x0000 0 0 0 0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				serial = <0>; /* start at ttyS0 (ignored by 8250_pci) */
+				pciserial0: port1@0 {
+					reg = <0>;
+				};
+			};
+		};
+		switch@0,2 {
+			compatible = "plx,pex8605";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			reg = <0x1000 0 0 0 0>;
+			serial@16 {
+				compatible = "exar,xr17v358";
+				reg = <0x0000 0 0 0 0>;
+			};
+		};
+		switch@0,3 {
+			compatible = "plx,pex8605";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			reg = <0x1800 0 0 0 0>;
+			serial@24 {
+				compatible = "exar,xr17v358";
+				reg = <0x0000 0 0 0 0>;
+			};
+		};
+	};
+};
+
+&pcie2 { /* port 1, lane 0 */
+	status = "okay";
+
+	pex1: switch@1,0 {
+		compatible = "plx,pex8605";
+		#address-cells = <3>;
+		#size-cells = <2>;
+		reg = <0x0000 0 0 0 0>;
+		switch@1,1 {
+			compatible = "plx,pex8605";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			reg = <0x0800 0 0 0 0>;
+			serial@48 {
+				compatible = "exar,xr17v358";
+				reg = <0x0000 0 0 0 0>;
+			};
+		};
+		switch@1,2 {
+			compatible = "plx,pex8605";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			reg = <0x1000 0 0 0 0>;
+			serial@64 {
+				compatible = "exar,xr17v358";
+				reg = <0x0000 0 0 0 0>;
+			};
+		};
+		switch@1,3 {
+			compatible = "plx,pex8605";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			reg = <0x1800 0 0 0 0>;
+			serial@80 {
+				compatible = "exar,xr17v358";
+				reg = <0x0000 0 0 0 0>;
+			};
+		};
+	};
+};
+

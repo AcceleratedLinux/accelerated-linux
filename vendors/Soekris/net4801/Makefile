@@ -231,7 +231,7 @@ extimage: lilo
 	rm -f $(VENDDIR)/disktab; \
 	)
 	cat mbr.img ext3.img | gzip -9 > $(IMAGE)
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGE) /tftpboot/.
 
 #############################################################################

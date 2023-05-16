@@ -249,14 +249,14 @@ int main(int argc, char *argv[])
 		write_chunk = sector_size;
 	}
 #else
-	if (lseek(fd, SEEK_END, 0L) < 0) {
+	if (lseek(fd, 0L, SEEK_END) < 0) {
 		printf("flashw: lseek (SEEK_END) failed, errno=%d\n", errno);
 		exit(1);
 	}
-	device_size = lseek(fd, SEEK_CUR, 0L);
+	device_size = lseek(fd, 0L, SEEK_CUR);
 	sector_size = 512;
 	write_chunk = 512;
-	lseek(fd, SEEK_SET, 0L);
+	lseek(fd, 0L, SEEK_SET);
 	printf("Using disk like behaviour, device_size=%d sector_size=512\n",
 			device_size);
 #endif
@@ -277,7 +277,10 @@ int main(int argc, char *argv[])
 	/*
 	 * Work out how much data we have to write.
 	 */
-	if (file != NULL) {
+	if (file != NULL && strcmp(file, "-") == 0) {
+		fdcp = STDIN_FILENO;
+		data_size = 0;
+	} else if (file != NULL) {
 		if (stat(file, &stat_buf) == -1) {
 			printf("ERROR: could not stat %s, errno=%d\n",
 				file, errno);

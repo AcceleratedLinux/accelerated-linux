@@ -4,6 +4,8 @@
  *
  * Copyright (c) 2015 Pengutronix, Philipp Zabel <p.zabel@pengutronix.de>
  *
+ * Copyright 2019 NXP
+ *
  * Based on the barebox ocotp driver,
  * Copyright (c) 2010 Baruch Siach <baruch@tkos.co.il>,
  *	Orex Computed Radiography
@@ -96,6 +98,7 @@ struct ocotp_params {
 	unsigned int bank_address_words;
 	void (*set_timing)(struct ocotp_priv *priv);
 	struct ocotp_ctrl_reg ctrl;
+	bool reverse_mac_address;
 };
 
 static int imx_ocotp_wait_for_busy(struct ocotp_priv *priv, u32 flags)
@@ -158,15 +161,31 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 			  void *val, size_t bytes)
 {
 	struct ocotp_priv *priv = context;
-	u8 *buf = val;
+	unsigned int count;
+	u8 *buf, *p;
 	int i, ret;
+	u32 index, num_bytes;
+
+	index = offset >> 2;
+	num_bytes = round_up((offset % 4) + bytes, 4);
+	count = num_bytes >> 2;
+
+	if (count > (priv->params->nregs - index))
+		count = priv->params->nregs - index;
+
+	p = kzalloc(num_bytes, GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
 
 	mutex_lock(&ocotp_mutex);
+
+	buf = p;
 
 	ret = clk_prepare_enable(priv->clk);
 	if (ret < 0) {
 		mutex_unlock(&ocotp_mutex);
 		dev_err(priv->dev, "failed to prepare/enable ocotp clk\n");
+		kfree(p);
 		return ret;
 	}
 
@@ -176,9 +195,9 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 		goto read_end;
 	}
 
-	for (i = offset; i < (bytes + offset); i++) {
-		u32 word_val = readl(priv->base + IMX_OCOTP_OFFSET_B0W0 +
-				     (i >> 2) * IMX_OCOTP_OFFSET_PER_WORD);
+	for (i = index; i < (index + count); i++) {
+		*(u32 *)buf = readl(priv->base + IMX_OCOTP_OFFSET_B0W0 +
+			       i * IMX_OCOTP_OFFSET_PER_WORD);
 
 		/* 47.3.1.2
 		 * For "read locked" registers 0xBADABADA will be returned and
@@ -186,18 +205,41 @@ static int imx_ocotp_read(void *context, unsigned int offset,
 		 * software before any new write, read or reload access can be
 		 * issued
 		 */
-		if (word_val == IMX_OCOTP_READ_LOCKED_VAL)
+		if (*((u32 *)buf) == IMX_OCOTP_READ_LOCKED_VAL)
 			imx_ocotp_clr_err_if_set(priv);
 
-		word_val >>= (i % 4) * 8;
-
-		*buf++ = (u8) (word_val & 0xFF);
+		buf += 4;
 	}
+
+	index = offset % 4;
+	memcpy(val, &p[index], bytes);
 
 read_end:
 	clk_disable_unprepare(priv->clk);
 	mutex_unlock(&ocotp_mutex);
+
+	kfree(p);
+
 	return ret;
+}
+
+static int imx_ocotp_cell_pp(void *context, const char *id, unsigned int offset,
+			     void *data, size_t bytes)
+{
+	struct ocotp_priv *priv = context;
+
+	/* Deal with some post processing of nvmem cell data */
+	if (id && !strcmp(id, "mac-address")) {
+		if (priv->params->reverse_mac_address) {
+			u8 *buf = data;
+			int i;
+
+			for (i = 0; i < bytes/2; i++)
+				swap(buf[i], buf[bytes - i - 1]);
+		}
+	}
+
+	return 0;
 }
 
 static void imx_ocotp_set_imx6_timing(struct ocotp_priv *priv)
@@ -443,10 +485,11 @@ write_end:
 static struct nvmem_config imx_ocotp_nvmem_config = {
 	.name = "imx-ocotp",
 	.read_only = false,
-	.word_size = 1,
+	.word_size = 4,
 	.stride = 1,
 	.reg_read = imx_ocotp_read,
 	.reg_write = imx_ocotp_write,
+	.cell_post_process = imx_ocotp_cell_pp,
 };
 
 static const struct ocotp_params imx6q_params = {
@@ -509,6 +552,7 @@ static const struct ocotp_params imx8mq_params = {
 	.bank_address_words = 0,
 	.set_timing = imx_ocotp_set_imx6_timing,
 	.ctrl = IMX_OCOTP_BM_CTRL_DEFAULT,
+	.reverse_mac_address = true,
 };
 
 static const struct ocotp_params imx8mm_params = {
@@ -516,6 +560,7 @@ static const struct ocotp_params imx8mm_params = {
 	.bank_address_words = 0,
 	.set_timing = imx_ocotp_set_imx6_timing,
 	.ctrl = IMX_OCOTP_BM_CTRL_DEFAULT,
+	.reverse_mac_address = true,
 };
 
 static const struct ocotp_params imx8mn_params = {
@@ -523,6 +568,7 @@ static const struct ocotp_params imx8mn_params = {
 	.bank_address_words = 0,
 	.set_timing = imx_ocotp_set_imx6_timing,
 	.ctrl = IMX_OCOTP_BM_CTRL_DEFAULT,
+	.reverse_mac_address = true,
 };
 
 static const struct ocotp_params imx8mp_params = {
@@ -530,6 +576,7 @@ static const struct ocotp_params imx8mp_params = {
 	.bank_address_words = 0,
 	.set_timing = imx_ocotp_set_imx6_timing,
 	.ctrl = IMX_OCOTP_BM_CTRL_8MP,
+	.reverse_mac_address = true,
 };
 
 static const struct of_device_id imx_ocotp_dt_ids[] = {

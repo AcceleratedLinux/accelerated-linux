@@ -91,7 +91,7 @@ config.make: dummy
 			if [ "$$CONFIG_USER_APPWEB_SSL" = "y" ] ; \
 			then \
 				SW="$$SW --with-openssl=$$moduleType" ; \
-				SW="$$SW --with-openssl-dir=../../lib/libssl" ; \
+				SW="$$SW --with-openssl-dir=../../lib/openssl" ; \
 			else SW="$$SW --without-ssl" ; \
 			fi ; \
 			if [ "$$CONFIG_USER_APPWEB_CGI" = "y" ] ; \

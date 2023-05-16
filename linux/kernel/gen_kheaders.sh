@@ -36,7 +36,7 @@ all_dirs="$all_dirs $dir_list"
 #
 # When Kconfig regenerates include/generated/autoconf.h, its timestamp is
 # updated, but the contents might be still the same. When any CONFIG option is
-# changed, Kconfig touches the corresponding timestamp file include/config/*.h.
+# changed, Kconfig touches the corresponding timestamp file include/config/*.
 # Hence, the md5sum detects the configuration change anyway. We do not need to
 # check include/generated/autoconf.h explicitly.
 #
@@ -56,9 +56,7 @@ if [ -f kernel/kheaders.md5 ] &&
 		exit
 fi
 
-if [ "${quiet}" != "silent_" ]; then
-       echo "  GEN     $tarfile"
-fi
+echo "  GEN     $tarfile"
 
 rm -rf $cpio_dir
 mkdir $cpio_dir
@@ -76,7 +74,7 @@ fi
 # of tree builds having stale headers in srctree. Just silence CPIO for now.
 for f in $dir_list;
 	do find "$f" -name "*.h";
-done | cpio --quiet -pd $cpio_dir >/dev/null 2>&1
+done | cpio --quiet -pdu $cpio_dir >/dev/null 2>&1
 
 # Remove comments except SDPX lines
 find $cpio_dir -type f -print0 |

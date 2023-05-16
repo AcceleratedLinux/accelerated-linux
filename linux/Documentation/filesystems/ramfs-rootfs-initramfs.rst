@@ -170,7 +170,7 @@ Documentation/driver-api/early-userspace/early_userspace_support.rst for more de
 The kernel does not depend on external cpio tools.  If you specify a
 directory instead of a configuration file, the kernel's build infrastructure
 creates a configuration file from that directory (usr/Makefile calls
-usr/gen_initramfs_list.sh), and proceeds to package up that directory
+usr/gen_initramfs.sh), and proceeds to package up that directory
 using the config file (by feeding it to usr/gen_init_cpio, which is created
 from usr/gen_init_cpio.c).  The kernel's build-time cpio creation code is
 entirely self-contained, and the kernel's boot-time extractor is also
@@ -246,15 +246,15 @@ If you don't already understand what shared libraries, devices, and paths
 you need to get a minimal root filesystem up and running, here are some
 references:
 
-- http://www.tldp.org/HOWTO/Bootdisk-HOWTO/
-- http://www.tldp.org/HOWTO/From-PowerUp-To-Bash-Prompt-HOWTO.html
+- https://www.tldp.org/HOWTO/Bootdisk-HOWTO/
+- https://www.tldp.org/HOWTO/From-PowerUp-To-Bash-Prompt-HOWTO.html
 - http://www.linuxfromscratch.org/lfs/view/stable/
 
-The "klibc" package (http://www.kernel.org/pub/linux/libs/klibc) is
+The "klibc" package (https://www.kernel.org/pub/linux/libs/klibc) is
 designed to be a tiny C library to statically link early userspace
 code against, along with some related utilities.  It is BSD licensed.
 
-I use uClibc (http://www.uclibc.org) and busybox (http://www.busybox.net)
+I use uClibc (https://www.uclibc.org) and busybox (https://www.busybox.net)
 myself.  These are LGPL and GPL, respectively.  (A self-contained initramfs
 package is planned for the busybox 1.3 release.)
 

@@ -11,7 +11,7 @@ include $(ROOTDIR)/tools/automake.inc
 
 my_romfs:
 	$(ROMFSINST) $(BASH_INSTALL_DIR)/bin/bash /bin/bash
-	$(ROMFSINST) -s bash /bin/sh
+	$(ROMFSINST) -e CONFIG_USER_BASH_SH -s bash /bin/sh
 
 PATCH_LEVEL = -p0
 

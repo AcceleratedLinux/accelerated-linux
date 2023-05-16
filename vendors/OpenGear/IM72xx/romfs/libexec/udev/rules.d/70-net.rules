@@ -1,0 +1,1 @@
+SUBSYSTEM=="net", ACTION=="add", KERNEL=="eth2", RUN+="/etc/scripts/udev-net-eth2"

@@ -1,0 +1,86 @@
+
+Author: Matthew Smith <matthew.smith@opengear.com>  2018-04-30 11:36:45
+
+    OG-5080: Reproducible build changes for user/cherokee
+
+    Change makefile of user/cherokee to define BUILDTIMESTAMP_DATE and
+    BUILDTIMESTAMP_TIME as -D arguments in the CFLAGS variable. This will
+    cause gcc calls in the sub-makes to define these macros.
+
+    The macros are used in common-internal.h to define the CHEROKEE_DATE and
+    CHEROKEE_TIME macros. Occurrences of __DATE__ and __TIME__ in other source
+    files are replaced with CHEROKEE_DATE and CHEROKEE_TIME. The CHEROKEE_DATE
+    and CHEROKEE_TIME macros fallback to __DATE__ and __TIME__ if the
+    BUILDTIMESTAMP_* macros aren't defined.
+
+    The resulting binaries will use the BUILDTIMESTAMP values in place of the
+    values given by __DATE__ and __TIME__ so that the builds become
+    reproducable.
+
+Author: Matthew Smith <matthew.smith@opengear.com>  2018-05-22 14:32:29
+
+    OG-5080: Reproducible builds: Renamed variable in user/cherokee
+
+    For consistency, renamed CHEROKEE_DATE / CHEROKEE_TIME to BUILD_DATE /
+    BUILD_TIME.
+
+Index: cherokee-1.2.101/cherokee/common-internal.h
+===================================================================
+--- cherokee-1.2.101.orig/cherokee/common-internal.h
++++ cherokee-1.2.101/cherokee/common-internal.h
+@@ -279,4 +279,16 @@ char *strcasestr(char *s, char *find);
+ #endif
+ 
+ 
++#ifdef BUILDTIMESTAMP_DATE
++# define BUILD_DATE BUILDTIMESTAMP_DATE
++#else
++# define BUILD_DATE __DATE__
++#endif
++
++#ifdef BUILDTIMESTAMP_TIME
++# define BUILD_TIME BUILDTIMESTAMP_TIME
++#else
++# define BUILD_TIME __TIME__
++#endif
++
+ #endif /* CHEROKEE_COMMON_INTERNAL_H */
+Index: cherokee-1.2.101/cherokee/error_log.c
+===================================================================
+--- cherokee-1.2.101.orig/cherokee/error_log.c
++++ cherokee-1.2.101/cherokee/error_log.c
+@@ -207,7 +207,7 @@ render_python_error (cherokee_error_type
+ 	cherokee_buffer_add_str (output, "\", ");
+ 
+ 	cherokee_buffer_add_str (output, "'compilation_date': \"");
+-	cherokee_buffer_add_str (output, __DATE__ " " __TIME__);
++	cherokee_buffer_add_str (output, BUILD_DATE " " BUILD_TIME);
+ 	cherokee_buffer_add_str (output, "\", ");
+ 
+ 	cherokee_buffer_add_str (output, "'configure_args': \"");
+Index: cherokee-1.2.101/cherokee/info.c
+===================================================================
+--- cherokee-1.2.101.orig/cherokee/info.c
++++ cherokee-1.2.101/cherokee/info.c
+@@ -36,7 +36,7 @@ cherokee_info_build_print (cherokee_serv
+ 	 */
+ 	printf ("Compilation\n");
+ 	printf (" Version: " PACKAGE_VERSION "\n");
+-	printf (" Compiled on: " __DATE__ " " __TIME__ "\n");
++	printf (" Compiled on: " BUILD_DATE " " BUILD_TIME "\n");
+ 	printf (" Arguments to configure: " CHEROKEE_CONFIG_ARGS "\n");
+ 	printf ("\n");
+ 
+Index: cherokee-1.2.101/cherokee/server.c
+===================================================================
+--- cherokee-1.2.101.orig/cherokee/server.c
++++ cherokee-1.2.101/cherokee/server.c
+@@ -416,7 +416,7 @@ print_banner (cherokee_server_t *srv)
+ 
+ 	/* First line
+ 	 */
+-	cherokee_buffer_add_va (&n, "Cherokee Web Server %s (%s): ", PACKAGE_VERSION, __DATE__);
++	cherokee_buffer_add_va (&n, "Cherokee Web Server %s (%s): ", PACKAGE_VERSION, BUILD_DATE);
+ 
+ 	/* Ports
+ 	 */

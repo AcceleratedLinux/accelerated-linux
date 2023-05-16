@@ -42,6 +42,12 @@ inc_libgmp = build/install/include/*.h,.
 dir_$(CONFIG_LIB_LIBG) += libg
 lib_libg = *.a
 
+dir_$(CONFIG_LIB_UEV) += libuev
+lib_uev = *.a
+
+dir_$(CONFIG_LIB_ITE) += libite
+lib_ite = *.a
+
 dir_$(CONFIG_LIB_LIBPAM) += libpam
 lib_libpam = build/libpam*/.libs/*.a build/libpam*/.libs/*.so
 inc_libpam = */include/security/*.h,security
@@ -194,7 +200,7 @@ dir_$(CONFIG_LIB_MINI_LIBINTL) += mini-libintl
 inc_mini-libintl = libintl.h,.
 
 dir_$(CONFIG_LIB_LIBOPENGEAR) += libopengear
-dep_libopengear = jansson scew libssl
+dep_libopengear = jansson scew openssl
 lib_libopengear = build/*.a \
 	build/*.so*
 inc_libopengear = include/opengear/*.h,opengear
@@ -202,8 +208,13 @@ inc_libopengear = include/opengear/*.h,opengear
 dep_libftdi = libusb STLport
 dep_libunbound = libldns expat
 dep_libgcrypt = libgpg-error
-dep_libssh = libssl
-dep_libldns = libssl
+dep_libssh = openssl
+dep_libldns = openssl
+dep_libdnsres = libevent
+dep_libldap = openssl
+dep_libnettle = libgmp
+dep_iptables = libpcap
+dep_glib = pcre zlib libffi libiconv
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local

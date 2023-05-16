@@ -1,0 +1,6 @@
+#!/bin/sh
+[ -z "$2" ] && echo "Error: should be run by odhcpc6c" && exit 1
+
+for script in /etc/scripts/odhcp6c.d/*; do
+	$script "$@"
+done

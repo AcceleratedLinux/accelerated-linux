@@ -5,8 +5,8 @@ CRDA = crda-$(CRDA_VERSION)
 $(CRDA)_URL = https://mirrors.edge.kernel.org/pub/software/network/crda/$(CRDA).tar.gz
 $(CRDA)_LICENSE = copyleft-next-0.3.0
 
-ifdef CONFIG_LIB_LIBSSL
-export PKG_CONFIG_PATH := $(ROOTDIR)/lib/libssl/build:$(PKG_CONFIG_PATH)
+ifdef CONFIG_LIB_OPENSSL
+export PKG_CONFIG_PATH := $(ROOTDIR)/lib/openssl/build:$(PKG_CONFIG_PATH)
 $(CRDA)_MAKEVARS = USE_OPENSSL=1
 endif
 $(CRDA)_MAKEVARS += PREFIX=/ RUNTIME_PUBKEY_DIR=/lib/crda/pubkeys \
@@ -14,6 +14,9 @@ $(CRDA)_MAKEVARS += PREFIX=/ RUNTIME_PUBKEY_DIR=/lib/crda/pubkeys \
 $(CRDA)_BUILD = all_noverify
 
 AUTOMAKE_y += $(CRDA)
+
+# Using OpenSSL-3.0 now, this will error out on warnings
+CFLAGS += -Wno-deprecated-declarations
 endif
 
 ###############################################################################
@@ -32,6 +35,7 @@ ifdef CONFIG_USER_CRDA_REGDB_UNRESTRICTED_WORLD
 $(REGDB)_PATCHES += wireless-regdb-2018.09.07-world-all-channels.patch
 endif
 $(REGDB)_PATCHES += wireless-regdb-2018.09.07-parallel-make.patch
+$(REGDB)_PATCHES += wireless-regdb-2018.09.07-fix-overlap-frequency-CH-LI.patch
 
 AUTOMAKE_y += $(REGDB)
 endif

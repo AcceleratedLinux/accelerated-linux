@@ -33,19 +33,16 @@
  * respectively NA for All or X for Supervisor and no access for User.
  * Then we use the APG to say whether accesses are according to Page rules or
  * "all Supervisor" rules (Access to all)
- * Therefore, we define 2 APG groups. lsb is _PMD_USER
- * 0 => Kernel => 01 (all accesses performed according to page definition)
- * 1 => User => 00 (all accesses performed as supervisor iaw page definition)
- * 2-15 => Not Used
+ * _PAGE_ACCESSED is also managed via APG. When _PAGE_ACCESSED is not set, say
+ * "all User" rules, that will lead to NA for all.
+ * Therefore, we define 4 APG groups. lsb is _PAGE_ACCESSED
+ * 0 => Kernel => 11 (all accesses performed according as user iaw page definition)
+ * 1 => Kernel+Accessed => 01 (all accesses performed according to page definition)
+ * 2 => User => 11 (all accesses performed according as user iaw page definition)
+ * 3 => User+Accessed => 10 (all accesses performed according to swaped page definition) for KUEP
+ * 4-15 => Not Used
  */
-#define MI_APG_INIT	0x40000000
-
-/*
- * 0 => Kernel => 01 (all accesses performed according to page definition)
- * 1 => User => 10 (all accesses performed according to swaped page definition)
- * 2-15 => Not Used
- */
-#define MI_APG_KUEP	0x60000000
+#define MI_APG_INIT	0xde000000
 
 /* The effective page number register.  When read, contains the information
  * about the last instruction TLB miss.  When MI_RPN is written, bits in
@@ -106,25 +103,9 @@
 #define MD_Ks		0x80000000	/* Should not be set */
 #define MD_Kp		0x40000000	/* Should always be set */
 
-/*
- * All pages' PP data bits are set to either 000 or 011 or 001, which means
- * respectively RW for Supervisor and no access for User, or RO for
- * Supervisor and no access for user and NA for ALL.
- * Then we use the APG to say whether accesses are according to Page rules or
- * "all Supervisor" rules (Access to all)
- * Therefore, we define 2 APG groups. lsb is _PMD_USER
- * 0 => Kernel => 01 (all accesses performed according to page definition)
- * 1 => User => 00 (all accesses performed as supervisor iaw page definition)
- * 2-15 => Not Used
- */
-#define MD_APG_INIT	0x40000000
-
-/*
- * 0 => No user => 01 (all accesses performed according to page definition)
- * 1 => User => 10 (all accesses performed according to swaped page definition)
- * 2-15 => Not Used
- */
-#define MD_APG_KUAP	0x60000000
+/* See explanation above at the definition of MI_APG_INIT */
+#define MD_APG_INIT	0xdc000000
+#define MD_APG_KUAP	0xde000000
 
 /* The effective page number register.  When read, contains the information
  * about the last instruction TLB miss.  When MD_RPN is written, bits in
@@ -189,16 +170,20 @@
 
 #define mmu_linear_psize	MMU_PAGE_8M
 
+#define MODULES_VADDR	(PAGE_OFFSET - SZ_256M)
+#define MODULES_END	PAGE_OFFSET
+
 #ifndef __ASSEMBLY__
 
 #include <linux/mmdebug.h>
+#include <linux/sizes.h>
 
 void mmu_pin_tlb(unsigned long top, bool readonly);
 
 typedef struct {
 	unsigned int id;
 	unsigned int active;
-	unsigned long vdso_base;
+	void __user *vdso;
 	void *pte_frag;
 } mm_context_t;
 
@@ -238,6 +223,48 @@ static inline unsigned int mmu_psize_to_shift(unsigned int mmu_psize)
 		return mmu_psize_defs[mmu_psize].shift;
 	BUG();
 }
+
+static inline bool arch_vmap_try_size(unsigned long addr, unsigned long end, u64 pfn,
+				      unsigned int max_page_shift, unsigned long size)
+{
+	if (end - addr < size)
+		return false;
+
+	if ((1UL << max_page_shift) < size)
+		return false;
+
+	if (!IS_ALIGNED(addr, size))
+		return false;
+
+	if (!IS_ALIGNED(PFN_PHYS(pfn), size))
+		return false;
+
+	return true;
+}
+
+static inline unsigned long arch_vmap_pte_range_map_size(unsigned long addr, unsigned long end,
+							 u64 pfn, unsigned int max_page_shift)
+{
+	if (arch_vmap_try_size(addr, end, pfn, max_page_shift, SZ_512K))
+		return SZ_512K;
+	if (PAGE_SIZE == SZ_16K)
+		return SZ_16K;
+	if (arch_vmap_try_size(addr, end, pfn, max_page_shift, SZ_16K))
+		return SZ_16K;
+	return PAGE_SIZE;
+}
+#define arch_vmap_pte_range_map_size arch_vmap_pte_range_map_size
+
+static inline int arch_vmap_pte_supported_shift(unsigned long size)
+{
+	if (size >= SZ_512K)
+		return 19;
+	else if (size >= SZ_16K)
+		return 14;
+	else
+		return PAGE_SHIFT;
+}
+#define arch_vmap_pte_supported_shift arch_vmap_pte_supported_shift
 
 /* patch sites */
 extern s32 patch__itlbmiss_exit_1, patch__dtlbmiss_exit_1;

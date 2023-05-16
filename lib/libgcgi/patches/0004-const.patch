@@ -1,0 +1,1042 @@
+
+Author: David Leonard <david.leonard@opengear.com>
+Date:   Thu Nov 5 11:44:56 2015 +1000
+
+Make interface friendly to const strings.
+Index: libgcgi-debian-0.9.5.dfsg-7/src/code.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/code.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/code.c
+@@ -20,9 +20,8 @@
+ 
+ #include "gcgi_private.h"
+ 
+-static char hextochar(char *hex);
++static char hextochar(const char *hex);
+ static void chartohex(char c, char *hex, int size);
+-static void plustospace(char *string);
+ 
+ /*------ Base64 Encoding Table ------*/
+ static const char mimeBase64[] = { 
+@@ -38,10 +37,10 @@ static const char mimeBase64[] = {
+ 
+ 
+ gcgiReturnType 
+-gcgiDecodeBaseSixtyFourString(char *text, char **decodedText, int *numBytes)
++gcgiDecodeBaseSixtyFourString(const char *text, char **decodedText, int *numBytes)
+ {
+   int  len, j, k, index;
+-  char *p, *plen;
++  const char *p, *plen;
+   unsigned char input[4]  = {0,0,0,0};
+   unsigned char output[3] = {0,0,0};
+   
+@@ -93,12 +92,12 @@ gcgiDecodeBaseSixtyFourString(char *text
+ 
+ 
+ gcgiReturnType
+-gcgiEncodeBaseSixtyFourString(char *text, int numBytes, char **encodedText)
++gcgiEncodeBaseSixtyFourString(const char *text, int numBytes, char **encodedText)
+ {
+   unsigned char input[3]  = {0,0,0};
+   unsigned char output[4] = {0,0,0,0};
+   int   index, i, j, size;
+-  char *p, *plen;
++  const char *p, *plen;
+ 
+   plen           = text + numBytes - 1;
+   size           = (4 * (numBytes / 3)) + (numBytes % 3? 4 : 0) + 1;
+@@ -130,10 +129,10 @@ gcgiEncodeBaseSixtyFourString(char *text
+ 
+ 
+ gcgiReturnType 
+-gcgiDecodeQuotedPrintableString(char *text, char **decodedText, int *size)
++gcgiDecodeQuotedPrintableString(const char *text, char **decodedText, int *size)
+ {
+     int  decoded, len, i;
+-    char *p,*q;
++    const char *p,*q;
+     char hex[3];
+     
+     q = p = text;
+@@ -172,10 +171,11 @@ gcgiDecodeQuotedPrintableString(char *te
+ 
+ 
+ gcgiReturnType
+-gcgiEncodeQuotedPrintableString(char *text, char **encodedText, int *size)
++gcgiEncodeQuotedPrintableString(const char *text, char **encodedText, int *size)
+ {
+     int len, i, columns;
+-    char *textlen, *p, hex[3];
++    const char *textlen, *p;
++    char hex[3];
+ 
+     text? (len = strlen(text)) : (len = 0);
+     textlen = text + len;
+@@ -226,9 +226,10 @@ gcgiEncodeQuotedPrintableString(char *te
+  * =?ISO-8859-1?Q?Andr=E9?=
+  * =?ISO-8859-1?B?SWYgeW91IGNhbiByZWFkIHRoaXMgeW8=?= */ 
+ gcgiReturnType
+-gcgiDecodeRfc2047String(char *text, char **charset, char **decodedText)
++gcgiDecodeRfc2047String(const char *text, char **charset, char **decodedText)
+ {
+-    char *p, *q, *r, *offset;
++    const char *p, *q, *offset;
++    char *r;
+     char *decode, *encoding;
+     int  len, dlen, i, numBytes, size;
+     
+@@ -287,10 +288,10 @@ gcgiDecodeRfc2047String(char *text, char
+ 
+ 
+ gcgiReturnType
+-gcgiDecodeUrlEncodedString(char *text, char **decodedText, int *size)
++gcgiDecodeUrlEncodedString(const char *text, char **decodedText, int *size)
+ {
+     int   len, i;
+-    char *textlen, *p;
++    const char *textlen, *p;
+ 
+     len     = strlen(text);
+     textlen = text + len;
+@@ -299,6 +300,9 @@ gcgiDecodeUrlEncodedString(char *text, c
+     *size = len + 1;
+ 
+     for (p = text, i = 0; p < textlen && *p != '\0'; p++, i++) 
++	if (*p == '+')
++	    (*decodedText)[i] = ' ';
++	else
+ 	if (*p == '%') {
+ 	    (*decodedText)[i] = hextochar(p+1);
+ 	    p += 2;
+@@ -307,18 +311,17 @@ gcgiDecodeUrlEncodedString(char *text, c
+ 	    (*decodedText)[i] = *p;
+     (*decodedText)[i++] = '\0';
+ 
+-    plustospace(*decodedText);
+-
+     return GCGISUCCESS;
+ }
+ 
+ 
+ /* According to RFC2396 */
+ gcgiReturnType
+-gcgiEncodeUrlString(char *text, char **encodedText, int *size)
++gcgiEncodeUrlString(const char *text, char **encodedText, int *size)
+ {
+     int   len, i;
+-    char *textlen, *p, hex[3];
++    const char *textlen, *p;
++    char  hex[3];
+ 
+     len     = strlen(text);
+     textlen = text + len;
+@@ -358,7 +361,7 @@ gcgiEncodeUrlString(char *text, char **e
+ 
+ 
+ char 
+-hextochar(char *hex)
++hextochar(const char *hex)
+ {
+     int i, j;
+ 
+@@ -412,17 +415,3 @@ chartohex(char c, char *hex, int size)
+     }
+ }
+ 
+-
+-void 
+-plustospace(char *string)
+-{
+-    char *p;
+-    int   slen; 
+-    
+-    slen = strlen(string);
+-
+-    for (p = string; p < (string+slen) && *p != 0; p++) {
+-	if (*p == '+') 
+-	    *p = ' ';
+-    }
+-}
+Index: libgcgi-debian-0.9.5.dfsg-7/src/common.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/common.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/common.c
+@@ -21,7 +21,7 @@
+ #include "common.h"
+ 
+ FILE * 
+-tempFile(char *prefix, char **filename, int *fd) 
++tempFile(const char *prefix, char **filename, int *fd) 
+ {
+   FILE        *retFile;
+   char        *tmpdir  = NULL;
+@@ -65,7 +65,7 @@ readQueryFromStream(FILE *input, int cle
+ {
+     size_t       read;
+     off_t        offset;
+-    static char *querystring;
++    char *       querystring;
+ 
+     read           = 0;
+     offset         = 0;
+Index: libgcgi-debian-0.9.5.dfsg-7/src/common.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/common.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/common.h
+@@ -73,7 +73,7 @@ BEGIN_C_DECLS
+ 
+ void        *xmalloc  (size_t num);
+ void        *xrealloc (void *p, size_t num);
+-FILE        *tempFile (char *prefix, char **filename, int *fd);
++FILE        *tempFile (const char *prefix, char **filename, int *fd);
+ char        *readQueryFromStream(FILE *stream, int clen);
+ 
+ END_C_DECLS
+Index: libgcgi-debian-0.9.5.dfsg-7/src/crypt.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/crypt.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/crypt.c
+@@ -49,7 +49,7 @@ generateKey()
+ 
+ 
+ void 
+-encryptString(char *text, int size, unsigned char *key, char **ciphertext, int *ctlen)
++encryptString(const char *text, int size, const unsigned char *key, char **ciphertext, int *ctlen)
+ {
+     EVP_CIPHER_CTX  ctx;
+     EVP_CIPHER     *cipher;
+@@ -70,7 +70,7 @@ encryptString(char *text, int size, unsi
+ 
+ 
+ void 
+-decryptString(char *ciphertext, int ctlen, unsigned char *key, char **text, int *size)
++decryptString(const char *ciphertext, int ctlen, const unsigned char *key, char **text, int *size)
+ {
+     EVP_CIPHER_CTX  ctx;
+     EVP_CIPHER     *cipher;
+@@ -91,7 +91,7 @@ decryptString(char *ciphertext, int ctle
+ 
+ 
+ void 
+-generateStringHMAC(char *text, int size, unsigned char **hmac, int *hlen)
++generateStringHMAC(const char *text, int size, unsigned char **hmac, int *hlen)
+ {
+     EVP_MD_CTX ctx;
+ 
+@@ -104,7 +104,7 @@ generateStringHMAC(char *text, int size,
+ 
+ 
+ int
+-writeKeyToFile(unsigned char *key, char *path)
++writeKeyToFile(const unsigned char *key, const char *path)
+ {
+     FILE   *out;
+     mode_t  old_mode;
+@@ -125,7 +125,7 @@ writeKeyToFile(unsigned char *key, char
+ }
+ 
+ int
+-readKeyFromFile(char *path, unsigned char **key)
++readKeyFromFile(const char *path, unsigned char **key)
+ {
+     FILE   *in;
+     size_t  read;
+@@ -156,7 +156,7 @@ readKeyFromFile(char *path, unsigned cha
+ 
+ 
+ void 
+-printHexString(FILE *output, unsigned char *s, int len)
++printHexString(FILE *output, const unsigned char *s, int len)
+ {
+     int i;
+ 
+Index: libgcgi-debian-0.9.5.dfsg-7/src/crypt.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/crypt.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/crypt.h
+@@ -21,12 +21,12 @@
+ #ifndef __CRYPT_H__
+ #define __CRYPT_H__
+ 
+-unsigned char *generateKey();
+-void           encryptString(char *text, int size, unsigned char *key, char **ciphertext, int *ctlen);
+-void           decryptString(char *ciphertext, int ctlen, unsigned char *key, char **text, int *size);
+-void           generateStringHMAC(char *text, int size, unsigned char **hmac, int *hlen);
+-int            writeKeyToFile(unsigned char *key, char *path);
+-int            readKeyFromFile(char *path, unsigned char **key);
+-void           printHexString(FILE *output, unsigned char *s, int len);
++unsigned char *generateKey(void);
++void           encryptString(const char *text, int size, const unsigned char *key, char **ciphertext, int *ctlen);
++void           decryptString(const char *ciphertext, int ctlen, const unsigned char *key, char **text, int *size);
++void           generateStringHMAC(const char *text, int size, unsigned char **hmac, int *hlen);
++int            writeKeyToFile(const unsigned char *key, const char *path);
++int            readKeyFromFile(const char *path, unsigned char **key);
++void           printHexString(FILE *output, const unsigned char *s, int len);
+ 
+ #endif /* __CRYPT_H__ */
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c
+@@ -200,7 +200,7 @@ parseGetQueryString(int *numBytes)
+ 
+ 
+ gcgiReturnType 
+-parseUrlEncoded(char *querystring, int clen) 
++parseUrlEncoded(const char *querystring, int clen) 
+ {
+     QueryStringNode *qstring; 
+     char            *beg, *end, *qlen;
+@@ -334,7 +334,7 @@ decodeUrl(QueryStringNode *qstring)
+ 
+ 
+ gcgiReturnType  
+-gcgiSendContentType(char *mimeType, char *name, char *charset, HTTPHeader header)
++gcgiSendContentType(const char *mimeType, const char *name, const char *charset, HTTPHeader header)
+ {
+     fprintf(gcgiOut, "Content-Type: %s", mimeType);
+ 
+@@ -354,7 +354,7 @@ gcgiSendContentType(char *mimeType, char
+ 
+ 
+ gcgiReturnType  
+-gcgiSendContentDisp(MimeDisposition disp, char *filename, HTTPHeader header)
++gcgiSendContentDisp(MimeDisposition disp, const char *filename, HTTPHeader header)
+ {
+     char *strDisp[] = { "inlined",
+ 			"attachment",
+@@ -389,7 +389,7 @@ gcgiSendContentLength(int length, HTTPHe
+ 
+ 
+ gcgiReturnType  
+-gcgiSendLocation(char *redirectURL)
++gcgiSendLocation(const char *redirectURL)
+ {
+     fprintf(gcgiOut, "Location: %s\r\n\r\n", redirectURL);
+ 
+@@ -398,7 +398,7 @@ gcgiSendLocation(char *redirectURL)
+ 
+ 
+ gcgiReturnType  
+-gcgiSendStatus(int status, char *message)
++gcgiSendStatus(int status, const char *message)
+ {
+     fprintf(gcgiOut, "HTTP/1.1 %d %s\r\n\r\n", status, message);
+ 
+@@ -407,7 +407,7 @@ gcgiSendStatus(int status, char *message
+ 
+ 
+ gcgiReturnType  
+-gcgiSendCacheControl(char *cache, HTTPHeader header)
++gcgiSendCacheControl(const char *cache, HTTPHeader header)
+ {
+     fprintf(gcgiOut, "Cache-Control: %s", cache);
+ 
+@@ -421,7 +421,7 @@ gcgiSendCacheControl(char *cache, HTTPHe
+ 
+ 
+ gcgiReturnType  
+-gcgiSendCookie(char *name, char *value, char *path, char *domain, char *expires, int secure, HTTPHeader header)
++gcgiSendCookie(const char *name, const char *value, const char *path, const char *domain, const char *expires, int secure, HTTPHeader header)
+ {
+     char *cookieEncoded;
+ 
+@@ -458,7 +458,7 @@ gcgiFetchCookies(char ***cookies)
+ 
+ 
+ gcgiReturnType  
+-gcgiParseCookie(char *cookie, char **name, char **value)
++gcgiParseCookie(const char *cookie, char **name, char **value)
+ {
+     char *encoded, *decoded;
+     int   size;
+@@ -489,8 +489,8 @@ gcgiFreeCookies(char **cookies)
+ 
+ #ifdef USE_SSL
+ gcgiReturnType  
+-gcgiSendEncryptedCookie(char *name, char *value, char *path, char *domain, char *expires, 
+-			int secure, unsigned char *key, HTTPHeader header)
++gcgiSendEncryptedCookie(const char *name, const char *value, const char *path, const char *domain, const char *expires, 
++			int secure, const unsigned char *key, HTTPHeader header)
+ {
+     char          *cookieEncoded;
+     char          *ciphertext, *digestEncoded;
+@@ -533,7 +533,7 @@ gcgiSendEncryptedCookie(char *name, char
+ 
+ 
+ gcgiReturnType  
+-gcgiParseEncryptedCookie(char *cookie, unsigned char *key, char **name, char **value)
++gcgiParseEncryptedCookie(const char *cookie, const unsigned char *key, char **name, char **value)
+ {
+     char          **tokens;
+     int             size;
+@@ -585,7 +585,7 @@ gcgiGenerateKey(unsigned char **key)
+ 
+ 
+ gcgiReturnType  
+-gcgiWriteKeyToFile(unsigned char *key, char *path)
++gcgiWriteKeyToFile(const unsigned char *key, const char *path)
+ {
+     if (writeKeyToFile(key, path) < 0)
+ 	return GCGIFATALERROR;
+@@ -595,7 +595,7 @@ gcgiWriteKeyToFile(unsigned char *key, c
+ 
+ 
+ gcgiReturnType  
+-gcgiReadKeyFromFile(char *path, unsigned char **key)
++gcgiReadKeyFromFile(const char *path, unsigned char **key)
+ {
+     if (readKeyFromFile(path, key) < 0)
+ 	return GCGIFATALERROR;
+@@ -615,7 +615,7 @@ gcgiNumFormFields(int *ret)
+ 
+ 
+ gcgiReturnType
+-gcgiNumFields(char *field, int *ret)
++gcgiNumFields(const char *field, int *ret)
+ {
+     int i;
+     
+@@ -631,7 +631,7 @@ gcgiNumFields(char *field, int *ret)
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchInteger(char *field, int *ret, int defaultRet)
++gcgiFetchInteger(const char *field, int *ret, int defaultRet)
+ {
+     int i;
+     QueryStringNode *qs;
+@@ -660,7 +660,7 @@ gcgiFetchInteger(char *field, int *ret,
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchIntegerNext(char *field, int *ret, int defaultRet)
++gcgiFetchIntegerNext(const char *field, int *ret, int defaultRet)
+ {
+     int i;
+     QueryStringNode *qs;
+@@ -689,7 +689,7 @@ gcgiFetchIntegerNext(char *field, int *r
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchDouble(char *field, double *ret, double defaultRet)
++gcgiFetchDouble(const char *field, double *ret, double defaultRet)
+ {
+     double i;
+     QueryStringNode *qs;
+@@ -718,7 +718,7 @@ gcgiFetchDouble(char *field, double *ret
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchDoubleNext(char *field, double *ret, double defaultRet)
++gcgiFetchDoubleNext(const char *field, double *ret, double defaultRet)
+ {
+     double i;
+     QueryStringNode *qs;
+@@ -747,7 +747,7 @@ gcgiFetchDoubleNext(char *field, double
+ 
+ 
+ gcgiReturnType 
+-gcgiFieldLength(char *field, int *ret)
++gcgiFieldLength(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+     
+@@ -766,7 +766,7 @@ gcgiFieldLength(char *field, int *ret)
+ 
+ 
+ gcgiReturnType 
+-gcgiFieldLengthCur(char *field, int *ret)
++gcgiFieldLengthCur(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+     
+@@ -785,7 +785,7 @@ gcgiFieldLengthCur(char *field, int *ret
+ 
+ 
+ gcgiReturnType 
+-gcgiFieldLengthNext(char *field, int *ret)
++gcgiFieldLengthNext(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+     
+@@ -804,7 +804,7 @@ gcgiFieldLengthNext(char *field, int *re
+ 
+ 
+ gcgiReturnType 
+-gcgiFieldSize(char *field, int *ret)
++gcgiFieldSize(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+     
+@@ -820,7 +820,7 @@ gcgiFieldSize(char *field, int *ret)
+ 
+ 
+ gcgiReturnType 
+-gcgiFieldSizeCur(char *field, int *ret)
++gcgiFieldSizeCur(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+     
+@@ -836,7 +836,7 @@ gcgiFieldSizeCur(char *field, int *ret)
+ 
+ 
+ gcgiReturnType 
+-gcgiFieldSizeNext(char *field, int *ret)
++gcgiFieldSizeNext(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+     
+@@ -859,7 +859,7 @@ gcgiFetchEnvVar(int env)
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchString(char *field, char *ret, int max)
++gcgiFetchString(const char *field, char *ret, int max)
+ {
+     int i;
+     QueryStringNode *qs;
+@@ -885,7 +885,7 @@ gcgiFetchString(char *field, char *ret,
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchStringNext(char *field, char *ret, int max)
++gcgiFetchStringNext(const char *field, char *ret, int max)
+ {
+     int i;
+     QueryStringNode *qs;
+@@ -910,7 +910,7 @@ gcgiFetchStringNext(char *field, char *r
+ 
+ 
+ gcgiReturnType  
+-gcgiFetchStringNoNewLines(char *field, char *ret, int max)
++gcgiFetchStringNoNewLines(const char *field, char *ret, int max)
+ {
+     int len,i,j;
+     QueryStringNode *qs;
+@@ -948,7 +948,7 @@ gcgiFetchStringNoNewLines(char *field, c
+ 
+ 
+ gcgiReturnType  
+-gcgiFetchStringNoNewLinesNext(char *field, char *ret, int max)
++gcgiFetchStringNoNewLinesNext(const char *field, char *ret, int max)
+ {
+     int len,i,j;
+     QueryStringNode *qs;
+@@ -988,7 +988,7 @@ gcgiFetchStringNoNewLinesNext(char *fiel
+ 
+ 
+ gcgiReturnType
+-gcgiFetchData(char *field, char *ret, int max, MimeType *type, 
++gcgiFetchData(const char *field, char *ret, int max, MimeType *type, 
+ 	      char **subtype, MimeEncoding *encoding, char **filename, int *truncated)
+ {
+     size_t i;
+@@ -1029,7 +1029,7 @@ gcgiFetchData(char *field, char *ret, in
+ 
+ 
+ gcgiReturnType
+-gcgiFetchDataNext(char *field, char *ret, int max, MimeType *type, 
++gcgiFetchDataNext(const char *field, char *ret, int max, MimeType *type, 
+ 		  char **subtype, MimeEncoding *encoding, char **filename, int *truncated)
+ {
+     size_t i;
+@@ -1055,7 +1055,7 @@ gcgiFetchDataNext(char *field, char *ret
+ 
+ 
+ gcgiReturnType 
+-gcgiFetchMultipleString(char *field, char ***data)
++gcgiFetchMultipleString(const char *field, char ***data)
+ {
+     int i, j;
+     QueryStringNode *qs;
+@@ -1100,7 +1100,7 @@ gcgiFreeMultipleString(char **data)
+ 
+ 
+ gcgiReturnType  
+-gcgiResetMultipleField(char *field)
++gcgiResetMultipleField(const char *field)
+ {
+     int i;
+ 
+@@ -1114,7 +1114,7 @@ gcgiResetMultipleField(char *field)
+ 
+ 
+ gcgiReturnType
+-gcgiFetchSelectIndex(char *field, char **data, int size, int *ret, int defaultVal)
++gcgiFetchSelectIndex(const char *field, char **data, int size, int *ret, int defaultVal)
+ {
+     QueryStringNode *qs;
+     int i;
+@@ -1138,7 +1138,7 @@ gcgiFetchSelectIndex(char *field, char *
+ 
+ 
+ gcgiReturnType   
+-gcgiFetchCheckbox(char *field, int *ret)
++gcgiFetchCheckbox(const char *field, int *ret)
+ {
+     QueryStringNode *qs;
+ 
+@@ -1154,7 +1154,7 @@ gcgiFetchCheckbox(char *field, int *ret)
+ 
+ 
+ gcgiReturnType
+-gcgiFetchMultipleCheckbox(char *field, char **data, int size, int **ret)
++gcgiFetchMultipleCheckbox(const char *field, char **data, int size, int **ret)
+ {
+     QueryStringNode *qs;
+     int i;
+@@ -1171,7 +1171,7 @@ gcgiFetchMultipleCheckbox(char *field, c
+ 
+ 
+ gcgiReturnType  
+-gcgiLoadEnvVariables(char *path)
++gcgiLoadEnvVariables(const char *path)
+ {
+     FILE *envfile;
+     char  line[256], *p;
+@@ -1188,6 +1188,7 @@ gcgiLoadEnvVariables(char *path)
+ 	/* Allocate a new string */
+ 	ilen  = 0;
+ 	isize = 256;
++	XFREE(input);
+ 	input = XMALLOC(char, isize);
+ 	memset(input, 0, isize);
+ 
+@@ -1227,7 +1228,7 @@ gcgiLoadEnvVariables(char *path)
+ 
+ 
+ gcgiReturnType 
+-gcgiSaveEnvVariables(char *path)
++gcgiSaveEnvVariables(const char *path)
+ {
+     FILE *envfile;
+     int i;
+@@ -1249,7 +1250,7 @@ gcgiSaveEnvVariables(char *path)
+ 
+ 
+ gcgiReturnType  
+-gcgiDebug(char *envVarsPath, char *cgiQueryPath)
++gcgiDebug(const char *envVarsPath, const char *cgiQueryPath)
+ {
+     int evlen, cqlen;
+     
+@@ -1379,7 +1380,7 @@ insertQueryStringNode(QueryStringNode *q
+ 
+ 
+ gcgiReturnType 
+-findQueryStringColl(char *field, int *index)
++findQueryStringColl(const char *field, int *index)
+ {
+     int flen, qlen, len;
+     QueryStringColl **qsc;
+@@ -1405,11 +1406,10 @@ findQueryStringColl(char *field, int *in
+ 
+ 
+ gcgiReturnType
+-findQueryStringNodeFirst(char *field, QueryStringNode **q)
++findQueryStringNodeFirst(const char *field, QueryStringNode **q)
+ {
+-    int flen, i, res;
++    int i, res;
+ 
+-    flen = strlen(field);
+     if (cgiQuery == NULL || cgiQuery->queryCount == 0) {
+ 	*q = NULL;
+ 	return GCGIFIELDNOTFOUND;
+@@ -1434,7 +1434,7 @@ findQueryStringNodeFirst(char *field, Qu
+ 
+ 
+ gcgiReturnType 
+-findQueryStringNode(char *field, QueryStringNode **q) 
++findQueryStringNode(const char *field, QueryStringNode **q) 
+ {
+     int flen, i, res;
+ 
+@@ -1469,7 +1469,7 @@ findQueryStringNode(char *field, QuerySt
+ 
+ 
+ gcgiReturnType 
+-findQueryStringNodeCur(char *field, QueryStringNode **q) 
++findQueryStringNodeCur(const char *field, QueryStringNode **q) 
+ {
+     int flen, i, res;
+ 
+@@ -1499,7 +1499,7 @@ findQueryStringNodeCur(char *field, Quer
+ 
+ 
+ gcgiReturnType
+-findQueryStringNodeByData(char *field, char *data, QueryStringNode **q)
++findQueryStringNodeByData(const char *field, const char *data, QueryStringNode **q)
+ {
+     QueryStringNode *qs;
+     int i;
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.h
+@@ -80,7 +80,8 @@ typedef enum {
+     eightbit, 
+     binary, 
+     quotedprintable, 
+-    basesixtyfour
++    basesixtyfour,
++    unknownEncoding
+ } MimeEncoding;
+ 
+ typedef enum {
+@@ -119,69 +120,69 @@ void            freeCgi( void );
+ gcgiReturnType  gcgiSetLimits(size_t fieldLimit, size_t queryLimit);
+ 
+ /* HTTP Header Functions */
+-gcgiReturnType  gcgiSendContentType(char *mimeType, char *name, char *charset, HTTPHeader header);
+-gcgiReturnType  gcgiSendContentDisp(MimeDisposition disp, char *filename, HTTPHeader header);
++gcgiReturnType  gcgiSendContentType(const char *mimeType, const char *name, const char *charset, HTTPHeader header);
++gcgiReturnType  gcgiSendContentDisp(MimeDisposition disp, const char *filename, HTTPHeader header);
+ gcgiReturnType  gcgiSendContentLength(int length, HTTPHeader header);
+-gcgiReturnType  gcgiSendCacheControl(char *cache, HTTPHeader header);
+-gcgiReturnType  gcgiSendLocation(char *redirectURL);
+-gcgiReturnType  gcgiSendStatus(int status, char *message);
++gcgiReturnType  gcgiSendCacheControl(const char *cache, HTTPHeader header);
++gcgiReturnType  gcgiSendLocation(const char *redirectURL);
++gcgiReturnType  gcgiSendStatus(int status, const char *message);
+ 
+ /* Cookie Handling Functions */
+-gcgiReturnType  gcgiSendCookie(char *name, char *value, char *path, char *domain, char *expires, 
++gcgiReturnType  gcgiSendCookie(const char *name, const char *value, const char *path, const char *domain, const char *expires, 
+ 			       int secure, HTTPHeader header);
+ gcgiReturnType  gcgiFetchCookies(char ***cookies);
+-gcgiReturnType  gcgiParseCookie(char *cookie, char **name, char **value);
++gcgiReturnType  gcgiParseCookie(const char *cookie, char **name, char **value);
+ gcgiReturnType  gcgiFreeCookies(char **cookies);
+ 
+-gcgiReturnType  gcgiSendEncryptedCookie(char *name, char *value, char *path, char *domain, char *expires, 
+-					int secure, unsigned char *key, HTTPHeader header);
+-gcgiReturnType  gcgiParseEncryptedCookie(char *cookie, unsigned char *key, char **name, char **value);
++gcgiReturnType  gcgiSendEncryptedCookie(const char *name, const char *value, const char *path, const char *domain, const char *expires, 
++					int secure, const unsigned char *key, HTTPHeader header);
++gcgiReturnType  gcgiParseEncryptedCookie(const char *cookie, const unsigned char *key, char **name, char **value);
+ gcgiReturnType  gcgiGenerateKey(unsigned char **key);
+-gcgiReturnType  gcgiWriteKeyToFile(unsigned char *key, char *path);
+-gcgiReturnType  gcgiReadKeyFromFile(char *path, unsigned char **key);
++gcgiReturnType  gcgiWriteKeyToFile(const unsigned char *key, const char *path);
++gcgiReturnType  gcgiReadKeyFromFile(const char *path, unsigned char **key);
+ 
+ /* Data Fetching Functions */
+ char           *gcgiFetchEnvVar(int env);
+-gcgiReturnType  gcgiFetchInteger(char *field, int *ret, int defaultRet);
+-gcgiReturnType  gcgiFetchIntegerNext(char *field, int *ret, int defaultRet);
+-gcgiReturnType  gcgiFetchDouble(char *field, double *ret, double defaultRet);
+-gcgiReturnType  gcgiFetchDoubleNext(char *field, double *ret, double defaultRet);
+-gcgiReturnType  gcgiFetchString(char *field, char *ret, int max);
+-gcgiReturnType  gcgiFetchStringNext(char *field, char *ret, int max);
+-gcgiReturnType  gcgiFetchStringNoNewLines(char *field, char *ret, int max);
+-gcgiReturnType  gcgiFetchStringNoNewLinesNext(char *field, char *ret, int max);
+-gcgiReturnType  gcgiFetchData(char *field, char *ret, int max, MimeType *type, 
++gcgiReturnType  gcgiFetchInteger(const char *field, int *ret, int defaultRet);
++gcgiReturnType  gcgiFetchIntegerNext(const char *field, int *ret, int defaultRet);
++gcgiReturnType  gcgiFetchDouble(const char *field, double *ret, double defaultRet);
++gcgiReturnType  gcgiFetchDoubleNext(const char *field, double *ret, double defaultRet);
++gcgiReturnType  gcgiFetchString(const char *field, char *ret, int max);
++gcgiReturnType  gcgiFetchStringNext(const char *field, char *ret, int max);
++gcgiReturnType  gcgiFetchStringNoNewLines(const char *field, char *ret, int max);
++gcgiReturnType  gcgiFetchStringNoNewLinesNext(const char *field, char *ret, int max);
++gcgiReturnType  gcgiFetchData(const char *field, char *ret, int max, MimeType *type, 
+ 			      char **subtype, MimeEncoding *encoding, char **filename, int *truncated);
+-gcgiReturnType  gcgiFetchDataNext(char *field, char *ret, int max, MimeType *type, 
++gcgiReturnType  gcgiFetchDataNext(const char *field, char *ret, int max, MimeType *type, 
+ 				  char **subtype, MimeEncoding *encoding, char **filename, int *truncated);
+-gcgiReturnType  gcgiFieldLength(char *field, int *ret);
+-gcgiReturnType  gcgiFieldLengthCur(char *field, int *ret);
+-gcgiReturnType  gcgiFieldLengthNext(char *field, int *ret);
+-gcgiReturnType  gcgiFieldSize(char *field, int *ret);
+-gcgiReturnType  gcgiFieldSizeCur(char *field, int *ret);
+-gcgiReturnType  gcgiFieldSizeNext(char *field, int *ret);
++gcgiReturnType  gcgiFieldLength(const char *field, int *ret);
++gcgiReturnType  gcgiFieldLengthCur(const char *field, int *ret);
++gcgiReturnType  gcgiFieldLengthNext(const char *field, int *ret);
++gcgiReturnType  gcgiFieldSize(const char *field, int *ret);
++gcgiReturnType  gcgiFieldSizeCur(const char *field, int *ret);
++gcgiReturnType  gcgiFieldSizeNext(const char *field, int *ret);
+ 
+ gcgiReturnType  gcgiNumFormFields(int *ret);
+-gcgiReturnType  gcgiNumFields(char *field, int *ret);
++gcgiReturnType  gcgiNumFields(const char *field, int *ret);
+ 
+-gcgiReturnType  gcgiFetchCheckbox(char *field, int *ret);
+-gcgiReturnType  gcgiFetchMultipleCheckbox(char *field, char **data, int size, int **ret);
+-gcgiReturnType  gcgiFetchMultipleString(char *field, char ***data);
++gcgiReturnType  gcgiFetchCheckbox(const char *field, int *ret);
++gcgiReturnType  gcgiFetchMultipleCheckbox(const char *field, char **data, int size, int **ret);
++gcgiReturnType  gcgiFetchMultipleString(const char *field, char ***data);
+ gcgiReturnType  gcgiFreeMultipleString(char **data);
+-gcgiReturnType  gcgiFetchSelectIndex(char *field, char **data, int size, int *ret, int defaultVal);
+-gcgiReturnType  gcgiResetMultipleField(char *field);
+-gcgiReturnType  gcgiLoadEnvVariables(char *path);
+-gcgiReturnType  gcgiSaveEnvVariables(char *path);
+-gcgiReturnType  gcgiDebug(char *envVarsPath, char *cgiQueryPath);
++gcgiReturnType  gcgiFetchSelectIndex(const char *field, char **data, int size, int *ret, int defaultVal);
++gcgiReturnType  gcgiResetMultipleField(const char *field);
++gcgiReturnType  gcgiLoadEnvVariables(const char *path);
++gcgiReturnType  gcgiSaveEnvVariables(const char *path);
++gcgiReturnType  gcgiDebug(const char *envVarsPath, const char *cgiQueryPath);
+ 
+ /* Encoding/Decoding Functions */
+-gcgiReturnType  gcgiDecodeBaseSixtyFourString(char *text, char **decodedText, int *numBytes);
+-gcgiReturnType  gcgiEncodeBaseSixtyFourString(char *text, int numBytes, char **encodedText);
+-gcgiReturnType  gcgiDecodeQuotedPrintableString(char *text, char **decodedText, int *size);
+-gcgiReturnType  gcgiEncodeQuotedPrintableString(char *text, char **encodedText, int *size);
+-gcgiReturnType  gcgiDecodeRfc2047String(char *text, char **charset, char **decodedText);
+-gcgiReturnType  gcgiDecodeUrlEncodedString(char *text, char **decodedText, int *size);
+-gcgiReturnType  gcgiEncodeUrlString(char *text, char **encodedText, int *size);
++gcgiReturnType  gcgiDecodeBaseSixtyFourString(const char *text, char **decodedText, int *numBytes);
++gcgiReturnType  gcgiEncodeBaseSixtyFourString(const char *text, int numBytes, char **encodedText);
++gcgiReturnType  gcgiDecodeQuotedPrintableString(const char *text, char **decodedText, int *size);
++gcgiReturnType  gcgiEncodeQuotedPrintableString(const char *text, char **encodedText, int *size);
++gcgiReturnType  gcgiDecodeRfc2047String(const char *text, char **charset, char **decodedText);
++gcgiReturnType  gcgiDecodeUrlEncodedString(const char *text, char **decodedText, int *size);
++gcgiReturnType  gcgiEncodeUrlString(const char *text, char **encodedText, int *size);
+ 
+ /*------ Debugging Functions ------*/
+ gcgiReturnType  printQuery(FILE *stream);
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi_private.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi_private.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi_private.h
+@@ -68,14 +68,14 @@ gcgiReturnType         freeCgiQuery( voi
+ gcgiReturnType         insertQueryStringNode(QueryStringNode *q);
+ gcgiReturnType         createQueryStringNode(QueryStringNode **q);
+ gcgiReturnType         freeQueryStringNode(QueryStringNode *q);
+-gcgiReturnType         findQueryStringNodeFirst(char *field, QueryStringNode **q);
+-gcgiReturnType         findQueryStringNode(char *field, QueryStringNode **q);
+-gcgiReturnType         findQueryStringNodeCur(char *field, QueryStringNode **q);
+-gcgiReturnType         findQueryStringNodeByData(char *field, char *data, QueryStringNode **q);
++gcgiReturnType         findQueryStringNodeFirst(const char *field, QueryStringNode **q);
++gcgiReturnType         findQueryStringNode(const char *field, QueryStringNode **q);
++gcgiReturnType         findQueryStringNodeCur(const char *field, QueryStringNode **q);
++gcgiReturnType         findQueryStringNodeByData(const char *field, const char *data, QueryStringNode **q);
+ gcgiReturnType         createQueryStringColl(QueryStringColl **q);
+ gcgiReturnType         createQueryStringCollArray(int numColls); 
+ gcgiReturnType         freeQueryStringColl(QueryStringColl *q);
+-gcgiReturnType         findQueryStringColl(char *field, int *index);
++gcgiReturnType         findQueryStringColl(const char *field, int *index);
+ gcgiReturnType         getEnvVariables( void );
+ 
+ /*------ Debugging Functions ------*/
+@@ -85,7 +85,7 @@ gcgiReturnType         printQueryStringC
+ /*------ Parse Functions------*/
+ gcgiReturnType         parsePostQueryString(int *numBytes);
+ gcgiReturnType         parseGetQueryString(int *numBytes);
+-gcgiReturnType         parseUrlEncoded(char *querystring, int clen);
++gcgiReturnType         parseUrlEncoded(const char *querystring, int clen);
+ gcgiReturnType         parseFormData(FILE *data);
+ void                   decodeUrl(QueryStringNode *qString);
+ 
+Index: libgcgi-debian-0.9.5.dfsg-7/src/mime.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/mime.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/mime.c
+@@ -49,7 +49,7 @@ mimeCreateMimePart(MimePart **part)
+     (*part)->version     = NULL;
+     (*part)->type        = unknown;
+     (*part)->subtype     = NULL;
+-    (*part)->encoding    = unknown;
++    (*part)->encoding    = unknownEncoding;
+     (*part)->boundary    = NULL;
+     (*part)->name        = NULL;
+     (*part)->filename    = NULL;
+@@ -454,7 +454,7 @@ mimeParseMimeBody(CRLFStringBuf *mimeIn,
+ {
+     char  *line, *peek;
+     int    i, endOfPart;
+-    int    llen, size;
++    size_t llen, size;
+ 
+     /* This message is MIME encoded, look for s/eboundary as end of Message. */
+     endOfPart = 0;
+@@ -506,7 +506,7 @@ mimeParseMimeBody(CRLFStringBuf *mimeIn,
+     } while (!endOfPart && line != NULL);
+     
+     /* If binary encoded, remove the final CRLF that seperates the MIME boundary. */
+-    if (part->encoding == binary || part->encoding == unknown) {
++    if (part->encoding == binary || part->encoding == unknownEncoding) {
+ 	if (part->body[part->bodylen - 1] == '\n' && part->body[part->bodylen - 2] == '\r') {
+ 	    part->body[part->bodylen - 1] = '\0';
+ 	    part->body[part->bodylen - 2] = '\0';
+Index: libgcgi-debian-0.9.5.dfsg-7/src/parse.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/parse.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/parse.c
+@@ -21,9 +21,9 @@
+ #include "parse.h"
+ 
+ int 
+-numOccurances(char *string, char *pattern)
++numOccurances(const char *string, const char *pattern)
+ {
+-    char *pin;
++    const char *pin;
+     int patternLen;
+     int count = 0;
+ 
+@@ -42,7 +42,7 @@ numOccurances(char *string, char *patter
+ }
+ 
+ int 
+-replacePat(char **string, char *pattern, char *replace, int *size)
++replacePat(char **string, const char *pattern, const char *replace, int *size)
+ {
+     char *pin, *pout, *output;
+     int  stringLen, patternLen, replaceLen;
+@@ -109,7 +109,7 @@ replacePat(char **string, char *pattern,
+ 
+ 
+ int 
+-removePat(char *string, char *pattern, int stringLen)
++removePat(char *string, const char *pattern, int stringLen)
+ {
+   char *pin, *pout, *out;
+   int   patternLen;
+@@ -143,9 +143,9 @@ removePat(char *string, char *pattern, i
+ 
+ 
+ int 
+-regexPat(char *string, char *pattern, int stringLen)
++regexPat(char *string, const char *pattern, int stringLen)
+ {
+-    int         res, outLen, limit;
++    int         res, limit;
+     int         count = 0;
+     int         nmatch = 1;
+     char       *pout, *sptr, *eptr;
+@@ -177,7 +177,6 @@ regexPat(char *string, char *pattern, in
+     *(pout+(sptr-string)) = '\0';
+     
+     strcat(pout, eptr);
+-    outLen = strlen(pout);
+     strcpy(string, pout);
+     *pout = '\0';
+     
+@@ -193,7 +192,6 @@ regexPat(char *string, char *pattern, in
+ 	*(pout+(sptr-string)) = '\0';       /* Zero out the partial string *
+ 					     * so strcat works properly.   */
+ 	strcat(pout, eptr);                 /* Add on the second half.     */
+-	outLen = strlen(pout);            
+ 	strcpy(string, pout);               /* Copy back to our original string */
+ 	*pout = '\0';
+     }
+@@ -207,7 +205,7 @@ regexPat(char *string, char *pattern, in
+ 
+ 
+ void 
+-insertString(char **string, char *insert, int offset, int *size)
++insertString(char **string, const char *insert, int offset, int *size)
+ {
+   char *p, *len, *tmp;
+   int  insertLen, stringLen, tmpLen;
+@@ -238,10 +236,10 @@ insertString(char **string, char *insert
+ 
+ /* Return a NULL-terminated array of strings. */
+ int
+-tokenizeString(char *string, int size, char ***output)
++tokenizeString(const char *string, int size, char ***output)
+ {
+-    char  *start, *end;
+-    char  *p, *q;
++    const char  *start, *end;
++    const char  *p, *q;
+     int   i;
+ 
+     end = string + size;
+@@ -305,10 +303,10 @@ tokenizeString(char *string, int size, c
+ 
+ 
+ int
+-tokenizeURLString(char *string, int size, char ***output)
++tokenizeURLString(const char *string, int size, char ***output)
+ {
+-    char  *start, *end;
+-    char  *p, *q;
++    const char  *start, *end;
++    const char  *p, *q;
+     int   i;
+ 
+     end = string + size;
+@@ -382,10 +380,10 @@ freeStringArray(char **string)
+ /* Parse a token, such as 'charset=ISO-8859-1' *
+  * or 'filename="pic17958.pcx"' or 'inline;'   */
+ int
+-parseToken(char *token, char **property, char **value)
++parseToken(const char *token, char **property, char **value)
+ {
+-    char *start, *end;
+-    char *p, *q;
++    const char *start, *end;
++    const char *p, *q;
+     int   tlen;
+ 
+     token? (tlen = strlen(token)) : (tlen = 0);
+@@ -448,11 +446,9 @@ parseToken(char *token, char **property,
+ int
+ readCRLFLine(FILE *input, char **line, int *size)
+ {
+-    off_t pos;
+     char  buf[256];
+     int   blen, llen;
+ 
+-    pos = ftell(input);
+     memset(*line, 0, *size);   
+     llen = 0;
+ 
+Index: libgcgi-debian-0.9.5.dfsg-7/src/parse.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/parse.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/parse.h
+@@ -25,15 +25,15 @@
+ 
+ BEGIN_C_DECLS
+ 
+-int      replacePat(char **string, char *pattern, char *replace, int *size);
+-int      numOccurarnces(char *string, char *pattern);
+-int      removePat(char *string, char *pattern, int stringLen);
+-int      regexPat(char *string,char *pattern,int stringLen);
+-void     insertString(char **string, char *insert, int offset, int *size);
+-int      tokenizeString(char *string, int size, char ***output);
+-int      tokenizeURLString(char *string, int size, char ***output);
++int      replacePat(char **string, const char *pattern, const char *replace, int *size);
++int      numOccurarnces(const char *string, const char *pattern);
++int      removePat(char *string, const char *pattern, int stringLen);
++int      regexPat(char *string, const char *pattern, int stringLen);
++void     insertString(char **string, const char *insert, int offset, int *size);
++int      tokenizeString(const char *string, int size, char ***output);
++int      tokenizeURLString(const char *string, int size, char ***output);
+ int      freeStringArray(char **string);
+-int      parseToken(char *token, char **property, char **value);
++int      parseToken(const char *token, char **property, char **value);
+ int      readCRLFLine(FILE *input, char **line, int *size);
+ 
+ END_C_DECLS
+Index: libgcgi-debian-0.9.5.dfsg-7/examples/gcgiFileUploadTest.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/examples/gcgiFileUploadTest.c
++++ libgcgi-debian-0.9.5.dfsg-7/examples/gcgiFileUploadTest.c
+@@ -1,5 +1,6 @@
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <string.h>
+ #include "gcgi.h"
+ 
+ static const char* const strTypes[] = {
+Index: libgcgi-debian-0.9.5.dfsg-7/examples/getinput.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/examples/getinput.c
++++ libgcgi-debian-0.9.5.dfsg-7/examples/getinput.c
+@@ -2,6 +2,7 @@
+ #include <stdio.h>
+ #include <sys/types.h>
+ #include <errno.h>
++#include <string.h>
+ 
+ int main (int argc, char *argv[], char *envp[]) 
+ {

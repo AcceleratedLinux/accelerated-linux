@@ -209,8 +209,8 @@ const char *find_on_path(const char *prog, const char *path)
  *
  * 2. If $ROOTDIR is set, but not the others, look in $ROOTDIR/.config for settings
  *
- * 3. If $ROOTDIR is not set, look at our path (which we expect to be $ROOTDIR/tools) to
- *    determine ROOTDIR and then proceed as in (2).
+ * 3. If $ROOTDIR is not set, look at our path (which we expect to be $ROOTDIR/tools or
+ *    $ROOTDIR/bin) to determine ROOTDIR and then proceed as in (2).
  */
 static void find_lib_env(void)
 {
@@ -224,6 +224,8 @@ static void find_lib_env(void)
 		rootdir = strdup(argv0);
 
 		pt = strstr(rootdir, "/tools/");
+		if (!pt)
+			pt = strstr(rootdir, "/bin/");
 		if (!pt) {
 			fatal("Could not determine ROOTDIR from argv[0]=%s\n", argv0);
 		}

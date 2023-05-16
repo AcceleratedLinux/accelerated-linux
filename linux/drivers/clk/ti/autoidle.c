@@ -82,7 +82,12 @@ static int _omap2_clk_allow_idle(struct clk_hw_omap *clk)
  */
 int omap2_clk_deny_idle(struct clk *clk)
 {
-	struct clk_hw *hw = __clk_get_hw(clk);
+	struct clk_hw *hw;
+
+	if (!clk)
+		return -EINVAL;
+
+	hw = __clk_get_hw(clk);
 
 	if (omap2_clk_is_hw_omap(hw)) {
 		struct clk_hw_omap *c = to_clk_hw_omap(hw);
@@ -101,7 +106,12 @@ int omap2_clk_deny_idle(struct clk *clk)
  */
 int omap2_clk_allow_idle(struct clk *clk)
 {
-	struct clk_hw *hw = __clk_get_hw(clk);
+	struct clk_hw *hw;
+
+	if (!clk)
+		return -EINVAL;
+
+	hw = __clk_get_hw(clk);
 
 	if (omap2_clk_is_hw_omap(hw)) {
 		struct clk_hw_omap *c = to_clk_hw_omap(hw);
@@ -195,7 +205,7 @@ int __init of_ti_clk_autoidle_setup(struct device_node *node)
 		return -ENOMEM;
 
 	clk->shift = shift;
-	clk->name = node->name;
+	clk->name = ti_dt_clk_name(node);
 	ret = ti_clk_get_reg_addr(node, 0, &clk->reg);
 	if (ret) {
 		kfree(clk);

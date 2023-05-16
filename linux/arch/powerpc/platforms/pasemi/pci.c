@@ -12,6 +12,7 @@
 
 
 #include <linux/kernel.h>
+#include <linux/of_address.h>
 #include <linux/pci.h>
 
 #include <asm/pci-bridge.h>
@@ -287,7 +288,7 @@ void __init pas_pci_init(void)
 	}
 }
 
-void __iomem *pasemi_pci_getcfgaddr(struct pci_dev *dev, int offset)
+void __iomem *__init pasemi_pci_getcfgaddr(struct pci_dev *dev, int offset)
 {
 	struct pci_controller *hose;
 

@@ -1,0 +1,145 @@
+From 156aea9170e82768c582bcb47ea0331b8c5758a5 Mon Sep 17 00:00:00 2001
+From: David McCullough <David.McCullough@digi.com>
+Date: Tue, 25 Jan 2022 17:35:39 +0100
+Subject: [PATCH 05/10] Adding 'virtualuser' config parameter
+
+---
+ auth.c     | 12 +++++++++---
+ loginrec.c |  8 +++++++-
+ servconf.c | 15 +++++++++++++++
+ servconf.h |  2 ++
+ 4 files changed, 33 insertions(+), 4 deletions(-)
+
+diff --git a/auth.c b/auth.c
+index 00b168b..d00e2b9 100644
+--- a/auth.c
++++ b/auth.c
+@@ -586,7 +586,7 @@ getpwnamallow(struct ssh *ssh, const char *user)
+ 	aix_setauthdb(user);
+ #endif
+ 
+-	pw = getpwnam(user);
++	pw = getpwnam(options.virtual_user ?: user);
+ 
+ #if defined(_AIX) && defined(HAVE_SETAUTHDB)
+ 	aix_restoreauthdb();
+@@ -620,8 +620,14 @@ getpwnamallow(struct ssh *ssh, const char *user)
+ 		auth_close(as);
+ #endif
+ #endif
+-	if (pw != NULL)
+-		return (pwcopy(pw));
++	if (pw != NULL) {
++		pw = pwcopy(pw);
++		if (pw && options.virtual_user && strcmp(options.virtual_user, pw->pw_name) == 0) {
++			free(pw->pw_name);
++			pw->pw_name = xstrdup(user);
++		}
++		return (pw);
++	}
+ 	return (NULL);
+ }
+ 
+diff --git a/loginrec.c b/loginrec.c
+index ea058fd..b4a254c 100644
+--- a/loginrec.c
++++ b/loginrec.c
+@@ -169,6 +169,11 @@
+ #include <time.h>
+ #include <unistd.h>
+ 
++#include "openbsd-compat/sys-queue.h"
++#include "channels.h"
++#include "misc.h"
++#include "log.h"
++#include "servconf.h"
+ #include "xmalloc.h"
+ #include "sshkey.h"
+ #include "hostfile.h"
+@@ -214,6 +219,7 @@ int wtmp_get_entry(struct logininfo *li);
+ int wtmpx_get_entry(struct logininfo *li);
+ 
+ extern struct sshbuf *loginmsg;
++extern ServerOptions options;
+ 
+ /* pick the shortest string */
+ #define MIN_SIZEOF(s1,s2) (sizeof(s1) < sizeof(s2) ? sizeof(s1) : sizeof(s2))
+@@ -384,7 +390,7 @@ login_init_entry(struct logininfo *li, pid_t pid, const char *username,
+ 
+ 	if (username) {
+ 		strlcpy(li->username, username, sizeof(li->username));
+-		pw = getpwnam(li->username);
++		pw = getpwnam(options.virtual_user ?: li->username);
+ 		if (pw == NULL) {
+ 			fatal("%s: Cannot find user \"%s\"", __func__,
+ 			    li->username);
+diff --git a/servconf.c b/servconf.c
+index 1fba8d0..575b936 100644
+--- a/servconf.c
++++ b/servconf.c
+@@ -192,6 +192,7 @@ initialize_server_options(ServerOptions *options)
+ 	options->ip_qos_interactive = -1;
+ 	options->ip_qos_bulk = -1;
+ 	options->version_addendum = NULL;
++	options->virtual_user = NULL;
+ 	options->fingerprint_hash = -1;
+ 	options->disable_forwarding = -1;
+ 	options->expose_userauth_info = -1;
+@@ -516,6 +517,7 @@ typedef enum {
+ 	sAuthenticationMethods, sHostKeyAgent, sPermitUserRC,
+ 	sStreamLocalBindMask, sStreamLocalBindUnlink,
+ 	sAllowStreamLocalForwarding, sFingerprintHash, sDisableForwarding,
++	sVirtualUser,
+ 	sExposeAuthInfo, sRDomain, sPubkeyAuthOptions, sSecurityKeyProvider,
+ 	sDeprecated, sIgnore, sUnsupported
+ } ServerOpCodes;
+@@ -672,6 +674,7 @@ static struct {
+ 	{ "allowstreamlocalforwarding", sAllowStreamLocalForwarding, SSHCFG_ALL },
+ 	{ "fingerprinthash", sFingerprintHash, SSHCFG_GLOBAL },
+ 	{ "disableforwarding", sDisableForwarding, SSHCFG_ALL },
++	{ "virtualuser", sVirtualUser, SSHCFG_ALL },
+ 	{ "exposeauthinfo", sExposeAuthInfo, SSHCFG_ALL },
+ 	{ "rdomain", sRDomain, SSHCFG_ALL },
+ 	{ "casignaturealgorithms", sCASignatureAlgorithms, SSHCFG_ALL },
+@@ -2413,6 +2416,17 @@ process_server_config_line_depth(ServerOptions *options, char *line,
+ 			options->fingerprint_hash = value;
+ 		break;
+ 
++	case sVirtualUser:
++		charptr = &options->virtual_user;
++
++		arg = argv_next(&ac, &av);
++		if (!arg || *arg == '\0')
++			fatal("%s line %d: missing user name.",
++			    filename, linenum);
++		if (*activep && *charptr == NULL)
++			*charptr = xstrdup(arg);
++		break;
++
+ 	case sExposeAuthInfo:
+ 		intptr = &options->expose_userauth_info;
+ 		goto parse_flag;
+@@ -2946,6 +2960,7 @@ dump_config(ServerOptions *o)
+ 	dump_cfg_string(sHostbasedAcceptedAlgorithms, o->hostbased_accepted_algos);
+ 	dump_cfg_string(sHostKeyAlgorithms, o->hostkeyalgorithms);
+ 	dump_cfg_string(sPubkeyAcceptedAlgorithms, o->pubkey_accepted_algos);
++	dump_cfg_string(sVirtualUser, o->virtual_user);
+ #if defined(__OpenBSD__) || defined(HAVE_SYS_SET_PROCESS_RDOMAIN)
+ 	dump_cfg_string(sRDomain, o->routing_domain);
+ #endif
+diff --git a/servconf.h b/servconf.h
+index dd5cbc1..a7ad3e0 100644
+--- a/servconf.h
++++ b/servconf.h
+@@ -225,6 +225,8 @@ typedef struct {
+ 	u_int	num_auth_methods;
+ 	char   **auth_methods;
+ 
++	char   *virtual_user;
++
+ 	int	fingerprint_hash;
+ 	int	expose_userauth_info;
+ 	u_int64_t timing_secret;
+-- 
+2.30.2
+

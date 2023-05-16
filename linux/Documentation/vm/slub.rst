@@ -41,6 +41,11 @@ slub_debug=<Debug-Options>,<slab name1>,<slab name2>,...
 	Enable options only for select slabs (no spaces
 	after a comma)
 
+Multiple blocks of options for all slabs or selected slabs can be given, with
+blocks of options delimited by ';'. The last of "all slabs" blocks is applied
+to all slabs except those that match one of the "select slabs" block. Options
+of the first "select slabs" blocks that matches the slab's name are applied.
+
 Possible debug options are::
 
 	F		Sanity checks on (enables SLAB_DEBUG_CONSISTENCY_CHECKS
@@ -83,17 +88,33 @@ switch off debugging for such caches by default, use::
 
 	slub_debug=O
 
-In case you forgot to enable debugging on the kernel command line: It is
-possible to enable debugging manually when the kernel is up. Look at the
-contents of::
+You can apply different options to different list of slab names, using blocks
+of options. This will enable red zoning for dentry and user tracking for
+kmalloc. All other slabs will not get any debugging enabled::
+
+	slub_debug=Z,dentry;U,kmalloc-*
+
+You can also enable options (e.g. sanity checks and poisoning) for all caches
+except some that are deemed too performance critical and don't need to be
+debugged by specifying global debug options followed by a list of slab names
+with "-" as options::
+
+	slub_debug=FZ;-,zs_handle,zspage
+
+The state of each debug option for a slab can be found in the respective files
+under::
 
 	/sys/kernel/slab/<slab name>/
 
-Look at the writable files. Writing 1 to them will enable the
-corresponding debug option. All options can be set on a slab that does
-not contain objects. If the slab already contains objects then sanity checks
-and tracing may only be enabled. The other options may cause the realignment
-of objects.
+If the file contains 1, the option is enabled, 0 means disabled. The debug
+options from the ``slub_debug`` parameter translate to the following files::
+
+	F	sanity_checks
+	Z	red_zone
+	P	poison
+	U	store_user
+	T	trace
+	A	failslab
 
 Careful with tracing: It may spew out lots of information and never stop if
 used on the wrong slab.
@@ -160,7 +181,7 @@ SLUB Debug output
 Here is a sample of slub debug output::
 
  ====================================================================
- BUG kmalloc-8: Redzone overwritten
+ BUG kmalloc-8: Right Redzone overwritten
  --------------------------------------------------------------------
 
  INFO: 0xc90f6d28-0xc90f6d2b. First byte 0x00 instead of 0xcc
@@ -168,10 +189,10 @@ Here is a sample of slub debug output::
  INFO: Object 0xc90f6d20 @offset=3360 fp=0xc90f6d58
  INFO: Allocated in get_modalias+0x61/0xf5 age=53 cpu=1 pid=554
 
- Bytes b4 0xc90f6d10:  00 00 00 00 00 00 00 00 5a 5a 5a 5a 5a 5a 5a 5a ........ZZZZZZZZ
-   Object 0xc90f6d20:  31 30 31 39 2e 30 30 35                         1019.005
-  Redzone 0xc90f6d28:  00 cc cc cc                                     .
-  Padding 0xc90f6d50:  5a 5a 5a 5a 5a 5a 5a 5a                         ZZZZZZZZ
+ Bytes b4 (0xc90f6d10): 00 00 00 00 00 00 00 00 5a 5a 5a 5a 5a 5a 5a 5a ........ZZZZZZZZ
+ Object   (0xc90f6d20): 31 30 31 39 2e 30 30 35                         1019.005
+ Redzone  (0xc90f6d28): 00 cc cc cc                                     .
+ Padding  (0xc90f6d50): 5a 5a 5a 5a 5a 5a 5a 5a                         ZZZZZZZZ
 
    [<c010523d>] dump_trace+0x63/0x1eb
    [<c01053df>] show_trace_log_lvl+0x1a/0x2f
@@ -357,11 +378,75 @@ c) Execute ``slabinfo-gnuplot.sh`` in '-t' mode, passing all of the
    can go unnoticed. To deal with that, ``slabinfo-gnuplot.sh`` has two
    options to 'zoom-in'/'zoom-out':
 
-   a) ``-s %d,%d`` -- overwrites the default image width and heigh
+   a) ``-s %d,%d`` -- overwrites the default image width and height
    b) ``-r %d,%d`` -- specifies a range of samples to use (for example,
       in ``slabinfo -X >> FOO_STATS; sleep 1;`` case, using a ``-r
       40,60`` range will plot only samples collected between 40th and
       60th seconds).
+
+
+DebugFS files for SLUB
+======================
+
+For more information about current state of SLUB caches with the user tracking
+debug option enabled, debugfs files are available, typically under
+/sys/kernel/debug/slab/<cache>/ (created only for caches with enabled user
+tracking). There are 2 types of these files with the following debug
+information:
+
+1. alloc_traces::
+
+    Prints information about unique allocation traces of the currently
+    allocated objects. The output is sorted by frequency of each trace.
+
+    Information in the output:
+    Number of objects, allocating function, minimal/average/maximal jiffies since alloc,
+    pid range of the allocating processes, cpu mask of allocating cpus, and stack trace.
+
+    Example:::
+
+    1085 populate_error_injection_list+0x97/0x110 age=166678/166680/166682 pid=1 cpus=1::
+	__slab_alloc+0x6d/0x90
+	kmem_cache_alloc_trace+0x2eb/0x300
+	populate_error_injection_list+0x97/0x110
+	init_error_injection+0x1b/0x71
+	do_one_initcall+0x5f/0x2d0
+	kernel_init_freeable+0x26f/0x2d7
+	kernel_init+0xe/0x118
+	ret_from_fork+0x22/0x30
+
+
+2. free_traces::
+
+    Prints information about unique freeing traces of the currently allocated
+    objects. The freeing traces thus come from the previous life-cycle of the
+    objects and are reported as not available for objects allocated for the first
+    time. The output is sorted by frequency of each trace.
+
+    Information in the output:
+    Number of objects, freeing function, minimal/average/maximal jiffies since free,
+    pid range of the freeing processes, cpu mask of freeing cpus, and stack trace.
+
+    Example:::
+
+    1980 <not-available> age=4294912290 pid=0 cpus=0
+    51 acpi_ut_update_ref_count+0x6a6/0x782 age=236886/237027/237772 pid=1 cpus=1
+	kfree+0x2db/0x420
+	acpi_ut_update_ref_count+0x6a6/0x782
+	acpi_ut_update_object_reference+0x1ad/0x234
+	acpi_ut_remove_reference+0x7d/0x84
+	acpi_rs_get_prt_method_data+0x97/0xd6
+	acpi_get_irq_routing_table+0x82/0xc4
+	acpi_pci_irq_find_prt_entry+0x8e/0x2e0
+	acpi_pci_irq_lookup+0x3a/0x1e0
+	acpi_pci_irq_enable+0x77/0x240
+	pcibios_enable_device+0x39/0x40
+	do_pci_enable_device.part.0+0x5d/0xe0
+	pci_enable_device_flags+0xfc/0x120
+	pci_enable_device+0x13/0x20
+	virtio_pci_probe+0x9e/0x170
+	local_pci_probe+0x48/0x80
+	pci_device_probe+0x105/0x1c0
 
 Christoph Lameter, May 30, 2007
 Sergey Senozhatsky, October 23, 2015

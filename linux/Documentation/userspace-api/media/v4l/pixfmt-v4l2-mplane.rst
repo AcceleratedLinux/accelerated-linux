@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 ******************************
 Multi-planar format structures
@@ -20,7 +13,7 @@ describing all planes of that format.
 
 
 
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
+.. tabularcolumns:: |p{1.4cm}|p{4.0cm}|p{11.9cm}|
 
 .. c:type:: v4l2_plane_pix_format
 
@@ -59,7 +52,7 @@ describing all planes of that format.
 
     \small
 
-.. tabularcolumns:: |p{4.4cm}|p{5.6cm}|p{7.5cm}|
+.. tabularcolumns:: |p{4.4cm}|p{5.6cm}|p{7.3cm}|
 
 .. c:type:: v4l2_pix_format_mplane
 
@@ -105,29 +98,21 @@ describing all planes of that format.
     * - __u8
       - ``ycbcr_enc``
       - Y'CbCr encoding, from enum :c:type:`v4l2_ycbcr_encoding`.
-        This information supplements the ``colorspace`` and must be set by
-	the driver for capture streams and by the application for output
-	streams, see :ref:`colorspaces`.
+	See struct :c:type:`v4l2_pix_format`.
     * - __u8
       - ``hsv_enc``
       - HSV encoding, from enum :c:type:`v4l2_hsv_encoding`.
-        This information supplements the ``colorspace`` and must be set by
-	the driver for capture streams and by the application for output
-	streams, see :ref:`colorspaces`.
+	See struct :c:type:`v4l2_pix_format`.
     * - }
       -
     * - __u8
       - ``quantization``
       - Quantization range, from enum :c:type:`v4l2_quantization`.
-        This information supplements the ``colorspace`` and must be set by
-	the driver for capture streams and by the application for output
-	streams, see :ref:`colorspaces`.
+	See struct :c:type:`v4l2_pix_format`.
     * - __u8
       - ``xfer_func``
       - Transfer function, from enum :c:type:`v4l2_xfer_func`.
-        This information supplements the ``colorspace`` and must be set by
-	the driver for capture streams and by the application for output
-	streams, see :ref:`colorspaces`.
+	See struct :c:type:`v4l2_pix_format`.
     * - __u8
       - ``reserved[7]``
       - Reserved for future extensions. Should be zeroed by drivers and

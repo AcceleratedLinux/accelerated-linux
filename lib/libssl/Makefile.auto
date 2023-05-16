@@ -1,1 +1,0 @@
-dep_$(CONFIG_LIB_LIBSSL) += libssl

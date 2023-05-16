@@ -38,6 +38,9 @@ struct cros_ec_rpmsg_response {
  * @rpdev:	rpmsg device we are connected to
  * @xfer_ack:	completion for host command transfer.
  * @host_event_work:	Work struct for pending host event.
+ * @ept: The rpmsg endpoint of this channel.
+ * @has_pending_host_event: Boolean used to check if there is a pending event.
+ * @probe_done: Flag to indicate that probe is done.
  */
 struct cros_ec_rpmsg {
 	struct rpmsg_device *rpdev;
@@ -86,6 +89,8 @@ static int cros_ec_pkt_xfer_rpmsg(struct cros_ec_device *ec_dev,
 
 	ec_msg->result = 0;
 	len = cros_ec_prepare_tx(ec_dev, ec_msg);
+	if (len < 0)
+		return len;
 	dev_dbg(ec_dev->dev, "prepared, len=%d\n", len);
 
 	reinit_completion(&ec_rpmsg->xfer_ack);
@@ -146,12 +151,8 @@ cros_ec_rpmsg_host_event_function(struct work_struct *host_event_work)
 	struct cros_ec_rpmsg *ec_rpmsg = container_of(host_event_work,
 						      struct cros_ec_rpmsg,
 						      host_event_work);
-	struct cros_ec_device *ec_dev = dev_get_drvdata(&ec_rpmsg->rpdev->dev);
-	bool ec_has_more_events;
 
-	do {
-		ec_has_more_events = cros_ec_handle_event(ec_dev);
-	} while (ec_has_more_events);
+	cros_ec_irq_thread(0, dev_get_drvdata(&ec_rpmsg->rpdev->dev));
 }
 
 static int cros_ec_rpmsg_callback(struct rpmsg_device *rpdev, void *data,

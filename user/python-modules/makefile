@@ -32,6 +32,8 @@ SETUPTOOLS_VERSION = 41.0.1
 SETUPTOOLS_PKG = setuptools-$(SETUPTOOLS_VERSION)
 $(SETUPTOOLS_PKG)_URL = https://github.com/pypa/setuptools/archive/v$(SETUPTOOLS_VERSION).tar.gz
 $(SETUPTOOLS_PKG)_DOWNLOADNAME = $(SETUPTOOLS_PKG).tar.gz
+$(SETUPTOOLS_PKG)_PATCHES += 0001-update-deprecated-html-parser.patch
+$(SETUPTOOLS_PKG)_PATCHES += 0002-Remove-bdist_wininst-Filter-out-distutils-deprecation.patch
 
 # currently we can only hostinstall non compiled modules,  a little more
 # work will be needed if we need to compile modules for the build python
@@ -46,7 +48,7 @@ endif
 ###############################################################################
 ifdef CONFIG_USER_PYTHON_MODULES_PIP
 
-PIP_VERSION = 19.1.1
+PIP_VERSION = 21.3
 PIP_PKG = pip-$(PIP_VERSION)
 $(PIP_PKG)_URL = https://github.com/pypa/pip/archive/$(PIP_VERSION).tar.gz
 $(PIP_PKG)_DOWNLOADNAME = $(PIP_PKG).tar.gz
@@ -145,7 +147,7 @@ endif
 ifdef CONFIG_USER_PYTHON_MODULES_DIGI_XBEE_LIB
 
 XBEE_LIB_PKG = python-xbee
-$(XBEE_LIB_PKG)_VERSION = 9976d553f7f5543b52fb6b203fd97713542d8e23
+$(XBEE_LIB_PKG)_VERSION = 9c08721ccc53c9ba1d9330ca78b876b495958f4e
 $(XBEE_LIB_PKG)_METHOD = git
 $(XBEE_LIB_PKG)_URL = https://github.com/digidotcom/xbee-python.git
 $(XBEE_LIB_PKG)_DEP = $(SETUPTOOLS_PKG)
@@ -169,7 +171,8 @@ ifdef CONFIG_USER_PYTHON_MODULES_SRP
 
 SRP_VERSION = 1.0.14
 SRP_PKG = srp-$(SRP_VERSION)
-$(SRP_PKG)_URL = https://files.pythonhosted.org/packages/9b/9f/04743397ed89136223966a721ec3d96065ce58b1f62aafa6fbae78830309/$(SRP_PKG).tar.gz
+$(SRP_PKG)_URL = https://pypi.io/packages/source/s/srp/$(SRP_PKG).tar.gz
+$(SRP_PKG)_DOWNLOADHASH = 34448d381f59783e88041eb7e049861279bd26e1c88578bc15e9fdcd2bacd3b1
 
 AUTOMAKE_y += $(SRP_PKG)
 endif
@@ -319,6 +322,30 @@ endif
 
 ###############################################################################
 
+ifdef CONFIG_USER_PYTHON_MODULES_TACACS_PLUS
+
+TACACS_PLUS_VERSION = 2.6
+TACACS_PLUS_PKG = tacacs_plus-$(TACACS_PLUS_VERSION)
+$(TACACS_PLUS_PKG)_URL = https://github.com/ansible/tacacs_plus/archive/refs/tags/$(TACACS_PLUS_VERSION).tar.gz
+$(TACACS_PLUS_PKG)_DEP = $(SETUPTOOLS_PKG) $(SIX_PKG)
+
+AUTOMAKE_y += $(TACACS_PLUS_PKG)
+endif
+
+###############################################################################
+
+ifdef CONFIG_USER_PYTHON_MODULES_UBUS
+
+PYTHON_UBUS_VERSION = 0.1.2
+PYTHON_UBUS_PKG = ubus-$(PYTHON_UBUS_VERSION)
+$(PYTHON_UBUS_PKG)_URL = https://pypi.io/packages/source/u/ubus/$(PYTHON_UBUS_PKG).tar.gz
+$(PYTHON_UBUS_PKG)_DOWNLOADHASH = 4dc4ef0fbcc8abb7a2354691475a58ff3eb015f1bab3150750729f7f657dd440
+$(PYTHON_UBUS_PKG)_DEP = $(SETUPTOOLS_PKG)
+
+AUTOMAKE_y += $(PYTHON_UBUS_PKG)
+endif
+
+###############################################################################
 FINALTARGET = pkg_install
 
 include $(ROOTDIR)/tools/automake.inc
@@ -375,5 +402,18 @@ clean: clean_sysconfigdata
 # included in the Python path by default, so include it.
 .PHONY: pth
 pth:
+ifdef CONFIG_USER_PYTHON
 	echo "/usr/lib/python$(PYTHON_VERSION_SHORT)/dist-packages" > $(ROMFSDIR)/usr/lib/python$(PYTHON_VERSION_SHORT)/site-packages/modules.pth
-romfs: pth
+endif
+
+PYTHON_LIVE_IMAGE_DIR = $(STAGEDIR)/live_images/python/rootfs
+
+.PHONY: python-modules_romfs
+python-modules_romfs:
+ifdef CONFIG_USER_PYTHON_LIVE_IMAGE
+	mkdir -p $(PYTHON_LIVE_IMAGE_DIR)/usr/lib
+	cp -r $(ROMFSDIR)/usr/lib/python$(PYTHON_VERSION_SHORT) $(PYTHON_LIVE_IMAGE_DIR)/usr/lib
+	rm -fr $(ROMFSDIR)/usr/lib/python$(PYTHON_VERSION_SHORT)/*
+endif
+
+romfs: pth python-modules_romfs

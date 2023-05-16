@@ -290,13 +290,11 @@ static int parse_file(const char *fname, struct md4_ctx *md)
 	return 1;
 }
 /* Check whether the file is a static library or not */
-static int is_static_library(const char *objfile)
+static bool is_static_library(const char *objfile)
 {
 	int len = strlen(objfile);
-	if (objfile[len - 2] == '.' && objfile[len - 1] == 'a')
-		return 1;
-	else
-		return 0;
+
+	return objfile[len - 2] == '.' && objfile[len - 1] == 'a';
 }
 
 /* We have dir/file.o.  Open dir/.file.o.cmd, look for source_ and deps_ line
@@ -387,26 +385,18 @@ out_file:
 /* Calc and record src checksum. */
 void get_src_version(const char *modname, char sum[], unsigned sumlen)
 {
-	char *buf, *pos, *firstline;
+	char *buf;
 	struct md4_ctx md;
 	char *fname;
 	char filelist[PATH_MAX + 1];
 
 	/* objects for a module are listed in the first line of *.mod file. */
-	snprintf(filelist, sizeof(filelist), "%.*smod",
-		 (int)strlen(modname) - 1, modname);
+	snprintf(filelist, sizeof(filelist), "%s.mod", modname);
 
 	buf = read_text_file(filelist);
 
-	pos = buf;
-	firstline = get_line(&pos);
-	if (!firstline) {
-		warn("bad ending versions file for %s\n", modname);
-		goto free;
-	}
-
 	md4_init(&md);
-	while ((fname = strsep(&firstline, " "))) {
+	while ((fname = strsep(&buf, "\n"))) {
 		if (!*fname)
 			continue;
 		if (!(is_static_library(fname)) &&

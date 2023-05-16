@@ -31,6 +31,8 @@
 #define MCU_CMD_SET_FACTORY_DEFAULTS	0x0F09
 /* Set power button lock */
 #define MCU_CMD_SET_PWR_BUTTON_LOCK	0x0F0A
+/* Set ignition sense power off delay time (in seconds) without saving */
+#define MCU_CMD_SET_TEMP_IGN_PWR_OFF_DELAY	0x0F0B
 
 /****** Get commands ******/
 /* Get MCU status */
@@ -58,6 +60,8 @@
 #define MCU_CMD_GET_VOLTAGE_THRES_SHDN	0x0F87
 /* Get power button lock status */
 #define MCU_CMD_GET_PWR_BUTTON_LOCK	0x0F88
+/* Get temp ignition sense power off delay time (in seconds) */
+#define MCU_CMD_GET_TEMP_IGN_PWR_OFF_DELAY	0x0F89
 
 #define MCU_VERSION_LEN		18
 
@@ -142,6 +146,7 @@ struct mcu_tx_pkt {
 		struct mcu_tx_set_cmd		set_voltage_thres_shdn;
 		struct mcu_tx_set_cmd		set_ign_pwr_on_delay;
 		struct mcu_tx_set_cmd		set_ign_pwr_off_delay;
+		struct mcu_tx_set_cmd		set_temp_ign_pwr_off_delay;
 		struct mcu_tx_set_cmd		set_factory_defaults;
 		union mcu_tx_set_pwr_b_lock	set_pwr_button_lock;
 		struct mcu_tx_set_cmd		to_bloader;
@@ -244,6 +249,7 @@ struct mcu_rx_pkt {
 		struct mcu_rx_set_status	set_voltage_thres_shdn;
 		struct mcu_rx_set_status	set_ign_pwr_on_delay;
 		struct mcu_rx_set_status	set_ign_pwr_off_delay;
+		struct mcu_rx_set_status	set_temp_ign_pwr_off_delay;
 		struct mcu_rx_set_status	set_factory_defaults;
 		struct mcu_rx_set_status	set_pwr_button_lock;
 		struct mcu_rx_set_status	to_bloader;

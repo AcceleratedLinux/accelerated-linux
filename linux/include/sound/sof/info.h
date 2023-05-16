@@ -25,6 +25,7 @@
 #define SOF_IPC_INFO_LOCKS		BIT(1)
 #define SOF_IPC_INFO_LOCKSV		BIT(2)
 #define SOF_IPC_INFO_GDB		BIT(3)
+#define SOF_IPC_INFO_D3_PERSISTENT	BIT(4)
 
 /* extended data types that can be appended onto end of sof_ipc_fw_ready */
 enum sof_ipc_ext_data {
@@ -46,9 +47,11 @@ struct sof_ipc_fw_version {
 	uint8_t time[10];
 	uint8_t tag[6];
 	uint32_t abi_version;
+	/* used to check FW and ldc file compatibility, reproducible value */
+	uint32_t src_hash;
 
 	/* reserved for future use */
-	uint32_t reserved[4];
+	uint32_t reserved[3];
 } __packed;
 
 /* FW ready Message - sent by firmware when boot has completed */
@@ -99,7 +102,7 @@ struct sof_ipc_window_elem {
 struct sof_ipc_window {
 	struct sof_ipc_ext_data_hdr ext_hdr;
 	uint32_t num_windows;
-	struct sof_ipc_window_elem window[];
+	struct sof_ipc_window_elem window[SOF_IPC_MAX_ELEMS];
 }  __packed;
 
 struct sof_ipc_cc_version {

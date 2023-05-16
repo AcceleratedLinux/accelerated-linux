@@ -11,6 +11,8 @@ VMLINUX   = $(IMAGEDIR)/vmlinux
 KERNEL    = $(IMAGEDIR)/kernel
 LZKERNEL  = $(IMAGEDIR)/kernel.lzma
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
+IMAGESIZE 	= 73646080 # 70.2MB
+BLOADER_IMG = $(IMAGEDIR)/u-boot.nand
 
 SIGNING_ALG = hmac
 SIGNING_KEY = $(ROOTDIR)/prop/sign_image/devkeys/lr54/developer_key
@@ -52,6 +54,7 @@ romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cr
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) -d $(THIS_DIR)/console /etc/inittab.d/console
 	$(ROMFSINST) -d -p 555 $(THIS_DIR)/fwenv_fixup.sh /sbin/fwenv_fixup.sh
+	$(ROMFSINST) -d $(THIS_DIR)/blacklist-hwcrypto.conf /etc/modprobe.d/blacklist-hwcrypto.conf
 
 romfs.post:: romfs.cleanup
 
@@ -67,7 +70,13 @@ uimage.bin: lzma
 	mkimage -A mips -O linux -T kernel -C lzma -a 0x81001000 -n "Linux" -d $(LZKERNEL) $(UKERNEL)
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROMFSIMG) /tftpboot/
 
-image: image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+bloader.overwrite:
+	@if [ "$(BLOADER_OVERWRITE_IMG)" ]; then \
+		echo "!!! Overwriting bootloader image with '$(BLOADER_OVERWRITE_IMG)'"; \
+		wget --quiet -O $(BLOADER_IMG) "$(BLOADER_OVERWRITE_IMG)" || exit 1; \
+	fi
+
+image: bloader.overwrite image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak

@@ -19,13 +19,7 @@
 #include "kirkwood.h"
 #include "board.h"
 
-#if defined(CONFIG_MACH_6300LX)
-#define	GPIO_USB_PWR	31 /* gpio 31 is power enable */
-#define	GPIO_USB_OVC	4  /* gpio 4 is over current */
-#define	USB_PWR_ON	GPIO_ON
-#define	USB_PWR_OFF	GPIO_OFF
-#define	USB_OVC_TRUE	GPIO_ON
-#elif defined(CONFIG_MACH_6330MX)
+#if defined(CONFIG_MACH_6330MX)
 #define	GPIO_USB_PWR	50 /* gpio 50 is power enable */
 #define	GPIO_USB_OVC	31 /* gpio 31 is over current */
 #define	USB_PWR_ON	GPIO_ON
@@ -163,8 +157,7 @@ static __init int accelerated_buzzer_init(void)
 }
 late_initcall(accelerated_buzzer_init);
 
-#endif /* ! CONFIG_MACH_6300LX */
-
+#endif /* ! CONFIG_MACH_5400_RM_DT */
 
 #if defined(CONFIG_MACH_5400_RM_DT) || defined(CONFIG_MACH_6300_EX_DT)
 

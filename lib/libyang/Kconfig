@@ -1,0 +1,5 @@
+config LIB_LIBYANG
+	bool "libyang"
+	select LIB_LIBPCRE
+	help
+		The libyang library.

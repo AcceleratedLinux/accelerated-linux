@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 .. _overlay:
 
@@ -44,6 +37,10 @@ capturing and overlay. Optionally these drivers may also permit
 capturing and overlay with a single file descriptor for compatibility
 with V4L and earlier versions of V4L2. [#f1]_
 
+A common application of two file descriptors is the X11
+:ref:`Xv/V4L <xvideo>` interface driver and a V4L2 application.
+While the X server controls video overlay, the application can take
+advantage of memory mapping and DMA.
 
 Querying Capabilities
 =====================
@@ -296,11 +293,6 @@ To start or stop the frame buffer overlay applications call the
 :ref:`VIDIOC_OVERLAY` ioctl.
 
 .. [#f1]
-   A common application of two file descriptors is the XFree86
-   :ref:`Xv/V4L <xvideo>` interface driver and a V4L2 application.
-   While the X server controls video overlay, the application can take
-   advantage of memory mapping and DMA.
-
    In the opinion of the designers of this API, no driver writer taking
    the efforts to support simultaneous capturing and overlay will
    restrict this ability by requiring a single file descriptor, as in

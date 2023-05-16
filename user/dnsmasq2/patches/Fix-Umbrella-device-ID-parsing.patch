@@ -1,0 +1,24 @@
+From 42680fc5b18d1ae8e7aa3840fafbb65a607b3635 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Mon, 10 Jan 2022 20:09:50 +0100
+Subject: [PATCH] Fix Umbrella device ID parsing
+
+---
+ src/option.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/option.c b/src/option.c
+index 4c5f140..d18f54a 100644
+--- a/src/option.c
++++ b/src/option.c
+@@ -2522,6 +2522,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
+ 
+           u8 *u = daemon->umbrella_device;
+           char word[3];
++          word[2] = '\0';
+           for (u8 i = 0; i < sizeof(daemon->umbrella_device); i++, arg+=2) {
+             memcpy(word, &(arg[0]), 2);
+             *u++ = strtoul(word, NULL, 16);
+-- 
+2.27.0
+

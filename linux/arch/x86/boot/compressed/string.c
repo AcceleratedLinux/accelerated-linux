@@ -79,3 +79,18 @@ extern void *__memset(void *s, int c, size_t n) __alias(memset);
 extern void *__memmove(void *dest, const void *src, size_t n) __alias(memmove);
 extern void *__memcpy(void *dest, const void *src, size_t n) __alias(memcpy);
 #endif
+
+size_t strlcat(char *dest, const char *src, size_t count)
+{
+	size_t dsize = strlen(dest);
+	size_t len = strlen(src);
+	size_t res = dsize + len;
+
+	dest += dsize;
+	count -= dsize;
+	if (len >= count)
+		len = count-1;
+	memcpy(dest, src, len);
+	dest[len] = 0;
+	return res;
+}

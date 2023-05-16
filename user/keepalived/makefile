@@ -1,5 +1,5 @@
 
-VERSION = 2.0.20
+VERSION = 2.2.2
 URL = http://www.keepalived.org/software/keepalived-$(VERSION).tar.gz
 
 # Investigate netfilter ipvs module before enabling keepalived's lvs

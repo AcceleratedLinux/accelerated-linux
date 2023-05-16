@@ -266,6 +266,7 @@ static struct irq_chip mca_gpio_irq_chip = {
 
 static int mca_gpio_irq_setup(struct mca_gpio *gpio)
 {
+	struct gpio_irq_chip *girq;
 	unsigned int val;
 	int ret, i;
 
@@ -303,31 +304,14 @@ static int mca_gpio_irq_setup(struct mca_gpio *gpio)
 		}
 	}
 
-	ret = gpiochip_irqchip_add(&gpio->gc,
-				   &mca_gpio_irq_chip,
-				   0,
-				   handle_edge_irq,
-				   IRQ_TYPE_NONE);
-	if (ret) {
-		dev_err(gpio->dev,
-			"Failed to connect irqchip to gpiochip (%d)\n", ret);
-		return ret;
-	}
-
-	/*
-	 * gpiochip_irqchip_add() sets .to_irq with its own implementation but
-	 * we have to use our own version because not all GPIOs are irq capable.
-	 * Therefore, we overwrite it.
-	 */
-	gpio->gc.to_irq = mca_gpio_to_irq;
-
-	for (i = 0; i < MCA_MAX_GPIO_IRQ_BANKS; i++) {
-		if (gpio->irq[i] < 0)
-			continue;
-		gpiochip_set_nested_irqchip(&gpio->gc,
-					    &mca_gpio_irq_chip,
-					    gpio->irq[i]);
-	}
+	girq = &gpio->gc.irq;
+	girq->chip = &mca_gpio_irq_chip;
+	girq->parent_handler = NULL;
+	girq->num_parents = 0;
+	girq->parents = NULL;
+	girq->default_type = IRQ_TYPE_NONE;
+	girq->handler = handle_edge_irq;
+	girq->threaded = true;
 
 	return 0;
 }
@@ -402,17 +386,22 @@ int mca_gpio_probe(struct platform_device *pdev, struct device *mca_dev,
 		goto err;
 	}
 
+	ret = mca_gpio_irq_setup(gpio);
+	if (ret)
+		goto err;
+
 	ret = gpiochip_add_data(&gpio->gc, gpio);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "Could not register gpiochip, %d\n", ret);
 		goto err;
 	}
 
-	ret = mca_gpio_irq_setup(gpio);
-	if (ret) {
-		gpiochip_remove(&gpio->gc);
-		goto err;
-	}
+	/*
+	 * gpiochip_irqchip_add() sets .to_irq with its own implementation but
+	 * we have to use our own version because not all GPIOs are irq capable.
+	 * Therefore, we overwrite it.
+	 */
+	gpio->gc.to_irq = mca_gpio_to_irq;
 
 	if (gpio_base)
 		*gpio_base = gpio->gc.base;

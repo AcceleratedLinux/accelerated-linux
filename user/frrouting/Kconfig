@@ -1,0 +1,59 @@
+config USER_FRROUTING
+	bool
+	select USER_PYTHON_HOST
+	select USER_READLINE
+	select LIB_NCURSES
+	select LIB_NCURSES_MINIMAL
+	select LIB_LIBCARES
+	select LIB_LIBCAP
+	select LIB_LIBYANG
+	help
+		For automake build directory inclusion only. Enable USER_FRROUTING_ZEBRA
+		for FRRouting.
+
+config USER_FRROUTING_ZEBRA
+	bool "FRRouting"
+	select USER_FRROUTING
+	help
+		The FRRouting (GNU Zebra replacement) routing daemon server process.
+
+config USER_FRROUTING_BGPD
+	bool "frrouting-bgpd"
+	depends on USER_FRROUTING_ZEBRA
+	help
+		The FRRouting BGP daemon.
+
+config USER_FRROUTING_ISISD
+	bool "frrouting-isisd"
+	depends on USER_FRROUTING_ZEBRA
+	help
+		The FRRouting ISIS daemon.
+
+config USER_FRROUTING_OSPFD
+	bool "frrouting-ospfd"
+	depends on USER_FRROUTING_ZEBRA
+	help
+		The FRRouting OSPF daemon.
+
+config USER_FRROUTING_OSPF6D
+	bool "frrouting-ospf6d"
+	depends on USER_FRROUTING_ZEBRA
+	help
+		The FRRouting OSPF6 daemon.
+
+config USER_FRROUTING_RIPD
+	bool "frrouting-ripd"
+	depends on USER_FRROUTING_ZEBRA
+	help
+		The FRRouting RIP daemon.
+
+config USER_FRROUTING_RIPNGD
+	bool "frrouting-ripngd"
+	depends on USER_FRROUTING_ZEBRA
+	help
+		The FRRouting RIPng daemon.
+
+config USER_FRROUTING_NHRPD
+	bool "frrouting-nhrpd"
+	help
+		The FRRouting Next Hop Resolution Protocol daemon.

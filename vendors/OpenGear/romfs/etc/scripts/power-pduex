@@ -1,0 +1,68 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+port=$1
+outlets=$2
+cmd=$3
+
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <port> \"<outlet> [outlet..]\" on|off|cycle|status"
+	exit 1
+fi
+
+function pduLogin {
+	[[ -z "$username" ]] && return 0
+	/bin/pmchat -v -t 5 ECHO ON "" "\r" "> " "login" "name:" "$username" "word:" "$password" "success" < $port 2>&1
+	return $?
+}
+
+function pduLogout {
+	[[ -z "$username" ]] && return 0
+	/bin/pmchat -v -t 5 ECHO ON "" "\r" "> " "logout" "> " < $port 2>&1
+	return $?
+}
+
+if ! pduLogin >& /dev/null; then
+	pduLogout >& /dev/null
+	sleep 5
+	if ! pduLogin >& /dev/null; then
+		power_error_login $outlet $username
+		#for outlet in $outlets; do
+		#	power_outlet_error_login $outlet $username
+		#done
+		exit 1
+	fi
+fi
+
+for outlet in $outlets; do
+	if [ $outlet -lt 1 -o $outlet -gt 2 ]
+	then
+		power_outlet_error_range $outlet 2
+		continue
+	fi
+
+	id=$(printf "%02d" $outlet)
+
+	case $cmd in
+	"on" )
+	/bin/pmchat -v -t 5 ECHO ON "" "\r" "> " "pset $id 1" "> " < $port >& /dev/null
+	;;
+	"off" )
+	/bin/pmchat -v -t 5 ECHO ON "" "\r" "> " "pset $id 0" "> " < $port >& /dev/null
+	;;
+	"cycle" )
+	/bin/pmchat -v -t 5 ECHO ON "" "prb $id" "> " < $port >& /dev/null
+	;;
+	esac
+
+	status=$(/bin/pmchat -v -t 5 ECHO ON "" "pshow" "> " < $port 2>&1 | awk "/^[ \t]+$id/ { print tolower(\$5) }")
+	power_outlet_status $outlet $status
+done
+
+if ! pduLogout >& /dev/null; then
+	power_warn_logout $username
+fi
+
+exit 0

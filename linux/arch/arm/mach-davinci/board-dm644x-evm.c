@@ -37,10 +37,6 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
-#include <mach/common.h>
-#include <mach/mux.h>
-#include <mach/serial.h>
-
 #include <linux/platform_data/i2c-davinci.h>
 #include <linux/platform_data/mtd-davinci.h>
 #include <linux/platform_data/mmc-davinci.h>
@@ -49,6 +45,9 @@
 #include <linux/platform_data/ti-aemif.h>
 
 #include "davinci.h"
+#include "common.h"
+#include "mux.h"
+#include "serial.h"
 #include "irqs.h"
 
 #define DM644X_EVM_PHY_ID		"davinci_mdio-0:01"
@@ -162,7 +161,7 @@ static struct davinci_nand_pdata davinci_evm_nandflash_data = {
 	.core_chipsel	= 0,
 	.parts		= davinci_evm_nandflash_partition,
 	.nr_parts	= ARRAY_SIZE(davinci_evm_nandflash_partition),
-	.ecc_mode	= NAND_ECC_HW,
+	.engine_type	= NAND_ECC_ENGINE_TYPE_ON_HOST,
 	.ecc_bits	= 1,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.timing		= &davinci_evm_nandflash_timing,
@@ -366,14 +365,13 @@ evm_led_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 	return status;
 }
 
-static int
+static void
 evm_led_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 {
 	if (evm_led_dev) {
 		platform_device_unregister(evm_led_dev);
 		evm_led_dev = NULL;
 	}
-	return 0;
 }
 
 static struct pcf857x_platform_data pcf_data_u2 = {
@@ -428,7 +426,7 @@ evm_u18_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 	return 0;
 }
 
-static int
+static void
 evm_u18_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 {
 	gpio_free(gpio + 1);
@@ -439,7 +437,6 @@ evm_u18_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 		device_remove_file(&client->dev, &dev_attr_user_sw);
 		gpio_free(sw_gpio);
 	}
-	return 0;
 }
 
 static struct pcf857x_platform_data pcf_data_u18 = {
@@ -488,7 +485,7 @@ evm_u35_setup(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 	return 0;
 }
 
-static int
+static void
 evm_u35_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 {
 	gpio_free(gpio + 7);
@@ -498,7 +495,6 @@ evm_u35_teardown(struct i2c_client *client, int gpio, unsigned ngpio, void *c)
 	gpio_free(gpio + 2);
 	gpio_free(gpio + 1);
 	gpio_free(gpio + 0);
-	return 0;
 }
 
 static struct pcf857x_platform_data pcf_data_u35 = {
@@ -541,6 +537,10 @@ static const struct property_entry eeprom_properties[] = {
 	{ }
 };
 
+static const struct software_node eeprom_node = {
+	.properties = eeprom_properties,
+};
+
 /*
  * MSP430 supports RTC, card detection, input from IR remote, and
  * a bit more.  It triggers interrupts on GPIO(7) from pressing
@@ -548,8 +548,7 @@ static const struct property_entry eeprom_properties[] = {
  */
 static struct i2c_client *dm6446evm_msp;
 
-static int dm6446evm_msp_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+static int dm6446evm_msp_probe(struct i2c_client *client)
 {
 	dm6446evm_msp = client;
 	return 0;
@@ -569,7 +568,7 @@ static const struct i2c_device_id dm6446evm_msp_ids[] = {
 static struct i2c_driver dm6446evm_msp_driver = {
 	.driver.name	= "dm6446evm_msp",
 	.id_table	= dm6446evm_msp_ids,
-	.probe		= dm6446evm_msp_probe,
+	.probe_new	= dm6446evm_msp_probe,
 	.remove		= dm6446evm_msp_remove,
 };
 
@@ -648,7 +647,7 @@ static struct i2c_board_info __initdata i2c_info[] =  {
 	},
 	{
 		I2C_BOARD_INFO("24c256", 0x50),
-		.properties = eeprom_properties,
+		.swnode = &eeprom_node,
 	},
 	{
 		I2C_BOARD_INFO("tlv320aic33", 0x1b),

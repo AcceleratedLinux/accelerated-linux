@@ -230,11 +230,11 @@ int usb_serial_generic_write(struct tty_struct *tty,
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_write);
 
-int usb_serial_generic_write_room(struct tty_struct *tty)
+unsigned int usb_serial_generic_write_room(struct tty_struct *tty)
 {
 	struct usb_serial_port *port = tty->driver_data;
 	unsigned long flags;
-	int room;
+	unsigned int room;
 
 	if (!port->bulk_out_size)
 		return 0;
@@ -243,15 +243,15 @@ int usb_serial_generic_write_room(struct tty_struct *tty)
 	room = kfifo_avail(&port->write_fifo);
 	spin_unlock_irqrestore(&port->lock, flags);
 
-	dev_dbg(&port->dev, "%s - returns %d\n", __func__, room);
+	dev_dbg(&port->dev, "%s - returns %u\n", __func__, room);
 	return room;
 }
 
-int usb_serial_generic_chars_in_buffer(struct tty_struct *tty)
+unsigned int usb_serial_generic_chars_in_buffer(struct tty_struct *tty)
 {
 	struct usb_serial_port *port = tty->driver_data;
 	unsigned long flags;
-	int chars;
+	unsigned int chars;
 
 	if (!port->bulk_out_size)
 		return 0;
@@ -260,7 +260,7 @@ int usb_serial_generic_chars_in_buffer(struct tty_struct *tty)
 	chars = kfifo_len(&port->write_fifo) + port->tx_bytes;
 	spin_unlock_irqrestore(&port->lock, flags);
 
-	dev_dbg(&port->dev, "%s - returns %d\n", __func__, chars);
+	dev_dbg(&port->dev, "%s - returns %u\n", __func__, chars);
 	return chars;
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_chars_in_buffer);
@@ -345,7 +345,7 @@ EXPORT_SYMBOL_GPL(usb_serial_generic_submit_read_urbs);
 void usb_serial_generic_process_read_urb(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
-	char *ch = (char *)urb->transfer_buffer;
+	char *ch = urb->transfer_buffer;
 	int i;
 
 	if (!urb->actual_length)
@@ -355,13 +355,13 @@ void usb_serial_generic_process_read_urb(struct urb *urb)
 	 * stuff like 3G modems, so shortcircuit it in the 99.9999999% of
 	 * cases where the USB serial is not a console anyway.
 	 */
-	if (!port->port.console || !port->sysrq) {
-		tty_insert_flip_string(&port->port, ch, urb->actual_length);
-	} else {
+	if (port->sysrq) {
 		for (i = 0; i < urb->actual_length; i++, ch++) {
 			if (!usb_serial_handle_sysrq_char(port, *ch))
 				tty_insert_flip_char(&port->port, *ch, TTY_NORMAL);
 		}
+	} else {
+		tty_insert_flip_string(&port->port, ch, urb->actual_length);
 	}
 	tty_flip_buffer_push(&port->port);
 }
@@ -495,6 +495,40 @@ void usb_serial_generic_unthrottle(struct tty_struct *tty)
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_unthrottle);
 
+void usb_serial_generic_stop(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	dev_err(&port->dev, "usb_serial_generic_stop\n");
+	set_bit(USB_SERIAL_WRITE_BUSY, &port->flags);
+}
+EXPORT_SYMBOL_GPL(usb_serial_generic_stop);
+
+void usb_serial_generic_start(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	dev_err(&port->dev, "usb_serial_generic_start\n");
+	clear_bit(USB_SERIAL_WRITE_BUSY, &port->flags);
+	usb_serial_generic_write_start(port, GFP_ATOMIC);
+}
+EXPORT_SYMBOL_GPL(usb_serial_generic_start);
+
+void usb_serial_generic_flush_buffer(struct tty_struct *tty)
+{
+	struct usb_serial_port *port = tty->driver_data;
+	unsigned long flags;
+	int i;
+
+	if (port->bulk_out_size) {
+		for (i = 0; i < ARRAY_SIZE(port->write_urbs); ++i)
+			usb_kill_urb(port->write_urbs[i]);
+
+		spin_lock_irqsave(&port->lock, flags);
+		kfifo_reset_out(&port->write_fifo);
+		spin_unlock_irqrestore(&port->lock, flags);
+	}
+}
+EXPORT_SYMBOL_GPL(usb_serial_generic_flush_buffer);
+
 static bool usb_serial_generic_msr_changed(struct tty_struct *tty,
 				unsigned long arg, struct async_icount *cprev)
 {
@@ -571,10 +605,10 @@ int usb_serial_generic_get_icount(struct tty_struct *tty,
 }
 EXPORT_SYMBOL_GPL(usb_serial_generic_get_icount);
 
-#ifdef CONFIG_MAGIC_SYSRQ
+#if defined(CONFIG_USB_SERIAL_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 int usb_serial_handle_sysrq_char(struct usb_serial_port *port, unsigned int ch)
 {
-	if (port->sysrq && port->port.console) {
+	if (port->sysrq) {
 		if (ch && time_before(jiffies, port->sysrq)) {
 			handle_sysrq(ch);
 			port->sysrq = 0;
@@ -584,16 +618,13 @@ int usb_serial_handle_sysrq_char(struct usb_serial_port *port, unsigned int ch)
 	}
 	return 0;
 }
-#else
-int usb_serial_handle_sysrq_char(struct usb_serial_port *port, unsigned int ch)
-{
-	return 0;
-}
-#endif
 EXPORT_SYMBOL_GPL(usb_serial_handle_sysrq_char);
 
 int usb_serial_handle_break(struct usb_serial_port *port)
 {
+	if (!port->port.console)
+		return 0;
+
 	if (!port->sysrq) {
 		port->sysrq = jiffies + HZ*5;
 		return 1;
@@ -602,6 +633,7 @@ int usb_serial_handle_break(struct usb_serial_port *port)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(usb_serial_handle_break);
+#endif
 
 /**
  * usb_serial_handle_dcd_change - handle a change of carrier detect state

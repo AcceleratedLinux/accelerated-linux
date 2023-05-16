@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# List connected unmanaged, connected managed and unconnected managed
+# Call Home session to this CMS.
+#
+
+# Non-Call Home ports already under management
+forwards=$(config -g config.cms.nodes | awk '/forwards\.forward[0-9]+\.port / { print $2 }')
+
+# Call Home ports already under management
+managed=$(config -g config.cms.nodes | awk '/\.node[0-9]+\.sshport / { print $2 }')
+
+# Parse netstat to match established registrar SSH connections with listening
+# SSH ports (the reverse port forward used by Call Home), they are in the same
+# process group
+
+output=$(netstat -n -t -a -p)
+
+e_pids=$(echo "$output" | awk '/ESTABLISHED.*sshd: cms/ { split($7,a,"/"); print a[1] }')
+l_pids=$(echo "$output" | awk '/LISTEN.*sshd: cms/ { split($7,a,"/"); print a[1] }')
+
+connected=""
+for e_pid in $e_pids; do
+	e_pgrp=$(cat /proc/${e_pid}/stat | awk '{ print $5 }')
+	[[ -z "$e_pgrp" ]] && continue
+	
+	for l_pid in $l_pids; do
+		ports=$(echo "$output" | awk '/LISTEN.*'${l_pid}'\/sshd: cms/ { gsub(/:/,""); print $4 }')
+		
+		for port in $ports; do
+			# Ignore non-Call Home
+			if echo "$forwards" | grep "^${port}$" >& /dev/null; then
+				continue
+			fi
+
+			l_pgrp=$(cat /proc/${l_pid}/stat | awk '{ print $5 }')
+			[[ -z "$l_pgrp" ]] && continue
+			
+			if [[ "$e_pgrp" -eq "$l_pgrp" ]]; then
+				# Found a connected Call Home
+				connected=$(echo "$connected"; echo $port)
+				break
+			fi
+		done
+	done
+done
+
+for port in $connected; do
+	echo -n "localhost:$port"
+	if echo "$managed" | grep "^${port}$" >& /dev/null; then
+		echo -n " (managed)"
+	fi
+	echo
+done
+
+for port in $managed; do
+	if ! echo "$connected" | grep "^${port}$" >& /dev/null; then
+		echo "localhost:$port (not connected)"
+	fi
+done

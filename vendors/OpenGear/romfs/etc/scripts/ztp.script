@@ -1,0 +1,231 @@
+#!/bin/sh
+# Zero Touch Provisioning
+#
+# Usage:
+#   ztp.script <infod_prefix> <ntp-interface>
+#
+# Parameters are pulled from infod, so that during the retries
+# changing options may be noticed.
+#
+#    <infod_prefix>.vendorspec_1   config-url
+#    <infod_prefix>.vendorspec_2   image-url
+#    <infod_prefix>.vendorspec_3   enroll-url
+#    <infod_prefix>.vendorspec_4   enroll-bundle
+#    <infod_prefix>.vendorspec_5   enroll-token
+#    <infod_prefix>.vendorspec_6   api-port
+#    <infod_prefix>.ntpsrv         NTP server
+#
+
+infod_prefix=$1
+interface=$2
+
+ZTP_REBOOTING=/tmp/ztp-rebooting
+
+ztp_reboot() {
+	mkdir $ZTP_REBOOTING
+	exec reboot
+}
+
+ztp_rebooting() {
+	[ -d $ZTP_REBOOTING ]
+}
+
+unconfigured () {
+	[ -z "$(/bin/config -g config.interfaces.wan.mode -g config.lhvpn)" ]
+}
+
+# Send output to the console since this is first-time behaviour
+if >/dev/console; then
+	exec 2<>/dev/console 1>&2
+	stty onlcr opost <&2   # makes console output neater
+fi
+
+ztp_logger () {
+	local prio=notice
+	case $1 in
+		--*) prio=${1#--}; shift;;
+	esac
+	logger -s -p daemon.$prio -t "${infod_prefix}" "$@"
+
+	prefix="$(date -u) [$$ $prio] ${infod_prefix}"
+	[ "$ZTPLOG" ] && echo "$prefix: $*" >$ZTPLOG
+}
+
+# prevent concurrent dhcp configs
+pidfile=/var/run/ztp-script.pid
+if [ -s $pidfile ] && kill -0 $(cat $pidfile); then
+	ztp_logger --info "ztp script is already running"
+	exit 1
+else
+	echo $$ > $pidfile
+fi 2>/dev/null
+
+if ztp_rebooting; then
+	ztp_logger --info "ztp script has already run and signalled a reboot"
+	exit 4
+fi
+
+# Wait for manifest processing to finish.
+# Note this will exit immediately if the device is already configured
+# but the scripts in the manifest (if found) will likely configure the device.
+while [ -e /etc/scripts/load-manifest -a ! -f /var/run/manifest ]; do
+	ztp_logger --info "waiting for load-manifest"
+	sleep 3
+done
+# Check again to see if we were configured
+if ! unconfigured; then
+	ztp_logger --info "already configured: ignoring DHCP"
+	exit 2
+fi
+
+
+ztp_logger "waiting 10s for network to settle"
+sleep 10
+
+# Set the time now if we can, because if the RTC is 1970, HTTPS
+# will fail to use expired/pre-valid certificates.
+# XXX should this be repeated in the retry loop?
+ntpsrv=$(/bin/infod_client -o get -q -p "${infod_prefix}.ntpsrv")
+# ntpsrv will have a trailing space when unset :( see 300-info
+if [ -n "${ntpsrv% }" ]; then
+	ztp_logger "getting time from $ntpsrv${interface:+ via $interface}"
+	for h in $ntpsrv; do
+		echo "server $h burst iburst"
+	done > /tmp/dhcp-ntp.conf
+	ntpd -4AnqQ ${interface:+ -I $interface} -c /tmp/dhcp-ntp.conf & ntp_pid=$!
+	# give the NTP daemon 10 seconds to get the time, otherwise give up
+	( sleep 10; kill $ntp_pid ) 2>/dev/null & disown $!
+	if wait $ntp_pid; then
+		hwclock --systohc --utc
+	else
+		ztp_logger --error "gave up setting time from $ntpsrv"
+	fi
+	rm -f /tmp/dhcp-ntp.conf
+else
+	ztp_logger "NTP skipped: no server"
+fi
+
+# note We wish to word-split $vendorspec_1 on $IFS,
+#      but NOT perform pathname expansion
+#      or otherwise interpret shell metachars.
+#      The set -f achieves that.
+set -f
+
+for retry in 1 2 3 4 5 6 7 8 9 10; do
+	need_reboot=
+
+	# See if some other process has configured
+	# us while we've been retrying.
+	if ! unconfigured; then
+		ztp_logger --info "already configured: ignoring DHCP"
+		exit 0
+	fi
+
+	# Fetch the suboptions from infod, in case DHCP is changing
+	for opt in 1 2 3 4 5 6; do
+		option_vars="$option_vars vendorspec_$opt"
+	done
+	# bootfile is set from DHCPv4 option 67 or DHCPv6 option 59.
+	# It is used as the fallback configuration URL if vendorspec.1 isn't set.
+	option_vars="$option_vars bootfile"
+	for optvar in $option_vars; do
+		if [ "$infod_prefix" ]; then
+			# Value from infod run through sed to remove leading spaces
+			val="$(/bin/infod_client -o get -q -p "${infod_prefix}.$optvar"  | sed -e 's/^[[:space:]]*//')"
+			case $val in
+			"")
+				ztp_logger --info "$optvar (n/a)"
+				;;
+			*)
+				ztp_logger --info "$optvar = '$val'"
+				;;
+			esac
+			eval $optvar=\$val
+		else
+			eval val=\$$optvar
+			eval ztp_logger "env $optvar=$val"
+		fi
+	done
+
+	# Deal with upgrading the firmware first
+	if [ "$vendorspec_2" ]; then
+		# Suboption 43.2 specifies a list of URLs to download firmware
+		# images from. 'backup-url loadimage' will exit success if firmware
+		# doesn't need replacing. Otherwise it will flash, touch /etc/config/.init
+		# and reboot, and we will arrive here again, or in a future 500-ztp script.
+		if ! /etc/scripts/backup-url loadimage $vendorspec_2; then
+			ztp_logger --error "loadimage failed; delaying 30 s"
+			sleep 30
+			continue
+		else
+			ztp_logger --info "installed firmware is up to date"
+			# carry on to handle next vendor suboptions
+		fi
+	else
+		ztp_logger --info "no firmware to download (vendorspec.2)"
+	fi
+
+	# Deal with restoring the config xml/partition, or running a custom script
+	if [ "$vendorspec_1" -o "$bootfile" ]; then
+		# configure from vendorspec if it's set, otherwise
+		# fallback to bootfile option
+		config_url="${vendorspec_1:-$bootfile}"
+		/etc/scripts/backup-url load --no-reboot $config_url
+		result=$?
+		case $result in
+		    0) # Successful load
+			ztp_logger "successful config load"
+			;;
+		    1) # Restore failed
+			ztp_logger --error "config restore failed; delaying 30 s"
+			sleep 30
+			continue
+			;;
+		    2) # Return code of 2 = reboot required (success)
+			ztp_logger "successful config load; reboot scheduled"
+			need_reboot=1
+			;;
+		    *) # Unexpected exit code, log it, ignore it
+			ztp_logger --error "unexpected backup-url exit $result"
+			;;
+		esac
+	else
+		ztp_logger --info "no config to download (vendorspec.1 / bootfile)"
+	fi
+
+	if [ "$vendorspec_3" ]; then
+		if [ ! -x /etc/scripts/enroll-node ]; then
+			ztp_logger --error "lighthouse enrollment not supported on this product"
+		elif /etc/scripts/enroll-node -u "$vendorspec_3" -b "$vendorspec_4" -s "$vendorspec_5" -p "$vendorspec_6"; then
+			# Only configure LHVPN if done rebooting.
+			if [ -z "$need_reboot" ]; then
+				ztp_logger "configuring lhvpn"
+				config -r lhvpn
+			else
+				ztp_logger "configuring lhvpn skipped (reboot)"
+			fi
+		else
+			# Lighthouse enrollment
+			ztp_logger --error "lighthouse enrollment failed; delaying 30 s"
+			sleep 30
+			continue
+		fi
+	else
+		ztp_logger --info "no lighthouse configuration (vendorspec.3/4/5/6)"
+	fi
+
+	# At this point, all the previous suboption handlers either
+	# succeeded, or had nothing to do, or called 'continue' to retry
+	# their error.  So, we are done and should terminate the ztp process.
+	if [ $need_reboot ]; then
+		ztp_logger "provisioning completed, rebooting"
+		ztp_reboot
+	else
+		ztp_logger "provisioning completed, not rebooting"
+		exit 0
+	fi
+done
+
+ztp_logger --error "too many retries, rebooting"
+ztp_reboot
+

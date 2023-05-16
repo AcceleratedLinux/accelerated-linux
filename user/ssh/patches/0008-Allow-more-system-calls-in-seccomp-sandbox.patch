@@ -1,0 +1,85 @@
+From 889cf09053b4149e59cd3407e3d775cfa4a299ac Mon Sep 17 00:00:00 2001
+From: Greg Ungerer <gregory.ungerer@digi.com>
+Date: Tue, 25 Jan 2022 17:51:41 +0100
+Subject: [PATCH 08/10] Allow more system calls in seccomp sandbox
+
+Ssh access into the Digi/IX14 is broken when using the new linux-5.5
+kernel and musl-1.2.0 C-library. You get a console dump like:
+
+sshd[5479] killed because of sig - 31
+
+STACK DUMP:
+0xbed3c8c8: bed3c910 00000007 bed3c990 b6f7073c 00000007 bed3c910 bed3c910
+0xbed3c8e4: 00000000 bed3c990 0005afd0 bed3c990 01c1e7d0 000ba320 bed3cbb0
+0xbed3c900: 01c1d9c0 00000015 01c1df60 0005b390 bed3c990 01c1e7d0 000ba320
+0xbed3c91c: bed3cbb0 000bb320 00054288 00000000 01c1df60 00000000 bed3c990
+0xbed3c938: 01c1e7d0 0006339c 01c1dc00 01c1df60 00000000 0006551c bed3c988
+0xbed3c954: bed3c990 00000020 01c1f2b0 01c1d970 bed3c990 bed3c98c 00065924
+0xbed3c970: 01c206a0 01c206a0 01c1d970 01c1f1b0 01c1cba0 01c21590 00000194
+0xbed3c98c: 00000020 bb6c1194 1c7683dd e734d8fc c0c4637f c9cef82e 00cd6b44
+0xbed3c9a8: ebd1101b 767bbc3f 00000545 01c1cba0 01c1d970 00000000 000ba320
+0xbed3c9c4: 01c1df60 01c1e818 00000000 01c1df60 01c1e818 00000000 00089714
+CPU: 0 PID: 5479 Comm: sshd Not tainted 5.5.0-ac0 #1
+Hardware name: Freescale i.MX6 Ultralite (Device Tree)
+PC is at 0xbef625a8
+LR is at 0xbef62590
+pc : [<bef625a8>]    lr : [<bef62590>]    psr: a0000010
+sp : bed3c8c8  ip : 00000000  fp : 000bb320
+r10: bed3cbb0  r9 : 000ba320  r8 : 01c1e7d0
+r7 : 00000193  r6 : 000bbf60  r5 : bed3c910  r4 : 00000007
+r3 : 0001066a  r2 : bed3c910  r1 : bed3c910  r0 : 00000007
+Flags: NzCv  IRQs on  FIQs on  Mode USER_32  ISA ARM  Segment user
+Control: 10c53c7d  Table: 84db8059  DAC: 00000055
+CPU: 0 PID: 5479 Comm: sshd Not tainted 5.5.0-ac0 #1
+Hardware name: Freescale i.MX6 Ultralite (Device Tree)
+[<c010d1b4>] (unwind_backtrace) from [<c010b31c>] (show_stack+0x10/0x14)
+[<c010b31c>] (show_stack) from [<c026d65c>] (do_coredump+0x234/0x113c)
+[<c026d65c>] (do_coredump) from [<c019abc0>] (__seccomp_filter+0x1ec/0x790)
+[<c019abc0>] (__seccomp_filter) from [<c0109d9c>] (syscall_trace_enter+0x90/0x148)
+[<c0109d9c>] (syscall_trace_enter) from [<c010119c>] (__sys_trace+0xc/0x40)
+Exception stack(0xc3d6bfa8 to 0xc3d6bff0)
+bfa0:                   00000007 bed3c910 00000007 bed3c910 bed3c910 0001066a
+bfc0: 00000007 bed3c910 000bbf60 00000193 01c1e7d0 000ba320 bed3cbb0 000bb320
+bfe0: 00000000 bed3c8c8 bef62590 bef625a8
+...
+
+The problem is that the sshd sandbox is tripping up on some system call
+changes. There is no longer a direct clock_gettime(), you use
+clock_gettime64() in its place (which musl does for you).
+
+After fixing that it tripped over on statx(). That has not changed
+recently but adding this to the allowed system calls recolves all
+sshd access problems. I also added the nanosleep() calls - which is
+already updated in the master openssh source tree.
+
+DAL-2516
+---
+ sandbox-seccomp-filter.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/sandbox-seccomp-filter.c b/sandbox-seccomp-filter.c
+index bbc2380..90dd3d0 100644
+--- a/sandbox-seccomp-filter.c
++++ b/sandbox-seccomp-filter.c
+@@ -270,6 +270,18 @@ static const struct sock_filter preauth_insns[] = {
+ #ifdef __NR_clock_gettime64
+ 	SC_ALLOW(__NR_clock_gettime64),
+ #endif
++#ifdef __NR_clock_nanosleep
++	SC_ALLOW(__NR_clock_nanosleep),
++#endif
++#ifdef __NR_clock_nanosleep_time64
++	SC_ALLOW(__NR_clock_nanosleep_time64),
++#endif
++#ifdef __NR_clock_gettime64
++	SC_ALLOW(__NR_clock_gettime64),
++#endif
++#ifdef __NR_statx
++	SC_ALLOW(__NR_statx),
++#endif
+ #ifdef __NR__newselect
+ 	SC_ALLOW(__NR__newselect),
+ #endif
+-- 
+2.30.2
+

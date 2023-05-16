@@ -1,15 +1,36 @@
+From c81e293f461f7cf22a7ee5222996c98fe5802b03 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Wed, 5 Jan 2022 16:48:37 +0100
+Subject: [PATCH] dhcp lease netmask 0
+
 If the user requested a netmask of 0.0.0.0 then allow it.  This is
 useful to force a lease regardless of what subnet is on that interface.
+---
+ src/dhcp.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff -Nurd dnsmasq-2.80.orig/src/dhcp.c dnsmasq-2.80/src/dhcp.c
---- dnsmasq-2.80.orig/src/dhcp.c	2018-10-19 04:21:55.000000000 +1000
-+++ dnsmasq-2.80/src/dhcp.c	2019-07-16 08:16:47.915312179 +1000
-@@ -534,7 +534,7 @@
-  	context->netmask = netmask;
-       }
-       
+diff --git a/src/dhcp.c b/src/dhcp.c
+index e500bc2..fa55296 100644
+--- a/src/dhcp.c
++++ b/src/dhcp.c
+@@ -565,7 +565,7 @@ static int complete_context(struct in_addr local, int if_index, char *label,
+ 
+       for (context = daemon->dhcp; context; context = context->next)
+ 	{
+-	  if (context->netmask.s_addr != 0 &&
++	  if (((context->flags & CONTEXT_NETMASK) || context->netmask.s_addr != 0) &&
+ 	      is_same_net(share->shared_addr, context->start, context->netmask) &&
+ 	      is_same_net(share->shared_addr, context->end, context->netmask))
+ 	    {
+@@ -589,7 +589,7 @@ static int complete_context(struct in_addr local, int if_index, char *label,
+   
+   for (context = daemon->dhcp; context; context = context->next)
+     {
 -      if (context->netmask.s_addr != 0 &&
 +      if (((context->flags & CONTEXT_NETMASK) || context->netmask.s_addr != 0) &&
  	  is_same_net(local, context->start, context->netmask) &&
  	  is_same_net(local, context->end, context->netmask))
  	{
+-- 
+2.27.0
+

@@ -12,18 +12,13 @@ DAL IMAGES FROM NETWORK"
 LOAD U-BOOT FROM USB
 -----------------------
 
-By default, all DAL U-Boots are configured to be quiet (silent), so that you
-will not see any output after loading the U-Boot. To build an interactive
-U-Boot, you will need to make the following changes in
-u-boot-freescale-imx6-16-IX15.patch:
+By default, all DAL U-Boots are configured to be quiet (silent) if the unit is
+in production-mode, and fully manufactured, so that you will not see any output
+after loading the U-Boot. To build an interactive U-Boot, you will need to make
+the following changes in /boot/u-boot/include/configs/ix15.h:
 
--+#define CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
-++/*#define CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG*/
- 
--+#define CONFIG_SILENT_CONSOLE
--+#define CONFIG_SILENT_U_BOOT_ONLY
-++/*#define CONFIG_SILENT_CONSOLE*/
-++/*#define CONFIG_SILENT_U_BOOT_ONLY*/
+  +#define CONFIG_DEVELOP
+   #include <configs/digi_common.h>
 
 After doing it, you will need to recompile U-Boot. To do so, execute these
 commands:

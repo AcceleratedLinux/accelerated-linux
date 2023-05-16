@@ -2,6 +2,7 @@
 
 #include "mt7621.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include "mt7621_pstore.dtsi"
 
 / {
 	model = "Digi TX54";
@@ -134,66 +135,28 @@
 	};
 };
 
+/* Overwrite dtsi's pinctrl. TX54 is using RGMII2 pins as GPIOs */
 &ethernet {
-	status = "okay";
+	pinctrl-0 = <&mdio_pins>, <&rgmii1_pins>;
+};
 
-	gmac0: mac@0 {
-		compatible = "mediatek,eth-mac";
-		reg = <0>;
-		phy-mode = "rgmii";
-
-		fixed-link {
-			speed = <1000>;
-			full-duplex;
-			pause;
+&switch0 {
+	ports {
+		port@1 {
+			status = "okay";
+			label = "eth1";
 		};
-	};
-
-	mdio-bus {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		switch@0 {
-			compatible = "mediatek,mt7621", "mediatek,mt7530";
-			reg = <0>;
-
-			ports {
-				#address-cells = <1>;
-				#size-cells = <0>;
-
-				port@0 {
-					reg = <1>;
-					label = "eth1";
-				};
-
-				port@1 {
-					reg = <2>;
-					label = "eth2";
-				};
-
-				port@2 {
-					reg = <3>;
-					label = "eth3";
-				};
-
-				port@3 {
-					reg = <4>;
-					label = "eth4";
-				};
-
-				port@6 {
-					reg = <6>;
-					label = "cpu";
-					ethernet = <&gmac0>;
-					phy-mode = "rgmii";
-
-					fixed-link {
-						speed = <1000>;
-						full-duplex;
-						pause;
-					};
-				};
-			};
+		port@2 {
+			status = "okay";
+			label = "eth2";
+		};
+		port@3 {
+			status = "okay";
+			label = "eth3";
+		};
+		port@4 {
+			status = "okay";
+			label = "eth4";
 		};
 	};
 };
@@ -304,4 +267,8 @@
 
 &crypto {
 	status = "okay";
+};
+
+&wdt {
+	mt7621,register-reset-handler;
 };

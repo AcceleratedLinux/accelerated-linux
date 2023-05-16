@@ -1,69 +1,25 @@
+/* SPDX-License-Identifier: GPL-2.0-only OR BSD-3-Clause */
 /*
- *	Implement AES CTR mode by8 optimization with AVX instructions. (x86_64)
- *
- * This is AES128/192/256 CTR mode optimization implementation. It requires
- * the support of Intel(R) AESNI and AVX instructions.
- *
- * This work was inspired by the AES CTR mode optimization published
- * in Intel Optimized IPSEC Cryptograhpic library.
- * Additional information on it can be found at:
- *    http://downloadcenter.intel.com/Detail_Desc.aspx?agr=Y&DwnldID=22972
- *
- * This file is provided under a dual BSD/GPLv2 license.  When using or
- * redistributing this file, you may do so under either license.
- *
- * GPL LICENSE SUMMARY
+ * AES CTR mode by8 optimization with AVX instructions. (x86_64)
  *
  * Copyright(c) 2014 Intel Corporation.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
  *
  * Contact Information:
  * James Guilford <james.guilford@intel.com>
  * Sean Gulley <sean.m.gulley@intel.com>
  * Chandramouli Narayanan <mouli@linux.intel.com>
+ */
+/*
+ * This is AES128/192/256 CTR mode optimization implementation. It requires
+ * the support of Intel(R) AESNI and AVX instructions.
  *
- * BSD LICENSE
- *
- * Copyright(c) 2014 Intel Corporation.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- * Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in
- * the documentation and/or other materials provided with the
- * distribution.
- * Neither the name of Intel Corporation nor the names of its
- * contributors may be used to endorse or promote products derived
- * from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * This work was inspired by the AES CTR mode optimization published
+ * in Intel Optimized IPSEC Cryptographic library.
+ * Additional information on it can be found at:
+ *    https://github.com/intel/intel-ipsec-mb
  */
 
 #include <linux/linkage.h>
-#include <asm/inst.h>
 
 #define VMOVDQ		vmovdqu
 
@@ -127,10 +83,6 @@ ddq_add_8:
 
 /* generate a unique variable for ddq_add_x */
 
-.macro setddq n
-	var_ddq_add = ddq_add_\n
-.endm
-
 /* generate a unique variable for xmm register */
 .macro setxdata n
 	var_xdata = %xmm\n
@@ -140,9 +92,7 @@ ddq_add_8:
 
 .macro club name, id
 .altmacro
-	.if \name == DDQ_DATA
-		setddq %\id
-	.elseif \name == XDATA
+	.if \name == XDATA
 		setxdata %\id
 	.endif
 .noaltmacro
@@ -165,9 +115,8 @@ ddq_add_8:
 
 	.set i, 1
 	.rept (by - 1)
-		club DDQ_DATA, i
 		club XDATA, i
-		vpaddq	var_ddq_add(%rip), xcounter, var_xdata
+		vpaddq	(ddq_add_1 + 16 * (i - 1))(%rip), xcounter, var_xdata
 		vptest	ddq_low_msk(%rip), var_xdata
 		jnz 1f
 		vpaddq	ddq_high_add_1(%rip), var_xdata, var_xdata
@@ -180,8 +129,7 @@ ddq_add_8:
 	vmovdqa	1*16(p_keys), xkeyA
 
 	vpxor	xkey0, xdata0, xdata0
-	club DDQ_DATA, by
-	vpaddq	var_ddq_add(%rip), xcounter, xcounter
+	vpaddq	(ddq_add_1 + 16 * (by - 1))(%rip), xcounter, xcounter
 	vptest	ddq_low_msk(%rip), xcounter
 	jnz	1f
 	vpaddq	ddq_high_add_1(%rip), xcounter, xcounter
@@ -534,7 +482,7 @@ ddq_add_8:
 	/* return updated IV */
 	vpshufb	xbyteswap, xcounter, xcounter
 	vmovdqu	xcounter, (p_iv)
-	ret
+	RET
 .endm
 
 /*

@@ -1,0 +1,25 @@
+From a572e7fe6b84042e441e59713bcf3d85de4ed51a Mon Sep 17 00:00:00 2001
+From: David McCullough <David.McCullough@digi.com>
+Date: Tue, 25 Jan 2022 16:53:49 +0100
+Subject: [PATCH 04/10] Change 'umac_ctx' structure to static
+
+---
+ umac.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/umac.c b/umac.c
+index e5ec19f..d8f9d8f 100644
+--- a/umac.c
++++ b/umac.c
+@@ -1180,7 +1180,7 @@ static int uhash(uhash_ctx_t ahc, u_char *msg, long len, u_char *res)
+  * time. The all-at-once is more optimaized than the sequential version and
+  * should be preferred when the sequential interface is not required.
+  */
+-struct umac_ctx {
++static struct umac_ctx {
+     uhash_ctx hash;          /* Hash function for message compression    */
+     pdf_ctx pdf;             /* PDF for hashed output                    */
+     void *free_ptr;          /* Address to free this struct via          */
+-- 
+2.30.2
+

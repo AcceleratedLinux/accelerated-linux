@@ -1,4 +1,4 @@
-PKG = gcc-8.3.0
+PKG = gcc-11.2.0
 URL = https://ftp.gnu.org/gnu/gcc/$(PKG)/$(PKG).tar.xz
 
 CONFOPTS += --target=$(TARGET)

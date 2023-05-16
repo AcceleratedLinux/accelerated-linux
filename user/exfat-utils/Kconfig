@@ -1,0 +1,4 @@
+config USER_EXFAT_UTILS
+	bool "EX Fat utilities"
+	help
+		Enable tools for formatting EX Fat partitions

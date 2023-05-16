@@ -3,7 +3,7 @@
  * Freescale FlexTimer Module (FTM) alarm device driver.
  *
  * Copyright 2014 Freescale Semiconductor, Inc.
- * Copyright 2019 NXP
+ * Copyright 2019-2020 NXP
  *
  */
 
@@ -290,7 +290,7 @@ static int ftm_rtc_probe(struct platform_device *pdev)
 	if (ret)
 		dev_err(&pdev->dev, "failed to enable irq wake\n");
 
-	ret = rtc_register_device(rtc->rtc_dev);
+	ret = devm_rtc_register_device(rtc->rtc_dev);
 	if (ret) {
 		dev_err(&pdev->dev, "can't register rtc device\n");
 		return ret;
@@ -310,9 +310,10 @@ static const struct of_device_id ftm_rtc_match[] = {
 	{ .compatible = "fsl,lx2160a-ftm-alarm", },
 	{ },
 };
+MODULE_DEVICE_TABLE(of, ftm_rtc_match);
 
 static const struct acpi_device_id ftm_imx_acpi_ids[] = {
-	{"NXP0011",},
+	{"NXP0014",},
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, ftm_imx_acpi_ids);

@@ -3,7 +3,7 @@ config LIB_LIBCURL
 	select LIB_LIBIDN2
 	select LIB_ZLIB
 	select LIB_LIBBZ2
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	default n
 	help
 	  The curl library for resolving URLs.

@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 
 <config>
-   <version>0.1</version>
+   <version>0.8</version>
 
    <system>
 	   <timezone>USA - Eastern</timezone>
+	   <snmp>
+	   	<protocol>UDP</protocol>
+	   	<trapport>162</trapport>
+	   </snmp>
+	   <ipv6>
+	   	<enabled>on</enabled>
+	   </ipv6>
    </system>
 
    <console>
@@ -15,24 +22,6 @@
 	   <speed>115200</speed>
    </console>
 
-   <services> 
-	   <http> 
-		   <enabled>on</enabled> 
-	   </http>
-	   <https> 
-		   <enabled>on</enabled> 
-	   </https>
-	   <telnet> 
-		   <enabled>on</enabled> 
-	   </telnet>
-	   <ssh> 
-		   <enabled>on</enabled> 
-	   </ssh>
-	   <pingreply> 
-		   <enabled>on</enabled> 
-	   </pingreply>
-   </services>
-
    <eventlog>
 	   <server>
 		   <type>None</type>
@@ -40,7 +29,18 @@
    </eventlog>
 
    <auth>
-	   <type>None</type>
+	   <type>Local</type>
    </auth>
 
+   <syslog>
+	   <loglevel>info</loglevel>
+   </syslog>
+
+   <users>
+           <total>1</total>
+           <user1>
+                   <username>root</username>
+                   <description>Root User</description>
+           </user1>
+   </users>
 </config>

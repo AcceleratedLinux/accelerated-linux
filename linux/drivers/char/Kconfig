@@ -18,7 +18,8 @@ config TTY_PRINTK
 	  The feature is useful to inline user messages with kernel
 	  messages.
 	  In order to use this feature, you should output user messages
-	  to /dev/ttyprintk or redirect console to this TTY.
+	  to /dev/ttyprintk or redirect console to this TTY, or boot
+	  the kernel with console=ttyprintk.
 
 	  If unsure, say N.
 
@@ -38,7 +39,7 @@ config PRINTER
 	  box (as opposed to using a serial printer; if the connector at the
 	  printer has 9 or 25 holes ["female"], then it's serial), say Y.
 	  Also read the Printing-HOWTO, available from
-	  <http://www.tldp.org/docs.html#howto>.
+	  <https://www.tldp.org/docs.html#howto>.
 
 	  It is possible to share one parallel port among several devices
 	  (e.g. printer and ZIP drive) and it is safe to compile the
@@ -93,8 +94,9 @@ config PPDEV
 
 config VIRTIO_CONSOLE
 	tristate "Virtio console"
-	depends on VIRTIO && TTY
+	depends on TTY
 	select HVC_DRIVER
+	select VIRTIO
 	help
 	  Virtio console for use with hypervisors.
 
@@ -209,7 +211,7 @@ config DTLK
 	depends on ISA
 	help
 	  This driver is for the DoubleTalk PC, a speech synthesizer
-	  manufactured by RC Systems (<http://www.rcsys.com/>).  It is also
+	  manufactured by RC Systems (<https://www.rcsys.com/>).  It is also
 	  called the `internal DoubleTalk'.
 
 	  To compile this driver as a module, choose M here: the
@@ -225,19 +227,6 @@ config XILINX_HWICAP
 
 	  If unsure, say N.
 
-config R3964
-	tristate "Siemens R3964 line discipline"
-	depends on TTY && BROKEN
-	help
-	  This driver allows synchronous communication with devices using the
-	  Siemens R3964 packet protocol. Unless you are dealing with special
-	  hardware like PLCs, you are unlikely to need this.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called n_r3964.
-
-	  If unsure, say N.
-
 config APPLICOM
 	tristate "Applicom intelligent fieldbus card support"
 	depends on PCI
@@ -245,7 +234,7 @@ config APPLICOM
 	  This driver provides the kernel-side support for the intelligent
 	  fieldbus cards made by Applicom International. More information
 	  about these cards can be found on the WWW at the address
-	  <http://www.applicom-int.com/>, or by email from David Woodhouse
+	  <https://www.applicom-int.com/>, or by email from David Woodhouse
 	  <dwmw2@infradead.org>.
 
 	  To compile this driver as a module, choose M here: the
@@ -341,16 +330,6 @@ config DEVMEM
 	  memory.
 	  When in doubt, say "Y".
 
-config DEVKMEM
-	bool "/dev/kmem virtual device support"
-	# On arm64, VMALLOC_START < PAGE_OFFSET, which confuses kmem read/write
-	depends on !ARM64
-	help
-	  Say Y here if you want to support the /dev/kmem device. The
-	  /dev/kmem device is rarely used, but can be used for certain
-	  kind of kernel debugging operations.
-	  When in doubt, say "N".
-
 config NVRAM
 	tristate "/dev/nvram support"
 	depends on X86 || HAVE_ARCH_NVRAM_OPS
@@ -373,27 +352,6 @@ config NVRAM
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called nvram.
-
-config RAW_DRIVER
-	tristate "RAW driver (/dev/raw/rawN)"
-	depends on BLOCK
-	help
-	  The raw driver permits block devices to be bound to /dev/raw/rawN.
-	  Once bound, I/O against /dev/raw/rawN uses efficient zero-copy I/O.
-	  See the raw(8) manpage for more details.
-
-	  Applications should preferably open the device (eg /dev/hda1)
-	  with the O_DIRECT flag.
-
-config MAX_RAW_DEVS
-	int "Maximum number of RAW devices to support (1-65536)"
-	depends on RAW_DRIVER
-	range 1 65536
-	default "256"
-	help
-	  The maximum number of RAW devices that are supported.
-	  Default is 256. Increase this number in case you need lots of
-	  raw devices.
 
 config DEVPORT
 	bool "/dev/port character device"
@@ -478,6 +436,14 @@ config SNAPDOG_GPIO_BIT
 	help
 	  Specify which GPIO bit within a bank is the watchdog pin.
 
+config SNAPDOG_BOOT_TIMEOUT
+	int "Snapdog boot timeout (seconds)"
+	depends on SNAPDOG
+	default 0
+	help
+	  If set to non-zero, Snapdog starts a boot timeout. If Snapdog is not
+	  tickled in the specified time, it reboots the device.
+
 config SNAPSHOW
 	bool "SnapGear Showtime support"
 	help
@@ -545,14 +511,6 @@ config TELCLOCK
 
 source "drivers/s390/char/Kconfig"
 
-config SI32260
-	tristate "SI32260"
-	depends on SPI
-	select FIQ
-	help
-	  Say Y here if you want to support Silicon Labds SI32260 SLIC
-	  hardware connected to an SPI bus.
-
 source "drivers/char/xillybus/Kconfig"
 
 config ADI
@@ -567,28 +525,41 @@ config ADI
 	  and SSM (Silicon Secured Memory).  Intended consumers of this
 	  driver include crash and makedumpfile.
 
-endmenu
-
 config RANDOM_TRUST_CPU
-	bool "Trust the CPU manufacturer to initialize Linux's CRNG"
+	bool "Initialize RNG using CPU RNG instructions"
+	default y
 	depends on ARCH_RANDOM
-	default n
 	help
-	Assume that CPU manufacturer (e.g., Intel or AMD for RDSEED or
-	RDRAND, IBM for the S390 and Power PC architectures) is trustworthy
-	for the purposes of initializing Linux's CRNG.  Since this is not
-	something that can be independently audited, this amounts to trusting
-	that CPU manufacturer (perhaps with the insistence or mandate
-	of a Nation State's intelligence or law enforcement agencies)
-	has not installed a hidden back door to compromise the CPU's
-	random number generation facilities. This can also be configured
-	at boot with "random.trust_cpu=on/off".
+	  Initialize the RNG using random numbers supplied by the CPU's
+	  RNG instructions (e.g. RDRAND), if supported and available. These
+	  random numbers are never used directly, but are rather hashed into
+	  the main input pool, and this happens regardless of whether or not
+	  this option is enabled. Instead, this option controls whether the
+	  they are credited and hence can initialize the RNG. Additionally,
+	  other sources of randomness are always used, regardless of this
+	  setting.  Enabling this implies trusting that the CPU can supply high
+	  quality and non-backdoored random numbers.
+
+	  Say Y here unless you have reason to mistrust your CPU or believe
+	  its RNG facilities may be faulty. This may also be configured at
+	  boot time with "random.trust_cpu=on/off".
 
 config RANDOM_TRUST_BOOTLOADER
-	bool "Trust the bootloader to initialize Linux's CRNG"
+	bool "Initialize RNG using bootloader-supplied seed"
+	default y
 	help
-	Some bootloaders can provide entropy to increase the kernel's initial
-	device randomness. Say Y here to assume the entropy provided by the
-	booloader is trustworthy so it will be added to the kernel's entropy
-	pool. Otherwise, say N here so it will be regarded as device input that
-	only mixes the entropy pool.
+	  Initialize the RNG using a seed supplied by the bootloader or boot
+	  environment (e.g. EFI or a bootloader-generated device tree). This
+	  seed is not used directly, but is rather hashed into the main input
+	  pool, and this happens regardless of whether or not this option is
+	  enabled. Instead, this option controls whether the seed is credited
+	  and hence can initialize the RNG. Additionally, other sources of
+	  randomness are always used, regardless of this setting. Enabling
+	  this implies trusting that the bootloader can supply high quality and
+	  non-backdoored seeds.
+
+	  Say Y here unless you have reason to mistrust your bootloader or
+	  believe its RNG facilities may be faulty. This may also be configured
+	  at boot time with "random.trust_bootloader=on/off".
+
+endmenu

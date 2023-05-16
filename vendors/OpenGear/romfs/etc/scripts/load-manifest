@@ -1,0 +1,222 @@
+#!/bin/bash
+
+# Loads a manifest.og file and performs optional actions:
+#  firmware update
+#  config restore
+#  lighthouse enrollment
+#
+# manifest.og contains <key>=<value> pairs. Recognized keys are:
+#  image              : Firmware image file name on the USB device's filesystem that will be flashed after boot once the image is validated
+#  flash_force        : Force image flash immediately. Will just blindly try and flash the image without any checks after 'flash_delay' seconds
+#  flash_delay        : The delay in seconds before flashing happens. Default is 20 secs
+#  nf                 : Options to pass to netflash when loading firmware image
+#  script             : Configuration script to run
+#  address            : Primary Lighthouse address to enroll with
+#  api_port           : Optional port to use for the primary address when requesting enrollment
+#  external_endpoints : List of additional "address:port" endpoints to fall back to when enrolling
+#  password           : LH global or bundle enrollment password
+#  bundle             : Name of LH enrollment bundle
+#  opg                : Config backup to restore
+#
+# All manifest variables are optional.
+
+my_dir="$(dirname "$0")"
+source "$my_dir/backup-common"
+
+log () { logger -s -t load-manifest "$@"; } # defaults to -p user.notice
+
+function load_vars () { # <var...>
+	# read each "<var>=<value>" line and assign to given shell variable
+	local var key val
+	while read line; do
+		for var in "$@"; do
+			key=${line%%=*} # Remove longest matching suffix pattern '=*'
+			val=${line#*=}  # Remove shortest matching prefix pattern '*='
+			if [ "${key}" == "$var" ]; then eval $var="$val"; break; fi
+		done
+	done
+}
+
+function load_manifest_file
+{
+	path="$1"
+	fname="$1/manifest.og"
+	log "Loading manifest file from $fname"
+
+	# Extract the fields from the file
+	load_vars flash_delay flash_force image script address api_port external_endpoints password bundle opg nf <$fname
+
+	if [ -z "$flash_delay" ]; then
+		 flash_delay=20
+	fi
+
+	done=0
+	if [ -n "$image" ]; then
+		image=$(substitute "$image")
+		if [ -n "$flash_force" ]; then
+			do_flash=true
+			log -p user.notice "$image: flash forced with delay: $device_flash_delay. netflash options: -ikE$nf"
+		else
+			log -p user.notice "$image: checking image..."
+			# Test if this is a new or existing image
+			/bin/netflash -tikZ "$path/$image"
+			ec=$?
+			case $ec in
+				49) log -p user.notice "$image: image is already in FLASH, continuing..."
+					;;
+				10) log -p user.notice "$image: image has incorrect product name"
+					return 1
+					;;
+				20) log -p user.notice "Bad flash device"
+					return 1
+					;;
+				12) log -p user.notice "$image: warning: image is not an upgrade"
+					;&  # fall through!
+				0)  do_flash=true
+					log -p user.notice "Delaying flash until device ready with netflash options: -ikE$nf"
+					;;
+				*)  log -p user.notice "$image: failed check($?)"
+					return 1
+					;;
+			esac
+		fi
+
+		if [ -n "$do_flash" ]; then
+			# USB will be unmounted, so save a copy
+			cp -rf "$path/$image" /tmp
+			(
+				# Flash with reboot. Delay to ensure we have hopefully cleanly booted up first, unless forced.
+				while : ; do
+					if [[ -f "/etc/config/migrate/initialboot.001" ]] || [[ -n "$flash_force" ]]; then
+						sleep $flash_delay
+						/bin/netflash -ikE$nf /tmp/$image
+						break
+					fi
+					sleep 5
+				done
+			)& disown $!
+
+			# Do not process further, we are going to flash
+			return 1
+		fi
+
+		done=1
+	fi
+
+	if [ -n "$opg" ]; then
+		opg=$(substitute "$opg")
+
+		if [ ! -f "$path/$opg" ]; then
+			log -p user.notice "Config backup file $opg could not be found"
+			return 1
+		fi
+
+		log "Restoring config from $path/$opg"
+		if ! /bin/config -i "$path/$opg" -p /etc/default/config.xml; then
+			log -p user.notice "Config restore failed"
+			return 1
+		fi
+		done=1
+	fi
+
+	if [ -n "$script" ]; then
+		script=$(substitute "$script")
+		if [ ! -f "$path/$script" ]; then
+			log -p user.notice "Script file specified in manifest could not be located"
+			return 1
+		fi
+
+		log "Running script $script"
+		if ! run_script "$path/$script"; then
+			return 1
+		fi
+		done=1
+	fi
+
+	if [ -n "$address" ]; then
+		if [ ! -n "$password" ]; then
+			log -p user.notice "Enrollment details do not contain an enrollment password"
+			return 1
+		fi
+
+		API_PORT_ARG=""
+		if [ -z "$api_port" ]; then
+			log -p user.notice "Enrollment details do not contain api port"
+		else
+			API_PORT_ARG="-p $api_port"
+		fi
+
+		EXT_EPS_ARG=""
+		if [ -n "$external_endpoints" ]; then
+			EXT_EPS_ARG="-e $external_endpoints"
+		fi
+
+		log "Enrolling at $address bundle='$bundle'"
+		if [ ! -f /etc/scripts/enroll-node ] ; then
+			log -p user.notice "This device type doesn't support enrollment"
+		elif ! /etc/scripts/enroll-node -u "$address" -b "$bundle" -s "$password" $API_PORT_ARG $EXT_EPS_ARG; then
+			log -p user.notice "Enrollment failed"
+			return 1
+		fi
+		done=1
+	fi
+
+	# If we made it this far without catastrophe set enough config to prevent ztp
+	if [ $done -ne 0 ]; then
+		log "done"
+		if [ -z "$(config -g config.interfaces.wan.mode)" ]; then
+			log -p user.notice "forcing wan config mode to DHCP"
+			/bin/config -s config.interfaces.wan.mode=dhcp
+		fi
+	fi
+
+	return 0
+}
+
+function load_manifest
+{
+	for dev in /dev/sd*1
+	do
+		if [ ! -b "$dev" ]; then
+			continue
+		fi
+		mnt=$(awk '$1 == dev { print $2; exit; }' dev=$dev /proc/mounts)
+		if [ "$mnt" ]; then
+			# already mounted?
+			if [ -f $mnt/manifest.og ]; then
+				if load_manifest_file $mnt; then
+					return 0
+				fi
+			fi
+		else
+			mnt=/tmp/mnt$$
+			mkdir $mnt
+			log -p user.debug "mounting $dev onto $mnt"
+			if mount -o ro "$dev" $mnt; then
+				if [ -f $mnt/manifest.og ]; then
+					if load_manifest_file $mnt; then
+						umount -f $mnt
+						rmdir $mnt
+						return 0
+					fi
+				fi
+				umount -f $mnt
+			fi
+			rmdir $mnt
+		fi
+	done
+	return 1
+}
+
+res=0
+
+if [ -z "$(/bin/config -g config.interfaces.wan.mode)" -a -z "$(/bin/config -g config.lhvpn)" ]; then
+	# Do all manifest-related actions
+	load_manifest
+	res=$?
+fi
+
+# Flag that this process has finished
+touch /var/run/manifest
+exit $res
+

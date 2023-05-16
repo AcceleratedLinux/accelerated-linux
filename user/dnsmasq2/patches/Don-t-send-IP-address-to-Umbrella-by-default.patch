@@ -1,0 +1,69 @@
+From cfac860da5783471beeac104aa8dc701fcf7bbc9 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 11 Jan 2022 14:34:59 +0100
+Subject: [PATCH] Don't send IP address to Umbrella by default
+
+Adding a new 'sendip' argument to '--umbrella', to enable local IP
+sending.
+---
+ src/dnsmasq.h |  1 +
+ src/edns0.c   | 12 +++++++-----
+ src/option.c  |  5 +++++
+ 3 files changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index a2b00ef..7553999 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -276,6 +276,7 @@ struct event_desc {
+ #define OPT_CMARK_ALST_EN  65
+ #define OPT_QUIET_TFTP     66
+ #define OPT_IGN_CONF_ERR   67
++#define OPT_UMBRELLA_SENDIP 69
+ #define OPT_LAST           68
+ 
+ #define OPTION_BITS (sizeof(unsigned int)*8)
+diff --git a/src/edns0.c b/src/edns0.c
+index 7bd26b8..ed0b3ef 100644
+--- a/src/edns0.c
++++ b/src/edns0.c
+@@ -466,11 +466,13 @@ static size_t add_umbrella_opt(struct dns_header *header, size_t plen, unsigned
+     PUTLONG(daemon->umbrella_org, u);
+   }
+ 
+-  int family = source->sa.sa_family;
+-  PUTSHORT(family == AF_INET ? UMBRELLA_IPV4 : UMBRELLA_IPV6, u);
+-  int size = family == AF_INET ? INADDRSZ : IN6ADDRSZ;
+-  memcpy(u, get_addrp(source, family), size);
+-  u += size;
++  if (option_bool(OPT_UMBRELLA_SENDIP)) {
++    int family = source->sa.sa_family;
++    PUTSHORT(family == AF_INET ? UMBRELLA_IPV4 : UMBRELLA_IPV6, u);
++    int size = family == AF_INET ? INADDRSZ : IN6ADDRSZ;
++    memcpy(u, get_addrp(source, family), size);
++    u += size;
++  }
+ 
+   if (option_bool(OPT_UMBRELLA_DEVID)) {
+     PUTSHORT(UMBRELLA_DEVICE, u);
+diff --git a/src/option.c b/src/option.c
+index d18f54a..594f130 100644
+--- a/src/option.c
++++ b/src/option.c
+@@ -2538,8 +2538,13 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
+             ret_err(gen_err);
+           }
+         }
++	else if (strstr(arg, "sendip")) {
++	  set_option_bool(OPT_UMBRELLA_SENDIP);
++	}
+         arg = comma;
+       }
++      if (!option_bool(OPT_UMBRELLA_SENDIP) && !option_bool(OPT_UMBRELLA_DEVID))
++        ret_err("deviceid and/or sendip option is mandatory for Umbrella");
+       break;
+ 
+     case LOPT_ADD_MAC: /* --add-mac */
+-- 
+2.27.0
+

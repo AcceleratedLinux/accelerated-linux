@@ -18,10 +18,30 @@ echo "low" > /sys/class/gpio/gpio499/direction
 ip link set eth0 up
 ip link set eth0 down
 
-# Enable 'downshift' feature on all switch ports to improve link likelihood.
-# This is because some ports prevent full speed links (bad magnetics?).
-# The switch is at PHYAD=1
-for p in 0 1 2 3; do
-   /etc/scripts/swtool write_phy 1 $p 16_0 '[11]=1'  # enable downshift
-   /etc/scripts/swtool write_phy 1 $p 0_0 '[15]=1'   # reset PHY to apply
+# Enable the Downshift Enable bit for PHYs of all switch ports
+downshift=0800		# bit11, 16_0
+phy_id=0x01410e70
+for i in 1 2 3 4; do
+	val=$(swtest -i net2p$i -p $phy_id -a 16 -r)
+	val=$(printf '%x' $((16#$val | 16#$downshift)))
+	swtest -i net2p$i -p $phy_id -a 16 -w 0x$val
 done
+
+# Setup the bridge interface for the MV88E6350R switch
+#
+# Rename eth1 as eth1cpu so that we can re-create eth1 as a bridge interface
+# to connect the cpu port along with all external switch ports
+ip link set eth1 name eth1cpu
+
+brctl addbr eth1
+brctl stp eth1 off
+
+ip link set dev eth1cpu up
+brctl addif eth1 eth1cpu
+
+for i in 1 2 3 4; do
+	ip link set dev net2p$i up
+	brctl addif eth1 net2p$i
+done
+
+ifconfig eth1 up

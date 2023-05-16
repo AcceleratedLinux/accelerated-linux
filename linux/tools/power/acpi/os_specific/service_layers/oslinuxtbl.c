@@ -3,7 +3,7 @@
  *
  * Module Name: oslinuxtbl - Linux OSL for obtaining ACPI tables
  *
- * Copyright (C) 2000 - 2020, Intel Corp.
+ * Copyright (C) 2000 - 2022, Intel Corp.
  *
  *****************************************************************************/
 
@@ -110,7 +110,7 @@ u32 gbl_table_count = 0;
  *
  * RETURN:      Status; Converted from errno.
  *
- * DESCRIPTION: Get last errno and conver it to acpi_status.
+ * DESCRIPTION: Get last errno and convert it to acpi_status.
  *
  *****************************************************************************/
 

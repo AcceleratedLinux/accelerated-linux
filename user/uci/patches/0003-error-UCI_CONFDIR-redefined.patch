@@ -1,0 +1,26 @@
+From b682ed1e967f3fc2fcd73dc4c1b7d3d99a4959db Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Wed, 14 Sep 2022 15:00:08 -0400
+Subject: [PATCH] error: "UCI_CONFDIR" redefined
+
+---
+ uci.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/uci.h b/uci.h
+index 43f2052..c987aa8 100644
+--- a/uci.h
++++ b/uci.h
+@@ -35,7 +35,9 @@ extern "C" {
+ #include <stdio.h>
+ #include <stdint.h>
+ 
++#ifndef UCI_CONFDIR
+ #define UCI_CONFDIR "/etc/config"
++#endif
+ #define UCI_SAVEDIR "/tmp/.uci"
+ #define UCI_DIRMODE 0700
+ #define UCI_FILEMODE 0600
+-- 
+2.25.1
+

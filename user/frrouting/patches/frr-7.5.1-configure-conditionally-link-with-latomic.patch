@@ -1,0 +1,42 @@
+From 9dcd7420a560f6278dedcbb0fef226d9ab7252d4 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 22 Apr 2021 22:07:41 +0100
+Subject: [PATCH] configure: conditionally link with -latomic
+
+Some architectures require explicit -latomic for __atomic_* operations.
+
+DAL-4798
+---
+ configure.ac | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 1e68c91..884d27e 100755
+--- a/configure.ac
++++ b/configure.ac
+@@ -951,6 +951,22 @@ int main(int argc, char **argv) {
+   ])
+ ])
+ 
++# Some architectures require explicit -latomic for __atomic_* operations.
++# AC_SEARCH_LIBS() does not work when checking built-ins due to conflicting types.
++TMPLIBS="$LIBS"
++AC_MSG_CHECKING(for library containing __atomic_store_8)
++AC_LINK_IFELSE(
++    [AC_LANG_PROGRAM([[]], [[volatile unsigned char i; __atomic_store_8(&i, 1, __ATOMIC_RELAXED);]])],
++    [AC_MSG_RESULT([none required])],
++    [LIBS="-latomic";
++     AC_LINK_IFELSE(
++         [AC_LANG_PROGRAM([[]], [[volatile unsigned char i; __atomic_store_8(&i, 1, __ATOMIC_RELAXED);]])],
++         [TMPLIBS="$TMPLIBS -latomic"; AC_MSG_RESULT([-latomic])],
++         [AC_MSG_RESULT([no])])
++    ]
++)
++LIBS="$TMPLIBS"
++
+ AC_CHECK_HEADERS([pthread_np.h],,, [
+ #include <pthread.h>
+ ])
+-- 
+2.17.1
+

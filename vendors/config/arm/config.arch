@@ -64,8 +64,8 @@ FLOAT  ?= hard
 
 ifndef CROSS_COMPILE
   ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-    ifneq ($(shell which arm-linux-musleabi-20191126-gcc),)
-      CROSS_COMPILE = arm-linux-musleabi-20191126-
+    ifneq ($(shell which arm-linux-musleabi-20220202-gcc),)
+      CROSS_COMPILE = arm-linux-musleabi-20220202-
     else
       CROSS_COMPILE = arm-linux-musleabi-
     endif
@@ -171,11 +171,16 @@ ifdef UCLINUX_BUILD_LIB
 	CFLAGS  := -O2
 	LDFLAGS := -Wl,-S
   endif
+  ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
+	CFLAGS  += -fstack-protector-strong
+  endif
+	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
-	LDFLAGS  += -fno-common -fno-builtin
+
+	LDFLAGS += -Wl,-z,relro,-z,now
 
 	CXXFLAGS = $(CFLAGS) -nostdinc++
 	CXXSUP := $(shell $(CXX) -print-file-name=libsupc++.a)
@@ -199,11 +204,16 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  := -O2
 	LDFLAGS := -g
   endif
+  ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
+	CFLAGS  += -fstack-protector-strong
+  endif
+	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
-	LDFLAGS  += -fno-common -fno-builtin
+
+	LDFLAGS += -Wl,-z,relro,-z,now
 
 	CXXFLAGS = $(CFLAGS) -nostdinc++
 	CXXSUP := $(shell $(CXX) -print-file-name=libsupc++.a)

@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# Tests for the existance of the route as listed by the "ip -6 r s ..."
+# command. Expects two arguments where the first is the IP prefix e.g.
+# "fe80:1235::/64" and the second is the ip route metric e.g. "123". If the
+# route was found the exit code is 0, else it is 1.
+#
+# NOTE: This script gets called by the conman conn labelled "global-routes6" as
+#       part of its "test" clause. Each installed route calls this script once
+#       per test.
+
+if [ $# != 2 ]; then
+    logger -s -t "$0" "Incorrect number of args provided." \
+            "Expected 2 where the first is the IP prefix and the second is" \
+            "the numeric metric of the route to test the existance of."
+    exit 1
+fi
+
+IP_PREFIX=$1
+METRIC=$2
+
+# Determine if the route is installed
+if ip -6 r s $IP_PREFIX | grep -q "metric $METRIC"; then
+    exit 0
+else
+    exit 1
+fi

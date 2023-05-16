@@ -6,13 +6,12 @@
  */
 
 #include "gaudiP.h"
-#include "include/gaudi/gaudi_coresight.h"
-#include "include/gaudi/asic_reg/gaudi_regs.h"
-#include "include/gaudi/gaudi_masks.h"
+#include "../include/gaudi/gaudi_coresight.h"
+#include "../include/gaudi/asic_reg/gaudi_regs.h"
+#include "../include/gaudi/gaudi_masks.h"
+#include "../include/gaudi/gaudi_reg_map.h"
 
 #include <uapi/misc/habanalabs.h>
-#include <linux/coresight.h>
-
 #define SPMU_SECTION_SIZE		MME0_ACC_SPMU_MAX_OFFSET
 #define SPMU_EVENT_TYPES_OFFSET		0x400
 #define SPMU_MAX_COUNTERS		6
@@ -392,6 +391,7 @@ static int gaudi_config_stm(struct hl_device *hdev,
 {
 	struct hl_debug_params_stm *input;
 	u64 base_reg;
+	u32 frequency;
 	int rc;
 
 	if (params->reg_idx >= ARRAY_SIZE(debug_stm_regs)) {
@@ -420,8 +420,11 @@ static int gaudi_config_stm(struct hl_device *hdev,
 		WREG32(base_reg + 0xE00, lower_32_bits(input->sp_mask));
 		WREG32(base_reg + 0xEF4, input->id);
 		WREG32(base_reg + 0xDF4, 0x80);
-		WREG32(base_reg + 0xE8C, input->frequency);
-		WREG32(base_reg + 0xE90, 0x7FF);
+		frequency = hdev->asic_prop.psoc_timestamp_frequency;
+		if (frequency == 0)
+			frequency = input->frequency;
+		WREG32(base_reg + 0xE8C, frequency);
+		WREG32(base_reg + 0xE90, 0x1F00);
 
 		/* SW-2176 - SW WA for HW bug */
 		if ((CFG_BASE + base_reg) >= mmDMA_CH_0_CS_STM_BASE &&
@@ -431,7 +434,7 @@ static int gaudi_config_stm(struct hl_device *hdev,
 			WREG32(base_reg + 0xE6C, 0x0);
 		}
 
-		WREG32(base_reg + 0xE80, 0x27 | (input->id << 16));
+		WREG32(base_reg + 0xE80, 0x23 | (input->id << 16));
 	} else {
 		WREG32(base_reg + 0xE80, 4);
 		WREG32(base_reg + 0xD64, 0);
@@ -523,7 +526,7 @@ static int gaudi_config_etf(struct hl_device *hdev,
 }
 
 static bool gaudi_etr_validate_address(struct hl_device *hdev, u64 addr,
-					u32 size, bool *is_host)
+					u64 size, bool *is_host)
 {
 	struct asic_fixed_properties *prop = &hdev->asic_prop;
 	struct gaudi_device *gaudi = hdev->asic_specific;
@@ -532,6 +535,12 @@ static bool gaudi_etr_validate_address(struct hl_device *hdev, u64 addr,
 	if (addr >> 50) {
 		dev_err(hdev->dev,
 			"ETR buffer address shouldn't exceed 50 bits\n");
+		return false;
+	}
+
+	if (addr > (addr + size)) {
+		dev_err(hdev->dev,
+			"ETR buffer size %llu overflow\n", size);
 		return false;
 	}
 
@@ -620,9 +629,21 @@ static int gaudi_config_etr(struct hl_device *hdev,
 		WREG32(mmPSOC_ETR_BUFWM, 0x3FFC);
 		WREG32(mmPSOC_ETR_RSZ, input->buffer_size);
 		WREG32(mmPSOC_ETR_MODE, input->sink_mode);
-		/* Workaround for H3 #HW-2075 bug: use small data chunks */
-		WREG32(mmPSOC_ETR_AXICTL, (is_host ? 0 : 0x700) |
-					PSOC_ETR_AXICTL_PROTCTRLBIT1_SHIFT);
+		if (!hdev->asic_prop.fw_security_enabled) {
+			/* make ETR not privileged */
+			val = FIELD_PREP(
+					PSOC_ETR_AXICTL_PROTCTRLBIT0_MASK, 0);
+			/* make ETR non-secured (inverted logic) */
+			val |= FIELD_PREP(
+					PSOC_ETR_AXICTL_PROTCTRLBIT1_MASK, 1);
+			/*
+			 * Workaround for H3 #HW-2075 bug: use small data
+			 * chunks
+			 */
+			val |= FIELD_PREP(PSOC_ETR_AXICTL_WRBURSTLEN_MASK,
+							is_host ? 0 : 7);
+			WREG32(mmPSOC_ETR_AXICTL, val);
+		}
 		WREG32(mmPSOC_ETR_DBALO,
 				lower_32_bits(input->buffer_address));
 		WREG32(mmPSOC_ETR_DBAHI,
@@ -827,7 +848,7 @@ static int gaudi_config_spmu(struct hl_device *hdev,
 	return 0;
 }
 
-int gaudi_debug_coresight(struct hl_device *hdev, void *data)
+int gaudi_debug_coresight(struct hl_device *hdev, struct hl_ctx *ctx, void *data)
 {
 	struct hl_debug_params *params = data;
 	int rc = 0;
@@ -861,12 +882,12 @@ int gaudi_debug_coresight(struct hl_device *hdev, void *data)
 	}
 
 	/* Perform read from the device to flush all configuration */
-	RREG32(mmPCIE_DBI_DEVICE_ID_VENDOR_ID_REG);
+	RREG32(mmHW_STATE);
 
 	return rc;
 }
 
-void gaudi_halt_coresight(struct hl_device *hdev)
+void gaudi_halt_coresight(struct hl_device *hdev, struct hl_ctx *ctx)
 {
 	struct hl_debug_params params = {};
 	int i, rc;

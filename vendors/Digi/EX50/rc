@@ -1,0 +1,297 @@
+check_caldata() {
+	local caldata_file="$1"
+	local caldata_offset="$2"
+
+	local magic=$(hd -lxm -s $caldata_offset -n 1 "$caldata_file" 2>/dev/null)
+	magic="${magic// /}"
+
+	[ "$magic" = "$CALDATA_MAGIC" ]
+}
+
+load_caldata_nand() {
+	nanddump -a -s $CALDATA_NAND_PART_OFFSET -l $((CALDATA_OFFSET + CALDATA_SIZE)) /dev/mtd0 2>/dev/null |
+		dd of="$CALDATA_FILE" bs=1 skip=$CALDATA_OFFSET 2>/dev/null
+
+	check_caldata "$CALDATA_FILE" 0 || {
+		rm -f "$CALDATA_FILE"
+		return 1
+	}
+}
+
+write_caldata_to_nand() {
+	local caldata="$1"
+
+	echo "Writing caldata to NAND..."
+
+	flash_erase -q /dev/mtd0 $CALDATA_NAND_PART_OFFSET $((CALDATA_NAND_PART_SIZE / 0x20000)) &&
+		nandwrite -q -s $CALDATA_NAND_PART_OFFSET /dev/mtd0 "$caldata" || {
+		echo "ERROR: failed to write caldata to NAND"
+		return 1
+	}
+}
+
+load_caldata_nor() {
+	# Load NOR flash driver, make sure, it is the last mtd
+	modprobe spi-nor || {
+		echo "ERROR: failed to load NOR driver"
+		return 1
+	}
+
+	# Search for caldata partition
+	local part=$(grep '0:ART' /proc/mtd | awk -F: '{print $1}')
+	local part_index="${part##mtd}"
+	part="/dev/mtdblock$part_index"
+
+	[ -b "$part" ] || {
+		echo "ERROR: failed to find caldata partition"
+		rmmod spi-nor
+		return 1
+	}
+
+	# Read the complete partition, so we can write it to NAND
+	local tmpfile=$(mktemp)
+	dd if=$part of="$tmpfile" bs=1 count=$((CALDATA_OFFSET + CALDATA_SIZE)) 2>/dev/null || {
+		echo "ERROR: failed to read calibration data"
+		rmmod spi-nor
+		return 1
+	}
+
+	check_caldata "$tmpfile" $CALDATA_OFFSET || {
+		echo "ERROR: invalid caldata in NOR"
+		rm -f "$tmpfile"
+		rmmod spi-nor
+		return 1
+	}
+
+	# Write caldata to NAND, so next time we won't need to read NOR again
+	write_caldata_to_nand "$tmpfile"
+
+	# Trim start from caldata and copy to its final place
+	dd if="$tmpfile" of="$CALDATA_FILE" bs=1 skip=$CALDATA_OFFSET 2>/dev/null
+	rm -f "$tmpfile"
+	rmmod spi-nor
+
+	return 0
+}
+
+load_caldata() {
+	local CALDATA_MAGIC=04040001
+	local CALDATA_DIR=/var/run/IPQ6018
+	local CALDATA_FILE="${CALDATA_DIR}/caldata.bin"
+	local CALDATA_OFFSET=4096
+	local CALDATA_NAND_PART_OFFSET=0x01100000
+	local CALDATA_NAND_PART_SIZE=0x80000
+
+	if [ -f /lib/firmware/IPQ6018/bdwlan.bin ]; then
+		local CALDATA_SIZE=$(stat -Lc%s /lib/firmware/IPQ6018/bdwlan.bin)
+	else
+		local CALDATA_SIZE=65536
+	fi
+
+	echo "Loading Wi-Fi calibration data..."
+
+	mkdir -p "$CALDATA_DIR"
+
+	# First try to dump it from NAND
+	load_caldata_nand && {
+		echo "Calibration data loaded from NAND"
+		return 0
+	}
+
+	# Now try NOR
+	load_caldata_nor && {
+		echo "Calibration data loaded from NOR"
+		return 0
+	}
+
+	echo "ERROR: failed to load Wi-Fi calibration data"
+	return 1
+}
+
+set_wifi_macs() {
+	# Set Wi-Fi MAC addresses
+	local mac="$(fw_printenv -n eth2addr 2>/dev/null)"
+	if [ "$mac" ]; then
+		iwpriv wifi0 setHwaddr "$mac"
+	else
+		echo "ERROR: failed to find Wi-Fi1 MAC address, using default one"
+	fi
+
+	mac="$(fw_printenv -n eth4addr 2>/dev/null)"
+	if [ "$mac" ]; then
+		iwpriv wifi1 setHwaddr "$mac"
+	else
+		echo "ERROR: failed to find Wi-Fi2 MAC address, using default one"
+	fi
+}
+
+init_wifi() {
+	load_caldata
+
+	modprobe qdf mem_debug_disabled=1
+	modprobe wifi_3_0
+	modprobe smart_antenna
+
+	set_wifi_macs
+
+	# Disable VLAN support on Wi-Fi interfaces. Having this enabled breaks the
+	# bridging randomly (if hostapd starts before wlan interface gets added to
+	# the bridge). In the failing case, the Wi-Fi driver adds the VLAN tag 1 to the
+	# packet, although it should just add VLAN tag 1 to the VLAN filtering table
+	# Should revert that, when the driver gets fixed
+	iwpriv wifi0 no_vlan 1
+	iwpriv wifi1 no_vlan 1
+
+	iwpriv wifi0 dbdc_enable 0
+	iwpriv wifi1 dbdc_enable 0
+
+	# Configuration for NSS
+	echo 3100000 > /proc/sys/dev/nss/n2hcfg/extra_pbuf_core0
+	echo 30624 > /proc/sys/dev/nss/n2hcfg/n2h_high_water_core0
+	echo 8192 > /proc/sys/dev/nss/n2hcfg/n2h_wifi_pool_buf
+	echo 256 > /proc/sys/dev/nss/n2hcfg/n2h_queue_limit_core0
+
+	iwpriv wifi0 fc_buf0_max 8192
+	iwpriv wifi0 fc_buf1_max 8192
+	iwpriv wifi0 fc_buf2_max 8192
+	iwpriv wifi0 fc_buf3_max 8192
+	iwpriv wifi1 fc_buf0_max 8192
+	iwpriv wifi1 fc_buf1_max 8192
+	iwpriv wifi1 fc_buf2_max 8192
+	iwpriv wifi1 fc_buf3_max 8192
+}
+
+hostname EX50
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=64M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
+
+echo "Starting watchdog..."
+watchdog /dev/watchdog
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# initialise devices before we need them
+/etc/rc.dev
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+
+modprobe qca-nss-dp
+ip link set eth1 name lan
+ip link set eth0 name wan
+modprobe shortcut-fe-cm
+modprobe ecm
+
+# Set external network interfaces to asigned MAC addresses
+setmac -i lan,wan -u -n 2
+
+echo 495 > /sys/class/gpio/export
+echo in > /sys/class/gpio/gpio495/direction
+
+# Configure and set the initial POWER LED color
+/etc/power-led.sh init
+
+echo "Initializing Wi-Fi interface control..."
+init_wifi
+
+if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+	/etc/factory
+	exit 0
+fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+	# Use the same setup as for factory testing
+	/etc/factory
+	exit 0
+fi
+
+echo "Mounting config filesystem..."
+if ! mount -t ubifs ubi0:config /etc/config
+then
+	echo "Cannot mount /etc/config as ubifs, reformatting..."
+	flash_erase /dev/flash/config 0 0
+	echo "Mounting config filesystem after reformat..."
+	if ! mount -t ubifs ubi0:config /etc/config
+	then
+		echo "Failed to mount flash based config filesystem"
+		echo "Using tmpfs for /etc/config."
+		mount -t tmpfs -o size=4M tmpfs /etc/config
+	fi
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+
+echo "Initializing CELL interface control..."
+/bin/sim -i
+
+cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
+
+# handle /opt,  contains modem firmware and maybe other goodies
+if grep -q '"opt"' /proc/mtd
+then
+	echo "Mounting opt filesystem...."
+	if ! mount -t ubifs ubi0:opt /opt
+	then
+		echo "Cannot mount /opt as ubifs, reformatting..."
+		flash_erase /dev/flash/opt 0 0
+		echo "Mounting opt filesystem after reformat..."
+		if ! mount -t ubifs ubi0:opt /opt
+		then
+			echo "Failed to mount flash based opt filesystem"
+			# just leave the empty mount point (RO)
+		fi
+	fi
+fi
+
+# modem firmware updates
+[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+echo 0 > /sys/kernel/persistent_mem/boot_attempts
+
+exit 0

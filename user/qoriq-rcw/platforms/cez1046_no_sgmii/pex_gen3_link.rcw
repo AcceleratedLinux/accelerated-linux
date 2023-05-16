@@ -1,0 +1,37 @@
+/*
+ * PEX Gen3 linkup ERRATAs for LS1046AQDS and LS1046ARDB
+ *
+ * A-010477: PCI Express Gen3 link training equalization fails
+ * with default controller configuration
+ * PCIe1 GEN3_RELATED_OFF register: 0x0340_0890 little endian
+ * PCIe2 GEN3_RELATED_OFF register: 0x0350_0890 little endian
+ * PCIe3 GEN3_RELATED_OFF register: 0x0360_0890 little endian
+ *
+ * A-008851: Invalid transmitter/receiver preset values are used
+ * in Gen3 equalization phases during link training for RC mode
+ *
+ * ALTCBAR Register (SCFG_ALTCBAR): 0x0157_0158 big endian
+ * PBL is also big endian block on LS1046A
+ */
+
+.pbi
+write 0x570158, 0x00000300
+awrite 0x400890, 0x01048000
+awrite 0x500890, 0x01048000
+awrite 0x600890, 0x01048000
+
+awrite 0x4008bc, 0x01000000
+awrite 0x400154, 0x47474747
+awrite 0x400158, 0x47474747
+awrite 0x4008bc, 0x00000000
+
+awrite 0x5008bc, 0x01000000
+awrite 0x500154, 0x47474747
+awrite 0x500158, 0x47474747
+awrite 0x5008bc, 0x00000000
+
+awrite 0x6008bc, 0x01000000
+awrite 0x600154, 0x47474747
+awrite 0x600158, 0x47474747
+awrite 0x6008bc, 0x00000000
+.end

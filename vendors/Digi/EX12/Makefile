@@ -7,6 +7,9 @@ UROMFSIMG = $(IMAGEDIR)/urootfs.bin
 ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
+IMAGESIZE = 31457280 # 30MB
+BLOADER_IMG = $(IMAGEDIR)/u-boot.imx
+BLOADER_IMG_VERSION = $(shell strings $(BLOADER_IMG) | grep -oE "[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,4}\.[0-9]{1,4}(-.*|$$)")
 
 SIGNING_ALG = ecdsa
 
@@ -56,7 +59,12 @@ uimage.bin:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-ex12.dtb $(IMAGEDIR)/
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-ex12.dtb /tftpboot/
 
-image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
+
+# Comment it out to stop generating the bootloader update file
+image: bloader.pack
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak
+SQUASH_BCJ = -b 256K -Xbcj arm
+

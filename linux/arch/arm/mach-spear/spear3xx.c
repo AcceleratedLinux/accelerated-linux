@@ -20,8 +20,8 @@
 #include <asm/mach/map.h>
 #include "pl080.h"
 #include "generic.h"
-#include <mach/spear.h>
-#include <mach/misc_regs.h>
+#include "spear.h"
+#include "misc_regs.h"
 
 /* ssp device registration */
 struct pl022_ssp_controller pl022_plat_data = {
@@ -30,16 +30,6 @@ struct pl022_ssp_controller pl022_plat_data = {
 	.dma_filter = pl08x_filter_id,
 	.dma_tx_param = "ssp0_tx",
 	.dma_rx_param = "ssp0_rx",
-	/*
-	 * This is number of spi devices that can be connected to spi. There are
-	 * two type of chipselects on which slave devices can work. One is chip
-	 * select provided by spi masters other is controlled through external
-	 * gpio's. We can't use chipselect provided from spi master (because as
-	 * soon as FIFO becomes empty, CS is disabled and transfer ends). So
-	 * this number now depends on number of gpios available for spi. each
-	 * slave on each master requires a separate gpio pin.
-	 */
-	.num_chipselect = 2,
 };
 
 /* dmac device registration */

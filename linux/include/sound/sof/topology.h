@@ -57,8 +57,8 @@ struct sof_ipc_comp {
 	uint32_t pipeline_id;
 	uint32_t core;
 
-	/* reserved for future use */
-	uint32_t reserved[1];
+	/* extended data length, 0 if no extended data */
+	uint32_t ext_data_length;
 } __packed;
 
 /*
@@ -234,7 +234,7 @@ struct sof_ipc_comp_process {
 	/* reserved for future use */
 	uint32_t reserved[7];
 
-	uint8_t data[0];
+	uint8_t data[];
 } __packed;
 
 /* frees components, buffers and pipelines

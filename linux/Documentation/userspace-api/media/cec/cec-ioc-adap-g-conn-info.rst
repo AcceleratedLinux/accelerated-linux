@@ -2,6 +2,8 @@
 ..
 .. Copyright 2019 Google LLC
 ..
+.. c:namespace:: CEC
+
 .. _CEC_ADAP_G_CONNECTOR_INFO:
 
 *******************************
@@ -16,17 +18,17 @@ CEC_ADAP_G_CONNECTOR_INFO - Query HDMI connector information
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, CEC_ADAP_G_CONNECTOR_INFO, struct cec_connector_info *argp )
-    :name: CEC_ADAP_G_CONNECTOR_INFO
+.. c:macro:: CEC_ADAP_G_CONNECTOR_INFO
+
+``int ioctl(int fd, CEC_ADAP_G_CONNECTOR_INFO, struct cec_connector_info *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :c:func:`open() <cec-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
-
 
 Description
 ===========
@@ -37,7 +39,7 @@ provide a pointer to a cec_connector_info struct which will be populated
 by the kernel with the info provided by the adapter's driver. This ioctl
 is only available if the ``CEC_CAP_CONNECTOR_INFO`` capability is set.
 
-.. tabularcolumns:: |p{1.0cm}|p{4.4cm}|p{2.5cm}|p{9.6cm}|
+.. tabularcolumns:: |p{1.0cm}|p{4.4cm}|p{2.5cm}|p{9.2cm}|
 
 .. c:type:: cec_connector_info
 
@@ -57,8 +59,7 @@ is only available if the ``CEC_CAP_CONNECTOR_INFO`` capability is set.
     * - }
       -
 
-
-.. tabularcolumns:: |p{4.4cm}|p{2.5cm}|p{10.6cm}|
+.. tabularcolumns:: |p{4.4cm}|p{2.5cm}|p{10.4cm}|
 
 .. _connector-type:
 
@@ -81,7 +82,7 @@ is only available if the ``CEC_CAP_CONNECTOR_INFO`` capability is set.
         Information about the connector can be found in
 	:ref:`cec-drm-connector-info`.
 
-.. tabularcolumns:: |p{4.4cm}|p{2.5cm}|p{10.6cm}|
+.. tabularcolumns:: |p{4.4cm}|p{2.5cm}|p{10.4cm}|
 
 .. c:type:: cec_drm_connector_info
 

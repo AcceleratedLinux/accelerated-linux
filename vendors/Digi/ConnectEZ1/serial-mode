@@ -11,55 +11,53 @@
 #
 # GPIO444 = UART GPIO 4: differential termination enable (output, active high, default low)
 # GPIO445 = UART GPIO 5: 2-wire, half-duplex enable (output, active high, default low)
-# GPIO446 = UART GPIO 6: RX enable (output, active high, default high)
-# GPIO447 = UART GPIO 7: RS232 (otherwise differential) (output, active high, default high)
+# GPIO446 = UART GPIO 6: RS485 enable (output, active low, default high)
+# GPIO447 = UART GPIO 7: RS232 enable (output, active high, default low)
 #
 
 serial_init() {
-	# The initialization puts the port into RS-232 mode
+	# The initialization prepares GPIOs, but defers mode shift
+	# until mode is selected.
 	echo 444 > /sys/class/gpio/export
-	echo low > /sys/class/gpio/gpio444/direction
 	echo 445 > /sys/class/gpio/export
-	echo low > /sys/class/gpio/gpio445/direction
 	echo 446 > /sys/class/gpio/export
-	echo high > /sys/class/gpio/gpio446/direction
 	echo 447 > /sys/class/gpio/export
-	echo high > /sys/class/gpio/gpio447/direction
 }
 
 serial_rs232() {
-	echo 0 > /sys/class/gpio/gpio444/value
-	echo 0 > /sys/class/gpio/gpio445/value
-	echo 1 > /sys/class/gpio/gpio446/value
-	echo 1 > /sys/class/gpio/gpio447/value
+	echo low > /sys/class/gpio/gpio444/direction
+	echo low > /sys/class/gpio/gpio445/direction
+	echo high > /sys/class/gpio/gpio446/direction
+	echo high > /sys/class/gpio/gpio447/direction
 }
 
 serial_rs422() {
-	echo 0 > /sys/class/gpio/gpio444/value
-	echo 0 > /sys/class/gpio/gpio445/value
-	echo 1 > /sys/class/gpio/gpio446/value
-	echo 0 > /sys/class/gpio/gpio447/value
+	echo low > /sys/class/gpio/gpio444/direction
+	echo low > /sys/class/gpio/gpio445/direction
+	echo low > /sys/class/gpio/gpio446/direction
+	echo low > /sys/class/gpio/gpio447/direction
 }
 
 serial_rs485() {  # 2-wire, half-duplex
-	echo 0 > /sys/class/gpio/gpio444/value
-	echo 1 > /sys/class/gpio/gpio445/value
-	echo 1 > /sys/class/gpio/gpio446/value
-	echo 0 > /sys/class/gpio/gpio447/value
+	echo low > /sys/class/gpio/gpio444/direction
+	echo high > /sys/class/gpio/gpio445/direction
+	echo low > /sys/class/gpio/gpio446/direction
+	echo low > /sys/class/gpio/gpio447/direction
 }
 
 serial_nonterminate() {
-	echo 0 > /sys/class/gpio/gpio444/value
+	echo low > /sys/class/gpio/gpio444/direction
 }
 
 serial_terminate() {
-	echo 1 > /sys/class/gpio/gpio444/value
+	echo high > /sys/class/gpio/gpio444/direction
 }
 
 usage() {
 	echo "usage: serial-mode <device> (init|rs-232|rs-422|rs-485) [terminate]"
 	echo
 	echo "        init      -- initialize port control"
+	echo "        powerdown -- not supported"
 	echo "        rs-232    -- set port into RS-232 mode (default)"
 	echo "        rs-422    -- set port into RS-422 mode"
 	echo "        rs-485    -- set port into RS-485 mode"
@@ -81,13 +79,17 @@ fi
 
 case "$2" in
 init)	serial_init ;;
+powerdown)
+	# Not supported, exit with success
+	exit 0
+	;;
 rs-232)	serial_rs232 ;;
 rs-422)	serial_rs422 ;;
 rs-485)	serial_rs485 ;;
 *)	usage ;;
 esac
 
-if [ "$3" = "terminate" ] ; then
+if [ "$3" = "terminate" ] && [ "$2" != "rs-232" ] ; then
 	serial_terminate
 else
 	serial_nonterminate

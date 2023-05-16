@@ -1,2 +1,4 @@
 inet:unknown:/bin/inetd
+cron:unknown:/usr/sbin/crond -l 9 -S -f
 fltd:unknown:/bin/flatfsd
+slog:unknown:/sbin/rsyslogd -n -f /etc/config/rsyslog.conf

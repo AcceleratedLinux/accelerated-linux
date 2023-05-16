@@ -1,0 +1,106 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+#DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/portmanager-pattern-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	. /etc/scripts/portmanager-pattern-alertv1 "$1" "$6" "$7" "$8" "$9"
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	SerialPatternNotification=2
+	serialPatternTx=4
+	serialPatternRx=5
+
+	export AGENT=""
+	export UPTIME=""
+	export NOTIFICATION="SerialPatternNotification"
+	export TRAP=$SerialPatternNotification
+
+	RESOLVED=1
+	TRIGGERED=2
+	UNRESOLVABLE=3
+
+	ALERT_TYPE=$serialPatternTx
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIMESTAMP=$4
+	ALERT_STATE=$5
+	ALERT_NAME=$6
+	ALERT_PORT=$7
+	ALERT_PORT_LABEL=$8
+	ALERT_DEVICE=`printf "port%02d" ${ALERT_PORT}`
+	ALERT_MATCH=$9
+	ALERT_SUMMARY="Pattern matched text '$ALERT_MATCH' on serial $ALERT_DEVICE ($ALERT_PORT_LABEL)"
+	ALERT_DEVICE="Port $ALERT_PORT ($ALERT_PORT_LABEL)"
+	ALERT_VALUE=-1
+	ALERT_OLD_VALUE=-1
+	ALERT_TRIGGER_VALUE=-1
+
+	if [ "$ALERT_STATE" == "-1" ]; then
+		ALERT_STATE=$UNRESOLVABLE
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmName" \
+		"s" \
+		"$ALERT_NAME" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIMESTAMP" \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmUser" \
+		"s" \
+		"$ALERT_NAME" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY" \
+		"AlarmTriggerValue" \
+		"i" \
+		"$ALERT_TRIGGER_VALUE" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$ALERT_OLD_VALUE" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

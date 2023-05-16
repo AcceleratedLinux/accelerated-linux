@@ -1,0 +1,103 @@
+#!/bin/lua
+local posix = require "posix"
+local io = require "io"
+local os = require "os"
+local curr_ports = tonumber(arg[1])
+
+function getFileContents(filename)
+	local res
+	f = io.open(filename, "r")
+	if f ~= nil then
+		res = f:read("*a")
+		f:close()
+	end
+	return res
+end
+
+function string:split(delimiter)
+  local result = { }
+  local from  = 1
+  local delim_from, delim_to = string.find( self, delimiter, from  )
+  while delim_from do
+    table.insert( result, string.sub( self, from , delim_from-1 ) )
+    from  = delim_to + 1
+    delim_from, delim_to = string.find( self, delimiter, from  )
+  end
+  table.insert( result, string.sub( self, from  ) )
+  return result
+end
+
+function string:trim()
+	return (string.gsub(self, "^%s*(.-)%s*$", "%1"))
+end
+
+-- Support up to 4 USB TTYs
+local ttys = {}
+local mapping = {}
+for x = 1, 4, 1 do
+	label = "ttyACM" .. (x - 1)
+	if posix.readlink("/sys/class/tty/" .. label) ~= nil then
+		-- Get the endpoint parent, and then see if its a Cisco USB Console
+		local usbep = posix.basename(posix.readlink("/sys/class/tty/" .. label .. "/device"))
+		-- Split off the endpoint to get the parent.
+		local usb_parent = usbep:split(":")[1]
+		local vendor = getFileContents("/sys/bus/usb/devices/" .. usb_parent .. "/idVendor"):trim()
+		local product = getFileContents("/sys/bus/usb/devices/" .. usb_parent .. "/idProduct"):trim()
+
+		if vendor == "05a6" and product == "0009" then
+			-- Success
+			ttys[usbep] = label
+		end
+	end
+end
+
+-- Load in the mapping file if we have it
+local f = io.open("/etc/config/usb-console-mapping", "r")
+if f ~= nil then
+	for line in f:lines() do
+		fields = line:split(" ")
+		mapping[fields[2]] = fields[1]
+	end
+	f:close()
+end
+
+-- Move our port count to the max found in the mapping file
+for x, y in pairs(mapping) do
+	if curr_ports <= tonumber(y) then
+		curr_ports = tonumber(y) + 1
+	end
+end
+
+
+-- Look up / fill in the endpoints
+for x, y in pairs(ttys) do
+	if mapping[x] == nil then
+		mapping[x] = curr_ports
+		curr_ports = curr_ports + 1
+	end 
+end
+
+-- Write the mapping file back
+f = io.open("/etc/config/usb-console-mapping", "w")
+for x, y in pairs(mapping) do
+	f:write(y, " ", x, "\n")
+end
+f:close()
+
+
+-- Append the results to /var/run/serial, and build the symlink
+f = io.open("/var/run/serial-ports", "a")
+for x, y in pairs(mapping) do
+	if ttys[x] ~= nil then
+		f:write(string.format("port%02d --> %s\n", y, ttys[x]))
+		posix.unlink(string.format("/dev/port%02d", y))
+		posix.link("/dev/" .. ttys[x], string.format("/dev/port%02d", y), true)
+		os.execute("/bin/infod -s -o push -p config.ports." .. string.format("port%d", y) .. ".dev.deflabel -d \"Cisco USB Console\" &")
+		os.execute("/bin/infod -s -o push -p config.ports." .. string.format("port%d", y) .. ".dev.typdesc -d \"usb-af\" &")
+	else 
+		f:write(string.format("port%02d --> null\n", y))
+		posix.unlink(string.format("/dev/port%02d", y))
+		posix.link("/dev/null", string.format("/dev/port%02d", y), true) 
+	end
+end
+f:close()

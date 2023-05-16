@@ -157,6 +157,10 @@
 	uint32_t VBLANK_PARAMETERS_5;\
 	uint32_t VBLANK_PARAMETERS_6
 
+#define DCN30_HUBP_REG_COMMON_VARIABLE_LIST \
+	DCN21_HUBP_REG_COMMON_VARIABLE_LIST;\
+	uint32_t DCN_DMDATA_VM_CNTL
+
 #define DCN2_HUBP_REG_FIELD_VARIABLE_LIST(type) \
 	DCN_HUBP_REG_FIELD_BASE_LIST(type); \
 	type DMDATA_ADDRESS_HIGH;\
@@ -192,17 +196,42 @@
 	type REFCYC_PER_META_CHUNK_FLIP_C; \
 	type VM_GROUP_SIZE
 
+#define DCN30_HUBP_REG_FIELD_VARIABLE_LIST(type) \
+	DCN21_HUBP_REG_FIELD_VARIABLE_LIST(type);\
+	type PRIMARY_SURFACE_DCC_IND_BLK;\
+	type SECONDARY_SURFACE_DCC_IND_BLK;\
+	type PRIMARY_SURFACE_DCC_IND_BLK_C;\
+	type SECONDARY_SURFACE_DCC_IND_BLK_C;\
+	type ALPHA_PLANE_EN;\
+	type REFCYC_PER_VM_DMDATA;\
+	type DMDATA_VM_FAULT_STATUS;\
+	type DMDATA_VM_FAULT_STATUS_CLEAR; \
+	type DMDATA_VM_UNDERFLOW_STATUS;\
+	type DMDATA_VM_LATE_STATUS;\
+	type DMDATA_VM_UNDERFLOW_STATUS_CLEAR; \
+	type DMDATA_VM_DONE; \
+	type CROSSBAR_SRC_Y_G; \
+	type CROSSBAR_SRC_ALPHA; \
+	type PACK_3TO2_ELEMENT_DISABLE; \
+	type ROW_TTU_MODE; \
+	type NUM_PKRS
+
+#define DCN31_HUBP_REG_FIELD_VARIABLE_LIST(type) \
+	DCN30_HUBP_REG_FIELD_VARIABLE_LIST(type);\
+	type HUBP_UNBOUNDED_REQ_MODE;\
+	type CURSOR_REQ_MODE;\
+	type HUBP_SOFT_RESET
 
 struct dcn_hubp2_registers {
-	DCN21_HUBP_REG_COMMON_VARIABLE_LIST;
+	DCN30_HUBP_REG_COMMON_VARIABLE_LIST;
 };
 
 struct dcn_hubp2_shift {
-	DCN21_HUBP_REG_FIELD_VARIABLE_LIST(uint8_t);
+	DCN31_HUBP_REG_FIELD_VARIABLE_LIST(uint8_t);
 };
 
 struct dcn_hubp2_mask {
-	DCN21_HUBP_REG_FIELD_VARIABLE_LIST(uint32_t);
+	DCN31_HUBP_REG_FIELD_VARIABLE_LIST(uint32_t);
 };
 
 struct dcn20_hubp {
@@ -301,6 +330,7 @@ void hubp2_program_surface_config(
 bool hubp2_is_flip_pending(struct hubp *hubp);
 
 void hubp2_set_blank(struct hubp *hubp, bool blank);
+void hubp2_set_blank_regs(struct hubp *hubp, bool blank);
 
 void hubp2_cursor_set_position(
 		struct hubp *hubp,

@@ -1,0 +1,210 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+host=$1
+outlets=$2
+cmd=$3
+tmpfile=/tmp/tmp.$$
+oldifs="$IFS"
+
+snmp_version=1
+
+declare -a outletStatus
+ON=".1.3.6.1.4.1.17420.1.2.9.1.21.0"
+OFF=".1.3.6.1.4.1.17420.1.2.9.1.22.0"
+
+# snmpset commands require r/w community, since an snmpget has already 
+# succeeded before calling snmpset, assume it is failing due to priv
+# level (login error)
+function toggleDelay {
+	cmd=$1
+	index=$2
+	oid=$3
+	new=$4
+	local delays
+	declare -a delays
+
+	delayStr=$(snmpget -v$snmp_version -c$community -Oqv $host $oid 2>&1 | tr -d "\"")
+	if [ "$?" -ne 0 ]
+	then
+		power_outlet_error_timeout "${outlet}" "${cmd}"
+		return 1
+	fi
+	IFS=","
+	delays=($delayStr)
+	IFS="$oldifs"
+	if [ -z "$delayStr" ]
+	then
+		power_outlet_error_timeout "${outlet}" "${cmd}"
+		return 1
+	fi
+	OLD=${delays[$index]}
+	delays[$index]=$new
+
+	newVal=$(echo ${delays[*]} | tr " " ",")
+	output=$(snmpset -v$snmp_version -c$community -Oqv $host $oid s "$newVal" 2>&1)
+	if [ "$?" -ne 0 ]
+	then
+		power_outlet_error_login "${outlet}" "$community"
+		return 1
+	fi
+
+	return 0
+}
+
+if [[ -z "$host" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=$(basename $0)
+	echo "Usage: $appname <address> \"<outlet> [outlet..]\" on|off|cycle|status"
+	exit 1
+fi
+
+# Get current status
+
+snmp_command="snmpget -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.17420.1.2.9.1.13.0"
+status_nibble=$(${snmp_command} | tr -d "\"")
+if [ "$?" -ne 0 ]
+then
+	power_error_login $community
+	exit 1
+fi
+
+if [ -z "$status_nibble" ]
+then
+	for outlet in $outlets; do
+		power_outlet_error_timeout $outlet $cmd
+	done
+	exit 1
+fi
+
+IFS=","
+outletStatus=($status_nibble)
+IFS="$oldifs"
+
+numOutlets=${#outletStatus[*]}
+if [[ "$cmd" == "probe" ]]; then
+	echo ${#outletStatus[*]}
+	exit 0
+fi
+
+failure=0
+for outlet in $outlets; do
+
+	if [ ${outlet} -lt 1 -o ${outlet} -gt ${numOutlets} ]
+	then
+		power_outlet_error_range $outlet $numOutlets
+		failure=1
+		continue
+	fi
+
+	index=$(($outlet - 1))
+
+	if [[ "$cmd" == "on" ]]; then
+
+		if ! toggleDelay "$cmd" "$index" "$ON" "0"
+		then
+			continue
+		fi
+
+		outletStatus[$index]=1
+		newStatus=$(echo ${outletStatus[*]} | tr " " ",")
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.17420.1.2.9.1.13.0 s "$newStatus" 2>&1)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+		if ! toggleDelay $cmd $index $ON $OLD
+		then
+			continue
+		fi
+
+	elif [[ "$cmd" == "off" ]]; then
+
+		if ! toggleDelay $cmd $index $OFF 0
+		then
+			continue
+		fi
+
+		outletStatus[$index]=0
+		newStatus=$(echo ${outletStatus[*]} | tr " " ",")
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.17420.1.2.9.1.13.0 s "$newStatus" 2>&1)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+		if ! toggleDelay $cmd $index $OFF $OLD
+		then
+			continue
+		fi
+
+	elif [[ "$cmd" == "cycle" ]]; then
+
+		if ! toggleDelay $cmd $index $OFF 0
+		then
+			continue
+		fi
+
+		outletStatus[$index]=0
+		newStatus=$(echo ${outletStatus[*]} | tr " " ",")
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.17420.1.2.9.1.13.0 s "$newStatus" 2>&1)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+		if ! toggleDelay $cmd $index $OFF $OLD
+		then
+			continue
+		fi
+
+		sleep 2
+
+		if ! toggleDelay $cmd $index $ON 0
+		then
+			continue
+		fi
+
+		outletStatus[$index]=1
+		newStatus=$(echo ${outletStatus[*]} | tr " " ",")
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.17420.1.2.9.1.13.0 s "$newStatus" 2>&1)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+		if ! toggleDelay $cmd $index $ON $OLD
+		then
+			continue
+		fi
+
+	elif [[ "$cmd" == "load" ]]; then
+		LOAD=$(snmpget -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.17420.1.2.9.1.11.0 2>&1 | tr -d "\"")
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_timeout "${outlet}" "${cmd}"
+			failure=1
+			continue
+		fi
+		LOAD=$(($LOAD/10))
+		echo $LOAD
+	fi
+		
+	if [ "${outletStatus[$index]}" == "0" ]
+	then
+		power_outlet_status $outlet "off"
+	else
+		power_outlet_status $outlet "on"
+	fi
+done
+
+exit ${failure}

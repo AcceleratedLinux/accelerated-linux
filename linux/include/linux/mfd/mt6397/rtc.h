@@ -36,6 +36,7 @@
 #define RTC_AL_MASK_DOW                BIT(4)
 
 #define RTC_TC_SEC             0x000a
+#define RTC_TC_MTH_MASK        0x000f
 /* Min, Hour, Dom... register offset to RTC_TC_SEC */
 #define RTC_OFFSET_SEC         0
 #define RTC_OFFSET_MIN         1
@@ -72,7 +73,6 @@ struct mtk_rtc_data {
 };
 
 struct mt6397_rtc {
-	struct device           *dev;
 	struct rtc_device       *rtc_dev;
 
 	/* Protect register access from multiple tasks */

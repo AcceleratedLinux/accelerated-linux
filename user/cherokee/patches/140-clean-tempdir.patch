@@ -1,0 +1,21 @@
+
+commit ad0aaaa67ef4b27a4105688053735f5c8a250f19
+Author: Ken Wilson <ken.wilson@opengear.com>
+Date:   Thu Dec 5 00:30:14 2013 +0000
+
+    #4292
+    Clean up the tmpdir on exit
+
+Index: cherokee-1.2.101/cherokee/init.c
+===================================================================
+--- cherokee-1.2.101.orig/cherokee/init.c
++++ cherokee-1.2.101/cherokee/init.c
+@@ -122,6 +122,8 @@ cherokee_init (void)
+ ret_t
+ cherokee_mrproper (void)
+ {
++	uid_t uid = getuid();
++	cherokee_rm_rf (&cherokee_tmp_dir, uid);
+ 	cherokee_buffer_mrproper (&cherokee_tmp_dir);
+ 
+ 	cherokee_bogotime_free();

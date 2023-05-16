@@ -1,0 +1,34 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+ACTION=$1
+retval=0
+if [ "$ACTION" == "snmp" ]; then
+	export AGENT=""
+	export UPTIME=""
+
+	export TRAP_NAME="${sensor_oid_prefix}EventOccurred"
+	export MIB_NAME="${sensor_mib_name}"
+
+	ALERT_DEVICE=$2
+	ALERT_DEVICE_TYPE=$3
+	ALERT_SENSOR=$4
+	ALERT_VALUE=$5
+
+	/bin/sh /etc/scripts/alert-snmpv1 \
+		"${sensor_oid_prefix}StatusName" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"${sensor_oid_prefix}StatusDevType" \
+		"s" \
+		"$ALERT_DEVICE_TYPE" \
+		"${sensor_oid_prefix}StatusType" \
+		"s" \
+		"$ALERT_SENSOR" \
+		"${sensor_oid_prefix}StatusValue" \
+		"i" \
+		"$ALERT_VALUE"
+
+	retval=$(( $? || $retval ))
+fi

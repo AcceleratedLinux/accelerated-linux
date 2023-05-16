@@ -26,7 +26,6 @@
 #include <asm/firmware.h>
 #include <asm/hvcall.h>
 #include <asm/mmu.h>
-#include <asm/pgalloc.h>
 #include <linux/uaccess.h>
 #include <linux/memory.h>
 #include <asm/plpar_wrappers.h>
@@ -476,8 +475,6 @@ static struct notifier_block cmm_reboot_nb = {
 static int cmm_memory_cb(struct notifier_block *self,
 			unsigned long action, void *arg)
 {
-	int ret = 0;
-
 	switch (action) {
 	case MEM_GOING_OFFLINE:
 		mutex_lock(&hotplug_mutex);
@@ -494,7 +491,7 @@ static int cmm_memory_cb(struct notifier_block *self,
 		break;
 	}
 
-	return notifier_from_errno(ret);
+	return NOTIFY_OK;
 }
 
 static struct notifier_block cmm_mem_nb = {

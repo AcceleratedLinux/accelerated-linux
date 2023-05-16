@@ -9,6 +9,7 @@
 #include <linux/spinlock.h>
 #include <linux/notifier.h>
 #include <net/netevent.h>
+#include <net/arp.h>
 #include "neigh.h"
 #include "tc.h"
 #include "en_rep.h"
@@ -109,15 +110,28 @@ static void mlx5e_rep_neigh_stats_work(struct work_struct *work)
 	rtnl_unlock();
 }
 
+struct neigh_update_work {
+	struct work_struct work;
+	struct neighbour *n;
+	struct mlx5e_neigh_hash_entry *nhe;
+};
+
+static void mlx5e_release_neigh_update_work(struct neigh_update_work *update_work)
+{
+	neigh_release(update_work->n);
+	mlx5e_rep_neigh_entry_release(update_work->nhe);
+	kfree(update_work);
+}
+
 static void mlx5e_rep_neigh_update(struct work_struct *work)
 {
-	struct mlx5e_neigh_hash_entry *nhe =
-		container_of(work, struct mlx5e_neigh_hash_entry, neigh_update_work);
-	struct neighbour *n = nhe->n;
-	struct mlx5e_encap_entry *e;
+	struct neigh_update_work *update_work = container_of(work, struct neigh_update_work,
+							     work);
+	struct mlx5e_neigh_hash_entry *nhe = update_work->nhe;
+	struct neighbour *n = update_work->n;
+	struct mlx5e_encap_entry *e = NULL;
+	bool neigh_connected, same_dev;
 	unsigned char ha[ETH_ALEN];
-	struct mlx5e_priv *priv;
-	bool neigh_connected;
 	u8 nud_state, dead;
 
 	rtnl_lock();
@@ -131,44 +145,58 @@ static void mlx5e_rep_neigh_update(struct work_struct *work)
 	memcpy(ha, n->ha, ETH_ALEN);
 	nud_state = n->nud_state;
 	dead = n->dead;
+	same_dev = READ_ONCE(nhe->neigh_dev) == n->dev;
 	read_unlock_bh(&n->lock);
 
 	neigh_connected = (nud_state & NUD_VALID) && !dead;
 
 	trace_mlx5e_rep_neigh_update(nhe, ha, neigh_connected);
 
-	list_for_each_entry(e, &nhe->encap_list, encap_list) {
-		if (!mlx5e_encap_take(e))
-			continue;
+	if (!same_dev)
+		goto out;
 
-		priv = netdev_priv(e->out_dev);
-		mlx5e_rep_update_flows(priv, e, neigh_connected, ha);
-		mlx5e_encap_put(priv, e);
-	}
-	mlx5e_rep_neigh_entry_release(nhe);
+	/* mlx5e_get_next_init_encap() releases previous encap before returning
+	 * the next one.
+	 */
+	while ((e = mlx5e_get_next_init_encap(nhe, e)) != NULL)
+		mlx5e_rep_update_flows(netdev_priv(e->out_dev), e, neigh_connected, ha);
+
+out:
 	rtnl_unlock();
-	neigh_release(n);
+	mlx5e_release_neigh_update_work(update_work);
 }
 
-static void mlx5e_rep_queue_neigh_update_work(struct mlx5e_priv *priv,
-					      struct mlx5e_neigh_hash_entry *nhe,
-					      struct neighbour *n)
+static struct neigh_update_work *mlx5e_alloc_neigh_update_work(struct mlx5e_priv *priv,
+							       struct neighbour *n)
 {
-	/* Take a reference to ensure the neighbour and mlx5 encap
-	 * entry won't be destructed until we drop the reference in
-	 * delayed work.
-	 */
-	neigh_hold(n);
+	struct neigh_update_work *update_work;
+	struct mlx5e_neigh_hash_entry *nhe;
+	struct mlx5e_neigh m_neigh = {};
 
-	/* This assignment is valid as long as the the neigh reference
-	 * is taken
-	 */
-	nhe->n = n;
+	update_work = kzalloc(sizeof(*update_work), GFP_ATOMIC);
+	if (WARN_ON(!update_work))
+		return NULL;
 
-	if (!queue_work(priv->wq, &nhe->neigh_update_work)) {
-		mlx5e_rep_neigh_entry_release(nhe);
-		neigh_release(n);
+	m_neigh.family = n->ops->family;
+	memcpy(&m_neigh.dst_ip, n->primary_key, n->tbl->key_len);
+
+	/* Obtain reference to nhe as last step in order not to release it in
+	 * atomic context.
+	 */
+	rcu_read_lock();
+	nhe = mlx5e_rep_neigh_entry_lookup(priv, &m_neigh);
+	rcu_read_unlock();
+	if (!nhe) {
+		kfree(update_work);
+		return NULL;
 	}
+
+	INIT_WORK(&update_work->work, mlx5e_rep_neigh_update);
+	neigh_hold(n);
+	update_work->n = n;
+	update_work->nhe = nhe;
+
+	return update_work;
 }
 
 static int mlx5e_rep_netevent_event(struct notifier_block *nb,
@@ -180,7 +208,7 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 	struct net_device *netdev = rpriv->netdev;
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 	struct mlx5e_neigh_hash_entry *nhe = NULL;
-	struct mlx5e_neigh m_neigh = {};
+	struct neigh_update_work *update_work;
 	struct neigh_parms *p;
 	struct neighbour *n;
 	bool found = false;
@@ -195,17 +223,11 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 #endif
 			return NOTIFY_DONE;
 
-		m_neigh.dev = n->dev;
-		m_neigh.family = n->ops->family;
-		memcpy(&m_neigh.dst_ip, n->primary_key, n->tbl->key_len);
-
-		rcu_read_lock();
-		nhe = mlx5e_rep_neigh_entry_lookup(priv, &m_neigh);
-		rcu_read_unlock();
-		if (!nhe)
+		update_work = mlx5e_alloc_neigh_update_work(priv, n);
+		if (!update_work)
 			return NOTIFY_DONE;
 
-		mlx5e_rep_queue_neigh_update_work(priv, nhe, n);
+		queue_work(priv->wq, &update_work->work);
 		break;
 
 	case NETEVENT_DELAY_PROBE_TIME_UPDATE:
@@ -225,7 +247,7 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 		rcu_read_lock();
 		list_for_each_entry_rcu(nhe, &neigh_update->neigh_list,
 					neigh_list) {
-			if (p->dev == nhe->m_neigh.dev) {
+			if (p->dev == READ_ONCE(nhe->neigh_dev)) {
 				found = true;
 				break;
 			}
@@ -258,7 +280,7 @@ int mlx5e_rep_neigh_init(struct mlx5e_rep_priv *rpriv)
 
 	err = rhashtable_init(&neigh_update->neigh_ht, &mlx5e_neigh_ht_params);
 	if (err)
-		return err;
+		goto out_err;
 
 	INIT_LIST_HEAD(&neigh_update->neigh_list);
 	mutex_init(&neigh_update->encap_lock);
@@ -266,14 +288,19 @@ int mlx5e_rep_neigh_init(struct mlx5e_rep_priv *rpriv)
 			  mlx5e_rep_neigh_stats_work);
 	mlx5e_rep_neigh_update_init_interval(rpriv);
 
-	rpriv->neigh_update.netevent_nb.notifier_call = mlx5e_rep_netevent_event;
-	err = register_netevent_notifier(&rpriv->neigh_update.netevent_nb);
+	neigh_update->netevent_nb.notifier_call = mlx5e_rep_netevent_event;
+	err = register_netevent_notifier(&neigh_update->netevent_nb);
 	if (err)
-		goto out_err;
+		goto out_notifier;
 	return 0;
 
-out_err:
+out_notifier:
+	neigh_update->netevent_nb.notifier_call = NULL;
 	rhashtable_destroy(&neigh_update->neigh_ht);
+out_err:
+	netdev_warn(rpriv->netdev,
+		    "Failed to initialize neighbours handling for vport %d\n",
+		    rpriv->rep->vport);
 	return err;
 }
 
@@ -281,6 +308,9 @@ void mlx5e_rep_neigh_cleanup(struct mlx5e_rep_priv *rpriv)
 {
 	struct mlx5e_neigh_update_table *neigh_update = &rpriv->neigh_update;
 	struct mlx5e_priv *priv = netdev_priv(rpriv->netdev);
+
+	if (!rpriv->neigh_update.netevent_nb.notifier_call)
+		return;
 
 	unregister_netevent_notifier(&neigh_update->netevent_nb);
 
@@ -340,7 +370,8 @@ mlx5e_rep_neigh_entry_lookup(struct mlx5e_priv *priv,
 }
 
 int mlx5e_rep_neigh_entry_create(struct mlx5e_priv *priv,
-				 struct mlx5e_encap_entry *e,
+				 struct mlx5e_neigh *m_neigh,
+				 struct net_device *neigh_dev,
 				 struct mlx5e_neigh_hash_entry **nhe)
 {
 	int err;
@@ -350,11 +381,11 @@ int mlx5e_rep_neigh_entry_create(struct mlx5e_priv *priv,
 		return -ENOMEM;
 
 	(*nhe)->priv = priv;
-	memcpy(&(*nhe)->m_neigh, &e->m_neigh, sizeof(e->m_neigh));
-	INIT_WORK(&(*nhe)->neigh_update_work, mlx5e_rep_neigh_update);
+	memcpy(&(*nhe)->m_neigh, m_neigh, sizeof(*m_neigh));
 	spin_lock_init(&(*nhe)->encap_list_lock);
 	INIT_LIST_HEAD(&(*nhe)->encap_list);
 	refcount_set(&(*nhe)->refcnt, 1);
+	WRITE_ONCE((*nhe)->neigh_dev, neigh_dev);
 
 	err = mlx5e_rep_neigh_entry_insert(priv, *nhe);
 	if (err)

@@ -1,0 +1,62 @@
+From fbc9a875cc067e02e3973aaf165215d1244e17d1 Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Thu, 15 Sep 2022 12:46:38 -0400
+Subject: [PATCH] jshn.sh: DAL specific changes
+
+1. Don't add existing keys to the list of keys.
+   This allows us to get a list of keys that has no duplicates.
+   Also cleanup before loading, to make this change more reliable (this
+   matches the behaviour of init).
+
+2. config: allow checking if the json parsing failed.
+   config.sh already checks this, I just forgot the patch.
+---
+ sh/jshn.sh | 18 ++++++++++++------
+ 1 file changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/sh/jshn.sh b/sh/jshn.sh
+index 7b0155d..31155e5 100644
+--- a/sh/jshn.sh
++++ b/sh/jshn.sh
+@@ -59,11 +59,13 @@ _json_add_generic() {
+ 		[[ "$var" == "$2" ]] || export -- "${JSON_PREFIX}N_${4}_${var}=$2"
+ 	fi
+ 
+-	export -- \
+-		"${JSON_PREFIX}${4}_$var=$3" \
+-		"${JSON_PREFIX}T_${4}_$var=$1"
+-	_jshn_append "JSON_UNSET" "${4}_$var"
+-	_jshn_append "K_$4" "$var"
++	if eval "[ -z \${${JSON_PREFIX}T_${4}_${var}+x} ]"; then
++		export -- "${JSON_PREFIX}T_${4}_$var=$1"
++		_jshn_append "JSON_UNSET" "${4}_$var"
++		_jshn_append "K_$4" "$var"
++	fi
++	export -- "${JSON_PREFIX}${4}_$var=$3"
++
+ }
+ 
+ _json_add_table() {
+@@ -124,6 +126,7 @@ json_init() {
+ 	json_cleanup
+ 	export -n ${JSON_PREFIX}JSON_SEQ=0
+ 	export -- \
++		${JSON_PREFIX}JSON_UNSET= \
+ 		${JSON_PREFIX}JSON_CUR="J_V" \
+ 		${JSON_PREFIX}K_J_V=
+ }
+@@ -177,7 +180,10 @@ json_add_null() {
+ # functions read access to json variables
+ 
+ json_load() {
+-	eval "`jshn -r "$1"`"
++	local cmds
++	json_cleanup
++	cmds=$(jshn -r "$1") || return 1
++	eval "$cmds"
+ }
+ 
+ json_load_file() {
+-- 
+2.25.1
+

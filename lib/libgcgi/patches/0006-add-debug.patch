@@ -1,0 +1,64 @@
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c
+@@ -855,6 +855,19 @@ gcgiFieldSizeNext(const char *field, int
+     return GCGISUCCESS;
+ }
+ 
++gcgiReturnType
++gcgiFieldName(int index, char **field)
++{
++    const char *name = NULL;
++    int len;
++
++    if (findQueryStringName(index, &name) != GCGISUCCESS)
++    	return GCGIFIELDNOTFOUND;
++
++    *field = XMALLOC(char, strlen(name) + 1);
++    strcpy(*field, name);
++    return GCGISUCCESS;
++}
+ 
+ char *
+ gcgiFetchEnvVar(int env)
+@@ -1409,6 +1422,15 @@ findQueryStringColl(const char *field, i
+     return GCGIFIELDNOTFOUND;
+ }
+ 
++gcgiReturnType
++findQueryStringName(int index, const char **ret)
++{
++    if (cgiQuery == NULL || index < 0 || index >= cgiQuery->queryCount)
++	return GCGIFIELDNOTFOUND;
++
++    *ret = cgiQuery->query[index]->beg->field;
++    return GCGISUCCESS;
++}
+ 
+ gcgiReturnType
+ findQueryStringNodeFirst(const char *field, QueryStringNode **q)
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.h
+@@ -161,6 +161,7 @@ gcgiReturnType  gcgiFieldLengthNext(cons
+ gcgiReturnType  gcgiFieldSize(const char *field, int *ret);
+ gcgiReturnType  gcgiFieldSizeCur(const char *field, int *ret);
+ gcgiReturnType  gcgiFieldSizeNext(const char *field, int *ret);
++gcgiReturnType  gcgiFieldName(int index, char **field);
+ 
+ gcgiReturnType  gcgiNumFormFields(int *ret);
+ gcgiReturnType  gcgiNumFields(const char *field, int *ret);
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi_private.h
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi_private.h
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi_private.h
+@@ -76,6 +76,7 @@ gcgiReturnType         createQueryString
+ gcgiReturnType         createQueryStringCollArray(int numColls); 
+ gcgiReturnType         freeQueryStringColl(QueryStringColl *q);
+ gcgiReturnType         findQueryStringColl(const char *field, int *index);
++gcgiReturnType         findQueryStringName(int index, const char **ret);
+ gcgiReturnType         getEnvVariables( void );
+ 
+ /*------ Debugging Functions ------*/

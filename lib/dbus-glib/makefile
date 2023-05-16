@@ -28,7 +28,7 @@ include $(ROOTDIR)/tools/automake.inc
 
 dbus-glib_romfs:
 	$(ROMFSINST) -R  /libexec/dbus-bash-completion-helper
-	$(ROMFSINST) -R  /etc/default/bash_completion.d
+	$(ROMFSINST) -R  /etc/bash_completion.d/dbus-bash-completion.sh
 	$(ROMFSINST) -R  /bin/dbus-binding-tool
 
 endif

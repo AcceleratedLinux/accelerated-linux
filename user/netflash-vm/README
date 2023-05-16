@@ -1,0 +1,13 @@
+
+netflash-vm will extract a rootfs+kernel (FSK) image from the file or URL
+and write it to local storage via /dev/flash/image before rebooting. It
+performs some checks and can show a progress meter. It can also be run
+in a CGI context for receiving firmware upgrades from a browser.
+
+netflash-vm is intended to be a drop-in reimplementation of uClinux
+netflash, but designed to handle complex firmware file encodings.
+This was motivated by the desire to make firmware images as directly
+bootable by virtual machine software as possile. netflash-vm can extract
+firmware data from QCOW2 disk images read over a pipeline, yet maintain
+compatibility with the original netflash command line arguments.
+

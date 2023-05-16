@@ -188,7 +188,8 @@ void pci_pri_init(struct pci_dev *pdev)
 
 /**
  * pci_enable_pri - Enable PRI capability
- * @ pdev: PCI device structure
+ * @pdev: PCI device structure
+ * @reqs: outstanding requests
  *
  * Returns 0 on success, negative value on error
  */
@@ -325,6 +326,21 @@ int pci_prg_resp_pasid_required(struct pci_dev *pdev)
 
 	return pdev->pasid_required;
 }
+
+/**
+ * pci_pri_supported - Check if PRI is supported.
+ * @pdev: PCI device structure
+ *
+ * Returns true if PRI capability is present, false otherwise.
+ */
+bool pci_pri_supported(struct pci_dev *pdev)
+{
+	/* VFs share the PF PRI */
+	if (pci_physfn(pdev)->pri_cap)
+		return true;
+	return false;
+}
+EXPORT_SYMBOL_GPL(pci_pri_supported);
 #endif /* CONFIG_PCI_PRI */
 
 #ifdef CONFIG_PCI_PASID
@@ -360,7 +376,7 @@ int pci_enable_pasid(struct pci_dev *pdev, int features)
 	if (WARN_ON(pdev->pasid_enabled))
 		return -EBUSY;
 
-	if (!pdev->eetlp_prefix_path)
+	if (!pdev->eetlp_prefix_path && !pdev->pasid_no_tlp)
 		return -EINVAL;
 
 	if (!pasid)
@@ -464,7 +480,7 @@ EXPORT_SYMBOL_GPL(pci_pasid_features);
 #define PASID_NUMBER_SHIFT	8
 #define PASID_NUMBER_MASK	(0x1f << PASID_NUMBER_SHIFT)
 /**
- * pci_max_pasid - Get maximum number of PASIDs supported by device
+ * pci_max_pasids - Get maximum number of PASIDs supported by device
  * @pdev: PCI device structure
  *
  * Returns negative value when PASID capability is not present.

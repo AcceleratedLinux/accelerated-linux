@@ -1,0 +1,73 @@
+Index: pam_tacplus-1.3.9/libtac/lib/author_r.c
+===================================================================
+--- pam_tacplus-1.3.9.orig/libtac/lib/author_r.c
++++ pam_tacplus-1.3.9/libtac/lib/author_r.c
+@@ -41,6 +41,8 @@
+ int tac_author_read(int fd, struct areply *re) {
+     HDR th;
+     struct author_reply *tb = NULL;
++    char *tb_byte_p = NULL;
++    int tb_bytes_read;
+     int len_from_header, r, len_from_body;
+     u_char *pktp = NULL;
+     char *msg = NULL;
+@@ -84,26 +86,39 @@ int tac_author_read(int fd, struct arepl
+     tb = (struct author_reply *) xcalloc(1, len_from_header);
+ 
+     /* read reply packet body */
+-    if (tac_readtimeout_enable &&
+-        tac_read_wait(fd,timeleft,len_from_header,NULL) < 0 ) {
+-
+-        TACSYSLOG((LOG_ERR,\
+-            "%s: reply timeout after %d secs", __FUNCTION__, tac_timeout))
+-        re->msg = xstrdup(author_syserr_msg);
+-        re->status = LIBTAC_STATUS_READ_TIMEOUT;
+-        free(tb);
+-        return re->status;
+-    }
+-    r = read(fd, tb, len_from_header);
+-    if (r < len_from_header) {
+-        TACSYSLOG((LOG_ERR,\
+-            "%s: short reply body, read %d of %d: %m", __FUNCTION__,\
+-            r, len_from_header))
+-        re->msg = xstrdup(author_syserr_msg);
+-        re->status = LIBTAC_STATUS_SHORT_BODY;
+-        free(tb);
+-        return re->status;
+-    }
++    tb_bytes_read = 0;
++    /* Treat as char* for pointer arithmetic in byte sized chunks below */
++    tb_byte_p = (char *) tb;
++    do {
++        if (tac_readtimeout_enable &&
++            tac_read_wait(fd, timeleft, len_from_header - tb_bytes_read,
++                    &timeleft) < 0 ) {
++            TACSYSLOG((LOG_ERR,\
++                "%s: reply timeout after %d secs", __FUNCTION__, tac_timeout));
++            re->msg = xstrdup(author_syserr_msg);
++            re->status = LIBTAC_STATUS_READ_TIMEOUT;
++            free(tb);
++            return re->status;
++        }
++        r = read(fd, tb_byte_p, len_from_header - tb_bytes_read);
++        if (r <= 0) {
++            /* 0 indicates EOF, -1 is error. Either way, the reply body is
++               short */
++            TACSYSLOG((LOG_ERR,\
++                "%s: short reply body, read %d of %d: %m", __FUNCTION__,\
++                tb_bytes_read, len_from_header));
++            re->msg = xstrdup(author_syserr_msg);
++            re->status = LIBTAC_STATUS_SHORT_BODY;
++            free(tb);
++            return re->status;
++        }
++        if (r < len_from_header) {
++            TACDEBUG((LOG_DEBUG, "%s: read bytes %d to %d of response body",\
++                __FUNCTION__, tb_bytes_read, tb_bytes_read + r - 1));
++        }
++        tb_bytes_read += r;
++        tb_byte_p += r;
++    } while (tb_bytes_read < len_from_header);
+ 
+     /* decrypt the body */
+     _tac_crypt((u_char *) tb, &th, len_from_header);

@@ -35,7 +35,7 @@
 	.macro	setup_c0_status set clr
 	.set	push
 	mfc0	t0, CP0_STATUS
-	or	t0, ST0_CU0|\set|0x1f|\clr
+	or	t0, ST0_KERNEL_CUMASK|\set|0x1f|\clr
 	xor	t0, 0x1f|\clr
 	mtc0	t0, CP0_STATUS
 	.set	noreorder
@@ -87,33 +87,51 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 
 	setup_c0_status_pri
 
+#ifdef CONFIG_SOC_MT7621
+	/*
+	 * According to MediaTek there is a hardwre bug in the EvictionQueue logic
+	 * of the MT7621 that means under some rare circumstances the queue will
+	 * stall. This causes a somewhat random and inconsistent Linux level oops,
+	 * usually a bad virtual address or unaligned access - but sometimes it
+	 * can be other faults too.
+	 *
+	 * Mediatek suggest that to work around this use the L2 cache in write through
+	 * (WT) mode instead of the default write back (WB) mode. The following code
+	 * sets up the base RAM to be in write through mode using the L2 control
+	 * registers of the MIPS Coherency Manager hardware block.
+	 */
+	/* Set L2 CCA Override to WT on lowest 256MB */
+	.set push
+	.set noreorder
+	jal	1f
+	li	t0, 5
+1:
+	ins	ra, t0, 29, 3
+	addiu   ra, 2f-1b
+	jr	ra
+	 nop
+
+	/* Running in KSEG 1*/
+2:
+	.set pop
+	lui     v0, 0xBFBF
+	ori     v0, v0, 0x80C0
+
+	lui     v1, 0xF000
+
+	ori     v1, v1, 0x0011
+	sw      v1, 8(v0)
+
+	/* Base */
+	sw      zero, 0(v0)
+#endif /* CONFIG_SOC_MT7621 */
+
 	/* We might not get launched at the address the kernel is linked to,
 	   so we jump there.  */
 	PTR_LA	t0, 0f
-	jr	t0
+	jr.hb	t0
 0:
 
-#ifdef CONFIG_USE_OF
-#if defined(CONFIG_MIPS_RAW_APPENDED_DTB) || \
-	defined(CONFIG_MIPS_ELF_APPENDED_DTB)
-
-	PTR_LA		t2, __appended_dtb
-
-#ifdef CONFIG_CPU_BIG_ENDIAN
-	li		t1, 0xd00dfeed
-#else  /* !CONFIG_CPU_BIG_ENDIAN */
-	li		t1, 0xedfe0dd0
-#endif /* !CONFIG_CPU_BIG_ENDIAN */
-	lw		t0, (t2)
-	beq		t0, t1, dtb_found
-#endif /* CONFIG_MIPS_RAW_APPENDED_DTB || CONFIG_MIPS_ELF_APPENDED_DTB */
-	li		t1, -2
-	move		t2, a1
-	beq		a0, t1, dtb_found
-
-	li		t2, 0
-dtb_found:
-#endif /* CONFIG_USE_OF */
 	PTR_LA		t0, __bss_start		# clear .bss
 	LONG_S		zero, (t0)
 	PTR_LA		t1, __bss_stop - LONGSIZE
@@ -126,10 +144,6 @@ dtb_found:
 	LONG_S		a1, fw_arg1
 	LONG_S		a2, fw_arg2
 	LONG_S		a3, fw_arg3
-
-#ifdef CONFIG_USE_OF
-	LONG_S		t2, fw_passed_dtb
-#endif
 
 	MTC0		zero, CP0_CONTEXT	# clear context register
 #ifdef CONFIG_64BIT

@@ -26,11 +26,15 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/string_helpers.h>
 
 #include "i915_drv.h"
+#include "intel_de.h"
 #include "intel_display_types.h"
 #include "intel_dsi.h"
-#include "intel_sideband.h"
+#include "vlv_dsi_pll.h"
+#include "vlv_dsi_pll_regs.h"
+#include "vlv_sideband.h"
 
 static const u16 lfsr_converts[] = {
 	426, 469, 234, 373, 442, 221, 110, 311, 411,		/* 62 - 70 */
@@ -390,10 +394,7 @@ static void glk_dsi_program_esc_clock(struct drm_device *dev,
 	/* Calculate TXESC2 divider */
 	div2_value = DIV_ROUND_UP(div1_value, txesc1_div);
 
-	if (div2_value < 10)
-		txesc2_div = div2_value;
-	else
-		txesc2_div = 10;
+	txesc2_div = min_t(u32, div2_value, 10);
 
 	intel_de_write(dev_priv, MIPIO_TXESC_CLK_DIV1,
 		       (1 << (txesc1_div - 1)) & GLK_TX_ESC_CLK_DIV1_MASK);
@@ -483,7 +484,7 @@ int bxt_dsi_pll_compute(struct intel_encoder *encoder,
 
 	if (dsi_ratio < dsi_ratio_min || dsi_ratio > dsi_ratio_max) {
 		drm_err(&dev_priv->drm,
-			"Cant get a suitable ratio from DSI PLL ratios\n");
+			"Can't get a suitable ratio from DSI PLL ratios\n");
 		return -ECHRNG;
 	} else
 		drm_dbg_kms(&dev_priv->drm, "DSI PLL calculation is Done!!\n");
@@ -566,4 +567,27 @@ void bxt_dsi_reset_clocks(struct intel_encoder *encoder, enum port port)
 		intel_de_write(dev_priv, MIPIO_TXESC_CLK_DIV2, tmp);
 	}
 	intel_de_write(dev_priv, MIPI_EOT_DISABLE(port), CLOCKSTOP);
+}
+
+static void assert_dsi_pll(struct drm_i915_private *i915, bool state)
+{
+	bool cur_state;
+
+	vlv_cck_get(i915);
+	cur_state = vlv_cck_read(i915, CCK_REG_DSI_PLL_CONTROL) & DSI_PLL_VCO_EN;
+	vlv_cck_put(i915);
+
+	I915_STATE_WARN(cur_state != state,
+			"DSI PLL state assertion failure (expected %s, current %s)\n",
+			str_on_off(state), str_on_off(cur_state));
+}
+
+void assert_dsi_pll_enabled(struct drm_i915_private *i915)
+{
+	assert_dsi_pll(i915, true);
+}
+
+void assert_dsi_pll_disabled(struct drm_i915_private *i915)
+{
+	assert_dsi_pll(i915, false);
 }

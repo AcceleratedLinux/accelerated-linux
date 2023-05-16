@@ -33,9 +33,8 @@
  * struct ad5764_chip_info - chip specific information
  * @int_vref:	Value of the internal reference voltage in uV - 0 if external
  *		reference voltage is used
- * @channel	channel specification
+ * @channels:	channel specification
 */
-
 struct ad5764_chip_info {
 	unsigned long int_vref;
 	const struct iio_chan_spec *channels;
@@ -46,7 +45,7 @@ struct ad5764_chip_info {
  * @spi:		spi_device
  * @chip_info:		chip info
  * @vref_reg:		vref supply regulators
- * @lock		lock to protect the data buffer during SPI ops
+ * @lock:		lock to protect the data buffer during SPI ops
  * @data:		spi transfer buffers
  */
 
@@ -290,7 +289,6 @@ static int ad5764_probe(struct spi_device *spi)
 	st->spi = spi;
 	st->chip_info = &ad5764_chip_infos[type];
 
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->info = &ad5764_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -334,7 +332,7 @@ error_disable_reg:
 	return ret;
 }
 
-static int ad5764_remove(struct spi_device *spi)
+static void ad5764_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 	struct ad5764_state *st = iio_priv(indio_dev);
@@ -343,8 +341,6 @@ static int ad5764_remove(struct spi_device *spi)
 
 	if (st->chip_info->int_vref == 0)
 		regulator_bulk_disable(ARRAY_SIZE(st->vref_reg), st->vref_reg);
-
-	return 0;
 }
 
 static const struct spi_device_id ad5764_ids[] = {

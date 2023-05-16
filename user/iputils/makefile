@@ -1,5 +1,5 @@
 VERSION = s20190709
-URL = git://github.com/iputils/iputils.git
+URL = https://github.com/iputils/iputils.git
 METHOD = git
 
 ifdef CONFIG_USER_IPUTILS_ARPING
@@ -27,7 +27,7 @@ ifdef CONFIG_USER_IPUTILS_TRACEROUTE6
 MAKEVARS += BUILD_TRACEROUTE6=y
 endif
 
-ifdef CONFIG_LIB_LIBSSL
+ifdef CONFIG_LIB_OPENSSL
 MAKEVARS += HAVE_OPENSSL=y
 endif
 ifdef CONFIG_LIB_LIBCAP
@@ -50,9 +50,6 @@ include $(ROOTDIR)/tools/automake.inc
 iputils_ROMFS = link_romfs
 
 link_romfs:
-ifdef CONFIG_USER_IPUTILS_PING6
-	$(ROMFSINST) -s /bin/ping /bin/ping6
-endif
-ifdef CONFIG_USER_IPUTILS_TRACEPATH6
-	$(ROMFSINST) -s /bin/tracepath /bin/tracepath6
-endif
+	$(ROMFSINST) -e CONFIG_USER_IPUTILS_PING -m -C cap_net_raw,cap_net_admin+ep /bin/ping
+	$(ROMFSINST) -e CONFIG_USER_IPUTILS_PING6 -s /bin/ping /bin/ping6
+	$(ROMFSINST) -e CONFIG_USER_IPUTILS_TRACEPATH6 -s /bin/tracepath /bin/tracepath6

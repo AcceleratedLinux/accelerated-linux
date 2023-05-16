@@ -1,0 +1,7 @@
+#!/bin/sh
+
+for f in /etc/scripts/udhcpc.d/*; do
+	$f "$@" || logger -p daemon.error -t udhcpc "$f: exit $? ($interface $*)"
+done
+
+exit 0

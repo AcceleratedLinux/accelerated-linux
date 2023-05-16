@@ -1,6 +1,6 @@
 linux-firmware_METHOD = git
 linux-firmware_URL = git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
-linux-firmware_VERSION = 1eb2408c6feacccd10b02a49214745f15d1c6fb7
+linux-firmware_VERSION = 20220509
 linux-firmware_FINALTARGET = lndir
 
 AUTOMAKE_ROMFS = linux-firmware_romfs
@@ -103,3 +103,5 @@ linux-firmware_romfs:
 	$(ROMFSINST) -e CONFIG_MT76x2_COMMON -o '$(CONFIG_USER_LINUX_FIRMWARE_MT7662)$(CONFIG_USER_LINUX_FIRMWARE_ALL_FIRMWARE)' $(SDIR)/mt7662.bin /lib/firmware/mt7662.bin
 	$(ROMFSINST) -e CONFIG_MT76x2_COMMON -o '$(CONFIG_USER_LINUX_FIRMWARE_MT7662_ROM_PATCH)$(CONFIG_USER_LINUX_FIRMWARE_ALL_FIRMWARE)' $(SDIR)/mt7662_rom_patch.bin /lib/firmware/mt7662_rom_patch.bin
 	$(ROMFSINST) -e CONFIG_WLAN_VENDOR_MARVELL -o '$(CONFIG_USER_LINUX_FIRMWARE_MARVELL_SD8887)$(CONFIG_USER_LINUX_FIRMWARE_ALL_FIRMWARE)' -d $(SDIR)/mrvl/sd8887_uapsta.bin /lib/firmware/mrvl/sd8887_uapsta.bin
+	$(ROMFSINST) -e CONFIG_WLAN_VENDOR_INTEL -o '$(CONFIG_USER_LINUX_FIRMWARE_AX210)$(CONFIG_USER_LINUX_FIRMWARE_ALL_FIRMWARE)' -d $(SDIR)/iwlwifi-ty-a0-gf-a0-71.ucode /lib/firmware/iwlwifi-ty-a0-gf-a0-71.ucode
+	$(ROMFSINST) -e CONFIG_WLAN_VENDOR_INTEL -o '$(CONFIG_USER_LINUX_FIRMWARE_AX210)$(CONFIG_USER_LINUX_FIRMWARE_ALL_FIRMWARE)' -d $(SDIR)/iwlwifi-ty-a0-gf-a0.pnvm /lib/firmware/iwlwifi-ty-a0-gf-a0.pnvm

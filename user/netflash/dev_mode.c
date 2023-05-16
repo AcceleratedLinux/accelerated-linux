@@ -25,19 +25,38 @@
     defined(CONFIG_DEFAULTS_DIGI_EX12) || \
     defined(CONFIG_DEFAULTS_DIGI_IX10) || \
     defined(CONFIG_DEFAULTS_DIGI_IX15) || \
-    defined(CONFIG_DEFAULTS_DIGI_IX20)
+    defined(CONFIG_DEFAULTS_DIGI_IX20) || \
+    defined(CONFIG_DEFAULTS_DIGI_IX30)
+
 #include <unistd.h>
 
 #define DEVKEY_GPIO "/sys/class/gpio/gpio86/value"
 #endif
 
-#if defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ1)
+#if defined(CONFIG_DEFAULTS_DIGI_EX50)
+#define DEVKEY_GPIO "/sys/class/gpio/gpio495/value"
+#endif
+
+#if defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ1) || \
+	defined(CONFIG_DEFAULTS_DIGI_ANYWHEREUSB2)
 #define DEVKEY_GPIO "/sys/class/gpio/gpio455/value"
 #endif
 
 #if defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ2) || \
     defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ4)
 #define DEVKEY_GPIO "/sys/class/gpio/gpio425/value"
+#endif
+
+#if defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8IO) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8M) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8IOS) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8W) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ16) || \
+	defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ16M) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ32) || \
+    defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ32M)
+#define DEVKEY_GPIO "/sys/class/gpio/gpio460/value"
 #endif
 
 #if defined(CONFIG_DEFAULTS_DIGI_IX14)
@@ -178,9 +197,20 @@ int is_development_key_allowed()
       defined(CONFIG_DEFAULTS_DIGI_IX10) || \
       defined(CONFIG_DEFAULTS_DIGI_IX15) || \
       defined(CONFIG_DEFAULTS_DIGI_IX20) || \
+      defined(CONFIG_DEFAULTS_DIGI_IX30) || \
       defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ1) || \
       defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ2) || \
-      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ4)
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ4) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8IO) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8M) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8IOS) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ8W) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ16) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ16M) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ32) || \
+      defined(CONFIG_DEFAULTS_DIGI_CONNECTEZ32M) || \
+	  defined(CONFIG_DEFAULTS_DIGI_ANYWHEREUSB2)
 
 int is_development_key_allowed() {
 	int fd = open(DEVKEY_GPIO, O_RDONLY);
@@ -192,6 +222,26 @@ int is_development_key_allowed() {
 	}
 
 	return value == '1';
+}
+
+#elif defined(CONFIG_DEFAULTS_DIGI_EX50)
+
+/*
+ * "DV" revision boards have a broken switch setup and always return "0".
+ * We take that to mean dev mode is enabled for now. These are early
+ * prototypes and we need to be able to develop on them.
+ */
+int is_development_key_allowed(void)
+{
+	int fd = open(DEVKEY_GPIO, O_RDONLY);
+	char value = 0;
+
+	if (fd >= 0) {
+		read(fd, &value, 1);
+		close(fd);
+	}
+
+	return value == '0';
 }
 
 #else

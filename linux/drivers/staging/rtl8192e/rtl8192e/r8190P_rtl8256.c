@@ -46,7 +46,6 @@ void rtl92e_set_bandwidth(struct net_device *dev,
 			netdev_err(dev, "%s(): Unknown bandwidth: %#X\n",
 				   __func__, Bandwidth);
 			break;
-
 		}
 	}
 }
@@ -72,7 +71,6 @@ bool rtl92e_config_rf(struct net_device *dev)
 			continue;
 
 		pPhyReg = &priv->PHYRegDef[eRFPath];
-
 
 		switch (eRFPath) {
 		case RF90_PATH_A:
@@ -143,7 +141,6 @@ bool rtl92e_config_rf(struct net_device *dev)
 				   __func__, eRFPath);
 			goto fail;
 		}
-
 	}
 
 	RT_TRACE(COMP_PHY, "PHY Initialization Success\n");
@@ -170,7 +167,6 @@ void rtl92e_set_cck_tx_power(struct net_device *dev, u8 powerlevel)
 	rtl92e_set_bb_reg(dev, rTxAGC_CCK_Mcs32, bTxAGCRateCCK, TxAGC);
 }
 
-
 void rtl92e_set_ofdm_tx_power(struct net_device *dev, u8 powerlevel)
 {
 	struct r8192_priv *priv = rtllib_priv(dev);
@@ -189,10 +185,10 @@ void rtl92e_set_ofdm_tx_power(struct net_device *dev, u8 powerlevel)
 	for (index = 0; index < 6; index++) {
 		writeVal = (u32)(priv->MCSTxPowerLevelOriginalOffset[index] +
 			   ((index < 2) ? powerBase0 : powerBase1));
-		byte0 = (u8)(writeVal & 0x7f);
-		byte1 = (u8)((writeVal & 0x7f00)>>8);
-		byte2 = (u8)((writeVal & 0x7f0000)>>16);
-		byte3 = (u8)((writeVal & 0x7f000000)>>24);
+		byte0 = writeVal & 0x7f;
+		byte1 = (writeVal & 0x7f00) >> 8;
+		byte2 = (writeVal & 0x7f0000) >> 16;
+		byte3 = (writeVal & 0x7f000000) >> 24;
 		if (byte0 > 0x24)
 			byte0 = 0x24;
 		if (byte1 > 0x24)
@@ -215,5 +211,4 @@ void rtl92e_set_ofdm_tx_power(struct net_device *dev, u8 powerlevel)
 				   (byte1 << 8) | byte0;
 		rtl92e_set_bb_reg(dev, RegOffset[index], 0x7f7f7f7f, writeVal);
 	}
-
 }

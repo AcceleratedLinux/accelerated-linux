@@ -21,14 +21,13 @@ static inline void flush(void) {}
 static inline void arch_decomp_setup(void) {}
 
 #if defined(CONFIG_MACH_8300) || defined(CONFIG_MACH_6300CX) || \
-    defined(CONFIG_MACH_6300LX) || defined(CONFIG_MACH_6330MX) || \
-    defined(CONFIG_MACH_6350SR)
+    defined(CONFIG_MACH_6350SR) || defined(CONFIG_MACH_6330MX)
 #define ARCH_HAS_DECOMP_WDOG
 static inline void arch_decomp_wdog(void)
 {
 	*((volatile u32 *)(0xd0018140)) ^= 0x00400000;
 }
-#endif /* CONFIG_MACH_8300 || CONFIG_MACH_6300CX || CONFIG_MACH_6300LX */
+#endif /* CONFIG_MACH_8300 || CONFIG_MACH_6300CX */
 
 #if defined(CONFIG_MACH_CM71xx)
 #define ARCH_HAS_DECOMP_WDOG

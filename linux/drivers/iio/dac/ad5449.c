@@ -56,7 +56,7 @@ struct ad5449_chip_info {
  * @has_sdo:		whether the SDO line is connected
  * @dac_cache:		Cache for the DAC values
  * @data:		spi transfer buffers
- * @lock		lock to protect the data buffer during SPI ops
+ * @lock:		lock to protect the data buffer during SPI ops
  */
 struct ad5449 {
 	struct spi_device		*spi;
@@ -297,7 +297,6 @@ static int ad5449_spi_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->name = id->name;
 	indio_dev->info = &ad5449_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -331,7 +330,7 @@ error_disable_reg:
 	return ret;
 }
 
-static int ad5449_spi_remove(struct spi_device *spi)
+static void ad5449_spi_remove(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 	struct ad5449 *st = iio_priv(indio_dev);
@@ -339,8 +338,6 @@ static int ad5449_spi_remove(struct spi_device *spi)
 	iio_device_unregister(indio_dev);
 
 	regulator_bulk_disable(st->chip_info->num_channels, st->vref_reg);
-
-	return 0;
 }
 
 static const struct spi_device_id ad5449_spi_ids[] = {

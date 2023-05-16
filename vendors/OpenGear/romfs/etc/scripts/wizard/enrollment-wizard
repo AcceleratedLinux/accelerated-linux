@@ -1,0 +1,101 @@
+#!/bin/bash
+#
+# This script automates CMS enrollment.
+#
+#   NOTE: Non-interactive operation requires this CMS's public key to
+#   be pre-authorized on each console server to be enrolled.
+#
+# Call Home
+#
+#   By default, any and all unmanaged remote console servers with a Call Home
+#   connection will be enrolled.  maclist restrictions apply (see below).
+#   To list Call Home connections, run: /etc/scripts/wizard/list-callhome
+#
+# /etc/config/wizard/autoenroll.txt
+#
+#   Enable selective enrollment.  Only the console servers listed will be
+#   enrolled.  maclist restrictions also apply (see below).  List one per
+#   line, with the format address:sshport.  These may be any combination of
+#   local or remote loopback connections (aka Call Home), e.g.:
+#
+# localhost:54321
+# myserver.fqdn.com:2222
+# 192.168.0.2:22
+#
+#   On successful enrollment the line is removed.
+#
+# /etc/config/wizard/maclist.txt
+# 
+#   Restricts enrollment to pre-defined console servers by hardware address.
+#   Console servers are identified by the MAC address of their first network
+#   port (eth0/Network 1). List one MAC address per line with the format (case
+#   insensitive):
+#
+# 00:13:C6:00:FF:FF
+#
+#   If this file exists and is not empty, non-matching console servers are
+#   ignored.  On successful enrollment, the file remains unchanged.  
+#
+# /etc/config/wizard/post-enroll.sh
+#
+#   If this file exists, it's run after each each successfull enrollment with
+#   the node details in the environment as NODE_ADDR, NODE_PORT and NODE_NAME.
+#
+
+source /etc/scripts/wizard/wizard.inc
+
+logit "*** Starting enrollment wizard"
+
+if [[ -f "/etc/config/wizard/autoenroll.txt" ]]; then
+	candidates=$(cat /etc/config/wizard/autoenroll.txt)
+else
+	candidates=$(bash /etc/scripts/wizard/list-callhome | grep -v managed | grep -v "not connected")
+fi
+
+if [[ -f "/etc/config/wizard/maclist.txt" ]]; then
+	maclist=$(cat /etc/config/wizard/maclist.txt | tr 'a-z' 'A-Z')
+fi
+
+sshopts="-o StrictHostKeyChecking=no -o ControlMaster=auto -o ControlPath=/var/run/cms/$(basename $0)-%r@%h:%p"
+for candidate in $candidates; do
+	logit "*** Candidate ${candidate}"
+
+	sshaddress=$(echo $candidate | cut -f1 -d':')
+	sshport=$(echo $candidate | cut -f2 -d':')
+	
+	# Start up a background SSH connection speed things up
+	su nagios -c "ssh -f -N $sshopts -p $sshport root@$sshaddress"
+	
+	mac=$(su nagios -c "ssh $sshopts -p $sshport root@$sshaddress cat /sys/class/net/eth0/address" | tr 'a-z' 'A-Z')
+	if [[ -n "$maclist" ]] && echo "$maclist" | grep "$mac" >& /dev/null; then
+		logit "*** Ignoring unlisted $mac"
+	else
+		numports=$(su nagios -c "ssh -o StrictHostKeyChecking=no -p $sshport root@$sshaddress cat /var/run/serial-ports" | wc -l)
+		hostname=$(su nagios -c "ssh -o StrictHostKeyChecking=no -p $sshport root@$sshaddress hostname")
+		description=$(su nagios -c "ssh -o StrictHostKeyChecking=no -p $sshport root@$sshaddress config -g config.system.location" | cut -f2- -d' ')
+		
+		if [[ -n "$hostname" ]] && [[ "$numports" -gt 0 ]]; then
+			logit "*** Enrolling $hostname with $numports ports"
+			
+			if ! bash /etc/scripts/wizard/enroller $sshaddress $sshport $hostname "$description" $numports; then
+				logit "*** ERRROR *** Enrollment failed, aborting"
+				exit 1
+			fi
+			
+			if [[ -f /etc/config/wizard/post-enroll.sh ]]; then
+				export NODE_ADDR=$sshaddress	
+				export NODE_PORT=$sshport
+				export NODE_NAME=$hostname
+				bash /etc/config/wizard/post-enroll.sh
+			fi
+			
+			# Success, remove it if it's in the list
+			sed -i "/$candidate/d" /etc/config/wizard/autoenroll.txt >& /dev/null
+		fi
+	fi
+	
+	# Stop the background SSH connection
+	su nagios -c "ssh $sshopts -p $sshport -O exit root@$sshaddress"
+done
+
+logit "*** Enrollment wizard complete"

@@ -148,6 +148,7 @@ static const s8 budtab[256] = {
  *	0	- success
  *	-ENOMEM	- insufficient memory
  *	-EIO	- i/o error
+ *	-EINVAL - wrong bmap data
  */
 int dbMount(struct inode *ipbmap)
 {
@@ -179,6 +180,12 @@ int dbMount(struct inode *ipbmap)
 	bmp->db_nfree = le64_to_cpu(dbmp_le->dn_nfree);
 	bmp->db_l2nbperpage = le32_to_cpu(dbmp_le->dn_l2nbperpage);
 	bmp->db_numag = le32_to_cpu(dbmp_le->dn_numag);
+	if (!bmp->db_numag) {
+		release_metapage(mp);
+		kfree(bmp);
+		return -EINVAL;
+	}
+
 	bmp->db_maxlevel = le32_to_cpu(dbmp_le->dn_maxlevel);
 	bmp->db_maxag = le32_to_cpu(dbmp_le->dn_maxag);
 	bmp->db_agpref = le32_to_cpu(dbmp_le->dn_agpref);
@@ -378,7 +385,8 @@ int dbFree(struct inode *ip, s64 blkno, s64 nblocks)
 	}
 
 	/* write the last buffer. */
-	write_metapage(mp);
+	if (mp)
+		write_metapage(mp);
 
 	IREAD_UNLOCK(ipbmap);
 
@@ -668,7 +676,7 @@ unlock:
  *		this does not succeed, we finally try to allocate anywhere
  *		within the aggregate.
  *
- *		we also try to allocate anywhere within the aggregate for
+ *		we also try to allocate anywhere within the aggregate
  *		for allocation requests larger than the allocation group
  *		size or requests that specify no hint value.
  *
@@ -860,74 +868,6 @@ int dbAlloc(struct inode *ip, s64 hint, s64 nblocks, s64 * results)
 
 	return (rc);
 }
-
-#ifdef _NOTYET
-/*
- * NAME:	dbAllocExact()
- *
- * FUNCTION:	try to allocate the requested extent;
- *
- * PARAMETERS:
- *	ip	- pointer to in-core inode;
- *	blkno	- extent address;
- *	nblocks	- extent length;
- *
- * RETURN VALUES:
- *	0	- success
- *	-ENOSPC	- insufficient disk resources
- *	-EIO	- i/o error
- */
-int dbAllocExact(struct inode *ip, s64 blkno, int nblocks)
-{
-	int rc;
-	struct inode *ipbmap = JFS_SBI(ip->i_sb)->ipbmap;
-	struct bmap *bmp = JFS_SBI(ip->i_sb)->bmap;
-	struct dmap *dp;
-	s64 lblkno;
-	struct metapage *mp;
-
-	IREAD_LOCK(ipbmap, RDWRLOCK_DMAP);
-
-	/*
-	 * validate extent request:
-	 *
-	 * note: defragfs policy:
-	 *  max 64 blocks will be moved.
-	 *  allocation request size must be satisfied from a single dmap.
-	 */
-	if (nblocks <= 0 || nblocks > BPERDMAP || blkno >= bmp->db_mapsize) {
-		IREAD_UNLOCK(ipbmap);
-		return -EINVAL;
-	}
-
-	if (nblocks > ((s64) 1 << bmp->db_maxfreebud)) {
-		/* the free space is no longer available */
-		IREAD_UNLOCK(ipbmap);
-		return -ENOSPC;
-	}
-
-	/* read in the dmap covering the extent */
-	lblkno = BLKTODMAP(blkno, bmp->db_l2nbperpage);
-	mp = read_metapage(ipbmap, lblkno, PSIZE, 0);
-	if (mp == NULL) {
-		IREAD_UNLOCK(ipbmap);
-		return -EIO;
-	}
-	dp = (struct dmap *) mp->data;
-
-	/* try to allocate the requested extent */
-	rc = dbAllocNext(bmp, dp, blkno, nblocks);
-
-	IREAD_UNLOCK(ipbmap);
-
-	if (rc == 0)
-		mark_metapage_dirty(mp);
-
-	release_metapage(mp);
-
-	return (rc);
-}
-#endif /* _NOTYET */
 
 /*
  * NAME:	dbReAlloc()
@@ -1656,7 +1596,7 @@ s64 dbDiscardAG(struct inode *ip, int agno, s64 minlen)
 		} else if (rc == -ENOSPC) {
 			/* search for next smaller log2 block */
 			l2nb = BLKSTOL2(nblocks) - 1;
-			nblocks = 1 << l2nb;
+			nblocks = 1LL << l2nb;
 		} else {
 			/* Trim any already allocated blocks */
 			jfs_error(bmp->db_ipbmap->i_sb, "-EIO\n");
@@ -2549,15 +2489,19 @@ dbAdjCtl(struct bmap * bmp, s64 blkno, int newval, int alloc, int level)
 		 */
 		if (oldval == NOFREE) {
 			rc = dbBackSplit((dmtree_t *) dcp, leafno);
-			if (rc)
+			if (rc) {
+				release_metapage(mp);
 				return rc;
+			}
 			oldval = dcp->stree[ti];
 		}
 		dbSplit((dmtree_t *) dcp, leafno, dcp->budmin, newval);
 	} else {
 		rc = dbJoin((dmtree_t *) dcp, leafno, newval);
-		if (rc)
+		if (rc) {
+			release_metapage(mp);
 			return rc;
+		}
 	}
 
 	/* check if the root of the current dmap control page changed due
@@ -3656,7 +3600,7 @@ void dbFinalizeBmap(struct inode *ipbmap)
 	 * (the leftmost ag with average free space in it);
 	 */
 //agpref:
-	/* get the number of active ags and inacitve ags */
+	/* get the number of active ags and inactive ags */
 	actags = bmp->db_maxag + 1;
 	inactags = bmp->db_numag - actags;
 	ag_rem = bmp->db_mapsize & (bmp->db_agsize - 1);	/* ??? */

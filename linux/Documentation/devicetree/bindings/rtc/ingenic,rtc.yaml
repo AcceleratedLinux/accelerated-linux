@@ -16,16 +16,16 @@ properties:
   compatible:
     oneOf:
       - enum:
-        - ingenic,jz4740-rtc
-        - ingenic,jz4760-rtc
+          - ingenic,jz4740-rtc
+          - ingenic,jz4760-rtc
       - items:
-        - const: ingenic,jz4725b-rtc
-        - const: ingenic,jz4740-rtc
+          - const: ingenic,jz4725b-rtc
+          - const: ingenic,jz4740-rtc
       - items:
-        - enum:
-          - ingenic,jz4770-rtc
-          - ingenic,jz4780-rtc
-        - const: ingenic,jz4760-rtc
+          - enum:
+              - ingenic,jz4770-rtc
+              - ingenic,jz4780-rtc
+          - const: ingenic,jz4760-rtc
 
   reg:
     maxItems: 1
@@ -68,9 +68,11 @@ required:
   - clocks
   - clock-names
 
+unevaluatedProperties: false
+
 examples:
   - |
-    #include <dt-bindings/clock/jz4740-cgu.h>
+    #include <dt-bindings/clock/ingenic,jz4740-cgu.h>
     rtc_dev: rtc@10003000 {
       compatible = "ingenic,jz4740-rtc";
       reg = <0x10003000 0x40>;

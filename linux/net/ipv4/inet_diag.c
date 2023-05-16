@@ -52,6 +52,11 @@ static DEFINE_MUTEX(inet_diag_table_mutex);
 
 static const struct inet_diag_handler *inet_diag_lock_handler(int proto)
 {
+	if (proto < 0 || proto >= IPPROTO_MAX) {
+		mutex_lock(&inet_diag_table_mutex);
+		return ERR_PTR(-ENOENT);
+	}
+
 	if (!inet_diag_table[proto])
 		sock_load_diag_module(AF_INET, proto);
 
@@ -120,6 +125,7 @@ int inet_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
 			     bool net_admin)
 {
 	const struct inet_sock *inet = inet_sk(sk);
+	struct inet_diag_sockopt inet_sockopt;
 
 	if (nla_put_u8(skb, INET_DIAG_SHUTDOWN, sk->sk_shutdown))
 		goto errout;
@@ -175,11 +181,53 @@ int inet_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
 	r->idiag_uid = from_kuid_munged(user_ns, sock_i_uid(sk));
 	r->idiag_inode = sock_i_ino(sk);
 
+	memset(&inet_sockopt, 0, sizeof(inet_sockopt));
+	inet_sockopt.recverr	= inet->recverr;
+	inet_sockopt.is_icsk	= inet->is_icsk;
+	inet_sockopt.freebind	= inet->freebind;
+	inet_sockopt.hdrincl	= inet->hdrincl;
+	inet_sockopt.mc_loop	= inet->mc_loop;
+	inet_sockopt.transparent = inet->transparent;
+	inet_sockopt.mc_all	= inet->mc_all;
+	inet_sockopt.nodefrag	= inet->nodefrag;
+	inet_sockopt.bind_address_no_port = inet->bind_address_no_port;
+	inet_sockopt.recverr_rfc4884 = inet->recverr_rfc4884;
+	inet_sockopt.defer_connect = inet->defer_connect;
+	if (nla_put(skb, INET_DIAG_SOCKOPT, sizeof(inet_sockopt),
+		    &inet_sockopt))
+		goto errout;
+
 	return 0;
 errout:
 	return 1;
 }
 EXPORT_SYMBOL_GPL(inet_diag_msg_attrs_fill);
+
+static int inet_diag_parse_attrs(const struct nlmsghdr *nlh, int hdrlen,
+				 struct nlattr **req_nlas)
+{
+	struct nlattr *nla;
+	int remaining;
+
+	nlmsg_for_each_attr(nla, nlh, hdrlen, remaining) {
+		int type = nla_type(nla);
+
+		if (type == INET_DIAG_REQ_PROTOCOL && nla_len(nla) != sizeof(u32))
+			return -EINVAL;
+
+		if (type < __INET_DIAG_REQ_MAX)
+			req_nlas[type] = nla;
+	}
+	return 0;
+}
+
+static int inet_diag_get_protocol(const struct inet_diag_req_v2 *req,
+				  const struct inet_diag_dump_data *data)
+{
+	if (data->req_nlas[INET_DIAG_REQ_PROTOCOL])
+		return nla_get_u32(data->req_nlas[INET_DIAG_REQ_PROTOCOL]);
+	return req->sdiag_protocol;
+}
 
 #define MAX_DUMP_ALLOC_SIZE (KMALLOC_MAX_SIZE - SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 
@@ -198,7 +246,7 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 	void *info = NULL;
 
 	cb_data = cb->data;
-	handler = inet_diag_table[req->sdiag_protocol];
+	handler = inet_diag_table[inet_diag_get_protocol(req, cb_data)];
 	BUG_ON(!handler);
 
 	nlh = nlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
@@ -213,6 +261,7 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 	r->idiag_state = sk->sk_state;
 	r->idiag_timer = 0;
 	r->idiag_retrans = 0;
+	r->idiag_expires = 0;
 
 	if (inet_diag_msg_attrs_fill(sk, skb, r, ext,
 				     sk_user_ns(NETLINK_CB(cb->skb).sk),
@@ -223,7 +272,7 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 		struct inet_diag_meminfo minfo = {
 			.idiag_rmem = sk_rmem_alloc_get(sk),
 			.idiag_wmem = READ_ONCE(sk->sk_wmem_queued),
-			.idiag_fmem = sk->sk_forward_alloc,
+			.idiag_fmem = sk_forward_alloc_get(sk),
 			.idiag_tmem = sk_wmem_alloc_get(sk),
 		};
 
@@ -266,9 +315,6 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 		r->idiag_retrans = icsk->icsk_probes_out;
 		r->idiag_expires =
 			jiffies_delta_to_msecs(sk->sk_timer.expires - jiffies);
-	} else {
-		r->idiag_timer = 0;
-		r->idiag_expires = 0;
 	}
 
 	if ((ext & (1 << (INET_DIAG_INFO - 1))) && handler->idiag_info_size) {
@@ -368,7 +414,7 @@ EXPORT_SYMBOL_GPL(inet_sk_diag_fill);
 static int inet_twsk_diag_fill(struct sock *sk,
 			       struct sk_buff *skb,
 			       struct netlink_callback *cb,
-			       u16 nlmsg_flags)
+			       u16 nlmsg_flags, bool net_admin)
 {
 	struct inet_timewait_sock *tw = inet_twsk(sk);
 	struct inet_diag_msg *r;
@@ -395,6 +441,12 @@ static int inet_twsk_diag_fill(struct sock *sk,
 	r->idiag_wqueue	      = 0;
 	r->idiag_uid	      = 0;
 	r->idiag_inode	      = 0;
+
+	if (net_admin && nla_put_u32(skb, INET_DIAG_MARK,
+				     tw->tw_mark)) {
+		nlmsg_cancel(skb, nlh);
+		return -EMSGSIZE;
+	}
 
 	nlmsg_end(skb, nlh);
 	return 0;
@@ -431,8 +483,10 @@ static int inet_req_diag_fill(struct sock *sk, struct sk_buff *skb,
 	r->idiag_inode	= 0;
 
 	if (net_admin && nla_put_u32(skb, INET_DIAG_MARK,
-				     inet_rsk(reqsk)->ir_mark))
+				     inet_rsk(reqsk)->ir_mark)) {
+		nlmsg_cancel(skb, nlh);
 		return -EMSGSIZE;
+	}
 
 	nlmsg_end(skb, nlh);
 	return 0;
@@ -444,7 +498,7 @@ static int sk_diag_fill(struct sock *sk, struct sk_buff *skb,
 			u16 nlmsg_flags, bool net_admin)
 {
 	if (sk->sk_state == TCP_TIME_WAIT)
-		return inet_twsk_diag_fill(sk, skb, cb, nlmsg_flags);
+		return inet_twsk_diag_fill(sk, skb, cb, nlmsg_flags, net_admin);
 
 	if (sk->sk_state == TCP_NEW_SYN_RECV)
 		return inet_req_diag_fill(sk, skb, cb, nlmsg_flags, net_admin);
@@ -524,10 +578,7 @@ int inet_diag_dump_one_icsk(struct inet_hashinfo *hashinfo,
 		nlmsg_free(rep);
 		goto out;
 	}
-	err = netlink_unicast(net->diag_nlsk, rep, NETLINK_CB(in_skb).portid,
-			      MSG_DONTWAIT);
-	if (err > 0)
-		err = 0;
+	err = nlmsg_unicast(net->diag_nlsk, rep, NETLINK_CB(in_skb).portid);
 
 out:
 	if (sk)
@@ -539,20 +590,28 @@ EXPORT_SYMBOL_GPL(inet_diag_dump_one_icsk);
 
 static int inet_diag_cmd_exact(int cmd, struct sk_buff *in_skb,
 			       const struct nlmsghdr *nlh,
+			       int hdrlen,
 			       const struct inet_diag_req_v2 *req)
 {
 	const struct inet_diag_handler *handler;
-	int err;
+	struct inet_diag_dump_data dump_data;
+	int err, protocol;
 
-	handler = inet_diag_lock_handler(req->sdiag_protocol);
+	memset(&dump_data, 0, sizeof(dump_data));
+	err = inet_diag_parse_attrs(nlh, hdrlen, dump_data.req_nlas);
+	if (err)
+		return err;
+
+	protocol = inet_diag_get_protocol(req, &dump_data);
+
+	handler = inet_diag_lock_handler(protocol);
 	if (IS_ERR(handler)) {
 		err = PTR_ERR(handler);
 	} else if (cmd == SOCK_DIAG_BY_FAMILY) {
-		struct inet_diag_dump_data empty_dump_data = {};
 		struct netlink_callback cb = {
 			.nlh = nlh,
 			.skb = in_skb,
-			.data = &empty_dump_data,
+			.data = &dump_data,
 		};
 		err = handler->dump_one(&cb, req);
 	} else if (cmd == SOCK_DESTROY && handler->destroy) {
@@ -743,6 +802,8 @@ int inet_diag_bc_sk(const struct nlattr *bc, struct sock *sk)
 		entry.mark = sk->sk_mark;
 	else if (sk->sk_state == TCP_NEW_SYN_RECV)
 		entry.mark = inet_rsk(inet_reqsk(sk))->ir_mark;
+	else if (sk->sk_state == TCP_TIME_WAIT)
+		entry.mark = inet_twsk(sk)->tw_mark;
 	else
 		entry.mark = 0;
 #ifdef CONFIG_SOCK_CGROUP_DATA
@@ -967,12 +1028,13 @@ void inet_diag_dump_icsk(struct inet_hashinfo *hashinfo, struct sk_buff *skb,
 		if (!(idiag_states & TCPF_LISTEN) || r->id.idiag_dport)
 			goto skip_listen_ht;
 
-		for (i = s_i; i < INET_LHTABLE_SIZE; i++) {
+		for (i = s_i; i <= hashinfo->lhash2_mask; i++) {
 			struct inet_listen_hashbucket *ilb;
 			struct hlist_nulls_node *node;
 
 			num = 0;
-			ilb = &hashinfo->listening_hash[i];
+			ilb = &hashinfo->lhash2[i];
+
 			spin_lock(&ilb->lock);
 			sk_nulls_for_each(sk, node, &ilb->nulls_head) {
 				struct inet_sock *inet = inet_sk(sk);
@@ -1103,13 +1165,16 @@ EXPORT_SYMBOL_GPL(inet_diag_dump_icsk);
 static int __inet_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 			    const struct inet_diag_req_v2 *r)
 {
+	struct inet_diag_dump_data *cb_data = cb->data;
 	const struct inet_diag_handler *handler;
 	u32 prev_min_dump_alloc;
-	int err = 0;
+	int protocol, err = 0;
+
+	protocol = inet_diag_get_protocol(r, cb_data);
 
 again:
 	prev_min_dump_alloc = cb->min_dump_alloc;
-	handler = inet_diag_lock_handler(r->sdiag_protocol);
+	handler = inet_diag_lock_handler(protocol);
 	if (!IS_ERR(handler))
 		handler->dump(skb, cb, r);
 	else
@@ -1139,20 +1204,17 @@ static int __inet_diag_dump_start(struct netlink_callback *cb, int hdrlen)
 	struct inet_diag_dump_data *cb_data;
 	struct sk_buff *skb = cb->skb;
 	struct nlattr *nla;
-	int rem, err;
+	int err;
 
 	cb_data = kzalloc(sizeof(*cb_data), GFP_KERNEL);
 	if (!cb_data)
 		return -ENOMEM;
 
-	nla_for_each_attr(nla, nlmsg_attrdata(nlh, hdrlen),
-			  nlmsg_attrlen(nlh, hdrlen), rem) {
-		int type = nla_type(nla);
-
-		if (type < __INET_DIAG_REQ_MAX)
-			cb_data->req_nlas[type] = nla;
+	err = inet_diag_parse_attrs(nlh, hdrlen, cb_data->req_nlas);
+	if (err) {
+		kfree(cb_data);
+		return err;
 	}
-
 	nla = cb_data->inet_diag_nla_bc;
 	if (nla) {
 		err = inet_diag_bc_audit(nla, skb);
@@ -1237,7 +1299,8 @@ static int inet_diag_get_exact_compat(struct sk_buff *in_skb,
 	req.idiag_states = rc->idiag_states;
 	req.id = rc->id;
 
-	return inet_diag_cmd_exact(SOCK_DIAG_BY_FAMILY, in_skb, nlh, &req);
+	return inet_diag_cmd_exact(SOCK_DIAG_BY_FAMILY, in_skb, nlh,
+				   sizeof(struct inet_diag_req), &req);
 }
 
 static int inet_diag_rcv_msg_compat(struct sk_buff *skb, struct nlmsghdr *nlh)
@@ -1279,7 +1342,8 @@ static int inet_diag_handler_cmd(struct sk_buff *skb, struct nlmsghdr *h)
 		return netlink_dump_start(net->diag_nlsk, skb, h, &c);
 	}
 
-	return inet_diag_cmd_exact(h->nlmsg_type, skb, h, nlmsg_data(h));
+	return inet_diag_cmd_exact(h->nlmsg_type, skb, h, hdrlen,
+				   nlmsg_data(h));
 }
 
 static

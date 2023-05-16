@@ -4,19 +4,19 @@
  *
  * INA219:
  * Zero Drift Bi-Directional Current/Power Monitor with I2C Interface
- * Datasheet: http://www.ti.com/product/ina219
+ * Datasheet: https://www.ti.com/product/ina219
  *
  * INA220:
  * Bi-Directional Current/Power Monitor with I2C Interface
- * Datasheet: http://www.ti.com/product/ina220
+ * Datasheet: https://www.ti.com/product/ina220
  *
  * INA226:
  * Bi-Directional Current/Power Monitor with I2C Interface
- * Datasheet: http://www.ti.com/product/ina226
+ * Datasheet: https://www.ti.com/product/ina226
  *
  * INA230:
  * Bi-directional Current/Power Monitor with I2C Interface
- * Datasheet: http://www.ti.com/product/ina230
+ * Datasheet: https://www.ti.com/product/ina230
  *
  * Copyright (C) 2012 Lothar Felten <lothar.felten@gmail.com>
  * Thanks to Jan Volkering
@@ -148,7 +148,7 @@ static const struct ina2xx_config ina2xx_config[] = {
  * Available averaging rates for ina226. The indices correspond with
  * the bit values expected by the chip (according to the ina226 datasheet,
  * table 3 AVG bit settings, found at
- * http://www.ti.com/lit/ds/symlink/ina226.pdf.
+ * https://www.ti.com/lit/ds/symlink/ina226.pdf.
  */
 static const int ina226_avg_tab[] = { 1, 4, 16, 64, 128, 256, 512, 1024 };
 
@@ -310,8 +310,7 @@ static ssize_t ina2xx_value_show(struct device *dev,
 	if (err < 0)
 		return err;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-			ina2xx_get_value(data, attr->index, regval));
+	return sysfs_emit(buf, "%d\n", ina2xx_get_value(data, attr->index, regval));
 }
 
 static int ina226_reg_to_alert(struct ina2xx_data *data, u8 bit, u16 regval)
@@ -386,7 +385,7 @@ static ssize_t ina226_alert_show(struct device *dev,
 		val = ina226_reg_to_alert(data, attr->index, regval);
 	}
 
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", val);
+	ret = sysfs_emit(buf, "%d\n", val);
 abort:
 	mutex_unlock(&data->config_lock);
 	return ret;
@@ -450,7 +449,7 @@ static ssize_t ina226_alarm_show(struct device *dev,
 
 	alarm = (regval & BIT(attr->index)) &&
 		(regval & INA226_ALERT_FUNCTION_FLAG);
-	return snprintf(buf, PAGE_SIZE, "%d\n", alarm);
+	return sysfs_emit(buf, "%d\n", alarm);
 }
 
 /*
@@ -481,7 +480,7 @@ static ssize_t ina2xx_shunt_show(struct device *dev,
 {
 	struct ina2xx_data *data = dev_get_drvdata(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%li\n", data->rshunt);
+	return sysfs_emit(buf, "%li\n", data->rshunt);
 }
 
 static ssize_t ina2xx_shunt_store(struct device *dev,
@@ -537,7 +536,7 @@ static ssize_t ina226_interval_show(struct device *dev,
 	if (status)
 		return status;
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", ina226_reg_to_interval(regval));
+	return sysfs_emit(buf, "%d\n", ina226_reg_to_interval(regval));
 }
 
 /* shunt voltage */
@@ -614,8 +613,9 @@ static const struct attribute_group ina226_group = {
 	.attrs = ina226_attrs,
 };
 
-static int ina2xx_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static const struct i2c_device_id ina2xx_id[];
+
+static int ina2xx_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct ina2xx_data *data;
@@ -627,7 +627,7 @@ static int ina2xx_probe(struct i2c_client *client,
 	if (client->dev.of_node)
 		chip = (enum ina2xx_ids)of_device_get_match_data(&client->dev);
 	else
-		chip = id->driver_data;
+		chip = i2c_match_id(ina2xx_id, client)->driver_data;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -717,7 +717,7 @@ static struct i2c_driver ina2xx_driver = {
 		.name	= "ina2xx",
 		.of_match_table = of_match_ptr(ina2xx_of_match),
 	},
-	.probe		= ina2xx_probe,
+	.probe_new	= ina2xx_probe,
 	.id_table	= ina2xx_id,
 };
 

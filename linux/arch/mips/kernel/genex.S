@@ -19,7 +19,6 @@
 #include <asm/mipsregs.h>
 #include <asm/stackframe.h>
 #include <asm/sync.h>
-#include <asm/war.h>
 #include <asm/thread_info.h>
 
 	__INIT
@@ -163,7 +162,7 @@ NESTED(handle_int, PT_SIZE, sp)
 	.set	push
 	.set	noat
 	mfc0	k0, CP0_STATUS
-#if defined(CONFIG_CPU_R3000) || defined(CONFIG_CPU_TX39XX)
+#if defined(CONFIG_CPU_R3000)
 	and	k0, ST0_IEP
 	bnez	k0, 1f
 
@@ -349,8 +348,8 @@ NESTED(ejtag_debug_handler, PT_SIZE, sp)
 	MTC0	k0, CP0_DESAVE
 	mfc0	k0, CP0_DEBUG
 
-	sll	k0, k0, 30	# Check for SDBBP.
-	bgez	k0, ejtag_return
+	andi	k0, k0, MIPS_DEBUG_DBP	# Check for SDBBP.
+	beqz	k0, ejtag_return
 
 #ifdef CONFIG_SMP
 1:	PTR_LA	k0, ejtag_debug_buffer_spinlock
@@ -498,6 +497,19 @@ NESTED(nmi_handler, PT_SIZE, sp)
 	KMODE
 	.endm
 
+	.macro __build_clear_gsexc
+	.set	push
+	/*
+	 * We need to specify a selector to access the CP0.Diag1 (GSCause)
+	 * register. All GSExc-equipped processors have MIPS32.
+	 */
+	.set	mips32
+	mfc0	a1, CP0_DIAGNOSTIC1
+	.set	pop
+	TRACE_IRQS_ON
+	STI
+	.endm
+
 	.macro	__BUILD_silent exception
 	.endm
 
@@ -556,6 +568,7 @@ NESTED(nmi_handler, PT_SIZE, sp)
 	BUILD_HANDLER fpe fpe fpe silent		/* #15 */
 #endif
 	BUILD_HANDLER ftlb ftlb none silent		/* #16 */
+	BUILD_HANDLER gsexc gsexc gsexc silent		/* #16 */
 	BUILD_HANDLER msa msa sti silent		/* #21 */
 	BUILD_HANDLER mdmx mdmx sti silent		/* #22 */
 #ifdef	CONFIG_HARDWARE_WATCHPOINTS
@@ -631,7 +644,7 @@ isrdhwr:
 	get_saved_sp	/* k1 := current_thread_info */
 	.set	noreorder
 	MFC0	k0, CP0_EPC
-#if defined(CONFIG_CPU_R3000) || defined(CONFIG_CPU_TX39XX)
+#if defined(CONFIG_CPU_R3000)
 	ori	k1, _THREAD_MASK
 	xori	k1, _THREAD_MASK
 	LONG_L	v1, TI_TP_VALUE(k1)

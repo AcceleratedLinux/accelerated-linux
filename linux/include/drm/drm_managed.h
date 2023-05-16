@@ -8,6 +8,7 @@
 #include <linux/types.h>
 
 struct drm_device;
+struct mutex;
 
 typedef void (*drmres_release_t)(struct drm_device *dev, void *res);
 
@@ -43,8 +44,6 @@ int __must_check __drmm_add_action(struct drm_device *dev,
 int __must_check __drmm_add_action_or_reset(struct drm_device *dev,
 					    drmres_release_t action,
 					    void *data, const char *name);
-
-void drmm_add_final_kfree(struct drm_device *dev, void *container);
 
 void *drmm_kmalloc(struct drm_device *dev, size_t size, gfp_t gfp) __malloc;
 
@@ -105,5 +104,7 @@ static inline void *drmm_kcalloc(struct drm_device *dev,
 char *drmm_kstrdup(struct drm_device *dev, const char *s, gfp_t gfp);
 
 void drmm_kfree(struct drm_device *dev, void *data);
+
+int drmm_mutex_init(struct drm_device *dev, struct mutex *lock);
 
 #endif

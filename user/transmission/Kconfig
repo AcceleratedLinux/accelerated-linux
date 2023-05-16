@@ -2,7 +2,7 @@ config USER_TRANSMISSION_DAEMON
 	bool "Transmission daemon"
 	select LIB_LIBEVENT
 	select LIB_ZLIB
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 		Transmission is a daemon-based Transmission session that can be controlled
 		via RPC commands from transmission's web interface or transmission-remote.
@@ -11,7 +11,7 @@ config USER_TRANSMISSION_CLI
 	bool "Transmission CLI"
 	select LIB_LIBEVENT
 	select LIB_ZLIB
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	help
 		transmission-cli is a lightweight, command-line BitTorrent client with
 		scripting capabilities.

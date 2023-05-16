@@ -346,11 +346,6 @@ struct vmballoon {
 	/* statistics */
 	struct vmballoon_stats *stats;
 
-#ifdef CONFIG_DEBUG_FS
-	/* debugfs file exporting statistics */
-	struct dentry *dbg_entry;
-#endif
-
 	/**
 	 * @b_dev_info: balloon device information descriptor.
 	 */
@@ -1457,10 +1452,10 @@ static void vmballoon_reset(struct vmballoon *b)
 
 	error = vmballoon_vmci_init(b);
 	if (error)
-		pr_err("failed to initialize vmci doorbell\n");
+		pr_err_once("failed to initialize vmci doorbell\n");
 
 	if (vmballoon_send_guest_id(b))
-		pr_err("failed to send guest ID to the host\n");
+		pr_err_once("failed to send guest ID to the host\n");
 
 unlock:
 	up_write(&b->conf_sem);
@@ -1709,14 +1704,14 @@ DEFINE_SHOW_ATTRIBUTE(vmballoon_debug);
 
 static void __init vmballoon_debugfs_init(struct vmballoon *b)
 {
-	b->dbg_entry = debugfs_create_file("vmmemctl", S_IRUGO, NULL, b,
-					   &vmballoon_debug_fops);
+	debugfs_create_file("vmmemctl", S_IRUGO, NULL, b,
+			    &vmballoon_debug_fops);
 }
 
 static void __exit vmballoon_debugfs_exit(struct vmballoon *b)
 {
 	static_key_disable(&balloon_stat_enabled.key);
-	debugfs_remove(b->dbg_entry);
+	debugfs_remove(debugfs_lookup("vmmemctl", NULL));
 	kfree(b->stats);
 	b->stats = NULL;
 }

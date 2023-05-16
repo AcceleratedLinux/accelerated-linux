@@ -1,0 +1,30 @@
+From ad8eb694243d5e1a185947985d8a6bbb24abc8b1 Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Mon, 23 May 2022 15:05:38 -0400
+Subject: [PATCH] pkcs#7: Invalid data from FortiAuthenticator
+
+Invalid data from FortiAuthenticator was causing the sscep client to crash as it was not checking
+for NULL value before deferencing.
+---
+ src/pkcs7.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/pkcs7.c b/src/pkcs7.c
+index 3c76164..97521db 100644
+--- a/src/pkcs7.c
++++ b/src/pkcs7.c
+@@ -571,6 +571,11 @@ int pkcs7_unwrap(struct scep *s) {
+ 		printf("%s: PKCS#7 payload size: %d bytes\n", pname, len);
+ 	BIO_set_flags(memorybio, BIO_FLAGS_MEM_RDONLY);
+ 	s->reply_p7 = d2i_PKCS7_bio(memorybio, NULL);
++	if (s->reply_p7 == NULL) {
++		fprintf(stderr, "%s: invalid PKCS#7 data\n", pname);
++		ERR_print_errors_fp(stderr);
++		exit (SCEP_PKISTATUS_P7);
++	}
+ 	if (d_flag) {
+ 		printf("%s: printing PEM fomatted PKCS#7\n", pname);
+ 		PEM_write_PKCS7(stdout, s->reply_p7);
+-- 
+2.25.1
+

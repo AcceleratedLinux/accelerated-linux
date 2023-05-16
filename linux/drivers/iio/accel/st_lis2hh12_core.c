@@ -450,7 +450,7 @@ out:
 	return err;
 }
 
-static int lis2hh12_sysfs_get_raw_temperature(struct device *dev,
+static ssize_t lis2hh12_sysfs_get_raw_temperature(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
@@ -468,7 +468,7 @@ static int lis2hh12_sysfs_get_raw_temperature(struct device *dev,
 	return sprintf(buf, "0x%hx\n", raw_value);
 }
 
-static int lis2hh12_sysfs_get_abs_temperature(struct device *dev,
+static ssize_t lis2hh12_sysfs_get_abs_temperature(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
@@ -569,7 +569,7 @@ ssize_t lis2hh12_sysfs_flush_fifo(struct device *dev,
 
 	mutex_lock(&indio_dev->mlock);
 
-	if (indio_dev->currentmode == INDIO_BUFFER_TRIGGERED) {
+	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
 		disable_irq(sdata->cdata->irq);
 	} else {
 		mutex_unlock(&indio_dev->mlock);
@@ -685,7 +685,7 @@ static int lis2hh12_read_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 		mutex_lock(&indio_dev->mlock);
-		if (indio_dev->currentmode == INDIO_BUFFER_TRIGGERED) {
+		if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
 			mutex_unlock(&indio_dev->mlock);
 			return -EBUSY;
 		}
@@ -740,7 +740,7 @@ static int lis2hh12_write_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_SCALE:
 		mutex_lock(&indio_dev->mlock);
 
-		if (indio_dev->currentmode == INDIO_BUFFER_TRIGGERED) {
+		if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
 			mutex_unlock(&indio_dev->mlock);
 			return -EBUSY;
 		}
@@ -890,12 +890,14 @@ int lis2hh12_common_probe(struct lis2hh12_data *cdata, int irq)
 		return err;
 
 	for (i = 0; i < LIS2HH12_SENSORS_NUMB; i++) {
-		piio_dev = iio_device_alloc(sizeof(struct lis2hh12_sensor_data *));
+		piio_dev = iio_device_alloc(cdata->dev, sizeof(struct lis2hh12_sensor_data *));
 		if (piio_dev == NULL) {
 			err = -ENOMEM;
 
 			goto iio_device_free;
 		}
+
+		dev_set_drvdata(&piio_dev->dev, piio_dev);
 
 		cdata->iio_sensors_dev[i] = piio_dev;
 		sdata = iio_priv(piio_dev);

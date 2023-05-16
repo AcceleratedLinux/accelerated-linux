@@ -1,0 +1,124 @@
+#!/bin/sh
+
+#
+# serial-mode.sh - setup and control serial port interface mode
+#
+# This control script is specific to the Digi/ConnectEZ1.
+#
+# (C) Copyright 2020, Digi International.
+#
+
+#
+# GPIO440 = port 1 termination/biasing (output, active high, default low)
+# GPIO441 = port 2 termination/biasing (output, active high, default low)
+# GPIO442 = port 3 termination/biasing (output, active high, default low)
+# GPIO443 = port 4 termination/biasing (output, active high, default low)
+# GPIO444 = port 1 2-wire, half-duplex enable (output, active high, default low)
+# GPIO445 = port 2 2-wire, half-duplex enable (output, active high, default low)
+# GPIO446 = port 3 2-wire, half-duplex enable (output, active high, default low)
+# GPIO447 = port 4 2-wire, half-duplex enable (output, active high, default low)
+#
+
+serial_init() {
+	# The initialization prepares GPIOs, but defers mode shift
+	# until mode is selected.
+	term="$((440 + $1))"
+	wire="$((444 + $1))"
+	echo "${term}" > /sys/class/gpio/export
+	echo "${wire}" > /sys/class/gpio/export
+}
+
+serial_rs232() {
+	wire="$((444 + $1))"
+	echo "low" > /sys/class/gpio/gpio${wire}/direction
+	echo "$1,232" > /sys/class/tty/ttyS2/device/uart_mode
+}
+
+serial_rs422() {
+	wire="$((444 + $1))"
+	echo "low" > /sys/class/gpio/gpio${wire}/direction
+	echo "$1,422" > /sys/class/tty/ttyS2/device/uart_mode
+}
+
+serial_rs485() {  # 2-wire, half-duplex
+	wire="$((444 + $1))"
+	echo "high" > /sys/class/gpio/gpio${wire}/direction
+	echo "$1,485_2W" > /sys/class/tty/ttyS2/device/uart_mode
+}
+
+serial_nonterminate() {
+	term="$((440 + $1))"
+	echo "low" > /sys/class/gpio/gpio${term}/direction
+}
+
+serial_terminate() {
+	term="$((440 + $1))"
+	echo "high" > /sys/class/gpio/gpio${term}/direction
+}
+
+altpin() {
+	# ttyS2 - ttyS5
+	tty_num=$((${1} + 2))
+	echo "$2" > /sys/class/tty/ttyS$tty_num/altpin
+	exit 0
+}
+
+usage() {
+	echo "usage: serial-mode <device> (init|rs-232|rs-422|rs-485) [terminate]"
+	echo
+	echo "        init      -- initialize port control"
+	echo "        powerdown -- not supported"
+	echo "        rs-232    -- set port into RS-232 mode (default)"
+	echo "        rs-422    -- set port into RS-422 mode"
+	echo "        rs-485    -- set port into RS-485 mode"
+	echo "        terminate -- enable line termination"
+	echo
+	echo "usage: serial-mode <device> altpin (on|off)"
+	echo
+	echo "        altpin    -- enable 8-pin altpin mode"
+	echo
+	exit 1
+}
+
+#
+# Check arguments, and error out on anything invalid.
+#
+if [ $# -lt 2 -o $# -gt 3 ] ; then
+	usage
+fi
+
+if [ "$2" = "altpin" ]; then
+	case "$3" in
+	on|off)	;;
+	*)	usage ;;
+	esac
+fi
+
+portnum="${1#/dev/serial/port}"
+if [ "${portnum}" -lt "1" ] || [ "${portnum}" -gt "4" ] ; then
+	echo "ERROR: serial-mode not supported on supplied port"
+	exit 1
+fi
+
+portnum=$((${portnum} - 1))
+
+case "$2" in
+init)	serial_init ${portnum} ;;
+powerdown)
+	# Not supported, exit with success
+	exit 0
+	;;
+rs-232)	serial_rs232 ${portnum} ;;
+rs-422)	serial_rs422 ${portnum} ;;
+rs-485)	serial_rs485 ${portnum} ;;
+altpin)	altpin ${portnum} "$3" ;;
+*)	usage ;;
+esac
+
+if [ "$3" = "terminate" ] && [ "$2" != "rs-232" ] ; then
+	serial_terminate ${portnum}
+else
+	serial_nonterminate ${portnum}
+fi
+
+exit 0

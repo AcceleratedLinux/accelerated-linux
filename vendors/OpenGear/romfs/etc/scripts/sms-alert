@@ -1,0 +1,86 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/sms-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+fi
+
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	CellMessageNotification=23
+	cellMessageReceived=76
+
+	export AGENT=""
+	export UPTIME=""
+	export NOTIFICATION="CellMessageNotification"
+	export TRAP=$CellMessageNotification
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_VALUE=$6
+	ALERT_PHONE=$7
+	ALERT_PATTERN=$8
+
+	ALERT_TYPE=$cellMessageReceived
+	ALERT_DEVICE=$ALERT_PHONE
+
+	ALERT_SUMMARY="Text message from '$ALERT_PHONE' matched pattern '$ALERT_PATTERN' with '$ALERT_VALUE'"
+	ALERT_VALUE=1
+	ALERT_OLD_VALUE=0
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$ALERT_OLD_VALUE"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

@@ -6,3 +6,9 @@ config USER_HOSTAPD_HOSTAPD
 config USER_HOSTAPD_HOSTAPD_CLI
 	bool "hostapd_cli"
 	depends on USER_HOSTAPD_HOSTAPD
+
+config USER_HOSTAPD_QCA_EXTENSIONS
+	bool "hostapd QCA extensions to nl80211"
+	depends on USER_HOSTAPD_HOSTAPD
+	help
+	  Enable QCA vendor extensions to nl80211.

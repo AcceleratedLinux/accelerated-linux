@@ -11,11 +11,11 @@ empty then the Freescale iMX6 CPU will automatically fall back to the USB
 recovery load mode (no header jumping required).
 Otherwise jump pins 2 & 3 on CON11. (R60 must not be present)
 
-To load a boot loader through the USB you need Freescales "imx_usb" tool
+To load a boot loader through the USB you need Freescale's "imx_usb" tool
 installed on your Linux PC development system.
 
 Power up the EX12 with the USB connected to your Linux PC. Note the USB cable
-you need is differnt to the one we use on the 6310-DX and ConnectIT4, rx and tx
+you need is different to the one we use on the 6310-DX and ConnectIT4, rx and tx
 have swapped. Check that the USB load device was detected properly:
 
   lsusb | grep -i freescale
@@ -30,19 +30,14 @@ The USB load process is straight forward from a compiled tree:
 
 You may need to run it as root.
 
-The normal bootloader is quiet, so you will not see anything on the console
-until linux has booted.
+If the unit is in production-mode and manufactured, the normal bootloader is
+quiet, so you will not see anything on the console until Linux has booted.
 
-You can make the uboot output trace by making the following changes in
-/boot/patches/u-boot-freescale-imx6-11-EX12.patch
+You can make the U-Boot output trace by making the following change in
+/boot/u-boot/include/configs/ex12.h:
 
--+#define CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
-++/*#define CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG*/
-
--+#define CONFIG_SILENT_CONSOLE
--+#define CONFIG_SILENT_U_BOOT_ONLY
-++/*#define CONFIG_SILENT_CONSOLE*/
-++/*#define CONFIG_SILENT_U_BOOT_ONLY*/
+  +#define CONFIG_DEVELOP
+   #include <configs/digi_common.h>
 
 Within a few seconds the usual u-boot boot up messages should come out of
 the serial console port of the EX12.

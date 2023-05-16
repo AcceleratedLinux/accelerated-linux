@@ -34,7 +34,6 @@
 		fdt@1 {
 			description = "Flattened Device Tree blob";
 			data = /incbin/("anywhereusb2.dtb");
-			/*data = /incbin/("fsl-ls1012a-frwy.dtb");*/
 			type = "flat_dt";
 			arch = "arm64";
 			compression = "none";

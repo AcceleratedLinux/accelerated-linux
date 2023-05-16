@@ -1,20 +1,20 @@
-From 03ef2b2cfcf87e3ad247552b7096c58a539a3b53 Mon Sep 17 00:00:00 2001
 From: Tatiana Leon <Tatiana.Leon@digi.com>
-Date: Fri, 23 Oct 2020 14:11:24 +0200
-Subject: [PATCH] mosquito_rr: disconnect from broker before exiting
+Date: Mon, 13 Jun 2022 13:40:44 +0200
+Subject: [PATCH] mosquito_rr: disconnect from broker before
+ exiting
 
 Signed-off-by: Tatiana Leon <Tatiana.Leon@digi.com>
 ---
- client/rr_client.c | 45 ++++++++++++++++++++++++++++++++++++++++++++-
- 1 file changed, 44 insertions(+), 1 deletion(-)
+ client/rr_client.c | 46 +++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 45 insertions(+), 1 deletion(-)
 
 diff --git a/client/rr_client.c b/client/rr_client.c
-index 27a12e26..875817a3 100644
+index 9dca6d74..3d7f8a5a 100644
 --- a/client/rr_client.c
 +++ b/client/rr_client.c
-@@ -66,6 +66,17 @@ void my_signal_handler(int signum)
- 
- void print_message(struct mosq_config *cfg, const struct mosquitto_message *message);
+@@ -67,6 +67,18 @@ static void my_signal_handler(int signum)
+ }
+ #endif
  
 +void my_disconnect_callback(struct mosquitto *mosq, void *obj, int rc, const mosquitto_property *properties)
 +{
@@ -27,19 +27,20 @@ index 27a12e26..875817a3 100644
 +		client_state = rr_s_disconnect;
 +	}
 +}
++
  
  int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadlen, void *payload, int qos, bool retain)
  {
-@@ -75,20 +86,24 @@ int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadl
+@@ -84,20 +96,24 @@ static void my_message_callback(struct mosquitto *mosq, void *obj, const struct
+ 	UNUSED(obj);
+ 	UNUSED(properties);
  
- void my_message_callback(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message, const mosquitto_property *properties)
- {
 +	if(process_messages == false) return;
 +
  	if(message->retain && cfg.no_retain) return;
  
 +	process_messages = false;
- 	print_message(&cfg, message);
+ 	print_message(&cfg, message, properties);
  	switch(cfg.pub_mode){
  		case MSGMODE_CMD:
  		case MSGMODE_FILE:
@@ -56,15 +57,15 @@ index 27a12e26..875817a3 100644
  	/* FIXME - check all below
  	if(process_messages == false) return;
  
-@@ -314,6 +329,7 @@ int main(int argc, char *argv[])
- 		mosquitto_log_callback_set(mosq, my_log_callback);
+@@ -366,6 +382,7 @@ int main(int argc, char *argv[])
+ 		mosquitto_log_callback_set(g_mosq, my_log_callback);
  	}
- 	mosquitto_connect_v5_callback_set(mosq, my_connect_callback);
-+	mosquitto_disconnect_v5_callback_set(mosq, my_disconnect_callback);
- 	mosquitto_subscribe_callback_set(mosq, my_subscribe_callback);
- 	mosquitto_message_v5_callback_set(mosq, my_message_callback);
+ 	mosquitto_connect_v5_callback_set(g_mosq, my_connect_callback);
++	mosquitto_disconnect_v5_callback_set(g_mosq, my_disconnect_callback);
+ 	mosquitto_subscribe_callback_set(g_mosq, my_subscribe_callback);
+ 	mosquitto_message_v5_callback_set(g_mosq, my_message_callback);
  
-@@ -357,6 +373,33 @@ int main(int argc, char *argv[])
+@@ -409,6 +426,33 @@ int main(int argc, char *argv[])
  		}
  	}while(rc == MOSQ_ERR_SUCCESS && client_state != rr_s_disconnect);
  
@@ -91,10 +92,10 @@ index 27a12e26..875817a3 100644
 +				break;
 +		}
 +		if (client_state != rr_s_disconnect){
-+			mosquitto_disconnect_v5(mosq, 0, cfg.disconnect_props);
++			mosquitto_disconnect_v5(g_mosq, 0, cfg.disconnect_props);
 +		}
 +	}
 +
- 	mosquitto_destroy(mosq);
+ 	mosquitto_destroy(g_mosq);
  	mosquitto_lib_cleanup();
  

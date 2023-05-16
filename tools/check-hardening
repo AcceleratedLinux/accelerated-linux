@@ -1,0 +1,107 @@
+#!/bin/bash
+
+#
+# check-hardening -- report on application security hardening status
+#
+# Produce a report detailing the common security hardening methods for he
+# binaries in a directory tree (such as "romfs"). The data is generated
+# using the "checksec" tool, so you need to have that package installed.
+# The report results are collated into a "coverage" percentage.
+#
+
+DIR=romfs
+RESULTS=/tmp/results.csv
+
+#
+# Check arguments to make sure we are good to go.
+#
+if [ $# -eq 1 ]
+then
+	DIR=$1
+fi
+if [ $# -gt 1 ]
+then
+	echo "usage: check-hardening [directory]"
+	exit 1
+fi
+if [ ! -d $DIR ]
+then
+	echo "check-hardening: directory $DIR not found"
+	exit 1
+fi
+
+echo "check-hardening: scanning directory tree $DIR..."
+
+#
+# Search through the specified directory running checksec on binary programs.
+# There is a couple of special cases to consider with symbolic links.
+# If the link is relative we just follow it to the local file it points to.
+# If it points to an absolute path then we need to get creative and figure
+# out what it is actually pointing to locally (otherwise we end up checking
+# program binaries of the local dev system - and that is not useful :-)
+#
+find $DIR | while read FILE ; do
+	FILETYPE=$(file -b "$FILE")
+
+	case "$FILETYPE" in
+	"symbolic link to /"*)
+		# Determine actual local file
+		REALFILE=$DIR/"${FILETYPE#*/}"
+		;;
+	"symbolic"*)
+		# Nothing required, let checksec follow link
+		REALFILE=$FILE
+		;;
+	*"ELF"*)
+		# File is an object, we want to check it
+		REALFILE=$FILE
+		;;
+	*)
+		# Not interested in any other file types, ignore them
+		REALFILE="" ;;
+	esac
+
+	if [ -s "$REALFILE" ]
+	then
+		CHECK=$(checksec --format=csv --file=$REALFILE)
+		if [[ "$CHECK" != *"Not an ELF file"* ]]
+		then
+			# Use original filename, not redirected name
+			echo ${CHECK%,*},$FILE
+		fi
+	fi
+done > $RESULTS
+
+if [ ! -s "$RESULTS" ]
+then
+	echo "check-hardening: no results found"
+	exit 0
+fi
+
+counts=$(awk 'BEGIN { FS=","; }
+     {
+	total++;
+	if ($1 == "Full RELRO") relro++;
+	if ($2 == "Canary found") canary++;
+	if ($3 == "NX enabled") nx++;
+	if ($4 == "PIE enabled") pie++;
+	if ($4 == "DSO") pie++;
+     }
+     END { printf("total=%d nx=%d pie=%d relro=%d canary=%d\n", total, nx, pie, relro, canary); }' < $RESULTS)
+
+eval $counts
+
+stripped=0
+for FILE in $(awk 'BEGIN { FS="," } { print $11 }' < $RESULTS)
+do
+	stotal=$((stotal + 1))
+	file -L $FILE | grep -q ", stripped" && stripped=$((stripped + 1))
+done
+
+percent=$((($nx + $pie + $relro + $canary + $stripped) * 100 / ($total * 5)))
+
+echo "check-hardening: total binaries checked=$total ($stotal)"
+echo "check-hardening: nx=$nx pie=$pie relro=$relro canary=$canary stripped=$stripped"
+echo "check-hardening: overall coverage=$percent%"
+
+exit 0

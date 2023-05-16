@@ -1,0 +1,126 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+#DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/ups-status-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	. /etc/scripts/ups-status-alertv1 "$1" "$6" "$7"
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+		
+	UpsNotification=14
+	upsOnBattery=33
+	upsLowBattery=34
+	unknown=65535
+
+	export NOTIFICATION="UpsNotification"
+	export TRAP=$UpsNotification
+
+	TRIGGERED=2
+	RESOLVING=3
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_UPS=$6
+	ALERT_STATUS=$7
+	ALERT_TYPE=$unknown
+	ALERT_DEVICE=$ALERT_UPS
+	ALERT_SUMMARY=""
+	ALERT_VALUE=-1
+	ALERT_OLD_VALUE=-1
+
+	if [ "$ALERT_STATUS" == "lowbatt" ]; then
+		ALERT_TYPE=$upsLowBattery
+		if [ "$ALERT_STATE" == "$TRIGGERED" ]; then
+			ALERT_SUMMARY="UPS '$ALERT_UPS' has a 'Low Battery'"
+			ALERT_VALUE=1
+			ALERT_OLD_VALUE=0
+		else
+			ALERT_SUMMARY="UPS '$ALERT_UPS' no longer has a 'Low Battery'"
+			ALERT_VALUE=0
+			ALERT_OLD_VALUE=1
+		fi
+	elif [ "$ALERT_STATUS" == "onbatt" ]; then
+		ALERT_TYPE=$upsOnBattery
+		if [ "$ALERT_STATE" == "$TRIGGERED" ]; then
+			ALERT_SUMMARY="UPS '$ALERT_UPS' is now 'On Battery'"
+			ALERT_VALUE=1
+			ALERT_OLD_VALUE=0
+		else
+			ALERT_SUMMARY="UPS '$ALERT_UPS' is no longer 'On Battery'"
+			ALERT_VALUE=0
+			ALERT_OLD_VALUE=1
+		fi
+	elif [ "$ALERT_STATUS" == "online" ]; then
+		# online is equivalent to a resolved onbatt
+		ALERT_TYPE=$upsOnBattery
+		if [ "$ALERT_STATE" == "$RESOLVING" ]; then
+			ALERT_SUMMARY="UPS '$ALERT_UPS' is no longer 'On Battery'"
+			ALERT_VALUE=0
+			ALERT_OLD_VALUE=1
+			ALERT_STATE=$RESOLVING
+		else
+			ALERT_SUMMARY="UPS '$ALERT_UPS' is now 'On Battery'"
+			ALERT_VALUE=1
+			ALERT_OLD_VALUE=0
+			ALERT_STATE=$TRIGGERED
+		fi
+	else
+		echo "Unsupported UPS status type: $ALERT_STATUS"
+		exit 1
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$ALERT_OLD_VALUE" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

@@ -65,7 +65,7 @@ module_param_array(video_nr, int, NULL, 0444);
 MODULE_PARM_DESC(video_nr, "video devices numbers array");
 
 /*
- * Please add any new PCI IDs to: http://pci-ids.ucw.cz.  This keeps
+ * Please add any new PCI IDs to: https://pci-ids.ucw.cz.  This keeps
  * the PCI ID database up to date.  Note that the entries must be
  * added under vendor 0x1797 (Techwell Inc.) as subsystem IDs.
  */
@@ -262,7 +262,7 @@ static int tw5864_initdev(struct pci_dev *pci_dev,
 
 	pci_set_master(pci_dev);
 
-	err = pci_set_dma_mask(pci_dev, DMA_BIT_MASK(32));
+	err = dma_set_mask(&pci_dev->dev, DMA_BIT_MASK(32));
 	if (err) {
 		dev_err(&dev->pci->dev, "32 bit PCI DMA is not supported\n");
 		goto disable_pci;
@@ -333,11 +333,10 @@ static void tw5864_finidev(struct pci_dev *pci_dev)
 
 	/* release resources */
 	iounmap(dev->mmio);
-	release_mem_region(pci_resource_start(pci_dev, 0),
-			   pci_resource_len(pci_dev, 0));
+	pci_release_regions(pci_dev);
+	pci_disable_device(pci_dev);
 
 	v4l2_device_unregister(&dev->v4l2_dev);
-	devm_kfree(&pci_dev->dev, dev);
 }
 
 static struct pci_driver tw5864_pci_driver = {

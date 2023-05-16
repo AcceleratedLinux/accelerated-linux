@@ -310,7 +310,18 @@ fi
 	exit 1
 fi
 # Program rootfs and kernel
-if /bin/tar xvzf "$updatefile" rootfs rootfs.sig rootfs.size kernel kernel.sig; then
+if /bin/tar tvzf "$updatefile" | /bin/grep -qs ' rootfs$'; then
+	echo 'rootfs
+rootfs.sig
+rootfs.size
+kernel
+kernel.sig' >_tar.list
+	/bin/tar xvzf "$updatefile" -T _tar.list || {
+		printf "![ERROR] Unable to extract firmware from update!" >&6
+		/bin/rm _tar.list
+		exit 1
+	}
+	/bin/rm _tar.list
 	[ -n "${avail_marked}" ] || invalidate_nextboot "$next_boot"
 	avail_marked="y"
 	echo "30% Performing firmware update on system $next_boot" >&5

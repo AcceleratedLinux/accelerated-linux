@@ -1,0 +1,10 @@
+# /etc/profile: This file contains system-wide defaults used by
+# all Bourne (and related) shells.
+export PYTHONHOME=/
+
+[ -f /etc/config/profile.tmout ] && . /etc/config/profile.tmout
+[ -f /etc/config/profile ] && . /etc/config/profile
+
+# If TERM is set preserve, otherwise set to something sane.
+[ -z "$TERM" ] && TERM=dumb
+export TERM

@@ -56,9 +56,11 @@
 #endif
 #ifdef CONFIG_USER_NETFLASH_ATECC508A
 #include "crypto_atmel.h"
+#include "dev_mode.h"
 #endif
 #ifdef CONFIG_USER_NETFLASH_CRYPTO_ECDSA_SW
 #include "crypto_ecdsa_sw.h"
+#include "dev_mode.h"
 #endif
 #if defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
@@ -122,6 +124,11 @@
 #else
 #define	SHA256_OPTIONS
 #endif
+#if defined(CONFIG_USER_NETFLASH_ATECC508A) || defined(CONFIG_USER_NETFLASH_CRYPTO_ECDSA_SW)
+#define DEV_OPTIONS "D"
+#else
+#define DEV_OPTIONS
+#endif
 
 #ifdef CONFIG_USER_NETFLASH_DUAL_IMAGES
 #define	UBOOT_OPTIONS "U"
@@ -135,7 +142,13 @@
 #define	UBOOT_OPTIONS
 #endif
 
-#define CMD_LINE_OPTIONS "abB:c:Cd:eEfFhiHjkKlL:Mno:pr:R:sStTuv?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS
+#ifdef CONFIG_USER_NETFLASH_STRICT_HW_VERSION_CHECK
+#define IGNORE_HW_OPTIONS
+#else
+#define IGNORE_HW_OPTIONS "H"
+#endif
+
+#define CMD_LINE_OPTIONS "abB:c:Cd:eEfFhijkKlL:Mno:pr:R:sStTuvZ?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS IGNORE_HW_OPTIONS DEV_OPTIONS
 
 #define PID_DIR "/var/run"
 #if defined(CONFIG_USER_DHCPCD_DHCPCD) || defined(CONFIG_USER_DHCPCD_NEW_DHCPCD)
@@ -169,6 +182,7 @@ static int watchdog_fd = -1;	/* ensure this is initalised to an invalid fd */
 #endif
 static int nostop_early;	/* no stop at end of input data, do write full dev. */
 static int docgi;		/* Read options and data from stdin in mime multipart format */
+static int stop_if_same_image = 0; /* -Z precheck and exit 58 if identical in flash */
 static int dofilesave;		/* Save locally as file, not a flash device */
 static int dofileautoname;	/* Put file in right directory automatically */
 static int dobootcfg;		/* Update boot.cfg file to boot image */
@@ -307,7 +321,7 @@ int local_write(int fd, void *buf, int count)
 
 	update_chksum(buf, count);
 #ifndef CONFIG_USER_NETFLASH_CRYPTO_V3
-	if (dothrow)
+	if (dothrow && !stop_if_same_image)
 		fb_throw(1024, local_throw);
 #endif
 	if (fb_write(buf, count) != 0) {
@@ -1033,13 +1047,17 @@ static int usage(int rc)
 	"\t-b\tdon't reboot hardware when done\n"
 	"\t-B N\tTFTP blocksize option 'N' bytes, 8-65464, default: 8192\n"
 	"\t-C\tcheck that image was written correctly\n"
-	"\t-d\tspecify seconds to wait before programming flash\n"
+#if defined(CONFIG_USER_NETFLASH_ATECC508A) || defined(CONFIG_USER_NETFLASH_CRYPTO_ECDSA_SW)
+	"\t-D\tTest if developer keys are allowed.\n"
+#endif
 	"\t-e\tdo not erase flash segments if they are already blank\n"
 	"\t-E\terase config just before programming flash\n"
 	"\t-f\tuse FTP as load protocol\n"
 	"\t-F\tforce overwrite (do not preserve special regions)\n"
 	"\t-h\tprint help\n"
+#ifndef CONFIG_USER_NETFLASH_STRICT_HW_VERSION_CHECK
 	"\t-H\tignore hardware type information\n"
+#endif
 	"\t-i\tignore any version information\n"
 	"\t-j\timage is a JFFS2 filesystem\n"
 	"\t-k\tdon't kill other processes (or delays kill until\n"
@@ -1071,6 +1089,7 @@ static int usage(int rc)
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS
 	"\t-z\tdecompress image before writing\n"
 #endif
+	"\t-Z\texit if image already flashed\n"
 	);
 
 	exit(rc);
@@ -1126,7 +1145,8 @@ int netflashmain(int argc, char *argv[])
 #else
 		.doversion = 0,
 #endif
-#ifdef CONFIG_USER_NETFLASH_HARDWARE
+#if defined(CONFIG_USER_NETFLASH_HARDWARE) || \
+    defined(CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO)
 		.dohardwareversion = 1,
 #else
 		.dohardwareversion = 0,
@@ -1297,6 +1317,11 @@ int netflashmain(int argc, char *argv[])
 		case 'd':
 			delay = (atoi(optarg));
 			break;
+#if defined(CONFIG_USER_NETFLASH_ATECC508A) || defined(CONFIG_USER_NETFLASH_CRYPTO_ECDSA_SW)
+		case 'D':
+			notice("Developer key %s", is_development_key_allowed() ? "true" : "false");
+			is_development_key_allowed() ? exit(0) : exit(1);
+#endif
 		case 'f':
 			doftp = 1;
 			break;
@@ -1306,9 +1331,11 @@ int netflashmain(int argc, char *argv[])
 		case 'i': 
 			check_opt.doversion = 0;
 			break;
+#ifndef CONFIG_USER_NETFLASH_STRICT_HW_VERSION_CHECK
 		case 'H': 
 			check_opt.dohardwareversion = 0;
 			break;
+#endif
 		case 'j':
 			dojffs2 = 1;
 			nostop_early = 1;
@@ -1348,9 +1375,6 @@ int netflashmain(int argc, char *argv[])
 		case 'n':
 			/* No checksum implies no version */
 			check_opt.dochecksum = 0;
-			check_opt.doversion = 0;
-			check_opt.dohardwareversion = 0;
-			check_opt.doremoveversion = 0;
 			break;
 		case 'o':
 			offset = strtol(optarg, NULL, 0);
@@ -1401,6 +1425,9 @@ int netflashmain(int argc, char *argv[])
 			doinflate = 1;
 			break;
 #endif
+		case 'Z':
+			stop_if_same_image = 1;
+			break;
 #ifdef CONFIG_USER_NETFLASH_SETSRC
 		case 'I':
 			srcaddr = optarg;
@@ -1413,7 +1440,7 @@ int netflashmain(int argc, char *argv[])
 #endif
 		case 'h':
 		case '?':
-			usage(0);
+			usage(opt == '?');
 			break;
 		case 0:
 #ifdef CONFIG_USER_NETFLASH_CRYPTO_V3
@@ -1536,7 +1563,7 @@ int netflashmain(int argc, char *argv[])
 		exit(NO_MEMORY);
 	}
 
-	if (checkimage || checkblank) {
+	if (checkimage || checkblank || stop_if_same_image) {
 		check_buf = malloc(sgsize);
 		if (!check_buf) {
 			error("Insufficient memory for check buffer!");
@@ -1594,7 +1621,7 @@ int netflashmain(int argc, char *argv[])
 #endif
 
 #ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
-	check_fw_product_info();
+	check_fw_product_info(&check_opt);
 #endif
 
 	if (dofilesave) {
@@ -1628,6 +1655,27 @@ int netflashmain(int argc, char *argv[])
 		error("image too large for FLASH device (size=%lld)",
 			devsize - offset);
 		exit(IMAGE_TOO_BIG);
+	}
+
+	if (stop_if_same_image) {
+		/* Stop now if the image is the same as what is in the FLASH device */
+		notice("comparing image against flash");
+		check_flash(rd, devsize, sgdata, sgsize);
+		switch (exitstatus) {
+		case 0:
+			/* Flash content matches the image file */
+			notice("image same as flash content");
+			exit(ALREADY_FLASHED);
+		case BAD_SEG_CHECK:
+			/* Expected difference between flash and image file */
+			notice("image in flash is different");
+			exitstatus = 0;
+			break; /* continue on */
+		default:
+			/* Unexpected other problem */
+			error("unexpected error comparing flash, %d", exitstatus);
+			exit(exitstatus);
+		}
 	}
 
 	if (dothrow) {

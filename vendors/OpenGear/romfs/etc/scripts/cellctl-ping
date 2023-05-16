@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# Test whether the modem's command interface is responding, in particular,
+# whether the modem manager can load the extended signal information (required
+# to send or receive SMS)
+#
+# Periodically called by cellctld for MC7750 and MC7710
+#
+
+# Allow custom override.
+if [ -x /etc/config/scripts/cellctl-ping ]; then
+	exec /etc/config/scripts/cellctl-ping
+fi
+
+product=$(infod_client -o get -q -p config.cellmodem.cellctl.info.product)
+if [ -x /bin/qmicli ] && [ "$product" = "MC7750" -o "$product" = "MC7710" ]; then
+	if [ -c /dev/cdc-wdm0 ]; then
+		if ! /bin/qmicli -d /dev/cdc-wdm0 -p --nas-get-signal-info >& /dev/null ; then
+			logger -t $0 "QMI extended signal info is not available"
+			exit 1
+		fi
+	fi
+fi
+
+# All checks pass
+exit 0

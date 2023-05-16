@@ -1,14 +1,105 @@
-If we are querying all servers and we see an NXDOMAIN response,  just hold
-onto that in case a batter response arrives from another server.  Only
-forward the NXDOMAIN if we get nothing better.
+From de0a90d67b2c8c863f5a746a9f6238e2e70ed946 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Sat, 8 Jan 2022 15:24:15 +0100
+Subject: [PATCH] Delay NXDOMAIN response
 
-This allows the use of upstreams servers that know about internal domains
-that are not visible to somthing like internet based servers.
+If we are sending requests to all servers then do not forward the first
+result we get back if it is an NXDOMAIN,  another server may respond
+with a better answer and we would rather return that.
 
-diff -Nurd dnsmasq-2.80.orig/src/dnsmasq.h dnsmasq-2.80/src/dnsmasq.h
---- dnsmasq-2.80.orig/src/dnsmasq.h	2018-10-19 04:21:55.000000000 +1000
-+++ dnsmasq-2.80/src/dnsmasq.h	2019-07-16 08:16:47.923312233 +1000
-@@ -676,6 +676,10 @@
+Remember the NXDOMAIN and forward that answer iff we do not get a better
+one and not all servers respond.
+
+We always send the response from the last server if all servers respond.
+A short timeout will send the saved NXDOMAIN response otherwise.
+
+(Original author: David McCullough <david.mccullough@accelecon.com>)
+---
+ src/dnsmasq.c | 17 +++++++---
+ src/dnsmasq.h |  5 +++
+ src/forward.c | 87 +++++++++++++++++++++++++++++++++++++++++++++++----
+ 3 files changed, 99 insertions(+), 10 deletions(-)
+
+diff --git a/src/dnsmasq.c b/src/dnsmasq.c
+index 602daed..6492cde 100644
+--- a/src/dnsmasq.c
++++ b/src/dnsmasq.c
+@@ -24,7 +24,7 @@ struct daemon *daemon;
+ static volatile pid_t pid = 0;
+ static volatile int pipewrite;
+ 
+-static void set_dns_listeners(void);
++static int set_dns_listeners(time_t now);
+ static void check_dns_listeners(time_t now);
+ static void sig_handler(int sig);
+ static void async_event(int pipe, time_t now);
+@@ -1051,6 +1051,7 @@ int main (int argc, char **argv)
+   while (1)
+     {
+       int timeout = -1;
++      int t;
+       
+       poll_reset();
+       
+@@ -1063,7 +1064,9 @@ int main (int argc, char **argv)
+       else if (is_dad_listeners())
+ 	timeout = 1000;
+ 
+-      set_dns_listeners();
++      t = set_dns_listeners(now) * 1000;
++      if (t > 0 && (timeout < 0 || t < timeout))
++	timeout = t;
+ 
+ #ifdef HAVE_DBUS
+       if (option_bool(OPT_DBUS))
+@@ -1706,12 +1709,13 @@ void clear_cache_and_reload(time_t now)
+ #endif
+ }
+ 
+-static void set_dns_listeners(void)
++static int set_dns_listeners(time_t now)
+ {
+   struct serverfd *serverfdp;
+   struct listener *listener;
+   struct randfd_list *rfl;
+   int i;
++  int wait = 0;
+   
+ #ifdef HAVE_TFTP
+   int  tftp = 0;
+@@ -1723,6 +1727,9 @@ static void set_dns_listeners(void)
+ 	poll_listen(transfer->sockfd, POLLIN);
+       }
+ #endif
++
++  if (daemon->port != 0)
++    wait = check_reply_timeout(now);
+   
+   for (serverfdp = daemon->sfds; serverfdp; serverfdp = serverfdp->next)
+     poll_listen(serverfdp->fd, POLLIN);
+@@ -1763,6 +1770,8 @@ static void set_dns_listeners(void)
+     for (i = 0; i < MAX_PROCS; i++)
+       if (daemon->tcp_pipes[i] != -1)
+ 	poll_listen(daemon->tcp_pipes[i], POLLIN);
++
++  return wait;
+ }
+ 
+ static void check_dns_listeners(time_t now)
+@@ -2113,7 +2122,7 @@ int delay_dhcp(time_t start, int sec, int fd, uint32_t addr, unsigned short id)
+       poll_reset();
+       if (fd != -1)
+         poll_listen(fd, POLLIN);
+-      set_dns_listeners();
++      set_dns_listeners(now);
+       set_log_writer();
+       
+ #ifdef HAVE_DHCP6
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 8674823..81c95c6 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -752,6 +752,10 @@ struct frec {
    struct frec *blocking_query; /* Query which is blocking us. */
  #endif
    struct frec *next;
@@ -19,21 +110,31 @@ diff -Nurd dnsmasq-2.80.orig/src/dnsmasq.h dnsmasq-2.80/src/dnsmasq.h
  };
  
  /* flags in top of length field for DHCP-option tables */
-diff -Nurd dnsmasq-2.80.orig/src/forward.c dnsmasq-2.80/src/forward.c
---- dnsmasq-2.80.orig/src/forward.c	2018-10-19 04:21:55.000000000 +1000
-+++ dnsmasq-2.80/src/forward.c	2019-07-16 08:16:47.923312233 +1000
-@@ -22,6 +22,8 @@
- 					  void *hash);
- static unsigned short get_id(void);
- static void free_frec(struct frec *f);
+@@ -1428,6 +1432,7 @@ int send_from(int fd, int nowild, char *packet, size_t len,
+ void resend_query(void);
+ int allocate_rfd(struct randfd_list **fdlp, struct server *serv);
+ void free_rfds(struct randfd_list **fdlp);
++int check_reply_timeout(time_t now);
+ 
+ /* network.c */
+ int indextoname(int fd, int index, char *name);
+diff --git a/src/forward.c b/src/forward.c
+index 3d638e4..441eeca 100644
+--- a/src/forward.c
++++ b/src/forward.c
+@@ -26,6 +26,9 @@ static void query_full(time_t now, char *domain);
+ 
+ static void return_reply(time_t now, struct frec *forward, struct dns_header *header, ssize_t n, int status);
+ 
 +static void forward_reply(struct dns_header *header, size_t n, time_t now,
 +			  struct frec *forward, struct server *server);
- 
++
  /* Send a UDP packet with its source address set as "source" 
     unless nowild is true, when we just send it with the kernel default */
-@@ -767,6 +769,20 @@
-   return resize_packet(header, n, pheader, plen);
+ int send_from(int fd, int nowild, char *packet, size_t len, 
+@@ -924,6 +927,20 @@ static void dnssec_validate(struct frec *forward, struct dns_header *header,
  }
+ #endif
  
 +static void store_reply(struct dns_header *header, size_t nn, struct frec *forward, struct server *server)
 +{
@@ -50,81 +151,126 @@ diff -Nurd dnsmasq-2.80.orig/src/forward.c dnsmasq-2.80/src/forward.c
 +}
 +
  /* sets new last_server */
- void reply_query(int fd, int family, time_t now)
+ void reply_query(int fd, time_t now)
  {
-@@ -978,14 +994,26 @@
-       my_syslog(LOG_WARNING, _("reducing DNS packet size for nameserver %s to %d"), daemon->addrbuff, SAFE_PKTSZ);
+@@ -1053,15 +1070,32 @@ void reply_query(int fd, time_t now)
+ 	}
      }
  
-+  /* if we are querying all servers and we get an NXDOMAIN response, save
+-  /* If the answer is an error, keep the forward record in place in case
++  /* If we are querying all servers and we get an NXDOMAIN response, save
 +     it in case we get a better response a bit later,  otherwise send
 +     through what we just received.
-     
--  /* If the answer is an error, keep the forward record in place in case
++
 +     If the answer is an error, keep the forward record in place in case
       we get a good reply from another server. Kill it when we've
       had replies from all to avoid filling the forwarding table when
       everything is broken */
--  if (forward->forwardall == 0 || --forward->forwardall == 1 ||
--      (RCODE(header) != REFUSED && RCODE(header) != SERVFAIL))
--    {
-+  if (forward->forwardall != 0)
+ 
+-  /* decrement count of replies recieved if we sent to more than one server. */
+-  if (forward->forwardall && (--forward->forwardall > 1) && RCODE(header) == REFUSED)
++  /* decrement count of replies received if we sent to more than one server. */
++  if (forward->forwardall)
 +    forward->forwardall--;
-+  if (option_bool(OPT_ALL_SERVERS) && forward->forwardall != 0 && forward->forwardall != 1 && RCODE(header) == NXDOMAIN)
-+    store_reply(header, n, forward, server);
-+  else if (forward->forwardall == 0 || forward->forwardall == 1 || RCODE(header) != SERVFAIL)
-+    forward_reply(header, n, now, forward, server);
++  if (option_bool(OPT_ALL_SERVERS) && forward->forwardall > 1 && RCODE(header) == NXDOMAIN)
++    {
++      store_reply(header, n, forward, server);
++      return;
++    }
++  if ((forward->forwardall > 1) && RCODE(header) == REFUSED)
+     return;
+ 
++  forward_reply(header, n, now, forward, server);
 +}
 +
 +static void forward_reply(struct dns_header *header, size_t n, time_t now,
-+                         struct frec *forward, struct server *server)
++                          struct frec *forward, struct server *server)
 +{
-+      int nn;
-       int check_rebind = 0, no_cache_dnssec = 0, cache_secure = 0, bogusanswer = 0;
-       
-       if (option_bool(OPT_NO_REBIND))
-@@ -1267,7 +1295,6 @@
- 		    &forward->source, &forward->dest, forward->iface);
- 	}
-       free_frec(forward); /* cancel */
--    }
+   /* We tried resending to this server with a smaller maximum size and got an answer.
+      Make that permanent. To avoid reduxing the packet size for a single dropped packet,
+      only do this when we get a truncated answer, or one larger than the safe size. */
+@@ -1086,6 +1120,34 @@ void reply_query(int fd, time_t now)
+     return_reply(now, forward, header, n, STAT_OK); 
+ }
+ 
++int check_reply_timeout(time_t now)
++{
++  struct frec *f, *oldest;
++
++  /* Check for reply timeout in records. If found any, send stored reply */
++  for (f = daemon->frec_list, oldest = NULL; f; f = f->next)
++    {
++#ifdef HAVE_DNSSEC
++      /* Don't free DNSSEC sub-queries here, as we may end up with
++	 dangling references to them. They'll go when their "real" query
++	 is freed. */
++      if (f->dependent)
++	continue;
++#endif
++      if (f->reply == NULL)
++	continue;
++
++      if (difftime(now, f->time) >= TIMEOUT)
++	forward_reply(f->reply, f->rlen, now, f, f->server);
++      else if (!oldest || difftime(f->time, oldest->time) <= 0)
++	oldest = f;
++    }
++
++    /* Return with the oldest record's expiration time */
++    return oldest ? (oldest->time + (time_t)TIMEOUT - now) : 0;
++}
++
++
+ static void return_reply(time_t now, struct frec *forward, struct dns_header *header, ssize_t n, int status)
+ {
+   int check_rebind = 0, no_cache_dnssec = 0, cache_secure = 0, bogusanswer = 0;
+@@ -1182,7 +1244,7 @@ static void return_reply(time_t now, struct frec *forward, struct dns_header *he
+ 	  header->id = htons(src->orig_id);
+ 	  
+ #ifdef HAVE_DUMPFILE
+-	  dump_packet(DUMP_REPLY, daemon->packet, (size_t)nn, NULL, &src->source);
++	  dump_packet(DUMP_REPLY, header, (size_t)nn, NULL, &src->source);
+ #endif
+ 	  
+ #if defined(HAVE_CONNTRACK) && defined(HAVE_UBUS)
+@@ -1195,7 +1257,7 @@ static void return_reply(time_t now, struct frec *forward, struct dns_header *he
+ 	    }
+ #endif
+ 	  
+-	  send_from(src->fd, option_bool(OPT_NOWILD) || option_bool (OPT_CLEVERBIND), daemon->packet, nn, 
++	  send_from(src->fd, option_bool(OPT_NOWILD) || option_bool (OPT_CLEVERBIND), (char *)header, nn,
+ 		    &src->source, &src->dest, src->iface);
+ 	  
+ 	  if (option_bool(OPT_EXTRALOG) && src != &forward->frec_src)
+@@ -2415,6 +2477,14 @@ static void free_frec(struct frec *f)
+   f->dependent = NULL;
+   f->next_dependent = NULL;
+ #endif
++
++  f->server = NULL;
++  if (f->reply)
++    {
++      free(f->reply);
++      f->reply = NULL;
++    }
++    f->rlen = 0;
  }
  
  
-@@ -2183,6 +2210,9 @@
-       f->blocking_query = NULL;
-       f->stash = NULL;
+@@ -2444,7 +2514,12 @@ static struct frec *get_new_frec(time_t now, struct server *master, int force)
+ 	  if (!f->dependent && !force)
  #endif
-+      f->server = NULL;
-+      f->reply = NULL;
-+      f->rlen = 0;
-       daemon->frec_list = f;
-     }
- 
-@@ -2237,6 +2267,12 @@
-   f->rfd4 = NULL;
-   f->sentto = NULL;
-   f->flags = 0;
-+
-+  f->server = NULL;
-+  if (f->reply) {
-+    free(f->reply);
-+    f->reply = NULL;
-+  }
-   
- #ifdef HAVE_IPV6
-   free_rfd(f->rfd6);
-@@ -2286,7 +2322,12 @@
- 	    if (!f->dependent)
- #endif
- 	      {
--		if (difftime(now, f->time) >= 4*TIMEOUT)
-+	        if (f->reply && difftime(now, f->time) >= TIMEOUT)
-+	          {
-+	             forward_reply(f->reply, f->rlen, now, f, f->server);
-+	             target = f;
-+	          }
-+	        else if (difftime(now, f->time) >= 4*TIMEOUT)
- 		  {
- 		    free_frec(f);
- 		    target = f;
+ 	    {
+-	      if (difftime(now, f->time) >= 4*TIMEOUT)
++	      if (f->reply && difftime(now, f->time) >= TIMEOUT)
++		{
++		  forward_reply(f->reply, f->rlen, now, f, f->server);
++		  target = f;
++		}
++	      else if (difftime(now, f->time) >= 4*TIMEOUT)
+ 		{
+ 		  free_frec(f);
+ 		  target = f;
+-- 
+2.27.0
+

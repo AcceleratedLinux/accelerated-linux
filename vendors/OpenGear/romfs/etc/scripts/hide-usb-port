@@ -1,0 +1,70 @@
+#!/bin/sh
+#
+# This script will generate a udev rule to prevent a /dev/portX symlink from
+# being created for a particular /dev/ttyUSBY device so that it won't be used
+# by portmanager
+#
+
+priority=60
+subsystem="tty"
+operation="ENV{SERIAL_IGNORE_TTY}=\"true\""
+comment="Added by $0 and the udev configurator"
+
+usage() {
+	echo "$0 <port number>"
+}
+
+if [ $# -lt 1 ]; then
+	echo "Please specify the port number to be hidden that links to a USB serial device"
+	usage
+	exit 1
+fi
+
+port=$(printf /dev/port%02d $1)
+if [ ! -e $port ]; then
+	echo "$port does not exist"
+	exit 1
+fi
+
+if [ ! -L $port ]; then
+	echo "$port is not a symbolic link"
+	exit 1
+fi
+
+usbdevice=`/usr/bin/readlink $port`
+if [ $? != 0 ]; then
+	echo "Failed to readlink $port"
+	exit 1
+fi
+
+if [[ $usbdevice != "/dev/ttyUSB"* ]]; then
+	echo "$port does not link to a USB serial device"
+	exit 1
+fi
+
+devpath=`udevadm info --name $usbdevice --query=path`
+
+# Generate the udev rules
+match="ACTION==\"add\", SUBSYSTEM==\"$subsystem\""
+match="${match}, DEVPATH==\"${devpath%%tty*}*\""
+
+# Append it to the config.device.rules structure
+total=$(config -g config.device.rules.total | cut -f2 -d' ')
+if [ -z "$total" ]; then
+	total=0;
+fi
+
+total=$((total + 1))
+config -s config.device.rules.rule${total}.match="$match"
+config -s config.device.rules.rule${total}.operation="$operation"
+config -s config.device.rules.rule${total}.priority="$priority"
+config -s config.device.rules.rule${total}.comment="$comment"
+config -s config.device.rules.total=$total
+
+# Make it work
+if config -r udev > /dev/null 2>&1; then
+	echo -n "Symlink to $usbdevice will be hidden from portmanager, "
+	echo "replug the usb cable or reboot to have this change take effect."
+fi
+
+exit 0

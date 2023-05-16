@@ -1,0 +1,100 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+host=$1
+outlets=$2
+cmd=$3
+
+if [[ -z "$host" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <address> \"<outlet> [outlet..]\" on|off|cycle|status|temp"
+	exit 1
+fi
+
+address=`config -g config.sdt.hosts | grep "$host"`
+if [ -z "$address" ]; then
+	for outlet in $outlets; do
+		power_outlet_error_config $outlet "address"
+	done
+	exit 1
+fi
+prefix=`echo $address | cut -d. -f-4`
+count=`config -g "$prefix.power.outlets" | cut -d' ' -f2`
+if [ -z "$count" -o "$count" -le "0" ]; then
+	power_outlet_error_range $outlet $count
+fi
+community=`config -g "$prefix.power.snmp.community" | cut -d' ' -f2`
+
+if [[ "$cmd" == "temp" ]]; then
+	status=`/bin/upsc rpc_${host} ups.temperature`
+	if [ -z "$status" ]; then
+		status="unknown"
+	fi
+	power_status_temp "${status}"
+fi
+
+output=()
+i=0
+
+for outlet in $outlets; do
+
+	if [ $outlet -lt 1 -o $outlet -gt $count ]
+	then
+		power_outlet_error_range $outlet $count
+		exit 1
+	fi
+
+	index=$(($outlet - 1))
+
+	if [[ "$cmd" == "on" ]]; then
+		echo "Powering on outlet $outlet"
+		output[$i]=$(/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.on 2>&1)
+	elif [[ "$cmd" == "off" ]]; then
+		echo "Powering off outlet $outlet"
+		output[$i]=$(/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off 2>&1)
+
+	elif [[ "$cmd" == "cycle" ]]; then
+		echo "Cycling outlet $outlet"
+		output[$i]=$(/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.cycle 2>&1)
+	else
+		output[$i]=""
+	fi
+	i=$(($i+1))
+done
+
+i=0
+failure=0
+for outlet in $outlets; do
+	if echo "${output[$i]}" | grep ": ERR ACCESS-DENIED" ; then
+		power_outlet_error_login "${outlet}" "${community}"
+		failure=1
+		continue
+	elif echo "${output[$i]}" | grep ": ERR" ; then
+		# Assume all other errors were timeouts waiting for response
+		power_outlet_error_timeout "${outlet}" "${cmd}"
+		failure=1
+		continue
+	fi
+
+	status=`/bin/upsc rpc_${host} outlet.${outlet}.status 2> /dev/null`
+	power=`/bin/upsc rpc_${host} outlet.${outlet}.power 2> /dev/null`
+	volts=`/bin/upsc rpc_${host} outlet.${outlet}.voltage 2> /dev/null`
+	current=`/bin/upsc rpc_${host} outlet.${outlet}.current 2> /dev/null`
+	load=`/bin/upsc rpc_${host} outlet.${outlet}.load 2> /dev/null`
+	power_outlet_status ${outlet} ${status}
+	if [ ! -z "$power" ]; then
+		power_outlet_status_power ${outlet} ${power}
+	fi
+	if [ ! -z "${volts}" ]; then
+		power_outlet_status_volts ${outlet} ${volts}
+	fi
+	if [ ! -z "${current}" ]; then
+		power_outlet_status_current ${outlet} ${current}
+	fi
+	if [ ! -z "${load}" ]; then
+		power_outlet_status_load ${outlet} ${load}
+	fi
+	i=$(($i+1))
+done
+exit ${failure}

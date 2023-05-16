@@ -1,12 +1,66 @@
 #!/bin/sh
 
-echo "Configuring network"
+set_ipv6()
+{
+	if [ "$1" == "1" ]
+	then
+		off=0
+		msg="Enabling IPv6 for $2"
+	else
+		off=1
+		msg="Disabling IPv6 for $2"
+	fi
+	iface=$2
 
-route del default 2> /dev/null
+	path=/proc/sys/net/ipv6/conf/$iface/disable_ipv6
+	if [ -e $path ]
+	then
+		current=$(cat $path)
+		if [ "$current" != "$off" ]
+		then
+			echo "$msg"
+			echo "$off" > $path
+		fi
+	fi
+}
 
-if [ -f /etc/config/netstart ]; then
-	/bin/sh /etc/config/netstart
-else
-	/bin/sh /etc/default/netstart
+#
+# Set ephemeral port range to be above anything that is listening
+#
+BEGIN=49152
+END=65535
+output=$(cat /proc/sys/net/ipv4/ip_local_port_range)
+begin=$(echo "$output" | cut -f1)
+end=$(echo "$output" | cut -f2)
+if [ "$BEGIN" != "$begin" -o "$END" != "$end" ]
+then
+	echo "Configuring IPv4 local port range"
+	echo "$BEGIN $END" > /proc/sys/net/ipv4/ip_local_port_range
 fi
 
+#
+# Enable/Disable IPv6 for cellular interfaces (if any)
+#
+disable_cell_ipv6=$(config -g config.cellmodem.ipv6.disabled | cut -d' ' -f2-)
+if [ "$disable_cell_ipv6" == "on" ]
+then
+	set_ipv6 0 "wwan0"
+	set_ipv6 0 "wwan1"
+else
+	set_ipv6 1 "wwan0"
+	set_ipv6 1 "wwan1"
+fi
+
+#
+# Enable/Disable IPv6 system wide
+#
+enable_global_ipv6=$(config -g config.system.ipv6.enabled | cut -d' ' -f2-)
+if [ "$enable_global_ipv6" == "on" ]
+then
+	set_ipv6 1 "all"
+else
+	set_ipv6 0 "all"
+fi
+
+# Ensure IPv6 is always enabled for loopback device
+set_ipv6 1 "lo"

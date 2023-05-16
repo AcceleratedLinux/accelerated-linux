@@ -1,0 +1,44 @@
+From bc36eab2ebe9ef41b72cf20b6bec838187b0fa14 Mon Sep 17 00:00:00 2001
+From: David McCullough <David.McCullough@digi.com>
+Date: Tue, 25 Jan 2022 17:45:31 +0100
+Subject: [PATCH 06/10] Change sshd config for DAL
+
+---
+ sshd_config | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/sshd_config b/sshd_config
+index c423eba..09caa3d 100644
+--- a/sshd_config
++++ b/sshd_config
+@@ -29,7 +29,8 @@
+ # Authentication:
+ 
+ #LoginGraceTime 2m
+-#PermitRootLogin prohibit-password
++PermitRootLogin yes
++StrictModes no
+ #StrictModes yes
+ #MaxAuthTries 6
+ #MaxSessions 10
+@@ -81,6 +82,9 @@ AuthorizedKeysFile	.ssh/authorized_keys
+ # and KbdInteractiveAuthentication to 'no'.
+ #UsePAM no
+ 
++# SG default
++UsePAM yes
++
+ #AllowAgentForwarding yes
+ #AllowTcpForwarding yes
+ #GatewayPorts no
+@@ -96,6 +100,7 @@ AuthorizedKeysFile	.ssh/authorized_keys
+ #ClientAliveInterval 0
+ #ClientAliveCountMax 3
+ #UseDNS no
++UseDNS no
+ #PidFile /var/run/sshd.pid
+ #MaxStartups 10:30:100
+ #PermitTunnel no
+-- 
+2.30.2
+

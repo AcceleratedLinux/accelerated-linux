@@ -11,7 +11,6 @@
 #include <linux/iio/iio.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/of.h>
 #include <linux/regulator/consumer.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
@@ -220,7 +219,6 @@ static int ad5592r_set_channel_modes(struct ad5592r_state *st)
 			break;
 
 		case CH_MODE_UNUSED:
-			/* fall-through */
 		default:
 			switch (st->channel_offstate[i]) {
 			case CH_OFFSTATE_OUT_TRISTATE:
@@ -237,7 +235,6 @@ static int ad5592r_set_channel_modes(struct ad5592r_state *st)
 				break;
 
 			case CH_OFFSTATE_PULLDOWN:
-				/* fall-through */
 			default:
 				pulldown |= BIT(i);
 				break;
@@ -376,36 +373,36 @@ static int ad5592r_read_raw(struct iio_dev *iio_dev,
 {
 	struct ad5592r_state *st = iio_priv(iio_dev);
 	u16 read_val;
-	int ret;
+	int ret, mult;
 
 	switch (m) {
 	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&st->lock);
-
 		if (!chan->output) {
+			mutex_lock(&st->lock);
 			ret = st->ops->read_adc(st, chan->channel, &read_val);
+			mutex_unlock(&st->lock);
 			if (ret)
-				goto unlock;
+				return ret;
 
 			if ((read_val >> 12 & 0x7) != (chan->channel & 0x7)) {
 				dev_err(st->dev, "Error while reading channel %u\n",
 						chan->channel);
-				ret = -EIO;
-				goto unlock;
+				return -EIO;
 			}
 
 			read_val &= GENMASK(11, 0);
 
 		} else {
+			mutex_lock(&st->lock);
 			read_val = st->cached_dac[chan->channel];
+			mutex_unlock(&st->lock);
 		}
 
 		dev_dbg(st->dev, "Channel %u read: 0x%04hX\n",
 				chan->channel, read_val);
 
 		*val = (int) read_val;
-		ret = IIO_VAL_INT;
-		break;
+		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
 		*val = ad5592r_get_vref(st);
 
@@ -413,25 +410,25 @@ static int ad5592r_read_raw(struct iio_dev *iio_dev,
 			s64 tmp = *val * (3767897513LL / 25LL);
 			*val = div_s64_rem(tmp, 1000000000LL, val2);
 
-			ret = IIO_VAL_INT_PLUS_MICRO;
-		} else {
-			int mult;
-
-			mutex_lock(&st->lock);
-
-			if (chan->output)
-				mult = !!(st->cached_gp_ctrl &
-					AD5592R_REG_CTRL_DAC_RANGE);
-			else
-				mult = !!(st->cached_gp_ctrl &
-					AD5592R_REG_CTRL_ADC_RANGE);
-
-			*val *= ++mult;
-
-			*val2 = chan->scan_type.realbits;
-			ret = IIO_VAL_FRACTIONAL_LOG2;
+			return IIO_VAL_INT_PLUS_MICRO;
 		}
-		break;
+
+		mutex_lock(&st->lock);
+
+		if (chan->output)
+			mult = !!(st->cached_gp_ctrl &
+				AD5592R_REG_CTRL_DAC_RANGE);
+		else
+			mult = !!(st->cached_gp_ctrl &
+				AD5592R_REG_CTRL_ADC_RANGE);
+
+		mutex_unlock(&st->lock);
+
+		*val *= ++mult;
+
+		*val2 = chan->scan_type.realbits;
+
+		return IIO_VAL_FRACTIONAL_LOG2;
 	case IIO_CHAN_INFO_OFFSET:
 		ret = ad5592r_get_vref(st);
 
@@ -441,15 +438,13 @@ static int ad5592r_read_raw(struct iio_dev *iio_dev,
 			*val = (-34365 * 25) / ret;
 		else
 			*val = (-75365 * 25) / ret;
-		ret =  IIO_VAL_INT;
-		break;
-	default:
-		ret = -EINVAL;
-	}
 
-unlock:
-	mutex_unlock(&st->lock);
-	return ret;
+		mutex_unlock(&st->lock);
+
+		return IIO_VAL_INT;
+	default:
+		return -EINVAL;
+	}
 }
 
 static int ad5592r_write_raw_get_fmt(struct iio_dev *indio_dev,
@@ -484,11 +479,11 @@ static ssize_t ad5592r_show_scale_available(struct iio_dev *iio_dev,
 		st->scale_avail[1][0], st->scale_avail[1][1]);
 }
 
-static struct iio_chan_spec_ext_info ad5592r_ext_info[] = {
+static const struct iio_chan_spec_ext_info ad5592r_ext_info[] = {
 	{
 	 .name = "scale_available",
 	 .read = ad5592r_show_scale_available,
-	 .shared = true,
+	 .shared = IIO_SHARED_BY_TYPE,
 	 },
 	{},
 };
@@ -508,11 +503,11 @@ static void ad5592r_setup_channel(struct iio_dev *iio_dev,
 	chan->ext_info = ad5592r_ext_info;
 }
 
-static int ad5592r_alloc_channels(struct ad5592r_state *st)
+static int ad5592r_alloc_channels(struct iio_dev *iio_dev)
 {
+	struct ad5592r_state *st = iio_priv(iio_dev);
 	unsigned i, curr_channel = 0,
 		 num_channels = st->num_channels;
-	struct iio_dev *iio_dev = iio_priv_to_dev(st);
 	struct iio_chan_spec *channels;
 	struct fwnode_handle *child;
 	u32 reg, tmp;
@@ -527,7 +522,7 @@ static int ad5592r_alloc_channels(struct ad5592r_state *st)
 		if (!ret)
 			st->channel_modes[reg] = tmp;
 
-		fwnode_property_read_u32(child, "adi,off-state", &tmp);
+		ret = fwnode_property_read_u32(child, "adi,off-state", &tmp);
 		if (!ret)
 			st->channel_offstate[reg] = tmp;
 	}
@@ -618,7 +613,6 @@ int ad5592r_probe(struct device *dev, const char *name,
 			return ret;
 	}
 
-	iio_dev->dev.parent = dev;
 	iio_dev->name = name;
 	iio_dev->info = &ad5592r_info;
 	iio_dev->modes = INDIO_DIRECT_MODE;
@@ -636,7 +630,7 @@ int ad5592r_probe(struct device *dev, const char *name,
 	if (ret)
 		goto error_disable_reg;
 
-	ret = ad5592r_alloc_channels(st);
+	ret = ad5592r_alloc_channels(iio_dev);
 	if (ret)
 		goto error_disable_reg;
 
@@ -666,9 +660,9 @@ error_disable_reg:
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(ad5592r_probe);
+EXPORT_SYMBOL_NS_GPL(ad5592r_probe, IIO_AD5592R);
 
-int ad5592r_remove(struct device *dev)
+void ad5592r_remove(struct device *dev)
 {
 	struct iio_dev *iio_dev = dev_get_drvdata(dev);
 	struct ad5592r_state *st = iio_priv(iio_dev);
@@ -679,10 +673,8 @@ int ad5592r_remove(struct device *dev)
 
 	if (st->reg)
 		regulator_disable(st->reg);
-
-	return 0;
 }
-EXPORT_SYMBOL_GPL(ad5592r_remove);
+EXPORT_SYMBOL_NS_GPL(ad5592r_remove, IIO_AD5592R);
 
 MODULE_AUTHOR("Paul Cercueil <paul.cercueil@analog.com>");
 MODULE_DESCRIPTION("Analog Devices AD5592R multi-channel converters");

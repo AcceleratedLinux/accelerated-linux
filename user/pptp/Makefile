@@ -26,7 +26,7 @@ LIBS	= -lutil
 # LIBS	= -lnsl -lsocket -lresolv
 # Solaris Nevada build 14 or above
 # LIBS    = -lnsl -lsocket
-LDFLAGS	=
+LDFLAGS	+=
 
 PPTP_BIN = pptp
 

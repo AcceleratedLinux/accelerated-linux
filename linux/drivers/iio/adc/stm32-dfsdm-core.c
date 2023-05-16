@@ -117,8 +117,7 @@ static void stm32_dfsdm_clk_disable_unprepare(struct stm32_dfsdm *dfsdm)
 {
 	struct dfsdm_priv *priv = to_stm32_dfsdm_priv(dfsdm);
 
-	if (priv->aclk)
-		clk_disable_unprepare(priv->aclk);
+	clk_disable_unprepare(priv->aclk);
 	clk_disable_unprepare(priv->clk);
 }
 
@@ -136,11 +135,9 @@ int stm32_dfsdm_start_dfsdm(struct stm32_dfsdm *dfsdm)
 	int ret;
 
 	if (atomic_inc_return(&priv->n_active_ch) == 1) {
-		ret = pm_runtime_get_sync(dev);
-		if (ret < 0) {
-			pm_runtime_put_noidle(dev);
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret < 0)
 			goto error_ret;
-		}
 
 		/* select clock source, e.g. 0 for "dfsdm" or 1 for "audio" */
 		clk_src = priv->aclk ? 1 : 0;
@@ -226,15 +223,12 @@ static int stm32_dfsdm_parse_of(struct platform_device *pdev,
 	if (!node)
 		return -EINVAL;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "Failed to get memory resource\n");
-		return -ENODEV;
-	}
-	priv->dfsdm.phys_base = res->start;
-	priv->dfsdm.base = devm_ioremap_resource(&pdev->dev, res);
+	priv->dfsdm.base = devm_platform_get_and_ioremap_resource(pdev, 0,
+							&res);
 	if (IS_ERR(priv->dfsdm.base))
 		return PTR_ERR(priv->dfsdm.base);
+
+	priv->dfsdm.phys_base = res->start;
 
 	/*
 	 * "dfsdm" clock is mandatory for DFSDM peripheral clocking.
@@ -243,12 +237,9 @@ static int stm32_dfsdm_parse_of(struct platform_device *pdev,
 	 * on use case.
 	 */
 	priv->clk = devm_clk_get(&pdev->dev, "dfsdm");
-	if (IS_ERR(priv->clk)) {
-		ret = PTR_ERR(priv->clk);
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Failed to get clock (%d)\n", ret);
-		return ret;
-	}
+	if (IS_ERR(priv->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(priv->clk),
+				     "Failed to get clock\n");
 
 	priv->aclk = devm_clk_get(&pdev->dev, "audio");
 	if (IS_ERR(priv->aclk))
@@ -390,7 +381,7 @@ static int stm32_dfsdm_core_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int __maybe_unused stm32_dfsdm_core_suspend(struct device *dev)
+static int stm32_dfsdm_core_suspend(struct device *dev)
 {
 	struct stm32_dfsdm *dfsdm = dev_get_drvdata(dev);
 	struct dfsdm_priv *priv = to_stm32_dfsdm_priv(dfsdm);
@@ -406,7 +397,7 @@ static int __maybe_unused stm32_dfsdm_core_suspend(struct device *dev)
 	return pinctrl_pm_select_sleep_state(dev);
 }
 
-static int __maybe_unused stm32_dfsdm_core_resume(struct device *dev)
+static int stm32_dfsdm_core_resume(struct device *dev)
 {
 	struct stm32_dfsdm *dfsdm = dev_get_drvdata(dev);
 	struct dfsdm_priv *priv = to_stm32_dfsdm_priv(dfsdm);
@@ -423,7 +414,7 @@ static int __maybe_unused stm32_dfsdm_core_resume(struct device *dev)
 	return pm_runtime_force_resume(dev);
 }
 
-static int __maybe_unused stm32_dfsdm_core_runtime_suspend(struct device *dev)
+static int stm32_dfsdm_core_runtime_suspend(struct device *dev)
 {
 	struct stm32_dfsdm *dfsdm = dev_get_drvdata(dev);
 
@@ -432,7 +423,7 @@ static int __maybe_unused stm32_dfsdm_core_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused stm32_dfsdm_core_runtime_resume(struct device *dev)
+static int stm32_dfsdm_core_runtime_resume(struct device *dev)
 {
 	struct stm32_dfsdm *dfsdm = dev_get_drvdata(dev);
 
@@ -440,11 +431,10 @@ static int __maybe_unused stm32_dfsdm_core_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops stm32_dfsdm_core_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(stm32_dfsdm_core_suspend,
-				stm32_dfsdm_core_resume)
-	SET_RUNTIME_PM_OPS(stm32_dfsdm_core_runtime_suspend,
-			   stm32_dfsdm_core_runtime_resume,
-			   NULL)
+	SYSTEM_SLEEP_PM_OPS(stm32_dfsdm_core_suspend, stm32_dfsdm_core_resume)
+	RUNTIME_PM_OPS(stm32_dfsdm_core_runtime_suspend,
+		       stm32_dfsdm_core_runtime_resume,
+		       NULL)
 };
 
 static struct platform_driver stm32_dfsdm_driver = {
@@ -453,7 +443,7 @@ static struct platform_driver stm32_dfsdm_driver = {
 	.driver = {
 		.name = "stm32-dfsdm",
 		.of_match_table = stm32_dfsdm_of_match,
-		.pm = &stm32_dfsdm_core_pm_ops,
+		.pm = pm_ptr(&stm32_dfsdm_core_pm_ops),
 	},
 };
 

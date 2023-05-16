@@ -1,0 +1,25 @@
+From e5d94faa93130e6b0839b9d02ed7e5f0b3ba0c4b Mon Sep 17 00:00:00 2001
+From: Seth Bollinger <Seth.Bollinger@digi.com>
+Date: Wed, 20 Apr 2022 09:30:18 -0500
+Subject: [PATCH 2/2] update swap list
+
+---
+ qspi_swap_list.txt | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/qspi_swap_list.txt b/qspi_swap_list.txt
+index d5abaea..4253a6a 100644
+--- a/qspi_swap_list.txt
++++ b/qspi_swap_list.txt
+@@ -32,3 +32,8 @@ ls1012a2g5rdb/NN_SSHN_2208/rcw_1000.bin
+ ls1012a2g5rdb/NN_SSHN_2208/rcw_800.bin
+ ls1012afrwy/N_SSNP_3305/rcw_1000_default.bin
+ ls1012afrwy/N_SSNP_3305/rcw_1000_sben.bin
++awusb2-commercial/AWUSB2COMMERCIAL/awusb2_commerical_sec.bin
++cez1012/CEZ1012/cez1012_sec.bin
++cez1012mini/CEZ1012MINI/cez1012mini_sec.bin
++cez1046/CEZ1046/cez1046_sec.bin
++cez1046_no_sgmii/CEZ1046_NO_SGMII/cez1046_no_sgmii_sec.bin
+-- 
+2.30.2
+

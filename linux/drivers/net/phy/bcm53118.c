@@ -191,7 +191,7 @@ static int bcm53118_slave_open(struct net_device *dev)
 	struct net_device *master = priv->sp->master;
 	int err;
 
-	memcpy(dev->dev_addr, master->dev_addr, ETH_ALEN);
+	dev_addr_mod(dev, 0, master->dev_addr, ETH_ALEN);
 
 	if (dev->flags & IFF_ALLMULTI) {
 		err = dev_set_allmulti(master, 1);
@@ -521,7 +521,7 @@ out:
 	return err;
 }
 
-static int bcm53118_spi_remove(struct spi_device *spi)
+static void bcm53118_spi_remove(struct spi_device *spi)
 {
 	struct bcm53118_switch *sp;
 
@@ -531,7 +531,7 @@ static int bcm53118_spi_remove(struct spi_device *spi)
 	free_netdev(sp->slave);
 	dev_put(sp->master);
 	kfree(sp);
-	return 0;
+	return;
 }
 
 static struct spi_driver bcm53118_spi_driver = {

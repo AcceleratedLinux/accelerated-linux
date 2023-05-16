@@ -1,6 +1,6 @@
 config USER_IPSEC_TOOLS
 	bool "ipsec-tools"
-	select LIB_LIBSSL
+	select LIB_OPENSSL
 	select LIB_FLEX
 	help
 	  This package is required to support IPSec for Linux 2.6+

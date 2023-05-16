@@ -13,51 +13,20 @@ result in strip errors.
  chat/Makefile.linux                  | 2 +-
  pppd/Makefile.linux                  | 4 ++--
  pppd/plugins/radius/Makefile.linux   | 7 ++++---
- pppd/plugins/rp-pppoe/Makefile.linux | 5 +++--
+ pppd/plugins/pppoe/Makefile.linux | 5 +++--
  pppdump/Makefile.linux               | 2 +-
  pppstats/Makefile.linux              | 2 +-
  6 files changed, 12 insertions(+), 10 deletions(-)
 
-diff --git a/chat/Makefile.linux b/chat/Makefile.linux
-index 01ed85e..0baa2f5 100644
---- a/chat/Makefile.linux
-+++ b/chat/Makefile.linux
-@@ -29,7 +29,7 @@ chat.o:	chat.c
- 
- install: chat
- 	mkdir -p $(BINDIR) $(MANDIR)
--	$(INSTALL) -s -c chat $(BINDIR)
-+	$(INSTALL) -c chat $(BINDIR)
- 	$(INSTALL) -c -m 644 chat.8 $(MANDIR)
- 
- romfs:
-diff --git a/pppd/Makefile.linux b/pppd/Makefile.linux
-index a962e1d..b1a2490 100644
---- a/pppd/Makefile.linux
-+++ b/pppd/Makefile.linux
-@@ -120,7 +120,7 @@ CFLAGS	+= -DUSE_SRP -DOPENSSL -I/usr/local/ssl/include
- #LIBS	+= -lsrp -L/usr/local/ssl/lib -lcrypto
- LIBS	+= -lsrp -lcrypto
- TARGETS	+= srp-entry
--EXTRAINSTALL = $(INSTALL) -s -c -m 555 srp-entry $(BINDIR)/srp-entry
-+EXTRAINSTALL = $(INSTALL) -c -m 555 srp-entry $(BINDIR)/srp-entry
- MANPAGES += srp-entry.8
- EXTRACLEAN += srp-entry.o
- NEEDDES=y
-@@ -279,7 +279,7 @@ all: $(TARGETS)
- install: pppd
- 	mkdir -p $(BINDIR) $(MANDIR)
- 	$(EXTRAINSTALL)
--	$(INSTALL) -s -c -m 555 pppd $(BINDIR)/pppd
-+	$(INSTALL) -c -m 555 pppd $(BINDIR)/pppd
- 	if chgrp pppusers $(BINDIR)/pppd 2>/dev/null; then \
- 	  chmod o-rx,u+s $(BINDIR)/pppd; fi
- 	$(INSTALL) -c -m 444 pppd.8 $(MANDIR)
 diff --git a/pppd/plugins/radius/Makefile.linux b/pppd/plugins/radius/Makefile.linux
 index 6556eb7..2181ae2 100644
 --- a/pppd/plugins/radius/Makefile.linux
 +++ b/pppd/plugins/radius/Makefile.linux
-@@ -10,6 +10,7 @@ LIBDIR = $(DESTDIR)/lib/pppd/$(VERSION)
+--- Makefile.linux.orig	2021-01-11 13:25:54.843561270 +1000
++++ Makefile.linux	2021-01-11 13:28:56.283555826 +1000
+--- Makefile.linux.orig	2021-01-11 16:10:22.619265207 +1000
++++ Makefile.linux	2021-01-11 16:12:04.531262149 +1000
+@@ -14,6 +14,7 @@
  VERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
  
  INSTALL	= install
@@ -65,67 +34,44 @@ index 6556eb7..2181ae2 100644
  
  ifeq ($(CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS),y)
  PLUGIN = radius.so radattr.so radrealms.so
-@@ -44,9 +45,9 @@ all: $(PLUGIN)
+@@ -48,9 +49,9 @@
  
  install: all
  	$(INSTALL) -d -m 755 $(LIBDIR)
--	$(INSTALL) -s -c -m 755 radius.so $(LIBDIR)
--	$(INSTALL) -s -c -m 755 radattr.so $(LIBDIR)
--	$(INSTALL) -s -c -m 755 radrealms.so $(LIBDIR)
+-	$(INSTALL) -c -m 755 radius.so $(LIBDIR)
+-	$(INSTALL) -c -m 755 radattr.so $(LIBDIR)
+-	$(INSTALL) -c -m 755 radrealms.so $(LIBDIR)
 +	$(INSTALL-STRIP) -s -c -m 755 radius.so $(LIBDIR)
 +	$(INSTALL-STRIP) -s -c -m 755 radattr.so $(LIBDIR)
 +	$(INSTALL-STRIP) -s -c -m 755 radrealms.so $(LIBDIR)
  	$(INSTALL) -c -m 444 pppd-radius.8 $(MANDIR)
  	$(INSTALL) -c -m 444 pppd-radattr.8 $(MANDIR)
  
-diff --git a/pppd/plugins/rp-pppoe/Makefile.linux b/pppd/plugins/rp-pppoe/Makefile.linux
+diff --git a/pppd/plugins/pppoe/Makefile.linux b/pppd/plugins/pppoe/Makefile.linux
 index 676f12e..710fa51 100644
---- a/pppd/plugins/rp-pppoe/Makefile.linux
-+++ b/pppd/plugins/rp-pppoe/Makefile.linux
-@@ -21,6 +21,7 @@ LIBDIR = $(DESTDIR)/lib/pppd/$(PPPDVERSION)
+--- a/pppd/plugins/pppoe/Makefile.linux
++++ b/pppd/plugins/pppoe/Makefile.linux
+@@ -23,6 +23,7 @@
  PPPDVERSION = $(shell awk -F '"' '/VERSION/ { print $$2; }' ../../patchlevel.h)
  
  INSTALL	= install
-+INSTALL-STRIP= install -c --strip-program=$(STRIP)
++INSTALL-STRIP = install -c --strip-program=$(STRIP)
+ LN_S	= ln -sf
  
- # Version is set ONLY IN THE MAKEFILE!  Don't delete this!
- RP_VERSION=3.8p
-@@ -51,9 +52,9 @@ rp-pppoe.so: plugin.o discovery.o if.o common.o
+ CFLAGS+=$(COPTS) -I../../../include
+@@ -49,11 +50,11 @@
  
  install: all
  	$(INSTALL) -d -m 755 $(LIBDIR)
--	$(INSTALL) -s -c -m 4550 rp-pppoe.so $(LIBDIR)
-+	$(INSTALL-STRIP) -s -c -m 4550 rp-pppoe.so $(LIBDIR)
+-	$(INSTALL) -c -m 4550 pppoe.so $(LIBDIR)
++	$(INSTALL-STRIP) -s -c -m 4550 pppoe.so $(LIBDIR)
+ 	# Symlink for backward compatibility
+ 	$(LN_S) pppoe.so $(LIBDIR)/rp-pppoe.so
  	$(INSTALL) -d -m 755 $(BINDIR)
--	$(INSTALL) -s -c -m 555 pppoe-discovery $(BINDIR)
+-	$(INSTALL) -c -m 555 pppoe-discovery $(BINDIR)
 +	$(INSTALL-STRIP) -s -c -m 555 pppoe-discovery $(BINDIR)
  
  clean:
  	rm -f *.o *.so *.a pppoe-discovery
-diff --git a/pppdump/Makefile.linux b/pppdump/Makefile.linux
-index 3d73710..124ce32 100644
---- a/pppdump/Makefile.linux
-+++ b/pppdump/Makefile.linux
-@@ -18,5 +18,5 @@ clean:
- 
- install:
- 	mkdir -p $(BINDIR) $(MANDIR)
--	$(INSTALL) -s -c pppdump $(BINDIR)
-+	$(INSTALL) -c pppdump $(BINDIR)
- 	$(INSTALL) -c -m 444 pppdump.8 $(MANDIR)
-diff --git a/pppstats/Makefile.linux b/pppstats/Makefile.linux
-index f7d1156..d2ff5cc 100644
---- a/pppstats/Makefile.linux
-+++ b/pppstats/Makefile.linux
-@@ -23,7 +23,7 @@ all: pppstats
- 
- install: pppstats
- 	-mkdir -p $(MANDIR)
--	$(INSTALL) -s -c pppstats $(BINDIR)
-+	$(INSTALL) -c pppstats $(BINDIR)
- 	$(INSTALL) -c -m 444 pppstats.8 $(MANDIR)
- 
- pppstats: $(PPPSTATSRCS)
--- 
 2.17.1
 

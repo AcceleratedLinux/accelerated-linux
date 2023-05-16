@@ -24,6 +24,9 @@
 #define SOF_TPLG_KCTL_ENUM_ID	257
 #define SOF_TPLG_KCTL_BYTES_ID	258
 #define SOF_TPLG_KCTL_SWITCH_ID	259
+#define SOF_TPLG_KCTL_BYTES_VOLATILE_RO 260
+#define SOF_TPLG_KCTL_BYTES_VOLATILE_RW 261
+#define SOF_TPLG_KCTL_BYTES_WO_ID 262
 
 /*
  * Tokens - must match values in topology configurations
@@ -48,6 +51,7 @@
 #define SOF_TKN_SCHED_CORE			203
 #define SOF_TKN_SCHED_FRAMES			204
 #define SOF_TKN_SCHED_TIME_DOMAIN		205
+#define SOF_TKN_SCHED_DYNAMIC_PIPELINE		206
 
 /* volume */
 #define SOF_TKN_VOLUME_RAMP_STEP_TYPE		250
@@ -73,6 +77,8 @@
 /* Token retired with ABI 3.2, do not use for new capabilities
  * #define SOF_TKN_COMP_PRELOAD_COUNT		403
  */
+#define SOF_TKN_COMP_CORE_ID			404
+#define SOF_TKN_COMP_UUID                       405
 
 /* SSP */
 #define SOF_TKN_INTEL_SSP_CLKS_CONTROL		500
@@ -133,5 +139,10 @@
 /* HDA */
 #define SOF_TKN_INTEL_HDA_RATE			1500
 #define SOF_TKN_INTEL_HDA_CH			1501
+
+/* AFE */
+#define SOF_TKN_MEDIATEK_AFE_RATE		1600
+#define SOF_TKN_MEDIATEK_AFE_CH			1601
+#define SOF_TKN_MEDIATEK_AFE_FORMAT		1602
 
 #endif

@@ -4,3 +4,6 @@ gpsdctl-no-autolaunch.patch
 poll-for-one-packet-at-a-time.patch
 don-t-shut-down-gpsd-when-idle.patch
 prefix-NMEA-sentences-with-device-name.patch
+sconstruct-remove-sourcecode.patch
+ubxtool-Reworks-c-option-so-that-it-s-usable.patch
+ubxtool-Use-perf-counter-for-deprecated-clock.patch

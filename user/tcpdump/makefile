@@ -1,11 +1,6 @@
-
-ifdef NOTDEF
-URL = http://www.tcpdump.org/release/tcpdump-4.6.2.tar.gz
-PATCHES = tcpdump-embed.patch tcpdump-no-version-binary.patch
-else
-URL = http://www.tcpdump.org/release/tcpdump-4.9.3.tar.gz
-PATCHES = tcpdump-no-version-binary.patch ppp-memory-allocation-fix.patch
-endif
+VERSION=4.99.0
+URL = http://www.tcpdump.org/release/tcpdump-$(VERSION).tar.gz
+PATCHES = tcpdump-no-version-binary.patch
 
 CONFVARS :=
 CONFVARS += PCAP_CONFIG=$(ROOTDIR)/tools/pcap-config

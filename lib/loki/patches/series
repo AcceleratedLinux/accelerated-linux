@@ -1,3 +1,4 @@
 loki-0.1.7-destdir.patch
 loki-0.1.7-bad-shared.patch
 loki-0.1.7-prefix.patch
+loki-0.1.7-remove-dynamic-exception.patch

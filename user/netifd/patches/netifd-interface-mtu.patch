@@ -129,8 +129,8 @@
  		addr_ext = blobmsg_get_bool(cur);
 
 diff -ur netifd.orig/scripts/netifd-proto.sh netifd/scripts/netifd-proto.sh
---- netifd.orig/scripts/netifd-proto.sh	2017-10-17 14:46:23.623610331 +1000
-+++ netifd/scripts/netifd-proto.sh	2017-10-17 14:18:40.903583439 +1000
+--- netifd.orig/scripts/netifd-proto.sh	2022-04-12 12:19:23.816366230 -0400
++++ netifd/scripts/netifd-proto.sh	2022-04-25 20:13:38.572385087 -0400
 @@ -39,6 +39,7 @@
  
  	PROTO_KEEP=0
@@ -160,29 +160,29 @@ diff -ur netifd.orig/scripts/netifd-proto.sh netifd/scripts/netifd-proto.sh
  }
  
  proto_add_ipv6_address() {
-@@ -130,8 +138,9 @@
+@@ -130,8 +137,9 @@
  	local gw="$3"
  	local source="$4"
  	local metric="$5"
 +	local mtu="$6"
  
 -	append PROTO_ROUTE "$target/$mask/$gw/$metric///$source"
-+	append PROTO_ROUTE "$target/$mask/$gw/$metric///$source/$mtu"
++	append PROTO_ROUTE "$target/$mask/$gw/$metric///$mtu/$source"
  }
  
  proto_add_ipv6_route() {
-@@ -142,8 +151,9 @@
+@@ -142,8 +150,9 @@
  	local valid="$5"
  	local source="$6"
  	local table="$7"
 +	local mtu="$8"
  
 -	append PROTO_ROUTE6 "$target/$mask/$gw/$metric/$valid/$table/$source"
-+	append PROTO_ROUTE6 "$target/$mask/$gw/$metric/$valid/$table/$source/$mtu"
++	append PROTO_ROUTE6 "$target/$mask/$gw/$metric/$valid/$table/$mtu/$source"
  }
  
  proto_add_ipv6_prefix() {
-@@ -161,7 +171,7 @@
+@@ -161,7 +170,7 @@
  
  _proto_push_ipv4_addr() {
  	local str="$1"
@@ -191,7 +191,7 @@ diff -ur netifd.orig/scripts/netifd-proto.sh netifd/scripts/netifd-proto.sh
  
  	address="${str%%/*}"
  	str="${str#*/}"
-@@ -169,13 +179,16 @@
+@@ -169,13 +178,16 @@
  	str="${str#*/}"
  	broadcast="${str%%/*}"
  	str="${str#*/}"
@@ -209,18 +209,18 @@ diff -ur netifd.orig/scripts/netifd-proto.sh netifd/scripts/netifd-proto.sh
  	json_close_object
  }
  
-@@ -223,7 +236,9 @@
+@@ -223,7 +235,9 @@
  	str="${str#*/}"
  	local table="${str%%/*}"
  	str="${str#*/}"
 -	local source="${str}"
-+	local source="${str%%/*}"
++	local mtu="${str%%/*}"
 +	str="${str#*/}"
-+	local mtu="$str"
++	local source="$str"
  
  	json_add_object ""
  	json_add_string target "$target"
-@@ -233,6 +248,7 @@
+@@ -233,6 +247,7 @@
  	[ -n "$valid" ] && json_add_int valid "$valid"
  	[ -n "$source" ] && json_add_string source "$source"
  	[ -n "$table" ] && json_add_string table "$table"
@@ -228,7 +228,7 @@ diff -ur netifd.orig/scripts/netifd-proto.sh netifd/scripts/netifd-proto.sh
  	json_close_object
  }
  
-@@ -261,6 +277,7 @@
+@@ -261,6 +276,7 @@
  
  	proto_close_nested
  	json_add_boolean keep "$PROTO_KEEP"
@@ -236,7 +236,7 @@ diff -ur netifd.orig/scripts/netifd-proto.sh netifd/scripts/netifd-proto.sh
  	_proto_push_array "ipaddr" "$PROTO_IPADDR" _proto_push_ipv4_addr
  	_proto_push_array "ip6addr" "$PROTO_IP6ADDR" _proto_push_ipv6_addr
  	_proto_push_array "routes" "$PROTO_ROUTE" _proto_push_route
-
+  
 --- netifd.orig/ubus.c	2017-10-17 14:46:23.623610331 +1000
 +++ netifd/ubus.c	2017-10-17 14:18:40.903583439 +1000
 @@ -113,11 +113,13 @@

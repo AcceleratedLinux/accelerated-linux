@@ -10,6 +10,7 @@
 /dts-v1/;
 
 #include "imx6ull.dtsi"
+#include "imx6-pstore-256MB.dtsi"
 
 / {
 	model = "Digi IX10";
@@ -194,6 +195,8 @@
 		ethphy0: ethernet-phy@2 {
 			compatible = "ethernet-phy-ieee802.3-c22";
 			reg = <2>;
+			clocks = <&clks IMX6UL_CLK_ENET_REF>;
+			clock-names = "rmii-ref";
 		};
 	};
 };

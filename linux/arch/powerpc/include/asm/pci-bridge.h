@@ -126,7 +126,11 @@ struct pci_controller {
 #endif	/* CONFIG_PPC64 */
 
 	void *private_data;
-	struct npu *npu;
+
+	/* IRQ domain hierarchy */
+	struct irq_domain	*dev_domain;
+	struct irq_domain	*msi_domain;
+	struct fwnode_handle	*fwnode;
 };
 
 /* These are used for config access before all the PCI probing
@@ -166,10 +170,10 @@ static inline struct pci_controller *pci_bus_to_host(const struct pci_bus *bus)
 	return bus->sysdata;
 }
 
-#ifndef CONFIG_PPC64
-
 extern int pci_device_from_OF_node(struct device_node *node,
 				   u8 *bus, u8 *devfn);
+#ifndef CONFIG_PPC64
+
 extern void pci_create_OF_bus_map(void);
 
 #else	/* CONFIG_PPC64 */
@@ -202,7 +206,6 @@ struct pci_dn {
 #define IODA_INVALID_PE		0xFFFFFFFF
 	unsigned int pe_number;
 #ifdef CONFIG_PCI_IOV
-	int     vf_index;		/* VF index in the PF */
 	u16     vfs_expanded;		/* number of VFs IOV BAR expanded */
 	u16     num_vfs;		/* number of VFs enabled*/
 	unsigned int *pe_num_map;	/* PE# for the first VF PE or array */
@@ -231,16 +234,6 @@ extern void pci_remove_device_node_info(struct device_node *dn);
 struct pci_dn *add_sriov_vf_pdns(struct pci_dev *pdev);
 void remove_sriov_vf_pdns(struct pci_dev *pdev);
 #endif
-
-static inline int pci_device_from_OF_node(struct device_node *np,
-					  u8 *bus, u8 *devfn)
-{
-	if (!PCI_DN(np))
-		return -ENODEV;
-	*bus = PCI_DN(np)->busno;
-	*devfn = PCI_DN(np)->devfn;
-	return 0;
-}
 
 #if defined(CONFIG_EEH)
 static inline struct eeh_dev *pdn_to_eeh_dev(struct pci_dn *pdn)

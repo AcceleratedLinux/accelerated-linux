@@ -1,33 +1,7 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
 /* QLogic qed NIC Driver
  * Copyright (c) 2015-2017  QLogic Corporation
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and /or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2019-2020 Marvell International Ltd.
  */
 
 #include <linux/types.h>
@@ -80,27 +54,27 @@
 
 /* connection context union */
 union conn_context {
-	struct e4_core_conn_context core_ctx;
-	struct e4_eth_conn_context eth_ctx;
-	struct e4_iscsi_conn_context iscsi_ctx;
-	struct e4_fcoe_conn_context fcoe_ctx;
-	struct e4_roce_conn_context roce_ctx;
+	struct core_conn_context core_ctx;
+	struct eth_conn_context eth_ctx;
+	struct iscsi_conn_context iscsi_ctx;
+	struct fcoe_conn_context fcoe_ctx;
+	struct roce_conn_context roce_ctx;
 };
 
 /* TYPE-0 task context - iSCSI, FCOE */
 union type0_task_context {
-	struct e4_iscsi_task_context iscsi_ctx;
-	struct e4_fcoe_task_context fcoe_ctx;
+	struct iscsi_task_context iscsi_ctx;
+	struct fcoe_task_context fcoe_ctx;
 };
 
 /* TYPE-1 task context - ROCE */
 union type1_task_context {
-	struct e4_rdma_task_context roce_ctx;
+	struct rdma_task_context roce_ctx;
 };
 
 struct src_ent {
-	u8 opaque[56];
-	u64 next;
+	__u8				opaque[56];
+	__be64				next;
 };
 
 #define CDUT_SEG_ALIGNMET		3 /* in 4k chunks */
@@ -120,14 +94,14 @@ struct src_ent {
 
 static bool src_proto(enum protocol_type type)
 {
-	return type == PROTOCOLID_ISCSI ||
+	return type == PROTOCOLID_TCP_ULP ||
 	       type == PROTOCOLID_FCOE ||
 	       type == PROTOCOLID_IWARP;
 }
 
 static bool tm_cid_proto(enum protocol_type type)
 {
-	return type == PROTOCOLID_ISCSI ||
+	return type == PROTOCOLID_TCP_ULP ||
 	       type == PROTOCOLID_FCOE ||
 	       type == PROTOCOLID_ROCE ||
 	       type == PROTOCOLID_IWARP;
@@ -1062,12 +1036,12 @@ static void qed_cid_map_free(struct qed_hwfn *p_hwfn)
 	u32 type, vf;
 
 	for (type = 0; type < MAX_CONN_TYPES; type++) {
-		kfree(p_mngr->acquired[type].cid_map);
+		bitmap_free(p_mngr->acquired[type].cid_map);
 		p_mngr->acquired[type].max_count = 0;
 		p_mngr->acquired[type].start_cid = 0;
 
 		for (vf = 0; vf < MAX_NUM_VFS; vf++) {
-			kfree(p_mngr->acquired_vf[type][vf].cid_map);
+			bitmap_free(p_mngr->acquired_vf[type][vf].cid_map);
 			p_mngr->acquired_vf[type][vf].max_count = 0;
 			p_mngr->acquired_vf[type][vf].start_cid = 0;
 		}
@@ -1080,15 +1054,10 @@ qed_cid_map_alloc_single(struct qed_hwfn *p_hwfn,
 			 u32 cid_start,
 			 u32 cid_count, struct qed_cid_acquired_map *p_map)
 {
-	u32 size;
-
 	if (!cid_count)
 		return 0;
 
-	size = DIV_ROUND_UP(cid_count,
-			    sizeof(unsigned long) * BITS_PER_BYTE) *
-	       sizeof(unsigned long);
-	p_map->cid_map = kzalloc(size, GFP_KERNEL);
+	p_map->cid_map = bitmap_zalloc(cid_count, GFP_KERNEL);
 	if (!p_map->cid_map)
 		return -ENOMEM;
 
@@ -1242,7 +1211,6 @@ void qed_cxt_mngr_setup(struct qed_hwfn *p_hwfn)
 	struct qed_cid_acquired_map *p_map;
 	struct qed_conn_type_cfg *p_cfg;
 	int type;
-	u32 len;
 
 	/* Reset acquired cids */
 	for (type = 0; type < MAX_CONN_TYPES; type++) {
@@ -1251,11 +1219,7 @@ void qed_cxt_mngr_setup(struct qed_hwfn *p_hwfn)
 		p_cfg = &p_mngr->conn_cfg[type];
 		if (p_cfg->cid_count) {
 			p_map = &p_mngr->acquired[type];
-			len = DIV_ROUND_UP(p_map->max_count,
-					   sizeof(unsigned long) *
-					   BITS_PER_BYTE) *
-			      sizeof(unsigned long);
-			memset(p_map->cid_map, 0, len);
+			bitmap_zero(p_map->cid_map, p_map->max_count);
 		}
 
 		if (!p_cfg->cids_per_vf)
@@ -1263,11 +1227,7 @@ void qed_cxt_mngr_setup(struct qed_hwfn *p_hwfn)
 
 		for (vf = 0; vf < MAX_NUM_VFS; vf++) {
 			p_map = &p_mngr->acquired_vf[type][vf];
-			len = DIV_ROUND_UP(p_map->max_count,
-					   sizeof(unsigned long) *
-					   BITS_PER_BYTE) *
-			      sizeof(unsigned long);
-			memset(p_map->cid_map, 0, len);
+			bitmap_zero(p_map->cid_map, p_map->max_count);
 		}
 	}
 }
@@ -1673,9 +1633,9 @@ static void qed_src_init_pf(struct qed_hwfn *p_hwfn)
 		     ilog2(rounded_conn_num));
 
 	STORE_RT_REG_AGG(p_hwfn, SRC_REG_FIRSTFREE_RT_OFFSET,
-			 p_hwfn->p_cxt_mngr->first_free);
+			 p_hwfn->p_cxt_mngr->src_t2.first_free);
 	STORE_RT_REG_AGG(p_hwfn, SRC_REG_LASTFREE_RT_OFFSET,
-			 p_hwfn->p_cxt_mngr->last_free);
+			 p_hwfn->p_cxt_mngr->src_t2.last_free);
 }
 
 /* Timers PF */
@@ -2072,7 +2032,7 @@ int qed_cxt_set_pf_params(struct qed_hwfn *p_hwfn, u32 rdma_tasks)
 					       rdma_tasks);
 		/* no need for break since RoCE coexist with Ethernet */
 	}
-	/* fall through */
+		fallthrough;
 	case QED_PCI_ETH:
 	{
 		struct qed_eth_pf_params *p_params =
@@ -2098,7 +2058,6 @@ int qed_cxt_set_pf_params(struct qed_hwfn *p_hwfn, u32 rdma_tasks)
 						    PROTOCOLID_FCOE,
 						    p_params->num_cons,
 						    0);
-
 			qed_cxt_set_proto_tid_count(p_hwfn, PROTOCOLID_FCOE,
 						    QED_CXT_FCOE_TID_SEG, 0,
 						    p_params->num_tasks, true);
@@ -2116,19 +2075,41 @@ int qed_cxt_set_pf_params(struct qed_hwfn *p_hwfn, u32 rdma_tasks)
 
 		if (p_params->num_cons && p_params->num_tasks) {
 			qed_cxt_set_proto_cid_count(p_hwfn,
-						    PROTOCOLID_ISCSI,
+						    PROTOCOLID_TCP_ULP,
 						    p_params->num_cons,
 						    0);
-
 			qed_cxt_set_proto_tid_count(p_hwfn,
-						    PROTOCOLID_ISCSI,
-						    QED_CXT_ISCSI_TID_SEG,
+						    PROTOCOLID_TCP_ULP,
+						    QED_CXT_TCP_ULP_TID_SEG,
 						    0,
 						    p_params->num_tasks,
 						    true);
 		} else {
 			DP_INFO(p_hwfn->cdev,
 				"Iscsi personality used without setting params!\n");
+		}
+		break;
+	}
+	case QED_PCI_NVMETCP:
+	{
+		struct qed_nvmetcp_pf_params *p_params;
+
+		p_params = &p_hwfn->pf_params.nvmetcp_pf_params;
+
+		if (p_params->num_cons && p_params->num_tasks) {
+			qed_cxt_set_proto_cid_count(p_hwfn,
+						    PROTOCOLID_TCP_ULP,
+						    p_params->num_cons,
+						    0);
+			qed_cxt_set_proto_tid_count(p_hwfn,
+						    PROTOCOLID_TCP_ULP,
+						    QED_CXT_TCP_ULP_TID_SEG,
+						    0,
+						    p_params->num_tasks,
+						    true);
+		} else {
+			DP_INFO(p_hwfn->cdev,
+				"NvmeTCP personality used without setting params!\n");
 		}
 		break;
 	}
@@ -2155,8 +2136,9 @@ int qed_cxt_get_tid_mem_info(struct qed_hwfn *p_hwfn,
 		seg = QED_CXT_FCOE_TID_SEG;
 		break;
 	case QED_PCI_ISCSI:
-		proto = PROTOCOLID_ISCSI;
-		seg = QED_CXT_ISCSI_TID_SEG;
+	case QED_PCI_NVMETCP:
+		proto = PROTOCOLID_TCP_ULP;
+		seg = QED_CXT_TCP_ULP_TID_SEG;
 		break;
 	default:
 		return -EINVAL;
@@ -2196,12 +2178,14 @@ qed_cxt_dynamic_ilt_alloc(struct qed_hwfn *p_hwfn,
 			  enum qed_cxt_elem_type elem_type, u32 iid)
 {
 	u32 reg_offset, shadow_line, elem_size, hw_p_size, elems_per_p, line;
+	struct tdif_task_context *tdif_context;
 	struct qed_ilt_client_cfg *p_cli;
 	struct qed_ilt_cli_blk *p_blk;
 	struct qed_ptt *p_ptt;
 	dma_addr_t p_phys;
 	u64 ilt_hw_entry;
 	void *p_virt;
+	u32 flags1;
 	int rc = 0;
 
 	switch (elem_type) {
@@ -2228,8 +2212,8 @@ qed_cxt_dynamic_ilt_alloc(struct qed_hwfn *p_hwfn,
 		p_blk = &p_cli->pf_blks[CDUT_SEG_BLK(QED_CXT_ROCE_TID_SEG)];
 		break;
 	default:
-		DP_NOTICE(p_hwfn, "-EINVALID elem type = %d", elem_type);
-		return -EINVAL;
+		DP_NOTICE(p_hwfn, "-EOPNOTSUPP elem type = %d", elem_type);
+		return -EOPNOTSUPP;
 	}
 
 	/* Calculate line in ilt */
@@ -2278,8 +2262,12 @@ qed_cxt_dynamic_ilt_alloc(struct qed_hwfn *p_hwfn,
 
 		for (elem_i = 0; elem_i < elems_per_p; elem_i++) {
 			elem = (union type1_task_context *)elem_start;
-			SET_FIELD(elem->roce_ctx.tdif_context.flags1,
-				  TDIF_TASK_CONTEXT_REF_TAG_MASK, 0xf);
+			tdif_context = &elem->roce_ctx.tdif_context;
+
+			flags1 = le32_to_cpu(tdif_context->flags1);
+			SET_FIELD(flags1, TDIF_TASK_CONTEXT_REF_TAG_MASK, 0xf);
+			tdif_context->flags1 = cpu_to_le32(flags1);
+
 			elem_start += TYPE1_TASK_CXT_SIZE(p_hwfn);
 		}
 	}
@@ -2353,6 +2341,11 @@ qed_cxt_free_ilt_range(struct qed_hwfn *p_hwfn,
 	case QED_ELEM_SRQ:
 		p_cli = &p_hwfn->p_cxt_mngr->clients[ILT_CLI_TSDM];
 		elem_size = SRQ_CXT_SIZE;
+		p_blk = &p_cli->pf_blks[SRQ_BLK];
+		break;
+	case QED_ELEM_XRC_SRQ:
+		p_cli = &p_hwfn->p_cxt_mngr->clients[ILT_CLI_TSDM];
+		elem_size = XRC_SRQ_CXT_SIZE;
 		p_blk = &p_cli->pf_blks[SRQ_BLK];
 		break;
 	case QED_ELEM_TASK:
@@ -2470,8 +2463,9 @@ int qed_cxt_get_task_ctx(struct qed_hwfn *p_hwfn,
 		seg = QED_CXT_FCOE_TID_SEG;
 		break;
 	case QED_PCI_ISCSI:
-		proto = PROTOCOLID_ISCSI;
-		seg = QED_CXT_ISCSI_TID_SEG;
+	case QED_PCI_NVMETCP:
+		proto = PROTOCOLID_TCP_ULP;
+		seg = QED_CXT_TCP_ULP_TID_SEG;
 		break;
 	default:
 		return -EINVAL;

@@ -1,0 +1,75 @@
+#!/bin/bash
+
+while getopts :o:e:i:d:s: OPT; do
+	case $OPT in
+		o)	OPERATION=$OPTARG
+			;;
+		e)	EXT_LINK=$OPTARG
+			;;
+		i)	INT_INTF=$OPTARG
+			;;
+		d)	DEST_MAC_ADDR=$OPTARG
+			;;
+		s)	SUBNET_OVERRIDE=$OPTARG
+			;;
+	esac
+done
+
+EXT_INTF=`infod_client -o get -p config.$EXT_LINK.ppp.ifname | cut -f2 `
+IP=`infod_client -o get -p config.$EXT_LINK.ppp.iplocal | cut -f2`
+DNS1=`infod_client -o get -p config.$EXT_LINK.ppp.dns1 | cut -f2`
+# These 2 will only exist for wwan connections
+SUBNET=`infod_client -o get -p config.$EXT_LINK.ppp.ipsubnet | cut -f2`
+GATEWAY=`infod_client -o get -p config.$EXT_LINK.ppp.ipgateway | cut -f2`
+
+# Check for the subnet override from config
+if [ -n "$SUBNET_OVERRIDE" ]; then
+	SUBNET=`ipcalc -m $IP/$SUBNET_OVERRIDE | cut -f2 -d'='`
+fi
+
+# For PPP, create a device route - this works on cisco and desktop linux
+case $SUBNET in
+" "|"")
+    GATEWAY=`infod_client -o get -p config.$EXT_LINK.ppp.ipremote | cut -f2`
+    SUBNET="255.255.255.255"
+	;;
+esac
+
+# When the cellmodem gets a new IP address, the cellmodem connection will
+# be disconnected and re-setup. This will make ip passthrough and the DHCP
+# server on the host device to be re-started
+#
+# Next time when the client tries to renew its current (deprecated) address,
+# it will receive DHCP NAK from server side and eventually re-discover to
+# get a new address
+#
+# That's why the lease time is as small as 60 seconds to reduce such delay
+LEASE=60
+
+case "$OPERATION" in
+	start)
+		cat <<-EOF > /etc/config/udhcpd-ippassthrough-$EXT_LINK.conf
+			start $IP
+			end $IP
+			interface $INT_INTF
+			max_leases 1
+			lease_file /var/run/udhcpd-ippassthrough-$EXT_LINK.leases
+			notify_file /etc/scripts/ippassthrough-udhcpd-notify $EXT_LINK
+			option subnet $SUBNET
+			option router $GATEWAY
+			option dns $DNS1
+			option lease $LEASE
+			${DEST_MAC_ADDR:+static_lease $DEST_MAC_ADDR $IP}
+EOF
+		>>/var/run/udhcpd-ippassthrough-$EXT_LINK.leases
+		;;
+	stop)
+		rm -f /etc/config/udhcpd-ippassthrough-$EXT_LINK.conf
+		rm -f /var/run/udhcpd-ippassthrough-$EXT_LINK.leases
+		;;
+	*)
+		echo "Usage: $0 -o start|stop -e linkname -i destination_interface -d router_mac -s subnet_override"
+		exit 1
+		;;
+esac
+exit 0

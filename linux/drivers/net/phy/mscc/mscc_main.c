@@ -17,7 +17,7 @@
 #include <linux/of.h>
 #include <linux/netdevice.h>
 #include <dt-bindings/net/mscc-phy-vsc8531.h>
-
+#include "mscc_serdes.h"
 #include "mscc.h"
 
 static const struct vsc85xx_hw_stat vsc85xx_hw_stats[] = {
@@ -273,12 +273,12 @@ static int vsc85xx_downshift_set(struct phy_device *phydev, u8 count)
 static int vsc85xx_wol_set(struct phy_device *phydev,
 			   struct ethtool_wolinfo *wol)
 {
+	const u8 *mac_addr = phydev->attached_dev->dev_addr;
 	int rc;
 	u16 reg_val;
 	u8  i;
 	u16 pwd[3] = {0, 0, 0};
 	struct ethtool_wolinfo *wol_conf = wol;
-	u8 *mac_addr = phydev->attached_dev->dev_addr;
 
 	mutex_lock(&phydev->lock);
 	rc = phy_select_page(phydev, MSCC_PHY_PAGE_EXTENDED_2);
@@ -629,7 +629,7 @@ static int vsc8531_pre_init_seq_set(struct phy_device *phydev)
 	if (rc < 0)
 		return rc;
 	rc = phy_modify_paged(phydev, MSCC_PHY_PAGE_TEST,
-			      MSCC_PHY_TEST_PAGE_8, 0x8000, 0x8000);
+			      MSCC_PHY_TEST_PAGE_8, TR_CLK_DISABLE, TR_CLK_DISABLE);
 	if (rc < 0)
 		return rc;
 
@@ -689,7 +689,7 @@ out_unlock:
 }
 
 /* phydev->bus->mdio_lock should be locked when using this function */
-static int phy_base_write(struct phy_device *phydev, u32 regnum, u16 val)
+int phy_base_write(struct phy_device *phydev, u32 regnum, u16 val)
 {
 	if (unlikely(!mutex_is_locked(&phydev->mdio.bus->mdio_lock))) {
 		dev_err(&phydev->mdio.dev, "MDIO bus lock not held!\n");
@@ -700,7 +700,7 @@ static int phy_base_write(struct phy_device *phydev, u32 regnum, u16 val)
 }
 
 /* phydev->bus->mdio_lock should be locked when using this function */
-static int phy_base_read(struct phy_device *phydev, u32 regnum)
+int phy_base_read(struct phy_device *phydev, u32 regnum)
 {
 	if (unlikely(!mutex_is_locked(&phydev->mdio.bus->mdio_lock))) {
 		dev_err(&phydev->mdio.dev, "MDIO bus lock not held!\n");
@@ -708,6 +708,113 @@ static int phy_base_read(struct phy_device *phydev, u32 regnum)
 	}
 
 	return __phy_package_read(phydev, regnum);
+}
+
+u32 vsc85xx_csr_read(struct phy_device *phydev,
+		     enum csr_target target, u32 reg)
+{
+	unsigned long deadline;
+	u32 val, val_l, val_h;
+
+	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_CSR_CNTL);
+
+	/* CSR registers are grouped under different Target IDs.
+	 * 6-bit Target_ID is split between MSCC_EXT_PAGE_CSR_CNTL_20 and
+	 * MSCC_EXT_PAGE_CSR_CNTL_19 registers.
+	 * Target_ID[5:2] maps to bits[3:0] of MSCC_EXT_PAGE_CSR_CNTL_20
+	 * and Target_ID[1:0] maps to bits[13:12] of MSCC_EXT_PAGE_CSR_CNTL_19.
+	 */
+
+	/* Setup the Target ID */
+	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_20,
+		       MSCC_PHY_CSR_CNTL_20_TARGET(target >> 2));
+
+	if ((target >> 2 == 0x1) || (target >> 2 == 0x3))
+		/* non-MACsec access */
+		target &= 0x3;
+	else
+		target = 0;
+
+	/* Trigger CSR Action - Read into the CSR's */
+	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_19,
+		       MSCC_PHY_CSR_CNTL_19_CMD | MSCC_PHY_CSR_CNTL_19_READ |
+		       MSCC_PHY_CSR_CNTL_19_REG_ADDR(reg) |
+		       MSCC_PHY_CSR_CNTL_19_TARGET(target));
+
+	/* Wait for register access*/
+	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
+	do {
+		usleep_range(500, 1000);
+		val = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_19);
+	} while (time_before(jiffies, deadline) &&
+		!(val & MSCC_PHY_CSR_CNTL_19_CMD));
+
+	if (!(val & MSCC_PHY_CSR_CNTL_19_CMD))
+		return 0xffffffff;
+
+	/* Read the Least Significant Word (LSW) (17) */
+	val_l = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_17);
+
+	/* Read the Most Significant Word (MSW) (18) */
+	val_h = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_18);
+
+	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+		       MSCC_PHY_PAGE_STANDARD);
+
+	return (val_h << 16) | val_l;
+}
+
+int vsc85xx_csr_write(struct phy_device *phydev,
+		      enum csr_target target, u32 reg, u32 val)
+{
+	unsigned long deadline;
+
+	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_CSR_CNTL);
+
+	/* CSR registers are grouped under different Target IDs.
+	 * 6-bit Target_ID is split between MSCC_EXT_PAGE_CSR_CNTL_20 and
+	 * MSCC_EXT_PAGE_CSR_CNTL_19 registers.
+	 * Target_ID[5:2] maps to bits[3:0] of MSCC_EXT_PAGE_CSR_CNTL_20
+	 * and Target_ID[1:0] maps to bits[13:12] of MSCC_EXT_PAGE_CSR_CNTL_19.
+	 */
+
+	/* Setup the Target ID */
+	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_20,
+		       MSCC_PHY_CSR_CNTL_20_TARGET(target >> 2));
+
+	/* Write the Least Significant Word (LSW) (17) */
+	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_17, (u16)val);
+
+	/* Write the Most Significant Word (MSW) (18) */
+	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_18, (u16)(val >> 16));
+
+	if ((target >> 2 == 0x1) || (target >> 2 == 0x3))
+		/* non-MACsec access */
+		target &= 0x3;
+	else
+		target = 0;
+
+	/* Trigger CSR Action - Write into the CSR's */
+	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_19,
+		       MSCC_PHY_CSR_CNTL_19_CMD |
+		       MSCC_PHY_CSR_CNTL_19_REG_ADDR(reg) |
+		       MSCC_PHY_CSR_CNTL_19_TARGET(target));
+
+	/* Wait for register access */
+	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
+	do {
+		usleep_range(500, 1000);
+		val = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_19);
+	} while (time_before(jiffies, deadline) &&
+		 !(val & MSCC_PHY_CSR_CNTL_19_CMD));
+
+	if (!(val & MSCC_PHY_CSR_CNTL_19_CMD))
+		return -ETIMEDOUT;
+
+	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+		       MSCC_PHY_PAGE_STANDARD);
+
+	return 0;
 }
 
 /* bus->mdio_lock should be locked when using this function */
@@ -719,7 +826,7 @@ static void vsc8584_csr_write(struct phy_device *phydev, u16 addr, u32 val)
 }
 
 /* bus->mdio_lock should be locked when using this function */
-static int vsc8584_cmd(struct phy_device *phydev, u16 val)
+int vsc8584_cmd(struct phy_device *phydev, u16 val)
 {
 	unsigned long deadline;
 	u16 reg_val;
@@ -1026,7 +1133,7 @@ static int vsc8574_config_pre_init(struct phy_device *phydev)
 	phy_base_write(phydev, MSCC_PHY_TEST_PAGE_5, 0x1b20);
 
 	reg = phy_base_read(phydev, MSCC_PHY_TEST_PAGE_8);
-	reg |= 0x8000;
+	reg |= TR_CLK_DISABLE;
 	phy_base_write(phydev, MSCC_PHY_TEST_PAGE_8, reg);
 
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_TR);
@@ -1046,7 +1153,7 @@ static int vsc8574_config_pre_init(struct phy_device *phydev)
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_TEST);
 
 	reg = phy_base_read(phydev, MSCC_PHY_TEST_PAGE_8);
-	reg &= ~0x8000;
+	reg &= ~TR_CLK_DISABLE;
 	phy_base_write(phydev, MSCC_PHY_TEST_PAGE_8, reg);
 
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
@@ -1131,6 +1238,92 @@ out:
 	return ret;
 }
 
+/* Access LCPLL Cfg_2 */
+static void vsc8584_pll5g_cfg2_wr(struct phy_device *phydev,
+				  bool disable_fsm)
+{
+	u32 rd_dat;
+
+	rd_dat = vsc85xx_csr_read(phydev, MACRO_CTRL, PHY_S6G_PLL5G_CFG2);
+	rd_dat &= ~BIT(PHY_S6G_CFG2_FSM_DIS);
+	rd_dat |= (disable_fsm << PHY_S6G_CFG2_FSM_DIS);
+	vsc85xx_csr_write(phydev, MACRO_CTRL, PHY_S6G_PLL5G_CFG2, rd_dat);
+}
+
+/* trigger a read to the spcified MCB */
+static int vsc8584_mcb_rd_trig(struct phy_device *phydev,
+			       u32 mcb_reg_addr, u8 mcb_slave_num)
+{
+	u32 rd_dat = 0;
+
+	/* read MCB */
+	vsc85xx_csr_write(phydev, MACRO_CTRL, mcb_reg_addr,
+			  (0x40000000 | (1L << mcb_slave_num)));
+
+	return read_poll_timeout(vsc85xx_csr_read, rd_dat,
+				 !(rd_dat & 0x40000000),
+				 4000, 200000, 0,
+				 phydev, MACRO_CTRL, mcb_reg_addr);
+}
+
+/* trigger a write to the spcified MCB */
+static int vsc8584_mcb_wr_trig(struct phy_device *phydev,
+			       u32 mcb_reg_addr,
+			       u8 mcb_slave_num)
+{
+	u32 rd_dat = 0;
+
+	/* write back MCB */
+	vsc85xx_csr_write(phydev, MACRO_CTRL, mcb_reg_addr,
+			  (0x80000000 | (1L << mcb_slave_num)));
+
+	return read_poll_timeout(vsc85xx_csr_read, rd_dat,
+				 !(rd_dat & 0x80000000),
+				 4000, 200000, 0,
+				 phydev, MACRO_CTRL, mcb_reg_addr);
+}
+
+/* Sequence to Reset LCPLL for the VIPER and ELISE PHY */
+static int vsc8584_pll5g_reset(struct phy_device *phydev)
+{
+	bool dis_fsm;
+	int ret = 0;
+
+	ret = vsc8584_mcb_rd_trig(phydev, 0x11, 0);
+	if (ret < 0)
+		goto done;
+	dis_fsm = 1;
+
+	/* Reset LCPLL */
+	vsc8584_pll5g_cfg2_wr(phydev, dis_fsm);
+
+	/* write back LCPLL MCB */
+	ret = vsc8584_mcb_wr_trig(phydev, 0x11, 0);
+	if (ret < 0)
+		goto done;
+
+	/* 10 mSec sleep while LCPLL is hold in reset */
+	usleep_range(10000, 20000);
+
+	/* read LCPLL MCB into CSRs */
+	ret = vsc8584_mcb_rd_trig(phydev, 0x11, 0);
+	if (ret < 0)
+		goto done;
+	dis_fsm = 0;
+
+	/* Release the Reset of LCPLL */
+	vsc8584_pll5g_cfg2_wr(phydev, dis_fsm);
+
+	/* write back LCPLL MCB */
+	ret = vsc8584_mcb_wr_trig(phydev, 0x11, 0);
+	if (ret < 0)
+		goto done;
+
+	usleep_range(110000, 200000);
+done:
+	return ret;
+}
+
 /* bus->mdio_lock should be locked when using this function */
 static int vsc8584_config_pre_init(struct phy_device *phydev)
 {
@@ -1169,6 +1362,12 @@ static int vsc8584_config_pre_init(struct phy_device *phydev)
 	u16 crc, reg;
 	int ret;
 
+	ret = vsc8584_pll5g_reset(phydev);
+	if (ret < 0) {
+		dev_err(dev, "failed LCPLL reset, ret: %d\n", ret);
+		return ret;
+	}
+
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
 
 	/* all writes below are broadcasted to all PHYs in the same package */
@@ -1196,7 +1395,7 @@ static int vsc8584_config_pre_init(struct phy_device *phydev)
 	phy_base_write(phydev, MSCC_PHY_TEST_PAGE_5, 0x1f20);
 
 	reg = phy_base_read(phydev, MSCC_PHY_TEST_PAGE_8);
-	reg |= 0x8000;
+	reg |= TR_CLK_DISABLE;
 	phy_base_write(phydev, MSCC_PHY_TEST_PAGE_8, reg);
 
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_TR);
@@ -1225,7 +1424,7 @@ static int vsc8584_config_pre_init(struct phy_device *phydev)
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_TEST);
 
 	reg = phy_base_read(phydev, MSCC_PHY_TEST_PAGE_8);
-	reg &= ~0x8000;
+	reg &= ~TR_CLK_DISABLE;
 	phy_base_write(phydev, MSCC_PHY_TEST_PAGE_8, reg);
 
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
@@ -1273,6 +1472,24 @@ static int vsc8584_config_pre_init(struct phy_device *phydev)
 	if (ret)
 		goto out;
 
+	/* Write patch vector 0, to skip IB cal polling  */
+	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_EXTENDED_GPIO);
+	reg = MSCC_ROM_TRAP_SERDES_6G_CFG; /* ROM address to trap, for patch vector 0 */
+	ret = phy_base_write(phydev, MSCC_TRAP_ROM_ADDR(1), reg);
+	if (ret)
+		goto out;
+
+	reg = MSCC_RAM_TRAP_SERDES_6G_CFG; /* RAM address to jump to, when patch vector 0 enabled */
+	ret = phy_base_write(phydev, MSCC_PATCH_RAM_ADDR(1), reg);
+	if (ret)
+		goto out;
+
+	reg = phy_base_read(phydev, MSCC_INT_MEM_CNTL);
+	reg |= PATCH_VEC_ZERO_EN; /* bit 8, enable patch vector 0 */
+	ret = phy_base_write(phydev, MSCC_INT_MEM_CNTL, reg);
+	if (ret)
+		goto out;
+
 	vsc8584_micro_deassert_reset(phydev, true);
 
 out:
@@ -1288,7 +1505,7 @@ static void vsc8584_get_base_addr(struct phy_device *phydev)
 	struct vsc8531_private *vsc8531 = phydev->priv;
 	u16 val, addr;
 
-	mutex_lock(&phydev->mdio.bus->mdio_lock);
+	phy_lock_mdio_bus(phydev);
 	__phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_EXTENDED);
 
 	addr = __phy_read(phydev, MSCC_PHY_EXT_PHY_CNTL_4);
@@ -1297,14 +1514,175 @@ static void vsc8584_get_base_addr(struct phy_device *phydev)
 	val = __phy_read(phydev, MSCC_PHY_ACTIPHY_CNTL);
 
 	__phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 
-	if (val & PHY_ADDR_REVERSED)
+	/* In the package, there are two pairs of PHYs (PHY0 + PHY2 and
+	 * PHY1 + PHY3). The first PHY of each pair (PHY0 and PHY1) is
+	 * the base PHY for timestamping operations.
+	 */
+	vsc8531->ts_base_addr = phydev->mdio.addr;
+	vsc8531->ts_base_phy = addr;
+
+	if (val & PHY_ADDR_REVERSED) {
 		vsc8531->base_addr = phydev->mdio.addr + addr;
-	else
+		if (addr > 1) {
+			vsc8531->ts_base_addr += 2;
+			vsc8531->ts_base_phy += 2;
+		}
+	} else {
 		vsc8531->base_addr = phydev->mdio.addr - addr;
+		if (addr > 1) {
+			vsc8531->ts_base_addr -= 2;
+			vsc8531->ts_base_phy -= 2;
+		}
+	}
 
 	vsc8531->addr = addr;
+}
+
+static void vsc85xx_coma_mode_release(struct phy_device *phydev)
+{
+	/* The coma mode (pin or reg) provides an optional feature that
+	 * may be used to control when the PHYs become active.
+	 * Alternatively the COMA_MODE pin may be connected low
+	 * so that the PHYs are fully active once out of reset.
+	 */
+
+	/* Enable output (mode=0) and write zero to it */
+	vsc85xx_phy_write_page(phydev, MSCC_PHY_PAGE_EXTENDED_GPIO);
+	__phy_modify(phydev, MSCC_PHY_GPIO_CONTROL_2,
+		     MSCC_PHY_COMA_MODE | MSCC_PHY_COMA_OUTPUT, 0);
+	vsc85xx_phy_write_page(phydev, MSCC_PHY_PAGE_STANDARD);
+}
+
+static int vsc8584_config_host_serdes(struct phy_device *phydev)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+	int ret;
+	u16 val;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_EXTENDED_GPIO);
+	if (ret)
+		return ret;
+
+	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
+	val &= ~MAC_CFG_MASK;
+	if (phydev->interface == PHY_INTERFACE_MODE_QSGMII) {
+		val |= MAC_CFG_QSGMII;
+	} else if (phydev->interface == PHY_INTERFACE_MODE_SGMII) {
+		val |= MAC_CFG_SGMII;
+	} else {
+		ret = -EINVAL;
+		return ret;
+	}
+
+	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
+	if (ret)
+		return ret;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_STANDARD);
+	if (ret)
+		return ret;
+
+	val = PROC_CMD_MCB_ACCESS_MAC_CONF | PROC_CMD_RST_CONF_PORT |
+		PROC_CMD_READ_MOD_WRITE_PORT;
+	if (phydev->interface == PHY_INTERFACE_MODE_QSGMII)
+		val |= PROC_CMD_QSGMII_MAC;
+	else
+		val |= PROC_CMD_SGMII_MAC;
+
+	ret = vsc8584_cmd(phydev, val);
+	if (ret)
+		return ret;
+
+	usleep_range(10000, 20000);
+
+	/* Disable SerDes for 100Base-FX */
+	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
+			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
+			  PROC_CMD_FIBER_DISABLE |
+			  PROC_CMD_READ_MOD_WRITE_PORT |
+			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_100BASE_FX);
+	if (ret)
+		return ret;
+
+	/* Disable SerDes for 1000Base-X */
+	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
+			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
+			  PROC_CMD_FIBER_DISABLE |
+			  PROC_CMD_READ_MOD_WRITE_PORT |
+			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_1000BASE_X);
+	if (ret)
+		return ret;
+
+	return vsc85xx_sd6g_config_v2(phydev);
+}
+
+static int vsc8574_config_host_serdes(struct phy_device *phydev)
+{
+	struct vsc8531_private *vsc8531 = phydev->priv;
+	int ret;
+	u16 val;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_EXTENDED_GPIO);
+	if (ret)
+		return ret;
+
+	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
+	val &= ~MAC_CFG_MASK;
+	if (phydev->interface == PHY_INTERFACE_MODE_QSGMII) {
+		val |= MAC_CFG_QSGMII;
+	} else if (phydev->interface == PHY_INTERFACE_MODE_SGMII) {
+		val |= MAC_CFG_SGMII;
+	} else if (phy_interface_is_rgmii(phydev)) {
+		val |= MAC_CFG_RGMII;
+	} else {
+		ret = -EINVAL;
+		return ret;
+	}
+
+	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
+	if (ret)
+		return ret;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_STANDARD);
+	if (ret)
+		return ret;
+
+	if (!phy_interface_is_rgmii(phydev)) {
+		val = PROC_CMD_MCB_ACCESS_MAC_CONF | PROC_CMD_RST_CONF_PORT |
+			PROC_CMD_READ_MOD_WRITE_PORT;
+		if (phydev->interface == PHY_INTERFACE_MODE_QSGMII)
+			val |= PROC_CMD_QSGMII_MAC;
+		else
+			val |= PROC_CMD_SGMII_MAC;
+
+		ret = vsc8584_cmd(phydev, val);
+		if (ret)
+			return ret;
+
+		usleep_range(10000, 20000);
+	}
+
+	/* Disable SerDes for 100Base-FX */
+	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
+			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
+			  PROC_CMD_FIBER_DISABLE |
+			  PROC_CMD_READ_MOD_WRITE_PORT |
+			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_100BASE_FX);
+	if (ret)
+		return ret;
+
+	/* Disable SerDes for 1000Base-X */
+	return vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
+			   PROC_CMD_FIBER_PORT(vsc8531->addr) |
+			   PROC_CMD_FIBER_DISABLE |
+			   PROC_CMD_READ_MOD_WRITE_PORT |
+			   PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_1000BASE_X);
 }
 
 static int vsc8584_config_init(struct phy_device *phydev)
@@ -1315,7 +1693,7 @@ static int vsc8584_config_init(struct phy_device *phydev)
 
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
 
-	mutex_lock(&phydev->mdio.bus->mdio_lock);
+	phy_lock_mdio_bus(phydev);
 
 	/* Some parts of the init sequence are identical for every PHY in the
 	 * package. Some parts are modifying the GPIO register bank which is a
@@ -1343,12 +1721,23 @@ static int vsc8584_config_init(struct phy_device *phydev)
 		case PHY_ID_VSC8572:
 		case PHY_ID_VSC8574:
 			ret = vsc8574_config_pre_init(phydev);
+			if (ret)
+				goto err;
+			ret = vsc8574_config_host_serdes(phydev);
+			if (ret)
+				goto err;
 			break;
 		case PHY_ID_VSC856X:
 		case PHY_ID_VSC8575:
 		case PHY_ID_VSC8582:
 		case PHY_ID_VSC8584:
 			ret = vsc8584_config_pre_init(phydev);
+			if (ret)
+				goto err;
+			ret = vsc8584_config_host_serdes(phydev);
+			if (ret)
+				goto err;
+			vsc85xx_coma_mode_release(phydev);
 			break;
 		default:
 			ret = -EINVAL;
@@ -1359,66 +1748,15 @@ static int vsc8584_config_init(struct phy_device *phydev)
 			goto err;
 	}
 
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
-		       MSCC_PHY_PAGE_EXTENDED_GPIO);
-
-	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
-	val &= ~MAC_CFG_MASK;
-	if (phydev->interface == PHY_INTERFACE_MODE_QSGMII) {
-		val |= MAC_CFG_QSGMII;
-	} else if (phydev->interface == PHY_INTERFACE_MODE_SGMII) {
-		val |= MAC_CFG_SGMII;
-	} else if (phy_interface_is_rgmii(phydev)) {
-		val |= MAC_CFG_RGMII;
-	} else {
-		ret = -EINVAL;
-		goto err;
-	}
-
-	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
-	if (ret)
-		goto err;
-
-	if (!phy_interface_is_rgmii(phydev)) {
-		val = PROC_CMD_MCB_ACCESS_MAC_CONF | PROC_CMD_RST_CONF_PORT |
-			PROC_CMD_READ_MOD_WRITE_PORT;
-		if (phydev->interface == PHY_INTERFACE_MODE_QSGMII)
-			val |= PROC_CMD_QSGMII_MAC;
-		else
-			val |= PROC_CMD_SGMII_MAC;
-
-		ret = vsc8584_cmd(phydev, val);
-		if (ret)
-			goto err;
-
-		usleep_range(10000, 20000);
-	}
-
-	/* Disable SerDes for 100Base-FX */
-	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
-			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
-			  PROC_CMD_FIBER_DISABLE |
-			  PROC_CMD_READ_MOD_WRITE_PORT |
-			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_100BASE_FX);
-	if (ret)
-		goto err;
-
-	/* Disable SerDes for 1000Base-X */
-	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
-			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
-			  PROC_CMD_FIBER_DISABLE |
-			  PROC_CMD_READ_MOD_WRITE_PORT |
-			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_1000BASE_X);
-	if (ret)
-		goto err;
-
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 
 	ret = vsc8584_macsec_init(phydev);
 	if (ret)
 		return ret;
 
-	phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
+	ret = vsc8584_ptp_init(phydev);
+	if (ret)
+		return ret;
 
 	val = phy_read(phydev, MSCC_PHY_EXT_PHY_CNTL_1);
 	val &= ~(MEDIA_OP_MODE_MASK | VSC8584_MAC_IF_SELECTION_MASK);
@@ -1449,23 +1787,31 @@ static int vsc8584_config_init(struct phy_device *phydev)
 	return 0;
 
 err:
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 	return ret;
 }
 
 static irqreturn_t vsc8584_handle_interrupt(struct phy_device *phydev)
 {
+	irqreturn_t ret;
 	int irq_status;
 
 	irq_status = phy_read(phydev, MII_VSC85XX_INT_STATUS);
-	if (irq_status < 0 || !(irq_status & MII_VSC85XX_INT_MASK_MASK))
+	if (irq_status < 0)
 		return IRQ_NONE;
+
+	/* Timestamping IRQ does not set a bit in the global INT_STATUS, so
+	 * irq_status would be 0.
+	 */
+	ret = vsc8584_handle_ts_interrupt(phydev);
+	if (!(irq_status & MII_VSC85XX_INT_MASK_MASK))
+		return ret;
 
 	if (irq_status & MII_VSC85XX_INT_MASK_EXT)
 		vsc8584_handle_macsec_interrupt(phydev);
 
 	if (irq_status & MII_VSC85XX_INT_MASK_LINK_CHG)
-		phy_mac_interrupt(phydev);
+		phy_trigger_machine(phydev);
 
 	return IRQ_HANDLED;
 }
@@ -1508,14 +1854,98 @@ static int vsc85xx_config_init(struct phy_device *phydev)
 	return 0;
 }
 
-static int vsc8584_did_interrupt(struct phy_device *phydev)
+static int __phy_write_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb,
+			       u32 op)
 {
-	int rc = 0;
+	unsigned long deadline;
+	u32 val;
+	int ret;
 
-	if (phydev->interrupts == PHY_INTERRUPT_ENABLED)
-		rc = phy_read(phydev, MII_VSC85XX_INT_STATUS);
+	ret = vsc85xx_csr_write(phydev, PHY_MCB_TARGET, reg,
+				op | (1 << mcb));
+	if (ret)
+		return -EINVAL;
 
-	return (rc < 0) ? 0 : rc & MII_VSC85XX_INT_MASK_MASK;
+	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
+	do {
+		usleep_range(500, 1000);
+		val = vsc85xx_csr_read(phydev, PHY_MCB_TARGET, reg);
+
+		if (val == 0xffffffff)
+			return -EIO;
+
+	} while (time_before(jiffies, deadline) && (val & op));
+
+	if (val & op)
+		return -ETIMEDOUT;
+
+	return 0;
+}
+
+/* Trigger a read to the specified MCB */
+int phy_update_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb)
+{
+	return __phy_write_mcb_s6g(phydev, reg, mcb, PHY_MCB_S6G_READ);
+}
+
+/* Trigger a write to the specified MCB */
+int phy_commit_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb)
+{
+	return __phy_write_mcb_s6g(phydev, reg, mcb, PHY_MCB_S6G_WRITE);
+}
+
+static int vsc8514_config_host_serdes(struct phy_device *phydev)
+{
+	int ret;
+	u16 val;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_EXTENDED_GPIO);
+	if (ret)
+		return ret;
+
+	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
+	val &= ~MAC_CFG_MASK;
+	val |= MAC_CFG_QSGMII;
+	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
+	if (ret)
+		return ret;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_STANDARD);
+	if (ret)
+		return ret;
+
+	ret = vsc8584_cmd(phydev, PROC_CMD_NOP);
+	if (ret)
+		return ret;
+
+	ret = vsc8584_cmd(phydev,
+			  PROC_CMD_MCB_ACCESS_MAC_CONF |
+			  PROC_CMD_RST_CONF_PORT |
+			  PROC_CMD_READ_MOD_WRITE_PORT | PROC_CMD_QSGMII_MAC);
+	if (ret) {
+		dev_err(&phydev->mdio.dev, "%s: QSGMII error: %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	/* Apply 6G SerDes FOJI Algorithm
+	 *  Initial condition requirement:
+	 *  1. hold 8051 in reset
+	 *  2. disable patch vector 0, in order to allow IB cal poll during FoJi
+	 *  3. deassert 8051 reset after change patch vector status
+	 *  4. proceed with FoJi (vsc85xx_sd6g_config_v2)
+	 */
+	vsc8584_micro_assert_reset(phydev);
+	val = phy_base_read(phydev, MSCC_INT_MEM_CNTL);
+	/* clear bit 8, to disable patch vector 0 */
+	val &= ~PATCH_VEC_ZERO_EN;
+	ret = phy_base_write(phydev, MSCC_INT_MEM_CNTL, val);
+	/* Enable 8051 clock, don't set patch present, disable PRAM clock override */
+	vsc8584_micro_deassert_reset(phydev, false);
+
+	return vsc85xx_sd6g_config_v2(phydev);
 }
 
 static int vsc8514_config_pre_init(struct phy_device *phydev)
@@ -1546,8 +1976,16 @@ static int vsc8514_config_pre_init(struct phy_device *phydev)
 		{0x16b2, 0x00007000},
 		{0x16b4, 0x00000814},
 	};
+	struct device *dev = &phydev->mdio.dev;
 	unsigned int i;
 	u16 reg;
+	int ret;
+
+	ret = vsc8584_pll5g_reset(phydev);
+	if (ret < 0) {
+		dev_err(dev, "failed LCPLL reset, ret: %d\n", ret);
+		return ret;
+	}
 
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
 
@@ -1579,155 +2017,52 @@ static int vsc8514_config_pre_init(struct phy_device *phydev)
 	reg &= ~SMI_BROADCAST_WR_EN;
 	phy_base_write(phydev, MSCC_PHY_EXT_CNTL_STATUS, reg);
 
-	return 0;
-}
-
-static u32 vsc85xx_csr_ctrl_phy_read(struct phy_device *phydev,
-				     u32 target, u32 reg)
-{
-	unsigned long deadline;
-	u32 val, val_l, val_h;
-
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_CSR_CNTL);
-
-	/* CSR registers are grouped under different Target IDs.
-	 * 6-bit Target_ID is split between MSCC_EXT_PAGE_CSR_CNTL_20 and
-	 * MSCC_EXT_PAGE_CSR_CNTL_19 registers.
-	 * Target_ID[5:2] maps to bits[3:0] of MSCC_EXT_PAGE_CSR_CNTL_20
-	 * and Target_ID[1:0] maps to bits[13:12] of MSCC_EXT_PAGE_CSR_CNTL_19.
+	/* Add pre-patching commands to:
+	 * 1. enable 8051 clock, operate 8051 clock at 125 MHz
+	 * instead of HW default 62.5MHz
+	 * 2. write patch vector 0, to skip IB cal polling executed
+	 * as part of the 0x80E0 ROM command
 	 */
+	vsc8584_micro_deassert_reset(phydev, false);
 
-	/* Setup the Target ID */
-	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_20,
-		       MSCC_PHY_CSR_CNTL_20_TARGET(target >> 2));
-
-	/* Trigger CSR Action - Read into the CSR's */
-	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_19,
-		       MSCC_PHY_CSR_CNTL_19_CMD | MSCC_PHY_CSR_CNTL_19_READ |
-		       MSCC_PHY_CSR_CNTL_19_REG_ADDR(reg) |
-		       MSCC_PHY_CSR_CNTL_19_TARGET(target & 0x3));
-
-	/* Wait for register access*/
-	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
-	do {
-		usleep_range(500, 1000);
-		val = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_19);
-	} while (time_before(jiffies, deadline) &&
-		!(val & MSCC_PHY_CSR_CNTL_19_CMD));
-
-	if (!(val & MSCC_PHY_CSR_CNTL_19_CMD))
-		return 0xffffffff;
-
-	/* Read the Least Significant Word (LSW) (17) */
-	val_l = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_17);
-
-	/* Read the Most Significant Word (MSW) (18) */
-	val_h = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_18);
-
+	vsc8584_micro_assert_reset(phydev);
 	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
-		       MSCC_PHY_PAGE_STANDARD);
-
-	return (val_h << 16) | val_l;
-}
-
-static int vsc85xx_csr_ctrl_phy_write(struct phy_device *phydev,
-				      u32 target, u32 reg, u32 val)
-{
-	unsigned long deadline;
-
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_CSR_CNTL);
-
-	/* CSR registers are grouped under different Target IDs.
-	 * 6-bit Target_ID is split between MSCC_EXT_PAGE_CSR_CNTL_20 and
-	 * MSCC_EXT_PAGE_CSR_CNTL_19 registers.
-	 * Target_ID[5:2] maps to bits[3:0] of MSCC_EXT_PAGE_CSR_CNTL_20
-	 * and Target_ID[1:0] maps to bits[13:12] of MSCC_EXT_PAGE_CSR_CNTL_19.
-	 */
-
-	/* Setup the Target ID */
-	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_20,
-		       MSCC_PHY_CSR_CNTL_20_TARGET(target >> 2));
-
-	/* Write the Least Significant Word (LSW) (17) */
-	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_17, (u16)val);
-
-	/* Write the Most Significant Word (MSW) (18) */
-	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_18, (u16)(val >> 16));
-
-	/* Trigger CSR Action - Write into the CSR's */
-	phy_base_write(phydev, MSCC_EXT_PAGE_CSR_CNTL_19,
-		       MSCC_PHY_CSR_CNTL_19_CMD |
-		       MSCC_PHY_CSR_CNTL_19_REG_ADDR(reg) |
-		       MSCC_PHY_CSR_CNTL_19_TARGET(target & 0x3));
-
-	/* Wait for register access */
-	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
-	do {
-		usleep_range(500, 1000);
-		val = phy_base_read(phydev, MSCC_EXT_PAGE_CSR_CNTL_19);
-	} while (time_before(jiffies, deadline) &&
-		 !(val & MSCC_PHY_CSR_CNTL_19_CMD));
-
-	if (!(val & MSCC_PHY_CSR_CNTL_19_CMD))
-		return -ETIMEDOUT;
-
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
-		       MSCC_PHY_PAGE_STANDARD);
-
-	return 0;
-}
-
-static int __phy_write_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb,
-			       u32 op)
-{
-	unsigned long deadline;
-	u32 val;
-	int ret;
-
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET, reg,
-					 op | (1 << mcb));
+		       MSCC_PHY_PAGE_EXTENDED_GPIO);
+	/* ROM address to trap, for patch vector 0 */
+	reg = MSCC_ROM_TRAP_SERDES_6G_CFG;
+	ret = phy_base_write(phydev, MSCC_TRAP_ROM_ADDR(1), reg);
 	if (ret)
-		return -EINVAL;
+		goto err;
+	/* RAM address to jump to, when patch vector 0 enabled */
+	reg = MSCC_RAM_TRAP_SERDES_6G_CFG;
+	ret = phy_base_write(phydev, MSCC_PATCH_RAM_ADDR(1), reg);
+	if (ret)
+		goto err;
+	reg = phy_base_read(phydev, MSCC_INT_MEM_CNTL);
+	reg |= PATCH_VEC_ZERO_EN; /* bit 8, enable patch vector 0 */
+	ret = phy_base_write(phydev, MSCC_INT_MEM_CNTL, reg);
+	if (ret)
+		goto err;
 
-	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
-	do {
-		usleep_range(500, 1000);
-		val = vsc85xx_csr_ctrl_phy_read(phydev, PHY_MCB_TARGET, reg);
-
-		if (val == 0xffffffff)
-			return -EIO;
-
-	} while (time_before(jiffies, deadline) && (val & op));
-
-	if (val & op)
-		return -ETIMEDOUT;
-
-	return 0;
-}
-
-/* Trigger a read to the spcified MCB */
-static int phy_update_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb)
-{
-	return __phy_write_mcb_s6g(phydev, reg, mcb, PHY_MCB_S6G_READ);
-}
-
-/* Trigger a write to the spcified MCB */
-static int phy_commit_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb)
-{
-	return __phy_write_mcb_s6g(phydev, reg, mcb, PHY_MCB_S6G_WRITE);
+	/* Enable 8051 clock, don't set patch present
+	 * yet, disable PRAM clock override
+	 */
+	vsc8584_micro_deassert_reset(phydev, false);
+	return ret;
+ err:
+	/* restore 8051 and bail w error */
+	vsc8584_micro_deassert_reset(phydev, false);
+	return ret;
 }
 
 static int vsc8514_config_init(struct phy_device *phydev)
 {
 	struct vsc8531_private *vsc8531 = phydev->priv;
-	unsigned long deadline;
 	int ret, i;
-	u16 val;
-	u32 reg;
 
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
 
-	mutex_lock(&phydev->mdio.bus->mdio_lock);
+	phy_lock_mdio_bus(phydev);
 
 	/* Some parts of the init sequence are identical for every PHY in the
 	 * package. Some parts are modifying the GPIO register bank which is a
@@ -1740,125 +2075,17 @@ static int vsc8514_config_init(struct phy_device *phydev)
 	 * do the correct init sequence for all PHYs that are package-critical
 	 * in this pre-init function.
 	 */
-	if (phy_package_init_once(phydev))
-		vsc8514_config_pre_init(phydev);
-
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
-		       MSCC_PHY_PAGE_EXTENDED_GPIO);
-
-	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
-
-	val &= ~MAC_CFG_MASK;
-	val |= MAC_CFG_QSGMII;
-	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
-
-	if (ret)
-		goto err;
-
-	ret = vsc8584_cmd(phydev,
-			  PROC_CMD_MCB_ACCESS_MAC_CONF |
-			  PROC_CMD_RST_CONF_PORT |
-			  PROC_CMD_READ_MOD_WRITE_PORT | PROC_CMD_QSGMII_MAC);
-	if (ret)
-		goto err;
-
-	/* 6g mcb */
-	phy_update_mcb_s6g(phydev, PHY_MCB_S6G_CFG, 0);
-	/* lcpll mcb */
-	phy_update_mcb_s6g(phydev, PHY_S6G_LCPLL_CFG, 0);
-	/* pll5gcfg0 */
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET,
-					 PHY_S6G_PLL5G_CFG0, 0x7036f145);
-	if (ret)
-		goto err;
-
-	phy_commit_mcb_s6g(phydev, PHY_S6G_LCPLL_CFG, 0);
-	/* pllcfg */
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET,
-					 PHY_S6G_PLL_CFG,
-					 (3 << PHY_S6G_PLL_ENA_OFFS_POS) |
-					 (120 << PHY_S6G_PLL_FSM_CTRL_DATA_POS)
-					 | (0 << PHY_S6G_PLL_FSM_ENA_POS));
-	if (ret)
-		goto err;
-
-	/* commoncfg */
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET,
-					 PHY_S6G_COMMON_CFG,
-					 (0 << PHY_S6G_SYS_RST_POS) |
-					 (0 << PHY_S6G_ENA_LANE_POS) |
-					 (0 << PHY_S6G_ENA_LOOP_POS) |
-					 (0 << PHY_S6G_QRATE_POS) |
-					 (3 << PHY_S6G_IF_MODE_POS));
-	if (ret)
-		goto err;
-
-	/* misccfg */
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET,
-					 PHY_S6G_MISC_CFG, 1);
-	if (ret)
-		goto err;
-
-	/* gpcfg */
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET,
-					 PHY_S6G_GPC_CFG, 768);
-	if (ret)
-		goto err;
-
-	phy_commit_mcb_s6g(phydev, PHY_S6G_DFT_CFG2, 0);
-
-	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
-	do {
-		usleep_range(500, 1000);
-		phy_update_mcb_s6g(phydev, PHY_MCB_S6G_CFG,
-				   0); /* read 6G MCB into CSRs */
-		reg = vsc85xx_csr_ctrl_phy_read(phydev, PHY_MCB_TARGET,
-						PHY_S6G_PLL_STATUS);
-		if (reg == 0xffffffff) {
-			mutex_unlock(&phydev->mdio.bus->mdio_lock);
-			return -EIO;
-		}
-
-	} while (time_before(jiffies, deadline) && (reg & BIT(12)));
-
-	if (reg & BIT(12)) {
-		mutex_unlock(&phydev->mdio.bus->mdio_lock);
-		return -ETIMEDOUT;
+	if (phy_package_init_once(phydev)) {
+		ret = vsc8514_config_pre_init(phydev);
+		if (ret)
+			goto err;
+		ret = vsc8514_config_host_serdes(phydev);
+		if (ret)
+			goto err;
+		vsc85xx_coma_mode_release(phydev);
 	}
 
-	/* misccfg */
-	ret = vsc85xx_csr_ctrl_phy_write(phydev, PHY_MCB_TARGET,
-					 PHY_S6G_MISC_CFG, 0);
-	if (ret)
-		goto err;
-
-	phy_commit_mcb_s6g(phydev, PHY_MCB_S6G_CFG, 0);
-
-	deadline = jiffies + msecs_to_jiffies(PROC_CMD_NCOMPLETED_TIMEOUT_MS);
-	do {
-		usleep_range(500, 1000);
-		phy_update_mcb_s6g(phydev, PHY_MCB_S6G_CFG,
-				   0); /* read 6G MCB into CSRs */
-		reg = vsc85xx_csr_ctrl_phy_read(phydev, PHY_MCB_TARGET,
-						PHY_S6G_IB_STATUS0);
-		if (reg == 0xffffffff) {
-			mutex_unlock(&phydev->mdio.bus->mdio_lock);
-			return -EIO;
-		}
-
-	} while (time_before(jiffies, deadline) && !(reg & BIT(8)));
-
-	if (!(reg & BIT(8))) {
-		mutex_unlock(&phydev->mdio.bus->mdio_lock);
-		return -ETIMEDOUT;
-	}
-
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
-
-	ret = phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
-
-	if (ret)
-		return ret;
+	phy_unlock_mdio_bus(phydev);
 
 	ret = phy_modify(phydev, MSCC_PHY_EXT_PHY_CNTL_1, MEDIA_OP_MODE_MASK,
 			 MEDIA_OP_MODE_COPPER << MEDIA_OP_MODE_POS);
@@ -1880,7 +2107,7 @@ static int vsc8514_config_init(struct phy_device *phydev)
 	return ret;
 
 err:
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 	return ret;
 }
 
@@ -1899,7 +2126,12 @@ static int vsc85xx_config_intr(struct phy_device *phydev)
 	int rc;
 
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		rc = vsc85xx_ack_interrupt(phydev);
+		if (rc)
+			return rc;
+
 		vsc8584_config_macsec_intr(phydev);
+		vsc8584_config_ts_intr(phydev);
 
 		rc = phy_write(phydev, MII_VSC85XX_INT_MASK,
 			       MII_VSC85XX_INT_MASK_MASK);
@@ -1908,9 +2140,31 @@ static int vsc85xx_config_intr(struct phy_device *phydev)
 		if (rc < 0)
 			return rc;
 		rc = phy_read(phydev, MII_VSC85XX_INT_STATUS);
+		if (rc < 0)
+			return rc;
+
+		rc = vsc85xx_ack_interrupt(phydev);
 	}
 
 	return rc;
+}
+
+static irqreturn_t vsc85xx_handle_interrupt(struct phy_device *phydev)
+{
+	int irq_status;
+
+	irq_status = phy_read(phydev, MII_VSC85XX_INT_STATUS);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (!(irq_status & MII_VSC85XX_INT_MASK_MASK))
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+
+	return IRQ_HANDLED;
 }
 
 static int vsc85xx_config_aneg(struct phy_device *phydev)
@@ -1999,6 +2253,7 @@ static int vsc8584_probe(struct phy_device *phydev)
 	u32 default_mode[4] = {VSC8531_LINK_1000_ACTIVITY,
 	   VSC8531_LINK_100_ACTIVITY, VSC8531_LINK_ACTIVITY,
 	   VSC8531_DUPLEX_COLLISION};
+	int ret;
 
 	if ((phydev->phy_id & MSCC_DEV_REV_MASK) != VSC8584_REVB) {
 		dev_err(&phydev->mdio.dev, "Only VSC8584 revB is supported.\n");
@@ -2012,8 +2267,8 @@ static int vsc8584_probe(struct phy_device *phydev)
 	phydev->priv = vsc8531;
 
 	vsc8584_get_base_addr(phydev);
-	devm_phy_package_join(&phydev->mdio.dev, phydev,
-			      vsc8531->base_addr, 0);
+	devm_phy_package_join(&phydev->mdio.dev, phydev, vsc8531->base_addr,
+			      sizeof(struct vsc85xx_shared_private));
 
 	vsc8531->nleds = 4;
 	vsc8531->supp_led_modes = VSC8584_SUPP_LED_MODES;
@@ -2023,6 +2278,16 @@ static int vsc8584_probe(struct phy_device *phydev)
 				      sizeof(u64), GFP_KERNEL);
 	if (!vsc8531->stats)
 		return -ENOMEM;
+
+	if (phy_package_probe_once(phydev)) {
+		ret = vsc8584_ptp_probe_once(phydev);
+		if (ret)
+			return ret;
+	}
+
+	ret = vsc8584_ptp_probe(phydev);
+	if (ret)
+		return ret;
 
 	return vsc85xx_dt_led_modes_get(phydev, default_mode);
 }
@@ -2068,7 +2333,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init	= &vsc85xx_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt	= &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr	= &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2093,9 +2358,8 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_aneg    = &vsc85xx_config_aneg,
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8574_probe,
@@ -2117,7 +2381,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init    = &vsc8514_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2141,7 +2405,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init	= &vsc85xx_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt	= &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr	= &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2165,7 +2429,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init    = &vsc85xx_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2189,7 +2453,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init	= &vsc85xx_config_init,
 	.config_aneg	= &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt	= &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr	= &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2213,7 +2477,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init    = &vsc85xx_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2237,9 +2501,8 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init    = &vsc8584_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8574_probe,
@@ -2262,9 +2525,8 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_init    = &vsc8584_config_init,
 	.config_aneg    = &vsc85xx_config_aneg,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8584_probe,
@@ -2287,9 +2549,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8574_probe,
@@ -2313,9 +2573,8 @@ static struct phy_driver vsc85xx_driver[] = {
 	.config_aneg    = &vsc85xx_config_aneg,
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
+	.handle_interrupt = vsc85xx_handle_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8574_probe,
@@ -2340,9 +2599,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8584_probe,
@@ -2365,9 +2622,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8584_probe,
@@ -2390,9 +2645,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
-	.did_interrupt  = &vsc8584_did_interrupt,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
 	.probe		= &vsc8584_probe,
@@ -2403,6 +2656,7 @@ static struct phy_driver vsc85xx_driver[] = {
 	.get_sset_count = &vsc85xx_get_sset_count,
 	.get_strings    = &vsc85xx_get_strings,
 	.get_stats      = &vsc85xx_get_stats,
+	.link_change_notify = &vsc85xx_link_change_notify,
 }
 
 };
@@ -2431,3 +2685,6 @@ MODULE_DEVICE_TABLE(mdio, vsc85xx_tbl);
 MODULE_DESCRIPTION("Microsemi VSC85xx PHY driver");
 MODULE_AUTHOR("Nagaraju Lakkaraju");
 MODULE_LICENSE("Dual MIT/GPL");
+
+MODULE_FIRMWARE(MSCC_VSC8584_REVB_INT8051_FW);
+MODULE_FIRMWARE(MSCC_VSC8574_REVB_INT8051_FW);

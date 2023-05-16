@@ -1,0 +1,10 @@
+#!/bin/bash
+ADDR=$2
+
+# Apply the ban to iptables.
+case $1 in
+	ban) iptables --append Fail2Ban --source $ADDR/32 --jump DROP ;;
+	unban) iptables --delete Fail2Ban --source $ADDR/32 --jump DROP ;;
+	ban6) ip6tables --append Fail2Ban --source $ADDR/128 --jump DROP ;;
+	unban6) ip6tables --delete Fail2Ban --source $ADDR/128 --jump DROP ;;
+esac

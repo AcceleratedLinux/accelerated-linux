@@ -10,6 +10,7 @@
 /dts-v1/;
 
 #include "imx6ull.dtsi"
+#include "imx6-pstore-256MB.dtsi"
 
 / {
 	model = "Digi IX15";
@@ -200,17 +201,6 @@
 			pinctrl-0 = <&pinctrl_devkey>;
 			gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
-		};
-	};
-
-	watchdog {
-		compatible = "gpio-leds";
-
-		wdout-gpio {
-			label = "wdout";
-			pinctrl-names = "default";
-			pinctrl-0 = <&pinctrl_wdout>;
-			gpios = <&gpio4 20 GPIO_ACTIVE_HIGH>;
 		};
 	};
 };
@@ -537,12 +527,6 @@
 	pinctrl_devkey: devkeygrp {
 		fsl,pins = <
 			MX6UL_PAD_LCD_DATA17__GPIO3_IO22	0x00000
-		>;
-	};
-
-	pinctrl_wdout: extwdoggrp {
-		fsl,pins = <
-			MX6UL_PAD_CSI_HSYNC__GPIO4_IO20		0x00010
 		>;
 	};
 

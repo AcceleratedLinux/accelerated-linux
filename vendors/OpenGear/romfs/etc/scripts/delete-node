@@ -1,0 +1,147 @@
+#!/bin/bash
+
+#set -x
+#User must provide the node to be removed. e.g. "config.users.user1"
+# Usage: delete-node {full node path}
+
+if [ $# != 1 ]
+then
+echo "Wrong number of arguments"
+echo "Usage: delnode {full '.' delimited node path}"
+exit 2
+fi
+
+# test for spaces
+TEMP=`echo "$1" | sed 's/.* .*/N/'`
+if [ "$TEMP" = "N" ]
+then
+echo "Wrong input format"
+echo "Usage: delnode {full '.' delimited node path}"
+exit 2
+fi
+
+# testing if node exists
+TEMP=`config -g config | grep "$1"`
+if [ -z "$TEMP" ]
+then
+echo "Node $1 not found"
+exit 0
+fi
+
+# LASTFIELD is the last field in the node path e.g. "user1"
+# ROOTNODE is the upper level of the node e.g. "config.users"
+# NUMBER is the integer value extracted from LASTFIELD e.g. "1"
+# TOTALNODE is the node name for the total e.g. "config.users.total"
+# TOTAL is the value of the total number of items before deleting e.g. "3"
+# NEWTOTAL is the modified total i.e. TOTAL-1
+# CHECKTOTAL checks if TOTAL is the actual total items in .xml
+
+LASTFIELD=${1##*.}
+ROOTNODE=${1%.*}
+NUMBER=`echo $LASTFIELD | sed 's/^[a-zA-Z]*//g'`
+TOTALNODE=`echo ${1%.*} | sed 's/\(.*\)/\1.total/'`
+TOTAL=`config -g $TOTALNODE | sed 's/.* //'`
+NEWTOTAL=$[ $TOTAL -1 ]
+TOTALPRESENT=true
+
+#set -x
+
+# Test if a total value exists
+# NOTE: this fix is not fail proof. But works for most things which have
+# one line per numbered item.
+if [ -z "$TOTAL" ]
+then
+	TOTALPRESENT=false
+	TOTAL=`config -g $ROOTNODE \
+                   | grep -c config`
+fi
+
+# Make backup copy of config file
+cp /etc/config/config.xml /etc/config/config0.bak
+echo "backup of /etc/config/config.xml saved in /etc/config/config0.bak"
+
+if [ -z $NUMBER ] # test whether a singular node is being \
+#deleted e.g. config.sdt.hosts
+then
+
+echo "deleting $1"
+config -d "$1"
+
+#set +x
+exit 0
+
+elif [ "$NUMBER" = "$TOTAL" ] # Test if last item is being deleted
+then
+# Deleting node
+echo "Deleting $1"
+config -d "$1"
+
+# Modifying item total.
+if [ "$TOTALPRESENT" = true ]
+then
+	config -s "$TOTALNODE=$NEWTOTAL"
+fi
+
+exit 0
+
+# more than one item exists
+elif [ "$NUMBER" -lt "$TOTAL" ]
+then
+
+# Modify the config list by shifting the last item into the 
+# gap produced from delelting
+
+echo "Deleting $1"
+
+LASTFIELDTEXT=`echo $LASTFIELD | sed 's/[0-9]//g'`
+CHECKTOTAL=`config -g $ROOTNODE.$LASTFIELDTEXT$TOTAL`
+
+if [ -z "$CHECKTOTAL" ]
+then
+	echo "WARNING: "$TOTALNODE" greater than number of items"
+fi
+
+#set -x
+
+# Delete the node now
+DELETECOMMAND=
+
+	config -d "$ROOTNODE.$LASTFIELDTEXT$NUMBER"
+
+	fifo_name=/var/tmp/$(basename $0).$$
+	mkfifo $fifo_name
+	config -g "$ROOTNODE.$LASTFIELDTEXT$TOTAL" > $fifo_name &
+
+	while read -r LINE
+	do
+	
+		DELETECOMMAND="$DELETECOMMAND -s \
+`echo "$LINE" | sed -e s/"$LASTFIELDTEXT$TOTAL\
+/$LASTFIELDTEXT$NUMBER"/ \
+-e 's/ /=/'`"
+
+	done < $fifo_name
+	rm -f $fifo_name
+
+DELETECOMMAND="config $DELETECOMMAND"
+$DELETECOMMAND
+
+#set +x
+
+# deleting last item 
+config -d "$ROOTNODE.$LASTFIELDTEXT$TOTAL"
+
+# Modifying item total.
+if [ "$TOTALPRESENT" = true ]
+then
+	config -s "$TOTALNODE=$NEWTOTAL"
+fi
+
+#set +x
+exit 0
+else
+echo "error: item being deleted has an index greater than total items. Increase the total count variable."
+#set +x
+exit 0
+fi 
+

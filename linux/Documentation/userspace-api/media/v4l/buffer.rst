@@ -1,11 +1,5 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _buffer:
 
@@ -23,8 +17,8 @@ argument to the :ref:`VIDIOC_QUERYBUF`,
 :ref:`VIDIOC_QBUF <VIDIOC_QBUF>` and
 :ref:`VIDIOC_DQBUF <VIDIOC_QBUF>` ioctl. In the multi-planar API,
 some plane-specific members of struct :c:type:`v4l2_buffer`,
-such as pointers and sizes for each plane, are stored in struct
-struct :c:type:`v4l2_plane` instead. In that case, struct
+such as pointers and sizes for each plane, are stored in
+struct :c:type:`v4l2_plane` instead. In that case,
 struct :c:type:`v4l2_buffer` contains an array of plane structures.
 
 Dequeued video buffers come with timestamps. The driver decides at which
@@ -39,7 +33,6 @@ stream. Changes in these flags may take place as a side effect of
 mem-to-mem devices is an exception to the rule: the timestamp source
 flags are copied from the OUTPUT video buffer to the CAPTURE video
 buffer.
-
 
 Interactions between formats, controls and buffers
 ==================================================
@@ -159,13 +152,12 @@ based on the queried sizes (for instance by allocating a set of buffers large
 enough for all the desired formats and controls, or by allocating separate set
 of appropriately sized buffers for each use case).
 
-
 .. c:type:: v4l2_buffer
 
 struct v4l2_buffer
 ==================
 
-.. tabularcolumns:: |p{2.8cm}|p{2.5cm}|p{1.6cm}|p{10.2cm}|
+.. tabularcolumns:: |p{2.9cm}|p{2.4cm}|p{12.0cm}|
 
 .. cssclass:: longtable
 
@@ -264,7 +256,7 @@ struct v4l2_buffer
 	``V4L2_MEMORY_MMAP`` this is the offset of the buffer from the
 	start of the device memory. The value is returned by the driver
 	and apart of serving as parameter to the
-	:ref:`mmap() <func-mmap>` function not useful for applications.
+	:c:func:`mmap()` function not useful for applications.
 	See :ref:`mmap` for details
     * - unsigned long
       - ``userptr``
@@ -317,13 +309,12 @@ struct v4l2_buffer
 	given, then ``EINVAL`` will be returned.
 
 
-
 .. c:type:: v4l2_plane
 
 struct v4l2_plane
 =================
 
-.. tabularcolumns:: |p{3.5cm}|p{3.5cm}|p{3.5cm}|p{7.0cm}|
+.. tabularcolumns:: |p{3.5cm}|p{3.5cm}|p{10.3cm}|
 
 .. cssclass:: longtable
 
@@ -357,7 +348,7 @@ struct v4l2_plane
       - ``mem_offset``
       - When the memory type in the containing struct
 	:c:type:`v4l2_buffer` is ``V4L2_MEMORY_MMAP``, this
-	is the value that should be passed to :ref:`mmap() <func-mmap>`,
+	is the value that should be passed to :c:func:`mmap()`,
 	similar to the ``offset`` field in struct
 	:c:type:`v4l2_buffer`.
     * - unsigned long
@@ -391,7 +382,6 @@ struct v4l2_plane
 	applications.
 
 
-
 .. c:type:: v4l2_buf_type
 
 enum v4l2_buf_type
@@ -399,7 +389,7 @@ enum v4l2_buf_type
 
 .. cssclass:: longtable
 
-.. tabularcolumns:: |p{7.8cm}|p{0.6cm}|p{9.1cm}|
+.. tabularcolumns:: |p{7.8cm}|p{0.6cm}|p{8.9cm}|
 
 .. flat-table::
     :header-rows:  0
@@ -455,7 +445,6 @@ enum v4l2_buf_type
       - Buffer for metadata output, see :ref:`metadata`.
 
 
-
 .. _buffer-flags:
 
 Buffer Flags
@@ -463,16 +452,16 @@ Buffer Flags
 
 .. raw:: latex
 
-    \small
+    \footnotesize
 
-.. tabularcolumns:: |p{7.0cm}|p{2.1cm}|p{8.4cm}|
+.. tabularcolumns:: |p{6.5cm}|p{1.8cm}|p{9.0cm}|
 
 .. cssclass:: longtable
 
 .. flat-table::
     :header-rows:  0
     :stub-columns: 0
-    :widths:       3 1 4
+    :widths:       65 18 70
 
     * .. _`V4L2-BUF-FLAG-MAPPED`:
 
@@ -577,7 +566,10 @@ Buffer Flags
 	applications shall use this flag if the data captured in the
 	buffer is not going to be touched by the CPU, instead the buffer
 	will, probably, be passed on to a DMA-capable hardware unit for
-	further processing or output.
+	further processing or output. This flag is ignored unless the
+	queue is used for :ref:`memory mapping <mmap>` streaming I/O and
+	reports :ref:`V4L2_BUF_CAP_SUPPORTS_MMAP_CACHE_HINTS
+	<V4L2-BUF-CAP-SUPPORTS-MMAP-CACHE-HINTS>` capability.
     * .. _`V4L2-BUF-FLAG-NO-CACHE-CLEAN`:
 
       - ``V4L2_BUF_FLAG_NO_CACHE_CLEAN``
@@ -585,12 +577,15 @@ Buffer Flags
       - Caches do not have to be cleaned for this buffer. Typically
 	applications shall use this flag for output buffers if the data in
 	this buffer has not been created by the CPU but by some
-	DMA-capable unit, in which case caches have not been used.
+	DMA-capable unit, in which case caches have not been used. This flag
+	is ignored unless the queue is used for :ref:`memory mapping <mmap>`
+	streaming I/O and reports :ref:`V4L2_BUF_CAP_SUPPORTS_MMAP_CACHE_HINTS
+	<V4L2-BUF-CAP-SUPPORTS-MMAP-CACHE-HINTS>` capability.
     * .. _`V4L2-BUF-FLAG-M2M-HOLD-CAPTURE-BUF`:
 
       - ``V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF``
       - 0x00000200
-      - Only valid if ``V4L2_BUF_CAP_SUPPORTS_M2M_HOLD_CAPTURE_BUF`` is
+      - Only valid if struct :c:type:`v4l2_requestbuffers` flag ``V4L2_BUF_CAP_SUPPORTS_M2M_HOLD_CAPTURE_BUF`` is
 	set. It is typically used with stateless decoders where multiple
 	output buffers each decode to a slice of the decoded frame.
 	Applications can set this flag when queueing the output buffer
@@ -609,7 +604,7 @@ Buffer Flags
 	:ref:`VIDIOC_DQBUF <VIDIOC_QBUF>` ioctl is called. Due to
 	hardware limitations, the last buffer may be empty. In this case
 	the driver will set the ``bytesused`` field to 0, regardless of
-	the format. Any Any subsequent call to the
+	the format. Any subsequent call to the
 	:ref:`VIDIOC_DQBUF <VIDIOC_QBUF>` ioctl will not block anymore,
 	but return an ``EPIPE`` error code.
     * .. _`V4L2-BUF-FLAG-REQUEST-FD`:
@@ -681,13 +676,10 @@ Buffer Flags
 
     \normalsize
 
-
-.. c:type:: v4l2_memory
-
 enum v4l2_memory
 ================
 
-.. tabularcolumns:: |p{5.0cm}|p{0.8cm}|p{11.7cm}|
+.. tabularcolumns:: |p{5.0cm}|p{0.8cm}|p{11.5cm}|
 
 .. flat-table::
     :header-rows:  0
@@ -707,7 +699,44 @@ enum v4l2_memory
       - 4
       - The buffer is used for :ref:`DMA shared buffer <dmabuf>` I/O.
 
+.. _memory-flags:
 
+Memory Consistency Flags
+------------------------
+
+.. raw:: latex
+
+    \small
+
+.. tabularcolumns:: |p{7.0cm}|p{2.1cm}|p{8.4cm}|
+
+.. cssclass:: longtable
+
+.. flat-table::
+    :header-rows:  0
+    :stub-columns: 0
+    :widths:       3 1 4
+
+    * .. _`V4L2-MEMORY-FLAG-NON-COHERENT`:
+
+      - ``V4L2_MEMORY_FLAG_NON_COHERENT``
+      - 0x00000001
+      - A buffer is allocated either in coherent (it will be automatically
+	coherent between the CPU and the bus) or non-coherent memory. The
+	latter can provide performance gains, for instance the CPU cache
+	sync/flush operations can be avoided if the buffer is accessed by the
+	corresponding device only and the CPU does not read/write to/from that
+	buffer. However, this requires extra care from the driver -- it must
+	guarantee memory consistency by issuing a cache flush/sync when
+	consistency is needed. If this flag is set V4L2 will attempt to
+	allocate the buffer in non-coherent memory. The flag takes effect
+	only if the buffer is used for :ref:`memory mapping <mmap>` I/O and the
+	queue reports the :ref:`V4L2_BUF_CAP_SUPPORTS_MMAP_CACHE_HINTS
+	<V4L2-BUF-CAP-SUPPORTS-MMAP-CACHE-HINTS>` capability.
+
+.. raw:: latex
+
+    \normalsize
 
 Timecodes
 =========
@@ -717,13 +746,12 @@ The :c:type:`v4l2_buffer_timecode` structure is designed to hold a
 (struct :c:type:`timeval` timestamps are stored in the struct
 :c:type:`v4l2_buffer` ``timestamp`` field.)
 
-
 .. c:type:: v4l2_timecode
 
 struct v4l2_timecode
 --------------------
 
-.. tabularcolumns:: |p{1.4cm}|p{2.8cm}|p{12.3cm}|
+.. tabularcolumns:: |p{1.4cm}|p{2.8cm}|p{13.1cm}|
 
 .. flat-table::
     :header-rows:  0
@@ -754,13 +782,10 @@ struct v4l2_timecode
       - The "user group" bits from the timecode.
 
 
-
 .. _timecode-type:
 
 Timecode Types
 --------------
-
-.. tabularcolumns:: |p{5.6cm}|p{0.8cm}|p{11.1cm}|
 
 .. flat-table::
     :header-rows:  0
@@ -784,13 +809,12 @@ Timecode Types
       -
 
 
-
 .. _timecode-flags:
 
 Timecode Flags
 --------------
 
-.. tabularcolumns:: |p{6.6cm}|p{1.4cm}|p{9.5cm}|
+.. tabularcolumns:: |p{6.6cm}|p{1.4cm}|p{9.3cm}|
 
 .. flat-table::
     :header-rows:  0

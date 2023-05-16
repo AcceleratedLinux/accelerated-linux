@@ -1,0 +1,29 @@
+GPIO controller for fabricated GPIOs
+
+The GPIO controller nodes must have child nodes, which describes the logical
+GPIOs.
+
+The sub-nodes must have either "input-gpio" or "output-gpio" property defined.
+
+Required properties:
+- compatible:		"fabricated-gpio"
+
+- input-gpio:		input GPIO with flags (required, if output-gpio is not
+			defined)
+- output-gpio:		output GPIO with flags (required, if input-gpio is not
+			defined)
+
+Optional properties:
+- pullup-gpio:		pull-up enable GPIO with flags
+- disable-pullup:	pull-up is disabled by default
+
+Example:
+	logical-io {
+		compatible = "fabricated-gpio";
+
+		gpio01 {
+			input-gpio = <&gpio4 28 GPIO_ACTIVE_HIGH>;
+			output-gpio = <&gpio5 1 GPIO_ACTIVE_LOW>;
+			pullup-gpio = <&gpio5 0 GPIO_ACTIVE_LOW>;
+		};
+	};

@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Note: Applicable also to Raritan PX3
+
+. /etc/scripts/power-common
+
+port=$1
+outlets=$2
+cmd=$3
+
+[[ -z "$username" ]] && username="admin"
+[[ -z "$password" ]] && password="raritan"
+
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <port> \"<outlet> [outlet..]\" on|off|cycle|status|probe "
+	exit 1
+fi
+
+function probeOutlets {
+	count=$(/bin/pmchat -v -t 3 ECHO ON "" "show outlets" "# " < $port 2>&1 | grep '^Outlet [0-9]\+:' | wc -l)
+	echo $count
+	return $?
+}
+
+function pduLogin {
+	/bin/pmchat -v -t 5 ECHO ON "" "\r" "name:" "$username" "word:" "$password" "# " < $port
+	return $?
+}
+
+function pduLogout {
+	/bin/pmchat -v -t 5 ECHO ON "" "exit" "name:" < $port
+	return $?
+}
+
+function outletPower {
+	outlet=$1
+	state=$2
+
+	/bin/pmchat -v -t 2 ECHO ON "" "power outlets $outlet $state /y" "# " < $port >& /dev/null
+	return $?
+}
+
+if ! pduLogin >& /dev/null; then
+	pduLogout >& /dev/null
+	if ! pduLogin >& /dev/null; then
+		power_error_login $username
+		#for outlet in $outlets; do
+		#	power_outlet_error_login $outlet $username
+		#done
+		exit 1
+	fi
+fi
+
+if [[ $cmd == "probe" ]]; then
+	if ! probeOutlets; then
+		echo "WARNING: outlet probe failed"
+	fi
+else
+	for outlet in $outlets; do
+		case $cmd in
+		"on" )
+		outletPower $outlet on
+		;;
+		"off" )
+		outletPower $outlet off
+		;;
+		"cycle" )
+		outletPower $outlet off
+		outletPower $outlet on
+		;;
+		esac
+	done
+
+	status_all=$(/bin/pmchat -v -t 2 ECHO ON "" "show outlets all" "# " < $port 2>&1)
+	for outlet in $outlets; do
+		status=$(echo "$status_all" | awk "/^Outlet $outlet: / { getline; print tolower(\$3) }")
+		power_outlet_status $outlet $status
+	done
+fi
+
+if ! pduLogout >& /dev/null; then
+	power_warn_logout "$username"
+fi
+
+exit 0

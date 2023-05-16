@@ -15,7 +15,7 @@ diff --git a/shellinabox/shell_in_a_box.jspp b/shellinabox/shell_in_a_box.jspp
 index 4e449cc..1b152bc 100644
 --- a/shellinabox/shell_in_a_box.jspp
 +++ b/shellinabox/shell_in_a_box.jspp
-@@ -170,7 +170,7 @@ ShellInABox.prototype.sendRequest = function(request) {
+@@ -155,7 +155,7 @@ ShellInABox.prototype.sendRequest = function(request) {
    if (request == undefined) {
      request                  = new XMLHttpRequest();
    }
@@ -24,7 +24,7 @@ index 4e449cc..1b152bc 100644
    request.timeout = 30000; // Don't leave POST pending forever: force 30s timeout to prevent HTTP Proxy thread hijack
    request.setRequestHeader('Cache-Control', 'no-cache');
    request.setRequestHeader('Content-Type',
-@@ -239,7 +239,7 @@ ShellInABox.prototype.sendKeys = function(keys) {
+@@ -224,7 +224,7 @@ ShellInABox.prototype.sendKeys = function(keys) {
      keys                       = this.pendingKeys + keys;
      this.pendingKeys           = '';
      var request                = new XMLHttpRequest();

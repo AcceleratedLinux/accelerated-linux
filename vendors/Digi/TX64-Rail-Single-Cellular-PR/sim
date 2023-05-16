@@ -1,0 +1,80 @@
+#!/bin/sh
+#
+# TX64-Single-Cellular SIM switching utility
+# SIM slot control is over AT commands for both LM940 modems.
+# No need to reset the modem after changing active slot -- ModemManager will
+# detect it from AT#QSS unsolicited messages.
+#set -x
+idx="$(runt find mm.modem modem.port "modem/wwan")"
+idx="${idx##mm.modem.}"
+
+sim_file="/etc/config/sim.conf"
+
+case "$1" in
+-n)
+	echo 2
+	;;
+-p)
+	state=$(pwrctrl -1) || {
+		echo "ERROR: ${state}"
+		exit 1
+	}
+	echo "Current state: ${state##* }"
+	;;
+-o)
+	pwrctrl -1on || exit 1
+	;;
+-O)
+	pwrctrl -1off || exit 1
+	;;
+-m)
+	# Built-in modem module is always present
+	echo "Cell module detected: yes"
+	exit 0
+	;;
+1|2)
+
+	model="$(/bin/modem idx=$idx model)" || exit 1
+
+	case "$model" in
+		EM919* | EM7690)
+			/bin/sim_tx64 -w 1 $1 || exit 1
+			;;
+		*)
+			/bin/modem idx=$idx softsim $1 2>/dev/null || exit 1
+			;;
+	esac
+	echo "$1" > "$sim_file"
+    ;;
+'')
+	expected="$(cat "$sim_file" 2>/dev/null)"
+	#expected="${expected:-1}"
+	model="$(/bin/modem idx=$idx model)" || exit 1
+	case "$model" in
+		EM919* | EM7690)
+			current="$(/bin/sim_tx64 -w 1 2>/dev/null || echo "$expected")"
+			;;
+		*)
+			current="$(/bin/modem idx=$idx softsim 2>/dev/null || echo "$expected")"
+			;;
+	esac
+	echo "$current"
+	;;
+*)
+	logger -t modem "sim: invalid option"#SIMDET
+
+	echo "usage: $(basename $0) [none|1|2|-dDnoOp]
+Get, set and control WWAN SIM selection (MM idx $idx)
+
+	-h	help	- this help
+	-n	number	- print number of SIM slots
+	-o	on	- turn on power to the cell module
+	-O	off	- turn off power to the cell module
+	-m	module detect	- detect cell module
+	-p	power	- report the modem's current power state"
+	[ "$1" = -h ] && exit 0 || exit 1
+	;;
+esac
+
+exit 0
+

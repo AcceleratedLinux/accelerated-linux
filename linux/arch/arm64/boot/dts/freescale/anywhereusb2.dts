@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Device Tree Include file for Digi AnywhereUSB-2.
+ * Device Tree Include file for Digi ConnectEZ-1.
  *
  * Copyright 2016 Freescale Semiconductor, Inc.
  * Copyright 2018 Digi Inc.
@@ -14,9 +14,11 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+#include "fsl-pstore-512MB.dtsi"
 
 / {
-	model = "Digi AnywhereUSB-2";
+	model = "Digi AnywhereUSB-2 Commercial";
 	compatible = "digi,anywhereusb2", "fsl,ls1012a";
 
 	aliases {
@@ -34,7 +36,7 @@
 	};
 
 	soc {
-		rcpm: rcpm@1ee2000 {
+		rcpm@1ee2000 {
 			compatible = "fsl,ls1012a-rcpm", "fsl,qoriq-rcpm-2.1";
 			reg = <0x0 0x1ee2000 0x0 0x1000>;
 			fsl,#rcpm-wakeup-cells = <1>;
@@ -68,6 +70,24 @@
 		clocks = <&clockgen 4 0>;
 		clock-names = "pfe";
 	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		power-led {
+			label = "power";
+			pinctrl-names = "default";
+			gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "default-on";
+		};
+
+		user-led {
+			label = "user";
+			pinctrl-names = "default";
+			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+		};
+	};
 };
 
 &duart0 {
@@ -82,33 +102,15 @@
 		reg = <0x32>;
 		label = "lp5569";
 		clock-mode = /bits/ 8 <1>;  /* internal */
-
-		chan0 {
-			chan-name = "pwr1b";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			invert = /bits/ 8 <0x01>;   /* inverted LED */
-			linux,default-trigger = "timer";
-		};
-
-		chan1 {
-			chan-name = "pwr1g";
-			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
-
-		chan2 {
-			chan-name = "pwr1r";
-			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
-			linux,default-trigger = "timer";
-		};
+		#address-cells = <1>;
+		#size-cells = <0>;
 
 		chan3 {
 			chan-name = "b01";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <3>;
 			linux,default-trigger = "timer";
 		};
 
@@ -116,6 +118,8 @@
 			chan-name = "g01";
 			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <4>;
 			linux,default-trigger = "timer";
 		};
 
@@ -123,6 +127,8 @@
 			chan-name = "r01";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <5>;
 			linux,default-trigger = "timer";
 		};
 
@@ -130,6 +136,8 @@
 			chan-name = "b02";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <6>;
 			linux,default-trigger = "timer";
 		};
 
@@ -137,6 +145,8 @@
 			chan-name = "g02";
 			led-cur = /bits/ 8 <0x03>;  /* 0.3mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <7>;
 			linux,default-trigger = "timer";
 		};
 
@@ -144,6 +154,8 @@
 			chan-name = "r02";
 			led-cur = /bits/ 8 <0x18>;  /* 2.4mA */
 			max-cur = /bits/ 8 <0x18>;  /* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <8>;
 			linux,default-trigger = "timer";
 		};
 	};
@@ -155,8 +167,13 @@
 };
 
 &i2c1 {
-	clock-frequency = <100000>;
+	clock-frequency = <400000>;
 	status = "okay";
+
+	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	pmux-reg-offset = <0x430>;
+	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -189,11 +206,11 @@
 		compatible = "fsl,pfe-gemac-port";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x1>;    /* GEM_ID */
-		fsl,gemac-bus-id = <0x1>; /* BUS_ID */
+		reg = <0x0>;    /* GEM_ID */
+		fsl,gemac-bus-id = <0x0>; /* BUS_ID */
 		fsl,gemac-phy-id = <0x0>; /* PHY_ID */
 		fsl,mdio-mux-val = <0x0>;
-		phy-mode = "rgmii-id"; /* use strapped tx/rx delay */
+		phy-mode = "sgmii";
 		fsl,pfe-phy-if-flags = <0x0>;
 
 		mdio {
@@ -203,7 +220,7 @@
 };
 
 &usb0 {
-	status = "okay";
+	status = "ok";
 };
 
 &usb1 {
@@ -211,10 +228,8 @@
 };
 
 &esdhc0 {
-	mmc-ddr-1_8v;
 	mmc-hs200-1_8v;
-	mmc-hs400-1_8v;
-	mmc-hs200-1_8v;
+	non-removable;
 	status = "okay";
 };
 
@@ -222,9 +237,9 @@
 	status = "disabled";
 };
 
-&gpio0 {
-	gpio-line-names = "", "", "", "", "", "", "", "",
+&gpio1 {
+	gpio-line-names = "", "", "", "", "", "", "", "dbg",
+			  "", "", "", "", "factory", "", "", "",
 			  "", "", "", "", "", "", "", "",
-			  "", "", "", "", "", "", "", "",
-			  "factory", "", "", "", "", "", "", "";
+			  "", "", "", "", "", "", "", "";
 };

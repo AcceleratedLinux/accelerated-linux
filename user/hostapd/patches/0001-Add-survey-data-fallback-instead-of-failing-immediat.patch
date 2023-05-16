@@ -17,7 +17,7 @@ diff --git a/src/ap/acs.c b/src/ap/acs.c
 index 6d4c041..54925fd 100644
 --- a/src/ap/acs.c
 +++ b/src/ap/acs.c
-@@ -292,18 +292,12 @@ static void acs_fail(struct hostapd_iface *iface)
+@@ -302,16 +302,12 @@ static void acs_fail(struct hostapd_iface *iface)
  static long double
  acs_survey_interference_factor(struct freq_survey *survey, s8 min_nf)
  {
@@ -29,15 +29,13 @@ index 6d4c041..54925fd 100644
  	else if (survey->filled & SURVEY_HAS_CHAN_TIME_RX)
  		busy = survey->channel_time_rx;
 -	else {
--		/* This shouldn't really happen as survey data is checked in
--		 * acs_sanity_check() */
 -		wpa_printf(MSG_ERROR, "ACS: Survey data missing");
 -		return 0;
 -	}
  
  	total = survey->channel_time;
  
-@@ -392,20 +386,19 @@ static int acs_usable_vht80_chan(struct hostapd_channel_data *chan)
+@@ -420,20 +416,19 @@ static int acs_usable_vht80_chan(struct hostapd_channel_data *chan)
  static int acs_survey_is_sufficient(struct freq_survey *survey)
  {
  	if (!(survey->filled & SURVEY_HAS_NF)) {

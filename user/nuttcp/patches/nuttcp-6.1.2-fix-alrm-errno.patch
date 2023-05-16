@@ -1,0 +1,47 @@
+--- nuttcp-6.1.2/nuttcp-6.1.2.c	2009-01-29 05:29:21.000000000 +1000
++++ nuttcp-6.1.2/nuttcp-6.1.2.c	2021-01-18 14:12:17.583714580 +1000
+@@ -991,9 +991,12 @@
+ 	char *cp1, *cp2;
+ 	short save_events;
+ 	long flags, saveflags;
++	int saved_errno = errno;
+ 
+-	if (host3 && clientserver && !client)
++	if (host3 && clientserver && !client) {
++		errno = saved_errno;
+ 		return;
++	}
+ 
+ 	if (clientserver && client && reading_srvr_info) {
+ 		mes("Error: not receiving server info");
+@@ -1085,17 +1088,21 @@
+ 				exit(1);
+ 			}
+ 			intr = 1;
++			errno = saved_errno;
+ 			return;
+ 		}
+ 
+-		if (!interval)
++		if (!interval) {
++			errno = saved_errno;
+ 			return;
++		}
+ 	}
+ 
+ 	if (interval && !trans) {
+ 		if ((udp && !got_begin) || done) {
+ 			timep.tv_sec = timec.tv_sec;
+ 			timep.tv_usec = timec.tv_usec;
++			errno = saved_errno;
+ 			return;
+ 		}
+ 		if (clientserver) {
+@@ -1281,6 +1288,7 @@
+ 	}
+ 	else
+ 		intr = 1;
++	errno = saved_errno;
+ 	return;
+ }
+ 

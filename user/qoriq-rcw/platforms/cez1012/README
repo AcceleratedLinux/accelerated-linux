@@ -1,0 +1,38 @@
+The RCW directories names for the LS1012ARDB board conform to the following
+naming convention:
+
+a_bcde_f:
+
+a = 'R' indicates RGMII
+    'N' indicates not available/not used
+
+b = What is available in SerDes1 Lane0
+c = What is available in SerDes1 Lane1
+d = What is available in SerDes1 Lane2
+e = What is available in SerDes1 Lane2
+
+For the Slots (c..j):
+ 'N' is NULL, not available/not used
+ 'P' is PCIe
+ 'S' is SGMII
+ 'H' is SATA
+
+Serdes1 protocol (k):
+f = 'hex value of serdes protocol value'
+
+BIN   Core/Platform/DDR
+Bin1: 800MHz/250MHz/1000MT/s
+
+Files naming convention
+=============================
+rcw_x.rcw
+rcw_x_bootmode.rcw
+rcw_x_specialsetting.rcw
+x = Core frequency
+bootmode = bootmode:qspiboot and so on.
+specialsetting = special setting:
+                        sben:Secure boot
+For example,
+        rcw_1000_default.rcw means rcw for core frequency of 1000MHz.
+
+For more information please refer to the comments in rcw file.

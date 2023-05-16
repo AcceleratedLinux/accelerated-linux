@@ -8,11 +8,14 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs -o size=40M tmpfs /tmp
 mount -t tmpfs -o size=32M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
 
 echo "Starting watchdog ..."
 watchdog /dev/watchdog
@@ -32,21 +35,6 @@ echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
 ifconfig eth0cpu up
 setmac -i lan1,lan2,lan3,lan4,lan5,lan6,lan7,lan8,wan1,wan2 -u -n 10
-
-echo "Initializing CELL power control..."
-echo 21 > /sys/class/gpio/export
-echo out > /sys/class/gpio/gpio21/direction
-echo 0 > /sys/class/gpio/gpio21/value
-echo "Initializing CELL SIM control..."
-echo 18 > /sys/class/gpio/export
-echo out > /sys/class/gpio/gpio18/direction
-echo "Initializing CELL presence control..."
-echo 24 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio24/direction
-echo "Initializing CELL switch control..."
-echo 27 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio27/direction
-echo falling > /sys/class/gpio/gpio27/edge
 
 echo "Initializing USB1 power control..."
 echo 45 > /sys/class/gpio/export
@@ -114,7 +102,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -125,6 +113,10 @@ if [ -f /etc/config/.init ]; then
 else
 	rm -f /etc/config/.init2
 fi
+
+echo "Initializing CELL power control..."
+/bin/sim -i
+
 cat /etc/inittab.d/* > /etc/inittab
 
 # cryptography disabled mode

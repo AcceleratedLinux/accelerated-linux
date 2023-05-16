@@ -11,11 +11,16 @@ ALL_TESTS="
 	matchall_mirror_behind_flower_ingress_test
 	matchall_sample_behind_flower_ingress_test
 	matchall_mirror_behind_flower_egress_test
+	matchall_proto_match_test
+	police_limits_test
+	multi_police_test
 "
 NUM_NETIFS=2
 
 source $lib_dir/tc_common.sh
 source $lib_dir/lib.sh
+source $lib_dir/devlink_lib.sh
+source mlxsw_lib.sh
 
 switch_create()
 {
@@ -164,7 +169,8 @@ matchall_sample_egress_test()
 	RET=0
 
 	# It is forbidden in mlxsw driver to have matchall with sample action
-	# bound on egress
+	# bound on egress. Spectrum-1 specific restriction
+	mlxsw_only_on_spectrum 1 || return
 
 	tc qdisc add dev $swp1 clsact
 
@@ -285,6 +291,96 @@ matchall_behind_flower_egress_test()
 matchall_mirror_behind_flower_egress_test()
 {
 	matchall_behind_flower_egress_test "mirror" "mirred egress mirror dev $swp2"
+}
+
+matchall_proto_match_test()
+{
+	RET=0
+
+	tc qdisc add dev $swp1 clsact
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		matchall skip_sw \
+		action sample group 1 rate 100
+	check_fail $? "Incorrect success to add matchall rule with protocol match"
+
+	tc qdisc del dev $swp1 clsact
+
+	log_test "matchall protocol match"
+}
+
+police_limits_test()
+{
+	RET=0
+
+	tc qdisc add dev $swp1 clsact
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		flower skip_sw \
+		action police rate 0.5kbit burst 1m conform-exceed drop/ok
+	check_fail $? "Incorrect success to add police action with too low rate"
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		flower skip_sw \
+		action police rate 2.5tbit burst 1g conform-exceed drop/ok
+	check_fail $? "Incorrect success to add police action with too high rate"
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		flower skip_sw \
+		action police rate 1.5kbit burst 1m conform-exceed drop/ok
+	check_err $? "Failed to add police action with low rate"
+
+	tc filter del dev $swp1 ingress protocol ip pref 1 handle 101 flower
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		flower skip_sw \
+		action police rate 1.9tbit burst 1g conform-exceed drop/ok
+	check_err $? "Failed to add police action with high rate"
+
+	tc filter del dev $swp1 ingress protocol ip pref 1 handle 101 flower
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		flower skip_sw \
+		action police rate 1.5kbit burst 512b conform-exceed drop/ok
+	check_fail $? "Incorrect success to add police action with too low burst size"
+
+	tc filter add dev $swp1 ingress pref 1 proto ip handle 101 \
+		flower skip_sw \
+		action police rate 1.5kbit burst 2k conform-exceed drop/ok
+	check_err $? "Failed to add police action with low burst size"
+
+	tc filter del dev $swp1 ingress protocol ip pref 1 handle 101 flower
+
+	tc qdisc del dev $swp1 clsact
+
+	log_test "police rate and burst limits"
+}
+
+multi_police_test()
+{
+	RET=0
+
+	# It is forbidden in mlxsw driver to have multiple police
+	# actions in a single rule.
+
+	tc qdisc add dev $swp1 clsact
+
+	tc filter add dev $swp1 ingress protocol ip pref 1 handle 101 \
+		flower skip_sw \
+		action police rate 100mbit burst 100k conform-exceed drop/ok
+	check_err $? "Failed to add rule with single police action"
+
+	tc filter del dev $swp1 ingress protocol ip pref 1 handle 101 flower
+
+	tc filter add dev $swp1 ingress protocol ip pref 1 handle 101 \
+		flower skip_sw \
+		action police rate 100mbit burst 100k conform-exceed drop/pipe \
+		action police rate 200mbit burst 200k conform-exceed drop/ok
+	check_fail $? "Incorrect success to add rule with two police actions"
+
+	tc qdisc del dev $swp1 clsact
+
+	log_test "multi police"
 }
 
 setup_prepare()

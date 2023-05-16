@@ -17,6 +17,7 @@
 #include "xfs_errortag.h"
 #include "xfs_error.h"
 #include "xfs_log.h"
+#include "xfs_log_priv.h"
 
 #ifdef DEBUG
 /*
@@ -377,8 +378,12 @@ xfsaild_resubmit_item(
 	}
 
 	/* protected by ail_lock */
-	list_for_each_entry(lip, &bp->b_li_list, li_bio_list)
-		xfs_clear_li_failed(lip);
+	list_for_each_entry(lip, &bp->b_li_list, li_bio_list) {
+		if (bp->b_flags & _XBF_INODES)
+			clear_bit(XFS_LI_FAILED, &lip->li_flags);
+		else
+			xfs_clear_li_failed(lip);
+	}
 
 	xfs_buf_unlock(bp);
 	return XFS_ITEM_SUCCESS;
@@ -393,7 +398,7 @@ xfsaild_push_item(
 	 * If log item pinning is enabled, skip the push and track the item as
 	 * pinned. This can help induce head-behind-tail conditions.
 	 */
-	if (XFS_TEST_ERROR(false, ailp->ail_mount, XFS_ERRTAG_LOG_ITEM_PIN))
+	if (XFS_TEST_ERROR(false, ailp->ail_log->l_mp, XFS_ERRTAG_LOG_ITEM_PIN))
 		return XFS_ITEM_PINNED;
 
 	/*
@@ -413,7 +418,7 @@ static long
 xfsaild_push(
 	struct xfs_ail		*ailp)
 {
-	xfs_mount_t		*mp = ailp->ail_mount;
+	struct xfs_mount	*mp = ailp->ail_log->l_mp;
 	struct xfs_ail_cursor	cur;
 	struct xfs_log_item	*lip;
 	xfs_lsn_t		lsn;
@@ -425,8 +430,12 @@ xfsaild_push(
 
 	/*
 	 * If we encountered pinned items or did not finish writing out all
-	 * buffers the last time we ran, force the log first and wait for it
-	 * before pushing again.
+	 * buffers the last time we ran, force a background CIL push to get the
+	 * items unpinned in the near future. We do not wait on the CIL push as
+	 * that could stall us for seconds if there is enough background IO
+	 * load. Stalling for that long when the tail of the log is pinned and
+	 * needs flushing will hard stop the transaction subsystem when log
+	 * space runs out.
 	 */
 	if (ailp->ail_log_flush && ailp->ail_last_pushed_lsn == 0 &&
 	    (!list_empty_careful(&ailp->ail_buf_list) ||
@@ -434,26 +443,32 @@ xfsaild_push(
 		ailp->ail_log_flush = 0;
 
 		XFS_STATS_INC(mp, xs_push_ail_flush);
-		xfs_log_force(mp, XFS_LOG_SYNC);
+		xlog_cil_flush(ailp->ail_log);
 	}
 
 	spin_lock(&ailp->ail_lock);
 
-	/* barrier matches the ail_target update in xfs_ail_push() */
-	smp_rmb();
-	target = ailp->ail_target;
-	ailp->ail_target_prev = target;
-
-	lip = xfs_trans_ail_cursor_first(ailp, &cur, ailp->ail_last_pushed_lsn);
-	if (!lip) {
-		/*
-		 * If the AIL is empty or our push has reached the end we are
-		 * done now.
-		 */
-		xfs_trans_ail_cursor_done(&cur);
-		spin_unlock(&ailp->ail_lock);
-		goto out_done;
+	/*
+	 * If we have a sync push waiter, we always have to push till the AIL is
+	 * empty. Update the target to point to the end of the AIL so that
+	 * capture updates that occur after the sync push waiter has gone to
+	 * sleep.
+	 */
+	if (waitqueue_active(&ailp->ail_empty)) {
+		lip = xfs_ail_max(ailp);
+		if (lip)
+			target = lip->li_lsn;
+	} else {
+		/* barrier matches the ail_target update in xfs_ail_push() */
+		smp_rmb();
+		target = ailp->ail_target;
+		ailp->ail_target_prev = target;
 	}
+
+	/* we're done if the AIL is empty or our push has reached the end */
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, ailp->ail_last_pushed_lsn);
+	if (!lip)
+		goto out_done;
 
 	XFS_STATS_INC(mp, xs_push_ail);
 
@@ -482,7 +497,7 @@ xfsaild_push(
 			 * inode buffer is locked because we already pushed the
 			 * updates to it as part of inode clustering.
 			 *
-			 * We do not want to to stop flushing just because lots
+			 * We do not want to stop flushing just because lots
 			 * of items are already being flushed, but we need to
 			 * re-try the flushing relatively soon if most of the
 			 * AIL is being flushed.
@@ -517,7 +532,7 @@ xfsaild_push(
 		/*
 		 * Are there too many items we can't do anything with?
 		 *
-		 * If we we are skipping too many items because we can't flush
+		 * If we are skipping too many items because we can't flush
 		 * them or they are already being flushed, we back off and
 		 * given them time to complete whatever operation is being
 		 * done. i.e. remove pressure from the AIL while we can't make
@@ -535,6 +550,8 @@ xfsaild_push(
 			break;
 		lsn = lip->li_lsn;
 	}
+
+out_done:
 	xfs_trans_ail_cursor_done(&cur);
 	spin_unlock(&ailp->ail_lock);
 
@@ -542,7 +559,6 @@ xfsaild_push(
 		ailp->ail_log_flush++;
 
 	if (!count || XFS_LSN_CMP(lsn, target) >= 0) {
-out_done:
 		/*
 		 * We reached the target or the AIL is empty, so wait a bit
 		 * longer for I/O to complete and remove pushed items from the
@@ -616,7 +632,7 @@ xfsaild(
 			 * opportunity to release such buffers from the queue.
 			 */
 			ASSERT(list_empty(&ailp->ail_buf_list) ||
-			       XFS_FORCED_SHUTDOWN(ailp->ail_mount));
+			       xlog_is_shutdown(ailp->ail_log));
 			xfs_buf_delwri_cancel(&ailp->ail_buf_list);
 			break;
 		}
@@ -634,7 +650,8 @@ xfsaild(
 		 */
 		smp_rmb();
 		if (!xfs_ail_min(ailp) &&
-		    ailp->ail_target == ailp->ail_target_prev) {
+		    ailp->ail_target == ailp->ail_target_prev &&
+		    list_empty(&ailp->ail_buf_list)) {
 			spin_unlock(&ailp->ail_lock);
 			freezable_schedule();
 			tout = 0;
@@ -678,7 +695,7 @@ xfs_ail_push(
 	struct xfs_log_item	*lip;
 
 	lip = xfs_ail_min(ailp);
-	if (!lip || XFS_FORCED_SHUTDOWN(ailp->ail_mount) ||
+	if (!lip || xlog_is_shutdown(ailp->ail_log) ||
 	    XFS_LSN_CMP(threshold_lsn, ailp->ail_target) <= 0)
 		return;
 
@@ -719,7 +736,6 @@ xfs_ail_push_all_sync(
 	spin_lock(&ailp->ail_lock);
 	while ((lip = xfs_ail_max(ailp)) != NULL) {
 		prepare_to_wait(&ailp->ail_empty, &wait, TASK_UNINTERRUPTIBLE);
-		ailp->ail_target = lip->li_lsn;
 		wake_up_process(ailp->ail_task);
 		spin_unlock(&ailp->ail_lock);
 		schedule();
@@ -735,7 +751,7 @@ xfs_ail_update_finish(
 	struct xfs_ail		*ailp,
 	xfs_lsn_t		old_lsn) __releases(ailp->ail_lock)
 {
-	struct xfs_mount	*mp = ailp->ail_mount;
+	struct xlog		*log = ailp->ail_log;
 
 	/* if the tail lsn hasn't changed, don't do updates or wakeups. */
 	if (!old_lsn || old_lsn == __xfs_ail_min_lsn(ailp)) {
@@ -743,13 +759,13 @@ xfs_ail_update_finish(
 		return;
 	}
 
-	if (!XFS_FORCED_SHUTDOWN(mp))
-		xlog_assign_tail_lsn_locked(mp);
+	if (!xlog_is_shutdown(log))
+		xlog_assign_tail_lsn_locked(log->l_mp);
 
 	if (list_empty(&ailp->ail_head))
 		wake_up_all(&ailp->ail_empty);
 	spin_unlock(&ailp->ail_lock);
-	xfs_log_space_wake(mp);
+	xfs_log_space_wake(log->l_mp);
 }
 
 /*
@@ -843,7 +859,6 @@ xfs_ail_delete_one(
 
 	trace_xfs_ail_delete(lip, mlip->li_lsn, lip->li_lsn);
 	xfs_ail_delete(ailp, lip);
-	xfs_clear_li_failed(lip);
 	clear_bit(XFS_LI_IN_AIL, &lip->li_flags);
 	lip->li_lsn = 0;
 
@@ -858,22 +873,23 @@ xfs_trans_ail_delete(
 	int			shutdown_type)
 {
 	struct xfs_ail		*ailp = lip->li_ailp;
-	struct xfs_mount	*mp = ailp->ail_mount;
+	struct xlog		*log = ailp->ail_log;
 	xfs_lsn_t		tail_lsn;
 
 	spin_lock(&ailp->ail_lock);
 	if (!test_bit(XFS_LI_IN_AIL, &lip->li_flags)) {
 		spin_unlock(&ailp->ail_lock);
-		if (shutdown_type && !XFS_FORCED_SHUTDOWN(mp)) {
-			xfs_alert_tag(mp, XFS_PTAG_AILDELETE,
+		if (shutdown_type && !xlog_is_shutdown(log)) {
+			xfs_alert_tag(log->l_mp, XFS_PTAG_AILDELETE,
 	"%s: attempting to delete a log item that is not in the AIL",
 					__func__);
-			xfs_force_shutdown(mp, shutdown_type);
+			xlog_force_shutdown(log, shutdown_type);
 		}
 		return;
 	}
 
 	/* xfs_ail_update_finish() drops the AIL lock */
+	xfs_clear_li_failed(lip);
 	tail_lsn = xfs_ail_delete_one(ailp, lip);
 	xfs_ail_update_finish(ailp, tail_lsn);
 }
@@ -888,7 +904,7 @@ xfs_trans_ail_init(
 	if (!ailp)
 		return -ENOMEM;
 
-	ailp->ail_mount = mp;
+	ailp->ail_log = mp->m_log;
 	INIT_LIST_HEAD(&ailp->ail_head);
 	INIT_LIST_HEAD(&ailp->ail_cursors);
 	spin_lock_init(&ailp->ail_lock);
@@ -896,7 +912,7 @@ xfs_trans_ail_init(
 	init_waitqueue_head(&ailp->ail_empty);
 
 	ailp->ail_task = kthread_run(xfsaild, ailp, "xfsaild/%s",
-			ailp->ail_mount->m_super->s_id);
+				mp->m_super->s_id);
 	if (IS_ERR(ailp->ail_task))
 		goto out_free_ailp;
 

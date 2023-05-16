@@ -7,6 +7,3 @@ MAKEVARS = INSTALLROOT=`pwd`/build/tftp-hpa-5.2-install
 
 include $(ROOTDIR)/tools/automake.inc
 
-romfs:
-	$(ROMFSINST) -a "tftp dgram udp wait root /sbin/in.tftpd /factory -s" /etc/inetd.conf
-

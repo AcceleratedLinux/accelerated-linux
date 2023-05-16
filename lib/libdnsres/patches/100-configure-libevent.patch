@@ -1,0 +1,58 @@
+
+Fix libevent discovery so it works with cross-compiling.
+
+Index: libdnsres-0.1a/configure.in
+===================================================================
+--- libdnsres-0.1a.orig/configure.in
++++ libdnsres-0.1a/configure.in
+@@ -29,44 +29,12 @@ dnl Checks for libraries.
+ AC_CHECK_LIB(socket, socket)
+ 
+ dnl Checks for libevent
+-AC_MSG_CHECKING(for libevent)
+-AC_ARG_WITH(libevent,
+-[  --with-libevent=DIR     use libevent build directory],
+-[ case "$withval" in
+-  yes|no)
+-     AC_MSG_RESULT(no)
+-     ;;
+-  *)
+-     AC_MSG_RESULT($withval)
+-     if test -f $withval/event.h -a -f $withval/libevent.a; then
+-        owd=`pwd`
+-        if cd $withval; then withval=`pwd`; cd $owd; fi
+-        EVENTINC="-I$withval"
+-        EVENTLIB="-L$withval -levent"
+-     elif test -f $withval/include/event.h -a -f $withval/lib/libevent.a; then
+-        owd=`pwd`
+-        if cd $withval; then withval=`pwd`; cd $owd; fi
+-	EVENTINC="-I$withval/include"
+-	EVENTLIB="-L$withval/lib -levent"
+-     else
+-        AC_ERROR(event.h or libevent.a not found in $withval)
+-     fi
+-     ;;
+-  esac ],
+-[ if test -f ${prefix}/include/event.h; then
+-     EVENTINC="-I${prefix}/include"
+-     EVENTLIB="-L${prefix}/lib -levent"
+-  elif test -f /usr/include/event/event.h; then
+-     EVENTINC="-I/usr/include/event"
+-     EVENTLIB="-levent"
+-  elif test -f /usr/include/event.h; then
+-     EVENTLIB="-levent"
+-  else
+-     AC_MSG_RESULT(no)
+-     AC_ERROR(libevent not found)
+-  fi
+-  AC_MSG_RESULT(yes) ]
+-)
++save_CPPFLAGS=$CPPFLAGS
++CPPFLAGS="$CPPFLAGS $EVENTINC"
++AC_CHECK_HEADER(event.h)
++CPPFLAGS="$save_CPPFLAGS"
++
++AC_SEARCH_LIBS(event_new, event, EVENTLIB=-levent)
+ AC_SUBST(EVENTINC)
+ AC_SUBST(EVENTLIB)
+ 

@@ -14,9 +14,9 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <termios.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/termios.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/select.h>

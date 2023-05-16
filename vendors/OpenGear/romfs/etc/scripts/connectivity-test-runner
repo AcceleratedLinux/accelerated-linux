@@ -1,0 +1,1268 @@
+#!/bin/bash
+
+script_name=$(basename $0)
+
+# Logging related
+verbosity=0
+enable_tag_color=true
+logger_active_tag=
+function log ()
+{
+	local tag=
+	local msg=
+	local color_tag_begin=
+	local color_tag_end=
+
+	if [ "$enable_tag_color" ]; then
+		color_tag_begin="\033[33m"
+		color_tag_end="\033[0m"
+	fi
+
+	if (( $# == 2 )); then
+		logger_active_tag=${1}
+		if [ -z "${2}" ]; then
+			# start tagged block, but do not log anything
+			return
+		else
+			# start tagged block
+			msg="${2}"
+			tag="$logger_active_tag"
+		fi
+	else
+		if [ "${1}" == "$logger_active_tag" ]; then
+			# disable tagged block, do not log anything
+			logger_active_tag=
+			return
+		elif [ -n "$logger_active_tag" ]; then
+			# inside existing tagged block
+			msg="${1}"
+			tag="$logger_active_tag"
+		else
+			#just log normally
+			msg=${1}
+		fi
+	fi
+
+	if [[ -n "$verbosity" ]]; then
+		local progress=
+		if (( verbosity == 0 )); then
+			return
+		fi
+
+		if (( verbosity >= 1 )); then
+			case "$logger_active_tag" in
+					[:space:]*|INFO|FATAL) progress=true;;
+					*) ;;
+			esac
+		fi
+
+		if [ -z "$progress" ]; then
+			if (( verbosity >= 2 )); then
+				case "$logger_active_tag" in
+					TEST-*) progress=true;;
+					*);;
+				esac
+			fi
+		fi
+
+		if [ -z "$progress" ]; then
+			if (( verbosity >= 3 )); then
+				progress=true
+			fi
+		fi
+
+		if [ -z "$progress" ]; then
+			return
+		fi
+
+	fi
+
+	if [ -n "$msg" ]; then
+		if [ "$tag" ]; then
+			echo -e "$color_tag_begin[$tag]$color_tag_end" "$msg"
+			logger -t "$script_name [$tag]" "$msg"
+		else
+			echo "$msg"
+			logger -t "$script_name" "$msg"
+		fi
+	fi
+}
+
+if ! bash -n "$(realpath $0)"; then
+	log FATAL "Syntax errors detected."
+	exit 1
+fi
+
+if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
+	log FATAL "Script used incorrectly. Should not be sourced"
+	exit 1
+fi
+
+# Enable or disable cgroups. Set to true to create and add child test process to cgroups
+cgroups_enabled=
+cgroups_enabled_net_prio=
+cgroups_enabled_net_cls=
+fwrules_enabled=
+# The original failover config state
+declare -A original_failover_config
+# The active working failover config state
+declare -A working_failover_config
+failover_config_subtree=config.interfaces.wan.failover
+# The interface under  test. Override with -i=
+test_iface=cellmodem
+test_iface_active=
+test_iface_isup=
+#eg. ping curl dns
+tests_to_be_performed=
+# Map of tests and their timeouts
+declare -A test_timeouts
+test_timeout_default=30
+# Map of tests and their endpoints
+declare -A test_endpoints
+test_endpoints["ping"]="8.8.8.8"
+test_endpoints["curl"]="http://www.google.com"
+test_endpoints["dns"]="8.8.8.8"
+declare -A test_success
+# The url endpoint for the test results
+declare -A test_results_endpoints
+failover_is_active=
+results_dir=/var/tmp/connectivity-test-results
+connectivity_scripts_path=/etc/scripts
+# The max number of seconds we wait for the interface to come up.
+# The default is worst case
+interface_bringup_timeout=900
+declare -A tests_runtime
+
+function cleanup_results_data ()
+{
+	if [ -d "$results_dir" ]; then
+		mkdir -p "$results_dir-lastrun" 2>/dev/null
+		rm -rf $results_dir/*.success 2>/dev/null
+		mv $results_dir/* "$results_dir-lastrun" 2>/dev/null
+		rmdir $results_dir 2>/dev/null
+		log "Last run results saved to $results_dir-lastrun"
+	fi
+}
+
+function clean_ws ()
+{
+	local s=${1}
+	echo "${s//[[:blank:]]/}"
+}
+
+# Restores system to previous state.
+in_cleanup=
+function cleanup ()
+{
+	if [ -n "$in_cleanup" ]; then
+		return;
+	fi
+
+	in_cleanup=true
+
+	do_push_results
+
+	log CLEANUP ""
+
+	# iptables. Must be first
+	if [ -n "$fwrules_enabled" ]; then
+		log "Revert iptables changes"
+		remove_fwrules
+	fi
+
+	# Have we actually changed conman?
+	if [ "${working_failover_config[dormant]}" != "${original_failover_config[dormant]}" ]; then
+		revert_to_original_failover_config "run-configurator"
+	fi
+
+	# cgroups
+	if [ -n "$cgroups_enabled" ]; then
+		log "Teardown cgroups"
+		teardown_cgroups
+	fi
+
+	# Remove override
+	set_wan_failover_ping_override
+
+	do_final_cleanup
+
+	log CLEANUP
+}
+
+function do_final_cleanup()
+{
+	#Remove all tests
+	if [ "$connectivity_scripts_path" != "/" ]; then
+		rm -rf $connectivity_scripts_path 2>/dev/null
+	fi
+
+	# Remove single instance lock
+	exec 201>&-
+	rm  $lock_file 2>/dev/null
+}
+
+# Sends curl notifications for the tests performed to indicate they have failed and not been run
+function notify_test_errors()
+{
+	local details="failure=Test not run: ${1}"
+
+	for test in $tests_to_be_performed; do
+		store_test_result $test "$details" 0
+	done
+
+	do_push_results
+
+	exit 1
+}
+
+# Push stored results to endpoints
+function do_push_results()
+{
+	log RESULTS-PUSH ""
+	if [ -d "$results_dir" ]; then
+		for test in $results_dir/*; do
+			local count=0
+			local command_template=$(<$test)
+			test_name=${test#$results_dir/}
+			[[ "$tests_to_be_performed" != *"$test_name"* ]] && continue
+			if [ -z "${test_results_endpoints[$test_name]}" ]; then
+					local result_file=$test-no-push-result
+					cmd=$(echo "$command_template" | sed -e "s~{{ENDPOINT}}~ ~")
+					echo -e "Date: $(date)" > $result_file
+					echo -e "\nCommand:\n$(echo $cmd)" >> $result_file
+					echo -e "\nResults not pushed, no endpoint provided" >> $result_file
+			else
+				for endpoint in $(echo ${test_results_endpoints[$test_name]} | sed "s/,/ /g"); do
+					cmd=$(echo "$command_template" | sed -e "s~{{ENDPOINT}}~${endpoint//&/\\&}~")
+					local result_file=$test-push-result$count
+					echo -e "Date: $(date)" > $result_file
+					echo -e "\nCommand:\n$(echo $cmd)" >> $result_file
+					echo -e "\nOutput: " >> $result_file
+					log "Pushing results of $test_name to endpoint: $endpoint"
+					( bash -c "$cmd" >> $result_file 2>&1 & )
+					let count=count+1
+				done
+			fi
+			rm $test 2>/dev/null
+		done
+		cleanup_results_data
+	else
+		log "$results_dir not valid. No test results to push"
+	fi
+	log RESULTS-PUSH
+}
+
+# Mode 1: Generates the default tests when passed: $1=path, $2=the set of builtin tests to generate
+# Mode 2: Generates a test script template when passed: $1=path, $2="" $3=test name
+function generate_builtin_tests()
+{
+	local path=${1}
+	#Comma separated list!
+	local tests=${2}
+	local name=${3}
+	[ ! -d "$path" ] && mkdir -p $path 2>/dev/null
+
+	read -r -d '' template <<-"EOT"
+
+#!/bin/bash
+
+########### Do not modify! ################
+
+[ -z "$TEST_IFACE" ] && echo "Must be run from connectivity-test-runner script" && exit 1
+[ -z "$TEST_ENDPOINT" ] && echo "Must be run from connectivity-test-runner script" && exit 1
+
+# Announce PID and give runner script time to parse and process TEST_SCRIPT_PID value
+echo "TEST_SCRIPT_PID=$$"
+sleep 2
+
+###########################################
+
+try_count=0
+max_tries=3
+
+# Results return string.
+# Set result to:
+#    * "success" for a succesfull test
+#    * "failure" for a failed test
+#    * "success=User Detail String" for succesfull test with details
+#    * "failure=User Detail String" for failed test with detail
+# where "User Detail String" will be forwarded in the JSON results payload
+# as the test result details for human consumption
+# eg. result="failure=Unknown error encountered"
+# Failure to set result accordingly will result in failed test being reported
+result=failure
+
+#{{PREAMBLE}}
+while :; do
+  #{{TEST_CONDITION}}
+  let try_count=try_count+1
+  if (( $try_count == $max_tries )); then
+     result=failure
+     break
+  fi
+  sleep 1
+done
+
+########### Do not modify! #############################
+
+# Announce result and give runner script time to process TEST_SCRIPT_RESULT value
+echo "TEST_SCRIPT_RESULT=$result"
+sleep 2
+
+########################################################
+
+EOT
+
+	if [ -n "$name" ]; then
+		echo "$template" > $path/connectivity-$name-test
+		sed -i -e "s/#{{PREAMBLE}}//" $path/connectivity-$name-test
+		sed -i -e "s/#{{TEST_CONDITION}}/#Add your test condition here/" $path/connectivity-$name-test
+		chmod +x $path/connectivity-$name-test
+		return
+	fi
+
+	for test in $(echo $tests | sed "s/,/ /g"); do
+		if [ "$test" == "ping" ]; then
+			echo "$template" > $path/connectivity-ping-test
+			sed -i -e "s/#{{PREAMBLE}}//" $path/connectivity-ping-test
+			sed -i -e 's/#{{TEST_CONDITION}}/ping -I $TEST_IFACE -q -c 1 $TEST_ENDPOINT \&\& result=success \&\& break/' $path/connectivity-ping-test
+			chmod +x $path/connectivity-ping-test
+		fi
+
+		if [ "$test" == "curl" ]; then
+			curl_code='CODE=$(curl --insecure --interface $TEST_IFACE --connect-timeout 5 -s -w '%{http_code}' "$TEST_ENDPOINT" -o \/dev\/null );\
+			if (( "$CODE" == 200 ));\
+			then\
+				result=success;\
+				break;\
+			fi'
+
+			echo "$template" > $path/connectivity-curl-test
+			sed -i -e 's/#{{PREAMBLE}}/echo "performing test": curl --insecure --interface $TEST_IFACE --connect-timeout 5 -s -w '%{http_code}' "$TEST_ENDPOINT" -o \/dev\/null /' $path/connectivity-curl-test
+			sed -i -e "s/#{{TEST_CONDITION}}/$curl_code/" $path/connectivity-curl-test
+			chmod +x $path/connectivity-curl-test
+		fi
+
+		if [ "$test" == "dns" ]; then
+			dns_code='# other options:timeout=3\
+			if dig -t SOA @$TEST_ENDPOINT . ; then\
+				result=success\
+				break\
+			fi'
+
+			echo "$template" > $path/connectivity-dns-test
+			sed -i -e 's/#{{PREAMBLE}}//' $path/connectivity-dns-test
+			sed -i  -e "s/#{{TEST_CONDITION}}/$dns_code/" $path/connectivity-dns-test
+			chmod +x $path/connectivity-dns-test
+		fi
+	done
+}
+
+# Override wan failover ping exit code.
+function set_wan_failover_ping_override()
+{
+	rm /var/run/override-wan-test-ping-code 2>/dev/null
+
+	if [ -n "$1" ]; then
+		if [[ $1 =~ ^[0-9]+$ ]]; then
+			log "Spoofing wan failover ping exit code as $1"
+			echo $1 > /var/run/override-wan-test-ping-code
+		fi
+	else
+		:
+	fi
+}
+
+function update_fwrules ()
+{
+	/bin/bash -c "$@"
+}
+
+# For dormant failover case we need to setup some firewall rules to block unexpected egress traffic via the $test_iface
+function setup_fwrules ()
+{
+	local fw_srcIp=$1
+	local out_srcIp=$2
+	[ -z "$fw_srcIp" ] && fw_srcIp=$(ifconfig eth0 | awk '/inet addr/ {gsub("addr:", "", $2); print $2}');
+	[ -z "$out_srcIp" ] && out_srcIp=$(ifconfig $test_iface | awk '/inet addr/ {gsub("addr:", "", $2); print $2}');
+
+	if [[ -n "$fw_srcIp" && -n "$out_srcIp" ]]; then
+		update_fwrules "/bin/iptables -I OUTPUT -t filter -o $test_iface ! --src $out_srcIp -j Block"
+		update_fwrules "/bin/iptables -I FORWARD -t filter -i eth0 -o $test_iface --src $fw_srcIp -j Block"
+		fwrules_enabled=true
+	fi
+}
+
+function remove_fwrules()
+{
+	local fw_srcIp=$1
+	local out_srcIp=$2
+	[ -z "$fw_srcIp" ] && fw_srcIp=$(ifconfig eth0 | awk '/inet addr/ {gsub("addr:", "", $2); print $2}');
+	[ -z "$out_srcIp" ] && out_srcIp=$(ifconfig $test_iface | awk '/inet addr/ {gsub("addr:", "", $2); print $2}');
+
+	if [[ -n "$fw_srcIp" && -n "$out_srcIp" ]]; then
+		update_fwrules "/bin/iptables -D OUTPUT -t filter -o $test_iface ! --src $out_srcIp -j Block"
+		update_fwrules "/bin/iptables -D FORWARD -t filter -i eth0 -o $test_iface --src  $fw_srcIp -j Block"
+	fi
+}
+
+# Check to see if $test_iface has ip address
+# if of type "cellmodem", set to proper iface: wwan0 or wwan1
+# For cellmodem can use $1 = "check-route":  Use route command to do test, due to bug where by ip is not possibly available yet
+# but interface is valid
+function check_test_iface_isactive()
+{
+	if [ "$test_iface" == "cellmodem" ]; then
+		if [ "${1}" == "check-route" ]; then
+			local result=$(route | grep wwan | awk '{if ($1 == "default" && $2 != " ") print  $8 }')
+			if [ -n "$result" ]; then
+				test_iface=$result
+				test_iface_active=true
+				return
+			fi
+		else
+			# have to account for the possibility for any one of these interfaces
+			if ifconfig wwan0 2>/dev/null | grep 'inet addr'; then
+				test_iface=wwan0
+				test_iface_active=true
+				return
+			elif ifconfig wwan1 2>/dev/null | grep 'inet addr'; then
+				test_iface=wwan1
+				test_iface_active=true
+				return
+			fi
+		fi
+	elif ifconfig $test_iface 2>/dev/null | grep 'inet addr'; then
+		test_iface_active=true
+		return
+	fi
+	test_iface_active=false
+}
+
+function check_test_iface_is_enabled ()
+{
+	test_iface_enabled=
+	if [ "$test_iface" == "cellmodem" ]; then
+		# Check if not hardware disabled
+		local value=$(config -g config.cellmodem.hardware.disable | cut -f2- -d' ')
+		if [ -z "$value" ]; then
+			# Check if not software disabled
+			value=$(config -g config.cellmodem.ppp.dialer.enabled | cut -f2- -d' ')
+			if [ "$value" == "on" ]; then
+				test_iface_enabled=true
+			fi
+		fi
+	else
+		test_iface_enabled=true
+	fi
+}
+
+function dump_working_failover_config ()
+{
+	read -r -d '' INFO <<- EOM
+	interface:${working_failover_config[interface]}, dormant:${working_failover_config[dormant]}, address1:${working_failover_config[address1]}, address2:${working_failover_config[address2]}
+	EOM
+
+	log "$INFO"
+}
+
+function get_failover_config_val ()
+{
+	value=$(config -g "$failover_config_subtree.${1}" | cut -f2- -d' ')
+	echo "$value"
+}
+
+function set_failover_config_val ()
+{
+	config -s "$failover_config_subtree.${1}=${2}"
+}
+
+# Returns current failover state
+function get_original_failover_config ()
+{
+	log "Retrieving original failover config"
+
+	local address1="$(get_failover_config_val address1)"
+	local address2="$(get_failover_config_val address2)"
+	local dormant="$(get_failover_config_val dormant)"
+	local interface="$(get_failover_config_val interface)"
+
+	original_failover_config=(
+		["address1"]="$address1"
+		["address2"]="$address2"
+		["dormant"]="$dormant"
+		["interface"]="$interface"
+	)
+
+	# Copy into working
+	for idx in "${!original_failover_config[@]}"; do
+		working_failover_config[$idx]=${original_failover_config[$idx]}
+	done
+}
+
+function commit_working_failover_config ()
+{
+	set_failover_config_val "address1" "${working_failover_config[address1]}"
+	set_failover_config_val "address2" "${working_failover_config[address2]}"
+	set_failover_config_val "dormant" "${working_failover_config[dormant]}"
+	set_failover_config_val "interface" "${working_failover_config[interface]}"
+
+	if [[ "$1" == "run-configurator" ]]; then
+		log "Running ipconfig configurator"
+		config -r ipconfig &>/dev/null
+	fi
+}
+
+function revert_to_original_failover_config ()
+{
+	log "Reverting working config to original"
+
+	for idx in "${!original_failover_config[@]}"; do
+		working_failover_config[$idx]=${original_failover_config[$idx]}
+	done
+
+	commit_working_failover_config ${1}
+}
+
+# Perform checks on the conman graph to see if a failover is configered as active
+function conman_status_failover_configured ()
+{
+	failover_cnt=$(conman_status | grep failover | wc -l)
+	if (( $failover_cnt >=2 )); then
+		echo "true"
+	else
+		echo "false"
+	fi
+}
+
+# Checks if an interface is configured in a particular failover state
+function get_failover_configuration_for_iface ()
+{
+	local result=
+	local iface="${1}"
+
+	if [ "${original_failover_config[interface]}" == "$iface" ]; then
+		if [ "${original_failover_config[dormant]}" == "on" ]; then
+			result=dormant
+		else
+			result=non-dormant
+		fi
+	fi
+
+	# Check conman status
+	# The congraph should have two failover related conns, when failover is active
+	if [ -n "$result" ]; then
+		local failover_cnt=$(conman_status | grep failover | wc -l)
+		local active=$(conman_status_failover_configured)
+		if [ "$active" == "false" ]; then
+			result=
+		fi
+	fi
+
+	echo "$result"
+}
+
+function wait_settle ()
+{
+	local result=
+
+	local max_sleep=900
+	local sleep_cnt=0
+
+	while true; do
+		check_test_iface_isactive
+		if [ "$test_iface_active" == "true" ]; then
+			settle_result=ready
+			log "Interface $test_iface is up"
+			break;
+		fi
+
+		let sleep_cnt=sleep_cnt+1
+		if (( $sleep_cnt == $max_sleep )); then
+			log "Time exceeded"
+			settle_result=abort
+			break;
+		fi
+		sleep 1
+	done
+}
+
+# cgroups API
+
+# common
+connectivity_cgroup_name=connectivity-test
+cgroup_sub_systems=
+cgroup_subsystem_path=
+connectivity_cgroup_path=
+connectivity_cgroup_tasks_path=
+
+#net_prio specific
+connectivity_cgroup_priority_map_path=
+
+# net_cls specific
+connectivity_cgroup_netcls_classid_path=
+connectivity_cgroup_netcls_id="0x00110011"
+connectivity_cgroup_netcls_id_handle="11"
+
+function check_cgroups_support ()
+{
+	if [ -n "$cgroups_enabled" ]; then
+		local sub_systems=$(cat /proc/cgroups | awk '/net_/ { if ($4 == "1") print $1; }')
+		cgroup_sub_systems=
+		if [[ -n "$cgroups_enabled_net_prio" ]] && [[ $sub_systems =~ net_prio ]]; then
+			cgroup_sub_systems=net_prio
+		fi
+		if [[ -n "$cgroups_enabled_net_cls" ]] && [[ $sub_systems =~ net_cls ]]; then
+			# TODO: Implement after kernel upgrade :)
+			# cgroup_sub_systems=$cgroup_sub_systems,net_cls
+			:
+		fi
+
+		if [ -z "cgroup_sub_systems" ]; then
+			cgroups_enabled=
+		fi
+	else
+		cgroup_sub_systems=
+		cgroups_enabled=
+	fi
+}
+
+function setup_cgroups ()
+{
+	if [ -z "$cgroups_enabled" ] || [ -z "$cgroup_sub_systems" ]; then
+		log "setup_cgroups: $cgroups_enabled, $cgroup_sub_systems"
+		return
+	fi
+
+	# Build cgroup paths
+	cgroup_subsystem_path=/sys/fs/cgroup/$cgroup_sub_systems
+	connectivity_cgroup_path=$cgroup_subsystem_path/$connectivity_cgroup_name
+	connectivity_cgroup_tasks_path=$connectivity_cgroup_path/tasks
+
+	if [[ $cgroup_sub_systems =~ net_prio ]]; then
+		connectivity_cgroup_priority_map_path=$connectivity_cgroup_path/net_prio.ifpriomap
+	fi
+
+	if [[ $cgroup_sub_systems =~ net_cls ]]; then
+		connectivity_cgroup_netcls_classid_path=$connectivity_cgroup_path/net_cls.classid
+	fi
+
+	 log "Paths:
+			cgroup_subsystem_path=$cgroup_subsystem_path
+	 		connectivity_cgroup_path=$connectivity_cgroup_path
+	 		connectivity_cgroup_tasks_path=$connectivity_cgroup_tasks_path
+	 		connectivity_cgroup_priority_map_path=$connectivity_cgroup_priority_map_path
+	 		connectivity_cgroup_netcls_classid_path=$connectivity_cgroup_netcls_classid_path
+	 	"
+
+	# mount root
+	if ! mount | grep /sys/fs/cgroup > /dev/null; then
+		log "Mounting /sys/fs/cgroup"
+	 	mount -t tmpfs cgroup_root /sys/fs/cgroup 2>/dev/null
+	fi
+
+	# mount subsystems
+	if ! mount | grep $cgroup_subsystem_path > /dev/null; then
+		log "Mounting $cgroup_subsystem_path"
+		mkdir -p $cgroup_subsystem_path
+	 	mount -t cgroup -o$cgroup_sub_systems none $cgroup_subsystem_path 2>/dev/null
+	fi
+
+	# Create failover specific cgroup
+	mkdir -p $connectivity_cgroup_path 2>/dev/null
+
+	if [[ $cgroup_sub_systems =~ net_cls ]]; then
+		setup_cgroups_netcls
+	fi
+}
+
+function teardown_cgroups ()
+{
+	if mount | grep $cgroup_sub_systems > /dev/null; then
+		umount $cgroup_subsystem_path
+		rmdir $cgroup_subsystem_path  > /dev/null
+	fi
+
+	if mount | grep /sys/fs/cgroup > /dev/null; then
+	 	umount /sys/fs/cgroup
+	fi
+
+	if [[ $cgroup_sub_systems =~ net_cls ]]; then
+		teardown_cgroups_netcls
+	fi
+}
+
+# Sets the cgroups priority for an interface
+function set_iface_cgroup_priority ()
+{
+	if [ -z "$cgroups_enabled" ]; then
+		return
+	fi
+
+	if [ -e "$connectivity_cgroup_priority_map_path" ]; then
+		local iface=${1}
+		local prio=${2}
+		[ -z "$iface" ] && iface=$test_iface
+		[ -z "$prio" ] && prio=0
+		log CGROUPS-NET_PRIO "Set cgroups net priority for $iface to $prio"
+		echo "$iface $prio" > $connectivity_cgroup_priority_map_path
+		#log "$(cat $connectivity_cgroup_priority_map_path)"
+		log CGROUPS-NET_PRIO
+	fi
+}
+
+# Add the PID to the cgroups container
+function add_child_to_cgroup ()
+{
+	if [ -z "$cgroups_enabled" ]; then
+		return
+	fi
+
+	local child_pid=${1}
+	log CGROUPS ""
+	if [[ $child_pid =~ ^[0-9]+$ ]]; then
+		log "Adding pid($child_pid) to cgroups tasks list"
+		echo "$child_pid" > $connectivity_cgroup_tasks_path
+		# log "$(cat $connectivity_cgroup_tasks_path)"
+	else
+		log "Invalid child pid: $child_pid"
+
+	fi
+	log CGROUPS
+}
+
+# Not really needed as child test process are short lived
+function remove_child_from_cgroups_task ()
+{
+	local child_pid=${1}
+	if [[ $child_pid =~ ^-?[0-9]+$ ]]; then
+		sed -i "/$child_pid/d" "$connectivity_cgroup_tasks_path"
+	else
+		log ERROR "invalid child pid: $child_pid"
+		log ERROR
+	fi
+}
+
+connectivity_cgroup_route=$connectivity_cgroup_name
+function setup_cgroups_netcls ()
+{
+	##
+	# Disabled: no recent cgroup suport in current kernel.
+	#
+	# References:
+	# Kernel docs
+	# https://superuser.com/questions/271915/route-the-traffic-over-specific-interface-for-a-process-in-linux/1048913
+	# https://www.evolware.org/?p=369
+	#
+	#
+	# Enabling this subsystem requires more kernel configuration such a cgroup class matching for iptables
+	##
+
+	# echo $connectivity_cgroup_netcls_id > $connectivity_cgroup_netcls_classid_path
+
+	# TODO: iptables requires cgroup support
+	# # Add mark $connectivity_cgroup_netcls_id_handle on packets of classid $connectivity_cgroup_netcls_id
+	# iptables -t mangle -A OUTPUT -m cgroup --cgroup $connectivity_cgroup_netcls_id -j MARK --set-mark $connectivity_cgroup_netcls_id_handle
+
+	# This needs to be done only once.
+	# line=$(grep -Fn "$route" /etc/iproute2/rt_tables| cut -f1 -d':')
+	# if [ -z "$line" ]; then
+	# 	echo $connectivity_cgroup_netcls_id_handle $connectivity_cgroup_route >> /etc/iproute2/rt_tables
+	# fi
+
+	# Add rule to forward packets from this cgroup over test route
+	# ip rule add fwmark $connectivity_cgroup_netcls_id_handle table $connectivity_cgroup_route
+
+	# test_iface_gateway=$(route -n | awk "/$test_iface/"' {print $2; exit;}')
+	# ip route add default via $test_iface_gatewaytable $connectivity_cgroup_route
+	:
+}
+
+function teardown_cgroups_netcls ()
+{
+	##
+	# Disabled: requires newer netcls cgroup suport in current kernel and iptables
+	# Not tested. Requires a bit of work
+	#
+
+	# iptables -t mangle -D OUTPUT -m cgroup --cgroup $connectivity_cgroup_netcls_id -j MARK --set-mark $connectivity_cgroup_netcls_id_handle
+
+	# line=$(grep -Fn "$route" /etc/iproute2/rt_tables| cut -f1 -d':')
+	# if (( $line > 0 )); then
+	# 	sed -i "$line d" "/etc/iproute2/rt_tables"
+	# fi
+
+	# TODO
+	# ip rule del fwmark $connectivity_cgroup_netcls_id_handle table $connectivity_cgroup_route
+	:
+}
+# End cgroup API
+
+function test_iface_is_up()
+{
+	log "Checking if $test_iface is up..."
+	local sleep_cnt=0
+	test_iface_active=
+	while :; do
+		check_test_iface_isactive "check-route"
+		if [ "$test_iface_active" == "true" ]; then
+			log "$test_iface is up"
+			test_iface_active=true
+			break
+		fi
+		let sleep_cnt=sleep_cnt+10
+		if (( $sleep_cnt > $interface_bringup_timeout )); then
+			break
+		fi
+		log "Sleeping for 10s..."
+		sleep 10
+	done
+}
+
+##
+# Test API
+##
+
+# Generates the command(s) that pushes the test results to the endpoint to a file for later use
+function store_test_result ()
+{
+	local test=${1}
+	local result=${2}
+	local details=
+
+	mkdir -p $results_dir
+	let tests_runtime[$test]=${tests_runtime[$test]}+${3}
+
+	if [[ $result =~ ^success ]]; then
+		details="${result#success=*}"
+		result=true
+		touch "$results_dir/$test.success"
+	elif [[ $result =~ ^failure ]]; then
+		details="${result#failure=*}"
+		result=false
+	else
+		details="$result"
+		result=false
+	fi
+
+	read -r -d '' command_template <<-EOF
+curl \
+-v \
+--insecure \
+--header 'Content-Type: application/json' \
+--request POST \
+--connect-timeout 15 \
+--retry 1 \
+--data '{ \
+"test": "$test", \
+"results": { \
+"success": $result, \
+"duration_seconds": ${tests_runtime[$test]}, \
+"detail": "$details" } \
+}' \
+--url '{{ENDPOINT}}'
+	EOF
+	echo "$command_template" > $results_dir/$test
+}
+
+function do_test ()
+{
+	export timestamp_test_start=$(date +%s)
+
+	export TEST_IFACE=$test_iface
+	export TEST_ENDPOINT="$2"
+
+	test_timeout=${test_timeouts["$1"]}
+	if [ -z "$test_timeout" ]; then
+		test_timeout=$test_timeout_default
+	fi
+
+	log "Timeout is set to $test_timeout(s)"
+	timeout $test_timeout $connectivity_scripts_path/connectivity-$1-test | while read line; do
+		log "script output: $line"
+		case "$line" in
+			TEST_SCRIPT_PID=*)
+				local pid=${line#TEST_SCRIPT_PID=};
+				if [ -n "$pid" ]; then
+					add_child_to_cgroup $pid
+				fi
+				;;
+			TEST_SCRIPT_RESULT=*)
+				local timestamp_test_end=$(date +%s)
+				local runtime=$((timestamp_test_end-timestamp_test_start))
+				local result=${line#TEST_SCRIPT_RESULT=};
+				store_test_result $1 "$result" $runtime
+				;;
+			*) ;;
+		esac
+	done
+
+	# Check if test was forcefully terminated
+	if [ ! -e $results_dir/$1 ]; then
+		local timestamp_test_end=$(date +%s)
+		local runtime=$((timestamp_test_end-timestamp_test_start))
+		store_test_result $1 "failure=Timeout: Test terminated" $runtime
+	fi
+}
+# End Test API
+
+function usage()
+{
+	echo
+	echo "Runs network interface connectivity test scripts"
+	echo
+	echo "Builtin tests available: ping,curl,dns"
+	echo
+	echo "Custom scripts:"
+	echo "        Use -gt to generate a template"
+	echo "        The test scripts should follow naming convention connectivity-YOURTESTNAME-test, where YOURTESTNAME is name passed to the -t option"
+	echo "        Use -p switch to provide the path to your custom scripts"
+	echo
+	echo $script_name "-tests=<tests> [-h] [-v] --TESTNAME--test-endpoints=<ips/urls> [--TESTNAME--result-endpoints=<urls>] [--TESTNAME--timeout=<seconds>] [-s=<isloation strategies>] [-p=path] [-gt=path]"
+	echo "-h          This help"
+	echo "-v          To make the operation more talkative add more v's"
+	echo "-tests      The names of Tests to perform given as comma separated list, builtin tests available: ping,curl,dns"
+	echo "--TESTNAME--test-endpoints"
+	echo "            A list of Test Endpoints for TESTNAME eg: --ping--test-endpoint=8.8.8.8,8.8.8.4.4"
+	echo "            Each endpoint will be tested until success is reported"
+	echo "            Appropriate defaults are chosen for builtins"
+	echo "--TESTNAME--result-endpoints"
+	echo "            A comma separated listof endpoints to which the results for TESTNAME will be pushed to"
+	echo "            eg --ping--result-endpoints=http://www.foo.com/resul?id=100,http://www.foo.com/resul?id=200"
+	echo "            Tests without result endpoint do not get pushed"
+	echo "--TESTNAME--timeout Number of seconds given for test to run before forcefully terminated eg: --ping--timeout=10"
+	echo "-s          A List of isolation Strategies to apply as comma separated list. Options: cgroup_net_prio cgroup_net_cls"
+	echo "-p          Search path for custom scripts"
+	echo "-gt         Write a test script template to path. eg -gt=."
+	#echo "-i          Test Interface. Defaults to \"cellmodem\""
+	echo
+	echo "example:    ./$script_name -vvv -tests=ping,curl"
+	echo "                           --ping--test-endpoints=8.8.4.4,8.8.4.4"
+	echo "                           --ping--result-endpoints=http://www.foo.com/result0,http://www.baz.com/result0"
+	echo "                           --curl--test-endpoints=https://foo.com/curltest,http://www.google.com"
+	echo "                           --curl--result-endpoints=http://www.foo.com/result1"
+	echo "                           -s=cgroup_net_prio"
+	echo
+	exit 0
+}
+
+##
+## Main
+##
+
+options_test_types=
+options_test_timeouts=
+options_gen_tests=
+generated_tests_path=/var/tmp/connectivity-tests
+rm -rf $generated_tests_path 2>/dev/null
+mkdir -p $generated_tests_path 2>/dev/null
+options_gen_template_path=
+options_kv_sep=":="
+connectivity_scripts_path=
+custom_scripts_path=
+
+export timestamp_script_start=$(date +%s)
+export test_bringup_elapsed=0
+
+for opt in $*; do
+	case "$opt" in
+		-h)
+			usage
+			;;
+		-v*)
+			var=${opt#-}
+			verbosity=${#var}
+			unset var
+			;;
+		-tests=*)
+			tests_to_be_performed=
+			options_test_types=${opt#-tests=}
+			;;
+		-i=*)
+			test_iface=${opt#-i=}
+			;;
+		-s=*)
+			options_nettraffic_isolation=${opt#-s=}
+			if [[ $options_nettraffic_isolation =~ cgroup_net_prio ]]; then
+				log CGROUPS "User options: cgroup net_prio enabled"
+				cgroups_enabled=true
+				cgroups_enabled_net_prio=true
+			fi
+
+			if [[ $options_nettraffic_isolation =~ cgroup_net_cls ]]; then
+				log CGROUPS "User options: cgroup net_cls enabled"
+				cgroups_enabled=true
+				cgroups_enabled_net_cls=true
+			fi
+			;;
+		-p=*)
+			custom_scripts_path=${opt#-p=}
+			;;
+		-gt=*)
+			options_gen_template_path=${opt#-gt=}
+			;;
+		--*--timeout=*)
+			if [[ $opt =~ --(.*)--timeout\=(.*) ]]; then
+				testname=${BASH_REMATCH[1]}
+				if [[ ",$options_test_types," = *",$testname,"* ]]; then
+					value="${BASH_REMATCH[2]}"
+					if [[ $value =~ ^-?[0-9]+$ ]]; then
+						test_timeouts["$testname"]=$value
+					else
+						log "Invalid timeout for $testname defaulting to $test_timeout_default"
+					fi
+				fi
+			fi
+			;;
+		--*--test-endpoints=*)
+			if [[ $opt =~ --(.*)--test-endpoints\=(.*) ]]; then
+				testname=${BASH_REMATCH[1]}
+				if [[ ",$options_test_types," = *",$testname,"* ]]; then
+					test_endpoints["$testname"]="${BASH_REMATCH[2]}"
+				fi
+			fi
+			;;
+		--*--result-endpoints=*)
+			if [[ $opt =~ --(.*)--result-endpoints\=(.*) ]]; then
+				testname=${BASH_REMATCH[1]}
+				if [[ ",$options_test_types," = *",$testname,"* ]]; then
+					test_results_endpoints["$testname"]="${BASH_REMATCH[2]}"
+				fi
+			fi
+			;;
+		*)
+			usage
+			;;
+	esac
+done
+
+log INFO ""
+
+if [ "$#" == "0" ]; then
+	usage
+fi
+
+# Lock script to single instance
+lock_file=/var/lock/$script_name.lock
+exec 201> $lock_file
+if ! flock -n 201 ; then
+	log INFO "Script already running."
+	log INFO "If you are sure it isn't remove $lock_file"
+  exit 1
+fi
+
+#Generate a template only?
+if [ -n "$options_gen_template_path" ]; then
+	generate_builtin_tests "$options_gen_template_path" "" YOURTESTNAME
+	log "Generated test template $options_gen_template_path/connectivity-YOURTESTNAME-test"
+	exit 0
+fi
+
+# Check if custom scripts path is provided
+# and copy the tests into our $generated_tests_path
+if [ -n "$custom_scripts_path" ]; then
+	if [ ! -d "$custom_scripts_path" ]; then
+		log "Supplied scripts path $custom_scripts_path does not exist."
+	else
+		for custom_test in $custom_scripts_path/*; do
+			if [[ $custom_test =~ connectivity-.*-test$ ]]; then
+				cp $custom_test $generated_tests_path 2>/dev/null
+				chmod +x $generated_tests_path/$custom_test 2>/dev/null
+			fi
+		done
+	fi
+fi
+
+# Generate the neccessary builtin tests
+generate_builtin_tests $generated_tests_path $options_test_types
+# our scripts path becomes the generated path
+connectivity_scripts_path=$generated_tests_path
+
+# Verify all test scripts
+cleanup_and_exit=
+for test in $(echo $options_test_types | sed "s/,/ /g"); do
+	if  [ -x "$connectivity_scripts_path/connectivity-$test-test" ]; then
+		# try and validate the script
+		SCRIPT=$(cat $connectivity_scripts_path/connectivity-$test-test)
+		score=0
+		if [[ $SCRIPT =~ TEST_SCRIPT_PID ]]; then
+			let score=score+1
+		fi
+
+		if [[ $SCRIPT =~ TEST_SCRIPT_RESULT ]]; then
+			let score=score+1
+		fi
+
+		if (( $score < 2 )); then
+			log INFO "$connectivity_scripts_path/connectivity-$test-test: This does not appear to be a test runner script.
+				Must echo variables TEST_SCRIPT_PID, TEST_SCRIPT_RESULT"
+		else
+			tests_to_be_performed="$tests_to_be_performed $test"
+			tests_runtime[$test]=0
+		fi
+
+		if [ -z "${test_endpoints[$test]}" ]; then
+			log INFO "Test endpoint expected for $test"
+			cleanup_and_exit=true
+		fi
+		SCRIPT=
+	else
+		log INFO "Test \"$test\" not found. (Use -p to provide custom path)"
+	fi
+done
+
+log INFO ""
+if [ -z "$tests_to_be_performed" ]; then
+	log "Nothing to do"
+	cleanup_and_exit=true
+fi
+
+if [ -n "$cleanup_and_exit" ]; then
+	do_final_cleanup
+	exit 1
+fi
+
+ippassthrough_enabled=$(config -g config.ippassthrough.enabled)
+if [ -n "$ippassthrough_enabled" ]; then
+	log FATAL "IP Passthrough enabled. Exiting"
+	notify_test_errors "IP Passthrough is enabled."
+fi
+
+check_test_iface_is_enabled
+if [ -z "$test_iface_enabled" ]; then
+	log "Failover interface $test_iface is disabled or not available"
+	notify_test_errors "Failover interface $test_iface is disabled or not available"
+fi
+log INFO
+
+# Retrieve failover data from config
+get_original_failover_config
+
+log ORIGINAL-CONFIG-DUMP ""
+dump_working_failover_config
+log ORIGINAL-CONFIG-DUMP
+
+log INFO ""
+enable_dormant_failover=
+check_iface_up=
+spoof_ping_code=
+#Check if the $test_iface has been failed over to already?
+conn="$(infod_client -q -o get -p conman.network-default-gateway.active-connection-name)"
+if [[ "$conn" =~ "dial-$test_iface" ]]; then
+	log "$test_iface is in active failover mode"
+	# Spoof wan failover ping to return false unconditionaly.
+	# While $test_iface tests are runnings we don't want conman to fail backwards from $test_iface to WAN
+	spoof_ping_code=1
+	failover_is_active=true
+	check_iface_up=true
+else
+	case "$(get_failover_configuration_for_iface $test_iface)" in
+		dormant)
+			log "$test_iface is configured in dormant failover mode"
+			check_iface_up=true
+			# Spoof wan failover ping to return true unconditionaly.
+			# While $test_iface tests are runnings we don't want conman to fail forwards from WAN to $test_iface
+			spoof_ping_code=0
+			;;
+		non-dormant)
+			log "$test_iface is configured in nondormant failover mode"
+			enable_dormant_failover=true
+			# Spoof wan failover ping to return true unconditionaly.
+			# While $test_iface tests are runnings we don't want conman to fail forwards from WAN to $test_iface
+			spoof_ping_code=0
+			;;
+		*)
+			log "$test_iface is not configured for failover"
+			check_iface_up=true
+			;;
+	esac
+fi
+
+if [ -n "$check_iface_up" ]; then
+	test_iface_is_up
+	if [ "$test_iface_active" == "false" ]; then
+		log FATAL "$test_iface was expected to be up."
+		notify_test_errors "Bringing up $test_iface timed out"
+	fi
+fi
+
+log INFO
+
+trap cleanup EXIT SIGTERM SIGKILL
+trap '' INT
+
+if [ -n "$enable_dormant_failover" ]; then
+	log ENABLE-DORMANT-FAILOVER ""
+	log "Configuring $test_iface to dormant failover"
+	working_failover_config["interface"]=$test_iface
+	working_failover_config["dormant"]="on"
+
+	# Note conman graph will be immediately written to disk
+	commit_working_failover_config "run-configurator"
+
+	log "Waiting for $test_iface interface to come up"
+	settle_result=
+	wait_settle
+	if [ "$settle_result" == "abort" ]; then
+		log "Aborting..."
+		notify_test_errors "Bringing up $test_iface timed out during dormant failover"
+	fi
+
+	log ENABLE-DORMANT-FAILOVER
+
+	log IPTABLES "Setting up fw rules"
+	setup_fwrules
+	log IPTABLES
+
+	log WORKING-CONFIG-DUMP ""
+	dump_working_failover_config
+	log WORKING-CONFIG-DUMP
+fi
+
+if [ -n "$spoof_ping_code" ]; then
+	log FAILOVER-PING-SPOOF ""
+	set_wan_failover_ping_override $spoof_ping_code
+	log FAILOVER-PING-SPOOF
+fi
+
+# Configure cgroups
+if [ -n "$cgroups_enabled" ]; then
+	log CGROUPS "Checking Kernel for cgroups support"
+	check_cgroups_support
+	if [ -n "$cgroups_enabled" ]; then
+		log "Found cgroup subsystems: $cgroup_sub_systems"
+		log "Configuring"
+		setup_cgroups
+	else
+		log "No cgroup support found"
+	fi
+
+	set_iface_cgroup_priority $test_iface 100
+
+	log CGROUPS
+fi
+
+log INFO "Tests to run: $tests_to_be_performed"
+log INFO
+
+timestamp_bringup_end=$(date +%s)
+test_bringup_elapsed=$((timestamp_bringup_end-timestamp_script_start))
+
+for test in $tests_to_be_performed; do
+	log TEST-$test "Start"
+	tests_runtime[$test]=$test_bringup_elapsed
+	endpoints=("${test_endpoints["$test"]//,/ }")
+	for e in $endpoints; do
+		if [ ! -f "$results_dir/$test.success" ]; then
+			do_test "$test" "$e"
+		else
+		log "Skipping test endpoint: $e"
+		fi
+	done
+	log TEST-$test "Done"
+done
+
+log INFO "Finished Tests"
+log INFO
+
+exit 0 # The cleanup function will be called before exit

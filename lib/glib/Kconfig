@@ -3,6 +3,8 @@ config LIB_GLIB
 	bool 'glib'
 	select LIB_LIBFFI
 	select LIB_GETTEXT
+	select LIB_PCRE
+	select LIB_ZLIB
 	help
 	  glib library
 

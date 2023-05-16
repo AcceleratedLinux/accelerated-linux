@@ -1,0 +1,69 @@
+From: Christophe Vu-Brugier <cvubrugier@fastmail.fm>
+Date: Wed, 22 Feb 2017 16:48:49 -0800
+Subject: [PATCH 11/31] Add importlib fix for PEP 3147 issue
+
+Python 3 has a new standard for installing .pyc file, called PEP
+3147. Unfortunately, this standard requires both the .py and .pyc
+files to be installed for a Python module to be found. This is quite
+annoying on space-constrained embedded systems, since the .py file is
+technically not required for execution.
+
+This patch changes cache_from_source() and source_from_cache() in
+importlib to get rid of the "__pycache__" directory.
+This effectively disables PEP 3147 for:
+
+* The python standard library
+* Packages built with distutils or setuptools
+* Packages built with automake that use the `py-compile` helper
+
+Signed-off-by: Christophe Vu-Brugier <cvubrugier@fastmail.fm>
+[ Andrey Smirnov: ported to Python 3.6 ]
+Signed-off-by: Andrey Smirnov <andrew.smirnov@gmail.com>
+---
+ Lib/importlib/_bootstrap_external.py | 38 ++++------------------------
+ 1 file changed, 5 insertions(+), 33 deletions(-)
+
+diff --git a/Lib/importlib/_bootstrap_external.py b/Lib/importlib/_bootstrap_external.py
+index 9feec50842..3550013d58 100644
+--- a/Lib/importlib/_bootstrap_external.py
++++ b/Lib/importlib/_bootstrap_external.py
+@@ -275,8 +275,6 @@ def cache_from_source(path, debug_override=None, *, optimization=None):
+     a True value is the same as setting 'optimization' to the empty string
+     while a False value is equivalent to setting 'optimization' to '1'.
+ 
+-    If sys.implementation.cache_tag is None then NotImplementedError is raised.
+-
+     """
+     if debug_override is not None:
+         _warnings.warn('the debug_override parameter is deprecated; use '
+@@ -288,10 +286,7 @@ def cache_from_source(path, debug_override=None, *, optimization=None):
+     path = _os.fspath(path)
+     head, tail = _path_split(path)
+     base, sep, rest = tail.rpartition('.')
+-    tag = sys.implementation.cache_tag
+-    if tag is None:
+-        raise NotImplementedError('sys.implementation.cache_tag is None')
+-    almost_filename = ''.join([(base if base else rest), sep, tag])
++    almost_filename = ''.join([(base if base else rest)])
+     if optimization is None:
+         if sys.flags.optimize == 0:
+             optimization = ''
+@@ -440,16 +440,14 @@
+             head.lstrip(path_separators),
+             filename,
+         )
+-    return _path_join(head, _PYCACHE, filename)
++    return _path_join(head, filename)
+ 
+ 
+ def source_from_cache(path):
+     """Given the path to a .pyc. file, return the path to its .py file.
+ 
+     The .pyc file does not need to exist; this simply returns the path to
+-    the .py file calculated to correspond to the .pyc file.  If path does
+-    not conform to PEP 3147/488 format, ValueError will be raised. If
+-    sys.implementation.cache_tag is None then NotImplementedError is raised.
++    the .py file calculated to correspond to the .pyc file.
+ 
+     """
+     if sys.implementation.cache_tag is None:

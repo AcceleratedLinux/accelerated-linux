@@ -163,7 +163,7 @@ snd_s1810c_send_ctl_packet(struct usb_device *dev, u32 a,
 }
 
 /*
- * When opening Universal Control the program periodicaly
+ * When opening Universal Control the program periodically
  * sends and receives state packets for syncinc state between
  * the device and the host.
  *
@@ -221,7 +221,7 @@ static int snd_s1810c_init_mixer_maps(struct snd_usb_audio *chip)
 	e = 0xbc;
 	for (n = 0; n < 2; n++) {
 		off = n * 18;
-		for (b = off, c = 0; b < 18 + off; b++) {
+		for (b = off; b < 18 + off; b++) {
 			/* This channel to all outputs ? */
 			for (c = 0; c <= 8; c++) {
 				snd_s1810c_send_ctl_packet(dev, a, b, c, 0, e);
@@ -554,11 +554,11 @@ int snd_sc1810_init_mixer(struct usb_mixer_interface *mixer)
 	dev_info(&dev->dev,
 		 "Presonus Studio 1810c, device_setup: %u\n", chip->setup);
 	if (chip->setup == 1)
-		dev_info(&dev->dev, "(8out/18in @ 48KHz)\n");
+		dev_info(&dev->dev, "(8out/18in @ 48kHz)\n");
 	else if (chip->setup == 2)
-		dev_info(&dev->dev, "(6out/8in @ 192KHz)\n");
+		dev_info(&dev->dev, "(6out/8in @ 192kHz)\n");
 	else
-		dev_info(&dev->dev, "(8out/14in @ 96KHz)\n");
+		dev_info(&dev->dev, "(8out/14in @ 96kHz)\n");
 
 	ret = snd_s1810c_init_mixer_maps(chip);
 	if (ret < 0)

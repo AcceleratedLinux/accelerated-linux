@@ -1,0 +1,12 @@
+#!/bin/bash
+
+printf "\nSDT SSH connection established\n"
+
+read -n 256 cmd arg1 arg2 arg3 <&1
+
+if [ "${cmd}" == "udpgw" -a -n "${arg3}" ] ; then
+  echo "Redirecting 127.0.0.1:$arg1 -> $arg2:$arg3"
+  exec /bin/udpgw $arg1 $arg2 $arg3
+fi
+
+exec /bin/discard

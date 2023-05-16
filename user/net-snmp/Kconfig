@@ -1,0 +1,246 @@
+config USER_NETSNMP_SNMPD
+	bool "net-snmp"
+	help
+	  net-snmp (www.net-snmp.org) Simple Network Management Protocol
+	  implementation.  Build/Install the agent (snmpd).
+
+if USER_NETSNMP_SNMPD
+
+config USER_NETSNMP_SNMPD_MINI
+	bool "Build mini agent"
+	help
+	  Build a minimal agent.
+
+config USER_NETSNMP_APPS
+	bool "Build Applications"
+	help
+	  Build the applications (snmpget, ...)
+
+if USER_NETSNMP_APPS
+
+config USER_NETSNMP_APPS_BULKGET
+	bool "snmpbulkget"
+	help
+	  Install snmpbulkget.
+
+config USER_NETSNMP_APPS_BULKWALK
+	bool "snmpbulkwalk"
+	help
+	  Install snmpbulkwalk.
+
+config USER_NETSNMP_APPS_DELTA
+	bool "snmpdelta"
+	help
+	  Install snmpdelta.
+
+config USER_NETSNMP_APPS_DF
+	bool "snmpdf"
+	help
+	  Install snmpdf.
+
+config USER_NETSNMP_APPS_GET
+	bool "snmpget"
+	help
+	  Install snmpget.
+
+config USER_NETSNMP_APPS_GETNEXT
+	bool "snmpgetnext"
+	help
+	  Install snmpgetnext.
+
+config USER_NETSNMP_APPS_SET
+	bool "snmpset"
+	help
+	  Install snmpset.
+
+config USER_NETSNMP_APPS_STATUS
+	bool "snmpstatus"
+	help
+	  Install snmpstatus.
+
+config USER_NETSNMP_APPS_TABLE
+	bool "snmptable"
+	help
+	  Install snmptable.
+
+config USER_NETSNMP_APPS_TEST
+	bool "snmptest"
+	help
+	  Install snmptest.
+
+config USER_NETSNMP_APPS_TRANSLATE
+	bool "snmptranslate"
+	help
+	  Install snmptranslate.
+
+config USER_NETSNMP_APPS_TRAP
+	bool "snmptrap"
+	help
+	  Install snmptrap.
+
+config USER_NETSNMP_APPS_TRAPD
+	bool "snmptrapd"
+	help
+	  Install snmptrapd.
+
+config USER_NETSNMP_APPS_USM
+	bool "snmpusm"
+	help
+	  Install snmpusm.
+
+config USER_NETSNMP_APPS_VACM
+	bool "snmpvacm"
+	help
+	  Install snmpvacm.
+
+config USER_NETSNMP_APPS_WALK
+	bool "snmpwalk"
+	help
+	  Install snmpwalk.
+
+config USER_NETSNMP_APPS_NETSTAT
+	bool "snmpnetstat"
+	help
+	  Install snmpnetstat.
+
+endif
+
+config USER_NETSNMP_BUILDSTATIC
+	bool "Build static"
+	help
+	  Link with static libraries.
+
+config USER_NETSNMP_MANUALS
+	bool "Install manuals"
+	help
+	  Install the manuals.
+
+config USER_NETSNMP_SCRIPTS
+	bool "Install scripts"
+	help
+	  Install the scripts (mib2c, ...).
+
+config USER_NETSNMP_MIBS
+	bool "Install MIBs"
+	help
+	  Install the mib files.
+
+config USER_NETSNMP_MIBLOADING
+	bool "Enable MIB loading"
+	depends on USER_NETSNMP_MIBS
+	help
+	  Include code that parses and manipulates the mib files.
+
+config USER_NETSNMP_V1
+	bool "Enable SNMP v1"
+	help
+	  Include code that implements SNMPv1.
+
+config USER_NETSNMP_V2C
+	bool "Enable SNMP v2c"
+	default y
+	help
+	  Include code that implements SNMPv2c.
+
+config USER_NETSNMP_IPV6
+	bool "IPv6 support"
+	help
+	  Generate IPv6 ready version.
+
+config USER_NETSNMP_NOTRANSPORTS
+	bool "Exclude transports"
+	help
+	  Exclude listed SNMP transports.
+	  (UDP UDPIPv6 TCPIPv6 TCP Unix Callback AAL5PVC IPX)
+
+config USER_NETSNMP_EXTRANSPORTS
+	string "Exclude Transports"
+	depends on USER_NETSNMP_NOTRANSPORTS
+	default "TCP"
+	help
+	  Transports to exclude (space separated list).
+
+config USER_NETSNMP_OPENSSL
+	bool "With OpenSSL"
+	help
+	  Look for openssl in PATH/lib.
+
+config USER_NETSNMP_OVRDEFAULTS
+	bool "Override defaults"
+	help
+	  Override defaults for prompted values.
+
+if USER_NETSNMP_OVRDEFAULTS
+
+config USER_NETSNMP_DEFVERSION
+	string "Default version"
+	default "3"
+	help
+	  Default version of SNMP to use.
+
+config USER_NETSNMP_DEFSYSCONTACT
+	string "Default Sys Contact"
+	default "unknown"
+	help
+	  Default system contact.
+
+config USER_NETSNMP_DEFSYSLOCATION
+	string "Default Sys Location"
+	default "unknown"
+	help
+	  Default system location.
+
+config USER_NETSNMP_DEFLOGFILE
+	string "Default Log file"
+	default "/var/log/snmp.log"
+	help
+	  Default log file location.
+
+config USER_NETSNMP_DEFPERSISDIR
+	string "Default Persistent Directory"
+	default "/var/net-snmp"
+	help
+	  Default directory for persistent data storage.
+
+config USER_NETSNMP_DEFENTERPRISEOID
+	string "Enterprise OID"
+	default "8072"
+	help
+	  The enterprise number assigned by IANA
+	  (Warning: this should be used with caution.)
+
+config USER_NETSNMP_DEFENTERPRISESYSOID
+	string "System OID"
+	default ".1.3.6.1.4.1.8072.1.1"
+	help
+	  The system oid that corresponds to this system type
+	  (Warning: this should be used with caution.)
+
+endif
+
+config USER_NETSNMP_ADDMIBS
+	bool "Additional MIBS"
+	help
+	  Compile with additional MIB modules.
+
+config USER_NETSNMP_ADDITIONALMIBS
+	string "Additional MIBS"
+	depends on USER_NETSNMP_ADDMIBS
+	default ""
+	help
+	  Additional MIB modules (space spearated list).
+
+config USER_NETSNMP_ADDITIONAL_MIB_DIRS
+	string "Additional MIB Dirs"
+	depends on USER_NETSNMP_ADDMIBS
+	default ""
+	help
+	  Directories to final external MIB sources for building into
+	  net-snmp (space spearated list).
+
+config USER_NETSNMP_INSTALL_CORE_MIBS
+	bool "Install Core MIBs"
+	help
+	  Install the core MIB files into romfs.
+
+endif

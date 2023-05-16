@@ -1,6 +1,6 @@
-diff -Naur busybox-1.31.0.org/init/init.c busybox-1.31.0/init/init.c
---- busybox-1.31.0.org/init/init.c	2018-12-31 01:14:20.000000000 +1000
-+++ busybox-1.31.0/init/init.c	2019-07-02 14:14:24.967531691 +1000
+diff -Naur busybox-1.34.1.org/init/init.c busybox-1.34.1/init/init.c
+--- busybox-1.34.1.org/init/init.c	2018-12-31 01:14:20.000000000 +1000
++++ busybox-1.34.1/init/init.c	2019-07-02 14:14:24.967531691 +1000
 @@ -118,6 +118,13 @@
  //config:	be they parsed or ignored by init.
  //config:	The original command-line used to launch init can then be
@@ -15,7 +15,7 @@ diff -Naur busybox-1.31.0.org/init/init.c busybox-1.31.0/init/init.c
  
  //applet:IF_INIT(APPLET(init, BB_DIR_SBIN, BB_SUID_DROP))
  //applet:IF_LINUXRC(APPLET_ODDNAME(linuxrc, init, BB_DIR_ROOT, BB_SUID_DROP, linuxrc))
-@@ -1124,6 +1131,19 @@
+@@ -1118,6 +1125,19 @@
  	message(L_CONSOLE | L_LOG, "init started: %s", bb_banner);
  #endif
  

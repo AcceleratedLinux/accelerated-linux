@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-// Copyright (C) 2018 Hangzhou C-SKY Microsystems co.,ltd.
 
 #ifndef __ASM_CSKY_PTRACE_H
 #define __ASM_CSKY_PTRACE_H
@@ -24,6 +23,7 @@
 #define user_mode(regs) (!((regs)->sr & PS_S))
 #define instruction_pointer(regs) ((regs)->pc)
 #define profile_pc(regs) instruction_pointer(regs)
+#define trap_no(regs) ((regs->sr >> 16) & 0xff)
 
 static inline void instruction_pointer_set(struct pt_regs *regs,
 					   unsigned long val)
@@ -50,6 +50,12 @@ static inline void forget_syscall(struct pt_regs *regs)
 static inline unsigned long regs_return_value(struct pt_regs *regs)
 {
 	return regs->a0;
+}
+
+static inline void regs_set_return_value(struct pt_regs *regs,
+					 unsigned long val)
+{
+	regs->a0 = val;
 }
 
 /* Valid only for Kernel mode traps. */

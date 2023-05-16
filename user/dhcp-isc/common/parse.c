@@ -35,6 +35,14 @@
 #include "dhcpd.h"
 #include <syslog.h>
 
+struct collection default_collection = {
+	(struct collection *)0,
+	"default",
+	(struct class *)0,
+};
+
+struct collection *collections = &default_collection;
+
 /* Enumerations can be specified in option formats, and are used for
    parsing, so we define the routines that manage them here. */
 

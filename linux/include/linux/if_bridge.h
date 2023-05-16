@@ -19,7 +19,14 @@ struct br_ip {
 #if IS_ENABLED(CONFIG_IPV6)
 		struct in6_addr ip6;
 #endif
-	} u;
+	} src;
+	union {
+		__be32	ip4;
+#if IS_ENABLED(CONFIG_IPV6)
+		struct in6_addr ip6;
+#endif
+		unsigned char	mac_addr[ETH_ALEN];
+	} dst;
 	__be16		proto;
 	__u16           vid;
 };
@@ -49,16 +56,41 @@ struct br_ip_list {
 #define BR_ISOLATED		BIT(16)
 #define BR_MRP_AWARE		BIT(17)
 #define BR_MRP_LOST_CONT	BIT(18)
+#define BR_MRP_LOST_IN_CONT	BIT(19)
+#define BR_TX_FWD_OFFLOAD	BIT(20)
+#define BR_PORT_LOCKED		BIT(21)
 
 #define BR_DEFAULT_AGEING_TIME	(300 * HZ)
 
-extern void brioctl_set(int (*ioctl_hook)(struct net *, unsigned int, void __user *));
+struct net_bridge;
+void brioctl_set(int (*hook)(struct net *net, struct net_bridge *br,
+			     unsigned int cmd, struct ifreq *ifr,
+			     void __user *uarg));
+int br_ioctl_call(struct net *net, struct net_bridge *br, unsigned int cmd,
+		  struct ifreq *ifr, void __user *uarg);
+
+/* QCA NSS ECM support - Start */
+extern struct net_device *br_port_dev_get(struct net_device *dev,
+					  unsigned char *addr,
+					  struct sk_buff *skb,
+					  unsigned int cookie);
+extern void br_refresh_fdb_entry(struct net_device *dev, const char *addr);
+extern void br_dev_update_stats(struct net_device *dev,
+                                struct rtnl_link_stats64 *nlstats);
+extern struct net_bridge_fdb_entry *br_fdb_has_entry(struct net_device *dev,
+                                                     const char *addr,
+                                                     __u16 vid);
+extern void br_fdb_update_register_notify(struct notifier_block *nb);
+extern void br_fdb_update_unregister_notify(struct notifier_block *nb);
+extern bool br_is_hairpin_enabled(struct net_device *dev);
+/* QCA NSS ECM support - End */
 
 #if IS_ENABLED(CONFIG_BRIDGE) && IS_ENABLED(CONFIG_BRIDGE_IGMP_SNOOPING)
 int br_multicast_list_adjacent(struct net_device *dev,
 			       struct list_head *br_ip_list);
 bool br_multicast_has_querier_anywhere(struct net_device *dev, int proto);
 bool br_multicast_has_querier_adjacent(struct net_device *dev, int proto);
+bool br_multicast_has_router_adjacent(struct net_device *dev, int proto);
 bool br_multicast_enabled(const struct net_device *dev);
 bool br_multicast_router(const struct net_device *dev);
 #else
@@ -77,6 +109,13 @@ static inline bool br_multicast_has_querier_adjacent(struct net_device *dev,
 {
 	return false;
 }
+
+static inline bool br_multicast_has_router_adjacent(struct net_device *dev,
+						    int proto)
+{
+	return true;
+}
+
 static inline bool br_multicast_enabled(const struct net_device *dev)
 {
 	return false;
@@ -94,6 +133,11 @@ int br_vlan_get_pvid_rcu(const struct net_device *dev, u16 *p_pvid);
 int br_vlan_get_proto(const struct net_device *dev, u16 *p_proto);
 int br_vlan_get_info(const struct net_device *dev, u16 vid,
 		     struct bridge_vlan_info *p_vinfo);
+int br_vlan_get_info_rcu(const struct net_device *dev, u16 vid,
+			 struct bridge_vlan_info *p_vinfo);
+bool br_mst_enabled(const struct net_device *dev);
+int br_mst_get_info(const struct net_device *dev, u16 msti, unsigned long *vids);
+int br_mst_get_state(const struct net_device *dev, u16 msti, u8 *state);
 #else
 static inline bool br_vlan_enabled(const struct net_device *dev)
 {
@@ -120,6 +164,28 @@ static inline int br_vlan_get_info(const struct net_device *dev, u16 vid,
 {
 	return -EINVAL;
 }
+
+static inline int br_vlan_get_info_rcu(const struct net_device *dev, u16 vid,
+				       struct bridge_vlan_info *p_vinfo)
+{
+	return -EINVAL;
+}
+
+static inline bool br_mst_enabled(const struct net_device *dev)
+{
+	return false;
+}
+
+static inline int br_mst_get_info(const struct net_device *dev, u16 msti,
+				  unsigned long *vids)
+{
+	return -EINVAL;
+}
+static inline int br_mst_get_state(const struct net_device *dev, u16 msti,
+				   u8 *state)
+{
+	return -EINVAL;
+}
 #endif
 
 #if IS_ENABLED(CONFIG_BRIDGE)
@@ -128,6 +194,8 @@ struct net_device *br_fdb_find_port(const struct net_device *br_dev,
 				    __u16 vid);
 void br_fdb_clear_offload(const struct net_device *dev, u16 vid);
 bool br_port_flag_is_set(const struct net_device *dev, unsigned long flag);
+u8 br_port_get_stp_state(const struct net_device *dev);
+clock_t br_get_ageing_time(const struct net_device *br_dev);
 #else
 static inline struct net_device *
 br_fdb_find_port(const struct net_device *br_dev,
@@ -146,6 +214,40 @@ br_port_flag_is_set(const struct net_device *dev, unsigned long flag)
 {
 	return false;
 }
+
+static inline u8 br_port_get_stp_state(const struct net_device *dev)
+{
+	return BR_STATE_DISABLED;
+}
+
+static inline clock_t br_get_ageing_time(const struct net_device *br_dev)
+{
+	return 0;
+}
 #endif
+
+/* QCA NSS ECM support - Start */
+typedef struct net_bridge_port *br_port_dev_get_hook_t(struct net_device *dev,
+						       struct sk_buff *skb,
+						       unsigned char *addr,
+						       unsigned int cookie);
+extern br_port_dev_get_hook_t __rcu *br_port_dev_get_hook;
+#define BR_FDB_EVENT_ADD     0x01
+#define BR_FDB_EVENT_DEL     0x02
+struct br_fdb_event {
+        unsigned char      addr[6];
+        unsigned char      is_local;
+        struct net_device *dev;
+	struct net_bridge *br;
+	struct net_device *orig_dev;
+};
+extern void br_fdb_register_notify(struct notifier_block *nb);
+extern void br_fdb_unregister_notify(struct notifier_block *nb);
+
+typedef struct net_bridge_port *br_get_dst_hook_t(
+		const struct net_bridge_port *src,
+		struct sk_buff **skb);
+extern br_get_dst_hook_t __rcu *br_get_dst_hook;
+/* QCA NSS ECM support - End */
 
 #endif

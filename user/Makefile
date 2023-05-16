@@ -93,6 +93,7 @@ dir_$(CONFIG_USER_ELVISTINY_VI)             += elvis-tiny
 dir_$(CONFIG_USER_ETHATTACH_ETHATTACH)      += ethattach
 dir_$(CONFIG_USER_ETHERWAKE)		    += etherwake
 dir_$(CONFIG_USER_ETHTOOL_ETHTOOL)          += ethtool
+dir_$(CONFIG_USER_EXFAT_UTILS)              += exfat-utils
 dir_$(CONFIG_USER_EXPECT_EXPECT)            += expect
 dir_$(CONFIG_USER_EZIPUPDATE_EZIPUPDATE)    += ez-ipupdate
 dir_$(CONFIG_USER_FAKEIDENTD_IDENTD)        += fakeidentd
@@ -207,10 +208,6 @@ dir_$(CONFIG_USER_SMCROUTE)                 += smcroute
 dir_$(CONFIG_USER_MUSICBOX_MUSICBOX)        += musicbox
 dir_$(CONFIG_USER_MYSQL)                    += mysql
 dir_$(CONFIG_USER_NBENCH_NBENCH)            += nbench
-dir_$(CONFIG_USER_NESSUS_NASL)              += nessus
-dir_$(CONFIG_USER_NESSUS_CORE)              += nessus
-dir_$(CONFIG_USER_NESSUS_PLUGINS)           += nessus
-dir_$(CONFIG_USER_NESSUS_LIBRARIES)         += nessus
 dir_$(CONFIG_USER_NETCAT_NETCAT)            += netcat
 dir_$(CONFIG_USER_NETFLASH_NETFLASH)        += netflash
 dir_$(CONFIG_USER_NETPERF_NETPERF)          += netperf
@@ -235,6 +232,7 @@ dir_$(CONFIG_USER_P7ZIP_7ZA)                += p7zip
 dir_$(CONFIG_USER_PALMBOT_PALMBOT)          += palmbot
 dir_$(CONFIG_USER_PAM_SMB)                  += pam_smb
 dir_$(CONFIG_USER_PAM_KRB5)                 += pam_krb5
+dir_$(CONFIG_USER_PAM_PORTAUTH)             += pam_portauth
 dir_$(CONFIG_USER_PCMCIA_CS)                += pcmcia-cs
 dir_$(CONFIG_USER_PERL_PERL)                += perl/Cross
 dir_$(CONFIG_USER_PERF_PERF)                += perf
@@ -251,21 +249,9 @@ dir_$(CONFIG_USER_PPTP_CLIENT_PPTP)         += pptp-client
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP_CALLMGR) += pptp-client
 dir_$(CONFIG_USER_PPTPD_PPTPCTRL)           += pptpd
 dir_$(CONFIG_USER_PPTPD_PPTPD)              += pptpd
-dir_$(CONFIG_USER_PROCPS_FREE)              += procps
-dir_$(CONFIG_USER_PROCPS_KILL)              += procps
-dir_$(CONFIG_USER_PROCPS_PGREP)             += procps
-dir_$(CONFIG_USER_PROCPS_PKILL)             += procps
-dir_$(CONFIG_USER_PROCPS_PS)                += procps
-dir_$(CONFIG_USER_PROCPS_SKILL)             += procps
-dir_$(CONFIG_USER_PROCPS_SNICE)             += procps
-dir_$(CONFIG_USER_PROCPS_SYSCTL)            += procps
-dir_$(CONFIG_USER_PROCPS_TLOAD)             += procps
-dir_$(CONFIG_USER_PROCPS_TOP)               += procps
-dir_$(CONFIG_USER_PROCPS_UPTIME)            += procps
-dir_$(CONFIG_USER_PROCPS_VMSTAT)            += procps
-dir_$(CONFIG_USER_PROCPS_W)                 += procps
-dir_$(CONFIG_USER_PROCPS_WATCH)             += procps
+dir_$(CONFIG_USER_PROCPS)                   += procps
 dir_$(CONFIG_USER_PROFTPD_PROFTPD)          += proftpd
+dir_$(CONFIG_USER_PYTHON)                   += sqlite
 dir_$(CONFIG_USER_REMSERIAL)                += remserial
 dir_$(CONFIG_USER_QSPITEST_TEST)            += qspitest
 dir_$(CONFIG_USER_QSPITEST_RX)              += qspitest
@@ -285,15 +271,12 @@ dir_$(CONFIG_USER_REISERFSPROGS)            += reiserfsprogs
 dir_$(CONFIG_USER_RESOLVEIP_RESOLVEIP)      += resolveip
 dir_$(CONFIG_USER_ROOTLOADER_ROOTLOADER)    += rootloader
 dir_$(CONFIG_USER_ROUTED_ROUTED)            += routed
-dir_$(CONFIG_USER_RP_PPPOE_PPPOE)           += rp-pppoe
-dir_$(CONFIG_USER_RP_PPPOE_PPPOE_SERVER)    += rp-pppoe
 dir_$(CONFIG_USER_RRDTOOL_RRDTOOL)          += rrdtool
 dir_$(CONFIG_USER_RSYNC_RSYNC)              += rsync
 dir_$(CONFIG_USER_RSYSLOG_RSYSLOGD)         += rsyslog
 dir_$(CONFIG_USER_RSYSLOGD_RSYSLOGD)        += rsyslogd
 dir_$(CONFIG_USER_RTC_M41T11)               += rtc-m41t11
 dir_$(CONFIG_USER_RTC_DS1302)               += rtc-ds1302
-dir_$(CONFIG_USER_SAMBA)                    += samba
 dir_$(CONFIG_USER_SASH_REBOOT)              += sash
 dir_$(CONFIG_USER_SASH_SH)                  += sash
 dir_$(CONFIG_USER_SASH_SHUTDOWN)            += sash
@@ -301,6 +284,7 @@ dir_$(CONFIG_USER_SASH_REBOOT_SNAPGEAR)     += sash
 dir_$(CONFIG_USER_SENDIP_SENDIP)            += sendip
 dir_$(CONFIG_USER_SER_SER)                  += ser
 dir_$(CONFIG_USER_SER_RTPPROXY)             += ser
+dir_$(CONFIG_USER_SETFSET_SETFSET)          += setfset
 dir_$(CONFIG_USER_SETHDLC_SETHDLC)          += sethdlc
 dir_$(CONFIG_USER_SETMAC_SETMAC)            += setmac
 dir_$(CONFIG_USER_SETSERIAL_SETSERIAL)      += setserial
@@ -332,7 +316,7 @@ dir_$(CONFIG_USER_SPEEDTOUCH_MODEM_RUN)     += speedtouch/src
 dir_$(CONFIG_USER_STUNNEL_STUNNEL)          += stunnel
 dir_$(CONFIG_USER_SQUASHFS_MKSQUASHFS)      += squashfs
 dir_$(CONFIG_USER_SQUASHFS_MKSQUASHFS7Z)    += squashfs
-dir_$(CONFIG_USER_SSCEP)		    += sscep
+dir_$(CONFIG_USER_SCEP_CLIENT)              += sscep
 dir_$(CONFIG_USER_SSH_SSHD)                 += ssh
 dir_$(CONFIG_USER_SSH_SSH)                  += ssh
 dir_$(CONFIG_USER_SSH_SSHKEYGEN)            += ssh
@@ -365,7 +349,6 @@ dir_$(CONFIG_USER_TIP_TIP)                  += tip
 dir_$(CONFIG_USER_TIMEPEG_TPT)              += tpt
 dir_$(CONFIG_USER_TRIPWIRE_SIGGEN)          += tripwire
 dir_$(CONFIG_USER_TRIPWIRE_TRIPWIRE)        += tripwire
-dir_$(CONFIG_USER_NETSNMP_SNMPD)            += net-snmp
 dir_$(CONFIG_USER_UBOOT_ENVTOOLS)           += uboot-envtools
 dir_$(CONFIG_USER_UDEV)                     += udev
 dir_$(CONFIG_USER_ULOGD_ULOGD)              += ulogd
@@ -389,6 +372,7 @@ dir_$(CONFIG_USER_VPNLED_VPNLED)            += vpnled
 dir_$(CONFIG_USER_W3CAM_VIDCAT)             += w3cam
 dir_$(CONFIG_USER_W3CAM_W3CAMD)             += w3cam
 dir_$(CONFIG_USER_WATCHDOGD)                += watchdogd
+dir_$(CONFIG_USER_WATCHDOG_ADVANCED)        += watchdog
 dir_$(CONFIG_USER_WEBSOCKIFY)               += websockify
 dir_$(CONFIG_USER_WGET)                     += wget
 dir_$(CONFIG_USER_WHETSTONE_WHETSTONE)      += whetstone
@@ -401,6 +385,7 @@ dir_$(CONFIG_USER_ZEBRA_RIPD_RIPD)          += zebra
 dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
 dir_$(CONFIG_USER_IFMETRIC)                 += ifmetric
 dir_$(CONFIG_USER_IPSETD)                   += ipsetd
+dir_$(CONFIG_USER_ATH11K_FIRMWARE)          += ath11k-firmware
 
 dir_y += games
 
@@ -430,13 +415,14 @@ all::
 
 snort: mysql
 asterisk: sqlite
+python: sqlite
 expect: tcl
 ifdef CONFIG_USER_IPTABLES_IPTABLES
 miniupnpd: iptables
 endif
 udev : util-linux kmod
 ntp : readline
-udev: util-linux
+libqmi: libmbim
 ModemManager: libgudev udev libmbim libqmi
 mtd-utils: util-linux
 netifd: ubus uci
@@ -444,14 +430,16 @@ netflash: i2c-tools
 ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
 netflash: squashfs-tools-ng
 endif
-flashrom: pciutils
+flashrom: pciutils udev
 ovs: dpdk
 swconfig: uci
 bluez: readline
 ble-provisioning-app: bluez
 e2fsprogs: util-linux
 cryptsetup: util-linux
-$(ROOTDIR)/prop: ubus ModemManager hostapd ipset i2c-tools powerman python python-modules apparmor
+samba: util-linux
+util-linux: readline
+$(ROOTDIR)/prop: ubus ModemManager hostapd ipset i2c-tools powerman python python-modules apparmor mosquitto wpa_supplicant
 
 ###################################
 

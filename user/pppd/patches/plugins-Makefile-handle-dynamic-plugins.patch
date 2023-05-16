@@ -23,7 +23,7 @@ index ee84f83..312d186 100644
  	$(INSTALL) -d $(LIBDIR)
 -	$(INSTALL) $? $(LIBDIR)
 +	for p in $(PLUGINS); do $(INSTALL) $$p $(LIBDIR); done
- 	for d in $(SUBDIRS); do $(MAKE) $(MFLAGS) -C $$d install; done
+ 	for d in $(SUBDIRS); do $(MAKE) $(MFLAGS) -C $$d install || exit $$?; done
  
  clean:
 -- 

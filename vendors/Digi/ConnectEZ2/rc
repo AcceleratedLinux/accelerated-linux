@@ -5,14 +5,17 @@ mount -t proc proc /proc
 mount -t sysfs sys /sys
 mkdir -m 755 /dev/pts
 mount -t devpts devpts /dev/pts
-mount -t tmpfs -o size=40M tmpfs /tmp
+mount -t tmpfs -o size=64M tmpfs /tmp
 mount -t tmpfs -o size=32M tmpfs /var
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -27,6 +30,10 @@ echo "Configuring GPIOs..."
 # GPIO2 on I2C0 is the dev mode jumper
 echo 425 > /sys/class/gpio/export
 echo in > /sys/class/gpio/gpio425/direction
+echo 1 > /sys/class/gpio/gpio425/active_low
+
+# This file must be present before the sim daemon starts
+touch /var/run/sim_button
 
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
@@ -72,7 +79,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/factory.json|/cfd.json|/nv.json|/current.json|/validation.json|/shadow|/awusbdcerts|/descriptors|/.migrate|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/factory.json|/cfd.json|/nv.json|/current.json|/validation.json|/shadow|/awusbdcerts|/descriptors|/.migrate|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/.migrate|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |
@@ -96,6 +103,10 @@ if [ -f /etc/config/nv.json -a ! -f /etc/config/.migrate ]; then
 		echo "Failed to pull configuration"
 	fi
 fi
+
+# Enable Cell module power
+/bin/sim -i
+
 cat /etc/inittab.d/* > /etc/inittab
 
 # cryptography disabled mode
@@ -103,6 +114,38 @@ if [ -e /etc/config/.nocrypt ] ; then
 	sh /etc/nocrypt
 	exit 0
 fi
+
+# Ensure that the serial driver is loaded before setting up mode
+modprobe 8250_pci
+
+# Set all external serial ports to state dictated by settings
+for serport in 1 2
+do
+	sigmode="$(config get serial.port${serport}.signal_mode)"
+	duplex="$(config get serial.port${serport}.full_duplex)"
+	term="$(config get serial.port${serport}.termination)"
+	if [ "${term}" = "true" ]
+	then
+		term="terminate"
+	else
+		term=""
+	fi
+
+	/bin/serial-mode /dev/serial/port${serport} init
+
+	/bin/serial-mode /dev/serial/port${serport} "${sigmode}" "${term}"
+
+	if [ "${sigmode}" = "rs-485" ]
+	then
+		echotx=""
+		[ "${duplex}" = "true" ] && echotx="-R"
+		/bin/rs485 -s -B ${echotx} -d /dev/serial/port${serport}
+	fi
+done
+
+# Enable all serial transceivers now that ports are in correct mode
+echo 431 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio431/direction
 
 # Reset device status LEDs before actions start... status LEDs all
 # default to timer trigger
@@ -116,6 +159,9 @@ done
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
 random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
 
 # do the rc script processing
 actiond &

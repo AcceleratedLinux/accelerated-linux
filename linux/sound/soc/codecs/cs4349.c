@@ -131,7 +131,7 @@ static int cs4349_pcm_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int cs4349_digital_mute(struct snd_soc_dai *dai, int mute)
+static int cs4349_mute(struct snd_soc_dai *dai, int mute, int direction)
 {
 	struct snd_soc_component *component = dai->component;
 	int reg;
@@ -223,12 +223,9 @@ static const struct snd_soc_dapm_route cs4349_routes[] = {
 	{"OutputB", NULL, "HiFi DAC"},
 };
 
-#define CS4349_PCM_FORMATS (SNDRV_PCM_FMTBIT_S8  | \
-			SNDRV_PCM_FMTBIT_S16_LE  | SNDRV_PCM_FMTBIT_S16_BE  | \
-			SNDRV_PCM_FMTBIT_S18_3LE | SNDRV_PCM_FMTBIT_S18_3BE | \
-			SNDRV_PCM_FMTBIT_S20_3LE | SNDRV_PCM_FMTBIT_S20_3BE | \
-			SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S24_3BE | \
-			SNDRV_PCM_FMTBIT_S24_LE  | SNDRV_PCM_FMTBIT_S24_BE  | \
+#define CS4349_PCM_FORMATS (SNDRV_PCM_FMTBIT_S8  | SNDRV_PCM_FMTBIT_S16_LE  | \
+			SNDRV_PCM_FMTBIT_S18_3LE | SNDRV_PCM_FMTBIT_S20_3LE | \
+			SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S24_LE  | \
 			SNDRV_PCM_FMTBIT_S32_LE)
 
 #define CS4349_PCM_RATES SNDRV_PCM_RATE_8000_192000
@@ -236,7 +233,8 @@ static const struct snd_soc_dapm_route cs4349_routes[] = {
 static const struct snd_soc_dai_ops cs4349_dai_ops = {
 	.hw_params	= cs4349_pcm_hw_params,
 	.set_fmt	= cs4349_set_dai_fmt,
-	.digital_mute	= cs4349_digital_mute,
+	.mute_stream	= cs4349_mute,
+	.no_capture_mute = 1,
 };
 
 static struct snd_soc_dai_driver cs4349_dai = {
@@ -249,7 +247,7 @@ static struct snd_soc_dai_driver cs4349_dai = {
 		.formats	= CS4349_PCM_FORMATS,
 	},
 	.ops = &cs4349_dai_ops,
-	.symmetric_rates = 1,
+	.symmetric_rate = 1,
 };
 
 static const struct snd_soc_component_driver soc_component_dev_cs4349 = {
@@ -277,8 +275,7 @@ static const struct regmap_config cs4349_regmap = {
 	.cache_type		= REGCACHE_RBTREE,
 };
 
-static int cs4349_i2c_probe(struct i2c_client *client,
-				      const struct i2c_device_id *id)
+static int cs4349_i2c_probe(struct i2c_client *client)
 {
 	struct cs4349_private *cs4349;
 	int ret;
@@ -381,7 +378,7 @@ static struct i2c_driver cs4349_i2c_driver = {
 		.pm = &cs4349_runtime_pm,
 	},
 	.id_table	= cs4349_i2c_id,
-	.probe		= cs4349_i2c_probe,
+	.probe_new	= cs4349_i2c_probe,
 	.remove		= cs4349_i2c_remove,
 };
 

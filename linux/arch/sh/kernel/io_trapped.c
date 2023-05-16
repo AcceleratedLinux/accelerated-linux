@@ -102,7 +102,6 @@ int register_trapped_io(struct trapped_io *tiop)
 	pr_warn("unable to install trapped io filter\n");
 	return -1;
 }
-EXPORT_SYMBOL_GPL(register_trapped_io);
 
 void __iomem *match_trapped_io_handler(struct list_head *list,
 				       unsigned long offset,
@@ -131,7 +130,6 @@ void __iomem *match_trapped_io_handler(struct list_head *list,
 	spin_unlock_irqrestore(&trapped_lock, flags);
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(match_trapped_io_handler);
 
 static struct trapped_io *lookup_tiop(unsigned long address)
 {
@@ -272,7 +270,6 @@ static struct mem_access trapped_io_access = {
 
 int handle_trapped_io(struct pt_regs *regs, unsigned long address)
 {
-	mm_segment_t oldfs;
 	insn_size_t instruction;
 	int tmp;
 
@@ -283,16 +280,12 @@ int handle_trapped_io(struct pt_regs *regs, unsigned long address)
 
 	WARN_ON(user_mode(regs));
 
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
-	if (copy_from_user(&instruction, (void *)(regs->pc),
-			   sizeof(instruction))) {
-		set_fs(oldfs);
+	if (copy_from_kernel_nofault(&instruction, (void *)(regs->pc),
+				     sizeof(instruction))) {
 		return 0;
 	}
 
 	tmp = handle_unaligned_access(instruction, regs,
 				      &trapped_io_access, 1, address);
-	set_fs(oldfs);
 	return tmp == 0;
 }

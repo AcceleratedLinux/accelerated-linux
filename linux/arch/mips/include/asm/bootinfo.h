@@ -65,25 +65,34 @@ enum loongson2ef_machine_type {
 /*
  * Valid machtype for group INGENIC
  */
-#define  MACH_INGENIC_JZ4730	0	/* JZ4730 SOC		*/
-#define  MACH_INGENIC_JZ4740	1	/* JZ4740 SOC		*/
-#define  MACH_INGENIC_JZ4770	2	/* JZ4770 SOC		*/
-#define  MACH_INGENIC_JZ4780	3	/* JZ4780 SOC		*/
-#define  MACH_INGENIC_X1000		4	/* X1000 SOC		*/
-#define  MACH_INGENIC_X1830		5	/* X1830 SOC		*/
+enum ingenic_machine_type {
+	MACH_INGENIC_UNKNOWN,
+	MACH_INGENIC_JZ4720,
+	MACH_INGENIC_JZ4725,
+	MACH_INGENIC_JZ4725B,
+	MACH_INGENIC_JZ4730,
+	MACH_INGENIC_JZ4740,
+	MACH_INGENIC_JZ4750,
+	MACH_INGENIC_JZ4755,
+	MACH_INGENIC_JZ4760,
+	MACH_INGENIC_JZ4760B,
+	MACH_INGENIC_JZ4770,
+	MACH_INGENIC_JZ4775,
+	MACH_INGENIC_JZ4780,
+	MACH_INGENIC_X1000,
+	MACH_INGENIC_X1000E,
+	MACH_INGENIC_X1830,
+	MACH_INGENIC_X2000,
+	MACH_INGENIC_X2000E,
+	MACH_INGENIC_X2000H,
+	MACH_INGENIC_X2100,
+};
 
 extern char *system_type;
 const char *get_system_type(void);
 
 extern unsigned long mips_machtype;
 
-#define BOOT_MEM_RAM		1
-#define BOOT_MEM_ROM_DATA	2
-#define BOOT_MEM_RESERVED	3
-#define BOOT_MEM_INIT_RAM	4
-#define BOOT_MEM_NOMAP		5
-
-extern void add_memory_region(phys_addr_t start, phys_addr_t size, long type);
 extern void detect_memory_region(phys_addr_t start, phys_addr_t sz_min,  phys_addr_t sz_max);
 
 extern void prom_init(void);
@@ -101,12 +110,32 @@ extern void (*free_init_pages_eva)(void *begin, void *end);
 extern char arcs_cmdline[COMMAND_LINE_SIZE];
 
 /*
- * Registers a0, a1, a3 and a4 as passed to the kernel entry by firmware
+ * Registers a0, a1, a2 and a3 as passed to the kernel entry by firmware
  */
 extern unsigned long fw_arg0, fw_arg1, fw_arg2, fw_arg3;
 
 #ifdef CONFIG_USE_OF
-extern unsigned long fw_passed_dtb;
+#include <linux/libfdt.h>
+#include <linux/of_fdt.h>
+
+extern char __appended_dtb[];
+
+static inline void *get_fdt(void)
+{
+	if (IS_ENABLED(CONFIG_MIPS_RAW_APPENDED_DTB) ||
+	    IS_ENABLED(CONFIG_MIPS_ELF_APPENDED_DTB))
+		if (fdt_magic(&__appended_dtb) == FDT_MAGIC)
+			return &__appended_dtb;
+
+	if (fw_arg0 == -2) /* UHI interface */
+		return (void *)fw_arg1;
+
+	if (IS_ENABLED(CONFIG_BUILTIN_DTB))
+		if (&__dtb_start != &__dtb_end)
+			return &__dtb_start;
+
+	return NULL;
+}
 #endif
 
 /*

@@ -29,8 +29,6 @@
 #include <linux/slab.h>
 #include <linux/hugetlb.h>
 
-#include <asm/pgalloc.h>
-#include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/mmu.h>
 #include <asm/smp.h>
@@ -97,6 +95,9 @@ static void __init MMU_setup(void)
 	}
 	if (IS_ENABLED(CONFIG_PPC_8xx))
 		return;
+
+	if (IS_ENABLED(CONFIG_KFENCE))
+		__map_without_ltlbs = 1;
 
 	if (debug_pagealloc_enabled())
 		__map_without_ltlbs = 1;
@@ -170,6 +171,8 @@ void __init MMU_init(void)
 #ifdef CONFIG_BOOTX_TEXT
 	btext_unmap();
 #endif
+
+	kasan_mmu_init();
 
 	setup_kup();
 

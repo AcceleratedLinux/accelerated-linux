@@ -14,6 +14,6 @@ kconfig = kcheck.Config(product.products, args.dir)
 kproduct = kcheck.Product(kconfig, product.products, product.groups)
 
 if args.set_only:
-    kproduct.set_only(kconfig)
+    kproduct.set_only()
 else:
-    kproduct.set(kconfig)
+    kproduct.set()

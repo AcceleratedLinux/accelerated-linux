@@ -62,8 +62,7 @@ static const unsigned short normal_i2c[] = { 0x2e, I2C_CLIENT_END };
  * Functions declaration
  */
 
-static int w83l785ts_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id);
+static int w83l785ts_probe(struct i2c_client *client);
 static int w83l785ts_detect(struct i2c_client *client,
 			    struct i2c_board_info *info);
 static int w83l785ts_remove(struct i2c_client *client);
@@ -85,7 +84,7 @@ static struct i2c_driver w83l785ts_driver = {
 	.driver = {
 		.name	= "w83l785ts",
 	},
-	.probe		= w83l785ts_probe,
+	.probe_new	= w83l785ts_probe,
 	.remove		= w83l785ts_remove,
 	.id_table	= w83l785ts_id,
 	.detect		= w83l785ts_detect,
@@ -99,7 +98,7 @@ static struct i2c_driver w83l785ts_driver = {
 struct w83l785ts_data {
 	struct device *hwmon_dev;
 	struct mutex update_lock;
-	char valid; /* zero until following fields are valid */
+	bool valid; /* false until following fields are valid */
 	unsigned long last_updated; /* in jiffies */
 
 	/* registers values */
@@ -163,8 +162,7 @@ static int w83l785ts_detect(struct i2c_client *client,
 	return 0;
 }
 
-static int w83l785ts_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
+static int w83l785ts_probe(struct i2c_client *client)
 {
 	struct w83l785ts_data *data;
 	struct device *dev = &client->dev;
@@ -272,7 +270,7 @@ static struct w83l785ts_data *w83l785ts_update_device(struct device *dev)
 				W83L785TS_REG_TEMP_OVER, data->temp[1]);
 
 		data->last_updated = jiffies;
-		data->valid = 1;
+		data->valid = true;
 	}
 
 	mutex_unlock(&data->update_lock);

@@ -25,10 +25,14 @@
 
 #include <linux/delay.h>
 
+#include "dm_services.h"
 #include "dc_bios_types.h"
 #include "dcn10_stream_encoder.h"
 #include "reg_helper.h"
 #include "hw_shared.h"
+#include "inc/link_dpcd.h"
+#include "dpcd_defs.h"
+#include "dcn30/dcn30_afmt.h"
 
 #define DC_LOGGER \
 		enc1->base.ctx->logger
@@ -121,35 +125,35 @@ void enc1_update_generic_info_packet(
 	switch (packet_index) {
 	case 0:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC0_FRAME_UPDATE, 1);
+				AFMT_GENERIC0_IMMEDIATE_UPDATE, 1);
 		break;
 	case 1:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC1_FRAME_UPDATE, 1);
+				AFMT_GENERIC1_IMMEDIATE_UPDATE, 1);
 		break;
 	case 2:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC2_FRAME_UPDATE, 1);
+				AFMT_GENERIC2_IMMEDIATE_UPDATE, 1);
 		break;
 	case 3:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC3_FRAME_UPDATE, 1);
+				AFMT_GENERIC3_IMMEDIATE_UPDATE, 1);
 		break;
 	case 4:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC4_FRAME_UPDATE, 1);
+				AFMT_GENERIC4_IMMEDIATE_UPDATE, 1);
 		break;
 	case 5:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC5_FRAME_UPDATE, 1);
+				AFMT_GENERIC5_IMMEDIATE_UPDATE, 1);
 		break;
 	case 6:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC6_FRAME_UPDATE, 1);
+				AFMT_GENERIC6_IMMEDIATE_UPDATE, 1);
 		break;
 	case 7:
 		REG_UPDATE(AFMT_VBI_PACKET_CONTROL1,
-				AFMT_GENERIC7_FRAME_UPDATE, 1);
+				AFMT_GENERIC7_IMMEDIATE_UPDATE, 1);
 		break;
 	default:
 		break;
@@ -522,16 +526,21 @@ void enc1_stream_encoder_hdmi_set_stream_attribute(
 	switch (crtc_timing->display_color_depth) {
 	case COLOR_DEPTH_888:
 		REG_UPDATE(HDMI_CONTROL, HDMI_DEEP_COLOR_DEPTH, 0);
+		DC_LOG_DEBUG("HDMI source set to 24BPP deep color depth\n");
 		break;
 	case COLOR_DEPTH_101010:
 		if (crtc_timing->pixel_encoding == PIXEL_ENCODING_YCBCR422) {
 			REG_UPDATE_2(HDMI_CONTROL,
 					HDMI_DEEP_COLOR_DEPTH, 1,
 					HDMI_DEEP_COLOR_ENABLE, 0);
+			DC_LOG_DEBUG("HDMI source 30BPP deep color depth"  \
+				"disabled for YCBCR422 pixel encoding\n");
 		} else {
 			REG_UPDATE_2(HDMI_CONTROL,
 					HDMI_DEEP_COLOR_DEPTH, 1,
 					HDMI_DEEP_COLOR_ENABLE, 1);
+			DC_LOG_DEBUG("HDMI source 30BPP deep color depth"  \
+				"enabled for YCBCR422 non-pixel encoding\n");
 			}
 		break;
 	case COLOR_DEPTH_121212:
@@ -539,16 +548,22 @@ void enc1_stream_encoder_hdmi_set_stream_attribute(
 			REG_UPDATE_2(HDMI_CONTROL,
 					HDMI_DEEP_COLOR_DEPTH, 2,
 					HDMI_DEEP_COLOR_ENABLE, 0);
+			DC_LOG_DEBUG("HDMI source 36BPP deep color depth"  \
+				"disabled for YCBCR422 pixel encoding\n");
 		} else {
 			REG_UPDATE_2(HDMI_CONTROL,
 					HDMI_DEEP_COLOR_DEPTH, 2,
 					HDMI_DEEP_COLOR_ENABLE, 1);
+			DC_LOG_DEBUG("HDMI source 36BPP deep color depth"  \
+				"enabled for non-pixel YCBCR422 encoding\n");
 			}
 		break;
 	case COLOR_DEPTH_161616:
 		REG_UPDATE_2(HDMI_CONTROL,
 				HDMI_DEEP_COLOR_DEPTH, 3,
 				HDMI_DEEP_COLOR_ENABLE, 1);
+		DC_LOG_DEBUG("HDMI source deep color depth enabled in"  \
+				"reserved mode\n");
 		break;
 	default:
 		break;
@@ -619,7 +634,7 @@ void enc1_stream_encoder_dvi_set_stream_attribute(
 	enc1_stream_encoder_set_stream_attribute_helper(enc1, crtc_timing);
 }
 
-void enc1_stream_encoder_set_mst_bandwidth(
+void enc1_stream_encoder_set_throttled_vcp_size(
 	struct stream_encoder *enc,
 	struct fixed31_32 avg_time_slots_per_mtp)
 {
@@ -632,6 +647,12 @@ void enc1_stream_encoder_set_mst_bandwidth(
 				avg_time_slots_per_mtp,
 				x),
 			26));
+
+	// If y rounds up to integer, carry it over to x.
+	if (y >> 26) {
+		x += 1;
+		y = 0;
+	}
 
 	REG_SET_2(DP_MSE_RATE_CNTL, 0,
 		DP_MSE_RATE_X, x,
@@ -715,6 +736,16 @@ void enc1_stream_encoder_update_dp_info_packets(
 					0,  /* packetIndex */
 					&info_frame->vsc);
 
+	/* VSC SDP at packetIndex 1 is used by PSR in DMCUB FW.
+	 * Note that the enablement of GSP1 is not done below,
+	 * it's done in FW.
+	 */
+	if (info_frame->vsc.valid)
+		enc1_update_generic_info_packet(
+					enc1,
+					1,  /* packetIndex */
+					&info_frame->vsc);
+
 	if (info_frame->spd.valid)
 		enc1_update_generic_info_packet(
 				enc1,
@@ -737,7 +768,6 @@ void enc1_stream_encoder_update_dp_info_packets(
 	REG_UPDATE(DP_SEC_CNTL, DP_SEC_GSP0_ENABLE, info_frame->vsc.valid);
 	REG_UPDATE(DP_SEC_CNTL, DP_SEC_GSP2_ENABLE, info_frame->spd.valid);
 	REG_UPDATE(DP_SEC_CNTL, DP_SEC_GSP3_ENABLE, info_frame->hdrsmd.valid);
-
 
 	/* This bit is the master enable bit.
 	 * When enabling secondary stream engine,
@@ -874,6 +904,7 @@ void enc1_stream_encoder_stop_dp_info_packets(
 }
 
 void enc1_stream_encoder_dp_blank(
+	struct dc_link *link,
 	struct stream_encoder *enc)
 {
 	struct dcn10_stream_encoder *enc1 = DCN10STRENC_FROM_STRENC(enc);
@@ -896,13 +927,15 @@ void enc1_stream_encoder_dp_blank(
 	 */
 	REG_UPDATE(DP_VID_STREAM_CNTL, DP_VID_STREAM_DIS_DEFER, 2);
 	/* Larger delay to wait until VBLANK - use max retry of
-	 * 10us*5000=50ms. This covers 41.7ms of minimum 24 Hz mode +
+	 * 10us*10200=102ms. This covers 100.0ms of minimum 10 Hz mode +
 	 * a little more because we may not trust delay accuracy.
 	 */
-	max_retries = DP_BLANK_MAX_RETRY * 250;
+	max_retries = DP_BLANK_MAX_RETRY * 501;
 
 	/* disable DP stream */
 	REG_UPDATE(DP_VID_STREAM_CNTL, DP_VID_STREAM_ENABLE, 0);
+
+	dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_DISABLE_DP_VID_STREAM);
 
 	/* the encoder stops sending the video stream
 	 * at the start of the vertical blanking.
@@ -920,10 +953,13 @@ void enc1_stream_encoder_dp_blank(
 	 */
 
 	REG_UPDATE(DP_STEER_FIFO, DP_STEER_FIFO_RESET, true);
+
+	dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_FIFO_STEER_RESET);
 }
 
 /* output video stream to link encoder */
 void enc1_stream_encoder_dp_unblank(
+	struct dc_link *link,
 	struct stream_encoder *enc,
 	const struct encoder_unblank_param *param)
 {
@@ -990,6 +1026,8 @@ void enc1_stream_encoder_dp_unblank(
 	 */
 
 	REG_UPDATE(DP_VID_STREAM_CNTL, DP_VID_STREAM_ENABLE, true);
+
+	dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_ENABLE_DP_VID_STREAM);
 }
 
 void enc1_stream_encoder_set_avmute(
@@ -1021,88 +1059,6 @@ void enc1_reset_hdmi_stream_attribute(
 
 #include "include/audio_types.h"
 
-/**
-* speakersToChannels
-*
-* @brief
-*  translate speakers to channels
-*
-*  FL  - Front Left
-*  FR  - Front Right
-*  RL  - Rear Left
-*  RR  - Rear Right
-*  RC  - Rear Center
-*  FC  - Front Center
-*  FLC - Front Left Center
-*  FRC - Front Right Center
-*  RLC - Rear Left Center
-*  RRC - Rear Right Center
-*  LFE - Low Freq Effect
-*
-*               FC
-*          FLC      FRC
-*    FL                    FR
-*
-*                    LFE
-*              ()
-*
-*
-*    RL                    RR
-*          RLC      RRC
-*               RC
-*
-*             ch  8   7   6   5   4   3   2   1
-* 0b00000011      -   -   -   -   -   -   FR  FL
-* 0b00000111      -   -   -   -   -   LFE FR  FL
-* 0b00001011      -   -   -   -   FC  -   FR  FL
-* 0b00001111      -   -   -   -   FC  LFE FR  FL
-* 0b00010011      -   -   -   RC  -   -   FR  FL
-* 0b00010111      -   -   -   RC  -   LFE FR  FL
-* 0b00011011      -   -   -   RC  FC  -   FR  FL
-* 0b00011111      -   -   -   RC  FC  LFE FR  FL
-* 0b00110011      -   -   RR  RL  -   -   FR  FL
-* 0b00110111      -   -   RR  RL  -   LFE FR  FL
-* 0b00111011      -   -   RR  RL  FC  -   FR  FL
-* 0b00111111      -   -   RR  RL  FC  LFE FR  FL
-* 0b01110011      -   RC  RR  RL  -   -   FR  FL
-* 0b01110111      -   RC  RR  RL  -   LFE FR  FL
-* 0b01111011      -   RC  RR  RL  FC  -   FR  FL
-* 0b01111111      -   RC  RR  RL  FC  LFE FR  FL
-* 0b11110011      RRC RLC RR  RL  -   -   FR  FL
-* 0b11110111      RRC RLC RR  RL  -   LFE FR  FL
-* 0b11111011      RRC RLC RR  RL  FC  -   FR  FL
-* 0b11111111      RRC RLC RR  RL  FC  LFE FR  FL
-* 0b11000011      FRC FLC -   -   -   -   FR  FL
-* 0b11000111      FRC FLC -   -   -   LFE FR  FL
-* 0b11001011      FRC FLC -   -   FC  -   FR  FL
-* 0b11001111      FRC FLC -   -   FC  LFE FR  FL
-* 0b11010011      FRC FLC -   RC  -   -   FR  FL
-* 0b11010111      FRC FLC -   RC  -   LFE FR  FL
-* 0b11011011      FRC FLC -   RC  FC  -   FR  FL
-* 0b11011111      FRC FLC -   RC  FC  LFE FR  FL
-* 0b11110011      FRC FLC RR  RL  -   -   FR  FL
-* 0b11110111      FRC FLC RR  RL  -   LFE FR  FL
-* 0b11111011      FRC FLC RR  RL  FC  -   FR  FL
-* 0b11111111      FRC FLC RR  RL  FC  LFE FR  FL
-*
-* @param
-*  speakers - speaker information as it comes from CEA audio block
-*/
-/* translate speakers to channels */
-
-union audio_cea_channels {
-	uint8_t all;
-	struct audio_cea_channels_bits {
-		uint32_t FL:1;
-		uint32_t FR:1;
-		uint32_t LFE:1;
-		uint32_t FC:1;
-		uint32_t RL_RC:1;
-		uint32_t RR:1;
-		uint32_t RC_RLC_FLC:1;
-		uint32_t RRC_FRC:1;
-	} channels;
-};
 
 /* 25.2MHz/1.001*/
 /* 25.2MHz/1.001*/
@@ -1516,6 +1472,10 @@ void enc1_se_hdmi_audio_setup(
 void enc1_se_hdmi_audio_disable(
 	struct stream_encoder *enc)
 {
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	if (enc->afmt && enc->afmt->funcs->afmt_powerdown)
+		enc->afmt->funcs->afmt_powerdown(enc->afmt);
+#endif
 	enc1_se_enable_audio_clock(enc, false);
 }
 
@@ -1616,8 +1576,8 @@ static const struct stream_encoder_funcs dcn10_str_enc_funcs = {
 		enc1_stream_encoder_hdmi_set_stream_attribute,
 	.dvi_set_stream_attribute =
 		enc1_stream_encoder_dvi_set_stream_attribute,
-	.set_mst_bandwidth =
-		enc1_stream_encoder_set_mst_bandwidth,
+	.set_throttled_vcp_size =
+		enc1_stream_encoder_set_throttled_vcp_size,
 	.update_hdmi_info_packets =
 		enc1_stream_encoder_update_hdmi_info_packets,
 	.stop_hdmi_info_packets =

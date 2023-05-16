@@ -1,154 +1,230 @@
-diff -Nurd dnsmasq-2.80.orig/src/dnsmasq.h dnsmasq-2.80/src/dnsmasq.h
---- dnsmasq-2.80.orig/src/dnsmasq.h	2019-07-16 08:16:47.923312233 +1000
-+++ dnsmasq-2.80/src/dnsmasq.h	2019-07-16 08:16:47.935312311 +1000
-@@ -262,7 +262,8 @@
- #define OPT_TFTP_APREF_MAC 56
- #define OPT_RAPID_COMMIT   57
- #define OPT_UBUS           58
--#define OPT_LAST           59
-+#define OPT_IGN_CONF_ERR   59
-+#define OPT_LAST           60
+From 1851b31a83d78ef357fd9b2ec03174f4efbd2d0e Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Sat, 8 Jan 2022 15:44:49 +0100
+Subject: [PATCH] Added DHCP option error ignore
+
+Added a patch to allow DNSMASQ to send erroneous values to their
+dhcp-options when the '--ignore-conf-error' is set.  For example,
+network broadcast address has an option of 28, and the payload is
+expected to be an address, any other types of payload value will trigger
+an alert and exit DNSMASQ.
+
+This is not a desirable behaviour, instead, when DNSMASQ detects an
+issue, it needs to be able to handle it, send it regardless, but at the
+same time syslog it.
+
+This commit allows that to happen by adding the flag
+'--ignore-conf-error' when dnsmasq is called.
+
+(Original author: Brendan Chen <brendan.chen@digi.com>)
+---
+ src/dnsmasq.h |   3 +-
+ src/option.c  | 104 ++++++++++++++++++++++++++++++++++++++++++--------
+ 2 files changed, 90 insertions(+), 17 deletions(-)
+
+diff --git a/src/dnsmasq.h b/src/dnsmasq.h
+index 81c95c6..a2b00ef 100644
+--- a/src/dnsmasq.h
++++ b/src/dnsmasq.h
+@@ -275,7 +275,8 @@ struct event_desc {
+ #define OPT_UMBRELLA_DEVID 64
+ #define OPT_CMARK_ALST_EN  65
+ #define OPT_QUIET_TFTP     66
+-#define OPT_LAST           67
++#define OPT_IGN_CONF_ERR   67
++#define OPT_LAST           68
  
- /* extra flags for my_syslog, we use a couple of facilities since they are known 
-    not to occupy the same bits as priorities, no matter how syslog.h is set up. */
-diff -Nurd dnsmasq-2.80.orig/src/option.c dnsmasq-2.80/src/option.c
---- dnsmasq-2.80.orig/src/option.c	2018-10-19 04:21:55.000000000 +1000
-+++ dnsmasq-2.80/src/option.c	2019-07-16 08:16:47.935312311 +1000
-@@ -166,6 +166,7 @@
- #define LOPT_UBUS          354
- #define LOPT_NAME_MATCH    355
- #define LOPT_CAA           356
-+#define LOPT_IGNORE_CONF_ERR 357
+ #define OPTION_BITS (sizeof(unsigned int)*8)
+ #define OPTION_SIZE ( (OPT_LAST/OPTION_BITS)+((OPT_LAST%OPTION_BITS)!=0) )
+diff --git a/src/option.c b/src/option.c
+index ffce9fc..4c5f140 100644
+--- a/src/option.c
++++ b/src/option.c
+@@ -174,6 +174,7 @@ struct myoption {
+ #define LOPT_CMARK_ALST_EN 365
+ #define LOPT_CMARK_ALST    366
+ #define LOPT_QUIET_TFTP    367
++#define LOPT_IGNORE_CONF_ERR 368
   
  #ifdef HAVE_GETOPT_LONG
  static const struct option opts[] =  
-@@ -337,6 +338,7 @@
-     { "dhcp-rapid-commit", 0, 0, LOPT_RAPID_COMMIT },
-     { "dumpfile", 1, 0, LOPT_DUMPFILE },
-     { "dumpmask", 1, 0, LOPT_DUMPMASK },
+@@ -353,6 +354,7 @@ static const struct myoption opts[] =
+     { "log-debug", 0, 0, LOPT_LOG_DEBUG },
+ 	{ "umbrella", 2, 0, LOPT_UMBRELLA },
+     { "quiet-tftp", 0, 0, LOPT_QUIET_TFTP },
 +    { "ignore-conf-error", 0, 0, LOPT_IGNORE_CONF_ERR},
      { NULL, 0, 0, 0 }
    };
  
-@@ -510,6 +512,7 @@
-   { LOPT_LOCAL_SERVICE, OPT_LOCAL_SERVICE, NULL, gettext_noop("Accept queries only from directly-connected networks."), NULL },
-   { LOPT_LOOP_DETECT, OPT_LOOP_DETECT, NULL, gettext_noop("Detect and remove DNS forwarding loops."), NULL },
-   { LOPT_IGNORE_ADDR, ARG_DUP, "<ipaddr>", gettext_noop("Ignore DNS responses containing ipaddr."), NULL }, 
+@@ -539,6 +541,7 @@ static struct {
+   { LOPT_SCRIPT_TIME, OPT_LEASE_RENEW, NULL, gettext_noop("Call dhcp-script when lease expiry changes."), NULL },
+   { LOPT_UMBRELLA, ARG_ONE, "[=<optspec>]", gettext_noop("Send Cisco Umbrella identifiers including remote IP."), NULL },
+   { LOPT_QUIET_TFTP, OPT_QUIET_TFTP, NULL, gettext_noop("Do not log routine TFTP."), NULL },
 +  { LOPT_IGNORE_CONF_ERR, OPT_IGN_CONF_ERR, NULL, gettext_noop("Log dnsmasq conf errors to syslog but continue to run DNSMASQ."), NULL },
-   { LOPT_DHCPTTL, ARG_ONE, "<ttl>", gettext_noop("Set TTL in DNS responses with DHCP-derived addresses."), NULL }, 
-   { LOPT_REPLY_DELAY, ARG_ONE, "<integer>", gettext_noop("Delay DHCP replies for at least number of seconds."), NULL },
-   { LOPT_RAPID_COMMIT, OPT_RAPID_COMMIT, NULL, gettext_noop("Enables DHCPv4 Rapid Commit option."), NULL },
-@@ -1077,7 +1080,11 @@
+   { 0, 0, NULL, NULL, NULL }
+ }; 
+ 
+@@ -810,7 +813,6 @@ static void do_usage(void)
+ 
+ #define ret_err(x) do { strcpy(errstr, (x)); return 0; } while (0)
+ #define ret_err_free(x,m) do { strcpy(errstr, (x)); free((m)); return 0; } while (0)
+-#define goto_err(x) do { strcpy(errstr, (x)); goto on_error; } while (0)
+ 
+ static char *parse_mysockaddr(char *arg, union mysockaddr *addr) 
+ {
+@@ -1189,14 +1191,24 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+ 	  new->u.vendor_class = (unsigned char *)opt_string_alloc(arg+7);
+ 	  new->flags |= DHOPT_VENDOR;
+ 	  if ((new->flags & DHOPT_ENCAPSULATE) || flags == DHOPT_MATCH)
+-	    goto_err(_("inappropriate vendor:"));
++	    {
++	      if (option_bool(OPT_IGN_CONF_ERR))
++		my_syslog(LOG_CRIT, "DHCP-option %d - inappropriate vendor:", new->opt);
++	      else
++		ret_err(_("inappropriate vendor:"));
++	    }
+ 	}
+       else if (strstr(arg, "encap:") == arg)
+ 	{
+ 	  new->u.encap = atoi(arg+6);
+ 	  new->flags |= DHOPT_ENCAPSULATE;
+ 	  if ((new->flags & DHOPT_VENDOR) || flags == DHOPT_MATCH)
+-	    goto_err(_("inappropriate encap:"));
++	    {
++	      if (option_bool(OPT_IGN_CONF_ERR))
++		my_syslog(LOG_CRIT, "DHCP-option %d - inappropriate encap:", new->opt);
++	      else
++		ret_err(_("inappropriate encap:"));
++	    }
+ 	}
+       else if (strstr(arg, "vi-encap:") == arg)
+ 	{
+@@ -1222,7 +1234,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
    if (is6)
      {
        if (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))
--	ret_err(_("unsupported encapsulation for IPv6 option"));
-+	if (option_bool(OPT_IGN_CONF_ERR)) {
-+    my_syslog(LOG_CRIT, "DHCP-option %d - unsupported encapsulation for IPv6 option", new->opt);
-+  } else {
-+    ret_err(_("unsupported encapsulation for IPv6 option"));
-+  }
+-	goto_err(_("unsupported encapsulation for IPv6 option"));
++	{
++	  if (option_bool(OPT_IGN_CONF_ERR))
++	    my_syslog(LOG_CRIT, "DHCP-option %d - unsupported encapsulation for IPv6 option", new->opt);
++	  else
++	    ret_err(_("unsupported encapsulation for IPv6 option"));
++	}
        
        if (opt_len == 0 &&
  	  !(new->flags & DHOPT_RFC3925))
-@@ -1091,7 +1098,11 @@
+@@ -1236,7 +1253,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
    
    /* option may be missing with rfc3925 match */
    if (!option_ok)
--    ret_err(_("bad dhcp-option"));
-+    if (option_bool(OPT_IGN_CONF_ERR)) {
-+      my_syslog(LOG_CRIT, "DHCP-option %d - bad dhcp-option", new->opt);
-+    } else {
-+      ret_err(_("bad dhcp-option"));
+-    goto_err(_("bad dhcp-option"));
++    {
++      if (option_bool(OPT_IGN_CONF_ERR))
++	my_syslog(LOG_CRIT, "DHCP-option %d - bad dhcp-option", new->opt);
++      else
++	ret_err(_("bad dhcp-option"));
 +    }
    
    if (comma)
      {
-@@ -1159,10 +1170,20 @@
+@@ -1314,10 +1336,30 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  	  is_string = is_dec = is_hex = 0;
  	  
  	  if (!is6 && (!is_addr || dots == 0))
--	    ret_err(_("bad IP address"));
-+    if (option_bool(OPT_IGN_CONF_ERR)) {
-+      my_syslog(LOG_CRIT, "DHCP-option %d - bad IP address", new->opt);
-+      is_string = 1; /* defaulting all errneous values to value type strings */
-+    } else {
-+      ret_err(_("bad IP address"));
-+    }
+-	    goto_err(_("bad IP address"));
++	    {
++	      if (option_bool(OPT_IGN_CONF_ERR))
++		{
++		  my_syslog(LOG_CRIT, "DHCP-option %d - bad IP address", new->opt);
++		  is_string = 1; /* defaulting all erroneous values to value type strings */
++		}
++	      else
++		{
++		  ret_err(_("bad IP address"));
++		}
++	    }
  
 -	   if (is6 && !is_addr6)
--	     ret_err(_("bad IPv6 address"));
+-	     goto_err(_("bad IPv6 address"));
 +	  if (is6 && !is_addr6)
-+      if (option_bool(OPT_IGN_CONF_ERR)) {
-+        my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv6 address", new->opt);
-+        is_string = 1; /* defaulting all errneous values to value type strings */
-+      } else {
-+	      ret_err(_("bad IPv6 address"));
-+      }
++	    {
++	      if (option_bool(OPT_IGN_CONF_ERR))
++		{
++		  my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv6 address", new->opt);
++		  is_string = 1; /* defaulting all erroneous values to value type strings */
++		}
++	      else
++		{
++		  ret_err(_("bad IPv6 address"));
++		}
++	    }
  	}
        /* or names */
        else if (opt_len & (OT_NAME | OT_RFC1035_NAME | OT_CSTRING))
-@@ -1255,7 +1276,11 @@
+@@ -1410,7 +1452,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  	      comma = split(cp);
  	      slash = split_chr(cp, '/');
  	      if (!inet_pton(AF_INET, cp, &in))
--		ret_err(_("bad IPv4 address"));
-+    if (option_bool(OPT_IGN_CONF_ERR)) {
-+      my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv4 address", new->opt);
-+    } else {
-+      ret_err(_("bad IPv4 address"));
-+    }
+-		goto_err(_("bad IPv4 address"));
++		{
++		  if (option_bool(OPT_IGN_CONF_ERR))
++		    my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv4 address", new->opt);
++		  else
++		    ret_err(_("bad IPv4 address"));
++		}
  	      if (!slash)
  		{
  		  memcpy(op, &in, INADDRSZ);
-@@ -1301,7 +1326,11 @@
+@@ -1456,7 +1503,10 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  		  continue;
  		}
- 	  
--	      ret_err(_("bad IPv6 address"));
-+        if (option_bool(OPT_IGN_CONF_ERR)) {
-+          my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv6 address", new->opt);
-+        } else {
-+          ret_err(_("bad IPv6 address"));
-+        }
+ 
+-	      goto_err(_("bad IPv6 address"));
++	      if (option_bool(OPT_IGN_CONF_ERR))
++		my_syslog(LOG_CRIT, "DHCP-option %d - bad IPv6 address", new->opt);
++	      else
++		ret_err(_("bad IPv6 address"));
  	    } 
  	  new->len = op - new->val;
  	}
-@@ -1328,7 +1357,11 @@
+@@ -1483,7 +1533,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  		  if (strcmp (arg, ".") != 0)
  		    {
  		      if (!(dom = canonicalise_opt(arg)))
--			ret_err(_("bad domain in dhcp-option"));
-+      if (option_bool(OPT_IGN_CONF_ERR)) {
-+        my_syslog(LOG_CRIT, "DHCP-option %d - bad domain in dhcp-option", new->opt);
-+      } else {
-+        ret_err(_("bad domain in dhcp-option"));
-+      }
+-			goto_err(_("bad domain in dhcp-option"));
++			{
++			  if (option_bool(OPT_IGN_CONF_ERR))
++			    my_syslog(LOG_CRIT, "DHCP-option %d - bad domain in dhcp-option", new->opt);
++			  else
++			    ret_err(_("bad domain in dhcp-option"));
++			}
  			
  		      domlen = strlen(dom) + 2;
  		    }
-@@ -1422,7 +1455,11 @@
+@@ -1578,7 +1633,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  		{
  		  char *dom = canonicalise_opt(arg);
  		  if (!dom)
--		    ret_err(_("bad domain in dhcp-option"));
-+        if (option_bool(OPT_IGN_CONF_ERR)) {
-+          my_syslog(LOG_CRIT, "DHCP-option %d - bad domain in dhcp-option", new->opt);
-+        } else {
-+          ret_err(_("bad domain in dhcp-option"));
-+        }
+-		    goto_err(_("bad domain in dhcp-option"));
++		    {
++		      if (option_bool(OPT_IGN_CONF_ERR))
++			my_syslog(LOG_CRIT, "DHCP-option %d - bad domain in dhcp-option", new->opt);
++		      else
++			ret_err(_("bad domain in dhcp-option"));
++		    }
  		    		  
- 		  newp = opt_malloc(len + strlen(dom) + 2);
+ 		  newp = opt_malloc(len + header_size + strlen(dom) + 2);
  		  
-@@ -1460,14 +1497,22 @@
+@@ -1622,14 +1682,24 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
        ((new->len > 255) || 
        (new->len > 253 && (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))) ||
         (new->len > 250 && (new->flags & DHOPT_RFC3925))))
--    ret_err(_("dhcp-option too long"));
-+    if (option_bool(OPT_IGN_CONF_ERR)) {
-+      my_syslog(LOG_CRIT, "DHCP-option %d - dhcp-option too long", new->opt);
-+    } else {
-+      ret_err(_("bad dhcp-option too long"));
+-    goto_err(_("dhcp-option too long"));
++    {
++      if (option_bool(OPT_IGN_CONF_ERR))
++	my_syslog(LOG_CRIT, "DHCP-option %d - dhcp-option too long", new->opt);
++      else
++	ret_err(_("bad dhcp-option too long"));
 +    }
    
    if (flags == DHOPT_MATCH)
@@ -156,26 +232,35 @@ diff -Nurd dnsmasq-2.80.orig/src/option.c dnsmasq-2.80/src/option.c
        if ((new->flags & (DHOPT_ENCAPSULATE | DHOPT_VENDOR)) ||
  	  !new->netid ||
  	  new->netid->next)
--	ret_err(_("illegal dhcp-match"));
-+  if (option_bool(OPT_IGN_CONF_ERR)) {
-+    my_syslog(LOG_CRIT, "DHCP-option %d - illegal dhcp-match", new->opt);
-+  } else {
-+    ret_err(_("illegal dhcp-match"));
-+  }
+-	goto_err(_("illegal dhcp-match"));
++	{
++	  if (option_bool(OPT_IGN_CONF_ERR))
++	    my_syslog(LOG_CRIT, "DHCP-option %d - illegal dhcp-match", new->opt);
++	  else
++	    ret_err(_("illegal dhcp-match"));
++	}
         
        if (is6)
  	{
-@@ -1553,6 +1598,9 @@
+@@ -1654,7 +1724,6 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+     }
+     
+   return 1;
+-on_error:
+   dhcp_opt_free(new);
+   return 0;
+ }
+@@ -1712,6 +1781,9 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
    
    switch (option)
      { 
-+      case LOPT_IGNORE_CONF_ERR:
-+        set_option_bool(OPT_IGN_CONF_ERR);
-+        break;
++    case LOPT_IGNORE_CONF_ERR:
++      set_option_bool(OPT_IGN_CONF_ERR);
++      break;
      case 'C': /* --conf-file */
        {
  	char *file = opt_string_alloc(arg);
-@@ -4395,7 +4443,7 @@
+@@ -4932,7 +5004,7 @@ static void read_file(char *file, FILE *f, int hard_opt)
        if (errmess)
  	strcpy(daemon->namebuff, errmess);
  	  
@@ -184,3 +269,6 @@ diff -Nurd dnsmasq-2.80.orig/src/option.c dnsmasq-2.80/src/option.c
  	{
  	  sprintf(daemon->namebuff + strlen(daemon->namebuff), _(" at line %d of %s"), lineno, file);
  	  if (hard_opt != 0)
+-- 
+2.27.0
+

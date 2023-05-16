@@ -12,11 +12,20 @@ Date:   Mon Jul 25 15:36:45 2016 +1000
     OG-1141 udhcpc: fix off-by-one
     
     fixes bug where $vendorspec_2 was sometimes empty
-Index: busybox-1.31.0/networking/udhcp/common.c
-===================================================================
---- busybox-1.31.0.orig/networking/udhcp/common.c
-+++ busybox-1.31.0/networking/udhcp/common.c
-@@ -45,6 +45,7 @@ const struct dhcp_optflag dhcp_optflags[
+Author: Greg Ungerer <greg.ungerer@digi.com>
+Date:   Thu 07 Oct 2021 00:45:51 AEST
+
+    udhcpc: rework for new busybox version
+
+    An import of busybox-1.34.1 meant a reworking of this support was
+    required. Behavior is identical, except now the environmeht also
+    contains an "opt43=" string as well (meaning we are more compatible
+    with the original busybox/udhcpc behavior).
+
+diff -Naur busybox-1.34.1/networking/udhcp/common.c busybox-1.34.1.new/networking/udhcp/common.c
+--- busybox-1.34.1/networking/udhcp/common.c	2021-01-01 20:52:27.000000000 +1000
++++ busybox-1.34.1.new/networking/udhcp/common.c	2021-10-07 00:20:12.778021518 +1000
+@@ -45,6 +45,7 @@
  	{ OPTION_STRING_HOST                      , 0x28 }, /* DHCP_NIS_DOMAIN    */
  	{ OPTION_IP | OPTION_LIST                 , 0x29 }, /* DHCP_NIS_SERVER    */
  	{ OPTION_IP | OPTION_LIST     | OPTION_REQ, 0x2a }, /* DHCP_NTP_SERVER    */
@@ -24,7 +33,7 @@ Index: busybox-1.31.0/networking/udhcp/common.c
  	{ OPTION_IP | OPTION_LIST                 , 0x2c }, /* DHCP_WINS_SERVER   */
  	{ OPTION_U32                              , 0x33 }, /* DHCP_LEASE_TIME    */
  	{ OPTION_IP                               , 0x36 }, /* DHCP_SERVER_ID     */
-@@ -116,6 +117,7 @@ const char dhcp_option_strings[] ALIGN1
+@@ -116,6 +117,7 @@
  	"nisdomain" "\0"        /* DHCP_NIS_DOMAIN      */
  	"nissrv" "\0"           /* DHCP_NIS_SERVER      */
  	"ntpsrv" "\0"           /* DHCP_NTP_SERVER      */
@@ -32,7 +41,7 @@ Index: busybox-1.31.0/networking/udhcp/common.c
  	"wins" "\0"             /* DHCP_WINS_SERVER     */
  	"lease" "\0"            /* DHCP_LEASE_TIME      */
  	"serverid" "\0"         /* DHCP_SERVER_ID       */
-@@ -503,6 +505,7 @@ int FAST_FUNC udhcp_str2optset(const cha
+@@ -547,6 +549,7 @@
  	struct option_set **opt_list = arg;
  	char *opt;
  	char *str;
@@ -40,7 +49,7 @@ Index: busybox-1.31.0/networking/udhcp/common.c
  	const struct dhcp_optflag *optflag;
  	struct dhcp_optflag userdef_optflag;
  	unsigned optcode;
-@@ -561,6 +564,17 @@ int FAST_FUNC udhcp_str2optset(const cha
+@@ -605,6 +608,17 @@
  			if (retval)
  				retval = udhcp_str2nip(val, buffer + 4);
  			break;
@@ -58,19 +67,18 @@ Index: busybox-1.31.0/networking/udhcp/common.c
   case_OPTION_STRING:
  		case OPTION_STRING:
  		case OPTION_STRING_HOST:
-Index: busybox-1.31.0/networking/udhcp/common.h
-===================================================================
---- busybox-1.31.0.orig/networking/udhcp/common.h
-+++ busybox-1.31.0/networking/udhcp/common.h
-@@ -80,6 +80,7 @@ struct BUG_bad_sizeof_struct_ip_udp_dhcp
+diff -Naur busybox-1.34.1/networking/udhcp/common.h busybox-1.34.1.new/networking/udhcp/common.h
+--- busybox-1.34.1/networking/udhcp/common.h	2021-01-01 20:52:27.000000000 +1000
++++ busybox-1.34.1.new/networking/udhcp/common.h	2021-09-28 15:58:00.876875649 +1000
+@@ -80,6 +80,7 @@
  enum {
- 	OPTION_IP = 1,
+ 	OPTION_IP = 0,
  	OPTION_IP_PAIR,
-+	OPTION_TLV,	/* tag-length-value sub options */
++	OPTION_TLV,     /* tag-length-value sub options */
  	OPTION_STRING,
  	/* Opts of STRING_HOST type will be sanitized before they are passed
  	 * to udhcpc script's environment: */
-@@ -134,6 +135,7 @@ enum {
+@@ -140,6 +141,7 @@
  //#define DHCP_NIS_DOMAIN       0x28
  //#define DHCP_NIS_SERVER       0x29
  //#define DHCP_NTP_SERVER       0x2a
@@ -78,11 +86,10 @@ Index: busybox-1.31.0/networking/udhcp/common.h
  //#define DHCP_WINS_SERVER      0x2c
  #define DHCP_REQUESTED_IP       0x32 /* 50: sent by client if specific IP is wanted */
  #define DHCP_LEASE_TIME         0x33 /* 51: */
-Index: busybox-1.31.0/networking/udhcp/dhcpc.c
-===================================================================
---- busybox-1.31.0.orig/networking/udhcp/dhcpc.c
-+++ busybox-1.31.0/networking/udhcp/dhcpc.c
-@@ -122,6 +122,7 @@ static const uint8_t len_of_option_as_st
+diff -Naur busybox-1.34.1/networking/udhcp/dhcpc.c busybox-1.34.1.new/networking/udhcp/dhcpc.c
+--- busybox-1.34.1/networking/udhcp/dhcpc.c	2021-01-01 20:52:27.000000000 +1000
++++ busybox-1.34.1.new/networking/udhcp/dhcpc.c	2021-10-07 00:42:25.243275599 +1000
+@@ -126,6 +126,7 @@
  	[OPTION_IP_PAIR         ] = sizeof("255.255.255.255 ") * 2,
  	[OPTION_STATIC_ROUTES   ] = sizeof("255.255.255.255/32 255.255.255.255 "),
  	[OPTION_6RD             ] = sizeof("132 128 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 255.255.255.255 "),
@@ -90,89 +97,68 @@ Index: busybox-1.31.0/networking/udhcp/dhcpc.c
  	[OPTION_STRING          ] = 1,
  	[OPTION_STRING_HOST     ] = 1,
  #if ENABLE_FEATURE_UDHCP_RFC3397
-@@ -431,6 +432,65 @@ static NOINLINE char *xmalloc_optname_op
- 	return ret;
+@@ -474,6 +475,43 @@
+ 	return NULL;
  }
  
-+/* Count the number of TLV entries in the option */
-+static int
-+tlv_count(uint8_t *option)
-+{
-+	int count;
-+	uint8_t *p;
-+	uint8_t *optend;
-+
-+	optend = option + option[OPT_LEN - 2];
-+	count = 0;
-+	for (p = option; p < optend; ) {
-+		/* tag 0 is padding */
-+		if (p[OPT_CODE] == 0) {
-+			p++;
-+			continue;
-+		}
-+		/* tag 255 truncates */
-+		if (p[OPT_CODE] == 255) {
-+			break;
-+		}
-+		/* check for overlong value */
-+		if (&p[OPT_DATA] + p[OPT_LEN] > optend) {
-+			break;
-+		}
-+		p += OPT_DATA + p[OPT_LEN];
-+		count++;
-+	}
-+	return count;
-+
-+}
-+
 +/* Allocate and fill multiple envvars with the sub-values of an options */
-+static char **
-+tlv_putenv(uint8_t *option, const char *opt_name, char **curr)
++static void tlv_putenv(uint8_t *option, const char *opt_name)
 +{
-+	static const struct dhcp_optflag str_option = { .flags = OPTION_STRING };
 +	uint8_t *optend = option + option[OPT_LEN - 2];
 +	uint8_t *p;
-+	char name[32];
 +
 +	for (p = option; p < optend; ) {
-+		if (p[OPT_CODE] == 0) {
-+			p++;
++		uint8_t code = p[OPT_CODE];
++		uint8_t len = p[OPT_LEN];
++		uint8_t *data = p + OPT_DATA;
++		char *new_opt;
++		int ofs;
++
++		if (code == 0) {
++       			p++;
 +			continue;
 +		}
-+		if (p[OPT_CODE] == 255) {
++		if (code == 255)
++			break;
++		if (data + len > optend) {
++			uint8_t maxlen = optend - data;
++			bb_perror_msg("overlong TLV %s.%u (%u > %u), ignoring",
++				opt_name, code, len, maxlen);
 +			break;
 +		}
-+		if (&p[OPT_DATA] + p[OPT_LEN] > optend) {
-+			break;
-+		}
-+		snprintf(name, sizeof name, "%s_%d", opt_name, p[OPT_CODE]);
-+		*curr = xmalloc_optname_optval(p + OPT_DATA, &str_option, name);
-+		putenv(*curr++);
-+		p += OPT_DATA + p[OPT_LEN];
++
++		new_opt = xmalloc(strlen(opt_name) + 6 + len);
++		ofs = sprintf(new_opt, "%s_%d=", opt_name, code);
++		memcpy(new_opt + ofs, data, len);
++		new_opt[ofs + len] = 0;
++
++		putenvp(new_opt);
++
++		p += OPT_DATA + len;
 +	}
-+	return curr;
 +}
 +
  /* put all the parameters into the environment */
- static char **fill_envp(struct dhcp_packet *packet)
+ static void fill_envp(struct dhcp_packet *packet)
  {
-@@ -469,6 +529,8 @@ static char **fill_envp(struct dhcp_pack
- 					overload |= *temp;
- 				else if (i == DHCP_SUBNET)
- 					envc++; /* for $mask */
-+				else if ((dhcp_optflags[i].flags & OPTION_TYPE_MASK) == OPTION_TLV)
-+					envc += tlv_count(temp);
- 				envc++;
- 				/*if (i != DHCP_MESSAGE_TYPE)*/
- 				FOUND_OPTS(i) |= BMASK(i);
-@@ -529,6 +591,10 @@ static char **fill_envp(struct dhcp_pack
- 			goto next;
- 		*found_ptr &= ~found_mask; /* leave only unknown options */
- 		temp = udhcp_get_option(packet, code);
-+		if ((dhcp_optflags[i].flags & OPTION_TYPE_MASK) == OPTION_TLV) {
-+			curr = tlv_putenv(temp, opt_name, curr);
-+			goto next;
-+		}
- 		*curr = xmalloc_optname_optval(temp, &dhcp_optflags[i], opt_name);
- 		putenv(*curr++);
- 		if (code == DHCP_SUBNET && temp[-OPT_DATA + OPT_LEN] == 4) {
+@@ -503,6 +541,12 @@
+ 		opt_item = concat_option(data, len, code);
+ 		opt_name = get_optname(code, &dh);
+ 		if (opt_name) {
++			if ((dh->flags & OPTION_TYPE_MASK) == OPTION_TLV) {
++				optptr = udhcp_get_option(packet, code);
++				tlv_putenv(optptr, opt_name);
++				goto noname;
++			}
++
+ 			new_opt = xmalloc_optname_optval(opt_item, dh, opt_name);
+ 			if (opt_item->code == DHCP_SUBNET && opt_item->len == 4) {
+ 				/* Generate extra envvar for DHCP_SUBNET, $mask */
+@@ -512,6 +556,7 @@
+ 			}
+ 		} else {
+ 			unsigned ofs;
++noname:
+ 			new_opt = xmalloc(sizeof("optNNN=") + 1 + opt_item->len*2);
+ 			ofs = sprintf(new_opt, "opt%u=", opt_item->code);
+ 			bin2hex(new_opt + ofs, (char *)opt_item->data, opt_item->len)[0] = '\0';

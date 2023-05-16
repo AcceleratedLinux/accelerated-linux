@@ -19,6 +19,7 @@ BLOADER_UPDATE_SCRIPT = $(THIS_DIR)/bootloader_update.sh
 
 SIGNING_ALG = ecdsa
 SIGNING_KEY = $(ROOTDIR)/prop/sign_image/devkeys/ex15/ex15_dev.key
+IMAGESIZE = 33554432 # 32MB
 
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
@@ -57,6 +58,7 @@ romfs.common: romfs_dev romfs.dirs romfs.default romfs.version romfs.cryptokey
 	$(ROMFSINST) -d $(THIS_DIR)/console /etc/inittab.d/console
 	$(ROMFSINST) -p 555 $(THIS_DIR)/rc /etc/rc
 	$(ROMFSINST) -d -p 555 $(THIS_DIR)/reset_bootcounter.sh /etc/reset_bootcounter.sh
+	$(ROMFSINST) -d $(THIS_DIR)/blacklist-hwcrypto.conf /etc/modprobe.d/blacklist-hwcrypto.conf
 
 romfs.post:: romfs.cleanup
 
@@ -73,7 +75,13 @@ uimage.bin: lzma
 	mkimage -A mips -O linux -T ramdisk -C none -a 0x88000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROMFSIMG) /tftpboot/
 
-image: image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+bloader.overwrite:
+	@if [ "$(BLOADER_OVERWRITE_IMG)" ]; then \
+		echo "!!! Overwriting bootloader image with '$(BLOADER_OVERWRITE_IMG)'"; \
+		wget --quiet -O $(BLOADER_IMG) "$(BLOADER_OVERWRITE_IMG)" || exit 1; \
+	fi
+
+image: bloader.overwrite image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 
 # Comment it out to stop generating the bootloader update file
 image: bloader.pack

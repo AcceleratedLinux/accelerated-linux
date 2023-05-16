@@ -1,34 +1,9 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
 /* QLogic qede NIC Driver
  * Copyright (c) 2015-2017  QLogic Corporation
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * OpenIB.org BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and /or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2019-2020 Marvell International Ltd.
  */
+
 #include "qede_ptp.h"
 #define QEDE_PTP_TX_TIMEOUT (2 * HZ)
 
@@ -53,12 +28,12 @@ struct qede_ptp {
 };
 
 /**
- * qede_ptp_adjfreq
- * @ptp: the ptp clock structure
- * @ppb: parts per billion adjustment from base
+ * qede_ptp_adjfreq() - Adjust the frequency of the PTP cycle counter.
  *
- * Adjust the frequency of the ptp cycle counter by the
- * indicated ppb from the base frequency.
+ * @info: The PTP clock info structure.
+ * @ppb: Parts per billion adjustment from base.
+ *
+ * Return: Zero on success, negative errno otherwise.
  */
 static int qede_ptp_adjfreq(struct ptp_clock_info *info, s32 ppb)
 {
@@ -329,11 +304,6 @@ int qede_ptp_hw_ts(struct qede_dev *edev, struct ifreq *ifr)
 		   "HWTSTAMP IOCTL: Requested tx_type = %d, requested rx_filters = %d\n",
 		   config.tx_type, config.rx_filter);
 
-	if (config.flags) {
-		DP_ERR(edev, "config.flags is reserved for future use\n");
-		return -EINVAL;
-	}
-
 	ptp->hw_ts_ioctl_called = 1;
 	ptp->tx_type = config.tx_type;
 	ptp->rx_filter = config.rx_filter;
@@ -526,19 +496,19 @@ void qede_ptp_tx_ts(struct qede_dev *edev, struct sk_buff *skb)
 
 	if (test_and_set_bit_lock(QEDE_FLAGS_PTP_TX_IN_PRORGESS,
 				  &edev->flags)) {
-		DP_ERR(edev, "Timestamping in progress\n");
+		DP_VERBOSE(edev, QED_MSG_DEBUG, "Timestamping in progress\n");
 		edev->ptp_skip_txts++;
 		return;
 	}
 
 	if (unlikely(!test_bit(QEDE_FLAGS_TX_TIMESTAMPING_EN, &edev->flags))) {
-		DP_ERR(edev,
-		       "Tx timestamping was not enabled, this packet will not be timestamped\n");
+		DP_VERBOSE(edev, QED_MSG_DEBUG,
+			   "Tx timestamping was not enabled, this pkt will not be timestamped\n");
 		clear_bit_unlock(QEDE_FLAGS_PTP_TX_IN_PRORGESS, &edev->flags);
 		edev->ptp_skip_txts++;
 	} else if (unlikely(ptp->tx_skb)) {
-		DP_ERR(edev,
-		       "The device supports only a single outstanding packet to timestamp, this packet will not be timestamped\n");
+		DP_VERBOSE(edev, QED_MSG_DEBUG,
+			   "Device supports a single outstanding pkt to ts, It will not be ts\n");
 		clear_bit_unlock(QEDE_FLAGS_PTP_TX_IN_PRORGESS, &edev->flags);
 		edev->ptp_skip_txts++;
 	} else {

@@ -1,1 +1,2 @@
-
+cons:unknown:/bin/agetty sercon 115200
+dhcpclient-eth0:unknown:/sbin/udhcpc -f -s /etc/scripts/udhcpc.script -i eth0:0

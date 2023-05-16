@@ -20,6 +20,7 @@
 #include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/mm.h>
+#include "vfio.h"
 
 #include <asm/iommu.h>
 #include <asm/tce.h>
@@ -383,7 +384,7 @@ static void tce_iommu_unuse_page(struct tce_container *container,
 	struct page *page;
 
 	page = pfn_to_page(hpa >> PAGE_SHIFT);
-	put_page(page);
+	unpin_user_page(page);
 }
 
 static int tce_iommu_prereg_ua_to_hpa(struct tce_container *container,
@@ -486,7 +487,7 @@ static int tce_iommu_use_page(unsigned long tce, unsigned long *hpa)
 	struct page *page = NULL;
 	enum dma_data_direction direction = iommu_tce_direction(tce);
 
-	if (get_user_pages_fast(tce & PAGE_MASK, 1,
+	if (pin_user_pages_fast(tce & PAGE_MASK, 1,
 			direction != DMA_TO_DEVICE ? FOLL_WRITE : 0,
 			&page) != 1)
 		return -EFAULT;
@@ -1238,12 +1239,15 @@ release_exit:
 }
 
 static int tce_iommu_attach_group(void *iommu_data,
-		struct iommu_group *iommu_group)
+		struct iommu_group *iommu_group, enum vfio_group_type type)
 {
 	int ret = 0;
 	struct tce_container *container = iommu_data;
 	struct iommu_table_group *table_group;
 	struct tce_iommu_group *tcegrp = NULL;
+
+	if (type == VFIO_EMULATED_IOMMU)
+		return -EINVAL;
 
 	mutex_lock(&container->lock);
 

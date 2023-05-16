@@ -1,0 +1,155 @@
+#!/bin/sh
+# Performs udev like setup for serial devices under mdev
+
+if [ -x "/etc/config/scripts/mdev-serial" ]; then
+	exec "/etc/config/scripts/mdev-serial" $@
+fi
+
+logger -t mdev-serial -p DEBUG "locking so execs will be serialized..." 99<&-
+
+exec 99>>/dev/.seq 	# serialize executions
+flock 99
+
+if [ -x "/etc/config/scripts/serial-helper" ]; then
+	. /etc/config/scripts/serial-helper
+else
+	. /etc/scripts/serial-helper
+fi
+
+logger -t mdev-serial "mdev $MDEV $MDEV_OP $DEVPATH [$1]"
+
+# find an unused portNN name and initialise it to $DEVNAME/$DEVPATH
+# The last allocated port number is kept in /var/run/ports.dynamic
+allocate_dynamic_port_index() { # srcline typedesc
+
+	case $(config -g config.ports.dynamic) in
+	    *" on") :;;
+	    *) return 1;; # dynamic ports not enabled
+	esac
+
+	flock 8
+	local last_index
+	if [ -s /var/run/ports.dynamic ]; then
+		last_index=$(sed -n '${s/ .*//;p}' /var/run/ports.dynamic)
+		last_index=${last_index#port}
+		last_index=${last_index#0}
+	else
+		serial_max_ports=$3
+
+		#get_serial_max_ports
+		last_index=$serial_max_ports
+	fi
+	port_index=$((last_index + 1))
+	port_name=$(printf port%02d $port_index)
+	port_deflabel="$DEVNAME"
+	port_typedesc=$2
+	port_pathglob="$DEVPATH"
+	port_srcline="$1"
+	echo "$port_name \"$port_deflabel\" \"$port_typedesc\" $port_pathglob" >&8
+
+	# give dynamic ports a fresh configuration
+	# (We won't hunt the config for a matching devpath)
+	local p=config.ports.port$port_index
+	if [ x"$(config -g ${p}.dynamicpath)" != x"$DEVPATH" ]; then
+	    config -d ${p} -s ${p}.dynamicpath="$DEVPATH"
+	fi
+
+	return 0
+} 8>>/var/run/ports.dynamic
+
+by_id=$(echo "$DEVPATH" | cut -d'/' -f3- | sed -r 's/\//-/g')
+by_path=$(echo "$DEVPATH" | cut -d'/' -f3- | sed -r 's/\//-/g')
+DEVNAME="/dev/$MDEV"
+
+# Find the line in /etc/ports matching DEVPATH
+port_name=
+port_srcline=
+for file in /var/run/ports.dynamic \
+            /etc/config/ports.d/*.ports \
+            /etc/ports.d/*.ports
+do
+
+	declare -i lineno=0
+	if [ -s "$file" ]; then
+	    while read LINE; do
+		: $((lineno++))
+		# Temporarily disable globbing while parsing line
+		old_flags=$-
+		set -f
+		declare -a "a=($LINE)"
+		set +f -$old_flags
+		if [ ${#a[*]} -ge 4 ] && [[ $DEVPATH == ${a[3]} ]]; then
+			port_name=${a[0]}
+			case $port_name in -|ignore) exit 0;; esac # fast ignore
+			port_deflabel=${a[1]}
+			port_typedesc=${a[2]}
+			port_pathglob=${a[3]}
+			port_links=("${a[@]:4}")
+			port_srcline="$file:$lineno"
+			case $port_typedesc in -) port_typedesc= ;; esac
+			break 2
+		fi
+	    done < $file
+	fi
+done
+
+serial_max_ports=$(serial_get_max_ports)
+port_index=
+case $port_name in
+    "")
+	# not matched; log and ignore
+	if [ $1 = serial ]; then
+		exec 8>>/var/run/ports.new
+		flock 8
+		if ! grep -q -F "$DEVPATH" /var/run/ports.new; then
+		   logger -t mdev-serial "mdev-serial: serial $DEVPATH not matched"
+		fi
+		exec 8<&-
+	elif [ $1 = cellmodem ]; then
+		serial_cellmodem_manage $MDEV_OP $DEVNAME $DEVPATH
+	fi
+	exit 0
+	;;
+    port[0-9]*)
+	port_index=${port_name#port}
+	port_index=${port_index#0}
+
+	# explicit port assignments ignored >max_ports
+	if [ $port_index -gt $serial_max_ports ]; then
+		# ignore hard ports that manuf said don't exist
+		exit 0
+	fi
+	;;
+    *portN+[0-9]*)
+	# TODO: For now assume there is only one flag in the brackets
+	# Also the flags parsing is wonky if there are no flags
+        flags=${port_name#*\[}
+        flags=${flags%\]*}
+	if [ $flags = 'gps' ] && ! serial_has_gps_feature; then
+		# Ignore this entry if it is flaged as GPS but product is
+		# configured to not have a GPS
+		exit 0
+	fi
+	get_serial_max_ports
+	port_offset=${port_name#*+}
+	port_offset=${port_offset#0}
+	port_index=$(($serial_max_ports + $port_offset))
+	port_name=$(printf port%02d $port_index)
+	;;
+    'port*')
+	if [ $1 = serial ]; then
+	        allocate_dynamic_port_index "$port_srcline" \
+			"$port_typedesc,dynamic" "$serial_max_ports" || exit 0
+	fi
+	;;
+esac
+
+case $MDEV_OP in
+  create) serial_create_device $MDEV $port_name $port_name $by_path;;
+  delete) serial_delete_device $MDEV $port_name $port_name $by_path;;
+  *)      logger -t mdev-serial "Unsupported action: $MDEV_OP"
+esac
+
+# cloexec 99: close 99 in the subrprocess, but
+# this process holds 99 open until it exits
+logger -t mdev-serial -p DEBUG "releasing lock..." 99<&-

@@ -26,8 +26,6 @@ user          -- User mode applications, source from many, many places.
                  packages, all are freely available on the net somewhere.
                  Some applications have been developed locally (in tree).
 
-openswan      -- Openswan from www.openswan.org
-
 vendors       -- Plaform specific build information and support files.
                  Layed out for each specific vendor and board, contains
                  default configurations and make instructions.

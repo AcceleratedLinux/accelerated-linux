@@ -1,0 +1,10 @@
+--- a/lib/tevent/tevent.h	2021-11-05 22:01:35.663515468 +1000
++++ b/lib/tevent/tevent.h	2021-11-05 21:54:58.633259341 +1000
+@@ -32,6 +32,7 @@
+ #include <talloc.h>
+ #include <sys/time.h>
+ #include <stdbool.h>
++#include <unistd.h>
+ 
+ /* for old gcc releases that don't have the feature test macro __has_attribute */
+ #ifndef __has_attribute

@@ -34,6 +34,7 @@ config EL3
 config 3C515
 	tristate "3c515 ISA \"Fast EtherLink\""
 	depends on ISA && ISA_DMA_API && !PPC32
+	select NETDEV_LEGACY_INIT
 	help
 	  If you have a 3Com ISA EtherLink XL "Corkscrew" 3c515 Fast Ethernet
 	  network card, say Y here.
@@ -76,8 +77,8 @@ config VORTEX
 	  "Hurricane" (3c555/3cSOHO)                           PCI
 
 	  If you have such a card, say Y here.  More specific information is in
-	  <file:Documentation/networking/device_drivers/3com/vortex.rst> and
-	  in the comments at the beginning of
+	  <file:Documentation/networking/device_drivers/ethernet/3com/vortex.rst>
+	  and in the comments at the beginning of
 	  <file:drivers/net/ethernet/3com/3c59x.c>.
 
 	  To compile this support as a module, choose M here.

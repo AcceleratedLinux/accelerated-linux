@@ -1,0 +1,180 @@
+--- ppp-ppp-2.4.9/pppd/options.c	2021-01-29 23:24:32.464370485 +1000
++++ ppp-ppp-2.4.9/pppd/options.c	2021-01-29 23:24:41.400188583 +1000
+@@ -72,6 +72,7 @@
+ #endif /* PPP_FILTER */
+ 
+ #include "pppd.h"
++#include "magic.h"
+ #include "pathnames.h"
+ 
+ #if defined(ultrix) || defined(NeXT)
+--- ppp-ppp-2.4.9/pppd/Makefile.linux	2021-01-29 23:25:22.747346722 +1000
++++ ppp-ppp-2.4.9/pppd/Makefile.linux	2021-01-30 00:18:35.538029172 +1000
+@@ -101,7 +101,9 @@
+ endif
+ 
+ # Enable EAP-TLS authentication (requires MPPE support, libssl and libcrypto)
++ifdef CONFIG_LIB_OPENSSL
+ USE_EAPTLS=y
++endif
+ 
+ MAXOCTETS=y
+ 
+@@ -317,7 +319,7 @@
+ 	$(INSTALL) -c -m 444 pppd.8 $(MANDIR)
+ 
+ pppd: $(PPPDOBJS)
+-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_PLUGIN) -o pppd $(PPPDOBJS) $(PLUGINNOBJS) $(LIBS) $(LDLIBS$(LDLIBS_$@))
++	$(CC) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_PLUGIN) -o pppd $(PPPDOBJS) $(PLUGINOBJS) $(LIBS) $(LDLIBS$(LDLIBS_$@))
+ 
+ srp-entry:	srp-entry.c
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ srp-entry.c $(LIBS) $(LDLIBS$(LDLIBS_$@))
+--- ppp-ppp-2.4.9/pppd/plugins/radius/Makefile.linux	2021-01-30 00:22:10.393637639 +1000
++++ ppp-ppp-2.4.9/pppd/plugins/radius/Makefile.linux	2021-01-30 00:26:15.028636422 +1000
+@@ -44,10 +44,12 @@
+ all: $(PLUGIN)
+ 
+ install: all
++ifdef CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS
+ 	$(INSTALL) -d -m 755 $(LIBDIR)
+ 	$(INSTALL-STRIP) -s -c -m 755 radius.so $(LIBDIR)
+ 	$(INSTALL-STRIP) -s -c -m 755 radattr.so $(LIBDIR)
+ 	$(INSTALL-STRIP) -s -c -m 755 radrealms.so $(LIBDIR)
++endif
+ 	$(INSTALL) -c -m 444 pppd-radius.8 $(MANDIR)
+ 	$(INSTALL) -c -m 444 pppd-radattr.8 $(MANDIR)
+ 
+--- ppp-ppp-2.4.9/pppd/plugins/pppoatm/Makefile.linux	2021-01-30 00:25:12.605912638 +1000
++++ ppp-ppp-2.4.9/pppd/plugins/pppoatm/Makefile.linux	2021-01-30 00:26:22.200489808 +1000
+@@ -44,8 +44,10 @@
+ 	$(LD) -r -o $@ $^
+ 
+ install: all
++ifdef CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS
+ 	$(INSTALL) -d -m 755 $(LIBDIR)
+ 	$(INSTALL) -c -m 4550 $(PLUGIN) $(LIBDIR)
++endif
+ 
+ clean:
+ 	rm -f *.o *.so *.a
+--- ppp-ppp-2.4.9/pppd/plugins/pppol2tp/Makefile.linux	2021-01-30 00:25:37.325407266 +1000
++++ ppp-ppp-2.4.9/pppd/plugins/pppol2tp/Makefile.linux	2021-01-30 00:25:39.013372749 +1000
+@@ -29,8 +29,10 @@
+ 	$(CC) $(CFLAGS) -c -o $@ $^
+ 
+ install: all
++ifdef CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS
+ 	$(INSTALL) -d -m 755 $(LIBDIR)
+ 	$(INSTALL) -c -m 755 $(PLUGINS) $(LIBDIR)
++endif
+ 
+ clean:
+ 	rm -f *.o *.so
+--- ppp-ppp-2.4.9/pppd/plugins/pptp/Makefile.linux	2021-01-30 00:25:59.004964016 +1000
++++ ppp-ppp-2.4.9/pppd/plugins/pptp/Makefile.linux	2021-01-30 00:26:02.512892298 +1000
+@@ -34,8 +34,10 @@
+ 	$(LD) -r -o $@ $^
+ 
+ install: all
++ifdef CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS
+ 	$(INSTALL) -d -m 755 $(LIBDIR)
+ 	$(INSTALL) -c -m 4550 pptp.so $(LIBDIR)
++endif
+ 
+ clean:
+ 	rm -f *.o *.so
+--- ppp-ppp-2.4.9/pppd/plugins/pppoe/Makefile.linux	2021-01-30 00:24:30.666770045 +1000
++++ ppp-ppp-2.4.9/pppd/plugins/pppoe/Makefile.linux	2021-01-30 00:24:32.190738892 +1000
+@@ -45,10 +45,12 @@
+ 	$(CC) $(LDFLAGS) -o pppoe.so -shared plugin.o discovery.o if.o common.o
+ 
+ install: all
++ifdef CONFIG_USER_PPPD_WITH_DYNAMIC_PLUGINS
+ 	$(INSTALL) -d -m 755 $(LIBDIR)
+ 	$(INSTALL-STRIP) -s -c -m 4550 pppoe.so $(LIBDIR)
+ 	# Symlink for backward compatibility
+ 	$(LN_S) pppoe.so $(LIBDIR)/rp-pppoe.so
++endif
+ 	$(INSTALL) -d -m 755 $(BINDIR)
+ 	$(INSTALL-STRIP) -s -c -m 555 pppoe-discovery $(BINDIR)
+ 
+--- ppp-ppp-2.4.9/pppd/plugins/Makefile.linux	2021-01-29 23:16:57.385610378 +1000
++++ ppp-ppp-2.4.9/pppd/plugins/Makefile.linux	2021-01-29 23:16:59.829560922 +1000
+@@ -24,6 +24,9 @@
+ SUBDIRS += pppoe
+ endif
+ ifeq ($(CONFIG_USER_PPPD_WITH_PPPOA),y)
++SUBDIRS += pppoatm
++endif
++ifeq ($(CONFIG_USER_PPPD_WITH_PPPOL2TP),y)
+ SUBDIRS += pppol2tp
+ endif
+ ifeq ($(CONFIG_USER_PPPD_WITH_RADIUS),y)
+--- ppp-ppp-2.4.9/pppd/sys-linux.c	2021-01-30 07:38:55.470955062 +1000
++++ ppp-ppp-2.4.9/pppd/sys-linux.c	2021-01-30 07:38:56.890925751 +1000
+@@ -1776,6 +1776,33 @@
+     return 1;
+ }
+ 
++
++int rtmetricfixup(int unit, u_int32_t hisaddr, u_int32_t metric)
++{
++    struct rtentry rt;
++
++    memset(&rt, '\0', sizeof(rt));
++    SET_SA_FAMILY (rt.rt_dst,     AF_INET);
++    SET_SA_FAMILY (rt.rt_gateway, AF_INET);
++    if (kernel_version > KVERSION(2,1,0)) {
++	SET_SA_FAMILY (rt.rt_genmask, AF_INET);
++	((struct sockaddr_in *) &rt.rt_genmask)->sin_addr.s_addr = ~0L;
++    }
++    rt.rt_dev = ifname;
++    ((struct sockaddr_in *) &rt.rt_gateway)->sin_addr.s_addr = 0L;
++    ((struct sockaddr_in *) &rt.rt_dst)->sin_addr.s_addr     = hisaddr;
++    rt.rt_flags = RTF_UP | RTF_HOST;
++    if (ioctl(sock_fd, SIOCDELRT, &rt) < 0) {
++	error("ioctl(SIOCDELRT): %m(%d)", errno);
++    }
++    rt.rt_metric = metric + 1;
++    if (ioctl(sock_fd, SIOCADDRT, &rt) < 0) {
++	warn("ioctl(SIOCADDRT): %m(%d)", errno);
++    }
++    return 1;
++}
++
++
+ #ifdef INET6
+ /*
+  * /proc/net/ipv6_route parsing stuff.
+@@ -1813,31 +1840,6 @@
+     return 1;
+ }
+ 
+-int rtmetricfixup(int unit, u_int32_t hisaddr, u_int32_t metric)
+-{
+-    struct rtentry rt;
+-
+-    memset(&rt, '\0', sizeof(rt));
+-    SET_SA_FAMILY (rt.rt_dst,     AF_INET);
+-    SET_SA_FAMILY (rt.rt_gateway, AF_INET);
+-    if (kernel_version > KVERSION(2,1,0)) {
+-	SET_SA_FAMILY (rt.rt_genmask, AF_INET);
+-	((struct sockaddr_in *) &rt.rt_genmask)->sin_addr.s_addr = ~0L;
+-    }
+-    rt.rt_dev = ifname;
+-    ((struct sockaddr_in *) &rt.rt_gateway)->sin_addr.s_addr = 0L;
+-    ((struct sockaddr_in *) &rt.rt_dst)->sin_addr.s_addr     = hisaddr;
+-    rt.rt_flags = RTF_UP | RTF_HOST;
+-    if (ioctl(sock_fd, SIOCDELRT, &rt) < 0) {
+-	error("ioctl(SIOCDELRT): %m(%d)", errno);
+-    }
+-    rt.rt_metric = metric + 1;
+-    if (ioctl(sock_fd, SIOCADDRT, &rt) < 0) {
+-	warn("ioctl(SIOCADDRT): %m(%d)", errno);
+-    }
+-    return 1;
+-}
+-
+ /********************************************************************
+  *
+  * read_route6_table - read the next entry from the route table

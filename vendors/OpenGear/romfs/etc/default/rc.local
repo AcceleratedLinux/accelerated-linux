@@ -1,0 +1,5 @@
+#!/bin/sh
+#
+# This script is executed after all the other init scripts, and is where you
+# should put any customized startup items you require.
+#

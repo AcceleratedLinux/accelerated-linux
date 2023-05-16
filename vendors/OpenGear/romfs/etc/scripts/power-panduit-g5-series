@@ -1,0 +1,158 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+DEBUG=0
+OPTS="-t 5 ECHO ON"
+if [ "$DEBUG" == "1" ]; then
+    OPTS="-v -t 5 ECHO ON"
+fi
+
+username=$1
+password=$2
+port=$3
+outlets=$4
+cmd=$5
+
+if [[ -z $username ]] || [[ -z $password ]] || [[ -z $port ]] || [[ -z $outlets ]] || [[ -z $cmd ]]
+then
+    appname=`basename $0`
+    echo "Usage: $appname <username> <password> <port> \"<outlet> [outlet..]\" on|off|cycle|status"
+    exit 1
+fi
+
+# Logging wrapper for use when debugging
+function log {
+    logger -t power_panduit_g5 "$1"
+}
+
+
+# Login to the PDU. The user must be logged out and at a username prompt before calling this to login.
+function pduLogin {
+    if [ $DEBUG == "1" ]
+    then
+        log "pduLogin called"
+    fi
+
+    # When at the "User Name : " prompt
+    /bin/pmchat $OPTS  "" "$username" "Password  : " "$password" "PANDUIT>" < $port &> /dev/null
+
+    if [ $? -ne 0 ]
+    then
+        # We were not at the "User Name : " prompt - assuming that we now are, try to log in again
+        /bin/pmchat $OPTS "" "$username" "Password  : " "$password" "PANDUIT>" < $port &> /dev/null
+    fi
+
+    # Assume that we are logged in now 
+}
+
+# Logout of the PDU
+function pduLogout {
+    if [ $DEBUG == "1" ]
+    then
+        log "pduLogout called"    
+    fi
+
+    /bin/pmchat $OPTS "" "exit" "Connection Closed, Goodbye" "" < $port &> /dev/null
+}
+
+
+# Turn the supplied outlet on
+function pduOutletOn {
+    
+    outlet=$1
+
+    if [ $DEBUG == "1" ]
+    then
+        log "pduOutletOn called with outlet = $outlet"
+    fi
+
+    /bin/pmchat $OPTS "" "dev outlet 1 $outlet on" "\n" < $port &> /dev/null
+}
+
+# Turn the supplied outlet off
+function pduOutletOff {
+
+    outlet=$1    
+
+    if [ $DEBUG == "1" ]
+    then
+        log "pduOutletOff called with outlet = $outlet"
+    fi
+
+    /bin/pmchat $OPTS "" "dev outlet 1 $outlet off" "\n" < $port &> /dev/null
+}
+
+function pduStatus {
+
+    outletsToGetStatusFor="$1"
+
+    if [ $DEBUG == "1" ]
+    then
+        log "pdu status called with outlets = $outletsToGetStatusFor"
+    fi
+
+    # The "dev outlet 1 status" returns a response as follows:
+    #   PANDUIT>dev outlet 1 status
+    #   SUCCESS
+    #   Relay Outlet Status
+    #   Outlet# 1:Close  Outlet# 2:Open   Outlet# 3:Open   Outlet# 4:Open   
+    #   Outlet# 5:Open   Outlet# 6:Open   Outlet# 7:Open   Outlet# 8:Open   
+    #   Outlet# 9:Close  Outlet#10:Open   Outlet#11:Open   Outlet#12:Open   
+    #   Outlet#13:Open   Outlet#14:Open   Outlet#15:Open   Outlet#16:Open
+    allOutletStatus=`/bin/pmchat $OPTS "" "dev outlet 1 status" "PANDUIT>" < $port 2>&1`
+
+    # Extract the Open|Close status of the queried outlet
+    for i in $outletsToGetStatusFor
+    do
+        regex="Outlet# ?$i:(Open|Close)"
+        match=`echo $allOutletStatus | egrep -o "$regex"`
+        status=${match##*:}
+
+        if [ $status == "Open" ]
+        then
+            power_outlet_status $i "on"
+        elif [ $status == "Close" ]
+        then
+            power_outlet_status $i "off"
+        else
+            power_outlet_status $i "unknown"
+        fi
+    done
+}
+
+pduLogin
+
+if [ "$cmd" != "on" ] && [ "$cmd" != "off" ] && [ "$cmd" != "cycle" ] && [ "$cmd" != "status" ]
+then
+    echo "ERROR: Unrecognized command \"$cmd\""
+    pduLogout
+    exit
+fi
+
+case "$cmd" in
+"on" )
+    for outlet in $outlets
+    do
+        pduOutletOn $outlet        
+    done
+;;
+"off" )
+    for outlet in $outlets
+    do
+        pduOutletOff $outlet
+    done
+;;
+"cycle" )
+    for outlet in $outlets
+    do
+        pduOutletOff $outlet
+        pduOutletOn $outlet
+    done
+;;
+esac
+
+# Always get the status no matter the command provided
+pduStatus "$outlets"
+pduLogout
+

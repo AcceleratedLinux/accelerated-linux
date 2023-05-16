@@ -3,10 +3,39 @@
 OPTIONS=
 
 DISK=VirtualDAL.img
-if [ $# -gt 0 ]; then
-	DISK="$1"
-	shift
-fi
+
+usage() {
+	echo "usage: $(basename $0) [-d DISK] [-p PID_FILE]
+
+	-d	DISK		- Defines which disk image to use with this drive
+	-p	PID_FILE	- Store the QEMU process PID in file
+"
+	exit 1
+}
+
+while true
+do
+	case "$1" in
+		-d)
+			shift
+			DISK=$1
+			shift
+			;;
+		-p)
+			shift
+			PID_FILE=$1
+			shift
+			;;
+		-h|-\?)
+			usage
+			;;
+
+		*)
+			break
+			;;
+
+	esac
+done
 
 # first NIC,  gets default address 10.0.2.15
 # ssh available as "ssh -p 2222 admin@localhost"
@@ -25,7 +54,10 @@ OPTIONS="$OPTIONS -serial mon:stdio"
 # The disk image
 OPTIONS="$OPTIONS -drive id=diskA,file=$DISK,if=none,cache=unsafe"
 OPTIONS="$OPTIONS -device ahci,id=ahci"
-OPTIONS="$OPTIONS -device ide-drive,drive=diskA,bus=ahci.0"
+OPTIONS="$OPTIONS -device ide-hd,drive=diskA,bus=ahci.0"
+
+# PID file
+[ -n "$PID_FILE" ] && OPTIONS="$OPTIONS -pidfile $PID_FILE"
 
 # Use kvm if we can
 kvm-ok >/dev/null && OPTIONS="$OPTIONS -enable-kvm"

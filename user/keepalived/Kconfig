@@ -1,6 +1,7 @@
 
 config USER_KEEPALIVED
 	bool "keepalived"
+	select USER_IPTABLES_SHARED
 	default n
 	help
 	  A High availability and load balancing framework that uses Linux IPVS.

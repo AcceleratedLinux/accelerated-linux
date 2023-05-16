@@ -1,6 +1,6 @@
-diff -Naur busybox-1.31.0.org/networking/nslookup.c busybox-1.31.0/networking/nslookup.c
---- busybox-1.31.0.org/networking/nslookup.c	2019-01-22 19:09:17.000000000 +1000
-+++ busybox-1.31.0/networking/nslookup.c	2019-07-02 14:08:41.757213490 +1000
+diff -Naur busybox-1.34.1.org/networking/nslookup.c busybox-1.34.1/networking/nslookup.c
+--- busybox-1.34.1.org/networking/nslookup.c	2019-01-22 19:09:17.000000000 +1000
++++ busybox-1.34.1/networking/nslookup.c	2019-07-02 14:08:41.757213490 +1000
 @@ -176,6 +176,10 @@
  		_res.nscount = 1;
  		/* struct copy */

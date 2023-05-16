@@ -1,4 +1,4 @@
-/**
+/*
  * This file is part of the Chelsio T4/T5/T6 Ethernet driver for Linux.
  *
  * Copyright (C) 2011-2016 Chelsio Communications.  All rights reserved.
@@ -33,23 +33,8 @@ static int cpl_fw6_pld_handler(struct adapter *adap, unsigned char *input);
 static void *chcr_uld_add(const struct cxgb4_lld_info *lld);
 static int chcr_uld_state_change(void *handle, enum cxgb4_state state);
 
-#if defined(CONFIG_CHELSIO_TLS_DEVICE)
-static const struct tlsdev_ops chcr_ktls_ops = {
-	.tls_dev_add = chcr_ktls_dev_add,
-	.tls_dev_del = chcr_ktls_dev_del,
-};
-#endif
-
-#ifdef CONFIG_CHELSIO_IPSEC_INLINE
-static void update_netdev_features(void);
-#endif /* CONFIG_CHELSIO_IPSEC_INLINE */
-
 static chcr_handler_func work_handlers[NUM_CPL_CMDS] = {
 	[CPL_FW6_PLD] = cpl_fw6_pld_handler,
-#ifdef CONFIG_CHELSIO_TLS_DEVICE
-	[CPL_ACT_OPEN_RPL] = chcr_ktls_cpl_act_open_rpl,
-	[CPL_SET_TCB_RPL] = chcr_ktls_cpl_set_tcb_rpl,
-#endif
 };
 
 static struct cxgb4_uld_info chcr_uld_info = {
@@ -60,12 +45,6 @@ static struct cxgb4_uld_info chcr_uld_info = {
 	.add = chcr_uld_add,
 	.state_change = chcr_uld_state_change,
 	.rx_handler = chcr_uld_rx_handler,
-#if defined(CONFIG_CHELSIO_IPSEC_INLINE) || defined(CONFIG_CHELSIO_TLS_DEVICE)
-	.tx_handler = chcr_uld_tx_handler,
-#endif /* CONFIG_CHELSIO_IPSEC_INLINE || CONFIG_CHELSIO_TLS_DEVICE */
-#if defined(CONFIG_CHELSIO_TLS_DEVICE)
-	.tlsdev_ops = &chcr_ktls_ops,
-#endif
 };
 
 static void detach_work_fn(struct work_struct *work)
@@ -148,7 +127,7 @@ static void chcr_dev_init(struct uld_ctx *u_ctx)
 
 static int chcr_dev_move(struct uld_ctx *u_ctx)
 {
-	 mutex_lock(&drv_data.drv_mutex);
+	mutex_lock(&drv_data.drv_mutex);
 	if (drv_data.last_dev == u_ctx) {
 		if (list_is_last(&drv_data.last_dev->entry, &drv_data.act_dev))
 			drv_data.last_dev = list_first_entry(&drv_data.act_dev,
@@ -205,7 +184,7 @@ static void *chcr_uld_add(const struct cxgb4_lld_info *lld)
 	struct uld_ctx *u_ctx;
 
 	/* Create the device and add it in the device list */
-	pr_info_once("%s - version %s\n", DRV_DESC, DRV_VERSION);
+	pr_info_once("%s\n", DRV_DESC);
 	if (!(lld->ulp_crypto & ULP_CRYPTO_LOOKASIDE))
 		return ERR_PTR(-EOPNOTSUPP);
 
@@ -240,23 +219,6 @@ int chcr_uld_rx_handler(void *handle, const __be64 *rsp,
 		work_handlers[rpl->opcode](adap, pgl->va);
 	return 0;
 }
-
-#if defined(CONFIG_CHELSIO_IPSEC_INLINE) || defined(CONFIG_CHELSIO_TLS_DEVICE)
-int chcr_uld_tx_handler(struct sk_buff *skb, struct net_device *dev)
-{
-	/* In case if skb's decrypted bit is set, it's nic tls packet, else it's
-	 * ipsec packet.
-	 */
-#ifdef CONFIG_CHELSIO_TLS_DEVICE
-	if (skb->decrypted)
-		return chcr_ktls_xmit(skb, dev);
-#endif
-#ifdef CONFIG_CHELSIO_IPSEC_INLINE
-	return chcr_ipsec_xmit(skb, dev);
-#endif
-	return 0;
-}
-#endif /* CONFIG_CHELSIO_IPSEC_INLINE || CONFIG_CHELSIO_TLS_DEVICE */
 
 static void chcr_detach_device(struct uld_ctx *u_ctx)
 {
@@ -305,24 +267,6 @@ static int chcr_uld_state_change(void *handle, enum cxgb4_state state)
 	return ret;
 }
 
-#ifdef CONFIG_CHELSIO_IPSEC_INLINE
-static void update_netdev_features(void)
-{
-	struct uld_ctx *u_ctx, *tmp;
-
-	mutex_lock(&drv_data.drv_mutex);
-	list_for_each_entry_safe(u_ctx, tmp, &drv_data.inact_dev, entry) {
-		if (u_ctx->lldi.crypto & ULP_CRYPTO_IPSEC_INLINE)
-			chcr_add_xfrmops(&u_ctx->lldi);
-	}
-	list_for_each_entry_safe(u_ctx, tmp, &drv_data.act_dev, entry) {
-		if (u_ctx->lldi.crypto & ULP_CRYPTO_IPSEC_INLINE)
-			chcr_add_xfrmops(&u_ctx->lldi);
-	}
-	mutex_unlock(&drv_data.drv_mutex);
-}
-#endif /* CONFIG_CHELSIO_IPSEC_INLINE */
-
 static int __init chcr_crypto_init(void)
 {
 	INIT_LIST_HEAD(&drv_data.act_dev);
@@ -331,12 +275,6 @@ static int __init chcr_crypto_init(void)
 	mutex_init(&drv_data.drv_mutex);
 	drv_data.last_dev = NULL;
 	cxgb4_register_uld(CXGB4_ULD_CRYPTO, &chcr_uld_info);
-
-	#ifdef CONFIG_CHELSIO_IPSEC_INLINE
-	rtnl_lock();
-	update_netdev_features();
-	rtnl_unlock();
-	#endif /* CONFIG_CHELSIO_IPSEC_INLINE */
 
 	return 0;
 }
@@ -371,4 +309,3 @@ module_exit(chcr_crypto_exit);
 MODULE_DESCRIPTION("Crypto Co-processor for Chelsio Terminator cards.");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Chelsio Communications");
-MODULE_VERSION(DRV_VERSION);

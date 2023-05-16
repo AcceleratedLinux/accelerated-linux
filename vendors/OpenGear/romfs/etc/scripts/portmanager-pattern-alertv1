@@ -1,0 +1,37 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	export AGENT=""
+	export UPTIME=""
+	export TRAP_NAME="${pattern_oid_prefix}EventOccurred"
+	export MIB_NAME="${pattern_mib_name}"
+
+	ALERT_DESCRIPTION=$2
+	ALERT_PORT=$3
+	ALERT_PORT_LABEL=$4
+	ALERT_TEXT=$5
+	
+	/bin/sh /etc/scripts/alert-snmpv1 \
+		"${pattern_oid_prefix}EventDescription" \
+		"s" \
+		"$ALERT_DESCRIPTION" \
+		"${pattern_oid_prefix}EventText" \
+		"s" \
+		"$ALERT_TEXT" \
+		"${pattern_oid_prefix}EventPortNumber" \
+		"i" \
+		"$ALERT_PORT" \
+		"${pattern_oid_prefix}EventPortLabel" \
+		"s" \
+		"$ALERT_PORT_LABEL"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

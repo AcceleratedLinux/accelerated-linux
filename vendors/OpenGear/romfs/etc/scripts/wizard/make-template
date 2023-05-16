@@ -1,0 +1,182 @@
+#!/bin/bash
+#
+# Genericize this console server's configuration for mass provisioning.
+#
+
+source /etc/scripts/wizard/wizard.inc
+
+function template_personality {
+	echo "*** Templating references to hostname"
+	hostname=$(hostname)
+	template_host=$(cat /etc/version | cut -f1 -d' ' | cut -f2 -d'/' | awk '{print tolower($0)}')
+	refs=$(config -g config | grep $hostname)
+	ifs="$IFS"
+	IFS=$'\n'
+	for ref in $refs; do
+		id=$(echo "$ref" | cut -f1 -d' ')
+		old=$(echo "$ref" | cut -f2- -d' ')
+		new=$(echo "$old" | sed "s/$(hostname)/$template_host/g")
+		echo "*** Setting \"$id=$new\""
+		config -s "$id=$new"
+	done
+	IFS="$ifs"
+	config -s config.system.name=$template_host
+
+	echo "*** Deleting any server SSH keys"
+	rm /etc/config/ssh_host_key* 2> /dev/null
+
+	echo "*** Removing any auto-detected settings"
+	config \
+		-d config.interfaces.lan.device.type \
+		-d config.system.model
+		
+	mode=$(config -g config.interfaces.wan.mode | cut -f2 -d' ')
+	if [[ -n "$mode" ]] && confirm "*** Set Network Interface to default DHCP/192.168.0.1 (static config preserved)"; then
+		config -d config.interfaces.wan.mode
+	fi
+	
+	interface=$(config -g config.interfaces.wan.failover.interface | cut -f2 -d' ')
+	if [[ -n "$interface" ]] && confirm "*** Disable failover/enable always-up OOB"; then
+		config \
+			-s config.wizard.saved.interfaces.wan.failover.interface=$interface \
+			-d config.interfaces.wan.failover.interface
+	fi
+}
+
+function template_security {
+	numipsec=$(config -g config.ipsec.tunnels.total | cut -f2 -d' ')
+	for (( i=1; i <= ${numipsec:-0}; i++ )); do	
+		secret=$(config -g config.ipsec.tunnels.tunnel${i}.secret | cut -f2 -d' ')
+		[[ -z "$secret" ]] && continue
+		addr=$(config -g config.ipsec.tunnels.tunnel${i}.right | cut -f2 -d' ')
+		echo "*** Removing IPsec shared secret (${addr})"
+		config \
+			-s config.wizard.saved.ipsec.tunnels.tunnel${i}.secret=scrubbed \
+			-d config.ipsec.tunnels.tunnel${i}.secret
+	done
+
+	methods=$(config -g config.auth | cut -f3 -d'.' | uniq)
+	for method in $methods; do
+		secret=$(config -g config.auth.${method}.password | cut -f2 -d' ')
+		[[ -z "$secret" ]] && continue
+		echo "*** Removing auth server ($method) password"
+		config \
+			-s config.wizard.saved.auth.${method}.password=scrubbed \
+			-d config.auth.${method}.password
+	done
+
+	if confirm "*** Default root password"; then
+		config -s config.users.user1.plaintext_password=default
+	fi
+}
+
+function template_cms {
+	cmsenabled=$(config -g config.cms.enabled | cut -f2 -d' ')
+	if [[ -n "$cmsenabled" ]]; then
+		echo "*** Removing CMS management settings"
+		config -d config.cms
+	fi
+
+	numservers=$(config -g config.ssh.servers.total | cut -f2 -d' ')
+	for (( servernum=1; $servernum <= ${numservers:-0}; servernum++ )); do
+		prefix=config.ssh.servers.server$servernum
+		                                             
+		cmsaddr=$(config -g ${prefix}.address | cut -f2 -d' ')
+		cmsport=$(config -g ${prefix}.sshport | cut -f2 -d' ')    
+		[[ -z "$cmsport" ]] && cmsport=22  
+	
+		echo "*** Resetting unique Call Home port (${cmsaddr}:${cmsport})"
+		# This must be set to something for reallocation to work
+		config -s ${prefix}.forwards.forward1.port=49151
+	done
+	
+	echo "*** Deleting Call Home SSH keys & fingerprints"
+	rm /etc/config/ssh_root_key* 2> /dev/null
+	> /.ssh/known_hosts
+
+	if confirm "*** Configure automatic Call Home wizard"; then
+		numservers=$(config -g config.ssh.servers.total | cut -f2 -d' ')
+		if [[ "$numservers" -lt 1 ]]; then
+		        echo "*** ERROR *** No Call Home servers configured"           
+			exit 1
+		fi
+		
+		for (( servernum=1; $servernum <= $numservers; servernum++ )); do
+			prefix=config.ssh.servers.server$servernum
+			                                             
+			cmsaddr=$(config -g ${prefix}.address | cut -f2 -d' ')
+			cmsport=$(config -g ${prefix}.sshport | cut -f2 -d' ')    
+			[[ -z "$cmsport" ]] && cmsport=22  
+	
+			get_pass "*** Enter Call Home password (${cmsaddr}:${cmsport})" cmspass
+			config -s config.wizard.callhome.server${servernum}.plaintext_password="$cmspass"
+		done
+
+		script="/etc/scripts/wizard/callhome-wizard"
+		if ! grep "^$script" /etc/config/rc.local >& /dev/null; then
+			echo "# Start $(basename $script) autorun - added by $(basename $0)" >> /etc/config/rc.local
+			echo "$script &" >> /etc/config/rc.local
+			echo "# End $(basename $script) autorun" >> /etc/config/rc.local
+		fi
+	fi
+
+	if confirm "*** Pre-authorize CMS management"; then
+		echo "*** To pre-authorize a CMS, you must install its public key. To obtain"
+		echo "*** the public key, run this command on the CMS:"
+		echo
+		echo "cat /etc/config/nagios/.ssh/id_rsa.pub"
+		echo
+		echo "*** You may paste key(s) into this wizard, or browse to this device and "
+		echo "*** Users & Groups -> Edit root -> New SSH Key."
+		while confirm "*** Paste a public key now"; do
+			read -p "*** Public key: " key
+			# Sanity check key
+			keyfile="/tmp/$(basename $0).$$.pub"
+			echo "$key" > "$keyfile"
+			if ! ssh-keygen -l -f "$keyfile"; then
+				echo "*** Invalid public key"
+			else
+				# Add new key ensuring newline
+				sed -i -e '$a\' /etc/config/ssh_authorized_keys
+				cat "$keyfile" >> /etc/config/ssh_authorized_keys
+			fi
+			rm -f "$keyfile"
+		done
+		chown root:root /etc/config/ssh_authorized_keys
+		chmod 400 /etc/config/ssh_authorized_keys
+	fi
+}
+
+if [ -d /var/run/cms ]; then
+	echo "*** ERROR *** This script is not designed to be run on CMS"
+	exit 1
+fi
+
+logit "*** Templating configuration"
+
+confirm "*** Template CMS management settings" && template_cms
+confirm "*** Template per-console server settings" && template_personality
+confirm "*** Template security settings" && template_security
+	
+echo "*** Applying config (may take a couple of minutes)"
+if ! config -a; then
+	logit "*** ERROR *** Failed to apply config"
+	exit 1
+fi
+
+if confirm "*** Queue setup wizard for next login"; then
+	script="/etc/scripts/wizard/setup-wizard"
+	if ! grep "^$script" /etc/config/profile >& /dev/null; then
+		echo "# Start $(basename $script) autorun - added by $(basename $0)" >> /etc/config/profile
+		echo "$script" >> /etc/config/profile
+		echo "# End $(basename $script) autorun" >> /etc/config/profile
+	fi
+fi
+
+logit "*** Template successful"
+
+echo
+echo "To save the template:"
+echo -e "- Browse to this device and click \033[1mBackup -> Save Backup\033[0m"
+echo -e "- Or type \033[1mconfig -e /tmp/template.opg\033[0m and copy off box using scp"
+echo

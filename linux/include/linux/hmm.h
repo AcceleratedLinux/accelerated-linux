@@ -9,14 +9,9 @@
 #ifndef LINUX_HMM_H
 #define LINUX_HMM_H
 
-#include <linux/kconfig.h>
-#include <linux/pgtable.h>
+#include <linux/mm.h>
 
-#include <linux/device.h>
-#include <linux/migrate.h>
-#include <linux/memremap.h>
-#include <linux/completion.h>
-#include <linux/mmu_notifier.h>
+struct mmu_interval_notifier;
 
 /*
  * On output:
@@ -37,16 +32,17 @@
  *                     will fail. Must be combined with HMM_PFN_REQ_FAULT.
  */
 enum hmm_pfn_flags {
-	/* Output flags */
+	/* Output fields and flags */
 	HMM_PFN_VALID = 1UL << (BITS_PER_LONG - 1),
 	HMM_PFN_WRITE = 1UL << (BITS_PER_LONG - 2),
 	HMM_PFN_ERROR = 1UL << (BITS_PER_LONG - 3),
+	HMM_PFN_ORDER_SHIFT = (BITS_PER_LONG - 8),
 
 	/* Input flags */
 	HMM_PFN_REQ_FAULT = HMM_PFN_VALID,
 	HMM_PFN_REQ_WRITE = HMM_PFN_WRITE,
 
-	HMM_PFN_FLAGS = HMM_PFN_VALID | HMM_PFN_WRITE | HMM_PFN_ERROR,
+	HMM_PFN_FLAGS = 0xFFUL << HMM_PFN_ORDER_SHIFT,
 };
 
 /*
@@ -59,6 +55,25 @@ enum hmm_pfn_flags {
 static inline struct page *hmm_pfn_to_page(unsigned long hmm_pfn)
 {
 	return pfn_to_page(hmm_pfn & ~HMM_PFN_FLAGS);
+}
+
+/*
+ * hmm_pfn_to_map_order() - return the CPU mapping size order
+ *
+ * This is optionally useful to optimize processing of the pfn result
+ * array. It indicates that the page starts at the order aligned VA and is
+ * 1<<order bytes long.  Every pfn within an high order page will have the
+ * same pfn flags, both access protections and the map_order.  The caller must
+ * be careful with edge cases as the start and end VA of the given page may
+ * extend past the range used with hmm_range_fault().
+ *
+ * This must be called under the caller 'user_lock' after a successful
+ * mmu_interval_read_begin(). The caller must have tested for HMM_PFN_VALID
+ * already.
+ */
+static inline unsigned int hmm_pfn_to_map_order(unsigned long hmm_pfn)
+{
+	return (hmm_pfn >> HMM_PFN_ORDER_SHIFT) & 0x1F;
 }
 
 /*
@@ -93,7 +108,7 @@ int hmm_range_fault(struct hmm_range *range);
  * HMM_RANGE_DEFAULT_TIMEOUT - default timeout (ms) when waiting for a range
  *
  * When waiting for mmu notifiers we need some kind of time out otherwise we
- * could potentialy wait for ever, 1000ms ie 1s sounds like a long time to
+ * could potentially wait for ever, 1000ms ie 1s sounds like a long time to
  * wait already.
  */
 #define HMM_RANGE_DEFAULT_TIMEOUT 1000

@@ -7,14 +7,11 @@
  */
 
 #include <errno.h>
-#include "nlattr.h"
-#include "libbpf_internal.h"
-#include <linux/rtnetlink.h>
 #include <string.h>
 #include <stdio.h>
-
-/* make sure libbpf doesn't use kernel-only integer typedefs */
-#pragma GCC poison u8 u16 u32 u64 s8 s16 s32 s64
+#include <linux/rtnetlink.h>
+#include "nlattr.h"
+#include "libbpf_internal.h"
 
 static uint16_t nla_attr_minlen[LIBBPF_NLA_TYPE_MAX+1] = {
 	[LIBBPF_NLA_U8]		= sizeof(uint8_t),
@@ -30,7 +27,7 @@ static struct nlattr *nla_next(const struct nlattr *nla, int *remaining)
 	int totlen = NLA_ALIGN(nla->nla_len);
 
 	*remaining -= totlen;
-	return (struct nlattr *) ((char *) nla + totlen);
+	return (struct nlattr *)((void *)nla + totlen);
 }
 
 static int nla_ok(const struct nlattr *nla, int remaining)

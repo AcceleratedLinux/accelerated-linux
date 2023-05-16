@@ -1,0 +1,41 @@
+#!/bin/lua
+local posix = require "posix"
+local io = require "io"
+
+-- Helper functions
+function getFileContents(filename)
+	local res
+	f = io.open(filename, "r")
+	if f ~= nil then
+		res = f:read("*a")
+		f:close()
+    else 
+        res = ""
+    end
+    
+	return res
+end
+
+function string:trim()
+	return (string.gsub(self, "^%s*(.-)%s*$", "%1"))
+end
+
+-- Get a list of USB devices and print out the relevant details in a way that emulates /proc/bus/usb/devices
+dev_dir = "/sys/bus/usb/devices"
+if posix.stat(dev_dir) ~= nil then
+	files, errstr, errno = posix.dir(dev_dir)
+	if files then
+		for a,b in ipairs(files) do
+			-- Do not print out endpoints, just the devices 
+			if string.find(b, ":") == nil then
+				dev = dev_dir .. "/" .. b
+				if posix.stat(dev .. "/idVendor") ~= nil then
+					print("P:  Vendor=" .. getFileContents(dev .. "/idVendor"):trim() .. " ProdID=" .. getFileContents(dev .. "/idProduct"):trim())
+					print("S:  Manufacturer=" .. getFileContents(dev .. "/manufacturer"):trim())
+					print("S:  Product=" .. getFileContents(dev .. "/product"):trim())
+					print("")
+				end
+			end
+		end
+	end
+end

@@ -1,2 +1,7 @@
 0001-Disable-libtool-check.patch
 0002-Fix-check-for-TIME_MAX-to-handle-8-byte-TIME_T-with-.patch
+130-rest-methods.patch
+140-clean-tempdir.patch
+150-ssl-client-cert-support.patch
+160-reproducible-build.patch
+200-tls12-fips.patch

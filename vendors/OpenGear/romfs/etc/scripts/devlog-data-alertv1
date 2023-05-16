@@ -1,0 +1,36 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+ACTION=$1
+retval=0
+
+ALERT_MODEM=$2
+ALERT_BYTES=$3
+ALERT_SECONDS=$4
+ALERT_STATE=$5
+
+if [ "$ACTION" == "snmp" ]; then
+	export OID="enterprises.${enterprise_name}"
+	export AGENT=""
+	export UPTIME=""
+	export SPECIFIC_TYPE=".${data_mib_prefix}.${data_mib_prefix}Objects.${data_oid_prefix}Event.${data_oid_prefix}EventTable"
+	export TRAP_NAME="${data_oid_prefix}EventOccurred"
+	export NOTIFICATION_TYPE=".${data_mib_prefix}.${data_mib_prefix}NotificationPrefix.${data_oid_prefix}MibNotifications"
+
+	/bin/sh /etc/scripts/alert-snmpv1 \
+		".${data_oid_prefix}EventEntry.${data_oid_prefix}EventState" \
+		"i" \
+		"$ALERT_STATE" \
+		".${data_oid_prefix}EventEntry.${data_oid_prefix}EventBytes" \
+		"i" \
+		"$ALERT_BYTES" \
+		".${data_oid_prefix}EventEntry.${data_oid_prefix}EventSeconds" \
+		"i" \
+		"$ALERT_SECONDS" \
+		".${data_oid_prefix}EventEntry.${data_oid_prefix}EventDevice" \
+		"s" \
+		"$ALERT_MODEM"
+
+	retval=$(( $? || $retval ))
+fi

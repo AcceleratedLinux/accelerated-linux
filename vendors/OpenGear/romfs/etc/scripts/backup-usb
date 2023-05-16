@@ -1,0 +1,307 @@
+#!/bin/sh
+# This backup script saves and restores system configuration
+# to a "magic volume". A magic volume is a USB flash storage
+# device with a preformatted FAT filesystem, and labeled with
+# the special label "OPG_xxyyzz", where xxyyzz matches the
+# last three hex octets of the primary ethernet interface's MAC
+# address.
+#
+# Usage: backup-usb <command>
+#
+#    check-magic
+#      Checks to see if a magic volume is present
+#    set-magic
+#      If a single FAT volume is present, marks it
+#      as a magic volume
+#
+#    list
+#      List loadable <name>s to stdout, prefixing the file
+#      that load-deafult would use with a '*'
+#    save <name>
+#      Saves the current configuration, giving it name <name>
+#    load <name>
+#      Restores a saved configuration
+#    delete <name>
+#      Deletes a saved configuration
+#
+#    set-default <name>
+#      Marks a previously saved config as the default to load
+#    load-default
+#      Loads default.opg from a disk labeled OPG_DEFAULT,
+#       or from the magic volume
+#
+
+source /etc/scripts/mutex
+
+function get_label
+{
+	dev=$1
+
+    mlabel -i $dev -s :: 2> /dev/null | awk '{print $4}'
+} 
+
+function has_label
+{
+	dev=$1
+	label="$2"
+
+	l=$(get_label $dev)
+	[ "$label" == "$l" ]
+}
+
+function get_volume_by_label
+{
+	label="$1"
+
+	for disk in ${DISKS[@]}; do
+		# Check for labeled volume on entire disk, or first partition
+		for dev in $disk ${disk}1; do
+			if has_label $dev "$label"; then
+				echo $dev
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
+function has_fs
+{
+	dev=$1
+	fstype=$2
+
+	minfo -i $dev :: 2> /dev/null | grep "type.*$fs" >& /dev/null
+}
+
+function get_volume_by_fs
+{
+	fs=$1
+
+	for disk in ${DISKS[@]}; do
+		# Check for filesystem on entire disk, or first partition
+		for dev in $disk ${disk}1; do
+			if has_fs $dev $fs; then
+				echo $dev
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
+function is_same_file
+{
+	file1="$1"
+	file2="$2"
+
+	sum1=$(md5sum "$file1" 2> /dev/null | cut -f1 -d' ')
+	sum2=$(md5sum "$file2" 2> /dev/null | cut -f1 -d' ')
+
+	[ "$sum1" == "$sum2" ]
+}
+
+function load_from_volume
+{
+	label="$1"
+	filename="$2"
+	local mountpoint dev
+
+	mountpoint=$(mount_volume "$label") || return 1
+
+	if [ -f "$mountpoint/${filename}.opg" ]; then
+		echo "Loading file ${filename}.opg from $dev (${label})" >&2
+		/bin/config -i "$mountpoint/${filename}.opg" -p /etc/default/config.xml
+		ret=$?
+	else
+		echo "File ${filename}.opg not found on $dev (${label})" >&2
+		ret=1
+	fi
+	umount_volume "$mountpoint"
+	return $ret
+}
+
+function mount_volume
+{
+	dev=$(get_volume_by_label "$1")
+	if [ "$dev" == '' ]; then
+		echo "Volume $1 not found" >&2
+		return 1
+	fi
+
+	path=$(grep "^$dev " /proc/mounts | cut -f2 -d' ')
+	if [ "$path" != '' ]; then
+		echo "$path"
+	else
+		if ! mount -t vfat $dev "$MOUNTPOINT" >& /dev/null; then
+			echo "Failed to mount $dev on $MOUNTPOINT" >&2
+			return 1
+		fi
+		echo "$MOUNTPOINT"
+	fi
+}
+
+function umount_volume
+{
+	path="$1"
+
+	if [ "$path" == "$MOUNTPOINT" ]; then
+		umount "$MOUNTPOINT"
+	fi
+}
+
+# Number of connected disks
+NDISKS=$(
+	if [ -d /sys/bus/usb/drivers/usb-storage ]; then
+		ls -1d /sys/bus/usb/drivers/usb-storage/[0-9]*
+	else
+		grep usb-storage /proc/bus/usb/devices
+	fi 2>/dev/null | wc -l
+)
+if [ $NDISKS -eq 0 ]; then
+	echo "No disks found" >&2
+	exit 255
+fi
+
+# Array of all possible disk devices
+declare -a DISKS
+DISKS=( $(ls /dev/sd?) )
+
+# Identifying label for the volume containing default config
+MAGIC_LABEL=$(ifconfig eth0 | awk '/HWaddr/ {print "OPG_"substr($5,10,16)}' | sed -e 's/://g')
+
+# Ephemeral mount point for the volume containing configs
+MOUNTPOINT='/var/run/config/mnt'
+
+CMD=$1
+case $CMD in
+
+	load-default )
+		if get_volume_by_label OPG_DEFAULT >& /dev/null; then
+			# Attempt to load templated configuration
+			if ! load_from_volume OPG_DEFAULT default; then
+				# Otherwise abort USB load without falling back to MAGIC_LABEL
+				echo "Not loading default from USB" >&2
+			fi
+		else
+			load_from_volume "$MAGIC_LABEL" default
+		fi
+		;;
+
+	load )
+		filename="$2"
+
+		load_from_volume "$MAGIC_LABEL" "$filename"
+		;;
+
+	check-magic )
+		dev=$(get_volume_by_label "$MAGIC_LABEL")
+		if [ "$dev" == '' ]; then
+			echo "Magic volume not found" >&2
+			exit $NDISKS
+		fi
+
+		echo "Magic volume at $dev" >&2
+		;;
+
+	set-magic )
+		if [ $NDISKS -gt 1 ]; then
+			echo "More than one USB storage device detected"
+			exit $NDISKS
+		fi
+
+		dev=$(get_volume_by_fs FAT)
+		if [ "$dev" == '' ]; then
+			echo "No FAT32 volumes found" >&2
+			exit 1
+		fi
+
+		if ! mlabel -i $dev ::"$MAGIC_LABEL"; then
+			echo "Failed to label volume $dev" >&2
+			exit 1
+		fi
+		;;
+
+	list )
+		path=$(mount_volume $MAGIC_LABEL) || exit 1
+
+		ifs="$IFS"
+		IFS=$'\n'
+
+		shopt -s dotglob
+		files=$(ls -a "$path"/*.opg 2> /dev/null)
+		default_name=$(cat "$path"/default.txt 2> /dev/null)
+
+		# If there is a default.opg, but default.txt is empty, then
+		# we have to use the old (broken) method of showing the default, to
+		# avoid changing customers' defaults after upgrade.
+		old_default=0
+		if [ "${default_name}" == "" ] && [ -f "$path"/default.opg ]; then
+			old_default=1
+		fi
+
+		for f in $files; do
+			if [ $(basename $f) == 'default.opg' ]; then
+				continue
+			fi
+
+			if [ $old_default -eq 0 ]; then
+				if [ $(basename $f) == "${default_name}" ]; then
+					echo -n '* '
+				fi
+			else
+				if is_same_file "$path/default.opg" "$f"; then
+					echo -n '* '
+				fi
+			fi
+			basename "$f" .opg
+		done
+		shopt -u dotglob
+
+		IFS="$ifs"
+		umount_volume "$path"
+		;;
+
+	save )
+		filename="$2"
+
+		path=$(mount_volume $MAGIC_LABEL) || exit 1
+		/bin/config -e "/${path}/${filename}.opg"
+		umount_volume "$path"
+		;;
+
+	delete )
+		filename="$2"
+
+		path=$(mount_volume $MAGIC_LABEL) || exit 1
+		if is_same_file "$path/default.opg" "$path/${filename}.opg"; then
+			rm "$path/default.opg"
+		fi
+		rm "$path/${filename}.opg"
+
+		# If this file was default, remove default.txt
+		default_name=$(cat "$path"/default.txt 2> /dev/null)
+		if [ "${default_name}" == "${filename}.opg" ]; then
+			rm "$path/default.txt"
+		fi
+
+		umount_volume "$path"
+		;;
+
+	set-default )
+		filename="$2"
+
+		path=$(mount_volume $MAGIC_LABEL) || exit 1
+		if [ "$filename" == '' ]; then
+			# Load factory defaults on ERASE
+			rm "$path/default.opg"
+			rm -f "$path/default.txt"
+		else
+			cp "$path/${filename}.opg" "$path/default.opg"
+			echo "${filename}".opg > "$path/default.txt"
+		fi
+		umount_volume "$path"
+		;;
+
+esac
+
+exit 0

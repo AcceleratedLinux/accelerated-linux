@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+
+interface=eth2
+
+addr=$(setfset -r | sed -n "s/^${interface}addr=//p")
+if ! ifconfig $interface hw ether "$addr"; then
+	logger -t "udev-net" "cannot set $interface MAC (${interface}addr=${addr})"
+fi
+

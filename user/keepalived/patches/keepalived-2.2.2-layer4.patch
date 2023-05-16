@@ -1,0 +1,11 @@
+--- keepalived-2.2.2/keepalived/core/layer4.c.org	2021-08-13 13:37:21.666461340 +1000
++++ keepalived-2.2.2/keepalived/core/layer4.c	2021-08-13 13:37:49.273327309 +1000
+@@ -27,8 +27,6 @@
+ #include <errno.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+-#include <linux/icmp.h>
+-#include <linux/icmpv6.h>
+ #ifdef ERRQUEUE_NEEDS_SYS_TIME
+ #include <sys/time.h>
+ #endif

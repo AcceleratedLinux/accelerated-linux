@@ -14,7 +14,7 @@ struct gsi_trans;
 struct gsi_ring;
 struct gsi_channel;
 
-#define GSI_RING_ELEMENT_SIZE	16	/* bytes */
+#define GSI_RING_ELEMENT_SIZE	16	/* bytes; must be a power of 2 */
 
 /* Return the entry that follows one provided in a transaction pool */
 void *gsi_trans_pool_next(struct gsi_trans_pool *pool, void *element);
@@ -44,7 +44,7 @@ void gsi_trans_complete(struct gsi_trans *trans);
  * @channel:	Channel associated with the transaction
  * @index:	Index of the TRE having a transaction
  *
- * @Return:	The GSI transaction pointer associated with the TRE index
+ * Return:	The GSI transaction pointer associated with the TRE index
  */
 struct gsi_trans *gsi_channel_trans_mapped(struct gsi_channel *channel,
 					   u32 index);
@@ -53,7 +53,7 @@ struct gsi_trans *gsi_channel_trans_mapped(struct gsi_channel *channel,
  * gsi_channel_trans_complete() - Return a channel's next completed transaction
  * @channel:	Channel whose next transaction is to be returned
  *
- * @Return:	The next completed transaction, or NULL if nothing new
+ * Return:	The next completed transaction, or NULL if nothing new
  */
 struct gsi_trans *gsi_channel_trans_complete(struct gsi_channel *channel);
 
@@ -76,7 +76,7 @@ void gsi_channel_trans_cancel_pending(struct gsi_channel *channel);
  * @gsi:	GSI pointer
  * @channel_id:	Channel number
  *
- * @Return:	0 if successful, or -ENOMEM on allocation failure
+ * Return:	0 if successful, or -ENOMEM on allocation failure
  *
  * Creates and sets up information for managing transactions on a channel
  */
@@ -100,7 +100,7 @@ void gsi_channel_doorbell(struct gsi_channel *channel);
 /**
  * gsi_ring_virt() - Return virtual address for a ring entry
  * @ring:	Ring whose address is to be translated
- * @addr:	Index (slot number) of entry
+ * @index:	Index (slot number) of entry
  */
 void *gsi_ring_virt(struct gsi_ring *ring, u32 index);
 

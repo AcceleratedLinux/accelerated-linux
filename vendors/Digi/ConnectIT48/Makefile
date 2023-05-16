@@ -6,6 +6,7 @@ ROMFSIMG  = $(IMAGEDIR)/rootfs
 ROMFSIMGZ = $(IMAGEDIR)/rootfs.gz
 ZIMAGE    = $(IMAGEDIR)/vmlinuz
 IMAGE     = $(IMAGEDIR)/image.bin
+IMAGESIZE = 1073741824 # 1GB
 
 SIGNING_ALG   = ecdsa
 
@@ -94,6 +95,10 @@ romfs: grub.cfg romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.
 	$(ROMFSINST) /boot/grub/grub.cfg
 	$(ROMFSINST) -d -p 755 pwrbtn.sh /etc/acpi/events/PWRF/00000080
 	$(ROMFSINST) $(ROOTDIR)/$(LINUXDIR)/arch/x86/boot/bzImage /boot/vmlinuz
+	$(ROMFSINST) -d -p 644 ../ConnectIT16/76-sdcard_poll_rate.rules /libexec/udev/rules.d/76-sdcard_poll_rate.rules
+	$(ROMFSINST) -d -p 644 ../ConnectIT16/76-sdcard_automount.rules /libexec/udev/rules.d/76-sdcard_automount.rules
+	$(ROMFSINST) -d -p 644 ../ConnectIT16/76-usb1_automount.rules /libexec/udev/rules.d/76-usb1_automount.rules
+	$(ROMFSINST) -d -p 644 ../ConnectIT16/76-usb2_automount.rules /libexec/udev/rules.d/76-usb2_automount.rules
 	echo "Digi Connect IT 48" > $(ROMFSDIR)/etc/issue
 
 grub.cfg: grub.cfg.in Makefile
@@ -106,6 +111,8 @@ romfs.post:: romfs.cleanup
 	# grub installation,  otherwise setup for building a signed image
 	if [ -f "$(SIGNED_GRUB)" ]; then \
 		rm -rf $(ROMFSDIR)/boot/grub ; \
+		rm -f $(ROMFSDIR)/usr/bin/grub-mkstandalone; \
+		rm -f $(ROMFSDIR)/usr/sbin/grub-install; \
 		$(ROMFSINST) -S -d /boot/grub/$(SIGNED_GRUB); \
 	else \
 		mv $(ROMFSDIR)/usr/lib/grub/x86_64-efi $(ROMFSDIR)/boot/grub/;\
@@ -117,7 +124,7 @@ romfs.post:: romfs.cleanup
 	$(ROMFSINST) -R /usr/share/locale
 	mkdir -p $(ROMFSDIR)/usr/share/locale
 
-image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.sign-atmel image.tag image.copy
+image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.sign-atmel image.tag image.copy image.size
 	gzip -9 -c -f $(ROMFSIMG) > $(ROMFSIMGZ)
 	./mkdisk
 

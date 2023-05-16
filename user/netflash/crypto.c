@@ -288,11 +288,17 @@ static int check_crypto_signature(void)
 #ifdef CONFIG_USER_NETFLASH_CRYPTO_V2
 void check_crypto_v2(const struct check_opt *opt)
 {
-	if (opt->dochecksum)
+	if (opt->dochecksum) {
 		chksum();
-	if (opt->doversion || opt->dohardwareversion || opt->doremoveversion || opt->dominimumcheck)
-		check_version_info(0, opt->doversion, opt->dohardwareversion,
-				opt->doremoveversion, 1, opt->dominimumcheck);
+
+		if (opt->doversion || opt->dohardwareversion ||
+		    opt->doremoveversion || opt->dominimumcheck)
+			check_version_info(0, opt->doversion,
+					   opt->dohardwareversion,
+					   opt->doremoveversion, 1,
+					   opt->dominimumcheck);
+	}
+
 	/*
 	 * Modern signed image support is backward compatible, so we don't
 	 * do the crypto check until this point. (That is we have stripped
@@ -320,10 +326,15 @@ void check_crypto_v2(const struct check_opt *opt)
 void check_crypto_v1(const struct check_opt *opt)
 {
 	check_crypto_signature();
-	if (opt->dochecksum)
+	if (opt->dochecksum) {
 		chksum();
-	if (opt->doversion || opt->dohardwareversion || opt->doremoveversion || opt->dominimumcheck)
-		check_version_info(0, opt->doversion, opt->dohardwareversion,
-				opt->doremoveversion, 1, opt->dominimumcheck);
+
+		if (opt->doversion || opt->dohardwareversion ||
+		    opt->doremoveversion || opt->dominimumcheck)
+			check_version_info(0, opt->doversion,
+					   opt->dohardwareversion,
+					   opt->doremoveversion, 1,
+					   opt->dominimumcheck);
+	}
 }
 #endif

@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 .. _jpeg-controls:
 
@@ -71,13 +64,12 @@ JPEG Control IDs
 .. _jpeg-quality-control:
 
 ``V4L2_CID_JPEG_COMPRESSION_QUALITY (integer)``
-    ``V4L2_CID_JPEG_COMPRESSION_QUALITY`` control determines trade-off
-    between image quality and size. It provides simpler method for
-    applications to control image quality, without a need for direct
-    reconfiguration of luminance and chrominance quantization tables. In
-    cases where a driver uses quantization tables configured directly by
-    an application, using interfaces defined elsewhere,
-    ``V4L2_CID_JPEG_COMPRESSION_QUALITY`` control should be set by
+    Determines trade-off between image quality and size.
+    It provides simpler method for applications to control image quality,
+    without a need for direct reconfiguration of luminance and chrominance
+    quantization tables. In cases where a driver uses quantization tables
+    configured directly by an application, using interfaces defined
+    elsewhere, ``V4L2_CID_JPEG_COMPRESSION_QUALITY`` control should be set by
     driver to 0.
 
     The value range of this control is driver-specific. Only positive,

@@ -11,6 +11,8 @@
 
 #include <crypto/aes.h>
 #include <crypto/internal/des.h>
+#include <linux/device.h>
+#include <linux/dma-mapping.h>
 
 #include "cesa.h"
 
@@ -87,22 +89,29 @@ static void mv_cesa_skcipher_std_step(struct skcipher_request *req)
 			    CESA_SA_SRAM_PAYLOAD_SIZE);
 
 	mv_cesa_adjust_op(engine, &sreq->op);
-	memcpy_toio(engine->sram, &sreq->op, sizeof(sreq->op));
+	if (engine->pool)
+		memcpy(engine->sram_pool, &sreq->op, sizeof(sreq->op));
+	else
+		memcpy_toio(engine->sram, &sreq->op, sizeof(sreq->op));
 
-	len = sg_pcopy_to_buffer(req->src, creq->src_nents,
-				 engine->sram + CESA_SA_DATA_SRAM_OFFSET,
-				 len, sreq->offset);
+	len = mv_cesa_sg_copy_to_sram(engine, req->src, creq->src_nents,
+				      CESA_SA_DATA_SRAM_OFFSET, len,
+				      sreq->offset);
 
 	sreq->size = len;
 	mv_cesa_set_crypt_op_len(&sreq->op, len);
 
 	/* FIXME: only update enc_len field */
 	if (!sreq->skip_ctx) {
-		memcpy_toio(engine->sram, &sreq->op, sizeof(sreq->op));
+		if (engine->pool)
+			memcpy(engine->sram_pool, &sreq->op, sizeof(sreq->op));
+		else
+			memcpy_toio(engine->sram, &sreq->op, sizeof(sreq->op));
 		sreq->skip_ctx = true;
-	} else {
+	} else if (engine->pool)
+		memcpy(engine->sram_pool, &sreq->op, sizeof(sreq->op.desc));
+	else
 		memcpy_toio(engine->sram, &sreq->op, sizeof(sreq->op.desc));
-	}
 
 	mv_cesa_set_int_mask(engine, CESA_SA_INT_ACCEL0_DONE);
 	writel_relaxed(CESA_SA_CFG_PARA_DIS, engine->regs + CESA_SA_CFG);
@@ -119,9 +128,9 @@ static int mv_cesa_skcipher_std_process(struct skcipher_request *req,
 	struct mv_cesa_engine *engine = creq->base.engine;
 	size_t len;
 
-	len = sg_pcopy_from_buffer(req->dst, creq->dst_nents,
-				   engine->sram + CESA_SA_DATA_SRAM_OFFSET,
-				   sreq->size, sreq->offset);
+	len = mv_cesa_sg_copy_from_sram(engine, req->dst, creq->dst_nents,
+					CESA_SA_DATA_SRAM_OFFSET, sreq->size,
+					sreq->offset);
 
 	sreq->offset += len;
 	if (sreq->offset < req->cryptlen)
@@ -212,11 +221,14 @@ mv_cesa_skcipher_complete(struct crypto_async_request *req)
 		basereq = &creq->base;
 		memcpy(skreq->iv, basereq->chain.last->op->ctx.skcipher.iv,
 		       ivsize);
-	} else {
+	} else if (engine->pool)
+		memcpy(skreq->iv,
+		       engine->sram_pool + CESA_SA_CRYPT_IV_SRAM_OFFSET,
+		       ivsize);
+	else
 		memcpy_fromio(skreq->iv,
 			      engine->sram + CESA_SA_CRYPT_IV_SRAM_OFFSET,
 			      ivsize);
-	}
 }
 
 static const struct mv_cesa_req_ops mv_cesa_skcipher_req_ops = {
@@ -262,8 +274,7 @@ static int mv_cesa_aes_setkey(struct crypto_skcipher *cipher, const u8 *key,
 	remaining = (ctx->aes.key_length - 16) / 4;
 	offset = ctx->aes.key_length + 24 - remaining;
 	for (i = 0; i < remaining; i++)
-		ctx->aes.key_dec[4 + i] =
-			cpu_to_le32(ctx->aes.key_enc[offset + i]);
+		ctx->aes.key_dec[4 + i] = ctx->aes.key_enc[offset + i];
 
 	return 0;
 }
@@ -508,7 +519,8 @@ struct skcipher_alg mv_cesa_ecb_des_alg = {
 		.cra_name = "ecb(des)",
 		.cra_driver_name = "mv-ecb-des",
 		.cra_priority = 300,
-		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC,
+		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC |
+			     CRYPTO_ALG_ALLOCATES_MEMORY,
 		.cra_blocksize = DES_BLOCK_SIZE,
 		.cra_ctxsize = sizeof(struct mv_cesa_des_ctx),
 		.cra_alignmask = 0,
@@ -558,7 +570,8 @@ struct skcipher_alg mv_cesa_cbc_des_alg = {
 		.cra_name = "cbc(des)",
 		.cra_driver_name = "mv-cbc-des",
 		.cra_priority = 300,
-		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC,
+		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC |
+			     CRYPTO_ALG_ALLOCATES_MEMORY,
 		.cra_blocksize = DES_BLOCK_SIZE,
 		.cra_ctxsize = sizeof(struct mv_cesa_des_ctx),
 		.cra_alignmask = 0,
@@ -611,12 +624,12 @@ struct skcipher_alg mv_cesa_ecb_des3_ede_alg = {
 	.decrypt = mv_cesa_ecb_des3_ede_decrypt,
 	.min_keysize = DES3_EDE_KEY_SIZE,
 	.max_keysize = DES3_EDE_KEY_SIZE,
-	.ivsize = DES3_EDE_BLOCK_SIZE,
 	.base = {
 		.cra_name = "ecb(des3_ede)",
 		.cra_driver_name = "mv-ecb-des3-ede",
 		.cra_priority = 300,
-		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC,
+		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC |
+			     CRYPTO_ALG_ALLOCATES_MEMORY,
 		.cra_blocksize = DES3_EDE_BLOCK_SIZE,
 		.cra_ctxsize = sizeof(struct mv_cesa_des3_ctx),
 		.cra_alignmask = 0,
@@ -669,7 +682,8 @@ struct skcipher_alg mv_cesa_cbc_des3_ede_alg = {
 		.cra_name = "cbc(des3_ede)",
 		.cra_driver_name = "mv-cbc-des3-ede",
 		.cra_priority = 300,
-		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC,
+		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC |
+			     CRYPTO_ALG_ALLOCATES_MEMORY,
 		.cra_blocksize = DES3_EDE_BLOCK_SIZE,
 		.cra_ctxsize = sizeof(struct mv_cesa_des3_ctx),
 		.cra_alignmask = 0,
@@ -741,7 +755,8 @@ struct skcipher_alg mv_cesa_ecb_aes_alg = {
 		.cra_name = "ecb(aes)",
 		.cra_driver_name = "mv-ecb-aes",
 		.cra_priority = 300,
-		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC,
+		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC |
+			     CRYPTO_ALG_ALLOCATES_MEMORY,
 		.cra_blocksize = AES_BLOCK_SIZE,
 		.cra_ctxsize = sizeof(struct mv_cesa_aes_ctx),
 		.cra_alignmask = 0,
@@ -790,7 +805,8 @@ struct skcipher_alg mv_cesa_cbc_aes_alg = {
 		.cra_name = "cbc(aes)",
 		.cra_driver_name = "mv-cbc-aes",
 		.cra_priority = 300,
-		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC,
+		.cra_flags = CRYPTO_ALG_KERN_DRIVER_ONLY | CRYPTO_ALG_ASYNC |
+			     CRYPTO_ALG_ALLOCATES_MEMORY,
 		.cra_blocksize = AES_BLOCK_SIZE,
 		.cra_ctxsize = sizeof(struct mv_cesa_aes_ctx),
 		.cra_alignmask = 0,

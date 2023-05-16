@@ -1,5 +1,4 @@
-
-PYTHON_VERSION = 3.6.10
+PYTHON_VERSION = 3.10.1
 PYTHON_VERSION_SHORT = $(shell echo $(PYTHON_VERSION) | cut -d'.' -f1,2)
 
 # build in parallel, faster
@@ -19,9 +18,9 @@ COMMON_CONFOPTS += --disable-ossaudiodev
 COMMON_CONFOPTS += --disable-pydoc
 COMMON_CONFOPTS += --disable-test-modules
 COMMON_CONFOPTS += --disable-tk
+COMMON_CONFOPTS += --disable-dbm
 COMMON_CONFOPTS += --without-ensurepip
 COMMON_CONFOPTS += --with-pymalloc
-COMMON_CONFOPTS += --without-system-ffi
 ifdef CONFIG_USER_PYTHON_REMOVE_SOURCE
 COMMON_CONFOPTS += --disable-pyc-build
 endif
@@ -30,7 +29,7 @@ endif
 PKG_y += Python-$(PYTHON_VERSION)
 PKG_y += Python-Host
 
-Python-Host_FINALTARGET = extracted
+Python-Host_FINALTARGET = build
 Python-Host_METHOD      = none
 
 ifneq ($(CONFIG_X86)$(CONFIG_MIPS)$(CONFIG_ARM64),)
@@ -58,8 +57,12 @@ Python-$(PYTHON_VERSION)_ROMFS = python_romfs
 
 # Absolute paths to staging so setup.py can correctly detect module
 # dependencies like zlib and ssl
-CPPFLAGS += -I$(STAGEDIR)/include -I$(STAGEDIR)/usr/include
-LDFLAGS += -L$(STAGEDIR)/lib -L$(STAGEDIR)/usr/lib
+
+CPPFLAGS += -I$(ROOTDIR)/staging/include -I$(ROOTDIR)/staging/usr/include
+CPPFLAGS += -I$(ROOTDIR)/user/python/build/Python-Host/Include/internal
+CPPFLAGS += -I$(ROOTDIR)/usr/include/python$(PYTHON_VERSION_SHORT)/internal
+LDFLAGS += -L$(ROOTDIR)/staging/lib -L$(ROOTDIR)/staging/usr/lib
+LDFLAGS += -lffi
 
 ifndef CONFIG_USER_PYTHON
 # nothing to be installed for python
@@ -72,37 +75,57 @@ include $(ROOTDIR)/tools/automake.inc
 # match the automake *-install processing for installing into romfs,  we do
 # not want to be installed in the firmware.
 
-build/Python-$(PYTHON_VERSION)-autoconf: build/Python-Host-build
+.PRECIOUS: build/Python-Host-build
 build/Python-Host-build: build/Python-$(PYTHON_VERSION)-patched
 	rm -rf build/Python-Host*
 	cp -ra build/Python-$(PYTHON_VERSION) build/Python-Host
 	ln -s Python-$(PYTHON_VERSION)-license build/Python-Host-license
 	cd build/Python-Host; \
-	export PKG_CONFIG_LIBDIR= PKG_CONFIG_PATH= EXTRA_CFLAGS= CPUFLAGS= CPU_CFLAGS= CXXFLAGS= CPPFLAGS= LDLIBS= LIBC= LIBS= CC=gcc CXX=g++ LD=gcc AR= RANLIB= CFLAGS= LDFLAGS= ; \
-	$(CONFVARS) autoreconf -i; \
-	$(CONFVARS) ./configure \
-		--prefix=`pwd`/../Python-Hostinstall \
-		$(COMMON_CONFOPTS) \
-		--disable-shared \
-		|| exit 1;  \
-	make $(MAKEVARS) || exit 1; \
-	make Parser/pgen || exit 1; \
-	make install $(MAKEVARS) || exit 1
-	[ ! -f build/Python-Host/Parser/pgen ] || cp build/Python-Host/Parser/pgen build/Python-Hostinstall/bin/pgen$(PYTHON_VERSION_SHORT)
+		export PKG_CONFIG_LIBDIR= PKG_CONFIG_PATH= EXTRA_CFLAGS= CPUFLAGS= CPU_CFLAGS= CXXFLAGS= CPPFLAGS= LDLIBS= LIBC= LIBS= CC=gcc CXX=g++ LD=gcc AR= RANLIB= CFLAGS= LDFLAGS= ; \
+		$(CONFVARS) autoreconf -i; \
+		$(CONFVARS) ./configure \
+			--prefix=`pwd`/../Python-Hostinstall \
+			$(COMMON_CONFOPTS) \
+			|| exit 1;  \
+		make $(MAKEVARS) || exit 1; \
+		make install $(MAKEVARS) || exit 1
 	touch $@
+
+PYTHON_LIVE_IMAGE_DIR = $(STAGEDIR)/live_images/python/rootfs
 
 python_romfs:
 ifdef CONFIG_USER_PYTHON
 	$(ROMFSINST) -s python$(PYTHON_VERSION_SHORT) /usr/bin/python
 	# Symlink dynamic library under '/lib' (otherwise uclibc dynamic loader does not find it)
-	if [ -f "$(ROMFSDIR)/usr/lib/libpython$(PYTHON_VERSION_SHORT)m.so.1.0" ]; then \
-		$(ROMFSINST) -s ../usr/lib/libpython$(PYTHON_VERSION_SHORT)m.so /lib/libpython$(PYTHON_VERSION_SHORT)m.so; \
-		$(ROMFSINST) -s ../usr/lib/libpython$(PYTHON_VERSION_SHORT)m.so.1.0 /lib/libpython$(PYTHON_VERSION_SHORT)m.so.1.0; \
+	if [ -f "$(ROMFSDIR)/usr/lib/libpython$(PYTHON_VERSION_SHORT).so.1.0" ]; then \
+		$(ROMFSINST) -s ../usr/lib/libpython$(PYTHON_VERSION_SHORT).so /lib/libpython$(PYTHON_VERSION_SHORT).so; \
+		$(ROMFSINST) -s ../usr/lib/libpython$(PYTHON_VERSION_SHORT).so.1.0 /lib/libpython$(PYTHON_VERSION_SHORT).so.1.0; \
 	fi
 	# Remove not needed static libraries, Windows EXE binaries and header files
 	if [ -d "$(ROMFSDIR)" ]; then \
 		rm -f $(ROMFSDIR)/usr/lib/python$(PYTHON_VERSION_SHORT)/distutils/command/*.exe; \
 		find $(ROMFSDIR) -type f -name 'libpython*.a' -delete; \
-		find $(ROMFSDIR)/usr/include/python$(PYTHON_VERSION_SHORT)m -type f -not -name pyconfig.h -delete; \
+		find $(ROMFSDIR)/usr/include/python$(PYTHON_VERSION_SHORT) -type f -not -name pyconfig.h -delete; \
 	fi
+
+ifdef CONFIG_USER_PYTHON_LIVE_IMAGE
+	# Move Python binary to live image and install our shim on the host.
+	mkdir -p $(PYTHON_LIVE_IMAGE_DIR)/usr/bin
+	mv $(ROMFSDIR)/usr/bin/python$(PYTHON_VERSION_SHORT) $(PYTHON_LIVE_IMAGE_DIR)/usr/bin
+	$(ROMFSINST) -p 755 /bin/mount_python_live_image.sh
+	$(ROMFSINST) -p 755 python_live_image.sh /usr/bin/python$(PYTHON_VERSION_SHORT)
+
+	# Copy Python libs to live image. Retain the empty directory and truncated
+	# libs in romfs to provide mount points.
+	mkdir -p $(PYTHON_LIVE_IMAGE_DIR)/usr/lib
+
+	cp -r $(ROMFSDIR)/usr/lib/python$(PYTHON_VERSION_SHORT) $(PYTHON_LIVE_IMAGE_DIR)/usr/lib/
+	rm -fr $(ROMFSDIR)/usr/lib/python$(PYTHON_VERSION_SHORT)/*
+
+	cp $(ROMFSDIR)/usr/lib/libpython3.so $(PYTHON_LIVE_IMAGE_DIR)/usr/lib
+	> $(ROMFSDIR)/usr/lib/libpython3.so
+
+	cp $(ROMFSDIR)/usr/lib/libpython$(PYTHON_VERSION_SHORT).so.1.0 $(PYTHON_LIVE_IMAGE_DIR)/usr/lib
+	> $(ROMFSDIR)/usr/lib/libpython$(PYTHON_VERSION_SHORT).so.1.0
+endif
 endif

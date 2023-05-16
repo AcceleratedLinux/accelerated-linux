@@ -113,7 +113,7 @@ free_data:
 	return err;
 }
 
-static int lis2hh12_spi_remove(struct spi_device *spi)
+static void lis2hh12_spi_remove(struct spi_device *spi)
 {
 	struct lis2hh12_data *cdata = spi_get_drvdata(spi);
 
@@ -121,7 +121,7 @@ static int lis2hh12_spi_remove(struct spi_device *spi)
 	dev_info(cdata->dev, "%s: removed\n", LIS2HH12_DEV_NAME);
 	kfree(cdata);
 
-	return 0;
+	return;
 }
 
 #ifdef CONFIG_PM

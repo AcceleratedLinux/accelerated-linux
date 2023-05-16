@@ -216,11 +216,14 @@ static struct awusb24_cpld_platform_data *awusb24_cpld_of_populate_pdata(struct 
 	pdata->num_channels = num_channels;
 
 	for_each_child_of_node(np, child) {
+		uint32_t reg;
+
 		cfg[i].chan_nr = i;
 
 		of_property_read_string(child, "name", &cfg[i].name);
 		of_property_read_u8(child, "led", &cfg[i].led);
-		of_property_read_u8(child, "reg", &cfg[i].reg);
+		of_property_read_u32(child, "reg", &reg);
+		cfg[i].reg = (uint8_t)reg;
 		cfg[i].default_trigger =
 			of_get_property(child, "linux,default-trigger", NULL);
 		i++;

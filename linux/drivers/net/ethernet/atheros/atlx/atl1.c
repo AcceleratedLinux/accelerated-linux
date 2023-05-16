@@ -1011,7 +1011,7 @@ static int atl1_mii_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 }
 
 /**
- * atl1_setup_mem_resources - allocate Tx / RX descriptor resources
+ * atl1_setup_ring_resources - allocate Tx / RX descriptor resources
  * @adapter: board private structure
  *
  * Return 0 on success, negative on failure
@@ -1050,11 +1050,11 @@ static s32 atl1_setup_ring_resources(struct atl1_adapter *adapter)
 		+ sizeof(struct stats_msg_block)
 		+ 40;
 
-	ring_header->desc = pci_alloc_consistent(pdev, ring_header->size,
-		&ring_header->dma);
+	ring_header->desc = dma_alloc_coherent(&pdev->dev, ring_header->size,
+					       &ring_header->dma, GFP_KERNEL);
 	if (unlikely(!ring_header->desc)) {
 		if (netif_msg_drv(adapter))
-			dev_err(&pdev->dev, "pci_alloc_consistent failed\n");
+			dev_err(&pdev->dev, "dma_alloc_coherent failed\n");
 		goto err_nomem;
 	}
 
@@ -1136,8 +1136,8 @@ static void atl1_clean_rx_ring(struct atl1_adapter *adapter)
 	for (i = 0; i < rfd_ring->count; i++) {
 		buffer_info = &rfd_ring->buffer_info[i];
 		if (buffer_info->dma) {
-			pci_unmap_page(pdev, buffer_info->dma,
-				buffer_info->length, PCI_DMA_FROMDEVICE);
+			dma_unmap_page(&pdev->dev, buffer_info->dma,
+				       buffer_info->length, DMA_FROM_DEVICE);
 			buffer_info->dma = 0;
 		}
 		if (buffer_info->skb) {
@@ -1175,8 +1175,8 @@ static void atl1_clean_tx_ring(struct atl1_adapter *adapter)
 	for (i = 0; i < tpd_ring->count; i++) {
 		buffer_info = &tpd_ring->buffer_info[i];
 		if (buffer_info->dma) {
-			pci_unmap_page(pdev, buffer_info->dma,
-				buffer_info->length, PCI_DMA_TODEVICE);
+			dma_unmap_page(&pdev->dev, buffer_info->dma,
+				       buffer_info->length, DMA_TO_DEVICE);
 			buffer_info->dma = 0;
 		}
 	}
@@ -1217,8 +1217,8 @@ static void atl1_free_ring_resources(struct atl1_adapter *adapter)
 	atl1_clean_rx_ring(adapter);
 
 	kfree(tpd_ring->buffer_info);
-	pci_free_consistent(pdev, ring_header->size, ring_header->desc,
-		ring_header->dma);
+	dma_free_coherent(&pdev->dev, ring_header->size, ring_header->desc,
+			  ring_header->dma);
 
 	tpd_ring->buffer_info = NULL;
 	tpd_ring->desc = NULL;
@@ -1866,9 +1866,9 @@ static u16 atl1_alloc_rx_buffers(struct atl1_adapter *adapter)
 		buffer_info->length = (u16) adapter->rx_buffer_len;
 		page = virt_to_page(skb->data);
 		offset = offset_in_page(skb->data);
-		buffer_info->dma = pci_map_page(pdev, page, offset,
+		buffer_info->dma = dma_map_page(&pdev->dev, page, offset,
 						adapter->rx_buffer_len,
-						PCI_DMA_FROMDEVICE);
+						DMA_FROM_DEVICE);
 		rfd_desc->buffer_addr = cpu_to_le64(buffer_info->dma);
 		rfd_desc->buf_len = cpu_to_le16(adapter->rx_buffer_len);
 		rfd_desc->coalese = 0;
@@ -1992,8 +1992,8 @@ rrd_ok:
 		}
 
 		/* Good Receive */
-		pci_unmap_page(adapter->pdev, buffer_info->dma,
-			       buffer_info->length, PCI_DMA_FROMDEVICE);
+		dma_unmap_page(&adapter->pdev->dev, buffer_info->dma,
+			       buffer_info->length, DMA_FROM_DEVICE);
 		buffer_info->dma = 0;
 		skb = buffer_info->skb;
 		length = le16_to_cpu(rrd->xsz.xsum_sz.pkt_size);
@@ -2062,8 +2062,8 @@ static int atl1_intr_tx(struct atl1_adapter *adapter)
 	while (cmb_tpd_next_to_clean != sw_tpd_next_to_clean) {
 		buffer_info = &tpd_ring->buffer_info[sw_tpd_next_to_clean];
 		if (buffer_info->dma) {
-			pci_unmap_page(adapter->pdev, buffer_info->dma,
-				       buffer_info->length, PCI_DMA_TODEVICE);
+			dma_unmap_page(&adapter->pdev->dev, buffer_info->dma,
+				       buffer_info->length, DMA_TO_DEVICE);
 			buffer_info->dma = 0;
 		}
 
@@ -2210,9 +2210,9 @@ static void atl1_tx_map(struct atl1_adapter *adapter, struct sk_buff *skb,
 		buffer_info->length = hdr_len;
 		page = virt_to_page(skb->data);
 		offset = offset_in_page(skb->data);
-		buffer_info->dma = pci_map_page(adapter->pdev, page,
+		buffer_info->dma = dma_map_page(&adapter->pdev->dev, page,
 						offset, hdr_len,
-						PCI_DMA_TODEVICE);
+						DMA_TO_DEVICE);
 
 		if (++next_to_use == tpd_ring->count)
 			next_to_use = 0;
@@ -2235,9 +2235,10 @@ static void atl1_tx_map(struct atl1_adapter *adapter, struct sk_buff *skb,
 					(hdr_len + i * ATL1_MAX_TX_BUF_LEN));
 				offset = offset_in_page(skb->data +
 					(hdr_len + i * ATL1_MAX_TX_BUF_LEN));
-				buffer_info->dma = pci_map_page(adapter->pdev,
-					page, offset, buffer_info->length,
-					PCI_DMA_TODEVICE);
+				buffer_info->dma = dma_map_page(&adapter->pdev->dev,
+								page, offset,
+								buffer_info->length,
+								DMA_TO_DEVICE);
 				if (++next_to_use == tpd_ring->count)
 					next_to_use = 0;
 			}
@@ -2247,8 +2248,9 @@ static void atl1_tx_map(struct atl1_adapter *adapter, struct sk_buff *skb,
 		buffer_info->length = buf_len;
 		page = virt_to_page(skb->data);
 		offset = offset_in_page(skb->data);
-		buffer_info->dma = pci_map_page(adapter->pdev, page,
-			offset, buf_len, PCI_DMA_TODEVICE);
+		buffer_info->dma = dma_map_page(&adapter->pdev->dev, page,
+						offset, buf_len,
+						DMA_TO_DEVICE);
 		if (++next_to_use == tpd_ring->count)
 			next_to_use = 0;
 	}
@@ -2550,7 +2552,7 @@ static irqreturn_t atl1_intr(int irq, void *data)
 
 /**
  * atl1_phy_config - Timer Call-back
- * @data: pointer to netdev cast into an unsigned long
+ * @t: timer_list containing pointer to netdev cast into an unsigned long
  */
 static void atl1_phy_config(struct timer_list *t)
 {
@@ -2883,7 +2885,7 @@ static const struct net_device_ops atl1_netdev_ops = {
 	.ndo_change_mtu		= atl1_change_mtu,
 	.ndo_fix_features	= atlx_fix_features,
 	.ndo_set_features	= atlx_set_features,
-	.ndo_do_ioctl		= atlx_ioctl,
+	.ndo_eth_ioctl		= atlx_ioctl,
 	.ndo_tx_timeout		= atlx_tx_timeout,
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller	= atl1_poll_controller,
@@ -2922,7 +2924,7 @@ static int atl1_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * various kernel subsystems to support the mechanics required by a
 	 * fixed-high-32-bit system.
 	 */
-	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
+	err = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
 	if (err) {
 		dev_err(&pdev->dev, "no usable DMA configuration\n");
 		goto err_dma;
@@ -3025,7 +3027,7 @@ static int atl1_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		/* mark random mac */
 		netdev->addr_assign_type = NET_ADDR_RANDOM;
 	}
-	memcpy(netdev->dev_addr, adapter->hw.mac_addr, netdev->addr_len);
+	eth_hw_addr_set(netdev, adapter->hw.mac_addr);
 
 	if (!is_valid_ether_addr(netdev->dev_addr)) {
 		err = -EIO;
@@ -3436,7 +3438,9 @@ static void atl1_get_regs(struct net_device *netdev, struct ethtool_regs *regs,
 }
 
 static void atl1_get_ringparam(struct net_device *netdev,
-	struct ethtool_ringparam *ring)
+			       struct ethtool_ringparam *ring,
+			       struct kernel_ethtool_ringparam *kernel_ring,
+			       struct netlink_ext_ack *extack)
 {
 	struct atl1_adapter *adapter = netdev_priv(netdev);
 	struct atl1_tpd_ring *txdr = &adapter->tpd_ring;
@@ -3449,7 +3453,9 @@ static void atl1_get_ringparam(struct net_device *netdev,
 }
 
 static int atl1_set_ringparam(struct net_device *netdev,
-	struct ethtool_ringparam *ring)
+			      struct ethtool_ringparam *ring,
+			      struct kernel_ethtool_ringparam *kernel_ring,
+			      struct netlink_ext_ack *extack)
 {
 	struct atl1_adapter *adapter = netdev_priv(netdev);
 	struct atl1_tpd_ring *tpdr = &adapter->tpd_ring;

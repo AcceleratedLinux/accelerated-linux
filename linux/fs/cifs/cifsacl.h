@@ -1,27 +1,13 @@
+/* SPDX-License-Identifier: LGPL-2.1 */
 /*
- *   fs/cifs/cifsacl.h
  *
  *   Copyright (c) International Business Machines  Corp., 2007
  *   Author(s): Steve French (sfrench@us.ibm.com)
  *
- *   This library is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU Lesser General Public License as published
- *   by the Free Software Foundation; either version 2.1 of the License, or
- *   (at your option) any later version.
- *
- *   This library is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
- *   the GNU Lesser General Public License for more details.
- *
- *   You should have received a copy of the GNU Lesser General Public License
- *   along with this library; if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #ifndef _CIFSACL_H
 #define _CIFSACL_H
-
 
 #define NUM_AUTHS (6)	/* number of authority fields */
 #define SID_MAX_SUB_AUTHORITIES (15) /* max number of sub authority fields */
@@ -29,6 +15,10 @@
 #define READ_BIT        0x4
 #define WRITE_BIT       0x2
 #define EXEC_BIT        0x1
+
+#define ACL_OWNER_MASK 0700
+#define ACL_GROUP_MASK 0070
+#define ACL_EVERYONE_MASK 0007
 
 #define UBITSHIFT	6
 #define GBITSHIFT	3
@@ -132,7 +122,7 @@ struct cifs_ace {
 /*
  * The current SMB3 form of security descriptor is similar to what was used for
  * cifs (see above) but some fields are split, and fields in the struct below
- * matches names of fields to the the spec, MS-DTYP (see sections 2.4.5 and
+ * matches names of fields to the spec, MS-DTYP (see sections 2.4.5 and
  * 2.4.6). Note that "CamelCase" fields are used in this struct in order to
  * match the MS-DTYP and MS-SMB2 specs which define the wire format.
  */
@@ -178,7 +168,7 @@ struct smb3_acl {
 
 /*
  * Used to store the special 'NFS SIDs' used to persist the POSIX uid and gid
- * See See http://technet.microsoft.com/en-us/library/hh509017(v=ws.10).aspx
+ * See http://technet.microsoft.com/en-us/library/hh509017(v=ws.10).aspx
  */
 struct owner_sid {
 	u8 Revision;

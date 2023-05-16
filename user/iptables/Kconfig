@@ -12,3 +12,10 @@ config USER_IPTABLES_SHARED
 	help
 	  Build iptables extensions as shared objects instead of statically
 	  linking.
+
+config USER_NFTABLES
+	bool "enable nftables support"
+	default n
+	help
+	  The nftables are not used by Digi(including Opengear) products yet,
+	  they need to be disabled so that matches could be found properly.

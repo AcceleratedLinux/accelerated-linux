@@ -39,13 +39,15 @@
  */
 #include <linux/bug.h>
 #include <linux/rbtree.h>
-#include <linux/kernel.h>
+#include <linux/limits.h>
 #include <linux/mm_types.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #ifdef CONFIG_DRM_DEBUG_MM
 #include <linux/stackdepot.h>
 #endif
+#include <linux/types.h>
+
 #include <drm/drm_print.h>
 
 #ifdef CONFIG_DRM_DEBUG_MM
@@ -338,7 +340,7 @@ static inline u64 drm_mm_hole_node_end(const struct drm_mm_node *hole_node)
 
 /**
  * drm_mm_nodes - list of nodes under the drm_mm range manager
- * @mm: the struct drm_mm range manger
+ * @mm: the struct drm_mm range manager
  *
  * As the drm_mm range manager hides its node_list deep with its
  * structure, extracting it looks painful and repetitive. This is

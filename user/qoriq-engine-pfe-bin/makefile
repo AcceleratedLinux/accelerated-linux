@@ -1,6 +1,6 @@
 export ACL_LICENSE = NXP Binary License
 METHOD = git
-URL = git://github.com/NXP/qoriq-engine-pfe-bin.git
+URL = https://github.com/NXP/qoriq-engine-pfe-bin.git
 VERSION = 58aa0cac630528ed91fe5639700d6b571c0c07b5
 
 BUILDVARS = :

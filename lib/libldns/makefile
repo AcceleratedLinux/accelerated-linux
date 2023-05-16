@@ -1,5 +1,5 @@
 
-URL = https://www.nlnetlabs.nl/downloads/ldns/ldns-1.7.1.tar.gz
+URL = https://www.nlnetlabs.nl/downloads/ldns/ldns-1.8.1.tar.gz
 MAKEVARS = 
 CONFOPTS += --disable-ldns-config
 CONFOPTS += --disable-gost

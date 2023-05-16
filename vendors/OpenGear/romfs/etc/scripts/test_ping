@@ -1,0 +1,55 @@
+#!/bin/bash -
+
+interface=$1
+recover=$2
+probe1=$3
+probe2=$4
+
+[ -z "$recover" -o -z "$interface" ] && exit 1
+[ -z "$probe1" -a -z "$probe2" ] && exit 1
+
+# Obtain outgoing interface's perif-route table ID when using IPv6 probe address
+table_id=
+if [[ $probe1 = *":"* ]] || [[ $probe2 = *":"* ]]; then
+	conmark=`ip6tables -L PerInterface -vnt mangle | grep ${interface} | awk -F "set" '{print $2}' | head -n 1`
+	table_id=`ip -6 rule list | grep $conmark | awk -F "lookup" '{print $2}' | head -n 1`
+fi
+
+# A probe attempt succeeds if it pings $recover times successfully.
+test_ping() {
+	local addr=$1
+	local ret=0
+
+	if [ -z "$addr" ]; then
+		return 1
+	fi
+
+	# When there are multiple default routes in IPv6 main route table and the one
+	# via the outgoing interface is not preferred, ping6 -I it will fail with
+	# "Network is unreachable". Work around this issue by making use of the interface
+	# specific perif route table
+	if [[ $addr = *":"* ]]; then
+		ip -6 rule add to $addr oif $interface lookup $table_id
+	fi
+
+	for ((i = 0; i < $recover; i++)); do
+		if [[ $addr = *":"* ]]; then
+			ping6 -w1 -c1 -I $interface $addr
+			ret=$?
+			[ $ret = 1 ] && break
+		else
+			ping -w1 -c1 -I $interface $addr || return 1
+		fi
+	done
+
+	if [[ $addr = *":"* ]]; then
+		ip -6 rule del to $addr oif $interface lookup $table_id
+	fi
+
+	return $ret
+}
+
+# It is a success when any one of the probe addresses succeeds.
+test_ping "$probe1" || test_ping "$probe2"
+
+exit $?

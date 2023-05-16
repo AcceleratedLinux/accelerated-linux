@@ -1,0 +1,25 @@
+
+Guard against unimplemented inet_nsap_ntoa() function.
+
+	Author: Wayne Meisner <wayne.meisner@opengear.com>
+	Date:   Wed Nov 30 00:13:01 2005 +0000
+
+	    inet_nsap_ntoa doesn't appear to exist on uClibc
+
+Index: libdnsres-0.1a/res_debug.c
+===================================================================
+--- libdnsres-0.1a.orig/res_debug.c
++++ libdnsres-0.1a/res_debug.c
+@@ -635,10 +635,12 @@ __dnsres_p_rr(struct dnsres *_resp,
+ 		}
+ 		break;
+ 
++#if HAVE_INET_NSAP_NTOA
+ 	case DNSRES_T_NSAP:
+ 		(void) fprintf(file, "\t%s", inet_nsap_ntoa(dlen, cp, NULL));
+ 		cp += dlen;
+ 		break;
++#endif
+ 
+ 	case DNSRES_T_AAAA: {
+ 		char t[sizeof "ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255"];

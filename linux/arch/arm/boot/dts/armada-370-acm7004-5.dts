@@ -33,7 +33,7 @@
 &mdio {	
 	status = "okay";
 
-	phy0: ethernet-phy@0 {
+	phy0: ethernet-phy@0 {	/* MV88E1512 */
 		reg = <0>;
 		marvell,reg-init =
 			< 3 16 0xf000 0x004a>,
@@ -41,8 +41,43 @@
 			< 3 18 0xff7f 0x0000>,
 			<18 20 0x0000 0x0226>;
 	};
-	switch@1 { /* MV88E6350R */
+
+	ethernet-switch@1 {	/* MV88E6350R */
+		compatible = "marvell,mv88e6350";
+		#address-cells = <1>;
+		#size-cells = <0>;
 		reg = <1>;
-		id = <0xdeadbeef>;
+		dsa,member = <0 0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;		/* Port number */
+				label = "net2p1";	/* netdev name */
+			};
+			port@1 {
+				reg = <1>;
+				label = "net2p2";
+			};
+			port@2 {
+				reg = <2>;
+				label = "net2p3";
+			};
+			port@3 {
+				reg = <3>;
+				label = "net2p4";
+			};
+			port@5 {
+				reg = <5>;
+				label = "cpu";
+				ethernet = <&eth1>;	/* host device connected to */
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+		};
 	};
 };

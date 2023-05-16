@@ -175,12 +175,13 @@ MODULE_FIRMWARE("nvidia/gm20b/gr/sw_method_init.bin");
 
 static const struct gf100_gr_fwif
 gm20b_gr_fwif[] = {
-	{ 0, gm20b_gr_load, &gm20b_gr, &gm20b_gr_fecs_acr },
+	{  0, gm20b_gr_load, &gm20b_gr, &gm20b_gr_fecs_acr },
+	{ -1, gm200_gr_nofw },
 	{}
 };
 
 int
-gm20b_gr_new(struct nvkm_device *device, int index, struct nvkm_gr **pgr)
+gm20b_gr_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst, struct nvkm_gr **pgr)
 {
-	return gf100_gr_new_(gm20b_gr_fwif, device, index, pgr);
+	return gf100_gr_new_(gm20b_gr_fwif, device, type, inst, pgr);
 }

@@ -1,6 +1,5 @@
+// SPDX-License-Identifier: MIT
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -9,6 +8,7 @@
 #include "i915_drv.h" /* for_each_engine() */
 #include "i915_request.h"
 #include "intel_engine_heartbeat.h"
+#include "intel_execlists_submission.h"
 #include "intel_gt.h"
 #include "intel_gt_pm.h"
 #include "intel_gt_requests.h"
@@ -31,11 +31,14 @@ static bool engine_active(const struct intel_engine_cs *engine)
 	return !list_empty(&engine->kernel_context->timeline->requests);
 }
 
-static bool flush_submission(struct intel_gt *gt)
+static bool flush_submission(struct intel_gt *gt, long timeout)
 {
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	bool active = false;
+
+	if (!timeout)
+		return false;
 
 	if (!intel_gt_pm_is_awake(gt))
 		return false;
@@ -127,19 +130,15 @@ void intel_engine_fini_retire(struct intel_engine_cs *engine)
 	GEM_BUG_ON(engine->retire);
 }
 
-long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
+long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout,
+				      long *remaining_timeout)
 {
 	struct intel_gt_timelines *timelines = &gt->timelines;
 	struct intel_timeline *tl, *tn;
 	unsigned long active_count = 0;
-	bool interruptible;
 	LIST_HEAD(free);
 
-	interruptible = true;
-	if (unlikely(timeout < 0))
-		timeout = -timeout, interruptible = false;
-
-	flush_submission(gt); /* kick the ksoftirqd tasklets */
+	flush_submission(gt, timeout); /* kick the ksoftirqd tasklets */
 	spin_lock(&timelines->lock);
 	list_for_each_entry_safe(tl, tn, &timelines->active_list, link) {
 		if (!mutex_trylock(&tl->mutex)) {
@@ -160,7 +159,7 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 				mutex_unlock(&tl->mutex);
 
 				timeout = dma_fence_wait_timeout(fence,
-								 interruptible,
+								 true,
 								 timeout);
 				dma_fence_put(fence);
 
@@ -194,25 +193,13 @@ out_active:	spin_lock(&timelines->lock);
 	list_for_each_entry_safe(tl, tn, &free, link)
 		__intel_timeline_free(&tl->kref);
 
-	if (flush_submission(gt)) /* Wait, there's more! */
+	if (flush_submission(gt, timeout)) /* Wait, there's more! */
 		active_count++;
 
+	if (remaining_timeout)
+		*remaining_timeout = timeout;
+
 	return active_count ? timeout : 0;
-}
-
-int intel_gt_wait_for_idle(struct intel_gt *gt, long timeout)
-{
-	/* If the device is asleep, we have no requests outstanding */
-	if (!intel_gt_pm_is_awake(gt))
-		return 0;
-
-	while ((timeout = intel_gt_retire_requests_timeout(gt, timeout)) > 0) {
-		cond_resched();
-		if (signal_pending(current))
-			return -EINTR;
-	}
-
-	return timeout;
 }
 
 static void retire_work_handler(struct work_struct *work)
@@ -245,4 +232,31 @@ void intel_gt_fini_requests(struct intel_gt *gt)
 {
 	/* Wait until the work is marked as finished before unloading! */
 	cancel_delayed_work_sync(&gt->requests.retire_work);
+
+	flush_work(&gt->watchdog.work);
+}
+
+void intel_gt_watchdog_work(struct work_struct *work)
+{
+	struct intel_gt *gt =
+		container_of(work, typeof(*gt), watchdog.work);
+	struct i915_request *rq, *rn;
+	struct llist_node *first;
+
+	first = llist_del_all(&gt->watchdog.list);
+	if (!first)
+		return;
+
+	llist_for_each_entry_safe(rq, rn, first, watchdog.link) {
+		if (!i915_request_completed(rq)) {
+			struct dma_fence *f = &rq->fence;
+
+			pr_notice("Fence expiration time out i915-%s:%s:%llx!\n",
+				  f->ops->get_driver_name(f),
+				  f->ops->get_timeline_name(f),
+				  f->seqno);
+			i915_request_cancel(rq, -EINTR);
+		}
+		i915_request_put(rq);
+	}
 }

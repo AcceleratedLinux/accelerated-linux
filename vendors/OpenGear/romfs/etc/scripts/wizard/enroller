@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# This script is used by callhome-wizard and enrolment-wizard, runs
+# on the CMS to complete enrolment.
+#
+
+source /etc/scripts/wizard/wizard.inc
+
+logit "*** Starting enroller"
+
+function usage {
+	logit "Usage: $(basename $0) ssh-address ssh-port short-name description num-serial-ports [root-password]"
+	exit 1
+}
+
+sshaddress=$1
+sshport=$2
+name=$3
+description="$4"
+ports=$5
+# Optional
+passwd="$6"
+
+[[ -z "sshaddress" ]] || [[ -z "$sshport" ]] || [[ -z "$name" ]] || [[ -z "$ports" ]] && usage
+
+data="form=nodes&new.name=${name}&new.description=${description}&new.address=${sshaddress}&new.sshport=${sshport}&new.passwd=$passwd&new.nagios.devices.disable=on&new.ports.total=$ports&action=Validate&prefix=new"
+if ! hit_ui "$data"; then
+	logit "*** Failed to enrol $name (${sshaddress}:${sshport})"
+	exit 1
+fi
+logit "*** Enrolled $name (${sshaddress}:${sshport})"
+exit 0

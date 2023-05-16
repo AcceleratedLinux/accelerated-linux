@@ -1,0 +1,39 @@
+
+<sys/bittypes.h> was a SunOS header to get uint*_t.
+We have <stdint.h> now.
+
+Index: libdnsres-0.1a/resolv.h
+===================================================================
+--- libdnsres-0.1a.orig/resolv.h
++++ libdnsres-0.1a/resolv.h
+@@ -118,12 +118,9 @@
+ #ifndef _RESOLV_H_
+ #define	_RESOLV_H_
+ 
++#include <stdint.h>
++#include <sys/types.h>
+ #include <sys/param.h>
+-#if (!defined(BSD)) || (BSD < 199306)
+-# include <sys/bitypes.h>
+-#else
+-# include <sys/types.h>
+-#endif
+ #include <sys/cdefs.h>
+ #include <sys/socket.h>
+ #include <stdio.h>
+Index: libdnsres-0.1a/dnsres.h
+===================================================================
+--- libdnsres-0.1a.orig/dnsres.h
++++ libdnsres-0.1a/dnsres.h
+@@ -117,10 +117,8 @@
+ #ifndef _DNSRES_H_
+ #define _DNSRES_H_
+ 
++#include <stdint.h>
+ #include <sys/param.h>
+-#if (!defined(BSD)) || (BSD < 199306)
+-# include <sys/bitypes.h>
+-#endif
+ #include <sys/cdefs.h>
+ 
+ /*

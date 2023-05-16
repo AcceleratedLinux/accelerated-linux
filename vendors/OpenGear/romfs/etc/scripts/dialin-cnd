@@ -1,0 +1,40 @@
+#!/bin/bash
+
+modem="$1"
+prefix="config.$modem.ppp"
+callerid="$3"
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/$(basename $0).$modem"
+scripts[1]="/etc/config/scripts/$(basename $0)"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+	if [ -f "${scripts[$i]}" ]; then
+		exec /bin/bash "${scripts[$i]}" "$@"
+	fi
+done
+
+enabled=$( config -g ${prefix}.cnd.enabled | cut -f2- -d' ' )
+if [[ "$enabled" != "on" ]]; then
+	# No call filtering, allow by default
+	exit 0
+fi
+
+# Caller ID format is: ' <calling number> ,<number format>,,,,<caller name>'
+cn=$( echo $3 | cut -f1 -d',' | tr -d ' ' )
+
+for (( i=1 ;; i++ )); do
+	pattern=$( config -g ${prefix}.cnd.phone${i} | cut -f2- -d' ' )
+	[[ -z "$pattern" ]] && break
+	
+	if echo "$cn" | grep "$pattern" >& /dev/null; then
+		# Allow on match
+		logger -t "$(basename $0)" -p INFO \
+			"Calling number $cn matched $pattern"
+		exit 0
+	fi
+	logger -t "$(basename $0)" -p INFO \
+		"Calling number $cn did not match $pattern"
+done
+
+# Deny by default
+exit 1

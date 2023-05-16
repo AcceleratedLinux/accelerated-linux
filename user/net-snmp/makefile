@@ -1,238 +1,169 @@
-#
-# Makefile for net-snmp
-#
+VERSION = 5.9
+URL = https://downloads.sourceforge.net/project/net-snmp/net-snmp/$(VERSION)/net-snmp-$(VERSION).tar.gz
 
-CFLAGS = -D__deprecated=
+CORE_MIBS = SNMPv2-TC SNMPv2-SMI SNMPv2-MIB SNMP-TARGET-MIB \
+	SNMP-VIEW-BASED-ACM-MIB SNMP-COMMUNITY-MIB SNMP-FRAMEWORK-MIB \
+	SNMP-MPD-MIB SNMP-PROXY-MIB SNMP-USER-BASED-SM-MIB RFC1155-SMI \
+	RFC1213-MIB RFC-1215 IF-MIB IP-MIB IPV6-ICMP-MIB IPV6-MIB IPV6-TCP-MIB \
+	IPV6-UDP-MIB IPV6-TC INET-ADDRESS-MIB IANAifType-MIB HOST-RESOURCES-MIB \
+	HOST-RESOURCES-TYPES DISMAN-EVENT-MIB SNMP-NOTIFICATION-MIB SNMPv2-TM \
+	UCD-SNMP-MIB UCD-DEMO-MIB UCD-DLMOD-MIB NET-SNMP-MIB NET-SNMP-AGENT-MIB \
+	NET-SNMP-EXTEND-MIB
 
-NET_SNMP_CFG = --prefix=$(STAGEDIR) --disable-debugging
+AUTOMAKE_ROMFS = my_romfs
+MAKEVARS = 
+CFLAGS += -D__deprecated=
 
-NET_SNMP_CFG += --disable-embedded-perl
+CONFOPTS = --with-install-prefix=/ --disable-debugging
+
+CONFOPTS += --without-perl-modules --disable-embedded-perl
+CONFOPTS += --without-python-modules
 
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
-NET_SNMP_CFG += --sysconfdir=/etc/config
+CONFOPTS += --sysconfdir=/etc/config
 endif
 
 ifdef CONFIG_CPU_BIG_ENDIAN
-NET_SNMP_CFG += --with-endianness=big
+CONFOPTS += --with-endianness=big
 else
-NET_SNMP_CFG += --with-endianness=little
+CONFOPTS += --with-endianness=little
 endif
 
 ifdef CONFIG_USER_NETSNMP_BUILDSTATIC
-NET_SNMP_CFG += --enable-shared=no
-NET_SNMP_LIB_EXT = a
-NET_SNMP_EXE_DIR = 
-else
-NET_SNMP_LIB_EXT = so
-NET_SNMP_EXE_DIR = .libs/
+CONFOPTS += --enable-shared=no
 endif
 
 ifdef CONFIG_USER_NETSNMP_SNMPD
 ifdef CONFIG_USER_NETSNMP_SNMPD_MINI
-NET_SNMP_CFG += --enable-mini-agent
+CONFOPTS += --enable-mini-agent
 endif
 else
-NET_SNMP_CFG += --disable-agent
+CONFOPTS += --disable-agent
 endif
 
 ifndef CONFIG_USER_NETSNMP_APPS
-NET_SNMP_CFG += --disable-applications
+CONFOPTS += --disable-applications
 endif
 
 ifndef CONFIG_USER_NETSNMP_MANUALS
-NET_SNMP_CFG += --disable-manuals
+CONFOPTS += --disable-manuals
 endif
 
 ifndef CONFIG_USER_NETSNMP_SCRIPTS
-NET_SNMP_CFG += --disable-scripts
+CONFOPTS += --disable-scripts
 endif
 
 ifdef CONFIG_USER_NETSNMP_MIBS
 ifndef CONFIG_USER_NETSNMP_MIBLOADING
-NET_SNMP_CFG += --disable-mib-loading
+CONFOPTS += --disable-mib-loading
 endif
 else
-NET_SNMP_CFG += --disable-mibs --disable-mib-loading
+CONFOPTS += --disable-mibs --disable-mib-loading
 endif
 
-ifdef CONFIG_USER_NETSNMP_NOV1
-NET_SNMP_CFG += --disable-snmpv1
+ifndef CONFIG_USER_NETSNMP_V1
+CONFOPTS += --disable-snmpv1
 endif
 
-ifdef CONFIG_USER_NETSNMP_NOV2C
-NET_SNMP_CFG += --disable-snmpv2c
+ifndef CONFIG_USER_NETSNMP_V2C
+CONFOPTS += --disable-snmpv2c
 endif
 
 ifdef CONFIG_USER_NETSNMP_IPV6
 ifndef CONFIG_IPV6
 $(error CONFIG_IPV6 not defined)
 else
-NET_SNMP_CFG += --enable-ipv6
+CONFOPTS += --enable-ipv6
 CONFVARS += ac_cv_have_struct_sockaddr_in6_sin6_addr=yes
 endif
 endif
 
 ifdef CONFIG_USER_NETSNMP_NOTRANSPORTS
-NET_SNMP_CFG += --with-out-transports=$(CONFIG_USER_NETSNMP_EXTRANSPORTS)
+CONFOPTS += --with-out-transports=$(CONFIG_USER_NETSNMP_EXTRANSPORTS)
 endif
 
 ifdef CONFIG_USER_NETSNMP_OPENSSL
-ifndef CONFIG_LIB_LIBSSL
-$(error CONFIG_LIB_LIBSSL not defined)
+ifndef CONFIG_LIB_OPENSSL
+$(error CONFIG_LIB_OPENSSL not defined)
 else
-NET_SNMP_CFG += --with-openssl=$(STAGEDIR)/lib
+CONFOPTS += --with-openssl=$(STAGEDIR)/lib
 endif
 endif
 
 ifdef CONFIG_USER_NETSNMP_OVRDEFAULTS
-NET_SNMP_CFG += --with-default-snmp-version=$(CONFIG_USER_NETSNMP_DEFVERSION)
-NET_SNMP_CFG += --with-sys-contact=$(CONFIG_USER_NETSNMP_DEFSYSCONTACT)
-NET_SNMP_CFG += --with-sys-location=$(CONFIG_USER_NETSNMP_DEFSYSLOCATION)
-NET_SNMP_CFG += --with-logfile=$(CONFIG_USER_NETSNMP_DEFLOGFILE)
-NET_SNMP_CFG += --with-persistent-directory=$(CONFIG_USER_NETSNMP_DEFPERSISDIR)
-NET_SNMP_CFG += --with-enterprise-oid=$(CONFIG_USER_NETSNMP_DEFENTERPRISEOID)
-NET_SNMP_CFG += --with-enterprise-sysoid=$(CONFIG_USER_NETSNMP_DEFENTERPRISESYSOID)
+CONFOPTS += --with-default-snmp-version=$(CONFIG_USER_NETSNMP_DEFVERSION)
+CONFOPTS += --with-sys-contact=$(CONFIG_USER_NETSNMP_DEFSYSCONTACT)
+CONFOPTS += --with-sys-location=$(CONFIG_USER_NETSNMP_DEFSYSLOCATION)
+CONFOPTS += --with-logfile=$(CONFIG_USER_NETSNMP_DEFLOGFILE)
+CONFOPTS += --with-persistent-directory=$(CONFIG_USER_NETSNMP_DEFPERSISDIR)
+CONFOPTS += --with-enterprise-oid=$(CONFIG_USER_NETSNMP_DEFENTERPRISEOID)
+CONFOPTS += --with-enterprise-sysoid=$(CONFIG_USER_NETSNMP_DEFENTERPRISESYSOID)
 else
-NET_SNMP_CFG += --with-defaults
+CONFOPTS += --with-defaults
 endif
 
 ifdef CONFIG_USER_NETSNMP_ADDMIBS
-NET_SNMP_CFG_EXTRA = --with-mib-modules=$(CONFIG_USER_NETSNMP_ADDITIONALMIBS)
+CONFOPTS += --with-mib-modules=$(CONFIG_USER_NETSNMP_ADDITIONALMIBS)
 endif
 
-all: build/Makefile
-	$(MAKE) -j1 xEXT=${NET_SNMP_LIB_EXT} xDIR=${NET_SNMP_EXE_DIR} -C build install
+include $(ROOTDIR)/tools/automake.inc
 
-build/Makefile: makefile
-	rm -fr source build
-	mkdir source build
-	find . -type d > .dirs
-	find . ! -type d | grep -v ./makefile > .files
-	while read t; do mkdir -p source/$$t; done < .dirs
-	while read t; do ln -sf `pwd`/$$t source/$$t; done < .files
-	rm -f .dirs .files
+# Override automake's --prefix= which net-snmp translates to the build dir
+CONFOPTS += --prefix=/
+
 ifdef CONFIG_USER_NETSNMP_ADDITIONAL_MIB_DIRS
-	AMIBDIR=`pwd`/source/agent/mibgroup; \
-	for d in $(CONFIG_USER_NETSNMP_ADDITIONAL_MIB_DIRS); do \
+AMIBDIR = $(shell pwd)/build/net-snmp-$(VERSION)/agent/mibgroup
+
+build/net-snmp-$(VERSION)-symlink-mibs: build/net-snmp-$(VERSION)-extracted
+	@for d in $(CONFIG_USER_NETSNMP_ADDITIONAL_MIB_DIRS); do \
 		echo "Adding MIBs from $$d"; \
 		[ ! -d "$$d" ] && echo "$$d does not exist" && exit 1; \
 		cd $$d; \
-		find . -type d | while read t; do mkdir -p $$AMIBDIR/$$t;done;\
-		find . -type f | while read t; do ln -sf $$d/$$t $$AMIBDIR/$$t;done;\
+		find . -type d | while read t; do mkdir -p $(AMIBDIR)/$$t;done;\
+		find . -type f | while read t; do ln -sf $$d/$$t $(AMIBDIR)/$$t;done;\
 	done
-endif
-	chmod u+x configure
-	( \
-		cd build; \
-		CC="$(CC) $(CFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="$(LDLIBS)" \
-			$(CONFVARS) sh ../source/configure $(CONFIGURE_OPTS) $(NET_SNMP_CFG) $(NET_SNMP_CFG_EXTRA); \
-		if [ $$? -ne 0 ]; then \
-			CC="$(CC) $(CFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="$(LDLIBS)" \
-				$(CONFVARS) sh ../source/configure $(CONFIGURE_OPTS) $(NET_SNMP_CFG); \
-		fi; \
-	)
+	touch $@
 
-NET_SNMP_VERSION=20.0.0
-NET_SNMP_VERSION_MAJOR=20
+build/net-snmp-$(VERSION)-configured: build/net-snmp-$(VERSION)-symlink-mibs
+endif
 
-romfs:
-ifndef CONFIG_USER_NETSNMP_BUILDSTATIC
-	$(ROMFSINST) build/snmplib/.libs/libnetsnmp.so.$(NET_SNMP_VERSION) /lib/libnetsnmp.so.$(NET_SNMP_VERSION_MAJOR)
-	$(ROMFSINST) build/agent/.libs/libnetsnmpagent.so.$(NET_SNMP_VERSION) /lib/libnetsnmpagent.so.$(NET_SNMP_VERSION_MAJOR)
-	$(ROMFSINST) build/agent/.libs/libnetsnmpmibs.so.$(NET_SNMP_VERSION) /lib/libnetsnmpmibs.so.$(NET_SNMP_VERSION_MAJOR)
-	$(ROMFSINST) build/agent/helpers/.libs/libnetsnmphelpers.so.$(NET_SNMP_VERSION) /lib/libnetsnmphelpers.so.$(NET_SNMP_VERSION_MAJOR)
-ifdef CONFIG_USER_NETSNMP_APPS_TRAPD
-	$(ROMFSINST) build/apps/.libs/libnetsnmptrapd.so.$(NET_SNMP_VERSION) /lib/libnetsnmptrapd.so.$(NET_SNMP_VERSION_MAJOR)
-endif
-endif
-ifdef CONFIG_USER_NETSNMP_SNMPD
-	$(ROMFSINST) build/agent/${NET_SNMP_EXE_DIR}snmpd /bin/snmpd
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_BULKGET
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpbulkget /bin/snmpbulkget
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_BULKWALK
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpbulkwalk /bin/snmpbulkwalk
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_DELTA
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpdelta /bin/snmpdelta
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_DF
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpdf /bin/snmpdf
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_GET
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpget /bin/snmpget
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_GETNEXT
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpgetnext /bin/snmpgetnext
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_SET
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpset /bin/snmpset
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_STATUS
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpstatus /bin/snmpstatus
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_TABLE
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmptable /bin/snmptable
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_TRANSLATE
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmptranslate /bin/snmptranslate
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_TRAP
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmptrap /bin/snmptrap
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_TRAPD
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmptrapd /bin/snmptrapd
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_USM
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpusm /bin/snmpusm
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_VACM
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpvacm /bin/snmpvacm
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_WALK
-	$(ROMFSINST) build/apps/${NET_SNMP_EXE_DIR}snmpwalk /bin/snmpwalk
-endif
-ifdef CONFIG_USER_NETSNMP_APPS_NETSTAT
-	$(ROMFSINST) build/apps/snmpnetstat/${NET_SNMP_EXE_DIR}snmpnetstat /bin/snmpnetstat
-endif
 ifdef CONFIG_USER_NETSNMP_INSTALL_CORE_MIBS
-	$(ROMFSINST) -d mibs/stripped/SNMPv2-TC /etc/snmp/mibs/SNMPv2-TC
-	$(ROMFSINST) mibs/stripped/SNMPv2-SMI /etc/snmp/mibs/SNMPv2-SMI
-	$(ROMFSINST) mibs/stripped/SNMPv2-MIB /etc/snmp/mibs/SNMPv2-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-TARGET-MIB /etc/snmp/mibs/SNMP-TARGET-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-VIEW-BASED-ACM-MIB /etc/snmp/mibs/SNMP-VIEW-BASED-ACM-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-COMMUNITY-MIB /etc/snmp/mibs/SNMP-COMMUNITY-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-FRAMEWORK-MIB /etc/snmp/mibs/SNMP-FRAMEWORK-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-MPD-MIB /etc/snmp/mibs/SNMP-MPD-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-PROXY-MIB /etc/snmp/mibs/SNMP-PROXY-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-USER-BASED-SM-MIB /etc/snmp/mibs/SNMP-USER-BASED-SM-MIB
-	$(ROMFSINST) mibs/stripped/RFC1155-SMI /etc/snmp/mibs/RFC1155-SMI
-	$(ROMFSINST) mibs/stripped/RFC1213-MIB /etc/snmp/mibs/RFC1213-MIB
-	$(ROMFSINST) mibs/stripped/RFC-1215 /etc/snmp/mibs/RFC-1215
-	$(ROMFSINST) mibs/stripped/IF-MIB /etc/snmp/mibs/IF-MIB
-	$(ROMFSINST) mibs/stripped/IP-MIB /etc/snmp/mibs/IP-MIB
-	$(ROMFSINST) mibs/stripped/IPV6-ICMP-MIB /etc/snmp/mibs/IPV6-ICMP-MIB
-	$(ROMFSINST) mibs/stripped/IPV6-MIB /etc/snmp/mibs/IPV6-MIB
-	$(ROMFSINST) mibs/stripped/IPV6-TCP-MIB /etc/snmp/mibs/IPV6-TCP-MIB
-	$(ROMFSINST) mibs/stripped/IPV6-UDP-MIB /etc/snmp/mibs/IPV6-UDP-MIB
-	$(ROMFSINST) mibs/stripped/IPV6-TC /etc/snmp/mibs/IPV6-TC
-	$(ROMFSINST) mibs/stripped/INET-ADDRESS-MIB /etc/snmp/mibs/INET-ADDRESS-MIB
-	$(ROMFSINST) mibs/stripped/IANAifType-MIB /etc/snmp/mibs/IANAifType-MIB
-	$(ROMFSINST) mibs/stripped/HOST-RESOURCES-MIB /etc/snmp/mibs/HOST-RESOURCES-MIB
-	$(ROMFSINST) mibs/stripped/HOST-RESOURCES-TYPES /etc/snmp/mibs/HOST-RESOURCES-TYPES
-	$(ROMFSINST) mibs/stripped/DISMAN-EVENT-MIB /etc/snmp/mibs/DISMAN-EVENT-MIB
-	$(ROMFSINST) mibs/stripped/SNMP-NOTIFICATION-MIB /etc/snmp/mibs/SNMP-NOTIFICATION-MIB
-	$(ROMFSINST) mibs/stripped/SNMPv2-TM /etc/snmp/mibs/SNMPv2-TM
-	$(ROMFSINST) mibs/stripped/UCD-SNMP-MIB /etc/snmp/mibs/UCD-SNMP-MIB
-	$(ROMFSINST) mibs/stripped/UCD-DEMO-MIB /etc/snmp/mibs/UCD-DEMO-MIB
-	$(ROMFSINST) mibs/stripped/UCD-DLMOD-MIB /etc/snmp/mibs/UCD-DLMOD-MIB
-	$(ROMFSINST) mibs/stripped/NET-SNMP-MIB /etc/snmp/mibs/NET-SNMP-MIB
-	$(ROMFSINST) mibs/stripped/NET-SNMP-AGENT-MIB /etc/snmp/mibs/NET-SNMP-AGENT-MIB
-	$(ROMFSINST) mibs/stripped/NET-SNMP-EXTEND-MIB /etc/snmp/mibs/NET-SNMP-EXTEND-MIB
+MIBSDIR = build/net-snmp-$(VERSION)/mibs
+
+build/net-snmp-$(VERSION)-strip-core-mibs: build/net-snmp-$(VERSION)-extracted
+	mkdir -p $(MIBSDIR)/stripped
+	smistrip -d $(MIBSDIR)/stripped $(patsubst %,$(MIBSDIR)/%.txt,$(CORE_MIBS))
+	touch $@
+
+build/net-snmp-$(VERSION)-configured: build/net-snmp-$(VERSION)-strip-core-mibs
 endif
+
+INSTALLDIR = build/net-snmp-$(VERSION)-install
+
+my_romfs:
+ifndef CONFIG_USER_NETSNMP_BUILDSTATIC
+	$(ROMFSINST) -v -f $(INSTALLDIR)/lib /lib
+	rm -f $(ROMFSDIR)/lib/*.a
+	rm -f $(ROMFSDIR)/lib/*.la
+endif
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_SNMPD $(INSTALLDIR)/sbin/snmpd /sbin/snmpd
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_BULKGET $(INSTALLDIR)/bin/snmpdsnmpbulkget /bin/snmpbulkget
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_BULKWALK $(INSTALLDIR)/bin/snmpbulkwalk /bin/snmpbulkwalk
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_DELTA $(INSTALLDIR)/bin/snmpdelta /bin/snmpdelta
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_DF $(INSTALLDIR)/bin/snmpdf /bin/snmpdf
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_GET $(INSTALLDIR)/bin/snmpget /bin/snmpget
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_GETNEXT $(INSTALLDIR)/bin/snmpgetnext /bin/snmpgetnext
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_SET $(INSTALLDIR)/bin/snmpset /bin/snmpset
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_STATUS $(INSTALLDIR)/bin/snmpstatus /bin/snmpstatus
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_TABLE $(INSTALLDIR)/bin/snmptable /bin/snmptable
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_TRANSLATE $(INSTALLDIR)/bin/snmptranslate /bin/snmptranslate
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_TRAP $(INSTALLDIR)/bin/snmptrap /bin/snmptrap
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_TRAPD $(INSTALLDIR)/sbin/snmptrapd /sbin/snmptrapd
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_USM $(INSTALLDIR)/bin/snmpusm /bin/snmpusm
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_VACM $(INSTALLDIR)/bin/snmpvacm /bin/snmpvacm
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_WALK $(INSTALLDIR)/bin/snmpwalk /bin/snmpwalk
+	$(ROMFSINST) -e CONFIG_USER_NETSNMP_APPS_NETSTAT $(INSTALLDIR)/bin/snmpnetstat /bin/snmpnetstat
 	$(ROMFSINST) -e CONFIG_USER_FLATFSD_ETC_CONFIG -s config /etc/snmp
-
-clean:
-	rm -rf source build
-
+ifdef CONFIG_USER_NETSNMP_INSTALL_CORE_MIBS
+	$(ROMFSINST) -d -v -f build/net-snmp-$(VERSION)/mibs/stripped /etc/snmp/mibs
+endif

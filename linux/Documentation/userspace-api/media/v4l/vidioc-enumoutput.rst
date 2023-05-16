@@ -1,11 +1,5 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_ENUMOUTPUT:
 
@@ -18,23 +12,21 @@ Name
 
 VIDIOC_ENUMOUTPUT - Enumerate video outputs
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_ENUMOUTPUT, struct v4l2_output *argp )
-    :name: VIDIOC_ENUMOUTPUT
+.. c:macro:: VIDIOC_ENUMOUTPUT
 
+``int ioctl(int fd, VIDIOC_ENUMOUTPUT, struct v4l2_output *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_output`.
-
 
 Description
 ===========
@@ -47,8 +39,7 @@ when the index is out of bounds. To enumerate all outputs applications
 shall begin at index zero, incrementing by one until the driver returns
 ``EINVAL``.
 
-
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
+.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.5cm}|
 
 .. c:type:: v4l2_output
 
@@ -105,8 +96,7 @@ shall begin at index zero, incrementing by one until the driver returns
 	zero.
 
 
-
-.. tabularcolumns:: |p{7.0cm}|p{1.8cm}|p{8.7cm}|
+.. tabularcolumns:: |p{7.5cm}|p{0.6cm}|p{9.2cm}|
 
 .. _output-type:
 
@@ -128,8 +118,7 @@ shall begin at index zero, incrementing by one until the driver returns
       - The video output will be copied to a :ref:`video overlay <overlay>`.
 
 
-
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. tabularcolumns:: |p{6.4cm}|p{2.4cm}|p{8.5cm}|
 
 .. _output-capabilities:
 
@@ -151,7 +140,6 @@ shall begin at index zero, incrementing by one until the driver returns
       - This output supports setting the native size using the
 	``V4L2_SEL_TGT_NATIVE_SIZE`` selection target, see
 	:ref:`v4l2-selections-common`.
-
 
 Return Value
 ============

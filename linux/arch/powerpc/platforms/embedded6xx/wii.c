@@ -13,13 +13,13 @@
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/seq_file.h>
+#include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/memblock.h>
 #include <mm/mmu_decl.h>
 
 #include <asm/io.h>
 #include <asm/machdep.h>
-#include <asm/prom.h>
 #include <asm/time.h>
 #include <asm/udbg.h>
 
@@ -69,7 +69,7 @@ static void __noreturn wii_spin(void)
 		cpu_relax();
 }
 
-static void __iomem *wii_ioremap_hw_regs(char *name, char *compatible)
+static void __iomem *__init wii_ioremap_hw_regs(char *name, char *compatible)
 {
 	void __iomem *hw_regs = NULL;
 	struct device_node *np;

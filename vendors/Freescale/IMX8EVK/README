@@ -1,0 +1,26 @@
+DIGI iMX8
+---------
+
+This is just some random notes on building and running on the iMX8 EVK
+platform. This is very much a work in progress.
+
+Generate images for this board using the Freescale/IMX8EVK accelerated linux
+target. The default is to select the musl C-library when building.
+The build will generate separate kernel, root filesystem and devicetree blobs.
+
+You can load onto the iMX8 board using the usual u-boot loader installed
+in the boot ROM of the board.
+
+  setenv bootargs console=ttymxc1,115200n8 root=/dev/ram0 initrd=0x80000000,64M
+  setenv ipaddr 192.168.0.66
+  setenv serverip 192.168.0.22
+  tftpboot 0x40480000 kernel.bin
+  tftpboot 0x7c000000 imx8mp-evk.dtb
+  tftpboot 0x80000000 rootfs.bin
+  booti 0x40480000 - 0x7c000000
+
+The serial console is on the micro-USB debug port (J23). You will need a
+micro-USB to standard USB cable. The serial console will appear on the 3rd
+USB serial port of a host Linux system. The console serial port is at the
+default 115200,8,n,1.
+

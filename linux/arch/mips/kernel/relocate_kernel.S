@@ -11,6 +11,7 @@
 #include <asm/stackframe.h>
 #include <asm/addrspace.h>
 
+#include <kernel-entry-init.h>
 
 LEAF(relocate_new_kernel)
 	PTR_L a0,	arg0
@@ -100,12 +101,12 @@ done:
 #endif
 	/* jump to kexec_start_address */
 	j		s1
-END(relocate_new_kernel)
+	END(relocate_new_kernel)
 
 #ifdef CONFIG_SMP
 /*
  * Other CPUs should wait until code is relocated and
- * then start at entry point.
+ * then start at entry (?) point.
  */
 LEAF(kexec_smp_wait)
 	PTR_L		a0, s_arg0
@@ -114,23 +115,28 @@ LEAF(kexec_smp_wait)
 	PTR_L		a3, s_arg3
 	PTR_L		s1, kexec_start_address
 
-	/*
-	 * Non-relocated address works for args and kexec_start_address (old
+	/* Non-relocated address works for args and kexec_start_address ( old
 	 * kernel is not overwritten). But we need relocated address of
 	 * kexec_flag.
 	 */
+
 	bal		1f
-1:	move		t1, ra
-	PTR_LA		t2, 1b
-	PTR_LA		t0, kexec_flag
-	PTR_SUB		t0, t0, t2
-	PTR_ADD		t0, t1, t0
+1:	move		t1,ra;
+	PTR_LA		t2,1b
+	PTR_LA		t0,kexec_flag
+	PTR_SUB		t0,t0,t2;
+	PTR_ADD		t0,t1,t0;
 
 1:	LONG_L		s0, (t0)
-	bne		s0, zero, 1b
+	bne		s0, zero,1b
 
+#ifdef USE_KEXEC_SMP_WAIT_FINAL
+	kexec_smp_wait_final
+#else
+	sync
+#endif
 	j		s1
-END(kexec_smp_wait)
+	END(kexec_smp_wait)
 #endif
 
 
@@ -145,10 +151,10 @@ END(kexec_smp_wait)
 
 kexec_args:
 	EXPORT(kexec_args)
-arg0:	PTR		0x0
-arg1:	PTR		0x0
-arg2:	PTR		0x0
-arg3:	PTR		0x0
+arg0:	PTR_WD		0x0
+arg1:	PTR_WD		0x0
+arg2:	PTR_WD		0x0
+arg3:	PTR_WD		0x0
 	.size	kexec_args,PTRSIZE*4
 
 #ifdef CONFIG_SMP
@@ -159,10 +165,10 @@ arg3:	PTR		0x0
  */
 secondary_kexec_args:
 	EXPORT(secondary_kexec_args)
-s_arg0: PTR		0x0
-s_arg1: PTR		0x0
-s_arg2: PTR		0x0
-s_arg3: PTR		0x0
+s_arg0: PTR_WD		0x0
+s_arg1: PTR_WD		0x0
+s_arg2: PTR_WD		0x0
+s_arg3: PTR_WD		0x0
 	.size	secondary_kexec_args,PTRSIZE*4
 kexec_flag:
 	LONG		0x1
@@ -171,17 +177,17 @@ kexec_flag:
 
 kexec_start_address:
 	EXPORT(kexec_start_address)
-	PTR		0x0
+	PTR_WD		0x0
 	.size		kexec_start_address, PTRSIZE
 
 kexec_indirection_page:
 	EXPORT(kexec_indirection_page)
-	PTR		0
+	PTR_WD		0
 	.size		kexec_indirection_page, PTRSIZE
 
 relocate_new_kernel_end:
 
 relocate_new_kernel_size:
 	EXPORT(relocate_new_kernel_size)
-	PTR		relocate_new_kernel_end - relocate_new_kernel
+	PTR_WD		relocate_new_kernel_end - relocate_new_kernel
 	.size		relocate_new_kernel_size, PTRSIZE

@@ -1,0 +1,56 @@
+#!/bin/lua
+require "fb"
+require "posix"
+require "io"
+
+function getFileContents(filename)
+	local res
+	f = io.open(filename, "r")
+	if f~= nil then
+		res = f:read("*a")
+		f:close()
+	end
+	return res
+end
+
+function string:split(delimiter)
+  local result = { }
+  local from  = 1
+  local delim_from, delim_to = string.find( self, delimiter, from  )
+  while delim_from do
+        table.insert( result, string.sub( self, from , delim_from-1 ) )
+        from  = delim_to + 1
+        delim_from, delim_to = string.find( self, delimiter, from  )
+  end
+  table.insert( result, string.sub( self, from  ) )
+  return result
+end
+
+function string:trim()
+	return (string.gsub(self, "^%s*(.-)%s*$", "%1"))
+end
+
+function gen_time()
+	local tbl = posix.localtime()
+	time_str = tbl["hour"] .. ":" .. string.format("%02d", tbl["min"]) .. ":" .. string.format("%02d", tbl["sec"]) .. " " .. tbl["monthday"] .. "/" .. tbl["month"] .. "/" .. tbl["year"]
+	return time_str
+end
+
+function gen_version()
+	local strs = getFileContents("/etc/version"):split(" ")
+	version = "IM7200: " .. strs[3]
+	return version
+end
+
+buf = fb.open("/dev/fb0")
+ft = fb.load_font("/etc/lcd-assets/Tamsyn6x12r.psf")
+
+while true do
+	fb.clear_buffer(buf)
+	fb.render_bitmap(buf, "/etc/lcd-assets/logo.png", 0, 0)
+	fb.render_string(buf, ft, gen_version(), false, 0, 38)
+	fb.render_string(buf, ft, gen_time(), false, 0, 51)
+	fb.swap_buffer(buf)
+	posix.sleep(1)
+end
+

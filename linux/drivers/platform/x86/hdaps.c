@@ -365,7 +365,7 @@ static ssize_t hdaps_variance_show(struct device *dev,
 static ssize_t hdaps_temp1_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	u8 uninitialized_var(temp);
+	u8 temp;
 	int ret;
 
 	ret = hdaps_readb_one(HDAPS_PORT_TEMP1, &temp);
@@ -378,7 +378,7 @@ static ssize_t hdaps_temp1_show(struct device *dev,
 static ssize_t hdaps_temp2_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	u8 uninitialized_var(temp);
+	u8 temp;
 	int ret;
 
 	ret = hdaps_readb_one(HDAPS_PORT_TEMP2, &temp);
@@ -462,7 +462,7 @@ static struct attribute *hdaps_attributes[] = {
 	NULL,
 };
 
-static struct attribute_group hdaps_attribute_group = {
+static const struct attribute_group hdaps_attribute_group = {
 	.attrs = hdaps_attributes,
 };
 

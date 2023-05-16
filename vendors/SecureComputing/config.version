@@ -1,4 +1,0 @@
-#
-# Declare the SecureComputing version in one place.
-#
-export VERSIONPKG=4.1.0p0

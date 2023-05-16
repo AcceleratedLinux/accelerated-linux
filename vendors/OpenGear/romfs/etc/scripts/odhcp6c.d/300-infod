@@ -1,0 +1,71 @@
+#!/bin/sh
+
+# if we have infod, push all odhcp6c parameters into infod. This
+# allows it to interfae with an external application (eg. conman).
+if [ -x /bin/infod_client ]
+then
+	/bin/infod_client -o push -p "odhcp6c.$1.rdnss" -d "${RDNSS:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.domains" -d "${DOMAINS:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.sntp_ip" -d "${SNTP_IP:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.sntp_fqdn" -d "${SNTP_FQDN:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.sip_ip" -d "${SIP_IP:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.sip_domain" -d "${SIP_DOMAIN:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.option_17" -d "${OPTION_17:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.prefixes" -d "${PREFIXES:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.addresses" -d "${ADDRESSES:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_addresses" -d "${RA_ADDRESSES:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_routes" -d "${RA_ROUTES:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_dns" -d "${RA_DNS:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_domains" -d "${RA_DOMAINS:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_hoplimit" -d "${RA_HOPLIMIT:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_mtu" -d "${RA_MTU:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_reachable" -d "${RA_REACHABLE:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ra_retransmit" -d "${RA_RETRANSMIT:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.aftr" -d "${AFTR:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.mape" -d "${MAPE:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.mapt" -d "${MAPT:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.lw406" -d "${LW4O6:- }"
+	/bin/infod_client -o push -p "odhcp6c.$1.ntpsrv" -d "${NTP_IP:- }"
+
+	# Vendor-specific option decoding
+	# Opengear Inc. enterprise-number 25049
+	if [ "$((16#${OPTION_17:0:8}))" -eq 25049 ]; then
+		offset=8
+		while [ $offset -lt ${#OPTION_17} ]; do
+			# option-code
+			code="$((16#${OPTION_17:offset:4}))"
+			# option-length
+			length="$((16#${OPTION_17:offset+4:4}))"
+			data=""
+			# Loop over option-data
+			for ((i=0; i<2*$length; i=$i+2 )); do
+				data="${data}$(printf \\$(printf '%03o' $((16#${OPTION_17:offset+8+$i:2}))))"
+			done
+			offset=$(($offset+2*(4+$length)))
+			/bin/infod_client -o push -p "odhcp6c.$1.vendorspec_$code" -d "${data}"
+		done
+	else
+		/bin/infod_client -o delete -p "odhcp6c.$1.vendorspec_" # prefix delete!
+	fi
+
+	if [ -n "$OPTION_59" ]; then
+		# decode option 59
+		length=$(( ${#OPTION_59} / 2 ))
+		data=""
+		# Loop over option-data
+		for ((i=0; i<2*$length; i=$i+2 )); do
+			data="${data}$(printf \\$(printf '%03o' $((16#${OPTION_59:$i:2}))))"
+		done
+		/bin/infod_client -o push -p "odhcp6c.$1.bootfile" -d "${data:- }"
+	fi
+
+	if [ "$2" = "bound" -o "$2" = "informed"  -o "$2" = "updated"  -o "$2" = "rebound"  -o "$2" = "ra-updated" ]
+	then
+		# give conman who is polling our status a green light
+		/bin/infod_client -o push -p "odhcp6c.$1.status" -d "up"
+	fi
+	if [ "$2" = "stopped" -o "$2" = "unbound"  -o "$2" = "started" ]
+	then
+		/bin/infod_client -o push -p "odhcp6c.$1.status" -d "down"
+	fi
+fi

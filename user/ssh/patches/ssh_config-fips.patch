@@ -1,0 +1,130 @@
+--- openssh-8.8p1/sshd_config.org
++++ openssh-8.8p1/sshd_config.org
+@@ -15,7 +15,7 @@
+ #ListenAddress 0.0.0.0
+ #ListenAddress ::
+ 
+-#HostKey /etc/ssh/ssh_host_rsa_key
++HostKey /etc/ssh/ssh_host_rsa_key
+ #HostKey /etc/ssh/ssh_host_ecdsa_key
+ #HostKey /etc/ssh/ssh_host_ed25519_key
+ 
+@@ -39,7 +40,7 @@
+ 
+ # The default is to check both .ssh/authorized_keys and .ssh/authorized_keys2
+ # but this is overridden so installations will only check .ssh/authorized_keys
+-AuthorizedKeysFile	.ssh/authorized_keys
++#AuthorizedKeysFile	.ssh/authorized_keys
+ 
+ #AuthorizedPrincipalsFile none
+ 
+@@ -82,9 +84,6 @@
+ # and KbdInteractiveAuthentication to 'no'.
+ #UsePAM no
+ 
+-# SG default
+-UsePAM yes
+-
+ #AllowAgentForwarding yes
+ #AllowTcpForwarding yes
+ #GatewayPorts no
+@@ -99,7 +98,6 @@
+ #Compression delayed
+ #ClientAliveInterval 0
+ #ClientAliveCountMax 3
+-#UseDNS no
+ UseDNS no
+ #PidFile /var/run/sshd.pid
+ #MaxStartups 10:30:100
+@@ -119,3 +115,14 @@
+ #	AllowTcpForwarding no
+ #	PermitTTY no
+ #	ForceCommand cvs server
++
++VirtualUser virtual
++AllowUsers root virtual
++
++# Enable PAM and require the PAM module to prompt for the password
++UsePAM yes
++ChallengeResponseAuthentication yes
++PasswordAuthentication no
++PubkeyAuthentication yes
++AuthorizedKeysFile /var/run/ssh_keys/%u
++PrintMotd no
+--- openssh-8.8p1/ssh_config.fips
++++ openssh-8.8p1/ssh_config.fips
+@@ -34,8 +34,10 @@
+ #   IdentityFile ~/.ssh/id_ecdsa
+ #   IdentityFile ~/.ssh/id_ed25519
+ #   Port 22
+-#   Ciphers aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc,3des-cbc
+-#   MACs hmac-md5,hmac-sha1,umac-64@openssh.com
++# FIPS 140-2 compliant algorithms only
++Ciphers aes128-ctr,aes192-ctr,aes256-ctr
++MACs hmac-sha2-256,hmac-sha2-512
++KexAlgorithms ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256
+ #   EscapeChar ~
+ #   Tunnel no
+ #   TunnelDevice any:any
+--- open-8.8p1/sshd_config.fips
++++ open-8.8p1/sshd_config.fips
+@@ -15,12 +15,16 @@
+ #ListenAddress 0.0.0.0
+ #ListenAddress ::
+ 
+-#HostKey /etc/ssh/ssh_host_rsa_key
++HostKey /etc/ssh/ssh_host_rsa_key
+ #HostKey /etc/ssh/ssh_host_ecdsa_key
+ #HostKey /etc/ssh/ssh_host_ed25519_key
+ 
+ # Ciphers and keying
+ #RekeyLimit default none
++# FIPS 140-2 compliant algorithms only
++Ciphers aes128-ctr,aes192-ctr,aes256-ctr
++MACs hmac-sha2-256,hmac-sha2-512
++KexAlgorithms ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256
+ 
+ # Logging
+ #SyslogFacility AUTH
+@@ -39,7 +41,7 @@
+ 
+ # The default is to check both .ssh/authorized_keys and .ssh/authorized_keys2
+ # but this is overridden so installations will only check .ssh/authorized_keys
+-AuthorizedKeysFile	.ssh/authorized_keys
++#AuthorizedKeysFile	.ssh/authorized_keys
+ 
+ #AuthorizedPrincipalsFile none
+ 
+@@ -82,9 +84,6 @@
+ # and KbdInteractiveAuthentication to 'no'.
+ #UsePAM no
+ 
+-# SG default
+-UsePAM yes
+-
+ #AllowAgentForwarding yes
+ #AllowTcpForwarding yes
+ #GatewayPorts no
+@@ -99,7 +98,6 @@
+ #Compression delayed
+ #ClientAliveInterval 0
+ #ClientAliveCountMax 3
+-#UseDNS no
+ UseDNS no
+ #PidFile /var/run/sshd.pid
+ #MaxStartups 10:30:100
+@@ -119,3 +117,14 @@
+ #	AllowTcpForwarding no
+ #	PermitTTY no
+ #	ForceCommand cvs server
++
++VirtualUser virtual
++AllowUsers root virtual
++
++# Enable PAM and require the PAM module to prompt for the password
++UsePAM yes
++ChallengeResponseAuthentication yes
++PasswordAuthentication no
++PubkeyAuthentication yes
++AuthorizedKeysFile /var/run/ssh_keys/%u
++PrintMotd no

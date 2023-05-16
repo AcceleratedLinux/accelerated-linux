@@ -1,0 +1,82 @@
+commit bc93bb896a5c7f940c300887394783506d860b4d
+Author: David Leonard <david.leonard@opengear.com>
+Date:   Tue Nov 1 07:04:50 2016 +1000
+
+    OG-3778 libgcgi: clear errno before strtol()
+    
+    This fixes a problem where POST bodies received by CGI scripts would
+    sometimes be ignored.
+    
+    Under some circumstances (static constructors calling strtol() on
+    empty strings) errno was left dirty containing ERANGE before gcgiInit()
+    was called.
+    
+    gcgiInit() did not clear errno before calling strtol(), but tested
+    it afterwards to detect errors. Because strtol() does not clear errno
+    on success, so gcgiInit() was incorrectly detecting all valid integer
+    headers (eg Content-Length) as being invalid.
+
+Index: libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c
+===================================================================
+--- libgcgi-debian-0.9.5.dfsg-7.orig/src/gcgi.c
++++ libgcgi-debian-0.9.5.dfsg-7/src/gcgi.c
+@@ -133,9 +133,10 @@ parsePostQueryString(int *numBytes)
+     if (cgiQuery->env[gcgiContentLength] == NULL || cgiQuery->env[gcgiContentType] == NULL)
+ 	return GCGIFATALERROR;
+     
++    errno = 0;
+     clen = strtol(cgiQuery->env[gcgiContentLength], NULL, 10);
+     /* Content Length was out of range */
+-    if (errno == ERANGE)
++    if (errno)
+ 	return GCGIFATALERROR;
+ 
+     if (debug) {
+@@ -646,9 +647,10 @@ gcgiFetchInteger(const char *field, int
+ 	return GCGIFIELDEMPTY;
+     }
+ 
++    errno = 0;
+     i = strtol(qs->data,NULL,10);
+ 
+-    if (errno == ERANGE) {
++    if (errno) {
+ 	*ret = defaultRet;
+ 	return GCGIBADDATA;
+     }
+@@ -675,9 +677,10 @@ gcgiFetchIntegerNext(const char *field,
+ 	return GCGIFIELDEMPTY;
+     }
+ 
++    errno = 0;
+     i = strtol(qs->data,NULL,10);
+ 
+-    if (errno == ERANGE) {
++    if (errno) {
+ 	*ret = defaultRet;
+ 	return GCGIBADDATA;
+     }
+@@ -704,9 +707,10 @@ gcgiFetchDouble(const char *field, doubl
+ 	return GCGIFIELDEMPTY;
+     }
+ 
++    errno = 0;
+     i = strtod(qs->data, NULL);
+ 
+-    if (errno == ERANGE) {
++    if (errno) {
+ 	*ret = defaultRet;
+ 	return GCGIBADDATA;
+     }
+@@ -733,9 +737,10 @@ gcgiFetchDoubleNext(const char *field, d
+ 	return GCGIFIELDEMPTY;
+     }
+ 
++    errno = 0;
+     i = strtod(qs->data, NULL);
+ 
+-    if (errno == ERANGE) {
++    if (errno) {
+ 	*ret = defaultRet;
+ 	return GCGIBADDATA;
+     }

@@ -30,11 +30,11 @@
 #ifndef RADEON_MODE_H
 #define RADEON_MODE_H
 
+#include <drm/display/drm_dp_helper.h>
+#include <drm/display/drm_dp_mst_helper.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_encoder.h>
-#include <drm/drm_dp_helper.h>
-#include <drm/drm_dp_mst_helper.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_crtc_helper.h>
 #include <linux/i2c.h>
@@ -994,7 +994,7 @@ int radeon_align_pitch(struct radeon_device *rdev, int width, int bpp, bool tile
 int radeon_dp_mst_init(struct radeon_connector *radeon_connector);
 int radeon_dp_mst_probe(struct radeon_connector *radeon_connector);
 int radeon_dp_mst_check_status(struct radeon_connector *radeon_connector);
-int radeon_mst_debugfs_init(struct radeon_device *rdev);
+void radeon_mst_debugfs_init(struct radeon_device *rdev);
 void radeon_dp_mst_prepare_pll(struct drm_crtc *crtc, struct drm_display_mode *mode);
 
 void radeon_setup_mst_connector(struct drm_device *dev);

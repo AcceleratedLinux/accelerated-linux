@@ -106,7 +106,7 @@
 			status = "disabled";
 		};
 
-		l2: l2-cache-controller@ac0000 {
+		l2: cache-controller@ac0000 {
 			compatible = "marvell,tauros3-cache", "arm,pl310-cache";
 			reg = <0xac0000 0x1000>;
 			cache-unified;
@@ -191,7 +191,7 @@
 					compatible = "snps,dw-apb-gpio-port";
 					gpio-controller;
 					#gpio-cells = <2>;
-					snps,nr-gpios = <8>;
+					ngpios = <8>;
 					reg = <0>;
 					interrupt-controller;
 					#interrupt-cells = <2>;
@@ -209,7 +209,7 @@
 					compatible = "snps,dw-apb-gpio-port";
 					gpio-controller;
 					#gpio-cells = <2>;
-					snps,nr-gpios = <8>;
+					ngpios = <8>;
 					reg = <0>;
 					interrupt-controller;
 					#interrupt-cells = <2>;
@@ -227,7 +227,7 @@
 					compatible = "snps,dw-apb-gpio-port";
 					gpio-controller;
 					#gpio-cells = <2>;
-					snps,nr-gpios = <8>;
+					ngpios = <8>;
 					reg = <0>;
 					interrupt-controller;
 					#interrupt-cells = <2>;
@@ -245,7 +245,7 @@
 					compatible = "snps,dw-apb-gpio-port";
 					gpio-controller;
 					#gpio-cells = <2>;
-					snps,nr-gpios = <8>;
+					ngpios = <8>;
 					reg = <0>;
 					interrupt-controller;
 					#interrupt-cells = <2>;
@@ -446,7 +446,7 @@
 					compatible = "snps,dw-apb-gpio-port";
 					gpio-controller;
 					#gpio-cells = <2>;
-					snps,nr-gpios = <8>;
+					ngpios = <8>;
 					reg = <0>;
 				};
 			};
@@ -461,7 +461,7 @@
 					compatible = "snps,dw-apb-gpio-port";
 					gpio-controller;
 					#gpio-cells = <2>;
-					snps,nr-gpios = <8>;
+					ngpios = <8>;
 					reg = <0>;
 					interrupt-controller;
 					#interrupt-cells = <2>;

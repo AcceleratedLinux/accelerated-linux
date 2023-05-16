@@ -1,0 +1,218 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+# DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/power-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+	echo "10:${10}" >> $FILE
+	echo "11:${11}" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	. /etc/scripts/environmental-alertv1 "$1" "$6" "$7" "power" "$9"
+	exit
+fi
+
+ACTION=$1
+retval=0
+
+if [ "$ACTION" == "snmp" ]; then
+
+	PowerSupplyInputNotification=11
+	PowerSupplyOutputNotification=12
+	PowerSupplyTempNotification=13
+	UpsNotification=14
+	UpsBatteryNotification=15
+	UpsInputNotification=16
+	UpsOutputNotification=17
+	
+	powerSupplyInputVoltageLow=23
+	powerSupplyInputVoltageHigh=24
+	powerSupplyOutputCurrentLow=25
+	powerSupplyOutputCurrentHigh=26
+	powerSupplyTemperatureLow=27
+	powerSupplyTemperatureHigh=28
+	upsTemperatureHigh=29
+	upsTemperatureLow=30
+	upsHumidityHigh=31
+	upsHumidityLow=32
+	upsStateOnBattery=33
+	upsStateOnLine=34
+	upsBatteryChargeLow=35
+	upsBatteryChargeHigh=36
+	upsBatteryVoltageLow=37
+	upsBatteryVoltageHigh=38
+	upsBatteryCurrentLow=39
+	upsBatteryCurrentHigh=40
+	upsBatteryTemperatureLow=41
+	upsBatteryTemperatureHigh=42
+	upsInputFrequencyLow=43
+	upsInputFrequencyHigh=44
+	upsInputVoltageLow=45
+	upsInputVoltageHigh=46
+	upsInputCurrentLow=47
+	upsInputCurrentHigh=48
+	upsOutputFrequencyLow=49
+	upsOutputFrequencyHigh=50
+	upsOutputVoltageLow=51
+	upsOutputVoltageHigh=52
+	upsOutputCurrentLow=53
+	upsOutputCurrentHigh=54
+	upsOutputLoadLow=55
+	upsOutputLoadHigh=56
+	upsOutputPowerLow=57
+	upsOutputPowerHigh=58
+	upsOutputTruePowerLow=59
+	upsOutputTruePowerHigh=60
+	unknown=65535
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_DEVICE=$6
+	ALERT_DEVICE_TYPE=$7
+	ALERT_PROPERTY=$8
+	ALERT_VALUE=$9
+	ALERT_TRIGGER_VALUE=${10}
+	ALERT_COMPARE=${11}
+	ALERT_OLD_VALUE=-1
+	ALERT_SUMMARY=""
+	ALERT_TYPE=$unknown
+	ALERT_USER=$ALERT_DEVICE_TYPE
+
+	if [ "$ALERT_DEVICE_TYPE" == "UPS" ]; then
+		if [ "$ALERT_PROPERTY" == "input.voltage" ]; then
+			export NOTIFICATION="UpsInputNotification"
+			export TRAP=$UpsInputNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$upsInputVoltageLow
+			else
+				ALERT_TYPE=$upsInputVoltageHigh
+			fi
+			ALERT_SUMMARY="UPS '$ALERT_DEVICE' input voltage is now $ALERT_VALUE volts, trigger was $ALERT_TRIGGER_VALUE volts"
+		elif [ "$ALERT_PROPERTY" == "input.frequency" ]; then
+			export NOTIFICATION="UpsInputNotification"
+			export TRAP=$UpsInputNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$upsInputFrequencyLow
+			else
+				ALERT_TYPE=$upsInputFrequencyHigh
+			fi
+			ALERT_SUMMARY="UPS '$ALERT_DEVICE' input frequency is now $ALERT_VALUE Hz, trigger was $ALERT_TRIGGER_VALUE Hz"
+		elif [ "$ALERT_PROPERTY" == "battery.charge" ]; then
+			export NOTIFICATION="UpsBatteryNotification"
+			export TRAP=$UpsBatteryNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$upsBatteryChargeLow
+			else
+				ALERT_TYPE=$upsBatteryChargeHigh
+			fi
+			ALERT_SUMMARY="UPS '$ALERT_DEVICE' battery charge is now $ALERT_VALUE%, trigger was $ALERT_TRIGGER_VALUE%"
+		elif [ "$ALERT_PROPERTY" == "output.load" ]; then
+			export NOTIFICATION="UpsOutputNotification"
+			export TRAP=$UpsOutputNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$upsOutputLoadLow
+			else
+				ALERT_TYPE=$upsOutputLoadHigh
+			fi
+			ALERT_SUMMARY="UPS '$ALERT_DEVICE' output load is now $ALERT_VALUE%, trigger was $ALERT_TRIGGER_VALUE%"
+		elif [ "$ALERT_PROPERTY" == "temp" ]; then
+			export NOTIFICATION="UpsNotification"
+			export TRAP=$UpsNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$upsTemperatureLow
+			else
+				ALERT_TYPE=$upsTemperatureHigh
+			fi
+			ALERT_SUMMARY="UPS '$ALERT_DEVICE' temperature is now $ALERT_VALUE degrees, trigger was $ALERT_TRIGGER_VALUE degrees"
+		else
+			echo "Unsupported alert type: $ALERT_DEVICE_TYPE"
+			exit 1
+		fi
+	else
+		if [ "$ALERT_PROPERTY" == "temp" ]; then
+			export NOTIFICATION="PowerSupplyTempNotification"
+			export TRAP=$PowerSupplyTempNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$powerSupplyTemperatureLow
+			else
+				ALERT_TYPE=$powerSupplyTemperatureHigh
+			fi
+			ALERT_SUMMARY="Power Supply '$ALERT_DEVICE' temperature is now $ALERT_VALUE degrees, trigger was $ALERT_TRIGGER_VALUE degrees"
+		elif [ "$ALERT_PROPERTY" == "voltage" ]; then
+			export NOTIFICATION="PowerSupplyInputNotification"
+			export TRAP=$PowerSupplyInputNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$powerSupplyInputVoltageLow
+			else
+				ALERT_TYPE=$powerSupplyInputVoltageHigh
+			fi
+			ALERT_TYPE=$powerSupplyInputVoltageHigh
+			ALERT_SUMMARY="Power Supply '$ALERT_DEVICE' input voltage is now $ALERT_VALUE volts, trigger was $ALERT_TRIGGER_VALUE volts"
+		elif [ "$ALERT_PROPERTY" == "current" ]; then
+			export NOTIFICATION="PowerSupplyOutputNotification"
+			export TRAP=$PowerSupplyOutputNotification
+			if [ "$ALERT_COMPARE" == "lesser" ]; then
+				ALERT_TYPE=$powerSupplyOutputCurrentLow
+			else
+				ALERT_TYPE=$powerSupplyOutputCurrentHigh
+			fi
+			ALERT_SUMMARY="Power Supply '$ALERT_DEVICE' current is now $ALERT_VALUE Amps, trigger was $ALERT_TRIGGER_VALUE Amps"
+		else
+			echo "Unsupported alert type: $ALERT_DEVICE_TYPE"
+			exit 1
+		fi
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmUser" \
+		"s" \
+		"$ALERT_USER" \
+		"AlarmTriggerValue" \
+		"i" \
+		"$ALERT_TRIGGER_VALUE" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$ALERT_OLD_VALUE" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi

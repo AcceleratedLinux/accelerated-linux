@@ -1,0 +1,124 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+#DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/portmanager-signal-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+	echo "10:${10}" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	. /etc/scripts/portmanager-signal-alertv1 "$1" "$6" "$7" "$8" "$9" 
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	SerialSignalNotification=1
+	serialSignalCts=1
+	serialSignalDcd=2
+	serialSignalDsr=3
+	unknown=65535
+
+	export AGENT=""
+	export UPTIME="0"
+	export TRAP=$SerialSignalNotification
+	export NOTIFICATION="SerialSignalNotification"
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_PORT=$6
+	ALERT_PORT_LABEL=$7
+	ALERT_DEVICE=`printf "port%02d" ${ALERT_PORT}`
+	ALERT_SIGNAL=$8
+	SIGNAL_VALUE=$9
+	SIGNAL_TRIGGER=${10}
+	ALERT_TYPE=$unknown
+	ALERT_SIGNAL_NAME="unknown"
+
+	ON=1
+	OFF=0
+
+	if [ "$ALERT_SIGNAL" == "cts" -o "$ALERT_SIGNAL" == "1" ]; then
+		ALERT_SIGNAL=8
+		ALERT_TYPE=$serialSignalCts
+		ALERT_SIGNAL_NAME="CTS"
+	elif [ "$ALERT_SIGNAL" == "dcd" -o "$ALERT_SIGNAL" == "2" ]; then
+		ALERT_SIGNAL=3
+		ALERT_TYPE=$serialSignalDcd
+		ALERT_SIGNAL_NAME="DCD"
+	elif [ "$ALERT_SIGNAL" == "dsr" -o "$ALERT_SIGNAL" == "3" ]; then
+		ALERT_SIGNAL=2
+		ALERT_TYPE=$serialSignalDsr
+		ALERT_SIGNAL_NAME="DSR"
+	else
+		echo "Unsupported signal: $ALERT_SIGNAL"
+		exit 1
+	fi
+	
+	if [ "$SIGNAL_VALUE" == "on" -o "$SIGNAL_VALUE" == "1" ]; then
+		SIGNAL_VALUE=$ON
+		SIGNAL_OLD_VALUE=$OFF
+	elif [ "$SIGNAL_VALUE" == "off" -o "$SIGNAL_VALUE" == "0" ]; then
+		SIGNAL_VALUE=$OFF
+		SIGNAL_OLD_VALUE=$ON
+	else
+		exit 1
+	fi
+
+	SIGNAL_SUMMARY="Signal '$ALERT_SIGNAL_NAME' changed from $SIGNAL_OLD_VALUE to $SIGNAL_VALUE on serial $ALERT_DEVICE ($ALERT_PORT_LABEL) "
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_DEVICE" \
+		"AlarmUser" \
+		"s" \
+		"$ALERT_SIGNAL_NAME" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$SIGNAL_VALUE" \
+		"AlarmPreviousValue" \
+		"i" \
+		"$SIGNAL_OLD_VALUE" \
+		"AlarmSummary" \
+		"s" \
+		"$SIGNAL_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

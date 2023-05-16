@@ -1,0 +1,26 @@
+diff --git a/ubxtool b/ubxtool
+index 8ea783163d3..a334c32cf2f 100755
+--- a/ubxtool
++++ b/ubxtool
+@@ -2055,8 +2055,8 @@ class gps_io(object):
+         try:
+             if read_opts['target']['server'] is not None:
+                 # gpsd input
+-                start = time.clock()
+-                while read_opts['input_wait'] > (time.clock() - start):
++                start = time.perf_counter()
++                while read_opts['input_wait'] > (time.perf_counter() - start):
+                     # First priority is to be sure the input buffer is read.
+                     # This is to prevent input buffer overuns
+                     if 0 < self.ser.waiting():
+@@ -2082,8 +2082,8 @@ class gps_io(object):
+ 
+             elif self.input_is_device:
+                 # input is a serial device
+-                start = time.clock()
+-                while read_opts['input_wait'] > (time.clock() - start):
++                start = time.perf_counter()
++                while read_opts['input_wait'] > (time.perf_counter() - start):
+                     # First priority is to be sure the input buffer is read.
+                     # This is to prevent input buffer overuns
+                     # pyserial 3.0 replaces inWaiting() with in_waiting

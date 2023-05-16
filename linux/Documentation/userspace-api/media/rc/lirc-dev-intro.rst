@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GPL-2.0 OR GFDL-1.1-no-invariants-or-later
 
 .. _lirc_dev_intro:
 
@@ -64,12 +57,12 @@ on the following table.
 
     This mode is for both sending and receiving IR.
 
-    For transmitting (aka sending), create a ``struct lirc_scancode`` with
+    For transmitting (aka sending), create a struct lirc_scancode with
     the desired scancode set in the ``scancode`` member, :c:type:`rc_proto`
     set to the :ref:`IR protocol <Remote_controllers_Protocols>`, and all other
     members set to 0. Write this struct to the lirc device.
 
-    For receiving, you read ``struct lirc_scancode`` from the LIRC device.
+    For receiving, you read struct lirc_scancode from the LIRC device.
     The ``scancode`` field is set to the received scancode and the
     :ref:`IR protocol <Remote_controllers_Protocols>` is set in
     :c:type:`rc_proto`. If the scancode maps to a valid key code, this is set
@@ -110,11 +103,11 @@ on the following table.
 
     ``LIRC_MODE2_PULSE``
 
-        Signifies the presence of IR in microseconds.
+        Signifies the presence of IR in microseconds, also known as *flash*.
 
     ``LIRC_MODE2_SPACE``
 
-        Signifies absence of IR in microseconds.
+        Signifies absence of IR in microseconds, also known as *gap*.
 
     ``LIRC_MODE2_FREQUENCY``
 
@@ -124,11 +117,16 @@ on the following table.
 
     ``LIRC_MODE2_TIMEOUT``
 
-        If timeout reports are enabled with
-        :ref:`lirc_set_rec_timeout_reports`, when the timeout set with
-        :ref:`lirc_set_rec_timeout` expires due to no IR being detected,
-        this packet will be sent, with the number of microseconds with
-        no IR.
+        When the timeout set with :ref:`lirc_set_rec_timeout` expires due
+        to no IR being detected, this packet will be sent, with the number
+        of microseconds with no IR.
+
+    ``LIRC_MODE2_OVERFLOW``
+
+        Signifies that the IR receiver encounter an overflow, and some IR
+        is missing. The IR data after this should be correct again. The
+        actual value is not important, but this is set to 0xffffff by the
+        kernel for compatibility with lircd.
 
 .. _lirc-mode-pulse:
 
@@ -142,6 +140,13 @@ on the following table.
     of entries.
 
     This mode is used only for IR send.
+
+*************************************
+Data types used by LIRC_MODE_SCANCODE
+*************************************
+
+.. kernel-doc:: include/uapi/linux/lirc.h
+    :identifiers: lirc_scancode rc_proto
 
 ********************
 BPF based IR decoder

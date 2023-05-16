@@ -1,0 +1,1378 @@
+#!/bin/bash
+
+# This script:
+#  - manages a directory of cellular modem firmware images, and
+#  - runs the right firmware flashing tool to upgrade a modem
+#     * Currently only supports the Sierra MC7354.
+#
+# Operations performed by this script are:
+#   -a   automated upgrade for current carrier
+#   -f   show local fingerprint
+#   -u   check remote server and show remote fingerprint
+#   -d   download remote firmware files to sync with remote
+#   -c   flash firmware images (for a carrier) onto attached cellular modem
+#   -m   flash specific firmware image files onto cellular modem
+#   -l   list known carriers for modem (useful for -c's argument)
+#   -L   list carriers downloaded and installed firmware versions
+#   -U   upgrade all installed carriers' PRI along with required firmware images
+
+# cellfw directory layout
+#
+# This script works with a local "cellfw" directory, which is a partial
+# mirror of a similar directory on a remote server. The local cellfw
+# directory is found via the 'config.cellmodem.firmware.directory' config.
+# The URL to the remote server is in 'config.cellmodem.firmware.update.url'.
+# The layout of the remote cellfw directory is as follows:
+#
+# cellfw/
+#   SHA1SUMS
+#       A list of SHA1 hashes for each file in the
+#       remote directry. This also indicates the
+#       maximum set of files needed.
+#   cell-firmware.txt
+#       A comma-separated table indicating
+#       which firmware files are used with which modems,
+#       carriers, software and hardware models.
+#       The columns in this file are:
+#         1 model_code   (from setfset -m)
+#         2 cellfwgroup  (from setfset)
+#         3 sw_version   (see version_lt.sh)
+#         4 carrier_id
+#         5 modem_product
+#         6 filenames    (whitespace-separated)
+#   carriers.txt
+#       A whitespace-separated table mapping carrierid
+#       to generic names, intended for display use.
+#   carrier-canon.txt
+#	A table of regex matches for guessing carrierid
+#	from externally supplied strings.
+#   (other files)
+#       Arbitarily named binary firmware files
+#
+# This script maintains a local cellfw/ partial mirror of just the
+# firmware images useful for the current device, plus some other files:
+#
+# cellfw/
+#   localfiles.txt
+#       A plain list of the files actually downloaded to the cellfw
+#       directory from the remote server.
+#   localdb.txt
+#       An extract of cell-firmware.txt with columns 1,3,4,5 omitted,
+#       and only with the rows relevant to the current device.
+#       The first row of the file is a header and begins
+#       with a '#' character. The header row is of the form:
+#         #<modem_product>,<model_code>,<cellfwgroup>,<sw_version>
+#       Subsequent lines are comma-separated rows of the form:
+#         1 carrier_id
+#         2 filenames
+
+# An ephemeral directory is used for -u and -d operations. If not
+# specified, it defaults to "/tmp/cellfw.update.$USER". This directory
+# contains (after successful -u):
+#   SHA1SUMS	        - file hashes			<hash> <name>
+#   SIZES               - file sizes from server	<nbytes> <name>
+#   cell-fimware.txt    - cell-firmware mapping file (compressed)
+#   localdb.txt		- cell-firmware extract
+#   localfiles.txt      - list of all files from localdb.txt, and some
+#                         (only exists if last -u succeeded)
+
+# Status information is conveyed to the UI via infod fields:
+#
+#   config.cellmodem.firmware.status
+#     This field contains either the current # status message (eg
+#     "Downloading foo.txt"), or the last error message (eg "Error:
+#     bar"), or "Success" if the script exited
+#     with success.  If the script aborts unexpectedly, the .status
+#     field will contain the last status message. The UI is expected
+#     to detect this situation.
+#
+#   config.cellmodem.firmware.pid
+#     PID of the current download/flash process, used for UI to
+#     determine if the script is starting, has crashed etc
+#
+#   config.cellmodem.firmware.fingerprint
+#   config.cellmodem.firmware.fingerprint-date
+#     local cellfw fingerprint hash and date, set as side-effect
+#     of -f or -d commands
+#
+#   config.cellmodem.firmware.update.has-updates
+#     Indicates a summary of the delta file; either 'yes' or 'no'.
+#
+#   config.cellmodem.firmware.update.delta
+#     path to a file containing files actions that will be
+#     performed by the next -d option. The delta is created
+#     and this field is set by as the -u command. It is cleared
+#     by -d.
+#
+#   config.cellmodem.firmware.update.fingerprint
+#   config.cellmodem.firmware.update.fingerprint-date
+#     remote cellfw fingerprint hash and date, set as side-effect
+#     of -u command, and cleared by -d.
+
+. /etc/scripts/version_lt.sh
+
+MAPFILE="cell-firmware.txt"
+SHA1SUMS="SHA1SUMS"				# SHA1 file checksums
+LOCALFILES="localfiles.txt"			# files maintained locally
+LOCALDB="localdb.txt"
+CARRIERSDB="carriers.txt"
+COMMONFILES="carrier-canon.txt"			# other files we always sync
+
+CURLOPTS="--compressed -S -s -f --remote-time"
+LOGGEROPTS="-t cell-fw-update"
+OP_SUCCESS=""					# Cellfw operation success
+
+CELLFWDIR=$(config -g config.cellmodem.firmware.directory | cut -d' ' -f 2)
+URL_BASE=$(config -g config.cellmodem.firmware.update.url | cut -d' ' -f 2)
+if [ -z "$URL_BASE" ]; then
+    URL_BASE=http://ftp.opengear.com/download/cellfw/	# URL_BASE must end with /
+fi
+
+set_status () {
+	# Broadcast our status to infod, syslog and stderr
+	logger $LOGGEROPTS ${OPT_v:+-s} -p user.info "$*"
+	infod_client -o push -p config.cellmodem.firmware.status -d "$*"
+}
+
+exit_with_msg () {
+	# Fatal exit
+	logger $LOGGEROPTS -s -p user.err "$2*"
+
+	# Run atexit cmds
+	run_atexit_cmds
+
+	# Set final status to be "Error: ..." so the UI can show the failure
+	infod_client -o push -p config.cellmodem.firmware.status -d "Error: $*"
+	exit $1
+}
+
+die () {
+	exit_with_msg 1 "$*"
+}
+
+succeed () {
+	exit_with_msg 0 "$*"
+}
+
+warn () {
+	# Non-fatal warning
+	logger $LOGGEROPTS -s -p user.warning "$*"
+}
+
+atexit () {
+	# Adds a command to be run later when this script exits.
+	# Note: atexit commands should not call set_status in minor cellfw operations, such as
+	# do_fingerprint or do_list_carriers. These are intended to be quiet operations that don't
+	# propagate status to the UI (except on error).
+	ATEXIT_CMDS=("$*" "${ATEXIT_CMDS[@]}")
+
+	# Trap the atexit_cmds - this should never be used since run_atexit_cmds is called
+	# manually before exit, but keep this trap just in case
+	trap 'run_atexit_cmds' 0
+}
+
+run_atexit_cmds () {
+	for cmd in "${ATEXIT_CMDS[@]}"; do
+		if [ $OPT_v ]; then
+		    echo "+ $cmd" >&2		# XXX debug
+		fi
+		eval "$cmd"			8<&- 9<&- # (hide lock fds)
+	done
+
+	ATEXIT_CMDS=()
+}
+
+new_tmpdir () {
+	# Delete and recreate a directory in temporary storage, setting the
+	# shell variable $tmpdir to point at it.
+	# The directory may be in a ramdisk, so don't use it for huge files.
+	if [ ! "$tmpdir" ]; then
+	    tmpdir=/tmp/cell-fw-update.$$
+	    atexit rm -rf $tmpdir
+	fi
+	rm -rf $tmpdir
+        mkdir $tmpdir || die "cannot create $tmpdir"
+}
+
+wait_for_modem_up () {
+	# Wait for cellctld to report device status as RESPONSIVE
+	logger $LOGGEROPTS "Waiting for cellctld to attach to modem"
+
+	# Delete any stale state from infod
+	infod_client -o delete -p config.cellmodem.cellctl.status.device-state
+
+	logger $LOGGEROPTS "Waiting for cellctld to report modem responding"
+	count=0
+	while [ "$(infod_client -q -o get -p config.cellmodem.cellctl.status.device-state)" != "RESPONDING" ]; do
+		sleep 2
+		count=$(expr $count + 1)
+		if [ $count -ge 60 ]; then
+			warn "Timed out waiting for cellctld to report modem responding"
+			return
+		fi
+	done
+
+	logger $LOGGEROPTS "Waiting for cellctld to respond to client requests"
+	count=0
+	while ! cellctl --ping &> /dev/null; do
+		logger $LOGGEROPTS "Cellctld not responding to client requests yet"
+		sleep 2
+		count=$(expr $count + 1)
+		if [ $count -ge 30 ]; then
+			warn "Timed out waiting for cellctld to respond to client requests"
+			return
+		fi
+	done
+}
+
+#------------------------------------------------------------
+# modem firmware flashing
+
+quiesce_system () {
+	# Temporarily disables all modem-using services we can think of
+
+	if [ $quiesced_already ]; then return; fi
+
+	local cell_enabled=$(config -g config.cellmodem.ppp.dialer.enabled |
+								cut -d' ' -f 2)
+	local sms_method=$(config -g config.system.sms.method | cut -d' ' -f 2)
+
+	# If we need to disable any services via conman,
+	# stop the keepalive first
+	if [ "$sms_method" = cellular -o \
+	     "$cell_enabled" = on ]
+	then
+		conman_command conman stop_keepalive
+		atexit  conman_command conman start_keepalive
+	fi
+
+	# If GPS is enabled, send SIGHUP to portmanager at exit to reload GPS port
+	if config -g config.ports | grep "nmea.enabled on"; then
+		atexit killall -HUP portmanager
+	fi
+
+	# Disable SMS
+	if [ "$sms_method" = cellular ]; then
+		set_status "Disabling cellular SMS"
+		conman_command smsd stop
+		atexit  conman_command smsd start
+		atexit set_status "Enabling cellular SMS"
+	fi
+
+	# Disconnect current data session and disable modem
+	if [ "$cell_enabled" = on ]; then
+		set_status "Disabling cell connection"
+		conman_command dial-cellmodem stop
+		atexit  conman_command dial-cellmodem start
+		atexit set_status "Enabling cell connection"
+	fi
+
+	# Skip over waiting for cellmodem to be disconnected
+	# if it was disabled in the first place
+	mmpath=`mmcli -L | grep ModemManager1 | awk '{print $1}'`
+	if [ -n "$mmpath" ] ; then
+		if ! mmcli -m $mmpath | grep -E -q "state: 'disabled'" ; then
+			count=0
+			while [ "$(infod_client -q -o get -p config.cellmodem.cellctl.status.session-state)" != "DISCONNECTED" ]; do
+				sleep 2
+				count=$(expr $count + 1)
+				if [ $count -ge 60 ]; then
+					warn "Timed out waiting for cellctld to report modem disconnected"
+					break
+				fi
+			done
+		fi
+	fi
+
+	if [ ! -f /var/run/.modem/.cellctl_wait ]
+	then
+
+		# atexit commands are run in reverse order!
+		# Normally, we shut down things in order of dependency,
+		# and atexit will start them up again in reverse order,
+		# so we can group the logical components together.
+
+		# Stop the cellctl --infod-interval client.
+		# /var/run/.modem/.cellctl_wait only affects the
+		# infod mode.
+		# OG-2005
+		echo cell-fw-update $$ > /var/run/.modem/.cellctl_wait
+		pkill cellctl$
+
+		# on exit, re-run cell-carrier script, which retrieves and
+		# saves the current carrier
+		atexit /etc/scripts/cell-carrier
+		atexit set_status "Updating new cellular carrier status"
+		atexit wait_for_modem_up
+		# cellctl --ping will not succeed until wait file is removed
+		atexit rm -f /var/run/.modem/.cellctl_wait
+
+		# suspend cellctld
+		logger $LOGGEROPTS "Detaching cellctld service"
+		pkill -USR1 cellctld
+		atexit pkill -USR1 cellctld
+		atexit logger $LOGGEROPTS "Re-attaching cellctld service"
+
+		# terminate ModemManager
+		logger $LOGGEROPTS "Terminating ModemManager service"
+		pkill -TERM ModemManager
+		count=0
+		while [ $(pgrep ModemManager) ]; do
+			sleep 1
+			count=$(expr $count + 1)
+			if [ $count -ge 5 ]; then
+				warn "Timed out waiting for ModemManager to terminate"
+			fi
+		done
+		# (no need to explicitly atexit-restart ModemManager,
+		# because D-Bus will do that when cellctld re-attaches)
+	fi
+
+	quiesced_already=1
+}
+
+# Return the /sys path to the USB device that implements the given /dev/ttyXX
+cellmodem_syspath () {
+	local ttypath=$(realpath $1)
+	local devpath=$(realpath /sys/class/tty/${ttypath#/dev/})
+	echo $devpath/device/../..
+}
+
+sierra_flash_modem () { # <filename>...
+	# Runs the qmi-firmware-update tool to upload the given files
+	# onto the current Sierra Wireless cellular modem.
+	# (reads CELLFWDIR)
+
+	# First, create a temporary directory of symlinks to the given files
+	# because the fwdldarm tool is silly.
+	new_tmpdir
+	for file; do
+		ln -s "$CELLFWDIR/$file" "$tmpdir/$file" ||
+			die "cannot create symlink $tmpdir/$file"
+	done
+
+	# For cellmodems that have multiple firmware image slots such as MC74xx
+	# family and EM7565:
+	# 1. the preferred carrier is controlled by the per-SIM, put it another way,
+	#    the cell-fw-update script is used ONLY to (re-)install firmware images
+	#    than to change carriers
+	# 2. the last flashed carrier image is preferred by default and saved into
+	#    cellmodem_carrier (by the cell-carrier script)
+	local action=
+	if [ -f /var/run/.modem/cellmodem_change_carrier_by_sim ]; then
+		action="upgrade"
+	else
+		# carrier change invalidates sim config (OG-2632)
+		# but make sure it's a change, not a general firmware upgrade
+		read cur_carrier < /var/run/.modem/cellmodem_carrier
+		if [ "x$cur_carrier" != "x$CARRIER" ] ; then
+			config -d config.cellmodem.ppp.dialer.enabled -d config.cellmodem.sims -r dialin
+			action="carrier change"
+		else
+			action="upgrade"
+		fi
+	fi
+	infod_client -o push -p config.cellmodem.firmware.last-action -d "$action"
+
+	# Follow /dev/cellmodem01 to the /sys parent device
+	local device=$(infod_client -q -o get -p config.cellmodem.cellctl.info.device)
+	if [ -z "$device" ]; then
+		device=/dev/cellmodem01
+
+		# Once the cellmodem resets, udev-cellmodem > rc.cellmodem will setup the
+		# symlink of /dev/cellmodem01, but it may take a bit longer on slower devices
+		count=0
+		while [ ! -e "$device" ]; do
+			logger $LOGGEROPTS "$device not established yet"
+			sleep 5
+			count=$(expr $count + 1)
+			if [ $count -ge 12 ]; then
+				die "Timed out waiting for $device to be established, aborting..."
+			fi
+		done
+	fi
+
+	local syspath=$(cellmodem_syspath $device)
+	local VID PID
+	read VID <$syspath/idVendor || die "no VID for $device ($syspath)"
+	read PID <$syspath/idProduct
+	local qfu_dev="--vid-pid=$VID:$PID"
+
+	# Verbose mode when only -vv supplied
+	local qfu_verbose=
+	if [[ $OPT_v -ge 2 ]]; then
+	    qfu_verbose="--verbose"
+	fi
+
+	vendor=$(infod_client -q -o get -p config.cellmodem.cellctl.info.manufacturer)
+	if [ -z "$vendor" ]; then read vendor <$syspath/manufacturer; fi
+	case $vendor in
+	  *Sierra*) VID=1199;;
+	  *) die "modem is not Sierra Wireless: $vendor";;
+	esac
+
+	# Shut down all the things that interfere with the modem
+	# qfu requires that ModemManager be shut down.
+	quiesce_system
+
+	# If CELLFW_DEBUG is enabled, drop into a shell after quiescing
+	if [ -t ] && [ "$CELLFW_DEBUG" ] ; then
+		echo "DEBUG SHELL (modem quiesced for diag; exit to continue)"
+		PS1='cell-fw-update>\$ ' bash -i
+	fi
+
+	# Send all the files now in $tmpdir/ to the modem.
+	# qfu has three operating modes: verify, update, reset
+	# In update mode it will calmly wait until the modem
+	# has "come back".
+	if [ -n "$CURRENT_CARRIER" ]; then
+		set_status "Sending $CURRENT_CARRIER firmware to modem"
+	else
+		set_status "Sending firmware to modem"
+	fi
+	if ! /bin/qmi-firmware-update $qfu_dev $qfu_verbose \
+		--update \
+		"$tmpdir"/* \
+		2>&1 | tee -a /var/log/cellfirmware.log
+	then
+		warn "$*: failed to flash; see /var/log/cell-firmware.log"
+		die "Failed to flash firmware"
+	fi
+
+	set_status "Reconfiguring modem"
+
+	# Wait for all udev events to be handled, but there is no guarantee
+	# that rc.cellmodem will be finished once this command returns
+	udevadm settle
+
+	# Force update of preferred info and prl version
+	rm -f /var/run/.modem/.cellmodem_fw_pref
+	rm -f /var/run/.modem/.cellmodem_prl_ver
+
+	# Set Success flag to print status at the end
+	OP_SUCCESS="yes"
+}
+
+
+#------------------------------------------------------------
+# remote directory synchronzing
+
+curl_or_die () { # [<curl-args>] <url>
+	# Same as curl, but logs a useful warning message on error
+	# Also sets download status
+
+	if [ ! "$curltmp" ]; then
+		curltmp=/tmp/curl.out.$$
+		atexit rm -f $curltmp
+	fi
+
+	# Temporarily change the tentative message on error to indicate fetch failure.
+	# In case we succeed, set the tentative message back to upgrade failure before continuing.
+	AUTOMATED_UPGRADE_MESSAGE='Check was run, could not fetch updates'
+	set_status "Downloading ${!#} ..."
+	curl $CURLOPTS -w '%{http_code}' "$@" >$curltmp
+        case $? in
+		0) set_status "Downloaded $file"; AUTOMATED_UPGRADE_MESSAGE='Check was run, upgrade failed'; return 0;;
+		1) die "Unsuported protocol: $url";;
+		3|62) die "Malformed URL: $url";;
+		5) die "Could not resolve proxy: $url";;
+		6) die "Could not resolve host: $url";;
+		7) die "Failed to connect to host: $url";;
+		8|11|13|14|21|30|31|36|84|87|88) die "curl FTP error $?: $url";;
+		9|69) die "Access denied ($?): $url";;
+		15) die "FTP can't get host: $url";;
+		17) die "FTP couldn't set binary: $url";;
+		18) die "Partial file transferred: $url";;
+		19) die "FTP couldn't access file: $url";;
+		22) die "HTTP error $(cat $curltmp) getting $url";;
+		23) die "Local write error: $url";;
+		26) die "Read error: $url";;
+		27) die "Out of memory: $url";;
+		28) die "Operation timeout: $url";;
+		33|34) die "curl HTTP error $?: $url";;
+		35|51|53|59|64|66|80|82|83) die "curl SSL error $?: $url";;
+		47) die "Too many redirects: $url";;
+		55) die "Failed sending network data: $url";;
+		56) die "Failed receiving network data: $url";;
+		60) die "Peer cert cannot be authenticated: $url";;
+		61|75|76) die "curl transfer encoding error ($?): $url";;
+		63) die "Maximum file size exceeded: $url";;
+		67|74) die "Username or password not accepted ($?): $url";;
+		68) die "File not found: $url";;
+		70) die "Out of disk space on server: $url";;
+		71|72) die "curl TFTP error $?: $url";;
+		73) die "File exists: $url";;
+		77) die "Error accessing SSL CA cert: $url";;
+		78) die "Resource referenced in URL does not exist: $url";;
+		89) die "No connection available: $url";;
+		*) die "curl error $?: $url";;
+	esac
+	return 1
+}
+
+download_file() { # [-d <dir>] [-h <hash>] <filename> [curl-opts]
+
+	# Downloads a single file from $URL_BASE/ into <dir>
+	# or $CELLFWDIR/, and performs a comparison with any
+	# previous download.
+	#
+	# Only checks the hash if a -h option is supplied
+	#
+	# Calls 'die' on network or filesystem failure.
+	# Calls 'die' if SHA1 sum mismatch
+	# Uses a filename ending in ".partial" while downloading.
+	# Returns 1 if the file downloaded made no change
+	#         0 if the file downloaded changed on disk or was new
+
+	local dstdir="$CELLFWDIR"
+	local hash=""
+
+	case $1 in -d) dstdir="$2"; shift 2;; esac
+	case $1 in -h) hash="$2"; shift 2;; esac
+	local file="$1"; shift
+
+	local url="${URL_BASE}/${file}"
+	local dst="$dstdir/$file"
+	local partial="$dst.partial"
+	local rv
+
+	if [ ! $OPT_C ]; then
+		rm -f "$partial" # no continuing
+	fi
+
+	case $file in
+		*%*|*/.*|.*|/*) die "illegal characters in filename $file";;
+		*/*) local filedir="${file%/*}"
+		     if [ ! -d "$dstdir/$filedir" ]; then
+			warn "creating $dstdir/$filedir/"
+			mkdir -p "$dstdir/$filedir"
+		     fi ;;
+	esac
+
+	curl_or_die ${OPT_C:+-C -} ${OPT_v:+-\#} -o "$partial" "$@" "$url"
+	if [ ! -e "$dst" ]; then
+		rv=0 # new dst
+	else
+		cmp -s "$partial" "$dst"
+		rv=$((1-$?))
+	fi
+
+	if [ -n "$hash" ] &&
+	   [ "$(sha1 <"$partial")" != "$hash" ]
+	then
+		die "SHA1 mismatch downloading $url"
+	fi
+
+	rm -f "$dst"
+	mv "$partial" "$dst" || die "cannot overwrite $dst"
+
+	set_status "Finished downloading $file"
+	return $rv
+}
+
+sha1 () { # < file
+	# Prints SHA1 checksum of input
+	sha1sum | cut -d' ' -f1
+}
+
+sha1_find () { # filename < sha1sums
+	# In a SHA1SUMS file, finds a filename's recorded hash
+	awk 'substr($0,43) == filename { print $1; ok=1 } END { exit ok?0:1 }' filename="$1"
+}
+
+sha1_verify () { # file...
+	# Check the SHA1 hashes of known files
+	for file; do
+		local expected=$(sha1_find "$file" <"$CELLFWDIR/$SHA1SUMS")
+		if [ -z "$expected" ]; then
+		    die "$file: no entry in $CELLFWDIR/$SHA1SUMS; override with --unsafe"
+		else
+		    local actual=$(sha1 <"$CELLFWDIR/$file")
+		    if [ x"$expected" != x"$actual" ]; then
+			die "$file: SHA1 mismatch with $CELLFWDIR/$SHA1SUMS; override with --unsafe"
+		    fi
+		fi
+	done
+}
+
+filelist_diff () { # <file1> <file2>
+	# Generates a file difference list.  Each line is
+	# a filename preceded by "- " or "+ ". If file1
+	# doesn't exist it is assumed to be empty.
+	if [ ! -s "$1" ]; then
+		sed 's/^/+ /' "$2"
+	else
+		diff -U0 "$1" "$2" |
+		  sed -n '1,2d;s/^[-+]/& /p'
+	fi
+}
+
+do_fingerprint () { # infod-prefix sumsfile
+	# Compute the fingerprint of the cellfw directory,
+	# and send the result to both infod and stdout
+	# (reads CELLFWDIR)
+	local prefix="${1-config.cellmodem.firmware}"
+	local sumsfile="${2-$CELLFWDIR/$SHA1SUMS}"
+	local fingerprint=$(sha1 < "$sumsfile")
+	local date=$(date +'%Y-%m-%d' -r "$sumsfile")
+
+	infod_client -o push -p $prefix.fingerprint -d "$fingerprint"
+	infod_client -o push -p $prefix.fingerprint-date -d "$date"
+	echo "$fingerprint $date"
+}
+
+do_update () {
+	local file old_localfiles new_mapfile map_hash
+	local nosha="-                                       "
+	# Downloads the SHA1SUMs and cell-firmware.txt files
+	# into EPHEMDIR, and builds some temporary file lists for
+	# later use by do_download().
+	# (reads CELLFWDIR, writes EPHEMDIR)
+
+	rm -f "$EPHEMDIR"/*
+	mkdir -p "$EPHEMDIR" || die "$EPHEMDIR: cannot create temp area"
+
+	if [ ! $OPT_unsafe ]; then
+	    # Always download the sums file
+	    download_file -d "$EPHEMDIR" $SHA1SUMS
+	else
+	    # fake an empty ephem sums file to keep logic simple
+	    > "$EPHEMDIR/$SHA1SUMS"
+	fi
+
+	set_match_vars_for_system
+	if [ ! $OPT_unsafe ] && [ ! "$modem_product" ]; then
+	    die "Modem not yet ready, or missing"
+	fi
+
+	# Get the carrier->firmware mapping file
+	if [ $OPT_unsafe ]; then
+	    # Always re-download the mapping file in --unsafe mode
+	    download_file -d "$EPHEMDIR" $MAPFILE
+	    new_mapfile="$EPHEMDIR/$MAPFILE"
+	else
+	    # Re-use the cellfw mapfile when its hash matches
+	    if [ -e "$CELLFWDIR/$MAPFILE" ] &&
+	       local map_hash=$(sha1_find $MAPFILE <"$EPHEMDIR/$SHA1SUMS") &&
+	       [ "$(sha1 <"$CELLFWDIR/$MAPFILE")" = "$map_hash" ]
+	    then
+		new_mapfile="$CELLFWDIR/$MAPFILE"
+	    else
+		download_file -d "$EPHEMDIR" -h "$map_hash" $MAPFILE
+		new_mapfile="$EPHEMDIR/$MAPFILE"
+	    fi
+	fi
+
+	# Generate the LOCALDB list of files. This is a subset
+	# of $MAPFILE containing lines relevant to the current
+	# "hard" configuration.
+	# Always rebuild this in case the local modem has changed type.
+
+	set_status "Rebuilding locally-relevant firmware list"
+	extract_localdb_for_system <"$new_mapfile" \
+				   >"$EPHEMDIR/$LOCALDB"
+
+	if [ $OPT_v ]; then
+		echo "modem: $modem_product"
+		echo "model: $modelcode${cellfwgroup:+ cellfwgroup=$cellfwgroup}"
+		echo "swver: $swversion"
+		echo "localdb:"
+		sed '1d;s/^/  /' "$EPHEMDIR/$LOCALDB" | grep . ||
+		   echo "  (no files for this hardware combination)"
+	fi >&2
+
+	if awk 'END {exit NR <= 1 ?0:1}' "$EPHEMDIR/$LOCALDB"; then
+		# If less than 2 lines in the localdb; then this means
+		# the remote server has no idea about our modem type,
+		# and if we trust it then we would probably end up
+		# deleting everything. To save the hassle, we just error
+		# out here.
+		AUTOMATED_UPGRADE_MESSAGE='Check was run, no updates available'
+		warn "No firmware files found for <$modem_product,$modelcode,$cellfwgroup,$swversion>"
+		if [ ! $OPT_unsafe ]; then
+		    die "No firmware files found for this hardware combination"
+		fi
+	fi
+
+	# Generate the new local list; that is, all the files which
+	# we will need locally in order to flash valid firmware
+
+	{ awk -F, 'NR > 1 { gsub(/ /,"\n",$2); print $2 }' \
+		<"$EPHEMDIR/$LOCALDB"
+	  # other files we want to manage
+	  echo $MAPFILE
+	  echo $CARRIERSDB
+	  for f in $COMMONFILES; do echo $f; done
+	} | grep -v '^$\|^/\|/\.\|^\.\|%' | sort -u > "$EPHEMDIR/$LOCALFILES"
+
+	# Generate the change delta, which is meant for display in the UI
+	# and for processing by the download step (-d). The change delta
+	# is a file with lines of the form:
+	#
+	#  delete   -     file		file not at remote, will delete local
+	#  keep     hash  file		already in sync, will keep local
+	#  copy     -     file		new file just obtained via update
+	#                                   process, will copy
+	#  download rhash file		new file found at remote, will
+	#                                   download
+
+	if [ -e "$CELLFWDIR/$LOCALFILES" ]; then
+		old_localfiles="$CELLFWDIR/$LOCALFILES"
+	else
+		old_localfiles=/dev/null
+	fi
+
+	{
+	  # disappearing files: delete them all
+	  comm -23 "$old_localfiles" "$EPHEMDIR/$LOCALFILES" |
+	    sed -e "s,^,delete   $nosha ,"
+	  # appearing and continuing files
+	  comm -1 "$old_localfiles" "$EPHEMDIR/$LOCALFILES" |
+	    while read file; do
+		local rhash
+		if [ $OPT_unsafe ]; then
+		    if [ -e "$EPHEMDIR/$file" ]; then
+		       # only small/metadata files are in $EPHEMDIR (no big binaries)
+		       echo "copy     $nosha $file"
+		    elif [ -e "$CELLFWDIR/$file" ]; then
+		       echo "keep     $nosha $file"
+		    else
+		       echo "download $nosha $file"
+		    fi
+		elif rhash=$(sha1_find "$file" <"$EPHEMDIR/$SHA1SUMS"); then
+		    if [ -e "$CELLFWDIR/$file" ] &&
+		       set_status "Checking existing file $file" >&2 &&
+		       [ "$(sha1 <"$CELLFWDIR/$file")" = "$rhash" ]
+		    then
+		       # existing file matches its new hash
+		       echo "keep     $rhash $file"
+		    elif [ -e "$EPHEMDIR/$file" ] &&
+		         set_status "Checking existing file $file"  >&2&&
+			 [ "$(sha1 <"$EPHEMDIR/$file")" = "$rhash" ]
+		    then
+		       echo "copy     $rhash $file"
+		    else
+		       echo "download $rhash $file"
+		    fi
+		else
+		    if [ ! -e "$EPHEMDIR/$file" ]; then
+		       # This is a desired, non-synthetic file ($COMMONFILES)
+		       # that wasn't found on the server. We will warn
+		       # about that, but trust that the server is correct and
+		       # delete our local copy.
+		       warn "Lost common file $file from $URL_BASE"
+		       if [ -e "$CELLFWDIR/$file" ]; then
+		           echo "delete   $nosha $file"
+		       fi
+		    elif [ -e "$CELLFWDIR/$file" ] &&
+		       cmp -s "$CELLFWDIR/$file" "$EPHEMDIR/$file"
+		    then
+		       # existing file identical to a synthetic file
+		       echo "keep     $nosha $file"
+		    else
+		       echo "copy     $nosha $file"
+		    fi
+		fi
+	    done
+	} > "$EPHEMDIR/delta"
+
+	# re-order the delta file so that downloads happen first
+	{ grep ^download "$EPHEMDIR/delta";
+	  grep -v ^download "$EPHEMDIR/delta"; } > "$EPHEMDIR/delta.tmp"
+	mv "$EPHEMDIR/delta.tmp" "$EPHEMDIR/delta"
+
+	if [ ! $OPT_unsafe ]; then
+	    do_fingerprint config.cellmodem.firmware.update "$EPHEMDIR/$SHA1SUMS"
+	fi
+
+	# synthetic files, and the SHA1SUMS handled at the end
+	# (ignore SHA1SUMS in unsafe mode)
+	for file in $LOCALFILES $LOCALDB $([ $OPT_unsafe ] || echo $SHA1SUMS); do
+	    if [ -e "$CELLFWDIR/$file" ] &&
+	       cmp -s "$CELLFWDIR/$file" "$EPHEMDIR/$file"
+	    then
+	        rm -f "$EPHEMDIR/$file"
+	        echo "keep     $nosha $file" >> "$EPHEMDIR/delta"
+	    else
+	        echo "copy     $nosha $file" >> "$EPHEMDIR/delta"
+	    fi
+	done
+
+	if ! echo space > "$EPHEMDIR/space_check"; then
+		die "cannot write to $EPHEMDIR"
+	fi
+
+	cat "$EPHEMDIR/delta"
+	infod_client -o push -p config.cellmodem.firmware.update.delta -d "$EPHEMDIR/delta"
+
+	if grep -q '^[^k]' <"$EPHEMDIR/delta"; then     # checks for any non-"keep" lines
+	    infod_client -o push -p config.cellmodem.firmware.update.has-updates -d yes
+	    if [ $OPT_v ] && [ ! $OPT_d ]; then
+	       echo "re-run with -d to apply these changes to $CELLFWDIR" >&2
+	    fi
+	else
+	    infod_client -o push -p config.cellmodem.firmware.update.has-updates -d no
+	fi
+
+        rm -f "$EPHEMDIR/space_check"
+
+	# Set Success flag to print status at the end
+	OP_SUCCESS="yes"
+}
+
+do_download () {
+	# Applies the actions of $EPHEMDIR/delta as previously
+	# constructed by do_update().
+	# (writes EPHEMDIR, writes CELLFWDIR)
+	local op hash file
+
+	infod_client -o delete -p config.cellmodem.firmware.fingerprint
+	infod_client -o delete -p config.cellmodem.firmware.fingerprint-date
+
+	if [ ! -e "$EPHEMDIR/delta" ]; then
+		die "Missing update info; try again with -u"
+	fi
+
+	while read op hash file; do
+	    case $op in
+		download)
+		   if [ $OPT_unsafe ] || [ x"$hash" = x"-" ]; then
+		       download_file "$file"
+		   else
+		       download_file -h "$hash" "$file"
+		   fi
+		   ;;
+		delete)
+		   set_status "Deleting $file"
+		   rm -f "$CELLFWDIR/$file"
+		   ;;
+		copy)
+		   set_status "Copying $file"
+		   cp -p "$EPHEMDIR/$file" "$CELLFWDIR/$file" ||
+			die "cannot copy to $CELLFWDIR/$file"
+		   rm -f "$EPHEMDIR/$file"
+		   ;;
+	    esac
+	done <"$EPHEMDIR/delta"
+
+	rm -f "$EPHEMDIR/delta"
+
+	infod_client -o delete -p config.cellmodem.firmware.update.delta
+	infod_client -o delete -p config.cellmodem.firmware.update.fingerprint
+	infod_client -o delete -p config.cellmodem.firmware.update.fingerprint-date
+	infod_client -o delete -p config.cellmodem.firmware.update.has-updates
+
+	# Set Success flag to print status at the end
+	OP_SUCCESS="yes"
+}
+
+#------------------------------------------------------------
+# automated upgrade
+
+do_auto_remember_state () {
+	# Remember what our current fw file state is
+	# so we can check later if it changed.
+	# (reads CELLFWDIR)
+
+	# determine what carrier we currently use
+	local carrier
+	/etc/scripts/cell-carrier
+	read carrier < /var/run/.modem/cellmodem_carrier
+
+	# remember the set of currently stored (and presumably flashed)
+	# files that pertain to the currently-selected carrier
+	OLD_RELEVANT_FILES=$(hash_carrier_relevant_files $carrier)
+}
+
+do_auto_check_changed () {
+	# Checks if the set of carrier-relevant files changed
+	# since do_auto_remember_state() was run. Return success iff it changed.
+	# (reads CELLFWDIR)
+
+	# determine what carrier we will next be using
+	local carrier
+	if [ -n "$CARRIER" ]; then
+		carrier=$CARRIER
+	else
+		/etc/scripts/cell-carrier
+		read carrier < /var/run/.modem/cellmodem_carrier
+	fi
+
+	# rescan for the (new?) list of relevant files
+	local relevant_files=$(hash_carrier_relevant_files $carrier)
+
+	[ x"$relevant_files" != x"$OLD_RELEVANT_FILES" ] # sets return code
+}
+
+hash_carrier_relevant_files () {
+	# Generate a comparable string representation of the
+	# set of files we would send to a modem for firmware upgrade.
+	files_for_carrier "$CARRIER" | sort -u |
+	    while read file; do
+		echo "$file"
+		sha1_find $file < "$CELLFWDIR/$SHA1SUMS"
+	    done
+}
+
+
+#------------------------------------------------------------
+# carrier ID mapping
+
+do_list_carriers () {
+
+	# Print the available carriers along with diaply names
+	# There should only be one line per carrier in localdb.txt
+	# Be careful to emit the lines using TAB separator
+	# Don't show names for carriers we can't use.
+	# If carriers.txt is missing, pretend IDs are display names
+	# (reads CELLFWDIR)
+	local id name cid cname
+	if [ -s "$CELLFWDIR/$LOCALDB" ]; then
+		while IFS=, read -r id _ _; do
+			case $id in "#"*) continue;; esac
+			name=
+			if [ -e "$CELLFWDIR/$CARRIERSDB" ]; then
+				while read -r cid cname; do
+				    if [ "$id" = "$cid" ]; then
+					name="$cname"
+					break
+				    fi
+				done < "$CELLFWDIR/$CARRIERSDB"
+			fi
+			if [ -z "$name" ]; then
+				name="$id"
+			fi
+			printf '%s\t%s\n' "$id" "$name"
+		done < "$CELLFWDIR/$LOCALDB"
+	fi
+}
+
+do_list_carriers_fw () {
+	# Print the available carriers information in format of
+	# "cid" \t "carrier name" \t "downloaded firmware version" \t "installed firmware version" \n
+	# Read do_list_carriers comments for caveats
+
+	if [ ! -s "$CELLFWDIR/$LOCALDB" ]; then
+		exit
+	fi
+
+	. /etc/scripts/modem-utils
+
+	if ! qmi_has_modem ; then
+		exit
+	fi
+
+	# Query cellmodem for installed firmware and PRIs
+	local modem_output=$(qmi_query_fw_images)
+	local pri_output=$(qmi_query_pri_files)
+
+	local id name cid cname downloaded_fw required_fw
+
+	# Iterate each carrier listed in the localdb.txt file
+	while IFS=, read -r id downloaded_fw _; do
+		case $id in "#"*) continue;; esac
+
+		# get its carrier name
+		name=
+		if [ -e "$CELLFWDIR/$CARRIERSDB" ]; then
+			while read -r cid cname; do
+			    if [ "$id" = "$cid" ]; then
+				name="$cname"
+				break
+			    fi
+			done < "$CELLFWDIR/$CARRIERSDB"
+		fi
+		if [ -z "$name" ]; then
+			name="$id"
+		fi
+
+		# get its newly downloaded firmware image version
+		downloaded_fw=`echo $downloaded_fw | cut -d' ' -f1`
+
+		# special case for "uscellular" and "verizonalo", whose PRI file names
+		# contain a hyphen: "US-CELLULAR" and "VERIZON-ALO" respectively
+		# the cid is used to find the PRI name so a hyphen is added for them
+		if [ "$id" = "uscellular" ]; then
+			id="us-cellular"
+		elif [ "$id" = "verizonalo" ]; then
+			id="verizon-alo"
+		fi
+
+		# get the required firmware version, if its PRI has been installed
+		# NOTE: some carrier's PRI installed such as Softbank does not have
+		# carrier name in upper case
+		required_fw=
+		for i in $pri_output; do
+			if echo $i | grep -qi ${id^^} ; then
+				fw=`echo $i | cut -d'_' -f1 | sed 's/^.//'`
+				required_fw=$fw
+				break
+			fi
+		done
+
+		# check if the required firmware has been installed
+		valid=
+		installed_fw=
+		if [ -n "$required_fw" ]; then
+			for i in $modem_output; do
+				installed_fw=`echo $i | cut -d'_' -f1 | sed 's/^.//'`
+				if [ "$required_fw" = "$installed_fw" ] ; then
+					valid="true"
+					break
+				fi
+			done
+
+			# if the required firmware has not been installed, then
+			# relevant PRI is not usable
+			if [ -z "$valid" ]; then
+				installed_fw=
+			fi
+		fi
+
+		# remove the hyphen in "us-cellular" and "verizon-alo" so that the cid
+		# output in -L command will be consistent with that of the -l command
+		if [ "$id" = "us-cellular" ]; then
+			id="uscellular"
+		elif [ "$id" = "verizon-alo" ]; then
+			id="verizonalo"
+		fi
+
+		# NOTE: ModemManagerEtherModem::getMultiCarrierCarriers() consumes this output,
+		# should it ever be changed in the future, that function must be updated accordingly
+		printf '%s\t%s\t%s\t%s\n' "$id" "$name" "$downloaded_fw" "${installed_fw:-"NULL"}"
+	done < "$CELLFWDIR/$LOCALDB"
+}
+
+function do_list_installed_carriers () {
+	# Print a whitespace separated list of installed carriers
+
+	if [ ! -s "$CELLFWDIR/$LOCALDB" ]; then
+		exit
+	fi
+
+	. /etc/scripts/modem-utils
+
+	local carriers=$(qmi_query_installed_carriers)
+
+	local cid
+	for i in $(echo $carriers); do
+		if [ "$i" = "us-cellular" ]; then
+			cid="uscellular"
+		elif [ "$i" = "verizon-alo" ]; then
+			cid="verizonalo"
+		else
+			cid="$i"
+		fi
+		CARRIER="${CARRIER} $cid"
+	done
+}
+
+files_for_carrier () { # carrier
+	local id files param
+	while IFS=, read -r id files param; do
+		if [ "$id" = "$1" ]; then
+			echo "$files"
+			break
+		fi
+	done < "$CELLFWDIR/$LOCALDB"
+}
+
+#------------------------------------------------------------
+# cell-firmware.txt "database" search operations
+
+set_match_vars_for_system () {
+	# Sets shell variables used for the lookup_* functions below
+	# These are used to match the "current" system against DB rows
+
+	[ -z "$modem_product" ] || return 0	# return if already set
+
+	# Query modem model from cellctld, but if it is suspended for
+	# example when manually upgrading firmware images on the CLI,
+	# fall back on directly reading relevant sysfs attribute file,
+	# which contains a simple model name on MC73xx family but a
+	# full sentence on MC74xx and EM7565 products
+	modem_product=$(cellctl -li |
+		awk '$1 == "product" { print tolower($2); }')
+	if [ -z "$modem_product" ]; then
+		read modem_product \
+			<$(cellmodem_syspath /dev/cellmodem01)/product
+		modem_product=${modem_product#Sierra Wireless }
+		modem_product=${modem_product% Qualcomm*}
+		modem_product=${modem_product,,}
+	fi
+	modelcode=$(setfset -qm | awk '{print tolower($2)}')
+	cellfwgroup=$(setfset -r | sed -n 's/^cellfwgroup=//p')
+	# look for the third field - vesion number - in /etc/version. Hopefully
+	# all our build profiles map the 'version' info to the 3rd field...
+	swversion=$(awk '{print $3;exit}' </etc/version)
+}
+
+extract_localdb_for_system() { # <mapfile
+	# Extracts and transform rows from the mapfile to
+	# create the localdb.txt file for the current system.
+
+	set_match_vars_for_system
+	echo "#$modem_product,$modelcode,$cellfwgroup,$swversion"
+	awk -F, "$version_lt_awk"'
+		/^#|^$/ { next }
+		($5 == modem_product)		\
+	     &&	($1 == modelcode)		\
+	     &&	($2 == cellfwgroup)		\
+	     &&	(!version_lt(swversion, $3))	\
+		{ print $4 "," $6 }
+	' \
+	RS='\r\n|\r|\n' \
+	modem_product="$modem_product" \
+	modelcode="$modelcode" \
+	cellfwgroup="$cellfwgroup" \
+	swversion="$swversion"
+}
+
+#------------------------------------------------------------
+# locks
+
+CELLFWDIR_LOCK=/var/run/cellfw.dir.lock
+EPHEMDIR_LOCK=/var/run/cellfw.ephemdir.lock
+
+# acquire/upgrade/downgrade a named read/write lock
+lock () { # [rw] lockname
+    local op= fd=
+
+    # A compromise for bash not being able to dynamically
+    # allocate or name FDs; pick 8 and 9 for lock FDs.
+    # (The '{var}>...' syntax is available in newer versions of bash.)
+    case $2 in
+       $CELLFWDIR_LOCK) fd=8;;
+       $EPHEMDIR_LOCK) fd=9;;
+       *) die "lock: unknown lock $2";;
+    esac
+    if [ ! -e /proc/self/fd/$fd ]; then
+       eval "exec $fd>>\$2" || die "$2: cannot open lock file"
+    fi
+
+    case $1 in
+       r) op=shared;;     # -> n+1 readers, 0 writer
+       w) op=exclusive;;  # -> 0 readers, 1 writer
+       u) op=unlock;;
+       *) die "lock: bad mode $1";;
+    esac
+    flock --$op $fd || die "$2: cannot alter lock"
+
+    if [ $1 = u ]; then
+       eval "exec $fd<&-"
+    fi
+}
+
+#------------------------------------------------------------
+# main
+
+usage() {
+	cat >&2 <<.
+Usage: $0 [options] <actions>
+
+Actions:
+        -m <file> [-m <file>].. Flash modem with firmware <file>(s)
+        -c <carrier>[,<carrier>...] Flash modem with firmware suitable for carrier(s)
+        -l                      List carrier IDs suitable for use with -c
+        -f                      Write current fingerprint and timestamp to stdout
+        -u                      Update file lists from remote server
+        -d                      Download/synchronize fw files from remote server
+        -h                      Show this usage
+        -L                      List carriers downloaded and installed firmware versions
+        -U                      Upgrade all installed carriers' PRI and required firmware images
+Options:
+        -a                      Report automated upgrade messages
+        -b <url>                Specify base URL to remote
+        -v                      Verbose messages
+        -C                      Continue/resume partial downloads
+        --unsafe                Ignore all checksums and signatures
+.
+}
+
+# Parse args
+if ! eval set -- $(getopt -o ":ab:Cc:dfhi:lLm:uUv" -l "unsafe" -- "$@"); then
+	usage
+	exit 2
+fi
+while case $1 in
+	-a)	OPT_a=1;;
+	-b)	URL_BASE="$2"; shift;;
+	-C)	OPT_C=1;;
+	-c)	# Strip leading and trailing single quote
+		OPT_c=1 CARRIER="$2"; shift;;
+	-d)	OPT_d=1;;
+	-f)	OPT_f=1;;
+	-h)	usage; exit;;
+	-l)	OPT_l=1;;
+	-L)	OPT_L=1;;
+	-m)	OPT_m=1; FILENAMES[${#FILENAMES[@]}]="$2"; shift;;
+	-u)	OPT_u=1;;
+	-U)	OPT_U=1;;
+	-v)	OPT_v=$((OPT_v + 1));;
+	--unsafe) OPT_unsafe=1;;
+	--)	shift; false;;
+esac; do shift; done
+
+EPHEMDIR="/tmp/cellfw.update"
+EPHEMPROP="config.cellmodem.firmware.ret" # infod
+CURRENT_CARRIER=
+# check for an expected operation argument
+if [ $# -ne 0 ] || [ ! "$OPT_a$OPT_f$OPT_c$OPT_m$OPT_u$OPT_U$OPT_d$OPT_l$OPT_L" ]; then
+	usage; exit 2
+fi
+
+# Do automated upgrade message
+if [ $OPT_a ]; then
+	AUTOMATED_UPGRADE_MESSAGE='Check was run, upgrade failed'
+	atexit logger $LOGGEROPTS -s -p user.info \$AUTOMATED_UPGRADE_MESSAGE
+
+	/etc/scripts/cell-carrier
+	read CARRIER </var/run/.modem/cellmodem_carrier
+fi
+
+# check for incompatible arguments
+if [ $OPT_m ] && [ $OPT_c ]; then die "options -m,-c are incompatible"; fi
+
+if [ -z "$CELLFWDIR" ]; then
+	die "config.cellmodem.firmware.directory not set"
+fi
+if [ ! -d "$CELLFWDIR/" ]; then
+	warn "$CELLFWDIR: no such directory"
+fi
+
+# indicate to UI that the process is running
+infod_client -o push -p config.cellmodem.firmware.pid -d $$
+
+# Read/write locks are required on directories $EPHEMDIR and $CELLFWDIR
+# because this script is invoked from various places (cli, webui, cron)
+# asynchronously.
+#
+# These lock states are required for the various operations:
+#
+#                               CELLFWDIR EPHEMDIR
+#   -a auto_remember               r
+#   -u update                      r         w
+#   -d download                    w         w
+#   -f fingerprint                 r
+#   -l list carriers               r
+#   -c determine fw files          r
+#   -a check remembered hashes     r
+#   -m flash firmware              r
+#
+# The order that locks are taken has been carefully chosen.
+# Deadlocks risk occurs when two processes try to hold the same
+# two exclusive locks at the same time but acquire them in a different order.
+# Deadlock avoidance is guaranteed by taking locks in the same sequence
+# at every point.  This avoids any held-A-waiting-B state
+# coexisting with a held-B-waiting-A.
+#
+# Here, we always grab or upgrade CELLFWDIR before EPHEMDIR and
+# release them in the reverse order.
+
+lock r $CELLFWDIR_LOCK									# CELLFWDIR_LOCK = read
+
+# update
+if [ $OPT_a ] || [ $OPT_u ]; then
+	if [ $OPT_a ]; then
+		do_auto_remember_state
+	fi
+	lock w $EPHEMDIR_LOCK								# EPHEMDIR_LOCK  = write
+
+	do_update
+
+	lock u $EPHEMDIR_LOCK								# EPHEMDIR_LOCK  = unlock
+fi
+
+# download
+if [ $OPT_a ] || [ $OPT_d ]; then
+	lock w $CELLFWDIR_LOCK								# CELLFWDIR_LOCK = write
+	lock w $EPHEMDIR_LOCK								# EPHEMDIR_LOCK  = write
+
+	do_download
+
+	lock u $EPHEMDIR_LOCK								# EPHEMDIR_LOCK  = unlock
+	lock r $CELLFWDIR_LOCK								# CELLFWDIR_LOCK = read
+fi
+
+# show fingerprint
+if [ $OPT_f ]; then
+	do_fingerprint
+fi
+
+# list carriers
+if [ $OPT_l ]; then
+	do_list_carriers
+fi
+
+# list carriers with FW versions
+if [ $OPT_L ]; then
+	do_list_carriers_fw
+fi
+
+if [ $OPT_U ]; then
+	do_list_installed_carriers
+fi
+
+if [ $OPT_a ] || [ $OPT_m ]; then
+	# flashing
+	if [ $OPT_a ] && ! do_auto_check_changed; then
+		AUTOMATED_UPGRADE_MESSAGE='Check was run, no updates available'
+		succeed "No changes to files for carrier '$CARRIER'"
+	fi
+
+	if [ $OPT_a ]; then
+		set_status "Finding carrier files"
+		FILENAMES=($(files_for_carrier "$CARRIER"))
+		if [ ${#FILENAMES[@]} -eq 0 ]; then
+			AUTOMATED_UPGRADE_MESSAGE='Check was run, no updates available'
+			succeed "No available files for carrier '$CARRIER'"
+		fi
+	fi
+
+	if [ ! $OPT_unsafe ]; then
+		set_status "Verifying files"
+		sha1_verify "${FILENAMES[@]}"
+	fi
+
+	set_status "Flashing modem"
+	sierra_flash_modem "${FILENAMES[@]}" 		8<&- # (hide lock)
+
+elif [ $OPT_c ] || [ $OPT_U ]; then
+	# CARRIER is a comma or whitespace separated list
+	for i in $(echo "$CARRIER" | sed "s/,/ /g"); do
+		set_status "Finding carrier files for ${i^^}"
+		FILENAMES=($(files_for_carrier "$i"))
+		if [ ${#FILENAMES[@]} -eq 0 ]; then
+			AUTOMATED_UPGRADE_MESSAGE='Check was run, no updates available'
+			warn "No available files for carrier '${i^^}', skip over it"
+			continue
+		fi
+
+		if [ ! $OPT_unsafe ]; then
+			set_status "Verifying files for ${i^^}"
+			sha1_verify "${FILENAMES[@]}"
+		fi
+
+		set_status "Flashing modem for ${i^^}"
+		CURRENT_CARRIER="${i^^}"
+		sierra_flash_modem "${FILENAMES[@]}" 		8<&- # (hide lock)
+	done
+fi
+
+lock u $CELLFWDIR_LOCK									# CELLFWDIR_LOCK = unlock
+
+AUTOMATED_UPGRADE_MESSAGE='Check was run, performed upgrade'
+
+# Run atexit commands
+run_atexit_cmds
+
+# Set the final status to Success if one of the main cellfw operations was run successfully:
+# - check for update
+# - download update
+# - change carrier
+# Any other status implies that the script terminated unexpectedly.
+if [ ! -z "$OP_SUCCESS" ]; then
+	set_status "Success"
+fi
+
+exit 0

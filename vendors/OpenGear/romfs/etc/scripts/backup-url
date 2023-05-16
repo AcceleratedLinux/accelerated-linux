@@ -1,0 +1,337 @@
+#!/bin/sh
+#
+# Restores a configuration from a URL
+#  Handles .opg, .xml and .sh files
+#
+# Usage:
+#  backup-url [--no-reboot] load <url>...
+#  backup-url loadimage <url>...
+#
+# Exit codes:
+#  0   One of the <url>s was loaded and succeeded
+#  1   All of the <url>s failed to load or apply
+#  2   Same as 0, except that --no-reboot was specified, and
+#      the loader requested a reboot. The caller of this script
+#      should arrange to reboot the system ASAP.
+
+shopt -s extglob
+my_dir="$(dirname "$0")"
+source "$my_dir/backup-common"
+
+PATH=/bin:/usr/bin:/etc:/sbin:/usr/sbin
+log () { # defaults to -p user.notice
+	logger -s -t backup-url "$@"
+	[ "$ZTPLOG" ] && (
+	 case $1:$2 in
+	     -p:*.debug) exit;;
+	     -p:*) shift 2;;
+	 esac
+	 # Keep /tmp/ztp.log under 128kB; restart on overflow
+	 ulimit -f 64; trap '' XFSZ
+	 prefix=backup-url
+	 if ! echo "$prefix: $*" >>$ZTPLOG; then
+	        mv $ZTPLOG $ZTPLOG.0
+	        echo "$prefix: $*" >$ZTPLOG
+	 fi
+	)
+}
+
+# Calls check_secure_files() for each mounted/mountable USB storage device
+check_usb_for_secure_files () {
+    for blocksys in /sys/bus/usb/drivers/usb-storage/*/host*/target*/*/block/*/sd*
+    do
+	dev=/dev/${blocksys##*/}
+	if [ ! -b "$dev" ]; then
+	    continue
+	fi
+	mnt=$(awk '$1 == dev { print $2; exit; }' dev=$dev /proc/mounts)
+	if [ $mnt ]; then
+	    # already mounted?
+	    if check_secure_files $mnt; then
+		return
+	    fi
+	else
+	    mnt=/tmp/mnt$$
+	    mkdir $mnt
+	    log -p user.debug "mounting $dev onto $mnt"
+	    if mount -o ro "$dev" $mnt; then
+		if check_secure_files $mnt; then
+		    return # don't umount
+		fi
+		umount -f $mnt
+		rmdir $mnt
+	    fi
+	fi
+    done
+    false
+}
+
+file_exists () {
+    if [ -e "$1" ]; then
+	log -p user.debug "looking for $1 - found"
+	return 0
+    else
+	log -p user.debug "looking for $1 - no"
+	return 1
+    fi
+}
+
+# Looks in a directory for certificate files.
+# If certificate files are found, then set the variables
+# ${certfile} and ${cacertfile} to their paths
+# Returns true if certificate files were found
+check_secure_files () { # dir
+    if file_exists "$1/ca-bundle.crt"; then
+	for f in "$1/client-$mac.pem" \
+	         "$1/client-$model.pem" \
+	         "$1/client.pem"
+	do
+	    if file_exists "$f"; then
+		certfile="$f"
+		cacertfile="$1/ca-bundle.crt"
+		secure=1
+		log -p user.notice "secure mode"
+		return 0
+	    fi
+	done
+    fi
+    return 1
+}
+
+secure_download () { # url
+    local exec=
+    case $1 in -exec=*) exec=${1#-exec=}; shift;; esac
+
+    $exec \
+		curl ${cacertfile:+--cacert "$cacertfile"} \
+		${certfile:+--cert "$certfile"} \
+		$([ $secure ] || echo " --insecure") \
+	 	--location \
+		--fail \
+		--globoff \
+		--url "$1"
+}
+
+# Validates then installs an XML file as config.xml
+install_xml () { # file
+    cat $1 > /tmp/new-config.xml
+    if [ ! -s /tmp/new-config.xml ]; then
+        log -p user.error "empty XML file";
+        return 1
+    fi
+    if ! config -p /tmp/new-config.xml -g config; then
+        log -p user.error "XML file failed to validate";
+        return 1
+    fi
+    # XXX assuming this is a cleanly re-initialized device
+    # TODO: erase then replace /etc/config/ with /etc/default/
+    # It would be better to communicate with /etc/rc to do this,
+    # perhaps by putting content into /etc/config/.init ?
+    log -p user.error "installing new config.xml";
+    rm -f /etc/config/config.xml
+    cp /tmp/new-config.xml /etc/config/config.xml
+    touch /etc/config/.run_configurators
+    return 0
+}
+
+# check that the URL is useable in the current security context
+secure_url_ok () { # url
+    # reject non-http URLs when in secure mode
+    if [ $secure ]; then
+        case $1 in
+			https:*) return 0;;
+			*)       log -p user.info "rejecting $1 (secure mode)"
+	            return 1;;
+		esac
+    else
+        return 0
+    fi
+}
+
+# Try to load a config.opg file from the given URL
+load () { # url
+    url=$(substitute "$1")
+
+    secure_url_ok "$url" || return 1
+
+    local do_reboot
+
+    # reject suspicous looking URLs
+    case ${url%%\?*} in
+		file:*)
+			log -p user.info "rejecting $url (file scheme)"
+			return 1;;
+		*:*.opg)
+			import_stream () { config -i -; }
+			do_reboot=true
+			;;
+		*:*.xml)
+			import_stream () { install_xml -; }
+			do_reboot=true
+			;;
+		*:*.sh)
+			import_stream () { run_script -; }
+			# Disable reboot for shell scripts that succeed;
+			# because they would have called reboot already.
+			do_reboot=false
+			;;
+		*)	log -p user.info "rejecting $url (does not end in .opg, .xml or .sh)"
+			return 1;;
+    esac
+
+    # Use a pipeline to save on local storage requirements.
+    # The pipe consumer, "config -i", will write temporary files and
+    # verify the content anyway.
+
+    log -p user.notice "trying $url ..."
+    secure_download "$url" | import_stream
+    case ${PIPESTATUS[0]}:${PIPESTATUS[1]} in
+        0:0) :;; # download good, and import good
+	0:*) log -p user.error "failed to import $url (${PIPESTATUS[1]})"
+	     return 1;;
+	3:*) log -p user.error "malformed URL"; return 1;;
+	7:*) log -p user.error "failed to connect"; return 1;;
+	28:*)log -p user.error "timeout"; return 1;;
+	47:*)log -p user.error "redirect loop?"; return 1;;
+	*)   log -p user.error "curl error ${PIPESTATUS[0]}"; return 1;;
+    esac
+
+    # Ensure we are now out of MODE_UNCONFIGURED mode
+    if [ -z "$(config -g config.interfaces.wan.mode)" ]; then
+		log -p user.notice "forcing wan config mode to DHCP"
+		config -s config.interfaces.wan.mode=dhcp
+    fi
+
+    # Ensure that a hostname has been set
+    if [ -z "$(config -g config.system.name)" ]; then
+		if [ -z "$hostname" ]; then
+			# If DHCP hasn't given us a hostname, and
+			# the opg import hasn't set one, then we will
+			# construct a unique one from our model and MAC
+			hostname="${model%%-*}-${mac}"
+		fi
+		log -p user.notice "setting hostname to $hostname"
+		config -s config.system.name="$hostname"
+    fi
+
+	if $do_reboot; then
+		# only reboot on successful load
+		if [ $no_reboot ]; then
+			# caller wants reboots turned into 'exit 2'
+			return 2
+		else
+			log -p user.alert "rebooting"
+			reboot
+			sleep 30 # just in case reboot is busted
+		fi
+	fi
+
+	return 0
+}
+
+# load a secure firmware image and program it to flash when
+# it is different. The system will reboot.
+# This is effectively a secured form of netflash.
+loadimage() {
+    local ec
+    local nf=iE
+
+    url=$(substitute "$1")
+
+    # Be careful not to permit netflash options that allow
+    # it to make changes to the system before it has received
+    # an input stream. That is, netflash with any of the
+    # permitted options should make no changes if given an
+    # empty input stream.
+    case $url in *";nf="*)
+	nf="${url##*;nf=}"
+	url="${url%;nf=*}"
+        if [ $secure ]; then
+            log -p user.error "netflash options not permitted in secure mode"
+	    return 1
+	elif [[ $nf != *([a-zA-Z]) ]]; then
+            log -p user.error "invalid netflash options (nf=$nf)"
+	    return 1
+	fi
+	;;
+    esac
+    nf=Zk$nf  # -Z and -k are required to prevent ZTP loops
+
+    secure_url_ok "$url" || return 1
+
+    # download the image then send it to netflash.
+    # netflash -Z will exit 49 if the image has already been flashed.
+    if [ 32768 -gt $(awk '/MemTotal/ {print $2;exit}' /proc/meminfo) ]; then
+        # Small memory device (32MB of RAM)
+        # Peform the download twice; once to check what's in flash
+        # (in throwaway -tk mode so nothing is killed) and the
+        # second to actually perform the flash, but fully killing things
+        log -p user.notice "comparing with firmware image from $url -tb$nf"
+        secure_download "$url" | netflash -tb$nf -- -; ec=$?
+	if [ $ec -eq 0 ]; then
+	    # Second download to actually install. The following contortions
+	    # are so that netflash can kill all other processes to free up RAM,
+	    # then it will start up its own curl subprocess. Mainly, the -k
+	    # option must be removed.
+	    nf=${nf//k} # -k prevents the necessary killing
+	    log -p user.notice "flashing firmware image from $url -$nf"
+	    netflash -$nf "|$(secure_download -exec=quote "$url")"
+	    ec=$? # usually not reached
+	fi
+    else
+	# Large memory device (usually 64MB or larger)
+        log -p user.notice "loading firmware image from $url -$nf..."
+        secure_download "$url" | netflash -$nf -- -; ec=$?
+    fi
+    case $ec in
+        49) log -p user.notice "$url: image is already in FLASH"
+	    return 0
+	    ;;
+        0)  log -p user.notice "$url: netflash -$nf succeeded"
+	    return 0
+	    ;;
+        *)  log -p user.error "$url: unexpected netflash error $ec"
+	    return 1
+	    ;;
+    esac
+}
+
+no_reboot=
+secure=
+cmd=$1
+shift
+case $cmd in
+    loadimage)
+		check_usb_for_secure_files
+		for url; do
+			loadimage "$url" && exit
+		done
+		log "loadimage: failed all $# urls"
+		exit 1
+		;;
+    load)
+		case $1 in
+		    --no-reboot) no_reboot=1; shift;;
+		esac
+		check_usb_for_secure_files
+		for url; do
+			load "$url"
+			case $? in
+			0) log "load succeeded"
+			   exit 0;;
+			2) log "load succeeded (reboot requested)"
+			   exit 2;;
+			1) : continue;;
+			*) log "load: bad return code $?"
+			   : continue;;
+			esac
+		done
+		log "load: failed all $# urls"
+		exit 1
+		;;
+    *)
+		echo "usage: $0 load [--no-reboot] <url>..." >&2
+		echo "       $0 loadimage <url>..." >&2
+		exit 1
+		;;
+esac

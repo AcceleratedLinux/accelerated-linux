@@ -760,7 +760,7 @@ static int rt274_set_dai_pll(struct snd_soc_dai *dai, int pll_id, int source,
 		break;
 	default:
 		dev_warn(component->dev, "invalid pll source, use BCLK\n");
-		/* fall through */
+		fallthrough;
 	case RT274_PLL2_S_BCLK:
 		snd_soc_component_update_bits(component, RT274_PLL2_CTRL,
 				RT274_PLL2_SRC_MASK, RT274_PLL2_SRC_BCLK);
@@ -788,7 +788,7 @@ static int rt274_set_dai_pll(struct snd_soc_dai *dai, int pll_id, int source,
 			break;
 		default:
 			dev_warn(component->dev, "invalid freq_in, assume 4.8M\n");
-			/* fall through */
+			fallthrough;
 		case 100:
 			snd_soc_component_write(component, 0x7a, 0xaab6);
 			snd_soc_component_write(component, 0x7b, 0x0301);
@@ -1056,7 +1056,7 @@ static struct snd_soc_dai_driver rt274_dai[] = {
 			.formats = RT274_FORMATS,
 		},
 		.ops = &rt274_aif_dai_ops,
-		.symmetric_rates = 1,
+		.symmetric_rate = 1,
 	},
 };
 
@@ -1105,15 +1105,16 @@ static const struct i2c_device_id rt274_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt274_i2c_id);
 
+#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt274_acpi_match[] = {
 	{ "10EC0274", 0 },
 	{ "INT34C2", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, rt274_acpi_match);
+#endif
 
-static int rt274_i2c_probe(struct i2c_client *i2c,
-			   const struct i2c_device_id *id)
+static int rt274_i2c_probe(struct i2c_client *i2c)
 {
 	struct rt274_priv *rt274;
 
@@ -1225,7 +1226,7 @@ static struct i2c_driver rt274_i2c_driver = {
 		   .of_match_table = of_match_ptr(rt274_of_match),
 #endif
 		   },
-	.probe = rt274_i2c_probe,
+	.probe_new = rt274_i2c_probe,
 	.remove = rt274_i2c_remove,
 	.id_table = rt274_i2c_id,
 };

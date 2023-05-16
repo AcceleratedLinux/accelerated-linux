@@ -1,0 +1,9 @@
+
+/*
+ * Clear SerDes RxBoost on lane D
+ */
+
+.pbi
+write 0xea08dc,  0x00502880
+write 0xea1300,  0x80104e20
+.end

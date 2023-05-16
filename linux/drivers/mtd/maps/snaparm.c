@@ -207,42 +207,6 @@ static const flash_layout_t flash_layout[] = {
  *	code clean.
  */
 
-#ifdef CONFIG_ARCH_KS8695
-#include <asm/cacheflush.h>
-/*
- *	The bus read and write buffers can potenitially coalesce read and
- *	write bus cycles to the same address, thus dropping real cycles
- *	when talking to IO type devices. We need to flush those	buffers 
- *	when doing flash reading/writing.
- *
- *	The CPU level 1 caches do not appear to be the issue. It does
- *	appear as though it is purely the read/write buffers that are
- *	the problem. So we force a few reads from the chip select region
- *	to empty out the read (and write) buffers. Reads seem not to
- *	have any side affects on the flash. If this was some other IO
- *	device it could be a problem.
- */
-static void invalidate_buffer(void *a)
-{
-	unsigned int p = (unsigned int) a ;
-	unsigned char v;
-
-	v = *((volatile unsigned char *) p);
-	v = *((volatile unsigned char *) (p^4));
-	v = *((volatile unsigned char *) ((p^8)^1));
-	v = *((volatile unsigned char *) (p^0x100));
-}
-#define	readpreflush(x)		invalidate_buffer(x)
-#define	writepreflush(x)	invalidate_buffer(x)
-
-#define	CONFIG_LOCK_MULTIBYTE
-static DEFINE_SPINLOCK(multibyte_lock);
-#define	initlock()		unsigned long flags;
-#define	getlock()		spin_lock_irqsave(&multibyte_lock, flags)
-#define	releaselock()		spin_unlock_irqrestore(&multibyte_lock, flags)
-#endif	/* CONFIG_ARCH_KS8695 */
-
-
 /*
  *	We are not entirely sure why, but on the iVPN the timing _between_
  *	access to the flash causes problems with other bus activity on the

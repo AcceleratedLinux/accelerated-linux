@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# Detect and register product-installed storage.
+# This can be run the first time the device is booted.
+
+# Currently, these names are being used by mount-mgr
+# for eventlog destinations:
+#   storage.usb
+#   storage.sd
+#   storage.nvlog
+
+# Add generic USB (internal or external)
+# Until the eventlog system is storage-ified we attach generic 'usb'
+# storage that matches the first detected disk. This pretty much
+# matches existing product behaviour.
+dev=/dev/sda1
+echo "registering storage.usb at $dev"
+config	-s config.storage.usb.type=device \
+	-s config.storage.usb.device="$dev" \
+	-s config.storage.usb.description="Internal USB flash" \
+	-s config.storage.usb.mountopts="-t vfat -o flush,gid=9,umask=002" \
+	-s config.storage.usb.enabled=on
+
+# Add other, product-specific storage
+case $MODEL in
+cm71* | b097 )
+	# Add the uSD card port for the CM7100
+	# On some models, the uSD card is also externally accessible.
+	dev=/dev/disk/by-path/platform-d00d4000.mvsdio-part1
+	echo "registering storage.sd at $dev"
+	config	-s config.storage.sd.type=device \
+		-s config.storage.sd.device="$dev" \
+		-s config.storage.sd.description="SD card" \
+		-s config.storage.sd.mountopts="-t vfat -o sync,flush,gid=9,umask=002" \
+		-s config.storage.sd.enabled=on
+	;;
+im72* | b098 )
+	# Add the uSD card port for the IM7200 
+	# On some models, the uSD card is also externally accessible.
+	dev=/dev/disk/by-path/platform-mvsdio-part1
+	echo "registering storage.sd at $dev"
+	config	-s config.storage.sd.type=device \
+		-s config.storage.sd.device="$dev" \
+		-s config.storage.sd.description="SD card" \
+		-s config.storage.sd.mountopts="-t vfat -o sync,flush,gid=9,umask=002" \
+		-s config.storage.sd.enabled=on
+	;;
+acm70* | b093 )
+	# Add the ACM700x's NAND flash
+	# The .format=ubifs means auto-format the volume if it isn't mounting
+	dev=/dev/ubi0_4
+	echo "registering storage.nvlog at $dev"
+	config	-s config.storage.nvlog.type=device \
+		-s config.storage.nvlog.device="$dev" \
+		-s config.storage.nvlog.description="Internal NAND flash" \
+		-s config.storage.nvlog.mountopts="-t ubifs -o sync" \
+		-s config.storage.nvlog.format=ubifs \
+		-s config.storage.nvlog.enabled=on
+	;;
+esac
+
+config -r storage
+
+exit 0

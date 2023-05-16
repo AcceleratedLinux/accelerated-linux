@@ -1,0 +1,124 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+# DEBUG=1
+if [ "$DEBUG" == "1" ]; then
+	FILE=/tmp/network-interface-alert
+	DATE=`date`
+	echo "$DATE" > $FILE
+	echo "1:$1" >> $FILE
+	echo "2:$2" >> $FILE
+	echo "3:$3" >> $FILE
+	echo "4:$4" >> $FILE
+	echo "5:$5" >> $FILE
+	echo "6:$6" >> $FILE
+	echo "7:$7" >> $FILE
+	echo "8:$8" >> $FILE
+	echo "9:$9" >> $FILE
+	echo "10:${10}" >> $FILE
+fi
+
+legacy=`config -g config.system.snmp.legacytraps`
+if [ ! -z "$legacy" ]; then
+	exit
+fi
+
+retval=0
+ACTION=$1
+
+if [ "$ACTION" == "snmp" ]; then
+
+	NetInterfaceNotification=21
+	netInterfaceDown=19
+	netInterfaceStarting=20
+	netInterfaceUp=21
+	netInterfaceStopping=22
+	unknown=65535
+
+	export AGENT=""
+	export UPTIME="0"
+	export TRAP=$NetInterfaceNotification
+	export NOTIFICATION="NetInterfaceNotification"
+
+	ALERT_CHECK=$2
+	ALERT_REF=$3
+	ALERT_TIME=$4
+	ALERT_STATE=$5
+	ALERT_IFACE=$6
+	ALERT_IFTYPE=$7
+	ALERT_IFSTATENUM=$8
+	ALERT_IFSTATE=$9
+	ALERT_TRIGGER=${10}
+	ALERT_TYPE=$unknown
+	ALERT_IFSTATUS_STRING=""
+
+	ARD_DOWN=1
+	ARD_STARTING=2
+	ARD_UP=4
+	ARD_STOPPING=8
+
+	SNMP_UNAVAILABLE=1
+	SNMP_DOWN=2
+	SNMP_STARTING=3
+	SNMP_UP=4
+	SNMP_STOPPING=5
+
+	if [ "$ALERT_IFSTATENUM" == "$ARD_DOWN" ]; then
+		ALERT_IFSTATUS_STRING="down"
+		ALERT_TYPE=$netInterfaceDown
+		ALERT_IFSTATENUM=$SNMP_DOWN
+	elif [ "$ALERT_IFSTATENUM" == "$ARD_STARTING" ]; then
+		ALERT_IFSTATUS_STRING="waiting to start"
+		ALERT_TYPE=$netInterfaceStarting
+		ALERT_IFSTATENUM=$SNMP_STARTING
+	elif [ "$ALERT_IFSTATENUM" == "$ARD_UP" ]; then
+		ALERT_IFSTATUS_STRING="up"
+		ALERT_TYPE=$netInterfaceUp
+		ALERT_IFSTATENUM=$SNMP_UP
+	elif [ "$ALERT_IFSTATENUM" == "$ARD_STOPPING" ]; then
+		ALERT_IFSTATUS_STRING="waiting to stop"
+		ALERT_TYPE=$netInterfaceStopping
+		ALERT_IFSTATENUM=$SNMP_STOPPING
+	fi
+
+	if [ ! -z "$ALERT_IFSTATUS_STRING" ]; then
+		ALERT_SUMMARY="Interface '$ALERT_IFACE' of type '$ALERT_IFTYPE' is now $ALERT_IFSTATUS_STRING"
+	else
+		ALERT_SUMMARY="Interface '$ALERT_IFACE' of type '$ALERT_IFTYPE' is in an unknown state"
+		ALERT_IFSTATENUM=$SNMP_UNAVAILABLE
+	fi
+
+	/bin/sh /etc/scripts/alert-snmp \
+		"AlarmType" \
+		"i" \
+		"$ALERT_TYPE" \
+		"AlarmCheck" \
+		"i" \
+		"$ALERT_CHECK" \
+		"AlarmInstance" \
+		"i" \
+		"$ALERT_REF" \
+		"AlarmTime" \
+		"x" \
+		"$ALERT_TIME" \
+		"AlarmState" \
+		"i" \
+		"$ALERT_STATE" \
+		"AlarmDevice" \
+		"s" \
+		"$ALERT_IFNAME" \
+		"AlarmUser" \
+		"s" \
+		"$ALERT_IFSTATE" \
+		"AlarmCurrentValue" \
+		"i" \
+		"$ALERT_IFSTATENUM" \
+		"AlarmSummary" \
+		"s" \
+		"$ALERT_SUMMARY"
+
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

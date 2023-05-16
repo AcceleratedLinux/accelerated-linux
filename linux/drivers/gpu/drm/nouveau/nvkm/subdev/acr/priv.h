@@ -10,6 +10,7 @@ struct nvkm_acr_fwif {
 	const struct nvkm_acr_func *func;
 };
 
+int gm200_acr_nofw(struct nvkm_acr *, int, const struct nvkm_acr_fwif *);
 int gm20b_acr_load(struct nvkm_acr *, int, const struct nvkm_acr_fwif *);
 int gp102_acr_load(struct nvkm_acr *, int, const struct nvkm_acr_fwif *);
 
@@ -27,8 +28,10 @@ struct nvkm_acr_func {
 	void (*wpr_check)(struct nvkm_acr *, u64 *start, u64 *limit);
 	int (*init)(struct nvkm_acr *);
 	void (*fini)(struct nvkm_acr *);
+	u64 bootstrap_falcons;
 };
 
+extern const struct nvkm_acr_func gm200_acr;
 int gm200_acr_wpr_parse(struct nvkm_acr *);
 u32 gm200_acr_wpr_layout(struct nvkm_acr *);
 int gm200_acr_wpr_build(struct nvkm_acr *, struct nvkm_acr_lsf *);
@@ -132,8 +135,8 @@ int gp102_acr_load_load(struct nvkm_acr *, struct nvkm_acr_hsfw *);
 extern const struct nvkm_acr_hsf_func gp108_acr_unload_0;
 void gp108_acr_hsfw_bld(struct nvkm_acr *, struct nvkm_acr_hsf *);
 
-int nvkm_acr_new_(const struct nvkm_acr_fwif *, struct nvkm_device *, int,
-		  struct nvkm_acr **);
+int nvkm_acr_new_(const struct nvkm_acr_fwif *, struct nvkm_device *, enum nvkm_subdev_type,
+		  int inst, struct nvkm_acr **);
 int nvkm_acr_hsf_boot(struct nvkm_acr *, const char *name);
 
 struct nvkm_acr_lsf {

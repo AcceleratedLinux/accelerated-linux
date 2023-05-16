@@ -1,0 +1,18 @@
+#!/bin/bash
+
+device=$1
+
+# echo "ACTION: $ACTION" >> /tmp/udev.${device}.log
+
+case $ACTION in
+add|change)
+	mkdir -p /var/run/.mtu > /dev/null 2>&1
+
+	if [ -f /sys/class/net/$device/mtu ]; then
+		cat /sys/class/net/$device/mtu >| /var/run/.mtu/$device
+	fi
+	;;
+remove)
+	rm -f /var/run/.mtu/$device
+	;;
+esac

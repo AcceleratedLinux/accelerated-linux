@@ -845,7 +845,7 @@ void __init ath79_register_eth(unsigned int id)
 	}
 
 	if (!is_valid_ether_addr(pdata->mac_addr)) {
-		random_ether_addr(pdata->mac_addr);
+		eth_random_addr(pdata->mac_addr);
 		printk(KERN_DEBUG
 			"ar71xx: using random MAC address for eth%d\n",
 			ath79_eth_instance);

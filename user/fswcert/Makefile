@@ -1,6 +1,6 @@
 ###################################################
 # Adjust SSLDIR before make ...
-SSLDIR=$(ROOTDIR)/lib/libssl
+SSLDIR=$(ROOTDIR)/lib/openssl
 
 # Adjust IPSECDIR before make install ...
 IPSECDIR=$(ROOTDIR)/romfs/bin

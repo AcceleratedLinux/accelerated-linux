@@ -1,8 +1,9 @@
-
-VERSION = 2.0.2
-URL = ftp://ftp.infradead.org/pub/mtd-utils/mtd-utils-$(VERSION).tar.bz2
+URL = git://git.infradead.org/mtd-utils.git
+METHOD = git
+VERSION = v2.0.2
 
 AUTOMAKE_ROMFS = my_romfs
+AUTORECONF := ./autogen.sh
 
 CONFOPTS-$(CONFIG_LIB_LIBLZO) += --without-lzo
 CONFOPTS-$(CONFIG_USER_MTD_UTILS_MKFSJFFS2) += --without-jffs
@@ -19,16 +20,16 @@ include $(ROOTDIR)/tools/automake.inc
 # backward compatabity for some of the older targets.
 #
 HOST_MKFS_JFFS2 = $(CURDIR)/build/mkfs.jffs2
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils/mkfs.jffs2.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils/compr.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils/compr_zlib.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils/compr_lzo.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils/compr_rtime.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils/rbtree.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/lib/libcrc32.c
-HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils-$(VERSION)/lib/dictionary.c
-HOST_CFLAGS += -I$(CURDIR)/build/mtd-utils-$(VERSION)/include
-HOST_CFLAGS += -I$(CURDIR)/build/mtd-utils-$(VERSION)/jffsX-utils
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/jffsX-utils/mkfs.jffs2.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/jffsX-utils/compr.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/jffsX-utils/compr_zlib.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/jffsX-utils/compr_lzo.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/jffsX-utils/compr_rtime.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/jffsX-utils/rbtree.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/lib/libcrc32.c
+HOST_MKFS_JFFS2_SRC += $(CURDIR)/build/mtd-utils/lib/dictionary.c
+HOST_CFLAGS += -I$(CURDIR)/build/mtd-utils/include
+HOST_CFLAGS += -I$(CURDIR)/build/mtd-utils/jffsX-utils
 HOST_CFLAGS += -DWITHOUT_XATTR
 HOST_CFLAGS += -DWITHOUT_LZO 
 HOST_CFLAGS += -D_GNU_SOURCE
@@ -39,7 +40,7 @@ $(HOST_MKFS_JFFS2):
 
 complete_target: $(HOST_MKFS_JFFS2)
 
-MTDBINS = $(CURDIR)/build/mtd-utils-$(VERSION)-install/sbin
+MTDBINS = $(CURDIR)/build/mtd-utils-install/sbin
 
 my_romfs:
 	mkdir -p $(ROMFSDIR)/sbin

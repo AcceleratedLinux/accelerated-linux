@@ -1,0 +1,8 @@
+# This file contains product specific bringup steps
+
+# Tickle PHYs so that the incorrect LED drive state is corrected.
+# Some bootloaders left the LEDs with the wrong drive level.
+ip link set eth0 up
+ip link set eth0 down
+ip link set eth1 up
+ip link set eth1 down

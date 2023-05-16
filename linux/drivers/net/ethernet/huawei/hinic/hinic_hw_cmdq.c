@@ -223,7 +223,7 @@ static void cmdq_prepare_wqe_ctrl(struct hinic_cmdq_wqe *wqe, int wrapped,
 	saved_data = CMDQ_WQE_HEADER(wqe)->saved_data;
 	saved_data = HINIC_SAVED_DATA_CLEAR(saved_data, ARM);
 
-	if ((cmd == CMDQ_SET_ARM_CMD) && (mod == HINIC_MOD_COMM))
+	if (cmd == CMDQ_SET_ARM_CMD && mod == HINIC_MOD_COMM)
 		CMDQ_WQE_HEADER(wqe)->saved_data |=
 						HINIC_SAVED_DATA_SET(1, ARM);
 	else
@@ -401,6 +401,7 @@ static int cmdq_sync_cmd_direct_resp(struct hinic_cmdq *cmdq,
 
 		spin_unlock_bh(&cmdq->cmdq_lock);
 
+		hinic_dump_ceq_info(cmdq->hwdev);
 		return -ETIMEDOUT;
 	}
 
@@ -593,7 +594,7 @@ static void cmdq_update_errcode(struct hinic_cmdq *cmdq, u16 prod_idx,
 }
 
 /**
- * cmdq_arm_ceq_handler - cmdq completion event handler for sync command
+ * cmdq_sync_cmd_handler - cmdq completion event handler for sync command
  * @cmdq: the cmdq of the command
  * @cons_idx: the consumer index to update the error code for
  * @errcode: the error code
@@ -783,7 +784,7 @@ static void free_cmdq(struct hinic_cmdq *cmdq)
  * init_cmdqs_ctxt - write the cmdq ctxt to HW after init all cmdq
  * @hwdev: the NIC HW device
  * @cmdqs: cmdqs to write the ctxts for
- * &db_area: db_area for all the cmdqs
+ * @db_area: db_area for all the cmdqs
  *
  * Return 0 - Success, negative - Failure
  **/
@@ -795,11 +796,10 @@ static int init_cmdqs_ctxt(struct hinic_hwdev *hwdev,
 	struct hinic_cmdq_ctxt *cmdq_ctxts;
 	struct pci_dev *pdev = hwif->pdev;
 	struct hinic_pfhwdev *pfhwdev;
-	size_t cmdq_ctxts_size;
 	int err;
 
-	cmdq_ctxts_size = HINIC_MAX_CMDQ_TYPES * sizeof(*cmdq_ctxts);
-	cmdq_ctxts = devm_kzalloc(&pdev->dev, cmdq_ctxts_size, GFP_KERNEL);
+	cmdq_ctxts = devm_kcalloc(&pdev->dev, HINIC_MAX_CMDQ_TYPES,
+				  sizeof(*cmdq_ctxts), GFP_KERNEL);
 	if (!cmdq_ctxts)
 		return -ENOMEM;
 
@@ -807,6 +807,7 @@ static int init_cmdqs_ctxt(struct hinic_hwdev *hwdev,
 
 	cmdq_type = HINIC_CMDQ_SYNC;
 	for (; cmdq_type < HINIC_MAX_CMDQ_TYPES; cmdq_type++) {
+		cmdqs->cmdq[cmdq_type].hwdev = hwdev;
 		err = init_cmdq(&cmdqs->cmdq[cmdq_type],
 				&cmdqs->saved_wqs[cmdq_type], cmdq_type,
 				db_area[cmdq_type]);
@@ -882,7 +883,6 @@ int hinic_init_cmdqs(struct hinic_cmdqs *cmdqs, struct hinic_hwif *hwif,
 	struct hinic_func_to_io *func_to_io = cmdqs_to_func_to_io(cmdqs);
 	struct pci_dev *pdev = hwif->pdev;
 	struct hinic_hwdev *hwdev;
-	size_t saved_wqs_size;
 	u16 max_wqe_size;
 	int err;
 
@@ -893,8 +893,8 @@ int hinic_init_cmdqs(struct hinic_cmdqs *cmdqs, struct hinic_hwif *hwif,
 	if (!cmdqs->cmdq_buf_pool)
 		return -ENOMEM;
 
-	saved_wqs_size = HINIC_MAX_CMDQ_TYPES * sizeof(struct hinic_wq);
-	cmdqs->saved_wqs = devm_kzalloc(&pdev->dev, saved_wqs_size, GFP_KERNEL);
+	cmdqs->saved_wqs = devm_kcalloc(&pdev->dev, HINIC_MAX_CMDQ_TYPES,
+					sizeof(*cmdqs->saved_wqs), GFP_KERNEL);
 	if (!cmdqs->saved_wqs) {
 		err = -ENOMEM;
 		goto err_saved_wqs;

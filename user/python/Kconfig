@@ -8,7 +8,15 @@ config USER_PYTHON_HOST
 
 config USER_PYTHON
 	bool "python-target"
+	depends on LIB_LIBFFI
 	select USER_PYTHON_HOST
 	help
 		Build python for the target device,  requires a host build
 
+config USER_PYTHON_LIVE_IMAGE
+	bool "python-target live image"
+	depends on LIB_LIBFFI
+	select USER_PYTHON
+	help
+		Build python and create an image that can be
+		live-mounted on the target.

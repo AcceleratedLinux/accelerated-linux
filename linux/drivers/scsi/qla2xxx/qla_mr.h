@@ -1,8 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * QLogic Fibre Channel HBA Driver
  * Copyright (c)  2003-2014 QLogic Corporation
- *
- * See LICENSE.qla2xxx for copyright and licensing details.
  */
 #ifndef __QLA_MR_H
 #define __QLA_MR_H
@@ -177,8 +176,12 @@ struct fxdisc_entry_fx00 {
 	uint8_t flags;
 	uint8_t reserved_1;
 
-	struct dsd64 dseg_rq;
-	struct dsd64 dseg_rsp;
+	/*
+	 * Use array size 1 below to prevent that Coverity complains about
+	 * the append_dsd64() calls for the two arrays below.
+	 */
+	struct dsd64 dseg_rq[1];
+	struct dsd64 dseg_rsp[1];
 
 	__le32 dataword;
 	__le32 adapid;

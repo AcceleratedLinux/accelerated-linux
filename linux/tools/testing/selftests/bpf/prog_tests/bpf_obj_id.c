@@ -3,7 +3,7 @@
 
 #define nr_iters 2
 
-void test_bpf_obj_id(void)
+void serial_test_bpf_obj_id(void)
 {
 	const __u64 array_magic_value = 0xfaceb00c;
 	const __u32 array_key = 0;
@@ -48,7 +48,7 @@ void test_bpf_obj_id(void)
 	bzero(zeros, sizeof(zeros));
 	for (i = 0; i < nr_iters; i++) {
 		now = time(NULL);
-		err = bpf_prog_load(file, BPF_PROG_TYPE_RAW_TRACEPOINT,
+		err = bpf_prog_test_load(file, BPF_PROG_TYPE_RAW_TRACEPOINT,
 				    &objs[i], &prog_fds[i]);
 		/* test_obj_id.o is a dumb prog. It should never fail
 		 * to load.
@@ -65,8 +65,8 @@ void test_bpf_obj_id(void)
 		if (CHECK_FAIL(err))
 			goto done;
 
-		prog = bpf_object__find_program_by_title(objs[i],
-							 "raw_tp/sys_enter");
+		prog = bpf_object__find_program_by_name(objs[i],
+							"test_obj_id");
 		if (CHECK_FAIL(!prog))
 			goto done;
 		links[i] = bpf_program__attach(prog);
@@ -159,15 +159,15 @@ void test_bpf_obj_id(void)
 		/* Check getting link info */
 		info_len = sizeof(struct bpf_link_info) * 2;
 		bzero(&link_infos[i], info_len);
-		link_infos[i].raw_tracepoint.tp_name = (__u64)&tp_name;
+		link_infos[i].raw_tracepoint.tp_name = ptr_to_u64(&tp_name);
 		link_infos[i].raw_tracepoint.tp_name_len = sizeof(tp_name);
 		err = bpf_obj_get_info_by_fd(bpf_link__fd(links[i]),
 					     &link_infos[i], &info_len);
 		if (CHECK(err ||
 			  link_infos[i].type != BPF_LINK_TYPE_RAW_TRACEPOINT ||
 			  link_infos[i].prog_id != prog_infos[i].id ||
-			  link_infos[i].raw_tracepoint.tp_name != (__u64)&tp_name ||
-			  strcmp((char *)link_infos[i].raw_tracepoint.tp_name,
+			  link_infos[i].raw_tracepoint.tp_name != ptr_to_u64(&tp_name) ||
+			  strcmp(u64_to_ptr(link_infos[i].raw_tracepoint.tp_name),
 				 "sys_enter") ||
 			  info_len != sizeof(struct bpf_link_info),
 			  "get-link-info(fd)",
@@ -178,7 +178,7 @@ void test_bpf_obj_id(void)
 			  link_infos[i].type, BPF_LINK_TYPE_RAW_TRACEPOINT,
 			  link_infos[i].id,
 			  link_infos[i].prog_id, prog_infos[i].id,
-			  (char *)link_infos[i].raw_tracepoint.tp_name,
+			  (const char *)u64_to_ptr(link_infos[i].raw_tracepoint.tp_name),
 			  "sys_enter"))
 			goto done;
 

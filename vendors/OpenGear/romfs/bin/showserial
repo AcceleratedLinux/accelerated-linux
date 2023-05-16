@@ -1,0 +1,14 @@
+#!/bin/bash
+
+serial=
+
+if [ -f /bin/setfset ]; then
+        serial=`setfset -q n|awk '{print $3}'`
+fi
+
+if [ -z "$serial" ]; then
+        echo 'No serial number information available'
+else
+        echo $serial
+fi
+

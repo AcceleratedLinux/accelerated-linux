@@ -3303,8 +3303,8 @@ static int ath6kl_cfg80211_sscan_start(struct wiphy *wiphy,
 		if (ret < 0)
 			return ret;
 	} else {
-		 ret = ath6kl_wmi_bssfilter_cmd(ar->wmi, vif->fw_vif_idx,
-						MATCHED_SSID_FILTER, 0);
+		ret = ath6kl_wmi_bssfilter_cmd(ar->wmi, vif->fw_vif_idx,
+					       MATCHED_SSID_FILTER, 0);
 		if (ret < 0)
 			return ret;
 	}
@@ -3648,7 +3648,7 @@ void ath6kl_cfg80211_vif_cleanup(struct ath6kl_vif *vif)
 		kfree(mc_filter);
 	}
 
-	unregister_netdevice(vif->ndev);
+	cfg80211_unregister_netdevice(vif->ndev);
 
 	ar->num_vif--;
 }
@@ -3781,6 +3781,7 @@ struct wireless_dev *ath6kl_interface_add(struct ath6kl *ar, const char *name,
 {
 	struct net_device *ndev;
 	struct ath6kl_vif *vif;
+	u8 addr[ETH_ALEN];
 
 	ndev = alloc_netdev(sizeof(*vif), name, name_assign_type, ether_setup);
 	if (!ndev)
@@ -3803,14 +3804,14 @@ struct wireless_dev *ath6kl_interface_add(struct ath6kl *ar, const char *name,
 	vif->htcap[NL80211_BAND_2GHZ].ht_enable = true;
 	vif->htcap[NL80211_BAND_5GHZ].ht_enable = true;
 
-	memcpy(ndev->dev_addr, ar->mac_addr, ETH_ALEN);
+	ether_addr_copy(addr, ar->mac_addr);
 	if (fw_vif_idx != 0) {
-		ndev->dev_addr[0] = (ndev->dev_addr[0] ^ (1 << fw_vif_idx)) |
-				     0x2;
+		addr[0] = (addr[0] ^ (1 << fw_vif_idx)) | 0x2;
 		if (test_bit(ATH6KL_FW_CAPABILITY_CUSTOM_MAC_ADDR,
 			     ar->fw_capabilities))
-			ndev->dev_addr[4] ^= 0x80;
+			addr[4] ^= 0x80;
 	}
+	eth_hw_addr_set(ndev, addr);
 
 	init_netdev(ndev);
 
@@ -3821,7 +3822,7 @@ struct wireless_dev *ath6kl_interface_add(struct ath6kl *ar, const char *name,
 
 	netdev_set_default_ethtool_ops(ndev, &ath6kl_ethtool_ops);
 
-	if (register_netdevice(ndev))
+	if (cfg80211_register_netdevice(ndev))
 		goto err;
 
 	ar->avail_idx_map &= ~BIT(fw_vif_idx);
@@ -3897,19 +3898,19 @@ int ath6kl_cfg80211_init(struct ath6kl *ar)
 	switch (ar->hw.cap) {
 	case WMI_11AN_CAP:
 		ht = true;
-		/* fall through */
+		fallthrough;
 	case WMI_11A_CAP:
 		band_5gig = true;
 		break;
 	case WMI_11GN_CAP:
 		ht = true;
-		/* fall through */
+		fallthrough;
 	case WMI_11G_CAP:
 		band_2gig = true;
 		break;
 	case WMI_11AGN_CAP:
 		ht = true;
-		/* fall through */
+		fallthrough;
 	case WMI_11AG_CAP:
 		band_2gig = true;
 		band_5gig = true;

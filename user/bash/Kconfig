@@ -3,4 +3,6 @@ config USER_BASH_BASH
 	bool "bash"
 	help
 	  The Bourne-Again Shell. (large)
+	select LIB_TERMCAP
+	select LIB_TERMCAP_SHARED
 

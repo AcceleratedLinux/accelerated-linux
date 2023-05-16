@@ -1,0 +1,6 @@
+ENV{DEVPATH}!="/devices/pci0000:00/*/1-4:1.0/*", GOTO="poll_rate_end"
+
+# enable in-kernel media-presence polling
+SUBSYSTEM=="block", KERNEL=="sd[a-z]", ACTION=="add", ATTR{events_poll_msecs}="1000"
+
+LABEL="poll_rate_end"

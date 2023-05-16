@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 .. _dv-controls:
 
@@ -106,7 +99,7 @@ enum v4l2_dv_it_content_type -
     or an analog source. The enum v4l2_dv_it_content_type defines
     the possible content types:
 
-.. tabularcolumns:: |p{7.3cm}|p{10.4cm}|
+.. tabularcolumns:: |p{7.3cm}|p{10.2cm}|
 
 .. flat-table::
     :header-rows:  0

@@ -1,0 +1,38 @@
+#!/bin/sh
+# Converts an mdev.conf environment into something more udev-like
+# then runs /etc/scripts/udev-$1
+
+exec 99>>/dev/.seq 	# serialize executions
+flock 99
+
+if grep -q udev_debug /proc/cmdline; then
+    echo "mdev $MDEV $MDEV_OP $DEVPATH [$1]" >&2
+fi
+
+case $MDEV_OP in
+  create) export ACTION=add;;
+  delete) export ACTION=remove;;
+  *)      export ACTION=$MDEV_OP;;
+esac
+export DEVLINKS=
+export DEVNAME=/dev/$MDEV
+s=$(readlink /sys$DEVPATH/subsystem)
+export SUBSYSTEM=${s##*/}
+
+# export selected fields from uevent, if it is there
+if [ -r /sys$DEVPATH/uevent ]; then
+  while read LINE; do
+    case $LINE in
+      DEVTYPE=*) export "$LINE";;
+    esac
+  done </sys$DEVPATH/uevent
+fi
+
+cmd="$1"; shift
+if [ -x "/etc/scripts/udev-$cmd" ]; then
+    cmd="/etc/scripts/udev-$cmd" 
+fi
+
+# cloexec 99: close 99 in the subrprocess, but
+# this process holds 99 open until it exits
+"$cmd" "$@" 99<&-

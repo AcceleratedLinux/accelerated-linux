@@ -14,6 +14,7 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include "fsl-pstore-512MB.dtsi"
 
 / {
 	model = "Digi ConnectEZ-1";
@@ -40,7 +41,7 @@
 	};
 
 	soc {
-		rcpm: rcpm@1ee2000 {
+		rcpm@1ee2000 {
 			compatible = "fsl,ls1012a-rcpm", "fsl,qoriq-rcpm-2.1";
 			reg = <0x0 0x1ee2000 0x0 0x1000>;
 			fsl,#rcpm-wakeup-cells = <1>;
@@ -108,8 +109,13 @@
 };
 
 &i2c1 {
-	clock-frequency = <100000>;
+	clock-frequency = <400000>;
 	status = "okay";
+
+	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	pmux-reg-offset = <0x430>;
+	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -164,10 +170,8 @@
 };
 
 &esdhc0 {
-	mmc-ddr-1_8v;
 	mmc-hs200-1_8v;
-	mmc-hs400-1_8v;
-	mmc-hs200-1_8v;
+	non-removable;
 	status = "okay";
 };
 

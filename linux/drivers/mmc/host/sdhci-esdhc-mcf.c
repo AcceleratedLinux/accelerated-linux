@@ -367,14 +367,14 @@ static int esdhc_mcf_plat_init(struct sdhci_host *host,
 			       struct pltfm_mcf_data *mcf_data)
 {
 	struct mcf_esdhc_platform_data *plat_data;
+	struct device *dev = mmc_dev(host->mmc);
 
-	if (!host->mmc->parent->platform_data) {
-		dev_err(mmc_dev(host->mmc), "no platform data!\n");
+	if (!dev->platform_data) {
+		dev_err(dev, "no platform data!\n");
 		return -EINVAL;
 	}
 
-	plat_data = (struct mcf_esdhc_platform_data *)
-			host->mmc->parent->platform_data;
+	plat_data = (struct mcf_esdhc_platform_data *)dev->platform_data;
 
 	/* Card_detect */
 	switch (plat_data->cd_type) {
@@ -509,6 +509,7 @@ static int sdhci_esdhc_mcf_remove(struct platform_device *pdev)
 static struct platform_driver sdhci_esdhc_mcf_driver = {
 	.driver	= {
 		.name = "sdhci-esdhc-mcf",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = sdhci_esdhc_mcf_probe,
 	.remove = sdhci_esdhc_mcf_remove,

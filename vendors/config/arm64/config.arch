@@ -59,8 +59,8 @@ ENDIAN ?= little
 FLOAT  ?= hard
 
 ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-  ifneq ($(shell which aarch64-linux-musl-20191114-gcc),)
-    CROSS_COMPILE ?= aarch64-linux-musl-20191114-
+  ifneq ($(shell which aarch64-linux-musl-20220202-gcc),)
+    CROSS_COMPILE ?= aarch64-linux-musl-20220202-
   else
     CROSS_COMPILE ?= aarch64-linux-musl-
   endif
@@ -120,11 +120,14 @@ ifdef UCLINUX_BUILD_LIB
 	CFLAGS  := -O2
 	LDFLAGS := -Wl,-S
   endif
+	CFLAGS  += -fstack-protector-strong
+	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
-	LDFLAGS  += -fno-common -fno-builtin
+
+	LDFLAGS += -Wl,-z,relro,-z,now
 
 	CXXFLAGS = $(CFLAGS) -nostdinc++
 	CXXSUP := $(shell $(CXX) -print-file-name=libsupc++.a)
@@ -148,11 +151,14 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  := -O2
 	LDFLAGS := -g
   endif
+	CFLAGS  += -fstack-protector-strong
+	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
-	LDFLAGS  += -fno-common -fno-builtin
+
+	LDFLAGS += -Wl,-z,relro,-z,now
 
 	CXXFLAGS = $(CFLAGS) -nostdinc++
 	CXXSUP := $(shell $(CXX) -print-file-name=libsupc++.a)

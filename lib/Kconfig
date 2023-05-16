@@ -88,6 +88,9 @@ config LIB_LIBNETOLD
 
 source ../lib/libpam/Kconfig
 
+source ../lib/libuev/Kconfig
+source ../lib/libite/Kconfig
+
 config USER_PAM_SMB
 	bool "PAM SMB"
 	depends on LIB_LIBPAM
@@ -101,6 +104,12 @@ config USER_PAM_KRB5
 	help
 	  PAM should support Kerberos 5 authentication.
 
+config USER_PAM_PORTAUTH
+	bool "pam_portauth"
+	depends on LIB_LIBPAM
+	help
+	  PAM assist for password-less access to serial port services.
+
 config LIB_LIBPCAP
 	bool "Build libPCAP"
 	default n
@@ -112,14 +121,6 @@ config LIB_LIBPCAP_STATIC
 	help
 	  If you only have 1 or 2 small users of libpcap, enabling
 	  the use of the static libpcap can save space.
-
-config LIB_LIBBZ2
-	bool "Build libBZIP2"
-	default n
-	help
-	  Data compression library.
-	  Only enable this if you want to force the library to be built.
-	  The Config will make sure this library is built if it is needed.
 
 config LIB_LIBATM
 	bool "Build libATM"
@@ -229,6 +230,8 @@ config LIB_LIBXML2
 	help
 	  Library to access XML files.
 	  See  http://xmlsoft.org/
+
+source ../lib/libopengear/Kconfig
 
 comment "Library Configuration"
 

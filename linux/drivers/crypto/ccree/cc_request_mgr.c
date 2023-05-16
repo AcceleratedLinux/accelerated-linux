@@ -101,13 +101,12 @@ void cc_req_mgr_fini(struct cc_drvdata *drvdata)
 	dev_dbg(dev, "max_used_sw_slots=%d\n", req_mgr_h->max_used_sw_slots);
 
 #ifdef COMP_IN_WQ
-	flush_workqueue(req_mgr_h->workq);
 	destroy_workqueue(req_mgr_h->workq);
 #else
 	/* Kill tasklet */
 	tasklet_kill(&req_mgr_h->comptask);
 #endif
-	kzfree(req_mgr_h);
+	kfree_sensitive(req_mgr_h);
 	drvdata->request_mgr_handle = NULL;
 }
 

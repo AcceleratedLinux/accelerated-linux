@@ -1,0 +1,83 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+port=$1
+outlets=$2
+cmd=$3
+
+[[ -z "$username" ]] && username="admin"
+[[ -z "$password" ]] && password="raritan"
+
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <port> \"<outlet> [outlet..]\" on|off|cycle|status|probe "
+	exit 1
+fi
+
+function probeOutlets {
+	count=$(/bin/pmchat -v -t 3 ECHO ON "" "show -d properties=name /system1/outlet*" "command:" < $port 2>&1 | grep '^/system1/outlet[0-9]\+' | wc -l)
+	echo $count
+	return $?
+}
+
+function pduLogin {
+	/bin/pmchat -v -t 3 ECHO ON "" "\r" "command:--command:" "clp" "ogin:" "$username" "word:" "$password" "clp:/\->" < $port
+	return $?
+}
+
+function pduLogout {
+	/bin/pmchat -v -t 5 ECHO ON "" "exit" "command:" < $port
+	return $?
+}
+
+function outletPower {
+	outlet=$1
+	state=$2
+
+	/bin/pmchat -v -t 2 ECHO ON "" "set /system1/outlet$outlet powerState=$state" "clp:/\->" < $port >& /dev/null
+	return $?
+}
+
+if ! pduLogin >& /dev/null; then
+	pduLogout >& /dev/null
+	if ! pduLogin >& /dev/null; then
+		power_error_login $username
+		#for outlet in $outlets; do
+		#	power_outlet_error_login $outlet $username
+		#done
+		exit 1
+	fi
+fi
+
+if [[ $cmd == "probe" ]]; then
+	if ! probeOutlets; then
+		echo "WARNING: outlet probe failed"
+	fi
+else
+	for outlet in $outlets; do
+		case $cmd in
+		"on" )
+		outletPower $outlet on
+		;;
+		"off" )
+		outletPower $outlet off
+		;;
+		"cycle" )
+		outletPower $outlet off
+		outletPower $outlet on
+		;;
+		esac
+	done
+
+	for outlet in $outlets; do
+		status=$(/bin/pmchat -v -t 2 ECHO ON "" "show -d properties=powerState /system1/outlet$outlet" "clp:/\->" < $port 2>&1 | grep "powerState is" | sed 's/.*(\(.*\))/\1/')
+		power_outlet_status $outlet $status
+	done
+fi
+
+if ! pduLogout >& /dev/null; then
+	power_warn_logout $username
+fi
+
+exit 0

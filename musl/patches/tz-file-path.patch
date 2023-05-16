@@ -1,14 +1,14 @@
---- musl-1.2.0/src/time/__tz.c.orig	2020-02-21 10:37:02.000000000 +1000
-+++ musl-1.2.0/src/time/__tz.c	2020-03-31 15:56:34.726113470 +1000
-@@ -6,6 +6,7 @@
+--- musl-1.2.3/src/time/__tz.c.orig	2022-04-08 03:12:40.000000000 +1000
++++ musl-1.2.3/src/time/__tz.c	14:05:45.296238460 +1000
+@@ -4,6 +4,7 @@
+ #include <stdlib.h>
+ #include <string.h>
  #include <sys/mman.h>
++#include <sys/stat.h>
+ #include <ctype.h>
  #include "libc.h"
  #include "lock.h"
-+#include <sys/stat.h>
- 
- long  __timezone = 0;
- int   __daylight = 0;
-@@ -123,12 +124,25 @@
+@@ -131,12 +132,25 @@
  	size_t i;
  	static const char search[] =
  		"/usr/share/zoneinfo/\0/share/zoneinfo/\0/etc/zoneinfo/\0";
@@ -36,8 +36,8 @@
  
  	for (i=0; i<5; i++) r0[i] = r1[i] = 0;
  
-@@ -153,7 +167,7 @@
- 	if (*s == ':' || ((p=strchr(s, '/')) && !memchr(s, ',', p-s))) {
+@@ -172,7 +186,7 @@
+ 	if (!posix_form) {
  		if (*s == ':') s++;
  		if (*s == '/' || *s == '.') {
 -			if (!libc.secure || !strcmp(s, "/etc/localtime"))
@@ -45,7 +45,7 @@
  				map = __map_file(s, &map_size);
  		} else {
  			size_t l = strlen(s);
-@@ -169,6 +183,23 @@
+@@ -188,6 +202,23 @@
  		}
  		if (!map) s = __utc;
  	}
@@ -69,7 +69,7 @@
  	if (map && (map_size < 44 || memcmp(map, "TZif", 4))) {
  		__munmap((void *)map, map_size);
  		map = 0;
-@@ -216,6 +247,7 @@
+@@ -235,6 +266,7 @@
  			return;
  		}
  	}

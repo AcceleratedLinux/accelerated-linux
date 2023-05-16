@@ -7,7 +7,9 @@
  * This driver was based on: drivers/watchdog/rt2880_wdt.c
  */
 
+#include <asm/reboot.h>
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/reset.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -15,6 +17,7 @@
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/mod_devicetable.h>
+#include <linux/of.h>
 
 #include <asm/mach-ralink/ralink_regs.h>
 
@@ -31,8 +34,12 @@
 #define TMR1CTL_RESTART			BIT(9)
 #define TMR1CTL_PRESCALE_SHIFT		16
 
+#define SYSC_REG_RESET_CTRL		0x034
+#define RSTCTL_RESET_PCI		BIT(26)
+
 static void __iomem *mt7621_wdt_base;
 static struct reset_control *mt7621_wdt_reset;
+static void (*old_machine_restart)(char *command);
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
@@ -128,9 +135,30 @@ static struct watchdog_device mt7621_wdt_dev = {
 	.max_timeout = 0xfffful / 1000,
 };
 
+static void mt7621_wdt_restart(char *command)
+{
+	u32 t;
+
+	rt_wdt_w32(TIMER_REG_TMR1LOAD, 1);
+	rt_wdt_w32(TIMER_REG_TMRSTAT, TMR1CTL_RESTART);
+
+	t = rt_wdt_r32(TIMER_REG_TMR1CTL);
+	t |= TMR1CTL_ENABLE;
+	rt_wdt_w32(TIMER_REG_TMR1CTL, t);
+
+	mdelay(100);
+
+	printk("Rebooting with watchdog failed, fallback to machine restart\n");
+	mdelay(20);
+
+	old_machine_restart(command);
+}
+
 static int mt7621_wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	int ret;
+
 	mt7621_wdt_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(mt7621_wdt_base))
 		return PTR_ERR(mt7621_wdt_base);
@@ -159,7 +187,25 @@ static int mt7621_wdt_probe(struct platform_device *pdev)
 		set_bit(WDOG_HW_RUNNING, &mt7621_wdt_dev.status);
 	}
 
-	return devm_watchdog_register_device(dev, &mt7621_wdt_dev);
+	ret = devm_watchdog_register_device(dev, &mt7621_wdt_dev);
+	if (ret)
+		return ret;
+
+	if (of_property_read_bool(dev->of_node,
+				  "mt7621,register-reset-handler")) {
+		old_machine_restart = _machine_restart;
+		_machine_restart = mt7621_wdt_restart;
+	}
+
+	return 0;
+}
+
+static int mt7621_wdt_remove(struct platform_device *dev)
+{
+	if (old_machine_restart)
+		_machine_restart = old_machine_restart;
+
+	return 0;
 }
 
 static void mt7621_wdt_shutdown(struct platform_device *pdev)
@@ -175,6 +221,7 @@ MODULE_DEVICE_TABLE(of, mt7621_wdt_match);
 
 static struct platform_driver mt7621_wdt_driver = {
 	.probe		= mt7621_wdt_probe,
+	.remove		= mt7621_wdt_remove,
 	.shutdown	= mt7621_wdt_shutdown,
 	.driver		= {
 		.name		= KBUILD_MODNAME,

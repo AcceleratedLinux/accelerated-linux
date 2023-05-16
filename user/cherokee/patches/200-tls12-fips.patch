@@ -1,0 +1,27 @@
+Index: cherokee-webserver-51f13b9/cherokee/cryptor_libssl.c
+===================================================================
+--- cherokee-webserver-51f13b9.orig/cherokee/cryptor_libssl.c
++++ cherokee-webserver-51f13b9/cherokee/cryptor_libssl.c
+@@ -409,6 +409,9 @@ _vserver_new (cherokee_cryptor_t
+ 
+ 	/* Init the OpenSSL context
+ 	 */
++    if (strstr(vsrv->ciphers.buf, "TLSv1.2"))
++	n->context = SSL_CTX_new (TLSv1_2_server_method());
++    else
+ 	n->context = SSL_CTX_new (SSLv23_server_method());
+ 	if (n->context == NULL) {
+ 		LOG_ERROR_S(CHEROKEE_ERROR_SSL_ALLOCATE_CTX);
+@@ -616,6 +619,12 @@ _vserver_new (cherokee_cryptor_t
+ 
+ 	SSL_CTX_set_session_cache_mode (n->context, SSL_SESS_CACHE_SERVER);
+ 
++/*
++ * See https://wiki.openssl.org/index.php/FIPS_mode_and_TLS
++ * This is OpenSSL's preferred cipherstring for OpenSSL 1.0.1f+ for all versions of
++ * TLS and complies with the new (2020) FIPS restrictions SP800-131A and FIPS 186-4.
++ */
++#define FIPS_CIPHERS "TLSv1.2+FIPS:kRSA+FIPS:!eNULL:!aNULL"
+ 
+ #ifndef OPENSSL_NO_TLSEXT
+ 	/* Enable SNI

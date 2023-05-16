@@ -24,7 +24,7 @@ AUTORECONF = NOCONFIGURE=true ./autogen.sh
 $(shell mkdir -p build/bin; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.57.1-install/bin/gdbus-codegen build/bin/.; ln -sf $(ROOTDIR)/lib/glib/build/glib-2.57.1-install/bin/glib-mkenums build/bin/.)
 MAKEVARS += PATH=$(shell pwd)/build/bin:$$PATH UNINSTALLED_GLIB_SRCDIR=$(ROOTDIR)/lib/glib/build/glib-2.57.1
 
-ModemManager_ROMFS = mm_romfs
+ROMFS = mm_romfs
 
 include $(ROOTDIR)/tools/automake.inc
 
@@ -38,6 +38,17 @@ else
 	$(ROMFSINST) -d build/ModemManager*/data/org.freedesktop.ModemManager1.conf\
 			/etc/dbus-1/system.d/org.freedesktop.ModemManager1.conf
 endif
+
+ifdef CONFIG_PROP_OGCS
+ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
+	$(ROMFSINST) -d build/ModemManager*/data/org.freedesktop.ModemManager1.service\
+			/etc/default/dbus-1/system.d/org.freedesktop.ModemManager1.service
+else
+	$(ROMFSINST) -d build/ModemManager*/data/org.freedesktop.ModemManager1.service\
+			/etc/dbus-1/system.d/org.freedesktop.ModemManager1.service
+endif
+endif
+
 ifndef CONFIG_USER_MODEMMANAGER_ALLPLUGINS
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_ANYDATA \
 			/lib/ModemManager/libmm-plugin-anydata.so
@@ -69,6 +80,8 @@ ifndef CONFIG_USER_MODEMMANAGER_ALLPLUGINS
 			/lib/ModemManager/libmm-plugin-longcheer.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_OPTION \
 			/lib/ModemManager/libmm-plugin-option.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_OPTIONHSO \
+			/lib/ModemManager/libmm-plugin-option-hso.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_VIA \
 			/lib/ModemManager/libmm-plugin-via.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_HSO \
@@ -77,6 +90,8 @@ ifndef CONFIG_USER_MODEMMANAGER_ALLPLUGINS
 			/lib/ModemManager/libmm-plugin-iridium.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_SIERRA \
 			/lib/ModemManager/libmm-plugin-sierra.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_SIERRALEGACY \
+			/lib/ModemManager/libmm-plugin-sierra-legacy.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_NOKIA \
 			/lib/ModemManager/libmm-plugin-nokia.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_HUAWEI \
@@ -87,5 +102,35 @@ ifndef CONFIG_USER_MODEMMANAGER_ALLPLUGINS
 			/lib/ModemManager/libmm-plugin-simtech.so
 	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_LINKTOP \
 			/lib/ModemManager/libmm-plugin-linktop.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_ALTAIRLTE \
+			/lib/ModemManager/libmm-plugin-altair-lte.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_BROADMOBI \
+			/lib/ModemManager/libmm-plugin-broadmobi.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_DELL \
+			/lib/ModemManager/libmm-plugin-dell.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_DLINK \
+			/lib/ModemManager/libmm-plugin-dlink.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_ERICSSONMBM \
+			/lib/ModemManager/libmm-plugin-ericsson-mbm.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_FIBOCOM \
+			/lib/ModemManager/libmm-plugin-fibocom.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_FOXCONN \
+			/lib/ModemManager/libmm-plugin-foxconn.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_HAIER \
+			/lib/ModemManager/libmm-plugin-haier.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_MTK \
+			/lib/ModemManager/libmm-plugin-mtk.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_QUECTEL \
+			/lib/ModemManager/libmm-plugin-quectel.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_TELIT \
+			/lib/ModemManager/libmm-plugin-telit.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_THURAYA \
+			/lib/ModemManager/libmm-plugin-thuraya.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_TPLINK \
+			/lib/ModemManager/libmm-plugin-tplink.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_UBLOX \
+			/lib/ModemManager/libmm-plugin-ublox.so
+	$(ROMFSINST) -R -E CONFIG_USER_MODEMMANAGER_PLUGIN_UNITAC \
+			/lib/ModemManager/libmm-plugin-unitac.so
 endif
 

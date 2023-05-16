@@ -1,0 +1,24 @@
+From 53832c80bc57127ba983e1badfa6674b4bd02a6d Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Fri, 8 Apr 2022 11:58:52 -0400
+Subject: [PATCH] fibocom: Enable QMI
+
+---
+ plugins/fibocom/mm-plugin-fibocom.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/plugins/fibocom/mm-plugin-fibocom.c b/plugins/fibocom/mm-plugin-fibocom.c
+index e2188561..7ab6b3f8 100644
+--- a/plugins/fibocom/mm-plugin-fibocom.c
++++ b/plugins/fibocom/mm-plugin-fibocom.c
+@@ -113,6 +113,7 @@ mm_plugin_create (void)
+                       MM_PLUGIN_ALLOWED_DRIVERS,    drivers,
+                       MM_PLUGIN_ALLOWED_AT,         TRUE,
+                       MM_PLUGIN_ALLOWED_MBIM,       TRUE,
++                      MM_PLUGIN_ALLOWED_QMI,        TRUE,
+                       MM_PLUGIN_XMM_PROBE,          TRUE,
+                       NULL));
+ }
+-- 
+2.25.1
+

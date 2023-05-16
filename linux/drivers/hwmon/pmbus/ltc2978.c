@@ -196,6 +196,17 @@ static int ltc_read_byte_data(struct i2c_client *client, int page, int reg)
 	return pmbus_read_byte_data(client, page, reg);
 }
 
+static int ltc_write_byte_data(struct i2c_client *client, int page, int reg, u8 value)
+{
+	int ret;
+
+	ret = ltc_wait_ready(client);
+	if (ret < 0)
+		return ret;
+
+	return pmbus_write_byte_data(client, page, reg, value);
+}
+
 static int ltc_write_byte(struct i2c_client *client, int page, u8 byte)
 {
 	int ret;
@@ -649,12 +660,12 @@ static int ltc2978_get_id(struct i2c_client *client)
 	return -ENODEV;
 }
 
-static int ltc2978_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int ltc2978_probe(struct i2c_client *client)
 {
 	int i, chip_id;
 	struct ltc2978_data *data;
 	struct pmbus_driver_info *info;
+	const struct i2c_device_id *id;
 
 	if (!i2c_check_functionality(client->adapter,
 				     I2C_FUNC_SMBUS_READ_WORD_DATA))
@@ -670,15 +681,18 @@ static int ltc2978_probe(struct i2c_client *client,
 		return chip_id;
 
 	data->id = chip_id;
+	id = i2c_match_id(ltc2978_id, client);
 	if (data->id != id->driver_data)
 		dev_warn(&client->dev,
-			 "Device mismatch: Configured %s, detected %s\n",
+			 "Device mismatch: Configured %s (%d), detected %d\n",
 			 id->name,
-			 ltc2978_id[data->id].name);
+			 (int) id->driver_data,
+			 chip_id);
 
 	info = &data->info;
 	info->write_word_data = ltc2978_write_word_data;
 	info->write_byte = ltc_write_byte;
+	info->write_byte_data = ltc_write_byte_data;
 	info->read_word_data = ltc_read_word_data;
 	info->read_byte_data = ltc_read_byte_data;
 
@@ -832,7 +846,7 @@ static int ltc2978_probe(struct i2c_client *client,
 	}
 #endif
 
-	return pmbus_do_probe(client, id, info);
+	return pmbus_do_probe(client, info);
 }
 
 
@@ -872,8 +886,7 @@ static struct i2c_driver ltc2978_driver = {
 		   .name = "ltc2978",
 		   .of_match_table = of_match_ptr(ltc2978_of_match),
 		   },
-	.probe = ltc2978_probe,
-	.remove = pmbus_do_remove,
+	.probe_new = ltc2978_probe,
 	.id_table = ltc2978_id,
 };
 
@@ -882,3 +895,4 @@ module_i2c_driver(ltc2978_driver);
 MODULE_AUTHOR("Guenter Roeck");
 MODULE_DESCRIPTION("PMBus driver for LTC2978 and compatible chips");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(PMBUS);

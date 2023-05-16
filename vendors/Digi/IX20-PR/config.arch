@@ -15,6 +15,7 @@ RELFILES = images/image.bin \
 	   images/u-boot.bin \
 	   images/u-boot.imx \
 	   images/u-boot-nand.imx \
+	   images/bloader.bin \
 	   images/configs.tar.gz \
 	   images/romfs-inst.log \
 	   images/acl-licenses.txt \

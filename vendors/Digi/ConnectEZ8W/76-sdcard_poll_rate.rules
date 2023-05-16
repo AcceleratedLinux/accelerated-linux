@@ -1,0 +1,6 @@
+ENV{DEVPATH}!="/devices/platform/soc/*/usb6/6-1*", GOTO="poll_rate_end"
+
+# enable in-kernel media-presence polling
+SUBSYSTEM=="block", KERNEL=="sda", ACTION=="add", ATTR{events_poll_msecs}="1000"
+
+LABEL="poll_rate_end"

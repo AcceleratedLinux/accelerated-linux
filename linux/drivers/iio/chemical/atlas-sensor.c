@@ -15,7 +15,7 @@
 #include <linux/irq.h>
 #include <linux/irq_work.h>
 #include <linux/i2c.h>
-#include <linux/of_device.h>
+#include <linux/mod_devicetable.h>
 #include <linux/regmap.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>
@@ -91,8 +91,8 @@ struct atlas_data {
 	struct regmap *regmap;
 	struct irq_work work;
 	unsigned int interrupt_enabled;
-
-	__be32 buffer[6]; /* 96-bit data + 32-bit pad + 64-bit timestamp */
+	/* 96-bit data + 32-bit pad + 64-bit timestamp */
+	__be32 buffer[6] __aligned(8);
 };
 
 static const struct regmap_config atlas_regmap_config = {
@@ -410,15 +410,9 @@ static int atlas_buffer_postenable(struct iio_dev *indio_dev)
 	struct atlas_data *data = iio_priv(indio_dev);
 	int ret;
 
-	ret = iio_triggered_buffer_postenable(indio_dev);
+	ret = pm_runtime_resume_and_get(&data->client->dev);
 	if (ret)
 		return ret;
-
-	ret = pm_runtime_get_sync(&data->client->dev);
-	if (ret < 0) {
-		pm_runtime_put_noidle(&data->client->dev);
-		return ret;
-	}
 
 	return atlas_set_interrupt(data, true);
 }
@@ -437,11 +431,8 @@ static int atlas_buffer_predisable(struct iio_dev *indio_dev)
 	if (ret)
 		return ret;
 
-	return iio_triggered_buffer_predisable(indio_dev);
+	return 0;
 }
-
-static const struct iio_trigger_ops atlas_interrupt_trigger_ops = {
-};
 
 static const struct iio_buffer_setup_ops atlas_buffer_setup_ops = {
 	.postenable = atlas_buffer_postenable,
@@ -491,11 +482,9 @@ static int atlas_read_measurement(struct atlas_data *data, int reg, __be32 *val)
 	int suspended = pm_runtime_suspended(dev);
 	int ret;
 
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0) {
-		pm_runtime_put_noidle(dev);
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
 		return ret;
-	}
 
 	if (suspended)
 		msleep(data->chip->delay);
@@ -600,11 +589,11 @@ static const struct iio_info atlas_info = {
 };
 
 static const struct i2c_device_id atlas_id[] = {
-	{ "atlas-ph-sm", ATLAS_PH_SM},
-	{ "atlas-ec-sm", ATLAS_EC_SM},
-	{ "atlas-orp-sm", ATLAS_ORP_SM},
-	{ "atlas-do-sm", ATLAS_DO_SM},
-	{ "atlas-rtd-sm", ATLAS_RTD_SM},
+	{ "atlas-ph-sm", ATLAS_PH_SM },
+	{ "atlas-ec-sm", ATLAS_EC_SM },
+	{ "atlas-orp-sm", ATLAS_ORP_SM },
+	{ "atlas-do-sm", ATLAS_DO_SM },
+	{ "atlas-rtd-sm", ATLAS_RTD_SM },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, atlas_id);
@@ -624,7 +613,6 @@ static int atlas_probe(struct i2c_client *client,
 {
 	struct atlas_data *data;
 	struct atlas_device *chip;
-	const struct of_device_id *of_id;
 	struct iio_trigger *trig;
 	struct iio_dev *indio_dev;
 	int ret;
@@ -633,21 +621,19 @@ static int atlas_probe(struct i2c_client *client,
 	if (!indio_dev)
 		return -ENOMEM;
 
-	of_id = of_match_device(atlas_dt_ids, &client->dev);
-	if (!of_id)
+	if (!dev_fwnode(&client->dev))
 		chip = &atlas_devices[id->driver_data];
 	else
-		chip = &atlas_devices[(unsigned long)of_id->data];
+		chip = &atlas_devices[(unsigned long)device_get_match_data(&client->dev)];
 
 	indio_dev->info = &atlas_info;
 	indio_dev->name = ATLAS_DRV_NAME;
 	indio_dev->channels = chip->channels;
 	indio_dev->num_channels = chip->num_channels;
 	indio_dev->modes = INDIO_BUFFER_SOFTWARE | INDIO_DIRECT_MODE;
-	indio_dev->dev.parent = &client->dev;
 
 	trig = devm_iio_trigger_alloc(&client->dev, "%s-dev%d",
-				      indio_dev->name, indio_dev->id);
+				      indio_dev->name, iio_device_id(indio_dev));
 
 	if (!trig)
 		return -ENOMEM;
@@ -656,8 +642,6 @@ static int atlas_probe(struct i2c_client *client,
 	data->client = client;
 	data->trig = trig;
 	data->chip = chip;
-	trig->dev.parent = indio_dev->dev.parent;
-	trig->ops = &atlas_interrupt_trigger_ops;
 	iio_trigger_set_drvdata(trig, indio_dev);
 
 	i2c_set_clientdata(client, indio_dev);
@@ -749,12 +733,10 @@ static int atlas_remove(struct i2c_client *client)
 
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-	pm_runtime_put_noidle(&client->dev);
 
 	return atlas_set_powermode(data, 0);
 }
 
-#ifdef CONFIG_PM
 static int atlas_runtime_suspend(struct device *dev)
 {
 	struct atlas_data *data =
@@ -770,18 +752,16 @@ static int atlas_runtime_resume(struct device *dev)
 
 	return atlas_set_powermode(data, 1);
 }
-#endif
 
 static const struct dev_pm_ops atlas_pm_ops = {
-	SET_RUNTIME_PM_OPS(atlas_runtime_suspend,
-			   atlas_runtime_resume, NULL)
+	RUNTIME_PM_OPS(atlas_runtime_suspend, atlas_runtime_resume, NULL)
 };
 
 static struct i2c_driver atlas_driver = {
 	.driver = {
 		.name	= ATLAS_DRV_NAME,
-		.of_match_table	= of_match_ptr(atlas_dt_ids),
-		.pm	= &atlas_pm_ops,
+		.of_match_table	= atlas_dt_ids,
+		.pm	= pm_ptr(&atlas_pm_ops),
 	},
 	.probe		= atlas_probe,
 	.remove		= atlas_remove,

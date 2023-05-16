@@ -15,6 +15,7 @@
 #include <linux/pagemap.h>
 #include <linux/udp.h>
 #include <linux/sunrpc/msg_prot.h>
+#include <linux/sunrpc/sched.h>
 #include <linux/sunrpc/xdr.h>
 #include <linux/export.h>
 
@@ -70,7 +71,7 @@ static size_t xdr_skb_read_and_csum_bits(struct xdr_skb_reader *desc, void *to, 
 	if (len > desc->count)
 		len = desc->count;
 	pos = desc->offset;
-	csum2 = skb_copy_and_csum_bits(desc->skb, pos, to, len, 0);
+	csum2 = skb_copy_and_csum_bits(desc->skb, pos, to, len);
 	desc->csum = csum_block_add(desc->csum, csum2, pos);
 	desc->count -= len;
 	desc->offset += len;
@@ -220,12 +221,6 @@ static int xprt_send_kvec(struct socket *sock, struct msghdr *msg,
 static int xprt_send_pagedata(struct socket *sock, struct msghdr *msg,
 			      struct xdr_buf *xdr, size_t base)
 {
-	int err;
-
-	err = xdr_alloc_bvec(xdr, GFP_KERNEL);
-	if (err < 0)
-		return err;
-
 	iov_iter_bvec(&msg->msg_iter, WRITE, xdr->bvec, xdr_buf_pagecount(xdr),
 		      xdr->page_len + xdr->page_base);
 	return xprt_sendmsg(sock, msg, base + xdr->page_base);

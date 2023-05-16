@@ -30,7 +30,6 @@
 #define MTK_STAR_WAIT_TIMEOUT			300
 #define MTK_STAR_MAX_FRAME_SIZE			1514
 #define MTK_STAR_SKB_ALIGNMENT			16
-#define MTK_STAR_NAPI_WEIGHT			64
 #define MTK_STAR_HASHTABLE_MC_LIMIT		256
 #define MTK_STAR_HASHTABLE_SIZE_MAX		512
 
@@ -523,7 +522,7 @@ static void mtk_star_dma_resume_tx(struct mtk_star_priv *priv)
 static void mtk_star_set_mac_addr(struct net_device *ndev)
 {
 	struct mtk_star_priv *priv = netdev_priv(ndev);
-	u8 *mac_addr = ndev->dev_addr;
+	const u8 *mac_addr = ndev->dev_addr;
 	unsigned int high, low;
 
 	high = mac_addr[0] << 8 | mac_addr[1] << 0;
@@ -966,6 +965,7 @@ static int mtk_star_enable(struct net_device *ndev)
 				      mtk_star_adjust_link, 0, priv->phy_intf);
 	if (!priv->phydev) {
 		netdev_err(ndev, "failed to connect to PHY\n");
+		ret = -ENODEV;
 		goto err_free_irq;
 	}
 
@@ -1053,7 +1053,7 @@ static int mtk_star_netdev_start_xmit(struct sk_buff *skb,
 err_drop_packet:
 	dev_kfree_skb(skb);
 	ndev->stats.tx_dropped++;
-	return NETDEV_TX_BUSY;
+	return NETDEV_TX_OK;
 }
 
 /* Returns the number of bytes sent or a negative number on the first
@@ -1161,7 +1161,7 @@ static const struct net_device_ops mtk_star_netdev_ops = {
 	.ndo_start_xmit		= mtk_star_netdev_start_xmit,
 	.ndo_get_stats64	= mtk_star_netdev_get_stats64,
 	.ndo_set_rx_mode	= mtk_star_set_rx_mode,
-	.ndo_do_ioctl		= mtk_star_netdev_ioctl,
+	.ndo_eth_ioctl		= mtk_star_netdev_ioctl,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
 };
@@ -1224,8 +1224,6 @@ static int mtk_star_receive_packet(struct mtk_star_priv *priv)
 		goto push_new_skb;
 	}
 
-	desc_data.dma_addr = new_dma_addr;
-
 	/* We can't fail anymore at this point: it's safe to unmap the skb. */
 	mtk_star_dma_unmap_rx(priv, &desc_data);
 
@@ -1234,6 +1232,9 @@ static int mtk_star_receive_packet(struct mtk_star_priv *priv)
 	desc_data.skb->protocol = eth_type_trans(desc_data.skb, ndev);
 	desc_data.skb->dev = ndev;
 	netif_receive_skb(desc_data.skb);
+
+	/* update dma_addr for new skb */
+	desc_data.dma_addr = new_dma_addr;
 
 push_new_skb:
 	desc_data.len = skb_tailroom(new_skb);
@@ -1389,7 +1390,7 @@ static int mtk_star_mdio_init(struct net_device *ndev)
 	priv->mii->write = mtk_star_mdio_write;
 	priv->mii->priv = priv;
 
-	ret = of_mdiobus_register(priv->mii, mdio_node);
+	ret = devm_of_mdiobus_register(dev, priv->mii, mdio_node);
 
 out_put_node:
 	of_node_put(mdio_node);
@@ -1439,13 +1440,6 @@ static void mtk_star_clk_disable_unprepare(void *data)
 	struct mtk_star_priv *priv = data;
 
 	clk_bulk_disable_unprepare(MTK_STAR_NCLKS, priv->clks);
-}
-
-static void mtk_star_mdiobus_unregister(void *data)
-{
-	struct mtk_star_priv *priv = data;
-
-	mdiobus_unregister(priv->mii);
 }
 
 static int mtk_star_probe(struct platform_device *pdev)
@@ -1549,22 +1543,19 @@ static int mtk_star_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = devm_add_action_or_reset(dev, mtk_star_mdiobus_unregister, priv);
-	if (ret)
-		return ret;
-
-	ret = eth_platform_get_mac_address(dev, ndev->dev_addr);
+	ret = platform_get_ethdev_address(dev, ndev);
 	if (ret || !is_valid_ether_addr(ndev->dev_addr))
 		eth_hw_addr_random(ndev);
 
 	ndev->netdev_ops = &mtk_star_netdev_ops;
 	ndev->ethtool_ops = &mtk_star_ethtool_ops;
 
-	netif_napi_add(ndev, &priv->napi, mtk_star_poll, MTK_STAR_NAPI_WEIGHT);
+	netif_napi_add(ndev, &priv->napi, mtk_star_poll, NAPI_POLL_WEIGHT);
 
 	return devm_register_netdev(dev, ndev);
 }
 
+#ifdef CONFIG_OF
 static const struct of_device_id mtk_star_of_match[] = {
 	{ .compatible = "mediatek,mt8516-eth", },
 	{ .compatible = "mediatek,mt8518-eth", },
@@ -1572,6 +1563,7 @@ static const struct of_device_id mtk_star_of_match[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(of, mtk_star_of_match);
+#endif
 
 static SIMPLE_DEV_PM_OPS(mtk_star_pm_ops,
 			 mtk_star_suspend, mtk_star_resume);

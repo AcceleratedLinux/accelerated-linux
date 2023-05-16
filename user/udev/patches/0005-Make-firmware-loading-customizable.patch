@@ -1,0 +1,40 @@
+From 78ba66c204c3d8e9204d6a410f1f159dfd330a1f Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Thu, 14 Jul 2022 16:26:33 +0200
+Subject: [PATCH] Make firmware loading customizable
+
+Separate out the firmware loading rule to another rule file. To add
+custom firmware loaders, add a similar line to the start of the file:
+
+  SUBSYSTEM=="firmware", ACTION=="add", PROGRAM+="load_firmware.sh", GOTO="end_of_fw_loading"
+---
+ rules/51-firmware.rules |    5 +++++
+ rules/Makefile.am       |    1 +
+ 2 files changed, 6 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index 3a5f3b5..a1de484 100644
+--- a/rules/Makefile.am.orig	2022-09-02 14:48:02.545126158 +1000
++++ b/rules/Makefile.am	2022-09-02 14:48:24.732198754 +1000
+@@ -8,6 +8,7 @@
+ 
+ dist_udevrules_DATA = \
+ 	50-udev-default.rules \
++	51-firmware.rules \
+ 	60-block.rules \
+ 	60-cdrom_id.rules \
+ 	60-drm.rules \
+diff --git a/rules/51-firmware.rules b/rules/51-firmware.rules
+new file mode 100644
+index 0000000..d1e08ba
+--- /dev/null
++++ b/rules/51-firmware.rules
+@@ -0,0 +1,5 @@
++# Firmware loading handlers
++
++SUBSYSTEM=="firmware", ACTION=="add", IMPORT{builtin}="firmware"
++
++LABEL="end_of_fw_loading"
+-- 
+2.34.1
+

@@ -1,0 +1,36 @@
+
+config USER_GDB
+	bool "GDB (GNU debugger)"
+	default n
+
+if USER_GDB
+
+  config USER_GDB_HOST
+	bool "gdb (host)"
+	default n
+	help
+	  Builds tools/$(ARCH)-gdb with minimal features.
+	  (Not recommended: You will probably find that your
+	  distro's gdb-multiarch package has better features
+	  than this configuration.)
+
+  config USER_GDB_TARGET
+	bool "gdb (target)"
+	default n
+	help
+	  On-target debugger with minimal features.
+
+  config USER_GDB_GDBSERVER
+	bool "gdbserver"
+	help
+	  Support for remote debugging of a target process.
+
+  config USER_GDB_GCORE
+	bool "gcore"
+	default n
+	select USER_GDB_TARGET
+	help
+	  A tool to capture a core dump of a live process.
+	  It is a wrapper around gdb.
+
+endif

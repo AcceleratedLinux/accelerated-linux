@@ -44,9 +44,9 @@
 
 struct interface_info *interfaces, *dummy_interfaces, *fallback_interface;
 int interfaces_invalidated;
-int quiet_interface_discovery;
 u_int16_t local_port;
 u_int16_t remote_port;
+int quiet_interface_discovery;
 int (*dhcp_interface_setup_hook) (struct interface_info *, struct iaddr *);
 int (*dhcp_interface_discovery_hook) (struct interface_info *);
 isc_result_t (*dhcp_interface_startup_hook) (struct interface_info *);

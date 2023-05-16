@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# For link-local host routes in the main route table, if relevant addresses
+# do not exist in the IPv6 neighbour cache anymore, remove the route.
+# For link-local addresses in the IPv6 neighbour cache, add link-local host
+# routes if not there yet in the main route table.
+# This ensures all neighours have link-local host routes, this is to workaround
+# the issue that DHCPv6 relay can't find a route to the DHCPv6 client when
+# the link-local subnet route via the relevant lower interface is not preferred.
+
+INTERFACE=$1
+[ -z "$INTERFACE" ] && exit 0
+
+ROUTEFILE=/tmp/ipv6-${INTERFACE}.routes
+/bin/ip -6 r show dev $INTERFACE | grep -E "fe80::" | grep -vE "fe80::/64" > $ROUTEFILE
+
+NEIGHFILE=/tmp/ipv6-${INTERFACE}.neighbor
+/bin/ip -6 n show dev $INTERFACE | grep -E "fe80::" | grep -v "FAILED" > $NEIGHFILE
+
+# remove link-local host routes if not neighbor anymore
+while read line; do
+	address=`echo $line | cut -d' ' -f1`
+	if [ -z "$address" ]; then
+		continue;
+	fi
+	if ! grep -q "$address" $NEIGHFILE; then
+		/bin/ip -6 r del $address dev $INTERFACE
+	fi
+done < $ROUTEFILE
+
+# add link-local host routes if becoming a new neighbor
+while read line; do
+	address=`echo $line | cut -d' ' -f1`
+	if [ -z "$address" ]; then
+		continue;
+	fi
+	if ! grep -q "$address" $ROUTEFILE; then
+		/bin/ip -6 r add $address dev $INTERFACE
+	fi
+
+done < $NEIGHFILE
+
+rm $ROUTEFILE
+rm $NEIGHFILE
+
+exit 0

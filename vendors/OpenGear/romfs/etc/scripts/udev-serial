@@ -1,0 +1,410 @@
+#!/bin/bash
+#
+# This script does the following:
+#  - creates a /dev/port* symlink when a tty device (uart) is attached
+#  - deletes the /dev/port* symlink when the tty device is removed
+#  - updates /var/run/serial-ports and infod when a port (not
+#    necessarily a tty) is detected. This is used by USB hub ports.
+#    (A client can detect a UART-less port by the absence of the /dev/port
+#    symlink.)
+#  - dynamically allocates new port numbers to TTYs that are either
+#    unknown or would conflict with an existing port-named tty.
+#
+# A port is the labeled receptacle on the surface of a product. Every
+# port has a unique index (starting from 1) and a default label string.
+#
+# TTY devices and USB hub ports are mapped to ports by the descriptor
+# files in /etc/ports.d/* file.  The format of these files is:
+#
+#    [<name>|-] [<deflabel>|-] [<typedesc>|-] <path-glob> [<infovar>=<value>...] [<link>...]
+#
+# Blank lines and lines beginning with '#' are ignored. Fields may
+# may be quoted with double quotes.
+#
+# This script assigns devices to ports by searching the /etc/ports.d files
+# and finding the FIRST matching <path-glob>. If nothing matches, the
+# device is ignored by this script.
+#
+# <name>
+#   The first column of the file, <name> is the name of the /dev/ symlink
+#   created for the tty device. The application can use the presence of the
+#   symlink to determine if the port is "present". (In-product UARTS are
+#   always present, while USB adapters may not be.
+#
+#   If the <name> is in the form 'port<NN>', the <NN> indicates the port
+#   index, and infod and /var/run/serial-ports is updated to reflect
+#   the port's presence. The script maintains consecutive ports entries
+#   beginning at port01.
+#
+#   Special <name>s:
+#  
+#        ignore     Matching devices are silently ignored.
+#        -          Matching devices are silently ignored.
+#        port*      If the <name> is exactly "port*" then the TTY device
+#                   is treated specially (See Dynamic Ports, below).
+#
+# <deflabel>
+#   The default label is a hint to the UI on how the port should be named.
+#   The application software is free to ignore this name, or allow the
+#   user to specify their own name.
+#
+#   If the label is - and the name is "port<nn>" then the effective
+#   label is "Port <n>".
+#
+# <typedesc>
+#   This is a comma-separated descriptive string used to describe the
+#   physical port interface.  The string may begin with one of:
+#      8p8c-f 6p4c-f usb-am de9-m
+#   It will also contain "dynamic" for dynamically-allocated ports.
+#
+# <path-glob>
+#   This a shell glob expression applied to the DEVPATH (/devices/...)
+#   path of an added device. The glob metachars are ? * and [ccc]. Note
+#   that / is not treated specially by ? or * in this mode. The glob
+#   should mactch both the USB port (SUBSYSTEM=usb) and the serial
+#   device (SUBSYSTEM=tty)
+#
+# <infovar>=<value>
+#   These values will be stored in infod with the prefix
+#   config.ports.port<n>.dev. Known vars are:
+#
+#      pinoutgpio="<chip> <n>"
+#        - used for X1/X2 pinout control, X1 when active
+#
+# <link>
+#   Symlinks to create in /dev to the port, should it exist
+#
+# Example content of a /etc/ports.d file:
+#
+#   # ACM9999 devices
+#   port01  "Port 1"  8P8C-X2  /devices/platform/serial8250/tty/ttyS1 sercon
+#   port08  "Port 8"  USB      /devices/platform/usb*/1-1.4.1/*
+#
+#
+# Dynamic Ports
+#
+#  Dynamic ports automatically adds new ports for unexpected TTY devices.
+#  This feature require config.ports.dynamic to be enabled.
+#
+#  Devices with SUBSYSTEM=tty and name 'port*' are allocated a port
+#  number dynamically. The number of system ports N is obtained
+#  with 'setfset -q s', and new ports are allocated starting at N+1.
+#  Once allocated, entries are added to the file /var/run/ports.dynamic
+#  so that if the device is removed and re-attached it will receive
+#  the same number.
+#
+# Infod structure
+#
+#  Ports are published in infod under the prefix ports.port<nn>:
+#
+#     config.ports.port<n>.dev.deflabel - the <deflabel> field
+#     config.ports.port<n>.dev.typedesc - the <typedesc> field
+#     config.ports.port<n>.dev.devname  - the device name under /dev, eg "ttyUSB0".
+#                               This script maintains a symlink
+#                               /dev/port<nn> that points there.
+#     config.ports.port<n>.dev.srcline  - indicates where the matched line came fron
+#
+
+if [ -x /etc/config/scripts/udev-serial ]; then
+	/bin/bash /etc/config/scripts/udev-serial "$@"
+	exit
+fi
+
+. /etc/scripts/serial-helper
+
+# find an unused portNN name and initialise it to $DEVNAME/$DEVPATH
+# The last allocated port number is kept in /var/run/ports.dynamic
+allocate_dynamic_port_index() { # srcline typedesc
+
+	case $(config -g config.ports.dynamic) in
+	    *" on") :;;
+	    *) return 1;; # dynamic ports not enabled
+	esac
+
+	flock 8
+	local last_index
+	if [ -s /var/run/ports.dynamic ]; then
+		last_index=$(sed -n '${s/ .*//;p}' /var/run/ports.dynamic)
+		last_index=${last_index#port}
+		last_index=${last_index#0}
+	else
+		get_serial_max_ports
+		last_index=$serial_max_ports
+	fi
+	port_index=$((last_index + 1))
+	port_name=$(printf port%02d $port_index)
+	port_deflabel="$DEVNAME"
+	port_typedesc=$2
+	port_pathglob="$DEVPATH"
+	port_srcline="$1"
+	echo "$port_name \"$port_deflabel\" \"$port_typedesc\" $port_pathglob" >&8
+
+	# give dynamic ports a fresh configuration
+	# (We won't hunt the config for a matching devpath)
+	local p=config.ports.port$port_index
+	if [ x"$(config -g ${p}.dynamicpath)" != x"$DEVPATH" ]; then
+	    config -d ${p} -s ${p}.dynamicpath="$DEVPATH"
+	fi
+
+	return 0
+} 8>>/var/run/ports.dynamic
+
+# The max number of phys ports the device was configured at manuf time
+# FIXME: this logic is duplicated in /etc/rc.serial-dynamic.
+get_serial_max_ports () {
+	if ! serial_max_ports=$(readlink /var/run/ports.max); then
+		serial_max_ports=$(serial_get_max_ports)
+		ln -s $serial_max_ports /var/run/ports.max
+	fi
+}
+
+if grep -q udev_debug /proc/cmdline; then
+	echo "$ACTION ${DEVNAME:-''} $DEVPATH ${SUBSYSTEM:-''}" >> /dev/serial.log
+fi
+
+# USB hubs allow us to deduce the future existence of physical USB paths.
+# Each /port* child node tells us what physical device path would be used.
+# If the path doesn't exists (ie nothing plugged in), pretend that it does
+# and recursively execute this script again so we can make a port entry.
+if [ $SUBSYSTEM = usb ] && [[ $(readlink /sys$DEVPATH/driver) == */hub ]]; then
+	for p in /sys$DEVPATH/*port[0-9]*; do
+		if [ -e "$p" ]; then
+			dp=${DEVPATH%:*}.${p##*/*port}/port
+			if [ ! -e "$dp" ]; then # pretend it is only when it isn't
+				SUBSYSTEM=usbport DEVNAME= DEVPATH="$dp" "$0" "$@"
+			fi
+			# Alternate form for root hubs with no downstream hubs
+			# (found on IM7200)
+			dp=${DEVPATH%-*}-${p##*/*port}/port
+			if [ ! -e "$dp" ]; then # pretend it is only when it isn't
+				SUBSYSTEM=usbport DEVNAME= DEVPATH="$dp" "$0" "$@"
+			fi
+
+		fi
+	done
+fi
+
+shift_array () { # array [n]
+    eval "$1=(\"\${$1[@]:${2:-1}}\")"
+}
+
+# Find the line in /etc/ports matching DEVPATH
+port_name=
+port_srcline=
+for file in /var/run/ports.dynamic \
+            /etc/config/ports.d/*.ports \
+            /etc/ports.d/*.ports
+do
+	declare -i lineno=0
+	if [ -s "$file" ]; then
+	    while read LINE; do
+		: $((lineno++))
+		# Temporarily disable globbing while parsing line
+		old_flags=$-
+		set -f
+		declare -a "a=($LINE)"
+		set +f -$old_flags
+		if [ ${#a[*]} -ge 4 ] && [[ $DEVPATH == ${a[3]} ]]; then
+			port_name=$a; shift_array a
+			case $port_name in -|ignore) exit 0;; esac # fast ignore
+			port_deflabel=$a; shift_array a
+			port_typedesc=$a; shift_array a
+			port_pathglob=$a; shift_array a
+			port_vars=() # for infod
+			while [[ $a == *=* ]]; do
+			   port_vars=("${port_vars[@]}" "$a"); shift_array a
+			done
+			port_links=("${a[@]}")
+			port_srcline="$file:$lineno"
+			case $port_typedesc in -) port_typedesc= ;; esac
+			break 2
+		fi
+	    done < $file
+	fi
+done
+
+port_index=
+case "$port_name" in
+    "")
+	# not matched; log and ignore
+	if [ "$SUBSYSTEM" = tty ]; then
+		exec 8>>/var/run/ports.new
+		flock 8
+		if ! grep -q -F "$DEVPATH" /var/run/ports.new; then
+		   echo "ignore \"${DEVNAME#/dev/}\" unknown $DEVPATH" >&8
+		   logger -t udev-serial "udev-serial: $DEVPATH not matched"
+		fi
+		exec 8<&-
+	fi
+	exit 0
+	;;
+    port[0-9]*)
+	port_index=${port_name#port}
+	port_index=${port_index#0}
+
+	# explicit port assignments ignored >max_ports
+	get_serial_max_ports
+	if [ $port_index -gt $serial_max_ports ]; then
+		# ignore hard ports that manuf said don't exist
+		exit 0
+	fi
+	;;
+    *portN+[0-9]*)
+	# TODO: For now assume there is only one flag in the brackets
+	# Also the flags parsing is wonky if there are no flags
+        flags=${port_name#*\[}
+        flags=${flags%\]*}
+	if [ "$flags" = gps ]; then
+	    if ! serial_has_gps_feature ; then
+		# This is probably a GPS-capable cellular module,
+		# but on a product where there is no GPS antenna cabling.
+		# We will ignore this device to avoid confusion.
+		exit 0
+	    fi
+	    # Inform cellctl that this product has GPS
+	    > /var/run/.modem/cellmodem_has_gps
+	fi
+	get_serial_max_ports
+	port_offset=${port_name#*+}
+	port_offset=${port_offset#0}
+	port_index=$(($serial_max_ports + $port_offset))
+	port_name=$(printf port%02d $port_index)
+	;;
+    'port*')
+	if [ $SUBSYSTEM = tty ]; then
+	        allocate_dynamic_port_index "$port_srcline" \
+			"$port_typedesc,dynamic" || exit 0
+	fi
+	;;
+esac
+
+
+# Detect port conflict (eg two adapters attached to the one USB port)
+if [[ ",$port_typedesc," != *,dynamic,* ]] &&
+   [ $SUBSYSTEM = tty ] &&
+   [ $ACTION = add -o $ACTION = change ] &&
+   [ -h /dev/$port_name ] &&
+   [ $(readlink /dev/$port_name) != "$DEVNAME" ]
+then
+	# Treat later ones as dynamic
+	allocate_dynamic_port_index "$port_srcline" \
+		"$port_typedesc,dynamic" || exit 0
+fi
+
+case $port_deflabel in
+    -)
+	port_deflabel="Port $port_index"
+	;;
+esac
+
+if [ -n "$port_index" ]; then
+    port_prefix=config.ports.port${port_index}.dev
+fi
+
+if grep -q udev_debug /proc/cmdline; then
+    echo "udev-serial $port_srcline: $port_name $port_deflabel $port_typedesc $port_pathglob $port_index $port_prefix ${port_links[*]}" >&2
+fi
+
+# $port_index will be set for devices that are possibly ports
+# otherwise empty
+
+if [ -n "$port_prefix" ]; then
+    case $ACTION in
+    add|change)
+	# Obtain a write lock on the serial-ports file
+	exec 9>>/var/run/serial-ports
+	flock 9 # NB even if we are blocked and another writer
+	        # appends to file then fd 9 will remain in append mode
+
+	port_max=$(wc -l </var/run/serial-ports)
+	if [ $port_max -eq 0 ]; then
+		# Allow everyone to read this file
+		chmod 644 /var/run/serial-ports
+	fi
+
+	port_path=$(readlink /dev/$port_name)
+	if [ -z "$port_path" ]; then
+		port_path="/dev/$port_name"
+	fi
+	serial_create_device "$port_path" "$port_name"
+
+	# Insert dummy entries into /var/run/serial-ports
+	while [ $port_max -lt $port_index ]; do
+	        port_max=$((port_max + 1))
+		printf 'port%02d --> port%02d\n' $port_max $port_max
+	done >&9
+
+	# Inform infod of the possibility of a port
+	infod_client -o push -p $port_prefix\.typedesc -d "$port_typedesc"
+	infod_client -o push -p $port_prefix\.deflabel -d "$port_deflabel"
+	infod_client -o push -p $port_prefix\.srcline  -d "$port_srcline"
+
+	# Pass other arbitrary keys
+	if [ ${#port_vars[*]} != 0 ]; then
+	    for varval in "${port_vars[@]}"; do
+	        infod_client -o push -p $port_prefix."${varval%%=*}" -d "${varval#*=}"
+	    done
+	fi
+
+	flock -u 9
+	;;
+    esac
+fi
+
+# remove a symlink $2 only if it points at $1
+# i.e. safely reverses "ln -s $1 $2"
+safe_rmlink() { # $dst $link
+	if [ -h "$2" ] && [ x"$(readlink "$2")" = x"$1" ]; then
+	    rm "$2"
+	else
+	    false
+	fi
+}
+
+if [ "$SUBSYSTEM" = tty ]; then
+        case "$ACTION" in
+	add|change)
+		serial_create_device "$DEVNAME" "$port_name"
+		if ! ln -s $DEVNAME /dev/$port_name; then
+		    logger -t udev-serial \
+			    "$DEVNAME: $port_name already occupied"
+	            exit 0
+		fi
+		for link in "${port_links[@]}"; do
+		    ln -s $port_name /dev/$link # ignore error
+		done
+		chmod 660 $DEVNAME
+		chgrp serial $DEVNAME
+		logger -t udev-serial "$port_name: attached $DEVNAME"
+		if [ $port_prefix ]; then
+		    infod_client -o push -p $port_prefix\.devname \
+		                         -d "$DEVNAME"
+		    infod_client -o push -p $port_prefix\.usb.event \
+					 -d "connected"
+		fi &
+		pkill -HUP portmanager
+		;;
+        remove)
+		if safe_rmlink $DEVNAME /dev/$port_name; then
+		    serial_delete_device "$DEVNAME" "$port_name"
+		    for link in "${port_links[@]}"; do
+			safe_rmlink $port_name /dev/$link
+		    done
+		    rm -f /dev/$port_name
+		    # For "permanent" USB ports, re-create the original (dummy) symlink
+		    # so that the port does not disappear.
+		    port_max=$(wc -l </var/run/serial-ports)
+		    if [ "$port_index" -le "$port_max" ]; then
+			    serial_create_device "/dev/$port_name" "$port_name"
+		    fi
+		    logger -t udev-serial "$port_name: detached $DEVNAME"
+		    if [ $port_prefix ]; then
+		        infod_client -o delete -p $port_prefix\.devname
+			infod_client -o push -p $port_prefix\.usb.event \
+					 -d "disconnected"
+		    fi &
+		    pkill -HUP portmanager
+		fi
+		;;
+	esac
+fi

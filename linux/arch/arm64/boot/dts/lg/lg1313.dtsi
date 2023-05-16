@@ -131,18 +131,18 @@
 		ranges;
 
 		timers: timer@fd100000 {
-			compatible = "arm,sp804";
+			compatible = "arm,sp804", "arm,primecell";
 			reg = <0x0 0xfd100000 0x1000>;
 			interrupts = <GIC_SPI 6 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&clk_bus>;
-			clock-names = "apb_pclk";
+			clocks = <&clk_bus>, <&clk_bus>, <&clk_bus>;
+			clock-names = "timer0clk", "timer1clk", "apb_pclk";
 		};
 		wdog: watchdog@fd200000 {
 			compatible = "arm,sp805", "arm,primecell";
 			reg = <0x0 0xfd200000 0x1000>;
 			interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&clk_bus>;
-			clock-names = "apb_pclk";
+			clocks = <&clk_bus>, <&clk_bus>;
+			clock-names = "wdog_clk", "apb_pclk";
 		};
 		uart0: serial@fe000000 {
 			compatible = "arm,pl011", "arm,primecell";
@@ -182,12 +182,13 @@
 			clocks = <&clk_bus>;
 			clock-names = "apb_pclk";
 		};
-		dmac0: dma@c1128000 {
+		dmac0: dma-controller@c1128000 {
 			compatible = "arm,pl330", "arm,primecell";
 			reg = <0x0 0xc1128000 0x1000>;
 			interrupts = <GIC_SPI 29 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clk_bus>;
 			clock-names = "apb_pclk";
+			#dma-cells = <1>;
 		};
 		gpio0: gpio@fd400000 {
 			#gpio-cells = <2>;

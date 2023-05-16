@@ -10,10 +10,7 @@
 
 #include <stdint.h>
 #include "processor.h"
-
-#define CPUID_VMX_BIT				5
-
-#define CPUID_VMX				(1 << 5)
+#include "apic.h"
 
 /*
  * Definitions of Primary Processor-Based VM-Execution Controls.
@@ -48,7 +45,7 @@
 #define SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES 0x00000001
 #define SECONDARY_EXEC_ENABLE_EPT		0x00000002
 #define SECONDARY_EXEC_DESC			0x00000004
-#define SECONDARY_EXEC_RDTSCP			0x00000008
+#define SECONDARY_EXEC_ENABLE_RDTSCP		0x00000008
 #define SECONDARY_EXEC_VIRTUALIZE_X2APIC_MODE	0x00000010
 #define SECONDARY_EXEC_ENABLE_VPID		0x00000020
 #define SECONDARY_EXEC_WBINVD_EXITING		0x00000040
@@ -98,6 +95,9 @@
 
 #define VMX_MISC_PREEMPTION_TIMER_RATE_MASK	0x0000001f
 #define VMX_MISC_SAVE_EFER_LMA			0x00000020
+
+#define VMX_EPT_VPID_CAP_1G_PAGES		0x00020000
+#define VMX_EPT_VPID_CAP_AD_BITS		0x00200000
 
 #define EXIT_REASON_FAILED_VMENTRY	0x80000000
 #define EXIT_REASON_EXCEPTION_NMI	0
@@ -573,6 +573,10 @@ struct vmx_pages {
 	void *eptp_hva;
 	uint64_t eptp_gpa;
 	void *eptp;
+
+	void *apic_access_hva;
+	uint64_t apic_access_gpa;
+	void *apic_access;
 };
 
 union vmx_basic {
@@ -605,15 +609,18 @@ bool load_vmcs(struct vmx_pages *vmx);
 
 bool nested_vmx_supported(void);
 void nested_vmx_check_supported(void);
+bool ept_1g_pages_supported(void);
 
 void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
-		   uint64_t nested_paddr, uint64_t paddr, uint32_t eptp_memslot);
+		   uint64_t nested_paddr, uint64_t paddr);
 void nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
-		 uint64_t nested_paddr, uint64_t paddr, uint64_t size,
-		 uint32_t eptp_memslot);
+		 uint64_t nested_paddr, uint64_t paddr, uint64_t size);
 void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
-			uint32_t memslot, uint32_t eptp_memslot);
+			uint32_t memslot);
+void nested_identity_map_1g(struct vmx_pages *vmx, struct kvm_vm *vm,
+			    uint64_t addr, uint64_t size);
 void prepare_eptp(struct vmx_pages *vmx, struct kvm_vm *vm,
 		  uint32_t eptp_memslot);
+void prepare_virtualize_apic_accesses(struct vmx_pages *vmx, struct kvm_vm *vm);
 
 #endif /* SELFTEST_KVM_VMX_H */

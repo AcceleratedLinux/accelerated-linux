@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
- * aQuantia Corporation Network Driver
- * Copyright (C) 2014-2019 aQuantia Corporation. All rights reserved
+/* Atlantic Network Driver
+ *
+ * Copyright (C) 2014-2019 aQuantia Corporation
+ * Copyright (C) 2019-2020 Marvell International Ltd.
  */
 
 /* File aq_main.c: Main file for aQuantia Linux driver. */
@@ -13,16 +14,21 @@
 #include "aq_ptp.h"
 #include "aq_filters.h"
 #include "aq_hw_utils.h"
+#include "aq_vec.h"
 
 #include <linux/netdevice.h>
 #include <linux/module.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <net/pkt_cls.h>
+#include <linux/filter.h>
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(AQ_CFG_DRV_AUTHOR);
 MODULE_DESCRIPTION(AQ_CFG_DRV_DESC);
+
+DEFINE_STATIC_KEY_FALSE(aq_xdp_locking_key);
+EXPORT_SYMBOL(aq_xdp_locking_key);
 
 static const char aq_ndev_driver_name[] = AQ_CFG_DRV_NAME;
 
@@ -70,8 +76,10 @@ static int aq_ndev_open(struct net_device *ndev)
 		goto err_exit;
 
 	err = aq_nic_start(aq_nic);
-	if (err < 0)
+	if (err < 0) {
+		aq_nic_stop(aq_nic);
 		goto err_exit;
+	}
 
 err_exit:
 	if (err < 0)
@@ -94,10 +102,11 @@ err_exit:
 	return err;
 }
 
-static int aq_ndev_start_xmit(struct sk_buff *skb, struct net_device *ndev)
+static netdev_tx_t aq_ndev_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
 	struct aq_nic_s *aq_nic = netdev_priv(ndev);
 
+#if IS_REACHABLE(CONFIG_PTP_1588_CLOCK)
 	if (unlikely(aq_utils_obj_test(&aq_nic->flags, AQ_NIC_PTP_DPATH_UP))) {
 		/* Hardware adds the Timestamp for PTPv2 802.AS1
 		 * and PTPv2 IPv4 UDP.
@@ -114,6 +123,7 @@ static int aq_ndev_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 		    unlikely(eth_hdr(skb)->h_proto == htons(ETH_P_1588)))
 			return aq_ptp_xmit(aq_nic, skb);
 	}
+#endif
 
 	skb_tx_timestamp(skb);
 	return aq_nic_xmit(aq_nic, skb);
@@ -121,8 +131,18 @@ static int aq_ndev_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 static int aq_ndev_change_mtu(struct net_device *ndev, int new_mtu)
 {
+	int new_frame_size = new_mtu + ETH_HLEN + ETH_FCS_LEN;
 	struct aq_nic_s *aq_nic = netdev_priv(ndev);
+	struct bpf_prog *prog;
 	int err;
+
+	prog = READ_ONCE(aq_nic->xdp_prog);
+	if (prog && !prog->aux->xdp_has_frags &&
+	    new_frame_size > AQ_CFG_RX_FRAME_MAX) {
+		netdev_err(ndev, "Illegal MTU %d for XDP prog without frags\n",
+			   ndev->mtu);
+		return -EOPNOTSUPP;
+	}
 
 	err = aq_nic_set_mtu(aq_nic, new_mtu + ETH_HLEN);
 
@@ -199,6 +219,25 @@ err_exit:
 	return err;
 }
 
+static netdev_features_t aq_ndev_fix_features(struct net_device *ndev,
+					      netdev_features_t features)
+{
+	struct aq_nic_s *aq_nic = netdev_priv(ndev);
+	struct bpf_prog *prog;
+
+	if (!(features & NETIF_F_RXCSUM))
+		features &= ~NETIF_F_LRO;
+
+	prog = READ_ONCE(aq_nic->xdp_prog);
+	if (prog && !prog->aux->xdp_has_frags &&
+	    aq_nic->xdp_prog && features & NETIF_F_LRO) {
+		netdev_err(ndev, "LRO is not supported with single buffer XDP, disabling\n");
+		features &= ~NETIF_F_LRO;
+	}
+
+	return features;
+}
+
 static int aq_ndev_set_mac_address(struct net_device *ndev, void *addr)
 {
 	struct aq_nic_s *aq_nic = netdev_priv(ndev);
@@ -222,12 +261,10 @@ static void aq_ndev_set_multicast_settings(struct net_device *ndev)
 	(void)aq_nic_set_multicast_list(aq_nic, ndev);
 }
 
+#if IS_REACHABLE(CONFIG_PTP_1588_CLOCK)
 static int aq_ndev_config_hwtstamp(struct aq_nic_s *aq_nic,
 				   struct hwtstamp_config *config)
 {
-	if (config->flags)
-		return -EINVAL;
-
 	switch (config->tx_type) {
 	case HWTSTAMP_TX_OFF:
 	case HWTSTAMP_TX_ON:
@@ -256,26 +293,31 @@ static int aq_ndev_config_hwtstamp(struct aq_nic_s *aq_nic,
 
 	return aq_ptp_hwtstamp_config_set(aq_nic->aq_ptp, config);
 }
+#endif
 
 static int aq_ndev_hwtstamp_set(struct aq_nic_s *aq_nic, struct ifreq *ifr)
 {
 	struct hwtstamp_config config;
+#if IS_REACHABLE(CONFIG_PTP_1588_CLOCK)
 	int ret_val;
+#endif
 
 	if (!aq_nic->aq_ptp)
 		return -EOPNOTSUPP;
 
 	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
 		return -EFAULT;
-
+#if IS_REACHABLE(CONFIG_PTP_1588_CLOCK)
 	ret_val = aq_ndev_config_hwtstamp(aq_nic, &config);
 	if (ret_val)
 		return ret_val;
+#endif
 
 	return copy_to_user(ifr->ifr_data, &config, sizeof(config)) ?
 	       -EFAULT : 0;
 }
 
+#if IS_REACHABLE(CONFIG_PTP_1588_CLOCK)
 static int aq_ndev_hwtstamp_get(struct aq_nic_s *aq_nic, struct ifreq *ifr)
 {
 	struct hwtstamp_config config;
@@ -287,6 +329,7 @@ static int aq_ndev_hwtstamp_get(struct aq_nic_s *aq_nic, struct ifreq *ifr)
 	return copy_to_user(ifr->ifr_data, &config, sizeof(config)) ?
 	       -EFAULT : 0;
 }
+#endif
 
 static int aq_ndev_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
@@ -296,8 +339,10 @@ static int aq_ndev_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 	case SIOCSHWTSTAMP:
 		return aq_ndev_hwtstamp_set(aq_nic, ifr);
 
+#if IS_REACHABLE(CONFIG_PTP_1588_CLOCK)
 	case SIOCGHWTSTAMP:
 		return aq_ndev_hwtstamp_get(aq_nic, ifr);
+#endif
 	}
 
 	return -EOPNOTSUPP;
@@ -399,6 +444,56 @@ static int aq_ndo_setup_tc(struct net_device *dev, enum tc_setup_type type,
 				      mqprio->qopt.prio_tc_map);
 }
 
+static int aq_xdp_setup(struct net_device *ndev, struct bpf_prog *prog,
+			struct netlink_ext_ack *extack)
+{
+	bool need_update, running = netif_running(ndev);
+	struct aq_nic_s *aq_nic = netdev_priv(ndev);
+	struct bpf_prog *old_prog;
+
+	if (prog && !prog->aux->xdp_has_frags) {
+		if (ndev->mtu > AQ_CFG_RX_FRAME_MAX) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "prog does not support XDP frags");
+			return -EOPNOTSUPP;
+		}
+
+		if (prog && ndev->features & NETIF_F_LRO) {
+			netdev_err(ndev,
+				   "LRO is not supported with single buffer XDP, disabling\n");
+			ndev->features &= ~NETIF_F_LRO;
+		}
+	}
+
+	need_update = !!aq_nic->xdp_prog != !!prog;
+	if (running && need_update)
+		aq_ndev_close(ndev);
+
+	old_prog = xchg(&aq_nic->xdp_prog, prog);
+	if (old_prog)
+		bpf_prog_put(old_prog);
+
+	if (!old_prog && prog)
+		static_branch_inc(&aq_xdp_locking_key);
+	else if (old_prog && !prog)
+		static_branch_dec(&aq_xdp_locking_key);
+
+	if (running && need_update)
+		return aq_ndev_open(ndev);
+
+	return 0;
+}
+
+static int aq_xdp(struct net_device *dev, struct netdev_bpf *xdp)
+{
+	switch (xdp->command) {
+	case XDP_SETUP_PROG:
+		return aq_xdp_setup(dev, xdp->prog, xdp->extack);
+	default:
+		return -EINVAL;
+	}
+}
+
 static const struct net_device_ops aq_ndev_ops = {
 	.ndo_open = aq_ndev_open,
 	.ndo_stop = aq_ndev_close,
@@ -407,10 +502,13 @@ static const struct net_device_ops aq_ndev_ops = {
 	.ndo_change_mtu = aq_ndev_change_mtu,
 	.ndo_set_mac_address = aq_ndev_set_mac_address,
 	.ndo_set_features = aq_ndev_set_features,
-	.ndo_do_ioctl = aq_ndev_ioctl,
+	.ndo_fix_features = aq_ndev_fix_features,
+	.ndo_eth_ioctl = aq_ndev_ioctl,
 	.ndo_vlan_rx_add_vid = aq_ndo_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid = aq_ndo_vlan_rx_kill_vid,
 	.ndo_setup_tc = aq_ndo_setup_tc,
+	.ndo_bpf = aq_xdp,
+	.ndo_xdp_xmit = aq_xdp_xmit,
 };
 
 static int __init aq_ndev_init_module(void)

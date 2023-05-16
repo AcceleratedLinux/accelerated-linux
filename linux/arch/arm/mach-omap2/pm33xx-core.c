@@ -2,12 +2,13 @@
 /*
  * AM33XX Arch Power Management Routines
  *
- * Copyright (C) 2016-2018 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2016-2018 Texas Instruments Incorporated - https://www.ti.com/
  *	Dave Gerlach
  */
 
 #include <linux/cpuidle.h>
 #include <linux/platform_data/pm33xx.h>
+#include <linux/suspend.h>
 #include <asm/cpuidle.h>
 #include <asm/smp_scu.h>
 #include <asm/suspend.h>
@@ -25,7 +26,6 @@
 #include "control.h"
 #include "clockdomain.h"
 #include "iomap.h"
-#include "omap_hwmod.h"
 #include "pm.h"
 #include "powerdomain.h"
 #include "prm33xx.h"
@@ -36,7 +36,6 @@
 static struct powerdomain *cefuse_pwrdm, *gfx_pwrdm, *per_pwrdm, *mpu_pwrdm;
 static struct clockdomain *gfx_l4ls_clkdm;
 static void __iomem *scu_base;
-static struct omap_hwmod *rtc_oh;
 
 static int (*idle_fn)(u32 wfi_flags);
 
@@ -267,13 +266,6 @@ static struct am33xx_pm_sram_addr *amx3_get_sram_addrs(void)
 		return NULL;
 }
 
-static void __iomem *am43xx_get_rtc_base_addr(void)
-{
-	rtc_oh = omap_hwmod_lookup("rtc");
-
-	return omap_hwmod_get_mpu_rt_va(rtc_oh);
-}
-
 static void am43xx_save_context(void)
 {
 }
@@ -297,16 +289,6 @@ static void am43xx_restore_context(void)
 	writel_relaxed(0x0, AM33XX_L4_WK_IO_ADDRESS(0x44df2e14));
 }
 
-static void am43xx_prepare_rtc_suspend(void)
-{
-	omap_hwmod_enable(rtc_oh);
-}
-
-static void am43xx_prepare_rtc_resume(void)
-{
-	omap_hwmod_idle(rtc_oh);
-}
-
 static struct am33xx_pm_platform_data am33xx_ops = {
 	.init = am33xx_suspend_init,
 	.deinit = amx3_suspend_deinit,
@@ -317,10 +299,7 @@ static struct am33xx_pm_platform_data am33xx_ops = {
 	.get_sram_addrs = amx3_get_sram_addrs,
 	.save_context = am33xx_save_context,
 	.restore_context = am33xx_restore_context,
-	.prepare_rtc_suspend = am43xx_prepare_rtc_suspend,
-	.prepare_rtc_resume = am43xx_prepare_rtc_resume,
 	.check_off_mode_enable = am33xx_check_off_mode_enable,
-	.get_rtc_base_addr = am43xx_get_rtc_base_addr,
 };
 
 static struct am33xx_pm_platform_data am43xx_ops = {
@@ -333,10 +312,7 @@ static struct am33xx_pm_platform_data am43xx_ops = {
 	.get_sram_addrs = amx3_get_sram_addrs,
 	.save_context = am43xx_save_context,
 	.restore_context = am43xx_restore_context,
-	.prepare_rtc_suspend = am43xx_prepare_rtc_suspend,
-	.prepare_rtc_resume = am43xx_prepare_rtc_resume,
 	.check_off_mode_enable = am43xx_check_off_mode_enable,
-	.get_rtc_base_addr = am43xx_get_rtc_base_addr,
 };
 
 static struct am33xx_pm_platform_data *am33xx_pm_get_pdata(void)
@@ -348,6 +324,44 @@ static struct am33xx_pm_platform_data *am33xx_pm_get_pdata(void)
 	else
 		return NULL;
 }
+
+#ifdef CONFIG_SUSPEND
+/*
+ * Block system suspend initially. Later on pm33xx sets up it's own
+ * platform_suspend_ops after probe. That depends also on loaded
+ * wkup_m3_ipc and booted am335x-pm-firmware.elf.
+ */
+static int amx3_suspend_block(suspend_state_t state)
+{
+	pr_warn("PM not initialized for pm33xx, wkup_m3_ipc, or am335x-pm-firmware.elf\n");
+
+	return -EINVAL;
+}
+
+static int amx3_pm_valid(suspend_state_t state)
+{
+	switch (state) {
+	case PM_SUSPEND_STANDBY:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static const struct platform_suspend_ops amx3_blocked_pm_ops = {
+	.begin = amx3_suspend_block,
+	.valid = amx3_pm_valid,
+};
+
+static void __init amx3_block_suspend(void)
+{
+	suspend_set_ops(&amx3_blocked_pm_ops);
+}
+#else
+static inline void amx3_block_suspend(void)
+{
+}
+#endif	/* CONFIG_SUSPEND */
 
 int __init amx3_common_pm_init(void)
 {
@@ -362,6 +376,7 @@ int __init amx3_common_pm_init(void)
 	devinfo.size_data = sizeof(*pdata);
 	devinfo.id = -1;
 	platform_device_register_full(&devinfo);
+	amx3_block_suspend();
 
 	return 0;
 }

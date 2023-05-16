@@ -1,2 +1,3 @@
 strongswan-id-ipvX-dns.patch
 0001-stroke-added-if_id_in-if_id_out-support-to-ipsec.con.patch
+0002-ike-added-round-robin-and-random-other-hosts-list-wa.patch

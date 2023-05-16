@@ -420,13 +420,7 @@ static int corgi_bl_set_intensity(struct corgi_lcd *lcd, int intensity)
 static int corgi_bl_update_status(struct backlight_device *bd)
 {
 	struct corgi_lcd *lcd = bl_get_data(bd);
-	int intensity = bd->props.brightness;
-
-	if (bd->props.power != FB_BLANK_UNBLANK)
-		intensity = 0;
-
-	if (bd->props.fb_blank != FB_BLANK_UNBLANK)
-		intensity = 0;
+	int intensity = backlight_get_brightness(bd);
 
 	if (corgibl_flags & CORGIBL_SUSPENDED)
 		intensity = 0;
@@ -548,7 +542,7 @@ static int corgi_lcd_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int corgi_lcd_remove(struct spi_device *spi)
+static void corgi_lcd_remove(struct spi_device *spi)
 {
 	struct corgi_lcd *lcd = spi_get_drvdata(spi);
 
@@ -556,7 +550,6 @@ static int corgi_lcd_remove(struct spi_device *spi)
 	lcd->bl_dev->props.brightness = 0;
 	backlight_update_status(lcd->bl_dev);
 	corgi_lcd_set_power(lcd->lcd_dev, FB_BLANK_POWERDOWN);
-	return 0;
 }
 
 static struct spi_driver corgi_lcd_driver = {

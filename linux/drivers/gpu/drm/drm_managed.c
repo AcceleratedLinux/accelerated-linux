@@ -8,11 +8,14 @@
 #include <drm/drm_managed.h>
 
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
+
+#include "drm_internal.h"
 
 /**
  * DOC: managed resources
@@ -25,7 +28,7 @@
  * be done directly with drmm_kmalloc() and the related functions. Everything
  * will be released on the final drm_dev_put() in reverse order of how the
  * release actions have been added and memory has been allocated since driver
- * loading started with drm_dev_init().
+ * loading started with devm_drm_dev_alloc().
  *
  * Note that release actions and managed memory can also be added and removed
  * during the lifetime of the driver, all the functions are fully concurrent
@@ -123,18 +126,6 @@ static void add_dr(struct drm_device *dev, struct drmres *dr)
 		       dr, dr->node.name, (unsigned long) dr->node.size);
 }
 
-/**
- * drmm_add_final_kfree - add release action for the final kfree()
- * @dev: DRM device
- * @container: pointer to the kmalloc allocation containing @dev
- *
- * Since the allocation containing the struct &drm_device must be allocated
- * before it can be initialized with drm_dev_init() there's no way to allocate
- * that memory with drmm_kmalloc(). To side-step this chicken-egg problem the
- * pointer for this final kfree() must be specified by calling this function. It
- * will be released in the final drm_dev_put() for @dev, after all other release
- * actions installed through drmm_add_action() have been processed.
- */
 void drmm_add_final_kfree(struct drm_device *dev, void *container)
 {
 	WARN_ON(dev->managed.final_kfree);
@@ -142,7 +133,6 @@ void drmm_add_final_kfree(struct drm_device *dev, void *container)
 	WARN_ON(dev + 1 > (struct drm_device *) (container + ksize(container)));
 	dev->managed.final_kfree = container;
 }
-EXPORT_SYMBOL(drmm_add_final_kfree);
 
 int __drmm_add_action(struct drm_device *dev,
 		      drmres_release_t action,
@@ -273,3 +263,29 @@ void drmm_kfree(struct drm_device *dev, void *data)
 	free_dr(dr_match);
 }
 EXPORT_SYMBOL(drmm_kfree);
+
+static void drmm_mutex_release(struct drm_device *dev, void *res)
+{
+	struct mutex *lock = res;
+
+	mutex_destroy(lock);
+}
+
+/**
+ * drmm_mutex_init - &drm_device-managed mutex_init()
+ * @dev: DRM device
+ * @lock: lock to be initialized
+ *
+ * Returns:
+ * 0 on success, or a negative errno code otherwise.
+ *
+ * This is a &drm_device-managed version of mutex_init(). The initialized
+ * lock is automatically destroyed on the final drm_dev_put().
+ */
+int drmm_mutex_init(struct drm_device *dev, struct mutex *lock)
+{
+	mutex_init(lock);
+
+	return drmm_add_action_or_reset(dev, drmm_mutex_release, lock);
+}
+EXPORT_SYMBOL(drmm_mutex_init);

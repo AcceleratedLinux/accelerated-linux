@@ -11,14 +11,32 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		# flash WWAN service and signal strength LEDs green
+		FINDME="-f WWAN1_SERVICE_GREEN -O WWAN1_SERVICE_YELLOW -f WWAN1_SIGNAL_GREEN -O WWAN1_SIGNAL_YELLOW"
+		ledcmd $FINDME
+		return 0
+	fi
+	return 1
+}
+
 case "$1" in
 start)
-	# Turn off all LEDs
-	ledcmd -O ALL -o POWER
-
+	# Turn off all LEDs except SIMx
+	for led in $(ls /sys/class/leds | grep -v SIM)
+	do
+		ledcmd -O $led
+	done
+	ledcmd -o POWER
 	exit 0
 	;;
 reload)
+	# LR54 units have no way of setting an altbit on/off, so if FindMe is enabled we
+	# use that to set the LED state instead of determining the LED states based off
+	# of the cellular/Wi-Fi statuses using the logic after this case statement
+	findme_update && exit 0
 	;;
 stop)
 	# Flash POWER LED

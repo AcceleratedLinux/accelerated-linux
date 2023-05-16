@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (C) 2022 Digi International
+ */
+/ {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * 64KiB reserved for pstore (ramoops). Kernel is reserving
+		 * memory from ~0xf3e00000
+		 */
+		ramoops@f0000000 {
+			compatible = "ramoops";
+			reg = <0 0xf0000000 0 0x10000>;
+			ecc-size = <16>;
+			record-size = <0x1000>;
+			console-size = <0x1000>;
+		};
+	};
+};

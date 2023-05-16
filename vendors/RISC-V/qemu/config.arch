@@ -1,0 +1,19 @@
+############################################################################
+
+ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
+VENDOR_TOPDIRS = boot
+endif
+
+LINUXTARGET = Image dtbs
+
+HW_VENDOR = RISC-V
+VERSIONPKG = 1.0.0
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+############################################################################
+
+include $(ROOTDIR)/vendors/config/riscv64/config.arch
+
+RELFILES += images/configs.tar.gz
+
+############################################################################

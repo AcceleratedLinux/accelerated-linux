@@ -1,0 +1,8 @@
+#!/bin/sh
+#
+# Action for TX64 Single-Cellular specific LED setting
+#
+
+WWAN_LEDS="WWAN1"
+
+source /etc/action.d/led_common

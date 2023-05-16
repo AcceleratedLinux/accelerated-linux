@@ -14,6 +14,7 @@ else
 	MODULES="$MODULES reboot sleep test i2c i2c_dw i2c_ismt atecc"
 	MODULES="$MODULES atecc_cmd mcu bootcntr watchdog regexp"
 	MODULES="$MODULES probe"
+	MODULES="${MODULES} dummy_verifier"
 
 	DRIVE=$(sed -n 's?.*root=/dev/\(sd.\).*?/dev/\1?p' < /proc/cmdline)
 	[ "${DRIVE}" ] || DRIVE=/dev/sdb
@@ -30,6 +31,7 @@ else
 		--modules "$MODULES" \
 		--install-modules "$MODULES" \
 		--output /tmp/bootx64.efi.standalone \
+		--disable-shim-lock \
 		"boot/grub/grub.cfg=/boot/grub/grub.cfg"
 
 	rm -rf /efi/grub/x86_64-efi /efi/EFI/BOOT/*

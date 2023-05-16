@@ -147,7 +147,7 @@ set common_args="boot_ver=${BOOT_VER} console=null panic=30"
 
 menuentry "Digi Connect IT 16 (image1 verification $image1)" {
 	set root=($HD,gpt2)
-	probe -U $root --set=partuuid
+	probe --part-uuid $root --set=partuuid
 	# allow no backdoors by using menu
 	if [ "$image1" = PASSED ]; then
 		linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=a $common_args $arg
@@ -160,7 +160,7 @@ menuentry "Digi Connect IT 16 (image1 verification $image1)" {
 
 menuentry "Digi Connect IT 16 (image2 verification $image2)" {
 	set root=($HD,gpt3)
-	probe -U $root --set=partuuid
+	probe --part-uuid $root --set=partuuid
 	# allow no backdoors by using menu
 	if [ "$image2" = PASSED ]; then
 		linux /boot/vmlinuz root=PARTUUID=$partuuid bootpart=b $common_args $arg

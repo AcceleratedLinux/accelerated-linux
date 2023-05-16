@@ -88,7 +88,7 @@ image:
 	$(CROSS)objcopy -O binary $(ROOTDIR)/$(LINUXDIR)/linux \
 	  $(IMAGEDIR)/linux.bin
 	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGE) /tftpboot
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGEDIR)/linux.bin /tftpboot
 	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROMFSIMG) /tftpboot

@@ -1,0 +1,9 @@
+/*
+ * PBI Commands for LS1046AQDS and LS1046ARDB
+ * The same setting of LS1043A
+ */
+
+.pbi
+write 0x570178, 0x0000e010
+write 0x180000, 0x00000008
+.end

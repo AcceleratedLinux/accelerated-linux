@@ -20,7 +20,11 @@ AWS ?= aws $(if $(V:0=),,--quiet)
 GIT ?= git
 METHOD ?= default
 PATCH_SERIES ?= series
+ifeq ($(shell expr length "$(DOWNLOADHASH)"),32)
+DOWNLOADHASH_METHOD ?= md5
+else
 DOWNLOADHASH_METHOD ?= sha256
+endif
 
 define download_pkg_def
   $(1)_URL ?= $(URL)

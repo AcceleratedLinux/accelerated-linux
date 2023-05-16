@@ -1,0 +1,6 @@
+0001-build-find-pre-built-heimdal-build-tools-in-case-of-.patch
+0002-Fix-unistd.h-include.patch
+0003-netdb-defines.patch
+0004-fix-pid_t-include.patch
+0005-signal.patch
+0006-ignore-timezone.patch

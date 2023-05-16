@@ -276,7 +276,7 @@ static int prism2_scan(struct wiphy *wiphy,
 	struct prism2_wiphy_private *priv = wiphy_priv(wiphy);
 	struct wlandevice *wlandev;
 	struct p80211msg_dot11req_scan msg1;
-	struct p80211msg_dot11req_scan_results msg2;
+	struct p80211msg_dot11req_scan_results *msg2;
 	struct cfg80211_bss *bss;
 	struct cfg80211_scan_info info = {};
 
@@ -301,6 +301,10 @@ static int prism2_scan(struct wiphy *wiphy,
 		return -EOPNOTSUPP;
 	}
 
+	msg2 = kzalloc(sizeof(*msg2), GFP_KERNEL);
+	if (!msg2)
+		return -ENOMEM;
+
 	priv->scan_request = request;
 
 	memset(&msg1, 0x00, sizeof(msg1));
@@ -324,8 +328,7 @@ static int prism2_scan(struct wiphy *wiphy,
 		(i < request->n_channels) && i < ARRAY_SIZE(prism2_channels);
 		i++)
 		msg1.channellist.data.data[i] =
-			ieee80211_frequency_to_channel(
-				request->channels[i]->center_freq);
+			ieee80211_frequency_to_channel(request->channels[i]->center_freq);
 	msg1.channellist.data.len = request->n_channels;
 
 	msg1.maxchanneltime.data = 250;
@@ -342,33 +345,31 @@ static int prism2_scan(struct wiphy *wiphy,
 	for (i = 0; i < numbss; i++) {
 		int freq;
 
-		memset(&msg2, 0, sizeof(msg2));
-		msg2.msgcode = DIDMSG_DOT11REQ_SCAN_RESULTS;
-		msg2.bssindex.data = i;
+		msg2->msgcode = DIDMSG_DOT11REQ_SCAN_RESULTS;
+		msg2->bssindex.data = i;
 
 		result = p80211req_dorequest(wlandev, (u8 *)&msg2);
 		if ((result != 0) ||
-		    (msg2.resultcode.data != P80211ENUM_resultcode_success)) {
+		    (msg2->resultcode.data != P80211ENUM_resultcode_success)) {
 			break;
 		}
 
 		ie_buf[0] = WLAN_EID_SSID;
-		ie_buf[1] = msg2.ssid.data.len;
+		ie_buf[1] = msg2->ssid.data.len;
 		ie_len = ie_buf[1] + 2;
-		memcpy(&ie_buf[2], &msg2.ssid.data.data, msg2.ssid.data.len);
-		freq = ieee80211_channel_to_frequency(msg2.dschannel.data,
+		memcpy(&ie_buf[2], &msg2->ssid.data.data, msg2->ssid.data.len);
+		freq = ieee80211_channel_to_frequency(msg2->dschannel.data,
 						      NL80211_BAND_2GHZ);
 		bss = cfg80211_inform_bss(wiphy,
-			ieee80211_get_channel(wiphy, freq),
-			CFG80211_BSS_FTYPE_UNKNOWN,
-			(const u8 *)&msg2.bssid.data.data,
-			msg2.timestamp.data, msg2.capinfo.data,
-			msg2.beaconperiod.data,
-			ie_buf,
-			ie_len,
-			(msg2.signal.data - 65536) * 100, /* Conversion to signed type */
-			GFP_KERNEL
-		);
+					  ieee80211_get_channel(wiphy, freq),
+					  CFG80211_BSS_FTYPE_UNKNOWN,
+					  (const u8 *)&msg2->bssid.data.data,
+					  msg2->timestamp.data, msg2->capinfo.data,
+					  msg2->beaconperiod.data,
+					  ie_buf,
+					  ie_len,
+					  (msg2->signal.data - 65536) * 100, /* Conversion to signed type */
+					  GFP_KERNEL);
 
 		if (!bss) {
 			err = -ENOMEM;
@@ -379,12 +380,13 @@ static int prism2_scan(struct wiphy *wiphy,
 	}
 
 	if (result)
-		err = prism2_result2err(msg2.resultcode.data);
+		err = prism2_result2err(msg2->resultcode.data);
 
 exit:
 	info.aborted = !!(err);
 	cfg80211_scan_done(request, &info);
 	priv->scan_request = NULL;
+	kfree(msg2);
 	return err;
 }
 
@@ -473,14 +475,13 @@ static int prism2_connect(struct wiphy *wiphy, struct net_device *dev,
 				return -EINVAL;
 
 			result = prism2_domibset_uint32(wlandev,
-				DIDMIB_DOT11SMT_PRIVACYTABLE_WEPDEFAULTKEYID,
+							DIDMIB_DOT11SMT_PRIVACYTABLE_WEPDEFAULTKEYID,
 				sme->key_idx);
 			if (result)
 				goto exit;
 
 			/* send key to driver */
-			did = didmib_dot11smt_wepdefaultkeystable_key(
-					sme->key_idx + 1);
+			did = didmib_dot11smt_wepdefaultkeystable_key(sme->key_idx + 1);
 			result = prism2_domibset_pstr32(wlandev,
 							did, sme->key_len,
 							(u8 *)sme->key);
@@ -586,7 +587,7 @@ static int prism2_set_tx_power(struct wiphy *wiphy, struct wireless_dev *wdev,
 		data = MBM_TO_DBM(mbm);
 
 	result = prism2_domibset_uint32(wlandev,
-		DIDMIB_DOT11PHY_TXPOWERTABLE_CURRENTTXPOWERLEVEL,
+					DIDMIB_DOT11PHY_TXPOWERTABLE_CURRENTTXPOWERLEVEL,
 		data);
 
 	if (result) {

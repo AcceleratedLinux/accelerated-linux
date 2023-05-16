@@ -1,0 +1,6 @@
+/*
+ * PBI Commands for LS1012ARDB
+ */
+.pbi
+write 0x550000, 0x000f400c
+.end

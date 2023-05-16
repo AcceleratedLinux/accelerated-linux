@@ -1,0 +1,14 @@
+Disable snmpps because of libcurses build error
+
+diff -ur net-snmp-5.9.orig/apps/Makefile.in net-snmp-5.9/apps/Makefile.in
+--- net-snmp-5.9.orig/apps/Makefile.in	2022-02-22 12:13:51.728466713 -0600
++++ net-snmp-5.9/apps/Makefile.in	2022-02-22 12:10:11.078557773 -0600
+@@ -53,7 +53,7 @@
+ @NETSNMP_HAVE_AGENTX_LIBS_TRUE@AGENTXTRAP = agentxtrap$(EXEEXT)
+ @NETSNMP_HAVE_AGENTX_LIBS_FALSE@AGENTXTRAP =
+ 
+-INSTALLBINPROGS_LIBCURSES_TRUE = snmpps$(EXEEXT)
++#INSTALLBINPROGS_LIBCURSES_TRUE = snmpps$(EXEEXT)
+ 
+ INSTALLBINPROGS	= snmpget$(EXEEXT) 			\
+ 		snmpgetnext$(EXEEXT) 			\

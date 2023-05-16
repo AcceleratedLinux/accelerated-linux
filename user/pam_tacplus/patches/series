@@ -1,4 +1,6 @@
 username.patch
 groupname.patch
+remove_key_from_log.patch
 account_auth_unavail.patch
 cdefs.patch
+170-segmented-authorization-reply-packets-fix.patch

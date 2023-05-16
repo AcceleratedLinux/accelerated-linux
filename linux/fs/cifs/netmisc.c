@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   fs/cifs/netmisc.c
  *
  *   Copyright (c) International Business Machines  Corp., 2002,2008
  *   Author(s): Steve French (sfrench@us.ibm.com)
@@ -880,6 +879,30 @@ map_smb_to_linux_error(char *buf, bool logErr)
 
 	return rc;
 }
+
+int
+map_and_check_smb_error(struct mid_q_entry *mid, bool logErr)
+{
+	int rc;
+	struct smb_hdr *smb = (struct smb_hdr *)mid->resp_buf;
+
+	rc = map_smb_to_linux_error((char *)smb, logErr);
+	if (rc == -EACCES && !(smb->Flags2 & SMBFLG2_ERR_STATUS)) {
+		/* possible ERRBaduid */
+		__u8 class = smb->Status.DosError.ErrorClass;
+		__u16 code = le16_to_cpu(smb->Status.DosError.Error);
+
+		/* switch can be used to handle different errors */
+		if (class == ERRSRV && code == ERRbaduid) {
+			cifs_dbg(FYI, "Server returned 0x%x, reconnecting session...\n",
+				code);
+			cifs_signal_cifsd_for_reconnect(mid->server, false);
+		}
+	}
+
+	return rc;
+}
+
 
 /*
  * calculate the size of the SMB message based on the fixed header

@@ -1,11 +1,5 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_G_FBUF:
 
@@ -18,26 +12,25 @@ Name
 
 VIDIOC_G_FBUF - VIDIOC_S_FBUF - Get or set frame buffer overlay parameters
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_G_FBUF, struct v4l2_framebuffer *argp )
-    :name: VIDIOC_G_FBUF
+.. c:macro:: VIDIOC_G_FBUF
 
-.. c:function:: int ioctl( int fd, VIDIOC_S_FBUF, const struct v4l2_framebuffer *argp )
-    :name: VIDIOC_S_FBUF
+``int ioctl(int fd, VIDIOC_G_FBUF, struct v4l2_framebuffer *argp)``
 
+.. c:macro:: VIDIOC_S_FBUF
+
+``int ioctl(int fd, VIDIOC_S_FBUF, const struct v4l2_framebuffer *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_framebuffer`.
-
 
 Description
 ===========
@@ -82,8 +75,7 @@ jeopardize the system security, its stability or even damage the
 hardware, therefore only the superuser can set the parameters for a
 destructive video overlay.
 
-
-.. tabularcolumns:: |p{3.5cm}|p{3.5cm}|p{3.5cm}|p{7.0cm}|
+.. tabularcolumns:: |p{3.5cm}|p{3.5cm}|p{3.5cm}|p{6.6cm}|
 
 .. c:type:: v4l2_framebuffer
 
@@ -215,8 +207,7 @@ destructive video overlay.
       - ``priv``
       - Reserved. Drivers and applications must set this field to zero.
 
-
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. tabularcolumns:: |p{7.4cm}|p{1.6cm}|p{8.3cm}|
 
 .. _framebuffer-cap:
 
@@ -264,8 +255,7 @@ destructive video overlay.
 	chroma-key colors are replaced by framebuffer pixels, which is
 	exactly opposite of ``V4L2_FBUF_CAP_CHROMAKEY``
 
-
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. tabularcolumns:: |p{7.4cm}|p{1.6cm}|p{8.3cm}|
 
 .. _framebuffer-flags:
 
@@ -338,7 +328,6 @@ destructive video overlay.
 	and :ref:`osd`. Both chroma-keying are mutual exclusive to each
 	other, so same ``chromakey`` field of struct
 	:c:type:`v4l2_window` is being used.
-
 
 Return Value
 ============

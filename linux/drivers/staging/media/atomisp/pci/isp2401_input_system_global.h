@@ -13,19 +13,15 @@
  * more details.
  */
 
-#ifndef __INPUT_SYSTEM_GLOBAL_H_INCLUDED__
-#define __INPUT_SYSTEM_GLOBAL_H_INCLUDED__
-
-#define IS_INPUT_SYSTEM_VERSION_VERSION_2401
-
 /* CSI reveiver has 3 ports. */
 #define		N_CSI_PORTS (3)
 
-#include "isys_dma.h"		/*	isys2401_dma_channel,
+#include "system_local.h"
+#include "isys_dma_global.h"	/*	isys2401_dma_channel,
 				 *	isys2401_dma_cfg_t
 				 */
 
-#include "ibuf_ctrl.h"		/*	ibuf_cfg_t,
+#include "ibuf_ctrl_local.h"	/*	ibuf_cfg_t,
 				 *	ibuf_ctrl_cfg_t
 				 */
 
@@ -41,18 +37,6 @@
 					virtual channels supported*/
 
 typedef enum {
-	INPUT_SYSTEM_ERR_NO_ERROR = 0,
-	INPUT_SYSTEM_ERR_CREATE_CHANNEL_FAIL,
-	INPUT_SYSTEM_ERR_CONFIGURE_CHANNEL_FAIL,
-	INPUT_SYSTEM_ERR_OPEN_CHANNEL_FAIL,
-	INPUT_SYSTEM_ERR_TRANSFER_FAIL,
-	INPUT_SYSTEM_ERR_CREATE_INPUT_PORT_FAIL,
-	INPUT_SYSTEM_ERR_CONFIGURE_INPUT_PORT_FAIL,
-	INPUT_SYSTEM_ERR_OPEN_INPUT_PORT_FAIL,
-	N_INPUT_SYSTEM_ERR
-} input_system_err_t;
-
-typedef enum {
 	INPUT_SYSTEM_SOURCE_TYPE_UNDEFINED = 0,
 	INPUT_SYSTEM_SOURCE_TYPE_SENSOR,
 	INPUT_SYSTEM_SOURCE_TYPE_TPG,
@@ -60,18 +44,13 @@ typedef enum {
 	N_INPUT_SYSTEM_SOURCE_TYPE
 } input_system_source_type_t;
 
-typedef enum {
-	INPUT_SYSTEM_POLL_ON_WAIT_FOR_FRAME,
-	INPUT_SYSTEM_POLL_ON_CAPTURE_REQUEST,
-} input_system_polling_mode_t;
-
 typedef struct input_system_channel_s input_system_channel_t;
 struct input_system_channel_s {
 	stream2mmio_ID_t	stream2mmio_id;
 	stream2mmio_sid_ID_t	stream2mmio_sid_id;
 
 	ibuf_ctrl_ID_t		ibuf_ctrl_id;
-	ib_buffer_t		ib_buffer;
+	isp2401_ib_buffer_t	ib_buffer;
 
 	isys2401_dma_ID_t	dma_id;
 	isys2401_dma_channel	dma_channel;
@@ -121,14 +100,11 @@ struct input_system_input_port_cfg_s {
 	} pixelgen_cfg;
 };
 
-typedef struct input_system_cfg_s input_system_cfg_t;
-struct input_system_cfg_s {
+typedef struct isp2401_input_system_cfg_s isp2401_input_system_cfg_t;
+struct isp2401_input_system_cfg_s {
 	input_system_input_port_ID_t	input_port_id;
 
 	input_system_source_type_t	mode;
-
-	/* ISP2401 */
-	input_system_polling_mode_t	polling_mode;
 
 	bool online;
 	bool raw_packed;
@@ -181,10 +157,6 @@ struct virtual_input_system_stream_s {
 	u8 online;
 	s8 linked_isys_stream_id;
 	u8 valid;
-
-	/* ISP2401 */
-	input_system_polling_mode_t	polling_mode;
-	s32 subscr_index;
 };
 
 typedef struct virtual_input_system_stream_cfg_s
@@ -202,5 +174,3 @@ struct virtual_input_system_stream_cfg_s {
 #define NUM_OF_LINES_PER_BUF		2
 #define LINES_OF_ISP_INPUT_BUF		(NUM_OF_INPUT_BUF * NUM_OF_LINES_PER_BUF)
 #define ISP_INPUT_BUF_STRIDE		SH_CSS_MAX_SENSOR_WIDTH
-
-#endif /* __INPUT_SYSTEM_GLOBAL_H_INCLUDED__ */

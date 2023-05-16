@@ -1,0 +1,156 @@
+#! /bin/sh
+
+. /etc/scripts/power-common
+
+out_udelay=50000
+out_retries=3
+in_udelay=100000
+in_retries=10
+
+port=$1
+outlets=$2
+cmd=$3
+tmpfile=/tmp/tmp.$$
+
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <port> \"<outlet> [outlet..]\" on|off|cycle|status"
+	exit 1
+fi
+
+function ipp_chat () {
+	out=$1
+	in=$2
+
+	cat "$port" > $tmpfile &
+	cat_pid=$!
+	trap "rm $tmpfile; kill $cat_pid" EXIT
+	
+	for (( i=0; i < $out_retries; i++ )); do
+		for (( j = 0 ; j < ${#out} ; j++ )); do
+			usleep $out_udelay
+			echo -n ${out:$j:1} > $port
+		done
+		echo > $port
+		for (( j=0; j < $in_retries; j++ )); do
+			usleep $in_udelay
+			line=`grep "$in" "$tmpfile"`
+			if [[ -n "$line" ]]; then
+				break 2
+			fi
+		done
+	done
+
+	rm $tmpfile
+	kill $cat_pid
+
+	if [[ -n "$line" ]]; then
+		echo $line
+	else
+		return 1
+	fi
+
+	return 0
+}
+
+# Suppress error messages from the shell
+exec 2> /dev/null
+
+# Set up the serial port for the IP Power
+stty 1400:4:cbe:a30:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0 < "$port"
+
+# Enable serial command mode
+if ! ipp_chat "0\\ADEBUG9258\\Z" "IP9258 DEBUG ON" &> /dev/null; then
+	for o in ${outlets}; do
+		power_outlet_error_timeout $o $cmd
+	done
+	exit 1
+fi
+
+# Get current status
+status_nibble=`ipp_chat "0\\Ap06\\Z" "p.*6:" | sed 's,.*p.*6:.\(.\).*,\1,g'`
+
+#
+# Send the command, the least significant bit is port 1, the most significant
+# is port 4.  A value of 0 is on, 1 is off.
+#
+outlet_mask=0
+for o in $outlets; do
+	outlet_bit=$(( 1<< ${o}-1 ))
+	outlet_mask=$(( outlet_mask | $outlet_bit ))
+done
+status_nibble=`printf %d 0x${status_nibble}`
+if [[ "$cmd" == "on" ]]; then
+	echo "Powering on outlet $outlets"
+	status_nibble=`printf %X $(( $status_nibble & ~${outlet_mask} ))`
+	ipp_chat "0\\AP06F${status_nibble}\\Z" "P.*6=F${status_nibble}" &> /dev/null
+	echo "Outlet $outlets powered on"
+	status_nibble=`printf %d 0x${status_nibble}`
+	outlets="1 2 3 4"
+	for o in ${outlets}; do
+		outlet_bit=$(( 1<< ${o}-1 ))
+		if [ "$o" -lt "1" -o "$o" -gt "4" ]; then
+			power_outlet_error_range $o 4
+		elif [[ $(( $status_nibble & $outlet_bit )) -eq $outlet_bit ]]; then
+			power_outlet_status $o "off"
+		else
+			power_outlet_status $o "on"
+		fi
+	done
+	
+elif [[ "$cmd" == "off" ]]; then
+	echo "Powering off outlet $outlets"
+	status_nibble=`printf %X $(( $status_nibble | ${outlet_mask} ))`
+	ipp_chat "0\\AP06F${status_nibble}\\Z" "P.*6=F${status_nibble}" &> /dev/null
+	echo "Outlet $outlets powered off"
+	status_nibble=`printf %d 0x${status_nibble}`
+	outlets="1 2 3 4"
+        for o in ${outlets}; do
+                outlet_bit=$(( 1<< ${o}-1 ))
+		if [ "$o" -lt "1" -o "$o" -gt "4" ]; then
+			power_outlet_error_range $o 4
+                elif [[ $(( $status_nibble & $outlet_bit )) -eq $outlet_bit ]]; then
+			power_outlet_status $o "off"
+                else
+			power_outlet_status $o "on"
+                fi
+        done
+
+elif [[ "$cmd" == "cycle" ]]; then
+        echo "Powering off outlet $outlets"
+        status_nibble=`printf %X $(( $status_nibble | ${outlet_mask} ))`
+        ipp_chat "0\\AP06F${status_nibble}\\Z" "P.*6=F${status_nibble}" &> /dev/null
+        sleep 3
+        status_nibble=`printf %d 0x${status_nibble}`
+        status_nibble=`printf %X $(( $status_nibble & ~${outlet_mask} ))`
+        ipp_chat "0\\AP06F${status_nibble}\\Z" "P.*6=F${status_nibble}" &> /dev/null
+        echo "Outlet $outlets power cycled"
+        status_nibble=`printf %d 0x${status_nibble}`
+        outlets="1 2 3 4"        
+        for o in ${outlets}; do
+        	outlet_bit=$(( 1<< ${o}-1 ))
+		if [ "$o" -lt "1" -o "$o" -gt "4" ]; then
+			power_outlet_error_range $o 4
+                elif [[ $(( $status_nibble & $outlet_bit )) -eq $outlet_bit ]]; then
+			power_outlet_status $o "off"
+                else
+			power_outlet_status $o "on"
+                fi
+        done
+else 
+	for o in ${outlets}; do
+		outlet_bit=$(( 1<< ${o}-1 ))
+		if [ "$o" -lt "1" -o "$o" -gt "4" ]; then
+			power_outlet_error_range $o 4
+		elif [[ $(( $status_nibble & $outlet_bit )) -eq $outlet_bit ]]; then
+			power_outlet_status $o "off"
+		else
+			power_outlet_status $o "on"
+		fi
+	done
+fi
+
+# Disable serial command mode
+ipp_chat "0\\ADEBUG0FF\\Z" "IP9258 DEBUG OFF" &> /dev/null
+
+exit 0

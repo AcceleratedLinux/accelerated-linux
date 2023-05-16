@@ -6,7 +6,7 @@
  */
 
 #include "goyaP.h"
-#include "include/goya/asic_reg/goya_regs.h"
+#include "../include/goya/asic_reg/goya_regs.h"
 
 /*
  * goya_set_block_as_protected - set the given block as protected
@@ -3119,4 +3119,9 @@ void goya_init_security(struct hl_device *hdev)
 	WREG32(mmTPC7_NRTR_LBW_RANGE_MASK_13, lbw_rng13_mask);
 
 	goya_init_protection_bits(hdev);
+}
+
+void goya_ack_protection_bits_errors(struct hl_device *hdev)
+{
+
 }

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/**
+/*
  * trace.h - DesignWare USB3 DRD Controller Trace Support
  *
- * Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com
+ * Copyright (C) 2014 Texas Instruments Incorporated - https://www.ti.com
  *
  * Author: Felipe Balbi <balbi@ti.com>
  */
@@ -32,8 +32,10 @@ DECLARE_EVENT_CLASS(dwc3_log_io,
 		__entry->offset = offset;
 		__entry->value = value;
 	),
-	TP_printk("addr %p value %08x", __entry->base + __entry->offset,
-			__entry->value)
+	TP_printk("addr %p offset %04x value %08x",
+		__entry->base + __entry->offset,
+		__entry->offset,
+		__entry->value)
 );
 
 DEFINE_EVENT(dwc3_log_io, dwc3_readl,
@@ -104,8 +106,8 @@ DECLARE_EVENT_CLASS(dwc3_log_request,
 	TP_STRUCT__entry(
 		__string(name, req->dep->name)
 		__field(struct dwc3_request *, req)
-		__field(unsigned, actual)
-		__field(unsigned, length)
+		__field(unsigned int, actual)
+		__field(unsigned int, length)
 		__field(int, status)
 		__field(int, zero)
 		__field(int, short_not_ok)
@@ -220,8 +222,6 @@ DECLARE_EVENT_CLASS(dwc3_log_trb,
 	TP_STRUCT__entry(
 		__string(name, dep->name)
 		__field(struct dwc3_trb *, trb)
-		__field(u32, allocated)
-		__field(u32, queued)
 		__field(u32, bpl)
 		__field(u32, bph)
 		__field(u32, size)
@@ -246,6 +246,7 @@ DECLARE_EVENT_CLASS(dwc3_log_trb,
 		__entry->dequeue, __entry->bph, __entry->bpl,
 		({char *s;
 		int pcm = ((__entry->size >> 24) & 3) + 1;
+
 		switch (__entry->type) {
 		case USB_ENDPOINT_XFER_INT:
 		case USB_ENDPOINT_XFER_ISOC:
@@ -291,12 +292,12 @@ DECLARE_EVENT_CLASS(dwc3_log_ep,
 	TP_ARGS(dep),
 	TP_STRUCT__entry(
 		__string(name, dep->name)
-		__field(unsigned, maxpacket)
-		__field(unsigned, maxpacket_limit)
-		__field(unsigned, max_streams)
-		__field(unsigned, maxburst)
-		__field(unsigned, flags)
-		__field(unsigned, direction)
+		__field(unsigned int, maxpacket)
+		__field(unsigned int, maxpacket_limit)
+		__field(unsigned int, max_streams)
+		__field(unsigned int, maxburst)
+		__field(unsigned int, flags)
+		__field(unsigned int, direction)
 		__field(u8, trb_enqueue)
 		__field(u8, trb_dequeue)
 	),

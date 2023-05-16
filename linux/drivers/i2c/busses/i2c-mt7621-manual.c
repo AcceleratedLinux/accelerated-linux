@@ -517,17 +517,7 @@ static struct platform_driver mtk_i2c_driver = {
 	},
 };
 
-static int __init i2c_mtk_init (void)
-{
-	return platform_driver_register(&mtk_i2c_driver);
-}
-subsys_initcall(i2c_mtk_init);
-
-static void __exit i2c_mtk_exit (void)
-{
-	platform_driver_unregister(&mtk_i2c_driver);
-}
-module_exit(i2c_mtk_exit);
+module_platform_driver(mtk_i2c_driver);
 
 MODULE_AUTHOR("Steven Liu <steven_liu@mediatek.com>");
 MODULE_DESCRIPTION("MT7621 I2c host driver");

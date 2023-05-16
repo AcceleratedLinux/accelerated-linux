@@ -1,0 +1,24 @@
+#!/bin/bash
+#
+# Restart ipsec daemon when relevant interface is actually used by ipsec
+#
+
+if [ -f "/etc/config/scripts/ipsec-restart" ]; then
+	exec "/etc/config/scripts/ipsec-restart" $@
+fi
+
+CALLER=$1
+
+TUNNELS="$(config -g config.ipsec.tunnels.total | cut -f2- -d' ')"
+if [ $TUNNELS -ge 1 ]; then
+	INTERFACES=$(grep interfaces /etc/config/ipsec.conf)
+
+	if [ "$CALLER" = "cellmodem" ]; then
+		if [[ "${INTERFACES}" == *wwan* ]]; then
+			/bin/conman_command ipsec-daemon restart
+		fi
+	fi
+
+fi
+
+exit 0

@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo $1 > /sys/bus/i2c/devices/0-0078/mcu-tx54-keys/temp_ign_delay_off

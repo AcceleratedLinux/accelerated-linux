@@ -13,61 +13,40 @@ static int hns_roce_fill_cq(struct sk_buff *msg,
 			    struct hns_roce_v2_cq_context *context)
 {
 	if (rdma_nl_put_driver_u32(msg, "state",
-				   roce_get_field(context->byte_4_pg_ceqn,
-						  V2_CQC_BYTE_4_ARM_ST_M,
-						  V2_CQC_BYTE_4_ARM_ST_S)))
+				   hr_reg_read(context, CQC_ARM_ST)))
+
 		goto err;
 
 	if (rdma_nl_put_driver_u32(msg, "ceqn",
-				   roce_get_field(context->byte_4_pg_ceqn,
-						  V2_CQC_BYTE_4_CEQN_M,
-						  V2_CQC_BYTE_4_CEQN_S)))
+				   hr_reg_read(context, CQC_CEQN)))
 		goto err;
 
 	if (rdma_nl_put_driver_u32(msg, "cqn",
-				   roce_get_field(context->byte_8_cqn,
-						  V2_CQC_BYTE_8_CQN_M,
-						  V2_CQC_BYTE_8_CQN_S)))
+				   hr_reg_read(context, CQC_CQN)))
 		goto err;
 
 	if (rdma_nl_put_driver_u32(msg, "hopnum",
-				   roce_get_field(context->byte_16_hop_addr,
-						  V2_CQC_BYTE_16_CQE_HOP_NUM_M,
-						  V2_CQC_BYTE_16_CQE_HOP_NUM_S)))
+				   hr_reg_read(context, CQC_CQE_HOP_NUM)))
 		goto err;
 
-	if (rdma_nl_put_driver_u32(
-		    msg, "pi",
-		    roce_get_field(context->byte_28_cq_pi,
-				   V2_CQC_BYTE_28_CQ_PRODUCER_IDX_M,
-				   V2_CQC_BYTE_28_CQ_PRODUCER_IDX_S)))
+	if (rdma_nl_put_driver_u32(msg, "pi",
+				   hr_reg_read(context, CQC_CQ_PRODUCER_IDX)))
 		goto err;
 
-	if (rdma_nl_put_driver_u32(
-		    msg, "ci",
-		    roce_get_field(context->byte_32_cq_ci,
-				   V2_CQC_BYTE_32_CQ_CONSUMER_IDX_M,
-				   V2_CQC_BYTE_32_CQ_CONSUMER_IDX_S)))
+	if (rdma_nl_put_driver_u32(msg, "ci",
+				   hr_reg_read(context, CQC_CQ_CONSUMER_IDX)))
 		goto err;
 
-	if (rdma_nl_put_driver_u32(
-		    msg, "coalesce",
-		    roce_get_field(context->byte_56_cqe_period_maxcnt,
-				   V2_CQC_BYTE_56_CQ_MAX_CNT_M,
-				   V2_CQC_BYTE_56_CQ_MAX_CNT_S)))
+	if (rdma_nl_put_driver_u32(msg, "coalesce",
+				   hr_reg_read(context, CQC_CQ_MAX_CNT)))
 		goto err;
 
-	if (rdma_nl_put_driver_u32(
-		    msg, "period",
-		    roce_get_field(context->byte_56_cqe_period_maxcnt,
-				   V2_CQC_BYTE_56_CQ_PERIOD_M,
-				   V2_CQC_BYTE_56_CQ_PERIOD_S)))
+	if (rdma_nl_put_driver_u32(msg, "period",
+				   hr_reg_read(context, CQC_CQ_PERIOD)))
 		goto err;
 
 	if (rdma_nl_put_driver_u32(msg, "cnt",
-				   roce_get_field(context->byte_52_cqe_cnt,
-						  V2_CQC_BYTE_52_CQE_CNT_M,
-						  V2_CQC_BYTE_52_CQE_CNT_S)))
+				   hr_reg_read(context, CQC_CQE_CNT)))
 		goto err;
 
 	return 0;
@@ -76,10 +55,9 @@ err:
 	return -EMSGSIZE;
 }
 
-static int hns_roce_fill_res_cq_entry(struct sk_buff *msg,
-				      struct rdma_restrack_entry *res)
+int hns_roce_fill_res_cq_entry(struct sk_buff *msg,
+			       struct ib_cq *ib_cq)
 {
-	struct ib_cq *ib_cq = container_of(res, struct ib_cq, res);
 	struct hns_roce_dev *hr_dev = to_hr_dev(ib_cq->device);
 	struct hns_roce_cq *hr_cq = to_hr_cq(ib_cq);
 	struct hns_roce_v2_cq_context *context;
@@ -118,13 +96,4 @@ err_cancel_table:
 err:
 	kfree(context);
 	return ret;
-}
-
-int hns_roce_fill_res_entry(struct sk_buff *msg,
-			    struct rdma_restrack_entry *res)
-{
-	if (res->type == RDMA_RESTRACK_CQ)
-		return hns_roce_fill_res_cq_entry(msg, res);
-
-	return 0;
 }

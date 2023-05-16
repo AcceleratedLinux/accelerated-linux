@@ -1,0 +1,478 @@
+#!/bin/bash
+
+# Utilities for EM7565 and similar modems, that are not supported by qmi-firmware-update tool due
+# to firmware protocol language differences.
+# This script aims to collect a set of tools (functions really) that help query, select firmware images
+# that are already on device mainly by using the qmicli command tool.
+#
+# Example usage:
+#   . /etc/scripts/modem-utils
+#   if qmi_query_firmware; then
+#       qmi_set_firmware "generic"
+#   fi
+#
+
+script_name=$(basename $0)
+
+qmi_log () { echo "$*" ; logger -t "$script_name" "$*"; }
+
+if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
+	exit 1
+elif [ -n "$qmi_utils_sourced" ]; then
+    exit 0;
+fi
+
+qmi_utils_sourced=true
+
+declare -a qmi_carriers
+declare -A qmi_carriers_canonical_to_raw_map
+declare -A qmi_carriers_to_index_map
+declare -A qmi_carrier_pri_id_map
+declare -A qmi_carrier_firmware_map
+declare -A qmi_modem_firmware_index_map
+
+qmi_active_firmware_prefix=
+qmi_active_firmware_version=
+qmi_active_firmware_config=
+qmi_active_carrier=
+qmi_dev=
+qmi_modem_operating_mode=
+
+
+function qmi_has_modem()
+{
+    if [ -e /dev/cdc-wdm0 ]; then
+        qmi_dev='/dev/cdc-wdm0'
+        return 0
+    elif [ -e /dev/cdc-wdm1 ]; then
+        qmi_dev='/dev/cdc-wdm1'
+        return 0
+    fi
+
+    return 1
+}
+
+# Query from QMI channel the information about installed firmware images and
+# extract the Build ID of firmware images without those of PRIs, e.g.:
+# '01.11.00.00_?'
+# '01.14.02.00_?'
+# '01.07.02.00_?'
+# '01.08.04.00_?'
+function qmi_query_fw_images()
+{
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    local output=$(/bin/qmicli -d $qmi_dev -p --dms-list-stored-images 2> /dev/null)
+
+    local modem_output=$(echo  "$output" | \
+        awk '/Build ID/ {match($3,/.+_.+/); print $3} /pri/ {exit}')
+
+    echo "$modem_output"
+}
+
+# Query from QMI channel the information about installed firmware images and
+# extract the Build ID of PRI without those of firmware images, e.g.:
+# '01.14.02.00_ATT'
+# '01.09.04.00_DOCOMO'
+# '01.14.04.00_DT'
+# '01.14.02.00_GENERIC'
+function qmi_query_pri_files()
+{
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    local output=$(/bin/qmicli -d $qmi_dev -p --dms-list-stored-images 2> /dev/null)
+
+    local pri_output=$(echo  "$output" | \
+        awk 'NR == 1, /pri/ {next} {print}' | \
+        awk '/Build ID/ {match($3,/.+_.+/); print $3}')
+
+    echo "$pri_output"
+}
+
+# Query from QMI channel the information about installed firmware images and
+# abstract installed carrier names from their PRI information
+function qmi_query_installed_carriers()
+{
+    local pri_output=$(qmi_query_pri_files)
+
+    local CID carriers=
+    for i in "$pri_output"; do
+        CID=$(echo "$i" | cut -d'_' -f2 | sed 's/.$//')
+        carriers="${carriers} ${CID,,}"
+    done
+
+    echo "$carriers"
+}
+
+# Queries the on-device stored images: this includes configs (pri) and firmware images
+# Needs to be called at least once
+function qmi_query_firmware()
+{
+    if qmi_query_stored_pri_images 2> /dev/null &&
+       qmi_query_stored_modem_images 2> /dev/null &&
+       qmi_query_active_firmware 2> /dev/null; then      # must come last !
+        return 0
+    fi
+    return 1
+}
+
+# Finds the stored 'modem' image index for given firmware version id
+# eg: qmi_helper_modem_index_for_firmware "00.03.05.00"
+# This index can be passed to 'qmicli -d /dev/cdc-wdmX  --dms-select-stored-image'
+function qmi_helper_modem_index_for_firmware()
+{
+    local firmware_id="$1"
+
+    for idx in "${!qmi_modem_firmware_index_map[@]}"; do
+        if [[ ${qmi_modem_firmware_index_map[$idx]} == "$firmware_id" ]]; then
+            return $idx
+        fi
+    done
+
+    return -1
+}
+
+# Queries the stored modem firmware image
+function qmi_query_stored_modem_images()
+{
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    local output=$(/bin/qmicli -d $qmi_dev -p --dms-list-stored-images 2> /dev/null)
+    local build_output=$(echo  "$output" | awk  '/Build ID/ {match($3,/.+_.+/); print $3} /pri/ {exit}')
+    # extract firmware ids
+    local qmicli_carrier_modem_build_ids=($(echo $build_output | awk 'BEGIN {RS=" "} ; {print substr($1,2,11)}'))
+
+    local index=0
+    for b in "${qmicli_carrier_modem_build_ids[@]}"; do
+        qmi_modem_firmware_index_map[$index]="$b"
+        let index=index+1
+    done
+}
+
+# Queries for stored configurations on device
+function qmi_query_stored_pri_images()
+{
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    local output=$(/bin/qmicli -d $qmi_dev -p --dms-list-stored-images  2> /dev/null)
+
+    local build_output=$(echo  "$output" | \
+             awk 'NR == 1, /pri/ {next} {print} {next} {print $4}' | \
+             awk  '/Build/ {match($3,/.+_.+/); print $3}')
+
+    qmi_carriers=($(echo $build_output | awk 'BEGIN {RS=" "} ; {print substr($1,14,length($1)-14)}'))
+
+    local build_ids=($(echo $build_output | awk 'BEGIN {RS=" "} ; {print substr($1,2,11)}'))
+
+    local unqiue_output=$(echo  "$output" | \
+             awk 'NR==1, /pri/ {next} {print} {next} {print $4}' | \
+             awk  '/Unique/ {match($3,/.+_.+/); print $3}')
+    local unique_ids=($(echo $unqiue_output | awk 'BEGIN {RS=" "} ; {print substr($1,2,11)}'))
+
+    local index=0
+    for c in "${qmi_carriers[@]}"; do
+        # carrier(lowercase) -> pri config version map
+        qmi_carrier_firmware_map[${c,,}]=${build_ids[$index]}
+        qmi_carrier_pri_id_map[${c,,}]=${unique_ids[$index]}
+        qmi_carriers_to_index_map[${c,,}]=$index
+        qmi_carriers_canonical_to_raw_map[${c,,}]=$c
+        let index=index+1
+    done
+
+    return 0
+}
+
+
+# Retrieve the active firmware parameters
+function qmi_query_active_firmware()
+{
+    qmi_active_firmware_prefix=
+    qmi_active_firmware_version=
+    qmi_active_firmware_config=
+    qmi_active_carrier=
+
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    # Extract active firmware version
+    boot_version=$(/bin/qmicli -d $qmi_dev -p --dms-swi-get-current-firmware 2> /dev/null| awk '/Boot version/ {print $3}')
+    qmi_active_firmware_prefix=${boot_version%%_*}
+    qmi_active_firmware_version=${boot_version##*_}
+
+    # Now get the active configuration using AT command
+    output="$(/etc/scripts/modem-cmd 'AT!IMPREF?')"
+    qmi_active_carrier=$(echo "$output" | awk '/current carrier name/ { print $4}')
+    qmi_active_carrier=${qmi_active_carrier,,}
+    if [ -n "$qmi_active_carrier" ]; then
+        qmi_active_firmware_config=$(echo "$output" | awk  -F: '/current config name/ {gsub(/ /, ""); print $2}' | awk "{ x=substr(\$0,${#qmi_active_carrier}+2); print substr(x,0,length(x)-1)}")
+    fi
+
+    return 0
+}
+
+# Extracts the modem operating mode.
+function qmi_query_operating_mode()
+{
+    echo "$(/bin/qmicli -d $qmi_dev -p --dms-get-operating-mode 2> /dev/null |  awk -F: '/Mode/ {gsub(/ /, ""); print substr($2,2,length($2)-2);}')"
+}
+
+# Checks if modem operating mode is set to 'online'
+function qmi_is_online()
+{
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    qmi_modem_operating_mode="$(qmi_query_operating_mode)"
+    if [[ $qmi_modem_operating_mode =~ online ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Set firmware configuration to a specific carrier given by param $1 eg. "att", "generic", "verizon" etc,
+# and sets firmware version with param $2: eg "01.08.04.00"
+#
+# At least one of the parameter must be given:
+# Examples:
+#  qmi_set_firmware "" "01.08.04.00"                 <- Changes firmware version, but using current active carrier config
+#  qmi_set_firmware "generic" ""                     <- Changes carrier config, but uses current active firmware
+#  qmi_set_firmware "generic" "01.08.04.00"          <- Changes carrier config and firmware version
+#  qmi_set_firmware "" ""                            <- Invalid. Does nothing
+#
+# Settings param $3 to true will try and match the firmware version to the config version.
+# qmi_query_firmware() must be called before this function
+#
+#
+# Example:
+#   qmi_set_firmware "generic" "01.08.04.00" true  <- Changes carrier config version and tries to match firmware version string to config version string, falls back to "01.08.04.00"
+#                                                     if no match found
+#
+
+function qmi_set_firmware()
+{
+    if ! qmi_has_modem; then
+        return 1
+    fi
+
+    local carrier_config="$1"
+    local firmware_version="$2"
+    local firmware_try_match_carrier="$3"
+
+    # Get config version string
+    if [[ -z "$carrier_config" ]] && [[ -z "$firmware_version" ]]; then
+        qmi_log "Invalid parameters given"
+        return 1
+    fi
+
+    if [ -z "$carrier_config" ]; then
+        carrier_config="$qmi_active_carrier"
+        if [ -z "$carrier_config" ]; then
+            qmi_log "Requires carrier as parameter"
+            return 1
+        fi
+    fi
+
+    # Get firmware version string
+    if [ "$firmware_try_match_carrier" == "true" ]; then
+        local match=${qmi_carrier_firmware_map[$carrier_config]}
+        if [ -n "$match" ]; then
+            firmware_version=$match
+        fi
+    fi
+
+    if [ -z "$firmware_version" ]; then
+        firmware_version="$qmi_active_firmware_version"
+        if [ -z "$firmware_version" ]; then
+            qmi_log "Requires firmware version as parameter"
+            return 1
+        fi
+    fi
+
+    # map carrier config to index
+    local priIndex=${qmi_carriers_to_index_map[$carrier_config]}
+    if [ -z "$priIndex" ] ; then
+        qmi_log "Carrier not found in list: ${qmi_carriers[@]}"
+        return 1;
+    fi
+
+    # map firmware version string to index
+    if [[ "${qmi_carrier_firmware_map[$carrier_config]}" != "$firmware_version" ]]; then
+        qmi_log "Carrier config version does not match active firmware version"
+    else
+        qmi_log "Carrier config version matches active firmware version"
+    fi
+
+    qmi_helper_modem_index_for_firmware "$firmware_version"
+    local modemIndex=$?
+
+    if (( $modemIndex >= 255 )); then
+        qmi_log "Firmware not found in list: ${qmi_modem_firmware_index_map[@]}"
+        return 1;
+    fi
+
+    qmi_log "Setting firmware $firmware_version with carrier: $carrier_config as active configuration"
+    if qmicli -d $qmi_dev -p --dms-select-stored-image=modem$modemIndex,pri$priIndex; then
+        reset_seq_ops="offline reset"
+        for s in ${reset_seq_ops[@]}; do
+            if ! qmicli -d $qmi_dev -p --dms-set-operating-mode=$s >& /dev/null; then
+                qmi_log "Failed to set operating mode: $s"
+                return 1
+            fi
+        done
+        return 0
+    else
+        qmi_log "Failed to set either carrier and/or firmware"
+    fi
+
+    return 1
+}
+
+# Sets latest stored firmware image to active
+# The modem will go offline and reset itself
+# This does not change the active carrier configuration
+function qmi_set_firmware_latest()
+{
+    local image="{qmi_modem_firmware_index_map[@]}"
+    if [ -n $"images" ]; then
+        local latest_image=$(echo "${qmi_modem_firmware_index_map[@]}" | tr -s ' ' "\n" | sort -nr | awk 'NR==1 {print $1;}')
+        if [ -n "$latest_image" ]; then
+            qmi_log "Setting firmware to latest: $latest_image"
+            qmi_set_firmware "" "$latest_image"
+        fi
+    fi
+}
+
+# Last queried active carrier
+function qmi_get_active_carrier()
+{
+    if [ -z "$qmi_get_active_carrier" ]; then
+        qmi_query_active_carrier
+    else
+        echo "$qmi_active_carrier"
+    fi
+    return 1
+}
+
+# Query in the active carrier
+function qmi_query_active_carrier()
+{
+    qmi_query_active_firmware >& /dev/null
+    echo "$qmi_active_carrier"
+    return 1
+}
+
+# Last queried active carrier config
+function qmi_query_active_carrier_config()
+{
+    qmi_query_active_firmware >& /dev/null
+    echo "$qmi_active_firmware_config"
+    return 1
+}
+
+# Last queried active carrier config
+function qmi_get_active_carrier_config()
+{
+    echo "$qmi_active_firmware_config"
+    return 1
+}
+
+# Query in realtime active carrier
+function qmi_query_active_carrier_firmware()
+{
+    qmi_query_active_firmware >& /dev/null
+    echo "$qmi_active_firmware_config"
+    return 1
+}
+
+# Query in realtime active carrier
+function qmi_get_active_carrier_firmware()
+{
+    echo "$qmi_active_firmware_config"
+    return 1
+}
+
+# Get carrier config version from carrier name
+function qmi_get_carrier_config_version()
+{
+    local carrier=${1,,}
+    echo "${qmi_carrier_pri_id_map[$carrier]}"
+}
+
+# Get carrier firmware version from carrier name
+function qmi_get_carrier_firmware_version()
+{
+    local carrier=${1,,}
+    echo "${qmi_carrier_firmware_map[$carrier]}"
+}
+
+# Return a list of carrier name pairs as lowercase  and raw names (as parsed from qmicli)
+function qmi_get_carriers_list_pairs()
+{
+    local result=
+    for c in "${!qmi_carriers_canonical_to_raw_map[@]}"; do
+        result=$result"$c\t${qmi_carriers_canonical_to_raw_map[$c]}\n"
+    done
+
+    echo -e "$result"
+}
+
+# Trys to build a string representing the full firmware configuration
+# eg: SWI9X50C_00.03.05.00_GENERIC_001.028_000
+
+function qmi_active_firmware_string()
+{
+    function __check()
+    {
+        if [ -z "$1" ]; then
+            echo "?"
+        else
+            echo "$1"
+        fi
+    }
+
+    local active_carrier="$(qmi_query_active_carrier)"
+    local active_carrier_config="$(qmi_get_active_carrier_config)"
+
+    echo "$(__check $qmi_active_firmware_prefix)""_""$(__check $qmi_active_firmware_version)""_""$(__check ${active_carrier^^})""_""$(__check $active_carrier_config)"
+}
+
+
+# Waits for modem hardware detection and online status, $1 = timeout parameter in seconds
+function qmi_modem_wait_online()
+{
+    local wait_time=$1
+    if [ -z "$wait_time" ]; then
+        wait_time=20
+    fi
+
+    local count=0
+    while ! qmi_has_modem; do
+	    sleep 1
+	    let count=count+1
+	    if (( count >= wait_time )); then
+            return 1
+        fi
+    done
+
+    count=0
+    while ! qmi_is_online; do
+        sleep 1
+        let count=count+1
+        if (( count >=  wait_time )); then
+            return 1
+        fi
+    done
+
+    return 0
+}

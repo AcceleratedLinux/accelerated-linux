@@ -7,6 +7,7 @@
 
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-core.h>
+#include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-vmalloc.h>
 
 #include "vimc-common.h"
@@ -351,8 +352,7 @@ static void vimc_cap_unregister(struct vimc_ent_device *ved)
 	struct vimc_cap_device *vcap =
 		container_of(ved, struct vimc_cap_device, ved);
 
-	vb2_queue_release(&vcap->queue);
-	video_unregister_device(&vcap->vdev);
+	vb2_video_unregister_device(&vcap->vdev);
 }
 
 static void *vimc_cap_process_frame(struct vimc_ent_device *ved,
@@ -424,14 +424,18 @@ static struct vimc_ent_device *vimc_cap_add(struct vimc_device *vimc,
 	/* Initialize the vb2 queue */
 	q = &vcap->queue;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	q->io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
+	q->io_modes = VB2_MMAP | VB2_DMABUF;
+	if (vimc_allocator == VIMC_ALLOCATOR_VMALLOC)
+		q->io_modes |= VB2_USERPTR;
 	q->drv_priv = vcap;
 	q->buf_struct_size = sizeof(struct vimc_cap_buffer);
 	q->ops = &vimc_cap_qops;
-	q->mem_ops = &vb2_vmalloc_memops;
+	q->mem_ops = vimc_allocator == VIMC_ALLOCATOR_DMA_CONTIG
+		   ? &vb2_dma_contig_memops : &vb2_vmalloc_memops;
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	q->min_buffers_needed = 2;
 	q->lock = &vcap->lock;
+	q->dev = v4l2_dev->dev;
 
 	ret = vb2_queue_init(q);
 	if (ret) {
@@ -477,13 +481,11 @@ static struct vimc_ent_device *vimc_cap_add(struct vimc_device *vimc,
 	if (ret) {
 		dev_err(vimc->mdev.dev, "%s: video register failed (err=%d)\n",
 			vcap->vdev.name, ret);
-		goto err_release_queue;
+		goto err_clean_m_ent;
 	}
 
 	return &vcap->ved;
 
-err_release_queue:
-	vb2_queue_release(q);
 err_clean_m_ent:
 	media_entity_cleanup(&vcap->vdev.entity);
 err_free_vcap:

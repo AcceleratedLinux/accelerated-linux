@@ -6,5 +6,7 @@ CFLAGS += -D__GLIBC__=2
 CFLAGS += -D__GLIBC_MINOR__=10
 CFLAGS += -D_GNU_SOURCE
 
+LIBS += -ludev
+
 include $(ROOTDIR)/tools/automake.inc
 

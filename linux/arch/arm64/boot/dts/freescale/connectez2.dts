@@ -15,4 +15,22 @@
 / {
 	model = "Digi ConnectEZ-2";
 	compatible = "digi,connectez2", "digi,connectez", "fsl,ls1012a";
+
+	leds {
+		compatible = "gpio-leds";
+
+		ser1link {
+			label = "serlnk1";
+			gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser2link {
+			label = "serlnk2";
+			gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+	};
 };

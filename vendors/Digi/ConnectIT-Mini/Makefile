@@ -7,6 +7,7 @@ UROMFSIMG = $(IMAGEDIR)/urootfs.bin
 ZIMAGE    = $(IMAGEDIR)/zImage
 IMAGE     = $(IMAGEDIR)/image.bin
 UKERNEL   = $(IMAGEDIR)/ukernel.bin
+IMAGESIZE = 31457280 # 30MB
 
 SIGNING_ALG = ecdsa
 
@@ -56,7 +57,9 @@ uimage.bin:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-connectit-mini.dtb $(IMAGEDIR)/
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-connectit-mini.dtb /tftpboot/
 
-image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 
 include $(ROOTDIR)/vendors/config/config.dev
 include $(ROOTDIR)/vendors/AcceleratedConcepts/vendor.mak
+
+SQUASH_BCJ = -b 256K -Xbcj arm

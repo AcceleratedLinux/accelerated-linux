@@ -1,11 +1,5 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_ENUMINPUT:
 
@@ -18,23 +12,21 @@ Name
 
 VIDIOC_ENUMINPUT - Enumerate video inputs
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_ENUMINPUT, struct v4l2_input *argp )
-    :name: VIDIOC_ENUMINPUT
+.. c:macro:: VIDIOC_ENUMINPUT
 
+``int ioctl(int fd, VIDIOC_ENUMINPUT, struct v4l2_input *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_input`.
-
 
 Description
 ===========
@@ -46,8 +38,7 @@ fill the rest of the structure or return an ``EINVAL`` error code when the
 index is out of bounds. To enumerate all inputs applications shall begin
 at index zero, incrementing by one until the driver returns ``EINVAL``.
 
-
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
+.. tabularcolumns:: |p{3.0cm}|p{3.5cm}|p{10.8cm}|
 
 .. c:type:: v4l2_input
 
@@ -110,8 +101,7 @@ at index zero, incrementing by one until the driver returns ``EINVAL``.
 	zero.
 
 
-
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. tabularcolumns:: |p{6.6cm}|p{1.0cm}|p{9.7cm}|
 
 .. _input-type:
 
@@ -133,8 +123,7 @@ at index zero, incrementing by one until the driver returns ``EINVAL``.
       - This input is a touch device for capturing raw touch data.
 
 
-
-.. tabularcolumns:: |p{4.8cm}|p{2.6cm}|p{10.1cm}|
+.. tabularcolumns:: |p{5.6cm}|p{2.6cm}|p{9.1cm}|
 
 .. _input-status:
 
@@ -205,8 +194,7 @@ at index zero, incrementing by one until the driver returns ``EINVAL``.
       - VTR time constant. [?]
 
 
-
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. tabularcolumns:: |p{6.6cm}|p{2.4cm}|p{8.3cm}|
 
 .. _input-capabilities:
 
@@ -228,7 +216,6 @@ at index zero, incrementing by one until the driver returns ``EINVAL``.
       - This input supports setting the native size using the
 	``V4L2_SEL_TGT_NATIVE_SIZE`` selection target, see
 	:ref:`v4l2-selections-common`.
-
 
 Return Value
 ============

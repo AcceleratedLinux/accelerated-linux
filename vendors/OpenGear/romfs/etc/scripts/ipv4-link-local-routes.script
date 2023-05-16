@@ -1,0 +1,44 @@
+#!/bin/bash
+#
+# This script is only used by DHCP relay, and should be REMOVED
+# once OG boxes can be configured as a real router
+#
+# Sync up host route with link scope according to ARP cache:
+# . for host addresses in the IPv4 ARP cache, add host routes if
+#   not there yet in the main route table
+# . however, for host routes with link scope in the main route table,
+#   if relevant addresses do not exist in the IPv4 ARP cache anymore,
+#   routes are not removed by this script. Instead, users could
+#   manually remove them on CLI
+#
+# This ensures all DHCP client behind the relay can be correctly routed via
+# the downstream interface when they are in the same subnet as that of the
+# upper interface, whose default route has a higher priority than that of
+# the lower interface
+
+INTERFACE=$1
+[ -z "$INTERFACE" ] && exit 0
+
+# host routes with link scope (excluding subnet routes)
+ROUTEFILE=/tmp/ipv4-${INTERFACE}.routes
+/bin/ip -4 r show dev $INTERFACE scope link | grep -vE "proto kernel" > $ROUTEFILE
+
+NEIGHFILE=/tmp/ipv4-${INTERFACE}.neighbor
+/bin/ip -4 n show dev $INTERFACE | grep -v "FAILED" > $NEIGHFILE
+
+# add host routes if becoming a new neighbor
+while read line; do
+	address=`echo $line | cut -d' ' -f1`
+	if [ -z "$address" ]; then
+		continue;
+	fi
+	if ! grep -q "$address" $ROUTEFILE; then
+		/bin/ip r add $address dev $INTERFACE
+	fi
+
+done < $NEIGHFILE
+
+rm $ROUTEFILE
+rm $NEIGHFILE
+
+exit 0

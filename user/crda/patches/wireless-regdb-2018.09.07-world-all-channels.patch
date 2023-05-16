@@ -35,7 +35,10 @@
 +	(2402 - 2472 @ 40), (30)
 +	# 5.15 ~ 5.25 GHz: 30 dBm for master mode, 23 dBm for clients
 +	(5170 - 5250 @ 40), (23), AUTO-BW
++	(5250 - 5330 @ 40), (23), DFS, AUTO-BW
++	(5490 - 5730 @ 40), (23), DFS
++	(5735 - 5835 @ 40), (23)
++	(57240 - 63720 @ 2160), (40)
 +	# 60g band
 +	# reference: http://cfr.regstoday.com/47cfr15.aspx#47_CFR_15p255
 +	# channels 1,2,3, EIRP=40dBm(43dBm peak)
-+	(57240 - 63720 @ 2160), (40)

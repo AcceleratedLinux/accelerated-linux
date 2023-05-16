@@ -1,8 +1,8 @@
-diff -Naur busybox-1.31.0.org/miscutils/watchdog.c busybox-1.31.0/miscutils/watchdog.c
---- busybox-1.31.0.org/miscutils/watchdog.c	2019-06-10 19:09:31.000000000 +1000
-+++ busybox-1.31.0/miscutils/watchdog.c	2019-07-02 14:40:30.725595960 +1000
-@@ -85,6 +85,14 @@
- 	xmove_fd(xopen(device, O_WRONLY), 3);
+diff -Naur busybox-1.34.1.org/miscutils/watchdog.c busybox-1.34.1/miscutils/watchdog.c
+--- busybox-1.34.1.org/miscutils/watchdog.c	2019-06-10 19:09:31.000000000 +1000
++++ busybox-1.34.1/miscutils/watchdog.c	2019-07-02 14:40:30.725595960 +1000
+@@ -97,6 +97,14 @@
+ #endif
  }
  
 +static void watchdog_safe_terminate(int unused UNUSED_PARAM) NORETURN;
@@ -16,15 +16,15 @@ diff -Naur busybox-1.31.0.org/miscutils/watchdog.c busybox-1.31.0/miscutils/watc
  int watchdog_main(int argc, char **argv) MAIN_EXTERNALLY_VISIBLE;
  int watchdog_main(int argc UNUSED_PARAM, char **argv)
  {
-@@ -100,6 +108,7 @@
+@@ -112,6 +120,7 @@
  	unsigned htimer_duration = 60000; /* reboots after N ms if not restarted */
  	char *st_arg;
  	char *ht_arg;
 +	int fd;
  
- 	opts = getopt32(argv, "^" "Ft:T:" "\0" "=1"/*must have exactly 1 arg*/,
- 				&st_arg, &ht_arg
-@@ -122,7 +131,22 @@
+ #define OPT_FOREGROUND  (1 << 0)
+ #define OPT_STIMER      (1 << 1)
+@@ -137,7 +146,22 @@
  	if (opts & OPT_STIMER)
  		stimer_duration = xatou_sfx(st_arg, suffixes);
  

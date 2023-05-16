@@ -12,7 +12,6 @@
 #define TRACE_CGROUP_PATH_LEN 1024
 extern spinlock_t trace_cgroup_path_lock;
 extern char trace_cgroup_path[TRACE_CGROUP_PATH_LEN];
-extern bool cgroup_debug;
 extern void __init enable_debug_cgroup(void);
 
 /*
@@ -64,6 +63,25 @@ static inline struct cgroup_fs_context *cgroup_fc2context(struct fs_context *fc)
 
 	return container_of(kfc, struct cgroup_fs_context, kfc);
 }
+
+struct cgroup_pidlist;
+
+struct cgroup_file_ctx {
+	struct cgroup_namespace	*ns;
+
+	struct {
+		void			*trigger;
+	} psi;
+
+	struct {
+		bool			started;
+		struct css_task_iter	iter;
+	} procs;
+
+	struct {
+		struct cgroup_pidlist	*pidlist;
+	} procs1;
+};
 
 /*
  * A cgroup can be associated with multiple css_sets as different tasks may

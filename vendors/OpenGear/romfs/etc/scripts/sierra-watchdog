@@ -1,0 +1,115 @@
+#!/bin/sh
+
+# Check for a recently reset Sierra GSM (MC87xxx) or
+# CDMA (MC5728) modem and fix up symlinks if the ttyUSBs have
+# changed.
+#
+# After a reset the USB driver can reattach the device functions at
+# different device nodes. Because we don't use udev, we have to
+# recreate the symlinks ourselves. Also, services that had the old USB
+# devices open will be suffering, so we restart/kill them.
+#
+# This script is run out of cron.
+
+# Load the user's script if there is one
+if [ -e /etc/config/scripts/sierra-watchdog ]; then
+    . /etc/config/scripts/sierra-watchdog
+fi
+
+# Find the first USB device with a function bound to the sierra driver
+mdevpath=
+for f in /sys/bus/usb/drivers/sierra/*:*; do
+    if [ -d $f ]; then
+        mdevpath=$(dirname $(realpath $f))
+	break;
+    fi
+done
+
+# Exit if no modem
+if [ ! $mdevpath ]; then
+    # For now leave the dead symlinks there. If there's no modem, services
+    # could be opening whacky nodes but eventually they'll be reset.
+    #rm -f /dev/cellnmea01 /dev/cellcommand01 /dev/cellmodem01
+    exit 0
+fi
+
+# Exit if the symlinks are newer than the sysfs nodes
+if [ `ls -1dt /dev/cellmodem01 $mdevpath 2>/dev/null |
+      sed 1q` = /dev/cellmodem01 ]; then
+    exit 0
+fi
+
+# Detection patterned after rc.cellmodem
+read product <$mdevpath/product
+read idVendor <$mdevpath/idVendor
+read idProduct <$mdevpath/idProduct
+case $product:$idVendor:$idProduct in
+    MC87* | "HSPA Modem"* | C888*)
+	map="2:nmea
+	     3:command
+	     6:modem"
+	;;
+    *MC57* | *:1199:0028 | *"USB 598"*)
+	map="0:command
+	     0:modem"
+	;;
+    *"USB 308"* | *"AirCard 31"*)
+	map="2:command
+	     3:modem"
+	;;
+    *:1199:68a3) # DirectIP Sierra Modem
+	map="3:command
+	     3:modem"
+	;;
+    *320U*)
+	map="2:command
+	     2:modem"
+	;;
+    MC77* | MC73*) # Sierra Gobi
+	map="1:nmea
+	     2:command
+	     2:modem"
+	;;
+    *)
+	logger -p user.err -t sierra-watchdog "Unrecognized '$product' $idVendor:$idProduct"
+	exit 0
+	;;
+esac
+
+# Reconstruct symlinks if the paths have changed
+changed=false
+for i in $map
+do
+    usb_function=${i%:*}
+    name=${i#*:}
+    tty=/dev/$(basename $(ls -1d $mdevpath/*:?.$usb_function/tty* | head -1))
+    link=/dev/cell${name}01
+
+    if [ ! -c $tty ]; then
+       logger -p user.err -t sierra-watchdog "no tty for function $i in $(basename $mdevpath)"
+       continue
+    fi
+
+    logger -t sierra-watchdog "checking $link -> $tty"
+    if [ -h $link ] && [ $tty != `readlink $link` ]; then
+	changed=true
+    fi
+    ln -sf $tty $link	# Always rebuild (for timestamps)
+done
+
+# Restarting every service after a device reset takes too
+# long to stabilize. Historically we only restarted services if
+# the device paths changed, so we continue to do that here.
+if $changed; then
+    logger -t sierra-watchdog "some links changed, restarting all services"
+    # Restart services
+    pkill portmanager
+    pkill swisdk
+    pkill cellctl
+    kill `head -n1 /var/run/ppp-cellmodem.pid` 2>/dev/null # ppp
+fi
+# Always restart smsd because it does not handle device changes.
+pkill smsd
+pkill smsd_cdma
+
+exit 0

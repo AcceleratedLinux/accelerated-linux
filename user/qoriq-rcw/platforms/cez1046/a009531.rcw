@@ -1,0 +1,28 @@
+/*
+ * Work-around for erratum A-009531
+ *
+ * Description:
+ * As defined in section 2.2.6.4, Relaxed Ordering and ID-Based Ordering (IDO)
+ * Attributes of the PCI Express Base Specification Rev 3.1, “A Completer
+ * is permitted to set IDO only if the IDO Completion Enable bit in the Device
+ * Control 2 Register is set. It is not required to copy the value of IDO from
+ * the Request into the Completion(s) for that Request".
+ *
+ * However, the PCI Express controller as the completer sets the IDO bit in the
+ * completion packet header, in response to non-posted requests (memory read) with
+ * IDO bit set in the packet header, even if the IDO Completion Enable bit in the
+ * Device Control 2 Register is not set.
+ *
+ * Impact:
+ * The PCI Express controller as the completer sends completion packets with IDO
+ * bit set in packet header even when the IDO Completion Enable bit is cleared in
+ * the controller’s Device Control 2 Register.
+ */
+
+.pbi
+write 0x570158, 0x00000300
+flush
+awrite 0x400098, 0x00000000
+awrite 0x500098, 0x00000000
+awrite 0x600098, 0x00000000
+.end

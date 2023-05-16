@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/$(basename $0)"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+	if [ -f "${scripts[$i]}" ]; then
+		exec /bin/bash "${scripts[$i]}" "$@"
+	fi
+done
+
+name=$1
+[[ -z "$name" ]] && exit 1
+
+filename=$(config -g config.${name}.log.filename | cut -f2- -d' ')
+probe=$(config -g config.${name}.log.probe | head -n 1 | cut -f2 -d' ')
+
+# Redirect output to log file
+[[ -n "$filename" ]] && exec 1>> "$filename"
+
+logat()
+{
+	command="$1"
+	output=$( ( COMMAND="$command" RESPONSE=OK \
+		/bin/chat -t 2 -E -V -f /etc/scripts/command-chat \
+		< /dev/cellcommand01 > /dev/cellcommand01 ) 2>&1 )
+	echo "$output" | grep -v '^$'
+}
+
+echo -e "++++++++\n$(date '+%s')"
+
+logat "AT!PCVOLT?"
+logat "AT!PCTEMP?"
+logat "AT+CSQ"
+logat "AT!GSTATUS?"
+
+if [[ -n "$probe" ]]; then
+	ifname=$(tail -1 /var/run/ppp-cellmodem.pid)
+	if [[ -n "$ifname" ]]; then
+		count=$(config -g config.${name}.log.probe.count | cut -f2 -d' ')
+		[[ -z "$count" ]] && count=5
+		ping -w 30 -c $count -I $ifname $probe
+	fi
+fi
+
+echo "--------"

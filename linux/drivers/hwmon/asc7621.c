@@ -77,7 +77,7 @@ struct asc7621_data {
 	struct i2c_client client;
 	struct device *class_dev;
 	struct mutex update_lock;
-	int valid;		/* !=0 if following fields are valid */
+	bool valid;		/* true if following fields are valid */
 	unsigned long last_high_reading;	/* In jiffies */
 	unsigned long last_low_reading;		/* In jiffies */
 	/*
@@ -1032,7 +1032,7 @@ static struct asc7621_data *asc7621_update_device(struct device *dev)
 		data->last_low_reading = jiffies;
 	}			/* last_reading */
 
-	data->valid = 1;
+	data->valid = true;
 
 	mutex_unlock(&data->update_lock);
 
@@ -1087,7 +1087,7 @@ static void asc7621_init_client(struct i2c_client *client)
 }
 
 static int
-asc7621_probe(struct i2c_client *client, const struct i2c_device_id *id)
+asc7621_probe(struct i2c_client *client)
 {
 	struct asc7621_data *data;
 	int i, err;
@@ -1193,7 +1193,7 @@ static struct i2c_driver asc7621_driver = {
 	.driver = {
 		.name = "asc7621",
 	},
-	.probe = asc7621_probe,
+	.probe_new = asc7621_probe,
 	.remove = asc7621_remove,
 	.id_table = asc7621_id,
 	.detect = asc7621_detect,

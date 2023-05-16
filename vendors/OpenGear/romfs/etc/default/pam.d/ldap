@@ -1,0 +1,22 @@
+###############################################################################
+# LDAP, no local
+###############################################################################
+auth optional pam_faildelay.so delay=5000000
+auth optional pam_echo.so file=/etc/config/motd
+auth sufficient pam_portauth.so
+auth [success=4 default=ignore] pam_succeed_if.so login != root quiet
+auth [success=done default=ignore] pam_unix.so   # Handle root user explicitly
+auth [success=1] pam_ldap.so use_first_pass      # Password continues to LDAP
+auth [default=die] pam_infod.so                  # post auth_error and deny
+auth [default=done] pam_adduser.so               # Finish processing root
+auth [success=1] pam_ldap.so try_first_pass      # Handle non-root
+auth [default=die] pam_infod.so                  # post auth_error and deny
+auth optional pam_adduser.so                     # Finish processing non-root
+
+account [success=1 default=ignore] pam_ldap.so
+account sufficient pam_unix.so
+account optional pam_adduser.so
+
+session optional pam_ldap.so
+session required pam_unix.so
+session optional pam_infod.so # post login/logout

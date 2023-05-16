@@ -1,11 +1,4 @@
-.. Permission is granted to copy, distribute and/or modify this
-.. document under the terms of the GNU Free Documentation License,
-.. Version 1.1 or any later version published by the Free Software
-.. Foundation, with no Invariant Sections, no Front-Cover Texts
-.. and no Back-Cover Texts. A copy of the license is included at
-.. Documentation/userspace-api/media/fdl-appendix.rst.
-..
-.. TODO: replace it to GFDL-1.1-or-later WITH no-invariant-sections
+.. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
 
 .. _v4l2-pix-fmt-ipu3-sbggr10:
 .. _v4l2-pix-fmt-ipu3-sgbrg10:
@@ -16,7 +9,9 @@
 V4L2_PIX_FMT_IPU3_SBGGR10 ('ip3b'), V4L2_PIX_FMT_IPU3_SGBRG10 ('ip3g'), V4L2_PIX_FMT_IPU3_SGRBG10 ('ip3G'), V4L2_PIX_FMT_IPU3_SRGGB10 ('ip3r')
 **********************************************************************************************************************************************
 
+====================
 10-bit Bayer formats
+====================
 
 Description
 ===========
@@ -32,7 +27,11 @@ Below is an example of a small image in V4L2_PIX_FMT_IPU3_SBGGR10 format.
 **Byte Order.**
 Each cell is one byte.
 
-.. tabularcolumns:: |p{0.8cm}|p{4.0cm}|p{4.0cm}|p{4.0cm}|p{4.0cm}|
+.. raw:: latex
+
+    \small
+
+.. tabularcolumns:: |p{0.8cm}|p{3.3cm}|p{3.3cm}|p{3.3cm}|p{3.3cm}|
 
 .. flat-table::
 
@@ -340,3 +339,7 @@ Each cell is one byte.
       - R\ :sub:`0323high`
       - G\ :sub:`0324low`
       - G\ :sub:`0324high`\ (bits 1--0)
+
+.. raw:: latex
+
+    \normalsize

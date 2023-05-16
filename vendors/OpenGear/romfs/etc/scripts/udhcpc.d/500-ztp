@@ -1,0 +1,40 @@
+#!/bin/sh
+
+unconfigured () {
+	[ -z "$(/bin/config -g config.interfaces.wan.mode -g config.lhvpn)" ]
+}
+
+has_ztp_options() {
+	[ -n "$vendorspec_1" -o -n "$vendorspec_2" -o -n "$vendorspec_3" -o -n "$bootfile" ]
+}
+
+# log only if $ZTPLOG does not exist
+log1 () {
+	if [ ! -f $ZTPLOG ]; then
+		logger -s -p daemon.info -t "ztp" "$@" 2>$ZTPLOG
+	fi
+}
+
+case $1 in
+bound)
+	# Wait a few seconds to give DHCP IPv6 offers a chance to run first.
+	# ztp.script has a mutual exclusion check so if DHCP IPv6 has started
+	# then our call to ztp.script will exit immediately
+	sleep 5
+	export ZTPLOG=/tmp/ztp.log
+	if unconfigured; then
+		# Check for a Vendor Specific Information option (43)
+		# received while we are in MODE_UNCONFIGURED
+		if has_ztp_options; then
+			log1 "DHCPv4 $1 on $interface configuring with ZTP"
+			/etc/scripts/ztp.script udhcpc.$interface $interface &
+		else
+			log1 "DHCPv4 $1 on $interface, but no vendor-specific or bootfile option received; unable to configure"
+		fi
+	else # configured
+		if has_ztp_options; then
+			log1 "DHCPv4 $1 on $interface, received vendor-specific / bootfile options, and ignored them because system is already configured"
+		fi
+	fi
+	;;
+esac

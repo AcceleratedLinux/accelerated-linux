@@ -9,14 +9,15 @@ From Zendesk Ticket #2693 Our DHCP client (udhcpc) is not sending the
 hostname in the dhcp ip request, meaning that you can't do addressing
 based on that name, or automagically insert hosts into your dns.
 
-Index: busybox-1.31.0/networking/udhcp/dhcpc.c
+Index: busybox-1.34.1/networking/udhcp/dhcpc.c
 ===================================================================
---- busybox-1.31.0.orig/networking/udhcp/dhcpc.c
-+++ busybox-1.31.0/networking/udhcp/dhcpc.c
-@@ -1351,6 +1351,15 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+--- busybox-1.34.1.orig/networking/udhcp/dhcpc.c
++++ busybox-1.34.1/networking/udhcp/dhcpc.c
+@@ -1323,6 +1323,16 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 		);
  		free(optstr);
  	}
- 
++
 +#if ENABLE_FEATURE_UDHCPC_ALWAYS_SEND_HOST_NAME
 +	if (!client_data.hostname) {
 +		char buf[HOST_NAME_MAX];
@@ -26,14 +27,14 @@ Index: busybox-1.31.0/networking/udhcp/dhcpc.c
 +	}
 +#endif
 +
- 	if (udhcp_read_interface(client_data.interface,
- 			&client_data.ifindex,
- 			NULL,
-Index: busybox-1.31.0/networking/udhcp/Config.src
+ 	if (str_V[0] != '\0') {
+ 		char *p;
+ 		unsigned len = strnlen(str_V, 254);
+Index: busybox-1.34.1/networking/udhcp/Config.src
 ===================================================================
---- busybox-1.31.0.orig/networking/udhcp/Config.src
-+++ busybox-1.31.0/networking/udhcp/Config.src
-@@ -100,6 +100,14 @@ config UDHCPC_DEFAULT_SCRIPT
+--- busybox-1.34.1.orig/networking/udhcp/Config.src
++++ busybox-1.34.1/networking/udhcp/Config.src
+@@ -98,6 +98,14 @@ config UDHCPC_DEFAULT_SCRIPT
  	examples/udhcp for a working example. Normally it is safe
  	to leave this untouched.
  

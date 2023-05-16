@@ -7,6 +7,8 @@
 #define DEFAULT_BANK_SWITCH_TIMEOUT 3000
 #define DEFAULT_PROBE_TIMEOUT       2000
 
+u64 sdw_dmi_override_adr(struct sdw_bus *bus, u64 addr);
+
 #if IS_ENABLED(CONFIG_ACPI)
 int sdw_acpi_find_slaves(struct sdw_bus *bus);
 #else
@@ -19,6 +21,8 @@ static inline int sdw_acpi_find_slaves(struct sdw_bus *bus)
 int sdw_of_find_slaves(struct sdw_bus *bus);
 void sdw_extract_slave_id(struct sdw_bus *bus,
 			  u64 addr, struct sdw_slave_id *id);
+int sdw_slave_add(struct sdw_bus *bus, struct sdw_slave_id *id,
+		  struct fwnode_handle *fwnode);
 int sdw_master_device_add(struct sdw_bus *bus, struct device *parent,
 			  struct fwnode_handle *fwnode);
 int sdw_master_device_del(struct sdw_bus *bus);
@@ -69,6 +73,7 @@ struct sdw_msg {
 };
 
 #define SDW_DOUBLE_RATE_FACTOR		2
+#define SDW_STRM_RATE_GROUPING		1
 
 extern int sdw_rows[SDW_FRAME_ROWS];
 extern int sdw_cols[SDW_FRAME_COLS];
@@ -154,19 +159,51 @@ int sdw_transfer_defer(struct sdw_bus *bus, struct sdw_msg *msg,
 int sdw_fill_msg(struct sdw_msg *msg, struct sdw_slave *slave,
 		 u32 addr, size_t count, u16 dev_num, u8 flags, u8 *buf);
 
-/* Read-Modify-Write Slave register */
-static inline int
-sdw_update(struct sdw_slave *slave, u32 addr, u8 mask, u8 val)
+/* Retrieve and return channel count from channel mask */
+static inline int sdw_ch_mask_to_ch(int ch_mask)
 {
-	int tmp;
+	int c = 0;
 
-	tmp = sdw_read(slave, addr);
-	if (tmp < 0)
-		return tmp;
+	for (c = 0; ch_mask; ch_mask >>= 1)
+		c += ch_mask & 1;
 
-	tmp = (tmp & ~mask) | val;
-	return sdw_write(slave, addr, tmp);
+	return c;
 }
+
+/* Fill transport parameter data structure */
+static inline void sdw_fill_xport_params(struct sdw_transport_params *params,
+					 int port_num, bool grp_ctrl_valid,
+					 int grp_ctrl, int sample_int,
+					 int off1, int off2,
+					 int hstart, int hstop,
+					 int pack_mode, int lane_ctrl)
+{
+	params->port_num = port_num;
+	params->blk_grp_ctrl_valid = grp_ctrl_valid;
+	params->blk_grp_ctrl = grp_ctrl;
+	params->sample_interval = sample_int;
+	params->offset1 = off1;
+	params->offset2 = off2;
+	params->hstart = hstart;
+	params->hstop = hstop;
+	params->blk_pkg_mode = pack_mode;
+	params->lane_ctrl = lane_ctrl;
+}
+
+/* Fill port parameter data structure */
+static inline void sdw_fill_port_params(struct sdw_port_params *params,
+					int port_num, int bps,
+					int flow_mode, int data_mode)
+{
+	params->num = port_num;
+	params->bps = bps;
+	params->flow_mode = flow_mode;
+	params->data_mode = data_mode;
+}
+
+/* broadcast read/write for tests */
+int sdw_bread_no_pm_unlocked(struct sdw_bus *bus, u16 dev_num, u32 addr);
+int sdw_bwrite_no_pm_unlocked(struct sdw_bus *bus, u16 dev_num, u32 addr, u8 value);
 
 /*
  * At the moment we only track Master-initiated hw_reset.

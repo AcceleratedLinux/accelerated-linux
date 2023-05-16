@@ -12,14 +12,20 @@ sfx=$(mktemp -u "XXXXXXXX")
 ns1="ns1-$sfx"
 ns2="ns2-$sfx"
 nsrouter="nsrouter-$sfx"
+timeout=4
 
 cleanup()
 {
+	ip netns pids ${ns1} | xargs kill 2>/dev/null
+	ip netns pids ${ns2} | xargs kill 2>/dev/null
+	ip netns pids ${nsrouter} | xargs kill 2>/dev/null
+
 	ip netns del ${ns1}
 	ip netns del ${ns2}
 	ip netns del ${nsrouter}
 	rm -f "$TMPFILE0"
 	rm -f "$TMPFILE1"
+	rm -f "$TMPFILE2" "$TMPFILE3"
 }
 
 nft --version > /dev/null 2>&1
@@ -42,6 +48,8 @@ fi
 
 TMPFILE0=$(mktemp)
 TMPFILE1=$(mktemp)
+TMPFILE2=$(mktemp)
+TMPFILE3=$(mktemp)
 trap cleanup EXIT
 
 ip netns add ${ns1}
@@ -83,7 +91,7 @@ load_ruleset() {
 	local name=$1
 	local prio=$2
 
-ip netns exec ${nsrouter} nft -f - <<EOF
+ip netns exec ${nsrouter} nft -f /dev/stdin <<EOF
 table inet $name {
 	chain nfq {
 		ip protocol icmp queue bypass
@@ -105,6 +113,7 @@ table inet $name {
 	chain output {
 		type filter hook output priority $prio; policy accept;
 		tcp dport 12345 queue num 3
+		tcp sport 23456 queue num 3
 		jump nfq
 	}
 	chain post {
@@ -118,7 +127,7 @@ EOF
 load_counter_ruleset() {
 	local prio=$1
 
-ip netns exec ${nsrouter} nft -f - <<EOF
+ip netns exec ${nsrouter} nft -f /dev/stdin <<EOF
 table inet countrules {
 	chain pre {
 		type filter hook prerouting priority $prio; policy accept;
@@ -175,7 +184,7 @@ test_ping_router() {
 test_queue_blackhole() {
 	local proto=$1
 
-ip netns exec ${nsrouter} nft -f - <<EOF
+ip netns exec ${nsrouter} nft -f /dev/stdin <<EOF
 table $proto blackh {
 	chain forward {
 	type filter hook forward priority 0; policy accept;
@@ -184,10 +193,10 @@ table $proto blackh {
 }
 EOF
 	if [ $proto = "ip" ] ;then
-		ip netns exec ${ns1} ping -c 1 -q 10.0.2.99 > /dev/null
+		ip netns exec ${ns1} ping -W 2 -c 1 -q 10.0.2.99 > /dev/null
 		lret=$?
 	elif [ $proto = "ip6" ]; then
-		ip netns exec ${ns1} ping -c 1 -q dead:2::99 > /dev/null
+		ip netns exec ${ns1} ping -W 2 -c 1 -q dead:2::99 > /dev/null
 		lret=$?
 	else
 		lret=111
@@ -214,8 +223,8 @@ test_queue()
 	local last=""
 
 	# spawn nf-queue listeners
-	ip netns exec ${nsrouter} ./nf-queue -c -q 0 -t 3 > "$TMPFILE0" &
-	ip netns exec ${nsrouter} ./nf-queue -c -q 1 -t 3 > "$TMPFILE1" &
+	ip netns exec ${nsrouter} ./nf-queue -c -q 0 -t $timeout > "$TMPFILE0" &
+	ip netns exec ${nsrouter} ./nf-queue -c -q 1 -t $timeout > "$TMPFILE1" &
 	sleep 1
 	test_ping
 	ret=$?
@@ -250,11 +259,11 @@ test_queue()
 
 test_tcp_forward()
 {
-	ip netns exec ${nsrouter} ./nf-queue -q 2 -t 10 &
+	ip netns exec ${nsrouter} ./nf-queue -q 2 -t $timeout &
 	local nfqpid=$!
 
 	tmpfile=$(mktemp) || exit 1
-	dd conv=sparse status=none if=/dev/zero bs=1M count=100 of=$tmpfile
+	dd conv=sparse status=none if=/dev/zero bs=1M count=200 of=$tmpfile
 	ip netns exec ${ns2} nc -w 5 -l -p 12345 <"$tmpfile" >/dev/null &
 	local rpid=$!
 
@@ -270,15 +279,13 @@ test_tcp_forward()
 
 test_tcp_localhost()
 {
-	tc -net "${nsrouter}" qdisc add dev lo root netem loss random 1%
-
 	tmpfile=$(mktemp) || exit 1
 
-	dd conv=sparse status=none if=/dev/zero bs=1M count=900 of=$tmpfile
+	dd conv=sparse status=none if=/dev/zero bs=1M count=200 of=$tmpfile
 	ip netns exec ${nsrouter} nc -w 5 -l -p 12345 <"$tmpfile" >/dev/null &
 	local rpid=$!
 
-	ip netns exec ${nsrouter} ./nf-queue -q 3 -t 30 &
+	ip netns exec ${nsrouter} ./nf-queue -q 3 -t $timeout &
 	local nfqpid=$!
 
 	sleep 1
@@ -287,6 +294,113 @@ test_tcp_localhost()
 
 	wait $rpid
 	[ $? -eq 0 ] && echo "PASS: tcp via loopback"
+	wait 2>/dev/null
+}
+
+test_tcp_localhost_connectclose()
+{
+	tmpfile=$(mktemp) || exit 1
+
+	ip netns exec ${nsrouter} ./connect_close -p 23456 -t $timeout &
+
+	ip netns exec ${nsrouter} ./nf-queue -q 3 -t $timeout &
+	local nfqpid=$!
+
+	sleep 1
+	rm -f "$tmpfile"
+
+	wait $rpid
+	[ $? -eq 0 ] && echo "PASS: tcp via loopback with connect/close"
+	wait 2>/dev/null
+}
+
+test_tcp_localhost_requeue()
+{
+ip netns exec ${nsrouter} nft -f /dev/stdin <<EOF
+flush ruleset
+table inet filter {
+	chain output {
+		type filter hook output priority 0; policy accept;
+		tcp dport 12345 limit rate 1/second burst 1 packets counter queue num 0
+	}
+	chain post {
+		type filter hook postrouting priority 0; policy accept;
+		tcp dport 12345 limit rate 1/second burst 1 packets counter queue num 0
+	}
+}
+EOF
+	tmpfile=$(mktemp) || exit 1
+	dd conv=sparse status=none if=/dev/zero bs=1M count=200 of=$tmpfile
+	ip netns exec ${nsrouter} nc -w 5 -l -p 12345 <"$tmpfile" >/dev/null &
+	local rpid=$!
+
+	ip netns exec ${nsrouter} ./nf-queue -c -q 1 -t $timeout > "$TMPFILE2" &
+
+	# nfqueue 1 will be called via output hook.  But this time,
+        # re-queue the packet to nfqueue program on queue 2.
+	ip netns exec ${nsrouter} ./nf-queue -G -d 150 -c -q 0 -Q 1 -t $timeout > "$TMPFILE3" &
+
+	sleep 1
+	ip netns exec ${nsrouter} nc -w 5 127.0.0.1 12345 <"$tmpfile" > /dev/null
+	rm -f "$tmpfile"
+
+	wait
+
+	if ! diff -u "$TMPFILE2" "$TMPFILE3" ; then
+		echo "FAIL: lost packets during requeue?!" 1>&2
+		return
+	fi
+
+	echo "PASS: tcp via loopback and re-queueing"
+}
+
+test_icmp_vrf() {
+	ip -net $ns1 link add tvrf type vrf table 9876
+	if [ $? -ne 0 ];then
+		echo "SKIP: Could not add vrf device"
+		return
+	fi
+
+	ip -net $ns1 li set eth0 master tvrf
+	ip -net $ns1 li set tvrf up
+
+	ip -net $ns1 route add 10.0.2.0/24 via 10.0.1.1 dev eth0 table 9876
+ip netns exec ${ns1} nft -f /dev/stdin <<EOF
+flush ruleset
+table inet filter {
+	chain output {
+		type filter hook output priority 0; policy accept;
+		meta oifname "tvrf" icmp type echo-request counter queue num 1
+		meta oifname "eth0" icmp type echo-request counter queue num 1
+	}
+	chain post {
+		type filter hook postrouting priority 0; policy accept;
+		meta oifname "tvrf" icmp type echo-request counter queue num 1
+		meta oifname "eth0" icmp type echo-request counter queue num 1
+	}
+}
+EOF
+	ip netns exec ${ns1} ./nf-queue -q 1 -t $timeout &
+	local nfqpid=$!
+
+	sleep 1
+	ip netns exec ${ns1} ip vrf exec tvrf ping -c 1 10.0.2.99 > /dev/null
+
+	for n in output post; do
+		for d in tvrf eth0; do
+			ip netns exec ${ns1} nft list chain inet filter $n | grep -q "oifname \"$d\" icmp type echo-request counter packets 1"
+			if [ $? -ne 0 ] ; then
+				echo "FAIL: chain $n: icmp packet counter mismatch for device $d" 1>&2
+				ip netns exec ${ns1} nft list ruleset
+				ret=1
+				return
+			fi
+		done
+	done
+
+	wait $nfqpid
+	[ $? -eq 0 ] && echo "PASS: icmp+nfqueue via vrf"
+	wait 2>/dev/null
 }
 
 ip netns exec ${nsrouter} sysctl net.ipv6.conf.all.forwarding=1 > /dev/null
@@ -328,5 +442,8 @@ test_queue 20
 
 test_tcp_forward
 test_tcp_localhost
+test_tcp_localhost_connectclose
+test_tcp_localhost_requeue
+test_icmp_vrf
 
 exit $ret

@@ -8,7 +8,11 @@ export ACL_LICENSE = BSD/GPLv2
 BUILDVARS = cp -f --remove-destination $(ROOTDIR)/linux/include/uapi/linux/capability.h \
 	build/$($*_BUILDDIR)/libcap/include/uapi/linux/capability.h;
 
-MAKEVARS  = BUILD_CC="$(BUILD_CC)" CC="$(CC)" lib=lib prefix=/
+MAKEVARS  = BUILD_CC="$(BUILD_CC)"
+MAKEVARS += CC="$(CC)"
+MAKEVARS += CFLAGS="$(CFLAGS)"
+MAKEVARS += LDFLAGS="$(LDFLAGS)"
+MAKEVARS += lib=lib prefix=/
 MAKEVARS += BUILD_GPERF=no PAM_CAP=no RAISE_SETFCAP=no
 
 include $(ROOTDIR)/tools/automake.inc

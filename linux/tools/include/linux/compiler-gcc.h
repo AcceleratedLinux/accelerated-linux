@@ -16,9 +16,9 @@
 # define __fallthrough __attribute__ ((fallthrough))
 #endif
 
-#if GCC_VERSION >= 40300
+#if __has_attribute(__error__)
 # define __compiletime_error(message) __attribute__((error(message)))
-#endif /* GCC_VERSION >= 40300 */
+#endif
 
 /* &a[0] degrades to a pointer: a different type from an array */
 #define __must_be_array(a)	BUILD_BUG_ON_ZERO(__same_type((a), &(a)[0]))
@@ -27,18 +27,6 @@
 #define  __pure		__attribute__((pure))
 #endif
 #define  noinline	__attribute__((noinline))
-#ifdef __has_attribute
-#if __has_attribute(disable_tail_calls)
-#define __no_tail_call	__attribute__((disable_tail_calls))
-#endif
-#endif
-#ifndef __no_tail_call
-#if GCC_VERSION > 40201
-#define __no_tail_call	__attribute__((optimize("no-optimize-sibling-calls")))
-#else
-#define __no_tail_call
-#endif
-#endif
 #ifndef __packed
 #define __packed	__attribute__((packed))
 #endif
@@ -50,7 +38,3 @@
 #endif
 #define __printf(a, b)	__attribute__((format(printf, a, b)))
 #define __scanf(a, b)	__attribute__((format(scanf, a, b)))
-
-#if GCC_VERSION >= 50100
-#define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
-#endif

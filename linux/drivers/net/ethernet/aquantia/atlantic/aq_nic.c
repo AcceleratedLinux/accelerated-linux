@@ -300,6 +300,7 @@ static bool aq_nic_is_valid_ether_addr(const u8 *addr)
 
 int aq_nic_ndev_register(struct aq_nic_s *self)
 {
+	u8 addr[ETH_ALEN];
 	int err = 0;
 
 	if (!self->ndev) {
@@ -315,24 +316,29 @@ int aq_nic_ndev_register(struct aq_nic_s *self)
 	aq_macsec_init(self);
 #endif
 
-	mutex_lock(&self->fwreq_mutex);
-	err = self->aq_fw_ops->get_mac_permanent(self->aq_hw,
-			    self->ndev->dev_addr);
-	mutex_unlock(&self->fwreq_mutex);
-	if (err)
-		goto err_exit;
+	if (platform_get_ethdev_address(&self->pdev->dev, self->ndev) != 0) {
+		// If DT has none or an invalid one, ask device for MAC address
+		mutex_lock(&self->fwreq_mutex);
+		err = self->aq_fw_ops->get_mac_permanent(self->aq_hw, addr);
+		mutex_unlock(&self->fwreq_mutex);
 
-	if (!is_valid_ether_addr(self->ndev->dev_addr) ||
-	    !aq_nic_is_valid_ether_addr(self->ndev->dev_addr)) {
-		netdev_warn(self->ndev, "MAC is invalid, will use random.");
-		eth_hw_addr_random(self->ndev);
+		if (err)
+			goto err_exit;
+
+		if (is_valid_ether_addr(addr) &&
+		    aq_nic_is_valid_ether_addr(addr)) {
+			eth_hw_addr_set(self->ndev, addr);
+		} else {
+			netdev_warn(self->ndev, "MAC is invalid, will use random.");
+			eth_hw_addr_random(self->ndev);
+		}
 	}
 
 #if defined(AQ_CFG_MAC_ADDR_PERMANENT)
 	{
 		static u8 mac_addr_permanent[] = AQ_CFG_MAC_ADDR_PERMANENT;
 
-		ether_addr_copy(self->ndev->dev_addr, mac_addr_permanent);
+		eth_hw_addr_set(self->ndev, mac_addr_permanent);
 	}
 #endif
 
@@ -371,7 +377,7 @@ void aq_nic_ndev_init(struct aq_nic_s *self)
 	self->ndev->features = aq_hw_caps->hw_features;
 	self->ndev->vlan_features |= NETIF_F_HW_CSUM | NETIF_F_RXCSUM |
 				     NETIF_F_RXHASH | NETIF_F_SG |
-				     NETIF_F_LRO | NETIF_F_TSO;
+				     NETIF_F_LRO | NETIF_F_TSO | NETIF_F_TSO6;
 	self->ndev->gso_partial_features = NETIF_F_GSO_UDP_L4;
 	self->ndev->priv_flags = aq_hw_caps->hw_priv_flags;
 	self->ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
@@ -405,6 +411,10 @@ int aq_nic_init(struct aq_nic_s *self)
 	mutex_unlock(&self->fwreq_mutex);
 	if (err < 0)
 		goto err_exit;
+	/* Restore default settings */
+	aq_nic_set_downshift(self, self->aq_nic_cfg.downshift_counter);
+	aq_nic_set_media_detect(self, self->aq_nic_cfg.is_media_detect ?
+				AQ_HW_MEDIA_DETECT_CNT : 0);
 
 	err = self->aq_hw_ops->hw_init(self->aq_hw,
 				       aq_nic_get_ndev(self)->dev_addr);
@@ -476,8 +486,8 @@ int aq_nic_start(struct aq_nic_s *self)
 	if (err < 0)
 		goto err_exit;
 
-	for (i = 0U, aq_vec = self->aq_vec[0];
-		self->aq_vecs > i; ++i, aq_vec = self->aq_vec[i]) {
+	for (i = 0U; self->aq_vecs > i; ++i) {
+		aq_vec = self->aq_vec[i];
 		err = aq_vec_start(aq_vec);
 		if (err < 0)
 			goto err_exit;
@@ -507,8 +517,8 @@ int aq_nic_start(struct aq_nic_s *self)
 		mod_timer(&self->polling_timer, jiffies +
 			  AQ_CFG_POLLING_TIMER_INTERVAL);
 	} else {
-		for (i = 0U, aq_vec = self->aq_vec[0];
-			self->aq_vecs > i; ++i, aq_vec = self->aq_vec[i]) {
+		for (i = 0U; self->aq_vecs > i; ++i) {
+			aq_vec = self->aq_vec[i];
 			err = aq_pci_func_alloc_irq(self, i, self->ndev->name,
 						    aq_vec_isr, aq_vec,
 						    aq_vec_get_affinity_mask(aq_vec));
@@ -557,6 +567,103 @@ int aq_nic_start(struct aq_nic_s *self)
 
 err_exit:
 	return err;
+}
+
+static unsigned int aq_nic_map_xdp(struct aq_nic_s *self,
+				   struct xdp_frame *xdpf,
+				   struct aq_ring_s *ring)
+{
+	struct device *dev = aq_nic_get_dev(self);
+	struct aq_ring_buff_s *first = NULL;
+	unsigned int dx = ring->sw_tail;
+	struct aq_ring_buff_s *dx_buff;
+	struct skb_shared_info *sinfo;
+	unsigned int frag_count = 0U;
+	unsigned int nr_frags = 0U;
+	unsigned int ret = 0U;
+	u16 total_len;
+
+	dx_buff = &ring->buff_ring[dx];
+	dx_buff->flags = 0U;
+
+	sinfo = xdp_get_shared_info_from_frame(xdpf);
+	total_len = xdpf->len;
+	dx_buff->len = total_len;
+	if (xdp_frame_has_frags(xdpf)) {
+		nr_frags = sinfo->nr_frags;
+		total_len += sinfo->xdp_frags_size;
+	}
+	dx_buff->pa = dma_map_single(dev, xdpf->data, dx_buff->len,
+				     DMA_TO_DEVICE);
+
+	if (unlikely(dma_mapping_error(dev, dx_buff->pa)))
+		goto exit;
+
+	first = dx_buff;
+	dx_buff->len_pkt = total_len;
+	dx_buff->is_sop = 1U;
+	dx_buff->is_mapped = 1U;
+	++ret;
+
+	for (; nr_frags--; ++frag_count) {
+		skb_frag_t *frag = &sinfo->frags[frag_count];
+		unsigned int frag_len = skb_frag_size(frag);
+		unsigned int buff_offset = 0U;
+		unsigned int buff_size = 0U;
+		dma_addr_t frag_pa;
+
+		while (frag_len) {
+			if (frag_len > AQ_CFG_TX_FRAME_MAX)
+				buff_size = AQ_CFG_TX_FRAME_MAX;
+			else
+				buff_size = frag_len;
+
+			frag_pa = skb_frag_dma_map(dev, frag, buff_offset,
+						   buff_size, DMA_TO_DEVICE);
+
+			if (unlikely(dma_mapping_error(dev, frag_pa)))
+				goto mapping_error;
+
+			dx = aq_ring_next_dx(ring, dx);
+			dx_buff = &ring->buff_ring[dx];
+
+			dx_buff->flags = 0U;
+			dx_buff->len = buff_size;
+			dx_buff->pa = frag_pa;
+			dx_buff->is_mapped = 1U;
+			dx_buff->eop_index = 0xffffU;
+
+			frag_len -= buff_size;
+			buff_offset += buff_size;
+
+			++ret;
+		}
+	}
+
+	first->eop_index = dx;
+	dx_buff->is_eop = 1U;
+	dx_buff->skb = NULL;
+	dx_buff->xdpf = xdpf;
+	goto exit;
+
+mapping_error:
+	for (dx = ring->sw_tail;
+	     ret > 0;
+	     --ret, dx = aq_ring_next_dx(ring, dx)) {
+		dx_buff = &ring->buff_ring[dx];
+
+		if (!dx_buff->pa)
+			continue;
+		if (unlikely(dx_buff->is_sop))
+			dma_unmap_single(dev, dx_buff->pa, dx_buff->len,
+					 DMA_TO_DEVICE);
+		else
+			dma_unmap_page(dev, dx_buff->pa, dx_buff->len,
+				       DMA_TO_DEVICE);
+	}
+
+exit:
+	return ret;
 }
 
 unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
@@ -687,6 +794,7 @@ unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
 	first->eop_index = dx;
 	dx_buff->is_eop = 1U;
 	dx_buff->skb = skb;
+	dx_buff->xdpf = NULL;
 	goto exit;
 
 mapping_error:
@@ -713,6 +821,44 @@ mapping_error:
 
 exit:
 	return ret;
+}
+
+int aq_nic_xmit_xdpf(struct aq_nic_s *aq_nic, struct aq_ring_s *tx_ring,
+		     struct xdp_frame *xdpf)
+{
+	u16 queue_index = AQ_NIC_RING2QMAP(aq_nic, tx_ring->idx);
+	struct net_device *ndev = aq_nic_get_ndev(aq_nic);
+	struct skb_shared_info *sinfo;
+	int cpu = smp_processor_id();
+	int err = NETDEV_TX_BUSY;
+	struct netdev_queue *nq;
+	unsigned int frags = 1;
+
+	if (xdp_frame_has_frags(xdpf)) {
+		sinfo = xdp_get_shared_info_from_frame(xdpf);
+		frags += sinfo->nr_frags;
+	}
+
+	if (frags > AQ_CFG_SKB_FRAGS_MAX)
+		return err;
+
+	nq = netdev_get_tx_queue(ndev, tx_ring->idx);
+	__netif_tx_lock(nq, cpu);
+
+	aq_ring_update_queue_state(tx_ring);
+
+	/* Above status update may stop the queue. Check this. */
+	if (__netif_subqueue_stopped(aq_nic_get_ndev(aq_nic), queue_index))
+		goto out;
+
+	frags = aq_nic_map_xdp(aq_nic, xdpf, tx_ring);
+	if (likely(frags))
+		err = aq_nic->aq_hw_ops->hw_ring_tx_xmit(aq_nic->aq_hw, tx_ring,
+							 frags);
+out:
+	__netif_tx_unlock(nq);
+
+	return err;
 }
 
 int aq_nic_xmit(struct aq_nic_s *self, struct sk_buff *skb)
@@ -899,8 +1045,14 @@ u64 *aq_nic_get_stats(struct aq_nic_s *self, u64 *data)
 	data[++i] = stats->mbtc;
 	data[++i] = stats->bbrc;
 	data[++i] = stats->bbtc;
-	data[++i] = stats->ubrc + stats->mbrc + stats->bbrc;
-	data[++i] = stats->ubtc + stats->mbtc + stats->bbtc;
+	if (stats->brc)
+		data[++i] = stats->brc;
+	else
+		data[++i] = stats->ubrc + stats->mbrc + stats->bbrc;
+	if (stats->btc)
+		data[++i] = stats->btc;
+	else
+		data[++i] = stats->ubtc + stats->mbtc + stats->bbtc;
 	data[++i] = stats->dma_pkt_rc;
 	data[++i] = stats->dma_pkt_tc;
 	data[++i] = stats->dma_oct_rc;
@@ -916,13 +1068,13 @@ u64 *aq_nic_get_stats(struct aq_nic_s *self, u64 *data)
 		     aq_vec && self->aq_vecs > i;
 		     ++i, aq_vec = self->aq_vec[i]) {
 			data += count;
-			aq_vec_get_sw_stats(aq_vec, tc, data, &count);
+			count = aq_vec_get_sw_stats(aq_vec, tc, data);
 		}
 	}
 
 	data += count;
 
-err_exit:;
+err_exit:
 	return data;
 }
 
@@ -944,12 +1096,17 @@ static void aq_nic_update_ndev_stats(struct aq_nic_s *self)
 void aq_nic_get_link_ksettings(struct aq_nic_s *self,
 			       struct ethtool_link_ksettings *cmd)
 {
+	u32 lp_link_speed_msk;
+
 	if (self->aq_nic_cfg.aq_hw_caps->media_type == AQ_HW_MEDIA_TYPE_FIBRE)
 		cmd->base.port = PORT_FIBRE;
 	else
 		cmd->base.port = PORT_TP;
-	/* This driver supports only 10G capable adapters, so DUPLEX_FULL */
-	cmd->base.duplex = DUPLEX_FULL;
+
+	cmd->base.duplex = DUPLEX_UNKNOWN;
+	if (self->link_status.mbps)
+		cmd->base.duplex = self->link_status.full_duplex ?
+				   DUPLEX_FULL : DUPLEX_HALF;
 	cmd->base.autoneg = self->aq_nic_cfg.is_autoneg;
 
 	ethtool_link_ksettings_zero_link_mode(cmd, supported);
@@ -970,13 +1127,25 @@ void aq_nic_get_link_ksettings(struct aq_nic_s *self,
 		ethtool_link_ksettings_add_link_mode(cmd, supported,
 						     1000baseT_Full);
 
+	if (self->aq_nic_cfg.aq_hw_caps->link_speed_msk & AQ_NIC_RATE_1G_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     1000baseT_Half);
+
 	if (self->aq_nic_cfg.aq_hw_caps->link_speed_msk & AQ_NIC_RATE_100M)
 		ethtool_link_ksettings_add_link_mode(cmd, supported,
 						     100baseT_Full);
 
+	if (self->aq_nic_cfg.aq_hw_caps->link_speed_msk & AQ_NIC_RATE_100M_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     100baseT_Half);
+
 	if (self->aq_nic_cfg.aq_hw_caps->link_speed_msk & AQ_NIC_RATE_10M)
 		ethtool_link_ksettings_add_link_mode(cmd, supported,
 						     10baseT_Full);
+
+	if (self->aq_nic_cfg.aq_hw_caps->link_speed_msk & AQ_NIC_RATE_10M_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     10baseT_Half);
 
 	if (self->aq_nic_cfg.aq_hw_caps->flow_control) {
 		ethtool_link_ksettings_add_link_mode(cmd, supported,
@@ -997,29 +1166,41 @@ void aq_nic_get_link_ksettings(struct aq_nic_s *self,
 	if (self->aq_nic_cfg.is_autoneg)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising, Autoneg);
 
-	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_10G)
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_10G)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     10000baseT_Full);
 
-	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_5G)
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_5G)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     5000baseT_Full);
 
-	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_2G5)
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_2G5)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     2500baseT_Full);
 
-	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_1G)
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_1G)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     1000baseT_Full);
 
-	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_100M)
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_1G_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, advertising,
+						     1000baseT_Half);
+
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_100M)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     100baseT_Full);
 
-	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_10M)
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_100M_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, advertising,
+						     100baseT_Half);
+
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_10M)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     10baseT_Full);
+
+	if (self->aq_nic_cfg.link_speed_msk & AQ_NIC_RATE_10M_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, advertising,
+						     10baseT_Half);
 
 	if (self->aq_nic_cfg.fc.cur & AQ_NIC_FC_RX)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
@@ -1035,32 +1216,84 @@ void aq_nic_get_link_ksettings(struct aq_nic_s *self,
 		ethtool_link_ksettings_add_link_mode(cmd, advertising, FIBRE);
 	else
 		ethtool_link_ksettings_add_link_mode(cmd, advertising, TP);
+
+	ethtool_link_ksettings_zero_link_mode(cmd, lp_advertising);
+	lp_link_speed_msk = self->aq_hw->aq_link_status.lp_link_speed_msk;
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_10G)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     10000baseT_Full);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_5G)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     5000baseT_Full);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_2G5)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     2500baseT_Full);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_1G)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     1000baseT_Full);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_1G_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     1000baseT_Half);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_100M)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     100baseT_Full);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_100M_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     100baseT_Half);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_10M)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     10baseT_Full);
+
+	if (lp_link_speed_msk & AQ_NIC_RATE_10M_HALF)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     10baseT_Half);
+
+	if (self->aq_hw->aq_link_status.lp_flow_control & AQ_NIC_FC_RX)
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     Pause);
+	if (!!(self->aq_hw->aq_link_status.lp_flow_control & AQ_NIC_FC_TX) ^
+	    !!(self->aq_hw->aq_link_status.lp_flow_control & AQ_NIC_FC_RX))
+		ethtool_link_ksettings_add_link_mode(cmd, lp_advertising,
+						     Asym_Pause);
 }
 
 int aq_nic_set_link_ksettings(struct aq_nic_s *self,
 			      const struct ethtool_link_ksettings *cmd)
 {
-	u32 speed = 0U;
+	int fduplex = (cmd->base.duplex == DUPLEX_FULL);
+	u32 speed = cmd->base.speed;
 	u32 rate = 0U;
 	int err = 0;
+
+	if (!fduplex && speed > SPEED_1000) {
+		err = -EINVAL;
+		goto err_exit;
+	}
 
 	if (cmd->base.autoneg == AUTONEG_ENABLE) {
 		rate = self->aq_nic_cfg.aq_hw_caps->link_speed_msk;
 		self->aq_nic_cfg.is_autoneg = true;
 	} else {
-		speed = cmd->base.speed;
-
 		switch (speed) {
 		case SPEED_10:
-			rate = AQ_NIC_RATE_10M;
+			rate = fduplex ? AQ_NIC_RATE_10M : AQ_NIC_RATE_10M_HALF;
 			break;
 
 		case SPEED_100:
-			rate = AQ_NIC_RATE_100M;
+			rate = fduplex ? AQ_NIC_RATE_100M
+				       : AQ_NIC_RATE_100M_HALF;
 			break;
 
 		case SPEED_1000:
-			rate = AQ_NIC_RATE_1G;
+			rate = fduplex ? AQ_NIC_RATE_1G : AQ_NIC_RATE_1G_HALF;
 			break;
 
 		case SPEED_2500:
@@ -1078,7 +1311,6 @@ int aq_nic_set_link_ksettings(struct aq_nic_s *self,
 		default:
 			err = -1;
 			goto err_exit;
-		break;
 		}
 		if (!(self->aq_nic_cfg.aq_hw_caps->link_speed_msk & rate)) {
 			err = -1;
@@ -1116,7 +1348,7 @@ int aq_nic_set_loopback(struct aq_nic_s *self)
 
 	if (!self->aq_hw_ops->hw_set_loopback ||
 	    !self->aq_fw_ops->set_phyloopback)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	mutex_lock(&self->fwreq_mutex);
 	self->aq_hw_ops->hw_set_loopback(self->aq_hw,
@@ -1317,6 +1549,52 @@ void aq_nic_release_filter(struct aq_nic_s *self, enum aq_rx_filter_type type,
 	}
 }
 
+int aq_nic_set_downshift(struct aq_nic_s *self, int val)
+{
+	int err = 0;
+	struct aq_nic_cfg_s *cfg = &self->aq_nic_cfg;
+
+	if (!self->aq_fw_ops->set_downshift)
+		return -EOPNOTSUPP;
+
+	if (val > 15) {
+		netdev_err(self->ndev, "downshift counter should be <= 15\n");
+		return -EINVAL;
+	}
+	cfg->downshift_counter = val;
+
+	mutex_lock(&self->fwreq_mutex);
+	err = self->aq_fw_ops->set_downshift(self->aq_hw, cfg->downshift_counter);
+	mutex_unlock(&self->fwreq_mutex);
+
+	return err;
+}
+
+int aq_nic_set_media_detect(struct aq_nic_s *self, int val)
+{
+	struct aq_nic_cfg_s *cfg = &self->aq_nic_cfg;
+	int err = 0;
+
+	if (!self->aq_fw_ops->set_media_detect)
+		return -EOPNOTSUPP;
+
+	if (val > 0 && val != AQ_HW_MEDIA_DETECT_CNT) {
+		netdev_err(self->ndev, "EDPD on this device could have only fixed value of %d\n",
+			   AQ_HW_MEDIA_DETECT_CNT);
+		return -EINVAL;
+	}
+
+	mutex_lock(&self->fwreq_mutex);
+	err = self->aq_fw_ops->set_media_detect(self->aq_hw, !!val);
+	mutex_unlock(&self->fwreq_mutex);
+
+	/* msecs plays no role - configuration is always fixed in PHY */
+	if (!err)
+		cfg->is_media_detect = !!val;
+
+	return err;
+}
+
 int aq_nic_setup_tc_mqprio(struct aq_nic_s *self, u32 tcs, u8 *prio_tc_map)
 {
 	struct aq_nic_cfg_s *cfg = &self->aq_nic_cfg;
@@ -1344,7 +1622,7 @@ int aq_nic_setup_tc_mqprio(struct aq_nic_s *self, u32 tcs, u8 *prio_tc_map)
 		for (i = 0; i < sizeof(cfg->prio_tc_map); i++)
 			cfg->prio_tc_map[i] = cfg->tcs * i / 8;
 
-	cfg->is_qos = (tcs != 0 ? true : false);
+	cfg->is_qos = !!tcs;
 	cfg->is_ptp = (cfg->tcs <= AQ_HW_PTP_TC);
 	if (!cfg->is_ptp)
 		netdev_warn(self->ndev, "%s\n",

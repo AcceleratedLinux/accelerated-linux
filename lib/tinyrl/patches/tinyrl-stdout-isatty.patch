@@ -1,0 +1,102 @@
+Only write out VT100 escape sequences when the output file stream is a tty.
+
+--- tinyrl/tinyrl.c.orig    2021-02-08 10:01:28.165951833 +1000
++++ tinyrl/tinyrl.c 2021-02-08 10:01:48.617922194 +1000
+@@ -39,6 +40,7 @@
+ 	char echo_char;
+ 	bool echo_enabled;
+ 	bool isatty;
++	bool vt100;
+ 
+ 	char *last_buffer;
+ 	size_t last_end;
+@@ -54,37 +56,44 @@
+ 
+ static void tinyrl_vt100_clear_screen(struct tinyrl *this)
+ {
+-	tinyrl_printf(this, "\x1b[2J");
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[2J");
+ }
+ 
+ static void tinyrl_vt100_erase_line_end(struct tinyrl *this)
+ {
+-	tinyrl_printf(this, "\x1b[0K");
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[0K");
+ }
+ 
+ static void tinyrl_vt100_erase_line(struct tinyrl *this)
+ {
+-	tinyrl_printf(this, "\x1b[2K");
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[2K");
+ }
+ 
+ static void tinyrl_vt100_cursor_up(struct tinyrl *this, unsigned count)
+ {
+-	tinyrl_printf(this, "\x1b[%dA", count);
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[%dA", count);
+ }
+ 
+ static void tinyrl_vt100_cursor_down(struct tinyrl *this, unsigned count)
+ {
+-	tinyrl_printf(this, "\x1b[%dB", count);
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[%dB", count);
+ }
+ 
+ static void tinyrl_vt100_cursor_forward(struct tinyrl *this, unsigned count)
+ {
+-	tinyrl_printf(this, "\x1b[%dC", count);
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[%dC", count);
+ }
+ 
+ static void tinyrl_vt100_cursor_home(struct tinyrl *this)
+ {
+-	tinyrl_printf(this, "\x1b[H");
++	if (this->vt100)
++		tinyrl_printf(this, "\x1b[H");
+ }
+ 
+ static void tty_set_raw_mode(FILE *istream, struct termios *old_termios)
+@@ -356,6 +364,7 @@
+ 	this->echo_char = '\0';
+ 	this->echo_enabled = true;
+ 	this->isatty = true;
++	this->vt100 = isatty(fileno(outstream)) == 1;
+ 	this->last_buffer = NULL;
+ 	this->last_end = 0;
+ 	this->last_row = 0;
+@@ -532,7 +541,8 @@
+ 		}
+ 
+ 		/* move cursor to the start of the last displayed row */
+-		tinyrl_printf(this, "\r");
++		if (this->vt100)
++			tinyrl_printf(this, "\r");
+ 		if (this->last_row > this->last_point_row) {
+ 			tinyrl_vt100_cursor_down(this, this->last_row - this->last_point_row);
+ 		} else if (this->last_row < this->last_point_row) {
+@@ -580,7 +590,8 @@
+ 		if (row > point_row) {
+ 			tinyrl_vt100_cursor_up(this, row - point_row);
+ 		}
+-		tinyrl_printf(this, "\r");
++		if (this->vt100)
++			tinyrl_printf(this, "\r");
+ 		if (point_col) {
+ 			tinyrl_vt100_cursor_forward(this, point_col);
+ 		}
+@@ -736,7 +747,8 @@
+ 		/* time to finish the session */
+ 		this->line = NULL;
+ 	} else {
+-		tinyrl_crlf(this);
++		if (this->vt100)
++			tinyrl_crlf(this);
+ 		this->done = true;
+ 	}
+ }

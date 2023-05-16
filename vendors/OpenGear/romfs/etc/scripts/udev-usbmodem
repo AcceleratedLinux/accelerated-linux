@@ -1,0 +1,24 @@
+#!/bin/bash
+
+read VID </sys$DEVPATH/../../../idVendor
+read PID </sys$DEVPATH/../../../idProduct
+
+# Some devices look like USB modems but aren't
+case $VID:$PID in
+      106c:3718) exit 0;; # Pantech UML290 (unsupported)
+      05a6:0009) exit 0;; # Cisco USB console
+      04e2:1410) exit 0;; # Cisco ASR 920 USB console (Exar)
+esac
+
+# We only support having one USB modem, so we have a hardcoded name for it
+case $ACTION in
+add|change)
+	ln -fs $DEVNAME /dev/usbmodem01
+	;;
+
+remove)
+	rm -f /dev/usbmodem01
+	;;
+esac
+
+exit 0

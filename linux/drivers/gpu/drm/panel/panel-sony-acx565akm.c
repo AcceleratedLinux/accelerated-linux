@@ -514,7 +514,6 @@ static const struct drm_display_mode acx565akm_mode = {
 	.vsync_start = 480 + 3,
 	.vsync_end = 480 + 3 + 3,
 	.vtotal = 480 + 3 + 3 + 4,
-	.vrefresh = 57,
 	.type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
 	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
 	.width_mm = 77,
@@ -630,7 +629,7 @@ static int acx565akm_probe(struct spi_device *spi)
 	lcd->spi = spi;
 	mutex_init(&lcd->mutex);
 
-	lcd->reset_gpio = devm_gpiod_get(&spi->dev, "reset", GPIOD_OUT_LOW);
+	lcd->reset_gpio = devm_gpiod_get(&spi->dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(lcd->reset_gpio)) {
 		dev_err(&spi->dev, "failed to get reset GPIO\n");
 		return PTR_ERR(lcd->reset_gpio);
@@ -651,17 +650,12 @@ static int acx565akm_probe(struct spi_device *spi)
 	drm_panel_init(&lcd->panel, &lcd->spi->dev, &acx565akm_funcs,
 		       DRM_MODE_CONNECTOR_DPI);
 
-	ret = drm_panel_add(&lcd->panel);
-	if (ret < 0) {
-		if (lcd->has_bc)
-			acx565akm_backlight_cleanup(lcd);
-		return ret;
-	}
+	drm_panel_add(&lcd->panel);
 
 	return 0;
 }
 
-static int acx565akm_remove(struct spi_device *spi)
+static void acx565akm_remove(struct spi_device *spi)
 {
 	struct acx565akm_panel *lcd = spi_get_drvdata(spi);
 
@@ -672,8 +666,6 @@ static int acx565akm_remove(struct spi_device *spi)
 
 	drm_panel_disable(&lcd->panel);
 	drm_panel_unprepare(&lcd->panel);
-
-	return 0;
 }
 
 static const struct of_device_id acx565akm_of_match[] = {

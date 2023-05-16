@@ -1,0 +1,9 @@
+/*
+ * PBI Commands for LS1046A
+ */
+
+.pbi
+write 0x570418, 0x0000009e
+write 0x57041c, 0x0000009e
+write 0x570420, 0x0000009e
+.end

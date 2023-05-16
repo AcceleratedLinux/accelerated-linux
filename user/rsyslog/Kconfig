@@ -2,7 +2,9 @@ config USER_RSYSLOG_RSYSLOGD
 	bool "rsyslog"
 	select LIB_ESTR
 	select LIB_FASTJSON
-    select USER_UTIL_LINUX_LIBUUID
+	select USER_UTIL_LINUX
+	select USER_UTIL_LINUX_LIBUUID
+	select LIB_ZLIB
 	help
 	  Full featured syslog daemon.
 

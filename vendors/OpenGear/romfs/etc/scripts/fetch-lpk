@@ -1,0 +1,48 @@
+#!/bin/bash
+
+case $(config -g config.auth.ldap.protocol | cut -f2- -d' ') in
+	ldaps_preferred) nettimeout=5;;
+	*) nettimeout=10;;
+esac
+
+binddn=$(config -g config.auth.ldap.binddn | cut -f2- -d' ')
+if [ -n "$binddn" ]; then
+    password=$(config -g config.auth.ldap.password | cut -f2- -d' ')
+fi
+
+# RFC2254 escaping
+uid=$1
+uid=${uid/\\\\/\\5c}
+uid=${uid/[*]/\\2a}
+uid=${uid/[(]/\\28}
+uid=${uid/[)]/\\29}
+
+filter="(&(objectClass=posixAccount)(uid=$uid))"
+
+ldapsearch -x ${binddn:+ -D "$binddn" -w "$password"} \
+    -o nettimeout=$nettimeout \
+    -LLL -o ldif-wrap=no \
+    "$filter" \
+    sshPublicKey |
+awk '/^sshPublicKey: / {
+		print substr($0,15);
+		found++;
+     }
+     /^sshPublicKey:: / {
+		fflush();
+		print substr($0,16) |"openssl enc -base64 -d;echo"
+		found++;
+     }
+     END { exit(found); }
+    ' IGNORECASE=1
+found=$? ldaperr=${PIPESTATUS[0]}
+
+if [ "$ldaperr" -eq 0 ]; then
+    logger -t fetch-lpk -p info "found $found public keys for user $1 (filter=$filter${binddn:+ binddn=$binddn})"
+else
+    # Note: see /etc/config/ldap.conf for connection parameters (baseDN etc)
+    # Error code is server/library code, see RFC4511/A.2
+    logger -t fetch-lpk -p error "LDAP error $ldaperr, uid=$1 filter=$filter${binddn:+ binddn=$binddn}"
+    exit $ldaperr
+fi
+

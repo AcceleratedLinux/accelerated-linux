@@ -22,12 +22,12 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/flash.h>
 
-#include <mach/common.h>
 #include <linux/platform_data/i2c-davinci.h>
-#include <mach/serial.h>
-#include <mach/mux.h>
 #include <linux/platform_data/usb-davinci.h>
 
+#include "common.h"
+#include "serial.h"
+#include "mux.h"
 #include "davinci.h"
 
 #define SFFSDR_PHY_ID		"davinci_mdio-0:01"
@@ -84,10 +84,14 @@ static const struct property_entry eeprom_properties[] = {
 	{ }
 };
 
+static const struct software_node eeprom_node = {
+	.properties = eeprom_properties,
+};
+
 static struct i2c_board_info __initdata i2c_info[] =  {
 	{
 		I2C_BOARD_INFO("24c64", 0x50),
-		.properties = eeprom_properties,
+		.swnode = &eeprom_node,
 	},
 	/* Other I2C devices:
 	 * MSP430,  addr 0x23 (not used)

@@ -1,3 +1,4 @@
+From 15fa152780c6867624495d27d1013339d049dc96 Mon Sep 17 00:00:00 2001
 From: Samuel Brian <samuel.brian@digi.com>
 Date: Mon, 25 Feb 2019 14:28:22 +1000
 Subject: port: find parent device of virtual net port
@@ -12,13 +13,13 @@ This relies on the virtual port to be named as "<master-port>.<some-id>"
 e.g. "wwan0.1" gets the same parent as "wwan0" even though in the Linux
 sysfs it is a virtual device (no parent).
 ---
- src/kerneldevice/mm-kernel-device-udev.c | 65 ++++++++++++++++++------
+ src/kerneldevice/mm-kernel-device-udev.c | 68 ++++++++++++++++++------
  src/kerneldevice/mm-kernel-device-udev.h |  4 +-
  src/mm-base-manager.c                    |  6 +--
- 3 files changed, 55 insertions(+), 20 deletions(-)
+ 3 files changed, 58 insertions(+), 20 deletions(-)
 
 diff --git a/src/kerneldevice/mm-kernel-device-udev.c b/src/kerneldevice/mm-kernel-device-udev.c
-index f07c46bc..b009f2f2 100644
+index f07c46b..c2c2c85 100644
 --- a/src/kerneldevice/mm-kernel-device-udev.c
 +++ b/src/kerneldevice/mm-kernel-device-udev.c
 @@ -41,6 +41,7 @@ struct _MMKernelDeviceUdevPrivate {
@@ -29,7 +30,7 @@ index f07c46bc..b009f2f2 100644
      guint16      vendor;
      guint16      product;
      guint16      revision;
-@@ -50,11 +51,35 @@ struct _MMKernelDeviceUdevPrivate {
+@@ -50,11 +51,38 @@ struct _MMKernelDeviceUdevPrivate {
  
  /*****************************************************************************/
  
@@ -47,8 +48,11 @@ index f07c46bc..b009f2f2 100644
 +        if (name && (c = strchr (name, '.'))) {
 +            *c = 0;
 +            parent = g_udev_client_query_by_subsystem_and_name (client, "net", name);
-+            if (parent)
-+                parent = g_udev_device_get_parent (parent);
++            if (parent) {
++                GUdevDevice *tmpdev = parent;
++                parent = g_udev_device_get_parent (tmpdev);
++                g_object_unref (tmpdev);
++            }
 +        }
 +        g_free(name);
 +    }
@@ -66,7 +70,7 @@ index f07c46bc..b009f2f2 100644
  {
      GUdevDevice *parent = NULL;
      const gchar *vid = NULL, *pid = NULL, *rid = NULL, *parent_subsys;
-@@ -63,7 +88,7 @@ get_device_ids (GUdevDevice *device,
+@@ -63,7 +91,7 @@ get_device_ids (GUdevDevice *device,
  
      g_assert (vendor != NULL && product != NULL);
  
@@ -75,7 +79,7 @@ index f07c46bc..b009f2f2 100644
      if (parent) {
          parent_subsys = g_udev_device_get_subsystem (parent);
          if (parent_subsys) {
-@@ -92,7 +117,7 @@ get_device_ids (GUdevDevice *device,
+@@ -92,7 +120,7 @@ get_device_ids (GUdevDevice *device,
                  /* Need to look for vendor/product in the parent of the QMI/MBIM device */
                  GUdevDevice *qmi_parent;
  
@@ -84,7 +88,7 @@ index f07c46bc..b009f2f2 100644
                  if (qmi_parent) {
                      vid = g_udev_device_get_property (qmi_parent, "ID_VENDOR_ID");
                      pid = g_udev_device_get_property (qmi_parent, "ID_MODEL_ID");
-@@ -176,14 +201,15 @@ ensure_device_ids (MMKernelDeviceUdev *self)
+@@ -176,14 +204,15 @@ ensure_device_ids (MMKernelDeviceUdev *self)
      if (!self->priv->device)
          return;
  
@@ -102,7 +106,7 @@ index f07c46bc..b009f2f2 100644
  {
      GUdevDevice *iter, *old = NULL;
      GUdevDevice *physdev = NULL;
-@@ -222,7 +248,7 @@ find_physical_gudevdevice (GUdevDevice *child)
+@@ -222,7 +251,7 @@ find_physical_gudevdevice (GUdevDevice *child)
                   * for the base PCMCIA device, not the PCMCIA controller which
                   * is usually PCI or some other bus type.
                   */
@@ -111,7 +115,7 @@ index f07c46bc..b009f2f2 100644
                  if (pcmcia_parent) {
                      tmp_subsys = g_udev_device_get_subsystem (pcmcia_parent);
                      if (tmp_subsys && strcmp (tmp_subsys, "pcmcia"))
-@@ -242,7 +268,7 @@ find_physical_gudevdevice (GUdevDevice *child)
+@@ -242,7 +271,7 @@ find_physical_gudevdevice (GUdevDevice *child)
          }
  
          old = iter;
@@ -120,7 +124,7 @@ index f07c46bc..b009f2f2 100644
          g_object_unref (old);
      }
  
-@@ -255,7 +281,7 @@ ensure_physdev (MMKernelDeviceUdev *self)
+@@ -255,7 +284,7 @@ ensure_physdev (MMKernelDeviceUdev *self)
      if (self->priv->physdev)
          return;
      if (self->priv->device)
@@ -129,16 +133,16 @@ index f07c46bc..b009f2f2 100644
  }
  
  /*****************************************************************************/
-@@ -274,7 +300,7 @@ ensure_interface (MMKernelDeviceUdev *self)
+@@ -274,7 +303,7 @@ ensure_interface (MMKernelDeviceUdev *self)
  
      ensure_physdev (self);
  
 -    parent = g_udev_device_get_parent (self->priv->device);
-+    parent =get_parent (self->priv->device, self->priv->client);
++    parent = get_parent (self->priv->device, self->priv->client);
      while (1) {
          /* Abort if no parent found */
          if (!parent)
-@@ -350,7 +376,7 @@ kernel_device_get_driver (MMKernelDevice *_self)
+@@ -350,7 +379,7 @@ kernel_device_get_driver (MMKernelDevice *_self)
      if (!driver) {
          GUdevDevice *parent;
  
@@ -147,7 +151,7 @@ index f07c46bc..b009f2f2 100644
          if (parent)
              driver = g_udev_device_get_driver (parent);
  
-@@ -788,7 +814,8 @@ kernel_device_get_global_property_as_int_hex (MMKernelDevice *_self,
+@@ -788,7 +817,8 @@ kernel_device_get_global_property_as_int_hex (MMKernelDevice *_self,
  /*****************************************************************************/
  
  MMKernelDevice *
@@ -157,7 +161,7 @@ index f07c46bc..b009f2f2 100644
  {
      GError *error = NULL;
      MMKernelDevice *self;
-@@ -801,6 +828,7 @@ mm_kernel_device_udev_new (GUdevDevice *udev_device)
+@@ -801,6 +831,7 @@ mm_kernel_device_udev_new (GUdevDevice *udev_device)
                                               "udev-device", udev_device,
                                               NULL));
      g_assert_no_error (error);
@@ -165,7 +169,7 @@ index f07c46bc..b009f2f2 100644
      return self;
  }
  
-@@ -808,13 +836,18 @@ mm_kernel_device_udev_new (GUdevDevice *udev_device)
+@@ -808,13 +839,18 @@ mm_kernel_device_udev_new (GUdevDevice *udev_device)
  
  MMKernelDevice *
  mm_kernel_device_udev_new_from_properties (MMKernelEventProperties  *props,
@@ -181,7 +185,7 @@ index f07c46bc..b009f2f2 100644
 +    self = MM_KERNEL_DEVICE (g_initable_new (MM_TYPE_KERNEL_DEVICE_UDEV,
 +                                              NULL,
 +                                              error,
-+                                              "properties", properties,
++                                              "properties", props,
 +                                              NULL));
 +
 +    MM_KERNEL_DEVICE_UDEV(self)->priv->client = client;
@@ -190,7 +194,7 @@ index f07c46bc..b009f2f2 100644
  
  /*****************************************************************************/
 diff --git a/src/kerneldevice/mm-kernel-device-udev.h b/src/kerneldevice/mm-kernel-device-udev.h
-index 9096ca71..e47989fe 100644
+index 9096ca7..e47989f 100644
 --- a/src/kerneldevice/mm-kernel-device-udev.h
 +++ b/src/kerneldevice/mm-kernel-device-udev.h
 @@ -46,8 +46,10 @@ struct _MMKernelDeviceUdevClass {
@@ -206,7 +210,7 @@ index 9096ca71..e47989fe 100644
  
  #endif /* MM_KERNEL_DEVICE_UDEV_H */
 diff --git a/src/mm-base-manager.c b/src/mm-base-manager.c
-index 653adb5c..20dd0ab2 100644
+index 653adb5..20dd0ab 100644
 --- a/src/mm-base-manager.c
 +++ b/src/mm-base-manager.c
 @@ -429,7 +429,7 @@ handle_kernel_event (MMBaseManager            *self,
@@ -236,3 +240,6 @@ index 653adb5c..20dd0ab2 100644
      device_added (ctx->self, kernel_device, FALSE, ctx->manual_scan);
      g_object_unref (kernel_device);
  
+-- 
+2.20.1
+

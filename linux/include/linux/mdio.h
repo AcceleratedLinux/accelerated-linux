@@ -7,6 +7,7 @@
 #define __LINUX_MDIO_H__
 
 #include <uapi/linux/mdio.h>
+#include <linux/bitfield.h>
 #include <linux/mod_devicetable.h>
 
 /* Or MII_ADDR_C45 into regnum for read/write on mii_bus to enable the 21 bit
@@ -14,10 +15,12 @@
  */
 #define MII_ADDR_C45		(1<<30)
 #define MII_DEVADDR_C45_SHIFT	16
+#define MII_DEVADDR_C45_MASK	GENMASK(20, 16)
 #define MII_REGADDR_C45_MASK	GENMASK(15, 0)
 
 struct gpio_desc;
 struct mii_bus;
+struct reset_control;
 
 /* Multiple levels of nesting are possible. However typically this is
  * limited to nested DSA like layer, a MUX layer, and the normal
@@ -48,7 +51,11 @@ struct mdio_device {
 	unsigned int reset_assert_delay;
 	unsigned int reset_deassert_delay;
 };
-#define to_mdio_device(d) container_of(d, struct mdio_device, dev)
+
+static inline struct mdio_device *to_mdio_device(const struct device *dev)
+{
+	return container_of(dev, struct mdio_device, dev);
+}
 
 /* struct mdio_driver_common: Common to all MDIO drivers */
 struct mdio_driver_common {
@@ -56,8 +63,12 @@ struct mdio_driver_common {
 	int flags;
 };
 #define MDIO_DEVICE_FLAG_PHY		1
-#define to_mdio_common_driver(d) \
-	container_of(d, struct mdio_driver_common, driver)
+
+static inline struct mdio_driver_common *
+to_mdio_common_driver(const struct device_driver *driver)
+{
+	return container_of(driver, struct mdio_driver_common, driver);
+}
 
 /* struct mdio_driver: Generic MDIO driver */
 struct mdio_driver {
@@ -71,9 +82,17 @@ struct mdio_driver {
 
 	/* Clears up any memory if needed */
 	void (*remove)(struct mdio_device *mdiodev);
+
+	/* Quiesces the device on system shutdown, turns off interrupts etc */
+	void (*shutdown)(struct mdio_device *mdiodev);
 };
-#define to_mdio_driver(d)						\
-	container_of(to_mdio_common_driver(d), struct mdio_driver, mdiodrv)
+
+static inline struct mdio_driver *
+to_mdio_driver(const struct device_driver *driver)
+{
+	return container_of(to_mdio_common_driver(driver), struct mdio_driver,
+			    mdiodrv);
+}
 
 /* device driver data */
 static inline void mdiodev_set_drvdata(struct mdio_device *mdio, void *data)
@@ -305,7 +324,7 @@ static inline u32 linkmode_adv_to_mii_10gbt_adv_t(unsigned long *advertising)
 /**
  * mii_10gbt_stat_mod_linkmode_lpa_t
  * @advertising: target the linkmode advertisement settings
- * @adv: value of the C45 10GBASE-T AN STATUS register
+ * @lpa: value of the C45 10GBASE-T AN STATUS register
  *
  * A small helper function that translates C45 10GBASE-T AN STATUS register bits
  * to linkmode advertisement settings. Other bits in advertising aren't changed.
@@ -321,6 +340,76 @@ static inline void mii_10gbt_stat_mod_linkmode_lpa_t(unsigned long *advertising,
 			 advertising, lpa & MDIO_AN_10GBT_STAT_LP10G);
 }
 
+/**
+ * mii_t1_adv_l_mod_linkmode_t
+ * @advertising: target the linkmode advertisement settings
+ * @lpa: value of the BASE-T1 Autonegotiation Advertisement [15:0] Register
+ *
+ * A small helper function that translates BASE-T1 Autonegotiation
+ * Advertisement [15:0] Register bits to linkmode advertisement settings.
+ * Other bits in advertising aren't changed.
+ */
+static inline void mii_t1_adv_l_mod_linkmode_t(unsigned long *advertising, u32 lpa)
+{
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Pause_BIT, advertising,
+			 lpa & MDIO_AN_T1_ADV_L_PAUSE_CAP);
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, advertising,
+			 lpa & MDIO_AN_T1_ADV_L_PAUSE_ASYM);
+}
+
+/**
+ * mii_t1_adv_m_mod_linkmode_t
+ * @advertising: target the linkmode advertisement settings
+ * @lpa: value of the BASE-T1 Autonegotiation Advertisement [31:16] Register
+ *
+ * A small helper function that translates BASE-T1 Autonegotiation
+ * Advertisement [31:16] Register bits to linkmode advertisement settings.
+ * Other bits in advertising aren't changed.
+ */
+static inline void mii_t1_adv_m_mod_linkmode_t(unsigned long *advertising, u32 lpa)
+{
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_10baseT1L_Full_BIT,
+			 advertising, lpa & MDIO_AN_T1_ADV_M_B10L);
+}
+
+/**
+ * linkmode_adv_to_mii_t1_adv_l_t
+ * @advertising: the linkmode advertisement settings
+ *
+ * A small helper function that translates linkmode advertisement
+ * settings to phy autonegotiation advertisements for the
+ * BASE-T1 Autonegotiation Advertisement [15:0] Register.
+ */
+static inline u32 linkmode_adv_to_mii_t1_adv_l_t(unsigned long *advertising)
+{
+	u32 result = 0;
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_Pause_BIT, advertising))
+		result |= MDIO_AN_T1_ADV_L_PAUSE_CAP;
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, advertising))
+		result |= MDIO_AN_T1_ADV_L_PAUSE_ASYM;
+
+	return result;
+}
+
+/**
+ * linkmode_adv_to_mii_t1_adv_m_t
+ * @advertising: the linkmode advertisement settings
+ *
+ * A small helper function that translates linkmode advertisement
+ * settings to phy autonegotiation advertisements for the
+ * BASE-T1 Autonegotiation Advertisement [31:16] Register.
+ */
+static inline u32 linkmode_adv_to_mii_t1_adv_m_t(unsigned long *advertising)
+{
+	u32 result = 0;
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_10baseT1L_Full_BIT, advertising))
+		result |= MDIO_AN_T1_ADV_M_B10L;
+
+	return result;
+}
+
 int __mdiobus_read(struct mii_bus *bus, int addr, u32 regnum);
 int __mdiobus_write(struct mii_bus *bus, int addr, u32 regnum, u16 val);
 int __mdiobus_modify_changed(struct mii_bus *bus, int addr, u32 regnum,
@@ -332,10 +421,46 @@ int mdiobus_write(struct mii_bus *bus, int addr, u32 regnum, u16 val);
 int mdiobus_write_nested(struct mii_bus *bus, int addr, u32 regnum, u16 val);
 int mdiobus_modify(struct mii_bus *bus, int addr, u32 regnum, u16 mask,
 		   u16 set);
+int mdiobus_modify_changed(struct mii_bus *bus, int addr, u32 regnum,
+			   u16 mask, u16 set);
+
+static inline int mdiodev_read(struct mdio_device *mdiodev, u32 regnum)
+{
+	return mdiobus_read(mdiodev->bus, mdiodev->addr, regnum);
+}
+
+static inline int mdiodev_write(struct mdio_device *mdiodev, u32 regnum,
+				u16 val)
+{
+	return mdiobus_write(mdiodev->bus, mdiodev->addr, regnum, val);
+}
+
+static inline int mdiodev_modify(struct mdio_device *mdiodev, u32 regnum,
+				 u16 mask, u16 set)
+{
+	return mdiobus_modify(mdiodev->bus, mdiodev->addr, regnum, mask, set);
+}
+
+static inline int mdiodev_modify_changed(struct mdio_device *mdiodev,
+					 u32 regnum, u16 mask, u16 set)
+{
+	return mdiobus_modify_changed(mdiodev->bus, mdiodev->addr, regnum,
+				      mask, set);
+}
 
 static inline u32 mdiobus_c45_addr(int devad, u16 regnum)
 {
 	return MII_ADDR_C45 | devad << MII_DEVADDR_C45_SHIFT | regnum;
+}
+
+static inline u16 mdiobus_c45_regad(u32 regnum)
+{
+	return FIELD_GET(MII_REGADDR_C45_MASK, regnum);
+}
+
+static inline u16 mdiobus_c45_devad(u32 regnum)
+{
+	return FIELD_GET(MII_DEVADDR_C45_MASK, regnum);
 }
 
 static inline int __mdiobus_c45_read(struct mii_bus *bus, int prtad, int devad,
@@ -357,6 +482,12 @@ static inline int mdiobus_c45_read(struct mii_bus *bus, int prtad, int devad,
 	return mdiobus_read(bus, prtad, mdiobus_c45_addr(devad, regnum));
 }
 
+static inline int mdiobus_c45_write(struct mii_bus *bus, int prtad, int devad,
+				    u16 regnum, u16 val)
+{
+	return mdiobus_write(bus, prtad, mdiobus_c45_addr(devad, regnum), val);
+}
+
 int mdiobus_register_device(struct mdio_device *mdiodev);
 int mdiobus_unregister_device(struct mdio_device *mdiodev);
 bool mdiobus_is_registered_device(struct mii_bus *bus, int addr);
@@ -364,6 +495,7 @@ struct phy_device *mdiobus_get_phy(struct mii_bus *bus, int addr);
 
 /**
  * mdio_module_driver() - Helper macro for registering mdio drivers
+ * @_mdio_driver: driver to register
  *
  * Helper macro for MDIO drivers which do not do anything special in module
  * init/exit. Each module may only use this macro once, and calling it

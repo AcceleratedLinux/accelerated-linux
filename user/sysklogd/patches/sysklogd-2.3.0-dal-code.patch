@@ -1,0 +1,28 @@
+--- sysklogd-2.3.0/src/syslogd.h.org	2022-06-09 23:52:32.286684215 +1000
++++ sysklogd-2.3.0/src/syslogd.h	2022-06-09 23:51:39.678549319 +1000
+@@ -258,6 +258,9 @@
+ struct buf_msg {
+ 	int	 	 pri;
+ 	char		 pribuf[8];
++#ifdef LOG_PRIORITY
++	char		 pricode[16];
++#endif
+ 	int	 	 flags;
+ 	struct logtime	 timestamp;
+ 	char		 timebuf[33];
+--- sysklogd-2.3.0/src/syslogd.c.org	2022-06-09 23:49:22.982205152 +1000
++++ sysklogd-2.3.0/src/syslogd.c	2022-06-09 23:48:09.082019354 +1000
+@@ -1763,6 +1763,13 @@
+ 	snprintf(buffer->pribuf, sizeof(buffer->pribuf), "<%d>", buffer->pri);
+ 	pushiov(iov, i, buffer->pribuf);
+ 
++#ifdef LOG_PRIORITY
++	snprintf(buffer->pricode, sizeof(buffer->pricode), "[F%02d:P%02d] ",
++		 LOG_FAC(buffer->pri), LOG_PRI(buffer->pri));
++	pushiov(iov, i, buffer->pricode);
++	pushsp(iov, i);
++#endif
++
+ 	/*
+ 	 * sysklogd < 2.0 had the traditional BSD format for remote syslog
+ 	 * which did not include the timestamp or the hostname.

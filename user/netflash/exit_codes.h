@@ -48,4 +48,5 @@ enum exit_codes {
 	BOOTPART_FAIL        = 55,
 	VERSION_INCOMPATIBLE = 56,
 	CRYPTOCHIP_IO_ERROR  = 57,
+	ALREADY_FLASHED      = 58,
 };

@@ -19,7 +19,6 @@ obj-$(CONFIG_MACH_8300)          += 8300.o
 obj-$(CONFIG_MACH_5400_RM_DT)    += board-accelerated.o
 obj-$(CONFIG_MACH_6300_EX_DT)    += board-accelerated.o
 obj-$(CONFIG_MACH_6300CX)        += 6300.o
-obj-$(CONFIG_MACH_6300LX)        += 6300.o board-accelerated.o
 obj-$(CONFIG_MACH_6330MX)        += 6300.o board-accelerated.o
 obj-$(CONFIG_MACH_6350SR)        += 6300.o board-accelerated.o
 

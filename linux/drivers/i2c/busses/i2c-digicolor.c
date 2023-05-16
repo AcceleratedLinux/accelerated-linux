@@ -160,12 +160,11 @@ static irqreturn_t dc_i2c_irq(int irq, void *dev_id)
 {
 	struct dc_i2c *i2c = dev_id;
 	int cmd_status = dc_i2c_cmd_status(i2c);
-	unsigned long flags;
 	u8 addr_cmd;
 
 	writeb_relaxed(1, i2c->regs + II_INTFLAG_CLEAR);
 
-	spin_lock_irqsave(&i2c->lock, flags);
+	spin_lock(&i2c->lock);
 
 	if (cmd_status == II_CMD_STATUS_ACK_BAD
 	    || cmd_status == II_CMD_STATUS_ABORT) {
@@ -187,7 +186,7 @@ static irqreturn_t dc_i2c_irq(int irq, void *dev_id)
 			break;
 		}
 		i2c->state = STATE_WRITE;
-		/* fall through */
+		fallthrough;
 	case STATE_WRITE:
 		if (i2c->msgbuf_ptr < i2c->msg->len)
 			dc_i2c_write_buf(i2c);
@@ -207,7 +206,7 @@ static irqreturn_t dc_i2c_irq(int irq, void *dev_id)
 	}
 
 out:
-	spin_unlock_irqrestore(&i2c->lock, flags);
+	spin_unlock(&i2c->lock);
 	return IRQ_HANDLED;
 }
 

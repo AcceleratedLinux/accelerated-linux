@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+// SPDX-License-Identifier: GPL-2.0
 /* Copyright (C) 2019 Arm Ltd.
  *
  * Based on msm_gem_freedreno.c:
@@ -40,18 +40,26 @@ static bool panfrost_gem_purge(struct drm_gem_object *obj)
 {
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
 	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
+	bool ret = false;
 
 	if (atomic_read(&bo->gpu_usecount))
 		return false;
 
-	if (!mutex_trylock(&shmem->pages_lock))
+	if (!mutex_trylock(&bo->mappings.lock))
 		return false;
 
-	panfrost_gem_teardown_mappings(bo);
-	drm_gem_shmem_purge_locked(obj);
+	if (!mutex_trylock(&shmem->pages_lock))
+		goto unlock_mappings;
+
+	panfrost_gem_teardown_mappings_locked(bo);
+	drm_gem_shmem_purge_locked(&bo->base);
+	ret = true;
 
 	mutex_unlock(&shmem->pages_lock);
-	return true;
+
+unlock_mappings:
+	mutex_unlock(&bo->mappings.lock);
+	return ret;
 }
 
 static unsigned long

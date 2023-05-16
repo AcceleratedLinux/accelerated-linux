@@ -1,0 +1,31 @@
+#!/bin/bash -
+
+#
+# This script is called by network-connection-wan-failover conman connection.
+#
+# We add extra logic here to allow the ping test result code to be overridden.
+# For example when we are simulating a dormant failover state.
+#
+
+# Check if should spoof the ping result
+override_file=/var/run/override-wan-test-ping-code
+if [ -e $override_file ]; then
+    read -r code<$override_file
+    if [[ $code =~ ^[0-9]+$ ]]; then
+        exit $code
+    fi
+fi
+
+# Otherwise we fall back to usual behaviour of the test_ping script
+
+interface=$1
+recover=$2
+probe1=$3
+probe2=$4
+
+[ -z "$recover" -o -z "$interface" ] && exit 1
+[ -z "$probe1" -a -z "$probe2" ] && exit 1
+
+./etc/scripts/test_ping $interface $recover $probe1 $probe2
+
+exit $?

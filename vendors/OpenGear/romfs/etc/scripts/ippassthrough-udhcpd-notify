@@ -1,0 +1,8 @@
+#!/bin/sh
+
+MAC=$(/usr/bin/dumpleases -f $2|/usr/bin/awk 'NR==2 {print $1}')
+if [ -z "$MAC" ]; then
+    /bin/infod_client -o delete -p "conman.ippassthrough-dhcpd.mac"
+else
+    /bin/infod_client -o push   -p "conman.ippassthrough-dhcpd.mac" -d "$MAC"
+fi

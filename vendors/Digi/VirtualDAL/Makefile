@@ -17,7 +17,7 @@ DEVICES += $(DEVICE_PTY_64) \
 	serial/vt1,c,4,1 \
 	serial/port1,c,4,64
 
-FLASH_DEVICES = 
+FLASH_DEVICES =
 
 all:
 
@@ -48,12 +48,13 @@ romfs.post:: romfs.cleanup
 	$(ROMFSINST) -R /usr/share/locale
 	mkdir -p $(ROMFSDIR)/usr/share/locale
 
-image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.tag image.copy
+image: image.configs image.dir image.x86.zimage image.squashfs image.x86.bin image.tag image.copy image.size
 	gzip -9 -c -f $(ROMFSIMG) > $(ROMFSIMGZ)
 	./mkdisk
 	cp VirtualDAL.vmx $(IMAGEDIR)/VirtualDAL-$(VERSIONPKG)/.
 	cp VirtualDAL.vmdk $(IMAGEDIR)/VirtualDAL-$(VERSIONPKG)/.
 	cp run-qemu.sh $(IMAGEDIR)/VirtualDAL-$(VERSIONPKG)/.
+	cp run-qemu-with-raspi.sh $(IMAGEDIR)/VirtualDAL-$(VERSIONPKG)/.
 	cp run-vmplayer.sh $(IMAGEDIR)/VirtualDAL-$(VERSIONPKG)/.
 	rm -f $(IMAGEDIR)/VM.tar*
 	tar cvCf $(IMAGEDIR) $(IMAGEDIR)/VM.tar VirtualDAL-$(VERSIONPKG)

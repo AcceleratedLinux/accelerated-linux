@@ -23,16 +23,33 @@ static inline int set_direct_map_default_noflush(struct page *page)
 {
 	return 0;
 }
-#endif
 
-#ifndef set_mce_nospec
-static inline int set_mce_nospec(unsigned long pfn, bool unmap)
+static inline bool kernel_page_present(struct page *page)
+{
+	return true;
+}
+#else /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
+/*
+ * Some architectures, e.g. ARM64 can disable direct map modifications at
+ * boot time. Let them overrive this query.
+ */
+#ifndef can_set_direct_map
+static inline bool can_set_direct_map(void)
+{
+	return true;
+}
+#define can_set_direct_map can_set_direct_map
+#endif
+#endif /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
+
+#ifdef CONFIG_X86_64
+int set_mce_nospec(unsigned long pfn);
+int clear_mce_nospec(unsigned long pfn);
+#else
+static inline int set_mce_nospec(unsigned long pfn)
 {
 	return 0;
 }
-#endif
-
-#ifndef clear_mce_nospec
 static inline int clear_mce_nospec(unsigned long pfn)
 {
 	return 0;

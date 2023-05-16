@@ -7,8 +7,11 @@ $schema: http://devicetree.org/meta-schemas/core.yaml#
 title: Freescale MXS PWM controller
 
 maintainers:
-  - Shawn Guo <shawn.guo@linaro.org>
+  - Shawn Guo <shawnguo@kernel.org>
   - Anson Huang <anson.huang@nxp.com>
+
+allOf:
+  - $ref: pwm.yaml#
 
 properties:
   compatible:
@@ -28,7 +31,6 @@ properties:
 required:
   - compatible
   - reg
-  - "#pwm-cells"
   - fsl,pwm-number
 
 additionalProperties: false

@@ -1,0 +1,11 @@
+--- a/xl2tpd.c	2022-09-14 15:52:40.726903399 +0100
++++ b/xl2tpd.c	2022-09-14 15:54:35.706687900 +0100
+@@ -1529,6 +1535,8 @@ static int control_handle_lac_remove(FIL
+             h = t;
+         }
+     }
++    if (lac->rsched)
++        deschedule(lac->rsched);
+ 
+     // removes lac from laclist
+     if (prev_lac == NULL)

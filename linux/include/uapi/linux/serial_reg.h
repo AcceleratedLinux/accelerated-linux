@@ -62,6 +62,7 @@
  * ST16C654:	 8  16  56  60		 8  16  32  56	PORT_16654
  * TI16C750:	 1  16  32  56		xx  xx  xx  xx	PORT_16750
  * TI16C752:	 8  16  56  60		 8  16  32  56
+ * OX16C950:	16  32 112 120		16  32  64 112	PORT_16C950
  * Tegra:	 1   4   8  14		16   8   4   1	PORT_TEGRA
  */
 #define UART_FCR_R_TRIG_00	0x00
@@ -375,6 +376,45 @@
 #define UART_ALTR_AFR		0x40	/* Additional Features Register */
 #define UART_ALTR_EN_TXFIFO_LW	0x01	/* Enable the TX FIFO Low Watermark */
 #define UART_ALTR_TX_LOW	0x41	/* Tx FIFO Low Watermark */
+
+/*
+ * These are definitions for the Pericom PI7C9X7954
+ */
+
+#define UART_PERI_IER_SPCI		(1 << 4)
+
+#define UART_PERI_SFR		0x07	/* Special function register */
+#define UART_PERI_DSR_FLOW		(1 << 1)	/* Enable DSR/DTR flow control */
+#define UART_PERI_950_MODE		(1 << 5)	/* Enable 950 mode */
+#define UART_PERI_TFD_SELECT	(1 << 7)	/* If set UART_PER_TX_COUNT acts as the sample clock register */
+
+#define UART_PERI_EFR		0x0A
+#define UART_PERI_RX_FLOW	(1 << 1)
+#define UART_PERI_TX_FLOW	(1 << 3)
+#define UART_PERI_ENHANCED_MODE	(1 << 4)
+#define UART_PERI_SPC_DETECT	(1 << 5)
+#define UART_PERI_AUTO_RTS 		(1 << 6)
+#define UART_PERI_AUTO_CTS 		(1 << 7)
+
+#define UART_PERI_XON1		0x0B
+
+#define UART_PERI_XON2		0x0C
+
+#define UART_PERI_XOFF1		0x0D
+
+#define UART_PERI_XOFF2		0x0E
+
+#define UART_PERI_TX_THRESH	0x10
+
+#define UART_PERI_RX_THRESH	0x11
+
+#define UART_PERI_FLOW_LOW	0x12
+
+#define UART_PERI_FLOW_HIGH	0x13
+
+#define UART_PERI_RX_COUNT	0x15	/* Bytes in RX FIFO */
+
+#define UART_PERI_TX_COUNT	0x16	/* Bytes in TX FIFO */
 
 #endif /* _LINUX_SERIAL_REG_H */
 

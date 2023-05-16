@@ -38,6 +38,7 @@
 *******************************************************************************/
 
 #include <linux/errno.h>
+#include <linux/filter.h>
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/in.h>
@@ -483,7 +484,7 @@ static void dn_nsp_disc_conf(struct sock *sk, struct sk_buff *skb)
 		break;
 	case DN_RUN:
 		sk->sk_shutdown |= SHUTDOWN_MASK;
-		/* fall through */
+		fallthrough;
 	case DN_CC:
 		scp->state = DN_CN;
 	}
@@ -520,7 +521,7 @@ static void dn_nsp_linkservice(struct sock *sk, struct sk_buff *skb)
 	fcval = *ptr;
 
 	/*
-	 * Here we ignore erronous packets which should really
+	 * Here we ignore erroneous packets which should really
 	 * should cause a connection abort. It is not critical
 	 * for now though.
 	 */
@@ -870,7 +871,7 @@ int dn_nsp_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 
 		/*
 		 * Read out ack data here, this applies equally
-		 * to data, other data, link serivce and both
+		 * to data, other data, link service and both
 		 * ack data and ack otherdata.
 		 */
 		dn_process_ack(sk, skb, other);

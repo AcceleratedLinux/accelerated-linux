@@ -1,0 +1,184 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+device=$1
+outlets=$2
+cmd=$3
+
+if [[ -z "$device" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <device> \"<outlet> [outlet..]\" on|off|cycle|status|temp|load"
+	exit 1
+fi
+
+if [ "$cmd" != "on" -a "$cmd" != "off" -a "$cmd" != "cycle" -a "$cmd" != "status" -a "$cmd" != "temp" -a "$cmd" != "load" ]; then
+	appname=`basename $0`
+	echo "Usage: $appname <device> \"<outlet> [outlet..]\" on|off|cycle|status|temp|load"
+	exit 1
+fi
+
+if [ -x /etc/config/scripts/power-powerman-async ]; then
+	. /etc/config/scripts/power-powerman-async "$1" "$2" "$3"
+	exit
+fi
+
+# If device is a port less than 10 we need both forms of name
+if [[ $device == /dev/* ]]; then
+	device=${device:5}
+fi
+pm_device=$device
+if [[ $device == port0* ]]; then
+	device="port${pm_device:5}"
+elif [[ $device == port* ]]; then
+	number="${device:4}"
+	if [ "$number" -lt "10" ]; then
+		pm_device="port0${number}"
+	fi
+else
+	echo "Usage: $appname <device> \"<outlet> [outlet..]\" on|off|cycle|status|temp|load"
+	echo " <device> must be in form port#"
+	exit 1
+fi
+
+prefix="config.ports.$device"
+devtype="config -g $prefix.power.type"
+if [ -z "$devtype" ]; then
+	for outlet in $outlets; do
+		power_outlet_error_config $outlet "$prefix.power.type"
+	done
+	exit 1
+fi
+count=`config -g "$prefix.power.outlets" | cut -d' ' -f2`
+if [ -z "$count" -o "$count" -le "0" ]; then
+	echo "Invalid number of outlets: $count"
+fi
+
+# Suppress error messages from the shell
+exec 2> /dev/null
+
+load=0
+temp=0
+status_results=( "unknown" )
+load_results=( "unknown" )
+temp_results=( "unknown" )
+for (( c=0; c<=$count; c++ )); do
+	status_results[$c]="unknown"
+done
+
+targets=""
+targetcount=0
+for outlet in $outlets; do
+
+	if [ $outlet -gt $count -o $outlet -lt 1 ]
+	then
+		power_outlet_error_range $outlet $count
+		continue
+	fi
+
+	outletoffset=$(( outlet - 1 ))
+	targets="${targets} ${pm_device}_${outletoffset}"
+	targetcount=$((targetcount+1))
+done
+
+if [[ "$cmd" == "on" ]]; then
+	echo "Powering on outlet $outlet"
+	/bin/powerman -1 $targets
+elif [[ "$cmd" == "off" ]]; then
+	echo "Powering off outlet $outlet"
+	/bin/powerman -0 $targets
+elif [[ "$cmd" == "cycle" ]]; then
+	echo "Cycling outlet $outlet"
+	/bin/powerman -c $targets
+elif [[ "$cmd" == "load" ]]; then
+	load=1
+elif [[ "$cmd" == "temp" ]]; then
+	temp=1
+fi
+
+outprefix="${pm_device}_"
+outlength=${#outprefix}
+
+# Get the outlet status
+powerman=`/bin/powerman -q ${targets}`
+online=`echo "${powerman}" | cut -d$'\n' -f1`
+offline=`echo "${powerman}" | cut -d$'\n' -f2`
+if [[ "$online" == on* ]]; then
+	onlist=`echo "$online" | cut -d':' -f2- | sed -e 's/^[ \t]*//'`
+	i=1
+	while [ "$i" -le "$targetcount" ]; do
+		plug=`echo "$onlist" | cut -d',' -f$i`
+		if [ ! -z "$plug" ]; then
+			outlet=${plug:$outlength}
+			status_results[$outlet]="on"
+		fi
+		i=$(( i + 1 ))
+	done
+fi
+if [[ "$offline" == off* ]]; then
+	offlist=`echo "$offline" | cut -d':' -f2- | sed -e 's/^[ \t]*//'`
+	i=1
+	while [ "$i" -le "$targetcount" ]; do
+		plug=`echo "$offlist" | cut -d',' -f$i`
+		if [ ! -z "$plug" ]; then
+			outlet=${plug:$outlength}
+			status_results[$outlet]="off"
+		fi
+		i=$(( i + 1 ))
+	done
+fi
+
+# Get the outlet load
+if [ "$load" == "1" ]; then
+powerman=`/bin/powerman -o ${targets}`
+if [ ! "Command cannot be handled by power control device(s)" = "$powerman" ]; then
+	for (( i=0; i<=$count; i++ )); do
+		load_results[$i]="unknown"
+	done
+	i=1
+	for outlet in $outlets; do
+		line=`echo "${powerman}" | cut -d$'\n' -f$i`
+		value=`echo "$line" | cut -d':' -f2- | sed -e 's/^[ \t]*//'`
+		load_results[$(( outlet - 1 ))]=$value
+		i=$(( i + 1 ))
+	done
+else
+	for outlet in $outlets; do
+		power_outlet_error_unsupported $outlet "load" 
+	done
+	load=0
+fi
+fi
+
+# Get the outlet temperature
+if [ "$temp" == "1" ]; then
+powerman=`/bin/powerman -P ${targets}`
+if [ ! "Command cannot be handled by power control device(s)" = "$powerman" ]; then
+	for (( i=0; i<=$count; i++ )); do
+		temp_results[$i]="unknown"
+	done
+	i=1
+	for outlet in $outlets; do
+		line=`echo "${powerman}" | cut -d$'\n' -f$i`
+		value=`echo "$line" | cut -d':' -f2- | sed -e 's/^[ \t]*//'`
+		temp_results[$(( outlet - 1 ))]=$value
+		i=$(( i + 1 ))
+	done
+else
+	for outlet in $outlets; do
+		power_outlet_error_unsupported $outlet "temp" 
+	done
+	temp=0
+fi
+fi
+
+for outlet in $outlets; do
+	echo "Outlet $outlet is ${status_results[$(( outlet - 1))]}"
+	if [ "$load" == "1" ]; then
+		power_outlet_status_load $outlet "${load_results[$(( outlet - 1 ))]}"
+	fi
+	if [ "$temp" == "1" ]; then
+		power_outlet_status_temp $outlet "${temp_results[$(( outlet - 1 ))]}"
+	fi
+done
+exit 0

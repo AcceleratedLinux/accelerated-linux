@@ -1,0 +1,65 @@
+From 15ad64ed439a8dd795509d656b5f7a4cfa1cae65 Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Mon, 14 Mar 2022 12:49:46 -0400
+Subject: [PATCH] include order fix
+
+Some of these headers are in the wrong order causing __packed to become a
+global variable,  the DAL -fno-common linker flag weed these issues out.
+---
+ lib/osdep/linux.c             | 4 ++--
+ lib/radiotap/radiotap.c       | 2 +-
+ src/airodump-ng/airodump-ng.c | 2 --
+ 3 files changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/lib/osdep/linux.c b/lib/osdep/linux.c
+index f6c7d9a5..f69dd939 100644
+--- a/lib/osdep/linux.c
++++ b/lib/osdep/linux.c
+@@ -56,8 +56,6 @@
+ #include <linux/genetlink.h>
+ #endif // CONFIG_LIBNL
+ 
+-#include "radiotap/radiotap.h"
+-#include "radiotap/radiotap_iter.h"
+ /* radiotap-parser defines types like u8 that
+ 		 * ieee80211_radiotap.h needs
+ 		 *
+@@ -67,6 +65,8 @@
+ 		 * - since linux does not include it in userspace headers
+ 		 */
+ #include "osdep.h"
++#include "radiotap/radiotap.h"
++#include "radiotap/radiotap_iter.h"
+ #include "aircrack-ng/support/pcap_local.h"
+ #include "crctable_osdep.h"
+ #include "common.h"
+diff --git a/lib/radiotap/radiotap.c b/lib/radiotap/radiotap.c
+index 8aad5a14..19afde0d 100644
+--- a/lib/radiotap/radiotap.c
++++ b/lib/radiotap/radiotap.c
+@@ -11,8 +11,8 @@
+  * Alternatively, this software may be distributed under the terms of ISC
+  * license, see COPYING for more details.
+  */
+-#include "radiotap_iter.h"
+ #include "platform.h"
++#include "radiotap_iter.h"
+ 
+ /* function prototypes and related defs are in radiotap_iter.h */
+ 
+diff --git a/src/airodump-ng/airodump-ng.c b/src/airodump-ng/airodump-ng.c
+index 2ead469e..59c63bb8 100644
+--- a/src/airodump-ng/airodump-ng.c
++++ b/src/airodump-ng/airodump-ng.c
+@@ -92,8 +92,6 @@
+ #include "radiotap/radiotap_iter.h"
+ 
+ struct devices dev;
+-uint8_t h80211[4096] __attribute__((aligned(16)));
+-uint8_t tmpbuf[4096] __attribute__((aligned(16)));
+ 
+ static const unsigned char llcnull[] = {0, 0, 0, 0};
+ 
+-- 
+2.25.1
+

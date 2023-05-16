@@ -9,12 +9,24 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+# flash SIM, LTE, and signal strength LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -n SIM1 -n ONLINE -n ETH -n COM -n RSS1 -n RSS2 -n RSS3 -n RSS4 -n RSS5 -f SIM1 -f ETH -O COM -O ONLINE -f RSS1 -f RSS2 -f RSS3 -f RSS4 -f RSS5"
+	else
+		FINDME="-a -N SIM1 -N COM -N ETH -N ONLINE -N RSS1 -N RSS2 -N RSS3 -N RSS4 -N RSS5"
+	fi
+	ledcmd $FINDME
+}
+
 case "$1" in
 start)
 	ledcmd -a -N COM -N ETH -N ONLINE
 	exit 0
 	;;
 reload)
+	findme_update
 	;;
 stop)
 	# Firmware flash
@@ -86,7 +98,7 @@ if [ "$LINK" = 1 ]; then
 	0) [ "$(runt get network.interface.lan1.eth.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
 	esac
 
-	case $(runt get network.interface.eth1.ipv6.up) in
+	case $(runt get network.interface.eth.ipv6.up) in
 	1) [ "$(runt get surelink.ipv6_interface_eth.passed)" = n ] && LAN6=1 || LAN6=2 ;;
 	0) [ "$(runt get network.interface.eth.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
 	esac
@@ -126,11 +138,48 @@ esac
 #    Solid green:  XNM is running.
 #    Solid red: XNM is not running.
 if [ "$(config get xbee.enable)" = 0 ]; then
-	XBEE="-O XBEE1 -O XBEE2 -O XBEE3"
+	XBEE="-O XBEE1 -O XBEE2 -O XBEE3"  # Off
 elif [ -f "/var/run/xnm.pid" ] && sumo /bin/kill -0 $(admin-file cat /var/run/xnm.pid) >/dev/null 2>&1; then
-	XBEE="-O XBEE1 -o XBEE2 -O XBEE3"
+	case "$(runt get xbee.xnm.status.code)" in
+	# Online
+	0)
+		XBEE="-O XBEE1 -o XBEE2 -O XBEE3" # Solid green
+		;;
+	# Offline
+	1)
+		XBEE="-o XBEE1 -O XBEE2 -O XBEE3" # Solid red
+		;;
+	# Local update process in progress
+	2)
+		XBEE="-o XBEE1 -f XBEE2 -O XBEE3" # Flash red/yellow
+		;;
+	# Remote update process in progress
+	3)
+		XBEE="-f XBEE1 -f XBEE2 -O XBEE3" # Flash -/yellow
+		;;
+	# Recovery in progress
+	4)
+		XBEE="-f XBEE1 -O XBEE2 -O XBEE3" # Flash -/red
+		;;
+	# Network discovery in progress
+	5)
+		XBEE="-O XBEE1 -f XBEE2 -O XBEE3" # Flash -/green
+		;;
+	# Neighbor discovery in progress
+	6)
+		XBEE="-O XBEE1 -f XBEE2 -O XBEE3" # Flash -/green
+		;;
+	# Active discovery in progress
+	8)
+		XBEE="-O XBEE1 -O XBEE2 -o XBEE3" # Solid blue
+		;;
+	# Other
+	*)
+		XBEE="-O XBEE1 -o XBEE2 -O XBEE3" # Solid green
+		;;
+	esac
 else
-	XBEE="-o XBEE1 -O XBEE2 -O XBEE3"
+	XBEE="-o XBEE1 -O XBEE2 -O XBEE3" # Solid red
 fi
 
 # SIM LED

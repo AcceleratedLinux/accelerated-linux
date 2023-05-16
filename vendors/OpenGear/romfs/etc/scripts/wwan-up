@@ -1,0 +1,211 @@
+#!/bin/sh
+
+# udhcpc wwan up script
+# This script is invoked by udhcpc (which is started by cellctl)
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+IFNAME=$interface
+MODEM=cellmodem
+LINKNAME=$MODEM
+export IFNAME
+export LINKNAME
+
+# Look for override values in the following order:
+# 1) config.cellmodem.sims.simN.ppp.dialer.
+# 2) config.cellmodem.ppp.dialer.
+sim=$(/bin/infod_client -o get -q -p "config.cellmodem.current-sim")
+if [ -n "$sim" ]
+then
+	sim=$((sim+1))
+	bc=$(config -g config.cellmodem.sims.sim${sim}.ppp.dialer.broadcast | cut -f2- -d' ')
+	nm=$(config -g config.cellmodem.sims.sim${sim}.ppp.dialer.netmask | cut -f2- -d' ')
+fi
+[ -z "$bc" ] && bc=$(config -g config.cellmodem.ppp.dialer.broadcast | cut -f2- -d' ')
+[ -n "$bc" ] && broadcast="$bc"
+[ -z "$nm" ] && nm=$(config -g config.cellmodem.ppp.dialer.netmask | cut -f2- -d' ')
+[ -n "$nm" ] && subnet="$nm"
+
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+ippassthrough=false
+if [ "$(config -g config.ippassthrough.enabled | cut -f2- -d' ')" = on ]
+then
+	ippassthrough=true
+fi
+
+ippassthrough_status=$(/bin/infod_client -o get -q -p "conman.ippassthrough.status")
+
+old_ip=$(/bin/infod_client -o get -q -p "udhcpc.$interface.ip")
+old_router=$(/bin/infod_client -o get -q -p "udhcpc.$interface.router")
+if [ "$old_ip:$old_router" != "$ip:$router" ]
+then
+	detailschanged=true
+else
+	detailschanged=false
+fi
+
+uptime=$(cat /proc/uptime | cut -f1 -d' ')
+
+logger -t wwan-up "event=<$1> interface=$interface ip=<$ip> router=<$router> mask=<$mask> siaddr=<$siaddr> boot_file=<$boot_file> sname=<$sname> (ippassthrough=$ippassthrough, detailschanged=$detailschanged, timestamp=$uptime)"
+
+/bin/infod_client -o push -q -p "udhcpc.$interface.command_timestamp" -d "$uptime"
+
+case "$1" in
+	deconfig)
+		# if we're doing ippassthrough, then do a 'deconfig' in a delayed
+		# process: to work around a bug where we get a quick 'deconfig' then
+		# 'bound' instead of a single 'renew'.
+		if [ "$ippassthrough" = "true" ]
+		then
+			/etc/scripts/wwan-up-delayed-deconfig $interface $uptime &
+			exit 0
+		else
+			/bin/infod_client -o delete -p "udhcpc.$interface.interface"
+			/bin/infod_client -o delete -p "udhcpc.$interface.ip"
+			/bin/infod_client -o delete -p "udhcpc.$interface.subnet"
+			/bin/infod_client -o delete -p "udhcpc.$interface.router"
+			/bin/infod_client -o delete -p "udhcpc.$interface.dns"
+			/bin/infod_client -o delete -p "udhcpc.$interface.action"
+			/sbin/ifconfig $interface 0.0.0.0
+			exit 0
+		fi
+		;;
+
+	renew|bound)
+		# Remove duplicate IP assigned by ipsetd
+		interface2=`echo $interface | cut -f1 -d':'`:1
+		ip2=`/sbin/ifconfig $interface2 | grep inet\ addr | cut -f2 -d':' | cut -f1 -d' '`
+		[ "$ip2" = "$ip" ] && /sbin/ifconfig $interface2 down
+
+		# Update interface address and default routes
+		if [ "$ippassthrough" = "false" -o "$detailschanged" = "true" ]
+		then
+			{
+				flock 9 # lock to avoid default route change races
+
+				# In ippassthrough mode, the following is harmless
+				# because it is undone by the ippassthrough conn script.
+				/sbin/ifconfig $interface $ip $BROADCAST $NETMASK
+
+				# Delete existing routes then re-add them in case
+				# they can't be replaced
+				if [ -n "$router" ] ; then
+					echo "deleting routers"
+					while route del default gw 0.0.0.0 dev $interface ; do
+						:
+					done
+
+					# Use conman specified metric if available. Otherwise
+					# fall back on default values based on failover status
+					# (MUST be consistent with ConfigManager.h definitions)
+					metric=`cat /proc/sys/net/ipv4/conf/$interface/def_rt_metric`
+					if [ "$metric" = "0" ] ; then
+						failover=`config -g config.interfaces.wan.failover.interface | cut -f2 -d' '`
+						dormant=`config -g config.interfaces.wan.failover.dormant | cut -f2 -d' '`
+						if [ "$failover" = "cellmodem" ] && [ "$dormant" = "on" ]; then
+							if [ "$(infod_client -q -o get -p conman.network-default-gateway.active-connection-name)" == "dial-cellmodem-failover" ]; then
+								# Assume WAN's priority
+								metric=1
+							else
+								# Cellmodem's default dormant priority
+								metric=1009
+							fi
+						else
+							# Cellmodem's default normal priority
+							metric=10
+						fi
+					fi
+
+					for i in $router ; do
+						route add default gw $i dev $interface metric $((metric++))
+					done
+				fi
+			} 9>/tmp/wwan-up-$interface
+		fi
+
+		# Restart ippassthrough and its DHCP server because of new IP/GW,
+		# if they have been running
+		#
+		# Restart the DHCP server will have it send DHCP NAK to the client,
+		# who will re-discover from the new instance of the DHCP server
+		#
+		# However, if ip passthrough and the DHCP server have been stopped
+		# (due to new IP/GW on cellmodem), they will soon be restarted by
+		# conman
+		if [ "$ippassthrough" = "true" -a "$detailschanged" = "true" -a "$ippassthrough_status" = "up" ]
+		then
+			logger -t wwan-up "restarting ippassthrough"
+			conman_command ippassthrough restart
+		fi
+
+		# export data for the dial-info call below
+		IPLOCAL=$ip
+		SUBNET=$subnet
+		GATEWAY=`echo $router | cut -f1 -d' '`
+		export IPLOCAL
+		export SUBNET
+		export GATEWAY
+		;;
+esac
+
+# Pull DNS information from ModemManager
+. /etc/scripts/cellctl-helper
+dns4=$(cc_get_ipv4_dns)
+dns6=$(cc_get_ipv6_dns)
+dns="$dns4 $dns6"
+
+# always save the old dial information, in case we need it in future to compare
+# for IP Passthrough conditional restarting (it might not be enabled yet). Note
+# that this should be done AFTER we pull out the old information for comparison.
+# TODO: in udhcpc.script, we push ALL DHCP parameters into infod at the top.
+# Should we do that in this script too?
+/bin/infod_client -o push -p "udhcpc.$interface.interface" -d "${interface:- }"
+/bin/infod_client -o push -p "udhcpc.$interface.ip" -d "${ip:- }"
+/bin/infod_client -o push -p "udhcpc.$interface.subnet" -d "${subnet:- }"
+/bin/infod_client -o push -p "udhcpc.$interface.router" -d "${router:- }"
+/bin/infod_client -o push -p "udhcpc.$interface.dns" -d "${dns:- }"
+/bin/infod_client -o push -p "udhcpc.$interface.action" -d "${1}"
+
+
+RESOLV="/var/run/${interface}-resolv.conf"
+echo -n > $RESOLV
+[ -n "$domain" ] && echo search $domain >> $RESOLV
+dnscount=1
+for i in $dns ; do
+	echo adding dns $i
+	echo nameserver $i >> $RESOLV
+	# export variables for the dial-info call below
+	eval DNS$dnscount=$i
+	export DNS$dnscount
+	dnscount=$(( dnscount+1 ))
+done
+# Push our resolv.conf into resolvconf
+if [ -f /etc/config/network/dialout.${MODEM}.resolv ]; then
+	RESOLV=/etc/config/network/dialout.${MODEM}.resolv
+fi
+# Clear out existing cellmodem entries, just in case cellctl died before
+# running the wwan-down script
+/bin/resolvconf -d ${MODEM}
+cat $RESOLV | /bin/resolvconf -a ${MODEM}
+
+# Only re-run ifup if this is a "bound" not a "renew" invocation
+if [ "$1" = "bound" ]; then
+	sh /etc/ifup
+	if [ "$ippassthrough" != "true" ]; then
+		# Do not apply this block rule if perif route has taken effective since
+		# kernel will make another policy-based route decision using packets MARK
+		# and perif route tables
+		iptables -A DialoutOutput -m mark --mark 0x0 '!' -s $ip --jump Block
+	fi
+fi
+
+if [ -x /bin/devlog ]; then
+        /bin/devlog -i ${IFNAME} -p /var/run/devlog.${IFNAME}.pid --background
+fi
+
+# record dial info into infod
+/etc/scripts/dial-info "connected"
+
+# Clear retry count on successful connection
+rm -f /var/run/.modem/retry_count

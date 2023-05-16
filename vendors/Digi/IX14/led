@@ -19,12 +19,48 @@ PWR_B=/sys/class/leds/PWR_B
 #exec 2>> /tmp/led.log
 #set -x
 
+# IX14 doesn't have the ledcmd tool, so we have to manually set the LED states accordingly
+# brightness state indicates on/off state of LED, which can be set to any number 0-223
+#   0 = off
+#   223 = full on
+# trigger state indicates flashing state of LED
+#   none  = no flashing
+#   timer = flash
+#
+findme_update() {
+	if find-me state &>/dev/null; then
+		# flash cellular service and signal strength LEDs green
+		echo 'none'  > $WWAN_SERVICE_B/trigger
+		echo 'none'  > $WWAN_SERVICE_R/trigger
+		echo 'timer' > $WWAN_SERVICE_G/trigger
+		echo '0'     > $WWAN_SERVICE_B/brightness
+		echo '0'     > $WWAN_SERVICE_R/brightness
+		echo '223'   > $WWAN_SERVICE_G/brightness
+
+		echo 'none'  > $WWAN_SIGNAL_B/trigger
+		echo 'none'  > $WWAN_SIGNAL_R/trigger
+		echo 'timer' > $WWAN_SIGNAL_G/trigger
+		echo '0'     > $WWAN_SIGNAL_B/brightness
+		echo '0'     > $WWAN_SIGNAL_R/brightness
+		echo '223'   > $WWAN_SIGNAL_G/brightness
+		return 0
+	else
+		# Restore states, which are not set later in this script
+		echo 'none'  > $WWAN_SIGNAL_B/trigger
+		echo 'none'  > $WWAN_SIGNAL_R/trigger
+		echo 'none'  > $WWAN_SIGNAL_G/trigger
+		return 1
+	fi
+}
+
 case "$1" in
 start)
 	echo "none" > ${PWR_B}/trigger
 	exit 0
 	;;
 reload)
+	# skip any LED state change done after the case statement so findme state takes precedence if enabled
+	findme_update && exit
 	;;
 stop)
 	exit 0

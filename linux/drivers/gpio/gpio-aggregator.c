@@ -10,6 +10,7 @@
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
 #include <linux/ctype.h>
+#include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
 #include <linux/gpio/machine.h>
@@ -36,59 +37,6 @@ struct gpio_aggregator {
 static DEFINE_MUTEX(gpio_aggregator_lock);	/* protects idr */
 static DEFINE_IDR(gpio_aggregator_idr);
 
-static char *get_arg(char **args)
-{
-	char *start = *args, *end;
-
-	start = skip_spaces(start);
-	if (!*start)
-		return NULL;
-
-	if (*start == '"') {
-		/* Quoted arg */
-		end = strchr(++start, '"');
-		if (!end)
-			return ERR_PTR(-EINVAL);
-	} else {
-		/* Unquoted arg */
-		for (end = start; *end && !isspace(*end); end++) ;
-	}
-
-	if (*end)
-		*end++ = '\0';
-
-	*args = end;
-	return start;
-}
-
-static bool isrange(const char *s)
-{
-	size_t n;
-
-	if (IS_ERR_OR_NULL(s))
-		return false;
-
-	while (1) {
-		n = strspn(s, "0123456789");
-		if (!n)
-			return false;
-
-		s += n;
-
-		switch (*s++) {
-		case '\0':
-			return true;
-
-		case '-':
-		case ',':
-			break;
-
-		default:
-			return false;
-		}
-	}
-}
-
 static int aggr_add_gpio(struct gpio_aggregator *aggr, const char *key,
 			 int hwnum, unsigned int *n)
 {
@@ -99,8 +47,7 @@ static int aggr_add_gpio(struct gpio_aggregator *aggr, const char *key,
 	if (!lookups)
 		return -ENOMEM;
 
-	lookups->table[*n] =
-		(struct gpiod_lookup)GPIO_LOOKUP_IDX(key, hwnum, NULL, *n, 0);
+	lookups->table[*n] = GPIO_LOOKUP_IDX(key, hwnum, NULL, *n, 0);
 
 	(*n)++;
 	memset(&lookups->table[*n], 0, sizeof(lookups->table[*n]));
@@ -111,66 +58,55 @@ static int aggr_add_gpio(struct gpio_aggregator *aggr, const char *key,
 
 static int aggr_parse(struct gpio_aggregator *aggr)
 {
-	unsigned int first_index, last_index, i, n = 0;
-	char *name, *offsets, *first, *last, *next;
-	char *args = aggr->args;
-	int error;
+	char *args = skip_spaces(aggr->args);
+	char *name, *offsets, *p;
+	unsigned long *bitmap;
+	unsigned int i, n = 0;
+	int error = 0;
 
-	for (name = get_arg(&args), offsets = get_arg(&args); name;
-	     offsets = get_arg(&args)) {
-		if (IS_ERR(name)) {
-			pr_err("Cannot get GPIO specifier: %pe\n", name);
-			return PTR_ERR(name);
-		}
+	bitmap = bitmap_alloc(ARCH_NR_GPIOS, GFP_KERNEL);
+	if (!bitmap)
+		return -ENOMEM;
 
-		if (!isrange(offsets)) {
+	args = next_arg(args, &name, &p);
+	while (*args) {
+		args = next_arg(args, &offsets, &p);
+
+		p = get_options(offsets, 0, &error);
+		if (error == 0 || *p) {
 			/* Named GPIO line */
 			error = aggr_add_gpio(aggr, name, U16_MAX, &n);
 			if (error)
-				return error;
+				goto free_bitmap;
 
 			name = offsets;
 			continue;
 		}
 
 		/* GPIO chip + offset(s) */
-		for (first = offsets; *first; first = next) {
-			next = strchrnul(first, ',');
-			if (*next)
-				*next++ = '\0';
-
-			last = strchr(first, '-');
-			if (last)
-				*last++ = '\0';
-
-			if (kstrtouint(first, 10, &first_index)) {
-				pr_err("Cannot parse GPIO index %s\n", first);
-				return -EINVAL;
-			}
-
-			if (!last) {
-				last_index = first_index;
-			} else if (kstrtouint(last, 10, &last_index)) {
-				pr_err("Cannot parse GPIO index %s\n", last);
-				return -EINVAL;
-			}
-
-			for (i = first_index; i <= last_index; i++) {
-				error = aggr_add_gpio(aggr, name, i, &n);
-				if (error)
-					return error;
-			}
+		error = bitmap_parselist(offsets, bitmap, ARCH_NR_GPIOS);
+		if (error) {
+			pr_err("Cannot parse %s: %d\n", offsets, error);
+			goto free_bitmap;
 		}
 
-		name = get_arg(&args);
+		for_each_set_bit(i, bitmap, ARCH_NR_GPIOS) {
+			error = aggr_add_gpio(aggr, name, i, &n);
+			if (error)
+				goto free_bitmap;
+		}
+
+		args = next_arg(args, &name, &p);
 	}
 
 	if (!n) {
 		pr_err("No GPIOs specified\n");
-		return -EINVAL;
+		error = -EINVAL;
 	}
 
-	return 0;
+free_bitmap:
+	bitmap_free(bitmap);
+	return error;
 }
 
 static ssize_t new_device_store(struct device_driver *driver, const char *buf,
@@ -278,7 +214,7 @@ static DRIVER_ATTR_WO(delete_device);
 static struct attribute *gpio_aggregator_attrs[] = {
 	&driver_attr_new_device.attr,
 	&driver_attr_delete_device.attr,
-	NULL,
+	NULL
 };
 ATTRIBUTE_GROUPS(gpio_aggregator);
 
@@ -311,6 +247,11 @@ struct gpiochip_fwd {
 	unsigned long tmp[];		/* values and descs for multiple ops */
 };
 
+#define fwd_tmp_values(fwd)	&(fwd)->tmp[0]
+#define fwd_tmp_descs(fwd)	(void *)&(fwd)->tmp[BITS_TO_LONGS((fwd)->chip.ngpio)]
+
+#define fwd_tmp_size(ngpios)	(BITS_TO_LONGS((ngpios)) + (ngpios))
+
 static int gpio_fwd_get_direction(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
@@ -337,42 +278,52 @@ static int gpio_fwd_get(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
-	return gpiod_get_value(fwd->descs[offset]);
+	return chip->can_sleep ? gpiod_get_value_cansleep(fwd->descs[offset])
+			       : gpiod_get_value(fwd->descs[offset]);
 }
 
-static int gpio_fwd_get_multiple(struct gpio_chip *chip, unsigned long *mask,
+static int gpio_fwd_get_multiple(struct gpiochip_fwd *fwd, unsigned long *mask,
 				 unsigned long *bits)
 {
-	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
-	unsigned long *values, flags = 0;
-	struct gpio_desc **descs;
+	struct gpio_desc **descs = fwd_tmp_descs(fwd);
+	unsigned long *values = fwd_tmp_values(fwd);
 	unsigned int i, j = 0;
 	int error;
-
-	if (chip->can_sleep)
-		mutex_lock(&fwd->mlock);
-	else
-		spin_lock_irqsave(&fwd->slock, flags);
-
-	/* Both values bitmap and desc pointers are stored in tmp[] */
-	values = &fwd->tmp[0];
-	descs = (void *)&fwd->tmp[BITS_TO_LONGS(fwd->chip.ngpio)];
 
 	bitmap_clear(values, 0, fwd->chip.ngpio);
 	for_each_set_bit(i, mask, fwd->chip.ngpio)
 		descs[j++] = fwd->descs[i];
 
-	error = gpiod_get_array_value(j, descs, NULL, values);
-	if (!error) {
-		j = 0;
-		for_each_set_bit(i, mask, fwd->chip.ngpio)
-			__assign_bit(i, bits, test_bit(j++, values));
-	}
-
-	if (chip->can_sleep)
-		mutex_unlock(&fwd->mlock);
+	if (fwd->chip.can_sleep)
+		error = gpiod_get_array_value_cansleep(j, descs, NULL, values);
 	else
+		error = gpiod_get_array_value(j, descs, NULL, values);
+	if (error)
+		return error;
+
+	j = 0;
+	for_each_set_bit(i, mask, fwd->chip.ngpio)
+		__assign_bit(i, bits, test_bit(j++, values));
+
+	return 0;
+}
+
+static int gpio_fwd_get_multiple_locked(struct gpio_chip *chip,
+					unsigned long *mask, unsigned long *bits)
+{
+	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
+	unsigned long flags;
+	int error;
+
+	if (chip->can_sleep) {
+		mutex_lock(&fwd->mlock);
+		error = gpio_fwd_get_multiple(fwd, mask, bits);
+		mutex_unlock(&fwd->mlock);
+	} else {
+		spin_lock_irqsave(&fwd->slock, flags);
+		error = gpio_fwd_get_multiple(fwd, mask, bits);
 		spin_unlock_irqrestore(&fwd->slock, flags);
+	}
 
 	return error;
 }
@@ -381,37 +332,45 @@ static void gpio_fwd_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
-	gpiod_set_value(fwd->descs[offset], value);
+	if (chip->can_sleep)
+		gpiod_set_value_cansleep(fwd->descs[offset], value);
+	else
+		gpiod_set_value(fwd->descs[offset], value);
 }
 
-static void gpio_fwd_set_multiple(struct gpio_chip *chip, unsigned long *mask,
+static void gpio_fwd_set_multiple(struct gpiochip_fwd *fwd, unsigned long *mask,
 				  unsigned long *bits)
 {
-	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
-	unsigned long *values, flags = 0;
-	struct gpio_desc **descs;
+	struct gpio_desc **descs = fwd_tmp_descs(fwd);
+	unsigned long *values = fwd_tmp_values(fwd);
 	unsigned int i, j = 0;
-
-	if (chip->can_sleep)
-		mutex_lock(&fwd->mlock);
-	else
-		spin_lock_irqsave(&fwd->slock, flags);
-
-	/* Both values bitmap and desc pointers are stored in tmp[] */
-	values = &fwd->tmp[0];
-	descs = (void *)&fwd->tmp[BITS_TO_LONGS(fwd->chip.ngpio)];
 
 	for_each_set_bit(i, mask, fwd->chip.ngpio) {
 		__assign_bit(j, values, test_bit(i, bits));
 		descs[j++] = fwd->descs[i];
 	}
 
-	gpiod_set_array_value(j, descs, NULL, values);
-
-	if (chip->can_sleep)
-		mutex_unlock(&fwd->mlock);
+	if (fwd->chip.can_sleep)
+		gpiod_set_array_value_cansleep(j, descs, NULL, values);
 	else
+		gpiod_set_array_value(j, descs, NULL, values);
+}
+
+static void gpio_fwd_set_multiple_locked(struct gpio_chip *chip,
+					 unsigned long *mask, unsigned long *bits)
+{
+	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
+	unsigned long flags;
+
+	if (chip->can_sleep) {
+		mutex_lock(&fwd->mlock);
+		gpio_fwd_set_multiple(fwd, mask, bits);
+		mutex_unlock(&fwd->mlock);
+	} else {
+		spin_lock_irqsave(&fwd->slock, flags);
+		gpio_fwd_set_multiple(fwd, mask, bits);
 		spin_unlock_irqrestore(&fwd->slock, flags);
+	}
 }
 
 static int gpio_fwd_set_config(struct gpio_chip *chip, unsigned int offset,
@@ -420,6 +379,13 @@ static int gpio_fwd_set_config(struct gpio_chip *chip, unsigned int offset,
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return gpiod_set_config(fwd->descs[offset], config);
+}
+
+static int gpio_fwd_to_irq(struct gpio_chip *chip, unsigned int offset)
+{
+	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
+
+	return gpiod_to_irq(fwd->descs[offset]);
 }
 
 /**
@@ -446,8 +412,8 @@ static struct gpiochip_fwd *gpiochip_fwd_create(struct device *dev,
 	unsigned int i;
 	int error;
 
-	fwd = devm_kzalloc(dev, struct_size(fwd, tmp,
-			   BITS_TO_LONGS(ngpios) + ngpios), GFP_KERNEL);
+	fwd = devm_kzalloc(dev, struct_size(fwd, tmp, fwd_tmp_size(ngpios)),
+			   GFP_KERNEL);
 	if (!fwd)
 		return ERR_PTR(-ENOMEM);
 
@@ -462,7 +428,8 @@ static struct gpiochip_fwd *gpiochip_fwd_create(struct device *dev,
 	for (i = 0; i < ngpios; i++) {
 		struct gpio_chip *parent = gpiod_to_chip(descs[i]);
 
-		dev_dbg(dev, "%u => gpio-%d\n", i, desc_to_gpio(descs[i]));
+		dev_dbg(dev, "%u => gpio %d irq %d\n", i,
+			desc_to_gpio(descs[i]), gpiod_to_irq(descs[i]));
 
 		if (gpiod_cansleep(descs[i]))
 			chip->can_sleep = true;
@@ -477,9 +444,10 @@ static struct gpiochip_fwd *gpiochip_fwd_create(struct device *dev,
 	chip->direction_input = gpio_fwd_direction_input;
 	chip->direction_output = gpio_fwd_direction_output;
 	chip->get = gpio_fwd_get;
-	chip->get_multiple = gpio_fwd_get_multiple;
+	chip->get_multiple = gpio_fwd_get_multiple_locked;
 	chip->set = gpio_fwd_set;
-	chip->set_multiple = gpio_fwd_set_multiple;
+	chip->set_multiple = gpio_fwd_set_multiple_locked;
+	chip->to_irq = gpio_fwd_to_irq;
 	chip->base = -1;
 	chip->ngpio = ngpios;
 	fwd->descs = descs;
@@ -536,7 +504,7 @@ static const struct of_device_id gpio_aggregator_dt_ids[] = {
 	 * Add GPIO-operated devices controlled from userspace below,
 	 * or use "driver_override" in sysfs
 	 */
-	{},
+	{}
 };
 MODULE_DEVICE_TABLE(of, gpio_aggregator_dt_ids);
 #endif

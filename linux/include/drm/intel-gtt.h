@@ -4,8 +4,11 @@
 #ifndef _DRM_INTEL_GTT_H
 #define	_DRM_INTEL_GTT_H
 
-#include <linux/agp_backend.h>
-#include <linux/kernel.h>
+#include <linux/types.h>
+
+struct agp_bridge_data;
+struct pci_dev;
+struct sg_table;
 
 void intel_gtt_get(u64 *gtt_total,
 		   phys_addr_t *mappable_base,
@@ -32,9 +35,5 @@ void intel_gtt_clear_range(unsigned int first_entry, unsigned int num_entries);
 
 /* flag for GFDT type */
 #define AGP_USER_CACHED_MEMORY_GFDT (1 << 3)
-
-#ifdef CONFIG_INTEL_IOMMU
-extern int intel_iommu_gfx_mapped;
-#endif
 
 #endif

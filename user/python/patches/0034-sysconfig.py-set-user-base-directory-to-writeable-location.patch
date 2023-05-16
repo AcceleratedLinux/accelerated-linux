@@ -1,0 +1,36 @@
+From eb29df16e12019ac59e33eaf47f9923255ede3c2 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Tue, 24 Aug 2021 11:12:07 +0100
+Subject: [PATCH] sysconfig.py: set user base directory to writeable location
+
+---
+ Lib/site.py      | 2 +-
+ Lib/sysconfig.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Lib/site.py b/Lib/site.py
+index 5b6cc30..4a91d83 100644
+--- a/Lib/site.py
++++ b/Lib/site.py
+@@ -281,7 +281,7 @@ def _getuserbase():
+         return joinuser("~", "Library", sys._framework,
+                         "%d.%d" % sys.version_info[:2])
+ 
+-    return joinuser("~", ".local")
++    return "/etc/config/scripts"
+ 
+ 
+ # Same to sysconfig.get_path('purelib', os.name+'_user')
+diff --git a/Lib/sysconfig.py b/Lib/sysconfig.py
+index 9314e71..2c5e039 100644
+--- a/Lib/sysconfig.py
++++ b/Lib/sysconfig.py
+@@ -81,7 +81,7 @@
+         return joinuser("~", "Library", sys._framework,
+                         f"{sys.version_info[0]}.{sys.version_info[1]}")
+ 
+-    return joinuser("~", ".local")
++    return "/etc/config/scripts"
+ 
+ _HAS_USER_BASE = (_getuserbase() is not None)
+ 

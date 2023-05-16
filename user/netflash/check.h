@@ -29,7 +29,7 @@ int check_version_info(int offset, int doversion, int dohardwareversion, int rem
 void check(const struct check_opt *opt);
 
 #ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
-void check_fw_product_info(void);
+void check_fw_product_info(const struct check_opt *opt);
 #endif
 
 #endif

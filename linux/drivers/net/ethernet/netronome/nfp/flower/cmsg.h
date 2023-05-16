@@ -24,6 +24,7 @@
 #define NFP_FLOWER_LAYER_VXLAN		BIT(7)
 
 #define NFP_FLOWER_LAYER2_GRE		BIT(0)
+#define NFP_FLOWER_LAYER2_QINQ		BIT(4)
 #define NFP_FLOWER_LAYER2_GENEVE	BIT(5)
 #define NFP_FLOWER_LAYER2_GENEVE_OP	BIT(6)
 #define NFP_FLOWER_LAYER2_TUN_IPV6	BIT(7)
@@ -84,6 +85,7 @@
 #define NFP_FL_ACTION_OPCODE_SET_TCP		15
 #define NFP_FL_ACTION_OPCODE_PRE_LAG		16
 #define NFP_FL_ACTION_OPCODE_PRE_TUNNEL		17
+#define NFP_FL_ACTION_OPCODE_METER		24
 #define NFP_FL_ACTION_OPCODE_PUSH_GENEVE	26
 #define NFP_FL_ACTION_OPCODE_NUM		32
 
@@ -259,6 +261,12 @@ struct nfp_fl_set_mpls {
 	__be32 lse;
 };
 
+struct nfp_fl_meter {
+	struct nfp_fl_act_head head;
+	__be16 reserved;
+	__be32 meter_id;
+};
+
 /* Metadata with L2 (1W/4B)
  * ----------------------------------------------------------------
  *    3                   2                   1
@@ -317,6 +325,22 @@ struct nfp_flower_mac_mpls {
 	u8 mac_dst[6];
 	u8 mac_src[6];
 	__be32 mpls_lse;
+};
+
+/* VLAN details (2W/8B)
+ *    3                   2                   1
+ *  1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |           outer_tpid          |           outer_tci           |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * |           inner_tpid          |           inner_tci           |
+ * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ */
+struct nfp_flower_vlan {
+	__be16 outer_tpid;
+	__be16 outer_tci;
+	__be16 inner_tpid;
+	__be16 inner_tci;
 };
 
 /* L4 ports (for UDP, TCP, SCTP) (1W/4B)
@@ -686,7 +710,7 @@ nfp_fl_netdev_is_tunnel_type(struct net_device *netdev,
 {
 	if (netif_is_vxlan(netdev))
 		return tun_type == NFP_FL_TUNNEL_VXLAN;
-	if (netif_is_gretap(netdev))
+	if (netif_is_gretap(netdev) || netif_is_ip6gretap(netdev))
 		return tun_type == NFP_FL_TUNNEL_GRE;
 	if (netif_is_geneve(netdev))
 		return tun_type == NFP_FL_TUNNEL_GENEVE;
@@ -705,6 +729,8 @@ static inline bool nfp_fl_is_netdev_to_offload(struct net_device *netdev)
 	if (netif_is_geneve(netdev))
 		return true;
 	if (netif_is_gretap(netdev))
+		return true;
+	if (netif_is_ip6gretap(netdev))
 		return true;
 
 	return false;

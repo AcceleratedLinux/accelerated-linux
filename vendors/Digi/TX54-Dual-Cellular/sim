@@ -12,7 +12,7 @@ idx="${idx##mm.modem.}"
 
 sim_file="/etc/config/sim$wwan.conf"
 
-if [ "$wwan" = 1 ]; then
+if [ -z "$wwan" -o "$wwan" = 1 ]; then
 	WWAN_POWER_GPIO="/sys/class/gpio/gpio414/value"
 else
 	WWAN_POWER_GPIO="/sys/class/gpio/gpio415/value"
@@ -44,16 +44,18 @@ case "$1" in
 	;;
 '')
 	[ -z "$idx" ] && exit 1
-	current=`/bin/modem idx=$idx softsim`
-	expected="$(cat "$sim_file" 2>/dev/null)"
-
-	# The modem always boots with slot 1 active, so it may be out of sync
-	# with the .conf when we read it. So re-set it if required.
-	if [ "$expected" != "current" ]; then
-		echo "$current"
-		/bin/modem idx=$idx softsim $expected
-	else
+	current="$(/bin/modem idx="$idx" softsim)"
+	if [ -f "$sim_file" ]; then
+		expected="$(cat "$sim_file" 2>/dev/null)"
+		if [ "$expected" != "$current" ]; then
+			logger -t sim "switching to sim $expected, idx=$idx"
+			/bin/modem idx="$idx" softsim "$expected"
+		fi
 		echo "$expected"
+	else
+		logger -t sim "creating $sim_file with sim $current, idx=$idx"
+		echo "$current" > "$sim_file"
+		echo "$current"
 	fi
 	;;
 *)

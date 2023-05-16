@@ -66,8 +66,6 @@ static char arr [] = "All rights reserved.";
 static char message [] = "Internet Systems Consortium DHCP Client";
 static char url [] = "For info, please visit http://www.isc.org/sw/dhcp/";
 
-u_int16_t local_port=0;
-u_int16_t remote_port=0;
 int no_daemon=0;
 struct string_list *client_env=NULL;
 int client_env_count=0;

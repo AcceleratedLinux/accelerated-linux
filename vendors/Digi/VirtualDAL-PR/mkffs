@@ -7,21 +7,21 @@
 #
 
 if ! mount 2>&1 | grep -q tmp; then
-        echo "Mounting filesystems..."
-        mount -t proc proc /proc
-        mount -t sysfs sys /sys
-        mkdir -m 755 /dev/pts
-        mount -t devpts devpts /dev/pts
-        mount -t tmpfs -o size=256M tmpfs /tmp
-        mount -t tmpfs -o size=256M tmpfs /var
-        mkdir -m 755 /dev/hugepages
-        mount -t hugetlbfs none /dev/hugepages
-        mkdir -m 1777 /var/tmp
-        mkdir -m 755 /var/log
-        mkdir -m 755 /var/run
-        mkdir -m 1777 /var/lock
-        mkdir -m 755 /var/empty
-        mkdir -m 755 /var/mnt
+	echo "Mounting filesystems..."
+	mount -t proc proc /proc
+	mount -t sysfs sys /sys
+	mkdir -m 755 /dev/pts
+	mount -t devpts devpts /dev/pts
+	mount -t tmpfs -o size=256M tmpfs /tmp
+	mount -t tmpfs -o size=256M tmpfs /var
+	mkdir -m 755 /dev/hugepages
+	mount -t hugetlbfs none /dev/hugepages
+	mkdir -m 1777 /var/tmp
+	mkdir -m 755 /var/log
+	mkdir -m 755 /var/run
+	mkdir -m 1777 /var/lock
+	mkdir -m 755 /var/empty
+	mkdir -m 755 /var/mnt
 fi
 
 # Default drive to setup and boot from
@@ -34,13 +34,13 @@ IMAGESIZE=${1:-4096}
 # Check if this device is mounted
 if mount | grep -q $DRIVE
 then
-        echo "ERROR: drive $DRIVE is active (mounted)"
-        exit 1
+	echo "ERROR: drive $DRIVE is active (mounted)"
+	exit 1
 fi
 
 # delete old partitions
 for p in 1 2 3 4 5; do
-        parted --script -- $DRIVE rm $p > /dev/null 2>&1
+	parted --script -- $DRIVE rm $p > /dev/null 2>&1
 done
 
 # partition alignement helper: new_part <size|0>
@@ -48,13 +48,13 @@ done
 
 new_part()
 {
-    last=$(parted --script -- ${DRIVE} unit s print | awk '/^ *[0-9]/ { gsub("s","",$3); print $3 }' | tail -1)
-    free=$((${last:-0}+1))
-    if [ "$1" = 0 ]; then
-        echo "${free}s -0"
-    else
-        echo "${free}s $((free + (($1 * 1024 * 1024) / 512) - 1))s"
-    fi
+	last=$(parted --script -- ${DRIVE} unit s print | awk '/^ *[0-9]/ { gsub("s","",$3); print $3 }' | tail -1)
+	free=$((${last:-0}+1))
+	if [ "$1" = 0 ]; then
+		echo "${free}s -0"
+	else
+		echo "${free}s $((free + (($1 * 1024 * 1024) / 512) - 1))s"
+	fi
 }
 
 echo "Making the GPT partitions..."

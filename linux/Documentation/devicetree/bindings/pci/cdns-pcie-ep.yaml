@@ -11,6 +11,7 @@ maintainers:
 
 allOf:
   - $ref: "cdns-pcie.yaml#"
+  - $ref: "pci-ep.yaml#"
 
 properties:
   cdns,max-outbound-regions:
@@ -20,5 +21,4 @@ properties:
     maximum: 32
     default: 32
 
-required:
-  - cdns,max-outbound-regions
+additionalProperties: true

@@ -1,0 +1,100 @@
+#!/bin/bash
+
+. /etc/scripts/power-common
+
+port=$1
+outlets=$2
+cmd=$3
+
+[[ -z "$username" ]] && username="apc"
+[[ -z "$password" ]] && password="apc"
+
+if [[ -z "$port" ]] || [[ -z "$outlets" ]] || [[ -z "$cmd" ]]; then
+	appname=`basename $0`
+	echo "Usage: $appname <port> \"<outlet> [outlet..]\" on|off|cycle|status"
+	exit 1
+fi
+
+function pduLogin {
+	/bin/pmchat -t 2 "" "\r\r" "User Name : " "${username}" "${username}" "${password}" ">" < $port 2>&1
+	return $?
+}
+
+function pduLogout {
+	/bin/pmchat -t 2 "" "quit" "Bye." < $port 2>&1
+	return $?
+}
+
+if ! pduLogin >& /dev/null; then
+	pduLogout >& /dev/null
+	if ! pduLogin >& /dev/null; then
+		power_error_login $username
+		exit 1
+	fi
+fi
+
+if [[ "$cmd" == "probe" ]]; then
+	output=$(/bin/pmchat -v -t 2 ECHO ON "" "prodInfo" ">" < $port 2>&1)
+	count=$(echo "$output" | awk '/Switched Outlets:/ { print $NF }')
+	echo "$count"
+else
+	for outlet in $outlets; do
+		case $cmd in
+		"on" )
+		/bin/pmchat -v -t 2 ECHO ON "" "olOn $outlet" ">" < $port >& /dev/null
+		;;
+		"off" )
+		/bin/pmchat -v -t 2 ECHO ON "" "olOff $outlet" ">" < $port >& /dev/null
+		;;
+		"cycle" )
+		/bin/pmchat -v -t 2 ECHO ON "" "olReboot $outlet" ">" < $port >& /dev/null
+		;;
+		esac
+	done
+	
+	# Asterisk indicates commands aren't complete
+	for (( i=0; i < 10; i++ )); do
+		output=$(/bin/pmchat -v -t 2 ECHO ON "" "olStatus all" ">" < $port 2>&1)
+		status=$(echo "$output" | awk 'BEGIN { IGNORECASE=1 } /on|off/ { print tolower($NF) }')
+		if ! echo "$status" | grep '*$' >& /dev/null; then
+			break
+		fi
+		sleep 1
+	done
+	if [[ "$i" -eq 10 ]]; then
+		for outlet in $outlets; do
+			power_outlet_error_timeout $outlet $cmd
+		done
+		exit 1
+	fi
+	
+	i=1
+	j=1
+	outlet=""
+
+	# Iterate over status output for all outlets
+	while IFS= read -r line
+	do
+		# Determine next outlet requested
+		if [ -z "$outlet" ]; then
+			outlet=$(echo "$outlets" | cut -d' ' -f$j)
+			if [ -z "$outlet" ]; then
+				# No more outlets requested
+				break
+			fi
+			j=$((j+1))
+		fi
+
+		if [ "$i" == "$outlet" ]; then
+			power_outlet_status $outlet $line
+			outlet=""
+		fi
+		i=$((i+1))
+	done < <(printf '%s\n' "$status")
+fi
+
+if ! pduLogout >& /dev/null; then
+	echo "WARNING: PDU logout failed"
+fi
+
+exit 0

@@ -2,3 +2,4 @@ libnl-add-route-mtu.patch
 libnl-add-route-oif.patch
 libnl-poll-h.patch
 libnl-route-link-fixing-a-deadlock.patch
+libnl-attr-mark-nested-attributes-as-nla_f_nested.patch

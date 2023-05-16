@@ -1,0 +1,88 @@
+--- clean-0.9.35/src/h_bash.c	2015-02-16 08:16:19.000000000 +1000
++++ patched-0.9.35/src/h_bash.c	2021-07-02 11:24:36.371667491 +0100
+@@ -89,15 +89,6 @@
+ 	      count--;
+ 	    }
+ 
+-
+-	  /* populate the environment */
+-	  while (env)
+-	    {
+-	      next = env->next;
+-	      putenv (env->buf);
+-	      env = next;
+-	    }
+-
+ 	  execv (argv[0].string, av);
+ 	  free (argv);
+ 
+@@ -108,6 +99,69 @@
+ 	{
+ 	  /* I'm parent, move along please */
+ 	  close (subshell_pipe[PARENT_IN]);
++
++	  /* setup the environment vars without limitations */
++	  for (; env; env = env->next)
++	    {
++	      /* Collate environment variables like:
++	       *
++	       *   FORM_collapsed[dpd.delay]=11
++	       *   FORM_collapsed[dpd.timeout]=60
++	       *
++	       * into a single shell variable, one per line:
++	       *
++	       *   FORM_collapsed='
++	       *   FORM_collapsed[dpd.delay]=11
++	       *   FORM_collapsed[dpd.timeout]=60'
++	       */
++	      if (strstr(env->buf, "FORM_collapsed[") == env->buf)
++	        {
++	          write(subshell_pipe[PARENT_OUT], "FORM_collapsed=$FORM_collapsed'\n", 32);
++	          write(subshell_pipe[PARENT_OUT], env->buf, strlen(env->buf));
++	          write(subshell_pipe[PARENT_OUT], "'\n", 2);
++	          continue;
++	        }
++
++	      /* Collate environment variables like:
++	       *
++	       *   FORM_expanded[dpd][delay]=11
++	       *   FORM_expanded[dpd][timeout]=60
++	       *
++	       * into a single shell variable, one per line:
++	       *
++	       *   FORM_expanded='
++	       *   FORM_expanded[dpd][delay]=11
++	       *   FORM_expanded[dpd][timeout]=60'
++	       */
++	      if (strstr(env->buf, "FORM_expanded[") == env->buf)
++	        {
++	          write(subshell_pipe[PARENT_OUT], "FORM_expanded=$FORM_expanded'\n", 30);
++	          write(subshell_pipe[PARENT_OUT], env->buf, strlen(env->buf));
++	          write(subshell_pipe[PARENT_OUT], "'\n", 2);
++	          continue;
++	        }
++
++	      char *np, *cp = strchr(env->buf, '=');
++	      for (np = env->buf; cp && np < cp && (isalnum(*np) || *np == '_'); np++);
++	      if (!cp || np != cp)
++		continue;
++	      cp++;
++	      write(subshell_pipe[PARENT_OUT], env->buf, cp - env->buf);
++	      write(subshell_pipe[PARENT_OUT], "'", 1);
++	      while (*cp) {
++	         np = strchr(cp, '\'');
++		     if (np) {
++	           write(subshell_pipe[PARENT_OUT], cp, np - cp);
++	           write(subshell_pipe[PARENT_OUT], "'\"'\"'", 5);
++		       np++;
++		     } else {
++		       np = cp + strlen(cp);
++	           write(subshell_pipe[PARENT_OUT], cp, np - cp);
++            }
++		     cp = np;
++	      }
++	      write(subshell_pipe[PARENT_OUT], "'\n", 2);
++	    }
+ 	}
+     }
+ 

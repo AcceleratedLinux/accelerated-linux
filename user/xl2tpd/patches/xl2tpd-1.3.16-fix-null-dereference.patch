@@ -1,0 +1,12 @@
+--- a/network.c     2022-09-14 11:39:27.002994196 +0100
++++ b/network.c     2022-09-14 11:39:48.951325763 +0100
+@@ -489,7 +489,7 @@ void network_thread ()
+                 {
+                     l2tp_log (LOG_DEBUG,
+                         "%s: select timeout with max retries: %d for tunnel: %d\n",
+-                        __FUNCTION__, gconfig.max_retries, tunnels.head->ourtid);
++                        __FUNCTION__, gconfig.max_retries, tunnels.head ? tunnels.head->ourtid : -1);
+                 }
+             }
+             else
+

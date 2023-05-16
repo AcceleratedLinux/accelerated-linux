@@ -1,0 +1,194 @@
+# Disable all superusers
+set superusers=""
+export superusers
+
+set GRUB_VERSION="<GRUB_VERSION>"
+
+set timeout=0
+
+set GRUB_NO_OUTPUT=1
+set GRUB_NO_EDIT=1
+
+set default="0"
+set part0_valid="false"
+set part1_valid="false"
+set DUALBOOT_ENV_VARS="default part0_valid part1_valid"
+
+set BOOTCNTR_RESET_VALUE=3
+
+set SECUREBOOT_ALG="hmac"
+set SECUREBOOT_HWKEY_PROD=1
+set SECUREBOOT_HWKEY_DEBUG=9
+
+function error {
+	unset GRUB_NO_OUTPUT
+	echo "ERROR: $1"
+
+	echo "Rebooting in 5 seconds..."
+	sleep 5
+	reboot
+}
+
+function print {
+	set SAVE_GRUB_NO_OUTPUT="${GRUB_NO_OUTPUT}"
+	unset GRUB_NO_OUTPUT
+
+	echo "$1"
+
+	set GRUB_NO_OUTPUT="${SAVE_GRUB_NO_OUTPUT}"
+}
+
+function verify_partition {
+	if verify_part "$1" "$SECUREBOOT_HWKEY_PROD" "$SECUREBOOT_ALG"; then
+		return 0
+	fi
+
+	if [ "$dev_mode" != "1" ]; then
+		return 1
+	fi
+
+	if verify_part "$1" "$SECUREBOOT_HWKEY_DEBUG" "$SECUREBOOT_ALG"; then
+		return 0
+	fi
+
+	return 1
+}
+
+function load_kernel {
+	PART="$1"
+	KERNEL_ARG_EXTRA="$2"
+
+	if [ "$dev_mode" == "1" ]; then
+		KERNEL_ARG_EXTRA="$KERNEL_ARG_EXTRA console=ttyS0,115200 dev_mode=1"
+	else
+		KERNEL_ARG_EXTRA="$KERNEL_ARG_EXTRA quiet console=null"
+	fi
+
+	bootcntr_dec
+
+	if ! verify_partition $PART; then
+		error "RootFS verification failed"
+	fi
+
+	# 3rd LED -> verification OK
+	mcu set_led wifi1_service green 0
+
+	set root=$PART
+
+	if ! linux /boot/vmlinuz panic=30 boot_ver=$GRUB_VERSION $KERNEL_ARG_EXTRA; then
+		error "Couldn't load kernel. Rebooting..."
+	fi
+
+	# 4th LED -> kernel loaded
+	mcu set_led wifi2_service green 0
+
+	watchdog_set 120
+}
+
+# Set MCU communication port
+mcu init com4
+
+# Turn on 1st LED as soon as possible -> grub loaded
+mcu set_led wwan1_signal green 0
+
+# Whitelist for variables allowed to be overwritten
+load_env -f (hd0,gpt1)/grub/grubenv $DUALBOOT_ENV_VARS
+
+serial --unit=0 --speed=115200
+terminal_output serial
+terminal_input serial
+
+# Load boot counter
+if ! bootcntr_get boot_cntr; then
+	# Reset boot counter
+	print "ERROR: invalid boot counter, resetting it..."
+	sleep 3
+
+	boot_cntr=$BOOTCNTR_RESET_VALUE
+	bootcntr_set $boot_cntr
+fi
+
+if [ "$boot_cntr" -le 0 ]; then
+	should_save_env=0
+
+	# Boot counter overrun, toggle boot partition
+	bootcntr_set $BOOTCNTR_RESET_VALUE
+
+	print "ERROR: boot counter reached the limit, trying to change boot bank..."
+
+	if [ "$default" == "0" ]; then
+		if [ "$part1_valid" == "true" ]; then
+			print "Changed default to bank 1"
+
+			set default="1"
+
+			# Invalidate current boot bank
+			set part0_valid="false"
+
+			should_save_env=1
+		else
+			print "ERROR: boot bank 1 is invalid. Retrying current boot bank"
+		fi
+	else
+		if [ "$part0_valid" == "true" ]; then
+			print "Changed default to bank 0"
+
+			set default="0"
+
+			# Invalidate current boot bank
+			set part1_valid="false"
+
+			should_save_env=1
+		else
+			print "ERROR: boot bank 0 is invalid. Retrying current boot bank"
+		fi
+	fi
+
+	# Save ENV if there's any change
+	if [ $should_save_env == 1 ]; then
+		save_env -f (hd0,gpt1)/grub/grubenv $DUALBOOT_ENV_VARS
+	fi
+
+	sleep 5
+fi
+
+# Check if the board is in developer-mode
+if ! mcu is_dev_mode dev_mode; then
+	print "ERROR: couldn't get development-mode state, using production-mode"
+	sleep 2
+
+	dev_mode=0
+fi
+
+if [ "$dev_mode" == "1" ]; then
+	set timeout=1
+	unset GRUB_NO_OUTPUT
+	mcu set_led gnss_service green 0
+fi
+
+# Figure out partition "invalid" labels
+if [ "$part0_valid" != "true" ]; then
+	PART0_VALID_STR=" !!! INVALID !!!"
+else
+	PART0_VALID_STR=""
+fi
+if [ "$part1_valid" != "true" ]; then
+	PART1_VALID_STR=" !!! INVALID !!!"
+else
+	PART1_VALID_STR=""
+fi
+
+menuentry "Digi Transport WR64 (image1)$PART0_VALID_STR" --unrestricted {
+	# 2nd LED set to green -> 1st boot bank
+	mcu set_led wwan1_service green 0
+
+	load_kernel (hd0,gpt5) "root=/dev/sda5 bootpart=a"
+}
+
+menuentry "Digi Transport WR64 (image2)$PART1_VALID_STR" --unrestricted {
+	# 2nd LED set to yellow -> 2nd boot bank
+	mcu set_led wwan1_service yellow 0
+
+	load_kernel (hd0,gpt7) "root=/dev/sda7 bootpart=b"
+}
+

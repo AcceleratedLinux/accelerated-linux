@@ -14,5 +14,7 @@ CONFOPTS += --enable-liblogging-stdlog=no
 include $(ROOTDIR)/tools/automake.inc
 
 rsyslog_romfs:
-	$(ROMFSINST) -e CONFIG_DEFAULTS_OPENGEAR -p 0644 config/rsyslog.conf /etc/default/rsyslog.conf
+	$(ROMFSINST) -p 0644 config/rsyslog.conf /etc/default/rsyslog.conf
+	$(ROMFSINST) -a "slog:unknown:/sbin/rsyslogd -n -f /etc/config/rsyslog.conf" /etc/default/inittab.d/slog
 	rm -f $(ROMFSDIR)/lib/rsyslog/*.la
+

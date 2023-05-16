@@ -1,0 +1,1 @@
+ACTION=="add|change|remove", SUBSYSTEM=="net", RUN+="/etc/scripts/udev-mtu %k"

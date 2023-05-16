@@ -28,7 +28,6 @@
 #include "iscsi_target_auth.h"
 
 #define MAX_LOGIN_PDUS  7
-#define TEXT_LEN	4096
 
 void convert_null_to_semi(char *buf, int len)
 {
@@ -96,14 +95,14 @@ int extract_param(
 }
 
 static u32 iscsi_handle_authentication(
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	char *in_buf,
 	char *out_buf,
 	int in_length,
 	int *out_length,
 	unsigned char *authtype)
 {
-	struct iscsi_session *sess = conn->sess;
+	struct iscsit_session *sess = conn->sess;
 	struct iscsi_node_auth *auth;
 	struct iscsi_node_acl *iscsi_nacl;
 	struct iscsi_portal_group *iscsi_tpg;
@@ -116,13 +115,6 @@ static u32 iscsi_handle_authentication(
 		se_nacl = conn->sess->se_sess->se_node_acl;
 		if (!se_nacl) {
 			pr_err("Unable to locate struct se_node_acl for"
-					" CHAP auth\n");
-			return -1;
-		}
-		iscsi_nacl = container_of(se_nacl, struct iscsi_node_acl,
-				se_node_acl);
-		if (!iscsi_nacl) {
-			pr_err("Unable to locate struct iscsi_node_acl for"
 					" CHAP auth\n");
 			return -1;
 		}
@@ -159,13 +151,13 @@ static u32 iscsi_handle_authentication(
 	return 2;
 }
 
-static void iscsi_remove_failed_auth_entry(struct iscsi_conn *conn)
+static void iscsi_remove_failed_auth_entry(struct iscsit_conn *conn)
 {
 	kfree(conn->auth_protocol);
 }
 
 int iscsi_target_check_login_request(
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	struct iscsi_login *login)
 {
 	int req_csg, req_nsg;
@@ -256,7 +248,7 @@ int iscsi_target_check_login_request(
 EXPORT_SYMBOL(iscsi_target_check_login_request);
 
 static int iscsi_target_check_first_request(
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	struct iscsi_login *login)
 {
 	struct iscsi_param *param = NULL;
@@ -323,7 +315,7 @@ static int iscsi_target_check_first_request(
 	return 0;
 }
 
-static int iscsi_target_do_tx_login_io(struct iscsi_conn *conn, struct iscsi_login *login)
+static int iscsi_target_do_tx_login_io(struct iscsit_conn *conn, struct iscsi_login *login)
 {
 	u32 padding = 0;
 	struct iscsi_login_rsp *login_rsp;
@@ -390,7 +382,7 @@ err:
 
 static void iscsi_target_sk_data_ready(struct sock *sk)
 {
-	struct iscsi_conn *conn = sk->sk_user_data;
+	struct iscsit_conn *conn = sk->sk_user_data;
 	bool rc;
 
 	pr_debug("Entering iscsi_target_sk_data_ready: conn: %p\n", conn);
@@ -429,7 +421,7 @@ static void iscsi_target_sk_data_ready(struct sock *sk)
 
 static void iscsi_target_sk_state_change(struct sock *);
 
-static void iscsi_target_set_sock_callbacks(struct iscsi_conn *conn)
+static void iscsi_target_set_sock_callbacks(struct iscsit_conn *conn)
 {
 	struct sock *sk;
 
@@ -451,7 +443,7 @@ static void iscsi_target_set_sock_callbacks(struct iscsi_conn *conn)
 	sk->sk_rcvtimeo = TA_LOGIN_TIMEOUT * HZ;
 }
 
-static void iscsi_target_restore_sock_callbacks(struct iscsi_conn *conn)
+static void iscsi_target_restore_sock_callbacks(struct iscsit_conn *conn)
 {
 	struct sock *sk;
 
@@ -475,19 +467,19 @@ static void iscsi_target_restore_sock_callbacks(struct iscsi_conn *conn)
 	sk->sk_rcvtimeo = MAX_SCHEDULE_TIMEOUT;
 }
 
-static int iscsi_target_do_login(struct iscsi_conn *, struct iscsi_login *);
+static int iscsi_target_do_login(struct iscsit_conn *, struct iscsi_login *);
 
 static bool __iscsi_target_sk_check_close(struct sock *sk)
 {
 	if (sk->sk_state == TCP_CLOSE_WAIT || sk->sk_state == TCP_CLOSE) {
 		pr_debug("__iscsi_target_sk_check_close: TCP_CLOSE_WAIT|TCP_CLOSE,"
-			"returning FALSE\n");
+			"returning TRUE\n");
 		return true;
 	}
 	return false;
 }
 
-static bool iscsi_target_sk_check_close(struct iscsi_conn *conn)
+static bool iscsi_target_sk_check_close(struct iscsit_conn *conn)
 {
 	bool state = false;
 
@@ -502,7 +494,7 @@ static bool iscsi_target_sk_check_close(struct iscsi_conn *conn)
 	return state;
 }
 
-static bool iscsi_target_sk_check_flag(struct iscsi_conn *conn, unsigned int flag)
+static bool iscsi_target_sk_check_flag(struct iscsit_conn *conn, unsigned int flag)
 {
 	bool state = false;
 
@@ -516,7 +508,7 @@ static bool iscsi_target_sk_check_flag(struct iscsi_conn *conn, unsigned int fla
 	return state;
 }
 
-static bool iscsi_target_sk_check_and_clear(struct iscsi_conn *conn, unsigned int flag)
+static bool iscsi_target_sk_check_and_clear(struct iscsit_conn *conn, unsigned int flag)
 {
 	bool state = false;
 
@@ -533,25 +525,24 @@ static bool iscsi_target_sk_check_and_clear(struct iscsi_conn *conn, unsigned in
 	return state;
 }
 
-static void iscsi_target_login_drop(struct iscsi_conn *conn, struct iscsi_login *login)
+static void iscsi_target_login_drop(struct iscsit_conn *conn, struct iscsi_login *login)
 {
-	struct iscsi_np *np = login->np;
 	bool zero_tsih = login->zero_tsih;
 
 	iscsi_remove_failed_auth_entry(conn);
 	iscsi_target_nego_release(conn);
-	iscsi_target_login_sess_out(conn, np, zero_tsih, true);
+	iscsi_target_login_sess_out(conn, zero_tsih, true);
 }
 
 struct conn_timeout {
 	struct timer_list timer;
-	struct iscsi_conn *conn;
+	struct iscsit_conn *conn;
 };
 
 static void iscsi_target_login_timeout(struct timer_list *t)
 {
 	struct conn_timeout *timeout = from_timer(timeout, t, timer);
-	struct iscsi_conn *conn = timeout->conn;
+	struct iscsit_conn *conn = timeout->conn;
 
 	pr_debug("Entering iscsi_target_login_timeout >>>>>>>>>>>>>>>>>>>\n");
 
@@ -564,8 +555,8 @@ static void iscsi_target_login_timeout(struct timer_list *t)
 
 static void iscsi_target_do_login_rx(struct work_struct *work)
 {
-	struct iscsi_conn *conn = container_of(work,
-				struct iscsi_conn, login_work.work);
+	struct iscsit_conn *conn = container_of(work,
+				struct iscsit_conn, login_work.work);
 	struct iscsi_login *login = conn->login;
 	struct iscsi_np *np = login->np;
 	struct iscsi_portal_group *tpg = conn->tpg;
@@ -625,13 +616,37 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 	pr_debug("iscsi_target_do_login_rx after rx_login_io, %p, %s:%d\n",
 			conn, current->comm, current->pid);
 
+	/*
+	 * LOGIN_FLAGS_READ_ACTIVE is cleared so that sk_data_ready
+	 * could be triggered again after this.
+	 *
+	 * LOGIN_FLAGS_WRITE_ACTIVE is cleared after we successfully
+	 * process a login PDU, so that sk_state_chage can do login
+	 * cleanup as needed if the socket is closed. If a delayed work is
+	 * ongoing (LOGIN_FLAGS_WRITE_ACTIVE or LOGIN_FLAGS_READ_ACTIVE),
+	 * sk_state_change will leave the cleanup to the delayed work or
+	 * it will schedule a delayed work to do cleanup.
+	 */
+	if (conn->sock) {
+		struct sock *sk = conn->sock->sk;
+
+		write_lock_bh(&sk->sk_callback_lock);
+		if (!test_bit(LOGIN_FLAGS_INITIAL_PDU, &conn->login_flags)) {
+			clear_bit(LOGIN_FLAGS_READ_ACTIVE, &conn->login_flags);
+			set_bit(LOGIN_FLAGS_WRITE_ACTIVE, &conn->login_flags);
+		}
+		write_unlock_bh(&sk->sk_callback_lock);
+	}
+
 	rc = iscsi_target_do_login(conn, login);
 	if (rc < 0) {
 		goto err;
 	} else if (!rc) {
-		if (iscsi_target_sk_check_and_clear(conn, LOGIN_FLAGS_READ_ACTIVE))
+		if (iscsi_target_sk_check_and_clear(conn,
+						    LOGIN_FLAGS_WRITE_ACTIVE))
 			goto err;
 	} else if (rc == 1) {
+		cancel_delayed_work(&conn->login_work);
 		iscsi_target_nego_release(conn);
 		iscsi_post_login_handler(np, conn, zero_tsih);
 		iscsit_deaccess_np(np, tpg, tpg_np);
@@ -640,13 +655,14 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 
 err:
 	iscsi_target_restore_sock_callbacks(conn);
+	cancel_delayed_work(&conn->login_work);
 	iscsi_target_login_drop(conn, login);
 	iscsit_deaccess_np(np, tpg, tpg_np);
 }
 
 static void iscsi_target_sk_state_change(struct sock *sk)
 {
-	struct iscsi_conn *conn;
+	struct iscsit_conn *conn;
 	void (*orig_state_change)(struct sock *);
 	bool state;
 
@@ -670,9 +686,10 @@ static void iscsi_target_sk_state_change(struct sock *sk)
 	state = __iscsi_target_sk_check_close(sk);
 	pr_debug("__iscsi_target_sk_close_change: state: %d\n", state);
 
-	if (test_bit(LOGIN_FLAGS_READ_ACTIVE, &conn->login_flags)) {
-		pr_debug("Got LOGIN_FLAGS_READ_ACTIVE=1 sk_state_change"
-			 " conn: %p\n", conn);
+	if (test_bit(LOGIN_FLAGS_READ_ACTIVE, &conn->login_flags) ||
+	    test_bit(LOGIN_FLAGS_WRITE_ACTIVE, &conn->login_flags)) {
+		pr_debug("Got LOGIN_FLAGS_{READ|WRITE}_ACTIVE=1"
+			 " sk_state_change conn: %p\n", conn);
 		if (state)
 			set_bit(LOGIN_FLAGS_CLOSED, &conn->login_flags);
 		write_unlock_bh(&sk->sk_callback_lock);
@@ -724,7 +741,7 @@ static void iscsi_target_sk_state_change(struct sock *sk)
  *	ISID/TSIH combinations.
  */
 static int iscsi_target_check_for_existing_instances(
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	struct iscsi_login *login)
 {
 	if (login->checked_for_existing)
@@ -740,7 +757,7 @@ static int iscsi_target_check_for_existing_instances(
 }
 
 static int iscsi_target_do_authentication(
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	struct iscsi_login *login)
 {
 	int authret;
@@ -799,7 +816,7 @@ static int iscsi_target_do_authentication(
 }
 
 static int iscsi_target_handle_csg_zero(
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	struct iscsi_login *login)
 {
 	int ret;
@@ -889,7 +906,7 @@ do_auth:
 	return iscsi_target_do_authentication(conn, login);
 }
 
-static int iscsi_target_handle_csg_one(struct iscsi_conn *conn, struct iscsi_login *login)
+static int iscsi_target_handle_csg_one(struct iscsit_conn *conn, struct iscsi_login *login)
 {
 	int ret;
 	u32 payload_length;
@@ -951,7 +968,7 @@ static int iscsi_target_handle_csg_one(struct iscsi_conn *conn, struct iscsi_log
 	return 0;
 }
 
-static int iscsi_target_do_login(struct iscsi_conn *conn, struct iscsi_login *login)
+static int iscsi_target_do_login(struct iscsit_conn *conn, struct iscsi_login *login)
 {
 	int pdu_count = 0;
 	struct iscsi_login_req *login_req;
@@ -1037,12 +1054,12 @@ static void iscsi_initiatorname_tolower(
  */
 int iscsi_target_locate_portal(
 	struct iscsi_np *np,
-	struct iscsi_conn *conn,
+	struct iscsit_conn *conn,
 	struct iscsi_login *login)
 {
 	char *i_buf = NULL, *s_buf = NULL, *t_buf = NULL;
 	char *tmpbuf, *start = NULL, *end = NULL, *key, *value;
-	struct iscsi_session *sess = conn->sess;
+	struct iscsit_session *sess = conn->sess;
 	struct iscsi_tiqn *tiqn;
 	struct iscsi_tpg_np *tpg_np = NULL;
 	struct iscsi_login_req *login_req;
@@ -1058,14 +1075,12 @@ int iscsi_target_locate_portal(
 	login_req = (struct iscsi_login_req *) login->req;
 	payload_length = ntoh24(login_req->dlength);
 
-	tmpbuf = kzalloc(payload_length + 1, GFP_KERNEL);
+	tmpbuf = kmemdup_nul(login->req_buf, payload_length, GFP_KERNEL);
 	if (!tmpbuf) {
 		pr_err("Unable to allocate memory for tmpbuf.\n");
 		return -1;
 	}
 
-	memcpy(tmpbuf, login->req_buf, payload_length);
-	tmpbuf[payload_length] = '\0';
 	start = tmpbuf;
 	end = (start + payload_length);
 
@@ -1217,7 +1232,7 @@ get_target:
 
 	/*
 	 * conn->sess->node_acl will be set when the referenced
-	 * struct iscsi_session is located from received ISID+TSIH in
+	 * struct iscsit_session is located from received ISID+TSIH in
 	 * iscsi_login_non_zero_tsih_s2().
 	 */
 	if (!login->leading_connection) {
@@ -1257,7 +1272,7 @@ get_target:
 alloc_tags:
 	tag_num = max_t(u32, ISCSIT_MIN_TAGS, queue_depth);
 	tag_num = (tag_num * 2) + ISCSIT_EXTRA_TAGS;
-	tag_size = sizeof(struct iscsi_cmd) + conn->conn_transport->priv_size;
+	tag_size = sizeof(struct iscsit_cmd) + conn->conn_transport->priv_size;
 
 	ret = transport_alloc_session_tags(sess->se_sess, tag_num, tag_size);
 	if (ret < 0) {
@@ -1272,7 +1287,7 @@ out:
 
 int iscsi_target_start_negotiation(
 	struct iscsi_login *login,
-	struct iscsi_conn *conn)
+	struct iscsit_conn *conn)
 {
 	int ret;
 
@@ -1308,7 +1323,7 @@ int iscsi_target_start_negotiation(
 	return ret;
 }
 
-void iscsi_target_nego_release(struct iscsi_conn *conn)
+void iscsi_target_nego_release(struct iscsit_conn *conn)
 {
 	struct iscsi_login *login = conn->conn_login;
 

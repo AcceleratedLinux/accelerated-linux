@@ -16,12 +16,16 @@
 #include <linux/math64.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_clock.h>
 #include <linux/pm_domain.h>
 #include <linux/slab.h>
+#include <linux/soc/renesas/r9a06g032-sysctrl.h>
 #include <linux/spinlock.h>
 #include <dt-bindings/clock/r9a06g032-sysctrl.h>
+
+#define R9A06G032_SYSCTRL_DMAMUX 0xA0
 
 struct r9a06g032_gate {
 	u16 gate, reset, ready, midle,
@@ -55,7 +59,7 @@ struct r9a06g032_clkdesc {
 			u16 sel, g1, r1, g2, r2;
 		} dual;
 	};
-} __packed;
+};
 
 #define I_GATE(_clk, _rst, _rdy, _midle, _scon, _mirack, _mistat) \
 	{ .gate = _clk, .reset = _rst, \
@@ -256,7 +260,7 @@ static const struct r9a06g032_clkdesc r9a06g032_clocks[] = {
 	D_MODULE(HCLK_QSPI0, "hclk_qspi0", CLK_REF_SYNC_D4, 0x2a0, 0x2a1, 0x2a2, 0x2a3, 0x300, 0x301, 0x302),
 	D_MODULE(HCLK_QSPI1, "hclk_qspi1", CLK_REF_SYNC_D4, 0x480, 0x481, 0x482, 0x483, 0x4c0, 0x4c1, 0x4c2),
 	D_MODULE(HCLK_ROM, "hclk_rom", CLK_REF_SYNC_D4, 0xaa0, 0xaa1, 0xaa2, 0, 0xb80, 0, 0),
-	D_MODULE(HCLK_RTC, "hclk_rtc", CLK_REF_SYNC_D8, 0xa00, 0, 0, 0, 0, 0, 0),
+	D_MODULE(HCLK_RTC, "hclk_rtc", CLK_REF_SYNC_D8, 0xa00, 0xa03, 0, 0xa02, 0, 0, 0),
 	D_MODULE(HCLK_SDIO0, "hclk_sdio0", CLK_REF_SYNC_D4, 0x60, 0x61, 0x62, 0x63, 0x80, 0x81, 0x82),
 	D_MODULE(HCLK_SDIO1, "hclk_sdio1", CLK_REF_SYNC_D4, 0x640, 0x641, 0x642, 0x643, 0x660, 0x661, 0x662),
 	D_MODULE(HCLK_SEMAP, "hclk_semap", CLK_REF_SYNC_D4, 0x7a3, 0x7a4, 0x7a5, 0, 0xb21, 0, 0),
@@ -279,7 +283,7 @@ static const struct r9a06g032_clkdesc r9a06g032_clocks[] = {
 	/*
 	 * These are not hardware clocks, but are needed to handle the special
 	 * case where we have a 'selector bit' that doesn't just change the
-	 * parent for a clock, but also the gate it's suposed to use.
+	 * parent for a clock, but also the gate it's supposed to use.
 	 */
 	{
 		.index = R9A06G032_UART_GROUP_012,
@@ -311,9 +315,33 @@ static const struct r9a06g032_clkdesc r9a06g032_clocks[] = {
 
 struct r9a06g032_priv {
 	struct clk_onecell_data data;
-	spinlock_t lock; /* protects concurent access to gates */
+	spinlock_t lock; /* protects concurrent access to gates */
 	void __iomem *reg;
 };
+
+static struct r9a06g032_priv *sysctrl_priv;
+
+/* Exported helper to access the DMAMUX register */
+int r9a06g032_sysctrl_set_dmamux(u32 mask, u32 val)
+{
+	unsigned long flags;
+	u32 dmamux;
+
+	if (!sysctrl_priv)
+		return -EPROBE_DEFER;
+
+	spin_lock_irqsave(&sysctrl_priv->lock, flags);
+
+	dmamux = readl(sysctrl_priv->reg + R9A06G032_SYSCTRL_DMAMUX);
+	dmamux &= ~mask;
+	dmamux |= val & mask;
+	writel(dmamux, sysctrl_priv->reg + R9A06G032_SYSCTRL_DMAMUX);
+
+	spin_unlock_irqrestore(&sysctrl_priv->lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(r9a06g032_sysctrl_set_dmamux);
 
 /* register/bit pairs are encoded as an uint16_t */
 static void
@@ -504,7 +532,7 @@ r9a06g032_register_gate(struct r9a06g032_priv *clocks,
 {
 	struct clk *clk;
 	struct r9a06g032_clk_gate *g;
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 
 	g = kzalloc(sizeof(*g), GFP_KERNEL);
 	if (!g)
@@ -604,20 +632,19 @@ r9a06g032_div_clamp_div(struct r9a06g032_clk_div *clk,
 	return div;
 }
 
-static long
-r9a06g032_div_round_rate(struct clk_hw *hw,
-			 unsigned long rate, unsigned long *prate)
+static int
+r9a06g032_div_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 {
 	struct r9a06g032_clk_div *clk = to_r9a06g032_div(hw);
-	u32 div = DIV_ROUND_UP(*prate, rate);
+	u32 div = DIV_ROUND_UP(req->best_parent_rate, req->rate);
 
 	pr_devel("%s %pC %ld (prate %ld) (wanted div %u)\n", __func__,
-		 hw->clk, rate, *prate, div);
+		 hw->clk, req->rate, req->best_parent_rate, div);
 	pr_devel("   min %d (%ld) max %d (%ld)\n",
-		 clk->min, DIV_ROUND_UP(*prate, clk->min),
-		clk->max, DIV_ROUND_UP(*prate, clk->max));
+		 clk->min, DIV_ROUND_UP(req->best_parent_rate, clk->min),
+		 clk->max, DIV_ROUND_UP(req->best_parent_rate, clk->max));
 
-	div = r9a06g032_div_clamp_div(clk, rate, *prate);
+	div = r9a06g032_div_clamp_div(clk, req->rate, req->best_parent_rate);
 	/*
 	 * this is a hack. Currently the serial driver asks for a clock rate
 	 * that is 16 times the baud rate -- and that is wildly outside the
@@ -630,11 +657,13 @@ r9a06g032_div_round_rate(struct clk_hw *hw,
 	if (clk->index == R9A06G032_DIV_UART ||
 	    clk->index == R9A06G032_DIV_P2_PG) {
 		pr_devel("%s div uart hack!\n", __func__);
-		return clk_get_rate(hw->clk);
+		req->rate = clk_get_rate(hw->clk);
+		return 0;
 	}
+	req->rate = DIV_ROUND_UP(req->best_parent_rate, div);
 	pr_devel("%s %pC %ld / %u = %ld\n", __func__, hw->clk,
-		 *prate, div, DIV_ROUND_UP(*prate, div));
-	return DIV_ROUND_UP(*prate, div);
+		 req->best_parent_rate, div, req->rate);
+	return 0;
 }
 
 static int
@@ -663,7 +692,7 @@ r9a06g032_div_set_rate(struct clk_hw *hw,
 
 static const struct clk_ops r9a06g032_clk_div_ops = {
 	.recalc_rate = r9a06g032_div_recalc_rate,
-	.round_rate = r9a06g032_div_round_rate,
+	.determine_rate = r9a06g032_div_determine_rate,
 	.set_rate = r9a06g032_div_set_rate,
 };
 
@@ -674,7 +703,7 @@ r9a06g032_register_div(struct r9a06g032_priv *clocks,
 {
 	struct r9a06g032_clk_div *div;
 	struct clk *clk;
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	unsigned int i;
 
 	div = kzalloc(sizeof(*div), GFP_KERNEL);
@@ -758,7 +787,7 @@ r9a06g032_register_bitsel(struct r9a06g032_priv *clocks,
 {
 	struct clk *clk;
 	struct r9a06g032_clk_bitsel *g;
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 	const char *names[2];
 
 	/* allocate the gate */
@@ -849,7 +878,7 @@ r9a06g032_register_dualgate(struct r9a06g032_priv *clocks,
 {
 	struct r9a06g032_clk_dualgate *g;
 	struct clk *clk;
-	struct clk_init_data init;
+	struct clk_init_data init = {};
 
 	/* allocate the gate */
 	g = kzalloc(sizeof(*g), GFP_KERNEL);
@@ -962,7 +991,17 @@ static int __init r9a06g032_clocks_probe(struct platform_device *pdev)
 	if (error)
 		return error;
 
-	return r9a06g032_add_clk_domain(dev);
+	error = r9a06g032_add_clk_domain(dev);
+	if (error)
+		return error;
+
+	sysctrl_priv = clocks;
+
+	error = of_platform_populate(np, NULL, NULL, dev);
+	if (error)
+		dev_err(dev, "Failed to populate children (%d)\n", error);
+
+	return 0;
 }
 
 static const struct of_device_id r9a06g032_match[] = {

@@ -26,7 +26,7 @@
 #ifndef _UAPI_HYPERV_H
 #define _UAPI_HYPERV_H
 
-#include <linux/uuid.h>
+#include <linux/types.h>
 
 /*
  * Framework version for util services.
@@ -90,6 +90,17 @@ struct hv_vss_check_dm_info {
 	__u32 flags;
 } __attribute__((packed));
 
+/*
+ * struct hv_vss_msg encodes the fields that the Linux VSS
+ * driver accesses. However, FREEZE messages from Hyper-V contain
+ * additional LUN information that Linux doesn't use and are not
+ * represented in struct hv_vss_msg. A received FREEZE message may
+ * be as large as 6,260 bytes, so the driver must allocate at least
+ * that much space, not sizeof(struct hv_vss_msg). Other messages
+ * such as AUTO_RECOVER may be as large as 12,500 bytes. However,
+ * because the Linux VSS driver responds that it doesn't support
+ * auto-recovery, it should not receive such messages.
+ */
 struct hv_vss_msg {
 	union {
 		struct hv_vss_hdr vss_hdr;
@@ -219,7 +230,7 @@ struct hv_do_fcopy {
  * kernel and user-level daemon communicate using a connector channel.
  *
  * The user mode component first registers with the
- * the kernel component. Subsequently, the kernel component requests, data
+ * kernel component. Subsequently, the kernel component requests, data
  * for the specified keys. In response to this message the user mode component
  * fills in the value corresponding to the specified key. We overload the
  * sequence field in the cn_msg header to define our KVP message types.

@@ -1,0 +1,114 @@
+From: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+Date: Tue, 27 Mar 2018 14:19:01 +0200
+Subject: [PATCH 14/31] Add an option to disable lib2to3
+
+lib2to3 is a library to convert Python 2.x code to Python 3.x. As
+such, it is probably not very useful on embedded system targets.
+
+Signed-off-by: Thomas Petazzoni <thomas.petazzoni@free-electrons.com>
+Signed-off-by: Samuel Martin <s.martin49@gmail.com>
+[ Andrey Smirnov: ported to Python 3.6 ]
+Signed-off-by: Andrey Smirnov <andrew.smirnov@gmail.com>
+---
+ Makefile.pre.in | 16 ++++++++++++----
+ configure.ac    |  7 +++++++
+ setup.py        |  5 +++--
+ 3 files changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/Makefile.pre.in b/Makefile.pre.in
+index ffef482a00..9346079c3c 100644
+--- a/Makefile.pre.in
++++ b/Makefile.pre.in
+@@ -1395,7 +1395,9 @@
+ 	(cd $(DESTDIR)$(BINDIR); $(LN) -s pydoc$(VERSION) pydoc3)
+ endif
+ 	-rm -f $(DESTDIR)$(BINDIR)/2to3
++ifeq (@LIB2TO3@,yes)
+ 	(cd $(DESTDIR)$(BINDIR); $(LN) -s 2to3-$(VERSION) 2to3)
++endif
+ 	if test "x$(LIPO_32BIT_FLAGS)" != "x" ; then \
+ 		rm -f $(DESTDIR)$(BINDIR)/python3-32$(EXE); \
+ 		(cd $(DESTDIR)$(BINDIR); $(LN) -s python$(VERSION)-32$(EXE) python3-32$(EXE)) \
+@@ -1441,7 +1443,6 @@
+ 		idlelib idlelib/Icons \
+ 		importlib importlib/metadata \
+ 		json \
+-		lib2to3 lib2to3/fixes lib2to3/pgen2 \
+ 		logging \
+ 		multiprocessing multiprocessing/dummy \
+ 		site-packages \
+@@ -1458,10 +1459,6 @@
+ TESTSUBDIRS=	ctypes/test \
+ 		distutils/tests \
+ 		idlelib/idle_test \
+-		lib2to3/tests \
+-		lib2to3/tests/data \
+-		lib2to3/tests/data/fixers \
+-		lib2to3/tests/data/fixers/myfixes \
+ 		sqlite3/test \
+ 		test test/audiodata \
+ 		test/capath test/cjkencodings \
+@@ -1533,6 +1530,15 @@
+ 
+ ifeq (@PYDOC@,yes)
+ LIBSUBDIRS += pydoc_data
++endif
++
++ifeq (@LIB2TO3@,yes)
++LIBSUBDIRS += lib2to3 lib2to3/fixes lib2to3/pgen2
++TESTSUBDIRS += \
++	lib2to3/tests \
++	lib2to3/tests/data \
++	lib2to3/tests/data/fixers \
++	lib2to3/tests/data/fixers/myfixes
+ endif
+ 
+ TEST_MODULES=@TEST_MODULES@
+
+@@ -1650,10 +1650,6 @@
+ 		-j0 -d $(LIBDEST)/site-packages -f \
+ 		-x badsyntax $(DESTDIR)$(LIBDEST)/site-packages
+ endif
+-	-PYTHONPATH=$(DESTDIR)$(LIBDEST) $(RUNSHARED) \
+-		$(PYTHON_FOR_BUILD) -m lib2to3.pgen2.driver $(DESTDIR)$(LIBDEST)/lib2to3/Grammar.txt
+-	-PYTHONPATH=$(DESTDIR)$(LIBDEST) $(RUNSHARED) \
+-		$(PYTHON_FOR_BUILD) -m lib2to3.pgen2.driver $(DESTDIR)$(LIBDEST)/lib2to3/PatternGrammar.txt
+ 
+ # bpo-21536: Misc/python-config.sh is generated in the build directory
+ # from $(srcdir)Misc/python-config.sh.in.
+diff --git a/configure.ac b/configure.ac
+index 92b7eb4916..73638b302e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -3233,6 +3233,13 @@ AC_ARG_ENABLE(test-modules,
+ 	[ TEST_MODULES="${enableval}" ], [ TEST_MODULES=yes ])
+ AC_MSG_RESULT($TEST_MODULES)
+ 
++AC_SUBST(LIB2TO3)
++AC_MSG_CHECKING(for --disable-lib2to3)
++AC_ARG_ENABLE(lib2to3,
++	AS_HELP_STRING([--disable-lib2to3], [disable lib2to3]),
++	[ LIB2TO3="${enableval}" ], [ LIB2TO3=yes ])
++AC_MSG_RESULT($LIB2TO3)
++
+ # Check for enable-ipv6
+ AH_TEMPLATE(ENABLE_IPV6, [Define if --enable-ipv6 is specified])
+ AC_MSG_CHECKING([if --enable-ipv6 is specified])
+diff --git a/setup.py b/setup.py
+index 51c003a1eb..c83fdf9d83 100644
+--- a/setup.py
++++ b/setup.py
+@@ -2373,10 +2373,11 @@ def main():
+     import warnings
+     warnings.filterwarnings("ignore",category=DeprecationWarning)
+ 
+-    scripts = ['Tools/scripts/idle3', 'Tools/scripts/2to3',
+-               'Tools/scripts/pyvenv']
++    scripts = ['Tools/scripts/idle3', 'Tools/scripts/pyvenv']
+     if not '--disable-pydoc' in sysconfig.get_config_var("CONFIG_ARGS"):
+         scripts += [ 'Tools/scripts/pydoc3' ]
++    if not '--disable-lib2to3' in sysconfig.get_config_var("CONFIG_ARGS"):
++        scripts += [ 'Tools/scripts/2to3' ]
+ 
+     setup(# PyPI Metadata (PEP 301)
+           name = "Python",

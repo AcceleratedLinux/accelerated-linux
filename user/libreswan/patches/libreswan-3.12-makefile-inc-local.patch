@@ -9,7 +9,7 @@
 +ifneq ($(CONFIG_OCF_CRYPTODEV),)
 +HAVE_OCF := true
 +endif
-+ifneq ($(CONFIG_LIB_LIBSSL),)
++ifneq ($(CONFIG_LIB_OPENSSL),)
 +HAVE_OPENSSL := true
 +endif
 +ifneq ($(CONFIG_USER_FLATFSD_FLATFSD),)

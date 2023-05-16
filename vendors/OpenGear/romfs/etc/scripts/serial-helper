@@ -1,0 +1,320 @@
+#!/bin/sh
+
+# The max ports from feature set or based on model name stored in feature set
+# or configuration data (The max number of phys ports the device was configured
+# at manuf time)
+serial_get_max_ports () {
+	serial_max_ports=$(setfset -qs 2>/dev/null)
+	serial_max_ports=${serial_max_ports#*: }
+	if [ -z "$serial_max_ports" ]; then
+		local model
+		if model=$(setfset -qm 2>/dev/null) && [ -n "$model" ]; then
+			# strip "Model: " prefix...
+			model="${model#*: }"
+		elif model=$(config -g config.system.model) && [ -n "$model" ]; then
+			model="${model#* }"
+		else
+			model="unknown96"
+		fi
+
+		if [ $model = "trd" ]; then
+			serial_max_ports=4
+		else
+			# strip "-*" suffix...
+			model="${model%%-*}"
+			# get count from name formats like:
+			# LES1516A, ACM7004-5, ACM5503,
+			# but NOT B095-004-1E
+			serial_max_ports=$(echo $model | sed 's/[A-Z]*[0-9]*\([0-9][0-9]\).*/\1/g')
+			# strip leading zero...
+			serial_max_ports=${serial_max_ports#0}
+		fi
+		logger -t serial-helper -p DEBUG \
+			"bad setfset; guessed max ports $serial_max_ports"
+	fi
+	echo $serial_max_ports
+}
+
+# Tests if this device was factory-configured for GPS
+serial_has_gps_feature () {
+	[[ $(setfset -qf) == *gps* ]] ||
+	[[ $(setfset -qm) == "Model: IM72"* ]]   # Assume IM72xx always has GPS
+}
+
+#
+# /dev/serial/by-id/ - Is a standard udev directory for aliasing system serial devices
+#   populated using manufacturer and model details.
+#
+# Example listing of /dev/serial/by-id/
+#   usb-Sierra_Wireless__Incorporated_MC7354-if00-port0 -> ../../ttyUSB0
+#   usb-Sierra_Wireless__Incorporated_MC7354-if02-port0 -> ../../ttyUSB1
+#   usb-Sierra_Wireless__Incorporated_MC7354-if03-port0 -> ../../ttyUSB2
+#
+# /dev/serial/by-opengear-id - Is a custom directory populated by udev callback
+#  scripts which alias system serial directories using the expected portmanager
+#  device names. For example:
+#
+# Example listing of /dev/serial/by-opengear-id/
+#   cellcommand01 -> /dev/ttyUSB2
+#   port01 -> /dev/ttyS0
+#   port02 -> /dev/ttyS1
+#   port03 -> /dev/ttyS2
+#   port04 -> /dev/ttyS3
+#
+
+serial_create_device() {
+
+	device=$1
+	og_id=$2
+	id=$3
+	path=$4
+
+	if [ ! -d /dev/serial ]
+	then
+		mkdir -m 755 /dev/serial
+	fi
+
+	if [ -n "$og_id" ]
+	then
+		if [ ! -d /dev/serial/by-opengear-id ]
+		then
+			mkdir -m 755 /dev/serial/by-opengear-id
+		fi
+		( cd /dev/serial/by-opengear-id/ ; ln -sf "$device" "$og_id" ; )
+	fi
+
+	if [ -n "$id" ]
+	then
+		if [ ! -d /dev/serial/by-id ]
+		then
+			mkdir -m 755 /dev/serial/by-id
+		fi
+		( cd /dev/serial/by-id/ ; ln -sf "$device" "$id" ; )
+	fi
+
+	if [ -n "$path" ]
+	then
+		if [ ! -d /dev/serial/by-path ]
+		then
+			mkdir -m 755 /dev/serial/by-path
+		fi
+		( cd /dev/serial/by-path/ ; ln -sf "$device" "$path" ; )
+	fi
+}
+
+serial_delete_device() {
+	device=$1
+	og_id=$2
+	id=$3
+	path=$4
+
+	[ -n "$og_id" ] && rm -f /dev/serial/by-opengear-id/$og_id
+	[ -n "$id" ] && rm -f /dev/serial/by-id/$id
+	[ -n "$path" ] && rm -f /dev/serial/by-path/$path
+}
+
+serial_cellmodem_manage() {
+	operation=$1
+	devname=$2
+	devpath=$3
+
+	op_func=""
+	case $operation in
+	create)
+		op_func="serial_create_device"
+		;;
+	delete)
+		op_func="serial_delete_device"
+		;;
+	*)
+		logger -t mdev-serial "Unsupported action: $operation"
+		return
+	esac
+
+	# get MODEL as lowercase device string
+	MODEL=$(tr A-Z a-z </etc/version | sed -e 's, .*,,;s,.*/,,')
+	read vendor       </sys$devpath/idVendor
+	read prodid       </sys$devpath/idProduct
+	read manufacturer </sys$devpath/manufacturer
+	read product      </sys$devpath/product
+
+	logger -t mdev-serial "vendor: $vendor prodid: $prodid manufacturer: $manufacturer product: $product"
+
+	# We only get called from MDEV once for the MC8795V but we need to set
+	# up multiple devices
+	# e.g. IM42xx "$devpath" is "/devices/pci0000:00/0000:00:0c.2/usb1/1-4"
+	if [[ $manufacturer == Sierra* ]]; then
+
+		# Perform Gobi modem setup (not ModemManager)
+		if [ -f "/lib/modules/`uname -r`/kernel/drivers/usb/serial/sierra.ko" ]; then
+			if [[ $product == MC87* ]]; then
+				gps_dev=""
+				if [ -x /bin/setfset ]; then 
+					OPTS=`/bin/setfset -qf | cut -f3 -d' '`
+					if echo $OPTS | grep "3g-gps" &> /dev/null ; then
+						logger -t mdev-serial "Found MC87 3g-gps cellnmea01 at ttyUSB2"
+						gps_dev="ttyUSB2"
+					fi
+				fi
+
+				if [ ! -z "$gps_dev" ]; then
+					$op_func "ttyUSB2" "cellnmea01" "cellnmea01" "pci0000:00-0000:00:0c.2-usb2"
+				fi
+				$op_func "ttyUSB3" "cellcommand01" "cellcommand01" "pci0000:00-0000:00:0c.2-usb3"
+				$op_func "ttyUSB6" "cellmodem01" "cellmodem01" "pci0000:00-0000:00:0c.2-usb6"
+				return
+	
+			elif [[ $product == "HSPA Modem"* ]] || [[ $product == C888* ]]; then
+				$op_func "ttyUSB3" "cellcommand01" "cellcommand01"  "$manufacturer-$product-usb3"
+				$op_func "ttyUSB6" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb6"
+
+				logger -t mdev-serial "Found HSPA|C888 $devpath"
+				return
+			elif [[ $product == *MC57* ]] || [[ $vendor == 1199 && $prodid == 0028 ]]; then
+				$op_func "ttyUSB0" "cellcommand01" "cellcommand01"  "$manufacturer-$product-usb0"
+				$op_func "ttyUSB0" "cellmodem01" "cellmodem01"  "$manufacturer-$product-usb0"
+				logger -t mdev-serial "Found *MC57* $devpath"
+				return
+			elif [[ $product == "Sierra Wireless USB 598"* ]]; then
+				$op_func "ttyUSB0" "cellcommand01" "cellcommand01"  "$manufacturer-$product-usb0"
+				$op_func "ttyUSB0" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb0"
+				logger -t mdev-serial "Found Sierra Wireless USB 598 $devpath"
+				return
+			elif [[ $product == *"USB 308"* ]] || [[ $product == *"AirCard 31"[0-9]U* ]]; then
+				$op_func "ttyUSB2" "cellcommand01" "cellcommand01"  "$manufacturer-$product-usb2"
+				$op_func "ttyUSB3" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb3"
+				logger -t mdev-serial "Found 'USB 308'* or AirCard 31*U* $devpath"
+				return
+			# DirectIP Sierra Modem
+			elif [[ $product == MC77* ]] && [[ $Vendor == 1199 && $prodid == 68a3 ]]; then
+				$op_func "ttyUSB3" "cellcommand01" "cellcommand01" "$manufacturer-$product-usb3"
+				$op_func "ttyUSB3" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb3"
+				logger -t mdev-serial "Found 'USB 308'* or AirCard 31*U* $devpath"
+				return
+			elif [[ $product == *320U* ]]; then
+				$op_func "ttyUSB2" "cellcommand01" "cellcommand01"  "$manufacturer-$product-usb2"
+				$op_func "ttyUSB2" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb2"
+				logger -t mdev-serial "Found *'320U'* $devpath"
+				return
+			# Sierra Gobi
+			elif [[ $product == MC77* ]] || [[ $product == MC73* ]]; then
+				case "$MODEL" in
+				acm700x | les160xa | acm7004-5 | cm71xx | cm7196 | im72xx)
+					$op_func "ttyUSB1" "cellnmea01" "cellnmea01" "$manufacturer-$product-usb1"
+					;;
+				*)
+					if [ -x /bin/setfset ]; then
+						OPTS=`/bin/setfset -qf | cut -f3 -d' '`
+						if echo $OPTS | grep "lte-gps" &> /dev/null ; then
+							> /var/run/.modem/cellmodem_has_gps
+							$op_func "ttyUSB1" "cellnmea01" "cellnmea01" "$manufacturer-$product-usb1"
+						fi
+					fi
+				;;
+				esac
+				if [ "$MODEL" != im72xx ] &&
+					[ "$MODEL" != cm7196 ] &&
+					[ "$MODEL" != cm71xx ] &&
+					[ "$MODEL" != acm700x ] &&
+					[ "$MODEL" != les160xa ] &&
+					[ "$MODEL" != acm7004-5 ]; then
+					$op_func "ttyUSB2" "cellcommand01" "cellcommand01" "$manufacturer-$product-usb2"
+					$op_func "ttyUSB2" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb2"
+				fi
+				return
+
+			fi
+			# Initialise pantech cellular modem
+		elif [[ $manufacturer == "Pantech, Incorporated"* ]]; then
+			if [[ $product == "PANTECH UML290"* ]]; then
+				logger -t mdev-serial "Found *PANTECH UML290* $devpath"
+				$op_func "ttyUSB2" "cellcommand01" "cellcommand01" "$manufacturer-$product-usb2"
+				$op_func "ttyACM0" "cellmodem01" "cellmodem01"  "$manufacturer-$product-acm0"
+				return
+			fi
+
+		# Initialise LG cellular modem
+		elif [[ $manufacturer == "LG ELECTRONICSInc"* ]]; then
+			if grep [[ $product == "LG UDC-AHB Subsystem"* ]]; then
+				logger -t mdev-serial "Found LG UDC-AHB* $devpath"
+				$op_func "ttyACM0" "cellcommand01" "cellcommand01" "$manufacturer-$product-acm0"
+				$op_func "ttyACM0" "cellmodem01" "cellmodem01" "$manufacturer-$product-acm0"
+				return
+			fi
+		fi
+	fi
+
+	if [ -x /sbin/ModemManager ]; then
+
+		# Initialise Modem Manager cellmodem
+		PROBE_COUNT=0
+		PROBE_MAX=12
+
+		if [[ $manufacturer == "Sierra Wireless"* ]]; then
+
+			if [[ $prodid == 68a2 ]]; then
+				# MC77x0 (MDM9200/MDM9600 UMTS) in QMI mode
+				# (Ref: AirCard/AirPrime USB Driver Developer's Guide)
+				#   1.0 DM    (Qualcomm diag)
+				#   1.2 NMEA
+				#   1.3 AT    (Modem port with AT commands)
+				#   1.8 NET   (QMI network interface)
+				# TODO: This is based on an MC7750, check with MC7700 & MC7710
+				$op_func "ttyUSB2" "cellmodem01" "cellmodem01" "$manufacturer-$product-1.3-usb2"
+				$op_func "ttyUSB1" "cellnmea01" "cellnmea01" "$manufacturer-$product-1.2-usb1"
+				$op_func "ttyUSB2" "cellcommand01" "cellcommand01" "$manufacturer-$product-1.3-usb2"
+			elif [[ $prodid == 68c0 ]]; then
+				# MC73xx in QMI mode
+				# (Ref: AirPrime MC73xx USB Driver Developer's Guide)
+				#   1.0 DIAG   (fw download, logs) [ttyUSB0]
+				#   1.2 NMEA   (GNSS sentences)    [ttyUSB1]
+				#   1.3 MODEM  (AT port)           [ttyUSB2]
+				#   1.4 AT     (control and status)
+				#   1.8 RMNET1
+				#  1.10 RMNET2
+				#  1.11 RMNET3
+				#  1.16 AUDIO
+				#  1.17 AUDIO
+				#  1.18 AUDIO
+				$op_func "ttyUSB2" "cellmodem01" "cellmodem01" "$manufacturer-$product-1.3-usb2"
+				$op_func "ttyUSB1" "cellnmea01" "cellnmea01" "$manufacturer-$product-1.2-usb1"
+				$op_func "ttyUSB2" "cellcommand01" "cellcommand01" "$manufacturer-$product-1.3-usb2"
+			fi
+			
+		elif [[ $manufacturer == "HUAWEI Technology"* ]]; then
+			# ME909u-521 (3.16.6u4)
+			#
+			# /dev/cellcommand01 -> /dev/ttyUSB0
+			# /dev/cellmodem01 -> /dev/ttyUSB1
+			# /dev/cellnmea01 -> port09
+			# /dev/port09 -> /dev/ttyUSB3
+			#
+			# ME209u-526 (3.16.6u4 GPS not supported)
+			#
+			# /dev/cellcommand01 -> /dev/ttyUSB0
+			# /dev/cellmodem01 -> /dev/ttyUSB1
+			#
+			$op_func "ttyUSB0" "cellcommand01" "cellcommand01" "$manufacturer-$product-usb0"
+			$op_func "ttyUSB1" "cellmodem01" "cellmodem01" "$manufacturer-$product-usb1"
+			if [ "$MODEL" != im72xx ] &&
+					[ "$MODEL" != cm7196 ] &&
+					[ "$MODEL" != cm71xx ] &&
+					[ "$MODEL" != acm700x ] &&
+					[ "$MODEL" != les160xa ] &&
+					[ "$MODEL" != acm7004-5 ]; then
+				# Some models do not support NMEA
+				if [ -e "/dev/ttyUSB3" ]; then
+					$op_func "ttyUSB3" "cellnmea01" "cellnmea01" "$manufacturer-$product-usb3"
+				fi
+			fi
+		fi
+	fi
+}
+
+# this __MUST__ be at the VERY end of the file - do NOT move!!
+#
+# Local Variables:
+# c-basic-offset: 8
+# tab-width: 8
+# end:
+# vi: tabstop=8 shiftwidth=8 textwidth=79 noexpandtab

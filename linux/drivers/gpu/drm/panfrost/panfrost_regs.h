@@ -51,6 +51,10 @@
 #define GPU_STATUS			0x34
 #define   GPU_STATUS_PRFCNT_ACTIVE	BIT(2)
 #define GPU_LATEST_FLUSH_ID		0x38
+#define GPU_PWR_KEY			0x50	/* (WO) Power manager key register */
+#define  GPU_PWR_KEY_UNLOCK		0x2968A819
+#define GPU_PWR_OVERRIDE0		0x54	/* (RW) Power manager override settings */
+#define GPU_PWR_OVERRIDE1		0x58	/* (RW) Power manager override settings */
 #define GPU_FAULT_STATUS		0x3C
 #define GPU_FAULT_ADDRESS_LO		0x40
 #define GPU_FAULT_ADDRESS_HI		0x44
@@ -78,6 +82,7 @@
 
 #define GPU_TEXTURE_FEATURES(n)		(0x0B0 + ((n) * 4))
 #define GPU_JS_FEATURES(n)		(0x0C0 + ((n) * 4))
+#define GPU_AFBC_FEATURES		(0x4C)	/* (RO) AFBC support on Bifrost */
 
 #define GPU_SHADER_PRESENT_LO		0x100	/* (RO) Shader core present bitmap, low word */
 #define GPU_SHADER_PRESENT_HI		0x104	/* (RO) Shader core present bitmap, high word */
@@ -203,6 +208,7 @@
 #define JM_MAX_JOB_THROTTLE_LIMIT	0x3F
 #define JM_FORCE_COHERENCY_FEATURES_SHIFT 2
 #define JM_IDVS_GROUP_SIZE_SHIFT	16
+#define JM_DEFAULT_IDVS_GROUP_SIZE	0xF
 #define JM_MAX_IDVS_GROUP_SIZE		0x3F
 
 
@@ -257,9 +263,6 @@
 #define JS_COMMAND_SOFT_STOP_1		0x06	/* Execute SOFT_STOP if JOB_CHAIN_FLAG is 1 */
 #define JS_COMMAND_HARD_STOP_1		0x07	/* Execute HARD_STOP if JOB_CHAIN_FLAG is 1 */
 
-#define JS_STATUS_EVENT_ACTIVE		0x08
-
-
 /* MMU regs */
 #define MMU_INT_RAWSTAT			0x2000
 #define MMU_INT_CLEAR			0x2004
@@ -290,7 +293,7 @@
 #define AS_FAULTADDRESS_LO(as)		(MMU_AS(as) + 0x20) /* (RO) Fault Address for address space n, low word */
 #define AS_FAULTADDRESS_HI(as)		(MMU_AS(as) + 0x24) /* (RO) Fault Address for address space n, high word */
 #define AS_STATUS(as)			(MMU_AS(as) + 0x28) /* (RO) Status flags for address space n */
-/* Additional Bifrost AS regsiters */
+/* Additional Bifrost AS registers */
 #define AS_TRANSCFG_LO(as)		(MMU_AS(as) + 0x30) /* (RW) Translation table configuration for address space n, low word */
 #define AS_TRANSCFG_HI(as)		(MMU_AS(as) + 0x34) /* (RW) Translation table configuration for address space n, high word */
 #define AS_FAULTEXTRA_LO(as)		(MMU_AS(as) + 0x38) /* (RO) Secondary fault address for address space n, low word */
@@ -313,6 +316,8 @@
 #define AS_FAULTSTATUS_ACCESS_TYPE_EX		(0x1 << 8)
 #define AS_FAULTSTATUS_ACCESS_TYPE_READ		(0x2 << 8)
 #define AS_FAULTSTATUS_ACCESS_TYPE_WRITE	(0x3 << 8)
+
+#define AS_LOCK_REGION_MIN_SIZE                 (1ULL << 15)
 
 #define gpu_write(dev, reg, data) writel(data, dev->iomem + reg)
 #define gpu_read(dev, reg) readl(dev->iomem + reg)

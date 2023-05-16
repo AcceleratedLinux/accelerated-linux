@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# This script is a workaround for when we are a DHCPv6 client behind a DHCPv6
+# relay. We ping the router (because it is also the relay) so that its neighbour
+# cache is kept warm with our interface's link-local address. Otherwise, when it
+# goes to relay packets back to us, its doesn't know which link to talk to us on
+#
+# To activate, setup "config.system.ipv6.ping_gw.enabled" to "on"
+#
+# This workaround should be abandoned when the relay becomes able to send reply
+# traffic destinating client's link-local addresses via the specified lower
+# interface (instead of always via the interface whose route is preferred)
+
+if [ "$(config -g config.system.ipv6.ping_gw.enabled | cut -f2- -d' ')" != "on" ]; then
+	exit 0
+fi
+
+INTERFACE=$1
+[ -z "$INTERFACE" ] && exit 0
+
+GWFILE=/tmp/ipv6-${INTERFACE}.gateway
+/bin/ip -6 r show dev $INTERFACE | grep default > $GWFILE
+
+while read line; do
+	address=`echo $line | cut -d' ' -f3`
+	if [ -z "$address" ]; then
+		continue;
+	fi
+
+	ping6 -I $INTERFACE $address -c 1
+
+done < $GWFILE
+
+rm $GWFILE
+
+exit 0

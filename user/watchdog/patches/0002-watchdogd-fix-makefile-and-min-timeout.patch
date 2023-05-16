@@ -1,0 +1,76 @@
+From b9748c95a473c854c6d3552461dbde93f42ca83e Mon Sep 17 00:00:00 2001
+From: Walter Hagstrom <walter.hagstrom@digi.com>
+Date: Sun, 2 Oct 2022 11:44:16 -0400
+Subject: [PATCH] watchdogd: fix makefile and min timeout
+
+Don't allow specifying a timeout of two seconds, the Intel iTCO driver
+doesn't allow that, so we don't allow a timeout of less than four
+seconds.
+
+Add dependency for libwdog.la to applications to avoid build
+error.
+---
+ src/Makefile.am | 21 ++++++++++++---------
+ src/wdt.c       |  8 +++++++-
+ 2 files changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/src/Makefile.am b/src/Makefile.am
+index 4c962ae..904a557 100644
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -23,15 +23,6 @@ if GENERIC_PLUGIN
+ watchdogd_SOURCES  += generic.c		generic.h
+ endif
+ 
+-watchdogd_CPPFLAGS  = -D_GNU_SOURCE -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_XOPEN_SOURCE
+-watchdogd_CPPFLAGS += -DSYSCONFDIR=\"@sysconfdir@\"
+-watchdogd_CFLAGS    = $(uev_CFLAGS) $(lite_CFLAGS) $(confuse_CFLAGS) $(AM_CFLAGS)
+-watchdogd_LDADD     = $(uev_LIBS)   $(lite_LIBS) $(confuse_LIBS) libwdog.la
+-
+-watchdogctl_SOURCES = watchdogctl.c
+-watchdogctl_CFLAGS  = $(lite_CFLAGS) $(AM_CFLAGS)
+-watchdogctl_LDADD   = $(lite_LIBS) libwdog.la
+-
+ lib_LTLIBRARIES     = libwdog.la
+ pkgconfigdir        = $(libdir)/pkgconfig
+ pkgconfig_DATA      = libwdog.pc
+@@ -41,3 +32,15 @@ libwdog_la_SOURCES  = wdog.c	wdog.h  compat.h
+ libwdog_la_CFLAGS   = $(lite_CFLAGS) $(AM_CFLAGS)
+ libwdog_la_LDFLAGS  = -version-info 2:0:0
+ 
++watchdogd_CPPFLAGS  = -D_GNU_SOURCE -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_XOPEN_SOURCE
++watchdogd_CPPFLAGS += -DSYSCONFDIR=\"@sysconfdir@\"
++watchdogd_CFLAGS    = $(uev_CFLAGS) $(lite_CFLAGS) $(confuse_CFLAGS) $(AM_CFLAGS)
++watchdogd_LDADD     = $(uev_LIBS)   $(lite_LIBS) $(confuse_LIBS) -L./.libs -lwdog
++watchdogd_DEPENDENCIES = libwdog.la
++
++watchdogctl_SOURCES = watchdogctl.c
++watchdogctl_CFLAGS  = $(lite_CFLAGS) $(AM_CFLAGS)
++watchdogctl_LDADD   = $(lite_LIBS)  -L./.libs -lwdog
++watchdogctl_DEPENDENCIES = libwdog.la
++
++
+diff --git a/src/wdt.c b/src/wdt.c
+index 5b2f64c..d13fbd9 100644
+--- a/src/wdt.c
++++ b/src/wdt.c
+@@ -204,9 +204,15 @@ int wdt_set_timeout(int count)
+ 		return 1;
+ 	}
+ 
+-	DEBUG("Setting watchdog timeout to %d sec.", count);
++	// We cannot set the watchdog to a value of less than 4 seconds
++	arg = (arg < 4) ? 4 : arg;
++
++	DEBUG("Setting watchdog timeout to %d sec.", arg);
+ 	if (ioctl(fd, WDIOC_SETTIMEOUT, &arg))
++	{
++		PERROR("Failed setting watchdog timeout");
+ 		return 1;
++	}
+ 
+ 	return 0;
+ }
+-- 
+2.34.1
+

@@ -29,8 +29,12 @@ static void handle_nonesp(struct espintcp_ctx *ctx, struct sk_buff *skb,
 
 static void handle_esp(struct sk_buff *skb, struct sock *sk)
 {
+	struct tcp_skb_cb *tcp_cb = (struct tcp_skb_cb *)skb->cb;
+
 	skb_reset_transport_header(skb);
-	memset(skb->cb, 0, sizeof(skb->cb));
+
+	/* restore IP CB, we need at least IP6CB->nhoff */
+	memmove(skb->cb, &tcp_cb->header, sizeof(tcp_cb->header));
 
 	rcu_read_lock();
 	skb->dev = dev_get_by_index_rcu(sock_net(sk), skb->skb_iif);
@@ -127,15 +131,13 @@ static int espintcp_parse(struct strparser *strp, struct sk_buff *skb)
 }
 
 static int espintcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
-			    int nonblock, int flags, int *addr_len)
+			    int flags, int *addr_len)
 {
 	struct espintcp_ctx *ctx = espintcp_getctx(sk);
 	struct sk_buff *skb;
 	int err = 0;
 	int copied;
 	int off = 0;
-
-	flags |= nonblock ? MSG_DONTWAIT : 0;
 
 	skb = __skb_recv_datagram(sk, &ctx->ike_queue, flags, &off, &err);
 	if (!skb) {

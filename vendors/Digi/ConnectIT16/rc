@@ -11,11 +11,14 @@ mount -t tmpfs -o size=256M tmpfs /var
 mkdir -m 755 /dev/hugepages
 mount -t hugetlbfs none /dev/hugepages
 mkdir -m 1777 /var/tmp
-mkdir -m 755 /var/log
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 64
 
 ledcmd -F STATUS_BLUE -F STATUS_REAR_BLUE -O WWAN_SERV_BLUE -O WWAN_SIG_BLUE
 
@@ -56,6 +59,10 @@ ln -s ${DRIVE}1 /dev/flash/efi
 ln -s ${DRIVE}2 /dev/flash/image
 ln -s ${DRIVE}3 /dev/flash/image1
 ln -s ${DRIVE}4 /dev/flash/opt
+
+# The places that runt usually looks for cpu temperature don't work for this
+# platform, so set up the working location
+ln -s /sys/class/hwmon/hwmon1/temp1_input /var/run/cpu_temp
 
 # /efi filesystem
 mount /dev/flash/efi /efi
@@ -134,7 +141,7 @@ fi
 
 if [ -f /etc/config/.init ]; then
 	echo "Factory defaulting config ..."
-	filter="($|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/random-seed)"
 	[ -f /etc/config/.init2 ] && filter='($|/random-seed)'
 	touch /etc/config/.init2
 	find /etc/config -name '*' |

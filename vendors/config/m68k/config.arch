@@ -85,7 +85,7 @@ endif
 # Either configure $(CONFIGURE_OPTS)
 # or     configure --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
 #
-TARGETARCH    := $(CROSS)linux
+TARGETARCH    := m68k-linux
 HOSTARCH      := $(shell sh $(ROOTDIR)/tools/config.guess)
 CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH)
 
@@ -138,7 +138,6 @@ ifdef UCLINUX_BUILD_USER
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
-	LDFLAGS  += -fno-common -fno-builtin
 
 	CXXFLAGS = $(CFLAGS) -nostdinc++ -fno-exceptions
 	CXXSUP :=  $(shell $(CXX) -print-file-name=libsupc++.a)

@@ -1,23 +1,42 @@
-From: Samuel Brian <samuel.brian@digi.com>
-Date: Fri, 16 Aug 2019 14:35:18 +1000
-Subject: mbim: poll for SMS
+From b78db70529740bdc3bcab98d60b02ce3ddd884af Mon Sep 17 00:00:00 2001
+From: Walter Hagstrom <walter.hagstrom@digi.com>
+Date: Fri, 18 Nov 2022 10:05:53 -0500
+Subject: [PATCH] modem/MBIM: Poll for SMS/Enable notifications
 
-The Telit LE910NA-V2 does not send MBIM events for received SMSs even though
-ModemManager subscribes to them.
-This means that SMSs were read from the modem only when it was transitioning
-from disabled to enabled state.
-This HACK re-runs the SMS enabling process on the signal strength poll
-timer in order to receive SMSs without having to disable and then enable
-the modem.
+The Telit LE910NA-V2 does not send MBIM events for received SMSs even
+though ModemManager subscribes to them. This means that SMSs were read
+from the modem only when it was transitioning from disabled to enabled
+state.  This HACK re-runs the SMS enabling process on the signal
+strength poll timer in order to receive SMSs without having to disable
+and then enable the modem. This only affects the LE910NA-V2 MBIM modem.
 
-This will affect all MBIM modems that do the periodic poll, which right now
-is only the Telit MBIM modems we use.
+NOTE: The above hack causes XHCI errors running on high speed MBIM
+modems, such as the EM9191, so only do this for the LE910NA-V2.
+
+Force enabling SMS notifications in MBIM modems, this allows us to
+receive an notification when SMS messages arrive over MBIM.
 ---
- src/mm-iface-modem.c | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ src/mm-broadband-modem-mbim.c |  4 ++++
+ src/mm-iface-modem.c          | 19 +++++++++++++++++++
+ 2 files changed, 23 insertions(+)
 
+diff --git a/src/mm-broadband-modem-mbim.c b/src/mm-broadband-modem-mbim.c
+index 8954889b..56966b67 100644
+--- a/src/mm-broadband-modem-mbim.c
++++ b/src/mm-broadband-modem-mbim.c
+@@ -3900,6 +3900,10 @@ modem_3gpp_enable_unsolicited_events (MMIfaceModem3gpp *_self,
+     self->priv->enable_flags |= PROCESS_NOTIFICATION_FLAG_CONNECT;
+     self->priv->enable_flags |= PROCESS_NOTIFICATION_FLAG_SUBSCRIBER_INFO;
+     self->priv->enable_flags |= PROCESS_NOTIFICATION_FLAG_PACKET_SERVICE;
++
++    /* SMS notifications don't work on the LE910NA-V2 (FIH7160) */
++    if (g_ascii_strcasecmp(mm_iface_modem_get_model (self), "FIH7160") != 0)
++        self->priv->enable_flags |= PROCESS_NOTIFICATION_FLAG_SMS_READ;
+     if (self->priv->is_pco_supported)
+         self->priv->enable_flags |= PROCESS_NOTIFICATION_FLAG_PCO;
+     if (self->priv->is_lte_attach_status_supported)
 diff --git a/src/mm-iface-modem.c b/src/mm-iface-modem.c
-index 5ec495a8..560aacb0 100644
+index 48105afe..5a45f4e5 100644
 --- a/src/mm-iface-modem.c
 +++ b/src/mm-iface-modem.c
 @@ -22,6 +22,7 @@
@@ -39,15 +58,16 @@ index 5ec495a8..560aacb0 100644
  #define SIGNAL_QUALITY_RECENT_TIMEOUT_SEC 60
  
  #define SIGNAL_CHECK_INITIAL_RETRIES      5
-@@ -1379,6 +1384,19 @@ periodic_signal_check_cb (MMIfaceModem *self)
+@@ -1379,6 +1384,20 @@ periodic_signal_check_cb (MMIfaceModem *self)
      ctx->access_technologies_mask = MM_MODEM_ACCESS_TECHNOLOGY_ANY;
      peridic_signal_check_step (self);
  
 +#if defined WITH_MBIM
-+    /* HACK: LE910NA-V2 does not send the "I've got a new SMS" event over
++    /* HACK: LE910NA-V2 (model=FIH7160) does not send the "I've got a new SMS" event over
 +     * MBIM, so periodically re-enable the messaging interface to recheck
 +     * for SMSs manually. Just do it for all MBIM modems for now. */
-+    if (MM_IS_BROADBAND_MODEM_MBIM(self)) {
++    const gchar *model = mm_iface_modem_get_model (self);
++    if (MM_IS_BROADBAND_MODEM_MBIM(self) && g_ascii_strcasecmp(model, "FIH7160") == 0) {
 +        mm_obj_dbg (self, "Periodic SMS check, re-enabling the Messaging interface...");
 +        mm_iface_modem_messaging_enable (MM_IFACE_MODEM_MESSAGING (self),
 +                                         NULL,
@@ -59,3 +79,6 @@ index 5ec495a8..560aacb0 100644
      /* Remove the timeout and clear the source id */
      if (ctx->timeout_source)
          ctx->timeout_source = 0;
+-- 
+2.34.1
+

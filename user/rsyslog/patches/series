@@ -1,3 +1,4 @@
 fix-multiple-definition.patch
 timezone.patch
 hostname.patch
+zlib.patch

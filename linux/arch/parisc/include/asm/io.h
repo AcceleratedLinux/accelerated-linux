@@ -273,9 +273,9 @@ static inline int inl(unsigned long addr)
 	return -1;
 }
 
-#define outb(x, y)	BUG()
-#define outw(x, y)	BUG()
-#define outl(x, y)	BUG()
+#define outb(x, y)	({(void)(x); (void)(y); BUG(); 0;})
+#define outw(x, y)	({(void)(x); (void)(y); BUG(); 0;})
+#define outl(x, y)	({(void)(x); (void)(y); BUG(); 0;})
 #endif
 
 /*
@@ -303,8 +303,8 @@ extern void outsl (unsigned long port, const void *src, unsigned long count);
 #define ioread64be ioread64be
 #define iowrite64 iowrite64
 #define iowrite64be iowrite64be
-extern u64 ioread64(void __iomem *addr);
-extern u64 ioread64be(void __iomem *addr);
+extern u64 ioread64(const void __iomem *addr);
+extern u64 ioread64be(const void __iomem *addr);
 extern void iowrite64(u64 val, void __iomem *addr);
 extern void iowrite64be(u64 val, void __iomem *addr);
 
@@ -316,9 +316,6 @@ extern void iowrite64be(u64 val, void __iomem *addr);
  */
 #define xlate_dev_mem_ptr(p)	__va(p)
 
-/*
- * Convert a virtual cached pointer to an uncached pointer
- */
-#define xlate_dev_kmem_ptr(p)	p
+extern int devmem_is_allowed(unsigned long pfn);
 
 #endif

@@ -129,7 +129,7 @@ config R8169
 config R8169_NOPROM
 	bool "Realtek 8169 without PROM"
 	depends on R8169
-	---help---
+	help
 	  Say y here if you have 8169 based hardware without the external
 	  EEPROM fitted. Some embedded boards do not use an external EEPROM.
 

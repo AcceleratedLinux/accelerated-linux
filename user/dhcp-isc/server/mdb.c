@@ -65,8 +65,6 @@ static host_id_info_t *host_id_info = NULL;
 
 int numclasseswritten;
 
-omapi_object_type_t *dhcp_type_host;
-
 isc_result_t enter_class(cd, dynamicp, commit)
 	struct class *cd;
 	int dynamicp;

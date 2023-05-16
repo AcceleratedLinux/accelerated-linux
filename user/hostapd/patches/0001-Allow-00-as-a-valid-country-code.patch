@@ -1,0 +1,30 @@
+From 4e994409f3231e5c7b7f058160c372e816b346d6 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 8 Feb 2022 12:32:11 +0100
+Subject: [PATCH] Allow '00' as a valid country code
+
+When kernel validates the country codes, it allows only alphabets
+(countries) and '00' (as world regdom). Do this in here as well.
+---
+ hostapd/config_file.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/hostapd/config_file.c b/hostapd/config_file.c
+index 7313908..dc154e7 100644
+--- a/hostapd/config_file.c
++++ b/hostapd/config_file.c
+@@ -2461,8 +2461,9 @@ static int hostapd_config_fill(struct hostapd_config *conf,
+ 	} else if (os_strcmp(buf, "skip_inactivity_poll") == 0) {
+ 		bss->skip_inactivity_poll = atoi(pos);
+ 	} else if (os_strcmp(buf, "country_code") == 0) {
+-		if (pos[0] < 'A' || pos[0] > 'Z' ||
+-		    pos[1] < 'A' || pos[1] > 'Z') {
++		if ((pos[0] < 'A' || pos[0] > 'Z' ||
++		     pos[1] < 'A' || pos[1] > 'Z') &&
++		    (pos[0] != '0' || pos[1] != '0')) {
+ 			wpa_printf(MSG_ERROR,
+ 				   "Line %d: Invalid country_code '%s'",
+ 				   line, pos);
+-- 
+2.27.0
+

@@ -1,0 +1,19 @@
+#!/bin/bash
+# This script is called (from wwan-conn) when a wwanN interface goes down
+
+MODEM=cellmodem
+IFNAME=$1
+LINKNAME=$MODEM
+export IFNAME 
+export LINKNAME
+
+# Push our resolv.conf into resolvconf 
+/bin/resolvconf -d ${MODEM}
+
+if [ -f /var/run/devlog.${IFNAME}.pid ]; then
+        kill -TERM `cat /var/run/devlog.${IFNAME}.pid`
+fi
+iptables -F DialoutOutput
+# record dial info into infod
+/etc/scripts/dial-info "disconnected"
+

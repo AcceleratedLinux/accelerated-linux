@@ -1,0 +1,29 @@
+diff --git a/Makefile.am b/Makefile.am
+index 067f481..b8d8fa0 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -20,4 +20,4 @@
+ #	51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ #
+ 
+-SUBDIRS = libexfat dump fsck fuse label mkfs
++SUBDIRS = libexfat dump fsck label mkfs
+diff --git a/configure.ac b/configure.ac
+index 4d144be..ce9a6d9 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -37,13 +37,12 @@ PKG_CHECK_MODULES([UBLIO], [libublio], [
+   AC_DEFINE([USE_UBLIO], [1],
+     [Define if block devices are not supported.])
+ ], [:])
+-PKG_CHECK_MODULES([FUSE], [fuse])
++#PKG_CHECK_MODULES([FUSE], [fuse])
+ AC_CONFIG_HEADERS([libexfat/config.h])
+ AC_CONFIG_FILES([
+ 	libexfat/Makefile
+ 	dump/Makefile
+ 	fsck/Makefile
+-	fuse/Makefile
+ 	label/Makefile
+ 	mkfs/Makefile
+ 	Makefile])

@@ -62,23 +62,10 @@ struct crypto_shash_spawn {
 int crypto_hash_walk_done(struct crypto_hash_walk *walk, int err);
 int crypto_hash_walk_first(struct ahash_request *req,
 			   struct crypto_hash_walk *walk);
-int crypto_ahash_walk_first(struct ahash_request *req,
-			   struct crypto_hash_walk *walk);
-
-static inline int crypto_ahash_walk_done(struct crypto_hash_walk *walk,
-					 int err)
-{
-	return crypto_hash_walk_done(walk, err);
-}
 
 static inline int crypto_hash_walk_last(struct crypto_hash_walk *walk)
 {
 	return !(walk->entrylen | walk->total);
-}
-
-static inline int crypto_ahash_walk_last(struct crypto_hash_walk *walk)
-{
-	return crypto_hash_walk_last(walk);
 }
 
 int crypto_register_ahash(struct ahash_alg *alg);
@@ -88,13 +75,7 @@ void crypto_unregister_ahashes(struct ahash_alg *algs, int count);
 int ahash_register_instance(struct crypto_template *tmpl,
 			    struct ahash_instance *inst);
 
-int shash_no_setkey(struct crypto_shash *tfm, const u8 *key,
-		    unsigned int keylen);
-
-static inline bool crypto_shash_alg_has_setkey(struct shash_alg *alg)
-{
-	return alg->setkey != shash_no_setkey;
-}
+bool crypto_shash_alg_has_setkey(struct shash_alg *alg);
 
 static inline bool crypto_shash_alg_needs_key(struct shash_alg *alg)
 {
@@ -175,6 +156,12 @@ static inline struct ahash_instance *ahash_instance(
 	struct crypto_instance *inst)
 {
 	return container_of(inst, struct ahash_instance, s.base);
+}
+
+static inline struct ahash_instance *ahash_alg_instance(
+	struct crypto_ahash *ahash)
+{
+	return ahash_instance(crypto_tfm_alg_instance(&ahash->base));
 }
 
 static inline void *ahash_instance_ctx(struct ahash_instance *inst)

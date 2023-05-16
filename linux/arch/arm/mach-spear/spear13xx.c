@@ -15,12 +15,13 @@
 
 #include <linux/amba/pl022.h>
 #include <linux/clk.h>
+#include <linux/clk/spear.h>
 #include <linux/clocksource.h>
 #include <linux/err.h>
 #include <linux/of.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/mach/map.h>
-#include <mach/spear.h>
+#include "spear.h"
 #include "generic.h"
 
 void __init spear13xx_l2x0_init(void)
@@ -28,7 +29,7 @@ void __init spear13xx_l2x0_init(void)
 	/*
 	 * 512KB (64KB/way), 8-way associativity, parity supported
 	 *
-	 * FIXME: 9th bit, of Auxillary Controller register must be set
+	 * FIXME: 9th bit, of Auxiliary Controller register must be set
 	 * for some spear13xx devices for stable L2 operation.
 	 *
 	 * Enable Early BRESP, L2 prefetch for Instruction and Data,

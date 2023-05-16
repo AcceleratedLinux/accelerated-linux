@@ -22,7 +22,7 @@ diff -Naur shellinabox.orig/shellinabox/cgi_root.html shellinabox/shellinabox/cg
 diff -Naur shellinabox.orig/shellinabox/shellinaboxd.c shellinabox/shellinabox/shellinaboxd.c
 --- shellinabox.orig/shellinabox/shellinaboxd.c	2020-02-26 14:18:12.772003031 +1000
 +++ shellinabox/shellinabox/shellinaboxd.c	2020-02-26 14:19:01.848098818 +1000
-@@ -630,6 +630,8 @@
+@@ -658,6 +658,8 @@
                                    "HTTP/1.1 200 OK\r\n"
                                    "Content-Type: %s\r\n"
                                    "Content-Length: %ld\r\n"

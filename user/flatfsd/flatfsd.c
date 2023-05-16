@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 
@@ -389,7 +390,8 @@ static int read_config_from_flash(void)
 	time_t bst = BUILD_START_UNIX;
 
 	if (time(NULL) < bst) {
-		stime(&bst);
+		struct timeval tv = { .tv_sec = bst, .tv_usec = 0 };
+		settimeofday(&tv, NULL);
 	}
 #endif
 #ifdef USING_FLASH_FILESYSTEM

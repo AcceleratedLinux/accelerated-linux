@@ -1,0 +1,5 @@
+config USER_LXC
+	bool 'lxc'
+	select LIB_LIBSECCOMP
+	help
+	  Linux containers

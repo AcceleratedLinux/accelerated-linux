@@ -4,6 +4,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
+#include <linux/log2.h>
 #include <net/net_namespace.h>
 #include <net/flow_dissector.h>
 #include <net/pkt_cls.h>
@@ -14,6 +15,46 @@
 #include "spectrum.h"
 #include "core_acl_flex_keys.h"
 
+static int mlxsw_sp_policer_validate(const struct flow_action *action,
+				     const struct flow_action_entry *act,
+				     struct netlink_ext_ack *extack)
+{
+	if (act->police.exceed.act_id != FLOW_ACTION_DROP) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Offload not supported when exceed action is not drop");
+		return -EOPNOTSUPP;
+	}
+
+	if (act->police.notexceed.act_id != FLOW_ACTION_PIPE &&
+	    act->police.notexceed.act_id != FLOW_ACTION_ACCEPT) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Offload not supported when conform action is not pipe or ok");
+		return -EOPNOTSUPP;
+	}
+
+	if (act->police.notexceed.act_id == FLOW_ACTION_ACCEPT &&
+	    !flow_action_is_last_entry(action, act)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Offload not supported when conform action is ok, but action is not last");
+		return -EOPNOTSUPP;
+	}
+
+	if (act->police.peakrate_bytes_ps ||
+	    act->police.avrate || act->police.overhead) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Offload not supported when peakrate/avrate/overhead is configured");
+		return -EOPNOTSUPP;
+	}
+
+	if (act->police.rate_pkt_ps) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "QoS offload not support packets per second");
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 static int mlxsw_sp_flower_parse_actions(struct mlxsw_sp *mlxsw_sp,
 					 struct mlxsw_sp_flow_block *block,
 					 struct mlxsw_sp_acl_rule_info *rulei,
@@ -22,6 +63,8 @@ static int mlxsw_sp_flower_parse_actions(struct mlxsw_sp *mlxsw_sp,
 {
 	const struct flow_action_entry *act;
 	int mirror_act_count = 0;
+	int police_act_count = 0;
+	int sample_act_count = 0;
 	int err, i;
 
 	if (!flow_action_has_entries(flow_action))
@@ -180,12 +223,61 @@ static int mlxsw_sp_flower_parse_actions(struct mlxsw_sp *mlxsw_sp,
 				return err;
 			break;
 			}
+		case FLOW_ACTION_POLICE: {
+			u32 burst;
+
+			if (police_act_count++) {
+				NL_SET_ERR_MSG_MOD(extack, "Multiple police actions per rule are not supported");
+				return -EOPNOTSUPP;
+			}
+
+			err = mlxsw_sp_policer_validate(flow_action, act, extack);
+			if (err)
+				return err;
+
+			/* The kernel might adjust the requested burst size so
+			 * that it is not exactly a power of two. Re-adjust it
+			 * here since the hardware only supports burst sizes
+			 * that are a power of two.
+			 */
+			burst = roundup_pow_of_two(act->police.burst);
+			err = mlxsw_sp_acl_rulei_act_police(mlxsw_sp, rulei,
+							    act->hw_index,
+							    act->police.rate_bytes_ps,
+							    burst, extack);
+			if (err)
+				return err;
+			break;
+			}
+		case FLOW_ACTION_SAMPLE: {
+			if (sample_act_count++) {
+				NL_SET_ERR_MSG_MOD(extack, "Multiple sample actions per rule are not supported");
+				return -EOPNOTSUPP;
+			}
+
+			err = mlxsw_sp_acl_rulei_act_sample(mlxsw_sp, rulei,
+							    block,
+							    act->sample.psample_group,
+							    act->sample.rate,
+							    act->sample.trunc_size,
+							    act->sample.truncate,
+							    extack);
+			if (err)
+				return err;
+			break;
+			}
 		default:
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported action");
 			dev_err(mlxsw_sp->bus_info->dev, "Unsupported action\n");
 			return -EOPNOTSUPP;
 		}
 	}
+
+	if (rulei->ipv6_valid) {
+		NL_SET_ERR_MSG_MOD(extack, "Unsupported mangle field");
+		return -EOPNOTSUPP;
+	}
+
 	return 0;
 }
 
@@ -461,7 +553,8 @@ static int mlxsw_sp_flower_parse(struct mlxsw_sp *mlxsw_sp,
 		struct flow_match_vlan match;
 
 		flow_rule_match_vlan(rule, &match);
-		if (mlxsw_sp_flow_block_is_egress_bound(block)) {
+		if (mlxsw_sp_flow_block_is_egress_bound(block) &&
+		    match.mask->vlan_id) {
 			NL_SET_ERR_MSG_MOD(f->common.extack, "vlan_id key is not supported on egress");
 			return -EOPNOTSUPP;
 		}
@@ -616,6 +709,7 @@ int mlxsw_sp_flower_stats(struct mlxsw_sp *mlxsw_sp,
 	u64 packets;
 	u64 lastuse;
 	u64 bytes;
+	u64 drops;
 	int err;
 
 	ruleset = mlxsw_sp_acl_ruleset_get(mlxsw_sp, block,
@@ -629,11 +723,12 @@ int mlxsw_sp_flower_stats(struct mlxsw_sp *mlxsw_sp,
 		return -EINVAL;
 
 	err = mlxsw_sp_acl_rule_get_stats(mlxsw_sp, rule, &packets, &bytes,
-					  &lastuse, &used_hw_stats);
+					  &drops, &lastuse, &used_hw_stats);
 	if (err)
 		goto err_rule_get_stats;
 
-	flow_stats_update(&f->stats, bytes, packets, lastuse, used_hw_stats);
+	flow_stats_update(&f->stats, bytes, packets, drops, lastuse,
+			  used_hw_stats);
 
 	mlxsw_sp_acl_ruleset_put(mlxsw_sp, ruleset);
 	return 0;

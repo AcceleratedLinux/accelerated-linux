@@ -1,4 +1,4 @@
-PKG = binutils-2.32
+PKG = binutils-2.37
 URL = https://ftp.gnu.org/gnu/binutils/$(PKG).tar.xz
 
 CONFOPTS += --target=$(TARGET)

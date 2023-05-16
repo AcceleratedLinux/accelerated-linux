@@ -30,7 +30,6 @@
  * SOFTWARE.
  *
  */
-#include <linux/dmapool.h>
 #include <linux/kernel.h>
 #include <linux/in.h>
 #include <linux/if.h>
@@ -108,7 +107,6 @@ static void rds_ib_dev_free(struct work_struct *work)
 		rds_ib_destroy_mr_pool(rds_ibdev->mr_1m_pool);
 	if (rds_ibdev->pd)
 		ib_dealloc_pd(rds_ibdev->pd);
-	dma_pool_destroy(rds_ibdev->rid_hdrs_pool);
 
 	list_for_each_entry_safe(i_ipaddr, i_next, &rds_ibdev->ipaddr_list, list) {
 		list_del(&i_ipaddr->list);
@@ -156,8 +154,8 @@ static int rds_ib_add_one(struct ib_device *device)
 	rds_ibdev->max_sge = min(device->attrs.max_send_sge, RDS_IB_MAX_SGE);
 
 	rds_ibdev->odp_capable =
-		!!(device->attrs.device_cap_flags &
-		   IB_DEVICE_ON_DEMAND_PAGING) &&
+		!!(device->attrs.kernel_cap_flags &
+		   IBK_ON_DEMAND_PAGING) &&
 		!!(device->attrs.odp_caps.per_transport_caps.rc_odp_caps &
 		   IB_ODP_SUPPORT_WRITE) &&
 		!!(device->attrs.odp_caps.per_transport_caps.rc_odp_caps &
@@ -189,14 +187,6 @@ static int rds_ib_add_one(struct ib_device *device)
 	if (IS_ERR(rds_ibdev->pd)) {
 		ret = PTR_ERR(rds_ibdev->pd);
 		rds_ibdev->pd = NULL;
-		goto put_dev;
-	}
-	rds_ibdev->rid_hdrs_pool = dma_pool_create(device->name,
-						   device->dma_device,
-						   sizeof(struct rds_header),
-						   L1_CACHE_BYTES, 0);
-	if (!rds_ibdev->rid_hdrs_pool) {
-		ret = -ENOMEM;
 		goto put_dev;
 	}
 

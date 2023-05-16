@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# this script is expected to be called by the 'dial*-*' scripts, to write
+# environment variables supplied by ppp into infod.  It expects one parameter,
+# a string, which is pushed into the 'status' field for the given connection
+# in infod. It would typically be either "connected" or "disconnected".
+status=$1
+
+# if we have infod, then push all the PPP reported variables into a ppp
+# section of infod (against the device). clear any that are only relevant
+# to ip-down scripts. (extracted from the pppd man page; all infod locations
+# are based on the variable name in lower case.)
+if [ -x /bin/infod_client ]
+then
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.device" -d "${DEVICE:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.ifname" -d "${IFNAME:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.iplocal" -d "${IPLOCAL:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.ipremote" -d "${IPREMOTE:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.peername" -d "${PEERNAME:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.speed" -d "${SPEED:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.orig_uid" -d "${ORIG_UID:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.ppplogname" -d "${PPPLOGNAME:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.connect_time" -d "${CONNECT_TIME:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.bytes_sent" -d "${BYTES_SENT:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.bytes_rcvd" -d "${BYTES_RCVD:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.linkname" -d "${LINKNAME:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.call_file" -d "${CALL_FILE:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.dns1" -d "${DNS1:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.dns2" -d "${DNS2:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.status" -d "${status:- }"
+	#WWAN only extra info
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.ipsubnet" -d "${SUBNET:- }"
+	/bin/infod_client -o push -p "config.$LINKNAME.ppp.ipgateway" -d "${GATEWAY:- }"
+fi

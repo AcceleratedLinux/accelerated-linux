@@ -341,8 +341,8 @@ struct wcd9335_codec {
 	int reset_gpio;
 	struct regulator_bulk_data supplies[WCD9335_MAX_SUPPLY];
 
-	unsigned int rx_port_value;
-	unsigned int tx_port_value;
+	unsigned int rx_port_value[WCD9335_RX_MAX];
+	unsigned int tx_port_value[WCD9335_TX_MAX];
 	int hph_l_gain;
 	int hph_r_gain;
 	u32 rx_bias_count;
@@ -618,7 +618,7 @@ static const char * const sb_tx8_mux_text[] = {
 	"ZERO", "RX_MIX_TX8", "DEC8", "DEC8_192"
 };
 
-static const DECLARE_TLV_DB_SCALE(digital_gain, 0, 1, 0);
+static const DECLARE_TLV_DB_SCALE(digital_gain, -8400, 100, -8400);
 static const DECLARE_TLV_DB_SCALE(line_gain, 0, 7, 1);
 static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 25, 1);
 static const DECLARE_TLV_DB_SCALE(ear_pa_gain, 0, 150, 0);
@@ -1269,10 +1269,11 @@ static const struct snd_kcontrol_new sb_tx8_mux =
 static int slim_rx_mux_get(struct snd_kcontrol *kc,
 			   struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kc);
-	struct wcd9335_codec *wcd = dev_get_drvdata(dapm->dev);
+	struct snd_soc_dapm_widget *w = snd_soc_dapm_kcontrol_widget(kc);
+	struct wcd9335_codec *wcd = dev_get_drvdata(w->dapm->dev);
+	u32 port_id = w->shift;
 
-	ucontrol->value.enumerated.item[0] = wcd->rx_port_value;
+	ucontrol->value.enumerated.item[0] = wcd->rx_port_value[port_id];
 
 	return 0;
 }
@@ -1286,11 +1287,17 @@ static int slim_rx_mux_put(struct snd_kcontrol *kc,
 	struct snd_soc_dapm_update *update = NULL;
 	u32 port_id = w->shift;
 
-	wcd->rx_port_value = ucontrol->value.enumerated.item[0];
+	if (wcd->rx_port_value[port_id] == ucontrol->value.enumerated.item[0])
+		return 0;
 
-	switch (wcd->rx_port_value) {
+	wcd->rx_port_value[port_id] = ucontrol->value.enumerated.item[0];
+
+	/* Remove channel from any list it's in before adding it to a new one */
+	list_del_init(&wcd->rx_chs[port_id].list);
+
+	switch (wcd->rx_port_value[port_id]) {
 	case 0:
-		list_del_init(&wcd->rx_chs[port_id].list);
+		/* Channel already removed from lists. Nothing to do here */
 		break;
 	case 1:
 		list_add_tail(&wcd->rx_chs[port_id].list,
@@ -1309,11 +1316,11 @@ static int slim_rx_mux_put(struct snd_kcontrol *kc,
 			      &wcd->dai[AIF4_PB].slim_ch_list);
 		break;
 	default:
-		dev_err(wcd->dev, "Unknown AIF %d\n", wcd->rx_port_value);
+		dev_err(wcd->dev, "Unknown AIF %d\n", wcd->rx_port_value[port_id]);
 		goto err;
 	}
 
-	snd_soc_dapm_mux_update_power(w->dapm, kc, wcd->rx_port_value,
+	snd_soc_dapm_mux_update_power(w->dapm, kc, wcd->rx_port_value[port_id],
 				      e, update);
 
 	return 0;
@@ -1327,8 +1334,13 @@ static int slim_tx_mixer_get(struct snd_kcontrol *kc,
 
 	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kc);
 	struct wcd9335_codec *wcd = dev_get_drvdata(dapm->dev);
+	struct snd_soc_dapm_widget *widget = snd_soc_dapm_kcontrol_widget(kc);
+	struct soc_mixer_control *mixer =
+			(struct soc_mixer_control *)kc->private_value;
+	int dai_id = widget->shift;
+	int port_id = mixer->shift;
 
-	ucontrol->value.integer.value[0] = wcd->tx_port_value;
+	ucontrol->value.integer.value[0] = wcd->tx_port_value[port_id] == dai_id;
 
 	return 0;
 }
@@ -1351,12 +1363,12 @@ static int slim_tx_mixer_put(struct snd_kcontrol *kc,
 	case AIF2_CAP:
 	case AIF3_CAP:
 		/* only add to the list if value not set */
-		if (enable && !(wcd->tx_port_value & BIT(port_id))) {
-			wcd->tx_port_value |= BIT(port_id);
+		if (enable && wcd->tx_port_value[port_id] != dai_id) {
+			wcd->tx_port_value[port_id] = dai_id;
 			list_add_tail(&wcd->tx_chs[port_id].list,
 					&wcd->dai[dai_id].slim_ch_list);
-		} else if (!enable && (wcd->tx_port_value & BIT(port_id))) {
-			wcd->tx_port_value &= ~BIT(port_id);
+		} else if (!enable && wcd->tx_port_value[port_id] == dai_id) {
+			wcd->tx_port_value[port_id] = -1;
 			list_del_init(&wcd->tx_chs[port_id].list);
 		}
 		break;
@@ -1617,7 +1629,7 @@ static int wcd9335_set_mix_interpolator_rate(struct snd_soc_dai *dai,
 
 	list_for_each_entry(ch, &wcd->dai[dai->id].slim_ch_list, list) {
 		for (j = 0; j < WCD9335_NUM_INTERPOLATORS; j++) {
-			val = snd_soc_component_read32(component,
+			val = snd_soc_component_read(component,
 					WCD9335_CDC_RX_INP_MUX_RX_INT_CFG1(j)) &
 					WCD9335_CDC_RX_INP_MUX_RX_INT_SEL_MASK;
 
@@ -1650,9 +1662,9 @@ static int wcd9335_set_prim_interpolator_rate(struct snd_soc_dai *dai,
 		 * is connected
 		 */
 		for (j = 0; j < WCD9335_NUM_INTERPOLATORS; j++) {
-			cfg0 = snd_soc_component_read32(comp,
+			cfg0 = snd_soc_component_read(comp,
 					WCD9335_CDC_RX_INP_MUX_RX_INT_CFG0(j));
-			cfg1 = snd_soc_component_read32(comp,
+			cfg1 = snd_soc_component_read(comp,
 					WCD9335_CDC_RX_INP_MUX_RX_INT_CFG1(j));
 
 			inp0_sel = cfg0 &
@@ -1826,7 +1838,7 @@ static int wcd9335_set_decimator_rate(struct snd_soc_dai *dai,
 			return -EINVAL;
 		}
 
-		tx_mux_sel = snd_soc_component_read32(comp, tx_port_reg) &
+		tx_mux_sel = snd_soc_component_read(comp, tx_port_reg) &
 						      (shift_val << shift);
 
 		tx_mux_sel = tx_mux_sel >> shift;
@@ -2058,7 +2070,7 @@ static int wcd9335_get_channel_map(struct snd_soc_dai *dai,
 	return 0;
 }
 
-static struct snd_soc_dai_ops wcd9335_dai_ops = {
+static const struct snd_soc_dai_ops wcd9335_dai_ops = {
 	.hw_params = wcd9335_hw_params,
 	.trigger = wcd9335_trigger,
 	.set_channel_map = wcd9335_set_channel_map,
@@ -2678,17 +2690,17 @@ static int wcd9335_codec_find_amic_input(struct snd_soc_component *comp,
 	if (adc_mux_n < 4) {
 		reg = WCD9335_CDC_TX_INP_MUX_ADC_MUX0_CFG1 + 2 * adc_mux_n;
 		mreg = WCD9335_CDC_TX_INP_MUX_ADC_MUX0_CFG0 + 2 * adc_mux_n;
-		mux_sel = snd_soc_component_read32(comp, reg) & 0x3;
+		mux_sel = snd_soc_component_read(comp, reg) & 0x3;
 	} else {
 		reg = WCD9335_CDC_TX_INP_MUX_ADC_MUX4_CFG0 + adc_mux_n - 4;
 		mreg = reg;
-		mux_sel = snd_soc_component_read32(comp, reg) >> 6;
+		mux_sel = snd_soc_component_read(comp, reg) >> 6;
 	}
 
 	if (mux_sel != WCD9335_CDC_TX_INP_MUX_SEL_AMIC)
 		return 0;
 
-	return snd_soc_component_read32(comp, mreg) & 0x07;
+	return snd_soc_component_read(comp, mreg) & 0x07;
 }
 
 static u16 wcd9335_codec_get_amic_pwlvl_reg(struct snd_soc_component *comp,
@@ -2776,7 +2788,7 @@ static int wcd9335_codec_enable_dec(struct snd_soc_dapm_widget *w,
 								       amic_n);
 
 		if (pwr_level_reg) {
-			switch ((snd_soc_component_read32(comp, pwr_level_reg) &
+			switch ((snd_soc_component_read(comp, pwr_level_reg) &
 					      WCD9335_AMIC_PWR_LVL_MASK) >>
 					      WCD9335_AMIC_PWR_LVL_SHIFT) {
 			case WCD9335_AMIC_PWR_LEVEL_LP:
@@ -2798,7 +2810,7 @@ static int wcd9335_codec_enable_dec(struct snd_soc_dapm_widget *w,
 				break;
 			}
 		}
-		hpf_coff_freq = (snd_soc_component_read32(comp, dec_cfg_reg) &
+		hpf_coff_freq = (snd_soc_component_read(comp, dec_cfg_reg) &
 				   TX_HPF_CUT_OFF_FREQ_MASK) >> 5;
 
 		if (hpf_coff_freq != CF_MIN_3DB_150HZ)
@@ -2830,10 +2842,10 @@ static int wcd9335_codec_enable_dec(struct snd_soc_dapm_widget *w,
 		snd_soc_component_update_bits(comp, tx_vol_ctl_reg,
 						0x10, 0x00);
 		snd_soc_component_write(comp, tx_gain_ctl_reg,
-			      snd_soc_component_read32(comp, tx_gain_ctl_reg));
+			      snd_soc_component_read(comp, tx_gain_ctl_reg));
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
-		hpf_coff_freq = (snd_soc_component_read32(comp, dec_cfg_reg) &
+		hpf_coff_freq = (snd_soc_component_read(comp, dec_cfg_reg) &
 				   TX_HPF_CUT_OFF_FREQ_MASK) >> 5;
 		snd_soc_component_update_bits(comp, tx_vol_ctl_reg, 0x10, 0x10);
 		snd_soc_component_update_bits(comp, dec_cfg_reg, 0x08, 0x00);
@@ -3080,7 +3092,7 @@ static int wcd9335_codec_enable_mix_path(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-		val = snd_soc_component_read32(comp, gain_reg);
+		val = snd_soc_component_read(comp, gain_reg);
 		val += offset_val;
 		snd_soc_component_write(comp, gain_reg, val);
 		break;
@@ -3208,7 +3220,7 @@ static int wcd9335_codec_enable_prim_interpolator(
 		}
 
 		if ((reg != prim_int_reg) &&
-			((snd_soc_component_read32(comp, prim_int_reg)) &
+			((snd_soc_component_read(comp, prim_int_reg)) &
 			 WCD9335_CDC_RX_PGA_MUTE_EN_MASK))
 			snd_soc_component_update_bits(comp, reg,
 						WCD9335_CDC_RX_PGA_MUTE_EN_MASK,
@@ -3344,7 +3356,7 @@ static int wcd9335_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		wcd9335_config_compander(comp, w->shift, event);
-		val = snd_soc_component_read32(comp, gain_reg);
+		val = snd_soc_component_read(comp, gain_reg);
 		val += offset_val;
 		snd_soc_component_write(comp, gain_reg, val);
 		break;
@@ -3366,12 +3378,12 @@ static void wcd9335_codec_hph_mode_gain_opt(struct snd_soc_component *component,
 	u8 hph_pa_status;
 	bool is_hphl_pa, is_hphr_pa;
 
-	hph_pa_status = snd_soc_component_read32(component, WCD9335_ANA_HPH);
+	hph_pa_status = snd_soc_component_read(component, WCD9335_ANA_HPH);
 	is_hphl_pa = hph_pa_status >> 7;
 	is_hphr_pa = (hph_pa_status & 0x40) >> 6;
 
-	hph_l_en = snd_soc_component_read32(component, WCD9335_HPH_L_EN);
-	hph_r_en = snd_soc_component_read32(component, WCD9335_HPH_R_EN);
+	hph_l_en = snd_soc_component_read(component, WCD9335_HPH_L_EN);
+	hph_r_en = snd_soc_component_read(component, WCD9335_HPH_R_EN);
 
 	l_val = (hph_l_en & 0xC0) | 0x20 | gain;
 	r_val = (hph_r_en & 0xC0) | 0x20 | gain;
@@ -3542,7 +3554,7 @@ static int wcd9335_codec_hphl_dac_event(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		/* Read DEM INP Select */
-		dem_inp = snd_soc_component_read32(comp,
+		dem_inp = snd_soc_component_read(comp,
 				WCD9335_CDC_RX1_RX_PATH_SEC0) & 0x03;
 		if (((hph_mode == CLS_H_HIFI) || (hph_mode == CLS_H_LOHIFI) ||
 				(hph_mode == CLS_H_LP)) && (dem_inp != 0x01)) {
@@ -3694,7 +3706,7 @@ static int wcd9335_codec_hphr_dac_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMU:
 
 		/* Read DEM INP Select */
-		dem_inp = snd_soc_component_read32(comp,
+		dem_inp = snd_soc_component_read(comp,
 				WCD9335_CDC_RX2_RX_PATH_SEC0) &
 				WCD9335_CDC_RX_PATH_DEM_INP_SEL_MASK;
 		if (((hph_mode == CLS_H_HIFI) || (hph_mode == CLS_H_LOHIFI) ||
@@ -3755,7 +3767,7 @@ static int wcd9335_codec_enable_hphl_pa(struct snd_soc_dapm_widget *w,
 					WCD9335_CDC_RX_PGA_MUTE_DISABLE);
 
 		/* Remove mix path mute if it is enabled */
-		if ((snd_soc_component_read32(comp,
+		if ((snd_soc_component_read(comp,
 					WCD9335_CDC_RX1_RX_PATH_MIX_CTL)) &
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK)
 			snd_soc_component_update_bits(comp,
@@ -3817,7 +3829,7 @@ static int wcd9335_codec_enable_lineout_pa(struct snd_soc_dapm_widget *w,
 					WCD9335_CDC_RX_PGA_MUTE_DISABLE);
 
 		/* Remove mix path mute if it is enabled */
-		if ((snd_soc_component_read32(comp, mix_vol_reg)) &
+		if ((snd_soc_component_read(comp, mix_vol_reg)) &
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK)
 			snd_soc_component_update_bits(comp,  mix_vol_reg,
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK,
@@ -3902,7 +3914,7 @@ static int wcd9335_codec_enable_hphr_pa(struct snd_soc_dapm_widget *w,
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK,
 					WCD9335_CDC_RX_PGA_MUTE_DISABLE);
 		/* Remove mix path mute if it is enabled */
-		if ((snd_soc_component_read32(comp,
+		if ((snd_soc_component_read(comp,
 					WCD9335_CDC_RX2_RX_PATH_MIX_CTL)) &
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK)
 			snd_soc_component_update_bits(comp,
@@ -3942,7 +3954,7 @@ static int wcd9335_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK,
 					WCD9335_CDC_RX_PGA_MUTE_DISABLE);
 		/* Remove mix path mute if it is enabled */
-		if ((snd_soc_component_read32(comp,
+		if ((snd_soc_component_read(comp,
 					WCD9335_CDC_RX0_RX_PATH_MIX_CTL)) &
 					WCD9335_CDC_RX_PGA_MUTE_EN_MASK)
 			snd_soc_component_update_bits(comp,
@@ -3979,7 +3991,7 @@ static irqreturn_t wcd9335_slimbus_irq(int irq, void *data)
 	}
 
 	for_each_set_bit(j, &status, 32) {
-		tx = (j >= 16 ? true : false);
+		tx = (j >= 16);
 		port_id = (tx ? j - 16 : j);
 		regmap_read(wcd->if_regmap,
 				WCD9335_SLIM_PGD_PORT_INT_RX_SOURCE0 + j, &val);
@@ -4074,6 +4086,16 @@ static int wcd9335_setup_irqs(struct wcd9335_codec *wcd)
 			     0xFF);
 
 	return ret;
+}
+
+static void wcd9335_teardown_irqs(struct wcd9335_codec *wcd)
+{
+	int i;
+
+	/* disable interrupts on all slave ports */
+	for (i = 0; i < WCD9335_SLIM_NUM_PORT_REG; i++)
+		regmap_write(wcd->if_regmap, WCD9335_SLIM_PGD_PORT_INT_EN0 + i,
+			     0x00);
 }
 
 static void wcd9335_cdc_sido_ccl_enable(struct wcd9335_codec *wcd,
@@ -4808,7 +4830,7 @@ static int wcd9335_enable_efuse_sensing(struct snd_soc_component *comp)
 	 */
 	usleep_range(5000, 5500);
 
-	if (!(snd_soc_component_read32(comp,
+	if (!(snd_soc_component_read(comp,
 					WCD9335_CHIP_TIER_CTRL_EFUSE_STATUS) &
 					WCD9335_CHIP_TIER_CTRL_EFUSE_EN_MASK))
 		WARN(1, "%s: Efuse sense is not complete\n", __func__);
@@ -4844,11 +4866,12 @@ static void wcd9335_codec_init(struct snd_soc_component *component)
 static int wcd9335_codec_probe(struct snd_soc_component *component)
 {
 	struct wcd9335_codec *wcd = dev_get_drvdata(component->dev);
+	int ret;
 	int i;
 
 	snd_soc_component_init_regmap(component, wcd->regmap);
 	/* Class-H Init*/
-	wcd->clsh_ctrl = wcd_clsh_ctrl_alloc(component, wcd->version);
+	wcd->clsh_ctrl = wcd_clsh_ctrl_alloc(component, WCD9335);
 	if (IS_ERR(wcd->clsh_ctrl))
 		return PTR_ERR(wcd->clsh_ctrl);
 
@@ -4861,7 +4884,15 @@ static int wcd9335_codec_probe(struct snd_soc_component *component)
 	for (i = 0; i < NUM_CODEC_DAIS; i++)
 		INIT_LIST_HEAD(&wcd->dai[i].slim_ch_list);
 
-	return wcd9335_setup_irqs(wcd);
+	ret = wcd9335_setup_irqs(wcd);
+	if (ret)
+		goto free_clsh_ctrl;
+
+	return 0;
+
+free_clsh_ctrl:
+	wcd_clsh_ctrl_free(wcd->clsh_ctrl);
+	return ret;
 }
 
 static void wcd9335_codec_remove(struct snd_soc_component *comp)
@@ -4869,7 +4900,7 @@ static void wcd9335_codec_remove(struct snd_soc_component *comp)
 	struct wcd9335_codec *wcd = dev_get_drvdata(comp->dev);
 
 	wcd_clsh_ctrl_free(wcd->clsh_ctrl);
-	free_irq(regmap_irq_get_virq(wcd->irq_data, WCD9335_IRQ_SLIMBUS), wcd);
+	wcd9335_teardown_irqs(wcd);
 }
 
 static int wcd9335_codec_set_sysclk(struct snd_soc_component *comp,
@@ -4904,6 +4935,7 @@ static const struct snd_soc_component_driver wcd9335_component_drv = {
 	.num_dapm_widgets = ARRAY_SIZE(wcd9335_dapm_widgets),
 	.dapm_routes = wcd9335_audio_map,
 	.num_dapm_routes = ARRAY_SIZE(wcd9335_audio_map),
+	.endianness = 1,
 };
 
 static int wcd9335_probe(struct wcd9335_codec *wcd)
@@ -5213,7 +5245,7 @@ static int wcd9335_slim_status(struct slim_device *sdev,
 
 	wcd9335_probe(wcd);
 
-	return ret;
+	return 0;
 }
 
 static const struct slim_device_id wcd9335_slim_id[] = {

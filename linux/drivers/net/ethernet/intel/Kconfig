@@ -34,7 +34,7 @@ config E100
 	  to identify the adapter.
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/e100.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/e100.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called e100.
@@ -50,7 +50,7 @@ config E1000
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/e1000.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/e1000.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called e1000.
@@ -58,8 +58,8 @@ config E1000
 config E1000E
 	tristate "Intel(R) PRO/1000 PCI-Express Gigabit Ethernet support"
 	depends on PCI && (!SPARC32 || BROKEN)
+	depends on PTP_1588_CLOCK_OPTIONAL
 	select CRC32
-	imply PTP_1588_CLOCK
 	help
 	  This driver supports the PCI-Express Intel(R) PRO/1000 gigabit
 	  ethernet family of adapters. For PCI or PCI-X e1000 adapters,
@@ -70,7 +70,7 @@ config E1000E
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/e1000e.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/e1000e.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called e1000e.
@@ -87,7 +87,7 @@ config E1000E_HWTS
 config IGB
 	tristate "Intel(R) 82575/82576 PCI-Express Gigabit Ethernet support"
 	depends on PCI
-	imply PTP_1588_CLOCK
+	depends on PTP_1588_CLOCK_OPTIONAL
 	select I2C
 	select I2C_ALGOBIT
 	help
@@ -98,7 +98,7 @@ config IGB
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/igb.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/igb.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called igb.
@@ -134,7 +134,7 @@ config IGBVF
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/igbvf.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/igbvf.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called igbvf.
@@ -151,7 +151,7 @@ config IXGB
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/ixgb.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/ixgb.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called ixgb.
@@ -159,9 +159,9 @@ config IXGB
 config IXGBE
 	tristate "Intel(R) 10GbE PCI Express adapters support"
 	depends on PCI
+	depends on PTP_1588_CLOCK_OPTIONAL
 	select MDIO
 	select PHYLIB
-	imply PTP_1588_CLOCK
 	help
 	  This driver supports Intel(R) 10GbE PCI Express family of
 	  adapters.  For more information on how to identify your adapter, go
@@ -170,7 +170,7 @@ config IXGBE
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/ixgbe.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/ixgbe.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called ixgbe.
@@ -222,7 +222,7 @@ config IXGBEVF
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/ixgbevf.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/ixgbevf.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called ixgbevf.  MSI-X interrupt support is required
@@ -231,7 +231,7 @@ config IXGBEVF
 config IEGBE
 	tristate "Intel(R) EP80579 GbE Gigabit Ethernet support"
 	depends on EXPERIMENTAL
-	---help---
+	help
 	  This driver supports the built-in Gigabit ethernet ports of the
 	  Intel(R) EP80579 (Tolapai) processor. It is probably not useful
 	  on any other hardware platform.
@@ -250,8 +250,9 @@ config IXGBEVF_IPSEC
 
 config I40E
 	tristate "Intel(R) Ethernet Controller XL710 Family support"
-	imply PTP_1588_CLOCK
+	depends on PTP_1588_CLOCK_OPTIONAL
 	depends on PCI
+	select AUXILIARY_BUS
 	help
 	  This driver supports Intel(R) Ethernet Controller XL710 Family of
 	  devices.  For more information on how to identify your adapter, go
@@ -260,7 +261,7 @@ config I40E
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/i40e.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/i40e.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called i40e.
@@ -295,7 +296,7 @@ config I40EVF
 	  This driver was formerly named i40evf.
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/iavf.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/iavf.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called iavf.  MSI-X interrupt support is required
@@ -305,7 +306,11 @@ config ICE
 	tristate "Intel(R) Ethernet Connection E800 Series Support"
 	default n
 	depends on PCI_MSI
+	depends on PTP_1588_CLOCK_OPTIONAL
+	select AUXILIARY_BUS
+	select DIMLIB
 	select NET_DEVLINK
+	select PLDMFW
 	help
 	  This driver supports Intel(R) Ethernet Connection E800 Series of
 	  devices.  For more information on how to identify your adapter, go
@@ -314,16 +319,40 @@ config ICE
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/ice.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/ice.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called ice.
+
+config ICE_SWITCHDEV
+	bool "Switchdev Support"
+	default y
+	depends on ICE && NET_SWITCHDEV
+	help
+	  Switchdev support provides internal SRIOV packet steering and switching.
+
+	  To enable it on running kernel use devlink tool:
+	  #devlink dev eswitch set pci/0000:XX:XX.X mode switchdev
+
+	  Say Y here if you want to use Switchdev in the driver.
+
+	  If unsure, say N.
+
+config ICE_HWTS
+	bool "Support HW cross-timestamp on platforms with PTM support"
+	default y
+	depends on ICE && X86
+	help
+	  Say Y to enable hardware supported cross-timestamping on platforms
+	  with PCIe PTM support. The cross-timestamp is available through
+	  the PTP clock driver precise cross-timestamp ioctl
+	  (PTP_SYS_OFFSET_PRECISE).
 
 config FM10K
 	tristate "Intel(R) FM10000 Ethernet Switch Host Interface Support"
 	default n
 	depends on PCI_MSI
-	imply PTP_1588_CLOCK
+	depends on PTP_1588_CLOCK_OPTIONAL
 	help
 	  This driver supports Intel(R) FM10000 Ethernet Switch Host
 	  Interface.  For more information on how to identify your adapter,
@@ -332,7 +361,7 @@ config FM10K
 	  <http://support.intel.com>
 
 	  More specific information on configuring the driver is in
-	  <file:Documentation/networking/device_drivers/intel/fm10k.rst>.
+	  <file:Documentation/networking/device_drivers/ethernet/intel/fm10k.rst>.
 
 	  To compile this driver as a module, choose M here. The module
 	  will be called fm10k.  MSI-X interrupt support is required
@@ -341,6 +370,7 @@ config IGC
 	tristate "Intel(R) Ethernet Controller I225-LM/I225-V support"
 	default n
 	depends on PCI
+	depends on PTP_1588_CLOCK_OPTIONAL
 	help
 	  This driver supports Intel(R) Ethernet Controller I225-LM/I225-V
 	  family of adapters.

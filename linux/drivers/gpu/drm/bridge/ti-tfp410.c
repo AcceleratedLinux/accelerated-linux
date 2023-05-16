@@ -51,11 +51,15 @@ static int tfp410_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int ret;
 
-	edid = drm_bridge_get_edid(dvi->next_bridge, connector);
-	if (IS_ERR_OR_NULL(edid)) {
-		if (edid != ERR_PTR(-ENOTSUPP))
+	if (dvi->next_bridge->ops & DRM_BRIDGE_OP_EDID) {
+		edid = drm_bridge_get_edid(dvi->next_bridge, connector);
+		if (!edid)
 			DRM_INFO("EDID read failed. Fallback to standard modes\n");
+	} else {
+		edid = NULL;
+	}
 
+	if (!edid) {
 		/*
 		 * No EDID, fallback on the XGA standard modes and prefer a mode
 		 * pretty much anything can handle.
@@ -188,6 +192,7 @@ static void tfp410_disable(struct drm_bridge *bridge)
 }
 
 static enum drm_mode_status tfp410_mode_valid(struct drm_bridge *bridge,
+					      const struct drm_display_info *info,
 					      const struct drm_display_mode *mode)
 {
 	if (mode->clock < 25000)
@@ -220,7 +225,7 @@ static int tfp410_parse_timings(struct tfp410 *dvi, bool i2c)
 	struct device_node *ep;
 	u32 pclk_sample = 0;
 	u32 bus_width = 24;
-	s32 deskew = 0;
+	u32 deskew = 0;
 
 	/* Start with defaults. */
 	*timings = tfp410_default_timings;
@@ -274,12 +279,12 @@ static int tfp410_parse_timings(struct tfp410 *dvi, bool i2c)
 	}
 
 	/* Get the setup and hold time from vendor-specific properties. */
-	of_property_read_u32(dvi->dev->of_node, "ti,deskew", (u32 *)&deskew);
-	if (deskew < -4 || deskew > 3)
+	of_property_read_u32(dvi->dev->of_node, "ti,deskew", &deskew);
+	if (deskew > 7)
 		return -EINVAL;
 
-	timings->setup_time_ps = min(0, 1200 - 350 * deskew);
-	timings->hold_time_ps = min(0, 1300 + 350 * deskew);
+	timings->setup_time_ps = 1200 - 350 * ((s32)deskew - 4);
+	timings->hold_time_ps = max(0, 1300 + 350 * ((s32)deskew - 4));
 
 	return 0;
 }
@@ -336,13 +341,11 @@ static int tfp410_init(struct device *dev, bool i2c)
 	return 0;
 }
 
-static int tfp410_fini(struct device *dev)
+static void tfp410_fini(struct device *dev)
 {
 	struct tfp410 *dvi = dev_get_drvdata(dev);
 
 	drm_bridge_remove(&dvi->bridge);
-
-	return 0;
 }
 
 static int tfp410_probe(struct platform_device *pdev)
@@ -352,7 +355,9 @@ static int tfp410_probe(struct platform_device *pdev)
 
 static int tfp410_remove(struct platform_device *pdev)
 {
-	return tfp410_fini(&pdev->dev);
+	tfp410_fini(&pdev->dev);
+
+	return 0;
 }
 
 static const struct of_device_id tfp410_match[] = {
@@ -389,7 +394,9 @@ static int tfp410_i2c_probe(struct i2c_client *client,
 
 static int tfp410_i2c_remove(struct i2c_client *client)
 {
-	return tfp410_fini(&client->dev);
+	tfp410_fini(&client->dev);
+
+	return 0;
 }
 
 static const struct i2c_device_id tfp410_i2c_ids[] = {

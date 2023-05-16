@@ -392,13 +392,13 @@ static int ak4642_dai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	data = MCKO | PMPLL; /* use MCKO */
 	bcko = 0;
 
-	/* set master/slave audio interface */
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
+	/* set clocking for audio interface */
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_CBP_CFP:
 		data |= MS;
 		bcko = BCKO_64;
 		break;
-	case SND_SOC_DAIFMT_CBS_CFS:
+	case SND_SOC_DAIFMT_CBC_CFC:
 		break;
 	default:
 		return -EINVAL;
@@ -516,7 +516,7 @@ static struct snd_soc_dai_driver ak4642_dai = {
 		.rates = SNDRV_PCM_RATE_8000_48000,
 		.formats = SNDRV_PCM_FMTBIT_S16_LE },
 	.ops = &ak4642_dai_ops,
-	.symmetric_rates = 1,
+	.symmetric_rate = 1,
 };
 
 static int ak4642_suspend(struct snd_soc_component *component)
@@ -630,8 +630,8 @@ static struct clk *ak4642_of_parse_mcko(struct device *dev)
 #endif
 
 static const struct of_device_id ak4642_of_match[];
-static int ak4642_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+static const struct i2c_device_id ak4642_i2c_id[];
+static int ak4642_i2c_probe(struct i2c_client *i2c)
 {
 	struct device *dev = &i2c->dev;
 	struct device_node *np = dev->of_node;
@@ -651,6 +651,8 @@ static int ak4642_i2c_probe(struct i2c_client *i2c,
 		if (of_id)
 			drvdata = of_id->data;
 	} else {
+		const struct i2c_device_id *id =
+			i2c_match_id(ak4642_i2c_id, i2c);
 		drvdata = (const struct ak4642_drvdata *)id->driver_data;
 	}
 
@@ -697,7 +699,7 @@ static struct i2c_driver ak4642_i2c_driver = {
 		.name = "ak4642-codec",
 		.of_match_table = ak4642_of_match,
 	},
-	.probe		= ak4642_i2c_probe,
+	.probe_new	= ak4642_i2c_probe,
 	.id_table	= ak4642_i2c_id,
 };
 

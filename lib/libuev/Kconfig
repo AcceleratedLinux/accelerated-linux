@@ -1,0 +1,3 @@
+config LIB_LIBUEV
+	bool "Build UEV"
+	default n

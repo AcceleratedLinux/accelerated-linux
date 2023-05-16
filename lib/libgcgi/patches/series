@@ -1,3 +1,6 @@
 0001-Extern-globals.patch
 0002-Fixup-bad-initialisation.patch
 0003-Add-extra-environment-variables.patch
+0004-const.patch
+0005-fix-strtol-post.patch
+0006-add-debug.patch

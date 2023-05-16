@@ -1,0 +1,166 @@
+DIGI EX50
+---------
+
+This is just some random notes on building and running on the EX50 platform.
+This is very much a work in progress.
+
+The Digi/EX50 board is built around a Qualcomm IPQ6018 SoC. (This is an
+ARM64 CPU based device).
+
+Generate images for this board using the Digi/EX50 accelerated linux
+target. The default is to select the musl C-library when building.
+The build will generate a single "itb" u-boot mutli-image format binary,
+images/ex50.itb. A number of the build artifacts, like kernel and
+root filesystem, are also present in that images/ directory.
+
+You can load onto the EX50 board using the usual uboot loader
+installed in the boot ROM of the board. You will need a debug enabled
+u-boot loader installed to network load as described below.
+
+    setenv bootargs console=ttyMSM0,115200n8 root=/dev/ram0 
+    dhcp 0x60000000 ex50-initrd.itb
+    bootm 0x60000000
+
+If for some reason you need to enable the early console (for debugging
+kernel boot up problems for example) then set the bootargs like this:
+
+    setenv bootargs console=ttyMSM0,115200n8 earlycon=msm_serial_dm,0x78B1000 root=/dev/ram0
+
+This assumes you have a local network with addresses setup with DHCP and
+tftp server.
+
+The console is on a 4-pin inline header. You will need a TTL-to-RS232
+connected and in place to use it. The console serial port is at the
+default 115200,8,n,1.
+
+
+
+INSTALLING DAL FIRMWARE - PRESERVING PARTITIONS (deprecated)
+-----------------------
+
+It is possible to install DAL firmware into flash for booting on the early
+EX50 prototypes. There are a few steps involved in using the development
+u-boot load as it is installed.
+
+1. network boot DAL firmware (as per steps above)
+2. at a shell login run the following commands:
+	ubiattach -p /dev/mtd0
+	ubirsvol /dev/ubi0 -N rootfs_data -s 4MiB
+	ubirsvol /dev/ubi0 -N kernel -s 8MiB
+	ubirsvol /dev/ubi0 -N ubi_rootfs -s 30MiB
+	ubimkvol /dev/ubi0 -N config -s 4MiB
+3. network copy images/ex50.itb and images/rootfs.bin into /tmp on EX50
+   and then run the following commands:
+	ubiupdatevol /dev/ubi0_0 /tmp/ex50.itb
+	ubiupdatevol /dev/ubi0_2 /tmp/rootfs.bin
+4. reboot the EX50
+5. break into u-boot command line and run:
+	setenv fsbootargs "ubi.mtd=rootfs root=/dev/mtdblock20"
+	saveenv
+
+Now on the next EX50 power up it will boot DAL firmware from flash.
+There is no ability to netflash yet, so new firmware installation requires
+step 3 above to be repeated with new images.
+
+
+
+INSTALLING DAL FIRMWARE
+-----------------------
+
+To format the NAND flash, install and boot DAL firmware use the following
+procedure. This allows for the usual netflash and web installation of the
+firmware. It does not setup full secure booting, though the firmware update
+itself does full signature checking at flash time.
+
+This first set of instructions sets up the u-boot environment.
+
+1.  Boot up the EX50 and break into the u-boot command shell.
+2.  Run the following commands:
+
+        setenv ipaddr
+        setenv netmask
+        setenv serverip
+        setenv bootpart a
+        setenv loadfile image.bin
+        setenv loadaddr 0x60000000
+        setenv mtdids nand0=ipq-nand
+        setenv mtdparts mtdparts=ipq-nand:-(flash)
+
+        setenv setpart 'if test X$bootpart = Xb ; then setenv nandpart image1 ; setenv bootroot root=/dev/mtdblock18 ; else setenv nandpart image ; setenv bootroot root=/dev/mtdblock17 ; fi'
+
+        setenv sizing 'setexpr sizaddr $loadaddr + 0x28 ; setexpr fssize *$sizaddr + 0xfff ; setexpr fssize $fssize \\& 0xfffff000 ; setexpr ukaddr $loadaddr + $fssize'
+
+        setenv netload 'if test X$ipaddr = X -o X$serverip = X ; then dhcp $loadaddr $loadfile ; else tftpboot $loadfile ; fi ; run sizing ; setenv bootargs boot=network console=ttyMSM0,9600n8 root=/dev/ram0 initrd=$loadaddr,48M ; bootm $ukaddr'
+
+        setenv nandload 'ubi part flash 2048 ; run setpart ; ubi read $loadaddr $nandpart 0x3000000 ; run sizing ; setenv bootargs boot=flash console=ttyMSM0,9600n8 ubi.mtd=0 $bootroot bootpart=$bootpart ; bootm $ukaddr'
+
+        setenv bootcmd run nandload
+
+3.  Finally save the new environment settings to NOR flash:
+        saveenv
+
+
+Note that along with the NAND loading commands there is also a command that
+allows network loading of the standard "image.bin" firmware images. From the
+u-boot command line if you do:
+
+        run netload
+
+then a network fetch and boot of the image.bin firmware will be carried out.
+
+With u-boot now setup we need to boot into DAL and setup the NAND flash.
+Next steps:
+
+4.  From the u-boot command line network boot DAL firmware:
+        run netload
+5.  Login to DAL (admin/default)
+6.  Enable the login shell using CLI commands:
+        config auth user admin password LongPassword-1234
+        config auth group admin acl shell enable true
+        exit
+7.  Login again (admin/LongPassword-1234) and select shell.
+
+
+At this point we are ready to setup the crypto and NAND:
+
+8.  Run the following shell commands:
+        program-ecc508
+        /etc/mkffs
+        netflash -kb -r /dev/flash/image <SERVER-IP> image.bin
+
+DAL firmware is now installed into the first partition of the NAND flash.
+On the next power up of the EX50 it will boot into this installed firmware.
+
+From this point on you can install new firmware via the web management
+interface (or the netflash shell command as usual).
+
+
+
+INSTALLING NEW BOOTLOADER
+-------------------------
+
+The boot loader region of the Qualcomm/IPQ6018 in NAND flash is a large
+single blob, and the MTD regions are setup as such. It is a region 32MB in
+size. It is made up of a number of binary blobs supplied by Qualcomm and
+also our own compiled u-boot binary and u-boot environment.
+
+The u-boot loader itself can be updated without having to erase and reflash
+the whole of the 32MB NAND flash boot region. From a Linux command line you
+need to do this:
+
+    flash_erase /dev/mtd0 0xe00000 12
+    nandwrite -s 0xe00000 /dev/mtd0 u-boot.bin
+
+The "u-boot.bin" (found in images/u-boot.bin) file is generated by DAL
+building from the Qualcomm QSDK u-boot sources for the IPQ-6018 SoC family.
+It is specially crafted blob, starting with the ELF based u-boot binary and
+converting to their own "mbn" format, plus some required padding.
+
+If you want to completely erase the u-boot environment, you can do that with:
+
+    flash_erase /dev/mtd0 14155776 4
+
+On the next power up the u-boot environment will be factory defaulted.
+In factory mode it will default to network loading of images, not booting
+from flash based firmware.
+

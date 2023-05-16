@@ -1,0 +1,15 @@
+--- loki-0.1.7/include/loki/SmallObj.h.org	2022-02-17 13:03:41.166166517 +1000
++++ loki-0.1.7/include/loki/SmallObj.h	2022-02-17 13:10:00.582538916 +1000
+@@ -455,12 +455,7 @@
+     public:
+ 
+         /// Throwing single-object new throws bad_alloc when allocation fails.
+-#ifdef _MSC_VER
+-        /// @note MSVC complains about non-empty exception specification lists.
+         static void * operator new ( std::size_t size )
+-#else
+-        static void * operator new ( std::size_t size ) throw ( std::bad_alloc )
+-#endif
+         {
+             typename MyThreadingModel::Lock lock;
+             (void)lock; // get rid of warning

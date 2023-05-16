@@ -229,17 +229,22 @@ void check(const struct check_opt *opt)
 		check_hmac_md5(opt->hmacmd5key);
 	else
 #endif
-	if (opt->dochecksum)
+	if (opt->dochecksum) {
 		chksum();
 
-	/*
-	 * Check the version information. Checks if the version info is present
-	 * and correct, and fails/exits if not. If 'doremoveversion' is true, will
-	 * strip the version info as well.
-	 */
-	if (opt->doversion || opt->dohardwareversion || opt->doremoveversion || opt->dominimumcheck)
-		check_version_info(0, opt->doversion, opt->dohardwareversion,
-				opt->doremoveversion, 1, opt->dominimumcheck);
+		/*
+		 * Check the version information. Checks if the version info is
+		 * present and correct, and fails/exits if not. If
+		 * 'doremoveversion' is true, will strip the version info as
+		 * well.
+		 */
+		if (opt->doversion || opt->dohardwareversion ||
+		    opt->doremoveversion || opt->dominimumcheck)
+			check_version_info(0, opt->doversion,
+					   opt->dohardwareversion,
+					   opt->doremoveversion, 1,
+					   opt->dominimumcheck);
+	}
 
 #ifdef CONFIG_USER_NETFLASH_SHA256
 	/*
@@ -268,11 +273,14 @@ void check(const struct check_opt *opt)
 }
 
 #ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
-void check_fw_product_info(void)
+void check_fw_product_info(const struct check_opt *opt)
 {
 	static const char squashfs_magic[4] = "hsqs";
 	char buff[sizeof(squashfs_magic)];
 	int ret;
+
+	if (!opt->dohardwareversion)
+		return;
 
 	/*
 	 * This feature is only available for squashfs-based firmware images.

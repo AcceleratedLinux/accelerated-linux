@@ -35,8 +35,7 @@ bogus:
 ### HARD TARGETS
 
 nc:	netcat.c
-#	$(LD) $(DFLAGS) $(XFLAGS) $(STATIC) -o nc netcat.c $(XLIBS)
-	$(CC) $(DFLAGS) $(XFLAGS) $(STATIC) -o nc netcat.c $(XLIBS) $(LDFLAGS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(DFLAGS) $(XFLAGS) $(STATIC) -o nc netcat.c $(XLIBS) $(LDFLAGS) $(LDLIBS)
 
 nc-dos:
 	@echo "DOS?!  Maybe someday, but not now"

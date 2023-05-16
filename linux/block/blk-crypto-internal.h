@@ -7,10 +7,11 @@
 #define __LINUX_BLK_CRYPTO_INTERNAL_H
 
 #include <linux/bio.h>
-#include <linux/blkdev.h>
+#include <linux/blk-mq.h>
 
 /* Represents a crypto mode supported by blk-crypto  */
 struct blk_crypto_mode {
+	const char *name; /* name of this mode, shown in sysfs */
 	const char *cipher_str; /* crypto API name (for fallback case) */
 	unsigned int keysize; /* key size in bytes */
 	unsigned int ivsize; /* iv size in bytes */
@@ -19,6 +20,10 @@ struct blk_crypto_mode {
 extern const struct blk_crypto_mode blk_crypto_modes[];
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
+
+int blk_crypto_sysfs_register(struct request_queue *q);
+
+void blk_crypto_sysfs_unregister(struct request_queue *q);
 
 void bio_crypt_dun_increment(u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
 			     unsigned int inc);
@@ -61,6 +66,13 @@ static inline bool blk_crypto_rq_is_encrypted(struct request *rq)
 }
 
 #else /* CONFIG_BLK_INLINE_ENCRYPTION */
+
+static inline int blk_crypto_sysfs_register(struct request_queue *q)
+{
+	return 0;
+}
+
+static inline void blk_crypto_sysfs_unregister(struct request_queue *q) { }
 
 static inline bool bio_crypt_rq_ctx_compatible(struct request *rq,
 					       struct bio *bio)
@@ -142,13 +154,24 @@ static inline void blk_crypto_free_request(struct request *rq)
 		__blk_crypto_free_request(rq);
 }
 
-void __blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
-			      gfp_t gfp_mask);
-static inline void blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
-					  gfp_t gfp_mask)
+int __blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
+			     gfp_t gfp_mask);
+/**
+ * blk_crypto_rq_bio_prep - Prepare a request's crypt_ctx when its first bio
+ *			    is inserted
+ * @rq: The request to prepare
+ * @bio: The first bio being inserted into the request
+ * @gfp_mask: Memory allocation flags
+ *
+ * Return: 0 on success, -ENOMEM if out of memory.  -ENOMEM is only possible if
+ *	   @gfp_mask doesn't include %__GFP_DIRECT_RECLAIM.
+ */
+static inline int blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
+					 gfp_t gfp_mask)
 {
 	if (bio_has_crypt_ctx(bio))
-		__blk_crypto_rq_bio_prep(rq, bio, gfp_mask);
+		return __blk_crypto_rq_bio_prep(rq, bio, gfp_mask);
+	return 0;
 }
 
 /**

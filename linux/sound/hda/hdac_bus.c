@@ -17,6 +17,7 @@ static void snd_hdac_bus_process_unsol_events(struct work_struct *work);
 static const struct hdac_bus_ops default_ops = {
 	.command = snd_hdac_bus_send_cmd,
 	.get_response = snd_hdac_bus_get_response,
+	.link_power = snd_hdac_bus_link_power,
 };
 
 /**
@@ -46,6 +47,18 @@ int snd_hdac_bus_init(struct hdac_bus *bus, struct device *dev,
 	INIT_LIST_HEAD(&bus->hlink_list);
 	init_waitqueue_head(&bus->rirb_wq);
 	bus->irq = -1;
+
+	/*
+	 * Default value of '8' is as per the HD audio specification (Rev 1.0a).
+	 * Following relation is used to derive STRIPE control value.
+	 *  For sample rate <= 48K:
+	 *   { ((num_channels * bits_per_sample) / number of SDOs) >= 8 }
+	 *  For sample rate > 48K:
+	 *   { ((num_channels * bits_per_sample * rate/48000) /
+	 *	number of SDOs) >= 8 }
+	 */
+	bus->sdo_limit = 8;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_hdac_bus_init);
@@ -252,3 +265,25 @@ void snd_hdac_aligned_write(unsigned int val, void __iomem *addr,
 }
 EXPORT_SYMBOL_GPL(snd_hdac_aligned_write);
 #endif /* CONFIG_SND_HDA_ALIGNED_MMIO */
+
+void snd_hdac_codec_link_up(struct hdac_device *codec)
+{
+	struct hdac_bus *bus = codec->bus;
+
+	if (bus->ops->link_power)
+		bus->ops->link_power(codec, true);
+	else
+		snd_hdac_bus_link_power(codec, true);
+}
+EXPORT_SYMBOL_GPL(snd_hdac_codec_link_up);
+
+void snd_hdac_codec_link_down(struct hdac_device *codec)
+{
+	struct hdac_bus *bus = codec->bus;
+
+	if (bus->ops->link_power)
+		bus->ops->link_power(codec, false);
+	else
+		snd_hdac_bus_link_power(codec, false);
+}
+EXPORT_SYMBOL_GPL(snd_hdac_codec_link_down);

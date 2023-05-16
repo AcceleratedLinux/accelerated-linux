@@ -1,5 +1,5 @@
---- busybox-1.31.0.org/networking/telnet.c	2019-01-22 03:09:17.000000000 -0600
-+++ busybox-1.31.0/networking/telnet.c	2020-06-10 17:38:00.614586000 -0500
+--- busybox-1.34.1.org/networking/telnet.c	2019-01-22 03:09:17.000000000 -0600
++++ busybox-1.34.1/networking/telnet.c	2020-06-10 17:38:00.614586000 -0500
 @@ -71,6 +71,7 @@
  
  #include <arpa/telnet.h>
@@ -26,7 +26,7 @@
  			con_escape();
  			return;
  		}
-@@ -415,15 +418,17 @@
+@@ -431,15 +434,17 @@
  	if (G.telflags & UF_ECHO) {
  		if (G.charmode == CHM_TRY) {
  			G.charmode = CHM_ON;
@@ -48,7 +48,7 @@
  			cookmode();
  		}
  	}
-@@ -607,6 +612,7 @@
+@@ -623,6 +628,7 @@
  	char *host;
  	int port;
  	int len;
@@ -56,7 +56,7 @@
  	struct pollfd ufds[2];
  
  	INIT_G();
-@@ -622,14 +628,18 @@
+@@ -638,14 +644,18 @@
  	}
  
  #if ENABLE_FEATURE_TELNET_AUTOLOGIN
@@ -78,7 +78,7 @@
  	if (!*argv)
  		bb_show_usage();
  	host = *argv++;
-@@ -639,9 +649,14 @@
+@@ -655,9 +665,14 @@
  		bb_show_usage();
  
  	xmove_fd(create_and_connect_stream_or_die(host, port), netfd);
@@ -95,7 +95,7 @@
  
  #if ENABLE_FEATURE_TELNET_WIDTH
  	get_terminal_width_height(0, &G.win_width, &G.win_height);
-@@ -677,7 +692,8 @@
+@@ -693,7 +708,8 @@
  		if (ufds[1].revents) {
  			len = safe_read(netfd, G.buf, DATABUFSIZE);
  			if (len <= 0) {

@@ -1,7 +1,7 @@
 /*
  * I2C access driver for TI TPS65912x PMICs
  *
- * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2015 Texas Instruments Incorporated - https://www.ti.com/
  *	Andrew F. Davis <afd@ti.com>
  *
  * This program is free software; you can redistribute it and/or
@@ -55,7 +55,9 @@ static int tps65912_i2c_remove(struct i2c_client *client)
 {
 	struct tps65912 *tps = i2c_get_clientdata(client);
 
-	return tps65912_device_exit(tps);
+	tps65912_device_exit(tps);
+
+	return 0;
 }
 
 static const struct i2c_device_id tps65912_i2c_id_table[] = {

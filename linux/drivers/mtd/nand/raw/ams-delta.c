@@ -191,8 +191,8 @@ static int gpio_nand_exec_op(struct nand_chip *this,
 	return ret;
 }
 
-static int gpio_nand_setup_data_interface(struct nand_chip *this, int csline,
-					  const struct nand_data_interface *cf)
+static int gpio_nand_setup_interface(struct nand_chip *this, int csline,
+				     const struct nand_interface_config *cf)
 {
 	struct gpio_nand *priv = nand_get_controller_data(this);
 	const struct nand_sdr_timings *sdr = nand_get_sdr_timings(cf);
@@ -215,9 +215,19 @@ static int gpio_nand_setup_data_interface(struct nand_chip *this, int csline,
 	return 0;
 }
 
+static int gpio_nand_attach_chip(struct nand_chip *chip)
+{
+	if (chip->ecc.engine_type == NAND_ECC_ENGINE_TYPE_SOFT &&
+	    chip->ecc.algo == NAND_ECC_ALGO_UNKNOWN)
+		chip->ecc.algo = NAND_ECC_ALGO_HAMMING;
+
+	return 0;
+}
+
 static const struct nand_controller_ops gpio_nand_ops = {
 	.exec_op = gpio_nand_exec_op,
-	.setup_data_interface = gpio_nand_setup_data_interface,
+	.attach_chip = gpio_nand_attach_chip,
+	.setup_interface = gpio_nand_setup_interface,
 };
 
 /*
@@ -259,9 +269,6 @@ static int gpio_nand_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "RDY GPIO request failed (%d)\n", err);
 		return err;
 	}
-
-	this->ecc.mode = NAND_ECC_SOFT;
-	this->ecc.algo = NAND_ECC_HAMMING;
 
 	platform_set_drvdata(pdev, priv);
 
@@ -362,6 +369,13 @@ static int gpio_nand_probe(struct platform_device *pdev)
 	/* Release write protection */
 	gpiod_set_value(priv->gpiod_nwp, 0);
 
+	/*
+	 * This driver assumes that the default ECC engine should be TYPE_SOFT.
+	 * Set ->engine_type before registering the NAND devices in order to
+	 * provide a driver specific default value.
+	 */
+	this->ecc.engine_type = NAND_ECC_ENGINE_TYPE_SOFT;
+
 	/* Scan to find existence of the device */
 	err = nand_scan(this, 1);
 	if (err)
@@ -400,12 +414,14 @@ static int gpio_nand_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_OF
 static const struct of_device_id gpio_nand_of_id_table[] = {
 	{
 		/* sentinel */
 	},
 };
 MODULE_DEVICE_TABLE(of, gpio_nand_of_id_table);
+#endif
 
 static const struct platform_device_id gpio_nand_plat_id_table[] = {
 	{

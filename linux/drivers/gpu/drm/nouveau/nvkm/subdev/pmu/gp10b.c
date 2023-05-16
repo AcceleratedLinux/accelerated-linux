@@ -28,7 +28,7 @@
 
 static int
 gp10b_pmu_acr_bootstrap_multiple_falcons_cb(void *priv,
-					    struct nv_falcon_msg *hdr)
+					    struct nvfw_falcon_msg *hdr)
 {
 	struct nv_pmu_acr_bootstrap_multiple_falcons_msg *msg =
 		container_of(hdr, typeof(*msg), msg.hdr);
@@ -69,17 +69,21 @@ gp10b_pmu_acr = {
 	.bld_write = gm20b_pmu_acr_bld_write,
 	.bld_patch = gm20b_pmu_acr_bld_patch,
 	.boot = gm20b_pmu_acr_boot,
+	.bootstrap_falcons = BIT_ULL(NVKM_ACR_LSF_PMU) |
+			     BIT_ULL(NVKM_ACR_LSF_FECS) |
+			     BIT_ULL(NVKM_ACR_LSF_GPCCS),
 	.bootstrap_falcon = gm20b_pmu_acr_bootstrap_falcon,
 	.bootstrap_multiple_falcons = gp10b_pmu_acr_bootstrap_multiple_falcons,
 };
 
 static const struct nvkm_pmu_func
 gp10b_pmu = {
-	.flcn = &gt215_pmu_flcn,
+	.flcn = &gm200_pmu_flcn,
 	.enabled = gf100_pmu_enabled,
 	.intr = gt215_pmu_intr,
 	.recv = gm20b_pmu_recv,
 	.initmsg = gm20b_pmu_initmsg,
+	.reset = gp102_pmu_reset,
 };
 
 #if IS_ENABLED(CONFIG_ARCH_TEGRA_210_SOC)
@@ -90,12 +94,14 @@ MODULE_FIRMWARE("nvidia/gp10b/pmu/sig.bin");
 
 static const struct nvkm_pmu_fwif
 gp10b_pmu_fwif[] = {
-	{ 0, gm20b_pmu_load, &gp10b_pmu, &gp10b_pmu_acr },
+	{  0, gm20b_pmu_load, &gp10b_pmu, &gp10b_pmu_acr },
+	{ -1, gm200_pmu_nofw, &gp10b_pmu },
 	{}
 };
 
 int
-gp10b_pmu_new(struct nvkm_device *device, int index, struct nvkm_pmu **ppmu)
+gp10b_pmu_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
+	      struct nvkm_pmu **ppmu)
 {
-	return nvkm_pmu_new_(gp10b_pmu_fwif, device, index, ppmu);
+	return nvkm_pmu_new_(gp10b_pmu_fwif, device, type, inst, ppmu);
 }

@@ -9,8 +9,7 @@
 #include <linux/slab.h>
 #include "internal.h"
 
-unsigned __read_mostly afs_volume_gc_delay = 10;
-unsigned __read_mostly afs_volume_record_life = 60 * 60;
+static unsigned __read_mostly afs_volume_record_life = 60 * 60;
 
 /*
  * Insert a volume into a cell.  If there's an existing volume record, that is
@@ -83,7 +82,7 @@ static struct afs_volume *afs_alloc_volume(struct afs_fs_context *params,
 
 	volume->vid		= vldb->vid[params->type];
 	volume->update_at	= ktime_get_real_seconds() + afs_volume_record_life;
-	volume->cell		= afs_get_cell(params->cell);
+	volume->cell		= afs_get_cell(params->cell, afs_cell_trace_get_vol);
 	volume->type		= params->type;
 	volume->type_force	= params->force;
 	volume->name_len	= vldb->name_len;
@@ -106,7 +105,7 @@ static struct afs_volume *afs_alloc_volume(struct afs_fs_context *params,
 	return volume;
 
 error_1:
-	afs_put_cell(params->net, volume->cell);
+	afs_put_cell(volume->cell, afs_cell_trace_put_vol);
 	kfree(volume);
 error_0:
 	return ERR_PTR(ret);
@@ -228,7 +227,7 @@ static void afs_destroy_volume(struct afs_net *net, struct afs_volume *volume)
 
 	afs_remove_volume_from_cell(volume);
 	afs_put_serverlist(net, rcu_access_pointer(volume->servers));
-	afs_put_cell(net, volume->cell);
+	afs_put_cell(volume->cell, afs_cell_trace_put_vol);
 	trace_afs_volume(volume->vid, atomic_read(&volume->usage),
 			 afs_volume_trace_free);
 	kfree_rcu(volume, rcu);
@@ -268,15 +267,30 @@ void afs_put_volume(struct afs_net *net, struct afs_volume *volume,
 /*
  * Activate a volume.
  */
-void afs_activate_volume(struct afs_volume *volume)
+int afs_activate_volume(struct afs_volume *volume)
 {
 #ifdef CONFIG_AFS_FSCACHE
-	volume->cache = fscache_acquire_cookie(volume->cell->cache,
-					       &afs_volume_cache_index_def,
-					       &volume->vid, sizeof(volume->vid),
-					       NULL, 0,
-					       volume, 0, true);
+	struct fscache_volume *vcookie;
+	char *name;
+
+	name = kasprintf(GFP_KERNEL, "afs,%s,%llx",
+			 volume->cell->name, volume->vid);
+	if (!name)
+		return -ENOMEM;
+
+	vcookie = fscache_acquire_volume(name, NULL, NULL, 0);
+	if (IS_ERR(vcookie)) {
+		if (vcookie != ERR_PTR(-EBUSY)) {
+			kfree(name);
+			return PTR_ERR(vcookie);
+		}
+		pr_err("AFS: Cache volume key already in use (%s)\n", name);
+		vcookie = NULL;
+	}
+	volume->cache = vcookie;
+	kfree(name);
 #endif
+	return 0;
 }
 
 /*
@@ -287,7 +301,7 @@ void afs_deactivate_volume(struct afs_volume *volume)
 	_enter("%s", volume->name);
 
 #ifdef CONFIG_AFS_FSCACHE
-	fscache_relinquish_cookie(volume->cache, NULL,
+	fscache_relinquish_volume(volume->cache, NULL,
 				  test_bit(AFS_VOLUME_DELETED, &volume->flags));
 	volume->cache = NULL;
 #endif

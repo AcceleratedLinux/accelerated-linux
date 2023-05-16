@@ -1,4 +1,5 @@
-URL = http://www.tcpdump.org/release/libpcap-1.9.1.tar.gz
+VERSION = 1.10.0
+URL = http://www.tcpdump.org/release/libpcap-$(VERSION).tar.gz
 
 CONFVARS :=
 CONFVARS += ac_cv_linux_vers=2

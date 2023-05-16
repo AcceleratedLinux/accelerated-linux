@@ -1,0 +1,37 @@
+#!/bin/sh
+
+if [ -f "/etc/config/scripts/alert-nsca" ]; then
+	exec "/etc/config/scripts/alert-nsca" $@
+fi
+
+enabled=$(config -g config.system.nagios.nsca.enabled | cut -f2- -d' ')
+if [ -z "$enabled" ]; then
+	exit 1
+fi
+
+host=$(config -g config.system.nagios.server.address | cut -f2- -d' ')
+if [ -z "$host" ]; then
+	exit 1
+fi
+
+nscaport=$(config -g config.system.nagios.nsca.port | cut -f2- -d' ')
+if [ -z "$nscaport" ]; then
+	nscaport=5667
+fi
+
+disable_link=$(config -g config.system.nagios.sdt.disabled | cut -f2- -d' ')
+if [ ! "$disable_link" == "on" ]; then
+	sdt_gw=$(config -g config.system.nagios.sdt.address | cut -f2- -d' ')
+	if [ -z "$sdt_gw" ]; then
+		sdt_gw=$(config -g config.system.nagios.address | cut -f2- -d' ')
+		if [ -z "$sdt_gw" ]; then
+			sdt_gw=$(config -g config.interfaces.wan.address | cut -f2- -d' ')
+		fi
+	fi
+	if [ ! -z "$sdt_gw" ]; then
+		STATUS="$STATUS - <a href=\"sdt://$sdt_gw/127.0.0.1#TCP Port 443\">Management Console via SDT</a>"
+	fi
+fi
+
+echo -e "$NAME\t$CHECK\t$CODE\t$STATUS" | send_nsca -H $host -p $nscaport -c /etc/config/send_nsca.cfg
+exit $?

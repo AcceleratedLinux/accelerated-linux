@@ -1,0 +1,10 @@
+rm ./romfs/lib/firmware/ath11k/QCN9074/hw1.0/board-2.bin
+
+For SparkLan WPEQ-405AX module:
+sudo cp user/ath11k-firmware/vendor_file/SparkLan/board.bin ./romfs/lib/firmware/ath11k/QCN9074/hw1.0/board.bin
+sudo cp user/ath11k-firmware/vendor_file/SparkLan/amss.bin ./romfs/lib/firmware/ath11k/QCN9074/hw1.0/
+sudo cp user/ath11k-firmware/vendor_file/SparkLan/m3.bin ./romfs/lib/firmware/ath11k/QCN9074/hw1.0/
+make image
+
+Or for Compex WLE3002HX module:
+sudo cp user/ath11k-firmware/vendor_file/Compex/WLE3002HX_5G-v2.bin ./romfs/lib/firmware/ath11k/QCN9074/hw1.0/board.bin

@@ -129,7 +129,9 @@ also a special value which can be returned by the start() function
 called SEQ_START_TOKEN; it can be used if you wish to instruct your
 show() function (described below) to print a header at the top of the
 output. SEQ_START_TOKEN should only be used if the offset is zero,
-however.
+however.  SEQ_START_TOKEN has no special meaning to the core seq_file
+code.  It is provided as a convenience for a start() funciton to
+communicate with the next() and show() functions.
 
 The next function to implement is called, amazingly, next(); its job is to
 move the iterator forward to the next position in the sequence.  The
@@ -144,6 +146,22 @@ complete. Here's the example version::
 	        *pos = ++*spos;
 	        return spos;
 	}
+
+The next() function should set ``*pos`` to a value that start() can use
+to find the new location in the sequence.  When the iterator is being
+stored in the private data area, rather than being reinitialized on each
+start(), it might seem sufficient to simply set ``*pos`` to any non-zero
+value (zero always tells start() to restart the sequence).  This is not
+sufficient due to historical problems.
+
+Historically, many next() functions have *not* updated ``*pos`` at
+end-of-file.  If the value is then used by start() to initialise the
+iterator, this can result in corner cases where the last entry in the
+sequence is reported twice in the file.  In order to discourage this bug
+from being resurrected, the core seq_file code now produces a warning if
+a next() function does not change the value of ``*pos``.  Consequently a
+next() function *must* change the value of ``*pos``, and of course must
+set it to a non-zero value.
 
 The stop() function closes a session; its job, of course, is to clean
 up. If dynamic memory is allocated for the iterator, stop() is the
@@ -198,6 +216,12 @@ iterator function. However, the seq_file code (by design) will not sleep
 between the calls to start() and stop(), so holding a lock during that time
 is a reasonable thing to do. The seq_file code will also avoid taking any
 other locks while the iterator is active.
+
+The iterater value returned by start() or next() is guaranteed to be
+passed to a subsequent next() or stop() call.  This allows resources
+such as locks that were taken to be reliably released.  There is *no*
+guarantee that the iterator will be passed to show(), though in practice
+it often will be.
 
 
 Formatted output

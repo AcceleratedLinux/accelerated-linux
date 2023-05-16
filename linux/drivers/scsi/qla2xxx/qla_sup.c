@@ -1,8 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * QLogic Fibre Channel HBA Driver
  * Copyright (c)  2003-2014 QLogic Corporation
- *
- * See LICENSE.qla2xxx for copyright and licensing details.
  */
 #include "qla_def.h"
 
@@ -845,7 +844,7 @@ qla2xxx_get_flt_info(scsi_qla_host_t *vha, uint32_t flt_addr)
 				ha->flt_region_nvram = start;
 			break;
 		case FLT_REG_IMG_PRI_27XX:
-			if (IS_QLA27XX(ha) && !IS_QLA28XX(ha))
+			if (IS_QLA27XX(ha) || IS_QLA28XX(ha))
 				ha->flt_region_img_status_pri = start;
 			break;
 		case FLT_REG_IMG_SEC_27XX:
@@ -1357,7 +1356,7 @@ next:
 		    flash_data_addr(ha, faddr), le32_to_cpu(*dwptr));
 		if (ret) {
 			ql_dbg(ql_dbg_user, vha, 0x7006,
-			    "Failed slopw write %x (%x)\n", faddr, *dwptr);
+			    "Failed slow write %x (%x)\n", faddr, *dwptr);
 			break;
 		}
 	}
@@ -2457,7 +2456,7 @@ qla2x00_write_optrom_data(struct scsi_qla_host *vha, void *buf,
 				sec_mask = 0x10000;
 				break;
 			}
-			/* Fall through... */
+			fallthrough;
 
 		case 0x1f: /* Atmel flash. */
 			/* 512k sector size. */
@@ -2466,7 +2465,7 @@ qla2x00_write_optrom_data(struct scsi_qla_host *vha, void *buf,
 				sec_mask =   0x80000000;
 				break;
 			}
-			/* Fall through... */
+			fallthrough;
 
 		case 0x01: /* AMD flash. */
 			if (flash_id == 0x38 || flash_id == 0x40 ||
@@ -2499,7 +2498,7 @@ qla2x00_write_optrom_data(struct scsi_qla_host *vha, void *buf,
 				sec_mask = 0x1e000;
 				break;
 			}
-			/* fall through */
+			fallthrough;
 		default:
 			/* Default to 16 kb sector size. */
 			rest_addr = 0x3fff;
@@ -2622,10 +2621,11 @@ qla24xx_read_optrom_data(struct scsi_qla_host *vha, void *buf,
 }
 
 static int
-qla28xx_extract_sfub_and_verify(struct scsi_qla_host *vha, uint32_t *buf,
+qla28xx_extract_sfub_and_verify(struct scsi_qla_host *vha, __le32 *buf,
     uint32_t len, uint32_t buf_size_without_sfub, uint8_t *sfub_buf)
 {
-	uint32_t *p, check_sum = 0;
+	uint32_t check_sum = 0;
+	__le32 *p;
 	int i;
 
 	p = buf + buf_size_without_sfub;
@@ -2635,14 +2635,14 @@ qla28xx_extract_sfub_and_verify(struct scsi_qla_host *vha, uint32_t *buf,
 	    sizeof(struct secure_flash_update_block));
 
 	for (i = 0; i < (sizeof(struct secure_flash_update_block) >> 2); i++)
-		check_sum += p[i];
+		check_sum += le32_to_cpu(p[i]);
 
 	check_sum = (~check_sum) + 1;
 
-	if (check_sum != p[i]) {
+	if (check_sum != le32_to_cpu(p[i])) {
 		ql_log(ql_log_warn, vha, 0x7097,
 		    "SFUB checksum failed, 0x%x, 0x%x\n",
-		    check_sum, p[i]);
+		    check_sum, le32_to_cpu(p[i]));
 		return QLA_COMMAND_ERROR;
 	}
 
@@ -2722,7 +2722,7 @@ qla28xx_write_flash_data(scsi_qla_host_t *vha, uint32_t *dwptr, uint32_t faddr,
 	if (ha->flags.secure_adapter && region.attribute) {
 
 		ql_log(ql_log_warn + ql_dbg_verbose, vha, 0xffff,
-		    "Region %x is secure\n", region.code);
+		    "Region %x is secure\n", le16_to_cpu(region.code));
 
 		switch (le16_to_cpu(region.code)) {
 		case FLT_REG_FW:
@@ -2776,7 +2776,7 @@ qla28xx_write_flash_data(scsi_qla_host_t *vha, uint32_t *dwptr, uint32_t faddr,
 		default:
 			ql_log(ql_log_warn + ql_dbg_verbose, vha,
 			    0xffff, "Secure region %x not supported\n",
-			    region.code);
+			    le16_to_cpu(region.code));
 			rval = QLA_COMMAND_ERROR;
 			goto done;
 		}
@@ -2791,8 +2791,8 @@ qla28xx_write_flash_data(scsi_qla_host_t *vha, uint32_t *dwptr, uint32_t faddr,
 			goto done;
 		}
 
-		rval = qla28xx_extract_sfub_and_verify(vha, dwptr, dwords,
-			buf_size_without_sfub, (uint8_t *)sfub);
+		rval = qla28xx_extract_sfub_and_verify(vha, (__le32 *)dwptr,
+			dwords, buf_size_without_sfub, (uint8_t *)sfub);
 
 		if (rval != QLA_SUCCESS)
 			goto done;
@@ -2936,7 +2936,6 @@ qla28xx_write_flash_data(scsi_qla_host_t *vha, uint32_t *dwptr, uint32_t faddr,
 		liter += dburst - 1;
 		faddr += dburst - 1;
 		dwptr += dburst - 1;
-		continue;
 	}
 
 write_protect:

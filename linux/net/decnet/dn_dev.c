@@ -462,7 +462,9 @@ int dn_dev_ioctl(unsigned int cmd, void __user *arg)
 	switch (cmd) {
 	case SIOCGIFADDR:
 		*((__le16 *)sdn->sdn_nodeaddr) = ifa->ifa_local;
-		goto rarok;
+		if (copy_to_user(arg, ifr, DN_IFREQ_SIZE))
+			ret = -EFAULT;
+		break;
 
 	case SIOCSIFADDR:
 		if (!ifa) {
@@ -485,10 +487,6 @@ done:
 	rtnl_unlock();
 
 	return ret;
-rarok:
-	if (copy_to_user(arg, ifr, DN_IFREQ_SIZE))
-		ret = -EFAULT;
-	goto done;
 }
 
 struct net_device *dn_dev_get_default(void)
@@ -523,8 +521,7 @@ int dn_dev_set_default(struct net_device *dev, int force)
 	}
 	spin_unlock(&dndev_lock);
 
-	if (old)
-		dev_put(old);
+	dev_put(old);
 	return rv;
 }
 
@@ -538,8 +535,7 @@ static void dn_dev_check_default(struct net_device *dev)
 	}
 	spin_unlock(&dndev_lock);
 
-	if (dev)
-		dev_put(dev);
+	dev_put(dev);
 }
 
 /*
@@ -660,7 +656,7 @@ static int dn_nl_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	ifa->ifa_dev = dn_db;
 
 	if (tb[IFA_LABEL])
-		nla_strlcpy(ifa->ifa_label, tb[IFA_LABEL], IFNAMSIZ);
+		nla_strscpy(ifa->ifa_label, tb[IFA_LABEL], IFNAMSIZ);
 	else
 		memcpy(ifa->ifa_label, dev->name, IFNAMSIZ);
 
@@ -858,7 +854,7 @@ static void dn_send_endnode_hello(struct net_device *dev, struct dn_ifaddr *ifa)
 	memcpy(msg->neighbor, dn_hiord, ETH_ALEN);
 
 	if (dn_db->router) {
-		struct dn_neigh *dn = (struct dn_neigh *)dn_db->router;
+		struct dn_neigh *dn = container_of(dn_db->router, struct dn_neigh, n);
 		dn_dn2eth(msg->neighbor, dn->addr);
 	}
 
@@ -906,7 +902,7 @@ static void dn_send_router_hello(struct net_device *dev, struct dn_ifaddr *ifa)
 {
 	int n;
 	struct dn_dev *dn_db = rcu_dereference_raw(dev->dn_ptr);
-	struct dn_neigh *dn = (struct dn_neigh *)dn_db->router;
+	struct dn_neigh *dn = container_of(dn_db->router, struct dn_neigh, n);
 	struct sk_buff *skb;
 	size_t size;
 	unsigned char *ptr;

@@ -12,4 +12,8 @@ dtb-$(CONFIG_DTB_MT7621_TX54_MIGRATION)	+= mt7621_tx54_migration.dtb
 dtb-$(CONFIG_DTB_OMEGA2P)	+= omega2p.dtb
 dtb-$(CONFIG_DTB_VOCORE2)	+= vocore2.dtb
 
+dtb-$(CONFIG_SOC_MT7621) += \
+	mt7621-gnubee-gb-pc1.dtb \
+	mt7621-gnubee-gb-pc2.dtb
+
 obj-$(CONFIG_BUILTIN_DTB)	+= $(addsuffix .o, $(dtb-y))

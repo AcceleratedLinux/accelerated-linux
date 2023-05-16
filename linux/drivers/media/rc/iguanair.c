@@ -59,7 +59,7 @@ struct iguanair {
 #define MAX_IN_PACKET		8u
 #define MAX_OUT_PACKET		(sizeof(struct send_packet) + BUF_SIZE)
 #define TIMEOUT			1000
-#define RX_RESOLUTION		21333
+#define RX_RESOLUTION		21
 
 struct packet {
 	uint16_t start;
@@ -101,7 +101,7 @@ static void process_ir_data(struct iguanair *ir, unsigned len)
 			break;
 		case CMD_TX_OVERFLOW:
 			ir->tx_overflow = true;
-			/* fall through */
+			fallthrough;
 		case CMD_RECEIVER_OFF:
 		case CMD_RECEIVER_ON:
 		case CMD_SEND:
@@ -109,7 +109,7 @@ static void process_ir_data(struct iguanair *ir, unsigned len)
 			break;
 		case CMD_RX_OVERFLOW:
 			dev_warn(ir->dev, "receive overflow\n");
-			ir_raw_event_reset(ir->rc);
+			ir_raw_event_overflow(ir->rc);
 			break;
 		default:
 			dev_warn(ir->dev, "control code %02x received\n",
@@ -124,7 +124,7 @@ static void process_ir_data(struct iguanair *ir, unsigned len)
 		for (i = 0; i < 7; i++) {
 			if (ir->buf_in[i] == 0x80) {
 				rawir.pulse = false;
-				rawir.duration = US_TO_NS(21845);
+				rawir.duration = 21845;
 			} else {
 				rawir.pulse = (ir->buf_in[i] & 0x80) == 0;
 				rawir.duration = ((ir->buf_in[i] & 0x7f) + 1) *
@@ -261,9 +261,6 @@ static int iguanair_receiver(struct iguanair *ir, bool enable)
 	ir->packet->header.start = 0;
 	ir->packet->header.direction = DIR_OUT;
 	ir->packet->header.cmd = enable ? CMD_RECEIVER_ON : CMD_RECEIVER_OFF;
-
-	if (enable)
-		ir_raw_event_reset(ir->rc);
 
 	return iguanair_send(ir, sizeof(ir->packet->header));
 }

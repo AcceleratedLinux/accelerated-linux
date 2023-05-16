@@ -8,6 +8,9 @@ OBJS1 = simpleinit.o
 EXEC2 = expand
 OBJS2 = expand.o
 
+EXEC3 = edinittab
+OBJS3 = edinittab.o
+
 ifdef CONFIG_UCLINUX
 BINDIR = /bin
 else
@@ -23,11 +26,7 @@ CFLAGS += -DINCLUDE_TIMEZONE
 endif
 endif
 
-ifdef CONFIG_LIB_LIBSSL_FIPS
-CFLAGS += -DINCLUDE_FIPS
-endif
-
-all: $(EXEC1) $(EXEC2)
+all: $(EXEC1) $(EXEC2) $(EXEC3)
 
 $(EXEC1): $(OBJS1)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS1) $(LIBCRYPT) $(LDLIBS$(LDLIBS_$@))
@@ -36,9 +35,14 @@ $(EXEC1): $(OBJS1)
 $(EXEC2): $(OBJS2)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS2) $(LDLIBS$(LDLIBS_$@))
 
+$(EXEC3): $(OBJS3)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS$(LDLIBS_$@))
+
 romfs:
 	$(ROMFSINST) -e CONFIG_USER_INIT_EXPAND /bin/$(EXEC2)
 	$(ROMFSINST) -e CONFIG_USER_INIT_INIT /bin/$(EXEC1)
+	$(ROMFSINST) -e CONFIG_USER_INIT_EDINITTAB /bin/$(EXEC3)
+
 ifdef CONFIG_USER_INIT_OVERLAY
 	mkdir -p $(ROMFSDIR)/overlay
 endif
@@ -55,5 +59,5 @@ ifdef CONFIG_USER_INIT_DEFAULT_ENTRIES
 endif
 
 clean:
-	rm -f simpleinit $(EXEC1) $(EXEC2) *.elf *.gdb *.o
+	rm -f simpleinit $(EXEC1) $(EXEC2) $(EXEC3) *.elf *.gdb *.o
 

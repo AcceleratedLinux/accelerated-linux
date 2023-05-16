@@ -22,6 +22,7 @@
 #include <linux/platform_data/mtd-orion_nand.h>
 
 struct orion_nand_info {
+	struct nand_controller controller;
 	struct nand_chip chip;
 	struct clk *clk;
 };
@@ -89,8 +90,7 @@ static void orion_nand_read_buf(struct nand_chip *chip, uint8_t *buf, int len)
 #endif
 }
 
-static int orion_nand_ecc = NAND_ECC_SOFT;
-static int orion_nand_algo = NAND_ECC_HAMMING;
+static int orion_nand_algo = NAND_ECC_ALGO_HAMMING;
 
 #ifdef CONFIG_MTD_NAND_ECC_SW_BCH
 /*
@@ -100,14 +100,23 @@ static int orion_nand_algo = NAND_ECC_HAMMING;
  */
 static int orion_set_nand_ecc(char *s)
 {
-	if (strncmp(s, "bch", 3) == 0) {
-		orion_nand_ecc = NAND_ECC_SOFT;
-		orion_nand_algo = NAND_ECC_BCH;
-	}
+	if (strncmp(s, "bch", 3) == 0)
+		orion_nand_algo = NAND_ECC_ALGO_BCH;
 	return 1;
 }
 __setup("nandecc=", orion_set_nand_ecc);
 #endif
+
+static int orion_nand_attach_chip(struct nand_chip *chip)
+{
+	chip->ecc.engine_type = NAND_ECC_ENGINE_TYPE_SOFT;
+	chip->ecc.algo = orion_nand_algo;
+	return 0;
+}
+
+static const struct nand_controller_ops orion_nand_ops = {
+	.attach_chip = orion_nand_attach_chip,
+};
 
 static int __init orion_nand_probe(struct platform_device *pdev)
 {
@@ -127,6 +136,10 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	nc = &info->chip;
 	mtd = nand_to_mtd(nc);
+
+	nand_controller_init(&info->controller);
+	info->controller.ops = &orion_nand_ops;
+	nc->controller = &info->controller;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	io_base = devm_ioremap_resource(&pdev->dev, res);
@@ -166,7 +179,7 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 	nc->legacy.IO_ADDR_R = nc->legacy.IO_ADDR_W = io_base;
 	nc->legacy.cmd_ctrl = orion_nand_cmd_ctrl;
 	nc->legacy.read_buf = orion_nand_read_buf;
-	nc->ecc.mode = orion_nand_ecc;
+	nc->ecc.engine_type = NAND_ECC_ENGINE_TYPE_SOFT;
 	nc->ecc.algo = orion_nand_algo;
 
 	if (board->chip_delay)
@@ -199,6 +212,13 @@ static int __init orion_nand_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to prepare clock!\n");
 		return ret;
 	}
+
+	/*
+	 * This driver assumes that the default ECC engine should be TYPE_SOFT.
+	 * Set ->engine_type before registering the NAND devices in order to
+	 * provide a driver specific default value.
+	 */
+	nc->ecc.engine_type = NAND_ECC_ENGINE_TYPE_SOFT;
 
 	ret = nand_scan(nc, 1);
 	if (ret)

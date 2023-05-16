@@ -13,25 +13,25 @@ Date:   Tue Feb 26 13:21:47 2019 +1000
     
     This helps improve the efficiency for the client to renew successfully at the
     next T1 timeout.
-Index: busybox-1.31.0/networking/udhcp/dhcpc.c
+Index: busybox-1.33.1/networking/udhcp/dhcpc.c
 ===================================================================
---- busybox-1.31.0.orig/networking/udhcp/dhcpc.c
-+++ busybox-1.31.0/networking/udhcp/dhcpc.c
-@@ -1813,6 +1813,17 @@ int udhcpc_main(int argc UNUSED_PARAM, c
- 				struct in_addr temp_addr;
- 				uint8_t *temp;
+--- busybox-1.34.1.org/networking/udhcp/dhcpc.c	2021-07-21 00:57:20.000000000 +1000
++++ busybox-1.34.1/networking/udhcp/dhcpc.c	2021-12-15 10:06:24.722147012 +1000
+@@ -1791,6 +1791,17 @@
+ 
+ 				change_listen_mode(LISTEN_NONE);
  
 +				/*
-+				 * A success to rebind at T2 implies failure to renew
-+				 * at T1. Update server's address
++				 * A success to rebind at T2 implies failure
++				 * to renew at T1. Update server's address
 +				 */
 +				if (client_data.state == REBINDING) {
 +					temp = udhcp_get_option32(&packet, DHCP_SERVER_ID);
 +					if (temp) {
-+						move_from_unaligned32(server_addr, temp);
++						move_from_unaligned32(server_id, temp);
 +					}
 +				}
 +
- 				temp = udhcp_get_option32(&packet, DHCP_LEASE_TIME);
- 				if (!temp) {
- 					bb_info_msg("no lease time with ACK, using 1 hour lease");
+ 				temp_addr.s_addr = server_id;
+ 				strcpy(server_str, inet_ntoa(temp_addr));
+ 				temp_addr.s_addr = packet.yiaddr;

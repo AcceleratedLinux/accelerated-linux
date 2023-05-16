@@ -31,11 +31,13 @@
 #include <linux/spi/spi.h>
 #include <linux/uaccess.h>
 #include <uapi/linux/sched/types.h>
+#include <asm-generic/digi_realport.h>
 
 #define XR20M1280_NAME			"xr20m1280"
 #define XR20M1280_DEVNAME		"ttyXR"
 #define XR20M1280_MAX_DEVS		8
 
+//#define VALIDATE_REG_ACCESS
 
 /* XR20M1280 register definitions */
 
@@ -78,15 +80,6 @@
  *       be cached.  The RHR and ISR will still be marked as precious,
  *       so that debug functions don't read those registers (and lose
  *       information) in lieu of standard operation.
- */
-
-/*
- * NOTE: Regarding GPIO handling
- *
- *       None of the GPIO pins of the UART are being connected to the
- *       more general Linux GPIO subsystem, as all connected pins have
- *       distinct UART-related functions, and will be controlled directly
- *       by the driver.
  */
 
 
@@ -175,6 +168,7 @@
     #define XR20M1280_FCR_WAKEI_BIT	(1 << 3) /* Enable wake up interrupt */
     #define XR20M1280_FCR_TXLVLL_BIT	(1 << 4) /* TX Trigger level LSB */
     #define XR20M1280_FCR_TXLVLH_BIT	(1 << 5) /* TX Trigger level MSB */
+    #define XR20M1280_FCR_DEFAULT	(XR20M1280_FCR_FIFO_BIT | XR20M1280_FCR_RXLVLL_BIT | XR20M1280_FCR_TXLVLH_BIT)
 
 /* Enhanced Register set: Only if (LCR == 0xBF) */
 #define XR20M1280_EFR_REG		(0x02) /* Enhanced Function */
@@ -479,6 +473,16 @@ enum uart_pm_state {
 };
 #endif
 
+#define RTS_TOGGLE_LSR_POLL_INTERVAL 200000
+
+enum xr20m1280_tx_state {
+	xr20m1280_tx_state_stopped,
+	xr20m1280_tx_state_starting,
+	xr20m1280_tx_state_started,
+	xr20m1280_tx_state_polling,
+	xr20m1280_tx_state_stopping
+};
+
 struct xr20m1280_devtype {
 	char	name[10];
 	int	nr_gpio;
@@ -487,20 +491,31 @@ struct xr20m1280_devtype {
 
 #define XR20M1280_RECONF_MD		(1 << 0)
 #define XR20M1280_RECONF_IER		(1 << 1)
-#define XR20M1280_RECONF_RS485		(1 << 2)
+#define XR20M1280_RECONF_RS485	(1 << 2)
+#define XR20M1280_RECONF_RTS_TOGGLE	(1 << 3)
 
 struct xr20m1280_one_config {
 	unsigned int			flags;
 	u8				ier_clear;
+	u8				ier_set;
 };
 
 struct xr20m1280_one {
 	struct uart_port		port;
 	u8				line;
 	unsigned int			msr_cache;
+	struct kthread_work		start_work;
 	struct kthread_work		tx_work;
+	struct kthread_work		stop_work;
 	struct kthread_work		reg_work;
+	struct hrtimer			start_tx_timer;
+	struct hrtimer			stop_tx_timer;
 	struct xr20m1280_one_config	config;
+	struct serial_rts_toggle	rts_toggle;
+	unsigned int 			estat;
+	unsigned int			flow;
+	enum xr20m1280_tx_state	tx_state;
+	bool				stopped;
 };
 
 struct xr20m1280_port {
@@ -515,8 +530,55 @@ struct xr20m1280_port {
 	struct task_struct		*kworker_task;
 	struct kthread_work		irq_work;
 	struct mutex			reg_mode_mutex;
+#ifdef VALIDATE_REG_ACCESS
+	struct {
+		u8 lcr;
+		u8 sfr;
+		u8 fctr;
+		u8 efr;
+		u8 dll;
+		u8 dlm;
+		u8 dld;
+	} cache;
+#endif
 	struct xr20m1280_one		p[0];
 };
+
+#ifdef VALIDATE_REG_ACCESS
+enum xr20m1280_register {
+	XR20M1280_RHR_REG_ENUM,
+	XR20M1280_THR_REG_ENUM,
+	XR20M1280_IER_REG_ENUM,
+	XR20M1280_ISR_REG_ENUM,
+	XR20M1280_FCR_REG_ENUM,
+	XR20M1280_LCR_REG_ENUM,
+	XR20M1280_MCR_REG_ENUM,
+	XR20M1280_LSR_REG_ENUM,
+	XR20M1280_SHR_REG_ENUM,
+	XR20M1280_MSR_REG_ENUM,
+	XR20M1280_SFR_REG_ENUM,
+	XR20M1280_SPR_REG_ENUM,
+	XR20M1280_GPIOLVL_REG_ENUM,
+	XR20M1280_EMSR_REG_ENUM,
+	XR20M1280_FCNT_REG_ENUM,
+	XR20M1280_DREV_REG_ENUM,
+	XR20M1280_DLL_REG_ENUM,
+	XR20M1280_DLM_REG_ENUM,
+	XR20M1280_DLD_REG_ENUM,
+	XR20M1280_FC_REG_ENUM,
+	XR20M1280_TRIG_REG_ENUM,
+	XR20M1280_FCTR_REG_ENUM,
+	XR20M1280_EFR_REG_ENUM,
+	XR20M1280_XON1_REG_ENUM,
+	XR20M1280_XON2_REG_ENUM,
+	XR20M1280_XOFF1_REG_ENUM,
+	XR20M1280_XOFF2_REG_ENUM,
+	XR20M1280_GPIOINT_REG_ENUM,
+	XR20M1280_GPIO3T_REG_ENUM,
+	XR20M1280_GPIOINV_REG_ENUM,
+	XR20M1280_GPIOSEL_REG_ENUM,
+};
+#endif
 
 static unsigned long xr20m1280_lines;
 
@@ -529,6 +591,7 @@ static struct uart_driver xr20m1280_uart = {
 
 #define to_xr20m1280_port(p,e)	((container_of((p), struct xr20m1280_port, e)))
 #define to_xr20m1280_one(p,e)	((container_of((p), struct xr20m1280_one, e)))
+#define RTS_TOGGLE_ENABLED(one) (((one)->port.rs485.flags & SER_RS485_ENABLED) == 0 && (one)->rts_toggle.enable)
 static int xr20m1280_line(struct uart_port *port)
 {
 	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
@@ -536,7 +599,7 @@ static int xr20m1280_line(struct uart_port *port)
 	return one->line;
 }
 
-static u8 xr20m1280_port_read(struct uart_port *port, u8 reg)
+static u8 _xr20m1280_port_read(struct uart_port *port, u8 reg)
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 	unsigned int val = 0;
@@ -547,7 +610,7 @@ static u8 xr20m1280_port_read(struct uart_port *port, u8 reg)
 	return val;
 }
 
-static void xr20m1280_port_write(struct uart_port *port, u8 reg, u8 val)
+static void _xr20m1280_port_write(struct uart_port *port, u8 reg, u8 val)
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 	const u8 line = xr20m1280_line(port);
@@ -556,13 +619,267 @@ static void xr20m1280_port_write(struct uart_port *port, u8 reg, u8 val)
 	regmap_write(s->regmap, (reg << XR20M1280_REG_SHIFT) | line, val);
 }
 
+static void _xr20m1280_port_update(struct uart_port *port, u8 reg,
+				  u8 mask, u8 val)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	const u8 line = xr20m1280_line(port);
+
+	pr_debug("port_update: reg: 0x%02x, mask: 0x%02x, val: 0x%02x\n", reg, mask, val);
+	regmap_update_bits(s->regmap, (reg << XR20M1280_REG_SHIFT) | line,
+			   mask, val);
+}
+
+#ifdef VALIDATE_REG_ACCESS
+static inline u8 conf_mode_a(struct xr20m1280_port *s)
+{
+	return s->cache.lcr & XR20M1280_LCR_DLAB_BIT;
+}
+
+static inline u8 enhanced_mode(struct xr20m1280_port *s)
+{
+	return s->cache.efr & XR20M1280_EFR_ENABLE_BIT;
+}
+
+static inline u8 conf_mode_b(struct xr20m1280_port *s)
+{
+	return s->cache.lcr == XR20M1280_LCR_CONF_MODE_B;
+}
+
+static inline u8 gpio_mode(struct xr20m1280_port *s)
+{
+	return s->cache.sfr & XR20M1280_SFR_GPIOE_BIT;
+}
+
+static inline u8 scratchpad_disabled(struct xr20m1280_port *s)
+{
+	return s->cache.fctr & XR20M1280_FCTR_SPSW_BIT;
+}
+
+static void validate_register_access(struct xr20m1280_port *s, char const * const str, enum xr20m1280_register reg, int line, u8 write)
+{
+	u8 valid = 0;
+
+	switch (reg) {
+	case XR20M1280_RHR_REG_ENUM:
+		valid = !conf_mode_a(s) && !write;
+		break;
+	case XR20M1280_THR_REG_ENUM:
+		valid = !conf_mode_a(s) && write;
+		break;
+	case XR20M1280_IER_REG_ENUM:
+		valid = !conf_mode_a(s);
+		break;
+	case XR20M1280_ISR_REG_ENUM:
+		valid = enhanced_mode(s) ? !conf_mode_a(s) : !conf_mode_b(s);
+		valid = valid && !write;
+		break;
+	case XR20M1280_FCR_REG_ENUM:
+		valid = enhanced_mode(s) ? !conf_mode_a(s) : !conf_mode_b(s);
+		valid = valid && write;
+		break;
+	case XR20M1280_LCR_REG_ENUM:
+		valid = 1;
+		break;
+	case XR20M1280_MCR_REG_ENUM:
+		valid = !conf_mode_b(s);
+		break;
+	case XR20M1280_LSR_REG_ENUM:
+	case XR20M1280_MSR_REG_ENUM:
+		valid = !conf_mode_b(s) && !write;
+		break;
+	case XR20M1280_SHR_REG_ENUM:
+	case XR20M1280_SFR_REG_ENUM:
+		valid = !conf_mode_b(s) && write;
+		break;
+	case XR20M1280_SPR_REG_ENUM:
+		valid = !conf_mode_b(s) && !scratchpad_disabled(s) && !gpio_mode(s);
+		break;
+	case XR20M1280_GPIOLVL_REG_ENUM:
+		valid = !conf_mode_b(s) && !scratchpad_disabled(s) && gpio_mode(s);
+		break;
+	case XR20M1280_EMSR_REG_ENUM:
+		valid = !conf_mode_b(s) && scratchpad_disabled(s) && !gpio_mode(s) && write;
+		break;
+	case XR20M1280_FCNT_REG_ENUM:
+		valid = !conf_mode_b(s) && scratchpad_disabled(s) && !gpio_mode(s) && !write;
+		break;
+	case XR20M1280_DREV_REG_ENUM:
+		valid = conf_mode_a(s) && !conf_mode_b(s) && s->cache.dll == 0 && s->cache.dlm == 0 && !write;
+		break;
+	case XR20M1280_DLL_REG_ENUM:
+	case XR20M1280_DLM_REG_ENUM:
+		valid = conf_mode_a(s) && !conf_mode_b(s);
+		break;
+	case XR20M1280_DLD_REG_ENUM:
+		valid = conf_mode_a(s) && !conf_mode_b(s) && enhanced_mode(s);
+		break;
+	case XR20M1280_FC_REG_ENUM:
+		valid = conf_mode_b(s) && !write;
+		break;
+	case XR20M1280_TRIG_REG_ENUM:
+		valid = conf_mode_b(s) && write;
+		break;
+	case XR20M1280_FCTR_REG_ENUM:
+	case XR20M1280_EFR_REG_ENUM:
+		valid = conf_mode_b(s);
+		break;
+	case XR20M1280_XON1_REG_ENUM:
+	case XR20M1280_XON2_REG_ENUM:
+	case XR20M1280_XOFF1_REG_ENUM:
+	case XR20M1280_XOFF2_REG_ENUM:
+		valid = conf_mode_b(s) && !gpio_mode(s);
+		break;
+	case XR20M1280_GPIOINT_REG_ENUM:
+	case XR20M1280_GPIO3T_REG_ENUM:
+	case XR20M1280_GPIOINV_REG_ENUM:
+	case XR20M1280_GPIOSEL_REG_ENUM:
+		valid = conf_mode_b(s) && gpio_mode(s);
+		break;
+	}
+	if (!valid) {
+		pr_warn("Invalid access to %s at %d! LCR: %hhu EFR: %hhu SFR: %hhu FCTR: %hhu DLL: %hhu DLM: %hhu DLD: %hhu write %hhu\n",
+		str, line, s->cache.lcr, s->cache.efr, s->cache.sfr, s->cache.fctr, s->cache.dll, s->cache.dlm, s->cache.dld, write);
+	}
+}
+
+static u8 _xr20m1280_port_validate_and_read(struct uart_port *port, char const * const str, enum xr20m1280_register reg, int line, u8 addr)
+{
+	u8 expected, actual;
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	validate_register_access(s, str, reg, line, 0);
+	actual = _xr20m1280_port_read(port, addr);
+	switch (reg) {
+	case XR20M1280_LCR_REG_ENUM:
+		expected = s->cache.lcr;
+		s->cache.lcr = actual;
+		break;
+	case XR20M1280_EFR_REG_ENUM:
+		expected = s->cache.efr;
+		s->cache.efr = actual;
+		break;
+	case XR20M1280_SFR_REG_ENUM:
+		expected = s->cache.sfr;
+		s->cache.sfr = actual;
+		break;
+	case XR20M1280_FCTR_REG_ENUM:
+		expected = s->cache.fctr;
+		s->cache.fctr = actual;
+		break;
+	case XR20M1280_DLL_REG_ENUM:
+		expected = s->cache.dll;
+		s->cache.dll = actual;
+		break;
+	case XR20M1280_DLM_REG_ENUM:
+		expected = s->cache.dlm;
+		s->cache.dlm = actual;
+		break;
+	case XR20M1280_DLD_REG_ENUM:
+		expected = s->cache.dld;
+		s->cache.dld = actual;
+		break;
+	default:
+		expected = actual;
+		break;
+	}
+	if (expected != actual) {
+		pr_warn("Cache mismatch for %s! Expected: %hhu Actual: %hhu\n", str, expected, actual);
+	}
+	return actual;
+}
+
+static void _xr20m1280_port_validate_and_write(struct uart_port *port, char const * const str, enum xr20m1280_register reg, int line, u8 addr, u8 val)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	switch (reg) {
+	case XR20M1280_LCR_REG_ENUM:
+		s->cache.lcr = val;
+		break;
+	case XR20M1280_EFR_REG_ENUM:
+		s->cache.efr = val;
+		break;
+	case XR20M1280_SFR_REG_ENUM:
+		s->cache.sfr = val;
+		break;
+	case XR20M1280_FCTR_REG_ENUM:
+		s->cache.fctr = val;
+		break;
+	case XR20M1280_DLL_REG_ENUM:
+		s->cache.dll = val;
+		break;
+	case XR20M1280_DLM_REG_ENUM:
+		s->cache.dlm = val;
+		break;
+	case XR20M1280_DLD_REG_ENUM:
+		s->cache.dld = val;
+		break;
+	default:
+		break;
+	}
+	validate_register_access(s, str, reg, line, 1);
+	_xr20m1280_port_write(port, addr, val);
+}
+
+static void _xr20m1280_port_validate_and_update(struct uart_port *port, char const * const str, enum xr20m1280_register reg, int line, u8 addr, u8 mask, u8 val)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	switch (reg) {
+	case XR20M1280_LCR_REG_ENUM:
+		s->cache.lcr = (s->cache.lcr & ~mask) | (val & mask);
+		break;
+	case XR20M1280_EFR_REG_ENUM:
+		s->cache.efr = (s->cache.efr & ~mask) | (val & mask);
+		break;
+	case XR20M1280_SFR_REG_ENUM:
+		s->cache.sfr = (s->cache.sfr & ~mask) | (val & mask);
+		break;
+	case XR20M1280_FCTR_REG_ENUM:
+		s->cache.fctr = (s->cache.fctr & ~mask) | (val & mask);
+		break;
+	case XR20M1280_DLL_REG_ENUM:
+		s->cache.dll = (s->cache.dll & ~mask) | (val & mask);
+		break;
+	case XR20M1280_DLM_REG_ENUM:
+		s->cache.dlm = (s->cache.dlm & ~mask) | (val & mask);
+		break;
+	case XR20M1280_DLD_REG_ENUM:
+		s->cache.dld = (s->cache.dld & ~mask) | (val & mask);
+		break;
+	default:
+		break;
+	}
+	validate_register_access(s, str, reg, line, 0);
+	validate_register_access(s, str, reg, line, 1);
+	_xr20m1280_port_update(port, addr, mask, val);
+}
+#define xr20m1280_port_read(port, reg)					_xr20m1280_port_validate_and_read(port, #reg, reg##_ENUM, __LINE__, reg)
+#define xr20m1280_port_write(port, reg, val)			_xr20m1280_port_validate_and_write(port, #reg, reg##_ENUM, __LINE__, reg, val)
+#define xr20m1280_port_update(port, reg, mask, val)		_xr20m1280_port_validate_and_update(port, #reg, reg##_ENUM, __LINE__, reg, mask, val)
+#else
+#define xr20m1280_port_read(port, reg)					_xr20m1280_port_read(port, reg)
+#define xr20m1280_port_write(port, reg, val)			_xr20m1280_port_write(port, reg, val)
+#define xr20m1280_port_update(port, reg, mask, val)		_xr20m1280_port_update(port, reg, mask, val)
+#endif
+
+static void start_hrtimer_ms(struct hrtimer *hrt, unsigned long msec)
+{
+	long sec = msec / 1000;
+	long nsec = (msec % 1000) * 1000000;
+	ktime_t t = ktime_set(sec, nsec);
+
+	hrtimer_start(hrt, t, HRTIMER_MODE_REL);
+}
+
 static void xr20m1280_fifo_read(struct uart_port *port, unsigned int rxlen)
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 	const u8 line = xr20m1280_line(port);
 	u8 addr = (XR20M1280_RHR_REG << XR20M1280_REG_SHIFT) | line;
 
-	regmap_raw_read(s->regmap, addr, s->buf, rxlen);
+	regmap_noinc_read(s->regmap, addr, s->buf, rxlen);
 }
 
 static void xr20m1280_fifo_write(struct uart_port *port, u8 to_send)
@@ -578,18 +895,7 @@ static void xr20m1280_fifo_write(struct uart_port *port, u8 to_send)
 	if (unlikely(!to_send))
 		return;
 
-	regmap_raw_write(s->regmap, addr, s->buf, to_send);
-}
-
-static void xr20m1280_port_update(struct uart_port *port, u8 reg,
-				  u8 mask, u8 val)
-{
-	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
-	const u8 line = xr20m1280_line(port);
-
-	pr_debug("port_update: reg: 0x%02x, mask: 0x%02x, val: 0x%02x\n", reg, mask, val);
-	regmap_update_bits(s->regmap, (reg << XR20M1280_REG_SHIFT) | line,
-			   mask, val);
+	regmap_noinc_write(s->regmap, addr, s->buf, to_send);
 }
 
 #define XR20M1280_FIFO_COUNT_RX 0
@@ -597,20 +903,27 @@ static void xr20m1280_port_update(struct uart_port *port, u8 reg,
 /* Register accesses in fifo_count are protected by reg_mode_mutex in ist */
 static u8 xr20m1280_fifo_count(struct uart_port *port, u8 dir)
 {
-	u8 len;
+	u8 last, len;
 
 	/* Set direction for fifo count read */
-	xr20m1280_port_write(port, XR20M1280_EMSR_REG, 0);
-	xr20m1280_port_write(port, XR20M1280_EMSR_REG, 0x3);
-	len = xr20m1280_port_read(port, XR20M1280_FCNT_REG);
-	// JAP // printk(KERN_INFO "xr20m1280_fifo_count: (1) %d\n", len); // JAP //
-	if (dir == XR20M1280_FIFO_COUNT_RX)
-		goto out;
+	xr20m1280_port_write(port, XR20M1280_EMSR_REG, dir);
+	last = xr20m1280_port_read(port, XR20M1280_FCNT_REG);
 
-	len = xr20m1280_port_read(port, XR20M1280_FCNT_REG);
-	// JAP // printk(KERN_INFO "xr20m1280_fifo_count: (2) %d\n", len); // JAP //
-out:
-	return len;
+	if (dir == XR20M1280_FIFO_COUNT_RX)
+	{
+		int i;
+		for (i = 0; i < 10; i++) {
+			len = xr20m1280_port_read(port, XR20M1280_FCNT_REG);
+			if (len == last)
+				break;
+			last = len;
+		}
+		if (i >= 10) {
+			dev_warn_ratelimited(port->dev, "%s: RX count did not stabilize\n", port->name);
+		}
+	}
+
+	return last;
 }
 
 static int xr20m1280_alloc_line(void)
@@ -716,24 +1029,31 @@ static int _xr20m1280_gpio_get(struct gpio_chip *chip, unsigned offset, int lock
 {
 	u8 lvl;
 	u8 fctr;
+	u8 lcr;
 	struct xr20m1280_port *s = container_of(chip, struct xr20m1280_port, gpio);
 	struct uart_port *port = &s->p[0].port;
 
 	if (lock)
 		mutex_lock(&s->reg_mode_mutex);
 
-	fctr = xr20m1280_port_read(port, XR20M1280_FCTR_REG);
 	/* Enable GPIO regs (SFR[0] == 1) */
 	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_GPIOE_BIT);
+
 	/* Unset swap scratchpad */
+	lcr = xr20m1280_port_read(port, XR20M1280_LCR_REG);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, XR20M1280_LCR_CONF_MODE_B);
+	fctr = xr20m1280_port_read(port, XR20M1280_FCTR_REG);
 	xr20m1280_port_update(port, XR20M1280_FCTR_REG, XR20M1280_FCTR_SPSW_BIT, 0);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
 
 	lvl = xr20m1280_port_read(port, XR20M1280_GPIOLVL_REG);
 	pr_debug("_xr20m1280_gpio_get: offset: %u, lvl: 0x%02x\n", offset, lvl);
 
 	/* Restore required state */
-	xr20m1280_port_write(port, XR20M1280_SFR_REG, 0x0);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, XR20M1280_LCR_CONF_MODE_B);
 	xr20m1280_port_write(port, XR20M1280_FCTR_REG, fctr);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_DEFAULT);
 
 	if (lock)
 		mutex_unlock(&s->reg_mode_mutex);
@@ -757,24 +1077,31 @@ static int xr20m1280_gpio_get(struct gpio_chip *chip, unsigned offset)
 static void _xr20m1280_gpio_set(struct gpio_chip *chip, unsigned offset, int val, int lock)
 {
 	u8 fctr;
+	u8 lcr;
 	struct xr20m1280_port *s = container_of(chip, struct xr20m1280_port, gpio);
 	struct uart_port *port = &s->p[0].port;
 
 	if (lock)
 		mutex_lock(&s->reg_mode_mutex);
 
-	fctr = xr20m1280_port_read(port, XR20M1280_FCTR_REG);
-	/* Enable GPIO regs (SFR[0] == 1) */
+		/* Enable GPIO regs (SFR[0] == 1) */
 	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_GPIOE_BIT);
+
 	/* Unset swap scratchpad */
+	lcr = xr20m1280_port_read(port, XR20M1280_LCR_REG);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, XR20M1280_LCR_CONF_MODE_B);
+	fctr = xr20m1280_port_read(port, XR20M1280_FCTR_REG);
 	xr20m1280_port_update(port, XR20M1280_FCTR_REG, XR20M1280_FCTR_SPSW_BIT, 0);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
 
 	pr_debug("gpio_set: offset: %u, val: %d\n", offset, val);
 	xr20m1280_port_update(port, XR20M1280_GPIOLVL_REG, BIT(offset), val ? BIT(offset) : 0);
 
 	/* Restore required state */
-	xr20m1280_port_write(port, XR20M1280_SFR_REG, 0x0);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, XR20M1280_LCR_CONF_MODE_B);
 	xr20m1280_port_write(port, XR20M1280_FCTR_REG, fctr);
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_DEFAULT);
 
 	if (lock)
 		mutex_unlock(&s->reg_mode_mutex);
@@ -817,18 +1144,23 @@ static int xr20m1280_gpio_direction_input(struct gpio_chip *chip, unsigned offse
 	xr20m1280_port_update(port, XR20M1280_GPIOSEL_REG, BIT(offset), BIT(offset));
 
 	/* Restore required state */
-	xr20m1280_port_write(port, XR20M1280_SFR_REG, 0x0);
 	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_DEFAULT);
 
 	mutex_unlock(&s->reg_mode_mutex);
 
 	return 0;
 }
-
+/*
+ * Per maxlinear there's no way to set the pin as an output without first
+ * setting the pin low.  So, if the pin default is pulled high, and it needs to
+ * be high, it's recommended that the software simply leaves the pin as an
+ * input, until it needs to drive the pin low.  This seems the only way to
+ * avoid a glitch.
+ */
 static int xr20m1280_gpio_direction_output(struct gpio_chip *chip, unsigned offset, int val)
 {
 	u8 lcr;
-	u8 cur_lvl;
 	u8 cur_dir;
 	struct xr20m1280_port *s = container_of(chip, struct xr20m1280_port, gpio);
 	struct uart_port *port = &s->p[0].port;
@@ -840,8 +1172,6 @@ static int xr20m1280_gpio_direction_output(struct gpio_chip *chip, unsigned offs
 	}
 
 	mutex_lock(&s->reg_mode_mutex);
-	cur_lvl = _xr20m1280_gpio_get(chip, offset, 0/*lock*/);
-
 	lcr = xr20m1280_port_read(port, XR20M1280_LCR_REG);
 	/* Enable GPIO regs (SFR[0] == 1) */
 	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_GPIOE_BIT);
@@ -850,60 +1180,27 @@ static int xr20m1280_gpio_direction_output(struct gpio_chip *chip, unsigned offs
 
 	/* the pin is already output */
 	cur_dir = xr20m1280_port_read(port, XR20M1280_GPIOSEL_REG);
-	pr_debug("gpio_direction_output: offset: %u, val: %d, cur_lvl: 0x%02x, cur_dir: 0x%02x\n", offset, val, cur_lvl, cur_dir);
+	pr_debug("gpio_direction_output: offset: %u, val: %d, cur_dir: 0x%02x\n", offset, val, cur_dir);
 	if (!(cur_dir & BIT(offset))) {
-		if (cur_lvl == val) {
-			goto out;
-		} else {
-			/* Restore required state */
-			xr20m1280_port_write(port, XR20M1280_SFR_REG, 0x0);
-			xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
-			_xr20m1280_gpio_set(chip, offset, val, 0/*use lock*/);
-			goto out;
-		}
-	}
-
-	/* If we want to set the pin high (the default state for these pins), we
-	 * don't want to glitch low for a small amount of time.  The remaining pins
-	 * default low, so it doesn't matter if the initial state is low. */
-	if ((offset == XR20M1280_485_RX_EN || offset == XR20M1280_485_EN) && val) {
-		/*
-		 * Set three-state control enable
-		 *
-		 * This sets the pin to floating, while still allowing us to set the LVL reg
-		 * to the pins required default state so we can avoid glitching the pin.
-		 */
-		pr_debug("gpio_direction_output: enabling 3 state\n");
-		xr20m1280_port_update(port, XR20M1280_GPIO3T_REG, BIT(offset), BIT(offset));
+		/* Restore required state */
+		xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+		xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_DEFAULT);
+		/* set value */
+		_xr20m1280_gpio_set(chip, offset, val, 0/*use lock*/);
+		goto out;
 	}
 
 	/* Set the GPIO as output */
 	pr_debug("gpio_direction_output: enabling output mode\n");
 	xr20m1280_port_update(port, XR20M1280_GPIOSEL_REG, BIT(offset), 0);
 	
-	if (cur_lvl != val) {
-		/* Restore required state */
-		xr20m1280_port_write(port, XR20M1280_SFR_REG, 0x0);
-		xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
-
-		_xr20m1280_gpio_set(chip, offset, val, 0/*use lock*/);
-	}
-
-	if ((offset == XR20M1280_485_RX_EN || offset == XR20M1280_485_EN) && val) {
-		/* Enable GPIO regs (SFR[0] == 1) */
-		xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_GPIOE_BIT);
-		/* Enable config mode B (LCR == 0xBF) */
-		xr20m1280_port_write(port, XR20M1280_LCR_REG, XR20M1280_LCR_CONF_MODE_B);
-		/* Set three-state control disable */
-		pr_debug("gpio_direction_output: disable 3 state\n");
-		xr20m1280_port_update(port, XR20M1280_GPIO3T_REG, BIT(offset), 0);
-	}
+	/* Restore required state */
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+	xr20m1280_port_write(port, XR20M1280_SFR_REG, XR20M1280_SFR_DEFAULT);
+	/* set value */
+	_xr20m1280_gpio_set(chip, offset, val, 0/*use lock*/);
 
 out:
-	/* Restore required state */
-	xr20m1280_port_write(port, XR20M1280_SFR_REG, 0x0);
-	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
-
 	mutex_unlock(&s->reg_mode_mutex);
 
 	return 0;
@@ -968,16 +1265,18 @@ static void xr20m1280_handle_rx(struct uart_port *port, unsigned int rxlen,
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 	unsigned int lsr = 0, ch, flag, bytes_read, i;
-	bool read_lsr = (iir == XR20M1280_ISR_RLSE_SRC) ? true : false;
+	__u32 rx, buf_overrun = 0, brk = 0, parity = 0, frame = 0, overrun = 0;
+	bool read_lsr = true;
 
 	if (unlikely(rxlen >= sizeof(s->buf))) {
 		dev_warn_ratelimited(port->dev,
 		                    "%s: Possible RX FIFO overrun: %d\n",
 		                    port->name, rxlen);
-		port->icount.buf_overrun++;
+		buf_overrun = 1;
 		/* Ensure sanity of RX level */
 		rxlen = sizeof(s->buf);
 	}
+	rx = rxlen;
 
 	// JAP // printk(KERN_INFO "xr20m1280_handle_rx: %d\n", rxlen); // JAP //
 	// JAP // printk(KERN_INFO "rx %d\n", rxlen); // JAP //
@@ -1001,21 +1300,21 @@ static void xr20m1280_handle_rx(struct uart_port *port, unsigned int rxlen,
 		}
 
 		lsr &= XR20M1280_LSR_BRK_ERROR_MASK;
-
-		port->icount.rx++;
 		flag = TTY_NORMAL;
 
 		if (unlikely(lsr)) {
 			if (lsr & XR20M1280_LSR_BI_BIT) {
-				port->icount.brk++;
-				if (uart_handle_break(port))
+				brk++;
+				if (uart_handle_break(port)) {
+					rxlen -= bytes_read;
 					continue;
+				}
 			} else if (lsr & XR20M1280_LSR_PE_BIT)
-				port->icount.parity++;
+				parity++;
 			else if (lsr & XR20M1280_LSR_FE_BIT)
-				port->icount.frame++;
+				frame++;
 			else if (lsr & XR20M1280_LSR_OE_BIT)
-				port->icount.overrun++;
+				overrun++;
 
 			lsr &= port->read_status_mask;
 			if (lsr & XR20M1280_LSR_BI_BIT)
@@ -1042,57 +1341,149 @@ static void xr20m1280_handle_rx(struct uart_port *port, unsigned int rxlen,
 		rxlen -= bytes_read;
 	}
 
+	spin_lock(&port->lock);
+	port->icount.buf_overrun += buf_overrun;
+	port->icount.rx += rx;
+	port->icount.brk += brk;
+	port->icount.parity += parity;
+	port->icount.frame += frame;
+	port->icount.overrun += overrun;
+	spin_unlock(&port->lock);
+
 	tty_flip_buffer_push(&port->state->port);
+}
+
+static void xr20m1280_do_stop_tx(struct uart_port *port)
+{
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	if (RTS_TOGGLE_ENABLED(one)) {
+		ktime_t t = ktime_set(0, RTS_TOGGLE_LSR_POLL_INTERVAL);
+		one->tx_state = xr20m1280_tx_state_polling;
+		hrtimer_start(&one->stop_tx_timer, t, HRTIMER_MODE_REL);
+	} else {
+		one->tx_state = xr20m1280_tx_state_stopped;
+	}
+	return;
 }
 
 /* Register accesses in handle_tx are protected by reg_mode_mutex in ist */
 static void xr20m1280_handle_tx(struct uart_port *port)
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
 	struct circ_buf *xmit = &port->state->xmit;
 	unsigned int txlen, to_send, i;
+	
+	txlen = xr20m1280_fifo_count(port, XR20M1280_FIFO_COUNT_TX);	
 
-	if (unlikely(port->x_char)) {
-		xr20m1280_port_write(port, XR20M1280_THR_REG, port->x_char);
-		port->icount.tx++;
-		port->x_char = 0;
+	if (one->tx_state != xr20m1280_tx_state_started) {
 		return;
 	}
 
-	if (uart_circ_empty(xmit) || uart_tx_stopped(port))
+	spin_lock(&port->lock);
+	if (uart_circ_empty(xmit) || one->stopped || uart_tx_stopped(port)) {
+		if (txlen == 0)
+			xr20m1280_do_stop_tx(port);
+		spin_unlock(&port->lock);
 		return;
+	}
 
 	/* Get length of data pending in circular buffer */
 	to_send = uart_circ_chars_pending(xmit);
 	// JAP // printk(KERN_INFO "xr20m1280_handle_tx: to_send: %d\n", to_send); // JAP //
-	if (likely(to_send)) {
-		// JAP // dump_register(port); // JAP //
-		/* Limit to size of TX FIFO */
-		txlen = xr20m1280_fifo_count(port, XR20M1280_FIFO_COUNT_TX);
-		// JAP // printk(KERN_INFO "xr20m1280_handle_tx: fifo reports %d bytes available\n", txlen); // JAP //
-		if (txlen > XR20M1280_FIFO_SIZE) {
-			dev_err_ratelimited(port->dev,
-				"chip reports %d free bytes in TX fifo, but it only has %d",
-				txlen, XR20M1280_FIFO_SIZE);
-			txlen = 0;
-		}
-		txlen = XR20M1280_FIFO_SIZE - txlen;
-		to_send = (to_send > txlen) ? txlen : to_send;
-
-		/* Add data to send */
-		port->icount.tx += to_send;
-
-		/* Convert to linear buffer */
-		for (i = 0; i < to_send; ++i) {
-			s->buf[i] = xmit->buf[xmit->tail];
-			xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
-		}
-		// JAP // printk(KERN_INFO "xr20m1280_fifo_write: writing %d bytes\n", to_send); // JAP //
-		xr20m1280_fifo_write(port, to_send);
+	// JAP // dump_register(port); // JAP //
+	/* Limit to size of TX FIFO */
+	// JAP // printk(KERN_INFO "xr20m1280_handle_tx: fifo reports %d bytes available\n", txlen); // JAP //
+	if (txlen > XR20M1280_FIFO_SIZE) {
+		dev_err_ratelimited(port->dev,
+			"chip reports %d free bytes in TX fifo, but it only has %d",
+			txlen, XR20M1280_FIFO_SIZE);
+		txlen = 0;
 	}
+	txlen = XR20M1280_FIFO_SIZE - txlen;
+	to_send = (to_send > txlen) ? txlen : to_send;
+
+	/* Add data to send */
+	port->icount.tx += to_send;
+
+	/* Convert to linear buffer */
+	for (i = 0; i < to_send; ++i) {
+		s->buf[i] = xmit->buf[xmit->tail];
+		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
+	}
+	// JAP // printk(KERN_INFO "xr20m1280_fifo_write: writing %d bytes\n", to_send); // JAP //
+	spin_unlock(&port->lock);
+	xr20m1280_fifo_write(port, to_send);
+	spin_lock(&port->lock);
 
 	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
 		uart_write_wakeup(port);
+
+	spin_unlock(&port->lock);
+}
+
+static void xr20m1280_ier_set(struct uart_port *port, u8 bit)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	lockdep_assert_held(&port->lock);
+	one->config.flags |= XR20M1280_RECONF_IER;
+	one->config.ier_set |= bit;
+	kthread_queue_work(&s->kworker, &one->reg_work);
+}
+
+static void xr20m1280_ier_clear(struct uart_port *port, u8 bit)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	lockdep_assert_held(&port->lock);
+	one->config.flags |= XR20M1280_RECONF_IER;
+	one->config.ier_clear |= bit;
+	kthread_queue_work(&s->kworker, &one->reg_work);
+}
+
+static void xr20m1280_stop_tx(struct uart_port *port)
+{
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	one->stopped = true;
+}
+
+static void xr20m1280_stop_rx(struct uart_port *port)
+{
+	xr20m1280_ier_clear(port, XR20M1280_IER_RHRI_BIT);
+}
+
+static void xr20m1280_start_tx(struct uart_port *port)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	if ((one->estat & (RP_OPH | RP_TXB)) == 0) {
+		one->stopped = false;
+		kthread_queue_work(&s->kworker, &one->start_work);
+	}
+}
+
+static void xr20m1280_check_ms(struct xr20m1280_one *one)
+{
+	unsigned int flow;
+	lockdep_assert_held(&one->port.lock);
+	flow = one->flow & (TIOCM_CTS | TIOCM_CD | TIOCM_DSR);
+	if ((one->msr_cache & flow) != flow) {
+		if ((one->estat & RP_OPH) == 0) {
+			one->estat |= RP_OPH;
+			if (flow != TIOCM_CTS)
+				xr20m1280_stop_tx(&one->port);
+		}
+	} else if (one->estat & RP_OPH) {
+		one->estat &= ~RP_OPH;
+		if (flow != TIOCM_CTS)
+			xr20m1280_start_tx(&one->port);
+	}
 }
 
 /* Ensure that cached MSR is updated if changes are detected by UART */
@@ -1111,7 +1502,21 @@ static void xr20m1280_handle_msi(struct uart_port *port)
 
 	// JAP // printk(KERN_INFO "%02x %02x\n", msr, res); // JAP //
 
+	spin_lock(&port->lock);
 	one->msr_cache = res;
+	if (msr & XR20M1280_MSR_DELTA_MASK) {
+		if (msr & XR20M1280_MSR_DCTS_BIT)
+		 	uart_handle_cts_change(port, msr & XR20M1280_MSR_CTS_BIT);
+		if (msr & XR20M1280_MSR_DDSR_BIT)
+			port->icount.dsr++;
+		if ((msr & (XR20M1280_MSR_DRI_BIT | XR20M1280_MSR_RI_BIT)) == XR20M1280_MSR_DRI_BIT)
+			port->icount.rng++;
+		if (msr & XR20M1280_MSR_DCD_BIT)
+			uart_handle_dcd_change(port, msr & XR20M1280_MSR_CD_BIT);
+		wake_up_interruptible(&port->state->port.delta_msr_wait);
+	}
+	xr20m1280_check_ms(one);
+	spin_unlock(&port->lock);
 }
 
 /* Register accesses in port_irq are protected by reg_mode_mutex in ist */
@@ -1130,9 +1535,10 @@ static bool xr20m1280_port_irq(struct xr20m1280_port *s, int portno)
 
 		switch (iir) {
 		case XR20M1280_ISR_RHRI_SRC:
+			xr20m1280_handle_rx(port, 16, iir);
+			break;
 		case XR20M1280_ISR_RLSE_SRC:
 		case XR20M1280_ISR_RTOI_SRC:
-		case XR20M1280_ISR_XOFFI_SRC:
 			// JAP // dump_register(port); // JAP //
 			// JAP // printk(KERN_INFO "%02x\n", iir); // JAP //
 			rxlen = xr20m1280_fifo_count(port, XR20M1280_FIFO_COUNT_RX);
@@ -1186,27 +1592,125 @@ static irqreturn_t xr20m1280_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static enum hrtimer_restart xr20m1280_queue_stop_tx(struct hrtimer *t)
+{
+	struct xr20m1280_one *one = to_xr20m1280_one(t, stop_tx_timer);
+	struct uart_port *port = &(one->port);
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	kthread_queue_work(&s->kworker, &one->stop_work);
+
+	return HRTIMER_NORESTART;
+}
+
+static void xr20m1280_stop_tx_proc(struct kthread_work *ws)
+{
+	u8 lsr;
+	struct xr20m1280_one *one = to_xr20m1280_one(ws, stop_work);
+	struct uart_port *port = &(one->port);
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	mutex_lock(&s->reg_mode_mutex);
+	if (one->tx_state == xr20m1280_tx_state_polling) {
+		lsr = xr20m1280_port_read(port, XR20M1280_LSR_REG);
+		if (lsr & XR20M1280_LSR_TEMT_BIT) {
+			unsigned long delay;
+			one->tx_state = xr20m1280_tx_state_stopping;
+			spin_lock(&port->lock);
+			delay = one->rts_toggle.postdelay;
+			spin_unlock(&port->lock);
+			if (delay) {
+				start_hrtimer_ms(&one->stop_tx_timer, delay);
+				mutex_unlock(&s->reg_mode_mutex);
+				return;
+			}
+		} else {
+			ktime_t t = ktime_set(0, RTS_TOGGLE_LSR_POLL_INTERVAL);
+			hrtimer_start(&one->stop_tx_timer, t, HRTIMER_MODE_REL);
+		}
+	}
+	if (one->tx_state == xr20m1280_tx_state_stopping) {
+		one->tx_state = xr20m1280_tx_state_stopped;
+		xr20m1280_port_update(&one->port, XR20M1280_MCR_REG, XR20M1280_MCR_RTS_BIT, 0);
+	}
+	mutex_unlock(&s->reg_mode_mutex);
+}
+
+static enum hrtimer_restart xr20m1280_queue_start_tx(struct hrtimer *t)
+{
+	struct xr20m1280_one *one = to_xr20m1280_one(t, start_tx_timer);
+	struct uart_port *port = &(one->port);
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	kthread_queue_work(&s->kworker, &one->tx_work);
+
+	return HRTIMER_NORESTART;
+}
+
 static void xr20m1280_tx_proc(struct kthread_work *ws)
 {
-	struct uart_port *port = &(to_xr20m1280_one(ws, tx_work)->port);
+	struct xr20m1280_one *one = to_xr20m1280_one(ws, tx_work);
+	struct uart_port *port = &(one->port);
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 
-	if ((port->rs485.flags & SER_RS485_ENABLED) &&
-	    (port->rs485.delay_rts_before_send > 0))
-		msleep(port->rs485.delay_rts_before_send);
+	if (one->tx_state == xr20m1280_tx_state_starting) {
+		one->tx_state = xr20m1280_tx_state_started;
+	}
 
-	xr20m1280_handle_tx(port);
+	if (one->tx_state == xr20m1280_tx_state_started) {
+		mutex_lock(&s->reg_mode_mutex);
+		xr20m1280_handle_tx(port);
+		mutex_unlock(&s->reg_mode_mutex);
+	}
+}
+
+static void xr20m1280_start_proc(struct kthread_work *ws)
+{
+	struct xr20m1280_one *one = to_xr20m1280_one(ws, start_work);
+	struct uart_port *port = &(one->port);
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct circ_buf *xmit = &port->state->xmit;
+	bool raise_rts = false;
+	unsigned long delay = 0;
+
+	if (one->tx_state == xr20m1280_tx_state_stopped) {
+		spin_lock(&port->lock);
+		if (uart_circ_empty(xmit) || one->stopped || uart_tx_stopped(port)) {
+			spin_unlock(&port->lock);
+			return;
+		}
+		one->tx_state = xr20m1280_tx_state_starting;
+	
+		if (RTS_TOGGLE_ENABLED(one)) {
+			raise_rts = true;
+			delay = one->rts_toggle.predelay;
+			one->port.mctrl |= TIOCM_RTS;
+			spin_unlock(&port->lock);
+			mutex_lock(&s->reg_mode_mutex);
+			xr20m1280_port_update(&one->port, XR20M1280_MCR_REG, XR20M1280_MCR_RTS_BIT, XR20M1280_MCR_RTS_BIT);
+			mutex_unlock(&s->reg_mode_mutex);
+			if (delay) {
+				start_hrtimer_ms(&one->start_tx_timer, delay);
+				return;
+			}
+		} else
+			spin_unlock(&port->lock);
+		kthread_queue_work(&s->kworker, &one->tx_work);
+	} else if (one->tx_state != xr20m1280_tx_state_starting) {
+		one->tx_state = xr20m1280_tx_state_started;
+		kthread_queue_work(&s->kworker, &one->tx_work);
+	}
 }
 
 static void xr20m1280_reconf_rs485(struct uart_port *port)
 {
-	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 	const u8 fctr_mask = XR20M1280_FCTR_AUTO_RS485_BIT;
 	u8 fctr = 0;
 	u8 lcr;
-	struct serial_rs485 *rs485 = &port->rs485;
-	unsigned long irqflags;
+	struct serial_rs485 *rs485;
 
-	spin_lock_irqsave(&port->lock, irqflags);
+	spin_lock(&port->lock);
+	rs485 = &port->rs485;
 	if (rs485->flags & SER_RS485_ENABLED) {
 		fctr = fctr_mask;
 
@@ -1215,11 +1719,9 @@ static void xr20m1280_reconf_rs485(struct uart_port *port)
 		 * ignore RTS_ON_SEND and RTS_AFTER_SEND
 		 */
 	}
-	spin_unlock_irqrestore(&port->lock, irqflags);
+	spin_unlock(&port->lock);
 
 	/* FCTR only if LCR == 0xBF */
-	mutex_lock(&s->reg_mode_mutex);
-
 	lcr = xr20m1280_port_read(port, XR20M1280_LCR_REG);
 	xr20m1280_port_write(port, XR20M1280_LCR_REG,
 			     XR20M1280_LCR_CONF_MODE_B);
@@ -1227,78 +1729,76 @@ static void xr20m1280_reconf_rs485(struct uart_port *port)
 	xr20m1280_port_update(port, XR20M1280_FCTR_REG, fctr_mask, fctr);
 
 	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
-
-	mutex_unlock(&s->reg_mode_mutex);
 }
 
-/* TODO -- reg mode mutex protections? */
 static void xr20m1280_reg_proc(struct kthread_work *ws)
 {
 	struct xr20m1280_one *one = to_xr20m1280_one(ws, reg_work);
+	struct xr20m1280_port *s = dev_get_drvdata(one->port.dev);
 	struct xr20m1280_one_config config;
-	unsigned long irqflags;
+	int mctrl;
 
-	spin_lock_irqsave(&one->port.lock, irqflags);
+	u8 mask = XR20M1280_MCR_LOOP_BIT | XR20M1280_MCR_RTS_BIT | XR20M1280_MCR_DTR_BIT;
+	spin_lock(&one->port.lock);
 	config = one->config;
 	memset(&one->config, 0, sizeof(one->config));
-	spin_unlock_irqrestore(&one->port.lock, irqflags);
+	if ((one->port.rs485.flags & SER_RS485_ENABLED) || one->rts_toggle.enable)
+		mask = XR20M1280_MCR_LOOP_BIT | XR20M1280_MCR_DTR_BIT;
+	if (config.flags & XR20M1280_RECONF_RTS_TOGGLE) {
+		if (RTS_TOGGLE_ENABLED(one)) {
+			if (one->tx_state == xr20m1280_tx_state_stopped && (one->port.mctrl & TIOCM_RTS) == TIOCM_RTS) {
+				one->port.mctrl &= ~TIOCM_RTS;
+				config.flags |= XR20M1280_RECONF_MD;
+			} else if ((one->port.mctrl & TIOCM_RTS) == 0) {
+				one->port.mctrl |= TIOCM_RTS;
+				config.flags |= XR20M1280_RECONF_MD;
+			}
+			mask = XR20M1280_MCR_LOOP_BIT | XR20M1280_MCR_RTS_BIT | XR20M1280_MCR_DTR_BIT;
+		} else if (one->tx_state == xr20m1280_tx_state_polling || one->tx_state == xr20m1280_tx_state_stopping) {
+			one->tx_state = xr20m1280_tx_state_stopped;
+		}
+	}
+	mctrl = one->port.mctrl;
+	spin_unlock(&one->port.lock);
+
+	mutex_lock(&s->reg_mode_mutex);
 
 	if (config.flags & XR20M1280_RECONF_MD) {
+		u8 val = 0;
+
+		if (mctrl & TIOCM_LOOP)
+			val |=  XR20M1280_MCR_LOOP_BIT;
+		if (mctrl & TIOCM_RTS)
+			val |= XR20M1280_MCR_RTS_BIT;
+		if (mctrl & TIOCM_DTR)
+			val |= XR20M1280_MCR_DTR_BIT;
+		
 		xr20m1280_port_update(&one->port, XR20M1280_MCR_REG,
-				      XR20M1280_MCR_LOOP_BIT,
-				      (one->port.mctrl & TIOCM_LOOP) ?
-				      XR20M1280_MCR_LOOP_BIT : 0);
-		xr20m1280_port_update(&one->port, XR20M1280_MCR_REG,
-				      XR20M1280_MCR_RTS_BIT,
-				      (one->port.mctrl & TIOCM_RTS) ?
-				      XR20M1280_MCR_RTS_BIT : 0);
-		xr20m1280_port_update(&one->port, XR20M1280_MCR_REG,
-				      XR20M1280_MCR_DTR_BIT,
-				      (one->port.mctrl & TIOCM_DTR) ?
-				      XR20M1280_MCR_DTR_BIT : 0);
+				      mask,
+				      val);
 	}
-	if (config.flags & XR20M1280_RECONF_IER)
+	if (config.flags & XR20M1280_RECONF_IER) {
 		xr20m1280_port_update(&one->port, XR20M1280_IER_REG,
-				      config.ier_clear, 0);
+				      config.ier_clear | config.ier_set,
+				      config.ier_set);
+	}
 
 	if (config.flags & XR20M1280_RECONF_RS485)
 		xr20m1280_reconf_rs485(&one->port);
-}
 
-static void xr20m1280_ier_clear(struct uart_port *port, u8 bit)
-{
-	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
-	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
-
-	one->config.flags |= XR20M1280_RECONF_IER;
-	one->config.ier_clear |= bit;
-	kthread_queue_work(&s->kworker, &one->reg_work);
-}
-
-static void xr20m1280_stop_tx(struct uart_port *port)
-{
-	xr20m1280_ier_clear(port, XR20M1280_IER_THRI_BIT);
-}
-
-static void xr20m1280_stop_rx(struct uart_port *port)
-{
-	xr20m1280_ier_clear(port, XR20M1280_IER_RHRI_BIT);
-}
-
-static void xr20m1280_start_tx(struct uart_port *port)
-{
-	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
-	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
-
-	kthread_queue_work(&s->kworker, &one->tx_work);
+	mutex_unlock(&s->reg_mode_mutex);
 }
 
 static unsigned int xr20m1280_tx_empty(struct uart_port *port)
 {
 	unsigned int lsr;
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 
-	/* TODO -- reg mode mutex protections? */
+	/* FIXME: Documentation/serial/driver claims this can't sleep */
+	lockdep_assert_irqs_enabled();
+	mutex_lock(&s->reg_mode_mutex);
 	lsr = xr20m1280_port_read(port, XR20M1280_LSR_REG);
+	mutex_unlock(&s->reg_mode_mutex);
 
 	return (lsr & XR20M1280_LSR_TEMT_BIT) ? TIOCSER_TEMT : 0;
 }
@@ -1307,6 +1807,7 @@ static unsigned int xr20m1280_get_mctrl(struct uart_port *port)
 {
 	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
 
+	lockdep_assert_held(&port->lock);
 	return one->msr_cache;
 }
 
@@ -1315,15 +1816,85 @@ static void xr20m1280_set_mctrl(struct uart_port *port, unsigned int mctrl)
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
 	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
 
+	lockdep_assert_held(&port->lock);
 	one->config.flags |= XR20M1280_RECONF_MD;
 	kthread_queue_work(&s->kworker, &one->reg_work);
 }
 
 static void xr20m1280_break_ctl(struct uart_port *port, int break_state)
 {
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	mutex_lock(&s->reg_mode_mutex);
 	xr20m1280_port_update(port, XR20M1280_LCR_REG,
 			      XR20M1280_LCR_TXBREAK_BIT,
 			      break_state ? XR20M1280_LCR_TXBREAK_BIT : 0);
+	mutex_unlock(&s->reg_mode_mutex);
+}
+
+/* Expects LCR in CONF_MODE_B */
+static void xr20m1280_configure_flow_control(struct uart_port *port, struct ktermios *termios)
+{
+	unsigned int flow = 0;
+	
+	if (termios->c_cflag & CRTSCTS)
+		flow |= XR20M1280_EFR_AUTORTS_BIT | XR20M1280_EFR_AUTOCTS_BIT;
+
+	/* Can't handle IXANY or VLNEXT in HW */
+	if (((termios->c_iflag & (IXON | IXANY)) == IXON) &&
+		((termios->c_cc[VLNEXT] == __DISABLED_CHAR || (termios->c_lflag & (ICANON | IEXTEN)) != (ICANON | IEXTEN)) &&
+		termios->c_cc[VSTART] != __DISABLED_CHAR && termios->c_cc[VSTOP] != __DISABLED_CHAR))
+	{
+
+		xr20m1280_port_write(port, XR20M1280_XON1_REG, termios->c_cc[VSTART]);
+		xr20m1280_port_write(port, XR20M1280_XOFF1_REG, termios->c_cc[VSTOP]);
+		flow |= XR20M1280_EFR_SWFLOW3_BIT;
+	}
+
+	/* Reset software flow bits to zero before writing a new setting */
+	xr20m1280_port_update(port, XR20M1280_EFR_REG,
+			      XR20M1280_EFR_AUTORTS_BIT | XR20M1280_EFR_AUTOCTS_BIT | XR20M1280_EFR_SWFLOW3_BIT,
+			      0);
+
+	if (flow) {
+		/* Update EFR register for automatic flow control */
+		xr20m1280_port_update(port, XR20M1280_EFR_REG,
+				      XR20M1280_EFR_AUTORTS_BIT | XR20M1280_EFR_AUTOCTS_BIT | XR20M1280_EFR_SWFLOW3_BIT,
+				      flow);
+	}
+}
+
+static void xr20m1280_set_ldisc(struct uart_port *port, struct ktermios *termios)
+{
+	u8 lcr;
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+	
+	spin_lock(&port->lock);
+	one->flow = 0;
+	if (termios->c_line != N_REALPORT)
+		port->status &= ~UPSTAT_SYNC_FIFO;
+	else
+		port->status |= UPSTAT_SYNC_FIFO; /* Call throttle() even when no flow control */
+	spin_unlock(&port->lock);
+
+	mutex_lock(&s->reg_mode_mutex);
+	
+	lcr = xr20m1280_port_read(port, XR20M1280_LCR_REG);
+
+	xr20m1280_port_write(port, XR20M1280_LCR_REG,
+			     XR20M1280_LCR_CONF_MODE_B);
+
+	if (termios->c_line != N_REALPORT)
+		xr20m1280_configure_flow_control(port, termios);
+	else
+		xr20m1280_port_update(port, XR20M1280_EFR_REG,
+			      XR20M1280_EFR_AUTORTS_BIT | XR20M1280_EFR_AUTOCTS_BIT | XR20M1280_EFR_SWFLOW3_BIT,
+			      0);
+
+	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+
+	mutex_unlock(&s->reg_mode_mutex);
 }
 
 static void xr20m1280_set_termios(struct uart_port *port,
@@ -1331,7 +1902,7 @@ static void xr20m1280_set_termios(struct uart_port *port,
 				  struct ktermios *old)
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
-	unsigned int lcr, flow = 0;
+	unsigned int lcr;
 	int baud;
 
 	/* Mask termios capabilities we don't support */
@@ -1369,14 +1940,6 @@ static void xr20m1280_set_termios(struct uart_port *port,
 	if (termios->c_cflag & CSTOPB)
 		lcr |= XR20M1280_LCR_STOPLEN_BIT; /* 2 stops */
 
-	/* Set read status mask */
-	port->read_status_mask = XR20M1280_LSR_OE_BIT;
-	if (termios->c_iflag & INPCK)
-		port->read_status_mask |= XR20M1280_LSR_PE_BIT |
-					  XR20M1280_LSR_FE_BIT;
-	if (termios->c_iflag & (BRKINT | PARMRK))
-		port->read_status_mask |= XR20M1280_LSR_BI_BIT;
-
 	/* Set status ignore mask */
 	port->ignore_status_mask = 0;
 	if (termios->c_iflag & IGNBRK)
@@ -1384,41 +1947,33 @@ static void xr20m1280_set_termios(struct uart_port *port,
 	if (!(termios->c_cflag & CREAD))
 		port->ignore_status_mask |= XR20M1280_LSR_BRK_ERROR_MASK;
 
+	/* Set read status mask */
+	port->read_status_mask = port->ignore_status_mask | XR20M1280_LSR_OE_BIT;
+	if (termios->c_iflag & INPCK)
+		port->read_status_mask |= XR20M1280_LSR_PE_BIT |
+					  XR20M1280_LSR_FE_BIT;
+	if (termios->c_iflag & (BRKINT | PARMRK))
+		port->read_status_mask |= XR20M1280_LSR_BI_BIT;
+
 	/* Grab lock protecting interrupt handling from mode changes */
 	mutex_lock(&s->reg_mode_mutex);
 
 	xr20m1280_port_write(port, XR20M1280_LCR_REG,
 			     XR20M1280_LCR_CONF_MODE_B);
-
-	/* Configure flow control */
-
-	xr20m1280_port_write(port, XR20M1280_XON1_REG, termios->c_cc[VSTART]);
-	xr20m1280_port_write(port, XR20M1280_XOFF1_REG, termios->c_cc[VSTOP]);
+			     
+	spin_lock(&port->lock);
 	if (termios->c_cflag & CRTSCTS)
-		flow |= XR20M1280_EFR_AUTOCTS_BIT |
-			XR20M1280_EFR_AUTORTS_BIT;
-	if (termios->c_iflag & IXON)
-		flow |= XR20M1280_EFR_SWFLOW3_BIT;
+		port->status |= UPSTAT_AUTORTS | UPSTAT_AUTOCTS;
+	else
+		port->status &= ~(UPSTAT_AUTORTS | UPSTAT_AUTOCTS);
 	if (termios->c_iflag & IXOFF)
-		flow |= XR20M1280_EFR_SWFLOW1_BIT;
+		port->status |= UPSTAT_AUTOXOFF; /* xr20m1280_throttle handles XOFF to ensure '\0' chars work in RealPort */
+	else
+		port->status &= ~UPSTAT_AUTOXOFF;
+	spin_unlock(&port->lock);
 
-	/* Reset software flow bits to zero before writing a new setting */
-	xr20m1280_port_update(port, XR20M1280_EFR_REG,
-			      XR20M1280_EFR_SWFLOW1_BIT |
-			      XR20M1280_EFR_SWFLOW3_BIT |
-			      XR20M1280_EFR_AUTORTS_BIT |
-			      XR20M1280_EFR_AUTOCTS_BIT,
-			      0);
-
-	if (flow) {
-		/* Update EFR register for automatic flow control */
-		xr20m1280_port_update(port, XR20M1280_EFR_REG,
-				      XR20M1280_EFR_SWFLOW1_BIT |
-				      XR20M1280_EFR_SWFLOW3_BIT |
-				      XR20M1280_EFR_AUTORTS_BIT |
-				      XR20M1280_EFR_AUTOCTS_BIT,
-				      flow);
-	}
+	if (termios->c_line != N_REALPORT)
+		xr20m1280_configure_flow_control(port, termios);
 
 	/* Update LCR register, simultaneously restoring register mode */
 	xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
@@ -1467,13 +2022,14 @@ static int xr20m1280_config_rs485(struct uart_port *port,
 
 		/*
 		 * RTS signal is handled by HW, it's timing can't be influenced.
-		 * Change delay_rts_after_send to the only value we support.
-		 * The delay_rts_before_send value is one we attempt to honor,
-		 * so it is not overriden here.
 		 */
+		rs485->delay_rts_before_send = 0;
 		rs485->delay_rts_after_send = 0;
 	}
+	if ((port->rs485.flags & SER_RS485_ENABLED) != (rs485->flags & SER_RS485_ENABLED) && one->rts_toggle.enable)
+		one->config.flags |= XR20M1280_RECONF_RTS_TOGGLE;
 
+	lockdep_assert_held(&port->lock);
 	port->rs485 = *rs485;
 	one->config.flags |= XR20M1280_RECONF_RS485;
 	kthread_queue_work(&s->kworker, &one->reg_work);
@@ -1496,10 +2052,7 @@ static int xr20m1280_startup(struct uart_port *port)
 	xr20m1280_port_write(port, XR20M1280_FCR_REG, val);
 	udelay(5);
 	/* Enable FIFOs & set FIFO interrupt trigger levels (RX=16, TX=32) */
-	xr20m1280_port_write(port, XR20M1280_FCR_REG,
-			     XR20M1280_FCR_FIFO_BIT|
-			     XR20M1280_FCR_RXLVLL_BIT|
-			     XR20M1280_FCR_TXLVLH_BIT);
+	xr20m1280_port_write(port, XR20M1280_FCR_REG, XR20M1280_FCR_DEFAULT);
 
 	/* Enable EFR */
 	xr20m1280_port_write(port, XR20M1280_LCR_REG,
@@ -1510,9 +2063,14 @@ static int xr20m1280_startup(struct uart_port *port)
 			      XR20M1280_EFR_ENABLE_BIT,
 			      XR20M1280_EFR_ENABLE_BIT);
 
+	/* Set scratch pad to known value for debug */
+	xr20m1280_port_update(port, XR20M1280_FCTR_REG, 0, XR20M1280_FCTR_SPSW_BIT);
+	xr20m1280_port_write(port, XR20M1280_SPR_REG, 0xFF);
+
 	/* Disable scratch pad register */
 	/* Set FIFO interrupt trigger level table (C) */
-	xr20m1280_port_write(port, XR20M1280_FCTR_REG,
+	xr20m1280_port_update(port, XR20M1280_FCTR_REG,
+			     XR20M1280_FCTR_TRIGTAB_C|XR20M1280_FCTR_SPSW_BIT,
 			     XR20M1280_FCTR_TRIGTAB_C|XR20M1280_FCTR_SPSW_BIT);
 
 #if 0 /* TODO */
@@ -1536,9 +2094,9 @@ static int xr20m1280_startup(struct uart_port *port)
 	/* Initialize MSR cache for port by simulating modem status interrupt*/
 	xr20m1280_handle_msi(port);
 
-	/* Enable RX, TX, MSI interrupts */
+	/* Enable RX, TX, LSR, MSI interrupts */
 	val = XR20M1280_IER_RHRI_BIT | XR20M1280_IER_THRI_BIT | 
-	      XR20M1280_IER_MSI_BIT;
+	      XR20M1280_IER_RLSI_BIT | XR20M1280_IER_MSI_BIT;
 	xr20m1280_port_write(port, XR20M1280_IER_REG, val);
 
 	/* Release lock protecting interrupt handling from mode changes */
@@ -1550,6 +2108,10 @@ static int xr20m1280_startup(struct uart_port *port)
 static void xr20m1280_shutdown(struct uart_port *port)
 {
 	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	/* Must flush work to ensure any user initiated functions are actually complete */
+	kthread_flush_worker(&s->kworker);
 
 	/* Grab lock protecting interrupt handling from mode changes */
 	mutex_lock(&s->reg_mode_mutex);
@@ -1557,19 +2119,29 @@ static void xr20m1280_shutdown(struct uart_port *port)
 	/* Disable all interrupts */
 	xr20m1280_port_write(port, XR20M1280_IER_REG, 0);
 
+	/* Disable break */
+	xr20m1280_port_update(port, XR20M1280_LCR_REG, XR20M1280_LCR_TXBREAK_BIT, 0);
+
+	/* Flush FIFO */
+	xr20m1280_port_write(port, XR20M1280_FCR_REG, XR20M1280_FCR_DEFAULT | XR20M1280_FCR_TXRESET_BIT);
+
 	/* Disable TX/RX */
-	xr20m1280_port_update(port, XR20M1280_SFR_REG,
-			      XR20M1280_SFR_RXDISABLE_BIT |
-			      XR20M1280_SFR_TXDISABLE_BIT,
-			      XR20M1280_SFR_RXDISABLE_BIT |
-			      XR20M1280_SFR_TXDISABLE_BIT);
+	xr20m1280_port_write(port, XR20M1280_SFR_REG,
+			     XR20M1280_SFR_DEFAULT |
+			     XR20M1280_SFR_RXDISABLE_BIT |
+			     XR20M1280_SFR_TXDISABLE_BIT);
 
 	/* Release lock protecting interrupt handling from mode changes */
 	mutex_unlock(&s->reg_mode_mutex);
 
-	xr20m1280_power(port, 0);
+	spin_lock(&port->lock);
+	uart_circ_clear(&port->state->xmit);
+	spin_unlock(&port->lock);
+	/* Kick tx_work so it notices tx is done and updates tx_state */
+	kthread_queue_work(&s->kworker, &one->tx_work);
 
-	kthread_flush_worker(&s->kworker);
+	/* FIXME: We may still need to lower RTS later. Would this still be safe if it actually did anything? */
+	xr20m1280_power(port, 0);
 }
 
 static const char *xr20m1280_type(struct uart_port *port)
@@ -1602,15 +2174,165 @@ static int xr20m1280_verify_port(struct uart_port *port,
 	return 0;
 }
 
+#ifdef CONFIG_PM
 static void xr20m1280_pm(struct uart_port *port, unsigned int state,
 			 unsigned int oldstate)
 {
 	xr20m1280_power(port, (state == UART_PM_STATE_ON) ? 1 : 0);
 }
+#endif
 
 static void xr20m1280_null_void(struct uart_port *port)
 {
 	/* Do nothing */
+}
+
+static void xr20m1280_throttle_ms(struct uart_port *port)
+{
+	unsigned int old;
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+	
+	old = port->mctrl;
+	port->mctrl &= ~(one->flow & (TIOCM_DTR | TIOCM_RTS));
+	if (port->mctrl != old)
+		xr20m1280_set_mctrl(port, port->mctrl);
+}
+
+static void xr20m1280_unthrottle_ms(struct uart_port *port)
+{
+	unsigned int old;
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+
+	old = port->mctrl;
+	port->mctrl |= one->flow & (TIOCM_DTR | TIOCM_RTS);
+	if (port->mctrl != old)
+		xr20m1280_set_mctrl(port, port->mctrl);
+}
+
+static void xr20m1280_send_xchar(struct uart_port *port, char ch)
+{
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	lockdep_assert_held(&port->state->port.tty->termios_rwsem);
+	if (ch == __DISABLED_CHAR && port->state->port.tty->termios.c_line != N_REALPORT)
+		return;
+	mutex_lock(&s->reg_mode_mutex);
+	xr20m1280_port_write(port, XR20M1280_EMSR_REG, XR20M1280_EMSR_TXI_BIT);
+	xr20m1280_port_write(port, XR20M1280_THR_REG, ch);
+	mutex_unlock(&s->reg_mode_mutex);
+}
+
+static int xr20m1280_ioctl(struct uart_port *port, unsigned int cmd, unsigned long arg)
+{
+	struct xr20m1280_one *one = to_xr20m1280_one(port, port);
+	struct xr20m1280_port *s = dev_get_drvdata(port->dev);
+
+	switch(cmd) {
+	case DIGI_REALPORT_SEND_IMMEDIATE: {
+		char immed;
+		if (copy_from_user(&immed, (char __user *) arg, sizeof(immed)))
+			return -EFAULT;
+		xr20m1280_send_xchar(port, immed);
+		return 0;
+	}
+	case DIGI_REALPORT_SET_FLOW_SIGNALS: {
+		unsigned int sigs;
+		u8 lcr, flow = 0;
+		if(copy_from_user(&sigs, (unsigned int __user *) arg, sizeof(sigs)))
+			return -EFAULT;
+		/* HW does not interrupt on RI change so can't use it for flow control */
+		sigs &= ~TIOCM_RI;
+		mutex_lock(&s->reg_mode_mutex);
+		lcr = xr20m1280_port_read(port, XR20M1280_LCR_REG);
+		xr20m1280_port_write(port, XR20M1280_LCR_REG, XR20M1280_LCR_CONF_MODE_B);
+		if ((sigs & (TIOCM_DTR | TIOCM_RTS)) == TIOCM_RTS) {
+			flow |= XR20M1280_EFR_AUTORTS_BIT;
+			sigs &= ~TIOCM_RTS;
+		}
+		if ((sigs & (TIOCM_CTS | TIOCM_CD | TIOCM_DSR)) == TIOCM_CTS) {
+			flow |= XR20M1280_EFR_AUTOCTS_BIT;
+		}
+		xr20m1280_port_update(port, XR20M1280_EFR_REG, XR20M1280_EFR_AUTORTS_BIT | XR20M1280_EFR_AUTOCTS_BIT, flow);
+		xr20m1280_port_write(port, XR20M1280_LCR_REG, lcr);
+		mutex_unlock(&s->reg_mode_mutex);
+		spin_lock(&port->lock);
+		one->flow = sigs;
+		if (tty_throttled(port->state->port.tty))
+			xr20m1280_throttle_ms(port);
+		else
+			xr20m1280_unthrottle_ms(port);
+		xr20m1280_check_ms(one);
+		spin_unlock(&port->lock);
+		return 0;
+	}
+	case DIGI_REALPORT_GET_HW_STATS: {
+		struct realport_hw_stats stats;
+		stats.tiocser_temt = 1;
+		spin_lock(&port->lock);
+		stats.tiocmget = xr20m1280_get_mctrl(port);
+		stats.counters.norun = port->icount.overrun;
+		stats.counters.noflow = port->icount.buf_overrun;
+		stats.counters.nframe = port->icount.frame;
+		stats.counters.nparity = port->icount.parity;
+		stats.counters.nbreak = port->icount.brk;
+		stats.tiocoutq = uart_circ_chars_pending(&port->state->xmit);
+		stats.estat = one->estat;
+		spin_unlock(&port->lock);
+		return copy_to_user((struct realport_hw_stats __user *) arg, &stats, sizeof(stats));
+	}
+	case DIGI_REALPORT_START_BREAK: {
+		struct tty_struct *tty = port->state->port.tty;
+		spin_lock(&port->lock);
+		xr20m1280_stop_tx(port);
+		one->estat |= RP_TXB;
+		spin_unlock(&port->lock);
+		tty->ops->wait_until_sent(tty, 0);
+		xr20m1280_break_ctl(port, 1);
+		return 0;
+	}
+	case DIGI_REALPORT_STOP_BREAK: {
+		xr20m1280_break_ctl(port, 0);
+		spin_lock(&port->lock);
+		one->estat &= ~RP_TXB;
+		xr20m1280_start_tx(port);
+		spin_unlock(&port->lock);
+		return 0;
+	}
+	case DIGI_RTS_TOGGLE_CONFIG: {
+		struct serial_rts_toggle config;
+		if (copy_from_user(&config, (struct serial_rts_toggle __user *) arg, sizeof(config)))
+			return -EFAULT;
+		spin_lock(&port->lock);
+		if (one->rts_toggle.enable != config.enable) {
+			one->config.flags |= XR20M1280_RECONF_RTS_TOGGLE;
+			kthread_queue_work(&s->kworker, &one->reg_work);
+		}
+		one->rts_toggle = config;
+		spin_unlock(&port->lock);
+		return 0;
+	}
+	}
+	return -ENOIOCTLCMD;
+}
+
+static void xr20m1280_throttle(struct uart_port *port)
+{
+	spin_lock(&port->lock);
+	xr20m1280_throttle_ms(port);
+	spin_unlock(&port->lock);
+	if (I_IXOFF(port->state->port.tty)) {
+		xr20m1280_send_xchar(port, STOP_CHAR(port->state->port.tty));
+	}
+}
+
+static void xr20m1280_unthrottle(struct uart_port *port)
+{
+	spin_lock(&port->lock);
+	xr20m1280_unthrottle_ms(port);
+	spin_unlock(&port->lock);
+	if (I_IXOFF(port->state->port.tty)) {
+		xr20m1280_send_xchar(port, START_CHAR(port->state->port.tty));
+	}
 }
 
 static const struct uart_ops xr20m1280_ops = {
@@ -1629,7 +2351,14 @@ static const struct uart_ops xr20m1280_ops = {
 	.release_port	= xr20m1280_null_void,
 	.config_port	= xr20m1280_config_port,
 	.verify_port	= xr20m1280_verify_port,
+#ifdef CONFIG_PM
 	.pm		= xr20m1280_pm,
+#endif
+	.ioctl		= xr20m1280_ioctl,
+	.throttle	= xr20m1280_throttle,
+	.unthrottle	= xr20m1280_unthrottle,
+	.send_xchar	= xr20m1280_send_xchar,
+	.set_ldisc	= xr20m1280_set_ldisc
 };
 
 
@@ -1777,7 +2506,15 @@ static int xr20m1280_probe(struct device *dev,
 				     XR20M1280_SFR_TXDISABLE_BIT);
 		/* Initialize kthread work structs */
 		kthread_init_work(&s->p[i].tx_work, xr20m1280_tx_proc);
+		kthread_init_work(&s->p[i].stop_work, xr20m1280_stop_tx_proc);
 		kthread_init_work(&s->p[i].reg_work, xr20m1280_reg_proc);
+		kthread_init_work(&s->p[i].start_work, xr20m1280_start_proc);
+		
+		hrtimer_init(&s->p[i].stop_tx_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		hrtimer_init(&s->p[i].start_tx_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+		s->p[i].stop_tx_timer.function = xr20m1280_queue_stop_tx;
+		s->p[i].start_tx_timer.function = xr20m1280_queue_start_tx;
+
 		/* Register port */
 		uart_add_one_port(&xr20m1280_uart, &s->p[i].port);
 		xr20m1280_report_port(&xr20m1280_uart, &s->p[i].port);
@@ -1876,6 +2613,7 @@ static int xr20m1280_spi_probe(struct spi_device *spi)
 	/* only supports mode 0 on XR20M1280 (TODO?) */
 	spi->mode		= spi->mode ? : SPI_MODE_0;
 	spi->max_speed_hz	= spi->max_speed_hz ? : 15000000;
+	spi->rt			= true;
 	ret = spi_setup(spi);
 	if (ret)
 		return ret;
@@ -1906,9 +2644,10 @@ static int xr20m1280_spi_probe(struct spi_device *spi)
 	return xr20m1280_probe(&spi->dev, devtype, regmap, spi->irq, flags);
 }
 
-static int xr20m1280_spi_remove(struct spi_device *spi)
+static void xr20m1280_spi_remove(struct spi_device *spi)
 {
-	return xr20m1280_remove(&spi->dev);
+	xr20m1280_remove(&spi->dev);
+	return;
 }
 
 static const struct spi_device_id xr20m1280_spi_id_table[] = {

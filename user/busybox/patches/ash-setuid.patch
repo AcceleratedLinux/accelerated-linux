@@ -3,7 +3,7 @@ Can be used by root to change to less privileged user.
 
 --- busybox.orig/shell/ash.c	2019-12-05 16:26:50.764785897 +1000
 +++ busybox/shell/ash.c	2019-12-05 11:40:06.396372408 +1000
-@@ -9899,6 +9899,9 @@
+@@ -10093,6 +10093,9 @@
  static int umaskcmd(int, char **) FAST_FUNC;
  static int unsetcmd(int, char **) FAST_FUNC;
  static int ulimitcmd(int, char **) FAST_FUNC;
@@ -13,7 +13,7 @@ Can be used by root to change to less privileged user.
  
  #define BUILTIN_NOSPEC          "0"
  #define BUILTIN_SPECIAL         "1"
-@@ -9980,6 +9982,9 @@
+@@ -10174,6 +10177,9 @@
  	{ BUILTIN_SPEC_REG_ASSG "readonly", exportcmd  },
  	{ BUILTIN_SPEC_REG      "return"  , returncmd  },
  	{ BUILTIN_SPEC_REG      "set"     , setcmd     },
@@ -23,7 +23,7 @@ Can be used by root to change to less privileged user.
  	{ BUILTIN_SPEC_REG      "shift"   , shiftcmd   },
  	{ BUILTIN_REGULAR       "socketpair", socketpaircmd },
  #if BASH_SOURCE
-@@ -14047,6 +14051,88 @@
+@@ -14297,6 +14303,88 @@
  	return shell_builtin_ulimit(argv);
  }
  

@@ -1,0 +1,5 @@
+config USER_SCEP_CLIENT
+	bool "SCEP client support"
+	help
+		Enable SCEP (Simple Certificate Enrollment Protocol) client to securely download private keys and certificates
+		from a SCEP server.

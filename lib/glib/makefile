@@ -1,60 +1,50 @@
+VERSION = 2.71.0
+URL := https://download.gnome.org/sources/glib/$(basename $(VERSION))/glib-$(VERSION).tar.xz
+DOWNLOADHASH = 926816526f6e4bba9af726970ff87be7dac0b70d5805050c6207b7bb17ea4fca
+WGETOPTS = --no-check-certificate
 
-# later versions introduce some build issues, be warned :-)
-URL := http://ftp.gnome.org/pub/GNOME/sources/glib/2.57/glib-2.57.1.tar.xz
-DOWNLOADHASH = d029e7c4536835f1f103472f7510332c28d58b9b7d6cd0e9f45c2653e670d9b4
-
-MAKEVARS  =  
-CONFIGURE = autogen.sh
-
-CONFVARS :=
-CONFVARS += glib_cv_stack_grows=no
-CONFVARS += glib_cv_uscore=no
-CONFVARS += ac_cv_func_posix_getpwuid_r=yes
-CONFVARS += ac_cv_func_posix_getgrgid_r=yes
-CONFVARS += ZLIB_CFLAGS=" "
-CONFVARS += PCRE_CFLAGS=" "
-
-# CONFOPTS += --enable-gc-friendly
-# CONFOPTS += --disable-mem-pools
-CONFOPTS += --disable-libmount
-CONFOPTS += --disable-rebuilds
-CONFOPTS += --disable-modular-tests
-CONFOPTS += --disable-largefile
-# CONFOPTS += --enable-iconv-cache= # [yes/no/auto]
-CONFOPTS += --disable-selinux       # build without selinux support
-CONFOPTS += --disable-fam           # don't use fam for file system monitoring
-CONFOPTS += --disable-xattr         # build without xattr support
-CONFOPTS += --disable-gtk-doc       # use gtk-doc to build documentation [[default=no]]
-CONFOPTS += --disable-gtk-doc-html  # build documentation in html format [[default=yes]]
-CONFOPTS += --disable-gtk-doc-pdf   # build documentation in pdf format [[default=no]]
-CONFOPTS += --disable-man           # generate man pages [default=auto]
-CONFOPTS += --disable-dtrace        # include tracing support for dtrace
-CONFOPTS += --disable-systemtap     # include tracing support for systemtap
-CONFOPTS += --disable-gcov          # enable coverage testing with gcov
-CONFOPTS += --disable-libelf
-CONFOPTS += --disable-largefile
+CONFOPTS += -Dlibmount=disabled
+CONFOPTS += -Dtests=false -Dinstalled_tests=false
+CONFOPTS += -Dselinux=disabled		# build without selinux support
+CONFOPTS += -Dfam=false			# don't use fam for file system monitoring
+CONFOPTS += -Dxattr=false		# build without xattr support
+CONFOPTS += -Dgtk_doc=false		# use gtk-doc to build documentation [[default=no]]
+CONFOPTS += -Dman=false			# generate man pages [default=auto]
+CONFOPTS += -Ddtrace=false		# include tracing support for dtrace
+CONFOPTS += -Dsystemtap=false		# include tracing support for systemtap
+CONFOPTS += -Dlibelf=disabled
 ifdef CONFIG_LIB_LIBICONV
-CONFOPTS += --with-libiconv=gnu
+CONFOPTS += -Diconv=external
 CFLAGS += -I$(ROOTDIR)/lib/libiconv/build/libiconv-1.14-install/include
 else
 ifdef CONFIG_LIB_MINI_ICONV
-CONFOPTS += --with-libiconv=native
+CONFOPTS += -Diconv=external
 else
-CONFOPTS += --with-libiconv=no
+CONFOPTS += -Diconv=auto
 endif
 endif
+CONFOPTS += -Dglib_debug=disabled
+CONFOPTS += -Doss_fuzz=disabled
 
 ifdef CONFIG_LIB_GLIB_STATIC
-CONFOPTS += --enable-static --disable-shared
+CONFOPTS += -Ddefault_library=static
 endif
 
+INSTALLTARGET = my_install
 ROMFS = glib_cleanup
 
-include $(ROOTDIR)/tools/automake.inc
+include $(ROOTDIR)/tools/meson.inc
+
+build/%-my_install: build/%-meson_installed
+	@# Remove '${bindir}' prefix before tools in pkg-config files to make
+	@# them working with cross-compilation
+	for f in ${addprefix build/glib-$(VERSION)-install/lib/pkgconfig/, glib-2.0.pc gio-2.0.pc}; do \
+		sed -i 's%$${bindir}/%%g' $$f; \
+	done
 
 glib_cleanup:
 	rm -rf $(ROMFSDIR)/lib/glib-2.0
-	rm -rf $(ROMFSDIR)/lib/locale
+	rm -rf $(ROMFSDIR)/share/locale
 ifndef CONFIG_LIB_GLIB_TOOLS
 	@for i in build/glib-*-install/bin/*; do \
 		[ -f "$$i" ] || continue; \

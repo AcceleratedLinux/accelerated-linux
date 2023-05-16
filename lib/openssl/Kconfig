@@ -1,0 +1,21 @@
+config LIB_OPENSSL
+	bool "Build OpenSSL"
+	default n
+	help
+		OpenSSL library.
+		Only enable this if you want to force the library to be built.
+		The config will make sure this library is built if it is needed.
+
+config LIB_OPENSSL3
+	bool "Build OpenSSL-3.0"
+	default n
+	depends on LIB_OPENSSL
+	help
+		Build OpenSSL version 3.0 instead of the legacy version 1.1.
+
+config LIB_OPENSSL_FIPS
+	bool "Enable FIPS mode"
+	default n
+	depends on LIB_OPENSSL3
+	help
+		Build OpenSSL with FIPS mode enabled.

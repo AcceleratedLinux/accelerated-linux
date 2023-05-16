@@ -1,0 +1,60 @@
+
+config USER_PROCPS
+	bool "procps"
+	select LIB_NCURSES
+	help
+	  Procps is a package of system tools often used on Linux systems.
+	  They tend to be tools for assisting in managing processes, such
+	  as "ps", "kill", "top", etc.
+
+if USER_PROCPS
+
+config USER_PROCPS_FREE
+	bool "free"
+
+config USER_PROCPS_KILL
+	bool "kill"
+
+config USER_PROCPS_PGREP
+	bool "pgrep"
+
+config USER_PROCPS_PIDOF
+	bool "pkill"
+
+config USER_PROCPS_PKILL
+	bool "pkill"
+
+config USER_PROCPS_PMAP
+	bool "pmap"
+
+config USER_PROCPS_PS
+	bool "ps"
+
+config USER_PROCPS_PWDX
+	bool "pwdx"
+
+config USER_PROCPS_SLABTOP
+	bool "slabtop"
+
+config USER_PROCPS_SYSCTL
+	bool "sysctl"
+
+config USER_PROCPS_TLOAD
+	bool "tload"
+
+config USER_PROCPS_TOP
+	bool "top"
+
+config USER_PROCPS_UPTIME
+	bool "uptime"
+
+config USER_PROCPS_VMSTAT
+	bool "vmstat"
+
+config USER_PROCPS_W
+	bool "w"
+
+config USER_PROCPS_WATCH
+	bool "watch"
+
+endif

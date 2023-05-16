@@ -26,6 +26,8 @@
  */
 /* Event uses a 64bit counter */
 #define ARMPMU_EVT_64BIT		1
+/* Event uses a 47bit counter */
+#define ARMPMU_EVT_47BIT		2
 
 #define HW_OP_UNSUPPORTED		0xFFFF
 #define C(_x)				PERF_COUNT_HW_CACHE_##_x
@@ -73,6 +75,7 @@ enum armpmu_attr_groups {
 	ARMPMU_ATTR_GROUP_COMMON,
 	ARMPMU_ATTR_GROUP_EVENTS,
 	ARMPMU_ATTR_GROUP_FORMATS,
+	ARMPMU_ATTR_GROUP_CAPS,
 	ARMPMU_NR_ATTR_GROUPS
 };
 
@@ -109,6 +112,8 @@ struct arm_pmu {
 	struct notifier_block	cpu_pm_nb;
 	/* the attr_groups array must be NULL-terminated */
 	const struct attribute_group *attr_groups[ARMPMU_NR_ATTR_GROUPS + 1];
+	/* store the PMMIR_EL1 to expose slots */
+	u64		reg_pmmir;
 
 	/* Only to be used by ACPI probing code */
 	unsigned long acpi_cpuid;
@@ -158,6 +163,12 @@ int arm_pmu_device_probe(struct platform_device *pdev,
 int arm_pmu_acpi_probe(armpmu_init_fn init_fn);
 #else
 static inline int arm_pmu_acpi_probe(armpmu_init_fn init_fn) { return 0; }
+#endif
+
+#ifdef CONFIG_KVM
+void kvm_host_pmu_init(struct arm_pmu *pmu);
+#else
+#define kvm_host_pmu_init(x)	do { } while(0)
 #endif
 
 /* Internal functions only for core arm_pmu code */

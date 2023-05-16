@@ -7,7 +7,6 @@
 #include "event.h"
 #include "debug.h"
 #include "tests/tests.h"
-#include "arch-tests.h"
 
 #define STACK_SIZE 8192
 
@@ -38,6 +37,13 @@ static int sample_ustack(struct perf_sample *sample,
 	stack_size = stack_size > STACK_SIZE ? STACK_SIZE : stack_size;
 
 	memcpy(buf, (void *) sp, stack_size);
+#ifdef MEMORY_SANITIZER
+	/*
+	 * Copying the stack may copy msan poison, avoid false positives in the
+	 * unwinder by removing the poison here.
+	 */
+	__msan_unpoison(buf, stack_size);
+#endif
 	stack->data = (char *) buf;
 	stack->size = stack_size;
 	return 0;

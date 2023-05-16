@@ -1,0 +1,29 @@
+#!/bin/bash
+
+MODEM=$6
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/ddns-up.${MODEM}"
+scripts[1]="/etc/config/scripts/ddns-up"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+        if [ -f "${scripts[$i]}" ]; then
+                exec /bin/sh "${scripts[$i]}" "$@"
+        fi
+done
+
+if [ -z "$MODEM" ]
+then
+	exit 1
+fi
+
+if [ -f /etc/config/network/${MODEM}_ddns.conf ]
+then
+	ez-ipupdate -d -c /etc/config/network/${MODEM}_ddns.conf -i ${IFNAME} \
+		-F /var/run/${MODEM}_ddns.pid 
+fi
+
+# If we're replacing default routes, now run that script
+if [ -f /etc/config/network/ip-up-${MODEM} ]
+then
+	/etc/config/network/ip-up-${MODEM} $@
+fi

@@ -53,42 +53,6 @@
 		clock-frequency = <26000000>;
 	};
 
-	rsnd_sgtl5000: sound {
-		compatible = "simple-audio-card";
-		simple-audio-card,format = "i2s";
-		simple-audio-card,bitclock-master = <&sndcodec>;
-		simple-audio-card,frame-master = <&sndcodec>;
-
-		sndcpu: simple-audio-card,cpu {
-			sound-dai = <&rcar_sound>;
-		};
-
-		sndcodec: simple-audio-card,codec {
-			sound-dai = <&sgtl5000>;
-		};
-	};
-
-	vccq_sdhi0: regulator-vccq-sdhi0 {
-		compatible = "regulator-gpio";
-
-		regulator-name = "SDHI0 VccQ";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <3300000>;
-
-		gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
-		gpios-states = <1>;
-		states = <3300000 1>, <1800000 0>;
-	};
-
-	vccq_panel: regulator-vccq-panel {
-		compatible = "regulator-fixed";
-		regulator-name = "Panel VccQ";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 13 GPIO_ACTIVE_LOW>;
-		enable-active-high;
-	};
-
 	backlight_lcd: backlight {
 		compatible = "pwm-backlight";
 		pwms = <&tpu 3 5000000 PWM_POLARITY_INVERTED>;
@@ -107,19 +71,40 @@
 			};
 		};
 	};
-};
 
-&du {
-	pinctrl-0 = <&du0_pins>;
-	pinctrl-names = "default";
+	vccq_panel: regulator-vccq-panel {
+		compatible = "regulator-fixed";
+		regulator-name = "Panel VccQ";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio1 13 GPIO_ACTIVE_LOW>;
+		enable-active-high;
+	};
 
-	status = "okay";
+	vccq_sdhi0: regulator-vccq-sdhi0 {
+		compatible = "regulator-gpio";
 
-	ports {
-		port@0 {
-			endpoint {
-				remote-endpoint = <&lcd_in>;
-			};
+		regulator-name = "SDHI0 VccQ";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <3300000>;
+
+		gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
+		gpios-states = <1>;
+		states = <3300000 1>, <1800000 0>;
+	};
+
+	rsnd_sgtl5000: sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&sndcodec>;
+		simple-audio-card,frame-master = <&sndcodec>;
+
+		sndcpu: simple-audio-card,cpu {
+			sound-dai = <&rcar_sound>;
+		};
+
+		sndcodec: simple-audio-card,codec {
+			sound-dai = <&sgtl5000>;
 		};
 	};
 };
@@ -138,6 +123,8 @@
 	 * On some older versions of the platform (before R4.0) the phy address
 	 * may be 1 or 3. The address is fixed to 3 for R4.0 onwards.
 	 */
+		compatible = "ethernet-phy-id0022.1622",
+			     "ethernet-phy-ieee802.3-c22";
 		reg = <3>;
 		micrel,led-mode = <1>;
 	};
@@ -148,6 +135,21 @@
 	pinctrl-names = "default";
 
 	status = "okay";
+};
+
+&du {
+	pinctrl-0 = <&du0_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+
+	ports {
+		port@0 {
+			endpoint {
+				remote-endpoint = <&lcd_in>;
+			};
+		};
+	};
 };
 
 &hscif1 {
@@ -171,6 +173,15 @@
 	status = "okay";
 	clock-frequency = <400000>;
 
+	sgtl5000: codec@a {
+		compatible = "fsl,sgtl5000";
+		#sound-dai-cells = <0>;
+		reg = <0x0a>;
+		clocks = <&audio_clock>;
+		VDDA-supply = <&reg_3p3v>;
+		VDDIO-supply = <&reg_3p3v>;
+	};
+
 	stmpe811@44 {
 		compatible = "st,stmpe811";
 		reg = <0x44>;
@@ -179,7 +190,7 @@
 
 		/* 3.25 MHz ADC clock speed */
 		st,adc-freq = <1>;
-		/* ADC converstion time: 80 clocks */
+		/* ADC conversion time: 80 clocks */
 		st,sample-time = <4>;
 		/* 12-bit ADC */
 		st,mod-12b = <1>;
@@ -202,15 +213,6 @@
 			/* 5 ms touch detect interrupt delay */
 			st,touch-det-delay = <5>;
 		};
-	};
-
-	sgtl5000: codec@a {
-		compatible = "fsl,sgtl5000";
-		#sound-dai-cells = <0>;
-		reg = <0x0a>;
-		clocks = <&audio_clock>;
-		VDDA-supply = <&reg_3p3v>;
-		VDDIO-supply = <&reg_3p3v>;
 	};
 };
 
@@ -289,8 +291,8 @@
 
 	rcar_sound,dai {
 		dai0 {
-			playback = <&ssi3 &src3 &dvc0>;
-			capture = <&ssi4 &src4 &dvc1>;
+			playback = <&ssi3>, <&src3>, <&dvc0>;
+			capture = <&ssi4>, <&src4>, <&dvc1>;
 		};
 	};
 };

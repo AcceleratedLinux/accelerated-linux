@@ -15,6 +15,7 @@ HWNAME      = $(shell echo $(CONFIG_PRODUCT) | tr '[:upper:]' '[:lower:]' | tr '
 MFGIMG      = $(IMAGEDIR)/$(HWNAME)_mfg.tar.gz
 BLOADER_IMG = $(IMAGEDIR)/u-boot.nand
 BLOADER_IMG_VERSION = $(shell strings $(BLOADER_IMG) | grep -oE "[0-9]{2}\.[0-9]{1,2}\.[0-9]{1,4}\.[0-9]{1,4}(-.*|$$)")
+IMAGESIZE	= 73900032 # 70.4 MB
 
 SIGNING_ALG = ecdsa
 
@@ -58,6 +59,8 @@ romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cr
 	$(ROMFSINST) -d $(THIS_DIR)/console /etc/inittab.d/console
 	$(ROMFSINST) -d -p 755 $(THIS_DIR)/pwrbtn.sh /etc/acpi/events/PWRF/00000080
 	$(ROMFSINST) -d -p 555 $(THIS_DIR)/fwenv_fixup.sh /sbin/fwenv_fixup.sh
+	$(ROMFSINST) -d $(THIS_DIR)/blacklist-hwcrypto.conf /etc/modprobe.d/blacklist-hwcrypto.conf
+	$(ROMFSINST) -d -p 755 $(THIS_DIR)/set_temp_pwr_off_delay /bin/set_temp_pwr_off_delay
 
 romfs.post:: romfs.cleanup
 
@@ -74,7 +77,13 @@ uimage.bin: lzma
 	mkimage -A mips -O linux -T kernel -C lzma -a 0x81001000 -n "Linux" -d $(LZKERNEL) $(UKERNEL)
 	[ "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(ROMFSIMG) /tftpboot/
 
-image: image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy
+bloader.overwrite:
+	@if [ "$(BLOADER_OVERWRITE_IMG)" ]; then \
+		echo "!!! Overwriting bootloader image with '$(BLOADER_OVERWRITE_IMG)'"; \
+		wget --quiet -O $(BLOADER_IMG) "$(BLOADER_OVERWRITE_IMG)" || exit 1; \
+	fi
+
+image: bloader.overwrite image.configs image.dir image.mips.vmlinux image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 	@# Create manufacturing image only if U-Boot is built
 	@if [ -f "$(IMAGEDIR)/u-boot.nand" ]; then \
 		echo "Creating manufacturing package..."; \

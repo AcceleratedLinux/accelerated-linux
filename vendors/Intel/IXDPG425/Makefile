@@ -148,7 +148,7 @@ image: mkcramfs
 	PAD=`expr 1048576 - $$SIZE` ; \
 	dd if=/dev/zero count=1 bs=$$PAD 2> /dev/null | tr \\000 \\377 >> $(IMAGE)
 	cat $(RAMDISK).gz >> $(IMAGE)
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 	if [ -d /tftpboot ]; then \
 		cp $(KERNELZ) /tftpboot/ 2> /dev/null; \
 		cp $(RAMDISK).gz /tftpboot/ 2> /dev/null; \

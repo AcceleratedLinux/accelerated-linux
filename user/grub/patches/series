@@ -1,0 +1,12 @@
+0001-Add-DesignWare-I2C-bus-support-and-add-driver-for-th.patch
+0002-Add-verify_part-command-verify-partition-signature-t.patch
+0003-Add-disable-vga-console-configure-option.patch
+0004-Add-MCU-driver.patch
+0005-Add-boot-counter-support.patch
+0006-Add-watchdog-support.patch
+0007-Add-ConnectIT-LED-and-dev-mode.patch
+0008-grub-add-driver-for-Intel-iSMT-SMBus-hardware-module.patch
+0009-Add-GRUB_NO_EDIT-env-variable-support-to-disable-con.patch
+0010-Add-GRUB_NO_OUTPUT-ENV-variable-support-to-disable-o.patch
+0011-Optimize-booting-from-squashfs-filesystems.patch
+0012-dummy_verifier-adding-a-dummy-verifier-which-passes-.patch

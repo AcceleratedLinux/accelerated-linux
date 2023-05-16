@@ -9,7 +9,7 @@ include $(ARCH_CONFIG)
 LINUXIMG = $(IMAGEDIR)/Intel-Tolapai-EP80579-vmlinuz
 ROMFSIMG = $(IMAGEDIR)/initrd
 
-VENDOR_ROMFS_DIR := ../../SecureComputing
+VENDOR_ROMFS_DIR := .
 
 FLASH_DEVICES =
 
@@ -51,6 +51,6 @@ romfs: romfs.dirs romfs.default romfs.rc romfs.version
 image: image.configs image.dir image.cramfs image.initramfs
 
 include $(ROOTDIR)/vendors/config/config.dev
-include $(ROOTDIR)/vendors/SecureComputing/vendor.mak
+include $(ROOTDIR)/vendors/Intel/Tolapai-EP80579/vendor.mak
 
 #############################################################################

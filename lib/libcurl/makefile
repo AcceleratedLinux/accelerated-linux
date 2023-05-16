@@ -7,6 +7,7 @@ CONFOPTS :=	--enable-dependency-tracking \
 		--disable-imap \
 		--disable-smtp \
 		--disable-gopher \
+		--disable-mqtt \
 		--enable-file \
 		--disable-ldap \
 		--disable-ldaps \
@@ -32,7 +33,13 @@ CONFOPTS :=	--enable-dependency-tracking \
 		--with-random=/dev/urandom \
 		--with-libidn2
 
-URL := https://curl.haxx.se/download/curl-7.69.0.tar.bz2
+ifdef CONFIG_LIB_OPENSSL
+CONFOPTS += --with-openssl
+else
+CONFOPTS += --without-ssl
+endif
+
+URL := https://curl.haxx.se/download/curl-7.85.0.tar.bz2
 ROMFS = curl_romfs
 MAKEVARS = 
 include $(ROOTDIR)/tools/automake.inc

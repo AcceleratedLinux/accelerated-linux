@@ -1,0 +1,25 @@
+From 2505517982a9255186a77918cadfb7bb30a2d979 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 7 Dec 2021 18:29:00 +0100
+Subject: [PATCH 10/11] Add GRUB_NO_OUTPUT ENV variable support to disable
+ output
+
+---
+ grub-core/term/serial.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/grub-core/term/serial.c b/grub-core/term/serial.c
+index f9271b0..5df8772 100644
+--- a/grub-core/term/serial.c
++++ b/grub-core/term/serial.c
+@@ -83,6 +83,7 @@ static void
+ serial_put (grub_term_output_t term, const int c)
+ {
+   struct grub_serial_output_state *data = term->data;
++  if (!grub_env_get ("GRUB_NO_OUTPUT"))
+   data->port->driver->put (data->port, c);
+ }
+ 
+-- 
+2.27.0
+

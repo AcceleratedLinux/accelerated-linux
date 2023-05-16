@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# If there's a user-configured script, run it
+if [ -f "/etc/config/scripts/alert-sms" ]; then
+	exec /bin/sh "/etc/config/scripts/alert-sms" $@
+fi
+
+if [ "RECEIVED" == "$1" ]; then
+	# Push the SMS contents into infod
+	FILE=$2
+	MSG=`awk 'BEGIN{RS="";FS="\n"}{if(NR>1) {print $0;}}' $FILE`
+	NUMBER=`grep -m1 'From: ' $FILE | cut -f2 -d' '`
+	infod_client -o push -p config.sms.incoming -t data -d "$NUMBER: $MSG"
+	rm $FILE
+fi
+
+

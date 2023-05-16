@@ -1,16 +1,8 @@
-CONFOPTS=
 
-all: build/build
-	$(MAKE) -C build
+URL = https://download.samba.org/pub/rsync/src/rsync-3.2.3.tar.gz
 
-build/build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
+CONFOPTS += --disable-xxhash
+CONFOPTS += --disable-zstd
+CONFOPTS += --disable-lz4
 
-clean:
-	rm -rf build
-
-romfs:
-	$(ROMFSINST) build/rsync /bin/rsync
+include $(ROOTDIR)/tools/automake.inc

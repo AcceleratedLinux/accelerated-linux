@@ -235,6 +235,9 @@ const char *parse_fs_dst(struct trace_seq *p,
 	const char *ret = trace_seq_buffer_ptr(p);
 
 	switch (dst->type) {
+	case MLX5_FLOW_DESTINATION_TYPE_UPLINK:
+		trace_seq_printf(p, "uplink\n");
+		break;
 	case MLX5_FLOW_DESTINATION_TYPE_VPORT:
 		trace_seq_printf(p, "vport=%u\n", dst->vport.num);
 		break;
@@ -247,11 +250,17 @@ const char *parse_fs_dst(struct trace_seq *p,
 	case MLX5_FLOW_DESTINATION_TYPE_TIR:
 		trace_seq_printf(p, "tir=%u\n", dst->tir_num);
 		break;
+	case MLX5_FLOW_DESTINATION_TYPE_FLOW_SAMPLER:
+		trace_seq_printf(p, "sampler_id=%u\n", dst->sampler_id);
+		break;
 	case MLX5_FLOW_DESTINATION_TYPE_COUNTER:
 		trace_seq_printf(p, "counter_id=%u\n", counter_id);
 		break;
 	case MLX5_FLOW_DESTINATION_TYPE_PORT:
 		trace_seq_printf(p, "port\n");
+		break;
+	case MLX5_FLOW_DESTINATION_TYPE_NONE:
+		trace_seq_printf(p, "none\n");
 		break;
 	}
 

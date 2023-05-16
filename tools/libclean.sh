@@ -120,7 +120,7 @@ while :; do
 				echo "Skipping libnss file $so"
 				echo "`basename $so`: libnss" >> $TMPF
 				;;
-			*cpython*|*dist-packages*|*site-packages*)
+			*python*|*dist-packages*|*site-packages*)
 				echo "Skipping python file $so"
 				echo "`basename $so`: python" >> $TMPF
 				;;
@@ -143,6 +143,18 @@ while :; do
 			*lua*)
 				echo "Skipping Lua module $so"
 				echo "`basename $so`: lua" >> $TMPF
+				;;
+			*libyang1*)
+				echo "Skipping libyang plugin file $so"
+				echo "`basename $so`: plugin" >> $TMPF
+				;;
+			*pppol2tp*|*/pppoe.so)
+				echo "Skipping ppp plugin file $so"
+				echo "`basename $so`: plugin" >> $TMPF
+				;;
+			*fips*)
+				echo "Skipping openssl FIPS file $so"
+				echo "`basename $so`: plugin" >> $TMPF
 				;;
 			*)
 				touch $TMPW

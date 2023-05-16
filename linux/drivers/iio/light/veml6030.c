@@ -128,7 +128,7 @@ static ssize_t in_illuminance_period_available_show(struct device *dev,
 		return -EINVAL;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", period_values[x]);
+	return sysfs_emit(buf, "%s\n", period_values[x]);
 }
 
 static IIO_DEVICE_ATTR_RO(in_illuminance_period_available, 0);
@@ -814,7 +814,6 @@ static int veml6030_probe(struct i2c_client *client,
 	data->client = client;
 	data->regmap = regmap;
 
-	indio_dev->dev.parent = &client->dev;
 	indio_dev->name = "veml6030";
 	indio_dev->channels = veml6030_channels;
 	indio_dev->num_channels = ARRAY_SIZE(veml6030_channels);

@@ -1,4 +1,4 @@
-VERSION = 2.2.1
+VERSION = 2.4.2
 
 URL = https://www.kernel.org/pub/linux/utils/cryptsetup/v$(basename $(VERSION))/cryptsetup-$(VERSION).tar.xz
 
@@ -12,6 +12,7 @@ CONFOPTS += --enable-luks-adjust-xts-keysize --with-crypto_backend=openssl
 CONFOPTS += --enable-static --enable-largefile --disable-static-cryptsetup
 CONFOPTS += --with-luks2-lock-path=/var/run/cryptsetup
 CONFOPTS += --with-default-luks-format=LUKS2
+CONFOPTS += --disable-ssh-token
 
 # Need this, otherwise it complains about missing 'libintl_gettext'
 #CONFVARS += LIBS=-lintl

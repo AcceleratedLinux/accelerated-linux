@@ -15,6 +15,9 @@
 /* make sure libbpf doesn't use kernel-only integer typedefs */
 #pragma GCC poison u8 u16 u32 u64 s8 s16 s32 s64
 
+/* prevent accidental re-addition of reallocarray() */
+#pragma GCC poison reallocarray
+
 /* start with 4 buckets */
 #define HASHMAP_MIN_CAP_BITS 2
 
@@ -72,7 +75,7 @@ void hashmap__clear(struct hashmap *map)
 
 void hashmap__free(struct hashmap *map)
 {
-	if (!map)
+	if (IS_ERR_OR_NULL(map))
 		return;
 
 	hashmap__clear(map);
@@ -235,4 +238,3 @@ bool hashmap__delete(struct hashmap *map, const void *key,
 
 	return true;
 }
-

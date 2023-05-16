@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Action for AnywhereUSB 2 specific LED setting
+# Action for ConnectEZ specific LED setting
 #
 ##############################################################
 # allow script override
@@ -9,30 +9,22 @@
 #exec 2>> /tmp/led.log
 #set -x
 
-#
-# NOTE: The AnywhereUSB 2 Plus hardware inverts the blue
-#       power LED in hardware in order to force the LED
-#       on as early as possible when power is applied.
-#
-#       The ledcmd parameters below must account for this.
-#
-
 findme_update()
 {
 	FINDME=
 	if find-me state &>/dev/null; then
-		# blue off, green on, red flashing
-		FINDME="-o pwr1b -o pwr1g -F pwr1r"
+		# power flashing
+		FINDME="-F power"
 	else
-		# blue on, green off, red off
-		FINDME="-O pwr1b -O pwr1g -O pwr1r"
+		# power on
+		FINDME="-o power"
 	fi
 }
 
 case "$1" in
 start|stop)
-	# blue on, green off, red off
-	ledcmd -O pwr1b -O pwr1g -O pwr1r
+	# power on
+	ledcmd -o power
 	;;
 reload)
 	findme_update

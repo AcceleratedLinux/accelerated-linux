@@ -1,0 +1,183 @@
+#!/bin/sh
+#
+# Action for specific LED setting
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+fan_led_update()
+{
+	FAN=""
+
+	# psu1_in - fan part of psu module
+	echo 304 > /sys/class/gpio/export 2>&1 || true
+	echo 1 > /sys/class/gpio/gpio304/active_low
+	FAN1_PRESENT=/sys/class/gpio/gpio304/value
+
+	# psu2_in - fan part of psu module
+	echo 305 > /sys/class/gpio/export 2>&1 || true
+	echo 1 > /sys/class/gpio/gpio305/active_low
+	FAN2_PRESENT=/sys/class/gpio/gpio305/value
+
+	# fan3_in
+	echo 306 > /sys/class/gpio/export 2>&1 || true
+	echo 1 > /sys/class/gpio/gpio306/active_low
+	FAN3_PRESENT=/sys/class/gpio/gpio306/value
+
+	if [ "$(cat $FAN1_PRESENT)" = "1" ]; then
+		RPM=$(cat /sys/class/hwmon/hwmon0/fan1_input)
+		TEMP_MAX_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
+		TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan1_alarm)
+
+		if [ "$RPM" -le "10" ]; then
+			FAN="$FAN -O pwrfan1g -o pwrfan1r"
+		elif [ "$TEMP_MAX_ALARM" = "1" ] || [ "$TEMP_CRIT_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/pwrfan2r/delay_on > /dev/null 2>&1)" != "250" ]; then
+				FAN="$FAN -O pwrfan1g -F pwrfan1r"
+			fi
+		elif [ "$FAN_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/pwrfan1r/delay_on > /dev/null 2>&1)" != "500" ]; then
+				FAN="$FAN -O pwrfan1g -f pwrfan1r"
+			fi
+		else
+			FAN="$FAN -o pwrfan1g -O pwrfan2r"
+		fi
+	fi
+
+	if [ "$(cat $FAN2_PRESENT)" = "1" ]; then
+		RPM=$(cat /sys/class/hwmon/hwmon0/fan2_input)
+		TEMP_MAX_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
+		TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan2_alarm)
+
+		if [ "$RPM" -le "10" ]; then
+			FAN="$FAN -O pwrfan2g -o pwrfan2r"
+		elif [ "$TEMP_MAX_ALARM" = "1" ] || [ "$TEMP_CRIT_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/pwrfan2r/delay_on > /dev/null 2>&1)" != "250" ]; then
+				FAN="$FAN -O pwrfan2g -F pwrfan2r"
+			fi
+		elif [ "$FAN_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/pwrfan2r/delay_on > /dev/null 2>&1)" != "500" ]; then
+				FAN="$FAN -O pwrfan2g -f pwrfan2r"
+			fi
+		else
+			FAN="$FAN -o pwrfan2g -O pwrfan2r"
+		fi
+	fi
+
+	if [ "$(cat $FAN3_PRESENT)" = "1" ]; then
+		RPM=$(cat /sys/class/hwmon/hwmon0/fan3_input)
+		TEMP_MAX_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
+		TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan3_alarm)
+
+		if [ "$RPM" -le "10" ]; then
+			FAN="$FAN -O sysfang -o sysfanr"
+		elif [ "$TEMP_MAX_ALARM" = "1" ] || [ "$TEMP_CRIT_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/sysfanr/delay_on > /dev/null 2>&1)" != "250" ]; then
+				FAN="$FAN -O sysfang -F sysfanr"
+			fi
+		elif [ "$FAN_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/sysfanr/delay_on > /dev/null 2>&1)" != "500" ]; then
+				FAN="$FAN -O sysfang -f sysfanr"
+			fi
+		else
+			FAN="$FAN -o sysfang -O sysfanr"
+		fi
+	fi
+}
+
+wwan_led_update()
+{
+	WWAN_SERV="-O wanserg -O wanserr"
+    WWAN_SIG="-O wansigg -O wansigr"
+
+    eval "$(config stop)"
+    eval "$(config start)"
+    config load
+
+    if config exists network.interface modem && \
+        [ "$(config get network.interface.modem.enable)" = "1" ]; then
+		MODEM_STATUS=$(runt get mm.persist.port.module.status)
+		if [ "$MODEM_STATUS" = "Updating firmware" ]; then
+			WWAN_SERV="-O wanserg -f wanserr"
+			WWAN_SIG="-O wansigg -f wansigr"
+		elif [ "$MODEM_STATUS" = "Recovering firmware" ]; then
+			WWAN_SERV="-f wanserg -O wanserr"
+			WWAN_SIG="-f wansigg -O wansigr"
+		else
+			idx="$(modem name=modem idx || modem idx)" 2>/dev/null
+			if [ -z "$idx" ]; then
+				if sim -m 2>/dev/null | grep -qw yes; then
+					# Slow flash SERV while waiting for modem to appear
+					WWAN_SERV="-f wanserg -O wanserr"
+					WWAN_SIG="-O wansigg -O wansigr"
+				else
+					# No modem present at all. Everything off
+					WWAN_SERV="-O wanserg -O wanserr"
+					WWAN_SIG="-O wansigg -O wansigr"
+				fi
+			else
+				case "$(runt get mm.modem.$idx.status.bars)" in
+				5)   WWAN_SIG="-o wansigg -O wansigr" ;;
+				4|3) WWAN_SIG="-F wansigg -O wansigr" ;;
+				2|1) WWAN_SIG="-f wansigg -O wansigr" ;;
+				0)   WWAN_SIG="-O wansigg -f wansigr" ;;
+				*)   WWAN_SIG="-O wansigg -O wansigr" ;;
+				esac
+
+				if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
+					WWAN_SERV="-o wanserg -O wanserr"
+				elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
+					# No SIM present
+					WWAN_SERV="-O wanserg -o wanserr"
+				else
+					# Connecting
+					WWAN_SERV="-F wanserg -O wanserr"
+				fi
+			fi
+		fi
+	fi
+    eval "$(config stop)"
+}
+
+findme_update()
+{
+	FINDME=
+	if find-me state > /dev/null 2>&1; then
+		FINDME="-f userg" # slow flash user green
+	else
+		FINDME="-O userg"
+	fi
+}
+
+case "$1" in
+start|stop)
+	ledcmd -O wansigg -O wansigr
+	ledcmd -O wanserg -O wanserr
+	;;
+reload)
+	findme_update
+	wwan_led_update
+	fan_led_update
+	ledcmd $WWAN_SERV $WWAN_SIG $FINDME $FAN
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+exit 0

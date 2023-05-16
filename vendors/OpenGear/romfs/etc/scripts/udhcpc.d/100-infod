@@ -1,0 +1,70 @@
+#!/bin/sh
+
+# if we have infod, push all udhcpc parameters into infod. This
+# allows it to interface with an external application (eg. conman).
+if [ -x /bin/infod_client ]
+then
+	/bin/infod_client -o push -p "udhcpc.$interface.argument" -d "${1:- }"
+
+	push_var () {
+		eval "local value=\"\$$1\""
+		/bin/infod_client -o push -p "udhcpc.$interface.$1" -d "${value:- }"
+	}
+
+	push_var interface
+	push_var ip		# leased IPv4 address
+	push_var subnet		# subnet IPv4 eg "255.255.255.0"
+	push_var mask		# prefix form of $subnet, eg "24"
+	push_var siaddr		# DHCP server's IPv4 address
+	push_var sname		# DHCP server's "name" (RFC951)
+	push_var boot_file	# boot file (RFC951)
+
+				# Option ID and dhcp-options(5) name
+	push_var timezone	#   2 time-offset
+	push_var router		#   3 routers
+	push_var timesvr	#   4 time-servers
+	push_var namesvr	#   5 ien116-name-servers
+	push_var dns		#   6 domain-name-servers
+	push_var logsvr		#   7 log-servers
+	push_var cookiesvr	#   8 cookie-servers
+	push_var lprsvr		#   9 lpr-servers
+	push_var hostname	#  12 host-name
+	push_var bootsize	#  13 boot-size
+	push_var domain		#  15 domain-name
+	push_var swapsvr	#  16 swap-server
+	push_var rootpath	#  17 root-path
+	push_var ipttl		#  23 default-ip-ttl
+	push_var mtu		#  26 interface-mtu
+	push_var broadcast	#  28 broadcast-address
+#	push_var nisdomain	#  40 nis-domain
+#	push_var nissrv		#  41 nis-servers
+	push_var ntpsrv		#  42 ntp-servers
+	push_var wins		#  44 netbios-name-servers
+#	push_var requestip	#  50 dhcp-requested-address
+	push_var lease		#  51 dhcp-lease-time
+	push_var dhcptype	#  53 dhcp-message-type
+	push_var serverid	#  54 dhcp-server-identifier
+	push_var message	#  56 dhcp-message
+	push_var tftp		#  66 tftp-server-name
+	push_var bootfile	#  67 bootfile-name
+#	push_var userclass	#  77 user-class
+	push_var search		# 119 domain-search
+#	push_var wpad		# 252 -
+
+	push_var vendorspec_1	#  43 vendor-encapsulated-options ...
+	push_var vendorspec_2
+	push_var vendorspec_3
+	push_var vendorspec_4
+	push_var vendorspec_5
+	push_var vendorspec_6
+
+	if [ "$1" = "renew" -o "$1" = "bound" ]
+	then
+		/bin/infod_client -o push -p "udhcpc.$interface.status" -d "up"
+	fi
+	if [ "$1" = "deconfig" ]
+	then
+		/bin/infod_client -o push -p "udhcpc.$interface.status" -d "down"
+	fi
+
+fi

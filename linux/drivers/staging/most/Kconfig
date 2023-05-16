@@ -18,18 +18,12 @@ menuconfig MOST_COMPONENTS
 
 if MOST_COMPONENTS
 
-source "drivers/staging/most/cdev/Kconfig"
-
 source "drivers/staging/most/net/Kconfig"
-
-source "drivers/staging/most/sound/Kconfig"
 
 source "drivers/staging/most/video/Kconfig"
 
 source "drivers/staging/most/dim2/Kconfig"
 
 source "drivers/staging/most/i2c/Kconfig"
-
-source "drivers/staging/most/usb/Kconfig"
 
 endif

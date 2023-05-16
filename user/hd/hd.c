@@ -82,8 +82,7 @@ int main(int argc, char *argv[])
 	unsigned short	sval;
 	unsigned char	ibuf[16];
 	unsigned int	val;
-	unsigned long	offset = 0, num = 0, total = 0;
-	off_t		addr;
+	unsigned long	addr, offset = 0, num = 0, total = 0;
 
 	progname = argv[0];
 	maximal = 1;
@@ -165,7 +164,7 @@ int main(int argc, char *argv[])
 	prefix = "";
 
 	if (obase == DECIMAL) {
-		addrfmt = "%08d: ";
+		addrfmt = "%08ld: ";
 		numprtc = 'u';
 		fill = "";
 		if (osize == BIT8) {
@@ -178,7 +177,7 @@ int main(int argc, char *argv[])
 		}
 		addprefix = 0;
 	} else if (obase == OCTAL) {
-		addrfmt = "%08o: ";
+		addrfmt = "%08lo: ";
 		numprtc = 'o';
 		numsize = (8 * osize) / 3 + 1;
                 fill = "0";
@@ -190,7 +189,7 @@ int main(int argc, char *argv[])
 			addprefix = 1;
 		}
 	} else {
-		addrfmt = "%08x: ";
+		addrfmt = "%08lx: ";
 		numprtc = 'x';
 		numsize = 2 * osize;
 		fill = "0";

@@ -1,0 +1,18 @@
+###############################################################################
+# KRB5 or local
+###############################################################################
+auth optional pam_faildelay.so delay=5000000
+auth optional pam_echo.so file=/etc/config/motd
+auth sufficient pam_portauth.so
+auth [success=2 default=ignore] pam_krb5.so no_user_check
+auth [success=1] pam_unix.so use_first_pass
+auth [default=die] pam_infod.so # post auth_error and deny
+auth optional pam_adduser.so
+
+account [success=1 default=ignore] pam_krb5.so
+account sufficient pam_unix.so
+account optional pam_adduser.so
+
+session optional pam_krb5.so
+session required pam_unix.so
+session optional pam_infod.so # post login/logout

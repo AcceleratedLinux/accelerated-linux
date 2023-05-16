@@ -11,6 +11,7 @@ echo "23 stream tcp nowait root /bin/telnetd" >> /etc/inetd.conf
 cat > /etc/config/accns.json <<!EOF
 {
     "auth": {
+	"idle_timeout": "0s",
         "group": {
             "admin": {
                 "acl": {
@@ -22,6 +23,11 @@ cat > /etc/config/accns.json <<!EOF
                     }
                 }
             }
+        },
+	"user": {
+            "admin": {
+                "password": "default"
+            }
         }
     }
 }
@@ -30,20 +36,11 @@ cat > /etc/config/accns.json <<!EOF
 echo '#!/bin/sh'  > /etc/config/start
 echo 'exit 0'    >> /etc/config/start
 chmod 555 /etc/config/start
-if [ -f /etc/inittab.d/console ] ; then
+if [ -f /etc/factory.console ] ; then
+	cat /etc/factory.console > /var/run/inittab
+elif [ -f /etc/inittab.d/console ] ; then
 	cat /etc/inittab.d/console > /var/run/inittab
 fi
-
-# check if has real mac address, if so do part two
-mount -t ubifs ubi0:config /var/mnt >/dev/null 2>&1
-chmod 700 /var/mnt/*
-if [ -f /var/mnt/macaddr.sh ]; then
-	. /var/mnt/macaddr.sh
-	if [ $(fw_printenv -n ethaddr) = "$ethaddr" ]; then
-		sh /var/mnt/factory.sh
-	fi
-fi
-umount /var/mnt
 
 # The default static ip in factory test mode
 # order is important here

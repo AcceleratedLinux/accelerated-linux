@@ -110,14 +110,14 @@ contain files named "0", "1", "2", ... The file numbers also represent
 increasing zone start sector on the device.
 
 All read and write operations to zone files are not allowed beyond the file
-maximum size, that is, beyond the zone size. Any access exceeding the zone
-size is failed with the -EFBIG error.
+maximum size, that is, beyond the zone capacity. Any access exceeding the zone
+capacity is failed with the -EFBIG error.
 
 Creating, deleting, renaming or modifying any attribute of files and
 sub-directories is not allowed.
 
 The number of blocks of a file as reported by stat() and fstat() indicates the
-size of the file zone, or in other words, the maximum file size.
+capacity of the zone file, or in other words, the maximum file size.
 
 Conventional zone files
 -----------------------
@@ -156,8 +156,8 @@ all accepted.
 
 Truncating sequential zone files is allowed only down to 0, in which case, the
 zone is reset to rewind the file zone write pointer position to the start of
-the zone, or up to the zone size, in which case the file's zone is transitioned
-to the FULL state (finish zone operation).
+the zone, or up to the zone capacity, in which case the file's zone is
+transitioned to the FULL state (finish zone operation).
 
 Format options
 --------------
@@ -306,8 +306,15 @@ Further notes:
 Mount options
 -------------
 
-zonefs define the "errors=<behavior>" mount option to allow the user to specify
-zonefs behavior in response to I/O errors, inode size inconsistencies or zone
+zonefs defines several mount options:
+* errors=<behavior>
+* explicit-open
+
+"errors=<behavior>" option
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The "errors=<behavior>" option mount option allows the user to specify zonefs
+behavior in response to I/O errors, inode size inconsistencies or zone
 condition changes. The defined behaviors are as follow:
 
 * remount-ro (default)
@@ -324,7 +331,63 @@ file size set to 0. This is necessary as the write pointer of read-only zones
 is defined as invalib by the ZBC and ZAC standards, making it impossible to
 discover the amount of data that has been written to the zone. In the case of a
 read-only zone discovered at run-time, as indicated in the previous section.
-the size of the zone file is left unchanged from its last updated value.
+The size of the zone file is left unchanged from its last updated value.
+
+"explicit-open" option
+~~~~~~~~~~~~~~~~~~~~~~
+
+A zoned block device (e.g. an NVMe Zoned Namespace device) may have limits on
+the number of zones that can be active, that is, zones that are in the
+implicit open, explicit open or closed conditions.  This potential limitation
+translates into a risk for applications to see write IO errors due to this
+limit being exceeded if the zone of a file is not already active when a write
+request is issued by the user.
+
+To avoid these potential errors, the "explicit-open" mount option forces zones
+to be made active using an open zone command when a file is opened for writing
+for the first time. If the zone open command succeeds, the application is then
+guaranteed that write requests can be processed. Conversely, the
+"explicit-open" mount option will result in a zone close command being issued
+to the device on the last close() of a zone file if the zone is not full nor
+empty.
+
+Runtime sysfs attributes
+------------------------
+
+zonefs defines several sysfs attributes for mounted devices.  All attributes
+are user readable and can be found in the directory /sys/fs/zonefs/<dev>/,
+where <dev> is the name of the mounted zoned block device.
+
+The attributes defined are as follows.
+
+* **max_wro_seq_files**:  This attribute reports the maximum number of
+  sequential zone files that can be open for writing.  This number corresponds
+  to the maximum number of explicitly or implicitly open zones that the device
+  supports.  A value of 0 means that the device has no limit and that any zone
+  (any file) can be open for writing and written at any time, regardless of the
+  state of other zones.  When the *explicit-open* mount option is used, zonefs
+  will fail any open() system call requesting to open a sequential zone file for
+  writing when the number of sequential zone files already open for writing has
+  reached the *max_wro_seq_files* limit.
+* **nr_wro_seq_files**:  This attribute reports the current number of sequential
+  zone files open for writing.  When the "explicit-open" mount option is used,
+  this number can never exceed *max_wro_seq_files*.  If the *explicit-open*
+  mount option is not used, the reported number can be greater than
+  *max_wro_seq_files*.  In such case, it is the responsibility of the
+  application to not write simultaneously more than *max_wro_seq_files*
+  sequential zone files.  Failure to do so can result in write errors.
+* **max_active_seq_files**:  This attribute reports the maximum number of
+  sequential zone files that are in an active state, that is, sequential zone
+  files that are partially writen (not empty nor full) or that have a zone that
+  is explicitly open (which happens only if the *explicit-open* mount option is
+  used).  This number is always equal to the maximum number of active zones that
+  the device supports.  A value of 0 means that the mounted device has no limit
+  on the number of sequential zone files that can be active.
+* **nr_active_seq_files**:  This attributes reports the current number of
+  sequential zone files that are active. If *max_active_seq_files* is not 0,
+  then the value of *nr_active_seq_files* can never exceed the value of
+  *nr_active_seq_files*, regardless of the use of the *explicit-open* mount
+  option.
 
 Zonefs User Space Tools
 =======================
@@ -401,8 +464,9 @@ append-writes to the file::
     # ls -l /mnt/seq/0
     -rw-r----- 1 root root 0 Nov 25 13:49 /mnt/seq/0
 
-Since files are statically mapped to zones on the disk, the number of blocks of
-a file as reported by stat() and fstat() indicates the size of the file zone::
+Since files are statically mapped to zones on the disk, the number of blocks
+of a file as reported by stat() and fstat() indicates the capacity of the file
+zone::
 
     # stat /mnt/seq/0
     File: /mnt/seq/0
@@ -416,5 +480,6 @@ a file as reported by stat() and fstat() indicates the size of the file zone::
 
 The number of blocks of the file ("Blocks") in units of 512B blocks gives the
 maximum file size of 524288 * 512 B = 256 MB, corresponding to the device zone
-size in this example. Of note is that the "IO block" field always indicates the
-minimum I/O size for writes and corresponds to the device physical sector size.
+capacity in this example. Of note is that the "IO block" field always
+indicates the minimum I/O size for writes and corresponds to the device
+physical sector size.

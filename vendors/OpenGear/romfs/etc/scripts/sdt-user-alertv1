@@ -1,0 +1,115 @@
+#!/bin/sh
+
+. /etc/scripts/snmp-env
+
+if [ -z "$ALERT_XMLID" -o -z "$ALERT_HOST" -o -z "$ALERT_USER" \
+       -o -z "$ALERT_PORT" -o -z "$ALERT_PROTOCOL" \
+       -o -z "$USER_EVENT" ]; then
+	echo "Script does not have mandatory environment"
+	exit 1
+fi
+
+# If there's a user-configured script, run it instead
+scripts[0]="/etc/config/scripts/user-alert.${ALERT_HOST}"
+scripts[1]="/etc/config/scripts/sdt-user-alert"
+for (( i=0 ; i < ${#scripts[@]} ; i++ )); do
+	if [ -f "${scripts[$i]}" ]; then
+		exec /bin/sh "${scripts[$i]}"
+	fi
+done
+
+retval=0
+
+nsca=$(config -g $ALERT_XMLID.nsca.enabled | cut -f2- -d' ')
+if [ "$nsca" == "on" ]; then
+
+	for (( i=1 ;; i++ )); do
+		address="$(config -g config.sdt.hosts.host$i.address | cut -f2- -d' ')"
+		if [ "$address" == "$ALERT_HOST" ]; then
+
+			export NAME="$(config -g config.sdt.hosts.host$i.nagios.name | cut -f2- -d' ')"
+			export CODE="1"
+			export CHECK="alert_login_$name"
+			export STATUS="\"$ALERT_USER\" connected to host $ALERT_HOST at $ALERT_PROTOCOL port $ALERT_PORT"
+
+			/bin/sh /etc/scripts/alert-nsca
+			retval=$(( $? || $retval ))
+			break
+
+		elif [ -z "$address" ]; then
+			break
+		fi
+	done
+fi
+
+snmp=$(config -g $ALERT_XMLID.snmp.enabled | cut -f2- -d' ')
+if [ "$snmp" == "on" ]; then
+
+	export OID="enterprises.${enterprise_name}"
+	export AGENT=""
+	export UPTIME=""
+	export SPECIFIC_TYPE=".${host_mib_prefix}.${host_mib_prefix}Objects.${host_oid_prefix}Event.${host_oid_prefix}EventTable"
+	export TRAP_NAME="${host_oid_prefix}EventOccurred"
+	export NOTIFICATION_TYPE=".${host_mib_prefix}.${host_mib_prefix}NotificationPrefix.${host_oid_prefix}MibNotifications"
+
+	/bin/sh /etc/scripts/alert-snmpv1 \
+		".${host_oid_prefix}EventEntry.${host_oid_prefix}EventUsername" \
+		"s" \
+		"$ALERT_USER" \
+		".${host_oid_prefix}EventEntry.${host_oid_prefix}EventType" \
+		"s" \
+		"$USER_EVENT" \
+		".${host_oid_prefix}EventEntry.${host_oid_prefix}EventAddress" \
+		"s" \
+		"$ALERT_HOST" \
+		".${host_oid_prefix}EventEntry.${host_oid_prefix}EventDescription" \
+		"s" \
+		"$(config -g $ALERT_XMLID.description | cut -f2- -d' ')" \
+		".${host_oid_prefix}EventEntry.${host_oid_prefix}EventPort" \
+		"i" \
+		"$ALERT_PORT" \
+		".${host_oid_prefix}EventEntry.${host_oid_prefix}EventProtocol" \
+		"s" \
+		"$ALERT_PROTOCOL"
+
+	retval=$(( $? || $retval ))
+fi
+
+cms=$(config -g config.cms.enabled | cut -f2- -d' ')
+if [ "$cms" == "on" ]; then
+	alertnum=$(echo $ALERT_XMLID | sed 's/config.alerts.alert//')
+	nodename=$(config -g config.cms.node.name | cut -f2- -d' ')
+	/bin/run_check -c check_xmlalert_${alertnum}_${nodename}
+	retval=$(( $? || $retval ))
+fi
+
+for suffix in "" "2"; do
+
+	email=$(config -g $ALERT_XMLID.email$suffix | cut -f2- -d' ')
+	if [ -z "$email" ]; then
+		continue
+	fi
+
+	export SUBJECT="Alert on host $ALERT_HOST via $(hostname) ($(config -g $ALERT_XMLID.description | cut -f2- -d' '))"
+	export TOADDR="$email"
+	export BODY="User $ALERT_USER connected to host $ALERT_HOST at $ALERT_PROTOCOL port $ALERT_PORT"
+
+	/bin/sh /etc/scripts/alert-email $suffix
+	retval=$(( $? || $retval ))
+done
+
+sms=$(config -g config.system.sms.method | cut -f2- -d' ')
+if [ "$sms" == "cellular" ]; then
+	number=$(config -g $ALERT_XMLID.sms_phone| cut -f2- -d' ')
+	if [ -z "$number" ]; then
+		continue
+	fi
+	
+	export NUMBER="$number"
+	export MSG="User $ALERT_USER connected to host $ALERT_HOST at $ALERT_PROTOCOL port $ALERT_PORT"
+
+	/bin/sh /etc/scripts/alert-sms
+	retval=$(( $? || $retval ))
+fi
+
+exit $retval

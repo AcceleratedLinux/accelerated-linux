@@ -1,0 +1,45 @@
+
+Fix link errors involving -lz.
+The library needs to be specified late enough to resolve uncompress() in runtime/parser.c
+when archived in librsyslog.a.
+
+--- rsyslog-8.33.0/runtime/Makefile.am	2021-01-26 21:11:07.109862524 +1000
++++ rsyslog-8.33.0/runtime/Makefile.am	2021-01-26 20:51:41.113668011 +1000
+@@ -111,7 +111,7 @@
+ endif
+ #librsyslog_la_LDFLAGS = -module -avoid-version
+ librsyslog_la_CPPFLAGS += $(PTHREADS_CFLAGS) $(RSRT_CFLAGS) $(LIBUUID_CFLAGS) $(LIBFASTJSON_CFLAGS) ${LIBESTR_CFLAGS} ${LIBLOGGING_STDLOG_CFLAGS} -I\$(top_srcdir)/tools
+-librsyslog_la_LIBADD =  $(DL_LIBS) $(RT_LIBS) $(LIBUUID_LIBS) $(LIBFASTJSON_LIBS) ${LIBESTR_LIBS} ${LIBLOGGING_STDLOG_LIBS}
++librsyslog_la_LIBADD =  $(DL_LIBS) $(RT_LIBS) $(LIBUUID_LIBS) $(LIBFASTJSON_LIBS) ${LIBESTR_LIBS} ${LIBLOGGING_STDLOG_LIBS} $(ZLIB_LIBS)
+ 
+ #
+ # regular expression support
+@@ -130,7 +130,7 @@
+ pkglib_LTLIBRARIES += lmzlibw.la
+ lmzlibw_la_SOURCES = zlibw.c zlibw.h
+ lmzlibw_la_CPPFLAGS = $(PTHREADS_CFLAGS) $(RSRT_CFLAGS) $(LIBLOGGING_STDLOG_CFLAGS)
+-lmzlibw_la_LDFLAGS = -module -avoid-version $(LIBLOGGING_STDLOG_LIBS)
++lmzlibw_la_LDFLAGS = -module -avoid-version $(LIBLOGGING_STDLOG_LIBS) $(ZLIB_LIBS)
+ lmzlibw_la_LIBADD =
+ 
+ if ENABLE_INET
+--- rsyslog-8.33.0/runtime/Makefile.in	2021-01-26 21:10:50.209749768 +1000
++++ rsyslog-8.33.0/runtime/Makefile.in	2021-01-26 21:10:13.073502000 +1000
+@@ -731,7 +731,7 @@
+ @WITH_MODDIRS_TRUE@	${LIBESTR_CFLAGS} \
+ @WITH_MODDIRS_TRUE@	${LIBLOGGING_STDLOG_CFLAGS} \
+ @WITH_MODDIRS_TRUE@	-I\$(top_srcdir)/tools
+-librsyslog_la_LIBADD = $(DL_LIBS) $(RT_LIBS) $(LIBUUID_LIBS) $(LIBFASTJSON_LIBS) ${LIBESTR_LIBS} ${LIBLOGGING_STDLOG_LIBS}
++librsyslog_la_LIBADD = $(DL_LIBS) $(RT_LIBS) $(LIBUUID_LIBS) $(LIBFASTJSON_LIBS) ${LIBESTR_LIBS} ${LIBLOGGING_STDLOG_LIBS} $(ZLIB_LIBS)
+ @ENABLE_REGEXP_TRUE@lmregexp_la_SOURCES = regexp.c regexp.h
+ @ENABLE_REGEXP_TRUE@lmregexp_la_CPPFLAGS = $(PTHREADS_CFLAGS) $(RSRT_CFLAGS) $(LIBLOGGING_STDLOG_CFLAGS)
+ @ENABLE_REGEXP_TRUE@lmregexp_la_LDFLAGS = -module -avoid-version $(LIBLOGGING_STDLOG_LIBS)
+@@ -738,7 +738,7 @@
+ @ENABLE_REGEXP_TRUE@lmregexp_la_LIBADD = 
+ lmzlibw_la_SOURCES = zlibw.c zlibw.h
+ lmzlibw_la_CPPFLAGS = $(PTHREADS_CFLAGS) $(RSRT_CFLAGS) $(LIBLOGGING_STDLOG_CFLAGS)
+-lmzlibw_la_LDFLAGS = -module -avoid-version $(LIBLOGGING_STDLOG_LIBS)
++lmzlibw_la_LDFLAGS = -module -avoid-version $(LIBLOGGING_STDLOG_LIBS) $(ZLIB_LIBS)
+ lmzlibw_la_LIBADD = 
+ #
+ # network support

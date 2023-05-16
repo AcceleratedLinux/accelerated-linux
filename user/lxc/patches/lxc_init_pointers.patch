@@ -1,0 +1,22 @@
+--- lxc/src/include/netns_ifaddrs.c.orig	2021-08-01 12:19:34.589336831 +1000
++++ lxc/src/include/netns_ifaddrs.c	2021-08-01 12:19:38.549336800 +1000
+@@ -165,7 +165,7 @@
+ 
+ static int nl_msg_to_ifaddr(void *pctx, bool *netnsid_aware, struct nlmsghdr *h)
+ {
+-	struct ifaddrs_storage *ifs, *ifs0;
++	struct ifaddrs_storage *ifs, *ifs0 = NULL;
+ 	struct rtattr *rta;
+ 	int stats_len = 0;
+ 	struct ifinfomsg *ifi = __NLMSG_DATA(h);
+--- lxc/src/lxc/criu.c.orig	2021-08-01 12:20:07.781336567 +1000
++++ lxc/src/lxc/criu.c	2021-08-01 12:20:11.205336540 +1000
+@@ -291,7 +291,7 @@
+ 	DECLARE_ARG(log);
+ 
+ 	for (int i = 0; i < cgroup_ops->criu_num_hierarchies(cgroup_ops); i++) {
+-		__do_free char *cgroup_base_path = NULL, *controllers;
++		__do_free char *cgroup_base_path = NULL, *controllers = NULL;
+ 		char **controllers_list = NULL;
+ 		char *tmp;
+ 

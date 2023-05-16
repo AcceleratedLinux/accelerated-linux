@@ -81,7 +81,7 @@ uimage.bin:
 	( cd $(IMAGEDIR) ; mkimage -f anywhereusb8w-initrd.its anywhereusb8w-initrd.itb )
 	rm -f $(IMAGEDIR)/anywhereusb8w*.its
 
-image: image.configs image.dir image.squashfs uimage.bin image.tag image.copy
+image: image.configs image.dir image.squashfs uimage.bin image.tag image.copy image.size
 	if [ -x $(SIGN_IMAGE_SCRIPT) ] ; then \
 		$(SIGN_IMAGE_SCRIPT) $(ITBIMG) $(ROOTDIR)/romfs awusb || exit 1; \
 		$(SIGN_IMAGE_SCRIPT) $(ROMFSIMG) $(ROOTDIR)/romfs awusb || exit 1; \

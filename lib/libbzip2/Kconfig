@@ -1,0 +1,6 @@
+config LIB_LIBBZ2
+	bool "libbz2"
+	help
+	  Data compression library.
+	  Only enable this if you want to force the library to be built.
+	  The Config will make sure this library is built if it is needed.

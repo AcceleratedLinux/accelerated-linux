@@ -379,7 +379,7 @@ static struct attribute *channel_attrs[] = {
 	NULL,
 };
 
-static struct attribute_group channel_attr_group = {
+static const struct attribute_group channel_attr_group = {
 	.attrs = channel_attrs,
 	.is_visible = channel_attr_is_visible,
 };
@@ -436,7 +436,7 @@ static struct attribute *interface_attrs[] = {
 	NULL,
 };
 
-static struct attribute_group interface_attr_group = {
+static const struct attribute_group interface_attr_group = {
 	.attrs = interface_attrs,
 };
 
@@ -718,7 +718,7 @@ static struct attribute *mc_attrs[] = {
 	NULL,
 };
 
-static struct attribute_group mc_attr_group = {
+static const struct attribute_group mc_attr_group = {
 	.attrs = mc_attrs,
 };
 
@@ -1283,10 +1283,8 @@ int most_register_interface(struct most_interface *iface)
 	struct most_channel *c;
 
 	if (!iface || !iface->enqueue || !iface->configure ||
-	    !iface->poison_channel || (iface->num_channels > MAX_CHANNELS)) {
-		dev_err(iface->dev, "Bad interface or channel overflow\n");
+	    !iface->poison_channel || (iface->num_channels > MAX_CHANNELS))
 		return -EINVAL;
-	}
 
 	id = ida_simple_get(&mdev_id, 0, 0, GFP_KERNEL);
 	if (id < 0) {

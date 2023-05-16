@@ -46,9 +46,10 @@ serial_terminate() {
 }
 
 usage() {
-	echo "usage: serial-mode <device> (init|rs-232|rs-485) [terminate]"
+	echo "usage: serial-mode <device> (init|powerdown|rs-232|rs-485) [terminate]"
 	echo
 	echo "        init      -- initialize port control"
+	echo "        powerdown -- powerdown port"
 	echo "        rs-232    -- set port into RS-232 mode (default)"
 	echo "        rs-485    -- set port into RS-485 mode"
 	echo "        terminate -- enable line termination"
@@ -69,6 +70,12 @@ fi
 
 case "$2" in
 init)	serial_init ;;
+# Cannot shutdown both transceivers simulatenously, RS-232 has lower consumption
+powerdown)
+	serial_rs232
+	# Don't parse 'terminate'
+	exit 0
+	;;
 rs-232)	serial_rs232 ;;
 rs-485)	serial_rs485 ;;
 *)	usage ;;

@@ -1,0 +1,118 @@
+From c741570986ab8e77c3576c634e1f0c3664fb6cfe Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 7 Dec 2021 18:23:22 +0100
+Subject: [PATCH 03/11] Add --disable-vga-console configure option
+
+Signed-off-by: Robert Hodaszi <robert.hodaszi@digi.com>
+---
+ config.h.in                   |  3 +++
+ configure.ac                  | 12 ++++++++++++
+ grub-core/kern/efi/init.c     |  5 +++++
+ grub-core/kern/i386/pc/init.c |  5 +++++
+ 4 files changed, 25 insertions(+)
+
+diff --git a/config.h.in b/config.h.in
+index 9e8f991..98245d9 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -13,6 +13,9 @@
+ #define DISK_CACHE_STATS @DISK_CACHE_STATS@
+ #define BOOT_TIME_STATS @BOOT_TIME_STATS@
+ 
++/* Define to 1 to disable VGA console */
++#define DISABLE_VGA_CONSOLE @DISABLE_VGA_CONSOLE@
++
+ /* We don't need those.  */
+ #define MINILZO_CFG_SKIP_LZO_PTR 1
+ #define MINILZO_CFG_SKIP_LZO_UTIL 1
+diff --git a/configure.ac b/configure.ac
+index 7517fc4..d0249ac 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1488,6 +1488,18 @@ LIBS="$tmp_LIBS"
+ # Check for options.
+ #
+ 
++# VGA console disable
++AC_ARG_ENABLE([vga-console],
++	      AS_HELP_STRING([--disable-vga-console],
++                             [disable VGA console]))
++
++if test x"$enable_vga_console" != xno ; then
++  DISABLE_VGA_CONSOLE=0
++else
++  DISABLE_VGA_CONSOLE=1
++fi
++AC_SUBST([DISABLE_VGA_CONSOLE])
++
+ # Memory manager debugging.
+ AC_ARG_ENABLE([mm-debug],
+ 	      AS_HELP_STRING([--enable-mm-debug],
+diff --git a/grub-core/kern/efi/init.c b/grub-core/kern/efi/init.c
+index 7facacf..4a43b26 100644
+--- a/grub-core/kern/efi/init.c
++++ b/grub-core/kern/efi/init.c
+@@ -17,6 +17,7 @@
+  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
+  */
+ 
++#include <config.h>
+ #include <grub/efi/efi.h>
+ #include <grub/efi/console.h>
+ #include <grub/efi/disk.h>
+@@ -86,9 +87,11 @@ void
+ grub_efi_init (void)
+ {
+   grub_modbase = grub_efi_modules_addr ();
++#ifndef DISABLE_VGA_CONSOLE
+   /* First of all, initialize the console so that GRUB can display
+      messages.  */
+   grub_console_init ();
++#endif
+ 
+   stack_protector_init ();
+ 
+@@ -145,5 +148,7 @@ void
+ grub_efi_fini (void)
+ {
+   grub_efidisk_fini ();
++#ifndef DISABLE_VGA_CONSOLE
+   grub_console_fini ();
++#endif
+ }
+diff --git a/grub-core/kern/i386/pc/init.c b/grub-core/kern/i386/pc/init.c
+index 27bc68b..7a0a63b 100644
+--- a/grub-core/kern/i386/pc/init.c
++++ b/grub-core/kern/i386/pc/init.c
+@@ -16,6 +16,7 @@
+  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
+  */
+ 
++#include <config.h>
+ #include <grub/kernel.h>
+ #include <grub/mm.h>
+ #include <grub/machine/boot.h>
+@@ -219,8 +220,10 @@ grub_machine_init (void)
+ 
+   grub_modbase = GRUB_MEMORY_MACHINE_DECOMPRESSION_ADDR + (_edata - _start);
+ 
++#ifndef DISABLE_VGA_CONSOLE
+   /* Initialize the console as early as possible.  */
+   grub_console_init ();
++#endif
+ 
+   /* This sanity check is useless since top of GRUB_MEMORY_MACHINE_RESERVED_END
+      is used for stack and if it's unavailable we wouldn't have gotten so far.
+@@ -265,7 +268,9 @@ grub_machine_init (void)
+ void
+ grub_machine_fini (int flags)
+ {
++#ifndef DISABLE_VGA_CONSOLE
+   if (flags & GRUB_LOADER_FLAG_NORETURN)
+     grub_console_fini ();
++#endif
+   grub_stop_floppy ();
+ }
+-- 
+2.27.0
+

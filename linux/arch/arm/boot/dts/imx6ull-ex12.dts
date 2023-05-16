@@ -10,6 +10,7 @@
 /dts-v1/;
 
 #include "imx6ull.dtsi"
+#include "imx6-pstore-128MB.dtsi"
 
 / {
 	model = "Digi EX12";
@@ -21,7 +22,7 @@
 
 	memory {
 		device_type = "memory";
-		reg = <0x80000000 0x8000000>;
+		reg = <0x80000000 0x10000000>;
 	};
 
 	cpus {
@@ -185,11 +186,15 @@
 		ethphy0: ethernet-phy@2 {
 			compatible = "ethernet-phy-ieee802.3-c22";
 			reg = <2>;
+			clocks = <&clks IMX6UL_CLK_ENET_REF>;
+			clock-names = "rmii-ref";
 		};
 
 		ethphy1: ethernet-phy@3 {
 			compatible = "ethernet-phy-ieee802.3-c22";
 			reg = <3>;
+			clocks = <&clks IMX6UL_CLK_ENET_REF>;
+			clock-names = "rmii-ref";
 		};
 	};
 };

@@ -39,7 +39,6 @@ static int pfe_get_gemac_if_proprties(struct device_node *parent, int port, int
 	int size;
 	int ii = 0, phy_id = 0;
 	const u32 *addr;
-	const void *mac_addr;
 
 	for (ii = 0; ii < if_cnt; ii++) {
 		gem = of_get_next_child(parent, gem);
@@ -58,12 +57,7 @@ static int pfe_get_gemac_if_proprties(struct device_node *parent, int port, int
 
 	pdata->ls1012a_eth_pdata[port].gem_id = port;
 
-	mac_addr = of_get_mac_address(gem);
-
-	if (!IS_ERR(mac_addr)) {
-		memcpy(pdata->ls1012a_eth_pdata[port].mac_addr, mac_addr,
-		       ETH_ALEN);
-	}
+	of_get_mac_address(gem, pdata->ls1012a_eth_pdata[port].mac_addr);
 
 	if (of_get_phy_mode(gem, &(pdata->ls1012a_eth_pdata[port].mii_config)))
 		pr_err("%s:%d Incorrect Phy mode....\n", __func__, __LINE__);

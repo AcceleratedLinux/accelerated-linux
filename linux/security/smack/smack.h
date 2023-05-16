@@ -100,7 +100,12 @@ struct socket_smack {
 	struct smack_known	*smk_out;	/* outbound label */
 	struct smack_known	*smk_in;	/* inbound label */
 	struct smack_known	*smk_packet;	/* TCP peer label */
+	int			smk_state;	/* netlabel socket states */
 };
+#define	SMK_NETLBL_UNSET	0
+#define	SMK_NETLBL_UNLABELED	1
+#define	SMK_NETLBL_LABELED	2
+#define	SMK_NETLBL_REQSKB	3
 
 /*
  * Inode smack data
@@ -195,19 +200,6 @@ enum {
 
 #define SMACK_DELETE_OPTION	"-DELETE"
 #define SMACK_CIPSO_OPTION 	"-CIPSO"
-
-/*
- * How communications on this socket are treated.
- * Usually it's determined by the underlying netlabel code
- * but there are certain cases, including single label hosts
- * and potentially single label interfaces for which the
- * treatment can not be known in advance.
- *
- * The possibility of additional labeling schemes being
- * introduced in the future exists as well.
- */
-#define SMACK_UNLABELED_SOCKET	0
-#define SMACK_CIPSO_SOCKET	1
 
 /*
  * CIPSO defaults.
@@ -305,11 +297,12 @@ struct smack_known *smk_find_entry(const char *);
 bool smack_privileged(int cap);
 bool smack_privileged_cred(int cap, const struct cred *cred);
 void smk_destroy_label_list(struct list_head *list);
+int smack_populate_secattr(struct smack_known *skp);
 
 /*
  * Shared data.
  */
-extern int smack_enabled;
+extern int smack_enabled __initdata;
 extern int smack_cipso_direct;
 extern int smack_cipso_mapped;
 extern struct smack_known *smack_net_ambient;
@@ -364,6 +357,12 @@ static inline struct smack_known **smack_ipc(const struct kern_ipc_perm *ipc)
 	return ipc->security + smack_blob_sizes.lbs_ipc;
 }
 
+static inline struct superblock_smack *smack_superblock(
+					const struct super_block *superblock)
+{
+	return superblock->s_security + smack_blob_sizes.lbs_superblock;
+}
+
 /*
  * Is the directory transmuting?
  */
@@ -390,7 +389,7 @@ static inline struct smack_known *smk_of_task(const struct task_smack *tsp)
 	return tsp->smk_task;
 }
 
-static inline struct smack_known *smk_of_task_struct(
+static inline struct smack_known *smk_of_task_struct_obj(
 						const struct task_struct *t)
 {
 	struct smack_known *skp;

@@ -10,7 +10,7 @@
  * Oh, it's a waste of space, but oh-so-yummy for debugging.
  */
 
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #include <linux/compiler.h>
 #include <linux/ctype.h>
@@ -135,7 +135,7 @@ char *number(char *end, unsigned long long num, int base, char locase)
 		break;
 	default:
 		unreachable();
-	};
+	}
 
 	return end;
 }

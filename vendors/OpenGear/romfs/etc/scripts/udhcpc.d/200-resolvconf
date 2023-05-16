@@ -1,0 +1,12 @@
+#!/bin/sh
+
+case $1 in
+	renew|bound)
+	(
+		[ -n "$domain$search" ] && echo "search $domain $search"
+		for i in $dns ; do
+			echo "nameserver $i"
+		done
+	) | /bin/resolvconf -m 100 -a $interface.dhcp
+	;;
+esac

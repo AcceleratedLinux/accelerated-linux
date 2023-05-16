@@ -146,7 +146,7 @@ ifdef CONFIG_USER_NETFLASH_SHA256
 	cat $(IMAGE) | $(ROOTDIR)/user/netflash/sha256sum -b >> $(IMAGE)
 	printf '\0%s\0%s\0%s' $(VERSIONPKG) $(HW_VENDOR) $(HW_PRODUCT) >>$(IMAGE)
 endif
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 ifdef CONFIG_USER_NETFLASH_CRYPTO_V3
 	if [ -f $(ACKEYV3) ] ; then \
 		$(ROOTDIR)/user/netflash/cryptimagev3.sh $(IMAGE) $(ACKEYV3) $(ACCRTV3); \
@@ -160,7 +160,7 @@ image.size.zimage:
 		exit 1; \
 	fi
 
-image.size:
+image.size: image.tag
 	@SIZE=`cat $(IMAGE) | wc -c`; \
 	if [ "$$SIZE" -gt "$(IMAGESIZE)" ]; then \
 		echo "Error: $(IMAGE) size $$SIZE is greater than $(IMAGESIZE)"; \
@@ -211,6 +211,11 @@ SQUASH_BCJ =
 ifeq ($(ARCH),arm)
 ifdef CONFIG_XZ_DEC_ARM
 SQUASH_BCJ = -Xbcj arm
+endif
+endif
+ifneq ($(filter x86 x86_64,$(ARCH)),)
+ifdef CONFIG_XZ_DEC_X86
+SQUASH_BCJ = -Xbcj x86
 endif
 endif
 
@@ -418,7 +423,9 @@ romfs.cleanup:
 	$(ROMFSINST) -R /lib/pkgconfig
 	$(ROMFSINST) -R /lib/gio
 	$(ROMFSINST) -R /lib/dbus-1.0
+	$(ROMFSINST) -R /lib/cmake
 	$(ROMFSINST) -R /var/run
+	$(ROMFSINST) -R /usr/lib/pkconfig
 	for i in $(ROMFSDIR)/lib/modules/*/*; do [ ! -f "$$i.bin" ] || rm -f "$$i"; done
 	$(ROOTDIR)/tools/libclean.sh $(ROMFSDIR)
 ifdef CONFIG_PROP_CONFIG_ACTIOND
@@ -486,7 +493,7 @@ bloader.pack.prop:
 
 	@# Adding tag
 	printf '\0%s\0%s\0%s' $(BLOADER_IMG_VERSION) $(HW_VENDOR) $(HW_PRODUCT) >> $(IMAGEDIR)/bloader_pack/bloader.img
-	$(ROOTDIR)/tools/cksum -b -o 2 $(IMAGEDIR)/bloader_pack/bloader.img >> $(IMAGEDIR)/bloader_pack/bloader.img
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGEDIR)/bloader_pack/bloader.img >> $(IMAGEDIR)/bloader_pack/bloader.img
 
 	if [ "$(BLOADER_UPDATE_SCRIPT)" ]; then \
 		cp "$(BLOADER_UPDATE_SCRIPT)" $(IMAGEDIR)/bloader_pack/update.sh; \

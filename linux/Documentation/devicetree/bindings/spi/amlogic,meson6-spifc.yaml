@@ -35,6 +35,8 @@ required:
   - reg
   - clocks
 
+unevaluatedProperties: false
+
 examples:
   - |
     spi@c1108c80 {
@@ -50,4 +52,3 @@ examples:
               spi-max-frequency = <40000000>;
           };
     };
-

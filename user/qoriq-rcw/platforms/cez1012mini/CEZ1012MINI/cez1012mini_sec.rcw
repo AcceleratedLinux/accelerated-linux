@@ -1,0 +1,66 @@
+/*
+ * CEZ RCW for SerDes Protocol 0x3508
+ *
+ * Configuration -- 1 SGMII
+ *
+ * Frequencies:
+ *
+ * Clock: 125 MHz
+ *
+ * Core		-- 600 MHz (Mul 6)
+ *
+ * Serdes Lanes vs Slot information
+ * A SGMII  : SG.m1 (1G)
+ * B PCIe   : Unused
+ * C Empty  : Unused
+ * D SATA   : Unused
+ *
+ * Serdes configuration
+ * SRDS_PRTCL_S1	: 0x3508
+ *
+ */
+
+#include <ls1012a.rcwi>
+
+SYS_PLL_RAT=4
+CGA_PLL1_RAT=6
+SRDS_PRTCL_S1=13576 /* 0x3508 - sgmii - pcie - sata - rgmii */
+SRDS_PLL1_REF_CLK_SEL_S1=1 /* 125 MHz */
+SRDS_PLL2_REF_CLK_SEL_S1=1
+SRDS_DIV_PEX=0
+SRDS_REFCLK_SEL=1
+SRDS_PLL_PD_S1=1
+SRDS_INT_REFCLK=1
+PBI_SRC=4
+SYS_PLL_SPD=1
+CGA_PLL1_SPD=1
+EC1_EXT_SAI2_TX=0
+EC1_EXT_SAI2_RX=0
+EC1_BASE=0
+UART1_BASE=1
+UART2_BASE_FLOW=0
+SDHC1_BASE=1
+SDHC2_BASE_BASE=3
+SDHC2_BASE_DAT321=3
+UART2_BASE_DATA=0
+EMI1_BASE=1
+CLK_OUT_BASE=2
+SDHC1_CD=1
+SDHC1_WP=1
+QSPI_DATA0_GPIO=0
+QSPI_DATA1_GPIO=0
+QSPI_IIC2=1
+USB1_DRVVBUS_BASE=0
+USB1_PWRFAULT_BASE=0
+SDHC1_VSEL=1
+EMI1_DMODE=1
+EVDD_VSEL=0
+IIC1_BASE=1
+EMI1_CMODE=0
+SYSCLK_FREQ=600
+
+
+#include <uboot_address.rcw>
+#include <usb_phy_freq.rcw>
+#include <secure_boot.rcw>
+#include <qspi_endianness.rcw>

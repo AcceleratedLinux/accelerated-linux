@@ -22,7 +22,7 @@ TRACE_EVENT(kvm_wfx_arm64,
 		__entry->is_wfe  = is_wfe;
 	),
 
-	TP_printk("guest executed wf%c at: 0x%08lx",
+	TP_printk("guest executed wf%c at: 0x%016lx",
 		  __entry->is_wfe ? 'e' : 'i', __entry->vcpu_pc)
 );
 
@@ -42,7 +42,7 @@ TRACE_EVENT(kvm_hvc_arm64,
 		__entry->imm = imm;
 	),
 
-	TP_printk("HVC at 0x%08lx (r0: 0x%08lx, imm: 0x%lx)",
+	TP_printk("HVC at 0x%016lx (r0: 0x%016lx, imm: 0x%lx)",
 		  __entry->vcpu_pc, __entry->r0, __entry->imm)
 );
 
@@ -78,13 +78,17 @@ TRACE_EVENT(kvm_arm_clear_debug,
 	TP_printk("flags: 0x%08x", __entry->guest_debug)
 );
 
+/*
+ * The dreg32 name is a leftover from a distant past. This will really
+ * output a 64bit value...
+ */
 TRACE_EVENT(kvm_arm_set_dreg32,
-	TP_PROTO(const char *name, __u32 value),
+	TP_PROTO(const char *name, __u64 value),
 	TP_ARGS(name, value),
 
 	TP_STRUCT__entry(
 		__field(const char *, name)
-		__field(__u32, value)
+		__field(__u64, value)
 	),
 
 	TP_fast_assign(
@@ -92,7 +96,7 @@ TRACE_EVENT(kvm_arm_set_dreg32,
 		__entry->value = value;
 	),
 
-	TP_printk("%s: 0x%08x", __entry->name, __entry->value)
+	TP_printk("%s: 0x%llx", __entry->name, __entry->value)
 );
 
 TRACE_DEFINE_SIZEOF(__u64);
@@ -135,7 +139,7 @@ TRACE_EVENT(trap_reg,
 		__entry->write_value = write_value;
 	),
 
-	TP_printk("%s %s reg %d (0x%08llx)", __entry->fn,  __entry->is_write?"write to":"read from", __entry->reg, __entry->write_value)
+	TP_printk("%s %s reg %d (0x%016llx)", __entry->fn,  __entry->is_write?"write to":"read from", __entry->reg, __entry->write_value)
 );
 
 TRACE_EVENT(kvm_handle_sys_reg,

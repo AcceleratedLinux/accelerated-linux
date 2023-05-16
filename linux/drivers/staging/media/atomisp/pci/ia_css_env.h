@@ -17,7 +17,8 @@
 #define __IA_CSS_ENV_H
 
 #include <type_support.h>
-#include <stdarg.h> /* va_list */
+#include <linux/stdarg.h> /* va_list */
+#include <linux/bits.h>
 #include "ia_css_types.h"
 #include "ia_css_acc_types.h"
 
@@ -28,10 +29,10 @@
 
 /* Memory allocation attributes, for use in ia_css_css_mem_env. */
 enum ia_css_mem_attr {
-	IA_CSS_MEM_ATTR_CACHED = 1 << 0,
-	IA_CSS_MEM_ATTR_ZEROED = 1 << 1,
-	IA_CSS_MEM_ATTR_PAGEALIGN = 1 << 2,
-	IA_CSS_MEM_ATTR_CONTIGUOUS = 1 << 3,
+	IA_CSS_MEM_ATTR_CACHED     = BIT(0),
+	IA_CSS_MEM_ATTR_ZEROED     = BIT(1),
+	IA_CSS_MEM_ATTR_PAGEALIGN  = BIT(2),
+	IA_CSS_MEM_ATTR_CONTIGUOUS = BIT(3),
 };
 
 /* Environment with function pointers for local IA memory allocation.
@@ -75,9 +76,9 @@ struct ia_css_hw_access_env {
 /* Environment with function pointers to print error and debug messages.
  */
 struct ia_css_print_env {
-	int (*debug_print)(const char *fmt, va_list args);
+	int  __printf(1, 0) (*debug_print)(const char *fmt, va_list args);
 	/** Print a debug message. */
-	int (*error_print)(const char *fmt, va_list args);
+	int  __printf(1, 0) (*error_print)(const char *fmt, va_list args);
 	/** Print an error message.*/
 };
 

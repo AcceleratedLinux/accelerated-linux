@@ -1,0 +1,52 @@
+# quotes arguments that contain shell metachars
+quote () {
+    local a
+    for a; do
+      case $a in
+        "" | *[\\\$\`\'\|\&\;\(\)\<\>\ \	]*) printf "'%s' " "${a//\'/\'\\\'\'}";;
+	*) printf "%s " "$a";;
+      esac
+    done
+}
+
+run_script () { # file
+    cat $1 > /tmp/new-config.sh
+    if [ ! -s /tmp/new-config.sh ]; then
+        log -p user.error "empty script";
+        return 1
+    fi
+    if ! bash -n /tmp/new-config.sh; then
+        log -p user.warn "Script failed to validate, running anyway";
+    fi
+
+    bash -x /tmp/new-config.sh
+    local ec=$?
+    if [ $ec -ne 0 ]; then
+        log -p user.warn "script exit $ec; failed";
+        return 1
+    fi
+
+    return 0
+}
+
+substitute () { # url
+    local url
+    # substitute some variables in $url
+    #
+    #   ${mac}   - lowercase eth0 MAC address in hex, no colons; or "nomac"
+    #   ${model} - lowercase model name, truncated at first hyphen.
+    #   ${class} - model name as a class (from /etc/version)
+    #   ${version} - version string (from /etc/version)
+    #
+    url="$1"
+    url="${url//\$\{mac\}/${mac}}"
+    url="${url//\$\{model\}/${model}}"
+    url="${url//\$\{class\}/${class}}"
+    url="${url//\$\{version\}/${version}}"
+    echo "$url"
+}
+
+model=$(config -g config.system.model | awk '{print tolower($2)}')
+mac=$(tr -d : </sys/class/net/eth0/address || echo nomac)
+read class _ version _ < /etc/version
+class=${class#*/}

@@ -1,0 +1,133 @@
+IX15-SX
+=======
+
+The IX15-SX is almost identical to the IX10, but for the XBee device.
+The IX15-SX includes an XBee SX instead of a XBee 3.
+
+First time setup for Digi IX15-SX
+=================================
+
+Setup console and check you have access to the U-Boot bootload command line.
+The console should be on the CON9 connector. You need a special USB cable.
+If there is no U-Boot prompt in the console after powering up the device, you
+will need to load U-Boot from USB, otherwise, you can skip directly to "LOAD
+DAL IMAGES FROM NETWORK"
+
+
+LOAD U-BOOT FROM USB
+-----------------------
+
+By default, all DAL U-Boots are configured to be quiet (silent) if the unit is
+in production-mode, and fully manufactured, so that you will not see any output
+after loading the U-Boot. To build an interactive U-Boot, you will need to make
+the following changes in /boot/u-boot/include/configs/ix15.h:
+
+  +#define CONFIG_DEVELOP
+   #include <configs/digi_common.h>
+
+After doing it, you will need to recompile U-Boot. To do so, execute these
+commands:
+
+  $ make boot_clean
+  $ make
+
+The IX15-SX has no external USB ports, there is a 8 pin header that may not be 
+fitted on production PCBA's (J6). This header exposes the recovery USB pins
+that must be connected to the USB cable.
+
+To carry out a USB recovery load you would normally need to jumper the
+header that enables USB load. If the nand flash is currently
+empty then the Freescale iMX6 CPU will automatically fall back to the USB
+recovery load mode (no header jumping required).
+Otherwise close the jumper J11 to use serial download as boot mode.
+
+To load a boot loader through the USB you need Freescales "imx_usb" tool
+installed on your Linux PC development system:
+
+  $ git clone https://github.com/boundarydevices/imx_usb_loader.git
+  $ cd imx_usb_loader
+  $ make
+
+Power up the IX15-SX with the USB connected to your Linux PC. Check that the 
+USB load device was detected properly:
+
+  $ lsusb | grep -i freescale
+
+It should report back with something similar to this if found:
+
+  Bus 003 Device 013: ID 15a2:0080 Freescale Semiconductor, Inc.
+
+The USB load process is straight forward from a compiled tree:
+
+  $ sudo imx_usb -v boot/build/uboot-imx/u-boot.imx
+
+Within a few seconds the usual u-boot boot up messages should come out of
+the serial console port of the IX15-SX.
+
+
+LOAD DAL IMAGES FROM NETWORK
+----------------------------
+
+Setup a DHCP/tftp server and load the DAL image file onto that server.
+Call the file "image.bin".
+
+Connect to U-Boot console and issue:
+
+  => run netload
+
+The IX15-SX should get an address and load the file and boot it.
+Once DAL boots, you will be at a login prompt. Login as admin/default and
+access the system shell. If you don't have shell access yet, you may need
+to enable it by executing these commands in the CLI:
+
+  > config auth user admin password default
+  > config auth allow_shell yes
+  > exit
+
+And now select "shell"
+
+
+FLASH DAL IMAGES
+----------------
+
+Once you have shell access in the IX15-SX, you can flash the different
+artifacts. The default networking on the LAN port is:
+
+  192.168.210.1/24
+       or
+  192.168.2.1/24
+
+Ensure either gives access to a tftpserver at IP W.X.Y.Z,  then run the
+following commands at the shell prompt to flash DAL images:
+
+  # /etc/mkffs
+  # netflash -bikr /dev/flash/image  W.X.Y.Z image.bin
+  # netflash -bikr /dev/flash/image1 W.X.Y.Z image.bin
+
+You may now reboot the device so that all features are available. If you
+need to flash U-Boot image, execute next step before rebooting.
+
+
+FLASH U-BOOT
+------------
+
+The process to flash the u-boot loader into flash memory is a little
+different than other Accelerated/Digi boards. This is due to the unusual
+flash and ECC layout used by Freescale's internal iMX6 CPU boot loader.
+
+The process is now essentially a 2 step process from an IX15-SX shell:
+
+  # netflash -iknb -R /tmp/u-boot.imx 192.168.0.22 u-boot.imx
+  # kobs-ng init -v -x /tmp/u-boot.imx
+
+You cannot directly netflash the u-boot binary.
+
+***WARNING***
+The production u-boot image has been HAB signed, allowing the secure
+boot functionality to be used. If the SRK and secure boot fuses have
+been burnt, then only images which have been encrypted using the same
+keys as burnt to the fuses will be allowed to run. If an incorrect
+u-boot is uploaded, then the unit will be *unrecoverable* via software.
+The only way to recover the unit is to desolder the NAND chip and
+program it with the correctly signed ECC image.
+

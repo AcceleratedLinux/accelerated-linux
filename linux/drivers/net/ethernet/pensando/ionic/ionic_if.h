@@ -34,6 +34,7 @@ enum ionic_cmd_opcode {
 	IONIC_CMD_LIF_RESET			= 22,
 	IONIC_CMD_LIF_GETATTR			= 23,
 	IONIC_CMD_LIF_SETATTR			= 24,
+	IONIC_CMD_LIF_SETPHC			= 25,
 
 	IONIC_CMD_RX_MODE_SET			= 30,
 	IONIC_CMD_RX_FILTER_ADD			= 31,
@@ -59,10 +60,14 @@ enum ionic_cmd_opcode {
 	IONIC_CMD_QOS_CLASS_INIT		= 241,
 	IONIC_CMD_QOS_CLASS_RESET		= 242,
 	IONIC_CMD_QOS_CLASS_UPDATE		= 243,
+	IONIC_CMD_QOS_CLEAR_STATS		= 244,
+	IONIC_CMD_QOS_RESET			= 245,
 
 	/* Firmware commands */
-	IONIC_CMD_FW_DOWNLOAD			= 254,
-	IONIC_CMD_FW_CONTROL			= 255,
+	IONIC_CMD_FW_DOWNLOAD                   = 252,
+	IONIC_CMD_FW_CONTROL                    = 253,
+	IONIC_CMD_FW_DOWNLOAD_V1		= 254,
+	IONIC_CMD_FW_CONTROL_V1		        = 255,
 };
 
 /**
@@ -90,8 +95,9 @@ enum ionic_status_code {
 	IONIC_RC_DEV_CMD	= 18,	/* Device cmd attempted on AdminQ */
 	IONIC_RC_ENOSUPP	= 19,	/* Operation not supported */
 	IONIC_RC_ERROR		= 29,	/* Generic error */
-
 	IONIC_RC_ERDMA		= 30,	/* Generic RDMA error */
+	IONIC_RC_EVFID		= 31,	/* VF ID does not exist */
+	IONIC_RC_EBAD_FW	= 32,	/* FW file is invalid or corrupted */
 };
 
 enum ionic_notifyq_opcode {
@@ -103,7 +109,7 @@ enum ionic_notifyq_opcode {
 };
 
 /**
- * struct cmd - General admin command format
+ * struct ionic_admin_cmd - General admin command format
  * @opcode:     Opcode for the command
  * @lif_index:  LIF index
  * @cmd_data:   Opcode-specific command bytes
@@ -167,7 +173,7 @@ struct ionic_dev_init_cmd {
 };
 
 /**
- * struct init_comp - Device init command completion
+ * struct ionic_dev_init_comp - Device init command completion
  * @status: Status of the command (enum ionic_status_code)
  */
 struct ionic_dev_init_comp {
@@ -185,7 +191,7 @@ struct ionic_dev_reset_cmd {
 };
 
 /**
- * struct reset_comp - Reset command completion
+ * struct ionic_dev_reset_comp - Reset command completion
  * @status: Status of the command (enum ionic_status_code)
  */
 struct ionic_dev_reset_comp {
@@ -264,6 +270,9 @@ union ionic_drv_identity {
  *                    value in usecs to device units using:
  *                    device units = usecs * mult / div
  * @eq_count:         Number of shared event queues
+ * @hwstamp_mask:     Bitmask for subtraction of hardware tick values.
+ * @hwstamp_mult:     Hardware tick to nanosecond multiplier.
+ * @hwstamp_shift:    Hardware tick to nanosecond divisor (power of two).
  */
 union ionic_dev_identity {
 	struct {
@@ -278,6 +287,9 @@ union ionic_dev_identity {
 		__le32 intr_coal_mult;
 		__le32 intr_coal_div;
 		__le32 eq_count;
+		__le64 hwstamp_mask;
+		__le32 hwstamp_mult;
+		__le32 hwstamp_shift;
 	};
 	__le32 words[478];
 };
@@ -315,7 +327,7 @@ struct ionic_lif_identify_comp {
 /**
  * enum ionic_lif_capability - LIF capabilities
  * @IONIC_LIF_CAP_ETH:     LIF supports Ethernet
- * @IONIC_LIF_CAP_RDMA:    LIF support RDMA
+ * @IONIC_LIF_CAP_RDMA:    LIF supports RDMA
  */
 enum ionic_lif_capability {
 	IONIC_LIF_CAP_ETH        = BIT(0),
@@ -341,6 +353,68 @@ enum ionic_logical_qtype {
 };
 
 /**
+ * enum ionic_q_feature - Common Features for most queue types
+ *
+ * Common features use bits 0-15. Per-queue-type features use higher bits.
+ *
+ * @IONIC_QIDENT_F_CQ:      Queue has completion ring
+ * @IONIC_QIDENT_F_SG:      Queue has scatter/gather ring
+ * @IONIC_QIDENT_F_EQ:      Queue can use event queue
+ * @IONIC_QIDENT_F_CMB:     Queue is in cmb bar
+ * @IONIC_Q_F_2X_DESC:      Double main descriptor size
+ * @IONIC_Q_F_2X_CQ_DESC:   Double cq descriptor size
+ * @IONIC_Q_F_2X_SG_DESC:   Double sg descriptor size
+ * @IONIC_Q_F_4X_DESC:      Quadruple main descriptor size
+ * @IONIC_Q_F_4X_CQ_DESC:   Quadruple cq descriptor size
+ * @IONIC_Q_F_4X_SG_DESC:   Quadruple sg descriptor size
+ */
+enum ionic_q_feature {
+	IONIC_QIDENT_F_CQ		= BIT_ULL(0),
+	IONIC_QIDENT_F_SG		= BIT_ULL(1),
+	IONIC_QIDENT_F_EQ		= BIT_ULL(2),
+	IONIC_QIDENT_F_CMB		= BIT_ULL(3),
+	IONIC_Q_F_2X_DESC		= BIT_ULL(4),
+	IONIC_Q_F_2X_CQ_DESC		= BIT_ULL(5),
+	IONIC_Q_F_2X_SG_DESC		= BIT_ULL(6),
+	IONIC_Q_F_4X_DESC		= BIT_ULL(7),
+	IONIC_Q_F_4X_CQ_DESC		= BIT_ULL(8),
+	IONIC_Q_F_4X_SG_DESC		= BIT_ULL(9),
+};
+
+/**
+ * enum ionic_rxq_feature - RXQ-specific Features
+ *
+ * Per-queue-type features use bits 16 and higher.
+ *
+ * @IONIC_RXQ_F_HWSTAMP:   Queue supports Hardware Timestamping
+ */
+enum ionic_rxq_feature {
+	IONIC_RXQ_F_HWSTAMP		= BIT_ULL(16),
+};
+
+/**
+ * enum ionic_txq_feature - TXQ-specific Features
+ *
+ * Per-queue-type features use bits 16 and higher.
+ *
+ * @IONIC_TXQ_F_HWSTAMP:   Queue supports Hardware Timestamping
+ */
+enum ionic_txq_feature {
+	IONIC_TXQ_F_HWSTAMP		= BIT(16),
+};
+
+/**
+ * struct ionic_hwstamp_bits - Hardware timestamp decoding bits
+ * @IONIC_HWSTAMP_INVALID:          Invalid hardware timestamp value
+ * @IONIC_HWSTAMP_CQ_NEGOFFSET:     Timestamp field negative offset
+ *                                  from the base cq descriptor.
+ */
+enum ionic_hwstamp_bits {
+	IONIC_HWSTAMP_INVALID	    = ~0ull,
+	IONIC_HWSTAMP_CQ_NEGOFFSET  = 8,
+};
+
+/**
  * struct ionic_lif_logical_qtype - Descriptor of logical to HW queue type
  * @qtype:          Hardware Queue Type
  * @qid_count:      Number of Queue IDs of the logical type
@@ -357,12 +431,12 @@ struct ionic_lif_logical_qtype {
  * enum ionic_lif_state - LIF state
  * @IONIC_LIF_DISABLE:     LIF disabled
  * @IONIC_LIF_ENABLE:      LIF enabled
- * @IONIC_LIF_HANG_RESET:  LIF hung, being reset
+ * @IONIC_LIF_QUIESCE:     LIF Quiesced
  */
 enum ionic_lif_state {
-	IONIC_LIF_DISABLE	= 0,
+	IONIC_LIF_QUIESCE	= 0,
 	IONIC_LIF_ENABLE	= 1,
-	IONIC_LIF_HANG_RESET	= 2,
+	IONIC_LIF_DISABLE	= 2,
 };
 
 /**
@@ -371,6 +445,7 @@ enum ionic_lif_state {
  * @name:           LIF name
  * @mtu:            MTU
  * @mac:            Station MAC address
+ * @vlan:           Default Vlan ID
  * @features:       Features (enum ionic_eth_hw_features)
  * @queue_count:    Queue counts per queue-type
  */
@@ -381,7 +456,7 @@ union ionic_lif_config {
 		char   name[IONIC_IFNAMSIZ];
 		__le32 mtu;
 		u8     mac[6];
-		u8     rsvd2[2];
+		__le16 vlan;
 		__le64 features;
 		__le32 queue_count[IONIC_QTYPE_MAX];
 	} __packed;
@@ -398,7 +473,9 @@ union ionic_lif_config {
  *     @max_ucast_filters:  Number of perfect unicast addresses supported
  *     @max_mcast_filters:  Number of perfect multicast addresses supported
  *     @min_frame_size:     Minimum size of frames to be sent
- *     @max_frame_size:     Maximim size of frames to be sent
+ *     @max_frame_size:     Maximum size of frames to be sent
+ *     @hwstamp_tx_modes:   Bitmask of BIT_ULL(enum ionic_txstamp_mode)
+ *     @hwstamp_rx_filters: Bitmask of enum ionic_pkt_class
  *     @config:             LIF config struct with features, mtu, mac, q counts
  *
  * @rdma:                RDMA identify structure
@@ -432,7 +509,10 @@ union ionic_lif_identity {
 			__le16 rss_ind_tbl_sz;
 			__le32 min_frame_size;
 			__le32 max_frame_size;
-			u8 rsvd2[106];
+			u8 rsvd2[2];
+			__le64 hwstamp_tx_modes;
+			__le64 hwstamp_rx_filters;
+			u8 rsvd3[88];
 			union ionic_lif_config config;
 		} __packed eth;
 
@@ -489,13 +569,13 @@ struct ionic_lif_init_comp {
 	u8 rsvd2[12];
 };
 
- /**
-  * struct ionic_q_identify_cmd - queue identify command
-  * @opcode:     opcode
-  * @lif_type:   LIF type (enum ionic_lif_type)
-  * @type:       Logical queue type (enum ionic_logical_qtype)
-  * @ver:        Highest queue type version that the driver supports
-  */
+/**
+ * struct ionic_q_identify_cmd - queue identify command
+ * @opcode:     opcode
+ * @lif_type:   LIF type (enum ionic_lif_type)
+ * @type:       Logical queue type (enum ionic_logical_qtype)
+ * @ver:        Highest queue type version that the driver supports
+ */
 struct ionic_q_identify_cmd {
 	u8     opcode;
 	u8     rsvd;
@@ -523,7 +603,7 @@ struct ionic_q_identify_comp {
  * union ionic_q_identity - queue identity information
  *     @version:        Queue type version that can be used with FW
  *     @supported:      Bitfield of queue versions, first bit = ver 0
- *     @features:       Queue features
+ *     @features:       Queue features (enum ionic_q_feature, etc)
  *     @desc_sz:        Descriptor size
  *     @comp_sz:        Completion descriptor size
  *     @sg_desc_sz:     Scatter/Gather descriptor size
@@ -535,10 +615,6 @@ union ionic_q_identity {
 		u8      version;
 		u8      supported;
 		u8      rsvd[6];
-#define IONIC_QIDENT_F_CQ	0x01	/* queue has completion ring */
-#define IONIC_QIDENT_F_SG	0x02	/* queue has scatter/gather ring */
-#define IONIC_QIDENT_F_EQ	0x04	/* queue can use event queue */
-#define IONIC_QIDENT_F_CMB	0x08	/* queue is in cmb bar */
 		__le64  features;
 		__le16  desc_sz;
 		__le16  comp_sz;
@@ -579,6 +655,7 @@ union ionic_q_identity {
  * @ring_base:    Queue ring base address
  * @cq_ring_base: Completion queue ring base address
  * @sg_ring_base: Scatter/Gather ring base address
+ * @features:     Mask of queue features to enable, if not in the flags above.
  */
 struct ionic_q_init_cmd {
 	u8     opcode;
@@ -602,7 +679,8 @@ struct ionic_q_init_cmd {
 	__le64 ring_base;
 	__le64 cq_ring_base;
 	__le64 sg_ring_base;
-	u8     rsvd2[20];
+	u8     rsvd2[12];
+	__le64 features;
 } __packed;
 
 /**
@@ -681,12 +759,12 @@ enum ionic_txq_desc_opcode {
  *                   IONIC_TXQ_DESC_OPCODE_CSUM_HW:
  *                      Offload 16-bit checksum computation to hardware.
  *                      If @csum_l3 is set then the packet's L3 checksum is
- *                      updated. Similarly, if @csum_l4 is set the the L4
+ *                      updated. Similarly, if @csum_l4 is set the L4
  *                      checksum is updated. If @encap is set then encap header
  *                      checksums are also updated.
  *
  *                   IONIC_TXQ_DESC_OPCODE_TSO:
- *                      Device preforms TCP segmentation offload
+ *                      Device performs TCP segmentation offload
  *                      (TSO).  @hdr_len is the number of bytes
  *                      to the end of TCP header (the offset to
  *                      the TCP payload).  @mss is the desired
@@ -976,13 +1054,21 @@ struct ionic_rxq_comp {
 };
 
 enum ionic_pkt_type {
-	IONIC_PKT_TYPE_NON_IP     = 0x000,
-	IONIC_PKT_TYPE_IPV4       = 0x001,
-	IONIC_PKT_TYPE_IPV4_TCP   = 0x003,
-	IONIC_PKT_TYPE_IPV4_UDP   = 0x005,
-	IONIC_PKT_TYPE_IPV6       = 0x008,
-	IONIC_PKT_TYPE_IPV6_TCP   = 0x018,
-	IONIC_PKT_TYPE_IPV6_UDP   = 0x028,
+	IONIC_PKT_TYPE_NON_IP		= 0x00,
+	IONIC_PKT_TYPE_IPV4		= 0x01,
+	IONIC_PKT_TYPE_IPV4_TCP		= 0x03,
+	IONIC_PKT_TYPE_IPV4_UDP		= 0x05,
+	IONIC_PKT_TYPE_IPV6		= 0x08,
+	IONIC_PKT_TYPE_IPV6_TCP		= 0x18,
+	IONIC_PKT_TYPE_IPV6_UDP		= 0x28,
+	/* below types are only used if encap offloads are enabled on lif */
+	IONIC_PKT_TYPE_ENCAP_NON_IP	= 0x40,
+	IONIC_PKT_TYPE_ENCAP_IPV4	= 0x41,
+	IONIC_PKT_TYPE_ENCAP_IPV4_TCP	= 0x43,
+	IONIC_PKT_TYPE_ENCAP_IPV4_UDP	= 0x45,
+	IONIC_PKT_TYPE_ENCAP_IPV6	= 0x48,
+	IONIC_PKT_TYPE_ENCAP_IPV6_TCP	= 0x58,
+	IONIC_PKT_TYPE_ENCAP_IPV6_UDP	= 0x68,
 };
 
 enum ionic_eth_hw_features {
@@ -1003,6 +1089,66 @@ enum ionic_eth_hw_features {
 	IONIC_ETH_HW_TSO_IPXIP6		= BIT(14),
 	IONIC_ETH_HW_TSO_UDP		= BIT(15),
 	IONIC_ETH_HW_TSO_UDP_CSUM	= BIT(16),
+	IONIC_ETH_HW_RX_CSUM_GENEVE	= BIT(17),
+	IONIC_ETH_HW_TX_CSUM_GENEVE	= BIT(18),
+	IONIC_ETH_HW_TSO_GENEVE		= BIT(19),
+	IONIC_ETH_HW_TIMESTAMP		= BIT(20),
+};
+
+/**
+ * enum ionic_pkt_class - Packet classification mask.
+ *
+ * Used with rx steering filter, packets indicated by the mask can be steered
+ * toward a specific receive queue.
+ *
+ * @IONIC_PKT_CLS_NTP_ALL:          All NTP packets.
+ * @IONIC_PKT_CLS_PTP1_SYNC:        PTPv1 sync
+ * @IONIC_PKT_CLS_PTP1_DREQ:        PTPv1 delay-request
+ * @IONIC_PKT_CLS_PTP1_ALL:         PTPv1 all packets
+ * @IONIC_PKT_CLS_PTP2_L4_SYNC:     PTPv2-UDP sync
+ * @IONIC_PKT_CLS_PTP2_L4_DREQ:     PTPv2-UDP delay-request
+ * @IONIC_PKT_CLS_PTP2_L4_ALL:      PTPv2-UDP all packets
+ * @IONIC_PKT_CLS_PTP2_L2_SYNC:     PTPv2-ETH sync
+ * @IONIC_PKT_CLS_PTP2_L2_DREQ:     PTPv2-ETH delay-request
+ * @IONIC_PKT_CLS_PTP2_L2_ALL:      PTPv2-ETH all packets
+ * @IONIC_PKT_CLS_PTP2_SYNC:        PTPv2 sync
+ * @IONIC_PKT_CLS_PTP2_DREQ:        PTPv2 delay-request
+ * @IONIC_PKT_CLS_PTP2_ALL:         PTPv2 all packets
+ * @IONIC_PKT_CLS_PTP_SYNC:         PTP sync
+ * @IONIC_PKT_CLS_PTP_DREQ:         PTP delay-request
+ * @IONIC_PKT_CLS_PTP_ALL:          PTP all packets
+ */
+enum ionic_pkt_class {
+	IONIC_PKT_CLS_NTP_ALL		= BIT(0),
+
+	IONIC_PKT_CLS_PTP1_SYNC		= BIT(1),
+	IONIC_PKT_CLS_PTP1_DREQ		= BIT(2),
+	IONIC_PKT_CLS_PTP1_ALL		= BIT(3) |
+		IONIC_PKT_CLS_PTP1_SYNC | IONIC_PKT_CLS_PTP1_DREQ,
+
+	IONIC_PKT_CLS_PTP2_L4_SYNC	= BIT(4),
+	IONIC_PKT_CLS_PTP2_L4_DREQ	= BIT(5),
+	IONIC_PKT_CLS_PTP2_L4_ALL	= BIT(6) |
+		IONIC_PKT_CLS_PTP2_L4_SYNC | IONIC_PKT_CLS_PTP2_L4_DREQ,
+
+	IONIC_PKT_CLS_PTP2_L2_SYNC	= BIT(7),
+	IONIC_PKT_CLS_PTP2_L2_DREQ	= BIT(8),
+	IONIC_PKT_CLS_PTP2_L2_ALL	= BIT(9) |
+		IONIC_PKT_CLS_PTP2_L2_SYNC | IONIC_PKT_CLS_PTP2_L2_DREQ,
+
+	IONIC_PKT_CLS_PTP2_SYNC		=
+		IONIC_PKT_CLS_PTP2_L4_SYNC | IONIC_PKT_CLS_PTP2_L2_SYNC,
+	IONIC_PKT_CLS_PTP2_DREQ		=
+		IONIC_PKT_CLS_PTP2_L4_DREQ | IONIC_PKT_CLS_PTP2_L2_DREQ,
+	IONIC_PKT_CLS_PTP2_ALL		=
+		IONIC_PKT_CLS_PTP2_L4_ALL | IONIC_PKT_CLS_PTP2_L2_ALL,
+
+	IONIC_PKT_CLS_PTP_SYNC		=
+		IONIC_PKT_CLS_PTP1_SYNC | IONIC_PKT_CLS_PTP2_SYNC,
+	IONIC_PKT_CLS_PTP_DREQ		=
+		IONIC_PKT_CLS_PTP1_DREQ | IONIC_PKT_CLS_PTP2_DREQ,
+	IONIC_PKT_CLS_PTP_ALL		=
+		IONIC_PKT_CLS_PTP1_ALL | IONIC_PKT_CLS_PTP2_ALL,
 };
 
 /**
@@ -1011,7 +1157,7 @@ enum ionic_eth_hw_features {
  * @type:       Queue type
  * @lif_index:  LIF index
  * @index:      Queue index
- * @oper:       Operation (enum q_control_oper)
+ * @oper:       Operation (enum ionic_q_control_oper)
  */
 struct ionic_q_control_cmd {
 	u8     opcode;
@@ -1094,6 +1240,8 @@ enum ionic_xcvr_pid {
 	IONIC_XCVR_PID_QSFP_100G_CWDM4  = 69,
 	IONIC_XCVR_PID_QSFP_100G_PSM4   = 70,
 	IONIC_XCVR_PID_SFP_25GBASE_ACC  = 71,
+	IONIC_XCVR_PID_SFP_10GBASE_T    = 72,
+	IONIC_XCVR_PID_SFP_1000BASE_T   = 73,
 };
 
 /**
@@ -1172,7 +1320,7 @@ enum ionic_port_loopback_mode {
  * struct ionic_xcvr_status - Transceiver Status information
  * @state:    Transceiver status (enum ionic_xcvr_state)
  * @phy:      Physical connection type (enum ionic_phy_type)
- * @pid:      Transceiver link mode (enum pid)
+ * @pid:      Transceiver link mode (enum ionic_xcvr_pid)
  * @sprom:    Transceiver sprom contents
  */
 struct ionic_xcvr_status {
@@ -1186,7 +1334,7 @@ struct ionic_xcvr_status {
  * union ionic_port_config - Port configuration
  * @speed:              port speed (in Mbps)
  * @mtu:                mtu
- * @state:              port admin state (enum port_admin_state)
+ * @state:              port admin state (enum ionic_port_admin_state)
  * @an_enable:          autoneg enable
  * @fec_type:           fec type (enum ionic_port_fec_type)
  * @pause_type:         pause type (enum ionic_port_pause_type)
@@ -1220,9 +1368,9 @@ union ionic_port_config {
  * @status:             link status (enum ionic_port_oper_status)
  * @id:                 port id
  * @speed:              link speed (in Mbps)
- * @link_down_count:    number of times link went from from up to down
+ * @link_down_count:    number of times link went from up to down
  * @fec_type:           fec type (enum ionic_port_fec_type)
- * @xcvr:               tranceiver status
+ * @xcvr:               transceiver status
  */
 struct ionic_port_status {
 	__le32 id;
@@ -1310,11 +1458,25 @@ enum ionic_stats_ctl_cmd {
 };
 
 /**
+ * enum ionic_txstamp_mode - List of TX Timestamping Modes
+ * @IONIC_TXSTAMP_OFF:           Disable TX hardware timetamping.
+ * @IONIC_TXSTAMP_ON:            Enable local TX hardware timetamping.
+ * @IONIC_TXSTAMP_ONESTEP_SYNC:  Modify TX PTP Sync packets.
+ * @IONIC_TXSTAMP_ONESTEP_P2P:   Modify TX PTP Sync and PDelayResp.
+ */
+enum ionic_txstamp_mode {
+	IONIC_TXSTAMP_OFF		= 0,
+	IONIC_TXSTAMP_ON		= 1,
+	IONIC_TXSTAMP_ONESTEP_SYNC	= 2,
+	IONIC_TXSTAMP_ONESTEP_P2P	= 3,
+};
+
+/**
  * enum ionic_port_attr - List of device attributes
  * @IONIC_PORT_ATTR_STATE:      Port state attribute
  * @IONIC_PORT_ATTR_SPEED:      Port speed attribute
  * @IONIC_PORT_ATTR_MTU:        Port MTU attribute
- * @IONIC_PORT_ATTR_AUTONEG:    Port autonegotation attribute
+ * @IONIC_PORT_ATTR_AUTONEG:    Port autonegotiation attribute
  * @IONIC_PORT_ATTR_FEC:        Port FEC attribute
  * @IONIC_PORT_ATTR_PAUSE:      Port pause attribute
  * @IONIC_PORT_ATTR_LOOPBACK:   Port loopback attribute
@@ -1551,6 +1713,7 @@ enum ionic_rss_hash_types {
  * @IONIC_LIF_ATTR_FEATURES:    LIF features attribute
  * @IONIC_LIF_ATTR_RSS:         LIF RSS attribute
  * @IONIC_LIF_ATTR_STATS_CTRL:  LIF statistics control attribute
+ * @IONIC_LIF_ATTR_TXSTAMP:     LIF TX timestamping mode
  */
 enum ionic_lif_attr {
 	IONIC_LIF_ATTR_STATE        = 0,
@@ -1560,6 +1723,7 @@ enum ionic_lif_attr {
 	IONIC_LIF_ATTR_FEATURES     = 4,
 	IONIC_LIF_ATTR_RSS          = 5,
 	IONIC_LIF_ATTR_STATS_CTRL   = 6,
+	IONIC_LIF_ATTR_TXSTAMP      = 7,
 };
 
 /**
@@ -1577,6 +1741,7 @@ enum ionic_lif_attr {
  *              @key:       The hash secret key
  *              @addr:      Address for the indirection table shared memory
  * @stats_ctl:  stats control commands (enum ionic_stats_ctl_cmd)
+ * @txstamp:    TX Timestamping Mode (enum ionic_txstamp_mode)
  */
 struct ionic_lif_setattr_cmd {
 	u8     opcode;
@@ -1595,6 +1760,7 @@ struct ionic_lif_setattr_cmd {
 			__le64 addr;
 		} rss;
 		u8      stats_ctl;
+		__le16 txstamp_mode;
 		u8      rsvd[60];
 	} __packed;
 };
@@ -1639,6 +1805,7 @@ struct ionic_lif_getattr_cmd {
  * @mtu:        Mtu
  * @mac:        Station mac
  * @features:   Features (enum ionic_eth_hw_features)
+ * @txstamp:    TX Timestamping Mode (enum ionic_txstamp_mode)
  * @color:      Color bit
  */
 struct ionic_lif_getattr_comp {
@@ -1650,9 +1817,33 @@ struct ionic_lif_getattr_comp {
 		__le32  mtu;
 		u8      mac[6];
 		__le64  features;
+		__le16  txstamp_mode;
 		u8      rsvd2[11];
 	} __packed;
 	u8     color;
+};
+
+/**
+ * struct ionic_lif_setphc_cmd - Set LIF PTP Hardware Clock
+ * @opcode:     Opcode
+ * @lif_index:  LIF index
+ * @tick:       Hardware stamp tick of an instant in time.
+ * @nsec:       Nanosecond stamp of the same instant.
+ * @frac:       Fractional nanoseconds at the same instant.
+ * @mult:       Cycle to nanosecond multiplier.
+ * @shift:      Cycle to nanosecond divisor (power of two).
+ */
+struct ionic_lif_setphc_cmd {
+	u8	opcode;
+	u8	rsvd1;
+	__le16  lif_index;
+	u8      rsvd2[4];
+	__le64	tick;
+	__le64	nsec;
+	__le64	frac;
+	__le32	mult;
+	__le32	shift;
+	u8     rsvd3[24];
 };
 
 enum ionic_rx_mode {
@@ -1687,9 +1878,10 @@ struct ionic_rx_mode_set_cmd {
 typedef struct ionic_admin_comp ionic_rx_mode_set_comp;
 
 enum ionic_rx_filter_match_type {
-	IONIC_RX_FILTER_MATCH_VLAN = 0,
-	IONIC_RX_FILTER_MATCH_MAC,
-	IONIC_RX_FILTER_MATCH_MAC_VLAN,
+	IONIC_RX_FILTER_MATCH_VLAN	= 0x0,
+	IONIC_RX_FILTER_MATCH_MAC	= 0x1,
+	IONIC_RX_FILTER_MATCH_MAC_VLAN	= 0x2,
+	IONIC_RX_FILTER_STEER_PKTCLASS	= 0x10,
 };
 
 /**
@@ -1706,6 +1898,7 @@ enum ionic_rx_filter_match_type {
  * @mac_vlan:   MACVLAN filter
  *              @vlan:  VLAN ID
  *              @addr:  MAC address (network-byte order)
+ * @pkt_class:  Packet classification filter
  */
 struct ionic_rx_filter_add_cmd {
 	u8     opcode;
@@ -1724,8 +1917,9 @@ struct ionic_rx_filter_add_cmd {
 			__le16 vlan;
 			u8     addr[6];
 		} mac_vlan;
+		__le64 pkt_class;
 		u8 rsvd[54];
-	};
+	} __packed;
 };
 
 /**
@@ -1874,12 +2068,14 @@ struct ionic_qos_identify_comp {
 };
 
 #define IONIC_QOS_TC_MAX		8
+#define IONIC_QOS_ALL_TC		0xFF
 /* Capri max supported, should be renamed. */
 #define IONIC_QOS_CLASS_MAX		7
 #define IONIC_QOS_PCP_MAX		8
 #define IONIC_QOS_CLASS_NAME_SZ	32
 #define IONIC_QOS_DSCP_MAX		64
 #define IONIC_QOS_ALL_PCP		0xFF
+#define IONIC_DSCP_BLOCK_SIZE		8
 
 /**
  * enum ionic_qos_class
@@ -1923,6 +2119,7 @@ enum ionic_qos_sched_type {
  *	IONIC_QOS_CONFIG_F_NO_DROP		drop/nodrop
  *	IONIC_QOS_CONFIG_F_RW_DOT1Q_PCP		enable dot1q pcp rewrite
  *	IONIC_QOS_CONFIG_F_RW_IP_DSCP		enable ip dscp rewrite
+ *	IONIC_QOS_CONFIG_F_NON_DISRUPTIVE	Non-disruptive TC update
  * @sched_type:		QoS class scheduling type (enum ionic_qos_sched_type)
  * @class_type:		QoS class type (enum ionic_qos_class_type)
  * @pause_type:		QoS pause type (enum ionic_qos_pause_type)
@@ -1931,8 +2128,8 @@ enum ionic_qos_sched_type {
  * @pfc_cos:		Priority-Flow Control class of service
  * @dwrr_weight:	QoS class scheduling weight
  * @strict_rlmt:	Rate limit for strict priority scheduling
- * @rw_dot1q_pcp:	Rewrite dot1q pcp to this value	(valid iff F_RW_DOT1Q_PCP)
- * @rw_ip_dscp:		Rewrite ip dscp to this value	(valid iff F_RW_IP_DSCP)
+ * @rw_dot1q_pcp:	Rewrite dot1q pcp to value (valid iff F_RW_DOT1Q_PCP)
+ * @rw_ip_dscp:		Rewrite ip dscp to value (valid iff F_RW_IP_DSCP)
  * @dot1q_pcp:		Dot1q pcp value
  * @ndscp:		Number of valid dscp values in the ip_dscp field
  * @ip_dscp:		IP dscp values
@@ -1944,6 +2141,8 @@ union ionic_qos_config {
 /* Used to rewrite PCP or DSCP value. */
 #define IONIC_QOS_CONFIG_F_RW_DOT1Q_PCP		BIT(2)
 #define IONIC_QOS_CONFIG_F_RW_IP_DSCP		BIT(3)
+/* Non-disruptive TC update */
+#define IONIC_QOS_CONFIG_F_NON_DISRUPTIVE	BIT(4)
 		u8      flags;
 		u8      sched_type;
 		u8      class_type;
@@ -2019,6 +2218,16 @@ struct ionic_qos_reset_cmd {
 	u8    rsvd[62];
 };
 
+/**
+ * struct ionic_qos_clear_port_stats_cmd - Qos config reset command
+ * @opcode:	Opcode
+ */
+struct ionic_qos_clear_stats_cmd {
+	u8    opcode;
+	u8    group_bitmap;
+	u8    rsvd[62];
+};
+
 typedef struct ionic_admin_comp ionic_qos_reset_comp;
 
 /**
@@ -2040,14 +2249,23 @@ typedef struct ionic_admin_comp ionic_fw_download_comp;
 
 /**
  * enum ionic_fw_control_oper - FW control operations
- * @IONIC_FW_RESET:     Reset firmware
- * @IONIC_FW_INSTALL:   Install firmware
- * @IONIC_FW_ACTIVATE:  Activate firmware
+ * @IONIC_FW_RESET:		Reset firmware
+ * @IONIC_FW_INSTALL:		Install firmware
+ * @IONIC_FW_ACTIVATE:		Activate firmware
+ * @IONIC_FW_INSTALL_ASYNC:	Install firmware asynchronously
+ * @IONIC_FW_INSTALL_STATUS:	Firmware installation status
+ * @IONIC_FW_ACTIVATE_ASYNC:	Activate firmware asynchronously
+ * @IONIC_FW_ACTIVATE_STATUS:	Firmware activate status
  */
 enum ionic_fw_control_oper {
-	IONIC_FW_RESET		= 0,
-	IONIC_FW_INSTALL	= 1,
-	IONIC_FW_ACTIVATE	= 2,
+	IONIC_FW_RESET			= 0,
+	IONIC_FW_INSTALL		= 1,
+	IONIC_FW_ACTIVATE		= 2,
+	IONIC_FW_INSTALL_ASYNC		= 3,
+	IONIC_FW_INSTALL_STATUS		= 4,
+	IONIC_FW_ACTIVATE_ASYNC		= 5,
+	IONIC_FW_ACTIVATE_STATUS	= 6,
+	IONIC_FW_UPDATE_CLEANUP		= 7,
 };
 
 /**
@@ -2164,7 +2382,7 @@ struct ionic_notifyq_event {
  * struct ionic_link_change_event - Link change event notification
  * @eid:		event number
  * @ecode:		event code = IONIC_EVENT_LINK_CHANGE
- * @link_status:	link up or down, with error bits (enum port_status)
+ * @link_status:	link up/down, with error bits (enum ionic_port_status)
  * @link_speed:		speed of the network link
  *
  * Sent when the network link state changes between UP and DOWN
@@ -2377,6 +2595,16 @@ enum ionic_pb_buffer_drop_stats {
 	IONIC_BUFFER_DROP_MAX,
 };
 
+enum ionic_oflow_drop_stats {
+	IONIC_OFLOW_OCCUPANCY_DROP,
+	IONIC_OFLOW_EMERGENCY_STOP_DROP,
+	IONIC_OFLOW_WRITE_BUFFER_ACK_FILL_UP_DROP,
+	IONIC_OFLOW_WRITE_BUFFER_ACK_FULL_DROP,
+	IONIC_OFLOW_WRITE_BUFFER_FULL_DROP,
+	IONIC_OFLOW_CONTROL_FIFO_FULL_DROP,
+	IONIC_OFLOW_DROP_MAX,
+};
+
 /**
  * struct port_pb_stats - packet buffers system stats
  * uses ionic_pb_buffer_drop_stats for drop_counts[]
@@ -2390,12 +2618,20 @@ struct ionic_port_pb_stats {
 	__le64 input_queue_buffer_occupancy[IONIC_QOS_TC_MAX];
 	__le64 input_queue_port_monitor[IONIC_QOS_TC_MAX];
 	__le64 output_queue_port_monitor[IONIC_QOS_TC_MAX];
+	__le64 oflow_drop_counts[IONIC_OFLOW_DROP_MAX];
+	__le64 input_queue_good_pkts_in[IONIC_QOS_TC_MAX];
+	__le64 input_queue_good_pkts_out[IONIC_QOS_TC_MAX];
+	__le64 input_queue_err_pkts_in[IONIC_QOS_TC_MAX];
+	__le64 input_queue_fifo_depth[IONIC_QOS_TC_MAX];
+	__le64 input_queue_max_fifo_depth[IONIC_QOS_TC_MAX];
+	__le64 input_queue_peak_occupancy[IONIC_QOS_TC_MAX];
+	__le64 output_queue_buffer_occupancy[IONIC_QOS_TC_MAX];
 };
 
 /**
  * struct ionic_port_identity - port identity structure
  * @version:        identity structure version
- * @type:           type of port (enum port_type)
+ * @type:           type of port (enum ionic_port_type)
  * @num_lanes:      number of lanes for the port
  * @autoneg:        autoneg supported
  * @min_frame_size: minimum frame size supported
@@ -2637,10 +2873,14 @@ union ionic_dev_cmd {
 	struct ionic_qos_identify_cmd qos_identify;
 	struct ionic_qos_init_cmd qos_init;
 	struct ionic_qos_reset_cmd qos_reset;
+	struct ionic_qos_clear_stats_cmd qos_clear_stats;
 
 	struct ionic_q_identify_cmd q_identify;
 	struct ionic_q_init_cmd q_init;
 	struct ionic_q_control_cmd q_control;
+
+	struct ionic_fw_download_cmd fw_download;
+	struct ionic_fw_control_cmd fw_control;
 };
 
 union ionic_dev_cmd_comp {
@@ -2674,6 +2914,19 @@ union ionic_dev_cmd_comp {
 
 	struct ionic_q_identify_comp q_identify;
 	struct ionic_q_init_comp q_init;
+
+	ionic_fw_download_comp fw_download;
+	struct ionic_fw_control_comp fw_control;
+};
+
+/**
+ * struct ionic_hwstamp_regs - Hardware current timestamp registers
+ * @tick_low:        Low 32 bits of hardware timestamp
+ * @tick_high:       High 32 bits of hardware timestamp
+ */
+struct ionic_hwstamp_regs {
+	u32    tick_low;
+	u32    tick_high;
 };
 
 /**
@@ -2683,9 +2936,12 @@ union ionic_dev_cmd_comp {
  * @asic_type:       Asic type
  * @asic_rev:        Asic revision
  * @fw_status:       Firmware status
+ *			bit 0   - 1 = fw running
+ *			bit 4-7 - 4 bit generation number, changes on fw restart
  * @fw_heartbeat:    Firmware heartbeat counter
  * @serial_num:      Serial number
  * @fw_version:      Firmware version
+ * @hwstamp_regs:    Hardware current timestamp registers
  */
 union ionic_dev_info_regs {
 #define IONIC_DEVINFO_FWVERS_BUFLEN 32
@@ -2695,11 +2951,14 @@ union ionic_dev_info_regs {
 		u8     version;
 		u8     asic_type;
 		u8     asic_rev;
-#define IONIC_FW_STS_F_RUNNING	0x1
+#define IONIC_FW_STS_F_RUNNING		0x01
+#define IONIC_FW_STS_F_GENERATION	0xF0
 		u8     fw_status;
 		u32    fw_heartbeat;
 		char   fw_version[IONIC_DEVINFO_FWVERS_BUFLEN];
 		char   serial_num[IONIC_DEVINFO_SERIAL_BUFLEN];
+		u8     rsvd_pad1024[948];
+		struct ionic_hwstamp_regs hwstamp;
 	};
 	u32 words[512];
 };
@@ -2747,6 +3006,7 @@ union ionic_adminq_cmd {
 	struct ionic_q_control_cmd q_control;
 	struct ionic_lif_setattr_cmd lif_setattr;
 	struct ionic_lif_getattr_cmd lif_getattr;
+	struct ionic_lif_setphc_cmd lif_setphc;
 	struct ionic_rx_mode_set_cmd rx_mode_set;
 	struct ionic_rx_filter_add_cmd rx_filter_add;
 	struct ionic_rx_filter_del_cmd rx_filter_del;
@@ -2763,6 +3023,7 @@ union ionic_adminq_comp {
 	struct ionic_q_init_comp q_init;
 	struct ionic_lif_setattr_comp lif_setattr;
 	struct ionic_lif_getattr_comp lif_getattr;
+	struct ionic_admin_comp lif_setphc;
 	struct ionic_rx_filter_add_comp rx_filter_add;
 	struct ionic_fw_control_comp fw_control;
 };

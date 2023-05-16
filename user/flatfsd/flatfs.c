@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -273,8 +274,13 @@ cleanup:
 /*
  * Simple wrappers that also do logging
  */
-
 #ifndef HAS_RTC
+static int settime(time_t *t)
+{
+	struct timeval tv = { .tv_sec = *t, .tv_usec = 0 };
+	return settimeofday(&tv, NULL);
+}
+
 void parseconfig(char *buf)
 {
 	char *confline, *confdata;
@@ -290,9 +296,9 @@ void parseconfig(char *buf)
 				time_t t;
 				t = atol(confdata);
 				if ((t > time(NULL)) && (t > bst))
-					stime(&t);
+					settime(&t);
 				else
-					stime(&bst);
+					settime(&bst);
 				bst = 0;
 			}
 		}
@@ -300,7 +306,7 @@ void parseconfig(char *buf)
 	}
 
 	if (bst) {
-		stime(&bst);
+		settime(&bst);
 	}
 }
 #endif

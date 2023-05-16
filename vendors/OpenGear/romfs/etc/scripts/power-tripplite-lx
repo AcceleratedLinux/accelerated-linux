@@ -1,0 +1,107 @@
+#!/bin/bash
+
+if [ -f /etc/config/scripts/power-tripplite-lx ]; then
+	exec /etc/config/scripts/power-tripplite-lx "$@"
+fi
+
+. /etc/scripts/power-common
+
+host=$1
+outlets=$2
+outletregx='^[0-9\s]+'
+if ! [[ $outlets =~ $outletregx ]]
+then
+   echo "Error: Outlet must contain only integers" >&2
+   exit 1
+fi
+cmd=$3
+
+snmp_version=2c
+
+# OIDS obtained from https://assets.tripplite.com/flyer/supported-snmp-oids-technical-application-bulletin-en.pdf
+numOutlets=$(snmpget -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.850.1.1.3.2.1.2.1.4.1)
+if [ "$?" -ne 0 ]
+then
+	power_error_login $community
+	exit 1
+fi
+
+if [ -z "$numOutlets" ]
+then
+	for outlet in $outlets; do
+		power_outlet_error_timeout $outlet $cmd
+	done
+	exit 1
+fi
+
+if [[ "$cmd" == "probe" ]]
+then
+	echo $numOutlets
+	exit 0
+fi
+
+failure=0
+
+for outlet in $outlets; do
+
+	if [ ${outlet} -lt 1 -o ${outlet} -gt ${numOutlets} ]
+	then
+		power_outlet_error_range $outlet $numOutlets
+		failure=1
+		continue
+	fi
+
+	if [[ "$cmd" == "on" ]]
+	then
+
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.6.1.$outlet i 2)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+	elif [[ "$cmd" == "off" ]]
+	then
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.6.1.$outlet i 1)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+	elif [[ "$cmd" == "cycle" ]]
+	then
+		output=$(snmpset -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.6.1.$outlet i 3)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_login "${outlet}" "${community}"
+			failure=1
+			continue
+		fi
+
+	elif [[ "$cmd" == "load" ]]
+	then
+		LOAD=$(snmpget -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.850.1.1.3.2.3.2.1.1.13.1.1)
+		if [ "$?" -ne 0 ]
+		then
+			power_outlet_error_timeout "${outlet}" "${cmd}"
+			failure=1
+			continue
+		fi
+		LOAD=$(($LOAD))
+		echo $LOAD
+	fi
+
+	outletStatus=$(snmpget -v$snmp_version -c$community -Oqv $host .1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.$outlet)
+	if [ "$outletStatus" == 2 ]
+	then
+		power_outlet_status $outlet "on"
+	else
+		power_outlet_status $outlet "off"
+	fi
+done
+
+exit ${failure}

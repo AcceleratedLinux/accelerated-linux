@@ -170,5 +170,20 @@ config USER_PYTHON_MODULES_AZURE_IOT_DEVICE
 		The Azure IoTHub Service SDK for Python provides functionality
 		for communicating with the Azure IoT Hub.
 
+config USER_PYTHON_MODULES_TACACS_PLUS
+	bool "tacplus"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	select USER_PYTHON_MODULES_SIX
+	help
+		TACACS Plus module for command authorization and accounting.
+
+config USER_PYTHON_MODULES_UBUS
+	bool "Python bindings for ubus"
+	select USER_PYTHON_MODULES_SETUPTOOLS_HOST
+	select LIB_LIBUBOX
+	select USER_UBUS
+	help
+		Python bindings for ubus.
+
 endmenu
 endif

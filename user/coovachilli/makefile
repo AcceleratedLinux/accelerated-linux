@@ -1,10 +1,10 @@
-VERSION = 1.5
+VERSION = 1.6
 URL = https://github.com/coova/coova-chilli.git
 METHOD = git
 MAKEVARS=
 
 AUTORECONF = ./bootstrap
-CONFOPTS += --$(if $(CONFIG_LIB_LIBSSL),with,without)-openssl --enable-json --enable-libjson --enable-debug2
+CONFOPTS += --$(if $(CONFIG_LIB_OPENSSL),with,without)-openssl --enable-json --enable-libjson --enable-debug2
 
 ifdef CONFIG_DEFAULTS_LIBC_MUSL
 #

@@ -1,0 +1,43 @@
+user/stunnel: remove crypto initialization calls
+
+Calling the openssl crypto initialization API the way stunnel does
+causes a lock deadlock inside openssl when using the openssl version 3
+library - but only on 32bit architecture platforms.
+
+When openssl version 3 crypto is running on 32bit platforms it uses pthread
+locks for atomic operations on 64bit quantities. Its own internal locks
+are now 64bit values. With the crypto libraries initialization code (which
+is called via OPENSSL_init_crypto()) it re-enters its own init code quite
+a few times - and this is by design. But this ends up causing a lock
+deadlock when specifically used with the OPENSSL_INIT_LOAD_CRYPTO_STRINGS
+and OPENSSL_INIT_LOAD_CONFIG flags as stunnel does.
+
+It is certainly arguable that openssl is at fault here. But we have a lot
+of packages that use openssl crypto, and none of them use exactly this
+sequence. So initially the fix is going into stunnel until we know better.
+
+The fix is simple in this case. OPENSSL_init_crypto() does not have to be
+called by a program using openssl's crypto library. It is only required if
+you need to do non-default initialization. The openssl version 3 documentation
+states that the options used by stunnel are in fact default options. So no
+explicit initialization step is required here. So the fix is to simply not
+do the OPENSSL_init_crypto() calls here at all.
+
+--- stunnel-5.63/src/ssl.c.orig	2022-03-16 02:59:09.000000000 +1000
++++ stunnel-5.63/src/ssl.c	2022-03-21 23:21:44.682757699 +1000
+@@ -87,6 +87,7 @@
+ }
+ 
+ int ssl_init(void) { /* init TLS before parsing configuration file */
++#if OPENSSL_VERSION_NUMBER<=0x30000000L
+ #if OPENSSL_VERSION_NUMBER>=0x10100000L
+     OPENSSL_INIT_SETTINGS *conf=OPENSSL_INIT_new();
+ #ifdef USE_WIN32
+@@ -100,6 +101,7 @@
+     SSL_load_error_strings();
+     SSL_library_init();
+ #endif
++#endif
+     index_ssl_cli=SSL_get_ex_new_index(0,
+         "CLI pointer", NULL, NULL, NULL);
+     index_ssl_ctx_opt=SSL_CTX_get_ex_new_index(0,

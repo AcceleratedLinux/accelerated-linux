@@ -10,12 +10,14 @@
 
 #include "en.h"
 
-struct mlx5_esw_flow_attr;
+struct mlx5_flow_attr;
 struct mlx5e_tc_mod_hdr_acts;
 struct mlx5_rep_uplink_priv;
 struct mlx5e_tc_flow;
 struct mlx5e_priv;
 
+struct mlx5_fs_chains;
+struct mlx5_tc_ct_priv;
 struct mlx5_ct_flow;
 
 struct nf_flowtable;
@@ -25,20 +27,21 @@ struct mlx5_ct_attr {
 	u16 ct_action;
 	struct mlx5_ct_flow *ct_flow;
 	struct nf_flowtable *nf_ft;
+	u32 ct_labels_id;
 };
 
 #define zone_to_reg_ct {\
 	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_2,\
 	.moffset = 0,\
-	.mlen = 2,\
+	.mlen = 16,\
 	.soffset = MLX5_BYTE_OFF(fte_match_param,\
-				 misc_parameters_2.metadata_reg_c_2) + 2,\
+				 misc_parameters_2.metadata_reg_c_2),\
 }
 
 #define ctstate_to_reg_ct {\
 	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_2,\
-	.moffset = 2,\
-	.mlen = 2,\
+	.moffset = 16,\
+	.mlen = 16,\
 	.soffset = MLX5_BYTE_OFF(fte_match_param,\
 				 misc_parameters_2.metadata_reg_c_2),\
 }
@@ -46,7 +49,7 @@ struct mlx5_ct_attr {
 #define mark_to_reg_ct {\
 	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_3,\
 	.moffset = 0,\
-	.mlen = 4,\
+	.mlen = 32,\
 	.soffset = MLX5_BYTE_OFF(fte_match_param,\
 				 misc_parameters_2.metadata_reg_c_3),\
 }
@@ -54,7 +57,7 @@ struct mlx5_ct_attr {
 #define labels_to_reg_ct {\
 	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_4,\
 	.moffset = 0,\
-	.mlen = 4,\
+	.mlen = 32,\
 	.soffset = MLX5_BYTE_OFF(fte_match_param,\
 				 misc_parameters_2.metadata_reg_c_4),\
 }
@@ -62,73 +65,99 @@ struct mlx5_ct_attr {
 #define fteid_to_reg_ct {\
 	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_5,\
 	.moffset = 0,\
-	.mlen = 4,\
+	.mlen = 32,\
 	.soffset = MLX5_BYTE_OFF(fte_match_param,\
 				 misc_parameters_2.metadata_reg_c_5),\
 }
 
-#define tupleid_to_reg_ct {\
+#define zone_restore_to_reg_ct {\
 	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_1,\
 	.moffset = 0,\
-	.mlen = 3,\
+	.mlen = ESW_ZONE_ID_BITS,\
 	.soffset = MLX5_BYTE_OFF(fte_match_param,\
 				 misc_parameters_2.metadata_reg_c_1),\
 }
 
-#define TUPLE_ID_BITS (mlx5e_tc_attr_to_reg_mappings[TUPLEID_TO_REG].mlen * 8)
-#define TUPLE_ID_MAX GENMASK(TUPLE_ID_BITS - 1, 0)
+#define nic_zone_restore_to_reg_ct {\
+	.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_B,\
+	.moffset = 16,\
+	.mlen = ESW_ZONE_ID_BITS,\
+}
+
+#define REG_MAPPING_MLEN(reg) (mlx5e_tc_attr_to_reg_mappings[reg].mlen)
+#define REG_MAPPING_MOFFSET(reg) (mlx5e_tc_attr_to_reg_mappings[reg].moffset)
+#define MLX5_CT_ZONE_BITS (mlx5e_tc_attr_to_reg_mappings[ZONE_TO_REG].mlen)
+#define MLX5_CT_ZONE_MASK GENMASK(MLX5_CT_ZONE_BITS - 1, 0)
 
 #if IS_ENABLED(CONFIG_MLX5_TC_CT)
 
-int
-mlx5_tc_ct_init(struct mlx5_rep_uplink_priv *uplink_priv);
+struct mlx5_tc_ct_priv *
+mlx5_tc_ct_init(struct mlx5e_priv *priv, struct mlx5_fs_chains *chains,
+		struct mod_hdr_tbl *mod_hdr,
+		enum mlx5_flow_namespace_type ns_type,
+		struct mlx5e_post_act *post_act);
 void
-mlx5_tc_ct_clean(struct mlx5_rep_uplink_priv *uplink_priv);
+mlx5_tc_ct_clean(struct mlx5_tc_ct_priv *ct_priv);
+
+void
+mlx5_tc_ct_match_del(struct mlx5_tc_ct_priv *priv, struct mlx5_ct_attr *ct_attr);
 
 int
-mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
-		       struct mlx5_flow_spec *spec,
-		       struct flow_cls_offload *f,
-		       struct netlink_ext_ack *extack);
+mlx5_tc_ct_match_add(struct mlx5_tc_ct_priv *priv,
+		     struct mlx5_flow_spec *spec,
+		     struct flow_cls_offload *f,
+		     struct mlx5_ct_attr *ct_attr,
+		     struct netlink_ext_ack *extack);
+int mlx5_tc_ct_add_no_trk_match(struct mlx5_flow_spec *spec);
 int
-mlx5_tc_ct_parse_action(struct mlx5e_priv *priv,
-			struct mlx5_esw_flow_attr *attr,
+mlx5_tc_ct_parse_action(struct mlx5_tc_ct_priv *priv,
+			struct mlx5_flow_attr *attr,
+			struct mlx5e_tc_mod_hdr_acts *mod_acts,
 			const struct flow_action_entry *act,
 			struct netlink_ext_ack *extack);
 
 struct mlx5_flow_handle *
-mlx5_tc_ct_flow_offload(struct mlx5e_priv *priv,
-			struct mlx5e_tc_flow *flow,
+mlx5_tc_ct_flow_offload(struct mlx5_tc_ct_priv *priv,
 			struct mlx5_flow_spec *spec,
-			struct mlx5_esw_flow_attr *attr,
+			struct mlx5_flow_attr *attr,
 			struct mlx5e_tc_mod_hdr_acts *mod_hdr_acts);
 void
-mlx5_tc_ct_delete_flow(struct mlx5e_priv *priv,
-		       struct mlx5e_tc_flow *flow,
-		       struct mlx5_esw_flow_attr *attr);
+mlx5_tc_ct_delete_flow(struct mlx5_tc_ct_priv *priv,
+		       struct mlx5_flow_attr *attr);
 
 bool
-mlx5e_tc_ct_restore_flow(struct mlx5_rep_uplink_priv *uplink_priv,
-			 struct sk_buff *skb, u32 tupleid);
+mlx5e_tc_ct_restore_flow(struct mlx5_tc_ct_priv *ct_priv,
+			 struct sk_buff *skb, u8 zone_restore_id);
+
+int
+mlx5_tc_ct_set_ct_clear_regs(struct mlx5_tc_ct_priv *priv,
+			     struct mlx5e_tc_mod_hdr_acts *mod_acts);
 
 #else /* CONFIG_MLX5_TC_CT */
 
-static inline int
-mlx5_tc_ct_init(struct mlx5_rep_uplink_priv *uplink_priv)
+static inline struct mlx5_tc_ct_priv *
+mlx5_tc_ct_init(struct mlx5e_priv *priv, struct mlx5_fs_chains *chains,
+		struct mod_hdr_tbl *mod_hdr,
+		enum mlx5_flow_namespace_type ns_type,
+		struct mlx5e_post_act *post_act)
 {
-	return 0;
+	return NULL;
 }
 
 static inline void
-mlx5_tc_ct_clean(struct mlx5_rep_uplink_priv *uplink_priv)
+mlx5_tc_ct_clean(struct mlx5_tc_ct_priv *ct_priv)
 {
 }
 
+static inline void
+mlx5_tc_ct_match_del(struct mlx5_tc_ct_priv *priv, struct mlx5_ct_attr *ct_attr) {}
+
 static inline int
-mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
-		       struct mlx5_flow_spec *spec,
-		       struct flow_cls_offload *f,
-		       struct netlink_ext_ack *extack)
+mlx5_tc_ct_match_add(struct mlx5_tc_ct_priv *priv,
+		     struct mlx5_flow_spec *spec,
+		     struct flow_cls_offload *f,
+		     struct mlx5_ct_attr *ct_attr,
+		     struct netlink_ext_ack *extack)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(f);
 
@@ -136,44 +165,54 @@ mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
 		return 0;
 
 	NL_SET_ERR_MSG_MOD(extack, "mlx5 tc ct offload isn't enabled.");
-	netdev_warn(priv->netdev, "mlx5 tc ct offload isn't enabled.\n");
 	return -EOPNOTSUPP;
 }
 
 static inline int
-mlx5_tc_ct_parse_action(struct mlx5e_priv *priv,
-			struct mlx5_esw_flow_attr *attr,
+mlx5_tc_ct_add_no_trk_match(struct mlx5_flow_spec *spec)
+{
+	return 0;
+}
+
+static inline int
+mlx5_tc_ct_set_ct_clear_regs(struct mlx5_tc_ct_priv *priv,
+			     struct mlx5e_tc_mod_hdr_acts *mod_acts)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int
+mlx5_tc_ct_parse_action(struct mlx5_tc_ct_priv *priv,
+			struct mlx5_flow_attr *attr,
+			struct mlx5e_tc_mod_hdr_acts *mod_acts,
 			const struct flow_action_entry *act,
 			struct netlink_ext_ack *extack)
 {
 	NL_SET_ERR_MSG_MOD(extack, "mlx5 tc ct offload isn't enabled.");
-	netdev_warn(priv->netdev, "mlx5 tc ct offload isn't enabled.\n");
 	return -EOPNOTSUPP;
 }
 
 static inline struct mlx5_flow_handle *
-mlx5_tc_ct_flow_offload(struct mlx5e_priv *priv,
-			struct mlx5e_tc_flow *flow,
+mlx5_tc_ct_flow_offload(struct mlx5_tc_ct_priv *priv,
 			struct mlx5_flow_spec *spec,
-			struct mlx5_esw_flow_attr *attr,
+			struct mlx5_flow_attr *attr,
 			struct mlx5e_tc_mod_hdr_acts *mod_hdr_acts)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
 static inline void
-mlx5_tc_ct_delete_flow(struct mlx5e_priv *priv,
-		       struct mlx5e_tc_flow *flow,
-		       struct mlx5_esw_flow_attr *attr)
+mlx5_tc_ct_delete_flow(struct mlx5_tc_ct_priv *priv,
+		       struct mlx5_flow_attr *attr)
 {
 }
 
 static inline bool
-mlx5e_tc_ct_restore_flow(struct mlx5_rep_uplink_priv *uplink_priv,
-			 struct sk_buff *skb, u32 tupleid)
+mlx5e_tc_ct_restore_flow(struct mlx5_tc_ct_priv *ct_priv,
+			 struct sk_buff *skb, u8 zone_restore_id)
 {
-	if  (!tupleid)
-		return  true;
+	if (!zone_restore_id)
+		return true;
 
 	return false;
 }

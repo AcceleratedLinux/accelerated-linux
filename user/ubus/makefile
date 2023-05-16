@@ -1,5 +1,5 @@
-URL      = git://nbd.name/luci2/ubus.git
-VERSION  = 2d660c519d2fcff95248da9f4fd9b37d61f9eb09
+URL      = https://git.openwrt.org/project/ubus.git
+VERSION  = 221ce7e7ff1bd1a0c9995fa9d32f58e865f7207f
 METHOD   = git
 CMAKE_OPTS = -DBUILD_LUA=0 -DBUILD_EXAMPLES=0 -DENABLE_SYSTEMD=0
 

@@ -3,7 +3,7 @@
  *
  * Name: acglobal.h - Declarations for global variables
  *
- * Copyright (C) 2000 - 2020, Intel Corp.
+ * Copyright (C) 2000 - 2022, Intel Corp.
  *
  *****************************************************************************/
 
@@ -41,6 +41,12 @@ ACPI_GLOBAL(struct acpi_generic_address, acpi_gbl_xpm1a_enable);
 
 ACPI_GLOBAL(struct acpi_generic_address, acpi_gbl_xpm1b_status);
 ACPI_GLOBAL(struct acpi_generic_address, acpi_gbl_xpm1b_enable);
+
+#ifdef ACPI_GPE_USE_LOGICAL_ADDRESSES
+ACPI_GLOBAL(unsigned long, acpi_gbl_xgpe0_block_logical_address);
+ACPI_GLOBAL(unsigned long, acpi_gbl_xgpe1_block_logical_address);
+
+#endif				/* ACPI_GPE_USE_LOGICAL_ADDRESSES */
 
 /*
  * Handle both ACPI 1.0 and ACPI 2.0+ Integer widths. The integer width is
@@ -220,6 +226,8 @@ extern struct acpi_bit_register_info
     acpi_gbl_bit_register_info[ACPI_NUM_BITREG];
 ACPI_GLOBAL(u8, acpi_gbl_sleep_type_a);
 ACPI_GLOBAL(u8, acpi_gbl_sleep_type_b);
+ACPI_GLOBAL(u8, acpi_gbl_sleep_type_a_s0);
+ACPI_GLOBAL(u8, acpi_gbl_sleep_type_b_s0);
 
 /*****************************************************************************
  *

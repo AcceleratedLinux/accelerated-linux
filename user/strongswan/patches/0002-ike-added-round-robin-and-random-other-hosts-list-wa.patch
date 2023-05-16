@@ -1,0 +1,304 @@
+From 5440894037bfca1ade09903ad1ca88cb52340b7a Mon Sep 17 00:00:00 2001
+From: Samuel Brian <samuel.brian@digi.com>
+Date: Tue, 30 Mar 2021 15:46:29 +1000
+Subject: ike: added round-robin and random "other hosts" list walking
+ functionality
+
+Previously, you could set a remote endpoint in ipsec.conf as a
+comma-separated list of hostname. When starting the IPsec tunnel,
+strongswan would choose the first hostname to resolve (or IP address).
+
+This commit adds a round-robin list-walking mechanism to try to connect
+with each hostname in order, and a random selection mechanism.
+
+The options are "priority" (the original behaviour), "random", and
+"roundrobin", and can be set via ipsec.conf e.g.:
+
+	right=ipsec1.blah.com,ipsec2.blah.com,ipsec3.blah.com
+	righthostsequence=random
+---
+ src/libcharon/config/ike_cfg.c               | 48 ++++++++++++++++++--
+ src/libcharon/config/ike_cfg.h               |  7 +++
+ src/libcharon/plugins/stroke/stroke_config.c |  1 +
+ src/starter/args.c                           |  8 ++++
+ src/starter/confread.c                       |  3 ++
+ src/starter/confread.h                       |  8 ++++
+ src/starter/keywords.h.in                    |  3 ++
+ src/starter/keywords.txt                     |  2 +
+ src/starter/starterstroke.c                  |  1 +
+ src/stroke/stroke_msg.h                      |  1 +
+ 10 files changed, 77 insertions(+), 5 deletions(-)
+
+diff --git a/src/libcharon/config/ike_cfg.c b/src/libcharon/config/ike_cfg.c
+index 79a344e45..6f593d131 100644
+--- a/src/libcharon/config/ike_cfg.c
++++ b/src/libcharon/config/ike_cfg.c
+@@ -70,6 +70,17 @@ struct private_ike_cfg_t {
+ 	 */
+ 	linked_list_t *other_hosts;
+ 
++	/**
++	 * The sequence used to select a candidate host from 'other_hosts'
++	 */
++	hosts_sequence_t other_hosts_sequence;
++
++	/**
++	 * The index of the next candidate host in 'other_hosts' when using
++	 * round-robin sequencing
++	 */
++	int other_hosts_index;
++
+ 	/**
+ 	 * Local ranges/subnets this config matches to, as traffic_selector_t*
+ 	 */
+@@ -154,22 +165,30 @@ METHOD(ike_cfg_t, childless, childless_t,
+ /**
+  * Common function for resolve_me/other
+  */
+-static host_t* resolve(linked_list_t *hosts, int family, uint16_t port)
++static host_t* resolve(linked_list_t *hosts, int family, uint16_t port, int hosts_index)
+ {
+ 	enumerator_t *enumerator;
+ 	host_t *host = NULL;
+ 	bool tried = FALSE;
+ 	char *str;
++	int i = 0;
+ 
+ 	enumerator = hosts->create_enumerator(hosts);
+ 	while (enumerator->enumerate(enumerator, &str))
+ 	{
++		tried = TRUE;
++
++		if (i++ < hosts_index)
++		{
++			continue;
++		}
++
++		DBG1(DBG_CFG, "resolving host: %s", str);
+ 		host = host_create_from_dns(str, family, port);
+-		if (host)
++		if (host || hosts_index != -1)
+ 		{
+ 			break;
+ 		}
+-		tried = TRUE;
+ 	}
+ 	enumerator->destroy(enumerator);
+ 
+@@ -185,13 +204,30 @@ static host_t* resolve(linked_list_t *hosts, int family, uint16_t port)
+ METHOD(ike_cfg_t, resolve_me, host_t*,
+ 	private_ike_cfg_t *this, int family)
+ {
+-	return resolve(this->my_hosts, family, this->my_port);
++	return resolve(this->my_hosts, family, this->my_port, -1);
+ }
+ 
+ METHOD(ike_cfg_t, resolve_other, host_t*,
+ 	private_ike_cfg_t *this, int family)
+ {
+-	return resolve(this->other_hosts, family, this->other_port);
++	if (this->other_hosts_sequence == HOSTS_SEQUENCE_PRIORITY)
++	{
++		DBG1(DBG_CFG, "priority hosts sequence: starting at first host");
++		this->other_hosts_index = -1;
++	}
++	else if (this->other_hosts_sequence == HOSTS_SEQUENCE_RANDOM)
++	{
++		DBG1(DBG_CFG, "randomised hosts sequence");
++		this->other_hosts_index = random();
++	}
++	else
++	{
++		DBG1(DBG_CFG, "round-robin hosts sequence");
++	}
++
++	this->other_hosts_index %= this->other_hosts->get_count(this->other_hosts);
++
++	return resolve(this->other_hosts, family, this->other_port, this->other_hosts_index++);
+ }
+ 
+ /**
+@@ -619,6 +655,8 @@ ike_cfg_t *ike_cfg_create(ike_cfg_create_t *data)
+ 		.other = strdup(data->remote),
+ 		.other_ranges = linked_list_create(),
+ 		.other_hosts = linked_list_create(),
++		.other_hosts_index = 0,
++		.other_hosts_sequence = data->remote_hosts_sequence,
+ 		.my_port = data->local_port,
+ 		.other_port = data->remote_port,
+ 		.dscp = data->dscp,
+diff --git a/src/libcharon/config/ike_cfg.h b/src/libcharon/config/ike_cfg.h
+index 1e11a1e56..0287ff2bf 100644
+--- a/src/libcharon/config/ike_cfg.h
++++ b/src/libcharon/config/ike_cfg.h
+@@ -74,6 +74,12 @@ enum childless_t {
+ 	CHILDLESS_FORCE,
+ };
+ 
++typedef enum {
++	HOSTS_SEQUENCE_PRIORITY,
++	HOSTS_SEQUENCE_ROUNDROBIN,
++	HOSTS_SEQUENCE_RANDOM,
++} hosts_sequence_t;
++
+ /**
+  * enum strings for ike_version_t
+  */
+@@ -277,6 +283,7 @@ struct ike_cfg_create_t {
+ 	uint16_t local_port;
+ 	/** Address/DNS name of remote peer (cloned) */
+ 	char *remote;
++	hosts_sequence_t remote_hosts_sequence;
+ 	/** IKE port to use as dest, 500 uses IKEv2 port floating */
+ 	uint16_t remote_port;
+ 	/** TRUE to not send any certificate requests */
+diff --git a/src/libcharon/plugins/stroke/stroke_config.c b/src/libcharon/plugins/stroke/stroke_config.c
+index 0d746c269..ac938e352 100644
+--- a/src/libcharon/plugins/stroke/stroke_config.c
++++ b/src/libcharon/plugins/stroke/stroke_config.c
+@@ -272,6 +272,7 @@ static ike_cfg_t *build_ike_cfg(private_stroke_config_t *this, stroke_msg_t *msg
+ 		.local_port = msg->add_conn.me.ikeport,
+ 		.remote = msg->add_conn.other.address,
+ 		.remote_port = msg->add_conn.other.ikeport,
++		.remote_hosts_sequence = msg->add_conn.other.hosts_sequence,
+ 		.no_certreq = msg->add_conn.other.sendcert == CERT_NEVER_SEND,
+ 		.force_encap = msg->add_conn.force_encap,
+ 		.fragmentation = msg->add_conn.fragmentation,
+diff --git a/src/starter/args.c b/src/starter/args.c
+index 342e57961..9efa4e375 100644
+--- a/src/starter/args.c
++++ b/src/starter/args.c
+@@ -47,6 +47,13 @@ static const char *LST_bool[] = {
+ 	 NULL
+ };
+ 
++static const char *LST_hosts_sequence[] = {
++	"priority",
++	"roundrobin",
++	"random",
++	 NULL
++};
++
+ static const char *LST_sendcert[] = {
+ 	"always",
+ 	"ifasked",
+@@ -198,6 +205,7 @@ static const token_info_t token_info[] =
+ 
+ 	/* end keywords */
+ 	{ ARG_STR,  offsetof(starter_end_t, host), NULL                                },
++	{ ARG_ENUM, offsetof(starter_end_t, hosts_sequence), LST_hosts_sequence        },
+ 	{ ARG_UINT, offsetof(starter_end_t, ikeport), NULL                             },
+ 	{ ARG_STR,  offsetof(starter_end_t, subnet), NULL                              },
+ 	{ ARG_MISC, 0, NULL  /* KW_PROTOPORT */                                        },
+diff --git a/src/starter/confread.c b/src/starter/confread.c
+index ac530dc69..b6373e85d 100644
+--- a/src/starter/confread.c
++++ b/src/starter/confread.c
+@@ -223,6 +223,9 @@ static void conn_defaults(starter_conn_t *conn)
+ 
+ 	conn->left.to_port = 0xffff;
+ 	conn->right.to_port = 0xffff;
++
++	conn->left.hosts_sequence = HOSTS_SEQUENCE_PRIORITY;
++	conn->right.hosts_sequence = HOSTS_SEQUENCE_PRIORITY;
+ }
+ 
+ /*
+diff --git a/src/starter/confread.h b/src/starter/confread.h
+index 825a12e19..1cf08beca 100644
+--- a/src/starter/confread.h
++++ b/src/starter/confread.h
+@@ -83,6 +83,13 @@ typedef enum {
+ 		SA_OPTION_FORCE_ENCAP   = 1 << 7, /* force UDP encapsulation */
+ } sa_option_t;
+ 
++typedef enum {
++	/* same as in ike_cfg.h */
++	HOSTS_SEQUENCE_PRIORITY,
++	HOSTS_SEQUENCE_ROUNDROBIN,
++	HOSTS_SEQUENCE_RANDOM,
++} hosts_sequence_t;
++
+ typedef struct starter_end starter_end_t;
+ 
+ struct starter_end {
+@@ -99,6 +106,7 @@ struct starter_end {
+ 		char            *groups2;
+ 		char            *cert_policy;
+ 		char            *host;
++		hosts_sequence_t hosts_sequence;
+ 		u_int           ikeport;
+ 		char            *subnet;
+ 		bool            modecfg;
+diff --git a/src/starter/keywords.h.in b/src/starter/keywords.h.in
+index c0dbaff01..bc28f6984 100644
+--- a/src/starter/keywords.h.in
++++ b/src/starter/keywords.h.in
+@@ -103,6 +103,7 @@ enum kw_token_t {
+ 
+ 	/* end keywords */
+ 	KW_HOST,
++	KW_HOSTSSEQUENCE,
+ 	KW_IKEPORT,
+ 	KW_SUBNET,
+ 	KW_PROTOPORT,
+@@ -132,6 +133,7 @@ enum kw_token_t {
+ 
+ 	/* left end keywords */
+ 	KW_LEFT,
++	KW_LEFTHOSTSSEQUENCE,
+ 	KW_LEFTIKEPORT,
+ 	KW_LEFTSUBNET,
+ 	KW_LEFTPROTOPORT,
+@@ -161,6 +163,7 @@ enum kw_token_t {
+ 
+ 	/* right end keywords */
+ 	KW_RIGHT,
++	KW_RIGHTHOSTSSEQUENCE,
+ 	KW_RIGHTIKEPORT,
+ 	KW_RIGHTSUBNET,
+ 	KW_RIGHTPROTOPORT,
+diff --git a/src/starter/keywords.txt b/src/starter/keywords.txt
+index 3cf30ab4e..1461339a4 100644
+--- a/src/starter/keywords.txt
++++ b/src/starter/keywords.txt
+@@ -88,6 +88,7 @@ ocspuri1,          KW_OCSPURI
+ ocspuri2,          KW_OCSPURI2
+ certuribase,       KW_CERTURIBASE
+ left,              KW_LEFT
++lefthostssequence, KW_LEFTHOSTSSEQUENCE
+ leftikeport,       KW_LEFTIKEPORT
+ leftsubnet,        KW_LEFTSUBNET
+ leftsubnetwithin,  KW_LEFTSUBNET
+@@ -113,6 +114,7 @@ leftca2,           KW_LEFTCA2
+ leftgroups,        KW_LEFTGROUPS
+ leftgroups2,       KW_LEFTGROUPS2
+ right,             KW_RIGHT
++righthostssequence,KW_RIGHTHOSTSSEQUENCE
+ rightikeport,      KW_RIGHTIKEPORT
+ rightsubnet,       KW_RIGHTSUBNET
+ rightsubnetwithin, KW_RIGHTSUBNET
+diff --git a/src/starter/starterstroke.c b/src/starter/starterstroke.c
+index cf591796a..c6d6c9713 100644
+--- a/src/starter/starterstroke.c
++++ b/src/starter/starterstroke.c
+@@ -165,6 +165,7 @@ static void add_end(stroke_msg_t **msg, size_t offset, starter_end_t *conn_end)
+ 
+ 	/* we can't assign it earlier as msg might change */
+ 	msg_end = (stroke_end_t*)((char*)(*msg) + offset);
++	msg_end->hosts_sequence = conn_end->hosts_sequence;
+ 	msg_end->ikeport = conn_end->ikeport;
+ 	msg_end->sendcert = conn_end->sendcert;
+ 	msg_end->hostaccess = conn_end->hostaccess;
+diff --git a/src/stroke/stroke_msg.h b/src/stroke/stroke_msg.h
+index 862b3d7d9..52149313c 100644
+--- a/src/stroke/stroke_msg.h
++++ b/src/stroke/stroke_msg.h
+@@ -158,6 +158,7 @@ struct stroke_end_t {
+ 	char *updown;
+ 	char *address;
+ 	uint16_t ikeport;
++	int hosts_sequence;
+ 	char *sourceip;
+ 	char *dns;
+ 	char *subnets;
