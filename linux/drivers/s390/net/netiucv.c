@@ -47,7 +47,7 @@
 #include <linux/ctype.h>
 #include <net/dst.h>
 
-#include <asm/io.h>
+#include <linux/io.h>
 #include <linux/uaccess.h>
 #include <asm/ebcdic.h>
 
@@ -1248,15 +1248,8 @@ static int netiucv_close(struct net_device *dev)
 /*
  * Start transmission of a packet.
  * Called from generic network device layer.
- *
- * @param skb Pointer to buffer containing the packet.
- * @param dev Pointer to interface struct.
- *
- * @return 0 if packet consumed, !0 if packet rejected.
- *         Note: If we return !0, then the packet is free'd by
- *               the generic network layer.
  */
-static int netiucv_tx(struct sk_buff *skb, struct net_device *dev)
+static netdev_tx_t netiucv_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct netiucv_priv *privptr = netdev_priv(dev);
 	int rc;
@@ -1703,26 +1696,14 @@ static const struct attribute_group *netiucv_attr_groups[] = {
 static int netiucv_register_device(struct net_device *ndev)
 {
 	struct netiucv_priv *priv = netdev_priv(ndev);
-	struct device *dev = kzalloc(sizeof(struct device), GFP_KERNEL);
+	struct device *dev;
 	int ret;
 
 	IUCV_DBF_TEXT(trace, 3, __func__);
 
-	if (dev) {
-		dev_set_name(dev, "net%s", ndev->name);
-		dev->bus = &iucv_bus;
-		dev->parent = iucv_root;
-		dev->groups = netiucv_attr_groups;
-		/*
-		 * The release function could be called after the
-		 * module has been unloaded. It's _only_ task is to
-		 * free the struct. Therefore, we specify kfree()
-		 * directly here. (Probably a little bit obfuscating
-		 * but legitime ...).
-		 */
-		dev->release = (void (*)(struct device *))kfree;
-		dev->driver = &netiucv_driver;
-	} else
+	dev = iucv_alloc_device(netiucv_attr_groups, &netiucv_driver, NULL,
+				"net%s", ndev->name);
+	if (!dev)
 		return -ENOMEM;
 
 	ret = device_register(dev);

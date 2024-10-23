@@ -134,11 +134,6 @@ static inline unsigned p2m_mid_index(unsigned long pfn)
 	return (pfn / P2M_PER_PAGE) % P2M_MID_PER_PAGE;
 }
 
-static inline unsigned p2m_index(unsigned long pfn)
-{
-	return pfn % P2M_PER_PAGE;
-}
-
 static void p2m_top_mfn_init(unsigned long *top)
 {
 	unsigned i;
@@ -560,7 +555,6 @@ int xen_alloc_p2m_entry(unsigned long pfn)
 			/* Separately check the mid mfn level */
 			unsigned long missing_mfn;
 			unsigned long mid_mfn_mfn;
-			unsigned long old_mfn;
 
 			mid_mfn = alloc_p2m_page();
 			if (!mid_mfn)
@@ -570,12 +564,12 @@ int xen_alloc_p2m_entry(unsigned long pfn)
 
 			missing_mfn = virt_to_mfn(p2m_mid_missing_mfn);
 			mid_mfn_mfn = virt_to_mfn(mid_mfn);
-			old_mfn = cmpxchg(top_mfn_p, missing_mfn, mid_mfn_mfn);
-			if (old_mfn != missing_mfn) {
-				free_p2m_page(mid_mfn);
-				mid_mfn = mfn_to_virt(old_mfn);
-			} else {
+			/* try_cmpxchg() updates missing_mfn on failure. */
+			if (try_cmpxchg(top_mfn_p, &missing_mfn, mid_mfn_mfn)) {
 				p2m_top_mfn_p[topidx] = mid_mfn;
+			} else {
+				free_p2m_page(mid_mfn);
+				mid_mfn = mfn_to_virt(missing_mfn);
 			}
 		}
 	} else {

@@ -1,5 +1,5 @@
 
-URL = http://ftp.gnu.org/gnu/gettext/gettext-0.19.8.1.tar.gz
+URL = https://ftp.gnu.org/gnu/gettext/gettext-0.19.8.1.tar.gz
 
 CONFOPTS =  --disable-libasprintf --disable-openmp --disable-rpath 
 CONFOPTS += --disable-java --disable-native-java --disable-csharp

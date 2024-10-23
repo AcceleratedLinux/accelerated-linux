@@ -11,7 +11,6 @@ struct page;
 struct zone;
 struct pglist_data;
 struct mem_section;
-struct memory_block;
 struct memory_group;
 struct resource;
 struct vmem_altmap;
@@ -44,11 +43,6 @@ extern void arch_refresh_nodedata(int nid, pg_data_t *pgdat);
 ({								\
 	memblock_alloc(sizeof(*pgdat), SMP_CACHE_BYTES);	\
 })
-/*
- * This definition is just for error path in node hotadd.
- * For node hotremove, we have to replace this.
- */
-#define generic_free_nodedata(pgdat)	kfree(pgdat)
 
 extern pg_data_t *node_data[];
 static inline void arch_refresh_nodedata(int nid, pg_data_t *pgdat)
@@ -63,9 +57,6 @@ static inline pg_data_t *generic_alloc_nodedata(int nid)
 {
 	BUG();
 	return NULL;
-}
-static inline void generic_free_nodedata(pg_data_t *pgdat)
-{
 }
 static inline void arch_refresh_nodedata(int nid, pg_data_t *pgdat)
 {
@@ -106,6 +97,8 @@ typedef int __bitwise mhp_t;
  * To do so, we will use the beginning of the hot-added range to build
  * the page tables for the memmap array that describes the entire range.
  * Only selected architectures support it with SPARSE_VMEMMAP.
+ * This is only a hint, the core kernel can decide to not do this based on
+ * different alignment checks.
  */
 #define MHP_MEMMAP_ON_MEMORY   ((__force mhp_t)BIT(1))
 /*
@@ -113,6 +106,22 @@ typedef int __bitwise mhp_t;
  * implies the node id (nid).
  */
 #define MHP_NID_IS_MGID		((__force mhp_t)BIT(2))
+/*
+ * The hotplugged memory is completely inaccessible while the memory is
+ * offline. The memory provider will handle MEM_PREPARE_ONLINE /
+ * MEM_FINISH_OFFLINE notifications and make the memory accessible.
+ *
+ * This flag is only relevant when used along with MHP_MEMMAP_ON_MEMORY,
+ * because the altmap cannot be written (e.g., poisoned) when adding
+ * memory -- before it is set online.
+ *
+ * This allows for adding memory with an altmap that is not currently
+ * made available by a hypervisor. When onlining that memory, the
+ * hypervisor can be instructed to make that memory available, and
+ * the onlining phase will not require any memory allocations, which is
+ * helpful in low-memory situations.
+ */
+#define MHP_OFFLINE_INACCESSIBLE	((__force mhp_t)BIT(3))
 
 /*
  * Extended parameters for memory hotplug:
@@ -128,6 +137,7 @@ struct mhp_params {
 
 bool mhp_range_allowed(u64 start, u64 size, bool need_mapping);
 struct range mhp_get_pluggable_range(bool need_mapping);
+bool mhp_supports_memmap_on_memory(void);
 
 /*
  * Zone resizing functions
@@ -161,7 +171,7 @@ extern void adjust_present_page_count(struct page *page,
 				      long nr_pages);
 /* VM interface that may be used by firmware interface */
 extern int mhp_init_memmap_on_memory(unsigned long pfn, unsigned long nr_pages,
-				     struct zone *zone);
+				     struct zone *zone, bool mhp_off_inaccessible);
 extern void mhp_deinit_memmap_on_memory(unsigned long pfn, unsigned long nr_pages);
 extern int online_pages(unsigned long pfn, unsigned long nr_pages,
 			struct zone *zone, struct memory_group *group);
@@ -216,6 +226,22 @@ void put_online_mems(void);
 void mem_hotplug_begin(void);
 void mem_hotplug_done(void);
 
+/* See kswapd_is_running() */
+static inline void pgdat_kswapd_lock(pg_data_t *pgdat)
+{
+	mutex_lock(&pgdat->kswapd_lock);
+}
+
+static inline void pgdat_kswapd_unlock(pg_data_t *pgdat)
+{
+	mutex_unlock(&pgdat->kswapd_lock);
+}
+
+static inline void pgdat_kswapd_lock_init(pg_data_t *pgdat)
+{
+	mutex_init(&pgdat->kswapd_lock);
+}
+
 #else /* ! CONFIG_MEMORY_HOTPLUG */
 #define pfn_to_online_page(pfn)			\
 ({						\
@@ -252,6 +278,15 @@ static inline bool movable_node_is_enabled(void)
 {
 	return false;
 }
+
+static inline bool mhp_supports_memmap_on_memory(void)
+{
+	return false;
+}
+
+static inline void pgdat_kswapd_lock(pg_data_t *pgdat) {}
+static inline void pgdat_kswapd_unlock(pg_data_t *pgdat) {}
+static inline void pgdat_kswapd_lock_init(pg_data_t *pgdat) {}
 #endif /* ! CONFIG_MEMORY_HOTPLUG */
 
 /*
@@ -315,9 +350,6 @@ static inline int remove_memory(u64 start, u64 size)
 static inline void __remove_memory(u64 start, u64 size) {}
 #endif /* CONFIG_MEMORY_HOTREMOVE */
 
-extern void set_zone_contiguous(struct zone *zone);
-extern void clear_zone_contiguous(struct zone *zone);
-
 #ifdef CONFIG_MEMORY_HOTPLUG
 extern void __ref free_area_init_core_hotplug(struct pglist_data *pgdat);
 extern int __add_memory(int nid, u64 start, u64 size, mhp_t mhp_flags);
@@ -333,13 +365,11 @@ extern void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 extern void remove_pfn_range_from_zone(struct zone *zone,
 				       unsigned long start_pfn,
 				       unsigned long nr_pages);
-extern bool is_memblock_offlined(struct memory_block *mem);
 extern int sparse_add_section(int nid, unsigned long pfn,
 		unsigned long nr_pages, struct vmem_altmap *altmap,
 		struct dev_pagemap *pgmap);
-extern void sparse_remove_section(struct mem_section *ms,
-		unsigned long pfn, unsigned long nr_pages,
-		unsigned long map_offset, struct vmem_altmap *altmap);
+extern void sparse_remove_section(unsigned long pfn, unsigned long nr_pages,
+				  struct vmem_altmap *altmap);
 extern struct page *sparse_decode_mem_map(unsigned long coded_mem_map,
 					  unsigned long pnum);
 extern struct zone *zone_for_pfn_range(int online_type, int nid,
@@ -348,16 +378,6 @@ extern struct zone *zone_for_pfn_range(int online_type, int nid,
 extern int arch_create_linear_mapping(int nid, u64 start, u64 size,
 				      struct mhp_params *params);
 void arch_remove_linear_mapping(u64 start, u64 size);
-extern bool mhp_supports_memmap_on_memory(unsigned long size);
 #endif /* CONFIG_MEMORY_HOTPLUG */
-
-#ifdef CONFIG_MHP_MEMMAP_ON_MEMORY
-bool mhp_memmap_on_memory(void);
-#else
-static inline bool mhp_memmap_on_memory(void)
-{
-	return false;
-}
-#endif
 
 #endif /* __LINUX_MEMORY_HOTPLUG_H */

@@ -12,7 +12,47 @@
 
 #include <linux/kvm_host.h>
 #include <asm/kvm_emulate.h>
+#include <asm/kvm_nested.h>
 #include <asm/esr.h>
+
+static void pend_sync_exception(struct kvm_vcpu *vcpu)
+{
+	/* If not nesting, EL1 is the only possible exception target */
+	if (likely(!vcpu_has_nv(vcpu))) {
+		kvm_pend_exception(vcpu, EXCEPT_AA64_EL1_SYNC);
+		return;
+	}
+
+	/*
+	 * With NV, we need to pick between EL1 and EL2. Note that we
+	 * never deal with a nesting exception here, hence never
+	 * changing context, and the exception itself can be delayed
+	 * until the next entry.
+	 */
+	switch(*vcpu_cpsr(vcpu) & PSR_MODE_MASK) {
+	case PSR_MODE_EL2h:
+	case PSR_MODE_EL2t:
+		kvm_pend_exception(vcpu, EXCEPT_AA64_EL2_SYNC);
+		break;
+	case PSR_MODE_EL1h:
+	case PSR_MODE_EL1t:
+		kvm_pend_exception(vcpu, EXCEPT_AA64_EL1_SYNC);
+		break;
+	case PSR_MODE_EL0t:
+		if (vcpu_el2_tge_is_set(vcpu))
+			kvm_pend_exception(vcpu, EXCEPT_AA64_EL2_SYNC);
+		else
+			kvm_pend_exception(vcpu, EXCEPT_AA64_EL1_SYNC);
+		break;
+	default:
+		BUG();
+	}
+}
+
+static bool match_target_el(struct kvm_vcpu *vcpu, unsigned long target)
+{
+	return (vcpu_get_flag(vcpu, EXCEPT_MASK) == target);
+}
 
 static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr)
 {
@@ -20,11 +60,7 @@ static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr
 	bool is_aarch32 = vcpu_mode_is_32bit(vcpu);
 	u64 esr = 0;
 
-	vcpu->arch.flags |= (KVM_ARM64_EXCEPT_AA64_EL1		|
-			     KVM_ARM64_EXCEPT_AA64_ELx_SYNC	|
-			     KVM_ARM64_PENDING_EXCEPTION);
-
-	vcpu_write_sys_reg(vcpu, addr, FAR_EL1);
+	pend_sync_exception(vcpu);
 
 	/*
 	 * Build an {i,d}abort, depending on the level and the
@@ -45,16 +81,22 @@ static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr
 	if (!is_iabt)
 		esr |= ESR_ELx_EC_DABT_LOW << ESR_ELx_EC_SHIFT;
 
-	vcpu_write_sys_reg(vcpu, esr | ESR_ELx_FSC_EXTABT, ESR_EL1);
+	esr |= ESR_ELx_FSC_EXTABT;
+
+	if (match_target_el(vcpu, unpack_vcpu_flag(EXCEPT_AA64_EL1_SYNC))) {
+		vcpu_write_sys_reg(vcpu, addr, FAR_EL1);
+		vcpu_write_sys_reg(vcpu, esr, ESR_EL1);
+	} else {
+		vcpu_write_sys_reg(vcpu, addr, FAR_EL2);
+		vcpu_write_sys_reg(vcpu, esr, ESR_EL2);
+	}
 }
 
 static void inject_undef64(struct kvm_vcpu *vcpu)
 {
 	u64 esr = (ESR_ELx_EC_UNKNOWN << ESR_ELx_EC_SHIFT);
 
-	vcpu->arch.flags |= (KVM_ARM64_EXCEPT_AA64_EL1		|
-			     KVM_ARM64_EXCEPT_AA64_ELx_SYNC	|
-			     KVM_ARM64_PENDING_EXCEPTION);
+	pend_sync_exception(vcpu);
 
 	/*
 	 * Build an unknown exception, depending on the instruction
@@ -63,7 +105,10 @@ static void inject_undef64(struct kvm_vcpu *vcpu)
 	if (kvm_vcpu_trap_il_is32bit(vcpu))
 		esr |= ESR_ELx_IL;
 
-	vcpu_write_sys_reg(vcpu, esr, ESR_EL1);
+	if (match_target_el(vcpu, unpack_vcpu_flag(EXCEPT_AA64_EL1_SYNC)))
+		vcpu_write_sys_reg(vcpu, esr, ESR_EL1);
+	else
+		vcpu_write_sys_reg(vcpu, esr, ESR_EL2);
 }
 
 #define DFSR_FSC_EXTABT_LPAE	0x10
@@ -73,8 +118,7 @@ static void inject_undef64(struct kvm_vcpu *vcpu)
 
 static void inject_undef32(struct kvm_vcpu *vcpu)
 {
-	vcpu->arch.flags |= (KVM_ARM64_EXCEPT_AA32_UND |
-			     KVM_ARM64_PENDING_EXCEPTION);
+	kvm_pend_exception(vcpu, EXCEPT_AA32_UND);
 }
 
 /*
@@ -90,21 +134,19 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt, u32 addr)
 	if (vcpu_read_sys_reg(vcpu, TCR_EL1) & TTBCR_EAE) {
 		fsr = DFSR_LPAE | DFSR_FSC_EXTABT_LPAE;
 	} else {
-		/* no need to shuffle FS[4] into DFSR[10] as its 0 */
+		/* no need to shuffle FS[4] into DFSR[10] as it's 0 */
 		fsr = DFSR_FSC_EXTABT_nLPAE;
 	}
 
 	far = vcpu_read_sys_reg(vcpu, FAR_EL1);
 
 	if (is_pabt) {
-		vcpu->arch.flags |= (KVM_ARM64_EXCEPT_AA32_IABT |
-				     KVM_ARM64_PENDING_EXCEPTION);
+		kvm_pend_exception(vcpu, EXCEPT_AA32_IABT);
 		far &= GENMASK(31, 0);
 		far |= (u64)addr << 32;
 		vcpu_write_sys_reg(vcpu, fsr, IFSR32_EL2);
 	} else { /* !iabt */
-		vcpu->arch.flags |= (KVM_ARM64_EXCEPT_AA32_DABT |
-				     KVM_ARM64_PENDING_EXCEPTION);
+		kvm_pend_exception(vcpu, EXCEPT_AA32_DABT);
 		far &= GENMASK(63, 32);
 		far |= addr;
 		vcpu_write_sys_reg(vcpu, fsr, ESR_EL1);
@@ -162,7 +204,7 @@ void kvm_inject_size_fault(struct kvm_vcpu *vcpu)
 	 * Size Fault at level 0, as if exceeding PARange.
 	 *
 	 * Non-LPAE guests will only get the external abort, as there
-	 * is no way to to describe the ASF.
+	 * is no way to describe the ASF.
 	 */
 	if (vcpu_el1_is_32bit(vcpu) &&
 	    !(vcpu_read_sys_reg(vcpu, TCR_EL1) & TTBCR_EAE))

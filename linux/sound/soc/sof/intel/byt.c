@@ -3,7 +3,7 @@
 // This file is provided under a dual BSD/GPLv2 license.  When using or
 // redistributing this file, you may do so under either license.
 //
-// Copyright(c) 2018 Intel Corporation. All rights reserved.
+// Copyright(c) 2018 Intel Corporation
 //
 // Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
 //
@@ -100,11 +100,9 @@ static int byt_resume(struct snd_sof_dev *sdev)
 	return 0;
 }
 
-static int byt_remove(struct snd_sof_dev *sdev)
+static void byt_remove(struct snd_sof_dev *sdev)
 {
 	byt_reset_dsp_disable_int(sdev);
-
-	return 0;
 }
 
 static int byt_acpi_probe(struct snd_sof_dev *sdev)
@@ -216,7 +214,7 @@ irq:
 }
 
 /* baytrail ops */
-static struct snd_sof_dsp_ops sof_byt_ops = {
+static const struct snd_sof_dsp_ops sof_byt_ops = {
 	/* device init */
 	.probe		= byt_acpi_probe,
 	.remove		= byt_remove,
@@ -225,11 +223,7 @@ static struct snd_sof_dsp_ops sof_byt_ops = {
 	.run		= atom_run,
 	.reset		= atom_reset,
 
-	/* Register IO */
-	.write		= sof_io_write,
-	.read		= sof_io_read,
-	.write64	= sof_io_write64,
-	.read64		= sof_io_read64,
+	/* Register IO uses direct mmio */
 
 	/* Block IO */
 	.block_read	= sof_block_read,
@@ -295,7 +289,7 @@ static const struct sof_intel_dsp_desc byt_chip_info = {
 };
 
 /* cherrytrail and braswell ops */
-static struct snd_sof_dsp_ops sof_cht_ops = {
+static const struct snd_sof_dsp_ops sof_cht_ops = {
 	/* device init */
 	.probe		= byt_acpi_probe,
 	.remove		= byt_remove,
@@ -304,11 +298,7 @@ static struct snd_sof_dsp_ops sof_cht_ops = {
 	.run		= atom_run,
 	.reset		= atom_reset,
 
-	/* Register IO */
-	.write		= sof_io_write,
-	.read		= sof_io_read,
-	.write64	= sof_io_write64,
-	.read64		= sof_io_read64,
+	/* Register IO uses direct mmio */
 
 	/* Block IO */
 	.block_read	= sof_block_read,
@@ -382,16 +372,16 @@ static const struct sof_dev_desc sof_acpi_baytrailcr_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 0,
 	.chip_info = &byt_chip_info,
-	.ipc_supported_mask = BIT(SOF_IPC),
-	.ipc_default = SOF_IPC,
+	.ipc_supported_mask = BIT(SOF_IPC_TYPE_3),
+	.ipc_default = SOF_IPC_TYPE_3,
 	.default_fw_path = {
-		[SOF_IPC] = "intel/sof",
+		[SOF_IPC_TYPE_3] = "intel/sof",
 	},
 	.default_tplg_path = {
-		[SOF_IPC] = "intel/sof-tplg",
+		[SOF_IPC_TYPE_3] = "intel/sof-tplg",
 	},
 	.default_fw_filename = {
-		[SOF_IPC] = "sof-byt.ri",
+		[SOF_IPC_TYPE_3] = "sof-byt.ri",
 	},
 	.nocodec_tplg_filename = "sof-byt-nocodec.tplg",
 	.ops = &sof_byt_ops,
@@ -404,16 +394,16 @@ static const struct sof_dev_desc sof_acpi_baytrail_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
 	.chip_info = &byt_chip_info,
-	.ipc_supported_mask = BIT(SOF_IPC),
-	.ipc_default = SOF_IPC,
+	.ipc_supported_mask = BIT(SOF_IPC_TYPE_3),
+	.ipc_default = SOF_IPC_TYPE_3,
 	.default_fw_path = {
-		[SOF_IPC] = "intel/sof",
+		[SOF_IPC_TYPE_3] = "intel/sof",
 	},
 	.default_tplg_path = {
-		[SOF_IPC] = "intel/sof-tplg",
+		[SOF_IPC_TYPE_3] = "intel/sof-tplg",
 	},
 	.default_fw_filename = {
-		[SOF_IPC] = "sof-byt.ri",
+		[SOF_IPC_TYPE_3] = "sof-byt.ri",
 	},
 	.nocodec_tplg_filename = "sof-byt-nocodec.tplg",
 	.ops = &sof_byt_ops,
@@ -426,16 +416,16 @@ static const struct sof_dev_desc sof_acpi_cherrytrail_desc = {
 	.resindex_imr_base = 2,
 	.irqindex_host_ipc = 5,
 	.chip_info = &cht_chip_info,
-	.ipc_supported_mask = BIT(SOF_IPC),
-	.ipc_default = SOF_IPC,
+	.ipc_supported_mask = BIT(SOF_IPC_TYPE_3),
+	.ipc_default = SOF_IPC_TYPE_3,
 	.default_fw_path = {
-		[SOF_IPC] = "intel/sof",
+		[SOF_IPC_TYPE_3] = "intel/sof",
 	},
 	.default_tplg_path = {
-		[SOF_IPC] = "intel/sof-tplg",
+		[SOF_IPC_TYPE_3] = "intel/sof-tplg",
 	},
 	.default_fw_filename = {
-		[SOF_IPC] = "sof-cht.ri",
+		[SOF_IPC_TYPE_3] = "sof-cht.ri",
 	},
 	.nocodec_tplg_filename = "sof-cht-nocodec.tplg",
 	.ops = &sof_cht_ops,
@@ -465,10 +455,7 @@ static int sof_baytrail_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	desc = device_get_match_data(&pdev->dev);
-	if (!desc)
-		return -ENODEV;
-
+	desc = (const struct sof_dev_desc *)id->driver_data;
 	if (desc == &sof_acpi_baytrail_desc && soc_intel_is_byt_cr(pdev))
 		desc = &sof_acpi_baytrailcr_desc;
 
@@ -478,7 +465,7 @@ static int sof_baytrail_probe(struct platform_device *pdev)
 /* acpi_driver definition */
 static struct platform_driver snd_sof_acpi_intel_byt_driver = {
 	.probe = sof_baytrail_probe,
-	.remove = sof_acpi_remove,
+	.remove_new = sof_acpi_remove,
 	.driver = {
 		.name = "sof-audio-acpi-intel-byt",
 		.pm = &sof_acpi_pm,
@@ -488,6 +475,7 @@ static struct platform_driver snd_sof_acpi_intel_byt_driver = {
 module_platform_driver(snd_sof_acpi_intel_byt_driver);
 
 MODULE_LICENSE("Dual BSD/GPL");
+MODULE_DESCRIPTION("SOF support for Baytrail/Cherrytrail");
 MODULE_IMPORT_NS(SND_SOC_SOF_INTEL_HIFI_EP_IPC);
 MODULE_IMPORT_NS(SND_SOC_SOF_XTENSA);
 MODULE_IMPORT_NS(SND_SOC_SOF_ACPI_DEV);

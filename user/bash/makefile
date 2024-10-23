@@ -1,6 +1,6 @@
-BASH_VERSION = 5.0
-URL = http://ftp.gnu.org/pub/gnu/bash/bash-$(BASH_VERSION).tar.gz
-DOWNLOADHASH = b4a80f2ac66170b2913efbfb9f2594f1f76c7b1afd11f799e22035d63077fb4d
+BASH_VERSION = 5.2.21
+URL = https://ftp.gnu.org/pub/gnu/bash/bash-$(BASH_VERSION).tar.gz
+DOWNLOADHASH = c8e31bdc59b69aaffc5b36509905ba3e5cbb12747091d27b4b977f078560d5b8
 
 BASH_INSTALL_DIR = build/bash-$(BASH_VERSION)-install
 CONFOPTS += --without-bash-malloc
@@ -11,7 +11,5 @@ include $(ROOTDIR)/tools/automake.inc
 
 my_romfs:
 	$(ROMFSINST) $(BASH_INSTALL_DIR)/bin/bash /bin/bash
-	$(ROMFSINST) -e CONFIG_USER_BASH_SH -s bash /bin/sh
-
-PATCH_LEVEL = -p0
+	$(ROMFSINST) -s bash /bin/sh
 

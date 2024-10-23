@@ -1669,14 +1669,12 @@ static int delta_open(struct file *file)
 	set_default_params(ctx);
 
 	/* enable ST231 clocks */
-	if (delta->clk_st231)
-		if (clk_prepare_enable(delta->clk_st231))
-			dev_warn(delta->dev, "failed to enable st231 clk\n");
+	if (clk_prepare_enable(delta->clk_st231))
+		dev_warn(delta->dev, "failed to enable st231 clk\n");
 
 	/* enable FLASH_PROMIP clock */
-	if (delta->clk_flash_promip)
-		if (clk_prepare_enable(delta->clk_flash_promip))
-			dev_warn(delta->dev, "failed to enable delta promip clk\n");
+	if (clk_prepare_enable(delta->clk_flash_promip))
+		dev_warn(delta->dev, "failed to enable delta promip clk\n");
 
 	mutex_unlock(&delta->lock);
 
@@ -1717,12 +1715,10 @@ static int delta_release(struct file *file)
 	v4l2_fh_exit(&ctx->fh);
 
 	/* disable ST231 clocks */
-	if (delta->clk_st231)
-		clk_disable_unprepare(delta->clk_st231);
+	clk_disable_unprepare(delta->clk_st231);
 
 	/* disable FLASH_PROMIP clock */
-	if (delta->clk_flash_promip)
-		clk_disable_unprepare(delta->clk_flash_promip);
+	clk_disable_unprepare(delta->clk_flash_promip);
 
 	dev_dbg(delta->dev, "%s decoder instance released\n", ctx->name);
 
@@ -1904,7 +1900,7 @@ err:
 	return ret;
 }
 
-static int delta_remove(struct platform_device *pdev)
+static void delta_remove(struct platform_device *pdev)
 {
 	struct delta_dev *delta = platform_get_drvdata(pdev);
 
@@ -1918,16 +1914,13 @@ static int delta_remove(struct platform_device *pdev)
 	pm_runtime_disable(delta->dev);
 
 	v4l2_device_unregister(&delta->v4l2_dev);
-
-	return 0;
 }
 
 static int delta_runtime_suspend(struct device *dev)
 {
 	struct delta_dev *delta = dev_get_drvdata(dev);
 
-	if (delta->clk_delta)
-		clk_disable_unprepare(delta->clk_delta);
+	clk_disable_unprepare(delta->clk_delta);
 
 	return 0;
 }
@@ -1936,9 +1929,8 @@ static int delta_runtime_resume(struct device *dev)
 {
 	struct delta_dev *delta = dev_get_drvdata(dev);
 
-	if (delta->clk_delta)
-		if (clk_prepare_enable(delta->clk_delta))
-			dev_warn(dev, "failed to prepare/enable delta clk\n");
+	if (clk_prepare_enable(delta->clk_delta))
+		dev_warn(dev, "failed to prepare/enable delta clk\n");
 
 	return 0;
 }
@@ -1962,7 +1954,7 @@ MODULE_DEVICE_TABLE(of, delta_match_types);
 
 static struct platform_driver delta_driver = {
 	.probe = delta_probe,
-	.remove = delta_remove,
+	.remove_new = delta_remove,
 	.driver = {
 		   .name = DELTA_NAME,
 		   .of_match_table = delta_match_types,

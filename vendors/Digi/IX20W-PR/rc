@@ -33,19 +33,13 @@ ifconfig lo 127.0.0.1
 setmac -i eth1,eth2 -u -n 2
 
 echo "Initializing Wi-Fi interface control..."
-# GPIO123 = WiFi module power (output, active high)
+echo disabled > /sys/devices/platform/regulator_wifi/state
 # GPIO124 = BT module power (output, active high)
-echo 123 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio123/direction
 echo 124 > /sys/class/gpio/export
 echo low > /sys/class/gpio/gpio124/direction
 sleep 1
-echo 1 > /sys/class/gpio/gpio123/value
+echo enabled > /sys/devices/platform/regulator_wifi/state
 echo 1 > /sys/class/gpio/gpio124/value
-
-# developer key
-echo 86 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio86/direction
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory

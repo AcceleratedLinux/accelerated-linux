@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright 2011-2017 by the PaX Team <pageexec@freemail.hu>
  * Modified by Alexander Popov <alex.popov@linux.com>
- * Licensed under the GPL v2
  *
  * Note: the choice of the license means that the compilation process is
  * NOT 'eligible' as defined by gcc's library exception to the GPL v3,
@@ -466,6 +466,8 @@ static bool stackleak_gate(void)
 		if (STRING_EQUAL(section, ".noinstr.text"))
 			return false;
 		if (STRING_EQUAL(section, ".entry.text"))
+			return false;
+		if (STRING_EQUAL(section, ".head.text"))
 			return false;
 	}
 

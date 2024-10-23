@@ -1,0 +1,43 @@
+From fd71fe21328086333a2566cfc838f62ff76116cc Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Fri, 30 Aug 2024 15:31:21 +0200
+Subject: [PATCH] Wipe out rpath strings on installation
+
+Meson adds paths to rpath at build time, and removes them on install.
+But the strings remain in the library files.
+
+Remove these build paths by padding unused space in the old rpath
+string.
+---
+ mesonbuild/scripts/depfixer.py | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/mesonbuild/scripts/depfixer.py b/mesonbuild/scripts/depfixer.py
+index b64e6e3900d5..9a7e60237e20 100644
+--- a/mesonbuild/scripts/depfixer.py
++++ b/mesonbuild/scripts/depfixer.py
+@@ -352,12 +352,17 @@ class Elf(DataSizes):
+         # the chance of obliterating other strings. It might still happen
+         # but our behavior is identical to what chrpath does and it has
+         # been in use for ages so based on that this should be rare.
++
++        # Always wipe out old rpath with spaces. For that, pad the unused
++        # characters with spaces
++        rpath_to_write = new_rpath +  b' ' * (len(old_rpath) + len(new_rpath))
++
++        self.bf.seek(rp_off)
++        self.bf.write(rpath_to_write)
++        self.bf.write(b'\0')
++
+         if not new_rpath:
+             self.remove_rpath_entry(entrynum)
+-        else:
+-            self.bf.seek(rp_off)
+-            self.bf.write(new_rpath)
+-            self.bf.write(b'\0')
+ 
+     def remove_rpath_entry(self, entrynum: int) -> None:
+         sec = self.find_section(b'.dynamic')
+-- 
+2.43.0
+

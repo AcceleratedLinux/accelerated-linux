@@ -7,15 +7,17 @@
  *
  */
 
+#include "linux/phy.h"
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/ethtool.h>
 #include <linux/i2c.h>
-#include <linux/gpio.h>
+#include <linux/sfp.h>
+#include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
-#include "../../gpio/gpiolib.h"
+#include <linux/gpio/consumer.h>
 #include "mv88x3310p.h"
 
 #include <asm/irq.h>
@@ -34,22 +36,8 @@ MODULE_LICENSE("GPL v2");
 #define DIGI_PCBA_XC			0x2
 #define DIGI_PCBA_XD			0x3
 
-#define SFP_1000BASE_MASK		0X0b
-#define SFP_TGBASE_MASK			0xf0
-
-#define FSL_LS1046ARDB_GPIO_BASE	384
-#define FSL_GPIO_NUM(g, n)		(FSL_LS1046ARDB_GPIO_BASE+32*(4-g)+n)
-#define PHY1_SFP_GPIO			FSL_GPIO_NUM(1, 24)
-#define PHY2_SFP_GPIO			FSL_GPIO_NUM(1, 25)
-
-struct sfp_module {
+struct mv88x3310p {
 	struct phy_device *phydev;
-	struct i2c_adapter *sfp_i2c_adapter;
-	int gpio;
-	int i2c_bus;
-	int i2c_addr;
-	int irq;
-	struct delayed_work sfp_queue;
 };
 
 static int i2c_read_reg(struct i2c_adapter *adapter, u8 adr, u8 reg, u8 *val)
@@ -61,122 +49,68 @@ static int i2c_read_reg(struct i2c_adapter *adapter, u8 adr, u8 reg, u8 *val)
 	return (i2c_transfer(adapter, msgs ,2) == 2) ? 0 : -1;
 }
 
-static int sfp_module_read_byte(struct sfp_module *sfp, u8 reg, u8 *val)
+
+static int mv88x3310p_sfp_insert(void *upstream, const struct sfp_eeprom_id *id)
 {
-	return i2c_read_reg(sfp->sfp_i2c_adapter, sfp->i2c_addr, reg, val);
-}
-
-static void phy_fiber_type_select(struct sfp_module *sfp)
-{
-	uint8_t tg_code, gigabit_code;
-
-	sfp_module_read_byte(sfp, 0x3, &tg_code);
-	sfp_module_read_byte(sfp, 0x6, &gigabit_code);
-	if ((gigabit_code & SFP_1000BASE_MASK) && !(tg_code & SFP_TGBASE_MASK)) {
-		/* 1G mode */
-		phy_write_mmd(sfp->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x06);
-		phy_write_mmd(sfp->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x8006);
-	} else if (!(gigabit_code & SFP_1000BASE_MASK) && (tg_code & SFP_TGBASE_MASK)) {
-		/* 10G mode */
-		phy_write_mmd(sfp->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x1e);
-		phy_write_mmd(sfp->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x801e);
-	}
-}
-
-static void fiber_type_select(struct work_struct *work)
-{
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct sfp_module *sfp = 
-		container_of(dwork, struct sfp_module, sfp_queue);
-
-	phy_fiber_type_select(sfp);
-	enable_irq(sfp->irq);
-}
-
-static irqreturn_t sfp_interrupt_handler(int irq, void* data)
-{
-	struct sfp_module *sfp = data;
-
-	disable_irq_nosync(irq);
-	queue_delayed_work(system_power_efficient_wq, &sfp->sfp_queue, msecs_to_jiffies(1000));
-
-	return IRQ_HANDLED;
-}
-
-static int sfp_interrupt_init(struct sfp_module *sfp)
-{
-	int ret = 0, value = 1;
-
-	ret = gpio_request_one(sfp->gpio, GPIOF_DIR_IN, "Fiber_Type_Select");
-	if (ret) {
-		printk(KERN_ERR "Failed to request gpio %d\n", sfp->gpio);
-		return ret;
+	struct phy_device *phydev = upstream;
+	struct mv88x3310p *info = phydev->priv;
+	if (!info) {
+		return -EINVAL;
 	}
 
-	value = gpio_get_value(sfp->gpio);
-	if(!value)
-		phy_fiber_type_select(sfp);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(support) = { 0, };
+	DECLARE_PHY_INTERFACE_MASK(interfaces);
+	phy_interface_t iface;
 
-	sfp->irq = gpio_to_irq(sfp->gpio);
-	ret = irq_set_irq_type(sfp->irq, IRQ_TYPE_EDGE_FALLING);
-	if (ret) {
-		printk(KERN_ERR "Failed to set IRQ(%d) type for gpio %d\n", sfp->irq, sfp->gpio);
-		return ret;
-	}
+	sfp_parse_support(phydev->sfp_bus, id, support, interfaces);
+	iface = sfp_select_interface(phydev->sfp_bus, support);
 
-	ret = request_irq(sfp->irq, sfp_interrupt_handler, 0, "sfp_interrupt", sfp);
-	if (ret) {
-		printk(KERN_EMERG "Cannot initialize Fiber IRQ (%d) \n", ret);
-		return ret;
+	if (iface == PHY_INTERFACE_MODE_10GBASER) {
+		/* MAC type: XFI with rate matching
+		 * Fiber type: 10GBASE-R */
+		phy_write_mmd(info->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x1e);
+		/* Software reset */
+		phy_write_mmd(info->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x801e);
+	} else if ((iface == PHY_INTERFACE_MODE_1000BASEX) ||
+		   (iface == PHY_INTERFACE_MODE_SGMII)) {
+		/* MAC type: XFI with rate matching
+		 * Fiber type: 1000BASE-X */
+		phy_write_mmd(info->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x06);
+		/* Software reset */
+		phy_write_mmd(info->phydev, CUNIT_DEV, CUNIT_PORT_CTRL_REG, 0x8006);
+	} else {
+		dev_err(&phydev->mdio.dev, "Incompatible SFP module inserted: %d\n", iface);
+		return -EINVAL;
 	}
 
 	return 0;
 }
-	u8 hw_info, model_name, hw_ver;
 
+static const struct sfp_upstream_ops mv88x3310p_sfp_ops = {
+	.attach = phy_sfp_attach,
+	.detach = phy_sfp_detach,
+	.module_insert = mv88x3310p_sfp_insert,
+};
+
+static u8 model_name, hw_ver;
 static int mv88x3310p_probe(struct phy_device *phydev)
 {
-	struct sfp_module *sfp;
+	struct mv88x3310p *info;
 	int err = -ENOMEM;
+	u8 hw_info;
 
-	sfp = kzalloc(sizeof(struct sfp_module), GFP_KERNEL);
-	if (!sfp)
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
 		return err;
 
 	i2c_read_reg(i2c_get_adapter(0), 0x59, 0x2, &hw_info);
 	model_name = (hw_info & 0x60) >> 5;
 	hw_ver = (hw_info & 0x0c) >> 2;
 
-	sfp->phydev = phydev;
-	phydev->priv = sfp;
-	switch (phydev->mdio.addr) {
-	case 0x1c:
-		sfp->gpio = PHY1_SFP_GPIO;
-		sfp->i2c_bus = 0;
-		break;
-	case 0x1d:
-		if (model_name == AW8G3 && hw_ver == DIGI_PCBA_XA) {
-			sfp->gpio = PHY1_SFP_GPIO;
-			sfp->i2c_bus = 0;
-		} else {
-			sfp->gpio = PHY2_SFP_GPIO;
-			sfp->i2c_bus = 1;
-		}
-		break;
-	default:
-		break;
-	}
+	info->phydev = phydev;
+	phydev->priv = info;
 
-	sfp->i2c_addr = 0x50;
-	sfp->sfp_i2c_adapter = i2c_get_adapter(sfp->i2c_bus);
-	if (sfp->sfp_i2c_adapter) {
-		sfp_interrupt_init(sfp);
-		INIT_DELAYED_WORK(&sfp->sfp_queue, fiber_type_select);
-	} else {
-		pr_warn("Failed to get i2c adapter from i2c bus %d.\n", sfp->i2c_bus);
-	}
-
-	return 0;	
+	return phy_sfp_probe(phydev, &mv88x3310p_sfp_ops);
 }
 
 static int mv88x3310p_aneg_done(struct phy_device *phydev)
@@ -274,12 +208,12 @@ static int mv88x3310p_read_status(struct phy_device *phydev)
 	switch (reg & CUNIT_FIBER_TYPE_MASK) {
 	case 0x18:
 		regnum = XUNIT_TGBASER_PCS_STATUS_REG;
-		val = CUNIT_GPIO1_SFP_10G;
+		val = CUNIT_GPIO_SFP_10G;
 		break;
 	case 0x0:
 		regnum = XUNIT_1000BASE_STATUS_REG;
 		phydev->speed = SPEED_1000;
-		val = CUNIT_GPIO0_SFP_1G;
+		val = CUNIT_GPIO_SFP_1G;
 		break;
 	}
 
@@ -328,12 +262,12 @@ static int mv88x3310p_read_status(struct phy_device *phydev)
 				break;
 			case 0x2:
 				phydev->speed = SPEED_1000;
-				val = CUNIT_GPIO2_COPPER_1G;
+				val = CUNIT_GPIO_COPPER_1G;
 				break;
 			case 0x3:
 			default:
 				phydev->speed = SPEED_10000;
-				val = CUNIT_GPIO3_COPPER_10G;
+				val = CUNIT_GPIO_COPPER_10G;
 				break;
 			}
 			if ((reg & 0x800) == 0x800) {
@@ -355,14 +289,18 @@ static int mv88x3310p_read_status(struct phy_device *phydev)
 		if (model_name == AW24G3 && hw_ver == DIGI_PCBA_XA) {
 			switch (val) {
 			case 0:
-			case CUNIT_GPIO3_COPPER_10G:
-			case CUNIT_GPIO2_COPPER_1G:
+			case CUNIT_GPIO_COPPER_10G:
+			case CUNIT_GPIO_COPPER_1G:
+				/* Positive polarity, off */
 				phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED0_CTRL_REG, 0x0001);
+				/* Negative polarity, solid copper link, blink TX/RX activity  */
 				phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED1_CTRL_REG, 0x0128);
 				break;
-			case CUNIT_GPIO1_SFP_10G:
-			case CUNIT_GPIO0_SFP_1G:
+			case CUNIT_GPIO_SFP_10G:
+			case CUNIT_GPIO_SFP_1G:
+				/* Positive polarity, solid fiber link, blink RX/TX activity */
 				phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED0_CTRL_REG, 0x0131);
+				/* Negative polarity, off */
 				phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED1_CTRL_REG, 0x0000);
 				break;
 			}
@@ -380,6 +318,19 @@ static int mv88x3310p_config_init(struct phy_device *phydev)
 {
 	/* Temporarily just say we support everything */
 	linkmode_copy(phydev->supported, PHY_10GBIT_FULL_FEATURES);
+
+	/* Positive polarity, solid link, blink RX/TX activity */
+	phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED0_CTRL_REG, 0x0138);
+	/* Negative polarity, solid SFP link */
+	phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED1_CTRL_REG, 0x0031);
+	/* Negative polarity, solid copper link */
+	phy_write_mmd(phydev, CUNIT_DEV, CUNIT_LED2_CTRL_REG, 0x0029);
+
+	/* Enable GPIO outputs */
+	phy_write_mmd(phydev, CUNIT_DEV, CUNIT_GPIO_TRISTATE_REG,
+		      CUNIT_GPIO_SFP_1G    | CUNIT_GPIO_SFP_10G |
+		      CUNIT_GPIO_COPPER_1G | CUNIT_GPIO_COPPER_10G);
+
 
 	return 0;
 }

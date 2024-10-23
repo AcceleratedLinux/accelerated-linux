@@ -33,6 +33,8 @@
 
 #include "internal.h"
 
+static bool hw_injection_possible = true;
+
 /*
  * Collect all the MCi_XXX settings
  */
@@ -268,8 +270,7 @@ static void __maybe_unused raise_mce(struct mce *m)
 					mce_irq_ipi, NULL, 0);
 				preempt_enable();
 			} else if (m->inject_flags & MCJ_NMI_BROADCAST)
-				apic->send_IPI_mask(mce_inject_cpumask,
-						NMI_VECTOR);
+				__apic_send_IPI_mask(mce_inject_cpumask, NMI_VECTOR);
 		}
 		start = jiffies;
 		while (!cpumask_empty(mce_inject_cpumask)) {
@@ -339,6 +340,8 @@ static int __set_inj(const char *buf)
 
 	for (i = 0; i < N_INJ_TYPES; i++) {
 		if (!strncmp(flags_options[i], buf, strlen(flags_options[i]))) {
+			if (i > SW_INJ && !hw_injection_possible)
+				continue;
 			inj_type = i;
 			return 0;
 		}
@@ -427,11 +430,9 @@ static void trigger_thr_int(void *info)
 
 static u32 get_nbc_for_node(int node_id)
 {
-	struct cpuinfo_x86 *c = &boot_cpu_data;
 	u32 cores_per_node;
 
-	cores_per_node = (c->x86_max_cores * smp_num_siblings) / amd_get_nodes_per_socket();
-
+	cores_per_node = topology_num_threads_per_package() / topology_amd_nodes_per_pkg();
 	return cores_per_node * node_id;
 }
 
@@ -540,8 +541,8 @@ static void do_inject(void)
 	if (boot_cpu_has(X86_FEATURE_AMD_DCM) &&
 	    b == 4 &&
 	    boot_cpu_data.x86 < 0x17) {
-		toggle_nb_mca_mst_cpu(topology_die_id(cpu));
-		cpu = get_nbc_for_node(topology_die_id(cpu));
+		toggle_nb_mca_mst_cpu(topology_amd_node_id(cpu));
+		cpu = get_nbc_for_node(topology_amd_node_id(cpu));
 	}
 
 	cpus_read_lock();
@@ -717,10 +718,54 @@ static void __init debugfs_init(void)
 				    &i_mce, dfs_fls[i].fops);
 }
 
+static void check_hw_inj_possible(void)
+{
+	int cpu;
+	u8 bank;
+
+	/*
+	 * This behavior exists only on SMCA systems though its not directly
+	 * related to SMCA.
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_SMCA))
+		return;
+
+	cpu = get_cpu();
+
+	for (bank = 0; bank < MAX_NR_BANKS; ++bank) {
+		u64 status = MCI_STATUS_VAL, ipid;
+
+		/* Check whether bank is populated */
+		rdmsrl(MSR_AMD64_SMCA_MCx_IPID(bank), ipid);
+		if (!ipid)
+			continue;
+
+		toggle_hw_mce_inject(cpu, true);
+
+		wrmsrl_safe(mca_msr_reg(bank, MCA_STATUS), status);
+		rdmsrl_safe(mca_msr_reg(bank, MCA_STATUS), &status);
+		wrmsrl_safe(mca_msr_reg(bank, MCA_STATUS), 0);
+
+		if (!status) {
+			hw_injection_possible = false;
+			pr_warn("Platform does not allow *hardware* error injection."
+				"Try using APEI EINJ instead.\n");
+		}
+
+		toggle_hw_mce_inject(cpu, false);
+
+		break;
+	}
+
+	put_cpu();
+}
+
 static int __init inject_init(void)
 {
 	if (!alloc_cpumask_var(&mce_inject_cpumask, GFP_KERNEL))
 		return -ENOMEM;
+
+	check_hw_inj_possible();
 
 	debugfs_init();
 

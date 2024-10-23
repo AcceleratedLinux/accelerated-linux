@@ -1,6 +1,8 @@
---- a/src/libstrongswan/utils/identification.c.orig	2020-03-26 17:24:07.968701244 +1000
-+++ a/src/libstrongswan/utils/identification.c	2020-03-26 17:26:43.377505341 +1000
-@@ -1393,6 +1393,54 @@
+Index: strongswan-5.9.13/src/libstrongswan/utils/identification.c
+===================================================================
+--- strongswan-5.9.13.orig/src/libstrongswan/utils/identification.c
++++ strongswan-5.9.13/src/libstrongswan/utils/identification.c
+@@ -1418,6 +1418,54 @@ static private_identification_t *identif
  }
  
  /**
@@ -55,7 +57,7 @@
   * Create an identity for a specific type, determined by prefix
   */
  static private_identification_t* create_from_string_with_prefix_type(char *str)
-@@ -1400,9 +1448,10 @@
+@@ -1425,9 +1473,10 @@ static private_identification_t* create_
  	struct {
  		const char *str;
  		id_type_t type;
@@ -68,7 +70,7 @@
  		{ "ipv4net:",		ID_IPV4_ADDR_SUBNET		},
  		{ "ipv6net:",		ID_IPV6_ADDR_SUBNET		},
  		{ "ipv4range:",		ID_IPV4_ADDR_RANGE		},
-@@ -1431,7 +1480,7 @@
+@@ -1457,7 +1506,7 @@ static private_identification_t* create_
  			{
  				this->encoded = chunk_from_hex(chunk_from_str(str + 1), NULL);
  			}

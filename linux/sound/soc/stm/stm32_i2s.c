@@ -593,16 +593,16 @@ static int stm32_i2s_set_dai_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
 	}
 
 	/* DAI clock master masks */
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_BC_FC:
 		i2s->ms_flg = I2S_MS_SLAVE;
 		break;
-	case SND_SOC_DAIFMT_CBS_CFS:
+	case SND_SOC_DAIFMT_BP_FP:
 		i2s->ms_flg = I2S_MS_MASTER;
 		break;
 	default:
 		dev_err(cpu_dai->dev, "Unsupported mode %#x\n",
-			fmt & SND_SOC_DAIFMT_MASTER_MASK);
+			fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK);
 		return -EINVAL;
 	}
 
@@ -953,6 +953,7 @@ static const struct regmap_config stm32_h7_i2s_regmap_conf = {
 };
 
 static const struct snd_soc_dai_ops stm32_i2s_pcm_dai_ops = {
+	.probe		= stm32_i2s_dai_probe,
 	.set_sysclk	= stm32_i2s_set_sysclk,
 	.set_fmt	= stm32_i2s_set_dai_fmt,
 	.startup	= stm32_i2s_startup,
@@ -978,6 +979,7 @@ static const struct snd_dmaengine_pcm_config stm32_i2s_pcm_config = {
 
 static const struct snd_soc_component_driver stm32_i2s_component = {
 	.name = "stm32-i2s",
+	.legacy_dai_naming = 1,
 };
 
 static void stm32_i2s_dai_init(struct snd_soc_pcm_stream *stream,
@@ -1001,7 +1003,6 @@ static int stm32_i2s_dais_init(struct platform_device *pdev,
 	if (!dai_ptr)
 		return -ENOMEM;
 
-	dai_ptr->probe = stm32_i2s_dai_probe;
 	dai_ptr->ops = &stm32_i2s_pcm_dai_ops;
 	dai_ptr->id = 1;
 	stm32_i2s_dai_init(&dai_ptr->playback, "playback");
@@ -1023,7 +1024,6 @@ static int stm32_i2s_parse_dt(struct platform_device *pdev,
 			      struct stm32_i2s_data *i2s)
 {
 	struct device_node *np = pdev->dev.of_node;
-	const struct of_device_id *of_id;
 	struct reset_control *rst;
 	struct resource *res;
 	int irq, ret;
@@ -1031,10 +1031,8 @@ static int stm32_i2s_parse_dt(struct platform_device *pdev,
 	if (!np)
 		return -ENODEV;
 
-	of_id = of_match_device(stm32_i2s_ids, &pdev->dev);
-	if (of_id)
-		i2s->regmap_conf = (const struct regmap_config *)of_id->data;
-	else
+	i2s->regmap_conf = device_get_match_data(&pdev->dev);
+	if (!i2s->regmap_conf)
 		return -EINVAL;
 
 	i2s->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
@@ -1065,7 +1063,7 @@ static int stm32_i2s_parse_dt(struct platform_device *pdev,
 				     "Could not get x11k parent clock\n");
 
 	/* Register mclk provider if requested */
-	if (of_find_property(np, "#clock-cells", NULL)) {
+	if (of_property_present(np, "#clock-cells")) {
 		ret = stm32_i2s_add_mclk_provider(i2s);
 		if (ret < 0)
 			return ret;
@@ -1076,7 +1074,7 @@ static int stm32_i2s_parse_dt(struct platform_device *pdev,
 	if (irq < 0)
 		return irq;
 
-	ret = devm_request_irq(&pdev->dev, irq, stm32_i2s_isr, IRQF_ONESHOT,
+	ret = devm_request_irq(&pdev->dev, irq, stm32_i2s_isr, 0,
 			       dev_name(&pdev->dev), i2s);
 	if (ret) {
 		dev_err(&pdev->dev, "irq request returned %d\n", ret);
@@ -1096,13 +1094,11 @@ static int stm32_i2s_parse_dt(struct platform_device *pdev,
 	return 0;
 }
 
-static int stm32_i2s_remove(struct platform_device *pdev)
+static void stm32_i2s_remove(struct platform_device *pdev)
 {
 	snd_dmaengine_pcm_unregister(&pdev->dev);
 	snd_soc_unregister_component(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	return 0;
 }
 
 static int stm32_i2s_probe(struct platform_device *pdev)
@@ -1134,8 +1130,6 @@ static int stm32_i2s_probe(struct platform_device *pdev)
 	if (IS_ERR(i2s->regmap))
 		return dev_err_probe(&pdev->dev, PTR_ERR(i2s->regmap),
 				     "Regmap init error\n");
-
-	pm_runtime_enable(&pdev->dev);
 
 	ret = snd_dmaengine_pcm_register(&pdev->dev, &stm32_i2s_pcm_config, 0);
 	if (ret)
@@ -1179,6 +1173,8 @@ static int stm32_i2s_probe(struct platform_device *pdev)
 			FIELD_GET(I2S_VERR_MIN_MASK, val));
 	}
 
+	pm_runtime_enable(&pdev->dev);
+
 	return ret;
 
 error:
@@ -1220,7 +1216,7 @@ static struct platform_driver stm32_i2s_driver = {
 		.pm = &stm32_i2s_pm_ops,
 	},
 	.probe = stm32_i2s_probe,
-	.remove = stm32_i2s_remove,
+	.remove_new = stm32_i2s_remove,
 };
 
 module_platform_driver(stm32_i2s_driver);

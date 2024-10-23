@@ -29,6 +29,8 @@
 
 /* radix tree tags */
 #define HWSPINLOCK_UNUSED	(0) /* tags an hwspinlock as unused */
+#define HWSPINLOCK_EXCLUSIVE	(1) /* tags an hwspinlock as exclusive */
+#define HWSPINLOCK_SHARED	(2) /* tags an hwspinlock as shared */
 
 /*
  * A radix tree is used to maintain the available hwspinlock instances.
@@ -84,8 +86,9 @@ static DEFINE_MUTEX(hwspinlock_tree_lock);
  * should decide between spin_trylock, spin_trylock_irq and
  * spin_trylock_irqsave.
  *
- * Returns 0 if we successfully locked the hwspinlock or -EBUSY if
+ * Returns: %0 if we successfully locked the hwspinlock or -EBUSY if
  * the hwspinlock was already taken.
+ *
  * This function will never sleep.
  */
 int __hwspin_trylock(struct hwspinlock *hwlock, int mode, unsigned long *flags)
@@ -171,7 +174,7 @@ EXPORT_SYMBOL_GPL(__hwspin_trylock);
 /**
  * __hwspin_lock_timeout() - lock an hwspinlock with timeout limit
  * @hwlock: the hwspinlock to be locked
- * @timeout: timeout value in msecs
+ * @to: timeout value in msecs
  * @mode: mode which controls whether local interrupts are disabled or not
  * @flags: a pointer to where the caller's interrupt state will be saved at (if
  *         requested)
@@ -199,9 +202,11 @@ EXPORT_SYMBOL_GPL(__hwspin_trylock);
  * to choose the appropriate @mode of operation, exactly the same way users
  * should decide between spin_lock, spin_lock_irq and spin_lock_irqsave.
  *
- * Returns 0 when the @hwlock was successfully taken, and an appropriate
+ * Returns: %0 when the @hwlock was successfully taken, and an appropriate
  * error code otherwise (most notably -ETIMEDOUT if the @hwlock is still
- * busy after @timeout msecs). The function will never sleep.
+ * busy after @timeout msecs).
+ *
+ * The function will never sleep.
  */
 int __hwspin_lock_timeout(struct hwspinlock *hwlock, unsigned int to,
 					int mode, unsigned long *flags)
@@ -304,19 +309,19 @@ EXPORT_SYMBOL_GPL(__hwspin_unlock);
 
 /**
  * of_hwspin_lock_simple_xlate - translate hwlock_spec to return a lock id
- * @bank: the hwspinlock device bank
  * @hwlock_spec: hwlock specifier as found in the device tree
  *
  * This is a simple translation function, suitable for hwspinlock platform
- * drivers that only has a lock specifier length of 1.
+ * drivers that only has a lock specifier length of 1 or 2.
  *
- * Returns a relative index of the lock within a specified bank on success,
+ * Returns: a relative index of the lock within a specified bank on success,
  * or -EINVAL on invalid specifier cell count.
  */
 static inline int
 of_hwspin_lock_simple_xlate(const struct of_phandle_args *hwlock_spec)
 {
-	if (WARN_ON(hwlock_spec->args_count != 1))
+	if (WARN_ON(hwlock_spec->args_count != 1 &&
+		    hwlock_spec->args_count != 2))
 		return -EINVAL;
 
 	return hwlock_spec->args[0];
@@ -332,18 +337,20 @@ of_hwspin_lock_simple_xlate(const struct of_phandle_args *hwlock_spec)
  * hwspinlock device, so that it can be requested using the normal
  * hwspin_lock_request_specific() API.
  *
- * Returns the global lock id number on success, -EPROBE_DEFER if the hwspinlock
- * device is not yet registered, -EINVAL on invalid args specifier value or an
- * appropriate error as returned from the OF parsing of the DT client node.
+ * Returns: the global lock id number on success, -EPROBE_DEFER if the
+ * hwspinlock device is not yet registered, -EINVAL on invalid args
+ * specifier value or an appropriate error as returned from the OF parsing
+ * of the DT client node.
  */
 int of_hwspin_lock_get_id(struct device_node *np, int index)
 {
 	struct of_phandle_args args;
-	struct hwspinlock *hwlock;
+	struct hwspinlock *hwlock, *tmp;
 	struct radix_tree_iter iter;
 	void **slot;
 	int id;
 	int ret;
+	unsigned int tag;
 
 	ret = of_parse_phandle_with_args(np, "hwlocks", "#hwlock-cells", index,
 					 &args);
@@ -367,7 +374,7 @@ int of_hwspin_lock_get_id(struct device_node *np, int index)
 			continue;
 		}
 
-		if (hwlock->bank->dev->of_node == args.np) {
+		if (device_match_of_node(hwlock->bank->dev, args.np)) {
 			ret = 0;
 			break;
 		}
@@ -382,6 +389,37 @@ int of_hwspin_lock_get_id(struct device_node *np, int index)
 		goto out;
 	}
 	id += hwlock->bank->base_id;
+
+	/* Set the EXCLUSIVE / SHARED tag */
+	if (args.args_count == 2 && args.args[1]) {
+		/* Tag SHARED unless already tagged EXCLUSIVE */
+		if (radix_tree_tag_get(&hwspinlock_tree, id,
+				       HWSPINLOCK_EXCLUSIVE)) {
+			ret = -EINVAL;
+			goto out;
+		}
+		tag = HWSPINLOCK_SHARED;
+	} else {
+		/* Tag EXCLUSIVE unless already tagged SHARED */
+		if (radix_tree_tag_get(&hwspinlock_tree, id,
+				       HWSPINLOCK_SHARED)) {
+			ret = -EINVAL;
+			goto out;
+		}
+		tag = HWSPINLOCK_EXCLUSIVE;
+	}
+
+	/* mark this hwspinlock */
+	hwlock = radix_tree_lookup(&hwspinlock_tree, id);
+	if (!hwlock) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	tmp = radix_tree_tag_set(&hwspinlock_tree, id, tag);
+
+	/* self-sanity check which should never fail */
+	WARN_ON(tmp != hwlock);
 
 out:
 	of_node_put(args.np);
@@ -399,9 +437,10 @@ EXPORT_SYMBOL_GPL(of_hwspin_lock_get_id);
  * the hwspinlock device, so that it can be requested using the normal
  * hwspin_lock_request_specific() API.
  *
- * Returns the global lock id number on success, -EPROBE_DEFER if the hwspinlock
- * device is not yet registered, -EINVAL on invalid args specifier value or an
- * appropriate error as returned from the OF parsing of the DT client node.
+ * Returns: the global lock id number on success, -EPROBE_DEFER if the
+ * hwspinlock device is not yet registered, -EINVAL on invalid args
+ * specifier value or an appropriate error as returned from the OF parsing
+ * of the DT client node.
  */
 int of_hwspin_lock_get_id_byname(struct device_node *np, const char *name)
 {
@@ -481,7 +520,7 @@ out:
  *
  * Should be called from a process context (might sleep)
  *
- * Returns 0 on success, or an appropriate error code on failure
+ * Returns: %0 on success, or an appropriate error code on failure
  */
 int hwspin_lock_register(struct hwspinlock_device *bank, struct device *dev,
 		const struct hwspinlock_ops *ops, int base_id, int num_locks)
@@ -505,6 +544,7 @@ int hwspin_lock_register(struct hwspinlock_device *bank, struct device *dev,
 
 		spin_lock_init(&hwlock->lock);
 		hwlock->bank = bank;
+		hwlock->refcount = 0;
 
 		ret = hwspin_lock_register_single(hwlock, base_id + i);
 		if (ret)
@@ -529,7 +569,7 @@ EXPORT_SYMBOL_GPL(hwspin_lock_register);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns 0 on success, or an appropriate error code on failure
+ * Returns: %0 on success, or an appropriate error code on failure
  */
 int hwspin_lock_unregister(struct hwspinlock_device *bank)
 {
@@ -578,7 +618,7 @@ static int devm_hwspin_lock_device_match(struct device *dev, void *res,
  *
  * Should be called from a process context (might sleep)
  *
- * Returns 0 on success, or an appropriate error code on failure
+ * Returns: %0 on success, or an appropriate error code on failure
  */
 int devm_hwspin_lock_unregister(struct device *dev,
 				struct hwspinlock_device *bank)
@@ -607,7 +647,7 @@ EXPORT_SYMBOL_GPL(devm_hwspin_lock_unregister);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns 0 on success, or an appropriate error code on failure
+ * Returns: %0 on success, or an appropriate error code on failure
  */
 int devm_hwspin_lock_register(struct device *dev,
 			      struct hwspinlock_device *bank,
@@ -635,19 +675,20 @@ EXPORT_SYMBOL_GPL(devm_hwspin_lock_register);
 
 /**
  * __hwspin_lock_request() - tag an hwspinlock as used and power it up
+ * @hwlock: the target hwspinlock
  *
  * This is an internal function that prepares an hwspinlock instance
  * before it is given to the user. The function assumes that
  * hwspinlock_tree_lock is taken.
  *
- * Returns 0 or positive to indicate success, and a negative value to
+ * Returns: %0 or positive to indicate success, and a negative value to
  * indicate an error (with the appropriate error code)
  */
 static int __hwspin_lock_request(struct hwspinlock *hwlock)
 {
 	struct device *dev = hwlock->bank->dev;
 	struct hwspinlock *tmp;
-	int ret;
+	int ret, id;
 
 	/* prevent underlying implementation from being removed */
 	if (!try_module_get(dev->driver->owner)) {
@@ -666,13 +707,18 @@ static int __hwspin_lock_request(struct hwspinlock *hwlock)
 
 	ret = 0;
 
+	/* update shareable refcount */
+	id = hwlock_to_id(hwlock);
+	if (radix_tree_tag_get(&hwspinlock_tree, id, HWSPINLOCK_SHARED) &&
+	    hwlock->refcount++)
+		goto out;
+
 	/* mark hwspinlock as used, should not fail */
-	tmp = radix_tree_tag_clear(&hwspinlock_tree, hwlock_to_id(hwlock),
-							HWSPINLOCK_UNUSED);
+	tmp = radix_tree_tag_clear(&hwspinlock_tree, id, HWSPINLOCK_UNUSED);
 
 	/* self-sanity check that should never fail */
 	WARN_ON(tmp != hwlock);
-
+out:
 	return ret;
 }
 
@@ -680,7 +726,7 @@ static int __hwspin_lock_request(struct hwspinlock *hwlock)
  * hwspin_lock_get_id() - retrieve id number of a given hwspinlock
  * @hwlock: a valid hwspinlock instance
  *
- * Returns the id number of a given @hwlock, or -EINVAL if @hwlock is invalid.
+ * Returns: the id number of a given @hwlock, or -EINVAL if @hwlock is invalid.
  */
 int hwspin_lock_get_id(struct hwspinlock *hwlock)
 {
@@ -704,7 +750,7 @@ EXPORT_SYMBOL_GPL(hwspin_lock_get_id);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns the address of the assigned hwspinlock, or NULL on error
+ * Returns: the address of the assigned hwspinlock, or %NULL on error
  */
 struct hwspinlock *hwspin_lock_request(void)
 {
@@ -747,7 +793,7 @@ EXPORT_SYMBOL_GPL(hwspin_lock_request);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns the address of the assigned hwspinlock, or NULL on error
+ * Returns: the address of the assigned hwspinlock, or %NULL on error
  */
 struct hwspinlock *hwspin_lock_request_specific(unsigned int id)
 {
@@ -766,9 +812,9 @@ struct hwspinlock *hwspin_lock_request_specific(unsigned int id)
 	/* sanity check (this shouldn't happen) */
 	WARN_ON(hwlock_to_id(hwlock) != id);
 
-	/* make sure this hwspinlock is unused */
-	ret = radix_tree_tag_get(&hwspinlock_tree, id, HWSPINLOCK_UNUSED);
-	if (ret == 0) {
+	/* make sure this hwspinlock is unused or shareable */
+	if (!radix_tree_tag_get(&hwspinlock_tree, id, HWSPINLOCK_SHARED) &&
+	    !radix_tree_tag_get(&hwspinlock_tree, id, HWSPINLOCK_UNUSED)) {
 		pr_warn("hwspinlock %u is already in use\n", id);
 		hwlock = NULL;
 		goto out;
@@ -795,13 +841,13 @@ EXPORT_SYMBOL_GPL(hwspin_lock_request_specific);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns 0 on success, or an appropriate error code on failure
+ * Returns: %0 on success, or an appropriate error code on failure
  */
 int hwspin_lock_free(struct hwspinlock *hwlock)
 {
 	struct device *dev;
 	struct hwspinlock *tmp;
-	int ret;
+	int ret, id;
 
 	if (!hwlock) {
 		pr_err("invalid hwlock\n");
@@ -812,28 +858,33 @@ int hwspin_lock_free(struct hwspinlock *hwlock)
 	mutex_lock(&hwspinlock_tree_lock);
 
 	/* make sure the hwspinlock is used */
-	ret = radix_tree_tag_get(&hwspinlock_tree, hwlock_to_id(hwlock),
-							HWSPINLOCK_UNUSED);
+	id = hwlock_to_id(hwlock);
+	ret = radix_tree_tag_get(&hwspinlock_tree, id, HWSPINLOCK_UNUSED);
 	if (ret == 1) {
 		dev_err(dev, "%s: hwlock is already free\n", __func__);
 		dump_stack();
 		ret = -EINVAL;
-		goto out;
+		goto unlock;
 	}
 
 	/* notify the underlying device that power is not needed */
 	pm_runtime_put(dev);
 
+	/* update shareable refcount */
+	if (radix_tree_tag_get(&hwspinlock_tree, id, HWSPINLOCK_SHARED) &&
+	    --hwlock->refcount)
+		goto put;
+
 	/* mark this hwspinlock as available */
-	tmp = radix_tree_tag_set(&hwspinlock_tree, hwlock_to_id(hwlock),
-							HWSPINLOCK_UNUSED);
+	tmp = radix_tree_tag_set(&hwspinlock_tree, id, HWSPINLOCK_UNUSED);
 
 	/* sanity check (this shouldn't happen) */
 	WARN_ON(tmp != hwlock);
 
+put:
 	module_put(dev->driver->owner);
 
-out:
+unlock:
 	mutex_unlock(&hwspinlock_tree_lock);
 	return ret;
 }
@@ -865,7 +916,7 @@ static void devm_hwspin_lock_release(struct device *dev, void *res)
  *
  * Should be called from a process context (might sleep)
  *
- * Returns 0 on success, or an appropriate error code on failure
+ * Returns: %0 on success, or an appropriate error code on failure
  */
 int devm_hwspin_lock_free(struct device *dev, struct hwspinlock *hwlock)
 {
@@ -891,7 +942,7 @@ EXPORT_SYMBOL_GPL(devm_hwspin_lock_free);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns the address of the assigned hwspinlock, or NULL on error
+ * Returns: the address of the assigned hwspinlock, or %NULL on error
  */
 struct hwspinlock *devm_hwspin_lock_request(struct device *dev)
 {
@@ -926,7 +977,7 @@ EXPORT_SYMBOL_GPL(devm_hwspin_lock_request);
  *
  * Should be called from a process context (might sleep)
  *
- * Returns the address of the assigned hwspinlock, or NULL on error
+ * Returns: the address of the assigned hwspinlock, or %NULL on error
  */
 struct hwspinlock *devm_hwspin_lock_request_specific(struct device *dev,
 						     unsigned int id)
@@ -949,6 +1000,5 @@ struct hwspinlock *devm_hwspin_lock_request_specific(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(devm_hwspin_lock_request_specific);
 
-MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Hardware spinlock interface");
 MODULE_AUTHOR("Ohad Ben-Cohen <ohad@wizery.com>");

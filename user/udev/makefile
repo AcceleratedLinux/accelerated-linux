@@ -35,3 +35,4 @@ sanitize_rules:
 	# We don't want to use persistent network names.
 	rm -f $(ROMFSDIR)/libexec/udev/rules.d/80-net-name-slot.rules
 
+	$(ROMFSINST) -d -p 644 files/61-gpio-keys.rules /libexec/udev/rules.d/61-gpio-keys.rules

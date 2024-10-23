@@ -109,6 +109,8 @@ static inline u64 arm_pmu_event_max_period(struct perf_event *event)
 {
 	if (event->hw.flags & ARMPMU_EVT_64BIT)
 		return GENMASK_ULL(63, 0);
+	else if (event->hw.flags & ARMPMU_EVT_63BIT)
+		return GENMASK_ULL(62, 0);
 	else if (event->hw.flags & ARMPMU_EVT_47BIT)
 		return GENMASK_ULL(46, 0);
 	else
@@ -443,7 +445,7 @@ __hw_perf_event_init(struct perf_event *event)
 {
 	struct arm_pmu *armpmu = to_arm_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
-	int mapping;
+	int mapping, ret;
 
 	hwc->flags = 0;
 	mapping = armpmu->map_event(event);
@@ -468,11 +470,10 @@ __hw_perf_event_init(struct perf_event *event)
 	/*
 	 * Check whether we need to exclude the counter from certain modes.
 	 */
-	if (armpmu->set_event_filter &&
-	    armpmu->set_event_filter(hwc, &event->attr)) {
-		pr_debug("ARM performance counters do not support "
-			 "mode exclusion\n");
-		return -EOPNOTSUPP;
+	if (armpmu->set_event_filter) {
+		ret = armpmu->set_event_filter(hwc, &event->attr);
+		if (ret)
+			return ret;
 	}
 
 	/*
@@ -514,9 +515,6 @@ static int armpmu_event_init(struct perf_event *event)
 	if (has_branch_stack(event))
 		return -EOPNOTSUPP;
 
-	if (armpmu->map_event(event) == -ENOENT)
-		return -ENOENT;
-
 	return __hw_perf_event_init(event);
 }
 
@@ -550,17 +548,10 @@ static void armpmu_disable(struct pmu *pmu)
  * microarchitecture, and aren't suitable for another. Thus, only match CPUs of
  * the same microarchitecture.
  */
-static int armpmu_filter_match(struct perf_event *event)
+static bool armpmu_filter(struct pmu *pmu, int cpu)
 {
-	struct arm_pmu *armpmu = to_arm_pmu(event->pmu);
-	unsigned int cpu = smp_processor_id();
-	int ret;
-
-	ret = cpumask_test_cpu(cpu, &armpmu->supported_cpus);
-	if (ret && armpmu->filter_match)
-		return armpmu->filter_match(event);
-
-	return ret;
+	struct arm_pmu *armpmu = to_arm_pmu(pmu);
+	return !cpumask_test_cpu(cpu, &armpmu->supported_cpus);
 }
 
 static ssize_t cpus_show(struct device *dev,
@@ -697,6 +688,11 @@ static int armpmu_get_cpu_irq(struct arm_pmu *pmu, int cpu)
 	return per_cpu(hw_events->irq, cpu);
 }
 
+bool arm_pmu_irq_is_nmi(void)
+{
+	return has_nmi;
+}
+
 /*
  * PMU hardware loses all context when a CPU goes offline.
  * When a CPU is hotplugged back in, since some hardware registers are
@@ -762,17 +758,8 @@ static void cpu_pm_pmu_setup(struct arm_pmu *armpmu, unsigned long cmd)
 		case CPU_PM_ENTER_FAILED:
 			 /*
 			  * Restore and enable the counter.
-			  * armpmu_start() indirectly calls
-			  *
-			  * perf_event_update_userpage()
-			  *
-			  * that requires RCU read locking to be functional,
-			  * wrap the call within RCU_NONIDLE to make the
-			  * RCU subsystem aware this cpu is not idle from
-			  * an RCU perspective for the armpmu_start() call
-			  * duration.
 			  */
-			RCU_NONIDLE(armpmu_start(event, PERF_EF_RELOAD));
+			armpmu_start(event, PERF_EF_RELOAD);
 			break;
 		default:
 			break;
@@ -861,16 +848,16 @@ static void cpu_pmu_destroy(struct arm_pmu *cpu_pmu)
 					    &cpu_pmu->node);
 }
 
-static struct arm_pmu *__armpmu_alloc(gfp_t flags)
+struct arm_pmu *armpmu_alloc(void)
 {
 	struct arm_pmu *pmu;
 	int cpu;
 
-	pmu = kzalloc(sizeof(*pmu), flags);
+	pmu = kzalloc(sizeof(*pmu), GFP_KERNEL);
 	if (!pmu)
 		goto out;
 
-	pmu->hw_events = alloc_percpu_gfp(struct pmu_hw_events, flags);
+	pmu->hw_events = alloc_percpu_gfp(struct pmu_hw_events, GFP_KERNEL);
 	if (!pmu->hw_events) {
 		pr_info("failed to allocate per-cpu PMU data.\n");
 		goto out_free_pmu;
@@ -885,16 +872,17 @@ static struct arm_pmu *__armpmu_alloc(gfp_t flags)
 		.start		= armpmu_start,
 		.stop		= armpmu_stop,
 		.read		= armpmu_read,
-		.filter_match	= armpmu_filter_match,
+		.filter		= armpmu_filter,
 		.attr_groups	= pmu->attr_groups,
 		/*
 		 * This is a CPU PMU potentially in a heterogeneous
-		 * configuration (e.g. big.LITTLE). This is not an uncore PMU,
-		 * and we have taken ctx sharing into account (e.g. with our
-		 * pmu::filter_match callback and pmu::event_init group
-		 * validation).
+		 * configuration (e.g. big.LITTLE) so
+		 * PERF_PMU_CAP_EXTENDED_HW_TYPE is required to open
+		 * PERF_TYPE_HARDWARE and PERF_TYPE_HW_CACHE events on a
+		 * specific PMU.
 		 */
-		.capabilities	= PERF_PMU_CAP_HETEROGENEOUS_CPUS,
+		.capabilities	= PERF_PMU_CAP_EXTENDED_REGS |
+				  PERF_PMU_CAP_EXTENDED_HW_TYPE,
 	};
 
 	pmu->attr_groups[ARMPMU_ATTR_GROUP_COMMON] =
@@ -904,7 +892,6 @@ static struct arm_pmu *__armpmu_alloc(gfp_t flags)
 		struct pmu_hw_events *events;
 
 		events = per_cpu_ptr(pmu->hw_events, cpu);
-		raw_spin_lock_init(&events->pmu_lock);
 		events->percpu_pmu = pmu;
 	}
 
@@ -915,17 +902,6 @@ out_free_pmu:
 out:
 	return NULL;
 }
-
-struct arm_pmu *armpmu_alloc(void)
-{
-	return __armpmu_alloc(GFP_KERNEL);
-}
-
-struct arm_pmu *armpmu_alloc_atomic(void)
-{
-	return __armpmu_alloc(GFP_ATOMIC);
-}
-
 
 void armpmu_free(struct arm_pmu *pmu)
 {

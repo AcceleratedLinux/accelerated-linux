@@ -48,6 +48,22 @@ struct drm_rect {
 };
 
 /**
+ * DRM_RECT_INIT - initialize a rectangle from x/y/w/h
+ * @x: x coordinate
+ * @y: y coordinate
+ * @w: width
+ * @h: height
+ *
+ * RETURNS:
+ * A new rectangle of the specified size.
+ */
+#define DRM_RECT_INIT(x, y, w, h) ((struct drm_rect){ \
+		.x1 = (x), \
+		.y1 = (y), \
+		.x2 = (x) + (w), \
+		.y2 = (y) + (h) })
+
+/**
  * DRM_RECT_FMT - printf string for &struct drm_rect
  */
 #define DRM_RECT_FMT    "%dx%d%+d%+d"
@@ -113,7 +129,7 @@ static inline void drm_rect_adjust_size(struct drm_rect *r, int dw, int dh)
 
 /**
  * drm_rect_translate - translate the rectangle
- * @r: rectangle to be tranlated
+ * @r: rectangle to be translated
  * @dx: horizontal translation
  * @dy: vertical translation
  *
@@ -130,7 +146,7 @@ static inline void drm_rect_translate(struct drm_rect *r, int dx, int dy)
 
 /**
  * drm_rect_translate_to - translate the rectangle to an absolute position
- * @r: rectangle to be tranlated
+ * @r: rectangle to be translated
  * @x: horizontal position
  * @y: vertical position
  *

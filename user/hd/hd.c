@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
 	else if (offset < 0)
 		lseek(fd, offset, SEEK_END);
 	addr = lseek(fd, 0, SEEK_CUR);
-	if (addr == (off_t)-1)
+	if (addr == (unsigned long)-1)
 		addr = 0;
 
 	/*

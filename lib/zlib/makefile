@@ -1,13 +1,14 @@
 export ACL_LICENSE = BSD (3 clause)
 
-URL = https://zlib.net/fossils/zlib-1.2.11.tar.gz
-DOWNLOADHASH = c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1
+VERSION = 1.3.1
+URL = https://zlib.net/zlib-$(VERSION).tar.xz
+DOWNLOADHASH = 38ef96b8dfe510d42707d9c781877914792541133e1870841463bfa73f883e32
 
-zlib-1.2.11_NODEFCONF = 1
-zlib-1.2.11_CONFOPTS += --prefix=
+zlib-$(VERSION)_NODEFCONF = 1
+zlib-$(VERSION)_CONFOPTS += --prefix=
 
 ifeq ($(CONFIG_MMU),)
-zlib-1.2.11_CONFOPTS += --static
+zlib-$(VERSION)_CONFOPTS += --static
 endif
 
 include $(ROOTDIR)/tools/automake.inc

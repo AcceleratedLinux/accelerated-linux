@@ -1,5 +1,5 @@
 
-URL = http://nuttcp.net/nuttcp/nuttcp-6.1.2.tar.bz2
+URL = https://nuttcp.net/nuttcp/nuttcp-6.1.2.tar.bz2
 MAKEVARS = CC="$(CC)" CFLAGS="$(CFLAGS)"
 FINALTARGET = built
 AUTOMAKE_ROMFS = my_romfs

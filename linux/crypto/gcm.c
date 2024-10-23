@@ -197,7 +197,7 @@ static inline unsigned int gcm_remain(unsigned int len)
 	return len ? 16 - len : 0;
 }
 
-static void gcm_hash_len_done(struct crypto_async_request *areq, int err);
+static void gcm_hash_len_done(void *data, int err);
 
 static int gcm_hash_update(struct aead_request *req,
 			   crypto_completion_t compl,
@@ -246,9 +246,9 @@ static int gcm_hash_len_continue(struct aead_request *req, u32 flags)
 	return gctx->complete(req, flags);
 }
 
-static void gcm_hash_len_done(struct crypto_async_request *areq, int err)
+static void gcm_hash_len_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -267,10 +267,9 @@ static int gcm_hash_crypt_remain_continue(struct aead_request *req, u32 flags)
 	       gcm_hash_len_continue(req, flags);
 }
 
-static void gcm_hash_crypt_remain_done(struct crypto_async_request *areq,
-				       int err)
+static void gcm_hash_crypt_remain_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -298,9 +297,9 @@ static int gcm_hash_crypt_continue(struct aead_request *req, u32 flags)
 	return gcm_hash_crypt_remain_continue(req, flags);
 }
 
-static void gcm_hash_crypt_done(struct crypto_async_request *areq, int err)
+static void gcm_hash_crypt_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -326,10 +325,9 @@ static int gcm_hash_assoc_remain_continue(struct aead_request *req, u32 flags)
 	return gcm_hash_crypt_remain_continue(req, flags);
 }
 
-static void gcm_hash_assoc_remain_done(struct crypto_async_request *areq,
-				       int err)
+static void gcm_hash_assoc_remain_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -355,9 +353,9 @@ static int gcm_hash_assoc_continue(struct aead_request *req, u32 flags)
 	return gcm_hash_assoc_remain_continue(req, flags);
 }
 
-static void gcm_hash_assoc_done(struct crypto_async_request *areq, int err)
+static void gcm_hash_assoc_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -380,9 +378,9 @@ static int gcm_hash_init_continue(struct aead_request *req, u32 flags)
 	return gcm_hash_assoc_remain_continue(req, flags);
 }
 
-static void gcm_hash_init_done(struct crypto_async_request *areq, int err)
+static void gcm_hash_init_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -433,9 +431,9 @@ static int gcm_encrypt_continue(struct aead_request *req, u32 flags)
 	return gcm_hash(req, flags);
 }
 
-static void gcm_encrypt_done(struct crypto_async_request *areq, int err)
+static void gcm_encrypt_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (err)
 		goto out;
@@ -477,9 +475,9 @@ static int crypto_gcm_verify(struct aead_request *req)
 	return crypto_memneq(iauth_tag, auth_tag, authsize) ? -EBADMSG : 0;
 }
 
-static void gcm_decrypt_done(struct crypto_async_request *areq, int err)
+static void gcm_decrypt_done(void *data, int err)
 {
-	struct aead_request *req = areq->data;
+	struct aead_request *req = data;
 
 	if (!err)
 		err = crypto_gcm_verify(req);
@@ -578,10 +576,10 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 				    const char *ctr_name,
 				    const char *ghash_name)
 {
+	struct skcipher_alg_common *ctr;
 	u32 mask;
 	struct aead_instance *inst;
 	struct gcm_instance_ctx *ctx;
-	struct skcipher_alg *ctr;
 	struct hash_alg_common *ghash;
 	int err;
 
@@ -609,13 +607,12 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 				   ctr_name, 0, mask);
 	if (err)
 		goto err_free_inst;
-	ctr = crypto_spawn_skcipher_alg(&ctx->ctr);
+	ctr = crypto_spawn_skcipher_alg_common(&ctx->ctr);
 
 	/* The skcipher algorithm must be CTR mode, using 16-byte blocks. */
 	err = -EINVAL;
 	if (strncmp(ctr->base.cra_name, "ctr(", 4) != 0 ||
-	    crypto_skcipher_alg_ivsize(ctr) != 16 ||
-	    ctr->base.cra_blocksize != 1)
+	    ctr->ivsize != 16 || ctr->base.cra_blocksize != 1)
 		goto err_free_inst;
 
 	err = -ENAMETOOLONG;
@@ -632,11 +629,10 @@ static int crypto_gcm_create_common(struct crypto_template *tmpl,
 	inst->alg.base.cra_priority = (ghash->base.cra_priority +
 				       ctr->base.cra_priority) / 2;
 	inst->alg.base.cra_blocksize = 1;
-	inst->alg.base.cra_alignmask = ghash->base.cra_alignmask |
-				       ctr->base.cra_alignmask;
+	inst->alg.base.cra_alignmask = ctr->base.cra_alignmask;
 	inst->alg.base.cra_ctxsize = sizeof(struct crypto_gcm_ctx);
 	inst->alg.ivsize = GCM_AES_IV_SIZE;
-	inst->alg.chunksize = crypto_skcipher_alg_chunksize(ctr);
+	inst->alg.chunksize = ctr->chunksize;
 	inst->alg.maxauthsize = 16;
 	inst->alg.init = crypto_gcm_init_tfm;
 	inst->alg.exit = crypto_gcm_exit_tfm;

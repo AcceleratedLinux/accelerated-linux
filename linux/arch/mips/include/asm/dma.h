@@ -87,8 +87,6 @@
 #if defined(CONFIG_SGI_IP22) || defined(CONFIG_SGI_IP28)
 /* don't care; ISA bus master won't work, ISA slave DMA supports 32bit addr */
 #define MAX_DMA_ADDRESS		PAGE_OFFSET
-#elif defined(CONFIG_SOC_MT7621)
-#define MAX_DMA_ADDRESS		(PAGE_OFFSET + (256 << 19))
 #elif defined(CONFIG_CPU_CAVIUM_OCTEON)
 /* Octeon can support DMA to any memory installed */
 #ifdef CONFIG_64BIT
@@ -315,13 +313,5 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 /* These are in kernel/dma.c: */
 extern int request_dma(unsigned int dmanr, const char * device_id);	/* reserve a DMA channel */
 extern void free_dma(unsigned int dmanr);	/* release it again */
-
-/* From PCI */
-
-#ifdef CONFIG_PCI
-extern int isa_dma_bridge_buggy;
-#else
-#define isa_dma_bridge_buggy	(0)
-#endif
 
 #endif /* _ASM_DMA_H */

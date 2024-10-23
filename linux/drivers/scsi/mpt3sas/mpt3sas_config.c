@@ -541,6 +541,42 @@ mpt3sas_config_get_manufacturing_pg0(struct MPT3SAS_ADAPTER *ioc,
 }
 
 /**
+ * mpt3sas_config_get_manufacturing_pg1 - obtain manufacturing page 1
+ * @ioc: per adapter object
+ * @mpi_reply: reply mf payload returned from firmware
+ * @config_page: contents of the config page
+ * Context: sleep.
+ *
+ * Return: 0 for success, non-zero for failure.
+ */
+int
+mpt3sas_config_get_manufacturing_pg1(struct MPT3SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2ManufacturingPage1_t *config_page)
+{
+	Mpi2ConfigRequest_t mpi_request;
+	int r;
+
+	memset(&mpi_request, 0, sizeof(Mpi2ConfigRequest_t));
+	mpi_request.Function = MPI2_FUNCTION_CONFIG;
+	mpi_request.Action = MPI2_CONFIG_ACTION_PAGE_HEADER;
+	mpi_request.Header.PageType = MPI2_CONFIG_PAGETYPE_MANUFACTURING;
+	mpi_request.Header.PageNumber = 1;
+	mpi_request.Header.PageVersion = MPI2_MANUFACTURING1_PAGEVERSION;
+	ioc->build_zero_len_sge_mpi(ioc, &mpi_request.PageBufferSGE);
+	r = _config_request(ioc, &mpi_request, mpi_reply,
+		MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, NULL, 0);
+	if (r)
+		goto out;
+
+	mpi_request.Action = MPI2_CONFIG_ACTION_PAGE_READ_CURRENT;
+	r = _config_request(ioc, &mpi_request, mpi_reply,
+		MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, config_page,
+		sizeof(*config_page));
+ out:
+	return r;
+}
+
+/**
  * mpt3sas_config_get_manufacturing_pg7 - obtain manufacturing page 7
  * @ioc: per adapter object
  * @mpi_reply: reply mf payload returned from firmware
@@ -757,7 +793,95 @@ mpt3sas_config_get_bios_pg3(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
 	r = _config_request(ioc, &mpi_request, mpi_reply,
 	    MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, config_page,
 	    sizeof(*config_page));
+
  out:
+	return r;
+}
+
+/**
+ * mpt3sas_config_set_bios_pg4 - write out bios page 4
+ * @ioc: per adapter object
+ * @mpi_reply: reply mf payload returned from firmware
+ * @config_page: contents of the config page
+ * @sz_config_pg: sizeof the config page
+ * Context: sleep.
+ *
+ * Return: 0 for success, non-zero for failure.
+ */
+int
+mpt3sas_config_set_bios_pg4(struct MPT3SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2BiosPage4_t *config_page,
+	int sz_config_pg)
+{
+	Mpi2ConfigRequest_t mpi_request;
+	int r;
+
+	memset(&mpi_request, 0, sizeof(Mpi2ConfigRequest_t));
+
+	mpi_request.Function = MPI2_FUNCTION_CONFIG;
+	mpi_request.Action = MPI2_CONFIG_ACTION_PAGE_HEADER;
+	mpi_request.Header.PageType = MPI2_CONFIG_PAGETYPE_BIOS;
+	mpi_request.Header.PageNumber = 4;
+	mpi_request.Header.PageVersion = MPI2_BIOSPAGE4_PAGEVERSION;
+
+	ioc->build_zero_len_sge_mpi(ioc, &mpi_request.PageBufferSGE);
+
+	r = _config_request(ioc, &mpi_request, mpi_reply,
+		MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, NULL, 0);
+	if (r)
+		goto out;
+
+	mpi_request.Action = MPI2_CONFIG_ACTION_PAGE_WRITE_CURRENT;
+	r = _config_request(ioc, &mpi_request, mpi_reply,
+		MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, config_page,
+		sz_config_pg);
+ out:
+	return r;
+}
+
+/**
+ * mpt3sas_config_get_bios_pg4 - read bios page 4
+ * @ioc: per adapter object
+ * @mpi_reply: reply mf payload returned from firmware
+ * @config_page: contents of the config page
+ * @sz_config_pg: sizeof the config page
+ * Context: sleep.
+ *
+ * Return: 0 for success, non-zero for failure.
+ */
+int
+mpt3sas_config_get_bios_pg4(struct MPT3SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2BiosPage4_t *config_page,
+	int sz_config_pg)
+{
+	Mpi2ConfigRequest_t mpi_request;
+	int r;
+
+	memset(&mpi_request, 0, sizeof(Mpi2ConfigRequest_t));
+	mpi_request.Function = MPI2_FUNCTION_CONFIG;
+	mpi_request.Action = MPI2_CONFIG_ACTION_PAGE_HEADER;
+	mpi_request.Header.PageType = MPI2_CONFIG_PAGETYPE_BIOS;
+	mpi_request.Header.PageNumber = 4;
+	mpi_request.Header.PageVersion =  MPI2_BIOSPAGE4_PAGEVERSION;
+	ioc->build_zero_len_sge_mpi(ioc, &mpi_request.PageBufferSGE);
+	r = _config_request(ioc, &mpi_request, mpi_reply,
+		MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, NULL, 0);
+	if (r)
+		goto out;
+
+	/*
+	 * The sizeof the page is variable. Allow for just the
+	 * size to be returned
+	 */
+	if (config_page && sz_config_pg) {
+		mpi_request.Action = MPI2_CONFIG_ACTION_PAGE_READ_CURRENT;
+
+		r = _config_request(ioc, &mpi_request, mpi_reply,
+			MPT3_CONFIG_PAGE_DEFAULT_TIMEOUT, config_page,
+			sz_config_pg);
+	}
+
+out:
 	return r;
 }
 
@@ -2210,7 +2334,7 @@ mpt3sas_config_update_driver_trigger_pg2(struct MPT3SAS_ADAPTER *ioc,
 		tg_pg2.NumMPIEventTrigger = 0;
 		memset(&tg_pg2.MPIEventTriggers[0], 0,
 		    NUM_VALID_ENTRIES * sizeof(
-		    MPI26_DRIVER_MPI_EVENT_TIGGER_ENTRY));
+		    MPI26_DRIVER_MPI_EVENT_TRIGGER_ENTRY));
 	}
 
 	rc = _config_set_driver_trigger_pg2(ioc, &mpi_reply, &tg_pg2);
@@ -2369,7 +2493,7 @@ mpt3sas_config_update_driver_trigger_pg3(struct MPT3SAS_ADAPTER *ioc,
 		tg_pg3.NumSCSISenseTrigger = 0;
 		memset(&tg_pg3.SCSISenseTriggers[0], 0,
 		    NUM_VALID_ENTRIES * sizeof(
-		    MPI26_DRIVER_SCSI_SENSE_TIGGER_ENTRY));
+		    MPI26_DRIVER_SCSI_SENSE_TRIGGER_ENTRY));
 	}
 
 	rc = _config_set_driver_trigger_pg3(ioc, &mpi_reply, &tg_pg3);
@@ -2525,7 +2649,7 @@ mpt3sas_config_update_driver_trigger_pg4(struct MPT3SAS_ADAPTER *ioc,
 		tg_pg4.NumIOCStatusLogInfoTrigger = 0;
 		memset(&tg_pg4.IOCStatusLoginfoTriggers[0], 0,
 		    NUM_VALID_ENTRIES * sizeof(
-		    MPI26_DRIVER_IOCSTATUS_LOGINFO_TIGGER_ENTRY));
+		    MPI26_DRIVER_IOCSTATUS_LOGINFO_TRIGGER_ENTRY));
 	}
 
 	rc = _config_set_driver_trigger_pg4(ioc, &mpi_reply, &tg_pg4);

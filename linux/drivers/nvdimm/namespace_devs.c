@@ -2,6 +2,7 @@
 /*
  * Copyright(c) 2013-2015 Intel Corporation. All rights reserved.
  */
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/sort.h>
@@ -26,7 +27,7 @@ static void namespace_pmem_release(struct device *dev)
 	struct nd_region *nd_region = to_nd_region(dev->parent);
 
 	if (nspm->id >= 0)
-		ida_simple_remove(&nd_region->ns_ida, nspm->id);
+		ida_free(&nd_region->ns_ida, nspm->id);
 	kfree(nspm->alt_name);
 	kfree(nspm->uuid);
 	kfree(nspm);
@@ -70,6 +71,8 @@ static int is_namespace_uuid_busy(struct device *dev, void *data)
  * nd_is_uuid_unique - verify that no other namespace has @uuid
  * @dev: any device on a nvdimm_bus
  * @uuid: uuid to check
+ *
+ * Returns: %true if the uuid is unique, %false if not
  */
 bool nd_is_uuid_unique(struct device *dev, uuid_t *uuid)
 {
@@ -170,15 +173,12 @@ EXPORT_SYMBOL(nvdimm_namespace_disk_name);
 
 const uuid_t *nd_dev_to_uuid(struct device *dev)
 {
-	if (!dev)
-		return &uuid_null;
-
-	if (is_namespace_pmem(dev)) {
+	if (dev && is_namespace_pmem(dev)) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
 
 		return nspm->uuid;
-	} else
-		return &uuid_null;
+	}
+	return &uuid_null;
 }
 EXPORT_SYMBOL(nd_dev_to_uuid);
 
@@ -339,6 +339,8 @@ static int scan_free(struct nd_region *nd_region,
  * adjust_resource() the allocation to @n, but if @n is larger than the
  * allocation delete it and find the 'new' last allocation in the label
  * set.
+ *
+ * Returns: %0 on success on -errno on error
  */
 static int shrink_dpa_allocation(struct nd_region *nd_region,
 		struct nd_label_id *label_id, resource_size_t n)
@@ -388,7 +390,7 @@ static resource_size_t init_dpa_allocation(struct nd_label_id *label_id,
  *
  * BLK-space is valid as long as it does not precede a PMEM
  * allocation in a given region. PMEM-space must be contiguous
- * and adjacent to an existing existing allocation (if one
+ * and adjacent to an existing allocation (if one
  * exists).  If reserving PMEM any space is valid.
  */
 static void space_valid(struct nd_region *nd_region, struct nvdimm_drvdata *ndd,
@@ -664,6 +666,8 @@ void release_free_pmem(struct nvdimm_bus *nvdimm_bus,
  * allocations from the start of an interleave set and end at the first
  * BLK allocation or the end of the interleave set, whichever comes
  * first.
+ *
+ * Returns: %0 on success on -errno on error
  */
 static int grow_dpa_allocation(struct nd_region *nd_region,
 		struct nd_label_id *label_id, resource_size_t n)
@@ -839,7 +843,6 @@ static ssize_t size_store(struct device *dev,
 {
 	struct nd_region *nd_region = to_nd_region(dev->parent);
 	unsigned long long val;
-	uuid_t **uuid = NULL;
 	int rc;
 
 	rc = kstrtoull(buf, 0, &val);
@@ -853,16 +856,12 @@ static ssize_t size_store(struct device *dev,
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
 
-	if (is_namespace_pmem(dev)) {
+	/* setting size zero == 'delete namespace' */
+	if (rc == 0 && val == 0 && is_namespace_pmem(dev)) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
 
-		uuid = &nspm->uuid;
-	}
-
-	if (rc == 0 && val == 0 && uuid) {
-		/* setting size zero == 'delete namespace' */
-		kfree(*uuid);
-		*uuid = NULL;
+		kfree(nspm->uuid);
+		nspm->uuid = NULL;
 	}
 
 	dev_dbg(dev, "%llx %s (%d)\n", val, rc < 0 ? "fail" : "success", rc);
@@ -958,6 +957,8 @@ static ssize_t uuid_show(struct device *dev, struct device_attribute *attr,
  * @dev: namespace type for generating label_id
  * @new_uuid: incoming uuid
  * @old_uuid: reference to the uuid storage location in the namespace object
+ *
+ * Returns: %0 on success on -errno on error
  */
 static int namespace_update_uuid(struct nd_region *nd_region,
 				 struct device *dev, uuid_t *new_uuid,
@@ -1346,7 +1347,7 @@ static ssize_t force_raw_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	bool force_raw;
-	int rc = strtobool(buf, &force_raw);
+	int rc = kstrtobool(buf, &force_raw);
 
 	if (rc)
 		return rc;
@@ -1663,8 +1664,10 @@ static int select_pmem_id(struct nd_region *nd_region, const uuid_t *pmem_id)
 /**
  * create_namespace_pmem - validate interleave set labelling, retrieve label0
  * @nd_region: region with mappings to validate
- * @nspm: target namespace to create
+ * @nd_mapping: container of dpa-resource-root + labels
  * @nd_label: target pmem namespace label to evaluate
+ *
+ * Returns: the created &struct device on success or ERR_PTR(-errno) on error
  */
 static struct device *create_namespace_pmem(struct nd_region *nd_region,
 					    struct nd_mapping *nd_mapping,
@@ -1712,8 +1715,6 @@ static struct device *create_namespace_pmem(struct nd_region *nd_region,
 	res->flags = IORESOURCE_MEM;
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
-		uuid_t uuid;
-
 		nsl_get_uuid(ndd, nd_label, &uuid);
 		if (has_uuid_at_pos(nd_region, &uuid, cookie, i))
 			continue;
@@ -1819,7 +1820,7 @@ static struct device *nd_namespace_pmem_create(struct nd_region *nd_region)
 	res->name = dev_name(&nd_region->dev);
 	res->flags = IORESOURCE_MEM;
 
-	nspm->id = ida_simple_get(&nd_region->ns_ida, 0, 0, GFP_KERNEL);
+	nspm->id = ida_alloc(&nd_region->ns_ida, GFP_KERNEL);
 	if (nspm->id < 0) {
 		kfree(nspm);
 		return NULL;
@@ -2197,8 +2198,7 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 			struct nd_namespace_pmem *nspm;
 
 			nspm = to_nd_namespace_pmem(dev);
-			id = ida_simple_get(&nd_region->ns_ida, 0, 0,
-					    GFP_KERNEL);
+			id = ida_alloc(&nd_region->ns_ida, GFP_KERNEL);
 			nspm->id = id;
 		} else
 			id = i;

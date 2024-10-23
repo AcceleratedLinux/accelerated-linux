@@ -10,13 +10,14 @@
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 
 #include <linux/pinctrl/machine.h>
+#include <linux/pinctrl/pinconf-generic.h>
+#include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
-#include <linux/pinctrl/pinconf.h>
-#include <linux/pinctrl/pinconf-generic.h>
 
 #include <linux/mfd/madera/core.h>
 #include <linux/mfd/madera/registers.h>
@@ -1083,19 +1084,17 @@ static int madera_pin_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int madera_pin_remove(struct platform_device *pdev)
+static void madera_pin_remove(struct platform_device *pdev)
 {
 	struct madera_pin_private *priv = platform_get_drvdata(pdev);
 
 	if (priv->madera->pdata.gpio_configs)
 		pinctrl_unregister_mappings(priv->madera->pdata.gpio_configs);
-
-	return 0;
 }
 
 static struct platform_driver madera_pin_driver = {
 	.probe = madera_pin_probe,
-	.remove = madera_pin_remove,
+	.remove_new = madera_pin_remove,
 	.driver = {
 		.name = "madera-pinctrl",
 	},

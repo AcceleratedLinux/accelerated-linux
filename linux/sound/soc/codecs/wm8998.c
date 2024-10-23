@@ -1332,7 +1332,6 @@ static const struct snd_soc_component_driver soc_component_dev_wm8998 = {
 	.num_dapm_routes	= ARRAY_SIZE(wm8998_dapm_routes),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int wm8998_probe(struct platform_device *pdev)
@@ -1410,7 +1409,7 @@ err_pm_disable:
 	return ret;
 }
 
-static int wm8998_remove(struct platform_device *pdev)
+static void wm8998_remove(struct platform_device *pdev)
 {
 	struct wm8998_priv *wm8998 = platform_get_drvdata(pdev);
 	struct arizona *arizona = wm8998->core.arizona;
@@ -1420,8 +1419,6 @@ static int wm8998_remove(struct platform_device *pdev)
 	arizona_free_spk_irqs(arizona);
 
 	arizona_jack_codec_dev_remove(&wm8998->core);
-
-	return 0;
 }
 
 static struct platform_driver wm8998_codec_driver = {
@@ -1429,7 +1426,7 @@ static struct platform_driver wm8998_codec_driver = {
 		.name = "wm8998-codec",
 	},
 	.probe = wm8998_probe,
-	.remove = wm8998_remove,
+	.remove_new = wm8998_remove,
 };
 
 module_platform_driver(wm8998_codec_driver);

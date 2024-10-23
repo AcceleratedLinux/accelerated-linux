@@ -31,6 +31,9 @@ properties:
           - invensense,mpu9250
           - invensense,mpu9255
       - items:
+          - const: invensense,icm20600
+          - const: invensense,icm20602
+      - items:
           - const: invensense,icm20608d
           - const: invensense,icm20608
 
@@ -40,12 +43,15 @@ properties:
   interrupts:
     maxItems: 1
 
-  spi-max-frequency: true
-
   vdd-supply: true
   vddio-supply: true
 
   mount-matrix: true
+
+  invensense,level-shifter:
+    type: boolean
+    description: |
+      From ancient platform data struct: false: VLogic, true: VDD
 
   i2c-gate:
     $ref: /schemas/i2c/i2c-controller.yaml
@@ -54,20 +60,22 @@ properties:
       These devices also support an auxiliary i2c bus via an i2c-gate.
 
 allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
   - if:
-      not:
-        properties:
-          compatible:
-            contains:
-              enum:
-                - invensense,mpu9150
-                - invensense,mpu9250
-                - invensense,mpu9255
+      properties:
+        compatible:
+          contains:
+            enum:
+              - invensense,iam20680
+              - invensense,icm20602
+              - invensense,icm20608
+              - invensense,icm20609
+              - invensense,icm20689
     then:
       properties:
         i2c-gate: false
 
-additionalProperties: false
+unevaluatedProperties: false
 
 required:
   - compatible

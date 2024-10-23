@@ -132,7 +132,7 @@ static unsigned long ebb_switch_in(bool ebb, struct cpu_hw_events *cpuhw)
 
 static inline void power_pmu_bhrb_enable(struct perf_event *event) {}
 static inline void power_pmu_bhrb_disable(struct perf_event *event) {}
-static void power_pmu_sched_task(struct perf_event_context *ctx, bool sched_in) {}
+static void power_pmu_sched_task(struct perf_event_pmu_context *pmu_ctx, bool sched_in) {}
 static inline void power_pmu_bhrb_read(struct perf_event *event, struct cpu_hw_events *cpuhw) {}
 static void pmao_restore_workaround(bool ebb) { }
 #endif /* CONFIG_PPC32 */
@@ -256,7 +256,7 @@ static bool regs_sipr(struct pt_regs *regs)
 
 static inline u32 perf_flags_from_msr(struct pt_regs *regs)
 {
-	if (regs->msr & MSR_PR)
+	if (user_mode(regs))
 		return PERF_RECORD_MISC_USER;
 	if ((regs->msr & MSR_HV) && freeze_events_kernel != MMCR0_FCHV)
 		return PERF_RECORD_MISC_HYPERVISOR;
@@ -424,7 +424,7 @@ static void power_pmu_bhrb_enable(struct perf_event *event)
 		cpuhw->bhrb_context = event->ctx;
 	}
 	cpuhw->bhrb_users++;
-	perf_sched_cb_inc(event->ctx->pmu);
+	perf_sched_cb_inc(event->pmu);
 }
 
 static void power_pmu_bhrb_disable(struct perf_event *event)
@@ -436,7 +436,7 @@ static void power_pmu_bhrb_disable(struct perf_event *event)
 
 	WARN_ON_ONCE(!cpuhw->bhrb_users);
 	cpuhw->bhrb_users--;
-	perf_sched_cb_dec(event->ctx->pmu);
+	perf_sched_cb_dec(event->pmu);
 
 	if (!cpuhw->disabled && !cpuhw->bhrb_users) {
 		/* BHRB cannot be turned off when other
@@ -451,7 +451,7 @@ static void power_pmu_bhrb_disable(struct perf_event *event)
 /* Called from ctxsw to prevent one process's branch entries to
  * mingle with the other process's entries during context switch.
  */
-static void power_pmu_sched_task(struct perf_event_context *ctx, bool sched_in)
+static void power_pmu_sched_task(struct perf_event_pmu_context *pmu_ctx, bool sched_in)
 {
 	if (!ppmu->bhrb_nr)
 		return;
@@ -1349,35 +1349,29 @@ static void power_pmu_disable(struct pmu *pmu)
 		 * a PMI happens during interrupt replay and perf counter
 		 * values are cleared by PMU callbacks before replay.
 		 *
-		 * If any PMC corresponding to the active PMU events are
-		 * overflown, disable the interrupt by clearing the paca
-		 * bit for PMI since we are disabling the PMU now.
-		 * Otherwise provide a warning if there is PMI pending, but
-		 * no counter is found overflown.
+		 * Disable the interrupt by clearing the paca bit for PMI
+		 * since we are disabling the PMU now. Otherwise provide a
+		 * warning if there is PMI pending, but no counter is found
+		 * overflown.
+		 *
+		 * Since power_pmu_disable runs under local_irq_save, it
+		 * could happen that code hits a PMC overflow without PMI
+		 * pending in paca. Hence only clear PMI pending if it was
+		 * set.
+		 *
+		 * If a PMI is pending, then MSR[EE] must be disabled (because
+		 * the masked PMI handler disabling EE). So it is safe to
+		 * call clear_pmi_irq_pending().
 		 */
-		if (any_pmc_overflown(cpuhw)) {
-			/*
-			 * Since power_pmu_disable runs under local_irq_save, it
-			 * could happen that code hits a PMC overflow without PMI
-			 * pending in paca. Hence only clear PMI pending if it was
-			 * set.
-			 *
-			 * If a PMI is pending, then MSR[EE] must be disabled (because
-			 * the masked PMI handler disabling EE). So it is safe to
-			 * call clear_pmi_irq_pending().
-			 */
-			if (pmi_irq_pending())
-				clear_pmi_irq_pending();
-		} else
-			WARN_ON(pmi_irq_pending());
+		if (pmi_irq_pending())
+			clear_pmi_irq_pending();
 
 		val = mmcra = cpuhw->mmcr.mmcra;
 
 		/*
 		 * Disable instruction sampling if it was enabled
 		 */
-		if (cpuhw->mmcr.mmcra & MMCRA_SAMPLE_ENABLE)
-			val &= ~MMCRA_SAMPLE_ENABLE;
+		val &= ~MMCRA_SAMPLE_ENABLE;
 
 		/* Disable BHRB via mmcra (BHRBRD) for p10 */
 		if (ppmu->flags & PPMU_ARCH_31)
@@ -1388,7 +1382,7 @@ static void power_pmu_disable(struct pmu *pmu)
 		 * instruction sampling or BHRB.
 		 */
 		if (val != mmcra) {
-			mtspr(SPRN_MMCRA, mmcra);
+			mtspr(SPRN_MMCRA, val);
 			mb();
 			isync();
 		}
@@ -2136,6 +2130,23 @@ static int power_pmu_event_init(struct perf_event *event)
 	if (has_branch_stack(event)) {
 		u64 bhrb_filter = -1;
 
+		/*
+		 * Currently no PMU supports having multiple branch filters
+		 * at the same time. Branch filters are set via MMCRA IFM[32:33]
+		 * bits for Power8 and above. Return EOPNOTSUPP when multiple
+		 * branch filters are requested in the event attr.
+		 *
+		 * When opening event via perf_event_open(), branch_sample_type
+		 * gets adjusted in perf_copy_attr(). Kernel will automatically
+		 * adjust the branch_sample_type based on the event modifier
+		 * settings to include PERF_SAMPLE_BRANCH_PLM_ALL. Hence drop
+		 * the check for PERF_SAMPLE_BRANCH_PLM_ALL.
+		 */
+		if (hweight64(event->attr.branch_sample_type & ~PERF_SAMPLE_BRANCH_PLM_ALL) > 1) {
+			local_irq_restore(irq_flags);
+			return -EOPNOTSUPP;
+		}
+
 		if (ppmu->bhrb_filter_map)
 			bhrb_filter = ppmu->bhrb_filter_map(
 					event->attr.branch_sample_type);
@@ -2301,17 +2312,20 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 			struct cpu_hw_events *cpuhw;
 			cpuhw = this_cpu_ptr(&cpu_hw_events);
 			power_pmu_bhrb_read(event, cpuhw);
-			data.br_stack = &cpuhw->bhrb_stack;
+			perf_sample_save_brstack(&data, event, &cpuhw->bhrb_stack, NULL);
 		}
 
 		if (event->attr.sample_type & PERF_SAMPLE_DATA_SRC &&
-						ppmu->get_mem_data_src)
+						ppmu->get_mem_data_src) {
 			ppmu->get_mem_data_src(&data.data_src, ppmu->flags, regs);
+			data.sample_flags |= PERF_SAMPLE_DATA_SRC;
+		}
 
 		if (event->attr.sample_type & PERF_SAMPLE_WEIGHT_TYPE &&
-						ppmu->get_mem_weight)
+						ppmu->get_mem_weight) {
 			ppmu->get_mem_weight(&data.weight.full, event->attr.sample_type);
-
+			data.sample_flags |= PERF_SAMPLE_WEIGHT_TYPE;
+		}
 		if (perf_event_overflow(event, &data, regs))
 			power_pmu_stop(event, 0);
 	} else if (period) {
@@ -2488,6 +2502,33 @@ static int power_pmu_prepare_cpu(unsigned int cpu)
 	return 0;
 }
 
+static ssize_t pmu_name_show(struct device *cdev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	if (ppmu)
+		return sysfs_emit(buf, "%s", ppmu->name);
+
+	return 0;
+}
+
+static DEVICE_ATTR_RO(pmu_name);
+
+static struct attribute *pmu_caps_attrs[] = {
+	&dev_attr_pmu_name.attr,
+	NULL
+};
+
+static const struct attribute_group pmu_caps_group = {
+	.name  = "caps",
+	.attrs = pmu_caps_attrs,
+};
+
+static const struct attribute_group *pmu_caps_groups[] = {
+	&pmu_caps_group,
+	NULL,
+};
+
 int __init register_power_pmu(struct power_pmu *pmu)
 {
 	if (ppmu)
@@ -2498,6 +2539,10 @@ int __init register_power_pmu(struct power_pmu *pmu)
 		pmu->name);
 
 	power_pmu.attr_groups = ppmu->attr_groups;
+
+	if (ppmu->flags & PPMU_ARCH_207S)
+		power_pmu.attr_update = pmu_caps_groups;
+
 	power_pmu.capabilities |= (ppmu->capabilities & PERF_PMU_CAP_EXTENDED_REGS);
 
 #ifdef MSR_HV
@@ -2547,6 +2592,8 @@ static int __init init_ppc64_pmu(void)
 	else if (!init_power9_pmu())
 		return 0;
 	else if (!init_power10_pmu())
+		return 0;
+	else if (!init_power11_pmu())
 		return 0;
 	else if (!init_ppc970_pmu())
 		return 0;

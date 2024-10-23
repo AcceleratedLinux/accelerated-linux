@@ -42,7 +42,6 @@
 #include "i915_drv.h"
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"
-#include "i915_gem_userptr.h"
 #include "i915_scatterlist.h"
 
 #ifdef CONFIG_MMU_NOTIFIER
@@ -61,36 +60,7 @@ static bool i915_gem_userptr_invalidate(struct mmu_interval_notifier *mni,
 					const struct mmu_notifier_range *range,
 					unsigned long cur_seq)
 {
-	struct drm_i915_gem_object *obj = container_of(mni, struct drm_i915_gem_object, userptr.notifier);
-	struct drm_i915_private *i915 = to_i915(obj->base.dev);
-	long r;
-
-	if (!mmu_notifier_range_blockable(range))
-		return false;
-
-	write_lock(&i915->mm.notifier_lock);
-
 	mmu_interval_set_seq(mni, cur_seq);
-
-	write_unlock(&i915->mm.notifier_lock);
-
-	/*
-	 * We don't wait when the process is exiting. This is valid
-	 * because the object will be cleaned up anyway.
-	 *
-	 * This is also temporarily required as a hack, because we
-	 * cannot currently force non-consistent batch buffers to preempt
-	 * and reschedule by waiting on it, hanging processes on exit.
-	 */
-	if (current->flags & PF_EXITING)
-		return true;
-
-	/* we will unbind on next submission, still have userptr pins */
-	r = dma_resv_wait_timeout(obj->base.resv, DMA_RESV_USAGE_BOOKKEEP, false,
-				  MAX_SCHEDULE_TIMEOUT);
-	if (r <= 0)
-		drm_err(&i915->drm, "(%ld) failed to wait for idle\n", r);
-
 	return true;
 }
 
@@ -128,13 +98,16 @@ static void i915_gem_object_userptr_drop_ref(struct drm_i915_gem_object *obj)
 
 static int i915_gem_userptr_get_pages(struct drm_i915_gem_object *obj)
 {
-	const unsigned long num_pages = obj->base.size >> PAGE_SHIFT;
-	unsigned int max_segment = i915_sg_segment_size();
+	unsigned int max_segment = i915_sg_segment_size(obj->base.dev->dev);
 	struct sg_table *st;
-	unsigned int sg_page_sizes;
 	struct page **pvec;
+	unsigned int num_pages; /* limited by sg_alloc_table_from_pages_segment */
 	int ret;
 
+	if (overflows_type(obj->base.size >> PAGE_SHIFT, num_pages))
+		return -E2BIG;
+
+	num_pages = obj->base.size >> PAGE_SHIFT;
 	st = kmalloc(sizeof(*st), GFP_KERNEL);
 	if (!st)
 		return -ENOMEM;
@@ -170,8 +143,7 @@ alloc_table:
 	if (i915_gem_object_can_bypass_llc(obj))
 		obj->cache_dirty = true;
 
-	sg_page_sizes = i915_sg_dma_sizes(st->sgl);
-	__i915_gem_object_set_pages(obj, st, sg_page_sizes);
+	__i915_gem_object_set_pages(obj, st);
 
 	return 0;
 
@@ -216,8 +188,8 @@ i915_gem_userptr_put_pages(struct drm_i915_gem_object *obj,
 			 * However...!
 			 *
 			 * The mmu-notifier can be invalidated for a
-			 * migrate_page, that is alreadying holding the lock
-			 * on the page. Such a try_to_unmap() will result
+			 * migrate_folio, that is alreadying holding the lock
+			 * on the folio. Such a try_to_unmap() will result
 			 * in us calling put_pages() and so recursively try
 			 * to lock the page. We avoid that deadlock with
 			 * a trylock_page() and in exchange we risk missing
@@ -292,7 +264,7 @@ int i915_gem_object_userptr_submit_init(struct drm_i915_gem_object *obj)
 	if (!i915_gem_object_is_readonly(obj))
 		gup_flags |= FOLL_WRITE;
 
-	pinned = ret = 0;
+	pinned = 0;
 	while (pinned < num_pages) {
 		ret = pin_user_pages_fast(obj->userptr.ptr + pinned * PAGE_SIZE,
 					  num_pages - pinned, gup_flags,
@@ -302,7 +274,6 @@ int i915_gem_object_userptr_submit_init(struct drm_i915_gem_object *obj)
 
 		pinned += ret;
 	}
-	ret = 0;
 
 	ret = i915_gem_object_lock_interruptible(obj, NULL);
 	if (ret)
@@ -378,6 +349,9 @@ i915_gem_userptr_release(struct drm_i915_gem_object *obj)
 {
 	GEM_WARN_ON(obj->userptr.page_ref);
 
+	if (!obj->userptr.notifier.mm)
+		return;
+
 	mmu_interval_notifier_remove(&obj->userptr.notifier);
 	obj->userptr.notifier.mm = NULL;
 }
@@ -426,12 +400,12 @@ static const struct drm_i915_gem_object_ops i915_gem_userptr_ops = {
 static int
 probe_range(struct mm_struct *mm, unsigned long addr, unsigned long len)
 {
-	const unsigned long end = addr + len;
+	VMA_ITERATOR(vmi, mm, addr);
 	struct vm_area_struct *vma;
-	int ret = -EFAULT;
+	unsigned long end = addr + len;
 
 	mmap_read_lock(mm);
-	for (vma = find_vma(mm, addr); vma; vma = vma->vm_next) {
+	for_each_vma_range(vmi, vma, end) {
 		/* Check for holes, note that we also update the addr below */
 		if (vma->vm_start > addr)
 			break;
@@ -439,16 +413,13 @@ probe_range(struct mm_struct *mm, unsigned long addr, unsigned long len)
 		if (vma->vm_flags & (VM_PFNMAP | VM_MIXEDMAP))
 			break;
 
-		if (vma->vm_end >= end) {
-			ret = 0;
-			break;
-		}
-
 		addr = vma->vm_end;
 	}
 	mmap_read_unlock(mm);
 
-	return ret;
+	if (vma || addr < end)
+		return -EFAULT;
+	return 0;
 }
 
 /*
@@ -492,13 +463,13 @@ i915_gem_userptr_ioctl(struct drm_device *dev,
 		       struct drm_file *file)
 {
 	static struct lock_class_key __maybe_unused lock_class;
-	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct drm_i915_private *i915 = to_i915(dev);
 	struct drm_i915_gem_userptr *args = data;
 	struct drm_i915_gem_object __maybe_unused *obj;
 	int __maybe_unused ret;
 	u32 __maybe_unused handle;
 
-	if (!HAS_LLC(dev_priv) && !HAS_SNOOP(dev_priv)) {
+	if (!HAS_LLC(i915) && !HAS_SNOOP(i915)) {
 		/* We cannot support coherent userptr objects on hw without
 		 * LLC and broken snooping.
 		 */
@@ -530,7 +501,7 @@ i915_gem_userptr_ioctl(struct drm_device *dev,
 		 * On almost all of the older hw, we cannot tell the GPU that
 		 * a page is readonly.
 		 */
-		if (!to_gt(dev_priv)->vm->has_read_only)
+		if (!to_gt(i915)->vm->has_read_only)
 			return -ENODEV;
 	}
 
@@ -582,15 +553,3 @@ i915_gem_userptr_ioctl(struct drm_device *dev,
 #endif
 }
 
-int i915_gem_init_userptr(struct drm_i915_private *dev_priv)
-{
-#ifdef CONFIG_MMU_NOTIFIER
-	rwlock_init(&dev_priv->mm.notifier_lock);
-#endif
-
-	return 0;
-}
-
-void i915_gem_cleanup_userptr(struct drm_i915_private *dev_priv)
-{
-}

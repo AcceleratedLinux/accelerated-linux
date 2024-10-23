@@ -37,9 +37,12 @@ static int lis2hh12_i2c_read(struct lis2hh12_data *cdata, u8 reg_addr, int len,
 static int lis2hh12_i2c_write(struct lis2hh12_data *cdata, u8 reg_addr, int len,
 								u8 * data)
 {
-	u8 send[len + 1];
 	struct i2c_msg msg;
 	struct i2c_client *client = to_i2c_client(cdata->dev);
+	u8 send[4];
+
+	if (len >= ARRAY_SIZE(send))
+		return -ENOMEM;
 
 	send[0] = reg_addr;
 	memcpy(&send[1], data, len * sizeof(u8));
@@ -58,8 +61,7 @@ static const struct lis2hh12_transfer_function lis2hh12_tf_i2c = {
 	.read = lis2hh12_i2c_read,
 };
 
-static int lis2hh12_i2c_probe(struct i2c_client *client,
-			    const struct i2c_device_id *id)
+static int lis2hh12_i2c_probe(struct i2c_client *client)
 {
 	int err;
 	struct lis2hh12_data *cdata;
@@ -84,14 +86,13 @@ free_data:
 	return err;
 }
 
-static int lis2hh12_i2c_remove(struct i2c_client *client)
+static void lis2hh12_i2c_remove(struct i2c_client *client)
 {
 	struct lis2hh12_data *cdata = i2c_get_clientdata(client);
 
 	lis2hh12_common_remove(cdata, client->irq);
 	dev_info(cdata->dev, "%s: removed\n", LIS2HH12_DEV_NAME);
 	kfree(cdata);
-	return 0;
 }
 
 #ifdef CONFIG_PM

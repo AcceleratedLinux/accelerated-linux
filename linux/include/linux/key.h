@@ -88,6 +88,12 @@ enum key_need_perm {
 	KEY_DEFER_PERM_CHECK,	/* Special: permission check is deferred */
 };
 
+enum key_lookup_flag {
+	KEY_LOOKUP_CREATE = 0x01,
+	KEY_LOOKUP_PARTIAL = 0x02,
+	KEY_LOOKUP_ALL = (KEY_LOOKUP_CREATE | KEY_LOOKUP_PARTIAL),
+};
+
 struct seq_file;
 struct user_struct;
 struct signal_struct;
@@ -380,6 +386,14 @@ extern int wait_for_key_construction(struct key *key, bool intr);
 
 extern int key_validate(const struct key *key);
 
+extern key_ref_t key_create(key_ref_t keyring,
+			    const char *type,
+			    const char *description,
+			    const void *payload,
+			    size_t plen,
+			    key_perm_t perm,
+			    unsigned long flags);
+
 extern key_ref_t key_create_or_update(key_ref_t keyring,
 				      const char *type,
 				      const char *description,
@@ -476,9 +490,6 @@ do {									\
 	rcu_assign_pointer((KEY)->payload.rcu_data0, (PAYLOAD));	\
 } while (0)
 
-#ifdef CONFIG_SYSCTL
-extern struct ctl_table key_sysctls[];
-#endif
 /*
  * the userspace interface
  */
@@ -504,6 +515,7 @@ extern void key_init(void);
 #define key_init()			do { } while(0)
 #define key_free_user_ns(ns)		do { } while(0)
 #define key_remove_domain(d)		do { } while(0)
+#define key_lookup(k)			NULL
 
 #endif /* CONFIG_KEYS */
 #endif /* __KERNEL__ */

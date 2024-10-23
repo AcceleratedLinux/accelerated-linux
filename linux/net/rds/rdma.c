@@ -301,6 +301,9 @@ static int __rds_rdma_map(struct rds_sock *rs, struct rds_get_mr_args *args,
 			kfree(sg);
 		}
 		ret = PTR_ERR(trans_private);
+		/* Trigger connection so that its ready for the next retry */
+		if (ret == -ENODEV && cp)
+			rds_conn_connect_if_down(cp->cp_conn);
 		goto out;
 	}
 
@@ -742,7 +745,7 @@ int rds_cmsg_rdma_args(struct rds_sock *rs, struct rds_message *rm,
 					NULL, 0, rs, &local_odp_mr->r_key, NULL,
 					iov->addr, iov->bytes, ODP_VIRTUAL);
 			if (IS_ERR(local_odp_mr->r_trans_private)) {
-				ret = IS_ERR(local_odp_mr->r_trans_private);
+				ret = PTR_ERR(local_odp_mr->r_trans_private);
 				rdsdebug("get_mr ret %d %p\"", ret,
 					 local_odp_mr->r_trans_private);
 				kfree(local_odp_mr);

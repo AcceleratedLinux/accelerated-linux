@@ -27,6 +27,7 @@
 #include <subdev/therm.h>
 #include <subdev/timer.h>
 #include <subdev/top.h>
+#include <subdev/vfn.h>
 #include <subdev/volt.h>
 
 #include <engine/bsp.h>
@@ -42,6 +43,8 @@
 #include <engine/msvld.h>
 #include <engine/nvenc.h>
 #include <engine/nvdec.h>
+#include <engine/nvjpg.h>
+#include <engine/ofa.h>
 #include <engine/pm.h>
 #include <engine/sec.h>
 #include <engine/sec2.h>

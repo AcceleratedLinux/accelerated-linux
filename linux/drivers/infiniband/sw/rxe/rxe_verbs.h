@@ -9,7 +9,6 @@
 
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
-#include <rdma/rdma_user_rxe.h>
 #include "rxe_pool.h"
 #include "rxe_task.h"
 #include "rxe_hw_counters.h"
@@ -64,9 +63,7 @@ struct rxe_cq {
 	struct rxe_queue	*queue;
 	spinlock_t		cq_lock;
 	u8			notify;
-	bool			is_dying;
 	bool			is_user;
-	struct tasklet_struct	comp_task;
 	atomic_t		num_wq;
 };
 
@@ -105,17 +102,7 @@ struct rxe_srq {
 	int			error;
 };
 
-enum rxe_qp_state {
-	QP_STATE_RESET,
-	QP_STATE_INIT,
-	QP_STATE_READY,
-	QP_STATE_DRAIN,		/* req only */
-	QP_STATE_DRAINED,	/* req only */
-	QP_STATE_ERROR
-};
-
 struct rxe_req_info {
-	enum rxe_qp_state	state;
 	int			wqe_index;
 	u32			psn;
 	int			opcode;
@@ -124,8 +111,9 @@ struct rxe_req_info {
 	int			need_rd_atomic;
 	int			wait_psn;
 	int			need_retry;
+	int			wait_for_rnr_timer;
 	int			noack_pkts;
-	struct rxe_task		task;
+	int			again;
 };
 
 struct rxe_comp_info {
@@ -136,7 +124,6 @@ struct rxe_comp_info {
 	int			started_retry;
 	u32			retry_cnt;
 	u32			rnr_retry;
-	struct rxe_task		task;
 };
 
 enum rdatm_res_state {
@@ -155,7 +142,7 @@ struct resp_res {
 
 	union {
 		struct {
-			struct sk_buff	*skb;
+			u64		orig_val;
 		} atomic;
 		struct {
 			u64		va_org;
@@ -164,11 +151,16 @@ struct resp_res {
 			u64		va;
 			u32		resid;
 		} read;
+		struct {
+			u32		length;
+			u64		va;
+			u8		type;
+			u8		level;
+		} flush;
 	};
 };
 
 struct rxe_resp_info {
-	enum rxe_qp_state	state;
 	u32			msn;
 	u32			psn;
 	u32			ack_psn;
@@ -189,7 +181,6 @@ struct rxe_resp_info {
 	u32			resid;
 	u32			rkey;
 	u32			length;
-	u64			atomic_orig;
 
 	/* SRQ only */
 	struct {
@@ -204,7 +195,6 @@ struct rxe_resp_info {
 	unsigned int		res_head;
 	unsigned int		res_tail;
 	struct resp_res		*res;
-	struct rxe_task		task;
 };
 
 struct rxe_qp {
@@ -237,6 +227,9 @@ struct rxe_qp {
 	struct sk_buff_head	req_pkts;
 	struct sk_buff_head	resp_pkts;
 
+	struct rxe_task		send_task;
+	struct rxe_task		recv_task;
+
 	struct rxe_req_info	req;
 	struct rxe_comp_info	comp;
 	struct rxe_resp_info	resp;
@@ -261,6 +254,22 @@ struct rxe_qp {
 	struct execute_work	cleanup_work;
 };
 
+enum {
+	RXE_ACCESS_REMOTE	= IB_ACCESS_REMOTE_READ
+				| IB_ACCESS_REMOTE_WRITE
+				| IB_ACCESS_REMOTE_ATOMIC,
+	RXE_ACCESS_SUPPORTED_MR	= RXE_ACCESS_REMOTE
+				| IB_ACCESS_LOCAL_WRITE
+				| IB_ACCESS_MW_BIND
+				| IB_ACCESS_ON_DEMAND
+				| IB_ACCESS_FLUSH_GLOBAL
+				| IB_ACCESS_FLUSH_PERSISTENT
+				| IB_ACCESS_OPTIONAL,
+	RXE_ACCESS_SUPPORTED_QP	= RXE_ACCESS_SUPPORTED_MR,
+	RXE_ACCESS_SUPPORTED_MW	= RXE_ACCESS_SUPPORTED_MR
+				| IB_ZERO_BASED,
+};
+
 enum rxe_mr_state {
 	RXE_MR_STATE_INVALID,
 	RXE_MR_STATE_FREE,
@@ -277,26 +286,9 @@ enum rxe_mr_lookup_type {
 	RXE_LOOKUP_REMOTE,
 };
 
-#define RXE_BUF_PER_MAP		(PAGE_SIZE / sizeof(struct rxe_phys_buf))
-
-struct rxe_phys_buf {
-	u64      addr;
-	u64      size;
-};
-
-struct rxe_map {
-	struct rxe_phys_buf	buf[RXE_BUF_PER_MAP];
-};
-
-struct rxe_map_set {
-	struct rxe_map		**map;
-	u64			va;
-	u64			iova;
-	size_t			length;
-	u32			offset;
-	u32			nbuf;
-	int			page_shift;
-	int			page_mask;
+enum rxe_rereg {
+	RXE_MR_REREG_SUPPORTED	= IB_MR_REREG_PD
+				| IB_MR_REREG_ACCESS,
 };
 
 static inline int rkey_is_mw(u32 rkey)
@@ -315,22 +307,23 @@ struct rxe_mr {
 	u32			lkey;
 	u32			rkey;
 	enum rxe_mr_state	state;
-	enum ib_mr_type		type;
 	int			access;
-
-	int			map_shift;
-	int			map_mask;
-
-	u32			num_buf;
-
-	u32			max_buf;
-	u32			num_map;
-
 	atomic_t		num_mw;
 
-	struct rxe_map_set	*cur_map_set;
-	struct rxe_map_set	*next_map_set;
+	unsigned int		page_offset;
+	unsigned int		page_shift;
+	u64			page_mask;
+
+	u32			num_buf;
+	u32			nbuf;
+
+	struct xarray		page_list;
 };
+
+static inline unsigned int mr_page_size(struct rxe_mr *mr)
+{
+	return mr ? mr->ibmr.page_size : PAGE_SIZE;
+}
 
 enum rxe_mw_state {
 	RXE_MW_STATE_INVALID	= RXE_MR_STATE_INVALID,

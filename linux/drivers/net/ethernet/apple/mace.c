@@ -272,7 +272,7 @@ static int mace_probe(struct macio_dev *mdev, const struct of_device_id *match)
 	return rc;
 }
 
-static int mace_remove(struct macio_dev *mdev)
+static void mace_remove(struct macio_dev *mdev)
 {
 	struct net_device *dev = macio_get_drvdata(mdev);
 	struct mace_data *mp;
@@ -296,8 +296,6 @@ static int mace_remove(struct macio_dev *mdev)
 	free_netdev(dev);
 
 	macio_release_resources(mdev);
-
-	return 0;
 }
 
 static void dbdma_reset(volatile struct dbdma_regs __iomem *dma)
@@ -846,7 +844,7 @@ static void mace_tx_timeout(struct timer_list *t)
     if (mp->tx_bad_runt) {
 	mp->tx_bad_runt = 0;
     } else if (i != mp->tx_fill) {
-	dev_kfree_skb(mp->tx_bufs[i]);
+	dev_kfree_skb_irq(mp->tx_bufs[i]);
 	if (++i >= N_TX_RING)
 	    i = 0;
 	mp->tx_empty = i;

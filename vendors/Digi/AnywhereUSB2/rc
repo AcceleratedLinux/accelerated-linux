@@ -26,12 +26,6 @@ echo 6 > /proc/sys/kernel/printk
 # initialise devices before we need them
 /etc/rc.dev
 
-echo "Configuring GPIOs..."
-# GPIO2/07 on is the dev/dbg mode jumper
-echo 455 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio455/direction
-echo 1 > /sys/class/gpio/gpio455/active_low
-
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1

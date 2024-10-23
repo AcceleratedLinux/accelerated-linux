@@ -46,12 +46,21 @@ static int port_cost(struct net_device *dev)
 		switch (ecmd.base.speed) {
 		case SPEED_10000:
 			return 2;
-		case SPEED_1000:
+		case SPEED_5000:
+			return 3;
+		case SPEED_2500:
 			return 4;
+		case SPEED_1000:
+			return 5;
 		case SPEED_100:
 			return 19;
 		case SPEED_10:
 			return 100;
+		case SPEED_UNKNOWN:
+			return 100;
+		default:
+			if (ecmd.base.speed > SPEED_10000)
+				return 1;
 		}
 	}
 
@@ -163,8 +172,9 @@ void br_manage_promisc(struct net_bridge *br)
 			 * This lets us disable promiscuous mode and write
 			 * this config to hw.
 			 */
-			if (br->auto_cnt == 0 ||
-			    (br->auto_cnt == 1 && br_auto_port(p)))
+			if ((p->dev->priv_flags & IFF_UNICAST_FLT) &&
+			    (br->auto_cnt == 0 ||
+			     (br->auto_cnt == 1 && br_auto_port(p))))
 				br_port_clear_promisc(p);
 			else
 				br_port_set_promisc(p);
@@ -259,14 +269,14 @@ static void release_nbp(struct kobject *kobj)
 	kfree(p);
 }
 
-static void brport_get_ownership(struct kobject *kobj, kuid_t *uid, kgid_t *gid)
+static void brport_get_ownership(const struct kobject *kobj, kuid_t *uid, kgid_t *gid)
 {
 	struct net_bridge_port *p = kobj_to_brport(kobj);
 
 	net_ns_get_ownership(dev_net(p->dev), uid, gid);
 }
 
-static struct kobj_type brport_ktype = {
+static const struct kobj_type brport_ktype = {
 #ifdef CONFIG_SYSFS
 	.sysfs_ops = &brport_sysfs_ops,
 #endif
@@ -280,7 +290,7 @@ static void destroy_nbp(struct net_bridge_port *p)
 
 	p->br = NULL;
 	p->dev = NULL;
-	dev_put_track(dev, &p->dev_tracker);
+	netdev_put(dev, &p->dev_tracker);
 
 	kobject_put(&p->kobj);
 }
@@ -429,7 +439,7 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 		return ERR_PTR(-ENOMEM);
 
 	p->br = br;
-	dev_hold_track(dev, &p->dev_tracker, GFP_KERNEL);
+	netdev_hold(dev, &p->dev_tracker, GFP_KERNEL);
 	p->dev = dev;
 	p->path_cost = port_cost(dev);
 	p->priority = 0x8000 >> BR_PORT_BITS;
@@ -440,7 +450,7 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	br_stp_port_timer_init(p);
 	err = br_multicast_add_port(p);
 	if (err) {
-		dev_put_track(dev, &p->dev_tracker);
+		netdev_put(dev, &p->dev_tracker);
 		kfree(p);
 		p = ERR_PTR(err);
 	}
@@ -574,26 +584,6 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 	    !is_valid_ether_addr(dev->dev_addr))
 		return -EINVAL;
 
-	/* Also don't allow bridging of net devices that are DSA masters, since
-	 * the bridge layer rx_handler prevents the DSA fake ethertype handler
-	 * to be invoked, so we don't get the chance to strip off and parse the
-	 * DSA switch tag protocol header (the bridge layer just returns
-	 * RX_HANDLER_CONSUMED, stopping RX processing for these frames).
-	 * The only case where that would not be an issue is when bridging can
-	 * already be offloaded, such as when the DSA master is itself a DSA
-	 * or plain switchdev port, and is bridged only with other ports from
-	 * the same hardware device.
-	 */
-	if (netdev_uses_dsa(dev)) {
-		list_for_each_entry(p, &br->port_list, list) {
-			if (!netdev_port_same_parent_id(dev, p->dev)) {
-				NL_SET_ERR_MSG(extack,
-					       "Cannot do software bridging with a DSA master");
-				return -EINVAL;
-			}
-		}
-	}
-
 	/* No bridging of bridges */
 	if (dev->netdev_ops->ndo_start_xmit == br_dev_xmit) {
 		NL_SET_ERR_MSG(extack,
@@ -621,7 +611,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 	err = dev_set_allmulti(dev, 1);
 	if (err) {
 		br_multicast_del_port(p);
-		dev_put_track(dev, &p->dev_tracker);
+		netdev_put(dev, &p->dev_tracker);
 		kfree(p);	/* kobject not yet init'd, manually free */
 		goto err1;
 	}
@@ -732,7 +722,7 @@ err3:
 	sysfs_remove_link(br->ifobj, p->dev->name);
 err2:
 	br_multicast_del_port(p);
-	dev_put_track(dev, &p->dev_tracker);
+	netdev_put(dev, &p->dev_tracker);
 	kobject_put(&p->kobj);
 	dev_set_allmulti(dev, -1);
 err1:
@@ -779,7 +769,7 @@ void br_port_flags_change(struct net_bridge_port *p, unsigned long mask)
 	if (mask & BR_AUTO_MASK)
 		nbp_update_port_count(br);
 
-	if (mask & BR_NEIGH_SUPPRESS)
+	if (mask & (BR_NEIGH_SUPPRESS | BR_NEIGH_VLAN_SUPPRESS))
 		br_recalculate_neigh_suppress_enabled(br);
 }
 
@@ -868,10 +858,10 @@ void br_dev_update_stats(struct net_device *dev,
 	stats = this_cpu_ptr(dev->tstats);
 
 	u64_stats_update_begin(&stats->syncp);
-	stats->rx_packets += nlstats->rx_packets;
-	stats->rx_bytes += nlstats->rx_bytes;
-	stats->tx_packets += nlstats->tx_packets;
-	stats->tx_bytes += nlstats->tx_bytes;
+	u64_stats_add(&stats->rx_packets, nlstats->rx_packets);
+	u64_stats_add(&stats->rx_bytes, nlstats->rx_bytes);
+	u64_stats_add(&stats->tx_packets, nlstats->tx_packets);
+	u64_stats_add(&stats->tx_bytes, nlstats->tx_bytes);
 	u64_stats_update_end(&stats->syncp);
 }
 EXPORT_SYMBOL_GPL(br_dev_update_stats);

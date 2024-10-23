@@ -7,15 +7,15 @@
 
 # If named simX, change modem WWANX SIM slot
 wwan="${0##*sim}"
-idx="$(runt find mm.modem modem.port "modem/wwan$wwan")"
-idx="${idx##mm.modem.}"
+modem_name="$(runt find mm.modem modem.port "modem/wwan$wwan")"
+modem_name="${modem_name##mm.modem.}"
 
 sim_file="/etc/config/sim$wwan.conf"
 
 if [ -z "$wwan" -o "$wwan" = 1 ]; then
-	WWAN_POWER_GPIO="/sys/class/gpio/gpio414/value"
+	WWAN_POWER_GPIO="/sys/class/gpio/gpio622/value"
 else
-	WWAN_POWER_GPIO="/sys/class/gpio/gpio415/value"
+	WWAN_POWER_GPIO="/sys/class/gpio/gpio623/value"
 fi
 
 case "$1" in
@@ -38,29 +38,29 @@ case "$1" in
 	exit 0
 	;;
 1|2)
-	[ -z "$idx" ] && exit 1
-	/bin/modem idx=$idx softsim $1
+	[ -z "$modem_name" ] && exit 1
+	/bin/modem name=$modem_name softsim $1
 	echo "$1" > "$sim_file"
 	;;
 '')
-	[ -z "$idx" ] && exit 1
-	current="$(/bin/modem idx="$idx" softsim)"
+	[ -z "$modem_name" ] && exit 1
+	current="$(/bin/modem name="$modem_name" softsim)"
 	if [ -f "$sim_file" ]; then
 		expected="$(cat "$sim_file" 2>/dev/null)"
 		if [ "$expected" != "$current" ]; then
-			logger -t sim "switching to sim $expected, idx=$idx"
-			/bin/modem idx="$idx" softsim "$expected"
+			logger -t sim "switching to sim $expected, name=$modem_name"
+			/bin/modem name="$modem_name" softsim "$expected"
 		fi
 		echo "$expected"
 	else
-		logger -t sim "creating $sim_file with sim $current, idx=$idx"
+		logger -t sim "creating $sim_file with sim $current, name=$modem_name"
 		echo "$current" > "$sim_file"
 		echo "$current"
 	fi
 	;;
 *)
 	echo "usage: $(basename $0) [none|1|2|-dDnoOp]
-Get, set and control WWAN$wwan SIM selection (MM idx $idx)
+Get, set and control WWAN$wwan SIM selection (MM name $modem_name)
 
 	-h	help	- this help
 	-n	number	- print number of SIM slots

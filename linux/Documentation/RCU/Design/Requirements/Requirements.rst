@@ -1844,10 +1844,10 @@ that meets this requirement.
 
 Furthermore, NMI handlers can be interrupted by what appear to RCU to be
 normal interrupts. One way that this can happen is for code that
-directly invokes rcu_irq_enter() and rcu_irq_exit() to be called
+directly invokes ct_irq_enter() and ct_irq_exit() to be called
 from an NMI handler. This astonishing fact of life prompted the current
-code structure, which has rcu_irq_enter() invoking
-rcu_nmi_enter() and rcu_irq_exit() invoking rcu_nmi_exit().
+code structure, which has ct_irq_enter() invoking
+ct_nmi_enter() and ct_irq_exit() invoking ct_nmi_exit().
 And yes, I also learned of this requirement the hard way.
 
 Loadable Modules
@@ -1858,7 +1858,7 @@ unloaded. After a given module has been unloaded, any attempt to call
 one of its functions results in a segmentation fault. The module-unload
 functions must therefore cancel any delayed calls to loadable-module
 functions, for example, any outstanding mod_timer() must be dealt
-with via del_timer_sync() or similar.
+with via timer_shutdown_sync() or similar.
 
 Unfortunately, there is no way to cancel an RCU callback; once you
 invoke call_rcu(), the callback function is eventually going to be
@@ -1955,12 +1955,12 @@ if offline CPUs block an RCU grace period for too long.
 
 An offline CPU's quiescent state will be reported either:
 
-1.  As the CPU goes offline using RCU's hotplug notifier (rcu_report_dead()).
+1.  As the CPU goes offline using RCU's hotplug notifier (rcutree_report_cpu_dead()).
 2.  When grace period initialization (rcu_gp_init()) detects a
     race either with CPU offlining or with a task unblocking on a leaf
     ``rcu_node`` structure whose CPUs are all offline.
 
-The CPU-online path (rcu_cpu_starting()) should never need to report
+The CPU-online path (rcutree_report_cpu_starting()) should never need to report
 a quiescent state for an offline CPU.  However, as a debugging measure,
 it does emit a warning if a quiescent state was not already reported
 for that CPU.
@@ -2071,41 +2071,7 @@ call.
 
 Because RCU avoids interrupting idle CPUs, it is illegal to execute an
 RCU read-side critical section on an idle CPU. (Kernels built with
-``CONFIG_PROVE_RCU=y`` will splat if you try it.) The RCU_NONIDLE()
-macro and ``_rcuidle`` event tracing is provided to work around this
-restriction. In addition, rcu_is_watching() may be used to test
-whether or not it is currently legal to run RCU read-side critical
-sections on this CPU. I learned of the need for diagnostics on the one
-hand and RCU_NONIDLE() on the other while inspecting idle-loop code.
-Steven Rostedt supplied ``_rcuidle`` event tracing, which is used quite
-heavily in the idle loop. However, there are some restrictions on the
-code placed within RCU_NONIDLE():
-
-#. Blocking is prohibited. In practice, this is not a serious
-   restriction given that idle tasks are prohibited from blocking to
-   begin with.
-#. Although nesting RCU_NONIDLE() is permitted, they cannot nest
-   indefinitely deeply. However, given that they can be nested on the
-   order of a million deep, even on 32-bit systems, this should not be a
-   serious restriction. This nesting limit would probably be reached
-   long after the compiler OOMed or the stack overflowed.
-#. Any code path that enters RCU_NONIDLE() must sequence out of that
-   same RCU_NONIDLE(). For example, the following is grossly
-   illegal:
-
-      ::
-
-	  1     RCU_NONIDLE({
-	  2       do_something();
-	  3       goto bad_idea;  /* BUG!!! */
-	  4       do_something_else();});
-	  5   bad_idea:
-
-
-   It is just as illegal to transfer control into the middle of
-   RCU_NONIDLE()'s argument. Yes, in theory, you could transfer in
-   as long as you also transferred out, but in practice you could also
-   expect to get sharply worded review comments.
+``CONFIG_PROVE_RCU=y`` will splat if you try it.)
 
 It is similarly socially unacceptable to interrupt an ``nohz_full`` CPU
 running in userspace. RCU must therefore track ``nohz_full`` userspace
@@ -2195,7 +2161,7 @@ scheduling-clock interrupt be enabled when RCU needs it to be:
    sections, and RCU believes this CPU to be idle, no problem. This
    sort of thing is used by some architectures for light-weight
    exception handlers, which can then avoid the overhead of
-   rcu_irq_enter() and rcu_irq_exit() at exception entry and
+   ct_irq_enter() and ct_irq_exit() at exception entry and
    exit, respectively. Some go further and avoid the entireties of
    irq_enter() and irq_exit().
    Just make very sure you are running some of your tests with
@@ -2226,7 +2192,7 @@ scheduling-clock interrupt be enabled when RCU needs it to be:
 +-----------------------------------------------------------------------+
 | **Answer**:                                                           |
 +-----------------------------------------------------------------------+
-| One approach is to do ``rcu_irq_exit();rcu_irq_enter();`` every so    |
+| One approach is to do ``ct_irq_exit();ct_irq_enter();`` every so      |
 | often. But given that long-running interrupt handlers can cause other |
 | problems, not least for response time, shouldn't you work to keep     |
 | your interrupt handler's runtime within reasonable bounds?            |

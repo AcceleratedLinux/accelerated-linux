@@ -65,7 +65,7 @@ struct as3935_state {
 		u8 chan;
 		s64 timestamp __aligned(8);
 	} scan;
-	u8 buf[2] ____cacheline_aligned;
+	u8 buf[2] __aligned(IIO_DMA_MINALIGN);
 };
 
 static const struct iio_chan_spec as3935_channels[] = {
@@ -257,7 +257,7 @@ static void as3935_event_work(struct work_struct *work)
 
 	switch (val) {
 	case AS3935_EVENT_INT:
-		iio_trigger_poll_chained(st->trig);
+		iio_trigger_poll_nested(st->trig);
 		break;
 	case AS3935_DISTURB_INT:
 	case AS3935_NOISE_INT:

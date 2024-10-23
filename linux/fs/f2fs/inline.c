@@ -61,26 +61,22 @@ bool f2fs_may_inline_dentry(struct inode *inode)
 	return true;
 }
 
-void f2fs_do_read_inline_data(struct page *page, struct page *ipage)
+void f2fs_do_read_inline_data(struct folio *folio, struct page *ipage)
 {
-	struct inode *inode = page->mapping->host;
-	void *src_addr, *dst_addr;
+	struct inode *inode = folio_file_mapping(folio)->host;
 
-	if (PageUptodate(page))
+	if (folio_test_uptodate(folio))
 		return;
 
-	f2fs_bug_on(F2FS_P_SB(page), page->index);
+	f2fs_bug_on(F2FS_I_SB(inode), folio_index(folio));
 
-	zero_user_segment(page, MAX_INLINE_DATA(inode), PAGE_SIZE);
+	folio_zero_segment(folio, MAX_INLINE_DATA(inode), folio_size(folio));
 
 	/* Copy the whole inline data block */
-	src_addr = inline_data_addr(inode, ipage);
-	dst_addr = kmap_atomic(page);
-	memcpy(dst_addr, src_addr, MAX_INLINE_DATA(inode));
-	flush_dcache_page(page);
-	kunmap_atomic(dst_addr);
-	if (!PageUptodate(page))
-		SetPageUptodate(page);
+	memcpy_to_folio(folio, 0, inline_data_addr(inode, ipage),
+		       MAX_INLINE_DATA(inode));
+	if (!folio_test_uptodate(folio))
+		folio_mark_uptodate(folio);
 }
 
 void f2fs_truncate_inline_inode(struct inode *inode,
@@ -101,13 +97,13 @@ void f2fs_truncate_inline_inode(struct inode *inode,
 		clear_inode_flag(inode, FI_DATA_EXIST);
 }
 
-int f2fs_read_inline_data(struct inode *inode, struct page *page)
+int f2fs_read_inline_data(struct inode *inode, struct folio *folio)
 {
 	struct page *ipage;
 
 	ipage = f2fs_get_node_page(F2FS_I_SB(inode), inode->i_ino);
 	if (IS_ERR(ipage)) {
-		unlock_page(page);
+		folio_unlock(folio);
 		return PTR_ERR(ipage);
 	}
 
@@ -116,15 +112,15 @@ int f2fs_read_inline_data(struct inode *inode, struct page *page)
 		return -EAGAIN;
 	}
 
-	if (page->index)
-		zero_user_segment(page, 0, PAGE_SIZE);
+	if (folio_index(folio))
+		folio_zero_segment(folio, 0, folio_size(folio));
 	else
-		f2fs_do_read_inline_data(page, ipage);
+		f2fs_do_read_inline_data(folio, ipage);
 
-	if (!PageUptodate(page))
-		SetPageUptodate(page);
+	if (!folio_test_uptodate(folio))
+		folio_mark_uptodate(folio);
 	f2fs_put_page(ipage, 1);
-	unlock_page(page);
+	folio_unlock(folio);
 	return 0;
 }
 
@@ -164,12 +160,13 @@ int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page)
 		set_sbi_flag(fio.sbi, SBI_NEED_FSCK);
 		f2fs_warn(fio.sbi, "%s: corrupted inline inode ino=%lx, i_addr[0]:0x%x, run fsck to fix.",
 			  __func__, dn->inode->i_ino, dn->data_blkaddr);
+		f2fs_handle_error(fio.sbi, ERROR_INVALID_BLKADDR);
 		return -EFSCORRUPTED;
 	}
 
-	f2fs_bug_on(F2FS_P_SB(page), PageWriteback(page));
+	f2fs_bug_on(F2FS_P_SB(page), folio_test_writeback(page_folio(page)));
 
-	f2fs_do_read_inline_data(page, dn->inode_page);
+	f2fs_do_read_inline_data(page_folio(page), dn->inode_page);
 	set_page_dirty(page);
 
 	/* clear dirty state */
@@ -177,7 +174,6 @@ int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page)
 
 	/* write data page to try to make data consistent */
 	set_page_writeback(page);
-	ClearPageError(page);
 	fio.old_blkaddr = dn->data_blkaddr;
 	set_inode_flag(dn->inode, FI_HOT_DATA);
 	f2fs_outplace_write_data(dn, &fio);
@@ -246,7 +242,6 @@ out:
 
 int f2fs_write_inline_data(struct inode *inode, struct page *page)
 {
-	void *src_addr, *dst_addr;
 	struct dnode_of_data dn;
 	int err;
 
@@ -263,10 +258,8 @@ int f2fs_write_inline_data(struct inode *inode, struct page *page)
 	f2fs_bug_on(F2FS_I_SB(inode), page->index);
 
 	f2fs_wait_on_page_writeback(dn.inode_page, NODE, true, true);
-	src_addr = kmap_atomic(page);
-	dst_addr = inline_data_addr(inode, dn.inode_page);
-	memcpy(dst_addr, src_addr, MAX_INLINE_DATA(inode));
-	kunmap_atomic(src_addr);
+	memcpy_from_page(inline_data_addr(inode, dn.inode_page),
+			 page, 0, MAX_INLINE_DATA(inode));
 	set_page_dirty(dn.inode_page);
 
 	f2fs_clear_page_cache_dirty_tag(page);
@@ -419,6 +412,7 @@ static int f2fs_move_inline_dirents(struct inode *dir, struct page *ipage,
 		set_sbi_flag(F2FS_P_SB(page), SBI_NEED_FSCK);
 		f2fs_warn(F2FS_P_SB(page), "%s: corrupted inline inode ino=%lx, i_addr[0]:0x%x, run fsck to fix.",
 			  __func__, dir->i_ino, dn.data_blkaddr);
+		f2fs_handle_error(F2FS_P_SB(page), ERROR_INVALID_BLKADDR);
 		err = -EFSCORRUPTED;
 		goto out;
 	}
@@ -427,18 +421,17 @@ static int f2fs_move_inline_dirents(struct inode *dir, struct page *ipage,
 
 	dentry_blk = page_address(page);
 
+	/*
+	 * Start by zeroing the full block, to ensure that all unused space is
+	 * zeroed and no uninitialized memory is leaked to disk.
+	 */
+	memset(dentry_blk, 0, F2FS_BLKSIZE);
+
 	make_dentry_ptr_inline(dir, &src, inline_dentry);
 	make_dentry_ptr_block(dir, &dst, dentry_blk);
 
 	/* copy data from inline dentry block to new dentry block */
 	memcpy(dst.bitmap, src.bitmap, src.nr_bitmap);
-	memset(dst.bitmap + src.nr_bitmap, 0, dst.nr_bitmap - src.nr_bitmap);
-	/*
-	 * we do not need to zero out remainder part of dentry and filename
-	 * field, since we have used bitmap for marking the usage status of
-	 * them, besides, we can also ignore copying/zeroing reserved space
-	 * of dentry block, because them haven't been used so far.
-	 */
 	memcpy(dst.dentry, src.dentry, SIZE_OF_DIR_ENTRY * src.max);
 	memcpy(dst.filename, src.filename, src.max * F2FS_SLOT_LEN);
 
@@ -504,7 +497,7 @@ static int f2fs_add_inline_entries(struct inode *dir, void *inline_dentry)
 		fname.hash = de->hash_code;
 
 		ino = le32_to_cpu(de->ino);
-		fake_mode = f2fs_get_de_type(de) << S_SHIFT;
+		fake_mode = fs_ftype_to_dtype(de->file_type) << S_DT_SHIFT;
 
 		err = f2fs_add_regular_entry(dir, &fname, NULL, ino, fake_mode);
 		if (err)
@@ -648,7 +641,8 @@ int f2fs_add_inline_entry(struct inode *dir, const struct f2fs_filename *fname,
 	}
 
 	if (inode) {
-		f2fs_down_write(&F2FS_I(inode)->i_sem);
+		f2fs_down_write_nested(&F2FS_I(inode)->i_sem,
+						SINGLE_DEPTH_NESTING);
 		page = f2fs_init_inode_metadata(inode, dir, fname, ipage);
 		if (IS_ERR(page)) {
 			err = PTR_ERR(page);
@@ -705,7 +699,7 @@ void f2fs_delete_inline_entry(struct f2fs_dir_entry *dentry, struct page *page,
 	set_page_dirty(page);
 	f2fs_put_page(page, 1);
 
-	dir->i_ctime = dir->i_mtime = current_time(dir);
+	inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
 	f2fs_mark_inode_dirty_sync(dir, false);
 
 	if (inode)

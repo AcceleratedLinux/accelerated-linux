@@ -1,0 +1,29 @@
+From 5ef489906e0120a222562831ca95e2d954d8a185 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 18 May 2023 15:40:14 +0100
+Subject: [PATCH] modem: fix max length of data read from serial port
+
+The maximum number of bytes returned from a single read() of the serial
+port was being restricted to sizeof <pointer-variable> - i.e. 4 or 8
+bytes depending on architecture - rather than the size of the buffer the
+data is read into.
+---
+ src/modem_core.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/modem_core.c b/src/modem_core.c
+index 2de6746..ca48b34 100644
+--- a/src/modem_core.c
++++ b/src/modem_core.c
+@@ -737,7 +737,7 @@ int mdm_read(modem_config *cfg, unsigned char *data, int len) {
+       res = 1;
+     }
+   } else {
+-    res = dce_read(&cfg->dce_data, data, sizeof(data));
++    res = dce_read(&cfg->dce_data, data, len);
+   }
+   return res;
+ }
+-- 
+2.34.1
+

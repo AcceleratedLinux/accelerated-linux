@@ -465,7 +465,7 @@ static void ppl_submit_iounit(struct ppl_io_unit *io)
 
 	bio->bi_end_io = ppl_log_endio;
 	bio->bi_iter.bi_sector = log->next_io_sector;
-	bio_add_page(bio, io->header_page, PAGE_SIZE, 0);
+	__bio_add_page(bio, io->header_page, PAGE_SIZE, 0);
 
 	pr_debug("%s: log->current_io_sector: %llu\n", __func__,
 	    (unsigned long long)log->next_io_sector);
@@ -496,7 +496,7 @@ static void ppl_submit_iounit(struct ppl_io_unit *io)
 					       prev->bi_opf, GFP_NOIO,
 					       &ppl_conf->bs);
 			bio->bi_iter.bi_sector = bio_end_sector(prev);
-			bio_add_page(bio, sh->ppl_page, PAGE_SIZE, 0);
+			__bio_add_page(bio, sh->ppl_page, PAGE_SIZE, 0);
 
 			bio_chain(bio, prev);
 			ppl_submit_iounit_bio(io, prev);
@@ -620,11 +620,9 @@ static void ppl_do_flush(struct ppl_io_unit *io)
 		struct md_rdev *rdev;
 		struct block_device *bdev = NULL;
 
-		rcu_read_lock();
-		rdev = rcu_dereference(conf->disks[i].rdev);
+		rdev = conf->disks[i].rdev;
 		if (rdev && !test_bit(Faulty, &rdev->flags))
 			bdev = rdev->bdev;
-		rcu_read_unlock();
 
 		if (bdev) {
 			struct bio *bio;
@@ -679,7 +677,7 @@ void ppl_quiesce(struct r5conf *conf, int quiesce)
 	}
 }
 
-int ppl_handle_flush_request(struct r5l_log *log, struct bio *bio)
+int ppl_handle_flush_request(struct bio *bio)
 {
 	if (bio->bi_iter.bi_size == 0) {
 		bio_endio(bio);
@@ -882,9 +880,7 @@ static int ppl_recover_entry(struct ppl_log *log, struct ppl_header_entry *e,
 				 (unsigned long long)r_sector, dd_idx,
 				 (unsigned long long)sector);
 
-			/* Array has not started so rcu dereference is safe */
-			rdev = rcu_dereference_protected(
-					conf->disks[dd_idx].rdev, 1);
+			rdev = conf->disks[dd_idx].rdev;
 			if (!rdev || (!test_bit(In_sync, &rdev->flags) &&
 				      sector >= rdev->recovery_offset)) {
 				pr_debug("%s:%*s data member disk %d missing\n",
@@ -897,7 +893,7 @@ static int ppl_recover_entry(struct ppl_log *log, struct ppl_header_entry *e,
 				 __func__, indent, "", rdev->bdev,
 				 (unsigned long long)sector);
 			if (!sync_page_io(rdev, sector, block_size, page2,
-					REQ_OP_READ, 0, false)) {
+					REQ_OP_READ, false)) {
 				md_error(mddev, rdev);
 				pr_debug("%s:%*s read failed!\n", __func__,
 					 indent, "");
@@ -919,7 +915,7 @@ static int ppl_recover_entry(struct ppl_log *log, struct ppl_header_entry *e,
 				 (unsigned long long)(ppl_sector + i));
 			if (!sync_page_io(log->rdev,
 					ppl_sector - log->rdev->data_offset + i,
-					block_size, page2, REQ_OP_READ, 0,
+					block_size, page2, REQ_OP_READ,
 					false)) {
 				pr_debug("%s:%*s read failed!\n", __func__,
 					 indent, "");
@@ -936,9 +932,7 @@ static int ppl_recover_entry(struct ppl_log *log, struct ppl_header_entry *e,
 				0, &disk, &sh);
 		BUG_ON(sh.pd_idx != le32_to_cpu(e->parity_disk));
 
-		/* Array has not started so rcu dereference is safe */
-		parity_rdev = rcu_dereference_protected(
-					conf->disks[sh.pd_idx].rdev, 1);
+		parity_rdev = conf->disks[sh.pd_idx].rdev;
 
 		BUG_ON(parity_rdev->bdev->bd_dev != log->rdev->bdev->bd_dev);
 		pr_debug("%s:%*s write parity at sector %llu, disk %pg\n",
@@ -946,7 +940,7 @@ static int ppl_recover_entry(struct ppl_log *log, struct ppl_header_entry *e,
 			 (unsigned long long)parity_sector,
 			 parity_rdev->bdev);
 		if (!sync_page_io(parity_rdev, parity_sector, block_size,
-				page1, REQ_OP_WRITE, 0, false)) {
+				  page1, REQ_OP_WRITE, false)) {
 			pr_debug("%s:%*s parity write error!\n", __func__,
 				 indent, "");
 			md_error(mddev, parity_rdev);
@@ -998,7 +992,7 @@ static int ppl_recover(struct ppl_log *log, struct ppl_header *pplhdr,
 			int s = pp_size > PAGE_SIZE ? PAGE_SIZE : pp_size;
 
 			if (!sync_page_io(rdev, sector - rdev->data_offset,
-					s, page, REQ_OP_READ, 0, false)) {
+					s, page, REQ_OP_READ, false)) {
 				md_error(mddev, rdev);
 				ret = -EIO;
 				goto out;
@@ -1062,7 +1056,7 @@ static int ppl_write_empty_header(struct ppl_log *log)
 
 	if (!sync_page_io(rdev, rdev->ppl.sector - rdev->data_offset,
 			  PPL_HEADER_SIZE, page, REQ_OP_WRITE | REQ_SYNC |
-			  REQ_FUA, 0, false)) {
+			  REQ_FUA, false)) {
 		md_error(rdev->mddev, rdev);
 		ret = -EIO;
 	}
@@ -1100,7 +1094,7 @@ static int ppl_load_distributed(struct ppl_log *log)
 		if (!sync_page_io(rdev,
 				  rdev->ppl.sector - rdev->data_offset +
 				  pplhdr_offset, PAGE_SIZE, page, REQ_OP_READ,
-				  0, false)) {
+				  false)) {
 			md_error(mddev, rdev);
 			ret = -EIO;
 			/* if not able to read - don't recover any PPL */
@@ -1301,8 +1295,6 @@ static int ppl_validate_rdev(struct md_rdev *rdev)
 
 static void ppl_init_child_log(struct ppl_log *log, struct md_rdev *rdev)
 {
-	struct request_queue *q;
-
 	if ((rdev->ppl.size << 9) >= (PPL_SPACE_SIZE +
 				      PPL_HEADER_SIZE) * 2) {
 		log->use_multippl = true;
@@ -1316,8 +1308,7 @@ static void ppl_init_child_log(struct ppl_log *log, struct md_rdev *rdev)
 	}
 	log->next_io_sector = rdev->ppl.sector;
 
-	q = bdev_get_queue(rdev->bdev);
-	if (test_bit(QUEUE_FLAG_WC, &q->queue_flags))
+	if (bdev_write_cache(rdev->bdev))
 		log->wb_cache_on = true;
 }
 
@@ -1402,14 +1393,13 @@ int ppl_init_log(struct r5conf *conf)
 		ppl_conf->signature = ~crc32c_le(~0, mddev->uuid, sizeof(mddev->uuid));
 		ppl_conf->block_size = 512;
 	} else {
-		ppl_conf->block_size = queue_logical_block_size(mddev->queue);
+		ppl_conf->block_size =
+			queue_logical_block_size(mddev->gendisk->queue);
 	}
 
 	for (i = 0; i < ppl_conf->count; i++) {
 		struct ppl_log *log = &ppl_conf->child_logs[i];
-		/* Array has not started so rcu dereference is safe */
-		struct md_rdev *rdev =
-			rcu_dereference_protected(conf->disks[i].rdev, 1);
+		struct md_rdev *rdev = conf->disks[i].rdev;
 
 		mutex_init(&log->io_mutex);
 		spin_lock_init(&log->io_list_lock);

@@ -1,0 +1,14 @@
+Fixes int-conversion error with basename().
+
+Index: frr/zebra/zebra_netns_notify.c
+===================================================================
+--- frr.orig/zebra/zebra_netns_notify.c
++++ frr/zebra/zebra_netns_notify.c
+@@ -14,6 +14,7 @@
+ #include <sched.h>
+ #endif
+ #include <dirent.h>
++#include <libgen.h>
+ #include <sys/inotify.h>
+ #include <sys/stat.h>
+ 

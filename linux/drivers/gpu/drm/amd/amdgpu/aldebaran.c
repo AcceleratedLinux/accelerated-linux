@@ -35,7 +35,7 @@ static bool aldebaran_is_mode2_default(struct amdgpu_reset_control *reset_ctl)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)reset_ctl->handle;
 
-	if ((adev->ip_versions[MP1_HWIP][0] == IP_VERSION(13, 0, 2) &&
+	if ((amdgpu_ip_version(adev, MP1_HWIP, 0) == IP_VERSION(13, 0, 2) &&
 	     adev->gmc.xgmi.connected_to_cpu))
 		return true;
 
@@ -48,24 +48,21 @@ aldebaran_get_reset_handler(struct amdgpu_reset_control *reset_ctl,
 {
 	struct amdgpu_reset_handler *handler;
 	struct amdgpu_device *adev = (struct amdgpu_device *)reset_ctl->handle;
+	int i;
+
+	if (reset_context->method == AMD_RESET_METHOD_NONE) {
+		if (aldebaran_is_mode2_default(reset_ctl))
+			reset_context->method = AMD_RESET_METHOD_MODE2;
+		else
+			reset_context->method = amdgpu_asic_reset_method(adev);
+	}
 
 	if (reset_context->method != AMD_RESET_METHOD_NONE) {
 		dev_dbg(adev->dev, "Getting reset handler for method %d\n",
 			reset_context->method);
-		list_for_each_entry(handler, &reset_ctl->reset_handlers,
-				     handler_list) {
+		for_each_handler(i, handler, reset_ctl) {
 			if (handler->reset_method == reset_context->method)
 				return handler;
-		}
-	}
-
-	if (aldebaran_is_mode2_default(reset_ctl)) {
-		list_for_each_entry(handler, &reset_ctl->reset_handlers,
-				     handler_list) {
-			if (handler->reset_method == AMD_RESET_METHOD_MODE2) {
-				reset_context->method = AMD_RESET_METHOD_MODE2;
-				return handler;
-			}
 		}
 	}
 
@@ -100,7 +97,7 @@ static int aldebaran_mode2_suspend_ip(struct amdgpu_device *adev)
 		adev->ip_blocks[i].status.hw = false;
 	}
 
-	return r;
+	return 0;
 }
 
 static int
@@ -124,9 +121,9 @@ static void aldebaran_async_reset(struct work_struct *work)
 	struct amdgpu_reset_control *reset_ctl =
 		container_of(work, struct amdgpu_reset_control, reset_work);
 	struct amdgpu_device *adev = (struct amdgpu_device *)reset_ctl->handle;
+	int i;
 
-	list_for_each_entry(handler, &reset_ctl->reset_handlers,
-			     handler_list) {
+	for_each_handler(i, handler, reset_ctl)	{
 		if (handler->reset_method == reset_ctl->active_reset) {
 			dev_dbg(adev->dev, "Resetting device\n");
 			handler->do_reset(adev);
@@ -148,30 +145,22 @@ aldebaran_mode2_perform_reset(struct amdgpu_reset_control *reset_ctl,
 			      struct amdgpu_reset_context *reset_context)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)reset_ctl->handle;
+	struct list_head *reset_device_list = reset_context->reset_device_list;
 	struct amdgpu_device *tmp_adev = NULL;
-	struct list_head reset_device_list;
 	int r = 0;
 
 	dev_dbg(adev->dev, "aldebaran perform hw reset\n");
-	if (adev->ip_versions[MP1_HWIP][0] == IP_VERSION(13, 0, 2) &&
+
+	if (reset_device_list == NULL)
+		return -EINVAL;
+
+	if (amdgpu_ip_version(adev, MP1_HWIP, 0) == IP_VERSION(13, 0, 2) &&
 	    reset_context->hive == NULL) {
 		/* Wrong context, return error */
 		return -EINVAL;
 	}
 
-	INIT_LIST_HEAD(&reset_device_list);
-	if (reset_context->hive) {
-		list_for_each_entry (tmp_adev,
-				     &reset_context->hive->device_list,
-				     gmc.xgmi.head)
-			list_add_tail(&tmp_adev->reset_list,
-				      &reset_device_list);
-	} else {
-		list_add_tail(&reset_context->reset_req_dev->reset_list,
-			      &reset_device_list);
-	}
-
-	list_for_each_entry (tmp_adev, &reset_device_list, reset_list) {
+	list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
 		mutex_lock(&tmp_adev->reset_cntl->reset_lock);
 		tmp_adev->reset_cntl->active_reset = AMD_RESET_METHOD_MODE2;
 	}
@@ -179,7 +168,7 @@ aldebaran_mode2_perform_reset(struct amdgpu_reset_control *reset_ctl,
 	 * Mode2 reset doesn't need any sync between nodes in XGMI hive, instead launch
 	 * them together so that they can be completed asynchronously on multiple nodes
 	 */
-	list_for_each_entry (tmp_adev, &reset_device_list, reset_list) {
+	list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
 		/* For XGMI run all resets in parallel to speed up the process */
 		if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
 			if (!queue_work(system_unbound_wq,
@@ -197,7 +186,7 @@ aldebaran_mode2_perform_reset(struct amdgpu_reset_control *reset_ctl,
 
 	/* For XGMI wait for all resets to complete before proceed */
 	if (!r) {
-		list_for_each_entry (tmp_adev, &reset_device_list, reset_list) {
+		list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
 			if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
 				flush_work(&tmp_adev->reset_cntl->reset_work);
 				r = tmp_adev->asic_reset_res;
@@ -207,7 +196,7 @@ aldebaran_mode2_perform_reset(struct amdgpu_reset_control *reset_ctl,
 		}
 	}
 
-	list_for_each_entry (tmp_adev, &reset_device_list, reset_list) {
+	list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
 		mutex_unlock(&tmp_adev->reset_cntl->reset_lock);
 		tmp_adev->reset_cntl->active_reset = AMD_RESET_METHOD_NONE;
 	}
@@ -339,30 +328,22 @@ static int
 aldebaran_mode2_restore_hwcontext(struct amdgpu_reset_control *reset_ctl,
 				  struct amdgpu_reset_context *reset_context)
 {
+	struct list_head *reset_device_list = reset_context->reset_device_list;
 	struct amdgpu_device *tmp_adev = NULL;
-	struct list_head reset_device_list;
+	struct amdgpu_ras *con;
 	int r;
 
-	if (reset_context->reset_req_dev->ip_versions[MP1_HWIP][0] ==
+	if (reset_device_list == NULL)
+		return -EINVAL;
+
+	if (amdgpu_ip_version(reset_context->reset_req_dev, MP1_HWIP, 0) ==
 		    IP_VERSION(13, 0, 2) &&
 	    reset_context->hive == NULL) {
 		/* Wrong context, return error */
 		return -EINVAL;
 	}
 
-	INIT_LIST_HEAD(&reset_device_list);
-	if (reset_context->hive) {
-		list_for_each_entry (tmp_adev,
-				     &reset_context->hive->device_list,
-				     gmc.xgmi.head)
-			list_add_tail(&tmp_adev->reset_list,
-				      &reset_device_list);
-	} else {
-		list_add_tail(&reset_context->reset_req_dev->reset_list,
-			      &reset_device_list);
-	}
-
-	list_for_each_entry (tmp_adev, &reset_device_list, reset_list) {
+	list_for_each_entry(tmp_adev, reset_device_list, reset_list) {
 		dev_info(tmp_adev->dev,
 			 "GPU reset succeeded, trying to resume\n");
 		r = aldebaran_mode2_restore_ip(tmp_adev);
@@ -375,7 +356,30 @@ aldebaran_mode2_restore_hwcontext(struct amdgpu_reset_control *reset_ctl,
 		 */
 		amdgpu_register_gpu_instance(tmp_adev);
 
-		/* Resume RAS */
+		/* Resume RAS, ecc_irq */
+		con = amdgpu_ras_get_context(tmp_adev);
+		if (!amdgpu_sriov_vf(tmp_adev) && con) {
+			if (tmp_adev->sdma.ras &&
+				tmp_adev->sdma.ras->ras_block.ras_late_init) {
+				r = tmp_adev->sdma.ras->ras_block.ras_late_init(tmp_adev,
+						&tmp_adev->sdma.ras->ras_block.ras_comm);
+				if (r) {
+					dev_err(tmp_adev->dev, "SDMA failed to execute ras_late_init! ret:%d\n", r);
+					goto end;
+				}
+			}
+
+			if (tmp_adev->gfx.ras &&
+				tmp_adev->gfx.ras->ras_block.ras_late_init) {
+				r = tmp_adev->gfx.ras->ras_block.ras_late_init(tmp_adev,
+						&tmp_adev->gfx.ras->ras_block.ras_comm);
+				if (r) {
+					dev_err(tmp_adev->dev, "GFX failed to execute ras_late_init! ret:%d\n", r);
+					goto end;
+				}
+			}
+		}
+
 		amdgpu_ras_resume(tmp_adev);
 
 		/* Update PSP FW topology after reset */
@@ -412,6 +416,11 @@ static struct amdgpu_reset_handler aldebaran_mode2_handler = {
 	.do_reset		= aldebaran_mode2_reset,
 };
 
+static struct amdgpu_reset_handler
+	*aldebaran_rst_handlers[AMDGPU_RESET_MAX_HANDLERS] = {
+		&aldebaran_mode2_handler,
+	};
+
 int aldebaran_reset_init(struct amdgpu_device *adev)
 {
 	struct amdgpu_reset_control *reset_ctl;
@@ -425,10 +434,9 @@ int aldebaran_reset_init(struct amdgpu_device *adev)
 	reset_ctl->active_reset = AMD_RESET_METHOD_NONE;
 	reset_ctl->get_reset_handler = aldebaran_get_reset_handler;
 
-	INIT_LIST_HEAD(&reset_ctl->reset_handlers);
 	INIT_WORK(&reset_ctl->reset_work, reset_ctl->async_reset);
 	/* Only mode2 is handled through reset control now */
-	amdgpu_reset_add_handler(reset_ctl, &aldebaran_mode2_handler);
+	reset_ctl->reset_handlers = &aldebaran_rst_handlers;
 
 	adev->reset_cntl = reset_ctl;
 

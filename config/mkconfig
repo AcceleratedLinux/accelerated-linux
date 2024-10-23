@@ -10,6 +10,8 @@
 
 #############################################################################
 
+export LC_ALL=C
+
 fix_name()
 {
 	echo $1 | tr '[\-\.\/\+a-z]' '[____A-Z]'
@@ -58,14 +60,14 @@ trap "rm -f $pfile; exit 1" 1 2 3 15
 
 find vendors -mindepth 1 -maxdepth 1 -type d -print | \
 		sed -e 's?^vendors/??' | \
-		(sort; echo "END") | while read v
+		(sort -f; echo "END") | while read v
 do
 	[ "$v" = "config" ] && continue
 	[ "$v" = END ] && break
 	fv=
 	find vendors/$v -name config.arch -print | \
 		sed -e 's?^vendors/??' -e 's?/[^/]*$??' -e 's?/? ?g' | \
-		(sort; echo "END END END END") | while read v p junk
+		(sort -f; echo "END END END END") | while read v p junk
 	do
 		[ "$fv" -a "$v" = END ] && (echo "endchoice"; echo) >> $pfile
 		[ "$v" = END ] && break
@@ -121,7 +123,7 @@ echo
 # expect an explosion of kernels just yet ;-)
 #
 
-KERNELS="`ls -d linux* 2>/dev/null`"
+KERNELS="`ls -d linux/ linux-*/ 2>/dev/null | tr -d /`"
 NKERNELS="`echo ${KERNELS} | wc -w`"
 if [ ${NKERNELS} -gt 1 ]; then
 	echo "choice"

@@ -1,0 +1,164 @@
+#!/bin/sh
+#
+# Action for IX40 LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+# flash LTE and signal strength LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -f cell-green -O cell-red -O cell-blue -f RSS1 -f RSS2 -f RSS3 -f RSS4 -f RSS5"
+	fi
+}
+
+case "$1" in
+start)
+	ledcmd -a -N cell-red -N cell-green -N cell-blue
+	exit 0
+	;;
+reload)
+	findme_update
+	;;
+stop)
+	# Firmware flash
+	ledcmd -a -n cell-red -n cell-green -n cell-blue -o cell-red -f cell-green -O cell-blue
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+
+#
+# Default state is INTERNET down, until we know for sure we have
+# an external connection that is up.
+#
+INTERNET_STATE="down"
+
+SIM_NUMBER=$(cat /etc/config/sim.conf 2> /dev/null)
+if [ "$SIM_NUMBER" = "1" ]; then
+	SIM_ACTIVE=SIM-GREEN
+	SIM_INACTIVE=SIM-BLUE
+fi
+if [ "$SIM_NUMBER" = "2" ]; then
+	SIM_INACTIVE=SIM-GREEN
+	SIM_ACTIVE=SIM-BLUE
+fi
+
+
+# Find modem index and interface
+modem_name="$(modem name 2> /dev/null)"
+idx="$(modem name="$modem_name" idx 2> /dev/null)"
+for i in $(runt keys mm.map.interface_idx); do
+	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] && intf=$i && break
+done
+
+RUNT_SIM1=$(runt dump mm.persist | grep sim_slot.1)
+RUNT_SIM2=$(runt dump mm.persist | grep sim_slot.2)
+SIM1_STATE=${RUNT_SIM1#*=}
+SIM2_STATE=${RUNT_SIM2#*=}
+
+MODEM_ENABLED=$(config get network.modem.$intf.enable 2> /dev/null)
+MODEM_STATE=$(runt get mm.modem.$modem_name.status.state)
+MODEM_GTECH=$(runt get mm.modem.$modem_name.status.gtech)
+MODEM_BARS=$(runt get mm.modem.$modem_name.status.bars)
+
+if [ "$MODEM_GTECH" = "5g" ]; then
+	# 5g show CELL color MAGENTA
+	CELL_LED="-o cell-blue -O cell-green -o cell-red"
+elif [ "$MODEM_GTECH" = "4g" ]; then
+	# 4g show CELL color BLUE
+	CELL_LED="-o cell-blue -O cell-green -O cell-red"
+elif [ "$MODEM_GTECH" = "3g" ]; then
+	# 3g show CELL color GREEN
+	CELL_LED="-O cell-blue -o cell-green -O cell-red"
+else
+	# No techology, show no CELL color
+	CELL_LED="-O cell-blue -O cell-green -O cell-red"
+fi
+
+case "$MODEM_BARS" in
+5) BARS_LED="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
+4) BARS_LED="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
+3) BARS_LED="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;
+2) BARS_LED="-o RSS1 -o RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+1) BARS_LED="-o RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+*) BARS_LED="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+esac
+
+if [ "$SIM1_STATE" = "absent" -a "$SIM2_STATE" = "absent" ]; then
+	# No SIM present at all, show RED
+	SIM_LED="-O SIM-BLUE -O SIM-GREEN -o SIM-RED"
+elif [ "$MODEM_ENABLED" = "" -o "$MODEM_ENABLED" = "0" ]; then
+	# Modem not present or disabled
+	SIM_LED="-O SIM-BLUE -O SIM-GREEN -O SIM-RED"
+elif [ "$MODEM_STATE" = "connected" ]; then
+	# Connection established, show fixed active SIM LED
+	SIM_LED="-O SIM-RED -O $SIM_INACTIVE -o $SIM_ACTIVE"
+	INTERNET_STATE="up"
+elif [ -n "$SIM_ACTIVE" ]; then
+	# Attempting connection, flash active SIM LED
+	SIM_LED="-O SIM-RED -O $SIM_INACTIVE -f $SIM_ACTIVE"
+	# When looking for a connection flash yellow on CELL LED
+	CELL_LED="-O cell-blue -f cell-green -f cell-red"
+else
+	# No SIM configured, SIM and CELL LEDs off
+	SIM_LED="-O SIM-GREEN -O SIM-BLUE -O SIM-RED"
+fi
+
+##############################################################
+
+# the default WAN port is eth1
+LINK=$(ip link show eth1 2> /dev/null | grep -c "state UP")
+
+WAN4=-1
+WAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.eth1.ipv4.up) in
+	1) [ "$(runt get surelink.ipv4_interface_eth1.passed)" = n ] && WAN4=1 || WAN4=2 ;;
+	0) [ "$(runt get network.interface.lan1.eth1.pending)" = 1 ] && WAN4=1 || WAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.eth1.ipv6.up) in
+	1) [ "$(runt get surelink.ipv6_interface_eth1.passed)" = n ] && WAN6=1 || WAN6=2 ;;
+	0) [ "$(runt get network.interface.eth1.ipv6.pending)" = 1 ] && WAN6=1 || WAN6=0 ;;
+	esac
+fi
+
+# working out ETH state
+if [ "$WAN4" = -1 -a "$WAN6" = -1 ]; then
+	WAN=$((LINK ? 2 : 0))
+elif [ "$WAN4" = 2 -o "$WAN6" = 2 ]; then
+	WAN=2
+elif [ "$WAN4" = 1 -o "$WAN6" = 1 ]; then
+	WAN=1
+else
+	WAN=0
+fi
+
+if [ "$WAN" = "2" ]; then
+	INTERNET_STATE="up"
+fi
+
+##############################################################
+
+case "$INTERNET_STATE" in
+"up")	   INT_LED="-o INT" ;;
+"pending") INT_LED="-f INT" ;;
+*)	   INT_LED="-O INT" ;;
+esac
+
+##############################################################
+
+eval ledcmd $INT_LED $CELL_LED $SIM_LED $BARS_LED
+
+exit 0

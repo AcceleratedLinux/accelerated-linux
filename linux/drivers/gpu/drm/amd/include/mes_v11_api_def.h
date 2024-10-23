@@ -61,6 +61,7 @@ enum MES_SCH_API_OPCODE {
 	MES_SCH_API_MISC			= 14,
 	MES_SCH_API_UPDATE_ROOT_PAGE_TABLE      = 15,
 	MES_SCH_API_AMD_LOG                     = 16,
+	MES_SCH_API_SET_HW_RSRC_1               = 19,
 	MES_SCH_API_MAX				= 0xFF
 };
 
@@ -193,7 +194,7 @@ struct MES_LOG_BUFFER {
 };
 
 enum MES_SWIP_TO_HWIP_DEF {
-	MES_MAX_HWIP_SEGMENT = 6,
+	MES_MAX_HWIP_SEGMENT = 8,
 };
 
 union MESAPI_SET_HW_RESOURCES {
@@ -222,13 +223,40 @@ union MESAPI_SET_HW_RESOURCES {
 				uint32_t apply_grbm_remote_register_dummy_read_wa : 1;
 				uint32_t second_gfx_pipe_enabled : 1;
 				uint32_t enable_level_process_quantum_check : 1;
-				uint32_t reserved	: 25;
+				uint32_t legacy_sch_mode : 1;
+				uint32_t disable_add_queue_wptr_mc_addr : 1;
+				uint32_t enable_mes_event_int_logging : 1;
+				uint32_t enable_reg_active_poll : 1;
+				uint32_t reserved	: 21;
 			};
 			uint32_t	uint32_t_all;
 		};
+		uint32_t	oversubscription_timer;
+		uint64_t        doorbell_info;
+		uint64_t        event_intr_history_gpu_mc_ptr;
 	};
 
 	uint32_t	max_dwords_in_api[API_FRAME_SIZE_IN_DWORDS];
+};
+
+union MESAPI_SET_HW_RESOURCES_1 {
+	struct {
+		union MES_API_HEADER				header;
+		struct MES_API_STATUS			   api_status;
+		uint64_t							timestamp;
+		union {
+			struct {
+				uint32_t enable_mes_info_ctx : 1;
+				uint32_t reserved : 31;
+			};
+			uint32_t uint32_all;
+		};
+		uint64_t							mes_info_ctx_mc_addr;
+		uint32_t							mes_info_ctx_size;
+		uint32_t							mes_kiq_unmap_timeout; // unit is 100ms
+	};
+
+	uint32_t max_dwords_in_api[API_FRAME_SIZE_IN_DWORDS];
 };
 
 union MESAPI__ADD_QUEUE {
@@ -265,10 +293,27 @@ union MESAPI__ADD_QUEUE {
 			uint32_t is_gang_suspended	: 1;
 			uint32_t is_tmz_queue		: 1;
 			uint32_t map_kiq_utility_queue  : 1;
-			uint32_t reserved		: 23;
+			uint32_t is_kfd_process		: 1;
+			uint32_t trap_en		: 1;
+			uint32_t is_aql_queue		: 1;
+			uint32_t skip_process_ctx_clear : 1;
+			uint32_t map_legacy_kq		: 1;
+			uint32_t exclusively_scheduled	: 1;
+			uint32_t is_long_running        : 1;
+			uint32_t is_dwm_queue           : 1;
+			uint32_t is_video_blit_queue    : 1;
+			uint32_t reserved               : 14;
 		};
-		struct MES_API_STATUS		api_status;
-		uint64_t                        tma_addr;
+		struct MES_API_STATUS       api_status;
+		uint64_t                    tma_addr;
+		uint32_t                    sch_id;
+		uint64_t                    timestamp;
+		uint32_t                    process_context_array_index;
+		uint32_t                    gang_context_array_index;
+		uint32_t                    pipe_id;
+		uint32_t                    queue_id;
+		uint32_t                    alignment_mode_setting;
+		uint64_t                    unmap_flag_addr;
 	};
 
 	uint32_t	max_dwords_in_api[API_FRAME_SIZE_IN_DWORDS];
@@ -284,7 +329,8 @@ union MESAPI__REMOVE_QUEUE {
 			uint32_t unmap_legacy_gfx_queue   : 1;
 			uint32_t unmap_kiq_utility_queue  : 1;
 			uint32_t preempt_legacy_gfx_queue : 1;
-			uint32_t reserved                 : 29;
+			uint32_t unmap_legacy_queue       : 1;
+			uint32_t reserved                 : 28;
 		};
 		struct MES_API_STATUS	    api_status;
 
@@ -293,6 +339,8 @@ union MESAPI__REMOVE_QUEUE {
 
 		uint64_t                    tf_addr;
 		uint32_t                    tf_data;
+
+		enum MES_QUEUE_TYPE         queue_type;
 	};
 
 	uint32_t	max_dwords_in_api[API_FRAME_SIZE_IN_DWORDS];
@@ -506,25 +554,39 @@ union MESAPI__SET_DEBUG_VMID {
 };
 
 enum MESAPI_MISC_OPCODE {
-	MESAPI_MISC__MODIFY_REG,
+	MESAPI_MISC__WRITE_REG,
 	MESAPI_MISC__INV_GART,
 	MESAPI_MISC__QUERY_STATUS,
+	MESAPI_MISC__READ_REG,
+	MESAPI_MISC__WAIT_REG_MEM,
+	MESAPI_MISC__SET_SHADER_DEBUGGER,
 	MESAPI_MISC__MAX,
-};
-
-enum MODIFY_REG_SUBCODE {
-	MODIFY_REG__OVERWRITE,
-	MODIFY_REG__RMW_OR,
-	MODIFY_REG__RMW_AND,
-	MODIFY_REG__MAX,
 };
 
 enum { MISC_DATA_MAX_SIZE_IN_DWORDS = 20 };
 
-struct MODIFY_REG {
-	enum MODIFY_REG_SUBCODE   subcode;
+struct WRITE_REG {
 	uint32_t                  reg_offset;
 	uint32_t                  reg_value;
+};
+
+struct READ_REG {
+	uint32_t                  reg_offset;
+	uint64_t                  buffer_addr;
+};
+
+enum WRM_OPERATION {
+	WRM_OPERATION__WAIT_REG_MEM,
+	WRM_OPERATION__WR_WAIT_WR_REG,
+	WRM_OPERATION__MAX,
+};
+
+struct WAIT_REG_MEM {
+	enum WRM_OPERATION         op;
+	uint32_t                   reference;
+	uint32_t                   mask;
+	uint32_t                   reg_offset1;
+	uint32_t                   reg_offset2;
 };
 
 struct INV_GART {
@@ -536,6 +598,22 @@ struct QUERY_STATUS {
 	uint32_t context_id;
 };
 
+struct SET_SHADER_DEBUGGER {
+	uint64_t process_context_addr;
+	union {
+		struct {
+			uint32_t single_memop : 1;  /* SQ_DEBUG.single_memop */
+			uint32_t single_alu_op : 1; /* SQ_DEBUG.single_alu_op */
+			uint32_t reserved : 29;
+			uint32_t process_ctx_flush : 1;
+		};
+		uint32_t u32all;
+	} flags;
+	uint32_t spi_gdbg_per_vmid_cntl;
+	uint32_t tcp_watch_cntl[4]; /* TCP_WATCHx_CNTL */
+	uint32_t trap_en;
+};
+
 union MESAPI__MISC {
 	struct {
 		union MES_API_HEADER	header;
@@ -543,9 +621,14 @@ union MESAPI__MISC {
 		struct MES_API_STATUS	api_status;
 
 		union {
-			struct		MODIFY_REG modify_reg;
+			struct		WRITE_REG write_reg;
 			struct		INV_GART inv_gart;
 			struct		QUERY_STATUS query_status;
+			struct		READ_REG read_reg;
+			struct          WAIT_REG_MEM wait_reg_mem;
+			struct		SET_SHADER_DEBUGGER set_shader_debugger;
+			enum MES_AMD_PRIORITY_LEVEL queue_sch_level;
+
 			uint32_t	data[MISC_DATA_MAX_SIZE_IN_DWORDS];
 		};
 	};

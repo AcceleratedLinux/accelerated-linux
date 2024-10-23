@@ -1,30 +1,27 @@
-VERSION = lxc-4.0.12
+VERSION = v6.0.1
 URL = https://github.com/lxc/lxc.git
 METHOD = git
-
-AUTORECONF = ./autogen.sh
 
 LIBTOOL = $(ROOTDIR)/user/lxc/build/$($(PKG)_BUILDDIR)/libtool
 
 AUTOMAKE_ROMFS = lxc_romfs
 INSTALLDIR = build/lxc-install
 
-CFLAGS += -g0
-LDFLAGS += -g0
 SECCOMP_CFLAGS = -I$(ROOTDIR)/staging/include
 
-CONFOPTS := --datarootdir=/etc \
-	--localstatedir=/opt \
-	--runstatedir=/var/run \
-	--with-distro=unknown
+CONFOPTS += -Dlocalstatedir=/opt
+CONFOPTS += -Ddatadir=/etc
+CONFOPTS += -Druntime-path=/var/run
+CONFOPTS += -Dinit-script=sysvinit
+CONFOPTS += -Ddbus=false
+CONFOPTS += -Dman=false
+CONFOPTS += -Dexamples=false
+CONFOPTS += -Dapparmor=false
+CONFOPTS += -Db_lto=true
+CONFOPTS += -Dc_args="-fPIC"
+CONFOPTS += -Dc_link_args="-fPIC"
 
-CONFOPTS += --disable-doc \
-	--disable-api-docs \
-	--disable-examples \
-	--disable-bash \
-	--disable-apparmor
-
-include $(ROOTDIR)/tools/automake.inc
+include $(ROOTDIR)/tools/meson.inc
 
 lxc_romfs:
 	$(ROMFSINST) -v -f $(INSTALLDIR)/bin /bin

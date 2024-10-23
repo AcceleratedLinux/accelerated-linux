@@ -3,7 +3,7 @@
 // This file is provided under a dual BSD/GPLv2 license.  When using or
 // redistributing this file, you may do so under either license.
 //
-// Copyright(c) 2018-2021 Intel Corporation. All rights reserved.
+// Copyright(c) 2018-2021 Intel Corporation
 //
 // Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
 //
@@ -274,22 +274,22 @@ static const char *fixup_tplg_name(struct snd_sof_dev *sdev,
 				   const char *ssp_str)
 {
 	const char *tplg_filename = NULL;
-	char *filename;
-	char *split_ext;
+	const char *split_ext;
+	char *filename, *tmp;
 
-	filename = devm_kstrdup(sdev->dev, sof_tplg_filename, GFP_KERNEL);
+	filename = kstrdup(sof_tplg_filename, GFP_KERNEL);
 	if (!filename)
 		return NULL;
 
 	/* this assumes a .tplg extension */
-	split_ext = strsep(&filename, ".");
-	if (split_ext) {
+	tmp = filename;
+	split_ext = strsep(&tmp, ".");
+	if (split_ext)
 		tplg_filename = devm_kasprintf(sdev->dev, GFP_KERNEL,
 					       "%s-%s.tplg",
 					       split_ext, ssp_str);
-		if (!tplg_filename)
-			return NULL;
-	}
+	kfree(filename);
+
 	return tplg_filename;
 }
 
@@ -418,3 +418,4 @@ void atom_set_mach_params(struct snd_soc_acpi_mach *mach,
 EXPORT_SYMBOL_NS(atom_set_mach_params, SND_SOC_SOF_INTEL_ATOM_HIFI_EP);
 
 MODULE_LICENSE("Dual BSD/GPL");
+MODULE_DESCRIPTION("SOF support for Atom platforms");

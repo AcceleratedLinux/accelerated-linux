@@ -26,12 +26,6 @@ echo 6 > /proc/sys/kernel/printk
 # initialise devices before we need them
 /etc/rc.dev
 
-echo "Configuring GPIOs..."
-# GPIO2/07 on is the dev/dbg mode jumper
-echo 455 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio455/direction
-echo 1 > /sys/class/gpio/gpio455/active_low
-
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
@@ -52,6 +46,14 @@ if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	# Use the same setup as for factory testing
 	/etc/factory
 	exit 0
+fi
+
+# Merge old dby /userfs into /opt so it's usable by default
+if ls /dev/mmcblk0p4 >/dev/null 2>&1; then
+	echo "Merging userfs into opt..."
+	parted -s /dev/mmcblk0 rm 4
+	parted -s /dev/mmcblk0 resizepart 3 3666
+	resize2fs -f /dev/mmcblk0p3
 fi
 
 # handle /opt, contains modem firmware and maybe other goodies

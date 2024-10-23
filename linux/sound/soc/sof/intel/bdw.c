@@ -3,7 +3,7 @@
 // This file is provided under a dual BSD/GPLv2 license.  When using or
 // redistributing this file, you may do so under either license.
 //
-// Copyright(c) 2018 Intel Corporation. All rights reserved.
+// Copyright(c) 2018 Intel Corporation
 //
 // Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
 //
@@ -567,7 +567,7 @@ static struct snd_soc_dai_driver bdw_dai[] = {
 };
 
 /* broadwell ops */
-static struct snd_sof_dsp_ops sof_bdw_ops = {
+static const struct snd_sof_dsp_ops sof_bdw_ops = {
 	/*Device init */
 	.probe          = bdw_probe,
 
@@ -575,11 +575,7 @@ static struct snd_sof_dsp_ops sof_bdw_ops = {
 	.run            = bdw_run,
 	.reset          = bdw_reset,
 
-	/* Register IO */
-	.write		= sof_io_write,
-	.read		= sof_io_read,
-	.write64	= sof_io_write64,
-	.read64		= sof_io_read64,
+	/* Register IO uses direct mmio */
 
 	/* Block IO */
 	.block_read	= sof_block_read,
@@ -643,16 +639,16 @@ static const struct sof_dev_desc sof_acpi_broadwell_desc = {
 	.resindex_imr_base = -1,
 	.irqindex_host_ipc = 0,
 	.chip_info = &bdw_chip_info,
-	.ipc_supported_mask = BIT(SOF_IPC),
-	.ipc_default = SOF_IPC,
+	.ipc_supported_mask = BIT(SOF_IPC_TYPE_3),
+	.ipc_default = SOF_IPC_TYPE_3,
 	.default_fw_path = {
-		[SOF_IPC] = "intel/sof",
+		[SOF_IPC_TYPE_3] = "intel/sof",
 	},
 	.default_tplg_path = {
-		[SOF_IPC] = "intel/sof-tplg",
+		[SOF_IPC_TYPE_3] = "intel/sof-tplg",
 	},
 	.default_fw_filename = {
-		[SOF_IPC] = "sof-bdw.ri",
+		[SOF_IPC_TYPE_3] = "sof-bdw.ri",
 	},
 	.nocodec_tplg_filename = "sof-bdw-nocodec.tplg",
 	.ops = &sof_bdw_ops,
@@ -681,17 +677,14 @@ static int sof_broadwell_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	desc = device_get_match_data(dev);
-	if (!desc)
-		return -ENODEV;
-
-	return sof_acpi_probe(pdev, device_get_match_data(dev));
+	desc = (const struct sof_dev_desc *)id->driver_data;
+	return sof_acpi_probe(pdev, desc);
 }
 
 /* acpi_driver definition */
 static struct platform_driver snd_sof_acpi_intel_bdw_driver = {
 	.probe = sof_broadwell_probe,
-	.remove = sof_acpi_remove,
+	.remove_new = sof_acpi_remove,
 	.driver = {
 		.name = "sof-audio-acpi-intel-bdw",
 		.pm = &sof_acpi_pm,
@@ -701,6 +694,7 @@ static struct platform_driver snd_sof_acpi_intel_bdw_driver = {
 module_platform_driver(snd_sof_acpi_intel_bdw_driver);
 
 MODULE_LICENSE("Dual BSD/GPL");
+MODULE_DESCRIPTION("SOF support for Broadwell platforms");
 MODULE_IMPORT_NS(SND_SOC_SOF_INTEL_HIFI_EP_IPC);
 MODULE_IMPORT_NS(SND_SOC_SOF_XTENSA);
 MODULE_IMPORT_NS(SND_SOC_SOF_ACPI_DEV);

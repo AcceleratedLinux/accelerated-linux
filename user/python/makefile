@@ -1,4 +1,4 @@
-PYTHON_VERSION = 3.10.1
+PYTHON_VERSION = 3.10.13
 PYTHON_VERSION_SHORT = $(shell echo $(PYTHON_VERSION) | cut -d'.' -f1,2)
 
 # build in parallel, faster
@@ -37,6 +37,7 @@ ifneq ($(CONFIG_X86)$(CONFIG_MIPS)$(CONFIG_ARM64),)
 CFLAGS += -fPIC
 endif
 
+CFLAGS += -O2 -g0
 Python-$(PYTHON_VERSION)_CONFVARS += ac_cv_prog_READELF=$(CROSS_COMPILE)readelf
 CONFVARS += ac_cv_buggy_getaddrinfo=no
 CONFVARS += ac_cv_file__dev_ptmx=yes
@@ -54,6 +55,8 @@ Python-$(PYTHON_VERSION)_CONFOPTS += --prefix=/usr
 Python-$(PYTHON_VERSION)_AUTORECONF = autoreconf -i
 
 Python-$(PYTHON_VERSION)_ROMFS = python_romfs
+
+INSTALLTARGET = my_installed
 
 # Absolute paths to staging so setup.py can correctly detect module
 # dependencies like zlib and ssl
@@ -81,7 +84,7 @@ build/Python-Host-build: build/Python-$(PYTHON_VERSION)-patched
 	cp -ra build/Python-$(PYTHON_VERSION) build/Python-Host
 	ln -s Python-$(PYTHON_VERSION)-license build/Python-Host-license
 	cd build/Python-Host; \
-		export PKG_CONFIG_LIBDIR= PKG_CONFIG_PATH= EXTRA_CFLAGS= CPUFLAGS= CPU_CFLAGS= CXXFLAGS= CPPFLAGS= LDLIBS= LIBC= LIBS= CC=gcc CXX=g++ LD=gcc AR= RANLIB= CFLAGS= LDFLAGS= ; \
+		export PKG_CONFIG_LIBDIR= PKG_CONFIG_PATH= PKG_CONFIG_SYSROOT_DIR= EXTRA_CFLAGS= CPUFLAGS= CPU_CFLAGS= CXXFLAGS= CPPFLAGS= LDLIBS= LIBC= LIBS= CC=gcc CXX=g++ LD=gcc AR= RANLIB= CFLAGS= LDFLAGS= ; \
 		$(CONFVARS) autoreconf -i; \
 		$(CONFVARS) ./configure \
 			--prefix=`pwd`/../Python-Hostinstall \
@@ -92,6 +95,20 @@ build/Python-Host-build: build/Python-$(PYTHON_VERSION)-patched
 	touch $@
 
 PYTHON_LIVE_IMAGE_DIR = $(STAGEDIR)/live_images/python/rootfs
+
+
+build/Python-$(PYTHON_VERSION)-my_installed: build/Python-$(PYTHON_VERSION)-installed
+	@# Copy out sysconfig before editing, so we can use it in python-module building
+	cp -a build/Python-$(PYTHON_VERSION)-install/usr/lib/python$(PYTHON_VERSION_SHORT)/_sysconfigdata_*.py build/
+	@# - Remove host paths
+	@# - Change cross-compiler binaries to native
+	@# - Remove file-prefix-map compiler argument
+	@# - Remove ucfront*
+	sed -i 's|$(AR)|ar|g;s|$(CROSS_COMPILE)gcc|gcc|g;s|$(CROSS_COMPILE)g++|g++|g;s|$(CROSS_COMPILE)readelf|readelf|g;s|ucfront-[^ ]*||g;s|$(STAGEDIR)||g;s|$(ROOTDIR)|dal|g;s|-ffile-prefix-map=[^ ]*||g' \
+		build/Python-$(PYTHON_VERSION)-install/usr/lib/python$(PYTHON_VERSION_SHORT)/_sysconfigdata_*.py \
+		build/Python-$(PYTHON_VERSION)-install/usr/lib/python$(PYTHON_VERSION_SHORT)/config-$(PYTHON_VERSION_SHORT)-*/Makefile \
+		build/Python-$(PYTHON_VERSION)-install/usr/bin/python$(PYTHON_VERSION_SHORT)-config
+	touch $@
 
 python_romfs:
 ifdef CONFIG_USER_PYTHON

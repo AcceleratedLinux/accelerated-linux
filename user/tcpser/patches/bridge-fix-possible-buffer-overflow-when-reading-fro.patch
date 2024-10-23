@@ -1,0 +1,29 @@
+From 6e4d18f6cd465b0ab51eb5afc78e814db7a7254e Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Fri, 5 May 2023 13:11:45 +0100
+Subject: [PATCH] bridge: fix possible buffer overflow when reading from socket
+
+The data read from the socket is subsequently nul-terminated, which
+results in a buffer overflow if the entire size of the buffer has been
+read. Instead, read up to one less bytes than the size of the buffer to
+allow room for the nul-terminator.
+---
+ src/bridge.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/bridge.c b/src/bridge.c
+index 1d00d49..7cac205 100644
+--- a/src/bridge.c
++++ b/src/bridge.c
+@@ -185,7 +185,7 @@ void *ip_thread(void *arg) {
+       // we got data
+       if (cfg->line_data.is_connected == TRUE && FD_ISSET(cfg->line_data.fd, &readfs)) {  // socket
+         LOG(LOG_DEBUG, "Data available on socket");
+-        res = line_read(&cfg->line_data, buf, sizeof(buf));
++        res = line_read(&cfg->line_data, buf, sizeof(buf) - 1);
+         //res = recv(cfg->line_data.fd, buf, sizeof(buf), 0);
+         if(0 >= res) {
+           LOG(LOG_INFO, "No socket data read, assume closed peer");
+-- 
+2.34.1
+

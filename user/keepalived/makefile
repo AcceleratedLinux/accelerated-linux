@@ -1,9 +1,9 @@
 
 VERSION = 2.2.2
-URL = http://www.keepalived.org/software/keepalived-$(VERSION).tar.gz
+URL = https://www.keepalived.org/software/keepalived-$(VERSION).tar.gz
 
 # Investigate netfilter ipvs module before enabling keepalived's lvs
-CONFOPTS=--disable-lvs --with-kernel-dir=$(STAGEDIR)
+CONFOPTS=--disable-lvs --with-kernel-dir=$(STAGEDIR) --enable-reproducible-build
 AUTORECONF = ./build_setup
 
 ifdef CONFIG_USER_KEEPALIVED_MINIMAL

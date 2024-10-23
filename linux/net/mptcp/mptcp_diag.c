@@ -10,7 +10,6 @@
 #include <linux/net.h>
 #include <linux/inet_diag.h>
 #include <net/netlink.h>
-#include <uapi/linux/mptcp.h>
 #include "protocol.h"
 
 static int sk_diag_dump(struct sock *sk, struct sk_buff *skb,
@@ -81,15 +80,18 @@ static void mptcp_diag_dump_listeners(struct sk_buff *skb, struct netlink_callba
 	struct mptcp_diag_ctx *diag_ctx = (void *)cb->ctx;
 	struct nlattr *bc = cb_data->inet_diag_nla_bc;
 	struct net *net = sock_net(skb->sk);
+	struct inet_hashinfo *hinfo;
 	int i;
 
-	for (i = diag_ctx->l_slot; i <= tcp_hashinfo.lhash2_mask; i++) {
+	hinfo = net->ipv4.tcp_death_row.hashinfo;
+
+	for (i = diag_ctx->l_slot; i <= hinfo->lhash2_mask; i++) {
 		struct inet_listen_hashbucket *ilb;
 		struct hlist_nulls_node *node;
 		struct sock *sk;
 		int num = 0;
 
-		ilb = &tcp_hashinfo.lhash2[i];
+		ilb = &hinfo->lhash2[i];
 
 		rcu_read_lock();
 		spin_lock(&ilb->lock);
@@ -222,6 +224,7 @@ static void mptcp_diag_get_info(struct sock *sk, struct inet_diag_msg *r,
 }
 
 static const struct inet_diag_handler mptcp_diag_handler = {
+	.owner		 = THIS_MODULE,
 	.dump		 = mptcp_diag_dump,
 	.dump_one	 = mptcp_diag_dump_one,
 	.idiag_get_info  = mptcp_diag_get_info,
@@ -242,4 +245,5 @@ static void __exit mptcp_diag_exit(void)
 module_init(mptcp_diag_init);
 module_exit(mptcp_diag_exit);
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("MPTCP socket monitoring via SOCK_DIAG");
 MODULE_ALIAS_NET_PF_PROTO_TYPE(PF_NETLINK, NETLINK_SOCK_DIAG, 2-262 /* AF_INET - IPPROTO_MPTCP */);

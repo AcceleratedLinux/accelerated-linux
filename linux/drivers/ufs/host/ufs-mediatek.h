@@ -7,12 +7,28 @@
 #define _UFS_MEDIATEK_H
 
 #include <linux/bitops.h>
-#include <linux/soc/mediatek/mtk_sip_svc.h>
+
+/*
+ * MCQ define and struct
+ */
+#define UFSHCD_MAX_Q_NR 8
+#define MTK_MCQ_INVALID_IRQ	0xFFFF
+
+/* REG_UFS_MMIO_OPT_CTRL_0 160h */
+#define EHS_EN                  BIT(0)
+#define PFM_IMPV                BIT(1)
+#define MCQ_MULTI_INTR_EN       BIT(2)
+#define MCQ_CMB_INTR_EN         BIT(3)
+#define MCQ_AH8                 BIT(4)
+
+#define MCQ_INTR_EN_MSK         (MCQ_MULTI_INTR_EN | MCQ_CMB_INTR_EN)
 
 /*
  * Vendor specific UFSHCI Registers
  */
+#define REG_UFS_XOUFS_CTRL          0x140
 #define REG_UFS_REFCLK_CTRL         0x144
+#define REG_UFS_MMIO_OPT_CTRL_0     0x160
 #define REG_UFS_EXTREG              0x2100
 #define REG_UFS_MPHYCTRL            0x2200
 #define REG_UFS_MTK_IP_VER          0x2240
@@ -23,6 +39,13 @@
 #define REG_UFS_DEBUG_SEL_B1        0x22D4
 #define REG_UFS_DEBUG_SEL_B2        0x22D8
 #define REG_UFS_DEBUG_SEL_B3        0x22DC
+
+#define REG_UFS_MTK_SQD             0x2800
+#define REG_UFS_MTK_SQIS            0x2814
+#define REG_UFS_MTK_CQD             0x281C
+#define REG_UFS_MTK_CQIS            0x2824
+
+#define REG_UFS_MCQ_STRIDE          0x30
 
 /*
  * Ref-clk control
@@ -76,15 +99,6 @@ enum {
 };
 
 /*
- * SiP commands
- */
-#define MTK_SIP_UFS_CONTROL               MTK_SIP_SMC_CMD(0x276)
-#define UFS_MTK_SIP_VA09_PWR_CTRL         BIT(0)
-#define UFS_MTK_SIP_DEVICE_RESET          BIT(1)
-#define UFS_MTK_SIP_CRYPTO_CTRL           BIT(2)
-#define UFS_MTK_SIP_REF_CLK_NOTIFICATION  BIT(3)
-
-/*
  * VS_DEBUGCLOCKENABLE
  */
 enum {
@@ -108,6 +122,17 @@ enum ufs_mtk_host_caps {
 	UFS_MTK_CAP_VA09_PWR_CTRL              = 1 << 1,
 	UFS_MTK_CAP_DISABLE_AH8                = 1 << 2,
 	UFS_MTK_CAP_BROKEN_VCC                 = 1 << 3,
+
+	/*
+	 * Override UFS_MTK_CAP_BROKEN_VCC's behavior to
+	 * allow vccqx upstream to enter LPM
+	 */
+	UFS_MTK_CAP_ALLOW_VCCQX_LPM            = 1 << 5,
+	UFS_MTK_CAP_PMC_VIA_FASTAUTO           = 1 << 6,
+	UFS_MTK_CAP_TX_SKEW_FIX                = 1 << 7,
+	UFS_MTK_CAP_DISABLE_MCQ                = 1 << 8,
+	/* Control MTCMOS with RTFF */
+	UFS_MTK_CAP_RTFF_MTCMOS                = 1 << 9,
 };
 
 struct ufs_mtk_crypt_cfg {
@@ -118,10 +143,22 @@ struct ufs_mtk_crypt_cfg {
 	int vcore_volt;
 };
 
+struct ufs_mtk_clk {
+	struct ufs_clk_info *ufs_sel_clki; /* Mux */
+	struct ufs_clk_info *ufs_sel_max_clki; /* Max src */
+	struct ufs_clk_info *ufs_sel_min_clki; /* Min src */
+};
+
 struct ufs_mtk_hw_ver {
 	u8 step;
 	u8 minor;
 	u8 major;
+};
+
+struct ufs_mtk_mcq_intr_info {
+	struct ufs_hba *hba;
+	u32 irq;
+	u8 qid;
 };
 
 struct ufs_mtk_host {
@@ -130,8 +167,10 @@ struct ufs_mtk_host {
 	struct reset_control *hci_reset;
 	struct reset_control *unipro_reset;
 	struct reset_control *crypto_reset;
+	struct reset_control *mphy_reset;
 	struct ufs_hba *hba;
 	struct ufs_mtk_crypt_cfg *crypt;
+	struct ufs_mtk_clk mclk;
 	struct ufs_mtk_hw_ver hw_ver;
 	enum ufs_mtk_host_caps caps;
 	bool mphy_powered_on;
@@ -140,6 +179,14 @@ struct ufs_mtk_host {
 	u16 ref_clk_ungating_wait_us;
 	u16 ref_clk_gating_wait_us;
 	u32 ip_ver;
+
+	bool mcq_set_intr;
+	bool is_mcq_intr_enabled;
+	int mcq_nr_intr;
+	struct ufs_mtk_mcq_intr_info mcq_intr_info[UFSHCD_MAX_Q_NR];
 };
+
+/* MTK delay of autosuspend: 500 ms */
+#define MTK_RPM_AUTOSUSPEND_DELAY_MS 500
 
 #endif /* !_UFS_MEDIATEK_H */

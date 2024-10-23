@@ -147,6 +147,7 @@ nvkm_udevice_info(struct nvkm_udevice *udev, void *data, u32 size)
 	case GV100: args->v0.family = NV_DEVICE_INFO_V0_VOLTA; break;
 	case TU100: args->v0.family = NV_DEVICE_INFO_V0_TURING; break;
 	case GA100: args->v0.family = NV_DEVICE_INFO_V0_AMPERE; break;
+	case AD100: args->v0.family = NV_DEVICE_INFO_V0_ADA; break;
 	default:
 		args->v0.family = 0;
 		break;
@@ -342,10 +343,13 @@ nvkm_udevice_child_get(struct nvkm_object *object, int index,
 			sclass = &device->mmu->user;
 		else if (device->fault && index-- == 0)
 			sclass = &device->fault->user;
+		else if (device->vfn && index-- == 0)
+			sclass = &device->vfn->user;
 		else
 			return -EINVAL;
 
 		oclass->base = sclass->base;
+		oclass->engine = NULL;
 	}
 
 	oclass->ctor = nvkm_udevice_child_new;

@@ -1,0 +1,777 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
+/*
+ * Copyright (C) Digi International 2024 - All Rights Reserved
+ *
+ * This file expresses the differences between the mainline kernel copy
+ * of stm32mp151.dtsi to the DEY (or ST-Linux) version of that file.
+ * The purpose of this .dtsi is to allow us to revert all DAL/DEY-specific
+ * patches to the mainline file, which will enable us to more easily track
+ * mainline changes.
+ *
+ * Where relevant, we have left a comment calling out the Git commit SHA
+ * and/or an explanatory comment for each change.
+ * "ST-Linux" refers to the GitHub stmicroelectronics/linux repository.
+ * The prefix "ARM: dts: stm32:" has been elided from commit message summaries.
+ */
+#include "stm32mp15-scmi.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	scmi_sram: sram@2ffff000 {
+		compatible = "mmio-sram";
+		reg = <0x2ffff000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0 0x2ffff000 0x1000>;
+
+		scmi_shm: scmi_shm@0 {
+			compatible = "arm,scmi-shmem";
+			reg = <0 0x80>;
+		};
+	};
+
+	pm_domain {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "st,stm32mp157c-pd";
+
+		pd_core_ret: core-ret-power-domain@1 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <1>;
+			#power-domain-cells = <0>;
+			label = "CORE-RETENTION";
+
+			pd_core: core-power-domain@2 {
+				reg = <2>;
+				#power-domain-cells = <0>;
+				label = "CORE";
+			};
+		};
+	};
+
+	soc {
+		sram: sram@10000000 {
+			compatible = "mmio-sram";
+			reg = <0x10000000 0x60000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0x10000000 0x60000>;
+		};
+
+		// ST-Linux commit 0d8112f0a84bd2ea85a8d6eaa85832503c4e1760
+		// "Add hwspinlock node for stm32mp151"
+		hsem: hwspinlock@4c000000 {
+			compatible = "st,stm32-hwspinlock";
+			#hwlock-cells = <2>;
+			reg = <0x4c000000 0x400>;
+			clocks = <&rcc HSEM>;
+			clock-names = "hsem";
+		};
+
+		// ST-Linux commit 2530c35d1b855c3c9555f97389d577b3f172ae63
+		// "add PWR wakeup pins support on stm32mp151"
+		pwr_irq: pwr@50001020 {
+			compatible = "st,stm32mp1-pwr";
+			reg = <0x50001020 0x100>;
+			interrupts = <GIC_SPI 149 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-controller;
+			#interrupt-cells = <3>;
+
+			st,wakeup-pins = <&gpioa 0 GPIO_ACTIVE_HIGH>,
+					 <&gpioa 2 GPIO_ACTIVE_HIGH>,
+					 <&gpioc 13 GPIO_ACTIVE_HIGH>,
+					 <&gpioi 8 GPIO_ACTIVE_HIGH>,
+					 <&gpioi 11 GPIO_ACTIVE_HIGH>,
+					 <&gpioc 1 GPIO_ACTIVE_HIGH>;
+		};
+
+		// ST-Linux commit bec7ff8fe5c5124a3cc7922b0e5ff34e2f081202
+		// "add Hardware debug port (HDP) on stm32mp15"
+		hdp: hdp@5002a000 {
+			compatible = "st,stm32mp1-hdp";
+			reg = <0x5002a000 0x400>;
+			clocks = <&rcc HDP>;
+			clock-names = "hdp";
+			status = "disabled";
+		};
+
+		// ST-Linux commit 89e1218834b319a8be556f6487e1c108d74f201d
+		// "add ddrperfm on stm32mp151"
+		// ddrperm = DDR Performance Monitor
+		ddrperfm: perf@5a007000 {
+			compatible = "st,stm32-ddr-pmu";
+			reg = <0x5a007000 0x400>;
+			clocks = <&rcc DDRPERFM>;
+			resets = <&rcc DDRPERFM_R>;
+			status = "disabled";
+		};
+	};
+};
+
+&cpu0 {
+	clocks = <&scmi_clk CK_SCMI_MPU>;
+	clock-names = "cpu";
+	operating-points-v2 = <&cpu0_opp_table>;
+	nvmem-cells = <&part_number_otp>;
+	nvmem-cell-names = "part_number";
+	#cooling-cells = <2>;
+};
+
+// BEGIN: ST-Linux commit 282cb39ab96db6b5760f6575e0cdcfa42f9737fb
+// "enable dma chaining for timers on stm32mp15xx"
+&timers1 {
+	/delete-property/ interrupts;
+	/delete-property/ interrupt-names;
+
+	dmas = <&dmamux1 11 0x400 0x80000001>,
+	       <&dmamux1 12 0x400 0x80000001>,
+	       <&dmamux1 13 0x400 0x80000001>,
+	       <&dmamux1 14 0x400 0x80000001>,
+	       <&dmamux1 15 0x400 0x80000001>,
+	       <&dmamux1 16 0x400 0x80000001>,
+	       <&dmamux1 17 0x400 0x80000001>;
+};
+&timers2 {
+	dmas = <&dmamux1 18 0x400 0x80000001>,
+	       <&dmamux1 19 0x400 0x80000001>,
+	       <&dmamux1 20 0x400 0x80000001>,
+	       <&dmamux1 21 0x400 0x80000001>,
+	       <&dmamux1 22 0x400 0x80000001>;
+};
+&timers3 {
+	dmas = <&dmamux1 23 0x400 0x80000001>,
+	       <&dmamux1 24 0x400 0x80000001>,
+	       <&dmamux1 25 0x400 0x80000001>,
+	       <&dmamux1 26 0x400 0x80000001>,
+	       <&dmamux1 27 0x400 0x80000001>,
+	       <&dmamux1 28 0x400 0x80000001>;
+};
+&timers4 {
+	dmas = <&dmamux1 29 0x400 0x80000001>,
+	       <&dmamux1 30 0x400 0x80000001>,
+	       <&dmamux1 31 0x400 0x80000001>,
+	       <&dmamux1 32 0x400 0x80000001>;
+};
+&timers5 {
+	dmas = <&dmamux1 55 0x400 0x80000001>,
+	       <&dmamux1 56 0x400 0x80000001>,
+	       <&dmamux1 57 0x400 0x80000001>,
+	       <&dmamux1 58 0x400 0x80000001>,
+	       <&dmamux1 59 0x400 0x80000001>,
+	       <&dmamux1 60 0x400 0x80000001>;
+};
+&timers6 {
+	dmas = <&dmamux1 69 0x400 0x80000001>;
+};
+&timers7 {
+	dmas = <&dmamux1 70 0x400 0x80000001>;
+};
+&timers8 {
+	/delete-property/ interrupts;
+	/delete-property/ interrupt-names;
+
+	dmas = <&dmamux1 47 0x400 0x80000001>,
+	       <&dmamux1 48 0x400 0x80000001>,
+	       <&dmamux1 49 0x400 0x80000001>,
+	       <&dmamux1 50 0x400 0x80000001>,
+	       <&dmamux1 51 0x400 0x80000001>,
+	       <&dmamux1 52 0x400 0x80000001>,
+	       <&dmamux1 53 0x400 0x80000001>;
+};
+&timers15 {
+	/delete-property/ interrupts;
+	/delete-property/ interrupt-names;
+
+	dmas = <&dmamux1 105 0x400 0x80000001>,
+	       <&dmamux1 106 0x400 0x80000001>,
+	       <&dmamux1 107 0x400 0x80000001>,
+	       <&dmamux1 108 0x400 0x80000001>;
+};
+&timers16 {
+	/delete-property/ interrupts;
+	/delete-property/ interrupt-names;
+
+	dmas = <&dmamux1 109 0x400 0x80000001>,
+	       <&dmamux1 110 0x400 0x80000001>;
+};
+&timers17 {
+	/delete-property/ interrupts;
+	/delete-property/ interrupt-names;
+
+	dmas = <&dmamux1 111 0x400 0x80000001>,
+	       <&dmamux1 112 0x400 0x80000001>;
+};
+// END: ST-Linux commit 282cb39ab96db6b5760f6575e0cdcfa42f9737fb
+
+&lptimer1 {
+	// ST-Linux commit 3338ba85112a51346db0905fd5f3ea45748b4ae3
+	// "add LP timer power domain on stm32mp151"
+	power-domains = <&pd_core>;
+
+	// ST-Linux commit 0889870e201a735fd4af6bd406981089bea019e8
+	// "add lptimers clocksource support on stm32mp15x"
+	timer {
+		compatible = "st,stm32-lptimer-timer";
+		status = "disabled";
+	};
+};
+
+&lptimer2 {
+	// ST-Linux commit 3338ba85112a51346db0905fd5f3ea45748b4ae3
+	// "add LP timer power domain on stm32mp151"
+	power-domains = <&pd_core>;
+
+	// ST-Linux commit 0889870e201a735fd4af6bd406981089bea019e8
+	// "add lptimers clocksource support on stm32mp15x"
+	timer {
+		compatible = "st,stm32-lptimer-timer";
+		status = "disabled";
+	};
+};
+
+&lptimer3 {
+	// ST-Linux commit 3338ba85112a51346db0905fd5f3ea45748b4ae3
+	// "add LP timer power domain on stm32mp151"
+	power-domains = <&pd_core>;
+
+	// ST-Linux commit 0889870e201a735fd4af6bd406981089bea019e8
+	// "add lptimers clocksource support on stm32mp15x"
+	timer {
+		compatible = "st,stm32-lptimer-timer";
+		status = "disabled";
+	};
+};
+
+&lptimer4 {
+	// ST-Linux commit 3338ba85112a51346db0905fd5f3ea45748b4ae3
+	// "add LP timer power domain on stm32mp151"
+	power-domains = <&pd_core>;
+
+	// ST-Linux commit 0889870e201a735fd4af6bd406981089bea019e8
+	// "add lptimers clocksource support on stm32mp15x"
+	timer {
+		compatible = "st,stm32-lptimer-timer";
+		status = "disabled";
+	};
+};
+
+&lptimer5 {
+	// ST-Linux commit 3338ba85112a51346db0905fd5f3ea45748b4ae3
+	// "add LP timer power domain on stm32mp151"
+	power-domains = <&pd_core>;
+
+	// ST-Linux commit 0889870e201a735fd4af6bd406981089bea019e8
+	// "add lptimers clocksource support on stm32mp15x"
+	timer {
+		compatible = "st,stm32-lptimer-timer";
+		status = "disabled";
+	};
+};
+
+// BEGIN: ST-Linux commit 06954752d355d1e343762e413457a4649ed1684b
+// "Use DMA FIFO mode on all spi in stm32mp151"
+&spi1 {
+	dmas = <&dmamux1 37 0x400 0x01>,
+	       <&dmamux1 38 0x400 0x01>;
+};
+&spi2 {
+	dmas = <&dmamux1 39 0x400 0x01>,
+	       <&dmamux1 40 0x400 0x01>;
+};
+&spi3 {
+	dmas = <&dmamux1 61 0x400 0x01>,
+	       <&dmamux1 62 0x400 0x01>;
+};
+&spi4 {
+	dmas = <&dmamux1 83 0x400 0x01>,
+	       <&dmamux1 84 0x400 0x01>;
+};
+&spi5 {
+	dmas = <&dmamux1 85 0x400 0x01>,
+	       <&dmamux1 86 0x400 0x01>;
+};
+// END: ST-Linux commit 06954752d355d1e343762e413457a4649ed1684b
+
+&spi6 {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_SPI6>;
+	resets = <&scmi_reset RST_SCMI_SPI6>;
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 34 0x0 0x40008 0x0 0x0 0x0>,
+	       <&mdma1 35 0x0 0x40002 0x0 0x0 0x0>;
+
+};
+
+// BEGIN: ST-Linux commit 2ae81eeef2d8c6c2af0d5f935fab255629ae3e94
+// "add dma and power-domains in stm32mp15x uart nodes"
+&usart1 {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_USART1>;
+
+	power-domains = <&pd_core>;
+};
+&usart2 {
+	power-domains = <&pd_core>;
+};
+&usart3 {
+	power-domains = <&pd_core>;
+};
+&uart4 {
+	power-domains = <&pd_core>;
+};
+&uart5 {
+	power-domains = <&pd_core>;
+};
+&usart6 {
+	power-domains = <&pd_core>;
+};
+&uart7 {
+	power-domains = <&pd_core>;
+};
+&uart8 {
+	power-domains = <&pd_core>;
+};
+// END: ST-Linux commit 2ae81eeef2d8c6c2af0d5f935fab255629ae3e94
+
+// BEGIN: ST-Linux commit 6eb77e0a09618d9dcc663a7c81c262a71edd9195
+// "update all i2c nodes interrupt/dma/power-domains in stm32mp151"
+&i2c1 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 21 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
+
+	dmas = <&dmamux1 33 0x400 0x80000001>,
+	       <&dmamux1 34 0x400 0x80000001>;
+	dma-names = "rx", "tx";
+	power-domains = <&pd_core>;
+};
+&i2c2 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 22 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>;
+
+	dmas = <&dmamux1 35 0x400 0x80000001>,
+	       <&dmamux1 36 0x400 0x80000001>;
+	dma-names = "rx", "tx";
+	power-domains = <&pd_core>;
+};
+&i2c3 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 23 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH>;
+
+	dmas = <&dmamux1 73 0x400 0x80000001>,
+	       <&dmamux1 74 0x400 0x80000001>;
+	dma-names = "rx", "tx";
+	power-domains = <&pd_core>;
+};
+&i2c4 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 24 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 96 IRQ_TYPE_LEVEL_HIGH>;
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_I2C4>;
+	resets = <&scmi_reset RST_SCMI_I2C4>;
+
+			// mwadsten: diff here and interrupts-extended
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 36 0x0 0x40008 0x0 0x0 0>,
+	       <&mdma1 37 0x0 0x40002 0x0 0x0 0>;
+	dma-names = "rx", "tx";
+	power-domains = <&pd_core>;
+};
+&i2c5 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 25 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 108 IRQ_TYPE_LEVEL_HIGH>;
+
+	dmas = <&dmamux1 115 0x400 0x80000001>,
+	       <&dmamux1 116 0x400 0x80000001>;
+	dma-names = "rx", "tx";
+	power-domains = <&pd_core>;
+};
+// END: ST-Linux commit 6eb77e0a09618d9dcc663a7c81c262a71edd9195
+
+&i2c6 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 54 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>;
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_I2C6>;
+	resets = <&scmi_reset RST_SCMI_I2C6>;
+
+	// mwadsten: diff here and interrupts-extended
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 38 0x0 0x40008 0x0 0x0 0>,
+	       <&mdma1 39 0x0 0x40002 0x0 0x0 0>;
+	dma-names = "rx", "tx";
+	power-domains = <&pd_core>;
+};
+
+&dma1 {
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 0 0x3 0x1200000a 0x48000008 0x00000020 1>,
+	       <&mdma1 1 0x3 0x1200000a 0x48000008 0x00000800 1>,
+	       <&mdma1 2 0x3 0x1200000a 0x48000008 0x00200000 1>,
+	       <&mdma1 3 0x3 0x1200000a 0x48000008 0x08000000 1>,
+	       <&mdma1 4 0x3 0x1200000a 0x4800000C 0x00000020 1>,
+	       <&mdma1 5 0x3 0x1200000a 0x4800000C 0x00000800 1>,
+	       <&mdma1 6 0x3 0x1200000a 0x4800000C 0x00200000 1>,
+	       <&mdma1 7 0x3 0x1200000a 0x4800000C 0x08000000 1>;
+	dma-names = "ch0", "ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7";
+};
+
+&dma2 {
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 8 0x3 0x1200000a 0x48001008 0x00000020 1>,
+	       <&mdma1 9 0x3 0x1200000a 0x48001008 0x00000800 1>,
+	       <&mdma1 10 0x3 0x1200000a 0x48001008 0x00200000 1>,
+	       <&mdma1 11 0x3 0x1200000a 0x48001008 0x08000000 1>,
+	       <&mdma1 12 0x3 0x1200000a 0x4800100C 0x00000020 1>,
+	       <&mdma1 13 0x3 0x1200000a 0x4800100C 0x00000800 1>,
+	       <&mdma1 14 0x3 0x1200000a 0x4800100C 0x00200000 1>,
+	       <&mdma1 15 0x3 0x1200000a 0x4800100C 0x08000000 1>;
+	dma-names = "ch0", "ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7";
+};
+
+&adc1 {
+	// ST-Linux commit a5d1fad484d0457b98608ec9357787baa5a2626c
+	// "enable dma chaining on stm32mp15xx adc"
+	dmas = <&dmamux1 9 0x400 0x80000001>;
+};
+
+&adc2 {
+	// ST-Linux commit a5d1fad484d0457b98608ec9357787baa5a2626c
+	// "enable dma chaining on stm32mp15xx adc"
+	dmas = <&dmamux1 10 0x400 0x80000001>;
+};
+
+&sdmmc1 {
+	interrupt-names = "cmd_irq";
+};
+
+&sdmmc2 {
+	// ST-Linux commit 64e11cb783d120d0a76cf89dbe4471ba98db0d8a
+	// "add sdmmc2 & 3 nodes for STM32MP157 SoC"
+	interrupt-names = "cmd_irq";
+};
+
+&sdmmc3 {
+	// ST-Linux commit 64e11cb783d120d0a76cf89dbe4471ba98db0d8a
+	// "add sdmmc2 & 3 nodes for STM32MP157 SoC"
+	interrupt-names = "cmd_irq";
+};
+
+&usbotg_hs {
+	// ST-Linux commit a18b559afc49e39edfcd977c77285426fe8fe3c4
+	// "add USB OTG wake up support on stm32mp151"
+	interrupts-extended = <&exti 44 IRQ_TYPE_LEVEL_HIGH>;
+	power-domains = <&pd_core>;
+	wakeup-source;
+
+	// ST-Linux commit 82ac8a81f985ad6a05c3f39aedb275eafbc40d3e
+	// "add USB OTG full support on stm32mp151"
+	usb33d-supply = <&scmi_usb33>;
+};
+
+&usbh_ehci {
+	// ST-Linux commit 0ecb3e22c080d267d8311f9595a8fc1cc896f881
+	// "add USBH_EHCI wake up support on stm32mp151"
+	/delete-property/ interrupts;
+	interrupts-extended = <&exti 43 IRQ_TYPE_LEVEL_HIGH>;
+
+	power-domains = <&pd_core>;
+	wakeup-source;
+};
+
+&ipcc {
+	// ST-Linux commit 98b83fc3f3fa630fa83db0fa03133980ae29ee3d
+	// "Add IPCC wakeup management on stm32mp151"
+	power-domains = <&pd_core>;
+};
+
+&dcmi {
+	// ST-Linux commit f37de57b273b97a82f9697ffb0503284f539b61d
+	// "add DCMI DMA/MDMA chaining on stm32mp15 family"
+	dmas = <&dmamux1 75 0x400 0xe0000001>;
+};
+
+&rcc {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	compatible = "st,stm32mp1-rcc-secure", "st,stm32mp1-rcc", "syscon";
+	clock-names = "hse", "hsi", "csi", "lse", "lsi";
+	// ST-Linux commit 937cf1c662316b015c72e0a4648c34bc423ad692
+	// "rename scmi_0 into scmi_ to stm32mp1"
+	clocks = <&scmi_clk CK_SCMI_HSE>,
+		 <&scmi_clk CK_SCMI_HSI>,
+		 <&scmi_clk CK_SCMI_CSI>,
+		 <&scmi_clk CK_SCMI_LSE>,
+		 <&scmi_clk CK_SCMI_LSI>;
+};
+
+&pwr_regulators {
+	// ST-Linux commit fd46f59f4209e6ce576c29c78ec5419b697081e0
+	// "add secure PWR regulators support on stm32mp151"
+	st,tzcr = <&rcc 0x0 0x1>;
+
+};
+
+&exti {
+	// ST-Linux commit 616a8062e184d03a509260f97319297f8b77f874
+	// "fix exti interrupt-map with stm32mp151"
+	#address-cells = <0>;
+	wakeup-parent = <&pwr_irq>;
+
+	// ST-Linux commit c3b4b4861e2e32ce2753811cdb1b99086b49bfee
+	// "Add hwlock for irqchip on stm32mp151"
+	hwlocks = <&hsem 1 1>;
+
+	// ST-Linux commit 2c1c7c9f3da1e4e2bc6011a2857708cc866c1513
+	// "use exti interrupt-map with stm32mp151"
+	exti-interrupt-map {
+		#address-cells = <0>; // 616a8062e
+		#interrupt-cells = <2>; // 616a8062e
+
+		interrupt-map-mask = <0xffffffff 0>;
+		interrupt-map =
+			<0  0 &intc GIC_SPI 6   IRQ_TYPE_LEVEL_HIGH>,
+			<1  0 &intc GIC_SPI 7   IRQ_TYPE_LEVEL_HIGH>,
+			<2  0 &intc GIC_SPI 8   IRQ_TYPE_LEVEL_HIGH>,
+			<3  0 &intc GIC_SPI 9   IRQ_TYPE_LEVEL_HIGH>,
+			<4  0 &intc GIC_SPI 10  IRQ_TYPE_LEVEL_HIGH>,
+			<5  0 &intc GIC_SPI 23  IRQ_TYPE_LEVEL_HIGH>,
+			<6  0 &intc GIC_SPI 64  IRQ_TYPE_LEVEL_HIGH>,
+			<7  0 &intc GIC_SPI 65  IRQ_TYPE_LEVEL_HIGH>,
+			<8  0 &intc GIC_SPI 66  IRQ_TYPE_LEVEL_HIGH>,
+			<9  0 &intc GIC_SPI 67  IRQ_TYPE_LEVEL_HIGH>,
+			<10 0 &intc GIC_SPI 40  IRQ_TYPE_LEVEL_HIGH>,
+			<11 0 &intc GIC_SPI 42  IRQ_TYPE_LEVEL_HIGH>,
+			<12 0 &intc GIC_SPI 76  IRQ_TYPE_LEVEL_HIGH>,
+			<13 0 &intc GIC_SPI 77  IRQ_TYPE_LEVEL_HIGH>,
+			<14 0 &intc GIC_SPI 121 IRQ_TYPE_LEVEL_HIGH>,
+			<15 0 &intc GIC_SPI 127 IRQ_TYPE_LEVEL_HIGH>,
+			<16 0 &intc GIC_SPI 1   IRQ_TYPE_LEVEL_HIGH>,
+			<19 0 &intc GIC_SPI 3   IRQ_TYPE_LEVEL_HIGH>,
+			<21 0 &intc GIC_SPI 31  IRQ_TYPE_LEVEL_HIGH>,
+			<22 0 &intc GIC_SPI 33  IRQ_TYPE_LEVEL_HIGH>,
+			<23 0 &intc GIC_SPI 72  IRQ_TYPE_LEVEL_HIGH>,
+			<24 0 &intc GIC_SPI 95  IRQ_TYPE_LEVEL_HIGH>,
+			<25 0 &intc GIC_SPI 107 IRQ_TYPE_LEVEL_HIGH>,
+			<26 0 &intc GIC_SPI 37  IRQ_TYPE_LEVEL_HIGH>,
+			<27 0 &intc GIC_SPI 38  IRQ_TYPE_LEVEL_HIGH>,
+			<28 0 &intc GIC_SPI 39  IRQ_TYPE_LEVEL_HIGH>,
+			<29 0 &intc GIC_SPI 71  IRQ_TYPE_LEVEL_HIGH>,
+			<30 0 &intc GIC_SPI 52  IRQ_TYPE_LEVEL_HIGH>,
+			<31 0 &intc GIC_SPI 53  IRQ_TYPE_LEVEL_HIGH>,
+			<32 0 &intc GIC_SPI 82  IRQ_TYPE_LEVEL_HIGH>,
+			<33 0 &intc GIC_SPI 83  IRQ_TYPE_LEVEL_HIGH>,
+			<43 0 &intc GIC_SPI 75  IRQ_TYPE_LEVEL_HIGH>,
+			<44 0 &intc GIC_SPI 98  IRQ_TYPE_LEVEL_HIGH>,
+			<47 0 &intc GIC_SPI 93  IRQ_TYPE_LEVEL_HIGH>,
+			<48 0 &intc GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>,
+			<50 0 &intc GIC_SPI 139 IRQ_TYPE_LEVEL_HIGH>,
+			<52 0 &intc GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>,
+			<53 0 &intc GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
+			<54 0 &intc GIC_SPI 135 IRQ_TYPE_LEVEL_HIGH>,
+			<55 0 &pwr_irq 0 IRQ_TYPE_EDGE_FALLING 0>,
+			<56 0 &pwr_irq 1 IRQ_TYPE_EDGE_FALLING 0>,
+			<57 0 &pwr_irq 2 IRQ_TYPE_EDGE_FALLING 0>,
+			<58 0 &pwr_irq 3 IRQ_TYPE_EDGE_FALLING 0>,
+			<59 0 &pwr_irq 4 IRQ_TYPE_EDGE_FALLING 0>,
+			<60 0 &pwr_irq 5 IRQ_TYPE_EDGE_FALLING 0>,
+			<61 0 &intc GIC_SPI 100 IRQ_TYPE_LEVEL_HIGH>,
+			<65 0 &intc GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>,
+			<68 0 &intc GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>,
+			<69 0 &intc GIC_SPI 94  IRQ_TYPE_LEVEL_HIGH>,
+			<70 0 &intc GIC_SPI 62  IRQ_TYPE_LEVEL_HIGH>,
+			<73 0 &intc GIC_SPI 129 IRQ_TYPE_LEVEL_HIGH>;
+	};
+	// ST-Linux commit 4e333e0253100c409471518e312b6ae4f5543fed
+	// "add irq-map for exti 69 to stm32mp151"
+	// refers to this line above:
+	// +<69 0 &intc GIC_SPI 94  IRQ_TYPE_LEVEL_HIGH>,
+};
+
+&hash1 {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_HASH1>;
+	resets = <&scmi_reset RST_SCMI_HASH1>;
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 31 0x2 0x1000A02 0x0 0x0 0x0>;
+};
+
+&rng1 {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_RNG1>;
+	resets = <&scmi_reset RST_SCMI_RNG1>;
+};
+
+&mdma1 {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	resets = <&scmi_reset RST_SCMI_MDMA>;
+
+	#dma-cells = <6>;
+};
+
+&fmc {
+	nand-controller@4,0 {
+		// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+		// "add DMA/MDMA chaining on stm32mp151"
+		dmas = <&mdma1 20 0x2 0x12000a02 0x0 0x0 0x0>,
+		       <&mdma1 20 0x2 0x12000a08 0x0 0x0 0x0>,
+		       <&mdma1 21 0x2 0x12000a0a 0x0 0x0 0x0>;
+	};
+};
+
+&qspi {
+	// ST-Linux commit 840185f7d4d62ed7e99ea196fab61f627841105e
+	// "add DMA/MDMA chaining on stm32mp151"
+	dmas = <&mdma1 22 0x2 0x10100002 0x0 0x0 0x0>,
+	       <&mdma1 22 0x2 0x10100008 0x0 0x0 0x0>;
+};
+
+&ethernet0 {
+	// ST-Linux commit 4b6791e8d8e9f7c9385e868645204562df67430e
+	// "Add support of Eth wakeup on stm32mp15"
+	interrupts-extended = <&intc GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH>,
+			      <&exti 70 IRQ_TYPE_LEVEL_HIGH>;
+	interrupt-names = "macirq",
+			  "eth_wake_irq";
+
+	power-domains = <&pd_core>;
+};
+
+&ltdc {
+	// ST-Linux commit 9c32f980d999b4f441044f94005b3e649d036694
+	// "preset stm32mp15x video #address- and #size-cells"
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+};
+
+&iwdg2 {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&rcc IWDG2>, <&scmi_clk CK_SCMI_LSI>;
+};
+
+&rtc {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_RTCAPB>,
+		 <&scmi_clk CK_SCMI_RTC>;
+
+};
+
+&bsec {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_BSEC>;
+
+	// ST-Linux commit 3c3c04a0365e6b40bcf9379748f3a144762ea4b6
+	// "load mac address from NVMEM for STM32MP15 boards"
+	ethernet_mac_address: mac@e4 {
+		reg = <0xe4 0x6>;
+	};
+};
+
+&tamp {
+	// ST-Linux commit 7663c884607515130278bd88e0830c2793a0c7c9
+	// "Enable reboot mode support to stm32mp157"
+	reboot-mode {
+		compatible = "syscon-reboot-mode";
+		offset = <0x150>; /* reg20 */
+		mask = <0xff>;
+		mode-normal = <0>;
+		mode-fastboot = <0x1>;
+		mode-recovery = <0x2>;
+		mode-stm32cubeprogrammer = <0x3>;
+		mode-ums_mmc0 = <0x10>;
+		mode-ums_mmc1 = <0x11>;
+		mode-ums_mmc2 = <0x12>;
+	};
+};
+
+&pinctrl {
+	// ST-Linux commit 3740283f0fc30c2263da33e0ba7486cd1ab50cbb
+	// "hwlocks for GPIO for stm32mp151"
+	hwlocks = <&hsem 0 1>;
+	// ST-Linux commit 8471a20253ebf01a646cf790e98d870a55216ded
+	// "add stm32mp157c initial support"
+	pins-are-numbered;
+};
+
+&pinctrl_z {
+	// ST-Linux commit 3740283f0fc30c2263da33e0ba7486cd1ab50cbb
+	// "hwlocks for GPIO for stm32mp151"
+	hwlocks = <&hsem 0 1>;
+
+	// ST-Linux commit 8471a20253ebf01a646cf790e98d870a55216ded
+	// "add stm32mp157c initial support"
+	pins-are-numbered;
+};
+
+&gpioz {
+	// ST-Linux commit aeb5849f03a571b866d0795e70c5bff336fdb686
+	// "move clocks/resets to SCMI resources for stm32mp15"
+	clocks = <&scmi_clk CK_SCMI_GPIOZ>;
+};
+
+&m4_rproc {
+	/delete-property/ st,syscfg-holdboot;
+	// ST-Linux commit 824a53fa5f0f6a54e60cfc08167365130a3cf633
+	// "update MCU hold boot declaration on stm32mp15"
+	// and
+	// ST-Linux commit 937cf1c662316b015c72e0a4648c34bc423ad692
+	// "rename scmi_0 into scmi_ to stm32mp1"
+	resets = <&scmi_reset RST_SCMI_MCU>,
+		 <&scmi_reset RST_SCMI_MCU_HOLD_BOOT>;
+	reset-names = "mcu_rst", "hold_boot";
+
+	// ST-Linux commit 126504fffd4f3aa59e9a70894ceaf0906cb2d974
+	// "declare m4 system resource manager on STM32MP151"
+	m4_system_resources {
+		compatible = "rproc-srm-core";
+		status = "disabled";
+	};
+};
+
+// NOTE: Previously defined directly in stm32mp15-scmi.dtsi.
+&scmi {
+	shmem = <&scmi_shm>;
+};
+
+// Moved here from stm32mp15-scmi.dtsi
+&reg11 {
+	status = "disabled";
+};
+
+&reg18 {
+	status = "disabled";
+};
+
+&usb33 {
+	status = "disabled";
+};
+
+&usbphyc {
+	vdda1v1-supply = <&scmi_reg11>;
+	vdda1v8-supply = <&scmi_reg18>;
+};
+// End "Moved here..."

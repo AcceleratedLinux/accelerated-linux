@@ -373,8 +373,7 @@ err_init_led:
 	return ret;
 }
 
-static int awusb24_cpld_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int awusb24_cpld_probe(struct i2c_client *client)
 {
 	int ret;
 	struct awusb24_cpld_chip *chip;
@@ -437,7 +436,7 @@ err_init:
 	return ret;
 }
 
-static int awusb24_cpld_remove(struct i2c_client *client)
+static void awusb24_cpld_remove(struct i2c_client *client)
 {
 	struct awusb24_cpld *led = i2c_get_clientdata(client);
 	struct awusb24_cpld_chip *chip = led->chip;
@@ -445,8 +444,6 @@ static int awusb24_cpld_remove(struct i2c_client *client)
 	awusb24_cpld_unregister_sysfs(chip ? chip->cl : NULL);
 	awusb24_cpld_unregister_leds(led, chip);
 	awusb24_cpld_deinit_device(chip);
-
-	return 0;
 }
 
 static struct i2c_driver awusb24_cpld_driver = {

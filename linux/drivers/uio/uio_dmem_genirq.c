@@ -36,16 +36,19 @@ struct uio_dmem_genirq_platdata {
 	struct platform_device *pdev;
 	unsigned int dmem_region_start;
 	unsigned int num_dmem_regions;
-	void *dmem_region_vaddr[MAX_UIO_MAPS];
 	struct mutex alloc_lock;
 	unsigned int refcnt;
+};
+
+/* Bits in uio_dmem_genirq_platdata.flags */
+enum {
+	UIO_IRQ_DISABLED = 0,
 };
 
 static int uio_dmem_genirq_open(struct uio_info *info, struct inode *inode)
 {
 	struct uio_dmem_genirq_platdata *priv = info->priv;
 	struct uio_mem *uiomem;
-	int dmem_region = priv->dmem_region_start;
 
 	uiomem = &priv->uioinfo->mem[priv->dmem_region_start];
 
@@ -56,11 +59,8 @@ static int uio_dmem_genirq_open(struct uio_info *info, struct inode *inode)
 			break;
 
 		addr = dma_alloc_coherent(&priv->pdev->dev, uiomem->size,
-				(dma_addr_t *)&uiomem->addr, GFP_KERNEL);
-		if (!addr) {
-			uiomem->addr = DMEM_MAP_ERROR;
-		}
-		priv->dmem_region_vaddr[dmem_region++] = addr;
+					  &uiomem->dma_addr, GFP_KERNEL);
+		uiomem->addr = addr ? (uintptr_t) addr : DMEM_MAP_ERROR;
 		++uiomem;
 	}
 	priv->refcnt++;
@@ -75,7 +75,6 @@ static int uio_dmem_genirq_release(struct uio_info *info, struct inode *inode)
 {
 	struct uio_dmem_genirq_platdata *priv = info->priv;
 	struct uio_mem *uiomem;
-	int dmem_region = priv->dmem_region_start;
 
 	/* Tell the Runtime PM code that the device has become idle */
 	pm_runtime_put_sync(&priv->pdev->dev);
@@ -88,13 +87,12 @@ static int uio_dmem_genirq_release(struct uio_info *info, struct inode *inode)
 	while (!priv->refcnt && uiomem < &priv->uioinfo->mem[MAX_UIO_MAPS]) {
 		if (!uiomem->size)
 			break;
-		if (priv->dmem_region_vaddr[dmem_region]) {
-			dma_free_coherent(&priv->pdev->dev, uiomem->size,
-					priv->dmem_region_vaddr[dmem_region],
-					uiomem->addr);
+		if (uiomem->addr) {
+			dma_free_coherent(uiomem->dma_device, uiomem->size,
+					  (void *) (uintptr_t) uiomem->addr,
+					  uiomem->dma_addr);
 		}
 		uiomem->addr = DMEM_MAP_ERROR;
-		++dmem_region;
 		++uiomem;
 	}
 
@@ -110,8 +108,10 @@ static irqreturn_t uio_dmem_genirq_handler(int irq, struct uio_info *dev_info)
 	 * remember the state so we can allow user space to enable it later.
 	 */
 
-	if (!test_and_set_bit(0, &priv->flags))
+	spin_lock(&priv->lock);
+	if (!__test_and_set_bit(UIO_IRQ_DISABLED, &priv->flags))
 		disable_irq_nosync(irq);
+	spin_unlock(&priv->lock);
 
 	return IRQ_HANDLED;
 }
@@ -125,20 +125,19 @@ static int uio_dmem_genirq_irqcontrol(struct uio_info *dev_info, s32 irq_on)
 	 * in the interrupt controller, but keep track of the
 	 * state to prevent per-irq depth damage.
 	 *
-	 * Serialize this operation to support multiple tasks.
+	 * Serialize this operation to support multiple tasks and concurrency
+	 * with irq handler on SMP systems.
 	 */
 
 	spin_lock_irqsave(&priv->lock, flags);
 	if (irq_on) {
-		if (test_and_clear_bit(0, &priv->flags))
+		if (__test_and_clear_bit(UIO_IRQ_DISABLED, &priv->flags))
 			enable_irq(dev_info->irq);
-		spin_unlock_irqrestore(&priv->lock, flags);
 	} else {
-		if (!test_and_set_bit(0, &priv->flags)) {
-			spin_unlock_irqrestore(&priv->lock, flags);
-			disable_irq(dev_info->irq);
-		}
+		if (!__test_and_set_bit(UIO_IRQ_DISABLED, &priv->flags))
+			disable_irq_nosync(dev_info->irq);
 	}
+	spin_unlock_irqrestore(&priv->lock, flags);
 
 	return 0;
 }
@@ -258,7 +257,8 @@ static int uio_dmem_genirq_probe(struct platform_device *pdev)
 					" dynamic and fixed memory regions.\n");
 			break;
 		}
-		uiomem->memtype = UIO_MEM_PHYS;
+		uiomem->memtype = UIO_MEM_DMA_COHERENT;
+		uiomem->dma_device = &pdev->dev;
 		uiomem->addr = DMEM_MAP_ERROR;
 		uiomem->size = pdata->dynamic_region_sizes[i];
 		++uiomem;

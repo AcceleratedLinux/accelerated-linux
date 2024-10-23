@@ -1,0 +1,55 @@
+diff --git a/mDNSEmbedLib/Makefile b/mDNSEmbedLib/Makefile
+new file mode 100644
+index 0000000000..be5d18d3b6
+--- /dev/null
++++ b/mDNSEmbedLib/Makefile
+@@ -0,0 +1,49 @@
++INCDIRS = ../mDNSCore ../mDNSPosix ../mDNSShared
++SRCDIRS = ../mDNSCore ../mDNSPosix ../mDNSShared
++INCLUDES=  $(wildcard *.h) $(foreach d, $(INCDIRS), $(wildcard $d/*.h))
++SOURCES = $(wildcard *.c*)
++CFLAGS += -D_GNU_SOURCE -DHAVE_IPV6=1 -DNOT_HAVE_SA_LEN -D_POSIX -DUSES_NETLINK=1 -DHAVE_LINUX -DTARGET_OS_LINUX -DMDNS_DEBUGMSGS=0 -W -Wall -Wno-expansion-to-defined -Werror -fwrapv
++CFLAGS+=$(addprefix -I,$(INCDIRS))
++TARGETLIB = libmdnsembed.a
++
++vpath %.c $(SRCDIRS)
++vpath %.S $(SRCDIRS)
++vpath %.s $(SRCDIRS)
++vpath %.h $(INCDIRS)
++
++SOURCES += \
++	mDNSPosix.c \
++	mDNSUNP.c \
++	mDNS.c \
++	uDNS.c \
++	DNSCommon.c \
++	DNSDigest.c \
++	mDNSDebug.c \
++	PlatformCommon.c \
++	GenLinkedList.c \
++	$()
++
++OBJECTS  = $(patsubst %.c,%.o, $(notdir $(SOURCES)))
++
++default: $(TARGETLIB)
++
++%.o: %.c $(notdir $(INCLUDES))
++	$(CC) $(CFLAGS) -c -o $@ $<
++
++.PHONY: clean default
++
++$(TARGETLIB): $(OBJECTS)
++	$(AR) rcs -o $@ $^
++
++install: $(TARGETLIB)
++	install -d -m 0755 $(DESTDIR)/lib
++	install -d -m 0755 $(DESTDIR)/include
++	install -m 0755 $(TARGETLIB) $(DESTDIR)/lib/$(TARGETLIB)
++	install -m 0644 ../mDNSCore/mDNSEmbeddedAPI.h $(DESTDIR)/include/mDNSEmbeddedAPI.h
++	install -m 0644 ../mDNSCore/mDNSDebug.h $(DESTDIR)/include/mDNSDebug.h
++	install -m 0644 ../mDNSPosix/mDNSPosix.h $(DESTDIR)/include/mDNSPosix.h
++	install -m 0644 ../mDNSShared/mDNSFeatures.h $(DESTDIR)/include/mDNSFeatures.h
++
++clean:
++	rm -rf $(TARGETLIB) *.o
++

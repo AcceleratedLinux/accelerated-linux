@@ -133,4 +133,11 @@ config R8169_NOPROM
 	  Say y here if you have 8169 based hardware without the external
 	  EEPROM fitted. Some embedded boards do not use an external EEPROM.
 
+config R8169_LEDS
+	def_bool R8169 && LEDS_TRIGGER_NETDEV
+	depends on !(R8169=y && LEDS_CLASS=m)
+	help
+	  Optional support for controlling the NIC LED's with the netdev
+	  LED trigger.
+
 endif # NET_VENDOR_REALTEK

@@ -1,0 +1,35 @@
+Running DAL devtests
+
+This is intended for use by engineers and developers making code changes to DAL features.
+Making sure that these changes do not break existing functionality.
+
+-------------------------------------------------------------------------------------
+
+Workflow
+
+From root directory.
+'make dal_devtests'
+This will create images/dal_devtests.tgz
+Copy this file to DAL device either /tmp or /opt and extract.
+login to device and change to dal_devtests directory.
+
+'./run_tests.sh'
+This will run all tests
+
+or if you are just checking for example surelink you can run just those tests
+'./surelink/test_surelink.sh'
+
+or if you want to just run the surelink tests for say modem interface only.
+'./surelink/test_surelink.sh test_surelink_modem'
+
+-------------------------------------------------------------------------------------
+
+Investigating an issue
+
+You can also for example just apply the config for a particular test so you can keep it in that state until you are finished.
+
+'./surelink/test_surelink.sh test_surelink_modem config'
+It should apply the config etc and exist so you can have a look around.
+When you are finished to restore as it would do after the test had finished.
+'./surelink/test_surelink.sh test_surelink_modem restore'
+

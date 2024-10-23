@@ -29,7 +29,7 @@ const struct file_operations generic_ro_fops = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
 	.mmap		= generic_file_readonly_mmap,
-	.splice_read	= generic_file_splice_read,
+	.splice_read	= filemap_splice_read,
 };
 
 EXPORT_SYMBOL(generic_ro_fops);
@@ -71,7 +71,7 @@ EXPORT_SYMBOL(vfs_setpos);
  * @file:	file structure to seek on
  * @offset:	file offset to seek to
  * @whence:	type of seek
- * @size:	max size of this file in file system
+ * @maxsize:	max size of this file in file system
  * @eof:	offset used for SEEK_END position
  *
  * This is a variant of generic_file_llseek that allows passing in a custom
@@ -227,12 +227,6 @@ loff_t noop_llseek(struct file *file, loff_t offset, int whence)
 }
 EXPORT_SYMBOL(noop_llseek);
 
-loff_t no_llseek(struct file *file, loff_t offset, int whence)
-{
-	return -ESPIPE;
-}
-EXPORT_SYMBOL(no_llseek);
-
 loff_t default_llseek(struct file *file, loff_t offset, int whence)
 {
 	struct inode *inode = file_inode(file);
@@ -290,14 +284,9 @@ EXPORT_SYMBOL(default_llseek);
 
 loff_t vfs_llseek(struct file *file, loff_t offset, int whence)
 {
-	loff_t (*fn)(struct file *, loff_t, int);
-
-	fn = no_llseek;
-	if (file->f_mode & FMODE_LSEEK) {
-		if (file->f_op->llseek)
-			fn = file->f_op->llseek;
-	}
-	return fn(file, offset, whence);
+	if (!(file->f_mode & FMODE_LSEEK))
+		return -ESPIPE;
+	return file->f_op->llseek(file, offset, whence);
 }
 EXPORT_SYMBOL(vfs_llseek);
 
@@ -365,6 +354,9 @@ out_putf:
 
 int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t count)
 {
+	int mask = read_write == READ ? MAY_READ : MAY_WRITE;
+	int ret;
+
 	if (unlikely((ssize_t) count < 0))
 		return -EINVAL;
 
@@ -382,23 +374,25 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 		}
 	}
 
-	return security_file_permission(file,
-				read_write == READ ? MAY_READ : MAY_WRITE);
+	ret = security_file_permission(file, mask);
+	if (ret)
+		return ret;
+
+	return fsnotify_file_area_perm(file, mask, ppos, count);
 }
 EXPORT_SYMBOL(rw_verify_area);
 
 static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 {
-	struct iovec iov = { .iov_base = buf, .iov_len = len };
 	struct kiocb kiocb;
 	struct iov_iter iter;
 	ssize_t ret;
 
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
-	iov_iter_init(&iter, READ, &iov, 1, len);
+	iov_iter_ubuf(&iter, ITER_DEST, buf, len);
 
-	ret = call_read_iter(filp, &kiocb, &iter);
+	ret = filp->f_op->read_iter(&kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
 	if (ppos)
 		*ppos = kiocb.ki_pos;
@@ -436,7 +430,7 @@ ssize_t __kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 
 	init_sync_kiocb(&kiocb, file);
 	kiocb.ki_pos = pos ? *pos : 0;
-	iov_iter_kvec(&iter, READ, &iov, 1, iov.iov_len);
+	iov_iter_kvec(&iter, ITER_DEST, &iov, 1, iov.iov_len);
 	ret = file->f_op->read_iter(&kiocb, &iter);
 	if (ret > 0) {
 		if (pos)
@@ -492,16 +486,15 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 
 static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
 {
-	struct iovec iov = { .iov_base = (void __user *)buf, .iov_len = len };
 	struct kiocb kiocb;
 	struct iov_iter iter;
 	ssize_t ret;
 
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
-	iov_iter_init(&iter, WRITE, &iov, 1, len);
+	iov_iter_ubuf(&iter, ITER_SOURCE, (void __user *)buf, len);
 
-	ret = call_write_iter(filp, &kiocb, &iter);
+	ret = filp->f_op->write_iter(&kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
 	if (ret > 0 && ppos)
 		*ppos = kiocb.ki_pos;
@@ -509,14 +502,9 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 }
 
 /* caller is responsible for file_start_write/file_end_write */
-ssize_t __kernel_write(struct file *file, const void *buf, size_t count, loff_t *pos)
+ssize_t __kernel_write_iter(struct file *file, struct iov_iter *from, loff_t *pos)
 {
-	struct kvec iov = {
-		.iov_base	= (void *)buf,
-		.iov_len	= min_t(size_t, count, MAX_RW_COUNT),
-	};
 	struct kiocb kiocb;
-	struct iov_iter iter;
 	ssize_t ret;
 
 	if (WARN_ON_ONCE(!(file->f_mode & FMODE_WRITE)))
@@ -532,8 +520,7 @@ ssize_t __kernel_write(struct file *file, const void *buf, size_t count, loff_t 
 
 	init_sync_kiocb(&kiocb, file);
 	kiocb.ki_pos = pos ? *pos : 0;
-	iov_iter_kvec(&iter, WRITE, &iov, 1, iov.iov_len);
-	ret = file->f_op->write_iter(&kiocb, &iter);
+	ret = file->f_op->write_iter(&kiocb, from);
 	if (ret > 0) {
 		if (pos)
 			*pos = kiocb.ki_pos;
@@ -542,6 +529,18 @@ ssize_t __kernel_write(struct file *file, const void *buf, size_t count, loff_t 
 	}
 	inc_syscw(current);
 	return ret;
+}
+
+/* caller is responsible for file_start_write/file_end_write */
+ssize_t __kernel_write(struct file *file, const void *buf, size_t count, loff_t *pos)
+{
+	struct kvec iov = {
+		.iov_base	= (void *)buf,
+		.iov_len	= min_t(size_t, count, MAX_RW_COUNT),
+	};
+	struct iov_iter iter;
+	iov_iter_kvec(&iter, ITER_SOURCE, &iov, 1, iov.iov_len);
+	return __kernel_write_iter(file, &iter, pos);
 }
 /*
  * This "EXPORT_SYMBOL_GPL()" is more of a "EXPORT_SYMBOL_DONTUSE()",
@@ -737,9 +736,9 @@ static ssize_t do_iter_readv_writev(struct file *filp, struct iov_iter *iter,
 	kiocb.ki_pos = (ppos ? *ppos : 0);
 
 	if (type == READ)
-		ret = call_read_iter(filp, &kiocb, iter);
+		ret = filp->f_op->read_iter(&kiocb, iter);
 	else
-		ret = call_write_iter(filp, &kiocb, iter);
+		ret = filp->f_op->write_iter(&kiocb, iter);
 	BUG_ON(ret == -EIOCBQUEUED);
 	if (ppos)
 		*ppos = kiocb.ki_pos;
@@ -756,15 +755,14 @@ static ssize_t do_loop_readv_writev(struct file *filp, struct iov_iter *iter,
 		return -EOPNOTSUPP;
 
 	while (iov_iter_count(iter)) {
-		struct iovec iovec = iov_iter_iovec(iter);
 		ssize_t nr;
 
 		if (type == READ) {
-			nr = filp->f_op->read(filp, iovec.iov_base,
-					      iovec.iov_len, ppos);
+			nr = filp->f_op->read(filp, iter_iov_addr(iter),
+						iter_iov_len(iter), ppos);
 		} else {
-			nr = filp->f_op->write(filp, iovec.iov_base,
-					       iovec.iov_len, ppos);
+			nr = filp->f_op->write(filp, iter_iov_addr(iter),
+						iter_iov_len(iter), ppos);
 		}
 
 		if (nr < 0) {
@@ -773,39 +771,11 @@ static ssize_t do_loop_readv_writev(struct file *filp, struct iov_iter *iter,
 			break;
 		}
 		ret += nr;
-		if (nr != iovec.iov_len)
+		if (nr != iter_iov_len(iter))
 			break;
 		iov_iter_advance(iter, nr);
 	}
 
-	return ret;
-}
-
-static ssize_t do_iter_read(struct file *file, struct iov_iter *iter,
-		loff_t *pos, rwf_t flags)
-{
-	size_t tot_len;
-	ssize_t ret = 0;
-
-	if (!(file->f_mode & FMODE_READ))
-		return -EBADF;
-	if (!(file->f_mode & FMODE_CAN_READ))
-		return -EINVAL;
-
-	tot_len = iov_iter_count(iter);
-	if (!tot_len)
-		goto out;
-	ret = rw_verify_area(READ, file, pos, tot_len);
-	if (ret < 0)
-		return ret;
-
-	if (file->f_op->read_iter)
-		ret = do_iter_readv_writev(file, iter, pos, READ, flags);
-	else
-		ret = do_loop_readv_writev(file, iter, pos, READ, flags);
-out:
-	if (ret >= 0)
-		fsnotify_access(file);
 	return ret;
 }
 
@@ -829,7 +799,7 @@ ssize_t vfs_iocb_iter_read(struct file *file, struct kiocb *iocb,
 	if (ret < 0)
 		return ret;
 
-	ret = call_read_iter(file, iocb, iter);
+	ret = file->f_op->read_iter(iocb, iter);
 out:
 	if (ret >= 0)
 		fsnotify_access(file);
@@ -838,41 +808,37 @@ out:
 EXPORT_SYMBOL(vfs_iocb_iter_read);
 
 ssize_t vfs_iter_read(struct file *file, struct iov_iter *iter, loff_t *ppos,
-		rwf_t flags)
-{
-	if (!file->f_op->read_iter)
-		return -EINVAL;
-	return do_iter_read(file, iter, ppos, flags);
-}
-EXPORT_SYMBOL(vfs_iter_read);
-
-static ssize_t do_iter_write(struct file *file, struct iov_iter *iter,
-		loff_t *pos, rwf_t flags)
+		      rwf_t flags)
 {
 	size_t tot_len;
 	ssize_t ret = 0;
 
-	if (!(file->f_mode & FMODE_WRITE))
+	if (!file->f_op->read_iter)
+		return -EINVAL;
+	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
-	if (!(file->f_mode & FMODE_CAN_WRITE))
+	if (!(file->f_mode & FMODE_CAN_READ))
 		return -EINVAL;
 
 	tot_len = iov_iter_count(iter);
 	if (!tot_len)
-		return 0;
-	ret = rw_verify_area(WRITE, file, pos, tot_len);
+		goto out;
+	ret = rw_verify_area(READ, file, ppos, tot_len);
 	if (ret < 0)
 		return ret;
 
-	if (file->f_op->write_iter)
-		ret = do_iter_readv_writev(file, iter, pos, WRITE, flags);
-	else
-		ret = do_loop_readv_writev(file, iter, pos, WRITE, flags);
-	if (ret > 0)
-		fsnotify_modify(file);
+	ret = do_iter_readv_writev(file, iter, ppos, READ, flags);
+out:
+	if (ret >= 0)
+		fsnotify_access(file);
 	return ret;
 }
+EXPORT_SYMBOL(vfs_iter_read);
 
+/*
+ * Caller is responsible for calling kiocb_end_write() on completion
+ * if async iocb was queued.
+ */
 ssize_t vfs_iocb_iter_write(struct file *file, struct kiocb *iocb,
 			    struct iov_iter *iter)
 {
@@ -893,7 +859,10 @@ ssize_t vfs_iocb_iter_write(struct file *file, struct kiocb *iocb,
 	if (ret < 0)
 		return ret;
 
-	ret = call_write_iter(file, iocb, iter);
+	kiocb_start_write(iocb);
+	ret = file->f_op->write_iter(iocb, iter);
+	if (ret != -EIOCBQUEUED)
+		kiocb_end_write(iocb);
 	if (ret > 0)
 		fsnotify_modify(file);
 
@@ -902,46 +871,111 @@ ssize_t vfs_iocb_iter_write(struct file *file, struct kiocb *iocb,
 EXPORT_SYMBOL(vfs_iocb_iter_write);
 
 ssize_t vfs_iter_write(struct file *file, struct iov_iter *iter, loff_t *ppos,
-		rwf_t flags)
+		       rwf_t flags)
 {
+	size_t tot_len;
+	ssize_t ret;
+
+	if (!(file->f_mode & FMODE_WRITE))
+		return -EBADF;
+	if (!(file->f_mode & FMODE_CAN_WRITE))
+		return -EINVAL;
 	if (!file->f_op->write_iter)
 		return -EINVAL;
-	return do_iter_write(file, iter, ppos, flags);
+
+	tot_len = iov_iter_count(iter);
+	if (!tot_len)
+		return 0;
+
+	ret = rw_verify_area(WRITE, file, ppos, tot_len);
+	if (ret < 0)
+		return ret;
+
+	file_start_write(file);
+	ret = do_iter_readv_writev(file, iter, ppos, WRITE, flags);
+	if (ret > 0)
+		fsnotify_modify(file);
+	file_end_write(file);
+
+	return ret;
 }
 EXPORT_SYMBOL(vfs_iter_write);
 
 static ssize_t vfs_readv(struct file *file, const struct iovec __user *vec,
-		  unsigned long vlen, loff_t *pos, rwf_t flags)
+			 unsigned long vlen, loff_t *pos, rwf_t flags)
 {
 	struct iovec iovstack[UIO_FASTIOV];
 	struct iovec *iov = iovstack;
 	struct iov_iter iter;
-	ssize_t ret;
+	size_t tot_len;
+	ssize_t ret = 0;
 
-	ret = import_iovec(READ, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
-	if (ret >= 0) {
-		ret = do_iter_read(file, &iter, pos, flags);
-		kfree(iov);
-	}
+	if (!(file->f_mode & FMODE_READ))
+		return -EBADF;
+	if (!(file->f_mode & FMODE_CAN_READ))
+		return -EINVAL;
 
+	ret = import_iovec(ITER_DEST, vec, vlen, ARRAY_SIZE(iovstack), &iov,
+			   &iter);
+	if (ret < 0)
+		return ret;
+
+	tot_len = iov_iter_count(&iter);
+	if (!tot_len)
+		goto out;
+
+	ret = rw_verify_area(READ, file, pos, tot_len);
+	if (ret < 0)
+		goto out;
+
+	if (file->f_op->read_iter)
+		ret = do_iter_readv_writev(file, &iter, pos, READ, flags);
+	else
+		ret = do_loop_readv_writev(file, &iter, pos, READ, flags);
+out:
+	if (ret >= 0)
+		fsnotify_access(file);
+	kfree(iov);
 	return ret;
 }
 
 static ssize_t vfs_writev(struct file *file, const struct iovec __user *vec,
-		   unsigned long vlen, loff_t *pos, rwf_t flags)
+			  unsigned long vlen, loff_t *pos, rwf_t flags)
 {
 	struct iovec iovstack[UIO_FASTIOV];
 	struct iovec *iov = iovstack;
 	struct iov_iter iter;
-	ssize_t ret;
+	size_t tot_len;
+	ssize_t ret = 0;
 
-	ret = import_iovec(WRITE, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
-	if (ret >= 0) {
-		file_start_write(file);
-		ret = do_iter_write(file, &iter, pos, flags);
-		file_end_write(file);
-		kfree(iov);
-	}
+	if (!(file->f_mode & FMODE_WRITE))
+		return -EBADF;
+	if (!(file->f_mode & FMODE_CAN_WRITE))
+		return -EINVAL;
+
+	ret = import_iovec(ITER_SOURCE, vec, vlen, ARRAY_SIZE(iovstack), &iov,
+			   &iter);
+	if (ret < 0)
+		return ret;
+
+	tot_len = iov_iter_count(&iter);
+	if (!tot_len)
+		goto out;
+
+	ret = rw_verify_area(WRITE, file, pos, tot_len);
+	if (ret < 0)
+		goto out;
+
+	file_start_write(file);
+	if (file->f_op->write_iter)
+		ret = do_iter_readv_writev(file, &iter, pos, WRITE, flags);
+	else
+		ret = do_loop_readv_writev(file, &iter, pos, WRITE, flags);
+	if (ret > 0)
+		fsnotify_modify(file);
+	file_end_write(file);
+out:
+	kfree(iov);
 	return ret;
 }
 
@@ -1186,7 +1220,7 @@ COMPAT_SYSCALL_DEFINE6(pwritev2, compat_ulong_t, fd,
 #endif /* CONFIG_COMPAT */
 
 static ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos,
-		  	   size_t count, loff_t max)
+			   size_t count, loff_t max)
 {
 	struct fd in, out;
 	struct inode *in_inode, *out_inode;
@@ -1258,10 +1292,8 @@ static ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos,
 		retval = rw_verify_area(WRITE, out.file, &out_pos, count);
 		if (retval < 0)
 			goto fput_out;
-		file_start_write(out.file);
 		retval = do_splice_direct(in.file, &pos, out.file, &out_pos,
 					  count, fl);
-		file_end_write(out.file);
 	} else {
 		if (out.file->f_flags & O_NONBLOCK)
 			fl |= SPLICE_F_NONBLOCK;
@@ -1370,36 +1402,6 @@ COMPAT_SYSCALL_DEFINE4(sendfile64, int, out_fd, int, in_fd,
 }
 #endif
 
-/**
- * generic_copy_file_range - copy data between two files
- * @file_in:	file structure to read from
- * @pos_in:	file offset to read from
- * @file_out:	file structure to write data to
- * @pos_out:	file offset to write data to
- * @len:	amount of data to copy
- * @flags:	copy flags
- *
- * This is a generic filesystem helper to copy data from one file to another.
- * It has no constraints on the source or destination file owners - the files
- * can belong to different superblocks and different filesystem types. Short
- * copies are allowed.
- *
- * This should be called from the @file_out filesystem, as per the
- * ->copy_file_range() method.
- *
- * Returns the number of bytes copied or a negative error indicating the
- * failure.
- */
-
-ssize_t generic_copy_file_range(struct file *file_in, loff_t pos_in,
-				struct file *file_out, loff_t pos_out,
-				size_t len, unsigned int flags)
-{
-	return do_splice_direct(file_in, &pos_in, file_out, &pos_out,
-				len > MAX_RW_COUNT ? MAX_RW_COUNT : len, 0);
-}
-EXPORT_SYMBOL(generic_copy_file_range);
-
 /*
  * Performs necessary checks before doing a file copy
  *
@@ -1431,7 +1433,9 @@ static int generic_copy_file_checks(struct file *file_in, loff_t pos_in,
 	 * and several different sets of file_operations, but they all end up
 	 * using the same ->copy_file_range() function pointer.
 	 */
-	if (file_out->f_op->copy_file_range) {
+	if (flags & COPY_FILE_SPLICE) {
+		/* cross sb splice is allowed */
+	} else if (file_out->f_op->copy_file_range) {
 		if (file_in->f_op->copy_file_range !=
 		    file_out->f_op->copy_file_range)
 			return -EXDEV;
@@ -1481,8 +1485,10 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 			    size_t len, unsigned int flags)
 {
 	ssize_t ret;
+	bool splice = flags & COPY_FILE_SPLICE;
+	bool samesb = file_inode(file_in)->i_sb == file_inode(file_out)->i_sb;
 
-	if (flags != 0)
+	if (flags & ~COPY_FILE_SPLICE)
 		return -EINVAL;
 
 	ret = generic_copy_file_checks(file_in, pos_in, file_out, pos_out, &len,
@@ -1508,22 +1514,27 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	 * same sb using clone, but for filesystems where both clone and copy
 	 * are supported (e.g. nfs,cifs), we only call the copy method.
 	 */
-	if (file_out->f_op->copy_file_range) {
+	if (!splice && file_out->f_op->copy_file_range) {
 		ret = file_out->f_op->copy_file_range(file_in, pos_in,
 						      file_out, pos_out,
 						      len, flags);
-		goto done;
-	}
-
-	if (file_in->f_op->remap_file_range &&
-	    file_inode(file_in)->i_sb == file_inode(file_out)->i_sb) {
+	} else if (!splice && file_in->f_op->remap_file_range && samesb) {
 		ret = file_in->f_op->remap_file_range(file_in, pos_in,
 				file_out, pos_out,
 				min_t(loff_t, MAX_RW_COUNT, len),
 				REMAP_FILE_CAN_SHORTEN);
-		if (ret > 0)
-			goto done;
+		/* fallback to splice */
+		if (ret <= 0)
+			splice = true;
+	} else if (samesb) {
+		/* Fallback to splice for same sb copy for backward compat */
+		splice = true;
 	}
+
+	file_end_write(file_out);
+
+	if (!splice)
+		goto done;
 
 	/*
 	 * We can get here for same sb copy of filesystems that do not implement
@@ -1535,10 +1546,17 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	 * consistent story about which filesystems support copy_file_range()
 	 * and which filesystems do not, that will allow userspace tools to
 	 * make consistent desicions w.r.t using copy_file_range().
+	 *
+	 * We also get here if caller (e.g. nfsd) requested COPY_FILE_SPLICE
+	 * for server-side-copy between any two sb.
+	 *
+	 * In any case, we call do_splice_direct() and not splice_file_range(),
+	 * without file_start_write() held, to avoid possible deadlocks related
+	 * to splicing from input file, while file_start_write() is held on
+	 * the output file on a different sb.
 	 */
-	ret = generic_copy_file_range(file_in, pos_in, file_out, pos_out, len,
-				      flags);
-
+	ret = do_splice_direct(file_in, &pos_in, file_out, &pos_out,
+			       min_t(size_t, len, MAX_RW_COUNT), 0);
 done:
 	if (ret > 0) {
 		fsnotify_access(file_in);
@@ -1549,8 +1567,6 @@ done:
 
 	inc_syscr(current);
 	inc_syscw(current);
-
-	file_end_write(file_out);
 
 	return ret;
 }
@@ -1588,6 +1604,10 @@ SYSCALL_DEFINE6(copy_file_range, int, fd_in, loff_t __user *, off_in,
 	} else {
 		pos_out = f_out.file->f_pos;
 	}
+
+	ret = -EINVAL;
+	if (flags != 0)
+		goto out;
 
 	ret = vfs_copy_file_range(f_in.file, pos_in, f_out.file, pos_out, len,
 				  flags);
@@ -1647,6 +1667,7 @@ int generic_write_check_limits(struct file *file, loff_t pos, loff_t *count)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(generic_write_check_limits);
 
 /* Like generic_write_checks(), but takes size of write instead of iter. */
 int generic_write_checks_count(struct kiocb *iocb, loff_t *count)
@@ -1663,7 +1684,9 @@ int generic_write_checks_count(struct kiocb *iocb, loff_t *count)
 	if (iocb->ki_flags & IOCB_APPEND)
 		iocb->ki_pos = i_size_read(inode);
 
-	if ((iocb->ki_flags & IOCB_NOWAIT) && !(iocb->ki_flags & IOCB_DIRECT))
+	if ((iocb->ki_flags & IOCB_NOWAIT) &&
+	    !((iocb->ki_flags & IOCB_DIRECT) ||
+	      (file->f_op->fop_flags & FOP_BUFFER_WASYNC)))
 		return -EINVAL;
 
 	return generic_write_check_limits(iocb->ki_filp, iocb->ki_pos, count);

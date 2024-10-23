@@ -23,14 +23,21 @@
 #include <linux/idr.h>
 #include <linux/backing-dev.h>
 #include <linux/gfp.h>
+#include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/reboot.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
 #include <linux/nvmem-provider.h>
+#include <linux/root_dev.h>
+#include <linux/error-injection.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
+
+#ifdef CONFIG_MTD_CRYPT
+#include <crypto/aes.h>
+#endif
 
 #include "mtdcore.h"
 
@@ -62,7 +69,6 @@ static SIMPLE_DEV_PM_OPS(mtd_cls_pm_ops, mtd_cls_suspend, mtd_cls_resume);
 
 static struct class mtd_class = {
 	.name = "mtd",
-	.owner = THIS_MODULE,
 	.pm = MTD_CLS_PM_OPS,
 };
 
@@ -92,8 +98,37 @@ static void mtd_release(struct device *dev)
 	struct mtd_info *mtd = dev_get_drvdata(dev);
 	dev_t index = MTD_DEVT(mtd->index);
 
+	idr_remove(&mtd_idr, mtd->index);
+	of_node_put(mtd_get_of_node(mtd));
+
+	if (mtd_is_partition(mtd))
+		release_mtd_partition(mtd);
+
 	/* remove /dev/mtdXro node */
 	device_destroy(&mtd_class, index + 1);
+}
+
+static void mtd_device_release(struct kref *kref)
+{
+	struct mtd_info *mtd = container_of(kref, struct mtd_info, refcnt);
+	bool is_partition = mtd_is_partition(mtd);
+
+	debugfs_remove_recursive(mtd->dbg.dfs_dir);
+
+	/* Try to remove the NVMEM provider */
+	nvmem_unregister(mtd->nvmem);
+
+	device_unregister(&mtd->dev);
+
+	/*
+	 *  Clear dev so mtd can be safely re-registered later if desired.
+	 *  Should not be done for partition,
+	 *  as it was already destroyed in device_unregister().
+	 */
+	if (!is_partition)
+		memset(&mtd->dev, 0, sizeof(mtd->dev));
+
+	module_put(THIS_MODULE);
 }
 
 #define MTD_DEVICE_ATTR_RO(name) \
@@ -518,10 +553,11 @@ static int mtd_nvmem_add(struct mtd_info *mtd)
 	struct device_node *node = mtd_get_of_node(mtd);
 	struct nvmem_config config = {};
 
-	config.id = -1;
+	config.id = NVMEM_DEVID_NONE;
 	config.dev = &mtd->dev;
 	config.name = dev_name(&mtd->dev);
 	config.owner = THIS_MODULE;
+	config.add_legacy_fixed_of_cells = of_device_is_compatible(node, "nvmem-cells");
 	config.reg_read = mtd_nvmem_reg_read;
 	config.size = mtd->size;
 	config.word_size = 1;
@@ -529,21 +565,74 @@ static int mtd_nvmem_add(struct mtd_info *mtd)
 	config.read_only = true;
 	config.root_only = true;
 	config.ignore_wp = true;
-	config.no_of_node = !of_device_is_compatible(node, "nvmem-cells");
 	config.priv = mtd;
 
 	mtd->nvmem = nvmem_register(&config);
 	if (IS_ERR(mtd->nvmem)) {
 		/* Just ignore if there is no NVMEM support in the kernel */
-		if (PTR_ERR(mtd->nvmem) == -EOPNOTSUPP) {
+		if (PTR_ERR(mtd->nvmem) == -EOPNOTSUPP)
 			mtd->nvmem = NULL;
-		} else {
-			dev_err(&mtd->dev, "Failed to register NVMEM device\n");
-			return PTR_ERR(mtd->nvmem);
-		}
+		else
+			return dev_err_probe(&mtd->dev, PTR_ERR(mtd->nvmem),
+					     "Failed to register NVMEM device\n");
 	}
 
 	return 0;
+}
+
+static void mtd_check_of_node(struct mtd_info *mtd)
+{
+	struct device_node *partitions, *parent_dn, *mtd_dn = NULL;
+	const char *pname, *prefix = "partition-";
+	int plen, mtd_name_len, offset, prefix_len;
+
+	/* Check if MTD already has a device node */
+	if (mtd_get_of_node(mtd))
+		return;
+
+	if (!mtd_is_partition(mtd))
+		return;
+
+	parent_dn = of_node_get(mtd_get_of_node(mtd->parent));
+	if (!parent_dn)
+		return;
+
+	if (mtd_is_partition(mtd->parent))
+		partitions = of_node_get(parent_dn);
+	else
+		partitions = of_get_child_by_name(parent_dn, "partitions");
+	if (!partitions)
+		goto exit_parent;
+
+	prefix_len = strlen(prefix);
+	mtd_name_len = strlen(mtd->name);
+
+	/* Search if a partition is defined with the same name */
+	for_each_child_of_node(partitions, mtd_dn) {
+		/* Skip partition with no/wrong prefix */
+		if (!of_node_name_prefix(mtd_dn, prefix))
+			continue;
+
+		/* Label have priority. Check that first */
+		if (!of_property_read_string(mtd_dn, "label", &pname)) {
+			offset = 0;
+		} else {
+			pname = mtd_dn->name;
+			offset = prefix_len;
+		}
+
+		plen = strlen(pname) - offset;
+		if (plen == mtd_name_len &&
+		    !strncmp(mtd->name, pname + offset, plen)) {
+			mtd_set_of_node(mtd, mtd_dn);
+			of_node_put(mtd_dn);
+			break;
+		}
+	}
+
+	of_node_put(partitions);
+exit_parent:
+	of_node_put(parent_dn);
 }
 
 /**
@@ -612,7 +701,7 @@ int add_mtd_device(struct mtd_info *mtd)
 	}
 
 	mtd->index = i;
-	mtd->usecount = 0;
+	kref_init(&mtd->refcnt);
 
 	/* default value if not set by driver */
 	if (mtd->bitflip_threshold == 0)
@@ -658,10 +747,13 @@ int add_mtd_device(struct mtd_info *mtd)
 	mtd->dev.devt = MTD_DEVT(i);
 	dev_set_name(&mtd->dev, "mtd%d", i);
 	dev_set_drvdata(&mtd->dev, mtd);
+	mtd_check_of_node(mtd);
 	of_node_get(mtd_get_of_node(mtd));
 	error = device_register(&mtd->dev);
-	if (error)
+	if (error) {
+		put_device(&mtd->dev);
 		goto fail_added;
+	}
 
 	/* Add the nvmem provider */
 	error = mtd_nvmem_add(mtd);
@@ -680,6 +772,25 @@ int add_mtd_device(struct mtd_info *mtd)
 		not->add(mtd);
 
 	mutex_unlock(&mtd_table_mutex);
+
+	if (of_property_read_bool(mtd_get_of_node(mtd), "linux,rootfs")) {
+		if (IS_BUILTIN(CONFIG_MTD)) {
+			pr_info("mtd: setting mtd%d (%s) as root device\n", mtd->index, mtd->name);
+			ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
+		} else {
+			pr_warn("mtd: can't set mtd%d (%s) as root device - mtd must be builtin\n",
+				mtd->index, mtd->name);
+		}
+	}
+
+#ifdef CONFIG_MTD_CRYPT
+	if (of_property_read_bool(mtd_get_of_node(mtd), "crypt")) {
+		mtd->flags |= MTD_CRYPT;
+		pr_info("mtd%d: enabling encryption for \"%s\"\n",
+			mtd->index, mtd->name);
+	}
+#endif
+
 	/* We _know_ we aren't being removed, because
 	   our caller is still holding us here. So none
 	   of this try_ nonsense, and no bitching about it
@@ -724,27 +835,8 @@ int del_mtd_device(struct mtd_info *mtd)
 	list_for_each_entry(not, &mtd_notifiers, list)
 		not->remove(mtd);
 
-	if (mtd->usecount) {
-		printk(KERN_NOTICE "Removing MTD device #%d (%s) with use count %d\n",
-		       mtd->index, mtd->name, mtd->usecount);
-		ret = -EBUSY;
-	} else {
-		debugfs_remove_recursive(mtd->dbg.dfs_dir);
-
-		/* Try to remove the NVMEM provider */
-		nvmem_unregister(mtd->nvmem);
-
-		device_unregister(&mtd->dev);
-
-		/* Clear dev so mtd can be safely re-registered later if desired */
-		memset(&mtd->dev, 0, sizeof(mtd->dev));
-
-		idr_remove(&mtd_idr, mtd->index);
-		of_node_put(mtd_get_of_node(mtd));
-
-		module_put(THIS_MODULE);
-		ret = 0;
-	}
+	kref_put(&mtd->refcnt, mtd_device_release);
+	ret = 0;
 
 out_error:
 	mutex_unlock(&mtd_table_mutex);
@@ -817,9 +909,10 @@ static struct nvmem_device *mtd_otp_nvmem_register(struct mtd_info *mtd,
 
 	/* OTP nvmem will be registered on the physical device */
 	config.dev = mtd->dev.parent;
-	config.name = kasprintf(GFP_KERNEL, "%s-%s", dev_name(&mtd->dev), compatible);
-	config.id = NVMEM_DEVID_NONE;
+	config.name = compatible;
+	config.id = NVMEM_DEVID_AUTO;
 	config.owner = THIS_MODULE;
+	config.add_legacy_fixed_of_cells = !mtd_type_is_nand(mtd);
 	config.type = NVMEM_TYPE_OTP;
 	config.root_only = true;
 	config.ignore_wp = true;
@@ -834,7 +927,6 @@ static struct nvmem_device *mtd_otp_nvmem_register(struct mtd_info *mtd,
 		nvmem = NULL;
 
 	of_node_put(np);
-	kfree(config.name);
 
 	return nvmem;
 }
@@ -869,21 +961,24 @@ static int mtd_nvmem_fact_otp_reg_read(void *priv, unsigned int offset,
 
 static int mtd_otp_nvmem_add(struct mtd_info *mtd)
 {
+	struct device *dev = mtd->dev.parent;
 	struct nvmem_device *nvmem;
 	ssize_t size;
 	int err;
 
 	if (mtd->_get_user_prot_info && mtd->_read_user_prot_reg) {
 		size = mtd_otp_size(mtd, true);
-		if (size < 0)
-			return size;
+		if (size < 0) {
+			err = size;
+			goto err;
+		}
 
 		if (size > 0) {
 			nvmem = mtd_otp_nvmem_register(mtd, "user-otp", size,
 						       mtd_nvmem_user_otp_reg_read);
 			if (IS_ERR(nvmem)) {
-				dev_err(&mtd->dev, "Failed to register OTP NVMEM device\n");
-				return PTR_ERR(nvmem);
+				err = PTR_ERR(nvmem);
+				goto err;
 			}
 			mtd->otp_user_nvmem = nvmem;
 		}
@@ -897,10 +992,29 @@ static int mtd_otp_nvmem_add(struct mtd_info *mtd)
 		}
 
 		if (size > 0) {
+			/*
+			 * The factory OTP contains thing such as a unique serial
+			 * number and is small, so let's read it out and put it
+			 * into the entropy pool.
+			 */
+			void *otp;
+
+			otp = kmalloc(size, GFP_KERNEL);
+			if (!otp) {
+				err = -ENOMEM;
+				goto err;
+			}
+			err = mtd_nvmem_fact_otp_reg_read(mtd, 0, otp, size);
+			if (err < 0) {
+				kfree(otp);
+				goto err;
+			}
+			add_device_randomness(otp, err);
+			kfree(otp);
+
 			nvmem = mtd_otp_nvmem_register(mtd, "factory-otp", size,
 						       mtd_nvmem_fact_otp_reg_read);
 			if (IS_ERR(nvmem)) {
-				dev_err(&mtd->dev, "Failed to register OTP NVMEM device\n");
 				err = PTR_ERR(nvmem);
 				goto err;
 			}
@@ -912,7 +1026,10 @@ static int mtd_otp_nvmem_add(struct mtd_info *mtd)
 
 err:
 	nvmem_unregister(mtd->otp_user_nvmem);
-	return err;
+	/* Don't report error if OTP is not supported. */
+	if (err == -EOPNOTSUPP)
+		return 0;
+	return dev_err_probe(dev, err, "Failed to register OTP NVMEM device\n");
 }
 
 /**
@@ -952,10 +1069,14 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char * const *types,
 
 	mtd_set_dev_defaults(mtd);
 
+	ret = mtd_otp_nvmem_add(mtd);
+	if (ret)
+		goto out;
+
 	if (IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER)) {
 		ret = add_mtd_device(mtd);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
 	/* Prefer parsed partitions over driver-provided fallback */
@@ -990,9 +1111,12 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char * const *types,
 		register_reboot_notifier(&mtd->reboot_notifier);
 	}
 
-	ret = mtd_otp_nvmem_add(mtd);
-
 out:
+	if (ret) {
+		nvmem_unregister(mtd->otp_user_nvmem);
+		nvmem_unregister(mtd->otp_factory_nvmem);
+	}
+
 	if (ret && device_is_registered(&mtd->dev))
 		del_mtd_device(mtd);
 
@@ -1131,28 +1255,58 @@ int __get_mtd_device(struct mtd_info *mtd)
 	struct mtd_info *master = mtd_get_master(mtd);
 	int err;
 
-	if (!try_module_get(master->owner))
-		return -ENODEV;
-
 	if (master->_get_device) {
 		err = master->_get_device(mtd);
-
-		if (err) {
-			module_put(master->owner);
+		if (err)
 			return err;
-		}
 	}
 
-	master->usecount++;
+	if (!try_module_get(master->owner)) {
+		if (master->_put_device)
+			master->_put_device(master);
+		return -ENODEV;
+	}
 
-	while (mtd->parent) {
-		mtd->usecount++;
+	while (mtd) {
+		if (mtd != master)
+			kref_get(&mtd->refcnt);
 		mtd = mtd->parent;
 	}
+
+	if (IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER))
+		kref_get(&master->refcnt);
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(__get_mtd_device);
+
+/**
+ * of_get_mtd_device_by_node - obtain an MTD device associated with a given node
+ *
+ * @np: device tree node
+ */
+struct mtd_info *of_get_mtd_device_by_node(struct device_node *np)
+{
+	struct mtd_info *mtd = NULL;
+	struct mtd_info *tmp;
+	int err;
+
+	mutex_lock(&mtd_table_mutex);
+
+	err = -EPROBE_DEFER;
+	mtd_for_each_device(tmp) {
+		if (mtd_get_of_node(tmp) == np) {
+			mtd = tmp;
+			err = __get_mtd_device(mtd);
+			break;
+		}
+	}
+
+	mutex_unlock(&mtd_table_mutex);
+
+	return err ? ERR_PTR(err) : mtd;
+}
+EXPORT_SYMBOL_GPL(of_get_mtd_device_by_node);
 
 /**
  *	get_mtd_device_nm - obtain a validated handle for an MTD device by
@@ -1205,18 +1359,23 @@ void __put_mtd_device(struct mtd_info *mtd)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
 
-	while (mtd->parent) {
-		--mtd->usecount;
-		BUG_ON(mtd->usecount < 0);
-		mtd = mtd->parent;
+	while (mtd) {
+		/* kref_put() can relese mtd, so keep a reference mtd->parent */
+		struct mtd_info *parent = mtd->parent;
+
+		if (mtd != master)
+			kref_put(&mtd->refcnt, mtd_device_release);
+		mtd = parent;
 	}
 
-	master->usecount--;
-
-	if (master->_put_device)
-		master->_put_device(master);
+	if (IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER))
+		kref_put(&master->refcnt, mtd_device_release);
 
 	module_put(master->owner);
+
+	/* must be the last as master can be freed in the _put_device */
+	if (master->_put_device)
+		master->_put_device(master);
 }
 EXPORT_SYMBOL_GPL(__put_mtd_device);
 
@@ -1272,6 +1431,7 @@ int mtd_erase(struct mtd_info *mtd, struct erase_info *instr)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mtd_erase);
+ALLOW_ERROR_INJECTION(mtd_erase, ERRNO);
 
 /*
  * This stuff for eXecute-In-Place. phys is optional and may be set to NULL.
@@ -1354,8 +1514,126 @@ static void mtd_update_ecc_stats(struct mtd_info *mtd, struct mtd_info *master,
 	}
 }
 
-int mtd_read(struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen,
-	     u_char *buf)
+#ifdef CONFIG_MTD_CRYPT
+/*
+ * MTD transparent encryption support.
+ *
+ * Support the "crypt" attribute for MTD partitions. This flag enables
+ * transparent AES read and write encryption of data as it is read and
+ * written on an MTD partition or device.
+ */
+#define AESKEYBITS 256
+#define AESKEYBYTES (AESKEYBITS / 8)
+#define AES_BLOCK_MASK (AES_BLOCK_SIZE - 1)
+
+static int mtd_ctx_inited;
+static struct crypto_aes_ctx mtd_ctx;
+
+void get_hw_hash(u8 *hash, int len);
+void __weak get_hw_hash(u8 *hash, int len)
+{
+	pr_warn("MTD-CRYPT: no hardware hash available\n");
+	memset(hash, 0, len);
+}
+
+static void mtd_setup_aes_key(void)
+{
+	u8 hash[AESKEYBYTES];
+
+	if (!mtd_ctx_inited) {
+		get_hw_hash(hash, sizeof(hash));
+		aes_expandkey(&mtd_ctx, hash, sizeof(hash));
+		mtd_ctx_inited = 1;
+	}
+}
+
+/*
+ * Determine if the contents of an AES block look like empty flash cells.
+ * This is called a _lot_, so optimize it as a hot path. This trivial
+ * 64bit quantity check seems to be much quicker than calling memcmp().
+ */
+int is_all_ff(const void *s);
+int is_all_ff(const void *s)
+{
+	unsigned long long *uip = (unsigned long long *) s;
+	return (uip[0] == 0xffffffffffffffffULL) &&
+	       (uip[1] == 0xffffffffffffffffULL);
+}
+
+/*
+ * Decrypt data when read from MTD device (flash). Look for and make
+ * an exception for "empty" flash (that is erased). Much code treats
+ * a flash page that contains all 1 bits as an empty page. We specifically
+ * do not encrypt/decrypt empty flash - and we do that at AES block size
+ * granularity - not at the page size. So an empty looking AES block
+ * will be maintained as all 1 bits when read and written.
+ *
+ * Also note that there is a special case here to deal with the case
+ * when a decrypted AES block is all 1 bits - exceptionally rare, but
+ * possible. In that case we carry out a double decrypt. So the final
+ * data will not be all 1 bits - and thus does not look like an empty
+ * AES block, which would not have otherwise been encrypted.
+ */
+static int mtd_read_encrypted(struct mtd_info *mtd, loff_t from, size_t len,
+			      size_t *retlen, u_char *buf)
+{
+	struct mtd_oob_ops ops = { 0 };
+	loff_t readfrom;
+	size_t readlen;
+	u8 *tmpbuf;
+	int ret, i;
+
+	readlen = len;
+	readfrom = from & ~AES_BLOCK_MASK;
+	if (readfrom != from)
+		readlen += from & AES_BLOCK_MASK;
+	if (readlen & AES_BLOCK_MASK)
+		readlen = (readlen + AES_BLOCK_SIZE) & ~AES_BLOCK_MASK;
+
+	tmpbuf = kmalloc(readlen, GFP_KERNEL);
+	if (tmpbuf == NULL) {
+		ret = -ENOMEM;
+		len = 0;
+		goto out;
+	}
+
+	ops.len = readlen;
+	ops.datbuf = tmpbuf;
+	ret = mtd_read_oob(mtd, readfrom, &ops);
+
+	if (ops.retlen <= 0) {
+		len = 0;
+		goto out;
+	}
+	if (ops.retlen != readlen) {
+		pr_warn(" partial read, wanted=%d got=%d", readlen, ops.retlen);
+		readlen = ops.retlen;
+	}
+
+	mtd_setup_aes_key();
+
+	for (i = 0; i < readlen; i += AES_BLOCK_SIZE) {
+		if (! is_all_ff(&tmpbuf[i])) {
+			aes_decrypt(&mtd_ctx, &tmpbuf[i], &tmpbuf[i]);
+			if (is_all_ff(&tmpbuf[i]))
+				aes_decrypt(&mtd_ctx, &tmpbuf[i], &tmpbuf[i]);
+		}
+	}
+
+	memcpy(buf, &tmpbuf[from & AES_BLOCK_MASK], len);
+
+out:
+	if (tmpbuf)
+		kfree(tmpbuf);
+	*retlen = len;
+
+	return ret;
+}
+
+#endif /* CONFIG_MTD_CRYPT */
+
+static int mtd_read_normal(struct mtd_info *mtd, loff_t from, size_t len,
+			   size_t *retlen, u_char *buf)
 {
 	struct mtd_oob_ops ops = {
 		.len = len,
@@ -1366,12 +1644,72 @@ int mtd_read(struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen,
 	ret = mtd_read_oob(mtd, from, &ops);
 	*retlen = ops.retlen;
 
+	WARN_ON_ONCE(*retlen != len && mtd_is_bitflip_or_eccerr(ret));
+
 	return ret;
 }
-EXPORT_SYMBOL_GPL(mtd_read);
 
-int mtd_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen,
-	      const u_char *buf)
+int mtd_read(struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen,
+	     u_char *buf)
+{
+#ifdef CONFIG_MTD_CRYPT
+	if (mtd->flags & MTD_CRYPT)
+		return mtd_read_encrypted(mtd, from, len, retlen, buf);
+#endif
+	return mtd_read_normal(mtd, from, len, retlen, buf);
+}
+EXPORT_SYMBOL_GPL(mtd_read);
+ALLOW_ERROR_INJECTION(mtd_read, ERRNO);
+
+#ifdef CONFIG_MTD_CRYPT
+static int mtd_write_encrypted(struct mtd_info *mtd, loff_t to, size_t len,
+			       size_t *retlen, const u_char *buf)
+{
+	struct mtd_oob_ops ops = {
+		.len = len,
+		.datbuf = (u8 *)buf,
+	};
+	int ret;
+
+	u_char dblbuf[AES_BLOCK_SIZE];
+	u_char *writebuf;
+	int i;
+
+	WARN_ON(len % AES_BLOCK_SIZE);
+
+	mtd_setup_aes_key();
+
+	writebuf = kmalloc(len, GFP_KERNEL);
+	if (writebuf == NULL) {
+		pr_err("failed to allocate buffer, len=%d\n", len);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < len; i += AES_BLOCK_SIZE) {
+		if (is_all_ff(&buf[i])) {
+			memcpy(&writebuf[i], &buf[i], AES_BLOCK_SIZE);
+		} else {
+			aes_encrypt(&mtd_ctx, &writebuf[i], &buf[i]);
+			if (is_all_ff(&writebuf[i])) {
+				memcpy(dblbuf, &writebuf[i], AES_BLOCK_SIZE);
+				aes_encrypt(&mtd_ctx, &writebuf[i], dblbuf);
+			}
+		}
+	}
+
+	ops.datbuf = writebuf;
+
+	ret = mtd_write_oob(mtd, to, &ops);
+	*retlen = ops.retlen;
+
+	kfree(writebuf);
+
+	return ret;
+}
+#endif /* CONFIG_MTD_CRYPT */
+
+static int mtd_write_normal(struct mtd_info *mtd, loff_t to, size_t len,
+			    size_t *retlen, const u_char *buf)
 {
 	struct mtd_oob_ops ops = {
 		.len = len,
@@ -1384,7 +1722,18 @@ int mtd_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen,
 
 	return ret;
 }
+
+int mtd_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen,
+	      const u_char *buf)
+{
+#ifdef CONFIG_MTD_CRYPT
+	if (mtd->flags & MTD_CRYPT)
+		return mtd_write_encrypted(mtd, to, len, retlen, buf);
+#endif
+	return mtd_write_normal(mtd, to, len, retlen, buf);
+}
 EXPORT_SYMBOL_GPL(mtd_write);
+ALLOW_ERROR_INJECTION(mtd_write, ERRNO);
 
 /*
  * In blackbox flight recorder like scenarios we want to make successful writes
@@ -1561,6 +1910,9 @@ int mtd_read_oob(struct mtd_info *mtd, loff_t from, struct mtd_oob_ops *ops)
 	if (!master->_read_oob && (!master->_read || ops->oobbuf))
 		return -EOPNOTSUPP;
 
+	if (ops->stats)
+		memset(ops->stats, 0, sizeof(*ops->stats));
+
 	if (mtd->flags & MTD_SLC_ON_MLC_EMULATION)
 		ret_code = mtd_io_emulated_slc(mtd, from, true, ops);
 	else
@@ -1578,6 +1930,8 @@ int mtd_read_oob(struct mtd_info *mtd, loff_t from, struct mtd_oob_ops *ops)
 		return ret_code;
 	if (mtd->ecc_strength == 0)
 		return 0;	/* device lacks ecc */
+	if (ops->stats)
+		ops->stats->max_bitflips = ret_code;
 	return ret_code >= mtd->bitflip_threshold ? -EUCLEAN : 0;
 }
 EXPORT_SYMBOL_GPL(mtd_read_oob);
@@ -2200,6 +2554,7 @@ int mtd_block_markbad(struct mtd_info *mtd, loff_t ofs)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mtd_block_markbad);
+ALLOW_ERROR_INJECTION(mtd_block_markbad, ERRNO);
 
 /*
  * default_mtd_writev - the default writev method
@@ -2387,6 +2742,7 @@ static int __init init_mtd(void)
 out_procfs:
 	if (proc_mtd)
 		remove_proc_entry("mtd", NULL);
+	bdi_unregister(mtd_bdi);
 	bdi_put(mtd_bdi);
 err_bdi:
 	class_unregister(&mtd_class);

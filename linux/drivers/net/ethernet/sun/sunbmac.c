@@ -25,7 +25,7 @@
 #include <linux/bitops.h>
 #include <linux/dma-mapping.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/gfp.h>
 
 #include <asm/auxio.h>
@@ -1038,8 +1038,8 @@ static void bigmac_set_multicast(struct net_device *dev)
 /* Ethtool support... */
 static void bigmac_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 {
-	strlcpy(info->driver, "sunbmac", sizeof(info->driver));
-	strlcpy(info->version, "2.0", sizeof(info->version));
+	strscpy(info->driver, "sunbmac", sizeof(info->driver));
+	strscpy(info->version, "2.0", sizeof(info->version));
 }
 
 static u32 bigmac_get_link(struct net_device *dev)
@@ -1234,7 +1234,7 @@ static int bigmac_sbus_probe(struct platform_device *op)
 	return bigmac_ether_init(op, qec_op);
 }
 
-static int bigmac_sbus_remove(struct platform_device *op)
+static void bigmac_sbus_remove(struct platform_device *op)
 {
 	struct bigmac *bp = platform_get_drvdata(op);
 	struct device *parent = op->dev.parent;
@@ -1255,8 +1255,6 @@ static int bigmac_sbus_remove(struct platform_device *op)
 			  bp->bblock_dvma);
 
 	free_netdev(net_dev);
-
-	return 0;
 }
 
 static const struct of_device_id bigmac_sbus_match[] = {
@@ -1274,7 +1272,7 @@ static struct platform_driver bigmac_sbus_driver = {
 		.of_match_table = bigmac_sbus_match,
 	},
 	.probe		= bigmac_sbus_probe,
-	.remove		= bigmac_sbus_remove,
+	.remove_new	= bigmac_sbus_remove,
 };
 
 module_platform_driver(bigmac_sbus_driver);

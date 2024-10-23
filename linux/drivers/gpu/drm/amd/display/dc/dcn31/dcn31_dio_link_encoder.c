@@ -30,7 +30,6 @@
 #include "link_encoder.h"
 #include "dcn31_dio_link_encoder.h"
 #include "stream_encoder.h"
-#include "i2caux_interface.h"
 #include "dc_bios_types.h"
 
 #include "gpio_service_interface.h"
@@ -38,6 +37,7 @@
 #include "link_enc_cfg.h"
 #include "dc_dmub_srv.h"
 #include "dal_asic_id.h"
+#include "link.h"
 
 #define CTX \
 	enc10->base.ctx
@@ -104,6 +104,9 @@ static bool has_query_dp_alt(struct link_encoder *enc)
 {
 	struct dc_dmub_srv *dc_dmub_srv = enc->ctx->dmub_srv;
 
+	if (enc->ctx->dce_version >= DCN_VERSION_3_15)
+		return true;
+
 	/* Supports development firmware and firmware >= 4.0.11 */
 	return dc_dmub_srv &&
 	       !(dc_dmub_srv->dmub->fw_version >= DMUB_FW_VERSION(4, 0, 0) &&
@@ -114,7 +117,6 @@ static bool query_dp_alt_from_dmub(struct link_encoder *enc,
 				   union dmub_rb_cmd *cmd)
 {
 	struct dcn10_link_encoder *enc10 = TO_DCN10_LINK_ENC(enc);
-	struct dc_dmub_srv *dc_dmub_srv = enc->ctx->dmub_srv;
 
 	memset(cmd, 0, sizeof(*cmd));
 	cmd->query_dp_alt.header.type = DMUB_CMD__VBIOS;
@@ -123,7 +125,7 @@ static bool query_dp_alt_from_dmub(struct link_encoder *enc,
 	cmd->query_dp_alt.header.payload_bytes = sizeof(cmd->query_dp_alt.data);
 	cmd->query_dp_alt.data.phy_id = phy_id_from_transmitter(enc10->base.transmitter);
 
-	if (!dc_dmub_srv_cmd_with_reply_data(dc_dmub_srv, cmd))
+	if (!dc_wake_and_execute_dmub_cmd(enc->ctx, cmd, DM_DMUB_WAIT_TYPE_WAIT_WITH_REPLY))
 		return false;
 
 	return true;
@@ -203,7 +205,7 @@ void dcn31_link_encoder_set_dio_phy_mux(
 	}
 }
 
-static void enc31_hw_init(struct link_encoder *enc)
+void enc31_hw_init(struct link_encoder *enc)
 {
 	struct dcn10_link_encoder *enc10 = TO_DCN10_LINK_ENC(enc);
 
@@ -422,7 +424,6 @@ static bool link_dpia_control(struct dc_context *dc_ctx,
 	struct dmub_cmd_dig_dpia_control_data *dpia_control)
 {
 	union dmub_rb_cmd cmd;
-	struct dc_dmub_srv *dmub = dc_ctx->dmub_srv;
 
 	memset(&cmd, 0, sizeof(cmd));
 
@@ -435,9 +436,7 @@ static bool link_dpia_control(struct dc_context *dc_ctx,
 
 	cmd.dig1_dpia_control.dpia_control = *dpia_control;
 
-	dc_dmub_srv_cmd_queue(dmub, &cmd);
-	dc_dmub_srv_cmd_execute(dmub);
-	dc_dmub_srv_wait_idle(dmub);
+	dc_wake_and_execute_dmub_cmd(dc_ctx, &cmd, DM_DMUB_WAIT_TYPE_WAIT);
 
 	return true;
 }
@@ -458,6 +457,7 @@ void dcn31_link_encoder_enable_dp_output(
 	/* Enable transmitter and encoder. */
 	if (!link_enc_cfg_is_transmitter_mappable(enc->ctx->dc, enc)) {
 
+		DC_LOG_DEBUG("%s: enc_id(%d)\n", __func__, enc->preferred_engine);
 		dcn20_link_encoder_enable_dp_output(enc, link_settings, clock_source);
 
 	} else {
@@ -482,13 +482,14 @@ void dcn31_link_encoder_enable_dp_output(
 
 		if (link) {
 			dpia_control.dpia_id = link->ddc_hw_inst;
-			dpia_control.fec_rdy = dc_link_should_enable_fec(link);
+			dpia_control.fec_rdy = link->dc->link_srv->dp_should_enable_fec(link);
 		} else {
 			DC_LOG_ERROR("%s: Failed to execute DPIA enable DMUB command.\n", __func__);
 			BREAK_TO_DEBUGGER();
 			return;
 		}
 
+		DC_LOG_DEBUG("%s: DPIA(%d) - enc_id(%d)\n", __func__, dpia_control.dpia_id, dpia_control.enc_id);
 		link_dpia_control(enc->ctx, &dpia_control);
 	}
 }
@@ -503,6 +504,7 @@ void dcn31_link_encoder_enable_dp_mst_output(
 	/* Enable transmitter and encoder. */
 	if (!link_enc_cfg_is_transmitter_mappable(enc->ctx->dc, enc)) {
 
+		DC_LOG_DEBUG("%s: enc_id(%d)\n", __func__, enc->preferred_engine);
 		dcn10_link_encoder_enable_dp_mst_output(enc, link_settings, clock_source);
 
 	} else {
@@ -527,13 +529,14 @@ void dcn31_link_encoder_enable_dp_mst_output(
 
 		if (link) {
 			dpia_control.dpia_id = link->ddc_hw_inst;
-			dpia_control.fec_rdy = dc_link_should_enable_fec(link);
+			dpia_control.fec_rdy = link->dc->link_srv->dp_should_enable_fec(link);
 		} else {
 			DC_LOG_ERROR("%s: Failed to execute DPIA enable DMUB command.\n", __func__);
 			BREAK_TO_DEBUGGER();
 			return;
 		}
 
+		DC_LOG_DEBUG("%s: DPIA(%d) - enc_id(%d)\n", __func__, dpia_control.dpia_id, dpia_control.enc_id);
 		link_dpia_control(enc->ctx, &dpia_control);
 	}
 }
@@ -547,6 +550,7 @@ void dcn31_link_encoder_disable_output(
 	/* Disable transmitter and encoder. */
 	if (!link_enc_cfg_is_transmitter_mappable(enc->ctx->dc, enc)) {
 
+		DC_LOG_DEBUG("%s: enc_id(%d)\n", __func__, enc->preferred_engine);
 		dcn10_link_encoder_disable_output(enc, signal);
 
 	} else {
@@ -554,7 +558,7 @@ void dcn31_link_encoder_disable_output(
 		struct dmub_cmd_dig_dpia_control_data dpia_control = { 0 };
 		struct dc_link *link;
 
-		if (!dcn10_is_dig_enabled(enc))
+		if (enc->funcs->is_dig_enabled && !enc->funcs->is_dig_enabled(enc))
 			return;
 
 		link = link_enc_cfg_get_link_using_link_enc(enc->ctx->dc, enc->preferred_engine);
@@ -578,6 +582,7 @@ void dcn31_link_encoder_disable_output(
 			return;
 		}
 
+		DC_LOG_DEBUG("%s: DPIA(%d) - enc_id(%d)\n", __func__, dpia_control.dpia_id, dpia_control.enc_id);
 		link_dpia_control(enc->ctx, &dpia_control);
 
 		link_encoder_disable(enc10);

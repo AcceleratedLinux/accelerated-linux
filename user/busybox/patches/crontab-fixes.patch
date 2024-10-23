@@ -94,10 +94,10 @@ Index: busybox-1.31.0/miscutils/crond.c
  #ifndef MAXLINES
  # define MAXLINES       256  /* max lines in non-root crontabs */
  #endif
-@@ -421,10 +444,11 @@ static void load_crontab(const char *fil
- 	char *mailTo = NULL;
+@@ -423,10 +446,11 @@ static void load_crontab(const char *fil
  #endif
  	char *shell = NULL;
+ 	char *path = NULL;
 +	const char *userName = fileName + strlen(CONFIG_FEATURE_CRONTAB_PREFIX);
  
 -	delete_cronfile(fileName);
@@ -108,7 +108,7 @@ Index: busybox-1.31.0/miscutils/crond.c
  		log7("ignoring file '%s' (no such user)", fileName);
  		return;
  	}
-@@ -433,14 +457,14 @@ static void load_crontab(const char *fil
+@@ -435,14 +459,14 @@ static void load_crontab(const char *fil
  	if (!parser)
  		return;
  
@@ -125,7 +125,7 @@ Index: busybox-1.31.0/miscutils/crond.c
  		pline = &file->cf_lines;
  
  		while (1) {
-@@ -623,12 +647,14 @@ static void rescan_crontab_dir(void)
+@@ -631,12 +655,14 @@ static void rescan_crontab_dir(void)
  	{
  		DIR *dir = opendir(".");
  		struct dirent *den;
@@ -141,9 +141,9 @@ Index: busybox-1.31.0/miscutils/crond.c
  				continue;
  			}
  			load_crontab(den->d_name);
-Index: busybox-1.34.1/miscutils/crontab.c
---- busybox-1.34.1.orig/miscutils/crontab.c
-+++ busybox-1.34.1/miscutils/crontab.c
+Index: busybox-1.36.1/miscutils/crontab.c
+--- busybox-1.36.1.orig/miscutils/crontab.c
++++ busybox-1.36.1/miscutils/crontab.c
 @@ -35,10 +35,8 @@
  
  #include "libbb.h"

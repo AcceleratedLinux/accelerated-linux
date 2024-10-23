@@ -1,0 +1,11 @@
+--- mDNSResponder-1310.100.10/mDNSPosix/mDNSPosix.c.org	2021-10-20 11:11:48.719751879 +1000
++++ mDNSResponder-1310.100.10/mDNSPosix/mDNSPosix.c	2021-10-20 11:14:27.245226774 +1000
+@@ -1816,7 +1816,7 @@
+     return ptr;
+ }
+ 
+-mDNSexport void DNSProxyInit(mDNSu32 IpIfArr[], mDNSu32 OpIf)
++mDNSexport void DNSProxyInit(mDNSu32 IpIfArr[MaxIp], mDNSu32 OpIf)
+ {
+     (void) IpIfArr;
+     (void) OpIf;

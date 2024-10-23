@@ -183,7 +183,7 @@ static inline int squashfs_block_size(__le32 raw)
 #define SQUASHFS_ID_BLOCK_BYTES(A)	(SQUASHFS_ID_BLOCKS(A) *\
 					sizeof(u64))
 /* xattr id lookup table defines */
-#define SQUASHFS_XATTR_BYTES(A)		((A) * sizeof(struct squashfs_xattr_id))
+#define SQUASHFS_XATTR_BYTES(A)		(((u64) (A)) * sizeof(struct squashfs_xattr_id))
 
 #define SQUASHFS_XATTR_BLOCK(A)		(SQUASHFS_XATTR_BYTES(A) / \
 					SQUASHFS_METADATA_SIZE)
@@ -236,6 +236,7 @@ struct meta_index {
 #define XZ_COMPRESSION		4
 #define LZ4_COMPRESSION		5
 #define ZSTD_COMPRESSION	6
+#define XZ_AES_COMPRESSION	7
 
 struct squashfs_super_block {
 #ifdef CONFIG_SQUASHFS_CRAMFS_MAGIC

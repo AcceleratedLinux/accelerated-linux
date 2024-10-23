@@ -323,6 +323,28 @@ static int atsha204_i2c_idle(const struct i2c_client *client)
 }
 
 
+static int atsha204_i2c_sleep(const struct i2c_client *client)
+{
+	const struct device *dev = &client->dev;
+	int retval;
+	char to_send[1] = {ATSHA204_SLEEP};
+
+	dev_dbg(dev, "Send sleep\n");
+	retval = atsha204_i2c_master_send(client, to_send, 1);
+	if (retval == 1)
+		retval = 0;
+	else
+		dev_err(dev, "Failed to sleep\n");
+
+	return retval;
+}
+
+#define SHA204_SELF_TEST_ERROR 0x7
+#define SHA204_HEALTH_TEST_ERROR 0x8
+#define SHA204_CMD_GENKEY 0x40
+#define SHA204_CMD_NONCE 0x16
+#define SHA204_CMD_RANDOM 0x1b
+#define SHA204_CMD_SIGN 0x41
 static int __atsha204_i2c_transaction(struct atsha204_chip *chip,
 				      const u8 *to_send, size_t to_send_len,
 				      struct atsha204_buffer *buf)
@@ -395,7 +417,31 @@ static int __atsha204_i2c_transaction(struct atsha204_chip *chip,
 	dev_dbg(chip->dev, "%s\n", "Received from device.");
 	/*print_hex_dump(KERN_INFO, "", DUMP_PREFIX_OFFSET, 32, 2, recv_buf, packet_len, true);*/
 
-	atsha204_i2c_idle(chip->client);
+	switch(to_send[2]) {
+	case SHA204_CMD_GENKEY:
+		fallthrough;
+	case SHA204_CMD_NONCE:
+		fallthrough;
+	case SHA204_CMD_RANDOM:
+		fallthrough;
+	case SHA204_CMD_SIGN:
+		/*
+		 * The ecc508/608 can return 0x7 or 0x8 self test errors when executing
+		 * the commands listed above.  These should be cleared on a chip sleep,
+		 * so sleep and hope that a retry of the command succeeds.
+		 */
+		if(packet_len == 4 && (recv_buf[1] == SHA204_SELF_TEST_ERROR ||
+		                       recv_buf[1] == SHA204_HEALTH_TEST_ERROR)) {
+			dev_err(global_chip->dev, "error code: 0x%x, sleeping to clear\n", recv_buf[1]);
+			atsha204_i2c_sleep(chip->client);
+		} else {
+			atsha204_i2c_idle(chip->client);
+		}
+		break;
+	default:
+		atsha204_i2c_idle(chip->client);
+		break;
+	};
 
 	rc = to_send_len;
 out:
@@ -431,11 +477,23 @@ static int atsha204_i2c_get_random(u8 *to_fill, const size_t max)
 			rc = -EBADMSG;
 			dev_err(global_chip->dev, "%s\n", "Bad CRC on Random");
 		} else {
-			rnd_len = (max > recv.len - 3) ? recv.len - 3 : max;
-			memcpy(to_fill, &recv.ptr[1], rnd_len);
-			rc = rnd_len;
-			dev_dbg(global_chip->dev, "%s: %d\n",
-				 "Returning random bytes", rc);
+			/*
+			 * The ecc508/608 chips can return 0x8 "health test error" when
+			 * getting random data.  I've seen the hwrng device returning large
+			 * strings of 0x8 as "random" data.  If the chip is only returning
+			 * an error code response (4 bytes), then we should also return an
+			 * error.
+			 */
+			if (recv.len == 4) {
+				dev_err(global_chip->dev, "Random command return error code: 0x%x\n", recv.ptr[1]);
+				rc = -EPROTO;
+			} else {
+				rnd_len = (max > recv.len - 3) ? recv.len - 3 : max;
+				memcpy(to_fill, &recv.ptr[1], rnd_len);
+				rc = rnd_len;
+				dev_dbg(global_chip->dev, "%s: %d\n",
+					 "Returning random bytes", rc);
+			}
 		}
 
 		kfree(recv.ptr);
@@ -488,24 +546,6 @@ out_bad_msg:
 	rc = -EBADMSG;
 out:
 	return rc;
-}
-
-
-static int atsha204_i2c_sleep(const struct i2c_client *client)
-{
-	const struct device *dev = &client->dev;
-	int retval;
-	char to_send[1] = {ATSHA204_SLEEP};
-
-	dev_dbg(dev, "Send sleep\n");
-	retval = atsha204_i2c_master_send(client, to_send, 1);
-	if (retval == 1)
-		retval = 0;
-	else
-		dev_err(dev, "Failed to sleep\n");
-
-	return retval;
-
 }
 
 
@@ -856,8 +896,7 @@ static void atsha204_sysfs_del_device(struct atsha204_chip *chip)
 	sysfs_remove_group(&chip->dev->kobj, &atsha204_dev_group);
 }
 
-static int atsha204_i2c_remove(struct i2c_client *client)
-
+static void atsha204_i2c_remove(struct i2c_client *client)
 {
 	const struct device *dev = &(client->dev);
 	struct atsha204_chip *chip = dev_get_drvdata(dev);
@@ -881,9 +920,6 @@ static int atsha204_i2c_remove(struct i2c_client *client)
 
 	atsha204_i2c_wakeup(client);
 	atsha204_i2c_sleep(client);
-
-	return 0;
-
 }
 
 MODULE_DEVICE_TABLE(i2c, atsha204_i2c_id);
@@ -1089,9 +1125,38 @@ static int lockcfg(struct atsha204_chip *chip)
 }
 #endif //CONFIG_HW_RANDOM_SHA204_LOCKCFG
 
+#define PROD_HASH_OFFSET	0x40
+#define PROD_HASH_LEN		32
 
-static int atsha204_i2c_probe(struct i2c_client *client,
-			      const struct i2c_device_id *id)
+static u8 atsh204_hash[PROD_HASH_LEN];
+
+/*
+ * Read the production key hash data and use that as the key.
+ * This data read function accesses the "Data Zone" region of the device
+ * using the local 4-byte read function.
+ */
+static void atsha204_hash_read(struct atsha204_chip *chip)
+{
+	int i;
+
+	for (i = 0; i < (PROD_HASH_LEN / 4); i++) {
+		atsha204_i2c_read4(chip,
+				   &atsh204_hash[i * 4],
+				   PROD_HASH_OFFSET + i, 2);
+	}
+}
+
+void get_hw_hash(u8 *hash, int len);
+void get_hw_hash(u8 *hash, int len)
+{
+	if (len > sizeof(atsh204_hash)) {
+		memset(hash, 0, len);
+		len = sizeof(atsh204_hash);
+	}
+	memcpy(hash, atsh204_hash, len);
+}
+
+static int atsha204_i2c_probe(struct i2c_client *client)
 {
 	int result = -1;
 	struct device *dev = &client->dev;
@@ -1118,11 +1183,11 @@ static int atsha204_i2c_probe(struct i2c_client *client,
 #ifdef CONFIG_HW_RANDOM_SHA204_LOCKCFG
 	result = lockcfg(chip);
 #endif
+	atsha204_hash_read(chip);
 
 err:
 	return result;
 }
-
 
 static ssize_t configzone_show(struct device *dev,
 			       struct device_attribute *attr,

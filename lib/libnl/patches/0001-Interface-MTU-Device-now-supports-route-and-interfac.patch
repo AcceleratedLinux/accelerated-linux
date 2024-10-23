@@ -1,0 +1,110 @@
+From dc51a1aa5badb9db26225fec318149d10d8e0a5a Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Wed, 19 Jul 2023 14:16:31 -0400
+Subject: [PATCH 1/5] Interface MTU: Device now supports route and
+ interface-specific MTU
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves UC-219
+
+Each interface can configure an MTU (between 576 and 1500).  This MTU
+will be associated with the specific interface/network while the it will
+still try to acquire an MTU value from the DHCP server.  The lowest MTU
+between the DHCP and the user-defined value will be used to set the
+per-route MTU.
+---
+ include/netlink-private/types.h |  1 +
+ include/netlink/route/route.h   |  1 +
+ lib/route/route_obj.c           | 18 ++++++++++++++++++
+ 3 files changed, 20 insertions(+)
+
+Index: libnl-3.9.0/include/netlink/route/route.h
+===================================================================
+--- libnl-3.9.0.orig/include/netlink/route/route.h
++++ libnl-3.9.0/include/netlink/route/route.h
+@@ -82,6 +82,7 @@ extern uint32_t	rtnl_route_get_flags(str
+ extern int	rtnl_route_set_metric(struct rtnl_route *, int, unsigned int);
+ extern int	rtnl_route_unset_metric(struct rtnl_route *, int);
+ extern int	rtnl_route_get_metric(struct rtnl_route *, int, uint32_t *);
++extern int	rtnl_route_set_mtu(struct rtnl_route *, unsigned int);
+ extern int	rtnl_route_set_dst(struct rtnl_route *, struct nl_addr *);
+ extern struct nl_addr *rtnl_route_get_dst(struct rtnl_route *);
+ extern int	rtnl_route_set_src(struct rtnl_route *, struct nl_addr *);
+Index: libnl-3.9.0/lib/route/route_obj.c
+===================================================================
+--- libnl-3.9.0.orig/lib/route/route_obj.c
++++ libnl-3.9.0/lib/route/route_obj.c
+@@ -56,6 +56,7 @@ struct rtnl_route {
+ 	uint8_t rt_type;
+ 	uint8_t rt_nmetrics;
+ 	uint8_t rt_ttl_propagate;
++	uint32_t rt_mtu;
+ 	uint32_t rt_flags;
+ 	struct nl_addr *rt_dst;
+ 	struct nl_addr *rt_src;
+@@ -90,6 +91,7 @@ struct rtnl_route {
+ #define ROUTE_ATTR_REALMS    0x010000
+ #define ROUTE_ATTR_CACHEINFO 0x020000
+ #define ROUTE_ATTR_TTL_PROPAGATE 0x040000
++#define ROUTE_ATTR_MTU       0x080000
+ /** @endcond */
+ 
+ static void route_constructor(struct nl_object *c)
+@@ -102,6 +104,7 @@ static void route_constructor(struct nl_
+ 	r->rt_protocol = RTPROT_STATIC;
+ 	r->rt_type = RTN_UNICAST;
+ 	r->rt_prio = 0;
++	r->rt_mtu = 1500;
+ 
+ 	nl_init_list_head(&r->rt_nexthops);
+ }
+@@ -623,6 +626,7 @@ static const struct trans_tbl route_attr
+ 	__ADD(ROUTE_ATTR_REALMS, realms),
+ 	__ADD(ROUTE_ATTR_CACHEINFO, cacheinfo),
+ 	__ADD(ROUTE_ATTR_TTL_PROPAGATE, ttl_propagate),
++	__ADD(ROUTE_ATTR_MTU, mtu),
+ };
+ 
+ static char *route_attrs2str(int attrs, char *buf, size_t len)
+@@ -862,6 +866,13 @@ int rtnl_route_get_metric(struct rtnl_ro
+ 	return 0;
+ }
+ 
++int rtnl_route_set_mtu(struct rtnl_route *route, unsigned int mtu)
++{
++	route->rt_mtu = mtu;
++	route->ce_mask |= ROUTE_ATTR_MTU;
++	return 0;
++}
++
+ int rtnl_route_set_pref_src(struct rtnl_route *route, struct nl_addr *addr)
+ {
+ 	if (route->ce_mask & ROUTE_ATTR_FAMILY) {
+@@ -1504,6 +1515,13 @@ int rtnl_route_build_msg(struct nl_msg *
+ 
+ 		nla_nest_end(msg, multipath);
+ 	}
++	if (route->ce_mask & ROUTE_ATTR_MTU) {
++		metrics = nla_nest_start(msg, RTA_METRICS);
++		if (metrics == NULL)
++			goto nla_put_failure;
++		NLA_PUT_U32(msg, RTAX_MTU, route->rt_mtu);
++		nla_nest_end(msg, metrics);
++	}
+ 
+ 	return 0;
+ 
+Index: libnl-3.9.0/libnl-route-3.sym
+===================================================================
+--- libnl-3.9.0.orig/libnl-route-3.sym
++++ libnl-3.9.0/libnl-route-3.sym
+@@ -744,6 +744,7 @@ global:
+ 	rtnl_route_set_flags;
+ 	rtnl_route_set_iif;
+ 	rtnl_route_set_metric;
++	rtnl_route_set_mtu;
+ 	rtnl_route_set_pref_src;
+ 	rtnl_route_set_priority;
+ 	rtnl_route_set_protocol;

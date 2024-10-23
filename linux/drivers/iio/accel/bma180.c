@@ -13,11 +13,10 @@
  */
 
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <linux/of_device.h>
-#include <linux/of.h>
 #include <linux/bitops.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
@@ -921,13 +920,12 @@ static const struct iio_trigger_ops bma180_trigger_ops = {
 	.reenable = bma180_trig_reen,
 };
 
-static int bma180_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+static int bma180_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct device *dev = &client->dev;
 	struct bma180_data *data;
 	struct iio_dev *indio_dev;
-	enum chip_ids chip;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
@@ -937,11 +935,7 @@ static int bma180_probe(struct i2c_client *client,
 	data = iio_priv(indio_dev);
 	i2c_set_clientdata(client, indio_dev);
 	data->client = client;
-	if (client->dev.of_node)
-		chip = (uintptr_t)of_device_get_match_data(dev);
-	else
-		chip = id->driver_data;
-	data->part_info = &bma180_part_info[chip];
+	data->part_info = i2c_get_match_data(client);
 
 	ret = iio_read_mount_matrix(dev, &data->orientation);
 	if (ret)
@@ -1045,7 +1039,7 @@ err_disable_vdd:
 	return ret;
 }
 
-static int bma180_remove(struct i2c_client *client)
+static void bma180_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct bma180_data *data = iio_priv(indio_dev);
@@ -1062,8 +1056,6 @@ static int bma180_remove(struct i2c_client *client)
 	mutex_unlock(&data->mutex);
 	regulator_disable(data->vddio_supply);
 	regulator_disable(data->vdd_supply);
-
-	return 0;
 }
 
 static int bma180_suspend(struct device *dev)
@@ -1095,11 +1087,11 @@ static int bma180_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(bma180_pm_ops, bma180_suspend, bma180_resume);
 
 static const struct i2c_device_id bma180_ids[] = {
-	{ "bma023", BMA023 },
-	{ "bma150", BMA150 },
-	{ "bma180", BMA180 },
-	{ "bma250", BMA250 },
-	{ "smb380", BMA150 },
+	{ "bma023", (kernel_ulong_t)&bma180_part_info[BMA023] },
+	{ "bma150", (kernel_ulong_t)&bma180_part_info[BMA150] },
+	{ "bma180", (kernel_ulong_t)&bma180_part_info[BMA180] },
+	{ "bma250", (kernel_ulong_t)&bma180_part_info[BMA250] },
+	{ "smb380", (kernel_ulong_t)&bma180_part_info[BMA150] },
 	{ }
 };
 
@@ -1108,23 +1100,23 @@ MODULE_DEVICE_TABLE(i2c, bma180_ids);
 static const struct of_device_id bma180_of_match[] = {
 	{
 		.compatible = "bosch,bma023",
-		.data = (void *)BMA023
+		.data = &bma180_part_info[BMA023]
 	},
 	{
 		.compatible = "bosch,bma150",
-		.data = (void *)BMA150
+		.data = &bma180_part_info[BMA150]
 	},
 	{
 		.compatible = "bosch,bma180",
-		.data = (void *)BMA180
+		.data = &bma180_part_info[BMA180]
 	},
 	{
 		.compatible = "bosch,bma250",
-		.data = (void *)BMA250
+		.data = &bma180_part_info[BMA250]
 	},
 	{
 		.compatible = "bosch,smb380",
-		.data = (void *)BMA150
+		.data = &bma180_part_info[BMA150]
 	},
 	{ }
 };

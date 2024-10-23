@@ -130,18 +130,23 @@ switch_create()
 
 	ip link set dev $swp3 up
 	mtu_set $swp3 10000
-	ethtool -s $swp3 speed 1000 autoneg off
+	tc qdisc replace dev $swp3 root handle 101: tbf rate 1gbit \
+		burst 128K limit 1G
 
 	vlan_create $swp1 111
 	vlan_create $swp2 222
 	vlan_create $swp3 111
 	vlan_create $swp3 222
 
-	ip link add name br111 up type bridge vlan_filtering 0
+	ip link add name br111 type bridge vlan_filtering 0
+	ip link set dev br111 addrgenmode none
+	ip link set dev br111 up
 	ip link set dev $swp1.111 master br111
 	ip link set dev $swp3.111 master br111
 
-	ip link add name br222 up type bridge vlan_filtering 0
+	ip link add name br222 type bridge vlan_filtering 0
+	ip link set dev br222 addrgenmode none
+	ip link set dev br222 up
 	ip link set dev $swp2.222 master br222
 	ip link set dev $swp3.222 master br222
 
@@ -193,7 +198,7 @@ switch_destroy()
 	vlan_destroy $swp2 222
 	vlan_destroy $swp1 111
 
-	ethtool -s $swp3 autoneg on
+	tc qdisc del dev $swp3 root handle 101:
 	mtu_restore $swp3
 	ip link set dev $swp3 down
 	lldptool -T -i $swp3 -V ETS-CFG up2tc=0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0

@@ -167,7 +167,6 @@ static int mv88e6350_probe(struct mdio_device *mdiodev)
 	struct device *dev = &mdiodev->dev;
 	struct device_node *np = dev->of_node;
 	int rc;
-	u16 v;
 
 	if (np == NULL)
 		return -ENODEV;
@@ -191,6 +190,7 @@ static void mv88e6350_remove(struct mdio_device *mdiodev)
 
 static const struct of_device_id dsa_of_match_table[] = {
 	{ .compatible = "marvell,mv88e6085", },
+	{ .compatible = "marvell,mv88e6190", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, mv88e6350_of_match_table);

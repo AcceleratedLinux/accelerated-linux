@@ -26,6 +26,7 @@
 #include "file.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 /*
  *
@@ -70,4 +71,22 @@ file_st * pcapng_file_open(char const * const filename, bool const append_to_fil
     return file;
 }
 
+file_st * pcapng_file_open_stdout()
+{
+    file_st * file;
+
+    file = (file_st *)malloc(sizeof *file);
+    if (file)
+    {
+        file->fp = stdout;
+        file->file_size = 0;
+    }
+
+    return file;
+}
+
+void pcapng_file_flush(file_st * const file)
+{
+        fflush(file->fp);
+}
 

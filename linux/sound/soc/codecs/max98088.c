@@ -310,24 +310,24 @@ static const struct regmap_config max98088_regmap = {
 static void m98088_eq_band(struct snd_soc_component *component, unsigned int dai,
                    unsigned int band, u16 *coefs)
 {
-       unsigned int eq_reg;
-       unsigned int i;
+	unsigned int eq_reg;
+	unsigned int i;
 
 	if (WARN_ON(band > 4) ||
 	    WARN_ON(dai > 1))
 		return;
 
-       /* Load the base register address */
-       eq_reg = dai ? M98088_REG_84_DAI2_EQ_BASE : M98088_REG_52_DAI1_EQ_BASE;
+	/* Load the base register address */
+	eq_reg = dai ? M98088_REG_84_DAI2_EQ_BASE : M98088_REG_52_DAI1_EQ_BASE;
 
-       /* Add the band address offset, note adjustment for word address */
-       eq_reg += band * (M98088_COEFS_PER_BAND << 1);
+	/* Add the band address offset, note adjustment for word address */
+	eq_reg += band * (M98088_COEFS_PER_BAND << 1);
 
-       /* Step through the registers and coefs */
-       for (i = 0; i < M98088_COEFS_PER_BAND; i++) {
-               snd_soc_component_write(component, eq_reg++, M98088_BYTE1(coefs[i]));
-               snd_soc_component_write(component, eq_reg++, M98088_BYTE0(coefs[i]));
-       }
+	/* Step through the registers and coefs */
+	for (i = 0; i < M98088_COEFS_PER_BAND; i++) {
+		snd_soc_component_write(component, eq_reg++, M98088_BYTE1(coefs[i]));
+		snd_soc_component_write(component, eq_reg++, M98088_BYTE0(coefs[i]));
+	}
 }
 
 /*
@@ -473,6 +473,9 @@ static const struct snd_kcontrol_new max98088_snd_controls[] = {
                        M98088_REG_36_LVL_MIC2, 5, 2, 0,
                        max98088_mic2pre_get, max98088_mic2pre_set,
                        max98088_micboost_tlv),
+
+        SOC_SINGLE("Noise Gate Threshold", M98088_REG_40_MICAGC_THRESH,
+               4, 15, 0),
 
        SOC_SINGLE("INA Volume", M98088_REG_37_LVL_INA, 0, 7, 1),
        SOC_SINGLE("INB Volume", M98088_REG_38_LVL_INB, 0, 7, 1),
@@ -1734,7 +1737,6 @@ static const struct snd_soc_component_driver soc_component_dev_max98088 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct i2c_device_id max98088_i2c_id[] = {
@@ -1746,18 +1748,17 @@ MODULE_DEVICE_TABLE(i2c, max98088_i2c_id);
 
 static int max98088_i2c_probe(struct i2c_client *i2c)
 {
-       struct max98088_priv *max98088;
-       int ret;
-       const struct i2c_device_id *id;
+	struct max98088_priv *max98088;
+	const struct i2c_device_id *id;
 
-       max98088 = devm_kzalloc(&i2c->dev, sizeof(struct max98088_priv),
-			       GFP_KERNEL);
-       if (max98088 == NULL)
-               return -ENOMEM;
+	max98088 = devm_kzalloc(&i2c->dev, sizeof(struct max98088_priv),
+				GFP_KERNEL);
+	if (max98088 == NULL)
+		return -ENOMEM;
 
-       max98088->regmap = devm_regmap_init_i2c(i2c, &max98088_regmap);
-       if (IS_ERR(max98088->regmap))
-	       return PTR_ERR(max98088->regmap);
+	max98088->regmap = devm_regmap_init_i2c(i2c, &max98088_regmap);
+	if (IS_ERR(max98088->regmap))
+		return PTR_ERR(max98088->regmap);
 
 	max98088->mclk = devm_clk_get(&i2c->dev, "mclk");
 	if (IS_ERR(max98088->mclk))
@@ -1765,14 +1766,13 @@ static int max98088_i2c_probe(struct i2c_client *i2c)
 			return PTR_ERR(max98088->mclk);
 
 	id = i2c_match_id(max98088_i2c_id, i2c);
-       max98088->devtype = id->driver_data;
+	max98088->devtype = id->driver_data;
 
-       i2c_set_clientdata(i2c, max98088);
-       max98088->pdata = i2c->dev.platform_data;
+	i2c_set_clientdata(i2c, max98088);
+	max98088->pdata = i2c->dev.platform_data;
 
-       ret = devm_snd_soc_register_component(&i2c->dev,
-                       &soc_component_dev_max98088, &max98088_dai[0], 2);
-       return ret;
+	return devm_snd_soc_register_component(&i2c->dev, &soc_component_dev_max98088,
+					      &max98088_dai[0], 2);
 }
 
 #if defined(CONFIG_OF)
@@ -1789,7 +1789,7 @@ static struct i2c_driver max98088_i2c_driver = {
 		.name = "max98088",
 		.of_match_table = of_match_ptr(max98088_of_match),
 	},
-	.probe_new = max98088_i2c_probe,
+	.probe = max98088_i2c_probe,
 	.id_table = max98088_i2c_id,
 };
 

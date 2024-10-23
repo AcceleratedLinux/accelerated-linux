@@ -16,7 +16,7 @@
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/slab.h>
-#include <linux/crash_core.h>
+#include <linux/vmcore_info.h>
 #include <linux/of.h>
 
 #include <asm/page.h>
@@ -347,6 +347,8 @@ static int __init create_opalcore(void)
 	}
 	if (!dn || ret)
 		pr_warn("WARNING: Failed to read OPAL base & entry values\n");
+
+	of_node_put(dn);
 
 	/* Use count to keep track of the program headers */
 	count = 0;

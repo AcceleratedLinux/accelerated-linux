@@ -30,6 +30,9 @@ config NETFILTER_FAMILY_BRIDGE
 config NETFILTER_FAMILY_ARP
 	bool
 
+config NETFILTER_BPF_LINK
+	def_bool BPF_SYSCALL
+
 config NETFILTER_NETLINK_HOOK
 	tristate "Netfilter base hook dump support"
 	depends on NETFILTER_ADVANCED
@@ -144,7 +147,6 @@ config NF_CONNTRACK_ZONES
 
 config NF_CONNTRACK_PROCFS
 	bool "Supply CT list in procfs (OBSOLETE)"
-	default y
 	depends on PROC_FS
 	help
 	This option enables for the list of known conntrack entries
@@ -197,6 +199,9 @@ config NF_CONNTRACK_LABELS
 	  This option enables support for assigning user-defined flag bits
 	  to connection tracking entries.  It can be used with xtables connlabel
 	  match and the nftables ct expression.
+
+config NF_CONNTRACK_OVS
+	bool
 
 config NF_CT_PROTO_DCCP
 	bool 'DCCP protocol connection tracking support'
@@ -468,6 +473,9 @@ config NF_NAT_REDIRECT
 config NF_NAT_MASQUERADE
 	bool
 
+config NF_NAT_OVS
+	bool
+
 config NETFILTER_SYNPROXY
 	tristate
 
@@ -576,12 +584,6 @@ config NFT_TUNNEL
 	help
 	  This option adds the "tunnel" expression that you can use to set
 	  tunneling policies.
-
-config NFT_OBJREF
-	tristate "Netfilter nf_tables stateful object reference module"
-	help
-	  This option adds the "objref" expression that allows you to refer to
-	  stateful objects, such as counters and quotas.
 
 config NFT_QUEUE
 	depends on NETFILTER_NETLINK_QUEUE
@@ -742,6 +744,14 @@ config NF_FLOW_TABLE
 
 	  To compile it as a module, choose M here.
 
+config NF_FLOW_TABLE_PROCFS
+	bool "Supply flow table statistics in procfs"
+	depends on NF_FLOW_TABLE
+	depends on PROC_FS
+	help
+	  This option enables for the flow table offload statistics
+	  to be shown in procfs under net/netfilter/nf_flowtable.
+
 config NETFILTER_XTABLES
 	tristate "Netfilter Xtables support (required for ip_tables)"
 	default m if NETFILTER_ADVANCED=n
@@ -754,7 +764,6 @@ if NETFILTER_XTABLES
 config NETFILTER_XTABLES_COMPAT
 	bool "Netfilter Xtables 32bit support"
 	depends on COMPAT
-	default y
 	help
 	   This option provides a translation layer to run 32bit arp,ip(6),ebtables
 	   binaries on 64bit kernels.
@@ -817,7 +826,7 @@ config NETFILTER_XT_TARGET_AUDIT
 
 config NETFILTER_XT_TARGET_CHECKSUM
 	tristate "CHECKSUM target support"
-	depends on IP_NF_MANGLE || IP6_NF_MANGLE
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
 	help
 	  This option adds a `CHECKSUM' target, which can be used in the iptables mangle
@@ -868,7 +877,7 @@ config NETFILTER_XT_TARGET_CONNSECMARK
 config NETFILTER_XT_TARGET_CT
 	tristate '"CT" target support'
 	depends on NF_CONNTRACK
-	depends on IP_NF_RAW || IP6_NF_RAW
+	depends on IP_NF_RAW || IP6_NF_RAW || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
 	help
 	  This options adds a `CT' target, which allows to specify initial
@@ -879,7 +888,7 @@ config NETFILTER_XT_TARGET_CT
 
 config NETFILTER_XT_TARGET_DSCP
 	tristate '"DSCP" and "TOS" target support'
-	depends on IP_NF_MANGLE || IP6_NF_MANGLE
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
 	help
 	  This option adds a `DSCP' target, which allows you to manipulate
@@ -895,7 +904,7 @@ config NETFILTER_XT_TARGET_DSCP
 
 config NETFILTER_XT_TARGET_HL
 	tristate '"HL" hoplimit target support'
-	depends on IP_NF_MANGLE || IP6_NF_MANGLE
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
 	help
 	This option adds the "HL" (for IPv6) and "TTL" (for IPv4)
@@ -1079,7 +1088,7 @@ config NETFILTER_XT_TARGET_TPROXY
 	depends on NETFILTER_ADVANCED
 	depends on IPV6 || IPV6=n
 	depends on IP6_NF_IPTABLES || IP6_NF_IPTABLES=n
-	depends on IP_NF_MANGLE
+	depends on IP_NF_MANGLE || NFT_COMPAT
 	select NF_DEFRAG_IPV4
 	select NF_DEFRAG_IPV6 if IP6_NF_IPTABLES != n
 	select NF_TPROXY_IPV4
@@ -1146,7 +1155,7 @@ config NETFILTER_XT_TARGET_TCPMSS
 
 config NETFILTER_XT_TARGET_TCPOPTSTRIP
 	tristate '"TCPOPTSTRIP" target support'
-	depends on IP_NF_MANGLE || IP6_NF_MANGLE
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
 	help
 	  This option adds a "TCPOPTSTRIP" target, which allows you to strip

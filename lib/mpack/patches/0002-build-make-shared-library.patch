@@ -1,0 +1,41 @@
+From 06c1a9e0d1f045ca6d1d47e994ad802600b80f31 Mon Sep 17 00:00:00 2001
+From: Samuel Brian <samuel.brian@gearlinx.com>
+Date: Thu, 8 Jul 2021 16:28:32 +1000
+Subject: [PATCH 2/2] build: make shared library
+
+mpack.c/mpack.h is meant to be embedded into projects, but to keep
+the source separate we can build a shared library.
+---
+ Makefile | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+ create mode 100644 Makefile
+
+diff --git a/Makefile b/Makefile
+new file mode 100644
+index 0000000..160e866
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,20 @@
++OBJS = src/mpack/mpack-common.o \
++	src/mpack/mpack-node.o \
++	src/mpack/mpack-platform.o \
++	src/mpack/mpack-reader.o \
++	src/mpack/mpack-writer.o \
++	src/mpack/mpack-expect.o
++
++CFLAGS += -fPIC
++
++all: libmpack.so
++
++libmpack.so: $(OBJS)
++	$(CC) $(LDFLAGS) -shared -o $@ $^
++
++install:
++	install -D libmpack.so -t ../mpack-install/lib
++	install -D src/mpack/*.h -t ../mpack-install/include/mpack
++
++clean:
++	rm -f libmpack.so src/mpack/*.o
+-- 
+2.30.2
+

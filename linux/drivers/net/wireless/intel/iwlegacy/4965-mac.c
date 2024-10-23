@@ -4020,7 +4020,7 @@ il4965_hdl_alive(struct il_priv *il, struct il_rx_buf *rxb)
 
 	if (palive->ver_subtype == INITIALIZE_SUBTYPE) {
 		D_INFO("Initialization Alive received.\n");
-		memcpy(&il->card_alive_init, &pkt->u.alive_frame,
+		memcpy(&il->card_alive_init, &pkt->u.raw,
 		       sizeof(struct il_init_alive_resp));
 		pwork = &il->init_alive_start;
 	} else {
@@ -4231,8 +4231,6 @@ il4965_rx_handle(struct il_priv *il)
 		fill_rx = 1;
 
 	while (i != r) {
-		int len;
-
 		rxb = rxq->queue[i];
 
 		/* If an RXB doesn't have a Rx queue slot associated with it,
@@ -4246,10 +4244,6 @@ il4965_rx_handle(struct il_priv *il)
 			       PAGE_SIZE << il->hw_params.rx_page_order,
 			       DMA_FROM_DEVICE);
 		pkt = rxb_addr(rxb);
-
-		len = le32_to_cpu(pkt->len_n_flags) & IL_RX_FRAME_SIZE_MSK;
-		len += sizeof(u32);	/* account for status word */
-
 		reclaim = il_need_reclaim(il, pkt);
 
 		/* Based on type of command response or notification,
@@ -6122,7 +6116,7 @@ il4965_mac_channel_switch(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	if (il->ops->set_channel_switch(il, ch_switch)) {
 		clear_bit(S_CHANNEL_SWITCH_PENDING, &il->status);
 		il->switch_channel = 0;
-		ieee80211_chswitch_done(il->vif, false);
+		ieee80211_chswitch_done(il->vif, false, 0);
 	}
 
 out:
@@ -6211,10 +6205,12 @@ out:
 	mutex_unlock(&il->mutex);
 }
 
-static void
+static int
 il4965_setup_deferred_work(struct il_priv *il)
 {
 	il->workqueue = create_singlethread_workqueue(DRV_NAME);
+	if (!il->workqueue)
+		return -ENOMEM;
 
 	init_waitqueue_head(&il->wait_command_queue);
 
@@ -6233,6 +6229,8 @@ il4965_setup_deferred_work(struct il_priv *il)
 	timer_setup(&il->watchdog, il_bg_watchdog, 0);
 
 	tasklet_setup(&il->irq_tasklet, il4965_irq_tasklet);
+
+	return 0;
 }
 
 static void
@@ -6303,7 +6301,12 @@ il4965_tx_queue_set_status(struct il_priv *il, struct il_tx_queue *txq,
 }
 
 static const struct ieee80211_ops il4965_mac_ops = {
+	.add_chanctx = ieee80211_emulate_add_chanctx,
+	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+	.change_chanctx = ieee80211_emulate_change_chanctx,
+	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
 	.tx = il4965_mac_tx,
+	.wake_tx_queue = ieee80211_handle_wake_tx_queue,
 	.start = il4965_mac_start,
 	.stop = il4965_mac_stop,
 	.add_interface = il_mac_add_interface,
@@ -6617,7 +6620,10 @@ il4965_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto out_disable_msi;
 	}
 
-	il4965_setup_deferred_work(il);
+	err = il4965_setup_deferred_work(il);
+	if (err)
+		goto out_free_irq;
+
 	il4965_setup_handlers(il);
 
 	/*********************************************
@@ -6655,6 +6661,7 @@ il4965_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 out_destroy_workqueue:
 	destroy_workqueue(il->workqueue);
 	il->workqueue = NULL;
+out_free_irq:
 	free_irq(il->pci_dev->irq, il);
 out_disable_msi:
 	pci_disable_msi(il->pci_dev);
@@ -6690,7 +6697,7 @@ il4965_pci_remove(struct pci_dev *pdev)
 	sysfs_remove_group(&pdev->dev.kobj, &il_attribute_group);
 
 	/* ieee80211_unregister_hw call wil cause il_mac_stop to
-	 * to be called and il4965_down since we are removing the device
+	 * be called and il4965_down since we are removing the device
 	 * we need to set S_EXIT_PENDING bit.
 	 */
 	set_bit(S_EXIT_PENDING, &il->status);

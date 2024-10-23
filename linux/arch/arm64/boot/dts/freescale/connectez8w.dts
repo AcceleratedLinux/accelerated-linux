@@ -14,6 +14,7 @@
 #include "fsl-ls1046a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 
 / {
 	model = "Digi Connect EZ 8W";
@@ -214,32 +215,52 @@
 			status = "disabled";
 		 };
 
-		usb0: usb@2f00000 {
-			usb3-lpm-capable;
-			snps,dis-u1u2-when-u3-quirk;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			clock-names = "ref", "bus_early", "suspend";
-			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
-			status = "okay";
-		};
+		aux_bus {
+			usb0: usb@2f00000 {
+				usb3-lpm-capable;
+				snps,dis-u1u2-when-u3-quirk;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				clock-names = "ref", "bus_early", "suspend";
+				clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+				status = "okay";
+			};
 
-		usb1: usb@3000000 {
-			usb3-lpm-capable;
-			snps,dis-u1u2-when-u3-quirk;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			clock-names = "ref", "bus_early", "suspend";
-			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
-			status = "okay";
-		};
+			usb1: usb@3000000 {
+				usb3-lpm-capable;
+				snps,dis-u1u2-when-u3-quirk;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				clock-names = "ref", "bus_early", "suspend";
+				clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+				status = "okay";
+			};
 
-		usb2: usb@3100000 {
-			usb3-lpm-capable;
-			snps,dis-u1u2-when-u3-quirk;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			clock-names = "ref", "bus_early", "suspend";
-			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
-			status = "okay";
+			usb2: usb@3100000 {
+				usb3-lpm-capable;
+				snps,dis-u1u2-when-u3-quirk;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				clock-names = "ref", "bus_early", "suspend";
+				clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+				status = "okay";
+			};
 		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio0 31 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	sim-mux0 {
+		compatible = "sim-mux";
+
+		sim-select-gpios  = <&exp3 16 GPIO_ACTIVE_HIGH>;
+
+		sim-count = <2>;
 	};
 };
 
@@ -267,11 +288,6 @@
 &i2c2 {
 	status = "okay";
 	
-	scl-gpios = <&gpio3 10 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio3 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x40C>;
-	pmux-mode-cfg = <0x00007700 0x00000000 0x00001100>;
-
 	exp3: tca6416@23 {
 		#gpio-cells = <2>;
 		compatible = "ti,tca6424";
@@ -284,13 +300,8 @@
 };
 
 &i2c3 {
-	clock-frequency = <400000>;
+	clock-frequency = <1000000>;
 	status = "okay";
-
-	scl-gpios = <&gpio3 12 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio3 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x40C>;
-	pmux-mode-cfg = <0x00000077 0x00000000 0x00000011>;
 
 	rng: atecc608b@60 {
 		compatible = "atsha204-i2c";
@@ -397,4 +408,11 @@
 			  "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "factory";
+};
+
+&gpio1 {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "developer_", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
 };

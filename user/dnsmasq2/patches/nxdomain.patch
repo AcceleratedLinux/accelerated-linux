@@ -1,6 +1,6 @@
-From de0a90d67b2c8c863f5a746a9f6238e2e70ed946 Mon Sep 17 00:00:00 2001
-From: Robert Hodaszi <robert.hodaszi@digi.com>
-Date: Sat, 8 Jan 2022 15:24:15 +0100
+From 58ba4abd7e92874554bb84f1404a0b0ca158cab8 Mon Sep 17 00:00:00 2001
+From: Ayman Ghanem <ayman.ghanem@digi.com>
+Date: Tue, 11 Apr 2023 10:40:38 -0500
 Subject: [PATCH] Delay NXDOMAIN response
 
 If we are sending requests to all servers then do not forward the first
@@ -21,40 +21,45 @@ A short timeout will send the saved NXDOMAIN response otherwise.
  3 files changed, 99 insertions(+), 10 deletions(-)
 
 diff --git a/src/dnsmasq.c b/src/dnsmasq.c
-index 602daed..6492cde 100644
+index 30fb419..8338b44 100644
 --- a/src/dnsmasq.c
 +++ b/src/dnsmasq.c
-@@ -24,7 +24,7 @@ struct daemon *daemon;
+@@ -29,7 +29,7 @@ struct daemon *daemon;
  static volatile pid_t pid = 0;
  static volatile int pipewrite;
  
 -static void set_dns_listeners(void);
 +static int set_dns_listeners(time_t now);
+ static void set_tftp_listeners(void);
  static void check_dns_listeners(time_t now);
  static void sig_handler(int sig);
- static void async_event(int pipe, time_t now);
-@@ -1051,6 +1051,7 @@ int main (int argc, char **argv)
+@@ -1061,6 +1061,7 @@ int main (int argc, char **argv)
    while (1)
      {
-       int timeout = -1;
+       int timeout = fast_retry(now);
 +      int t;
        
        poll_reset();
        
-@@ -1063,7 +1064,9 @@ int main (int argc, char **argv)
-       else if (is_dad_listeners())
+@@ -1074,9 +1075,12 @@ int main (int argc, char **argv)
+ 	       (timeout == -1 || timeout > 1000))
  	timeout = 1000;
- 
--      set_dns_listeners();
-+      t = set_dns_listeners(now) * 1000;
-+      if (t > 0 && (timeout < 0 || t < timeout))
-+	timeout = t;
- 
- #ifdef HAVE_DBUS
-       if (option_bool(OPT_DBUS))
-@@ -1706,12 +1709,13 @@ void clear_cache_and_reload(time_t now)
+       
+-      if (daemon->port != 0)
+-	set_dns_listeners();
+-      
++      if (daemon->port != 0) {
++        t = set_dns_listeners(now) * 1000;
++        if (t > 0 && (timeout < 0 || t < timeout))
++          timeout = t;
++      }
++
+ #ifdef HAVE_TFTP
+       set_tftp_listeners();
  #endif
+@@ -1771,12 +1775,15 @@ static void set_tftp_listeners(void)
  }
+ #endif
  
 -static void set_dns_listeners(void)
 +static int set_dns_listeners(time_t now)
@@ -64,21 +69,13 @@ index 602daed..6492cde 100644
    struct randfd_list *rfl;
    int i;
 +  int wait = 0;
-   
- #ifdef HAVE_TFTP
-   int  tftp = 0;
-@@ -1723,6 +1727,9 @@ static void set_dns_listeners(void)
- 	poll_listen(transfer->sockfd, POLLIN);
-       }
- #endif
-+
-+  if (daemon->port != 0)
-+    wait = check_reply_timeout(now);
++  
++  wait = check_reply_timeout(now);
    
    for (serverfdp = daemon->sfds; serverfdp; serverfdp = serverfdp->next)
      poll_listen(serverfdp->fd, POLLIN);
-@@ -1763,6 +1770,8 @@ static void set_dns_listeners(void)
-     for (i = 0; i < MAX_PROCS; i++)
+@@ -1811,6 +1818,8 @@ static void set_dns_listeners(void)
+     for (i = 0; i < daemon->max_procs; i++)
        if (daemon->tcp_pipes[i] != -1)
  	poll_listen(daemon->tcp_pipes[i], POLLIN);
 +
@@ -86,20 +83,20 @@ index 602daed..6492cde 100644
  }
  
  static void check_dns_listeners(time_t now)
-@@ -2113,7 +2122,7 @@ int delay_dhcp(time_t start, int sec, int fd, uint32_t addr, unsigned short id)
-       poll_reset();
+@@ -2160,7 +2169,7 @@ int delay_dhcp(time_t start, int sec, int fd, uint32_t addr, unsigned short id)
        if (fd != -1)
          poll_listen(fd, POLLIN);
--      set_dns_listeners();
-+      set_dns_listeners(now);
-       set_log_writer();
-       
- #ifdef HAVE_DHCP6
+       if (daemon->port != 0)
+-	set_dns_listeners();
++	set_dns_listeners(now);
+ #ifdef HAVE_TFTP
+       set_tftp_listeners();
+ #endif
 diff --git a/src/dnsmasq.h b/src/dnsmasq.h
-index 8674823..81c95c6 100644
+index e455c3f..08d5e61 100644
 --- a/src/dnsmasq.h
 +++ b/src/dnsmasq.h
-@@ -752,6 +752,10 @@ struct frec {
+@@ -803,6 +803,10 @@ struct frec {
    struct frec *blocking_query; /* Query which is blocking us. */
  #endif
    struct frec *next;
@@ -110,19 +107,19 @@ index 8674823..81c95c6 100644
  };
  
  /* flags in top of length field for DHCP-option tables */
-@@ -1428,6 +1432,7 @@ int send_from(int fd, int nowild, char *packet, size_t len,
- void resend_query(void);
+@@ -1533,6 +1537,7 @@ void resend_query(void);
  int allocate_rfd(struct randfd_list **fdlp, struct server *serv);
  void free_rfds(struct randfd_list **fdlp);
+ int fast_retry(time_t now);
 +int check_reply_timeout(time_t now);
  
  /* network.c */
  int indextoname(int fd, int index, char *name);
 diff --git a/src/forward.c b/src/forward.c
-index 3d638e4..441eeca 100644
+index 32f37e4..778cf43 100644
 --- a/src/forward.c
 +++ b/src/forward.c
-@@ -26,6 +26,9 @@ static void query_full(time_t now, char *domain);
+@@ -29,6 +29,9 @@ static void query_full(time_t now, char *domain);
  
  static void return_reply(time_t now, struct frec *forward, struct dns_header *header, ssize_t n, int status);
  
@@ -132,7 +129,7 @@ index 3d638e4..441eeca 100644
  /* Send a UDP packet with its source address set as "source" 
     unless nowild is true, when we just send it with the kernel default */
  int send_from(int fd, int nowild, char *packet, size_t len, 
-@@ -924,6 +927,20 @@ static void dnssec_validate(struct frec *forward, struct dns_header *header,
+@@ -1108,6 +1111,20 @@ static void dnssec_validate(struct frec *forward, struct dns_header *header,
  }
  #endif
  
@@ -153,7 +150,7 @@ index 3d638e4..441eeca 100644
  /* sets new last_server */
  void reply_query(int fd, time_t now)
  {
-@@ -1053,15 +1070,32 @@ void reply_query(int fd, time_t now)
+@@ -1252,15 +1269,32 @@ void reply_query(int fd, time_t now)
  	}
      }
  
@@ -189,7 +186,7 @@ index 3d638e4..441eeca 100644
    /* We tried resending to this server with a smaller maximum size and got an answer.
       Make that permanent. To avoid reduxing the packet size for a single dropped packet,
       only do this when we get a truncated answer, or one larger than the safe size. */
-@@ -1086,6 +1120,34 @@ void reply_query(int fd, time_t now)
+@@ -1301,6 +1335,34 @@ void reply_query(int fd, time_t now)
      return_reply(now, forward, header, n, STAT_OK); 
  }
  
@@ -224,25 +221,19 @@ index 3d638e4..441eeca 100644
  static void return_reply(time_t now, struct frec *forward, struct dns_header *header, ssize_t n, int status)
  {
    int check_rebind = 0, no_cache_dnssec = 0, cache_secure = 0, bogusanswer = 0;
-@@ -1182,7 +1244,7 @@ static void return_reply(time_t now, struct frec *forward, struct dns_header *he
- 	  header->id = htons(src->orig_id);
- 	  
+@@ -1418,9 +1480,9 @@ static void return_reply(time_t now, struct frec *forward, struct dns_header *he
+ 	  if (src->fd != -1)
+ 	    {
  #ifdef HAVE_DUMPFILE
--	  dump_packet(DUMP_REPLY, daemon->packet, (size_t)nn, NULL, &src->source);
-+	  dump_packet(DUMP_REPLY, header, (size_t)nn, NULL, &src->source);
- #endif
- 	  
- #if defined(HAVE_CONNTRACK) && defined(HAVE_UBUS)
-@@ -1195,7 +1257,7 @@ static void return_reply(time_t now, struct frec *forward, struct dns_header *he
- 	    }
- #endif
- 	  
--	  send_from(src->fd, option_bool(OPT_NOWILD) || option_bool (OPT_CLEVERBIND), daemon->packet, nn, 
-+	  send_from(src->fd, option_bool(OPT_NOWILD) || option_bool (OPT_CLEVERBIND), (char *)header, nn,
- 		    &src->source, &src->dest, src->iface);
- 	  
- 	  if (option_bool(OPT_EXTRALOG) && src != &forward->frec_src)
-@@ -2415,6 +2477,14 @@ static void free_frec(struct frec *f)
+-	      dump_packet_udp(DUMP_REPLY, daemon->packet, (size_t)nn, NULL, &src->source, src->fd);
++	      dump_packet_udp(DUMP_REPLY, header, (size_t)nn, NULL, &src->source, src->fd);
+ #endif 
+-	      send_from(src->fd, option_bool(OPT_NOWILD) || option_bool (OPT_CLEVERBIND), daemon->packet, nn, 
++	      send_from(src->fd, option_bool(OPT_NOWILD) || option_bool (OPT_CLEVERBIND), (char *)header, nn, 
+ 			&src->source, &src->dest, src->iface);
+ 	      
+ 	      if (option_bool(OPT_EXTRALOG) && src != &forward->frec_src)
+@@ -2871,6 +2933,14 @@ static void free_frec(struct frec *f)
    f->dependent = NULL;
    f->next_dependent = NULL;
  #endif
@@ -257,7 +248,7 @@ index 3d638e4..441eeca 100644
  }
  
  
-@@ -2444,7 +2514,12 @@ static struct frec *get_new_frec(time_t now, struct server *master, int force)
+@@ -2900,7 +2970,12 @@ static struct frec *get_new_frec(time_t now, struct server *master, int force)
  	  if (!f->dependent && !force)
  #endif
  	    {
@@ -269,8 +260,8 @@ index 3d638e4..441eeca 100644
 +		}
 +	      else if (difftime(now, f->time) >= 4*TIMEOUT)
  		{
+ 		  daemon->metrics[METRIC_DNS_UNANSWERED_QUERY]++;
  		  free_frec(f);
- 		  target = f;
 -- 
-2.27.0
+2.34.1
 

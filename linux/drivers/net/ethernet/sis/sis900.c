@@ -2027,9 +2027,9 @@ static void sis900_get_drvinfo(struct net_device *net_dev,
 {
 	struct sis900_private *sis_priv = netdev_priv(net_dev);
 
-	strlcpy(info->driver, SIS900_MODULE_NAME, sizeof(info->driver));
-	strlcpy(info->version, SIS900_DRV_VERSION, sizeof(info->version));
-	strlcpy(info->bus_info, pci_name(sis_priv->pci_dev),
+	strscpy(info->driver, SIS900_MODULE_NAME, sizeof(info->driver));
+	strscpy(info->version, SIS900_DRV_VERSION, sizeof(info->version));
+	strscpy(info->bus_info, pci_name(sis_priv->pci_dev),
 		sizeof(info->bus_info));
 }
 
@@ -2273,7 +2273,7 @@ static int sis900_set_config(struct net_device *dev, struct ifmap *map)
 		 * (which seems to be different from the ifport(pcmcia) definition) */
 		switch(map->port){
 		case IF_PORT_UNKNOWN: /* use auto here */
-			dev->if_port = map->port;
+			WRITE_ONCE(dev->if_port, map->port);
 			/* we are going to change the media type, so the Link
 			 * will be temporary down and we need to reflect that
 			 * here. When the Link comes up again, it will be
@@ -2294,7 +2294,7 @@ static int sis900_set_config(struct net_device *dev, struct ifmap *map)
 			break;
 
 		case IF_PORT_10BASET: /* 10BaseT */
-			dev->if_port = map->port;
+			WRITE_ONCE(dev->if_port, map->port);
 
 			/* we are going to change the media type, so the Link
 			 * will be temporary down and we need to reflect that
@@ -2315,7 +2315,7 @@ static int sis900_set_config(struct net_device *dev, struct ifmap *map)
 
 		case IF_PORT_100BASET: /* 100BaseT */
 		case IF_PORT_100BASETX: /* 100BaseTx */
-			dev->if_port = map->port;
+			WRITE_ONCE(dev->if_port, map->port);
 
 			/* we are going to change the media type, so the Link
 			 * will be temporary down and we need to reflect that

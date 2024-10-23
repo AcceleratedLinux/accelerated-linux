@@ -1,0 +1,159 @@
+
+Index: openssh-9.8p1/config.sub
+===================================================================
+--- openssh-9.8p1.orig/config.sub
++++ openssh-9.8p1/config.sub
+@@ -327,6 +327,10 @@ case $1 in
+ 				basic_machine=m68k-ericsson
+ 				basic_os=ose
+ 				;;
++			nios2 | nios2-* | nios2 | nios2-*)
++				basic_machine=nios2-altera
++				os=-linux
++				;;
+ 			gmicro)
+ 				basic_machine=tron-gmicro
+ 				basic_os=sysv
+Index: openssh-9.8p1/pathnames.h
+===================================================================
+--- openssh-9.8p1.orig/pathnames.h
++++ openssh-9.8p1/pathnames.h
+@@ -12,7 +12,16 @@
+  * called by a name other than "ssh" or "Secure Shell".
+  */
+ 
++#include <config/autoconf.h>
++
++#ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
++#define ETCDIR				"/etc/config"
++#define SSHDIR				ETCDIR ""
++#endif
++
++#ifndef ETCDIR
+ #define ETCDIR				"/etc"
++#endif
+ 
+ #ifndef SSHDIR
+ #define SSHDIR				ETCDIR "/ssh"
+@@ -44,7 +53,7 @@
+ #define _PATH_DH_MODULI			SSHDIR "/moduli"
+ 
+ #ifndef _PATH_SSH_PROGRAM
+-#define _PATH_SSH_PROGRAM		"/usr/bin/ssh"
++#define _PATH_SSH_PROGRAM		"/bin/ssh"
+ #endif
+ 
+ /* Binary paths for the sshd components */
+Index: openssh-9.8p1/readconf.c
+===================================================================
+--- openssh-9.8p1.orig/readconf.c
++++ openssh-9.8p1/readconf.c
+@@ -2753,7 +2753,7 @@ fill_default_options(Options * options)
+ #endif
+ 	}
+ 	if (options->escape_char == -1)
+-		options->escape_char = '~';
++		options->escape_char = SSH_ESCAPECHAR_DEFAULT;
+ 	if (options->num_system_hostfiles == 0) {
+ 		options->system_hostfiles[options->num_system_hostfiles++] =
+ 		    xstrdup(_PATH_SSH_SYSTEM_HOSTFILE);
+Index: openssh-9.8p1/session.c
+===================================================================
+--- openssh-9.8p1.orig/session.c
++++ openssh-9.8p1/session.c
+@@ -99,6 +99,10 @@
+ #include <kafs.h>
+ #endif
+ 
++#ifdef EMBED
++# include <syslog.h>
++#endif	/* EMBED */
++
+ #ifdef WITH_SELINUX
+ #include <selinux/selinux.h>
+ #endif
+@@ -568,12 +581,14 @@ int
+ do_exec_pty(struct ssh *ssh, Session *s, const char *command)
+ {
+ 	int fdout, ptyfd, ttyfd, ptymaster;
++	int tfd;
+ 	pid_t pid;
+ 
+ 	if (s == NULL)
+ 		fatal("do_exec_pty: no session");
+ 	ptyfd = s->ptyfd;
+ 	ttyfd = s->ttyfd;
++	tfd = ttyfd;
+ 
+ 	/*
+ 	 * Create another descriptor of the pty master side for use as the
+@@ -616,18 +635,19 @@ do_exec_pty(struct ssh *ssh, Session *s,
+ 		close(ptyfd);
+ 
+ 		/* Make the pseudo tty our controlling tty. */
+-		pty_make_controlling_tty(&ttyfd, s->tty);
++		pty_make_controlling_tty(&tfd, s->tty);
+ 
+ 		/* Redirect stdin/stdout/stderr from the pseudo tty. */
+-		if (dup2(ttyfd, 0) == -1)
++		if (dup2(tfd, 0) == -1)
+ 			error("dup2 stdin: %s", strerror(errno));
+-		if (dup2(ttyfd, 1) == -1)
++		if (dup2(tfd, 1) == -1)
+ 			error("dup2 stdout: %s", strerror(errno));
+-		if (dup2(ttyfd, 2) == -1)
++		if (dup2(tfd, 2) == -1)
+ 			error("dup2 stderr: %s", strerror(errno));
+ 
+ 		/* Close the extra descriptor for the pseudo tty. */
+-		close(ttyfd);
++		if (tfd > 2)
++			close(tfd);
+ 
+ 		/* record login, etc. similar to login(1) */
+ #ifndef HAVE_OSF_SIA
+Index: openssh-9.8p1/ssh.c
+===================================================================
+--- openssh-9.8p1.orig/ssh.c
++++ openssh-9.8p1/ssh.c
+@@ -2305,8 +2307,10 @@ ssh_session2(struct ssh *ssh, const stru
+ 			fork_postauth();
+ 	}
+ 
+-	return client_loop(ssh, tty_flag, tty_flag ?
+-	    options.escape_char : SSH_ESCAPECHAR_NONE, id);
++	return client_loop(ssh, tty_flag,
++	    options.escape_char == SSH_ESCAPECHAR_DEFAULT
++	    ? (tty_flag ? '~' : SSH_ESCAPECHAR_NONE)
++	    : options.escape_char, id);
+ }
+ 
+ /* Loads all IdentityFile and CertificateFile keys */
+Index: openssh-9.8p1/ssh.h
+===================================================================
+--- openssh-9.8p1.orig/ssh.h
++++ openssh-9.8p1/ssh.h
+@@ -87,6 +87,9 @@
+ /* Used to identify ``EscapeChar none'' */
+ #define SSH_ESCAPECHAR_NONE		-2
+ 
++/* Use default, which could be ~ or none (based on tty presence) */
++#define SSH_ESCAPECHAR_DEFAULT		-3
++
+ /*
+  * unprivileged user when UsePrivilegeSeparation=yes;
+  * sshd will change its privileges to this user and its
+Index: openssh-9.8p1/ssh_config
+===================================================================
+--- openssh-9.8p1.orig/ssh_config
++++ openssh-9.8p1/ssh_config
+@@ -44,3 +44,9 @@
+ #   ProxyCommand ssh -q -W %h:%p gateway.example.com
+ #   RekeyLimit 1G 1h
+ #   UserKnownHostsFile ~/.ssh/known_hosts.d/%k
++
++IdentityFile /etc/config/identity
++IdentityFile /etc/config/id_rsa
++IdentityFile /etc/config/id_dsa
++
++GlobalKnownHostsFile /etc/config/ssh_known_hosts

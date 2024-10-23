@@ -398,6 +398,7 @@ sub Postprocess {
   while (<IN>) {
     my $ign;
     for $ign (split) {
+        $ign =~ s/-[a-z0-9]+.html//;
     	$ignore{$ign} = 1;
     }
   }
@@ -527,9 +528,12 @@ ENDTEXT
 
   $TotalBugs = scalar(@Index);
   for my $row ( sort { $a->[2] cmp $b->[2] } @Index ) {
-    if ($ignore{$row->[0]}) {
+    my $myrow = $row->[0];
+    $myrow =~ s/-[a-z0-9]+.html//;
+    if ($ignore{$myrow}) {
       $TotalExceptions++;
     } else {
+      Diag("reporting clang error for $row->[0]\n");
       $TotalErrors++;
     }
   }

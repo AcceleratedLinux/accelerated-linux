@@ -1,0 +1,112 @@
+
+Author: Ken Wilson <ken.wilson@opengear.com>
+Date:   Fri Jul 3 15:57:30 2020 +1000
+
+    pam_unix: Support flatfsds /etc/config layout
+
+    Even though /etc/passwd and /etc/shadow are symlinked to /etc/config/
+    there are still issues when it comes to changing the password because
+    pam_unix creates a temporary file and expects to replace the passwd and
+    shadow files once the changes have been made. Since /etc/ is read-only,
+    the operation can't succeed. This commit changes just the "replace"
+    operations to work with the actual paths to those files.
+
+    DAL-3763
+
+
+Index: Linux-PAM-1.6.1/modules/pam_unix/passverify.c
+===================================================================
+--- Linux-PAM-1.6.1.orig/modules/pam_unix/passverify.c
++++ Linux-PAM-1.6.1/modules/pam_unix/passverify.c
+@@ -362,9 +362,19 @@ PAMH_ARG_DECL(int check_shadow_expiry,
+ 
+ /* passwd/salt conversion macros */
+ 
++#ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
++#define PW_TMPFILE              "/etc/config/npasswd"
++#define SH_TMPFILE              "/etc/config/nshadow"
++#define OPW_TMPFILE             "/etc/config/nopasswd"
++#define PW_FILE                 "/etc/config/passwd"
++#define SH_FILE                 "/etc/config/shadow"
++#else
+ #define PW_TMPFILE              "/etc/npasswd"
+ #define SH_TMPFILE              "/etc/nshadow"
+ #define OPW_TMPFILE             SCONFIGDIR "/nopasswd"
++#define PW_FILE                 "/etc/passwd"
++#define SH_FILE                 "/etc/shadow"
++#endif
+ 
+ /*
+  * i64c - convert an integer to a radix 64 character
+@@ -558,7 +568,7 @@ unix_selinux_confined(void)
+     }
+ 
+     /* let's try opening shadow read only */
+-    if ((fd=open("/etc/shadow", O_RDONLY | O_CLOEXEC)) != -1) {
++    if ((fd=open(SH_FILE, O_RDONLY | O_CLOEXEC)) != -1) {
+         close(fd);
+         confined = 0;
+         return confined;
+@@ -681,7 +691,7 @@ save_old_password(pam_handle_t *pamh, co
+ #ifdef WITH_SELINUX
+     if (SELINUX_ENABLED) {
+       char *passwd_context_raw = NULL;
+-      if (getfilecon_raw("/etc/passwd",&passwd_context_raw)<0) {
++      if (getfilecon_raw(PW_FILE,&passwd_context_raw)<0) {
+         return PAM_AUTHTOK_ERR;
+       };
+       if (getfscreatecon_raw(&prev_context_raw)<0) {
+@@ -845,7 +855,7 @@ PAMH_ARG_DECL(int unix_update_passwd,
+ #ifdef WITH_SELINUX
+     if (SELINUX_ENABLED) {
+       char *passwd_context_raw = NULL;
+-      if (getfilecon_raw("/etc/passwd",&passwd_context_raw)<0) {
++      if (getfilecon_raw(PW_FILE,&passwd_context_raw)<0) {
+ 	return PAM_AUTHTOK_ERR;
+       };
+       if (getfscreatecon_raw(&prev_context_raw)<0) {
+@@ -867,7 +877,7 @@ PAMH_ARG_DECL(int unix_update_passwd,
+       goto done;
+     }
+ 
+-    opwfile = fopen("/etc/passwd", "re");
++    opwfile = fopen(PW_FILE, "re");
+     if (opwfile == NULL) {
+ 	fclose(pwfile);
+ 	err = 1;
+@@ -928,7 +938,7 @@ PAMH_ARG_DECL(int unix_update_passwd,
+ 
+ done:
+     if (!err) {
+-	if (!rename(PW_TMPFILE, "/etc/passwd"))
++	if (!rename(PW_TMPFILE, PW_FILE))
+ 	    pam_syslog(pamh,
+ 		LOG_NOTICE, "password changed for %s", forwho);
+ 	else
+@@ -970,7 +980,7 @@ PAMH_ARG_DECL(int unix_update_shadow,
+ #ifdef WITH_SELINUX
+     if (SELINUX_ENABLED) {
+       char *shadow_context_raw = NULL;
+-      if (getfilecon_raw("/etc/shadow",&shadow_context_raw)<0) {
++      if (getfilecon_raw(SH_FILE,&shadow_context_raw)<0) {
+ 	return PAM_AUTHTOK_ERR;
+       };
+       if (getfscreatecon_raw(&prev_context_raw)<0) {
+@@ -992,7 +1002,7 @@ PAMH_ARG_DECL(int unix_update_shadow,
+ 	goto done;
+     }
+ 
+-    opwfile = fopen("/etc/shadow", "re");
++    opwfile = fopen(SH_FILE, "re");
+     if (opwfile == NULL) {
+ 	fclose(pwfile);
+ 	err = 1;
+@@ -1073,7 +1083,7 @@ PAMH_ARG_DECL(int unix_update_shadow,
+ 
+  done:
+     if (!err) {
+-	if (!rename(SH_TMPFILE, "/etc/shadow"))
++	if (!rename(SH_TMPFILE, SH_FILE))
+ 	    pam_syslog(pamh,
+ 		LOG_NOTICE, "password changed for %s", forwho);
+ 	else

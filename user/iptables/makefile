@@ -1,11 +1,10 @@
-IPTABLES_VERSION = 1.8.7
-URL = http://www.netfilter.org/projects/iptables/files/iptables-$(IPTABLES_VERSION).tar.bz2
+URL = https://www.netfilter.org/projects/iptables/files/iptables-1.8.10.tar.xz
 IPTABLES_INSTALL_DIR = build/iptables-$(IPTABLES_VERSION)-install
 AUTORECONF = autoreconf -i
 MAKEVARS =
 UCFRONT_ENV = 
 
-CONFOPTS := --prefix= --disable-xml
+CONFOPTS += --disable-xml
 
 ifdef CONFIG_USER_IPTABLES_SHARED
 CONFOPTS += --enable-shared --disable-static
@@ -27,8 +26,6 @@ endif
 
 CONFOPTS += --enable-bpf-compiler
 
-ifdef CONFIG_DEFAULTS_LIBC_MUSL
-CFLAGS += -D__GLIBC__=2
-endif
+CFLAGS += -D_GNU_SOURCE
 
 include $(ROOTDIR)/tools/automake.inc

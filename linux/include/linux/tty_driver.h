@@ -7,6 +7,7 @@
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/cdev.h>
+#include <linux/uaccess.h>
 #include <linux/termios.h>
 #include <linux/seq_file.h>
 
@@ -71,8 +72,7 @@ struct serial_struct;
  *	is closed for the last time freeing up the resources. This is
  *	actually the second part of shutdown for routines that might sleep.
  *
- * @write: ``int ()(struct tty_struct *tty, const unsigned char *buf,
- *		    int count)``
+ * @write: ``ssize_t ()(struct tty_struct *tty, const u8 *buf, size_t count)``
  *
  *	This routine is called by the kernel to write a series (@count) of
  *	characters (@buf) to the @tty device. The characters may come from
@@ -84,7 +84,7 @@ struct serial_struct;
  *
  *	Optional: Required for writable devices. May not sleep.
  *
- * @put_char: ``int ()(struct tty_struct *tty, unsigned char ch)``
+ * @put_char: ``int ()(struct tty_struct *tty, u8 ch)``
  *
  *	This routine is called by the kernel to write a single character @ch to
  *	the @tty device. If the kernel uses this routine, it must call the
@@ -141,7 +141,7 @@ struct serial_struct;
  *
  *	Optional.
  *
- * @set_termios: ``void ()(struct tty_struct *tty, struct ktermios *old)``
+ * @set_termios: ``void ()(struct tty_struct *tty, const struct ktermios *old)``
  *
  *	This routine allows the @tty driver to be notified when device's
  *	termios settings have changed. New settings are in @tty->termios.
@@ -153,6 +153,13 @@ struct serial_struct;
  *	being used.
  *
  *	Optional. Called under the @tty->termios_rwsem. May sleep.
+ *
+ * @ldisc_ok: ``int ()(struct tty_struct *tty, int ldisc)``
+ *
+ *	This routine allows the @tty driver to decide if it can deal
+ *	with a particular @ldisc.
+ *
+ *	Optional. Called under the @tty->ldisc_sem and @tty->termios_rwsem.
  *
  * @set_ldisc: ``void ()(struct tty_struct *tty)``
  *
@@ -242,7 +249,7 @@ struct serial_struct;
  *	Optional: If not provided, the device is assumed to have no FIFO.
  *	Usually correct to invoke via tty_wait_until_sent(). May sleep.
  *
- * @send_xchar: ``void ()(struct tty_struct *tty, char ch)``
+ * @send_xchar: ``void ()(struct tty_struct *tty, u8 ch)``
  *
  *	This routine is used to send a high-priority XON/XOFF character (@ch)
  *	to the @tty device.
@@ -355,9 +362,8 @@ struct tty_operations {
 	void (*close)(struct tty_struct * tty, struct file * filp);
 	void (*shutdown)(struct tty_struct *tty);
 	void (*cleanup)(struct tty_struct *tty);
-	int  (*write)(struct tty_struct * tty,
-		      const unsigned char *buf, int count);
-	int  (*put_char)(struct tty_struct *tty, unsigned char ch);
+	ssize_t (*write)(struct tty_struct *tty, const u8 *buf, size_t count);
+	int  (*put_char)(struct tty_struct *tty, u8 ch);
 	void (*flush_chars)(struct tty_struct *tty);
 	unsigned int (*write_room)(struct tty_struct *tty);
 	unsigned int (*chars_in_buffer)(struct tty_struct *tty);
@@ -365,7 +371,7 @@ struct tty_operations {
 		    unsigned int cmd, unsigned long arg);
 	long (*compat_ioctl)(struct tty_struct *tty,
 			     unsigned int cmd, unsigned long arg);
-	void (*set_termios)(struct tty_struct *tty, struct ktermios * old);
+	void (*set_termios)(struct tty_struct *tty, const struct ktermios *old);
 	void (*throttle)(struct tty_struct * tty);
 	void (*unthrottle)(struct tty_struct * tty);
 	void (*stop)(struct tty_struct *tty);
@@ -373,9 +379,10 @@ struct tty_operations {
 	void (*hangup)(struct tty_struct *tty);
 	int (*break_ctl)(struct tty_struct *tty, int state);
 	void (*flush_buffer)(struct tty_struct *tty);
+	int (*ldisc_ok)(struct tty_struct *tty, int ldisc);
 	void (*set_ldisc)(struct tty_struct *tty);
 	void (*wait_until_sent)(struct tty_struct *tty, int timeout);
-	void (*send_xchar)(struct tty_struct *tty, char ch);
+	void (*send_xchar)(struct tty_struct *tty, u8 ch);
 	int (*tiocmget)(struct tty_struct *tty);
 	int (*tiocmset)(struct tty_struct *tty,
 			unsigned int set, unsigned int clear);
@@ -396,7 +403,6 @@ struct tty_operations {
 /**
  * struct tty_driver -- driver for TTY devices
  *
- * @magic: set to %TTY_DRIVER_MAGIC in __tty_alloc_driver()
  * @kref: reference counting. Reaching zero frees all the internals and the
  *	  driver.
  * @cdevs: allocated/registered character /dev devices
@@ -432,7 +438,6 @@ struct tty_operations {
  * @driver_name, @name, @type, @subtype, @init_termios, and @ops.
  */
 struct tty_driver {
-	int	magic;
 	struct kref kref;
 	struct cdev **cdevs;
 	struct module	*owner;
@@ -488,9 +493,6 @@ static inline void tty_set_operations(struct tty_driver *driver,
 {
 	driver->ops = op;
 }
-
-/* tty driver magic number */
-#define TTY_DRIVER_MAGIC		0x5402
 
 /**
  * DOC: TTY Driver Flags

@@ -1,0 +1,79 @@
+#!/bin/bash
+# netflash script to update RaspberryPi-3 firmware.
+
+help()
+{
+	echo "Usage: $0 [-L] [-t] [-b] [-U] [-k] new_firmware"
+	exit 1
+}
+
+while getopts L:tbUki opt; do
+	case "$opt" in
+		L) ;;
+		t) opt_just_check=1 ;;
+		U) opt_dual_boot_update=1 ;;
+		k) ;;
+		b) opt_no_reboot=1 ;;
+		i) ;;
+		*) help ;;
+	esac
+done
+shift "$(( OPTIND - 1 ))"
+
+if [ ! -f "$1" ]; then
+	echo "Invalid update file!"
+	exit 1
+fi
+
+CHECK=$(tar -tf $1 2>/dev/null | grep -c bcm2837-rpi-3-b-plus.dtb)
+
+if [ "$CHECK" != "1" ]; then
+	echo "firmware image is not for RaspberryPi-3!"
+	exit 1
+fi
+
+if [ -n "$opt_just_check" ]; then
+	# always pass check
+	exit 0
+fi
+
+CURRENT=$(fw_printenv boot_id 2>/dev/null| sed 's/boot_id=//g')
+
+ERR=0
+mount -o remount,rw /boot
+ERR=$?
+
+if [ $ERR -eq 0 ]; then
+	# update boot files
+	tar -xzf $1 -O bcm2837-rpi-3-a-plus.dtb >/boot/bcm2837-rpi-3-a-plus.dtb
+	tar -xzf $1 -O bcm2837-rpi-3-b.dtb >/boot/bcm2837-rpi-3-b.dtb
+	tar -xzf $1 -O bcm2837-rpi-3-b-plus.dtb >/boot/bcm2837-rpi-3-b-plus.dtb
+	tar -xzf $1 -O boot.scr >/boot/boot.scr
+	tar -xzf $1 -O norm.scr >/boot/norm.scr
+	tar -xzf $1 -O config.txt >/boot/config.txt
+	tar -xzf $1 -O u-boot.bin >/boot/u-boot.bin
+
+	if [ "$CURRENT" = "B" ]; then
+		tar -xzf $1 -O zImage >/boot/zImageA
+		tar -xzf $1 -O rootfs.bin | dd of=/dev/mmcblk0p2 bs=1M
+		fw_setenv boot_state tryA
+	else
+		tar -xzf $1 -O zImage >/boot/zImageB
+		tar -xzf $1 -O rootfs.bin | dd of=/dev/mmcblk0p3 bs=1M
+		fw_setenv boot_state tryB
+	fi
+	mount -o remount,ro /boot
+	sync
+	sync
+	sync
+	[ -n "$opt_dual_boot_update" ] && echo "Dual boot update not supported"
+	[ -z "$opt_no_reboot" ] && reboot_managed reboot "firmware updated."
+else
+	echo "Couldnt remount /boot for update!"
+	exit 1
+fi
+
+echo "Update complete."
+logger -t fwupdate "Firmware update complete."
+
+exit 0

@@ -9,8 +9,8 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/math.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
@@ -47,7 +47,7 @@
 
 #define TS_CODE_AVE_SCALE(x)	((x) * 1000000)
 #define MCELSIUS(temp)		((temp) * MILLIDEGREE_PER_DEGREE)
-#define TS_CODE_CAP_TIMES	8	/* Capture  times */
+#define TS_CODE_CAP_TIMES	8	/* Total number of ADC data samples */
 
 #define RZG2L_THERMAL_GRAN	500	/* milli Celsius */
 #define RZG2L_TSU_SS_TIMEOUT_US	1000
@@ -73,14 +73,15 @@ static inline void rzg2l_thermal_write(struct rzg2l_thermal_priv *priv, u32 reg,
 	iowrite32(data, priv->base + reg);
 }
 
-static int rzg2l_thermal_get_temp(void *devdata, int *temp)
+static int rzg2l_thermal_get_temp(struct thermal_zone_device *tz, int *temp)
 {
-	struct rzg2l_thermal_priv *priv = devdata;
+	struct rzg2l_thermal_priv *priv = thermal_zone_device_priv(tz);
 	u32 result = 0, dsensor, ts_code_ave;
 	int val, i;
 
 	for (i = 0; i < TS_CODE_CAP_TIMES ; i++) {
-		/* TSU repeats measurement at 20 microseconds intervals and
+		/*
+		 * TSU repeats measurement at 20 microseconds intervals and
 		 * automatically updates the results of measurement. As per
 		 * the HW manual for measuring temperature we need to read 8
 		 * values consecutively and then take the average.
@@ -92,16 +93,18 @@ static int rzg2l_thermal_get_temp(void *devdata, int *temp)
 
 	ts_code_ave = result / TS_CODE_CAP_TIMES;
 
-	/* Calculate actual sensor value by applying curvature correction formula
+	/*
+	 * Calculate actual sensor value by applying curvature correction formula
 	 * dsensor = ts_code_ave / (1 + ts_code_ave * 0.000013). Here we are doing
 	 * integer calculation by scaling all the values by 1000000.
 	 */
 	dsensor = TS_CODE_AVE_SCALE(ts_code_ave) /
 		(TS_CODE_AVE_SCALE(1) + (ts_code_ave * CURVATURE_CORRECTION_CONST));
 
-	/* The temperature Tj is calculated by the formula
+	/*
+	 * The temperature Tj is calculated by the formula
 	 * Tj = (dsensor − calib1) * 165/ (calib0 − calib1) − 40
-	 * where calib0 and calib1 are the caliberation values.
+	 * where calib0 and calib1 are the calibration values.
 	 */
 	val = ((dsensor - priv->calib1) * (MCELSIUS(165) /
 		(priv->calib0 - priv->calib1))) - MCELSIUS(40);
@@ -111,7 +114,7 @@ static int rzg2l_thermal_get_temp(void *devdata, int *temp)
 	return 0;
 }
 
-static const struct thermal_zone_of_device_ops rzg2l_tz_of_ops = {
+static const struct thermal_zone_device_ops rzg2l_tz_of_ops = {
 	.get_temp = rzg2l_thermal_get_temp,
 };
 
@@ -122,7 +125,8 @@ static int rzg2l_thermal_init(struct rzg2l_thermal_priv *priv)
 	rzg2l_thermal_write(priv, TSU_SM, TSU_SM_NORMAL_MODE);
 	rzg2l_thermal_write(priv, TSU_ST, 0);
 
-	/* Before setting the START bit, TSU should be in normal operating
+	/*
+	 * Before setting the START bit, TSU should be in normal operating
 	 * mode. As per the HW manual, it will take 60 µs to place the TSU
 	 * into normal operating mode.
 	 */
@@ -146,14 +150,12 @@ static void rzg2l_thermal_reset_assert_pm_disable_put(struct platform_device *pd
 	reset_control_assert(priv->rstc);
 }
 
-static int rzg2l_thermal_remove(struct platform_device *pdev)
+static void rzg2l_thermal_remove(struct platform_device *pdev)
 {
 	struct rzg2l_thermal_priv *priv = dev_get_drvdata(&pdev->dev);
 
 	thermal_remove_hwmon_sysfs(priv->zone);
 	rzg2l_thermal_reset_assert_pm_disable_put(pdev);
-
-	return 0;
 }
 
 static int rzg2l_thermal_probe(struct platform_device *pdev)
@@ -203,8 +205,8 @@ static int rzg2l_thermal_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	zone = devm_thermal_zone_of_sensor_register(dev, 0, priv,
-						    &rzg2l_tz_of_ops);
+	zone = devm_thermal_of_zone_register(dev, 0, priv,
+					     &rzg2l_tz_of_ops);
 	if (IS_ERR(zone)) {
 		dev_err(dev, "Can't register thermal zone");
 		ret = PTR_ERR(zone);
@@ -212,12 +214,11 @@ static int rzg2l_thermal_probe(struct platform_device *pdev)
 	}
 
 	priv->zone = zone;
-	priv->zone->tzp->no_hwmon = false;
 	ret = thermal_add_hwmon_sysfs(priv->zone);
 	if (ret)
 		goto err;
 
-	dev_dbg(dev, "TSU probed with %s caliberation values",
+	dev_dbg(dev, "TSU probed with %s calibration values",
 		rzg2l_thermal_read(priv, OTPTSUTRIM_REG(0)) ?  "hw" : "sw");
 
 	return 0;
@@ -239,7 +240,7 @@ static struct platform_driver rzg2l_thermal_driver = {
 		.of_match_table = rzg2l_thermal_dt_ids,
 	},
 	.probe = rzg2l_thermal_probe,
-	.remove = rzg2l_thermal_remove,
+	.remove_new = rzg2l_thermal_remove,
 };
 module_platform_driver(rzg2l_thermal_driver);
 

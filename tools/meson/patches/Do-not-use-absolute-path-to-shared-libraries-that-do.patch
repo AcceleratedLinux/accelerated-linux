@@ -1,0 +1,98 @@
+From 8b968324168bab8e7a1a238d553181c9781a797f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Lo=C3=AFc=20Yhuel?= <loic.yhuel@softathome.com>
+Date: Thu, 14 Jan 2021 16:24:27 +0100
+Subject: [PATCH] Do not use absolute path to shared libraries that don't have
+ a SONAME set
+
+When there is no SONAME, the linker would embed the absolute path as DT_NEEDED in the
+output, which will never work when using a sysroot, for example when cross-compiling.
+
+This affected pkg-config dependencies, and find_library when the "dirs" argument is given.
+
+Now if the library has no SONAME :
+ - -L/-l arguments returned by pkg-config
+ - find_library generates "-L/dir -lname", instead of "/dir/libname.so"
+
+Fixes: #7766
+---
+ mesonbuild/compilers/mixins/clike.py |  7 ++++++-
+ mesonbuild/dependencies/pkgconfig.py |  8 +++++++-
+ mesonbuild/scripts/depfixer.py       | 16 ++++++++++++++++
+ 3 files changed, 29 insertions(+), 2 deletions(-)
+
+Index: meson-1.4.1/mesonbuild/compilers/mixins/clike.py
+===================================================================
+--- meson-1.4.1.orig/mesonbuild/compilers/mixins/clike.py
++++ meson-1.4.1/mesonbuild/compilers/mixins/clike.py
+@@ -31,6 +31,9 @@ from .. import compilers
+ from ..compilers import CompileCheckMode
+ from .visualstudio import VisualStudioLikeCompiler
+ 
++from ...linkers.linkers import PosixDynamicLinkerMixin
++from ...scripts import depfixer
++
+ if T.TYPE_CHECKING:
+     from ...dependencies import Dependency
+     from ..._typing import ImmutableListProtocol
+@@ -1166,6 +1169,10 @@ class CLikeCompiler(Compiler):
+                 trial = self._get_file_from_list(env, trials)
+                 if not trial:
+                     continue
++                if isinstance(self.linker, PosixDynamicLinkerMixin):
++                    if not self.info.is_cygwin() and not self.info.is_windows() and not self.info.is_darwin():
++                        if depfixer.is_elf_shared_library_without_soname(trial.as_posix()):
++                            return ['-L' + trial.parent.as_posix(), '-l' + libname]
+                 if libname.startswith('lib') and trial.name.startswith(libname) and lib_prefix_warning:
+                     mlog.warning(f'find_library({libname!r}) starting in "lib" only works by accident and is not portable')
+                 return [trial.as_posix()]
+Index: meson-1.4.1/mesonbuild/dependencies/pkgconfig.py
+===================================================================
+--- meson-1.4.1.orig/mesonbuild/dependencies/pkgconfig.py
++++ meson-1.4.1/mesonbuild/dependencies/pkgconfig.py
+@@ -466,7 +466,13 @@ class PkgConfigDependency(ExternalDepend
+                     # else, library is either to be ignored, or is provided by
+                     # the compiler, can't be resolved, and should be used as-is
+                     if args:
+-                        if not args[0].startswith('-l'):
++                        if len(args) > 1:
++                            # We found the library, but it has no SONAME, so
++                            # find_library returned ['-Lpath', '-llib'].
++                            # We cannot use the full path, which would be
++                            # written into the output by the linker.
++                            libs_notfound.append(lib)
++                        elif not args[0].startswith('-l'):
+                             lib = args[0]
+                     else:
+                         continue
+Index: meson-1.4.1/mesonbuild/scripts/depfixer.py
+===================================================================
+--- meson-1.4.1.orig/mesonbuild/scripts/depfixer.py
++++ meson-1.4.1/mesonbuild/scripts/depfixer.py
+@@ -252,6 +252,12 @@ class Elf(DataSizes):
+         self.bf.seek(strtab.val + soname.val)
+         return self.read_str().decode()
+ 
++    def has_soname(self) -> bool:
++        for i in self.dynamic:
++            if i.d_tag == DT_SONAME:
++                return True
++        return False
++
+     def get_entry_offset(self, entrynum: int) -> T.Optional[int]:
+         sec = self.find_section(b'.dynstr')
+         for i in self.dynamic:
+@@ -482,3 +488,14 @@ def fix_rpath(fname: str, rpath_dirs_to_
+         if isinstance(new_rpath, bytes):
+             new_rpath = new_rpath.decode('utf8')
+         fix_darwin(fname, rpath_dirs_to_remove, new_rpath, final_path, install_name_mappings)
++
++def is_elf_shared_library_without_soname(fname: str) -> bool:
++    # Not an shared library
++    if fname.endswith(('.a')):
++        return False
++    try:
++        with Elf(fname, verbose=False) as e:
++            return not e.has_soname()
++    except (Exception, SystemExit):
++        return False
++

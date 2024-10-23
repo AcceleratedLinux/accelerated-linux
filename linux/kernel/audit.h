@@ -133,7 +133,7 @@ struct audit_context {
 	struct sockaddr_storage *sockaddr;
 	size_t sockaddr_len;
 				/* Save things to print about task_struct */
-	pid_t		    pid, ppid;
+	pid_t		    ppid;
 	kuid_t		    uid, euid, suid, fsuid;
 	kgid_t		    gid, egid, sgid, fsgid;
 	unsigned long	    personality;
@@ -245,8 +245,6 @@ struct audit_netlink_list {
 
 int audit_send_list_thread(void *_dest);
 
-extern int selinux_audit_rule_update(void);
-
 extern struct mutex audit_filter_mutex;
 extern int audit_del_rule(struct audit_entry *entry);
 extern void audit_free_rule_rcu(struct rcu_head *head);
@@ -261,8 +259,8 @@ extern struct tty_struct *audit_get_tty(void);
 extern void audit_put_tty(struct tty_struct *tty);
 
 /* audit watch/mark/tree functions */
-#ifdef CONFIG_AUDITSYSCALL
 extern unsigned int audit_serial(void);
+#ifdef CONFIG_AUDITSYSCALL
 extern int auditsc_get_stamp(struct audit_context *ctx,
 			      struct timespec64 *t, unsigned int *serial);
 
@@ -336,7 +334,7 @@ static inline int audit_signal_info_syscall(struct task_struct *t)
 	return 0;
 }
 
-#define audit_filter_inodes(t, c) AUDIT_STATE_DISABLED
+#define audit_filter_inodes(t, c) do { } while (0)
 #endif /* CONFIG_AUDITSYSCALL */
 
 extern char *audit_unpack_string(void **bufp, size_t *remain, size_t len);

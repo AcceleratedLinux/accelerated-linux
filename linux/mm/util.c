@@ -49,6 +49,7 @@ EXPORT_SYMBOL(kfree_const);
  *
  * Return: newly allocated copy of @s or %NULL in case of error
  */
+noinline
 char *kstrdup(const char *s, gfp_t gfp)
 {
 	size_t len;
@@ -120,18 +121,57 @@ EXPORT_SYMBOL(kstrndup);
  * @len: memory region length
  * @gfp: GFP mask to use
  *
- * Return: newly allocated copy of @src or %NULL in case of error
+ * Return: newly allocated copy of @src or %NULL in case of error,
+ * result is physically contiguous. Use kfree() to free.
  */
-void *kmemdup(const void *src, size_t len, gfp_t gfp)
+void *kmemdup_noprof(const void *src, size_t len, gfp_t gfp)
 {
 	void *p;
 
-	p = kmalloc_track_caller(len, gfp);
+	p = kmalloc_node_track_caller_noprof(len, gfp, NUMA_NO_NODE, _RET_IP_);
 	if (p)
 		memcpy(p, src, len);
 	return p;
 }
-EXPORT_SYMBOL(kmemdup);
+EXPORT_SYMBOL(kmemdup_noprof);
+
+/**
+ * kmemdup_array - duplicate a given array.
+ *
+ * @src: array to duplicate.
+ * @count: number of elements to duplicate from array.
+ * @element_size: size of each element of array.
+ * @gfp: GFP mask to use.
+ *
+ * Return: duplicated array of @src or %NULL in case of error,
+ * result is physically contiguous. Use kfree() to free.
+ */
+void *kmemdup_array(const void *src, size_t count, size_t element_size, gfp_t gfp)
+{
+	return kmemdup(src, size_mul(element_size, count), gfp);
+}
+EXPORT_SYMBOL(kmemdup_array);
+
+/**
+ * kvmemdup - duplicate region of memory
+ *
+ * @src: memory region to duplicate
+ * @len: memory region length
+ * @gfp: GFP mask to use
+ *
+ * Return: newly allocated copy of @src or %NULL in case of error,
+ * result may be not physically contiguous. Use kvfree() to free.
+ */
+void *kvmemdup(const void *src, size_t len, gfp_t gfp)
+{
+	void *p;
+
+	p = kvmalloc(len, gfp);
+	if (p)
+		memcpy(p, src, len);
+	return p;
+}
+EXPORT_SYMBOL(kvmemdup);
 
 /**
  * kmemdup_nul - Create a NUL-terminated string from unterminated data
@@ -272,38 +312,6 @@ void *memdup_user_nul(const void __user *src, size_t len)
 }
 EXPORT_SYMBOL(memdup_user_nul);
 
-void __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
-		struct vm_area_struct *prev)
-{
-	struct vm_area_struct *next;
-
-	vma->vm_prev = prev;
-	if (prev) {
-		next = prev->vm_next;
-		prev->vm_next = vma;
-	} else {
-		next = mm->mmap;
-		mm->mmap = vma;
-	}
-	vma->vm_next = next;
-	if (next)
-		next->vm_prev = vma;
-}
-
-void __vma_unlink_list(struct mm_struct *mm, struct vm_area_struct *vma)
-{
-	struct vm_area_struct *prev, *next;
-
-	next = vma->vm_next;
-	prev = vma->vm_prev;
-	if (prev)
-		prev->vm_next = next;
-	else
-		mm->mmap = next;
-	if (next)
-		next->vm_prev = prev;
-}
-
 /* Check if the vma is being used as a stack by this task */
 int vma_is_stack_for_current(struct vm_area_struct *vma)
 {
@@ -405,7 +413,10 @@ static int mmap_is_legacy(struct rlimit *rlim_stack)
 	if (current->personality & ADDR_COMPAT_LAYOUT)
 		return 1;
 
-	if (rlim_stack->rlim_cur == RLIM_INFINITY)
+	/* On parisc the stack always grows up - so a unlimited stack should
+	 * not be an indicator to use the legacy memory layout. */
+	if (rlim_stack->rlim_cur == RLIM_INFINITY &&
+		!IS_ENABLED(CONFIG_STACK_GROWSUP))
 		return 1;
 
 	return sysctl_legacy_va_layout;
@@ -420,6 +431,15 @@ static int mmap_is_legacy(struct rlimit *rlim_stack)
 
 static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 {
+#ifdef CONFIG_STACK_GROWSUP
+	/*
+	 * For an upwards growing stack the calculation is much simpler.
+	 * Memory for the maximum stack size is reserved at the top of the
+	 * task. mmap_base starts directly below the stack and grows
+	 * downwards.
+	 */
+	return PAGE_ALIGN_DOWN(mmap_upper_limit(rlim_stack) - rnd);
+#else
 	unsigned long gap = rlim_stack->rlim_cur;
 	unsigned long pad = stack_guard_gap;
 
@@ -437,6 +457,7 @@ static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 		gap = MAX_GAP;
 
 	return PAGE_ALIGN(STACK_TOP - gap - rnd);
+#endif
 }
 
 void arch_pick_mmap_layout(struct mm_struct *mm, struct rlimit *rlim_stack)
@@ -448,17 +469,17 @@ void arch_pick_mmap_layout(struct mm_struct *mm, struct rlimit *rlim_stack)
 
 	if (mmap_is_legacy(rlim_stack)) {
 		mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
-		mm->get_unmapped_area = arch_get_unmapped_area;
+		clear_bit(MMF_TOPDOWN, &mm->flags);
 	} else {
 		mm->mmap_base = mmap_base(random_factor, rlim_stack);
-		mm->get_unmapped_area = arch_get_unmapped_area_topdown;
+		set_bit(MMF_TOPDOWN, &mm->flags);
 	}
 }
 #elif defined(CONFIG_MMU) && !defined(HAVE_ARCH_PICK_MMAP_LAYOUT)
 void arch_pick_mmap_layout(struct mm_struct *mm, struct rlimit *rlim_stack)
 {
 	mm->mmap_base = TASK_UNMAPPED_BASE;
-	mm->get_unmapped_area = arch_get_unmapped_area;
+	clear_bit(MMF_TOPDOWN, &mm->flags);
 }
 #endif
 
@@ -549,7 +570,7 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	if (!ret) {
 		if (mmap_write_lock_killable(mm))
 			return -EINTR;
-		ret = do_mmap(file, addr, len, prot, flag, pgoff, &populate,
+		ret = do_mmap(file, addr, len, prot, flag, 0, pgoff, &populate,
 			      &uf);
 		mmap_write_unlock(mm);
 		userfaultfd_unmap_complete(mm, &uf);
@@ -588,7 +609,7 @@ EXPORT_SYMBOL(vm_mmap);
  *
  * Return: pointer to the allocated memory of %NULL in case of failure
  */
-void *kvmalloc_node(size_t size, gfp_t flags, int node)
+void *kvmalloc_node_noprof(size_t size, gfp_t flags, int node)
 {
 	gfp_t kmalloc_flags = flags;
 	void *ret;
@@ -610,7 +631,7 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 		kmalloc_flags &= ~__GFP_NOFAIL;
 	}
 
-	ret = kmalloc_node(size, kmalloc_flags, node);
+	ret = kmalloc_node_noprof(size, kmalloc_flags, node);
 
 	/*
 	 * It doesn't really make sense to fallback to vmalloc for sub page
@@ -618,6 +639,10 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	 */
 	if (ret || size <= PAGE_SIZE)
 		return ret;
+
+	/* non-sleeping allocations are not supported by vmalloc */
+	if (!gfpflags_allow_blocking(flags))
+		return NULL;
 
 	/* Don't even allow crazy sizes */
 	if (unlikely(size > INT_MAX)) {
@@ -631,11 +656,11 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	 * about the resulting pointer, and cannot play
 	 * protection games.
 	 */
-	return __vmalloc_node_range(size, 1, VMALLOC_START, VMALLOC_END,
+	return __vmalloc_node_range_noprof(size, 1, VMALLOC_START, VMALLOC_END,
 			flags, PAGE_KERNEL, VM_ALLOW_HUGE_VMAP,
 			node, __builtin_return_address(0));
 }
-EXPORT_SYMBOL(kvmalloc_node);
+EXPORT_SYMBOL(kvmalloc_node_noprof);
 
 /**
  * kvfree() - Free memory.
@@ -674,20 +699,20 @@ void kvfree_sensitive(const void *addr, size_t len)
 }
 EXPORT_SYMBOL(kvfree_sensitive);
 
-void *kvrealloc(const void *p, size_t oldsize, size_t newsize, gfp_t flags)
+void *kvrealloc_noprof(const void *p, size_t oldsize, size_t newsize, gfp_t flags)
 {
 	void *newp;
 
 	if (oldsize >= newsize)
 		return (void *)p;
-	newp = kvmalloc(newsize, flags);
+	newp = kvmalloc_noprof(newsize, flags);
 	if (!newp)
 		return NULL;
 	memcpy(newp, p, oldsize);
 	kvfree(p);
 	return newp;
 }
-EXPORT_SYMBOL(kvrealloc);
+EXPORT_SYMBOL(kvrealloc_noprof);
 
 /**
  * __vmalloc_array - allocate memory for a virtually contiguous array.
@@ -695,26 +720,26 @@ EXPORT_SYMBOL(kvrealloc);
  * @size: element size.
  * @flags: the type of memory to allocate (see kmalloc).
  */
-void *__vmalloc_array(size_t n, size_t size, gfp_t flags)
+void *__vmalloc_array_noprof(size_t n, size_t size, gfp_t flags)
 {
 	size_t bytes;
 
 	if (unlikely(check_mul_overflow(n, size, &bytes)))
 		return NULL;
-	return __vmalloc(bytes, flags);
+	return __vmalloc_noprof(bytes, flags);
 }
-EXPORT_SYMBOL(__vmalloc_array);
+EXPORT_SYMBOL(__vmalloc_array_noprof);
 
 /**
  * vmalloc_array - allocate memory for a virtually contiguous array.
  * @n: number of elements.
  * @size: element size.
  */
-void *vmalloc_array(size_t n, size_t size)
+void *vmalloc_array_noprof(size_t n, size_t size)
 {
-	return __vmalloc_array(n, size, GFP_KERNEL);
+	return __vmalloc_array_noprof(n, size, GFP_KERNEL);
 }
-EXPORT_SYMBOL(vmalloc_array);
+EXPORT_SYMBOL(vmalloc_array_noprof);
 
 /**
  * __vcalloc - allocate and zero memory for a virtually contiguous array.
@@ -722,54 +747,22 @@ EXPORT_SYMBOL(vmalloc_array);
  * @size: element size.
  * @flags: the type of memory to allocate (see kmalloc).
  */
-void *__vcalloc(size_t n, size_t size, gfp_t flags)
+void *__vcalloc_noprof(size_t n, size_t size, gfp_t flags)
 {
-	return __vmalloc_array(n, size, flags | __GFP_ZERO);
+	return __vmalloc_array_noprof(n, size, flags | __GFP_ZERO);
 }
-EXPORT_SYMBOL(__vcalloc);
+EXPORT_SYMBOL(__vcalloc_noprof);
 
 /**
  * vcalloc - allocate and zero memory for a virtually contiguous array.
  * @n: number of elements.
  * @size: element size.
  */
-void *vcalloc(size_t n, size_t size)
+void *vcalloc_noprof(size_t n, size_t size)
 {
-	return __vmalloc_array(n, size, GFP_KERNEL | __GFP_ZERO);
+	return __vmalloc_array_noprof(n, size, GFP_KERNEL | __GFP_ZERO);
 }
-EXPORT_SYMBOL(vcalloc);
-
-/* Neutral page->mapping pointer to address_space or anon_vma or other */
-void *page_rmapping(struct page *page)
-{
-	return folio_raw_mapping(page_folio(page));
-}
-
-/**
- * folio_mapped - Is this folio mapped into userspace?
- * @folio: The folio.
- *
- * Return: True if any page in this folio is referenced by user page tables.
- */
-bool folio_mapped(struct folio *folio)
-{
-	long i, nr;
-
-	if (!folio_test_large(folio))
-		return atomic_read(&folio->_mapcount) >= 0;
-	if (atomic_read(folio_mapcount_ptr(folio)) >= 0)
-		return true;
-	if (folio_test_hugetlb(folio))
-		return false;
-
-	nr = folio_nr_pages(folio);
-	for (i = 0; i < nr; i++) {
-		if (atomic_read(&folio_page(folio, i)->_mapcount) >= 0)
-			return true;
-	}
-	return false;
-}
-EXPORT_SYMBOL(folio_mapped);
+EXPORT_SYMBOL(vcalloc_noprof);
 
 struct anon_vma *folio_anon_vma(struct folio *folio)
 {
@@ -801,68 +794,15 @@ struct address_space *folio_mapping(struct folio *folio)
 		return NULL;
 
 	if (unlikely(folio_test_swapcache(folio)))
-		return swap_address_space(folio_swap_entry(folio));
+		return swap_address_space(folio->swap);
 
 	mapping = folio->mapping;
-	if ((unsigned long)mapping & PAGE_MAPPING_ANON)
+	if ((unsigned long)mapping & PAGE_MAPPING_FLAGS)
 		return NULL;
 
-	return (void *)((unsigned long)mapping & ~PAGE_MAPPING_FLAGS);
+	return mapping;
 }
 EXPORT_SYMBOL(folio_mapping);
-
-/* Slow path of page_mapcount() for compound pages */
-int __page_mapcount(struct page *page)
-{
-	int ret;
-
-	ret = atomic_read(&page->_mapcount) + 1;
-	/*
-	 * For file THP page->_mapcount contains total number of mapping
-	 * of the page: no need to look into compound_mapcount.
-	 */
-	if (!PageAnon(page) && !PageHuge(page))
-		return ret;
-	page = compound_head(page);
-	ret += atomic_read(compound_mapcount_ptr(page)) + 1;
-	if (PageDoubleMap(page))
-		ret--;
-	return ret;
-}
-EXPORT_SYMBOL_GPL(__page_mapcount);
-
-/**
- * folio_mapcount() - Calculate the number of mappings of this folio.
- * @folio: The folio.
- *
- * A large folio tracks both how many times the entire folio is mapped,
- * and how many times each individual page in the folio is mapped.
- * This function calculates the total number of times the folio is
- * mapped.
- *
- * Return: The number of times this folio is mapped.
- */
-int folio_mapcount(struct folio *folio)
-{
-	int i, compound, nr, ret;
-
-	if (likely(!folio_test_large(folio)))
-		return atomic_read(&folio->_mapcount) + 1;
-
-	compound = folio_entire_mapcount(folio);
-	nr = folio_nr_pages(folio);
-	if (folio_test_hugetlb(folio))
-		return compound;
-	ret = compound;
-	for (i = 0; i < nr; i++)
-		ret += atomic_read(&folio_page(folio, i)->_mapcount) + 1;
-	/* File pages has compound_mapcount included in _mapcount */
-	if (!folio_test_anon(folio))
-		return ret - compound * nr;
-	if (folio_test_double_map(folio))
-		ret -= nr;
-	return ret;
-}
 
 /**
  * folio_copy - Copy the contents of one folio to another.
@@ -886,6 +826,7 @@ void folio_copy(struct folio *dst, struct folio *src)
 		cond_resched();
 	}
 }
+EXPORT_SYMBOL(folio_copy);
 
 int sysctl_overcommit_memory __read_mostly = OVERCOMMIT_GUESS;
 int sysctl_overcommit_ratio __read_mostly = 50;
@@ -1005,7 +946,7 @@ EXPORT_SYMBOL_GPL(vm_memory_committed);
  * succeed and -ENOMEM implies there is not.
  *
  * We currently support three overcommit policies, which are set via the
- * vm.overcommit_memory sysctl.  See Documentation/vm/overcommit-accounting.rst
+ * vm.overcommit_memory sysctl.  See Documentation/mm/overcommit-accounting.rst
  *
  * Strict overcommit modes added 2002 Feb 26 by Alan Cox.
  * Additional code 2002 Jul 20 by Robert Love.
@@ -1018,6 +959,7 @@ EXPORT_SYMBOL_GPL(vm_memory_committed);
 int __vm_enough_memory(struct mm_struct *mm, long pages, int cap_sys_admin)
 {
 	long allowed;
+	unsigned long bytes_failed;
 
 	vm_acct_memory(pages);
 
@@ -1052,6 +994,9 @@ int __vm_enough_memory(struct mm_struct *mm, long pages, int cap_sys_admin)
 	if (percpu_counter_read_positive(&vm_committed_as) < allowed)
 		return 0;
 error:
+	bytes_failed = pages << PAGE_SHIFT;
+	pr_warn_ratelimited("%s: pid: %d, comm: %s, bytes: %lu not enough memory for the allocation\n",
+			    __func__, current->pid, current->comm, bytes_failed);
 	vm_unacct_memory(pages);
 
 	return -ENOMEM;
@@ -1121,11 +1066,11 @@ int __weak memcmp_pages(struct page *page1, struct page *page2)
 	char *addr1, *addr2;
 	int ret;
 
-	addr1 = kmap_atomic(page1);
-	addr2 = kmap_atomic(page2);
+	addr1 = kmap_local_page(page1);
+	addr2 = kmap_local_page(page2);
 	ret = memcmp(addr1, addr2, PAGE_SIZE);
-	kunmap_atomic(addr2);
-	kunmap_atomic(addr1);
+	kunmap_local(addr2);
+	kunmap_local(addr1);
 	return ret;
 }
 
@@ -1145,15 +1090,15 @@ void mem_dump_obj(void *object)
 {
 	const char *type;
 
-	if (kmem_valid_obj(object)) {
-		kmem_dump_obj(object);
+	if (kmem_dump_obj(object))
 		return;
-	}
 
 	if (vmalloc_dump_obj(object))
 		return;
 
-	if (virt_addr_valid(object))
+	if (is_vmalloc_addr(object))
+		type = "vmalloc memory";
+	else if (virt_addr_valid(object))
 		type = "non-slab/vmalloc memory";
 	else if (object == NULL)
 		type = "NULL pointer";
@@ -1207,7 +1152,7 @@ void page_offline_end(void)
 }
 EXPORT_SYMBOL(page_offline_end);
 
-#ifndef ARCH_IMPLEMENTS_FLUSH_DCACHE_FOLIO
+#ifndef flush_dcache_folio
 void flush_dcache_folio(struct folio *folio)
 {
 	long i, nr = folio_nr_pages(folio);

@@ -13,7 +13,10 @@ mkdir -m 1777 /var/lock
 mkdir -m 755 /var/empty
 mkdir -m 755 /var/mnt
 
+modprobe bonding
+
 # Setup the filesystem to host the /var/log.
+modprobe ext4
 . /lib/varlog_setup.sh
 setup_varlogfs 16
 
@@ -42,9 +45,7 @@ ifconfig eth0 up
 case "$(cat /etc/version)" in
 *EX15W*)
 	echo "Initializing Wi-Fi interface control..."
-	# GPIO30 = WiFi W_disable (output, disable low) [sysgpio=510]
-	echo 510 > /sys/class/gpio/export
-	echo high > /sys/class/gpio/gpio510/direction
+	echo enabled > /sys/devices/platform/regulator_wifi/state
 
 	modprobe ath10k_pci
 	;;
@@ -58,6 +59,11 @@ if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	# Use the same setup as for factory testing
 	/etc/factory
 	exit 0
+fi
+
+if [ "$(fw_printenv nandload 2>/dev/null | grep -c 'setenv uksize 0x400000')" = "1" ]; then
+	# Increase kernel allocation size from 0x400000 to 0x500000 on older uboot
+	fw_setenv nandload "ubi part flash 2048 ; run parting ; ubi read \$loadaddr \$nandpart 0x800 ; run sizing ; setenv uksize 0x500000 ; ubi read \$loadaddr \$nandpart \$uksize \$fssize ; setenv bootargs \$console ubi.mtd=3 root=\$rootpart bootpart=\$bootpart \$arg ; bootm \$loadaddr"
 fi
 
 echo "Mounting config filesystem..."

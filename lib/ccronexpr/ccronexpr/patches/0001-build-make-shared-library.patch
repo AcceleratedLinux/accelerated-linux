@@ -1,0 +1,44 @@
+From 5738b464f4e6f137f0c38e3c589edf70a8f4d927 Mon Sep 17 00:00:00 2001
+From: Samuel Brian <samuel.brian@gearlinx.com>
+Date: Fri, 30 Jul 2021 21:01:26 +1000
+Subject: [PATCH] build: make shared library
+
+ccronexpr.c/ccronexpr.h is meant to be embedded into projects, but to keep
+the source separate we can build a shared library.
+---
+ .gitignore |  3 ++-
+ Makefile   | 15 +++++++++++++++
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+ create mode 100644 Makefile
+
+diff --git a/.gitignore b/.gitignore
+index c9e21d9..4a4cfe8 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,3 +1,4 @@
+ /build/
+ /nbproject
+-/Makefile
++*.o
++*.so
+diff --git a/Makefile b/Makefile
+new file mode 100644
+index 0000000..44d65dd
+--- /dev/null
++++ b/Makefile
+@@ -0,0 +1,15 @@
++OBJS = ccronexpr.o
++
++CFLAGS += -fPIC
++
++all: libccronexpr.so
++
++libccronexpr.so: $(OBJS)
++	$(CC) $(LDFLAGS) -shared -o $@ $^
++
++install:
++	install -D libccronexpr.so -t $(DESTDIR)/lib
++	install -D ccronexpr.h -t $(DESTDIR)/include
++
++clean:
++	rm -f libccronexpr.so $(OBJS)

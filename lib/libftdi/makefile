@@ -1,4 +1,4 @@
-URL = http://www.intra2net.com/en/developer/libftdi/download/libftdi1-1.1.tar.bz2
+URL = https://www.intra2net.com/en/developer/libftdi/download/libftdi1-1.1.tar.bz2
 CMAKE_OPTS += -DFTDIPP=OFF
 CMAKE_OPTS += -DUNIT_TEST=OFF
 CMAKE_OPTS += -DPYTHON_BINDINGS=OFF

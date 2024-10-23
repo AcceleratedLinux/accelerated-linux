@@ -1,0 +1,31 @@
+Previously, the request included Service-Type=Authenticate-Only which
+meant that the RADIUS server didn't need to return authorization info.
+This made sense, since we weren't parsing the RADIUS attributes anyway.
+Now that we are parsing the RADIUS attributes, we really do want the
+RADIUS server to include the attributes in the response.
+
+Some RADIUS servers respect the Authenticate-Only value (e.g. ClearBox).
+Others ignore it and send the attributes anyway (e.g. FreeRADIUS).
+
+Index: pam_radius-release_2_0_0/src/pam_radius_auth.c
+===================================================================
+--- pam_radius-release_2_0_0.orig/src/pam_radius_auth.c
++++ pam_radius-release_2_0_0/src/pam_radius_auth.c
+@@ -1262,7 +1262,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_h
+ 
+ 	build_radius_packet(request, user, password, &config);
+ 	/* not all servers understand this service type, but some do */
+-	add_int_attribute(request, PW_USER_SERVICE_TYPE, PW_AUTHENTICATE_ONLY);
++	add_int_attribute(request, PW_USER_SERVICE_TYPE, PW_RLOGIN);
+ 
+ 	/*
+ 	 *	Tell the server which host the user is coming from.
+@@ -1668,7 +1668,7 @@ PAM_EXTERN int pam_sm_chauthtok(pam_hand
+ 		request->id = request->vector[0]; /* this should be evenly distributed */
+ 
+ 		build_radius_packet(request, user, password, &config);
+-		add_int_attribute(request, PW_USER_SERVICE_TYPE, PW_AUTHENTICATE_ONLY);
++		add_int_attribute(request, PW_USER_SERVICE_TYPE, PW_RLOGIN);
+ 
+ 		retval = talk_radius(&config, request, response, password, NULL, 1);
+ 		PAM_FAIL_CHECK;

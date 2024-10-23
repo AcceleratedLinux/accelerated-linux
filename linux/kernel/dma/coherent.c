@@ -74,7 +74,7 @@ out_unmap_membase:
 	return ERR_PTR(-ENOMEM);
 }
 
-static void dma_release_coherent_memory(struct dma_coherent_mem *mem)
+static void _dma_release_coherent_memory(struct dma_coherent_mem *mem)
 {
 	if (!mem)
 		return;
@@ -126,7 +126,7 @@ int dma_declare_coherent_memory(struct device *dev, phys_addr_t phys_addr,
 
 	ret = dma_assign_coherent_memory(dev, mem);
 	if (ret)
-		dma_release_coherent_memory(mem);
+		_dma_release_coherent_memory(mem);
 	return ret;
 }
 
@@ -136,10 +136,18 @@ void dma_release_declared_memory(struct device *dev)
 
 	if (!mem)
 		return;
-	dma_release_coherent_memory(mem);
+	dma_release_coherent_memory(dev);
 	dev->dma_mem = NULL;
 }
 EXPORT_SYMBOL(dma_release_declared_memory);
+
+void dma_release_coherent_memory(struct device *dev)
+{
+	if (dev) {
+		_dma_release_coherent_memory(dev->dma_mem);
+		dev->dma_mem = NULL;
+	}
+}
 
 static void *__dma_alloc_from_coherent(struct device *dev,
 				       struct dma_coherent_mem *mem,

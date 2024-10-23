@@ -1,0 +1,6 @@
+#!/bin/sh
+
+accns_log status "Voltage input critical event"
+
+# Power off the board
+reboot_managed "poweroff" "Shutdown due to voltage input critical event."

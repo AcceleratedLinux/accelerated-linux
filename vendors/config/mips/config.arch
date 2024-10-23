@@ -64,8 +64,8 @@ FLOAT  ?= hard
 
 ifndef CROSS_COMPILE
   ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-    ifneq ($(shell which mips-linux-musl-20220202-gcc),)
-      CROSS_COMPILE = mips-linux-musl-20220202-
+    ifneq ($(shell which mips-linux-musl-20240415-gcc),)
+      CROSS_COMPILE = mips-linux-musl-20240415-
     else
       CROSS_COMPILE = mips-linux-musl-
     endif
@@ -74,8 +74,8 @@ endif
 
 ifneq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
   ifndef CROSS_COMPILE
-    ifneq ($(shell which mips-linux-uclibc-20200917-gcc),)
-      CROSS_COMPILE = mips-linux-uclibc-20200917-
+    ifneq ($(shell which mips-linux-uclibc-20240415-gcc),)
+      CROSS_COMPILE = mips-linux-uclibc-20240415-
     endif
   endif
   ifndef CROSS_COMPILE
@@ -85,26 +85,6 @@ ifneq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
   endif
 endif
 
-ifndef CROSS_COMPILE
-  ifneq ($(shell which mips-linux-20191101-gcc),)
-    CROSS_COMPILE  = mips-linux-20191101-
-  endif
-endif
-ifndef CROSS_COMPILE
-  ifneq ($(shell which mips-linux-20170624-gcc),)
-    CROSS_COMPILE  = mips-linux-20170624-
-  endif
-endif
-ifndef CROSS_COMPILE
-  ifneq ($(shell which mips-linux-20130305-gcc),)
-    CROSS_COMPILE  = mips-linux-20130305-
-  endif
-endif
-ifndef CROSS_COMPILE
-  ifneq ($(shell which mips-linux-20071101-gcc),)
-    CROSS_COMPILE  = mips-linux-20071101-
-  endif
-endif
 ifndef CROSS_COMPILE
   CROSS_COMPILE  = mips-linux-
 endif
@@ -145,18 +125,22 @@ ifdef UCLINUX_BUILD_LIB
 	GLIBC_TARGET_OPTS = mips-linux --enable-shared
   endif
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  := -g
+	CFLAGS  := -O2 $(CFLAGS_DEBUG)
 	LDFLAGS :=
   else
-	CFLAGS  := 
-	LDFLAGS := -Wl,-S
+	ifeq ($(findstring OPTIMIZE_FOR_SIZE,$(VENDOR_CFLAGS)),OPTIMIZE_FOR_SIZE)
+		CFLAGS  := -Os -ffunction-sections -fdata-sections
+		LDFLAGS := -Wl,-S -Wl,--gc-sections
+	else
+		CFLAGS  := -O2
+		LDFLAGS := -Wl,-S
+	endif
   endif
   ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
 	CFLAGS  += -fstack-protector-strong
   endif
 	CFLAGS  += -Wl,-z,relro,-z,now
 	CFLAGS  += -Wl,-z,noexecstack
-	CFLAGS  += -O2
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += -Dlinux -D__linux__ -Dunix
@@ -181,11 +165,16 @@ endif
 ifdef UCLINUX_BUILD_USER
 
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  := -g
+	CFLAGS  := -O2 $(CFLAGS_DEBUG)
 	LDFLAGS :=
   else
-	CFLAGS  := -O2
-	LDFLAGS := -g
+	ifeq ($(findstring OPTIMIZE_FOR_SIZE,$(VENDOR_CFLAGS)),OPTIMIZE_FOR_SIZE)
+		CFLAGS  := -Os -ffunction-sections -fdata-sections
+		LDFLAGS := -Os -Wl,--gc-sections
+	else
+		CFLAGS  := -O2
+		LDFLAGS := -Wl,-S
+	endif
   endif
   ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
 	CFLAGS  += -fstack-protector-strong

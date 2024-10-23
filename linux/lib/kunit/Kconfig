@@ -4,7 +4,7 @@
 
 menuconfig KUNIT
 	tristate "KUnit - Enable support for unit tests"
-	select GLOB if KUNIT=y
+	select GLOB
 	help
 	  Enables support for kernel unit tests (KUnit), a lightweight unit
 	  testing and mocking framework for the Linux kernel. These tests are
@@ -23,6 +23,17 @@ config KUNIT_DEBUGFS
 	  of /sys/kernel/debug/kunit/<test_suite>/results files for each
 	  test suite, which allow users to see results of the last test suite
 	  run that occurred.
+
+config KUNIT_FAULT_TEST
+	bool "Enable KUnit tests which print BUG stacktraces"
+	depends on KUNIT_TEST
+	depends on !UML
+	default y
+	help
+	  Enables fault handling tests for the KUnit framework. These tests may
+	  trigger a kernel BUG(), and the associated stack trace, even when they
+	  pass. If this conflicts with your test infrastrcture (or is confusing
+	  or annoying), they can be disabled by setting this to N.
 
 config KUNIT_TEST
 	tristate "KUnit test for KUnit" if !KUNIT_ALL_TESTS
@@ -58,5 +69,16 @@ config KUNIT_ALL_TESTS
 	  to the KUnit documentation in Documentation/dev-tools/kunit/.
 
 	  If unsure, say N.
+
+config KUNIT_DEFAULT_ENABLED
+	bool "Default value of kunit.enable"
+	default y
+	help
+	  Sets the default value of kunit.enable. If set to N then KUnit
+	  tests will not execute unless kunit.enable=1 is passed to the
+	  kernel command line.
+
+	  In most cases this should be left as Y. Only if additional opt-in
+	  behavior is needed should this be set to N.
 
 endif # KUNIT

@@ -19,7 +19,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/soc/qcom/mdt_loader.h>
-#include <linux/qcom_scm.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #ifdef CONFIG_IPQ_SUBSYSTEM_RAMDUMP
 #include <soc/qcom/ramdump.h>
 #endif
@@ -680,7 +680,7 @@ static int q6v5_wcss_qcs404_power_on(struct q6v5_wcss *wcss)
 	if (ret) {
 		dev_err(wcss->dev,
 			"xo cbcr enabling timed out (rc:%d)\n", ret);
-		return ret;
+		goto disable_xo_cbcr_clk;
 	}
 
 	writel(0, wcss->reg_base + Q6SS_CGC_OVERRIDE);
@@ -746,6 +746,7 @@ disable_sleep_cbcr_clk:
 	val = readl(wcss->reg_base + Q6SS_SLEEP_CBCR);
 	val &= ~Q6SS_CLK_ENABLE;
 	writel(val, wcss->reg_base + Q6SS_SLEEP_CBCR);
+disable_xo_cbcr_clk:
 	val = readl(wcss->reg_base + Q6SS_XO_CBCR);
 	val &= ~Q6SS_CLK_ENABLE;
 	writel(val, wcss->reg_base + Q6SS_XO_CBCR);
@@ -1219,7 +1220,7 @@ skip_m3:
 	return ret;
 }
 
-int q6v5_wcss_register_dump_segments(struct rproc *rproc,
+static int q6v5_wcss_register_dump_segments(struct rproc *rproc,
 					const struct firmware *fw)
 {
 	/*
@@ -1315,8 +1316,7 @@ static int q6v5_wcss_init_mmio(struct q6v5_wcss *wcss,
 		return PTR_ERR(wcss->reg_base);
 
 	if (wcss->version == WCSS_IPQ) {
-		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "rmb");
-		wcss->rmb_base = devm_ioremap_resource(&pdev->dev, res);
+		wcss->rmb_base = devm_platform_ioremap_resource_byname(pdev, "rmb");
 		if (IS_ERR(wcss->rmb_base))
 			return PTR_ERR(wcss->rmb_base);
 	}
@@ -1595,8 +1595,8 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 	if (desc->need_mem_protection && !qcom_scm_is_available())
 		return -EPROBE_DEFER;
 
-	rproc = rproc_alloc(&pdev->dev, pdev->name, desc->ops,
-			    desc->q6_firmware_name, sizeof(*wcss));
+	rproc = devm_rproc_alloc(&pdev->dev, pdev->name, desc->ops,
+				 desc->q6_firmware_name, sizeof(*wcss));
 	if (!rproc) {
 		dev_err(&pdev->dev, "failed to allocate rproc\n");
 		return -ENOMEM;
@@ -1615,31 +1615,31 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 
 	ret = q6v5_wcss_init_mmio(wcss, pdev);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	ret = q6v5_alloc_memory_region(wcss);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	if (desc->init_clock) {
 		ret = desc->init_clock(wcss);
 		if (ret)
-			goto free_rproc;
+			return ret;
 	}
 
 	if (desc->init_regulator) {
 		ret = desc->init_regulator(wcss);
 		if (ret)
-			goto free_rproc;
+			return ret;
 	}
 
 	ret = q6v5_wcss_init_reset(wcss, desc);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	ret = qcom_q6v5_init(&wcss->q6v5, pdev, rproc, desc->crash_reason_smem, NULL, NULL);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	qcom_add_glink_subdev(rproc, &wcss->glink_subdev, desc->ssr_name);
 	qcom_add_ssr_subdev(rproc, &wcss->ssr_subdev, desc->ssr_name);
@@ -1652,28 +1652,20 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 
 	ret = rproc_add(rproc);
 	if (ret)
-		goto free_rproc;
+		return ret;
 
 	platform_set_drvdata(pdev, rproc);
 
 	return 0;
-
-free_rproc:
-	rproc_free(rproc);
-
-	return ret;
 }
 
-static int q6v5_wcss_remove(struct platform_device *pdev)
+static void q6v5_wcss_remove(struct platform_device *pdev)
 {
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	struct q6v5_wcss *wcss = rproc->priv;
 
 	qcom_q6v5_deinit(&wcss->q6v5);
 	rproc_del(rproc);
-	rproc_free(rproc);
-
-	return 0;
 }
 
 static const struct wcss_data wcss_ipq8074_res_init = {
@@ -1760,7 +1752,7 @@ MODULE_DEVICE_TABLE(of, q6v5_wcss_of_match);
 
 static struct platform_driver q6v5_wcss_driver = {
 	.probe = q6v5_wcss_probe,
-	.remove = q6v5_wcss_remove,
+	.remove_new = q6v5_wcss_remove,
 	.driver = {
 		.name = "qcom-q6v5-wcss-pil",
 		.of_match_table = q6v5_wcss_of_match,

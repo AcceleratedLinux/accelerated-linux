@@ -15,7 +15,7 @@ endif
 ifneq ($(CONFIG_USER_FLATFSD_FLATFSD),)
 USE_SINGLE_CONF_DIR := true
 endif
-ifneq ($(CONFIG_LIB_LIBPAM_FORCE)$(CONFIG_LIB_LIBPAM),)
+ifneq ($(CONFIG_LIB_LIBPAM),)
 USE_XAUTHPAM := true
 HAVE_THREADS := true # the comments below about XAUTH say we need threads
 endif

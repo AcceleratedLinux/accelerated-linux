@@ -196,28 +196,6 @@ static int b44_wait_bit(struct b44 *bp, unsigned long reg,
 	return 0;
 }
 
-static inline void __b44_cam_read(struct b44 *bp, unsigned char *data, int index)
-{
-	u32 val;
-
-	bw32(bp, B44_CAM_CTRL, (CAM_CTRL_READ |
-			    (index << CAM_CTRL_INDEX_SHIFT)));
-
-	b44_wait_bit(bp, B44_CAM_CTRL, CAM_CTRL_BUSY, 100, 1);
-
-	val = br32(bp, B44_CAM_DATA_LO);
-
-	data[2] = (val >> 24) & 0xFF;
-	data[3] = (val >> 16) & 0xFF;
-	data[4] = (val >> 8) & 0xFF;
-	data[5] = (val >> 0) & 0xFF;
-
-	val = br32(bp, B44_CAM_DATA_HI);
-
-	data[0] = (val >> 8) & 0xFF;
-	data[1] = (val >> 0) & 0xFF;
-}
-
 static inline void __b44_cam_write(struct b44 *bp,
 				   const unsigned char *data, int index)
 {
@@ -1064,13 +1042,13 @@ static int b44_change_mtu(struct net_device *dev, int new_mtu)
 		/* We'll just catch it later when the
 		 * device is up'd.
 		 */
-		dev->mtu = new_mtu;
+		WRITE_ONCE(dev->mtu, new_mtu);
 		return 0;
 	}
 
 	spin_lock_irq(&bp->lock);
 	b44_halt(bp);
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 	b44_init_rings(bp);
 	b44_init_hw(bp, B44_FULL_RESET);
 	spin_unlock_irq(&bp->lock);
@@ -1680,7 +1658,7 @@ static void b44_get_stats64(struct net_device *dev,
 	unsigned int start;
 
 	do {
-		start = u64_stats_fetch_begin_irq(&hwstat->syncp);
+		start = u64_stats_fetch_begin(&hwstat->syncp);
 
 		/* Convert HW stats into rtnl_link_stats64 stats. */
 		nstat->rx_packets = hwstat->rx_pkts;
@@ -1714,7 +1692,7 @@ static void b44_get_stats64(struct net_device *dev,
 		/* Carrier lost counter seems to be broken for some devices */
 		nstat->tx_carrier_errors = hwstat->tx_carrier_lost;
 #endif
-	} while (u64_stats_fetch_retry_irq(&hwstat->syncp, start));
+	} while (u64_stats_fetch_retry(&hwstat->syncp, start));
 
 }
 
@@ -1790,13 +1768,13 @@ static void b44_get_drvinfo (struct net_device *dev, struct ethtool_drvinfo *inf
 	struct b44 *bp = netdev_priv(dev);
 	struct ssb_bus *bus = bp->sdev->bus;
 
-	strlcpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
+	strscpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
 	switch (bus->bustype) {
 	case SSB_BUSTYPE_PCI:
-		strlcpy(info->bus_info, pci_name(bus->host_pci), sizeof(info->bus_info));
+		strscpy(info->bus_info, pci_name(bus->host_pci), sizeof(info->bus_info));
 		break;
 	case SSB_BUSTYPE_SSB:
-		strlcpy(info->bus_info, "SSB", sizeof(info->bus_info));
+		strscpy(info->bus_info, "SSB", sizeof(info->bus_info));
 		break;
 	case SSB_BUSTYPE_PCMCIA:
 	case SSB_BUSTYPE_SDIO:
@@ -1815,11 +1793,9 @@ static int b44_nway_reset(struct net_device *dev)
 	b44_readphy(bp, MII_BMCR, &bmcr);
 	b44_readphy(bp, MII_BMCR, &bmcr);
 	r = -EINVAL;
-	if (bmcr & BMCR_ANENABLE) {
-		b44_writephy(bp, MII_BMCR,
-			     bmcr | BMCR_ANRESTART);
-		r = 0;
-	}
+	if (bmcr & BMCR_ANENABLE)
+		r = b44_writephy(bp, MII_BMCR,
+				 bmcr | BMCR_ANRESTART);
 	spin_unlock_irq(&bp->lock);
 
 	return r;
@@ -2033,12 +2009,14 @@ static int b44_set_pauseparam(struct net_device *dev,
 		bp->flags |= B44_FLAG_TX_PAUSE;
 	else
 		bp->flags &= ~B44_FLAG_TX_PAUSE;
-	if (bp->flags & B44_FLAG_PAUSE_AUTO) {
-		b44_halt(bp);
-		b44_init_rings(bp);
-		b44_init_hw(bp, B44_FULL_RESET);
-	} else {
-		__b44_set_flow_ctrl(bp, bp->flags);
+	if (netif_running(dev)) {
+		if (bp->flags & B44_FLAG_PAUSE_AUTO) {
+			b44_halt(bp);
+			b44_init_rings(bp);
+			b44_init_hw(bp, B44_FULL_RESET);
+		} else {
+			__b44_set_flow_ctrl(bp, bp->flags);
+		}
 	}
 	spin_unlock_irq(&bp->lock);
 
@@ -2082,12 +2060,12 @@ static void b44_get_ethtool_stats(struct net_device *dev,
 	do {
 		data_src = &hwstat->tx_good_octets;
 		data_dst = data;
-		start = u64_stats_fetch_begin_irq(&hwstat->syncp);
+		start = u64_stats_fetch_begin(&hwstat->syncp);
 
 		for (i = 0; i < ARRAY_SIZE(b44_gstrings); i++)
 			*data_dst++ = *data_src++;
 
-	} while (u64_stats_fetch_retry_irq(&hwstat->syncp, start));
+	} while (u64_stats_fetch_retry(&hwstat->syncp, start));
 }
 
 static void b44_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
@@ -2375,7 +2353,7 @@ static int b44_init_one(struct ssb_device *sdev,
 	bp->tx_pending = B44_DEF_TX_RING_PENDING;
 
 	dev->netdev_ops = &b44_netdev_ops;
-	netif_napi_add(dev, &bp->napi, b44_poll, 64);
+	netif_napi_add(dev, &bp->napi, b44_poll);
 	dev->watchdog_timeo = B44_TX_TIMEOUT;
 	dev->min_mtu = B44_MIN_MTU;
 	dev->max_mtu = B44_MAX_MTU;

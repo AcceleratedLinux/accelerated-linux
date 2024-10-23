@@ -77,8 +77,8 @@ struct adc108s102_state {
 	 *  tx_buf: 8 channel read commands, plus 1 dummy command
 	 *  rx_buf: 1 dummy response, 8 channel responses
 	 */
-	__be16				rx_buf[9] ____cacheline_aligned;
-	__be16				tx_buf[9] ____cacheline_aligned;
+	__be16				rx_buf[9] __aligned(IIO_DMA_MINALIGN);
+	__be16				tx_buf[9] __aligned(IIO_DMA_MINALIGN);
 };
 
 #define ADC108S102_V_CHAN(index)					\
@@ -293,13 +293,11 @@ static const struct of_device_id adc108s102_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, adc108s102_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id adc108s102_acpi_ids[] = {
 	{ "INT3495", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, adc108s102_acpi_ids);
-#endif
 
 static const struct spi_device_id adc108s102_id[] = {
 	{ "adc108s102", 0 },
@@ -311,7 +309,7 @@ static struct spi_driver adc108s102_driver = {
 	.driver = {
 		.name   = "adc108s102",
 		.of_match_table = adc108s102_of_match,
-		.acpi_match_table = ACPI_PTR(adc108s102_acpi_ids),
+		.acpi_match_table = adc108s102_acpi_ids,
 	},
 	.probe		= adc108s102_probe,
 	.id_table	= adc108s102_id,

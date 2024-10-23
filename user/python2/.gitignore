@@ -1,0 +1,3 @@
+_sysconfigdata*.py
+*.pyc
+*.tgz

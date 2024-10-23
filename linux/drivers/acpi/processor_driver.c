@@ -27,6 +27,7 @@
 #define ACPI_PROCESSOR_NOTIFY_PERFORMANCE 0x80
 #define ACPI_PROCESSOR_NOTIFY_POWER	0x81
 #define ACPI_PROCESSOR_NOTIFY_THROTTLING	0x82
+#define ACPI_PROCESSOR_NOTIFY_HIGEST_PERF_CHANGED	0x85
 
 MODULE_AUTHOR("Paul Diefenbaugh");
 MODULE_DESCRIPTION("ACPI Processor Driver");
@@ -80,6 +81,11 @@ static void acpi_processor_notify(acpi_handle handle, u32 event, void *data)
 		break;
 	case ACPI_PROCESSOR_NOTIFY_THROTTLING:
 		acpi_processor_tstate_has_changed(pr);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  dev_name(&device->dev), event, 0);
+		break;
+	case ACPI_PROCESSOR_NOTIFY_HIGEST_PERF_CHANGED:
+		cpufreq_update_limits(pr->id);
 		acpi_bus_generate_netlink_event(device->pnp.device_class,
 						  dev_name(&device->dev), event, 0);
 		break;
@@ -139,75 +145,17 @@ static int acpi_soft_cpu_dead(unsigned int cpu)
 }
 
 #ifdef CONFIG_ACPI_CPU_FREQ_PSS
-static int acpi_pss_perf_init(struct acpi_processor *pr,
-		struct acpi_device *device)
+static void acpi_pss_perf_init(struct acpi_processor *pr)
 {
-	int result = 0;
-
 	acpi_processor_ppc_has_changed(pr, 0);
 
 	acpi_processor_get_throttling_info(pr);
 
 	if (pr->flags.throttling)
 		pr->flags.limit = 1;
-
-	pr->cdev = thermal_cooling_device_register("Processor", device,
-						   &processor_cooling_ops);
-	if (IS_ERR(pr->cdev)) {
-		result = PTR_ERR(pr->cdev);
-		return result;
-	}
-
-	dev_dbg(&device->dev, "registered as cooling_device%d\n",
-		pr->cdev->id);
-
-	result = sysfs_create_link(&device->dev.kobj,
-				   &pr->cdev->device.kobj,
-				   "thermal_cooling");
-	if (result) {
-		dev_err(&device->dev,
-			"Failed to create sysfs link 'thermal_cooling'\n");
-		goto err_thermal_unregister;
-	}
-
-	result = sysfs_create_link(&pr->cdev->device.kobj,
-				   &device->dev.kobj,
-				   "device");
-	if (result) {
-		dev_err(&pr->cdev->device,
-			"Failed to create sysfs link 'device'\n");
-		goto err_remove_sysfs_thermal;
-	}
-
-	return 0;
-
- err_remove_sysfs_thermal:
-	sysfs_remove_link(&device->dev.kobj, "thermal_cooling");
- err_thermal_unregister:
-	thermal_cooling_device_unregister(pr->cdev);
-
-	return result;
-}
-
-static void acpi_pss_perf_exit(struct acpi_processor *pr,
-		struct acpi_device *device)
-{
-	if (pr->cdev) {
-		sysfs_remove_link(&device->dev.kobj, "thermal_cooling");
-		sysfs_remove_link(&pr->cdev->device.kobj, "device");
-		thermal_cooling_device_unregister(pr->cdev);
-		pr->cdev = NULL;
-	}
 }
 #else
-static inline int acpi_pss_perf_init(struct acpi_processor *pr,
-		struct acpi_device *device)
-{
-	return 0;
-}
-
-static inline void acpi_pss_perf_exit(struct acpi_processor *pr,
-		struct acpi_device *device) {}
+static inline void acpi_pss_perf_init(struct acpi_processor *pr) {}
 #endif /* CONFIG_ACPI_CPU_FREQ_PSS */
 
 static int __acpi_processor_start(struct acpi_device *device)
@@ -229,7 +177,9 @@ static int __acpi_processor_start(struct acpi_device *device)
 	if (!cpuidle_get_driver() || cpuidle_get_driver() == &acpi_idle_driver)
 		acpi_processor_power_init(pr);
 
-	result = acpi_pss_perf_init(pr, device);
+	acpi_pss_perf_init(pr);
+
+	result = acpi_processor_thermal_init(pr, device);
 	if (result)
 		goto err_power_exit;
 
@@ -239,7 +189,7 @@ static int __acpi_processor_start(struct acpi_device *device)
 		return 0;
 
 	result = -ENODEV;
-	acpi_pss_perf_exit(pr, device);
+	acpi_processor_thermal_exit(pr, device);
 
 err_power_exit:
 	acpi_processor_power_exit(pr);
@@ -277,9 +227,9 @@ static int acpi_processor_stop(struct device *dev)
 		return 0;
 	acpi_processor_power_exit(pr);
 
-	acpi_pss_perf_exit(pr, device);
-
 	acpi_cppc_processor_exit(pr);
+
+	acpi_processor_thermal_exit(pr, device);
 
 	return 0;
 }
@@ -319,6 +269,12 @@ static int __init acpi_processor_driver_init(void)
 	if (acpi_disabled)
 		return 0;
 
+	if (!cpufreq_register_notifier(&acpi_processor_notifier_block,
+				       CPUFREQ_POLICY_NOTIFIER)) {
+		acpi_processor_cpufreq_init = true;
+		acpi_processor_ignore_ppc_init();
+	}
+
 	result = driver_register(&acpi_processor_driver);
 	if (result < 0)
 		return result;
@@ -331,12 +287,6 @@ static int __init acpi_processor_driver_init(void)
 	hp_online = result;
 	cpuhp_setup_state_nocalls(CPUHP_ACPI_CPUDRV_DEAD, "acpi/cpu-drv:dead",
 				  NULL, acpi_soft_cpu_dead);
-
-	if (!cpufreq_register_notifier(&acpi_processor_notifier_block,
-				       CPUFREQ_POLICY_NOTIFIER)) {
-		acpi_processor_cpufreq_init = true;
-		acpi_processor_ignore_ppc_init();
-	}
 
 	acpi_processor_throttling_init();
 	return 0;

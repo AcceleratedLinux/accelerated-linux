@@ -1,18 +1,9 @@
-CONFOPTS = --disable-dependency-tracking --enable-static --disable-shared
-CONFIGURE_HOST ?= $(CROSS_COMPILE:-=)
+URL = https://ftp.gnu.org/gnu/osip/libosip2-2.2.0.tar.gz
 
-all: build/build
-	$(MAKE) -C build all
-	$(MAKE) -C build prefix= DESTDIR=$(shell pwd)/build/install install
+export ACL_LICENSE = LGPL
 
-build/build: makefile
-	rm -rf build
-	mkdir build
-	(cd build; sh ../configure $(CONFIGURE_OPTS) $(CONFOPTS))
-	touch build/build
+CONFOPTS += --disable-dependency-tracking
+CONFOPTS += --enable-static
+CONFOPTS += --disable-shared
 
-clean:
-	rm -rf build
-
-# Nothing to install for romfs. We use static libraries only
-romfs:
+include $(ROOTDIR)/tools/automake.inc

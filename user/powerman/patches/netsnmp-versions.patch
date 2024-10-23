@@ -1,0 +1,22 @@
+--- powerman/snmppower/snmppower.c.org	2023-10-24 14:30:49.236422455 +1000
++++ powerman/snmppower/snmppower.c	2023-10-24 14:33:13.001720511 +1000
+@@ -40,6 +40,19 @@
+ #include "error.h"
+ #include "argv.h"
+ 
++#ifndef SNMP_VERSION_1
++#define SNMP_VERSION_1 0
++#endif
++#ifndef SNMP_VERSION_2
++#define SNMP_VERSION_2c 1
++#endif
++#ifndef SNMP_VERSION_2
++#define SNMP_VERSION_2u 2
++#endif
++#ifndef SNMP_VERSION_3
++#define SNMP_VERSION_3 3
++#endif
++
+ #define OPTIONS "h:"
+ static struct option longopts[] = {
+     {"hostname", required_argument, 0, 'h' },

@@ -74,7 +74,15 @@
 #define LEDMAN_XBEE2		52
 #define LEDMAN_XBEE3		53
 
-#define	LEDMAN_MAX		54	/* one more than the highest LED above */
+#define LEDMAN_SIM1_RED		54
+#define LEDMAN_SIM1_GREEN	LEDMAN_SIM1
+#define LEDMAN_SIM1_BLUE	55
+
+#define LEDMAN_SIM2_RED		56
+#define LEDMAN_SIM2_GREEN	LEDMAN_SIM2
+#define LEDMAN_SIM2_BLUE	57
+
+#define	LEDMAN_MAX		58	/* one more than the highest LED above */
 
 #define LEDMAN_MAX_NAME		16
 

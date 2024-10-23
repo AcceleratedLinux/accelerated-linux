@@ -7,7 +7,6 @@
 // Hardware interface for mt8195 DSP clock
 
 #include <linux/clk.h>
-#include <linux/pm_runtime.h>
 #include <linux/io.h>
 #include "mt8195.h"
 #include "mt8195-clk.h"
@@ -129,6 +128,13 @@ static int adsp_default_clk_init(struct snd_sof_dev *sdev, bool enable)
 				     priv->clk[CLK_TOP_MAINPLL_D7_D2]);
 		if (ret) {
 			dev_err(dev, "set audio_local_bus failed %d\n", ret);
+			return ret;
+		}
+
+		ret = clk_set_parent(priv->clk[CLK_TOP_AUDIO_H],
+				     priv->clk[CLK_TOP_CLK26M]);
+		if (ret) {
+			dev_err(dev, "set audio_h_sel failed %d\n", ret);
 			return ret;
 		}
 

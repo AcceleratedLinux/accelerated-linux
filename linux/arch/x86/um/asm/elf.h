@@ -168,8 +168,8 @@ do {								\
 	(pr_reg)[18] = (_regs)->regs.gp[18];			\
 	(pr_reg)[19] = (_regs)->regs.gp[19];			\
 	(pr_reg)[20] = (_regs)->regs.gp[20];			\
-	(pr_reg)[21] = current->thread.arch.fs;			\
-	(pr_reg)[22] = 0;					\
+	(pr_reg)[21] = (_regs)->regs.gp[21];			\
+	(pr_reg)[22] = (_regs)->regs.gp[22];			\
 	(pr_reg)[23] = 0;					\
 	(pr_reg)[24] = 0;					\
 	(pr_reg)[25] = 0;					\
@@ -200,10 +200,6 @@ typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 typedef struct user_i387_struct elf_fpregset_t;
 
 struct task_struct;
-
-extern int elf_core_copy_fpregs(struct task_struct *t, elf_fpregset_t *fpu);
-
-#define ELF_CORE_COPY_FPREGS(t, fpu) elf_core_copy_fpregs(t, fpu)
 
 #define ELF_EXEC_PAGESIZE 4096
 

@@ -41,7 +41,7 @@
 
 static struct ipmi_recv_msg *ipmi_alloc_recv_msg(void);
 static int ipmi_init_msghandler(void);
-static void smi_recv_tasklet(struct tasklet_struct *t);
+static void smi_recv_work(struct work_struct *t);
 static void handle_new_recv_msgs(struct ipmi_smi *intf);
 static void need_waiter(struct ipmi_smi *intf);
 static int handle_one_recv_msg(struct ipmi_smi *intf,
@@ -498,13 +498,13 @@ struct ipmi_smi {
 	/*
 	 * Messages queued for delivery.  If delivery fails (out of memory
 	 * for instance), They will stay in here to be processed later in a
-	 * periodic timer interrupt.  The tasklet is for handling received
+	 * periodic timer interrupt.  The workqueue is for handling received
 	 * messages directly from the handler.
 	 */
 	spinlock_t       waiting_rcv_msgs_lock;
 	struct list_head waiting_rcv_msgs;
 	atomic_t	 watchdog_pretimeouts_to_deliver;
-	struct tasklet_struct recv_tasklet;
+	struct work_struct recv_work;
 
 	spinlock_t             xmit_msgs_lock;
 	struct list_head       xmit_msgs;
@@ -614,7 +614,7 @@ static int __ipmi_bmc_register(struct ipmi_smi *intf,
 static int __scan_channels(struct ipmi_smi *intf, struct ipmi_device_id *id);
 
 
-/**
+/*
  * The driver model view of the IPMI messaging driver.
  */
 static struct platform_driver ipmidriver = {
@@ -704,7 +704,7 @@ static void clean_up_interface_data(struct ipmi_smi *intf)
 	struct cmd_rcvr  *rcvr, *rcvr2;
 	struct list_head list;
 
-	tasklet_kill(&intf->recv_tasklet);
+	cancel_work_sync(&intf->recv_work);
 
 	free_smi_msg_list(&intf->waiting_rcv_msgs);
 	free_recv_msg_list(&intf->waiting_events);
@@ -735,12 +735,6 @@ static void intf_free(struct kref *ref)
 	clean_up_interface_data(intf);
 	kfree(intf);
 }
-
-struct watcher_entry {
-	int              intf_num;
-	struct ipmi_smi  *intf;
-	struct list_head link;
-};
 
 int ipmi_smi_watcher_register(struct ipmi_smi_watcher *watcher)
 {
@@ -1325,7 +1319,7 @@ static void free_user(struct kref *ref)
 {
 	struct ipmi_user *user = container_of(ref, struct ipmi_user, refcount);
 
-	/* SRCU cleanup must happen in task context. */
+	/* SRCU cleanup must happen in workqueue context. */
 	queue_work(remove_work_wq, &user->remove_work);
 }
 
@@ -1336,6 +1330,7 @@ static void _ipmi_destroy_user(struct ipmi_user *user)
 	unsigned long    flags;
 	struct cmd_rcvr  *rcvr;
 	struct cmd_rcvr  *rcvrs = NULL;
+	struct module    *owner;
 
 	if (!acquire_ipmi_user(user, &i)) {
 		/*
@@ -1398,8 +1393,9 @@ static void _ipmi_destroy_user(struct ipmi_user *user)
 		kfree(rcvr);
 	}
 
+	owner = intf->owner;
 	kref_put(&intf->refcount, intf_free);
-	module_put(intf->owner);
+	module_put(owner);
 }
 
 int ipmi_destroy_user(struct ipmi_user *user)
@@ -3057,7 +3053,7 @@ static void cleanup_bmc_work(struct work_struct *work)
 	int id = bmc->pdev.id; /* Unregister overwrites id */
 
 	platform_device_unregister(&bmc->pdev);
-	ida_simple_remove(&ipmi_bmc_ida, id);
+	ida_free(&ipmi_bmc_ida, id);
 }
 
 static void
@@ -3173,7 +3169,7 @@ static int __ipmi_bmc_register(struct ipmi_smi *intf,
 
 		bmc->pdev.name = "ipmi_bmc";
 
-		rv = ida_simple_get(&ipmi_bmc_ida, 0, 0, GFP_KERNEL);
+		rv = ida_alloc(&ipmi_bmc_ida, GFP_KERNEL);
 		if (rv < 0) {
 			kfree(bmc);
 			goto out;
@@ -3609,8 +3605,7 @@ int ipmi_add_smi(struct module         *owner,
 	intf->curr_seq = 0;
 	spin_lock_init(&intf->waiting_rcv_msgs_lock);
 	INIT_LIST_HEAD(&intf->waiting_rcv_msgs);
-	tasklet_setup(&intf->recv_tasklet,
-		     smi_recv_tasklet);
+	INIT_WORK(&intf->recv_work, smi_recv_work);
 	atomic_set(&intf->watchdog_pretimeouts_to_deliver, 0);
 	spin_lock_init(&intf->xmit_msgs_lock);
 	INIT_LIST_HEAD(&intf->xmit_msgs);
@@ -3710,12 +3705,16 @@ static void deliver_smi_err_response(struct ipmi_smi *intf,
 				     struct ipmi_smi_msg *msg,
 				     unsigned char err)
 {
+	int rv;
 	msg->rsp[0] = msg->data[0] | 4;
 	msg->rsp[1] = msg->data[1];
 	msg->rsp[2] = err;
 	msg->rsp_size = 3;
-	/* It's an error, so it will never requeue, no need to check return. */
-	handle_one_recv_msg(intf, msg);
+
+	/* This will never requeue, but it may ask us to free the message. */
+	rv = handle_one_recv_msg(intf, msg);
+	if (rv == 0)
+		ipmi_free_smi_msg(msg);
 }
 
 static void cleanup_smi_msgs(struct ipmi_smi *intf)
@@ -4357,7 +4356,7 @@ static int handle_oem_get_msg_cmd(struct ipmi_smi *intf,
 
 			/*
 			 * The message starts at byte 4 which follows the
-			 * the Channel Byte in the "GET MESSAGE" command
+			 * Channel Byte in the "GET MESSAGE" command
 			 */
 			recv_msg->msg.data_len = msg->rsp_size - 4;
 			memcpy(recv_msg->msg_data, &msg->rsp[4],
@@ -4779,7 +4778,7 @@ static void handle_new_recv_msgs(struct ipmi_smi *intf)
 			 * To preserve message order, quit if we
 			 * can't handle a message.  Add the message
 			 * back at the head, this is safe because this
-			 * tasklet is the only thing that pulls the
+			 * workqueue is the only thing that pulls the
 			 * messages.
 			 */
 			list_add(&smi_msg->link, &intf->waiting_rcv_msgs);
@@ -4812,10 +4811,10 @@ static void handle_new_recv_msgs(struct ipmi_smi *intf)
 	}
 }
 
-static void smi_recv_tasklet(struct tasklet_struct *t)
+static void smi_recv_work(struct work_struct *t)
 {
 	unsigned long flags = 0; /* keep us warning-free. */
-	struct ipmi_smi *intf = from_tasklet(intf, t, recv_tasklet);
+	struct ipmi_smi *intf = from_work(intf, t, recv_work);
 	int run_to_completion = intf->run_to_completion;
 	struct ipmi_smi_msg *newmsg = NULL;
 
@@ -4866,7 +4865,7 @@ void ipmi_smi_msg_received(struct ipmi_smi *intf,
 
 	/*
 	 * To preserve message order, we keep a queue and deliver from
-	 * a tasklet.
+	 * a workqueue.
 	 */
 	if (!run_to_completion)
 		spin_lock_irqsave(&intf->waiting_rcv_msgs_lock, flags);
@@ -4887,9 +4886,9 @@ void ipmi_smi_msg_received(struct ipmi_smi *intf,
 		spin_unlock_irqrestore(&intf->xmit_msgs_lock, flags);
 
 	if (run_to_completion)
-		smi_recv_tasklet(&intf->recv_tasklet);
+		smi_recv_work(&intf->recv_work);
 	else
-		tasklet_schedule(&intf->recv_tasklet);
+		queue_work(system_bh_wq, &intf->recv_work);
 }
 EXPORT_SYMBOL(ipmi_smi_msg_received);
 
@@ -4899,7 +4898,7 @@ void ipmi_smi_watchdog_pretimeout(struct ipmi_smi *intf)
 		return;
 
 	atomic_set(&intf->watchdog_pretimeouts_to_deliver, 1);
-	tasklet_schedule(&intf->recv_tasklet);
+	queue_work(system_bh_wq, &intf->recv_work);
 }
 EXPORT_SYMBOL(ipmi_smi_watchdog_pretimeout);
 
@@ -5068,7 +5067,7 @@ static bool ipmi_timeout_handler(struct ipmi_smi *intf,
 				       flags);
 	}
 
-	tasklet_schedule(&intf->recv_tasklet);
+	queue_work(system_bh_wq, &intf->recv_work);
 
 	return need_timer;
 }
@@ -5377,20 +5376,15 @@ static void send_panic_events(struct ipmi_smi *intf, char *str)
 
 	j = 0;
 	while (*p) {
-		int size = strlen(p);
+		int size = strnlen(p, 11);
 
-		if (size > 11)
-			size = 11;
 		data[0] = 0;
 		data[1] = 0;
 		data[2] = 0xf0; /* OEM event without timestamp. */
 		data[3] = intf->addrinfo[0].address;
 		data[4] = j++; /* sequence # */
-		/*
-		 * Always give 11 bytes, so strncpy will fill
-		 * it with zeroes for me.
-		 */
-		strncpy(data+5, p, 11);
+
+		memcpy_and_pad(data+5, 11, p, size, '\0');
 		p += size;
 
 		ipmi_panic_request_and_wait(intf, &addr, &msg);

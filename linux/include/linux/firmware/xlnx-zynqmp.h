@@ -3,8 +3,9 @@
  * Xilinx Zynq MPSoC Firmware layer
  *
  *  Copyright (C) 2014-2021 Xilinx
+ *  Copyright (C) 2022 - 2023, Advanced Micro Devices, Inc.
  *
- *  Michal Simek <michal.simek@xilinx.com>
+ *  Michal Simek <michal.simek@amd.com>
  *  Davorin Mista <davorin.mista@aggios.com>
  *  Jolly Shah <jollys@xilinx.com>
  *  Rajan Vaja <rajanv@xilinx.com>
@@ -12,6 +13,7 @@
 
 #ifndef __FIRMWARE_ZYNQMP_H__
 #define __FIRMWARE_ZYNQMP_H__
+#include <linux/types.h>
 
 #include <linux/err.h>
 
@@ -31,9 +33,27 @@
 #define PM_SIP_SVC			0xC2000000
 
 /* PM API versions */
+#define PM_API_VERSION_1	1
 #define PM_API_VERSION_2	2
 
+#define PM_PINCTRL_PARAM_SET_VERSION	2
+
+#define ZYNQMP_FAMILY_CODE 0x23
+#define VERSAL_FAMILY_CODE 0x26
+
+/* When all subfamily of platform need to support */
+#define ALL_SUB_FAMILY_CODE		0x00
+#define VERSAL_SUB_FAMILY_CODE		0x01
+#define VERSALNET_SUB_FAMILY_CODE	0x03
+
+#define FAMILY_CODE_MASK	GENMASK(27, 21)
+#define SUB_FAMILY_CODE_MASK	GENMASK(20, 19)
+
+#define API_ID_MASK		GENMASK(7, 0)
+#define MODULE_ID_MASK		GENMASK(11, 8)
+
 /* ATF only commands */
+#define TF_A_PM_REGISTER_SGI		0xa04
 #define PM_GET_TRUSTZONE_VERSION	0xa03
 #define PM_SET_SUSPEND_MODE		0xa02
 #define GET_CALLBACK_DATA		0xa01
@@ -69,13 +89,47 @@
 #define XILINX_ZYNQMP_PM_FPGA_FULL	0x0U
 #define XILINX_ZYNQMP_PM_FPGA_PARTIAL	BIT(0)
 
+/* FPGA Status Reg */
+#define XILINX_ZYNQMP_PM_FPGA_CONFIG_STAT_OFFSET	7U
+#define XILINX_ZYNQMP_PM_FPGA_READ_CONFIG_REG		0U
+
 /*
  * Node IDs for the Error Events.
  */
-#define EVENT_ERROR_PMC_ERR1	(0x28100000U)
-#define EVENT_ERROR_PMC_ERR2	(0x28104000U)
-#define EVENT_ERROR_PSM_ERR1	(0x28108000U)
-#define EVENT_ERROR_PSM_ERR2	(0x2810C000U)
+#define VERSAL_EVENT_ERROR_PMC_ERR1	(0x28100000U)
+#define VERSAL_EVENT_ERROR_PMC_ERR2	(0x28104000U)
+#define VERSAL_EVENT_ERROR_PSM_ERR1	(0x28108000U)
+#define VERSAL_EVENT_ERROR_PSM_ERR2	(0x2810C000U)
+
+#define VERSAL_NET_EVENT_ERROR_PMC_ERR1	(0x28100000U)
+#define VERSAL_NET_EVENT_ERROR_PMC_ERR2	(0x28104000U)
+#define VERSAL_NET_EVENT_ERROR_PMC_ERR3	(0x28108000U)
+#define VERSAL_NET_EVENT_ERROR_PSM_ERR1	(0x2810C000U)
+#define VERSAL_NET_EVENT_ERROR_PSM_ERR2	(0x28110000U)
+#define VERSAL_NET_EVENT_ERROR_PSM_ERR3	(0x28114000U)
+#define VERSAL_NET_EVENT_ERROR_PSM_ERR4	(0x28118000U)
+
+/* ZynqMP SD tap delay tuning */
+#define SD_ITAPDLY	0xFF180314
+#define SD_OTAPDLYSEL	0xFF180318
+
+/**
+ * XPM_EVENT_ERROR_MASK_DDRMC_CR: Error event mask for DDRMC MC Correctable ECC Error.
+ */
+#define XPM_EVENT_ERROR_MASK_DDRMC_CR		BIT(18)
+
+/**
+ * XPM_EVENT_ERROR_MASK_DDRMC_NCR: Error event mask for DDRMC MC Non-Correctable ECC Error.
+ */
+#define XPM_EVENT_ERROR_MASK_DDRMC_NCR		BIT(19)
+#define XPM_EVENT_ERROR_MASK_NOC_NCR		BIT(13)
+#define XPM_EVENT_ERROR_MASK_NOC_CR		BIT(12)
+
+enum pm_module_id {
+	PM_MODULE_ID = 0x0,
+	XSEM_MODULE_ID = 0x3,
+	TF_A_MODULE_ID = 0xa,
+};
 
 enum pm_api_cb_id {
 	PM_INIT_SUSPEND_CB = 30,
@@ -84,8 +138,11 @@ enum pm_api_cb_id {
 };
 
 enum pm_api_id {
+	PM_API_FEATURES = 0,
 	PM_GET_API_VERSION = 1,
 	PM_REGISTER_NOTIFIER = 5,
+	PM_FORCE_POWERDOWN = 8,
+	PM_REQUEST_WAKEUP = 10,
 	PM_SYSTEM_SHUTDOWN = 12,
 	PM_REQUEST_NODE = 13,
 	PM_RELEASE_NODE = 14,
@@ -101,7 +158,6 @@ enum pm_api_id {
 	PM_SECURE_SHA = 26,
 	PM_PINCTRL_REQUEST = 28,
 	PM_PINCTRL_RELEASE = 29,
-	PM_PINCTRL_GET_FUNCTION = 30,
 	PM_PINCTRL_SET_FUNCTION = 31,
 	PM_PINCTRL_CONFIG_PARAM_GET = 32,
 	PM_PINCTRL_CONFIG_PARAM_SET = 33,
@@ -112,18 +168,20 @@ enum pm_api_id {
 	PM_CLOCK_GETSTATE = 38,
 	PM_CLOCK_SETDIVIDER = 39,
 	PM_CLOCK_GETDIVIDER = 40,
-	PM_CLOCK_SETRATE = 41,
-	PM_CLOCK_GETRATE = 42,
 	PM_CLOCK_SETPARENT = 43,
 	PM_CLOCK_GETPARENT = 44,
+	PM_FPGA_READ = 46,
 	PM_SECURE_AES = 47,
+	PM_EFUSE_ACCESS = 53,
 	PM_FEATURE_CHECK = 63,
 };
 
 /* PMU-FW return status codes */
 enum pm_ret_status {
 	XST_PM_SUCCESS = 0,
+	XST_PM_INVALID_VERSION = 4,
 	XST_PM_NO_FEATURE = 19,
+	XST_PM_INVALID_CRC = 301,
 	XST_PM_INTERNAL = 2000,
 	XST_PM_CONFLICT = 2001,
 	XST_PM_NO_ACCESS = 2002,
@@ -134,6 +192,11 @@ enum pm_ret_status {
 };
 
 enum pm_ioctl_id {
+	IOCTL_GET_RPU_OPER_MODE = 0,
+	IOCTL_SET_RPU_OPER_MODE = 1,
+	IOCTL_RPU_BOOT_ADDR_CONFIG = 2,
+	IOCTL_TCM_COMB_CONFIG = 3,
+	IOCTL_SET_TAPDELAY_BYPASS = 4,
 	IOCTL_SD_DLL_RESET = 6,
 	IOCTL_SET_SD_TAPDELAY = 7,
 	IOCTL_SET_PLL_FRAC_MODE = 8,
@@ -152,6 +215,9 @@ enum pm_ioctl_id {
 	/* Runtime feature configuration */
 	IOCTL_SET_FEATURE_CONFIG = 26,
 	IOCTL_GET_FEATURE_CONFIG = 27,
+	/* Dynamic SD/GEM configuration */
+	IOCTL_SET_SD_CONFIG = 30,
+	IOCTL_SET_GEM_CONFIG = 31,
 };
 
 enum pm_query_id {
@@ -169,6 +235,21 @@ enum pm_query_id {
 	PM_QID_PINCTRL_GET_PIN_GROUPS = 11,
 	PM_QID_CLOCK_GET_NUM_CLOCKS = 12,
 	PM_QID_CLOCK_GET_MAX_DIVISOR = 13,
+};
+
+enum rpu_oper_mode {
+	PM_RPU_MODE_LOCKSTEP = 0,
+	PM_RPU_MODE_SPLIT = 1,
+};
+
+enum rpu_boot_mem {
+	PM_RPU_BOOTMEM_LOVEC = 0,
+	PM_RPU_BOOTMEM_HIVEC = 1,
+};
+
+enum rpu_tcm_comb {
+	PM_RPU_TCM_SPLIT = 0,
+	PM_RPU_TCM_COMB = 1,
 };
 
 enum zynqmp_pm_reset_action {
@@ -368,6 +449,11 @@ enum pm_pinctrl_drive_strength {
 	PM_PINCTRL_DRIVE_STRENGTH_12MA = 3,
 };
 
+enum pm_pinctrl_tri_state {
+	PM_PINCTRL_TRI_STATE_DISABLE = 0,
+	PM_PINCTRL_TRI_STATE_ENABLE = 1,
+};
+
 enum zynqmp_pm_shutdown_type {
 	ZYNQMP_PM_SHUTDOWN_TYPE_SHUTDOWN = 0,
 	ZYNQMP_PM_SHUTDOWN_TYPE_RESET = 1,
@@ -378,6 +464,18 @@ enum zynqmp_pm_shutdown_subtype {
 	ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM = 0,
 	ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY = 1,
 	ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM = 2,
+};
+
+enum tap_delay_signal_type {
+	PM_TAPDELAY_NAND_DQS_IN = 0,
+	PM_TAPDELAY_NAND_DQS_OUT = 1,
+	PM_TAPDELAY_QSPI = 2,
+	PM_TAPDELAY_MAX = 3,
+};
+
+enum tap_delay_bypass_ctrl {
+	PM_TAPDELAY_BYPASS_DISABLE = 0,
+	PM_TAPDELAY_BYPASS_ENABLE = 1,
 };
 
 enum ospi_mux_select_type {
@@ -394,6 +492,30 @@ enum pm_feature_config_id {
 };
 
 /**
+ * enum pm_sd_config_type - PM SD configuration.
+ * @SD_CONFIG_EMMC_SEL: To set SD_EMMC_SEL in CTRL_REG_SD and SD_SLOTTYPE
+ * @SD_CONFIG_BASECLK: To set SD_BASECLK in SD_CONFIG_REG1
+ * @SD_CONFIG_8BIT: To set SD_8BIT in SD_CONFIG_REG2
+ * @SD_CONFIG_FIXED: To set fixed config registers
+ */
+enum pm_sd_config_type {
+	SD_CONFIG_EMMC_SEL = 1,
+	SD_CONFIG_BASECLK = 2,
+	SD_CONFIG_8BIT = 3,
+	SD_CONFIG_FIXED = 4,
+};
+
+/**
+ * enum pm_gem_config_type - PM GEM configuration.
+ * @GEM_CONFIG_SGMII_MODE: To set GEM_SGMII_MODE in GEM_CLK_CTRL register
+ * @GEM_CONFIG_FIXED: To set fixed config registers
+ */
+enum pm_gem_config_type {
+	GEM_CONFIG_SGMII_MODE = 1,
+	GEM_CONFIG_FIXED = 2,
+};
+
+/**
  * struct zynqmp_pm_query_data - PM query data
  * @qid:	query ID
  * @arg1:	Argument 1 of query data
@@ -407,20 +529,18 @@ struct zynqmp_pm_query_data {
 	u32 arg3;
 };
 
-int zynqmp_pm_invoke_fn(u32 pm_api_id, u32 arg0, u32 arg1,
-			u32 arg2, u32 arg3, u32 *ret_payload);
+int zynqmp_pm_invoke_fn(u32 pm_api_id, u32 *ret_payload, u32 num_args, ...);
 
 #if IS_REACHABLE(CONFIG_ZYNQMP_FIRMWARE)
 int zynqmp_pm_get_api_version(u32 *version);
 int zynqmp_pm_get_chipid(u32 *idcode, u32 *version);
+int zynqmp_pm_get_family_info(u32 *family, u32 *subfamily);
 int zynqmp_pm_query_data(struct zynqmp_pm_query_data qdata, u32 *out);
 int zynqmp_pm_clock_enable(u32 clock_id);
 int zynqmp_pm_clock_disable(u32 clock_id);
 int zynqmp_pm_clock_getstate(u32 clock_id, u32 *state);
 int zynqmp_pm_clock_setdivider(u32 clock_id, u32 divider);
 int zynqmp_pm_clock_getdivider(u32 clock_id, u32 *divider);
-int zynqmp_pm_clock_setrate(u32 clock_id, u64 rate);
-int zynqmp_pm_clock_getrate(u32 clock_id, u64 *rate);
 int zynqmp_pm_clock_setparent(u32 clock_id, u32 parent_id);
 int zynqmp_pm_clock_getparent(u32 clock_id, u32 *parent_id);
 int zynqmp_pm_set_pll_frac_mode(u32 clk_id, u32 mode);
@@ -444,18 +564,20 @@ int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
 			      const u32 qos,
 			      const enum zynqmp_pm_request_ack ack);
 int zynqmp_pm_aes_engine(const u64 address, u32 *out);
+int zynqmp_pm_efuse_access(const u64 address, u32 *out);
 int zynqmp_pm_sha_hash(const u64 address, const u32 size, const u32 flags);
 int zynqmp_pm_fpga_load(const u64 address, const u32 size, const u32 flags);
 int zynqmp_pm_fpga_get_status(u32 *value);
+int zynqmp_pm_fpga_get_config_status(u32 *value);
 int zynqmp_pm_write_ggs(u32 index, u32 value);
 int zynqmp_pm_read_ggs(u32 index, u32 *value);
 int zynqmp_pm_write_pggs(u32 index, u32 value);
 int zynqmp_pm_read_pggs(u32 index, u32 *value);
+int zynqmp_pm_set_tapdelay_bypass(u32 index, u32 value);
 int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype);
 int zynqmp_pm_set_boot_health_status(u32 value);
 int zynqmp_pm_pinctrl_request(const u32 pin);
 int zynqmp_pm_pinctrl_release(const u32 pin);
-int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id);
 int zynqmp_pm_pinctrl_set_function(const u32 pin, const u32 id);
 int zynqmp_pm_pinctrl_get_config(const u32 pin, const u32 param,
 				 u32 *value);
@@ -468,6 +590,19 @@ int zynqmp_pm_feature(const u32 api_id);
 int zynqmp_pm_is_function_supported(const u32 api_id, const u32 id);
 int zynqmp_pm_set_feature_config(enum pm_feature_config_id id, u32 value);
 int zynqmp_pm_get_feature_config(enum pm_feature_config_id id, u32 *payload);
+int zynqmp_pm_register_sgi(u32 sgi_num, u32 reset);
+int zynqmp_pm_force_pwrdwn(const u32 target,
+			   const enum zynqmp_pm_request_ack ack);
+int zynqmp_pm_request_wake(const u32 node,
+			   const bool set_addr,
+			   const u64 address,
+			   const enum zynqmp_pm_request_ack ack);
+int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode);
+int zynqmp_pm_set_rpu_mode(u32 node_id, enum rpu_oper_mode rpu_mode);
+int zynqmp_pm_set_tcm_config(u32 node_id, enum rpu_tcm_comb tcm_mode);
+int zynqmp_pm_set_sd_config(u32 node, enum pm_sd_config_type config, u32 value);
+int zynqmp_pm_set_gem_config(u32 node, enum pm_gem_config_type config,
+			     u32 value);
 #else
 static inline int zynqmp_pm_get_api_version(u32 *version)
 {
@@ -475,6 +610,11 @@ static inline int zynqmp_pm_get_api_version(u32 *version)
 }
 
 static inline int zynqmp_pm_get_chipid(u32 *idcode, u32 *version)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_get_family_info(u32 *family, u32 *subfamily)
 {
 	return -ENODEV;
 }
@@ -506,16 +646,6 @@ static inline int zynqmp_pm_clock_setdivider(u32 clock_id, u32 divider)
 }
 
 static inline int zynqmp_pm_clock_getdivider(u32 clock_id, u32 *divider)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_clock_setrate(u32 clock_id, u64 rate)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_clock_getrate(u32 clock_id, u64 *rate)
 {
 	return -ENODEV;
 }
@@ -622,6 +752,11 @@ static inline int zynqmp_pm_aes_engine(const u64 address, u32 *out)
 	return -ENODEV;
 }
 
+static inline int zynqmp_pm_efuse_access(const u64 address, u32 *out)
+{
+	return -ENODEV;
+}
+
 static inline int zynqmp_pm_sha_hash(const u64 address, const u32 size,
 				     const u32 flags)
 {
@@ -635,6 +770,11 @@ static inline int zynqmp_pm_fpga_load(const u64 address, const u32 size,
 }
 
 static inline int zynqmp_pm_fpga_get_status(u32 *value)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_fpga_get_config_status(u32 *value)
 {
 	return -ENODEV;
 }
@@ -659,6 +799,11 @@ static inline int zynqmp_pm_read_pggs(u32 index, u32 *value)
 	return -ENODEV;
 }
 
+static inline int zynqmp_pm_set_tapdelay_bypass(u32 index, u32 value)
+{
+	return -ENODEV;
+}
+
 static inline int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype)
 {
 	return -ENODEV;
@@ -675,11 +820,6 @@ static inline int zynqmp_pm_pinctrl_request(const u32 pin)
 }
 
 static inline int zynqmp_pm_pinctrl_release(const u32 pin)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id)
 {
 	return -ENODEV;
 }
@@ -733,6 +873,55 @@ static inline int zynqmp_pm_get_feature_config(enum pm_feature_config_id id,
 {
 	return -ENODEV;
 }
+
+static inline int zynqmp_pm_register_sgi(u32 sgi_num, u32 reset)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_force_pwrdwn(const u32 target,
+					 const enum zynqmp_pm_request_ack ack)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_request_wake(const u32 node,
+					 const bool set_addr,
+					 const u64 address,
+					 const enum zynqmp_pm_request_ack ack)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_set_rpu_mode(u32 node_id, enum rpu_oper_mode rpu_mode)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_set_tcm_config(u32 node_id, enum rpu_tcm_comb tcm_mode)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_set_sd_config(u32 node,
+					  enum pm_sd_config_type config,
+					  u32 value)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_set_gem_config(u32 node,
+					   enum pm_gem_config_type config,
+					   u32 value)
+{
+	return -ENODEV;
+}
+
 #endif
 
 #endif /* __FIRMWARE_ZYNQMP_H__ */

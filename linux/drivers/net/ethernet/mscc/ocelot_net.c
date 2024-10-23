@@ -20,6 +20,13 @@
 
 #define OCELOT_MAC_QUIRKS	OCELOT_QUIRK_QSGMII_PORTS_MUST_BE_UP
 
+struct ocelot_dump_ctx {
+	struct net_device *dev;
+	struct sk_buff *skb;
+	struct netlink_callback *cb;
+	int idx;
+};
+
 static bool ocelot_netdevice_dev_check(const struct net_device *dev);
 
 static struct ocelot *devlink_port_to_ocelot(struct devlink_port *dlp)
@@ -185,15 +192,6 @@ void ocelot_port_devlink_teardown(struct ocelot *ocelot, int port)
 	struct devlink_port *dlp = &ocelot->devlink_ports[port];
 
 	devlink_port_unregister(dlp);
-}
-
-static struct devlink_port *ocelot_get_devlink_port(struct net_device *dev)
-{
-	struct ocelot_port_private *priv = netdev_priv(dev);
-	struct ocelot *ocelot = priv->port.ocelot;
-	int port = priv->port.index;
-
-	return &ocelot->devlink_ports[port];
 }
 
 int ocelot_setup_tc_cls_flower(struct ocelot_port_private *priv,
@@ -726,36 +724,7 @@ static void ocelot_get_stats64(struct net_device *dev,
 	struct ocelot *ocelot = priv->port.ocelot;
 	int port = priv->port.index;
 
-	/* Configure the port to read the stats from */
-	ocelot_write(ocelot, SYS_STAT_CFG_STAT_VIEW(port),
-		     SYS_STAT_CFG);
-
-	/* Get Rx stats */
-	stats->rx_bytes = ocelot_read(ocelot, SYS_COUNT_RX_OCTETS);
-	stats->rx_packets = ocelot_read(ocelot, SYS_COUNT_RX_SHORTS) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_FRAGMENTS) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_JABBERS) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_LONGS) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_64) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_65_127) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_128_255) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_256_1023) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_1024_1526) +
-			    ocelot_read(ocelot, SYS_COUNT_RX_1527_MAX);
-	stats->multicast = ocelot_read(ocelot, SYS_COUNT_RX_MULTICAST);
-	stats->rx_dropped = dev->stats.rx_dropped;
-
-	/* Get Tx stats */
-	stats->tx_bytes = ocelot_read(ocelot, SYS_COUNT_TX_OCTETS);
-	stats->tx_packets = ocelot_read(ocelot, SYS_COUNT_TX_64) +
-			    ocelot_read(ocelot, SYS_COUNT_TX_65_127) +
-			    ocelot_read(ocelot, SYS_COUNT_TX_128_511) +
-			    ocelot_read(ocelot, SYS_COUNT_TX_512_1023) +
-			    ocelot_read(ocelot, SYS_COUNT_TX_1024_1526) +
-			    ocelot_read(ocelot, SYS_COUNT_TX_1527_MAX);
-	stats->tx_dropped = ocelot_read(ocelot, SYS_COUNT_TX_DROPS) +
-			    ocelot_read(ocelot, SYS_COUNT_TX_AGING);
-	stats->collisions = ocelot_read(ocelot, SYS_COUNT_TX_COLLISION);
+	return ocelot_port_get_stats64(ocelot, port, stats);
 }
 
 static int ocelot_port_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
@@ -783,6 +752,49 @@ static int ocelot_port_fdb_del(struct ndmsg *ndm, struct nlattr *tb[],
 	int port = priv->port.index;
 
 	return ocelot_fdb_del(ocelot, port, addr, vid, ocelot_port->bridge);
+}
+
+static int ocelot_port_fdb_do_dump(const unsigned char *addr, u16 vid,
+				   bool is_static, void *data)
+{
+	struct ocelot_dump_ctx *dump = data;
+	u32 portid = NETLINK_CB(dump->cb->skb).portid;
+	u32 seq = dump->cb->nlh->nlmsg_seq;
+	struct nlmsghdr *nlh;
+	struct ndmsg *ndm;
+
+	if (dump->idx < dump->cb->args[2])
+		goto skip;
+
+	nlh = nlmsg_put(dump->skb, portid, seq, RTM_NEWNEIGH,
+			sizeof(*ndm), NLM_F_MULTI);
+	if (!nlh)
+		return -EMSGSIZE;
+
+	ndm = nlmsg_data(nlh);
+	ndm->ndm_family  = AF_BRIDGE;
+	ndm->ndm_pad1    = 0;
+	ndm->ndm_pad2    = 0;
+	ndm->ndm_flags   = NTF_SELF;
+	ndm->ndm_type    = 0;
+	ndm->ndm_ifindex = dump->dev->ifindex;
+	ndm->ndm_state   = is_static ? NUD_NOARP : NUD_REACHABLE;
+
+	if (nla_put(dump->skb, NDA_LLADDR, ETH_ALEN, addr))
+		goto nla_put_failure;
+
+	if (vid && nla_put_u16(dump->skb, NDA_VLAN, vid))
+		goto nla_put_failure;
+
+	nlmsg_end(dump->skb, nlh);
+
+skip:
+	dump->idx++;
+	return 0;
+
+nla_put_failure:
+	nlmsg_cancel(dump->skb, nlh);
+	return -EMSGSIZE;
 }
 
 static int ocelot_port_fdb_dump(struct sk_buff *skb,
@@ -904,7 +916,6 @@ static const struct net_device_ops ocelot_port_netdev_ops = {
 	.ndo_set_features		= ocelot_set_features,
 	.ndo_setup_tc			= ocelot_setup_tc,
 	.ndo_eth_ioctl			= ocelot_ioctl,
-	.ndo_get_devlink_port		= ocelot_get_devlink_port,
 };
 
 struct net_device *ocelot_port_to_netdev(struct ocelot *ocelot, int port)
@@ -1391,11 +1402,10 @@ static int ocelot_netdevice_lag_join(struct net_device *dev,
 	int port = priv->port.index;
 	int err;
 
-	err = ocelot_port_lag_join(ocelot, port, bond, info);
-	if (err == -EOPNOTSUPP) {
-		NL_SET_ERR_MSG_MOD(extack, "Offloading not supported");
+	err = ocelot_port_lag_join(ocelot, port, bond, info, extack);
+	if (err == -EOPNOTSUPP)
+		/* Offloading not supported, fall back to software LAG */
 		return 0;
-	}
 
 	bridge_dev = netdev_master_upper_dev_get(bond);
 	if (!bridge_dev || !netif_is_bridge_master(bridge_dev))
@@ -1665,25 +1675,10 @@ static void vsc7514_phylink_mac_config(struct phylink_config *config,
 {
 	struct net_device *ndev = to_net_dev(config->dev);
 	struct ocelot_port_private *priv = netdev_priv(ndev);
-	struct ocelot_port *ocelot_port = &priv->port;
+	struct ocelot *ocelot = priv->port.ocelot;
+	int port = priv->port.index;
 
-	/* Disable HDX fast control */
-	ocelot_port_writel(ocelot_port, DEV_PORT_MISC_HDX_FAST_DIS,
-			   DEV_PORT_MISC);
-
-	/* SGMII only for now */
-	ocelot_port_writel(ocelot_port, PCS1G_MODE_CFG_SGMII_MODE_ENA,
-			   PCS1G_MODE_CFG);
-	ocelot_port_writel(ocelot_port, PCS1G_SD_CFG_SD_SEL, PCS1G_SD_CFG);
-
-	/* Enable PCS */
-	ocelot_port_writel(ocelot_port, PCS1G_CFG_PCS_ENA, PCS1G_CFG);
-
-	/* No aneg on SGMII */
-	ocelot_port_writel(ocelot_port, 0, PCS1G_ANEG_CFG);
-
-	/* No loopback */
-	ocelot_port_writel(ocelot_port, 0, PCS1G_LB_CFG);
+	ocelot_phylink_mac_config(ocelot, port, link_an_mode, state);
 }
 
 static void vsc7514_phylink_mac_link_down(struct phylink_config *config,
@@ -1717,7 +1712,6 @@ static void vsc7514_phylink_mac_link_up(struct phylink_config *config,
 }
 
 static const struct phylink_mac_ops ocelot_phylink_ops = {
-	.validate		= phylink_generic_validate,
 	.mac_config		= vsc7514_phylink_mac_config,
 	.mac_link_down		= vsc7514_phylink_mac_link_down,
 	.mac_link_up		= vsc7514_phylink_mac_link_up,
@@ -1748,34 +1742,11 @@ static int ocelot_port_phylink_create(struct ocelot *ocelot, int port,
 		return -EINVAL;
 	}
 
-	/* Ensure clock signals and speed are set on all QSGMII links */
-	if (phy_mode == PHY_INTERFACE_MODE_QSGMII)
-		ocelot_port_rmwl(ocelot_port, 0,
-				 DEV_CLOCK_CFG_MAC_TX_RST |
-				 DEV_CLOCK_CFG_MAC_RX_RST,
-				 DEV_CLOCK_CFG);
-
 	ocelot_port->phy_mode = phy_mode;
 
-	if (phy_mode != PHY_INTERFACE_MODE_INTERNAL) {
-		struct phy *serdes = of_phy_get(portnp, NULL);
-
-		if (IS_ERR(serdes)) {
-			err = PTR_ERR(serdes);
-			dev_err_probe(dev, err,
-				      "missing SerDes phys for port %d\n",
-				      port);
-			return err;
-		}
-
-		err = phy_set_mode_ext(serdes, PHY_MODE_ETHERNET, phy_mode);
-		of_phy_put(serdes);
-		if (err) {
-			dev_err(dev, "Could not SerDes mode on port %d: %pe\n",
-				port, ERR_PTR(err));
-			return err;
-		}
-	}
+	err = ocelot_port_configure_serdes(ocelot, port, portnp);
+	if (err)
+		return err;
 
 	priv = container_of(ocelot_port, struct ocelot_port_private, port);
 
@@ -1853,6 +1824,7 @@ int ocelot_probe_port(struct ocelot *ocelot, int port, struct regmap *target,
 	if (ocelot->fdma)
 		ocelot_fdma_netdev_init(ocelot, dev);
 
+	SET_NETDEV_DEVLINK_PORT(dev, &ocelot->devlink_ports[port]);
 	err = register_netdev(dev);
 	if (err) {
 		dev_err(ocelot->dev, "register_netdev failed\n");

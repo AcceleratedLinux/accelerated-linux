@@ -1734,12 +1734,12 @@ static void nv_get_stats(int cpu, struct fe_priv *np,
 	u64 tx_packets, tx_bytes, tx_dropped;
 
 	do {
-		syncp_start = u64_stats_fetch_begin_irq(&np->swstats_rx_syncp);
+		syncp_start = u64_stats_fetch_begin(&np->swstats_rx_syncp);
 		rx_packets       = src->stat_rx_packets;
 		rx_bytes         = src->stat_rx_bytes;
 		rx_dropped       = src->stat_rx_dropped;
 		rx_missed_errors = src->stat_rx_missed_errors;
-	} while (u64_stats_fetch_retry_irq(&np->swstats_rx_syncp, syncp_start));
+	} while (u64_stats_fetch_retry(&np->swstats_rx_syncp, syncp_start));
 
 	storage->rx_packets       += rx_packets;
 	storage->rx_bytes         += rx_bytes;
@@ -1747,11 +1747,11 @@ static void nv_get_stats(int cpu, struct fe_priv *np,
 	storage->rx_missed_errors += rx_missed_errors;
 
 	do {
-		syncp_start = u64_stats_fetch_begin_irq(&np->swstats_tx_syncp);
+		syncp_start = u64_stats_fetch_begin(&np->swstats_tx_syncp);
 		tx_packets  = src->stat_tx_packets;
 		tx_bytes    = src->stat_tx_bytes;
 		tx_dropped  = src->stat_tx_dropped;
-	} while (u64_stats_fetch_retry_irq(&np->swstats_tx_syncp, syncp_start));
+	} while (u64_stats_fetch_retry(&np->swstats_tx_syncp, syncp_start));
 
 	storage->tx_packets += tx_packets;
 	storage->tx_bytes   += tx_bytes;
@@ -1761,7 +1761,7 @@ static void nv_get_stats(int cpu, struct fe_priv *np,
 /*
  * nv_get_stats64: dev->ndo_get_stats64 function
  * Get latest stats value from the nic.
- * Called with read_lock(&dev_base_lock) held for read -
+ * Called with rcu_read_lock() held -
  * only synchronized against unregister_netdevice.
  */
 static void
@@ -3090,7 +3090,7 @@ static void set_bufsize(struct net_device *dev)
 
 /*
  * nv_change_mtu: dev->change_mtu function
- * Called with dev_base_lock held for read.
+ * Called with RTNL held for read.
  */
 static int nv_change_mtu(struct net_device *dev, int new_mtu)
 {
@@ -3098,7 +3098,7 @@ static int nv_change_mtu(struct net_device *dev, int new_mtu)
 	int old_mtu;
 
 	old_mtu = dev->mtu;
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 
 	/* return early if the buffer sizes will not change */
 	if (old_mtu <= ETH_DATA_LEN && new_mtu <= ETH_DATA_LEN)
@@ -4291,9 +4291,9 @@ static void nv_do_stats_poll(struct timer_list *t)
 static void nv_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 {
 	struct fe_priv *np = netdev_priv(dev);
-	strlcpy(info->driver, DRV_NAME, sizeof(info->driver));
-	strlcpy(info->version, FORCEDETH_VERSION, sizeof(info->version));
-	strlcpy(info->bus_info, pci_name(np->pci_dev), sizeof(info->bus_info));
+	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
+	strscpy(info->version, FORCEDETH_VERSION, sizeof(info->version));
+	strscpy(info->bus_info, pci_name(np->pci_dev), sizeof(info->bus_info));
 }
 
 static void nv_get_wol(struct net_device *dev, struct ethtool_wolinfo *wolinfo)
@@ -5876,7 +5876,7 @@ static int nv_probe(struct pci_dev *pci_dev, const struct pci_device_id *id)
 	else
 		dev->netdev_ops = &nv_netdev_ops_optimized;
 
-	netif_napi_add(dev, &np->napi, nv_napi_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add(dev, &np->napi, nv_napi_poll);
 	dev->ethtool_ops = &ops;
 	dev->watchdog_timeo = NV_WATCHDOG_TIMEO;
 
@@ -6138,6 +6138,7 @@ static int nv_probe(struct pci_dev *pci_dev, const struct pci_device_id *id)
 	return 0;
 
 out_error:
+	nv_mgmt_release_sema(dev);
 	if (phystate_orig)
 		writel(phystate|NVREG_ADAPTCTL_RUNNING, base + NvRegAdapterControl);
 out_freering:

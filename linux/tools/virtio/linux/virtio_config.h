@@ -1,7 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#ifndef LINUX_VIRTIO_CONFIG_H
+#define LINUX_VIRTIO_CONFIG_H
 #include <linux/virtio_byteorder.h>
 #include <linux/virtio.h>
 #include <uapi/linux/virtio_config.h>
+
+struct virtio_config_ops {
+	int (*disable_vq_and_reset)(struct virtqueue *vq);
+	int (*enable_vq_after_reset)(struct virtqueue *vq);
+};
 
 /*
  * __virtio_test_bit - helper to test feature bits. For use by transports.
@@ -90,3 +97,5 @@ static inline __virtio64 cpu_to_virtio64(struct virtio_device *vdev, u64 val)
 {
 	return __cpu_to_virtio64(virtio_is_little_endian(vdev), val);
 }
+
+#endif

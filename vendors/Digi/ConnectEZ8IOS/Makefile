@@ -72,6 +72,7 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
 	$(ROMFSINST) -d /etc/factory.console
 	$(ROMFSINST) -d -p 644 ../ConnectEZ8W/76-sdcard_poll_rate.rules /libexec/udev/rules.d/76-sdcard_poll_rate.rules
 	$(ROMFSINST) -d -p 644 ../ConnectEZ8W/76-cez_automount.rules /libexec/udev/rules.d/76-cez_automount.rules
+	$(ROMFSINST) -d -p 555 ../ConnectEZ8/serial-mode /bin/serial-mode
 	echo "Digi ConnectEZ-8MIOS" > $(ROMFSDIR)/etc/issue
 	echo "NETWORK_PRODUCT=connectez" > version.info
 	echo "PRODUCT_VERSION="$$(sed -e 's?^[^ ]* [^ ]* ??' -e 's?-.*$$??' < $(ROMFSDIR)/etc/version) >> version.info

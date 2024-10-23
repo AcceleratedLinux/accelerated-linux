@@ -1,0 +1,92 @@
+<params_file>
+    <parameters_block>
+        <param name="function" size="0x4"/>
+        <param name="padding1" size="0x4"/>
+        <param name="base_addr" size="0x8"/>
+        <param name="num_items" size="0x4" type="data_size"/>
+        <param name="result_status" size="0x4" type="result"/>
+        <param name="items" size="0x8" type="data_inout"/>
+        <param name="qspi_base_addr" size="0x8"/>
+        <param name="qspi_controller_offset" size="0x4"/>
+        <param name="bytes_per_sector" size="0x4" value="0x10000"/>
+        <param name="bytes_per_page" size="0x4" value="0x100"/>
+        <param name="number_of_sectors" size="0x4" value="0x100"/>
+        <param name="swap_enable" size="0x1"/>
+        <param name="workaround" size="0x1" value="0"/>
+        <param name="is_nand" size="0x1" value ="0"/>
+        <param name="block_protect_mask" size="0x1" value="0x5C"/>
+        <param name="top_bottom_reg_address" size="0x4" value="0"/>
+        <param name="top_bottom_mask" size="0x1" value="0x20"/>
+
+        <!-- write enable -->
+        <param name="write_enable_cmd" size="0x1" value="0x06"/>
+
+        <!-- read id -->
+        <param name="read_id_cmd" size="0x1" value="0x9F"/>
+        <param name="read_id_dummy" size="0x1" value="0x0"/>
+        <param name="read_id_length" size="0x1" value="0x08"/>
+
+        <!-- read status register -->
+        <param name="read_status_register_cmd" size="0x1" value="0x05"/>
+        <param name="read_status_register_address_length" size="0x1" value="0x0"/>
+        <param name="read_status_register_length" size="0x1" value="0x01"/>
+
+        <!-- write status register -->
+        <param name="write_status_register_cmd" size="0x1" value="0x01"/>
+        <param name="write_status_register_address_length" size="0x1" value="0x0"/>
+        <param name="write_status_register_length" size="0x1" value="0x01"/>
+
+         <!-- read any register -->
+        <param name="read_any_register_cmd" size="0x1" value="0x0"/>
+        <param name="read_any_register_address_length" size="0x1" value="0x0"/>
+        <param name="read_any_register_dummy" size="0x1" value="0x0"/>
+        <param name="read_any_register_length" size="0x1" value="0x0"/>
+
+         <!-- write any register -->
+        <param name="write_any_register_cmd" size="0x1" value="0x0"/>
+        <param name="write_any_register_address_length" size="0x1" value="0x0"/>
+        <param name="write_any_register_dummy" size="0x1" value="0x0"/>
+        <param name="write_any_register_length" size="0x1" value="0x0"/>
+
+        <!-- page read (NOR) / read to cache (NAND) -->
+        <param name="page_read_cmd" size="0x1" value="0x0B"/>
+        <param name="page_read_dummy1" size="0x1" value="0x0"/>
+        <param name="page_read_address_length" size="0x1" value="0x18"/>
+        <param name="page_read_dummy2" size="0x1" value="0x08"/>
+
+        <!-- read from cache (NAND) -->
+        <param name="page_read_from_cache_cmd" size="0x1" value="0x0"/>
+        <param name="page_read_from_cache_dummy1" size="0x1" value="0x0"/>
+        <param name="page_read_from_cache_address_length" size="0x1" value="0x0"/>
+        <param name="page_read_from_cache_dummy2" size="0x1" value="0x0"/>
+
+        <!-- page program -->
+        <param name="page_program_cmd" size="0x1" value="0x02"/>
+        <param name="page_program_dummy" size="0x1" value="0x0"/>
+        <param name="page_program_address_length" size="0x1" value="0x18"/>
+
+        <!-- page erase -->
+        <param name="page_erase_cmd" size="0x1" value="0xD8"/>
+        <param name="page_erase_dummy" size="0x1" value="0x0"/>
+        <param name="page_erase_address_length" size="0x1" value="0x18"/>
+
+        <!-- program execute -->
+        <param name="page_execute_cmd" size="0x1" value="0x0"/>
+        <param name="page_execute_dummy" size="0x1" value="0x0"/>
+        <param name="page_execute_address_length" size="0x1" value="0x0"/>
+
+        <!-- die select -->
+        <param name="die_select" size="0x1" value="0x0"/>
+        <param name="die_index" size="0x1" value="0x0"/>
+
+        <!-- clear status register -->
+        <param name="clear_status_register_cmd" size="0x1" value="0x0"/>
+
+        <!-- random load program data command (NAND) -->
+        <param name="random_load_program_cmd" size="0x1" value="0x0"/>
+        <param name="random_load_program_dummy" size="0x1" value="0x0"/>
+        <param name="random_load_program_address_length" size="0x1" value="0x0"/>
+
+        <param name="padding" size="0x2"/>
+    </parameters_block>
+</params_file>

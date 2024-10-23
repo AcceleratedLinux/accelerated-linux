@@ -12,6 +12,7 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/mdio/mdio-mscc-miim.h>
+#include <linux/mfd/ocelot.h>
 #include <linux/module.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
@@ -51,6 +52,7 @@ struct mscc_miim_info {
 struct mscc_miim_dev {
 	struct regmap *regs;
 	int mii_status_offset;
+	bool ignore_read_errors;
 	struct regmap *phy_regs;
 	const struct mscc_miim_info *info;
 	struct clk *clk;
@@ -107,9 +109,6 @@ static int mscc_miim_read(struct mii_bus *bus, int mii_id, int regnum)
 	u32 val;
 	int ret;
 
-	if (regnum & MII_ADDR_C45)
-		return -EOPNOTSUPP;
-
 	ret = mscc_miim_wait_pending(bus);
 	if (ret)
 		goto out;
@@ -137,7 +136,7 @@ static int mscc_miim_read(struct mii_bus *bus, int mii_id, int regnum)
 		goto out;
 	}
 
-	if (val & MSCC_MIIM_DATA_ERROR) {
+	if (!miim->ignore_read_errors && !!(val & MSCC_MIIM_DATA_ERROR)) {
 		ret = -EIO;
 		goto out;
 	}
@@ -152,9 +151,6 @@ static int mscc_miim_write(struct mii_bus *bus, int mii_id,
 {
 	struct mscc_miim_dev *miim = bus->priv;
 	int ret;
-
-	if (regnum & MII_ADDR_C45)
-		return -EOPNOTSUPP;
 
 	ret = mscc_miim_wait_pending(bus);
 	if (ret < 0)
@@ -217,7 +213,8 @@ static const struct regmap_config mscc_miim_phy_regmap_config = {
 };
 
 int mscc_miim_setup(struct device *dev, struct mii_bus **pbus, const char *name,
-		    struct regmap *mii_regmap, int status_offset)
+		    struct regmap *mii_regmap, int status_offset,
+		    bool ignore_read_errors)
 {
 	struct mscc_miim_dev *miim;
 	struct mii_bus *bus;
@@ -239,6 +236,7 @@ int mscc_miim_setup(struct device *dev, struct mii_bus **pbus, const char *name,
 
 	miim->regs = mii_regmap;
 	miim->mii_status_offset = status_offset;
+	miim->ignore_read_errors = ignore_read_errors;
 
 	*pbus = bus;
 
@@ -270,46 +268,27 @@ static int mscc_miim_clk_set(struct mii_bus *bus)
 
 static int mscc_miim_probe(struct platform_device *pdev)
 {
-	struct regmap *mii_regmap, *phy_regmap = NULL;
 	struct device_node *np = pdev->dev.of_node;
+	struct regmap *mii_regmap, *phy_regmap;
 	struct device *dev = &pdev->dev;
-	void __iomem *regs, *phy_regs;
 	struct mscc_miim_dev *miim;
-	struct resource *res;
 	struct mii_bus *bus;
 	int ret;
 
-	regs = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
-	if (IS_ERR(regs)) {
-		dev_err(dev, "Unable to map MIIM registers\n");
-		return PTR_ERR(regs);
-	}
-
-	mii_regmap = devm_regmap_init_mmio(dev, regs, &mscc_miim_regmap_config);
-
-	if (IS_ERR(mii_regmap)) {
-		dev_err(dev, "Unable to create MIIM regmap\n");
-		return PTR_ERR(mii_regmap);
-	}
+	mii_regmap = ocelot_regmap_from_resource(pdev, 0,
+						 &mscc_miim_regmap_config);
+	if (IS_ERR(mii_regmap))
+		return dev_err_probe(dev, PTR_ERR(mii_regmap),
+				     "Unable to create MIIM regmap\n");
 
 	/* This resource is optional */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (res) {
-		phy_regs = devm_ioremap_resource(dev, res);
-		if (IS_ERR(phy_regs)) {
-			dev_err(dev, "Unable to map internal phy registers\n");
-			return PTR_ERR(phy_regs);
-		}
+	phy_regmap = ocelot_regmap_from_resource_optional(pdev, 1,
+						 &mscc_miim_phy_regmap_config);
+	if (IS_ERR(phy_regmap))
+		return dev_err_probe(dev, PTR_ERR(phy_regmap),
+				     "Unable to create phy register regmap\n");
 
-		phy_regmap = devm_regmap_init_mmio(dev, phy_regs,
-						   &mscc_miim_phy_regmap_config);
-		if (IS_ERR(phy_regmap)) {
-			dev_err(dev, "Unable to create phy register regmap\n");
-			return PTR_ERR(phy_regmap);
-		}
-	}
-
-	ret = mscc_miim_setup(dev, &bus, "mscc_miim", mii_regmap, 0);
+	ret = mscc_miim_setup(dev, &bus, "mscc_miim", mii_regmap, 0, false);
 	if (ret < 0) {
 		dev_err(dev, "Unable to setup the MDIO bus\n");
 		return ret;
@@ -356,15 +335,13 @@ out_disable_clk:
 	return ret;
 }
 
-static int mscc_miim_remove(struct platform_device *pdev)
+static void mscc_miim_remove(struct platform_device *pdev)
 {
 	struct mii_bus *bus = platform_get_drvdata(pdev);
 	struct mscc_miim_dev *miim = bus->priv;
 
 	clk_disable_unprepare(miim->clk);
 	mdiobus_unregister(bus);
-
-	return 0;
 }
 
 static const struct mscc_miim_info mscc_ocelot_miim_info = {
@@ -392,7 +369,7 @@ MODULE_DEVICE_TABLE(of, mscc_miim_match);
 
 static struct platform_driver mscc_miim_driver = {
 	.probe = mscc_miim_probe,
-	.remove = mscc_miim_remove,
+	.remove_new = mscc_miim_remove,
 	.driver = {
 		.name = "mscc-miim",
 		.of_match_table = mscc_miim_match,

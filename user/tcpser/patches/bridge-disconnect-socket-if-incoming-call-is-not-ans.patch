@@ -1,0 +1,27 @@
+From 46a3060350ce22f981497d88c4a859a7ee9bf7f6 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Fri, 5 May 2023 12:26:43 +0100
+Subject: [PATCH] bridge: disconnect socket if incoming call is not answered
+
+Previously, after sending RING x 10 over the serial port, the remote
+caller would receive NO ANSWER but remain connected.
+---
+ src/bridge.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/bridge.c b/src/bridge.c
+index 70a6019..1d00d49 100644
+--- a/src/bridge.c
++++ b/src/bridge.c
+@@ -390,7 +390,7 @@ void *bridge_task(void *arg) {
+             writeFile(cfg->no_answer, cfg->line_data.fd);
+           }
+           cfg->is_ringing = FALSE;
+-          //mdm_disconnect(cfg, FALSE); // not sure need to do a disconnect here, no connection
++          mdm_disconnect(cfg, FALSE);
+         } else
+           mdm_send_ring(cfg);
+       } else 
+-- 
+2.34.1
+

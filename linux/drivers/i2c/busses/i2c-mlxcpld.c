@@ -22,6 +22,7 @@
 #define MLXCPLD_I2C_BUS_NUM		1
 #define MLXCPLD_I2C_DATA_REG_SZ		36
 #define MLXCPLD_I2C_DATA_SZ_BIT		BIT(5)
+#define MLXCPLD_I2C_DATA_EXT2_SZ_BIT	BIT(6)
 #define MLXCPLD_I2C_DATA_SZ_MASK	GENMASK(6, 5)
 #define MLXCPLD_I2C_SMBUS_BLK_BIT	BIT(7)
 #define MLXCPLD_I2C_MAX_ADDR_LEN	4
@@ -40,7 +41,7 @@
 #define MLXCPLD_LPCI2C_STATUS_REG	0x9
 #define MLXCPLD_LPCI2C_DATA_REG		0xa
 
-/* LPC I2C masks and parametres */
+/* LPC I2C masks and parameters */
 #define MLXCPLD_LPCI2C_RST_SEL_MASK	0x1
 #define MLXCPLD_LPCI2C_TRANS_END	0x1
 #define MLXCPLD_LPCI2C_STATUS_NACK	0x10
@@ -466,10 +467,17 @@ static const struct i2c_adapter_quirks mlxcpld_i2c_quirks_ext = {
 	.max_comb_1st_msg_len = 4,
 };
 
+static const struct i2c_adapter_quirks mlxcpld_i2c_quirks_ext2 = {
+	.flags = I2C_AQ_COMB_WRITE_THEN_READ,
+	.max_read_len = (MLXCPLD_I2C_DATA_REG_SZ - 4) * 4,
+	.max_write_len = (MLXCPLD_I2C_DATA_REG_SZ - 4) * 4 + MLXCPLD_I2C_MAX_ADDR_LEN,
+	.max_comb_1st_msg_len = 4,
+};
+
 static struct i2c_adapter mlxcpld_i2c_adapter = {
 	.owner          = THIS_MODULE,
 	.name           = "i2c-mlxcpld",
-	.class          = I2C_CLASS_HWMON | I2C_CLASS_SPD,
+	.class          = I2C_CLASS_HWMON,
 	.algo           = &mlxcpld_i2c_algo,
 	.quirks		= &mlxcpld_i2c_quirks,
 	.retries	= MLXCPLD_I2C_RETR_NUM,
@@ -547,6 +555,8 @@ static int mlxcpld_i2c_probe(struct platform_device *pdev)
 	/* Check support for extended transaction length */
 	if ((val & MLXCPLD_I2C_DATA_SZ_MASK) == MLXCPLD_I2C_DATA_SZ_BIT)
 		mlxcpld_i2c_adapter.quirks = &mlxcpld_i2c_quirks_ext;
+	else if ((val & MLXCPLD_I2C_DATA_SZ_MASK) == MLXCPLD_I2C_DATA_EXT2_SZ_BIT)
+		mlxcpld_i2c_adapter.quirks = &mlxcpld_i2c_quirks_ext2;
 	/* Check support for smbus block transaction */
 	if (val & MLXCPLD_I2C_SMBUS_BLK_BIT)
 		priv->smbus_block = true;
@@ -560,6 +570,10 @@ static int mlxcpld_i2c_probe(struct platform_device *pdev)
 	if (err)
 		goto mlxcpld_i2_probe_failed;
 
+	/* Notify caller when adapter is added. */
+	if (pdata && pdata->completion_notify)
+		pdata->completion_notify(pdata->handle, mlxcpld_i2c_adapter.nr);
+
 	return 0;
 
 mlxcpld_i2_probe_failed:
@@ -567,19 +581,17 @@ mlxcpld_i2_probe_failed:
 	return err;
 }
 
-static int mlxcpld_i2c_remove(struct platform_device *pdev)
+static void mlxcpld_i2c_remove(struct platform_device *pdev)
 {
 	struct mlxcpld_i2c_priv *priv = platform_get_drvdata(pdev);
 
 	i2c_del_adapter(&priv->adap);
 	mutex_destroy(&priv->lock);
-
-	return 0;
 }
 
 static struct platform_driver mlxcpld_i2c_driver = {
 	.probe		= mlxcpld_i2c_probe,
-	.remove		= mlxcpld_i2c_remove,
+	.remove_new	= mlxcpld_i2c_remove,
 	.driver = {
 		.name = MLXCPLD_I2C_DEVICE_NAME,
 	},

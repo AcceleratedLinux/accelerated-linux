@@ -3,7 +3,7 @@
  * max77976_charger.c - Driver for the Maxim MAX77976 battery charger
  *
  * Copyright (C) 2021 Luca Ceresoli
- * Author: Luca Ceresoli <luca@lucaceresoli.net>
+ * Author: Luca Ceresoli <luca.ceresoli@bootlin.com>
  */
 
 #include <linux/i2c.h>
@@ -499,11 +499,11 @@ static struct i2c_driver max77976_driver = {
 		.name		= MAX77976_DRIVER_NAME,
 		.of_match_table	= max77976_of_id,
 	},
-	.probe_new	= max77976_probe,
+	.probe		= max77976_probe,
 	.id_table	= max77976_i2c_id,
 };
 module_i2c_driver(max77976_driver);
 
-MODULE_AUTHOR("Luca Ceresoli <luca@lucaceresoli.net>");
+MODULE_AUTHOR("Luca Ceresoli <luca.ceresoli@bootlin.com>");
 MODULE_DESCRIPTION("Maxim MAX77976 charger driver");
 MODULE_LICENSE("GPL v2");

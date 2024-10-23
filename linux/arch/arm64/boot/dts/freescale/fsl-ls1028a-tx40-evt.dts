@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree file for Digi TX40 EVT.
+ *
+ * Copyright 2018-2021 NXP
+ * Copyright 2023 Digi Inc.
+ *
+ * Harninder Rai <harninder.rai@nxp.com>
+ * Robert Hodaszi <robert.hodaszi@digi.com>
+ *
+ */
+ #include "fsl-ls1028a-tx40.dts"
+
+
+/ {
+	sim-mux0 {
+		compatible = "sim-mux";
+
+		sim-select-gpios  = <&gpio3 4 GPIO_ACTIVE_HIGH>;
+
+		sim-count = <2>;
+	};
+};
+
+&soc {
+	leds {
+		extgpio@3 {
+			label = "wifi-red";
+			gpios = <&extgpio 3 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@4 {
+			label = "wifi-green";
+			gpios = <&extgpio 4 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@5 {
+			label = "wifi-blue";
+			gpios = <&extgpio 5 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@8 {
+			label = "gnss-red";
+			gpios = <&extgpio 8 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@9 {
+			label = "gnss-green";
+			gpios = <&extgpio 9 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@10 {
+			label = "gnss-blue";
+			gpios = <&extgpio 10 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+	};
+};
+
+&reg_gnss {
+	gpio = <&gpio3 8 GPIO_ACTIVE_HIGH>;
+};
+
+&reg_wifi {
+	gpio = <&gpio3 5 GPIO_ACTIVE_HIGH>;
+};
+
+&pcie1 {
+	reset-gpios = <&gpio3 6 GPIO_ACTIVE_HIGH>;
+};
+
+/*&i2c0 {
+	/delete-node/ lis2de12@18;
+	accelerometer: adxl343@53 {
+		compatible = "adi,adxl345";
+		reg = <0x53>;
+		interrupt-parent = <&mcu_tx40>;
+		interrupts = <4>;
+	};
+};*/
+
+&i2c4 {
+	/delete-node/ pca9538@70;
+	extgpio: pca9535@20 {
+		#gpio-cells = <2>;
+		compatible = "nxp,pca9535";
+		reg = <0x20>;
+		pinctrl-names = "default";
+		gpio-controller;
+	};
+};

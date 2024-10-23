@@ -192,6 +192,7 @@ struct lis2hh12_data {
 	struct iio_trigger *iio_trig[LIS2HH12_SENSORS_NUMB];
 	const struct lis2hh12_transfer_function *tf;
 	struct lis2hh12_transfer_buffer tb;
+	struct mutex mlock;
 };
 
 int lis2hh12_common_probe(struct lis2hh12_data *cdata, int irq);

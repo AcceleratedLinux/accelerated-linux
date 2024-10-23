@@ -9,48 +9,48 @@
 #
 
 #
-# GPIO444 = UART GPIO 4: differential termination enable (output, active high, default low)
-# GPIO445 = UART GPIO 5: 2-wire, half-duplex enable (output, active high, default low)
-# GPIO446 = UART GPIO 6: RS485 enable (output, active low, default high)
-# GPIO447 = UART GPIO 7: RS232 enable (output, active high, default low)
+# GPIO576 = UART GPIO 4: differential termination enable (output, active high, default low)
+# GPIO577 = UART GPIO 5: 2-wire, half-duplex enable (output, active high, default low)
+# GPIO578 = UART GPIO 6: RS485 enable (output, active low, default high)
+# GPIO579 = UART GPIO 7: RS232 enable (output, active high, default low)
 #
 
 serial_init() {
 	# The initialization prepares GPIOs, but defers mode shift
 	# until mode is selected.
-	echo 444 > /sys/class/gpio/export
-	echo 445 > /sys/class/gpio/export
-	echo 446 > /sys/class/gpio/export
-	echo 447 > /sys/class/gpio/export
+	echo 576 > /sys/class/gpio/export
+	echo 577 > /sys/class/gpio/export
+	echo 578 > /sys/class/gpio/export
+	echo 579 > /sys/class/gpio/export
 }
 
 serial_rs232() {
-	echo low > /sys/class/gpio/gpio444/direction
-	echo low > /sys/class/gpio/gpio445/direction
-	echo high > /sys/class/gpio/gpio446/direction
-	echo high > /sys/class/gpio/gpio447/direction
+	echo low > /sys/class/gpio/gpio576/direction
+	echo low > /sys/class/gpio/gpio577/direction
+	echo high > /sys/class/gpio/gpio578/direction
+	echo high > /sys/class/gpio/gpio579/direction
 }
 
 serial_rs422() {
-	echo low > /sys/class/gpio/gpio444/direction
-	echo low > /sys/class/gpio/gpio445/direction
-	echo low > /sys/class/gpio/gpio446/direction
-	echo low > /sys/class/gpio/gpio447/direction
+	echo low > /sys/class/gpio/gpio576/direction
+	echo low > /sys/class/gpio/gpio577/direction
+	echo low > /sys/class/gpio/gpio578/direction
+	echo low > /sys/class/gpio/gpio579/direction
 }
 
 serial_rs485() {  # 2-wire, half-duplex
-	echo low > /sys/class/gpio/gpio444/direction
-	echo high > /sys/class/gpio/gpio445/direction
-	echo low > /sys/class/gpio/gpio446/direction
-	echo low > /sys/class/gpio/gpio447/direction
+	echo low > /sys/class/gpio/gpio576/direction
+	echo high > /sys/class/gpio/gpio577/direction
+	echo low > /sys/class/gpio/gpio578/direction
+	echo low > /sys/class/gpio/gpio579/direction
 }
 
 serial_nonterminate() {
-	echo low > /sys/class/gpio/gpio444/direction
+	echo low > /sys/class/gpio/gpio576/direction
 }
 
 serial_terminate() {
-	echo high > /sys/class/gpio/gpio444/direction
+	echo high > /sys/class/gpio/gpio576/direction
 }
 
 usage() {

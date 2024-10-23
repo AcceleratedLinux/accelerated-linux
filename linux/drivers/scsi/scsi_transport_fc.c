@@ -137,6 +137,7 @@ static const struct {
 	{ FCH_EVT_PORT_FABRIC,		"port_fabric" },
 	{ FCH_EVT_LINK_UNKNOWN,		"link_unknown" },
 	{ FCH_EVT_LINK_FPIN,		"link_FPIN" },
+	{ FCH_EVT_LINK_FPIN_ACK,	"link_FPIN_ACK" },
 	{ FCH_EVT_VENDOR_UNIQUE,	"vendor_unique" },
 };
 fc_enum_name_search(host_event_code, fc_host_event_code,
@@ -543,7 +544,7 @@ fc_host_post_fc_event(struct Scsi_Host *shost, u32 event_number,
 	struct nlmsghdr	*nlh;
 	struct fc_nl_event *event;
 	const char *name;
-	u32 len;
+	size_t len, padding;
 	int err;
 
 	if (!data_buf || data_len < 4)
@@ -554,7 +555,7 @@ fc_host_post_fc_event(struct Scsi_Host *shost, u32 event_number,
 		goto send_fail;
 	}
 
-	len = FC_NL_MSGALIGN(sizeof(*event) + data_len);
+	len = FC_NL_MSGALIGN(sizeof(*event) - sizeof(event->event_data) + data_len);
 
 	skb = nlmsg_new(len, GFP_KERNEL);
 	if (!skb) {
@@ -578,7 +579,9 @@ fc_host_post_fc_event(struct Scsi_Host *shost, u32 event_number,
 	event->event_num = event_number;
 	event->event_code = event_code;
 	if (data_len)
-		memcpy(&event->event_data, data_buf, data_len);
+		memcpy(event->event_data_flex, data_buf, data_len);
+	padding = len - offsetof(typeof(*event), event_data_flex) - data_len;
+	memset(event->event_data_flex + data_len, 0, padding);
 
 	nlmsg_multicast(scsi_nl_sock, skb, 0, SCSI_NL_GRP_FC_EVENTS,
 			GFP_KERNEL);
@@ -892,17 +895,20 @@ fc_fpin_congn_stats_update(struct Scsi_Host *shost,
  * @shost:		host the FPIN was received on
  * @fpin_len:		length of FPIN payload, in bytes
  * @fpin_buf:		pointer to FPIN payload
- *
+ * @event_acknowledge:	1, if LLDD handles this event.
  * Notes:
  *	This routine assumes no locks are held on entry.
  */
 void
-fc_host_fpin_rcv(struct Scsi_Host *shost, u32 fpin_len, char *fpin_buf)
+fc_host_fpin_rcv(struct Scsi_Host *shost, u32 fpin_len, char *fpin_buf,
+		u8 event_acknowledge)
 {
 	struct fc_els_fpin *fpin = (struct fc_els_fpin *)fpin_buf;
 	struct fc_tlv_desc *tlv;
-	u32 desc_cnt = 0, bytes_remain;
+	u32 bytes_remain;
 	u32 dtag;
+	enum fc_host_event_code event_code =
+		event_acknowledge ? FCH_EVT_LINK_FPIN_ACK : FCH_EVT_LINK_FPIN;
 
 	/* Update Statistics */
 	tlv = (struct fc_tlv_desc *)&fpin->fpin_desc[0];
@@ -926,13 +932,12 @@ fc_host_fpin_rcv(struct Scsi_Host *shost, u32 fpin_len, char *fpin_buf)
 			fc_fpin_congn_stats_update(shost, tlv);
 		}
 
-		desc_cnt++;
 		bytes_remain -= FC_TLV_DESC_SZ_FROM_LENGTH(tlv);
 		tlv = fc_tlv_next_desc(tlv);
 	}
 
 	fc_host_post_fc_event(shost, fc_get_event_number(),
-				FCH_EVT_LINK_FPIN, fpin_len, fpin_buf, 0);
+				event_code, fpin_len, fpin_buf, 0);
 }
 EXPORT_SYMBOL(fc_host_fpin_rcv);
 
@@ -1170,7 +1175,7 @@ static int fc_rport_set_dev_loss_tmo(struct fc_rport *rport,
 	return 0;
 }
 
-fc_rport_show_function(dev_loss_tmo, "%d\n", 20, )
+fc_rport_show_function(dev_loss_tmo, "%u\n", 20, )
 static ssize_t
 store_fc_rport_dev_loss_tmo(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
@@ -2528,15 +2533,14 @@ static int fc_vport_match(struct attribute_container *cont,
  * Notes:
  *	This routine assumes no locks are held on entry.
  */
-enum blk_eh_timer_return
-fc_eh_timed_out(struct scsi_cmnd *scmd)
+enum scsi_timeout_action fc_eh_timed_out(struct scsi_cmnd *scmd)
 {
 	struct fc_rport *rport = starget_to_rport(scsi_target(scmd->device));
 
 	if (rport->port_state == FC_PORTSTATE_BLOCKED)
-		return BLK_EH_RESET_TIMER;
+		return SCSI_EH_RESET_TIMER;
 
-	return BLK_EH_DONE;
+	return SCSI_EH_NOT_HANDLED;
 }
 EXPORT_SYMBOL(fc_eh_timed_out);
 
@@ -3447,7 +3451,7 @@ fc_remote_port_delete(struct fc_rport  *rport)
 
 	spin_unlock_irqrestore(shost->host_lock, flags);
 
-	scsi_target_block(&rport->dev);
+	scsi_block_targets(shost, &rport->dev);
 
 	/* see if we need to kill io faster than waiting for device loss */
 	if ((rport->fast_io_fail_tmo != -1) &&
@@ -4272,6 +4276,7 @@ fc_bsg_hostadd(struct Scsi_Host *shost, struct fc_host_attrs *fc_host)
 {
 	struct device *dev = &shost->shost_gendev;
 	struct fc_internal *i = to_fc_internal(shost->transportt);
+	struct queue_limits lim;
 	struct request_queue *q;
 	char bsg_name[20];
 
@@ -4282,16 +4287,16 @@ fc_bsg_hostadd(struct Scsi_Host *shost, struct fc_host_attrs *fc_host)
 
 	snprintf(bsg_name, sizeof(bsg_name),
 		 "fc_host%d", shost->host_no);
-
-	q = bsg_setup_queue(dev, bsg_name, fc_bsg_dispatch, fc_bsg_job_timeout,
-				i->f->dd_bsg_size);
+	scsi_init_limits(shost, &lim);
+	lim.max_segments = min_not_zero(lim.max_segments, i->f->max_bsg_segments);
+	q = bsg_setup_queue(dev, bsg_name, &lim, fc_bsg_dispatch,
+			fc_bsg_job_timeout, i->f->dd_bsg_size);
 	if (IS_ERR(q)) {
 		dev_err(dev,
 			"fc_host%d: bsg interface failed to initialize - setup queue\n",
 			shost->host_no);
 		return PTR_ERR(q);
 	}
-	__scsi_init_queue(shost, q);
 	blk_queue_rq_timeout(q, FC_DEFAULT_BSG_TIMEOUT);
 	fc_host->rqst_q = q;
 	return 0;
@@ -4307,6 +4312,7 @@ fc_bsg_rportadd(struct Scsi_Host *shost, struct fc_rport *rport)
 {
 	struct device *dev = &rport->dev;
 	struct fc_internal *i = to_fc_internal(shost->transportt);
+	struct queue_limits lim;
 	struct request_queue *q;
 
 	rport->rqst_q = NULL;
@@ -4314,13 +4320,14 @@ fc_bsg_rportadd(struct Scsi_Host *shost, struct fc_rport *rport)
 	if (!i->f->bsg_request)
 		return -ENOTSUPP;
 
-	q = bsg_setup_queue(dev, dev_name(dev), fc_bsg_dispatch_prep,
+	scsi_init_limits(shost, &lim);
+	lim.max_segments = min_not_zero(lim.max_segments, i->f->max_bsg_segments);
+	q = bsg_setup_queue(dev, dev_name(dev), &lim, fc_bsg_dispatch_prep,
 				fc_bsg_job_timeout, i->f->dd_bsg_size);
 	if (IS_ERR(q)) {
 		dev_err(dev, "failed to setup bsg queue\n");
 		return PTR_ERR(q);
 	}
-	__scsi_init_queue(shost, q);
 	blk_queue_rq_timeout(q, BLK_DEFAULT_SG_TIMEOUT);
 	rport->rqst_q = q;
 	return 0;

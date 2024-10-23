@@ -15,7 +15,8 @@
 #include <linux/dmapool.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 
@@ -86,7 +87,6 @@ struct sa_match_data {
 	u8 priv;
 	u8 priv_id;
 	u32 supported_algos;
-	bool skip_engine_control;
 };
 
 static struct device *sa_k3_dev;
@@ -1038,7 +1038,7 @@ static void sa_free_sa_rx_data(struct sa_rx_data *rxd)
 
 static void sa_aes_dma_in_callback(void *data)
 {
-	struct sa_rx_data *rxd = (struct sa_rx_data *)data;
+	struct sa_rx_data *rxd = data;
 	struct skcipher_request *req;
 	u32 *result;
 	__be32 *mdptr;
@@ -1352,7 +1352,7 @@ static int sa_decrypt(struct skcipher_request *req)
 
 static void sa_sha_dma_in_callback(void *data)
 {
-	struct sa_rx_data *rxd = (struct sa_rx_data *)data;
+	struct sa_rx_data *rxd = data;
 	struct ahash_request *req;
 	struct crypto_ahash *tfm;
 	unsigned int authsize;
@@ -1690,7 +1690,7 @@ static void sa_sha_cra_exit(struct crypto_tfm *tfm)
 
 static void sa_aead_dma_in_callback(void *data)
 {
-	struct sa_rx_data *rxd = (struct sa_rx_data *)data;
+	struct sa_rx_data *rxd = data;
 	struct aead_request *req;
 	struct crypto_aead *tfm;
 	unsigned int start;
@@ -1869,9 +1869,8 @@ static int sa_aead_setkey(struct crypto_aead *authenc,
 	crypto_aead_set_flags(ctx->fallback.aead,
 			      crypto_aead_get_flags(authenc) &
 			      CRYPTO_TFM_REQ_MASK);
-	crypto_aead_setkey(ctx->fallback.aead, key, keylen);
 
-	return 0;
+	return crypto_aead_setkey(ctx->fallback.aead, key, keylen);
 }
 
 static int sa_aead_setauthsize(struct crypto_aead *tfm, unsigned int authsize)
@@ -2361,7 +2360,15 @@ static int sa_link_child(struct device *dev, void *data)
 static struct sa_match_data am654_match_data = {
 	.priv = 1,
 	.priv_id = 1,
-	.supported_algos = GENMASK(SA_ALG_AUTHENC_SHA256_AES, 0),
+	.supported_algos = BIT(SA_ALG_CBC_AES) |
+			   BIT(SA_ALG_EBC_AES) |
+			   BIT(SA_ALG_CBC_DES3) |
+			   BIT(SA_ALG_ECB_DES3) |
+			   BIT(SA_ALG_SHA1) |
+			   BIT(SA_ALG_SHA256) |
+			   BIT(SA_ALG_SHA512) |
+			   BIT(SA_ALG_AUTHENC_SHA1_AES) |
+			   BIT(SA_ALG_AUTHENC_SHA256_AES),
 };
 
 static struct sa_match_data am64_match_data = {
@@ -2372,7 +2379,6 @@ static struct sa_match_data am64_match_data = {
 			   BIT(SA_ALG_SHA256) |
 			   BIT(SA_ALG_SHA512) |
 			   BIT(SA_ALG_AUTHENC_SHA256_AES),
-	.skip_engine_control = true,
 };
 
 static const struct of_device_id of_match[] = {
@@ -2390,6 +2396,7 @@ static int sa_ul_probe(struct platform_device *pdev)
 	struct device_node *node = dev->of_node;
 	static void __iomem *saul_base;
 	struct sa_crypto_data *dev_data;
+	u32 status, val;
 	int ret;
 
 	dev_data = devm_kzalloc(dev, sizeof(*dev_data), GFP_KERNEL);
@@ -2426,13 +2433,13 @@ static int sa_ul_probe(struct platform_device *pdev)
 
 	spin_lock_init(&dev_data->scid_lock);
 
-	if (!dev_data->match_data->skip_engine_control) {
-		u32 val = SA_EEC_ENCSS_EN | SA_EEC_AUTHSS_EN | SA_EEC_CTXCACH_EN |
-			  SA_EEC_CPPI_PORT_IN_EN | SA_EEC_CPPI_PORT_OUT_EN |
-			  SA_EEC_TRNG_EN;
-
+	val = SA_EEC_ENCSS_EN | SA_EEC_AUTHSS_EN | SA_EEC_CTXCACH_EN |
+	      SA_EEC_CPPI_PORT_IN_EN | SA_EEC_CPPI_PORT_OUT_EN |
+	      SA_EEC_TRNG_EN;
+	status = readl_relaxed(saul_base + SA_ENGINE_STATUS);
+	/* Only enable engines if all are not already enabled */
+	if (val & ~status)
 		writel_relaxed(val, saul_base + SA_ENGINE_ENABLE_CONTROL);
-	}
 
 	sa_register_algos(dev_data);
 
@@ -2460,7 +2467,7 @@ destroy_dma_pool:
 	return ret;
 }
 
-static int sa_ul_remove(struct platform_device *pdev)
+static void sa_ul_remove(struct platform_device *pdev)
 {
 	struct sa_crypto_data *dev_data = platform_get_drvdata(pdev);
 
@@ -2478,13 +2485,11 @@ static int sa_ul_remove(struct platform_device *pdev)
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	return 0;
 }
 
 static struct platform_driver sa_ul_driver = {
 	.probe = sa_ul_probe,
-	.remove = sa_ul_remove,
+	.remove_new = sa_ul_remove,
 	.driver = {
 		   .name = "saul-crypto",
 		   .of_match_table = of_match,

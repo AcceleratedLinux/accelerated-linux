@@ -36,7 +36,8 @@ nfs3_rpc_wrapper(struct rpc_clnt *clnt, struct rpc_message *msg, int flags)
 		res = rpc_call_sync(clnt, msg, flags);
 		if (res != -EJUKEBOX)
 			break;
-		freezable_schedule_timeout_killable_unsafe(NFS_JUKEBOX_RETRY_TIME);
+		__set_current_state(TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
+		schedule_timeout(NFS_JUKEBOX_RETRY_TIME);
 		res = -ERESTARTSYS;
 	} while (!fatal_signal_pending(current));
 	return res;
@@ -542,9 +543,10 @@ out:
 }
 
 static int
-nfs3_proc_symlink(struct inode *dir, struct dentry *dentry, struct page *page,
+nfs3_proc_symlink(struct inode *dir, struct dentry *dentry, struct folio *folio,
 		  unsigned int len, struct iattr *sattr)
 {
+	struct page *page = &folio->page;
 	struct nfs3_createdata *data;
 	struct dentry *d_alias;
 	int status = -ENOMEM;
@@ -961,7 +963,7 @@ nfs3_proc_lock(struct file *filp, int cmd, struct file_lock *fl)
 	struct nfs_open_context *ctx = nfs_file_open_context(filp);
 	int status;
 
-	if (fl->fl_flags & FL_CLOSE) {
+	if (fl->c.flc_flags & FL_CLOSE) {
 		l_ctx = nfs_get_lock_context(ctx);
 		if (IS_ERR(l_ctx))
 			l_ctx = NULL;
@@ -984,6 +986,7 @@ static int nfs3_have_delegation(struct inode *inode, fmode_t flags)
 
 static const struct inode_operations nfs3_dir_inode_operations = {
 	.create		= nfs_create,
+	.atomic_open	= nfs_atomic_open_v23,
 	.lookup		= nfs_lookup,
 	.link		= nfs_link,
 	.unlink		= nfs_unlink,
@@ -997,7 +1000,7 @@ static const struct inode_operations nfs3_dir_inode_operations = {
 	.setattr	= nfs_setattr,
 #ifdef CONFIG_NFS_V3_ACL
 	.listxattr	= nfs3_listxattr,
-	.get_acl	= nfs3_get_acl,
+	.get_inode_acl	= nfs3_get_acl,
 	.set_acl	= nfs3_set_acl,
 #endif
 };
@@ -1008,7 +1011,7 @@ static const struct inode_operations nfs3_file_inode_operations = {
 	.setattr	= nfs_setattr,
 #ifdef CONFIG_NFS_V3_ACL
 	.listxattr	= nfs3_listxattr,
-	.get_acl	= nfs3_get_acl,
+	.get_inode_acl	= nfs3_get_acl,
 	.set_acl	= nfs3_set_acl,
 #endif
 };

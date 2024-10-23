@@ -181,6 +181,8 @@ static int filelayout_async_handle_error(struct rpc_task *task,
 	case -EIO:
 	case -ETIMEDOUT:
 	case -EPIPE:
+	case -EPROTO:
+	case -ENODEV:
 		dprintk("%s DS connection error %d\n", __func__,
 			task->tk_status);
 		nfs4_mark_deviceid_unavailable(devid);
@@ -603,14 +605,6 @@ filelayout_check_layout(struct pnfs_layout_hdr *lo,
 
 	dprintk("--> %s\n", __func__);
 
-	/* FIXME: remove this check when layout segment support is added */
-	if (lgr->range.offset != 0 ||
-	    lgr->range.length != NFS4_MAX_UINT64) {
-		dprintk("%s Only whole file layouts supported. Use MDS i/o\n",
-			__func__);
-		goto out;
-	}
-
 	if (fl->pattern_offset > lgr->range.offset) {
 		dprintk("%s pattern_offset %lld too large\n",
 				__func__, fl->pattern_offset);
@@ -781,6 +775,12 @@ filelayout_alloc_lseg(struct pnfs_layout_hdr *layoutid,
 	return &fl->generic_hdr;
 }
 
+static bool
+filelayout_lseg_is_striped(const struct nfs4_filelayout_segment *flseg)
+{
+	return flseg->num_fh > 1;
+}
+
 /*
  * filelayout_pg_test(). Called by nfs_can_coalesce_requests()
  *
@@ -801,6 +801,8 @@ filelayout_pg_test(struct nfs_pageio_descriptor *pgio, struct nfs_page *prev,
 	size = pnfs_generic_pg_test(pgio, prev, req);
 	if (!size)
 		return 0;
+	else if (!filelayout_lseg_is_striped(FILELAYOUT_LSEG(pgio->pg_lseg)))
+		return size;
 
 	/* see if req and prev are in the same stripe */
 	if (prev) {
@@ -852,6 +854,8 @@ fl_pnfs_update_layout(struct inode *ino,
 
 	status = filelayout_check_deviceid(lo, fl, gfp_flags);
 	if (status) {
+		pnfs_error_mark_layout_for_return(ino, lseg);
+		pnfs_set_lo_fail(lseg);
 		pnfs_put_lseg(lseg);
 		lseg = NULL;
 	}
@@ -863,15 +867,15 @@ static void
 filelayout_pg_init_read(struct nfs_pageio_descriptor *pgio,
 			struct nfs_page *req)
 {
-	pnfs_generic_pg_check_layout(pgio);
+	pnfs_generic_pg_check_layout(pgio, req);
 	if (!pgio->pg_lseg) {
 		pgio->pg_lseg = fl_pnfs_update_layout(pgio->pg_inode,
 						      nfs_req_openctx(req),
-						      0,
-						      NFS4_MAX_UINT64,
+						      req_offset(req),
+						      req->wb_bytes,
 						      IOMODE_READ,
 						      false,
-						      GFP_KERNEL);
+						      nfs_io_gfp_mask());
 		if (IS_ERR(pgio->pg_lseg)) {
 			pgio->pg_error = PTR_ERR(pgio->pg_lseg);
 			pgio->pg_lseg = NULL;
@@ -887,15 +891,15 @@ static void
 filelayout_pg_init_write(struct nfs_pageio_descriptor *pgio,
 			 struct nfs_page *req)
 {
-	pnfs_generic_pg_check_layout(pgio);
+	pnfs_generic_pg_check_layout(pgio, req);
 	if (!pgio->pg_lseg) {
 		pgio->pg_lseg = fl_pnfs_update_layout(pgio->pg_inode,
 						      nfs_req_openctx(req),
-						      0,
-						      NFS4_MAX_UINT64,
+						      req_offset(req),
+						      req->wb_bytes,
 						      IOMODE_RW,
 						      false,
-						      GFP_NOFS);
+						      nfs_io_gfp_mask());
 		if (IS_ERR(pgio->pg_lseg)) {
 			pgio->pg_error = PTR_ERR(pgio->pg_lseg);
 			pgio->pg_lseg = NULL;

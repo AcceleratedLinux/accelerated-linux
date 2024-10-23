@@ -321,7 +321,9 @@ struct hclge_config_mac_speed_dup_cmd {
 
 #define HCLGE_CFG_MAC_SPEED_CHANGE_EN_B	0
 	u8 mac_change_fec_en;
-	u8 rsv[22];
+	u8 rsv[4];
+	u8 lane_num;
+	u8 rsv1[17];
 };
 
 #define HCLGE_TQP_ENABLE_B		0
@@ -347,7 +349,9 @@ struct hclge_sfp_info_cmd {
 	u8 autoneg_ability; /* whether support autoneg */
 	__le32 speed_ability; /* speed ability for current media */
 	__le32 module_type;
-	u8 rsv[8];
+	u8 fec_ability;
+	u8 lane_num;
+	u8 rsv[6];
 };
 
 #define HCLGE_MAC_CFG_FEC_AUTO_EN_B	0
@@ -359,10 +363,25 @@ struct hclge_sfp_info_cmd {
 #define HCLGE_MAC_FEC_OFF		0
 #define HCLGE_MAC_FEC_BASER		1
 #define HCLGE_MAC_FEC_RS		2
+#define HCLGE_MAC_FEC_LLRS		3
 struct hclge_config_fec_cmd {
 	u8 fec_mode;
 	u8 default_config;
 	u8 rsv[22];
+};
+
+#define HCLGE_FEC_STATS_CMD_NUM 4
+
+struct hclge_query_fec_stats_cmd {
+	/* fec rs mode total stats */
+	__le32 rs_fec_corr_blocks;
+	__le32 rs_fec_uncorr_blocks;
+	__le32 rs_fec_error_blocks;
+	/* fec base-r mode per lanes stats */
+	u8 base_r_lane_num;
+	u8 rsv[3];
+	__le32 base_r_fec_corr_blocks;
+	__le32 base_r_fec_uncorr_blocks;
 };
 
 #define HCLGE_MAC_UPLINK_PORT		0x100
@@ -807,7 +826,10 @@ struct hclge_dev_specs_1_cmd {
 	u8 rsv0[2];
 	__le16 umv_size;
 	__le16 mc_mac_size;
-	u8 rsv1[12];
+	u8 rsv1[6];
+	u8 tnl_num;
+	u8 hilink_version;
+	u8 rsv2[4];
 };
 
 /* mac speed type defined in firmware command */
@@ -853,10 +875,18 @@ struct hclge_phy_reg_cmd {
 	u8 rsv1[18];
 };
 
+struct hclge_wol_cfg_cmd {
+	__le32 wake_on_lan_mode;
+	u8 sopass[SOPASS_MAX];
+	u8 sopass_size;
+	u8 rsv[13];
+};
+
+struct hclge_query_wol_supported_cmd {
+	__le32 supported_wake_mode;
+	u8 rsv[20];
+};
+
 struct hclge_hw;
 int hclge_cmd_send(struct hclge_hw *hw, struct hclge_desc *desc, int num);
-enum hclge_comm_cmd_status hclge_cmd_mdio_write(struct hclge_hw *hw,
-						struct hclge_desc *desc);
-enum hclge_comm_cmd_status hclge_cmd_mdio_read(struct hclge_hw *hw,
-					       struct hclge_desc *desc);
 #endif

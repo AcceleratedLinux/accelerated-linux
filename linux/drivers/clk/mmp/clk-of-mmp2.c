@@ -1,13 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * mmp2 clock framework source file
  *
  * Copyright (C) 2012 Marvell
  * Chao Xie <xiechao.mail@gmail.com>
  * Copyright (C) 2020 Lubomir Rintel <lkundrak@v3.sk>
- *
- * This file is licensed under the terms of the GNU General Public
- * License version 2. This program is licensed "as is" without any
- * warranty of any kind, whether express or implied.
  */
 
 #include <linux/module.h>
@@ -80,6 +77,8 @@
 #define MPMU_PLL1_CTRL		0x5c
 #define MPMU_PLL_DIFF_CTRL	0x68
 #define MPMU_PLL2_CTRL1		0x414
+
+#define NR_CLKS		200
 
 enum mmp2_clk_model {
 	CLK_MODEL_MMP2,
@@ -546,7 +545,7 @@ static void __init mmp2_clk_init(struct device_node *np)
 
 	mmp2_pm_domain_init(np, pxa_unit);
 
-	mmp_clk_init(np, &pxa_unit->unit, MMP2_NR_CLKS);
+	mmp_clk_init(np, &pxa_unit->unit, NR_CLKS);
 
 	mmp2_main_clk_init(pxa_unit);
 

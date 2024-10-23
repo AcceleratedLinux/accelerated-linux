@@ -4,6 +4,8 @@ config LIB_LIBPAM
 	help
 	  Build/Install libpam
 
+if LIB_LIBPAM
+
 config LIB_LIBPAM_CONF
 	bool "install pam.conf"
 	depends on LIB_LIBPAM
@@ -11,226 +13,318 @@ config LIB_LIBPAM_CONF
 	help
 	  Install a default pam.conf
 
-config LIB_LIBPAM_ALL_MODULES
-	bool "all modules"
-	depends on LIB_LIBPAM
-	default n
-	help
-	  Install all pam modules
+config LIB_LIBPAM_LIBPAMC
+	bool "libpamc.so"
 
-config LIB_LIBPAM_PAM_XAUTH
-	bool 'pam_xauth'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_xauth.so
-
-config LIB_LIBPAM_PAM_SHELLS
-	bool 'pam_shells'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_shells.so
-
-config LIB_LIBPAM_PAM_SUCCEED_IF
-	bool 'pam_succeed_if'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_succeed_if.so
-
-config LIB_LIBPAM_PAM_STRESS
-	bool 'pam_stress'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_stress.so
-
-config LIB_LIBPAM_PAM_SECURETTY
-	bool 'pam_securetty'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_securetty.so
-
-config LIB_LIBPAM_PAM_ISSUE
-	bool 'pam_issue'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_issue.so
-
-config LIB_LIBPAM_PAM_LISTFILE
-	bool 'pam_listfile'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_listfile.so
+config LIB_LIBPAM_LIBPAM_MISC
+	bool "libpam_misc.so"
 
 config LIB_LIBPAM_PAM_ACCESS
-	bool 'pam_access'
+	bool "pam_access"
+	default n
 	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
 	help
-	  Install pam_access.so
-
-config LIB_LIBPAM_PAM_ENV
-	bool 'pam_env'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_env.so
-
-config LIB_LIBPAM_PAM_GROUP
-	bool 'pam_group'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_group.so
-
-config LIB_LIBPAM_PAM_FILTER
-	bool 'pam_filter'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_filter.so
-
-config LIB_LIBPAM_PAM_MKHOMEDIR
-	bool 'pam_mkhomedir'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_mkhomedir.so
-
-config LIB_LIBPAM_PAM_FTP
-	bool 'pam_ftp'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_ftp.so
-
-config LIB_LIBPAM_PAM_ECHO
-	bool 'pam_echo'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_echo.so
-
-config LIB_LIBPAM_PAM_PERMIT
-	bool 'pam_permit'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_permit.so
-
-config LIB_LIBPAM_PAM_MAIL
-	bool 'pam_mail'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_mail.so
-
-config LIB_LIBPAM_PAM_WHEEL
-	bool 'pam_wheel'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_wheel.so
-
-config LIB_LIBPAM_PAM_RHOSTS_AUTH
-	bool 'pam_rhosts_auth'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_rhosts_auth.so
-
-config LIB_LIBPAM_PAM_UMASK
-	bool 'pam_umask'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_umask.so
-
-config LIB_LIBPAM_PAM_NOLOGIN
-	bool 'pam_nologin'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_nologin.so
-
-config LIB_LIBPAM_PAM_LASTLOG
-	bool 'pam_lastlog'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_lastlog.so
-
-config LIB_LIBPAM_PAM_DENY
-	bool 'pam_deny'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_deny.so
-
-config LIB_LIBPAM_PAM_MOTD
-	bool 'pam_motd'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_motd.so
-
-config LIB_LIBPAM_PAM_ROOTOK
-	bool 'pam_rootok'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_rootok.so
-
-config LIB_LIBPAM_PAM_UNIX
-	bool 'pam_unix'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_unix.so
+	  PAM module for logdaemon style login access control
 
 config LIB_LIBPAM_PAM_DEBUG
-	bool 'pam_debug'
+	bool "pam_debug"
+	default n
 	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
 	help
-	  Install pam_debug.so
+	  PAM module to debug the PAM stack
+
+config LIB_LIBPAM_PAM_DENY
+	bool "pam_deny"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  The locking-out PAM module
+
+config LIB_LIBPAM_PAM_ECHO
+	bool "pam_echo"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module for printing text messages
+
+config LIB_LIBPAM_PAM_ENV
+	bool "pam_env"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to set/unset environment variables
+
+config LIB_LIBPAM_PAM_EXEC
+	bool "pam_exec"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module which calls an external command
+
+config LIB_LIBPAM_PAM_FAILDELAY
+	bool "pam_faildelay"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Change the delay on failure per-application
+
+config LIB_LIBPAM_PAM_FAILLOCK
+	bool "pam_faillock"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Module counting authentication failures during a specified interval
+
+config LIB_LIBPAM_PAM_FILTER
+	bool "pam_filter"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM filter module
+
+config LIB_LIBPAM_PAM_FTP
+	bool "pam_ftp"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module for anonymous access module
+
+config LIB_LIBPAM_PAM_GROUP
+	bool "pam_group"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module for group access
+
+config LIB_LIBPAM_PAM_ISSUE
+	bool "pam_issue"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to add issue file to user prompt
+
+config LIB_LIBPAM_PAM_KEYINIT
+	bool "pam_keyinit"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Kernel session keyring initialiser module
+
+config LIB_LIBPAM_PAM_LASTLOG
+	bool "pam_lastlog"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to display date of last login and perform inactive account lock out
 
 config LIB_LIBPAM_PAM_LIMITS
-	bool 'pam_limits'
+	bool "pam_limits"
+	default n
 	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
 	help
-	  Install pam_limits.so
+	  PAM module to limit resources
 
-config LIB_LIBPAM_PAM_TIME
-	bool 'pam_time'
+config LIB_LIBPAM_PAM_LISTFILE
+	bool "pam_listfile"
+	default n
 	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
 	help
-	  Install pam_time.so
-
-config LIB_LIBPAM_PAM_TALLY
-	bool 'pam_tally'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_tally.so
-
-config LIB_LIBPAM_PAM_WARN
-	bool 'pam_warn'
-	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
-	help
-	  Install pam_warn.so
+	  deny or allow services based on an arbitrary file
 
 config LIB_LIBPAM_PAM_LOCALUSER
-	bool 'pam_localuser'
+	bool "pam_localuser"
+	default n
 	depends on LIB_LIBPAM
-	depends on !LIB_LIBPAM_ALL_MODULES
 	help
-	  Install pam_localuser.so
+	  require users to be listed in /etc/passwd
+
+config LIB_LIBPAM_PAM_LOGINUID
+	bool "pam_loginuid"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Record user's login uid to the process attribute
+
+config LIB_LIBPAM_PAM_MAIL
+	bool "pam_mail"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Inform about available mail
+
+config LIB_LIBPAM_PAM_MKHOMEDIR
+	bool "pam_mkhomedir"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to create users home directory
+
+config LIB_LIBPAM_PAM_MOTD
+	bool "pam_motd"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Display the motd file
+
+config LIB_LIBPAM_PAM_NAMESPACE
+	bool "pam_namespace"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module for configuring namespace for a session
+
+config LIB_LIBPAM_PAM_NOLOGIN
+	bool "pam_nologin"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Prevent non-root users from login
+
+config LIB_LIBPAM_PAM_PERMIT
+	bool "pam_permit"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  The promiscuous module
+
+config LIB_LIBPAM_PAM_PWHISTORY
+	bool "pam_pwhistory"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to remember last passwords
+
+config LIB_LIBPAM_PAM_RHOSTS
+	bool "pam_rhosts"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  The rhosts PAM module
+
+config LIB_LIBPAM_PAM_ROOTOK
+	bool "pam_rootok"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Gain only root access
+
+config LIB_LIBPAM_PAM_SECURETTY
+	bool "pam_securetty"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Limit root login to special devices
+
+config LIB_LIBPAM_PAM_SELINUX
+	bool "pam_selinux"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to set the default security context
+
+config LIB_LIBPAM_PAM_SEPERMIT
+	bool "pam_sepermit"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to allow/deny login depending on SELinux enforcement state
+
+config LIB_LIBPAM_PAM_SETQUOTA
+	bool "pam_setquota"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to set or modify disk quotas on session start
+
+config LIB_LIBPAM_PAM_SHELLS
+	bool "pam_shells"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to check for valid login shell
+
+config LIB_LIBPAM_PAM_STRESS
+	bool "pam_stress"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  The stress-testing PAM module
+
+config LIB_LIBPAM_PAM_SUCCEED_IF
+	bool "pam_succeed_if"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  test account characteristics
+
+config LIB_LIBPAM_PAM_TIME
+	bool "pam_time"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module for time control access
+
+config LIB_LIBPAM_PAM_TIMESTAMP
+	bool "pam_timestamp"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Authenticate using cached successful authentication attempts
+
+config LIB_LIBPAM_PAM_TTY_AUDIT
+	bool "pam_tty_audit"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Enable or disable TTY auditing for specified users
+
+config LIB_LIBPAM_PAM_UMASK
+	bool "pam_umask"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to set the file mode creation mask
+
+config LIB_LIBPAM_PAM_UNIX
+	bool "pam_unix"
+	default y
+	depends on LIB_LIBPAM
+	help
+	  Module for traditional password authentication
+
+config LIB_LIBPAM_PAM_USERDB
+	bool "pam_userdb"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to authenticate against a db database
+
+config LIB_LIBPAM_PAM_USERTYPE
+	bool "pam_usertype"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  check if the authenticated user is a system or regular account
+
+config LIB_LIBPAM_PAM_WARN
+	bool "pam_warn"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module which logs all PAM items if called
+
+config LIB_LIBPAM_PAM_WHEEL
+	bool "pam_wheel"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  Only permit root access to members of group wheel
+
+config LIB_LIBPAM_PAM_XAUTH
+	bool "pam_xauth"
+	default n
+	depends on LIB_LIBPAM
+	help
+	  PAM module to forward xauth keys between users
+
+endif

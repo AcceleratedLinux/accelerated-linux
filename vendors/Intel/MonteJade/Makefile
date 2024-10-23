@@ -15,7 +15,9 @@ ROMFS_DIRS = \
 	mnt \
 	proc \
 	sbin \
-	usr usr/bin usr/sbin \
+	sys \
+	tmp \
+	usr usr/bin usr/sbin usr/var \
 	var 
 
 

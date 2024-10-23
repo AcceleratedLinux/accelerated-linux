@@ -100,10 +100,10 @@ ifdef UCLINUX_BUILD_LIB
         GLIBC_TARGET_OPTS = m68k-linux --enable-shared
   endif
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  -g
+	CFLAGS  := $(CFLAGS_DEBUG)
 	LDFLAGS :=
   else
-	CFLAGS  :=  -g
+	CFLAGS  :=
 	LDFLAGS :=
   endif
 	CFLAGS  += -pipe
@@ -128,10 +128,10 @@ endif
 ifdef UCLINUX_BUILD_USER
 
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  -g
+	CFLAGS  :=  -O2 $(CFLAGS_DEBUG)
 	LDFLAGS :=
   else
-	CFLAGS  :=  -O2 -g
+	CFLAGS  :=  -O2
 	LDFLAGS :=
   endif
 	CFLAGS  += -pipe

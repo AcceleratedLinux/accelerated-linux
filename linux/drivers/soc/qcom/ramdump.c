@@ -367,7 +367,7 @@ int create_ramdump_device_file(void *handle)
 			return dump_major;
 		}
 
-		dump_class = class_create(THIS_MODULE, "dump_q6v5");
+		dump_class = class_create("dump_q6v5");
 		if (IS_ERR(dump_class)) {
 			pr_err("Unable to create a dump_class");
 			ret = PTR_ERR(dump_class);

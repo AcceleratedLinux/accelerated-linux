@@ -7,6 +7,7 @@
  * Authors:
  *   Yaozu (Eddie) Dong <Eddie.dong@intel.com>
  */
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/export.h>
 #include <linux/kvm_host.h>
@@ -31,7 +32,6 @@ int kvm_cpu_has_pending_timer(struct kvm_vcpu *vcpu)
 
 	return r;
 }
-EXPORT_SYMBOL(kvm_cpu_has_pending_timer);
 
 /*
  * check if there is a pending userspace external interrupt
@@ -118,8 +118,10 @@ static int kvm_cpu_get_extint(struct kvm_vcpu *v)
 	if (!lapic_in_kernel(v))
 		return v->arch.interrupt.nr;
 
+#ifdef CONFIG_KVM_XEN
 	if (kvm_xen_has_interrupt(v))
 		return v->kvm->arch.xen.upcall_vector;
+#endif
 
 	if (irqchip_split(v->kvm)) {
 		int vector = v->arch.pending_external_vector;
@@ -150,7 +152,6 @@ void kvm_inject_pending_timer_irqs(struct kvm_vcpu *vcpu)
 	if (kvm_xen_timer_enabled(vcpu))
 		kvm_xen_inject_timer_irqs(vcpu);
 }
-EXPORT_SYMBOL_GPL(kvm_inject_pending_timer_irqs);
 
 void __kvm_migrate_timers(struct kvm_vcpu *vcpu)
 {
@@ -164,4 +165,9 @@ bool kvm_arch_irqfd_allowed(struct kvm *kvm, struct kvm_irqfd *args)
 	bool resample = args->flags & KVM_IRQFD_FLAG_RESAMPLE;
 
 	return resample ? irqchip_kernel(kvm) : irqchip_in_kernel(kvm);
+}
+
+bool kvm_arch_irqchip_in_kernel(struct kvm *kvm)
+{
+	return irqchip_in_kernel(kvm);
 }

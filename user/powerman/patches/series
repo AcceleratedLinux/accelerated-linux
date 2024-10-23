@@ -1,3 +1,4 @@
 powerman-no-git.patch
 print-config.patch
 time.patch
+netsnmp-versions.patch

@@ -115,9 +115,9 @@ static int poly_copy_tag(struct aead_request *req)
 	return 0;
 }
 
-static void chacha_decrypt_done(struct crypto_async_request *areq, int err)
+static void chacha_decrypt_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_verify_tag);
+	async_done_continue(data, err, poly_verify_tag);
 }
 
 static int chacha_decrypt(struct aead_request *req)
@@ -161,9 +161,9 @@ static int poly_tail_continue(struct aead_request *req)
 	return chacha_decrypt(req);
 }
 
-static void poly_tail_done(struct crypto_async_request *areq, int err)
+static void poly_tail_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_tail_continue);
+	async_done_continue(data, err, poly_tail_continue);
 }
 
 static int poly_tail(struct aead_request *req)
@@ -191,9 +191,9 @@ static int poly_tail(struct aead_request *req)
 	return poly_tail_continue(req);
 }
 
-static void poly_cipherpad_done(struct crypto_async_request *areq, int err)
+static void poly_cipherpad_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_tail);
+	async_done_continue(data, err, poly_tail);
 }
 
 static int poly_cipherpad(struct aead_request *req)
@@ -220,9 +220,9 @@ static int poly_cipherpad(struct aead_request *req)
 	return poly_tail(req);
 }
 
-static void poly_cipher_done(struct crypto_async_request *areq, int err)
+static void poly_cipher_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_cipherpad);
+	async_done_continue(data, err, poly_cipherpad);
 }
 
 static int poly_cipher(struct aead_request *req)
@@ -250,9 +250,9 @@ static int poly_cipher(struct aead_request *req)
 	return poly_cipherpad(req);
 }
 
-static void poly_adpad_done(struct crypto_async_request *areq, int err)
+static void poly_adpad_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_cipher);
+	async_done_continue(data, err, poly_cipher);
 }
 
 static int poly_adpad(struct aead_request *req)
@@ -279,9 +279,9 @@ static int poly_adpad(struct aead_request *req)
 	return poly_cipher(req);
 }
 
-static void poly_ad_done(struct crypto_async_request *areq, int err)
+static void poly_ad_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_adpad);
+	async_done_continue(data, err, poly_adpad);
 }
 
 static int poly_ad(struct aead_request *req)
@@ -303,9 +303,9 @@ static int poly_ad(struct aead_request *req)
 	return poly_adpad(req);
 }
 
-static void poly_setkey_done(struct crypto_async_request *areq, int err)
+static void poly_setkey_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_ad);
+	async_done_continue(data, err, poly_ad);
 }
 
 static int poly_setkey(struct aead_request *req)
@@ -329,9 +329,9 @@ static int poly_setkey(struct aead_request *req)
 	return poly_ad(req);
 }
 
-static void poly_init_done(struct crypto_async_request *areq, int err)
+static void poly_init_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_setkey);
+	async_done_continue(data, err, poly_setkey);
 }
 
 static int poly_init(struct aead_request *req)
@@ -352,9 +352,9 @@ static int poly_init(struct aead_request *req)
 	return poly_setkey(req);
 }
 
-static void poly_genkey_done(struct crypto_async_request *areq, int err)
+static void poly_genkey_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_init);
+	async_done_continue(data, err, poly_init);
 }
 
 static int poly_genkey(struct aead_request *req)
@@ -391,9 +391,9 @@ static int poly_genkey(struct aead_request *req)
 	return poly_init(req);
 }
 
-static void chacha_encrypt_done(struct crypto_async_request *areq, int err)
+static void chacha_encrypt_done(void *data, int err)
 {
-	async_done_continue(areq->data, err, poly_genkey);
+	async_done_continue(data, err, poly_genkey);
 }
 
 static int chacha_encrypt(struct aead_request *req)
@@ -558,7 +558,7 @@ static int chachapoly_create(struct crypto_template *tmpl, struct rtattr **tb,
 	u32 mask;
 	struct aead_instance *inst;
 	struct chachapoly_instance_ctx *ctx;
-	struct skcipher_alg *chacha;
+	struct skcipher_alg_common *chacha;
 	struct hash_alg_common *poly;
 	int err;
 
@@ -579,7 +579,7 @@ static int chachapoly_create(struct crypto_template *tmpl, struct rtattr **tb,
 				   crypto_attr_alg_name(tb[1]), 0, mask);
 	if (err)
 		goto err_free_inst;
-	chacha = crypto_spawn_skcipher_alg(&ctx->chacha);
+	chacha = crypto_spawn_skcipher_alg_common(&ctx->chacha);
 
 	err = crypto_grab_ahash(&ctx->poly, aead_crypto_instance(inst),
 				crypto_attr_alg_name(tb[2]), 0, mask);
@@ -591,7 +591,7 @@ static int chachapoly_create(struct crypto_template *tmpl, struct rtattr **tb,
 	if (poly->digestsize != POLY1305_DIGEST_SIZE)
 		goto err_free_inst;
 	/* Need 16-byte IV size, including Initial Block Counter value */
-	if (crypto_skcipher_alg_ivsize(chacha) != CHACHA_IV_SIZE)
+	if (chacha->ivsize != CHACHA_IV_SIZE)
 		goto err_free_inst;
 	/* Not a stream cipher? */
 	if (chacha->base.cra_blocksize != 1)
@@ -610,12 +610,11 @@ static int chachapoly_create(struct crypto_template *tmpl, struct rtattr **tb,
 	inst->alg.base.cra_priority = (chacha->base.cra_priority +
 				       poly->base.cra_priority) / 2;
 	inst->alg.base.cra_blocksize = 1;
-	inst->alg.base.cra_alignmask = chacha->base.cra_alignmask |
-				       poly->base.cra_alignmask;
+	inst->alg.base.cra_alignmask = chacha->base.cra_alignmask;
 	inst->alg.base.cra_ctxsize = sizeof(struct chachapoly_ctx) +
 				     ctx->saltlen;
 	inst->alg.ivsize = ivsize;
-	inst->alg.chunksize = crypto_skcipher_alg_chunksize(chacha);
+	inst->alg.chunksize = chacha->chunksize;
 	inst->alg.maxauthsize = POLY1305_DIGEST_SIZE;
 	inst->alg.init = chachapoly_init;
 	inst->alg.exit = chachapoly_exit;

@@ -38,8 +38,9 @@
 #include <linux/fs.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/ledman.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/ledman.h>
 
 #if LINUX_VERSION_CODE < 0x020300
 #include <linux/malloc.h>
@@ -2576,7 +2577,7 @@ ledman_initarch(void)
 #endif /* CONFIG_MACH_6300CX */
 /****************************************************************************/
 /****************************************************************************/
-#if defined(CONFIG_MACH_ARMADA_38X) && !defined(CONFIG_MACH_U115)
+#if defined(CONFIG_MACH_ARMADA_38X) && !(defined(CONFIG_MACH_U115) || defined(CONFIG_MACH_U120))
 /****************************************************************************/
 #define LEDMAN_PLATFORM_DEFINED
 
@@ -2679,7 +2680,7 @@ static void ledman_initarch(void)
 }
 
 /****************************************************************************/
-#endif /* defined(CONFIG_MACH_ARMADA_38X) && !defined(CONFIG_MACH_U115) */
+#endif /* defined(CONFIG_MACH_ARMADA_38X) && !(defined(CONFIG_MACH_U115) || defined(CONFIG_MACH_U120)) */
 /****************************************************************************/
 /****************************************************************************/
 #if defined(CONFIG_MACH_U115)
@@ -2729,20 +2730,20 @@ static struct ledgpiomap ledgpio[] = {
 	{ .name = "WAN2",	.gpio = 52, },
 	{ .name = "SERIAL",	.gpio = 53, },
 
-	{ .name = "RED",	.gpio = 496, },
-	{ .name = "BLUE",	.gpio = 497, },
-	{ .name = "GREEN",	.gpio = 498, },
-	{ .name = "RSS1",	.gpio = 499, },
-	{ .name = "RSS2",	.gpio = 500, },
-	{ .name = "RSS3",	.gpio = 501, },
-	{ .name = "RSS4",	.gpio = 502, },
-	{ .name = "RSS5",	.gpio = 503, },
-	{ .name = "SIM1_RED",	.gpio = 504, },
-	{ .name = "SIM1_BLUE",	.gpio = 505, },
-	{ .name = "SIM1_GREEN",	.gpio = 506, },
-	{ .name = "SIM2_RED",	.gpio = 507, },
-	{ .name = "SIM2_BLUE",	.gpio = 508, },
-	{ .name = "SIM2_GREEN",	.gpio = 509, },
+	{ .name = "RED",	.gpio = 512, },
+	{ .name = "BLUE",	.gpio = 513, },
+	{ .name = "GREEN",	.gpio = 514, },
+	{ .name = "RSS1",	.gpio = 515, },
+	{ .name = "RSS2",	.gpio = 516, },
+	{ .name = "RSS3",	.gpio = 517, },
+	{ .name = "RSS4",	.gpio = 518, },
+	{ .name = "RSS5",	.gpio = 519, },
+	{ .name = "SIM1_RED",	.gpio = 520, },
+	{ .name = "SIM1_BLUE",	.gpio = 521, },
+	{ .name = "SIM1_GREEN",	.gpio = 522, },
+	{ .name = "SIM2_RED",	.gpio = 523, },
+	{ .name = "SIM2_BLUE",	.gpio = 524, },
+	{ .name = "SIM2_GREEN",	.gpio = 525, },
 };
 
 static ledmap_t ledman_std = {
@@ -2869,7 +2870,209 @@ static void ledman_initarch(void)
 }
 
 /****************************************************************************/
-#endif /* defined(CONFIG_MACH_ARMADA_38X) && defined(CONFIG_MACH_U115) */
+#endif /* defined(CONFIG_MACH_U115) */
+/****************************************************************************/
+/****************************************************************************/
+#if defined(CONFIG_MACH_U120) && !defined(CONFIG_LEDS_GPIO)
+/****************************************************************************/
+#define LEDMAN_PLATFORM_DEFINED
+
+#include <linux/gpio.h>
+
+struct ledgpiomap {
+	char		*name;
+	unsigned int	flags;
+	unsigned int	gpio;
+};
+
+#define	F_INITED	0x1
+
+// NOTE: the led names on the board DO NOT match the front case names
+#define LED_ONLINE	0x200000
+#define LED_VPN		0x400000
+#define LED_USB		0x000001
+#define LED_WAN1	0x000002
+#define LED_WAN2	0x000004
+#define LED_SERIAL	0x000008
+#define LED_SLIDE_RED	0x000010
+#define LED_SLIDE_BLUE	0x000020
+#define LED_SLIDE_GREEN	0x000040
+
+#define LED_RED		0x000080
+#define LED_BLUE	0x000100
+#define LED_GREEN	0x000200
+#define LED_RSS1	0x000400
+#define LED_RSS2	0x000800
+#define LED_RSS3	0x001000
+#define LED_RSS4	0x002000
+#define LED_RSS5	0x004000
+#define LED_SIM1_RED	0x008000
+#define LED_SIM1_BLUE	0x010000
+#define LED_SIM1_GREEN	0x020000
+#define LED_SIM2_RED	0x040000
+#define LED_SIM2_BLUE	0x080000
+#define LED_SIM2_GREEN	0x100000
+
+#define LED_MASK	0x7fffff
+#define	LED_NR		23
+
+static struct ledgpiomap ledgpio[] = {
+	{ .name = "USB",	.gpio = 528, },
+	{ .name = "SERIAL",	.gpio = 529, },
+	{ .name = "WAN1",	.gpio = 530, },
+	{ .name = "WAN2",	.gpio = 531, },
+	{ .name = "SLIDE_RED",	.gpio = 532, },
+	{ .name = "SLIDE_BLUE",	.gpio = 533, },
+	{ .name = "SLIDE_GREEN",.gpio = 534, },
+
+	{ .name = "RED",	.gpio = 512, },
+	{ .name = "BLUE",	.gpio = 513, },
+	{ .name = "GREEN",	.gpio = 514, },
+	{ .name = "RSS1",	.gpio = 515, },
+	{ .name = "RSS2",	.gpio = 516, },
+	{ .name = "RSS3",	.gpio = 517, },
+	{ .name = "RSS4",	.gpio = 518, },
+	{ .name = "RSS5",	.gpio = 519, },
+	{ .name = "SIM1_RED",	.gpio = 520, },
+	{ .name = "SIM1_BLUE",	.gpio = 521, },
+	{ .name = "SIM1_GREEN",	.gpio = 522, },
+	{ .name = "SIM2_RED",	.gpio = 523, },
+	{ .name = "SIM2_BLUE",	.gpio = 524, },
+	{ .name = "SIM2_GREEN",	.gpio = 525, },
+	{ .name = "ONLINE",	.gpio = 526, },
+	{ .name = "VPN",	.gpio = 527, },
+};
+
+static ledmap_t ledman_std = {
+	[LEDMAN_ALL]       = LED_MASK,
+
+	[LEDMAN_NVRAM_1]   = LED_ONLINE | LED_VPN | LED_WAN2 | LED_SERIAL,
+	[LEDMAN_NVRAM_2]   = LED_USB | LED_WAN1,
+	[LEDMAN_NVRAM_ALL] = LED_MASK,
+
+	[LEDMAN_ONLINE]    = LED_ONLINE,
+	[LEDMAN_VPN]       = LED_VPN,
+	[LEDMAN_LAN2_RX]   = LED_WAN1,
+	[LEDMAN_LAN2_TX]   = LED_WAN1,
+	[LEDMAN_LAN3_RX]   = LED_WAN2,
+	[LEDMAN_LAN3_TX]   = LED_WAN2,
+	[LEDMAN_COM]       = LED_SERIAL,
+
+	[LEDMAN_ETH]       = LED_GREEN,
+	[LEDMAN_COM1_DCD]  = LED_BLUE,
+	[LEDMAN_COM2_DCD]  = LED_RED,
+
+	[LEDMAN_RSS1]      = LED_RSS1,
+	[LEDMAN_RSS2]      = LED_RSS2,
+	[LEDMAN_RSS3]      = LED_RSS3,
+	[LEDMAN_RSS4]      = LED_RSS4,
+	[LEDMAN_RSS5]      = LED_RSS5,
+
+	[LEDMAN_SIM1_RED]  = LED_SIM1_RED,
+	[LEDMAN_SIM1_GREEN]= LED_SIM1_GREEN,
+	[LEDMAN_SIM1_BLUE] = LED_SIM1_BLUE,
+
+	[LEDMAN_SIM2_RED]  = LED_SIM2_RED,
+	[LEDMAN_SIM2_GREEN]= LED_SIM2_GREEN,
+	[LEDMAN_SIM2_BLUE] = LED_SIM2_BLUE,
+
+	[LEDMAN_XBEE1]     = LED_SLIDE_RED,
+	[LEDMAN_XBEE2]     = LED_SLIDE_GREEN,
+	[LEDMAN_XBEE3]     = LED_SLIDE_BLUE,
+};
+
+/* Erase is common to both */
+#define	GPIO_ERASE	54
+
+static leddef_t ledman_def = { };
+
+static unsigned int leds_state = LED_MASK;
+static unsigned int leds_bits = LED_MASK;
+static struct work_struct leds_work;
+static int leds_scheduled;
+static int leds_deferedsetup;
+
+static void ledman_set(unsigned long bits)
+{
+	leds_bits = bits;
+	if (!leds_scheduled) {
+		leds_scheduled++;
+		schedule_work(&leds_work);
+	}
+}
+
+static irqreturn_t ledman_interrupt(int irq, void *dev_id)
+{
+	ledman_signalreset();
+	return IRQ_HANDLED;
+}
+
+static void ledman_initgpio(void)
+{
+	int i, rc;
+
+	leds_deferedsetup = 0;
+	for (i = 0; i < LED_NR; i++) {
+		if (ledgpio[i].flags & F_INITED)
+			continue;
+
+		rc = gpio_request(ledgpio[i].gpio, ledgpio[i].name);
+		if (rc < 0) {
+			leds_deferedsetup++;
+			continue;
+		}
+		gpio_direction_output(ledgpio[i].gpio, 1);
+		ledgpio[i].flags |= F_INITED;
+	}
+}
+
+static void ledman_work(struct work_struct *work)
+{
+	unsigned int i, changed;
+	unsigned int b, bits;
+
+	if (leds_deferedsetup)
+		ledman_initgpio();
+
+	/*
+	 * Get new state and mark that we have processed that.
+	 * This ordering avoids need for preempt protection.
+	 */
+	bits = leds_bits;
+	leds_scheduled = 0;
+
+	changed = bits ^ leds_state;
+	if (changed) {
+		for (i = 0; i < LED_NR; i++) {
+			b = 0x1 << i;
+			if (changed & b)
+				gpio_set_value_cansleep(ledgpio[i].gpio, (bits & b) ? 0 : 1);
+		}
+		leds_state = bits;
+	}
+}
+
+static void ledman_initarch(void)
+{
+	int i;
+
+	INIT_WORK(&leds_work, ledman_work);
+
+	/* Set up direct connect local LEDs now */
+	ledman_initgpio();
+	ledman_set(0);
+
+	gpio_request(GPIO_ERASE, "Erase");
+	gpio_direction_input(GPIO_ERASE);
+	i = gpio_to_irq(GPIO_ERASE);
+	if (request_irq(i, ledman_interrupt, IRQF_TRIGGER_FALLING, "Erase", NULL))
+		pr_err("failed to register IRQ%d for ERASE switch\n", i);
+	else
+		pr_info("registered ERASE switch on IRQ%d\n", i);
+}
+
+/****************************************************************************/
+#endif /* defined(CONFIG_MACH_U120) && !defined(CONFIG_LEDS_GPIO) */
 /****************************************************************************/
 /****************************************************************************/
 #if defined(CONFIG_MACH_6350SR) || defined(CONFIG_MACH_6330MX)
@@ -2915,16 +3118,16 @@ static struct ledgpiomap ledgpio[] = {
 #else
 	{ .name = "LED3", .gpio = 63, },
 #endif
-	{ .name = "RED", .gpio = 496, },
-	{ .name = "BLUE", .gpio = 497, },
-	{ .name = "GREEN", .gpio = 498, },
-	{ .name = "RSS1", .gpio = 499, },
-	{ .name = "RSS2", .gpio = 500, },
-	{ .name = "RSS3", .gpio = 501, },
-	{ .name = "RSS4", .gpio = 502, },
-	{ .name = "RSS5", .gpio = 503, },
-	{ .name = "SIM1", .gpio = 504, },
-	{ .name = "SIM2", .gpio = 505, },
+	{ .name = "RED", .gpio = 512, },
+	{ .name = "BLUE", .gpio = 513, },
+	{ .name = "GREEN", .gpio = 514, },
+	{ .name = "RSS1", .gpio = 515, },
+	{ .name = "RSS2", .gpio = 516, },
+	{ .name = "RSS3", .gpio = 517, },
+	{ .name = "RSS4", .gpio = 518, },
+	{ .name = "RSS5", .gpio = 519, },
+	{ .name = "SIM1", .gpio = 520, },
+	{ .name = "SIM2", .gpio = 521, },
 };
 
 static ledmap_t ledman_std = {
@@ -3154,8 +3357,6 @@ static leddef_t ac6310dx_ledman_def = {
 #define CONNECTIT_MINI_LED_MASK		0x3ff
 #define CONNECTIT_MINI_LED_NR		10
 
-#define CONNECTIT_MINI_GPIO_ERASE	49
-
 static struct ledgpiomap connectit_mini_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
 	{ .name = "BLUE", .gpio = 1, },
@@ -3214,10 +3415,6 @@ static leddef_t connectit_mini_ledman_def = {
 #define CONNECTIT4_LED_SERIAL	0x2000
 #define CONNECTIT4_LED_MASK	0x3fff
 #define CONNECTIT4_LED_NR	14
-
-#define GPIO_ERASE		49
-#define EX12_GPIO_ERASE		120
-#define GPIO_BUZZER		65
 
 static struct ledgpiomap connectit4_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
@@ -3287,8 +3484,6 @@ static leddef_t connectit4_ledman_def = {
 #define IX20_LED_MASK	0xfff
 #define IX20_LED_NR	12
 
-#define IX20_GPIO_ERASE	115
-
 static struct ledgpiomap ix20_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
 	{ .name = "BLUE", .gpio = 1, },
@@ -3352,8 +3547,6 @@ static leddef_t ix20_ledman_def = {
 #define IX10_LED_SIM_BLUE	0x800
 #define IX10_LED_MASK		0xfff
 #define IX10_LED_NR		12
-
-#define IX10_GPIO_ERASE		115
 
 static struct ledgpiomap ix10_ledgpio[] = {
 	{ .name = "RED", .gpio = 0, },
@@ -3421,8 +3614,6 @@ static leddef_t ix10_ledman_def = {
 #define IX15_LED_XBEE_BLUE	0x4000
 #define IX15_LED_MASK		0xffff
 #define IX15_LED_NR		15
-
-#define IX15_GPIO_ERASE		115
 
 static struct ledgpiomap ix15_ledgpio[] = {
 	{ .name = "RED", .gpio = 45, },
@@ -3492,9 +3683,7 @@ static leddef_t ix15_ledman_def = {
 #define IX30_LED_MASK	0x1ff
 #define IX30_LED_NR	9
 
-#define IX30_GPIO_ERASE	115
-
-#define IX30_LEDS_BASE	(512 - 2 * 16)
+#define IX30_LEDS_BASE	528
 
 static struct ledgpiomap ix30_ledgpio[] = {
 	{ .name = "RED",    .gpio = IX30_LEDS_BASE + 0, },
@@ -3535,21 +3724,6 @@ static leddef_t ix30_ledman_def = {
 	[LEDS_ON] = IX30_LED_RED | IX30_LED_GREEN,
 };
 
-/*
- * The Connect IT 4 has a buzzer, and we want to use that on button press.
- */
-static unsigned long buzzer_progress[] = {
-	0,
-	CONNECTIT4_LED_RSS5,
-	CONNECTIT4_LED_RSS4 | CONNECTIT4_LED_RSS5,
-	CONNECTIT4_LED_RSS3 | CONNECTIT4_LED_RSS4 | CONNECTIT4_LED_RSS5,
-	CONNECTIT4_LED_RSS2 | CONNECTIT4_LED_RSS3 | CONNECTIT4_LED_RSS4 |
-		CONNECTIT4_LED_RSS5,
-	CONNECTIT4_LED_RSS1 | CONNECTIT4_LED_RSS2 | CONNECTIT4_LED_RSS3 |
-		CONNECTIT4_LED_RSS4 | CONNECTIT4_LED_RSS5,
-};
-
-static int buzzer_use;
 static unsigned int led_nr;
 static unsigned int leds_state;
 static struct ledgpiomap *ledgpio;
@@ -3561,9 +3735,6 @@ static struct work_struct leds_work;
 static bool leds_use_wq;
 static int leds_deferred_setup;
 static int leds_scheduled;
-
-static void buzzer_init(void);
-static void buzzer_start(void);
 
 static void ac6310dx_ledman_init(void)
 {
@@ -3581,7 +3752,6 @@ static void connectit4_ledman_init(void)
 	ledgpio = connectit4_ledgpio;
 	memcpy(&ledman_std, &connectit4_ledman_std, sizeof(ledman_std));
 	memcpy(&ledman_def, &connectit4_ledman_def, sizeof(ledman_def));
-	buzzer_use = 1;
 }
 
 static void connectit_mini_ledman_init(void)
@@ -3705,10 +3875,7 @@ static void ledman_set(unsigned long bits)
 
 static irqreturn_t ledman_interrupt(int irq, void *dev_id)
 {
-	if (buzzer_use)
-		buzzer_start();
-	else
-		ledman_signalreset();
+	ledman_signalreset();
 	return IRQ_HANDLED;
 }
 
@@ -3741,25 +3908,18 @@ static void ledman_initarch(void)
 		ledman_setup_erase(AC6310DX_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,ix10")) {
 		ix10_ledman_init();
-		ledman_setup_erase(IX10_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,ix15")) {
 		ix15_ledman_init();
-		ledman_setup_erase(IX15_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,ix20")) {
 		ix20_ledman_init();
-		ledman_setup_erase(IX20_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,ix30")) {
 		ix30_ledman_init();
-		ledman_setup_erase(IX30_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,connectit-mini")) {
 		connectit_mini_ledman_init();
-		ledman_setup_erase(CONNECTIT_MINI_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,ex12")) {
 		connectit_mini_ledman_init();
-		ledman_setup_erase(EX12_GPIO_ERASE);
 	} else if (of_machine_is_compatible("digi,connectit4")) {
 		connectit4_ledman_init();
-		ledman_setup_erase(GPIO_ERASE);
 	} else {
 		return;
 	}
@@ -3774,17 +3934,120 @@ static void ledman_initarch(void)
 		}
 	}
 	ledman_set(0);
-
-	if (buzzer_use) {
-		gpio_request(GPIO_BUZZER, "Buzzer");
-		gpio_direction_output(GPIO_BUZZER, 0);
-		gpio_export(GPIO_BUZZER, 0);
-		buzzer_init();
-	}
 }
 
 /****************************************************************************/
 #endif /* CONFIG_SOC_IMX6UL */
+/****************************************************************************/
+/****************************************************************************/
+#if defined(CONFIG_ARCH_STM32) /* Digi/CCMP13DK and Digi/IoT-Gateway Small/Large */
+/****************************************************************************/
+#define LEDMAN_PLATFORM_DEFINED
+
+#include <linux/gpio.h>
+
+struct ledgpiomap {
+	char	*name;
+	int	gpio;
+	int flags;
+};
+
+#define F_INITED		0x1
+#define F_ACTIVE_HIGH		0x2
+
+#define CCMP13DK_LED_ULED	0x1
+#define CCMP13DK_LED_USER1	0x2
+#define CCMP13DK_LED_USER2	0x4
+#define CCMP13DK_LED_MASK	0x7
+#define CCMP13DK_LED_NR		3
+
+#define GPIO_ULED	96 /* PG0 */
+#define GPIO_USER1	13 /* PA13 */
+#define GPIO_USER2	14 /* PA14 */
+
+static struct ledgpiomap ccmp13dk_ledgpio[] = {
+	{ .name = "ULED",  .gpio = 96, .flags = F_ACTIVE_HIGH, }, /* PG0 */
+	{ .name = "USER1", .gpio = 13, }, /* PA13 */
+	{ .name = "USER2", .gpio = 14, }, /* PA14 */
+};
+static ledmap_t ccmp13dk_ledman_std = {
+	[LEDMAN_ALL]       = CCMP13DK_LED_MASK,
+	[LEDMAN_POWER]     = CCMP13DK_LED_ULED,
+	[LEDMAN_ETH]       = CCMP13DK_LED_USER1,
+	[LEDMAN_XBEE1]     = CCMP13DK_LED_USER2,
+};
+static leddef_t ccmp13dk_ledman_def = {
+	[LEDS_ON] = CCMP13DK_LED_ULED,
+};
+
+static unsigned int led_nr;
+static unsigned int leds_state;
+static struct ledgpiomap *ledgpio;
+static ledmap_t ledman_std;
+static leddef_t ledman_def;
+
+static void ccmp13dk_ledman_init(void)
+{
+	led_nr = CCMP13DK_LED_NR;
+	leds_state = CCMP13DK_LED_MASK;
+	ledgpio = ccmp13dk_ledgpio;
+	memcpy(&ledman_std, &ccmp13dk_ledman_std, sizeof(ledman_std));
+	memcpy(&ledman_def, &ccmp13dk_ledman_def, sizeof(ledman_def));
+}
+
+#if 0
+static irqreturn_t ledman_interrupt(int irq, void *dev_id)
+{
+	return IRQ_HANDLED;
+}
+#endif
+
+static void
+ledman_set(unsigned long bits)
+{
+	unsigned int i, b;
+	const unsigned int changed = bits ^ leds_state;
+
+	if (changed) {
+		for (i = 0; i < led_nr; i++) {
+			b = 0x1 << i;
+			if (changed & b) {
+				// If we're turning on an LED, we set the I/O low.
+				int value = (bits & b) ? 0 : 1;
+				// Unless the LED is wired as active-high...
+				if (ledgpio[i].flags & F_ACTIVE_HIGH)
+					value = !value;
+				gpio_set_value(ledgpio[i].gpio, value);
+			}
+		}
+		leds_state = bits;
+	}
+}
+
+static void
+ledman_initarch(void)
+{
+	int i;
+	if (of_machine_is_compatible("digi,ccmp13-dvk") ||
+            of_machine_is_compatible("digi,iot-gateway-large") ||
+            of_machine_is_compatible("digi,iot-gateway-small"))
+        {
+		ccmp13dk_ledman_init();
+	} else {
+		return;
+	}
+
+	for (i = 0; i < led_nr; i++) {
+		gpio_request(ledgpio[i].gpio, ledgpio[i].name);
+		gpio_direction_output(
+			ledgpio[i].gpio,
+			(ledgpio[i].flags & F_ACTIVE_HIGH) ? 0 : 1);
+	}
+	ledman_set(0);
+}
+
+/****************************************************************************/
+#endif /* CONFIG_ARCH_STM32 */
 /****************************************************************************/
 /****************************************************************************/
 #if defined(CONFIG_DTB_MT7621_EX15)
@@ -3816,21 +4079,19 @@ struct ledgpiomap {
 #define LED_MASK	0xfff
 #define LED_NR		12
 
-#define GPIO_ERASE	508
-
 static struct ledgpiomap ledgpio[] = {
-	{ .name = "RED", .gpio = 400, },
-	{ .name = "BLUE", .gpio = 401, },
-	{ .name = "GREEN", .gpio = 402, },
-	{ .name = "RSS1", .gpio = 403, },
-	{ .name = "RSS2", .gpio = 404, },
-	{ .name = "RSS3", .gpio = 405, },
-	{ .name = "RSS4", .gpio = 406, },
-	{ .name = "RSS5", .gpio = 407, },
-	{ .name = "SIM1", .gpio = 448, },
-	{ .name = "SIM2", .gpio = 511, },
-	{ .name = "ETH0", .gpio = 502, },
-	{ .name = "ETH1", .gpio = 503, },
+	{ .name = "RED", .gpio = 608, },
+	{ .name = "BLUE", .gpio = 609, },
+	{ .name = "GREEN", .gpio = 610, },
+	{ .name = "RSS1", .gpio = 611, },
+	{ .name = "RSS2", .gpio = 612, },
+	{ .name = "RSS3", .gpio = 613, },
+	{ .name = "RSS4", .gpio = 614, },
+	{ .name = "RSS5", .gpio = 615, },
+	{ .name = "SIM1", .gpio = 544, },
+	{ .name = "SIM2", .gpio = 543, },
+	{ .name = "ETH0", .gpio = 534, },
+	{ .name = "ETH1", .gpio = 535, },
 };
 
 static ledmap_t ledman_std = {
@@ -3907,25 +4168,6 @@ static void ledman_initgpio(void)
 	}
 }
 
-/*
- * GPIO interrupts may not become configurable until late in the boot
- * sequence. So we need to be prepared to retry ERASE IRQ acquisition
- * multiple times.
- */
-static void ledman_initerase(void)
-{
-	gpio_request(GPIO_ERASE, "Erase");
-	gpio_direction_input(GPIO_ERASE);
-	leds_irq = gpio_to_irq(GPIO_ERASE);
-	if (leds_irq < 0)
-		return;
-
-	if (request_irq(leds_irq, ledman_interrupt, IRQF_TRIGGER_FALLING, "Erase", NULL))
-		pr_err("failed to register IRQ%d for ERASE switch\n", leds_irq);
-	else
-		pr_info("registered ERASE switch on IRQ%d\n", leds_irq);
-}
-
 static void ledman_work(struct work_struct *work)
 {
 	unsigned int i, changed;
@@ -3936,8 +4178,6 @@ static void ledman_work(struct work_struct *work)
 		/* Force fresh set of all LEDs */
 		leds_state = ~leds_bits;
 	}
-	if (leds_irq < 0)
-		ledman_initerase();
 
 	/*
 	 * Get new state and mark that we have processed that.
@@ -3962,7 +4202,6 @@ static void ledman_initarch(void)
 	INIT_WORK(&leds_work, ledman_work);
 	ledman_initgpio();
 	ledman_set(0);
-	ledman_initerase();
 }
 
 /****************************************************************************/

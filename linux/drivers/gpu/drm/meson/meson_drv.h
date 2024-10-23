@@ -9,7 +9,6 @@
 
 #include <linux/device.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/regmap.h>
 
 struct drm_crtc;
@@ -23,6 +22,13 @@ enum vpu_compatible {
 	VPU_COMPATIBLE_GXL  = 1,
 	VPU_COMPATIBLE_GXM  = 2,
 	VPU_COMPATIBLE_G12A = 3,
+};
+
+enum {
+	MESON_ENC_CVBS = 0,
+	MESON_ENC_HDMI,
+	MESON_ENC_DSI,
+	MESON_ENC_LAST,
 };
 
 struct meson_drm_match_data {
@@ -51,6 +57,7 @@ struct meson_drm {
 	struct drm_crtc *crtc;
 	struct drm_plane *primary_plane;
 	struct drm_plane *overlay_plane;
+	void *encoders[MESON_ENC_LAST];
 
 	const struct meson_drm_soc_limits *limits;
 

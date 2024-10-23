@@ -13,6 +13,8 @@ IMAGESIZE = 47185920 # 45MB
 
 SIGNING_ALG = ecdsa
 
+
+
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
 ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
@@ -54,10 +56,10 @@ romfs.post:: romfs.cleanup
 
 uimage.bin:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-ix30.dtb >> $(ZIMAGE)
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/imx/imx6ull-ix30.dtb >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x80800000 -e 0x80800000 -n "Linux-5.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x83800000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ull-ix30.dtb $(IMAGEDIR)/
+	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/imx/imx6ull-ix30.dtb $(IMAGEDIR)/
 
 image: image.configs image.dir image.arm.zimage image.squashfs uimage.bin image.ukernel.bin image.sign-atmel image.tag image.copy image.size
 

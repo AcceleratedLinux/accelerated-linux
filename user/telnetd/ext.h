@@ -70,6 +70,8 @@ extern int require_SecurID;
 extern int auth_level;
 #endif
 
+extern int no_login;
+
 extern slcfun slctab[NSLC + 1];	/* slc mapping table */
 
 extern char *terminaltype;

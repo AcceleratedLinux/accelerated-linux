@@ -217,7 +217,7 @@ s32	rtw_hal_mgnt_xmit(struct adapter *padapter, struct xmit_frame *pmgntframe)
 	/* memcpy(pmgntframe->attrib.ra, pwlanhdr->addr1, ETH_ALEN); */
 
 	if (padapter->securitypriv.binstallBIPkey == true) {
-		if (IS_MCAST(pmgntframe->attrib.ra)) {
+		if (is_multicast_ether_addr(pmgntframe->attrib.ra)) {
 			pmgntframe->attrib.encrypt = _BIP_;
 			/* pmgntframe->attrib.bswenc = true; */
 		} else {
@@ -398,11 +398,6 @@ s32 rtw_hal_c2h_handler(struct adapter *adapter, u8 *c2h_evt)
 c2h_id_filter rtw_hal_c2h_id_filter_ccx(struct adapter *adapter)
 {
 	return adapter->HalFunc.c2h_id_filter_ccx;
-}
-
-s32 rtw_hal_is_disable_sw_channel_plan(struct adapter *padapter)
-{
-	return GET_HAL_DATA(padapter)->bDisableSWChannelPlan;
 }
 
 s32 rtw_hal_macid_sleep(struct adapter *padapter, u32 macid)

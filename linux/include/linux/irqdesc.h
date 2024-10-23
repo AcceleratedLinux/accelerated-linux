@@ -18,6 +18,18 @@ struct irq_domain;
 struct pt_regs;
 
 /**
+ * struct irqstat - interrupt statistics
+ * @cnt:	real-time interrupt count
+ * @ref:	snapshot of interrupt count
+ */
+struct irqstat {
+	unsigned int	cnt;
+#ifdef CONFIG_GENERIC_IRQ_STAT_SNAPSHOT
+	unsigned int	ref;
+#endif
+};
+
+/**
  * struct irq_desc - interrupt descriptor
  * @irq_common_data:	per irq and chip data passed down to chip functions
  * @kstat_irqs:		irq stats per cpu
@@ -55,7 +67,7 @@ struct pt_regs;
 struct irq_desc {
 	struct irq_common_data	irq_common_data;
 	struct irq_data		irq_data;
-	unsigned int __percpu	*kstat_irqs;
+	struct irqstat __percpu	*kstat_irqs;
 	irq_flow_handler_t	handle_irq;
 	struct irqaction	*action;	/* IRQ action list */
 	unsigned int		status_use_accessors;
@@ -102,6 +114,9 @@ struct irq_desc {
 	int			parent_irq;
 	struct module		*owner;
 	const char		*name;
+#ifdef CONFIG_HARDIRQS_SW_RESEND
+	struct hlist_node	resend_node;
+#endif
 } ____cacheline_internodealigned_in_smp;
 
 #ifdef CONFIG_SPARSE_IRQ
@@ -116,7 +131,7 @@ extern struct irq_desc irq_desc[NR_IRQS];
 static inline unsigned int irq_desc_kstat_cpu(struct irq_desc *desc,
 					      unsigned int cpu)
 {
-	return desc->kstat_irqs ? *per_cpu_ptr(desc->kstat_irqs, cpu) : 0;
+	return desc->kstat_irqs ? per_cpu(desc->kstat_irqs->cnt, cpu) : 0;
 }
 
 static inline struct irq_desc *irq_data_to_desc(struct irq_data *data)
@@ -169,6 +184,7 @@ int generic_handle_irq_safe(unsigned int irq);
  * conversion failed.
  */
 int generic_handle_domain_irq(struct irq_domain *domain, unsigned int hwirq);
+int generic_handle_domain_irq_safe(struct irq_domain *domain, unsigned int hwirq);
 int generic_handle_domain_nmi(struct irq_domain *domain, unsigned int hwirq);
 #endif
 
@@ -209,14 +225,15 @@ static inline void irq_set_handler_locked(struct irq_data *data,
  * Must be called with irq_desc locked and valid parameters.
  */
 static inline void
-irq_set_chip_handler_name_locked(struct irq_data *data, struct irq_chip *chip,
+irq_set_chip_handler_name_locked(struct irq_data *data,
+				 const struct irq_chip *chip,
 				 irq_flow_handler_t handler, const char *name)
 {
 	struct irq_desc *desc = irq_data_to_desc(data);
 
 	desc->handle_irq = handler;
 	desc->name = name;
-	data->chip = chip;
+	data->chip = (struct irq_chip *)chip;
 }
 
 bool irq_check_status_bit(unsigned int irq, unsigned int bitmask);

@@ -12,7 +12,9 @@
 #include "gen6_ppgtt.h"
 #include "gen7_renderclear.h"
 #include "i915_drv.h"
+#include "i915_irq.h"
 #include "i915_mitigations.h"
+#include "i915_reg.h"
 #include "intel_breadcrumbs.h"
 #include "intel_context.h"
 #include "intel_engine_regs.h"
@@ -117,7 +119,9 @@ static void flush_cs_tlb(struct intel_engine_cs *engine)
 		return;
 
 	/* ring should be idle before issuing a sync flush*/
-	GEM_DEBUG_WARN_ON((ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE) == 0);
+	if ((ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE) == 0)
+		drm_warn(&engine->i915->drm, "%s not idle before sync flush!\n",
+			 engine->name);
 
 	ENGINE_WRITE_FW(engine, RING_INSTPM,
 			_MASKED_BIT_ENABLE(INSTPM_TLB_INVALIDATE |
@@ -596,8 +600,9 @@ static void ring_context_reset(struct intel_context *ce)
 	clear_bit(CONTEXT_VALID_BIT, &ce->flags);
 }
 
-static void ring_context_ban(struct intel_context *ce,
-			     struct i915_request *rq)
+static void ring_context_revoke(struct intel_context *ce,
+				struct i915_request *rq,
+				unsigned int preempt_timeout_ms)
 {
 	struct intel_engine_cs *engine;
 
@@ -632,7 +637,7 @@ static const struct intel_context_ops ring_context_ops = {
 
 	.cancel_request = ring_context_cancel_request,
 
-	.ban = ring_context_ban,
+	.revoke = ring_context_revoke,
 
 	.pre_pin = ring_context_pre_pin,
 	.pin = ring_context_pin,
@@ -800,7 +805,7 @@ static int mi_set_context(struct i915_request *rq,
 static int remap_l3_slice(struct i915_request *rq, int slice)
 {
 #define L3LOG_DW (GEN7_L3LOG_SIZE / sizeof(u32))
-	u32 *cs, *remap_info = rq->engine->i915->l3_parity.remap_info[slice];
+	u32 *cs, *remap_info = rq->i915->l3_parity.remap_info[slice];
 	int i;
 
 	if (!remap_info)
@@ -892,7 +897,7 @@ static int clear_residuals(struct i915_request *rq)
 	}
 
 	ret = engine->emit_bb_start(rq,
-				    engine->wa_ctx.vma->node.start, 0,
+				    i915_vma_offset(engine->wa_ctx.vma), 0,
 				    0);
 	if (ret)
 		return ret;
@@ -1047,9 +1052,9 @@ static void gen6_bsd_set_default_submission(struct intel_engine_cs *engine)
 
 static void ring_release(struct intel_engine_cs *engine)
 {
-	struct drm_i915_private *dev_priv = engine->i915;
+	struct drm_i915_private *i915 = engine->i915;
 
-	drm_WARN_ON(&dev_priv->drm, GRAPHICS_VER(dev_priv) > 2 &&
+	drm_WARN_ON(&i915->drm, GRAPHICS_VER(i915) > 2 &&
 		    (ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE) == 0);
 
 	intel_engine_cleanup_common(engine);

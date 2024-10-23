@@ -463,10 +463,10 @@ static void can_can_gw_rcv(struct sk_buff *skb, void *data)
 
 	/* process strictly Classic CAN or CAN FD frames */
 	if (gwj->flags & CGW_FLAGS_CAN_FD) {
-		if (skb->len != CANFD_MTU)
+		if (!can_is_canfd_skb(skb))
 			return;
 	} else {
-		if (skb->len != CAN_MTU)
+		if (!can_is_can_skb(skb))
 			return;
 	}
 
@@ -1138,6 +1138,13 @@ static int cgw_create_job(struct sk_buff *skb,  struct nlmsghdr *nlh,
 
 	if (gwj->dst.dev->type != ARPHRD_CAN)
 		goto out;
+
+	/* is sending the skb back to the incoming interface intended? */
+	if (gwj->src.dev == gwj->dst.dev &&
+	    !(gwj->flags & CGW_FLAGS_CAN_IIF_TX_OK)) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	ASSERT_RTNL();
 

@@ -546,10 +546,10 @@ static void pfe_eth_get_wol(struct net_device *ndev, struct ethtool_wolinfo
 static void pfe_eth_get_drvinfo(struct net_device *ndev, struct ethtool_drvinfo
 				*drvinfo)
 {
-	strlcpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, DRV_VERSION, sizeof(drvinfo->version));
-	strlcpy(drvinfo->fw_version, "N/A", sizeof(drvinfo->fw_version));
-	strlcpy(drvinfo->bus_info, "N/A", sizeof(drvinfo->bus_info));
+	strscpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
+	strscpy(drvinfo->version, DRV_VERSION, sizeof(drvinfo->version));
+	strscpy(drvinfo->fw_version, "N/A", sizeof(drvinfo->fw_version));
+	strscpy(drvinfo->bus_info, "N/A", sizeof(drvinfo->bus_info));
 }
 
 /*
@@ -871,22 +871,12 @@ static int pfe_eth_mdio_write(struct mii_bus *bus, int mii_id, int regnum,
 	if ((mii_id) && (pfe->mdio_muxval[mii_id]))
 		pfe_eth_mdio_mux(pfe->mdio_muxval[mii_id]);
 
-	if (regnum & MII_ADDR_C45) {
-		pfe_eth_mdio_write_addr(bus, mii_id, (regnum >> 16) & 0x1f,
-					regnum & 0xffff);
-		__raw_writel(EMAC_MII_DATA_OP_CL45_WR |
-			     EMAC_MII_DATA_PA(mii_id) |
-			     EMAC_MII_DATA_RA((regnum >> 16) & 0x1f) |
-			     EMAC_MII_DATA_TA | EMAC_MII_DATA(value),
-			     priv->PHY_baseaddr + EMAC_MII_DATA_REG);
-	} else {
-		/* start a write op */
-		__raw_writel(EMAC_MII_DATA_ST | EMAC_MII_DATA_OP_WR |
-			     EMAC_MII_DATA_PA(mii_id) |
-			     EMAC_MII_DATA_RA(regnum) |
-			     EMAC_MII_DATA_TA | EMAC_MII_DATA(value),
-			     priv->PHY_baseaddr + EMAC_MII_DATA_REG);
-	}
+	/* start a write op */
+	__raw_writel(EMAC_MII_DATA_ST | EMAC_MII_DATA_OP_WR |
+		     EMAC_MII_DATA_PA(mii_id) |
+		     EMAC_MII_DATA_RA(regnum) |
+		     EMAC_MII_DATA_TA | EMAC_MII_DATA(value),
+		     priv->PHY_baseaddr + EMAC_MII_DATA_REG);
 
 	if (pfe_eth_gemac_phy_timeout(priv, EMAC_MDIO_TIMEOUT)) {
 		netdev_err(priv->ndev, "%s: phy MDIO write timeout\n",
@@ -908,22 +898,12 @@ static int pfe_eth_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 	if ((mii_id) && (pfe->mdio_muxval[mii_id]))
 		pfe_eth_mdio_mux(pfe->mdio_muxval[mii_id]);
 
-	if (regnum & MII_ADDR_C45) {
-		pfe_eth_mdio_write_addr(bus, mii_id, (regnum >> 16) & 0x1f,
-					regnum & 0xffff);
-		__raw_writel(EMAC_MII_DATA_OP_CL45_RD |
-			     EMAC_MII_DATA_PA(mii_id) |
-			     EMAC_MII_DATA_RA((regnum >> 16) & 0x1f) |
-			     EMAC_MII_DATA_TA,
-			     priv->PHY_baseaddr + EMAC_MII_DATA_REG);
-	} else {
-		/* start a read op */
-		__raw_writel(EMAC_MII_DATA_ST | EMAC_MII_DATA_OP_RD |
-			     EMAC_MII_DATA_PA(mii_id) |
-			     EMAC_MII_DATA_RA(regnum) |
-			     EMAC_MII_DATA_TA, priv->PHY_baseaddr +
-			     EMAC_MII_DATA_REG);
-	}
+	/* start a read op */
+	__raw_writel(EMAC_MII_DATA_ST | EMAC_MII_DATA_OP_RD |
+		     EMAC_MII_DATA_PA(mii_id) |
+		     EMAC_MII_DATA_RA(regnum) |
+		     EMAC_MII_DATA_TA, priv->PHY_baseaddr +
+		     EMAC_MII_DATA_REG);
 
 	if (pfe_eth_gemac_phy_timeout(priv, EMAC_MDIO_TIMEOUT)) {
 		netdev_err(priv->ndev, "%s: phy MDIO read timeout\n", __func__);
@@ -934,6 +914,62 @@ static int pfe_eth_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 						EMAC_MII_DATA_REG));
 	netif_info(priv, hw, priv->ndev, "%s: phy %x reg %x val %x\n", __func__,
 		   mii_id, regnum, value);
+	return value;
+}
+
+static int pfe_eth_mdio_write_c45(struct mii_bus *bus, int mii_id, int devad,
+				  int regnum, u16 value)
+{
+	struct pfe_eth_priv_s *priv = (struct pfe_eth_priv_s *)bus->priv;
+
+	/*To access external PHYs on QDS board mux needs to be configured*/
+	if ((mii_id) && (pfe->mdio_muxval[mii_id]))
+		pfe_eth_mdio_mux(pfe->mdio_muxval[mii_id]);
+
+	pfe_eth_mdio_write_addr(bus, mii_id, devad, regnum);
+	__raw_writel(EMAC_MII_DATA_OP_CL45_WR |
+		     EMAC_MII_DATA_PA(mii_id) |
+		     EMAC_MII_DATA_RA(devad) |
+		     EMAC_MII_DATA_TA | EMAC_MII_DATA(value),
+		     priv->PHY_baseaddr + EMAC_MII_DATA_REG);
+
+	if (pfe_eth_gemac_phy_timeout(priv, EMAC_MDIO_TIMEOUT)) {
+		netdev_err(priv->ndev, "%s: phy MDIO write timeout\n",
+			   __func__);
+		return -1;
+	}
+	netif_info(priv, hw, priv->ndev, "%s: phy %x devad %x reg %x val %x\n",
+		   __func__, mii_id, devad, regnum, value);
+
+	return 0;
+}
+
+static int pfe_eth_mdio_read_c45(struct mii_bus *bus, int mii_id,
+				 int devad, int regnum)
+{
+	struct pfe_eth_priv_s *priv = (struct pfe_eth_priv_s *)bus->priv;
+	u16 value = 0;
+
+	/*To access external PHYs on QDS board mux needs to be configured*/
+	if ((mii_id) && (pfe->mdio_muxval[mii_id]))
+		pfe_eth_mdio_mux(pfe->mdio_muxval[mii_id]);
+
+	pfe_eth_mdio_write_addr(bus, mii_id, devad, regnum);
+	__raw_writel(EMAC_MII_DATA_OP_CL45_RD |
+		     EMAC_MII_DATA_PA(mii_id) |
+		     EMAC_MII_DATA_RA(devad) |
+		     EMAC_MII_DATA_TA,
+		     priv->PHY_baseaddr + EMAC_MII_DATA_REG);
+
+	if (pfe_eth_gemac_phy_timeout(priv, EMAC_MDIO_TIMEOUT)) {
+		netdev_err(priv->ndev, "%s: phy MDIO read timeout\n", __func__);
+		return -1;
+	}
+
+	value = EMAC_MII_DATA(__raw_readl(priv->PHY_baseaddr +
+						EMAC_MII_DATA_REG));
+	netif_info(priv, hw, priv->ndev, "%s: phy %x devad %x reg %x val %x\n",
+		   __func__, mii_id, devad, regnum, value);
 	return value;
 }
 
@@ -957,6 +993,8 @@ static int pfe_eth_mdio_init(struct pfe_eth_priv_s *priv,
 	bus->name = "ls1012a MDIO Bus";
 	bus->read = &pfe_eth_mdio_read;
 	bus->write = &pfe_eth_mdio_write;
+	bus->read_c45 = &pfe_eth_mdio_read_c45;
+	bus->write_c45 = &pfe_eth_mdio_write_c45;
 	bus->reset = &pfe_eth_mdio_reset;
 	snprintf(bus->id, MII_BUS_ID_SIZE, "ls1012a-%x", priv->id);
 	bus->priv = priv;
@@ -2103,7 +2141,7 @@ static struct sk_buff *pfe_eth_rx_skb(struct net_device *ndev,
 
 		/* First frag */
 		if (desc_ctrl & CL_DESC_FIRST) {
-			skb = build_skb(buf_addr, 0);
+			skb = slab_build_skb(buf_addr);
 			if (unlikely(!skb))
 				goto pkt_drop;
 
@@ -2125,7 +2163,7 @@ static struct sk_buff *pfe_eth_rx_skb(struct net_device *ndev,
 				goto pkt_drop;
 			}
 
-			skb_frag = build_skb(buf_addr, 0);
+			skb_frag = slab_build_skb(buf_addr);
 
 			if (unlikely(!skb_frag)) {
 				kfree(buf_addr);
@@ -2412,12 +2450,12 @@ static int pfe_eth_init_one(struct pfe *pfe, int id)
 	priv->msg_enable = NETIF_MSG_IFUP | NETIF_MSG_IFDOWN | NETIF_MSG_LINK |
 				NETIF_MSG_PROBE;
 
-	netif_napi_add(ndev, &priv->low_napi, pfe_eth_low_poll,
-		       HIF_RX_POLL_WEIGHT - 16);
-	netif_napi_add(ndev, &priv->high_napi, pfe_eth_high_poll,
-		       HIF_RX_POLL_WEIGHT - 16);
-	netif_napi_add(ndev, &priv->lro_napi, pfe_eth_lro_poll,
-		       HIF_RX_POLL_WEIGHT - 16);
+	netif_napi_add_weight(ndev, &priv->low_napi, pfe_eth_low_poll,
+			      HIF_RX_POLL_WEIGHT - 16);
+	netif_napi_add_weight(ndev, &priv->high_napi, pfe_eth_high_poll,
+			      HIF_RX_POLL_WEIGHT - 16);
+	netif_napi_add_weight(ndev, &priv->lro_napi, pfe_eth_lro_poll,
+			      HIF_RX_POLL_WEIGHT - 16);
 
 	err = register_netdev(ndev);
 

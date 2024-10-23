@@ -8,6 +8,13 @@ config ARCH_ACTIONS
 	help
 	  This enables support for the Actions Semiconductor S900 SoC family.
 
+config ARCH_AIROHA
+	bool "Airoha SoC Support"
+	select ARM_PSCI
+	select HAVE_ARM_ARCH_TIMER
+	help
+	  This enables support for the ARM64 based Airoha SoCs.
+
 config ARCH_SUNXI
 	bool "Allwinner sunxi 64-bit SoC Family"
 	select ARCH_HAS_RESET_CONTROLLER
@@ -33,6 +40,11 @@ config ARCH_APPLE
 	  This enables support for Apple's in-house ARM SoC family, starting
 	  with the Apple M1.
 
+menuconfig ARCH_BCM
+	bool "Broadcom SoC Support"
+
+if ARCH_BCM
+
 config ARCH_BCM2835
 	bool "Broadcom BCM2835 family"
 	select TIMER_OF
@@ -47,14 +59,6 @@ config ARCH_BCM2835
 	  This enables support for the Broadcom BCM2837 and BCM2711 SoC.
 	  These SoCs are used in the Raspberry Pi 3 and 4 devices.
 
-config ARCH_BCM4908
-	bool "Broadcom BCM4908 family"
-	select GPIOLIB
-	help
-	  This enables support for the Broadcom BCM4906, BCM4908 and
-	  BCM49408 SoCs. These SoCs use Brahma-B53 cores and can be
-	  found in home routers.
-
 config ARCH_BCM_IPROC
 	bool "Broadcom iProc SoC Family"
 	select COMMON_CLK_IPROC
@@ -62,6 +66,26 @@ config ARCH_BCM_IPROC
 	select PINCTRL
 	help
 	  This enables support for Broadcom iProc based SoCs
+
+config ARCH_BCMBCA
+	bool "Broadcom Broadband Carrier Access (BCA) origin SoC"
+	select GPIOLIB
+	help
+	  Say Y if you intend to run the kernel on a Broadcom Broadband ARM-based
+	  BCA chipset.
+
+	  This enables support for Broadcom BCA ARM-based broadband chipsets,
+	  including the DSL, PON and Wireless family of chips.
+
+config ARCH_BRCMSTB
+	bool "Broadcom Set-Top-Box SoCs"
+	select ARCH_HAS_RESET_CONTROLLER
+	select GENERIC_IRQ_CHIP
+	select PINCTRL
+	help
+	  This enables support for Broadcom's ARMv8 Set Top Box SoCs
+
+endif
 
 config ARCH_BERLIN
 	bool "Marvell Berlin SoC Family"
@@ -77,16 +101,8 @@ config ARCH_BITMAIN
 	help
 	  This enables support for the Bitmain SoC Family.
 
-config ARCH_BRCMSTB
-	bool "Broadcom Set-Top-Box SoCs"
-	select ARCH_HAS_RESET_CONTROLLER
-	select GENERIC_IRQ_CHIP
-	select PINCTRL
-	help
-	  This enables support for Broadcom's ARMv8 Set Top Box SoCs
-
 config ARCH_EXYNOS
-	bool "ARMv8 based Samsung Exynos SoC family"
+	bool "Samsung Exynos SoC family"
 	select COMMON_CLK_SAMSUNG
 	select CLKSRC_EXYNOS_MCT
 	select EXYNOS_PM_DOMAINS if PM_GENERIC_DOMAINS
@@ -99,7 +115,7 @@ config ARCH_EXYNOS
 	  This enables support for ARMv8 based Samsung Exynos SoC family.
 
 config ARCH_SPARX5
-	bool "ARMv8 based Microchip Sparx5 SoC family"
+	bool "Microchip Sparx5 SoC family"
 	select PINCTRL
 	select DW_APB_TIMER_OF
 	help
@@ -125,12 +141,6 @@ config ARCH_K3
 	help
 	  This enables support for Texas Instruments' K3 multicore SoC
 	  architecture.
-
-config ARCH_LAYERSCAPE
-	bool "ARMv8 based Freescale Layerscape SoC family"
-	select EDAC_SUPPORT
-	help
-	  This enables support for the Freescale Layerscape SoC family.
 
 config ARCH_LG1K
 	bool "LG Electronics LG1K SoC Family"
@@ -182,14 +192,27 @@ config ARCH_MVEBU
 	select PINCTRL_ARMADA_37XX
 	select PINCTRL_ARMADA_AP806
 	select PINCTRL_ARMADA_CP110
+	select PINCTRL_AC5
 	help
-	  This enables support for Marvell EBU familly, including:
+	  This enables support for Marvell EBU family, including:
 	   - Armada 3700 SoC Family
 	   - Armada 7K SoC Family
 	   - Armada 8K SoC Family
+	   - 98DX2530 SoC Family
+
+menuconfig ARCH_NXP
+	bool "NXP SoC support"
+
+if ARCH_NXP
+
+config ARCH_LAYERSCAPE
+	bool "Freescale Layerscape SoC family"
+	select EDAC_SUPPORT
+	help
+	  This enables support for the Freescale Layerscape SoC family.
 
 config ARCH_MXC
-	bool "ARMv8 based NXP i.MX SoC family"
+	bool "NXP i.MX SoC family"
 	select ARM64_ERRATUM_843419
 	select ARM64_ERRATUM_845719 if COMPAT
 	select IMX_GPCV2
@@ -201,6 +224,44 @@ config ARCH_MXC
 	help
 	  This enables support for the ARMv8 based SoCs in the
 	  NXP i.MX family.
+
+config ARCH_S32
+	bool "NXP S32 SoC Family"
+	help
+	  This enables support for the NXP S32 family of processors.
+
+endif
+
+config ARCH_MA35
+	bool "Nuvoton MA35 Architecture"
+	select GPIOLIB
+	select PINCTRL
+	select RESET_CONTROLLER
+	help
+	  This enables support for the ARMv8 based Nuvoton MA35 series SoCs.
+
+config ARCH_NPCM
+	bool "Nuvoton NPCM Architecture"
+	select PINCTRL
+	select GPIOLIB
+	select NPCM7XX_TIMER
+	select RESET_CONTROLLER
+	select MFD_SYSCON
+	help
+	  General support for NPCM8xx BMC (Arbel).
+	  Nuvoton NPCM8xx BMC based on the Cortex A35.
+
+config ARCH_PENSANDO
+	bool "AMD Pensando Platforms"
+	help
+	  This enables support for the ARMv8 based AMD Pensando SoC
+	  family to include the Elba SoC.
+
+	  AMD Pensando SoCs support a range of Distributed Services
+	  Cards in PCIe format installed into servers.  The Elba
+	  SoC includes 16 Cortex A-72 CPU cores, 144 P4-programmable
+	  cores for a minimal latency/jitter datapath, and network
+	  interfaces up to 200 Gb/s.
 
 config ARCH_QCOM
 	bool "Qualcomm Platforms"
@@ -218,9 +279,6 @@ config ARCH_REALTEK
 
 config ARCH_RENESAS
 	bool "Renesas SoC Platforms"
-	select GPIOLIB
-	select PINCTRL
-	select SOC_BUS
 	help
 	  This enables support for the ARMv8 based Renesas SoCs.
 
@@ -234,11 +292,6 @@ config ARCH_ROCKCHIP
 	  This enables support for the ARMv8 based Rockchip chipsets,
 	  like the RK3368.
 
-config ARCH_S32
-	bool "NXP S32 SoC Family"
-	help
-	  This enables support for the NXP S32 family of processors.
-
 config ARCH_SEATTLE
 	bool "AMD Seattle SoC Family"
 	help
@@ -248,7 +301,24 @@ config ARCH_INTEL_SOCFPGA
 	bool "Intel's SoCFPGA ARMv8 Families"
 	help
 	  This enables support for Intel's SoCFPGA ARMv8 families:
-	  Stratix 10 (ex. Altera), Agilex and eASIC N5X.
+	  Stratix 10 (ex. Altera), Stratix10 Software Virtual Platform,
+	  Agilex and eASIC N5X.
+
+config ARCH_STM32
+	bool "STMicroelectronics STM32 SoC Family"
+	select GPIOLIB
+	select PINCTRL
+	select PINCTRL_STM32MP257
+	select STM32_EXTI
+	select ARM_SMC_MBOX
+	select ARM_SCMI_PROTOCOL
+	select COMMON_CLK_SCMI
+	select STM32_FIREWALL
+	help
+	  This enables support for ARMv8 based STMicroelectronics
+	  STM32 family, including:
+		- STM32MP25:
+			- STM32MP251, STM32MP253, STM32MP255 and STM32MP257.
 
 config ARCH_SYNQUACER
 	bool "Socionext SynQuacer SoC Family"
@@ -269,7 +339,7 @@ config ARCH_TEGRA
 	  This enables support for the NVIDIA Tegra SoC family.
 
 config ARCH_TESLA_FSD
-	bool "ARMv8 based Tesla platform"
+	bool "Tesla platform"
 	depends on ARCH_EXYNOS
 	help
 	  Support for ARMv8 based Tesla platforms.

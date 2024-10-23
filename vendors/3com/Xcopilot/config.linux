@@ -1,17 +1,18 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/m68k 5.19.0-ac0 Kernel Configuration
+# Linux/m68k 6.10.0-ac0 Kernel Configuration
 #
-CONFIG_CC_VERSION_TEXT="m68k-uclinux-gcc (GCC) 5.4.0"
+CONFIG_CC_VERSION_TEXT="m68k-uclinux-gcc (GCC) 12.3.0"
 CONFIG_CC_IS_GCC=y
-CONFIG_GCC_VERSION=50400
+CONFIG_GCC_VERSION=120300
 CONFIG_CLANG_VERSION=0
 CONFIG_AS_IS_GNU=y
-CONFIG_AS_VERSION=22501
+CONFIG_AS_VERSION=24100
 CONFIG_LD_IS_BFD=y
-CONFIG_LD_VERSION=22501
+CONFIG_LD_VERSION=24100
 CONFIG_LLD_VERSION=0
-CONFIG_CC_HAS_ASM_GOTO=y
+CONFIG_CC_HAS_ASM_INLINE=y
+CONFIG_CC_HAS_NO_PROFILE_FN_ATTR=y
 CONFIG_PAHOLE_VERSION=0
 CONFIG_IRQ_WORK=y
 
@@ -61,27 +62,27 @@ CONFIG_TICK_CPU_ACCOUNTING=y
 #
 CONFIG_TINY_RCU=y
 # CONFIG_RCU_EXPERT is not set
-CONFIG_SRCU=y
 CONFIG_TINY_SRCU=y
 # end of RCU Subsystem
 
 # CONFIG_IKCONFIG is not set
 # CONFIG_IKHEADERS is not set
 CONFIG_LOG_BUF_SHIFT=14
-CONFIG_PRINTK_SAFE_LOG_BUF_SHIFT=13
 
 #
 # Scheduler features
 #
 # end of Scheduler features
 
-CONFIG_GCC12_NO_ARRAY_BOUNDS=y
+CONFIG_CC_IMPLICIT_FALLTHROUGH="-Wimplicit-fallthrough=3"
+CONFIG_GCC10_NO_ARRAY_BOUNDS=y
+CONFIG_CC_NO_ARRAY_BOUNDS=y
+CONFIG_GCC_NO_STRINGOP_OVERFLOW=y
+CONFIG_CC_NO_STRINGOP_OVERFLOW=y
 # CONFIG_CGROUPS is not set
 # CONFIG_NAMESPACES is not set
 # CONFIG_CHECKPOINT_RESTORE is not set
 # CONFIG_SCHED_AUTOGROUP is not set
-CONFIG_SYSFS_DEPRECATED=y
-CONFIG_SYSFS_DEPRECATED_V2=y
 # CONFIG_RELAY is not set
 # CONFIG_BLK_DEV_INITRD is not set
 # CONFIG_BOOT_CONFIG is not set
@@ -99,7 +100,7 @@ CONFIG_SYSFS_SYSCALL=y
 CONFIG_POSIX_TIMERS=y
 CONFIG_PRINTK=y
 CONFIG_BUG=y
-CONFIG_BASE_FULL=y
+# CONFIG_BASE_SMALL is not set
 # CONFIG_FUTEX is not set
 # CONFIG_EPOLL is not set
 CONFIG_SIGNALFD=y
@@ -109,10 +110,10 @@ CONFIG_AIO=y
 CONFIG_IO_URING=y
 # CONFIG_ADVISE_SYSCALLS is not set
 CONFIG_MEMBARRIER=y
-# CONFIG_KALLSYMS is not set
 # CONFIG_KCMP is not set
-CONFIG_EMBEDDED=y
+CONFIG_CACHESTAT_SYSCALL=y
 # CONFIG_PC104 is not set
+# CONFIG_KALLSYMS is not set
 
 #
 # Kernel Performance Events And Counters
@@ -120,6 +121,11 @@ CONFIG_EMBEDDED=y
 # end of Kernel Performance Events And Counters
 
 # CONFIG_PROFILING is not set
+
+#
+# Kexec and crash features
+#
+# end of Kexec and crash features
 # end of General setup
 
 CONFIG_M68K=y
@@ -132,7 +138,6 @@ CONFIG_NO_IOPORT_MAP=y
 CONFIG_HZ=100
 CONFIG_PGTABLE_LEVELS=3
 # CONFIG_MMU is not set
-# CONFIG_KEXEC is not set
 
 #
 # Platform setup
@@ -149,7 +154,7 @@ CONFIG_M68328=y
 #
 # Processor Specific Options
 #
-CONFIG_FORCE_MAX_ZONEORDER=11
+CONFIG_ARCH_FORCE_MAX_ORDER=10
 CONFIG_CPU_HAS_NO_BITFIELDS=y
 CONFIG_CPU_HAS_NO_CAS=y
 CONFIG_CPU_HAS_NO_MULDIV64=y
@@ -182,10 +187,8 @@ CONFIG_KERNELBASE=0x10000400
 # ROM configuration
 #
 CONFIG_ROM=y
-CONFIG_ROMBASE=0x10c00000
 CONFIG_ROMVEC=0x10c00000
 CONFIG_ROMSTART=0x10c10400
-CONFIG_ROMSIZE=0x1f0000
 # CONFIG_RAMKERNEL is not set
 CONFIG_ROMKERNEL=y
 # end of Platform setup
@@ -201,18 +204,27 @@ CONFIG_ROMKERNEL=y
 # CONFIG_PM is not set
 # end of Power management options
 
+CONFIG_CPU_MITIGATIONS=y
+
 #
 # General architecture-dependent options
 #
 CONFIG_ARCH_32BIT_OFF_T=y
 CONFIG_HAVE_ASM_MODVERSIONS=y
+CONFIG_MMU_LAZY_TLB_REFCOUNT=y
 CONFIG_ARCH_WANT_IPC_PARSE_VERSION=y
+CONFIG_HAVE_ARCH_SECCOMP=y
+CONFIG_HAVE_ARCH_SECCOMP_FILTER=y
+CONFIG_SECCOMP=y
 CONFIG_LTO_NONE=y
 CONFIG_HAVE_MOD_ARCH_SPECIFIC=y
 CONFIG_MODULES_USE_ELF_RELA=y
 CONFIG_MODULES_USE_ELF_REL=y
+CONFIG_HAVE_PAGE_SIZE_4KB=y
+CONFIG_PAGE_SIZE_4KB=y
 CONFIG_PAGE_SIZE_LESS_THAN_64KB=y
 CONFIG_PAGE_SIZE_LESS_THAN_256KB=y
+CONFIG_PAGE_SHIFT=12
 CONFIG_HAVE_ARCH_HASH=y
 CONFIG_OLD_SIGSUSPEND3=y
 CONFIG_OLD_SIGACTION=y
@@ -225,17 +237,18 @@ CONFIG_HAVE_ARCH_PFN_VALID=y
 # GCOV-based kernel profiling
 #
 # end of GCOV-based kernel profiling
+
+CONFIG_FUNCTION_ALIGNMENT=0
 # end of General architecture-dependent options
 
-CONFIG_BASE_SMALL=0
 # CONFIG_MODULES is not set
 CONFIG_BLOCK=y
 CONFIG_BLOCK_LEGACY_AUTOLOAD=y
 # CONFIG_BLK_DEV_BSGLIB is not set
 # CONFIG_BLK_DEV_INTEGRITY is not set
+CONFIG_BLK_DEV_WRITE_MOUNTED=y
 # CONFIG_BLK_DEV_ZONED is not set
 # CONFIG_BLK_WBT is not set
-# CONFIG_BLK_SED_OPAL is not set
 # CONFIG_BLK_INLINE_ENCRYPTION is not set
 
 #
@@ -280,15 +293,16 @@ CONFIG_BINFMT_FLAT_ARGVP_ENVP_ON_STACK=y
 #
 
 #
-# SLAB allocator options
+# Slab allocator options
 #
-CONFIG_SLAB=y
-# CONFIG_SLUB is not set
-# CONFIG_SLOB is not set
+CONFIG_SLUB=y
+# CONFIG_SLUB_TINY is not set
 CONFIG_SLAB_MERGE_DEFAULT=y
 # CONFIG_SLAB_FREELIST_RANDOM is not set
 # CONFIG_SLAB_FREELIST_HARDENED is not set
-# end of SLAB allocator options
+# CONFIG_SLUB_STATS is not set
+# CONFIG_RANDOM_KMALLOC_CACHES is not set
+# end of Slab allocator options
 
 # CONFIG_SHUFFLE_PAGE_ALLOCATOR is not set
 CONFIG_COMPAT_BRK=y
@@ -296,9 +310,10 @@ CONFIG_COMPAT_BRK=y
 CONFIG_FLATMEM=y
 CONFIG_SPLIT_PTLOCK_CPUS=999999
 # CONFIG_PAGE_REPORTING is not set
-CONFIG_VIRT_TO_BUS=y
+CONFIG_PCP_BATCH_SCALE_MAX=5
 CONFIG_NOMMU_INITIAL_TRIM_EXCESS=1
 CONFIG_NEED_PER_CPU_KM=y
+CONFIG_ARCH_HAS_CPU_CACHE_ALIASING=y
 CONFIG_ARCH_HAS_CURRENT_STACK_POINTER=y
 CONFIG_ZONE_DMA=y
 CONFIG_VM_EVENT_COUNTERS=y
@@ -307,6 +322,7 @@ CONFIG_VM_EVENT_COUNTERS=y
 #
 # GUP_TEST needs to have DEBUG_FS enabled
 #
+# CONFIG_MEMFD_CREATE is not set
 
 #
 # Data Access Monitoring
@@ -346,6 +362,7 @@ CONFIG_ALLOW_DEV_COREDUMP=y
 # CONFIG_DEBUG_DEVRES is not set
 # CONFIG_DEBUG_TEST_DRIVER_REMOVE is not set
 CONFIG_GENERIC_CPU_DEVICES=y
+# CONFIG_FW_DEVLINK_SYNC_STATE_TIMEOUT is not set
 # end of Generic Driver Options
 
 #
@@ -355,6 +372,11 @@ CONFIG_GENERIC_CPU_DEVICES=y
 # CONFIG_MHI_BUS_EP is not set
 # CONFIG_MHI_QCA_BUS is not set
 # end of Bus devices
+
+#
+# Cache Drivers
+#
+# end of Cache Drivers
 
 #
 # Firmware Drivers
@@ -369,6 +391,11 @@ CONFIG_GENERIC_CPU_DEVICES=y
 # CONFIG_GOOGLE_FIRMWARE is not set
 
 #
+# Qualcomm firmware drivers
+#
+# end of Qualcomm firmware drivers
+
+#
 # Tegra firmware driver
 #
 # end of Tegra firmware driver
@@ -380,7 +407,6 @@ CONFIG_MTD=y
 #
 # Partition parsers
 #
-# CONFIG_MTD_AR7_PARTS is not set
 # CONFIG_MTD_CMDLINE_PARTS is not set
 # CONFIG_MTD_REDBOOT_PARTS is not set
 # end of Partition parsers
@@ -390,6 +416,7 @@ CONFIG_MTD=y
 #
 CONFIG_MTD_BLKDEVS=y
 CONFIG_MTD_BLOCK=y
+# CONFIG_MTD_CRYPT is not set
 
 #
 # Note that in some cases UBI block is preferred. See MTD_UBI_BLOCK.
@@ -480,6 +507,7 @@ CONFIG_BLK_DEV=y
 CONFIG_BLK_DEV_RAM=y
 CONFIG_BLK_DEV_RAM_COUNT=16
 CONFIG_BLK_DEV_RAM_SIZE=4096
+# CONFIG_BLK_DEV_UBLK is not set
 
 #
 # NVME Support
@@ -599,6 +627,7 @@ CONFIG_TTY=y
 # CONFIG_UNIX98_PTYS is not set
 CONFIG_LEGACY_PTYS=y
 CONFIG_LEGACY_PTY_COUNT=256
+CONFIG_LEGACY_TIOCSTI=y
 CONFIG_LDISC_AUTOLOAD=y
 
 #
@@ -618,6 +647,7 @@ CONFIG_LDISC_AUTOLOAD=y
 # end of Serial drivers
 
 # CONFIG_SERIAL_IMX6_DIGI_EXTENSIONS is not set
+# CONFIG_SERIAL_STM32_DIGI_REALPORT_EXTENSIONS is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
 # CONFIG_NULL_TTY is not set
 # CONFIG_SERIAL_DEV_BUS is not set
@@ -640,7 +670,6 @@ CONFIG_DEVMEM=y
 # CONFIG_SNAPI2C is not set
 # CONFIG_SNAPSPI is not set
 # CONFIG_FIFO_HUB is not set
-CONFIG_RANDOM_TRUST_BOOTLOADER=y
 # end of Character devices
 
 #
@@ -677,26 +706,13 @@ CONFIG_HWMON=y
 # Native drivers
 #
 # CONFIG_SENSORS_AS370 is not set
+# CONFIG_SENSORS_ASUS_ROG_RYUJIN is not set
 # CONFIG_SENSORS_AXI_FAN_CONTROL is not set
-# CONFIG_SENSORS_ASPEED is not set
 # CONFIG_SENSORS_CORSAIR_CPRO is not set
 # CONFIG_SENSORS_CORSAIR_PSU is not set
-# CONFIG_SENSORS_F71805F is not set
-# CONFIG_SENSORS_F71882FG is not set
-# CONFIG_SENSORS_IT87 is not set
 # CONFIG_SENSORS_MAX197 is not set
 # CONFIG_SENSORS_MR75203 is not set
-# CONFIG_SENSORS_PC87360 is not set
-# CONFIG_SENSORS_PC87427 is not set
-# CONFIG_SENSORS_NCT6683 is not set
-# CONFIG_SENSORS_NCT6775 is not set
 # CONFIG_SENSORS_NPCM7XX is not set
-# CONFIG_SENSORS_SY7636A is not set
-# CONFIG_SENSORS_SMSC47M1 is not set
-# CONFIG_SENSORS_SMSC47B397 is not set
-# CONFIG_SENSORS_VT1211 is not set
-# CONFIG_SENSORS_W83627HF is not set
-# CONFIG_SENSORS_W83627EHF is not set
 # CONFIG_THERMAL is not set
 # CONFIG_WATCHDOG is not set
 
@@ -704,11 +720,9 @@ CONFIG_HWMON=y
 # Multifunction device drivers
 #
 # CONFIG_MFD_MADERA is not set
-# CONFIG_HTC_PASIC3 is not set
 # CONFIG_MFD_KEMPLD is not set
 # CONFIG_MFD_MT6397 is not set
 # CONFIG_MFD_SYSCON is not set
-# CONFIG_MFD_TI_AM335X_TSCADC is not set
 # CONFIG_MFD_TQMX86 is not set
 # end of Multifunction device drivers
 
@@ -726,11 +740,7 @@ CONFIG_HWMON=y
 #
 # Graphics support
 #
-
-#
-# ARM devices
-#
-# end of ARM devices
+# CONFIG_AUXDISPLAY is not set
 
 #
 # Frame buffer Devices
@@ -747,10 +757,7 @@ CONFIG_HWMON=y
 # end of Graphics support
 
 # CONFIG_SOUND is not set
-
-#
-# HID support
-#
+CONFIG_HID_SUPPORT=y
 CONFIG_HID=y
 # CONFIG_HID_BATTERY_STRENGTH is not set
 # CONFIG_HIDRAW is not set
@@ -772,15 +779,18 @@ CONFIG_HID_GENERIC=y
 # CONFIG_HID_DRAGONRISE is not set
 # CONFIG_HID_EMS_FF is not set
 # CONFIG_HID_ELECOM is not set
+# CONFIG_HID_EVISION is not set
 # CONFIG_HID_EZKEY is not set
 # CONFIG_HID_GEMBIRD is not set
 # CONFIG_HID_GFRM is not set
 # CONFIG_HID_GLORIOUS is not set
+# CONFIG_HID_GOOGLE_STADIA_FF is not set
 # CONFIG_HID_VIVALDI is not set
 # CONFIG_HID_KEYTOUCH is not set
 # CONFIG_HID_KYE is not set
 # CONFIG_HID_WALTOP is not set
 # CONFIG_HID_VIEWSONIC is not set
+# CONFIG_HID_VRC2 is not set
 # CONFIG_HID_XIAOMI is not set
 # CONFIG_HID_GYRATION is not set
 # CONFIG_HID_ICADE is not set
@@ -803,19 +813,20 @@ CONFIG_HID_GENERIC=y
 # CONFIG_HID_PETALYNX is not set
 # CONFIG_HID_PICOLCD is not set
 # CONFIG_HID_PLANTRONICS is not set
+# CONFIG_HID_PXRC is not set
 # CONFIG_HID_RAZER is not set
 # CONFIG_HID_PRIMAX is not set
 # CONFIG_HID_SAITEK is not set
 # CONFIG_HID_SEMITEK is not set
 # CONFIG_HID_SPEEDLINK is not set
 # CONFIG_HID_STEAM is not set
-# CONFIG_HID_STEELSERIES is not set
 # CONFIG_HID_SUNPLUS is not set
 # CONFIG_HID_RMI is not set
 # CONFIG_HID_GREENASIA is not set
 # CONFIG_HID_SMARTJOYPLUS is not set
 # CONFIG_HID_TIVO is not set
 # CONFIG_HID_TOPSEED is not set
+# CONFIG_HID_TOPRE is not set
 # CONFIG_HID_UDRAW_PS3 is not set
 # CONFIG_HID_XINMO is not set
 # CONFIG_HID_ZEROPLUS is not set
@@ -823,13 +834,21 @@ CONFIG_HID_GENERIC=y
 # CONFIG_HID_SENSOR_HUB is not set
 # CONFIG_HID_ALPS is not set
 # end of Special HID drivers
-# end of HID support
+
+#
+# HID-BPF support
+#
+# end of HID-BPF support
 
 CONFIG_USB_OHCI_LITTLE_ENDIAN=y
 CONFIG_USB_SUPPORT=y
 # CONFIG_USB_ULPI_BUS is not set
 CONFIG_USB_ARCH_HAS_HCD=y
 # CONFIG_USB is not set
+
+#
+# USB dual-mode controller drivers
+#
 
 #
 # USB port drivers
@@ -857,11 +876,9 @@ CONFIG_USB_ARCH_HAS_HCD=y
 # CONFIG_DMABUF_HEAPS is not set
 # end of DMABUF options
 
-# CONFIG_AUXDISPLAY is not set
 # CONFIG_VFIO is not set
 # CONFIG_VIRT_DRIVERS is not set
 CONFIG_VIRTIO_MENU=y
-# CONFIG_VIRTIO_HARDEN_NOTIFICATION is not set
 CONFIG_VHOST_MENU=y
 # CONFIG_VHOST_CROSS_ENDIAN_LEGACY is not set
 
@@ -907,6 +924,11 @@ CONFIG_VHOST_MENU=y
 # end of NXP/Freescale QorIQ SoC drivers
 
 #
+# fujitsu SoC drivers
+#
+# end of fujitsu SoC drivers
+
+#
 # i.MX SoC drivers
 #
 # end of i.MX SoC drivers
@@ -915,6 +937,8 @@ CONFIG_VHOST_MENU=y
 # Enable LiteX SoC Builder specific drivers
 #
 # end of Enable LiteX SoC Builder specific drivers
+
+# CONFIG_WPCM450_SOC is not set
 
 #
 # Qualcomm SoC drivers
@@ -928,6 +952,31 @@ CONFIG_VHOST_MENU=y
 #
 # end of Xilinx SoC drivers
 # end of SOC (System On Chip) specific Drivers
+
+#
+# PM Domains
+#
+
+#
+# Amlogic PM Domains
+#
+# end of Amlogic PM Domains
+
+#
+# Broadcom PM Domains
+#
+# end of Broadcom PM Domains
+
+#
+# i.MX PM Domains
+#
+# end of i.MX PM Domains
+
+#
+# Qualcomm PM Domains
+#
+# end of Qualcomm PM Domains
+# end of PM Domains
 
 # CONFIG_PM_DEVFREQ is not set
 # CONFIG_EXTCON is not set
@@ -966,12 +1015,12 @@ CONFIG_VHOST_MENU=y
 #
 # Android
 #
-# CONFIG_ANDROID is not set
 # end of Android
 
 # CONFIG_DAX is not set
 CONFIG_NVMEM=y
 CONFIG_NVMEM_SYSFS=y
+# CONFIG_NVMEM_LAYOUTS is not set
 # CONFIG_NVMEM_RMEM is not set
 
 #
@@ -994,6 +1043,7 @@ CONFIG_NVMEM_SYSFS=y
 #
 CONFIG_VALIDATE_FS_PARSER=y
 CONFIG_FS_IOMAP=y
+CONFIG_BUFFER_HEAD=y
 CONFIG_EXT2_FS=y
 # CONFIG_EXT2_FS_XATTR is not set
 # CONFIG_EXT3_FS is not set
@@ -1005,6 +1055,7 @@ CONFIG_EXT2_FS=y
 # CONFIG_BTRFS_FS is not set
 # CONFIG_NILFS2_FS is not set
 # CONFIG_F2FS_FS is not set
+# CONFIG_BCACHEFS_FS is not set
 # CONFIG_EXPORTFS_BLOCK_OPS is not set
 CONFIG_FILE_LOCKING=y
 # CONFIG_FS_ENCRYPTION is not set
@@ -1014,7 +1065,6 @@ CONFIG_DNOTIFY=y
 CONFIG_INOTIFY_USER=y
 # CONFIG_FANOTIFY is not set
 # CONFIG_QUOTA is not set
-# CONFIG_AUTOFS4_FS is not set
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_FUSE_FS is not set
 # CONFIG_OVERLAY_FS is not set
@@ -1022,7 +1072,6 @@ CONFIG_INOTIFY_USER=y
 #
 # Caches
 #
-# CONFIG_FSCACHE is not set
 # end of Caches
 
 #
@@ -1038,8 +1087,8 @@ CONFIG_INOTIFY_USER=y
 # CONFIG_MSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
 # CONFIG_EXFAT_FS is not set
-# CONFIG_NTFS_FS is not set
 # CONFIG_NTFS3_FS is not set
+# CONFIG_NTFS_FS is not set
 # end of DOS/FAT/EXFAT/NT Filesystems
 
 #
@@ -1098,7 +1147,6 @@ CONFIG_IO_WQ=y
 # CONFIG_SECURITY_DMESG_RESTRICT is not set
 # CONFIG_SECURITY is not set
 # CONFIG_SECURITYFS is not set
-CONFIG_HAVE_HARDENED_USERCOPY_ALLOCATOR=y
 # CONFIG_HARDENED_USERCOPY is not set
 # CONFIG_STATIC_USERMODEHELPER is not set
 CONFIG_DEFAULT_SECURITY_DAC=y
@@ -1111,10 +1159,24 @@ CONFIG_LSM="yama,loadpin,safesetid,integrity"
 #
 # Memory initialization
 #
-CONFIG_INIT_STACK_NONE=y
+CONFIG_CC_HAS_AUTO_VAR_INIT_PATTERN=y
+CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO_BARE=y
+CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO=y
+# CONFIG_INIT_STACK_NONE is not set
+# CONFIG_INIT_STACK_ALL_PATTERN is not set
+CONFIG_INIT_STACK_ALL_ZERO=y
 # CONFIG_INIT_ON_ALLOC_DEFAULT_ON is not set
 # CONFIG_INIT_ON_FREE_DEFAULT_ON is not set
+CONFIG_CC_HAS_ZERO_CALL_USED_REGS=y
+# CONFIG_ZERO_CALL_USED_REGS is not set
 # end of Memory initialization
+
+#
+# Hardening of kernel data structures
+#
+# CONFIG_LIST_HARDENED is not set
+# CONFIG_BUG_ON_DATA_CORRUPTION is not set
+# end of Hardening of kernel data structures
 
 CONFIG_RANDSTRUCT_NONE=y
 # end of Kernel hardening options
@@ -1131,13 +1193,12 @@ CONFIG_GENERIC_STRNCPY_FROM_USER=y
 CONFIG_GENERIC_STRNLEN_USER=y
 # CONFIG_CORDIC is not set
 # CONFIG_PRIME_NUMBERS is not set
-CONFIG_GENERIC_PCI_IOMAP=y
-CONFIG_GENERIC_IOMAP=y
 
 #
 # Crypto library routines
 #
 CONFIG_CRYPTO_LIB_BLAKE2S_GENERIC=y
+# CONFIG_CRYPTO_LIB_CHACHA is not set
 # CONFIG_CRYPTO_LIB_CURVE25519 is not set
 CONFIG_CRYPTO_LIB_POLY1305_RSIZE=1
 # CONFIG_CRYPTO_LIB_POLY1305 is not set
@@ -1165,11 +1226,17 @@ CONFIG_HAS_IOMEM=y
 CONFIG_NO_DMA=y
 CONFIG_DMA_NONCOHERENT_MMAP=y
 # CONFIG_DMA_API_DEBUG is not set
+CONFIG_FORCE_NR_CPUS=y
 CONFIG_GENERIC_ATOMIC64=y
 # CONFIG_IRQ_POLL is not set
 CONFIG_UACCESS_MEMCPY=y
 CONFIG_SBITMAP=y
+# CONFIG_LWQ_TEST is not set
 # end of Library routines
+
+CONFIG_GENERIC_LIB_ASHLDI3=y
+CONFIG_GENERIC_LIB_ASHRDI3=y
+CONFIG_GENERIC_LIB_LSHRDI3=y
 
 #
 # Kernel hacking
@@ -1197,6 +1264,7 @@ CONFIG_DEBUG_MISC=y
 #
 # Compile-time checks and compiler options
 #
+CONFIG_AS_HAS_NON_CONST_ULEB128=y
 CONFIG_DEBUG_INFO_NONE=y
 # CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set
 # CONFIG_DEBUG_INFO_DWARF4 is not set
@@ -1217,7 +1285,7 @@ CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 #
 # CONFIG_MAGIC_SYSRQ is not set
 # CONFIG_DEBUG_FS is not set
-# CONFIG_UBSAN is not set
+CONFIG_HAVE_KCSAN_COMPILER=y
 # end of Generic Kernel Debugging Instruments
 
 #
@@ -1230,7 +1298,8 @@ CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 #
 # CONFIG_PAGE_EXTENSION is not set
 # CONFIG_DEBUG_PAGEALLOC is not set
-# CONFIG_DEBUG_SLAB is not set
+CONFIG_SLUB_DEBUG=y
+# CONFIG_SLUB_DEBUG_ON is not set
 # CONFIG_PAGE_POISONING is not set
 # CONFIG_DEBUG_OBJECTS is not set
 # CONFIG_DEBUG_STACK_USAGE is not set
@@ -1238,7 +1307,8 @@ CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 # CONFIG_DEBUG_VM is not set
 # CONFIG_DEBUG_NOMMU_REGIONS is not set
 # CONFIG_DEBUG_MEMORY_INIT is not set
-CONFIG_CC_HAS_KASAN_GENERIC=y
+# CONFIG_MEM_ALLOC_PROFILING is not set
+CONFIG_CC_HAS_WORKING_NOSANITIZE_ADDRESS=y
 # end of Memory Debugging
 
 # CONFIG_DEBUG_SHIRQ is not set
@@ -1252,12 +1322,12 @@ CONFIG_PANIC_TIMEOUT=0
 # CONFIG_SOFTLOCKUP_DETECTOR is not set
 # CONFIG_DETECT_HUNG_TASK is not set
 # CONFIG_WQ_WATCHDOG is not set
+# CONFIG_WQ_CPU_INTENSIVE_REPORT is not set
 # end of Debug Oops, Lockups and Hangs
 
 #
 # Scheduler Debugging
 #
-CONFIG_SCHED_DEBUG=y
 # CONFIG_SCHEDSTATS is not set
 # end of Scheduler Debugging
 
@@ -1287,10 +1357,8 @@ CONFIG_HAVE_DEBUG_BUGVERBOSE=y
 # CONFIG_DEBUG_PLIST is not set
 # CONFIG_DEBUG_SG is not set
 # CONFIG_DEBUG_NOTIFIERS is not set
-# CONFIG_BUG_ON_DATA_CORRUPTION is not set
+# CONFIG_DEBUG_MAPLE_TREE is not set
 # end of Debug kernel data structures
-
-# CONFIG_DEBUG_CREDENTIALS is not set
 
 #
 # RCU Debugging
@@ -1310,7 +1378,6 @@ CONFIG_HAVE_DEBUG_BUGVERBOSE=y
 #
 # CONFIG_BOOTPARAM is not set
 CONFIG_FULLDEBUG=y
-CONFIG_NO_KERNEL_MSG=y
 # end of m68k Debugging
 
 #
@@ -1319,7 +1386,9 @@ CONFIG_NO_KERNEL_MSG=y
 # CONFIG_KUNIT is not set
 # CONFIG_NOTIFIER_ERROR_INJECTION is not set
 # CONFIG_FAULT_INJECTION is not set
+CONFIG_CC_HAS_SANCOV_TRACE_PC=y
 CONFIG_RUNTIME_TESTING_MENU=y
+# CONFIG_TEST_DHRY is not set
 # CONFIG_TEST_MIN_HEAP is not set
 # CONFIG_TEST_DIV64 is not set
 # CONFIG_BACKTRACE_SELF_TEST is not set
@@ -1328,18 +1397,16 @@ CONFIG_RUNTIME_TESTING_MENU=y
 # CONFIG_INTERVAL_TREE_TEST is not set
 # CONFIG_ATOMIC64_SELFTEST is not set
 # CONFIG_TEST_HEXDUMP is not set
-# CONFIG_STRING_SELFTEST is not set
-# CONFIG_TEST_STRING_HELPERS is not set
-# CONFIG_TEST_STRSCPY is not set
 # CONFIG_TEST_KSTRTOX is not set
 # CONFIG_TEST_PRINTF is not set
 # CONFIG_TEST_SCANF is not set
 # CONFIG_TEST_BITMAP is not set
 # CONFIG_TEST_UUID is not set
 # CONFIG_TEST_XARRAY is not set
+# CONFIG_TEST_MAPLE_TREE is not set
 # CONFIG_TEST_RHASHTABLE is not set
-# CONFIG_TEST_SIPHASH is not set
 # CONFIG_TEST_IDA is not set
+# CONFIG_TEST_BITOPS is not set
 # CONFIG_FIND_BIT_BENCHMARK is not set
 # CONFIG_TEST_FIRMWARE is not set
 # CONFIG_TEST_SYSCTL is not set
@@ -1348,4 +1415,9 @@ CONFIG_RUNTIME_TESTING_MENU=y
 # CONFIG_TEST_MEMINIT is not set
 # CONFIG_TEST_FREE_PAGES is not set
 # end of Kernel Testing and Coverage
+
+#
+# Rust hacking
+#
+# end of Rust hacking
 # end of Kernel hacking

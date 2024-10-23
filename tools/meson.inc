@@ -8,7 +8,11 @@ INSTALLTARGET ?= meson_installed
 include $(ROOTDIR)/tools/base.inc
 include $(ROOTDIR)/tools/download.inc
 
+MESON ?= meson
 NINJA ?= ninja
+MESON_BUILD_OPTS ?= -j$(HOST_NCPU)
+MESON_BUILD_OPTS += $(if $(V:0=),-v)
+MESON_INSTALL_OPTS ?= --no-rebuild
 
 ifneq ($(findstring i386,$(MACHINE)),)
 MESON_ARCH = x86
@@ -18,17 +22,11 @@ else
 MESON_ARCH = $(MACHINE)
 endif
 
-comma := ,
-empty :=
-space := $(empty) $(empty)
-
-# Build a comma-separated list of items, from a space-separated
-# list of items:   a b c d  -->  a, b, c, d
-make-comma-list = $(subst $(space),$(comma)$(space),$(strip $(1)))
-
-# Build a comma-separated list of single-quoted items, from a space-separated
-# list of unquoted items:   a b c d  -->  'a', 'b', 'c', 'd'
-make-sq-comma-list = $(call make-comma-list,$(patsubst %,'%',$(strip $(1))))
+# Expands a make variable, intended for shell expansion, into a
+# python list of quoted strings, which is then quoted for use in
+# an unquoted sed expression, s%..%..%
+# For example, the CPPFLAGS -DPATH='"/x[y%z\n"' quotes properly
+make-python-list = "$$(python -c "import sys,re;print(re.escape(repr(sys.argv[1:])).replace('%','\\\\%'))" $1)"
 
 PRECIOUS: $(addprefix build/,$(addsuffix -meson_configured,$(PKG_y)))
 PRECIOUS: $(addprefix build/,$(addsuffix -meson_built,$(PKG_y)))
@@ -45,9 +43,9 @@ build/%-meson_configured: build/%-patched
 	    -e 's%@NM@%$(NM)%g' \
 	    -e 's%@PKGCONFIG@%pkg-config%g' \
 	    -e 's%@CMAKE@%cmake%g' \
-	    -e "s%@CFLAGS@%$(call make-sq-comma-list,$(CFLAGS) $($*_CFLAGS))%g" \
-	    -e "s%@CXXFLAGS@%$(call make-sq-comma-list,$(CXXFLAGS) $($*_CXXFLAGS))%g" \
-	    -e "s%@LDFLAGS@%$(call make-sq-comma-list,$(LDFLAGS) $($*_LDFLAGS))%g" \
+	    -e  s%@CFLAGS@%$(call make-python-list,$(CFLAGS) $($*_CFLAGS))%g \
+	    -e  s%@CXXFLAGS@%$(call make-python-list,$(CXXFLAGS) $($*_CXXFLAGS))%g \
+	    -e  s%@LDFLAGS@%$(call make-python-list,$(LDFLAGS) $($*_LDFLAGS))%g \
 	    -e 's%@ARCH@%$(MESON_ARCH)%g' \
 	    -e 's%@CPU@%$(MESON_ARCH)%g' \
 	    -e 's%@ENDIAN@%$(ENDIAN)%g' \
@@ -55,7 +53,8 @@ build/%-meson_configured: build/%-patched
 	    $(ROOTDIR)/tools/meson/meson-cross.conf.in \
 	    > build/meson-cross.conf
 	$(AT)$(CONFVARS) $($*_CONFVARS) \
-		$(ROOTDIR)/tools/meson/build/install/meson.pyz \
+		$(MESON) \
+			setup \
 			--prefix=/ \
 			--libdir=lib \
 			--cross-file build/meson-cross.conf \
@@ -68,7 +67,7 @@ build/%-meson_configured: build/%-patched
 build/%-meson_built: build/%-$(CONFIGTARGET)
 	@echo "Meson building $* ..."
 	$(AT)$(BUILDVARS) $($*_BUILDVARS) \
-		$(UCFRONT_ENV) $(NINJA) -j$(HOST_NCPU) $(MAKEVARS) $($*_MAKEVARS) -C build/$($*_BUILDDIR)/build
+		$(UCFRONT_ENV) $(MESON) compile $(MESON_BUILD_OPTS) $(MAKEVARS) $($*_MAKEVARS) -C build/$($*_BUILDDIR)/build
 	$(AT)touch $@
 
 build/%-meson_installed: build/%-$(BUILDTARGET)
@@ -76,5 +75,5 @@ build/%-meson_installed: build/%-$(BUILDTARGET)
 	$(AT)mkdir -p build/$*-install
 	$(AT)$(BUILDVARS) $($*_BUILDVARS) $($*_INSTALLVARS) \
 		DESTDIR=`pwd`/build/$*-install \
-		$(UCFRONT_ENV) $(NINJA) $(MAKEVARS) $($*_MAKEVARS) -C build/$($*_BUILDDIR)/build $($*_INSTALL)
+		$(UCFRONT_ENV) $(MESON) install $(MESON_INSTALL_OPTS) $(MAKEVARS) $($*_MAKEVARS) -C build/$($*_BUILDDIR)/build
 	$(AT)touch $@

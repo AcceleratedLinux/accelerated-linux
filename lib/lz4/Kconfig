@@ -1,0 +1,4 @@
+config LIB_LIBLZ4
+    bool "liblz4"
+    help
+        Build and install LZ4 compression library

@@ -265,7 +265,6 @@ static const struct lp50xx_chip_info lp50xx_chip_info_tbl[] = {
 struct lp50xx_led {
 	struct led_classdev_mc mc_cdev;
 	struct lp50xx *priv;
-	unsigned long bank_modules;
 	u8 ctrl_bank_enabled;
 	int led_number;
 };
@@ -279,7 +278,6 @@ struct lp50xx_led {
  * @dev: pointer to the devices device struct
  * @lock: lock for reading/writing the device
  * @chip_info: chip specific information (ie num_leds)
- * @num_of_banked_leds: holds the number of banked LEDs
  * @leds: array of LED strings
  */
 struct lp50xx {
@@ -290,7 +288,6 @@ struct lp50xx {
 	struct device *dev;
 	struct mutex lock;
 	const struct lp50xx_chip_info *chip_info;
-	int num_of_banked_leds;
 
 	/* This needs to be at the end of the struct */
 	struct lp50xx_led leds[];
@@ -403,8 +400,6 @@ static int lp50xx_probe_leds(struct fwnode_handle *child, struct lp50xx *priv,
 			dev_err(priv->dev, "reg property is invalid\n");
 			return -EINVAL;
 		}
-
-		priv->num_of_banked_leds = num_leds;
 
 		ret = fwnode_property_read_u32_array(child, "reg", led_banks, num_leds);
 		if (ret) {
@@ -563,7 +558,7 @@ static int lp50xx_probe(struct i2c_client *client)
 	return lp50xx_probe_dt(led);
 }
 
-static int lp50xx_remove(struct i2c_client *client)
+static void lp50xx_remove(struct i2c_client *client)
 {
 	struct lp50xx *led = i2c_get_clientdata(client);
 	int ret;
@@ -579,8 +574,6 @@ static int lp50xx_remove(struct i2c_client *client)
 	}
 
 	mutex_destroy(&led->lock);
-
-	return 0;
 }
 
 static const struct i2c_device_id lp50xx_id[] = {
@@ -610,7 +603,7 @@ static struct i2c_driver lp50xx_driver = {
 		.name	= "lp50xx",
 		.of_match_table = of_lp50xx_leds_match,
 	},
-	.probe_new	= lp50xx_probe,
+	.probe		= lp50xx_probe,
 	.remove		= lp50xx_remove,
 	.id_table	= lp50xx_id,
 };

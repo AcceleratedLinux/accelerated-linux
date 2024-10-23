@@ -1358,7 +1358,6 @@ static const struct snd_soc_component_driver soc_codec_dev_tscs42xx = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static inline void init_coeff_ram_cache(struct tscs42xx *tscs42xx)
@@ -1486,8 +1485,8 @@ static int tscs42xx_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id tscs42xx_i2c_id[] = {
-	{ "tscs42A1", 0 },
-	{ "tscs42A2", 0 },
+	{ "tscs42A1" },
+	{ "tscs42A2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tscs42xx_i2c_id);
@@ -1504,7 +1503,7 @@ static struct i2c_driver tscs42xx_i2c_driver = {
 		.name = "tscs42xx",
 		.of_match_table = tscs42xx_of_match,
 	},
-	.probe_new = tscs42xx_i2c_probe,
+	.probe = tscs42xx_i2c_probe,
 	.id_table = tscs42xx_i2c_id,
 };
 

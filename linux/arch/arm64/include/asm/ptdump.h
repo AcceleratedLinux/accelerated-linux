@@ -23,18 +23,12 @@ struct ptdump_info {
 
 void ptdump_walk(struct seq_file *s, struct ptdump_info *info);
 #ifdef CONFIG_PTDUMP_DEBUGFS
+#define EFI_RUNTIME_MAP_END	DEFAULT_MAP_WINDOW_64
 void __init ptdump_debugfs_register(struct ptdump_info *info, const char *name);
 #else
 static inline void ptdump_debugfs_register(struct ptdump_info *info,
 					   const char *name) { }
 #endif
-void ptdump_check_wx(void);
 #endif /* CONFIG_PTDUMP_CORE */
-
-#ifdef CONFIG_DEBUG_WX
-#define debug_checkwx()	ptdump_check_wx()
-#else
-#define debug_checkwx()	do { } while (0)
-#endif
 
 #endif /* __ASM_PTDUMP_H */

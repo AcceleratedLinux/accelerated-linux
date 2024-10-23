@@ -352,7 +352,7 @@ static int thmc50_detect(struct i2c_client *client,
 	pr_debug("thmc50: Detected %s (version %x, revision %x)\n",
 		 type_name, (revision >> 4) - 0xc, revision & 0xf);
 
-	strlcpy(info->type, type_name, I2C_NAME_SIZE);
+	strscpy(info->type, type_name, I2C_NAME_SIZE);
 
 	return 0;
 }
@@ -420,7 +420,7 @@ static struct i2c_driver thmc50_driver = {
 	.driver = {
 		.name = "thmc50",
 	},
-	.probe_new = thmc50_probe,
+	.probe = thmc50_probe,
 	.id_table = thmc50_id,
 	.detect = thmc50_detect,
 	.address_list = normal_i2c,

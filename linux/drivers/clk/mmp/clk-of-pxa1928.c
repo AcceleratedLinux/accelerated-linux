@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * pxa1928 clock framework source file
  *
@@ -7,10 +8,6 @@
  * Based on drivers/clk/mmp/clk-of-mmp2.c:
  * Copyright (C) 2012 Marvell
  * Chao Xie <xiechao.mail@gmail.com>
- *
- * This file is licensed under the terms of the GNU General Public
- * License version 2. This program is licensed "as is" without any
- * warranty of any kind, whether express or implied.
  */
 #include <linux/kernel.h>
 #include <linux/io.h>
@@ -24,6 +21,9 @@
 #include "reset.h"
 
 #define MPMU_UART_PLL	0x14
+
+#define APBC_NR_CLKS	48
+#define APMU_NR_CLKS	96
 
 struct pxa1928_clk_unit {
 	struct mmp_clk_unit unit;
@@ -238,7 +238,7 @@ static void __init pxa1928_apmu_clk_init(struct device_node *np)
 		return;
 	}
 
-	mmp_clk_init(np, &pxa_unit->unit, PXA1928_APMU_NR_CLKS);
+	mmp_clk_init(np, &pxa_unit->unit, APMU_NR_CLKS);
 
 	pxa1928_axi_periph_clk_init(pxa_unit);
 }
@@ -259,7 +259,7 @@ static void __init pxa1928_apbc_clk_init(struct device_node *np)
 		return;
 	}
 
-	mmp_clk_init(np, &pxa_unit->unit, PXA1928_APBC_NR_CLKS);
+	mmp_clk_init(np, &pxa_unit->unit, APBC_NR_CLKS);
 
 	pxa1928_apb_periph_clk_init(pxa_unit);
 	pxa1928_clk_reset_init(np, pxa_unit);

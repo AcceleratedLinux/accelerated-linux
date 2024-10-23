@@ -171,8 +171,11 @@ groups['opengear/linux_ip6tables'] = dict(
 
 # Minimal user and Linux for hardware bringup and basic diag
 groups['opengear/minimum'] = dict(
+    device = dict(
+        DEFAULTS_KERNEL_LINUX='y',
+    ),
     linux = dict(
-        EMBEDDED='y',           # this enables EXPERT and other options
+        EXPERT='y',             # allow expert configuration
         MODULES='y',            # allow kmod loading
         FW_LOADER='y',          # allow device firmware loading from userspc
 
@@ -488,6 +491,7 @@ groups['opengear/ogcs-common'] = dict(
         LIB_DBUS_GLIB='y',
         LIB_GLIB='y',
          LIB_LIBFFI='y',                            # needed by glib
+         LIB_PCRE2='y',                             # needed by glib
 
         # bash
         USER_BASH_BASH='y',
@@ -632,6 +636,7 @@ groups['opengear/ogcs-common'] = dict(
         # iptables
         USER_IPTABLES_IPTABLES='y',     # avoid --disable-ipv4
         USER_IPTABLES_IP6TABLES='y',    # avoid --disable-ipv6
+        USER_IPTABLES_SHARED='y',
 
         # logging
         USER_RSYSLOG_RSYSLOGD='y',
@@ -785,6 +790,7 @@ groups['opengear/usb-cellmodem'] = dict(
         USER_LIBQMI='y',
         USER_LIBQMI_QMICLI='y',
         USER_LIBQMI_QMI_FIRMWARE_UPDATE='y',
+        USER_LIBMBIM='y',
 
         USER_MODEMMANAGER='y',
         USER_MODEMMANAGER_PLUGIN_SIERRA='y',
@@ -872,6 +878,8 @@ groups['opengear/x86_64'] = dict(
         # Compatibility with i386
         IA32_EMULATION='y',     # permits UID32 and i386 binaries
         X86_X32_ABI='n',
+        COMMON_CLK='y',
+        CLOCKSOURCE_WATCHDOG_MAX_SKEW_US='100',
     ),
 )
 groups['opengear/x86_64']['linux']['64BIT'] = 'y'   # where is your god now

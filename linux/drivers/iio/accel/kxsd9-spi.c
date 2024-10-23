@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/device.h>
 #include <linux/kernel.h>
-#include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/spi/spi.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/slab.h>
 #include <linux/regmap.h>
 
@@ -52,7 +51,7 @@ MODULE_DEVICE_TABLE(of, kxsd9_of_match);
 static struct spi_driver kxsd9_spi_driver = {
 	.driver = {
 		.name = "kxsd9",
-		.pm = &kxsd9_dev_pm_ops,
+		.pm = pm_ptr(&kxsd9_dev_pm_ops),
 		.of_match_table = kxsd9_of_match,
 	},
 	.probe = kxsd9_spi_probe,

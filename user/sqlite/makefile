@@ -1,7 +1,10 @@
-URL = http://www.sqlite.org/2022/sqlite-autoconf-3390400.tar.gz
+URL = https://www.sqlite.org/2023/sqlite-autoconf-3430200.tar.gz
 CONFVARS = ac_cv_func_posix_fallocate=no
+
+# Prerequisite for python & frr; do it quickly
+MAKEVARS = -j$(HOST_NCPU)
 
 include $(ROOTDIR)/tools/automake.inc
 
-sqlite_romfs:
-	$(ROMFSINST) -d $(INSTALLDIR)/lib/libsqlite3.so /lib/libsqlite3.so
+romfs:
+	$(ROMFSINST) -R /bin/sqlite3

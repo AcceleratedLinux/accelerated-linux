@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+
+"""
+This tool can compare, test and regenerate uClinux build config files,
+based on the product feature tables encoded in product.py.
+
+
+History
+
+The uClinux source layout placed default build configurations at
+vendors/VENDOR/PRODUCT/config.*. The number of these files slowly
+became unmanageable because (unlike Buildroot, Yocto or OpenWRT)
+config heirarchies and inclusions were not implemented.
+
+Instead, when a Linux-contributed python library for Kconfig analysis,
+appeared kcheck appeared as a "sanity check" tool. The kckeck
+tool initially encoded the "required minimum" configuration symbols
+in python dictionaries (products.py) and performed bulk consistency
+analysis over the vendors directory. kcheck looked for and found missing
+and forgotten symbols and greatly improved product uniformity.
+
+kcheck's two other capabilities (a group inclusion mechanism,
+and the ability to generate config files directly) immediately
+filled the void for adding new feature configuration across products.
+Soon products.py became the de facto authoritative source of config.
+
+Today, products.py replaces uClinux's "Update Default Vendor
+Settings" (DEFAULTS_VENDOR_UPDATE) mechanism. There is no direct "save to
+products.py" for changes made through 'make myconfig_menuconfig'. Instead,
+developers run tools/kcheck/check to see what has changed (for the current
+product) and manually update product.py themselves.
+
+The result is that product configuration management complexity has been
+moved out of the vendors/*/*/config files and into the products.py file,
+which presents its own new and exciting variety of unmanageability, as
+we still have to remember to regen and check in the old vendor config
+files, and deal with their merge issues, too.
+"""
+
+import kcheck
+import multiprocessing
+import product
+import logging
+import argparse
+import os
+import sys
+
+logger = logging.getLogger('kcheck-tool')
+logging.basicConfig(level=logging.INFO)
+
+def do_one(confdir):
+    """Perform the selected subset of {set,check,test} against the config
+    files in a vendors product directory, or ROOTDIR if confdir is None.
+    :arg confdir: None, or the "vendors/VENDOR/PRODUCT" directory name.
+    :returns: True, or the map {pname: features} if --test was enabled
+    """
+    global args
+    global logger
+    global using_product
+
+    if args.debug:
+        logger.debug(f"pid {os.getpid()}, loading confdir {confdir!r}, cwd {os.getcwd()}")
+        import time
+        start_time = time.monotonic_ns() # When debugging, measure the time taken
+
+    try:
+
+        kconfig = kcheck.Config(product.products, confdir, using_product)
+        kproduct = kcheck.Product(kconfig, product.products, product.groups)
+        logger.debug(f"kproduct {kproduct!r}")
+
+        ret = True
+        if args.set: # --set
+            if args.set_only:
+                kproduct.set_only()
+            else:
+                kproduct.set()
+        if args.check: # --check
+            errors = kproduct.check()
+            kproduct.print_errors(errors)
+            if errors:
+                ret = False
+        if args.test: # --test
+            if ret:
+                ret = { kproduct.product_name: kcheck.test(kproduct) }
+            else:
+                print(f"{kproduct.product_name}: check failed, not testing", file=sys.stderr)
+
+    except Exception as e:
+        logger.debug(f"Error during kcheck {confdir}", exc_info=True)
+        print(f"Error during kcheck {confdir}: {e}", file=sys.stderr)
+        ret = False
+
+    if args.debug:
+        elapsed = time.monotonic_ns() - start_time
+        logger.debug(f"elapsed {elapsed*1e-9:.3f} in confdir {confdir!r}")
+
+    return ret
+
+if 'ROOTDIR' in os.environ:
+    default_rootdir = os.environ['ROOTDIR']
+else:
+    # locate ROOTDIR assuming this script is ROOTDIR/tools/kcheck/tool
+    default_rootdir = os.path.join(os.path.dirname(sys.argv[0]),'../..')
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-s', '--set',
+    help='rewrite config files using products.py tables',
+    dest='set', action='store_true')
+parser.add_argument('--using',
+    help='select the specified vendor/product' \
+         ' instead of deducing it from .config or config.device',
+    metavar='VEND/PROD', dest='using')
+parser.add_argument('--set-only',
+    help='do not clear unknown symbols when updating config files',
+    dest='set_only', action='store_true')
+parser.add_argument('-c', '--check',
+    help='check config files are consistent with products.py',
+    dest='check', action='store_true')
+parser.add_argument('-a', '--all',
+    help='act on the config files of each vendors/V/P',
+    dest='all', action='store_true')
+parser.add_argument('--dir', '--rootdir',
+    help='source root directory (default $ROOTDIR)',
+    dest='rootdir', default=default_rootdir)
+parser.add_argument('-t', '--test',
+    help='test config files against prop/config/schema/accns.schema' \
+         ' and write JSON feature descriptor(s) to stdout',
+    dest='test', action='store_true')
+parser.add_argument('-n',
+    help='number of parallel processes (default ncpu)',
+    dest='nproc', action='store', type=int, default=None)
+parser.add_argument('--debug',
+    help='show exception detail for debugging kcheck',
+    dest='debug', action='store_true')
+parser.add_argument('dirs', nargs='*',
+    help='vendors/V/P directories to use instead of .')
+
+# If this program is invoked through a convenience alias,
+# enable the relevant options:
+#
+#   set      -> tool --set
+#   setall   -> tool --set --all
+#   check    -> tool --check
+#   checkall -> tool --check --all
+#   test     -> tool --test
+#   testall  -> tool --test --all
+#
+if parser.prog.startswith("set"):
+    parser.set_defaults(set=True)
+if parser.prog.startswith("test"):
+    parser.set_defaults(test=True)
+if parser.prog.startswith("check"):
+    parser.set_defaults(check=True)
+if parser.prog.endswith("all"):
+    parser.set_defaults(all=True)
+args = parser.parse_args()
+
+if args.debug:
+    logger.setLevel(logging.DEBUG)
+
+if not (args.set or args.check or args.test):
+    parser.error("One of -s (--set), -c (--check) or -t (--test) is required.")
+
+if args.all: # --all
+    if args.dirs:
+        parser.error("Cannot specify directory arguments with --all")
+    args.dirs = [f"{args.rootdir}/vendors/{p['vendor']}/{p['product']}"
+               for p in product.products.values()]
+
+if not args.dirs:
+    args.dirs = [args.rootdir]
+
+# Adjust dirs to be relative to rootdir because we chdir there
+reldirs = [os.path.relpath(d, args.rootdir) for d in args.dirs]
+if 'ROOTDIR' not in os.environ:
+    os.environ['ROOTDIR'] = os.path.abspath(args.rootdir)
+logger.debug(f"ROOTDIR = {os.environ['ROOTDIR']}")
+logger.debug(f"chdir {args.rootdir}")
+os.chdir(args.rootdir)
+
+if args.debug and len(reldirs) > 1:
+    import time
+    start_time = time.monotonic_ns()
+
+if args.using:
+    ps = product.products
+    matches = list(n for n in ps if f"{ps[n]['vendor']}/{ps[n]['product']}" == args.using)
+    if len(matches) != 1:
+            print(f"No unique product for {args.using!r}, found {matches}", file=sys.stderr)
+            sys.exit(1)
+    using_product = ps[matches[0]]
+    logger.debug(f"Using product {using_product}")
+else:
+    using_product = None
+
+ret = multiprocessing.Pool(args.nproc).map(do_one, reldirs)
+
+if args.test:
+    import json
+    if len(ret) == 1:
+            print(json.dumps(ret[0]))
+    else:
+            print(json.dumps(dict(zip(reldirs, ret))))
+
+if args.debug and len(reldirs) > 1:
+    elapsed = time.monotonic_ns() - start_time
+    logger.debug(f"elapsed {elapsed*1e-9:.3f} overall")
+
+if not all(ret):
+    sys.exit(1)

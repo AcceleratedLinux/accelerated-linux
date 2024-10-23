@@ -2,12 +2,12 @@ Index: pam_tacplus/support.c
 ===================================================================
 --- pam_tacplus.orig/support.c
 +++ pam_tacplus/support.c
-@@ -53,7 +53,7 @@
+@@ -62,7 +62,7 @@
      int retval;
      char *user;
  
 -    retval = pam_get_user(pamh, (void *)&user, "Username: ");
 +    retval = pam_get_user(pamh, (void *)&user, NULL);
-     if (retval != PAM_SUCCESS || user == NULL || *user == '\0') {
+     if (retval != PAM_SUCCESS || user == NULL || *user == '\0')
+     {
          _pam_log(LOG_ERR, "unable to obtain username");
-         user = NULL;

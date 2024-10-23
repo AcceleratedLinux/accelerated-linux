@@ -33,6 +33,12 @@
 #define MCU_CMD_SET_PWR_BUTTON_LOCK	0x0F0A
 /* Set ignition sense power off delay time (in seconds) without saving */
 #define MCU_CMD_SET_TEMP_IGN_PWR_OFF_DELAY	0x0F0B
+/* Set ignition sense enabled config */
+#define MCU_CMD_SET_IGN_SENSE_ENABLE	0x0F0C
+/* Set ignition / button interrupt config */
+#define MCU_CMD_SET_GPIO_INT_CFG	0x0F0D
+/* Set ignition / button interrupt debounce time (in 10msec) */
+#define MCU_CMD_SET_GPIO_INT_DEBOUNCE	0x0F0E
 
 /****** Get commands ******/
 /* Get MCU status */
@@ -62,6 +68,12 @@
 #define MCU_CMD_GET_PWR_BUTTON_LOCK	0x0F88
 /* Get temp ignition sense power off delay time (in seconds) */
 #define MCU_CMD_GET_TEMP_IGN_PWR_OFF_DELAY	0x0F89
+/* Get ignition sense enabled config */
+#define MCU_CMD_GET_IGN_SENSE_ENABLE	0x0F8A
+/* Get ignition / button interrupt config */
+#define MCU_CMD_GET_GPIO_INT_CFG	0x0F8B
+/* Get ignition / button interrupt debounce time (in 10msec) */
+#define MCU_CMD_GET_GPIO_INT_DEBOUNCE	0x0F8C
 
 #define MCU_VERSION_LEN		18
 
@@ -127,6 +139,21 @@ struct mcu_tx_get_cmd {
 	uint8_t		dummy[0];
 } __packed;
 
+enum {
+	MCU_GPIO_INT_TYPE_NONE = 0,
+	MCU_GPIO_INT_TYPE_RISING,
+	MCU_GPIO_INT_TYPE_FALLING,
+	MCU_GPIO_INT_TYPE_BOTH_EDGES,
+};
+#define MCU_GPIO_INT_TYPE_MASK		0xF
+#define MCU_GPIO_INT_SHIFT_IGN		0
+#define MCU_GPIO_INT_SHIFT_BUTTON	4
+
+struct mcu_tx_set_gpio_int_debounce {
+	uint8_t		ign_10msec;
+	uint8_t		button_10msec;
+} __packed;
+
 #define MCU_TX_MAX_SIZE		32
 #define MCU_TX_HDR_SIZE		3
 
@@ -147,8 +174,11 @@ struct mcu_tx_pkt {
 		struct mcu_tx_set_cmd		set_ign_pwr_on_delay;
 		struct mcu_tx_set_cmd		set_ign_pwr_off_delay;
 		struct mcu_tx_set_cmd		set_temp_ign_pwr_off_delay;
+		struct mcu_tx_set_cmd		set_ign_sense_enable;
 		struct mcu_tx_set_cmd		set_factory_defaults;
 		union mcu_tx_set_pwr_b_lock	set_pwr_button_lock;
+		struct mcu_tx_set_cmd		set_gpio_int_cfg;
+		struct mcu_tx_set_gpio_int_debounce	set_gpio_int_debounce;
 		struct mcu_tx_set_cmd		to_bloader;
 
 		struct mcu_tx_get_cmd		get_status;
@@ -159,7 +189,10 @@ struct mcu_tx_pkt {
 		struct mcu_tx_get_cmd		get_voltage_thres_shdn;
 		struct mcu_tx_get_cmd		get_ign_pwr_on_delay;
 		struct mcu_tx_get_cmd		get_ign_pwr_off_delay;
+		struct mcu_tx_get_cmd		get_ign_sense_enable;
 		struct mcu_tx_get_cmd		get_pwr_button_lock;
+		struct mcu_tx_get_cmd		get_gpio_int_cfg;
+		struct mcu_tx_get_cmd		get_gpio_int_debounce;
 	};
 } __packed;
 
@@ -219,6 +252,11 @@ union mcu_rx_get_events {
 		uint8_t	rtc_int:1;
 		/* 1 if accelerometer interrupt happened */
 		uint8_t	acc_int:1;
+		uint8_t rfu:3;
+		/* Ignition GPIO interrupt */
+		uint8_t ign_gpio_int:1;
+		/* Button GPIO interrupt */
+		uint8_t button_gpio_int:1;
 	};
 };
 
@@ -231,6 +269,12 @@ union mcu_rx_get_pwr_b_lock {
 		uint8_t long_press_disabled:1;
 	};
 };
+
+struct mcu_rx_get_gpio_int_debounce {
+	uint8_t		ign_10msec;
+	uint8_t		button_10msec;
+} __packed;
+
 
 struct mcu_rx_get_uint16 {
 	uint16_t	value;
@@ -250,8 +294,11 @@ struct mcu_rx_pkt {
 		struct mcu_rx_set_status	set_ign_pwr_on_delay;
 		struct mcu_rx_set_status	set_ign_pwr_off_delay;
 		struct mcu_rx_set_status	set_temp_ign_pwr_off_delay;
+		struct mcu_rx_set_status	set_ign_sense_enable;
 		struct mcu_rx_set_status	set_factory_defaults;
 		struct mcu_rx_set_status	set_pwr_button_lock;
+		struct mcu_rx_set_status	set_gpio_int_cfg;
+		struct mcu_rx_set_status	set_gpio_int_debounce;
 		struct mcu_rx_set_status	to_bloader;
 
 		struct mcu_rx_get_status	get_status;
@@ -262,7 +309,10 @@ struct mcu_rx_pkt {
 		struct mcu_rx_get_uint16	get_voltage_thres_shdn;
 		struct mcu_rx_get_uint16	get_ign_pwr_on_delay;
 		struct mcu_rx_get_uint16	get_ign_pwr_off_delay;
+		struct mcu_rx_get_uint16	get_ign_sense_enable;
 		union mcu_rx_get_pwr_b_lock	get_pwr_button_lock;
+		struct mcu_rx_get_uint16	get_gpio_int_cfg;
+		struct mcu_rx_get_gpio_int_debounce	get_gpio_int_debounce;
 	};
 } __packed;
 

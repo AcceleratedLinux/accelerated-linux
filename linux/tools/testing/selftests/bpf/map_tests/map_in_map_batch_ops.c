@@ -18,7 +18,7 @@ static __u32 get_map_id_from_fd(int map_fd)
 	uint32_t info_len = sizeof(map_info);
 	int ret;
 
-	ret = bpf_obj_get_info_by_fd(map_fd, &map_info, &info_len);
+	ret = bpf_map_get_info_by_fd(map_fd, &map_info, &info_len);
 	CHECK(ret < 0, "Finding map info failed", "error:%s\n",
 	      strerror(errno));
 
@@ -33,11 +33,11 @@ static void create_inner_maps(enum bpf_map_type map_type,
 {
 	int map_fd, map_index, ret;
 	__u32 map_key = 0, map_id;
-	char map_name[15];
+	char map_name[16];
 
 	for (map_index = 0; map_index < OUTER_MAP_ENTRIES; map_index++) {
 		memset(map_name, 0, sizeof(map_name));
-		sprintf(map_name, "inner_map_fd_%d", map_index);
+		snprintf(map_name, sizeof(map_name), "inner_map_fd_%d", map_index);
 		map_fd = bpf_map_create(map_type, map_name, sizeof(__u32),
 					sizeof(__u32), 1, NULL);
 		CHECK(map_fd < 0,

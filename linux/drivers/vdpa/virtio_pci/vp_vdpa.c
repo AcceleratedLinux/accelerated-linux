@@ -17,6 +17,7 @@
 #include <linux/virtio_ring.h>
 #include <linux/virtio_pci.h>
 #include <linux/virtio_pci_modern.h>
+#include <uapi/linux/vdpa.h>
 
 #define VP_VDPA_QUEUE_MAX 256
 #define VP_VDPA_DRIVER_NAME "vp_vdpa"
@@ -35,6 +36,7 @@ struct vp_vdpa {
 	struct virtio_pci_modern_device *mdev;
 	struct vp_vring *vring;
 	struct vdpa_callback config_cb;
+	u64 device_features;
 	char msix_name[VP_VDPA_NAME_SIZE];
 	int config_irq;
 	int queues;
@@ -66,9 +68,9 @@ static struct virtio_pci_modern_device *vp_vdpa_to_mdev(struct vp_vdpa *vp_vdpa)
 
 static u64 vp_vdpa_get_device_features(struct vdpa_device *vdpa)
 {
-	struct virtio_pci_modern_device *mdev = vdpa_to_mdev(vdpa);
+	struct vp_vdpa *vp_vdpa = vdpa_to_vp(vdpa);
 
-	return vp_modern_get_features(mdev);
+	return vp_vdpa->device_features;
 }
 
 static int vp_vdpa_set_driver_features(struct vdpa_device *vdpa, u64 features)
@@ -158,7 +160,13 @@ static int vp_vdpa_request_irq(struct vp_vdpa *vp_vdpa)
 	struct pci_dev *pdev = mdev->pci_dev;
 	int i, ret, irq;
 	int queues = vp_vdpa->queues;
-	int vectors = queues + 1;
+	int vectors = 1;
+	int msix_vec = 0;
+
+	for (i = 0; i < queues; i++) {
+		if (vp_vdpa->vring[i].cb.callback)
+			vectors++;
+	}
 
 	ret = pci_alloc_irq_vectors(pdev, vectors, vectors, PCI_IRQ_MSIX);
 	if (ret != vectors) {
@@ -171,9 +179,12 @@ static int vp_vdpa_request_irq(struct vp_vdpa *vp_vdpa)
 	vp_vdpa->vectors = vectors;
 
 	for (i = 0; i < queues; i++) {
+		if (!vp_vdpa->vring[i].cb.callback)
+			continue;
+
 		snprintf(vp_vdpa->vring[i].msix_name, VP_VDPA_NAME_SIZE,
 			"vp-vdpa[%s]-%d\n", pci_name(pdev), i);
-		irq = pci_irq_vector(pdev, i);
+		irq = pci_irq_vector(pdev, msix_vec);
 		ret = devm_request_irq(&pdev->dev, irq,
 				       vp_vdpa_vq_handler,
 				       0, vp_vdpa->vring[i].msix_name,
@@ -183,21 +194,22 @@ static int vp_vdpa_request_irq(struct vp_vdpa *vp_vdpa)
 				"vp_vdpa: fail to request irq for vq %d\n", i);
 			goto err;
 		}
-		vp_modern_queue_vector(mdev, i, i);
+		vp_modern_queue_vector(mdev, i, msix_vec);
 		vp_vdpa->vring[i].irq = irq;
+		msix_vec++;
 	}
 
 	snprintf(vp_vdpa->msix_name, VP_VDPA_NAME_SIZE, "vp-vdpa[%s]-config\n",
 		 pci_name(pdev));
-	irq = pci_irq_vector(pdev, queues);
+	irq = pci_irq_vector(pdev, msix_vec);
 	ret = devm_request_irq(&pdev->dev, irq,	vp_vdpa_config_handler, 0,
 			       vp_vdpa->msix_name, vp_vdpa);
 	if (ret) {
 		dev_err(&pdev->dev,
-			"vp_vdpa: fail to request irq for vq %d\n", i);
+			"vp_vdpa: fail to request irq for config: %d\n", ret);
 			goto err;
 	}
-	vp_modern_config_vector(mdev, queues);
+	vp_modern_config_vector(mdev, msix_vec);
 	vp_vdpa->config_irq = irq;
 
 	return 0;
@@ -214,7 +226,10 @@ static void vp_vdpa_set_status(struct vdpa_device *vdpa, u8 status)
 
 	if (status & VIRTIO_CONFIG_S_DRIVER_OK &&
 	    !(s & VIRTIO_CONFIG_S_DRIVER_OK)) {
-		vp_vdpa_request_irq(vp_vdpa);
+		if (vp_vdpa_request_irq(vp_vdpa)) {
+			WARN_ON(1);
+			return;
+		}
 	}
 
 	vp_modern_set_status(mdev, status);
@@ -324,6 +339,13 @@ static void vp_vdpa_set_vq_num(struct vdpa_device *vdpa, u16 qid,
 	struct virtio_pci_modern_device *mdev = vdpa_to_mdev(vdpa);
 
 	vp_modern_set_queue_size(mdev, qid, num);
+}
+
+static u16 vp_vdpa_get_vq_size(struct vdpa_device *vdpa, u16 qid)
+{
+	struct virtio_pci_modern_device *mdev = vdpa_to_mdev(vdpa);
+
+	return vp_modern_get_queue_size(mdev, qid);
 }
 
 static int vp_vdpa_set_vq_address(struct vdpa_device *vdpa, u16 qid,
@@ -447,6 +469,7 @@ static const struct vdpa_config_ops vp_vdpa_ops = {
 	.set_vq_ready	= vp_vdpa_set_vq_ready,
 	.get_vq_ready	= vp_vdpa_get_vq_ready,
 	.set_vq_num	= vp_vdpa_set_vq_num,
+	.get_vq_size	= vp_vdpa_get_vq_size,
 	.set_vq_address	= vp_vdpa_set_vq_address,
 	.kick_vq	= vp_vdpa_kick_vq,
 	.get_generation	= vp_vdpa_get_generation,
@@ -475,6 +498,7 @@ static int vp_vdpa_dev_add(struct vdpa_mgmt_dev *v_mdev, const char *name,
 	struct pci_dev *pdev = mdev->pci_dev;
 	struct device *dev = &pdev->dev;
 	struct vp_vdpa *vp_vdpa = NULL;
+	u64 device_features;
 	int ret, i;
 
 	vp_vdpa = vdpa_alloc_device(struct vp_vdpa, vdpa,
@@ -490,6 +514,20 @@ static int vp_vdpa_dev_add(struct vdpa_mgmt_dev *v_mdev, const char *name,
 	vp_vdpa->vdpa.dma_dev = &pdev->dev;
 	vp_vdpa->queues = vp_modern_get_num_queues(mdev);
 	vp_vdpa->mdev = mdev;
+
+	device_features = vp_modern_get_features(mdev);
+	if (add_config->mask & BIT_ULL(VDPA_ATTR_DEV_FEATURES)) {
+		if (add_config->device_features & ~device_features) {
+			ret = -EINVAL;
+			dev_err(&pdev->dev, "Try to provision features "
+				"that are not supported by the device: "
+				"device_features 0x%llx provisioned 0x%llx\n",
+				device_features, add_config->device_features);
+			goto err;
+		}
+		device_features = add_config->device_features;
+	}
+	vp_vdpa->device_features = device_features;
 
 	ret = devm_add_action_or_reset(dev, vp_vdpa_free_irq_vectors, pdev);
 	if (ret) {
@@ -599,6 +637,7 @@ static int vp_vdpa_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	mgtdev->id_table = mdev_id;
 	mgtdev->max_supported_vqs = vp_modern_get_num_queues(mdev);
 	mgtdev->supported_features = vp_modern_get_features(mdev);
+	mgtdev->config_attr_mask = (1 << VDPA_ATTR_DEV_FEATURES);
 	pci_set_master(pdev);
 	pci_set_drvdata(pdev, vp_vdpa_mgtdev);
 
@@ -627,9 +666,9 @@ static void vp_vdpa_remove(struct pci_dev *pdev)
 	struct virtio_pci_modern_device *mdev = NULL;
 
 	mdev = vp_vdpa_mgtdev->mdev;
-	vp_modern_remove(mdev);
 	vdpa_mgmtdev_unregister(&vp_vdpa_mgtdev->mgtdev);
-	kfree(&vp_vdpa_mgtdev->mgtdev.id_table);
+	vp_modern_remove(mdev);
+	kfree(vp_vdpa_mgtdev->mgtdev.id_table);
 	kfree(mdev);
 	kfree(vp_vdpa_mgtdev);
 }

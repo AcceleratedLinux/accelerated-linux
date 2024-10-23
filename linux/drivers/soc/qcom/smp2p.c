@@ -58,8 +58,8 @@
  * @valid_entries:	number of allocated entries
  * @flags:
  * @entries:		individual communication entries
- *     @name:		name of the entry
- *     @value:		content of the entry
+ * @entries.name:	name of the entry
+ * @entries.value:	content of the entry
  */
 struct smp2p_smem_item {
 	u32 magic;
@@ -119,6 +119,9 @@ struct smp2p_entry {
  * @out:	pointer to the outbound smem item
  * @smem_items:	ids of the two smem items
  * @valid_entries: already scanned inbound entries
+ * @ssr_ack_enabled: SMP2P_FEATURE_SSR_ACK feature is supported and was enabled
+ * @ssr_ack: current cached state of the local ack bit
+ * @negotiation_done: whether negotiating finished
  * @local_pid:	processor id of the inbound edge
  * @remote_pid:	processor id of the outbound edge
  * @ipc_regmap:	regmap for the outbound ipc
@@ -272,6 +275,8 @@ static void qcom_smp2p_notify_in(struct qcom_smp2p *smp2p)
  *
  * Handle notifications from the remote side to handle newly allocated entries
  * or any changes to the state bits of existing entries.
+ *
+ * Return: %IRQ_HANDLED
  */
 static irqreturn_t qcom_smp2p_intr(int irq, void *data)
 {
@@ -419,7 +424,7 @@ static int qcom_smp2p_outbound_entry(struct qcom_smp2p *smp2p,
 	char buf[SMP2P_MAX_ENTRY_NAME] = {};
 
 	/* Allocate an entry from the smem item */
-	strlcpy(buf, entry->name, SMP2P_MAX_ENTRY_NAME);
+	strscpy(buf, entry->name, SMP2P_MAX_ENTRY_NAME);
 	memcpy(out->entries[out->valid_entries].name, buf, SMP2P_MAX_ENTRY_NAME);
 
 	/* Make the logical entry reference the physical value */
@@ -657,7 +662,7 @@ report_read_failure:
 	return -EINVAL;
 }
 
-static int qcom_smp2p_remove(struct platform_device *pdev)
+static void qcom_smp2p_remove(struct platform_device *pdev)
 {
 	struct qcom_smp2p *smp2p = platform_get_drvdata(pdev);
 	struct smp2p_entry *entry;
@@ -673,8 +678,6 @@ static int qcom_smp2p_remove(struct platform_device *pdev)
 	mbox_free_channel(smp2p->mbox_chan);
 
 	smp2p->out->valid_entries = 0;
-
-	return 0;
 }
 
 static const struct of_device_id qcom_smp2p_of_match[] = {
@@ -685,7 +688,7 @@ MODULE_DEVICE_TABLE(of, qcom_smp2p_of_match);
 
 static struct platform_driver qcom_smp2p_driver = {
 	.probe = qcom_smp2p_probe,
-	.remove = qcom_smp2p_remove,
+	.remove_new = qcom_smp2p_remove,
 	.driver  = {
 		.name  = "qcom_smp2p",
 		.of_match_table = qcom_smp2p_of_match,

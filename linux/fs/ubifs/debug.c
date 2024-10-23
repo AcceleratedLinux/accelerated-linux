@@ -237,14 +237,14 @@ void ubifs_dump_inode(struct ubifs_info *c, const struct inode *inode)
 	pr_err("\tuid            %u\n", (unsigned int)i_uid_read(inode));
 	pr_err("\tgid            %u\n", (unsigned int)i_gid_read(inode));
 	pr_err("\tatime          %u.%u\n",
-	       (unsigned int)inode->i_atime.tv_sec,
-	       (unsigned int)inode->i_atime.tv_nsec);
+	       (unsigned int) inode_get_atime_sec(inode),
+	       (unsigned int) inode_get_atime_nsec(inode));
 	pr_err("\tmtime          %u.%u\n",
-	       (unsigned int)inode->i_mtime.tv_sec,
-	       (unsigned int)inode->i_mtime.tv_nsec);
+	       (unsigned int) inode_get_mtime_sec(inode),
+	       (unsigned int) inode_get_mtime_nsec(inode));
 	pr_err("\tctime          %u.%u\n",
-	       (unsigned int)inode->i_ctime.tv_sec,
-	       (unsigned int)inode->i_ctime.tv_nsec);
+	       (unsigned int) inode_get_ctime_sec(inode),
+	       (unsigned int) inode_get_ctime_nsec(inode));
 	pr_err("\tcreat_sqnum    %llu\n", ui->creat_sqnum);
 	pr_err("\txattr_size     %u\n", ui->xattr_size);
 	pr_err("\txattr_cnt      %u\n", ui->xattr_cnt);
@@ -1742,17 +1742,22 @@ int dbg_check_idx_size(struct ubifs_info *c, long long idx_size)
 	err = dbg_walk_index(c, NULL, add_size, &calc);
 	if (err) {
 		ubifs_err(c, "error %d while walking the index", err);
-		return err;
+		goto out_err;
 	}
 
 	if (calc != idx_size) {
 		ubifs_err(c, "index size check failed: calculated size is %lld, should be %lld",
 			  calc, idx_size);
 		dump_stack();
-		return -EINVAL;
+		err = -EINVAL;
+		goto out_err;
 	}
 
 	return 0;
+
+out_err:
+	ubifs_destroy_tnc_tree(c);
+	return err;
 }
 
 /**
@@ -2467,7 +2472,7 @@ error_dump:
 
 static inline int chance(unsigned int n, unsigned int out_of)
 {
-	return !!((prandom_u32() % out_of) + 1 <= n);
+	return !!(get_random_u32_below(out_of) + 1 <= n);
 
 }
 
@@ -2485,13 +2490,13 @@ static int power_cut_emulated(struct ubifs_info *c, int lnum, int write)
 			if (chance(1, 2)) {
 				d->pc_delay = 1;
 				/* Fail within 1 minute */
-				delay = prandom_u32() % 60000;
+				delay = get_random_u32_below(60000);
 				d->pc_timeout = jiffies;
 				d->pc_timeout += msecs_to_jiffies(delay);
 				ubifs_warn(c, "failing after %lums", delay);
 			} else {
 				d->pc_delay = 2;
-				delay = prandom_u32() % 10000;
+				delay = get_random_u32_below(10000);
 				/* Fail within 10000 operations */
 				d->pc_cnt_max = delay;
 				ubifs_warn(c, "failing after %lu calls", delay);
@@ -2571,7 +2576,7 @@ static int corrupt_data(const struct ubifs_info *c, const void *buf,
 	unsigned int from, to, ffs = chance(1, 2);
 	unsigned char *p = (void *)buf;
 
-	from = prandom_u32() % len;
+	from = get_random_u32_below(len);
 	/* Corruption span max to end of write unit */
 	to = min(len, ALIGN(from + 1, c->max_write_size));
 
@@ -2581,7 +2586,7 @@ static int corrupt_data(const struct ubifs_info *c, const void *buf,
 	if (ffs)
 		memset(p + from, 0xFF, to - from);
 	else
-		prandom_bytes(p + from, to - from);
+		get_random_bytes(p + from, to - from);
 
 	return to;
 }

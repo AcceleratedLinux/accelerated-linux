@@ -30,8 +30,8 @@
 
 static void recv_tasklet(struct tasklet_struct *t);
 
-void r8712_init_recv_priv(struct recv_priv *precvpriv,
-			  struct _adapter *padapter)
+int r8712_init_recv_priv(struct recv_priv *precvpriv,
+			 struct _adapter *padapter)
 {
 	int i;
 	struct recv_buf *precvbuf;
@@ -44,7 +44,7 @@ void r8712_init_recv_priv(struct recv_priv *precvpriv,
 	precvpriv->pallocated_recv_buf =
 		kzalloc(NR_RECVBUFF * sizeof(struct recv_buf) + 4, GFP_ATOMIC);
 	if (!precvpriv->pallocated_recv_buf)
-		return;
+		return -ENOMEM;
 	precvpriv->precv_buf = precvpriv->pallocated_recv_buf + 4 -
 			      ((addr_t)(precvpriv->pallocated_recv_buf) & 3);
 	precvbuf = (struct recv_buf *)precvpriv->precv_buf;
@@ -75,6 +75,7 @@ void r8712_init_recv_priv(struct recv_priv *precvpriv,
 		}
 		pskb = NULL;
 	}
+	return 0;
 }
 
 void r8712_free_recv_priv(struct recv_priv *precvpriv)
@@ -266,8 +267,7 @@ union recv_frame *r8712_recvframe_chk_defrag(struct _adapter *padapter,
 				/*the first fragment*/
 				if (!list_empty(&pdefrag_q->queue)) {
 					/*free current defrag_q */
-					r8712_free_recvframe_queue(pdefrag_q,
-							     pfree_recv_queue);
+					r8712_free_recvframe_queue(pdefrag_q, pfree_recv_queue);
 				}
 			}
 			/* Then enqueue the 0~(n-1) fragment to the defrag_q */
@@ -861,7 +861,7 @@ static void query_rx_phy_status(struct _adapter *padapter,
 static void process_link_qual(struct _adapter *padapter,
 			      union recv_frame *prframe)
 {
-	u32	last_evm = 0, tmpVal;
+	u32	last_evm = 0, avg_val;
 	struct rx_pkt_attrib *pattrib;
 	struct smooth_rssi_data *sqd = &padapter->recvpriv.signal_qual_data;
 
@@ -883,8 +883,8 @@ static void process_link_qual(struct _adapter *padapter,
 			sqd->index = 0;
 
 		/* <1> Showed on UI for user, in percentage. */
-		tmpVal = sqd->total_val / sqd->total_num;
-		padapter->recvpriv.signal = (u8)tmpVal;
+		avg_val = sqd->total_val / sqd->total_num;
+		padapter->recvpriv.signal = (u8)avg_val;
 	}
 }
 

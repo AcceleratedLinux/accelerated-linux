@@ -1,0 +1,123 @@
+From 7f4b5a0a286167ba9e5953d5943f8d5be75776f0 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Tue, 9 May 2023 13:40:57 +0100
+Subject: [PATCH] phone_book: do not use fixed-size arrays
+
+Allocate phonebook entries dynamically so that the dialstring length and
+maximum number of entries are not artificially limited by hard-coded
+values.
+---
+ src/line.c       |  7 +++++--
+ src/phone_book.c | 25 ++++++++++++++-----------
+ src/phone_book.h |  6 +-----
+ 3 files changed, 20 insertions(+), 18 deletions(-)
+
+diff --git a/src/line.c b/src/line.c
+index 90f3369..6ac418b 100644
+--- a/src/line.c
++++ b/src/line.c
+@@ -1,3 +1,5 @@
++#include <stdlib.h>
++#include <string.h>
+ #include "debug.h"
+ #include "modem_core.h"
+ #include "phone_book.h"
+@@ -84,17 +86,18 @@ int line_off_hook(line_config *cfg) {
+ }
+ 
+ int line_connect(line_config *cfg, char *number) {
+-  char address[PH_ENTRY_SIZE];
++  char *address = strdup(pb_search(number) ?: number);
+ 
+   LOG(LOG_INFO, "Connecting line");
+-  pb_search(number, address);
+   cfg->fd = ip_connect(address);
+   if(cfg->fd > -1) {
+     LOG(LOG_ALL, "Connected to %s", address);
++    free(address);
+     cfg->is_connected = TRUE;
+     return 0;
+   } else {
+     LOG(LOG_ALL, "Could not connect to %s",address);
++    free(address);
+     return -1;
+   }
+ }
+diff --git a/src/phone_book.c b/src/phone_book.c
+index ea232e4..faea642 100644
+--- a/src/phone_book.c
++++ b/src/phone_book.c
+@@ -1,9 +1,14 @@
++#include <stdlib.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include "phone_book.h"
+ #include "debug.h"
+ 
+-char phone_book[PH_BOOK_SIZE][2][PH_ENTRY_SIZE];
++static struct {
++  char *number;
++  char *address;
++} *phone_book;
++
+ int size = 0;
+ 
+ int pb_init() {
+@@ -13,15 +18,15 @@ int pb_init() {
+ 
+ int pb_add(char* from, char* to) {
+   LOG_ENTER();
+-  if(size < PH_BOOK_SIZE
+-     && from != NULL
++  if (from != NULL
+      && to != NULL
+      && strlen(from) > 0
+      && strlen(to) > 0
+     ) {
+     // should really trim spaces.
+-    strncpy(phone_book[size][0], from, PH_ENTRY_SIZE);
+-    strncpy(phone_book[size][1], to, PH_ENTRY_SIZE);
++    phone_book = reallocarray(phone_book, size + 1, sizeof(*phone_book));
++    phone_book[size].number = strdup(from);
++    phone_book[size].address = strdup(to);
+     size++;
+     LOG_EXIT();
+     return 0;
+@@ -30,17 +35,15 @@ int pb_add(char* from, char* to) {
+   return -1;
+ }
+ 
+-int pb_search(char *number, char *address) {
++char *pb_search(char *number) {
+   int i=0;
+ 
+   LOG_ENTER();
+-  strcpy(address, number);
+   for(i = 0; i < size; i++) {
+     LOG(LOG_INFO, "Searching entry %d of %d", i, size);
+-    if(strcmp(phone_book[i][0], number) == 0) {
+-      LOG(LOG_INFO, "Found a match for '%s': '%s'", number, phone_book[i][1]);
+-      strncpy(address, phone_book[i][1], PH_ENTRY_SIZE);
+-      break;
++    if(strcmp(phone_book[i].number, number) == 0) {
++      LOG(LOG_INFO, "Found a match for '%s': '%s'", number, phone_book[i].address);
++      return phone_book[i].address;
+     }
+   }
+   LOG_EXIT();
+diff --git a/src/phone_book.h b/src/phone_book.h
+index 0ef320a..266e7bf 100644
+--- a/src/phone_book.h
++++ b/src/phone_book.h
+@@ -1,7 +1,3 @@
+-
+-#define PH_BOOK_SIZE    100
+-#define PH_ENTRY_SIZE   128
+-
+ int pb_init(void);
+ int pb_add(char *from, char *to);
+-int pb_search(char *number, char* address);
++char *pb_search(char *number);
+-- 
+2.34.1
+

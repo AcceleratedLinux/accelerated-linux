@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <net/genetlink.h>
-#include <net/ila.h>
 #include <net/netns/generic.h>
 #include <uapi/linux/genetlink.h>
 #include "ila.h"
@@ -55,6 +54,7 @@ struct genl_family ila_nl_family __ro_after_init = {
 	.module		= THIS_MODULE,
 	.ops		= ila_nl_ops,
 	.n_ops		= ARRAY_SIZE(ila_nl_ops),
+	.resv_start_op	= ILA_CMD_FLUSH + 1,
 };
 
 static __net_init int ila_init_net(struct net *net)

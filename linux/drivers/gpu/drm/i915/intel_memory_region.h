@@ -50,8 +50,6 @@ enum intel_region_id {
 		for_each_if((mr) = (i915)->mm.regions[id])
 
 struct intel_memory_region_ops {
-	unsigned int flags;
-
 	int (*init)(struct intel_memory_region *mem);
 	int (*release)(struct intel_memory_region *mem);
 
@@ -71,16 +69,15 @@ struct intel_memory_region {
 	struct io_mapping iomap;
 	struct resource region;
 
-	resource_size_t io_start;
-	resource_size_t io_size;
+	struct resource io;
 	resource_size_t min_page_size;
 	resource_size_t total;
-	resource_size_t avail;
 
 	u16 type;
 	u16 instance;
 	enum intel_region_id id;
 	char name[16];
+	char uabi_name[16];
 	bool private; /* not for userspace */
 
 	struct {
@@ -126,6 +123,9 @@ int intel_memory_region_reserve(struct intel_memory_region *mem,
 
 void intel_memory_region_debug(struct intel_memory_region *mr,
 			       struct drm_printer *printer);
+
+void intel_memory_region_avail(struct intel_memory_region *mr,
+			       u64 *avail, u64 *visible_avail);
 
 struct intel_memory_region *
 i915_gem_ttm_system_setup(struct drm_i915_private *i915,

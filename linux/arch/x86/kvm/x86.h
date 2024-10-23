@@ -3,10 +3,35 @@
 #define ARCH_X86_KVM_X86_H
 
 #include <linux/kvm_host.h>
+#include <asm/fpu/xstate.h>
 #include <asm/mce.h>
 #include <asm/pvclock.h>
 #include "kvm_cache_regs.h"
 #include "kvm_emulate.h"
+
+struct kvm_caps {
+	/* control of guest tsc rate supported? */
+	bool has_tsc_control;
+	/* maximum supported tsc_khz for guests */
+	u32  max_guest_tsc_khz;
+	/* number of bits of the fractional part of the TSC scaling ratio */
+	u8   tsc_scaling_ratio_frac_bits;
+	/* maximum allowed value of TSC scaling ratio */
+	u64  max_tsc_scaling_ratio;
+	/* 1ull << kvm_caps.tsc_scaling_ratio_frac_bits */
+	u64  default_tsc_scaling_ratio;
+	/* bus lock detection supported? */
+	bool has_bus_lock_exit;
+	/* notify VM exit supported? */
+	bool has_notify_vmexit;
+	/* bit mask of VM types */
+	u32 supported_vm_types;
+
+	u64 supported_mce_cap;
+	u64 supported_xcr0;
+	u64 supported_xss;
+	u64 supported_perf_cap;
+};
 
 void kvm_spurious_fault(void);
 
@@ -17,6 +42,14 @@ void kvm_spurious_fault(void);
 		trace_kvm_nested_vmenter_failed(#consistency_check, 0);	\
 	failed;								\
 })
+
+/*
+ * The first...last VMX feature MSRs that are emulated by KVM.  This may or may
+ * not cover all known VMX MSRs, as KVM doesn't emulate an MSR until there's an
+ * associated feature that KVM supports for nested virtualization.
+ */
+#define KVM_FIRST_EMULATED_VMX_MSR	MSR_IA32_VMX_BASIC
+#define KVM_LAST_EMULATED_VMX_MSR	MSR_IA32_VMX_VMFUNC
 
 #define KVM_DEFAULT_PLE_GAP		128
 #define KVM_VMX_DEFAULT_PLE_WINDOW	4096
@@ -61,10 +94,23 @@ static inline unsigned int __shrink_ple_window(unsigned int val,
 void kvm_service_local_tlb_flush_requests(struct kvm_vcpu *vcpu);
 int kvm_check_nested_events(struct kvm_vcpu *vcpu);
 
+static inline bool kvm_vcpu_has_run(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.last_vmentry_cpu != -1;
+}
+
+static inline bool kvm_is_exception_pending(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.exception.pending ||
+	       vcpu->arch.exception_vmexit.pending ||
+	       kvm_test_request(KVM_REQ_TRIPLE_FAULT, vcpu);
+}
+
 static inline void kvm_clear_exception_queue(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.exception.pending = false;
 	vcpu->arch.exception.injected = false;
+	vcpu->arch.exception_vmexit.pending = false;
 }
 
 static inline void kvm_queue_interrupt(struct kvm_vcpu *vcpu, u8 vector,
@@ -93,15 +139,15 @@ static inline bool kvm_exception_is_soft(unsigned int nr)
 
 static inline bool is_protmode(struct kvm_vcpu *vcpu)
 {
-	return kvm_read_cr0_bits(vcpu, X86_CR0_PE);
+	return kvm_is_cr0_bit_set(vcpu, X86_CR0_PE);
 }
 
-static inline int is_long_mode(struct kvm_vcpu *vcpu)
+static inline bool is_long_mode(struct kvm_vcpu *vcpu)
 {
 #ifdef CONFIG_X86_64
-	return vcpu->arch.efer & EFER_LMA;
+	return !!(vcpu->arch.efer & EFER_LMA);
 #else
-	return 0;
+	return false;
 #endif
 }
 
@@ -141,19 +187,19 @@ static inline bool mmu_is_nested(struct kvm_vcpu *vcpu)
 	return vcpu->arch.walk_mmu == &vcpu->arch.nested_mmu;
 }
 
-static inline int is_pae(struct kvm_vcpu *vcpu)
+static inline bool is_pae(struct kvm_vcpu *vcpu)
 {
-	return kvm_read_cr4_bits(vcpu, X86_CR4_PAE);
+	return kvm_is_cr4_bit_set(vcpu, X86_CR4_PAE);
 }
 
-static inline int is_pse(struct kvm_vcpu *vcpu)
+static inline bool is_pse(struct kvm_vcpu *vcpu)
 {
-	return kvm_read_cr4_bits(vcpu, X86_CR4_PSE);
+	return kvm_is_cr4_bit_set(vcpu, X86_CR4_PSE);
 }
 
-static inline int is_paging(struct kvm_vcpu *vcpu)
+static inline bool is_paging(struct kvm_vcpu *vcpu)
 {
-	return likely(kvm_read_cr0_bits(vcpu, X86_CR0_PG));
+	return likely(kvm_is_cr0_bit_set(vcpu, X86_CR0_PG));
 }
 
 static inline bool is_pae_paging(struct kvm_vcpu *vcpu)
@@ -163,7 +209,7 @@ static inline bool is_pae_paging(struct kvm_vcpu *vcpu)
 
 static inline u8 vcpu_virt_addr_bits(struct kvm_vcpu *vcpu)
 {
-	return kvm_read_cr4_bits(vcpu, X86_CR4_LA57) ? 57 : 48;
+	return kvm_is_cr4_bit_set(vcpu, X86_CR4_LA57) ? 57 : 48;
 }
 
 static inline bool is_noncanonical_address(u64 la, struct kvm_vcpu *vcpu)
@@ -246,14 +292,11 @@ static inline bool kvm_check_has_quirk(struct kvm *kvm, u64 quirk)
 	return !(kvm->arch.disabled_quirks & quirk);
 }
 
-static inline bool kvm_vcpu_latch_init(struct kvm_vcpu *vcpu)
-{
-	return is_smm(vcpu) || static_call(kvm_x86_apic_init_signal_blocked)(vcpu);
-}
-
 void kvm_inject_realmode_interrupt(struct kvm_vcpu *vcpu, int irq, int inc_eip);
 
 u64 get_kvmclock_ns(struct kvm *kvm);
+uint64_t kvm_get_wall_clock_epoch(struct kvm *kvm);
+bool kvm_get_monotonic_and_clockread(s64 *kernel_ns, u64 *tsc_timestamp);
 
 int kvm_read_guest_virt(struct kvm_vcpu *vcpu,
 	gva_t addr, void *val, unsigned int bytes,
@@ -265,11 +308,11 @@ int kvm_write_guest_virt_system(struct kvm_vcpu *vcpu,
 
 int handle_ud(struct kvm_vcpu *vcpu);
 
-void kvm_deliver_exception_payload(struct kvm_vcpu *vcpu);
+void kvm_deliver_exception_payload(struct kvm_vcpu *vcpu,
+				   struct kvm_queued_exception *ex);
 
 void kvm_vcpu_mtrr_init(struct kvm_vcpu *vcpu);
 u8 kvm_mtrr_get_guest_memory_type(struct kvm_vcpu *vcpu, gfn_t gfn);
-bool kvm_mtrr_valid(struct kvm_vcpu *vcpu, u32 msr, u64 data);
 int kvm_mtrr_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data);
 int kvm_mtrr_get_msr(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata);
 bool kvm_mtrr_check_gfn_range_consistency(struct kvm_vcpu *vcpu, gfn_t gfn,
@@ -283,14 +326,44 @@ int x86_emulate_instruction(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 fastpath_t handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vcpu);
 
 extern u64 host_xcr0;
-extern u64 supported_xcr0;
 extern u64 host_xss;
-extern u64 supported_xss;
+extern u64 host_arch_capabilities;
+
+extern struct kvm_caps kvm_caps;
+
 extern bool enable_pmu;
+
+/*
+ * Get a filtered version of KVM's supported XCR0 that strips out dynamic
+ * features for which the current process doesn't (yet) have permission to use.
+ * This is intended to be used only when enumerating support to userspace,
+ * e.g. in KVM_GET_SUPPORTED_CPUID and KVM_CAP_XSAVE2, it does NOT need to be
+ * used to check/restrict guest behavior as KVM rejects KVM_SET_CPUID{2} if
+ * userspace attempts to enable unpermitted features.
+ */
+static inline u64 kvm_get_filtered_xcr0(void)
+{
+	u64 permitted_xcr0 = kvm_caps.supported_xcr0;
+
+	BUILD_BUG_ON(XFEATURE_MASK_USER_DYNAMIC != XFEATURE_MASK_XTILE_DATA);
+
+	if (permitted_xcr0 & XFEATURE_MASK_USER_DYNAMIC) {
+		permitted_xcr0 &= xstate_get_guest_group_perm();
+
+		/*
+		 * Treat XTILE_CFG as unsupported if the current process isn't
+		 * allowed to use XTILE_DATA, as attempting to set XTILE_CFG in
+		 * XCR0 without setting XTILE_DATA is architecturally illegal.
+		 */
+		if (!(permitted_xcr0 & XFEATURE_MASK_XTILE_DATA))
+			permitted_xcr0 &= ~XFEATURE_MASK_XTILE_CFG;
+	}
+	return permitted_xcr0;
+}
 
 static inline bool kvm_mpx_supported(void)
 {
-	return (supported_xcr0 & (XFEATURE_MASK_BNDREGS | XFEATURE_MASK_BNDCSR))
+	return (kvm_caps.supported_xcr0 & (XFEATURE_MASK_BNDREGS | XFEATURE_MASK_BNDCSR))
 		== (XFEATURE_MASK_BNDREGS | XFEATURE_MASK_BNDCSR);
 }
 
@@ -303,6 +376,18 @@ extern int pi_inject_timer;
 extern bool report_ignored_msrs;
 
 extern bool eager_page_split;
+
+static inline void kvm_pr_unimpl_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
+{
+	if (report_ignored_msrs)
+		vcpu_unimpl(vcpu, "Unhandled WRMSR(0x%x) = 0x%llx\n", msr, data);
+}
+
+static inline void kvm_pr_unimpl_rdmsr(struct kvm_vcpu *vcpu, u32 msr)
+{
+	if (report_ignored_msrs)
+		vcpu_unimpl(vcpu, "Unhandled RDMSR(0x%x)\n", msr);
+}
 
 static inline u64 nsec_to_cycles(struct kvm_vcpu *vcpu, u64 nsec)
 {
@@ -344,19 +429,18 @@ static inline bool kvm_cstate_in_guest(struct kvm *kvm)
 	return kvm->arch.cstate_in_guest;
 }
 
-enum kvm_intr_type {
-	/* Values are arbitrary, but must be non-zero. */
-	KVM_HANDLING_IRQ = 1,
-	KVM_HANDLING_NMI,
-};
+static inline bool kvm_notify_vmexit_enabled(struct kvm *kvm)
+{
+	return kvm->arch.notify_vmexit_flags & KVM_X86_NOTIFY_VMEXIT_ENABLED;
+}
 
-static inline void kvm_before_interrupt(struct kvm_vcpu *vcpu,
-					enum kvm_intr_type intr)
+static __always_inline void kvm_before_interrupt(struct kvm_vcpu *vcpu,
+						 enum kvm_intr_type intr)
 {
 	WRITE_ONCE(vcpu->arch.handling_intr_from_guest, (u8)intr);
 }
 
-static inline void kvm_after_interrupt(struct kvm_vcpu *vcpu)
+static __always_inline void kvm_after_interrupt(struct kvm_vcpu *vcpu)
 {
 	WRITE_ONCE(vcpu->arch.handling_intr_from_guest, 0);
 }
@@ -407,7 +491,7 @@ static inline void kvm_machine_check(void)
 void kvm_load_guest_xsave_state(struct kvm_vcpu *vcpu);
 void kvm_load_host_xsave_state(struct kvm_vcpu *vcpu);
 int kvm_spec_ctrl_test_value(u64 value);
-bool kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4);
+bool __kvm_is_valid_cr4(struct kvm_vcpu *vcpu, unsigned long cr4);
 int kvm_handle_memory_failure(struct kvm_vcpu *vcpu, int r,
 			      struct x86_exception *e);
 int kvm_handle_invpcid(struct kvm_vcpu *vcpu, unsigned long type, gva_t gva);
@@ -443,6 +527,8 @@ bool kvm_msr_allowed(struct kvm_vcpu *vcpu, u32 index, u32 type);
 		__reserved_bits |= X86_CR4_VMXE;        \
 	if (!__cpu_has(__c, X86_FEATURE_PCID))          \
 		__reserved_bits |= X86_CR4_PCIDE;       \
+	if (!__cpu_has(__c, X86_FEATURE_LAM))           \
+		__reserved_bits |= X86_CR4_LAM_SUP;     \
 	__reserved_bits;                                \
 })
 

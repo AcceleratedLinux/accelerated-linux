@@ -301,3 +301,24 @@ config USER_MODEMMANAGER_PLUGIN_UBLOX
 	depends on !USER_MODEMMANAGER_ALLPLUGINS
 	help
 	  Install ublox plugin
+
+config USER_MODEMMANAGER_PLUGIN_INTEL
+	bool 'plugin-intel'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install intell plugin
+
+config USER_MODEMMANAGER_PLUGIN_QCOM_SOC
+	bool 'plugin-qcom-soc'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install qcom-soc plugin
+
+config USER_MODEMMANAGER_PLUGIN_GOSUNCN
+	bool 'plugin-gosuncn'
+	depends on USER_MODEMMANAGER
+	depends on !USER_MODEMMANAGER_ALLPLUGINS
+	help
+	  Install gosuncn plugin

@@ -830,8 +830,8 @@ static int hip04_set_coalesce(struct net_device *netdev,
 static void hip04_get_drvinfo(struct net_device *netdev,
 			      struct ethtool_drvinfo *drvinfo)
 {
-	strlcpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, DRV_VERSION, sizeof(drvinfo->version));
+	strscpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
+	strscpy(drvinfo->version, DRV_VERSION, sizeof(drvinfo->version));
 }
 
 static const struct ethtool_ops hip04_ethtool_ops = {
@@ -960,8 +960,8 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	}
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq <= 0) {
-		ret = -EINVAL;
+	if (irq < 0) {
+		ret = irq;
 		goto init_fail;
 	}
 
@@ -990,7 +990,7 @@ static int hip04_mac_probe(struct platform_device *pdev)
 	ndev->watchdog_timeo = TX_TIMEOUT;
 	ndev->priv_flags |= IFF_UNICAST_FLT;
 	ndev->irq = irq;
-	netif_napi_add(ndev, &priv->napi, hip04_rx_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add(ndev, &priv->napi, hip04_rx_poll);
 
 	hip04_reset_dreq(priv);
 	hip04_reset_ppe(priv);
@@ -1021,7 +1021,7 @@ init_fail:
 	return ret;
 }
 
-static int hip04_remove(struct platform_device *pdev)
+static void hip04_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct hip04_priv *priv = netdev_priv(ndev);
@@ -1035,8 +1035,6 @@ static int hip04_remove(struct platform_device *pdev)
 	of_node_put(priv->phy_node);
 	cancel_work_sync(&priv->tx_timeout_task);
 	free_netdev(ndev);
-
-	return 0;
 }
 
 static const struct of_device_id hip04_mac_match[] = {
@@ -1048,7 +1046,7 @@ MODULE_DEVICE_TABLE(of, hip04_mac_match);
 
 static struct platform_driver hip04_mac_driver = {
 	.probe	= hip04_mac_probe,
-	.remove	= hip04_remove,
+	.remove_new = hip04_remove,
 	.driver	= {
 		.name		= DRV_NAME,
 		.of_match_table	= hip04_mac_match,

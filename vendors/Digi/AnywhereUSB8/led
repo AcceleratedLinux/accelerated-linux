@@ -9,6 +9,69 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+if [ "$(fw_printenv | grep model | cut -d= -f 2)" = "AW24" ]; then
+	# power supplies are built in, so always present
+	runt set system.chassis.psu1 "present"
+	runt set system.chassis.psu2 "present"
+
+	pwr_reg="$(grep 6c /sys/bus/i2c/drivers/awusb24_cpld/0-0059/cpld/regs | cut -d: -f 2)"
+	if [ "$(( pwr_reg / 2  % 2 ))" = "1" ]; then
+		runt set system.chassis.psu1_voltage "12"
+		runt set system.chassis.psu1_power "yes"
+	else
+		runt set system.chassis.psu1_voltage "0"
+		runt set system.chassis.psu1_power "no"
+	fi
+
+	if [ "$(( pwr_reg / 1  % 2 ))" = "1" ]; then
+		runt set system.chassis.psu2_voltage "12"
+		runt set system.chassis.psu2_power "yes"
+	else
+		runt set system.chassis.psu2_voltage "0"
+		runt set system.chassis.psu2_power "no"
+	fi
+fi
+
+fan_led_update()
+{
+	FAN=""
+	fans="fan1"
+	if [ "$(fw_printenv | grep model | cut -d= -f 2)" = "AW24" ]; then
+		fans="${fans} fan2"
+	fi
+
+	# Set CPU temp alarms
+	TEMP_HIGH_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
+	TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
+	runt set system.chassis.temp_high_alarm "$TEMP_HIGH_ALARM"
+	runt set system.chassis.temp_crit_alarm "$TEMP_CRIT_ALARM"
+
+	for fan in ${fans}; do
+		RPM=$(cat /sys/class/hwmon/hwmon0/${fan}_input)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/${fan}_alarm)
+		runt set system.chassis.${fan} "present"
+		runt set system.chassis.${fan}_rpm "$RPM"
+		# fan alarm is set after 3 minutes at fan max speed
+		runt set system.chassis.${fan}_alarm "$FAN_ALARM"
+
+		if [ "$RPM" -le "1000" ]; then
+			# If the fan isn't spinning fast enough, then set an artificial "alarm"
+			runt set system.chassis.${fan}_alarm "1"
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/${fan}r/delay_on > /dev/null 2>&1)" != "250" ]; then
+				FAN="$FAN -O ${fan}g -F ${fan}r"
+			fi
+		elif [ "$FAN_ALARM" = "1" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/${fan}r/delay_on > /dev/null 2>&1)" != "500" ]; then
+				FAN="$FAN -O ${fan}g -f ${fan}r"
+			fi
+		else
+			FAN="$FAN -o ${fan}g -O ${fan}r"
+		fi
+	done
+}
+
 wwan_led_update()
 {
     WWAN_SERV="-O wanserg -O wanserr"
@@ -28,8 +91,8 @@ wwan_led_update()
 			WWAN_SERV="-f wanserg -O wanserr"
 			WWAN_SIG="-f wansigg -O wansigr"
 		else
-			idx="$(modem name=modem idx || modem idx)" 2>/dev/null
-			if [ -z "$idx" ]; then
+			modem_name="$(modem name)" 2>/dev/null
+			if [ -z "$modem_name" ]; then
 				if sim -m 2>/dev/null | grep -qw yes; then
 					# Slow flash SERV while waiting for modem to appear
 					WWAN_SERV="-f wanserg -O wanserr"
@@ -40,7 +103,7 @@ wwan_led_update()
 					WWAN_SIG="-O wansigg -O wansigr"
 				fi
 			else
-				case "$(runt get mm.modem.$idx.status.bars)" in
+				case "$(runt get mm.modem.$modem_name.status.bars)" in
 				5)   WWAN_SIG="-o wansigg -O wansigr" ;;
 				4|3) WWAN_SIG="-F wansigg -O wansigr" ;;
 				2|1) WWAN_SIG="-f wansigg -O wansigr" ;;
@@ -48,9 +111,9 @@ wwan_led_update()
 				*)   WWAN_SIG="-O wansigg -O wansigr" ;;
 				esac
 
-				if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
+				if [ "$(runt get mm.modem.$modem_name.status.state)" = connected ]; then
 					WWAN_SERV="-o wanserg -O wanserr"
-				elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
+				elif [ -z "$(runt get mm.modem.$modem_name.modem.imsi)" ]; then
 					# No SIM present
 					WWAN_SERV="-O wanserg -o wanserr"
 				else
@@ -166,12 +229,14 @@ start|stop)
 	ledcmd -O wansigg -O wansigr
 	ledcmd -O wanserg -O wanserr
 	ledcmd -O wifig -O wifir
+	ledcmd -O fan1g -O fan1r -O fan2g -O fan2r
 	;;
 reload)
 	findme_update
 	wwan_led_update
 	wifi_led_update
-	ledcmd $WWAN_SERV $WWAN_SIG $FINDME $WIFI_SERV
+	fan_led_update
+	ledcmd $WWAN_SERV $WWAN_SIG $FINDME $WIFI_SERV $FAN
 	;;
 *)
 	echo "Usage: $0 {start|stop|reload}"

@@ -3147,10 +3147,8 @@ void brcms_c_init_scb(struct scb *scb)
 	scb->flags = SCB_WMECAP | SCB_HTCAP;
 	for (i = 0; i < NUMPRIO; i++) {
 		scb->seqnum[i] = 0;
-		scb->seqctl[i] = 0xFFFF;
 	}
 
-	scb->seqctl_nonqos = 0xFFFF;
 	scb->magic = SCB_MAGIC;
 }
 
@@ -3800,7 +3798,7 @@ static void brcms_b_set_shortslot(struct brcms_hardware *wlc_hw, bool shortslot)
 }
 
 /*
- * Suspend the the MAC and update the slot timing
+ * Suspend the MAC and update the slot timing
  * for standard 11b/g (20us slots) or shortslot 11g (9us slots).
  */
 static void brcms_c_switch_shortslot(struct brcms_c_info *wlc, bool shortslot)
@@ -5553,8 +5551,8 @@ int brcms_c_module_register(struct brcms_pub *pub,
 	/* find an empty entry and just add, no duplication check! */
 	for (i = 0; i < BRCMS_MAXMODULES; i++) {
 		if (wlc->modulecb[i].name[0] == '\0') {
-			strncpy(wlc->modulecb[i].name, name,
-				sizeof(wlc->modulecb[i].name) - 1);
+			strscpy(wlc->modulecb[i].name, name,
+				sizeof(wlc->modulecb[i].name));
 			wlc->modulecb[i].hdl = hdl;
 			wlc->modulecb[i].down_fn = d_fn;
 			return 0;

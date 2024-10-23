@@ -11,8 +11,8 @@ diff --git a/umac.c b/umac.c
 index e5ec19f..d8f9d8f 100644
 --- a/umac.c
 +++ b/umac.c
-@@ -1180,7 +1180,7 @@ static int uhash(uhash_ctx_t ahc, u_char *msg, long len, u_char *res)
-  * time. The all-at-once is more optimaized than the sequential version and
+@@ -1181,7 +1181,7 @@ static int uhash(uhash_ctx_t ahc, u_char *msg, long len, u_char *res)
+  * time. The all-at-once is more optimized than the sequential version and
   * should be preferred when the sequential interface is not required.
   */
 -struct umac_ctx {

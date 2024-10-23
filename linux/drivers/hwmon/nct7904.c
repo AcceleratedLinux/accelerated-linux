@@ -798,12 +798,12 @@ static int nct7904_detect(struct i2c_client *client,
 	    (i2c_smbus_read_byte_data(client, BANK_SEL_REG) & 0xf8) != 0x00)
 		return -ENODEV;
 
-	strlcpy(info->type, "nct7904", I2C_NAME_SIZE);
+	strscpy(info->type, "nct7904", I2C_NAME_SIZE);
 
 	return 0;
 }
 
-static const struct hwmon_channel_info *nct7904_info[] = {
+static const struct hwmon_channel_info * const nct7904_info[] = {
 	HWMON_CHANNEL_INFO(in,
 			   /* dummy, skipped in is_visible */
 			   HWMON_I_INPUT | HWMON_I_MIN | HWMON_I_MAX |
@@ -1161,7 +1161,7 @@ static int nct7904_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id nct7904_id[] = {
-	{"nct7904", 0},
+	{"nct7904"},
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, nct7904_id);
@@ -1171,7 +1171,7 @@ static struct i2c_driver nct7904_driver = {
 	.driver = {
 		.name = "nct7904",
 	},
-	.probe_new = nct7904_probe,
+	.probe = nct7904_probe,
 	.id_table = nct7904_id,
 	.detect = nct7904_detect,
 	.address_list = normal_i2c,

@@ -1256,7 +1256,6 @@ static const struct snd_soc_component_driver soc_component_dev_cs42l73 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config cs42l73_regmap = {
@@ -1268,7 +1267,7 @@ static const struct regmap_config cs42l73_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(cs42l73_reg_defaults),
 	.volatile_reg = cs42l73_volatile_register,
 	.readable_reg = cs42l73_readable_register,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 
 	.use_single_read = true,
 	.use_single_write = true,
@@ -1373,7 +1372,7 @@ static const struct of_device_id cs42l73_of_match[] = {
 MODULE_DEVICE_TABLE(of, cs42l73_of_match);
 
 static const struct i2c_device_id cs42l73_id[] = {
-	{"cs42l73", 0},
+	{"cs42l73"},
 	{}
 };
 
@@ -1385,7 +1384,7 @@ static struct i2c_driver cs42l73_i2c_driver = {
 		   .of_match_table = cs42l73_of_match,
 		   },
 	.id_table = cs42l73_id,
-	.probe_new = cs42l73_i2c_probe,
+	.probe = cs42l73_i2c_probe,
 
 };
 

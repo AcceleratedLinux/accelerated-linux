@@ -20,7 +20,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 #include <linux/sysfs.h>
 
 /* Addresses to scan */
@@ -353,7 +353,7 @@ static int tmp421_detect(struct i2c_client *client,
 		return -ENODEV;
 	}
 
-	strlcpy(info->type, tmp421_id[kind].name, I2C_NAME_SIZE);
+	strscpy(info->type, tmp421_id[kind].name, I2C_NAME_SIZE);
 	dev_info(&adapter->dev, "Detected TI %s chip at 0x%02x\n",
 		 names[kind], client->addr);
 
@@ -487,7 +487,7 @@ static struct i2c_driver tmp421_driver = {
 		.name	= "tmp421",
 		.of_match_table = of_match_ptr(tmp421_of_match),
 	},
-	.probe_new = tmp421_probe,
+	.probe = tmp421_probe,
 	.id_table = tmp421_id,
 	.detect = tmp421_detect,
 	.address_list = normal_i2c,

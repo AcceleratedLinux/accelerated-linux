@@ -132,12 +132,6 @@ static int afs_mntpt_set_params(struct fs_context *fc, struct dentry *mntpt)
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		if (PageError(page)) {
-			ret = afs_bad(AFS_FS_I(d_inode(mntpt)), afs_file_error_mntpt);
-			put_page(page);
-			return ret;
-		}
-
 		buf = kmap(page);
 		ret = -EINVAL;
 		if (buf[size - 1] == '.')
@@ -146,6 +140,11 @@ static int afs_mntpt_set_params(struct fs_context *fc, struct dentry *mntpt)
 		put_page(page);
 		if (ret < 0)
 			return ret;
+
+		/* Don't cross a backup volume mountpoint from a backup volume */
+		if (src_as->volume && src_as->volume->type == AFSVL_BACKVOL &&
+		    ctx->type == AFSVL_BACKVOL)
+			return -ENODEV;
 	}
 
 	return 0;

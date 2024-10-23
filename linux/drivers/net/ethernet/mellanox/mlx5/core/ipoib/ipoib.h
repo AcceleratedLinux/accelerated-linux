@@ -53,14 +53,18 @@ extern const struct mlx5e_rx_handlers mlx5i_rx_handlers;
 struct mlx5i_priv {
 	struct rdma_netdev rn; /* keep this first */
 	u32 qpn;
+	u32 tisn;
 	bool   sub_interface;
+	u32    num_sub_interfaces;
 	u32    qkey;
 	u16    pkey_index;
 	struct mlx5i_pkey_qpn_ht *qpn_htbl;
+	struct net_device *parent_dev;
 	char  *mlx5e_priv[];
 };
 
 int mlx5i_create_tis(struct mlx5_core_dev *mdev, u32 underlay_qpn, u32 *tisn);
+u32 mlx5i_get_tisn(struct mlx5_core_dev *mdev, struct mlx5e_priv *priv, u8 lag_port, u8 tc);
 
 /* Underlay QP create/destroy functions */
 int mlx5i_create_underlay_qp(struct mlx5e_priv *priv);
@@ -116,6 +120,10 @@ struct mlx5i_tx_wqe {
 void mlx5i_sq_xmit(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		   struct mlx5_av *av, u32 dqpn, u32 dqkey, bool xmit_more);
 void mlx5i_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats);
+
+/* Reference management for child to parent interfaces. */
+struct net_device *mlx5i_parent_get(struct net_device *netdev);
+void mlx5i_parent_put(struct net_device *netdev);
 
 #endif /* CONFIG_MLX5_CORE_IPOIB */
 #endif /* __MLX5E_IPOB_H__ */

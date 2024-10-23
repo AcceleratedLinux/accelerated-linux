@@ -22,6 +22,7 @@
 
 #include "amd_iommu_types.h"
 #include "amd_iommu.h"
+#include "../iommu-pages.h"
 
 static void v1_tlb_flush_all(void *cookie)
 {
@@ -156,7 +157,7 @@ static bool increase_address_space(struct protection_domain *domain,
 	bool ret = true;
 	u64 *pte;
 
-	pte = (void *)get_zeroed_page(gfp);
+	pte = iommu_alloc_page_node(domain->nid, gfp);
 	if (!pte)
 		return false;
 
@@ -187,7 +188,7 @@ static bool increase_address_space(struct protection_domain *domain,
 
 out:
 	spin_unlock_irqrestore(&domain->lock, flags);
-	free_page((unsigned long)pte);
+	iommu_free_page(pte);
 
 	return ret;
 }
@@ -250,7 +251,7 @@ static u64 *alloc_pte(struct protection_domain *domain,
 
 		if (!IOMMU_PTE_PRESENT(__pte) ||
 		    pte_level == PAGE_MODE_NONE) {
-			page = (u64 *)get_zeroed_page(gfp);
+			page = iommu_alloc_page_node(domain->nid, gfp);
 
 			if (!page)
 				return NULL;
@@ -258,8 +259,8 @@ static u64 *alloc_pte(struct protection_domain *domain,
 			__npte = PM_LEVEL_PDE(level, iommu_virt_to_phys(page));
 
 			/* pte could have been changed somewhere. */
-			if (cmpxchg64(pte, __pte, __npte) != __pte)
-				free_page((unsigned long)page);
+			if (!try_cmpxchg64(pte, &__pte, __npte))
+				iommu_free_page(page);
 			else if (IOMMU_PTE_PRESENT(__pte))
 				*updated = true;
 
@@ -310,8 +311,8 @@ static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
 			return NULL;
 
 		/* Large PTE */
-		if (PM_PTE_LEVEL(*pte) == 7 ||
-		    PM_PTE_LEVEL(*pte) == 0)
+		if (PM_PTE_LEVEL(*pte) == PAGE_MODE_7_LEVEL ||
+		    PM_PTE_LEVEL(*pte) == PAGE_MODE_NONE)
 			break;
 
 		/* No level skipping support yet */
@@ -341,10 +342,8 @@ static void free_clear_pte(u64 *pte, u64 pteval, struct list_head *freelist)
 	u64 *pt;
 	int mode;
 
-	while (cmpxchg64(pte, pteval, 0) != pteval) {
+	while (!try_cmpxchg64(pte, &pteval, 0))
 		pr_warn("AMD-Vi: IOMMU pte changed since we read it\n");
-		pteval = *pte;
-	}
 
 	if (!IOMMU_PTE_PRESENT(pteval))
 		return;
@@ -362,48 +361,59 @@ static void free_clear_pte(u64 *pte, u64 pteval, struct list_head *freelist)
  * supporting all features of AMD IOMMU page tables like level skipping
  * and full 64 bit address spaces.
  */
-static int iommu_v1_map_page(struct io_pgtable_ops *ops, unsigned long iova,
-			  phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
+static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
+			      phys_addr_t paddr, size_t pgsize, size_t pgcount,
+			      int prot, gfp_t gfp, size_t *mapped)
 {
 	struct protection_domain *dom = io_pgtable_ops_to_domain(ops);
 	LIST_HEAD(freelist);
 	bool updated = false;
 	u64 __pte, *pte;
 	int ret, i, count;
+	size_t size = pgcount << __ffs(pgsize);
+	unsigned long o_iova = iova;
 
-	BUG_ON(!IS_ALIGNED(iova, size));
-	BUG_ON(!IS_ALIGNED(paddr, size));
+	BUG_ON(!IS_ALIGNED(iova, pgsize));
+	BUG_ON(!IS_ALIGNED(paddr, pgsize));
 
 	ret = -EINVAL;
 	if (!(prot & IOMMU_PROT_MASK))
 		goto out;
 
-	count = PAGE_SIZE_PTE_COUNT(size);
-	pte   = alloc_pte(dom, iova, size, NULL, gfp, &updated);
+	while (pgcount > 0) {
+		count = PAGE_SIZE_PTE_COUNT(pgsize);
+		pte   = alloc_pte(dom, iova, pgsize, NULL, gfp, &updated);
 
-	ret = -ENOMEM;
-	if (!pte)
-		goto out;
+		ret = -ENOMEM;
+		if (!pte)
+			goto out;
 
-	for (i = 0; i < count; ++i)
-		free_clear_pte(&pte[i], pte[i], &freelist);
+		for (i = 0; i < count; ++i)
+			free_clear_pte(&pte[i], pte[i], &freelist);
 
-	if (!list_empty(&freelist))
-		updated = true;
+		if (!list_empty(&freelist))
+			updated = true;
 
-	if (count > 1) {
-		__pte = PAGE_SIZE_PTE(__sme_set(paddr), size);
-		__pte |= PM_LEVEL_ENC(7) | IOMMU_PTE_PR | IOMMU_PTE_FC;
-	} else
-		__pte = __sme_set(paddr) | IOMMU_PTE_PR | IOMMU_PTE_FC;
+		if (count > 1) {
+			__pte = PAGE_SIZE_PTE(__sme_set(paddr), pgsize);
+			__pte |= PM_LEVEL_ENC(7) | IOMMU_PTE_PR | IOMMU_PTE_FC;
+		} else
+			__pte = __sme_set(paddr) | IOMMU_PTE_PR | IOMMU_PTE_FC;
 
-	if (prot & IOMMU_PROT_IR)
-		__pte |= IOMMU_PTE_IR;
-	if (prot & IOMMU_PROT_IW)
-		__pte |= IOMMU_PTE_IW;
+		if (prot & IOMMU_PROT_IR)
+			__pte |= IOMMU_PTE_IR;
+		if (prot & IOMMU_PROT_IW)
+			__pte |= IOMMU_PTE_IW;
 
-	for (i = 0; i < count; ++i)
-		pte[i] = __pte;
+		for (i = 0; i < count; ++i)
+			pte[i] = __pte;
+
+		iova  += pgsize;
+		paddr += pgsize;
+		pgcount--;
+		if (mapped)
+			*mapped += pgsize;
+	}
 
 	ret = 0;
 
@@ -417,28 +427,28 @@ out:
 		 * Updates and flushing already happened in
 		 * increase_address_space().
 		 */
-		amd_iommu_domain_flush_tlb_pde(dom);
-		amd_iommu_domain_flush_complete(dom);
+		amd_iommu_domain_flush_pages(dom, o_iova, size);
 		spin_unlock_irqrestore(&dom->lock, flags);
 	}
 
 	/* Everything flushed out, free pages now */
-	put_pages_list(&freelist);
+	iommu_put_pages_list(&freelist);
 
 	return ret;
 }
 
-static unsigned long iommu_v1_unmap_page(struct io_pgtable_ops *ops,
-				      unsigned long iova,
-				      size_t size,
-				      struct iommu_iotlb_gather *gather)
+static unsigned long iommu_v1_unmap_pages(struct io_pgtable_ops *ops,
+					  unsigned long iova,
+					  size_t pgsize, size_t pgcount,
+					  struct iommu_iotlb_gather *gather)
 {
 	struct amd_io_pgtable *pgtable = io_pgtable_ops_to_data(ops);
 	unsigned long long unmapped;
 	unsigned long unmap_size;
 	u64 *pte;
+	size_t size = pgcount << __ffs(pgsize);
 
-	BUG_ON(!is_power_of_2(size));
+	BUG_ON(!is_power_of_2(pgsize));
 
 	unmapped = 0;
 
@@ -450,13 +460,13 @@ static unsigned long iommu_v1_unmap_page(struct io_pgtable_ops *ops,
 			count = PAGE_SIZE_PTE_COUNT(unmap_size);
 			for (i = 0; i < count; i++)
 				pte[i] = 0ULL;
+		} else {
+			return unmapped;
 		}
 
 		iova = (iova & ~(unmap_size - 1)) + unmap_size;
 		unmapped += unmap_size;
 	}
-
-	BUG_ON(unmapped && !is_power_of_2(unmapped));
 
 	return unmapped;
 }
@@ -476,6 +486,73 @@ static phys_addr_t iommu_v1_iova_to_phys(struct io_pgtable_ops *ops, unsigned lo
 	__pte	    = __sme_clr(*pte & PM_ADDR_MASK);
 
 	return (__pte & ~offset_mask) | (iova & offset_mask);
+}
+
+static bool pte_test_and_clear_dirty(u64 *ptep, unsigned long size,
+				     unsigned long flags)
+{
+	bool test_only = flags & IOMMU_DIRTY_NO_CLEAR;
+	bool dirty = false;
+	int i, count;
+
+	/*
+	 * 2.2.3.2 Host Dirty Support
+	 * When a non-default page size is used , software must OR the
+	 * Dirty bits in all of the replicated host PTEs used to map
+	 * the page. The IOMMU does not guarantee the Dirty bits are
+	 * set in all of the replicated PTEs. Any portion of the page
+	 * may have been written even if the Dirty bit is set in only
+	 * one of the replicated PTEs.
+	 */
+	count = PAGE_SIZE_PTE_COUNT(size);
+	for (i = 0; i < count && test_only; i++) {
+		if (test_bit(IOMMU_PTE_HD_BIT, (unsigned long *)&ptep[i])) {
+			dirty = true;
+			break;
+		}
+	}
+
+	for (i = 0; i < count && !test_only; i++) {
+		if (test_and_clear_bit(IOMMU_PTE_HD_BIT,
+				       (unsigned long *)&ptep[i])) {
+			dirty = true;
+		}
+	}
+
+	return dirty;
+}
+
+static int iommu_v1_read_and_clear_dirty(struct io_pgtable_ops *ops,
+					 unsigned long iova, size_t size,
+					 unsigned long flags,
+					 struct iommu_dirty_bitmap *dirty)
+{
+	struct amd_io_pgtable *pgtable = io_pgtable_ops_to_data(ops);
+	unsigned long end = iova + size - 1;
+
+	do {
+		unsigned long pgsize = 0;
+		u64 *ptep, pte;
+
+		ptep = fetch_pte(pgtable, iova, &pgsize);
+		if (ptep)
+			pte = READ_ONCE(*ptep);
+		if (!ptep || !IOMMU_PTE_PRESENT(pte)) {
+			pgsize = pgsize ?: PTE_LEVEL_PAGE_SIZE(0);
+			iova += pgsize;
+			continue;
+		}
+
+		/*
+		 * Mark the whole IOVA range as dirty even if only one of
+		 * the replicated PTEs were marked dirty.
+		 */
+		if (pte_test_and_clear_dirty(ptep, pgsize, flags))
+			iommu_dirty_bitmap_record(dirty, iova, pgsize);
+		iova += pgsize;
+	} while (iova < end);
+
+	return 0;
 }
 
 /*
@@ -504,7 +581,7 @@ static void v1_free_pgtable(struct io_pgtable *iop)
 	/* Make changes visible to IOMMUs */
 	amd_iommu_domain_update(dom);
 
-	put_pages_list(&freelist);
+	iommu_put_pages_list(&freelist);
 }
 
 static struct io_pgtable *v1_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie)
@@ -516,9 +593,10 @@ static struct io_pgtable *v1_alloc_pgtable(struct io_pgtable_cfg *cfg, void *coo
 	cfg->oas            = IOMMU_OUT_ADDR_BIT_SIZE,
 	cfg->tlb            = &v1_flush_ops;
 
-	pgtable->iop.ops.map          = iommu_v1_map_page;
-	pgtable->iop.ops.unmap        = iommu_v1_unmap_page;
+	pgtable->iop.ops.map_pages    = iommu_v1_map_pages;
+	pgtable->iop.ops.unmap_pages  = iommu_v1_unmap_pages;
 	pgtable->iop.ops.iova_to_phys = iommu_v1_iova_to_phys;
+	pgtable->iop.ops.read_and_clear_dirty = iommu_v1_read_and_clear_dirty;
 
 	return &pgtable->iop;
 }

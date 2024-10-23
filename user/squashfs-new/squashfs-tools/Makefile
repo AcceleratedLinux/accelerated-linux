@@ -28,6 +28,18 @@
 #
 XZ_SUPPORT = 1
 
+########### Building XZ-AES support #############
+#
+# LZMA2 compression with AES encryption.
+#
+# XZ Utils liblzma (http://tukaani.org/xz/) is supported
+#
+# To build using XZ Utils liblzma - install the library and uncomment
+# the XZ_AES_SUPPORT line below.
+# Requires openssl to provide the AES encryption.
+#
+XZ_AES_SUPPORT = 1
+
 
 ############ Building LZO support ##############
 #
@@ -143,6 +155,14 @@ MKSQUASHFS_OBJS += xz_wrapper.o
 UNSQUASHFS_OBJS += xz_wrapper.o
 LIBS += -llzma
 COMPRESSORS += xz
+endif
+
+ifeq ($(XZ_AES_SUPPORT),1)
+CFLAGS += -DXZ_AES_SUPPORT
+MKSQUASHFS_OBJS += xz_aes_wrapper.o
+UNSQUASHFS_OBJS += xz_aes_wrapper.o
+LIBS += -llzma -lcrypto
+COMPRESSORS += xz-aes
 endif
 
 ifeq ($(LZO_SUPPORT),1)

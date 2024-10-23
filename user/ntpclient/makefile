@@ -1,4 +1,4 @@
-URL = http://doolittle.icarus.com/ntpclient/ntpclient_2015_365.tar.gz
+URL = https://doolittle.icarus.com/ntpclient/ntpclient_2015_365.tar.gz
 
 BUILDDIR = ntpclient-2015
 MAKEVARS = ntpclient adjtimex

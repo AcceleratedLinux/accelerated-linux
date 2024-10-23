@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/proc_fs.h>
 #include <linux/regulator/consumer.h>
@@ -151,7 +151,7 @@ static void _fusb302_log(struct fusb302_chip *chip, const char *fmt,
 
 	if (fusb302_log_full(chip)) {
 		chip->logbuffer_head = max(chip->logbuffer_head - 1, 0);
-		strlcpy(tmpbuffer, "overflow", sizeof(tmpbuffer));
+		strscpy(tmpbuffer, "overflow", sizeof(tmpbuffer));
 	}
 
 	if (chip->logbuffer_head < 0 ||
@@ -190,7 +190,7 @@ static void fusb302_log(struct fusb302_chip *chip, const char *fmt, ...)
 
 static int fusb302_debug_show(struct seq_file *s, void *v)
 {
-	struct fusb302_chip *chip = (struct fusb302_chip *)s->private;
+	struct fusb302_chip *chip = s->private;
 	int tail;
 
 	mutex_lock(&chip->logbuffer_lock);
@@ -1467,7 +1467,7 @@ static int fusb302_pd_read_message(struct fusb302_chip *chip,
 	if ((!len) && (pd_header_type_le(msg->header) == PD_CTRL_GOOD_CRC))
 		tcpm_pd_transmit_complete(chip->tcpm_port, TCPC_TX_SUCCESS);
 	else
-		tcpm_pd_receive(chip->tcpm_port, msg);
+		tcpm_pd_receive(chip->tcpm_port, msg, TCPC_TX_SOP);
 
 	return ret;
 }
@@ -1677,8 +1677,7 @@ static struct fwnode_handle *fusb302_fwnode_get(struct device *dev)
 	return fwnode;
 }
 
-static int fusb302_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int fusb302_probe(struct i2c_client *client)
 {
 	struct fusb302_chip *chip;
 	struct i2c_adapter *adapter = client->adapter;
@@ -1743,9 +1742,8 @@ static int fusb302_probe(struct i2c_client *client,
 	chip->tcpm_port = tcpm_register_port(&client->dev, &chip->tcpc_dev);
 	if (IS_ERR(chip->tcpm_port)) {
 		fwnode_handle_put(chip->tcpc_dev.fwnode);
-		ret = PTR_ERR(chip->tcpm_port);
-		if (ret != -EPROBE_DEFER)
-			dev_err(dev, "cannot register tcpm port, ret=%d", ret);
+		ret = dev_err_probe(dev, PTR_ERR(chip->tcpm_port),
+				    "cannot register tcpm port\n");
 		goto destroy_workqueue;
 	}
 
@@ -1771,7 +1769,7 @@ destroy_workqueue:
 	return ret;
 }
 
-static int fusb302_remove(struct i2c_client *client)
+static void fusb302_remove(struct i2c_client *client)
 {
 	struct fusb302_chip *chip = i2c_get_clientdata(client);
 
@@ -1783,8 +1781,6 @@ static int fusb302_remove(struct i2c_client *client)
 	fwnode_handle_put(chip->tcpc_dev.fwnode);
 	destroy_workqueue(chip->wq);
 	fusb302_debugfs_exit(chip);
-
-	return 0;
 }
 
 static int fusb302_pm_suspend(struct device *dev)
@@ -1817,7 +1813,7 @@ static int fusb302_pm_resume(struct device *dev)
 	return 0;
 }
 
-static const struct of_device_id fusb302_dt_match[] = {
+static const struct of_device_id fusb302_dt_match[] __maybe_unused = {
 	{.compatible = "fcs,fusb302"},
 	{},
 };

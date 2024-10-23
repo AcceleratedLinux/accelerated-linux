@@ -11,8 +11,9 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_dma.h>
-#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
@@ -796,6 +797,17 @@ static int zynqmp_dma_device_terminate_all(struct dma_chan *dchan)
 }
 
 /**
+ * zynqmp_dma_synchronize - Synchronizes the termination of a transfers to the current context.
+ * @dchan: DMA channel pointer
+ */
+static void zynqmp_dma_synchronize(struct dma_chan *dchan)
+{
+	struct zynqmp_dma_chan *chan = to_chan(dchan);
+
+	tasklet_kill(&chan->tasklet);
+}
+
+/**
  * zynqmp_dma_prep_memcpy - prepare descriptors for memcpy transaction
  * @dchan: DMA channel
  * @dma_dst: Destination buffer address
@@ -849,7 +861,7 @@ static struct dma_async_tx_descriptor *zynqmp_dma_prep_memcpy(
 
 	zynqmp_dma_desc_config_eod(chan, desc);
 	async_tx_ack(&first->async_tx);
-	first->async_tx.flags = flags;
+	first->async_tx.flags = (enum dma_ctrl_flags)flags;
 	return &first->async_tx;
 }
 
@@ -879,7 +891,6 @@ static int zynqmp_dma_chan_probe(struct zynqmp_dma_device *zdev,
 			   struct platform_device *pdev)
 {
 	struct zynqmp_dma_chan *chan;
-	struct resource *res;
 	struct device_node *node = pdev->dev.of_node;
 	int err;
 
@@ -889,8 +900,7 @@ static int zynqmp_dma_chan_probe(struct zynqmp_dma_device *zdev,
 	chan->dev = zdev->dev;
 	chan->zdev = zdev;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	chan->regs = devm_ioremap_resource(&pdev->dev, res);
+	chan->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(chan->regs))
 		return PTR_ERR(chan->regs);
 
@@ -1051,12 +1061,17 @@ static int zynqmp_dma_probe(struct platform_device *pdev)
 	zdev->dev = &pdev->dev;
 	INIT_LIST_HEAD(&zdev->common.channels);
 
-	dma_set_mask(&pdev->dev, DMA_BIT_MASK(44));
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(44));
+	if (ret) {
+		dev_err(&pdev->dev, "DMA not available for address range\n");
+		return ret;
+	}
 	dma_cap_set(DMA_MEMCPY, zdev->common.cap_mask);
 
 	p = &zdev->common;
 	p->device_prep_dma_memcpy = zynqmp_dma_prep_memcpy;
 	p->device_terminate_all = zynqmp_dma_device_terminate_all;
+	p->device_synchronize = zynqmp_dma_synchronize;
 	p->device_issue_pending = zynqmp_dma_issue_pending;
 	p->device_alloc_chan_resources = zynqmp_dma_alloc_chan_resources;
 	p->device_free_chan_resources = zynqmp_dma_free_chan_resources;
@@ -1132,7 +1147,7 @@ err_disable_pm:
  *
  * Return: Always '0'
  */
-static int zynqmp_dma_remove(struct platform_device *pdev)
+static void zynqmp_dma_remove(struct platform_device *pdev)
 {
 	struct zynqmp_dma_device *zdev = platform_get_drvdata(pdev);
 
@@ -1143,8 +1158,6 @@ static int zynqmp_dma_remove(struct platform_device *pdev)
 	pm_runtime_disable(zdev->dev);
 	if (!pm_runtime_enabled(zdev->dev))
 		zynqmp_dma_runtime_suspend(zdev->dev);
-
-	return 0;
 }
 
 static const struct of_device_id zynqmp_dma_of_match[] = {
@@ -1160,7 +1173,7 @@ static struct platform_driver zynqmp_dma_driver = {
 		.pm = &zynqmp_dma_dev_pm_ops,
 	},
 	.probe = zynqmp_dma_probe,
-	.remove = zynqmp_dma_remove,
+	.remove_new = zynqmp_dma_remove,
 };
 
 module_platform_driver(zynqmp_dma_driver);

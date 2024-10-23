@@ -1,0 +1,90 @@
+#!/bin/sh
+
+#
+# serial-mode.sh - setup and control serial port interface mode
+#
+# This control script is specific to the Digi/IX10. On that hardware we
+# only support interface mode setting on a single serial port,
+# and that is /dev/serial/port1.
+#
+# (C) Copyright 2020, Digi International.
+#
+
+#
+# GPIO28  = (GPIO1.28) RS485 terminate enable (output, active high)
+# GPIO124 = (GPIO4.28) RS232/RS485 select (output, low=RS485, high=RS232)
+#
+
+#
+# The sequencing of the GPIO states for each mode is taken directly
+# from the hardware data sheet for the IX10.
+#
+
+serial_init() {
+	# The initialization puts the port into RS-232 mode
+	echo 28 > /sys/class/gpio/export
+	echo low > /sys/class/gpio/gpio28/direction
+	echo 124 > /sys/class/gpio/export
+	echo high > /sys/class/gpio/gpio124/direction
+}
+
+serial_rs232() {
+	echo 0 > /sys/class/gpio/gpio28/value
+	echo 1 > /sys/class/gpio/gpio124/value
+}
+
+serial_rs485() {
+	echo 0 > /sys/class/gpio/gpio124/value
+}
+
+serial_nonterminate() {
+	echo 0 > /sys/class/gpio/gpio28/value
+}
+
+serial_terminate() {
+	echo 1 > /sys/class/gpio/gpio28/value
+}
+
+usage() {
+	echo "usage: serial-mode <device> (init|powerdown|rs-232|rs-485) [terminate]"
+	echo
+	echo "        init      -- initialize port control"
+	echo "        powerdown -- powerdown port"
+	echo "        rs-232    -- set port into RS-232 mode (default)"
+	echo "        rs-485    -- set port into RS-485 mode"
+	echo "        terminate -- enable line termination"
+	echo
+	exit 1
+}
+
+#
+# Check arguments, and error out on anything invalid.
+#
+if [ $# -lt 2 -o $# -gt 3 ] ; then
+	usage
+fi
+if [ "$1" != "/dev/serial/port1" ] ; then
+	echo "ERROR: serial-mode only supported on /dev/serial/port1"
+	exit 1
+fi
+
+case "$2" in
+init)	serial_init ;;
+# Cannot shutdown both transceivers simulatenously, RS-232 has lower consumption
+powerdown)
+	serial_rs232
+	# Don't parse 'terminate'
+	exit 0
+	;;
+rs-232)	serial_rs232 ;;
+rs-485)	serial_rs485 ;;
+*)	usage ;;
+esac
+
+if [ "$3" = "terminate" ] ; then
+	serial_terminate
+else
+	serial_nonterminate
+fi
+
+exit 0

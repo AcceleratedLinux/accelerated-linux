@@ -582,36 +582,10 @@ static int skl_tplg_unload_pipe_modules(struct skl_dev *skl,
 	return ret;
 }
 
-static bool skl_tplg_is_multi_fmt(struct skl_dev *skl, struct skl_pipe *pipe)
+static void skl_tplg_set_pipe_config_idx(struct skl_pipe *pipe, int idx)
 {
-	struct skl_pipe_fmt *cur_fmt;
-	struct skl_pipe_fmt *next_fmt;
-	int i;
-
-	if (pipe->nr_cfgs <= 1)
-		return false;
-
-	if (pipe->conn_type != SKL_PIPE_CONN_TYPE_FE)
-		return true;
-
-	for (i = 0; i < pipe->nr_cfgs - 1; i++) {
-		if (pipe->direction == SNDRV_PCM_STREAM_PLAYBACK) {
-			cur_fmt = &pipe->configs[i].out_fmt;
-			next_fmt = &pipe->configs[i + 1].out_fmt;
-		} else {
-			cur_fmt = &pipe->configs[i].in_fmt;
-			next_fmt = &pipe->configs[i + 1].in_fmt;
-		}
-
-		if (!CHECK_HW_PARAMS(cur_fmt->channels, cur_fmt->freq,
-				     cur_fmt->bps,
-				     next_fmt->channels,
-				     next_fmt->freq,
-				     next_fmt->bps))
-			return true;
-	}
-
-	return false;
+	pipe->cur_config_idx = idx;
+	pipe->memory_pages = pipe->configs[idx].mem_pages;
 }
 
 /*
@@ -632,24 +606,14 @@ skl_tplg_get_pipe_config(struct skl_dev *skl, struct skl_module_cfg *mconfig)
 	int i;
 
 	if (pipe->nr_cfgs == 0) {
-		pipe->cur_config_idx = 0;
-		return 0;
-	}
-
-	if (skl_tplg_is_multi_fmt(skl, pipe)) {
-		pipe->cur_config_idx = pipe->pipe_config_idx;
-		pipe->memory_pages = pconfig->mem_pages;
-		dev_dbg(skl->dev, "found pipe config idx:%d\n",
-			pipe->cur_config_idx);
+		skl_tplg_set_pipe_config_idx(pipe, 0);
 		return 0;
 	}
 
 	if (pipe->conn_type == SKL_PIPE_CONN_TYPE_NONE || pipe->nr_cfgs == 1) {
 		dev_dbg(skl->dev, "No conn_type or just 1 pathcfg, taking 0th for %d\n",
 			pipe->ppl_id);
-		pipe->cur_config_idx = 0;
-		pipe->memory_pages = pconfig->mem_pages;
-
+		skl_tplg_set_pipe_config_idx(pipe, 0);
 		return 0;
 	}
 
@@ -668,10 +632,8 @@ skl_tplg_get_pipe_config(struct skl_dev *skl, struct skl_module_cfg *mconfig)
 
 		if (CHECK_HW_PARAMS(params->ch, params->s_freq, params->s_fmt,
 				    fmt->channels, fmt->freq, fmt->bps)) {
-			pipe->cur_config_idx = i;
-			pipe->memory_pages = pconfig->mem_pages;
+			skl_tplg_set_pipe_config_idx(pipe, i);
 			dev_dbg(skl->dev, "Using pipe config: %d\n", i);
-
 			return 0;
 		}
 	}
@@ -1391,9 +1353,9 @@ static int skl_tplg_multi_config_set_get(struct snd_kcontrol *kcontrol,
 		return -EIO;
 
 	if (is_set)
-		pipe->pipe_config_idx = ucontrol->value.enumerated.item[0];
+		skl_tplg_set_pipe_config_idx(pipe, ucontrol->value.enumerated.item[0]);
 	else
-		ucontrol->value.enumerated.item[0]  =  pipe->pipe_config_idx;
+		ucontrol->value.enumerated.item[0] = pipe->cur_config_idx;
 
 	return 0;
 }
@@ -1701,11 +1663,10 @@ int skl_tplg_update_pipe_params(struct device *dev,
 struct skl_module_cfg *
 skl_tplg_fe_get_cpr_module(struct snd_soc_dai *dai, int stream)
 {
-	struct snd_soc_dapm_widget *w;
+	struct snd_soc_dapm_widget *w = snd_soc_dai_get_widget(dai, stream);
 	struct snd_soc_dapm_path *p = NULL;
 
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		w = dai->playback_widget;
 		snd_soc_dapm_widget_for_each_sink_path(w, p) {
 			if (p->connect && p->sink->power &&
 				!is_skl_dsp_widget_type(p->sink, dai->dev))
@@ -1718,7 +1679,6 @@ skl_tplg_fe_get_cpr_module(struct snd_soc_dai *dai, int stream)
 			}
 		}
 	} else {
-		w = dai->capture_widget;
 		snd_soc_dapm_widget_for_each_source_path(w, p) {
 			if (p->connect && p->source->power &&
 				!is_skl_dsp_widget_type(p->source, dai->dev))
@@ -1782,14 +1742,12 @@ static struct skl_module_cfg *skl_get_mconfig_cap_cpr(
 struct skl_module_cfg *
 skl_tplg_be_get_cpr_module(struct snd_soc_dai *dai, int stream)
 {
-	struct snd_soc_dapm_widget *w;
+	struct snd_soc_dapm_widget *w = snd_soc_dai_get_widget(dai, stream);
 	struct skl_module_cfg *mconfig;
 
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		w = dai->playback_widget;
 		mconfig = skl_get_mconfig_pb_cpr(dai, w);
 	} else {
-		w = dai->capture_widget;
 		mconfig = skl_get_mconfig_cap_cpr(dai, w);
 	}
 	return mconfig;
@@ -1837,20 +1795,28 @@ static int skl_tplg_be_fill_pipe_params(struct snd_soc_dai *dai,
 {
 	struct nhlt_specific_cfg *cfg;
 	struct skl_pipe *pipe = mconfig->pipe;
+	struct skl_pipe_params save = *pipe->p_params;
 	struct skl_pipe_fmt *pipe_fmt;
 	struct skl_dev *skl = get_skl_ctx(dai->dev);
 	int link_type = skl_tplg_be_link_type(mconfig->dev_type);
 	u8 dev_type = skl_tplg_be_dev_type(mconfig->dev_type);
+	int ret;
 
 	skl_tplg_fill_dma_id(mconfig, params);
 
 	if (link_type == NHLT_LINK_HDA)
 		return 0;
 
+	*pipe->p_params = *params;
+	ret = skl_tplg_get_pipe_config(skl, mconfig);
+	if (ret)
+		goto err;
+
+	dev_dbg(skl->dev, "%s using pipe config: %d\n", __func__, pipe->cur_config_idx);
 	if (pipe->direction == SNDRV_PCM_STREAM_PLAYBACK)
-		pipe_fmt = &pipe->configs[pipe->pipe_config_idx].out_fmt;
+		pipe_fmt = &pipe->configs[pipe->cur_config_idx].out_fmt;
 	else
-		pipe_fmt = &pipe->configs[pipe->pipe_config_idx].in_fmt;
+		pipe_fmt = &pipe->configs[pipe->cur_config_idx].in_fmt;
 
 	/* update the blob based on virtual bus_id*/
 	cfg = intel_nhlt_get_endpoint_blob(dai->dev, skl->nhlt,
@@ -1865,10 +1831,15 @@ static int skl_tplg_be_fill_pipe_params(struct snd_soc_dai *dai,
 		dev_err(dai->dev, "Blob NULL for id:%d type:%d dirn:%d ch:%d, freq:%d, fmt:%d\n",
 			mconfig->vbus_id, link_type, params->stream,
 			params->ch, params->s_freq, params->s_fmt);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
 	return 0;
+
+err:
+	*pipe->p_params = save;
+	return ret;
 }
 
 static int skl_tplg_be_set_src_pipe_params(struct snd_soc_dai *dai,
@@ -1930,20 +1901,13 @@ static int skl_tplg_be_set_sink_pipe_params(struct snd_soc_dai *dai,
 int skl_tplg_be_update_params(struct snd_soc_dai *dai,
 				struct skl_pipe_params *params)
 {
-	struct snd_soc_dapm_widget *w;
+	struct snd_soc_dapm_widget *w = snd_soc_dai_get_widget(dai, params->stream);
 
 	if (params->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		w = dai->playback_widget;
-
 		return skl_tplg_be_set_src_pipe_params(dai, w, params);
-
 	} else {
-		w = dai->capture_widget;
-
 		return skl_tplg_be_set_sink_pipe_params(dai, w, params);
 	}
-
-	return 0;
 }
 
 static const struct snd_soc_tplg_widget_events skl_tplg_widget_ops[] = {
@@ -2718,168 +2682,6 @@ static int skl_tplg_get_desc_blocks(struct device *dev,
 	return -EINVAL;
 }
 
-/* Functions to parse private data from configuration file format v4 */
-
-/*
- * Add pipeline from topology binary into driver pipeline list
- *
- * If already added we return that instance
- * Otherwise we create a new instance and add into driver list
- */
-static int skl_tplg_add_pipe_v4(struct device *dev,
-			struct skl_module_cfg *mconfig, struct skl_dev *skl,
-			struct skl_dfw_v4_pipe *dfw_pipe)
-{
-	struct skl_pipeline *ppl;
-	struct skl_pipe *pipe;
-	struct skl_pipe_params *params;
-
-	list_for_each_entry(ppl, &skl->ppl_list, node) {
-		if (ppl->pipe->ppl_id == dfw_pipe->pipe_id) {
-			mconfig->pipe = ppl->pipe;
-			return 0;
-		}
-	}
-
-	ppl = devm_kzalloc(dev, sizeof(*ppl), GFP_KERNEL);
-	if (!ppl)
-		return -ENOMEM;
-
-	pipe = devm_kzalloc(dev, sizeof(*pipe), GFP_KERNEL);
-	if (!pipe)
-		return -ENOMEM;
-
-	params = devm_kzalloc(dev, sizeof(*params), GFP_KERNEL);
-	if (!params)
-		return -ENOMEM;
-
-	pipe->ppl_id = dfw_pipe->pipe_id;
-	pipe->memory_pages = dfw_pipe->memory_pages;
-	pipe->pipe_priority = dfw_pipe->pipe_priority;
-	pipe->conn_type = dfw_pipe->conn_type;
-	pipe->state = SKL_PIPE_INVALID;
-	pipe->p_params = params;
-	INIT_LIST_HEAD(&pipe->w_list);
-
-	ppl->pipe = pipe;
-	list_add(&ppl->node, &skl->ppl_list);
-
-	mconfig->pipe = pipe;
-
-	return 0;
-}
-
-static void skl_fill_module_pin_info_v4(struct skl_dfw_v4_module_pin *dfw_pin,
-					struct skl_module_pin *m_pin,
-					bool is_dynamic, int max_pin)
-{
-	int i;
-
-	for (i = 0; i < max_pin; i++) {
-		m_pin[i].id.module_id = dfw_pin[i].module_id;
-		m_pin[i].id.instance_id = dfw_pin[i].instance_id;
-		m_pin[i].in_use = false;
-		m_pin[i].is_dynamic = is_dynamic;
-		m_pin[i].pin_state = SKL_PIN_UNBIND;
-	}
-}
-
-static void skl_tplg_fill_fmt_v4(struct skl_module_pin_fmt *dst_fmt,
-				 struct skl_dfw_v4_module_fmt *src_fmt,
-				 int pins)
-{
-	int i;
-
-	for (i = 0; i < pins; i++) {
-		dst_fmt[i].fmt.channels  = src_fmt[i].channels;
-		dst_fmt[i].fmt.s_freq = src_fmt[i].freq;
-		dst_fmt[i].fmt.bit_depth = src_fmt[i].bit_depth;
-		dst_fmt[i].fmt.valid_bit_depth = src_fmt[i].valid_bit_depth;
-		dst_fmt[i].fmt.ch_cfg = src_fmt[i].ch_cfg;
-		dst_fmt[i].fmt.ch_map = src_fmt[i].ch_map;
-		dst_fmt[i].fmt.interleaving_style =
-						src_fmt[i].interleaving_style;
-		dst_fmt[i].fmt.sample_type = src_fmt[i].sample_type;
-	}
-}
-
-static int skl_tplg_get_pvt_data_v4(struct snd_soc_tplg_dapm_widget *tplg_w,
-				    struct skl_dev *skl, struct device *dev,
-				    struct skl_module_cfg *mconfig)
-{
-	struct skl_dfw_v4_module *dfw =
-				(struct skl_dfw_v4_module *)tplg_w->priv.data;
-	int ret;
-	int idx = mconfig->fmt_cfg_idx;
-
-	dev_dbg(dev, "Parsing Skylake v4 widget topology data\n");
-
-	ret = guid_parse(dfw->uuid, (guid_t *)mconfig->guid);
-	if (ret)
-		return ret;
-	mconfig->id.module_id = -1;
-	mconfig->id.instance_id = dfw->instance_id;
-	mconfig->module->resources[0].cpc = dfw->max_mcps / 1000;
-	mconfig->module->resources[0].ibs = dfw->ibs;
-	mconfig->module->resources[0].obs = dfw->obs;
-	mconfig->core_id = dfw->core_id;
-	mconfig->module->max_input_pins = dfw->max_in_queue;
-	mconfig->module->max_output_pins = dfw->max_out_queue;
-	mconfig->module->loadable = dfw->is_loadable;
-	skl_tplg_fill_fmt_v4(mconfig->module->formats[0].inputs, dfw->in_fmt,
-			     MAX_IN_QUEUE);
-	skl_tplg_fill_fmt_v4(mconfig->module->formats[0].outputs, dfw->out_fmt,
-			     MAX_OUT_QUEUE);
-
-	mconfig->params_fixup = dfw->params_fixup;
-	mconfig->converter = dfw->converter;
-	mconfig->m_type = dfw->module_type;
-	mconfig->vbus_id = dfw->vbus_id;
-	mconfig->module->resources[0].is_pages = dfw->mem_pages;
-
-	ret = skl_tplg_add_pipe_v4(dev, mconfig, skl, &dfw->pipe);
-	if (ret)
-		return ret;
-
-	mconfig->dev_type = dfw->dev_type;
-	mconfig->hw_conn_type = dfw->hw_conn_type;
-	mconfig->time_slot = dfw->time_slot;
-	mconfig->formats_config[idx].caps_size = dfw->caps.caps_size;
-
-	mconfig->m_in_pin = devm_kcalloc(dev,
-				MAX_IN_QUEUE, sizeof(*mconfig->m_in_pin),
-				GFP_KERNEL);
-	if (!mconfig->m_in_pin)
-		return -ENOMEM;
-
-	mconfig->m_out_pin = devm_kcalloc(dev,
-				MAX_OUT_QUEUE, sizeof(*mconfig->m_out_pin),
-				GFP_KERNEL);
-	if (!mconfig->m_out_pin)
-		return -ENOMEM;
-
-	skl_fill_module_pin_info_v4(dfw->in_pin, mconfig->m_in_pin,
-				    dfw->is_dynamic_in_pin,
-				    mconfig->module->max_input_pins);
-	skl_fill_module_pin_info_v4(dfw->out_pin, mconfig->m_out_pin,
-				    dfw->is_dynamic_out_pin,
-				    mconfig->module->max_output_pins);
-
-	if (mconfig->formats_config[idx].caps_size) {
-		mconfig->formats_config[idx].set_params = dfw->caps.set_params;
-		mconfig->formats_config[idx].param_id = dfw->caps.param_id;
-		mconfig->formats_config[idx].caps =
-		devm_kzalloc(dev, mconfig->formats_config[idx].caps_size,
-			     GFP_KERNEL);
-		if (!mconfig->formats_config[idx].caps)
-			return -ENOMEM;
-		memcpy(mconfig->formats_config[idx].caps, dfw->caps.caps,
-		       dfw->caps.caps_size);
-	}
-
-	return 0;
-}
-
 static int skl_tplg_get_caps_data(struct device *dev, char *data,
 				  struct skl_module_cfg *mconfig)
 {
@@ -2913,13 +2715,6 @@ static int skl_tplg_get_pvt_data(struct snd_soc_tplg_dapm_widget *tplg_w,
 	char *data;
 	int ret;
 
-	/*
-	 * v4 configuration files have a valid UUID at the start of
-	 * the widget's private data.
-	 */
-	if (uuid_is_valid((char *)tplg_w->priv.data))
-		return skl_tplg_get_pvt_data_v4(tplg_w, skl, dev, mconfig);
-
 	/* Read the NUM_DATA_BLOCKS descriptor */
 	array = (struct snd_soc_tplg_vendor_array *)tplg_w->priv.data;
 	ret = skl_tplg_get_desc_blocks(dev, array);
@@ -2949,9 +2744,6 @@ static int skl_tplg_get_pvt_data(struct snd_soc_tplg_dapm_widget *tplg_w,
 			return ret;
 		block_size = ret;
 		off += array->size;
-
-		array = (struct snd_soc_tplg_vendor_array *)
-			(tplg_w->priv.data + off);
 
 		data = (tplg_w->priv.data + off);
 
@@ -3006,7 +2798,7 @@ void skl_cleanup_resources(struct skl_dev *skl)
 		return;
 
 	card = soc_component->card;
-	if (!card || !card->instantiated)
+	if (!snd_soc_card_is_instantiated(card))
 		return;
 
 	list_for_each_entry(w, &card->widgets, list) {
@@ -3598,9 +3390,6 @@ static int skl_tplg_get_manifest_data(struct snd_soc_tplg_manifest *manifest,
 			return ret;
 		block_size = ret;
 		off += array->size;
-
-		array = (struct snd_soc_tplg_vendor_array *)
-			(manifest->priv.data + off);
 
 		data = (manifest->priv.data + off);
 

@@ -1,7 +1,6 @@
 ############################################################################
 
 ifeq ($(ROOTDIR)/boot,$(wildcard $(ROOTDIR)/boot))
-BOOT_CROSS_COMPILE = arm-linux-musleabi-20191126-
 VENDOR_TOPDIRS = boot
 endif
 
@@ -14,10 +13,18 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
 RELFILES = $(IMAGEDIR)/* \
 	   prop/config/schema/accns.schema \
-	   prop/config/cc_acl/app/runt/FE00000A*
+	   prop/config/edp-rust-client/descriptors/runt/FE00000A*
 
 ############################################################################
 
 include $(ROOTDIR)/vendors/config/arm64/config.arch
 
 ############################################################################
+
+# EX50's bootloader is arm32, while rest of system is arm64
+ifndef BOOT_CROSS_COMPILE
+  BOOT_CROSS_COMPILE = $(CROSS_COMPILE:aarch64-%=arm-%)
+  ifeq ($(shell which $(BOOT_CROSS_COMPILE)gcc),)
+    BOOT_CROSS_COMPILE := arm-linux-musleabi-20220202-
+  endif
+endif

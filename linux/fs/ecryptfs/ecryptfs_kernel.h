@@ -506,7 +506,7 @@ ecryptfs_dentry_to_lower(struct dentry *dentry)
 	return ((struct ecryptfs_dentry_info *)dentry->d_fsdata)->lower_path.dentry;
 }
 
-static inline struct path *
+static inline const struct path *
 ecryptfs_dentry_to_lower_path(struct dentry *dentry)
 {
 	return &((struct ecryptfs_dentry_info *)dentry->d_fsdata)->lower_path;
@@ -702,6 +702,6 @@ int ecryptfs_set_f_namelen(long *namelen, long lower_namelen,
 int ecryptfs_derive_iv(char *iv, struct ecryptfs_crypt_stat *crypt_stat,
 		       loff_t offset);
 
-extern const struct xattr_handler *ecryptfs_xattr_handlers[];
+extern const struct xattr_handler * const ecryptfs_xattr_handlers[];
 
 #endif /* #ifndef ECRYPTFS_KERNEL_H */

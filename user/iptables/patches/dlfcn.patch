@@ -1,13 +1,13 @@
 diff -Nurd iptables.orig-1.8.3/iptables/Makefile.am iptables-1.8.3/iptables/Makefile.am
 --- iptables.orig-1.8.3/iptables/Makefile.am	2019-05-30 11:58:09.389798031 +1000
 +++ iptables-1.8.3/iptables/Makefile.am	2019-05-30 11:58:09.489798790 +1000
-@@ -15,6 +15,9 @@
- if ENABLE_STATIC
- xtables_legacy_multi_CFLAGS  += -DALL_INCLUSIVE
- endif
+@@ -20,6 +20,9 @@
+ 				iptables-restore.c iptables-save.c
+ xtables_legacy_multi_CFLAGS   = ${common_cflags}
+ xtables_legacy_multi_LDADD    = ${common_ldadd}
 +if !ENABLE_SHARED
 +xtables_legacy_multi_CFLAGS  += -DNO_SHARED_LIBS=1
 +endif
  if ENABLE_IPV4
- xtables_legacy_multi_SOURCES += iptables-standalone.c iptables.c
+ xtables_legacy_multi_SOURCES += iptables-standalone.c iptables.c iptables-multi.h
  xtables_legacy_multi_CFLAGS  += -DENABLE_IPV4

@@ -982,7 +982,6 @@ static int mt9t112_set_fmt(struct v4l2_subdev *sd,
 
 	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE)
 		return mt9t112_s_fmt(sd, mf);
-	sd_state->pads->try_fmt = *mf;
 
 	return 0;
 }
@@ -1060,8 +1059,7 @@ done:
 	return ret;
 }
 
-static int mt9t112_probe(struct i2c_client *client,
-			 const struct i2c_device_id *did)
+static int mt9t112_probe(struct i2c_client *client)
 {
 	struct mt9t112_priv *priv;
 	int ret;
@@ -1102,14 +1100,12 @@ static int mt9t112_probe(struct i2c_client *client,
 	return v4l2_async_register_subdev(&priv->subdev);
 }
 
-static int mt9t112_remove(struct i2c_client *client)
+static void mt9t112_remove(struct i2c_client *client)
 {
 	struct mt9t112_priv *priv = to_mt9t112(client);
 
 	clk_disable_unprepare(priv->clk);
 	v4l2_async_unregister_subdev(&priv->subdev);
-
-	return 0;
 }
 
 static const struct i2c_device_id mt9t112_id[] = {

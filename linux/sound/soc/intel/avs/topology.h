@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright(c) 2021 Intel Corporation. All rights reserved.
+ * Copyright(c) 2021 Intel Corporation
  *
  * Authors: Cezary Rojewski <cezary.rojewski@intel.com>
  *          Amadeusz Slawinski <amadeuszx.slawinski@linux.intel.com>
@@ -33,6 +33,9 @@ struct avs_tplg {
 	u32 num_pplcfgs;
 	struct avs_tplg_binding *bindings;
 	u32 num_bindings;
+	u32 num_condpath_tmpls;
+	struct avs_tplg_init_config *init_configs;
+	u32 num_init_configs;
 
 	struct list_head path_tmpl_list;
 };
@@ -138,11 +141,21 @@ struct avs_tplg_path_template_id {
 struct avs_tplg_path_template {
 	u32 id;
 
+	struct snd_soc_dapm_widget *w;
+
 	struct list_head path_list;
 
 	struct avs_tplg *owner;
 	/* Driver path templates management. */
 	struct list_head node;
+};
+
+struct avs_tplg_init_config {
+	u32 id;
+
+	u8 param;
+	size_t length;
+	void *data;
 };
 
 struct avs_tplg_path {
@@ -180,6 +193,9 @@ struct avs_tplg_module {
 	u8 core_id;
 	u8 domain;
 	struct avs_tplg_modcfg_ext *cfg_ext;
+	u32 ctl_id;
+	u32 num_config_ids;
+	u32 *config_ids;
 
 	struct avs_tplg_pipeline *owner;
 	/* Pipeline modules management. */

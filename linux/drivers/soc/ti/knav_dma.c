@@ -1,17 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2014 Texas Instruments Incorporated
  * Authors:	Santosh Shilimkar <santosh.shilimkar@ti.com>
  *		Sandeep Nair <sandeep_n@ti.com>
  *		Cyril Chemparathy <cyril@ti.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/io.h>
@@ -674,8 +666,8 @@ static int dma_init(struct device_node *cloud, struct device_node *dma_node)
 	dma->rx_priority = DMA_PRIO_DEFAULT;
 	dma->tx_priority = DMA_PRIO_DEFAULT;
 
-	dma->enable_all	= (of_get_property(node, "ti,enable-all", NULL) != NULL);
-	dma->loopback	= (of_get_property(node, "ti,loop-back",  NULL) != NULL);
+	dma->enable_all	= of_property_read_bool(node, "ti,enable-all");
+	dma->loopback	= of_property_read_bool(node, "ti,loop-back");
 
 	ret = of_property_read_u32(node, "ti,rx-retry-timeout", &timeout);
 	if (ret < 0) {
@@ -781,7 +773,7 @@ err_pm_disable:
 	return ret;
 }
 
-static int knav_dma_remove(struct platform_device *pdev)
+static void knav_dma_remove(struct platform_device *pdev)
 {
 	struct knav_dma_device *dma;
 
@@ -792,8 +784,6 @@ static int knav_dma_remove(struct platform_device *pdev)
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	return 0;
 }
 
 static struct of_device_id of_match[] = {
@@ -805,7 +795,7 @@ MODULE_DEVICE_TABLE(of, of_match);
 
 static struct platform_driver knav_dma_driver = {
 	.probe	= knav_dma_probe,
-	.remove	= knav_dma_remove,
+	.remove_new = knav_dma_remove,
 	.driver = {
 		.name		= "keystone-navigator-dma",
 		.of_match_table	= of_match,

@@ -1,5 +1,7 @@
-URL      = git://nbd.name/uqmi.git
-VERSION  = b61b3e8ff2b29e08b53eabc7b813c1c87c734947
+URL      = https://git.openwrt.org/project/uqmi.git
+VERSION  = e7207bec95f02f2f7a98254d642186a082af838d
 METHOD   = git
+
+export ACL_LICENSE = GPLv2
 
 include $(ROOTDIR)/tools/cmake.inc

@@ -57,6 +57,7 @@
 #include "nf_internals.h"
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("List and change connection tracking table");
 
 struct ctnetlink_list_dump_ctx {
 	struct nf_conn *last;
@@ -176,7 +177,12 @@ nla_put_failure:
 static int ctnetlink_dump_timeout(struct sk_buff *skb, const struct nf_conn *ct,
 				  bool skip_zero)
 {
-	long timeout = nf_ct_expires(ct) / HZ;
+	long timeout;
+
+	if (nf_ct_is_confirmed(ct))
+		timeout = nf_ct_expires(ct) / HZ;
+	else
+		timeout = ct->timeout / HZ;
 
 	if (skip_zero && timeout == 0)
 		return 0;
@@ -328,9 +334,15 @@ nla_put_failure:
 }
 
 #ifdef CONFIG_NF_CONNTRACK_MARK
-static int ctnetlink_dump_mark(struct sk_buff *skb, const struct nf_conn *ct)
+static int ctnetlink_dump_mark(struct sk_buff *skb, const struct nf_conn *ct,
+			       bool dump)
 {
-	if (nla_put_be32(skb, CTA_MARK, htonl(ct->mark)))
+	u32 mark = READ_ONCE(ct->mark);
+
+	if (!mark && !dump)
+		return 0;
+
+	if (nla_put_be32(skb, CTA_MARK, htonl(mark)))
 		goto nla_put_failure;
 	return 0;
 
@@ -338,7 +350,7 @@ nla_put_failure:
 	return -1;
 }
 #else
-#define ctnetlink_dump_mark(a, b) (0)
+#define ctnetlink_dump_mark(a, b, c) (0)
 #endif
 
 #ifdef CONFIG_NF_CONNTRACK_SECMARK
@@ -543,7 +555,7 @@ static int ctnetlink_dump_extinfo(struct sk_buff *skb,
 static int ctnetlink_dump_info(struct sk_buff *skb, struct nf_conn *ct)
 {
 	if (ctnetlink_dump_status(skb, ct) < 0 ||
-	    ctnetlink_dump_mark(skb, ct) < 0 ||
+	    ctnetlink_dump_mark(skb, ct, true) < 0 ||
 	    ctnetlink_dump_secctx(skb, ct) < 0 ||
 	    ctnetlink_dump_id(skb, ct) < 0 ||
 	    ctnetlink_dump_use(skb, ct) < 0 ||
@@ -826,8 +838,7 @@ ctnetlink_conntrack_event(unsigned int events, const struct nf_ct_event *item)
 	}
 
 #ifdef CONFIG_NF_CONNTRACK_MARK
-	if ((events & (1 << IPCT_MARK) || ct->mark)
-	    && ctnetlink_dump_mark(skb, ct) < 0)
+	if (ctnetlink_dump_mark(skb, ct, events & (1 << IPCT_MARK)))
 		goto nla_put_failure;
 #endif
 	nlmsg_end(skb, nlh);
@@ -865,6 +876,7 @@ struct ctnetlink_filter_u32 {
 
 struct ctnetlink_filter {
 	u8 family;
+	bool zone_filter;
 
 	u_int32_t orig_flags;
 	u_int32_t reply_flags;
@@ -981,12 +993,15 @@ ctnetlink_alloc_filter(const struct nlattr * const cda[], u8 family)
 	if (err)
 		goto err_filter;
 
+	if (cda[CTA_ZONE]) {
+		err = ctnetlink_parse_zone(cda[CTA_ZONE], &filter->zone);
+		if (err < 0)
+			goto err_filter;
+		filter->zone_filter = true;
+	}
+
 	if (!cda[CTA_FILTER])
 		return filter;
-
-	err = ctnetlink_parse_zone(cda[CTA_ZONE], &filter->zone);
-	if (err < 0)
-		goto err_filter;
 
 	err = ctnetlink_parse_filter(cda[CTA_FILTER], filter);
 	if (err < 0)
@@ -1032,7 +1047,7 @@ err_filter:
 
 static bool ctnetlink_needs_filter(u8 family, const struct nlattr * const *cda)
 {
-	return family || cda[CTA_MARK] || cda[CTA_FILTER] || cda[CTA_STATUS];
+	return family || cda[CTA_MARK] || cda[CTA_FILTER] || cda[CTA_STATUS] || cda[CTA_ZONE];
 }
 
 static int ctnetlink_start(struct netlink_callback *cb)
@@ -1137,6 +1152,10 @@ static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 	if (filter->family && nf_ct_l3num(ct) != filter->family)
 		goto ignore_entry;
 
+	if (filter->zone_filter &&
+	    !nf_ct_zone_equal_any(ct, &filter->zone))
+		goto ignore_entry;
+
 	if (filter->orig_flags) {
 		tuple = nf_ct_tuple(ct, IP_CT_DIR_ORIGINAL);
 		if (!ctnetlink_filter_match_tuple(&filter->orig, tuple,
@@ -1154,7 +1173,7 @@ static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 	}
 
 #ifdef CONFIG_NF_CONNTRACK_MARK
-	if ((ct->mark & filter->mark.mask) != filter->mark.val)
+	if ((READ_ONCE(ct->mark) & filter->mark.mask) != filter->mark.val)
 		goto ignore_entry;
 #endif
 	status = (u32)READ_ONCE(ct->status);
@@ -1311,13 +1330,9 @@ static int ctnetlink_parse_tuple_ip(struct nlattr *attr,
 	struct nlattr *tb[CTA_IP_MAX+1];
 	int ret = 0;
 
-	ret = nla_parse_nested_deprecated(tb, CTA_IP_MAX, attr, NULL, NULL);
+	ret = nla_parse_nested_deprecated(tb, CTA_IP_MAX, attr,
+					  cta_ip_nla_policy, NULL);
 	if (ret < 0)
-		return ret;
-
-	ret = nla_validate_nested_deprecated(attr, CTA_IP_MAX,
-					     cta_ip_nla_policy, NULL);
-	if (ret)
 		return ret;
 
 	switch (tuple->src.l3num) {
@@ -1549,9 +1564,6 @@ static const struct nla_policy ct_nla_policy[CTA_MAX+1] = {
 
 static int ctnetlink_flush_iterate(struct nf_conn *ct, void *data)
 {
-	if (test_bit(IPS_OFFLOAD_BIT, &ct->status))
-		return 0;
-
 	return ctnetlink_filter_match(ct, data);
 }
 
@@ -1620,11 +1632,6 @@ static int ctnetlink_del_conntrack(struct sk_buff *skb,
 		return -ENOENT;
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
-
-	if (test_bit(IPS_OFFLOAD_BIT, &ct->status)) {
-		nf_ct_put(ct);
-		return -EBUSY;
-	}
 
 	if (cda[CTA_ID]) {
 		__be32 id = nla_get_be32(cda[CTA_ID]);
@@ -1891,45 +1898,10 @@ ctnetlink_parse_nat_setup(struct nf_conn *ct,
 }
 #endif
 
-static void
-__ctnetlink_change_status(struct nf_conn *ct, unsigned long on,
-			  unsigned long off)
-{
-	unsigned int bit;
-
-	/* Ignore these unchangable bits */
-	on &= ~IPS_UNCHANGEABLE_MASK;
-	off &= ~IPS_UNCHANGEABLE_MASK;
-
-	for (bit = 0; bit < __IPS_MAX_BIT; bit++) {
-		if (on & (1 << bit))
-			set_bit(bit, &ct->status);
-		else if (off & (1 << bit))
-			clear_bit(bit, &ct->status);
-	}
-}
-
 static int
 ctnetlink_change_status(struct nf_conn *ct, const struct nlattr * const cda[])
 {
-	unsigned long d;
-	unsigned int status = ntohl(nla_get_be32(cda[CTA_STATUS]));
-	d = ct->status ^ status;
-
-	if (d & (IPS_EXPECTED|IPS_CONFIRMED|IPS_DYING))
-		/* unchangeable */
-		return -EBUSY;
-
-	if (d & IPS_SEEN_REPLY && !(status & IPS_SEEN_REPLY))
-		/* SEEN_REPLY bit can only be set */
-		return -EBUSY;
-
-	if (d & IPS_ASSURED && !(status & IPS_ASSURED))
-		/* ASSURED bit can only be set */
-		return -EBUSY;
-
-	__ctnetlink_change_status(ct, status, 0);
-	return 0;
+	return nf_ct_change_status_common(ct, ntohl(nla_get_be32(cda[CTA_STATUS])));
 }
 
 static int
@@ -2005,7 +1977,7 @@ static int ctnetlink_change_helper(struct nf_conn *ct,
 	}
 
 	if (help) {
-		if (help->helper == helper) {
+		if (rcu_access_pointer(help->helper) == helper) {
 			/* update private helper data if allowed. */
 			if (helper->from_nlattr)
 				helper->from_nlattr(helpinfo, ct);
@@ -2024,16 +1996,7 @@ static int ctnetlink_change_helper(struct nf_conn *ct,
 static int ctnetlink_change_timeout(struct nf_conn *ct,
 				    const struct nlattr * const cda[])
 {
-	u64 timeout = (u64)ntohl(nla_get_be32(cda[CTA_TIMEOUT])) * HZ;
-
-	if (timeout > INT_MAX)
-		timeout = INT_MAX;
-	WRITE_ONCE(ct->timeout, nfct_time_stamp + (u32)timeout);
-
-	if (test_bit(IPS_DYING_BIT, &ct->status))
-		return -ETIME;
-
-	return 0;
+	return __nf_ct_change_timeout(ct, (u64)ntohl(nla_get_be32(cda[CTA_TIMEOUT])) * HZ);
 }
 
 #if defined(CONFIG_NF_CONNTRACK_MARK)
@@ -2046,9 +2009,9 @@ static void ctnetlink_change_mark(struct nf_conn *ct,
 		mask = ~ntohl(nla_get_be32(cda[CTA_MARK_MASK]));
 
 	mark = ntohl(nla_get_be32(cda[CTA_MARK]));
-	newmark = (ct->mark & mask) ^ mark;
-	if (newmark != ct->mark)
-		ct->mark = newmark;
+	newmark = (READ_ONCE(ct->mark) & mask) ^ mark;
+	if (newmark != READ_ONCE(ct->mark))
+		WRITE_ONCE(ct->mark, newmark);
 }
 #endif
 
@@ -2292,11 +2255,6 @@ ctnetlink_create_conntrack(struct net *net,
 	if (!cda[CTA_TIMEOUT])
 		goto err1;
 
-	timeout = (u64)ntohl(nla_get_be32(cda[CTA_TIMEOUT])) * HZ;
-	if (timeout > INT_MAX)
-		timeout = INT_MAX;
-	ct->timeout = (u32)timeout + nfct_time_stamp;
-
 	rcu_read_lock();
  	if (cda[CTA_HELP]) {
 		char *helpname = NULL;
@@ -2344,11 +2302,6 @@ ctnetlink_create_conntrack(struct net *net,
 			ct->status |= IPS_HELPER;
 			RCU_INIT_POINTER(help->helper, helper);
 		}
-	} else {
-		/* try an implicit helper assignation */
-		err = __nf_ct_try_assign_helper(ct, NULL, GFP_ATOMIC);
-		if (err < 0)
-			goto err2;
 	}
 
 	err = ctnetlink_setup_nat(ct, cda);
@@ -2364,6 +2317,9 @@ ctnetlink_create_conntrack(struct net *net,
 
 	/* we must add conntrack extensions before confirmation. */
 	ct->status |= IPS_CONFIRMED;
+
+	timeout = (u64)ntohl(nla_get_be32(cda[CTA_TIMEOUT])) * HZ;
+	__nf_ct_set_timeout(ct, timeout);
 
 	if (cda[CTA_STATUS]) {
 		err = ctnetlink_change_status(ct, cda);
@@ -2421,12 +2377,15 @@ ctnetlink_create_conntrack(struct net *net,
 
 	err = nf_conntrack_hash_check_insert(ct);
 	if (err < 0)
-		goto err2;
+		goto err3;
 
 	rcu_read_unlock();
 
 	return ct;
 
+err3:
+	if (ct->master)
+		nf_ct_put(ct->master);
 err2:
 	rcu_read_unlock();
 err1:
@@ -2781,7 +2740,7 @@ static int __ctnetlink_glue_build(struct sk_buff *skb, struct nf_conn *ct)
 		goto nla_put_failure;
 
 #ifdef CONFIG_NF_CONNTRACK_MARK
-	if (ct->mark && ctnetlink_dump_mark(skb, ct) < 0)
+	if (ctnetlink_dump_mark(skb, ct, true) < 0)
 		goto nla_put_failure;
 #endif
 	if (ctnetlink_dump_labels(skb, ct) < 0)
@@ -2837,7 +2796,7 @@ ctnetlink_update_status(struct nf_conn *ct, const struct nlattr * const cda[])
 	 * unchangeable bits but do not error out. Also user programs
 	 * are allowed to clear the bits that they are allowed to change.
 	 */
-	__ctnetlink_change_status(ct, status, ~status);
+	__nf_ct_change_status(ct, status, ~status);
 	return 0;
 }
 
@@ -3022,7 +2981,9 @@ nla_put_failure:
 	return -1;
 }
 
+#if IS_ENABLED(CONFIG_NF_NAT)
 static const union nf_inet_addr any_addr;
+#endif
 
 static __be32 nf_expect_get_id(const struct nf_conntrack_expect *exp)
 {
@@ -3413,12 +3374,17 @@ static int ctnetlink_get_expect(struct sk_buff *skb,
 
 static bool expect_iter_name(struct nf_conntrack_expect *exp, void *data)
 {
+	struct nf_conntrack_helper *helper;
 	const struct nf_conn_help *m_help;
 	const char *name = data;
 
 	m_help = nfct_help(exp->master);
 
-	return strcmp(m_help->helper->name, name) == 0;
+	helper = rcu_dereference(m_help->helper);
+	if (!helper)
+		return false;
+
+	return strcmp(helper->name, name) == 0;
 }
 
 static bool expect_iter_all(struct nf_conntrack_expect *exp, void *data)
@@ -3501,10 +3467,12 @@ ctnetlink_change_expect(struct nf_conntrack_expect *x,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_NF_NAT)
 static const struct nla_policy exp_nat_nla_policy[CTA_EXPECT_NAT_MAX+1] = {
 	[CTA_EXPECT_NAT_DIR]	= { .type = NLA_U32 },
 	[CTA_EXPECT_NAT_TUPLE]	= { .type = NLA_NESTED },
 };
+#endif
 
 static int
 ctnetlink_parse_expect_nat(const struct nlattr *attr,
@@ -3934,7 +3902,7 @@ static int __init ctnetlink_init(void)
 {
 	int ret;
 
-	BUILD_BUG_ON(sizeof(struct ctnetlink_list_dump_ctx) > sizeof_field(struct netlink_callback, ctx));
+	NL_ASSERT_DUMP_CTX_FITS(struct ctnetlink_list_dump_ctx);
 
 	ret = nfnetlink_subsys_register(&ctnl_subsys);
 	if (ret < 0) {

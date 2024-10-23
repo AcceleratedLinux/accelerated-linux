@@ -1,0 +1,2 @@
+config LIB_MBEDTLS
+	bool "mbedtls"

@@ -237,7 +237,7 @@ static int hisi_spi_nor_dma_transfer(struct spi_nor *nor, loff_t start_off,
 	reg = readl(host->regbase + FMC_CFG);
 	reg &= ~(FMC_CFG_OP_MODE_MASK | SPI_NOR_ADDR_MODE_MASK);
 	reg |= FMC_CFG_OP_MODE_NORMAL;
-	reg |= (nor->addr_width == 4) ? SPI_NOR_ADDR_MODE_4BYTES
+	reg |= (nor->addr_nbytes == 4) ? SPI_NOR_ADDR_MODE_4BYTES
 		: SPI_NOR_ADDR_MODE_3BYTES;
 	writel(reg, host->regbase + FMC_CFG);
 
@@ -468,13 +468,12 @@ static int hisi_spi_nor_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int hisi_spi_nor_remove(struct platform_device *pdev)
+static void hisi_spi_nor_remove(struct platform_device *pdev)
 {
 	struct hifmc_host *host = platform_get_drvdata(pdev);
 
 	hisi_spi_nor_unregister_all(host);
 	mutex_destroy(&host->lock);
-	return 0;
 }
 
 static const struct of_device_id hisi_spi_nor_dt_ids[] = {
@@ -489,7 +488,7 @@ static struct platform_driver hisi_spi_nor_driver = {
 		.of_match_table = hisi_spi_nor_dt_ids,
 	},
 	.probe	= hisi_spi_nor_probe,
-	.remove	= hisi_spi_nor_remove,
+	.remove_new = hisi_spi_nor_remove,
 };
 module_platform_driver(hisi_spi_nor_driver);
 

@@ -1,5 +1,5 @@
 URL      = https://git.openwrt.org/project/libubox.git
-VERSION  = c83a84afbef2b24f960ddeda0b5e2ab01fba6981
+VERSION   = d2223ef9da7172a84d1508733dc58840e1381e3c
 METHOD   = git
 CMAKE_OPTS = -DBUILD_LUA=0
 

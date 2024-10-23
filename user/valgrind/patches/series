@@ -1,2 +1,3 @@
 helgrind-musl.patch
 configure-arm.patch
+valgrind-diserver-path.patch

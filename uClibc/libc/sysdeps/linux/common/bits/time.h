@@ -60,6 +60,15 @@
 #   define CLOCK_REALTIME_COARSE	5
 /* Monotonic system-wide clock, updated only on ticks.  */
 #   define CLOCK_MONOTONIC_COARSE	6
+/* Monotonic system-wide clock that includes time spent in suspension.  */
+#   define CLOCK_BOOTTIME		7
+/* Like CLOCK_REALTIME but also wakes suspended system.  */
+#   define CLOCK_REALTIME_ALARM		8
+/* Like CLOCK_BOOTTIME but also wakes suspended system.  */
+#   define CLOCK_BOOTTIME_ALARM		9
+/* Like CLOCK_REALTIME but in International Atomic Time.  */
+# define CLOCK_TAI			11
+
 
 /* Flag to indicate time is absolute.  */
 #   define TIMER_ABSTIME		1

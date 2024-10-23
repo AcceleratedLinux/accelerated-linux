@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2011-2017 Qualcomm Atheros, Inc.
  * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "coredump.h"
@@ -531,7 +532,7 @@ static const struct ath10k_mem_section qca6174_hw30_sdio_register_sections[] = {
 
 	{0x40000, 0x400A4},
 
-	/* SI register is skiped here.
+	/* SI register is skipped here.
 	 * Because it will cause bus hang
 	 *
 	 * {0x50000, 0x50018},

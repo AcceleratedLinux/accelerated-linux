@@ -46,7 +46,7 @@ echo " - Modem index: ${MODEM_INDEX}"
 
 # Wait until modem is fully connected.
 echo "Waiting for modem connection..."
-while [ "$(runt get mm.modem.${MODEM_INDEX}.status.state)" != "connected" ]; do
+while [ "$(runt get mm.modem.modem.status.state)" != "connected" ]; do
         sleep 1
 done
 

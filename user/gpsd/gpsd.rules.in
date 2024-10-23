@@ -1,4 +1,5 @@
 # udev rules for gpsd
+# @GENERATED@
 #
 # This file is Copyright (c) 2010 by the GPSD project
 # Copyright (c) 2020 Digi International Inc.
@@ -23,14 +24,14 @@
 SUBSYSTEM!="tty", GOTO="gpsd_rules_end"
 
 # u-blox AG, u-blox 5 (tested with Navilock NL-402U) [linux module: cdc_acm]
-ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a5", SYMLINK+="gps%n", @udevcommand@
+ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a5", SYMLINK+="gps%n", @UDEVCOMMAND@
 # u-blox AG, u-blox 6 (tested with GNSS Evaluation Kit TCXO) [linux module: cdc_acm]
-ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a6", SYMLINK+="gps%n", @udevcommand@
+ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a6", SYMLINK+="gps%n", @UDEVCOMMAND@
 # u-blox AG, u-blox 7 [linux module: cdc_acm]
-ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", SYMLINK+="gps%n", @udevcommand@
+ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", SYMLINK+="gps%n", @UDEVCOMMAND@
 # u-blox AG, u-blox 8 (tested with GNSS Evaluation Kit EKV-M8N) [linux module: cdc_acm]
-ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a8", SYMLINK+="gps%n", @udevcommand@
+ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a8", SYMLINK+="gps%n", @UDEVCOMMAND@
 
-ACTION=="remove", @udevcommand@
+ACTION=="remove", @UDEVCOMMAND@
 
 LABEL="gpsd_rules_end"

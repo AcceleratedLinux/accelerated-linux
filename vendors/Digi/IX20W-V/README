@@ -1,0 +1,178 @@
+
+IX20W-V
+-----
+
+The IX20W-V has no external USB ports, there is a 3 pin header that may not be
+fitted on production PCBA's. CON16
+
+To carry out a USB recovery load you would normally need to jumper the
+header that enables USB load. If the nand flash is currently
+empty then the Freescale iMX6 CPU will automatically fall back to the USB
+recovery load mode (no header jumping required).
+Otherwise jump pins 2 & 3 on CON11. (R60 must not be present)
+
+To load a boot loader through the USB you need Freescales "imx_usb" tool
+installed on your Linux PC development system.
+
+Power up the IX20W-V with the USB connected to your Linux PC. Note the USB cable
+you need is differnt to the one we use on the 6310-DX and ConnectIT4, rx and tx
+have swapped. Check that the USB load device was detected properly:
+
+  lsusb | grep -i freescale
+
+It should report back with something similar to this if found:
+
+  Bus 003 Device 011: ID 15a2:0080 Freescale Semiconductor, Inc.
+
+The USB load process is straight forward from a compiled tree:
+
+  imx_usb -v boot/build/uboot-imx/u-boot.imx
+
+You may need to run it as root.
+
+If the unit is in production-mode and manufactured, the normal bootloader is
+quiet, so you will not see anything on the console until Linux has booted.
+
+You can make the U-Boot output trace by making the following change in
+/boot/u-boot/include/configs/ix20.h:
+
+  +#define CONFIG_DEVELOP
+   #include <configs/digi_common.h>
+
+Within a few seconds the usual u-boot boot up messages should come out of
+the serial console port of the IX20W-V.
+
+FLASH PROGAMMING u-boot
+-----------------------
+
+The process to flash the u-boot loader into flash memory is a little
+different than other Accelerated/Digi boards. This is due to the unusual
+flash and ECC layout used by Freescale's internal iMX6 CPU boot loader.
+
+The process is now essentially a 2 step process from an IX20W-V shell login:
+
+  netflash -iknb -R /tmp/u-boot.imx 192.168.0.22 u-boot.imx
+  kobs-ng init -v -x /tmp/u-boot.imx
+
+You cannot directly netflash the u-boot binary.
+
+***WARNING***
+The production u-boot image has been HAB signed, allowing the secure
+boot functionality to be used. If the SRK and secure boot fuses have
+been burnt, then only images which have been encrypted using the same
+keys as burnt to the fuses will be allowed to run. If an incorrect
+u-boot is uploaded, then the unit will be *unrecoverable* via software.
+The only way to recover the unit is to desolder the NAND chip and
+program it with the correctly signed ECC image.
+
+FACTORY FLASH
+-------------
+
+The factory pre-program flash image file is not automatially generated as
+part of the firmware compilation. Due to the unusual layout and ECC required
+it must be read from flash after installed onto an IX20W-V. Even worse is that
+you cannot read the raw NAND flash contents from Linux itself - you need to
+read it from u-boot. You could also read the nand flash in the beeprog reader.
+The following process reads the nand from u-boot:
+
+So to generate the factory boot loader file run the following command from
+the u-boot command line on an IX20W-V which has had the boot loader required
+already flashed into the boot partition:
+
+  nand read.raw 0x81000000 0 0xa00
+  md.b 0x81000000 0x00528000
+
+You will need to capture the serial output on your development server.
+It will take quite a few minutes (at least 20+) to dump out the boot loader
+flash contents.
+
+On your Linux development server you now need to take that capture serial
+console output and turn it into the pre-program binary file. First edit
+the captured serial output to remove any lines not part of the hexdump.
+Modify the address to start the dump addresses from 0x00000000 (in "vim"
+you can use a command like "1,$s/
+81/00/g"). The use the xxd tool to
+convert it to a binary file.
+
+  xxd -r < console-output > u-boot-with-ecc.bin
+
+Note that you must use a device with a NAND flash that has no Bad Blocks
+within the boot loader flash partition (which is the first 5MB of flash).
+The factory based programmer will rely on a boot loader image that has a
+pristine in-flash boot loader section. Bad Blocks will force a different
+layout - and that will break real device booting on any other flash device.
+
+You can check for location of bad blocks during the kernel boot on the
+IX20W-V device. Look for the NAND flash discovery messages during boot and it
+will list the Bad Block locations:
+
+  nand: device found, Manufacturer ID: 0x2c, Chip ID: 0xda
+  nand: Micron MT29F2G08ABAEAWP
+  nand: 256 MiB, SLC, erase size: 128 KiB, page size: 2048, OOB size: 64
+  gpmi-nand 1806000.gpmi-nand: enable the asynchronous EDO mode 5
+  Scanning device for bad blocks
+  Bad eraseblock 81 at 0x000000a20000
+  Bad eraseblock 146 at 0x000001240000
+  Bad eraseblock 2044 at 0x00000ff80000
+  5 ofpart partitions found on MTD device gpmi-nand
+  Creating 5 MTD partitions on "gpmi-nand":
+  0x000000000000-0x000000500000 : "u-boot"
+  0x000000500000-0x000000600000 : "u-boot-env"
+  0x000000600000-0x000000800000 : "log"
+  0x000000800000-0x000010000000 : "flash"
+  0x000000000000-0x000010000000 : "all"
+  gpmi-nand 1806000.gpmi-nand: driver registered.
+
+
+CERTIFICATION TESTING
+---------------------
+
+For lab certification testing of the Wi-Fi hardware module it may be
+necessary to use the Qualcomm/Atheros qcacld driver instead of the mainline
+ath10k Wi-Fi driver that we use in the shipping product.
+
+To do that you will need to enable a number of extra switches and flags at
+configure and compile time.
+
+Specifically in the kernel you need to enable:
+
+    CONFIG_SUSPEND=y
+    CONFIG_SUSPEND_FREEZER=y
+    CONFIG_PM_SLEEP=y
+    CONFIG_PM=y
+    CONFIG_BLK_PM=y
+    CONFIG_FREEZER=y
+    CONFIG_NL80211_TESTMODE=y
+    CONFIG_FW_CACHE=y
+
+In the modules configuration you need to enable:
+
+    CONFIG_QCA_CLD_WLAN=y
+
+And in the user/vendor configuration you need to enable:
+
+    CONFIG_PROP_QCMBR_QCMBR=y
+    CONFIG_PROP_QCACLD_FIRMWARE=y
+
+That will build firmware capable of using the qcacld wlan driver.
+
+For actual testing you need to put the IX20 into emctest enabled mode:
+
+    fw_setenv emctest enabled
+
+And finally the tools need to be launched at boot time so that the
+Qualcomm Radio Control Tool (QRCT) program can talk to the WSD377 module
+on the IX20. The simplest method to do that is to modify the factory
+test script (vendors/AcceleratedConcepts/romfs/etc/factory) installed on
+the IX20 (before building firmware) and adding lines like this at about
+line 36:
+
+    if [ "$(fw_printenv emctest)" = "emctest=enabled" ] ; then
+           modprobe wlan con_mode=5
+           echo "qcmbr:unknown:/bin/Qcmbr" >> /var/run/inittab
+    fi
+
+When the IX20 boots now it will enter emctest mode with the Qcmbr test
+daemon running and ready to communicate with the QRCT testing tool over
+the WAN ethernet interface.
+

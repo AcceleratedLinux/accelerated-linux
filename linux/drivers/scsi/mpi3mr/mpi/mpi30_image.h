@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- *  Copyright 2018-2021 Broadcom Inc. All rights reserved.
- *
+ *  Copyright 2018-2023 Broadcom Inc. All rights reserved.
  */
 #ifndef MPI30_IMAGE_H
 #define MPI30_IMAGE_H     1
@@ -63,6 +62,9 @@ struct mpi3_component_image_header {
 #define MPI3_IMAGE_HEADER_SIGNATURE1_PBLP                     (0x504c4250)
 #define MPI3_IMAGE_HEADER_SIGNATURE1_MANIFEST                 (0x464e414d)
 #define MPI3_IMAGE_HEADER_SIGNATURE1_OEM                      (0x204d454f)
+#define MPI3_IMAGE_HEADER_SIGNATURE1_RMC                      (0x20434d52)
+#define MPI3_IMAGE_HEADER_SIGNATURE1_SMM                      (0x204d4d53)
+#define MPI3_IMAGE_HEADER_SIGNATURE1_PSW                      (0x20575350)
 #define MPI3_IMAGE_HEADER_SIGNATURE2_VALUE                    (0x50584546)
 #define MPI3_IMAGE_HEADER_FLAGS_DEVICE_KEY_BASIS_MASK         (0x00000030)
 #define MPI3_IMAGE_HEADER_FLAGS_DEVICE_KEY_BASIS_CDI          (0x00000000)
@@ -196,16 +198,17 @@ struct mpi3_supported_devices_data {
 	struct mpi3_supported_device   supported_device[MPI3_SUPPORTED_DEVICE_MAX];
 };
 
-#ifndef MPI3_ENCRYPTED_HASH_MAX
-#define MPI3_ENCRYPTED_HASH_MAX                      (1)
+#ifndef MPI3_PUBLIC_KEY_MAX
+#define MPI3_PUBLIC_KEY_MAX                      (1)
 #endif
 struct mpi3_encrypted_hash_entry {
 	u8                         hash_image_type;
 	u8                         hash_algorithm;
 	u8                         encryption_algorithm;
 	u8                         reserved03;
-	__le32                     reserved04;
-	__le32                     encrypted_hash[MPI3_ENCRYPTED_HASH_MAX];
+	__le16                     public_key_size;
+	__le16                     signature_size;
+	__le32                     public_key[MPI3_PUBLIC_KEY_MAX];
 };
 
 #define MPI3_HASH_IMAGE_TYPE_KEY_WITH_SIGNATURE      (0x03)
@@ -226,17 +229,6 @@ struct mpi3_encrypted_hash_entry {
 #define MPI3_ENCRYPTION_ALGORITHM_RSA2048            (0x04)
 #define MPI3_ENCRYPTION_ALGORITHM_RSA4096            (0x05)
 #define MPI3_ENCRYPTION_ALGORITHM_RSA3072            (0x06)
-#ifndef MPI3_PUBLIC_KEY_MAX
-#define MPI3_PUBLIC_KEY_MAX                          (1)
-#endif
-struct mpi3_encrypted_key_with_hash_entry {
-	u8                         hash_image_type;
-	u8                         hash_algorithm;
-	u8                         encryption_algorithm;
-	u8                         reserved03;
-	__le32                     reserved04;
-	__le32                     public_key[MPI3_PUBLIC_KEY_MAX];
-};
 
 #ifndef MPI3_ENCRYPTED_HASH_ENTRY_MAX
 #define MPI3_ENCRYPTED_HASH_ENTRY_MAX               (1)

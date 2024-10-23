@@ -1,0 +1,12 @@
+mmc dev 0
+setenv upasswd default
+setenv boot_state first
+setenv boot_id A
+setenv fdtfile bcm2837-rpi-3-b.dtb
+setenv boot_scripts norm.scr
+setenv bootargs "earlyprintk=ttyS1,115200 earlycon=uart8250,mmio32,0x3f215040 console=ttyS1,115200 root=/dev/mmcblk0p2 ro noinitrd rootfstype=squashfs rootwait mem=1000M loglevel=7"
+setenv bootcmd "run bootcmd_mmc0"
+fatload mmc 0:1 ${kernel_addr_r} zImageA
+fatload mmc 0:1 ${fdt_addr} ${fdtfile}
+saveenv
+bootz ${kernel_addr_r} - ${fdt_addr}

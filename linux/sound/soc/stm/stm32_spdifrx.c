@@ -856,6 +856,7 @@ static void stm32_spdifrx_shutdown(struct snd_pcm_substream *substream,
 }
 
 static const struct snd_soc_dai_ops stm32_spdifrx_pcm_dai_ops = {
+	.probe		= stm32_spdifrx_dai_probe,
 	.startup	= stm32_spdifrx_startup,
 	.hw_params	= stm32_spdifrx_hw_params,
 	.trigger	= stm32_spdifrx_trigger,
@@ -864,7 +865,6 @@ static const struct snd_soc_dai_ops stm32_spdifrx_pcm_dai_ops = {
 
 static struct snd_soc_dai_driver stm32_spdifrx_dai[] = {
 	{
-		.probe = stm32_spdifrx_dai_probe,
 		.capture = {
 			.stream_name = "CPU-Capture",
 			.channels_min = 1,
@@ -888,6 +888,7 @@ static const struct snd_pcm_hardware stm32_spdifrx_pcm_hw = {
 
 static const struct snd_soc_component_driver stm32_spdifrx_component = {
 	.name = "stm32-spdifrx",
+	.legacy_dai_naming = 1,
 };
 
 static const struct snd_dmaengine_pcm_config stm32_spdifrx_pcm_config = {
@@ -907,17 +908,13 @@ static int stm32_spdifrx_parse_of(struct platform_device *pdev,
 				  struct stm32_spdifrx_data *spdifrx)
 {
 	struct device_node *np = pdev->dev.of_node;
-	const struct of_device_id *of_id;
 	struct resource *res;
 
 	if (!np)
 		return -ENODEV;
 
-	of_id = of_match_device(stm32_spdifrx_ids, &pdev->dev);
-	if (of_id)
-		spdifrx->regmap_conf =
-			(const struct regmap_config *)of_id->data;
-	else
+	spdifrx->regmap_conf = device_get_match_data(&pdev->dev);
+	if (!spdifrx->regmap_conf)
 		return -EINVAL;
 
 	spdifrx->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
@@ -938,7 +935,7 @@ static int stm32_spdifrx_parse_of(struct platform_device *pdev,
 	return 0;
 }
 
-static int stm32_spdifrx_remove(struct platform_device *pdev)
+static void stm32_spdifrx_remove(struct platform_device *pdev)
 {
 	struct stm32_spdifrx_data *spdifrx = platform_get_drvdata(pdev);
 
@@ -951,8 +948,6 @@ static int stm32_spdifrx_remove(struct platform_device *pdev)
 	snd_dmaengine_pcm_unregister(&pdev->dev);
 	snd_soc_unregister_component(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	return 0;
 }
 
 static int stm32_spdifrx_probe(struct platform_device *pdev)
@@ -1001,8 +996,6 @@ static int stm32_spdifrx_probe(struct platform_device *pdev)
 	udelay(2);
 	reset_control_deassert(rst);
 
-	pm_runtime_enable(&pdev->dev);
-
 	pcm_config = &stm32_spdifrx_pcm_config;
 	ret = snd_dmaengine_pcm_register(&pdev->dev, pcm_config, 0);
 	if (ret)
@@ -1034,6 +1027,8 @@ static int stm32_spdifrx_probe(struct platform_device *pdev)
 			FIELD_GET(SPDIFRX_VERR_MAJ_MASK, ver),
 			FIELD_GET(SPDIFRX_VERR_MIN_MASK, ver));
 	}
+
+	pm_runtime_enable(&pdev->dev);
 
 	return ret;
 
@@ -1077,7 +1072,7 @@ static struct platform_driver stm32_spdifrx_driver = {
 		.pm = &stm32_spdifrx_pm_ops,
 	},
 	.probe = stm32_spdifrx_probe,
-	.remove = stm32_spdifrx_remove,
+	.remove_new = stm32_spdifrx_remove,
 };
 
 module_platform_driver(stm32_spdifrx_driver);

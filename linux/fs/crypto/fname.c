@@ -74,19 +74,14 @@ struct fscrypt_nokey_name {
 
 static inline bool fscrypt_is_dot_dotdot(const struct qstr *str)
 {
-	if (str->len == 1 && str->name[0] == '.')
-		return true;
-
-	if (str->len == 2 && str->name[0] == '.' && str->name[1] == '.')
-		return true;
-
-	return false;
+	return is_dot_dotdot(str->name, str->len);
 }
 
 /**
  * fscrypt_fname_encrypt() - encrypt a filename
  * @inode: inode of the parent directory (for regular filenames)
- *	   or of the symlink (for symlink targets)
+ *	   or of the symlink (for symlink targets). Key must already be
+ *	   set up.
  * @iname: the filename to encrypt
  * @out: (output) the encrypted filename
  * @olen: size of the encrypted filename.  It must be at least @iname->len.
@@ -99,7 +94,7 @@ int fscrypt_fname_encrypt(const struct inode *inode, const struct qstr *iname,
 {
 	struct skcipher_request *req = NULL;
 	DECLARE_CRYPTO_WAIT(wait);
-	const struct fscrypt_info *ci = inode->i_crypt_info;
+	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
 	struct crypto_skcipher *tfm = ci->ci_enc_key.tfm;
 	union fscrypt_iv iv;
 	struct scatterlist sg;
@@ -109,7 +104,7 @@ int fscrypt_fname_encrypt(const struct inode *inode, const struct qstr *iname,
 	 * Copy the filename to the output buffer for encrypting in-place and
 	 * pad it with the needed number of NUL bytes.
 	 */
-	if (WARN_ON(olen < iname->len))
+	if (WARN_ON_ONCE(olen < iname->len))
 		return -ENOBUFS;
 	memcpy(out, iname->name, iname->len);
 	memset(out + iname->len, 0, olen - iname->len);
@@ -137,6 +132,7 @@ int fscrypt_fname_encrypt(const struct inode *inode, const struct qstr *iname,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(fscrypt_fname_encrypt);
 
 /**
  * fname_decrypt() - decrypt a filename
@@ -155,7 +151,7 @@ static int fname_decrypt(const struct inode *inode,
 	struct skcipher_request *req = NULL;
 	DECLARE_CRYPTO_WAIT(wait);
 	struct scatterlist src_sg, dst_sg;
-	const struct fscrypt_info *ci = inode->i_crypt_info;
+	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
 	struct crypto_skcipher *tfm = ci->ci_enc_key.tfm;
 	union fscrypt_iv iv;
 	int res;
@@ -264,9 +260,9 @@ static int fscrypt_base64url_decode(const char *src, int srclen, u8 *dst)
 	return bp - dst;
 }
 
-bool fscrypt_fname_encrypted_size(const union fscrypt_policy *policy,
-				  u32 orig_len, u32 max_len,
-				  u32 *encrypted_len_ret)
+bool __fscrypt_fname_encrypted_size(const union fscrypt_policy *policy,
+				    u32 orig_len, u32 max_len,
+				    u32 *encrypted_len_ret)
 {
 	int padding = 4 << (fscrypt_policy_flags(policy) &
 			    FSCRYPT_POLICY_FLAGS_PAD_MASK);
@@ -279,6 +275,29 @@ bool fscrypt_fname_encrypted_size(const union fscrypt_policy *policy,
 	*encrypted_len_ret = min(encrypted_len, max_len);
 	return true;
 }
+
+/**
+ * fscrypt_fname_encrypted_size() - calculate length of encrypted filename
+ * @inode:		parent inode of dentry name being encrypted. Key must
+ *			already be set up.
+ * @orig_len:		length of the original filename
+ * @max_len:		maximum length to return
+ * @encrypted_len_ret:	where calculated length should be returned (on success)
+ *
+ * Filenames that are shorter than the maximum length may have their lengths
+ * increased slightly by encryption, due to padding that is applied.
+ *
+ * Return: false if the orig_len is greater than max_len. Otherwise, true and
+ *	   fill out encrypted_len_ret with the length (up to max_len).
+ */
+bool fscrypt_fname_encrypted_size(const struct inode *inode, u32 orig_len,
+				  u32 max_len, u32 *encrypted_len_ret)
+{
+	return __fscrypt_fname_encrypted_size(&inode->i_crypt_info->ci_policy,
+					      orig_len, max_len,
+					      encrypted_len_ret);
+}
+EXPORT_SYMBOL_GPL(fscrypt_fname_encrypted_size);
 
 /**
  * fscrypt_fname_alloc_buffer() - allocate a buffer for presented filenames
@@ -435,8 +454,7 @@ int fscrypt_setup_filename(struct inode *dir, const struct qstr *iname,
 		return ret;
 
 	if (fscrypt_has_encryption_key(dir)) {
-		if (!fscrypt_fname_encrypted_size(&dir->i_crypt_info->ci_policy,
-						  iname->len, NAME_MAX,
+		if (!fscrypt_fname_encrypted_size(dir, iname->len, NAME_MAX,
 						  &fname->crypto_buf.len))
 			return -ENAMETOOLONG;
 		fname->crypto_buf.name = kmalloc(fname->crypto_buf.len,
@@ -544,9 +562,9 @@ EXPORT_SYMBOL_GPL(fscrypt_match_name);
  */
 u64 fscrypt_fname_siphash(const struct inode *dir, const struct qstr *name)
 {
-	const struct fscrypt_info *ci = dir->i_crypt_info;
+	const struct fscrypt_inode_info *ci = dir->i_crypt_info;
 
-	WARN_ON(!ci->ci_dirhash_key_initialized);
+	WARN_ON_ONCE(!ci->ci_dirhash_key_initialized);
 
 	return siphash(name->name, name->len, &ci->ci_dirhash_key);
 }

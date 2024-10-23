@@ -243,4 +243,15 @@ config USER_NETSNMP_INSTALL_CORE_MIBS
 	help
 	  Install the core MIB files into romfs.
 
+config USER_NETSNMP_ADDITIONAL_CFLAGS
+	string "Additional CFLAGS"
+	default ""
+	help
+		Additional CFLAGS
+
+config USER_NETSNMP_INCLUDE_DEBUG
+	bool "Include Debug Statements"
+	help
+		Includes debuging statements that can be conditionally
+		enabled at runtime on a per token basis
 endif

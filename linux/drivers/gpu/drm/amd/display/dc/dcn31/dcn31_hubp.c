@@ -59,7 +59,13 @@ static void hubp31_program_extended_blank(struct hubp *hubp,
 {
 	struct dcn20_hubp *hubp2 = TO_DCN20_HUBP(hubp);
 
-	REG_SET(BLANK_OFFSET_1, 0, MIN_DST_Y_NEXT_START, min_dst_y_next_start_optimized);
+	REG_UPDATE(BLANK_OFFSET_1, MIN_DST_Y_NEXT_START, min_dst_y_next_start_optimized);
+}
+
+void hubp31_program_extended_blank_value(
+	struct hubp *hubp, unsigned int min_dst_y_next_start_optimized)
+{
+	hubp31_program_extended_blank(hubp, min_dst_y_next_start_optimized);
 }
 
 static struct hubp_funcs dcn31_hubp_funcs = {
@@ -87,6 +93,7 @@ static struct hubp_funcs dcn31_hubp_funcs = {
 	.hubp_init = hubp3_init,
 	.set_unbounded_requesting = hubp31_set_unbounded_requesting,
 	.hubp_soft_reset = hubp31_soft_reset,
+	.hubp_set_flip_int = hubp1_set_flip_int,
 	.hubp_in_blank = hubp1_in_blank,
 	.program_extended_blank = hubp31_program_extended_blank,
 };

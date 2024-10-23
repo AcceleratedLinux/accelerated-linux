@@ -1,0 +1,2 @@
+dir_$(CONFIG_LIB_PROTOBUF) += protobuf
+dir_$(CONFIG_LIB_PROTOBUF_HOST) += protobuf-Host

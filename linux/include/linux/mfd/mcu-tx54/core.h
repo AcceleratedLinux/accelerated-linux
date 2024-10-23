@@ -17,9 +17,14 @@ enum mcu_tx54_irq_numbers {
 	MCU_TX54_IRQ_PWR_FAIL,
 	MCU_TX54_IRQ_RTC,
 	MCU_TX54_IRQ_ACC,
+	MCU_TX54_IRQ_GPIO_IGN = 8,
+	MCU_TX54_IRQ_GPIO_BUTTON,
 
 	MCU_TX54_IRQ_NR
 };
+
+#define MCU_TX54_IRQ_NAME_GPIO_IGN	"IRQ_GPIO_IGN"
+#define MCU_TX54_IRQ_NAME_GPIO_BUTTON	"IRQ_GPIO_BTN"
 
 struct mcu_tx54 {
 	struct device		*dev;

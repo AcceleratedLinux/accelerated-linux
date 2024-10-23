@@ -1,6 +1,8 @@
 
-URL      = http://dbus.freedesktop.org/releases/dbus/dbus-1.13.20.tar.xz
-CONFOPTS = --disable-x11-autolaunch --without-x --disable-xml-docs --disable-doxygen-docs
+URL      = https://dbus.freedesktop.org/releases/dbus/dbus-1.14.10.tar.xz
+CONFOPTS = --disable-x11-autolaunch --without-x \
+	   --disable-xml-docs --disable-doxygen-docs \
+	   --disable-systemd --without-systemdsystemunitdir
 ROMFS    = dbus_romfs
 ifdef CONFIG_LIB_GLIB_STATIC
 MAKEVARS += LIBS="-lffi -lrt"

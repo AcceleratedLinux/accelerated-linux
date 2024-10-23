@@ -1,0 +1,123 @@
+
+IX30W
+-----
+
+The front-panel USB connector can be used to USB-load the U-Boot onto an IX30W.
+To connect it with the PC, a USB-A to USB-A cable is needed.
+
+To carry out a USB recovery load you would normally need to jumper the
+header that enables USB load. If the nand flash is currently
+empty then the Freescale iMX6 CPU will automatically fall back to the USB
+recovery load mode (no header jumping required).
+Otherwise jump pins 2 & 3 on CON11. (R75 must not be present)
+
+To load a boot loader through the USB you need Freescale's "imx_usb" tool
+installed on your Linux PC development system.
+
+Power up the IX30W with the USB connected to your Linux PC. Check that the USB
+load device was detected properly:
+
+  lsusb | grep -i freescale
+
+It should report back with something similar to this if found:
+
+  Bus 003 Device 011: ID 15a2:0080 Freescale Semiconductor, Inc.
+
+The USB load process is straight forward from a compiled tree:
+
+  imx_usb -v boot/build/uboot-imx/u-boot.imx
+
+You may need to run it as root.
+
+If the unit is in production-mode and manufactured, the normal bootloader is
+quiet, so you will not see anything on the console until Linux has booted.
+
+You can make the U-Boot output trace by making the following change in
+/boot/u-boot/include/configs/ix30.h:
+
+  +#define CONFIG_DEVELOP
+   #include <configs/digi_common.h>
+
+Within a few seconds the usual u-boot boot up messages should come out of
+the serial console port of the IX30W.
+
+FLASH PROGAMMING u-boot
+-----------------------
+
+The process to flash the u-boot loader into flash memory is a little
+different than other Accelerated/Digi boards. This is due to the unusual
+flash and ECC layout used by Freescale's internal iMX6 CPU boot loader.
+
+The process is now essentially a 2 step process from an IX30W shell login:
+
+  netflash -iknb -R /tmp/u-boot.imx 192.168.0.22 u-boot.imx
+  kobs-ng init -v -x /tmp/u-boot.imx
+
+You cannot directly netflash the u-boot binary.
+
+***WARNING***
+The production u-boot image has been HAB signed, allowing the secure
+boot functionality to be used. If the SRK and secure boot fuses have
+been burnt, then only images which have been encrypted using the same
+keys as burnt to the fuses will be allowed to run. If an incorrect
+u-boot is uploaded, then the unit will be *unrecoverable* via software.
+The only way to recover the unit is to desolder the NAND chip and
+program it with the correctly signed ECC image.
+
+FACTORY FLASH
+-------------
+
+The factory pre-program flash image file is not automatially generated as
+part of the firmware compilation. Due to the unusual layout and ECC required
+it must be read from flash after installed onto an IX30W. Even worse is that
+you cannot read the raw NAND flash contents from Linux itself - you need to
+read it from u-boot. You could also read the nand flash in the beeprog reader.
+The following process reads the nand from u-boot:
+
+So to generate the factory boot loader file run the following command from
+the u-boot command line on an IX30W which has had the boot loader required
+already flashed into the boot partition:
+
+  nand read.raw 0x81000000 0 0xa00
+  md.b 0x81000000 0x00528000
+
+You will need to capture the serial output on your development server.
+It will take quite a few minutes (at least 20+) to dump out the boot loader
+flash contents.
+
+On your Linux development server you now need to take that capture serial
+console output and turn it into the pre-program binary file. First edit
+the captured serial output to remove any lines not part of the hexdump.
+Modify the address to start the dump addresses from 0x00000000 (in "vim"
+you can use a command like "1,$s/81/00/g"). The use the xxd tool to
+convert it to a binary file.
+
+  xxd -r < console-output > u-boot-with-ecc.bin
+
+Note that you must use a device with a NAND flash that has no Bad Blocks
+within the boot loader flash partition (which is the first 5MB of flash).
+The factory based programmer will rely on a boot loader image that has a
+pristine in-flash boot loader section. Bad Blocks will force a different
+layout - and that will break real device booting on any other flash device.
+
+You can check for location of bad blocks during the kernel boot on the
+IX30W device. Look for the NAND flash discovery messages during boot and it
+will list the Bad Block locations:
+
+  nand: device found, Manufacturer ID: 0x2c, Chip ID: 0xda
+  nand: Micron MT29F2G08ABAEAWP
+  nand: 256 MiB, SLC, erase size: 128 KiB, page size: 2048, OOB size: 64
+  gpmi-nand 1806000.gpmi-nand: enable the asynchronous EDO mode 5
+  Scanning device for bad blocks
+  Bad eraseblock 81 at 0x000000a20000
+  Bad eraseblock 146 at 0x000001240000
+  Bad eraseblock 2044 at 0x00000ff80000
+  5 ofpart partitions found on MTD device gpmi-nand
+  Creating 5 MTD partitions on "gpmi-nand":
+  0x000000000000-0x000000500000 : "u-boot"
+  0x000000500000-0x000000600000 : "u-boot-env"
+  0x000000600000-0x000000800000 : "log"
+  0x000000800000-0x000010000000 : "flash"
+  0x000000000000-0x000010000000 : "all"
+  gpmi-nand 1806000.gpmi-nand: driver registered.
+

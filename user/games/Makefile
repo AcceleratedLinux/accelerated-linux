@@ -5,7 +5,6 @@
 .EXPORT_ALL_VARIABLES:
 
 dir_y = 
-dir_n =
 dir_ = 
 
 dir_$(CONFIG_USER_GAMES_ADVENT4)        += advent4
@@ -25,7 +24,7 @@ romfs:
 	done
 
 clean:
-	-for i in $(dir_y) $(dir_n) $(dir_) ; do \
+	-for i in $(dir_y) $(dir_) ; do \
 		[ ! -d $$i ] || make -C $$i clean; \
 	done
 

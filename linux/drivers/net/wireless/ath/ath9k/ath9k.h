@@ -20,6 +20,7 @@
 #include <linux/etherdevice.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
+#include <linux/kstrtox.h>
 #include <linux/leds.h>
 #include <linux/completion.h>
 #include <linux/time.h>
@@ -38,6 +39,7 @@ extern int ath9k_modparam_nohwcrypt;
 extern int ath9k_led_blink;
 extern bool is_ath9k_unloaded;
 extern int ath9k_use_chanctx;
+extern int ath9k_use_msi;
 
 /*************************/
 /* Descriptor Management */
@@ -1128,7 +1130,6 @@ void ath_restart_work(struct ath_softc *sc);
 int ath9k_init_device(u16 devid, struct ath_softc *sc,
 		    const struct ath_bus_ops *bus_ops);
 void ath9k_deinit_device(struct ath_softc *sc);
-void ath9k_reload_chainmask_settings(struct ath_softc *sc);
 u8 ath_txchainmask_reduction(struct ath_softc *sc, u8 chainmask, u32 rate);
 void ath_start_rfkill_poll(struct ath_softc *sc);
 void ath9k_rfkill_poll_state(struct ieee80211_hw *hw);

@@ -475,7 +475,6 @@ static const struct snd_soc_component_driver soc_component_dev_wl1273 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int wl1273_platform_probe(struct platform_device *pdev)
@@ -485,11 +484,6 @@ static int wl1273_platform_probe(struct platform_device *pdev)
 				      &wl1273_dai, 1);
 }
 
-static int wl1273_platform_remove(struct platform_device *pdev)
-{
-	return 0;
-}
-
 MODULE_ALIAS("platform:wl1273-codec");
 
 static struct platform_driver wl1273_platform_driver = {
@@ -497,7 +491,6 @@ static struct platform_driver wl1273_platform_driver = {
 		.name	= "wl1273-codec",
 	},
 	.probe		= wl1273_platform_probe,
-	.remove		= wl1273_platform_remove,
 };
 
 module_platform_driver(wl1273_platform_driver);

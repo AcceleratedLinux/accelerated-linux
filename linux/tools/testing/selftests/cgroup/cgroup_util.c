@@ -195,10 +195,10 @@ int cg_write_numeric(const char *cgroup, const char *control, long value)
 	return cg_write(cgroup, control, buf);
 }
 
-int cg_find_unified_root(char *root, size_t len)
+int cg_find_unified_root(char *root, size_t len, bool *nsdelegate)
 {
 	char buf[10 * PAGE_SIZE];
-	char *fs, *mount, *type;
+	char *fs, *mount, *type, *options;
 	const char delim[] = "\n\t ";
 
 	if (read_text("/proc/self/mounts", buf, sizeof(buf)) <= 0)
@@ -211,12 +211,14 @@ int cg_find_unified_root(char *root, size_t len)
 	for (fs = strtok(buf, delim); fs; fs = strtok(NULL, delim)) {
 		mount = strtok(NULL, delim);
 		type = strtok(NULL, delim);
-		strtok(NULL, delim);
+		options = strtok(NULL, delim);
 		strtok(NULL, delim);
 		strtok(NULL, delim);
 
 		if (strcmp(type, "cgroup2") == 0) {
 			strncpy(root, mount, len);
+			if (nsdelegate)
+				*nsdelegate = !!strstr(options, "nsdelegate");
 			return 0;
 		}
 	}
@@ -286,6 +288,8 @@ int cg_destroy(const char *cgroup)
 {
 	int ret;
 
+	if (!cgroup)
+		return 0;
 retry:
 	ret = rmdir(cgroup);
 	if (ret && errno == EBUSY) {
@@ -555,6 +559,7 @@ int proc_mount_contains(const char *option)
 ssize_t proc_read_text(int pid, bool thread, const char *item, char *buf, size_t size)
 {
 	char path[PATH_MAX];
+	ssize_t ret;
 
 	if (!pid)
 		snprintf(path, sizeof(path), "/proc/%s/%s",
@@ -562,8 +567,8 @@ ssize_t proc_read_text(int pid, bool thread, const char *item, char *buf, size_t
 	else
 		snprintf(path, sizeof(path), "/proc/%d/%s", pid, item);
 
-	size = read_text(path, buf, size);
-	return size < 0 ? -1 : size;
+	ret = read_text(path, buf, size);
+	return ret < 0 ? -1 : ret;
 }
 
 int proc_read_strstr(int pid, bool thread, const char *item, const char *needle)

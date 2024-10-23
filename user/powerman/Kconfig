@@ -7,6 +7,7 @@ config USER_POWERMAN_POWERMAN
 config USER_POWERMAN_HTTPPOWER
 	bool "httppower"
 	depends on USER_POWERMAN_POWERMAN
+	select LIB_LIBCURL
 	default y
 	help
 		A helper program for powerman which enables it to communicate with

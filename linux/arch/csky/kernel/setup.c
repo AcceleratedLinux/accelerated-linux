@@ -8,21 +8,9 @@
 #include <linux/of_fdt.h>
 #include <linux/start_kernel.h>
 #include <linux/dma-map-ops.h>
-#include <linux/screen_info.h>
 #include <asm/sections.h>
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
-
-#ifdef CONFIG_DUMMY_CONSOLE
-struct screen_info screen_info = {
-	.orig_video_lines	= 30,
-	.orig_video_cols	= 80,
-	.orig_video_mode	= 0,
-	.orig_video_ega_bx	= 0,
-	.orig_video_isVGA	= 1,
-	.orig_video_points	= 8
-};
-#endif
 
 static void __init csky_memblock_init(void)
 {
@@ -31,7 +19,7 @@ static void __init csky_memblock_init(void)
 	unsigned long max_zone_pfn[MAX_NR_ZONES] = { 0 };
 	signed long size;
 
-	memblock_reserve(__pa(_stext), _end - _stext);
+	memblock_reserve(__pa(_start), _end - _start);
 
 	early_init_fdt_reserve_self();
 	early_init_fdt_scan_reserved_mem();
@@ -78,7 +66,7 @@ void __init setup_arch(char **cmdline_p)
 	pr_info("Phys. mem: %ldMB\n",
 		(unsigned long) memblock_phys_mem_size()/1024/1024);
 
-	setup_initial_init_mm(_stext, _etext, _edata, _end);
+	setup_initial_init_mm(_start, _etext, _edata, _end);
 
 	parse_early_param();
 

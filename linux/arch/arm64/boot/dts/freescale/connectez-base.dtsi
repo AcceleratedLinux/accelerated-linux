@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Device Tree Include file for Digi ConnectEZ-4.
+ * Device tree common include for Digi Connect EZ 2 and 4.
  *
  * Copyright 2016 Freescale Semiconductor, Inc.
  * Copyright 2018 Digi Inc.
@@ -14,6 +14,7 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
 #include "fsl-pstore-512MB.dtsi"
 
@@ -54,7 +55,7 @@
 		};
 	};
 
-	pfe: pfe@04000000 {
+	pfe: pfe@4000000 {
 		status = "okay";
 		compatible = "fsl,pfe";
 		reg =   <0x0 0x04000000 0x0 0xc00000>,	/* AXI 16M */
@@ -70,6 +71,31 @@
 		fsl,rcpm-wakeup = <&rcpm 0xf0000020>;
 		clocks = <&clockgen 4 0>;
 		clock-names = "pfe";
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys-polled";
+		poll-interval = <100>; /* msec */
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio4 2 GPIO_ACTIVE_LOW>;
+		};
+
+		sim-switch {
+			label = "sim_switch";
+			linux,code = <KEY_SELECT>;
+			gpios = <&gpio4 3 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	sim-mux0 {
+		compatible = "sim-mux";
+
+		sim-select-gpios  = <&gpio3 5 GPIO_ACTIVE_HIGH>;
+
+		sim-count = <2>;
 	};
 };
 
@@ -205,7 +231,7 @@
 		reg = <0x71>;
 		pinctrl-names = "default";
 		gpio-controller;
-		gpio-line-names = "", "", "factory", "sim_switch", "", "", "", "";
+		gpio-line-names = "", "developer_", "factory", "sim_switch", "", "", "", "";
 	};
 
 	accelerometer@1e {
@@ -215,13 +241,8 @@
 };
 
 &i2c1 {
-	clock-frequency = <400000>;
+	clock-frequency = <1000000>;
 	status = "okay";
-
-	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x430>;
-	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -233,6 +254,9 @@
 	num-cs = <1>;
 	bus-num = <0>;
 	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_qspi_2>;
 
 	qflash0: w25q32dw@0 {
 		compatible = "jedec,spi-nor";

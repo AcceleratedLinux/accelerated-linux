@@ -1,5 +1,5 @@
-VERSION = libcap-2.25
-URL = git://git.kernel.org/pub/scm/linux/kernel/git/morgan/libcap.git
+VERSION = libcap-2.70
+URL = git://git.kernel.org/pub/scm/libs/libcap/libcap.git
 METHOD = git
 
 export ACL_LICENSE = BSD/GPLv2
@@ -10,9 +10,11 @@ BUILDVARS = cp -f --remove-destination $(ROOTDIR)/linux/include/uapi/linux/capab
 
 MAKEVARS  = BUILD_CC="$(BUILD_CC)"
 MAKEVARS += CC="$(CC)"
-MAKEVARS += CFLAGS="$(CFLAGS)"
-MAKEVARS += LDFLAGS="$(LDFLAGS)"
-MAKEVARS += lib=lib prefix=/
-MAKEVARS += BUILD_GPERF=no PAM_CAP=no RAISE_SETFCAP=no
+MAKEVARS += prefix=/
+MAKEVARS += lib=lib
+MAKEVARS += USE_GPERF=no
+MAKEVARS += PAM_CAP=no
+MAKEVARS += RAISE_SETFCAP=no
+MAKEVARS += GOLANG=no
 
 include $(ROOTDIR)/tools/automake.inc

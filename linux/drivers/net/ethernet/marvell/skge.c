@@ -394,9 +394,9 @@ static void skge_get_drvinfo(struct net_device *dev,
 {
 	struct skge_port *skge = netdev_priv(dev);
 
-	strlcpy(info->driver, DRV_NAME, sizeof(info->driver));
-	strlcpy(info->version, DRV_VERSION, sizeof(info->version));
-	strlcpy(info->bus_info, pci_name(skge->hw->pdev),
+	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
+	strscpy(info->version, DRV_VERSION, sizeof(info->version));
+	strscpy(info->bus_info, pci_name(skge->hw->pdev),
 		sizeof(info->bus_info));
 }
 
@@ -2905,13 +2905,13 @@ static int skge_change_mtu(struct net_device *dev, int new_mtu)
 	int err;
 
 	if (!netif_running(dev)) {
-		dev->mtu = new_mtu;
+		WRITE_ONCE(dev->mtu, new_mtu);
 		return 0;
 	}
 
 	skge_down(dev);
 
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 
 	err = skge_up(dev);
 	if (err)
@@ -3832,7 +3832,7 @@ static struct net_device *skge_devinit(struct skge_hw *hw, int port,
 		dev->features |= NETIF_F_HIGHDMA;
 
 	skge = netdev_priv(dev);
-	netif_napi_add(dev, &skge->napi, skge_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add(dev, &skge->napi, skge_poll);
 	skge->netdev = dev;
 	skge->hw = hw;
 	skge->msg_enable = netif_msg_init(debug, default_msg);

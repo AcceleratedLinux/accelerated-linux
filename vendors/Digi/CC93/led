@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# Action for Digi/ConnectCore-93 LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+case "$1" in
+start)
+	ledcmd -f blue:status
+	ledcmd -o green:power
+	exit 0
+	;;
+reload)
+	;;
+stop)
+	# Firmware flash
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+exit 0

@@ -309,7 +309,7 @@ static int adt7x10_write(struct device *dev, enum hwmon_sensor_types type,
 	}
 }
 
-static const struct hwmon_channel_info *adt7x10_info[] = {
+static const struct hwmon_channel_info * const adt7x10_info[] = {
 	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT | HWMON_T_MAX | HWMON_T_MIN |
 			   HWMON_T_CRIT | HWMON_T_MAX_HYST | HWMON_T_MIN_HYST |
 			   HWMON_T_CRIT_HYST | HWMON_T_MIN_ALARM |
@@ -397,8 +397,6 @@ int adt7x10_probe(struct device *dev, const char *name, int irq,
 }
 EXPORT_SYMBOL_GPL(adt7x10_probe);
 
-#ifdef CONFIG_PM_SLEEP
-
 static int adt7x10_suspend(struct device *dev)
 {
 	struct adt7x10_data *data = dev_get_drvdata(dev);
@@ -414,10 +412,7 @@ static int adt7x10_resume(struct device *dev)
 	return regmap_write(data->regmap, ADT7X10_CONFIG, data->config);
 }
 
-SIMPLE_DEV_PM_OPS(adt7x10_dev_pm_ops, adt7x10_suspend, adt7x10_resume);
-EXPORT_SYMBOL_GPL(adt7x10_dev_pm_ops);
-
-#endif /* CONFIG_PM_SLEEP */
+EXPORT_SIMPLE_DEV_PM_OPS(adt7x10_dev_pm_ops, adt7x10_suspend, adt7x10_resume);
 
 MODULE_AUTHOR("Hartmut Knaack");
 MODULE_DESCRIPTION("ADT7410/ADT7420, ADT7310/ADT7320 common code");

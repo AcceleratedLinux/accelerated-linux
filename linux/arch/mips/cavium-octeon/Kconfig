@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 if CPU_CAVIUM_OCTEON
 
-config CAVIUM_OCTEON_SOC
-	bool
-
 config CAVIUM_CN63XXP1
 	bool "Enable CN63XXP1 errata workarounds"
 	default "n"
@@ -17,7 +14,8 @@ config CAVIUM_CN63XXP1
 config CAVIUM_OCTEON_CVMSEG_SIZE
 	int "Number of L1 cache lines reserved for CVMSEG memory"
 	range 0 54
-	default 1
+	default 0 if !CAVIUM_OCTEON_SOC
+	default 1 if CAVIUM_OCTEON_SOC
 	help
 	  CVMSEG LM is a segment that accesses portions of the dcache as a
 	  local memory; the larger CVMSEG is, the smaller the cache is.
@@ -83,6 +81,18 @@ config CAVIUM_OCTEON_USE_BOOTMEM
 	  you may want to enable this. If you are using some other boot
 	  loader, or just not using the boot time setup shared memory
 	  pool then you can leave this disabled.
+
+config CAVIUM_RESERVE32
+	int "Memory to reserve for user processes shared region (MB)"
+	range 0 1536
+	default "0"
+	help
+	  Reserve a shared memory region for user processes to use for hardware
+	  memory buffers. This is required for 32bit applications to be able to
+	  send and receive packets directly. Applications access this memory by
+	  memory mapping /dev/mem for the addresses in /proc/octeon_info. For
+	  optimal performance with HugeTLBs, keep this size an even number of
+	  megabytes.
 
 config OCTEON_ILM
 	tristate "Module to measure interrupt latency using Octeon CIU Timer"

@@ -343,11 +343,9 @@ static int sctp_sock_filter(struct sctp_endpoint *ep, struct sctp_transport *tsp
 	struct sctp_comm_param *commp = p;
 	struct sock *sk = ep->base.sk;
 	const struct inet_diag_req_v2 *r = commp->r;
-	struct sctp_association *assoc =
-		list_entry(ep->asocs.next, struct sctp_association, asocs);
 
 	/* find the ep only once through the transports by this condition */
-	if (tsp->asoc != assoc)
+	if (!list_is_first(&tsp->asoc->asocs, &ep->asocs))
 		return 0;
 
 	if (r->sdiag_family != AF_UNSPEC && sk->sk_family != r->sdiag_family)
@@ -426,6 +424,7 @@ static int sctp_diag_dump_one(struct netlink_callback *cb,
 	struct net *net = sock_net(skb->sk);
 	const struct nlmsghdr *nlh = cb->nlh;
 	union sctp_addr laddr, paddr;
+	int dif = req->id.idiag_if;
 	struct sctp_comm_param commp = {
 		.skb = skb,
 		.r = req,
@@ -454,7 +453,7 @@ static int sctp_diag_dump_one(struct netlink_callback *cb,
 	}
 
 	return sctp_transport_lookup_process(sctp_sock_dump_one,
-					     net, &laddr, &paddr, &commp);
+					     net, &laddr, &paddr, &commp, dif);
 }
 
 static void sctp_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
@@ -508,6 +507,7 @@ done:
 }
 
 static const struct inet_diag_handler sctp_diag_handler = {
+	.owner		 = THIS_MODULE,
 	.dump		 = sctp_diag_dump,
 	.dump_one	 = sctp_diag_dump_one,
 	.idiag_get_info  = sctp_diag_get_info,
@@ -528,4 +528,5 @@ static void __exit sctp_diag_exit(void)
 module_init(sctp_diag_init);
 module_exit(sctp_diag_exit);
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("SCTP socket monitoring via SOCK_DIAG");
 MODULE_ALIAS_NET_PF_PROTO_TYPE(PF_NETLINK, NETLINK_SOCK_DIAG, 2-132);

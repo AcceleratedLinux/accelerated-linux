@@ -190,6 +190,7 @@ struct hfsplus_sb_info {
 	int work_queued;               /* non-zero delayed work is queued */
 	struct delayed_work sync_work; /* FS sync delayed work */
 	spinlock_t work_lock;          /* protects sync_work and work_queued */
+	struct rcu_head rcu;
 };
 
 #define HFSPLUS_SB_WRITEBACKUP	0
@@ -198,6 +199,8 @@ struct hfsplus_sb_info {
 #define HFSPLUS_SB_HFSX		3
 #define HFSPLUS_SB_CASEFOLD	4
 #define HFSPLUS_SB_NOBARRIER	5
+#define HFSPLUS_SB_UID		6
+#define HFSPLUS_SB_GID		7
 
 static inline struct hfsplus_sb_info *HFSPLUS_SB(struct super_block *sb)
 {
@@ -479,13 +482,13 @@ void hfsplus_inode_write_fork(struct inode *inode,
 			      struct hfsplus_fork_raw *fork);
 int hfsplus_cat_read_inode(struct inode *inode, struct hfs_find_data *fd);
 int hfsplus_cat_write_inode(struct inode *inode);
-int hfsplus_getattr(struct user_namespace *mnt_userns, const struct path *path,
+int hfsplus_getattr(struct mnt_idmap *idmap, const struct path *path,
 		    struct kstat *stat, u32 request_mask,
 		    unsigned int query_flags);
 int hfsplus_file_fsync(struct file *file, loff_t start, loff_t end,
 		       int datasync);
 int hfsplus_fileattr_get(struct dentry *dentry, struct fileattr *fa);
-int hfsplus_fileattr_set(struct user_namespace *mnt_userns,
+int hfsplus_fileattr_set(struct mnt_idmap *idmap,
 			 struct dentry *dentry, struct fileattr *fa);
 
 /* ioctl.c */
@@ -525,7 +528,7 @@ int hfsplus_compare_dentry(const struct dentry *dentry, unsigned int len,
 
 /* wrapper.c */
 int hfsplus_submit_bio(struct super_block *sb, sector_t sector, void *buf,
-		       void **data, int op, int op_flags);
+		       void **data, blk_opf_t opf);
 int hfsplus_read_wrapper(struct super_block *sb);
 
 /*

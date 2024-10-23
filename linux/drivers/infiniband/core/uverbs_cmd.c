@@ -739,6 +739,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	mr->uobject = uobj;
 	atomic_inc(&pd->usecnt);
 	mr->iova = cmd.hca_va;
+	mr->length = cmd.length;
 
 	rdma_restrack_new(&mr->res, RDMA_RESTRACK_MR);
 	rdma_restrack_set_name(&mr->res, NULL);
@@ -861,8 +862,10 @@ static int ib_uverbs_rereg_mr(struct uverbs_attr_bundle *attrs)
 			mr->pd = new_pd;
 			atomic_inc(&new_pd->usecnt);
 		}
-		if (cmd.flags & IB_MR_REREG_TRANS)
+		if (cmd.flags & IB_MR_REREG_TRANS) {
 			mr->iova = cmd.hca_va;
+			mr->length = cmd.length;
+		}
 	}
 
 	memset(&resp, 0, sizeof(resp));
@@ -1847,8 +1850,14 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		attr->path_mtu = cmd->base.path_mtu;
 	if (cmd->base.attr_mask & IB_QP_PATH_MIG_STATE)
 		attr->path_mig_state = cmd->base.path_mig_state;
-	if (cmd->base.attr_mask & IB_QP_QKEY)
+	if (cmd->base.attr_mask & IB_QP_QKEY) {
+		if (cmd->base.qkey & IB_QP_SET_QKEY &&
+		    !rdma_nl_get_privileged_qkey()) {
+			ret = -EPERM;
+			goto release_qp;
+		}
 		attr->qkey = cmd->base.qkey;
+	}
 	if (cmd->base.attr_mask & IB_QP_RQ_PSN)
 		attr->rq_psn = cmd->base.rq_psn;
 	if (cmd->base.attr_mask & IB_QP_SQ_PSN)
@@ -2728,7 +2737,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 
 	switch (ib_spec->type & ~IB_FLOW_SPEC_INNER) {
 	case IB_FLOW_SPEC_ETH:
-		ib_filter_sz = offsetof(struct ib_flow_eth_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_eth_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2739,7 +2748,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 		memcpy(&ib_spec->eth.mask, kern_spec_mask, actual_filter_sz);
 		break;
 	case IB_FLOW_SPEC_IPV4:
-		ib_filter_sz = offsetof(struct ib_flow_ipv4_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_ipv4_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2750,7 +2759,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 		memcpy(&ib_spec->ipv4.mask, kern_spec_mask, actual_filter_sz);
 		break;
 	case IB_FLOW_SPEC_IPV6:
-		ib_filter_sz = offsetof(struct ib_flow_ipv6_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_ipv6_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2766,7 +2775,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 		break;
 	case IB_FLOW_SPEC_TCP:
 	case IB_FLOW_SPEC_UDP:
-		ib_filter_sz = offsetof(struct ib_flow_tcp_udp_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_tcp_udp_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2777,7 +2786,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 		memcpy(&ib_spec->tcp_udp.mask, kern_spec_mask, actual_filter_sz);
 		break;
 	case IB_FLOW_SPEC_VXLAN_TUNNEL:
-		ib_filter_sz = offsetof(struct ib_flow_tunnel_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_tunnel_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2792,7 +2801,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 			return -EINVAL;
 		break;
 	case IB_FLOW_SPEC_ESP:
-		ib_filter_sz = offsetof(struct ib_flow_esp_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_esp_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2803,7 +2812,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 		memcpy(&ib_spec->esp.mask, kern_spec_mask, actual_filter_sz);
 		break;
 	case IB_FLOW_SPEC_GRE:
-		ib_filter_sz = offsetof(struct ib_flow_gre_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_gre_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);
@@ -2814,7 +2823,7 @@ int ib_uverbs_kern_spec_to_ib_spec_filter(enum ib_flow_spec_type type,
 		memcpy(&ib_spec->gre.mask, kern_spec_mask, actual_filter_sz);
 		break;
 	case IB_FLOW_SPEC_MPLS:
-		ib_filter_sz = offsetof(struct ib_flow_mpls_filter, real_sz);
+		ib_filter_sz = sizeof(struct ib_flow_mpls_filter);
 		actual_filter_sz = spec_filter_size(kern_spec_mask,
 						    kern_filter_sz,
 						    ib_filter_sz);

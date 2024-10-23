@@ -140,14 +140,15 @@ static int mdio_mux_mmioreg_probe(struct platform_device *pdev)
 	 * set any bits outside of the 'mask'.
 	 */
 	for_each_available_child_of_node(np, np2) {
-		iprop = of_get_property(np2, "reg", &len);
-		if (!iprop || len != sizeof(uint32_t)) {
+		u64 reg;
+
+		if (of_property_read_reg(np2, 0, &reg, NULL)) {
 			dev_err(&pdev->dev, "mdio-mux child node %pOF is "
 				"missing a 'reg' property\n", np2);
 			of_node_put(np2);
 			return -ENODEV;
 		}
-		if (be32_to_cpup(iprop) & ~s->mask) {
+		if ((u32)reg & ~s->mask) {
 			dev_err(&pdev->dev, "mdio-mux child node %pOF has "
 				"a 'reg' value with unmasked bits\n",
 				np2);
@@ -159,25 +160,20 @@ static int mdio_mux_mmioreg_probe(struct platform_device *pdev)
 	ret = mdio_mux_init(&pdev->dev, pdev->dev.of_node,
 			    mdio_mux_mmioreg_switch_fn,
 			    &s->mux_handle, s, NULL);
-	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev,
-				"failed to register mdio-mux bus %pOF\n", np);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to register mdio-mux bus %pOF\n", np);
 
 	pdev->dev.platform_data = s;
 
 	return 0;
 }
 
-static int mdio_mux_mmioreg_remove(struct platform_device *pdev)
+static void mdio_mux_mmioreg_remove(struct platform_device *pdev)
 {
 	struct mdio_mux_mmioreg_state *s = dev_get_platdata(&pdev->dev);
 
 	mdio_mux_uninit(s->mux_handle);
-
-	return 0;
 }
 
 static const struct of_device_id mdio_mux_mmioreg_match[] = {
@@ -194,7 +190,7 @@ static struct platform_driver mdio_mux_mmioreg_driver = {
 		.of_match_table = mdio_mux_mmioreg_match,
 	},
 	.probe		= mdio_mux_mmioreg_probe,
-	.remove		= mdio_mux_mmioreg_remove,
+	.remove_new	= mdio_mux_mmioreg_remove,
 };
 
 module_platform_driver(mdio_mux_mmioreg_driver);

@@ -140,28 +140,25 @@ create_service_led_args() {
 
 get_modem_information() {
 	modem_name=$1
-	modem_idx="$(modem port=modem/${modem_name} idx)"
 
 	# Note that it can happen that although the port is present in runt,
 	# nothing else (e.g. signal) relating to the modem is.
-	if [ -n "$modem_idx" ]; then
-		state="$(runt get mm.modem.$modem_idx.status.state)"
-		if [ -n "$state" ]; then
-			STATE="$state"
-		fi
-
-		bars="$(runt get mm.modem.$modem_idx.status.bars)"
-		if [ -n "$bars" ]; then
-			BARS="$bars"
-		fi
-
-		tech="$(runt get mm.modem.$modem_idx.status.gtech)"
-		if [ -n "$tech" ]; then
-			TECHNOLOGY="$tech"
-		fi
-
-		return
+	state="$(runt get mm.modem.$modem_name.status.state)"
+	if [ -n "$state" ]; then
+		STATE="$state"
 	fi
+
+	bars="$(runt get mm.modem.$modem_name.status.bars)"
+	if [ -n "$bars" ]; then
+		BARS="$bars"
+	fi
+
+	tech="$(runt get mm.modem.$modem_name.status.gtech)"
+	if [ -n "$tech" ]; then
+		TECHNOLOGY="$tech"
+	fi
+
+	return
 }
 
 name_idx=1

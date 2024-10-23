@@ -70,6 +70,10 @@ int pcapng_file_read(char const * const filename, void (* packet_cb)(pcapng_pack
  */
 file_st * pcapng_file_open(char const * const filename, bool const append_to_file);
 
+file_st * pcapng_file_open_stdout(void);
+
+void pcapng_file_flush(file_st * const file);
+
 void pcapng_file_close(file_st * const file);
 
 bool pcapng_file_size_exceeds_limit(file_st const * const file, long const limit);

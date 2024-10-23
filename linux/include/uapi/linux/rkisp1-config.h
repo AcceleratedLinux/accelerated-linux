@@ -117,7 +117,46 @@
 /*
  * Defect Pixel Cluster Correction
  */
-#define RKISP1_CIF_ISP_DPCC_METHODS_MAX       3
+#define RKISP1_CIF_ISP_DPCC_METHODS_MAX				3
+
+#define RKISP1_CIF_ISP_DPCC_MODE_STAGE1_ENABLE			(1U << 2)
+
+#define RKISP1_CIF_ISP_DPCC_OUTPUT_MODE_STAGE1_INCL_G_CENTER	(1U << 0)
+#define RKISP1_CIF_ISP_DPCC_OUTPUT_MODE_STAGE1_INCL_RB_CENTER	(1U << 1)
+#define RKISP1_CIF_ISP_DPCC_OUTPUT_MODE_STAGE1_G_3X3		(1U << 2)
+#define RKISP1_CIF_ISP_DPCC_OUTPUT_MODE_STAGE1_RB_3X3		(1U << 3)
+
+/* 0-2 for sets 1-3 */
+#define RKISP1_CIF_ISP_DPCC_SET_USE_STAGE1_USE_SET(n)		((n) << 0)
+#define RKISP1_CIF_ISP_DPCC_SET_USE_STAGE1_USE_FIX_SET		(1U << 3)
+
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_PG_GREEN_ENABLE		(1U << 0)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_LC_GREEN_ENABLE		(1U << 1)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_RO_GREEN_ENABLE		(1U << 2)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_RND_GREEN_ENABLE	(1U << 3)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_RG_GREEN_ENABLE		(1U << 4)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_PG_RED_BLUE_ENABLE	(1U << 8)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_LC_RED_BLUE_ENABLE	(1U << 9)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_RO_RED_BLUE_ENABLE	(1U << 10)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_RND_RED_BLUE_ENABLE	(1U << 11)
+#define RKISP1_CIF_ISP_DPCC_METHODS_SET_RG_RED_BLUE_ENABLE	(1U << 12)
+
+#define RKISP1_CIF_ISP_DPCC_LINE_THRESH_G(v)			((v) << 0)
+#define RKISP1_CIF_ISP_DPCC_LINE_THRESH_RB(v)			((v) << 8)
+#define RKISP1_CIF_ISP_DPCC_LINE_MAD_FAC_G(v)			((v) << 0)
+#define RKISP1_CIF_ISP_DPCC_LINE_MAD_FAC_RB(v)			((v) << 8)
+#define RKISP1_CIF_ISP_DPCC_PG_FAC_G(v)				((v) << 0)
+#define RKISP1_CIF_ISP_DPCC_PG_FAC_RB(v)			((v) << 8)
+#define RKISP1_CIF_ISP_DPCC_RND_THRESH_G(v)			((v) << 0)
+#define RKISP1_CIF_ISP_DPCC_RND_THRESH_RB(v)			((v) << 8)
+#define RKISP1_CIF_ISP_DPCC_RG_FAC_G(v)				((v) << 0)
+#define RKISP1_CIF_ISP_DPCC_RG_FAC_RB(v)			((v) << 8)
+
+#define RKISP1_CIF_ISP_DPCC_RO_LIMITS_n_G(n, v)			((v) << ((n) * 4))
+#define RKISP1_CIF_ISP_DPCC_RO_LIMITS_n_RB(n, v)		((v) << ((n) * 4 + 2))
+
+#define RKISP1_CIF_ISP_DPCC_RND_OFFS_n_G(n, v)			((v) << ((n) * 4))
+#define RKISP1_CIF_ISP_DPCC_RND_OFFS_n_RB(n, v)			((v) << ((n) * 4 + 2))
 
 /*
  * Denoising pre filter
@@ -136,16 +175,21 @@
 /**
  * enum rkisp1_cif_isp_version - ISP variants
  *
- * @RKISP1_V10: used at least in rk3288 and rk3399
- * @RKISP1_V11: declared in the original vendor code, but not used
- * @RKISP1_V12: used at least in rk3326 and px30
- * @RKISP1_V13: used at least in rk1808
+ * @RKISP1_V10: Used at least in RK3288 and RK3399.
+ * @RKISP1_V11: Declared in the original vendor code, but not used. Same number
+ *	of entries in grids and histogram as v10.
+ * @RKISP1_V12: Used at least in RK3326 and PX30.
+ * @RKISP1_V13: Used at least in RK1808. Same number of entries in grids and
+ *	histogram as v12.
+ * @RKISP1_V_IMX8MP: Used in at least i.MX8MP. Same number of entries in grids
+ *	and histogram as v10.
  */
 enum rkisp1_cif_isp_version {
 	RKISP1_V10 = 10,
 	RKISP1_V11,
 	RKISP1_V12,
 	RKISP1_V13,
+	RKISP1_V_IMX8MP,
 };
 
 enum rkisp1_cif_isp_histogram_mode {
@@ -249,16 +293,20 @@ struct rkisp1_cif_isp_bls_config {
 };
 
 /**
- * struct rkisp1_cif_isp_dpcc_methods_config - Methods Configuration used by DPCC
+ * struct rkisp1_cif_isp_dpcc_methods_config - DPCC methods set configuration
  *
- * Methods Configuration used by Defect Pixel Cluster Correction
+ * This structure stores the configuration of one set of methods for the DPCC
+ * algorithm. Multiple methods can be selected in each set (independently for
+ * the Green and Red/Blue components) through the @method field, the result is
+ * the logical AND of all enabled methods. The remaining fields set thresholds
+ * and factors for each method.
  *
- * @method: Method enable bits
- * @line_thresh: Line threshold
- * @line_mad_fac: Line MAD factor
- * @pg_fac: Peak gradient factor
- * @rnd_thresh: Rank Neighbor Difference threshold
- * @rg_fac: Rank gradient factor
+ * @method: Method enable bits (RKISP1_CIF_ISP_DPCC_METHODS_SET_*)
+ * @line_thresh: Line threshold (RKISP1_CIF_ISP_DPCC_LINE_THRESH_*)
+ * @line_mad_fac: Line Mean Absolute Difference factor (RKISP1_CIF_ISP_DPCC_LINE_MAD_FAC_*)
+ * @pg_fac: Peak gradient factor (RKISP1_CIF_ISP_DPCC_PG_FAC_*)
+ * @rnd_thresh: Rank Neighbor Difference threshold (RKISP1_CIF_ISP_DPCC_RND_THRESH_*)
+ * @rg_fac: Rank gradient factor (RKISP1_CIF_ISP_DPCC_RG_FAC_*)
  */
 struct rkisp1_cif_isp_dpcc_methods_config {
 	__u32 method;
@@ -272,14 +320,16 @@ struct rkisp1_cif_isp_dpcc_methods_config {
 /**
  * struct rkisp1_cif_isp_dpcc_config - Configuration used by DPCC
  *
- * Configuration used by Defect Pixel Cluster Correction
+ * Configuration used by Defect Pixel Cluster Correction. Three sets of methods
+ * can be configured and selected through the @set_use field. The result is the
+ * logical OR of all enabled sets.
  *
- * @mode: dpcc output mode
- * @output_mode: whether use hard coded methods
- * @set_use: stage1 methods set
- * @methods: methods config
- * @ro_limits: rank order limits
- * @rnd_offs: differential rank offsets for rank neighbor difference
+ * @mode: DPCC mode (RKISP1_CIF_ISP_DPCC_MODE_*)
+ * @output_mode: Interpolation output mode (RKISP1_CIF_ISP_DPCC_OUTPUT_MODE_*)
+ * @set_use: Methods sets selection (RKISP1_CIF_ISP_DPCC_SET_USE_*)
+ * @methods: Methods sets configuration
+ * @ro_limits: Rank order limits (RKISP1_CIF_ISP_DPCC_RO_LIMITS_*)
+ * @rnd_offs: Differential rank offsets for rank neighbor difference (RKISP1_CIF_ISP_DPCC_RND_OFFS_*)
  */
 struct rkisp1_cif_isp_dpcc_config {
 	__u32 mode;
@@ -539,10 +589,9 @@ enum rkisp1_cif_isp_goc_mode {
  * as is reported by the hw_revision field of the struct media_device_info
  * that is returned by ioctl MEDIA_IOC_DEVICE_INFO.
  *
- * Versions <= V11 have RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES_V10
- * entries, versions >= V12 have RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES_V12
- * entries. RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES is equal to the maximum
- * of the two.
+ * V10 has RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES_V10 entries, V12 has
+ * RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES_V12 entries.
+ * RKISP1_CIF_ISP_GAMMA_OUT_MAX_SAMPLES is equal to the maximum of the two.
  */
 struct rkisp1_cif_isp_goc_config {
 	__u32 mode;
@@ -562,10 +611,10 @@ struct rkisp1_cif_isp_goc_config {
  * as is reported by the hw_revision field of the struct media_device_info
  * that is returned by ioctl MEDIA_IOC_DEVICE_INFO.
  *
- * Versions <= V11 have RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE_V10
- * entries, versions >= V12 have RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE_V12
- * entries. RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE is equal to the maximum
- * of the two.
+ * V10 has RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE_V10 entries, V12 has
+ * RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE_V12 entries.
+ * RKISP1_CIF_ISP_HISTOGRAM_WEIGHT_GRIDS_SIZE is equal to the maximum of the
+ * two.
  */
 struct rkisp1_cif_isp_hst_config {
 	__u32 mode;
@@ -857,9 +906,9 @@ struct rkisp1_cif_isp_bls_meas_val {
  * as is reported by the hw_revision field of the struct media_device_info
  * that is returned by ioctl MEDIA_IOC_DEVICE_INFO.
  *
- * Versions <= V11 have RKISP1_CIF_ISP_AE_MEAN_MAX_V10 entries,
- * versions >= V12 have RKISP1_CIF_ISP_AE_MEAN_MAX_V12 entries.
- * RKISP1_CIF_ISP_AE_MEAN_MAX is equal to the maximum of the two.
+ * V10 has RKISP1_CIF_ISP_AE_MEAN_MAX_V10 entries, V12 has
+ * RKISP1_CIF_ISP_AE_MEAN_MAX_V12 entries. RKISP1_CIF_ISP_AE_MEAN_MAX is equal
+ * to the maximum of the two.
  *
  * Image is divided into 5x5 blocks on V10 and 9x9 blocks on V12.
  */
@@ -899,21 +948,21 @@ struct rkisp1_cif_isp_af_stat {
  *	       integer part.
  *
  * The window of the measurements area is divided to 5x5 sub-windows for
- * V10/V11 and to 9x9 sub-windows for V12. The histogram is then computed for
- * each sub-window independently and the final result is a weighted average of
- * the histogram measurements on all sub-windows. The window of the
- * measurements area and the weight of each sub-window are configurable using
+ * V10 and to 9x9 sub-windows for V12. The histogram is then computed for each
+ * sub-window independently and the final result is a weighted average of the
+ * histogram measurements on all sub-windows. The window of the measurements
+ * area and the weight of each sub-window are configurable using
  * struct @rkisp1_cif_isp_hst_config.
  *
- * The histogram contains 16 bins in V10/V11 and 32 bins in V12/V13.
+ * The histogram contains 16 bins in V10 and 32 bins in V12.
  *
  * The number of entries of @hist_bins depends on the hardware revision
  * as is reported by the hw_revision field of the struct media_device_info
  * that is returned by ioctl MEDIA_IOC_DEVICE_INFO.
  *
- * Versions <= V11 have RKISP1_CIF_ISP_HIST_BIN_N_MAX_V10 entries,
- * versions >= V12 have RKISP1_CIF_ISP_HIST_BIN_N_MAX_V12 entries.
- * RKISP1_CIF_ISP_HIST_BIN_N_MAX is equal to the maximum of the two.
+ * V10 has RKISP1_CIF_ISP_HIST_BIN_N_MAX_V10 entries, V12 has
+ * RKISP1_CIF_ISP_HIST_BIN_N_MAX_V12 entries. RKISP1_CIF_ISP_HIST_BIN_N_MAX is
+ * equal to the maximum of the two.
  */
 struct rkisp1_cif_isp_hist_stat {
 	__u32 hist_bins[RKISP1_CIF_ISP_HIST_BIN_N_MAX];

@@ -1,0 +1,249 @@
+From 3243ba0b74cef8491dccca96a4f16688208164e2 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 27 Apr 2023 09:57:50 +0100
+Subject: [PATCH] modem: add support for setting speed with S31
+
+The port speed may now be configured with S register 31:
+
+    ats31=<val>
+
+Accepted values are:
+
+    1 - 460800
+    2 - 230400
+    3 - 115200
+    4 - 57600
+    5 - 38400
+    6 - 19200
+    7 - 9600
+    8 - 4800
+    9 - 2400
+    10 - 1200
+    11 - 600
+    12 - 300
+    13 - 28800
+
+Note that autobaud (value zero) is not supported.
+---
+ src/dce.c        | 14 ++++++++++++++
+ src/dce.h        |  1 +
+ src/init.c       | 19 +++++++++++++++++++
+ src/modem_core.c | 27 +++++++++++++++++++++++++++
+ src/modem_core.h | 18 +++++++++++++++++-
+ src/serial.c     | 18 ++++++++++++++++++
+ src/serial.h     |  1 +
+ 7 files changed, 97 insertions(+), 1 deletion(-)
+
+diff --git a/src/dce.c b/src/dce.c
+index 59335ae..cb9b2c3 100644
+--- a/src/dce.c
++++ b/src/dce.c
+@@ -117,6 +117,20 @@ int dce_set_parity_databits(dce_config *cfg, unsigned val) {
+   return rc;
+ }
+ 
++int dce_set_speed(dce_config *cfg, unsigned speed) {
++  int rc = 0;
++
++  LOG_ENTER();
++
++  if (cfg->is_ip232) {
++  } else {
++    rc = ser_set_speed(cfg->fd, speed);
++  }
++
++  LOG_EXIT()
++  return rc;
++}
++
+ int dce_set_control_lines(dce_config *cfg, int state) {
+   int rc;
+ 
+diff --git a/src/dce.h b/src/dce.h
+index d9c72a3..92252c1 100644
+--- a/src/dce.h
++++ b/src/dce.h
+@@ -49,6 +49,7 @@ void dce_init_config(dce_config *cfg);
+ int dce_connect(dce_config *cfg);
+ int dce_set_flow_control(dce_config *cfg, int opts);
+ int dce_set_parity_databits(dce_config *cfg, unsigned val);
++int dce_set_speed(dce_config *cfg, unsigned speed);
+ int dce_set_control_lines(dce_config *cfg, int state);
+ int dce_get_control_lines(dce_config *cfg);
+ int dce_check_control_lines(dce_config *cfg);
+diff --git a/src/init.c b/src/init.c
+index 0a85a8c..baa5e37 100644
+--- a/src/init.c
++++ b/src/init.c
+@@ -63,6 +63,7 @@ int init(int argc,
+   cfg[0].dce_data.port_speed = 38400;
+   cfg[0].dce_data.stopbits = 1;
+   cfg[0].line_speed = 38400;
++  cfg[0].line_speed_follows_port_speed = TRUE;
+ 
+   while(opt>-1 && i < max_modem) {
+     opt=getopt(argc, argv, "p:s:b:S:d:v:hw:i:Il:L:t:n:a:A:c:C:N:B:T:D:V");
+@@ -140,6 +141,23 @@ int init(int argc,
+         LOG(LOG_ALL, "Setting DTE speed to %d", cfg[i].dce_data.port_speed);
+         if(dce_set == FALSE)
+           cfg[i].line_speed = cfg[i].dce_data.port_speed;
++        int sval = 0;
++        switch (cfg[i].dce_data.port_speed) {
++          case 460800: sval = MDM_SPEED_460800; break;
++          case 230400: sval = MDM_SPEED_230400; break;
++          case 115200: sval = MDM_SPEED_115200; break;
++          case 57600: sval = MDM_SPEED_57600; break;
++          case 38400: sval = MDM_SPEED_38400; break;
++          case 19200: sval = MDM_SPEED_19200; break;
++          case 9600: sval = MDM_SPEED_9600; break;
++          case 4800: sval = MDM_SPEED_4800; break;
++          case 2400: sval = MDM_SPEED_2400; break;
++          case 1200: sval = MDM_SPEED_1200; break;
++          case 600: sval = MDM_SPEED_600; break;
++          case 300: sval = MDM_SPEED_300; break;
++          case 28800: sval = MDM_SPEED_28800; break;
++        }
++        cfg[i].s[S_REG_SPEED] = sval;
+         break;
+       case 'b':
+         cfg[i].dce_data.stopbits = atoi(optarg);
+@@ -177,6 +195,7 @@ int init(int argc,
+       case 'S':
+         cfg[i].line_speed = atoi(optarg);
+         dce_set = TRUE;
++        cfg[i].line_speed_follows_port_speed = FALSE;
+         break;
+       case 'D':
+         cfg[i].direct_conn = TRUE;
+diff --git a/src/modem_core.c b/src/modem_core.c
+index c368e67..2de6746 100644
+--- a/src/modem_core.c
++++ b/src/modem_core.c
+@@ -105,6 +105,7 @@ void mdm_init_config(modem_config *cfg) {
+   cfg->s[S_REG_CARRIER_LOSS] = 14;
+   cfg->s[S_REG_DTMF_TIME] = 95;
+   cfg->s[S_REG_GUARD_TIME] = 50;
++  cfg->s[S_REG_SPEED] = MDM_SPEED_38400;
+ 
+   cfg->crlf[0] = cfg->s[S_REG_CR];
+   cfg->crlf[1] = cfg->s[S_REG_LF];
+@@ -471,6 +472,32 @@ int mdm_parse_cmd(modem_config* cfg) {
+                   break;
+               }
+               break;
++            case S_REG_SPEED:
++              unsigned speed = 0;
++              switch (cfg->s[S_REG_SPEED]) {
++                case MDM_SPEED_460800: speed = 460800; break;
++                case MDM_SPEED_230400: speed = 230400; break;
++                case MDM_SPEED_115200: speed = 115200; break;
++                case MDM_SPEED_57600: speed = 57600; break;
++                case MDM_SPEED_38400: speed = 38400; break;
++                case MDM_SPEED_19200: speed = 19200; break;
++                case MDM_SPEED_9600: speed = 9600; break;
++                case MDM_SPEED_4800: speed = 4800; break;
++                case MDM_SPEED_2400: speed = 2400; break;
++                case MDM_SPEED_1200: speed = 1200; break;
++                case MDM_SPEED_600: speed = 600; break;
++                case MDM_SPEED_300: speed = 300; break;
++                case MDM_SPEED_28800: speed = 28800; break;
++              }
++              if (speed) {
++                dce_set_speed(&cfg->dce_data, speed);
++                cfg->dce_data.port_speed = speed;
++                if (cfg->line_speed_follows_port_speed)
++                  cfg->line_speed = speed;
++              } else {
++                cmd=AT_CMD_ERR;
++              }
++              break;
+           }
+         } else {
+           LOG(LOG_DEBUG, "Ignoring S register %d=%s", num, tmp);
+diff --git a/src/modem_core.h b/src/modem_core.h
+index 2cbdc26..0fac373 100644
+--- a/src/modem_core.h
++++ b/src/modem_core.h
+@@ -38,6 +38,20 @@ typedef enum {
+ #define MDM_PARITY_ODD_DATA_8 5
+ #define MDM_PARITY_EVEN_DATA_8 6
+ 
++#define MDM_SPEED_460800 1
++#define MDM_SPEED_230400 2
++#define MDM_SPEED_115200 3
++#define MDM_SPEED_57600 4
++#define MDM_SPEED_38400 5
++#define MDM_SPEED_19200 6
++#define MDM_SPEED_9600 7
++#define MDM_SPEED_4800 8
++#define MDM_SPEED_2400 9
++#define MDM_SPEED_1200 10
++#define MDM_SPEED_600 11
++#define MDM_SPEED_300 12
++#define MDM_SPEED_28800 13
++
+ #define MDM_CONN_NONE 0
+ #define MDM_CONN_OUTGOING 1
+ #define MDM_CONN_INCOMING 2
+@@ -68,7 +82,8 @@ enum {
+   S_REG_DTMF_TIME = 11,
+   S_REG_GUARD_TIME = 12,
+   S_REG_PARITY_DATABITS = 23,
+-  S_REG_INACTIVITY_TIME = 30
++  S_REG_INACTIVITY_TIME = 30,
++  S_REG_SPEED = 31,
+ };
+ 
+ typedef struct modem_config {
+@@ -89,6 +104,7 @@ typedef struct modem_config {
+   dce_config dce_data;
+   line_config line_data;
+   int line_speed;
++  int line_speed_follows_port_speed;
+   int conn_type;
+   int is_ringing;
+   int is_off_hook;
+diff --git a/src/serial.c b/src/serial.c
+index d53450d..d040e50 100644
+--- a/src/serial.c
++++ b/src/serial.c
+@@ -211,6 +211,24 @@ int ser_set_parity_databits(int fd, unsigned cflag) {
+   return 0;
+ }
+ 
++int ser_set_speed(int fd, unsigned speed) {
++  struct termios tio;
++  if(0 != tcgetattr(fd, &tio)) {
++    ELOG(LOG_FATAL, "Could not get serial port attributes");
++    return -1;
++  }
++  int bps_rate = ser_get_bps_const(speed);
++  if (bps_rate > -1) {
++    cfsetispeed(&tio, bps_rate);
++    cfsetospeed(&tio, bps_rate);
++  }
++  if(0 != tcsetattr(fd, TCSANOW, &tio)) {
++    ELOG(LOG_FATAL,"Could not set serial port attributes");
++    return -1;
++  }
++  return 0;
++}
++
+ int ser_get_control_lines(int fd) {
+   int status;
+ 
+diff --git a/src/serial.h b/src/serial.h
+index a805511..5ba101b 100644
+--- a/src/serial.h
++++ b/src/serial.h
+@@ -10,6 +10,7 @@ int ser_get_bps_const(int speed);
+ int ser_init_conn(char *tty, int speed, int stopbits);
+ int ser_set_flow_control(int fd, unsigned iflag, unsigned cflag);
+ int ser_set_parity_databits(int fd, unsigned cflag);
++int ser_set_speed(int fd, unsigned speed);
+ int ser_get_control_lines(int fd);
+ int ser_set_control_lines(int fd, int state);
+ int ser_write(int fd, unsigned char *data,int len);
+-- 
+2.34.1
+

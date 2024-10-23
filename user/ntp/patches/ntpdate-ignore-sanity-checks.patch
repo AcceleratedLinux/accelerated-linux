@@ -1,0 +1,110 @@
+--- a/ntpdate/ntpdate.c	2023-07-18 15:22:40.702621300 +1000
++++ b/ntpdate/ntpdate.c	2023-07-18 15:22:52.714468258 +1000
+@@ -126,6 +126,11 @@
+ int polltest = 0;
+ 
+ /*
++ * Ignore sanity checking to be compatible with bad servers.
++ */
++int ignore_sanity_checks = 0;
++
++/*
+  * Initializing flag.  All async routines watch this and only do their
+  * thing when it is clear.
+  */
+@@ -350,7 +355,7 @@
+ 	/*
+ 	 * Decode argument list
+ 	 */
+-	while ((c = ntp_getopt(argc, argv, "46a:bBde:k:o:p:qst:uv")) != EOF)
++	while ((c = ntp_getopt(argc, argv, "46a:bBde:ik:o:p:qst:uv")) != EOF)
+ 		switch (c)
+ 		{
+ 		case '4':
+@@ -386,6 +391,9 @@
+ 				sys_authdelay = tmp.l_uf;
+ 			}
+ 			break;
++		case 'i':
++			ignore_sanity_checks = 1;
++			break;
+ 		case 'k':
+ 			key_file = ntp_optarg;
+ 			break;
+@@ -1067,40 +1075,42 @@
+ 				printf("%s: Server dropped: no data\n", ntoa(&server->srcadr));
+ 			continue;	/* no data */
+ 		}
+-		if (server->stratum > NTP_INFIN) {
+-			if (debug)
+-				printf("%s: Server dropped: strata too high\n", ntoa(&server->srcadr));
+-			continue;	/* stratum no good */
+-		}
+-		if (server->delay > NTP_MAXWGT) {
+-			if (debug)
+-				printf("%s: Server dropped: server too far away\n",
+-					ntoa(&server->srcadr));
+-			continue;	/* too far away */
+-		}
+-		if (server->leap == LEAP_NOTINSYNC) {
+-			if (debug)
+-				printf("%s: Server dropped: leap not in sync\n", ntoa(&server->srcadr));
+-			continue;	/* he's in trouble */
+-		}
+-		if (!L_ISHIS(&server->org, &server->reftime)) {
+-			if (debug)
+-				printf("%s: Server dropped: server is very broken\n",
+-				       ntoa(&server->srcadr));
+-			continue;	/* very broken host */
+-		}
+-		if ((server->org.l_ui - server->reftime.l_ui)
+-		    >= NTP_MAXAGE) {
+-			if (debug)
+-				printf("%s: Server dropped: server has gone too long without sync\n",
+-				       ntoa(&server->srcadr));
+-			continue;	/* too long without sync */
+-		}
+-		if (server->trust != 0) {
+-			if (debug)
+-				printf("%s: Server dropped: Server is untrusted\n",
+-				       ntoa(&server->srcadr));
+-			continue;
++		if (!ignore_sanity_checks) {
++			if (server->stratum > NTP_INFIN) {
++				if (debug)
++					printf("%s: Server dropped: strata too high\n", ntoa(&server->srcadr));
++				continue;	/* stratum no good */
++			}
++			if (server->delay > NTP_MAXWGT) {
++				if (debug)
++					printf("%s: Server dropped: server too far away\n",
++						ntoa(&server->srcadr));
++				continue;	/* too far away */
++			}
++			if (server->leap == LEAP_NOTINSYNC) {
++				if (debug)
++					printf("%s: Server dropped: leap not in sync\n", ntoa(&server->srcadr));
++				continue;	/* he's in trouble */
++			}
++			if (!L_ISHIS(&server->org, &server->reftime)) {
++				if (debug)
++					printf("%s: Server dropped: server is very broken\n",
++					       ntoa(&server->srcadr));
++				continue;	/* very broken host */
++			}
++			if ((server->org.l_ui - server->reftime.l_ui)
++			    >= NTP_MAXAGE) {
++				if (debug)
++					printf("%s: Server dropped: server has gone too long without sync\n",
++					       ntoa(&server->srcadr));
++				continue;	/* too long without sync */
++			}
++			if (server->trust != 0) {
++				if (debug)
++					printf("%s: Server dropped: Server is untrusted\n",
++					       ntoa(&server->srcadr));
++				continue;
++			}
+ 		}
+ 
+ 		/*

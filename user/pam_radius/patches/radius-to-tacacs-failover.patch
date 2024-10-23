@@ -1,0 +1,48 @@
+Index: pam_radius-release_2_0_0/src/pam_radius_auth.c
+===================================================================
+--- pam_radius-release_2_0_0.orig/src/pam_radius_auth.c
++++ pam_radius-release_2_0_0/src/pam_radius_auth.c
+@@ -37,6 +37,10 @@
+ /* internal data */
+ static CONST char *pam_module_name = "pam_radius_auth";
+ 
++/* radius_authenticated is introduced, to handle authentication with
++ * tacacs as fallback authentication method to radius. */
++static char radius_authenticated = FALSE;
++
+ /* logging */
+ static void _pam_log(int err, CONST char *format, ...)
+ {
+@@ -1177,6 +1181,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_h
+ 	AUTH_HDR *response = (AUTH_HDR *) recv_buffer;
+ 	radius_conf_t config;
+ 
++	radius_authenticated = FALSE;
+ 	ctrl = _pam_parse(argc, argv, &config);
+ 	debug = config.debug;
+ 
+@@ -1453,6 +1458,9 @@ do_next:
+ 		*pret = retval;
+ 		pam_set_data(pamh, "rad_setcred_return", (void *) pret, _int_free);
+ 	}
++	if (retval==PAM_SUCCESS) {
++		radius_authenticated = TRUE;
++	}
+ 	return retval;
+ }
+ 
+@@ -1822,9 +1830,11 @@ PAM_EXTERN int pam_sm_chauthtok(pam_hand
+  */
+ PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh,int flags,int argc,CONST char **argv)
+ {
+-	int retval;
+-	retval = PAM_SUCCESS;
+-	return retval;
++	if (radius_authenticated == TRUE) {
++		return PAM_SUCCESS;
++	} else {
++		return PAM_IGNORE;
++	}
+ }
+ 
+ 

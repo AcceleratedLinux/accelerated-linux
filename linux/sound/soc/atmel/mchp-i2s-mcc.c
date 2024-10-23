@@ -16,7 +16,7 @@
 #include <linux/clk.h>
 #include <linux/mfd/syscon.h>
 #include <linux/lcm.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -350,7 +350,7 @@ static int mchp_i2s_mcc_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		return -EINVAL;
 
 	/* We can't generate only FSYNC */
-	if ((fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) == SND_SOC_DAIFMT_CBP_CFC)
+	if ((fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) == SND_SOC_DAIFMT_BC_FP)
 		return -EINVAL;
 
 	/* We can only reconfigure the IP when it's stopped */
@@ -547,19 +547,19 @@ static int mchp_i2s_mcc_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	switch (dev->fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_BP_FP:
 		/* cpu is BCLK and LRC master */
 		mra |= MCHP_I2SMCC_MRA_MODE_MASTER;
 		if (dev->sysclk)
 			mra |= MCHP_I2SMCC_MRA_IMCKMODE_GEN;
 		set_divs = 1;
 		break;
-	case SND_SOC_DAIFMT_CBC_CFP:
+	case SND_SOC_DAIFMT_BP_FC:
 		/* cpu is BCLK master */
 		mrb |= MCHP_I2SMCC_MRB_CLKSEL_INT;
 		set_divs = 1;
 		fallthrough;
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_BC_FC:
 		/* cpu is slave */
 		mra |= MCHP_I2SMCC_MRA_MODE_SLAVE;
 		if (dev->sysclk)
@@ -870,17 +870,6 @@ static int mchp_i2s_mcc_startup(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static const struct snd_soc_dai_ops mchp_i2s_mcc_dai_ops = {
-	.set_sysclk	= mchp_i2s_mcc_set_sysclk,
-	.set_bclk_ratio = mchp_i2s_mcc_set_bclk_ratio,
-	.startup	= mchp_i2s_mcc_startup,
-	.trigger	= mchp_i2s_mcc_trigger,
-	.hw_params	= mchp_i2s_mcc_hw_params,
-	.hw_free	= mchp_i2s_mcc_hw_free,
-	.set_fmt	= mchp_i2s_mcc_set_dai_fmt,
-	.set_tdm_slot	= mchp_i2s_mcc_set_dai_tdm_slot,
-};
-
 static int mchp_i2s_mcc_dai_probe(struct snd_soc_dai *dai)
 {
 	struct mchp_i2s_mcc_dev *dev = snd_soc_dai_get_drvdata(dai);
@@ -895,6 +884,18 @@ static int mchp_i2s_mcc_dai_probe(struct snd_soc_dai *dai)
 	return 0;
 }
 
+static const struct snd_soc_dai_ops mchp_i2s_mcc_dai_ops = {
+	.probe		= mchp_i2s_mcc_dai_probe,
+	.set_sysclk	= mchp_i2s_mcc_set_sysclk,
+	.set_bclk_ratio	= mchp_i2s_mcc_set_bclk_ratio,
+	.startup	= mchp_i2s_mcc_startup,
+	.trigger	= mchp_i2s_mcc_trigger,
+	.hw_params	= mchp_i2s_mcc_hw_params,
+	.hw_free	= mchp_i2s_mcc_hw_free,
+	.set_fmt	= mchp_i2s_mcc_set_dai_fmt,
+	.set_tdm_slot	= mchp_i2s_mcc_set_dai_tdm_slot,
+};
+
 #define MCHP_I2SMCC_RATES              SNDRV_PCM_RATE_8000_192000
 
 #define MCHP_I2SMCC_FORMATS	(SNDRV_PCM_FMTBIT_S8 |          \
@@ -906,7 +907,6 @@ static int mchp_i2s_mcc_dai_probe(struct snd_soc_dai *dai)
 				 SNDRV_PCM_FMTBIT_S32_LE)
 
 static struct snd_soc_dai_driver mchp_i2s_mcc_dai = {
-	.probe	= mchp_i2s_mcc_dai_probe,
 	.playback = {
 		.stream_name = "I2SMCC-Playback",
 		.channels_min = 1,
@@ -928,7 +928,8 @@ static struct snd_soc_dai_driver mchp_i2s_mcc_dai = {
 };
 
 static const struct snd_soc_component_driver mchp_i2s_mcc_component = {
-	.name	= "mchp-i2s-mcc",
+	.name			= "mchp-i2s-mcc",
+	.legacy_dai_naming	= 1,
 };
 
 #ifdef CONFIG_OF
@@ -1087,22 +1088,20 @@ static int mchp_i2s_mcc_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mchp_i2s_mcc_remove(struct platform_device *pdev)
+static void mchp_i2s_mcc_remove(struct platform_device *pdev)
 {
 	struct mchp_i2s_mcc_dev *dev = platform_get_drvdata(pdev);
 
 	clk_disable_unprepare(dev->pclk);
-
-	return 0;
 }
 
 static struct platform_driver mchp_i2s_mcc_driver = {
 	.driver		= {
 		.name	= "mchp_i2s_mcc",
-		.of_match_table	= of_match_ptr(mchp_i2s_mcc_dt_ids),
+		.of_match_table	= mchp_i2s_mcc_dt_ids,
 	},
 	.probe		= mchp_i2s_mcc_probe,
-	.remove		= mchp_i2s_mcc_remove,
+	.remove_new	= mchp_i2s_mcc_remove,
 };
 module_platform_driver(mchp_i2s_mcc_driver);
 

@@ -13,7 +13,7 @@
 #include <linux/module.h>
 #include <linux/mtd/partitions.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/dma/mxs-dma.h>
 #include "gpmi-nand.h"
@@ -148,11 +148,9 @@ static int gpmi_init(struct gpmi_nand_data *this)
 	struct resources *r = &this->resources;
 	int ret;
 
-	ret = pm_runtime_get_sync(this->dev);
-	if (ret < 0) {
-		pm_runtime_put_noidle(this->dev);
+	ret = pm_runtime_resume_and_get(this->dev);
+	if (ret < 0)
 		return ret;
-	}
 
 	ret = gpmi_reset_block(r->gpmi_regs, false);
 	if (ret)
@@ -699,12 +697,6 @@ static int common_nfc_set_geometry(struct gpmi_nand_data *this)
 	bool use_minimun_ecc;
 	int err;
 
-	if (of_property_read_bool(this->dev->of_node,
-				  "fsl,legacy-bch-geometry")) {
-		dev_warn(this->dev, "using legacy BCH geometry\n");
-		return legacy_set_geometry(this);
-	}
-
 	use_minimun_ecc = of_property_read_bool(this->dev->of_node,
 						"fsl,use-minimum-ecc");
 
@@ -967,7 +959,6 @@ static int gpmi_nfc_apply_timings(struct gpmi_nand_data *this)
 	writel(BM_GPMI_CTRL1_CLEAR_MASK, gpmi_regs + HW_GPMI_CTRL1_CLR);
 	writel(hw->ctrl1n, gpmi_regs + HW_GPMI_CTRL1_SET);
 
-	clk_prepare_enable(r->clock[0]);
 	/* Wait 64 clock cycles before using the GPMI after enabling the DLL */
 	dll_wait_time_us = USEC_PER_SEC / hw->clk_rate * 64;
 	if (!dll_wait_time_us)
@@ -1368,7 +1359,7 @@ error_alloc:
 /*
  * Handles block mark swapping.
  * It can be called in swapping the block mark, or swapping it back,
- * because the the operations are the same.
+ * because the operations are the same.
  */
 static void block_mark_swapping(struct gpmi_nand_data *this,
 				void *payload, void *auxiliary)
@@ -2314,12 +2305,6 @@ static int gpmi_nand_attach_chip(struct nand_chip *chip)
 	dev_dbg(this->dev, "Blockmark swapping %sabled\n",
 		this->swap_block_mark ? "en" : "dis");
 
-#if 0
-	if (of_property_read_bool(this->dev->of_node,
-				  "fsl,legacy-bch-geometry"))
-		this->legacy_bch_geometry = true;
-#endif
-
 	ret = gpmi_init_last(this);
 	if (ret)
 		return ret;
@@ -2517,11 +2502,9 @@ static int gpmi_nfc_exec_op(struct nand_chip *chip,
 	for (i = 0; i < GPMI_MAX_TRANSFERS; i++)
 		this->transfers[i].direction = DMA_NONE;
 
-	ret = pm_runtime_get_sync(this->dev);
-	if (ret < 0) {
-		pm_runtime_put_noidle(this->dev);
+	ret = pm_runtime_resume_and_get(this->dev);
+	if (ret < 0)
 		return ret;
-	}
 
 	/*
 	 * This driver currently supports only one NAND chip. Plus, dies share
@@ -2794,7 +2777,7 @@ exit_acquire_resources:
 	return ret;
 }
 
-static int gpmi_nand_remove(struct platform_device *pdev)
+static void gpmi_nand_remove(struct platform_device *pdev)
 {
 	struct gpmi_nand_data *this = platform_get_drvdata(pdev);
 	struct nand_chip *chip = &this->nand;
@@ -2808,7 +2791,6 @@ static int gpmi_nand_remove(struct platform_device *pdev)
 	nand_cleanup(chip);
 	gpmi_free_dma_buffer(this);
 	release_resources(this);
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -2877,7 +2859,7 @@ static struct platform_driver gpmi_nand_driver = {
 		.of_match_table = gpmi_nand_id_table,
 	},
 	.probe   = gpmi_nand_probe,
-	.remove  = gpmi_nand_remove,
+	.remove_new = gpmi_nand_remove,
 };
 module_platform_driver(gpmi_nand_driver);
 

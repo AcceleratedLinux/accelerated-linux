@@ -63,8 +63,8 @@ static struct vio_version vsw_versions[] = {
 static void vsw_get_drvinfo(struct net_device *dev,
 			    struct ethtool_drvinfo *info)
 {
-	strlcpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
-	strlcpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
+	strscpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
+	strscpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
 }
 
 static u32 vsw_get_msglevel(struct net_device *dev)
@@ -124,7 +124,7 @@ static void vsw_set_rx_mode(struct net_device *dev)
 	return sunvnet_set_rx_mode_common(dev, port->vp);
 }
 
-int ldmvsw_open(struct net_device *dev)
+static int ldmvsw_open(struct net_device *dev)
 {
 	struct vnet_port *port = netdev_priv(dev);
 	struct vio_driver_state *vio = &port->vio;
@@ -136,7 +136,6 @@ int ldmvsw_open(struct net_device *dev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(ldmvsw_open);
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
 static void vsw_poll_controller(struct net_device *dev)
@@ -287,6 +286,9 @@ static int vsw_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 
 	hp = mdesc_grab();
 
+	if (!hp)
+		return -ENODEV;
+
 	rmac = mdesc_get_property(hp, vdev->mp, remote_macaddr_prop, &len);
 	err = -ENODEV;
 	if (!rmac) {
@@ -335,7 +337,7 @@ static int vsw_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	port->tsolen = 0;
 
 	/* Mark the port as belonging to ldmvsw which directs the
-	 * the common code to use the net_device in the vnet_port
+	 * common code to use the net_device in the vnet_port
 	 * rather than the net_device in the vnet (which is used
 	 * by sunvnet). This bit is used by the VNET_PORT_TO_NET_DEVICE
 	 * macro.
@@ -354,8 +356,7 @@ static int vsw_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 
 	dev_set_drvdata(&vdev->dev, port);
 
-	netif_napi_add(dev, &port->napi, sunvnet_poll_common,
-		       NAPI_POLL_WEIGHT);
+	netif_napi_add(dev, &port->napi, sunvnet_poll_common);
 
 	spin_lock_irqsave(&vp->lock, flags);
 	list_add_rcu(&port->list, &vp->port_list);

@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "atecc.h"
 #include "fileblock.h"
 #include "squashfs.h"
 #include "util.h"
@@ -111,6 +112,49 @@ static int squashfs_func_truncate(sqfs_file_t *base, sqfs_u64 size)
 	return SQFS_ERROR_UNSUPPORTED;
 }
 
+#ifdef CONFIG_USER_NETFLASH_ATECC508A_KERNEL_DRIVER
+
+#define AES_KEY_BYTES		32
+#define DATA_ZONE		2
+#define PROD_HASH_OFFSET	0x40
+
+/*
+ * Read the production key hash data and use that as the key.
+ * This data read function accesses the "Data Zone" region of the device
+ * using the atecc i2c 4-byte READ command.
+ */
+static void squashfs_set_aes_key(struct squashfs_img *img)
+{
+	atecc_ctx ctx;
+	uint8_t key[AES_KEY_BYTES];
+
+	if (atecc_init(&ctx) == 0) {
+		uint16_t addr = PROD_HASH_OFFSET;
+		int i;
+
+		for (i = 0; i < sizeof(key); i += 4, addr++)
+			atecc_read4(&ctx, DATA_ZONE, addr, &key[i]);
+
+		atecc_close(&ctx);
+
+		sqfs_aes_set_key(img->cmp, key);
+
+		/* Clear key in RAM now we are done with it locally */
+		memset(key, 0, sizeof(key));
+	} else {
+		notice("cannot extract key");
+	}
+}
+
+#else
+
+static void squashfs_set_aes_key(struct squashfs_img *img)
+{
+	notice("no key extraction method available");
+}
+
+#endif /* CONFIG_USER_NETFLASH_ATECC508A_KERNEL_DRIVER */
+
 struct squashfs_img *squashfs_img_open(void)
 {
 	int ret;
@@ -144,6 +188,9 @@ struct squashfs_img *squashfs_img_open(void)
 		error("squashfs: failed to create compressor");
 		goto err;
 	}
+
+	if (img->super.compression_id == SQFS_COMP_XZ_AES)
+		squashfs_set_aes_key(img);
 
 	img->idtbl = sqfs_id_table_create(0);
 	if (img->idtbl == NULL) {

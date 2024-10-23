@@ -48,7 +48,7 @@
  * of 4096 jumbo frames (MTU=9000) we will need about 9K*4K = 36MB plus
  * some padding.
  *
- * But the size of a single DMA region is limited by MAX_ORDER in the
+ * But the size of a single DMA region is limited by MAX_PAGE_ORDER in the
  * kernel (about 16MB currently).  To support say 4K Jumbo frames, we
  * use a set of LTBs (struct ltb_set) per pool.
  *
@@ -75,7 +75,7 @@
  * pool for the 4MB. Thus the 16 Rx and Tx queues require 32 * 5 = 160
  * plus 16 for the TSO pools for a total of 176 LTB mappings per VNIC.
  */
-#define IBMVNIC_ONE_LTB_MAX	((u32)((1 << (MAX_ORDER - 1)) * PAGE_SIZE))
+#define IBMVNIC_ONE_LTB_MAX	((u32)((1 << MAX_PAGE_ORDER) * PAGE_SIZE))
 #define IBMVNIC_ONE_LTB_SIZE	min((u32)(8 << 20), IBMVNIC_ONE_LTB_MAX)
 #define IBMVNIC_LTB_SET_SIZE	(38 << 20)
 
@@ -825,6 +825,7 @@ struct ibmvnic_sub_crq_queue {
 	atomic_t used;
 	char name[32];
 	u64 handle;
+	cpumask_var_t affinity_mask;
 } ____cacheline_aligned;
 
 struct ibmvnic_long_term_buff {
@@ -982,6 +983,10 @@ struct ibmvnic_adapter {
 	struct completion reset_done;
 	int reset_done_rc;
 	bool wait_for_reset;
+
+	/* CPU hotplug instances for online & dead */
+	struct hlist_node node;
+	struct hlist_node node_dead;
 
 	/* partner capabilities */
 	u64 min_tx_queues;

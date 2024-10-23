@@ -56,4 +56,11 @@
 #define cpu_has_tlbinv		0
 #define cpu_has_userlocal	1
 
+/*
+ * Because of the Eviction Queue bug workaround, have to limit the DMA address
+ * range to <192MB (DMA address <0x1C000000), because from that point different
+ * peripherals, etc. are mapped, not memory.
+ */
+#define MAX_DMA32_PFN		((192UL << 20) >> PAGE_SHIFT)
+
 #endif /* _MT7621_CPU_FEATURE_OVERRIDES_H */

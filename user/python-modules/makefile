@@ -1,24 +1,4 @@
-PYTHON_VERSION = $(shell sed -rn 's/^PYTHON_VERSION += +(.*)$\/\1/p' $(ROOTDIR)/user/python/makefile)
-PYTHON_VERSION_SHORT = $(shell echo $(PYTHON_VERSION) | cut -d'.' -f1,2)
-
-# make sure we do not lean on system packages
-export PYTHONNOUSERSITE = 1
-
-# Requires that the build system has the same major/minor version of Python as
-# was built for the target.
-PYTHON_HOSTINSTALL := $(ROOTDIR)/user/python/build/Python-Hostinstall
-PYTHON := PATH="$(PYTHON_HOSTINSTALL)/bin:$$PATH"; export PATH; python$(PYTHON_VERSION_SHORT)
-
-PYTHON_BUILDDIR = $(ROOTDIR)/user/python/build/Python-$(PYTHON_VERSION)
-PYTHON_INSTALLDIR = $(ROOTDIR)/user/python/build/Python-$(PYTHON_VERSION)-install/usr/lib/python$(PYTHON_VERSION_SHORT)
-SYSCONFIGDATA_MATCH = _sysconfigdata*.py
-SYSCONFIGPATH = $(shell find $(PYTHON_INSTALLDIR) -name $(SYSCONFIGDATA_MATCH) 2> /dev/null | head)
-SYSCONFIGDATA = $(notdir $(SYSCONFIGPATH))
-
-# Setup environment to find sysconfigdata module from the cross-compiled Python
-export PYTHONPATH = $(ROOTDIR)/user/python-modules
-export _PYTHON_PROJECT_BASE = $(PYTHON_BUILDDIR)
-export _PYTHON_SYSCONFIGDATA_NAME = $(basename $(SYSCONFIGDATA))
+include python-modules.mk
 
 # Absolute paths to staging so setup.py can correctly detect module
 # dependencies like zlib and ssl
@@ -147,7 +127,7 @@ endif
 ifdef CONFIG_USER_PYTHON_MODULES_DIGI_XBEE_LIB
 
 XBEE_LIB_PKG = python-xbee
-$(XBEE_LIB_PKG)_VERSION = 9c08721ccc53c9ba1d9330ca78b876b495958f4e
+$(XBEE_LIB_PKG)_VERSION = cbd2cfe5ed18ff217cb97c565463be7879055be6
 $(XBEE_LIB_PKG)_METHOD = git
 $(XBEE_LIB_PKG)_URL = https://github.com/digidotcom/xbee-python.git
 $(XBEE_LIB_PKG)_DEP = $(SETUPTOOLS_PKG)
@@ -180,7 +160,7 @@ endif
 ###############################################################################
 ifdef CONFIG_USER_PYTHON_MODULES_PAHO_MQTT
 
-PAHO_MQTT_VERSION = 1.5.1
+PAHO_MQTT_VERSION = 1.6.1
 PAHO_MQTT_PKG = paho.mqtt.python-$(PAHO_MQTT_VERSION)
 $(PAHO_MQTT_PKG)_URL = https://github.com/eclipse/paho.mqtt.python/archive/v$(PAHO_MQTT_VERSION).tar.gz
 $(PAHO_MQTT_PKG)_DOWNLOADNAME = $(PAHO_MQTT_PKG).tar.gz
@@ -341,6 +321,7 @@ PYTHON_UBUS_PKG = ubus-$(PYTHON_UBUS_VERSION)
 $(PYTHON_UBUS_PKG)_URL = https://pypi.io/packages/source/u/ubus/$(PYTHON_UBUS_PKG).tar.gz
 $(PYTHON_UBUS_PKG)_DOWNLOADHASH = 4dc4ef0fbcc8abb7a2354691475a58ff3eb015f1bab3150750729f7f657dd440
 $(PYTHON_UBUS_PKG)_DEP = $(SETUPTOOLS_PKG)
+$(PYTHON_UBUS_PKG)_PATCHES += 0003-ubus-fix-memory-leak-in-objects-method.patch
 
 AUTOMAKE_y += $(PYTHON_UBUS_PKG)
 endif

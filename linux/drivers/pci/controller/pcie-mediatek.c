@@ -617,12 +617,18 @@ static void mtk_pcie_intr_handler(struct irq_desc *desc)
 		if (status & MSI_STATUS){
 			unsigned long imsi_status;
 
+			/*
+			 * The interrupt status can be cleared even if the
+			 * MSI status remains pending. As such, given the
+			 * edge-triggered interrupt type, its status should
+			 * be cleared before being dispatched to the
+			 * handler of the underlying device.
+			 */
+			writel(MSI_STATUS, port->base + PCIE_INT_STATUS);
 			while ((imsi_status = readl(port->base + PCIE_IMSI_STATUS))) {
 				for_each_set_bit(bit, &imsi_status, MTK_MSI_IRQS_NUM)
 					generic_handle_domain_irq(port->inner_domain, bit);
 			}
-			/* Clear MSI interrupt status */
-			writel(MSI_STATUS, port->base + PCIE_INT_STATUS);
 		}
 	}
 
@@ -643,7 +649,7 @@ static int mtk_pcie_setup_irq(struct mtk_pcie_port *port,
 		return err;
 	}
 
-	if (of_find_property(dev->of_node, "interrupt-names", NULL))
+	if (of_property_present(dev->of_node, "interrupt-names"))
 		port->irq = platform_get_irq_byname(pdev, "pcie_irq");
 	else
 		port->irq = platform_get_irq(pdev, port->slot);
@@ -1134,7 +1140,7 @@ static void mtk_pcie_free_resources(struct mtk_pcie *pcie)
 	pci_free_resource_list(windows);
 }
 
-static int mtk_pcie_remove(struct platform_device *pdev)
+static void mtk_pcie_remove(struct platform_device *pdev)
 {
 	struct mtk_pcie *pcie = platform_get_drvdata(pdev);
 	struct pci_host_bridge *host = pci_host_bridge_from_priv(pcie);
@@ -1146,11 +1152,9 @@ static int mtk_pcie_remove(struct platform_device *pdev)
 	mtk_pcie_irq_teardown(pcie);
 
 	mtk_pcie_put_resources(pcie);
-
-	return 0;
 }
 
-static int __maybe_unused mtk_pcie_suspend_noirq(struct device *dev)
+static int mtk_pcie_suspend_noirq(struct device *dev)
 {
 	struct mtk_pcie *pcie = dev_get_drvdata(dev);
 	struct mtk_pcie_port *port;
@@ -1174,7 +1178,7 @@ static int __maybe_unused mtk_pcie_suspend_noirq(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused mtk_pcie_resume_noirq(struct device *dev)
+static int mtk_pcie_resume_noirq(struct device *dev)
 {
 	struct mtk_pcie *pcie = dev_get_drvdata(dev);
 	struct mtk_pcie_port *port, *tmp;
@@ -1195,8 +1199,8 @@ static int __maybe_unused mtk_pcie_resume_noirq(struct device *dev)
 }
 
 static const struct dev_pm_ops mtk_pcie_pm_ops = {
-	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_pcie_suspend_noirq,
-				      mtk_pcie_resume_noirq)
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_pcie_suspend_noirq,
+				  mtk_pcie_resume_noirq)
 };
 
 static const struct mtk_pcie_soc mtk_pcie_soc_v1 = {
@@ -1239,7 +1243,7 @@ MODULE_DEVICE_TABLE(of, mtk_pcie_ids);
 
 static struct platform_driver mtk_pcie_driver = {
 	.probe = mtk_pcie_probe,
-	.remove = mtk_pcie_remove,
+	.remove_new = mtk_pcie_remove,
 	.driver = {
 		.name = "mtk-pcie",
 		.of_match_table = mtk_pcie_ids,

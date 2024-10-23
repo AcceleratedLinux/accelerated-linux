@@ -1,0 +1,55 @@
+config USER_PYTHON2_HOST
+	bool "python2-host (2.7)"
+	help
+		Build python2 for the build system,  this is used for
+		building python2 and other python2 related services
+		throughout the build process.
+
+config USER_PYTHON2
+	bool "python2-target (2.7)"
+	select LIB_LIBFFI
+	select LIB_NCURSES
+	select LIB_NCURSES_MINIMAL
+	select USER_PYTHON2_HOST
+	help
+		Build python2 for the target device, requires a host build.
+		Note that enabling this option does not include any new files
+		into the DAL image, it only builds Python, installs any third-party
+		packages (see "python2 modules") and creates an LXC container.
+
+
+if USER_PYTHON2
+menu "python2 modules (2.7)"
+
+# Note that pip was not installed in NDS or DBL.
+config USER_PYTHON2_MODULES_PIP
+	bool "pip"
+	select USER_PYTHON2_MODULES_SETUPTOOLS
+	help
+		The PyPA recommended tool for installing Python packages.
+
+config USER_PYTHON2_MODULES_SETUPTOOLS_HOST
+	bool "setuptools - host build"
+	help
+		Easily download, build, install, upgrade, and uninstall Python packages.
+		Host build only.
+
+config USER_PYTHON2_MODULES_SETUPTOOLS
+	bool "setuptools - install on target"
+	select USER_PYTHON2_MODULES_SETUPTOOLS_HOST
+	help
+		Easily download, build, install, upgrade, and uninstall Python packages.
+
+config USER_PYTHON2_MODULES_SIX
+	bool "six"
+	help
+		Python 2 and 3 compatibility utilities.
+
+config USER_PYTHON2_MODULES_PAHO_MQTT
+	bool "paho-mqtt"
+	select USER_PYTHON2_MODULES_SETUPTOOLS_HOST
+	help
+		Eclipse Paho MQTT Python client library.
+
+endmenu
+endif

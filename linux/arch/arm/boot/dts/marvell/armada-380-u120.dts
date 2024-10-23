@@ -1,0 +1,505 @@
+/*
+ * armada-380-u120.dts -- device tree for Gearlinx/U120
+ *
+ *  Copyright (C) 2014 Marvell
+ *  Copyright (C) 2018 Gearlinx Pty Ltd
+ *  Copyright (C) 2023 Digi
+ *
+ * This file is dual-licensed: you can use it either under the terms
+ * of the GPL or the X11 license, at your option. Note that this dual
+ * licensing only applies to this file, and not this project as a
+ * whole.
+ *
+ *  a) This file is free software; you can redistribute it and/or
+ *     modify it under the terms of the GNU General Public License as
+ *     published by the Free Software Foundation; either version 2 of the
+ *     License, or (at your option) any later version.
+ *
+ *     This file is distributed in the hope that it will be useful
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ * Or, alternatively
+ *
+ *  b) Permission is hereby granted, free of charge, to any person
+ *     obtaining a copy of this software and associated documentation
+ *     files (the "Software"), to deal in the Software without
+ *     restriction, including without limitation the rights to use
+ *     copy, modify, merge, publish, distribute, sublicense, and/or
+ *     sell copies of the Software, and to permit persons to whom the
+ *     Software is furnished to do so, subject to the following
+ *     conditions:
+ *
+ *     The above copyright notice and this permission notice shall be
+ *     included in all copies or substantial portions of the Software.
+ *
+ *     THE SOFTWARE IS PROVIDED , WITHOUT WARRANTY OF ANY KIND
+ *     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ *     OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ *     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ *     HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
+ *     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ *     OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/dts-v1/;
+#include "armada-388.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "Digi U120";
+	compatible = "digi,u120", "marvell,armada388",
+		"marvell,armada385", "marvell,armada380";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x00000000 0x40000000>; /* 1GB */
+	};
+
+	soc {
+		ranges = <MBUS_ID(0xf0, 0x01) 0 0xf1000000 0x100000
+			  MBUS_ID(0x01, 0x1d) 0 0xfff00000 0x100000
+			  MBUS_ID(0x09, 0x19) 0 0xf1100000 0x10000
+			  MBUS_ID(0x09, 0x15) 0 0xf1110000 0x10000
+			  MBUS_ID(0x0e, 0x0a) 0 0xf6000000 0x100000>;
+
+		internal-regs {
+
+			serial@12000 {
+				status = "okay";
+			};
+
+			serial@12100 {
+				status = "okay";
+				pinctrl-0 = <&uart1_full_pins &uart1_dtr_pin>;
+				pinctrl-names = "default";
+				dtr-gpios = <&gpio1 27 GPIO_ACTIVE_LOW>;
+				dcd-gpios = <&gpio1 18 GPIO_ACTIVE_LOW>;
+			};
+
+			gpio-leds {
+				compatible = "gpio-leds";
+				pinctrl-names = "default";
+
+				cell-red {
+					label = "cell-red";
+					gpios = <&extgpio0 0 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				cell-blue {
+					label = "cell-blue";
+					gpios = <&extgpio0 1 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				cell-green {
+					label = "cell-green";
+					gpios = <&extgpio0 2 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				rss1 {
+					label = "RSS1";
+					gpios = <&extgpio0 3 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				rss2 {
+					label = "RSS2";
+					gpios = <&extgpio0 4 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				rss3 {
+					label = "RSS3";
+					gpios = <&extgpio0 5 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				rss4 {
+					label = "RSS4";
+					gpios = <&extgpio0 6 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				rss5 {
+					label = "RSS5";
+					gpios = <&extgpio0 7 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				sim1-red {
+					label = "sim1-red";
+					gpios = <&extgpio0 8 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				sim1-blue {
+					label = "sim1-blue";
+					gpios = <&extgpio0 9 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				sim1-green {
+					label = "sim1-green";
+					gpios = <&extgpio0 10 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				sim2-red {
+					label = "sim2-red";
+					gpios = <&extgpio0 11 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				sim2-blue {
+					label = "sim2-blue";
+					gpios = <&extgpio0 12 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				sim2-green {
+					label = "sim2-green";
+					gpios = <&extgpio0 13 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				online {
+					label = "ONLINE";
+					gpios = <&extgpio0 14 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				vpn {
+					label = "vpn";
+					gpios = <&extgpio0 15 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				usb {
+					label = "usb";
+					gpios = <&extgpio1 0 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				serial {
+					label = "serial";
+					gpios = <&extgpio1 1 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				wan1 {
+					label = "wan1";
+					gpios = <&extgpio1 2 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				wan2 {
+					label = "wan2";
+					gpios = <&extgpio1 3 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				slide-red {
+					label = "slide-red";
+					gpios = <&extgpio1 4 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				slide-blue {
+					label = "slide-blue";
+					gpios = <&extgpio1 5 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+
+				slide-green {
+					label = "slide-green";
+					gpios = <&extgpio1 6 GPIO_ACTIVE_LOW>;
+					default-state = "off";
+				};
+			};
+
+			i2c:i2c@11000 {
+				status = "okay";
+				pinctrl-0 = <&i2c0_pins>;
+				pinctrl-names = "default";
+				clock-frequency = <200000>;
+
+				extgpio0: pca8575@26 {
+					compatible = "nxp,pca8575";
+					reg = <0x26>;
+					gpio-controller;
+					#gpio-cells = <2>;
+				};
+
+				extgpio1: pca9554@3c {
+					compatible = "nxp,pca9554";
+					reg = <0x3c>;
+					gpio-controller;
+					#gpio-cells = <2>;
+				};
+
+				temp: lm75b@48 {
+					compatible = "nxp,lm75a";
+					reg = <0x48>;
+				};
+			};
+
+			eth0: ethernet@70000 {
+				status = "okay";
+				phy = <&phy1>;
+				phy-mode = "rgmii-id";
+				pinctrl-0 = <&ge0_rgmii_pins>;
+				pinctrl-names = "default";
+			};
+
+			eth1: ethernet@30000 {
+				status = "okay";
+				phy-mode = "sgmii";
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+
+			eth2: ethernet@34000 {
+				status = "okay";
+				phy = <&phy2>;
+				phy-mode = "sgmii";
+			};
+
+			usb@58000 {
+				status = "okay";
+			};
+
+			usb3@f0000 {
+				status = "okay";
+			};
+
+			usb3@f8000 {
+				status = "okay";
+			};
+
+		};
+
+		efuse: efuse {
+			compatible = "marvell,efuse";
+			reg = <MBUS_ID(0x0e, 0x0a) 0 0x100000>;
+		};
+	};
+
+	sfp: sfp {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c>;
+		status = "ok";
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		sim-button {
+			label = "sim_switch";
+			linux,code = <KEY_SELECT>;
+			gpios = <&gpio0 27 GPIO_ACTIVE_LOW>;
+		};
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio1 22 GPIO_ACTIVE_LOW>;
+		};
+	};
+};
+
+&nand_controller {
+	status = "okay";
+
+	nand@0 {
+		reg = <0>;
+		label = "pxa3xx_nand-0";
+		nand-rb = <0>;
+		nand-on-flash-bbt;
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x00000000 0x00200000>;
+			};
+			partition@1 {
+				label = "u-boot-env";
+				reg = <0x00200000 0x00100000>;
+			};
+			partition@2 {
+				label = "log";
+				reg = <0x00300000 0x00200000>;
+			};
+			partition@3 {
+				label = "flash";
+				reg = <0x00500000 0>;
+				crypt;
+			};
+			partition@4 {
+				label = "all";
+				reg = <0x00000000 0>;
+			};
+		};
+	};
+};
+
+&pinctrl {
+	uart1_full_pins: uart1-full-pins {
+		marvell,pins = "mpp55", "mpp56", "mpp57", "mpp58";
+		marvell,function = "ua1";
+	};
+
+	uart1_dtr_pin: uart1-dtr-pin {
+		marvell,pins = "mpp59";
+		marvell,function = "gpio";
+	};
+
+	uart1_dcd_pin: uart1-dcd-pin {
+		marvell,pins = "mpp50";
+		marvell,function = "gpio";
+	};
+};
+
+&pciec {
+	status = "okay";
+};
+
+&pcie1 {
+	/* Port 0, Lane 0 */
+	reset-gpios = <&gpio0 18 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&pcie2 {
+	/* Port 1, Lane 0 */
+	reset-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
+
+&gpio0 {
+	gpio-line-names =
+		"", "", "", "", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "",
+		"SLIDE_RESET",
+		"", "",
+		"SLIDE_PRESENT",
+		"", "",
+		"SLIDE_POWER",
+		"",
+		"CELL_POWER",
+		"SIM_SWAP",
+		"",
+		"WIFI_RESET",
+		"", "";
+};
+
+&gpio1 {
+	gpio-line-names =
+		"", "", "", "", "",
+		"CELL_OFF",
+		"",
+		"CELL_RESET",
+		"", "", "",
+		"LED_FUNC",
+		"",
+		"USB_POWER",
+		"USB_OC",
+		"",
+		"POE_LINK_P6",
+		"POE_LINK_P6",
+		"UART1_DCD",
+		"",
+		"POE_POWER_P6",
+		"POE_POWER_P7",
+		"ERASE",
+		"", "", "", "", "";
+};
+
+&mdio {
+	status = "okay";
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+
+	phy1: ethernet-phy@0 {
+		status = "okay";
+		reg = <0>;
+		sfp = <&sfp>;
+	};
+
+	phy2: ethernet-phy@1 {
+		status = "okay";
+		reg = <1>;
+	};
+
+	switch@10 {
+		compatible = "marvell,mv88e6190";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x10>;
+		dsa,member = <0 0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@1 {
+				reg = <1>;
+				label = "lan1";
+			};
+			port@2 {
+				reg = <2>;
+				label = "lan2";
+			};
+			port@3 {
+				reg = <3>;
+				label = "lan3";
+			};
+			port@4 {
+				reg = <4>;
+				label = "lan4";
+			};
+			port@5 {
+				reg = <5>;
+				label = "lan5";
+			};
+			port@6 {
+				reg = <6>;
+				label = "lan6";
+			};
+			port@7 {
+				reg = <7>;
+				label = "lan7";
+			};
+			port@8 {
+				reg = <8>;
+				label = "lan8";
+			};
+			port@9 {
+				reg = <9>;
+				label = "cpu";
+				ethernet = <&eth1>;
+				phy-mode = "sgmii";
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+		};
+	};
+};

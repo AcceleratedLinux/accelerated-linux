@@ -9,7 +9,7 @@
  * Copyright 2007, Michael Wu <flamingice@sourmilk.net>
  * Copyright 2007-2010, Intel Corporation
  * Copyright(c) 2015-2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2021 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 
 /**
@@ -55,8 +55,8 @@ static void ieee80211_free_tid_rx(struct rcu_head *h)
 	kfree(tid_rx);
 }
 
-void ___ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
-				     u16 initiator, u16 reason, bool tx)
+void __ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
+				    u16 initiator, u16 reason, bool tx)
 {
 	struct ieee80211_local *local = sta->local;
 	struct tid_ampdu_rx *tid_rx;
@@ -69,10 +69,10 @@ void ___ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 		.ssn = 0,
 	};
 
-	lockdep_assert_held(&sta->ampdu_mlme.mtx);
+	lockdep_assert_wiphy(sta->local->hw.wiphy);
 
 	tid_rx = rcu_dereference_protected(sta->ampdu_mlme.tid_rx[tid],
-					lockdep_is_held(&sta->ampdu_mlme.mtx));
+					lockdep_is_held(&sta->local->hw.wiphy->mtx));
 
 	if (!test_bit(tid, sta->ampdu_mlme.agg_session_valid))
 		return;
@@ -114,14 +114,6 @@ void ___ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 	call_rcu(&tid_rx->rcu_head, ieee80211_free_tid_rx);
 }
 
-void __ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
-				    u16 initiator, u16 reason, bool tx)
-{
-	mutex_lock(&sta->ampdu_mlme.mtx);
-	___ieee80211_stop_rx_ba_session(sta, tid, initiator, reason, tx);
-	mutex_unlock(&sta->ampdu_mlme.mtx);
-}
-
 void ieee80211_stop_rx_ba_session(struct ieee80211_vif *vif, u16 ba_rx_bitmap,
 				  const u8 *addr)
 {
@@ -140,7 +132,7 @@ void ieee80211_stop_rx_ba_session(struct ieee80211_vif *vif, u16 ba_rx_bitmap,
 		if (ba_rx_bitmap & BIT(i))
 			set_bit(i, sta->ampdu_mlme.tid_rx_stop_requested);
 
-	ieee80211_queue_work(&sta->local->hw, &sta->ampdu_mlme.work);
+	wiphy_work_queue(sta->local->hw.wiphy, &sta->ampdu_mlme.work);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL(ieee80211_stop_rx_ba_session);
@@ -166,7 +158,7 @@ static void sta_rx_agg_session_timer_expired(struct timer_list *t)
 	       sta->sta.addr, tid);
 
 	set_bit(tid, sta->ampdu_mlme.tid_rx_timer_expired);
-	ieee80211_queue_work(&sta->local->hw, &sta->ampdu_mlme.work);
+	wiphy_work_queue(sta->local->hw.wiphy, &sta->ampdu_mlme.work);
 }
 
 static void sta_rx_agg_reorder_timer_expired(struct timer_list *t)
@@ -183,19 +175,8 @@ static void ieee80211_add_addbaext(struct ieee80211_sub_if_data *sdata,
 				   const struct ieee80211_addba_ext_ie *req,
 				   u16 buf_size)
 {
-	struct ieee80211_supported_band *sband;
 	struct ieee80211_addba_ext_ie *resp;
-	const struct ieee80211_sta_he_cap *he_cap;
-	u8 frag_level, cap_frag_level;
 	u8 *pos;
-
-	sband = ieee80211_get_sband(sdata);
-	if (!sband)
-		return;
-	he_cap = ieee80211_get_he_iftype_cap(sband,
-					     ieee80211_vif_type_p2p(&sdata->vif));
-	if (!he_cap)
-		return;
 
 	pos = skb_put_zero(skb, 2 + sizeof(struct ieee80211_addba_ext_ie));
 	*pos++ = WLAN_EID_ADDBA_EXT;
@@ -203,14 +184,6 @@ static void ieee80211_add_addbaext(struct ieee80211_sub_if_data *sdata,
 	resp = (struct ieee80211_addba_ext_ie *)pos;
 	resp->data = req->data & IEEE80211_ADDBA_EXT_NO_FRAG;
 
-	frag_level = u32_get_bits(req->data,
-				  IEEE80211_ADDBA_EXT_FRAG_LEVEL_MASK);
-	cap_frag_level = u32_get_bits(he_cap->he_cap_elem.mac_cap_info[0],
-				      IEEE80211_HE_MAC_CAP0_DYNAMIC_FRAG_MASK);
-	if (frag_level > cap_frag_level)
-		frag_level = cap_frag_level;
-	resp->data |= u8_encode_bits(frag_level,
-				     IEEE80211_ADDBA_EXT_FRAG_LEVEL_MASK);
 	resp->data |= u8_encode_bits(buf_size >> IEEE80211_ADDBA_EXT_BUF_SIZE_SHIFT,
 				     IEEE80211_ADDBA_EXT_BUF_SIZE_MASK);
 }
@@ -242,7 +215,7 @@ static void ieee80211_send_addba_resp(struct sta_info *sta, u8 *da, u16 tid,
 	    sdata->vif.type == NL80211_IFTYPE_MESH_POINT)
 		memcpy(mgmt->bssid, sdata->vif.addr, ETH_ALEN);
 	else if (sdata->vif.type == NL80211_IFTYPE_STATION)
-		memcpy(mgmt->bssid, sdata->u.mgd.bssid, ETH_ALEN);
+		memcpy(mgmt->bssid, sdata->vif.cfg.ap_addr, ETH_ALEN);
 	else if (sdata->vif.type == NL80211_IFTYPE_ADHOC)
 		memcpy(mgmt->bssid, sdata->u.ibss.bssid, ETH_ALEN);
 
@@ -269,11 +242,11 @@ static void ieee80211_send_addba_resp(struct sta_info *sta, u8 *da, u16 tid,
 	ieee80211_tx_skb(sdata, skb);
 }
 
-void ___ieee80211_start_rx_ba_session(struct sta_info *sta,
-				      u8 dialog_token, u16 timeout,
-				      u16 start_seq_num, u16 ba_policy, u16 tid,
-				      u16 buf_size, bool tx, bool auto_seq,
-				      const struct ieee80211_addba_ext_ie *addbaext)
+void __ieee80211_start_rx_ba_session(struct sta_info *sta,
+				     u8 dialog_token, u16 timeout,
+				     u16 start_seq_num, u16 ba_policy, u16 tid,
+				     u16 buf_size, bool tx, bool auto_seq,
+				     const struct ieee80211_addba_ext_ie *addbaext)
 {
 	struct ieee80211_local *local = sta->sdata->local;
 	struct tid_ampdu_rx *tid_agg_rx;
@@ -289,6 +262,8 @@ void ___ieee80211_start_rx_ba_session(struct sta_info *sta,
 	u16 status = WLAN_STATUS_REQUEST_DECLINED;
 	u16 max_buf_size;
 
+	lockdep_assert_wiphy(sta->local->hw.wiphy);
+
 	if (tid >= IEEE80211_FIRST_TSPEC_TSID) {
 		ht_dbg(sta->sdata,
 		       "STA %pM requests BA session on unsupported tid %d\n",
@@ -297,9 +272,9 @@ void ___ieee80211_start_rx_ba_session(struct sta_info *sta,
 	}
 
 	if (!sta->sta.deflink.ht_cap.ht_supported &&
-	    sta->sdata->vif.bss_conf.chandef.chan->band != NL80211_BAND_6GHZ) {
+	    !sta->sta.deflink.he_cap.has_he) {
 		ht_dbg(sta->sdata,
-		       "STA %pM erroneously requests BA session on tid %d w/o QoS\n",
+		       "STA %pM erroneously requests BA session on tid %d w/o HT\n",
 		       sta->sta.addr, tid);
 		/* send a response anyway, it's an error case if we get here */
 		goto end;
@@ -344,9 +319,6 @@ void ___ieee80211_start_rx_ba_session(struct sta_info *sta,
 	ht_dbg(sta->sdata, "AddBA Req buf_size=%d for %pM\n",
 	       buf_size, sta->sta.addr);
 
-	/* examine state machine */
-	lockdep_assert_held(&sta->ampdu_mlme.mtx);
-
 	if (test_bit(tid, sta->ampdu_mlme.agg_session_valid)) {
 		if (sta->ampdu_mlme.tid_rx_token[tid] == dialog_token) {
 			struct tid_ampdu_rx *tid_rx;
@@ -374,9 +346,9 @@ void ___ieee80211_start_rx_ba_session(struct sta_info *sta,
 				   sta->sta.addr, tid);
 
 		/* delete existing Rx BA session on the same tid */
-		___ieee80211_stop_rx_ba_session(sta, tid, WLAN_BACK_RECIPIENT,
-						WLAN_STATUS_UNSPECIFIED_QOS,
-						false);
+		__ieee80211_stop_rx_ba_session(sta, tid, WLAN_BACK_RECIPIENT,
+					       WLAN_STATUS_UNSPECIFIED_QOS,
+					       false);
 	}
 
 	if (ieee80211_hw_check(&local->hw, SUPPORTS_REORDERING_BUFFER)) {
@@ -463,20 +435,6 @@ end:
 					  timeout, addbaext);
 }
 
-static void __ieee80211_start_rx_ba_session(struct sta_info *sta,
-					    u8 dialog_token, u16 timeout,
-					    u16 start_seq_num, u16 ba_policy,
-					    u16 tid, u16 buf_size, bool tx,
-					    bool auto_seq,
-					    const struct ieee80211_addba_ext_ie *addbaext)
-{
-	mutex_lock(&sta->ampdu_mlme.mtx);
-	___ieee80211_start_rx_ba_session(sta, dialog_token, timeout,
-					 start_seq_num, ba_policy, tid,
-					 buf_size, tx, auto_seq, addbaext);
-	mutex_unlock(&sta->ampdu_mlme.mtx);
-}
-
 void ieee80211_process_addba_request(struct ieee80211_local *local,
 				     struct sta_info *sta,
 				     struct ieee80211_mgmt *mgmt,
@@ -502,7 +460,7 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 				 u.action.u.addba_req.variable);
 	if (ies_len) {
 		elems = ieee802_11_parse_elems(mgmt->u.action.u.addba_req.variable,
-					       ies_len, true, mgmt->bssid, NULL);
+					       ies_len, true, NULL);
 		if (!elems || elems->parse_error)
 			goto free;
 	}
@@ -526,7 +484,6 @@ void ieee80211_manage_rx_ba_offl(struct ieee80211_vif *vif,
 				 const u8 *addr, unsigned int tid)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_local *local = sdata->local;
 	struct sta_info *sta;
 
 	rcu_read_lock();
@@ -535,7 +492,7 @@ void ieee80211_manage_rx_ba_offl(struct ieee80211_vif *vif,
 		goto unlock;
 
 	set_bit(tid, sta->ampdu_mlme.tid_rx_manage_offl);
-	ieee80211_queue_work(&local->hw, &sta->ampdu_mlme.work);
+	wiphy_work_queue(sta->local->hw.wiphy, &sta->ampdu_mlme.work);
  unlock:
 	rcu_read_unlock();
 }
@@ -545,7 +502,6 @@ void ieee80211_rx_ba_timer_expired(struct ieee80211_vif *vif,
 				   const u8 *addr, unsigned int tid)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_local *local = sdata->local;
 	struct sta_info *sta;
 
 	rcu_read_lock();
@@ -554,7 +510,7 @@ void ieee80211_rx_ba_timer_expired(struct ieee80211_vif *vif,
 		goto unlock;
 
 	set_bit(tid, sta->ampdu_mlme.tid_rx_timer_expired);
-	ieee80211_queue_work(&local->hw, &sta->ampdu_mlme.work);
+	wiphy_work_queue(sta->local->hw.wiphy, &sta->ampdu_mlme.work);
 
  unlock:
 	rcu_read_unlock();

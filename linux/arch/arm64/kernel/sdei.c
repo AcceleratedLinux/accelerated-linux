@@ -47,6 +47,9 @@ DEFINE_PER_CPU(unsigned long *, sdei_shadow_call_stack_normal_ptr);
 DEFINE_PER_CPU(unsigned long *, sdei_shadow_call_stack_critical_ptr);
 #endif
 
+DEFINE_PER_CPU(struct sdei_registered_event *, sdei_active_normal_event);
+DEFINE_PER_CPU(struct sdei_registered_event *, sdei_active_critical_event);
+
 static void _free_sdei_stack(unsigned long * __percpu *ptr, int cpu)
 {
 	unsigned long *p;
@@ -144,7 +147,7 @@ static int init_sdei_scs(void)
 	int cpu;
 	int err = 0;
 
-	if (!IS_ENABLED(CONFIG_SHADOW_CALL_STACK))
+	if (!scs_is_enabled())
 		return 0;
 
 	for_each_possible_cpu(cpu) {
@@ -160,38 +163,6 @@ static int init_sdei_scs(void)
 		free_sdei_scs();
 
 	return err;
-}
-
-static bool on_sdei_normal_stack(unsigned long sp, unsigned long size,
-				 struct stack_info *info)
-{
-	unsigned long low = (unsigned long)raw_cpu_read(sdei_stack_normal_ptr);
-	unsigned long high = low + SDEI_STACK_SIZE;
-
-	return on_stack(sp, size, low, high, STACK_TYPE_SDEI_NORMAL, info);
-}
-
-static bool on_sdei_critical_stack(unsigned long sp, unsigned long size,
-				   struct stack_info *info)
-{
-	unsigned long low = (unsigned long)raw_cpu_read(sdei_stack_critical_ptr);
-	unsigned long high = low + SDEI_STACK_SIZE;
-
-	return on_stack(sp, size, low, high, STACK_TYPE_SDEI_CRITICAL, info);
-}
-
-bool _on_sdei_stack(unsigned long sp, unsigned long size, struct stack_info *info)
-{
-	if (!IS_ENABLED(CONFIG_VMAP_STACK))
-		return false;
-
-	if (on_sdei_critical_stack(sp, size, info))
-		return true;
-
-	if (on_sdei_normal_stack(sp, size, info))
-		return true;
-
-	return false;
 }
 
 unsigned long sdei_arch_get_entry_point(int conduit)

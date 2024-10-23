@@ -3,3 +3,4 @@ nxdomain.patch
 option-value-error-ignore.patch
 Fix-Umbrella-device-ID-parsing.patch
 Don-t-send-IP-address-to-Umbrella-by-default.patch
+domain-match-sort-NXDOMAIN-literals-before-upstream-servers.patch

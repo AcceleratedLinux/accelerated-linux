@@ -277,6 +277,14 @@ static int dsa_loop_port_max_mtu(struct dsa_switch *ds, int port)
 	return ETH_MAX_MTU;
 }
 
+static void dsa_loop_phylink_get_caps(struct dsa_switch *dsa, int port,
+				      struct phylink_config *config)
+{
+	bitmap_fill(config->supported_interfaces, PHY_INTERFACE_MODE_MAX);
+	__clear_bit(PHY_INTERFACE_MODE_NA, config->supported_interfaces);
+	config->mac_capabilities = ~0;
+}
+
 static const struct dsa_switch_ops dsa_loop_driver = {
 	.get_tag_protocol	= dsa_loop_get_protocol,
 	.setup			= dsa_loop_setup,
@@ -295,6 +303,7 @@ static const struct dsa_switch_ops dsa_loop_driver = {
 	.port_vlan_del		= dsa_loop_port_vlan_del,
 	.port_change_mtu	= dsa_loop_port_change_mtu,
 	.port_max_mtu		= dsa_loop_port_max_mtu,
+	.phylink_get_caps	= dsa_loop_phylink_get_caps,
 };
 
 static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
@@ -351,8 +360,6 @@ static void dsa_loop_drv_remove(struct mdio_device *mdiodev)
 
 	dsa_unregister_switch(ds);
 	dev_put(ps->netdev);
-
-	dev_set_drvdata(&mdiodev->dev, NULL);
 }
 
 static void dsa_loop_drv_shutdown(struct mdio_device *mdiodev)
@@ -378,6 +385,17 @@ static struct mdio_driver dsa_loop_drv = {
 
 #define NUM_FIXED_PHYS	(DSA_LOOP_NUM_PORTS - 2)
 
+static void dsa_loop_phydevs_unregister(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < NUM_FIXED_PHYS; i++)
+		if (!IS_ERR(phydevs[i])) {
+			fixed_phy_unregister(phydevs[i]);
+			phy_device_free(phydevs[i]);
+		}
+}
+
 static int __init dsa_loop_init(void)
 {
 	struct fixed_phy_status status = {
@@ -385,23 +403,23 @@ static int __init dsa_loop_init(void)
 		.speed = SPEED_100,
 		.duplex = DUPLEX_FULL,
 	};
-	unsigned int i;
+	unsigned int i, ret;
 
 	for (i = 0; i < NUM_FIXED_PHYS; i++)
 		phydevs[i] = fixed_phy_register(PHY_POLL, &status, NULL);
 
-	return mdio_driver_register(&dsa_loop_drv);
+	ret = mdio_driver_register(&dsa_loop_drv);
+	if (ret)
+		dsa_loop_phydevs_unregister();
+
+	return ret;
 }
 module_init(dsa_loop_init);
 
 static void __exit dsa_loop_exit(void)
 {
-	unsigned int i;
-
 	mdio_driver_unregister(&dsa_loop_drv);
-	for (i = 0; i < NUM_FIXED_PHYS; i++)
-		if (!IS_ERR(phydevs[i]))
-			fixed_phy_unregister(phydevs[i]);
+	dsa_loop_phydevs_unregister();
 }
 module_exit(dsa_loop_exit);
 

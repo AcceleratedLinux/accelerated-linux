@@ -50,7 +50,6 @@
 #include <linux/pid.h>
 #include <linux/smp.h>
 #include <linux/mm.h>
-#include <linux/vmacache.h>
 #include <linux/rcupdate.h>
 #include <linux/irq.h>
 #include <linux/security.h>
@@ -282,17 +281,6 @@ static void kgdb_flush_swbreak_addr(unsigned long addr)
 {
 	if (!CACHE_FLUSH_IS_SAFE)
 		return;
-
-	if (current->mm) {
-		int i;
-
-		for (i = 0; i < VMACACHE_SIZE; i++) {
-			if (!current->vmacache.vmas[i])
-				continue;
-			flush_cache_range(current->vmacache.vmas[i],
-					  addr, addr + BREAK_INSTR_SIZE);
-		}
-	}
 
 	/* Force flush instruction cache if it was outside the mm */
 	flush_icache_range(addr, addr + BREAK_INSTR_SIZE);
@@ -980,7 +968,7 @@ static int __init opt_kgdb_con(char *str)
 early_param("kgdbcon", opt_kgdb_con);
 
 #ifdef CONFIG_MAGIC_SYSRQ
-static void sysrq_handle_dbg(int key)
+static void sysrq_handle_dbg(u8 key)
 {
 	if (!dbg_io_ops) {
 		pr_crit("ERROR: No KGDB I/O module available\n");
@@ -1017,6 +1005,9 @@ void kgdb_panic(const char *msg)
 	 */
 	if (panic_timeout)
 		return;
+
+	debug_locks_off();
+	console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 
 	if (dbg_kdb_mode)
 		kdb_printf("PANIC: %s\n", msg);

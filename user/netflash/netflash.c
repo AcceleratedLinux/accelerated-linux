@@ -148,7 +148,14 @@
 #define IGNORE_HW_OPTIONS "H"
 #endif
 
-#define CMD_LINE_OPTIONS "abB:c:Cd:eEfFhijkKlL:Mno:pr:R:sStTuvZ?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS IGNORE_HW_OPTIONS DEV_OPTIONS
+#ifdef CONFIG_USER_BUSYBOX_WATCHDOG
+#define CONFIG_USER_NETFLASH_WATCHDOG 1
+#define WATCHDOG_OPTIONS "w"
+#else
+#define WATCHDOG_OPTIONS
+#endif
+
+#define CMD_LINE_OPTIONS "abB:c:Cd:eEfFhijkKlL:Mno:pr:R:sStTuvZ?" DECOMPRESS_OPTIONS HMACMD5_OPTIONS SETSRC_OPTIONS SHA256_OPTIONS UBOOT_OPTIONS IGNORE_HW_OPTIONS DEV_OPTIONS WATCHDOG_OPTIONS
 
 #define PID_DIR "/var/run"
 #if defined(CONFIG_USER_DHCPCD_DHCPCD) || defined(CONFIG_USER_DHCPCD_NEW_DHCPCD)
@@ -160,10 +167,6 @@
 #define DHCPCD_PID_FILE "dhcpc"
 #endif
 #define NETFLASH_KILL_LIST_FILE "/etc/netflash_kill_list.txt"
-
-#ifdef CONFIG_USER_BUSYBOX_WATCHDOG
-#define CONFIG_USER_NETFLASH_WATCHDOG 1
-#endif
 
 #ifdef CONFIG_USER_NETFLASH_WITH_CGI
 #define MAX_WAIT_NETFLASH_FLUSH		20	/* seconds */
@@ -216,7 +219,7 @@ static int local_system(char **argv, int closefd)
 
 	pid = vfork();
 	if (pid == -1) {
-		error("vfork() failed %m");
+		error("vfork() failed: %s", strerror(errno));
 		exit(VFORK_FAIL);
 	} else if (pid == 0) {
 		if (closefd) {
@@ -424,15 +427,9 @@ static int ftpfetch(char *srvname, char *filename)
 
 extern int openhttp(char *url);
 
-/*
- *	When fetching file we need to even number of bytes in write
- *	buffers. Otherwise FLASH programming will fail. This is mostly
- *	only a problem with http for some reason.
- */
-
 static int filefetch(char *filename)
 {
-	int fd, i, j;
+	int fd, i;
 	unsigned char buf[1024];
 
 	if (strncmp(filename, "http://", 7) == 0)
@@ -457,12 +454,14 @@ static int filefetch(char *filename)
 		return -1;
 
 	for (;;) {
-		if ((i = read(fd, buf, sizeof(buf))) <= 0)
+		i = read(fd, buf, sizeof(buf));
+		if (i == 0)
 			break;
-		if (i & 0x1) {
-			/* Read more to make even sized buffer */
-			if ((j = read(fd, &buf[i], 1)) > 0)
-				i += j;
+		if (i == -1) {
+			if (errno == EINTR)
+				continue;
+			error("read: %s", strerror(errno));
+			break;
 		}
 		local_write(-1, buf, i);
 	}
@@ -518,7 +517,7 @@ static int flashing_rootfs(char *rdev)
 	 * is the rootfs device the same as the flash device?
 	 */
 	if (stat("/", &stat_rootfs) != 0) {
-		error("stat(\"/\") failed: %m");
+		error("stat(\"/\") failed: %s", strerror(errno));
 		exit(BAD_ROOTFS);
 	}
 	if (samedev(&stat_rdev, &stat_rootfs))
@@ -951,9 +950,9 @@ static int get_bootpart(void)
 				}
 				s = strtok(NULL, " \n");
 			}
-			free(line);
 		}
 		fclose(f);
+		free(line);
 	}
 
 	return bootpart;
@@ -1165,7 +1164,7 @@ int netflashmain(int argc, char *argv[])
 		.doremovesig = 0,
 	};
 
-	rdev = "/dev/flash/image";
+	rdev = NULL;
 	srvname = NULL;
 	filename = NULL;
 	console = NULL;
@@ -1410,14 +1409,7 @@ int netflashmain(int argc, char *argv[])
 			exit(0);
 #ifdef CONFIG_USER_NETFLASH_DUAL_IMAGES
 		case 'U':
-			dobootpart = get_bootpart();
-			if (dobootpart == 'a') {
-				dobootpart = 'b';
-				rdev = CONFIG_USER_NETFLASH_DUAL_IMAGES_B;
-			} else {
-				dobootpart = 'a';
-				rdev = CONFIG_USER_NETFLASH_DUAL_IMAGES_A;
-			}
+			dobootpart = '?'; /* resolved later using rdev */
 			break;
 #endif
 #ifdef CONFIG_USER_NETFLASH_DECOMPRESS
@@ -1458,6 +1450,19 @@ int netflashmain(int argc, char *argv[])
 		}
 	}
 
+	if (!rdev) {
+#ifdef CONFIG_USER_NETFLASH_DUAL_IMAGES
+		/* Choose opposite bootpart passed in on kernel cmdline */
+		if (get_bootpart() == 'a')
+			rdev = CONFIG_USER_NETFLASH_DUAL_IMAGES_B;
+		else
+			rdev = CONFIG_USER_NETFLASH_DUAL_IMAGES_A;
+		dobootpart = '?'; /* same as -U */
+#else
+		rdev = "/dev/flash/image";
+#endif
+	}
+
 	doflashingrootfs = flashing_rootfs(rdev);
 
 #ifdef CONFIG_USER_NETFLASH_DUAL_IMAGES
@@ -1466,6 +1471,16 @@ int netflashmain(int argc, char *argv[])
 			error("current root filesystem is new boot partition");
 			exit(BAD_BOOTPART);
 		}
+
+		if (strcmp(rdev, CONFIG_USER_NETFLASH_DUAL_IMAGES_A) == 0)
+			dobootpart = 'a';
+		else if (strcmp(rdev, CONFIG_USER_NETFLASH_DUAL_IMAGES_B) == 0)
+			dobootpart = 'b';
+		else {
+			error("cannot determine bootpart from %s", rdev);
+			exit(BAD_BOOTPART);
+		}
+		notice("new bootpart %c", dobootpart);
 	}
 
 	/* Treat images not under /dev/ as normal files. */

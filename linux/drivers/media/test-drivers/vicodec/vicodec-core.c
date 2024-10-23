@@ -280,17 +280,13 @@ static int device_process(struct vicodec_ctx *ctx,
 		 */
 		if (!(ntohl(ctx->state.header.flags) & V4L2_FWHT_FL_I_FRAME)) {
 			struct vb2_buffer *ref_vb2_buf;
-			int ref_buf_idx;
 			struct vb2_queue *vq_cap =
 				v4l2_m2m_get_vq(ctx->fh.m2m_ctx,
 						V4L2_BUF_TYPE_VIDEO_CAPTURE);
 
-			ref_buf_idx = vb2_find_timestamp(vq_cap,
-							 ctx->state.ref_frame_ts, 0);
-			if (ref_buf_idx < 0)
+			ref_vb2_buf = vb2_find_buffer(vq_cap, ctx->state.ref_frame_ts);
+			if (!ref_vb2_buf)
 				return -EINVAL;
-
-			ref_vb2_buf = vq_cap->bufs[ref_buf_idx];
 			if (ref_vb2_buf->state == VB2_BUF_STATE_ERROR)
 				ret = -EINVAL;
 			ctx->state.ref_frame.buf =
@@ -1244,6 +1240,12 @@ static int vicodec_decoder_cmd(struct file *file, void *fh,
 	struct vicodec_ctx *ctx = file2ctx(file);
 	int ret;
 
+	/*
+	 * This ioctl should not be used with a stateless codec that doesn't
+	 * support holding buffers and the associated flush command.
+	 */
+	WARN_ON(ctx->is_stateless);
+
 	ret = v4l2_m2m_ioctl_try_decoder_cmd(file, fh, dc);
 	if (ret < 0)
 		return ret;
@@ -1343,6 +1345,7 @@ static const struct v4l2_ioctl_ops vicodec_ioctl_ops = {
 	.vidioc_prepare_buf	= v4l2_m2m_ioctl_prepare_buf,
 	.vidioc_create_bufs	= v4l2_m2m_ioctl_create_bufs,
 	.vidioc_expbuf		= v4l2_m2m_ioctl_expbuf,
+	.vidioc_remove_bufs	= v4l2_m2m_ioctl_remove_bufs,
 
 	.vidioc_streamon	= v4l2_m2m_ioctl_streamon,
 	.vidioc_streamoff	= v4l2_m2m_ioctl_streamoff,
@@ -1722,6 +1725,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 			V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
 			V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	dst_vq->max_num_buffers = 64;
 	dst_vq->drv_priv = ctx;
 	dst_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	dst_vq->ops = &vicodec_qops;
@@ -2029,7 +2033,7 @@ static const struct v4l2_m2m_ops m2m_ops = {
 
 static int register_instance(struct vicodec_dev *dev,
 			     struct vicodec_dev_instance *dev_instance,
-			     const char *name, bool is_enc)
+			     const char *name, bool is_enc, bool is_stateless)
 {
 	struct video_device *vfd;
 	int ret;
@@ -2049,10 +2053,11 @@ static int register_instance(struct vicodec_dev *dev,
 	strscpy(vfd->name, name, sizeof(vfd->name));
 	vfd->device_caps = V4L2_CAP_STREAMING |
 		(multiplanar ? V4L2_CAP_VIDEO_M2M_MPLANE : V4L2_CAP_VIDEO_M2M);
-	if (is_enc) {
+	if (is_enc || is_stateless) {
 		v4l2_disable_ioctl(vfd, VIDIOC_DECODER_CMD);
 		v4l2_disable_ioctl(vfd, VIDIOC_TRY_DECODER_CMD);
-	} else {
+	}
+	if (!is_enc) {
 		v4l2_disable_ioctl(vfd, VIDIOC_ENCODER_CMD);
 		v4l2_disable_ioctl(vfd, VIDIOC_TRY_ENCODER_CMD);
 	}
@@ -2111,17 +2116,17 @@ static int vicodec_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 
 	ret = register_instance(dev, &dev->stateful_enc, "stateful-encoder",
-				true);
+				true, false);
 	if (ret)
 		goto unreg_dev;
 
 	ret = register_instance(dev, &dev->stateful_dec, "stateful-decoder",
-				false);
+				false, false);
 	if (ret)
 		goto unreg_sf_enc;
 
 	ret = register_instance(dev, &dev->stateless_dec, "stateless-decoder",
-				false);
+				false, true);
 	if (ret)
 		goto unreg_sf_dec;
 
@@ -2183,7 +2188,7 @@ free_dev:
 	return ret;
 }
 
-static int vicodec_remove(struct platform_device *pdev)
+static void vicodec_remove(struct platform_device *pdev)
 {
 	struct vicodec_dev *dev = platform_get_drvdata(pdev);
 
@@ -2200,13 +2205,11 @@ static int vicodec_remove(struct platform_device *pdev)
 	video_unregister_device(&dev->stateful_dec.vfd);
 	video_unregister_device(&dev->stateless_dec.vfd);
 	v4l2_device_put(&dev->v4l2_dev);
-
-	return 0;
 }
 
 static struct platform_driver vicodec_pdrv = {
 	.probe		= vicodec_probe,
-	.remove		= vicodec_remove,
+	.remove_new	= vicodec_remove,
 	.driver		= {
 		.name	= VICODEC_NAME,
 	},

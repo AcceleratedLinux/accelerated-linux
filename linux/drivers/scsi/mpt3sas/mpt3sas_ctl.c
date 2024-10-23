@@ -948,6 +948,14 @@ _ctl_do_mpt_command(struct MPT3SAS_ADAPTER *ioc, struct mpt3_ioctl_command karg,
 		break;
 	}
 	case MPI2_FUNCTION_FW_DOWNLOAD:
+	{
+		if (ioc->pdev->vendor == MPI2_MFGPAGE_VENDORID_ATTO) {
+			ioc_info(ioc, "Firmware download not supported for ATTO HBA.\n");
+			ret = -EPERM;
+			break;
+		}
+		fallthrough;
+	}
 	case MPI2_FUNCTION_FW_UPLOAD:
 	{
 		ioc->build_sg(ioc, psge, data_out_dma, data_out_sz, data_in_dma,
@@ -1686,6 +1694,7 @@ _ctl_diag_register_2(struct MPT3SAS_ADAPTER *ioc,
 	ioc->ctl_cmds.status = MPT3_CMD_PENDING;
 	memset(ioc->ctl_cmds.reply, 0, ioc->reply_sz);
 	mpi_request = mpt3sas_base_get_msg_frame(ioc, smid);
+	memset(mpi_request, 0, ioc->request_sz);
 	ioc->ctl_cmds.smid = smid;
 
 	request_data = ioc->diag_buffer[buffer_type];
@@ -1787,6 +1796,7 @@ _ctl_diag_register_2(struct MPT3SAS_ADAPTER *ioc,
 	if (rc && request_data) {
 		dma_free_coherent(&ioc->pdev->dev, request_data_sz,
 		    request_data, request_data_dma);
+		ioc->diag_buffer[buffer_type] = NULL;
 		ioc->diag_buffer_status[buffer_type] &=
 		    ~MPT3_DIAG_BUFFER_IS_DRIVER_ALLOCATED;
 	}
@@ -1874,7 +1884,7 @@ mpt3sas_enable_diag_buffer(struct MPT3SAS_ADAPTER *ioc, u8 bits_to_register)
 			    diag_register.requested_buffer_size>>10);
 		else if (ioc->diag_buffer_status[MPI2_DIAG_BUF_TYPE_TRACE]
 		    & MPT3_DIAG_BUFFER_IS_REGISTERED) {
-			ioc_err(ioc, "Trace buffer memory %d KB allocated\n",
+			ioc_info(ioc, "Trace buffer memory %d KB allocated\n",
 			    diag_register.requested_buffer_size>>10);
 			if (ioc->hba_mpi_version_belonged != MPI2_VERSION)
 				ioc->diag_buffer_status[
@@ -2163,6 +2173,7 @@ mpt3sas_send_diag_release(struct MPT3SAS_ADAPTER *ioc, u8 buffer_type,
 	ioc->ctl_cmds.status = MPT3_CMD_PENDING;
 	memset(ioc->ctl_cmds.reply, 0, ioc->reply_sz);
 	mpi_request = mpt3sas_base_get_msg_frame(ioc, smid);
+	memset(mpi_request, 0, ioc->request_sz);
 	ioc->ctl_cmds.smid = smid;
 
 	mpi_request->Function = MPI2_FUNCTION_DIAG_RELEASE;
@@ -2417,6 +2428,7 @@ _ctl_diag_read_buffer(struct MPT3SAS_ADAPTER *ioc, void __user *arg)
 	ioc->ctl_cmds.status = MPT3_CMD_PENDING;
 	memset(ioc->ctl_cmds.reply, 0, ioc->reply_sz);
 	mpi_request = mpt3sas_base_get_msg_frame(ioc, smid);
+	memset(mpi_request, 0, ioc->request_sz);
 	ioc->ctl_cmds.smid = smid;
 
 	mpi_request->Function = MPI2_FUNCTION_DIAG_BUFFER_POST;
@@ -2528,6 +2540,56 @@ out:
 		    __func__, arg);
 		return -EFAULT;
 	}
+	return 0;
+}
+
+/**
+ * _ctl_enable_diag_sbr_reload - enable sbr reload bit
+ * @ioc: per adapter object
+ * @arg: user space buffer containing ioctl content
+ *
+ * Enable the SBR reload bit
+ */
+static int
+_ctl_enable_diag_sbr_reload(struct MPT3SAS_ADAPTER *ioc, void __user *arg)
+{
+	u32 ioc_state, host_diagnostic;
+
+	if (ioc->shost_recovery ||
+	    ioc->pci_error_recovery || ioc->is_driver_loading ||
+	    ioc->remove_host)
+		return -EAGAIN;
+
+	ioc_state = mpt3sas_base_get_iocstate(ioc, 1);
+
+	if (ioc_state != MPI2_IOC_STATE_OPERATIONAL)
+		return -EFAULT;
+
+	host_diagnostic = ioc->base_readl(&ioc->chip->HostDiagnostic);
+
+	if (host_diagnostic & MPI2_DIAG_SBR_RELOAD)
+		return 0;
+
+	if (mutex_trylock(&ioc->hostdiag_unlock_mutex)) {
+		if (mpt3sas_base_unlock_and_get_host_diagnostic(ioc, &host_diagnostic)) {
+			mutex_unlock(&ioc->hostdiag_unlock_mutex);
+				return -EFAULT;
+		}
+	} else
+		return -EAGAIN;
+
+	host_diagnostic |= MPI2_DIAG_SBR_RELOAD;
+	writel(host_diagnostic, &ioc->chip->HostDiagnostic);
+	host_diagnostic = ioc->base_readl(&ioc->chip->HostDiagnostic);
+	mpt3sas_base_lock_host_diagnostic(ioc);
+	mutex_unlock(&ioc->hostdiag_unlock_mutex);
+
+	if (!(host_diagnostic & MPI2_DIAG_SBR_RELOAD)) {
+		ioc_err(ioc, "%s: Failed to set Diag SBR Reload Bit\n", __func__);
+		return -EFAULT;
+	}
+
+	ioc_info(ioc, "%s: Successfully set the Diag SBR Reload Bit\n", __func__);
 	return 0;
 }
 
@@ -2706,6 +2768,10 @@ _ctl_ioctl_main(struct file *file, unsigned int cmd, void __user *arg,
 	case MPT3ADDNLDIAGQUERY:
 		if (_IOC_SIZE(cmd) == sizeof(struct mpt3_addnl_diag_query))
 			ret = _ctl_addnl_diag_query(ioc, arg);
+		break;
+	case MPT3ENABLEDIAGSBRRELOAD:
+		if (_IOC_SIZE(cmd) == sizeof(struct mpt3_enable_diag_sbr_reload))
+			ret = _ctl_enable_diag_sbr_reload(ioc, arg);
 		break;
 	default:
 		dctlprintk(ioc,
@@ -4022,7 +4088,7 @@ sas_ncq_prio_supported_show(struct device *dev,
 {
 	struct scsi_device *sdev = to_scsi_device(dev);
 
-	return sysfs_emit(buf, "%d\n", scsih_ncq_prio_supp(sdev));
+	return sysfs_emit(buf, "%d\n", sas_ata_ncq_prio_supported(sdev));
 }
 static DEVICE_ATTR_RO(sas_ncq_prio_supported);
 
@@ -4057,7 +4123,7 @@ sas_ncq_prio_enable_store(struct device *dev,
 	if (kstrtobool(buf, &ncq_prio_enable))
 		return -EINVAL;
 
-	if (!scsih_ncq_prio_supp(sdev))
+	if (!sas_ata_ncq_prio_supported(sdev))
 		return -EINVAL;
 
 	sas_device_priv_data->ncq_prio_enable = ncq_prio_enable;
@@ -4145,31 +4211,37 @@ mpt3sas_ctl_init(ushort hbas_to_enumerate)
 }
 
 /**
+ * mpt3sas_ctl_release - release dma for ctl
+ * @ioc: per adapter object
+ */
+void
+mpt3sas_ctl_release(struct MPT3SAS_ADAPTER *ioc)
+{
+	int i;
+
+	/* free memory associated to diag buffers */
+	for (i = 0; i < MPI2_DIAG_BUF_TYPE_COUNT; i++) {
+		if (!ioc->diag_buffer[i])
+			continue;
+		dma_free_coherent(&ioc->pdev->dev,
+				  ioc->diag_buffer_sz[i],
+				  ioc->diag_buffer[i],
+				  ioc->diag_buffer_dma[i]);
+		ioc->diag_buffer[i] = NULL;
+		ioc->diag_buffer_status[i] = 0;
+	}
+
+	kfree(ioc->event_log);
+}
+
+/**
  * mpt3sas_ctl_exit - exit point for ctl
  * @hbas_to_enumerate: ?
  */
 void
 mpt3sas_ctl_exit(ushort hbas_to_enumerate)
 {
-	struct MPT3SAS_ADAPTER *ioc;
-	int i;
 
-	list_for_each_entry(ioc, &mpt3sas_ioc_list, list) {
-
-		/* free memory associated to diag buffers */
-		for (i = 0; i < MPI2_DIAG_BUF_TYPE_COUNT; i++) {
-			if (!ioc->diag_buffer[i])
-				continue;
-			dma_free_coherent(&ioc->pdev->dev,
-					  ioc->diag_buffer_sz[i],
-					  ioc->diag_buffer[i],
-					  ioc->diag_buffer_dma[i]);
-			ioc->diag_buffer[i] = NULL;
-			ioc->diag_buffer_status[i] = 0;
-		}
-
-		kfree(ioc->event_log);
-	}
 	if (hbas_to_enumerate != 1)
 		misc_deregister(&ctl_dev);
 	if (hbas_to_enumerate != 2)

@@ -78,6 +78,10 @@ static int qca_mdio_wait_busy(struct qca_mdio_data *am)
 	return -ETIMEDOUT;
 }
 
+#ifndef MII_ADDR_C45
+#define MII_ADDR_C45 (1<<30)
+#endif
+
 static int qca_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 {
 	struct qca_mdio_data *am = bus->priv;
@@ -127,6 +131,11 @@ static int qca_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 	return value;
 }
 
+static int qca_mdio_read_c45(struct mii_bus *bus, int mii_id, int devad, int regnum)
+{
+	return qca_mdio_read(bus, mii_id, MII_ADDR_C45 | (devad << 16) | regnum);
+}
+
 static int qca_mdio_write(struct mii_bus *bus, int mii_id, int regnum,
 			  u16 value)
 {
@@ -173,6 +182,12 @@ static int qca_mdio_write(struct mii_bus *bus, int mii_id, int regnum,
 		return -ETIMEDOUT;
 
 	return 0;
+}
+
+static int qca_mdio_write_c45(struct mii_bus *bus, int mii_id, int regnum,
+			  int devad, u16 value)
+{
+	return qca_mdio_write(bus, mii_id, MII_ADDR_C45 | (devad << 16) | regnum, value);
 }
 
 static int qca_phy_gpio_set(struct platform_device *pdev, int number)
@@ -306,6 +321,8 @@ static int qca_mdio_probe(struct platform_device *pdev)
 	am->mii_bus->name = "qca_mdio";
 	am->mii_bus->read = &qca_mdio_read;
 	am->mii_bus->write = &qca_mdio_write;
+	am->mii_bus->read_c45 = &qca_mdio_read_c45;
+	am->mii_bus->write_c45 = &qca_mdio_write_c45;
 	am->mii_bus->priv = am;
 	am->mii_bus->parent = &pdev->dev;
 	snprintf(am->mii_bus->id, MII_BUS_ID_SIZE, "%s", dev_name(&pdev->dev));

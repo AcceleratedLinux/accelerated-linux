@@ -1,0 +1,22 @@
+#!/bin/sh
+
+#
+# Check arguments, and error out on anything invalid.
+#
+if [ $# -ne 3  ] || [ "$2" != "altpin" ] || [ "$3" != "on" -a "$3" != "off" ] ; then
+	echo "usage: serial-mode <device> altpin (on|off)"
+	echo
+	echo "        altpin    -- enable 8-pin altpin mode"
+	echo
+	exit 1
+fi
+
+portnum="${1#/dev/serial/port}"
+if [ "${portnum}" -lt "1" ] || [ "${portnum}" -gt "16" ] ; then
+	echo "ERROR: serial-mode not supported on supplied port"
+	exit 1
+fi
+
+echo "$3" > /sys/class/tty/ttyS$portnum/altpin
+
+exit 0

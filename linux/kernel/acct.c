@@ -84,7 +84,6 @@ static struct ctl_table kern_acct_table[] = {
 		.mode           = 0644,
 		.proc_handler   = proc_dointvec,
 	},
-	{ }
 };
 
 static __init int kernel_acct_sysctls_init(void)
@@ -246,7 +245,7 @@ static int acct_on(struct filename *pathname)
 		filp_close(file, NULL);
 		return PTR_ERR(internal);
 	}
-	err = __mnt_want_write(internal);
+	err = mnt_get_write_access(internal);
 	if (err) {
 		mntput(internal);
 		kfree(acct);
@@ -271,7 +270,7 @@ static int acct_on(struct filename *pathname)
 	old = xchg(&ns->bacct, &acct->pin);
 	mutex_unlock(&acct->lock);
 	pin_kill(old);
-	__mnt_drop_write(mnt);
+	mnt_put_write_access(mnt);
 	mntput(mnt);
 	return 0;
 }
@@ -320,7 +319,7 @@ void acct_exit_ns(struct pid_namespace *ns)
 }
 
 /*
- *  encode an unsigned long into a comp_t
+ *  encode an u64 into a comp_t
  *
  *  This routine has been adopted from the encode_comp_t() function in
  *  the kern_acct.c file of the FreeBSD operating system. The encoding
@@ -331,7 +330,7 @@ void acct_exit_ns(struct pid_namespace *ns)
 #define	EXPSIZE		3			/* Base 8 (3 bit) exponent. */
 #define	MAXFRACT	((1 << MANTSIZE) - 1)	/* Maximum fractional value. */
 
-static comp_t encode_comp_t(unsigned long value)
+static comp_t encode_comp_t(u64 value)
 {
 	int exp, rnd;
 
@@ -350,6 +349,8 @@ static comp_t encode_comp_t(unsigned long value)
 		exp++;
 	}
 
+	if (exp > (((comp_t) ~0U) >> MANTSIZE))
+		return (comp_t) ~0U;
 	/*
 	 * Clean it up and polish it off.
 	 */
@@ -443,7 +444,7 @@ static void fill_ac(acct_t *ac)
 	memset(ac, 0, sizeof(acct_t));
 
 	ac->ac_version = ACCT_VERSION | ACCT_BYTEORDER;
-	strlcpy(ac->ac_comm, current->comm, sizeof(ac->ac_comm));
+	strscpy(ac->ac_comm, current->comm, sizeof(ac->ac_comm));
 
 	/* calculate run_time in nsec*/
 	run_time = ktime_get_ns();
@@ -468,7 +469,7 @@ static void fill_ac(acct_t *ac)
 	do_div(elapsed, AHZ);
 	btime = ktime_get_real_seconds() - elapsed;
 	ac->ac_btime = clamp_t(time64_t, btime, 0, U32_MAX);
-#if ACCT_VERSION==2
+#if ACCT_VERSION == 2
 	ac->ac_ahz = AHZ;
 #endif
 
@@ -555,15 +556,14 @@ void acct_collect(long exitcode, int group_dead)
 	unsigned long vsize = 0;
 
 	if (group_dead && current->mm) {
+		struct mm_struct *mm = current->mm;
+		VMA_ITERATOR(vmi, mm, 0);
 		struct vm_area_struct *vma;
 
-		mmap_read_lock(current->mm);
-		vma = current->mm->mmap;
-		while (vma) {
+		mmap_read_lock(mm);
+		for_each_vma(vmi, vma)
 			vsize += vma->vm_end - vma->vm_start;
-			vma = vma->vm_next;
-		}
-		mmap_read_unlock(current->mm);
+		mmap_read_unlock(mm);
 	}
 
 	spin_lock_irq(&current->sighand->siglock);

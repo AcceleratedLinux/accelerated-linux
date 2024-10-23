@@ -18,6 +18,7 @@
 #include <linux/kernel.h>
 #include <linux/log2.h>
 #include <linux/time64.h>
+#include <linux/overflow.h>
 #include <unistd.h>
 #include "cap.h"
 #include "strlist.h"
@@ -26,6 +27,8 @@
 /*
  * XXX We need to find a better place for these things...
  */
+
+const char *input_name;
 
 bool perf_singlethreaded = true;
 
@@ -200,7 +203,7 @@ static int rm_rf_depth_pat(const char *path, int depth, const char **pat)
 	return rmdir(path);
 }
 
-static int rm_rf_kcore_dir(const char *path)
+static int rm_rf_a_kcore_dir(const char *path, const char *name)
 {
 	char kcore_dir_path[PATH_MAX];
 	const char *pat[] = {
@@ -210,9 +213,42 @@ static int rm_rf_kcore_dir(const char *path)
 		NULL,
 	};
 
-	snprintf(kcore_dir_path, sizeof(kcore_dir_path), "%s/kcore_dir", path);
+	snprintf(kcore_dir_path, sizeof(kcore_dir_path), "%s/%s", path, name);
 
 	return rm_rf_depth_pat(kcore_dir_path, 0, pat);
+}
+
+static bool kcore_dir_filter(const char *name __maybe_unused, struct dirent *d)
+{
+	const char *pat[] = {
+		"kcore_dir",
+		"kcore_dir__[1-9]*",
+		NULL,
+	};
+
+	return match_pat(d->d_name, pat);
+}
+
+static int rm_rf_kcore_dir(const char *path)
+{
+	struct strlist *kcore_dirs;
+	struct str_node *nd;
+	int ret;
+
+	kcore_dirs = lsdir(path, kcore_dir_filter);
+
+	if (!kcore_dirs)
+		return 0;
+
+	strlist__for_each_entry(nd, kcore_dirs) {
+		ret = rm_rf_a_kcore_dir(path, nd->s);
+		if (ret)
+			return ret;
+	}
+
+	strlist__delete(kcore_dirs);
+
+	return 0;
 }
 
 int rm_rf_perf_data(const char *path)
@@ -467,3 +503,71 @@ char *filename_with_chroot(int pid, const char *filename)
 
 	return new_name;
 }
+
+/*
+ * Reallocate an array *arr of size *arr_sz so that it is big enough to contain
+ * x elements of size msz, initializing new entries to *init_val or zero if
+ * init_val is NULL
+ */
+int do_realloc_array_as_needed(void **arr, size_t *arr_sz, size_t x, size_t msz, const void *init_val)
+{
+	size_t new_sz = *arr_sz;
+	void *new_arr;
+	size_t i;
+
+	if (!new_sz)
+		new_sz = msz >= 64 ? 1 : roundup(64, msz); /* Start with at least 64 bytes */
+	while (x >= new_sz) {
+		if (check_mul_overflow(new_sz, (size_t)2, &new_sz))
+			return -ENOMEM;
+	}
+	if (new_sz == *arr_sz)
+		return 0;
+	new_arr = calloc(new_sz, msz);
+	if (!new_arr)
+		return -ENOMEM;
+	if (*arr_sz)
+		memcpy(new_arr, *arr, *arr_sz * msz);
+	if (init_val) {
+		for (i = *arr_sz; i < new_sz; i++)
+			memcpy(new_arr + (i * msz), init_val, msz);
+	}
+	*arr = new_arr;
+	*arr_sz = new_sz;
+	return 0;
+}
+
+#ifndef HAVE_SCHED_GETCPU_SUPPORT
+int sched_getcpu(void)
+{
+#ifdef __NR_getcpu
+	unsigned int cpu;
+	int err = syscall(__NR_getcpu, &cpu, NULL, NULL);
+
+	if (!err)
+		return cpu;
+#else
+	errno = ENOSYS;
+#endif
+	return -1;
+}
+#endif
+
+#ifndef HAVE_SCANDIRAT_SUPPORT
+int scandirat(int dirfd, const char *dirp,
+	      struct dirent ***namelist,
+	      int (*filter)(const struct dirent *),
+	      int (*compar)(const struct dirent **, const struct dirent **))
+{
+	char path[PATH_MAX];
+	int err, fd = openat(dirfd, dirp, O_PATH);
+
+	if (fd < 0)
+		return fd;
+
+	snprintf(path, sizeof(path), "/proc/%d/fd/%d", getpid(), fd);
+	err = scandir(path, namelist, filter, compar);
+	close(fd);
+	return err;
+}
+#endif

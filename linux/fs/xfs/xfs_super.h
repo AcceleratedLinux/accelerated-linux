@@ -92,11 +92,14 @@ extern xfs_agnumber_t xfs_set_inode_alloc(struct xfs_mount *,
 
 extern const struct export_operations xfs_export_operations;
 extern const struct quotactl_ops xfs_quotactl_operations;
+extern const struct dax_holder_operations xfs_dax_holder_operations;
 
 extern void xfs_reinit_percpu_counters(struct xfs_mount *mp);
 
 extern struct workqueue_struct *xfs_discard_wq;
 
 #define XFS_M(sb)		((struct xfs_mount *)((sb)->s_fs_info))
+
+struct dentry *xfs_debugfs_mkdir(const char *name, struct dentry *parent);
 
 #endif	/* __XFS_SUPER_H__ */

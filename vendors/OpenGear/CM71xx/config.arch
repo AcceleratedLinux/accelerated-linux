@@ -20,7 +20,7 @@ RELFILES = images/image.bin \
 	   images/acl-licenses.txt \
 	   images/static-analysis.tar.gz \
 	   prop/config/schema/accns.schema \
-	   prop/config/cc_acl/app/runt/FE00000A*
+	   prop/config/edp-rust-client/descriptors/runt/FE00000A*
 
 ############################################################################
 

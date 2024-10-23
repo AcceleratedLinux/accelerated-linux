@@ -53,7 +53,7 @@ static u32 *iommu_gatt_base;		/* Remapping table */
  * of only flushing when an mapping is reused. With it true the GART is
  * flushed for every mapping. Problem is that doing the lazy flush seems
  * to trigger bugs with some popular PCI cards, in particular 3ware (but
- * has been also also seen with Qlogic at least).
+ * has been also seen with Qlogic at least).
  */
 static int iommu_fullflush = 1;
 
@@ -504,7 +504,7 @@ static __init unsigned long check_iommu_size(unsigned long aper, u64 aper_size)
 	}
 
 	a = aper + iommu_size;
-	iommu_size -= round_up(a, PMD_PAGE_SIZE) - a;
+	iommu_size -= round_up(a, PMD_SIZE) - a;
 
 	if (iommu_size < 64*1024*1024) {
 		pr_warn("PCI-DMA: Warning: Small IOMMU %luMB."
@@ -676,7 +676,7 @@ static const struct dma_map_ops gart_dma_ops = {
 	.get_sgtable			= dma_common_get_sgtable,
 	.dma_supported			= dma_direct_supported,
 	.get_required_mask		= dma_direct_get_required_mask,
-	.alloc_pages			= dma_direct_alloc_pages,
+	.alloc_pages_op			= dma_direct_alloc_pages,
 	.free_pages			= dma_direct_free_pages,
 };
 
@@ -776,7 +776,7 @@ int __init gart_iommu_init(void)
 				iommu_size >> PAGE_SHIFT);
 	/*
 	 * Tricky. The GART table remaps the physical memory range,
-	 * so the CPU wont notice potential aliases and if the memory
+	 * so the CPU won't notice potential aliases and if the memory
 	 * is remapped to UC later on, we might surprise the PCI devices
 	 * with a stray writeout of a cacheline. So play it sure and
 	 * do an explicit, full-scale wbinvd() _after_ having marked all

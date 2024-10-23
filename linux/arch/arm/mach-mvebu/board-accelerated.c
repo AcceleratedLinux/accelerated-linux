@@ -89,8 +89,8 @@ static __init int accelerated_usbpwr_init(void)
 		printk(KERN_ERR "accelerated: can't set up USB Over Current: %d\n", rc);
 		return rc;
 	}
-	gpio_export(GPIO_USB_PWR, 0);
-	gpio_export(GPIO_USB_OVC, 0);
+	gpiod_export(gpio_to_desc(GPIO_USB_PWR), 0);
+	gpiod_export(gpio_to_desc(GPIO_USB_OVC), 0);
 	mdelay(20);
 	/* start the timer, do first check */
 	accelerated_usboc_handler(0);
@@ -116,7 +116,7 @@ static __init int accelerated_cell_init(void)
 		printk(KERN_ERR "accelerated: can't set up Cell Disable: %d\n", rc);
 		return rc;
 	}
-	gpio_export(GPIO_CELL_DISABLE, 0);
+	gpiod_export(gpio_to_desc(GPIO_CELL_DISABLE), 0);
 
 	rc = gpio_request(GPIO_CELL_RESET, "Cell Reset");
 	if (!rc)
@@ -125,7 +125,7 @@ static __init int accelerated_cell_init(void)
 		printk(KERN_ERR "accelerated: can't set up Cell Reset: %d\n", rc);
 		return rc;
 	}
-	gpio_export(GPIO_CELL_RESET, 0);
+	gpiod_export(gpio_to_desc(GPIO_CELL_RESET), 0);
 
 	printk(KERN_INFO "accelerated: CELL Control configured.\n");
 	return 0;
@@ -152,7 +152,7 @@ static __init int accelerated_buzzer_init(void)
 		printk(KERN_ERR "accelerated: can't set up Buzzer: %d\n", rc);
 		return rc;
 	}
-	gpio_export(GPIO_BUZZER, 0);
+	gpiod_export(gpio_to_desc(GPIO_BUZZER), 0);
 	return 0;
 }
 late_initcall(accelerated_buzzer_init);

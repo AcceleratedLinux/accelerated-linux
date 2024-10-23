@@ -16,6 +16,12 @@ PRODUCTION_BUILD=0
 ifeq ($(BUILD_TYPE),candidate)
 PRODUCTION_BUILD=1
 endif
+ifeq ($(BUILD_TYPE),sprint)
+PRODUCTION_BUILD=1
+endif
+ifeq ($(BUILD_TYPE),beta)
+PRODUCTION_BUILD=1
+endif
 
 FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/production/awusb/firmware_ca.pem
 DEV_FIRMWARE_CA_PEM = $(ROOTDIR)/prop/sign_image/devkeys/awusb/firmware_ca.pem

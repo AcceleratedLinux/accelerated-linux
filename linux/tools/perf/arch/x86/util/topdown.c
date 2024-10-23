@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <stdio.h>
 #include "api/fs/fs.h"
+#include "util/evsel.h"
 #include "util/pmu.h"
+#include "util/pmus.h"
 #include "util/topdown.h"
 #include "topdown.h"
 #include "evsel.h"
@@ -22,36 +23,12 @@ bool topdown_sys_has_perf_metrics(void)
 	 * The slots event is only available when the core PMU
 	 * supports the perf metrics feature.
 	 */
-	pmu = perf_pmu__find_by_type(PERF_TYPE_RAW);
-	if (pmu && pmu_have_event(pmu->name, "slots"))
+	pmu = perf_pmus__find_by_type(PERF_TYPE_RAW);
+	if (pmu && perf_pmu__have_event(pmu, "slots"))
 		has_perf_metrics = true;
 
 	cached = true;
 	return has_perf_metrics;
-}
-
-/*
- * Check whether we can use a group for top down.
- * Without a group may get bad results due to multiplexing.
- */
-bool arch_topdown_check_group(bool *warn)
-{
-	int n;
-
-	if (sysctl__read_int("kernel/nmi_watchdog", &n) < 0)
-		return false;
-	if (n > 0) {
-		*warn = true;
-		return false;
-	}
-	return true;
-}
-
-void arch_topdown_group_warn(void)
-{
-	fprintf(stderr,
-		"nmi_watchdog enabled with topdown. May give wrong results.\n"
-		"Disable with echo 0 > /proc/sys/kernel/nmi_watchdog\n");
 }
 
 #define TOPDOWN_SLOTS		0x0400
@@ -62,7 +39,6 @@ void arch_topdown_group_warn(void)
  * Only Topdown metric supports sample-read. The slots
  * event must be the leader of the topdown group.
  */
-
 bool arch_topdown_sample_read(struct evsel *leader)
 {
 	if (!evsel__sys_has_perf_metrics(leader))

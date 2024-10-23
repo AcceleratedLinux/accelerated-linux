@@ -1,5 +1,5 @@
 QEMU_VERSION = 3.0.0
-URL = http://wiki.qemu-project.org/download/qemu-$(QEMU_VERSION).tar.bz2
+URL = https://wiki.qemu-project.org/download/qemu-$(QEMU_VERSION).tar.bz2
 
 QEMU_TARGETS_$(CONFIG_USER_QEMU_AARCH64_SOFTMMU) += aarch64-softmmu
 QEMU_TARGETS_$(CONFIG_USER_QEMU_AARCH64_LINUX_USER) += aarch64-linux-user

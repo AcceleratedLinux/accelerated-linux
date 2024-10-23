@@ -1,3 +1,5 @@
+OPENSSH_VERSION = 9.8p1
+URL = https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$(OPENSSH_VERSION).tar.gz
 
 CONFOPTS  = --libexecdir=/usr/libexec
 CONFOPTS += --sbindir=/bin
@@ -35,16 +37,12 @@ SSHCONFDIR = /etc
 SSHDEFDIR = /etc
 endif
 
-# If we're building with libpam, we add this capability to ssh
-ifdef CONFIG_LIB_LIBPAM
-NEED_LIB_PAM := y
-endif
-ifdef CONFIG_LIB_LIBPAM_FORCE
-NEED_LIB_PAM := y
-endif
-ifeq ($(NEED_LIB_PAM),y)
-CONFOPTS += --with-pam
-endif
+CONFOPTS-$(CONFIG_LIB_LIBPAM) += --with-pam
+CONFOPTS-$(CONFIG_USER_SSH_PKCS11) += --enable-pkcs11
+CONFOPTS-$(CONFIG_USER_SSH_SK) += --enable-security-key
+CONFOPTS += $(patsubst --with-%,--without-%,\
+		$(CONFOPTS-:--enable-%=--disable-%))
+CONFOPTS += $(CONFOPTS-y)
 
 FLTFLAGS += -s 65536
 ifdef CONFIG_PROP_SSH_SECURITY_COUNT
@@ -59,9 +57,6 @@ endif
 
 CONFVARS = INSTALL="install -c --strip-program=$(STRIP)"
 
-OPENSSH_VERSION = 8.8p1
-URL = http://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$(OPENSSH_VERSION).tar.gz
-
 AUTOMAKE_ROMFS = my_romfs
 
 include $(ROOTDIR)/tools/automake.inc
@@ -72,12 +67,15 @@ my_romfs:
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSH $(OPENSSH_INSTALL_DIR)/bin/ssh /bin/ssh
 	$(ROMFSINST) -d -e CONFIG_USER_SSH_SSH $(OPENSSH_INSTALL_DIR)$(SSHCONFDIR)/ssh_config $(SSHDEFDIR)/ssh_config
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSHD $(OPENSSH_INSTALL_DIR)/bin/sshd /bin/sshd
+	$(ROMFSINST) -d -e CONFIG_USER_SSH_SSHD $(OPENSSH_INSTALL_DIR)/usr/libexec/sshd-session /usr/libexec/sshd-session
 	$(ROMFSINST) -e CONFIG_USER_SSH_SSHKEYGEN $(OPENSSH_INSTALL_DIR)/bin/ssh-keygen /bin/ssh-keygen
 	$(ROMFSINST) -e CONFIG_USER_SSH_GEN_KEYS $(OPENSSH_INSTALL_DIR)/bin/gen-keys /bin/gen-keys
 	$(ROMFSINST) -e CONFIG_USER_SSH_SCP $(OPENSSH_INSTALL_DIR)/bin/scp /bin/scp
 	$(ROMFSINST) -e CONFIG_USER_SSH_SFTP $(OPENSSH_INSTALL_DIR)/bin/sftp /bin/sftp
 	$(ROMFSINST) -d -e CONFIG_USER_SSH_SFTP_SERVER $(OPENSSH_INSTALL_DIR)/usr/libexec/sftp-server /usr/libexec/sftp-server
 	$(ROMFSINST) -d -e CONFIG_USER_SSH_SSH_KEYSIGN $(OPENSSH_INSTALL_DIR)/usr/libexec/ssh-keysign /usr/libexec/ssh-keysign
+	$(ROMFSINST) -d -e CONFIG_USER_SSH_PKCS11 $(OPENSSH_INSTALL_DIR)/usr/libexec/ssh-pkcs11-helper /usr/libexec/ssh-pkcs11-helper
+	$(ROMFSINST) -d -e CONFIG_USER_SSH_SK $(OPENSSH_INSTALL_DIR)/usr/libexec/ssh-sk-helper /usr/libexec/ssh-sk-helper
 	##
 	# Add the appropriate stuff to the start files.
 	#

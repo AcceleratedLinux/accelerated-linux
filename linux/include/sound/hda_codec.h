@@ -18,9 +18,6 @@
 #include <sound/hda_verbs.h>
 #include <sound/hda_regmap.h>
 
-#define IS_BXT(pci) ((pci)->vendor == 0x8086 && (pci)->device == 0x5a98)
-#define IS_CFL(pci) ((pci)->vendor == 0x8086 && (pci)->device == 0xa348)
-
 /*
  * Structures
  */
@@ -112,11 +109,9 @@ struct hda_codec_ops {
 	void (*unsol_event)(struct hda_codec *codec, unsigned int res);
 	void (*set_power_state)(struct hda_codec *codec, hda_nid_t fg,
 				unsigned int power_state);
-#ifdef CONFIG_PM
 	int (*suspend)(struct hda_codec *codec);
 	int (*resume)(struct hda_codec *codec);
 	int (*check_power_status)(struct hda_codec *codec, hda_nid_t nid);
-#endif
 	void (*stream_pm)(struct hda_codec *codec, hda_nid_t nid, bool on);
 };
 
@@ -144,6 +139,7 @@ struct hda_pcm_stream {
 	hda_nid_t nid;	/* default NID to query rates/formats/bps, or set up */
 	u32 rates;	/* supported rates */
 	u64 formats;	/* supported formats (SNDRV_PCM_FMTBIT_) */
+	u32 subformats;	/* for S32_LE format, SNDRV_PCM_SUBFMTBIT_* */
 	unsigned int maxbps;	/* supported max. bit per sample */
 	const struct snd_pcm_chmap_elem *chmap; /* chmap to override */
 	struct hda_pcm_ops ops;
@@ -231,7 +227,6 @@ struct hda_codec {
 	/* misc flags */
 	unsigned int configured:1; /* codec was configured */
 	unsigned int in_freeing:1; /* being released */
-	unsigned int registered:1; /* codec was registered */
 	unsigned int display_power_control:1; /* needs display power */
 	unsigned int spdif_status_reset :1; /* needs to toggle SPDIF for each
 					     * status change
@@ -259,13 +254,12 @@ struct hda_codec {
 	unsigned int link_down_at_suspend:1; /* link down at runtime suspend */
 	unsigned int relaxed_resume:1;	/* don't resume forcibly for jack */
 	unsigned int forced_resume:1; /* forced resume for jack */
-	unsigned int mst_no_extra_pcms:1; /* no backup PCMs for DP-MST */
+	unsigned int no_stream_clean_at_suspend:1; /* do not clean streams at suspend */
+	unsigned int ctl_dev_id:1; /* old control element id build behaviour */
 
-#ifdef CONFIG_PM
 	unsigned long power_on_acct;
 	unsigned long power_off_acct;
 	unsigned long power_jiffies;
-#endif
 
 	/* filter the requested power state per nid */
 	unsigned int (*power_filter)(struct hda_codec *codec, hda_nid_t nid,
@@ -294,8 +288,6 @@ struct hda_codec {
 #define dev_to_hda_codec(_dev)	container_of(_dev, struct hda_codec, core.dev)
 #define hda_codec_dev(_dev)	(&(_dev)->core.dev)
 
-#define hdac_to_hda_priv(_hdac) \
-			container_of(_hdac, struct hdac_hda_priv, codec.core)
 #define hdac_to_hda_codec(_hdac) container_of(_hdac, struct hda_codec, core)
 
 #define list_for_each_codec(c, bus) \
@@ -453,8 +445,8 @@ void __snd_hda_codec_cleanup_stream(struct hda_codec *codec, hda_nid_t nid,
 #define snd_hda_codec_cleanup_stream(codec, nid) \
 	__snd_hda_codec_cleanup_stream(codec, nid, 0)
 
-#define snd_hda_query_supported_pcm(codec, nid, ratesp, fmtsp, bpsp) \
-	snd_hdac_query_supported_pcm(&(codec)->core, nid, ratesp, fmtsp, bpsp)
+#define snd_hda_query_supported_pcm(codec, nid, ratesp, fmtsp, subfmtp, bpsp) \
+	snd_hdac_query_supported_pcm(&(codec)->core, nid, ratesp, fmtsp, subfmtp, bpsp)
 #define snd_hda_is_supported_format(codec, nid, fmt) \
 	snd_hdac_is_supported_format(&(codec)->core, nid, fmt)
 
@@ -485,10 +477,8 @@ extern const struct dev_pm_ops hda_codec_driver_pm;
 static inline
 int hda_call_check_power_status(struct hda_codec *codec, hda_nid_t nid)
 {
-#ifdef CONFIG_PM
 	if (codec->patch_ops.check_power_status)
 		return codec->patch_ops.check_power_status(codec, nid);
-#endif
 	return 0;
 }
 
@@ -499,14 +489,9 @@ int hda_call_check_power_status(struct hda_codec *codec, hda_nid_t nid)
 #define snd_hda_power_up_pm(codec)	snd_hdac_power_up_pm(&(codec)->core)
 #define snd_hda_power_down(codec)	snd_hdac_power_down(&(codec)->core)
 #define snd_hda_power_down_pm(codec)	snd_hdac_power_down_pm(&(codec)->core)
-#ifdef CONFIG_PM
 void snd_hda_codec_set_power_save(struct hda_codec *codec, int delay);
 void snd_hda_set_power_save(struct hda_bus *bus, int delay);
 void snd_hda_update_power_acct(struct hda_codec *codec);
-#else
-static inline void snd_hda_codec_set_power_save(struct hda_codec *codec, int delay) {}
-static inline void snd_hda_set_power_save(struct hda_bus *bus, int delay) {}
-#endif
 
 static inline bool hda_codec_need_resume(struct hda_codec *codec)
 {

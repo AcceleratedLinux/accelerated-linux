@@ -1,0 +1,7 @@
+config USER_WISUN_BR
+	bool 'Wi-SUN Border Router'
+	select LIB_MBEDTLS
+	select LIB_LIBNL
+	select LIB_LIBCAP
+	help
+	  Wi-SUN Border Router and related tools

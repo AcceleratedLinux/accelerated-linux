@@ -27,6 +27,7 @@ static const char * const fw_upload_err_str[] = {
 	[FW_UPLOAD_ERR_INVALID_SIZE] = "invalid-file-size",
 	[FW_UPLOAD_ERR_RW_ERROR]     = "read-write-error",
 	[FW_UPLOAD_ERR_WEAROUT]	     = "flash-wearout",
+	[FW_UPLOAD_ERR_FW_INVALID]   = "firmware-invalid",
 };
 
 static const char *fw_upload_progress(struct device *dev,
@@ -264,6 +265,15 @@ int fw_upload_start(struct fw_sysfs *fw_sysfs)
 	return 0;
 }
 
+void fw_upload_free(struct fw_sysfs *fw_sysfs)
+{
+	struct fw_upload_priv *fw_upload_priv = fw_sysfs->fw_upload_priv;
+
+	free_fw_priv(fw_sysfs->fw_priv);
+	kfree(fw_upload_priv->fw_upload);
+	kfree(fw_upload_priv);
+}
+
 /**
  * firmware_upload_register() - register for the firmware upload sysfs API
  * @module: kernel module of this device
@@ -377,6 +387,7 @@ void firmware_upload_unregister(struct fw_upload *fw_upload)
 {
 	struct fw_sysfs *fw_sysfs = fw_upload->priv;
 	struct fw_upload_priv *fw_upload_priv = fw_sysfs->fw_upload_priv;
+	struct module *module = fw_upload_priv->module;
 
 	mutex_lock(&fw_upload_priv->lock);
 	if (fw_upload_priv->progress == FW_UPLOAD_PROG_IDLE) {
@@ -392,6 +403,6 @@ void firmware_upload_unregister(struct fw_upload *fw_upload)
 
 unregister:
 	device_unregister(&fw_sysfs->dev);
-	module_put(fw_upload_priv->module);
+	module_put(module);
 }
 EXPORT_SYMBOL_GPL(firmware_upload_unregister);

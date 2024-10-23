@@ -1,0 +1,226 @@
+
+Patch the debuginfo client and server (diserver) so that full
+paths are passed, the server rejects paths containing "..",
+and appends .debug to search its cwd.
+
+Also, fix loop polling so that the server doesn't spin when nothing
+connected.
+
+Index: valgrind-3.21.0/coregrind/m_debuginfo/image.c
+===================================================================
+--- valgrind-3.21.0.orig/coregrind/m_debuginfo/image.c
++++ valgrind-3.21.0/coregrind/m_debuginfo/image.c
+@@ -926,10 +926,6 @@ DiImage* ML_(img_from_di_server)(const H
+    if (filename == NULL || serverAddr == NULL)
+       return NULL;
+ 
+-   /* The filename must be a plain filename -- no slashes at all. */
+-   if (VG_(strchr)(filename, '/') != NULL)
+-      return NULL;
+-
+    /* Try to connect to the server.  A side effect of this is to parse
+       and reject, if syntactically invalid, |serverAddr|.  Reasons why
+       this could fail:
+Index: valgrind-3.21.0/auxprogs/valgrind-di-server.c
+===================================================================
+--- valgrind-3.21.0.orig/auxprogs/valgrind-di-server.c
++++ valgrind-3.21.0/auxprogs/valgrind-di-server.c
+@@ -95,6 +95,7 @@
+ #include <unistd.h>
+ #include <string.h>
+ #include <time.h>
++#include <errno.h>
+ #include <fcntl.h>
+ #include <stdlib.h>
+ #include <signal.h>
+@@ -758,8 +759,26 @@ static Bool handle_transaction ( int con
+          ok = False;
+       }
+       if (ok) {
++         /* Sanitise the filename a bit */
++         while (*filename == '/')
++            filename++;
++         if (strstr(filename, "..")) {
++            res = mk_Frame_asciiz("FAIL", "OPEN: bad filename");
++            printf("(%d) SessionID %llu: suspicious filename \"%s\"\n",
++                   conn_count, conn_state[conn_no].session_id, filename );
++            ok = False;
++         }
++      }
++      if (ok) {
+          assert(clo_serverpath);
+          fd = open((char*)filename, O_RDONLY);
++         if (fd == -1 && errno == ENOENT) {
++            int sz = strlen(filename) + 7;
++            char *filename_debug = malloc(sz);
++            snprintf(filename_debug, sz, "%s.debug", filename);
++            fd = open(filename_debug, O_RDONLY);
++            free(filename_debug);
++         }
+          if (fd == -1) {
+             res = mk_Frame_asciiz("FAIL", "OPEN: cannot open file");
+             printf("(%d) SessionID %llu: open failed for \"%s\"\n",
+@@ -1153,7 +1172,7 @@ int main (int argc, char** argv)
+            ufd.fd      = main_sd;
+            ufd.events  = POLLIN;
+            ufd.revents = 0;
+-           res = poll(&ufd, 1, 0/*ms*/ /* 0=return immediately. */);
++           res = poll(&ufd, 1, conn_count ? 0 /*ms*/ /* 0=return immediately. */ : -1 /* block forever */);
+            if (res == 0) break;
+ 
+            /* ok, we have someone waiting to connect.  Get the sd. */
+Index: valgrind-3.21.0/coregrind/m_debuginfo/readelf.c
+===================================================================
+--- valgrind-3.21.0.orig/coregrind/m_debuginfo/readelf.c
++++ valgrind-3.21.0/coregrind/m_debuginfo/readelf.c
+@@ -40,6 +40,7 @@
+ #include "pub_core_libcproc.h"
+ #include "pub_core_machine.h"      /* VG_ELF_CLASS */
+ #include "pub_core_options.h"
++#include "pub_core_mallocfree.h"
+ #include "pub_core_oset.h"
+ #include "pub_core_pathscan.h"     /* find_executable */
+ #include "pub_core_syscall.h"
+@@ -1579,14 +1580,10 @@ DiImage* find_debug_file( struct _DebugI
+ #     undef TRY_OBJDIRS
+ 
+       if (serverpath) {
+-         /* When looking on the debuginfo server, always just pass the
+-            basename. */
+-         const HChar* basename = debugname;
+-         if (VG_(strstr)(basename, "/") != NULL) {
+-            basename = VG_(strrchr)(basename, '/') + 1;
+-         }
++         HChar* basename = VG_(realpath)(objpath, NULL);
+          VG_(sprintf)(debugpath, "%s on %s", basename, serverpath);
+          dimg = open_debug_file(basename, buildid, crc, rel_ok, serverpath);
++         VG_(free)(basename);
+          if (dimg) goto dimg_ok;
+       }
+ 
+@@ -1654,14 +1651,10 @@ DiImage* find_debug_file_ad_hoc( const D
+       }
+    }
+    if (serverpath) {
+-      /* When looking on the debuginfo server, always just pass the
+-         basename. */
+-      const HChar* basename = objpath;
+-      if (VG_(strstr)(basename, "/") != NULL) {
+-         basename = VG_(strrchr)(basename, '/') + 1;
+-      }
++      HChar* basename = VG_(realpath)(objpath, NULL);
+       VG_(sprintf)(debugpath, "%s on %s", basename, serverpath);
+       dimg = ML_(img_from_di_server)(basename, serverpath);
++      VG_(free)(basename);
+       if (dimg != NULL) {
+          if (VG_(clo_verbosity) > 1) {
+             VG_(message)(Vg_DebugMsg, "  Using (POSSIBLY MISMATCHED) %s\n",
+Index: valgrind-3.21.0/coregrind/m_libcfile.c
+===================================================================
+--- valgrind-3.21.0.orig/coregrind/m_libcfile.c
++++ valgrind-3.21.0/coregrind/m_libcfile.c
+@@ -929,6 +929,92 @@ SSizeT VG_(readlink) (const HChar* path,
+    return sr_isError(res) ? -1 : sr_Res(res);
+ }
+ 
++/* Expands 'path' to an absolute path without ., .. or symbolic link entries.
++   If 'buffer' is NULL, the result is a string allocated with malloc. */
++HChar *VG_(realpath) (const HChar *path, HChar *buffer)
++{
++   SysRes res;
++   HChar *ret = buffer;
++   HChar *p;
++
++#  define REALPATH_MAX 1024
++
++   if (!*path)
++      return NULL; /* ENOENT */
++   if (!ret && !(ret = VG_(malloc)("realpath", REALPATH_MAX + 1)))
++      return NULL; /* ENOMEM */
++   if (*path != '/') {
++      HChar cwdbuf[REALPATH_MAX + 1];
++      cwdbuf[0] = '\0';
++      res = VG_(do_syscall2)(__NR_getcwd, (UWord)cwdbuf, sizeof cwdbuf);
++      if (sr_isError(res) || cwdbuf[0] != '/')
++         goto fail;
++      if (!VG_(realpath)(cwdbuf, ret) || ret[0] != '/')
++         goto fail;
++      if (!ret[1]) /* if (ret == "/") */
++         p = ret;
++      else
++         p = ret + VG_(strlen)(ret);
++   } else
++      p = ret;
++
++   /* invariant: ret..p == realpath(path'..path) modulo / */
++#  define ISSEP(c) ((c) == '/' || !(c))
++   while (*path) {
++      /* assert(p == ret || p[-1] != '/'); */
++      if (*path == '/')
++         path++;
++      else if (path[0] == '.' && ISSEP(path[1]))
++         path++;
++      else if (path[0] == '.' && path[1] == '.' && ISSEP(path[2])) {
++         path += 2;
++         while (p != ret && *p != '/')
++            p--;
++      }
++      else {
++         HChar linkbuf[REALPATH_MAX + 1];
++         HChar *file;
++
++         /* append a "/file" component */
++         *p++ = '/';
++         file = p; /* ret..file is the "dir/" containing file "dir/file" */
++         while (!ISSEP(*path))
++            *p++ = *path++;
++         *p = '\0';
++         res = VG_(do_syscall3)(__NR_readlink, (UWord)ret, (UWord)linkbuf,
++            sizeof linkbuf);
++         if (!sr_isError(res)) {
++            SSizeT linklen = sr_Res(res);
++            if (!linklen || linkbuf[0] != '/') {
++               /* relative symlink: insert ret..file in front of linkbuf */
++               if (linklen + (file - ret) > REALPATH_MAX)
++                  goto fail;
++               /* assert(file[-1] == '/'); */
++               VG_(memmove)(&linkbuf[file - ret], linkbuf, linklen);
++               VG_(memcpy)(linkbuf, ret, file - ret);
++               linklen += file - ret;
++            }
++            linkbuf[linklen] = '\0';
++            if (!VG_(realpath)(linkbuf, ret))
++               goto fail;
++            p = ret + VG_(strlen)(ret);
++         } else if (sr_Err(res) != VKI_EINVAL)
++            goto fail;
++      }
++   }
++   if (p == ret)
++      *p++ = '/';
++   *p = '\0';
++   return ret;
++
++fail:
++   if (!buffer)
++      VG_(free)(ret);
++   return NULL;
++
++#  undef ISSEP
++}
++
+ #if defined(VGO_linux) || defined(VGO_solaris)
+ Int VG_(getdents64) (Int fd, struct vki_dirent64 *dirp, UInt count)
+ {
+Index: valgrind-3.21.0/include/pub_tool_libcfile.h
+===================================================================
+--- valgrind-3.21.0.orig/include/pub_tool_libcfile.h
++++ valgrind-3.21.0/include/pub_tool_libcfile.h
+@@ -93,6 +93,7 @@ extern Int    VG_(unlink) ( const HChar*
+ extern SysRes VG_(poll) (struct vki_pollfd *fds, Int nfds, Int timeout);
+ 
+ extern SSizeT VG_(readlink)( const HChar* path, HChar* buf, SizeT bufsiz);
++extern HChar* VG_(realpath)( const HChar* path, HChar* buf );
+ 
+ #if defined(VGO_linux) || defined(VGO_solaris)
+ extern Int    VG_(getdents64)( Int fd, struct vki_dirent64 *dirp, UInt count );

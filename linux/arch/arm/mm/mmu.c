@@ -21,12 +21,13 @@
 #include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/smp_plat.h>
+#include <asm/tcm.h>
 #include <asm/tlb.h>
 #include <asm/highmem.h>
 #include <asm/system_info.h>
 #include <asm/traps.h>
 #include <asm/procinfo.h>
-#include <asm/memory.h>
+#include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/kasan_def.h>
 
@@ -37,7 +38,6 @@
 
 #include "fault.h"
 #include "mm.h"
-#include "tcm.h"
 
 extern unsigned long __atags_pointer;
 
@@ -300,7 +300,11 @@ static struct mem_type mem_types[] __ro_after_init = {
 		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
 			     L_PTE_XN | L_PTE_RDONLY,
 		.prot_l1   = PMD_TYPE_TABLE,
+#ifdef CONFIG_ARM_LPAE
+		.prot_sect = PMD_TYPE_SECT | L_PMD_SECT_RDONLY | PMD_SECT_AP2,
+#else
 		.prot_sect = PMD_TYPE_SECT,
+#endif
 		.domain    = DOMAIN_KERNEL,
 	},
 	[MT_ROM] = {
@@ -411,6 +415,26 @@ void __set_fixmap(enum fixed_addresses idx, phys_addr_t phys, pgprot_t prot)
 		pte_clear(NULL, vaddr, pte);
 	local_flush_tlb_kernel_range(vaddr, vaddr + PAGE_SIZE);
 }
+
+static pgprot_t protection_map[16] __ro_after_init = {
+	[VM_NONE]					= __PAGE_NONE,
+	[VM_READ]					= __PAGE_READONLY,
+	[VM_WRITE]					= __PAGE_COPY,
+	[VM_WRITE | VM_READ]				= __PAGE_COPY,
+	[VM_EXEC]					= __PAGE_READONLY_EXEC,
+	[VM_EXEC | VM_READ]				= __PAGE_READONLY_EXEC,
+	[VM_EXEC | VM_WRITE]				= __PAGE_COPY_EXEC,
+	[VM_EXEC | VM_WRITE | VM_READ]			= __PAGE_COPY_EXEC,
+	[VM_SHARED]					= __PAGE_NONE,
+	[VM_SHARED | VM_READ]				= __PAGE_READONLY,
+	[VM_SHARED | VM_WRITE]				= __PAGE_SHARED,
+	[VM_SHARED | VM_WRITE | VM_READ]		= __PAGE_SHARED,
+	[VM_SHARED | VM_EXEC]				= __PAGE_READONLY_EXEC,
+	[VM_SHARED | VM_EXEC | VM_READ]			= __PAGE_READONLY_EXEC,
+	[VM_SHARED | VM_EXEC | VM_WRITE]		= __PAGE_SHARED_EXEC,
+	[VM_SHARED | VM_EXEC | VM_WRITE | VM_READ]	= __PAGE_SHARED_EXEC
+};
+DECLARE_VM_GET_PAGE_PROT
 
 /*
  * Adjust the PMD section entries according to the CPU in use.
@@ -713,11 +737,12 @@ static void __init *early_alloc(unsigned long sz)
 
 static void *__init late_alloc(unsigned long sz)
 {
-	void *ptr = (void *)__get_free_pages(GFP_PGTABLE_KERNEL, get_order(sz));
+	void *ptdesc = pagetable_alloc(GFP_PGTABLE_KERNEL & ~__GFP_HIGHMEM,
+			get_order(sz));
 
-	if (!ptr || !pgtable_pte_page_ctor(virt_to_page(ptr)))
+	if (!ptdesc || !pagetable_pte_ctor(ptdesc))
 		BUG();
-	return ptr;
+	return ptdesc_to_virt(ptdesc);
 }
 
 static pte_t * __init arm_pte_alloc(pmd_t *pmd, unsigned long addr,
@@ -1662,9 +1687,8 @@ static void __init early_paging_init(const struct machine_desc *mdesc)
 	 */
 	cr = get_cr();
 	set_cr(cr & ~(CR_I | CR_C));
-	asm("mrc p15, 0, %0, c2, c0, 2" : "=r" (ttbcr));
-	asm volatile("mcr p15, 0, %0, c2, c0, 2"
-		: : "r" (ttbcr & ~(3 << 8 | 3 << 10)));
+	ttbcr = cpu_get_ttbcr();
+	cpu_set_ttbcr(ttbcr & ~(3 << 8 | 3 << 10));
 	flush_cache_all();
 
 	/*
@@ -1676,7 +1700,7 @@ static void __init early_paging_init(const struct machine_desc *mdesc)
 	lpae_pgtables_remap(offset, pa_pgd);
 
 	/* Re-enable the caches and cacheable TLB walks */
-	asm volatile("mcr p15, 0, %0, c2, c0, 2" : : "r" (ttbcr));
+	cpu_set_ttbcr(ttbcr);
 	set_cr(cr);
 }
 
@@ -1764,7 +1788,7 @@ void __init paging_init(const struct machine_desc *mdesc)
 	bootmem_init();
 
 	empty_zero_page = virt_to_page(zero_page);
-	__flush_dcache_page(NULL, empty_zero_page);
+	__flush_dcache_folio(NULL, page_folio(empty_zero_page));
 }
 
 void __init early_mm_init(const struct machine_desc *mdesc)
@@ -1773,8 +1797,8 @@ void __init early_mm_init(const struct machine_desc *mdesc)
 	early_paging_init(mdesc);
 }
 
-void set_pte_at(struct mm_struct *mm, unsigned long addr,
-			      pte_t *ptep, pte_t pteval)
+void set_ptes(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval, unsigned int nr)
 {
 	unsigned long ext = 0;
 
@@ -1784,5 +1808,11 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 		ext |= PTE_EXT_NG;
 	}
 
-	set_pte_ext(ptep, pteval, ext);
+	for (;;) {
+		set_pte_ext(ptep, pteval, ext);
+		if (--nr == 0)
+			break;
+		ptep++;
+		pteval = pte_next_pfn(pteval);
+	}
 }

@@ -1,0 +1,86 @@
+#!/bin/sh
+
+##################################################################
+#exec 2> /dev/console
+#set -x
+##################################################################
+
+SW_SCRIPTNAME="$(basename "${0}")"
+
+# XBee HW settings (gpios, etc)
+. /etc/xbee.conf
+
+# set_gpio_value <gpio_line_name> <value>
+set_gpio_value() {
+	local GPIO_NAME="${1}"
+	local VALUE="${2}"
+	/bin/gpioset -t 0 "${GPIO_NAME}"="${VALUE}"
+}
+
+# toggle_gpio <gpio_line_name>
+toggle_gpio() {
+	set_gpio_value "${1}" 0
+	usleep 400000
+	set_gpio_value "${1}" 1
+}
+
+# log [logger parameters]
+log() {
+	logger -t xbee "$@"
+}
+
+xbee_start() {
+	# Power up XBee
+	toggle_gpio "${XBEE_GPIO_NAME_XBEE_POWER_EN}"
+
+	# Reset XBee
+	xbee_reset
+
+	log "XBee initialized"
+}
+
+xbee_stop() {
+	# Power down XBee
+	set_gpio_value "${XBEE_GPIO_NAME_XBEE_POWER_EN}" 0
+
+	log "XBee stopped"
+}
+
+xbee_reset() {
+	# Toggle XBee RESET GPIO
+	toggle_gpio "${XBEE_GPIO_NAME_XBEE_RST}"
+
+	log "XBee reset"
+}
+
+usage() {
+	cat <<EOF
+
+Usage: ${SW_SCRIPTNAME} <command>
+
+Commands:
+    XBee power control:
+      on                             Turn on the interface
+      off                            Turn off the interface
+      reset                          Reset the XBee only if it is on
+EOF
+}
+
+case "${1}" in
+	help|'')
+		usage
+		;;
+	on)
+		xbee_start
+		;;
+	off)
+		xbee_stop
+		;;
+	reset)
+		xbee_reset
+		;;
+	*)
+		usage
+		exit 1
+		;;
+esac

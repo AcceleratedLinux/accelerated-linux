@@ -1,11 +1,11 @@
 #!/bin/sh
 
-# ensure everyones time is the same
+# Ensure everyone's time is the same
 TZ=UTC
 export TZ
 
-# no git info,  generate suitable public version based on build date
-if [  ! -e ${ROOTDIR:-`pwd`}/.git ]; then
+# No Git info; generate suitable public version based on build date.
+if [ ! -e ${ROOTDIR:-`pwd`}/.git ]; then
 	YEAR=$(date +%y)
 	MONTH=$(date +%m | sed 's/^0*//')
 	DAY=$(date +%d | sed 's/^0*//')
@@ -15,70 +15,67 @@ if [  ! -e ${ROOTDIR:-`pwd`}/.git ]; then
 	exit 0
 fi
 
-# are we on the build machine
+# Are we on the build machine?
 if [ "$ON_BUILD_MACHINE" ]; then
 	CREV=
 else
 	CREV="-$(git rev-parse --short HEAD)"
 fi
 
-# is the tree dirty
+# Is the tree dirty?
 DIRTY=$(git describe --always --dirty | sed -n 's/.*dirty$/-dirty/p')
 
 # Check if we have a version TAG at this commit
-
-# Find any tags pointing at this version
-TAGS=$(git tag --points-at HEAD 2> /dev/null)
-
-# look for a pure version number tag (no commit IDs or dirty is allowed)
-for v in $TAGS; do
-	VERSION=$(echo "$v" | sed -n '/^[1-9][0-9]\.*[1-9][0-2]\{0,1\}\(\.[1-9][0-9]*\)\{1,\}$/p')
-	[ "$VERSION" ] && echo "$VERSION$CREV$DIRTY" && exit 0
-done
-
-# look for a mixed name-version-YYYMMDD tag
-for v in $TAGS; do
-	VERSION=$(echo "$v" | sed -n 's/^.*-\([1-9][0-9]\.*[1-9][0-2]\{0,1\}\(\.[1-9][0-9]*\)\{1,\}\)-[0-9]\{8\}$/\1/p')
-	[ "$VERSION" ] && echo "$VERSION$CREV$DIRTY" && exit 0
-done
-
-# there is no tag forcing a version on us so we  need to create a version
-
-# find the first commit on master
-
-CNT=0
-for hash in $(git log --first-parent --pretty=format:"%H" --graph | sed 's/^\* *//')
+for tag in $(git tag --points-at HEAD 2>/dev/null)
 do
-	git branch -a --no-color --contains $hash 2> /dev/null | sed 's/^[*]\{0,1\} *//' | egrep -q '^(.*/)*master$' && break
-	CNT=$((CNT + 1))
+	# look for a pure version number tag (no commit IDs or dirty is allowed)
+	PURE_VERSION=$(echo "$tag" | sed -n '/^[1-9][0-9]\.*[1-9][0-2]\{0,1\}\(\.[1-9][0-9]*\)\{1,\}$/p')
+	[ "$PURE_VERSION" ] && echo "${PURE_VERSION}${CREV}${DIRTY}" && exit 0
+
+	# look for a mixed name-version-YYYMMDD tag
+	NAME_VER_DATE=$(echo "$tag" | sed -n 's/^.*-\([1-9][0-9]\.*[1-9][0-2]\{0,1\}\(\.[1-9][0-9]*\)\{1,\}\)-[0-9]\{8\}$/\1/p')
+	[ "$NAME_VER_DATE" ] && echo "${NAME_VER_DATE}${CREV}${DIRTY}" && exit 0
 done
 
-# Move to 4 digit versions (always, old code kept for reference)
-#BRANCH=
-#[ $CNT -ne 0 ] && BRANCH=".$CNT"
-BRANCH=".$CNT"
+# There is no tag forcing a version on us, so we need to create a version.
+# Find the number of commits between HEAD and the closest common ancestor
+# commit on the master branch.
+COMMITS_PAST_MASTER=999999
+# If we don't find a common commit with master, treat HEAD as that commit.
+MERGE_BASE=$(git rev-parse --short HEAD)
+# Note: The original version of this script walked back on the current branch
+# until it found any commit which also exists on "master" or any branch ending
+# in "/master".
+for master_ref in $(git branch --all --format='%(refname)' | egrep '^(.*/)*master$')
+do
+	MERGE_BASE_REF=$(git merge-base ${master_ref} HEAD)
+	if [ -n "${MERGE_BASE_REF}" ]; then
+		PAST_MASTER=$(git log --first-parent --oneline ${MERGE_BASE_REF}..HEAD | wc -l)
+		if [ ${PAST_MASTER} -lt ${COMMITS_PAST_MASTER} ]; then
+			COMMITS_PAST_MASTER=${PAST_MASTER}
+			MERGE_BASE=${MERGE_BASE_REF}
+		fi
+	fi
+done
 
-MASTER_COMMIT="$hash"
-
-LASTREVDATE=$(git show -s --format=${GIT_DATE:-%ci} $MASTER_COMMIT | head -n1)
-
+LASTREVDATE=$(git show -s --format=${GIT_DATE:-%ci} ${MERGE_BASE} | head -n1)
 YEAR=$(date -d "$LASTREVDATE" +%y)
 YEAR4=$(date -d "$LASTREVDATE" +%Y)
 MONTH=$(date -d "$LASTREVDATE" +%m | sed 's/^0*//')
-COUNT=$(git rev-list --first-parent --since="$YEAR4-$MONTH-01 00:00:00" $MASTER_COMMIT | wc -l)
+MASTER_COMMITS_THIS_MONTH=$(git rev-list --first-parent \
+	--since="$YEAR4-$MONTH-01 00:00:00" $MERGE_BASE \
+	| wc -l)
 
-# lets shutdown rogue version numbers
+# Let's shut down rogue version numbers
 DALDEV=
-if [ "$COUNT" -gt 255 ]; then
-	DALDEV="$DALDEV-$COUNT"
-	COUNT=255
+if [ "$MASTER_COMMITS_THIS_MONTH" -gt 255 ]; then
+	DALDEV="${DALDEV}-${MASTER_COMMITS_THIS_MONTH}"
+	MASTER_COMMITS_THIS_MONTH=255
 fi
-if [ "$CNT" -gt 255 ]; then
-	DALDEV="$DALDEV-$CNT"
-	CNT=255
+if [ "$COMMITS_PAST_MASTER" -gt 255 ]; then
+	DALDEV="${DALDEV}-${COMMITS_PAST_MASTER}"
+	COMMITS_PAST_MASTER=255
 fi
-[ "$DALDEV" ] && DALDEV="-DEVONLY$DALDEV"
+[ "$DALDEV" ] && DALDEV="-DEVONLY${DALDEV}"
 
-VERSIONSTR="$YEAR.$MONTH.$COUNT$BRANCH$CREV$DALDEV$DIRTY"
-
-echo $VERSIONSTR
+echo "${YEAR}.${MONTH}.${MASTER_COMMITS_THIS_MONTH}.${COMMITS_PAST_MASTER}${CREV}${DALDEV}${DIRTY}"

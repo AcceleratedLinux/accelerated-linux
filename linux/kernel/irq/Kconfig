@@ -24,6 +24,7 @@ config GENERIC_IRQ_SHOW_LEVEL
 
 # Supports effective affinity mask
 config GENERIC_IRQ_EFFECTIVE_AFF_MASK
+       depends on SMP
        bool
 
 # Support for delayed migration from interrupt context
@@ -75,6 +76,11 @@ config IRQ_DOMAIN_NOMAP
 	bool
 	select IRQ_DOMAIN
 
+config IRQ_DOMAIN_OLD_FWSPEC_SELECT_BEHAVIOR
+	bool
+	depends on IRQ_DOMAIN
+	default y if STM32_EXTI
+
 # Support for hierarchical fasteoi+edge and fasteoi+level handlers
 config IRQ_FASTEOI_HIERARCHY_HANDLERS
 	bool
@@ -82,17 +88,18 @@ config IRQ_FASTEOI_HIERARCHY_HANDLERS
 # Generic IRQ IPI support
 config GENERIC_IRQ_IPI
 	bool
+	depends on SMP
 	select IRQ_DOMAIN_HIERARCHY
 
-# Generic MSI interrupt support
-config GENERIC_MSI_IRQ
+# Generic IRQ IPI Mux support
+config GENERIC_IRQ_IPI_MUX
 	bool
+	depends on SMP
 
 # Generic MSI hierarchical interrupt domain support
-config GENERIC_MSI_IRQ_DOMAIN
+config GENERIC_MSI_IRQ
 	bool
 	select IRQ_DOMAIN_HIERARCHY
-	select GENERIC_MSI_IRQ
 
 config IRQ_MSI_IOMMU
 	bool
@@ -104,6 +111,10 @@ config GENERIC_IRQ_MATRIX_ALLOCATOR
 	bool
 
 config GENERIC_IRQ_RESERVATION_MODE
+	bool
+
+# Snapshot for interrupt statistics
+config GENERIC_IRQ_STAT_SNAPSHOT
 	bool
 
 # Support forced irq threading

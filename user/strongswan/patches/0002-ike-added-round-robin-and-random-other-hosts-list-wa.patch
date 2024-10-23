@@ -29,15 +29,14 @@ The options are "priority" (the original behaviour), "random", and
  src/stroke/stroke_msg.h                      |  1 +
  10 files changed, 77 insertions(+), 5 deletions(-)
 
-diff --git a/src/libcharon/config/ike_cfg.c b/src/libcharon/config/ike_cfg.c
-index 79a344e45..6f593d131 100644
---- a/src/libcharon/config/ike_cfg.c
-+++ b/src/libcharon/config/ike_cfg.c
-@@ -70,6 +70,17 @@ struct private_ike_cfg_t {
- 	 */
+Index: strongswan-5.9.13/src/libcharon/config/ike_cfg.c
+===================================================================
+--- strongswan-5.9.13.orig/src/libcharon/config/ike_cfg.c
++++ strongswan-5.9.13/src/libcharon/config/ike_cfg.c
+@@ -72,6 +72,17 @@ struct private_ike_cfg_t {
  	linked_list_t *other_hosts;
  
-+	/**
+ 	/**
 +	 * The sequence used to select a candidate host from 'other_hosts'
 +	 */
 +	hosts_sequence_t other_hosts_sequence;
@@ -48,10 +47,11 @@ index 79a344e45..6f593d131 100644
 +	 */
 +	int other_hosts_index;
 +
- 	/**
++	/**
  	 * Local ranges/subnets this config matches to, as traffic_selector_t*
  	 */
-@@ -154,22 +165,30 @@ METHOD(ike_cfg_t, childless, childless_t,
+ 	linked_list_t *my_ranges;
+@@ -155,22 +166,30 @@ METHOD(ike_cfg_t, childless, childless_t
  /**
   * Common function for resolve_me/other
   */
@@ -85,7 +85,7 @@ index 79a344e45..6f593d131 100644
  	}
  	enumerator->destroy(enumerator);
  
-@@ -185,13 +204,30 @@ static host_t* resolve(linked_list_t *hosts, int family, uint16_t port)
+@@ -186,13 +205,30 @@ static host_t* resolve(linked_list_t *ho
  METHOD(ike_cfg_t, resolve_me, host_t*,
  	private_ike_cfg_t *this, int family)
  {
@@ -118,7 +118,7 @@ index 79a344e45..6f593d131 100644
  }
  
  /**
-@@ -619,6 +655,8 @@ ike_cfg_t *ike_cfg_create(ike_cfg_create_t *data)
+@@ -620,6 +656,8 @@ ike_cfg_t *ike_cfg_create(ike_cfg_create
  		.other = strdup(data->remote),
  		.other_ranges = linked_list_create(),
  		.other_hosts = linked_list_create(),
@@ -127,11 +127,11 @@ index 79a344e45..6f593d131 100644
  		.my_port = data->local_port,
  		.other_port = data->remote_port,
  		.dscp = data->dscp,
-diff --git a/src/libcharon/config/ike_cfg.h b/src/libcharon/config/ike_cfg.h
-index 1e11a1e56..0287ff2bf 100644
---- a/src/libcharon/config/ike_cfg.h
-+++ b/src/libcharon/config/ike_cfg.h
-@@ -74,6 +74,12 @@ enum childless_t {
+Index: strongswan-5.9.13/src/libcharon/config/ike_cfg.h
+===================================================================
+--- strongswan-5.9.13.orig/src/libcharon/config/ike_cfg.h
++++ strongswan-5.9.13/src/libcharon/config/ike_cfg.h
+@@ -76,6 +76,12 @@ enum childless_t {
  	CHILDLESS_FORCE,
  };
  
@@ -144,7 +144,7 @@ index 1e11a1e56..0287ff2bf 100644
  /**
   * enum strings for ike_version_t
   */
-@@ -277,6 +283,7 @@ struct ike_cfg_create_t {
+@@ -284,6 +290,7 @@ struct ike_cfg_create_t {
  	uint16_t local_port;
  	/** Address/DNS name of remote peer (cloned) */
  	char *remote;
@@ -152,11 +152,11 @@ index 1e11a1e56..0287ff2bf 100644
  	/** IKE port to use as dest, 500 uses IKEv2 port floating */
  	uint16_t remote_port;
  	/** TRUE to not send any certificate requests */
-diff --git a/src/libcharon/plugins/stroke/stroke_config.c b/src/libcharon/plugins/stroke/stroke_config.c
-index 0d746c269..ac938e352 100644
---- a/src/libcharon/plugins/stroke/stroke_config.c
-+++ b/src/libcharon/plugins/stroke/stroke_config.c
-@@ -272,6 +272,7 @@ static ike_cfg_t *build_ike_cfg(private_stroke_config_t *this, stroke_msg_t *msg
+Index: strongswan-5.9.13/src/libcharon/plugins/stroke/stroke_config.c
+===================================================================
+--- strongswan-5.9.13.orig/src/libcharon/plugins/stroke/stroke_config.c
++++ strongswan-5.9.13/src/libcharon/plugins/stroke/stroke_config.c
+@@ -273,6 +273,7 @@ static ike_cfg_t *build_ike_cfg(private_
  		.local_port = msg->add_conn.me.ikeport,
  		.remote = msg->add_conn.other.address,
  		.remote_port = msg->add_conn.other.ikeport,
@@ -164,11 +164,11 @@ index 0d746c269..ac938e352 100644
  		.no_certreq = msg->add_conn.other.sendcert == CERT_NEVER_SEND,
  		.force_encap = msg->add_conn.force_encap,
  		.fragmentation = msg->add_conn.fragmentation,
-diff --git a/src/starter/args.c b/src/starter/args.c
-index 342e57961..9efa4e375 100644
---- a/src/starter/args.c
-+++ b/src/starter/args.c
-@@ -47,6 +47,13 @@ static const char *LST_bool[] = {
+Index: strongswan-5.9.13/src/starter/args.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/args.c
++++ strongswan-5.9.13/src/starter/args.c
+@@ -46,6 +46,13 @@ static const char *LST_bool[] = {
  	 NULL
  };
  
@@ -182,7 +182,7 @@ index 342e57961..9efa4e375 100644
  static const char *LST_sendcert[] = {
  	"always",
  	"ifasked",
-@@ -198,6 +205,7 @@ static const token_info_t token_info[] =
+@@ -197,6 +204,7 @@ static const token_info_t token_info[] =
  
  	/* end keywords */
  	{ ARG_STR,  offsetof(starter_end_t, host), NULL                                },
@@ -190,11 +190,11 @@ index 342e57961..9efa4e375 100644
  	{ ARG_UINT, offsetof(starter_end_t, ikeport), NULL                             },
  	{ ARG_STR,  offsetof(starter_end_t, subnet), NULL                              },
  	{ ARG_MISC, 0, NULL  /* KW_PROTOPORT */                                        },
-diff --git a/src/starter/confread.c b/src/starter/confread.c
-index ac530dc69..b6373e85d 100644
---- a/src/starter/confread.c
-+++ b/src/starter/confread.c
-@@ -223,6 +223,9 @@ static void conn_defaults(starter_conn_t *conn)
+Index: strongswan-5.9.13/src/starter/confread.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/confread.c
++++ strongswan-5.9.13/src/starter/confread.c
+@@ -222,6 +222,9 @@ static void conn_defaults(starter_conn_t
  
  	conn->left.to_port = 0xffff;
  	conn->right.to_port = 0xffff;
@@ -204,10 +204,10 @@ index ac530dc69..b6373e85d 100644
  }
  
  /*
-diff --git a/src/starter/confread.h b/src/starter/confread.h
-index 825a12e19..1cf08beca 100644
---- a/src/starter/confread.h
-+++ b/src/starter/confread.h
+Index: strongswan-5.9.13/src/starter/confread.h
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/confread.h
++++ strongswan-5.9.13/src/starter/confread.h
 @@ -83,6 +83,13 @@ typedef enum {
  		SA_OPTION_FORCE_ENCAP   = 1 << 7, /* force UDP encapsulation */
  } sa_option_t;
@@ -230,11 +230,11 @@ index 825a12e19..1cf08beca 100644
  		u_int           ikeport;
  		char            *subnet;
  		bool            modecfg;
-diff --git a/src/starter/keywords.h.in b/src/starter/keywords.h.in
-index c0dbaff01..bc28f6984 100644
---- a/src/starter/keywords.h.in
-+++ b/src/starter/keywords.h.in
-@@ -103,6 +103,7 @@ enum kw_token_t {
+Index: strongswan-5.9.13/src/starter/keywords.h.in
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/keywords.h.in
++++ strongswan-5.9.13/src/starter/keywords.h.in
+@@ -102,6 +102,7 @@ enum kw_token_t {
  
  	/* end keywords */
  	KW_HOST,
@@ -242,7 +242,7 @@ index c0dbaff01..bc28f6984 100644
  	KW_IKEPORT,
  	KW_SUBNET,
  	KW_PROTOPORT,
-@@ -132,6 +133,7 @@ enum kw_token_t {
+@@ -131,6 +132,7 @@ enum kw_token_t {
  
  	/* left end keywords */
  	KW_LEFT,
@@ -250,7 +250,7 @@ index c0dbaff01..bc28f6984 100644
  	KW_LEFTIKEPORT,
  	KW_LEFTSUBNET,
  	KW_LEFTPROTOPORT,
-@@ -161,6 +163,7 @@ enum kw_token_t {
+@@ -160,6 +162,7 @@ enum kw_token_t {
  
  	/* right end keywords */
  	KW_RIGHT,
@@ -258,11 +258,11 @@ index c0dbaff01..bc28f6984 100644
  	KW_RIGHTIKEPORT,
  	KW_RIGHTSUBNET,
  	KW_RIGHTPROTOPORT,
-diff --git a/src/starter/keywords.txt b/src/starter/keywords.txt
-index 3cf30ab4e..1461339a4 100644
---- a/src/starter/keywords.txt
-+++ b/src/starter/keywords.txt
-@@ -88,6 +88,7 @@ ocspuri1,          KW_OCSPURI
+Index: strongswan-5.9.13/src/starter/keywords.txt
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/keywords.txt
++++ strongswan-5.9.13/src/starter/keywords.txt
+@@ -87,6 +87,7 @@ ocspuri1,          KW_OCSPURI
  ocspuri2,          KW_OCSPURI2
  certuribase,       KW_CERTURIBASE
  left,              KW_LEFT
@@ -270,7 +270,7 @@ index 3cf30ab4e..1461339a4 100644
  leftikeport,       KW_LEFTIKEPORT
  leftsubnet,        KW_LEFTSUBNET
  leftsubnetwithin,  KW_LEFTSUBNET
-@@ -113,6 +114,7 @@ leftca2,           KW_LEFTCA2
+@@ -112,6 +113,7 @@ leftca2,           KW_LEFTCA2
  leftgroups,        KW_LEFTGROUPS
  leftgroups2,       KW_LEFTGROUPS2
  right,             KW_RIGHT
@@ -278,11 +278,11 @@ index 3cf30ab4e..1461339a4 100644
  rightikeport,      KW_RIGHTIKEPORT
  rightsubnet,       KW_RIGHTSUBNET
  rightsubnetwithin, KW_RIGHTSUBNET
-diff --git a/src/starter/starterstroke.c b/src/starter/starterstroke.c
-index cf591796a..c6d6c9713 100644
---- a/src/starter/starterstroke.c
-+++ b/src/starter/starterstroke.c
-@@ -165,6 +165,7 @@ static void add_end(stroke_msg_t **msg, size_t offset, starter_end_t *conn_end)
+Index: strongswan-5.9.13/src/starter/starterstroke.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/starterstroke.c
++++ strongswan-5.9.13/src/starter/starterstroke.c
+@@ -164,6 +164,7 @@ static void add_end(stroke_msg_t **msg,
  
  	/* we can't assign it earlier as msg might change */
  	msg_end = (stroke_end_t*)((char*)(*msg) + offset);
@@ -290,11 +290,11 @@ index cf591796a..c6d6c9713 100644
  	msg_end->ikeport = conn_end->ikeport;
  	msg_end->sendcert = conn_end->sendcert;
  	msg_end->hostaccess = conn_end->hostaccess;
-diff --git a/src/stroke/stroke_msg.h b/src/stroke/stroke_msg.h
-index 862b3d7d9..52149313c 100644
---- a/src/stroke/stroke_msg.h
-+++ b/src/stroke/stroke_msg.h
-@@ -158,6 +158,7 @@ struct stroke_end_t {
+Index: strongswan-5.9.13/src/stroke/stroke_msg.h
+===================================================================
+--- strongswan-5.9.13.orig/src/stroke/stroke_msg.h
++++ strongswan-5.9.13/src/stroke/stroke_msg.h
+@@ -159,6 +159,7 @@ struct stroke_end_t {
  	char *updown;
  	char *address;
  	uint16_t ikeport;

@@ -14,42 +14,34 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
-#include <linux/sched/clock.h>
-#include <linux/soc/mediatek/mtk_sip_svc.h>
 
 #include <ufs/ufshcd.h>
 #include "ufshcd-pltfrm.h"
 #include <ufs/ufs_quirks.h>
 #include <ufs/unipro.h>
+
 #include "ufs-mediatek.h"
+#include "ufs-mediatek-sip.h"
+
+static int  ufs_mtk_config_mcq(struct ufs_hba *hba, bool irq);
 
 #define CREATE_TRACE_POINTS
 #include "ufs-mediatek-trace.h"
+#undef CREATE_TRACE_POINTS
 
-#define ufs_mtk_smc(cmd, val, res) \
-	arm_smccc_smc(MTK_SIP_UFS_CONTROL, \
-		      cmd, val, 0, 0, 0, 0, 0, &(res))
-
-#define ufs_mtk_va09_pwr_ctrl(res, on) \
-	ufs_mtk_smc(UFS_MTK_SIP_VA09_PWR_CTRL, on, res)
-
-#define ufs_mtk_crypto_ctrl(res, enable) \
-	ufs_mtk_smc(UFS_MTK_SIP_CRYPTO_CTRL, enable, res)
-
-#define ufs_mtk_ref_clk_notify(on, res) \
-	ufs_mtk_smc(UFS_MTK_SIP_REF_CLK_NOTIFICATION, on, res)
-
-#define ufs_mtk_device_reset_ctrl(high, res) \
-	ufs_mtk_smc(UFS_MTK_SIP_DEVICE_RESET, high, res)
+#define MAX_SUPP_MAC 64
+#define MCQ_QUEUE_OFFSET(c) ((((c) >> 16) & 0xFF) * 0x200)
 
 static const struct ufs_dev_quirk ufs_mtk_dev_fixups[] = {
-	{ .wmanufacturerid = UFS_VENDOR_MICRON,
+	{ .wmanufacturerid = UFS_ANY_VENDOR,
 	  .model = UFS_ANY_MODEL,
-	  .quirk = UFS_DEVICE_QUIRK_DELAY_AFTER_LPM },
+	  .quirk = UFS_DEVICE_QUIRK_DELAY_AFTER_LPM |
+		UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM },
 	{ .wmanufacturerid = UFS_VENDOR_SKHYNIX,
 	  .model = "H9HQ21AFAMZDAR",
 	  .quirk = UFS_DEVICE_QUIRK_SUPPORT_EXTENDED_FEATURES },
@@ -59,6 +51,45 @@ static const struct ufs_dev_quirk ufs_mtk_dev_fixups[] = {
 static const struct of_device_id ufs_mtk_of_match[] = {
 	{ .compatible = "mediatek,mt8183-ufshci" },
 	{},
+};
+MODULE_DEVICE_TABLE(of, ufs_mtk_of_match);
+
+/*
+ * Details of UIC Errors
+ */
+static const char *const ufs_uic_err_str[] = {
+	"PHY Adapter Layer",
+	"Data Link Layer",
+	"Network Link Layer",
+	"Transport Link Layer",
+	"DME"
+};
+
+static const char *const ufs_uic_pa_err_str[] = {
+	"PHY error on Lane 0",
+	"PHY error on Lane 1",
+	"PHY error on Lane 2",
+	"PHY error on Lane 3",
+	"Generic PHY Adapter Error. This should be the LINERESET indication"
+};
+
+static const char *const ufs_uic_dl_err_str[] = {
+	"NAC_RECEIVED",
+	"TCx_REPLAY_TIMER_EXPIRED",
+	"AFCx_REQUEST_TIMER_EXPIRED",
+	"FCx_PROTECTION_TIMER_EXPIRED",
+	"CRC_ERROR",
+	"RX_BUFFER_OVERFLOW",
+	"MAX_FRAME_LENGTH_EXCEEDED",
+	"WRONG_SEQUENCE_NUMBER",
+	"AFC_FRAME_SYNTAX_ERROR",
+	"NAC_FRAME_SYNTAX_ERROR",
+	"EOF_SYNTAX_ERROR",
+	"FRAME_SYNTAX_ERROR",
+	"BAD_CTRL_SYMBOL_TYPE",
+	"PA_INIT_ERROR",
+	"PA_ERROR_IND_RECEIVED",
+	"PA_INIT"
 };
 
 static bool ufs_mtk_is_boost_crypt_enabled(struct ufs_hba *hba)
@@ -80,6 +111,34 @@ static bool ufs_mtk_is_broken_vcc(struct ufs_hba *hba)
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
 	return !!(host->caps & UFS_MTK_CAP_BROKEN_VCC);
+}
+
+static bool ufs_mtk_is_pmc_via_fastauto(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	return !!(host->caps & UFS_MTK_CAP_PMC_VIA_FASTAUTO);
+}
+
+static bool ufs_mtk_is_tx_skew_fix(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	return (host->caps & UFS_MTK_CAP_TX_SKEW_FIX);
+}
+
+static bool ufs_mtk_is_rtff_mtcmos(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	return (host->caps & UFS_MTK_CAP_RTFF_MTCMOS);
+}
+
+static bool ufs_mtk_is_allow_vccqx_lpm(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	return (host->caps & UFS_MTK_CAP_ALLOW_VCCQX_LPM);
 }
 
 static void ufs_mtk_cfg_unipro_cg(struct ufs_hba *hba, bool enable)
@@ -133,16 +192,23 @@ static void ufs_mtk_crypto_enable(struct ufs_hba *hba)
 static void ufs_mtk_host_reset(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	struct arm_smccc_res res;
 
 	reset_control_assert(host->hci_reset);
 	reset_control_assert(host->crypto_reset);
 	reset_control_assert(host->unipro_reset);
+	reset_control_assert(host->mphy_reset);
 
 	usleep_range(100, 110);
 
 	reset_control_deassert(host->unipro_reset);
 	reset_control_deassert(host->crypto_reset);
 	reset_control_deassert(host->hci_reset);
+	reset_control_deassert(host->mphy_reset);
+
+	/* restore mphy setting aftre mphy reset */
+	if (host->mphy_reset)
+		ufs_mtk_mphy_ctrl(UFS_MPHY_RESTORE, res);
 }
 
 static void ufs_mtk_init_reset_control(struct ufs_hba *hba,
@@ -167,6 +233,8 @@ static void ufs_mtk_init_reset(struct ufs_hba *hba)
 				   "unipro_rst");
 	ufs_mtk_init_reset_control(hba, &host->crypto_reset,
 				   "crypto_rst");
+	ufs_mtk_init_reset_control(hba, &host->mphy_reset,
+				   "mphy_rst");
 }
 
 static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
@@ -191,6 +259,14 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 			hba->capabilities &= ~MASK_AUTO_HIBERN8_SUPPORT;
 			hba->ahit = 0;
 		}
+
+		/*
+		 * Turn on CLK_CG early to bypass abnormal ERR_CHK signal
+		 * to prevent host hang issue
+		 */
+		ufshcd_writel(hba,
+			      ufshcd_readl(hba, REG_UFS_XOUFS_CTRL) | 0x80,
+			      REG_UFS_XOUFS_CTRL);
 	}
 
 	return 0;
@@ -244,8 +320,9 @@ static int ufs_mtk_setup_ref_clk(struct ufs_hba *hba, bool on)
 	if (host->ref_clk_enabled == on)
 		return 0;
 
+	ufs_mtk_ref_clk_notify(on, PRE_CHANGE, res);
+
 	if (on) {
-		ufs_mtk_ref_clk_notify(on, res);
 		ufshcd_writel(hba, REFCLK_REQUEST, REG_UFS_REFCLK_CTRL);
 	} else {
 		ufshcd_delay_us(host->ref_clk_gating_wait_us, 10);
@@ -267,7 +344,7 @@ static int ufs_mtk_setup_ref_clk(struct ufs_hba *hba, bool on)
 
 	dev_err(hba->dev, "missing ack of refclk req, reg: 0x%x\n", value);
 
-	ufs_mtk_ref_clk_notify(host->ref_clk_enabled, res);
+	ufs_mtk_ref_clk_notify(host->ref_clk_enabled, POST_CHANGE, res);
 
 	return -ETIMEDOUT;
 
@@ -275,8 +352,8 @@ out:
 	host->ref_clk_enabled = on;
 	if (on)
 		ufshcd_delay_us(host->ref_clk_ungating_wait_us, 10);
-	else
-		ufs_mtk_ref_clk_notify(on, res);
+
+	ufs_mtk_ref_clk_notify(on, POST_CHANGE, res);
 
 	return 0;
 }
@@ -371,9 +448,6 @@ static int ufs_mtk_wait_link_state(struct ufs_hba *hba, u32 state,
 		usleep_range(100, 200);
 	} while (ktime_before(time_checked, timeout));
 
-	if (val == state)
-		return 0;
-
 	return -ETIMEDOUT;
 }
 
@@ -402,8 +476,6 @@ static int ufs_mtk_mphy_power_on(struct ufs_hba *hba, bool on)
 		if (ufs_mtk_is_va09_supported(hba)) {
 			ufs_mtk_va09_pwr_ctrl(res, 0);
 			ret = regulator_disable(host->reg_va09);
-			if (ret < 0)
-				goto out;
 		}
 	}
 out:
@@ -579,20 +651,80 @@ static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
 	if (of_property_read_bool(np, "mediatek,ufs-broken-vcc"))
 		host->caps |= UFS_MTK_CAP_BROKEN_VCC;
 
+	if (of_property_read_bool(np, "mediatek,ufs-pmc-via-fastauto"))
+		host->caps |= UFS_MTK_CAP_PMC_VIA_FASTAUTO;
+
+	if (of_property_read_bool(np, "mediatek,ufs-tx-skew-fix"))
+		host->caps |= UFS_MTK_CAP_TX_SKEW_FIX;
+
+	if (of_property_read_bool(np, "mediatek,ufs-disable-mcq"))
+		host->caps |= UFS_MTK_CAP_DISABLE_MCQ;
+
+	if (of_property_read_bool(np, "mediatek,ufs-rtff-mtcmos"))
+		host->caps |= UFS_MTK_CAP_RTFF_MTCMOS;
+
 	dev_info(hba->dev, "caps: 0x%x", host->caps);
 }
 
-static void ufs_mtk_scale_perf(struct ufs_hba *hba, bool up)
+static void ufs_mtk_scale_perf(struct ufs_hba *hba, bool scale_up)
+{
+	ufs_mtk_boost_crypt(hba, scale_up);
+}
+
+static void ufs_mtk_pwr_ctrl(struct ufs_hba *hba, bool on)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
-	ufs_mtk_boost_crypt(hba, up);
-	ufs_mtk_setup_ref_clk(hba, up);
-
-	if (up)
+	if (on) {
 		phy_power_on(host->mphy);
-	else
+		ufs_mtk_setup_ref_clk(hba, on);
+		if (!ufshcd_is_clkscaling_supported(hba))
+			ufs_mtk_scale_perf(hba, on);
+	} else {
+		if (!ufshcd_is_clkscaling_supported(hba))
+			ufs_mtk_scale_perf(hba, on);
+		ufs_mtk_setup_ref_clk(hba, on);
 		phy_power_off(host->mphy);
+	}
+}
+
+static void ufs_mtk_mcq_disable_irq(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	u32 irq, i;
+
+	if (!is_mcq_enabled(hba))
+		return;
+
+	if (host->mcq_nr_intr == 0)
+		return;
+
+	for (i = 0; i < host->mcq_nr_intr; i++) {
+		irq = host->mcq_intr_info[i].irq;
+		disable_irq(irq);
+	}
+	host->is_mcq_intr_enabled = false;
+}
+
+static void ufs_mtk_mcq_enable_irq(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	u32 irq, i;
+
+	if (!is_mcq_enabled(hba))
+		return;
+
+	if (host->mcq_nr_intr == 0)
+		return;
+
+	if (host->is_mcq_intr_enabled == true)
+		return;
+
+	for (i = 0; i < host->mcq_nr_intr; i++) {
+		irq = host->mcq_intr_info[i].irq;
+		enable_irq(irq);
+	}
+	host->is_mcq_intr_enabled = true;
 }
 
 /**
@@ -601,7 +733,7 @@ static void ufs_mtk_scale_perf(struct ufs_hba *hba, bool up)
  * @on: If true, enable clocks else disable them.
  * @status: PRE_CHANGE or POST_CHANGE notify
  *
- * Returns 0 on success, non-zero on failure.
+ * Return: 0 on success, non-zero on failure.
  */
 static int ufs_mtk_setup_clocks(struct ufs_hba *hba, bool on,
 				enum ufs_notify_change_status status)
@@ -637,9 +769,11 @@ static int ufs_mtk_setup_clocks(struct ufs_hba *hba, bool on,
 		}
 
 		if (clk_pwr_off)
-			ufs_mtk_scale_perf(hba, false);
+			ufs_mtk_pwr_ctrl(hba, false);
+		ufs_mtk_mcq_disable_irq(hba);
 	} else if (on && status == POST_CHANGE) {
-		ufs_mtk_scale_perf(hba, true);
+		ufs_mtk_pwr_ctrl(hba, true);
+		ufs_mtk_mcq_enable_irq(hba);
 	}
 
 	return ret;
@@ -676,13 +810,154 @@ static u32 ufs_mtk_get_ufs_hci_version(struct ufs_hba *hba)
 }
 
 /**
+ * ufs_mtk_init_clocks - Init mtk driver private clocks
+ *
+ * @hba: per adapter instance
+ */
+static void ufs_mtk_init_clocks(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	struct list_head *head = &hba->clk_list_head;
+	struct ufs_mtk_clk *mclk = &host->mclk;
+	struct ufs_clk_info *clki, *clki_tmp;
+
+	/*
+	 * Find private clocks and store them in struct ufs_mtk_clk.
+	 * Remove "ufs_sel_min_src" and "ufs_sel_min_src" from list to avoid
+	 * being switched on/off in clock gating.
+	 */
+	list_for_each_entry_safe(clki, clki_tmp, head, list) {
+		if (!strcmp(clki->name, "ufs_sel")) {
+			host->mclk.ufs_sel_clki = clki;
+		} else if (!strcmp(clki->name, "ufs_sel_max_src")) {
+			host->mclk.ufs_sel_max_clki = clki;
+			clk_disable_unprepare(clki->clk);
+			list_del(&clki->list);
+		} else if (!strcmp(clki->name, "ufs_sel_min_src")) {
+			host->mclk.ufs_sel_min_clki = clki;
+			clk_disable_unprepare(clki->clk);
+			list_del(&clki->list);
+		}
+	}
+
+	if (!mclk->ufs_sel_clki || !mclk->ufs_sel_max_clki ||
+	    !mclk->ufs_sel_min_clki) {
+		hba->caps &= ~UFSHCD_CAP_CLK_SCALING;
+		dev_info(hba->dev,
+			 "%s: Clk-scaling not ready. Feature disabled.",
+			 __func__);
+	}
+}
+
+#define MAX_VCC_NAME 30
+static int ufs_mtk_vreg_fix_vcc(struct ufs_hba *hba)
+{
+	struct ufs_vreg_info *info = &hba->vreg_info;
+	struct device_node *np = hba->dev->of_node;
+	struct device *dev = hba->dev;
+	char vcc_name[MAX_VCC_NAME];
+	struct arm_smccc_res res;
+	int err, ver;
+
+	if (hba->vreg_info.vcc)
+		return 0;
+
+	if (of_property_read_bool(np, "mediatek,ufs-vcc-by-num")) {
+		ufs_mtk_get_vcc_num(res);
+		if (res.a1 > UFS_VCC_NONE && res.a1 < UFS_VCC_MAX)
+			snprintf(vcc_name, MAX_VCC_NAME, "vcc-opt%lu", res.a1);
+		else
+			return -ENODEV;
+	} else if (of_property_read_bool(np, "mediatek,ufs-vcc-by-ver")) {
+		ver = (hba->dev_info.wspecversion & 0xF00) >> 8;
+		snprintf(vcc_name, MAX_VCC_NAME, "vcc-ufs%u", ver);
+	} else {
+		return 0;
+	}
+
+	err = ufshcd_populate_vreg(dev, vcc_name, &info->vcc, false);
+	if (err)
+		return err;
+
+	err = ufshcd_get_vreg(dev, info->vcc);
+	if (err)
+		return err;
+
+	err = regulator_enable(info->vcc->reg);
+	if (!err) {
+		info->vcc->enabled = true;
+		dev_info(dev, "%s: %s enabled\n", __func__, vcc_name);
+	}
+
+	return err;
+}
+
+static void ufs_mtk_vreg_fix_vccqx(struct ufs_hba *hba)
+{
+	struct ufs_vreg_info *info = &hba->vreg_info;
+	struct ufs_vreg **vreg_on, **vreg_off;
+
+	if (hba->dev_info.wspecversion >= 0x0300) {
+		vreg_on = &info->vccq;
+		vreg_off = &info->vccq2;
+	} else {
+		vreg_on = &info->vccq2;
+		vreg_off = &info->vccq;
+	}
+
+	if (*vreg_on)
+		(*vreg_on)->always_on = true;
+
+	if (*vreg_off) {
+		regulator_disable((*vreg_off)->reg);
+		devm_kfree(hba->dev, (*vreg_off)->name);
+		devm_kfree(hba->dev, *vreg_off);
+		*vreg_off = NULL;
+	}
+}
+
+static void ufs_mtk_init_mcq_irq(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	struct platform_device *pdev;
+	int i;
+	int irq;
+
+	host->mcq_nr_intr = UFSHCD_MAX_Q_NR;
+	pdev = container_of(hba->dev, struct platform_device, dev);
+
+	if (host->caps & UFS_MTK_CAP_DISABLE_MCQ)
+		goto failed;
+
+	for (i = 0; i < host->mcq_nr_intr; i++) {
+		/* irq index 0 is legacy irq, sq/cq irq start from index 1 */
+		irq = platform_get_irq(pdev, i + 1);
+		if (irq < 0) {
+			host->mcq_intr_info[i].irq = MTK_MCQ_INVALID_IRQ;
+			goto failed;
+		}
+		host->mcq_intr_info[i].hba = hba;
+		host->mcq_intr_info[i].irq = irq;
+		dev_info(hba->dev, "get platform mcq irq: %d, %d\n", i, irq);
+	}
+
+	return;
+failed:
+       /* invalidate irq info */
+	for (i = 0; i < host->mcq_nr_intr; i++)
+		host->mcq_intr_info[i].irq = MTK_MCQ_INVALID_IRQ;
+
+	host->mcq_nr_intr = 0;
+}
+
+/**
  * ufs_mtk_init - find other essential mmio bases
  * @hba: host controller instance
  *
  * Binds PHY with controller and powers up PHY enabling clocks
  * and regulators.
  *
- * Returns -EPROBE_DEFER if binding fails, returns negative error
+ * Return: -EPROBE_DEFER if binding fails, returns negative error
  * on phy power up failure and returns zero on success.
  */
 static int ufs_mtk_init(struct ufs_hba *hba)
@@ -690,7 +965,9 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	const struct of_device_id *id;
 	struct device *dev = hba->dev;
 	struct ufs_mtk_host *host;
+	struct Scsi_Host *shost = hba->host;
 	int err = 0;
+	struct arm_smccc_res res;
 
 	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
 	if (!host) {
@@ -711,11 +988,17 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	/* Initialize host capability */
 	ufs_mtk_init_host_caps(hba);
 
+	ufs_mtk_init_mcq_irq(hba);
+
 	err = ufs_mtk_bind_mphy(hba);
 	if (err)
 		goto out_variant_clear;
 
 	ufs_mtk_init_reset(hba);
+
+	/* backup mphy setting if mphy can reset */
+	if (host->mphy_reset)
+		ufs_mtk_mphy_ctrl(UFS_MPHY_BACKUP, res);
 
 	/* Enable runtime autosuspend */
 	hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
@@ -728,11 +1011,22 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 
 	/* Enable WriteBooster */
 	hba->caps |= UFSHCD_CAP_WB_EN;
+
+	/* Enable clk scaling*/
+	hba->caps |= UFSHCD_CAP_CLK_SCALING;
+
+	/* Set runtime pm delay to replace default */
+	shost->rpm_autosuspend_delay = MTK_RPM_AUTOSUSPEND_DELAY_MS;
+
 	hba->quirks |= UFSHCI_QUIRK_SKIP_MANUAL_WB_FLUSH_CTRL;
+	hba->quirks |= UFSHCD_QUIRK_MCQ_BROKEN_INTR;
+	hba->quirks |= UFSHCD_QUIRK_MCQ_BROKEN_RTC;
 	hba->vps->wb_flush_threshold = UFS_WB_BUF_REMAIN_PERCENT(80);
 
 	if (host->caps & UFS_MTK_CAP_DISABLE_AH8)
 		hba->caps |= UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
+
+	ufs_mtk_init_clocks(hba);
 
 	/*
 	 * ufshcd_vops_init() is invoked after
@@ -742,6 +1036,15 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	 * Enable phy clocks specifically here.
 	 */
 	ufs_mtk_mphy_power_on(hba, true);
+
+	if (ufs_mtk_is_rtff_mtcmos(hba)) {
+		/* First Restore here, to avoid backup unexpected value */
+		ufs_mtk_mtcmos_ctrl(false, res);
+
+		/* Power on to init */
+		ufs_mtk_mtcmos_ctrl(true, res);
+	}
+
 	ufs_mtk_setup_clocks(hba, true, POST_CHANGE);
 
 	host->ip_ver = ufshcd_readl(hba, REG_UFS_MTK_IP_VER);
@@ -754,24 +1057,68 @@ out:
 	return err;
 }
 
+static bool ufs_mtk_pmc_via_fastauto(struct ufs_hba *hba,
+				     struct ufs_pa_layer_attr *dev_req_params)
+{
+	if (!ufs_mtk_is_pmc_via_fastauto(hba))
+		return false;
+
+	if (dev_req_params->hs_rate == hba->pwr_info.hs_rate)
+		return false;
+
+	if (dev_req_params->pwr_tx != FAST_MODE &&
+	    dev_req_params->gear_tx < UFS_HS_G4)
+		return false;
+
+	if (dev_req_params->pwr_rx != FAST_MODE &&
+	    dev_req_params->gear_rx < UFS_HS_G4)
+		return false;
+
+	return true;
+}
+
 static int ufs_mtk_pre_pwr_change(struct ufs_hba *hba,
 				  struct ufs_pa_layer_attr *dev_max_params,
 				  struct ufs_pa_layer_attr *dev_req_params)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	struct ufs_dev_params host_cap;
+	struct ufs_host_params host_params;
 	int ret;
 
-	ufshcd_init_pwr_dev_param(&host_cap);
-	host_cap.hs_rx_gear = UFS_HS_G4;
-	host_cap.hs_tx_gear = UFS_HS_G4;
+	ufshcd_init_host_params(&host_params);
+	host_params.hs_rx_gear = UFS_HS_G5;
+	host_params.hs_tx_gear = UFS_HS_G5;
 
-	ret = ufshcd_get_pwr_dev_param(&host_cap,
-				       dev_max_params,
-				       dev_req_params);
+	ret = ufshcd_negotiate_pwr_params(&host_params, dev_max_params, dev_req_params);
 	if (ret) {
 		pr_info("%s: failed to determine capabilities\n",
 			__func__);
+	}
+
+	if (ufs_mtk_pmc_via_fastauto(hba, dev_req_params)) {
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXTERMINATION), true);
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXGEAR), UFS_HS_G1);
+
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_RXTERMINATION), true);
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_RXGEAR), UFS_HS_G1);
+
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_ACTIVETXDATALANES),
+			       dev_req_params->lane_tx);
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_ACTIVERXDATALANES),
+			       dev_req_params->lane_rx);
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HSSERIES),
+			       dev_req_params->hs_rate);
+
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TXHSADAPTTYPE),
+			       PA_NO_ADAPT);
+
+		ret = ufshcd_uic_change_pwr_mode(hba,
+					FASTAUTO_MODE << 4 | FASTAUTO_MODE);
+
+		if (ret) {
+			dev_err(hba->dev, "%s: HSG1B FASTAUTO failed ret=%d\n",
+				__func__, ret);
+		}
 	}
 
 	if (host->hw_ver.major >= 3) {
@@ -871,7 +1218,7 @@ static void ufs_mtk_setup_clk_gating(struct ufs_hba *hba)
 	}
 }
 
-static int ufs_mtk_post_link(struct ufs_hba *hba)
+static void ufs_mtk_post_link(struct ufs_hba *hba)
 {
 	/* enable unipro clock gating feature */
 	ufs_mtk_cfg_unipro_cg(hba, true);
@@ -882,8 +1229,6 @@ static int ufs_mtk_post_link(struct ufs_hba *hba)
 			FIELD_PREP(UFSHCI_AHIBERN8_SCALE_MASK, 3);
 
 	ufs_mtk_setup_clk_gating(hba);
-
-	return 0;
 }
 
 static int ufs_mtk_link_startup_notify(struct ufs_hba *hba,
@@ -896,7 +1241,7 @@ static int ufs_mtk_link_startup_notify(struct ufs_hba *hba,
 		ret = ufs_mtk_pre_link(hba);
 		break;
 	case POST_CHANGE:
-		ret = ufs_mtk_post_link(hba);
+		ufs_mtk_post_link(hba);
 		break;
 	default:
 		ret = -EINVAL;
@@ -947,14 +1292,28 @@ static int ufs_mtk_link_set_hpm(struct ufs_hba *hba)
 		return err;
 
 	err = ufshcd_uic_hibern8_exit(hba);
-	if (!err)
-		ufshcd_set_link_active(hba);
-	else
+	if (err)
 		return err;
+
+	/* Check link state to make sure exit h8 success */
+	ufs_mtk_wait_idle_state(hba, 5);
+	err = ufs_mtk_wait_link_state(hba, VS_LINK_UP, 100);
+	if (err) {
+		dev_warn(hba->dev, "exit h8 state fail, err=%d\n", err);
+		return err;
+	}
+	ufshcd_set_link_active(hba);
 
 	err = ufshcd_make_hba_operational(hba);
 	if (err)
 		return err;
+
+	if (is_mcq_enabled(hba)) {
+		ufs_mtk_config_mcq(hba, false);
+		ufshcd_mcq_make_queues_operational(hba);
+		ufshcd_mcq_config_mac(hba, hba->nutrs);
+		ufshcd_mcq_enable(hba);
+	}
 
 	return 0;
 }
@@ -962,6 +1321,11 @@ static int ufs_mtk_link_set_hpm(struct ufs_hba *hba)
 static int ufs_mtk_link_set_lpm(struct ufs_hba *hba)
 {
 	int err;
+
+	/* Disable reset confirm feature by UniPro */
+	ufshcd_writel(hba,
+		      (ufshcd_readl(hba, REG_UFS_XOUFS_CTRL) & ~0x100),
+		      REG_UFS_XOUFS_CTRL);
 
 	err = ufs_mtk_unipro_set_lpm(hba, true);
 	if (err) {
@@ -973,17 +1337,62 @@ static int ufs_mtk_link_set_lpm(struct ufs_hba *hba)
 	return 0;
 }
 
-static void ufs_mtk_vreg_set_lpm(struct ufs_hba *hba, bool lpm)
+static void ufs_mtk_vccqx_set_lpm(struct ufs_hba *hba, bool lpm)
 {
-	if (!hba->vreg_info.vccq2 || !hba->vreg_info.vcc)
+	struct ufs_vreg *vccqx = NULL;
+
+	if (hba->vreg_info.vccq)
+		vccqx = hba->vreg_info.vccq;
+	else
+		vccqx = hba->vreg_info.vccq2;
+
+	regulator_set_mode(vccqx->reg,
+			   lpm ? REGULATOR_MODE_IDLE : REGULATOR_MODE_NORMAL);
+}
+
+static void ufs_mtk_vsx_set_lpm(struct ufs_hba *hba, bool lpm)
+{
+	struct arm_smccc_res res;
+
+	ufs_mtk_device_pwr_ctrl(!lpm,
+				(unsigned long)hba->dev_info.wspecversion,
+				res);
+}
+
+static void ufs_mtk_dev_vreg_set_lpm(struct ufs_hba *hba, bool lpm)
+{
+	bool skip_vccqx = false;
+
+	/* Prevent entering LPM when device is still active */
+	if (lpm && ufshcd_is_ufs_dev_active(hba))
 		return;
 
-	if (lpm && !hba->vreg_info.vcc->enabled)
-		regulator_set_mode(hba->vreg_info.vccq2->reg,
-				   REGULATOR_MODE_IDLE);
-	else if (!lpm)
-		regulator_set_mode(hba->vreg_info.vccq2->reg,
-				   REGULATOR_MODE_NORMAL);
+	/* Skip vccqx lpm control and control vsx only */
+	if (!hba->vreg_info.vccq && !hba->vreg_info.vccq2)
+		skip_vccqx = true;
+
+	/* VCC is always-on, control vsx only */
+	if (!hba->vreg_info.vcc)
+		skip_vccqx = true;
+
+	/* Broken vcc keep vcc always on, most case control vsx only */
+	if (lpm && hba->vreg_info.vcc && hba->vreg_info.vcc->enabled) {
+		/* Some device vccqx/vsx can enter lpm */
+		if (ufs_mtk_is_allow_vccqx_lpm(hba))
+			skip_vccqx = false;
+		else /* control vsx only */
+			skip_vccqx = true;
+	}
+
+	if (lpm) {
+		if (!skip_vccqx)
+			ufs_mtk_vccqx_set_lpm(hba, lpm);
+		ufs_mtk_vsx_set_lpm(hba, lpm);
+	} else {
+		ufs_mtk_vsx_set_lpm(hba, lpm);
+		if (!skip_vccqx)
+			ufs_mtk_vccqx_set_lpm(hba, lpm);
+	}
 }
 
 static void ufs_mtk_auto_hibern8_disable(struct ufs_hba *hba)
@@ -1008,9 +1417,8 @@ static int ufs_mtk_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 	struct arm_smccc_res res;
 
 	if (status == PRE_CHANGE) {
-		if (!ufshcd_is_auto_hibern8_supported(hba))
-			return 0;
-		ufs_mtk_auto_hibern8_disable(hba);
+		if (ufshcd_is_auto_hibern8_supported(hba))
+			ufs_mtk_auto_hibern8_disable(hba);
 		return 0;
 	}
 
@@ -1026,7 +1434,6 @@ static int ufs_mtk_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 		 * ufshcd_suspend() re-enabling regulators while vreg is still
 		 * in low-power mode.
 		 */
-		ufs_mtk_vreg_set_lpm(hba, true);
 		err = ufs_mtk_mphy_power_on(hba, false);
 		if (err)
 			goto fail;
@@ -1034,6 +1441,8 @@ static int ufs_mtk_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 
 	if (ufshcd_is_link_off(hba))
 		ufs_mtk_device_reset_ctrl(0, res);
+
+	ufs_mtk_sram_pwr_ctrl(false, res);
 
 	return 0;
 fail:
@@ -1049,12 +1458,16 @@ fail:
 static int ufs_mtk_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	int err;
+	struct arm_smccc_res res;
+
+	if (hba->ufshcd_state != UFSHCD_STATE_OPERATIONAL)
+		ufs_mtk_dev_vreg_set_lpm(hba, false);
+
+	ufs_mtk_sram_pwr_ctrl(true, res);
 
 	err = ufs_mtk_mphy_power_on(hba, true);
 	if (err)
 		goto fail;
-
-	ufs_mtk_vreg_set_lpm(hba, false);
 
 	if (ufshcd_is_link_hibern8(hba)) {
 		err = ufs_mtk_link_set_hpm(hba);
@@ -1069,13 +1482,16 @@ fail:
 
 static void ufs_mtk_dbg_register_dump(struct ufs_hba *hba)
 {
-	ufshcd_dump_regs(hba, REG_UFS_REFCLK_CTRL, 0x4, "Ref-Clk Ctrl ");
+	/* Dump ufshci register 0x140 ~ 0x14C */
+	ufshcd_dump_regs(hba, REG_UFS_XOUFS_CTRL, 0x10,
+			 "XOUFS Ctrl (0x140): ");
 
 	ufshcd_dump_regs(hba, REG_UFS_EXTREG, 0x4, "Ext Reg ");
 
+	/* Dump ufshci register 0x2200 ~ 0x22AC */
 	ufshcd_dump_regs(hba, REG_UFS_MPHYCTRL,
 			 REG_UFS_REJECT_MON - REG_UFS_MPHYCTRL + 4,
-			 "MPHY Ctrl ");
+			 "MPHY Ctrl (0x2200): ");
 
 	/* Direct debugging information to REG_MTK_PROBE */
 	ufs_mtk_dbg_sel(hba);
@@ -1087,8 +1503,21 @@ static int ufs_mtk_apply_dev_quirks(struct ufs_hba *hba)
 	struct ufs_dev_info *dev_info = &hba->dev_info;
 	u16 mid = dev_info->wmanufacturerid;
 
-	if (mid == UFS_VENDOR_SAMSUNG)
+	if (mid == UFS_VENDOR_SAMSUNG) {
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TACTIVATE), 6);
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HIBERN8TIME), 10);
+	} else if (mid == UFS_VENDOR_MICRON) {
+		/* Only for the host which have TX skew issue */
+		if (ufs_mtk_is_tx_skew_fix(hba) &&
+			(STR_PRFX_EQUAL("MT128GBCAV2U31", dev_info->model) ||
+			STR_PRFX_EQUAL("MT256GBCAV4U31", dev_info->model) ||
+			STR_PRFX_EQUAL("MT512GBCAV8U31", dev_info->model) ||
+			STR_PRFX_EQUAL("MT256GBEAX4U40", dev_info->model) ||
+			STR_PRFX_EQUAL("MT512GAYAX4U40", dev_info->model) ||
+			STR_PRFX_EQUAL("MT001TAYAX8U40", dev_info->model))) {
+			ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TACTIVATE), 8);
+		}
+	}
 
 	/*
 	 * Decide waiting time before gating reference clock and
@@ -1104,7 +1533,6 @@ static int ufs_mtk_apply_dev_quirks(struct ufs_hba *hba)
 	else
 		ufs_mtk_setup_ref_clk_wait_us(hba,
 					      REFCLK_DEFAULT_WAIT_US);
-
 	return 0;
 }
 
@@ -1122,14 +1550,231 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 		hba->dev_quirks &= ~(UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM |
 			UFS_DEVICE_QUIRK_DELAY_AFTER_LPM);
 	}
+
+	ufs_mtk_vreg_fix_vcc(hba);
+	ufs_mtk_vreg_fix_vccqx(hba);
 }
 
 static void ufs_mtk_event_notify(struct ufs_hba *hba,
 				 enum ufs_event_type evt, void *data)
 {
 	unsigned int val = *(u32 *)data;
+	unsigned long reg;
+	u8 bit;
 
 	trace_ufs_mtk_event(evt, val);
+
+	/* Print details of UIC Errors */
+	if (evt <= UFS_EVT_DME_ERR) {
+		dev_info(hba->dev,
+			 "Host UIC Error Code (%s): %08x\n",
+			 ufs_uic_err_str[evt], val);
+		reg = val;
+	}
+
+	if (evt == UFS_EVT_PA_ERR) {
+		for_each_set_bit(bit, &reg, ARRAY_SIZE(ufs_uic_pa_err_str))
+			dev_info(hba->dev, "%s\n", ufs_uic_pa_err_str[bit]);
+	}
+
+	if (evt == UFS_EVT_DL_ERR) {
+		for_each_set_bit(bit, &reg, ARRAY_SIZE(ufs_uic_dl_err_str))
+			dev_info(hba->dev, "%s\n", ufs_uic_dl_err_str[bit]);
+	}
+}
+
+static void ufs_mtk_config_scaling_param(struct ufs_hba *hba,
+				struct devfreq_dev_profile *profile,
+				struct devfreq_simple_ondemand_data *data)
+{
+	/* Customize min gear in clk scaling */
+	hba->clk_scaling.min_gear = UFS_HS_G4;
+
+	hba->vps->devfreq_profile.polling_ms = 200;
+	hba->vps->ondemand_data.upthreshold = 50;
+	hba->vps->ondemand_data.downdifferential = 20;
+}
+
+/**
+ * ufs_mtk_clk_scale - Internal clk scaling operation
+ *
+ * MTK platform supports clk scaling by switching parent of ufs_sel(mux).
+ * The ufs_sel downstream to ufs_ck which feeds directly to UFS hardware.
+ * Max and min clocks rate of ufs_sel defined in dts should match rate of
+ * "ufs_sel_max_src" and "ufs_sel_min_src" respectively.
+ * This prevent changing rate of pll clock that is shared between modules.
+ *
+ * @hba: per adapter instance
+ * @scale_up: True for scaling up and false for scaling down
+ */
+static void ufs_mtk_clk_scale(struct ufs_hba *hba, bool scale_up)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	struct ufs_mtk_clk *mclk = &host->mclk;
+	struct ufs_clk_info *clki = mclk->ufs_sel_clki;
+	int ret = 0;
+
+	ret = clk_prepare_enable(clki->clk);
+	if (ret) {
+		dev_info(hba->dev,
+			 "clk_prepare_enable() fail, ret: %d\n", ret);
+		return;
+	}
+
+	if (scale_up) {
+		ret = clk_set_parent(clki->clk, mclk->ufs_sel_max_clki->clk);
+		clki->curr_freq = clki->max_freq;
+	} else {
+		ret = clk_set_parent(clki->clk, mclk->ufs_sel_min_clki->clk);
+		clki->curr_freq = clki->min_freq;
+	}
+
+	if (ret) {
+		dev_info(hba->dev,
+			 "Failed to set ufs_sel_clki, ret: %d\n", ret);
+	}
+
+	clk_disable_unprepare(clki->clk);
+
+	trace_ufs_mtk_clk_scale(clki->name, scale_up, clk_get_rate(clki->clk));
+}
+
+static int ufs_mtk_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
+				    enum ufs_notify_change_status status)
+{
+	if (!ufshcd_is_clkscaling_supported(hba))
+		return 0;
+
+	if (status == PRE_CHANGE) {
+		/* Switch parent before clk_set_rate() */
+		ufs_mtk_clk_scale(hba, scale_up);
+	} else {
+		/* Request interrupt latency QoS accordingly */
+		ufs_mtk_scale_perf(hba, scale_up);
+	}
+
+	return 0;
+}
+
+static int ufs_mtk_get_hba_mac(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	/* MCQ operation not permitted */
+	if (host->caps & UFS_MTK_CAP_DISABLE_MCQ)
+		return -EPERM;
+
+	return MAX_SUPP_MAC;
+}
+
+static int ufs_mtk_op_runtime_config(struct ufs_hba *hba)
+{
+	struct ufshcd_mcq_opr_info_t *opr;
+	int i;
+
+	hba->mcq_opr[OPR_SQD].offset = REG_UFS_MTK_SQD;
+	hba->mcq_opr[OPR_SQIS].offset = REG_UFS_MTK_SQIS;
+	hba->mcq_opr[OPR_CQD].offset = REG_UFS_MTK_CQD;
+	hba->mcq_opr[OPR_CQIS].offset = REG_UFS_MTK_CQIS;
+
+	for (i = 0; i < OPR_MAX; i++) {
+		opr = &hba->mcq_opr[i];
+		opr->stride = REG_UFS_MCQ_STRIDE;
+		opr->base = hba->mmio_base + opr->offset;
+	}
+
+	return 0;
+}
+
+static int ufs_mtk_mcq_config_resource(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	/* fail mcq initialization if interrupt is not filled properly */
+	if (!host->mcq_nr_intr) {
+		dev_info(hba->dev, "IRQs not ready. MCQ disabled.");
+		return -EINVAL;
+	}
+
+	hba->mcq_base = hba->mmio_base + MCQ_QUEUE_OFFSET(hba->mcq_capabilities);
+	return 0;
+}
+
+static irqreturn_t ufs_mtk_mcq_intr(int irq, void *__intr_info)
+{
+	struct ufs_mtk_mcq_intr_info *mcq_intr_info = __intr_info;
+	struct ufs_hba *hba = mcq_intr_info->hba;
+	struct ufs_hw_queue *hwq;
+	u32 events;
+	int qid = mcq_intr_info->qid;
+
+	hwq = &hba->uhq[qid];
+
+	events = ufshcd_mcq_read_cqis(hba, qid);
+	if (events)
+		ufshcd_mcq_write_cqis(hba, events, qid);
+
+	if (events & UFSHCD_MCQ_CQIS_TAIL_ENT_PUSH_STS)
+		ufshcd_mcq_poll_cqe_lock(hba, hwq);
+
+	return IRQ_HANDLED;
+}
+
+static int ufs_mtk_config_mcq_irq(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	u32 irq, i;
+	int ret;
+
+	for (i = 0; i < host->mcq_nr_intr; i++) {
+		irq = host->mcq_intr_info[i].irq;
+		if (irq == MTK_MCQ_INVALID_IRQ) {
+			dev_err(hba->dev, "invalid irq. %d\n", i);
+			return -ENOPARAM;
+		}
+
+		host->mcq_intr_info[i].qid = i;
+		ret = devm_request_irq(hba->dev, irq, ufs_mtk_mcq_intr, 0, UFSHCD,
+				       &host->mcq_intr_info[i]);
+
+		dev_dbg(hba->dev, "request irq %d intr %s\n", irq, ret ? "failed" : "");
+
+		if (ret) {
+			dev_err(hba->dev, "Cannot request irq %d\n", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int ufs_mtk_config_mcq(struct ufs_hba *hba, bool irq)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	int ret = 0;
+
+	if (!host->mcq_set_intr) {
+		/* Disable irq option register */
+		ufshcd_rmwl(hba, MCQ_INTR_EN_MSK, 0, REG_UFS_MMIO_OPT_CTRL_0);
+
+		if (irq) {
+			ret = ufs_mtk_config_mcq_irq(hba);
+			if (ret)
+				return ret;
+		}
+
+		host->mcq_set_intr = true;
+	}
+
+	ufshcd_rmwl(hba, MCQ_AH8, MCQ_AH8, REG_UFS_MMIO_OPT_CTRL_0);
+	ufshcd_rmwl(hba, MCQ_INTR_EN_MSK, MCQ_MULTI_INTR_EN, REG_UFS_MMIO_OPT_CTRL_0);
+
+	return 0;
+}
+
+static int ufs_mtk_config_esi(struct ufs_hba *hba)
+{
+	return ufs_mtk_config_mcq(hba, true);
 }
 
 /*
@@ -1153,13 +1798,20 @@ static const struct ufs_hba_variant_ops ufs_hba_mtk_vops = {
 	.dbg_register_dump   = ufs_mtk_dbg_register_dump,
 	.device_reset        = ufs_mtk_device_reset,
 	.event_notify        = ufs_mtk_event_notify,
+	.config_scaling_param = ufs_mtk_config_scaling_param,
+	.clk_scale_notify    = ufs_mtk_clk_scale_notify,
+	/* mcq vops */
+	.get_hba_mac         = ufs_mtk_get_hba_mac,
+	.op_runtime_config   = ufs_mtk_op_runtime_config,
+	.mcq_config_resource = ufs_mtk_mcq_config_resource,
+	.config_esi          = ufs_mtk_config_esi,
 };
 
 /**
  * ufs_mtk_probe - probe routine of the driver
  * @pdev: pointer to Platform device handle
  *
- * Return zero for success and non-zero for failure
+ * Return: zero for success and non-zero for failure.
  */
 static int ufs_mtk_probe(struct platform_device *pdev)
 {
@@ -1199,7 +1851,7 @@ skip_reset:
 
 out:
 	if (err)
-		dev_info(dev, "probe failed %d\n", err);
+		dev_err(dev, "probe failed %d\n", err);
 
 	of_node_put(reset_node);
 	return err;
@@ -1211,26 +1863,92 @@ out:
  *
  * Always return 0
  */
-static int ufs_mtk_remove(struct platform_device *pdev)
+static void ufs_mtk_remove(struct platform_device *pdev)
 {
 	struct ufs_hba *hba =  platform_get_drvdata(pdev);
 
 	pm_runtime_get_sync(&(pdev)->dev);
 	ufshcd_remove(hba);
+}
+
+#ifdef CONFIG_PM_SLEEP
+static int ufs_mtk_system_suspend(struct device *dev)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct arm_smccc_res res;
+	int ret;
+
+	ret = ufshcd_system_suspend(dev);
+	if (ret)
+		return ret;
+
+	ufs_mtk_dev_vreg_set_lpm(hba, true);
+
+	if (ufs_mtk_is_rtff_mtcmos(hba))
+		ufs_mtk_mtcmos_ctrl(false, res);
+
 	return 0;
 }
 
+static int ufs_mtk_system_resume(struct device *dev)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct arm_smccc_res res;
+
+	ufs_mtk_dev_vreg_set_lpm(hba, false);
+
+	if (ufs_mtk_is_rtff_mtcmos(hba))
+		ufs_mtk_mtcmos_ctrl(true, res);
+
+	return ufshcd_system_resume(dev);
+}
+#endif
+
+#ifdef CONFIG_PM
+static int ufs_mtk_runtime_suspend(struct device *dev)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct arm_smccc_res res;
+	int ret = 0;
+
+	ret = ufshcd_runtime_suspend(dev);
+	if (ret)
+		return ret;
+
+	ufs_mtk_dev_vreg_set_lpm(hba, true);
+
+	if (ufs_mtk_is_rtff_mtcmos(hba))
+		ufs_mtk_mtcmos_ctrl(false, res);
+
+	return 0;
+}
+
+static int ufs_mtk_runtime_resume(struct device *dev)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct arm_smccc_res res;
+
+	if (ufs_mtk_is_rtff_mtcmos(hba))
+		ufs_mtk_mtcmos_ctrl(true, res);
+
+	ufs_mtk_dev_vreg_set_lpm(hba, false);
+
+	return ufshcd_runtime_resume(dev);
+}
+#endif
+
 static const struct dev_pm_ops ufs_mtk_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(ufshcd_system_suspend, ufshcd_system_resume)
-	SET_RUNTIME_PM_OPS(ufshcd_runtime_suspend, ufshcd_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(ufs_mtk_system_suspend,
+				ufs_mtk_system_resume)
+	SET_RUNTIME_PM_OPS(ufs_mtk_runtime_suspend,
+			   ufs_mtk_runtime_resume, NULL)
 	.prepare	 = ufshcd_suspend_prepare,
 	.complete	 = ufshcd_resume_complete,
 };
 
 static struct platform_driver ufs_mtk_pltform = {
 	.probe      = ufs_mtk_probe,
-	.remove     = ufs_mtk_remove,
-	.shutdown   = ufshcd_pltfrm_shutdown,
+	.remove_new = ufs_mtk_remove,
 	.driver = {
 		.name   = "ufshcd-mtk",
 		.pm     = &ufs_mtk_pm_ops,

@@ -19,30 +19,29 @@ keys.
  2 files changed, 166 insertions(+), 1 deletion(-)
  create mode 100644 gen-keys.c
 
-diff --git a/Makefile.in b/Makefile.in
-index b029384..f70e83e 100644
---- a/Makefile.in
-+++ b/Makefile.in
-@@ -67,7 +67,7 @@ MKDIR_P=@MKDIR_P@
- 
+Index: openssh-9.8p1/Makefile.in
+===================================================================
+--- openssh-9.8p1.orig/Makefile.in
++++ openssh-9.8p1/Makefile.in
+@@ -72,6 +72,7 @@ MKDIR_P=@MKDIR_P@
  .SUFFIXES: .lo
  
--TARGETS=ssh$(EXEEXT) sshd$(EXEEXT) ssh-add$(EXEEXT) ssh-keygen$(EXEEXT) ssh-keyscan${EXEEXT} ssh-keysign${EXEEXT} ssh-pkcs11-helper$(EXEEXT) ssh-agent$(EXEEXT) scp$(EXEEXT) sftp-server$(EXEEXT) sftp$(EXEEXT) ssh-sk-helper$(EXEEXT)
-+TARGETS=ssh$(EXEEXT) sshd$(EXEEXT) ssh-add$(EXEEXT) ssh-keygen$(EXEEXT) ssh-keyscan${EXEEXT} ssh-keysign${EXEEXT} ssh-pkcs11-helper$(EXEEXT) ssh-agent$(EXEEXT) scp$(EXEEXT) sftp-server$(EXEEXT) sftp$(EXEEXT) ssh-sk-helper$(EXEEXT) gen-keys$(EXEEXT)
+ TARGETS=ssh$(EXEEXT) sshd$(EXEEXT) sshd-session$(EXEEXT) ssh-add$(EXEEXT) ssh-keygen$(EXEEXT) ssh-keyscan${EXEEXT} ssh-keysign${EXEEXT} ssh-pkcs11-helper$(EXEEXT) ssh-agent$(EXEEXT) scp$(EXEEXT) sftp-server$(EXEEXT) sftp$(EXEEXT) ssh-sk-helper$(EXEEXT)
++TARGETS+= gen-keys$(EXEEXT)
  
  XMSS_OBJS=\
  	ssh-xmss.o \
-@@ -224,6 +224,9 @@ ssh-agent$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHAGENT_OBJS)
+@@ -232,6 +233,9 @@ ssh-agent$(EXEEXT): $(LIBCOMPAT) libssh.
  ssh-keygen$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYGEN_OBJS)
- 	$(LD) -o $@ $(SSHKEYGEN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
+ 	$(LD) -o $@ $(SSHKEYGEN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
  
 +gen-keys$(EXEEXT): gen-keys.o
 +	FLTFLAGS="-s 1000" $(LD) -o $@ gen-keys.o $(LDFLAGS) $(LIBS)
 +
  ssh-keysign$(EXEEXT): $(LIBCOMPAT) libssh.a $(SSHKEYSIGN_OBJS)
- 	$(LD) -o $@ $(SSHKEYSIGN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS)
+ 	$(LD) -o $@ $(SSHKEYSIGN_OBJS) $(LDFLAGS) -lssh -lopenbsd-compat $(LIBS) $(CHANNELLIBS)
  
-@@ -394,6 +397,7 @@ install-files:
+@@ -405,6 +409,7 @@ install-files:
  	$(MKDIR_P) -m 0755 $(DESTDIR)$(PRIVSEP_PATH)
  	$(INSTALL) -m 0755 $(STRIP_OPT) ssh$(EXEEXT) $(DESTDIR)$(bindir)/ssh$(EXEEXT)
  	$(INSTALL) -m 0755 $(STRIP_OPT) scp$(EXEEXT) $(DESTDIR)$(bindir)/scp$(EXEEXT)
@@ -50,11 +49,10 @@ index b029384..f70e83e 100644
  	$(INSTALL) -m 0755 $(STRIP_OPT) ssh-add$(EXEEXT) $(DESTDIR)$(bindir)/ssh-add$(EXEEXT)
  	$(INSTALL) -m 0755 $(STRIP_OPT) ssh-agent$(EXEEXT) $(DESTDIR)$(bindir)/ssh-agent$(EXEEXT)
  	$(INSTALL) -m 0755 $(STRIP_OPT) ssh-keygen$(EXEEXT) $(DESTDIR)$(bindir)/ssh-keygen$(EXEEXT)
-diff --git a/gen-keys.c b/gen-keys.c
-new file mode 100644
-index 0000000..f28b142
+Index: openssh-9.8p1/gen-keys.c
+===================================================================
 --- /dev/null
-+++ b/gen-keys.c
++++ openssh-9.8p1/gen-keys.c
 @@ -0,0 +1,161 @@
 +#include <stdio.h>
 +#include <stdlib.h>
@@ -217,6 +215,3 @@ index 0000000..f28b142
 +#endif
 +	return 0;
 +}
--- 
-2.30.2
-

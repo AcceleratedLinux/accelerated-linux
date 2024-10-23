@@ -1,12 +1,8 @@
 
-URL = http://download.rsyslog.com/libfastjson/libfastjson-0.99.8.tar.gz
-DOWNLOADHASH = 3544c757668b4a257825b3cbc26f800f59ef3c1ff2a260f40f96b48ab1d59e07
+URL = https://download.rsyslog.com/libfastjson/libfastjson-0.99.9.tar.gz
+DOWNLOADHASH = a330e1bdef3096b7ead53b4bad1a6158f19ba9c9ec7c36eda57de7729d84aaee
 
 LIBTOOL = $(abspath $(shell pwd)/build/$(PKG)/libtool)
+$(PKG)_CONFVARS = LIBS="-lm"
 
 include $(ROOTDIR)/tools/automake.inc
-
-$(PKG)_CONFOPTS =
-#$(PKG)_CONFOPTS += ac_cv_func_malloc_0_nonnull=yes
-
-$(PKG)_CONFVARS = LIBS="-lm"

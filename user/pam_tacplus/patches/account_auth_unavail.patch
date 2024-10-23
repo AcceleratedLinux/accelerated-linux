@@ -2,12 +2,12 @@ Index: pam_tacplus/pam_tacplus.c
 ===================================================================
 --- pam_tacplus.orig/pam_tacplus.c
 +++ pam_tacplus/pam_tacplus.c
-@@ -447,7 +447,7 @@
-        than TACACS+ */
-     if(active_server.addr == NULL) {
-         _pam_log (LOG_ERR, "user not authenticated by TACACS+");
--        return PAM_AUTH_ERR;
-+        return PAM_AUTHINFO_UNAVAIL;
-     }
-     if (ctrl & PAM_TAC_DEBUG)
-         syslog (LOG_DEBUG, "%s: active server is [%s]", __FUNCTION__,
+@@ -648,7 +648,7 @@
+ 	if (active_server.addr == NULL)
+ 	{
+ 		_pam_log(LOG_ERR, "user not authenticated by TACACS+");
+-		return PAM_AUTH_ERR;
++		return PAM_AUTHINFO_UNAVAIL;
+ 	}
+ 	if (ctrl & PAM_TAC_DEBUG)
+ 		syslog(LOG_DEBUG, "%s: active server is [%s]", __FUNCTION__,

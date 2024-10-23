@@ -4,12 +4,19 @@
  */
 
 #include <linux/hashtable.h>
+#include <linux/xattr.h>
+#include "messages.h"
 #include "props.h"
 #include "btrfs_inode.h"
 #include "transaction.h"
 #include "ctree.h"
 #include "xattr.h"
 #include "compression.h"
+#include "space-info.h"
+#include "fs.h"
+#include "accessors.h"
+#include "super.h"
+#include "dir-item.h"
 
 #define BTRFS_PROP_HANDLERS_HT_BITS 8
 static DEFINE_HASHTABLE(prop_handlers_ht, BTRFS_PROP_HANDLERS_HT_BITS);
@@ -261,7 +268,7 @@ static void inode_prop_iterator(void *ctx,
 		btrfs_warn(root->fs_info,
 			   "error applying prop %s to ino %llu (root %llu): %d",
 			   handler->xattr_name, btrfs_ino(BTRFS_I(inode)),
-			   root->root_key.objectid, ret);
+			   btrfs_root_id(root), ret);
 	else
 		set_bit(BTRFS_INODE_HAS_PROPS, &BTRFS_I(inode)->runtime_flags);
 }
@@ -270,11 +277,8 @@ int btrfs_load_inode_props(struct inode *inode, struct btrfs_path *path)
 {
 	struct btrfs_root *root = BTRFS_I(inode)->root;
 	u64 ino = btrfs_ino(BTRFS_I(inode));
-	int ret;
 
-	ret = iterate_object_props(root, path, ino, inode_prop_iterator, inode);
-
-	return ret;
+	return iterate_object_props(root, path, ino, inode_prop_iterator, inode);
 }
 
 static int prop_compression_validate(const struct btrfs_inode *inode,
@@ -299,7 +303,7 @@ static int prop_compression_validate(const struct btrfs_inode *inode,
 static int prop_compression_apply(struct inode *inode, const char *value,
 				  size_t len)
 {
-	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
+	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
 	int type;
 
 	/* Reset to defaults */
@@ -456,7 +460,7 @@ int btrfs_inode_inherit_props(struct btrfs_trans_handle *trans,
 	return 0;
 }
 
-void __init btrfs_props_init(void)
+int __init btrfs_props_init(void)
 {
 	int i;
 
@@ -466,5 +470,6 @@ void __init btrfs_props_init(void)
 
 		hash_add(prop_handlers_ht, &p->node, h);
 	}
+	return 0;
 }
 

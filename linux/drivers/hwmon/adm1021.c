@@ -426,7 +426,7 @@ static int adm1021_detect(struct i2c_client *client,
 
 	pr_debug("Detected chip %s at adapter %d, address 0x%02x.\n",
 		 type_name, i2c_adapter_id(adapter), client->addr);
-	strlcpy(info->type, type_name, I2C_NAME_SIZE);
+	strscpy(info->type, type_name, I2C_NAME_SIZE);
 
 	return 0;
 }
@@ -488,7 +488,7 @@ static struct i2c_driver adm1021_driver = {
 	.driver = {
 		.name	= "adm1021",
 	},
-	.probe_new	= adm1021_probe,
+	.probe		= adm1021_probe,
 	.id_table	= adm1021_id,
 	.detect		= adm1021_detect,
 	.address_list	= normal_i2c,

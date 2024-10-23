@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/time.h>
+#include <linux/of.h>
 
 #define SFP_INGR 0x20 /* Instruction reg */
 #define SFP_VERS 0x38 /* Version reg */
@@ -70,6 +71,29 @@ static char *sfp_reg_desc[] = {
 	"OUIDR4",
 };
 
+static void (*sfp_write)(u32 value, volatile void __iomem *addr);
+static u32 (*sfp_read)(const volatile void __iomem *addr);
+
+static void sfp_write_be(u32 value, volatile void __iomem *addr)
+{
+	iowrite32be(value, addr);
+}
+
+static u32 sfp_read_be(const volatile void __iomem *addr)
+{
+	return ioread32be(addr);
+}
+
+static void sfp_write_le(u32 value, volatile void __iomem *addr)
+{
+	iowrite32(value, addr);
+}
+
+static u32 sfp_read_le(const volatile void __iomem *addr)
+{
+	return ioread32(addr);
+}
+
 #if 0
 static int sfp_set_timing(void)
 {
@@ -91,11 +115,11 @@ static int sfp_set_timing(void)
 	 */
 	timing = clk_rate/1000000 * 12;
 
-	cur_timing = ioread32be(sfp_base + SFP_SFPCR);
+	cur_timing = sfp_read(sfp_base + SFP_SFPCR);
 	pr_err("SFP: calculated timing: 0x%x, cur timing: 0x%x\n", timing, cur_timing);
 
 	if (cur_timing != timing)
-		iowrite32be(timing, sfp_base + SFP_SFPCR);
+		sfp_write(timing, sfp_base + SFP_SFPCR);
 
 	return 0;
 }
@@ -112,12 +136,12 @@ static int sfp_wait(void)
 	 * (12 us prog/bit) x (4096 bits) = 49.15ms
 	 * We will wait double that value just to be safe */
 	msleep(100);
-	reg = ioread32be(sfp_base + SFP_INGR);
+	reg = sfp_read(sfp_base + SFP_INGR);
 	if (reg == 0)
 		return 0;
 
 	pr_err("SFP: timeout! - status: 0x%x\n", reg);
-	reg = ioread32be(sfp_base + SFP_SVHESR);
+	reg = sfp_read(sfp_base + SFP_SVHESR);
 	pr_err("SFP: VHESR: 0x%x\n", reg);
 
 	return -ETIMEDOUT;
@@ -130,13 +154,13 @@ static ssize_t save_store(struct kobject *kobj, struct kobj_attribute *attr, con
 	u32 value;
 
 	/* verify hamming status for OTPMK */
-	value = ioread32be(sfp_base + SFP_SVHESR);
+	value = sfp_read(sfp_base + SFP_SVHESR);
 	if (value != 0) {
 		pr_err("SFP: error in hamming status: 0x%x\n", value);
 		return -EINVAL;
 	}
 
-	iowrite32be(SFP_INGR_INST_PROG, sfp_base + SFP_INGR);
+	sfp_write(SFP_INGR_INST_PROG, sfp_base + SFP_INGR);
 	ret = sfp_wait();
 
 	return ret ? ret : count;
@@ -147,7 +171,7 @@ static ssize_t svhesr_show(struct kobject *kobj, struct kobj_attribute *attr, ch
 	u32 value;
 
 	/* Display hamming status for OTPMK */
-	value = ioread32be(sfp_base + SFP_SVHESR);
+	value = sfp_read(sfp_base + SFP_SVHESR);
 	pr_err("SFP: hamming status: 0x%x\n", value);
 
 	return scnprintf(buf, PAGE_SIZE, "0x%08x\n", value);
@@ -170,7 +194,7 @@ static ssize_t sfp_show(struct kobject *kobj, struct kobj_attribute *attr, char 
 	u32 value = 0;
 
 	pr_err("SFP: Showing reg 0x%x\n", index);
-	value = ioread32be(SFP_MIRROR_BASE + index);
+	value = sfp_read(SFP_MIRROR_BASE + index);
 
 	return scnprintf(buf, PAGE_SIZE, "0x%08x\n", value);
 }
@@ -178,7 +202,7 @@ static ssize_t sfp_show(struct kobject *kobj, struct kobj_attribute *attr, char 
 #if 0
 static int load_mirror(void)
 {
-	iowrite32be(SFP_INGR_INST_READ, sfp_base + SFP_INGR);
+	sfp_write(SFP_INGR_INST_READ, sfp_base + SFP_INGR);
 	return sfp_wait();
 }
 #endif
@@ -192,10 +216,10 @@ static ssize_t sfp_store(struct kobject *kobj, struct kobj_attribute *attr, cons
 		return -EINVAL;
 	pr_err("SFP: Storing 0x%08x to reg 0x%x\n", value, index);
 
-	iowrite32be(value, SFP_MIRROR_BASE + index);
+	sfp_write(value, SFP_MIRROR_BASE + index);
 
 	/* verify hamming status for OTPMK */
-	value = ioread32be(sfp_base + SFP_SVHESR);
+	value = sfp_read(sfp_base + SFP_SVHESR);
 	pr_err("SFP: hamming status: 0x%x\n", value);
 
 	return count;
@@ -208,6 +232,7 @@ static int sfp_init(void)
 	int i;
 	int ret;
 	u32 version;
+	struct device_node *np;
 
 	sfp_res.name = "SFP mirror register memory space";
 	sfp_res.start = SFP_BASE;
@@ -224,6 +249,27 @@ static int sfp_init(void)
 		pr_err("SFP: failed to ioremap resource\n");
 		goto err;
 	}
+
+	/*
+	 * Platforms, compatible with ls1021a-sfp are using big-endian,
+	 * ls1028a-sfp are using little-endian IO
+	 */
+	np = of_find_compatible_node(NULL, NULL, "fsl,ls1021a-sfp");
+	if (np) {
+		sfp_write = sfp_write_be;
+		sfp_read = sfp_read_be;
+	} else {
+		np = of_find_compatible_node(NULL, NULL, "fsl,ls1028a-sfp");
+		if (!np) {
+			ret = -ENODEV;
+			pr_err("SFP: failed to find compatible node\n");
+			goto err;
+		}
+
+		sfp_write = sfp_write_le;
+		sfp_read = sfp_read_le;
+	}
+	of_node_put(np);
 
 	/* The last one is NULL, which is used to detect the end */
 	attrs = kzalloc((SFP_NUM_REGS + 4) * sizeof(*attrs), GFP_KERNEL);
@@ -264,10 +310,10 @@ static int sfp_init(void)
 #if 0
 	load_mirror();
 #endif
-	version = ioread32be(sfp_base + SFP_VERS);
+	version = sfp_read(sfp_base + SFP_VERS);
 	pr_info("SFP: version: 0x%08x\n", version);
 
-	ret = ioread32be(sfp_base + SFP_SFPCR);
+	ret = sfp_read(sfp_base + SFP_SFPCR);
 	pr_err("SFP: cur timing: 0x%x\n", ret);
 
 	return 0;

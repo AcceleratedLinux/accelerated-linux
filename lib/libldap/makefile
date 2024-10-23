@@ -1,8 +1,9 @@
-VERSION = 2.5.8
+VERSION = 2.6.3
 URL = https://openldap.org/software/download/OpenLDAP/openldap-release/openldap-$(VERSION).tgz
 
 CONFOPTS += --without-yielding-select
 CONFOPTS += --disable-slapd
+CONFOPTS += --enable-dynamic
 
 ifdef CONFIG_LIB_OPENSSL
 CONFOPTS += --with-tls

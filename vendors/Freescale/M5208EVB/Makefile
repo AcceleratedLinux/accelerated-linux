@@ -4,7 +4,6 @@
 
 ROMFSIMG = $(IMAGEDIR)/romfs.img
 IMAGE    = $(IMAGEDIR)/image.bin
-IMAGEZ   = $(IMAGEDIR)/imagez.bin
 ELFIMAGE = $(IMAGEDIR)/image.elf
 
 DIRS = 
@@ -89,12 +88,6 @@ romfs:
 image:
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	genromfs -v -V "ROMdisk" -f $(ROMFSIMG) -d $(ROMFSDIR)
-	$(CROSS)objcopy -O binary $(ROOTDIR)/$(LINUXDIR)/linux \
-	  $(IMAGEDIR)/linux.bin
-	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
-	gzip -c -8 $(IMAGE) > $(IMAGEZ)
-	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGE) /tftpboot
 	BSS=`$(CROSS)objdump --headers $(ROOTDIR)/$(LINUXDIR)/linux | \
 	  grep .bss` ; \
 	ADDR=`set -- $${BSS} ; echo 0x$${4}` ; \
@@ -102,5 +95,7 @@ image:
 	  --adjust-section-vma=.romfs=$${ADDR} --no-adjust-warnings \
 	  --set-section-flags=.romfs=alloc,load,data   \
 	  $(ROOTDIR)/$(LINUXDIR)/linux $(ELFIMAGE) 2> /dev/null
+	$(CROSS)objcopy -O binary $(ELFIMAGE) $(IMAGE)
+	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGE) /tftpboot
 
 

@@ -24,7 +24,6 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -412,9 +411,9 @@ static int sun4i_gpadc_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static int sun4i_gpadc_get_temp(void *data, int *temp)
+static int sun4i_gpadc_get_temp(struct thermal_zone_device *tz, int *temp)
 {
-	struct sun4i_gpadc_iio *info = data;
+	struct sun4i_gpadc_iio *info = thermal_zone_device_priv(tz);
 	int val, scale, offset;
 
 	if (sun4i_gpadc_temp_read(info->indio_dev, &val))
@@ -428,7 +427,7 @@ static int sun4i_gpadc_get_temp(void *data, int *temp)
 	return 0;
 }
 
-static const struct thermal_zone_of_device_ops sun4i_ts_tz_ops = {
+static const struct thermal_zone_device_ops sun4i_ts_tz_ops = {
 	.get_temp = &sun4i_gpadc_get_temp,
 };
 
@@ -637,9 +636,9 @@ static int sun4i_gpadc_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 
 	if (IS_ENABLED(CONFIG_THERMAL_OF)) {
-		info->tzd = thermal_zone_of_sensor_register(info->sensor_device,
-							    0, info,
-							    &sun4i_ts_tz_ops);
+		info->tzd = devm_thermal_of_zone_register(info->sensor_device,
+							  0, info,
+							  &sun4i_ts_tz_ops);
 		/*
 		 * Do not fail driver probing when failing to register in
 		 * thermal because no thermal DT node is found.
@@ -670,7 +669,7 @@ err_map:
 	return ret;
 }
 
-static int sun4i_gpadc_remove(struct platform_device *pdev)
+static void sun4i_gpadc_remove(struct platform_device *pdev)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
 	struct sun4i_gpadc_iio *info = iio_priv(indio_dev);
@@ -679,14 +678,10 @@ static int sun4i_gpadc_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 
 	if (!IS_ENABLED(CONFIG_THERMAL_OF))
-		return 0;
-
-	thermal_zone_of_sensor_unregister(info->sensor_device, info->tzd);
+		return;
 
 	if (!info->no_irq)
 		iio_map_array_unregister(indio_dev);
-
-	return 0;
 }
 
 static const struct platform_device_id sun4i_gpadc_id[] = {
@@ -705,7 +700,7 @@ static struct platform_driver sun4i_gpadc_driver = {
 	},
 	.id_table = sun4i_gpadc_id,
 	.probe = sun4i_gpadc_probe,
-	.remove = sun4i_gpadc_remove,
+	.remove_new = sun4i_gpadc_remove,
 };
 MODULE_DEVICE_TABLE(of, sun4i_gpadc_of_id);
 

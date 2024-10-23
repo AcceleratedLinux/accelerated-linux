@@ -83,8 +83,8 @@ static const struct fs_parameter_spec *fs_lookup_key(
 }
 
 /*
- * fs_parse - Parse a filesystem configuration parameter
- * @fc: The filesystem context to log errors through.
+ * __fs_parse - Parse a filesystem configuration parameter
+ * @log: The filesystem context to log errors through.
  * @desc: The parameter description to use.
  * @param: The parameter.
  * @result: Where to place the result of the parse
@@ -138,15 +138,16 @@ EXPORT_SYMBOL(__fs_parse);
  * @fc: The filesystem context to log errors through.
  * @param: The parameter.
  * @want_bdev: T if want a blockdev
+ * @flags: Pathwalk flags passed to filename_lookup()
  * @_path: The result of the lookup
  */
 int fs_lookup_param(struct fs_context *fc,
 		    struct fs_parameter *param,
 		    bool want_bdev,
+		    unsigned int flags,
 		    struct path *_path)
 {
 	struct filename *f;
-	unsigned int flags = 0;
 	bool put_f;
 	int ret;
 

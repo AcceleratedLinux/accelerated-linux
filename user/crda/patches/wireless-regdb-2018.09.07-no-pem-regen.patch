@@ -1,0 +1,35 @@
+
+Certificates and private keys are manually rebuilt and checked in,
+so remove the helpful automation.
+The git checkout process sometimes glitches the timestamps on files,
+causing unnecessary certificate rebuilds.
+
+Index: wireless-regdb-2018.09.07/Makefile
+===================================================================
+--- wireless-regdb-2018.09.07.orig/Makefile
++++ wireless-regdb-2018.09.07/Makefile
+@@ -82,24 +82,6 @@
+ 	@echo "Generating public key for $(REGDB_AUTHOR)..."
+ 	openssl rsa -in $(REGDB_PRIVKEY) -out $(REGDB_PUBKEY) -pubout -outform PEM
+ 
+-$(REGDB_PUBCERT): $(REGDB_PRIVKEY)
+-	@echo "Generating certificate for $(REGDB_AUTHOR)..."
+-	./gen-pubcert.sh $(REGDB_PRIVKEY) $(REGDB_PUBCERT)
+-	@echo $(REGDB_PUBKEY) > .custom
+-
+-
+-$(REGDB_PRIVKEY):
+-	@echo "Generating private key for $(REGDB_AUTHOR)..."
+-	openssl genrsa -out $(REGDB_PRIVKEY) 2048
+-
+-ifneq ($(shell test -e $(DISTRO_PRIVKEY) && echo yes),yes)
+-$(DISTRO_PRIVKEY):
+-	@echo "Generating private key for $(LSB_ID) packager..."
+-	openssl genrsa -out $(DISTRO_PRIVKEY) 2048
+-endif
+-
+-install-distro-key: maintainer-clean $(DISTRO_PRIVKEY)
+-
+ %.gz: %
+ 	gzip < $< > $@
+ 

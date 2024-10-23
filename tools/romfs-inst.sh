@@ -106,6 +106,63 @@ setattrs()
 
 #############################################################################
 
+# Strip a file after it has been copied into ROMFSDIR
+file_strip()
+{
+	local f=$(readlink -f $1)
+	local fdir=$(dirname $f)
+	local romfsdir=$(readlink -f $ROMFSDIR)
+	local dst=${f#$romfsdir}
+	local OBJCOPY=${STRIPTOOL%strip}objcopy
+
+	if [ -n "$strip" ]; then
+		local ro rodir
+		[ -w $f ] || ro=1
+		[ -w $fdir ] || rodir=1
+
+		# Temporarily make the file and its directory writable
+		[ $rodir ] && chmod u+w $fdir
+		[ $ro ] && chmod u+w $f
+
+		if [ $savedebug ] && [ ! -s $f.debug ]; then
+			# Copy out the debug info to ${DEBUGDIR}.
+			# Install a .gnu.debuglink section into $f so that gdb
+			# can find where we saved the debug sections.
+			# See GDB's info "Debugging Information in Separate Files".
+			# The tl;dr is "set debug-file-directory ${DEBUGDIR}".
+			# Objcopy is quite picky about its working directory
+			# and the debuglink argument can't contain '/'...
+			${OBJCOPY} \
+				--only-keep-debug \
+				--compress-debug-sections \
+				$f $f.debug 2>/dev/null &&
+			(cd ${f%/*} && ${OBJCOPY} \
+				--add-gnu-debuglink=${f##*/}.debug \
+				${f##*/}) &&
+			install -p -D $f.debug ${DEBUGDIR}$f.debug
+			rm -f $f.debug
+		fi
+
+		if [ $savedebug ]; then
+			# Preserve GDB helper scripts
+			case ${dst} in
+			    /share/gdb/auto-load/*)
+				install -p -D $1 ${DEBUGDIR}${romfsdir}${dst#/share/gdb/auto-load}
+				;;
+			    *-gdb.py | *-gdb.gdb | *-gdb.scm)
+				install -p -D $1 ${DEBUGDIR}$f
+				;;
+			esac
+		fi
+
+		${STRIPTOOL} $1 2>/dev/null
+		${STRIPTOOL} -R .comment -R .note $1 2>/dev/null
+
+		[ $ro ] && chmod u-w $f
+		[ $rodir ] && chmod u-w $fdir
+	fi
+}
+
 file_copy()
 {
 	rc=0
@@ -129,13 +186,10 @@ file_copy()
 			rc=$?
 			# And make sure these files are still writable
 			find . -print | grep -E -v '/CVS|/\.svn' | ( cd ${ROMFSDIR}${dst}; xargs chmod u+w )
-			setattrs ${ROMFSDIR}${dst}
 			find . -type f | grep -E -v '/CVS|/\.svn|\.ko$' | while read t; do
-				if [ -n "$strip" ]; then
-					${STRIPTOOL} ${ROMFSDIR}${dst}/$t 2>/dev/null
-					${STRIPTOOL} -R .comment -R .note ${ROMFSDIR}${dst}/$t 2>/dev/null
-				fi
+				file_strip ${ROMFSDIR}${dst}/$t
 			done
+			setattrs ${ROMFSDIR}${dst}
 		)
 	else
 		if [ -d ${ROMFSDIR}${dst} ]; then
@@ -157,11 +211,7 @@ file_copy()
 		cp ${src} ${dstfile}
 		rc=$?
 		if [ $rc -eq 0 ]; then
-			if [ -n "$strip" ]; then
-				chmod u+w ${dstfile}
-				${STRIPTOOL} ${dstfile} 2>/dev/null
-				${STRIPTOOL} -R .comment -R .note ${dstfile} 2>/dev/null
-			fi
+			file_strip ${dstfile}
 			setattrs ${dstfile}
 			rc=$?
 		fi
@@ -219,7 +269,10 @@ sym_link()
 {
 	rm -f ${ROMFSDIR}${dst}
 	[ "$v" ] && echo "ln -s ${src} ${ROMFSDIR}${dst}"
-	ln -sf ${src} ${ROMFSDIR}${dst}
+	case ${src} in
+	    /*) ln -sfr ${ROMFSDIR}${src} ${ROMFSDIR}${dst};;
+	    *)  ln -sf             ${src} ${ROMFSDIR}${dst};;
+	esac
 	return $?
 }
 
@@ -275,6 +328,7 @@ r=
 follow=L
 caps=
 owner=
+savedebug=
 
 while getopts 'VdRfSMvcme:E:o:O:A:p:a:l:s:r:C:w:' opt "$@"
 do
@@ -339,6 +393,16 @@ if [ -z "$STRIPTOOL" ]
 then
 	STRIPTOOL=strip
 fi	
+
+if [ -z "$DEBUGDIR" ]
+then
+	# gdb -q -batch -ex 'show debug-file-directory'
+	# If writeable, debug symbols will be stored here
+	DEBUGDIR=/usr/lib/debug
+fi
+if [ -w "${DEBUGDIR}$(readlink -f $ROMFSDIR)" ]; then
+	savedebug=1
+fi
 
 shift `expr $OPTIND - 1`
 

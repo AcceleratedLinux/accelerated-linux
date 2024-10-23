@@ -57,7 +57,7 @@ description: |
                 |27     |FPD Internal voltage measurement, VCC_PSINTFP (supply5).       |Voltage
                 |28     |PS Auxiliary voltage measurement (supply6).                    |Voltage
                 |29     |PL VCCADC voltage measurement (vccams).                        |Voltage
-                |30     |Differential analog input signal voltage measurment.           |Voltage
+                |30     |Differential analog input signal voltage measurement.          |Voltage
                 |31     |VUser0 voltage measurement (supply7).                          |Voltage
                 |32     |VUser1 voltage measurement (supply8).                          |Voltage
                 |33     |VUser2 voltage measurement (supply9).                          |Voltage
@@ -134,6 +134,7 @@ properties:
 
   ams-pl@400:
     type: object
+    additionalProperties: false
     description:
       PL-SYSMON is capable of monitoring off chip voltage and temperature.
       PL-SYSMON block has DRP, JTAG and I2C interface to enable monitoring

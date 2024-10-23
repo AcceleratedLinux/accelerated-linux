@@ -159,9 +159,9 @@ static int unsolicited_report_interval(struct inet6_dev *idev)
 	int iv;
 
 	if (mld_in_v1_mode(idev))
-		iv = idev->cnf.mldv1_unsolicited_report_interval;
+		iv = READ_ONCE(idev->cnf.mldv1_unsolicited_report_interval);
 	else
-		iv = idev->cnf.mldv2_unsolicited_report_interval;
+		iv = READ_ONCE(idev->cnf.mldv2_unsolicited_report_interval);
 
 	return iv > 0 ? iv : 1;
 }
@@ -580,7 +580,7 @@ done:
 }
 
 int ip6_mc_msfget(struct sock *sk, struct group_filter *gsf,
-		  struct sockaddr_storage __user *p)
+		  sockptr_t optval, size_t ss_offset)
 {
 	struct ipv6_pinfo *inet6 = inet6_sk(sk);
 	const struct in6_addr *group;
@@ -612,8 +612,7 @@ int ip6_mc_msfget(struct sock *sk, struct group_filter *gsf,
 
 	copycount = count < gsf->gf_numsrc ? count : gsf->gf_numsrc;
 	gsf->gf_numsrc = count;
-
-	for (i = 0; i < copycount; i++, p++) {
+	for (i = 0; i < copycount; i++) {
 		struct sockaddr_in6 *psin6;
 		struct sockaddr_storage ss;
 
@@ -621,18 +620,19 @@ int ip6_mc_msfget(struct sock *sk, struct group_filter *gsf,
 		memset(&ss, 0, sizeof(ss));
 		psin6->sin6_family = AF_INET6;
 		psin6->sin6_addr = psl->sl_addr[i];
-		if (copy_to_user(p, &ss, sizeof(ss)))
+		if (copy_to_sockptr_offset(optval, ss_offset, &ss, sizeof(ss)))
 			return -EFAULT;
+		ss_offset += sizeof(ss);
 	}
 	return 0;
 }
 
-bool inet6_mc_check(struct sock *sk, const struct in6_addr *mc_addr,
+bool inet6_mc_check(const struct sock *sk, const struct in6_addr *mc_addr,
 		    const struct in6_addr *src_addr)
 {
-	struct ipv6_pinfo *np = inet6_sk(sk);
-	struct ipv6_mc_socklist *mc;
-	struct ip6_sf_socklist *psl;
+	const struct ipv6_pinfo *np = inet6_sk(sk);
+	const struct ipv6_mc_socklist *mc;
+	const struct ip6_sf_socklist *psl;
 	bool rv = true;
 
 	rcu_read_lock();
@@ -642,7 +642,7 @@ bool inet6_mc_check(struct sock *sk, const struct in6_addr *mc_addr,
 	}
 	if (!mc) {
 		rcu_read_unlock();
-		return np->mc_all;
+		return inet6_test_bit(MC6_ALL, sk);
 	}
 	psl = rcu_dereference(mc->sflist);
 	if (!psl) {
@@ -1050,7 +1050,7 @@ bool ipv6_chk_mcast_addr(struct net_device *dev, const struct in6_addr *group,
 /* called with mc_lock */
 static void mld_gq_start_work(struct inet6_dev *idev)
 {
-	unsigned long tv = prandom_u32() % idev->mc_maxdelay;
+	unsigned long tv = get_random_u32_below(idev->mc_maxdelay);
 
 	idev->mc_gq_running = 1;
 	if (!mod_delayed_work(mld_wq, &idev->mc_gq_work, tv + 2))
@@ -1068,7 +1068,7 @@ static void mld_gq_stop_work(struct inet6_dev *idev)
 /* called with mc_lock */
 static void mld_ifc_start_work(struct inet6_dev *idev, unsigned long delay)
 {
-	unsigned long tv = prandom_u32() % delay;
+	unsigned long tv = get_random_u32_below(delay);
 
 	if (!mod_delayed_work(mld_wq, &idev->mc_ifc_work, tv + 2))
 		in6_dev_hold(idev);
@@ -1085,7 +1085,7 @@ static void mld_ifc_stop_work(struct inet6_dev *idev)
 /* called with mc_lock */
 static void mld_dad_start_work(struct inet6_dev *idev, unsigned long delay)
 {
-	unsigned long tv = prandom_u32() % delay;
+	unsigned long tv = get_random_u32_below(delay);
 
 	if (!mod_delayed_work(mld_wq, &idev->mc_dad_work, tv + 2))
 		in6_dev_hold(idev);
@@ -1130,7 +1130,7 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 	}
 
 	if (delay >= resptime)
-		delay = prandom_u32() % resptime;
+		delay = get_random_u32_below(resptime);
 
 	if (!mod_delayed_work(mld_wq, &ma->mca_work, delay))
 		refcount_inc(&ma->mca_refcnt);
@@ -1202,15 +1202,15 @@ static bool mld_marksources(struct ifmcaddr6 *pmc, int nsrcs,
 
 static int mld_force_mld_version(const struct inet6_dev *idev)
 {
+	const struct net *net = dev_net(idev->dev);
+	int all_force;
+
+	all_force = READ_ONCE(net->ipv6.devconf_all->force_mld_version);
 	/* Normally, both are 0 here. If enforcement to a particular is
 	 * being used, individual device enforcement will have a lower
 	 * precedence over 'all' device (.../conf/all/force_mld_version).
 	 */
-
-	if (dev_net(idev->dev)->ipv6.devconf_all->force_mld_version != 0)
-		return dev_net(idev->dev)->ipv6.devconf_all->force_mld_version;
-	else
-		return idev->cnf.force_mld_version;
+	return all_force ?: READ_ONCE(idev->cnf.force_mld_version);
 }
 
 static bool mld_in_v2_mode_only(const struct inet6_dev *idev)
@@ -1699,11 +1699,9 @@ mld_scount(struct ifmcaddr6 *pmc, int type, int gdeleted, int sdeleted)
 	return scount;
 }
 
-static void ip6_mc_hdr(struct sock *sk, struct sk_buff *skb,
-		       struct net_device *dev,
-		       const struct in6_addr *saddr,
-		       const struct in6_addr *daddr,
-		       int proto, int len)
+static void ip6_mc_hdr(const struct sock *sk, struct sk_buff *skb,
+		       struct net_device *dev, const struct in6_addr *saddr,
+		       const struct in6_addr *daddr, int proto, int len)
 {
 	struct ipv6hdr *hdr;
 
@@ -1718,7 +1716,7 @@ static void ip6_mc_hdr(struct sock *sk, struct sk_buff *skb,
 
 	hdr->payload_len = htons(len);
 	hdr->nexthdr = proto;
-	hdr->hop_limit = inet6_sk(sk)->hop_limit;
+	hdr->hop_limit = READ_ONCE(inet6_sk(sk)->hop_limit);
 
 	hdr->saddr = *saddr;
 	hdr->daddr = *daddr;
@@ -1791,7 +1789,7 @@ static void mld_sendpack(struct sk_buff *skb)
 
 	rcu_read_lock();
 	idev = __in6_dev_get(skb->dev);
-	IP6_UPD_PO_STATS(net, idev, IPSTATS_MIB_OUT, skb->len);
+	IP6_INC_STATS(net, idev, IPSTATS_MIB_OUTREQUESTS);
 
 	payload_len = (skb_tail_pointer(skb) - skb_network_header(skb)) -
 		sizeof(*pip6);
@@ -2149,8 +2147,7 @@ static void igmp6_send(struct in6_addr *addr, struct net_device *dev, int type)
 	full_len = sizeof(struct ipv6hdr) + payload_len;
 
 	rcu_read_lock();
-	IP6_UPD_PO_STATS(net, __in6_dev_get(dev),
-		      IPSTATS_MIB_OUT, full_len);
+	IP6_INC_STATS(net, __in6_dev_get(dev), IPSTATS_MIB_OUTREQUESTS);
 	rcu_read_unlock();
 
 	skb = sock_alloc_send_skb(sk, hlen + tlen + full_len, 1, &err);
@@ -2574,7 +2571,7 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 
 	igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REPORT);
 
-	delay = prandom_u32() % unsolicited_report_interval(ma->idev);
+	delay = get_random_u32_below(unsolicited_report_interval(ma->idev));
 
 	if (cancel_delayed_work(&ma->mca_work)) {
 		refcount_dec(&ma->mca_refcnt);
@@ -2722,11 +2719,14 @@ void ipv6_mc_down(struct inet6_dev *idev)
 	/* Should stop work after group drop. or we will
 	 * start work again in mld_ifc_event()
 	 */
-	synchronize_net();
 	mld_query_stop_work(idev);
 	mld_report_stop_work(idev);
+
+	mutex_lock(&idev->mc_lock);
 	mld_ifc_stop_work(idev);
 	mld_gq_stop_work(idev);
+	mutex_unlock(&idev->mc_lock);
+
 	mld_dad_stop_work(idev);
 }
 
@@ -3013,8 +3013,6 @@ static struct ip6_sf_list *igmp6_mcf_get_next(struct seq_file *seq, struct ip6_s
 				continue;
 			state->im = rcu_dereference(state->idev->mc_list);
 		}
-		if (!state->im)
-			break;
 		psf = rcu_dereference(state->im->mca_sources);
 	}
 out:

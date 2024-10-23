@@ -174,6 +174,7 @@ static int gpio_pericom_probe(struct platform_device *pdev)
 	/* Need to associate a DT node with the driver */
 	snprintf(node_name, sizeof(node_name), "pericom-gpio%d", index);
 	np = of_find_node_by_name(NULL, node_name);
+	dev->of_node = np;
 	if (!np)
 		return -ENODEV;
 
@@ -185,7 +186,6 @@ static int gpio_pericom_probe(struct platform_device *pdev)
 
 	sprintf(pericom_gpio->name, "pericom_gpio%d", index);
 	pericom_gpio->gpio_chip.label = pericom_gpio->name;
-	pericom_gpio->gpio_chip.of_node = np;
 	pericom_gpio->gpio_chip.parent = dev;
 	pericom_gpio->gpio_chip.direction_output = pericom_direction_output;
 	pericom_gpio->gpio_chip.direction_input = pericom_direction_input;
@@ -194,6 +194,7 @@ static int gpio_pericom_probe(struct platform_device *pdev)
 	pericom_gpio->gpio_chip.set = pericom_set_value;
 	pericom_gpio->gpio_chip.base = -1;
 	pericom_gpio->gpio_chip.ngpio = ngpios;
+	pericom_gpio->gpio_chip.can_sleep = true;
 	pericom_gpio->index = index;
 	pericom_gpio->pcidev = pcidev;
 

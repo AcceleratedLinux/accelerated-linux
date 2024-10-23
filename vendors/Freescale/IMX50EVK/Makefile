@@ -18,8 +18,10 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
-	usr usr/var \
+	tmp \
+	usr usr/bin usr/sbin usr/var \
 	var
 
 DEVICES = \
@@ -95,7 +97,7 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx50-evk.dtb >> $(ZIMAGE)
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/imx/imx50-evk.dtb >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x70060000 -e 0x70060000 -n "Linux-3.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x70800000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	if [ -d /tftpboot ]; then \

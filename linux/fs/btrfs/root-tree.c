@@ -6,11 +6,15 @@
 #include <linux/err.h>
 #include <linux/uuid.h>
 #include "ctree.h"
+#include "fs.h"
+#include "messages.h"
 #include "transaction.h"
 #include "disk-io.h"
-#include "print-tree.h"
 #include "qgroup.h"
 #include "space-info.h"
+#include "accessors.h"
+#include "root-tree.h"
+#include "orphan.h"
 
 /*
  * Read a root item from the tree. In case we detect a root item smaller then
@@ -46,7 +50,8 @@ static void btrfs_read_root_item(struct extent_buffer *eb, int slot,
 }
 
 /*
- * btrfs_find_root - lookup the root by the key.
+ * Lookup the root by the key.
+ *
  * root: the root of the root tree
  * search_key: the key to search
  * path: the path we search
@@ -76,7 +81,14 @@ int btrfs_find_root(struct btrfs_root *root, const struct btrfs_key *search_key,
 		if (ret > 0)
 			goto out;
 	} else {
-		BUG_ON(ret == 0);		/* Logical error */
+		/*
+		 * Key with offset -1 found, there would have to exist a root
+		 * with such id, but this is out of the valid range.
+		 */
+		if (ret == 0) {
+			ret = -EUCLEAN;
+			goto out;
+		}
 		if (path->slots[0] == 0)
 			goto out;
 		path->slots[0]--;
@@ -136,8 +148,7 @@ int btrfs_update_root(struct btrfs_trans_handle *trans, struct btrfs_root
 	if (ret > 0) {
 		btrfs_crit(fs_info,
 			"unable to find root key (%llu %u %llu) in tree %llu",
-			key->objectid, key->type, key->offset,
-			root->root_key.objectid);
+			key->objectid, key->type, key->offset, btrfs_root_id(root));
 		ret = -EUCLEAN;
 		btrfs_abort_transaction(trans, ret);
 		goto out;
@@ -186,7 +197,7 @@ int btrfs_update_root(struct btrfs_trans_handle *trans, struct btrfs_root
 	btrfs_set_root_generation_v2(item, btrfs_root_generation(item));
 
 	write_extent_buffer(l, item, ptr, sizeof(*item));
-	btrfs_mark_buffer_dirty(path->nodes[0]);
+	btrfs_mark_buffer_dirty(trans, path->nodes[0]);
 out:
 	btrfs_free_path(path);
 	return ret;
@@ -317,8 +328,11 @@ int btrfs_del_root(struct btrfs_trans_handle *trans,
 	ret = btrfs_search_slot(trans, root, key, path, -1, 1);
 	if (ret < 0)
 		goto out;
-
-	BUG_ON(ret != 0);
+	if (ret != 0) {
+		/* The root must exist but we did not find it by the key. */
+		ret = -EUCLEAN;
+		goto out;
+	}
 
 	ret = btrfs_del_item(trans, root, path);
 out:
@@ -327,9 +341,8 @@ out:
 }
 
 int btrfs_del_root_ref(struct btrfs_trans_handle *trans, u64 root_id,
-		       u64 ref_id, u64 dirid, u64 *sequence, const char *name,
-		       int name_len)
-
+		       u64 ref_id, u64 dirid, u64 *sequence,
+		       const struct fscrypt_str *name)
 {
 	struct btrfs_root *tree_root = trans->fs_info->tree_root;
 	struct btrfs_path *path;
@@ -337,7 +350,6 @@ int btrfs_del_root_ref(struct btrfs_trans_handle *trans, u64 root_id,
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
 	unsigned long ptr;
-	int err = 0;
 	int ret;
 
 	path = btrfs_alloc_path();
@@ -349,28 +361,28 @@ int btrfs_del_root_ref(struct btrfs_trans_handle *trans, u64 root_id,
 	key.offset = ref_id;
 again:
 	ret = btrfs_search_slot(trans, tree_root, &key, path, -1, 1);
-	if (ret < 0)
+	if (ret < 0) {
 		goto out;
-	if (ret == 0) {
+	} else if (ret == 0) {
 		leaf = path->nodes[0];
 		ref = btrfs_item_ptr(leaf, path->slots[0],
 				     struct btrfs_root_ref);
 		ptr = (unsigned long)(ref + 1);
 		if ((btrfs_root_ref_dirid(leaf, ref) != dirid) ||
-		    (btrfs_root_ref_name_len(leaf, ref) != name_len) ||
-		    memcmp_extent_buffer(leaf, name, ptr, name_len)) {
-			err = -ENOENT;
+		    (btrfs_root_ref_name_len(leaf, ref) != name->len) ||
+		    memcmp_extent_buffer(leaf, name->name, ptr, name->len)) {
+			ret = -ENOENT;
 			goto out;
 		}
 		*sequence = btrfs_root_ref_sequence(leaf, ref);
 
 		ret = btrfs_del_item(trans, tree_root, path);
-		if (ret) {
-			err = ret;
+		if (ret)
 			goto out;
-		}
-	} else
-		err = -ENOENT;
+	} else {
+		ret = -ENOENT;
+		goto out;
+	}
 
 	if (key.type == BTRFS_ROOT_BACKREF_KEY) {
 		btrfs_release_path(path);
@@ -382,7 +394,7 @@ again:
 
 out:
 	btrfs_free_path(path);
-	return err;
+	return ret;
 }
 
 /*
@@ -401,8 +413,8 @@ out:
  * Will return 0, -ENOMEM, or anything from the CoW path
  */
 int btrfs_add_root_ref(struct btrfs_trans_handle *trans, u64 root_id,
-		       u64 ref_id, u64 dirid, u64 sequence, const char *name,
-		       int name_len)
+		       u64 ref_id, u64 dirid, u64 sequence,
+		       const struct fscrypt_str *name)
 {
 	struct btrfs_root *tree_root = trans->fs_info->tree_root;
 	struct btrfs_key key;
@@ -421,7 +433,7 @@ int btrfs_add_root_ref(struct btrfs_trans_handle *trans, u64 root_id,
 	key.offset = ref_id;
 again:
 	ret = btrfs_insert_empty_item(trans, tree_root, path, &key,
-				      sizeof(*ref) + name_len);
+				      sizeof(*ref) + name->len);
 	if (ret) {
 		btrfs_abort_transaction(trans, ret);
 		btrfs_free_path(path);
@@ -432,10 +444,10 @@ again:
 	ref = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_root_ref);
 	btrfs_set_root_ref_dirid(leaf, ref, dirid);
 	btrfs_set_root_ref_sequence(leaf, ref, sequence);
-	btrfs_set_root_ref_name_len(leaf, ref, name_len);
+	btrfs_set_root_ref_name_len(leaf, ref, name->len);
 	ptr = (unsigned long)(ref + 1);
-	write_extent_buffer(leaf, name, ptr, name_len);
-	btrfs_mark_buffer_dirty(leaf);
+	write_extent_buffer(leaf, name->name, ptr, name->len);
+	btrfs_mark_buffer_dirty(trans, leaf);
 
 	if (key.type == BTRFS_ROOT_BACKREF_KEY) {
 		btrfs_release_path(path);
@@ -482,7 +494,8 @@ void btrfs_update_root_times(struct btrfs_trans_handle *trans,
 }
 
 /*
- * btrfs_subvolume_reserve_metadata() - reserve space for subvolume operation
+ * Reserve space for subvolume operation.
+ *
  * root: the root of the parent directory
  * rsv: block reservation
  * items: the number of items that we need do reservation
@@ -505,7 +518,7 @@ int btrfs_subvolume_reserve_metadata(struct btrfs_root *root,
 	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_block_rsv *global_rsv = &fs_info->global_block_rsv;
 
-	if (test_bit(BTRFS_FS_QUOTA_ENABLED, &fs_info->flags)) {
+	if (btrfs_qgroup_enabled(fs_info)) {
 		/* One for parent inode, two for dir entries */
 		qgroup_num_bytes = 3 * fs_info->nodesize;
 		ret = btrfs_qgroup_reserve_meta_prealloc(root,
@@ -533,14 +546,4 @@ int btrfs_subvolume_reserve_metadata(struct btrfs_root *root,
 		spin_unlock(&rsv->lock);
 	}
 	return ret;
-}
-
-void btrfs_subvolume_release_metadata(struct btrfs_root *root,
-				      struct btrfs_block_rsv *rsv)
-{
-	struct btrfs_fs_info *fs_info = root->fs_info;
-	u64 qgroup_to_release;
-
-	btrfs_block_rsv_release(fs_info, rsv, (u64)-1, &qgroup_to_release);
-	btrfs_qgroup_convert_reserved_meta(root, qgroup_to_release);
 }

@@ -120,9 +120,9 @@ static int sdio_bus_match(struct device *dev, struct device_driver *drv)
 }
 
 static int
-sdio_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
+sdio_bus_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
-	struct sdio_func *func = dev_to_sdio_func(dev);
+	const struct sdio_func *func = dev_to_sdio_func(dev);
 	unsigned int i;
 
 	if (add_uevent_var(env,
@@ -244,7 +244,7 @@ static const struct dev_pm_ops sdio_bus_pm_ops = {
 	)
 };
 
-static struct bus_type sdio_bus_type = {
+static const struct bus_type sdio_bus_type = {
 	.name		= "sdio",
 	.dev_groups	= sdio_dev_groups,
 	.match		= sdio_bus_match,
@@ -265,16 +265,19 @@ void sdio_unregister_bus(void)
 }
 
 /**
- *	sdio_register_driver - register a function driver
+ *	__sdio_register_driver - register a function driver
  *	@drv: SDIO function driver
+ *	@owner: owning module/driver
  */
-int sdio_register_driver(struct sdio_driver *drv)
+int __sdio_register_driver(struct sdio_driver *drv, struct module *owner)
 {
 	drv->drv.name = drv->name;
 	drv->drv.bus = &sdio_bus_type;
+	drv->drv.owner = owner;
+
 	return driver_register(&drv->drv);
 }
-EXPORT_SYMBOL_GPL(sdio_register_driver);
+EXPORT_SYMBOL_GPL(__sdio_register_driver);
 
 /**
  *	sdio_unregister_driver - unregister a function driver
@@ -291,7 +294,14 @@ static void sdio_release_func(struct device *dev)
 {
 	struct sdio_func *func = dev_to_sdio_func(dev);
 
-	sdio_free_func_cis(func);
+	if (!(func->card->quirks & MMC_QUIRK_NONSTD_SDIO))
+		sdio_free_func_cis(func);
+
+	/*
+	 * We have now removed the link to the tuples in the
+	 * card structure, so remove the reference.
+	 */
+	put_device(&func->card->dev);
 
 	kfree(func->info);
 	kfree(func->tmpbuf);
@@ -322,6 +332,12 @@ struct sdio_func *sdio_alloc_func(struct mmc_card *card)
 	func->card = card;
 
 	device_initialize(&func->dev);
+
+	/*
+	 * We may link to tuples in the card structure,
+	 * we need make sure we have a reference to it.
+	 */
+	get_device(&func->card->dev);
 
 	func->dev.parent = &card->dev;
 	func->dev.bus = &sdio_bus_type;
@@ -376,10 +392,9 @@ int sdio_add_func(struct sdio_func *func)
  */
 void sdio_remove_func(struct sdio_func *func)
 {
-	if (!sdio_func_present(func))
-		return;
+	if (sdio_func_present(func))
+		device_del(&func->dev);
 
-	device_del(&func->dev);
 	of_node_put(func->dev.of_node);
 	put_device(&func->dev);
 }

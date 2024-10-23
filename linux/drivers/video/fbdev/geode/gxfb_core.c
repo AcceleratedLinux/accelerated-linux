@@ -15,6 +15,7 @@
  *
  * 16 MiB of framebuffer memory is assumed to be available.
  */
+#include <linux/aperture.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -267,14 +268,11 @@ static int gxfb_map_video_memory(struct fb_info *info, struct pci_dev *dev)
 
 static const struct fb_ops gxfb_ops = {
 	.owner		= THIS_MODULE,
+	FB_DEFAULT_IOMEM_OPS,
 	.fb_check_var	= gxfb_check_var,
 	.fb_set_par	= gxfb_set_par,
 	.fb_setcolreg	= gxfb_setcolreg,
 	.fb_blank       = gxfb_blank,
-	/* No HW acceleration for now. */
-	.fb_fillrect	= cfb_fillrect,
-	.fb_copyarea	= cfb_copyarea,
-	.fb_imageblit	= cfb_imageblit,
 };
 
 static struct fb_info *gxfb_init_fbinfo(struct device *dev)
@@ -307,7 +305,6 @@ static struct fb_info *gxfb_init_fbinfo(struct device *dev)
 	info->var.vmode	= FB_VMODE_NONINTERLACED;
 
 	info->fbops		= &gxfb_ops;
-	info->flags		= FBINFO_DEFAULT;
 	info->node		= -1;
 
 	info->pseudo_palette	= (void *)par + sizeof(struct gxfb_par);
@@ -363,6 +360,10 @@ static int gxfb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	struct fb_videomode *modedb_ptr;
 	unsigned int modedb_size;
+
+	ret = aperture_remove_conflicting_pci_devices(pdev, "gxfb");
+	if (ret)
+		return ret;
 
 	info = gxfb_init_fbinfo(&pdev->dev);
 	if (!info)
@@ -506,7 +507,12 @@ static int __init gxfb_init(void)
 {
 #ifndef MODULE
 	char *option = NULL;
+#endif
 
+	if (fb_modesetting_disabled("gxfb"))
+		return -ENODEV;
+
+#ifndef MODULE
 	if (fb_get_options("gxfb", &option))
 		return -ENODEV;
 

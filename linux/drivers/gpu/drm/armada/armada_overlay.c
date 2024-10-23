@@ -4,6 +4,8 @@
  *  Rewritten from the dovefb driver, and Armada510 manuals.
  */
 
+#include <linux/bitfield.h>
+
 #include <drm/armada_drm.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
@@ -298,12 +300,6 @@ fail:
 	return ret;
 }
 
-static void armada_ovl_plane_destroy(struct drm_plane *plane)
-{
-	drm_plane_cleanup(plane);
-	kfree(plane);
-}
-
 static void armada_overlay_reset(struct drm_plane *plane)
 {
 	struct armada_overlay_state *state;
@@ -451,8 +447,8 @@ static int armada_overlay_get_property(struct drm_plane *plane,
 			     drm_to_overlay_state(state)->colorkey_ug,
 			     drm_to_overlay_state(state)->colorkey_vb, 0);
 	} else if (property == priv->colorkey_mode_prop) {
-		*val = (drm_to_overlay_state(state)->colorkey_mode &
-			CFG_CKMODE_MASK) >> ffs(CFG_CKMODE_MASK);
+		*val = FIELD_GET(CFG_CKMODE_MASK,
+				 drm_to_overlay_state(state)->colorkey_mode);
 	} else if (property == priv->brightness_prop) {
 		*val = drm_to_overlay_state(state)->brightness + 256;
 	} else if (property == priv->contrast_prop) {
@@ -468,7 +464,7 @@ static int armada_overlay_get_property(struct drm_plane *plane,
 static const struct drm_plane_funcs armada_ovl_plane_funcs = {
 	.update_plane	= armada_overlay_plane_update,
 	.disable_plane	= drm_atomic_helper_disable_plane,
-	.destroy	= armada_ovl_plane_destroy,
+	.destroy	= drm_plane_helper_destroy,
 	.reset		= armada_overlay_reset,
 	.atomic_duplicate_state = armada_overlay_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state,

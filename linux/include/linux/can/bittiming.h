@@ -11,6 +11,8 @@
 
 #define CAN_SYNC_SEG 1
 
+#define CAN_BITRATE_UNSET 0
+#define CAN_BITRATE_UNKNOWN (-1U)
 
 #define CAN_CTRLMODE_TDC_MASK					\
 	(CAN_CTRLMODE_TDC_AUTO | CAN_CTRLMODE_TDC_MANUAL)
@@ -114,7 +116,7 @@ struct can_tdc_const {
 
 #ifdef CONFIG_CAN_CALC_BITTIMING
 int can_calc_bittiming(const struct net_device *dev, struct can_bittiming *bt,
-		       const struct can_bittiming_const *btc);
+		       const struct can_bittiming_const *btc, struct netlink_ext_ack *extack);
 
 void can_calc_tdco(struct can_tdc *tdc, const struct can_tdc_const *tdc_const,
 		   const struct can_bittiming *dbt,
@@ -122,7 +124,7 @@ void can_calc_tdco(struct can_tdc *tdc, const struct can_tdc_const *tdc_const,
 #else /* !CONFIG_CAN_CALC_BITTIMING */
 static inline int
 can_calc_bittiming(const struct net_device *dev, struct can_bittiming *bt,
-		   const struct can_bittiming_const *btc)
+		   const struct can_bittiming_const *btc, struct netlink_ext_ack *extack)
 {
 	netdev_err(dev, "bit-timing calculation not available\n");
 	return -EINVAL;
@@ -136,10 +138,16 @@ can_calc_tdco(struct can_tdc *tdc, const struct can_tdc_const *tdc_const,
 }
 #endif /* CONFIG_CAN_CALC_BITTIMING */
 
+void can_sjw_set_default(struct can_bittiming *bt);
+
+int can_sjw_check(const struct net_device *dev, const struct can_bittiming *bt,
+		  const struct can_bittiming_const *btc, struct netlink_ext_ack *extack);
+
 int can_get_bittiming(const struct net_device *dev, struct can_bittiming *bt,
 		      const struct can_bittiming_const *btc,
 		      const u32 *bitrate_const,
-		      const unsigned int bitrate_const_cnt);
+		      const unsigned int bitrate_const_cnt,
+		      struct netlink_ext_ack *extack);
 
 /*
  * can_bit_time() - Duration of one bit

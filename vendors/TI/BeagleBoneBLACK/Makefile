@@ -18,9 +18,10 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
 	tmp \
-	usr usr/var \
+	usr usr/bin usr/sbin usr/var \
 	var
 
 DEVICES = null,c,1,3	zero,c,1,5	console,c,5,1
@@ -59,7 +60,7 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/am335x-boneblack.dtb >> $(ZIMAGE)
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/ti/omap/am335x-boneblack.dtb >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x81000000 -e 0x81000000 -n "Linux-4.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x88080000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	if [ -d /tftpboot ]; then \

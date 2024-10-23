@@ -206,6 +206,20 @@ others should not be larger than the returned value.
 
 ::
 
+	size_t
+	dma_opt_mapping_size(struct device *dev);
+
+Returns the maximum optimal size of a mapping for the device.
+
+Mapping larger buffers may take much longer in certain scenarios. In
+addition, for high-rate short-lived streaming mappings, the upfront time
+spent on the mapping may account for an appreciable part of the total
+request lifetime. As such, if splitting larger requests incurs no
+significant performance penalty, then device drivers are advised to
+limit total DMA streaming mappings length to the returned value.
+
+::
+
 	bool
 	dma_need_sync(struct device *dev, dma_addr_t dma_addr);
 
@@ -434,7 +448,7 @@ DMA address entries returned.
 
 Synchronise a single contiguous or scatter/gather mapping for the CPU
 and device. With the sync_sg API, all the parameters must be the same
-as those passed into the single mapping API. With the sync_single API,
+as those passed into the sg mapping API. With the sync_single API,
 you can use dma_handle and size parameters that aren't identical to
 those passed into the single mapping API to do a partial sync.
 

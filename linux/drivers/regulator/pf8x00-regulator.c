@@ -142,7 +142,7 @@ static const struct regmap_config pf8x00_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = PF8X00_PAGE_SELECT,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 /* VLDOx output: 1.5V to 5.0V */
@@ -607,9 +607,10 @@ static struct i2c_driver pf8x00_regulator_driver = {
 	.id_table = pf8x00_i2c_id,
 	.driver = {
 		.name = "pf8x00",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.of_match_table = pf8x00_dt_ids,
 	},
-	.probe_new = pf8x00_i2c_probe,
+	.probe = pf8x00_i2c_probe,
 };
 module_i2c_driver(pf8x00_regulator_driver);
 

@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/fsl,ls1012a-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP QorIQ LS1012A pin multiplexing
+
+maintainers:
+  - Unknown
+
+description: >
+  Bindings for LS1012A pinmux control.
+
+properties:
+  compatible:
+    const: fsl,ls1012a-pinctrl
+
+  reg:
+    description: Specifies the base address of the PMUXCR0 register.
+    maxItems: 2
+
+  big-endian:
+    description: If present, the PMUXCR0 register is implemented in big-endian.
+    type: boolean
+
+  dcfg-regmap:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      The phandle of the syscon node for the DCFG registers.
+
+patternProperties:
+  '^pinctrl-':
+    type: object
+    $ref: pinmux-node.yaml#
+    unevaluatedProperties: false
+
+    properties:
+      function:
+        enum: [ i2c, spi, gpio, gpio_reset ]
+
+      groups:
+        items:
+          enum: [ qspi_1_grp, qspi_2_grp, qspi_3_grp ]
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    pinctrl: pinctrl@1570430 {
+    	compatible = "fsl,ls1012a-pinctrl";
+    	reg = <0x0 0x1570430 0x0 0x4>;
+    	big-endian;
+    	dcfg-regmap = <&dcfg>;
+    	pinctrl_qspi_1: pinctrl-qspi-1 {
+    	    groups = "qspi_1_grp";
+    	    function = "spi";
+    	};
+    	pinctrl_qspi_2: pinctrl-qspi-2 {
+    	    groups = "qspi_1_grp", "qspi_2_grp";
+    	    function = "spi";
+    	};
+    	pinctrl_qspi_4: pinctrl-qspi-4 {
+    	    groups = "qspi_1_grp", "qspi_2_grp", "qspi_3_grp";
+    	    function = "spi";
+    	};
+    };
+  - |
+    qspi: quadspi@1550000 {
+        compatible = "fsl,ls1021a-qspi";
+        reg = <0 0x1550000 0 0x10000>;
+        /* QSPI pins for buswidth 2 */
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_qspi_2>;
+        status = "okay";
+    };

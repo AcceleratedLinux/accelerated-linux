@@ -1,0 +1,114 @@
+From 9443028dfaab7032f59234cefb10b6ca7e466721 Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Wed, 19 Jul 2023 14:23:34 -0400
+Subject: [PATCH 2/5] lib/libnl: added rtnl_route_set_oif() /
+ rtnl_route_get_oif()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The oif is required for adding a route equivalent to e.g.
+  ip route add 192.168.3.0/24 dev eth1
+---
+ include/netlink-private/types.h |  1 +
+ include/netlink/route/route.h   |  2 ++
+ lib/route/route_obj.c           | 25 +++++++++++++++++++++++++
+ 3 files changed, 28 insertions(+)
+
+Index: libnl-3.9.0/include/netlink/route/route.h
+===================================================================
+--- libnl-3.9.0.orig/include/netlink/route/route.h
++++ libnl-3.9.0/include/netlink/route/route.h
+@@ -91,6 +91,8 @@ extern int	rtnl_route_set_pref_src(struc
+ extern struct nl_addr *rtnl_route_get_pref_src(struct rtnl_route *);
+ extern void	rtnl_route_set_iif(struct rtnl_route *, int);
+ extern int	rtnl_route_get_iif(struct rtnl_route *);
++extern void	rtnl_route_set_oif(struct rtnl_route *, int);
++extern int	rtnl_route_get_oif(struct rtnl_route *);
+ extern int	rtnl_route_get_src_len(struct rtnl_route *);
+ extern void	rtnl_route_set_ttl_propagate(struct rtnl_route *route,
+ 					     uint8_t ttl_prop);
+Index: libnl-3.9.0/lib/route/route_obj.c
+===================================================================
+--- libnl-3.9.0.orig/lib/route/route_obj.c
++++ libnl-3.9.0/lib/route/route_obj.c
+@@ -19,6 +19,7 @@
+  * family                                         AF_UNSPEC
+  * type                                           RTN_UNICAST
+  * iif                                            NULL
++ * oif                                            NULL
+  * @endcode
+  *
+  * @{
+@@ -62,6 +63,7 @@ struct rtnl_route {
+ 	struct nl_addr *rt_src;
+ 	uint32_t rt_table;
+ 	uint32_t rt_iif;
++	uint32_t rt_oif;
+ 	uint32_t rt_prio;
+ 	uint32_t rt_metrics[RTAX_MAX];
+ 	uint32_t rt_metrics_mask;
+@@ -279,6 +281,15 @@ static void route_dump_details(struct nl
+ 			nl_dump(p, "iif %d ", r->rt_iif);
+ 	}
+ 
++	if (r->ce_mask & ROUTE_ATTR_OIF) {
++		if (link_cache) {
++			nl_dump(p, "oif %s ",
++				rtnl_link_i2name(link_cache, r->rt_oif,
++						 buf, sizeof(buf)));
++		} else
++			nl_dump(p, "oif %d ", r->rt_oif);
++	}
++
+ 	if (r->ce_mask & ROUTE_ATTR_SRC)
+ 		nl_dump(p, "src %s ", nl_addr2str(r->rt_src, buf, sizeof(buf)));
+ 
+@@ -415,6 +426,7 @@ static uint64_t route_compare(struct nl_
+ 	diff |= _DIFF(ROUTE_ATTR_DST, nl_addr_cmp(a->rt_dst, b->rt_dst));
+ 	diff |= _DIFF(ROUTE_ATTR_SRC, nl_addr_cmp(a->rt_src, b->rt_src));
+ 	diff |= _DIFF(ROUTE_ATTR_IIF, a->rt_iif != b->rt_iif);
++	diff |= _DIFF(ROUTE_ATTR_OIF, a->rt_oif != b->rt_oif);
+ 	diff |= _DIFF(ROUTE_ATTR_PREF_SRC,
+ 		      nl_addr_cmp(a->rt_pref_src, b->rt_pref_src));
+ 	diff |= _DIFF(ROUTE_ATTR_TTL_PROPAGATE,
+@@ -907,6 +919,17 @@ int rtnl_route_get_iif(struct rtnl_route
+ 	return route->rt_iif;
+ }
+ 
++void rtnl_route_set_oif(struct rtnl_route *route, int ifindex)
++{
++	route->rt_oif = ifindex;
++	route->ce_mask |= ROUTE_ATTR_OIF;
++}
++
++int rtnl_route_get_oif(struct rtnl_route *route)
++{
++	return route->rt_oif;
++}
++
+ void rtnl_route_add_nexthop(struct rtnl_route *route, struct rtnl_nexthop *nh)
+ {
+ 	nl_list_add_tail(&nh->rtnh_list, &route->rt_nexthops);
+@@ -1441,6 +1464,9 @@ int rtnl_route_build_msg(struct nl_msg *
+ 	if (route->ce_mask & ROUTE_ATTR_TTL_PROPAGATE)
+ 		NLA_PUT_U8(msg, RTA_TTL_PROPAGATE, route->rt_ttl_propagate);
+ 
++	if (route->ce_mask & ROUTE_ATTR_OIF)
++		NLA_PUT_U32(msg, RTA_OIF, route->rt_oif);
++
+ 	if (route->rt_nmetrics > 0) {
+ 		uint32_t val;
+ 
+Index: libnl-3.9.0/libnl-route-3.sym
+===================================================================
+--- libnl-3.9.0.orig/libnl-route-3.sym
++++ libnl-3.9.0/libnl-route-3.sym
+@@ -745,6 +745,7 @@ global:
+ 	rtnl_route_set_iif;
+ 	rtnl_route_set_metric;
+ 	rtnl_route_set_mtu;
++	rtnl_route_set_oif;
+ 	rtnl_route_set_pref_src;
+ 	rtnl_route_set_priority;
+ 	rtnl_route_set_protocol;

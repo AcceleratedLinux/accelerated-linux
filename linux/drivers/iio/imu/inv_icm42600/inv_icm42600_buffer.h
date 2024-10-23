@@ -32,6 +32,8 @@ struct inv_icm42600_fifo {
 	struct {
 		unsigned int gyro;
 		unsigned int accel;
+		unsigned int eff_gyro;
+		unsigned int eff_accel;
 	} watermark;
 	size_t count;
 	struct {
@@ -39,7 +41,7 @@ struct inv_icm42600_fifo {
 		size_t accel;
 		size_t total;
 	} nb;
-	uint8_t data[2080] ____cacheline_aligned;
+	uint8_t data[2080] __aligned(IIO_DMA_MINALIGN);
 };
 
 /* FIFO data packet */

@@ -1,15 +1,5 @@
-/*
- * Copyright (C) 2017 Broadcom
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2017 Broadcom
 
 /*
  * Broadcom FlexRM Mailbox Driver
@@ -632,15 +622,15 @@ static int flexrm_spu_dma_map(struct device *dev, struct brcm_message *msg)
 
 	rc = dma_map_sg(dev, msg->spu.src, sg_nents(msg->spu.src),
 			DMA_TO_DEVICE);
-	if (rc < 0)
-		return rc;
+	if (!rc)
+		return -EIO;
 
 	rc = dma_map_sg(dev, msg->spu.dst, sg_nents(msg->spu.dst),
 			DMA_FROM_DEVICE);
-	if (rc < 0) {
+	if (!rc) {
 		dma_unmap_sg(dev, msg->spu.src, sg_nents(msg->spu.src),
 			     DMA_TO_DEVICE);
-		return rc;
+		return -EIO;
 	}
 
 	return 0;
@@ -1511,16 +1501,12 @@ static int flexrm_mbox_probe(struct platform_device *pdev)
 	mbox->dev = dev;
 	platform_set_drvdata(pdev, mbox);
 
-	/* Get resource for registers */
-	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	/* Get resource for registers and map registers of all rings */
+	mbox->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &iomem);
 	if (!iomem || (resource_size(iomem) < RING_REGS_SIZE)) {
 		ret = -ENODEV;
 		goto fail;
-	}
-
-	/* Map registers of all rings */
-	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
-	if (IS_ERR(mbox->regs)) {
+	} else if (IS_ERR(mbox->regs)) {
 		ret = PTR_ERR(mbox->regs);
 		goto fail;
 	}
@@ -1601,8 +1587,8 @@ static int flexrm_mbox_probe(struct platform_device *pdev)
 	}
 
 	/* Allocate platform MSIs for each ring */
-	ret = platform_msi_domain_alloc_irqs(dev, mbox->num_rings,
-						flexrm_mbox_msi_write);
+	ret = platform_device_msi_init_and_alloc_irqs(dev, mbox->num_rings,
+						      flexrm_mbox_msi_write);
 	if (ret)
 		goto fail_destroy_cmpl_pool;
 
@@ -1655,7 +1641,7 @@ skip_debugfs:
 
 fail_free_debugfs_root:
 	debugfs_remove_recursive(mbox->root);
-	platform_msi_domain_free_irqs(dev);
+	platform_device_msi_free_irqs_all(dev);
 fail_destroy_cmpl_pool:
 	dma_pool_destroy(mbox->cmpl_pool);
 fail_destroy_bd_pool:
@@ -1664,19 +1650,17 @@ fail:
 	return ret;
 }
 
-static int flexrm_mbox_remove(struct platform_device *pdev)
+static void flexrm_mbox_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct flexrm_mbox *mbox = platform_get_drvdata(pdev);
 
 	debugfs_remove_recursive(mbox->root);
 
-	platform_msi_domain_free_irqs(dev);
+	platform_device_msi_free_irqs_all(dev);
 
 	dma_pool_destroy(mbox->cmpl_pool);
 	dma_pool_destroy(mbox->bd_pool);
-
-	return 0;
 }
 
 static const struct of_device_id flexrm_mbox_of_match[] = {
@@ -1691,7 +1675,7 @@ static struct platform_driver flexrm_mbox_driver = {
 		.of_match_table = flexrm_mbox_of_match,
 	},
 	.probe		= flexrm_mbox_probe,
-	.remove		= flexrm_mbox_remove,
+	.remove_new	= flexrm_mbox_remove,
 };
 module_platform_driver(flexrm_mbox_driver);
 

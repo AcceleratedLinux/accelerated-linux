@@ -38,7 +38,6 @@ struct backing_dev_info *bdi_alloc(int node_id);
 
 void wb_start_background_writeback(struct bdi_writeback *wb);
 void wb_workfn(struct work_struct *work);
-void wb_wakeup_delayed(struct bdi_writeback *wb);
 
 void wb_wait_for_completion(struct wb_completion *done);
 
@@ -46,7 +45,6 @@ extern spinlock_t bdi_lock;
 extern struct list_head bdi_list;
 
 extern struct workqueue_struct *bdi_wq;
-extern struct workqueue_struct *bdi_async_bio_wq;
 
 static inline bool wb_has_dirty_io(struct bdi_writeback *wb)
 {
@@ -102,8 +100,18 @@ static inline unsigned long wb_stat_error(void)
 #endif
 }
 
+/* BDI ratio is expressed as part per 1000000 for finer granularity. */
+#define BDI_RATIO_SCALE 10000
+
+u64 bdi_get_min_bytes(struct backing_dev_info *bdi);
+u64 bdi_get_max_bytes(struct backing_dev_info *bdi);
 int bdi_set_min_ratio(struct backing_dev_info *bdi, unsigned int min_ratio);
 int bdi_set_max_ratio(struct backing_dev_info *bdi, unsigned int max_ratio);
+int bdi_set_min_ratio_no_scale(struct backing_dev_info *bdi, unsigned int min_ratio);
+int bdi_set_max_ratio_no_scale(struct backing_dev_info *bdi, unsigned int max_ratio);
+int bdi_set_min_bytes(struct backing_dev_info *bdi, u64 min_bytes);
+int bdi_set_max_bytes(struct backing_dev_info *bdi, u64 max_bytes);
+int bdi_set_strict_limit(struct backing_dev_info *bdi, unsigned int strict_limit);
 
 /*
  * Flags in backing_dev_info::capability
@@ -138,12 +146,6 @@ struct backing_dev_info *inode_to_bdi(struct inode *inode);
 static inline bool mapping_can_writeback(struct address_space *mapping)
 {
 	return inode_to_bdi(mapping->host)->capabilities & BDI_CAP_WRITEBACK;
-}
-
-static inline int bdi_sched_wait(void *word)
-{
-	schedule();
-	return 0;
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK
@@ -233,18 +235,6 @@ wb_get_create_current(struct backing_dev_info *bdi, gfp_t gfp)
 		css_put(memcg_css);
 	}
 	return wb;
-}
-
-/**
- * inode_to_wb_is_valid - test whether an inode has a wb associated
- * @inode: inode of interest
- *
- * Returns %true if @inode has a wb associated.  May be called without any
- * locking.
- */
-static inline bool inode_to_wb_is_valid(struct inode *inode)
-{
-	return inode->i_wb;
 }
 
 /**
@@ -343,11 +333,6 @@ static inline struct bdi_writeback *
 wb_get_create_current(struct backing_dev_info *bdi, gfp_t gfp)
 {
 	return &bdi->wb;
-}
-
-static inline bool inode_to_wb_is_valid(struct inode *inode)
-{
-	return true;
 }
 
 static inline struct bdi_writeback *inode_to_wb(struct inode *inode)

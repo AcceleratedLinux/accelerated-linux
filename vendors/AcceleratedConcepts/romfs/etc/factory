@@ -3,6 +3,7 @@ echo "Initiating factory test ..."
 mount -t tmpfs -o size=4M tmpfs /etc/config
 echo '#!/bin/sh'  > /tmp/factory_test.sh
 echo 'read cmd'  >> /tmp/factory_test.sh
+echo 'echo "/tmp/factory_test.sh: eval $cmd" >>/tmp/factory_cmd_log' >> /tmp/factory_test.sh
 echo 'eval $cmd' >> /tmp/factory_test.sh
 echo 'exit 0'    >> /tmp/factory_test.sh
 chmod 755 /tmp/factory_test.sh
@@ -50,6 +51,10 @@ if ifconfig lan &>/dev/null; then netdev=lan; fi
 if ifconfig lan1 &>/dev/null; then netdev=lan1; fi
 if ifconfig eth1 &>/dev/null; then netdev=eth1; fi
 if ifconfig net1 &>/dev/null; then netdev=net1; fi
+if grep -q IX40 /etc/version; then netdev=eth4; fi
+
 ifconfig $netdev 192.168.0.1
+
 inetd &
+
 exit 0

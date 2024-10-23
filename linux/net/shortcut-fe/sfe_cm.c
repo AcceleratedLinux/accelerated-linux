@@ -212,7 +212,7 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr, struct net_device 
 	 * neighbours are routers too.
 	 */
 	if (likely(is_v4)) {
-		rt = ip_route_output(&init_net, addr->ip, 0, 0, 0);
+		rt = ip_route_output(&init_net, addr->ip, 0, 0, 0, RT_SCOPE_UNIVERSE);
 		if (unlikely(IS_ERR(rt))) {
 			goto ret_fail;
 		}

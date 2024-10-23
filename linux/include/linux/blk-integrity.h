@@ -20,6 +20,7 @@ struct blk_integrity_iter {
 	unsigned int		data_size;
 	unsigned short		interval;
 	unsigned char		tuple_size;
+	unsigned char		pi_offset;
 	const char		*disk_name;
 };
 
@@ -63,12 +64,6 @@ static inline bool
 blk_integrity_queue_supports_integrity(struct request_queue *q)
 {
 	return q->integrity.profile;
-}
-
-static inline void blk_queue_max_integrity_segments(struct request_queue *q,
-						    unsigned int segs)
-{
-	q->limits.max_integrity_segments = segs;
 }
 
 static inline unsigned short
@@ -148,10 +143,6 @@ static inline void blk_integrity_register(struct gendisk *d,
 {
 }
 static inline void blk_integrity_unregister(struct gendisk *d)
-{
-}
-static inline void blk_queue_max_integrity_segments(struct request_queue *q,
-						    unsigned int segs)
 {
 }
 static inline unsigned short

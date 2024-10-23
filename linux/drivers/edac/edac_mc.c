@@ -103,7 +103,6 @@ static void edac_mc_dump_dimm(struct dimm_info *dimm)
 	edac_dbg(4, "  dimm->label = '%s'\n", dimm->label);
 	edac_dbg(4, "  dimm->nr_pages = 0x%x\n", dimm->nr_pages);
 	edac_dbg(4, "  dimm->grain = %d\n", dimm->grain);
-	edac_dbg(4, "  dimm->nr_pages = 0x%x\n", dimm->nr_pages);
 }
 
 static void edac_mc_dump_csrow(struct csrow_info *csrow)
@@ -167,6 +166,7 @@ const char * const edac_mem_types[] = {
 	[MEM_NVDIMM]	= "Non-volatile-RAM",
 	[MEM_WIO2]	= "Wide-IO-2",
 	[MEM_HBM2]	= "High-bandwidth-memory-Gen2",
+	[MEM_HBM3]	= "High-bandwidth-memory-Gen3",
 };
 EXPORT_SYMBOL_GPL(edac_mem_types);
 

@@ -79,6 +79,14 @@ static inline u64 gic_read_iar_cavium_thunderx(void)
 	return 0x3ff;
 }
 
+static u64 __maybe_unused gic_read_iar(void)
+{
+	if (alternative_has_cap_unlikely(ARM64_WORKAROUND_CAVIUM_23154))
+		return gic_read_iar_cavium_thunderx();
+	else
+		return gic_read_iar_common();
+}
+
 static inline void gic_write_ctlr(u32 val)
 {
 	write_sysreg_s(val, SYS_ICC_CTLR_EL1);
@@ -188,6 +196,11 @@ static inline void gic_pmr_mask_irqs(void)
 static inline void gic_arch_enable_irqs(void)
 {
 	asm volatile ("msr daifclr, #3" : : : "memory");
+}
+
+static inline bool gic_has_relaxed_pmr_sync(void)
+{
+	return cpus_have_cap(ARM64_HAS_GIC_PRIO_RELAXED_SYNC);
 }
 
 #endif /* __ASSEMBLY__ */

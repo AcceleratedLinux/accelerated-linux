@@ -1,0 +1,340 @@
+
+ps: add f option (process forest)
+
+From https://bugs.busybox.net/show_bug.cgi?id=16084
+    
+diff --git a/include/libbb.h b/include/libbb.h
+index ef5d04713..2a8116998 100644
+--- a/include/libbb.h
++++ b/include/libbb.h
+@@ -2054,6 +2054,17 @@ int FAST_FUNC procps_read_smaps(pid_t pid, struct smaprec *total,
+ typedef struct procps_status_t {
+ 	DIR *dir;
+ 	IF_FEATURE_SHOW_THREADS(DIR *task_dir;)
++#if ENABLE_FEATURE_PS_FOREST
++	/* Forest information encoded as a depth and a bit
++	 * pattern of "more to come". Depths are limited.
++	 *   0 1 2 3 4 5
++	 *   | |   |   + progA       fmore=1|2|8|32 fdepth=5
++	 *   | |   |   ` progB       fmore=1|2|8    fdepth=5 */
++	unsigned long fmore;
++	uint8_t fdepth;
++	struct procps_forest *forest, *forest_next;
++	int pidwidth;
++#endif
+ 	uint8_t shift_pages_to_bytes;
+ 	uint8_t shift_pages_to_kb;
+ /* Fields are set to 0/NULL if failed to determine (or not requested) */
+@@ -2123,6 +2134,7 @@ enum {
+ 	PSSCAN_NICE     = (1 << 20) * ENABLE_FEATURE_PS_ADDITIONAL_COLUMNS,
+ 	PSSCAN_RUIDGID  = (1 << 21) * ENABLE_FEATURE_PS_ADDITIONAL_COLUMNS,
+ 	PSSCAN_TASKS	= (1 << 22) * ENABLE_FEATURE_SHOW_THREADS,
++	PSSCAN_FOREST	= (1 << 23) * ENABLE_FEATURE_PS_FOREST,
+ };
+ //procps_status_t* alloc_procps_scan(void) FAST_FUNC;
+ void free_procps_scan(procps_status_t* sp) FAST_FUNC;
+diff --git a/libbb/procps.c b/libbb/procps.c
+index f56b71b21..d372a2ac1 100644
+--- a/libbb/procps.c
++++ b/libbb/procps.c
+@@ -105,6 +105,7 @@ void FAST_FUNC free_procps_scan(procps_status_t* sp)
+ 	free(sp->argv0);
+ 	free(sp->exe);
+ 	IF_SELINUX(free(sp->context);)
++	IF_FEATURE_PS_FOREST(free(sp->forest));
+ 	free(sp);
+ }
+ 
+@@ -279,6 +280,154 @@ int FAST_FUNC procps_read_smaps(pid_t pid, struct smaprec *total,
+ }
+ #endif
+ 
++#if ENABLE_FEATURE_PS_FOREST
++
++#define FOREST_MAXDEPTH (sizeof (unsigned long) * 8 - 1)
++
++struct procps_forest {
++	unsigned long more;	/* 0..FOREST_MAXDEPTH bits */
++	unsigned pid;
++	int depth;
++};
++
++struct forest {
++	struct forest_proc {
++		unsigned pid, ppid;
++		unsigned child, sibling;
++	} *proc;
++	unsigned nproc;
++};
++
++static struct forest_proc *forest_bsearch(unsigned pid, const struct forest *forest)
++{
++	unsigned a = 0, b = forest->nproc;
++
++	while (a != b) {
++		unsigned m = (a + b) / 2;
++		if (forest->proc[m].pid == pid)
++			return &forest->proc[m];
++		else if (pid < forest->proc[m].pid)
++			b = m;
++		else
++			a = m + 1;
++	}
++	return NULL;
++}
++
++static int forest_proc_pidcmp(const void *a, const void *b)
++{
++	const struct forest_proc *af = a;
++	const struct forest_proc *bf = b;
++
++	return af->pid < bf->pid ? -1 : af->pid == bf->pid ? 0 : 1;
++}
++
++static void forest_layout_r(struct procps_forest **nextp, unsigned int pid,
++	const struct forest *forest, struct procps_forest *parent)
++{
++	while (pid) {
++		struct forest_proc *p = forest_bsearch(pid, forest);
++		struct procps_forest *dst = (*nextp)++;
++		dst->pid = pid;
++		dst->depth = parent->depth + 1;
++		dst->more = parent->more;
++		if (p->sibling)
++			dst->more |= 1 << dst->depth;
++		if (p->child)
++			forest_layout_r(nextp, p->child, forest, dst);
++		pid = p->sibling;
++	}
++}
++
++static struct dirent * forest_readdir(procps_status_t* sp)
++{
++	static struct dirent de_ret;
++	struct procps_forest *next;
++
++	if (!sp->forest) {
++		/* Read all the PIDs and PPIDs into sp->forest[] */
++		struct dirent *entry;
++		struct forest forest = { NULL, 0 };
++		int pidwidth;
++		unsigned pid, ppid;
++		unsigned pid0_child;
++		char buf[PROCPS_BUFSIZE];
++		char filename[sizeof "/proc/%u/stat" + 3 * sizeof(int)];
++		char *cp;
++		struct procps_forest p0;
++
++		while ((entry = readdir(sp->dir))) {
++			if (entry->d_type != DT_DIR)
++				continue;
++			pid = bb_strtou(entry->d_name, NULL, 10);
++			if (errno || !pid)
++				continue;
++
++			/* Read its PPID */
++			sprintf(filename, "/proc/%u/stat", pid);
++			if (read_to_buf(filename, buf) < 0)
++				continue; /* process probably exited */
++			cp = strrchr(buf, ')'); /* split into "PID (cmd" and "<rest>" */
++			if (!cp)
++				continue;
++			if (sscanf(cp + 4, "%u", &ppid) != 1)
++				continue;
++			if (ppid == 1)
++				ppid = 0;
++			forest.proc = xrealloc(forest.proc, (forest.nproc + 1) * sizeof *forest.proc);
++			forest.proc[forest.nproc].pid = pid;
++			forest.proc[forest.nproc].ppid = ppid;
++			forest.proc[forest.nproc].child = 0;
++			forest.nproc++;
++
++			pidwidth = strlen(entry->d_name);
++			if (pidwidth > sp->pidwidth)
++				sp->pidwidth = pidwidth;
++		}
++		if (!forest.nproc)
++			return NULL;
++
++		/* Construct the child/sibling links in PID order */
++		pid0_child = 0;
++		qsort(forest.proc, forest.nproc, sizeof *forest.proc, forest_proc_pidcmp);
++		for (unsigned i = forest.nproc; i--; ) {
++			struct forest_proc *p = &forest.proc[i];
++			struct forest_proc *parent = forest_bsearch(p->ppid, &forest);
++			if (!parent) {
++				p->sibling = pid0_child;
++				pid0_child = p->pid;
++			} else {
++				p->sibling = parent->child;
++				parent->child = p->pid;
++			}
++		}
++
++
++		/* Recursively lay out the tree, computing 'more' columns */
++		sp->forest = xzalloc((forest.nproc + 1) * sizeof sp->forest[0]);
++		next = sp->forest;
++		p0.more = 0;
++		p0.depth = -1;
++		forest_layout_r(&next, pid0_child, &forest, &p0);
++		free(forest.proc);
++
++		sp->forest_next = sp->forest;
++	}
++
++	/* Return a dirent for the next entry in sp->forest[] */
++	next = sp->forest_next;
++	if (!next->pid)
++		return NULL;
++	sp->forest_next++;
++	de_ret.d_type = DT_DIR;
++	snprintf(de_ret.d_name, sizeof de_ret.d_name, "%u", next->pid);
++
++	sp->fmore = next->more;
++	sp->fdepth = next->depth;
++	return &de_ret;
++}
++#endif /* ENABLE_FEATURE_PS_FOREST */
++
+ procps_status_t* FAST_FUNC procps_scan(procps_status_t* sp, int flags)
+ {
+ 	if (!sp)
+@@ -301,6 +450,11 @@ procps_status_t* FAST_FUNC procps_scan(procps_status_t* sp, int flags)
+ 			closedir(sp->task_dir);
+ 			sp->task_dir = NULL;
+ 		}
++#endif
++#if ENABLE_FEATURE_PS_FOREST
++		if (flags & PSSCAN_FOREST)
++			entry = forest_readdir(sp);
++		else
+ #endif
+ 		entry = readdir(sp->dir);
+ 		if (entry == NULL) {
+diff --git a/procps/ps.c b/procps/ps.c
+index 5b521aebd..1e0f8a367 100644
+--- a/procps/ps.c
++++ b/procps/ps.c
+@@ -31,6 +31,10 @@
+ //config:	Support argument 'l' for long output.
+ //config:	Adds fields PPID, RSS, START, TIME & TTY
+ //config:
++//config:config FEATURE_PS_FOREST
++//config:	bool "Enable forest option (-f)"
++//config:	depends on (PS || MINIPS) && !DESKTOP
++//config:
+ //config:config FEATURE_PS_TIME
+ //config:	bool "Enable -o time and -o etime specifiers"
+ //config:	default y
+@@ -92,8 +96,11 @@
+ //usage:	IF_FEATURE_SHOW_THREADS(
+ //usage:     "\n	T	Show threads"
+ //usage:	)
++//usage:	IF_FEATURE_PS_FOREST(
++//usage:     "\n	f	Show forest"
++//usage:	)
+ //usage:
+-//usage:#endif /* ENABLE_DESKTOP */
++//usage:#endif /* !ENABLE_DESKTOP */
+ //usage:
+ //usage:#define ps_example_usage
+ //usage:       "$ ps\n"
+@@ -655,20 +662,22 @@ int ps_main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
+ 		OPT_Z = (1 << 0) * ENABLE_SELINUX,
+ 		OPT_T = (1 << ENABLE_SELINUX) * ENABLE_FEATURE_SHOW_THREADS,
+ 		OPT_l = (1 << ENABLE_SELINUX) * (1 << ENABLE_FEATURE_SHOW_THREADS) * ENABLE_FEATURE_PS_LONG,
++		OPT_f = (1 << ENABLE_SELINUX) * (1 << ENABLE_FEATURE_SHOW_THREADS) * (1 << ENABLE_FEATURE_PS_LONG) * ENABLE_FEATURE_PS_FOREST,
+ 	};
+ #if ENABLE_FEATURE_PS_LONG
+ 	time_t now = now; /* for compiler */
+ 	unsigned long uptime = uptime;
+ #endif
+ 	/* If we support any options, parse argv */
+-#if ENABLE_SELINUX || ENABLE_FEATURE_SHOW_THREADS || ENABLE_FEATURE_PS_WIDE || ENABLE_FEATURE_PS_LONG
++#if ENABLE_SELINUX || ENABLE_FEATURE_SHOW_THREADS || ENABLE_FEATURE_PS_WIDE || ENABLE_FEATURE_PS_LONG || ENABLE_FEATURE_PS_FOREST
+ 	int opts = 0;
+ # if ENABLE_FEATURE_PS_WIDE
+ 	/* -w is a bit complicated */
+ 	int w_count = 0;
+ 	make_all_argv_opts(argv);
+ 	opts = getopt32(argv, "^"
+-		IF_SELINUX("Z")IF_FEATURE_SHOW_THREADS("T")IF_FEATURE_PS_LONG("l")"w"
++		IF_SELINUX("Z")IF_FEATURE_SHOW_THREADS("T")IF_FEATURE_PS_LONG("l")
++		IF_FEATURE_PS_FOREST("f")"w"
+ 		"\0" "ww",
+ 		&w_count
+ 	);
+@@ -686,7 +695,8 @@ int ps_main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
+ # else
+ 	/* -w is not supported, only -Z and/or -T */
+ 	make_all_argv_opts(argv);
+-	opts = getopt32(argv, IF_SELINUX("Z")IF_FEATURE_SHOW_THREADS("T")IF_FEATURE_PS_LONG("l"));
++	opts = getopt32(argv, IF_SELINUX("Z")IF_FEATURE_SHOW_THREADS("T")IF_FEATURE_PS_LONG("l")
++		IF_FEATURE_PS_FOREST("f"));
+ # endif
+ 
+ # if ENABLE_SELINUX
+@@ -730,7 +740,12 @@ int ps_main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
+ 	if (opts & OPT_T) {
+ 		psscan_flags |= PSSCAN_TASKS;
+ 	}
+-#endif
++# if ENABLE_FEATURE_PS_FOREST
++	if (opts & OPT_f) {
++		psscan_flags |= PSSCAN_FOREST;
++	}
++# endif
++#endif /* feature opts */
+ 
+ 	p = NULL;
+ 	while ((p = procps_scan(p, psscan_flags)) != NULL) {
+@@ -745,6 +760,12 @@ int ps_main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
+ #endif
+ 		{
+ 			char buf6[6];
++			int pidwidth = 5;
++#if ENABLE_FEATURE_PS_FOREST
++			if (opts & OPT_f)
++				if (p->pidwidth > pidwidth)
++					pidwidth = p->pidwidth;
++#endif
+ 			smart_ulltoa5(p->vsz, buf6, " mgtpezy")[0] = '\0';
+ #if ENABLE_FEATURE_PS_LONG
+ 			if (opts & OPT_l) {
+@@ -778,17 +799,31 @@ int ps_main(int argc UNUSED_PARAM, char **argv UNUSED_PARAM)
+ 				strftime(stime_str, 6, (elapsed >= (24 * 60 * 60)) ? "%b%d" : "%H:%M", tm);
+ 				stime_str[5] = '\0';
+ 				//            S  UID PID PPID VSZ RSS TTY STIME TIME        CMD
+-				len = printf("%c %5u %5u %5u %5s %5s %-5s %s %02u:%02u:%02u ",
+-					p->state[0], p->uid, p->pid, p->ppid, buf6, bufr, tty,
++				len = printf("%c %5u %*u %*u %5s %5s %-5s %s %02u:%02u:%02u ",
++					p->state[0], p->uid, pidwidth, p->pid, pidwidth, p->ppid, buf6, bufr, tty,
+ 					stime_str, sut / 3600, (sut % 3600) / 60, sut % 60);
+ 			} else
+ #endif
+ 			{
+ 				const char *user = get_cached_username(p->uid);
+-				len = printf("%5u %-8.8s %s %s  ",
+-					p->pid, user, buf6, p->state);
++				len = printf("%*u %-8.8s %s %s  ",
++					pidwidth, p->pid, user, buf6, p->state);
++			}
++		}
++
++#if ENABLE_FEATURE_PS_FOREST
++		if (opts & OPT_f) {
++			int i;
++			for (i = 1; i <= p->fdepth && len + 4 <= terminal_width; i++) {
++				if (i == p->fdepth)
++					len += printf(" \\_ ");
++				else if ((p->fmore >> i) & 1)
++					len += printf(" |  ");
++				else
++					len += printf("    ");
+ 			}
+ 		}
++#endif
+ 
+ 		{
+ 			int sz = terminal_width - len;

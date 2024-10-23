@@ -16,7 +16,7 @@
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/memblock.h>
 
@@ -424,23 +424,6 @@ static void __init cell_iommu_setup_hardware(struct cbe_iommu *iommu,
 	cell_iommu_enable_hardware(iommu);
 }
 
-#if 0/* Unused for now */
-static struct iommu_window *find_window(struct cbe_iommu *iommu,
-		unsigned long offset, unsigned long size)
-{
-	struct iommu_window *window;
-
-	/* todo: check for overlapping (but not equal) windows) */
-
-	list_for_each_entry(window, &(iommu->windows), list) {
-		if (window->offset == offset && window->size == size)
-			return window;
-	}
-
-	return NULL;
-}
-#endif
-
 static inline u32 cell_iommu_get_ioid(struct device_node *np)
 {
 	const u32 *ioid;
@@ -720,8 +703,10 @@ static int __init cell_iommu_init_disabled(void)
 	cell_disable_iommus();
 
 	/* If we have no Axon, we set up the spider DMA magic offset */
-	if (of_find_node_by_name(NULL, "axon") == NULL)
+	np = of_find_node_by_name(NULL, "axon");
+	if (!np)
 		cell_dma_nommu_offset = SPIDER_DMA_OFFSET;
+	of_node_put(np);
 
 	/* Now we need to check to see where the memory is mapped
 	 * in PCI space. We assume that all busses use the same dma

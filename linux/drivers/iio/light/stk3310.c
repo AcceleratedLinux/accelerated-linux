@@ -7,11 +7,11 @@
  * IIO driver for STK3310/STK3311. 7-bit I2C address: 0x48.
  */
 
-#include <linux/acpi.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/regmap.h>
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
@@ -586,8 +586,7 @@ out:
 	return IRQ_HANDLED;
 }
 
-static int stk3310_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int stk3310_probe(struct i2c_client *client)
 {
 	int ret;
 	struct iio_dev *indio_dev;
@@ -649,12 +648,12 @@ err_standby:
 	return ret;
 }
 
-static int stk3310_remove(struct i2c_client *client)
+static void stk3310_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 
 	iio_device_unregister(indio_dev);
-	return stk3310_set_state(iio_priv(indio_dev), STK3310_STATE_STANDBY);
+	stk3310_set_state(iio_priv(indio_dev), STK3310_STATE_STANDBY);
 }
 
 static int stk3310_suspend(struct device *dev)
@@ -694,7 +693,6 @@ MODULE_DEVICE_TABLE(i2c, stk3310_i2c_id);
 static const struct acpi_device_id stk3310_acpi_id[] = {
 	{"STK3310", 0},
 	{"STK3311", 0},
-	{"STK3335", 0},
 	{}
 };
 
@@ -713,9 +711,9 @@ static struct i2c_driver stk3310_driver = {
 		.name = "stk3310",
 		.of_match_table = stk3310_of_match,
 		.pm = pm_sleep_ptr(&stk3310_pm_ops),
-		.acpi_match_table = ACPI_PTR(stk3310_acpi_id),
+		.acpi_match_table = stk3310_acpi_id,
 	},
-	.probe =            stk3310_probe,
+	.probe =        stk3310_probe,
 	.remove =           stk3310_remove,
 	.id_table =         stk3310_i2c_id,
 };

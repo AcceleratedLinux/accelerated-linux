@@ -270,6 +270,7 @@ bool ath_is_49ghz_allowed(u16 regdomain)
 }
 EXPORT_SYMBOL(ath_is_49ghz_allowed);
 
+#ifndef CONFIG_ATH_REG_NO_FORCED_RADAR
 /* Frequency is one where radar detection is required */
 static bool ath_is_radar_freq(u16 center_freq,
 			      struct ath_regulatory *reg)
@@ -344,6 +345,7 @@ __ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 			ch->flags &= ~IEEE80211_CHAN_NO_IR;
 	}
 }
+#endif
 
 /*
  * These exception rules do not apply radar frequencies.

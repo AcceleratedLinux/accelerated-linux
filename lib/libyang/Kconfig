@@ -1,5 +1,5 @@
 config LIB_LIBYANG
 	bool "libyang"
-	select LIB_LIBPCRE
+	select LIB_LIBPCRE2
 	help
 		The libyang library.

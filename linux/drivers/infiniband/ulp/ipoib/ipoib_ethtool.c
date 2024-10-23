@@ -65,10 +65,10 @@ static void ipoib_get_drvinfo(struct net_device *netdev,
 
 	ib_get_device_fw_str(priv->ca, drvinfo->fw_version);
 
-	strlcpy(drvinfo->bus_info, dev_name(priv->ca->dev.parent),
+	strscpy(drvinfo->bus_info, dev_name(priv->ca->dev.parent),
 		sizeof(drvinfo->bus_info));
 
-	strlcpy(drvinfo->driver, "ib_ipoib", sizeof(drvinfo->driver));
+	strscpy(drvinfo->driver, "ib_ipoib", sizeof(drvinfo->driver));
 }
 
 static int ipoib_get_coalesce(struct net_device *dev,
@@ -174,6 +174,8 @@ static inline int ib_speed_enum_to_int(int speed)
 		return SPEED_50000;
 	case IB_SPEED_NDR:
 		return SPEED_100000;
+	case IB_SPEED_XDR:
+		return SPEED_200000;
 	}
 
 	return SPEED_UNKNOWN;

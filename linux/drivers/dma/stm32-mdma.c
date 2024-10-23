@@ -24,7 +24,6 @@
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/of_dma.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -199,6 +198,7 @@ struct stm32_mdma_chan_config {
 	u32 transfer_config;
 	u32 mask_addr;
 	u32 mask_data;
+	bool m2m_hw; /* True when MDMA is triggered by STM32 DMA */
 };
 
 struct stm32_mdma_hwdesc {
@@ -224,7 +224,13 @@ struct stm32_mdma_desc {
 	u32 ccr;
 	bool cyclic;
 	u32 count;
-	struct stm32_mdma_desc_node node[];
+	struct stm32_mdma_desc_node node[] __counted_by(count);
+};
+
+struct stm32_mdma_dma_config {
+	u32 request;	/* STM32 DMA channel stream id, triggering MDMA */
+	u32 cmar;	/* STM32 DMA interrupt flag clear register address */
+	u32 cmdr;	/* STM32 DMA Transfer Complete flag */
 };
 
 struct stm32_mdma_chan {
@@ -250,7 +256,7 @@ struct stm32_mdma_device {
 	u32 nr_ahb_addr_masks;
 	u32 chan_reserved;
 	struct stm32_mdma_chan chan[STM32_MDMA_MAX_CHANNELS];
-	u32 ahb_addr_masks[];
+	u32 ahb_addr_masks[] __counted_by(nr_ahb_addr_masks);
 };
 
 static struct stm32_mdma_device *stm32_mdma_get_dev(
@@ -315,6 +321,7 @@ static struct stm32_mdma_desc *stm32_mdma_alloc_desc(
 	desc = kzalloc(struct_size(desc, node, count), GFP_NOWAIT);
 	if (!desc)
 		return NULL;
+	desc->count = count;
 
 	for (i = 0; i < count; i++) {
 		desc->node[i].hwdesc =
@@ -323,8 +330,6 @@ static struct stm32_mdma_desc *stm32_mdma_alloc_desc(
 		if (!desc->node[i].hwdesc)
 			goto err;
 	}
-
-	desc->count = count;
 
 	return desc;
 
@@ -483,7 +488,7 @@ static int stm32_mdma_set_xfer_param(struct stm32_mdma_chan *chan,
 	src_maxburst = chan->dma_config.src_maxburst;
 	dst_maxburst = chan->dma_config.dst_maxburst;
 
-	ccr = stm32_mdma_read(dmadev, STM32_MDMA_CCR(chan->id));
+	ccr = stm32_mdma_read(dmadev, STM32_MDMA_CCR(chan->id)) & ~STM32_MDMA_CCR_EN;
 	ctcr = stm32_mdma_read(dmadev, STM32_MDMA_CTCR(chan->id));
 	ctbr = stm32_mdma_read(dmadev, STM32_MDMA_CTBR(chan->id));
 
@@ -539,13 +544,23 @@ static int stm32_mdma_set_xfer_param(struct stm32_mdma_chan *chan,
 		dst_addr = chan->dma_config.dst_addr;
 
 		/* Set device data size */
+		if (chan_config->m2m_hw)
+			dst_addr_width = stm32_mdma_get_max_width(dst_addr, buf_len,
+								  STM32_MDMA_MAX_BUF_LEN);
 		dst_bus_width = stm32_mdma_get_width(chan, dst_addr_width);
 		if (dst_bus_width < 0)
 			return dst_bus_width;
 		ctcr &= ~STM32_MDMA_CTCR_DSIZE_MASK;
 		ctcr |= STM32_MDMA_CTCR_DSIZE(dst_bus_width);
+		if (chan_config->m2m_hw) {
+			ctcr &= ~STM32_MDMA_CTCR_DINCOS_MASK;
+			ctcr |= STM32_MDMA_CTCR_DINCOS(dst_bus_width);
+		}
 
 		/* Set device burst value */
+		if (chan_config->m2m_hw)
+			dst_maxburst = STM32_MDMA_MAX_BUF_LEN / dst_addr_width;
+
 		dst_best_burst = stm32_mdma_get_best_burst(buf_len, tlen,
 							   dst_maxburst,
 							   dst_addr_width);
@@ -588,13 +603,24 @@ static int stm32_mdma_set_xfer_param(struct stm32_mdma_chan *chan,
 		src_addr = chan->dma_config.src_addr;
 
 		/* Set device data size */
+		if (chan_config->m2m_hw)
+			src_addr_width = stm32_mdma_get_max_width(src_addr, buf_len,
+								  STM32_MDMA_MAX_BUF_LEN);
+
 		src_bus_width = stm32_mdma_get_width(chan, src_addr_width);
 		if (src_bus_width < 0)
 			return src_bus_width;
 		ctcr &= ~STM32_MDMA_CTCR_SSIZE_MASK;
 		ctcr |= STM32_MDMA_CTCR_SSIZE(src_bus_width);
+		if (chan_config->m2m_hw) {
+			ctcr &= ~STM32_MDMA_CTCR_SINCOS_MASK;
+			ctcr |= STM32_MDMA_CTCR_SINCOS(src_bus_width);
+		}
 
 		/* Set device burst value */
+		if (chan_config->m2m_hw)
+			src_maxburst = STM32_MDMA_MAX_BUF_LEN / src_addr_width;
+
 		src_best_burst = stm32_mdma_get_best_burst(buf_len, tlen,
 							   src_maxburst,
 							   src_addr_width);
@@ -702,10 +728,14 @@ static int stm32_mdma_setup_xfer(struct stm32_mdma_chan *chan,
 {
 	struct stm32_mdma_device *dmadev = stm32_mdma_get_dev(chan);
 	struct dma_slave_config *dma_config = &chan->dma_config;
+	struct stm32_mdma_chan_config *chan_config = &chan->chan_config;
 	struct scatterlist *sg;
 	dma_addr_t src_addr, dst_addr;
-	u32 ccr, ctcr, ctbr;
+	u32 m2m_hw_period, ccr, ctcr, ctbr;
 	int i, ret = 0;
+
+	if (chan_config->m2m_hw)
+		m2m_hw_period = sg_dma_len(sgl);
 
 	for_each_sg(sgl, sg, sg_len, i) {
 		if (sg_dma_len(sg) > STM32_MDMA_MAX_BLOCK_LEN) {
@@ -716,6 +746,8 @@ static int stm32_mdma_setup_xfer(struct stm32_mdma_chan *chan,
 		if (direction == DMA_MEM_TO_DEV) {
 			src_addr = sg_dma_address(sg);
 			dst_addr = dma_config->dst_addr;
+			if (chan_config->m2m_hw && (i & 1))
+				dst_addr += m2m_hw_period;
 			ret = stm32_mdma_set_xfer_param(chan, direction, &ccr,
 							&ctcr, &ctbr, src_addr,
 							sg_dma_len(sg));
@@ -723,6 +755,8 @@ static int stm32_mdma_setup_xfer(struct stm32_mdma_chan *chan,
 					   src_addr);
 		} else {
 			src_addr = dma_config->src_addr;
+			if (chan_config->m2m_hw && (i & 1))
+				src_addr += m2m_hw_period;
 			dst_addr = sg_dma_address(sg);
 			ret = stm32_mdma_set_xfer_param(chan, direction, &ccr,
 							&ctcr, &ctbr, dst_addr,
@@ -742,8 +776,6 @@ static int stm32_mdma_setup_xfer(struct stm32_mdma_chan *chan,
 	/* Enable interrupts */
 	ccr &= ~STM32_MDMA_CCR_IRQ_MASK;
 	ccr |= STM32_MDMA_CCR_TEIE | STM32_MDMA_CCR_CTCIE;
-	if (sg_len > 1)
-		ccr |= STM32_MDMA_CCR_BTIE;
 	desc->ccr = ccr;
 
 	return 0;
@@ -755,6 +787,7 @@ stm32_mdma_prep_slave_sg(struct dma_chan *c, struct scatterlist *sgl,
 			 unsigned long flags, void *context)
 {
 	struct stm32_mdma_chan *chan = to_stm32_mdma_chan(c);
+	struct stm32_mdma_chan_config *chan_config = &chan->chan_config;
 	struct stm32_mdma_desc *desc;
 	int i, ret;
 
@@ -777,6 +810,21 @@ stm32_mdma_prep_slave_sg(struct dma_chan *c, struct scatterlist *sgl,
 	if (ret < 0)
 		goto xfer_setup_err;
 
+	/*
+	 * In case of M2M HW transfer triggered by STM32 DMA, we do not have to clear the
+	 * transfer complete flag by hardware in order to let the CPU rearm the STM32 DMA
+	 * with the next sg element and update some data in dmaengine framework.
+	 */
+	if (chan_config->m2m_hw && direction == DMA_MEM_TO_DEV) {
+		struct stm32_mdma_hwdesc *hwdesc;
+
+		for (i = 0; i < sg_len; i++) {
+			hwdesc = desc->node[i].hwdesc;
+			hwdesc->cmar = 0;
+			hwdesc->cmdr = 0;
+		}
+	}
+
 	desc->cyclic = false;
 
 	return vchan_tx_prep(&chan->vchan, &desc->vdesc, flags);
@@ -798,6 +846,7 @@ stm32_mdma_prep_dma_cyclic(struct dma_chan *c, dma_addr_t buf_addr,
 	struct stm32_mdma_chan *chan = to_stm32_mdma_chan(c);
 	struct stm32_mdma_device *dmadev = stm32_mdma_get_dev(chan);
 	struct dma_slave_config *dma_config = &chan->dma_config;
+	struct stm32_mdma_chan_config *chan_config = &chan->chan_config;
 	struct stm32_mdma_desc *desc;
 	dma_addr_t src_addr, dst_addr;
 	u32 ccr, ctcr, ctbr, count;
@@ -858,8 +907,12 @@ stm32_mdma_prep_dma_cyclic(struct dma_chan *c, dma_addr_t buf_addr,
 		if (direction == DMA_MEM_TO_DEV) {
 			src_addr = buf_addr + i * period_len;
 			dst_addr = dma_config->dst_addr;
+			if (chan_config->m2m_hw && (i & 1))
+				dst_addr += period_len;
 		} else {
 			src_addr = dma_config->src_addr;
+			if (chan_config->m2m_hw && (i & 1))
+				src_addr += period_len;
 			dst_addr = buf_addr + i * period_len;
 		}
 
@@ -911,7 +964,7 @@ stm32_mdma_prep_dma_memcpy(struct dma_chan *c, dma_addr_t dest, dma_addr_t src,
 	if (!desc)
 		return NULL;
 
-	ccr = stm32_mdma_read(dmadev, STM32_MDMA_CCR(chan->id));
+	ccr = stm32_mdma_read(dmadev, STM32_MDMA_CCR(chan->id)) & ~STM32_MDMA_CCR_EN;
 	ctcr = stm32_mdma_read(dmadev, STM32_MDMA_CTCR(chan->id));
 	ctbr = stm32_mdma_read(dmadev, STM32_MDMA_CTBR(chan->id));
 	cbndtr = stm32_mdma_read(dmadev, STM32_MDMA_CBNDTR(chan->id));
@@ -1180,6 +1233,10 @@ static int stm32_mdma_resume(struct dma_chan *c)
 	unsigned long flags;
 	u32 status, reg;
 
+	/* Transfer can be terminated */
+	if (!chan->desc || (stm32_mdma_read(dmadev, STM32_MDMA_CCR(chan->id)) & STM32_MDMA_CCR_EN))
+		return -EPERM;
+
 	hwdesc = chan->desc->node[chan->curr_hwdesc].hwdesc;
 
 	spin_lock_irqsave(&chan->vchan.lock, flags);
@@ -1244,25 +1301,50 @@ static int stm32_mdma_slave_config(struct dma_chan *c,
 
 	memcpy(&chan->dma_config, config, sizeof(*config));
 
+	/* Check if user is requesting STM32 DMA to trigger MDMA */
+	if (config->peripheral_size) {
+		struct stm32_mdma_dma_config *mdma_config;
+
+		mdma_config = (struct stm32_mdma_dma_config *)chan->dma_config.peripheral_config;
+		chan->chan_config.request = mdma_config->request;
+		chan->chan_config.mask_addr = mdma_config->cmar;
+		chan->chan_config.mask_data = mdma_config->cmdr;
+		chan->chan_config.m2m_hw = true;
+	}
+
 	return 0;
 }
 
 static size_t stm32_mdma_desc_residue(struct stm32_mdma_chan *chan,
 				      struct stm32_mdma_desc *desc,
-				      u32 curr_hwdesc)
+				      u32 curr_hwdesc,
+				      struct dma_tx_state *state)
 {
 	struct stm32_mdma_device *dmadev = stm32_mdma_get_dev(chan);
 	struct stm32_mdma_hwdesc *hwdesc;
-	u32 cbndtr, residue, modulo, burst_size;
+	u32 cisr, clar, cbndtr, residue, modulo, burst_size;
 	int i;
 
+	cisr = stm32_mdma_read(dmadev, STM32_MDMA_CISR(chan->id));
+
 	residue = 0;
-	for (i = curr_hwdesc + 1; i < desc->count; i++) {
+	/* Get the next hw descriptor to process from current transfer */
+	clar = stm32_mdma_read(dmadev, STM32_MDMA_CLAR(chan->id));
+	for (i = desc->count - 1; i >= 0; i--) {
 		hwdesc = desc->node[i].hwdesc;
+
+		if (hwdesc->clar == clar)
+			break;/* Current transfer found, stop cumulating */
+
+		/* Cumulate residue of unprocessed hw descriptors */
 		residue += STM32_MDMA_CBNDTR_BNDT(hwdesc->cbndtr);
 	}
 	cbndtr = stm32_mdma_read(dmadev, STM32_MDMA_CBNDTR(chan->id));
 	residue += cbndtr & STM32_MDMA_CBNDTR_BNDT_MASK;
+
+	state->in_flight_bytes = 0;
+	if (chan->chan_config.m2m_hw && (cisr & STM32_MDMA_CISR_CRQA))
+		state->in_flight_bytes = cbndtr & STM32_MDMA_CBNDTR_BNDT_MASK;
 
 	if (!chan->mem_burst)
 		return residue;
@@ -1293,11 +1375,10 @@ static enum dma_status stm32_mdma_tx_status(struct dma_chan *c,
 
 	vdesc = vchan_find_desc(&chan->vchan, cookie);
 	if (chan->desc && cookie == chan->desc->vdesc.tx.cookie)
-		residue = stm32_mdma_desc_residue(chan, chan->desc,
-						  chan->curr_hwdesc);
+		residue = stm32_mdma_desc_residue(chan, chan->desc, chan->curr_hwdesc, state);
 	else if (vdesc)
-		residue = stm32_mdma_desc_residue(chan,
-						  to_stm32_mdma_desc(vdesc), 0);
+		residue = stm32_mdma_desc_residue(chan, to_stm32_mdma_desc(vdesc), 0, state);
+
 	dma_set_residue(state, residue);
 
 	spin_unlock_irqrestore(&chan->vchan.lock, flags);
@@ -1328,12 +1409,7 @@ static irqreturn_t stm32_mdma_irq_handler(int irq, void *devid)
 		return IRQ_NONE;
 	}
 	id = __ffs(status);
-
 	chan = &dmadev->chan[id];
-	if (!chan) {
-		dev_warn(mdma2dev(dmadev), "MDMA channel not initialized\n");
-		return IRQ_NONE;
-	}
 
 	/* Handle interrupt for the channel */
 	spin_lock(&chan->vchan.lock);
@@ -1476,6 +1552,7 @@ static struct dma_chan *stm32_mdma_of_xlate(struct of_phandle_args *dma_spec,
 		return NULL;
 	}
 
+	memset(&config, 0, sizeof(config));
 	config.request = dma_spec->args[0];
 	config.priority_level = dma_spec->args[1];
 	config.transfer_config = dma_spec->args[2];
@@ -1516,7 +1593,6 @@ static int stm32_mdma_probe(struct platform_device *pdev)
 	struct stm32_mdma_device *dmadev;
 	struct dma_device *dd;
 	struct device_node *of_node;
-	struct resource *res;
 	struct reset_control *rst;
 	u32 nr_channels, nr_requests;
 	int i, count, ret;
@@ -1550,16 +1626,15 @@ static int stm32_mdma_probe(struct platform_device *pdev)
 			      GFP_KERNEL);
 	if (!dmadev)
 		return -ENOMEM;
+	dmadev->nr_ahb_addr_masks = count;
 
 	dmadev->nr_channels = nr_channels;
 	dmadev->nr_requests = nr_requests;
 	device_property_read_u32_array(&pdev->dev, "st,ahb-addr-masks",
 				       dmadev->ahb_addr_masks,
 				       count);
-	dmadev->nr_ahb_addr_masks = count;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	dmadev->base = devm_ioremap_resource(&pdev->dev, res);
+	dmadev->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(dmadev->base))
 		return PTR_ERR(dmadev->base);
 
@@ -1752,4 +1827,3 @@ subsys_initcall(stm32_mdma_init);
 MODULE_DESCRIPTION("Driver for STM32 MDMA controller");
 MODULE_AUTHOR("M'boumba Cedric Madianga <cedric.madianga@gmail.com>");
 MODULE_AUTHOR("Pierre-Yves Mordret <pierre-yves.mordret@st.com>");
-MODULE_LICENSE("GPL v2");

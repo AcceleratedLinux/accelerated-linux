@@ -710,22 +710,19 @@ static int cx2072x_config_i2spcm(struct cx2072x_priv *cx2072x)
 
 	regdbt2.ulval = 0xac;
 
-	/* set master/slave */
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_CBP_CFP:
 		reg2.r.tx_master = 1;
 		reg3.r.rx_master = 1;
-		dev_dbg(dev, "Sets Master mode\n");
 		break;
 
-	case SND_SOC_DAIFMT_CBS_CFS:
+	case SND_SOC_DAIFMT_CBC_CFC:
 		reg2.r.tx_master = 0;
 		reg3.r.rx_master = 0;
-		dev_dbg(dev, "Sets Slave mode\n");
 		break;
 
 	default:
-		dev_err(dev, "Unsupported DAI master mode\n");
+		dev_err(dev, "Unsupported DAI clocking mode\n");
 		return -EINVAL;
 	}
 
@@ -1009,9 +1006,9 @@ static int cx2072x_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	dev_dbg(dev, "set_dai_fmt- %08x\n", fmt);
 	/* set master/slave */
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
-	case SND_SOC_DAIFMT_CBS_CFS:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBC_CFC:
 		break;
 
 	default:
@@ -1549,6 +1546,14 @@ static int cx2072x_dsp_dai_probe(struct snd_soc_dai *dai)
 	return 0;
 }
 
+static const struct snd_soc_dai_ops cx2072x_dai_ops2 = {
+	.probe		= cx2072x_dsp_dai_probe,
+	.set_sysclk	= cx2072x_set_dai_sysclk,
+	.set_fmt	= cx2072x_set_dai_fmt,
+	.hw_params	= cx2072x_hw_params,
+	.set_bclk_ratio	= cx2072x_set_dai_bclk_ratio,
+};
+
 #define CX2072X_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE)
 
 static struct snd_soc_dai_driver soc_codec_cx2072x_dai[] = {
@@ -1575,7 +1580,6 @@ static struct snd_soc_dai_driver soc_codec_cx2072x_dai[] = {
 	{ /* plabayck only, return echo reference to Conexant DSP chip */
 		.name = "cx2072x-dsp",
 		.id	= CX2072X_DAI_DSP,
-		.probe = cx2072x_dsp_dai_probe,
 		.playback = {
 			.stream_name = "DSP Playback",
 			.channels_min = 2,
@@ -1583,7 +1587,7 @@ static struct snd_soc_dai_driver soc_codec_cx2072x_dai[] = {
 			.rates = CX2072X_RATES_DSP,
 			.formats = CX2072X_FORMATS,
 		},
-		.ops = &cx2072x_dai_ops,
+		.ops = &cx2072x_dai_ops2,
 	},
 	{ /* plabayck only, return echo reference through I2S TX */
 		.name = "cx2072x-aec",
@@ -1676,15 +1680,14 @@ static int cx2072x_i2c_probe(struct i2c_client *i2c)
 	return 0;
 }
 
-static int cx2072x_i2c_remove(struct i2c_client *i2c)
+static void cx2072x_i2c_remove(struct i2c_client *i2c)
 {
 	pm_runtime_disable(&i2c->dev);
-	return 0;
 }
 
 static const struct i2c_device_id cx2072x_i2c_id[] = {
-	{ "cx20721", 0 },
-	{ "cx20723", 0 },
+	{ "cx20721" },
+	{ "cx20723" },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, cx2072x_i2c_id);
@@ -1710,7 +1713,7 @@ static struct i2c_driver cx2072x_i2c_driver = {
 		.acpi_match_table = ACPI_PTR(cx2072x_acpi_match),
 		.pm = &cx2072x_runtime_pm,
 	},
-	.probe_new = cx2072x_i2c_probe,
+	.probe = cx2072x_i2c_probe,
 	.remove = cx2072x_i2c_remove,
 	.id_table = cx2072x_i2c_id,
 };

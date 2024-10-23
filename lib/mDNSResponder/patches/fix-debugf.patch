@@ -1,0 +1,11 @@
+--- a/mDNSShared/mDNSDebug.c.orig	2020-07-21 18:17:17.000000000 -0500
++++ b/mDNSShared/mDNSDebug.c	2021-04-29 17:02:38.336860935 -0500
+@@ -90,7 +90,7 @@
+ #endif
+ 
+ #if MDNS_DEBUGMSGS
+-void debugf_(const char *format, ...)       LOG_HELPER_BODY(MDNS_LOG_DEBUG)
++void debugf_(const char *format, ...)       LOG_HELPER_BODY(NULL, MDNS_LOG_DEBUG)
+ #endif
+ 
+ // Log message with default "mDNSResponder" ident string at the start

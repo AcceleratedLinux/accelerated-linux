@@ -1,0 +1,11 @@
+--- libpciaccess-0.17/src/Makefile.in.org	2023-10-08 23:32:45.008109767 +1000
++++ libpciaccess-0.17/src/Makefile.in	2023-10-08 23:33:25.262233875 +1000
+@@ -438,7 +438,7 @@
+ 	$(OS_SUPPORT)
+ 
+ libpciaccess_la_LIBADD = $(PCIACCESS_LIBS)
+-libpciaccess_la_LDFLAGS = -version-number 0:11:1 -no-undefined
++libpciaccess_la_LDFLAGS = 
+ EXTRA_DIST = meson.build
+ all: all-am
+ 

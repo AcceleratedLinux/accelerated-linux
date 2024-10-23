@@ -61,6 +61,24 @@ static const u8 rsa_digest_info_sha512[] = {
 	0x05, 0x00, 0x04, 0x40
 };
 
+static const u8 rsa_digest_info_sha3_256[] = {
+	0x30, 0x31, 0x30, 0x0d, 0x06, 0x09,
+	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x08,
+	0x05, 0x00, 0x04, 0x20
+};
+
+static const u8 rsa_digest_info_sha3_384[] = {
+	0x30, 0x41, 0x30, 0x0d, 0x06, 0x09,
+	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x09,
+	0x05, 0x00, 0x04, 0x30
+};
+
+static const u8 rsa_digest_info_sha3_512[] = {
+	0x30, 0x51, 0x30, 0x0d, 0x06, 0x09,
+	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0A,
+	0x05, 0x00, 0x04, 0x40
+};
+
 static const struct rsa_asn1_template {
 	const char	*name;
 	const u8	*data;
@@ -74,8 +92,13 @@ static const struct rsa_asn1_template {
 	_(sha384),
 	_(sha512),
 	_(sha224),
-	{ NULL }
 #undef _
+#define _(X) { "sha3-" #X, rsa_digest_info_sha3_##X, sizeof(rsa_digest_info_sha3_##X) }
+	_(256),
+	_(384),
+	_(512),
+#undef _
+	{ NULL }
 };
 
 static const struct rsa_asn1_template *rsa_lookup_asn1(const char *name)
@@ -190,7 +213,7 @@ static int pkcs1pad_encrypt_sign_complete(struct akcipher_request *req, int err)
 	if (likely(!pad_len))
 		goto out;
 
-	out_buf = kzalloc(ctx->key_size, GFP_KERNEL);
+	out_buf = kzalloc(ctx->key_size, GFP_ATOMIC);
 	err = -ENOMEM;
 	if (!out_buf)
 		goto out;
@@ -210,20 +233,17 @@ out:
 	return err;
 }
 
-static void pkcs1pad_encrypt_sign_complete_cb(
-		struct crypto_async_request *child_async_req, int err)
+static void pkcs1pad_encrypt_sign_complete_cb(void *data, int err)
 {
-	struct akcipher_request *req = child_async_req->data;
-	struct crypto_async_request async_req;
+	struct akcipher_request *req = data;
 
 	if (err == -EINPROGRESS)
-		return;
+		goto out;
 
-	async_req.data = req->base.data;
-	async_req.tfm = crypto_akcipher_tfm(crypto_akcipher_reqtfm(req));
-	async_req.flags = child_async_req->flags;
-	req->base.complete(&async_req,
-			pkcs1pad_encrypt_sign_complete(req, err));
+	err = pkcs1pad_encrypt_sign_complete(req, err);
+
+out:
+	akcipher_request_complete(req, err);
 }
 
 static int pkcs1pad_encrypt(struct akcipher_request *req)
@@ -253,7 +273,7 @@ static int pkcs1pad_encrypt(struct akcipher_request *req)
 	ps_end = ctx->key_size - req->src_len - 2;
 	req_ctx->in_buf[0] = 0x02;
 	for (i = 1; i < ps_end; i++)
-		req_ctx->in_buf[i] = 1 + prandom_u32_max(255);
+		req_ctx->in_buf[i] = get_random_u32_inclusive(1, 255);
 	req_ctx->in_buf[ps_end] = 0x00;
 
 	pkcs1pad_sg_set_buf(req_ctx->in_sg, req_ctx->in_buf,
@@ -328,19 +348,17 @@ done:
 	return err;
 }
 
-static void pkcs1pad_decrypt_complete_cb(
-		struct crypto_async_request *child_async_req, int err)
+static void pkcs1pad_decrypt_complete_cb(void *data, int err)
 {
-	struct akcipher_request *req = child_async_req->data;
-	struct crypto_async_request async_req;
+	struct akcipher_request *req = data;
 
 	if (err == -EINPROGRESS)
-		return;
+		goto out;
 
-	async_req.data = req->base.data;
-	async_req.tfm = crypto_akcipher_tfm(crypto_akcipher_reqtfm(req));
-	async_req.flags = child_async_req->flags;
-	req->base.complete(&async_req, pkcs1pad_decrypt_complete(req, err));
+	err = pkcs1pad_decrypt_complete(req, err);
+
+out:
+	akcipher_request_complete(req, err);
 }
 
 static int pkcs1pad_decrypt(struct akcipher_request *req)
@@ -509,19 +527,17 @@ done:
 	return err;
 }
 
-static void pkcs1pad_verify_complete_cb(
-		struct crypto_async_request *child_async_req, int err)
+static void pkcs1pad_verify_complete_cb(void *data, int err)
 {
-	struct akcipher_request *req = child_async_req->data;
-	struct crypto_async_request async_req;
+	struct akcipher_request *req = data;
 
 	if (err == -EINPROGRESS)
-		return;
+		goto out;
 
-	async_req.data = req->base.data;
-	async_req.tfm = crypto_akcipher_tfm(crypto_akcipher_reqtfm(req));
-	async_req.flags = child_async_req->flags;
-	req->base.complete(&async_req, pkcs1pad_verify_complete(req, err));
+	err = pkcs1pad_verify_complete(req, err);
+
+out:
+	akcipher_request_complete(req, err);
 }
 
 /*
@@ -579,6 +595,10 @@ static int pkcs1pad_init_tfm(struct crypto_akcipher *tfm)
 		return PTR_ERR(child_tfm);
 
 	ctx->child = child_tfm;
+
+	akcipher_set_reqsize(tfm, sizeof(struct pkcs1pad_request) +
+				  crypto_akcipher_reqsize(child_tfm));
+
 	return 0;
 }
 
@@ -674,7 +694,6 @@ static int pkcs1pad_create(struct crypto_template *tmpl, struct rtattr **tb)
 	inst->alg.set_pub_key = pkcs1pad_set_pub_key;
 	inst->alg.set_priv_key = pkcs1pad_set_priv_key;
 	inst->alg.max_size = pkcs1pad_get_max_size;
-	inst->alg.reqsize = sizeof(struct pkcs1pad_request) + rsa_alg->reqsize;
 
 	inst->free = pkcs1pad_free;
 
@@ -691,3 +710,5 @@ struct crypto_template rsa_pkcs1pad_tmpl = {
 	.create = pkcs1pad_create,
 	.module = THIS_MODULE,
 };
+
+MODULE_ALIAS_CRYPTO("pkcs1pad");

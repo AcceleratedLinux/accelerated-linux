@@ -109,16 +109,16 @@ CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH
 
 ifdef UCLINUX_BUILD_LIB
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
 
   ifdef BUILD_SHARED
-	CFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
+	CFLAGS  += -mid-shared-library
   else
 	ifndef DISABLE_XIP
 	  CFLAGS  += -msep-data
@@ -134,8 +134,13 @@ ifdef UCLINUX_BUILD_LIB
   ifndef DISABLE_MOVE_RODATA
   	LDFLAGS += -Wl,-move-rodata
   endif
+
   ifdef BUILD_SHARED
-	LDFLAGS += -shared-lib-id,0
+	LDFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
+  else
+	ifndef DISABLE_XIP
+	  LDFLAGS  += -msep-data
+	endif
   endif
 
 	UCLINUX_BUILD_SET=1
@@ -153,16 +158,16 @@ ifdef UCLINUX_BUILD_USER
 	LIBC          = -Wl,-R,$(ROOTDIR)/lib/libc.gdb $(SLIBC)
   endif
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
 	CFLAGS  += $(VENDOR_CFLAGS) -DEMBED
 
   ifdef BUILD_SHARED
-	CFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
+	CFLAGS  += -mid-shared-library -mshared-library-id=0
   else
 	ifndef DISABLE_XIP
 	  CFLAGS  += -msep-data
@@ -182,8 +187,13 @@ ifdef UCLINUX_BUILD_USER
   ifndef DISABLE_MOVE_RODATA
   	LDFLAGS += -Wl,-move-rodata
   endif
+
   ifdef BUILD_SHARED
-	LDFLAGS += -shared-lib-id,0
+	LDFLAGS += -mid-shared-library -mshared-library-id=0 -Wl,-shared-lib-id,0
+  else
+	ifndef DISABLE_XIP
+	  LDFLAGS  += -msep-data
+	endif
   endif
 
   ifndef FLTFLAGS

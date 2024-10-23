@@ -239,15 +239,6 @@ config USER_USBHUBCTRL_USBHUBCTRL
 		Command line utility to control enabled ports on the SG560U
 		and some other USB-booting devices
 
-comment "Vixie-cron"
-
-config USER_VIXIECRON_CRON
-	bool "cron"
-
-config USER_VIXIECRON_CRONTAB
-	bool "crontab"
-
-
 comment "at"
 
 config USER_AT_AT
@@ -279,10 +270,7 @@ config USER_BLE_PROVISIONING_APP
 	help
 	  enables Bluetooth GATT server for Digi Remote Manager provisioning
 
-config USER_ATH11K_FIRMWARE
-bool "ath11k-firmware"
-help
-        ath11k firmware
+source ../user/ath11k-firmware/Kconfig
 
 endmenu
 
@@ -300,6 +288,17 @@ config USER_FLASHW_FLASHW
 
 config USER_SETMAC_SETMAC
 	bool "setmac"
+	help
+	  A tool to initialize network MAC addresses at system start up time.
+	  Normally this is done from something like an /etc/rc script.
+
+config USER_SETMAC_PREFIX
+	string "setmac prefix"
+	depends on USER_SETMAC_SETMAC
+	default ""
+	help
+	  Specify the default OUI address prefix for setmac. The pre-programmed
+	  default is "0x00, 0x27, 0x04, 0x03, 0x02".
 
 config USER_FCONFIG_FCONFIG
 	bool "fconfig"
@@ -623,6 +622,12 @@ config USER_NETFLASH_VM_NETFLASH
 	  firmware out of complex containers such as QCOW2 images of
 	  DOS partitions.
 
+config USER_NETFLASH_USE_UBI
+	bool "netflash support for using UBI"
+	depends on USER_NETFLASH_NETFLASH && USER_MTD_UTILS
+	help
+	  Netflash will expect to write images into UBI volumes.
+
 config USER_RECOVER_STATIC_TFTP
 	bool "bootloader uses server config from flash"
 
@@ -773,7 +778,6 @@ config USER_MTD_UTILS_MTDPART
 config USER_MTD_UTILS_MKFSJFFS2
 	bool "mkfs.jffs2"
 	depends on USER_MTD_UTILS
-	select LIB_LIBLZO
 
 config USER_MTD_UTILS_JFFS2DUMP
 	bool "jffs2dump"
@@ -895,6 +899,10 @@ config USER_MTD_UTILS_UBIRENAME
 
 config USER_MTD_UTILS_UBIRSVOL
 	bool "ubirsvol"
+	depends on USER_MTD_UTILS
+
+config USER_MTD_UTILS_UBIBLOCK
+	bool "ubiblock"
 	depends on USER_MTD_UTILS
 
 endmenu
@@ -1428,11 +1436,6 @@ config USER_DISCARD_ECHO_NO_INSTALL
 	depends on USER_DISCARD_INETD_ECHO
 	help
 	  Stop echo from installing an entry into inetd.conf
-
-config USER_DNSMASQ_DNSMASQ
-	bool "dnsmasq"
-	help
-	  DNS masquerading
 
 config USER_ETHATTACH_ETHATTACH
 	bool "ethattach"
@@ -2120,12 +2123,6 @@ config USER_SETHDLC_SETHDLC
 	help
 	  Small utility for configuring HDLC network interfaces.
 
-config USER_SIPROXD_SIPROXD
-	bool "siproxd"
-	select LIB_OSIP2
-	help
-	  siproxd is a SIP proxy. See http://siproxd.sourceforge.net/
-
 config USER_SLATTACH_SLATTACH
 	bool "slattach"
 	select LIB_LIBNETOLD
@@ -2799,11 +2796,6 @@ config USER_PERL_PERL
 	help
 	  The PERL scripting language.
 
-config USER_POTRACE_POTRACE
-	bool 'potrace'
-	help
-	  The protrace graphics utility that converts bitmaps to vector graphics
-
 config USER_READPROFILE_READPROFILE
 	bool "readprofile"
 	help
@@ -2826,219 +2818,6 @@ config USER_SETSERIAL_SETSERIAL
 	help
 	  User level serial port configuration tool.
 	  Approx binary size: 18k
-
-config USER_SHADOW_UTILS
-	bool "shadow utilities"
-	help
-	  A collection of shadow password file based utilities.
-	  These are generally full featured with lots of flexibility.
-
-config USER_SHADOW_PAM
-	bool "use PAM"
-	depends on USER_SHADOW_UTILS
-	select LIB_LIBPAM
-	help
-	  Instead of using the shadow password file, authentication and session
-	  control is managed by PAM the pluggable authentication framework.
-
-config USER_SHADOW_SHAREDLIB
-	bool "use shared library"
-	depends on USER_SHADOW_UTILS
-	help
-	  Enabling this option creates a shadow shared library and all the
-	  various applications then use this library.  Enabling this option will
-	  save space.  The cost of this space saving is the opening of a trivial
-	  escalation from normal user privileges to super user ones.  You have
-	  been warned.
-
-config USER_SHADOW_CHAGE
-	bool "chage"
-	depends on USER_SHADOW_UTILS
-	help
-	  Change user password expiry information.
-
-config USER_SHADOW_CHFN
-	bool "chfn"
-	depends on USER_SHADOW_UTILS
-	help
-	  Change real user name and information.
-
-config USER_SHADOW_CHPASSWD
-	bool "chpasswd"
-	depends on USER_SHADOW_UTILS
-	help
-	  Update passwords in batch mode.
-
-config USER_SHADOW_CHSH
-	bool "chsh"
-	depends on USER_SHADOW_UTILS
-	help
-	  Change login shell.
-
-config USER_SHADOW_EXPIRY
-	bool "expiry"
-	depends on USER_SHADOW_UTILS
-	help
-	  Check and enforce password expiration policy.
-
-config USER_SHADOW_FAILLOG
-	bool "faillog"
-	depends on USER_SHADOW_UTILS
-	help
-	  Display faillog records or set login failure limits.
-
-config USER_SHADOW_GPASSWD
-	bool "gpasswd"
-	depends on USER_SHADOW_UTILS
-	help
-	  Administer the groups file.
-
-config USER_SHADOW_GROUPADD
-	bool "groupadd"
-	depends on USER_SHADOW_UTILS
-	help
-	  Create a new group.
-
-config USER_SHADOW_GROUPDEL
-	bool "groupdel"
-	depends on USER_SHADOW_UTILS
-	help
-	  Delete a group.
-
-config USER_SHADOW_GROUPMOD
-	bool "groupmod"
-	depends on USER_SHADOW_UTILS
-	help
-	  Modify a group.
-
-config USER_SHADOW_GROUPS
-	bool "groups"
-	depends on USER_SHADOW_UTILS
-	help
-	  Print the groups a user is in.
-
-config USER_SHADOW_GRPCK
-	bool "grpck"
-	depends on USER_SHADOW_UTILS
-	help
-	  Verify integrity of group files.
-
-config USER_SHADOW_GRPCONV
-	bool "grpconv"
-	depends on USER_SHADOW_UTILS
-	help
-	  Convert to and from shadow passwords and groups.
-
-config USER_SHADOW_GRPUNCONV
-	bool "grpunconv"
-	depends on USER_SHADOW_UTILS
-	help
-	  Convert to and from shadow passwords and groups.
-
-config USER_SHADOW_ID
-	bool "id"
-	depends on USER_SHADOW_UTILS
-	help
-	  Print real and effective UIDs and GIDs.
-
-config USER_SHADOW_LASTLOG
-	bool "lastlog"
-	depends on USER_SHADOW_UTILS
-	help
-	  Examine the lastlog file.
-	  This file contains historic login information.
-
-config USER_SHADOW_LOGIN
-	bool "login"
-	depends on USER_SHADOW_UTILS
-	help
-	  The shadow login program.
-	  Generally fully featured login program that supports shadow passwords.
-
-config USER_SHADOW_LOGOUTD
-	bool "logoutd"
-	depends on USER_SHADOW_UTILS
-	help
-	  Enforce login time restrictions.
-
-config USER_SHADOW_NEWGRP
-	bool "newgrp"
-	depends on USER_SHADOW_UTILS
-	help
-	  Log in to a new group.
-
-config USER_SHADOW_NEWUSERS
-	bool "newusers"
-	depends on USER_SHADOW_UTILS
-	help
-	  Update and create new users in batch.
-
-config USER_SHADOW_NOLOGIN
-	bool "nologin"
-	depends on USER_SHADOW_UTILS
-	help
-	  Politely refuse a login.
-
-config USER_SHADOW_PASSWD
-	bool "passwd"
-	depends on USER_SHADOW_UTILS
-	help
-	  The shadow passwd program that complements the shadow login by
-	  allowing passwords to be changed.
-
-config USER_SHADOW_PWCK
-	bool "pwck"
-	depends on USER_SHADOW_UTILS
-	help
-	  Verify integrity of password files.
-
-config USER_SHADOW_PWCONV
-	bool "pwconv"
-	depends on USER_SHADOW_UTILS
-	help
-	  Convert to and from shadow passwords and groups.
-
-config USER_SHADOW_PWUNCONV
-	bool "pwunconv"
-	depends on USER_SHADOW_UTILS
-	help
-	  Convert to and from shadow passwords and groups.
-
-config USER_SHADOW_SU
-	bool "su"
-	depends on USER_SHADOW_UTILS
-	help
-	  Change user ID or become super-user.
-
-config USER_SHADOW_SULOGIN
-	bool "sulogin"
-	depends on USER_SHADOW_UTILS
-	help
-	  Single-user login.
-
-config USER_SHADOW_USERADD
-	bool "useradd"
-	depends on USER_SHADOW_UTILS
-	help
-	  Create a new user or update default new user information.
-
-config USER_SHADOW_USERDEL
-	bool "userdel"
-	depends on USER_SHADOW_UTILS
-	help
-	  Delete a user account and related files.
-
-config USER_SHADOW_USERMOD
-	bool "usermod"
-	depends on USER_SHADOW_UTILS
-	help
-	  Modify a user account.
-
-config USER_SHADOW_VIPW
-	bool "vipw"
-	depends on USER_SHADOW_UTILS
-	help
-	  Edit the password, group, shadow-password or shadow-group file.
 
 config USER_TRIPWIRE_SIGGEN
 	bool "siggen"

@@ -1,0 +1,20 @@
+--- mDNSResponder-1310.100.10/mDNSCore/mDNS.c.org	2021-10-20 11:36:57.668163505 +1000
++++ mDNSResponder-1310.100.10/mDNSCore/mDNS.c	2021-10-20 11:37:38.974416636 +1000
+@@ -12354,7 +12354,7 @@
+             {
+                 // Don't use mDNS_DropLockBeforeCallback() here, since we don't allow API calls
+                 if (question->QuestionCallback)
+-                    question->QuestionCallback(m, question, &cr->resrec, mDNSfalse);
++                    question->QuestionCallback(m, question, &cr->resrec, QC_rmv);
+             }
+         }
+     }
+@@ -12972,7 +12972,7 @@
+         if (m->SPSBrowseCallback)
+         {
+             mDNS_DropLockBeforeCallback();      // Allow client to legally make mDNS API calls from the callback
+-            m->SPSBrowseCallback(m, &set->NetWakeBrowse, mDNSNULL, mDNSfalse);
++            m->SPSBrowseCallback(m, &set->NetWakeBrowse, mDNSNULL, QC_rmv);
+             mDNS_ReclaimLockAfterCallback();    // Decrement mDNS_reentrancy to block mDNS API calls again
+         }
+ 

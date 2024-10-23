@@ -3,8 +3,11 @@
 .. note:: Per leggere la documentazione originale in inglese:
 	  :ref:`Documentation/doc-guide/index.rst <doc_guide>`
 
+.. title:: Commenti in kernel-doc
+
 .. _it_kernel_doc:
 
+=================================
 Scrivere i commenti in kernel-doc
 =================================
 
@@ -177,9 +180,9 @@ Il valore di ritorno, se c'è, viene descritto in una sezione dedicata di nome
      se provate a formattare bene il vostro testo come nel seguente esempio::
 
 	* Return:
-	* 0 - OK
-	* -EINVAL - invalid argument
-	* -ENOMEM - out of memory
+	* %0 - OK
+	* %-EINVAL - invalid argument
+	* %-ENOMEM - out of memory
 
      le righe verranno unite e il risultato sarà::
 
@@ -189,8 +192,8 @@ Il valore di ritorno, se c'è, viene descritto in una sezione dedicata di nome
      utilizzare una lista ReST, ad esempio::
 
       * Return:
-      * * 0		- OK to runtime suspend the device
-      * * -EBUSY	- Device should not be runtime suspended
+      * * %0		- OK to runtime suspend the device
+      * * %-EBUSY	- Device should not be runtime suspended
 
   #) Se il vostro testo ha delle righe che iniziano con una frase seguita dai
      due punti, allora ognuna di queste frasi verrà considerata come il nome
@@ -469,6 +472,7 @@ Il titolo che segue ``DOC:`` funziona da intestazione all'interno del file
 sorgente, ma anche come identificatore per l'estrazione di questi commenti di
 documentazione. Quindi, il titolo dev'essere unico all'interno del file.
 
+=======================================
 Includere i commenti di tipo kernel-doc
 =======================================
 

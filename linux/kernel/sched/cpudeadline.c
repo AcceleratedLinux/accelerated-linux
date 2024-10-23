@@ -123,7 +123,7 @@ int cpudl_find(struct cpudl *cp, struct task_struct *p,
 		unsigned long cap, max_cap = 0;
 		int cpu, max_cpu = -1;
 
-		if (!static_branch_unlikely(&sched_asym_cpucapacity))
+		if (!sched_asym_cpucap_active())
 			return 1;
 
 		/* Ensure the capacity of the CPUs fits the task. */
@@ -131,7 +131,7 @@ int cpudl_find(struct cpudl *cp, struct task_struct *p,
 			if (!dl_task_fits_capacity(p, cpu)) {
 				cpumask_clear_cpu(cpu, later_mask);
 
-				cap = capacity_orig_of(cpu);
+				cap = arch_scale_cpu_capacity(cpu);
 
 				if (cap > max_cap ||
 				    (cpu == task_cpu(p) && cap == max_cap)) {

@@ -29,8 +29,8 @@ struct rsnd_ssiu {
 	     i++)
 
 /*
- *	SSI	Gen2		Gen3
- *	0	BUSIF0-3	BUSIF0-7
+ *	SSI	Gen2		Gen3		Gen4
+ *	0	BUSIF0-3	BUSIF0-7	BUSIF0-7
  *	1	BUSIF0-3	BUSIF0-7
  *	2	BUSIF0-3	BUSIF0-7
  *	3	BUSIF0		BUSIF0-7
@@ -40,10 +40,11 @@ struct rsnd_ssiu {
  *	7	BUSIF0		BUSIF0
  *	8	BUSIF0		BUSIF0
  *	9	BUSIF0-3	BUSIF0-7
- *	total	22		52
+ *	total	22		52		8
  */
 static const int gen2_id[] = { 0, 4,  8, 12, 13, 14, 15, 16, 17, 18 };
 static const int gen3_id[] = { 0, 8, 16, 24, 32, 40, 41, 42, 43, 44 };
+static const int gen4_id[] = { 0 };
 
 /* enable busif buffer over/under run interrupt. */
 #define rsnd_ssiu_busif_err_irq_enable(mod)  rsnd_ssiu_busif_err_irq_ctrl(mod, 1)
@@ -67,6 +68,8 @@ static void rsnd_ssiu_busif_err_irq_ctrl(struct rsnd_mod *mod, int enable)
 		shift  = 1;
 		offset = 1;
 		break;
+	default:
+		return;
 	}
 
 	for (i = 0; i < 4; i++) {
@@ -150,6 +153,10 @@ static int rsnd_ssiu_init(struct rsnd_mod *mod,
 	/* clear status */
 	rsnd_ssiu_busif_err_status_clear(mod);
 
+	/* Gen4 doesn't have SSI_MODE */
+	if (rsnd_is_gen4(priv))
+		goto ssi_mode_setting_end;
+
 	/*
 	 * SSI_MODE0
 	 */
@@ -204,6 +211,7 @@ static int rsnd_ssiu_init(struct rsnd_mod *mod,
 	rsnd_mod_bset(mod, SSI_MODE1, 0x0013001f, val1);
 	rsnd_mod_bset(mod, SSI_MODE2, 0x00000017, val2);
 
+ssi_mode_setting_end:
 	/*
 	 * Enable busif buffer over/under run interrupt.
 	 * It will be handled from ssi.c
@@ -405,7 +413,7 @@ static void rsnd_ssiu_debug_info(struct seq_file *m,
 				 struct rsnd_dai_stream *io,
 				struct rsnd_mod *mod)
 {
-	rsnd_debugfs_mod_reg_show(m, mod, RSND_GEN2_SSIU,
+	rsnd_debugfs_mod_reg_show(m, mod, RSND_BASE_SSIU,
 				  rsnd_mod_id(mod) * 0x80, 0x80);
 }
 #define DEBUG_INFO .debug_info = rsnd_ssiu_debug_info
@@ -417,6 +425,7 @@ static struct rsnd_mod_ops rsnd_ssiu_ops_gen2 = {
 	.name		= SSIU_NAME,
 	.dma_req	= rsnd_ssiu_dma_req,
 	.init		= rsnd_ssiu_init_gen2,
+	.quit		= rsnd_ssiu_quit,
 	.start		= rsnd_ssiu_start_gen2,
 	.stop		= rsnd_ssiu_stop_gen2,
 	.get_status	= rsnd_ssiu_get_status,
@@ -550,6 +559,9 @@ int rsnd_ssiu_probe(struct rsnd_priv *priv)
 		} else if (rsnd_is_gen3(priv)) {
 			list	= gen3_id;
 			nr	= ARRAY_SIZE(gen3_id);
+		} else if (rsnd_is_gen4(priv)) {
+			list	= gen4_id;
+			nr	= ARRAY_SIZE(gen4_id);
 		} else {
 			dev_err(dev, "unknown SSIU\n");
 			return -ENODEV;

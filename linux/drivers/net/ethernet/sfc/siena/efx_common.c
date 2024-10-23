@@ -306,7 +306,7 @@ int efx_siena_change_mtu(struct net_device *net_dev, int new_mtu)
 	efx_siena_stop_all(efx);
 
 	mutex_lock(&efx->mac_lock);
-	net_dev->mtu = new_mtu;
+	WRITE_ONCE(net_dev->mtu, new_mtu);
 	efx_siena_mac_reconfigure(efx, true);
 	mutex_unlock(&efx->mac_lock);
 
@@ -605,7 +605,7 @@ static size_t efx_siena_update_stats_atomic(struct efx_nic *efx, u64 *full_stats
 	return efx->type->update_stats(efx, full_stats, core_stats);
 }
 
-/* Context: process, dev_base_lock or RTNL held, non-blocking. */
+/* Context: process, rcu_read_lock or RTNL held, non-blocking. */
 void efx_siena_net_stats(struct net_device *net_dev,
 			 struct rtnl_link_stats64 *stats)
 {
@@ -1006,7 +1006,7 @@ int efx_siena_init_struct(struct efx_nic *efx,
 	efx->pci_dev = pci_dev;
 	efx->msg_enable = debug;
 	efx->state = STATE_UNINIT;
-	strlcpy(efx->name, pci_name(pci_dev), sizeof(efx->name));
+	strscpy(efx->name, pci_name(pci_dev), sizeof(efx->name));
 
 	efx->net_dev = net_dev;
 	efx->rx_prefix_size = efx->type->rx_prefix_size;
@@ -1178,7 +1178,7 @@ static ssize_t mcdi_logging_show(struct device *dev,
 	struct efx_nic *efx = dev_get_drvdata(dev);
 	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", mcdi->logging_enabled);
+	return sysfs_emit(buf, "%d\n", mcdi->logging_enabled);
 }
 
 static ssize_t mcdi_logging_store(struct device *dev,

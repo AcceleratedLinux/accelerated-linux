@@ -10,6 +10,7 @@
 #include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/sysfs.h>
 #include <asm/unaligned.h>
 
@@ -729,18 +730,14 @@ static ssize_t occ_show_extended(struct device *dev,
 			rc = sysfs_emit(buf, "%u",
 					get_unaligned_be32(&extn->sensor_id));
 		} else {
-			rc = sysfs_emit(buf, "%02x%02x%02x%02x\n",
-					extn->name[0], extn->name[1],
-					extn->name[2], extn->name[3]);
+			rc = sysfs_emit(buf, "%4phN\n", extn->name);
 		}
 		break;
 	case 1:
 		rc = sysfs_emit(buf, "%02x\n", extn->flags);
 		break;
 	case 2:
-		rc = sysfs_emit(buf, "%02x%02x%02x%02x%02x%02x\n",
-				extn->data[0], extn->data[1], extn->data[2],
-				extn->data[3], extn->data[4], extn->data[5]);
+		rc = sysfs_emit(buf, "%6phN\n", extn->data);
 		break;
 	default:
 		return -EINVAL;
@@ -1220,8 +1217,16 @@ int occ_setup(struct occ *occ)
 	occ->groups[0] = &occ->group;
 
 	rc = occ_setup_sysfs(occ);
-	if (rc)
+	if (rc) {
 		dev_err(occ->bus_dev, "failed to setup sysfs: %d\n", rc);
+		return rc;
+	}
+
+	if (!device_property_read_bool(occ->bus_dev, "ibm,no-poll-on-init")) {
+		rc = occ_active(occ, true);
+		if (rc)
+			occ_shutdown_sysfs(occ);
+	}
 
 	return rc;
 }

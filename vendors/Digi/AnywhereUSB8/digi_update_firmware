@@ -112,9 +112,9 @@ dev_mode() {
 	echo "$product_id, $CURR_PRODUCT_ID"
 	case "$CURR_PRODUCT_ID" in
 	0x0000d002)
-		gpio=505;;
+		gpio=537;;
 	0x0000d003|0x0000d004|0x0000d005|0x0000d006|0x0000d007|0x0000d008)
-		gpio=419;;
+		gpio=579;;
 	0x0000d009)
 		gpio=455;;
 	0x0000d00a|0x0000d00b)
@@ -219,7 +219,6 @@ echo UPDATE_SIZE = "$UPDATE_SIZE", SIG_SIZE = "$SIG_SIZE"
 echo "5% Checking new firmware image..." >&5
 
 /bin/tar xvzf "$updatefile" version signer_cert.pem
-/bin/openssl x509 -in signer_cert.pem -noout -pubkey >public.pem
 if ! /bin/openssl verify -verbose -CAfile /etc/ssl/firmware/firmware_ca.pem signer_cert.pem | /bin/grep "^signer_cert.pem: OK$"; then
 	if dev_mode ; then
 		if ! /bin/openssl verify -verbose -CAfile /etc/ssl/firmware/dev_firmware_ca.pem signer_cert.pem | /bin/grep "^signer_cert.pem: OK$"; then
@@ -241,8 +240,8 @@ echo "10% Checking new firmware image..." >&5
 echo "15% Checking new firmware image..." >&5
 
 HASH="$(/bin/openssl dgst -sha256 <"$updatefile")"
-echo "${HASH#(stdin)= }" >hash
-/bin/openssl rsautl -verify -inkey public.pem -keyform PEM -pubin -in sig > verify
+echo "${HASH#SHA2-256(stdin)= }" >hash
+/bin/openssl pkeyutl -verifyrecover -in sig -inkey signer_cert.pem -keyform PEM -certin > verify
 if ! /usr/bin/diff -s hash verify; then
 	echo "Invalid firmware update file." >&6
 	exit 1

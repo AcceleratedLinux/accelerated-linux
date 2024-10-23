@@ -8,6 +8,7 @@ Makefile: makefile
 	sh configure $(CONFIGURE_OPTS) $(CONFOPTS)
 
 clean:
-	if [ -f Makefile ]; then $(MAKE) -f Makefile distclean; fi
+	-$(MAKE) -f Makefile distclean
+	rm -f Makefile
 
 romfs:

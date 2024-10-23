@@ -21,7 +21,10 @@
  *
  */
 
+#include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_modeset_helper.h>
+#include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_vblank.h>
 
 #include "amdgpu.h"
@@ -49,6 +52,7 @@
 
 static void dce_v11_0_set_display_funcs(struct amdgpu_device *adev);
 static void dce_v11_0_set_irq_funcs(struct amdgpu_device *adev);
+static void dce_v11_0_hpd_int_ack(struct amdgpu_device *adev, int hpd);
 
 static const u32 crtc_offsets[] =
 {
@@ -385,6 +389,7 @@ static void dce_v11_0_hpd_init(struct amdgpu_device *adev)
 				    AMDGPU_HPD_DISCONNECT_INT_DELAY_IN_MS);
 		WREG32(mmDC_HPD_TOGGLE_FILT_CNTL + hpd_offsets[amdgpu_connector->hpd.hpd], tmp);
 
+		dce_v11_0_hpd_int_ack(adev, amdgpu_connector->hpd.hpd);
 		dce_v11_0_hpd_set_polarity(adev, amdgpu_connector->hpd.hpd);
 		amdgpu_irq_get(adev, &adev->hpd_irq, amdgpu_connector->hpd.hpd);
 	}
@@ -1066,7 +1071,7 @@ static void dce_v11_0_program_watermarks(struct amdgpu_device *adev,
 					    (u32)mode->clock);
 		line_time = (u32) div_u64((u64)mode->crtc_htotal * 1000000,
 					  (u32)mode->clock);
-		line_time = min(line_time, (u32)65535);
+		line_time = min_t(u32, line_time, 65535);
 
 		/* watermark for high clocks */
 		if (adev->pm.dpm_enabled) {
@@ -1096,7 +1101,7 @@ static void dce_v11_0_program_watermarks(struct amdgpu_device *adev,
 		wm_high.num_heads = num_heads;
 
 		/* set for high clocks */
-		latency_watermark_a = min(dce_v11_0_latency_watermark(&wm_high), (u32)65535);
+		latency_watermark_a = min_t(u32, dce_v11_0_latency_watermark(&wm_high), 65535);
 
 		/* possibly force display priority to high */
 		/* should really do this at mode validation time... */
@@ -1135,7 +1140,7 @@ static void dce_v11_0_program_watermarks(struct amdgpu_device *adev,
 		wm_low.num_heads = num_heads;
 
 		/* set for low clocks */
-		latency_watermark_b = min(dce_v11_0_latency_watermark(&wm_low), (u32)65535);
+		latency_watermark_b = min_t(u32, dce_v11_0_latency_watermark(&wm_low), 65535);
 
 		/* possibly force display priority to high */
 		/* should really do this at mode validation time... */
@@ -2914,12 +2919,9 @@ static int dce_v11_0_sw_init(void *handle)
 	adev_to_drm(adev)->mode_config.max_height = 16384;
 
 	adev_to_drm(adev)->mode_config.preferred_depth = 24;
-	/* disable prefer shadow for now due to hibernation issues */
-	adev_to_drm(adev)->mode_config.prefer_shadow = 0;
+	adev_to_drm(adev)->mode_config.prefer_shadow = 1;
 
 	adev_to_drm(adev)->mode_config.fb_modifiers_not_supported = true;
-
-	adev_to_drm(adev)->mode_config.fb_base = adev->gmc.aper_base;
 
 	r = amdgpu_display_modeset_create_props(adev);
 	if (r)
@@ -2949,6 +2951,17 @@ static int dce_v11_0_sw_init(void *handle)
 	r = dce_v11_0_audio_init(adev);
 	if (r)
 		return r;
+
+	/* Disable vblank IRQs aggressively for power-saving */
+	/* XXX: can this be enabled for DC? */
+	adev_to_drm(adev)->vblank_disable_immediate = true;
+
+	r = drm_vblank_init(adev_to_drm(adev), adev->mode_info.num_crtc);
+	if (r)
+		return r;
+
+	INIT_DELAYED_WORK(&adev->hotplug_work,
+		  amdgpu_display_hotplug_work_func);
 
 	drm_kms_helper_poll_init(adev_to_drm(adev));
 
@@ -3022,6 +3035,8 @@ static int dce_v11_0_hw_fini(void *handle)
 	}
 
 	dce_v11_0_pageflip_interrupt_fini(adev);
+
+	flush_delayed_work(&adev->hotplug_work);
 
 	return 0;
 }
@@ -3415,7 +3430,7 @@ static int dce_v11_0_hpd_irq(struct amdgpu_device *adev,
 
 	if (disp_int & mask) {
 		dce_v11_0_hpd_int_ack(adev, hpd);
-		schedule_work(&adev->hotplug_work);
+		schedule_delayed_work(&adev->hotplug_work, 0);
 		DRM_DEBUG("IH: HPD%d\n", hpd + 1);
 	}
 
@@ -3449,6 +3464,8 @@ static const struct amd_ip_funcs dce_v11_0_ip_funcs = {
 	.soft_reset = dce_v11_0_soft_reset,
 	.set_clockgating_state = dce_v11_0_set_clockgating_state,
 	.set_powergating_state = dce_v11_0_set_powergating_state,
+	.dump_ip_state = NULL,
+	.print_ip_state = NULL,
 };
 
 static void

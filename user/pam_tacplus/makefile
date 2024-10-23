@@ -1,6 +1,6 @@
-METHOD   = git
-URL      = https://github.com/jeroennijhof/pam_tacplus.git
-VERSION  = 1.3.8
-AUTORECONF = autoreconf -i
+VERSION = 1.7.0
+URL = https://github.com/kravietz/pam_tacplus/releases/download/v$(VERSION)/pam_tacplus-$(VERSION).tar.gz
+
+CONFVARS += gl_cv_func_getopt_gnu=yes
 
 include $(ROOTDIR)/tools/automake.inc

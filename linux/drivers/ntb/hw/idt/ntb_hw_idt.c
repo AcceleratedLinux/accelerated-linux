@@ -2129,7 +2129,7 @@ static int idt_init_isr(struct idt_ntb_dev *ndev)
 	int ret;
 
 	/* Allocate just one interrupt vector for the ISR */
-	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI | PCI_IRQ_LEGACY);
+	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI | PCI_IRQ_INTX);
 	if (ret != 1) {
 		dev_err(&pdev->dev, "Failed to allocate IRQ vector");
 		return ret;
@@ -2406,7 +2406,7 @@ static ssize_t idt_dbgfs_info_read(struct file *filp, char __user *ubuf,
 				"\t%hhu.\t", idx);
 		else
 			off += scnprintf(strbuf + off, size - off,
-				"\t%hhu-%hhu.\t", idx, idx + cnt - 1);
+				"\t%hhu-%d.\t", idx, idx + cnt - 1);
 
 		off += scnprintf(strbuf + off, size - off, "%s BAR%hhu, ",
 			idt_get_mw_name(data), ndev->mws[idx].bar);
@@ -2435,7 +2435,7 @@ static ssize_t idt_dbgfs_info_read(struct file *filp, char __user *ubuf,
 					"\t%hhu.\t", idx);
 			else
 				off += scnprintf(strbuf + off, size - off,
-					"\t%hhu-%hhu.\t", idx, idx + cnt - 1);
+					"\t%hhu-%d.\t", idx, idx + cnt - 1);
 
 			off += scnprintf(strbuf + off, size - off,
 				"%s BAR%hhu, ", idt_get_mw_name(data),
@@ -2480,7 +2480,7 @@ static ssize_t idt_dbgfs_info_read(struct file *filp, char __user *ubuf,
 		int src;
 		data = idt_ntb_msg_read(&ndev->ntb, &src, idx);
 		off += scnprintf(strbuf + off, size - off,
-			"\t%hhu. 0x%08x from peer %hhu (Port %hhu)\n",
+			"\t%hhu. 0x%08x from peer %d (Port %hhu)\n",
 			idx, data, src, ndev->peers[src].port);
 	}
 	off += scnprintf(strbuf + off, size - off, "\n");
@@ -2651,20 +2651,18 @@ static int idt_init_pci(struct idt_ntb_dev *ndev)
 	}
 
 	/*
-	 * Enable the device advanced error reporting. It's not critical to
+	 * The PCI core enables device error reporting. It's not critical to
 	 * have AER disabled in the kernel.
+	 *
+	 * Cleanup nonfatal error status before getting to init.
 	 */
-	ret = pci_enable_pcie_error_reporting(pdev);
-	if (ret != 0)
-		dev_warn(&pdev->dev, "PCIe AER capability disabled\n");
-	else /* Cleanup nonfatal error status before getting to init */
-		pci_aer_clear_nonfatal_status(pdev);
+	pci_aer_clear_nonfatal_status(pdev);
 
 	/* First enable the PCI device */
 	ret = pcim_enable_device(pdev);
 	if (ret != 0) {
 		dev_err(&pdev->dev, "Failed to enable PCIe device\n");
-		goto err_disable_aer;
+		return ret;
 	}
 
 	/*
@@ -2692,8 +2690,6 @@ static int idt_init_pci(struct idt_ntb_dev *ndev)
 
 err_clear_master:
 	pci_clear_master(pdev);
-err_disable_aer:
-	(void)pci_disable_pcie_error_reporting(pdev);
 
 	return ret;
 }
@@ -2713,9 +2709,6 @@ static void idt_deinit_pci(struct idt_ntb_dev *ndev)
 
 	/* Clear the bus master disabling the Request TLPs translation */
 	pci_clear_master(pdev);
-
-	/* Disable the AER capability */
-	(void)pci_disable_pcie_error_reporting(pdev);
 
 	dev_dbg(&pdev->dev, "NT-function PCIe interface cleared");
 }
@@ -2891,6 +2884,7 @@ static struct pci_driver idt_pci_driver = {
 
 static int __init idt_pci_driver_init(void)
 {
+	int ret;
 	pr_info("%s %s\n", NTB_DESC, NTB_VER);
 
 	/* Create the top DebugFS directory if the FS is initialized */
@@ -2898,7 +2892,11 @@ static int __init idt_pci_driver_init(void)
 		dbgfs_topdir = debugfs_create_dir(KBUILD_MODNAME, NULL);
 
 	/* Register the NTB hardware driver to handle the PCI device */
-	return pci_register_driver(&idt_pci_driver);
+	ret = pci_register_driver(&idt_pci_driver);
+	if (ret)
+		debugfs_remove_recursive(dbgfs_topdir);
+
+	return ret;
 }
 module_init(idt_pci_driver_init);
 

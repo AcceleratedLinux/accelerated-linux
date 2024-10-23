@@ -26,10 +26,15 @@ properties:
       - ti,ina226
       - ti,ina230
       - ti,ina231
+      - ti,ina237
       - ti,ina238
+      - ti,ina260
 
   reg:
     maxItems: 1
+
+  "#io-channel-cells":
+    const: 1
 
   shunt-resistor:
     description:
@@ -57,11 +62,18 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     enum: [1, 2, 4, 8]
 
+  vs-supply:
+    description: phandle to the regulator that provides the VS supply typically
+      in range from 2.7 V to 5.5 V.
+
 required:
   - compatible
   - reg
 
-additionalProperties: false
+allOf:
+  - $ref: hwmon-common.yaml#
+
+unevaluatedProperties: false
 
 examples:
   - |
@@ -72,6 +84,9 @@ examples:
         power-sensor@44 {
             compatible = "ti,ina220";
             reg = <0x44>;
+            #io-channel-cells = <1>;
+            label = "vdd_3v0";
             shunt-resistor = <1000>;
+            vs-supply = <&vdd_3v0>;
         };
     };

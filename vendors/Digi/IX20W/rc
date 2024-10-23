@@ -33,19 +33,15 @@ ifconfig lo 127.0.0.1
 setmac -i eth1,eth2 -u -n 2
 
 echo "Initializing Wi-Fi interface control..."
-# GPIO123 = WiFi module power (output, active high)
-# GPIO124 = BT module power (output, active high)
-echo 123 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio123/direction
-echo 124 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio124/direction
+echo disabled > /sys/devices/platform/regulator_wifi/state
 sleep 1
-echo 1 > /sys/class/gpio/gpio123/value
-echo 1 > /sys/class/gpio/gpio124/value
+echo enabled > /sys/devices/platform/regulator_wifi/state
 
-# developer key
-echo 86 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio86/direction
+# Bluetooth is not currently used on this product
+# The pin will not go low unless we first bring the HCI up
+hciconfig hci0 up
+sleep 1
+hciconfig hci0 down
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory

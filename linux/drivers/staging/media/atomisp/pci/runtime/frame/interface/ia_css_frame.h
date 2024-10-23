@@ -109,16 +109,13 @@ void ia_css_frame_free_multiple(unsigned int num_frames,
  *
  * @param	frame	The allocated frame.
  * @param[in]	size_bytes	The frame size in bytes.
- * @param[in]	contiguous	Allocate memory physically contiguously or not.
  * @return	The error code.
  *
  * Allocate a frame using the given size in bytes.
  * The frame structure is partially null initialized.
  */
-int ia_css_frame_allocate_with_buffer_size(
-    struct ia_css_frame **frame,
-    const unsigned int size_bytes,
-    const bool contiguous);
+int ia_css_frame_allocate_with_buffer_size(struct ia_css_frame **frame,
+					   const unsigned int size_bytes);
 
 /* @brief Check whether 2 frames are same type
  *
@@ -140,5 +137,7 @@ bool ia_css_frame_is_same_type(
  */
 int ia_css_dma_configure_from_info(struct dma_port_config *config,
 				   const struct ia_css_frame_info *info);
+
+unsigned int ia_css_frame_pad_width(unsigned int width, enum ia_css_frame_format format);
 
 #endif /* __IA_CSS_FRAME_H__ */

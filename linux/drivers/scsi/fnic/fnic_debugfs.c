@@ -1,19 +1,5 @@
-/*
- * Copyright 2012 Cisco Systems, Inc.  All rights reserved.
- *
- * This program is free software; you may redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 of the License.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright 2012 Cisco Systems, Inc.  All rights reserved.
 
 #include <linux/module.h>
 #include <linux/errno.h>
@@ -66,9 +52,10 @@ int fnic_debugfs_init(void)
 		fc_trc_flag->fnic_trace = 2;
 		fc_trc_flag->fc_trace = 3;
 		fc_trc_flag->fc_clear = 4;
+		return 0;
 	}
 
-	return 0;
+	return -ENOMEM;
 }
 
 /*
@@ -215,25 +202,21 @@ static int fnic_trace_debugfs_open(struct inode *inode,
 		return -ENOMEM;
 
 	if (*rdata_ptr == fc_trc_flag->fnic_trace) {
-		fnic_dbg_prt->buffer = vmalloc(array3_size(3, trace_max_pages,
+		fnic_dbg_prt->buffer = vzalloc(array3_size(3, trace_max_pages,
 							   PAGE_SIZE));
 		if (!fnic_dbg_prt->buffer) {
 			kfree(fnic_dbg_prt);
 			return -ENOMEM;
 		}
-		memset((void *)fnic_dbg_prt->buffer, 0,
-		3 * (trace_max_pages * PAGE_SIZE));
 		fnic_dbg_prt->buffer_len = fnic_get_trace_data(fnic_dbg_prt);
 	} else {
 		fnic_dbg_prt->buffer =
-			vmalloc(array3_size(3, fnic_fc_trace_max_pages,
+			vzalloc(array3_size(3, fnic_fc_trace_max_pages,
 					    PAGE_SIZE));
 		if (!fnic_dbg_prt->buffer) {
 			kfree(fnic_dbg_prt);
 			return -ENOMEM;
 		}
-		memset((void *)fnic_dbg_prt->buffer, 0,
-			3 * (fnic_fc_trace_max_pages * PAGE_SIZE));
 		fnic_dbg_prt->buffer_len =
 			fnic_fc_trace_get_data(fnic_dbg_prt, *rdata_ptr);
 	}

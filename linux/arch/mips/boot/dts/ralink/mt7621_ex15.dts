@@ -2,6 +2,7 @@
 
 #include "mt7621.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include "mt7621_pstore.dtsi"
 
 / {
@@ -16,6 +17,43 @@
 	chosen {
 		stdout-path = "serial0:115200";
 	};
+
+	gpio-keys {
+                compatible = "gpio-keys";
+
+                factory-button {
+                        label = "factory";
+                        linux,code = <KEY_DELETE>;
+                        gpios = <&gpio 28 GPIO_ACTIVE_LOW>;
+                };
+
+                sim-button {
+                        label = "sim_switch";
+                        linux,code = <KEY_SELECT>;
+                        gpios = <&gpio 26 GPIO_ACTIVE_LOW>;
+                };
+	};
+
+	reg_wifi: regulator-wifi {
+		/* Note: This is not an actual regulator, but rather a disable
+		 * pin on the module. */
+		compatible = "regulator-fixed";
+		regulator-name = "wifi-en";
+		gpio = <&gpio 30 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+	regulator_wifi {
+		compatible = "regulator-output";
+		vout-supply = <&reg_wifi>;
+	};
+
+	sim-mux0 {
+		compatible = "sim-mux";
+
+		sim-select-gpios  = <&gpio 27 GPIO_ACTIVE_HIGH>;
+
+		sim-count = <2>;
+	};
 };
 
 &pcie {
@@ -24,7 +62,7 @@
 	status = "okay";
 };
 
-&xhci {
+&usb {
 	status = "okay";
 };
 
@@ -60,6 +98,10 @@
 	pinctrl-0 = <&mdio_pins>, <&rgmii1_pins>;
 };
 
+&gmac1 {
+        status = "disabled";
+};
+
 &switch0 {
 	ports {
 		port@0 {
@@ -85,11 +127,11 @@
 	};
 };
 
-&uartlite0 {
+&serial0 {
 	status = "okay";
 };
 
-&uartlite1 {
+&serial1 {
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
@@ -97,7 +139,7 @@
 	dcd-gpios = <&gpio 8 GPIO_ACTIVE_LOW>;
 };
 
-&uartlite2 {
+&serial2 {
 	status = "disabled";
 };
 
@@ -108,4 +150,19 @@
 			function = "gpio";
 		};
 	};
+};
+
+&gpio {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+	/*  8 */	  "", "", "", "", "", "", "", "",
+	/* 16 */	  "", "", "", "", "", "", "", "",
+	/* 24 */	  "", "", "sim_switch", "", "factory", "", "", "",
+	/* 32 */	  "", "", "", "", "", "", "", "",
+	/* 40 */	  "", "", "", "", "", "", "", "",
+	/* 48 */	  "", "", "", "", "", "", "", "",
+	/* 56 */	  "", "", "", "", "", "", "", "",
+	/* 64 */	  "", "", "", "", "", "", "", "",
+	/* 72 */	  "", "", "", "", "", "", "", "",
+	/* 80 */	  "", "", "", "", "", "", "", "",
+	/* 88 */	  "", "", "", "", "", "", "", "";
 };

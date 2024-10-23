@@ -93,12 +93,12 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/sama5d31ek.dtb $(IMAGEDIR)/
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/sama5d31ek.dtb >> $(ZIMAGE)
+	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/microchip/sama5d31ek.dtb $(IMAGEDIR)/
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/microchip/sama5d31ek.dtb >> $(ZIMAGE)
 	if [ -d /tftpboot ]; then \
 		cp $(ZIMAGE) /tftpboot/ ; \
 		cp $(ROMFSIMG) /tftpboot/ ; \
-		cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/sama5d31ek.dtb /tftpboot/ ; \
+		cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/microchip/sama5d31ek.dtb /tftpboot/ ; \
 	fi
 
 include $(ROOTDIR)/vendors/config/config.dev

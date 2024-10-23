@@ -512,7 +512,7 @@ static void new_system_port_status(struct vub300_mmc_host *vub300)
 		vub300->card_present = 1;
 		vub300->bus_width = 0;
 		if (disable_offload_processing)
-			strncpy(vub300->vub_name, "EMPTY Processing Disabled",
+			strscpy(vub300->vub_name, "EMPTY Processing Disabled",
 				sizeof(vub300->vub_name));
 		else
 			vub300->vub_name[0] = 0;
@@ -1216,7 +1216,7 @@ static void __download_offload_pseudocode(struct vub300_mmc_host *vub300,
 		dev_err(&vub300->udev->dev,
 			"corrupt offload pseudocode in firmware %s\n",
 			vub300->vub_name);
-		strncpy(vub300->vub_name, "corrupt offload pseudocode",
+		strscpy(vub300->vub_name, "corrupt offload pseudocode",
 			sizeof(vub300->vub_name));
 		return;
 	}
@@ -1250,7 +1250,7 @@ static void __download_offload_pseudocode(struct vub300_mmc_host *vub300,
 				"not enough memory for xfer buffer to send"
 				" INTERRUPT_PSEUDOCODE for %s %s\n", fw->data,
 				vub300->vub_name);
-			strncpy(vub300->vub_name,
+			strscpy(vub300->vub_name,
 				"SDIO interrupt pseudocode download failed",
 				sizeof(vub300->vub_name));
 			return;
@@ -1259,7 +1259,7 @@ static void __download_offload_pseudocode(struct vub300_mmc_host *vub300,
 		dev_err(&vub300->udev->dev,
 			"corrupt interrupt pseudocode in firmware %s %s\n",
 			fw->data, vub300->vub_name);
-		strncpy(vub300->vub_name, "corrupt interrupt pseudocode",
+		strscpy(vub300->vub_name, "corrupt interrupt pseudocode",
 			sizeof(vub300->vub_name));
 		return;
 	}
@@ -1293,7 +1293,7 @@ static void __download_offload_pseudocode(struct vub300_mmc_host *vub300,
 				"not enough memory for xfer buffer to send"
 				" TRANSFER_PSEUDOCODE for %s %s\n", fw->data,
 				vub300->vub_name);
-			strncpy(vub300->vub_name,
+			strscpy(vub300->vub_name,
 				"SDIO transfer pseudocode download failed",
 				sizeof(vub300->vub_name));
 			return;
@@ -1302,7 +1302,7 @@ static void __download_offload_pseudocode(struct vub300_mmc_host *vub300,
 		dev_err(&vub300->udev->dev,
 			"corrupt transfer pseudocode in firmware %s %s\n",
 			fw->data, vub300->vub_name);
-		strncpy(vub300->vub_name, "corrupt transfer pseudocode",
+		strscpy(vub300->vub_name, "corrupt transfer pseudocode",
 			sizeof(vub300->vub_name));
 		return;
 	}
@@ -1336,15 +1336,13 @@ static void __download_offload_pseudocode(struct vub300_mmc_host *vub300,
 		dev_err(&vub300->udev->dev,
 			"corrupt dynamic registers in firmware %s\n",
 			vub300->vub_name);
-		strncpy(vub300->vub_name, "corrupt dynamic registers",
+		strscpy(vub300->vub_name, "corrupt dynamic registers",
 			sizeof(vub300->vub_name));
 		return;
 	}
 
-	return;
-
 copy_error_message:
-	strncpy(vub300->vub_name, "SDIO pseudocode download failed",
+	strscpy(vub300->vub_name, "SDIO pseudocode download failed",
 		sizeof(vub300->vub_name));
 }
 
@@ -1372,11 +1370,11 @@ static void download_offload_pseudocode(struct vub300_mmc_host *vub300)
 		 vub300->vub_name);
 	retval = request_firmware(&fw, vub300->vub_name, &card->dev);
 	if (retval < 0) {
-		strncpy(vub300->vub_name, "vub_default.bin",
+		strscpy(vub300->vub_name, "vub_default.bin",
 			sizeof(vub300->vub_name));
 		retval = request_firmware(&fw, vub300->vub_name, &card->dev);
 		if (retval < 0) {
-			strncpy(vub300->vub_name,
+			strscpy(vub300->vub_name,
 				"no SDIO offload firmware found",
 				sizeof(vub300->vub_name));
 		} else {
@@ -1715,6 +1713,9 @@ static void construct_request_response(struct vub300_mmc_host *vub300,
 	int bytes = 3 & less_cmd;
 	int words = less_cmd >> 2;
 	u8 *r = vub300->resp.response.command_response;
+
+	if (!resp_len)
+		return;
 	if (bytes == 3) {
 		cmd->resp[words] = (r[1 + (words << 2)] << 24)
 			| (r[2 + (words << 2)] << 16)
@@ -1757,7 +1758,7 @@ static void vub300_cmndwork_thread(struct work_struct *work)
 			 * has been already downloaded to the VUB300 chip
 			 */
 		} else if (0 == vub300->mmc->card->sdio_funcs) {
-			strncpy(vub300->vub_name, "SD memory device",
+			strscpy(vub300->vub_name, "SD memory device",
 				sizeof(vub300->vub_name));
 		} else {
 			download_offload_pseudocode(vub300);
@@ -2049,6 +2050,7 @@ static void vub300_enable_sdio_irq(struct mmc_host *mmc, int enable)
 		return;
 	kref_get(&vub300->kref);
 	if (enable) {
+		set_current_state(TASK_RUNNING);
 		mutex_lock(&vub300->irq_mutex);
 		if (vub300->irqs_queued) {
 			vub300->irqs_queued -= 1;
@@ -2064,6 +2066,7 @@ static void vub300_enable_sdio_irq(struct mmc_host *mmc, int enable)
 			vub300_queue_poll_work(vub300, 0);
 		}
 		mutex_unlock(&vub300->irq_mutex);
+		set_current_state(TASK_INTERRUPTIBLE);
 	} else {
 		vub300->irq_enabled = 0;
 	}
@@ -2299,14 +2302,15 @@ static int vub300_probe(struct usb_interface *interface,
 				0x0000, 0x0000, &vub300->system_port_status,
 				sizeof(vub300->system_port_status), 1000);
 	if (retval < 0) {
-		goto error4;
+		goto error5;
 	} else if (sizeof(vub300->system_port_status) == retval) {
 		vub300->card_present =
 			(0x0001 & vub300->system_port_status.port_flags) ? 1 : 0;
 		vub300->read_only =
 			(0x0010 & vub300->system_port_status.port_flags) ? 1 : 0;
 	} else {
-		goto error4;
+		retval = -EINVAL;
+		goto error5;
 	}
 	usb_set_intfdata(interface, vub300);
 	INIT_DELAYED_WORK(&vub300->pollwork, vub300_pollwork_thread);
@@ -2329,8 +2333,13 @@ static int vub300_probe(struct usb_interface *interface,
 			 "USB vub300 remote SDIO host controller[%d]"
 			 "connected with no SD/SDIO card inserted\n",
 			 interface_to_InterfaceNumber(interface));
-	mmc_add_host(mmc);
+	retval = mmc_add_host(mmc);
+	if (retval)
+		goto error6;
+
 	return 0;
+error6:
+	del_timer_sync(&vub300->inactivity_timer);
 error5:
 	mmc_free_host(mmc);
 	/*

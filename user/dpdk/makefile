@@ -1,4 +1,4 @@
-URL = http://fast.dpdk.org/rel/dpdk-16.11.1.tar.xz
+URL = https://fast.dpdk.org/rel/dpdk-16.11.1.tar.xz
 
 dpdk-16.11.1_BUILDDIR = dpdk-stable-16.11.1
 

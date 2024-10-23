@@ -22,7 +22,7 @@ config CLKEVT_I8253
 config I8253_LOCK
 	bool
 
-config OMAP_DM_TIMER
+config OMAP_DM_SYSTIMER
 	bool
 	select TIMER_OF
 
@@ -55,6 +55,13 @@ config DIGICOLOR_TIMER
 	depends on HAS_IOMEM
 	help
 	  Enables the support for the digicolor timer driver.
+
+config OMAP_DM_TIMER
+	bool "OMAP dual-mode timer driver" if ARCH_K3 || COMPILE_TEST
+	default y if ARCH_K3
+	select TIMER_OF
+	help
+	  Enables the support for the TI dual-mode timer driver.
 
 config DW_APB_TIMER
 	bool "DW APB timer driver" if COMPILE_TEST
@@ -149,6 +156,14 @@ config TEGRA_TIMER
 	depends on ARCH_TEGRA || COMPILE_TEST
 	help
 	  Enables support for the Tegra driver.
+
+config TEGRA186_TIMER
+	bool "NVIDIA Tegra186 timer driver"
+	depends on ARCH_TEGRA || COMPILE_TEST
+	depends on WATCHDOG && WATCHDOG_CORE
+	help
+	  Enables support for the timers and watchdogs found on NVIDIA
+	  Tegra186 and later SoCs.
 
 config VT8500_TIMER
 	bool "VT8500 timer driver" if COMPILE_TEST
@@ -367,7 +382,7 @@ config ARM_GT_INITIAL_PRESCALER_VAL
 	depends on ARM_GLOBAL_TIMER
 	help
 	  When the ARM global timer initializes, its current rate is declared
-	  to the kernel and maintained forever. Should it's parent clock
+	  to the kernel and maintained forever. Should its parent clock
 	  change, the driver tries to fix the timer's internal prescaler.
 	  On some machs (i.e. Zynq) the initial prescaler value thus poses
 	  bounds about how much the parent clock is allowed to decrease or
@@ -419,14 +434,14 @@ config ATMEL_TCB_CLKSRC
 config CLKSRC_EXYNOS_MCT
 	bool "Exynos multi core timer driver" if COMPILE_TEST
 	depends on ARM || ARM64
-	depends on ARCH_EXYNOS || COMPILE_TEST
+	depends on ARCH_ARTPEC || ARCH_EXYNOS || COMPILE_TEST
 	help
 	  Support for Multi Core Timer controller on Exynos SoCs.
 
 config CLKSRC_SAMSUNG_PWM
 	bool "PWM timer driver for Samsung S3C, S5P" if COMPILE_TEST
 	depends on HAS_IOMEM
-	depends on ARCH_EXYNOS || ARCH_S3C24XX || ARCH_S3C64XX || ARCH_S5PV210 || COMPILE_TEST
+	depends on ARCH_EXYNOS || ARCH_S3C64XX || ARCH_S5PV210 || COMPILE_TEST
 	help
 	  This is a new clocksource driver for the PWM timer found in
 	  Samsung S3C, S5P and Exynos SoCs, replacing an earlier driver
@@ -446,13 +461,6 @@ config VF_PIT_TIMER
 	help
 	  Support for Periodic Interrupt Timer on Freescale Vybrid Family SoCs.
 
-config OXNAS_RPS_TIMER
-	bool "Oxford Semiconductor OXNAS RPS Timers driver" if COMPILE_TEST
-	select TIMER_OF
-	select CLKSRC_MMIO
-	help
-	  This enables support for the Oxford Semiconductor OXNAS RPS timers.
-
 config SYS_SUPPORTS_SH_CMT
 	bool
 
@@ -463,6 +471,15 @@ config MTK_TIMER
 	select CLKSRC_MMIO
 	help
 	  Support for Mediatek timer driver.
+
+config MTK_CPUX_TIMER
+	bool "MediaTek CPUX timer driver" if COMPILE_TEST
+	depends on HAS_IOMEM
+	default ARCH_MEDIATEK
+	select TIMER_OF
+	select CLKSRC_MMIO
+	help
+	  Support for MediaTek CPUXGPT timer driver.
 
 config SPRD_TIMER
 	bool "Spreadtrum timer driver" if EXPERT
@@ -588,6 +605,15 @@ config TIMER_IMX_SYS_CTR
 	  Enable this option to use i.MX system counter timer as a
 	  clockevent.
 
+config CLKSRC_LOONGSON1_PWM
+	bool "Clocksource using Loongson1 PWM"
+	depends on MACH_LOONGSON32 || COMPILE_TEST
+	select MIPS_EXTERNAL_TIMER
+	select TIMER_OF
+	help
+	  Enable this option to use Loongson1 PWM timer as clocksource
+	  instead of the performance counter.
+
 config CLKSRC_ST_LPC
 	bool "Low power clocksource found in the LPC" if COMPILE_TEST
 	select TIMER_OF if OF
@@ -691,7 +717,7 @@ config INGENIC_OST
 
 config MICROCHIP_PIT64B
 	bool "Microchip PIT64B support"
-	depends on OF || COMPILE_TEST
+	depends on OF && ARM
 	select TIMER_OF
 	help
 	  This option enables Microchip PIT64B timer for Atmel
@@ -705,5 +731,16 @@ config GOLDFISH_TIMER
 	depends on RTC_DRV_GOLDFISH
 	help
 	  Support for the timer/counter of goldfish-rtc
+
+config EP93XX_TIMER
+	bool "Cirrus Logic ep93xx timer driver" if COMPILE_TEST
+	depends on ARCH_EP93XX
+	depends on GENERIC_CLOCKEVENTS
+	depends on HAS_IOMEM
+	select CLKSRC_MMIO
+	select TIMER_OF
+	help
+	  Enables support for the Cirrus Logic timer block
+	  EP93XX.
 
 endmenu

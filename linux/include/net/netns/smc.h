@@ -18,5 +18,11 @@ struct netns_smc {
 	struct ctl_table_header		*smc_hdr;
 #endif
 	unsigned int			sysctl_autocorking_size;
+	unsigned int			sysctl_smcr_buf_type;
+	int				sysctl_smcr_testlink_time;
+	int				sysctl_wmem;
+	int				sysctl_rmem;
+	int				sysctl_max_links_per_lgr;
+	int				sysctl_max_conns_per_lgr;
 };
 #endif

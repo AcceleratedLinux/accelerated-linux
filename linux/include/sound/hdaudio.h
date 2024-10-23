@@ -10,6 +10,8 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/iopoll.h>
+#include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/timecounter.h>
 #include <sound/core.h>
@@ -31,7 +33,7 @@ struct hda_device_id;
 /*
  * exported bus type
  */
-extern struct bus_type snd_hda_bus_type;
+extern const struct bus_type snd_hda_bus_type;
 
 /*
  * generic arrays
@@ -93,6 +95,7 @@ struct hdac_device {
 	bool lazy_cache:1;	/* don't wake up for writes */
 	bool caps_overwriting:1; /* caps overwrite being in process */
 	bool cache_coef:1;	/* cache COEF read/write too */
+	unsigned int registered:1; /* codec was registered */
 };
 
 /* device/driver type used for matching */
@@ -121,7 +124,7 @@ void snd_hdac_device_exit(struct hdac_device *dev);
 int snd_hdac_device_register(struct hdac_device *codec);
 void snd_hdac_device_unregister(struct hdac_device *codec);
 int snd_hdac_device_set_chip_name(struct hdac_device *codec, const char *name);
-int snd_hdac_codec_modalias(struct hdac_device *hdac, char *buf, size_t size);
+int snd_hdac_codec_modalias(const struct hdac_device *hdac, char *buf, size_t size);
 
 int snd_hdac_refresh_widgets(struct hdac_device *codec);
 
@@ -137,13 +140,14 @@ int snd_hdac_get_connections(struct hdac_device *codec, hda_nid_t nid,
 			     hda_nid_t *conn_list, int max_conns);
 int snd_hdac_get_sub_nodes(struct hdac_device *codec, hda_nid_t nid,
 			   hda_nid_t *start_id);
-unsigned int snd_hdac_calc_stream_format(unsigned int rate,
-					 unsigned int channels,
-					 snd_pcm_format_t format,
-					 unsigned int maxbps,
-					 unsigned short spdif_ctls);
+unsigned int snd_hdac_stream_format_bits(snd_pcm_format_t format, snd_pcm_subformat_t subformat,
+					 unsigned int maxbits);
+unsigned int snd_hdac_stream_format(unsigned int channels, unsigned int bits, unsigned int rate);
+unsigned int snd_hdac_spdif_stream_format(unsigned int channels, unsigned int bits,
+					  unsigned int rate, unsigned short spdif_ctls);
 int snd_hdac_query_supported_pcm(struct hdac_device *codec, hda_nid_t nid,
-				u32 *ratesp, u64 *formatsp, unsigned int *bpsp);
+				 u32 *ratesp, u64 *formatsp, u32 *subformatsp,
+				 unsigned int *bpsp);
 bool snd_hdac_is_supported_format(struct hdac_device *codec, hda_nid_t nid,
 				  unsigned int format);
 
@@ -345,6 +349,9 @@ struct hdac_bus {
 	bool corbrp_self_clear:1;	/* CORBRP clears itself after reset */
 	bool polling_mode:1;
 	bool needs_damn_long_delay:1;
+	bool not_use_interrupts:1;	/* prohibiting the RIRB IRQ */
+	bool access_sdnctl_in_dword:1;	/* accessing the sdnctl register by dword */
+	bool use_pio_for_commands:1;	/* Use PIO instead of CORB for commands */
 
 	int poll_count;
 
@@ -493,6 +500,13 @@ static inline u16 snd_hdac_reg_readw(struct hdac_bus *bus, void __iomem *addr)
 	snd_hdac_chip_writeb(chip, reg, \
 			     (snd_hdac_chip_readb(chip, reg) & ~(mask)) | (val))
 
+/* update register macro */
+#define snd_hdac_updatel(addr, reg, mask, val)		\
+	writel(((readl(addr + reg) & ~(mask)) | (val)), addr + reg)
+
+#define snd_hdac_updatew(addr, reg, mask, val)		\
+	writew(((readw(addr + reg) & ~(mask)) | (val)), addr + reg)
+
 /*
  * HD-audio stream
  */
@@ -508,6 +522,13 @@ struct hdac_stream {
 	unsigned int fifo_size;	/* FIFO size */
 
 	void __iomem *sd_addr;	/* stream descriptor pointer */
+
+	void __iomem *spib_addr; /* software position in buffers stream pointer */
+	void __iomem *fifo_addr; /* software position Max fifos stream pointer */
+
+	void __iomem *dpibr_addr; /* DMA position in buffer resume pointer */
+	u32 dpib;		/* DMA position in buffer */
+	u32 lpib;		/* Linear position in buffer */
 
 	u32 sd_int_sta_mask;	/* stream int status mask */
 
@@ -549,18 +570,19 @@ void snd_hdac_stream_init(struct hdac_bus *bus, struct hdac_stream *azx_dev,
 			  int idx, int direction, int tag);
 struct hdac_stream *snd_hdac_stream_assign(struct hdac_bus *bus,
 					   struct snd_pcm_substream *substream);
+void snd_hdac_stream_release_locked(struct hdac_stream *azx_dev);
 void snd_hdac_stream_release(struct hdac_stream *azx_dev);
 struct hdac_stream *snd_hdac_get_stream(struct hdac_bus *bus,
 					int dir, int stream_tag);
 
-int snd_hdac_stream_setup(struct hdac_stream *azx_dev);
+int snd_hdac_stream_setup(struct hdac_stream *azx_dev, bool code_loading);
 void snd_hdac_stream_cleanup(struct hdac_stream *azx_dev);
 int snd_hdac_stream_setup_periods(struct hdac_stream *azx_dev);
 int snd_hdac_stream_set_params(struct hdac_stream *azx_dev,
 				unsigned int format_val);
-void snd_hdac_stream_start(struct hdac_stream *azx_dev, bool fresh_start);
-void snd_hdac_stream_clear(struct hdac_stream *azx_dev);
+void snd_hdac_stream_start(struct hdac_stream *azx_dev);
 void snd_hdac_stream_stop(struct hdac_stream *azx_dev);
+void snd_hdac_stop_streams(struct hdac_bus *bus);
 void snd_hdac_stop_streams_and_chip(struct hdac_bus *bus);
 void snd_hdac_stream_reset(struct hdac_stream *azx_dev);
 void snd_hdac_stream_sync_trigger(struct hdac_stream *azx_dev, bool set,
@@ -571,6 +593,19 @@ void snd_hdac_stream_timecounter_init(struct hdac_stream *azx_dev,
 				      unsigned int streams);
 int snd_hdac_get_stream_stripe_ctl(struct hdac_bus *bus,
 				struct snd_pcm_substream *substream);
+
+void snd_hdac_stream_spbcap_enable(struct hdac_bus *chip,
+				   bool enable, int index);
+int snd_hdac_stream_set_spib(struct hdac_bus *bus,
+			     struct hdac_stream *azx_dev, u32 value);
+int snd_hdac_stream_get_spbmaxfifo(struct hdac_bus *bus,
+				   struct hdac_stream *azx_dev);
+void snd_hdac_stream_drsm_enable(struct hdac_bus *bus,
+				 bool enable, int index);
+int snd_hdac_stream_wait_drsm(struct hdac_stream *azx_dev);
+int snd_hdac_stream_set_dpibr(struct hdac_bus *bus,
+			      struct hdac_stream *azx_dev, u32 value);
+int snd_hdac_stream_set_lpib(struct hdac_stream *azx_dev, u32 value);
 
 /*
  * macros for easy use
@@ -588,6 +623,15 @@ int snd_hdac_get_stream_stripe_ctl(struct hdac_bus *bus,
 	snd_hdac_reg_readw((dev)->bus, (dev)->sd_addr + AZX_REG_ ## reg)
 #define snd_hdac_stream_readb(dev, reg) \
 	snd_hdac_reg_readb((dev)->bus, (dev)->sd_addr + AZX_REG_ ## reg)
+#define snd_hdac_stream_readb_poll(dev, reg, val, cond, delay_us, timeout_us) \
+	read_poll_timeout_atomic(snd_hdac_reg_readb, val, cond, delay_us, timeout_us, \
+				 false, (dev)->bus, (dev)->sd_addr + AZX_REG_ ## reg)
+#define snd_hdac_stream_readw_poll(dev, reg, val, cond, delay_us, timeout_us) \
+	read_poll_timeout_atomic(snd_hdac_reg_readw, val, cond, delay_us, timeout_us, \
+				 false, (dev)->bus, (dev)->sd_addr + AZX_REG_ ## reg)
+#define snd_hdac_stream_readl_poll(dev, reg, val, cond, delay_us, timeout_us) \
+	read_poll_timeout_atomic(snd_hdac_reg_readl, val, cond, delay_us, timeout_us, \
+				 false, (dev)->bus, (dev)->sd_addr + AZX_REG_ ## reg)
 
 /* update a register, pass without AZX_REG_ prefix */
 #define snd_hdac_stream_updatel(dev, reg, mask, val) \
@@ -665,5 +709,31 @@ static inline unsigned int snd_array_index(struct snd_array *array, void *ptr)
 #define snd_array_for_each(array, idx, ptr) \
 	for ((idx) = 0, (ptr) = (array)->list; (idx) < (array)->used; \
 	     (ptr) = snd_array_elem(array, ++(idx)))
+
+/*
+ * Device matching
+ */
+
+#define HDA_CONTROLLER_IS_HSW(pci) (pci_match_id((struct pci_device_id []){ \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_HSW_0) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_HSW_2) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_HSW_3) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_BDW) }, \
+			{ } \
+		}, pci))
+
+#define HDA_CONTROLLER_IS_APL(pci) (pci_match_id((struct pci_device_id []){ \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_APL) }, \
+			{ } \
+		}, pci))
+
+#define HDA_CONTROLLER_IN_GPU(pci) (pci_match_id((struct pci_device_id []){ \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_DG1) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_DG2_0) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_DG2_1) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_DG2_2) }, \
+			{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HDA_BMG) }, \
+			{ } \
+		}, pci) || HDA_CONTROLLER_IS_HSW(pci))
 
 #endif /* __SOUND_HDAUDIO_H */

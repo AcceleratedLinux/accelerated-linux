@@ -39,8 +39,6 @@ int build_id__mark_dso_hit(struct perf_tool *tool, union perf_event *event,
 			   struct perf_sample *sample, struct evsel *evsel,
 			   struct machine *machine);
 
-int dsos__hit_all(struct perf_session *session);
-
 int perf_event__inject_buildid(struct perf_tool *tool, union perf_event *event,
 			       struct perf_sample *sample, struct evsel *evsel,
 			       struct machine *machine);
@@ -66,10 +64,18 @@ int build_id_cache__list_build_ids(const char *pathname, struct nsinfo *nsi,
 				   struct strlist **result);
 bool build_id_cache__cached(const char *sbuild_id);
 int build_id_cache__add(const char *sbuild_id, const char *name, const char *realname,
-			struct nsinfo *nsi, bool is_kallsyms, bool is_vdso);
-int build_id_cache__add_s(const char *sbuild_id,
-			  const char *name, struct nsinfo *nsi,
-			  bool is_kallsyms, bool is_vdso);
+			struct nsinfo *nsi, bool is_kallsyms, bool is_vdso,
+			const char *proper_name, const char *root_dir);
+int __build_id_cache__add_s(const char *sbuild_id,
+			    const char *name, struct nsinfo *nsi,
+			    bool is_kallsyms, bool is_vdso,
+			    const char *proper_name, const char *root_dir);
+static inline int build_id_cache__add_s(const char *sbuild_id,
+					const char *name, struct nsinfo *nsi,
+					bool is_kallsyms, bool is_vdso)
+{
+	return __build_id_cache__add_s(sbuild_id, name, nsi, is_kallsyms, is_vdso, NULL, NULL);
+}
 int build_id_cache__remove_s(const char *sbuild_id);
 
 extern char buildid_dir[];

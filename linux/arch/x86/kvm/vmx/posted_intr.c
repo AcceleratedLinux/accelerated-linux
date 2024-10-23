@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/kvm_host.h>
 
 #include <asm/irq_remapping.h>
@@ -34,7 +36,7 @@ static inline struct pi_desc *vcpu_to_pi_desc(struct kvm_vcpu *vcpu)
 	return &(to_vmx(vcpu)->pi_desc);
 }
 
-static int pi_try_set_control(struct pi_desc *pi_desc, u64 old, u64 new)
+static int pi_try_set_control(struct pi_desc *pi_desc, u64 *pold, u64 new)
 {
 	/*
 	 * PID.ON can be set at any time by a different vCPU or by hardware,
@@ -42,7 +44,7 @@ static int pi_try_set_control(struct pi_desc *pi_desc, u64 old, u64 new)
 	 * update must be retried with a fresh snapshot an ON change causes
 	 * the cmpxchg to fail.
 	 */
-	if (cmpxchg64(&pi_desc->control, old, new) != old)
+	if (!try_cmpxchg64(&pi_desc->control, pold, new))
 		return -EBUSY;
 
 	return 0;
@@ -96,22 +98,23 @@ void vmx_vcpu_pi_load(struct kvm_vcpu *vcpu, int cpu)
 	if (!x2apic_mode)
 		dest = (dest << 8) & 0xFF00;
 
+	old.control = READ_ONCE(pi_desc->control);
 	do {
-		old.control = new.control = READ_ONCE(pi_desc->control);
+		new.control = old.control;
 
 		/*
 		 * Clear SN (as above) and refresh the destination APIC ID to
 		 * handle task migration (@cpu != vcpu->cpu).
 		 */
 		new.ndst = dest;
-		new.sn = 0;
+		__pi_clear_sn(&new);
 
 		/*
 		 * Restore the notification vector; in the blocking case, the
 		 * descriptor was modified on "put" to use the wakeup vector.
 		 */
 		new.nv = POSTED_INTR_VECTOR;
-	} while (pi_try_set_control(pi_desc, old.control, new.control));
+	} while (pi_try_set_control(pi_desc, &old.control, new.control));
 
 	local_irq_restore(flags);
 
@@ -154,14 +157,14 @@ static void pi_enable_wakeup_handler(struct kvm_vcpu *vcpu)
 		      &per_cpu(wakeup_vcpus_on_cpu, vcpu->cpu));
 	raw_spin_unlock(&per_cpu(wakeup_vcpus_on_cpu_lock, vcpu->cpu));
 
-	WARN(pi_desc->sn, "PI descriptor SN field set before blocking");
+	WARN(pi_test_sn(pi_desc), "PI descriptor SN field set before blocking");
 
+	old.control = READ_ONCE(pi_desc->control);
 	do {
-		old.control = new.control = READ_ONCE(pi_desc->control);
-
 		/* set 'NV' to 'wakeup vector' */
+		new.control = old.control;
 		new.nv = POSTED_INTR_WAKEUP_VECTOR;
-	} while (pi_try_set_control(pi_desc, old.control, new.control));
+	} while (pi_try_set_control(pi_desc, &old.control, new.control));
 
 	/*
 	 * Send a wakeup IPI to this CPU if an interrupt may have been posted
@@ -172,16 +175,29 @@ static void pi_enable_wakeup_handler(struct kvm_vcpu *vcpu)
 	 * scheduled out).
 	 */
 	if (pi_test_on(&new))
-		apic->send_IPI_self(POSTED_INTR_WAKEUP_VECTOR);
+		__apic_send_IPI_self(POSTED_INTR_WAKEUP_VECTOR);
 
 	local_irq_restore(flags);
+}
+
+static bool vmx_needs_pi_wakeup(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * The default posted interrupt vector does nothing when
+	 * invoked outside guest mode.   Return whether a blocked vCPU
+	 * can be the target of posted interrupts, as is the case when
+	 * using either IPI virtualization or VT-d PI, so that the
+	 * notification vector is switched to the one that calls
+	 * back to the pi_wakeup_handler() function.
+	 */
+	return vmx_can_use_ipiv(vcpu) || vmx_can_use_vtd_pi(vcpu->kvm);
 }
 
 void vmx_vcpu_pi_put(struct kvm_vcpu *vcpu)
 {
 	struct pi_desc *pi_desc = vcpu_to_pi_desc(vcpu);
 
-	if (!vmx_can_use_vtd_pi(vcpu->kvm))
+	if (!vmx_needs_pi_wakeup(vcpu))
 		return;
 
 	if (kvm_vcpu_is_blocking(vcpu) && !vmx_interrupt_blocked(vcpu))

@@ -25,6 +25,8 @@
 #include <rdma/mlx5_user_ioctl_verbs.h>
 
 #include "srq.h"
+#include "qp.h"
+#include "macsec.h"
 
 #define mlx5_ib_dbg(_dev, format, arg...)                                      \
 	dev_dbg(&(_dev)->ib_dev.dev, "%s:%d:(pid %d): " format, __func__,      \
@@ -37,6 +39,10 @@
 #define mlx5_ib_warn(_dev, format, arg...)                                     \
 	dev_warn(&(_dev)->ib_dev.dev, "%s:%d:(pid %d): " format, __func__,     \
 		 __LINE__, current->pid, ##arg)
+
+#define mlx5_ib_log(lvl, _dev, format, arg...)                                 \
+	dev_printk(lvl, &(_dev)->ib_dev.dev,  "%s:%d:(pid %d): " format,       \
+		   __func__, __LINE__, current->pid, ##arg)
 
 #define MLX5_IB_DEFAULT_UIDX 0xffffff
 #define MLX5_USER_ASSIGNED_UIDX_MASK __mlx5_mask(qpc, user_index)
@@ -233,8 +239,19 @@ enum {
 #define MLX5_IB_NUM_SNIFFER_FTS		2
 #define MLX5_IB_NUM_EGRESS_FTS		1
 #define MLX5_IB_NUM_FDB_FTS		MLX5_BY_PASS_NUM_REGULAR_PRIOS
+
+struct mlx5_ib_anchor {
+	struct mlx5_flow_table *ft;
+	struct mlx5_flow_group *fg_goto_table;
+	struct mlx5_flow_group *fg_drop;
+	struct mlx5_flow_handle *rule_goto_table;
+	struct mlx5_flow_handle *rule_drop;
+	unsigned int rule_goto_table_ref;
+};
+
 struct mlx5_ib_flow_prio {
 	struct mlx5_flow_table		*flow_table;
+	struct mlx5_ib_anchor		anchor;
 	unsigned int			refcount;
 };
 
@@ -257,6 +274,12 @@ struct mlx5_ib_flow_matcher {
 	struct mlx5_core_dev	*mdev;
 	atomic_t		usecnt;
 	u8			match_criteria_enable;
+};
+
+struct mlx5_ib_steering_anchor {
+	struct mlx5_ib_flow_prio *ft_prio;
+	struct mlx5_ib_dev *dev;
+	atomic_t usecnt;
 };
 
 struct mlx5_ib_pp {
@@ -607,12 +630,23 @@ enum mlx5_mkey_type {
 	MLX5_MKEY_INDIRECT_DEVX,
 };
 
+struct mlx5r_cache_rb_key {
+	u8 ats:1;
+	unsigned int access_mode;
+	unsigned int access_flags;
+	unsigned int ndescs;
+};
+
 struct mlx5_ib_mkey {
 	u32 key;
 	enum mlx5_mkey_type type;
 	unsigned int ndescs;
 	struct wait_queue_head wait;
 	refcount_t usecount;
+	/* Cacheable user Mkey must hold either a rb_key or a cache_ent. */
+	struct mlx5r_cache_rb_key rb_key;
+	struct mlx5_cache_ent *cache_ent;
+	u8 cacheable : 1;
 };
 
 #define MLX5_IB_MTT_PRESENT (MLX5_IB_MTT_READ | MLX5_IB_MTT_WRITE)
@@ -635,20 +669,9 @@ struct mlx5_ib_mr {
 	struct ib_mr ibmr;
 	struct mlx5_ib_mkey mmkey;
 
-	/* User MR data */
-	struct mlx5_cache_ent *cache_ent;
-	/* Everything after cache_ent is zero'd when MR allocated */
 	struct ib_umem *umem;
 
 	union {
-		/* Used only while the MR is in the cache */
-		struct {
-			u32 out[MLX5_ST_SZ_DW(create_mkey_out)];
-			struct mlx5_async_work cb_work;
-			/* Cache list element */
-			struct list_head list;
-		};
-
 		/* Used only by kernel MRs (umem == NULL) */
 		struct {
 			void *descs;
@@ -688,12 +711,6 @@ struct mlx5_ib_mr {
 	};
 };
 
-/* Zero the fields in the mr that are variant depending on usage */
-static inline void mlx5_clear_mr(struct mlx5_ib_mr *mr)
-{
-	memset_after(mr, 0, cache_ent);
-}
-
 static inline bool is_odp_mr(struct mlx5_ib_mr *mr)
 {
 	return IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING) && mr->umem &&
@@ -717,44 +734,61 @@ struct mlx5_ib_umr_context {
 	struct completion	done;
 };
 
+enum {
+	MLX5_UMR_STATE_UNINIT,
+	MLX5_UMR_STATE_ACTIVE,
+	MLX5_UMR_STATE_RECOVER,
+	MLX5_UMR_STATE_ERR,
+};
+
 struct umr_common {
 	struct ib_pd	*pd;
 	struct ib_cq	*cq;
 	struct ib_qp	*qp;
-	/* control access to UMR QP
+	/* Protects from UMR QP overflow
 	 */
 	struct semaphore	sem;
+	/* Protects from using UMR while the UMR is not active
+	 */
+	struct mutex lock;
+	unsigned int state;
+};
+
+#define NUM_MKEYS_PER_PAGE \
+	((PAGE_SIZE - sizeof(struct list_head)) / sizeof(u32))
+
+struct mlx5_mkeys_page {
+	u32 mkeys[NUM_MKEYS_PER_PAGE];
+	struct list_head list;
+};
+static_assert(sizeof(struct mlx5_mkeys_page) == PAGE_SIZE);
+
+struct mlx5_mkeys_queue {
+	struct list_head pages_list;
+	u32 num_pages;
+	unsigned long ci;
+	spinlock_t lock; /* sync list ops */
 };
 
 struct mlx5_cache_ent {
-	struct list_head	head;
-	/* sync access to the cahce entry
-	 */
-	spinlock_t		lock;
-
+	struct mlx5_mkeys_queue	mkeys_queue;
+	u32			pending;
 
 	char                    name[4];
-	u32                     order;
-	u32			access_mode;
-	u32			page;
-	unsigned int		ndescs;
 
+	struct rb_node		node;
+	struct mlx5r_cache_rb_key rb_key;
+
+	u8 is_tmp:1;
 	u8 disabled:1;
 	u8 fill_to_high_water:1;
 
 	/*
-	 * - available_mrs is the length of list head, ie the number of MRs
-	 *   available for immediate allocation.
-	 * - total_mrs is available_mrs plus all in use MRs that could be
-	 *   returned to the cache.
-	 * - limit is the low water mark for available_mrs, 2* limit is the
+	 * - limit is the low water mark for stored mkeys, 2* limit is the
 	 *   upper water mark.
-	 * - pending is the number of MRs currently being created
 	 */
-	u32 total_mrs;
-	u32 available_mrs;
+	u32 in_use;
 	u32 limit;
-	u32 pending;
 
 	/* Statistics */
 	u32                     miss;
@@ -763,11 +797,23 @@ struct mlx5_cache_ent {
 	struct delayed_work	dwork;
 };
 
-struct mlx5_mr_cache {
+struct mlx5r_async_create_mkey {
+	union {
+		u32 in[MLX5_ST_SZ_BYTES(create_mkey_in)];
+		u32 out[MLX5_ST_SZ_DW(create_mkey_out)];
+	};
+	struct mlx5_async_work cb_work;
+	struct mlx5_cache_ent *ent;
+	u32 mkey;
+};
+
+struct mlx5_mkey_cache {
 	struct workqueue_struct *wq;
-	struct mlx5_cache_ent	ent[MAX_MR_CACHE_ENTRIES];
-	struct dentry		*root;
+	struct rb_root		rb_root;
+	struct mutex		rb_lock;
+	struct dentry		*fs_root;
 	unsigned long		last_add;
+	struct delayed_work	remove_ent_dwork;
 };
 
 struct mlx5_ib_port_resources {
@@ -826,6 +872,9 @@ struct mlx5_roce {
 	rwlock_t		netdev_lock;
 	struct net_device	*netdev;
 	struct notifier_block	nb;
+	struct netdev_net_notifier nn;
+	struct notifier_block	mdev_nb;
+	struct net_device	*tracking_netdev;
 	atomic_t		tx_port_affinity;
 	enum ib_port_state last_port_state;
 	struct mlx5_ib_dev	*dev;
@@ -838,6 +887,9 @@ struct mlx5_ib_port {
 	struct mlx5_ib_dbg_cc_params *dbg_cc_params;
 	struct mlx5_roce roce;
 	struct mlx5_eswitch_rep		*rep;
+#ifdef CONFIG_MLX5_MACSEC
+	struct mlx5_reserved_gids *reserved_gids;
+#endif
 };
 
 struct mlx5_ib_dbg_param {
@@ -868,6 +920,8 @@ enum mlx5_ib_dbg_cc_types {
 	MLX5_IB_DBG_CC_NP_CNP_DSCP,
 	MLX5_IB_DBG_CC_NP_CNP_PRIO_MODE,
 	MLX5_IB_DBG_CC_NP_CNP_PRIO,
+	MLX5_IB_DBG_CC_GENERAL_RTT_RESP_DSCP_VALID,
+	MLX5_IB_DBG_CC_GENERAL_RTT_RESP_DSCP,
 	MLX5_IB_DBG_CC_MAX,
 };
 
@@ -1045,6 +1099,19 @@ struct mlx5_port_caps {
 	u8 ext_port_cap;
 };
 
+
+struct mlx5_special_mkeys {
+	u32 dump_fill_mkey;
+	__be32 null_mkey;
+	__be32 terminate_scatter_list_mkey;
+};
+
+struct mlx5_macsec {
+	struct mutex lock; /* Protects mlx5_macsec internal contexts */
+	struct list_head macsec_devices_list;
+	struct notifier_block blocking_events_nb;
+};
+
 struct mlx5_ib_dev {
 	struct ib_device		ib_dev;
 	struct mlx5_core_dev		*mdev;
@@ -1064,7 +1131,7 @@ struct mlx5_ib_dev {
 	struct mlx5_ib_resources	devr;
 
 	atomic_t			mkey_var;
-	struct mlx5_mr_cache		cache;
+	struct mlx5_mkey_cache		cache;
 	struct timer_list		delay_timer;
 	/* Prevents soft lock on massive reg MRs */
 	struct mutex			slow_path_mutex;
@@ -1075,7 +1142,6 @@ struct mlx5_ib_dev {
 
 	struct xarray		odp_mkeys;
 
-	u32			null_mkey;
 	struct mlx5_ib_flow_db	*flow_db;
 	/* protect resources needed as part of reset flow */
 	spinlock_t		reset_flow_resource_lock;
@@ -1104,6 +1170,11 @@ struct mlx5_ib_dev {
 	struct mlx5_port_caps port_caps[MLX5_MAX_PORTS];
 	u16 pkey_table_len;
 	u8 lag_ports;
+	struct mlx5_special_mkeys mkeys;
+
+#ifdef CONFIG_MLX5_MACSEC
+	struct mlx5_macsec macsec;
+#endif
 };
 
 static inline struct mlx5_ib_cq *to_mibcq(struct mlx5_core_cq *mcq)
@@ -1307,14 +1378,17 @@ int mlx5_ib_query_port(struct ib_device *ibdev, u32 port,
 		       struct ib_port_attr *props);
 void mlx5_ib_populate_pas(struct ib_umem *umem, size_t page_size, __be64 *pas,
 			  u64 access_flags);
-void mlx5_ib_copy_pas(u64 *old, u64 *new, int step, int num);
 int mlx5_ib_get_cqe_size(struct ib_cq *ibcq);
-int mlx5_mr_cache_init(struct mlx5_ib_dev *dev);
-int mlx5_mr_cache_cleanup(struct mlx5_ib_dev *dev);
+int mlx5_mkey_cache_init(struct mlx5_ib_dev *dev);
+void mlx5_mkey_cache_cleanup(struct mlx5_ib_dev *dev);
+struct mlx5_cache_ent *
+mlx5r_cache_create_ent_locked(struct mlx5_ib_dev *dev,
+			      struct mlx5r_cache_rb_key rb_key,
+			      bool persistent_entry);
 
 struct mlx5_ib_mr *mlx5_mr_cache_alloc(struct mlx5_ib_dev *dev,
-				       struct mlx5_cache_ent *ent,
-				       int access_flags);
+				       int access_flags, int access_mode,
+				       int ndescs);
 
 int mlx5_ib_check_mr_status(struct ib_mr *ibmr, u32 check_mask,
 			    struct ib_mr_status *mr_status);
@@ -1338,7 +1412,7 @@ int mlx5r_odp_create_eq(struct mlx5_ib_dev *dev, struct mlx5_ib_pf_eq *eq);
 void mlx5_ib_odp_cleanup_one(struct mlx5_ib_dev *ibdev);
 int __init mlx5_ib_odp_init(void);
 void mlx5_ib_odp_cleanup(void);
-void mlx5_odp_init_mr_cache_entry(struct mlx5_cache_ent *ent);
+int mlx5_odp_init_mkey_cache(struct mlx5_ib_dev *dev);
 void mlx5_odp_populate_xlt(void *xlt, size_t idx, size_t nentries,
 			   struct mlx5_ib_mr *mr, int flags);
 
@@ -1357,7 +1431,10 @@ static inline int mlx5r_odp_create_eq(struct mlx5_ib_dev *dev,
 static inline void mlx5_ib_odp_cleanup_one(struct mlx5_ib_dev *ibdev) {}
 static inline int mlx5_ib_odp_init(void) { return 0; }
 static inline void mlx5_ib_odp_cleanup(void)				    {}
-static inline void mlx5_odp_init_mr_cache_entry(struct mlx5_cache_ent *ent) {}
+static inline int mlx5_odp_init_mkey_cache(struct mlx5_ib_dev *dev)
+{
+	return 0;
+}
 static inline void mlx5_odp_populate_xlt(void *xlt, size_t idx, size_t nentries,
 					 struct mlx5_ib_mr *mr, int flags) {}
 
@@ -1539,6 +1616,21 @@ int mlx5_ib_test_wc(struct mlx5_ib_dev *dev);
 
 static inline bool mlx5_ib_lag_should_assign_affinity(struct mlx5_ib_dev *dev)
 {
+	/*
+	 * If the driver is in hash mode and the port_select_flow_table_bypass cap
+	 * is supported, it means that the driver no longer needs to assign the port
+	 * affinity by default. If a user wants to set the port affinity explicitly,
+	 * the user has a dedicated API to do that, so there is no need to assign
+	 * the port affinity by default.
+	 */
+	if (dev->lag_active &&
+	    mlx5_lag_mode_is_hash(dev->mdev) &&
+	    MLX5_CAP_PORT_SELECTION(dev->mdev, port_select_flow_table_bypass))
+		return 0;
+
+	if (mlx5_lag_is_lacp_owner(dev->mdev) && !dev->lag_active)
+		return 0;
+
 	return dev->lag_active ||
 		(MLX5_CAP_GEN(dev->mdev, num_lag_ports) > 1 &&
 		 MLX5_CAP_GEN(dev->mdev, lag_tx_port_affinity));
@@ -1549,4 +1641,43 @@ static inline bool rt_supported(int ts_cap)
 	return ts_cap == MLX5_TIMESTAMP_FORMAT_CAP_REAL_TIME ||
 	       ts_cap == MLX5_TIMESTAMP_FORMAT_CAP_FREE_RUNNING_AND_REAL_TIME;
 }
+
+/*
+ * PCI Peer to Peer is a trainwreck. If no switch is present then things
+ * sometimes work, depending on the pci_distance_p2p logic for excluding broken
+ * root complexes. However if a switch is present in the path, then things get
+ * really ugly depending on how the switch is setup. This table assumes that the
+ * root complex is strict and is validating that all req/reps are matches
+ * perfectly - so any scenario where it sees only half the transaction is a
+ * failure.
+ *
+ * CR/RR/DT  ATS RO P2P
+ * 00X       X   X  OK
+ * 010       X   X  fails (request is routed to root but root never sees comp)
+ * 011       0   X  fails (request is routed to root but root never sees comp)
+ * 011       1   X  OK
+ * 10X       X   1  OK
+ * 101       X   0  fails (completion is routed to root but root didn't see req)
+ * 110       X   0  SLOW
+ * 111       0   0  SLOW
+ * 111       1   0  fails (completion is routed to root but root didn't see req)
+ * 111       1   1  OK
+ *
+ * Unfortunately we cannot reliably know if a switch is present or what the
+ * CR/RR/DT ACS settings are, as in a VM that is all hidden. Assume that
+ * CR/RR/DT is 111 if the ATS cap is enabled and follow the last three rows.
+ *
+ * For now assume if the umem is a dma_buf then it is P2P.
+ */
+static inline bool mlx5_umem_needs_ats(struct mlx5_ib_dev *dev,
+				       struct ib_umem *umem, int access_flags)
+{
+	if (!MLX5_CAP_GEN(dev->mdev, ats) || !umem->is_dmabuf)
+		return false;
+	return access_flags & IB_ACCESS_RELAXED_ORDERING;
+}
+
+int set_roce_addr(struct mlx5_ib_dev *dev, u32 port_num,
+		  unsigned int index, const union ib_gid *gid,
+		  const struct ib_gid_attr *attr);
 #endif /* MLX5_IB_H */

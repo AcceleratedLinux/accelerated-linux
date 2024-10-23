@@ -220,21 +220,18 @@ static __always_inline void clear_pending_set_locked(struct qspinlock *lock)
  */
 static __always_inline u32 xchg_tail(struct qspinlock *lock, u32 tail)
 {
-	u32 old, new, val = atomic_read(&lock->val);
+	u32 old, new;
 
-	for (;;) {
-		new = (val & _Q_LOCKED_PENDING_MASK) | tail;
+	old = atomic_read(&lock->val);
+	do {
+		new = (old & _Q_LOCKED_PENDING_MASK) | tail;
 		/*
 		 * We can use relaxed semantics since the caller ensures that
 		 * the MCS node is properly initialized before updating the
 		 * tail.
 		 */
-		old = atomic_cmpxchg_relaxed(&lock->val, val, new);
-		if (old == val)
-			break;
+	} while (!atomic_try_cmpxchg_relaxed(&lock->val, &old, new));
 
-		val = old;
-	}
 	return old;
 }
 #endif /* _Q_PENDING_BITS == 8 */
@@ -313,7 +310,7 @@ static __always_inline u32  __pv_wait_head_or_lock(struct qspinlock *lock,
  * contended             :    (*,x,y) +--> (*,0,0) ---> (*,0,1) -'  :
  *   queue               :         ^--'                             :
  */
-void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
+void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 {
 	struct mcs_spinlock *prev, *next, *node;
 	u32 old, tail;
@@ -371,7 +368,7 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	/*
 	 * We're pending, wait for the owner to go away.
 	 *
-	 * 0,1,1 -> 0,1,0
+	 * 0,1,1 -> *,1,0
 	 *
 	 * this wait loop must be a load-acquire such that we match the
 	 * store-release that clears the locked bit and create lock
@@ -380,7 +377,7 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * barriers.
 	 */
 	if (val & _Q_LOCKED_MASK)
-		atomic_cond_read_acquire(&lock->val, !(VAL & _Q_LOCKED_MASK));
+		smp_cond_load_acquire(&lock->locked, !VAL);
 
 	/*
 	 * take ownership and clear the pending bit.

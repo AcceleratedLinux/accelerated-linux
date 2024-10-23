@@ -72,6 +72,7 @@ static int red_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 {
 	struct red_sched_data *q = qdisc_priv(sch);
 	struct Qdisc *child = q->qdisc;
+	unsigned int len;
 	int ret;
 
 	q->vars.qavg = red_calc_qavg(&q->parms,
@@ -126,9 +127,10 @@ static int red_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		break;
 	}
 
+	len = qdisc_pkt_len(skb);
 	ret = qdisc_enqueue(skb, child, to_free);
 	if (likely(ret == NET_XMIT_SUCCESS)) {
-		qdisc_qstats_backlog_inc(sch, skb);
+		sch->qstats.backlog += len;
 		sch->q.qlen++;
 	} else if (net_xmit_drop_count(ret)) {
 		q->stats.pdrop++;
@@ -176,8 +178,6 @@ static void red_reset(struct Qdisc *sch)
 	struct red_sched_data *q = qdisc_priv(sch);
 
 	qdisc_reset(q->qdisc);
-	sch->qstats.backlog = 0;
-	sch->q.qlen = 0;
 	red_restart(&q->vars);
 }
 
@@ -321,12 +321,15 @@ static inline void red_adaptative_timer(struct timer_list *t)
 {
 	struct red_sched_data *q = from_timer(q, t, adapt_timer);
 	struct Qdisc *sch = q->sch;
-	spinlock_t *root_lock = qdisc_lock(qdisc_root_sleeping(sch));
+	spinlock_t *root_lock;
 
+	rcu_read_lock();
+	root_lock = qdisc_lock(qdisc_root_sleeping(sch));
 	spin_lock(root_lock);
 	red_adaptative_algo(&q->parms, &q->vars);
 	mod_timer(&q->adapt_timer, jiffies + HZ/2);
 	spin_unlock(root_lock);
+	rcu_read_unlock();
 }
 
 static int red_init(struct Qdisc *sch, struct nlattr *opt,
@@ -369,9 +372,6 @@ static int red_change(struct Qdisc *sch, struct nlattr *opt,
 	struct red_sched_data *q = qdisc_priv(sch);
 	struct nlattr *tb[TCA_RED_MAX + 1];
 	int err;
-
-	if (!opt)
-		return -EINVAL;
 
 	err = nla_parse_nested_deprecated(tb, TCA_RED_MAX, opt, red_policy,
 					  extack);
@@ -463,7 +463,6 @@ static int red_dump_stats(struct Qdisc *sch, struct gnet_dump *d)
 	}
 	st.early = q->stats.prob_drop + q->stats.forced_drop;
 	st.pdrop = q->stats.pdrop;
-	st.other = q->stats.other;
 	st.marked = q->stats.prob_mark + q->stats.forced_mark;
 
 	return gnet_stats_copy_app(d, &st, sizeof(st));
@@ -522,12 +521,7 @@ static unsigned long red_find(struct Qdisc *sch, u32 classid)
 static void red_walk(struct Qdisc *sch, struct qdisc_walker *walker)
 {
 	if (!walker->stop) {
-		if (walker->count >= walker->skip)
-			if (walker->fn(sch, 1, walker) < 0) {
-				walker->stop = 1;
-				return;
-			}
-		walker->count++;
+		tc_qdisc_stats_dump(sch, 1, walker);
 	}
 }
 
@@ -554,6 +548,7 @@ static struct Qdisc_ops red_qdisc_ops __read_mostly = {
 	.dump_stats	=	red_dump_stats,
 	.owner		=	THIS_MODULE,
 };
+MODULE_ALIAS_NET_SCH("red");
 
 static int __init red_module_init(void)
 {
@@ -569,3 +564,4 @@ module_init(red_module_init)
 module_exit(red_module_exit)
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Random Early Detection qdisc");

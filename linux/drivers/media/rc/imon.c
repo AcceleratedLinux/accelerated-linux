@@ -646,15 +646,14 @@ static int send_packet(struct imon_context *ictx)
 		pr_err_ratelimited("error submitting urb(%d)\n", retval);
 	} else {
 		/* Wait for transmission to complete (or abort) */
-		mutex_unlock(&ictx->lock);
 		retval = wait_for_completion_interruptible(
 				&ictx->tx.finished);
 		if (retval) {
 			usb_kill_urb(ictx->tx_urb);
 			pr_err_ratelimited("task interrupted\n");
 		}
-		mutex_lock(&ictx->lock);
 
+		ictx->tx.busy = false;
 		retval = ictx->tx.status;
 		if (retval)
 			pr_err_ratelimited("packet tx failed (%d)\n", retval);
@@ -684,7 +683,6 @@ static int send_packet(struct imon_context *ictx)
  */
 static int send_associate_24g(struct imon_context *ictx)
 {
-	int retval;
 	const unsigned char packet[8] = { 0x01, 0x00, 0x00, 0x00,
 					  0x00, 0x00, 0x00, 0x20 };
 
@@ -699,9 +697,8 @@ static int send_associate_24g(struct imon_context *ictx)
 	}
 
 	memcpy(ictx->usb_tx_buf, packet, sizeof(packet));
-	retval = send_packet(ictx);
 
-	return retval;
+	return send_packet(ictx);
 }
 
 /*
@@ -848,13 +845,13 @@ static ssize_t imon_clock_show(struct device *d,
 	mutex_lock(&ictx->lock);
 
 	if (!ictx->display_supported) {
-		len = snprintf(buf, PAGE_SIZE, "Not supported.");
+		len = sysfs_emit(buf, "Not supported.");
 	} else {
-		len = snprintf(buf, PAGE_SIZE,
-			"To set the clock on your iMON display:\n"
-			"# date \"+%%y %%m %%d %%w %%H %%M %%S\" > imon_clock\n"
-			"%s", ictx->display_isopen ?
-			"\nNOTE: imon device must be closed\n" : "");
+		len = sysfs_emit(buf,
+				 "To set the clock on your iMON display:\n"
+				 "# date \"+%%y %%m %%d %%w %%H %%M %%S\" > imon_clock\n"
+				 "%s", ictx->display_isopen ?
+				 "\nNOTE: imon device must be closed\n" : "");
 	}
 
 	mutex_unlock(&ictx->lock);
@@ -955,7 +952,8 @@ static ssize_t vfd_write(struct file *file, const char __user *buf,
 	if (ictx->disconnected)
 		return -ENODEV;
 
-	mutex_lock(&ictx->lock);
+	if (mutex_lock_interruptible(&ictx->lock))
+		return -ERESTARTSYS;
 
 	if (!ictx->dev_present_intf0) {
 		pr_err_ratelimited("no iMON device present\n");
@@ -2426,6 +2424,12 @@ static int imon_probe(struct usb_interface *interface,
 	first_if = usb_ifnum_to_if(usbdev, 0);
 	if (!first_if) {
 		ret = -ENODEV;
+		goto fail;
+	}
+
+	if (first_if->dev.driver != interface->dev.driver) {
+		dev_err(&interface->dev, "inconsistent driver matching\n");
+		ret = -EINVAL;
 		goto fail;
 	}
 

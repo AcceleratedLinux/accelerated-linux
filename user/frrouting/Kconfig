@@ -7,6 +7,8 @@ config USER_FRROUTING
 	select LIB_LIBCARES
 	select LIB_LIBCAP
 	select LIB_LIBYANG
+	select LIB_PROTOBUF_C
+	select LIB_PROTOBUF_C_HOST
 	help
 		For automake build directory inclusion only. Enable USER_FRROUTING_ZEBRA
 		for FRRouting.

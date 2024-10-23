@@ -20,8 +20,8 @@ properties:
 patternProperties:
   "^led(-[0-9a-f]+)?$":
     type: object
-
     $ref: common.yaml#
+    unevaluatedProperties: false
 
     properties:
       pwms:
@@ -33,11 +33,6 @@ patternProperties:
         description:
           Maximum brightness possible for the LED
         $ref: /schemas/types.yaml#/definitions/uint32
-
-      active-low:
-        description:
-          For PWMs where the LED is wired to supply rather than ground.
-        type: boolean
 
     required:
       - pwms

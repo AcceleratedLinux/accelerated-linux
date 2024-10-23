@@ -106,6 +106,14 @@ enum sys_off_mode {
 	SYS_OFF_MODE_POWER_OFF,
 
 	/**
+	 * @SYS_OFF_MODE_RESTART_PREPARE:
+	 *
+	 * Handlers prepare system to be restarted. Handlers are
+	 * allowed to sleep.
+	 */
+	SYS_OFF_MODE_RESTART_PREPARE,
+
+	/**
 	 * @SYS_OFF_MODE_RESTART:
 	 *
 	 * Handlers restart system. Handlers are disallowed to sleep.
@@ -121,11 +129,14 @@ enum sys_off_mode {
  * @cb_data: User's callback data.
  * @cmd: Command string. Currently used only by the sys-off restart mode,
  *       NULL otherwise.
+ * @dev: Device of the sys-off handler. Only if known (devm_register_*),
+ *       NULL otherwise.
  */
 struct sys_off_data {
 	int mode;
 	void *cb_data;
 	const char *cmd;
+	struct device *dev;
 };
 
 struct sys_off_handler *
@@ -166,7 +177,17 @@ void ctrl_alt_del(void);
 
 extern void orderly_poweroff(bool force);
 extern void orderly_reboot(void);
-void hw_protection_shutdown(const char *reason, int ms_until_forced);
+void __hw_protection_shutdown(const char *reason, int ms_until_forced, bool shutdown);
+
+static inline void hw_protection_reboot(const char *reason, int ms_until_forced)
+{
+	__hw_protection_shutdown(reason, ms_until_forced, false);
+}
+
+static inline void hw_protection_shutdown(const char *reason, int ms_until_forced)
+{
+	__hw_protection_shutdown(reason, ms_until_forced, true);
+}
 
 /*
  * Emergency restart, callable from an interrupt handler.

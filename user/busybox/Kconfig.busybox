@@ -813,51 +813,118 @@ config USER_BUSYBOX_MD5_SMALL
 	default 1  # all "fast or small" options default to small
 	range 0 3
 	help
-	Trade binary size versus speed for the md5sum algorithm.
+	Trade binary size versus speed for the md5 algorithm.
 	Approximate values running uClibc and hashing
 	linux-2.4.4.tar.bz2 were:
-	value               user times (sec)  text size (386)
-	0 (fastest)         1.1                6144
-	1                   1.4                5392
-	2                   3.0                5088
-	3 (smallest)        5.1                4912
+	value           user times (sec)  text size (386)
+	0 (fastest)     1.1               6144
+	1               1.4               5392
+	2               3.0               5088
+	3 (smallest)    5.1               4912
+
+config USER_BUSYBOX_SHA1_SMALL
+	int "SHA1: Trade bytes for speed (0:fast, 3:slow)"
+	default 3  # all "fast or small" options default to small
+	range 0 3
+	help
+	Trade binary size versus speed for the sha1 algorithm.
+	With FEATURE_COPYBUF_KB=64:
+	                throughput MB/s   size of sha1_process_block64
+	value           486  x86-64       486   x86-64
+	0               440  485          3481  3502
+	1               265  265           641   696
+	2,3             220  210           342   364
+
+config USER_BUSYBOX_SHA1_HWACCEL
+	bool "SHA1: Use hardware accelerated instructions if possible"
+	default y
+	help
+	On x86, this adds ~590 bytes of code. Throughput
+	is about twice as fast as fully-unrolled generic code.
+
+config USER_BUSYBOX_SHA256_HWACCEL
+	bool "SHA256: Use hardware accelerated instructions if possible"
+	default y
+	help
+	On x86, this adds ~1k bytes of code.
 
 config USER_BUSYBOX_SHA3_SMALL
 	int "SHA3: Trade bytes for speed (0:fast, 1:slow)"
 	default 1  # all "fast or small" options default to small
 	range 0 1
 	help
-	Trade binary size versus speed for the sha3sum algorithm.
+	Trade binary size versus speed for the sha3 algorithm.
 	SHA3_SMALL=0 compared to SHA3_SMALL=1 (approximate):
 	64-bit x86: +270 bytes of code, 45% faster
 	32-bit x86: +450 bytes of code, 75% faster
 
-config USER_BUSYBOX_FEATURE_FAST_TOP
-	bool "Faster /proc scanning code (+100 bytes)"
-	default n  # all "fast or small" options default to small
+config USER_BUSYBOX_FEATURE_NON_POSIX_CP
+	bool "Non-POSIX, but safer, copying to special nodes"
+	default y
 	help
-	This option makes top and ps ~20% faster (or 20% less CPU hungry),
-	but code size is slightly bigger.
+	With this option, "cp file symlink" will delete symlink
+	and create a regular file. This does not conform to POSIX,
+	but prevents a symlink attack.
+	Similarly, "cp file device" will not send file's data
+	to the device. (To do that, use "cat file >device")
 
-config USER_BUSYBOX_FEATURE_ETC_NETWORKS
-	bool "Support /etc/networks"
+config USER_BUSYBOX_FEATURE_VERBOSE_CP_MESSAGE
+	bool "Give more precise messages when copy fails (cp, mv etc)"
 	default n
 	help
-	Enable support for network names in /etc/networks. This is
-	a rarely used feature which allows you to use names
-	instead of IP/mask pairs in route command.
+	Error messages with this feature enabled:
 
-config USER_BUSYBOX_FEATURE_ETC_SERVICES
-	bool "Consult /etc/services even for well-known ports"
-	default n
+	$ cp file /does_not_exist/file
+	cp: cannot create '/does_not_exist/file': Path does not exist
+	$ cp file /vmlinuz/file
+	cp: cannot stat '/vmlinuz/file': Path has non-directory component
+
+	If this feature is not enabled, they will be, respectively:
+
+	cp: cannot create '/does_not_exist/file': No such file or directory
+	cp: cannot stat '/vmlinuz/file': Not a directory
+
+	This will cost you ~60 bytes.
+
+config USER_BUSYBOX_FEATURE_USE_SENDFILE
+	bool "Use sendfile system call"
+	default y
 	help
-	Look up e.g. "telnet" and "http" in /etc/services file
-	instead of assuming ports 23 and 80.
-	This is almost never necessary (everybody uses standard ports),
-	and it makes sense to avoid reading this file.
-	If you disable this option, in the cases where port is explicitly
-	specified as a service name (e.g. "telnet HOST PORTNAME"),
-	it will still be looked up in /etc/services.
+	When enabled, busybox will use the kernel sendfile() function
+	instead of read/write loops to copy data between file descriptors
+	(for example, cp command does this a lot).
+	If sendfile() doesn't work, copying code falls back to read/write
+	loop. sendfile() was originally implemented for faster I/O
+	from files to sockets, but since Linux 2.6.33 it was extended
+	to work for many more file types.
+
+config USER_BUSYBOX_FEATURE_COPYBUF_KB
+	int "Copy buffer size, in kilobytes"
+	range 1 1024
+	default 4
+	help
+	Size of buffer used by cp, mv, install, wget etc.
+	Buffers which are 4 kb or less will be allocated on stack.
+	Bigger buffers will be allocated with mmap, with fallback to 4 kb
+	stack buffer if mmap fails.
+
+config USER_BUSYBOX_MONOTONIC_SYSCALL
+	bool "Use clock_gettime(CLOCK_MONOTONIC) syscall"
+	default y
+	help
+	Use clock_gettime(CLOCK_MONOTONIC) syscall for measuring
+	time intervals (time, ping, traceroute etc need this).
+	Probably requires Linux 2.6+. If not selected, gettimeofday
+	will be used instead (which gives wrong results if date/time
+	is reset).
+
+config USER_BUSYBOX_IOCTL_HEX2STR_ERROR
+	bool "Use ioctl names rather than hex values in error messages"
+	default y
+	help
+	Use ioctl names rather than hex values in error messages
+	(e.g. VT_DISALLOCATE rather than 0x5608). If disabled this
+	saves about 1400 bytes.
 
 config USER_BUSYBOX_FEATURE_EDITING
 	bool "Command line editing"
@@ -1074,98 +1141,27 @@ config USER_BUSYBOX_UNICODE_PRESERVE_BROKEN
 	at shell prompt will list file named 0xff (single char name
 	with char value 255), not file named '?'.
 
-config USER_BUSYBOX_FEATURE_NON_POSIX_CP
-	bool "Non-POSIX, but safer, copying to special nodes"
-	default y
+choice
+	prompt "Use LOOP_CONFIGURE for losetup and loop mounts"
+	default USER_BUSYBOX_TRY_LOOP_CONFIGURE
 	help
-	With this option, "cp file symlink" will delete symlink
-	and create a regular file. This does not conform to POSIX,
-	but prevents a symlink attack.
-	Similarly, "cp file device" will not send file's data
-	to the device. (To do that, use "cat file >device")
+	LOOP_CONFIGURE is added to Linux 5.8
+	https://lwn.net/Articles/820408/
+	This allows userspace to completely setup a loop device with a single
+	ioctl, removing the in-between state where the device can be partially
+	configured - eg the loop device has a backing file associated with it,
+	but is reading from the wrong offset.
 
-config USER_BUSYBOX_FEATURE_VERBOSE_CP_MESSAGE
-	bool "Give more precise messages when copy fails (cp, mv etc)"
-	default n
-	help
-	Error messages with this feature enabled:
+config USER_BUSYBOX_LOOP_CONFIGURE
+	bool "use LOOP_CONFIGURE, needs kernel >= 5.8"
 
-	$ cp file /does_not_exist/file
-	cp: cannot create '/does_not_exist/file': Path does not exist
-	$ cp file /vmlinuz/file
-	cp: cannot stat '/vmlinuz/file': Path has non-directory component
+config USER_BUSYBOX_NO_LOOP_CONFIGURE
+	bool "use LOOP_SET_FD + LOOP_SET_STATUS"
 
-	If this feature is not enabled, they will be, respectively:
+config USER_BUSYBOX_TRY_LOOP_CONFIGURE
+	bool "try LOOP_CONFIGURE, fall back to LOOP_SET_FD + LOOP_SET_STATUS"
 
-	cp: cannot create '/does_not_exist/file': No such file or directory
-	cp: cannot stat '/vmlinuz/file': Not a directory
-
-	This will cost you ~60 bytes.
-
-config USER_BUSYBOX_FEATURE_USE_SENDFILE
-	bool "Use sendfile system call"
-	default y
-	help
-	When enabled, busybox will use the kernel sendfile() function
-	instead of read/write loops to copy data between file descriptors
-	(for example, cp command does this a lot).
-	If sendfile() doesn't work, copying code falls back to read/write
-	loop. sendfile() was originally implemented for faster I/O
-	from files to sockets, but since Linux 2.6.33 it was extended
-	to work for many more file types.
-
-config USER_BUSYBOX_FEATURE_COPYBUF_KB
-	int "Copy buffer size, in kilobytes"
-	range 1 1024
-	default 4
-	help
-	Size of buffer used by cp, mv, install, wget etc.
-	Buffers which are 4 kb or less will be allocated on stack.
-	Bigger buffers will be allocated with mmap, with fallback to 4 kb
-	stack buffer if mmap fails.
-
-config USER_BUSYBOX_FEATURE_SKIP_ROOTFS
-	bool "Skip rootfs in mount table"
-	default y
-	help
-	Ignore rootfs entry in mount table.
-
-	In Linux, kernel has a special filesystem, rootfs, which is initially
-	mounted on /. It contains initramfs data, if kernel is configured
-	to have one. Usually, another file system is mounted over / early
-	in boot process, and therefore most tools which manipulate
-	mount table, such as df, will skip rootfs entry.
-
-	However, some systems do not mount anything on /.
-	If you need to configure busybox for one of these systems,
-	you may find it useful to turn this option off to make df show
-	initramfs statistics.
-
-	Otherwise, choose Y.
-
-config USER_BUSYBOX_MONOTONIC_SYSCALL
-	bool "Use clock_gettime(CLOCK_MONOTONIC) syscall"
-	default y
-	help
-	Use clock_gettime(CLOCK_MONOTONIC) syscall for measuring
-	time intervals (time, ping, traceroute etc need this).
-	Probably requires Linux 2.6+. If not selected, gettimeofday
-	will be used instead (which gives wrong results if date/time
-	is reset).
-
-config USER_BUSYBOX_IOCTL_HEX2STR_ERROR
-	bool "Use ioctl names rather than hex values in error messages"
-	default y
-	help
-	Use ioctl names rather than hex values in error messages
-	(e.g. VT_DISALLOCATE rather than 0x5608). If disabled this
-	saves about 1400 bytes.
-
-config USER_BUSYBOX_FEATURE_HWIB
-	bool "Support infiniband HW"
-	default y
-	help
-	Support for printing infiniband addresses in network applets.
+endchoice
 
 endmenu
 
@@ -1377,6 +1373,20 @@ config USER_BUSYBOX_FEATURE_CPIO_P
 	depends on USER_BUSYBOX_FEATURE_CPIO_O
 	help
 	Passthrough mode. Rarely used.
+
+config USER_BUSYBOX_FEATURE_CPIO_IGNORE_DEVNO
+	bool "Support --ignore-devno like GNU cpio"
+	default y
+	depends on USER_BUSYBOX_FEATURE_CPIO_O && USER_BUSYBOX_LONG_OPTS
+	help
+	Optionally ignore device numbers when creating archives.
+
+config USER_BUSYBOX_FEATURE_CPIO_RENUMBER_INODES
+	bool "Support --renumber-inodes like GNU cpio"
+	default y
+	depends on USER_BUSYBOX_FEATURE_CPIO_O && USER_BUSYBOX_LONG_OPTS
+	help
+	Optionally renumber inodes when creating archives.
 config USER_BUSYBOX_DPKG
 	bool "dpkg (43 kb)"
 	default y
@@ -1615,6 +1625,47 @@ endmenu
 
 menu "Coreutils"
 
+config USER_BUSYBOX_FEATURE_VERBOSE
+	bool "Support verbose options (usually -v) for various applets"
+	default y
+	help
+	Enable cp -v, rm -v and similar messages.
+	Also enables long option (--verbose) if it exists.
+	Without this option, -v is accepted but ignored.
+
+comment "Common options for date and touch"
+
+config USER_BUSYBOX_FEATURE_TIMEZONE
+	bool "Allow timezone in dates"
+	default y
+	depends on USER_BUSYBOX_DESKTOP
+	help
+	Permit the use of timezones when parsing user-provided data
+	strings, e.g. '1996-04-09 12:45:00 -0500'.
+
+	This requires support for the '%z' extension to strptime() which
+	may not be available in all implementations.
+
+comment "Common options for cp and mv"
+	depends on USER_BUSYBOX_CP || USER_BUSYBOX_MV
+
+config USER_BUSYBOX_FEATURE_PRESERVE_HARDLINKS
+	bool "Preserve hard links"
+	default y
+	depends on USER_BUSYBOX_CP || USER_BUSYBOX_MV
+	help
+	Allow cp and mv to preserve hard links.
+
+comment "Common options for df, du, ls"
+	depends on USER_BUSYBOX_DF || USER_BUSYBOX_DU || USER_BUSYBOX_LS
+
+config USER_BUSYBOX_FEATURE_HUMAN_READABLE
+	bool "Support human readable output (example 13k, 23M, 235G)"
+	default y
+	depends on USER_BUSYBOX_DF || USER_BUSYBOX_DU || USER_BUSYBOX_LS
+	help
+	Allow df, du, and ls to have human readable output.
+
 config USER_BUSYBOX_BASENAME
 	bool "basename (438 bytes)"
 	default y
@@ -1809,6 +1860,26 @@ config USER_BUSYBOX_FEATURE_DF_FANCY
 	-a Show all filesystems
 	-i Inodes
 	-B <SIZE> Blocksize
+
+config USER_BUSYBOX_FEATURE_SKIP_ROOTFS
+	bool "Skip rootfs in mount table"
+	default y
+	depends on USER_BUSYBOX_DF
+	help
+	Ignore rootfs entry in mount table.
+
+	In Linux, kernel has a special filesystem, rootfs, which is initially
+	mounted on /. It contains initramfs data, if kernel is configured
+	to have one. Usually, another file system is mounted over / early
+	in boot process, and therefore most tools which manipulate
+	mount table, such as df, will skip rootfs entry.
+
+	However, some systems do not mount anything on /.
+	If you need to configure busybox for one of these systems,
+	you may find it useful to turn this option off to make df show
+	initramfs statistics.
+
+	Otherwise, choose Y.
 config USER_BUSYBOX_DIRNAME
 	bool "dirname (329 bytes)"
 	default y
@@ -2201,7 +2272,7 @@ config USER_BUSYBOX_SORT
 	sort is used to sort lines of text in specified files.
 
 config USER_BUSYBOX_FEATURE_SORT_BIG
-	bool "Full SuSv3 compliant sort (support -ktcbdfiogM)"
+	bool "Full SuSv3 compliant sort (support -ktcbdfioghM)"
 	default y
 	depends on USER_BUSYBOX_SORT
 	help
@@ -2399,6 +2470,11 @@ config USER_BUSYBOX_TRUNCATE
 	help
 	truncate truncates files to a given size. If a file does
 	not exist, it is created unless told otherwise.
+config USER_BUSYBOX_TSORT
+	bool "tsort (0.7 kb)"
+	default y
+	help
+	tsort performs a topological sort.
 config USER_BUSYBOX_TTY
 	bool "tty (3.6 kb)"
 	default y
@@ -2504,36 +2580,6 @@ config USER_BUSYBOX_YES
 	help
 	yes is used to repeatedly output a specific string, or
 	the default string 'y'.
-
-comment "Common options"
-
-config USER_BUSYBOX_FEATURE_VERBOSE
-	bool "Support verbose options (usually -v) for various applets"
-	default y
-	help
-	Enable cp -v, rm -v and similar messages.
-	Also enables long option (--verbose) if it exists.
-	Without this option, -v is accepted but ignored.
-
-comment "Common options for cp and mv"
-	depends on USER_BUSYBOX_CP || USER_BUSYBOX_MV
-
-config USER_BUSYBOX_FEATURE_PRESERVE_HARDLINKS
-	bool "Preserve hard links"
-	default y
-	depends on USER_BUSYBOX_CP || USER_BUSYBOX_MV
-	help
-	Allow cp and mv to preserve hard links.
-
-comment "Common options for df, du, ls"
-	depends on USER_BUSYBOX_DF || USER_BUSYBOX_DU || USER_BUSYBOX_LS
-
-config USER_BUSYBOX_FEATURE_HUMAN_READABLE
-	bool "Support human readable output (example 13k, 23M, 235G)"
-	default y
-	depends on USER_BUSYBOX_DF || USER_BUSYBOX_DU || USER_BUSYBOX_LS
-	help
-	Allow df, du, and ls to have human readable output.
 
 endmenu
 # DO NOT EDIT. This file is generated from Config.src
@@ -3061,19 +3107,51 @@ config USER_BUSYBOX_FEATURE_FIND_PRINT0
 	interpreted by other programs.
 
 config USER_BUSYBOX_FEATURE_FIND_MTIME
-	bool "Enable -mtime: modified time matching"
+	bool "Enable -mtime: modification time matching"
 	default y
 	depends on USER_BUSYBOX_FIND
 	help
 	Allow searching based on the modification time of
 	files, in days.
 
+config USER_BUSYBOX_FEATURE_FIND_ATIME
+	bool "Enable -atime: access time matching"
+	default y
+	depends on USER_BUSYBOX_FEATURE_FIND_MTIME
+	help
+	Allow searching based on the access time of
+	files, in days.
+
+config USER_BUSYBOX_FEATURE_FIND_CTIME
+	bool "Enable -ctime: status change timestamp matching"
+	default y
+	depends on USER_BUSYBOX_FEATURE_FIND_MTIME
+	help
+	Allow searching based on the status change timestamp of
+	files, in days.
+
 config USER_BUSYBOX_FEATURE_FIND_MMIN
-	bool "Enable -mmin: modified time matching by minutes"
+	bool "Enable -mmin: modification time matching by minutes"
 	default y
 	depends on USER_BUSYBOX_FIND
 	help
 	Allow searching based on the modification time of
+	files, in minutes.
+
+config USER_BUSYBOX_FEATURE_FIND_AMIN
+	bool "Enable -amin: access time matching by minutes"
+	default y
+	depends on USER_BUSYBOX_FEATURE_FIND_MMIN
+	help
+	Allow searching based on the access time of
+	files, in minutes.
+
+config USER_BUSYBOX_FEATURE_FIND_CMIN
+	bool "Enable -cmin: status change timestamp matching by minutes"
+	default y
+	depends on USER_BUSYBOX_FEATURE_FIND_MMIN
+	help
+	Allow searching based on the status change timestamp of
 	files, in minutes.
 
 config USER_BUSYBOX_FEATURE_FIND_PERM
@@ -3116,6 +3194,13 @@ config USER_BUSYBOX_FEATURE_FIND_INUM
 	bool "Enable -inum: inode number matching"
 	default y
 	depends on USER_BUSYBOX_FIND
+
+config USER_BUSYBOX_FEATURE_FIND_SAMEFILE
+	bool "Enable -samefile: reference file matching"
+	default y
+	depends on USER_BUSYBOX_FIND
+	help
+	Support the 'find -samefile' option for searching by a reference file.
 
 config USER_BUSYBOX_FEATURE_FIND_EXEC
 	bool "Enable -exec: execute commands"
@@ -6046,6 +6131,13 @@ config USER_BUSYBOX_RX
 	default y
 	help
 	Receive files using the Xmodem protocol.
+config USER_BUSYBOX_SEEDRNG
+	bool "seedrng (1.3 kb)"
+	default y
+	help
+	Seed the kernel RNG from seed files, meant to be called
+	once during startup, once during shutdown, and optionally
+	at some periodic interval in between.
 config USER_BUSYBOX_SETFATTR
 	bool "setfattr (3.7 kb)"
 	default y
@@ -6069,6 +6161,11 @@ config USER_BUSYBOX_TIME
 	The time command runs the specified program with the given arguments.
 	When the command finishes, time writes a message to standard output
 	giving timing statistics about this program run.
+config USER_BUSYBOX_TREE
+	bool "tree (0.6 kb)"
+	default y
+	help
+	List files and directories in a tree structure.
 config USER_BUSYBOX_TS
 	bool "ts (450 bytes)"
 	default y
@@ -6201,6 +6298,32 @@ config USER_BUSYBOX_VERBOSE_RESOLUTION_ERRORS
 	"can't resolve 'hostname.com'" and want to know more.
 	This may increase size of your executable a bit.
 
+config USER_BUSYBOX_FEATURE_ETC_NETWORKS
+	bool "Support /etc/networks"
+	default n
+	help
+	Enable support for network names in /etc/networks. This is
+	a rarely used feature which allows you to use names
+	instead of IP/mask pairs in route command.
+
+config USER_BUSYBOX_FEATURE_ETC_SERVICES
+	bool "Consult /etc/services even for well-known ports"
+	default n
+	help
+	Look up e.g. "telnet" and "http" in /etc/services file
+	instead of assuming ports 23 and 80.
+	This is almost never necessary (everybody uses standard ports),
+	and it makes sense to avoid reading this file.
+	If you disable this option, in the cases where port is explicitly
+	specified as a service name (e.g. "telnet HOST PORTNAME"),
+	it will still be looked up in /etc/services.
+
+config USER_BUSYBOX_FEATURE_HWIB
+	bool "Support infiniband HW"
+	default y
+	help
+	Support for printing infiniband addresses in network applets.
+
 config USER_BUSYBOX_FEATURE_TLS_SHA1
 	bool "In TLS code, support ciphers which use deprecated SHA1"
 	depends on USER_BUSYBOX_TLS
@@ -6326,6 +6449,12 @@ config USER_BUSYBOX_HTTPD
 	default y
 	help
 	HTTP server.
+
+config USER_BUSYBOX_FEATURE_HTTPD_PORT_DEFAULT
+	int "Default port"
+	default 80
+	range 1 65535
+	depends on USER_BUSYBOX_HTTPD
 
 config USER_BUSYBOX_FEATURE_HTTPD_RANGES
 	bool "Support 'Ranges:' header"
@@ -7093,6 +7222,12 @@ config USER_BUSYBOX_FEATURE_TELNETD_STANDALONE
 	help
 	Selecting this will make telnetd able to run standalone.
 
+config USER_BUSYBOX_FEATURE_TELNETD_PORT_DEFAULT
+	int "Default port"
+	default 23
+	range 1 65535
+	depends on USER_BUSYBOX_FEATURE_TELNETD_STANDALONE
+
 config USER_BUSYBOX_FEATURE_TELNETD_INETD_WAIT
 	bool "Support -w SEC option (inetd wait mode)"
 	default y
@@ -7454,11 +7589,16 @@ config USER_BUSYBOX_FEATURE_UDHCPC_SANITIZEOPT
 config USER_BUSYBOX_UDHCPC_DEFAULT_SCRIPT
 	string "Absolute path to config script"
 	default "/usr/share/udhcpc/default.script"
-	depends on USER_BUSYBOX_UDHCPC || USER_BUSYBOX_UDHCPC6
+	depends on USER_BUSYBOX_UDHCPC
 	help
 	This script is called after udhcpc receives an answer. See
 	examples/udhcp for a working example. Normally it is safe
 	to leave this untouched.
+
+config USER_BUSYBOX_UDHCPC6_DEFAULT_SCRIPT
+	string "Absolute path to config script for IPv6"
+	default "/usr/share/udhcpc/default6.script"
+	depends on USER_BUSYBOX_UDHCPC6
 
 config USER_BUSYBOX_FEATURE_UDHCPC_ALWAYS_SEND_HOST_NAME
 	bool "Always send a hostname"
@@ -7637,6 +7777,13 @@ endmenu
 # DO NOT EDIT. This file is generated from Config.src
 menu "Mail Utilities"
 
+config USER_BUSYBOX_FEATURE_MIME_CHARSET
+	string "Default charset"
+	default "us-ascii"
+	depends on USER_BUSYBOX_MAKEMIME || USER_BUSYBOX_REFORMIME || USER_BUSYBOX_SENDMAIL
+	help
+	Default charset of the message.
+
 config USER_BUSYBOX_MAKEMIME
 	bool "makemime (5.4 kb)"
 	default y
@@ -7677,13 +7824,6 @@ config USER_BUSYBOX_SENDMAIL
 	help
 	Barebones sendmail.
 
-config USER_BUSYBOX_FEATURE_MIME_CHARSET
-	string "Default charset"
-	default "us-ascii"
-	depends on USER_BUSYBOX_MAKEMIME || USER_BUSYBOX_REFORMIME || USER_BUSYBOX_SENDMAIL
-	help
-	Default charset of the message.
-
 endmenu
 # DO NOT EDIT. This file is generated from Config.src
 #
@@ -7692,6 +7832,21 @@ endmenu
 #
 
 menu "Process Utilities"
+
+config USER_BUSYBOX_FEATURE_FAST_TOP
+	bool "Faster /proc scanning code (+100 bytes)"
+	default n  # all "fast or small" options default to small
+	help
+	This option makes top and ps ~20% faster (or 20% less CPU hungry),
+	but code size is slightly bigger.
+
+config USER_BUSYBOX_FEATURE_SHOW_THREADS
+	bool "Support thread display in ps/pstree/top"
+	default y
+	depends on USER_BUSYBOX_PS || USER_BUSYBOX_TOP || USER_BUSYBOX_PSTREE
+	help
+	Enables the ps -T option, showing of threads in pstree,
+	and 'h' command in top.
 
 config USER_BUSYBOX_FREE
 	bool "free (3.1 kb)"
@@ -7826,6 +7981,11 @@ config USER_BUSYBOX_FEATURE_PS_LONG
 	Support argument 'l' for long output.
 	Adds fields PPID, RSS, START, TIME & TTY
 
+config USER_BUSYBOX_FEATURE_PS_FOREST
+	bool "Enable forest output (-f)"
+	default y
+	depends on (USER_BUSYBOX_PS || USER_BUSYBOX_MINIPS) && !USER_BUSYBOX_DESKTOP
+
 config USER_BUSYBOX_FEATURE_PS_TIME
 	bool "Enable -o time and -o etime specifiers"
 	default y
@@ -7945,14 +8105,6 @@ config USER_BUSYBOX_WATCH
 	help
 	watch is used to execute a program periodically, showing
 	output to the screen.
-
-config USER_BUSYBOX_FEATURE_SHOW_THREADS
-	bool "Support thread display in ps/pstree/top"
-	default y
-	depends on USER_BUSYBOX_PS || USER_BUSYBOX_TOP || USER_BUSYBOX_PSTREE
-	help
-	Enables the ps -T option, showing of threads in pstree,
-	and 'h' command in top.
 
 endmenu
 # DO NOT EDIT. This file is generated from Config.src
@@ -8352,6 +8504,11 @@ config USER_BUSYBOX_ASH_PRINTF
 
 config USER_BUSYBOX_ASH_TEST
 	bool "test builtin"
+	default y
+	depends on USER_BUSYBOX_SHELL_ASH
+
+config USER_BUSYBOX_ASH_SLEEP
+	bool "sleep builtin"
 	default y
 	depends on USER_BUSYBOX_SHELL_ASH
 

@@ -36,7 +36,9 @@
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/kthread.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
 
 #include <asm/machdep.h>
 #include <asm/io.h>
@@ -317,24 +319,26 @@ static void do_attach(struct i2c_adapter *adapter)
 	if (x.running || strncmp(adapter->name, "uni-n", 5))
 		return;
 
+	of_node_get(adapter->dev.of_node);
 	np = of_find_compatible_node(adapter->dev.of_node, NULL, "MAC,ds1775");
 	if (np) {
 		of_node_put(np);
 	} else {
-		strlcpy(info.type, "MAC,ds1775", I2C_NAME_SIZE);
+		strscpy(info.type, "MAC,ds1775", I2C_NAME_SIZE);
 		i2c_new_scanned_device(adapter, &info, scan_ds1775, NULL);
 	}
 
+	of_node_get(adapter->dev.of_node);
 	np = of_find_compatible_node(adapter->dev.of_node, NULL, "MAC,adm1030");
 	if (np) {
 		of_node_put(np);
 	} else {
-		strlcpy(info.type, "MAC,adm1030", I2C_NAME_SIZE);
+		strscpy(info.type, "MAC,adm1030", I2C_NAME_SIZE);
 		i2c_new_scanned_device(adapter, &info, scan_adm1030, NULL);
 	}
 }
 
-static int
+static void
 do_remove(struct i2c_client *client)
 {
 	if (x.running) {
@@ -348,8 +352,6 @@ do_remove(struct i2c_client *client)
 		x.fan = NULL;
 	else
 		printk(KERN_ERR "g4fan: bad client\n");
-
-	return 0;
 }
 
 static int
@@ -411,8 +413,9 @@ static const struct i2c_device_id therm_windtunnel_id[] = {
 MODULE_DEVICE_TABLE(i2c, therm_windtunnel_id);
 
 static int
-do_probe(struct i2c_client *cl, const struct i2c_device_id *id)
+do_probe(struct i2c_client *cl)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(cl);
 	struct i2c_adapter *adapter = cl->adapter;
 	int ret = 0;
 
@@ -478,11 +481,9 @@ static int therm_of_probe(struct platform_device *dev)
 	return -ENODEV;
 }
 
-static int
-therm_of_remove( struct platform_device *dev )
+static void therm_of_remove(struct platform_device *dev)
 {
 	i2c_del_driver( &g4fan_driver );
-	return 0;
 }
 
 static const struct of_device_id therm_of_match[] = {{
@@ -498,7 +499,7 @@ static struct platform_driver therm_of_driver = {
 		.of_match_table = therm_of_match,
 	},
 	.probe		= therm_of_probe,
-	.remove		= therm_of_remove,
+	.remove_new	= therm_of_remove,
 };
 
 struct apple_thermal_info {

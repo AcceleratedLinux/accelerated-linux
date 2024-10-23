@@ -7,6 +7,7 @@
 #define SEC_AIV_SIZE		12
 #define SEC_IV_SIZE		24
 #define SEC_MAX_KEY_SIZE	64
+#define SEC_MAX_AKEY_SIZE	128
 #define SEC_COMM_SCENE		0
 #define SEC_MIN_BLOCK_SZ	1
 
@@ -36,8 +37,6 @@ enum sec_mac_len {
 enum sec_cmode {
 	SEC_CMODE_ECB    = 0x0,
 	SEC_CMODE_CBC    = 0x1,
-	SEC_CMODE_CFB    = 0x2,
-	SEC_CMODE_OFB    = 0x3,
 	SEC_CMODE_CTR    = 0x4,
 	SEC_CMODE_CCM    = 0x5,
 	SEC_CMODE_GCM    = 0x6,

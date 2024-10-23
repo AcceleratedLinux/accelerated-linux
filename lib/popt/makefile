@@ -1,4 +1,4 @@
-URL = https://sourceforge.net/projects/cross-stuff/files/cross-stuff/1.0/popt-1.7.tar.gz
+URL = http://ftp.rpm.org/popt/releases/popt-1.x/popt-1.19.tar.gz
 
 CONFOPTS += --without-libiconv-prefix --without-libintl-prefix
 

@@ -185,7 +185,7 @@ static int hisi_trng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
 	struct hisi_trng *trng;
 	int currsize = 0;
 	u32 val = 0;
-	u32 ret;
+	int ret;
 
 	trng = container_of(rng, struct hisi_trng, rng);
 
@@ -303,7 +303,7 @@ err_remove_from_list:
 	return ret;
 }
 
-static int hisi_trng_remove(struct platform_device *pdev)
+static void hisi_trng_remove(struct platform_device *pdev)
 {
 	struct hisi_trng *trng = platform_get_drvdata(pdev);
 
@@ -314,8 +314,6 @@ static int hisi_trng_remove(struct platform_device *pdev)
 	if (trng->ver != HISI_TRNG_VER_V1 &&
 	    atomic_dec_return(&trng_active_devs) == 0)
 		crypto_unregister_rng(&hisi_trng_alg);
-
-	return 0;
 }
 
 static const struct acpi_device_id hisi_trng_acpi_match[] = {
@@ -326,7 +324,7 @@ MODULE_DEVICE_TABLE(acpi, hisi_trng_acpi_match);
 
 static struct platform_driver hisi_trng_driver = {
 	.probe		= hisi_trng_probe,
-	.remove         = hisi_trng_remove,
+	.remove_new     = hisi_trng_remove,
 	.driver		= {
 		.name	= "hisi-trng-v2",
 		.acpi_match_table = ACPI_PTR(hisi_trng_acpi_match),

@@ -248,7 +248,7 @@ powr1220_read(struct device *dev, enum hwmon_sensor_types type, u32
 	return 0;
 }
 
-static const struct hwmon_channel_info *powr1220_info[] = {
+static const struct hwmon_channel_info * const powr1220_info[] = {
 	HWMON_CHANNEL_INFO(in,
 			   HWMON_I_INPUT | HWMON_I_HIGHEST | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_HIGHEST | HWMON_I_LABEL,
@@ -323,11 +323,10 @@ static const struct i2c_device_id powr1220_ids[] = {
 MODULE_DEVICE_TABLE(i2c, powr1220_ids);
 
 static struct i2c_driver powr1220_driver = {
-	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		.name	= "powr1220",
 	},
-	.probe_new	= powr1220_probe,
+	.probe		= powr1220_probe,
 	.id_table	= powr1220_ids,
 };
 

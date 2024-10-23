@@ -10,6 +10,7 @@
 #include "xfs_log_format.h"
 #include "xfs_trans_resv.h"
 #include "xfs_mount.h"
+#include "xfs_ag.h"
 #include "xfs_inode.h"
 #include "xfs_errortag.h"
 #include "xfs_error.h"
@@ -17,6 +18,7 @@
 #include "xfs_trans.h"
 #include "xfs_ialloc.h"
 #include "xfs_dir2.h"
+#include "xfs_health.h"
 
 #include <linux/iversion.h>
 
@@ -41,14 +43,12 @@ xfs_inode_buf_verify(
 	bool		readahead)
 {
 	struct xfs_mount *mp = bp->b_mount;
-	xfs_agnumber_t	agno;
 	int		i;
 	int		ni;
 
 	/*
 	 * Validate the magic number and version of every inode in the buffer
 	 */
-	agno = xfs_daddr_to_agno(mp, xfs_buf_daddr(bp));
 	ni = XFS_BB_TO_FSB(mp, bp->b_length) * mp->m_sb.sb_inopblock;
 	for (i = 0; i < ni; i++) {
 		struct xfs_dinode	*dip;
@@ -59,7 +59,7 @@ xfs_inode_buf_verify(
 		unlinked_ino = be32_to_cpu(dip->di_next_unlinked);
 		di_ok = xfs_verify_magic16(bp, dip->di_magic) &&
 			xfs_dinode_good_version(mp, dip->di_version) &&
-			xfs_verify_agino_or_null(mp, agno, unlinked_ino);
+			xfs_verify_agino_or_null(bp->b_pag, unlinked_ino);
 		if (unlikely(XFS_TEST_ERROR(!di_ok, mp,
 						XFS_ERRTAG_ITOBP_INOTOBP))) {
 			if (readahead) {
@@ -133,9 +133,14 @@ xfs_imap_to_bp(
 	struct xfs_imap		*imap,
 	struct xfs_buf		**bpp)
 {
-	return xfs_trans_read_buf(mp, tp, mp->m_ddev_targp, imap->im_blkno,
-				   imap->im_len, XBF_UNMAPPED, bpp,
-				   &xfs_inode_buf_ops);
+	int			error;
+
+	error = xfs_trans_read_buf(mp, tp, mp->m_ddev_targp, imap->im_blkno,
+			imap->im_len, XBF_UNMAPPED, bpp, &xfs_inode_buf_ops);
+	if (xfs_metadata_is_sick(error))
+		xfs_agno_mark_sick(mp, xfs_daddr_to_agno(mp, imap->im_blkno),
+				XFS_SICK_AG_INODES);
+	return error;
 }
 
 static inline struct timespec64 xfs_inode_decode_bigtime(uint64_t ts)
@@ -178,7 +183,6 @@ xfs_inode_from_disk(
 	xfs_failaddr_t		fa;
 
 	ASSERT(ip->i_cowfp == NULL);
-	ASSERT(ip->i_afp == NULL);
 
 	fa = xfs_dinode_verify(ip->i_mount, ip->i_ino, from);
 	if (fa) {
@@ -222,15 +226,19 @@ xfs_inode_from_disk(
 	 * a time before epoch is converted to a time long after epoch
 	 * on 64 bit systems.
 	 */
-	inode->i_atime = xfs_inode_from_disk_ts(from, from->di_atime);
-	inode->i_mtime = xfs_inode_from_disk_ts(from, from->di_mtime);
-	inode->i_ctime = xfs_inode_from_disk_ts(from, from->di_ctime);
+	inode_set_atime_to_ts(inode,
+			      xfs_inode_from_disk_ts(from, from->di_atime));
+	inode_set_mtime_to_ts(inode,
+			      xfs_inode_from_disk_ts(from, from->di_mtime));
+	inode_set_ctime_to_ts(inode,
+			      xfs_inode_from_disk_ts(from, from->di_ctime));
 
 	ip->i_disk_size = be64_to_cpu(from->di_size);
 	ip->i_nblocks = be64_to_cpu(from->di_nblocks);
 	ip->i_extsize = be32_to_cpu(from->di_extsize);
 	ip->i_forkoff = from->di_forkoff;
-	ip->i_diflags	= be16_to_cpu(from->di_flags);
+	ip->i_diflags = be16_to_cpu(from->di_flags);
+	ip->i_next_unlinked = be32_to_cpu(from->di_next_unlinked);
 
 	if (from->di_dmevmask || from->di_dmstate)
 		xfs_iflags_set(ip, XFS_IPRESERVE_DM_FIELDS);
@@ -286,7 +294,7 @@ xfs_inode_to_disk_iext_counters(
 {
 	if (xfs_inode_has_large_extent_counts(ip)) {
 		to->di_big_nextents = cpu_to_be64(xfs_ifork_nextents(&ip->i_df));
-		to->di_big_anextents = cpu_to_be32(xfs_ifork_nextents(ip->i_afp));
+		to->di_big_anextents = cpu_to_be32(xfs_ifork_nextents(&ip->i_af));
 		/*
 		 * We might be upgrading the inode to use larger extent counters
 		 * than was previously used. Hence zero the unused field.
@@ -294,7 +302,7 @@ xfs_inode_to_disk_iext_counters(
 		to->di_nrext64_pad = cpu_to_be16(0);
 	} else {
 		to->di_nextents = cpu_to_be32(xfs_ifork_nextents(&ip->i_df));
-		to->di_anextents = cpu_to_be16(xfs_ifork_nextents(ip->i_afp));
+		to->di_anextents = cpu_to_be16(xfs_ifork_nextents(&ip->i_af));
 	}
 }
 
@@ -315,9 +323,9 @@ xfs_inode_to_disk(
 	to->di_projid_lo = cpu_to_be16(ip->i_projid & 0xffff);
 	to->di_projid_hi = cpu_to_be16(ip->i_projid >> 16);
 
-	to->di_atime = xfs_inode_to_disk_ts(ip, inode->i_atime);
-	to->di_mtime = xfs_inode_to_disk_ts(ip, inode->i_mtime);
-	to->di_ctime = xfs_inode_to_disk_ts(ip, inode->i_ctime);
+	to->di_atime = xfs_inode_to_disk_ts(ip, inode_get_atime(inode));
+	to->di_mtime = xfs_inode_to_disk_ts(ip, inode_get_mtime(inode));
+	to->di_ctime = xfs_inode_to_disk_ts(ip, inode_get_ctime(inode));
 	to->di_nlink = cpu_to_be32(inode->i_nlink);
 	to->di_gen = cpu_to_be32(inode->i_generation);
 	to->di_mode = cpu_to_be16(inode->i_mode);
@@ -326,7 +334,7 @@ xfs_inode_to_disk(
 	to->di_nblocks = cpu_to_be64(ip->i_nblocks);
 	to->di_extsize = cpu_to_be32(ip->i_extsize);
 	to->di_forkoff = ip->i_forkoff;
-	to->di_aformat = xfs_ifork_format(ip->i_afp);
+	to->di_aformat = xfs_ifork_format(&ip->i_af);
 	to->di_flags = cpu_to_be16(ip->i_diflags);
 
 	if (xfs_has_v3inodes(ip->i_mount)) {
@@ -366,17 +374,40 @@ xfs_dinode_verify_fork(
 	/*
 	 * For fork types that can contain local data, check that the fork
 	 * format matches the size of local data contained within the fork.
-	 *
-	 * For all types, check that when the size says the should be in extent
-	 * or btree format, the inode isn't claiming it is in local format.
 	 */
 	if (whichfork == XFS_DATA_FORK) {
-		if (S_ISDIR(mode) || S_ISLNK(mode)) {
-			if (be64_to_cpu(dip->di_size) <= fork_size &&
+		/*
+		 * A directory small enough to fit in the inode must be stored
+		 * in local format.  The directory sf <-> extents conversion
+		 * code updates the directory size accordingly.  Directories
+		 * being truncated have zero size and are not subject to this
+		 * check.
+		 */
+		if (S_ISDIR(mode)) {
+			if (dip->di_size &&
+			    be64_to_cpu(dip->di_size) <= fork_size &&
 			    fork_format != XFS_DINODE_FMT_LOCAL)
 				return __this_address;
 		}
 
+		/*
+		 * A symlink with a target small enough to fit in the inode can
+		 * be stored in extents format if xattrs were added (thus
+		 * converting the data fork from shortform to remote format)
+		 * and then removed.
+		 */
+		if (S_ISLNK(mode)) {
+			if (be64_to_cpu(dip->di_size) <= fork_size &&
+			    fork_format != XFS_DINODE_FMT_EXTENTS &&
+			    fork_format != XFS_DINODE_FMT_LOCAL)
+				return __this_address;
+		}
+
+		/*
+		 * For all types, check that when the size says the fork should
+		 * be in extent or btree format, the inode isn't claiming to be
+		 * in local format.
+		 */
 		if (be64_to_cpu(dip->di_size) > fork_size &&
 		    fork_format == XFS_DINODE_FMT_LOCAL)
 			return __this_address;
@@ -483,6 +514,14 @@ xfs_dinode_verify(
 			return __this_address;
 	}
 
+	if (dip->di_version > 1) {
+		if (dip->di_onlink)
+			return __this_address;
+	} else {
+		if (dip->di_nlink)
+			return __this_address;
+	}
+
 	/* don't allow invalid i_size */
 	di_size = be64_to_cpu(dip->di_size);
 	if (di_size & (1ULL << 63))
@@ -492,9 +531,19 @@ xfs_dinode_verify(
 	if (mode && xfs_mode_to_ftype(mode) == XFS_DIR3_FT_UNKNOWN)
 		return __this_address;
 
-	/* No zero-length symlinks/dirs. */
-	if ((S_ISLNK(mode) || S_ISDIR(mode)) && di_size == 0)
-		return __this_address;
+	/*
+	 * No zero-length symlinks/dirs unless they're unlinked and hence being
+	 * inactivated.
+	 */
+	if ((S_ISLNK(mode) || S_ISDIR(mode)) && di_size == 0) {
+		if (dip->di_version > 1) {
+			if (dip->di_nlink)
+				return __this_address;
+		} else {
+			if (dip->di_onlink)
+				return __this_address;
+		}
+	}
 
 	fa = xfs_dinode_verify_nrext64(mp, dip);
 	if (fa)
@@ -506,6 +555,9 @@ xfs_dinode_verify(
 
 	/* Fork checks carried over from xfs_iformat_fork */
 	if (mode && nextents + naextents > nblocks)
+		return __this_address;
+
+	if (nextents + naextents == 0 && nblocks != 0)
 		return __this_address;
 
 	if (S_ISDIR(mode) && nextents > mp->m_dir_geo->max_extents)

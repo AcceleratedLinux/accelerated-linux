@@ -8,20 +8,17 @@ CC with ucfront is 'ucfront-gcc <gcc>'. Have to split it up for popen().
  mesonbuild/compilers/detect.py | 3 +++
  1 file changed, 3 insertions(+)
 
-diff --git a/mesonbuild/compilers/detect.py b/mesonbuild/compilers/detect.py
-index 1eacecf..3f2cf0b 100644
---- a/mesonbuild/compilers/detect.py
-+++ b/mesonbuild/compilers/detect.py
-@@ -402,6 +402,9 @@ def _detect_c_or_cpp_compiler(env: 'Environment', lang: str, for_machine: Machin
-         else:
-             arg = '--version'
+Index: meson-1.4.1/mesonbuild/compilers/detect.py
+===================================================================
+--- meson-1.4.1.orig/mesonbuild/compilers/detect.py
++++ meson-1.4.1/mesonbuild/compilers/detect.py
+@@ -274,7 +274,9 @@ def _detect_c_or_cpp_compiler(env: 'Envi
  
+     for compiler in compilers:
+         if isinstance(compiler, str):
+             compiler = [compiler]
 +        if ' ' in compiler[0]:
-+            compiler = compiler[0].split()
-+
-         try:
-             p, out, err = Popen_safe(compiler + [arg])
-         except OSError as e:
--- 
-2.27.0
-
++            compiler[:1] = compiler[0].strip().split(' ')
+         compiler_name = os.path.basename(compiler[0])
+ 
+         if any(os.path.basename(x) in {'cl', 'cl.exe', 'clang-cl', 'clang-cl.exe'} for x in compiler):

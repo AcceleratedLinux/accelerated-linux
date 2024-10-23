@@ -214,7 +214,8 @@ struct xilinx_dpdma_tx_desc {
  * @running: true if the channel is running
  * @first_frame: flag for the first frame of stream
  * @video_group: flag if multi-channel operation is needed for video channels
- * @lock: lock to access struct xilinx_dpdma_chan
+ * @lock: lock to access struct xilinx_dpdma_chan. Must be taken before
+ *        @vchan.lock, if both are to be held.
  * @desc_pool: descriptor allocation pool
  * @err_task: error IRQ bottom half handler
  * @desc: References to descriptors being processed
@@ -309,7 +310,7 @@ static ssize_t xilinx_dpdma_debugfs_desc_done_irq_read(char *buf)
 
 	out_str_len = strlen(XILINX_DPDMA_DEBUGFS_UINT16_MAX_STR);
 	out_str_len = min_t(size_t, XILINX_DPDMA_DEBUGFS_READ_MAX_SIZE,
-			    out_str_len);
+			    out_str_len + 1);
 	snprintf(buf, out_str_len, "%d",
 		 dpdma_debugfs.xilinx_dpdma_irq_done_count);
 
@@ -376,7 +377,7 @@ static ssize_t xilinx_dpdma_debugfs_read(struct file *f, char __user *buf,
 		if (ret < 0)
 			goto done;
 	} else {
-		strlcpy(kern_buff, "No testcase executed",
+		strscpy(kern_buff, "No testcase executed",
 			XILINX_DPDMA_DEBUGFS_READ_MAX_SIZE);
 	}
 
@@ -1042,9 +1043,8 @@ static int xilinx_dpdma_chan_stop(struct xilinx_dpdma_chan *chan)
 static void xilinx_dpdma_chan_done_irq(struct xilinx_dpdma_chan *chan)
 {
 	struct xilinx_dpdma_tx_desc *active;
-	unsigned long flags;
 
-	spin_lock_irqsave(&chan->lock, flags);
+	spin_lock(&chan->lock);
 
 	xilinx_dpdma_debugfs_desc_done_irq(chan);
 
@@ -1056,7 +1056,7 @@ static void xilinx_dpdma_chan_done_irq(struct xilinx_dpdma_chan *chan)
 			 "chan%u: DONE IRQ with no active descriptor!\n",
 			 chan->id);
 
-	spin_unlock_irqrestore(&chan->lock, flags);
+	spin_unlock(&chan->lock);
 }
 
 /**
@@ -1071,10 +1071,9 @@ static void xilinx_dpdma_chan_vsync_irq(struct  xilinx_dpdma_chan *chan)
 {
 	struct xilinx_dpdma_tx_desc *pending;
 	struct xilinx_dpdma_sw_desc *sw_desc;
-	unsigned long flags;
 	u32 desc_id;
 
-	spin_lock_irqsave(&chan->lock, flags);
+	spin_lock(&chan->lock);
 
 	pending = chan->desc.pending;
 	if (!chan->running || !pending)
@@ -1097,15 +1096,17 @@ static void xilinx_dpdma_chan_vsync_irq(struct  xilinx_dpdma_chan *chan)
 	 * Complete the active descriptor, if any, promote the pending
 	 * descriptor to active, and queue the next transfer, if any.
 	 */
+	spin_lock(&chan->vchan.lock);
 	if (chan->desc.active)
 		vchan_cookie_complete(&chan->desc.active->vdesc);
 	chan->desc.active = pending;
 	chan->desc.pending = NULL;
 
 	xilinx_dpdma_chan_queue_transfer(chan);
+	spin_unlock(&chan->vchan.lock);
 
 out:
-	spin_unlock_irqrestore(&chan->lock, flags);
+	spin_unlock(&chan->lock);
 }
 
 /**
@@ -1264,10 +1265,12 @@ static void xilinx_dpdma_issue_pending(struct dma_chan *dchan)
 	struct xilinx_dpdma_chan *chan = to_xilinx_chan(dchan);
 	unsigned long flags;
 
-	spin_lock_irqsave(&chan->vchan.lock, flags);
+	spin_lock_irqsave(&chan->lock, flags);
+	spin_lock(&chan->vchan.lock);
 	if (vchan_issue_pending(&chan->vchan))
 		xilinx_dpdma_chan_queue_transfer(chan);
-	spin_unlock_irqrestore(&chan->vchan.lock, flags);
+	spin_unlock(&chan->vchan.lock);
+	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
 static int xilinx_dpdma_config(struct dma_chan *dchan,
@@ -1495,7 +1498,9 @@ static void xilinx_dpdma_chan_err_task(struct tasklet_struct *t)
 		    XILINX_DPDMA_EINTR_CHAN_ERR_MASK << chan->id);
 
 	spin_lock_irqsave(&chan->lock, flags);
+	spin_lock(&chan->vchan.lock);
 	xilinx_dpdma_chan_queue_transfer(chan);
+	spin_unlock(&chan->vchan.lock);
 	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
@@ -1652,10 +1657,8 @@ static int xilinx_dpdma_probe(struct platform_device *pdev)
 	dpdma_hw_init(xdev);
 
 	xdev->irq = platform_get_irq(pdev, 0);
-	if (xdev->irq < 0) {
-		dev_err(xdev->dev, "failed to get platform irq\n");
+	if (xdev->irq < 0)
 		return xdev->irq;
-	}
 
 	ret = request_irq(xdev->irq, xilinx_dpdma_irq_handler, IRQF_SHARED,
 			  dev_name(xdev->dev), xdev);
@@ -1738,7 +1741,7 @@ error:
 	return ret;
 }
 
-static int xilinx_dpdma_remove(struct platform_device *pdev)
+static void xilinx_dpdma_remove(struct platform_device *pdev)
 {
 	struct xilinx_dpdma_device *xdev = platform_get_drvdata(pdev);
 	unsigned int i;
@@ -1753,8 +1756,6 @@ static int xilinx_dpdma_remove(struct platform_device *pdev)
 
 	for (i = 0; i < ARRAY_SIZE(xdev->chan); i++)
 		xilinx_dpdma_chan_remove(xdev->chan[i]);
-
-	return 0;
 }
 
 static const struct of_device_id xilinx_dpdma_of_match[] = {
@@ -1765,7 +1766,7 @@ MODULE_DEVICE_TABLE(of, xilinx_dpdma_of_match);
 
 static struct platform_driver xilinx_dpdma_driver = {
 	.probe			= xilinx_dpdma_probe,
-	.remove			= xilinx_dpdma_remove,
+	.remove_new		= xilinx_dpdma_remove,
 	.driver			= {
 		.name		= "xilinx-zynqmp-dpdma",
 		.of_match_table	= xilinx_dpdma_of_match,

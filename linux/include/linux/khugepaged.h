@@ -10,35 +10,22 @@ extern struct attribute_group khugepaged_attr_group;
 extern int khugepaged_init(void);
 extern void khugepaged_destroy(void);
 extern int start_stop_khugepaged(void);
-extern bool hugepage_vma_check(struct vm_area_struct *vma,
-			       unsigned long vm_flags);
 extern void __khugepaged_enter(struct mm_struct *mm);
 extern void __khugepaged_exit(struct mm_struct *mm);
 extern void khugepaged_enter_vma(struct vm_area_struct *vma,
 				 unsigned long vm_flags);
 extern void khugepaged_min_free_kbytes_update(void);
+extern bool current_is_khugepaged(void);
 #ifdef CONFIG_SHMEM
-extern void collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr);
+extern int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
+				   bool install_pmd);
 #else
-static inline void collapse_pte_mapped_thp(struct mm_struct *mm,
-					   unsigned long addr)
+static inline int collapse_pte_mapped_thp(struct mm_struct *mm,
+					  unsigned long addr, bool install_pmd)
 {
+	return 0;
 }
 #endif
-
-#define khugepaged_enabled()					       \
-	(transparent_hugepage_flags &				       \
-	 ((1<<TRANSPARENT_HUGEPAGE_FLAG) |		       \
-	  (1<<TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG)))
-#define khugepaged_always()				\
-	(transparent_hugepage_flags &			\
-	 (1<<TRANSPARENT_HUGEPAGE_FLAG))
-#define khugepaged_req_madv()					\
-	(transparent_hugepage_flags &				\
-	 (1<<TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG))
-#define khugepaged_defrag()					\
-	(transparent_hugepage_flags &				\
-	 (1<<TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG))
 
 static inline void khugepaged_fork(struct mm_struct *mm, struct mm_struct *oldmm)
 {
@@ -51,16 +38,6 @@ static inline void khugepaged_exit(struct mm_struct *mm)
 	if (test_bit(MMF_VM_HUGEPAGE, &mm->flags))
 		__khugepaged_exit(mm);
 }
-
-static inline void khugepaged_enter(struct vm_area_struct *vma,
-				   unsigned long vm_flags)
-{
-	if (!test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags) &&
-	    khugepaged_enabled()) {
-		if (hugepage_vma_check(vma, vm_flags))
-			__khugepaged_enter(vma->vm_mm);
-	}
-}
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 static inline void khugepaged_fork(struct mm_struct *mm, struct mm_struct *oldmm)
 {
@@ -68,21 +45,23 @@ static inline void khugepaged_fork(struct mm_struct *mm, struct mm_struct *oldmm
 static inline void khugepaged_exit(struct mm_struct *mm)
 {
 }
-static inline void khugepaged_enter(struct vm_area_struct *vma,
-				    unsigned long vm_flags)
-{
-}
 static inline void khugepaged_enter_vma(struct vm_area_struct *vma,
 					unsigned long vm_flags)
 {
 }
-static inline void collapse_pte_mapped_thp(struct mm_struct *mm,
-					   unsigned long addr)
+static inline int collapse_pte_mapped_thp(struct mm_struct *mm,
+					  unsigned long addr, bool install_pmd)
 {
+	return 0;
 }
 
 static inline void khugepaged_min_free_kbytes_update(void)
 {
+}
+
+static inline bool current_is_khugepaged(void)
+{
+	return false;
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 

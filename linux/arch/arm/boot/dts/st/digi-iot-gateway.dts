@@ -1,0 +1,872 @@
+/*
+* Copyright 2024, Digi International Inc.
+*
+* Permission to use, copy, modify, and/or distribute this software for any
+* purpose with or without fee is hereby granted, provided that the above
+* copyright notice and this permission notice appear in all copies.
+* THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+* WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+* MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+* ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+* WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+* ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+* OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+*/
+
+/dts-v1/;
+
+/* STM32MP157 CPU */
+#include "stm32mp157.dtsi"
+#include "stm32mp151-dey-changes.dtsi"
+#include "stm32mp15xa.dtsi"
+#include "stm32mp15-pinctrl.dtsi"
+#include "stm32mp15xxac-pinctrl.dtsi"
+#include "stm32mp15-scmi.dtsi"
+/* Digi ConnectCore CCMP15 */
+#include "ccmp15.dtsi"
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/leds/leds-pca955x.h>
+
+/*
+ * Quick reference:
+ * usart1: BT_UART (*)
+ * usart3: XBEE1
+ * uart4: CONSOLE (*)
+ * uart7: UART (RS-232/RS-485)
+ * uart8: XBEE2
+ * i2c1: I2C_USER (SDA=PH12 AF5, SCL=PH11 AF5)
+ * i2c2: I2C_INT (status LEDs, and TBD)
+ * i2c4: PMIC (*)
+ * i2c6: ATECC
+ * sdmmc2: micro SD
+ * sdmmc3: Wi-Fi (*)
+ * eth1: 10/100 Ethernet (* - ethernet0)
+ * USB host: Connected to "XBee 2" (for XBee 3 Cellular)
+ * USB OTG: Connected to USB-A port if USB_USER#/FW is high and USB_OTG_SW_OE# is low.
+ *          Connected to microUSB/TAG-Connect if USB_USER#/FW is low and USB_OTG_SW_OE# is low.
+ *          Disconnected if USB_OTG_SW_OE# is driven high.
+ * Items marked (*) are standard as defined in ccmp15.dtsi.
+ */
+
+#if 1
+// Make it easier to tell which peripheral is which
+#define DIGI_COMMENT(text) digi,comment = text
+#else
+#define DIGI_COMMENT(text)
+#endif
+
+/ {
+	model = "Digi International IoT Gateway";
+	compatible = "digi,iot-gateway";
+	digi,machine,name = "iot-gateway";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	aliases {
+		ethernet0 = &ethernet0;
+		mmc1 = &sdmmc2; /* Micro SD */
+		serial0 = &uart4; /* CONSOLE */
+		serial1 = &usart1; /* BT_UART */
+		serial2 = &usart3; /* XBEE1 */
+		serial3 = &uart8; /* XBEE2 */
+		serial4 = &uart7; /* RS-232/485 */
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpiob 8 GPIO_ACTIVE_LOW>;
+			// TODO: pinctrl
+		};
+
+		user-button {
+			label = "user";
+			linux,code = <KEY_SELECT>;
+			gpios = <&gpiob 9 GPIO_ACTIVE_LOW>;
+			// TODO: pinctrl
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		/* NOTE: Supplying color and function here lets the kernel
+		 * automatically name these e.g. "red:power" in sysfs. */
+		power_r {
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_POWER;
+			gpios = <&gpioi 7 GPIO_ACTIVE_HIGH>; /* LGA_A14, LTDC_B7 */
+		};
+		power_g {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_POWER;
+			/*
+			 * This line controls a MOSFET which in turn controls the MOSFET
+			 * giving this color a path to GND. The second MOSFET's gate
+			 * is pulled up (so green is on by default). Thus, from the
+			 * chip's perspective, green is active low, since driving this high
+			 * will switch it off.
+			 */
+			gpios = <&gpioi 6 GPIO_ACTIVE_LOW>; /* LGA_A20, LTDC_B6 */
+		};
+		power_b {
+			color = <LED_COLOR_ID_BLUE>;
+			function = LED_FUNCTION_POWER;
+			gpios = <&gpioi 5 GPIO_ACTIVE_HIGH>; /* LGA_A17, LTDC_B5 */
+			default-state = "on";
+		};
+		status3_red {
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_STATUS;
+			function-enumerator = <3>;
+			gpios = <&gpiod 10 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>; /* LGA_A10, LTDC_B3 */
+		};
+		status6_red {
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_STATUS;
+			function-enumerator = <6>;
+			gpios = <&gpioi 4 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>; /* LGA_A12, LTDC_B4 */
+		};
+		eth_yellow {
+			color = <LED_COLOR_ID_YELLOW>;
+			function = LED_FUNCTION_LAN;
+			gpios = <&gpioc 9 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>;
+			trigger-sources = <&ethernet0>;
+			linux,default-trigger = "stmmac-0:00:link";
+		};
+	};
+
+	usb_phy_tuning: usb-phy-tuning {
+		st,hs-dc-level = <2>;
+		st,fs-rftime-tuning;
+		st,hs-rftime-reduction;
+		st,hs-current-trim = <15>;
+		st,hs-impedance-trim = <1>;
+		st,squelch-level = <3>;
+		st,hs-rx-offset = <2>;
+		st,no-lsfs-sc;
+	};
+
+	usb-a-connector {
+		compatible = "usb-a-connector";
+		// id-gpios = <&gpioa 10 GPIO_ACTIVE_HIGH>; /* LGA_AA13, USB_OTG_ID - wired to GND */
+		// No vbus-gpios - wired directly to OTG_VBUS line of MPU
+		vbus-supply = <&vbus_otg>;
+
+		port {
+			con_usbotg_hs_ep: endpoint {
+				remote-endpoint = <&usbotg_hs_ep>;
+			};
+		};
+	};
+
+	watchdog {
+		/* STWD100NYWY3F */
+		compatible = "linux,wdt-gpio";
+		gpios = <&gpioc 12 GPIO_ACTIVE_LOW>; /* LGA_W15 */
+		hw_algo = "toggle";
+		hw_margin_ms = <1000>; /* tWD 1.12 to 2.24s, typical 1.6s */
+		always-running;
+	};
+};
+/delete-node/ &gpu_reserved;
+
+/*
+ * Modify the cpu0_opp_table to delete the "opp-supported-hw" property.
+ *
+ * This value is set by the optional stm32-cpufreq driver.
+ * Since we do not plan on changing the cpu frequencies of the chip,
+ * we are NOT using that driver.
+ * Because it is not being used, the "opp-supported-hw" entry is
+ * not needed, and must be removed.
+ */
+&cpu0_opp_table {
+	opp-650000000 {
+		/delete-property/ opp-supported-hw;
+	};
+};
+
+&gpiob {
+	/* PB8: SW_ERASE. PB9: SW_USER. */
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "factory", "user_button", "", "", "", "", "", "";
+};
+&gpiod {
+	/* PD3: DEV/nPROD. */
+	gpio-line-names = "", "", "", "developer", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
+};
+&gpiof {
+	/* PF10: XBEE2_PWR_EN. */
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "XBEE2_PWR_EN", "", "", "", "", "";
+};
+&gpiog {
+	/* PG0: XBEE1_PWR_EN. PG2: XBEE1_nRST. */
+	gpio-line-names = "XBEE1_PWR_EN", "", "XBEE1_nRST", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
+};
+&gpioh {
+	/* PH8: XBEE2_nRST. PH9: USB_USER#/FW. PH10: USB_OTG_SW_OE#. */
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "XBEE2_nRST", "USB_nUSER_FW", "USB_OTG_SW_nOE", "", "", "", "", "";
+	usb-switch-hog {
+		gpio-hog;
+		gpios = <9 GPIO_OPEN_DRAIN>;
+		output-low;
+	};
+};
+
+&usbotg_hs {
+	dr_mode = "host";
+};
+
+/* TODO: Overlay to enable usart1 (Bluetooth) if wireless variant */
+/* USART1 (Bluetooth) */
+&usart1 {
+	// status = "okay";
+	DIGI_COMMENT("ble");
+};
+
+/* 10/100 Ethernet */
+&ethernet0 {
+	status = "okay";
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&ethernet0_rmii_pins_c>;
+	pinctrl-1 = <&ethernet0_rmii_sleep_pins_c>;
+	phy-mode = "rmii";
+	max-speed = <100>;
+	phy-handle = <&rmii_phy>;
+	phy-supply = <&v3v3>;
+	// TODO?!?! How do we define which pin the clock comes in on?
+	st,ext-phyclk;
+
+	mdio0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "snps,dwmac-mdio";
+
+		/* Microchip KSZ8081RNA PHY */
+		rmii_phy: ethernet-phy@0 {
+			reg = <0>;
+			interrupts-extended = <&gpiog 12 IRQ_TYPE_LEVEL_LOW>; /* LGA_Y3, LTDC_B1 */
+			reset-gpios = <&gpioa 3 GPIO_ACTIVE_LOW>; /* LGA_A18, LTDC_B2 */
+			reset-assert-us = <10000>;
+			reset-deassert-us = <300>;
+		};
+	};
+};
+
+/* SMT XBee */
+&usart3 {
+	pinctrl-names = "default", "sleep", "idle", "no-hw-flowctrl", "gpio";
+	pinctrl-0 = <&ccmp15_usart3_pins>;
+	pinctrl-1 = <&ccmp15_usart3_sleep_pins>;
+	pinctrl-2 = <&ccmp15_usart3_idle_pins>;
+	pinctrl-3 = <&ccmp15_usart3_no_hw_flowctrl_pins>;
+	pinctrl-4 = <&ccmp15_usart3_gpio_pins>;
+	uart-has-rtscts;
+	digi,long-break;
+	digi,no-hw-flowctrl;
+	// Controlled as GPIO when RTS state is set manually (rtscts disabled).
+	digi,rts-gpios = <&gpiog 8 GPIO_ACTIVE_LOW>; /* LGA_N21, USART3_RTS */
+	// TODO: Confirm this means if we deassert DTR, it's driven or pulled high.
+	dtr-gpios = <&gpiob 10 GPIO_ACTIVE_LOW>; /* LGA_J21, ETH1_RX_ER */
+	status = "okay";
+	DIGI_COMMENT("xbee1");
+};
+
+&spi4 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&spi4_pins_b>;
+	pinctrl-1 = <&spi4_sleep_pins_b>;
+	cs-gpios = <&gpioe 11 GPIO_ACTIVE_LOW>; /* LGA_Y9, SPI4_NSS */
+	status = "disabled"; /* Disabled until needed */
+	DIGI_COMMENT("xbee1_SPI");
+
+	spidev@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>; /* CS #0 */
+		spi-max-frequency = <50000000>;
+	};
+};
+
+/* Console */
+&uart4 {
+	pinctrl-names = "default", "sleep", "idle";
+	pinctrl-0 = <&ccmp15_uart4_pins_a>;
+	pinctrl-1 = <&uart4_sleep_pins_a>;
+	pinctrl-2 = <&ccmp15_uart4_idle_pins_a>;
+	/delete-property/dmas;
+	/delete-property/dma-names;
+	status = "okay";
+	DIGI_COMMENT("console");
+};
+
+/* RS-232/RS-485 */
+&uart7 {
+	// TODO(LCG-603): Switching between 232 and 485
+	linux,rs485-enabled-at-boot-time;
+	pinctrl-names = "default", "sleep", "idle", "no-hw-flowctrl", "gpio";
+	pinctrl-0 = <&ccmp15_uart7_pins>;
+	pinctrl-1 = <&ccmp15_uart7_sleep_pins>;
+	pinctrl-2 = <&ccmp15_uart7_idle_pins>;
+	pinctrl-3 = <&ccmp15_uart7_no_hw_flowctrl_pins>;
+	pinctrl-4 = <&ccmp15_uart7_gpio_pins>;
+	uart-has-rtscts;
+	digi,long-break;
+	digi,no-hw-flowctrl;
+	// Controlled as GPIO when RTS state is set manually (rtscts disabled).
+	digi,rts-gpios = <&gpiof 8 GPIO_ACTIVE_LOW>; /* LGA_P19, UART7_RTS */
+	// TODO: Are we supposed to call these out in pinctrl?
+	dsr-gpios = <&gpioc 3 GPIO_ACTIVE_LOW>; /* LGA_V19 */
+	dcd-gpios = <&gpiob 0 GPIO_ACTIVE_LOW>; /* LGA_U20 */
+	dtr-gpios = <&gpiob 6 GPIO_ACTIVE_LOW>; /* LGA_U19 */
+	rng-gpios = <&gpioc 11 GPIO_ACTIVE_LOW>; /* LGA_T19 */
+
+	// TODO: RS485_TERM - kernel seems to support defining rs485-term-gpios,
+	// but no existing .dts files appear to use that.
+	status = "okay";
+	DIGI_COMMENT("rs232,485");
+};
+
+/* XBee 2 (TH or SMT) */
+&uart8 {
+	pinctrl-names = "default", "sleep", "idle", "no-hw-flowctrl", "gpio";
+	pinctrl-0 = <&ccmp15_uart8_pins>;
+	pinctrl-1 = <&ccmp15_uart8_sleep_pins>;
+	pinctrl-2 = <&ccmp15_uart8_idle_pins>;
+	pinctrl-3 = <&ccmp15_uart8_no_hw_flowctrl_pins>;
+	pinctrl-4 = <&ccmp15_uart8_gpio_pins>;
+	uart-has-rtscts;
+	digi,long-break;
+	digi,no-hw-flowctrl;
+	// Controlled as GPIO when RTS state is set manually (rtscts disabled).
+	digi,rts-gpios = <&gpiog 7 GPIO_ACTIVE_LOW>; /* LGA_C21, LTDC_CLK */
+	// TODO: Confirm this means if we deassert DTR, it's driven or pulled high.
+	dtr-gpios = <&gpioi 10 GPIO_ACTIVE_LOW>; /* LGA_B21, LTDC_HSYNC */
+	status = "okay";
+	DIGI_COMMENT("xbee2");
+};
+
+/* I2C_USER: Grove connector */
+&i2c1 {
+	// TODO: rising/falling time, ...
+	clock-frequency = <400000>;
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&i2c1_pins>;
+	pinctrl-1 = <&i2c1_sleep_pins>;
+	i2c-scl-rising-time-ns = <185>;
+	i2c-scl-falling-time-ns = <20>;
+	status = "okay";
+	/* spare dmas for other usage */
+	/delete-property/dmas;
+	/delete-property/dma-names;
+	DIGI_COMMENT("I2C_USER");
+
+	// NOTE: No hardcoded devices expected - userspace only.
+};
+
+/* I2C_INT */
+&i2c2 {
+	// TODO: rising/falling time, ...
+	clock-frequency = <400000>;
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&i2c2_pins_a>;
+	pinctrl-1 = <&i2c2_sleep_pins_a>;
+	i2c-scl-rising-time-ns = <185>;
+	i2c-scl-falling-time-ns = <20>;
+	status = "okay";
+	/* spare dmas for other usage */
+	/delete-property/dmas;
+	/delete-property/dma-names;
+	DIGI_COMMENT("I2C_INT");
+
+	/* STATUS(n, BLUE, x) will become "blue:status-n" in sysfs */
+	#define STATUS(func_enum, color_, reg_val) \
+		led@reg_val { \
+			reg = <reg_val>; default-state = "keep"; type = <PCA955X_TYPE_LED>; \
+			function = LED_FUNCTION_STATUS; function-enumerator = <func_enum>; \
+			color = <LED_COLOR_ID_ ## color_>; \
+		}
+	/* NOTE: Schematic says slave address 0xC0 (0x60 << 1) */
+	pca9551@60 {
+		compatible = "nxp,pca9551";
+		reg = <0x60>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		STATUS(1, BLUE, 0);
+		STATUS(1, GREEN, 1);
+		STATUS(1, RED, 2);
+		STATUS(2, BLUE, 3);
+		STATUS(2, GREEN, 4);
+		STATUS(2, RED, 5);
+		STATUS(3, BLUE, 6);
+		STATUS(3, GREEN, 7);
+		/* status3_red is driven directly */
+	};
+
+	pca9551@61 {
+		compatible = "nxp,pca9551";
+		reg = <0x61>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		STATUS(4, BLUE, 0);
+		STATUS(4, GREEN, 1);
+		STATUS(4, RED, 2);
+		STATUS(5, BLUE, 3);
+		STATUS(5, GREEN, 4);
+		STATUS(5, RED, 5);
+		STATUS(6, BLUE, 6);
+		STATUS(6, GREEN, 7);
+		/* status6_red is driven directly */
+	};
+};
+
+/* I2C bus for ATECC chip */
+&i2c6 {
+	clock-frequency = <100000>;
+	// TODO: Is our sleep state correct for the ATECC chip?
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&ccmp15_i2c6_pins_a>;
+	pinctrl-1 = <&ccmp15_i2c6_sleep_pins_a>;
+	i2c-scl-rising-time-ns = <185>;
+	i2c-scl-falling-time-ns = <20>;
+	status = "okay";
+	/* spare dmas for other usage */
+	/delete-property/dmas;
+	/delete-property/dma-names;
+	DIGI_COMMENT("atecc");
+
+	rng: atecc508a@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
+};
+
+/* Per Brad F, this should be 3.3V */
+&vdd_sd {
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+};
+
+/* Micro SD */
+&sdmmc2 {
+	pinctrl-names = "default", "opendrain", "sleep";
+	pinctrl-0 = <&sdmmc2_b4_pins_a>;
+	pinctrl-1 = <&sdmmc2_b4_od_pins_a>;
+	pinctrl-2 = <&sdmmc2_b4_sleep_pins_a>;
+	cd-gpios = <&gpioa 13 GPIO_ACTIVE_LOW>; /* LGA_W1 */
+	disable-wp;
+	st,neg-edge;
+	bus-width = <4>;
+	no-1-8-v;
+	vmmc-supply = <&vdd_sd>;
+	status = "okay";
+};
+
+&usbh_ehci {
+	phys = <&usbphyc_port0>;
+	phy-names = "usb";
+	status = "okay";
+};
+
+&usbotg_hs {
+	phys = <&usbphyc_port1 0>;
+	phy-names = "usb2-phy";
+	// usb-role-switch; // TODO - always function as host...
+	status = "okay";
+
+	port {
+		usbotg_hs_ep: endpoint {
+			remote-endpoint = <&con_usbotg_hs_ep>;
+		};
+	};
+};
+
+&usbphyc {
+	status = "okay";
+};
+
+&usbphyc_port0 {
+	phy-supply = <&vdd_usb>;
+	st,phy-tuning = <&usb_phy_tuning>;
+};
+
+&usbphyc_port1 {
+	phy-supply = <&vdd_usb>;
+	st,phy-tuning = <&usb_phy_tuning>;
+};
+
+// TODO: sim-mux entries?
+&pinctrl {
+
+	// USART3: SMT XBee
+	ccmp15_usart3_pins: usart3-1 {
+		pins1 {
+			pinmux = <STM32_PINMUX('D', 8, AF7)>, /* USART3_TX */
+				 <STM32_PINMUX('G', 8, AF8)>; /* USART3_RTS */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('B', 12, AF8)>; /* USART3_RX */
+			bias-pull-up;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('B', 13, AF7)>; /* USART3_CTS_NSS */
+			bias-disable;
+		};
+	};
+
+	ccmp15_usart3_idle_pins: usart3-idle-1 {
+		pins1 {
+			pinmux = <STM32_PINMUX('D', 8, ANALOG)>, /* USART3_TX */
+				 <STM32_PINMUX('B', 13, ANALOG)>; /* USART3_CTS_NSS */
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('G', 8, AF8)>; /* USART3_RTS */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('B', 12, AF8)>; /* USART3_RX */
+			bias-disable;
+		};
+	};
+
+	ccmp15_usart3_sleep_pins: usart3-sleep-1 {
+		pins {
+			pinmux = <STM32_PINMUX('D', 8, ANALOG)>, /* USART3_TX */
+				 <STM32_PINMUX('G', 8, ANALOG)>, /* USART3_RTS */
+				 <STM32_PINMUX('B', 13, ANALOG)>, /* USART3_CTS_NSS */
+				 <STM32_PINMUX('B', 12, ANALOG)>; /* USART3_RX */
+		};
+	};
+
+	ccmp15_usart3_no_hw_flowctrl_pins: usart3-no-hw-flowctrl-0 {
+		// RTS is being driven manually by an application.
+		pins1 {
+			pinmux = <STM32_PINMUX('D', 8, AF7)>; /* USART3_TX */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('B', 12, AF8)>; /* USART3_RX */
+			bias-pull-up;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('B', 13, AF7)>; /* USART3_CTS_NSS */
+			bias-disable;
+		};
+	};
+
+	ccmp15_usart3_gpio_pins: usart3-gpio-0 {
+		// In "gpio" mode (digi,long-break), drive TX low but keep
+		// RX pulled up so we don't errantly read a break condition.
+		pins1 {
+			pinmux = <STM32_PINMUX('D', 8, GPIO)>; /* USART3_TX */
+			drive-push-pull;
+			output-low;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('B', 12, AF8)>; /* USART3_RX */
+			bias-pull-up;
+		};
+	};
+
+	// TODO: Would it make sense to split these out to a shared file, since
+	// they are identical to CCMP157-DVK?
+	// UART4: CONSOLE
+	ccmp15_uart4_pins_a: ccmp15_uart4-0 {
+		pins1 {
+			pinmux = <STM32_PINMUX('G', 11, AF6)>; /* UART4_TX */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('B', 2, AF8)>; /* UART4_RX */
+			bias-pull-up;
+		};
+	};
+
+	ccmp15_uart4_idle_pins_a: ccmp15_uart4-idle-0 {
+		pins1 {
+			pinmux = <STM32_PINMUX('G', 11, ANALOG)>; /* UART4_TX */
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('B', 2, AF8)>; /* UART4_RX */
+			bias-pull-up;
+		};
+	};
+
+	// UART7: RS-232/RS-485
+	ccmp15_uart7_pins: uart7-1 {
+		pins1 {
+			pinmux = <STM32_PINMUX('F', 7, AF7)>, /* UART7_TX */
+				 <STM32_PINMUX('F', 8, AF7)>; /* UART7_RTS */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('F', 6, AF7)>; /* UART7_RX */
+			bias-pull-up;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('F', 9, AF7)>; /* UART7_CTS */
+			bias-disable;
+		};
+	};
+
+	ccmp15_uart7_idle_pins: uart7-idle-1 {
+		pins1 {
+			pinmux = <STM32_PINMUX('F', 7, ANALOG)>, /* UART7_TX */
+				 <STM32_PINMUX('F', 9, ANALOG)>; /* UART7_CTS */
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('F', 8, AF7)>; /* UART7_RTS */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('F', 6, AF7)>; /* UART7_RX */
+			bias-disable;
+		};
+	};
+
+	ccmp15_uart7_sleep_pins: uart7-sleep-1 {
+		pins {
+			pinmux = <STM32_PINMUX('F', 7, ANALOG)>, /* UART7_TX */
+				 <STM32_PINMUX('F', 8, ANALOG)>, /* UART7_RTS */
+				 <STM32_PINMUX('F', 9, ANALOG)>, /* UART7_CTS */
+				 <STM32_PINMUX('F', 6, ANALOG)>; /* UART7_RX */
+		};
+	};
+
+	ccmp15_uart7_no_hw_flowctrl_pins: uart7-no-hw-flowctrl-0 {
+		// RTS is being driven manually by an application.
+		pins1 {
+			pinmux = <STM32_PINMUX('F', 7, AF7)>; /* UART7_TX */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('F', 6, AF7)>; /* UART7_RX */
+			bias-pull-up;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('F', 9, AF7)>; /* UART7_CTS_NSS */
+			bias-disable;
+		};
+	};
+
+	ccmp15_uart7_gpio_pins: uart7-gpio-0 {
+		// In "gpio" mode (digi,long-break), drive TX low but keep
+		// RX pulled up so we don't errantly read a break condition.
+		pins1 {
+			pinmux = <STM32_PINMUX('F', 7, GPIO)>; /* UART7_TX */
+			drive-push-pull;
+			output-low;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('F', 6, AF7)>; /* UART7_RX */
+			bias-pull-up;
+		};
+	};
+
+	// UART8: TH/SMT XBee ("XBee 2")
+	ccmp15_uart8_pins: uart8-1 {
+		pins1 {
+			pinmux = <STM32_PINMUX('E', 1, AF8)>, /* UART8_TX */
+				 <STM32_PINMUX('G', 7, AF8)>; /* UART8_RTS */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('E', 0, AF8)>; /* UART8_RX */
+			bias-pull-up;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('E', 15, AF8)>; /* UART8_CTS */
+			bias-disable;
+		};
+	};
+
+	ccmp15_uart8_idle_pins: uart8-idle-1 {
+		pins1 {
+			pinmux = <STM32_PINMUX('E', 1, ANALOG)>, /* UART8_TX */
+				 <STM32_PINMUX('E', 15, ANALOG)>; /* UART8_CTS */
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('G', 7, AF8)>; /* UART8_RTS */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('E', 0, AF8)>; /* UART8_RX */
+			bias-disable;
+		};
+	};
+
+	ccmp15_uart8_sleep_pins: uart8-sleep-1 {
+		pins {
+			pinmux = <STM32_PINMUX('E', 1, ANALOG)>, /* UART8_TX */
+				 <STM32_PINMUX('G', 7, ANALOG)>, /* UART8_RTS */
+				 <STM32_PINMUX('E', 15, ANALOG)>, /* UART8_CTS */
+				 <STM32_PINMUX('E', 0, ANALOG)>; /* UART8_RX */
+		};
+	};
+
+	ccmp15_uart8_no_hw_flowctrl_pins: uart8-no-hw-flowctrl-0 {
+		// RTS is being driven manually by an application.
+		pins1 {
+			pinmux = <STM32_PINMUX('E', 1, AF8)>; /* UART8_TX */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('E', 0, AF8)>; /* UART8_RX */
+			bias-pull-up;
+		};
+		pins3 {
+			pinmux = <STM32_PINMUX('E', 15, AF8)>; /* UART8_CTS */
+			bias-disable;
+		};
+	};
+
+	ccmp15_uart8_gpio_pins: uart8-gpio-0 {
+		// In "gpio" mode (digi,long-break), drive TX low but keep
+		// RX pulled up so we don't errantly read a break condition.
+		pins1 {
+			pinmux = <STM32_PINMUX('E', 1, GPIO)>; /* UART8_TX */
+			drive-push-pull;
+			output-low;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('E', 0, AF8)>; /* UART8_RX */
+			bias-pull-up;
+		};
+	};
+
+	// i2c1: I2C_USER (Grove header)
+	i2c1_pins: i2c1-0 {
+		pins {
+			pinmux = <STM32_PINMUX('H', 11, AF5)>, /* LGA_B9, I2C1_SCL */
+				 <STM32_PINMUX('H', 12, AF5)>; /* LGA_W10, I2C1_SDA */
+			bias-disable;
+			drive-open-drain;
+			slew-rate = <0>;
+		};
+	};
+
+	i2c1_sleep_pins: i2c1-sleep-0 {
+		pins {
+			pinmux = <STM32_PINMUX('H', 11, ANALOG)>, /* LGA_B9, I2C1_SCL */
+				 <STM32_PINMUX('H', 12, ANALOG)>; /* LGA_W10, I2C1_SDA */
+		};
+	};
+
+	rtc_out2_rmp_pins_a: rtc-out2-rmp-pins-0 {
+		pins {
+			pinmux = <STM32_PINMUX('I', 8, ANALOG)>; /* RTC_OUT2_RMP */
+		};
+	};
+};
+
+&pinctrl_z {
+	// TODO: Would it make sense to split these out to a shared file, since
+	// they are identical to CCMP157-DVK?
+	ccmp15_i2c6_pins_a: ccmp15_i2c6-0 {
+		pins {
+			pinmux = <STM32_PINMUX('Z', 0, AF2)>, /* I2C6_SCL */
+				 <STM32_PINMUX('Z', 3, AF2)>; /* I2C6_SDA */
+			bias-disable;
+			drive-open-drain;
+			slew-rate = <0>;
+		};
+	};
+
+	ccmp15_i2c6_sleep_pins_a: ccmp15_i2c6-sleep-0 {
+		pins {
+			pinmux = <STM32_PINMUX('Z', 0, ANALOG)>, /* I2C6_SCL */
+				 <STM32_PINMUX('Z', 3, ANALOG)>; /* I2C6_SDA */
+		};
+	};
+};
+
+/**************************************************************
+ * Wireless
+ **************************************************************/
+
+/ {
+	wireless {
+		/* U-Boot will fill in the MAC address here */
+	};
+};
+
+/* Enable the RF regulator */
+&reg_3v3_rf {
+	status = "okay";
+};
+
+/* Enable the WL regulator */
+&reg_rf_wl_en {
+	status = "okay";
+};
+
+/* Enable External 32kHz Low-Power Oscillator */
+&rtc {
+	st,lsco = <RTC_OUT2_RMP>;
+	pinctrl-0 = <&ccmp15_rtc_out1_pins_a &rtc_out2_rmp_pins_a>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+/* SDMMC3 (Wireless) */
+&sdmmc3 {
+	pinctrl-names = "default", "opendrain", "sleep";
+	pinctrl-0 = <&sdmmc3_b4_pins_a>;
+	pinctrl-1 = <&sdmmc3_b4_od_pins_a>;
+	pinctrl-2 = <&sdmmc3_b4_sleep_pins_a>;
+	non-removable;
+	no-1-8-v;
+	st,neg-edge;
+	bus-width = <4>;
+	vmmc-supply = <&reg_rf_wl_en>;
+	status = "okay";
+
+	brcmf {
+		compatible = "cypress,cyw4373-fmac";
+		brcm,broken_sg_support;
+		brcm,sd_head_align = /bits/  16 <8>;
+		brcm,sd_sgentry_align = /bits/ 16 <32>;
+		status = "okay";
+	};
+};

@@ -84,7 +84,7 @@ endif
 ifdef UCLINUX_BUILD_LIB
 
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1)
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) $(CFLAGS_DEBUG)
   else
 	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2)
   endif
@@ -121,7 +121,7 @@ ifdef UCLINUX_BUILD_USER
 	LDPATH = -L$(ROOTDIR)/lib
 
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1)
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) $(CFLAGS_DEBUG)
   else
 	CFLAGS  :=  $(if $(UOPT),$(UOPT),-Os)
   endif

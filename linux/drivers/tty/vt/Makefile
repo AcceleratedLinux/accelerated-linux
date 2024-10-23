@@ -5,9 +5,9 @@
 FONTMAPFILE = cp437.uni
 
 obj-$(CONFIG_VT)			+= vt_ioctl.o vc_screen.o \
-					   selection.o keyboard.o
+					   selection.o keyboard.o \
+					   vt.o defkeymap.o
 obj-$(CONFIG_CONSOLE_TRANSLATIONS)	+= consolemap.o consolemap_deftbl.o
-obj-$(CONFIG_HW_CONSOLE)		+= vt.o defkeymap.o
 
 # Files generated that shall be removed upon make clean
 clean-files := consolemap_deftbl.c defkeymap.c
@@ -30,6 +30,6 @@ $(obj)/defkeymap.o:  $(obj)/defkeymap.c
 ifdef GENERATE_KEYMAP
 
 $(obj)/defkeymap.c: $(obj)/%.c: $(src)/%.map
-	loadkeys --mktable $< > $@
+	loadkeys --mktable --unicode $< > $@
 
 endif

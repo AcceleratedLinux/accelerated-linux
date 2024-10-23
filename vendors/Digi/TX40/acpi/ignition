@@ -1,0 +1,6 @@
+#!/bin/sh
+
+accns_log status "Ignition down event"
+
+# Power off the board
+reboot_managed "poweroff" "Shutdown due to ignition down event."

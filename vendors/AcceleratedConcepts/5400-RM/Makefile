@@ -51,7 +51,7 @@ romfs.post:: romfs.cleanup
 
 uimage.bin:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/kirkwood-5400-rm.dtb >> $(ZIMAGE)
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/marvell/kirkwood-5400-rm.dtb >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x2000000 -e 0x2000000 -n "Linux" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x3000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 

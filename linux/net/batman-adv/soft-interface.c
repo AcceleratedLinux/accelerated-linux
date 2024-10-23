@@ -48,7 +48,6 @@
 #include "hard-interface.h"
 #include "multicast.h"
 #include "network-coding.h"
-#include "originator.h"
 #include "send.h"
 #include "translation-table.h"
 
@@ -154,11 +153,14 @@ static int batadv_interface_set_mac_addr(struct net_device *dev, void *p)
 
 static int batadv_interface_change_mtu(struct net_device *dev, int new_mtu)
 {
+	struct batadv_priv *bat_priv = netdev_priv(dev);
+
 	/* check ranges */
-	if (new_mtu < 68 || new_mtu > batadv_hardif_min_mtu(dev))
+	if (new_mtu < ETH_MIN_MTU || new_mtu > batadv_hardif_min_mtu(dev))
 		return -EINVAL;
 
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
+	bat_priv->mtu_set_by_user = new_mtu;
 
 	return 0;
 }
@@ -196,8 +198,7 @@ static netdev_tx_t batadv_interface_tx(struct sk_buff *skb,
 	unsigned short vid;
 	u32 seqno;
 	int gw_mode;
-	enum batadv_forw_mode forw_mode = BATADV_FORW_SINGLE;
-	struct batadv_orig_node *mcast_single_orig = NULL;
+	enum batadv_forw_mode forw_mode = BATADV_FORW_BCAST;
 	int mcast_is_routable = 0;
 	int network_offset = ETH_HLEN;
 	__be16 proto;
@@ -300,15 +301,20 @@ static netdev_tx_t batadv_interface_tx(struct sk_buff *skb,
 
 send:
 		if (do_bcast && !is_broadcast_ether_addr(ethhdr->h_dest)) {
-			forw_mode = batadv_mcast_forw_mode(bat_priv, skb,
-							   &mcast_single_orig,
+			forw_mode = batadv_mcast_forw_mode(bat_priv, skb, vid,
 							   &mcast_is_routable);
-			if (forw_mode == BATADV_FORW_NONE)
-				goto dropped;
-
-			if (forw_mode == BATADV_FORW_SINGLE ||
-			    forw_mode == BATADV_FORW_SOME)
+			switch (forw_mode) {
+			case BATADV_FORW_BCAST:
+				break;
+			case BATADV_FORW_UCASTS:
+			case BATADV_FORW_MCAST:
 				do_bcast = false;
+				break;
+			case BATADV_FORW_NONE:
+				fallthrough;
+			default:
+				goto dropped;
+			}
 		}
 	}
 
@@ -357,12 +363,11 @@ send:
 			if (ret)
 				goto dropped;
 			ret = batadv_send_skb_via_gw(bat_priv, skb, vid);
-		} else if (mcast_single_orig) {
-			ret = batadv_mcast_forw_send_orig(bat_priv, skb, vid,
-							  mcast_single_orig);
-		} else if (forw_mode == BATADV_FORW_SOME) {
+		} else if (forw_mode == BATADV_FORW_UCASTS) {
 			ret = batadv_mcast_forw_send(bat_priv, skb, vid,
 						     mcast_is_routable);
+		} else if (forw_mode == BATADV_FORW_MCAST) {
+			ret = batadv_mcast_forw_mcsend(bat_priv, skb);
 		} else {
 			if (batadv_dat_snoop_outgoing_arp_request(bat_priv,
 								  skb))
@@ -386,7 +391,6 @@ dropped:
 dropped_freed:
 	batadv_inc_counter(bat_priv, BATADV_CNT_TX_DROPPED);
 end:
-	batadv_orig_node_put(mcast_single_orig);
 	batadv_hardif_put(primary_if);
 	return NETDEV_TX_OK;
 }
@@ -441,7 +445,7 @@ void batadv_interface_rx(struct net_device *soft_iface,
 		if (!pskb_may_pull(skb, VLAN_ETH_HLEN))
 			goto dropped;
 
-		vhdr = (struct vlan_ethhdr *)skb->data;
+		vhdr = skb_vlan_eth_hdr(skb);
 
 		/* drop batman-in-batman packets to prevent loops */
 		if (vhdr->h_vlan_encapsulated_proto != htons(ETH_P_BATMAN))
@@ -761,6 +765,7 @@ static int batadv_softif_init_late(struct net_device *dev)
 	atomic_set(&bat_priv->mcast.num_want_all_unsnoopables, 0);
 	atomic_set(&bat_priv->mcast.num_want_all_ipv4, 0);
 	atomic_set(&bat_priv->mcast.num_want_all_ipv6, 0);
+	atomic_set(&bat_priv->mcast.num_no_mc_ptype_capa, 0);
 #endif
 	atomic_set(&bat_priv->gw.mode, BATADV_GW_MODE_OFF);
 	atomic_set(&bat_priv->gw.bandwidth_down, 100);
@@ -924,6 +929,18 @@ static const struct {
 	{ "tt_response_rx" },
 	{ "tt_roam_adv_tx" },
 	{ "tt_roam_adv_rx" },
+#ifdef CONFIG_BATMAN_ADV_MCAST
+	{ "mcast_tx" },
+	{ "mcast_tx_bytes" },
+	{ "mcast_tx_local" },
+	{ "mcast_tx_local_bytes" },
+	{ "mcast_rx" },
+	{ "mcast_rx_bytes" },
+	{ "mcast_rx_local" },
+	{ "mcast_rx_local_bytes" },
+	{ "mcast_fwd" },
+	{ "mcast_fwd_bytes" },
+#endif
 #ifdef CONFIG_BATMAN_ADV_DAT
 	{ "dat_get_tx" },
 	{ "dat_get_rx" },

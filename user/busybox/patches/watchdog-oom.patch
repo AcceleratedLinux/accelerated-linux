@@ -1,6 +1,6 @@
-diff -Naur busybox-1.34.1.org/miscutils/watchdog.c busybox-1.34.1/miscutils/watchdog.c
---- busybox-1.34.1.org/miscutils/watchdog.c	2019-06-10 19:09:31.000000000 +1000
-+++ busybox-1.34.1/miscutils/watchdog.c	2019-07-02 14:40:30.725595960 +1000
+diff -Naur busybox-1.36.1.org/miscutils/watchdog.c busybox-1.36.1/miscutils/watchdog.c
+--- busybox-1.36.1.org/miscutils/watchdog.c	2019-06-10 19:09:31.000000000 +1000
++++ busybox-1.36.1/miscutils/watchdog.c	2019-07-02 14:40:30.725595960 +1000
 @@ -97,6 +97,14 @@
  #endif
  }

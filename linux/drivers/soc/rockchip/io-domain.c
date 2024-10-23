@@ -491,6 +491,22 @@ static const struct rockchip_iodomain_soc_data soc_data_rv1108_pmu = {
 	},
 };
 
+static const struct rockchip_iodomain_soc_data soc_data_rv1126_pmu = {
+	.grf_offset = 0x140,
+	.supply_names = {
+		NULL,
+		"vccio1",
+		"vccio2",
+		"vccio3",
+		"vccio4",
+		"vccio5",
+		"vccio6",
+		"vccio7",
+		"pmuio0",
+		"pmuio1",
+	},
+};
+
 static const struct of_device_id rockchip_iodomain_match[] = {
 	{
 		.compatible = "rockchip,px30-io-voltage-domain",
@@ -543,6 +559,10 @@ static const struct of_device_id rockchip_iodomain_match[] = {
 	{
 		.compatible = "rockchip,rv1108-pmu-io-voltage-domain",
 		.data = &soc_data_rv1108_pmu
+	},
+	{
+		.compatible = "rockchip,rv1126-pmu-io-voltage-domain",
+		.data = &soc_data_rv1126_pmu
 	},
 	{ /* sentinel */ },
 };
@@ -667,7 +687,7 @@ unreg_notify:
 	return ret;
 }
 
-static int rockchip_iodomain_remove(struct platform_device *pdev)
+static void rockchip_iodomain_remove(struct platform_device *pdev)
 {
 	struct rockchip_iodomain *iod = platform_get_drvdata(pdev);
 	int i;
@@ -679,13 +699,11 @@ static int rockchip_iodomain_remove(struct platform_device *pdev)
 			regulator_unregister_notifier(io_supply->reg,
 						      &io_supply->nb);
 	}
-
-	return 0;
 }
 
 static struct platform_driver rockchip_iodomain_driver = {
 	.probe   = rockchip_iodomain_probe,
-	.remove  = rockchip_iodomain_remove,
+	.remove_new = rockchip_iodomain_remove,
 	.driver  = {
 		.name  = "rockchip-iodomain",
 		.of_match_table = rockchip_iodomain_match,

@@ -7,6 +7,7 @@
 menuconfig IPV6
 	tristate "The IPv6 protocol"
 	default y
+	select CRYPTO_LIB_SHA1
 	help
 	  Support for IP version 6 (IPv6).
 
@@ -151,7 +152,7 @@ config INET6_TUNNEL
 	default n
 
 config IPV6_VTI
-tristate "Virtual (secure) IPv6: tunneling"
+	tristate "Virtual (secure) IPv6: tunneling"
 	select IPV6_TUNNEL
 	select NET_IP_TUNNEL
 	select XFRM

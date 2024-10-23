@@ -18,6 +18,7 @@
 #include <linux/module.h>
 #include <linux/kexec.h>
 #include <linux/delay.h>
+#include <linux/efi.h>
 #include <linux/init.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/debug.h>
@@ -26,12 +27,15 @@
 #include <linux/syscalls.h>
 #include <linux/mm_types.h>
 #include <linux/kasan.h>
+#include <linux/ubsan.h>
+#include <linux/cfi.h>
 
 #include <asm/atomic.h>
 #include <asm/bug.h>
 #include <asm/cpufeature.h>
 #include <asm/daifflags.h>
 #include <asm/debug-monitors.h>
+#include <asm/efi.h>
 #include <asm/esr.h>
 #include <asm/exception.h>
 #include <asm/extable.h>
@@ -161,10 +165,8 @@ static void dump_kernel_instr(const char *lvl, struct pt_regs *regs)
 
 		if (!bad)
 			p += sprintf(p, i == 0 ? "(%08x) " : "%08x ", val);
-		else {
-			p += sprintf(p, "bad PC value");
-			break;
-		}
+		else
+			p += sprintf(p, i == 0 ? "(????????) " : "???????? ");
 	}
 
 	printk("%sCode: %s\n", lvl, str);
@@ -180,12 +182,12 @@ static void dump_kernel_instr(const char *lvl, struct pt_regs *regs)
 
 #define S_SMP " SMP"
 
-static int __die(const char *str, int err, struct pt_regs *regs)
+static int __die(const char *str, long err, struct pt_regs *regs)
 {
 	static int die_counter;
 	int ret;
 
-	pr_emerg("Internal error: %s: %x [#%d]" S_PREEMPT S_SMP "\n",
+	pr_emerg("Internal error: %s: %016lx [#%d]" S_PREEMPT S_SMP "\n",
 		 str, err, ++die_counter);
 
 	/* trap and error numbers are mostly meaningless on ARM */
@@ -206,7 +208,7 @@ static DEFINE_RAW_SPINLOCK(die_lock);
 /*
  * This function is protected against re-entrancy.
  */
-void die(const char *str, struct pt_regs *regs, int err)
+void die(const char *str, struct pt_regs *regs, long err)
 {
 	int ret;
 	unsigned long flags;
@@ -372,51 +374,22 @@ void arm64_skip_faulting_instruction(struct pt_regs *regs, unsigned long size)
 		regs->pstate &= ~PSR_BTYPE_MASK;
 }
 
-static LIST_HEAD(undef_hook);
-static DEFINE_RAW_SPINLOCK(undef_lock);
-
-void register_undef_hook(struct undef_hook *hook)
+static int user_insn_read(struct pt_regs *regs, u32 *insnp)
 {
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&undef_lock, flags);
-	list_add(&hook->node, &undef_hook);
-	raw_spin_unlock_irqrestore(&undef_lock, flags);
-}
-
-void unregister_undef_hook(struct undef_hook *hook)
-{
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&undef_lock, flags);
-	list_del(&hook->node);
-	raw_spin_unlock_irqrestore(&undef_lock, flags);
-}
-
-static int call_undef_hook(struct pt_regs *regs)
-{
-	struct undef_hook *hook;
-	unsigned long flags;
 	u32 instr;
-	int (*fn)(struct pt_regs *regs, u32 instr) = NULL;
 	unsigned long pc = instruction_pointer(regs);
 
-	if (!user_mode(regs)) {
-		__le32 instr_le;
-		if (get_kernel_nofault(instr_le, (__le32 *)pc))
-			goto exit;
-		instr = le32_to_cpu(instr_le);
-	} else if (compat_thumb_mode(regs)) {
+	if (compat_thumb_mode(regs)) {
 		/* 16-bit Thumb instruction */
 		__le16 instr_le;
 		if (get_user(instr_le, (__le16 __user *)pc))
-			goto exit;
+			return -EFAULT;
 		instr = le16_to_cpu(instr_le);
 		if (aarch32_insn_is_wide(instr)) {
 			u32 instr2;
 
 			if (get_user(instr_le, (__le16 __user *)(pc + 2)))
-				goto exit;
+				return -EFAULT;
 			instr2 = le16_to_cpu(instr_le);
 			instr = (instr << 16) | instr2;
 		}
@@ -424,19 +397,12 @@ static int call_undef_hook(struct pt_regs *regs)
 		/* 32-bit ARM instruction */
 		__le32 instr_le;
 		if (get_user(instr_le, (__le32 __user *)pc))
-			goto exit;
+			return -EFAULT;
 		instr = le32_to_cpu(instr_le);
 	}
 
-	raw_spin_lock_irqsave(&undef_lock, flags);
-	list_for_each_entry(hook, &undef_hook, node)
-		if ((instr & hook->instr_mask) == hook->instr_val &&
-			(regs->pstate & hook->pstate_mask) == hook->pstate_val)
-			fn = hook->fn;
-
-	raw_spin_unlock_irqrestore(&undef_lock, flags);
-exit:
-	return fn ? fn(regs, instr) : 1;
+	*insnp = instr;
+	return 0;
 }
 
 void force_signal_inject(int signal, int code, unsigned long address, unsigned long err)
@@ -485,37 +451,79 @@ void arm64_notify_segfault(unsigned long addr)
 	force_signal_inject(SIGSEGV, code, addr, 0);
 }
 
-void do_undefinstr(struct pt_regs *regs)
+void do_el0_undef(struct pt_regs *regs, unsigned long esr)
 {
+	u32 insn;
+
 	/* check for AArch32 breakpoint instructions */
 	if (!aarch32_break_handler(regs))
 		return;
 
-	if (call_undef_hook(regs) == 0)
+	if (user_insn_read(regs, &insn))
+		goto out_err;
+
+	if (try_emulate_mrs(regs, insn))
 		return;
 
-	BUG_ON(!user_mode(regs));
+	if (try_emulate_armv8_deprecated(regs, insn))
+		return;
+
+out_err:
 	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 }
-NOKPROBE_SYMBOL(do_undefinstr);
 
-void do_bti(struct pt_regs *regs)
+void do_el1_undef(struct pt_regs *regs, unsigned long esr)
 {
-	BUG_ON(!user_mode(regs));
+	u32 insn;
+
+	if (aarch64_insn_read((void *)regs->pc, &insn))
+		goto out_err;
+
+	if (try_emulate_el1_ssbs(regs, insn))
+		return;
+
+out_err:
+	die("Oops - Undefined instruction", regs, esr);
+}
+
+void do_el0_bti(struct pt_regs *regs)
+{
 	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 }
-NOKPROBE_SYMBOL(do_bti);
 
-void do_ptrauth_fault(struct pt_regs *regs, unsigned long esr)
+void do_el1_bti(struct pt_regs *regs, unsigned long esr)
 {
-	/*
-	 * Unexpected FPAC exception or pointer authentication failure in
-	 * the kernel: kill the task before it does any more harm.
-	 */
-	BUG_ON(!user_mode(regs));
+	if (efi_runtime_fixup_exception(regs, "BTI violation")) {
+		regs->pstate &= ~PSR_BTYPE_MASK;
+		return;
+	}
+	die("Oops - BTI", regs, esr);
+}
+
+void do_el0_fpac(struct pt_regs *regs, unsigned long esr)
+{
 	force_signal_inject(SIGILL, ILL_ILLOPN, regs->pc, esr);
 }
-NOKPROBE_SYMBOL(do_ptrauth_fault);
+
+void do_el1_fpac(struct pt_regs *regs, unsigned long esr)
+{
+	/*
+	 * Unexpected FPAC exception in the kernel: kill the task before it
+	 * does any more harm.
+	 */
+	die("Oops - FPAC", regs, esr);
+}
+
+void do_el0_mops(struct pt_regs *regs, unsigned long esr)
+{
+	arm64_mops_reset_regs(&regs->user_regs, esr);
+
+	/*
+	 * If single stepping then finish the step before executing the
+	 * prologue instruction.
+	 */
+	user_fastforward_single_step(current);
+}
 
 #define __user_cache_maint(insn, address, res)			\
 	if (address >= TASK_SIZE_MAX) {				\
@@ -577,13 +585,13 @@ static void ctr_read_handler(unsigned long esr, struct pt_regs *regs)
 	int rt = ESR_ELx_SYS64_ISS_RT(esr);
 	unsigned long val = arm64_ftr_reg_user_value(&arm64_ftr_reg_ctrel0);
 
-	if (cpus_have_const_cap(ARM64_WORKAROUND_1542419)) {
+	if (cpus_have_final_cap(ARM64_WORKAROUND_1542419)) {
 		/* Hide DIC so that we can trap the unnecessary maintenance...*/
-		val &= ~BIT(CTR_DIC_SHIFT);
+		val &= ~BIT(CTR_EL0_DIC_SHIFT);
 
 		/* ... and fake IminLine to reduce the number of traps. */
-		val &= ~CTR_IMINLINE_MASK;
-		val |= (PAGE_SHIFT - 2) & CTR_IMINLINE_MASK;
+		val &= ~CTR_EL0_IminLine_MASK;
+		val |= (PAGE_SHIFT - 2) & CTR_EL0_IminLine_MASK;
 	}
 
 	pt_regs_write_reg(regs, rt, val);
@@ -737,7 +745,7 @@ static const struct sys64_hook cp15_64_hooks[] = {
 	{},
 };
 
-void do_cp15instr(unsigned long esr, struct pt_regs *regs)
+void do_el0_cp15(unsigned long esr, struct pt_regs *regs)
 {
 	const struct sys64_hook *hook, *hook_base;
 
@@ -758,7 +766,7 @@ void do_cp15instr(unsigned long esr, struct pt_regs *regs)
 		hook_base = cp15_64_hooks;
 		break;
 	default:
-		do_undefinstr(regs);
+		do_el0_undef(regs, esr);
 		return;
 	}
 
@@ -773,12 +781,11 @@ void do_cp15instr(unsigned long esr, struct pt_regs *regs)
 	 * EL0. Fall back to our usual undefined instruction handler
 	 * so that we handle these consistently.
 	 */
-	do_undefinstr(regs);
+	do_el0_undef(regs, esr);
 }
-NOKPROBE_SYMBOL(do_cp15instr);
 #endif
 
-void do_sysinstr(unsigned long esr, struct pt_regs *regs)
+void do_el0_sys(unsigned long esr, struct pt_regs *regs)
 {
 	const struct sys64_hook *hook;
 
@@ -793,9 +800,8 @@ void do_sysinstr(unsigned long esr, struct pt_regs *regs)
 	 * back to our usual undefined instruction handler so that we handle
 	 * these consistently.
 	 */
-	do_undefinstr(regs);
+	do_el0_undef(regs, esr);
 }
-NOKPROBE_SYMBOL(do_sysinstr);
 
 static const char *esr_class_str[] = {
 	[0 ... ESR_ELx_EC_MAX]		= "UNRECOGNIZED EC",
@@ -829,6 +835,7 @@ static const char *esr_class_str[] = {
 	[ESR_ELx_EC_DABT_LOW]		= "DABT (lower EL)",
 	[ESR_ELx_EC_DABT_CUR]		= "DABT (current EL)",
 	[ESR_ELx_EC_SP_ALIGN]		= "SP Alignment",
+	[ESR_ELx_EC_MOPS]		= "MOPS",
 	[ESR_ELx_EC_FP_EXC32]		= "FP (AArch32)",
 	[ESR_ELx_EC_FP_EXC64]		= "FP (AArch64)",
 	[ESR_ELx_EC_SERROR]		= "SError",
@@ -868,7 +875,7 @@ void bad_el0_sync(struct pt_regs *regs, int reason, unsigned long esr)
 DEFINE_PER_CPU(unsigned long [OVERFLOW_STACK_SIZE/sizeof(long)], overflow_stack)
 	__aligned(16);
 
-void panic_bad_stack(struct pt_regs *regs, unsigned long esr, unsigned long far)
+void __noreturn panic_bad_stack(struct pt_regs *regs, unsigned long esr, unsigned long far)
 {
 	unsigned long tsk_stk = (unsigned long)current->stack;
 	unsigned long irq_stk = (unsigned long)this_cpu_read(irq_stack_ptr);
@@ -910,7 +917,6 @@ void __noreturn arm64_serror_panic(struct pt_regs *regs, unsigned long esr)
 	nmi_panic(regs, "Asynchronous SError Interrupt");
 
 	cpu_park_loop();
-	unreachable();
 }
 
 bool arm64_is_fatal_ras_serror(struct pt_regs *regs, unsigned long esr)
@@ -953,7 +959,7 @@ void do_serror(struct pt_regs *regs, unsigned long esr)
 }
 
 /* GENERIC_BUG traps */
-
+#ifdef CONFIG_GENERIC_BUG
 int is_valid_bugaddr(unsigned long addr)
 {
 	/*
@@ -965,12 +971,13 @@ int is_valid_bugaddr(unsigned long addr)
 	 */
 	return 1;
 }
+#endif
 
 static int bug_handler(struct pt_regs *regs, unsigned long esr)
 {
 	switch (report_bug(regs->pc, regs)) {
 	case BUG_TRAP_TYPE_BUG:
-		die("Oops - BUG", regs, 0);
+		die("Oops - BUG", regs, esr);
 		break;
 
 	case BUG_TRAP_TYPE_WARN:
@@ -990,6 +997,38 @@ static struct break_hook bug_break_hook = {
 	.fn = bug_handler,
 	.imm = BUG_BRK_IMM,
 };
+
+#ifdef CONFIG_CFI_CLANG
+static int cfi_handler(struct pt_regs *regs, unsigned long esr)
+{
+	unsigned long target;
+	u32 type;
+
+	target = pt_regs_read_reg(regs, FIELD_GET(CFI_BRK_IMM_TARGET, esr));
+	type = (u32)pt_regs_read_reg(regs, FIELD_GET(CFI_BRK_IMM_TYPE, esr));
+
+	switch (report_cfi_failure(regs, regs->pc, &target, type)) {
+	case BUG_TRAP_TYPE_BUG:
+		die("Oops - CFI", regs, esr);
+		break;
+
+	case BUG_TRAP_TYPE_WARN:
+		break;
+
+	default:
+		return DBG_HOOK_ERROR;
+	}
+
+	arm64_skip_faulting_instruction(regs, AARCH64_INSN_SIZE);
+	return DBG_HOOK_HANDLED;
+}
+
+static struct break_hook cfi_break_hook = {
+	.fn = cfi_handler,
+	.imm = CFI_BRK_IMM_BASE,
+	.mask = CFI_BRK_IMM_MASK,
+};
+#endif /* CONFIG_CFI_CLANG */
 
 static int reserved_fault_handler(struct pt_regs *regs, unsigned long esr)
 {
@@ -1018,7 +1057,7 @@ static int kasan_handler(struct pt_regs *regs, unsigned long esr)
 	bool recover = esr & KASAN_ESR_RECOVER;
 	bool write = esr & KASAN_ESR_WRITE;
 	size_t size = KASAN_ESR_SIZE(esr);
-	u64 addr = regs->regs[0];
+	void *addr = (void *)regs->regs[0];
 	u64 pc = regs->pc;
 
 	kasan_report(addr, size, write, pc);
@@ -1038,7 +1077,7 @@ static int kasan_handler(struct pt_regs *regs, unsigned long esr)
 	 * This is something that might be fixed at some point in the future.
 	 */
 	if (!recover)
-		die("Oops - KASAN", regs, 0);
+		die("Oops - KASAN", regs, esr);
 
 	/* If thread survives, skip over the brk instruction and continue: */
 	arm64_skip_faulting_instruction(regs, AARCH64_INSN_SIZE);
@@ -1052,6 +1091,22 @@ static struct break_hook kasan_break_hook = {
 };
 #endif
 
+#ifdef CONFIG_UBSAN_TRAP
+static int ubsan_handler(struct pt_regs *regs, unsigned long esr)
+{
+	die(report_ubsan_failure(regs, esr & UBSAN_BRK_MASK), regs, esr);
+	return DBG_HOOK_HANDLED;
+}
+
+static struct break_hook ubsan_break_hook = {
+	.fn	= ubsan_handler,
+	.imm	= UBSAN_BRK_IMM,
+	.mask	= UBSAN_BRK_MASK,
+};
+#endif
+
+#define esr_comment(esr) ((esr) & ESR_ELx_BRK64_ISS_COMMENT_MASK)
+
 /*
  * Initial handler for AArch64 BRK exceptions
  * This handler only used until debug_traps_init().
@@ -1059,11 +1114,17 @@ static struct break_hook kasan_break_hook = {
 int __init early_brk64(unsigned long addr, unsigned long esr,
 		struct pt_regs *regs)
 {
+#ifdef CONFIG_CFI_CLANG
+	if ((esr_comment(esr) & ~CFI_BRK_IMM_MASK) == CFI_BRK_IMM_BASE)
+		return cfi_handler(regs, esr) != DBG_HOOK_HANDLED;
+#endif
 #ifdef CONFIG_KASAN_SW_TAGS
-	unsigned long comment = esr & ESR_ELx_BRK64_ISS_COMMENT_MASK;
-
-	if ((comment & ~KASAN_BRK_MASK) == KASAN_BRK_IMM)
+	if ((esr_comment(esr) & ~KASAN_BRK_MASK) == KASAN_BRK_IMM)
 		return kasan_handler(regs, esr) != DBG_HOOK_HANDLED;
+#endif
+#ifdef CONFIG_UBSAN_TRAP
+	if ((esr_comment(esr) & ~UBSAN_BRK_MASK) == UBSAN_BRK_IMM)
+		return ubsan_handler(regs, esr) != DBG_HOOK_HANDLED;
 #endif
 	return bug_handler(regs, esr) != DBG_HOOK_HANDLED;
 }
@@ -1071,9 +1132,15 @@ int __init early_brk64(unsigned long addr, unsigned long esr,
 void __init trap_init(void)
 {
 	register_kernel_break_hook(&bug_break_hook);
+#ifdef CONFIG_CFI_CLANG
+	register_kernel_break_hook(&cfi_break_hook);
+#endif
 	register_kernel_break_hook(&fault_break_hook);
 #ifdef CONFIG_KASAN_SW_TAGS
 	register_kernel_break_hook(&kasan_break_hook);
+#endif
+#ifdef CONFIG_UBSAN_TRAP
+	register_kernel_break_hook(&ubsan_break_hook);
 #endif
 	debug_traps_init();
 }

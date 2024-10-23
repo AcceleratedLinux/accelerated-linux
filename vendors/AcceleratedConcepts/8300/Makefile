@@ -44,7 +44,7 @@ romfs.post:: romfs.cleanup
 
 uimage.bin:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/armada-370-ac8300.dtb >> $(ZIMAGE)
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/marvell/armada-370-ac8300.dtb >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x01000000 -e 0x01000000 -n "Linux" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x03000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 

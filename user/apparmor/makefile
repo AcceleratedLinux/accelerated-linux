@@ -1,6 +1,6 @@
-AA_VERSION = 3.0.3
-AA_VERSION_STRIPPED = $(shell AA_VERSION=$(AA_VERSION); echo $${AA_VERSION%*.0})
-AA_LIB_VERSION = 1.8.1
+AA_VERSION = 3.1.7
+AA_SERIES  = $(subst $() ,.,$(wordlist 1,2,$(subst ., ,$(AA_VERSION))))
+AA_VERSION_STRIPPED = $(AA_VERSION:%.0=%)
 AA_DIR     = apparmor-$(AA_VERSION_STRIPPED)
 
 AALIB      = -L../libraries/libapparmor/src/.libs
@@ -73,9 +73,8 @@ PARSER_INST        = build/parser-install
 PROFILES_INST      = build/profiles-install
 
 my_romfs:
-	$(ROMFSINST) -d $(INSTALLDIR)/lib/libapparmor.so.$(AA_LIB_VERSION) /lib/libapparmor.so.$(AA_LIB_VERSION)
-	$(ROMFSINST) -s libapparmor.so.$(AA_LIB_VERSION) /lib/libapparmor.so.1
-	$(ROMFSINST) -s libapparmor.so.$(AA_LIB_VERSION) /lib/libapparmor.so
+	$(ROMFSINST) -d $(INSTALLDIR)/lib/libapparmor.so.1 /lib/libapparmor.so.1
+	$(ROMFSINST) -s libapparmor.so.1 /lib/libapparmor.so
 	$(ROMFSINST) -d $(INSTALLDIR)/etc/apparmor /etc/apparmor
 	$(ROMFSINST) -d $(INSTALLDIR)/etc/apparmor.d/tunables /etc/apparmor.d/tunables
 	$(ROMFSINST) -d $(INSTALLDIR)/sbin/apparmor_parser /sbin/apparmor_parser

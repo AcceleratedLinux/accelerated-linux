@@ -1,2 +1,4 @@
 Add-ucfront-compatibility.patch
 Don-t-add-prefix-to-pkg-config-files-if-it-is-set-to.patch
+Do-not-use-absolute-path-to-shared-libraries-that-do.patch
+Wipe-out-rpath-strings-on-installation.patch

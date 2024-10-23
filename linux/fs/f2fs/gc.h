@@ -26,9 +26,12 @@
 #define LIMIT_FREE_BLOCK	40 /* percentage over invalid + free space */
 
 #define DEF_GC_FAILED_PINNED_FILES	2048
+#define MAX_GC_FAILED_PINNED_FILES	USHRT_MAX
 
 /* Search max. number of dirty segments to select a victim segment */
 #define DEF_MAX_VICTIM_SEARCH 4096 /* covers 8GB */
+
+#define NR_GC_CHECKPOINT_SECS (3)	/* data/node/dentry sections */
 
 struct f2fs_gc_kthread {
 	struct task_struct *f2fs_gc_task;
@@ -41,7 +44,7 @@ struct f2fs_gc_kthread {
 	unsigned int no_gc_sleep_time;
 
 	/* for changing gc mode */
-	unsigned int gc_wake;
+	bool gc_wake;
 
 	/* for GC_MERGE mount option */
 	wait_queue_head_t fggc_wq;		/*
@@ -55,20 +58,10 @@ struct gc_inode_list {
 	struct radix_tree_root iroot;
 };
 
-struct victim_info {
-	unsigned long long mtime;	/* mtime of section */
-	unsigned int segno;		/* section No. */
-};
-
 struct victim_entry {
 	struct rb_node rb_node;		/* rb node located in rb-tree */
-	union {
-		struct {
-			unsigned long long mtime;	/* mtime of section */
-			unsigned int segno;		/* segment No. */
-		};
-		struct victim_info vi;	/* victim info */
-	};
+	unsigned long long mtime;	/* mtime of section */
+	unsigned int segno;		/* segment No. */
 	struct list_head list;
 };
 
@@ -104,7 +97,7 @@ static inline block_t free_segs_blk_count(struct f2fs_sb_info *sbi)
 	if (f2fs_sb_has_blkzoned(sbi))
 		return free_segs_blk_count_zoned(sbi);
 
-	return free_segments(sbi) << sbi->log_blocks_per_seg;
+	return SEGS_TO_BLKS(sbi, free_segments(sbi));
 }
 
 static inline block_t free_user_blocks(struct f2fs_sb_info *sbi)
@@ -112,7 +105,7 @@ static inline block_t free_user_blocks(struct f2fs_sb_info *sbi)
 	block_t free_blks, ovp_blks;
 
 	free_blks = free_segs_blk_count(sbi);
-	ovp_blks = overprovision_segments(sbi) << sbi->log_blocks_per_seg;
+	ovp_blks = SEGS_TO_BLKS(sbi, overprovision_segments(sbi));
 
 	if (free_blks < ovp_blks)
 		return 0;
@@ -120,15 +113,13 @@ static inline block_t free_user_blocks(struct f2fs_sb_info *sbi)
 	return free_blks - ovp_blks;
 }
 
-static inline block_t limit_invalid_user_blocks(struct f2fs_sb_info *sbi)
+static inline block_t limit_invalid_user_blocks(block_t user_block_count)
 {
-	return (long)(sbi->user_block_count * LIMIT_INVALID_BLOCK) / 100;
+	return (long)(user_block_count * LIMIT_INVALID_BLOCK) / 100;
 }
 
-static inline block_t limit_free_user_blocks(struct f2fs_sb_info *sbi)
+static inline block_t limit_free_user_blocks(block_t reclaimable_user_blocks)
 {
-	block_t reclaimable_user_blocks = sbi->user_block_count -
-		written_block_count(sbi);
 	return (long)(reclaimable_user_blocks * LIMIT_FREE_BLOCK) / 100;
 }
 
@@ -163,15 +154,16 @@ static inline void decrease_sleep_time(struct f2fs_gc_kthread *gc_th,
 
 static inline bool has_enough_invalid_blocks(struct f2fs_sb_info *sbi)
 {
-	block_t invalid_user_blocks = sbi->user_block_count -
-					written_block_count(sbi);
+	block_t user_block_count = sbi->user_block_count;
+	block_t invalid_user_blocks = user_block_count -
+		written_block_count(sbi);
 	/*
 	 * Background GC is triggered with the following conditions.
 	 * 1. There are a number of invalid blocks.
 	 * 2. There is not enough free space.
 	 */
-	if (invalid_user_blocks > limit_invalid_user_blocks(sbi) &&
-			free_user_blocks(sbi) < limit_free_user_blocks(sbi))
-		return true;
-	return false;
+	return (invalid_user_blocks >
+			limit_invalid_user_blocks(user_block_count) &&
+		free_user_blocks(sbi) <
+			limit_free_user_blocks(invalid_user_blocks));
 }

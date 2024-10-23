@@ -29,9 +29,10 @@
 
 #include <linux/if_vlan.h>
 #include <linux/mfd/syscon.h>
+#include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
-#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/phylink.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
@@ -451,8 +452,8 @@ static void ag71xx_get_drvinfo(struct net_device *ndev,
 {
 	struct ag71xx *ag = netdev_priv(ndev);
 
-	strlcpy(info->driver, "ag71xx", sizeof(info->driver));
-	strlcpy(info->bus_info, of_node_full_name(ag->pdev->dev.of_node),
+	strscpy(info->driver, "ag71xx", sizeof(info->driver));
+	strscpy(info->bus_info, of_node_full_name(ag->pdev->dev.of_node),
 		sizeof(info->bus_info));
 }
 
@@ -786,7 +787,7 @@ static bool ag71xx_check_dma_stuck(struct ag71xx *ag)
 	return false;
 }
 
-static int ag71xx_tx_packets(struct ag71xx *ag, bool flush)
+static int ag71xx_tx_packets(struct ag71xx *ag, bool flush, int budget)
 {
 	struct ag71xx_ring *ring = &ag->tx_ring;
 	int sent = 0, bytes_compl = 0, n = 0;
@@ -825,7 +826,7 @@ static int ag71xx_tx_packets(struct ag71xx *ag, bool flush)
 		if (!skb)
 			continue;
 
-		dev_kfree_skb_any(skb);
+		napi_consume_skb(skb, budget);
 		ring->buf[i].tx.skb = NULL;
 
 		bytes_compl += ring->buf[i].tx.len;
@@ -946,7 +947,7 @@ static unsigned int ag71xx_max_frame_len(unsigned int mtu)
 	return ETH_HLEN + VLAN_HLEN + mtu + ETH_FCS_LEN;
 }
 
-static void ag71xx_hw_set_macaddr(struct ag71xx *ag, unsigned char *mac)
+static void ag71xx_hw_set_macaddr(struct ag71xx *ag, const unsigned char *mac)
 {
 	u32 t;
 
@@ -970,7 +971,7 @@ static void ag71xx_fast_reset(struct ag71xx *ag)
 	mii_reg = ag71xx_rr(ag, AG71XX_REG_MII_CFG);
 	rx_ds = ag71xx_rr(ag, AG71XX_REG_RX_DESC);
 
-	ag71xx_tx_packets(ag, true);
+	ag71xx_tx_packets(ag, true, 0);
 
 	reset_control_assert(ag->mac_reset);
 	usleep_range(10, 20);
@@ -1086,7 +1087,6 @@ static void ag71xx_mac_link_up(struct phylink_config *config,
 }
 
 static const struct phylink_mac_ops ag71xx_phylink_mac_ops = {
-	.validate = phylink_generic_validate,
 	.mac_config = ag71xx_mac_config,
 	.mac_link_down = ag71xx_mac_link_down,
 	.mac_link_up = ag71xx_mac_link_up,
@@ -1427,7 +1427,7 @@ static int ag71xx_open(struct net_device *ndev)
 	if (ret) {
 		netif_err(ag, link, ndev, "phylink_of_phy_connect filed with err: %i\n",
 			  ret);
-		goto err;
+		return ret;
 	}
 
 	max_frame_len = ag71xx_max_frame_len(ndev->mtu);
@@ -1448,6 +1448,7 @@ static int ag71xx_open(struct net_device *ndev)
 
 err:
 	ag71xx_rings_cleanup(ag);
+	phylink_disconnect_phy(ag->phylink);
 	return ret;
 }
 
@@ -1657,7 +1658,7 @@ static int ag71xx_rx_packets(struct ag71xx *ag, int limit)
 		ndev->stats.rx_packets++;
 		ndev->stats.rx_bytes += pktlen;
 
-		skb = build_skb(ring->buf[i].rx.rx_buf, ag71xx_buffer_size(ag));
+		skb = napi_build_skb(ring->buf[i].rx.rx_buf, ag71xx_buffer_size(ag));
 		if (!skb) {
 			skb_free_frag(ring->buf[i].rx.rx_buf);
 			goto next;
@@ -1703,7 +1704,7 @@ static int ag71xx_poll(struct napi_struct *napi, int limit)
 	int tx_done, rx_done;
 	u32 status;
 
-	tx_done = ag71xx_tx_packets(ag, false);
+	tx_done = ag71xx_tx_packets(ag, false, limit);
 
 	netif_dbg(ag, rx_status, ndev, "processing RX ring\n");
 	rx_done = ag71xx_rx_packets(ag, limit);
@@ -1787,7 +1788,7 @@ static int ag71xx_change_mtu(struct net_device *ndev, int new_mtu)
 {
 	struct ag71xx *ag = netdev_priv(ndev);
 
-	ndev->mtu = new_mtu;
+	WRITE_ONCE(ndev->mtu, new_mtu);
 	ag71xx_wr(ag, AG71XX_REG_MAC_MFL,
 		  ag71xx_max_frame_len(ndev->mtu));
 
@@ -1967,21 +1968,19 @@ err_put_clk:
 	return err;
 }
 
-static int ag71xx_remove(struct platform_device *pdev)
+static void ag71xx_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct ag71xx *ag;
 
 	if (!ndev)
-		return 0;
+		return;
 
 	ag = netdev_priv(ndev);
 	unregister_netdev(ndev);
 	ag71xx_mdio_remove(ag);
 	clk_disable_unprepare(ag->clk_eth);
 	platform_set_drvdata(pdev, NULL);
-
-	return 0;
 }
 
 static const u32 ar71xx_fifo_ar7100[] = {
@@ -2068,7 +2067,7 @@ static const struct of_device_id ag71xx_match[] = {
 
 static struct platform_driver ag71xx_driver = {
 	.probe		= ag71xx_probe,
-	.remove		= ag71xx_remove,
+	.remove_new	= ag71xx_remove,
 	.driver = {
 		.name	= "ag71xx",
 		.of_match_table = ag71xx_match,

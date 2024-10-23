@@ -14,9 +14,8 @@
 scriptname=$0
 args="$*"
 
-T=${TMPDIR-/tmp}/kvm.sh.$$
+T="`mktemp -d ${TMPDIR-/tmp}/kvm.sh.XXXXXX`"
 trap 'rm -rf $T' 0
-mkdir $T
 
 cd `dirname $scriptname`/../../../../../
 
@@ -50,6 +49,7 @@ TORTURE_SHUTDOWN_GRACE=180
 TORTURE_SUITE=rcu
 TORTURE_MOD=rcutorture
 TORTURE_TRUST_MAKE=""
+debuginfo="CONFIG_DEBUG_INFO_NONE=n CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y"
 resdir=""
 configs=""
 cpus=0
@@ -69,6 +69,7 @@ usage () {
 	echo "       --cpus N"
 	echo "       --datestamp string"
 	echo "       --defconfig string"
+	echo "       --debug-info"
 	echo "       --dryrun batches|scenarios|sched|script"
 	echo "       --duration minutes | <seconds>s | <hours>h | <days>d"
 	echo "       --gdb"
@@ -136,6 +137,15 @@ do
 		ds=$2
 		shift
 		;;
+	--debug-info|--debuginfo)
+		if test -z "$TORTURE_KCONFIG_KCSAN_ARG" && test -z "$TORTURE_BOOT_GDB_ARG"
+		then
+			TORTURE_KCONFIG_KCSAN_ARG="$debuginfo"; export TORTURE_KCONFIG_KCSAN_ARG
+			TORTURE_BOOT_GDB_ARG="nokaslr"; export TORTURE_BOOT_GDB_ARG
+		else
+			echo "Ignored redundant --debug-info (implied by --kcsan &c)"
+		fi
+		;;
 	--defconfig)
 		checkarg --defconfig "defconfigtype" "$#" "$2" '^[^/][^/]*$' '^--'
 		TORTURE_DEFCONFIG=$2
@@ -164,7 +174,7 @@ do
 		shift
 		;;
 	--gdb)
-		TORTURE_KCONFIG_GDB_ARG="CONFIG_DEBUG_INFO=y"; export TORTURE_KCONFIG_GDB_ARG
+		TORTURE_KCONFIG_GDB_ARG="$debuginfo"; export TORTURE_KCONFIG_GDB_ARG
 		TORTURE_BOOT_GDB_ARG="nokaslr"; export TORTURE_BOOT_GDB_ARG
 		TORTURE_QEMU_GDB_ARG="-s -S"; export TORTURE_QEMU_GDB_ARG
 		;;
@@ -180,19 +190,19 @@ do
 		shift
 		;;
 	--kasan)
-		TORTURE_KCONFIG_KASAN_ARG="CONFIG_DEBUG_INFO=y CONFIG_KASAN=y"; export TORTURE_KCONFIG_KASAN_ARG
+		TORTURE_KCONFIG_KASAN_ARG="$debuginfo CONFIG_KASAN=y"; export TORTURE_KCONFIG_KASAN_ARG
 		if test -n "$torture_qemu_mem_default"
 		then
 			TORTURE_QEMU_MEM=2G
 		fi
 		;;
 	--kconfig|--kconfigs)
-		checkarg --kconfig "(Kconfig options)" $# "$2" '^CONFIG_[A-Z0-9_]\+=\([ynm]\|[0-9]\+\)\( CONFIG_[A-Z0-9_]\+=\([ynm]\|[0-9]\+\)\)*$' '^error$'
+		checkarg --kconfig "(Kconfig options)" $# "$2" '^\(#CHECK#\)\?CONFIG_[A-Z0-9_]\+=\([ynm]\|[0-9]\+\|"[^"]*"\)\( \(#CHECK#\)\?CONFIG_[A-Z0-9_]\+=\([ynm]\|[0-9]\+\|"[^"]*"\)\)*$' '^error$'
 		TORTURE_KCONFIG_ARG="`echo "$TORTURE_KCONFIG_ARG $2" | sed -e 's/^ *//' -e 's/ *$//'`"
 		shift
 		;;
 	--kcsan)
-		TORTURE_KCONFIG_KCSAN_ARG="CONFIG_DEBUG_INFO=y CONFIG_KCSAN=y CONFIG_KCSAN_STRICT=y CONFIG_KCSAN_REPORT_ONCE_IN_MS=100000 CONFIG_KCSAN_VERBOSE=y CONFIG_DEBUG_LOCK_ALLOC=y CONFIG_PROVE_LOCKING=y"; export TORTURE_KCONFIG_KCSAN_ARG
+		TORTURE_KCONFIG_KCSAN_ARG="$debuginfo CONFIG_KCSAN=y CONFIG_KCSAN_STRICT=y CONFIG_KCSAN_REPORT_ONCE_IN_MS=100000 CONFIG_KCSAN_VERBOSE=y CONFIG_DEBUG_LOCK_ALLOC=y CONFIG_PROVE_LOCKING=y"; export TORTURE_KCONFIG_KCSAN_ARG
 		;;
 	--kmake-arg|--kmake-args)
 		checkarg --kmake-arg "(kernel make arguments)" $# "$2" '.*' '^error$'
@@ -586,7 +596,7 @@ awk < $T/cfgcpu.pack \
 echo kvm-end-run-stats.sh "$resdir/$ds" "$starttime" >> $T/script
 
 # Extract the tests and their batches from the script.
-egrep 'Start batch|Starting build\.' $T/script | grep -v ">>" |
+grep -E 'Start batch|Starting build\.' $T/script | grep -v ">>" |
 	sed -e 's/:.*$//' -e 's/^echo //' -e 's/-ovf//' |
 	awk '
 	/^----Start/ {
@@ -623,7 +633,7 @@ then
 elif test "$dryrun" = sched
 then
 	# Extract the test run schedule from the script.
-	egrep 'Start batch|Starting build\.' $T/script | grep -v ">>" |
+	grep -E 'Start batch|Starting build\.' $T/script | grep -v ">>" |
 		sed -e 's/:.*$//' -e 's/^echo //'
 	nbuilds="`grep 'Starting build\.' $T/script |
 		  grep -v ">>" | sed -e 's/:.*$//' -e 's/^echo //' |
@@ -656,4 +666,4 @@ fi
 # Control buffer size: --bootargs trace_buf_size=3k
 # Get trace-buffer dumps on all oopses: --bootargs ftrace_dump_on_oops
 # Ditto, but dump only the oopsing CPU: --bootargs ftrace_dump_on_oops=orig_cpu
-# Heavy-handed way to also dump on warnings: --bootargs panic_on_warn
+# Heavy-handed way to also dump on warnings: --bootargs panic_on_warn=1

@@ -41,9 +41,9 @@ static int mcb_match(struct device *dev, struct device_driver *drv)
 	return 0;
 }
 
-static int mcb_uevent(struct device *dev, struct kobj_uevent_env *env)
+static int mcb_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
-	struct mcb_device *mdev = to_mcb_device(dev);
+	const struct mcb_device *mdev = to_mcb_device(dev);
 	int ret;
 
 	ret = add_uevent_var(env, "MODALIAS=mcb:16z%03d", mdev->id);
@@ -71,8 +71,10 @@ static int mcb_probe(struct device *dev)
 
 	get_device(dev);
 	ret = mdrv->probe(mdev, found_id);
-	if (ret)
+	if (ret) {
 		module_put(carrier_mod);
+		put_device(dev);
+	}
 
 	return ret;
 }
@@ -154,7 +156,7 @@ static const struct attribute_group *mcb_carrier_groups[] = {
 };
 
 
-static struct bus_type mcb_bus_type = {
+static const struct bus_type mcb_bus_type = {
 	.name = "mcb",
 	.match = mcb_match,
 	.uevent = mcb_uevent,
@@ -163,7 +165,7 @@ static struct bus_type mcb_bus_type = {
 	.shutdown = mcb_shutdown,
 };
 
-static struct device_type mcb_carrier_device_type = {
+static const struct device_type mcb_carrier_device_type = {
 	.name = "mcb-carrier",
 	.groups = mcb_carrier_groups,
 };
@@ -244,6 +246,7 @@ int mcb_device_register(struct mcb_bus *bus, struct mcb_device *dev)
 	return 0;
 
 out:
+	put_device(&dev->dev);
 
 	return ret;
 }
@@ -254,12 +257,13 @@ static void mcb_free_bus(struct device *dev)
 	struct mcb_bus *bus = to_mcb_bus(dev);
 
 	put_device(bus->carrier);
-	ida_simple_remove(&mcb_ida, bus->bus_nr);
+	ida_free(&mcb_ida, bus->bus_nr);
 	kfree(bus);
 }
 
 /**
  * mcb_alloc_bus() - Allocate a new @mcb_bus
+ * @carrier: generic &struct device for the carrier device
  *
  * Allocate a new @mcb_bus.
  */
@@ -273,7 +277,7 @@ struct mcb_bus *mcb_alloc_bus(struct device *carrier)
 	if (!bus)
 		return ERR_PTR(-ENOMEM);
 
-	bus_nr = ida_simple_get(&mcb_ida, 0, 0, GFP_KERNEL);
+	bus_nr = ida_alloc(&mcb_ida, GFP_KERNEL);
 	if (bus_nr < 0) {
 		kfree(bus);
 		return ERR_PTR(bus_nr);
@@ -286,7 +290,7 @@ struct mcb_bus *mcb_alloc_bus(struct device *carrier)
 	bus->dev.parent = carrier;
 	bus->dev.bus = &mcb_bus_type;
 	bus->dev.type = &mcb_carrier_device_type;
-	bus->dev.release = &mcb_free_bus;
+	bus->dev.release = mcb_free_bus;
 
 	dev_set_name(&bus->dev, "mcb:%d", bus_nr);
 	rc = device_add(&bus->dev);
@@ -309,7 +313,7 @@ static int __mcb_devices_unregister(struct device *dev, void *data)
 
 static void mcb_devices_unregister(struct mcb_bus *bus)
 {
-	bus_for_each_dev(&mcb_bus_type, NULL, NULL, __mcb_devices_unregister);
+	bus_for_each_dev(bus->dev.bus, NULL, NULL, __mcb_devices_unregister);
 }
 /**
  * mcb_release_bus() - Free a @mcb_bus
@@ -324,7 +328,7 @@ void mcb_release_bus(struct mcb_bus *bus)
 EXPORT_SYMBOL_NS_GPL(mcb_release_bus, MCB);
 
 /**
- * mcb_bus_put() - Increment refcnt
+ * mcb_bus_get() - Increment refcnt
  * @bus: The @mcb_bus
  *
  * Get a @mcb_bus' ref
@@ -385,17 +389,13 @@ EXPORT_SYMBOL_NS_GPL(mcb_free_dev, MCB);
 
 static int __mcb_bus_add_devices(struct device *dev, void *data)
 {
-	struct mcb_device *mdev = to_mcb_device(dev);
 	int retval;
 
-	if (mdev->is_added)
-		return 0;
-
 	retval = device_attach(dev);
-	if (retval < 0)
+	if (retval < 0) {
 		dev_err(dev, "Error adding device (%d)\n", retval);
-
-	mdev->is_added = true;
+		return retval;
+	}
 
 	return 0;
 }
@@ -408,7 +408,7 @@ static int __mcb_bus_add_devices(struct device *dev, void *data)
  */
 void mcb_bus_add_devices(const struct mcb_bus *bus)
 {
-	bus_for_each_dev(&mcb_bus_type, NULL, NULL, __mcb_bus_add_devices);
+	bus_for_each_dev(bus->dev.bus, NULL, NULL, __mcb_bus_add_devices);
 }
 EXPORT_SYMBOL_NS_GPL(mcb_bus_add_devices, MCB);
 
@@ -456,7 +456,7 @@ EXPORT_SYMBOL_NS_GPL(mcb_request_mem, MCB);
 
 /**
  * mcb_release_mem() - Release memory requested by device
- * @dev: The @mcb_device that requested the memory
+ * @mem: The memory resource to be released
  *
  * Release memory that was prior requested via @mcb_request_mem().
  */

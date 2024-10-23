@@ -1,0 +1,113 @@
+#!/bin/sh
+
+#
+# serial-mode.sh - setup and control serial port interface mode
+#
+# This control script is specific to the Digi/IoT-Gateway-Large.
+# On that hardware we only support interface mode setting on a
+# single serial port, and that is /dev/serial/port1.
+#
+# (C) Copyright 2024, Digi International.
+#
+#
+# IoT Gateway - Large
+#
+# PH6: GPIO 630 -> PH6 : SERIAL_ON
+# PA14: GPIO 526 -> PA14 : RS232/485#
+# PC2: GPIO 546 -> PC2 : RS485_TERM
+#
+# For RS-232, SERIAL_ON is high and RS232/RS485# is high.
+# For RS-485, SERIAL_ON is high and RS232/RS485# is low.
+# For RS-485, RS485_TERM enables on-board RS-485 AC termination,
+#             and bias voltage, active high.
+#
+
+# SERIAL_ON GPIO
+GPIO_SERIAL_ON_NAME="PH6"
+
+# RS232/RS485#
+GPIO_RS232_RS485_NAME="PA14"
+
+# RS485 TERM
+GPIO_RS485_TERM_NAME="PC2"
+
+
+# set_gpio_value <gpio_line_name> <value>
+set_gpio_value() {
+	local GPIO_NAME="${1}"
+	local VALUE="${2}"
+	/bin/gpioset -t 0 "${GPIO_NAME}"="${VALUE}"
+}
+
+# The initialization puts the port into RS-232 mode.
+serial_init() {
+	# Turn on SERIAL_ON
+	set_gpio_value "${GPIO_SERIAL_ON_NAME}" 1
+
+	# Turn on RS-232
+	set_gpio_value "${GPIO_RS232_RS485_NAME}" 1
+}
+
+# Sets serial port to 232 mode.
+serial_rs232() {
+	serial_init
+}
+
+# Sets serial port to RS-422/RS-485 mode.
+serial_rs485() {
+	set_gpio_value "${GPIO_RS232_RS485_NAME}" 0
+}
+
+# Sets serial port to RS-485 Non-Terminate mode.
+serial_nonterminate() {
+	set_gpio_value "${GPIO_RS485_TERM_NAME}" 0
+}
+
+# Sets serial port to RS-485 Terminate mode.
+serial_terminate() {
+	set_gpio_value "${GPIO_RS485_TERM_NAME}" 1
+}
+
+usage() {
+	echo "usage: serial-mode <device> (init|powerdown|rs-232|rs-485) [terminate]"
+	echo
+	echo "        init      -- initialize port control"
+	echo "        powerdown -- powerdown port"
+	echo "        rs-232    -- set port into RS-232 mode (default)"
+	echo "        rs-485    -- set port into RS-485 mode"
+	echo "        terminate -- enable line termination"
+	echo
+	exit 1
+}
+
+#
+# Check arguments, and error out on anything invalid.
+#
+if [ $# -lt 2 -o $# -gt 3 ] ; then
+	usage
+fi
+if [ "$1" != "/dev/serial/port1" ] ; then
+	echo "ERROR: serial-mode only supported on /dev/serial/port1"
+	exit 1
+fi
+
+case "$2" in
+init)	serial_init ;;
+# Cannot shutdown both transceivers simulatenously, RS-232 has lower consumption
+powerdown)
+	serial_rs232
+	# Don't parse 'terminate'
+	exit 0
+	;;
+rs-232)	serial_rs232 ;;
+rs-485)	serial_rs485 ;;
+*)	usage ;;
+esac
+
+if [ "$3" = "terminate" ] ; then
+	serial_terminate
+else
+	serial_nonterminate
+fi
+
+exit 0

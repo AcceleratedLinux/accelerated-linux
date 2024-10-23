@@ -77,6 +77,7 @@ static int iqs62x_keys_parse_prop(struct platform_device *pdev,
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to read switch code: %d\n",
 				ret);
+			fwnode_handle_put(child);
 			return ret;
 		}
 		iqs62x_keys->switches[i].code = val;
@@ -90,6 +91,8 @@ static int iqs62x_keys_parse_prop(struct platform_device *pdev,
 			iqs62x_keys->switches[i].flag = (i == IQS62X_SW_HALL_N ?
 							 IQS62X_EVENT_HALL_N_T :
 							 IQS62X_EVENT_HALL_S_T);
+
+		fwnode_handle_put(child);
 	}
 
 	return 0;
@@ -307,7 +310,7 @@ static int iqs62x_keys_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int iqs62x_keys_remove(struct platform_device *pdev)
+static void iqs62x_keys_remove(struct platform_device *pdev)
 {
 	struct iqs62x_keys_private *iqs62x_keys = platform_get_drvdata(pdev);
 	int ret;
@@ -316,8 +319,6 @@ static int iqs62x_keys_remove(struct platform_device *pdev)
 						 &iqs62x_keys->notifier);
 	if (ret)
 		dev_err(&pdev->dev, "Failed to unregister notifier: %d\n", ret);
-
-	return ret;
 }
 
 static struct platform_driver iqs62x_keys_platform_driver = {
@@ -325,7 +326,7 @@ static struct platform_driver iqs62x_keys_platform_driver = {
 		.name = "iqs62x-keys",
 	},
 	.probe = iqs62x_keys_probe,
-	.remove = iqs62x_keys_remove,
+	.remove_new = iqs62x_keys_remove,
 };
 module_platform_driver(iqs62x_keys_platform_driver);
 

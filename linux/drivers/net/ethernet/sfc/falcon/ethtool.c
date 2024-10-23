@@ -162,9 +162,9 @@ static void ef4_ethtool_get_drvinfo(struct net_device *net_dev,
 {
 	struct ef4_nic *efx = netdev_priv(net_dev);
 
-	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
-	strlcpy(info->version, EF4_DRIVER_VERSION, sizeof(info->version));
-	strlcpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
+	strscpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
+	strscpy(info->version, EF4_DRIVER_VERSION, sizeof(info->version));
+	strscpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
 }
 
 static int ef4_ethtool_get_regs_len(struct net_device *net_dev)
@@ -412,7 +412,7 @@ static void ef4_ethtool_get_strings(struct net_device *net_dev,
 		strings += (efx->type->describe_stats(efx, strings) *
 			    ETH_GSTRING_LEN);
 		for (i = 0; i < EF4_ETHTOOL_SW_STAT_COUNT; i++)
-			strlcpy(strings + i * ETH_GSTRING_LEN,
+			strscpy(strings + i * ETH_GSTRING_LEN,
 				ef4_sw_stat_desc[i].name, ETH_GSTRING_LEN);
 		strings += EF4_ETHTOOL_SW_STAT_COUNT * ETH_GSTRING_LEN;
 		strings += (ef4_describe_per_queue_stats(efx, strings) *
@@ -1257,31 +1257,33 @@ static u32 ef4_ethtool_get_rxfh_indir_size(struct net_device *net_dev)
 		0 : ARRAY_SIZE(efx->rx_indir_table));
 }
 
-static int ef4_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
-				u8 *hfunc)
+static int ef4_ethtool_get_rxfh(struct net_device *net_dev,
+				struct ethtool_rxfh_param *rxfh)
 {
 	struct ef4_nic *efx = netdev_priv(net_dev);
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
-	if (indir)
-		memcpy(indir, efx->rx_indir_table, sizeof(efx->rx_indir_table));
+	rxfh->hfunc = ETH_RSS_HASH_TOP;
+	if (rxfh->indir)
+		memcpy(rxfh->indir, efx->rx_indir_table,
+		       sizeof(efx->rx_indir_table));
 	return 0;
 }
 
-static int ef4_ethtool_set_rxfh(struct net_device *net_dev, const u32 *indir,
-				const u8 *key, const u8 hfunc)
+static int ef4_ethtool_set_rxfh(struct net_device *net_dev,
+				struct ethtool_rxfh_param *rxfh,
+				struct netlink_ext_ack *extack)
 {
 	struct ef4_nic *efx = netdev_priv(net_dev);
 
 	/* We do not allow change in unsupported parameters */
-	if (key ||
-	    (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP))
+	if (rxfh->key ||
+	    (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	     rxfh->hfunc != ETH_RSS_HASH_TOP))
 		return -EOPNOTSUPP;
-	if (!indir)
+	if (!rxfh->indir)
 		return 0;
 
-	return efx->type->rx_push_rss_config(efx, true, indir);
+	return efx->type->rx_push_rss_config(efx, true, rxfh->indir);
 }
 
 static int ef4_ethtool_get_module_eeprom(struct net_device *net_dev,

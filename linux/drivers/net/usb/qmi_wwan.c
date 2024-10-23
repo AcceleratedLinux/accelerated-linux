@@ -13,6 +13,7 @@
 #include <linux/ethtool.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
+#include <linux/kstrtox.h>
 #include <linux/mii.h>
 #include <linux/rtnetlink.h>
 #include <linux/usb.h>
@@ -46,22 +47,12 @@
  */
 
 /* driver specific data */
-struct qmimux_hdr {
-	u8 pad;
-	u8 mux_id;
-	__be16 pkt_len;
-};
-
 struct qmi_wwan_state {
 	struct usb_driver *subdriver;
 	atomic_t pmcount;
 	unsigned long flags;
 	struct usb_interface *control;
 	struct usb_interface *data;
-
-	struct sk_buff *partial_skb;
-	unsigned int partial_len;
-	struct qmimux_hdr partial_hdr;
 };
 
 enum qmi_wwan_flags {
@@ -72,6 +63,12 @@ enum qmi_wwan_flags {
 
 enum qmi_wwan_quirks {
 	QMI_WWAN_QUIRK_DTR = 1 << 0,	/* needs "set DTR" request */
+};
+
+struct qmimux_hdr {
+	u8 pad;
+	u8 mux_id;
+	__be16 pkt_len;
 };
 
 struct qmimux_priv {
@@ -124,7 +121,6 @@ static const struct net_device_ops qmimux_netdev_ops = {
 	.ndo_open        = qmimux_open,
 	.ndo_stop        = qmimux_stop,
 	.ndo_start_xmit  = qmimux_start_xmit,
-	.ndo_get_stats64 = dev_get_tstats64,
 };
 
 static void qmimux_setup(struct net_device *dev)
@@ -136,6 +132,7 @@ static void qmimux_setup(struct net_device *dev)
 	dev->flags           = IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
 	dev->netdev_ops      = &qmimux_netdev_ops;
 	dev->mtu             = 1500;
+	dev->pcpu_stat_type  = NETDEV_PCPU_STAT_TSTATS;
 	dev->needs_free_netdev = true;
 }
 
@@ -162,115 +159,21 @@ static bool qmimux_has_slaves(struct usbnet *dev)
 	return !list_empty(&dev->net->adj_list.upper);
 }
 
-static inline void qmimux_rx_stats_pkt(struct qmimux_priv *priv, int len)
-{
-	struct pcpu_sw_netstats *stats64;
-	unsigned long flags;
-
-	stats64 = this_cpu_ptr(priv->real_dev->tstats);
-	flags = u64_stats_update_begin_irqsave(&stats64->syncp);
-	stats64->rx_packets++;
-	stats64->rx_bytes += len;
-	u64_stats_update_end_irqrestore(&stats64->syncp, flags);
-}
-
 static int qmimux_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
 	unsigned int len, offset = 0, pad_len, pkt_len;
 	struct qmimux_hdr *hdr;
 	struct net_device *net;
 	struct sk_buff *skbn;
 	u8 qmimux_hdr_sz = sizeof(*hdr);
 
-	if (info->partial_skb) {
-
-		if (info->partial_hdr.pkt_len - info->partial_len > skb->len)
-			len = skb->len;
-		else
-			len = info->partial_hdr.pkt_len - info->partial_len;
-
-		skb_put_data(info->partial_skb, skb->data, len);
-		info->partial_len += len;
-		if (info->partial_len < info->partial_hdr.pkt_len)
-			return 0; /* more data too come */
-
-		net = qmimux_find_dev(dev, info->partial_hdr.mux_id);
-		if (!net) {
-			kfree_skb(info->partial_skb);
-			goto skip_partial;
-		}
-		info->partial_skb->dev = net;
-
-		switch (info->partial_skb->data[0] & 0xf0) {
-		case 0x40:
-			skb_reset_mac_header(info->partial_skb);
-			info->partial_skb->protocol = htons(ETH_P_IP);
-			(void) netif_rx(info->partial_skb);
-			qmimux_rx_stats_pkt(netdev_priv(net), len);
-			break;
-		case 0x60:
-			skb_reset_mac_header(info->partial_skb);
-			info->partial_skb->protocol = htons(ETH_P_IPV6);
-			(void) netif_rx(info->partial_skb);
-			qmimux_rx_stats_pkt(netdev_priv(net), len);
-			break;
-		default:
-			/* not ip - do not know what to do */
-			kfree_skb(info->partial_skb);
-			break;
-		}
-	skip_partial:
-		info->partial_skb = NULL;
-		offset = len;
-	}
-
-	while (offset + qmimux_hdr_sz <= skb->len) { /* <= only mux hdr */
+	while (offset + qmimux_hdr_sz < skb->len) {
 		hdr = (struct qmimux_hdr *)(skb->data + offset);
 		len = be16_to_cpu(hdr->pkt_len);
 
-/*
- * this is a hack to recover from broken packets if they ever occur.
- * It was tested due to another bug in the mux/reassembly but should not
- * ever actually happen
- *
- * We need some way to find bad packets,  a 2k len seems a pretty safe limit.
- */
-#define MUX_MAXPKT 2048
-
-		if (len > MUX_MAXPKT) {
-			net = NULL;
-			while (offset + qmimux_hdr_sz < skb->len) {
-				offset++;
-				hdr = (struct qmimux_hdr *)(skb->data + offset);
-				len = be16_to_cpu(hdr->pkt_len);
-				if (len > MUX_MAXPKT)
-					continue;
-				net = qmimux_find_dev(dev, hdr->mux_id);
-				if (net)
-					break; /* found a possible hdr */
-			}
-			if (!net)
-				return 0;
-		}
-
-		/* partial packet or just mux hdr only */
-		if (offset + len + qmimux_hdr_sz > skb->len) {
-			net = qmimux_find_dev(dev, hdr->mux_id);
-			if (!net)
-				return 0;
-			skbn = netdev_alloc_skb(net, len);
-			if (!skbn)
-				return 0;
-			info->partial_len = skb->len - (offset + qmimux_hdr_sz);
-			info->partial_hdr = *hdr;
-			info->partial_hdr.pkt_len = be16_to_cpu(hdr->pkt_len);
-			skb_put_data(skbn,
-				skb->data + offset + qmimux_hdr_sz,
-				info->partial_len);
-			info->partial_skb = skbn;
+		/* drop the packet, bogus length */
+		if (offset + len + qmimux_hdr_sz > skb->len)
 			return 0;
-		}
 
 		/* control packet, we do not know what to do */
 		if (hdr->pad & 0x80)
@@ -289,15 +192,13 @@ static int qmimux_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 		if (!skbn)
 			return 0;
 
-		skb_reserve(skbn, LL_MAX_HEADER);
-		skb_put_data(skbn, skb->data + offset + qmimux_hdr_sz, pkt_len);
-		skb_reset_mac_header(skbn);
-
 		switch (skb->data[offset + qmimux_hdr_sz] & 0xf0) {
 		case 0x40:
+			skb_reset_mac_header(skbn);
 			skbn->protocol = htons(ETH_P_IP);
 			break;
 		case 0x60:
+			skb_reset_mac_header(skbn);
 			skbn->protocol = htons(ETH_P_IPV6);
 			break;
 		default:
@@ -305,6 +206,8 @@ static int qmimux_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 			goto skip;
 		}
 
+		skb_reserve(skbn, LL_MAX_HEADER);
+		skb_put_data(skbn, skb->data + offset + qmimux_hdr_sz, pkt_len);
 		if (netif_rx(skbn) != NET_RX_SUCCESS) {
 			net->stats.rx_errors++;
 			return 0;
@@ -312,12 +215,10 @@ static int qmimux_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 			dev_sw_netstats_rx_add(net, pkt_len);
 		}
 
-		qmimux_rx_stats_pkt(netdev_priv(net), len);
 skip:
 		offset += len + qmimux_hdr_sz;
 	}
-	/* we never use the original SKB/packet */
-	return 0;
+	return 1;
 }
 
 static ssize_t mux_id_show(struct device *d, struct device_attribute *attr, char *buf)
@@ -360,19 +261,11 @@ static int qmimux_register_device(struct net_device *real_dev, u8 mux_id)
 	priv->mux_id = mux_id;
 	priv->real_dev = real_dev;
 
-	new_dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
-	if (!new_dev->tstats) {
-		err = -ENOBUFS;
-		goto out_free_newdev;
-	}
-
 	new_dev->sysfs_groups[0] = &qmi_wwan_sysfs_qmimux_attr_group;
 
 	err = register_netdevice(new_dev);
-	if (err < 0) {
-		err = -ENODEV;
+	if (err < 0)
 		goto out_free_newdev;
-	}
 
 	/* Account for reference in struct qmimux_priv_priv */
 	dev_hold(real_dev);
@@ -400,7 +293,6 @@ static void qmimux_unregister_device(struct net_device *dev,
 	struct qmimux_priv *priv = netdev_priv(dev);
 	struct net_device *real_dev = priv->real_dev;
 
-	free_percpu(dev->tstats);
 	netdev_upper_dev_unlink(real_dev, dev);
 	unregister_netdevice_queue(dev, head);
 
@@ -411,7 +303,7 @@ static void qmimux_unregister_device(struct net_device *dev,
 static void qmi_wwan_netdev_setup(struct net_device *net)
 {
 	struct usbnet *dev = netdev_priv(net);
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 
 	if (info->flags & QMI_WWAN_FLAG_RAWIP) {
 		net->header_ops      = NULL;  /* No header */
@@ -437,7 +329,7 @@ static void qmi_wwan_netdev_setup(struct net_device *net)
 static ssize_t raw_ip_show(struct device *d, struct device_attribute *attr, char *buf)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 
 	return sprintf(buf, "%c\n", info->flags & QMI_WWAN_FLAG_RAWIP ? 'Y' : 'N');
 }
@@ -445,11 +337,11 @@ static ssize_t raw_ip_show(struct device *d, struct device_attribute *attr, char
 static ssize_t raw_ip_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	bool enable;
 	int ret;
 
-	if (strtobool(buf, &enable))
+	if (kstrtobool(buf, &enable))
 		return -EINVAL;
 
 	/* no change? */
@@ -514,7 +406,7 @@ static ssize_t add_mux_show(struct device *d, struct device_attribute *attr, cha
 static ssize_t add_mux_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	u8 mux_id;
 	int ret;
 
@@ -552,7 +444,7 @@ static ssize_t del_mux_show(struct device *d, struct device_attribute *attr, cha
 static ssize_t del_mux_store(struct device *d,  struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct usbnet *dev = netdev_priv(to_net_dev(d));
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	struct net_device *del_dev;
 	u8 mux_id;
 	int ret = 0;
@@ -598,7 +490,7 @@ static ssize_t pass_through_store(struct device *d,
 	struct qmi_wwan_state *info;
 	bool enable;
 
-	if (strtobool(buf, &enable))
+	if (kstrtobool(buf, &enable))
 		return -EINVAL;
 
 	info = (void *)&dev->data;
@@ -664,30 +556,16 @@ static const u8 buggy_fw_addr[ETH_ALEN] = {0x00, 0xa0, 0xc6, 0x00, 0x00, 0x00};
  * Another common firmware bug results in all packets being addressed
  * to 00:a0:c6:00:00:00 despite the host address being different.
  * This function will also fixup such packets.
- *
- * Another firmware bug results in packets with complete garbage for the
- * ethernet header. This function tries to detect invalid headers and
- * replace them with a valid header.
  */
 static int qmi_wwan_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	bool rawip = info->flags & QMI_WWAN_FLAG_RAWIP;
 	__be16 proto;
 
 	/* This check is no longer done by usbnet */
-	if (skb->len < dev->net->hard_header_len) {
-		dev->net->stats.rx_errors++;
+	if (skb->len < dev->net->hard_header_len)
 		return 0;
-	}
-
-	/* Test for a valid ethernet header */
-	if (memcmp(skb->data, dev->net->dev_addr, ETH_ALEN) == 0)
-		return 1;
-	if (skb->protocol == htons(ETH_P_IP) && skb->data[0] == 0x01 && skb->data[1] == 0x00 && skb->data[2] == 0x5e)
-		return 1;
-	if (skb->protocol == htons(ETH_P_IPV6) && skb->data[0] == 0x33 && skb->data[1] == 0x33)
-		return 1;
 
 	if (info->flags & QMI_WWAN_FLAG_MUX)
 		return qmimux_rx_fixup(dev, skb);
@@ -713,10 +591,8 @@ static int qmi_wwan_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 		skb_reset_mac_header(skb);
 		goto fix_dest;
 	default:
-		if (rawip) {
-			dev->net->stats.rx_errors++;
+		if (rawip)
 			return 0;
-		}
 		/* pass along other packets without modifications */
 		return 1;
 	}
@@ -726,10 +602,9 @@ static int qmi_wwan_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 		skb->protocol = proto;
 		return 1;
 	}
-	if (skb_headroom(skb) < ETH_HLEN) {
-		dev->net->stats.rx_errors++;
+
+	if (skb_headroom(skb) < ETH_HLEN)
 		return 0;
-	}
 	skb_push(skb, ETH_HLEN);
 	skb_reset_mac_header(skb);
 	eth_hdr(skb)->h_proto = proto;
@@ -737,71 +612,6 @@ static int qmi_wwan_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 fix_dest:
 	memcpy(eth_hdr(skb)->h_dest, dev->net->dev_addr, ETH_ALEN);
 	return 1;
-}
-
-/*
- * this is the same as qmi_wwan_rx_fixup but we ensure we do our best to make
- * it work. rawip interfaces use RX_ASSEMBLE so we need to do error counting
- * here as well
- */
-static int qmi_wwan_rawip_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
-{
-	__be16 proto;
-	struct sk_buff *skb2 = NULL;
-
-	dev_dbg(&dev->intf->dev, "%s()\n", __func__);
-
-	/* usbnet rx_complete guarantees that skb->len is at least
-	 * hard_header_len, so we can inspect the dest address without
-	 * checking skb->len
-	 */
-	switch (skb->data[0] & 0xf0) {
-	case 0x40:
-		proto = htons(ETH_P_IP);
-		break;
-	case 0x60:
-		proto = htons(ETH_P_IPV6);
-		break;
-	case 0x00:
-		if (is_multicast_ether_addr(skb->data))
-			return 1;
-		/* possibly bogus destination - rewrite just in case */
-		skb_reset_mac_header(skb);
-		goto fix_dest;
-	default:
-		/* pass along other packets without modifications */
-		return 1;
-	}
-	if (skb_headroom(skb) < ETH_HLEN) {
-		skb2 = skb_copy_expand(skb, ETH_HLEN, 0, GFP_ATOMIC);
-		if (!skb2) {
-			dev->net->stats.rx_errors++;
-			return 0;
-		}
-		skb = skb2;
-	}
-	skb_push(skb, ETH_HLEN);
-	skb_reset_mac_header(skb);
-	eth_hdr(skb)->h_proto = proto;
-	eth_zero_addr(eth_hdr(skb)->h_source);
-fix_dest:
-	memcpy(eth_hdr(skb)->h_dest, dev->net->dev_addr, ETH_ALEN);
-	if (skb2) {
-		usbnet_skb_return(dev, skb2);
-		/* old packet will be dropped, new skb is received, no error */
-		return 0;
-	}
-	return 1;
-}
-
-/* some devices expect and send only rawip packets, oblige */
-static struct sk_buff *qmi_wwan_rawip_tx_fixup(struct usbnet *dev,
-	struct sk_buff *skb, gfp_t flags)
-{
-	if (skb->len > ETH_HLEN && (skb->data[0] & 0xd0) != 0x40 &&
-			(skb->data[ETH_HLEN] & 0xd0) == 0x40)
-		skb_pull(skb, ETH_HLEN);
-	return skb;
 }
 
 /* very simplistic detection of IPv4 or IPv6 headers */
@@ -831,7 +641,6 @@ static const struct net_device_ops qmi_wwan_netdev_ops = {
 	.ndo_start_xmit		= usbnet_start_xmit,
 	.ndo_tx_timeout		= usbnet_tx_timeout,
 	.ndo_change_mtu		= usbnet_change_mtu,
-	.ndo_get_stats64	= dev_get_tstats64,
 	.ndo_set_mac_address	= qmi_wwan_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
 };
@@ -841,13 +650,13 @@ static const struct net_device_ops qmi_wwan_netdev_ops = {
  */
 static int qmi_wwan_manage_power(struct usbnet *dev, int on)
 {
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	int rv;
 
 	if (info == NULL) {
 		/*
 		 * It is possible we end up here after the device has actually
-		 * been disconnected. The driver_priv pointer will be NULL in
+		 * been disconnected. The dev->data pointer will be NULL in
 		 * that case so check for that. Nothing to do if it is already
 		 * gone, just cleanly exit.
 		 */
@@ -885,7 +694,7 @@ static int qmi_wwan_register_subdriver(struct usbnet *dev)
 {
 	int rv;
 	struct usb_driver *subdriver = NULL;
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 
 	/* collect bulk endpoints */
 	rv = usbnet_get_endpoints(dev, info->data);
@@ -921,26 +730,6 @@ static int qmi_wwan_register_subdriver(struct usbnet *dev)
 	/* save subdriver struct for suspend/resume wrappers */
 	info->subdriver = subdriver;
 
-	/* Never use the same address on both ends of the link, even
-	 * if the buggy firmware told us to.
-	 */
-	if (ether_addr_equal(dev->net->dev_addr, default_modem_addr)) {
-		u8 addr = dev->net->dev_addr[4];
-
-		addr ^= 0x11;
-		dev_addr_mod(dev->net, 4, &addr, 1);
-	}
-
-	/* make MAC addr easily distinguishable from an IP header */
-	if (possibly_iphdr(dev->net->dev_addr)) {
-		u8 addr = dev->net->dev_addr[0];
-
-		addr |= 0x02;	/* set local assignment bit */
-		addr &= 0xbf;	/* clear "IP" bit */
-		dev_addr_mod(dev->net, 0, &addr, 1);
-	}
-	dev->net->netdev_ops = &qmi_wwan_netdev_ops;
-
 err:
 	return rv;
 }
@@ -968,15 +757,13 @@ static int qmi_wwan_bind(struct usbnet *dev, struct usb_interface *intf)
 	struct usb_cdc_union_desc *cdc_union;
 	struct usb_cdc_ether_desc *cdc_ether;
 	struct usb_driver *driver = driver_of(intf);
-	struct qmi_wwan_state *info;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	struct usb_cdc_parsed_header hdr;
 
-	dev->driver_priv = kzalloc(sizeof(struct qmi_wwan_state), GFP_KERNEL);
-	if (!dev->driver_priv)
-		return -ENOMEM;
+	BUILD_BUG_ON((sizeof(((struct usbnet *)0)->data) <
+		      sizeof(struct qmi_wwan_state)));
 
 	/* set up initial state */
-	info = dev->driver_priv;
 	info->control = intf;
 	info->data = intf;
 
@@ -1007,9 +794,6 @@ static int qmi_wwan_bind(struct usbnet *dev, struct usb_interface *intf)
 		dev->hard_mtu = le16_to_cpu(cdc_ether->wMaxSegmentSize);
 		usbnet_get_ethernet_addr(dev, cdc_ether->iMACAddress);
 	}
-
-	/* Make sure we can handle whatever sized packet is thrown at us */
-	dev->rx_urb_size = 2048;
 
 	/* claim data interface and set it up */
 	if (info->control != info->data) {
@@ -1066,27 +850,12 @@ static int qmi_wwan_bind(struct usbnet *dev, struct usb_interface *intf)
 	dev->net->netdev_ops = &qmi_wwan_netdev_ops;
 	dev->net->sysfs_groups[0] = &qmi_wwan_sysfs_attr_group;
 err:
-	if (status < 0) {
-		kfree(dev->driver_priv);
-		dev->driver_priv = NULL;
-	}
-	return status;
-}
-
-static int qmi_wwan_rawip_bind(struct usbnet *dev, struct usb_interface *intf)
-{
-	int status = qmi_wwan_bind(dev, intf);
-	if (status < 0)
-		return status;
-	dev->net->flags |= IFF_NOARP;
-	dev->net->flags &= ~IFF_MULTICAST;
-	dev->net->mtu = 1460;
 	return status;
 }
 
 static void qmi_wwan_unbind(struct usbnet *dev, struct usb_interface *intf)
 {
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	struct usb_driver *driver = driver_of(intf);
 	struct usb_interface *other;
 
@@ -1114,9 +883,6 @@ static void qmi_wwan_unbind(struct usbnet *dev, struct usb_interface *intf)
 	info->subdriver = NULL;
 	info->data = NULL;
 	info->control = NULL;
-
-	kfree(dev->driver_priv);
-	dev->driver_priv = NULL;
 }
 
 /* suspend/resume wrappers calling both usbnet and the cdc-wdm
@@ -1128,7 +894,7 @@ static void qmi_wwan_unbind(struct usbnet *dev, struct usb_interface *intf)
 static int qmi_wwan_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	int ret;
 
 	/* Both usbnet_suspend() and subdriver->suspend() MUST return 0
@@ -1151,7 +917,7 @@ err:
 static int qmi_wwan_resume(struct usb_interface *intf)
 {
 	struct usbnet *dev = usb_get_intfdata(intf);
-	struct qmi_wwan_state *info = (void *) dev->driver_priv;
+	struct qmi_wwan_state *info = (void *)&dev->data;
 	int ret = 0;
 	bool callsub = (intf == info->control && info->subdriver &&
 			info->subdriver->resume);
@@ -1169,25 +935,16 @@ err:
 
 static const struct driver_info	qmi_wwan_info = {
 	.description	= "WWAN/QMI device",
-	.flags		= FLAG_WWAN | FLAG_SEND_ZLP | FLAG_RX_ASSEMBLE,
+	.flags		= FLAG_WWAN | FLAG_SEND_ZLP,
 	.bind		= qmi_wwan_bind,
 	.unbind		= qmi_wwan_unbind,
 	.manage_power	= qmi_wwan_manage_power,
 	.rx_fixup       = qmi_wwan_rx_fixup,
 };
 
-static const struct driver_info	qmi_wwan_rawip_info = {
-	.description	= "WWAN/QMI rawip device",
-	.flags		= FLAG_WWAN | FLAG_RX_ASSEMBLE,
-	.bind		= qmi_wwan_rawip_bind,
-	.unbind		= qmi_wwan_unbind,
-	.rx_fixup	= qmi_wwan_rawip_rx_fixup,
-	.tx_fixup	= qmi_wwan_rawip_tx_fixup,
-};
-
 static const struct driver_info	qmi_wwan_info_quirk_dtr = {
 	.description	= "WWAN/QMI device",
-	.flags		= FLAG_WWAN | FLAG_SEND_ZLP | FLAG_RX_ASSEMBLE,
+	.flags		= FLAG_WWAN | FLAG_SEND_ZLP,
 	.bind		= qmi_wwan_bind,
 	.unbind		= qmi_wwan_unbind,
 	.manage_power	= qmi_wwan_manage_power,
@@ -1201,11 +958,6 @@ static const struct driver_info	qmi_wwan_info_quirk_dtr = {
 #define QMI_FIXED_INTF(vend, prod, num) \
 	USB_DEVICE_INTERFACE_NUMBER(vend, prod, num), \
 	.driver_info = (unsigned long)&qmi_wwan_info
-
-/* map QMI/wwan function by a fixed interface number - raw IP format */
-#define QMI_RAWIP_FIXED_INTF(vend, prod, num) \
-	USB_DEVICE_INTERFACE_NUMBER(vend, prod, num), \
-	.driver_info = (unsigned long)&qmi_wwan_rawip_info
 
 /* devices requiring "set DTR" quirk */
 #define QMI_QUIRK_SET_DTR(vend, prod, num) \
@@ -1234,28 +986,6 @@ static const struct driver_info	qmi_wwan_info_quirk_dtr = {
 	.driver_info = (unsigned long)&qmi_wwan_info_quirk_dtr
 
 static const struct usb_device_id products[] = {
-	/* Black listed devices */
-	{	/* Novatel MiFi U620L Enterprise Mode - non QMI modem */
-		USB_DEVICE(0x1410, 0x9022),
-		.driver_info        = -1L,
-	},
-	{	/* Novatel MiFi U620L Client Mode - non QMI modem */
-		USB_DEVICE(0x1410, 0x9020),
-		.driver_info        = -1L,
-	},
-	{	/* USB208B 81RY52 USB to Ethernet */
-		USB_DEVICE(0x0bda, 0x8152),
-		.driver_info        = -1L,
-	},
-	{	/* Telit LE910 v2 - default */
-		USB_DEVICE(0x1bc7, 0x0036),
-		.driver_info        = -1L,
-	},
-	{	/* Telit LE910 v2 MBIM */
-		USB_DEVICE(0x1bc7, 0x0032),
-		.driver_info        = -1L,
-	},
-
 	/* 1. CDC ECM like devices match on the control interface */
 	{	/* Huawei E392, E398 and possibly others sharing both device id and more... */
 		USB_VENDOR_AND_INTERFACE_INFO(HUAWEI_VENDOR_ID, USB_CLASS_VENDOR_SPEC, 1, 9),
@@ -1298,10 +1028,6 @@ static const struct usb_device_id products[] = {
 	{	/* Pantech UML290 - newer firmware */
 		USB_VENDOR_AND_INTERFACE_INFO(0x106c, USB_CLASS_VENDOR_SPEC, 0xf1, 0xff),
 		.driver_info        = (unsigned long)&qmi_wwan_info,
-	},
-	{	/* Pantech UML295 */
-		USB_VENDOR_AND_INTERFACE_INFO(0x10a9, USB_CLASS_VENDOR_SPEC, 0xf0, 0x00),
-		.driver_info        = (unsigned long)&qmi_wwan_rawip_info,
 	},
 	{	/* Novatel USB551L and MC551 */
 		USB_DEVICE_AND_INTERFACE_INFO(0x1410, 0xb001,
@@ -1368,6 +1094,7 @@ static const struct usb_device_id products[] = {
 	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0512)},	/* Quectel EG12/EM12 */
 	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0620)},	/* Quectel EM160R-GL */
 	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0800)},	/* Quectel RM500Q-GL */
+	{QMI_MATCH_FF_FF_FF(0x2c7c, 0x0801)},	/* Quectel RM520N */
 
 	/* 3. Combined interface devices matching on interface number */
 	{QMI_FIXED_INTF(0x0408, 0xea42, 4)},	/* Yota / Megafon M100-1 */
@@ -1499,7 +1226,9 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x05c6, 0x9080, 8)},
 	{QMI_FIXED_INTF(0x05c6, 0x9083, 3)},
 	{QMI_FIXED_INTF(0x05c6, 0x9084, 4)},
+	{QMI_QUIRK_SET_DTR(0x05c6, 0x9091, 2)},	/* Compal RXM-G1 */
 	{QMI_FIXED_INTF(0x05c6, 0x90b2, 3)},    /* ublox R410M */
+	{QMI_QUIRK_SET_DTR(0x05c6, 0x90db, 2)},	/* Compal RXM-G1 */
 	{QMI_FIXED_INTF(0x05c6, 0x920d, 0)},
 	{QMI_FIXED_INTF(0x05c6, 0x920d, 5)},
 	{QMI_QUIRK_SET_DTR(0x05c6, 0x9625, 4)},	/* YUGA CLM920-NC5 */
@@ -1566,6 +1295,7 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x19d2, 0x0168, 4)},
 	{QMI_FIXED_INTF(0x19d2, 0x0176, 3)},
 	{QMI_FIXED_INTF(0x19d2, 0x0178, 3)},
+	{QMI_FIXED_INTF(0x19d2, 0x0189, 4)},    /* ZTE MF290 */
 	{QMI_FIXED_INTF(0x19d2, 0x0191, 4)},	/* ZTE EuFi890 */
 	{QMI_FIXED_INTF(0x19d2, 0x0199, 1)},	/* ZTE MF820S */
 	{QMI_FIXED_INTF(0x19d2, 0x0200, 1)},
@@ -1604,7 +1334,7 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x2001, 0x7e3d, 4)},	/* D-Link DWM-222 A2 */
 	{QMI_FIXED_INTF(0x2020, 0x2031, 4)},	/* Olicard 600 */
 	{QMI_FIXED_INTF(0x2020, 0x2033, 4)},	/* BroadMobi BM806U */
-	{QMI_FIXED_INTF(0x2020, 0x2060, 4)},	/* BroadMobi BM818 */
+	{QMI_QUIRK_SET_DTR(0x2020, 0x2060, 4)},	/* BroadMobi BM818 */
 	{QMI_FIXED_INTF(0x0f3d, 0x68a2, 8)},    /* Sierra Wireless MC7700 */
 	{QMI_FIXED_INTF(0x114f, 0x68a2, 8)},    /* Sierra Wireless MC7750 */
 	{QMI_FIXED_INTF(0x1199, 0x68a2, 8)},	/* Sierra Wireless MC7710 in QMI mode */
@@ -1624,8 +1354,6 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x1199, 0x9061, 8)},	/* Sierra Wireless Modem */
 	{QMI_FIXED_INTF(0x1199, 0x9063, 8)},	/* Sierra Wireless EM7305 */
 	{QMI_FIXED_INTF(0x1199, 0x9063, 10)},	/* Sierra Wireless EM7305 */
-	{QMI_FIXED_INTF(0x1199, 0x9070, 8)},	/* Sierra Wireless MC74xx/EM74xx */
-	{QMI_FIXED_INTF(0x1199, 0x9070, 10)},	/* Sierra Wireless MC74xx/EM74xx */
 	{QMI_QUIRK_SET_DTR(0x1199, 0x9071, 8)},	/* Sierra Wireless MC74xx */
 	{QMI_QUIRK_SET_DTR(0x1199, 0x9071, 10)},/* Sierra Wireless MC74xx */
 	{QMI_QUIRK_SET_DTR(0x1199, 0x9079, 8)},	/* Sierra Wireless EM74xx */
@@ -1639,11 +1367,16 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x2357, 0x0201, 4)},	/* TP-LINK HSUPA Modem MA180 */
 	{QMI_FIXED_INTF(0x2357, 0x9000, 4)},	/* TP-LINK MA260 */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1031, 3)}, /* Telit LE910C1-EUX */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x103a, 0)}, /* Telit LE910C4-WWX */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1040, 2)},	/* Telit LE922A */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1050, 2)},	/* Telit FN980 */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1057, 2)},	/* Telit FN980 */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1060, 2)},	/* Telit LN920 */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1070, 2)},	/* Telit FN990 */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1080, 2)}, /* Telit FE990 */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x10a0, 0)}, /* Telit FN920C04 */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x10a4, 0)}, /* Telit FN920C04 */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x10a9, 0)}, /* Telit FN920C04 */
 	{QMI_FIXED_INTF(0x1bc7, 0x1100, 3)},	/* Telit ME910 */
 	{QMI_FIXED_INTF(0x1bc7, 0x1101, 3)},	/* Telit ME910 dual modem */
 	{QMI_FIXED_INTF(0x1bc7, 0x1200, 5)},	/* Telit LE920 */
@@ -1653,9 +1386,13 @@ static const struct usb_device_id products[] = {
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1260, 2)},	/* Telit LE910Cx */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1261, 2)},	/* Telit LE910Cx */
 	{QMI_QUIRK_SET_DTR(0x1bc7, 0x1900, 1)},	/* Telit LN940 series */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x3000, 0)},	/* Telit FN912 series */
+	{QMI_QUIRK_SET_DTR(0x1bc7, 0x3001, 0)},	/* Telit FN912 series */
 	{QMI_FIXED_INTF(0x1c9e, 0x9801, 3)},	/* Telewell TW-3G HSPA+ */
 	{QMI_FIXED_INTF(0x1c9e, 0x9803, 4)},	/* Telewell TW-3G HSPA+ */
 	{QMI_FIXED_INTF(0x1c9e, 0x9b01, 3)},	/* XS Stick W100-2 from 4G Systems */
+	{QMI_QUIRK_SET_DTR(0x1c9e, 0x9b05, 4)},	/* Longsung U8300 */
+	{QMI_QUIRK_SET_DTR(0x1c9e, 0x9b3c, 4)},	/* Longsung U9300 */
 	{QMI_FIXED_INTF(0x0b3c, 0xc000, 4)},	/* Olivetti Olicard 100 */
 	{QMI_FIXED_INTF(0x0b3c, 0xc001, 4)},	/* Olivetti Olicard 120 */
 	{QMI_FIXED_INTF(0x0b3c, 0xc002, 4)},	/* Olivetti Olicard 140 */
@@ -1673,6 +1410,8 @@ static const struct usb_device_id products[] = {
 	{QMI_QUIRK_SET_DTR(0x1e2d, 0x00b0, 4)},	/* Cinterion CLS8 */
 	{QMI_FIXED_INTF(0x1e2d, 0x00b7, 0)},	/* Cinterion MV31 RmNet */
 	{QMI_FIXED_INTF(0x1e2d, 0x00b9, 0)},	/* Cinterion MV31 RmNet based on new baseline */
+	{QMI_FIXED_INTF(0x1e2d, 0x00f3, 0)},	/* Cinterion MV32-W-A RmNet */
+	{QMI_FIXED_INTF(0x1e2d, 0x00f4, 0)},	/* Cinterion MV32-W-B RmNet */
 	{QMI_FIXED_INTF(0x413c, 0x81a2, 8)},	/* Dell Wireless 5806 Gobi(TM) 4G LTE Mobile Broadband Card */
 	{QMI_FIXED_INTF(0x413c, 0x81a3, 8)},	/* Dell Wireless 5570 HSPA+ (42Mbps) Mobile Broadband Card */
 	{QMI_FIXED_INTF(0x413c, 0x81a4, 8)},	/* Dell Wireless 5570e HSPA+ (42Mbps) Mobile Broadband Card */
@@ -1682,6 +1421,7 @@ static const struct usb_device_id products[] = {
 	{QMI_FIXED_INTF(0x413c, 0x81b3, 8)},	/* Dell Wireless 5809e Gobi(TM) 4G LTE Mobile Broadband Card (rev3) */
 	{QMI_FIXED_INTF(0x413c, 0x81b6, 8)},	/* Dell Wireless 5811e */
 	{QMI_FIXED_INTF(0x413c, 0x81b6, 10)},	/* Dell Wireless 5811e */
+	{QMI_FIXED_INTF(0x413c, 0x81c2, 8)},	/* Dell Wireless 5811e */
 	{QMI_FIXED_INTF(0x413c, 0x81cc, 8)},	/* Dell Wireless 5816e */
 	{QMI_FIXED_INTF(0x413c, 0x81d7, 0)},	/* Dell Wireless 5821e */
 	{QMI_FIXED_INTF(0x413c, 0x81d7, 1)},	/* Dell Wireless 5821e preproduction config */
@@ -1697,23 +1437,14 @@ static const struct usb_device_id products[] = {
 	{QMI_QUIRK_SET_DTR(0x2c7c, 0x0191, 4)},	/* Quectel EG91 */
 	{QMI_QUIRK_SET_DTR(0x2c7c, 0x0195, 4)},	/* Quectel EG95 */
 	{QMI_FIXED_INTF(0x2c7c, 0x0296, 4)},	/* Quectel BG96 */
+	{QMI_QUIRK_SET_DTR(0x2c7c, 0x030e, 4)},	/* Quectel EM05GV2 */
 	{QMI_QUIRK_SET_DTR(0x2cb7, 0x0104, 4)},	/* Fibocom NL678 series */
 	{QMI_FIXED_INTF(0x0489, 0xe0b4, 0)},	/* Foxconn T77W968 LTE */
 	{QMI_FIXED_INTF(0x0489, 0xe0b5, 0)},	/* Foxconn T77W968 LTE with eSIM support*/
 	{QMI_FIXED_INTF(0x2692, 0x9025, 4)},    /* Cellient MPL200 (rebranded Qualcomm 05c6:9025) */
-
-	{QMI_FIXED_INTF(0x1e2d, 0x0053, 4)},	/* Cinterion PX8 */
-
-	//{QMI_FIXED_INTF(0x1435, 0x3182, 1)},	/* WNC */
-	//{QMI_FIXED_INTF(0x1435, 0x3182, 2)},	/* WNC */
-	//{QMI_FIXED_INTF(0x1435, 0x3182, 3)},	/* WNC */
-	//{QMI_FIXED_INTF(0x1435, 0x3182, 5)},	/* WNC */
-	//{QMI_FIXED_INTF(0x1435, 0x3182, 7)},	/* WNC */
-	//{QMI_FIXED_INTF(0x1435, 0x3182, 8)},	/* WNC */
-
-	{ USB_INTERFACE_INFO(USB_CLASS_CDC_DATA, 0, 0),
-	  .driver_info        = (unsigned long)&qmi_wwan_info,
-	},
+	{QMI_QUIRK_SET_DTR(0x1546, 0x1312, 4)},	/* u-blox LARA-R6 01B */
+	{QMI_QUIRK_SET_DTR(0x1546, 0x1342, 4)},	/* u-blox LARA-L6 */
+	{QMI_QUIRK_SET_DTR(0x33f8, 0x0104, 4)}, /* Rolling RW101 RMNET */
 
 	/* 4. Gobi 1000 devices */
 	{QMI_GOBI1K_DEVICE(0x05c6, 0x9212)},	/* Acer Gobi Modem Device */
@@ -1771,7 +1502,6 @@ static const struct usb_device_id products[] = {
 	{QMI_GOBI_DEVICE(0x1199, 0x901b)},	/* Sierra Wireless MC7770 */
 	{QMI_GOBI_DEVICE(0x12d1, 0x14f1)},	/* Sony Gobi 3000 Composite */
 	{QMI_GOBI_DEVICE(0x1410, 0xa021)},	/* Foxconn Gobi 3000 Modem device (Novatel E396) */
-	{QMI_GOBI_DEVICE(0x0AF0, 0x8120)},	/* Option GTM681W */
 
 	{ }					/* END */
 };
@@ -1804,9 +1534,6 @@ static int qmi_wwan_probe(struct usb_interface *intf,
 	if (!id->driver_info) {
 		dev_dbg(&intf->dev, "setting defaults for dynamic device id\n");
 		id->driver_info = (unsigned long)&qmi_wwan_info;
-	} else if (id->driver_info == (unsigned long) -1) {
-		/* Our own blacklisting */
-		return -ENODEV;
 	}
 
 	/* There are devices where the same interface number can be
@@ -1850,16 +1577,11 @@ static void qmi_wwan_disconnect(struct usb_interface *intf)
 	/* called twice if separate control and data intf */
 	if (!dev)
 		return;
-	info = (void *) dev->driver_priv;
+	info = (void *)&dev->data;
 	if (info->flags & QMI_WWAN_FLAG_MUX) {
 		if (!rtnl_trylock()) {
 			restart_syscall();
 			return;
-		}
-		if (info->partial_skb) {
-			struct sk_buff *p = info->partial_skb;
-			info->partial_skb = NULL;
-			kfree_skb(p);
 		}
 		rcu_read_lock();
 		netdev_for_each_upper_dev_rcu(dev->net, ldev, iter)

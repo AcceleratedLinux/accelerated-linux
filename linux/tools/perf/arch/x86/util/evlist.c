@@ -1,47 +1,94 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <stdio.h>
 #include "util/pmu.h"
+#include "util/pmus.h"
 #include "util/evlist.h"
 #include "util/parse-events.h"
+#include "util/event.h"
 #include "topdown.h"
+#include "evsel.h"
 
-#define TOPDOWN_L1_EVENTS	"{slots,topdown-retiring,topdown-bad-spec,topdown-fe-bound,topdown-be-bound}"
-#define TOPDOWN_L2_EVENTS	"{slots,topdown-retiring,topdown-bad-spec,topdown-fe-bound,topdown-be-bound,topdown-heavy-ops,topdown-br-mispredict,topdown-fetch-lat,topdown-mem-bound}"
-
-int arch_evlist__add_default_attrs(struct evlist *evlist)
+static int ___evlist__add_default_attrs(struct evlist *evlist,
+					struct perf_event_attr *attrs,
+					size_t nr_attrs)
 {
-	if (!pmu_have_event("cpu", "slots"))
-		return 0;
+	LIST_HEAD(head);
+	size_t i = 0;
 
-	if (pmu_have_event("cpu", "topdown-heavy-ops"))
-		return parse_events(evlist, TOPDOWN_L2_EVENTS, NULL);
-	else
-		return parse_events(evlist, TOPDOWN_L1_EVENTS, NULL);
-}
+	for (i = 0; i < nr_attrs; i++)
+		event_attr_init(attrs + i);
 
-struct evsel *arch_evlist__leader(struct list_head *list)
-{
-	struct evsel *evsel, *first, *slots = NULL;
-	bool has_topdown = false;
+	if (perf_pmus__num_core_pmus() == 1)
+		return evlist__add_attrs(evlist, attrs, nr_attrs);
 
-	first = list_first_entry(list, struct evsel, core.node);
+	for (i = 0; i < nr_attrs; i++) {
+		struct perf_pmu *pmu = NULL;
 
-	if (!topdown_sys_has_perf_metrics())
-		return first;
+		if (attrs[i].type == PERF_TYPE_SOFTWARE) {
+			struct evsel *evsel = evsel__new(attrs + i);
 
-	/* If there is a slots event and a topdown event then the slots event comes first. */
-	__evlist__for_each_entry(list, evsel) {
-		if (evsel->pmu_name && !strncmp(evsel->pmu_name, "cpu", 3) && evsel->name) {
-			if (strcasestr(evsel->name, "slots")) {
-				slots = evsel;
-				if (slots == first)
-					return first;
-			}
-			if (strcasestr(evsel->name, "topdown"))
-				has_topdown = true;
-			if (slots && has_topdown)
-				return slots;
+			if (evsel == NULL)
+				goto out_delete_partial_list;
+			list_add_tail(&evsel->core.node, &head);
+			continue;
+		}
+
+		while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
+			struct perf_cpu_map *cpus;
+			struct evsel *evsel;
+
+			evsel = evsel__new(attrs + i);
+			if (evsel == NULL)
+				goto out_delete_partial_list;
+			evsel->core.attr.config |= (__u64)pmu->type << PERF_PMU_TYPE_SHIFT;
+			cpus = perf_cpu_map__get(pmu->cpus);
+			evsel->core.cpus = cpus;
+			evsel->core.own_cpus = perf_cpu_map__get(cpus);
+			evsel->pmu_name = strdup(pmu->name);
+			list_add_tail(&evsel->core.node, &head);
 		}
 	}
-	return first;
+
+	evlist__splice_list_tail(evlist, &head);
+
+	return 0;
+
+out_delete_partial_list:
+	{
+		struct evsel *evsel, *n;
+
+		__evlist__for_each_entry_safe(&head, n, evsel)
+			evsel__delete(evsel);
+	}
+	return -1;
+}
+
+int arch_evlist__add_default_attrs(struct evlist *evlist,
+				   struct perf_event_attr *attrs,
+				   size_t nr_attrs)
+{
+	if (!nr_attrs)
+		return 0;
+
+	return ___evlist__add_default_attrs(evlist, attrs, nr_attrs);
+}
+
+int arch_evlist__cmp(const struct evsel *lhs, const struct evsel *rhs)
+{
+	if (topdown_sys_has_perf_metrics() &&
+	    (arch_evsel__must_be_in_group(lhs) || arch_evsel__must_be_in_group(rhs))) {
+		/* Ensure the topdown slots comes first. */
+		if (strcasestr(lhs->name, "slots") && !strcasestr(lhs->name, "uops_retired.slots"))
+			return -1;
+		if (strcasestr(rhs->name, "slots") && !strcasestr(rhs->name, "uops_retired.slots"))
+			return 1;
+		/* Followed by topdown events. */
+		if (strcasestr(lhs->name, "topdown") && !strcasestr(rhs->name, "topdown"))
+			return -1;
+		if (!strcasestr(lhs->name, "topdown") && strcasestr(rhs->name, "topdown"))
+			return 1;
+	}
+
+	/* Default ordering by insertion index. */
+	return lhs->core.idx - rhs->core.idx;
 }

@@ -31,6 +31,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
@@ -160,7 +161,12 @@ static int mtk_i2c_wait_idle(struct mtk_i2c *i2c)
 static void mtk_i2c_reset(struct mtk_i2c *i2c)
 {
 	u32 reg;
-	device_reset(i2c->adap.dev.parent);
+	int ret;
+
+	ret = device_reset(i2c->adap.dev.parent);
+	if (ret)
+		dev_err(i2c->dev, "I2C reset failed!\n");
+
 	barrier();
 
 	/* ctrl0 */
@@ -469,13 +475,13 @@ static int mtk_i2c_probe(struct platform_device *pdev)
 
 	adap = &i2c->adap;
 	adap->owner = THIS_MODULE;
-	adap->class = I2C_CLASS_HWMON | I2C_CLASS_SPD;
+	adap->class = I2C_CLASS_HWMON;
 	adap->algo = &mtk_i2c_algo;
 	adap->retries = 3;
 	adap->dev.parent = &pdev->dev;
 	i2c_set_adapdata(adap, i2c);
 	adap->dev.of_node = pdev->dev.of_node;
-	strlcpy(adap->name, dev_name(&pdev->dev), sizeof(adap->name));
+	strscpy(adap->name, dev_name(&pdev->dev), sizeof(adap->name));
 
 	platform_set_drvdata(pdev, i2c);
 

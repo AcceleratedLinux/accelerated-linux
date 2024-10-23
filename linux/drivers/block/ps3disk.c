@@ -382,6 +382,14 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	struct ps3disk_private *priv;
 	int error;
 	unsigned int devidx;
+	struct queue_limits lim = {
+		.logical_block_size	= dev->blk_size,
+		.max_hw_sectors		= dev->bounce_size >> 9,
+		.max_segments		= -1,
+		.max_segment_size	= dev->bounce_size,
+		.dma_alignment		= dev->blk_size - 1,
+	};
+
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 
@@ -431,7 +439,7 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	if (error)
 		goto fail_teardown;
 
-	gendisk = blk_mq_alloc_disk(&priv->tag_set, dev);
+	gendisk = blk_mq_alloc_disk(&priv->tag_set, &lim, dev);
 	if (IS_ERR(gendisk)) {
 		dev_err(&dev->sbd.core, "%s:%u: blk_mq_alloc_disk failed\n",
 			__func__, __LINE__);
@@ -441,14 +449,7 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 
 	queue = gendisk->queue;
 
-	blk_queue_max_hw_sectors(queue, dev->bounce_size >> 9);
-	blk_queue_dma_alignment(queue, dev->blk_size-1);
-	blk_queue_logical_block_size(queue, dev->blk_size);
-
 	blk_queue_write_cache(queue, true, false);
-
-	blk_queue_max_segments(queue, -1);
-	blk_queue_max_segment_size(queue, dev->bounce_size);
 
 	priv->gendisk = gendisk;
 	gendisk->major = ps3disk_major;
@@ -473,7 +474,7 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 
 	return 0;
 fail_cleanup_disk:
-	blk_cleanup_disk(gendisk);
+	put_disk(gendisk);
 fail_free_tag_set:
 	blk_mq_free_tag_set(&priv->tag_set);
 fail_teardown:
@@ -500,7 +501,7 @@ static void ps3disk_remove(struct ps3_system_bus_device *_dev)
 		    &ps3disk_mask);
 	mutex_unlock(&ps3disk_mask_mutex);
 	del_gendisk(priv->gendisk);
-	blk_cleanup_disk(priv->gendisk);
+	put_disk(priv->gendisk);
 	blk_mq_free_tag_set(&priv->tag_set);
 	dev_notice(&dev->sbd.core, "Synchronizing disk cache\n");
 	ps3disk_sync_cache(dev);

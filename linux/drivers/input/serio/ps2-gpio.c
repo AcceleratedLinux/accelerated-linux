@@ -449,8 +449,8 @@ static int ps2_gpio_probe(struct platform_device *pdev)
 	serio->write = drvdata->write_enable ? ps2_gpio_write : NULL;
 	serio->port_data = drvdata;
 	serio->dev.parent = dev;
-	strlcpy(serio->name, dev_name(dev), sizeof(serio->name));
-	strlcpy(serio->phys, dev_name(dev), sizeof(serio->phys));
+	strscpy(serio->name, dev_name(dev), sizeof(serio->name));
+	strscpy(serio->phys, dev_name(dev), sizeof(serio->phys));
 
 	drvdata->serio = serio;
 	drvdata->dev = dev;
@@ -476,12 +476,11 @@ err_free_serio:
 	return error;
 }
 
-static int ps2_gpio_remove(struct platform_device *pdev)
+static void ps2_gpio_remove(struct platform_device *pdev)
 {
 	struct ps2_gpio_data *drvdata = platform_get_drvdata(pdev);
 
 	serio_unregister_port(drvdata->serio);
-	return 0;
 }
 
 #if defined(CONFIG_OF)
@@ -494,7 +493,7 @@ MODULE_DEVICE_TABLE(of, ps2_gpio_match);
 
 static struct platform_driver ps2_gpio_driver = {
 	.probe		= ps2_gpio_probe,
-	.remove		= ps2_gpio_remove,
+	.remove_new	= ps2_gpio_remove,
 	.driver = {
 		.name = DRIVER_NAME,
 		.of_match_table = of_match_ptr(ps2_gpio_match),

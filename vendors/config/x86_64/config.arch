@@ -74,16 +74,16 @@ ENDIAN  = little
 FLOAT   = hard
 
 ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-  ifneq ($(shell which x86_64-linux-musl-20220202-gcc),)
-    CROSS_COMPILE ?= x86_64-linux-musl-20220202-
+  ifneq ($(shell which x86_64-linux-musl-20240415-gcc),)
+    CROSS_COMPILE ?= x86_64-linux-musl-20240415-
   else
     CROSS_COMPILE ?= x86_64-linux-musl-
   endif
 endif
 
 ifneq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
-  ifneq ($(shell which x86_64-linux-uclibc-20220202-gcc),)
-    CROSS_COMPILE ?= x86_64-linux-uclibc-20220202-
+  ifneq ($(shell which x86_64-linux-uclibc-20240415-gcc),)
+    CROSS_COMPILE ?= x86_64-linux-uclibc-20240415-
   else
     CROSS_COMPILE ?= x86_64-linux-uclibc-
   endif
@@ -168,9 +168,9 @@ ifdef UCLINUX_BUILD_LIB
 	GLIBC_TARGET_OPTS = --host=x86_64-redhat-linux
   endif
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -fomit-frame-pointer
   endif
   ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
 	CFLAGS  += -fstack-protector-strong
@@ -194,9 +194,9 @@ endif
 
 ifdef UCLINUX_BUILD_USER
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -fomit-frame-pointer
   endif
   ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
 	CFLAGS  += -fstack-protector-strong

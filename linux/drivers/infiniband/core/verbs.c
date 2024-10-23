@@ -147,6 +147,7 @@ __attribute_const__ int ib_rate_to_mult(enum ib_rate rate)
 	case IB_RATE_50_GBPS:  return  20;
 	case IB_RATE_400_GBPS: return 160;
 	case IB_RATE_600_GBPS: return 240;
+	case IB_RATE_800_GBPS: return 320;
 	default:	       return  -1;
 	}
 }
@@ -176,6 +177,7 @@ __attribute_const__ enum ib_rate mult_to_ib_rate(int mult)
 	case 20:  return IB_RATE_50_GBPS;
 	case 160: return IB_RATE_400_GBPS;
 	case 240: return IB_RATE_600_GBPS;
+	case 320: return IB_RATE_800_GBPS;
 	default:  return IB_RATE_PORT_CURRENT;
 	}
 }
@@ -205,6 +207,7 @@ __attribute_const__ int ib_rate_to_mbps(enum ib_rate rate)
 	case IB_RATE_50_GBPS:  return 53125;
 	case IB_RATE_400_GBPS: return 425000;
 	case IB_RATE_600_GBPS: return 637500;
+	case IB_RATE_800_GBPS: return 850000;
 	default:	       return -1;
 	}
 }
@@ -366,7 +369,7 @@ void rdma_copy_ah_attr(struct rdma_ah_attr *dest,
 EXPORT_SYMBOL(rdma_copy_ah_attr);
 
 /**
- * rdma_replace_ah_attr - Replace valid ah_attr with new new one.
+ * rdma_replace_ah_attr - Replace valid ah_attr with new one.
  * @old:        Pointer to existing ah_attr which needs to be replaced.
  *              old is assumed to be valid or zero'd
  * @new:        Pointer to the new ah_attr.
@@ -532,6 +535,8 @@ static struct ib_ah *_rdma_create_ah(struct ib_pd *pd,
 	else
 		ret = device->ops.create_ah(ah, &init_attr, NULL);
 	if (ret) {
+		if (ah->sgid_attr)
+			rdma_put_gid_attr(ah->sgid_attr);
 		kfree(ah);
 		return ERR_PTR(ret);
 	}
@@ -742,7 +747,7 @@ EXPORT_SYMBOL(ib_get_gids_from_rdma_hdr);
 
 /* Resolve destination mac address and hop limit for unicast destination
  * GID entry, considering the source GID entry as well.
- * ah_attribute must have have valid port_num, sgid_index.
+ * ah_attribute must have valid port_num, sgid_index.
  */
 static int ib_resolve_unicast_gid_dmac(struct ib_device *device,
 				       struct rdma_ah_attr *ah_attr)
@@ -1038,7 +1043,7 @@ struct ib_srq *ib_create_srq_user(struct ib_pd *pd,
 	ret = pd->device->ops.create_srq(srq, srq_init_attr, udata);
 	if (ret) {
 		rdma_restrack_put(&srq->res);
-		atomic_dec(&srq->pd->usecnt);
+		atomic_dec(&pd->usecnt);
 		if (srq->srq_type == IB_SRQT_XRC && srq->ext.xrc.xrcd)
 			atomic_dec(&srq->ext.xrc.xrcd->usecnt);
 		if (ib_srq_has_cq(srq->srq_type))
@@ -1878,12 +1883,95 @@ int ib_modify_qp_with_udata(struct ib_qp *ib_qp, struct ib_qp_attr *attr,
 }
 EXPORT_SYMBOL(ib_modify_qp_with_udata);
 
+static void ib_get_width_and_speed(u32 netdev_speed, u32 lanes,
+				   u16 *speed, u8 *width)
+{
+	if (!lanes) {
+		if (netdev_speed <= SPEED_1000) {
+			*width = IB_WIDTH_1X;
+			*speed = IB_SPEED_SDR;
+		} else if (netdev_speed <= SPEED_10000) {
+			*width = IB_WIDTH_1X;
+			*speed = IB_SPEED_FDR10;
+		} else if (netdev_speed <= SPEED_20000) {
+			*width = IB_WIDTH_4X;
+			*speed = IB_SPEED_DDR;
+		} else if (netdev_speed <= SPEED_25000) {
+			*width = IB_WIDTH_1X;
+			*speed = IB_SPEED_EDR;
+		} else if (netdev_speed <= SPEED_40000) {
+			*width = IB_WIDTH_4X;
+			*speed = IB_SPEED_FDR10;
+		} else if (netdev_speed <= SPEED_50000) {
+			*width = IB_WIDTH_2X;
+			*speed = IB_SPEED_EDR;
+		} else if (netdev_speed <= SPEED_100000) {
+			*width = IB_WIDTH_4X;
+			*speed = IB_SPEED_EDR;
+		} else if (netdev_speed <= SPEED_200000) {
+			*width = IB_WIDTH_4X;
+			*speed = IB_SPEED_HDR;
+		} else {
+			*width = IB_WIDTH_4X;
+			*speed = IB_SPEED_NDR;
+		}
+
+		return;
+	}
+
+	switch (lanes) {
+	case 1:
+		*width = IB_WIDTH_1X;
+		break;
+	case 2:
+		*width = IB_WIDTH_2X;
+		break;
+	case 4:
+		*width = IB_WIDTH_4X;
+		break;
+	case 8:
+		*width = IB_WIDTH_8X;
+		break;
+	case 12:
+		*width = IB_WIDTH_12X;
+		break;
+	default:
+		*width = IB_WIDTH_1X;
+	}
+
+	switch (netdev_speed / lanes) {
+	case SPEED_2500:
+		*speed = IB_SPEED_SDR;
+		break;
+	case SPEED_5000:
+		*speed = IB_SPEED_DDR;
+		break;
+	case SPEED_10000:
+		*speed = IB_SPEED_FDR10;
+		break;
+	case SPEED_14000:
+		*speed = IB_SPEED_FDR;
+		break;
+	case SPEED_25000:
+		*speed = IB_SPEED_EDR;
+		break;
+	case SPEED_50000:
+		*speed = IB_SPEED_HDR;
+		break;
+	case SPEED_100000:
+		*speed = IB_SPEED_NDR;
+		break;
+	default:
+		*speed = IB_SPEED_SDR;
+	}
+}
+
 int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 {
 	int rc;
 	u32 netdev_speed;
 	struct net_device *netdev;
-	struct ethtool_link_ksettings lksettings;
+	struct ethtool_link_ksettings lksettings = {};
 
 	if (rdma_port_get_link_layer(dev, port_num) != IB_LINK_LAYER_ETHERNET)
 		return -EINVAL;
@@ -1902,29 +1990,13 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 		netdev_speed = lksettings.base.speed;
 	} else {
 		netdev_speed = SPEED_1000;
-		pr_warn("%s speed is unknown, defaulting to %u\n", netdev->name,
-			netdev_speed);
+		if (rc)
+			pr_warn("%s speed is unknown, defaulting to %u\n",
+				netdev->name, netdev_speed);
 	}
 
-	if (netdev_speed <= SPEED_1000) {
-		*width = IB_WIDTH_1X;
-		*speed = IB_SPEED_SDR;
-	} else if (netdev_speed <= SPEED_10000) {
-		*width = IB_WIDTH_1X;
-		*speed = IB_SPEED_FDR10;
-	} else if (netdev_speed <= SPEED_20000) {
-		*width = IB_WIDTH_4X;
-		*speed = IB_SPEED_DDR;
-	} else if (netdev_speed <= SPEED_25000) {
-		*width = IB_WIDTH_1X;
-		*speed = IB_SPEED_EDR;
-	} else if (netdev_speed <= SPEED_40000) {
-		*width = IB_WIDTH_4X;
-		*speed = IB_SPEED_FDR10;
-	} else {
-		*width = IB_WIDTH_4X;
-		*speed = IB_SPEED_EDR;
-	}
+	ib_get_width_and_speed(netdev_speed, lksettings.lanes,
+			       speed, width);
 
 	return 0;
 }
@@ -2149,6 +2221,8 @@ struct ib_mr *ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	mr->pd = pd;
 	mr->dm = NULL;
 	atomic_inc(&pd->usecnt);
+	mr->iova =  virt_addr;
+	mr->length = length;
 
 	rdma_restrack_new(&mr->res, RDMA_RESTRACK_MR);
 	rdma_restrack_parent_name(&mr->res, &pd->res);
@@ -2955,15 +3029,18 @@ EXPORT_SYMBOL(__rdma_block_iter_start);
 bool __rdma_block_iter_next(struct ib_block_iter *biter)
 {
 	unsigned int block_offset;
+	unsigned int sg_delta;
 
 	if (!biter->__sg_nents || !biter->__sg)
 		return false;
 
 	biter->__dma_addr = sg_dma_address(biter->__sg) + biter->__sg_advance;
 	block_offset = biter->__dma_addr & (BIT_ULL(biter->__pg_bit) - 1);
-	biter->__sg_advance += BIT_ULL(biter->__pg_bit) - block_offset;
+	sg_delta = BIT_ULL(biter->__pg_bit) - block_offset;
 
-	if (biter->__sg_advance >= sg_dma_len(biter->__sg)) {
+	if (sg_dma_len(biter->__sg) - biter->__sg_advance > sg_delta) {
+		biter->__sg_advance += sg_delta;
+	} else {
 		biter->__sg_advance = 0;
 		biter->__sg = sg_next(biter->__sg);
 		biter->__sg_nents--;

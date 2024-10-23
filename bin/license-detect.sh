@@ -42,7 +42,7 @@ license_detect() {
 	#
 	# BSD is a bit trickier but lets try
 	#
-	BSD=$(egrep -B 20 -A 20 'TH.* SOFTWARE IS PROVIDED.*AS IS' "$1" | tr -d '\n')
+	BSD=$(cat $1 | tr '\n' ' ' | egrep -B 20 -A 20 'TH.* SOFTWARE IS PROVIDED.*AS IS')
 	case "$BSD" in
 	"") ;;
 	*"used to endorse or promote products"*)

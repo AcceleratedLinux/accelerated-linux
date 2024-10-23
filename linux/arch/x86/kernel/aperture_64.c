@@ -36,7 +36,7 @@
 /*
  * Using 512M as goal, in case kexec will load kernel_big
  * that will do the on-position decompress, and could overlap with
- * with the gart aperture that is used.
+ * the gart aperture that is used.
  * Sequence:
  * kernel_small
  * ==> kexec (with kdump trigger path or gart still enabled)
@@ -259,10 +259,9 @@ static u32 __init search_agp_bridge(u32 *order, int *valid_agp)
 							order);
 				}
 
-				/* No multi-function device? */
 				type = read_pci_config_byte(bus, slot, func,
 							       PCI_HEADER_TYPE);
-				if (!(type & 0x80))
+				if (!(type & PCI_HEADER_TYPE_MFD))
 					break;
 			}
 		}

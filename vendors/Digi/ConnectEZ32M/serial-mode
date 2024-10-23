@@ -7,87 +7,87 @@
 #
 
 #
-# GPIO344 = port 1 termination/biasing (output, active high, default low)
-# GPIO345 = port 2 termination/biasing (output, active high, default low)
-# GPIO346 = port 3 termination/biasing (output, active high, default low)
-# GPIO347 = port 4 termination/biasing (output, active high, default low)
-# GPIO348 = port 5 termination/biasing (output, active high, default low)
-# GPIO349 = port 6 termination/biasing (output, active high, default low)
-# GPIO350 = port 7 termination/biasing (output, active high, default low)
-# GPIO351 = port 8 termination/biasing (output, active high, default low)
+# GPIO680 = port 1 termination/biasing (output, active high, default low)
+# GPIO681 = port 2 termination/biasing (output, active high, default low)
+# GPIO682 = port 3 termination/biasing (output, active high, default low)
+# GPIO683 = port 4 termination/biasing (output, active high, default low)
+# GPIO684 = port 5 termination/biasing (output, active high, default low)
+# GPIO685 = port 6 termination/biasing (output, active high, default low)
+# GPIO686 = port 7 termination/biasing (output, active high, default low)
+# GPIO687 = port 8 termination/biasing (output, active high, default low)
 #
-# GPIO328 = port 9 termination/biasing (output, active high, default low)
-# GPIO329 = port 10 termination/biasing (output, active high, default low)
-# GPIO330 = port 11 termination/biasing (output, active high, default low)
-# GPIO331 = port 12 termination/biasing (output, active high, default low)
-# GPIO332 = port 13 termination/biasing (output, active high, default low)
-# GPIO333 = port 14 termination/biasing (output, active high, default low)
-# GPIO334 = port 15 termination/biasing (output, active high, default low)
-# GPIO335 = port 16 termination/biasing (output, active high, default low)
+# GPIO696 = port 9 termination/biasing (output, active high, default low)
+# GPIO697 = port 10 termination/biasing (output, active high, default low)
+# GPIO698 = port 11 termination/biasing (output, active high, default low)
+# GPIO699 = port 12 termination/biasing (output, active high, default low)
+# GPIO700 = port 13 termination/biasing (output, active high, default low)
+# GPIO701 = port 14 termination/biasing (output, active high, default low)
+# GPIO702 = port 15 termination/biasing (output, active high, default low)
+# GPIO703 = port 16 termination/biasing (output, active high, default low)
 #
-# GPIO376 = port 17 termination/biasing (output, active high, default low)
-# GPIO377 = port 18 termination/biasing (output, active high, default low)
-# GPIO378 = port 19 termination/biasing (output, active high, default low)
-# GPIO379 = port 20 termination/biasing (output, active high, default low)
-# GPIO380 = port 21 termination/biasing (output, active high, default low)
-# GPIO381 = port 22 termination/biasing (output, active high, default low)
-# GPIO382 = port 23 termination/biasing (output, active high, default low)
-# GPIO383 = port 24 termination/biasing (output, active high, default low)
+# GPIO648 = port 17 termination/biasing (output, active high, default low)
+# GPIO649 = port 18 termination/biasing (output, active high, default low)
+# GPIO650 = port 19 termination/biasing (output, active high, default low)
+# GPIO651 = port 20 termination/biasing (output, active high, default low)
+# GPIO652 = port 21 termination/biasing (output, active high, default low)
+# GPIO653 = port 22 termination/biasing (output, active high, default low)
+# GPIO654 = port 23 termination/biasing (output, active high, default low)
+# GPIO655 = port 24 termination/biasing (output, active high, default low)
 #
-# GPIO360 = port 25 termination/biasing (output, active high, default low)
-# GPIO361 = port 26 termination/biasing (output, active high, default low)
-# GPIO362 = port 27 termination/biasing (output, active high, default low)
-# GPIO363 = port 28 termination/biasing (output, active high, default low)
-# GPIO364 = port 29 termination/biasing (output, active high, default low)
-# GPIO365 = port 30 termination/biasing (output, active high, default low)
-# GPIO366 = port 31 termination/biasing (output, active high, default low)
-# GPIO367 = port 32 termination/biasing (output, active high, default low)
+# GPIO664 = port 25 termination/biasing (output, active high, default low)
+# GPIO665 = port 26 termination/biasing (output, active high, default low)
+# GPIO666 = port 27 termination/biasing (output, active high, default low)
+# GPIO667 = port 28 termination/biasing (output, active high, default low)
+# GPIO668 = port 29 termination/biasing (output, active high, default low)
+# GPIO669 = port 30 termination/biasing (output, active high, default low)
+# GPIO670 = port 31 termination/biasing (output, active high, default low)
+# GPIO671 = port 32 termination/biasing (output, active high, default low)
 #
-# GPIO336 = port 1 2-wire, half-duplex enable (output, active high, default low)
-# GPIO337 = port 2 2-wire, half-duplex enable (output, active high, default low)
-# GPIO338 = port 3 2-wire, half-duplex enable (output, active high, default low)
-# GPIO339 = port 4 2-wire, half-duplex enable (output, active high, default low)
-# GPIO340 = port 5 2-wire, half-duplex enable (output, active high, default low)
-# GPIO341 = port 6 2-wire, half-duplex enable (output, active high, default low)
-# GPIO342 = port 7 2-wire, half-duplex enable (output, active high, default low)
-# GPIO343 = port 8 2-wire, half-duplex enable (output, active high, default low)
+# GPIO672 = port 1 2-wire, half-duplex enable (output, active high, default low)
+# GPIO673 = port 2 2-wire, half-duplex enable (output, active high, default low)
+# GPIO674 = port 3 2-wire, half-duplex enable (output, active high, default low)
+# GPIO675 = port 4 2-wire, half-duplex enable (output, active high, default low)
+# GPIO676 = port 5 2-wire, half-duplex enable (output, active high, default low)
+# GPIO677 = port 6 2-wire, half-duplex enable (output, active high, default low)
+# GPIO678 = port 7 2-wire, half-duplex enable (output, active high, default low)
+# GPIO679 = port 8 2-wire, half-duplex enable (output, active high, default low)
 #
-# GPIO320 = port 9 2-wire, half-duplex enable (output, active high, default low)
-# GPIO321 = port 10 2-wire, half-duplex enable (output, active high, default low)
-# GPIO322 = port 11 2-wire, half-duplex enable (output, active high, default low)
-# GPIO323 = port 12 2-wire, half-duplex enable (output, active high, default low)
-# GPIO324 = port 13 2-wire, half-duplex enable (output, active high, default low)
-# GPIO325 = port 14 2-wire, half-duplex enable (output, active high, default low)
-# GPIO326 = port 15 2-wire, half-duplex enable (output, active high, default low)
-# GPIO327 = port 16 2-wire, half-duplex enable (output, active high, default low)
+# GPIO688 = port 9 2-wire, half-duplex enable (output, active high, default low)
+# GPIO689 = port 10 2-wire, half-duplex enable (output, active high, default low)
+# GPIO690 = port 11 2-wire, half-duplex enable (output, active high, default low)
+# GPIO691 = port 12 2-wire, half-duplex enable (output, active high, default low)
+# GPIO692 = port 13 2-wire, half-duplex enable (output, active high, default low)
+# GPIO693 = port 14 2-wire, half-duplex enable (output, active high, default low)
+# GPIO694 = port 15 2-wire, half-duplex enable (output, active high, default low)
+# GPIO695 = port 16 2-wire, half-duplex enable (output, active high, default low)
 #
-# GPIO368 = port 17 2-wire, half-duplex enable (output, active high, default low)
-# GPIO369 = port 18 2-wire, half-duplex enable (output, active high, default low)
-# GPIO370 = port 19 2-wire, half-duplex enable (output, active high, default low)
-# GPIO371 = port 20 2-wire, half-duplex enable (output, active high, default low)
-# GPIO372 = port 21 2-wire, half-duplex enable (output, active high, default low)
-# GPIO373 = port 22 2-wire, half-duplex enable (output, active high, default low)
-# GPIO374 = port 23 2-wire, half-duplex enable (output, active high, default low)
-# GPIO375 = port 24 2-wire, half-duplex enable (output, active high, default low)
+# GPIO640 = port 17 2-wire, half-duplex enable (output, active high, default low)
+# GPIO641 = port 18 2-wire, half-duplex enable (output, active high, default low)
+# GPIO642 = port 19 2-wire, half-duplex enable (output, active high, default low)
+# GPIO643 = port 20 2-wire, half-duplex enable (output, active high, default low)
+# GPIO644 = port 21 2-wire, half-duplex enable (output, active high, default low)
+# GPIO645 = port 22 2-wire, half-duplex enable (output, active high, default low)
+# GPIO646 = port 23 2-wire, half-duplex enable (output, active high, default low)
+# GPIO647 = port 24 2-wire, half-duplex enable (output, active high, default low)
 #
-# GPIO352 = port 25 2-wire, half-duplex enable (output, active high, default low)
-# GPIO353 = port 26 2-wire, half-duplex enable (output, active high, default low)
-# GPIO354 = port 27 2-wire, half-duplex enable (output, active high, default low)
-# GPIO355 = port 28 2-wire, half-duplex enable (output, active high, default low)
-# GPIO356 = port 29 2-wire, half-duplex enable (output, active high, default low)
-# GPIO357 = port 30 2-wire, half-duplex enable (output, active high, default low)
-# GPIO358 = port 31 2-wire, half-duplex enable (output, active high, default low)
-# GPIO359 = port 32 2-wire, half-duplex enable (output, active high, default low)
+# GPIO656 = port 25 2-wire, half-duplex enable (output, active high, default low)
+# GPIO657 = port 26 2-wire, half-duplex enable (output, active high, default low)
+# GPIO658 = port 27 2-wire, half-duplex enable (output, active high, default low)
+# GPIO659 = port 28 2-wire, half-duplex enable (output, active high, default low)
+# GPIO660 = port 29 2-wire, half-duplex enable (output, active high, default low)
+# GPIO661 = port 30 2-wire, half-duplex enable (output, active high, default low)
+# GPIO662 = port 31 2-wire, half-duplex enable (output, active high, default low)
+# GPIO663 = port 32 2-wire, half-duplex enable (output, active high, default low)
 
 get_term_gpio() {
 	if [ "$1" -ge "0" ] && [ "$1" -le "7" ] ; then
-		gpio="$((344 + $1))"
+		gpio="$((680 + $1))"
 	elif [ "$1" -ge "8" ] && [ "$1" -le "15" ] ; then
-		gpio="$((328 + ($1 - 8)))"
+		gpio="$((696 + ($1 - 8)))"
 	elif [ "$1" -ge "16" ] && [ "$1" -le "23" ] ; then
-		gpio="$((376 + ($1 - 16)))"
+		gpio="$((648 + ($1 - 16)))"
 	elif [ "$1" -ge "24" ] && [ "$1" -le "31" ] ; then
-		gpio="$((360 + ($1 - 24)))"
+		gpio="$((664 + ($1 - 24)))"
 	fi
 
 	echo "$gpio"
@@ -95,13 +95,13 @@ get_term_gpio() {
 
 get_2w_gpio() {
 	if [ "$1" -ge "0" ] && [ "$1" -le "7" ] ; then
-		gpio="$((336 + $1))"
+		gpio="$((672 + $1))"
 	elif [ "$1" -ge "8" ] && [ "$1" -le "15" ] ; then
-		gpio="$((320 + ($1 - 8)))"
+		gpio="$((688 + ($1 - 8)))"
 	elif [ "$1" -ge "16" ] && [ "$1" -le "23" ] ; then
-		gpio="$((368 + ($1 - 16)))"
+		gpio="$((640 + ($1 - 16)))"
 	elif [ "$1" -ge "24" ] && [ "$1" -le "31" ] ; then
-		gpio="$((352 + ($1 - 24)))"
+		gpio="$((656 + ($1 - 24)))"
 	fi
 
 	echo "$gpio"
@@ -134,21 +134,21 @@ serial_rs232() {
 	wire=$(get_2w_gpio $1)
 	uart_index=$(get_uart_index $1)
 	echo "low" > /sys/class/gpio/gpio${wire}/direction
-	echo "$uart_index,232" > /sys/class/tty/ttyS$((1 + $1))/device/uart_mode
+	echo "$uart_index,232" > /sys/class/tty/ttyS$((1 + $1))/device/../../uart_mode
 }
 
 serial_rs422() {
 	wire=$(get_2w_gpio $1)
 	uart_index=$(get_uart_index $1)
 	echo "low" > /sys/class/gpio/gpio${wire}/direction
-	echo "$uart_index,422" > /sys/class/tty/ttyS$((1 + $1))/device/uart_mode
+	echo "$uart_index,422" > /sys/class/tty/ttyS$((1 + $1))/device/../../uart_mode
 }
 
 serial_rs485() {  # 2-wire, half-duplex
 	wire=$(get_2w_gpio $1)
 	uart_index=$(get_uart_index $1)
 	echo "high" > /sys/class/gpio/gpio${wire}/direction
-	echo "$uart_index,485_2W" > /sys/class/tty/ttyS$((1 + $1))/device/uart_mode
+	echo "$uart_index,485_2W" > /sys/class/tty/ttyS$((1 + $1))/device/../../uart_mode
 }
 
 serial_nonterminate() {
@@ -161,6 +161,13 @@ serial_terminate() {
 	echo "high" > /sys/class/gpio/gpio${term}/direction
 }
 
+altpin() {
+	# ttyS2 - ttyS5
+	tty_num=$((${1} + 1))
+	echo "$2" > /sys/class/tty/ttyS$tty_num/altpin
+	exit 0
+}
+
 usage() {
 	echo "usage: serial-mode <device> (init|rs-232|rs-422|rs-485) [terminate]"
 	echo
@@ -171,6 +178,10 @@ usage() {
 	echo "        rs-485    -- set port into RS-485 mode"
 	echo "        terminate -- enable line termination"
 	echo
+	echo "usage: serial-mode <device> altpin (on|off)"
+	echo
+	echo "        altpin    -- enable 8-pin altpin mode"
+	echo
 	exit 1
 }
 
@@ -179,6 +190,13 @@ usage() {
 #
 if [ $# -lt 2 -o $# -gt 3 ] ; then
 	usage
+fi
+
+if [ "$2" = "altpin" ]; then
+	case "$3" in
+	on|off)	;;
+	*)	usage ;;
+	esac
 fi
 
 portnum="${1#/dev/serial/port}"
@@ -198,6 +216,7 @@ powerdown)
 rs-232)	serial_rs232 ${portnum} ;;
 rs-422)	serial_rs422 ${portnum} ;;
 rs-485)	serial_rs485 ${portnum} ;;
+altpin)	altpin ${portnum} "$3" ;;
 *)	usage ;;
 esac
 

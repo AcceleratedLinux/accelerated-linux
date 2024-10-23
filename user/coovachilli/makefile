@@ -5,6 +5,7 @@ MAKEVARS=
 
 AUTORECONF = ./bootstrap
 CONFOPTS += --$(if $(CONFIG_LIB_OPENSSL),with,without)-openssl --enable-json --enable-libjson --enable-debug2
+CONFOPTS += --enable-sessgarden
 
 ifdef CONFIG_DEFAULTS_LIBC_MUSL
 #

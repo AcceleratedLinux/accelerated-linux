@@ -298,7 +298,7 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		model = of_get_property(root, "model", NULL);
 		if (model) {
 			req->platform_name_valid = 1;
-			strlcpy(req->platform_name, model,
+			strscpy(req->platform_name, model,
 				QMI_WLFW_MAX_PLATFORM_NAME_LEN_V01);
 			cnss_pr_info("platform name: %s", req->platform_name);
 		}
@@ -546,7 +546,7 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 			resp->fw_version_info.fw_version;
 		fw_build_timestamp = resp->fw_version_info.fw_build_timestamp;
 		fw_build_timestamp[QMI_WLFW_MAX_TIMESTAMP_LEN] = '\0';
-		strlcpy(plat_priv->fw_version_info.fw_build_timestamp,
+		strscpy(plat_priv->fw_version_info.fw_build_timestamp,
 			resp->fw_version_info.fw_build_timestamp,
 			QMI_WLFW_MAX_TIMESTAMP_LEN + 1);
 	}
@@ -1207,7 +1207,7 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 	}
 
 	req->host_version_valid = 1;
-	strlcpy(req->host_version, host_version,
+	strscpy(req->host_version, host_version,
 		QMI_WLFW_MAX_STR_LEN_V01 + 1);
 
 	req->tgt_cfg_valid = 1;
@@ -2350,10 +2350,10 @@ static void cnss_wlfw_qdss_trace_save_ind_cb(struct qmi_handle *qmi_wlfw,
 	event_data->total_size = ind_msg->total_size;
 
 	if (ind_msg->file_name_valid)
-		strlcpy(event_data->file_name, ind_msg->file_name,
+		strscpy(event_data->file_name, ind_msg->file_name,
 			QDSS_TRACE_FILE_NAME_MAX + 1);
 	else
-		strlcpy(event_data->file_name, "qdss_trace",
+		strscpy(event_data->file_name, "qdss_trace",
 			QDSS_TRACE_FILE_NAME_MAX + 1);
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_QDSS_TRACE_SAVE,

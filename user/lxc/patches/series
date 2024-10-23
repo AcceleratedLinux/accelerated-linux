@@ -1,5 +1,3 @@
 lxc_bpf.patch
 lxc-templates.patch
 lxc_init_pointers.patch
-lxc_remove_debug_cflag
-lxc-cflags-flto.patch

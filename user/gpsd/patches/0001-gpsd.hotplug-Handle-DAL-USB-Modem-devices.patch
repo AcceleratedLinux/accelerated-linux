@@ -1,0 +1,149 @@
+From 9721c25e2e7f72a68c58bf36e2a3ca69f360d90a Mon Sep 17 00:00:00 2001
+From: Anubhav Gupta <anubhav.gupta@digi.com>
+Date: Sun, 25 Jun 2023 10:24:02 -0400
+Subject: [PATCH] gpsd.hotplug: Handle DAL USB/Modem devices
+
+Modified gpsd.hotplug to handle USB GPS dongles as well as modems.
+As per the UDEV rules defined in 78-dal-modem-scripts.rules for modems, gpsd.hotplug will create
+a symbolic link for the GPS port as well as run gpsdctl on the port such that gpsd will start
+quering NMEA data.
+---
+ gpsd.hotplug | 113 ++++++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 107 insertions(+), 6 deletions(-)
+
+diff --git a/gpsd.hotplug b/gpsd.hotplug
+index 3f1fea0d3887..0f7115082ea7 100644
+--- a/gpsd.hotplug
++++ b/gpsd.hotplug
+@@ -39,8 +39,104 @@ if [ -n "$GPSD_SOCKET" ]; then
+   export GPSD_SOCKET
+ fi
+ 
+-if [ -n "$USBAUTO" ]; then
+-  [ "$USBAUTO" = "true" ] || exit 0
++get_modem_name()
++{
++    local usb="${1}"
++    local modem=
++
++    local modems=$(config keys "network.modem")
++    for modem in $modems; do
++        local port="$(config get "network.modem.${modem}.port")"
++        if [ "${usb}" = "${port}" ]; then
++            echo "${modem}"
++            return 0
++        fi
++    done
++}
++
++create_modem_gps_link()
++{
++    local modem_name=
++    local usb=
++
++    local usbs=$(config keys "device.usb.modem")
++    for usb in $usbs; do
++        local instances=$(config count "device.usb.modem.${usb}.path")
++        local count=0
++        while [ $count -lt $instances ]
++        do
++            local usb_path="$(config get "device.usb.modem.${usb}.path.${count}")"
++            if [ "${usb_path}" = "${ID_USB_DEVICE_PATH}" ]; then
++                modem_name="$(get_modem_name "device.usb.modem.${usb}")"
++                break
++            fi
++            count=$((count+1))
++        done
++        [ -n "${modem_name}" ] && break
++    done
++
++    if [ -n "${modem_name}" -a "${DEVNAME}" ]; then
++        local sym_port="/dev/${modem_name}_modemGPS"
++        logger -t gpsd.hotplug -p daemon.info "Creating symbolic link for GPS port ${DEVNAME} to ${sym_port}"
++        ln -sf "${DEVNAME}" "${sym_port}"
++        echo "${sym_port}"
++    fi
++}
++
++eval $(config start)
++config load
++
++USB_ENABLE=0
++USB_PATH_VALID=0
++MODEM_ENABLE=0
++
++if [ "$ACTION" = "add" ]; then
++	MODEM_GPS_PORT="$(create_modem_gps_link)"
++	MODEM_NAME="${MODEM_GPS_PORT##*/}"
++	MODEM_NAME="${MODEM_NAME%_*}"
++fi
++
++if [ "$(config get service.location.enable)" = 1 ]; then
++    SOURCE_NUM="$(config count service.location.source)"
++    for idx in $(seq 0 $((SOURCE_NUM - 1))); do
++        if [ "$(config get service.location.source.$idx.enable)" = 1 ]; then
++            case "$(config get service.location.source.$idx.type)" in
++                usb) USB_ENABLE=1
++                ;;
++                modem)
++                    modem_device="$(config get service.location.source.$idx.modem)"
++                    modem_device="${modem_device##*.}"
++                    if [ -n "${MODEM_NAME}" -a "${MODEM_NAME}" = "${modem_device}" ]; then
++                        MODEM_ENABLE=1
++                    fi
++                ;;
++            esac
++        fi
++    done
++fi
++
++if [ ${USB_ENABLE} -eq 1 ]; then
++    USB_PORT_PATHS=
++    for port in $(config keys device.usb.port); do
++        for path in $(config get device.usb.port.${port}.path); do
++            USB_PORT_PATHS="${USB_PORT_PATHS} ${path}"
++        done
++    done
++
++    # Check if the device is on an external USB port
++    for path in ${USB_PORT_PATHS}; do
++        case ${ID_USB_DEVICE_PATH} in
++        ${path}|${path}.*)
++            USB_PATH_VALID=1
++            ;;
++        esac
++    done
++fi
++
++eval $(config stop)
++
++if [ ${MODEM_ENABLE} -eq 0 -a ${USB_PATH_VALID} -eq 0 ]; then
++    exit 0
+ fi
+ 
+ if [ "$ACTION" = "remove" ] ; then
+@@ -70,12 +166,17 @@ fi
+ # actual wait/hotplug portion in the background.
+ 
+ {
+-    #logger -t gpsd.hotplug -p daemon.info "waiting for" $DEVNAME
+-    while [ -x $DEVNAME ]
++    if [ ${MODEM_ENABLE} -eq 1 ]; then
++        GPSD_DEV="${MODEM_GPS_PORT}"
++    else
++        GPSD_DEV="${DEVNAME}"
++    fi
++    #logger -t gpsd.hotplug -p daemon.info "waiting for" $GPSD_DEV
++    while [ -x $GPSD_DEV ]
+     do
+         sleep 1
+     done
+-    #logger -t gpsd.hotplug -p daemon.info $DEVNAME "is active"
+-    gpsdctl $ACTION $DEVNAME
++    logger -t gpsd.hotplug -p daemon.info $GPSD_DEV "is active"
++    gpsdctl $ACTION $GPSD_DEV
+ } &
+ # vim: set expandtab shiftwidth=4
+-- 
+2.34.1
+

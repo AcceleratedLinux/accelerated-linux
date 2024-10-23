@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
+#include <linux/power_supply.h>
 
 #include <asm/unaligned.h>
 
@@ -259,8 +260,10 @@ static const struct pci_device_id gpu_i2c_ids[] = {
 MODULE_DEVICE_TABLE(pci, gpu_i2c_ids);
 
 static const struct property_entry ccgx_props[] = {
-	/* Use FW built for NVIDIA (nv) only */
-	PROPERTY_ENTRY_U16("ccgx,firmware-build", ('n' << 8) | 'v'),
+	/* Use FW built for NVIDIA GPU only */
+	PROPERTY_ENTRY_STRING("firmware-name", "nvidia,gpu"),
+	/* USB-C doesn't power the system */
+	PROPERTY_ENTRY_U8("scope", POWER_SUPPLY_SCOPE_DEVICE),
 	{ }
 };
 
@@ -299,7 +302,7 @@ static int gpu_i2c_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	i2c_set_adapdata(&i2cd->adapter, i2cd);
 	i2cd->adapter.owner = THIS_MODULE;
-	strlcpy(i2cd->adapter.name, "NVIDIA GPU I2C adapter",
+	strscpy(i2cd->adapter.name, "NVIDIA GPU I2C adapter",
 		sizeof(i2cd->adapter.name));
 	i2cd->adapter.algo = &gpu_i2c_algorithm;
 	i2cd->adapter.quirks = &gpu_i2c_quirks;

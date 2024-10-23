@@ -79,6 +79,11 @@ Description:
 		* "accel-base"
 		* "accel-display"
 
+		For devices where an accelerometer is housed in the swivel camera subassembly
+		(for AR application), the following standardized label is used:
+
+		* "accel-camera"
+
 What:		/sys/bus/iio/devices/iio:deviceX/current_timestamp_clock
 KernelVersion:	4.5
 Contact:	linux-iio@vger.kernel.org
@@ -101,6 +106,9 @@ Description:
 		direct access interfaces, it may be found in any of the
 		relevant directories.  If it affects all of the above
 		then it is to be found in the base device directory.
+
+		The stm32-timer-trigger has the additional characteristic that
+		a sampling_frequency of 0 is defined to stop sampling.
 
 What:		/sys/bus/iio/devices/iio:deviceX/sampling_frequency_available
 What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_sampling_frequency_available
@@ -188,7 +196,7 @@ Description:
 		Raw capacitance measurement from channel Y. Units after
 		application of scale and offset are nanofarads.
 
-What:		/sys/.../iio:deviceX/in_capacitanceY-in_capacitanceZ_raw
+What:		/sys/.../iio:deviceX/in_capacitanceY-capacitanceZ_raw
 KernelVersion:	3.2
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -198,6 +206,25 @@ Description:
 		separately available. In differential only parts, then all that
 		is required is a consistent labeling.  Units after application
 		of scale and offset are nanofarads.
+
+What:		/sys/.../iio:deviceX/in_capacitanceY-capacitanceZ_zeropoint
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		For differential channels, this an offset that is applied
+		equally to both inputs. As the reading is of the difference
+		between the two inputs, this should not be applied to the _raw
+		reading by userspace (unlike _offset) and unlike calibbias
+		it does not affect the differential value measured because
+		the effect of _zeropoint cancels out across the two inputs
+		that make up the differential pair. It's purpose is to bring
+		the individual signals, before the differential is measured,
+		within the measurement range of the device. The naming is
+		chosen because if the separate inputs that make the
+		differential pair are drawn on a graph in their
+		_raw  units, this is the value that the zero point on the
+		measurement axis represents. It is expressed with the
+		same scaling as _raw.
 
 What:		/sys/bus/iio/devices/iio:deviceX/in_temp_raw
 What:		/sys/bus/iio/devices/iio:deviceX/in_tempX_raw
@@ -216,7 +243,8 @@ Description:
 		less measurements. Units after application of scale and offset
 		are milli degrees Celsius.
 
-What:		/sys/bus/iio/devices/iio:deviceX/in_tempX_input
+What:		/sys/bus/iio/devices/iio:deviceX/in_tempY_input
+What:		/sys/bus/iio/devices/iio:deviceX/in_temp_input
 KernelVersion:	2.6.38
 Contact:	linux-iio@vger.kernel.org
 Description:
@@ -233,6 +261,15 @@ Description:
 		Has all of the equivalent parameters as per voltageY. Units
 		after application of scale and offset are m/s^2.
 
+What:		/sys/bus/iio/devices/iio:deviceX/in_accel_linear_x_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_accel_linear_y_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_accel_linear_z_raw
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		As per in_accel_X_raw attributes, but minus the
+		acceleration due to gravity.
+
 What:		/sys/bus/iio/devices/iio:deviceX/in_gravity_x_raw
 What:		/sys/bus/iio/devices/iio:deviceX/in_gravity_y_raw
 What:		/sys/bus/iio/devices/iio:deviceX/in_gravity_z_raw
@@ -242,6 +279,35 @@ Description:
 		Gravity in direction x, y or z (may be arbitrarily assigned
 		but should match other such assignments on device).
 		Units after application of scale and offset are m/s^2.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltaangl_x_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltaangl_y_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltaangl_z_raw
+KernelVersion:	6.5
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Angular displacement between two consecutive samples on x, y or
+		z (may be arbitrarily assigned but should match other such
+		assignments on device).
+		In order to compute the total angular displacement during a
+		desired period of time, the application should sum-up the delta
+		angle samples acquired during that time.
+		Units after application of scale and offset are radians.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltavelocity_x_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltavelocity_y_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltavelocity_z_raw
+KernelVersion:	6.5
+Contact:	linux-iio@vger.kernel.org
+Description:
+		The linear velocity change between two consecutive samples on x,
+		y or z (may be arbitrarily assigned but should match other such
+		assignments on device).
+		In order to compute the total linear velocity change during a
+		desired period of time, the application should sum-up the delta
+		velocity samples acquired during that time.
+		Units after application of scale and offset are meters per
+		second.
 
 What:		/sys/bus/iio/devices/iio:deviceX/in_angl_raw
 What:		/sys/bus/iio/devices/iio:deviceX/in_anglY_raw
@@ -297,10 +363,21 @@ Description:
 What:		/sys/bus/iio/devices/iio:deviceX/in_accel_x_peak_raw
 What:		/sys/bus/iio/devices/iio:deviceX/in_accel_y_peak_raw
 What:		/sys/bus/iio/devices/iio:deviceX/in_accel_z_peak_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_humidityrelative_peak_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_temp_peak_raw
 KernelVersion:	2.6.36
 Contact:	linux-iio@vger.kernel.org
 Description:
-		Highest value since some reset condition.  These
+		Highest value since some reset condition. These
+		attributes allow access to this and are otherwise
+		the direct equivalent of the <type>Y[_name]_raw attributes.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_humidityrelative_trough_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_temp_trough_raw
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lowest value since some reset condition. These
 		attributes allow access to this and are otherwise
 		the direct equivalent of the <type>Y[_name]_raw attributes.
 
@@ -425,6 +502,8 @@ What:		/sys/bus/iio/devices/iio:deviceX/in_humidityrelative_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_velocity_sqrt(x^2+y^2+z^2)_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_illuminance_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_countY_scale
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltaangl_scale
+What:		/sys/bus/iio/devices/iio:deviceX/in_deltavelocity_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_angl_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_x_scale
 What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_y_scale
@@ -551,7 +630,9 @@ KernelVersion:	2.6.35
 Contact:	linux-iio@vger.kernel.org
 Description:
 		If a discrete set of scale values is available, they
-		are listed in this attribute.
+		are listed in this attribute. Unlike illumination,
+		multiplying intensity by intensity_scale does not
+		yield value with any standardized unit.
 
 What:		/sys/bus/iio/devices/iio:deviceX/out_voltageY_hardwaregain
 What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_hardwaregain
@@ -1296,6 +1377,12 @@ Description:
 What:		/sys/.../iio:deviceX/bufferY/in_accel_x_en
 What:		/sys/.../iio:deviceX/bufferY/in_accel_y_en
 What:		/sys/.../iio:deviceX/bufferY/in_accel_z_en
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_x_en
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_y_en
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_z_en
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_x_en
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_y_en
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_z_en
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_x_en
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_y_en
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_z_en
@@ -1326,6 +1413,8 @@ Description:
 		Scan element control for triggered data capture.
 
 What:		/sys/.../iio:deviceX/bufferY/in_accel_type
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_type
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_type
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_type
 What:		/sys/.../iio:deviceX/bufferY/in_magn_type
 What:		/sys/.../iio:deviceX/bufferY/in_incli_type
@@ -1380,6 +1469,12 @@ What:		/sys/.../iio:deviceX/bufferY/in_voltage_q_index
 What:		/sys/.../iio:deviceX/bufferY/in_accel_x_index
 What:		/sys/.../iio:deviceX/bufferY/in_accel_y_index
 What:		/sys/.../iio:deviceX/bufferY/in_accel_z_index
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_x_index
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_y_index
+What:		/sys/.../iio:deviceX/bufferY/in_deltaangl_z_index
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_x_index
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_y_index
+What:		/sys/.../iio:deviceX/bufferY/in_deltavelocity_z_index
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_x_index
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_y_index
 What:		/sys/.../iio:deviceX/bufferY/in_anglvel_z_index
@@ -1493,6 +1588,8 @@ What:		/sys/.../iio:deviceX/in_intensityY_raw
 What:		/sys/.../iio:deviceX/in_intensityY_ir_raw
 What:		/sys/.../iio:deviceX/in_intensityY_both_raw
 What:		/sys/.../iio:deviceX/in_intensityY_uv_raw
+What:		/sys/.../iio:deviceX/in_intensityY_uva_raw
+What:		/sys/.../iio:deviceX/in_intensityY_uvb_raw
 What:		/sys/.../iio:deviceX/in_intensityY_duv_raw
 KernelVersion:	3.4
 Contact:	linux-iio@vger.kernel.org
@@ -1501,8 +1598,9 @@ Description:
 		that measurements contain visible and infrared light
 		components or just infrared light, respectively. Modifier
 		uv indicates that measurements contain ultraviolet light
-		components. Modifier duv indicates that measurements
-		contain deep ultraviolet light components.
+		components. Modifiers uva, uvb and duv indicate that
+		measurements contain A, B or deep (C) ultraviolet light
+		components respectively.
 
 What:		/sys/.../iio:deviceX/in_uvindex_input
 KernelVersion:	4.6
@@ -1771,8 +1869,8 @@ What:		/sys/bus/iio/devices/iio:deviceX/out_resistanceX_raw
 KernelVersion:	4.3
 Contact:	linux-iio@vger.kernel.org
 Description:
-		Raw (unscaled no offset etc.) resistance reading that can be processed
-		into an ohm value.
+		Raw (unscaled no offset etc.) resistance reading.
+		Units after application of scale and offset are ohms.
 
 What:		/sys/bus/iio/devices/iio:deviceX/heater_enable
 KernelVersion:	4.1.0
@@ -1858,8 +1956,9 @@ What:		/sys/bus/iio/devices/iio:deviceX/in_electricalconductivity_raw
 KernelVersion:	4.8
 Contact:	linux-iio@vger.kernel.org
 Description:
-		Raw (unscaled no offset etc.) electric conductivity reading that
-		can be processed to siemens per meter.
+		Raw (unscaled no offset etc.) electric conductivity reading.
+		Units after application of scale and offset are siemens per
+		meter.
 
 What:		/sys/bus/iio/devices/iio:deviceX/in_countY_raw
 KernelVersion:	4.10
@@ -1915,8 +2014,8 @@ What:		/sys/bus/iio/devices/iio:deviceX/in_phaseY_raw
 KernelVersion:	4.18
 Contact:	linux-iio@vger.kernel.org
 Description:
-		Raw (unscaled) phase difference reading from channel Y
-		that can be processed to radians.
+		Raw (unscaled) phase difference reading from channel Y.
+		Units after application of scale and offset are radians.
 
 What:		/sys/bus/iio/devices/iio:deviceX/in_massconcentration_pm1_input
 What:		/sys/bus/iio/devices/iio:deviceX/in_massconcentrationY_pm1_input
@@ -2030,3 +2129,163 @@ Description:
 		Available range for the forced calibration value, expressed as:
 
 		- a range specified as "[min step max]"
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_voltageX_sampling_frequency
+What:		/sys/bus/iio/devices/iio:deviceX/in_powerY_sampling_frequency
+What:		/sys/bus/iio/devices/iio:deviceX/in_currentZ_sampling_frequency
+KernelVersion:	5.20
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Some devices have separate controls of sampling frequency for
+		individual channels. If multiple channels are enabled in a scan,
+		then the sampling_frequency of the scan may be computed from the
+		per channel sampling frequencies.
+
+What:		/sys/.../events/in_accel_gesture_singletap_en
+What:		/sys/.../events/in_accel_gesture_doubletap_en
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Device generates an event on a single or double tap.
+
+What:		/sys/.../events/in_accel_gesture_singletap_value
+What:		/sys/.../events/in_accel_gesture_doubletap_value
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Specifies the threshold value that the device is comparing
+		against to generate the tap gesture event. The lower
+		threshold value increases the sensitivity of tap detection.
+		Units and the exact meaning of value are device-specific.
+
+What:		/sys/.../events/in_accel_gesture_tap_value_available
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lists all available threshold values which can be used to
+		modify the sensitivity of the tap detection.
+
+What:		/sys/.../events/in_accel_gesture_singletap_reset_timeout
+What:		/sys/.../events/in_accel_gesture_doubletap_reset_timeout
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Specifies the timeout value in seconds for the tap detector
+		to not to look for another tap event after the event as
+		occurred. Basically the minimum quiet time between the two
+		single-tap's or two double-tap's.
+
+What:		/sys/.../events/in_accel_gesture_tap_reset_timeout_available
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lists all available tap reset timeout values. Units in seconds.
+
+What:		/sys/.../events/in_accel_gesture_doubletap_tap2_min_delay
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Specifies the minimum quiet time in seconds between the two
+		taps of a double tap.
+
+What:		/sys/.../events/in_accel_gesture_doubletap_tap2_min_delay_available
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lists all available delay values between two taps in the double
+		tap. Units in seconds.
+
+What:		/sys/.../events/in_accel_gesture_tap_maxtomin_time
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Specifies the maximum time difference allowed between upper
+		and lower peak of tap to consider it as the valid tap event.
+		Units in seconds.
+
+What:		/sys/.../events/in_accel_gesture_tap_maxtomin_time_available
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lists all available time values between upper peak to lower
+		peak. Units in seconds.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_rot_yaw_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_rot_pitch_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_rot_roll_raw
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Raw (unscaled) euler angles readings. Units after
+		application of scale are deg.
+
+What:		/sys/bus/iio/devices/iio:deviceX/serialnumber
+KernelVersion:	6.1
+Contact:	linux-iio@vger.kernel.org
+Description:
+		An example format is 16-bytes, 2-digits-per-byte, HEX-string
+		representing the sensor unique ID number.
+
+What:		/sys/.../events/in_proximity_thresh_either_runningperiod
+KernelVersion:	6.6
+Contact:	linux-iio@vger.kernel.org
+Description:
+		A running period of time (in seconds) for which
+		in_proximity_thresh_either_runningcount amount of conditions
+		must occur before an event is generated. If direction is not
+		specified then this period applies to both directions.
+
+What:		/sys/.../events/in_proximity_thresh_either_runningcount
+KernelVersion:	6.6
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Number of conditions that must occur, during a running
+		period, before an event is generated.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_colortemp_raw
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Represents light color temperature, which measures light color
+		temperature in Kelvin.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_chromaticity_x_raw
+What:		/sys/bus/iio/devices/iio:deviceX/in_chromaticity_y_raw
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		The x and y light color coordinate on the CIE 1931 chromaticity
+		diagram.
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_altvoltageY_mag_either_label
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_altvoltageY_mag_rising_label
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_altvoltageY_thresh_falling_label
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_altvoltageY_thresh_rising_label
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_anglvelY_mag_rising_label
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_anglY_thresh_rising_label
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_phaseY_mag_rising_label
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Optional symbolic label to a device channel event.
+		If a label is defined for this event add that to the event
+		specific attributes. This is useful for userspace to be able to
+		better identify an individual event.
+
+What:		/sys/.../events/in_accel_gesture_tap_wait_timeout
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Enable tap gesture confirmation with timeout.
+
+What:		/sys/.../events/in_accel_gesture_tap_wait_dur
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Timeout value in seconds for tap gesture confirmation.
+
+What:		/sys/.../events/in_accel_gesture_tap_wait_dur_available
+KernelVersion:	6.7
+Contact:	linux-iio@vger.kernel.org
+Description:
+		List of available timeout value for tap gesture confirmation.

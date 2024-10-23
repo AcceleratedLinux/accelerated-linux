@@ -95,8 +95,7 @@ static const struct wf_sensor_ops wf_lm87_ops = {
 	.owner		= THIS_MODULE,
 };
 
-static int wf_lm87_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int wf_lm87_probe(struct i2c_client *client)
 {	
 	struct wf_lm87_sensor *lm;
 	const char *name = NULL, *loc;
@@ -145,7 +144,7 @@ static int wf_lm87_probe(struct i2c_client *client,
 	return rc;
 }
 
-static int wf_lm87_remove(struct i2c_client *client)
+static void wf_lm87_remove(struct i2c_client *client)
 {
 	struct wf_lm87_sensor *lm = i2c_get_clientdata(client);
 
@@ -154,8 +153,6 @@ static int wf_lm87_remove(struct i2c_client *client)
 
 	/* release sensor */
 	wf_unregister_sensor(&lm->sens);
-
-	return 0;
 }
 
 static const struct i2c_device_id wf_lm87_id[] = {

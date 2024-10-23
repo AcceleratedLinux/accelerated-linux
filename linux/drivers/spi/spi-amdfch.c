@@ -32,7 +32,7 @@
 #define FIFOLEN		64
 
 struct amdfch_spi {
-	struct spi_master	*master;
+	struct spi_controller	*controller;
 	void __iomem		*mapbase;
 	u32			baseaddr;
 };
@@ -124,10 +124,10 @@ static void amdfch_spi_addr_update(struct amdfch_spi *aspi, int cmdcnt, int cnt)
  * write address. We will need to send multiple SPI messages to satisfy most
  * flash reads or writes.
  */
-static int amdfch_spi_xfer_msg(struct spi_master *master,
+static int amdfch_spi_xfer_msg(struct spi_controller *controller,
 			       struct spi_message *msg)
 {
-	struct amdfch_spi *aspi = spi_master_get_devdata(master);
+	struct amdfch_spi *aspi = spi_controller_get_devdata(controller);
 	struct spi_transfer *cmdxfer, *dataxfer;
 	int len, cnt, cmdcnt, txcnt, rxcnt, i, rc;
 	u8 const *txp;
@@ -209,9 +209,9 @@ static int amdfch_spi_xfer_msg(struct spi_master *master,
 out:
 	if (msg->status == -EINPROGRESS)
 		msg->status = rc;
-	if (msg->status && master->handle_err)
-		master->handle_err(master, msg);
-	spi_finalize_current_message(master);
+	if (msg->status && controller->handle_err)
+		controller->handle_err(controller, msg);
+	spi_finalize_current_message(controller);
 	return rc;
 }
 
@@ -219,7 +219,7 @@ static int amdfch_spi_probe(struct pci_dev *pdev, const struct pci_device_id *id
 {
 	struct device *dev = &pdev->dev;
 	struct amdfch_spi *aspi;
-	struct spi_master *master;
+	struct spi_controller *controller;
 	void __iomem *mapbase;
 	u32 base;
 	int rc;
@@ -241,36 +241,36 @@ static int amdfch_spi_probe(struct pci_dev *pdev, const struct pci_device_id *id
 		return -ENOMEM;
 	}
 
-	master = spi_alloc_master(dev, sizeof(*aspi));
-	if (master == NULL) {
-		dev_err(dev, "spi master alloc failed\n");
+	controller = spi_alloc_master(dev, sizeof(*aspi));
+	if (controller == NULL) {
+		dev_err(dev, "spi controller alloc failed\n");
 		return -ENOMEM;
 	}
 
-	master->bus_num = 0;
-	master->mode_bits = SPI_CPHA | SPI_CPOL;
-	master->num_chipselect = 1;
-	master->transfer_one_message = amdfch_spi_xfer_msg;
-	master->bits_per_word_mask = SPI_BPW_MASK(8);
+	controller->bus_num = 0;
+	controller->mode_bits = SPI_CPHA | SPI_CPOL;
+	controller->num_chipselect = 1;
+	controller->transfer_one_message = amdfch_spi_xfer_msg;
+	controller->bits_per_word_mask = SPI_BPW_MASK(8);
 
-	aspi = spi_master_get_devdata(master);
+	aspi = spi_controller_get_devdata(controller);
 	pci_set_drvdata(pdev, aspi);
-	aspi->master = master;
+	aspi->controller = controller;
 	aspi->baseaddr = base;
 	aspi->mapbase = mapbase;
 
-	rc = spi_register_master(master);
+	rc = spi_register_controller(controller);
 	return rc;
 }
 
 static void amdfch_spi_remove(struct pci_dev *pdev)
 {
 	struct amdfch_spi *aspi = pci_get_drvdata(pdev);
-	struct spi_master *master = aspi->master;
+	struct spi_controller *controller = aspi->controller;
 
 	if (aspi->mapbase)
 		iounmap(aspi->mapbase);
-	spi_unregister_master(master);
+	spi_unregister_controller(controller);
 }
 
 static const struct pci_device_id amdfch_spi_devices[] = {

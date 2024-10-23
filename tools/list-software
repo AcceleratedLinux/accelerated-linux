@@ -1,0 +1,1251 @@
+#!/bin/bash
+# This script guesses and reports the version and licence of
+# installed romfs files.
+#
+# It needs a 'make romfs' to have completed, and it only
+# reports for the packages enabled for the current vendor/product.
+# Run this script from the top of the source tree (ROOTDIR).
+#
+# The licence and version guessing uses various heuristics
+# developed this by looking for "popular" licence and
+# version declarations first, and then adding specialised tests.
+#
+# usage:
+#  list-software [--table] [{linux|uboot|dir}...]
+#  list-software > sbom.cdx.json
+#
+# The output format is determined by the report() function.
+
+[ "$ROOTDIR" ] ||  ROOTDIR=$(realpath "$(dirname "$0")/..")
+[ "$ROMFSDIR" ] || ROMFSDIR="$ROOTDIR/romfs"
+[ "$IMAGEDIR" ] || IMAGEDIR="$ROOTDIR/images"
+LINUXDIR="$ROOTDIR/$(sed -ne 's/^CONFIG_LINUXDIR=//p' $ROOTDIR/.config)"
+VENDOR="$(sed -ne 's/^CONFIG_VENDOR=//p' $ROOTDIR/.config)"
+PRODUCT="$(sed -ne 's/^CONFIG_PRODUCT=//p' $ROOTDIR/.config)"
+
+opt_table=
+opt_xtrace=
+opt_verbose=$V
+while [ $# -gt 0 ]; do
+	case $1 in
+	--)
+		shift
+		break;;
+	-v|--verbose)
+		opt_verbose=$((opt_verbose + 1))
+		shift;;
+	--table)
+		opt_table=1
+		shift;;
+	-x|--xtrace)
+		opt_xtrace=1
+		shift;;
+	-?|-h|--help)
+		echo "usage: $0 [-v|--verbose] [--table] [<dir>...]" >&2
+		exit 1
+		;;
+	*)
+		break;;
+	esac
+done
+
+# The common API for report* functions is:
+#    report_start
+#    report <dir> {pkg|cpe:2.3:} vers lic size [url [alg:hash [purl]]]
+#    report_end
+if [ $opt_table ]; then
+   report_start () { table_report_start "$@"; }
+   report ()       { table_report "$@"; }
+   report_end ()   { table_report_end "$@"; }
+else
+   report_start () { cyclonedx_report_start "$@"; }
+   report ()       { cyclonedx_report "$@"; }
+   report_end ()   { cyclonedx_report_end "$@"; }
+fi
+
+if [ $opt_verbose ]; then
+  progress () { printf '%.78s\e[K\r' "$*" >&2; }
+else
+  progress () { :; }
+fi
+
+if [ "${opt_verbose:-0}" -ge 2 ]; then
+  log_verbose () { echo "$0: $*" >&2; }
+  log_verbose "verbosity level $opt_verbose"
+else
+  log_verbose () { :; }
+fi
+
+# Trim whitespace from the ends of the named variables
+trim () {
+	local -n v
+	for v; do v="${v/# }"; v="${v/% }"; done
+}
+
+# Print the file's size. Prints 0 for non-files.
+file_size () {
+	if [ -f "$1" ]; then
+	    wc -c <$1 | tr -d ' '
+	elif [ -e "$1" ]; then
+	    echo 0
+	else
+	    false
+	fi
+}
+
+# Given a source directory, examine it and set $VERSION
+guess_version () { # srcdir
+	if [[ $1 = user/netcat ]] && [ -f $1/netcat.c ]; then
+	   VERSION=$(sed -ne '/^ *holler *("\[v/{s/.*\[v\([^]]*\).*/\1/p;q}' $1/netcat.c)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = user/samba/source ]]; then
+	   VERSION=$(sed -ne '/SAMBA_VERSION_OFFICIAL_STRING/{s/[^"]*\"\([^"]*\).*/\1/;p;q}' $1/include/version.h)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/openssl ]]; then
+	   VERSION=$(sed -ne '/^PKG/{s/.*=[ \t]*openssl-*//;p;q}' $1/makefile)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = user/iproute2 ]]; then
+	   VERSION=$(sed -ne '/SNAPSHOT/{s,[^"]*",,;s,".*,,;p;q}' $1/include/SNAPSHOT.h)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = openswan ]]; then
+	   VERSION=$(sed 's/.*=//' <$1/Makefile.ver)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = uClibc ]]; then
+	   VERSION=$(make -f $1/Rules.mak -n -p 2>&1 | sed -ne 's,^VERSION := ,,p')
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/zlib ]]; then
+	   VERSION=$(sed -n -e '/VERSION "/s/.*"\(.*\)".*/\1/p' < $1/zlib.h)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/lua ]]; then
+	   VERSION=$(sed -n "/^R=/{s/^R= *//;s/#.*//;p;q}" $1/Makefile)
+	   [ "$VERSION" ] && return
+	fi
+	if [ -s $1/build/*/build/meson-logs/meson-log.txt ]; then
+	   VERSION=$(sed -n '/^Project version:/{s/.*: //p;q}' $1/build/*/build/meson-logs/meson-log.txt)
+	   [ "$VERSION" ] && log_verbose "guess_version found $VERSION in meson-log.txt" && return
+	fi
+	for f in $1/build/config.log $1/build/*-*/config.log $1/builddir/config.log; do
+	   [ -e $f ] || continue
+	   local var=PACKAGE_VERSION
+	   [[ $1 = lib/log4c ]] && var=VERSION
+	   [[ $1 = lib/libmcrypt ]] && var=VERSION
+	   [[ $1 = lib/ncurses ]] && grep -q NCURSES_VERSION_STRING $f && var=NCURSES_VERSION_STRING
+	   [[ $1 = lib/pcre ]] && var=PCRE_VERSION
+	   [[ $1 = user/pam_radius ]] && var=PAM_RADIUS_VERSION_STRING
+	   VERSION=$(sed -n "/^$var=/{s,.*='*,,;s,',,g;p;q}" $f)
+	   [ "$VERSION" ] && log_verbose "guess_version $var found in $f" && return
+	   VERSION=$(sed -n "/^#define $var /{s,.* \"*,,;s,\",,g;p;q}" $f)
+	   [ "$VERSION" ] && log_verbose "guess_version $var found in $f" && return
+	done
+	if [[ $1 = user/init ]]; then
+	   VERSION=$(sed -n '/^\/\* Version/{s/.*Version //;s/ .*//;p;q}' $1/simpleinit.c)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = user/uboot-envtools ]] && [ -e $1/include/version.h ]; then
+	   VERSION=$(sed -ne '/#define U_BOOT_VERSION/{s/.*"u-boot \([-0-9.]*\).*/\1/p;q}' \
+		$1/include/version.h)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = user/wireless_tools ]] && [ -e $1/iwlib.h ]; then
+	   VERSION=$(sed -ne 's/^#define[ \t]*WT_VERSION[ \t]*\([0-9][0-9]*\).*/\1/p' $1/iwlib.h)
+	   log_verbose "guess_version $1/iwlib.h $VERSION"
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = */*/* ]] && [ -e $1/../version.h ]; then # ftp
+	   log_verbose "guess_version found $1/../version.h"
+	   VERSION=$(sed -n '/^char pkg.*"\$/{s/.*-\([0-9.]*\).*/\1/p;q}' $1/../version.h)
+	   [ "$VERSION" ] && return
+	fi
+	for f in $1/configure.ac $1/configure.in; do
+	   [ -e $f ] || continue
+	   VERSION=$(sed -n -e '/^\(AC_INIT\|^AM_INIT_AUTOMAKE\).*,/{
+		  s/^[A-Z_]*([^,]*,[ \t]*\(\[[^]]*\]\|[^,)]*\).*/\1/;
+		  s/^\[\|\]$//g;p;q
+		}' $f)
+	   # pam_krb5 and powerman try to expand things
+	   case $VERSION in *\`*|*\$*) VERSION=;; esac
+	   [ "$VERSION" ] && log_verbose "guess_version version found in $f" && return
+	done
+	if [[ $1 = lib/libbzip2 ]]; then
+	   VERSION=$(fmt -1000 < $1/README | sed -n '/version/{s/.*, version \([0-9.]*[0-9]\).*/\1/p;q}')
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/libmcrypt ]]; then
+	   VERSION=$(sed -n 's/.*version \([^),]*\).*/\1/;p;q' $1/NEWS)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/termcap ]]; then
+	   VERSION=$(sed -ne '/^static char \*termcap_version_string/{s/.*GNU termcap //;s/ .*//;p;q}' $1/version.c)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/libpam ]]; then
+	   VERSION=$(sed -n '/Release/{s/.*Release \([^),]*\).*/\1/;p;q}' $1/NEWS)
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = lib/libpng ]]; then
+	   VERSION=$(head <$1/ANNOUNCE | fmt -3 | tr -d ' \t' | sed -ne '/^[0-9][0-9.]*[0-9]$/{p;q}')
+	   [ "$VERSION" ] && return
+	fi
+	if [[ $1 = user/busybox ]]; then
+	   VERSION=$(awk '/^[A-Z]* = / { v[$1]=$3 }
+		          END { if (v["VERSION"]) \
+		              print v["VERSION"] "." v["PATCHLEVEL"] "." \
+		                 v["SUBLEVEL"] v["EXTRAVERSION"]; }' $1/Makefile)
+	   [ "$VERSION" ] && return
+	fi
+
+	local files=($1/version.h $1/src/hwclock.c)
+	[[ $1 = user/ifenslave ]] && files=($ROOTDIR/linux*/Documentation/networking/ifenslave.c)
+	[[ $1 = user/lua-lpeg ]] && files=($1/lpeg.c)
+	[[ $1 = user/pppd ]] && files=($1/pppd/patchlevel.h)
+	for f in "${files[@]}"; do
+	   [ -e $f ] || continue
+	   VERSION=$(sed -n -e '/^ *#[ \t]*define[ \t]*[A-Z0-9_]*VERSION[ \t]*"/s/.*"\(.*\)".*/\1/p' $f)
+	   [ "$VERSION" ] && log_verbose "guess_version found #define VERSION in $f" && return
+	done
+
+	# fdisk is like this:
+	for f in $1/makefile $1/Makefile $1/unix/Makefile; do
+	    [ -e $f ] || continue
+	    grep -q '^[ \t]*VERSION[ \t]*:\?=' $f || continue
+	    VERSION=$(perl -e '
+	    %imm = %value = ();
+	    sub expand ($) {
+	       my $var = shift;
+	       my $ret = $value{$var};
+	       $ret =~ s/\$[({](\w+)[})]/&expand($1)/ge unless $imm{$var};
+	       return $ret;
+	    }
+	    while(<>) {
+		if (/^\s*(\w+)\s*([:+]?=)\s*([^#\n]*)/) {
+			$imm{$1} = 1 if $2 eq ":=";
+			$imm{$1} = 0 if $2 eq "=";
+			if ($2 eq "+=") { $value{$1} .= " "; }
+			else            { $value{$1} = ""; }
+			$value{$1} .= $3;
+		}
+	    }
+	    print &expand("VERSION"), "\n";
+	    ' $f)
+	    if [ ${#VERSION} = 40 ] && [[ "$VERSION" = *([0-9a-f]) ]]; then
+		log_verbose "guess_version ignoring sha1 VERSION from $f"
+		local VERSION_SHA1=$VERSION
+		VERSION=
+	    fi
+	    VERSION="${VERSION#Version }" # zip
+	    VERSION="${VERSION#[a-z][a-z]*-}" # libcap
+	    VERSION="${VERSION#v}"
+	    case $VERSION in *\$*) VERSION=;; esac # reject makevars
+	    [ "$VERSION" ] && log_verbose "guess_version found VERSION in $f" && return
+	done
+
+	# flashw is like this
+	VERSION=$(sed -ne '/^\(static \|const \)*char[ \t*]*[a-z_]*version[][ \t]*=[ \t]*"/{s/[^"]*"//;s/".*//;s/^v//;p;q}' $1/*.c 2>/dev/null)
+	[ "$VERSION" ] && return
+
+	# Use the first old style SCCSID we can find
+	VERSION=$(sed -ne '/"@[(]#)/{s/.*"@.#.\([^"]*\)".*/\1/;s/^\([ \t]*[$a-zA-Z(\/][^ \t]*\)*[ \t]*//;s/[ \t].*//;p;q}' $1/*.c 2>/dev/null | head -1)
+	if [ "$VERSION" ] && [[ "$VERSION" != 198[0-9]* ]]; then
+		log_verbose "guess_version found $VERSION in $1/*.c"
+		return
+	fi
+
+	# Luarocks, pick the highest version spec
+	if [ -d $1/rockspec* ]; then
+	    file=$(cd $1/rockspec* && LC_ALL=C ls -vr1 *spec | grep -v '.-[a-z]' | head -1)
+	    VERSION=$(sed -ne '/version/{s/.*= *"//;s/".*//;p;q;}' $1/rockspec*/$file 2>/dev/null)
+	    [ "$VERSION" ] && return
+	fi
+
+	# RPM specs
+	for f in $1/*.spec $1/rpmbuild/SPECS/*.spec $1/*.lsm; do
+	   [ -e $f ] || continue
+	   grep -q '^Version:' $f || continue
+	   VERSION=$(awk '$1=="%define" {v["%{"$2"}"]=$3;}
+	                  /^Version:/ { sub(/^Version: */,""); n=1; while (n) { n=0; for(k in v) n+=gsub(k, v[k]) } print; quit}' <$f)
+	   [ "$VERSION" ] && log_verbose "guess_version found Version in $f" && return
+	done
+
+	if [ "$VERSION_SHA1" ]; then
+	    log_verbose "guess_version failed in $1, falling back on sha1"
+	    VERSION="$VERSION_SHA1"; return
+	fi
+	log_verbose "guess_version failed in $1"
+	VERSION=-
+}
+
+# Given a licence ID, return true if it is a recognised SPDX licence ID.
+# https://cyclonedx.org/docs/1.4/json/#components_items_licenses_items_license_id
+licence_is_spdx () { # id
+	case $1 in
+	0BSD|389-exception|AAL|Abstyles|Adobe-2006|Adobe-Glyph|ADSL|AFL-1.1|\
+	AFL-1.2|AFL-2.0|AFL-2.1|AFL-3.0|Afmparse|AGPL-1.0|AGPL-1.0-only|\
+	AGPL-1.0-or-later|AGPL-3.0|AGPL-3.0-only|AGPL-3.0-or-later|\
+	Aladdin|AMDPLPA|AML|AMPAS|ANTLR-PD|ANTLR-PD-fallback|Apache-1.0|\
+	Apache-1.1|Apache-2.0|APAFML|APL-1.0|App-s2p|APSL-1.0|APSL-1.1|\
+	APSL-1.2|APSL-2.0|Artistic-1.0|Artistic-1.0-cl8|Artistic-1.0-Perl|\
+	Artistic-2.0|Autoconf-exception-2.0|Autoconf-exception-3.0|Bahyph|Barr|\
+	Beerware|Bison-exception-2.2|BitTorrent-1.0|BitTorrent-1.1|blessing|\
+	BlueOak-1.0.0|Bootloader-exception|Borceux|BSD-1-Clause|BSD-2-Clause|\
+	BSD-2-Clause-FreeBSD|BSD-2-Clause-NetBSD|BSD-2-Clause-Patent|\
+	BSD-2-Clause-Views|BSD-3-Clause|BSD-3-Clause-Attribution|\
+	BSD-3-Clause-Clear|BSD-3-Clause-LBNL|BSD-3-Clause-Modification|\
+	BSD-3-Clause-No-Military-License|BSD-3-Clause-No-Nuclear-License|\
+	BSD-3-Clause-No-Nuclear-License-2014|BSD-3-Clause-No-Nuclear-Warranty|\
+	BSD-3-Clause-Open-MPI|BSD-4-Clause|BSD-4-Clause-Shortened|\
+	BSD-4-Clause-UC|BSD-Protection|BSD-Source-Code|BSL-1.0|BUSL-1.1|\
+	bzip2-1.0.5|bzip2-1.0.6|CAL-1.0|CAL-1.0-Combined-Work-Exception|\
+	Caldera|CATOSL-1.1|CC0-1.0|CC-BY-1.0|CC-BY-2.0|CC-BY-2.5|\
+	CC-BY-2.5-AU|CC-BY-3.0|CC-BY-3.0-AT|CC-BY-3.0-DE|CC-BY-3.0-NL|\
+	CC-BY-3.0-US|CC-BY-4.0|CC-BY-NC-1.0|CC-BY-NC-2.0|CC-BY-NC-2.5|\
+	CC-BY-NC-3.0|CC-BY-NC-3.0-DE|CC-BY-NC-4.0|CC-BY-NC-ND-1.0|\
+	CC-BY-NC-ND-2.0|CC-BY-NC-ND-2.5|CC-BY-NC-ND-3.0|CC-BY-NC-ND-3.0-DE|\
+	CC-BY-NC-ND-3.0-IGO|CC-BY-NC-ND-4.0|CC-BY-NC-SA-1.0|CC-BY-NC-SA-2.0|\
+	CC-BY-NC-SA-2.0-FR|CC-BY-NC-SA-2.0-UK|CC-BY-NC-SA-2.5|CC-BY-NC-SA-3.0|\
+	CC-BY-NC-SA-3.0-DE|CC-BY-NC-SA-3.0-IGO|CC-BY-NC-SA-4.0|CC-BY-ND-1.0|\
+	CC-BY-ND-2.0|CC-BY-ND-2.5|CC-BY-ND-3.0|CC-BY-ND-3.0-DE|\
+	CC-BY-ND-4.0|CC-BY-SA-1.0|CC-BY-SA-2.0|CC-BY-SA-2.0-UK|\
+	CC-BY-SA-2.1-JP|CC-BY-SA-2.5|CC-BY-SA-3.0|CC-BY-SA-3.0-AT|\
+	CC-BY-SA-3.0-DE|CC-BY-SA-4.0|CC-PDDC|CDDL-1.0|CDDL-1.1|CDL-1.0|\
+	CDLA-Permissive-1.0|CDLA-Permissive-2.0|CDLA-Sharing-1.0|CECILL-1.0|\
+	CECILL-1.1|CECILL-2.0|CECILL-2.1|CECILL-B|CECILL-C|CERN-OHL-1.1|\
+	CERN-OHL-1.2|CERN-OHL-P-2.0|CERN-OHL-S-2.0|CERN-OHL-W-2.0|ClArtistic|\
+	Classpath-exception-2.0|CLISP-exception-2.0|CNRI-Jython|CNRI-Python|\
+	CNRI-Python-GPL-Compatible|COIL-1.0|Community-Spec-1.0|Condor-1.1|\
+	copyleft-next-0.3.0|copyleft-next-0.3.1|CPAL-1.0|CPL-1.0|CPOL-1.02|\
+	Crossword|CrystalStacker|CUA-OPL-1.0|Cube|C-UDA-1.0|curl|D-FSL-1.0|\
+	diffmark|DigiRule-FOSS-exception|DL-DE-BY-2.0|DOC|Dotseqn|DRL-1.0|\
+	DSDP|dvipdfm|ECL-1.0|ECL-2.0|eCos-2.0|eCos-exception-2.0|EFL-1.0|\
+	EFL-2.0|eGenix|Elastic-2.0|Entessa|EPICS|EPL-1.0|EPL-2.0|ErlPL-1.1|\
+	etalab-2.0|EUDatagrid|EUPL-1.0|EUPL-1.1|EUPL-1.2|Eurosym|Fair|\
+	Fawkes-Runtime-exception|FDK-AAC|FLTK-exception|Font-exception-2.0|\
+	Frameworx-1.0|FreeBSD-DOC|FreeImage|freertos-exception-2.0|\
+	FSFAP|FSFUL|FSFULLR|FTL|GCC-exception-2.0|GCC-exception-3.1|GD|\
+	GFDL-1.1|GFDL-1.1-invariants-only|GFDL-1.1-invariants-or-later|\
+	GFDL-1.1-no-invariants-only|GFDL-1.1-no-invariants-or-later|\
+	GFDL-1.1-only|GFDL-1.1-or-later|GFDL-1.2|GFDL-1.2-invariants-only|\
+	GFDL-1.2-invariants-or-later|GFDL-1.2-no-invariants-only|\
+	GFDL-1.2-no-invariants-or-later|GFDL-1.2-only|GFDL-1.2-or-later|\
+	GFDL-1.3|GFDL-1.3-invariants-only|GFDL-1.3-invariants-or-later|\
+	GFDL-1.3-no-invariants-only|GFDL-1.3-no-invariants-or-later|\
+	GFDL-1.3-only|GFDL-1.3-or-later|Giftware|GL2PS|Glide|Glulxe|GLWTPL|\
+	gnu-javamail-exception|gnuplot|GPL-1.0|GPL-1.0+|GPL-1.0-only|\
+	GPL-1.0-or-later|GPL-2.0|GPL-2.0+|GPL-2.0-only|GPL-2.0-or-later|\
+	GPL-2.0-with-autoconf-exception|GPL-2.0-with-bison-exception|\
+	GPL-2.0-with-classpath-exception|GPL-2.0-with-font-exception|\
+	GPL-2.0-with-GCC-exception|GPL-3.0|GPL-3.0+|GPL-3.0-linking-exception|\
+	GPL-3.0-linking-source-exception|GPL-3.0-only|GPL-3.0-or-later|\
+	GPL-3.0-with-autoconf-exception|GPL-3.0-with-GCC-exception|GPL-CC-1.0|\
+	gSOAP-1.3b|HaskellReport|Hippocratic-2.1|HPND|HPND-sell-variant|\
+	HTMLTIDY|i2p-gpl-java-exception|IBM-pibs|ICU|IJG|ImageMagick|\
+	iMatix|Imlib2|Info-ZIP|Intel|Intel-ACPI|Interbase-1.0|IPA|IPL-1.0|\
+	ISC|Jam|JasPer-2.0|JPNIC|JSON|LAL-1.2|LAL-1.3|Latex2e|Leptonica|\
+	LGPL-2.0|LGPL-2.0+|LGPL-2.0-only|LGPL-2.0-or-later|LGPL-2.1|\
+	LGPL-2.1+|LGPL-2.1-only|LGPL-2.1-or-later|LGPL-3.0|LGPL-3.0+|\
+	LGPL-3.0-linking-exception|LGPL-3.0-only|LGPL-3.0-or-later|\
+	LGPLLR|Libpng|libpng-2.0|libselinux-1.0|libtiff|Libtool-exception|\
+	LiLiQ-P-1.1|LiLiQ-R-1.1|LiLiQ-Rplus-1.1|Linux-man-pages-copyleft|\
+	Linux-OpenIB|Linux-syscall-note|LLVM-exception|LPL-1.0|LPL-1.02|\
+	LPPL-1.0|LPPL-1.1|LPPL-1.2|LPPL-1.3a|LPPL-1.3c|LZMA-exception|\
+	MakeIndex|mif-exception|MirOS|MIT|MIT-0|MIT-advertising|MIT-CMU|\
+	MIT-enna|MIT-feh|MIT-Modern-Variant|MITNFA|MIT-open-group|Motosoto|\
+	mpich2|MPL-1.0|MPL-1.1|MPL-2.0|MPL-2.0-no-copyleft-exception|MS-PL|\
+	MS-RL|MTLL|MulanPSL-1.0|MulanPSL-2.0|Multics|Mup|NAIST-2003|\
+	NASA-1.3|Naumen|NBPL-1.0|NCGL-UK-2.0|NCSA|NetCDF|Net-SNMP|\
+	Newsletr|NGPL|NIST-PD|NIST-PD-fallback|NLOD-1.0|NLOD-2.0|NLPL|Nokia|\
+	Nokia-Qt-exception-1.1|NOSL|Noweb|NPL-1.0|NPL-1.1|NPOSL-3.0|NRL|NTP|\
+	NTP-0|Nunit|OCaml-LGPL-linking-exception|OCCT-exception-1.0|OCCT-PL|\
+	OCLC-2.0|ODbL-1.0|ODC-By-1.0|OFL-1.0|OFL-1.0-no-RFN|OFL-1.0-RFN|\
+	OFL-1.1|OFL-1.1-no-RFN|OFL-1.1-RFN|OGC-1.0|OGDL-Taiwan-1.0|\
+	OGL-Canada-2.0|OGL-UK-1.0|OGL-UK-2.0|OGL-UK-3.0|OGTSL|OLDAP-1.1|\
+	OLDAP-1.2|OLDAP-1.3|OLDAP-1.4|OLDAP-2.0|OLDAP-2.0.1|OLDAP-2.1|\
+	OLDAP-2.2|OLDAP-2.2.1|OLDAP-2.2.2|OLDAP-2.3|OLDAP-2.4|OLDAP-2.5|\
+	OLDAP-2.6|OLDAP-2.7|OLDAP-2.8|OML|OpenJDK-assembly-exception-1.0|\
+	OpenSSL|openvpn-openssl-exception|OPL-1.0|OPUBL-1.0|OSET-PL-2.1|\
+	OSL-1.0|OSL-1.1|OSL-2.0|OSL-2.1|OSL-3.0|O-UDA-1.0|\
+	Parity-6.0.0|Parity-7.0.0|PDDL-1.0|PHP-3.0|PHP-3.01|Plexus|\
+	PolyForm-Noncommercial-1.0.0|PolyForm-Small-Business-1.0.0|\
+	PostgreSQL|PSF-2.0|psfrag|PS-or-PDF-font-exception-20170817|psutils|\
+	Python-2.0|Qhull|QPL-1.0|Qt-GPL-exception-1.0|Qt-LGPL-exception-1.1|\
+	Qwt-exception-1.0|Rdisc|RHeCos-1.1|RPL-1.1|RPL-1.5|RPSL-1.0|\
+	RSA-MD|RSCPL|Ruby|Saxpath|SAX-PD|SCEA|SchemeReport|Sendmail|\
+	Sendmail-8.23|SGI-B-1.0|SGI-B-1.1|SGI-B-2.0|SHL-0.5|SHL-0.51|\
+	SHL-2.0|SHL-2.1|SimPL-2.0|SISSL|SISSL-1.2|Sleepycat|SMLNJ|\
+	SMPPL|SNIA|Spencer-86|Spencer-94|Spencer-99|SPL-1.0|SSH-OpenSSH|\
+	SSH-short|SSPL-1.0|StandardML-NJ|SugarCRM-1.1.3|Swift-exception|SWL|\
+	TAPR-OHL-1.0|TCL|TCP-wrappers|TMate|TORQUE-1.1|TOSL|TU-Berlin-1.0|\
+	TU-Berlin-2.0|u-boot-exception-2.0|UCL-1.0|Unicode-DFS-2015|\
+	Unicode-DFS-2016|Unicode-TOU|Universal-FOSS-exception-1.0|Unlicense|\
+	UPL-1.0|Vim|VOSTROM|VSL-1.0|W3C|W3C-19980720|W3C-20150513|\
+	Watcom-1.0|Wsuipa|WTFPL|wxWindows|WxWindows-exception-3.1|X11|\
+	X11-distribute-modifications-variant|Xerox|XFree86-1.1|xinetd|Xnet|\
+	xpp|XSkat|YPL-1.0|YPL-1.1|Zed|Zend-2.0|Zimbra-1.3|Zimbra-1.4|Zlib|\
+	zlib-acknowledgement|ZPL-1.1|ZPL-2.0|ZPL-2.1) true;;
+	*) false;;
+	esac
+}
+
+# Given a source directory, examine it and set $LICENCE to an indicative ID.
+guess_licence () { # srcdir
+	log_verbose "guess_licence $1"
+	LICENCE=unknown
+
+	for f in $1/makefile $1/Makefile; do
+	   if [ -f $f ] && [[ $f != */build* ]]; then
+	      LICENCE=$(sed -ne '/^export *ACL_LICENSE *=/{s/[^=]*= *\([^ ]*\).*/\1/p;q}' $f)
+	      [ "$LICENCE" ] && log_verbose "$1: found ACL_LICENCE=$LICENCE in $f"
+	      case $LICENCE in
+	      FreeBSD) LICENCE=BSD-2-Clause-FreeBSD; return;;
+	      GPLv2+) LICENCE=GPL-2.0-or-later; return;;
+	      "LGPL 2.1+ and GPL 2.0+") LICENCE=GPL-2.0-or-later; return;;
+	      esac
+	   fi
+	done
+
+	# Things that originated with uClinux, SnapGear or Opengear
+	# and go out with the CDK will be licensed as "uClinux".
+	# Many of these were written by Greg Ungerer and not explicitly
+	# licenced.
+	case $1 in
+	   vendors/* |\
+	   lib/libopengear |\
+	   user/buttond |\
+	   user/cpu |\
+	   user/discard |\
+	   user/flashw |\
+	   user/flatfsd |\
+	   user/gettyd |\
+	   user/ledcmd |\
+	   user/login |\
+	   user/netflash |\
+	   user/pam_adduser |\
+	   user/pam_portauth |\
+	   user/perifrouted |\
+	   user/setfset |\
+	   user/setmac |\
+	   user/sigs |\
+	   user/tip |\
+	   user/watchdogd \
+	   ) LICENCE=uClinux; return;;  # FIXME what is the SPDX equivalent?
+	esac
+
+	if [[ $1 = lib/lua_curl ]]; then
+		LICENCE=Lua; return	# FIXME SPDX equivalent?
+	fi
+	if [[ $1 = lib/ncurses ]] && fmt -100 $1/README | grep -q 'MIT-style license'; then
+		LICENCE=MIT; return
+	fi
+	if [[ $1 = user/sqlite/* ]] && grep -qi 'The author disclaims copyright' $1/sqlite3.c; then
+		LICENCE=PD; return	# FIXME SPDX equivalent?
+	fi
+	if [[ $1 = user/agetty ]] && grep -q 'This program is freely distributable' $1/agetty.c; then
+		LICENCE=PD; return	# FIXME SPDX equivalent?
+	fi
+	if grep -q License: $1/*.spec 2>/dev/null; then
+		LICENCE=$(sed -ne '/^License:/{s/[ \t]*$//;s/^License:[ \t]*//;p;q}' $1/*.spec) # RPM
+		[ "$LICENCE" ] && log_verbose "guess_licence: found licence $LICENCE in $1/*.spec"
+		# vaious fixups from RPM's non-SPDX licences
+		case $LICENCE in
+		GPL) LICENCE=GPL-2.0-or-later;;
+		LGPLv2+) LICENCE=LGPL-2.0-or-later;;
+		GPLv2) LICENCE=GPL-2.0;;
+		GPLv2+) LICENCE=GPL-2.0-or-later;;
+		"LGPL-2.1+ and GPL-2.0+") LICENCE=GPL-2.0-or-later;;
+		BSD) LICENCE=BSD-3-Clause;;
+		"LGPL for libftdi and GPLv2"*) LICENCE=LGPL-2.0;;
+		*" or "*) LICENCE=;; # ignore ambiguous spec
+		esac
+		[ "$LICENCE" ] && return
+	fi
+
+	local files=($1/COPYING* $1/*LICEN* $1/Licen* $1/COPYRIGHT* $1/src/COPYING* \
+	             $1/README $1/README.md $1/LEGAL debian/copyright $1/license.terms \
+		     $1/README.cfdisk $1/doc/us/license.html \
+		     $1/lpeg.html $1/doc/en/txt/gpl.txt \
+		     $1/LICEN?ES/* ${1%/src}/doc/LICEN?E* $1/Documentation/LICEN?E*)
+	case $1 in
+	   user/ftp/*)   files+=($1/ftp.c);;
+	   user/telnetd) files+=($1/telnetd.c);;
+	   *)	if [ $(ls -1 $1/*.c 2>/dev/null | wc -l) -lt 4 ]; then
+		    # scan C source text when there are only a handful
+		    log_verbose "guess_licence: few C sources, $(echo $1/*.c)"
+		    files+=($1/*.c)
+		fi;;
+	esac
+	#[[ $1 = lib/openssl* ]] && files=($1/*/LICEN?E*)
+	[[ $1 = lib/libevent ]] && files=($1/event.c)
+	[[ $1 = lib/libkrb5 ]] && files=($1/include/krb5/krb5.h)
+	[[ $1 = user/netcat/build/* ]] && files=($1/netcat.c)
+	[[ $1 = user/ifenslave ]] && files=($ROOTDIR/linux*/Documentation/networking/ifenslave.c)
+	[[ $1 = user/openresolv/build/* ]] && files=($1/resolvconf)
+	[[ $1 = user/mgetty ]] && files=($1/README.1st)
+	[[ $1 = user/setserial ]] && files=($1/version.h)
+	if grep -q 'SPDX-License-Identifier' "${files[@]}" $1/*.[ch] 2>/dev/null; then
+		LICENCE=$(sed -ne 's,.*SPDX-License-Identifier:*[ \t(]*\([^ \t)]*\).*,\1,p' \
+			"${files[@]}" $1/*.[ch] 2>/dev/null | sort -u | tr \\n ' ')
+		LICENCE="${LICENCE% }"
+		if [ "$LICENCE" ]; then
+		    log_verbose "$1 found SPDX-License-Identifier $LICENCE"
+		    case $LICENCE in
+		    # Collapse multiple GPL-2.0 variants to worst case
+		    "GPL-2.0 GPL-2.0-only GPL-2.0-or-later") LICENCE=GPL-2.0-only;;
+		    BSD-2-clause) LICENCE=BSD-2-Clause;; # fix case
+		    esac
+		    if licence_is_spdx "$LICENCE"; then
+			return
+		    else
+			log_verbose "guess_licence: $1 ignored invalid SPDX-License-Identifier ($LICENCE)"
+		    fi
+		fi
+	fi
+	for f in "${files[@]}"; do
+		[ -f $f ] || continue
+		log_verbose "scanning $f"
+		if grep -qi 'version 2' $f; then V=2.0;
+		elif grep -qi 'version 3' $f; then V=3.0;
+		else V=2.0; fi
+		if grep -qi 'BSD networking tape' $f; then
+			LICENCE=BSD; return
+		fi
+		if grep -qi 'This code is released under the libpng license' $f; then
+			LICENCE=Libpng; return
+		fi
+		if grep -Eqi '(Library|Lesser) General Public Lic' $f; then
+			log_verbose "guess_licence found LGPL in $f"
+			LICENCE=LGPL-$V; return
+		fi
+		if tr '\n\t*' '   ' <$f | sed -e 's,  *, ,g' | grep \
+		    -e 'GNU General Public Licen' \
+		    -e 'distributed under the GNU GPL license' \
+		    -e 'distributed under the GPL' \
+		    -e 'redistributed under the GNU Public license' \
+		    -e 'under the terms of the GPLv' \
+		    -Fqi
+		then
+			log_verbose "guess_licence found GPL in $f"
+			LICENCE=GPL-$V; return
+		fi
+		if grep -qi 'all files.*use a BSD 2-Clause lic' $f; then
+			LICENCE=BSD-2-Clause; return
+		fi
+		if tr '\n\t*' '   ' <$f | sed -e 's,  *, ,g' | grep \
+		   -e 'must reproduce the above copyright'\
+		   -e 'must retain the above copyright' \
+		   -e 'provided that this notice is present' \
+		   -e 'provided that this notice is preserved' \
+		   -e 'provided the above notices are retained on all copies' \
+		   -e 'provided that the above copyright notice appears in all copies' \
+		   -e 'provided that the above copyright notice and this permission notice appear' \
+		   -e 'provided that existing copyright notices are retained in all copies' \
+		   -e 'above copyright notice and this permission notice shall be included' \
+		   -e 'notice may not be removed or altered from any source distribution' \
+		   -e "Redistributions of source code must retain the authors' copyright notice" \
+		   -e 'notice appear in all copies' \
+		   -Fqi; then
+			log_verbose "guess_licence: found BSD clause in $f"
+			LICENCE=BSD-3-Clause; return
+		fi
+		if grep -q 'Artistic Licence' $f && grep -qi 'you may not charge a fee' $f; then
+			LICENCE=Artistic-1.0; return
+		fi
+		if grep -q 'www.apache.org/licenses/' $f; then
+			if grep -Eq 'Version 2.0|LICEN?E-2' $f; then
+				LICENCE=Apache-2.0; return
+			fi
+		fi
+		if grep -Eq 'is public domain|released under Creative Commons Public Domain|freely given away to the Internet community' $f; then
+			LICENCE=PD; return	# FIXME SPDX equivalent?
+		fi
+		if grep -iq 'Eclipse Public License 2.0' $f; then
+			LICENCE=EPL-2.0; return
+		fi
+	done
+
+	# OpenWRT packages
+	case $1 in
+	   # from https://github.com/openwrt/openwrt/blob/main/package/libs/libubox/Makefile
+	   lib/libubox*) LICENCE=ISC; return;;
+	   # from https://github.com/openwrt/openwrt/blob/main/package/network/config/netifd/Makefile
+	   user/netifd*) LICENCE=GPL-2.0; return;;
+	   # from https://github.com/openwrt/openwrt/blob/main/package/system/uci/Makefile
+	   user/uci*) LICENCE=LGPL-2.1; return;;
+	esac
+
+	log_verbose "$1 guess_licence failed ${files[*]}"
+}
+
+TODO () { log_verbose "TODO $(caller), dir $dir"; }
+
+# Given a source directory, determine the CPE sub-fields "part:vendor:product"
+# from the full "cpe:2.3:part:vendor:product:version:patch:..." identifier
+# and write it to stdout.
+# (If you're adding to this, download from https://nvd.nist.gov/products/cpe
+# and use grep on it to find CPE identifiers)
+guess_cpe () { # srcdir
+	case $1 in
+	*/agetty) TODO;; # a:uclinux:agetty?
+	*/aircrack-ng) echo a:aircrack-ng:aircrack-ng;;
+	*/apparmor) echo a:apparmor:apparmor;;
+	*/ath10k-firmware) echo o:qualcomm:qca9377_firmware;;
+	*/bash)	echo a:gnu:bash;;
+	*/bridge-utils) echo a:kernel:bridge-utils;;
+	*/busybox) echo a:busybox:busybox;;
+	*/cherokee) echo a:cherokee-project:cherokee_web_server;;
+	*/conntrack-tools) echo a:netfilter:conntrack-tools;;
+	*/coovachilli) echo a:coovachilli_project:coovachilli;;
+	*/crconf) TODO;; # crypto conf (obsoleted by iproute2?)
+	*/crda) TODO;; # obsolete?
+	*/cryptsetup) TODO;; # kernel?
+	*/curl) echo a:haxx:curl;;
+	*/dbus) echo a:freedesktop:dbus;;
+	*/dbus-glib) echo a:freedesktop:dbus-glib;;
+	*/dhcp-isc) echo a:isc:dhcp;;
+	*/discard) TODO;; # a:uclinux:discard
+	*/dnsmasq2) echo a:thekelleys:dnsmasq;;
+	*/dmidecode) TODO;; # a:gnu:dmidecode
+	*/dosfstools) echo a:dosfstools_project:dosfstools;;
+	*/e2fsprogs) echo a:e2fsprogs_project:e2fsprogs;;
+	*/estr) echo a:adiscon:libestr;;
+	*/ethtool) echo a:kernel:ethtool;;
+	*/expat) echo a:libexpat:expat;;
+	*/ez-ipupdate) TODO;;
+	*/fastjson) echo a:rsyslog:libfastjson;;
+	*/fcron) TODO;; # a:fcron_project:fcron
+	*/frrouting) echo a:linuxfoundation:free_range_routing;;
+	*/ftp/*) echo a:netkit_ftp_project:netkit_ftp;;
+	*/gdb) echo a:gnu:gdb;;
+	*/gettext) echo a:gnu:gettext;;
+	*/glib) echo a:gnome:glib;;
+	*/gpsd) echo a:gpsd_project:gpsd;;
+	*/haserl) echo a:haserl_project:haserl;;
+	*/hd) TODO;; # (hexdump) a:uclinux:hd;;
+	*/hidapi) TODO;; # a:libusb:hidapi
+	*/hostapd) echo a:w1.fi:hostapd;;
+	*/hwclock) TODO;; # a:hwclock_project:hwclock ibiblio.org
+	*/i2c-tools) echo a:i2c-tools_project:i2c-tools;;
+	*/imx-kobs) TODO;; # NAND boot editor a:nxp:imx-kobs
+	*/inetd) TODO;;
+	*/inetutils) echo a:gnu:inetutils;;
+	*/init) TODO;;
+	*/iperf) echo a:iperf3_project:iperf3;;
+	*/ipmitool) echo a:ipmitool_project:ipmitool;;
+	*/iproute2) echo a:iproute2_project:iproute2;;
+	*/ipset) echo a:netfilter:ipset;;
+	*/iptables) echo a:netfilter:iptables;;
+	*/iputils) echo a:iputils_project:iputils;;
+	*/iw) echo a:kernel:iw;;
+	*/jansson) echo a:jansson_project:jansson;;
+	*/jerryscript) echo a:jerryscript:jerryscript;;
+	*/json-c) echo a:json-c_project:json-c;;
+	*/keepalived) echo a:keepalived:keepalived;;
+	*/kmod) echo a:kernel:kmod;;
+	*/libaio) echo a:libaio_project:libaio;;
+	*/libargon2) echo a:argon2_project:argon2;;
+	*/libbzip2) echo a:bzip:bzip2;;
+	*/libcap) echo a:libcap_project:libcap;;
+	*/libcap-ng) echo a:libcap-ng_project:libcap-ng;;
+	*/libcares) echo a:c-ares_project:c-ares;;
+	*/libconfuse) echo a:libconfuse_project:libconfuse;;
+	*/libcurl) echo a:haxx:libcurl;;
+	*/libdevmapper) : echo a:redhat:lvm2;;
+	*/libdnsres) :;;
+	*/libestr) echo a:adiscon:libestr;;
+	*/libevent) echo a:libevent_project:libevent;;
+	*/libfastjson) echo a:rsyslog:libfastjson;;
+	*/libffi) echo a:libffi_project:libffi;;
+	*/libftdi) TODO;;
+	*/libgcgi) :;;
+	*/libgd) echo a:libgd:libgd;;
+	*/libgmp) echo a:gmplib:gmp;;
+	*/libgpiod) :;;
+	*/libgudev) : echo a:gnome:libgudev;;
+	*/libidn2) echo a:gnu:libidn2;;
+	*/libite) TODO;; # low grade BSD compat
+	*/libkrb5) echo a:mit:kerberos;;
+	*/libldap) echo a:openldap:openldap;;
+	*/libldns) echo a:nlnetlabs:ldns;;
+	*/libmbim) echo a:freedesktop:libmbim;;
+	*/libmnl) echo a:netfilter:libmnl;;
+	*/libnetfilter_conntrack) echo a:netfilter:libnetfilter_conntrack;;
+	*/libnetfilter_cthelper)  echo a:netfilter:libnetfilter_cthelper;;
+	*/libnetfilter_cttimeout) echo a:netfilter:libnetfilter_cttimeout;;
+	*/libnetfilter_queue)     echo a:netfilter:libnetfilter_queue;;
+	*/libnfnetlink)           echo a:netfilter:libnfnetlink;;
+	*/libnl|*/libnl/lib) echo a:libnl_project:libnl;;
+	*/libpam) echo a:linux-pam:linux-pam;;
+	*/libpcap) echo a:tcpdump:libpcap;;
+	*/libpcapng) echo a:digi:libpcapng;;
+	*/libpciaccess) TODO;;
+	*/libpng) echo a:libpng:libpng;;
+	*/libqmi) echo a:libqmi_project:libqmi;;
+	*/libseccomp) echo a:libseccomp_project:libseccomp;;
+	*/libtirpc) echo a:libtirpc_project:libtirpc;;
+	*/libubox) TODO;; # OpenWRT
+	*/libuev) TODO;;
+	*/libunbound) echo a:nlnetlabs:unbound;;
+	*/libusb|*/libusb-*) echo a:libusb:libusb;;
+	*/libyang) echo a:cesnet:libyang;;
+	*/linux-firmware) :;;
+	*/linux|*/linux-[0-9]*) echo o:linux:linux_kernel;;
+	*/lm_sensors) TODO;; # a:kernel:lm_sensors
+	*/log4c) echo a:apache:log4cxx;;
+	*/logrotate) echo a:logrotate_project:logrotate;;
+	*/lrzsz) echo a:lrzsz_project:lrzsz;;
+	*/lua) echo a:lua:lua;;
+	*/lxc) echo a:linuxcontainers:lxc;;
+	*/lz4) echo a:lz4_project:lz4;;
+	*/mawk) TODO;;
+	*/mDNSResponder) echo a:apple:mdnsresponder;;
+	*/mgetty) echo a:mgetty_project:mgetty;;
+	*/minirl) : echo a:digi:minirl;;
+	*/mobile-broadband-provider-info) : echo a:gnome:TODO;;
+	*/ModemManager) : echo a:freedesktop:modemmanager;;
+	*/mosquitto) echo a:eclipse:mosquitto;;
+	*/mtd-utils) echo a:mtd-utils_project:mtd-utils;;
+	*/musl|musl) echo a:musl-libc:musl;;
+	*/nagios-plugins) echo a:nagios:plugins;;
+	*/ncurses) echo a:ncurses_project:ncurses;;
+	*/neon) echo a:webdav:neon;;
+	*/netcat) echo a:netcat_project:netcat;;
+	*/netifd) TODO;; # a:openwrt:netifd
+	*/net-snmp) echo a:net-snmp:net-snmp;;
+	*/net-tools) echo a:net-tools_project:net-tools;;
+	*/netflash) TODO;; # a:uclinux:netflash
+	*/nrpe) echo a:nagios:remote_plug_in_executor;;
+	*/nsca) echo a:nagios:remote_plug_in_executor;;
+	*/ntp) echo a:ntp:ntp;;
+	*/nut) :;; # networkupstools
+	*/nuttcp) TODO;; # a:nuttcp_project:nuttcp (TCP perf tool)
+	*/odhcp6c) TODO;; # a:openwrt:odhcp6c
+	*/openldap) echo a:openldap:openldap;;
+	*/openresolv) echo a:openresolv_project:openresolv;;
+	*/openssh | */ssh) echo a:openbsd:openssh;;
+	*/openssl) echo a:openssl:openssl;;
+	openswan) echo a:xelerance:openswan;;
+	*/openvpn) echo a:openvpn:openvpn;;
+	*/pam_google_authenticator) echo a:google:authenticator;;
+	*/pam_krb5) echo a:pam-krb5_project:pam-krb5;;
+	*/pam_ldap) echo a:padl:pam_ldap;;
+	*/pam_radius) echo a:freeradius:pam_radius;;
+	*/pam_tacplus) echo a:pam_tacplus_project:pam_tacplus;;
+	*/pcre|*/pcre2) echo a:pcre:pcre;;
+	*/popt) echo a:popt_project:popt;;
+	*/ppp|*/pppd) echo a:canonical:ppp;;
+	*/pptpd) TODO;;
+	*/procps | */procps-ng) echo a:procps-ng_project:procps-ng;;
+	*/python) echo a:python:python;;
+	*/quagga) echo a:quagga:quagga;;
+	*/readline) echo a:gnu:readline;;
+	*/resolveip) TODO;;
+	*/routed/*) echo a:netkit_routed_project:netkit_routed;;
+	*/rp-pppoe) echo a:rp-pppoe_project:rp-pppoe;;
+	*/rsync) echo a:samba:rsync;;
+	*/rsyslog) echo a:rsyslog:rsyslog;;
+	*/samba|*/samba/source) echo a:samba:samba;;
+	*/scew) :;;
+	*/setserial) echo a:setserial_project:setserial;;
+	*/shadow) echo a:shadow_project:shadow;;
+	*/shellinabox) echo a:shellinabox_project:shellinabox;;
+	*/smcroute) echo a:troglobit:smcroute;;
+	*/smtpclient) TODO;;
+	*/socat) echo a:dest-unreach:socat;;
+	*/sqlite) echo a:sqlite:sqlite;;
+	*/squashfs-tools-ng) TODO;;
+	*/sscep) TODO;;
+	*/STLport) echo a:stlport_project:stlport;;
+	*/strace) echo a:strace_project:strace;;
+	*/strongswan) echo a:strongswan:strongswan;;
+	*/stunnel) echo a:stunnel:stunnel;;
+	*/sudo) echo a:todd_miller:sudo;;
+	*/sysklogd) : echo a:troglobit:sysklogd;;
+	*/tar) echo a:gnu:tar;;
+	*/tcl) echo a:tcl:tcl;;
+	*/tcpblast) TODO;;
+	*/tcpdump) echo a:tcpdump:tcpdump;;
+	*/tcpser) TODO;;
+	*/telnetd) echo a:netkit_telnet_project:netkit_telnet;;
+	*/termcap) TODO;; # gnu:termutils ?
+	*/tftp | */tftp-hpa) echo a:tftp-hpa_project:tftp-hpa;;
+	*/tip) :;;
+	*/traceroute) :;;
+	*/u-boot*) echo a:denx:u-boot;;
+	*/uboot-envtools) : echo a:denx:u-boot-envtools;;
+	*/ubus) : TODO;;
+	uClibc) echo a:uclibc:uclibc;;
+	*/udev) echo a:udev_project:udev;;
+	*/udns) TODO;;
+	*/util-linux) echo a:util-linux_project:util-linux;;
+	*/vsftpd) echo a:vsftpd_project:vsftpd;;
+	*/watchdogd) :;;
+	*/wireless_tools) echo a:wireless_tools_project:wireless_tools;;
+	*/wpa_supplicant) echo a:w1.fi:wpa_supplicant;;
+	*/xl2tpd) : echo a:xelerance:xl2tpd;;
+	*/xz) echo a:xz_project:xz;;
+	*/yajl) echo a:yajl_project:yajl;;
+	*/zip) echo a:zip_project:zip;;
+	*/zlib) echo a:zlib:zlib;;
+	*) log_verbose "guess_cpe: $1: no cpe known";;
+	esac
+}
+
+cyclonedx_report_start () {
+	local top_PRODUCT top_VERSION _
+	local top_NAME=dal
+	read top_PRODUCT _ top_VERSION _ < $ROMFSDIR/etc/version
+	CDXVER=1.4
+	cat <<-.
+	{ "\$schema": "http://cyclonedx.org/schema/bom-${CDXVER}.schema.json"
+	, "bomFormat": "CycloneDX"
+	, "specVersion": "${CDXVER}"
+	, "version": 1
+	, "metadata":
+	  { "component":
+	    { "type": "application"
+	    , "name": "$top_NAME"
+	    , "version": "$top_VERSION"
+	    , "properties":
+	      [ { "name": "uclinux:vendor", "value": "${top_PRODUCT%/*}" }
+	      , { "name": "uclinux:product", "value": "${top_PRODUCT#*/}" }
+	      ]
+	    }
+	  , "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+.
+	case $CDXVER in
+	1.4) cat <<-.
+	  , "tools":
+	    [ { "name": "tools/list-software"
+	      , "vendor": "com.digi"
+	      , "version": "$(bin/version)"
+	      }
+	    ]
+	  }
+.
+	;;
+	1.5) cat <<-.
+	  , "tools":
+	    { "components":
+	      [ { "type": "application"
+	        , "name": "tools/list-software"
+	        , "group": "com.digi"
+	        , "version": "$(bin/version)"
+	        }
+	      ]
+	    }
+	  }
+.
+	;;
+	esac
+	cat <<-.
+	, "components":
+.
+	cyclonedx_lead='[' # first component
+}
+
+cyclonedx_report () { # dir {pkg|cpe} vers lic size [url [alg:hash [purl]]]
+	local dir="$1" pkg="$2" version="$3" licence="$4"
+	local size="$5" local disturl="$6" disturlhash="$7"
+	local purl="$8"
+
+	if ! licence_is_spdx "$licence"; then
+	    echo "warning: '$licence' is not a SPDX licence (dir=$dir pkg=$pkg version=$version)">&2
+	fi
+	if [ "$version" = "-" ]; then
+	    version=
+	fi
+
+	local type
+	case $dir in
+	lib/firmware*)	type=firmware;;
+	u-boot*)	type=firmware;;
+	lib/*)		type=library;;
+	linux*)		type=operating-system;;
+	*)		type=application;;
+	esac
+
+	local cpe name
+	case $pkg in
+	[oa]:*:* | cpe:2.3:*)
+	    cpe=${pkg#cpe:2.3:}
+	    if [[ $cpe != ?:*:*:* ]]; then
+		cpe="$cpe:$version"
+	    fi
+	    while [[ $cpe != ?:*:*:*:*:*:*:*:*:*:* ]]; do
+		cpe="$cpe:*"
+	    done
+	    name=${cpe#?:*:}; name=${name%%:*}
+	    cpe="cpe:2.3:$cpe"
+	    ;;
+	*)
+	    name="$pkg"
+	    cpe=
+	    ;;
+	esac
+
+	cat <<-.
+		  $cyclonedx_lead { "type": "$type"
+		    , "name": "$name"
+.
+	cyclonedx_lead=,
+
+	[ "$version" ] && echo "    , \"version\": \"$version\""
+	[ "$licence" ] && echo "    , \"licenses\": [{\"expression\": \"$licence\"}]"
+	[ "$cpe" ] &&  echo "    , \"cpe\": \"$cpe\""
+	[ "$purl" ] && echo "    , \"purl\": \"$purl\""
+
+	# Experimental: if patches/series exists, and the word CVE appears
+	# in a named patch before a line starting with '--- ', then we'll add
+	# that information to the SBOM output.
+	if [ -s $dir/patches/series ]; then
+	    local patch cve comma=' '
+	    for cve in $(
+	        for patch in $(awk '$1 && !/^#/ { print $1 }' $dir/patches/series); do
+	            sed -ne 's,.*\(CVE-[-0-9]*\).*,\1,p;/^--- /q' < $dir/patches/$patch
+	        done
+	    ); do
+		 [ "$comma" = ' ' ] && echo "    , \"pedigree\": { \"patches\": ["
+	         echo "      $comma { \"type\": \"unofficial\", \"resolves\": [ { \"type\": \"security\", \"id\": \"$cve\" } ] }"
+	         comma=,
+	    done
+	    [ "$comma" = , ] && echo "      ] }"
+	fi
+
+	if [ "$disturl" ]; then
+	    echo "    , \"externalReferences\":"
+	    echo "      [ { \"type\": \"distribution\""
+	    echo "        , \"url\": \"$disturl\""
+	    if [ "$disturlhash" ]; then
+		local hash="${disturlhash#*:}"
+		local hashalg="${disturlhash%:*}"
+		case $hashalg in
+		md5)    hashalg=MD5;;
+		sha256) hashalg=SHA-256;;
+		sha512) hashalg=SHA-512;;
+		*)      echo "warning: unknown hash alg in $disturlhash" >&2;;
+		esac
+		echo "        , \"hashes\": [{ \"alg\": \"$hashalg\", \"content\": \"$hash\" }]"
+		fi
+	    echo "        }"
+	    echo "      ]"
+	fi
+
+	# Buildsystem internal properties
+	echo "    , \"properties\":"
+	echo "      [ { \"name\": \"uclinux:srcdir\", \"value\": \"${dir%/}\" }"
+	[ -n "$size" -a "$size" -ne 0 ] &&
+	echo "      , { \"name\": \"uclinux:size\", \"value\": \"${size}\" }"
+	echo "      ]"
+
+	echo "    }"
+}
+
+cyclonedx_report_end () {
+	if [ "$cyclonedx_lead" = "[" ]; then
+		echo "  []";
+	else
+		echo "  ]";
+	fi
+	echo "}"
+}
+
+
+table_report_start () { :; }
+
+table_report () { #dir pkg version licence size [url [alg:hash [purl]]]
+	local dir="$1"
+	local pkg="${2/-unknown/-?}"
+	local version="${3:-?}"
+	local licence="${4/unknown/?}"
+	local size="$5"
+	local disturl="$6"
+	local disturlhash="$7"
+	local purl="$8"
+	case $pkg in
+		cpe:2.3:?:*:*:*) : ;;
+		cpe:2.3:?:*:*)  pkg="$pkg:$version";;
+	esac
+	printf '%-24s %-24s %10s %10s %s %s %s\n' "$dir" "$pkg" "$version" "$licence" "$disturl" "$disturlhash" "$purl"
+}
+
+table_report_end () { :; }
+
+# Generate the package source directory names from the romfs-inst.log
+# Also emits the total stored (uncompressed)
+#  4.x: /full/build/path /full/romfs/path
+#  5.x: "/full/build/path","/full/romfs/path",size
+dirs_from_romfs_log () {
+ sed -e 's#^"\([^"]*\)","\([^"]*\)",.*#\1 \2#;' <"$IMAGEDIR"/romfs-inst.log |
+ sort -u |
+ while read src dst; do
+  origsrc="$src"
+  progress "$origsrc"
+
+  src=${src#$ROOTDIR/}
+  dst=${dst#$ROMFSDIR}
+
+  [[ $src == /dev/* ]] && continue	# /dev/null was a source
+  [[ $src == /* ]] && continue		# out-of-tree, eg libgcc_s.so.1
+
+  # guess the package directory for $src
+  dir=$src
+  [[ $dir == openswan/* ]] && dir=openswan
+  [[ $dir == */build/* ]] && dir=${dir%%/build/*}
+  [[ $dir == */builddir/* ]] && dir=${dir%%/builddir/*}
+  [[ $dir == */build ]] && dir=${dir%/build}
+  [[ $dir == lib/*/lib ]] && dir=${dir%/lib}
+  [[ $dir == */src ]] && dir=${dir%/src}
+  [[ $dir == user/bridge-utils/* ]] && dir=user/bridge-utils
+  [[ $dir == user/iproute2/* ]] && dir=user/iproute2
+  [[ $dir == user/mgetty/* ]] && dir=user/mgetty
+  [[ $dir == linux/arch/* ]] && dir=linux
+  if [[ $dir == staging/* ]]; then
+	echo "error: staging dir used as source ($src)" >&2
+	continue
+  fi
+
+  if [[ $dir = prop/* ]]; then
+	case $dir in
+	prop/config/wan_bonding/*) :;;
+	*) dir=prop;;	# assume the rest is DAL
+	esac
+  fi
+
+  if [[ $dir == lib/firmware/* ]]; then
+     dir=${dir#lib/firmware/}
+     dir=${dir%%/*}
+     dir=lib/firmware/$dir
+  elif [[ $dir == vendors/* ]]; then
+     dir=$(echo "$dir" | sed -e 's,^\([^/]*/[^/]*/[^/]*\)/.*,\1,')
+  else
+      # walk up to a directory with a makefile
+      while [ ! -e "$dir"/Makefile ] && [ ! -e "$dir"/makefile ]; do
+          dir=${dir%/*}
+	  if [ "$dir" = "/" -o "$dir" = "" ]; then
+	     echo "$origsrc !!">&2;exit 1
+	  fi
+      done
+      [[ $dir == */src ]] && dir=${dir%/src}
+  fi
+  local size=0
+  echo $dir $(file_size "$ROMFSDIR$dst")
+ done |
+ awk '{sz[$1]+=int($2)} END{for (d in sz) print d,sz[d]}' |
+ sort
+}
+
+report_dir () { # dir size
+  local dir=$1
+  local size=$2
+  local mf=$dir/GNUmakefile
+  [ -e $mf ] || mf=$dir/makefile
+  [ -e $mf ] || mf=$dir/Makefile
+
+  #[[ $dir = user/powerman ]] || continue # XXX
+  local cpe= purl=
+  if [ -e $mf ] && grep -q '^[ \t]*include.*/tools/.*\.inc' $mf; then
+      log_verbose "report_dir $1: detected tools/*.inc package"
+      # automake packages usually have a sensible package-version name
+      # and check their sources out in a subdirectory
+      local tmp=/tmp/M$$
+      tmp=/tmp/M # for debug
+      # Theoretically, $(AUTOMAKE_y) could have multiple packages,
+      # but that rarely happens. So assume it doesn't.
+      # Makefiles that use automake.inc can set
+      #  CPE=a:vendor:name:version[:patch]
+      printf '
+         include $(ROOTDIR)/config.arch
+         include $(__mf)
+         paths::; @$(foreach pkg,$(or $(AUTOMAKE_y),$(PKG_y)),\
+	   echo $(or $(CPE_$(pkg)),$(CPE),$(pkg),-) \
+	      ! $(or $(BLD),build)/$($(pkg)_SRCDIR) \
+	      ! $($(pkg)_URL) \
+	      ! $(if $($(pkg)_DOWNLOADHASH), \
+	         $($(pkg)_DOWNLOADHASH_METHOD):$($(pkg)_DOWNLOADHASH)) \
+	      ! $($(pkg)_VERSION) \
+	      ; ):
+      ' > $tmp.mk
+      local pkg srcdir DISTURL DISTURLHASH
+      IFS=! read pkg srcdir DISTURL DISTURLHASH VERSION \
+		      < <(set -a; . $ROOTDIR/.config;
+		          . $ROOTDIR/config/.config;
+			  make --no-print-directory -C $ROOTDIR/$dir \
+		          -f $tmp.mk \
+			  ROOTDIR="$ROOTDIR" \
+			  __mf="$ROOTDIR/$mf" \
+			  paths | tee $tmp.mk.out
+			  )
+      trim pkg srcdir DISTURL DISTURLHASH VERSION
+      #cat $tmp.mk $tmp.mk.out >&2
+      rm -f $tmp.mk $tmp.mk.out
+      log_verbose "[pkg=$pkg DISTURL=$DISTURL VERSION=$VERSION]"
+
+      githash=
+      if [[ "$VERSION" =~ [0-9a-f]{20,40} ]]; then
+	# looks like a git hash; save it as a last resort
+	log_verbose "$dir ignoring githash version for now"
+	githash="$VERSION"
+	VERSION=
+      fi
+      VERSION=${VERSION#$pkg-}
+
+      # If the makefile didn't specify it, compute it from $UC_DOWNLOADS
+      if [ "$DISTURL" ] && [ ! "$DISTURLHASH" ] &&
+         [ -s "$HOME/.downloads/${DISTURL##*/}" ]
+      then
+	  local hash
+	  read hash _ < <(sha256sum < "$HOME/.downloads/${DISTURL##*/}") &&
+	  DISTURLHASH="sha256:$hash"
+      fi
+
+      if [[ $pkg == cpe:2.3:?:*:* ]]; then # Already in a:vendor:product:version form
+         cpe=${pkg}
+	 log_verbose "$dir/$mf: found valid CPE"
+	 local -a field
+	 local _remain="$cpe"
+	 while [[ $_remain = *:* ]]; do
+	     field+=("${_remain%%:*}")
+	     _remain="${_remain#*:}"
+	 done
+	 field+=("$_remain")
+	 log_verbose "cpe fields=(${field[*]})"
+	 PKGNAME="${field[4]}"
+	 VERSION="${field[5]}"
+      elif [ ! "$VERSION" ]; then
+	 log_verbose "$dir/$mf: found pkg=$pkg srcdir=$srcdir"
+	 case $pkg in
+	 *-[0-9]* | *-v[0-9]* | *-pre[0-9])
+	     pkg=${pkg%-stable}	# lib/libevent
+	     VERSION=${pkg##*-}
+	     PKGNAME=${pkg%-$VERSION}
+	     log_verbose "$dir guessed automake $PKGNAME version $VERSION from name"
+	     ;;
+	 *)
+	     PKGNAME=$pkg
+             guess_version $dir <&-
+	     log_verbose "$dir guessed automake $PKGNAME version $VERSION from scan"
+	     ;;
+	 esac
+      else
+         PKGNAME=${pkg%-$VERSION}
+      fi
+      case $dir in
+      user/lm_sensors)
+	log_verbose "$dir lm_sensors pkg=$pkg"
+	PKGNAME=lm_sensors
+	VERSION=${pkg#V}
+	VERSION=${VERSION//-/.}
+	;;
+      user/sqlite)
+	# makefile says 3390400 but it is really 33.9.4
+	log_verbose "$dir guess_version"
+        guess_version $dir <&-
+	;;
+      lib/libgcgi)
+	VERSION=$PKGNAME-$VERSION
+	PKGNAME=libgcgi
+	;;
+      esac
+      guess_licence $dir/$srcdir <&-; LICENCE="${LICENCE// /-}"
+  else
+      PKGNAME=${dir#*/}
+      guess_version $dir <&-
+      guess_licence $dir <&-; LICENCE="${LICENCE// /-}"
+      log_verbose "$dir guessed last-resort $PKGDIR $VERSION"
+  fi
+  if [[ "$VERSION" == v[0-9]* ]]; then
+      VERSION=${VERSION#v}
+  fi
+  if [ ! "$VERSION" ] && [ "$githash" ]; then
+	log_verbose "$dir falling back on git hash as version"
+	VERSION="$githash"
+  fi
+  if [ ! "$cpe" ]; then
+      cpe=$(guess_cpe $dir)
+      cpe=${cpe:+cpe:2.3:$cpe}
+  fi
+  if [ ! "$purl" ]; then
+	if [[ $DISTURL == *://github.com/* ]]; then
+	    # pURLs for github can be reliably constructed
+	    local uri=${DISTURL#*://github.com/}
+	    local ghrepo=${uri%%/*}
+	    local ghname=${uri#$ghrepo/}; ghname=${ghname%%/*}
+	    local rest=${uri#$ghrepo/$ghname}
+	    local tag=$VERSION
+	    if [[ $ghname = *.git ]]; then
+		ghname=${ghname%.git}
+	    elif [[ $rest == /archive/refs/tags/*.tar.* ]]; then
+		tag=${rest#/archive/refs/tags/}
+		tag=${tag%.tar.*}
+	    elif [[ $rest == /archive/*.tar.* ]]; then
+		tag=${rest#/archive/}
+		tag=${tag%.tar.*}
+	    elif [[ $rest == /releases/download/*tar.* ]]; then
+		tag=${rest#/releases/download/}
+		tag=${tag%/**}
+	    fi
+	    purl="pkg:github/$ghrepo/${ghname%%/*}@$tag"
+	fi
+  fi
+  report $dir "${cpe:-$PKGNAME}" "$VERSION" "$LICENCE" \
+	"$size" "$DISTURL" "$DISTURLHASH" "$purl"
+}
+
+report_linux () {
+  # Kernel version
+  if [ -e $LINUXDIR/include/config/kernel.release ]; then
+	read VERSION <$LINUXDIR/include/config/kernel.release
+	if [[ $VERSION = *-* ]]; then
+	   local localver=${VERSION##*-}
+	   VERSION=${VERSION%-*}:$localver
+	fi
+	guess_licence $LINUXDIR
+	local cpe=$(guess_cpe $LINUXDIR)
+	cpe=${cpe:+cpe:2.3:$cpe}
+	local size=0
+	report ${LINUXDIR#$ROOTDIR/} ${cpe:-linux} $VERSION "$LICENCE" \
+		"$(file_size images/vmlinuz)"
+  fi
+}
+
+report_uboot () {
+  # Bootloader version
+  case $VENDOR/$PRODUCT in
+    OpenGear/IM72*) BL=u-boot-armada31x;;
+    OpenGear/CM71xx | OpenGear/ACM7* | Opengear/CM7196*) BL=u-boot-armada37x;;
+    *) BL=;;
+  esac
+  if [ $BL ] && [ -d $ROOTDIR/$BL ]; then
+    guess_licence $ROOTDIR/$BL
+    local cpe=$(guess_cpe $ROOTDIR/$BL)
+    cpe=${cpe:+cpe:2.3:$cpe}
+    read VERSION < $ROOTDIR/$BL/version.txt
+    report $BL ${cpe:-uboot} "$VERSION" "$LICENCE" \
+		"$(file_size images/bloader.bin)"
+  fi
+}
+
+[ $opt_xtrace ] && set -x
+report_start
+if [ $# -eq 0 ]; then
+  while read dir sz; do
+    progress $dir
+    report_dir $dir $sz
+  done < <(dirs_from_romfs_log)
+  report_linux
+  report_uboot
+else
+  for dir; do
+    case $dir in
+      linux) report_linux;;
+      uboot) report_uboot;;
+      *)     report_dir $dir 0;;
+    esac
+  done
+fi
+report_end

@@ -29,9 +29,9 @@ struct private_data {
 
 	cpumask_var_t cpus;
 	struct device *cpu_dev;
-	struct opp_table *opp_table;
 	struct cpufreq_frequency_table *freq_table;
 	bool have_static_opps;
+	int opp_token;
 };
 
 static LIST_HEAD(priv_list);
@@ -68,12 +68,9 @@ static int set_target(struct cpufreq_policy *policy, unsigned int index)
  */
 static const char *find_supply_name(struct device *dev)
 {
-	struct device_node *np;
+	struct device_node *np __free(device_node) = of_node_get(dev->of_node);
 	struct property *pp;
 	int cpu = dev->id;
-	const char *name = NULL;
-
-	np = of_node_get(dev->of_node);
 
 	/* This must be valid for sure */
 	if (WARN_ON(!np))
@@ -82,22 +79,16 @@ static const char *find_supply_name(struct device *dev)
 	/* Try "cpu0" for older DTs */
 	if (!cpu) {
 		pp = of_find_property(np, "cpu0-supply", NULL);
-		if (pp) {
-			name = "cpu0";
-			goto node_put;
-		}
+		if (pp)
+			return "cpu0";
 	}
 
 	pp = of_find_property(np, "cpu-supply", NULL);
-	if (pp) {
-		name = "cpu";
-		goto node_put;
-	}
+	if (pp)
+		return "cpu";
 
 	dev_dbg(dev, "no regulator for cpu%d\n", cpu);
-node_put:
-	of_node_put(np);
-	return name;
+	return NULL;
 }
 
 static int cpufreq_init(struct cpufreq_policy *policy)
@@ -193,7 +184,7 @@ static int dt_cpufreq_early_init(struct device *dev, int cpu)
 	struct private_data *priv;
 	struct device *cpu_dev;
 	bool fallback = false;
-	const char *reg_name;
+	const char *reg_name[] = { NULL, NULL };
 	int ret;
 
 	/* Check if this CPU is already covered by some other policy */
@@ -208,7 +199,7 @@ static int dt_cpufreq_early_init(struct device *dev, int cpu)
 	if (!priv)
 		return -ENOMEM;
 
-	if (!alloc_cpumask_var(&priv->cpus, GFP_KERNEL))
+	if (!zalloc_cpumask_var(&priv->cpus, GFP_KERNEL))
 		return -ENOMEM;
 
 	cpumask_set_cpu(cpu, priv->cpus);
@@ -218,15 +209,12 @@ static int dt_cpufreq_early_init(struct device *dev, int cpu)
 	 * OPP layer will be taking care of regulators now, but it needs to know
 	 * the name of the regulator first.
 	 */
-	reg_name = find_supply_name(cpu_dev);
-	if (reg_name) {
-		priv->opp_table = dev_pm_opp_set_regulators(cpu_dev, &reg_name,
-							    1);
-		if (IS_ERR(priv->opp_table)) {
-			ret = PTR_ERR(priv->opp_table);
-			if (ret != -EPROBE_DEFER)
-				dev_err(cpu_dev, "failed to set regulators: %d\n",
-					ret);
+	reg_name[0] = find_supply_name(cpu_dev);
+	if (reg_name[0]) {
+		priv->opp_token = dev_pm_opp_set_regulators(cpu_dev, reg_name);
+		if (priv->opp_token < 0) {
+			ret = dev_err_probe(cpu_dev, priv->opp_token,
+					    "failed to set regulators\n");
 			goto free_cpumask;
 		}
 	}
@@ -295,7 +283,7 @@ static int dt_cpufreq_early_init(struct device *dev, int cpu)
 out:
 	if (priv->have_static_opps)
 		dev_pm_opp_of_cpumask_remove_table(priv->cpus);
-	dev_pm_opp_put_regulators(priv->opp_table);
+	dev_pm_opp_put_regulators(priv->opp_token);
 free_cpumask:
 	free_cpumask_var(priv->cpus);
 	return ret;
@@ -309,7 +297,7 @@ static void dt_cpufreq_release(void)
 		dev_pm_opp_free_cpufreq_table(priv->cpu_dev, &priv->freq_table);
 		if (priv->have_static_opps)
 			dev_pm_opp_of_cpumask_remove_table(priv->cpus);
-		dev_pm_opp_put_regulators(priv->opp_table);
+		dev_pm_opp_put_regulators(priv->opp_token);
 		free_cpumask_var(priv->cpus);
 		list_del(&priv->node);
 	}
@@ -352,11 +340,10 @@ err:
 	return ret;
 }
 
-static int dt_cpufreq_remove(struct platform_device *pdev)
+static void dt_cpufreq_remove(struct platform_device *pdev)
 {
 	cpufreq_unregister_driver(&dt_cpufreq_driver);
 	dt_cpufreq_release();
-	return 0;
 }
 
 static struct platform_driver dt_cpufreq_platdrv = {
@@ -364,7 +351,7 @@ static struct platform_driver dt_cpufreq_platdrv = {
 		.name	= "cpufreq-dt",
 	},
 	.probe		= dt_cpufreq_probe,
-	.remove		= dt_cpufreq_remove,
+	.remove_new	= dt_cpufreq_remove,
 };
 module_platform_driver(dt_cpufreq_platdrv);
 

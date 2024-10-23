@@ -28,6 +28,16 @@ config LIB_FLEX
 	bool "Build flex"
 	default n
 
+config LIB_PROTOBUF_C
+	bool "Build protobuf-c"
+	select LIB_PROTOBUF
+	default n
+
+config LIB_PROTOBUF
+	bool "Build protobuf"
+	select LIB_ABSL_CPP
+	default n
+
 config LIB_BFD
 	bool "Build libbfd"
 	default n
@@ -69,8 +79,8 @@ config LIB_LIBLZMA
 	bool "Build liblzma"
 	default n
 
-config LIB_LIBLZO
-	bool "Build liblzo"
+config LIB_LIBLZ4
+	bool "Build liblz4"
 	default n
 
 config LIB_LIBNET
@@ -112,6 +122,11 @@ config USER_PAM_PORTAUTH
 
 config LIB_LIBPCAP
 	bool "Build libPCAP"
+	default n
+
+config LIB_LIBPCAPNG
+	bool "Build Digi pcap library"
+	select LIB_LIBPCAP
 	default n
 
 config LIB_LIBPCAP_STATIC
@@ -177,10 +192,6 @@ config LIB_ARES
 	default n
 	help
 	  An asynchronous resolver with more features than the uClibc resolver.
-
-config LIB_OSIP2
-	bool "Build libosip2"
-	default n
 
 config LIB_PWLIB
 	bool 'Build pwlib'
@@ -266,5 +277,13 @@ config C_PLUS_PLUS
 	bool "c++" if LIB_INSTALL_LIBSTDCPLUS || LIB_STLPORT
 
 endmenu
+
+config LIBC_NOCRYPT
+	default n
+	bool
+	help
+	  Inhibit libc from including its own crypt() or libcrypt.so.
+	  This is automatically selected by libraries that provide
+	  libcrypt.so.
 
 #############################################################################

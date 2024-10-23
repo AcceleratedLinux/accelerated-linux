@@ -11,7 +11,7 @@ IMAGESIZE = 47185920 # 45MB
 
 SIGNING_ALG = ecdsa
 
-DTB       = imx6ul-ix14.dtb
+DTB       = nxp/imx/imx6ul-ix14.dtb
 
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)

@@ -1,3 +1,5 @@
+URL := https://curl.se/download/curl-8.9.1.tar.xz
+
 CONFOPTS :=	--enable-dependency-tracking \
 		--disable-largefile \
 		--enable-http \
@@ -12,7 +14,7 @@ CONFOPTS :=	--enable-dependency-tracking \
 		--disable-ldap \
 		--disable-ldaps \
 		--disable-rtsp \
-		--disable-proxy \
+		--enable-proxy \
 		--disable-dict \
 		--disable-telnet \
 		--disable-manual \
@@ -39,7 +41,6 @@ else
 CONFOPTS += --without-ssl
 endif
 
-URL := https://curl.haxx.se/download/curl-7.85.0.tar.bz2
 ROMFS = curl_romfs
 MAKEVARS = 
 include $(ROOTDIR)/tools/automake.inc

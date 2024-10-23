@@ -19,8 +19,6 @@
  * Migration is a command line option. When used on non-numa machines will 
  * exit with error. Test is still usefull on non-numa for testing IPIs.
  */
-
-#define _GNU_SOURCE /* for program_invocation_short_name */
 #include <getopt.h>
 #include <pthread.h>
 #include <inttypes.h>
@@ -38,9 +36,6 @@
 
 /* Default delay between migrate_pages calls (microseconds) */
 #define DEFAULT_DELAY_USECS 500000
-
-#define HALTER_VCPU_ID 0
-#define SENDER_VCPU_ID 1
 
 /*
  * Vector for IPI from sender vCPU to halting vCPU.
@@ -79,8 +74,7 @@ struct test_data_page {
 
 struct thread_params {
 	struct test_data_page *data;
-	struct kvm_vm *vm;
-	uint32_t vcpu_id;
+	struct kvm_vcpu *vcpu;
 	uint64_t *pipis_rcvd; /* host address of ipis_rcvd global */
 };
 
@@ -198,33 +192,30 @@ static void sender_guest_code(struct test_data_page *data)
 static void *vcpu_thread(void *arg)
 {
 	struct thread_params *params = (struct thread_params *)arg;
+	struct kvm_vcpu *vcpu = params->vcpu;
 	struct ucall uc;
 	int old;
 	int r;
-	unsigned int exit_reason;
 
 	r = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old);
 	TEST_ASSERT(r == 0,
 		    "pthread_setcanceltype failed on vcpu_id=%u with errno=%d",
-		    params->vcpu_id, r);
+		    vcpu->id, r);
 
-	fprintf(stderr, "vCPU thread running vCPU %u\n", params->vcpu_id);
-	vcpu_run(params->vm, params->vcpu_id);
-	exit_reason = vcpu_state(params->vm, params->vcpu_id)->exit_reason;
+	fprintf(stderr, "vCPU thread running vCPU %u\n", vcpu->id);
+	vcpu_run(vcpu);
 
-	TEST_ASSERT(exit_reason == KVM_EXIT_IO,
-		    "vCPU %u exited with unexpected exit reason %u-%s, expected KVM_EXIT_IO",
-		    params->vcpu_id, exit_reason, exit_reason_str(exit_reason));
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
 
-	if (get_ucall(params->vm, params->vcpu_id, &uc) == UCALL_ABORT) {
+	if (get_ucall(vcpu, &uc) == UCALL_ABORT) {
 		TEST_ASSERT(false,
 			    "vCPU %u exited with error: %s.\n"
 			    "Sending vCPU sent %lu IPIs to halting vCPU\n"
 			    "Halting vCPU halted %lu times, woke %lu times, received %lu IPIs.\n"
 			    "Halter TPR=%#x PPR=%#x LVR=%#x\n"
 			    "Migrations attempted: %lu\n"
-			    "Migrations completed: %lu\n",
-			    params->vcpu_id, (const char *)uc.args[0],
+			    "Migrations completed: %lu",
+			    vcpu->id, (const char *)uc.args[0],
 			    params->data->ipis_sent, params->data->hlt_count,
 			    params->data->wake_count,
 			    *params->pipis_rcvd, params->data->halter_tpr,
@@ -236,7 +227,7 @@ static void *vcpu_thread(void *arg)
 	return NULL;
 }
 
-static void cancel_join_vcpu_thread(pthread_t thread, uint32_t vcpu_id)
+static void cancel_join_vcpu_thread(pthread_t thread, struct kvm_vcpu *vcpu)
 {
 	void *retval;
 	int r;
@@ -244,12 +235,12 @@ static void cancel_join_vcpu_thread(pthread_t thread, uint32_t vcpu_id)
 	r = pthread_cancel(thread);
 	TEST_ASSERT(r == 0,
 		    "pthread_cancel on vcpu_id=%d failed with errno=%d",
-		    vcpu_id, r);
+		    vcpu->id, r);
 
 	r = pthread_join(thread, &retval);
 	TEST_ASSERT(r == 0,
 		    "pthread_join on vcpu_id=%d failed with errno=%d",
-		    vcpu_id, r);
+		    vcpu->id, r);
 	TEST_ASSERT(retval == PTHREAD_CANCELED,
 		    "expected retval=%p, got %p", PTHREAD_CANCELED,
 		    retval);
@@ -295,7 +286,7 @@ void do_migrations(struct test_data_page *data, int run_secs, int delay_usecs,
 	}
 
 	TEST_ASSERT(nodes > 1,
-		    "Did not find at least 2 numa nodes. Can't do migration\n");
+		    "Did not find at least 2 numa nodes. Can't do migration");
 
 	fprintf(stderr, "Migrating amongst %d nodes found\n", nodes);
 
@@ -354,7 +345,7 @@ void do_migrations(struct test_data_page *data, int run_secs, int delay_usecs,
 				    wake_count != data->wake_count,
 				    "IPI, HLT and wake count have not increased "
 				    "in the last %lu seconds. "
-				    "HLTer is likely hung.\n", interval_secs);
+				    "HLTer is likely hung.", interval_secs);
 
 			ipis_sent = data->ipis_sent;
 			hlt_count = data->hlt_count;
@@ -388,7 +379,7 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 				    "-m adds calls to migrate_pages while vCPUs are running."
 				    " Default is no migrations.\n"
 				    "-d <delay microseconds> - delay between migrate_pages() calls."
-				    " Default is %d microseconds.\n",
+				    " Default is %d microseconds.",
 				    DEFAULT_RUN_SECS, DEFAULT_DELAY_USECS);
 		}
 	}
@@ -415,34 +406,28 @@ int main(int argc, char *argv[])
 	if (delay_usecs <= 0)
 		delay_usecs = DEFAULT_DELAY_USECS;
 
-	vm = vm_create_default(HALTER_VCPU_ID, 0, halter_guest_code);
-	params[0].vm = vm;
-	params[1].vm = vm;
+	vm = vm_create_with_one_vcpu(&params[0].vcpu, halter_guest_code);
 
-	vm_init_descriptor_tables(vm);
-	vcpu_init_descriptor_tables(vm, HALTER_VCPU_ID);
 	vm_install_exception_handler(vm, IPI_VECTOR, guest_ipi_handler);
 
 	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
 
-	vm_vcpu_add_default(vm, SENDER_VCPU_ID, sender_guest_code);
+	params[1].vcpu = vm_vcpu_add(vm, 1, sender_guest_code);
 
 	test_data_page_vaddr = vm_vaddr_alloc_page(vm);
-	data =
-	   (struct test_data_page *)addr_gva2hva(vm, test_data_page_vaddr);
+	data = addr_gva2hva(vm, test_data_page_vaddr);
 	memset(data, 0, sizeof(*data));
 	params[0].data = data;
 	params[1].data = data;
 
-	vcpu_args_set(vm, HALTER_VCPU_ID, 1, test_data_page_vaddr);
-	vcpu_args_set(vm, SENDER_VCPU_ID, 1, test_data_page_vaddr);
+	vcpu_args_set(params[0].vcpu, 1, test_data_page_vaddr);
+	vcpu_args_set(params[1].vcpu, 1, test_data_page_vaddr);
 
 	pipis_rcvd = (uint64_t *)addr_gva2hva(vm, (uint64_t)&ipis_rcvd);
 	params[0].pipis_rcvd = pipis_rcvd;
 	params[1].pipis_rcvd = pipis_rcvd;
 
 	/* Start halter vCPU thread and wait for it to execute first HLT. */
-	params[0].vcpu_id = HALTER_VCPU_ID;
 	r = pthread_create(&threads[0], NULL, vcpu_thread, &params[0]);
 	TEST_ASSERT(r == 0,
 		    "pthread_create halter failed errno=%d", errno);
@@ -462,7 +447,6 @@ int main(int argc, char *argv[])
 		"Halter vCPU thread reported its APIC ID: %u after %d seconds.\n",
 		data->halter_apic_id, wait_secs);
 
-	params[1].vcpu_id = SENDER_VCPU_ID;
 	r = pthread_create(&threads[1], NULL, vcpu_thread, &params[1]);
 	TEST_ASSERT(r == 0, "pthread_create sender failed errno=%d", errno);
 
@@ -478,8 +462,8 @@ int main(int argc, char *argv[])
 	/*
 	 * Cancel threads and wait for them to stop.
 	 */
-	cancel_join_vcpu_thread(threads[0], HALTER_VCPU_ID);
-	cancel_join_vcpu_thread(threads[1], SENDER_VCPU_ID);
+	cancel_join_vcpu_thread(threads[0], params[0].vcpu);
+	cancel_join_vcpu_thread(threads[1], params[1].vcpu);
 
 	fprintf(stderr,
 		"Test successful after running for %d seconds.\n"

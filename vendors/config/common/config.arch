@@ -6,6 +6,7 @@ export UCLINUX_DIST
 
 # ROOTDIR must be set by the initial makefile
 export ROOTDIR
+export CCACHE_BASEDIR ?= $(ROOTDIR)
 
 TOOLS_CONFIG = $(ROOTDIR)/.sgbuilt_toolchain
 export TOOLS_CONFIG
@@ -102,6 +103,9 @@ export LINUX_CONFIG CONFIG_CONFIG MODULES_CONFIG ARCH_CONFIG
 HOSTCC ?= cc
 HOSTCXX ?= c++
 export HOSTCC HOSTCXX
+
+# Common flags for enabling debug symbols
+CFLAGS_DEBUG ?= -gdwarf -fvar-tracking-assignments
 
 ifndef HOSTBUILD
 -include $(ARCH_CONFIG)
@@ -229,9 +233,12 @@ endif
 	# (with thanks to Kbuild in 2.6)
 	# LDFLAGS += $(shell if $(CC) -Wl,--fatal-warnings -nostdlib -xc /dev/null -o /tmp/$$$$.out > /dev/null 2>&1; then echo "-Wl,--fatal-warnings"; rm /tmp/$$$$.out; fi;)
 
-	PKG_CONFIG_PATH   = $(STAGEDIR)/lib/pkgconfig:$(STAGEDIR)/lib:$(STAGEDIR)/share/pkgconfig
-	PKG_CONFIG_LIBDIR = $(STAGEDIR)/lib/pkgconfig
+	PKG_CONFIG_PATH        =
+	PKG_CONFIG_LIBDIR      = $(STAGEDIR)/lib/pkgconfig:$(STAGEDIR)/lib:$(STAGEDIR)/share/pkgconfig
+	PKG_CONFIG_SYSROOT_DIR = $(STAGEDIR)
 	GLIBJ_ZIP=$(STAGEDIR)/lib/classpath/install/share/classpath/glibj.zip
+
+	
 endif
 ############################################################################
 

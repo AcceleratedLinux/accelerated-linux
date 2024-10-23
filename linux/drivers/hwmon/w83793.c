@@ -285,13 +285,13 @@ static int w83793_write_value(struct i2c_client *client, u16 reg, u8 value);
 static int w83793_probe(struct i2c_client *client);
 static int w83793_detect(struct i2c_client *client,
 			 struct i2c_board_info *info);
-static int w83793_remove(struct i2c_client *client);
+static void w83793_remove(struct i2c_client *client);
 static void w83793_init_client(struct i2c_client *client);
 static void w83793_update_nonvolatile(struct device *dev);
 static struct w83793_data *w83793_update_device(struct device *dev);
 
 static const struct i2c_device_id w83793_id[] = {
-	{ "w83793", 0 },
+	{ "w83793" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, w83793_id);
@@ -301,7 +301,7 @@ static struct i2c_driver w83793_driver = {
 	.driver = {
 		   .name = "w83793",
 	},
-	.probe_new	= w83793_probe,
+	.probe		= w83793_probe,
 	.remove		= w83793_remove,
 	.id_table	= w83793_id,
 	.detect		= w83793_detect,
@@ -1495,7 +1495,7 @@ static struct notifier_block watchdog_notifier = {
  * Init / remove routines
  */
 
-static int w83793_remove(struct i2c_client *client)
+static void w83793_remove(struct i2c_client *client)
 {
 	struct w83793_data *data = i2c_get_clientdata(client);
 	struct device *dev = &client->dev;
@@ -1554,8 +1554,6 @@ static int w83793_remove(struct i2c_client *client)
 	mutex_lock(&watchdog_data_mutex);
 	kref_put(&data->kref, w83793_release_resources);
 	mutex_unlock(&watchdog_data_mutex);
-
-	return 0;
 }
 
 static int
@@ -1636,7 +1634,7 @@ static int w83793_detect(struct i2c_client *client,
 	if (chip_id != 0x7b)
 		return -ENODEV;
 
-	strlcpy(info->type, "w83793", I2C_NAME_SIZE);
+	strscpy(info->type, "w83793", I2C_NAME_SIZE);
 
 	return 0;
 }

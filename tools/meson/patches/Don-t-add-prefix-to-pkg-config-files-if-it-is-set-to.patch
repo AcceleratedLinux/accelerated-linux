@@ -9,19 +9,16 @@ format like '//include', which may cause build errors.
  mesonbuild/modules/pkgconfig.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/mesonbuild/modules/pkgconfig.py b/mesonbuild/modules/pkgconfig.py
-index ffced12..e7d7542 100644
---- a/mesonbuild/modules/pkgconfig.py
-+++ b/mesonbuild/modules/pkgconfig.py
-@@ -344,7 +344,7 @@ class PkgConfigModule(ExtensionModule):
-         fname = os.path.join(outdir, pcfile)
-         with open(fname, 'w', encoding='utf-8') as ofile:
-             if not dataonly:
--                ofile.write('prefix={}\n'.format(self._escape(prefix)))
-+                ofile.write('prefix={}\n'.format(self._escape(prefix) if str(prefix) != '/' else ''))
-                 if uninstalled:
-                     ofile.write('srcdir={}\n'.format(self._escape(srcdir)))
-                 ofile.write('libdir={}\n'.format(self._escape('${prefix}' / libdir)))
--- 
-2.27.0
-
+Index: meson-1.4.1/mesonbuild/modules/pkgconfig.py
+===================================================================
+--- meson-1.4.1.orig/mesonbuild/modules/pkgconfig.py
++++ meson-1.4.1/mesonbuild/modules/pkgconfig.py
+@@ -497,7 +497,7 @@ class PkgConfigModule(NewExtensionModule
+             for optname in optnames:
+                 if optname in referenced_vars - varnames:
+                     if optname == 'prefix':
+-                        ofile.write('prefix={}\n'.format(self._escape(prefix)))
++                        ofile.write('prefix={}\n'.format(self._escape(prefix) if str(prefix) != '/' else ''))
+                     else:
+                         dirpath = PurePath(_as_str(coredata.get_option(mesonlib.OptionKey(optname))))
+                         ofile.write('{}={}\n'.format(optname, self._escape('${prefix}' / dirpath)))

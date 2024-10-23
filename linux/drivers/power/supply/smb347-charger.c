@@ -1528,9 +1528,9 @@ static const struct regulator_desc smb347_usb_vbus_regulator_desc = {
 	.n_voltages	= 1,
 };
 
-static int smb347_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int smb347_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct power_supply_config mains_usb_cfg = {};
 	struct regulator_config usb_rdev_cfg = {};
 	struct device *dev = &client->dev;
@@ -1595,14 +1595,12 @@ static int smb347_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int smb347_remove(struct i2c_client *client)
+static void smb347_remove(struct i2c_client *client)
 {
 	struct smb347_charger *smb = i2c_get_clientdata(client);
 
 	smb347_usb_vbus_regulator_disable(smb->usb_rdev);
 	smb347_irq_disable(smb);
-
-	return 0;
 }
 
 static void smb347_shutdown(struct i2c_client *client)

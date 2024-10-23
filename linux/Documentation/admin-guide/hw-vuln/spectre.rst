@@ -138,11 +138,10 @@ associated with the source address of the indirect branch. Specifically,
 the BHB might be shared across privilege levels even in the presence of
 Enhanced IBRS.
 
-Currently the only known real-world BHB attack vector is via
-unprivileged eBPF. Therefore, it's highly recommended to not enable
-unprivileged eBPF, especially when eIBRS is used (without retpolines).
-For a full mitigation against BHB attacks, it's recommended to use
-retpolines (or eIBRS combined with retpolines).
+Previously the only known real-world BHB attack vector was via unprivileged
+eBPF. Further research has found attacks that don't require unprivileged eBPF.
+For a full mitigation against BHB attacks it is recommended to set BHI_DIS_S or
+use the BHB clearing sequence.
 
 Attack scenarios
 ----------------
@@ -422,6 +421,31 @@ The possible values in this file are:
   'RSB filling'   Protection of RSB on context switch enabled
   =============   ===========================================
 
+  - EIBRS Post-barrier Return Stack Buffer (PBRSB) protection status:
+
+  ===========================  =======================================================
+  'PBRSB-eIBRS: SW sequence'   CPU is affected and protection of RSB on VMEXIT enabled
+  'PBRSB-eIBRS: Vulnerable'    CPU is vulnerable
+  'PBRSB-eIBRS: Not affected'  CPU is not affected by PBRSB
+  ===========================  =======================================================
+
+  - Branch History Injection (BHI) protection status:
+
+.. list-table::
+
+ * - BHI: Not affected
+   - System is not affected
+ * - BHI: Retpoline
+   - System is protected by retpoline
+ * - BHI: BHI_DIS_S
+   - System is protected by BHI_DIS_S
+ * - BHI: SW loop, KVM SW loop
+   - System is protected by software clearing sequence
+ * - BHI: Vulnerable
+   - System is vulnerable to BHI
+ * - BHI: Vulnerable, KVM: SW loop
+   - System is vulnerable; KVM is protected by software clearing sequence
+
 Full mitigation might require a microcode update from the CPU
 vendor. When the necessary microcode is not available, the kernel will
 report vulnerability.
@@ -465,14 +489,29 @@ Spectre variant 2
    -mindirect-branch=thunk-extern -mindirect-branch-register options.
    If the kernel is compiled with a Clang compiler, the compiler needs
    to support -mretpoline-external-thunk option.  The kernel config
-   CONFIG_RETPOLINE needs to be turned on, and the CPU needs to run with
-   the latest updated microcode.
+   CONFIG_MITIGATION_RETPOLINE needs to be turned on, and the CPU needs
+   to run with the latest updated microcode.
 
    On Intel Skylake-era systems the mitigation covers most, but not all,
    cases. See :ref:`[3] <spec_ref3>` for more details.
 
-   On CPUs with hardware mitigation for Spectre variant 2 (e.g. Enhanced
-   IBRS on x86), retpoline is automatically disabled at run time.
+   On CPUs with hardware mitigation for Spectre variant 2 (e.g. IBRS
+   or enhanced IBRS on x86), retpoline is automatically disabled at run time.
+
+   Systems which support enhanced IBRS (eIBRS) enable IBRS protection once at
+   boot, by setting the IBRS bit, and they're automatically protected against
+   some Spectre v2 variant attacks. The BHB can still influence the choice of
+   indirect branch predictor entry, and although branch predictor entries are
+   isolated between modes when eIBRS is enabled, the BHB itself is not isolated
+   between modes. Systems which support BHI_DIS_S will set it to protect against
+   BHI attacks.
+
+   On Intel's enhanced IBRS systems, this includes cross-thread branch target
+   injections on SMT systems (STIBP). In other words, Intel eIBRS enables
+   STIBP, too.
+
+   AMD Automatic IBRS does not protect userspace, and Legacy IBRS systems clear
+   the IBRS bit on exit to userspace, therefore both explicitly enable STIBP.
 
    The retpoline mitigation is turned on by default on vulnerable
    CPUs. It can be forced on or off by the administrator
@@ -496,9 +535,12 @@ Spectre variant 2
    For Spectre variant 2 mitigation, individual user programs
    can be compiled with return trampolines for indirect branches.
    This protects them from consuming poisoned entries in the branch
-   target buffer left by malicious software.  Alternatively, the
-   programs can disable their indirect branch speculation via prctl()
-   (See :ref:`Documentation/userspace-api/spec_ctrl.rst <set_spec_ctrl>`).
+   target buffer left by malicious software.
+
+   On legacy IBRS systems, at return to userspace, implicit STIBP is disabled
+   because the kernel clears the IBRS bit. In this case, the userspace programs
+   can disable indirect branch speculation via prctl() (See
+   :ref:`Documentation/userspace-api/spec_ctrl.rst <set_spec_ctrl>`).
    On x86, this will turn on STIBP to guard against attacks from the
    sibling thread when the user program is running, and use IBPB to
    flush the branch target buffer when switching to/from the program.
@@ -587,8 +629,8 @@ kernel command line.
 		Selecting 'on' will, and 'auto' may, choose a
 		mitigation method at run time according to the
 		CPU, the available microcode, the setting of the
-		CONFIG_RETPOLINE configuration option, and the
-		compiler with which the kernel was built.
+		CONFIG_MITIGATION_RETPOLINE configuration option,
+		and the compiler with which the kernel was built.
 
 		Selecting 'on' will also enable the mitigation
 		against user space to user space task attacks.
@@ -602,9 +644,10 @@ kernel command line.
                 retpoline,generic       Retpolines
                 retpoline,lfence        LFENCE; indirect branch
                 retpoline,amd           alias for retpoline,lfence
-                eibrs                   enhanced IBRS
-                eibrs,retpoline         enhanced IBRS + Retpolines
-                eibrs,lfence            enhanced IBRS + LFENCE
+                eibrs                   Enhanced/Auto IBRS
+                eibrs,retpoline         Enhanced/Auto IBRS + Retpolines
+                eibrs,lfence            Enhanced/Auto IBRS + LFENCE
+                ibrs                    use IBRS to protect kernel
 
 		Not specifying this option is equivalent to
 		spectre_v2=auto.
@@ -614,6 +657,18 @@ kernel command line.
 		disable Spectre variant 2 mitigations, boot with
 		spectre_v2=off. Spectre variant 1 mitigations
 		cannot be disabled.
+
+	spectre_bhi=
+
+		[X86] Control mitigation of Branch History Injection
+		(BHI) vulnerability.  This setting affects the deployment
+		of the HW BHI control and the SW BHB clearing sequence.
+
+		on
+			(default) Enable the HW or SW mitigation as
+			needed.
+		off
+			Disable the mitigation.
 
 For spectre_v2_user see Documentation/admin-guide/kernel-parameters.txt
 

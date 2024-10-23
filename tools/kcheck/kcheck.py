@@ -3,7 +3,7 @@
 import os
 import sys
 import json
-from pathlib import Path
+import pathlib
 import kconfiglib
 from kconfiglib import Symbol, BOOL, TRISTATE
 from enum import IntEnum
@@ -57,6 +57,7 @@ def _select_all_Symbols(node):
                 yield item
         node = node.next
 
+
 def uniq(l):
     """ Remove duplicates from sorted list l """
     i = 1
@@ -67,26 +68,40 @@ def uniq(l):
             i += 1
     return l
 
+def dirprefix(path):
+    """ Returns the string that can be consistently prepended to
+        another path to make it relative to the directory identified by
+        the path argument.
+        This means the following expression is always meanigful:
+            dirprefix(dir) + filename
+    """
+    if path == "." or path == "./":
+        return ""
+    elif path == "" or path.endswith('/'):
+        return path
+    else:
+        return path + '/'
+
 class Section():
     def __init__(self,
                  config_dir,
                  predefined_product_config_file,
-                 Kconfig_directory):
-        self.config_dir = config_dir
-        self.root_dir = os.environ.get('ROOTDIR', os.getcwd())
+                 Kconfig_dir):
+        self.config_dir = dirprefix(config_dir)
+        self.root_dir = ""
         self.predefined_product_config_file = predefined_product_config_file
-        self.Kconfig_directory = Kconfig_directory
+        self.Kconfig_dir = dirprefix(Kconfig_dir)
         if self.config_dir is None or self.config_dir == self.root_dir:
             self.config_file = (
-                f"{self.root_dir}{self.Kconfig_directory}/.config")
+                f"{self.root_dir}{self.Kconfig_dir}.config")
         else:
             self.config_file = (
-                f"{self.config_dir}/{self.predefined_product_config_file}")
+                f"{self.config_dir}{self.predefined_product_config_file}")
         self._load_config()
 
     def _load_config(self):
-        os.environ["srctree"] = f"{self.root_dir}{self.Kconfig_directory}"
-        Kconfig_path = f"{self.root_dir}{self.Kconfig_directory}/Kconfig"
+        os.environ["srctree"] = f"{self.root_dir}{self.Kconfig_dir}"
+        Kconfig_path = f"{self.root_dir}{self.Kconfig_dir}Kconfig"
         self.Kconfig = kconfiglib.Kconfig(Kconfig_path, False)
         self.Kconfig.load_config(self.config_file)
         self.item = dict()
@@ -123,7 +138,7 @@ class DeviceSection(Section):
                 f"DEFAULTS_{product['vendor']}_{product['product']}")
             if self.check_value(name):
                 print(f"Found {product['vendor']} {product['product']}",
-                    file=sys.stderr)
+                      file=sys.stderr)
                 return product
 
         # Offer some useful error messages before raising
@@ -226,7 +241,6 @@ class SectionError(dict):
 
 class Config():
     def __init__(self, products, config_dir, product=None):
-        config_dir = os.path.abspath(config_dir)
 
         device_section = DeviceSection(config_dir, "config.device", "")
 
@@ -244,10 +258,10 @@ class Config():
 
         self.sections = dict(
             device=device_section,
-            linux=Section(config_dir, "config.linux", "/linux"),
-            modules=Section(config_dir, "config.modules", "/modules"),
-            user=Section(config_dir, "config.vendor", "/config")
-            )
+            linux=Section(config_dir, "config.linux", "linux"),
+            modules=Section(config_dir, "config.modules", "modules"),
+            user=Section(config_dir, "config.vendor", "config")
+        )
 
     def get_section_names(self):
         return self.sections.keys()
@@ -260,13 +274,15 @@ class Config():
             self.sections[section_name].write()
         self.sections["device"].write_product_info(self.product)
 
+
 class MultiValue:
     """Accumulates the value(-list)s assigned to a symbol
        and can be asked to resolve to the 'most-specific' assigned value. """
+
     def __init__(self, initial_value=None, initial_context='*init*', name="?"):
         self.groups = set()
         self.values = []
-        self.name = name       # only used in warning messages
+        self.name = name  # only used in warning messages
         self._resolved = False
         if initial_value is not None:
             self.add_value(initial_value, initial_context)
@@ -295,7 +311,7 @@ class MultiValue:
         v0 = uniq(sorted(v[0] for v in self._candidates))
         if len(v0) > 1:
             print(f"{self.name}: conflicting values assigned")
-            for value,context in self.values:
+            for value, context in self.values:
                 print(f"  {value!r} from {context}")
             print(f"  using {self.resolve_multi()}")
 
@@ -311,12 +327,20 @@ class MultiValue:
         self.resolve()
         return self._candidates[0] if self._candidates else []
 
+
 class Product():
     def __init__(self, config, products, groups):
         # products is unused.
         self.config = config
         self.groups = set()
         self._load(self.config.product, groups)
+
+    def __repr__(self):
+        nitems = sum(map(len, self.item.values()))
+        return (f"<Product {self.name!r}" +
+                f", {len(self.groups)} groups" +
+                f", {sum(map(len, self.item.values()))} items" +
+                f">")
 
     @property
     def _section_names(self):
@@ -325,6 +349,8 @@ class Product():
     def _load(self, product, groups):
         self.item = dict()
         self.name = product['name']
+        self.product_name = product['product']
+        self.vendor_name = product['vendor']
         for section_name in self._section_names:
             self.item[section_name] = dict()
         self._load_product(product, groups)
@@ -371,7 +397,7 @@ class Product():
                 item = items[name]
                 if item.str_value not in map(str, vals):
                     errors.add_mismatch(name, item.str_value, vals_repr,
-                        multival.groups)
+                                        multival.groups)
                 elif not item.assignable:
                     errors.add_unneeded(name, vals_repr, multival.groups)
                 elif len(vals) > 1 and str(vals[0]) != item.str_value:
@@ -432,10 +458,11 @@ class Product():
 
     def print_errors(self, errors):
         for section_name in self._section_names:
-            self._print_section_errors(section_name, errors[section_name])
+            if section_name in errors:
+                self._print_section_errors(section_name, errors[section_name])
 
 
-def test(product):
+def test(product, rootdir = '.', schemapath = "prop/config/schema/accns.schema"):
     def get_name(schema):
         for name in ['title', 'label']:
             if name in schema:
@@ -483,10 +510,7 @@ def test(product):
 
     dictionary = {}
 
-    try:
-        content = Path("prop/config/schema/accns.schema").read_text()
-    except OSError:
-        return dictionary
+    content = pathlib.Path(rootdir, schemapath).read_text()
     schema = json.loads(content)
 
     prop = schema['properties']

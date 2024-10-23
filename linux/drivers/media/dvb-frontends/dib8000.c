@@ -13,7 +13,7 @@
 #include <linux/mutex.h>
 #include <asm/div64.h>
 
-#include <media/dvb_math.h>
+#include <linux/int_log.h>
 
 #include <media/dvb_frontend.h>
 
@@ -3212,7 +3212,7 @@ static int dib8000_tune(struct dvb_frontend *fe)
 
 	case CT_DEMOD_STEP_6: /* (36)  if there is an input (diversity) */
 		if ((state->fe[1] != NULL) && (state->output_mode != OUTMODE_DIVERSITY)) {
-			/* if there is a diversity fe in input and this fe is has not already failed : wait here until this this fe has succedeed or failed */
+			/* if there is a diversity fe in input and this fe is has not already failed : wait here until this fe has succeeded or failed */
 			if (dib8000_get_status(state->fe[1]) <= FE_STATUS_STD_SUCCESS) /* Something is locked on the input fe */
 				*tune_state = CT_DEMOD_STEP_8; /* go for mpeg */
 			else if (dib8000_get_status(state->fe[1]) >= FE_STATUS_TUNE_TIME_TOO_SHORT) { /* fe in input failed also, break the current one */
@@ -4527,7 +4527,7 @@ void *dib8000_attach(struct dib8000_ops *ops)
 
 	return ops;
 }
-EXPORT_SYMBOL(dib8000_attach);
+EXPORT_SYMBOL_GPL(dib8000_attach);
 
 MODULE_AUTHOR("Olivier Grenie <Olivier.Grenie@parrot.com, Patrick Boettcher <patrick.boettcher@posteo.de>");
 MODULE_DESCRIPTION("Driver for the DiBcom 8000 ISDB-T demodulator");

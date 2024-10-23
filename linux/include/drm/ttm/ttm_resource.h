@@ -89,6 +89,38 @@ struct ttm_resource_manager_func {
 		     struct ttm_resource *res);
 
 	/**
+	 * struct ttm_resource_manager_func member intersects
+	 *
+	 * @man: Pointer to a memory type manager.
+	 * @res: Pointer to a struct ttm_resource to be checked.
+	 * @place: Placement to check against.
+	 * @size: Size of the check.
+	 *
+	 * Test if @res intersects with @place + @size. Used to judge if
+	 * evictions are valueable or not.
+	 */
+	bool (*intersects)(struct ttm_resource_manager *man,
+			   struct ttm_resource *res,
+			   const struct ttm_place *place,
+			   size_t size);
+
+	/**
+	 * struct ttm_resource_manager_func member compatible
+	 *
+	 * @man: Pointer to a memory type manager.
+	 * @res: Pointer to a struct ttm_resource to be checked.
+	 * @place: Placement to check against.
+	 * @size: Size of the check.
+	 *
+	 * Test if @res compatible with @place + @size. Used to check of
+	 * the need to move the backing store or not.
+	 */
+	bool (*compatible)(struct ttm_resource_manager *man,
+			   struct ttm_resource *res,
+			   const struct ttm_place *place,
+			   size_t size);
+
+	/**
 	 * struct ttm_resource_manager_func member debug
 	 *
 	 * @man: Pointer to a memory type manager.
@@ -165,7 +197,7 @@ struct ttm_bus_placement {
  * struct ttm_resource
  *
  * @start: Start of the allocation.
- * @num_pages: Actual size of resource in pages.
+ * @size: Actual size of resource in bytes.
  * @mem_type: Resource type of the allocation.
  * @placement: Placement flags.
  * @bus: Placement on io bus accessible to the CPU
@@ -176,7 +208,7 @@ struct ttm_bus_placement {
  */
 struct ttm_resource {
 	unsigned long start;
-	unsigned long num_pages;
+	size_t size;
 	uint32_t mem_type;
 	uint32_t placement;
 	struct ttm_bus_placement bus;
@@ -219,6 +251,9 @@ struct ttm_lru_bulk_move_pos {
  *
  * Container for the current bulk move state. Should be used with
  * ttm_lru_bulk_move_init() and ttm_bo_set_bulk_move().
+ * All BOs in a bulk_move structure need to share the same reservation object to
+ * ensure that the bulk as a whole is locked for eviction even if only one BO of
+ * the bulk is evicted.
  */
 struct ttm_lru_bulk_move {
 	struct ttm_lru_bulk_move_pos pos[TTM_NUM_MEM_TYPES][TTM_MAX_BO_PRIORITY];
@@ -329,8 +364,13 @@ int ttm_resource_alloc(struct ttm_buffer_object *bo,
 		       const struct ttm_place *place,
 		       struct ttm_resource **res);
 void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource **res);
-bool ttm_resource_compat(struct ttm_resource *res,
-			 struct ttm_placement *placement);
+bool ttm_resource_intersects(struct ttm_device *bdev,
+			     struct ttm_resource *res,
+			     const struct ttm_place *place,
+			     size_t size);
+bool ttm_resource_compatible(struct ttm_resource *res,
+			     struct ttm_placement *placement,
+			     bool evicting);
 void ttm_resource_set_bo(struct ttm_resource *res,
 			 struct ttm_buffer_object *bo);
 

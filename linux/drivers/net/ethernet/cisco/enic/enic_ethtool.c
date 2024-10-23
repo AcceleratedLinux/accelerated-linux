@@ -1,20 +1,5 @@
-/*
- * Copyright 2013 Cisco Systems, Inc.  All rights reserved.
- *
- * This program is free software; you may redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 of the License.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright 2013 Cisco Systems, Inc.  All rights reserved.
 
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
@@ -146,10 +131,10 @@ static void enic_get_drvinfo(struct net_device *netdev,
 	if (err == -ENOMEM)
 		return;
 
-	strlcpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->fw_version, fw_info->fw_version,
+	strscpy(drvinfo->driver, DRV_NAME, sizeof(drvinfo->driver));
+	strscpy(drvinfo->fw_version, fw_info->fw_version,
 		sizeof(drvinfo->fw_version));
-	strlcpy(drvinfo->bus_info, pci_name(enic->pdev),
+	strscpy(drvinfo->bus_info, pci_name(enic->pdev),
 		sizeof(drvinfo->bus_info));
 }
 
@@ -583,31 +568,32 @@ static u32 enic_get_rxfh_key_size(struct net_device *netdev)
 	return ENIC_RSS_LEN;
 }
 
-static int enic_get_rxfh(struct net_device *netdev, u32 *indir, u8 *hkey,
-			 u8 *hfunc)
+static int enic_get_rxfh(struct net_device *netdev,
+			 struct ethtool_rxfh_param *rxfh)
 {
 	struct enic *enic = netdev_priv(netdev);
 
-	if (hkey)
-		memcpy(hkey, enic->rss_key, ENIC_RSS_LEN);
+	if (rxfh->key)
+		memcpy(rxfh->key, enic->rss_key, ENIC_RSS_LEN);
 
-	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+	rxfh->hfunc = ETH_RSS_HASH_TOP;
 
 	return 0;
 }
 
-static int enic_set_rxfh(struct net_device *netdev, const u32 *indir,
-			 const u8 *hkey, const u8 hfunc)
+static int enic_set_rxfh(struct net_device *netdev,
+			 struct ethtool_rxfh_param *rxfh,
+			 struct netlink_ext_ack *extack)
 {
 	struct enic *enic = netdev_priv(netdev);
 
-	if ((hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP) ||
-	    indir)
+	if (rxfh->indir ||
+	    (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	     rxfh->hfunc != ETH_RSS_HASH_TOP))
 		return -EINVAL;
 
-	if (hkey)
-		memcpy(enic->rss_key, hkey, ENIC_RSS_LEN);
+	if (rxfh->key)
+		memcpy(enic->rss_key, rxfh->key, ENIC_RSS_LEN);
 
 	return __enic_set_rsskey(enic);
 }

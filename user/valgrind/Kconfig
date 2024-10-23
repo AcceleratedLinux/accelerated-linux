@@ -1,0 +1,69 @@
+config USER_VALGRIND
+    bool "valgrind"
+    help
+      Memory leak checker.
+
+if USER_VALGRIND
+
+config USER_VALGRIND_CACHEGRIND
+    bool "cachegrind"
+    help
+      Cachegrind is a cache and branch-prediction profiler.
+      It helps you make your programs run faster.
+
+config USER_VALGRIND_CALLGRIND
+    bool "callgrind"
+    help
+      Callgrind is a call-graph generating cache profiler.
+      It has some overlap with Cachegrind, but also gathers
+      some information that Cachegrind does not.
+
+config USER_VALGRIND_DHAT
+    bool "dhat"
+    help
+      DHAT is a different kind of heap profiler.
+      It helps you understand issues of block lifetimes,
+      block utilisation, and layout inefficiencies.
+
+config USER_VALGRIND_DRD
+    bool "drd"
+    help
+      DRD is also a thread error detector.
+      It is similar to Helgrind but uses different analysis
+      techniques and so may find different problems.
+
+config USER_VALGRIND_HELGRIND
+    bool "helgrind"
+    help
+      Helgrind is a thread error detector. It helps you make
+      your multi-threaded programs more correct.
+
+config USER_VALGRIND_MASSIF
+    bool "massif"
+    help
+      Massif is a heap profiler. It helps you make your programs
+      use less memory.
+
+config USER_VALGRIND_MEMCHECK
+    bool "memcheck"
+    default y
+    help
+      Memcheck is a memory error detector. It helps you make your programs,
+      particularly those written in C and C++, more correct.
+
+config USER_VALGRIND_DISERVER
+    bool "diserver (host)"
+    default y
+    help
+      diserver is a host network server process that serves
+      debug address info to a remote, on-target valgrind so that
+      valgrind can print source addresses.
+      A wrapper script is installed as $ROOTDIR/bin/diserver
+
+config USER_VALGRIND_VGDB
+    bool "vgdb"
+    help
+      A GDB protocol server that can control valgrind.
+
+endif
+

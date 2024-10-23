@@ -86,8 +86,7 @@ int cn10k_sq_aq_init(void *dev, u16 qidx, u16 sqb_aura)
 	aq->sq.max_sqe_size = NIX_MAXSQESZ_W16; /* 128 byte */
 	aq->sq.cq_ena = 1;
 	aq->sq.ena = 1;
-	/* Only one SMQ is allocated, map all SQ's to that SMQ  */
-	aq->sq.smq = pfvf->hw.txschq_list[NIX_TXSCH_LVL_SMQ][0];
+	aq->sq.smq = otx2_get_smq_idx(pfvf, qidx);
 	aq->sq.smq_rr_weight = mtu_to_dwrr_weight(pfvf, pfvf->tx_max_pktlen);
 	aq->sq.default_chan = pfvf->hw.tx_chan_base;
 	aq->sq.sqe_stype = NIX_STYPE_STF; /* Cache SQB */
@@ -108,12 +107,13 @@ int cn10k_sq_aq_init(void *dev, u16 qidx, u16 sqb_aura)
 }
 
 #define NPA_MAX_BURST 16
-void cn10k_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq)
+int cn10k_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq)
 {
 	struct otx2_nic *pfvf = dev;
+	int cnt = cq->pool_ptrs;
 	u64 ptrs[NPA_MAX_BURST];
-	int num_ptrs = 1;
 	dma_addr_t bufptr;
+	int num_ptrs = 1;
 
 	/* Refill pool with new buffers */
 	while (cq->pool_ptrs) {
@@ -132,6 +132,7 @@ void cn10k_refill_pool_ptrs(void *dev, struct otx2_cq_queue *cq)
 			num_ptrs = 1;
 		}
 	}
+	return cnt - cq->pool_ptrs;
 }
 
 void cn10k_sqe_flush(void *dev, struct otx2_snd_queue *sq, int size, int qidx)
@@ -448,6 +449,9 @@ int cn10k_set_ipolicer_rate(struct otx2_nic *pfvf, u16 profile,
 
 	aq->prof.pebs_mantissa = 0;
 	aq->prof_mask.pebs_mantissa = 0xFF;
+
+	aq->prof.hl_en = 0;
+	aq->prof_mask.hl_en = 1;
 
 	/* Fill AQ info */
 	aq->qidx = profile;

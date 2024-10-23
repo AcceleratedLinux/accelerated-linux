@@ -76,8 +76,7 @@ static void rpcrdma_mrs_destroy(struct rpcrdma_xprt *r_xprt);
 static void rpcrdma_ep_get(struct rpcrdma_ep *ep);
 static int rpcrdma_ep_put(struct rpcrdma_ep *ep);
 static struct rpcrdma_regbuf *
-rpcrdma_regbuf_alloc(size_t size, enum dma_data_direction direction,
-		     gfp_t flags);
+rpcrdma_regbuf_alloc(size_t size, enum dma_data_direction direction);
 static void rpcrdma_regbuf_dma_unmap(struct rpcrdma_regbuf *rb);
 static void rpcrdma_regbuf_free(struct rpcrdma_regbuf *rb);
 
@@ -245,7 +244,11 @@ rpcrdma_cm_event_handler(struct rdma_cm_id *id, struct rdma_cm_event *event)
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		pr_info("rpcrdma: removing device %s for %pISpc\n",
 			ep->re_id->device->name, sap);
-		fallthrough;
+		switch (xchg(&ep->re_connect_status, -ENODEV)) {
+		case 0: goto wake_connect_worker;
+		case 1: goto disconnected;
+		}
+		return 0;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
 		ep->re_connect_status = -ENODEV;
 		goto disconnected;
@@ -373,7 +376,7 @@ static int rpcrdma_ep_create(struct rpcrdma_xprt *r_xprt)
 	struct rpcrdma_ep *ep;
 	int rc;
 
-	ep = kzalloc(sizeof(*ep), GFP_KERNEL);
+	ep = kzalloc(sizeof(*ep), XPRTRDMA_GFP_FLAGS);
 	if (!ep)
 		return -ENOTCONN;
 	ep->re_xprt = &r_xprt->rx_xprt;
@@ -606,7 +609,7 @@ static struct rpcrdma_sendctx *rpcrdma_sendctx_create(struct rpcrdma_ep *ep)
 	struct rpcrdma_sendctx *sc;
 
 	sc = kzalloc(struct_size(sc, sc_sges, ep->re_attr.cap.max_send_sge),
-		     GFP_KERNEL);
+		     XPRTRDMA_GFP_FLAGS);
 	if (!sc)
 		return NULL;
 
@@ -629,7 +632,7 @@ static int rpcrdma_sendctxs_create(struct rpcrdma_xprt *r_xprt)
 	 * Sends are posted.
 	 */
 	i = r_xprt->rx_ep->re_max_requests + RPCRDMA_MAX_BC_REQUESTS;
-	buf->rb_sc_ctxs = kcalloc(i, sizeof(sc), GFP_KERNEL);
+	buf->rb_sc_ctxs = kcalloc(i, sizeof(sc), XPRTRDMA_GFP_FLAGS);
 	if (!buf->rb_sc_ctxs)
 		return -ENOMEM;
 
@@ -740,13 +743,16 @@ rpcrdma_mrs_create(struct rpcrdma_xprt *r_xprt)
 {
 	struct rpcrdma_buffer *buf = &r_xprt->rx_buf;
 	struct rpcrdma_ep *ep = r_xprt->rx_ep;
+	struct ib_device *device = ep->re_id->device;
 	unsigned int count;
 
+	/* Try to allocate enough to perform one full-sized I/O */
 	for (count = 0; count < ep->re_max_rdma_segs; count++) {
 		struct rpcrdma_mr *mr;
 		int rc;
 
-		mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+		mr = kzalloc_node(sizeof(*mr), XPRTRDMA_GFP_FLAGS,
+				  ibdev_to_node(device));
 		if (!mr)
 			break;
 
@@ -791,38 +797,33 @@ void rpcrdma_mrs_refresh(struct rpcrdma_xprt *r_xprt)
 	/* If there is no underlying connection, it's no use
 	 * to wake the refresh worker.
 	 */
-	if (ep->re_connect_status == 1) {
-		/* The work is scheduled on a WQ_MEM_RECLAIM
-		 * workqueue in order to prevent MR allocation
-		 * from recursing into NFS during direct reclaim.
-		 */
-		queue_work(xprtiod_workqueue, &buf->rb_refresh_worker);
-	}
+	if (ep->re_connect_status != 1)
+		return;
+	queue_work(system_highpri_wq, &buf->rb_refresh_worker);
 }
 
 /**
  * rpcrdma_req_create - Allocate an rpcrdma_req object
  * @r_xprt: controlling r_xprt
  * @size: initial size, in bytes, of send and receive buffers
- * @flags: GFP flags passed to memory allocators
  *
  * Returns an allocated and fully initialized rpcrdma_req or NULL.
  */
-struct rpcrdma_req *rpcrdma_req_create(struct rpcrdma_xprt *r_xprt, size_t size,
-				       gfp_t flags)
+struct rpcrdma_req *rpcrdma_req_create(struct rpcrdma_xprt *r_xprt,
+				       size_t size)
 {
 	struct rpcrdma_buffer *buffer = &r_xprt->rx_buf;
 	struct rpcrdma_req *req;
 
-	req = kzalloc(sizeof(*req), flags);
+	req = kzalloc(sizeof(*req), XPRTRDMA_GFP_FLAGS);
 	if (req == NULL)
 		goto out1;
 
-	req->rl_sendbuf = rpcrdma_regbuf_alloc(size, DMA_TO_DEVICE, flags);
+	req->rl_sendbuf = rpcrdma_regbuf_alloc(size, DMA_TO_DEVICE);
 	if (!req->rl_sendbuf)
 		goto out2;
 
-	req->rl_recvbuf = rpcrdma_regbuf_alloc(size, DMA_NONE, flags);
+	req->rl_recvbuf = rpcrdma_regbuf_alloc(size, DMA_NONE);
 	if (!req->rl_recvbuf)
 		goto out3;
 
@@ -834,7 +835,7 @@ struct rpcrdma_req *rpcrdma_req_create(struct rpcrdma_xprt *r_xprt, size_t size,
 	return req;
 
 out3:
-	kfree(req->rl_sendbuf);
+	rpcrdma_regbuf_free(req->rl_sendbuf);
 out2:
 	kfree(req);
 out1:
@@ -858,7 +859,7 @@ int rpcrdma_req_setup(struct rpcrdma_xprt *r_xprt, struct rpcrdma_req *req)
 		     r_xprt->rx_ep->re_max_rdma_segs * rpcrdma_readchunk_maxsz;
 	maxhdrsize *= sizeof(__be32);
 	rb = rpcrdma_regbuf_alloc(__roundup_pow_of_two(maxhdrsize),
-				  DMA_TO_DEVICE, GFP_KERNEL);
+				  DMA_TO_DEVICE);
 	if (!rb)
 		goto out;
 
@@ -929,17 +930,14 @@ struct rpcrdma_rep *rpcrdma_rep_create(struct rpcrdma_xprt *r_xprt,
 	struct rpcrdma_buffer *buf = &r_xprt->rx_buf;
 	struct rpcrdma_rep *rep;
 
-	rep = kzalloc(sizeof(*rep), GFP_KERNEL);
+	rep = kzalloc(sizeof(*rep), XPRTRDMA_GFP_FLAGS);
 	if (rep == NULL)
 		goto out;
 
 	rep->rr_rdmabuf = rpcrdma_regbuf_alloc(r_xprt->rx_ep->re_inline_recv,
-					       DMA_FROM_DEVICE, GFP_KERNEL);
+					       DMA_FROM_DEVICE);
 	if (!rep->rr_rdmabuf)
 		goto out_free;
-
-	if (!rpcrdma_regbuf_dma_map(r_xprt, rep->rr_rdmabuf))
-		goto out_free_regbuf;
 
 	rep->rr_cid.ci_completion_id =
 		atomic_inc_return(&r_xprt->rx_ep->re_completion_ids);
@@ -959,8 +957,6 @@ struct rpcrdma_rep *rpcrdma_rep_create(struct rpcrdma_xprt *r_xprt,
 	spin_unlock(&buf->rb_lock);
 	return rep;
 
-out_free_regbuf:
-	rpcrdma_regbuf_free(rep->rr_rdmabuf);
 out_free:
 	kfree(rep);
 out:
@@ -1064,8 +1060,8 @@ int rpcrdma_buffer_create(struct rpcrdma_xprt *r_xprt)
 	for (i = 0; i < r_xprt->rx_xprt.max_reqs; i++) {
 		struct rpcrdma_req *req;
 
-		req = rpcrdma_req_create(r_xprt, RPCRDMA_V1_DEF_INLINE_SIZE * 2,
-					 GFP_KERNEL);
+		req = rpcrdma_req_create(r_xprt,
+					 RPCRDMA_V1_DEF_INLINE_SIZE * 2);
 		if (!req)
 			goto out;
 		list_add(&req->rl_list, &buf->rb_send_bufs);
@@ -1235,15 +1231,14 @@ void rpcrdma_buffer_put(struct rpcrdma_buffer *buffers, struct rpcrdma_req *req)
  * or Replies they may be registered externally via frwr_map.
  */
 static struct rpcrdma_regbuf *
-rpcrdma_regbuf_alloc(size_t size, enum dma_data_direction direction,
-		     gfp_t flags)
+rpcrdma_regbuf_alloc(size_t size, enum dma_data_direction direction)
 {
 	struct rpcrdma_regbuf *rb;
 
-	rb = kmalloc(sizeof(*rb), flags);
+	rb = kmalloc(sizeof(*rb), XPRTRDMA_GFP_FLAGS);
 	if (!rb)
 		return NULL;
-	rb->rg_data = kmalloc(size, flags);
+	rb->rg_data = kmalloc(size, XPRTRDMA_GFP_FLAGS);
 	if (!rb->rg_data) {
 		kfree(rb);
 		return NULL;
@@ -1367,9 +1362,13 @@ void rpcrdma_post_recvs(struct rpcrdma_xprt *r_xprt, int needed, bool temp)
 			rep = rpcrdma_rep_create(r_xprt, temp);
 		if (!rep)
 			break;
+		if (!rpcrdma_regbuf_dma_map(r_xprt, rep->rr_rdmabuf)) {
+			rpcrdma_rep_put(buf, rep);
+			break;
+		}
 
 		rep->rr_cid.ci_queue_id = ep->re_attr.recv_cq->res.id;
-		trace_xprtrdma_post_recv(rep);
+		trace_xprtrdma_post_recv(&rep->rr_cid);
 		rep->rr_recv_wr.next = wr;
 		wr = &rep->rr_recv_wr;
 		--needed;

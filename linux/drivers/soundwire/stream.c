@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw.h>
+#include <linux/soundwire/sdw_type.h>
 #include <sound/soc.h>
 #include "bus.h"
 
@@ -80,14 +81,14 @@ static int _sdw_program_slave_port_params(struct sdw_bus *bus,
 	}
 
 	/* Program DPN_OffsetCtrl2 registers */
-	ret = sdw_write(slave, addr1, t_params->offset2);
+	ret = sdw_write_no_pm(slave, addr1, t_params->offset2);
 	if (ret < 0) {
 		dev_err(bus->dev, "DPN_OffsetCtrl2 register write failed\n");
 		return ret;
 	}
 
 	/* Program DPN_BlockCtrl3 register */
-	ret = sdw_write(slave, addr2, t_params->blk_pkg_mode);
+	ret = sdw_write_no_pm(slave, addr2, t_params->blk_pkg_mode);
 	if (ret < 0) {
 		dev_err(bus->dev, "DPN_BlockCtrl3 register write failed\n");
 		return ret;
@@ -104,7 +105,7 @@ static int _sdw_program_slave_port_params(struct sdw_bus *bus,
 	/* Program DPN_SampleCtrl2 register */
 	wbuf = FIELD_GET(SDW_DPN_SAMPLECTRL_HIGH, t_params->sample_interval - 1);
 
-	ret = sdw_write(slave, addr3, wbuf);
+	ret = sdw_write_no_pm(slave, addr3, wbuf);
 	if (ret < 0) {
 		dev_err(bus->dev, "DPN_SampleCtrl2 register write failed\n");
 		return ret;
@@ -114,7 +115,7 @@ static int _sdw_program_slave_port_params(struct sdw_bus *bus,
 	wbuf = FIELD_PREP(SDW_DPN_HCTRL_HSTART, t_params->hstart);
 	wbuf |= FIELD_PREP(SDW_DPN_HCTRL_HSTOP, t_params->hstop);
 
-	ret = sdw_write(slave, addr4, wbuf);
+	ret = sdw_write_no_pm(slave, addr4, wbuf);
 	if (ret < 0)
 		dev_err(bus->dev, "DPN_HCtrl register write failed\n");
 
@@ -162,7 +163,7 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 	wbuf = FIELD_PREP(SDW_DPN_PORTCTRL_DATAMODE, p_params->data_mode);
 	wbuf |= FIELD_PREP(SDW_DPN_PORTCTRL_FLOWMODE, p_params->flow_mode);
 
-	ret = sdw_update(s_rt->slave, addr1, 0xF, wbuf);
+	ret = sdw_update_no_pm(s_rt->slave, addr1, 0xF, wbuf);
 	if (ret < 0) {
 		dev_err(&s_rt->slave->dev,
 			"DPN_PortCtrl register write failed for port %d\n",
@@ -172,7 +173,7 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 
 	if (!dpn_prop->read_only_wordlength) {
 		/* Program DPN_BlockCtrl1 register */
-		ret = sdw_write(s_rt->slave, addr2, (p_params->bps - 1));
+		ret = sdw_write_no_pm(s_rt->slave, addr2, (p_params->bps - 1));
 		if (ret < 0) {
 			dev_err(&s_rt->slave->dev,
 				"DPN_BlockCtrl1 register write failed for port %d\n",
@@ -183,7 +184,7 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 
 	/* Program DPN_SampleCtrl1 register */
 	wbuf = (t_params->sample_interval - 1) & SDW_DPN_SAMPLECTRL_LOW;
-	ret = sdw_write(s_rt->slave, addr3, wbuf);
+	ret = sdw_write_no_pm(s_rt->slave, addr3, wbuf);
 	if (ret < 0) {
 		dev_err(&s_rt->slave->dev,
 			"DPN_SampleCtrl1 register write failed for port %d\n",
@@ -192,7 +193,7 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 	}
 
 	/* Program DPN_OffsetCtrl1 registers */
-	ret = sdw_write(s_rt->slave, addr4, t_params->offset1);
+	ret = sdw_write_no_pm(s_rt->slave, addr4, t_params->offset1);
 	if (ret < 0) {
 		dev_err(&s_rt->slave->dev,
 			"DPN_OffsetCtrl1 register write failed for port %d\n",
@@ -202,7 +203,7 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 
 	/* Program DPN_BlockCtrl2 register*/
 	if (t_params->blk_grp_ctrl_valid) {
-		ret = sdw_write(s_rt->slave, addr5, t_params->blk_grp_ctrl);
+		ret = sdw_write_no_pm(s_rt->slave, addr5, t_params->blk_grp_ctrl);
 		if (ret < 0) {
 			dev_err(&s_rt->slave->dev,
 				"DPN_BlockCtrl2 reg write failed for port %d\n",
@@ -213,7 +214,7 @@ static int sdw_program_slave_port_params(struct sdw_bus *bus,
 
 	/* program DPN_LaneCtrl register */
 	if (slave_prop->lane_control_support) {
-		ret = sdw_write(s_rt->slave, addr6, t_params->lane_ctrl);
+		ret = sdw_write_no_pm(s_rt->slave, addr6, t_params->lane_ctrl);
 		if (ret < 0) {
 			dev_err(&s_rt->slave->dev,
 				"DPN_LaneCtrl register write failed for port %d\n",
@@ -318,9 +319,9 @@ static int sdw_enable_disable_slave_ports(struct sdw_bus *bus,
 	 * it is safe to reset this register
 	 */
 	if (en)
-		ret = sdw_write(s_rt->slave, addr, p_rt->ch_mask);
+		ret = sdw_write_no_pm(s_rt->slave, addr, p_rt->ch_mask);
 	else
-		ret = sdw_write(s_rt->slave, addr, 0x0);
+		ret = sdw_write_no_pm(s_rt->slave, addr, 0x0);
 
 	if (ret < 0)
 		dev_err(&s_rt->slave->dev,
@@ -401,20 +402,26 @@ static int sdw_do_port_prep(struct sdw_slave_runtime *s_rt,
 			    struct sdw_prepare_ch prep_ch,
 			    enum sdw_port_prep_ops cmd)
 {
-	const struct sdw_slave_ops *ops = s_rt->slave->ops;
-	int ret;
+	int ret = 0;
+	struct sdw_slave *slave = s_rt->slave;
 
-	if (ops->port_prep) {
-		ret = ops->port_prep(s_rt->slave, &prep_ch, cmd);
-		if (ret < 0) {
-			dev_err(&s_rt->slave->dev,
-				"Slave Port Prep cmd %d failed: %d\n",
-				cmd, ret);
-			return ret;
+	mutex_lock(&slave->sdw_dev_lock);
+
+	if (slave->probed) {
+		struct device *dev = &slave->dev;
+		struct sdw_driver *drv = drv_to_sdw_driver(dev->driver);
+
+		if (drv->ops && drv->ops->port_prep) {
+			ret = drv->ops->port_prep(slave, &prep_ch, cmd);
+			if (ret < 0)
+				dev_err(dev, "Slave Port Prep cmd %d failed: %d\n",
+					cmd, ret);
 		}
 	}
 
-	return 0;
+	mutex_unlock(&slave->sdw_dev_lock);
+
+	return ret;
 }
 
 static int sdw_prep_deprep_slave_ports(struct sdw_bus *bus,
@@ -462,16 +469,16 @@ static int sdw_prep_deprep_slave_ports(struct sdw_bus *bus,
 	}
 
 	/* Inform slave about the impending port prepare */
-	sdw_do_port_prep(s_rt, prep_ch, SDW_OPS_PORT_PRE_PREP);
+	sdw_do_port_prep(s_rt, prep_ch, prep ? SDW_OPS_PORT_PRE_PREP : SDW_OPS_PORT_PRE_DEPREP);
 
 	/* Prepare Slave port implementing CP_SM */
 	if (!dpn_prop->simple_ch_prep_sm) {
 		addr = SDW_DPN_PREPARECTRL(p_rt->num);
 
 		if (prep)
-			ret = sdw_write(s_rt->slave, addr, p_rt->ch_mask);
+			ret = sdw_write_no_pm(s_rt->slave, addr, p_rt->ch_mask);
 		else
-			ret = sdw_write(s_rt->slave, addr, 0x0);
+			ret = sdw_write_no_pm(s_rt->slave, addr, 0x0);
 
 		if (ret < 0) {
 			dev_err(&s_rt->slave->dev,
@@ -484,7 +491,7 @@ static int sdw_prep_deprep_slave_ports(struct sdw_bus *bus,
 		wait_for_completion_timeout(port_ready,
 			msecs_to_jiffies(dpn_prop->ch_prep_timeout));
 
-		val = sdw_read(s_rt->slave, SDW_DPN_PREPARESTATUS(p_rt->num));
+		val = sdw_read_no_pm(s_rt->slave, SDW_DPN_PREPARESTATUS(p_rt->num));
 		if ((val < 0) || (val & p_rt->ch_mask)) {
 			ret = (val < 0) ? val : -ETIMEDOUT;
 			dev_err(&s_rt->slave->dev,
@@ -494,7 +501,7 @@ static int sdw_prep_deprep_slave_ports(struct sdw_bus *bus,
 	}
 
 	/* Inform slaves about ports prepared */
-	sdw_do_port_prep(s_rt, prep_ch, SDW_OPS_PORT_POST_PREP);
+	sdw_do_port_prep(s_rt, prep_ch, prep ? SDW_OPS_PORT_POST_PREP : SDW_OPS_PORT_POST_DEPREP);
 
 	/* Disable interrupt after Port de-prepare */
 	if (!prep && intr)
@@ -578,7 +585,7 @@ static int sdw_notify_config(struct sdw_master_runtime *m_rt)
 	struct sdw_slave_runtime *s_rt;
 	struct sdw_bus *bus = m_rt->bus;
 	struct sdw_slave *slave;
-	int ret = 0;
+	int ret;
 
 	if (bus->ops->set_bus_conf) {
 		ret = bus->ops->set_bus_conf(bus, &bus->params);
@@ -589,17 +596,27 @@ static int sdw_notify_config(struct sdw_master_runtime *m_rt)
 	list_for_each_entry(s_rt, &m_rt->slave_rt_list, m_rt_node) {
 		slave = s_rt->slave;
 
-		if (slave->ops->bus_config) {
-			ret = slave->ops->bus_config(slave, &bus->params);
-			if (ret < 0) {
-				dev_err(bus->dev, "Notify Slave: %d failed\n",
-					slave->dev_num);
-				return ret;
+		mutex_lock(&slave->sdw_dev_lock);
+
+		if (slave->probed) {
+			struct device *dev = &slave->dev;
+			struct sdw_driver *drv = drv_to_sdw_driver(dev->driver);
+
+			if (drv->ops && drv->ops->bus_config) {
+				ret = drv->ops->bus_config(slave, &bus->params);
+				if (ret < 0) {
+					dev_err(dev, "Notify Slave: %d failed\n",
+						slave->dev_num);
+					mutex_unlock(&slave->sdw_dev_lock);
+					return ret;
+				}
 			}
 		}
+
+		mutex_unlock(&slave->sdw_dev_lock);
 	}
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -667,8 +684,6 @@ static int sdw_bank_switch(struct sdw_bus *bus, int m_rt_count)
 	if (!wr_msg)
 		return -ENOMEM;
 
-	bus->defer_msg.msg = wr_msg;
-
 	wbuf = kzalloc(sizeof(*wbuf), GFP_KERNEL);
 	if (!wbuf) {
 		ret = -ENOMEM;
@@ -696,7 +711,7 @@ static int sdw_bank_switch(struct sdw_bus *bus, int m_rt_count)
 	multi_link = bus->multi_link && (m_rt_count >= bus->hw_sync_min_links);
 
 	if (multi_link)
-		ret = sdw_transfer_defer(bus, wr_msg, &bus->defer_msg);
+		ret = sdw_transfer_defer(bus, wr_msg);
 	else
 		ret = sdw_transfer(bus, wr_msg);
 
@@ -706,8 +721,8 @@ static int sdw_bank_switch(struct sdw_bus *bus, int m_rt_count)
 	}
 
 	if (!multi_link) {
-		kfree(wr_msg);
 		kfree(wbuf);
+		kfree(wr_msg);
 		bus->defer_msg.msg = NULL;
 		bus->params.curr_bank = !bus->params.curr_bank;
 		bus->params.next_bank = !bus->params.next_bank;
@@ -727,14 +742,15 @@ error_1:
  * sdw_ml_sync_bank_switch: Multilink register bank switch
  *
  * @bus: SDW bus instance
+ * @multi_link: whether this is a multi-link stream with hardware-based sync
  *
  * Caller function should free the buffers on error
  */
-static int sdw_ml_sync_bank_switch(struct sdw_bus *bus)
+static int sdw_ml_sync_bank_switch(struct sdw_bus *bus, bool multi_link)
 {
 	unsigned long time_left;
 
-	if (!bus->multi_link)
+	if (!multi_link)
 		return 0;
 
 	/* Wait for completion of transfer */
@@ -752,6 +768,7 @@ static int sdw_ml_sync_bank_switch(struct sdw_bus *bus)
 	if (bus->defer_msg.msg) {
 		kfree(bus->defer_msg.msg->buf);
 		kfree(bus->defer_msg.msg);
+		bus->defer_msg.msg = NULL;
 	}
 
 	return 0;
@@ -831,7 +848,7 @@ static int do_bank_switch(struct sdw_stream_runtime *stream)
 			bus->bank_switch_timeout = DEFAULT_BANK_SWITCH_TIMEOUT;
 
 		/* Check if bank switch was successful */
-		ret = sdw_ml_sync_bank_switch(bus);
+		ret = sdw_ml_sync_bank_switch(bus, multi_link);
 		if (ret < 0) {
 			dev_err(bus->dev,
 				"multi link bank switch failed: %d\n", ret);
@@ -850,6 +867,7 @@ error:
 		if (bus->defer_msg.msg) {
 			kfree(bus->defer_msg.msg->buf);
 			kfree(bus->defer_msg.msg);
+			bus->defer_msg.msg = NULL;
 		}
 	}
 
@@ -880,7 +898,7 @@ static struct sdw_port_runtime *sdw_port_alloc(struct list_head *port_list)
 }
 
 static int sdw_port_config(struct sdw_port_runtime *p_rt,
-			   struct sdw_port_config *port_config,
+			   const struct sdw_port_config *port_config,
 			   int port_index)
 {
 	p_rt->ch_mask = port_config[port_index].ch_mask;
@@ -953,7 +971,7 @@ static int sdw_slave_port_is_valid_range(struct device *dev, int num)
 
 static int sdw_slave_port_config(struct sdw_slave *slave,
 				 struct sdw_slave_runtime *s_rt,
-				 struct sdw_port_config *port_config)
+				 const struct sdw_port_config *port_config)
 {
 	struct sdw_port_runtime *p_rt;
 	int ret;
@@ -1009,7 +1027,7 @@ static int sdw_master_port_alloc(struct sdw_master_runtime *m_rt,
 }
 
 static int sdw_master_port_config(struct sdw_master_runtime *m_rt,
-				  struct sdw_port_config *port_config)
+				  const struct sdw_port_config *port_config)
 {
 	struct sdw_port_runtime *p_rt;
 	int ret;
@@ -1133,7 +1151,8 @@ static struct sdw_master_runtime
 *sdw_master_rt_alloc(struct sdw_bus *bus,
 		     struct sdw_stream_runtime *stream)
 {
-	struct sdw_master_runtime *m_rt;
+	struct sdw_master_runtime *m_rt, *walk_m_rt;
+	struct list_head *insert_after;
 
 	m_rt = kzalloc(sizeof(*m_rt), GFP_KERNEL);
 	if (!m_rt)
@@ -1142,7 +1161,20 @@ static struct sdw_master_runtime
 	/* Initialization of Master runtime handle */
 	INIT_LIST_HEAD(&m_rt->port_list);
 	INIT_LIST_HEAD(&m_rt->slave_rt_list);
-	list_add_tail(&m_rt->stream_node, &stream->master_list);
+
+	/*
+	 * Add in order of bus id so that when taking the bus_lock
+	 * of multiple buses they will always be taken in the same
+	 * order to prevent a mutex deadlock.
+	 */
+	insert_after = &stream->master_list;
+	list_for_each_entry_reverse(walk_m_rt, &stream->master_list, stream_node) {
+		if (walk_m_rt->bus->id < bus->id) {
+			insert_after = &walk_m_rt->stream_node;
+			break;
+		}
+	}
+	list_add(&m_rt->stream_node, insert_after);
 
 	list_add_tail(&m_rt->bus_node, &bus->m_rt_list);
 
@@ -1321,7 +1353,7 @@ static int _sdw_prepare_stream(struct sdw_stream_runtime *stream,
 			       bool update_params)
 {
 	struct sdw_master_runtime *m_rt;
-	struct sdw_bus *bus = NULL;
+	struct sdw_bus *bus;
 	struct sdw_master_prop *prop;
 	struct sdw_bus_params params;
 	int ret;
@@ -1338,25 +1370,23 @@ static int _sdw_prepare_stream(struct sdw_stream_runtime *stream,
 			return -EINVAL;
 		}
 
-		if (!update_params)
-			goto program_params;
+		if (update_params) {
+			/* Increment cumulative bus bandwidth */
+			/* TODO: Update this during Device-Device support */
+			bus->params.bandwidth += m_rt->stream->params.rate *
+				m_rt->ch_count * m_rt->stream->params.bps;
 
-		/* Increment cumulative bus bandwidth */
-		/* TODO: Update this during Device-Device support */
-		bus->params.bandwidth += m_rt->stream->params.rate *
-			m_rt->ch_count * m_rt->stream->params.bps;
-
-		/* Compute params */
-		if (bus->compute_params) {
-			ret = bus->compute_params(bus);
-			if (ret < 0) {
-				dev_err(bus->dev, "Compute params failed: %d\n",
-					ret);
-				return ret;
+			/* Compute params */
+			if (bus->compute_params) {
+				ret = bus->compute_params(bus);
+				if (ret < 0) {
+					dev_err(bus->dev, "Compute params failed: %d\n",
+						ret);
+					goto restore_params;
+				}
 			}
 		}
 
-program_params:
 		/* Program params */
 		ret = sdw_program_params(bus, true);
 		if (ret < 0) {
@@ -1365,14 +1395,9 @@ program_params:
 		}
 	}
 
-	if (!bus) {
-		pr_err("Configuration error in %s\n", __func__);
-		return -EINVAL;
-	}
-
 	ret = do_bank_switch(stream);
 	if (ret < 0) {
-		dev_err(bus->dev, "Bank switch failed: %d\n", ret);
+		pr_err("%s: do_bank_switch failed: %d\n", __func__, ret);
 		goto restore_params;
 	}
 
@@ -1450,7 +1475,7 @@ EXPORT_SYMBOL(sdw_prepare_stream);
 static int _sdw_enable_stream(struct sdw_stream_runtime *stream)
 {
 	struct sdw_master_runtime *m_rt;
-	struct sdw_bus *bus = NULL;
+	struct sdw_bus *bus;
 	int ret;
 
 	/* Enable Master(s) and Slave(s) port(s) associated with stream */
@@ -1460,7 +1485,7 @@ static int _sdw_enable_stream(struct sdw_stream_runtime *stream)
 		/* Program params */
 		ret = sdw_program_params(bus, false);
 		if (ret < 0) {
-			dev_err(bus->dev, "Program params failed: %d\n", ret);
+			dev_err(bus->dev, "%s: Program params failed: %d\n", __func__, ret);
 			return ret;
 		}
 
@@ -1473,14 +1498,9 @@ static int _sdw_enable_stream(struct sdw_stream_runtime *stream)
 		}
 	}
 
-	if (!bus) {
-		pr_err("Configuration error in %s\n", __func__);
-		return -EINVAL;
-	}
-
 	ret = do_bank_switch(stream);
 	if (ret < 0) {
-		dev_err(bus->dev, "Bank switch failed: %d\n", ret);
+		pr_err("%s: do_bank_switch failed: %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -1550,14 +1570,14 @@ static int _sdw_disable_stream(struct sdw_stream_runtime *stream)
 		/* Program params */
 		ret = sdw_program_params(bus, false);
 		if (ret < 0) {
-			dev_err(bus->dev, "Program params failed: %d\n", ret);
+			dev_err(bus->dev, "%s: Program params failed: %d\n", __func__, ret);
 			return ret;
 		}
 	}
 
 	ret = do_bank_switch(stream);
 	if (ret < 0) {
-		pr_err("Bank switch failed: %d\n", ret);
+		pr_err("%s: do_bank_switch failed: %d\n", __func__, ret);
 		return ret;
 	}
 
@@ -1647,7 +1667,7 @@ static int _sdw_deprepare_stream(struct sdw_stream_runtime *stream)
 		/* Program params */
 		ret = sdw_program_params(bus, false);
 		if (ret < 0) {
-			dev_err(bus->dev, "Program params failed: %d\n", ret);
+			dev_err(bus->dev, "%s: Program params failed: %d\n", __func__, ret);
 			return ret;
 		}
 	}
@@ -1698,7 +1718,7 @@ EXPORT_SYMBOL(sdw_deprepare_stream);
 static int set_stream(struct snd_pcm_substream *substream,
 		      struct sdw_stream_runtime *sdw_stream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
 	struct snd_soc_dai *dai;
 	int ret = 0;
 	int i;
@@ -1751,7 +1771,7 @@ EXPORT_SYMBOL(sdw_alloc_stream);
 int sdw_startup_stream(void *sdw_substream)
 {
 	struct snd_pcm_substream *substream = sdw_substream;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
 	struct sdw_stream_runtime *sdw_stream;
 	char *name;
 	int ret;
@@ -1795,12 +1815,12 @@ EXPORT_SYMBOL(sdw_startup_stream);
 void sdw_shutdown_stream(void *sdw_substream)
 {
 	struct snd_pcm_substream *substream = sdw_substream;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
 	struct sdw_stream_runtime *sdw_stream;
 	struct snd_soc_dai *dai;
 
 	/* Find stream from first CPU DAI */
-	dai = asoc_rtd_to_cpu(rtd, 0);
+	dai = snd_soc_rtd_to_cpu(rtd, 0);
 
 	sdw_stream = snd_soc_dai_get_stream(dai, substream->stream);
 
@@ -1842,12 +1862,12 @@ EXPORT_SYMBOL(sdw_release_stream);
  */
 int sdw_stream_add_master(struct sdw_bus *bus,
 			  struct sdw_stream_config *stream_config,
-			  struct sdw_port_config *port_config,
+			  const struct sdw_port_config *port_config,
 			  unsigned int num_ports,
 			  struct sdw_stream_runtime *stream)
 {
 	struct sdw_master_runtime *m_rt;
-	bool alloc_master_rt = true;
+	bool alloc_master_rt = false;
 	int ret;
 
 	mutex_lock(&bus->bus_lock);
@@ -1869,29 +1889,25 @@ int sdw_stream_add_master(struct sdw_bus *bus,
 	 * it first), if so skip allocation and go to configuration
 	 */
 	m_rt = sdw_master_rt_find(bus, stream);
-	if (m_rt) {
-		alloc_master_rt = false;
-		goto skip_alloc_master_rt;
-	}
-
-	m_rt = sdw_master_rt_alloc(bus, stream);
 	if (!m_rt) {
-		dev_err(bus->dev, "Master runtime alloc failed for stream:%s\n", stream->name);
-		ret = -ENOMEM;
-		goto unlock;
+		m_rt = sdw_master_rt_alloc(bus, stream);
+		if (!m_rt) {
+			dev_err(bus->dev, "%s: Master runtime alloc failed for stream:%s\n",
+				__func__, stream->name);
+			ret = -ENOMEM;
+			goto unlock;
+		}
+
+		alloc_master_rt = true;
 	}
-skip_alloc_master_rt:
 
-	if (sdw_master_port_allocated(m_rt))
-		goto skip_alloc_master_port;
+	if (!sdw_master_port_allocated(m_rt)) {
+		ret = sdw_master_port_alloc(m_rt, num_ports);
+		if (ret)
+			goto alloc_error;
 
-	ret = sdw_master_port_alloc(m_rt, num_ports);
-	if (ret)
-		goto alloc_error;
-
-	stream->m_rt_count++;
-
-skip_alloc_master_port:
+		stream->m_rt_count++;
+	}
 
 	ret = sdw_master_rt_config(m_rt, stream_config);
 	if (ret < 0)
@@ -1966,14 +1982,14 @@ EXPORT_SYMBOL(sdw_stream_remove_master);
  */
 int sdw_stream_add_slave(struct sdw_slave *slave,
 			 struct sdw_stream_config *stream_config,
-			 struct sdw_port_config *port_config,
+			 const struct sdw_port_config *port_config,
 			 unsigned int num_ports,
 			 struct sdw_stream_runtime *stream)
 {
 	struct sdw_slave_runtime *s_rt;
 	struct sdw_master_runtime *m_rt;
-	bool alloc_master_rt = true;
-	bool alloc_slave_rt = true;
+	bool alloc_master_rt = false;
+	bool alloc_slave_rt = false;
 
 	int ret;
 
@@ -1984,44 +2000,41 @@ int sdw_stream_add_slave(struct sdw_slave *slave,
 	 * and go to configuration
 	 */
 	m_rt = sdw_master_rt_find(slave->bus, stream);
-	if (m_rt) {
-		alloc_master_rt = false;
-		goto skip_alloc_master_rt;
-	}
-
-	/*
-	 * If this API is invoked by Slave first then m_rt is not valid.
-	 * So, allocate m_rt and add Slave to it.
-	 */
-	m_rt = sdw_master_rt_alloc(slave->bus, stream);
 	if (!m_rt) {
-		dev_err(&slave->dev, "Master runtime alloc failed for stream:%s\n", stream->name);
-		ret = -ENOMEM;
-		goto unlock;
+		/*
+		 * If this API is invoked by Slave first then m_rt is not valid.
+		 * So, allocate m_rt and add Slave to it.
+		 */
+		m_rt = sdw_master_rt_alloc(slave->bus, stream);
+		if (!m_rt) {
+			dev_err(&slave->dev, "%s: Master runtime alloc failed for stream:%s\n",
+				__func__, stream->name);
+			ret = -ENOMEM;
+			goto unlock;
+		}
+
+		alloc_master_rt = true;
 	}
 
-skip_alloc_master_rt:
 	s_rt = sdw_slave_rt_find(slave, stream);
-	if (s_rt)
-		goto skip_alloc_slave_rt;
-
-	s_rt = sdw_slave_rt_alloc(slave, m_rt);
 	if (!s_rt) {
-		dev_err(&slave->dev, "Slave runtime alloc failed for stream:%s\n", stream->name);
-		alloc_slave_rt = false;
-		ret = -ENOMEM;
-		goto alloc_error;
+		s_rt = sdw_slave_rt_alloc(slave, m_rt);
+		if (!s_rt) {
+			dev_err(&slave->dev, "Slave runtime alloc failed for stream:%s\n",
+				stream->name);
+			ret = -ENOMEM;
+			goto alloc_error;
+		}
+
+		alloc_slave_rt = true;
 	}
 
-skip_alloc_slave_rt:
-	if (sdw_slave_port_allocated(s_rt))
-		goto skip_port_alloc;
+	if (!sdw_slave_port_allocated(s_rt)) {
+		ret = sdw_slave_port_alloc(slave, s_rt, num_ports);
+		if (ret)
+			goto alloc_error;
+	}
 
-	ret = sdw_slave_port_alloc(slave, s_rt, num_ports);
-	if (ret)
-		goto alloc_error;
-
-skip_port_alloc:
 	ret =  sdw_master_rt_config(m_rt, stream_config);
 	if (ret)
 		goto unlock;

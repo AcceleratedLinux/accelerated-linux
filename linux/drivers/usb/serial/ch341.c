@@ -97,13 +97,16 @@ struct ch341_private {
 	u8 mcr;
 	u8 msr;
 	u8 lcr;
+
 	unsigned long quirks;
+	u8 version;
+
 	unsigned long break_end;
 };
 
 static void ch341_set_termios(struct tty_struct *tty,
 			      struct usb_serial_port *port,
-			      struct ktermios *old_termios);
+			      const struct ktermios *old_termios);
 
 static int ch341_control_out(struct usb_device *dev, u8 request,
 			     u16 value, u16 index)
@@ -250,8 +253,12 @@ static int ch341_set_baudrate_lcr(struct usb_device *dev,
 	/*
 	 * CH341A buffers data until a full endpoint-size packet (32 bytes)
 	 * has been received unless bit 7 is set.
+	 *
+	 * At least one device with version 0x27 appears to have this bit
+	 * inverted.
 	 */
-	val |= BIT(7);
+	if (priv->version > 0x27)
+		val |= BIT(7);
 
 	r = ch341_control_out(dev, CH341_REQ_WRITE_REG,
 			      CH341_REG_DIVISOR << 8 | CH341_REG_PRESCALER,
@@ -265,6 +272,9 @@ static int ch341_set_baudrate_lcr(struct usb_device *dev,
 	 * (stop bits, parity and word length). Version 0x30 and above use
 	 * CH341_REG_LCR only and CH341_REG_LCR2 is always set to zero.
 	 */
+	if (priv->version < 0x30)
+		return 0;
+
 	r = ch341_control_out(dev, CH341_REQ_WRITE_REG,
 			      CH341_REG_LCR2 << 8 | CH341_REG_LCR, lcr);
 	if (r)
@@ -308,7 +318,9 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	r = ch341_control_in(dev, CH341_REQ_READ_VERSION, 0, 0, buffer, size);
 	if (r)
 		return r;
-	dev_dbg(&dev->dev, "Chip version: 0x%02x\n", buffer[0]);
+
+	priv->version = buffer[0];
+	dev_dbg(&dev->dev, "Chip version: 0x%02x\n", priv->version);
 
 	r = ch341_control_out(dev, CH341_REQ_SERIAL_INIT, 0, 0);
 	if (r < 0)
@@ -470,7 +482,8 @@ err_kill_interrupt_urb:
  * tty->termios contains the new setting to be used.
  */
 static void ch341_set_termios(struct tty_struct *tty,
-		struct usb_serial_port *port, struct ktermios *old_termios)
+			      struct usb_serial_port *port,
+			      const struct ktermios *old_termios)
 {
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned baud_rate;
@@ -549,12 +562,12 @@ static void ch341_set_termios(struct tty_struct *tty,
  * TCSBRKP. Due to how the simulation is implemented the duration can't be
  * controlled. The duration is always about (1s / 46bd * 9bit) = 196ms.
  */
-static void ch341_simulate_break(struct tty_struct *tty, int break_state)
+static int ch341_simulate_break(struct tty_struct *tty, int break_state)
 {
 	struct usb_serial_port *port = tty->driver_data;
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned long now, delay;
-	int r;
+	int r, r2;
 
 	if (break_state != 0) {
 		dev_dbg(&port->dev, "enter break state requested\n");
@@ -586,7 +599,7 @@ static void ch341_simulate_break(struct tty_struct *tty, int break_state)
 		 */
 		priv->break_end = jiffies + (11 * HZ / CH341_MIN_BPS);
 
-		return;
+		return 0;
 	}
 
 	dev_dbg(&port->dev, "leave break state requested\n");
@@ -602,17 +615,22 @@ static void ch341_simulate_break(struct tty_struct *tty, int break_state)
 		schedule_timeout_interruptible(delay);
 	}
 
+	r = 0;
 restore:
 	/* Restore original baud rate */
-	r = ch341_set_baudrate_lcr(port->serial->dev, priv, priv->baud_rate,
-				   priv->lcr);
-	if (r < 0)
+	r2 = ch341_set_baudrate_lcr(port->serial->dev, priv, priv->baud_rate,
+			priv->lcr);
+	if (r2 < 0) {
 		dev_err(&port->dev,
 			"restoring original baud rate of %u failed: %d\n",
-			priv->baud_rate, r);
+			priv->baud_rate, r2);
+		return r2;
+	}
+
+	return r;
 }
 
-static void ch341_break_ctl(struct tty_struct *tty, int break_state)
+static int ch341_break_ctl(struct tty_struct *tty, int break_state)
 {
 	const uint16_t ch341_break_reg =
 			((uint16_t) CH341_REG_LCR << 8) | CH341_REG_BREAK;
@@ -622,17 +640,17 @@ static void ch341_break_ctl(struct tty_struct *tty, int break_state)
 	uint16_t reg_contents;
 	uint8_t break_reg[2];
 
-	if (priv->quirks & CH341_QUIRK_SIMULATE_BREAK) {
-		ch341_simulate_break(tty, break_state);
-		return;
-	}
+	if (priv->quirks & CH341_QUIRK_SIMULATE_BREAK)
+		return ch341_simulate_break(tty, break_state);
 
 	r = ch341_control_in(port->serial->dev, CH341_REQ_READ_REG,
 			ch341_break_reg, 0, break_reg, 2);
 	if (r) {
 		dev_err(&port->dev, "%s - USB control read error (%d)\n",
 				__func__, r);
-		return;
+		if (r > 0)
+			r = -EIO;
+		return r;
 	}
 	dev_dbg(&port->dev, "%s - initial ch341 break register contents - reg1: %x, reg2: %x\n",
 		__func__, break_reg[0], break_reg[1]);
@@ -650,9 +668,13 @@ static void ch341_break_ctl(struct tty_struct *tty, int break_state)
 	reg_contents = get_unaligned_le16(break_reg);
 	r = ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG,
 			ch341_break_reg, reg_contents);
-	if (r < 0)
+	if (r < 0) {
 		dev_err(&port->dev, "%s - USB control write error (%d)\n",
 				__func__, r);
+		return r;
+	}
+
+	return 0;
 }
 
 static int ch341_tiocmset(struct tty_struct *tty,

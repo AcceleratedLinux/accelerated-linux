@@ -387,18 +387,21 @@ static int max30100_read_raw(struct iio_dev *indio_dev,
 		 * Temperature reading can only be acquired while engine
 		 * is running
 		 */
-		mutex_lock(&indio_dev->mlock);
-
-		if (!iio_buffer_enabled(indio_dev))
+		if (iio_device_claim_buffer_mode(indio_dev)) {
+			/*
+			 * Replacing -EBUSY or other error code
+			 * returned by iio_device_claim_buffer_mode()
+			 * because user space may rely on the current
+			 * one.
+			 */
 			ret = -EAGAIN;
-		else {
+		} else {
 			ret = max30100_get_temp(data, val);
 			if (!ret)
 				ret = IIO_VAL_INT;
 
+			iio_device_release_buffer_mode(indio_dev);
 		}
-
-		mutex_unlock(&indio_dev->mlock);
 		break;
 	case IIO_CHAN_INFO_SCALE:
 		*val = 1;  /* 0.0625 */
@@ -414,8 +417,7 @@ static const struct iio_info max30100_info = {
 	.read_raw = max30100_read_raw,
 };
 
-static int max30100_probe(struct i2c_client *client,
-			  const struct i2c_device_id *id)
+static int max30100_probe(struct i2c_client *client)
 {
 	struct max30100_data *data;
 	struct iio_dev *indio_dev;
@@ -471,15 +473,13 @@ static int max30100_probe(struct i2c_client *client,
 	return iio_device_register(indio_dev);
 }
 
-static int max30100_remove(struct i2c_client *client)
+static void max30100_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct max30100_data *data = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
 	max30100_set_powermode(data, false);
-
-	return 0;
 }
 
 static const struct i2c_device_id max30100_id[] = {

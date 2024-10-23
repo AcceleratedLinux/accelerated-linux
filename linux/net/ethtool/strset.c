@@ -167,7 +167,7 @@ static int strset_get_id(const struct nlattr *nest, u32 *val,
 			       get_stringset_policy, extack);
 	if (ret < 0)
 		return ret;
-	if (!tb[ETHTOOL_A_STRINGSET_ID])
+	if (NL_REQ_ATTR_CHECK(extack, nest, tb, ETHTOOL_A_STRINGSET_ID))
 		return -EINVAL;
 
 	*val = nla_get_u32(tb[ETHTOOL_A_STRINGSET_ID]);
@@ -274,7 +274,7 @@ static int strset_prepare_set(struct strset_info *info, struct net_device *dev,
 
 static int strset_prepare_data(const struct ethnl_req_info *req_base,
 			       struct ethnl_reply_data *reply_base,
-			       struct genl_info *info)
+			       const struct genl_info *info)
 {
 	const struct strset_req_info *req_info = STRSET_REQINFO(req_base);
 	struct strset_reply_data *data = STRSET_REPDATA(reply_base);

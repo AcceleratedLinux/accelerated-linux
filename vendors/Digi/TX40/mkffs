@@ -1,0 +1,26 @@
+#!/bin/sh
+
+#
+# mkffs -- make MMC flash filesystem for TX40
+#
+# Setup and create partitions on the MMC flash device.
+#
+
+MMC=/dev/mmcblk0
+
+#
+# image is at an offset of 1MiB with a size of 100MiB, while image1 is at an
+# offset of 101MiB with size 100MiB.
+# Note that we use sector start and end numbers to be precise here (since
+# u-boot uses these fixed offsets to find and boot images).
+#
+parted -s ${MMC} mktable gpt
+parted -s ${MMC} mkpart image 2048s 206847s
+parted -s ${MMC} mkpart image1 206848s 411647s
+parted -s ${MMC} mkpart opt ext4 411648s 14223359s
+parted -s ${MMC} mkpart config ext4 14223360s 100%
+
+mkfs.ext4 -F ${MMC}p3
+mkfs.ext4 -F ${MMC}p4
+
+exit 0

@@ -1,4 +1,4 @@
-URL = http://ftp.gnu.org/gnu/parted/parted-3.3.tar.xz
+URL = https://ftp.gnu.org/gnu/parted/parted-3.3.tar.xz
 
 MAKEVARS = 
 CONFOPTS = --disable-device-mapper

@@ -1,9 +1,7 @@
-dal-gpsd-hotplug.patch
-sconstruct-hotplug-path.patch
-gpsdctl-no-autolaunch.patch
+0001-gpsd.hotplug-Handle-DAL-USB-Modem-devices.patch
+gpsdctl-don-t-autolaunch-gpsd-on-GPS-device-add.patch
 poll-for-one-packet-at-a-time.patch
 don-t-shut-down-gpsd-when-idle.patch
 prefix-NMEA-sentences-with-device-name.patch
-sconstruct-remove-sourcecode.patch
-ubxtool-Reworks-c-option-so-that-it-s-usable.patch
-ubxtool-Use-perf-counter-for-deprecated-clock.patch
+Fix-udev-uninstall-script-to-use-DESTDIR-as-udev-ins.patch
+driver_ubx-always-output-NMEA-sentences-instead-of-U.patch

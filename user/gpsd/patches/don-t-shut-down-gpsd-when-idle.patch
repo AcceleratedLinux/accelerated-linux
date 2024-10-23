@@ -1,4 +1,4 @@
-From 14588416d1ad7e506941f503292877e1d018a540 Mon Sep 17 00:00:00 2001
+From 10aa1a8e67c3caf19b5eb65c280315e7a46417bb Mon Sep 17 00:00:00 2001
 From: "Sreeves, Francis" <francis.sreeves@digi.com>
 Date: Tue, 26 May 2020 18:09:22 +0100
 Subject: [PATCH] user/gpsd: don't shut down gpsd when idle
@@ -12,30 +12,30 @@ action.d/location script, so we don't want gpsd shutting itself down.
 
 DAL-2577
 ---
- gpsd.c | 3 +++
+ gpsd/gpsd.c | 3 +++
  1 file changed, 3 insertions(+)
 
-diff --git a/gpsd.c b/gpsd.c
-index a10a27c..9ce4fc6 100644
---- a/gpsd.c
-+++ b/gpsd.c
-@@ -2488,6 +2488,8 @@ int main(int argc, char *argv[])
- 	}
- #endif /* SOCKET_EXPORT_ENABLE */
+diff --git a/gpsd/gpsd.c b/gpsd/gpsd.c
+index 51464515408c..d239a5016576 100644
+--- a/gpsd/gpsd.c
++++ b/gpsd/gpsd.c
+@@ -3060,6 +3060,8 @@ int main(int argc, char *argv[])
+         }
+ #endif  // SOCKET_EXPORT_ENABLE
  
 +/* Don't shut down gpsd, the system will handle this */
 +#if 0
- 	/*
- 	 * Might be time for graceful shutdown if no command-line
- 	 * devices were specified, there are no subscribers, there are
-@@ -2515,6 +2517,7 @@ int main(int argc, char *argv[])
- 		goto shutdown;
- 	    }
- 	}
+         /*
+          * Might be time for graceful shutdown if no command-line
+          * devices were specified, there are no subscribers, there are
+@@ -3093,6 +3095,7 @@ int main(int argc, char *argv[])
+                 goto shutdown;
+             }
+         }
 +#endif
      }
  
-     /* if we make it here, we got a signal... deal with it */
+     // if we make it here, we got a signal... deal with it
 -- 
-2.17.1
+2.34.1
 

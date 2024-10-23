@@ -14,6 +14,7 @@
 #include "fsl-ls1046a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include "fsl-pstore-2048MB.dtsi"
 
 / {
@@ -63,29 +64,56 @@
 			num-ob-windows = <6>;
 		 };
 
-		usb0: usb@2f00000 {
-			usb3-lpm-capable;
-			snps,dis-u1u2-when-u3-quirk;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			clock-names = "ref", "bus_early", "suspend";
-			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
-		};
+		aux_bus {
+			usb0: usb@2f00000 {
+				usb2-lpm-disable;
+				snps,dis_u3_susphy_quirk;
+				snps,dis_u2_susphy_quirk;
+				snps,dis_enblslpm_quirk;
+				snps,dis-u1u2-when-u3-quirk;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				clock-names = "ref", "bus_early", "suspend";
+				clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			};
 
-		usb1: usb@3000000 {
-			usb3-lpm-capable;
-			snps,dis-u1u2-when-u3-quirk;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			clock-names = "ref", "bus_early", "suspend";
-			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
-		};
+			usb1: usb@3000000 {
+				usb2-lpm-disable;
+				snps,dis_u3_susphy_quirk;
+				snps,dis_u2_susphy_quirk;
+				snps,dis_enblslpm_quirk;
+				snps,dis-u1u2-when-u3-quirk;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				clock-names = "ref", "bus_early", "suspend";
+				clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			};
 
-		usb2: usb@3100000 {
-			usb3-lpm-capable;
-			snps,dis-u1u2-when-u3-quirk;
-			snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
-			clock-names = "ref", "bus_early", "suspend";
-			clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			usb2: usb@3100000 {
+				usb2-lpm-disable;
+				snps,dis_u3_susphy_quirk;
+				snps,dis_u2_susphy_quirk;
+				snps,dis_enblslpm_quirk;
+				snps,dis-u1u2-when-u3-quirk;
+				snps,incr-burst-type-adjustment = <1>, <4>, <8>, <16>;
+				clock-names = "ref", "bus_early", "suspend";
+				clocks = <&clockgen 4 1>, <&clockgen 4 1>,<&clockgen 4 1>;
+			};
 		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio0 31 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	sfp1: sfp1 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c0>;
+		mod-def0-gpios = <&gpio0 24 GPIO_ACTIVE_LOW>;
+		maximum-power-milliwatt = <1000>;
 	};
 };
 
@@ -623,13 +651,8 @@
 };
 
 &i2c3 {
-	clock-frequency = <400000>;
+	clock-frequency = <1000000>;
 	status = "okay";
-
-	scl-gpios = <&gpio3 12 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio3 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x40C>;
-	pmux-mode-cfg = <0x00000077 0x00000000 0x00000011>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -717,6 +740,7 @@
 		phy0: ethernet-phy@0 {
 			compatible = "ethernet-phy-ieee802.3-c45";
 			reg = <28>;
+			sfp = <&sfp1>;
 		};
 
 		ethernet-phy@1 {

@@ -22,7 +22,7 @@ ROMFS_DIRS = \
 	sbin \
 	sys \
 	tmp \
-	usr usr/var \
+	usr usr/sbin usr/var \
 	var
 
 all:

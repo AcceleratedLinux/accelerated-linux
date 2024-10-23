@@ -296,7 +296,6 @@ static const struct snd_soc_component_driver soc_component_dev_max9850 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int max9850_i2c_probe(struct i2c_client *i2c)
@@ -321,7 +320,7 @@ static int max9850_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id max9850_i2c_id[] = {
-	{ "max9850", 0 },
+	{ "max9850" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max9850_i2c_id);
@@ -330,7 +329,7 @@ static struct i2c_driver max9850_i2c_driver = {
 	.driver = {
 		.name = "max9850",
 	},
-	.probe_new = max9850_i2c_probe,
+	.probe = max9850_i2c_probe,
 	.id_table = max9850_i2c_id,
 };
 

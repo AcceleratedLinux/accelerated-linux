@@ -37,7 +37,7 @@ struct ad7266_state {
 	struct gpio_desc	*gpios[3];
 
 	/*
-	 * DMA (thus cache coherency maintenance) requires the
+	 * DMA (thus cache coherency maintenance) may require the
 	 * transfer buffers to live in their own cache lines.
 	 * The buffer needs to be large enough to hold two samples (4 bytes) and
 	 * the naturally aligned timestamp (8 bytes).
@@ -45,7 +45,7 @@ struct ad7266_state {
 	struct {
 		__be16 sample[2];
 		s64 timestamp;
-	} data ____cacheline_aligned;
+	} data __aligned(IIO_DMA_MINALIGN);
 };
 
 static int ad7266_wakeup(struct ad7266_state *st)
@@ -157,6 +157,8 @@ static int ad7266_read_raw(struct iio_dev *indio_dev,
 		ret = ad7266_read_single(st, val, chan->address);
 		iio_device_release_direct_mode(indio_dev);
 
+		if (ret < 0)
+			return ret;
 		*val = (*val >> 2) & 0xfff;
 		if (chan->scan_type.sign == 's')
 			*val = sign_extend32(*val,
@@ -371,7 +373,6 @@ static void ad7266_init_channels(struct iio_dev *indio_dev)
 	indio_dev->channels = chan_info->channels;
 	indio_dev->num_channels = chan_info->num_channels;
 	indio_dev->available_scan_masks = chan_info->scan_masks;
-	indio_dev->masklength = chan_info->num_channels - 1;
 }
 
 static const char * const ad7266_gpio_labels[] = {

@@ -13,14 +13,13 @@
 #include <linux/elf.h>
 #include <linux/mm.h>
 #include <linux/numa.h>
-#include <linux/vmalloc.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/jump_label.h>
-
+#include <asm/jump_label.h>
 
 struct mips_hi16 {
 	struct mips_hi16 *next;
@@ -30,17 +29,6 @@ struct mips_hi16 {
 
 static LIST_HEAD(dbe_list);
 static DEFINE_SPINLOCK(dbe_lock);
-
-#ifdef MODULE_START
-void *module_alloc(unsigned long size)
-{
-	if (size == 0)
-		return NULL;
-	return __vmalloc_node_range(size, 1, MODULE_START, MODULE_END,
-				GFP_KERNEL, PAGE_KERNEL, 0, NUMA_NO_NODE,
-				__builtin_return_address(0));
-}
-#endif
 
 static void apply_r_mips_32(u32 *location, u32 base, Elf_Addr v)
 {
@@ -430,8 +418,8 @@ int module_finalize(const Elf_Ehdr *hdr,
 	const Elf_Shdr *s;
 	char *secstrings = (void *)hdr + sechdrs[hdr->e_shstrndx].sh_offset;
 
-	/* Make jump label nops. */
-	jump_label_apply_nops(me);
+	if (IS_ENABLED(CONFIG_JUMP_LABEL))
+		jump_label_apply_nops(me);
 
 	INIT_LIST_HEAD(&me->arch.dbe_list);
 	for (s = sechdrs; s < sechdrs + hdr->e_shnum; s++) {

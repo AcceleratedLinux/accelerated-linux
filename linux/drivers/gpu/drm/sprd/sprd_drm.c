@@ -5,15 +5,15 @@
 
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of_graph.h>
-#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_drv.h>
-#include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
@@ -48,14 +48,14 @@ static void sprd_drm_mode_config_init(struct drm_device *drm)
 	drm->mode_config.helper_private = &sprd_drm_mode_config_helper;
 }
 
-DEFINE_DRM_GEM_CMA_FOPS(sprd_drm_fops);
+DEFINE_DRM_GEM_DMA_FOPS(sprd_drm_fops);
 
 static struct drm_driver sprd_drm_drv = {
 	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
 	.fops			= &sprd_drm_fops,
 
 	/* GEM Operations */
-	DRM_GEM_CMA_DRIVER_OPS,
+	DRM_GEM_DMA_DRIVER_OPS,
 
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
@@ -138,10 +138,9 @@ static int sprd_drm_probe(struct platform_device *pdev)
 	return drm_of_component_probe(&pdev->dev, component_compare_of, &drm_component_ops);
 }
 
-static int sprd_drm_remove(struct platform_device *pdev)
+static void sprd_drm_remove(struct platform_device *pdev)
 {
 	component_master_del(&pdev->dev, &drm_component_ops);
-	return 0;
 }
 
 static void sprd_drm_shutdown(struct platform_device *pdev)
@@ -164,7 +163,7 @@ MODULE_DEVICE_TABLE(of, drm_match_table);
 
 static struct platform_driver sprd_drm_driver = {
 	.probe = sprd_drm_probe,
-	.remove = sprd_drm_remove,
+	.remove_new = sprd_drm_remove,
 	.shutdown = sprd_drm_shutdown,
 	.driver = {
 		.name = "sprd-drm-drv",

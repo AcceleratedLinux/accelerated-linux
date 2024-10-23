@@ -31,11 +31,6 @@ echo 6 > /proc/sys/kernel/printk
 /etc/rc.dev
 
 echo "Configuring GPIOs..."
-# dev mode jumper
-echo 460 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio460/direction
-echo 1 > /sys/class/gpio/gpio460/active_low
-
 # wlan0 needs to be up before netifd, otherwise there's a possible race that
 # will stop wifi from working (mac80211.sh will del the interface, and it
 # will never come back)
@@ -47,14 +42,12 @@ while ! ifconfig wlan0 >/dev/null 2>&1 && [ "$loop" -gt "0" ]; do
 done
 
 # Enable Cell module power
-echo 377 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio377/direction
-# Enable sim select GPIO
-echo 376 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio376/direction
-touch /var/run/sim_button # This file must be present before the sim daemon starts
+echo 657 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio657/direction
+# This file must be present before the sim daemon starts
+touch /var/run/sim_button
 # Enable cell detect GPIO
-echo 378 > /sys/class/gpio/export
+echo 658 > /sys/class/gpio/export
 
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
@@ -149,8 +142,8 @@ while [ "$loop" -gt "0" ] && [ ! -e /sys/class/led/serlnk1 ]; do
 done
 
 # Enable all serial transceivers now that ports are in correct mode (sun break)
-echo 493 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio493/direction
+echo 525 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio525/direction
 
 # Reset device status LEDs before actions start... status LEDs all
 # default to timer trigger
@@ -164,6 +157,8 @@ done
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
 random_seed restore
+
+ln -s /sys/class/hwmon/hwmon0/temp2_input /var/run/cpu_temp
 
 # init processing
 [ -x /etc/rcS ] && /etc/rcS

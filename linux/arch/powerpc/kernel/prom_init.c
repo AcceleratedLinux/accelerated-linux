@@ -42,7 +42,7 @@
 #include <asm/iommu.h>
 #include <asm/btext.h>
 #include <asm/sections.h>
-#include <asm/machdep.h>
+#include <asm/setup.h>
 #include <asm/asm-prototypes.h>
 #include <asm/ultravisor-api.h>
 
@@ -95,12 +95,6 @@ static int of_workarounds __prombss;
 
 #define OF_WA_CLAIM	1	/* do phys/virt claim separately, then map */
 #define OF_WA_LONGTRAIL	2	/* work around longtrail bugs */
-
-#define PROM_BUG() do {						\
-        prom_printf("kernel BUG at %s line 0x%x!\n",		\
-		    __FILE__, __LINE__);			\
-	__builtin_trap();					\
-} while (0)
 
 #ifdef DEBUG_PROM
 #define prom_debug(x...)	prom_printf(x)
@@ -823,8 +817,8 @@ static void __init early_cmdline_parse(void)
 		opt += 4;
 		prom_memory_limit = prom_memparse(opt, (const char **)&opt);
 #ifdef CONFIG_PPC64
-		/* Align to 16 MB == size of ppc64 large page */
-		prom_memory_limit = ALIGN(prom_memory_limit, 0x1000000);
+		/* Align down to 16 MB which is large page size with hash page translation */
+		prom_memory_limit = ALIGN_DOWN(prom_memory_limit, SZ_16M);
 #endif
 	}
 
@@ -953,7 +947,7 @@ struct option_vector7 {
 } __packed;
 
 struct ibm_arch_vec {
-	struct { u32 mask, val; } pvrs[14];
+	struct { __be32 mask, val; } pvrs[16];
 
 	u8 num_vectors;
 
@@ -1012,6 +1006,14 @@ static const struct ibm_arch_vec ibm_architecture_vec_template __initconst = {
 		{
 			.mask = cpu_to_be32(0xffff0000), /* POWER10 */
 			.val  = cpu_to_be32(0x00800000),
+		},
+		{
+			.mask = cpu_to_be32(0xffff0000), /* POWER11 */
+			.val  = cpu_to_be32(0x00820000),
+		},
+		{
+			.mask = cpu_to_be32(0xffffffff), /* P11 compliant */
+			.val  = cpu_to_be32(0x0f000007),
 		},
 		{
 			.mask = cpu_to_be32(0xffffffff), /* all 3.1-compliant */

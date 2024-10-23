@@ -1,0 +1,5 @@
+config USER_MSTPD
+	bool "mstpd"
+	default false
+	help
+	  RSTP Protocol daemon

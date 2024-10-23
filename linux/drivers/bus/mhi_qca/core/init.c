@@ -73,7 +73,8 @@ static const char * const mhi_pm_state_str[] = {
 
 const char *to_mhi_pm_state_str(enum mhi_pm_state state)
 {
-	int index = find_last_bit((unsigned long *)&state, 32);
+	unsigned long lstate = state;
+	int index = find_last_bit(&lstate, 32);
 
 	if (index >= ARRAY_SIZE(mhi_pm_state_str))
 		return "Invalid State";
@@ -1375,7 +1376,7 @@ void mhi_driver_unregister(struct mhi_driver *mhi_drv)
 }
 EXPORT_SYMBOL_GPL(mhi_driver_unregister);
 
-static int mhi_uevent(struct device *dev, struct kobj_uevent_env *env)
+static int mhi_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	struct mhi_device *mhi_dev = to_mhi_device(dev);
 

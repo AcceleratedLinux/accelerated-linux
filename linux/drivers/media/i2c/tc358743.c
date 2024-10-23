@@ -133,8 +133,8 @@ static void i2c_rd(struct v4l2_subdev *sd, u16 reg, u8 *values, u32 n)
 
 	err = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 	if (err != ARRAY_SIZE(msgs)) {
-		v4l2_err(sd, "%s: reading register 0x%x from 0x%x failed\n",
-				__func__, reg, client->addr);
+		v4l2_err(sd, "%s: reading register 0x%x from 0x%x failed: %d\n",
+				__func__, reg, client->addr, err);
 	}
 }
 
@@ -165,8 +165,8 @@ static void i2c_wr(struct v4l2_subdev *sd, u16 reg, u8 *values, u32 n)
 
 	err = i2c_transfer(client->adapter, &msg, 1);
 	if (err != 1) {
-		v4l2_err(sd, "%s: writing register 0x%x from 0x%x failed\n",
-				__func__, reg, client->addr);
+		v4l2_err(sd, "%s: writing register 0x%x from 0x%x failed: %d\n",
+				__func__, reg, client->addr, err);
 		return;
 	}
 
@@ -964,6 +964,8 @@ static void tc358743_cec_handler(struct v4l2_subdev *sd, u16 intstatus,
 
 		v = i2c_rd32(sd, CECRCTR);
 		msg.len = v & 0x1f;
+		if (msg.len > CEC_MAX_MSG_SIZE)
+			msg.len = CEC_MAX_MSG_SIZE;
 		for (i = 0; i < msg.len; i++) {
 			v = i2c_rd32(sd, CECRBUF1 + i * 4);
 			msg.msg[i] = v & 0xff;
@@ -1519,10 +1521,13 @@ static int tc358743_g_input_status(struct v4l2_subdev *sd, u32 *status)
 	return 0;
 }
 
-static int tc358743_s_dv_timings(struct v4l2_subdev *sd,
+static int tc358743_s_dv_timings(struct v4l2_subdev *sd, unsigned int pad,
 				 struct v4l2_dv_timings *timings)
 {
 	struct tc358743_state *state = to_state(sd);
+
+	if (pad != 0)
+		return -EINVAL;
 
 	if (!timings)
 		return -EINVAL;
@@ -1551,10 +1556,13 @@ static int tc358743_s_dv_timings(struct v4l2_subdev *sd,
 	return 0;
 }
 
-static int tc358743_g_dv_timings(struct v4l2_subdev *sd,
+static int tc358743_g_dv_timings(struct v4l2_subdev *sd, unsigned int pad,
 				 struct v4l2_dv_timings *timings)
 {
 	struct tc358743_state *state = to_state(sd);
+
+	if (pad != 0)
+		return -EINVAL;
 
 	*timings = state->timings;
 
@@ -1571,10 +1579,13 @@ static int tc358743_enum_dv_timings(struct v4l2_subdev *sd,
 			&tc358743_timings_cap, NULL, NULL);
 }
 
-static int tc358743_query_dv_timings(struct v4l2_subdev *sd,
-		struct v4l2_dv_timings *timings)
+static int tc358743_query_dv_timings(struct v4l2_subdev *sd, unsigned int pad,
+				     struct v4l2_dv_timings *timings)
 {
 	int ret;
+
+	if (pad != 0)
+		return -EINVAL;
 
 	ret = tc358743_get_detected_timings(sd, timings);
 	if (ret)
@@ -1820,9 +1831,6 @@ static const struct v4l2_subdev_core_ops tc358743_core_ops = {
 
 static const struct v4l2_subdev_video_ops tc358743_video_ops = {
 	.g_input_status = tc358743_g_input_status,
-	.s_dv_timings = tc358743_s_dv_timings,
-	.g_dv_timings = tc358743_g_dv_timings,
-	.query_dv_timings = tc358743_query_dv_timings,
 	.s_stream = tc358743_s_stream,
 };
 
@@ -1832,6 +1840,9 @@ static const struct v4l2_subdev_pad_ops tc358743_pad_ops = {
 	.get_fmt = tc358743_get_fmt,
 	.get_edid = tc358743_g_edid,
 	.set_edid = tc358743_s_edid,
+	.s_dv_timings = tc358743_s_dv_timings,
+	.g_dv_timings = tc358743_g_dv_timings,
+	.query_dv_timings = tc358743_query_dv_timings,
 	.enum_dv_timings = tc358743_enum_dv_timings,
 	.dv_timings_cap = tc358743_dv_timings_cap,
 	.get_mbus_config = tc358743_get_mbus_config,
@@ -1889,14 +1900,11 @@ static int tc358743_probe_of(struct tc358743_state *state)
 	int ret;
 
 	refclk = devm_clk_get(dev, "refclk");
-	if (IS_ERR(refclk)) {
-		if (PTR_ERR(refclk) != -EPROBE_DEFER)
-			dev_err(dev, "failed to get refclk: %ld\n",
-				PTR_ERR(refclk));
-		return PTR_ERR(refclk);
-	}
+	if (IS_ERR(refclk))
+		return dev_err_probe(dev, PTR_ERR(refclk),
+				     "failed to get refclk\n");
 
-	ep = of_graph_get_next_endpoint(dev->of_node, NULL);
+	ep = of_graph_get_endpoint_by_regs(dev->of_node, 0, -1);
 	if (!ep) {
 		dev_err(dev, "missing endpoint node\n");
 		return -EINVAL;
@@ -2092,9 +2100,6 @@ static int tc358743_probe(struct i2c_client *client)
 	state->mbus_fmt_code = MEDIA_BUS_FMT_RGB888_1X24;
 
 	sd->dev = &client->dev;
-	err = v4l2_async_register_subdev(sd);
-	if (err < 0)
-		goto err_hdl;
 
 	mutex_init(&state->confctl_mutex);
 
@@ -2114,7 +2119,7 @@ static int tc358743_probe(struct i2c_client *client)
 
 	tc358743_initial_setup(sd);
 
-	tc358743_s_dv_timings(sd, &default_timing);
+	tc358743_s_dv_timings(sd, 0, &default_timing);
 
 	tc358743_set_csi_color_space(sd);
 
@@ -2152,6 +2157,10 @@ static int tc358743_probe(struct i2c_client *client)
 	if (err)
 		goto err_work_queues;
 
+	err = v4l2_async_register_subdev(sd);
+	if (err < 0)
+		goto err_work_queues;
+
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 		  client->addr << 1, client->adapter->name);
 
@@ -2169,7 +2178,7 @@ err_hdl:
 	return err;
 }
 
-static int tc358743_remove(struct i2c_client *client)
+static void tc358743_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct tc358743_state *state = to_state(sd);
@@ -2185,8 +2194,6 @@ static int tc358743_remove(struct i2c_client *client)
 	mutex_destroy(&state->confctl_mutex);
 	media_entity_cleanup(&sd->entity);
 	v4l2_ctrl_handler_free(&state->hdl);
-
-	return 0;
 }
 
 static const struct i2c_device_id tc358743_id[] = {
@@ -2209,7 +2216,7 @@ static struct i2c_driver tc358743_driver = {
 		.name = "tc358743",
 		.of_match_table = of_match_ptr(tc358743_of_match),
 	},
-	.probe_new = tc358743_probe,
+	.probe = tc358743_probe,
 	.remove = tc358743_remove,
 	.id_table = tc358743_id,
 };

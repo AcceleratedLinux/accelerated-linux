@@ -635,9 +635,8 @@ __sso_led_dt_parse(struct sso_led_priv *priv, struct fwnode_handle *fw_ssoled)
 		led->priv = priv;
 		desc = &led->desc;
 
-		led->gpiod = devm_fwnode_get_gpiod_from_child(dev, NULL,
-							      fwnode_child,
-							      GPIOD_ASIS, NULL);
+		led->gpiod = devm_fwnode_gpiod_get(dev, fwnode_child, NULL,
+						   GPIOD_ASIS, NULL);
 		if (IS_ERR(led->gpiod)) {
 			ret = dev_err_probe(dev, PTR_ERR(led->gpiod), "led: get gpio fail!\n");
 			goto __dt_err;
@@ -838,7 +837,7 @@ static int intel_sso_led_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int intel_sso_led_remove(struct platform_device *pdev)
+static void intel_sso_led_remove(struct platform_device *pdev)
 {
 	struct sso_led_priv *priv;
 	struct sso_led *led, *n;
@@ -851,8 +850,6 @@ static int intel_sso_led_remove(struct platform_device *pdev)
 	}
 
 	regmap_exit(priv->mmap);
-
-	return 0;
 }
 
 static const struct of_device_id of_sso_led_match[] = {
@@ -864,7 +861,7 @@ MODULE_DEVICE_TABLE(of, of_sso_led_match);
 
 static struct platform_driver intel_sso_led_driver = {
 	.probe		= intel_sso_led_probe,
-	.remove		= intel_sso_led_remove,
+	.remove_new	= intel_sso_led_remove,
 	.driver		= {
 			.name = "lgm-ssoled",
 			.of_match_table = of_sso_led_match,

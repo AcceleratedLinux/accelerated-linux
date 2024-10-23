@@ -19,9 +19,10 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
 	tmp \
-	usr usr/var \
+	usr usr/sbin usr/var \
 	var
 
 DEVICES = \
@@ -96,6 +97,6 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/integratorcp.dtb >> $(ZIMAGE)
+	cat $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/arm/integratorcp.dtb >> $(ZIMAGE)
 
 include $(ROOTDIR)/vendors/config/config.dev

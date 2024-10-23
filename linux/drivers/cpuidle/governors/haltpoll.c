@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/kvm_para.h>
+#include <trace/events/power.h>
 
 static unsigned int guest_halt_poll_ns __read_mostly = 200000;
 module_param(guest_halt_poll_ns, uint, 0644);
@@ -90,16 +91,23 @@ static void adjust_poll_limit(struct cpuidle_device *dev, u64 block_ns)
 		if (val > guest_halt_poll_ns)
 			val = guest_halt_poll_ns;
 
+		trace_guest_halt_poll_ns_grow(val, dev->poll_limit_ns);
 		dev->poll_limit_ns = val;
 	} else if (block_ns > guest_halt_poll_ns &&
 		   guest_halt_poll_allow_shrink) {
 		unsigned int shrink = guest_halt_poll_shrink;
 
 		val = dev->poll_limit_ns;
-		if (shrink == 0)
+		if (shrink == 0) {
 			val = 0;
-		else
+		} else {
 			val /= shrink;
+			/* Reset value to 0 if shrunk below grow_start */
+			if (val < guest_halt_poll_grow_start)
+				val = 0;
+		}
+
+		trace_guest_halt_poll_ns_shrink(val, dev->poll_limit_ns);
 		dev->poll_limit_ns = val;
 	}
 }

@@ -1,6 +1,6 @@
 
-VERSION = 6.3
-URL = http://ftp.gnu.org/pub/gnu/ncurses/ncurses-$(VERSION).tar.gz
+VERSION = 6.4
+URL = https://ftp.gnu.org/pub/gnu/ncurses/ncurses-$(VERSION).tar.gz
 COMMON_CONFOPTS  = --without-ada
 COMMON_CONFOPTS += --without-cxx
 COMMON_CONFOPTS += --without-manpages
@@ -44,7 +44,7 @@ build/ncurses-host-built:
 	ln -s ncurses-$(VERSION)-license build/ncurses-host-license
 
 	cd build/ncurses-host; \
-	export PKG_CONFIG_LIBDIR= PKG_CONFIG_PATH= EXTRA_CFLAGS= CPUFLAGS= CPU_CFLAGS= CXXFLAGS= CPPFLAGS= LDLIBS= LIBC= LIBS= CC=gcc CXX=g++ LD=gcc AR= RANLIB= CFLAGS= LDFLAGS= ; \
+	export PKG_CONFIG_LIBDIR= PKG_CONFIG_PATH= PKG_CONFIG_SYSROOT_DIR= EXTRA_CFLAGS= CPUFLAGS= CPU_CFLAGS= CXXFLAGS= CPPFLAGS= LDLIBS= LIBC= LIBS= CC=gcc CXX=g++ LD=gcc AR= RANLIB= CFLAGS= LDFLAGS= ; \
 	$(CONFVARS) ./configure \
 		--prefix=$$(pwd) \
 		$(COMMON_CONFOPTS) \

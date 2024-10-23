@@ -1,5 +1,5 @@
 VERSION = 4.0.14
-URL = http://download.redis.io/releases/redis-$(VERSION).tar.gz
+URL = https://download.redis.io/releases/redis-$(VERSION).tar.gz
 
 MAKEVARS = USE_JEMALLOC=no PREFIX=$(shell pwd)/build/redis-$(VERSION)-install/usr
 

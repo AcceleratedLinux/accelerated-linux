@@ -256,7 +256,7 @@ static int tmp401_reg_write(void *context, unsigned int reg, unsigned int val)
 static const struct regmap_config tmp401_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 16,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.volatile_reg = tmp401_regmap_is_volatile,
 	.reg_read = tmp401_reg_read,
 	.reg_write = tmp401_reg_write,
@@ -671,7 +671,7 @@ static int tmp401_detect(struct i2c_client *client,
 	if (reg > 15)
 		return -ENODEV;
 
-	strlcpy(info->type, tmp401_id[kind].name, I2C_NAME_SIZE);
+	strscpy(info->type, tmp401_id[kind].name, I2C_NAME_SIZE);
 
 	return 0;
 }
@@ -766,7 +766,7 @@ static struct i2c_driver tmp401_driver = {
 		.name	= "tmp401",
 		.of_match_table = of_match_ptr(tmp4xx_of_match),
 	},
-	.probe_new	= tmp401_probe,
+	.probe		= tmp401_probe,
 	.id_table	= tmp401_id,
 	.detect		= tmp401_detect,
 	.address_list	= normal_i2c,

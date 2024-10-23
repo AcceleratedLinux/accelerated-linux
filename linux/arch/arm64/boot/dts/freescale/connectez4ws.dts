@@ -1,0 +1,359 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Include file for Digi ConnectEZ-4.
+ *
+ * Copyright 2016 Freescale Semiconductor, Inc.
+ * Copyright 2018 Digi Inc.
+ *
+ * Mingkai Hu <mingkai.hu@nxp.com>
+ * Greg Ungerer <gregory.ungerer@digi.com>
+ */
+
+/dts-v1/;
+#include "fsl-ls1012a.dtsi"
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Digi ConnectEZ-4 WS";
+	compatible = "digi,connectez4ws", "digi,connectez", "fsl,ls1012a";
+
+	aliases {
+		serial0 = &duart0;
+		serial1 = &duart1;
+	};
+
+	chosen {
+		stdout-path = "serial1:115200n8";
+	};
+
+	sys_mclk: clock-mclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+	};
+
+	soc {
+		rcpm@1ee2000 {
+			compatible = "fsl,ls1012a-rcpm", "fsl,qoriq-rcpm-2.1";
+			reg = <0x0 0x1ee2000 0x0 0x1000>;
+			fsl,#rcpm-wakeup-cells = <1>;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		pfe_reserved: packetbuffer@83400000 {
+			reg = <0 0x83400000 0 0xc00000>;
+		};
+
+		/*
+		* 64KiB reserved for pstore (ramoops).
+		* phys mem 0x0000000080000000-0x000000008bdfefff
+		*/
+		ramoops@8bdfdfff {
+			compatible = "ramoops";
+			reg = <0 0x8b000000 0 0x10000>;
+			ecc-size = <16>;
+			record-size = <0x1000>;
+			console-size = <0x1000>;
+		};
+	};
+
+	pfe: pfe@4000000 {
+		status = "okay";
+		compatible = "fsl,pfe";
+		reg =	<0x0 0x04000000 0x0 0xc00000>,	/* AXI 16M */
+			<0x0 0x83400000 0x0 0xc00000>;	/* PFE DDR 12M */
+		reg-names = "pfe", "pfe-ddr";
+		fsl,pfe-num-interfaces = <0x2>;
+		interrupts = <0 172 0x4>,	 /* HIF interrupt */
+				 <0 173 0x4>,	 /*HIF_NOCPY interrupt */
+				 <0 174 0x4>;	 /* WoL interrupt */
+		interrupt-names = "pfe_hif", "pfe_hif_nocpy", "pfe_wol";
+		memory-region = <&pfe_reserved>;
+		fsl,pfe-scfg = <&scfg 0>;
+		fsl,rcpm-wakeup = <&rcpm 0xf0000020>;
+		clocks = <&clockgen 4 0>;
+		clock-names = "pfe";
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys-polled";
+		poll-interval = <100>; /* msec */
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio4 3 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		ser1link {
+			label = "serlnk1";
+			gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser2link {
+			label = "serlnk2";
+			gpios = <&gpio3 1 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser3link {
+			label = "serlnk3";
+			gpios = <&gpio3 2 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		ser4link {
+			label = "serlnk4";
+			gpios = <&gpio3 3 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+	};
+};
+
+&pcie1 {
+	status = "okay";
+};
+
+&duart0 {
+	status = "okay";
+};
+
+&duart1 {
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+
+	lp5569a:lp5569@32 {
+		compatible = "ti,lp5569";
+		reg = <0x32>;
+		label = "lp5569";
+		clock-mode = /bits/ 8 <1>;	/* internal */
+		gpio-strobe-sec = /bits/ 8 <0x4>; /* strobe gpio every 4 seconds for external watchdog */
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		chan0 {
+			chan-name = "pwrb";
+			led-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			invert = /bits/ 8 <0x01>;	/* inverted LED */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <0>;
+			linux,default-trigger = "timer";
+		};
+
+		chan1 {
+			chan-name = "pwrg";
+			led-cur = /bits/ 8 <0x03>;	/* 0.3mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <1>;
+			linux,default-trigger = "timer";
+		};
+
+		chan2 {
+			chan-name = "pwrr";
+			led-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <2>;
+			linux,default-trigger = "timer";
+		};
+		
+		chan3 {
+			chan-name = "wifib";
+			led-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <3>;
+			linux,default-trigger = "timer";
+		};
+
+		chan4 {
+			chan-name = "wifig";
+			led-cur = /bits/ 8 <0x03>;	/* 0.3mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <4>;
+			linux,default-trigger = "timer";
+		};
+
+		chan5 {
+			chan-name = "wifir";
+			led-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <5>;
+			linux,default-trigger = "timer";
+		};
+
+		chan6 {
+			chan-name = "userb";
+			led-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_BLUE>;
+			reg = <6>;
+			linux,default-trigger = "timer";
+		};
+
+		chan7 {
+			chan-name = "userg";
+			led-cur = /bits/ 8 <0x03>;	/* 0.3mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_GREEN>;
+			reg = <7>;
+			linux,default-trigger = "timer";
+		};
+
+		chan8 {
+			chan-name = "userr";
+			led-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			max-cur = /bits/ 8 <0x18>;	/* 2.4mA */
+			color = <LED_COLOR_ID_RED>;
+			reg = <8>;
+			linux,default-trigger = "timer";
+		};
+
+	};
+
+	temperature-sensor@4d {
+		compatible = "onnn,nct1008"; /* nct72 reg/pin compatible */
+		reg = <0x4d>;
+	};
+
+	gpio2: pca9538@70 {
+		compatible = "nxp,pca9538";
+		reg = <0x70>;
+		pinctrl-names = "default";
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-line-names = "term1", "term2", "term3", "term4", "4w2w1", "4w2w2", "4w2w3", "4w2w4";
+	};
+
+	gpio3: pca9538@73 {
+		compatible = "nxp,pca9538";
+		reg = <0x73>;
+		pinctrl-names = "default";
+		gpio-controller;
+		#gpio-cells = <2>;
+		/* 0 - 3 = serlnk1-4 LED */
+		gpio-line-names = "", "", "", "", "otp_fuse", "wlan_dev_wake", "wlan_rst", "wlan_pdn";
+	};
+
+	gpio4: pca9538@71 {
+		compatible = "nxp,pca9538";
+		reg = <0x71>;
+		pinctrl-names = "default";
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-line-names = "", "developer_", "wlan_wake_host", "factory", "manuf", "temp_alert", "pmic_int", "sun_break";
+	};
+
+	accelerometer@1e {
+		compatible = "st,lis2hh12-accel";
+		reg = <0x1e>;
+	};
+};
+
+
+&i2c1 {
+	clock-frequency = <1000000>;
+	status = "okay";
+
+	rng: atecc508a@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
+};
+
+&qspi {
+	num-cs = <1>;
+	bus-num = <0>;
+	status = "okay";
+
+	qflash0: w25q32dw@0 {
+		compatible = "jedec,spi-nor";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		spi-max-frequency = <80000000>;
+		spi-rx-bus-width = <1>;
+		spi-tx-bus-width = <1>;
+		reg = <0>;
+	};
+};
+
+&pfe {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	ethernet@0 {
+		compatible = "fsl,pfe-gemac-port";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x0>;	/* GEM_ID */
+		fsl,gemac-bus-id = <0x0>; /* BUS_ID */
+		fsl,gemac-phy-id = <0x0>; /* PHY_ID */
+		fsl,mdio-mux-val = <0x0>;
+		phy-mode = "sgmii"; /* use strapped tx/rx delay */
+		fsl,pfe-phy-if-flags = <0x0>;
+
+		mdio {
+			reg = <0x1>; /* enabled/disabled */
+		};
+	};
+
+	ethernet@1 {
+		compatible = "fsl,pfe-gemac-port";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x1>;	/* GEM_ID */
+		fsl,gemac-bus-id = <0x0>; /* BUS_ID */
+		fsl,gemac-phy-id = <0x1>; /* PHY_ID */
+		fsl,mdio-mux-val = <0x0>;
+		phy-mode = "rgmii-id"; /* use strapped tx/rx delay */
+		fsl,pfe-phy-if-flags = <0x0>;
+
+		mdio {
+			reg = <0x1>; /* enabled/disabled */
+		};
+	};
+};
+
+&esdhc0 {
+	sd-uhs-sdr104;
+	non-removable;
+	status = "okay";
+};
+
+&esdhc1 {
+	mmc-hs200-1_8v;
+	non-removable;
+	status = "okay";
+};
+
+&gpio0 {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
+};

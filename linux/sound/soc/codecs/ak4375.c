@@ -9,7 +9,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <sound/soc.h>
@@ -473,7 +473,6 @@ static const struct snd_soc_component_driver soc_codec_dev_ak4375 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config ak4375_regmap = {
@@ -581,11 +580,9 @@ static int ak4375_i2c_probe(struct i2c_client *i2c)
 	return 0;
 }
 
-static int ak4375_i2c_remove(struct i2c_client *i2c)
+static void ak4375_i2c_remove(struct i2c_client *i2c)
 {
 	pm_runtime_disable(&i2c->dev);
-
-	return 0;
 }
 
 static const struct of_device_id ak4375_of_match[] = {
@@ -600,7 +597,7 @@ static struct i2c_driver ak4375_i2c_driver = {
 		.pm = &ak4375_pm,
 		.of_match_table = ak4375_of_match,
 	},
-	.probe_new = ak4375_i2c_probe,
+	.probe = ak4375_i2c_probe,
 	.remove = ak4375_i2c_remove,
 };
 module_i2c_driver(ak4375_i2c_driver);

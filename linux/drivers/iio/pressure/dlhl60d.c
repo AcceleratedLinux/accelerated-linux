@@ -47,7 +47,7 @@ struct dlh_state {
 	struct dlh_info info;
 	bool use_interrupt;
 	struct completion completion;
-	u8 rx_buf[DLH_NUM_READ_BYTES] ____cacheline_aligned;
+	u8 rx_buf[DLH_NUM_READ_BYTES];
 };
 
 static struct dlh_info dlh_info_tbl[] = {
@@ -129,9 +129,8 @@ static int dlh_read_direct(struct dlh_state *st,
 	if (ret)
 		return ret;
 
-	*pressure = get_unaligned_be32(&st->rx_buf[1]) >> 8;
-	*temperature = get_unaligned_be32(&st->rx_buf[3]) &
-		GENMASK(DLH_NUM_TEMP_BITS - 1, 0);
+	*pressure = get_unaligned_be24(&st->rx_buf[1]);
+	*temperature = get_unaligned_be24(&st->rx_buf[4]);
 
 	return 0;
 }
@@ -251,18 +250,17 @@ static irqreturn_t dlh_trigger_handler(int irq, void *private)
 	struct dlh_state *st = iio_priv(indio_dev);
 	int ret;
 	unsigned int chn, i = 0;
-	__be32 tmp_buf[2];
+	__be32 tmp_buf[2] = { };
 
 	ret = dlh_start_capture_and_read(st);
 	if (ret)
 		goto out;
 
 	for_each_set_bit(chn, indio_dev->active_scan_mask,
-		indio_dev->masklength) {
-		memcpy(tmp_buf + i,
+			 indio_dev->masklength) {
+		memcpy(&tmp_buf[i++],
 			&st->rx_buf[1] + chn * DLH_NUM_DATA_BYTES,
 			DLH_NUM_DATA_BYTES);
-		i++;
 	}
 
 	iio_push_to_buffers(indio_dev, tmp_buf);
@@ -283,9 +281,9 @@ static irqreturn_t dlh_interrupt(int irq, void *private)
 	return IRQ_HANDLED;
 };
 
-static int dlh_probe(struct i2c_client *client,
-	const struct i2c_device_id *id)
+static int dlh_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct dlh_state *st;
 	struct iio_dev *indio_dev;
 	int ret;

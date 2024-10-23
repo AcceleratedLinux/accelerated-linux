@@ -506,7 +506,7 @@ printk("do something with color palette!\n");
 /* We implement our own mmap to set MAY_SHARE and add the correct size */
 static int m532xfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 {
-	vma->vm_flags |= VM_MAYSHARE| VM_SHARED;
+	vm_flags_set(vma, VM_MAYSHARE| VM_SHARED);
 
 	vma->vm_start = info->fix.smem_start;
 	vma->vm_end   = info->fix.smem_start + info->fix.smem_len;
@@ -638,7 +638,7 @@ int __init m532xfb_init(void)
 	* driver can provide (pan/wrap/copyarea/etc.) and whether it
 	* is a module -- see FBINFO_* in include/linux/fb.h
 	*/
-	info.flags = FBINFO_DEFAULT + FBINFO_HWACCEL_DISABLED;
+	info.flags = FBINFO_HWACCEL_DISABLED;
 	info.par = &current_par;
 
 	/*

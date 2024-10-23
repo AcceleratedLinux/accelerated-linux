@@ -4,7 +4,7 @@
  *
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
- * Copyright (C) 2018 - 2019, 2021 Intel Corporation
+ * Copyright (C) 2018 - 2019, 2021-2024 Intel Corporation
  */
 
 #include <linux/debugfs.h>
@@ -201,6 +201,36 @@ static const struct file_operations airtime_flags_ops = {
 	.llseek = default_llseek,
 };
 
+static ssize_t aql_pending_read(struct file *file,
+				char __user *user_buf,
+				size_t count, loff_t *ppos)
+{
+	struct ieee80211_local *local = file->private_data;
+	char buf[400];
+	int len = 0;
+
+	len = scnprintf(buf, sizeof(buf),
+			"AC     AQL pending\n"
+			"VO     %u us\n"
+			"VI     %u us\n"
+			"BE     %u us\n"
+			"BK     %u us\n"
+			"total  %u us\n",
+			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_VO]),
+			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_VI]),
+			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_BE]),
+			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_BK]),
+			atomic_read(&local->aql_total_pending_airtime));
+	return simple_read_from_buffer(user_buf, count, ppos,
+				       buf, len);
+}
+
+static const struct file_operations aql_pending_ops = {
+	.read = aql_pending_read,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
 static ssize_t aql_txq_limit_read(struct file *file,
 				  char __user *user_buf,
 				  size_t count,
@@ -216,14 +246,14 @@ static ssize_t aql_txq_limit_read(struct file *file,
 			"VI	%u		%u\n"
 			"BE	%u		%u\n"
 			"BK	%u		%u\n",
-			local->airtime[IEEE80211_AC_VO].aql_txq_limit_low,
-			local->airtime[IEEE80211_AC_VO].aql_txq_limit_high,
-			local->airtime[IEEE80211_AC_VI].aql_txq_limit_low,
-			local->airtime[IEEE80211_AC_VI].aql_txq_limit_high,
-			local->airtime[IEEE80211_AC_BE].aql_txq_limit_low,
-			local->airtime[IEEE80211_AC_BE].aql_txq_limit_high,
-			local->airtime[IEEE80211_AC_BK].aql_txq_limit_low,
-			local->airtime[IEEE80211_AC_BK].aql_txq_limit_high);
+			local->aql_txq_limit_low[IEEE80211_AC_VO],
+			local->aql_txq_limit_high[IEEE80211_AC_VO],
+			local->aql_txq_limit_low[IEEE80211_AC_VI],
+			local->aql_txq_limit_high[IEEE80211_AC_VI],
+			local->aql_txq_limit_low[IEEE80211_AC_BE],
+			local->aql_txq_limit_high[IEEE80211_AC_BE],
+			local->aql_txq_limit_low[IEEE80211_AC_BK],
+			local->aql_txq_limit_high[IEEE80211_AC_BK]);
 	return simple_read_from_buffer(user_buf, count, ppos,
 				       buf, len);
 }
@@ -255,13 +285,13 @@ static ssize_t aql_txq_limit_write(struct file *file,
 	if (ac >= IEEE80211_NUM_ACS)
 		return -EINVAL;
 
-	q_limit_low_old = local->airtime[ac].aql_txq_limit_low;
-	q_limit_high_old = local->airtime[ac].aql_txq_limit_high;
+	q_limit_low_old = local->aql_txq_limit_low[ac];
+	q_limit_high_old = local->aql_txq_limit_high[ac];
 
-	local->airtime[ac].aql_txq_limit_low = q_limit_low;
-	local->airtime[ac].aql_txq_limit_high = q_limit_high;
+	wiphy_lock(local->hw.wiphy);
+	local->aql_txq_limit_low[ac] = q_limit_low;
+	local->aql_txq_limit_high[ac] = q_limit_high;
 
-	mutex_lock(&local->sta_mtx);
 	list_for_each_entry(sta, &local->sta_list, list) {
 		/* If a sta has customized queue limits, keep it */
 		if (sta->airtime[ac].aql_limit_low == q_limit_low_old &&
@@ -270,7 +300,8 @@ static ssize_t aql_txq_limit_write(struct file *file,
 			sta->airtime[ac].aql_limit_high = q_limit_high;
 		}
 	}
-	mutex_unlock(&local->sta_mtx);
+	wiphy_unlock(local->hw.wiphy);
+
 	return count;
 }
 
@@ -382,46 +413,6 @@ static const struct file_operations force_tx_status_ops = {
 	.llseek = default_llseek,
 };
 
-static ssize_t airtime_read(struct file *file,
-			    char __user *user_buf,
-			    size_t count,
-			    loff_t *ppos)
-{
-	struct ieee80211_local *local = file->private_data;
-	char buf[200];
-	u64 v_t[IEEE80211_NUM_ACS];
-	u64 wt[IEEE80211_NUM_ACS];
-	int len = 0, ac;
-
-	for (ac = 0; ac < IEEE80211_NUM_ACS; ac++) {
-		spin_lock_bh(&local->airtime[ac].lock);
-		v_t[ac] = local->airtime[ac].v_t;
-		wt[ac] = local->airtime[ac].weight_sum;
-		spin_unlock_bh(&local->airtime[ac].lock);
-	}
-	len = scnprintf(buf, sizeof(buf),
-			"\tVO         VI         BE         BK\n"
-			"Virt-t\t%-10llu %-10llu %-10llu %-10llu\n"
-			"Weight\t%-10llu %-10llu %-10llu %-10llu\n",
-			v_t[0],
-			v_t[1],
-			v_t[2],
-			v_t[3],
-			wt[0],
-			wt[1],
-			wt[2],
-			wt[3]);
-
-	return simple_read_from_buffer(user_buf, count, ppos,
-				       buf, len);
-}
-
-static const struct file_operations airtime_ops = {
-	.read = airtime_read,
-	.open = simple_open,
-	.llseek = default_llseek,
-};
-
 #ifdef CONFIG_PM
 static ssize_t reset_write(struct file *file, const char __user *user_buf,
 			   size_t count, loff_t *ppos)
@@ -505,6 +496,10 @@ static const char *hw_flag_names[] = {
 	FLAG(SUPPORTS_RX_DECAP_OFFLOAD),
 	FLAG(SUPPORTS_CONC_MON_RX_DECAP),
 	FLAG(DETECTS_COLOR_COLLISION),
+	FLAG(MLO_MCAST_MULTI_LINK_TX),
+	FLAG(DISALLOW_PUNCTURING),
+	FLAG(DISALLOW_PUNCTURING_5GHZ),
+	FLAG(HANDLES_QUIET_CSA),
 #undef FLAG
 };
 
@@ -603,9 +598,9 @@ static ssize_t format_devstat_counter(struct ieee80211_local *local,
 	char buf[20];
 	int res;
 
-	rtnl_lock();
+	wiphy_lock(local->hw.wiphy);
 	res = drv_get_stats(local, &stats);
-	rtnl_unlock();
+	wiphy_unlock(local->hw.wiphy);
 	if (res)
 		return res;
 	res = printvalue(&stats, buf, sizeof(buf));
@@ -671,25 +666,16 @@ void debugfs_hw_add(struct ieee80211_local *local)
 	DEBUGFS_ADD(hw_conf);
 	DEBUGFS_ADD_MODE(force_tx_status, 0600);
 	DEBUGFS_ADD_MODE(aql_enable, 0600);
+	DEBUGFS_ADD(aql_pending);
+	DEBUGFS_ADD_MODE(aqm, 0600);
 
-	if (local->ops->wake_tx_queue)
-		DEBUGFS_ADD_MODE(aqm, 0600);
-
-	if (wiphy_ext_feature_isset(local->hw.wiphy,
-				    NL80211_EXT_FEATURE_AIRTIME_FAIRNESS)) {
-		DEBUGFS_ADD_MODE(airtime, 0600);
-		DEBUGFS_ADD_MODE(airtime_flags, 0600);
-	}
+	DEBUGFS_ADD_MODE(airtime_flags, 0600);
 
 	DEBUGFS_ADD(aql_txq_limit);
 	debugfs_create_u32("aql_threshold", 0600,
 			   phyd, &local->aql_threshold);
 
 	statsd = debugfs_create_dir("statistics", phyd);
-
-	/* if the dir failed, don't put all the other things into the root! */
-	if (!statsd)
-		return;
 
 #ifdef CONFIG_MAC80211_DEBUG_COUNTERS
 	DEBUGFS_STATS_ADD(dot11TransmittedFragmentCount);

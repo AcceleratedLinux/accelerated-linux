@@ -1,0 +1,86 @@
+
+Backport 1.8.10 fix for "iptables list shows proto column with numeric instead of protocol name"
+
+commit 34f085b1607364f4eaded1140060dcaf965a2649
+Author: Phil Sutter <phil@nwl.cc>
+Date:   2024-01-10 14:08:58 +0100
+
+    Revert "xshared: Print protocol numbers if --numeric was given"
+    
+    This reverts commit da8ecc62dd765b15df84c3aa6b83dcb7a81d4ffa.
+    
+    The patch's original intention is not entirely clear anymore. If it was
+    to reduce delays involved by calling getprotobynumber() though, commit
+    b6196c7504d4d ("xshared: Prefer xtables_chain_protos lookup over
+    getprotoent") avoids those if --numeric flag was given already. Also,
+    this numeric protocol output did not cover iptables-save which is a more
+    relevant candidate for such optimizations anyway.
+    
+    Closes: https://bugzilla.netfilter.org/show_bug.cgi?id=1729
+    Signed-off-by: Phil Sutter <phil@nwl.cc>
+
+Index: iptables-1.8.10/iptables/tests/shell/testcases/ip6tables/0002-verbose-output_0
+===================================================================
+--- iptables-1.8.10.orig/iptables/tests/shell/testcases/ip6tables/0002-verbose-output_0
++++ iptables-1.8.10/iptables/tests/shell/testcases/ip6tables/0002-verbose-output_0
+@@ -33,11 +33,11 @@ EXPECT='Chain INPUT (policy ACCEPT 0 pac
+ 
+ Chain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+  pkts bytes target     prot opt in     out     source               destination
+-    0     0 ACCEPT     0    --  eth2   eth3    feed:babe::1         feed:babe::2
+-    0     0 ACCEPT     0    --  eth2   eth3    feed:babe::4         feed:babe::5
+-    0     0            58   --  *      *       ::/0                 ::/0                 ipv6-icmptype 1 code 0
+-    0     0            0    --  *      *       ::/0                 ::/0                 dst length:42 rt type:23
+-    0     0 LOG        0    --  *      *       ::/0                 ::/0                 frag id:1337 LOG flags 0 level 4
++    0     0 ACCEPT     all  --  eth2   eth3    feed:babe::1         feed:babe::2
++    0     0 ACCEPT     all  --  eth2   eth3    feed:babe::4         feed:babe::5
++    0     0            ipv6-icmp --  *      *       ::/0                 ::/0                 ipv6-icmptype 1 code 0
++    0     0            all  --  *      *       ::/0                 ::/0                 dst length:42 rt type:23
++    0     0 LOG        all  --  *      *       ::/0                 ::/0                 frag id:1337 LOG flags 0 level 4
+ 
+ Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+  pkts bytes target     prot opt in     out     source               destination'
+Index: iptables-1.8.10/iptables/tests/shell/testcases/ipt-restore/0011-noflush-empty-line_0
+===================================================================
+--- iptables-1.8.10.orig/iptables/tests/shell/testcases/ipt-restore/0011-noflush-empty-line_0
++++ iptables-1.8.10/iptables/tests/shell/testcases/ipt-restore/0011-noflush-empty-line_0
+@@ -12,5 +12,5 @@ EOF
+ 
+ EXPECT='Chain FORWARD (policy ACCEPT)
+ target     prot opt source               destination         
+-ACCEPT     0    --  0.0.0.0/0            0.0.0.0/0           '
++ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           '
+ diff -u <(echo "$EXPECT") <($XT_MULTI iptables -n -L FORWARD)
+Index: iptables-1.8.10/iptables/tests/shell/testcases/iptables/0002-verbose-output_0
+===================================================================
+--- iptables-1.8.10.orig/iptables/tests/shell/testcases/iptables/0002-verbose-output_0
++++ iptables-1.8.10/iptables/tests/shell/testcases/iptables/0002-verbose-output_0
+@@ -21,8 +21,8 @@ EXPECT='Chain INPUT (policy ACCEPT 0 pac
+ 
+ Chain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+  pkts bytes target     prot opt in     out     source               destination
+-    0     0 ACCEPT     0    --  eth2   eth3    10.0.0.1             10.0.0.2
+-    0     0 ACCEPT     0    --  eth2   eth3    10.0.0.4             10.0.0.5
++    0     0 ACCEPT     all  --  eth2   eth3    10.0.0.1             10.0.0.2
++    0     0 ACCEPT     all  --  eth2   eth3    10.0.0.4             10.0.0.5
+ 
+ Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+  pkts bytes target     prot opt in     out     source               destination'
+Index: iptables-1.8.10/iptables/xshared.c
+===================================================================
+--- iptables-1.8.10.orig/iptables/xshared.c
++++ iptables-1.8.10/iptables/xshared.c
+@@ -1083,10 +1083,10 @@ void print_rule_details(unsigned int lin
+ 
+ 	fputc(invflags & XT_INV_PROTO ? '!' : ' ', stdout);
+ 
+-	if (((format & (FMT_NUMERIC | FMT_NOTABLE)) == FMT_NUMERIC) || !pname)
+-		printf(FMT("%-4hu ", "%hu "), proto);
+-	else
++	if (pname)
+ 		printf(FMT("%-4s ", "%s "), pname);
++	else
++		printf(FMT("%-4hu ", "%hu "), proto);
+ }
+ 
+ void save_rule_details(const char *iniface, unsigned const char *iniface_mask,

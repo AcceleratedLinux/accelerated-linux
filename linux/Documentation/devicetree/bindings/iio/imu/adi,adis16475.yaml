@@ -47,6 +47,10 @@ properties:
   spi-max-frequency:
     maximum: 2000000
 
+  spi-cs-inactive-delay-ns:
+    minimum: 16000
+    default: 16000
+
   interrupts:
     maxItems: 1
 
@@ -79,6 +83,7 @@ required:
   - spi-cpol
 
 allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
   - if:
       properties:
         compatible:
@@ -107,23 +112,23 @@ allOf:
       dependencies:
         adi,sync-mode: [ clocks ]
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
     #include <dt-bindings/interrupt-controller/irq.h>
     spi {
-            #address-cells = <1>;
-            #size-cells = <0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
 
-            adis16475: adis16475-3@0 {
-                    compatible = "adi,adis16475-3";
-                    reg = <0>;
-                    spi-cpha;
-                    spi-cpol;
-                    spi-max-frequency = <2000000>;
-                    interrupts = <4 IRQ_TYPE_EDGE_RISING>;
-                    interrupt-parent = <&gpio>;
-            };
+        adis16475: adis16475-3@0 {
+            compatible = "adi,adis16475-3";
+            reg = <0>;
+            spi-cpha;
+            spi-cpol;
+            spi-max-frequency = <2000000>;
+            interrupts = <4 IRQ_TYPE_EDGE_RISING>;
+            interrupt-parent = <&gpio>;
+        };
     };
 ...

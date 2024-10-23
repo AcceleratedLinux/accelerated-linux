@@ -1,5 +1,5 @@
 VERSION = 2.21
-URL = http://ftpmirror.gnu.org/gnu/units/units-$(VERSION).tar.gz
+URL = https://ftpmirror.gnu.org/gnu/units/units-$(VERSION).tar.gz
 
 # Static currency exchange rates
 CONFOPTS += --sharedstatedir=/etc

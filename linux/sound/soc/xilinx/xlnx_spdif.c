@@ -226,6 +226,7 @@ static struct snd_soc_dai_driver xlnx_spdif_rx_dai = {
 
 static const struct snd_soc_component_driver xlnx_spdif_component = {
 	.name = "xlnx-spdif",
+	.legacy_dai_naming = 1,
 };
 
 static const struct of_device_id xlnx_spdif_of_match[] = {
@@ -311,12 +312,11 @@ clk_err:
 	return ret;
 }
 
-static int xlnx_spdif_remove(struct platform_device *pdev)
+static void xlnx_spdif_remove(struct platform_device *pdev)
 {
 	struct spdif_dev_data *ctx = dev_get_drvdata(&pdev->dev);
 
 	clk_disable_unprepare(ctx->axi_clk);
-	return 0;
 }
 
 static struct platform_driver xlnx_spdif_driver = {
@@ -325,7 +325,7 @@ static struct platform_driver xlnx_spdif_driver = {
 		.of_match_table = xlnx_spdif_of_match,
 	},
 	.probe = xlnx_spdif_probe,
-	.remove = xlnx_spdif_remove,
+	.remove_new = xlnx_spdif_remove,
 };
 module_platform_driver(xlnx_spdif_driver);
 

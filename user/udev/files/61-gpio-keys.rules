@@ -1,0 +1,12 @@
+# Create link to gpio-keys and gpio-beeper event devices
+
+ACTION!="add", GOTO="gpio_keys_end"
+SUBSYSTEM!="input", GOTO="gpio_keys_end"
+
+SUBSYSTEMS=="platform", ENV{ID_PATH}=="*gpio-keys*", KERNEL=="event*", \
+  ENV{.INPUT_CLASS}=="", SYMLINK+="input/gpio-keys-event"
+
+SUBSYSTEMS=="platform", ENV{ID_PATH}=="*buzzer", KERNEL=="event*", \
+  ENV{.INPUT_CLASS}=="", SYMLINK+="input/buzzer"
+
+LABEL="gpio_keys_end"

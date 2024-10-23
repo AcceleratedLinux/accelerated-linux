@@ -9,13 +9,16 @@
 
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/cleanup.h>
+#include <linux/slab.h>
 #include <linux/iio/types.h>
-#include <linux/of.h>
 /* IIO TODO LIST */
 /*
  * Provide means of adjusting timer accuracy.
  * Currently assumes nano seconds.
  */
+
+struct fwnode_reference_args;
 
 enum iio_shared_by {
 	IIO_SEPARATE,
@@ -219,6 +222,9 @@ struct iio_event_spec {
  * @extend_name:	Allows labeling of channel attributes with an
  *			informative name. Note this has no effect codes etc,
  *			unlike modifiers.
+ *			This field is deprecated in favour of providing
+ *			iio_info->read_label() to override the label, which
+ *			unlike @extend_name does not affect sysfs filenames.
  * @datasheet_name:	A name used in in-kernel mapping of channels. It should
  *			correspond to the first name that the channel is referred
  *			to by in the datasheet (e.g. IND), or the nearest
@@ -313,7 +319,6 @@ static inline bool iio_channel_has_available(const struct iio_chan_spec *chan,
 }
 
 s64 iio_get_time_ns(const struct iio_dev *indio_dev);
-unsigned int iio_get_time_res(const struct iio_dev *indio_dev);
 
 /*
  * Device operating modes
@@ -380,6 +385,11 @@ unsigned int iio_get_time_res(const struct iio_dev *indio_dev);
 
 #define INDIO_MAX_RAW_ELEMENTS		4
 
+struct iio_val_int_plus_micro {
+	int integer;
+	int micro;
+};
+
 struct iio_trigger; /* forward declaration */
 
 /**
@@ -418,16 +428,14 @@ struct iio_trigger; /* forward declaration */
  * @write_event_config:	set if the event is enabled.
  * @read_event_value:	read a configuration value associated with the event.
  * @write_event_value:	write a configuration value for the event.
+ * @read_event_label:	function to request label name for a specified label,
+ *			for better event identification.
  * @validate_trigger:	function to validate the trigger when the
  *			current trigger gets changed.
  * @update_scan_mode:	function to configure device and scan buffer when
  *			channels have changed
  * @debugfs_reg_access:	function to read or write register value of device
- * @of_xlate:		function pointer to obtain channel specifier index.
- *			When #iio-cells is greater than '0', the driver could
- *			provide a custom of_xlate function that reads the
- *			*args* and returns the appropriate index in registered
- *			IIO channels array.
+ * @fwnode_xlate:	fwnode based function pointer to obtain channel specifier index.
  * @hwfifo_set_watermark: function pointer to set the current hardware
  *			fifo watermark level; see hwfifo_* entries in
  *			Documentation/ABI/testing/sysfs-bus-iio for details on
@@ -500,6 +508,12 @@ struct iio_info {
 				 enum iio_event_direction dir,
 				 enum iio_event_info info, int val, int val2);
 
+	int (*read_event_label)(struct iio_dev *indio_dev,
+				struct iio_chan_spec const *chan,
+				enum iio_event_type type,
+				enum iio_event_direction dir,
+				char *label);
+
 	int (*validate_trigger)(struct iio_dev *indio_dev,
 				struct iio_trigger *trig);
 	int (*update_scan_mode)(struct iio_dev *indio_dev,
@@ -507,8 +521,8 @@ struct iio_info {
 	int (*debugfs_reg_access)(struct iio_dev *indio_dev,
 				  unsigned reg, unsigned writeval,
 				  unsigned *readval);
-	int (*of_xlate)(struct iio_dev *indio_dev,
-			const struct of_phandle_args *iiospec);
+	int (*fwnode_xlate)(struct iio_dev *indio_dev,
+			    const struct fwnode_reference_args *iiospec);
 	int (*hwfifo_set_watermark)(struct iio_dev *indio_dev, unsigned val);
 	int (*hwfifo_flush_to_buffer)(struct iio_dev *indio_dev,
 				      unsigned count);
@@ -545,9 +559,9 @@ struct iio_buffer_setup_ops {
  *			and owner
  * @buffer:		[DRIVER] any buffer present
  * @scan_bytes:		[INTERN] num bytes captured to be fed to buffer demux
- * @mlock:		[INTERN] lock used to prevent simultaneous device state
- *			changes
- * @available_scan_masks: [DRIVER] optional array of allowed bitmasks
+ * @available_scan_masks: [DRIVER] optional array of allowed bitmasks. Sort the
+ *			   array in order of preference, the most preferred
+ *			   masks first.
  * @masklength:		[INTERN] the length of the mask established from
  *			channels
  * @active_scan_mask:	[INTERN] union of all scan masks requested by buffers
@@ -571,7 +585,6 @@ struct iio_dev {
 
 	struct iio_buffer		*buffer;
 	int				scan_bytes;
-	struct mutex			mlock;
 
 	const unsigned long		*available_scan_masks;
 	unsigned			masklength;
@@ -627,7 +640,36 @@ int iio_push_event(struct iio_dev *indio_dev, u64 ev_code, s64 timestamp);
 int iio_device_claim_direct_mode(struct iio_dev *indio_dev);
 void iio_device_release_direct_mode(struct iio_dev *indio_dev);
 
-extern struct bus_type iio_bus_type;
+/*
+ * This autocleanup logic is normally used via
+ * iio_device_claim_direct_scoped().
+ */
+DEFINE_GUARD(iio_claim_direct, struct iio_dev *, iio_device_claim_direct_mode(_T),
+	     iio_device_release_direct_mode(_T))
+
+DEFINE_GUARD_COND(iio_claim_direct, _try, ({
+			struct iio_dev *dev;
+			int d = iio_device_claim_direct_mode(_T);
+
+			if (d < 0)
+				dev = NULL;
+			else
+				dev = _T;
+			dev;
+		}))
+
+/**
+ * iio_device_claim_direct_scoped() - Scoped call to iio_device_claim_direct.
+ * @fail: What to do on failure to claim device.
+ * @iio_dev: Pointer to the IIO devices structure
+ */
+#define iio_device_claim_direct_scoped(fail, iio_dev) \
+	scoped_cond_guard(iio_claim_direct_try, fail, iio_dev)
+
+int iio_device_claim_buffer_mode(struct iio_dev *indio_dev);
+void iio_device_release_buffer_mode(struct iio_dev *indio_dev);
+
+extern const struct bus_type iio_bus_type;
 
 /**
  * iio_device_put() - reference counted deallocation of struct device
@@ -709,8 +751,13 @@ static inline void *iio_device_get_drvdata(const struct iio_dev *indio_dev)
 	return dev_get_drvdata(&indio_dev->dev);
 }
 
-/* Can we make this smaller? */
-#define IIO_ALIGN L1_CACHE_BYTES
+/*
+ * Used to ensure the iio_priv() structure is aligned to allow that structure
+ * to in turn include IIO_DMA_MINALIGN'd elements such as buffers which
+ * must not share  cachelines with the rest of the structure, thus making
+ * them safe for use with non-coherent DMA.
+ */
+#define IIO_DMA_MINALIGN ARCH_DMA_MINALIGN
 struct iio_dev *iio_device_alloc(struct device *parent, int sizeof_priv);
 
 /* The information at the returned address is guaranteed to be cacheline aligned */
@@ -721,10 +768,13 @@ static inline void *iio_priv(const struct iio_dev *indio_dev)
 
 void iio_device_free(struct iio_dev *indio_dev);
 struct iio_dev *devm_iio_device_alloc(struct device *parent, int sizeof_priv);
-__printf(2, 3)
-struct iio_trigger *devm_iio_trigger_alloc(struct device *parent,
-					   const char *fmt, ...);
 
+#define devm_iio_trigger_alloc(parent, fmt, ...) \
+	__devm_iio_trigger_alloc((parent), THIS_MODULE, (fmt), ##__VA_ARGS__)
+__printf(3, 4)
+struct iio_trigger *__devm_iio_trigger_alloc(struct device *parent,
+					     struct module *this_mod,
+					     const char *fmt, ...);
 /**
  * iio_get_debugfs_dentry() - helper function to get the debugfs_dentry
  * @indio_dev:		IIO device structure for device
@@ -735,6 +785,19 @@ struct dentry *iio_get_debugfs_dentry(struct iio_dev *indio_dev);
 static inline struct dentry *iio_get_debugfs_dentry(struct iio_dev *indio_dev)
 {
 	return NULL;
+}
+#endif
+
+#ifdef CONFIG_ACPI
+bool iio_read_acpi_mount_matrix(struct device *dev,
+				struct iio_mount_matrix *orientation,
+				char *acpi_method);
+#else
+static inline bool iio_read_acpi_mount_matrix(struct device *dev,
+					      struct iio_mount_matrix *orientation,
+					      char *acpi_method)
+{
+	return false;
 }
 #endif
 

@@ -247,6 +247,7 @@ error:
 		for (i = 0; i < RX_URBS_COUNT; i++)
 			free_rx_urb(urbs[i]);
 	}
+	kfree(urbs);
 	return r;
 }
 
@@ -492,9 +493,12 @@ int plfxlc_usb_wreq_async(struct plfxlc_usb *usb, const u8 *buffer,
 			  void *context)
 {
 	struct usb_device *udev = interface_to_usbdev(usb->ez_usb);
-	struct urb *urb = usb_alloc_urb(0, GFP_ATOMIC);
+	struct urb *urb;
 	int r;
 
+	urb = usb_alloc_urb(0, GFP_ATOMIC);
+	if (!urb)
+		return -ENOMEM;
 	usb_fill_bulk_urb(urb, udev, usb_sndbulkpipe(udev, EP_DATA_OUT),
 			  (void *)buffer, buffer_len, complete_fn, context);
 
@@ -562,7 +566,7 @@ static void sta_queue_cleanup_timer_callb(struct timer_list *t)
 		if (tx->station[sidx].flag & STATION_HEARTBEAT_FLAG) {
 			tx->station[sidx].flag ^= STATION_HEARTBEAT_FLAG;
 		} else {
-			memset(tx->station[sidx].mac, 0, ETH_ALEN);
+			eth_zero_addr(tx->station[sidx].mac);
 			tx->station[sidx].flag = 0;
 		}
 	}

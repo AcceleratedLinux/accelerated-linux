@@ -24,7 +24,7 @@ struct ufs_host {
 	void (*late_init)(struct ufs_hba *hba);
 };
 
-enum {
+enum intel_ufs_dsm_func_id {
 	INTEL_DSM_FNS		=  0,
 	INTEL_DSM_RESET		=  1,
 };
@@ -42,6 +42,15 @@ static const guid_t intel_dsm_guid =
 	GUID_INIT(0x1A4832A0, 0x7D03, 0x43CA,
 		  0xB0, 0x20, 0xF6, 0xDC, 0xD1, 0x2A, 0x19, 0x50);
 
+static bool __intel_dsm_supported(struct intel_host *host,
+				  enum intel_ufs_dsm_func_id fn)
+{
+	return fn < 32 && fn >= 0 && (host->dsm_fns & (1u << fn));
+}
+
+#define INTEL_DSM_SUPPORTED(host, name) \
+	__intel_dsm_supported(host, INTEL_DSM_##name)
+
 static int __intel_dsm(struct intel_host *intel_host, struct device *dev,
 		       unsigned int fn, u32 *result)
 {
@@ -49,11 +58,12 @@ static int __intel_dsm(struct intel_host *intel_host, struct device *dev,
 	int err = 0;
 	size_t len;
 
-	obj = acpi_evaluate_dsm(ACPI_HANDLE(dev), &intel_dsm_guid, 0, fn, NULL);
+	obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(dev), &intel_dsm_guid, 0, fn, NULL,
+				      ACPI_TYPE_BUFFER);
 	if (!obj)
 		return -EOPNOTSUPP;
 
-	if (obj->type != ACPI_TYPE_BUFFER || obj->buffer.length < 1) {
+	if (obj->buffer.length < 1) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -71,7 +81,7 @@ out:
 static int intel_dsm(struct intel_host *intel_host, struct device *dev,
 		     unsigned int fn, u32 *result)
 {
-	if (fn > 31 || !(intel_host->dsm_fns & (1 << fn)))
+	if (!__intel_dsm_supported(intel_host, fn))
 		return -EOPNOTSUPP;
 
 	return __intel_dsm(intel_host, dev, fn, result);
@@ -300,7 +310,7 @@ static int ufs_intel_device_reset(struct ufs_hba *hba)
 {
 	struct intel_host *host = ufshcd_get_variant(hba);
 
-	if (host->dsm_fns & INTEL_DSM_RESET) {
+	if (INTEL_DSM_SUPPORTED(host, RESET)) {
 		u32 result = 0;
 		int err;
 
@@ -342,7 +352,7 @@ static int ufs_intel_common_init(struct ufs_hba *hba)
 		return -ENOMEM;
 	ufshcd_set_variant(hba, host);
 	intel_dsm_init(host, hba->dev);
-	if (host->dsm_fns & INTEL_DSM_RESET) {
+	if (INTEL_DSM_SUPPORTED(host, RESET)) {
 		if (hba->vops->device_reset)
 			hba->caps |= UFSHCD_CAP_DEEPSLEEP;
 	} else {
@@ -426,6 +436,7 @@ static int ufs_intel_adl_init(struct ufs_hba *hba)
 {
 	hba->nop_out_timeout = 200;
 	hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
+	hba->caps |= UFSHCD_CAP_WB_EN;
 	return ufs_intel_common_init(hba);
 }
 
@@ -495,15 +506,6 @@ static int ufshcd_pci_restore(struct device *dev)
 #endif
 
 /**
- * ufshcd_pci_shutdown - main function to put the controller in reset state
- * @pdev: pointer to PCI device handle
- */
-static void ufshcd_pci_shutdown(struct pci_dev *pdev)
-{
-	ufshcd_shutdown((struct ufs_hba *)pci_get_drvdata(pdev));
-}
-
-/**
  * ufshcd_pci_remove - de-allocate PCI/SCSI host and host memory space
  *		data structure memory
  * @pdev: pointer to PCI handle
@@ -523,7 +525,7 @@ static void ufshcd_pci_remove(struct pci_dev *pdev)
  * @pdev: pointer to PCI device handle
  * @id: PCI device id
  *
- * Returns 0 on success, non-zero value on failure
+ * Return: 0 on success, non-zero value on failure.
  */
 static int
 ufshcd_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
@@ -589,6 +591,7 @@ static const struct dev_pm_ops ufshcd_pci_pm_ops = {
 };
 
 static const struct pci_device_id ufshcd_pci_tbl[] = {
+	{ PCI_VENDOR_ID_REDHAT, 0x0013, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ PCI_VENDOR_ID_SAMSUNG, 0xC00C, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ PCI_VDEVICE(INTEL, 0x9DFA), (kernel_ulong_t)&ufs_intel_cnl_hba_vops },
 	{ PCI_VDEVICE(INTEL, 0x4B41), (kernel_ulong_t)&ufs_intel_ehl_hba_vops },
@@ -597,6 +600,8 @@ static const struct pci_device_id ufshcd_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, 0x51FF), (kernel_ulong_t)&ufs_intel_adl_hba_vops },
 	{ PCI_VDEVICE(INTEL, 0x54FF), (kernel_ulong_t)&ufs_intel_adl_hba_vops },
 	{ PCI_VDEVICE(INTEL, 0x7E47), (kernel_ulong_t)&ufs_intel_mtl_hba_vops },
+	{ PCI_VDEVICE(INTEL, 0xA847), (kernel_ulong_t)&ufs_intel_mtl_hba_vops },
+	{ PCI_VDEVICE(INTEL, 0x7747), (kernel_ulong_t)&ufs_intel_mtl_hba_vops },
 	{ }	/* terminate list */
 };
 
@@ -607,7 +612,6 @@ static struct pci_driver ufshcd_pci_driver = {
 	.id_table = ufshcd_pci_tbl,
 	.probe = ufshcd_pci_probe,
 	.remove = ufshcd_pci_remove,
-	.shutdown = ufshcd_pci_shutdown,
 	.driver = {
 		.pm = &ufshcd_pci_pm_ops
 	},

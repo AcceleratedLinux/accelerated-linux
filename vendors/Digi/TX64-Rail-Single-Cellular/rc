@@ -42,35 +42,37 @@ ip link set eth0 name eth1
 # /efi filesystem
 mount -o discard /dev/flash/efi /efi
 
-# load I2C driver with modified frequency (100kHz, because of the ATECC508)
-modprobe i2c-designware-core bus_speed=100
+# Load ATECC508 SSDT overlay first. This chip needs 100kHz bus frequency, so
+# load I2C driver after, because driver is checking the required bus frequency
+mount -t configfs nodev /sys/kernel/config
+mkdir /sys/kernel/config/acpi/table/atecc508
+cat /etc/ssdt/atecc508.aml > /sys/kernel/config/acpi/table/atecc508/aml
+modprobe i2c-designware-core
 modprobe i2c-designware-pci
-
-# instantiate ATECC508 device
-echo "atsha204-i2c 0x60" > /sys/bus/i2c/devices/i2c-1/new_device
 
 # Check if OPT filesystem exists
 if ! sgdisk ${DRIVE} -p | grep -q "${LABEL_OPTFS}"; then
-	echo "Creating new OPT filesystem..."
+	echo "Creating new OPT partition..."
 
 	# Fix GPT
 	sgdisk ${DRIVE} -e
 	sgdisk ${DRIVE} -new 0::-0 --typecode=0:8300 --change-name=0:"${LABEL_OPTFS}" --partition-guid=0:"${GUID_OPTFS}" > /dev/null
 	partprobe
 
-	mkfs.ext4 -F ${DRIVE}${OPTFS_PART}
-	mount -t ext4 -o discard ${DRIVE}${OPTFS_PART} /opt
-
-	ln -s /efi/grub /opt/boot
-
-	umount /opt
-else
-	echo "Mounting OPT filesystem..."
+	mkfs.ext4 -F /dev/flash/opt
 fi
 
-# Mount OPT
+echo "Mounting OPT filesystem..."
+
 fsck.ext4 -p /dev/flash/opt
-mount -t ext4 -o discard /dev/flash/opt /opt
+mount -t ext4 -o discard /dev/flash/opt /opt || {
+	echo "Re-creating OPT filesystem..."
+
+	mkfs.ext4 -F /dev/flash/opt
+	mount -t ext4 -o discard /dev/flash/opt /opt
+}
+
+[ -L /opt/boot ] || ln -s /efi/grub /opt/boot
 
 echo "Starting watchdog ..."
 watchdog /dev/watchdog

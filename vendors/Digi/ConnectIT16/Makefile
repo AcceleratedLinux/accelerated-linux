@@ -47,8 +47,13 @@ all:
 
 clean: image.clean
 	rm -f grub.cfg
+	rm -f atecc508.aml
 
-romfs: grub.cfg romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
+atecc508.aml: atecc508.asl
+	@echo "Generating ATECC508 SSDT overlay..."
+	/usr/bin/iasl -p $@ $<
+
+romfs: grub.cfg romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey atecc508.aml
 	$(ROMFSINST) -s lib /lib64
 	$(ROMFSINST) /etc/default/start
 	$(ROMFSINST) -s /var/tmp/log /dev/log
@@ -61,13 +66,14 @@ romfs: grub.cfg romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.
 	$(ROMFSINST) -p 555 /bin/setup-new-device.sh
 	$(ROMFSINST) -p 555 /bin/clear-bootcount.sh
 	$(ROMFSINST) /boot/grub/grub.cfg
-	$(ROMFSINST) -d -p 755 pwrbtn.sh /etc/acpi/events/PWRF/00000080
+	$(ROMFSINST) -d -p 755 pwrbtn.sh /etc/acpi/PWRF/00000080
 	$(ROMFSINST) $(ROOTDIR)/$(LINUXDIR)/arch/x86/boot/bzImage /boot/vmlinuz
 	$(ROMFSINST) -d -p 644 /libexec/udev/rules.d/76-sdcard_poll_rate.rules
 	$(ROMFSINST) -d -p 644 /libexec/udev/rules.d/76-sdcard_automount.rules
 	$(ROMFSINST) -d -p 644 /libexec/udev/rules.d/76-usb1_automount.rules
 	$(ROMFSINST) -d -p 644 /libexec/udev/rules.d/76-usb2_automount.rules
 	echo "Digi Connect IT 16" > $(ROMFSDIR)/etc/issue
+	$(ROMFSINST) -d /etc/ssdt/atecc508.aml
 
 grub.cfg: grub.cfg.in Makefile
 	sed 's/BOOT_VER[ 	]*=.*$$/BOOT_VER="$(VERSIONPKG)"/g' < $< > $@

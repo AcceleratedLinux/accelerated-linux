@@ -1,18 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * OMAP DPLL clock support
  *
  * Copyright (C) 2013 Texas Instruments, Inc.
  *
  * Tero Kristo <t-kristo@ti.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/clk.h>
@@ -42,8 +34,6 @@ static const struct clk_ops dpll_m4xen_ck_ops = {
 	.save_context	= &omap3_core_dpll_save_context,
 	.restore_context = &omap3_core_dpll_restore_context,
 };
-#else
-static const struct clk_ops dpll_m4xen_ck_ops = {};
 #endif
 
 #if defined(CONFIG_ARCH_OMAP3) || defined(CONFIG_ARCH_OMAP4) || \
@@ -103,11 +93,7 @@ static const struct clk_ops omap3_dpll_core_ck_ops = {
 	.recalc_rate	= &omap3_dpll_recalc,
 	.round_rate	= &omap2_dpll_round_rate,
 };
-#else
-static const struct clk_ops omap3_dpll_core_ck_ops = {};
-#endif
 
-#ifdef CONFIG_ARCH_OMAP3
 static const struct clk_ops omap3_dpll_ck_ops = {
 	.enable		= &omap3_noncore_dpll_enable,
 	.disable	= &omap3_noncore_dpll_disable,
@@ -145,9 +131,13 @@ static const struct clk_ops omap3_dpll_per_ck_ops = {
 };
 #endif
 
+#if defined(CONFIG_ARCH_OMAP4) || defined(CONFIG_SOC_OMAP5) || \
+        defined(CONFIG_SOC_DRA7XX) || defined(CONFIG_SOC_AM33XX) || \
+	defined(CONFIG_SOC_AM43XX)
 static const struct clk_ops dpll_x2_ck_ops = {
 	.recalc_rate	= &omap3_clkoutx2_recalc,
 };
+#endif
 
 /**
  * _register_dpll - low level registration of a DPLL clock
@@ -195,7 +185,7 @@ static void __init _register_dpll(void *user,
 
 	/* register the clock */
 	name = ti_dt_clk_name(node);
-	clk = ti_clk_register_omap_hw(NULL, &clk_hw->hw, name);
+	clk = of_ti_clk_register_omap_hw(node, &clk_hw->hw, name);
 
 	if (!IS_ERR(clk)) {
 		of_clk_add_provider(node, of_clk_src_simple_get, clk);
@@ -267,7 +257,7 @@ static void _register_dpll_x2(struct device_node *node,
 #endif
 
 	/* register the clock */
-	clk = ti_clk_register_omap_hw(NULL, &clk_hw->hw, name);
+	clk = of_ti_clk_register_omap_hw(node, &clk_hw->hw, name);
 
 	if (IS_ERR(clk))
 		kfree(clk_hw);

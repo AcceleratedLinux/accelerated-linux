@@ -1952,12 +1952,12 @@ mptsas_qcmd(struct Scsi_Host *shost, struct scsi_cmnd *SCpnt)
  *	@sc: scsi command that the midlayer is about to time out
  *
  **/
-static enum blk_eh_timer_return mptsas_eh_timed_out(struct scsi_cmnd *sc)
+static enum scsi_timeout_action mptsas_eh_timed_out(struct scsi_cmnd *sc)
 {
 	MPT_SCSI_HOST *hd;
 	MPT_ADAPTER   *ioc;
 	VirtDevice    *vdevice;
-	enum blk_eh_timer_return rc = BLK_EH_DONE;
+	enum scsi_timeout_action rc = SCSI_EH_NOT_HANDLED;
 
 	hd = shost_priv(sc->device->host);
 	if (hd == NULL) {
@@ -1980,7 +1980,7 @@ static enum blk_eh_timer_return mptsas_eh_timed_out(struct scsi_cmnd *sc)
 		dtmprintk(ioc, printk(MYIOC_s_WARN_FMT ": %s: ioc is in reset,"
 		    "SML need to reset the timer (sc=%p)\n",
 		    ioc->name, __func__, sc));
-		rc = BLK_EH_RESET_TIMER;
+		rc = SCSI_EH_RESET_TIMER;
 	}
 	vdevice = sc->device->hostdata;
 	if (vdevice && vdevice->vtarget && (vdevice->vtarget->inDMD
@@ -1988,7 +1988,7 @@ static enum blk_eh_timer_return mptsas_eh_timed_out(struct scsi_cmnd *sc)
 		dtmprintk(ioc, printk(MYIOC_s_WARN_FMT ": %s: target removed "
 		    "or in device removal delay (sc=%p)\n",
 		    ioc->name, __func__, sc));
-		rc = BLK_EH_RESET_TIMER;
+		rc = SCSI_EH_RESET_TIMER;
 		goto done;
 	}
 
@@ -1997,7 +1997,7 @@ done:
 }
 
 
-static struct scsi_host_template mptsas_driver_template = {
+static const struct scsi_host_template mptsas_driver_template = {
 	.module				= THIS_MODULE,
 	.proc_name			= "mptsas",
 	.show_info			= mptscsih_show_info,
@@ -2020,6 +2020,7 @@ static struct scsi_host_template mptsas_driver_template = {
 	.sg_tablesize			= MPT_SCSI_SG_DEPTH,
 	.max_sectors			= 8192,
 	.cmd_per_lun			= 7,
+	.dma_alignment			= 511,
 	.shost_groups			= mptscsih_host_attr_groups,
 	.no_write_same			= 1,
 };
@@ -2964,17 +2965,13 @@ mptsas_exp_repmanufacture_info(MPT_ADAPTER *ioc,
 			goto out_free;
 
 		manufacture_reply = data_out + sizeof(struct rep_manu_request);
-		strncpy(edev->vendor_id, manufacture_reply->vendor_id,
-			SAS_EXPANDER_VENDOR_ID_LEN);
-		strncpy(edev->product_id, manufacture_reply->product_id,
-			SAS_EXPANDER_PRODUCT_ID_LEN);
-		strncpy(edev->product_rev, manufacture_reply->product_rev,
-			SAS_EXPANDER_PRODUCT_REV_LEN);
+		memtostr(edev->vendor_id, manufacture_reply->vendor_id);
+		memtostr(edev->product_id, manufacture_reply->product_id);
+		memtostr(edev->product_rev, manufacture_reply->product_rev);
 		edev->level = manufacture_reply->sas_format;
 		if (manufacture_reply->sas_format) {
-			strncpy(edev->component_vendor_id,
-				manufacture_reply->component_vendor_id,
-				SAS_EXPANDER_COMPONENT_VENDOR_ID_LEN);
+			memtostr(edev->component_vendor_id,
+				 manufacture_reply->component_vendor_id);
 			tmp = (u8 *)&manufacture_reply->component_id;
 			edev->component_id = tmp[0] << 8 | tmp[1];
 			edev->component_revision_id =

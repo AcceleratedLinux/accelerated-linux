@@ -1,0 +1,30 @@
+Fixes int-conversion error with basename().
+
+Index: iproute2-5.14.0/rdma/rdma.h
+===================================================================
+--- iproute2-5.14.0.orig/rdma/rdma.h
++++ iproute2-5.14.0/rdma/rdma.h
+@@ -7,6 +7,7 @@
+ #define _RDMA_TOOL_H_
+ 
+ #include <stdlib.h>
++#include <libgen.h>
+ #include <string.h>
+ #include <errno.h>
+ #include <getopt.h>
+Index: iproute2-5.14.0/lib/bpf_legacy.c
+===================================================================
+--- iproute2-5.14.0.orig/lib/bpf_legacy.c
++++ iproute2-5.14.0/lib/bpf_legacy.c
+@@ -958,8 +958,10 @@ int bpf_load_common(struct bpf_cfg_in *c
+ 	if (cfg->mode == CBPF_BYTECODE || cfg->mode == CBPF_FILE)
+ 		ops->cbpf_cb(nl, cfg->opcodes, cfg->n_opcodes);
+ 	if (cfg->mode == EBPF_OBJECT || cfg->mode == EBPF_PINNED) {
++		const char *object_slash = strrchr(cfg->object, '/');
++		const char *object_basename = object_slash ? object_slash + 1 : cfg->object;
+ 		snprintf(annotation, sizeof(annotation), "%s:[%s]",
+-			 basename(cfg->object), cfg->mode == EBPF_PINNED ?
++			 object_basename, cfg->mode == EBPF_PINNED ?
+ 			 "*fsobj" : cfg->section);
+ 		ops->ebpf_cb(nl, cfg->prog_fd, annotation);
+ 	}

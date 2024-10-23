@@ -12,6 +12,11 @@
 
 /* MDIO_MMD_VEND2 registers */
 #define DP83TD510E_PHY_STS			0x10
+/* Bit 7 - mii_interrupt, active high. Clears on read.
+ * Note: Clearing does not necessarily deactivate IRQ pin if interrupts pending.
+ * This differs from the DP83TD510E datasheet (2020) which states this bit
+ * clears on write 0.
+ */
 #define DP83TD510E_STS_MII_INT			BIT(7)
 #define DP83TD510E_LINK_STATUS			BIT(0)
 
@@ -27,17 +32,32 @@
 #define DP83TD510E_AN_STAT_1			0x60c
 #define DP83TD510E_MASTER_SLAVE_RESOL_FAIL	BIT(15)
 
+#define DP83TD510E_MSE_DETECT			0xa85
+
+#define DP83TD510_SQI_MAX	7
+
+/* Register values are converted to SNR(dB) as suggested by
+ * "Application Report - DP83TD510E Cable Diagnostics Toolkit":
+ * SNR(dB) = -10 * log10 (VAL/2^17) - 1.76 dB.
+ * SQI ranges are implemented according to "OPEN ALLIANCE - Advanced diagnostic
+ * features for 100BASE-T1 automotive Ethernet PHYs"
+ */
+static const u16 dp83td510_mse_sqi_map[] = {
+	0x0569, /* < 18dB */
+	0x044c, /* 18dB =< SNR < 19dB */
+	0x0369, /* 19dB =< SNR < 20dB */
+	0x02b6, /* 20dB =< SNR < 21dB */
+	0x0227, /* 21dB =< SNR < 22dB */
+	0x01b6, /* 22dB =< SNR < 23dB */
+	0x015b, /* 23dB =< SNR < 24dB */
+	0x0000  /* 24dB =< SNR */
+};
+
 static int dp83td510_config_intr(struct phy_device *phydev)
 {
 	int ret;
 
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
-		/* Clear any pending interrupts */
-		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_PHY_STS,
-				    0x0);
-		if (ret)
-			return ret;
-
 		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2,
 				    DP83TD510E_INTERRUPT_REG_1,
 				    DP83TD510E_INT1_LINK_EN);
@@ -60,10 +80,6 @@ static int dp83td510_config_intr(struct phy_device *phydev)
 					 DP83TD510E_GENCFG_INT_EN);
 		if (ret)
 			return ret;
-
-		/* Clear any pending interrupts */
-		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_PHY_STS,
-				    0x0);
 	}
 
 	return ret;
@@ -72,14 +88,6 @@ static int dp83td510_config_intr(struct phy_device *phydev)
 static irqreturn_t dp83td510_handle_interrupt(struct phy_device *phydev)
 {
 	int  ret;
-
-	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_PHY_STS);
-	if (ret < 0) {
-		phy_error(phydev);
-		return IRQ_NONE;
-	} else if (!(ret & DP83TD510E_STS_MII_INT)) {
-		return IRQ_NONE;
-	}
 
 	/* Read the current enabled interrupts */
 	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_INTERRUPT_REG_1);
@@ -164,6 +172,32 @@ static int dp83td510_config_aneg(struct phy_device *phydev)
 	return genphy_c45_check_and_restart_aneg(phydev, changed);
 }
 
+static int dp83td510_get_sqi(struct phy_device *phydev)
+{
+	int sqi, ret;
+	u16 mse_val;
+
+	if (!phydev->link)
+		return 0;
+
+	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_MSE_DETECT);
+	if (ret < 0)
+		return ret;
+
+	mse_val = 0xFFFF & ret;
+	for (sqi = 0; sqi < ARRAY_SIZE(dp83td510_mse_sqi_map); sqi++) {
+		if (mse_val >= dp83td510_mse_sqi_map[sqi])
+			return sqi;
+	}
+
+	return -EINVAL;
+}
+
+static int dp83td510_get_sqi_max(struct phy_device *phydev)
+{
+	return DP83TD510_SQI_MAX;
+}
+
 static int dp83td510_get_features(struct phy_device *phydev)
 {
 	/* This PHY can't respond on MDIO bus if no RMII clock is enabled.
@@ -192,6 +226,8 @@ static struct phy_driver dp83td510_driver[] = {
 	.get_features	= dp83td510_get_features,
 	.config_intr	= dp83td510_config_intr,
 	.handle_interrupt = dp83td510_handle_interrupt,
+	.get_sqi	= dp83td510_get_sqi,
+	.get_sqi_max	= dp83td510_get_sqi_max,
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,

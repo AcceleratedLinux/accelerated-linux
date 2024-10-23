@@ -127,7 +127,7 @@ struct admv1014_state {
 	unsigned int			quad_se_mode;
 	unsigned int			p1db_comp;
 	bool				det_en;
-	u8				data[3] ____cacheline_aligned;
+	u8				data[3] __aligned(IIO_DMA_MINALIGN);
 };
 
 static const int mixer_vgate_table[] = {106, 107, 108, 110, 111, 112, 113, 114,
@@ -669,8 +669,7 @@ static int admv1014_init(struct admv1014_state *st)
 	chip_id = FIELD_GET(ADMV1014_CHIP_ID_MSK, chip_id);
 	if (chip_id != ADMV1014_CHIP_ID) {
 		dev_err(&spi->dev, "Invalid Chip ID.\n");
-		ret = -EINVAL;
-		return ret;
+		return -EINVAL;
 	}
 
 	ret = __admv1014_spi_update_bits(st, ADMV1014_REG_QUAD,
@@ -711,7 +710,6 @@ static int admv1014_init(struct admv1014_state *st)
 
 static int admv1014_properties_parse(struct admv1014_state *st)
 {
-	const char *str;
 	unsigned int i;
 	struct spi_device *spi = st->spi;
 	int ret;
@@ -720,27 +718,21 @@ static int admv1014_properties_parse(struct admv1014_state *st)
 
 	st->p1db_comp = device_property_read_bool(&spi->dev, "adi,p1db-compensation-enable");
 
-	ret = device_property_read_string(&spi->dev, "adi,input-mode", &str);
-	if (ret) {
-		st->input_mode = ADMV1014_IQ_MODE;
-	} else {
-		ret = match_string(input_mode_names, ARRAY_SIZE(input_mode_names), str);
-		if (ret < 0)
-			return ret;
-
+	ret = device_property_match_property_string(&spi->dev, "adi,input-mode",
+						    input_mode_names,
+						    ARRAY_SIZE(input_mode_names));
+	if (ret >= 0)
 		st->input_mode = ret;
-	}
+	else
+		st->input_mode = ADMV1014_IQ_MODE;
 
-	ret = device_property_read_string(&spi->dev, "adi,quad-se-mode", &str);
-	if (ret) {
-		st->quad_se_mode = ADMV1014_SE_MODE_POS;
-	} else {
-		ret = match_string(quad_se_mode_names, ARRAY_SIZE(quad_se_mode_names), str);
-		if (ret < 0)
-			return ret;
-
+	ret = device_property_match_property_string(&spi->dev, "adi,quad-se-mode",
+						    quad_se_mode_names,
+						    ARRAY_SIZE(quad_se_mode_names));
+	if (ret >= 0)
 		st->quad_se_mode = ADMV1014_SE_MODE_POS + (ret * 3);
-	}
+	else
+		st->quad_se_mode = ADMV1014_SE_MODE_POS;
 
 	for (i = 0; i < ADMV1014_NUM_REGULATORS; ++i)
 		st->regulators[i].supply = admv1014_reg_name[i];

@@ -18,10 +18,10 @@ struct core_vma_metadata {
 
 struct coredump_params {
 	const kernel_siginfo_t *siginfo;
-	struct pt_regs *regs;
 	struct file *file;
 	unsigned long limit;
 	unsigned long mm_flags;
+	int cpu;
 	loff_t written;
 	loff_t pos;
 	loff_t to_skip;
@@ -29,6 +29,8 @@ struct coredump_params {
 	size_t vma_data_size;
 	struct core_vma_metadata *vma_meta;
 };
+
+extern unsigned int core_file_note_size_limit;
 
 /*
  * These are the only things you should do on a core-file: use only these

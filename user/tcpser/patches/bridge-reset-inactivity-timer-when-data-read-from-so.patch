@@ -1,0 +1,27 @@
+From 92f52c394d731e218d0f3f406087ac23860d60b9 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 27 Apr 2023 14:43:50 +0100
+Subject: [PATCH] bridge: reset inactivity timer when data read from socket
+
+Previously, the activity timer (S30) was reset when data was read from
+the serial port, but not when data was read from the connected IP
+socket.
+---
+ src/bridge.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/bridge.c b/src/bridge.c
+index 9fc54b5..70a6019 100644
+--- a/src/bridge.c
++++ b/src/bridge.c
+@@ -193,6 +193,7 @@ void *ip_thread(void *arg) {
+           action_pending = TRUE;
+         } else {
+           LOG(LOG_DEBUG, "Read %d bytes from socket", res);
++          writePipe(cfg->cp[0][1], 0); /* reset inactivity timer */
+           buf[res] = 0;
+           parse_ip_data(cfg, buf, res);
+         }
+-- 
+2.34.1
+

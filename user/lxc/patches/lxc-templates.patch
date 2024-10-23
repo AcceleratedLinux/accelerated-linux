@@ -2,7 +2,7 @@ diff --git a/templates/lxc-download.in b/templates/lxc-download.in
 index 973783ba..3c817daf 100644
 --- a/templates/lxc-download.in
 +++ b/templates/lxc-download.in
-@@ -266,7 +266,7 @@ done
+@@ -168,7 +168,7 @@ done
  
  # Check for required binaries
  for bin in tar xz wget; do
@@ -11,7 +11,7 @@ index 973783ba..3c817daf 100644
      echo "ERROR: Missing required tool: ${bin}" 1>&2
      exit 1
    fi
-@@ -317,7 +317,7 @@ if mountpoint -q /tmp; then
+@@ -210,7 +210,7 @@ if mountpoint -q /tmp; then
    DOWNLOAD_TEMP="${LXC_PATH}"
  fi
  
@@ -24,7 +24,7 @@ diff --git a/templates/lxc-local.in b/templates/lxc-local.in
 index 552a4946..3a3c75b2 100644
 --- a/templates/lxc-local.in
 +++ b/templates/lxc-local.in
-@@ -97,7 +97,7 @@ done
+@@ -95,7 +95,7 @@ done
  
  # Check for required binaries
  for bin in tar xz; do
@@ -33,12 +33,11 @@ index 552a4946..3a3c75b2 100644
      echo "ERROR: Missing required tool: ${bin}" 1>&2
      exit 1
    fi
-@@ -145,7 +145,7 @@ relevant_file() {
- echo "Unpacking the rootfs"
- 
- # Create temporary directory to
--if ! command -V mktemp >/dev/null 2>&1; then
-+if ! which mktemp >/dev/null 2>&1; then
-   LOCAL_TEMP=/tmp/lxc-local.$$
-   mkdir -p "${LOCAL_TEMP}"
- else
+@@ -148,6 +148,6 @@ create_build_dir() {
+   # Create temporary build directory.
+   # If mktemp is not available, use /tmp/lxc-local.$$
+-  if ! command -V mktemp >/dev/null 2>&1; then
++  if ! which mktemp >/dev/null 2>&1; then
+     LOCAL_TEMP=/tmp/lxc-local.$$
+     mkdir -p "${LOCAL_TEMP}"
+   else

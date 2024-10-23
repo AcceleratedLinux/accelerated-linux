@@ -354,7 +354,7 @@ static int show_journal(struct seq_file *m, void *unused)
 		   "prepare: \t%12lu\n"
 		   "prepare_retry: \t%12lu\n",
 		   DJP(jp_journal_1st_block),
-		   SB_JOURNAL(sb)->j_dev_bd,
+		   file_bdev(SB_JOURNAL(sb)->j_bdev_file),
 		   DJP(jp_journal_dev),
 		   DJP(jp_journal_size),
 		   DJP(jp_journal_trans_max),
@@ -411,7 +411,7 @@ int reiserfs_proc_info_init(struct super_block *sb)
 	char *s;
 
 	/* Some block devices use /'s */
-	strlcpy(b, sb->s_id, BDEVNAME_SIZE);
+	strscpy(b, sb->s_id, BDEVNAME_SIZE);
 	s = strchr(b, '/');
 	if (s)
 		*s = '!';
@@ -441,7 +441,7 @@ int reiserfs_proc_info_done(struct super_block *sb)
 		char *s;
 
 		/* Some block devices use /'s */
-		strlcpy(b, sb->s_id, BDEVNAME_SIZE);
+		strscpy(b, sb->s_id, BDEVNAME_SIZE);
 		s = strchr(b, '/');
 		if (s)
 			*s = '!';

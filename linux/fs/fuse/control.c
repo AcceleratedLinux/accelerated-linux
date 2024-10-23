@@ -174,11 +174,7 @@ static ssize_t fuse_conn_congestion_threshold_write(struct file *file,
 	if (!fc)
 		goto out;
 
-	down_read(&fc->killsb);
-	spin_lock(&fc->bg_lock);
-	fc->congestion_threshold = val;
-	spin_unlock(&fc->bg_lock);
-	up_read(&fc->killsb);
+	WRITE_ONCE(fc->congestion_threshold, val);
 	fuse_conn_put(fc);
 out:
 	return ret;
@@ -235,7 +231,7 @@ static struct dentry *fuse_ctl_add_dentry(struct dentry *parent,
 	inode->i_mode = mode;
 	inode->i_uid = fc->user_id;
 	inode->i_gid = fc->group_id;
-	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+	simple_inode_init_ts(inode);
 	/* setting ->i_op to NULL is not allowed */
 	if (iop)
 		inode->i_op = iop;
@@ -258,7 +254,7 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 	struct dentry *parent;
 	char name[32];
 
-	if (!fuse_control_sb)
+	if (!fuse_control_sb || fc->no_control)
 		return 0;
 
 	parent = fuse_control_sb->s_root;
@@ -296,7 +292,7 @@ void fuse_ctl_remove_conn(struct fuse_conn *fc)
 {
 	int i;
 
-	if (!fuse_control_sb)
+	if (!fuse_control_sb || fc->no_control)
 		return;
 
 	for (i = fc->ctl_ndents - 1; i >= 0; i--) {

@@ -154,10 +154,10 @@ struct drm_framebuffer {
 	 * drm_mode_fb_cmd2.
 	 *
 	 * Note that this is a linear offset and does not take into account
-	 * tiling or buffer laytou per @modifier. It meant to be used when the
-	 * actual pixel data for this framebuffer plane starts at an offset,
-	 * e.g.  when multiple planes are allocated within the same backing
-	 * storage buffer object. For tiled layouts this generally means it
+	 * tiling or buffer layout per @modifier. It is meant to be used when
+	 * the actual pixel data for this framebuffer plane starts at an offset,
+	 * e.g. when multiple planes are allocated within the same backing
+	 * storage buffer object. For tiled layouts this generally means its
 	 * @offsets must at least be tile-size aligned, but hardware often has
 	 * stricter requirements.
 	 *
@@ -188,18 +188,6 @@ struct drm_framebuffer {
 	 * DRM_MODE_FB_MODIFIERS.
 	 */
 	int flags;
-	/**
-	 * @hot_x: X coordinate of the cursor hotspot. Used by the legacy cursor
-	 * IOCTL when the driver supports cursor through a DRM_PLANE_TYPE_CURSOR
-	 * universal plane.
-	 */
-	int hot_x;
-	/**
-	 * @hot_y: Y coordinate of the cursor hotspot. Used by the legacy cursor
-	 * IOCTL when the driver supports cursor through a DRM_PLANE_TYPE_CURSOR
-	 * universal plane.
-	 */
-	int hot_y;
 	/**
 	 * @filp_head: Placed on &drm_file.fbs, protected by &drm_file.fbs_lock.
 	 */
@@ -291,11 +279,6 @@ static inline void drm_framebuffer_assign(struct drm_framebuffer **p,
 					  struct drm_framebuffer, head);	\
 	     &fb->head != (&(dev)->mode_config.fb_list);			\
 	     fb = list_next_entry(fb, head))
-
-int drm_framebuffer_plane_width(int width,
-				const struct drm_framebuffer *fb, int plane);
-int drm_framebuffer_plane_height(int height,
-				 const struct drm_framebuffer *fb, int plane);
 
 /**
  * struct drm_afbc_framebuffer - a special afbc frame buffer object

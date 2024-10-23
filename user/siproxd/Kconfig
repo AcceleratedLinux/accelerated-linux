@@ -1,0 +1,6 @@
+
+config USER_SIPROXD_SIPROXD
+	bool "siproxd"
+	select LIB_OSIP2
+	help
+	  siproxd is a SIP proxy. See http://siproxd.sourceforge.net/

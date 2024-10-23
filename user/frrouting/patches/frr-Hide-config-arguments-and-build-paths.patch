@@ -1,0 +1,25 @@
+From 5c35ab6753764817abe490f5ad16fa559a8d61f2 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Mon, 2 Sep 2024 18:34:49 +0200
+Subject: [PATCH] Hide config arguments and build paths
+
+---
+ lib/version.h.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/version.h.in b/lib/version.h.in
+index 7c313790410e..dbc7d310418b 100644
+--- a/lib/version.h.in
++++ b/lib/version.h.in
+@@ -32,7 +32,7 @@ extern "C" {
+ #define FRR_VER_SHORT   "@PACKAGE_VERSION@"
+ #define FRR_BUG_ADDRESS "@PACKAGE_BUGREPORT@"
+ #define FRR_COPYRIGHT   "Copyright 1996-2005 Kunihiro Ishiguro, et al."
+-#define FRR_CONFIG_ARGS "@CONFIG_ARGS@"
++#define FRR_CONFIG_ARGS ""
+ 
+ #define FRR_DEFAULT_MOTD \
+ 	"\n" \
+-- 
+2.43.0
+

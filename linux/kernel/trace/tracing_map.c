@@ -574,7 +574,12 @@ __tracing_map_insert(struct tracing_map *map, void *key, bool lookup_only)
 				}
 
 				memcpy(elt->key, key, map->key_size);
-				entry->val = elt;
+				/*
+				 * Ensure the initialization is visible and
+				 * publish the elt.
+				 */
+				smp_wmb();
+				WRITE_ONCE(entry->val, elt);
 				atomic64_inc(&map->hits);
 
 				return entry->val;
@@ -961,7 +966,7 @@ create_sort_entry(void *key, struct tracing_map_elt *elt)
 static void detect_dups(struct tracing_map_sort_entry **sort_entries,
 		      int n_entries, unsigned int key_size)
 {
-	unsigned int dups = 0, total_dups = 0;
+	unsigned int total_dups = 0;
 	int i;
 	void *key;
 
@@ -974,11 +979,10 @@ static void detect_dups(struct tracing_map_sort_entry **sort_entries,
 	key = sort_entries[0]->key;
 	for (i = 1; i < n_entries; i++) {
 		if (!memcmp(sort_entries[i]->key, key, key_size)) {
-			dups++; total_dups++;
+			total_dups++;
 			continue;
 		}
 		key = sort_entries[i]->key;
-		dups = 0;
 	}
 
 	WARN_ONCE(total_dups > 0,

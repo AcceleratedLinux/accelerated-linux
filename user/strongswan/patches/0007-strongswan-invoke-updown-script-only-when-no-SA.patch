@@ -1,0 +1,290 @@
+From fbd6445618ca0b6beb5228877b548f3dd908ee68 Mon Sep 17 00:00:00 2001
+From: Walter Hagstrom <walter.hagstrom@digi.com>
+Date: Fri, 6 Sep 2024 10:04:18 -0400
+Subject: [PATCH] strongswan: invoke updown script only when no SA
+
+Previously, the updown script was invoked every time the tunnel was
+reauthenticated, causing issues due to the way DAL handles
+reauthentication. DAL incorrectly assumes that the entire tunnel is
+disconnected upon reauthentication, but this is not the case, as DAL
+is configured to use make-before-break.
+
+The current behavior leads to the updown script notifying netifd that
+the interface is down, which in turn triggers a stroke terminate
+command. This command brings down the newly created tunnel, resulting
+in the tunnel remaining down for several minutes. This problem is
+particularly noticeable when DAL is deployed on both ends, as both ends
+delete their respective Security Associations (SAs).
+
+With this change, the updown script is only called when no SA remains.
+This ensures the tunnel stays up during reauthentication, resulting in
+a stable connection.
+
+DAL-9751
+---
+ .../plugins/updown/updown_listener.c          | 242 ++++++++++++++++++
+ 1 file changed, 242 insertions(+)
+
+diff --git a/src/libcharon/plugins/updown/updown_listener.c b/src/libcharon/plugins/updown/updown_listener.c
+index f4ab964e9..c41718448 100644
+--- a/src/libcharon/plugins/updown/updown_listener.c
++++ b/src/libcharon/plugins/updown/updown_listener.c
+@@ -249,6 +249,231 @@ static char* get_port(traffic_selector_t *me, traffic_selector_t *other,
+ 	return port_buf;
+ }
+ 
++/**
++ * Helper function to compare local (own) and remote (peer) endpoints.
++ */
++static bool compare_endpoints(ike_sa_t *old_sa, ike_sa_t *new_sa)
++{
++	host_t *old_local = old_sa->get_my_host(old_sa);
++	host_t *new_local = new_sa->get_my_host(new_sa);
++	host_t *old_remote = old_sa->get_other_host(old_sa);
++	host_t *new_remote = new_sa->get_other_host(new_sa);
++
++	/* Compare local endpoints */
++	if (!old_local->equals(old_local, new_local))
++	{
++		DBG0(DBG_IKE, "Local endpoints do not match");
++		return FALSE;
++	}
++
++	/* Compare remote endpoints */
++	if (!old_remote->equals(old_remote, new_remote))
++	{
++		DBG0(DBG_IKE, "Remote endpoints do not match");
++		return FALSE;
++	}
++
++	return TRUE;
++}
++
++/**
++ * Helper function to compare traffic selectors of the old SA with a new Child SA.
++ */
++static bool compare_traffic_selectors(ike_sa_t *old_sa, child_sa_t *new_child_sa)
++{
++	traffic_selector_t *old_ts, *new_ts;
++	enumerator_t *old_ts_enum, *new_ts_enum;
++	child_sa_t *old_child_sa;
++	enumerator_t *old_child_enum;
++
++	/* Enumerate the Child SAs of the old IKE SA to compare traffic selectors */
++	old_child_enum = old_sa->create_child_sa_enumerator(old_sa);
++	while (old_child_enum->enumerate(old_child_enum, (void **)&old_child_sa))
++	{
++		old_ts_enum = old_child_sa->create_ts_enumerator(old_child_sa, TRUE);
++
++		/* Compare each local traffic selector */
++		while (old_ts_enum->enumerate(old_ts_enum, &old_ts))
++		{
++			bool match_found = FALSE;
++
++			/* Create a new enumerator for new_child_sa traffic selectors */
++			new_ts_enum = new_child_sa->create_ts_enumerator(new_child_sa, TRUE);
++
++			while (new_ts_enum->enumerate(new_ts_enum, &new_ts))
++			{
++				if (old_ts->equals(old_ts, new_ts))
++				{
++					match_found = TRUE;
++					break;
++				}
++			}
++
++			new_ts_enum->destroy(new_ts_enum);
++
++			/* If any traffic selector doesn't match, return FALSE */
++			if (!match_found)
++			{
++				old_ts_enum->destroy(old_ts_enum);
++				old_child_enum->destroy(old_child_enum);
++				return FALSE;
++			}
++		}
++
++		old_ts_enum->destroy(old_ts_enum);
++	}
++
++	old_child_enum->destroy(old_child_enum);
++
++	return TRUE;
++}
++
++/**
++ * Helper function to compare IKE SA parameters.
++ */
++static bool compare_ike_sa_parameters(ike_sa_t *old_sa, ike_sa_t *new_sa)
++{
++	proposal_t *old_proposal = old_sa->get_proposal(old_sa);
++	proposal_t *new_proposal = new_sa->get_proposal(new_sa);
++	transform_type_t types[] = {
++		ENCRYPTION_ALGORITHM,
++		INTEGRITY_ALGORITHM,
++		PSEUDO_RANDOM_FUNCTION,
++		KEY_EXCHANGE_METHOD
++	};
++	uint16_t old_alg, new_alg, old_key_size, new_key_size;
++	int i;
++
++	/* Compare local (own) and remote (peer) endpoints */
++	if (!compare_endpoints(old_sa, new_sa))
++	{
++		DBG0(DBG_IKE, "Endpoints do not match between the old and new IKE SAs");
++		return FALSE;
++	}
++
++	/* Compare each transform type in the proposals */
++	for (i = 0; i < sizeof(types) / sizeof(types[0]); i++)
++	{
++		/* Get algorithms for the old and new proposals */
++		if (!old_proposal->get_algorithm(old_proposal, types[i], &old_alg, &old_key_size) ||
++			!new_proposal->get_algorithm(new_proposal, types[i], &new_alg, &new_key_size))
++		{
++			DBG0(DBG_IKE, "Algorithm for type %d not found in one of the proposals", types[i]);
++			return FALSE;
++		}
++
++		/* Compare algorithms and key sizes */
++		if (old_alg != new_alg || old_key_size != new_key_size)
++		{
++			DBG0(DBG_IKE, "Algorithm mismatch: old_alg=%d, new_alg=%d, old_key_size=%d, new_key_size=%d",
++				 old_alg, new_alg, old_key_size, new_key_size);
++			return FALSE;
++		}
++	}
++
++	return TRUE;
++}
++
++/**
++ * Helper function to check if another SA is installed, this is done when using make before break.
++ */
++static bool check_for_installed_sa(ike_sa_t *old_ike_sa)
++{
++	enumerator_t *ike_enumerator, *child_enumerator;
++	bool another_active = FALSE;
++	child_sa_t *child_sa;
++	ike_sa_t *ike_sa;
++
++	if (!old_ike_sa)
++	{
++		DBG0(DBG_IKE, "Old IKE SA is NULL");
++		return FALSE;
++	}
++
++	DBG0(DBG_IKE, "Checking if another IKE SA is active and in the INSTALLED state with matching parameters for IKE_SA %s[%d]",
++		 old_ike_sa->get_name(old_ike_sa), old_ike_sa->get_unique_id(old_ike_sa));
++
++	/* Create an enumerator for all IKE SAs */
++	ike_enumerator = charon->controller->create_ike_sa_enumerator(charon->controller, FALSE);
++
++	if (!ike_enumerator)
++	{
++		DBG0(DBG_IKE, "Failed to create IKE SA enumerator");
++		return FALSE;
++	}
++
++	DBG0(DBG_IKE, "Enumerating all IKE SAs");
++
++	/* Loop over all existing IKE SAs */
++	while (ike_enumerator->enumerate(ike_enumerator, &ike_sa))
++	{
++		DBG0(DBG_IKE, "Checking IKE SA %s[%d]", ike_sa->get_name(ike_sa), ike_sa->get_unique_id(ike_sa));
++
++		/* Skip the same old IKE SA being checked for deletion */
++		if (ike_sa->get_unique_id(ike_sa) == old_ike_sa->get_unique_id(old_ike_sa))
++		{
++			DBG0(DBG_IKE, "Skipping the same IKE SA being checked for deletion %s[%d]", ike_sa->get_name(ike_sa), ike_sa->get_unique_id(ike_sa));
++			continue;
++		}
++
++		DBG0(DBG_IKE, "Found different IKE SA %s[%d]", ike_sa->get_name(ike_sa), ike_sa->get_unique_id(ike_sa));
++
++		/* Check if the IKE SA is in an ESTABLISHED state */
++		if (ike_sa->get_state(ike_sa) != IKE_ESTABLISHED)
++		{
++			DBG0(DBG_IKE, "IKE SA %s is not in the ESTABLISHED state", ike_sa->get_name(ike_sa));
++			continue;
++		}
++
++		DBG0(DBG_IKE, "IKE SA %s is in the ESTABLISHED state", ike_sa->get_name(ike_sa));
++
++		/* Compare IKE SA parameters (such as proposals, algorithms, etc.) */
++		if (!compare_ike_sa_parameters(old_ike_sa, ike_sa))
++		{
++			DBG0(DBG_IKE, "IKE SA %s does not match the parameters of the old IKE SA", ike_sa->get_name(ike_sa));
++			continue;
++		}
++
++		/* Enumerate all Child SAs associated with this IKE SA */
++		child_enumerator = ike_sa->create_child_sa_enumerator(ike_sa);
++		if (!child_enumerator)
++		{
++			DBG0(DBG_IKE, "Failed to create Child SA enumerator for IKE SA %s[%d]", ike_sa->get_name(ike_sa), ike_sa->get_unique_id(ike_sa));
++			continue;
++		}
++
++		while (child_enumerator->enumerate(child_enumerator, (void **)&child_sa))
++		{
++			DBG0(DBG_IKE, "Checking child SA %s{%d}", child_sa->get_name(child_sa), child_sa->get_unique_id(child_sa));
++
++			/* Check if Child SA is in the INSTALLED state */
++			if (child_sa->get_state(child_sa) == CHILD_INSTALLED)
++			{
++				/* Check if traffic selectors match */
++				if (compare_traffic_selectors(old_ike_sa, child_sa))
++				{
++					DBG0(DBG_IKE, "Found matching active Child SA %s{%d}", child_sa->get_name(child_sa), child_sa->get_unique_id(child_sa));
++					another_active = TRUE;
++					break;
++				}
++			}
++			DBG0(DBG_IKE, "Child SA %s{%d} is not in the INSTALLED state", child_sa->get_name(child_sa), child_sa->get_unique_id(child_sa));
++		}
++
++		child_enumerator->destroy(child_enumerator);
++
++		if (another_active)
++		{
++			break;
++		}
++	}
++
++	ike_enumerator->destroy(ike_enumerator);
++
++	DBG0(DBG_IKE, "another_active=%d", another_active);
++	return another_active;
++}
++
+ /**
+  * Invoke the updown script once for given traffic selectors
+  */
+@@ -268,6 +493,23 @@ static void invoke_once(private_updown_listener_t *this, ike_sa_t *ike_sa,
+ 	char port_buf[PORT_BUF_LEN];
+ 	char *envp[128] = {};
+ 
++	DBG0(DBG_IKE, "invoke_once called for %s", up ? "up" : "down");
++
++	if (!ike_sa)
++	{
++		DBG0(DBG_IKE, "IKE SA is NULL");
++		return;
++	}
++
++	/* Check if another IKE SA is active and in the INSTALLED state with matching parameters */
++	if (check_for_installed_sa(ike_sa))
++	{
++		DBG0(DBG_IKE, "Another active IKE SA with matching parameters found. Skipping updown script invocation.");
++		return;
++	}
++
++	DBG0(DBG_IKE, "Invoking updown script for %s", up ? "up" : "down");
++
+ 	me = ike_sa->get_my_host(ike_sa);
+ 	other = ike_sa->get_other_host(ike_sa);
+ 
+-- 
+2.25.1
+

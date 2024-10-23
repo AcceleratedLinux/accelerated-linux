@@ -5,7 +5,6 @@
  * Common part of most Semtech SAR sensor.
  */
 
-#include <linux/acpi.h>
 #include <linux/bitops.h>
 #include <linux/byteorder/generic.h>
 #include <linux/delay.h>
@@ -425,16 +424,30 @@ static const struct iio_buffer_setup_ops sx_common_buffer_setup_ops = {
 	.postdisable = sx_common_buffer_postdisable,
 };
 
-static void sx_common_regulator_disable(void *_data)
+void sx_common_get_raw_register_config(struct device *dev,
+				       struct sx_common_reg_default *reg_def)
 {
-	struct sx_common_data *data = _data;
+#ifdef CONFIG_ACPI
+	struct acpi_device *adev = ACPI_COMPANION(dev);
+	u32 raw = 0, ret;
+	char prop[80];
 
-	regulator_bulk_disable(ARRAY_SIZE(data->supplies), data->supplies);
+	if (!reg_def->property || !adev)
+		return;
+
+	snprintf(prop, ARRAY_SIZE(prop), "%s,reg_%s", acpi_device_hid(adev), reg_def->property);
+	ret = device_property_read_u32(dev, prop, &raw);
+	if (ret)
+		return;
+
+	reg_def->def = raw;
+#endif
 }
+EXPORT_SYMBOL_NS_GPL(sx_common_get_raw_register_config, SEMTECH_PROX);
 
 #define SX_COMMON_SOFT_RESET				0xde
 
-static int sx_common_init_device(struct iio_dev *indio_dev)
+static int sx_common_init_device(struct device *dev, struct iio_dev *indio_dev)
 {
 	struct sx_common_data *data = iio_priv(indio_dev);
 	struct sx_common_reg_default tmp;
@@ -456,8 +469,7 @@ static int sx_common_init_device(struct iio_dev *indio_dev)
 
 	/* Program defaults from constant or BIOS. */
 	for (i = 0; i < data->chip_info->num_default_regs; i++) {
-		initval = data->chip_info->ops.get_default_reg(&indio_dev->dev,
-							       i, &tmp);
+		initval = data->chip_info->ops.get_default_reg(dev, i, &tmp);
 		ret = regmap_write(data->regmap, initval->reg, initval->def);
 		if (ret)
 			return ret;
@@ -476,6 +488,7 @@ int sx_common_probe(struct i2c_client *client,
 		    const struct sx_common_chip_info *chip_info,
 		    const struct regmap_config *regmap_config)
 {
+	static const char * const regulator_names[] = { "vdd", "svdd" };
 	struct device *dev = &client->dev;
 	struct iio_dev *indio_dev;
 	struct sx_common_data *data;
@@ -489,8 +502,6 @@ int sx_common_probe(struct i2c_client *client,
 
 	data->chip_info = chip_info;
 	data->client = client;
-	data->supplies[0].supply = "vdd";
-	data->supplies[1].supply = "svdd";
 	mutex_init(&data->mutex);
 	init_completion(&data->completion);
 
@@ -499,29 +510,18 @@ int sx_common_probe(struct i2c_client *client,
 		return dev_err_probe(dev, PTR_ERR(data->regmap),
 				     "Could init register map\n");
 
-	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(data->supplies),
-				      data->supplies);
+	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(regulator_names),
+					     regulator_names);
 	if (ret)
 		return dev_err_probe(dev, ret, "Unable to get regulators\n");
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(data->supplies), data->supplies);
-	if (ret)
-		return dev_err_probe(dev, ret, "Unable to enable regulators\n");
-
 	/* Must wait for Tpor time after initial power up */
 	usleep_range(1000, 1100);
-
-	ret = devm_add_action_or_reset(dev, sx_common_regulator_disable, data);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "Unable to register regulators deleter\n");
 
 	ret = data->chip_info->ops.check_whoami(dev, indio_dev);
 	if (ret)
 		return dev_err_probe(dev, ret, "error reading WHOAMI\n");
 
-	ACPI_COMPANION_SET(&indio_dev->dev, ACPI_COMPANION(dev));
-	indio_dev->dev.of_node = client->dev.of_node;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
 	indio_dev->channels =  data->chip_info->iio_channels;
@@ -530,7 +530,7 @@ int sx_common_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, indio_dev);
 
-	ret = sx_common_init_device(indio_dev);
+	ret = sx_common_init_device(dev, indio_dev);
 	if (ret)
 		return dev_err_probe(dev, ret, "Unable to initialize sensor\n");
 

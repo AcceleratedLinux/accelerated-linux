@@ -16,24 +16,27 @@
 #include <linux/dma-mapping.h>
 #include <linux/dvb/dmx.h>
 #include <linux/dvb/frontend.h>
+#include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/firmware.h>
+#include <linux/gpio/consumer.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/of_gpio.h>
 #include <linux/of_platform.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/pinctrl/pinctrl.h>
 #include <linux/platform_device.h>
-#include <linux/usb.h>
 #include <linux/slab.h>
 #include <linux/time.h>
+#include <linux/usb.h>
 #include <linux/wait.h>
-#include <linux/pinctrl/pinctrl.h>
 
-#include "c8sectpfe-core.h"
 #include "c8sectpfe-common.h"
+#include "c8sectpfe-core.h"
 #include "c8sectpfe-debugfs.h"
+
 #include <media/dmxdev.h>
 #include <media/dvb_demux.h>
 #include <media/dvb_frontend.h>
@@ -107,7 +110,7 @@ static void channel_swdemux_tsklet(struct tasklet_struct *t)
 				size,
 				DMA_FROM_DEVICE);
 
-	buf = (u8 *) channel->back_buffer_aligned;
+	buf = channel->back_buffer_aligned;
 
 	dev_dbg(fei->dev,
 		"chan=%d channel=%p num_packets = %d, buf = %p, pos = 0x%x\n\trp=0x%lx, wp=0x%lx\n",
@@ -133,7 +136,7 @@ static void channel_swdemux_tsklet(struct tasklet_struct *t)
 static int c8sectpfe_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
 	struct dvb_demux *demux = dvbdmxfeed->demux;
-	struct stdemux *stdemux = (struct stdemux *)demux->priv;
+	struct stdemux *stdemux = demux->priv;
 	struct c8sectpfei *fei = stdemux->c8sectpfei;
 	struct channel_info *channel;
 	u32 tmp;
@@ -176,7 +179,7 @@ static int c8sectpfe_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 
 	channel = fei->channel_data[stdemux->tsin_index];
 
-	bitmap = (unsigned long *) channel->pid_buffer_aligned;
+	bitmap = channel->pid_buffer_aligned;
 
 	/* 8192 is a special PID */
 	if (dvbdmxfeed->pid == 8192) {
@@ -254,7 +257,7 @@ static int c8sectpfe_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
 
 	struct dvb_demux *demux = dvbdmxfeed->demux;
-	struct stdemux *stdemux = (struct stdemux *)demux->priv;
+	struct stdemux *stdemux = demux->priv;
 	struct c8sectpfei *fei = stdemux->c8sectpfei;
 	struct channel_info *channel;
 	int idlereq;
@@ -272,7 +275,7 @@ static int c8sectpfe_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 
 	channel = fei->channel_data[stdemux->tsin_index];
 
-	bitmap = (unsigned long *) channel->pid_buffer_aligned;
+	bitmap = channel->pid_buffer_aligned;
 
 	if (dvbdmxfeed->pid == 8192) {
 		tmp = readl(fei->io + C8SECTPFE_IB_PID_SET(channel->tsin_id));
@@ -333,8 +336,7 @@ static int c8sectpfe_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 			__func__, __LINE__, stdemux, channel->tsin_id);
 
 		/* turn off all PIDS in the bitmap */
-		memset((void *)channel->pid_buffer_aligned
-			, 0x00, PID_TABLE_SIZE);
+		memset(channel->pid_buffer_aligned, 0, PID_TABLE_SIZE);
 
 		/* manage cache so data is visible to HW */
 		dma_sync_single_for_device(fei->dev,
@@ -458,23 +460,19 @@ static int configure_memdma_and_inputblock(struct c8sectpfei *fei,
 
 	init_completion(&tsin->idle_completion);
 
-	tsin->back_buffer_start = kzalloc(FEI_BUFFER_SIZE +
-					FEI_ALIGNMENT, GFP_KERNEL);
-
+	tsin->back_buffer_start = kzalloc(FEI_BUFFER_SIZE + FEI_ALIGNMENT, GFP_KERNEL);
 	if (!tsin->back_buffer_start) {
 		ret = -ENOMEM;
 		goto err_unmap;
 	}
 
 	/* Ensure backbuffer is 32byte aligned */
-	tsin->back_buffer_aligned = tsin->back_buffer_start
-		+ FEI_ALIGNMENT;
+	tsin->back_buffer_aligned = tsin->back_buffer_start + FEI_ALIGNMENT;
 
-	tsin->back_buffer_aligned = (void *)
-		(((uintptr_t) tsin->back_buffer_aligned) & ~0x1F);
+	tsin->back_buffer_aligned = PTR_ALIGN(tsin->back_buffer_aligned, FEI_ALIGNMENT);
 
 	tsin->back_buffer_busaddr = dma_map_single(fei->dev,
-					(void *)tsin->back_buffer_aligned,
+					tsin->back_buffer_aligned,
 					FEI_BUFFER_SIZE,
 					DMA_BIDIRECTIONAL);
 
@@ -489,8 +487,7 @@ static int configure_memdma_and_inputblock(struct c8sectpfei *fei,
 	 * per pid. By powers of deduction we conclude stih407 family
 	 * is configured (at SoC design stage) for bit per pid.
 	 */
-	tsin->pid_buffer_start = kzalloc(2048, GFP_KERNEL);
-
+	tsin->pid_buffer_start = kzalloc(PID_TABLE_SIZE + PID_TABLE_SIZE, GFP_KERNEL);
 	if (!tsin->pid_buffer_start) {
 		ret = -ENOMEM;
 		goto err_unmap;
@@ -503,11 +500,9 @@ static int configure_memdma_and_inputblock(struct c8sectpfei *fei,
 	 * the register.
 	 */
 
-	tsin->pid_buffer_aligned = tsin->pid_buffer_start +
-		PID_TABLE_SIZE;
+	tsin->pid_buffer_aligned = tsin->pid_buffer_start + PID_TABLE_SIZE;
 
-	tsin->pid_buffer_aligned = (void *)
-		(((uintptr_t) tsin->pid_buffer_aligned) & ~0x3ff);
+	tsin->pid_buffer_aligned = PTR_ALIGN(tsin->pid_buffer_aligned, PID_TABLE_SIZE);
 
 	tsin->pid_buffer_busaddr = dma_map_single(fei->dev,
 						tsin->pid_buffer_aligned,
@@ -699,16 +694,10 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, fei);
 
-	fei->c8sectpfeclk = devm_clk_get(dev, "c8sectpfe");
+	fei->c8sectpfeclk = devm_clk_get_enabled(dev, "c8sectpfe");
 	if (IS_ERR(fei->c8sectpfeclk)) {
-		dev_err(dev, "c8sectpfe clk not found\n");
-		return PTR_ERR(fei->c8sectpfeclk);
-	}
-
-	ret = clk_prepare_enable(fei->c8sectpfeclk);
-	if (ret) {
 		dev_err(dev, "Failed to enable c8sectpfe clock\n");
-		return ret;
+		return PTR_ERR(fei->c8sectpfeclk);
 	}
 
 	/* to save power disable all IP's (on by default) */
@@ -726,7 +715,7 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 			0, "c8sectpfe-idle-irq", fei);
 	if (ret) {
 		dev_err(dev, "Can't register c8sectpfe-idle-irq IRQ.\n");
-		goto err_clk_disable;
+		return ret;
 	}
 
 	ret = devm_request_irq(dev, fei->error_irq,
@@ -734,7 +723,7 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 				"c8sectpfe-error-irq", fei);
 	if (ret) {
 		dev_err(dev, "Can't register c8sectpfe-error-irq IRQ.\n");
-		goto err_clk_disable;
+		return ret;
 	}
 
 	fei->tsin_count = of_get_child_count(np);
@@ -743,16 +732,14 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 		fei->tsin_count > fei->hw_stats.num_ib) {
 
 		dev_err(dev, "More tsin declared than exist on SoC!\n");
-		ret = -EINVAL;
-		goto err_clk_disable;
+		return -EINVAL;
 	}
 
 	fei->pinctrl = devm_pinctrl_get(dev);
 
 	if (IS_ERR(fei->pinctrl)) {
 		dev_err(dev, "Error getting tsin pins\n");
-		ret = PTR_ERR(fei->pinctrl);
-		goto err_clk_disable;
+		return PTR_ERR(fei->pinctrl);
 	}
 
 	for_each_child_of_node(np, child) {
@@ -818,30 +805,23 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 		}
 		of_node_put(i2c_bus);
 
-		tsin->rst_gpio = of_get_named_gpio(child, "reset-gpios", 0);
-
-		ret = gpio_is_valid(tsin->rst_gpio);
-		if (!ret) {
-			dev_err(dev,
-				"reset gpio for tsin%d not valid (gpio=%d)\n",
-				tsin->tsin_id, tsin->rst_gpio);
-			ret = -EINVAL;
-			goto err_node_put;
-		}
-
-		ret = devm_gpio_request_one(dev, tsin->rst_gpio,
-					GPIOF_OUT_INIT_LOW, "NIM reset");
+		/* Acquire reset GPIO and activate it */
+		tsin->rst_gpio = devm_fwnode_gpiod_get(dev,
+						       of_fwnode_handle(child),
+						       "reset", GPIOD_OUT_HIGH,
+						       "NIM reset");
+		ret = PTR_ERR_OR_ZERO(tsin->rst_gpio);
 		if (ret && ret != -EBUSY) {
-			dev_err(dev, "Can't request tsin%d reset gpio\n"
-				, fei->channel_data[index]->tsin_id);
+			dev_err(dev, "Can't request tsin%d reset gpio\n",
+				fei->channel_data[index]->tsin_id);
 			goto err_node_put;
 		}
 
 		if (!ret) {
-			/* toggle reset lines */
-			gpio_direction_output(tsin->rst_gpio, 0);
+			/* wait for the chip to reset */
 			usleep_range(3500, 5000);
-			gpio_direction_output(tsin->rst_gpio, 1);
+			/* release the reset line */
+			gpiod_set_value_cansleep(tsin->rst_gpio, 0);
 			usleep_range(3000, 5000);
 		}
 
@@ -870,7 +850,7 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(dev, "c8sectpfe_tuner_register_frontend failed (%d)\n",
 			ret);
-		goto err_clk_disable;
+		return ret;
 	}
 
 	c8sectpfe_debugfs_init(fei);
@@ -879,12 +859,10 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 
 err_node_put:
 	of_node_put(child);
-err_clk_disable:
-	clk_disable_unprepare(fei->c8sectpfeclk);
 	return ret;
 }
 
-static int c8sectpfe_remove(struct platform_device *pdev)
+static void c8sectpfe_remove(struct platform_device *pdev)
 {
 	struct c8sectpfei *fei = platform_get_drvdata(pdev);
 	struct channel_info *channel;
@@ -914,11 +892,6 @@ static int c8sectpfe_remove(struct platform_device *pdev)
 
 	if (readl(fei->io + SYS_OTHER_CLKEN))
 		writel(0, fei->io + SYS_OTHER_CLKEN);
-
-	if (fei->c8sectpfeclk)
-		clk_disable_unprepare(fei->c8sectpfeclk);
-
-	return 0;
 }
 
 
@@ -934,6 +907,7 @@ static int configure_channels(struct c8sectpfei *fei)
 		if (ret) {
 			dev_err(fei->dev,
 				"configure_memdma_and_inputblock failed\n");
+			of_node_put(child);
 			goto err_unmap;
 		}
 		index++;
@@ -1122,7 +1096,6 @@ static int load_slim_core_fw(const struct firmware *fw, struct c8sectpfei *fei)
 		}
 	}
 
-	release_firmware(fw);
 	return err;
 }
 
@@ -1146,6 +1119,7 @@ static int load_c8sectpfe_fw(struct c8sectpfei *fei)
 	}
 
 	err = load_slim_core_fw(fw, fei);
+	release_firmware(fw);
 	if (err) {
 		dev_err(fei->dev, "load_slim_core_fw failed err=(%d)\n", err);
 		return err;
@@ -1181,10 +1155,10 @@ MODULE_DEVICE_TABLE(of, c8sectpfe_match);
 static struct platform_driver c8sectpfe_driver = {
 	.driver = {
 		.name = "c8sectpfe",
-		.of_match_table = of_match_ptr(c8sectpfe_match),
+		.of_match_table = c8sectpfe_match,
 	},
 	.probe	= c8sectpfe_probe,
-	.remove	= c8sectpfe_remove,
+	.remove_new = c8sectpfe_remove,
 };
 
 module_platform_driver(c8sectpfe_driver);

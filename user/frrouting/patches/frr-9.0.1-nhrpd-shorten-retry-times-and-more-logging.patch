@@ -1,0 +1,181 @@
+From cd11ab97ca505ea9579aa9e11449213f92636ce1 Mon Sep 17 00:00:00 2001
+From: Walter Hagstrom <walter.hagstrom@digi.com>
+Date: Mon, 18 Mar 2024 11:09:18 -0400
+Subject: [PATCH] nhrpd: Shorten retry times and more logging
+
+This commit addresses two areas in the NHRP daemon initialization
+process:
+
+1. Reduced Tunnel Reconnection Delay: Previously, during NHRP
+initialization, if an IPSec tunnel failed to establish immediately,
+the system would wait 120 seconds before attempting a reconnection.
+This delay has been reduced to 20 seconds, allowing for quicker retry
+attempts and a better user experience.
+
+2. Enhanced Logging for IPSec Connection Events: To aid in
+troubleshooting and debugging, we have increased the verbosity of the
+logging associated with IPSec connection establishment.
+
+DAL-9254
+---
+ nhrpd/nhrp_nhs.c  |  5 ++++-
+ nhrpd/nhrp_peer.c | 36 ++++++++++++++++++++++++++++++++++++
+ nhrpd/vici.c      |  3 +++
+ 3 files changed, 43 insertions(+), 1 deletion(-)
+
+diff --git a/nhrpd/nhrp_nhs.c b/nhrpd/nhrp_nhs.c
+index acd3b7df9..645801897 100644
+--- a/nhrpd/nhrp_nhs.c
++++ b/nhrpd/nhrp_nhs.c
+@@ -171,11 +171,14 @@ static void nhrp_reg_send_req(struct event *t)
+ 	if (!nhrp_peer_check(r->peer, 2)) {
+ 		debugf(NHRP_DEBUG_COMMON, "NHS: Waiting link for %pSU",
+ 		       &r->peer->vc->remote.nbma);
+-		event_add_timer(master, nhrp_reg_send_req, r, 120,
++		event_add_timer(master, nhrp_reg_send_req, r, /*120*/ 20,
+ 				&r->t_register);
+ 		return;
+ 	}
+ 
++	debugf(NHRP_DEBUG_COMMON, "NHS: Sending registration for %pSU",
++	       &r->peer->vc->remote.nbma);
++
+ 	event_add_timer(master, nhrp_reg_timeout, r, r->timeout,
+ 			&r->t_register);
+ 
+diff --git a/nhrpd/nhrp_peer.c b/nhrpd/nhrp_peer.c
+index ffb6cf750..820b196ad 100644
+--- a/nhrpd/nhrp_peer.c
++++ b/nhrpd/nhrp_peer.c
+@@ -58,8 +58,11 @@ static void nhrp_peer_notify_up(struct event *t)
+ 	struct interface *ifp = p->ifp;
+ 	struct nhrp_interface *nifp = ifp->info;
+ 
++	debugf(NHRP_DEBUG_COMMON, "Peer %pSU is up", &vc->remote.nbma);
++
+ 	p->t_fallback = NULL;
+ 	if (nifp->enabled && (!nifp->ipsec_profile || vc->ipsec)) {
++		debugf(NHRP_DEBUG_COMMON, "Peer %pSU is up", &vc->remote.nbma);
+ 		p->online = 1;
+ 		nhrp_peer_ref(p);
+ 		notifier_call(&p->notifier_list, NOTIFY_PEER_UP);
+@@ -75,6 +78,8 @@ static void __nhrp_peer_check(struct nhrp_peer *p)
+ 	unsigned online;
+ 
+ 	online = nifp->enabled && (!nifp->ipsec_profile || vc->ipsec);
++	debugf(NHRP_DEBUG_COMMON, "Peer %pSU is %s", &vc->remote.nbma,
++	       online ? "online" : "offline");
+ 	if (p->online != online) {
+ 		EVENT_OFF(p->t_fallback);
+ 		if (online && notifier_active(&p->notifier_list)) {
+@@ -104,6 +109,9 @@ static void nhrp_peer_vc_notify(struct notifier_block *n, unsigned long cmd)
+ {
+ 	struct nhrp_peer *p = container_of(n, struct nhrp_peer, vc_notifier);
+ 
++	debugf(NHRP_DEBUG_COMMON, "Peer %pSU VC notify %lu", &p->vc->remote.nbma,
++	       cmd);
++
+ 	switch (cmd) {
+ 	case NOTIFY_VC_IPSEC_CHANGED:
+ 		__nhrp_peer_check(p);
+@@ -122,6 +130,10 @@ static void nhrp_peer_ifp_notify(struct notifier_block *n, unsigned long cmd)
+ 	struct nhrp_interface *nifp;
+ 	struct nhrp_vc *vc;
+ 
++
++	debugf(NHRP_DEBUG_COMMON, "Peer %pSU IF notify %lu", &p->vc->remote.nbma,
++	       cmd);
++
+ 	nhrp_peer_ref(p);
+ 	switch (cmd) {
+ 	case NOTIFY_INTERFACE_UP:
+@@ -184,6 +196,8 @@ static void *nhrp_peer_create(void *data)
+ 	nhrp_interface_notify_add(p->ifp, &p->ifp_notifier,
+ 				  nhrp_peer_ifp_notify);
+ 
++	debugf(NHRP_DEBUG_COMMON, "Creating peer %pSU", &p->vc->remote.nbma);
++
+ 	return p;
+ }
+ 
+@@ -255,6 +269,9 @@ static void nhrp_peer_request_timeout(struct event *t)
+ 	struct interface *ifp = p->ifp;
+ 	struct nhrp_interface *nifp = ifp->info;
+ 
++	debugf(NHRP_DEBUG_COMMON, "IPsec connection request to %pSU timed out",
++	       &vc->remote.nbma);
++
+ 
+ 	if (p->online)
+ 		return;
+@@ -262,6 +279,9 @@ static void nhrp_peer_request_timeout(struct event *t)
+ 	if (nifp->ipsec_fallback_profile && !p->prio
+ 	    && !p->fallback_requested) {
+ 		p->fallback_requested = 1;
++		debugf(NHRP_DEBUG_COMMON,
++		       "Initiating IPsec connection request to %pSU",
++		       &vc->remote.nbma);
+ 		vici_request_vc(nifp->ipsec_fallback_profile, &vc->local.nbma,
+ 				&vc->remote.nbma, p->prio);
+ 		event_add_timer(master, nhrp_peer_request_timeout, p, 30,
+@@ -278,6 +298,9 @@ static void nhrp_peer_defer_vici_request(struct event *t)
+ 	struct interface *ifp = p->ifp;
+ 	struct nhrp_interface *nifp = ifp->info;
+ 
++	debugf(NHRP_DEBUG_COMMON, "IPsec connection request to %pSU deferred",
++	       &vc->remote.nbma);
++
+ 	EVENT_OFF(p->t_timer);
+ 
+ 	if (p->online) {
+@@ -285,6 +308,8 @@ static void nhrp_peer_defer_vici_request(struct event *t)
+ 		       "IPsec connection to %pSU already established",
+ 		       &vc->remote.nbma);
+ 	} else {
++		debugf(NHRP_DEBUG_COMMON, "Initiating IPsec connection to %pSU",
++		       &vc->remote.nbma);
+ 		vici_request_vc(nifp->ipsec_profile, &vc->local.nbma,
+ 				&vc->remote.nbma, p->prio);
+ 		event_add_timer(master, nhrp_peer_request_timeout, p,
+@@ -300,6 +325,14 @@ int nhrp_peer_check(struct nhrp_peer *p, int establish)
+ 	struct interface *ifp = p->ifp;
+ 	struct nhrp_interface *nifp = ifp->info;
+ 
++	debugf(NHRP_DEBUG_COMMON, "Checking peer %pSU", &vc->remote.nbma);
++
++	debugf(NHRP_DEBUG_COMMON, "Peer %pSU requested:%d prio:%d online:%d",
++	       &vc->remote.nbma, p->requested, p->prio, p->online);
++
++	debugf(NHRP_DEBUG_COMMON, "Peer %pSU establish:%d ipsec_profile:%d vc->ipsec:%d",
++	       &vc->remote.nbma, establish, nifp->ipsec_profile, vc->ipsec);
++
+ 	if (p->online)
+ 		return 1;
+ 	if (!establish)
+@@ -318,6 +351,9 @@ int nhrp_peer_check(struct nhrp_peer *p, int establish)
+ 
+ 	/* All NHRP registration requests are prioritized */
+ 	if (p->prio) {
++		debugf(NHRP_DEBUG_COMMON,
++		       "nhrp_peer_check: Initiating IPsec connection request to %pSU",
++		       &vc->remote.nbma);
+ 		vici_request_vc(nifp->ipsec_profile, &vc->local.nbma,
+ 				&vc->remote.nbma, p->prio);
+ 		event_add_timer(master, nhrp_peer_request_timeout, p,
+diff --git a/nhrpd/vici.c b/nhrpd/vici.c
+index 2f7636260..25b28c924 100644
+--- a/nhrpd/vici.c
++++ b/nhrpd/vici.c
+@@ -584,6 +584,9 @@ void vici_request_vc(const char *profile, union sockunion *src,
+ 	sockunion2str(src, buf[0], sizeof(buf[0]));
+ 	sockunion2str(dst, buf[1], sizeof(buf[1]));
+ 
++	debugf(NHRP_DEBUG_VICI, "Requesting VC for %s from %s to %s", profile,
++	       buf[0], buf[1]);
++
+ 	vici_submit_request(vici, "initiate", VICI_KEY_VALUE, "child",
+ 			    strlen(profile), profile, VICI_KEY_VALUE, "timeout",
+ 			    (size_t)2, "-1", VICI_KEY_VALUE, "async", (size_t)1,
+-- 
+2.25.1
+

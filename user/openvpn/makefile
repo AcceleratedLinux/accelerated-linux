@@ -1,6 +1,7 @@
-
-VERSION = 2.5.6
+VERSION = 2.6.9
 URL = https://swupdate.openvpn.org/community/releases/openvpn-$(VERSION).tar.gz
+
+CONFOPTS += --disable-dco
 
 MAKEVARS = 
 CONFVARS += ac_cv_path_ROUTE=/sbin/route

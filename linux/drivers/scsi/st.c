@@ -87,7 +87,7 @@ static int try_rdio = 1;
 static int try_wdio = 1;
 static int debug_flag;
 
-static struct class st_sysfs_class;
+static const struct class st_sysfs_class;
 static const struct attribute_group *st_dev_groups[];
 static const struct attribute_group *st_drv_groups[];
 
@@ -206,7 +206,6 @@ static int st_remove(struct device *);
 static struct scsi_driver st_template = {
 	.gendrv = {
 		.name		= "st",
-		.owner		= THIS_MODULE,
 		.probe		= st_probe,
 		.remove		= st_remove,
 		.groups		= st_drv_groups,
@@ -414,6 +413,8 @@ static int st_chk_result(struct scsi_tape *STp, struct st_request * SRpnt)
 	if (cmdstatp->have_sense &&
 	    cmdstatp->sense_hdr.asc == 0 && cmdstatp->sense_hdr.ascq == 0x17)
 		STp->cleaning_req = 1; /* ASC and ASCQ => cleaning requested */
+	if (cmdstatp->have_sense && scode == UNIT_ATTENTION && cmdstatp->sense_hdr.asc == 0x29)
+		STp->pos_unknown = 1; /* ASC => power on / reset */
 
 	STp->pos_unknown |= STp->device->was_reset;
 
@@ -512,7 +513,8 @@ static void st_do_stats(struct scsi_tape *STp, struct request *req)
 	atomic64_dec(&STp->stats->in_flight);
 }
 
-static void st_scsi_execute_end(struct request *req, blk_status_t status)
+static enum rq_end_io_ret st_scsi_execute_end(struct request *req,
+					      blk_status_t status)
 {
 	struct scsi_cmnd *scmd = blk_mq_rq_to_pdu(req);
 	struct st_request *SRpnt = req->end_io_data;
@@ -532,6 +534,7 @@ static void st_scsi_execute_end(struct request *req, blk_status_t status)
 
 	blk_rq_unmap_user(tmp);
 	blk_mq_free_request(req);
+	return RQ_END_IO_NONE;
 }
 
 static int st_scsi_execute(struct st_request *SRpnt, const unsigned char *cmd,
@@ -3830,7 +3833,7 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 		break;
 	}
 
-	retval = scsi_ioctl(STp->device, file->f_mode, cmd_in, p);
+	retval = scsi_ioctl(STp->device, file->f_mode & FMODE_WRITE, cmd_in, p);
 	if (!retval && cmd_in == SCSI_IOCTL_STOP_UNIT) {
 		/* unload */
 		STp->rew_at_close = 0;
@@ -4246,11 +4249,10 @@ static int st_probe(struct device *dev)
 	struct st_partstat *STps;
 	struct st_buffer *buffer;
 	int i, error;
-	char *stp;
 
 	if (SDp->type != TYPE_TAPE)
 		return -ENODEV;
-	if ((stp = st_incompatible(SDp))) {
+	if (st_incompatible(SDp)) {
 		sdev_printk(KERN_INFO, SDp,
 			    "OnStream tapes are no longer supported;\n");
 		sdev_printk(KERN_INFO, SDp,
@@ -4435,7 +4437,7 @@ static void scsi_tape_release(struct kref *kref)
 	return;
 }
 
-static struct class st_sysfs_class = {
+static const struct class st_sysfs_class = {
 	.name = "scsi_tape",
 	.dev_groups = st_dev_groups,
 };

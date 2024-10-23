@@ -116,9 +116,9 @@ CONFIGURE_OPTS := --host=$(TARGETARCH) --build=$(HOSTARCH) --target=$(TARGETARCH
 
 ifdef UCLINUX_BUILD_LIB
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O1) -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
@@ -138,9 +138,9 @@ endif
 
 ifdef UCLINUX_BUILD_USER
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O1) -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror

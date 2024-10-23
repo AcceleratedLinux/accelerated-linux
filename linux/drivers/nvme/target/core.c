@@ -10,11 +10,14 @@
 #include <linux/pci-p2pdma.h>
 #include <linux/scatterlist.h>
 
+#include <generated/utsrelease.h>
+
 #define CREATE_TRACE_POINTS
 #include "trace.h"
 
 #include "nvmet.h"
 
+struct kmem_cache *nvmet_bvec_cache;
 struct workqueue_struct *buffered_io_wq;
 struct workqueue_struct *zbd_wq;
 static const struct nvmet_fabrics_ops *nvmet_transports[NVMF_TRTYPE_MAX];
@@ -245,7 +248,7 @@ void nvmet_ns_changed(struct nvmet_subsys *subsys, u32 nsid)
 		nvmet_add_to_changed_ns_log(ctrl, cpu_to_le32(nsid));
 		if (nvmet_aen_bit_disabled(ctrl, NVME_AEN_BIT_NS_ATTR))
 			continue;
-		nvmet_add_async_event(ctrl, NVME_AER_TYPE_NOTICE,
+		nvmet_add_async_event(ctrl, NVME_AER_NOTICE,
 				NVME_AER_NOTICE_NS_CHANGED,
 				NVME_LOG_CHANGED_NS);
 	}
@@ -262,7 +265,7 @@ void nvmet_send_ana_event(struct nvmet_subsys *subsys,
 			continue;
 		if (nvmet_aen_bit_disabled(ctrl, NVME_AEN_BIT_ANA_CHANGE))
 			continue;
-		nvmet_add_async_event(ctrl, NVME_AER_TYPE_NOTICE,
+		nvmet_add_async_event(ctrl, NVME_AER_NOTICE,
 				NVME_AER_NOTICE_ANA, NVME_LOG_ANA);
 	}
 	mutex_unlock(&subsys->lock);
@@ -355,6 +358,18 @@ int nvmet_enable_port(struct nvmet_port *port)
 	if (port->inline_data_size < 0)
 		port->inline_data_size = 0;
 
+	/*
+	 * If the transport didn't set the max_queue_size properly, then clamp
+	 * it to the target limits. Also set default values in case the
+	 * transport didn't set it at all.
+	 */
+	if (port->max_queue_size < 0)
+		port->max_queue_size = NVMET_MAX_QUEUE_SIZE;
+	else
+		port->max_queue_size = clamp_t(int, port->max_queue_size,
+					       NVMET_MIN_QUEUE_SIZE,
+					       NVMET_MAX_QUEUE_SIZE);
+
 	port->enabled = true;
 	port->tr_ops = ops;
 	return 0;
@@ -422,10 +437,13 @@ void nvmet_stop_keep_alive_timer(struct nvmet_ctrl *ctrl)
 u16 nvmet_req_find_ns(struct nvmet_req *req)
 {
 	u32 nsid = le32_to_cpu(req->cmd->common.nsid);
+	struct nvmet_subsys *subsys = nvmet_req_subsys(req);
 
-	req->ns = xa_load(&nvmet_req_subsys(req)->namespaces, nsid);
+	req->ns = xa_load(&subsys->namespaces, nsid);
 	if (unlikely(!req->ns)) {
 		req->error_loc = offsetof(struct nvme_common_command, nsid);
+		if (nvmet_subsys_nsid_exists(subsys, nsid))
+			return NVME_SC_INTERNAL_PATH_ERROR;
 		return NVME_SC_INVALID_NS | NVME_SC_DNR;
 	}
 
@@ -695,11 +713,10 @@ static void nvmet_update_sq_head(struct nvmet_req *req)
 	if (req->sq->size) {
 		u32 old_sqhd, new_sqhd;
 
+		old_sqhd = READ_ONCE(req->sq->sqhd);
 		do {
-			old_sqhd = req->sq->sqhd;
 			new_sqhd = (old_sqhd + 1) % req->sq->size;
-		} while (cmpxchg(&req->sq->sqhd, old_sqhd, new_sqhd) !=
-					old_sqhd);
+		} while (!try_cmpxchg(&req->sq->sqhd, &old_sqhd, new_sqhd));
 	}
 	req->cqe->sq_head = cpu_to_le16(req->sq->sqhd & 0x0000FFFF);
 }
@@ -735,6 +752,8 @@ static void nvmet_set_error(struct nvmet_req *req, u16 status)
 
 static void __nvmet_req_complete(struct nvmet_req *req, u16 status)
 {
+	struct nvmet_ns *ns = req->ns;
+
 	if (!req->sq->sqhd_disabled)
 		nvmet_update_sq_head(req);
 	req->cqe->sq_id = cpu_to_le16(req->sq->qid);
@@ -745,15 +764,17 @@ static void __nvmet_req_complete(struct nvmet_req *req, u16 status)
 
 	trace_nvmet_req_complete(req);
 
-	if (req->ns)
-		nvmet_put_namespace(req->ns);
 	req->ops->queue_response(req);
+	if (ns)
+		nvmet_put_namespace(ns);
 }
 
 void nvmet_req_complete(struct nvmet_req *req, u16 status)
 {
+	struct nvmet_sq *sq = req->sq;
+
 	__nvmet_req_complete(req, status);
-	percpu_ref_put(&req->sq->ref);
+	percpu_ref_put(&sq->ref);
 }
 EXPORT_SYMBOL_GPL(nvmet_req_complete);
 
@@ -795,6 +816,16 @@ void nvmet_sq_destroy(struct nvmet_sq *sq)
 	wait_for_completion(&sq->confirm_done);
 	wait_for_completion(&sq->free_done);
 	percpu_ref_exit(&sq->ref);
+	nvmet_auth_sq_free(sq);
+
+	/*
+	 * we must reference the ctrl again after waiting for inflight IO
+	 * to complete. Because admin connect may have sneaked in after we
+	 * store sq->ctrl locally, but before we killed the percpu_ref. the
+	 * admin connect allocates and assigns sq->ctrl, which now needs a
+	 * final ref put, as this ctrl is going away.
+	 */
+	ctrl = sq->ctrl;
 
 	if (ctrl) {
 		/*
@@ -829,6 +860,7 @@ int nvmet_sq_init(struct nvmet_sq *sq)
 	}
 	init_completion(&sq->free_done);
 	init_completion(&sq->confirm_done);
+	nvmet_auth_sq_init(sq);
 
 	return 0;
 }
@@ -865,7 +897,14 @@ static inline u16 nvmet_io_cmd_check_access(struct nvmet_req *req)
 
 static u16 nvmet_parse_io_cmd(struct nvmet_req *req)
 {
+	struct nvme_command *cmd = req->cmd;
 	u16 ret;
+
+	if (nvme_is_fabrics(cmd))
+		return nvmet_parse_fabrics_io_cmd(req);
+
+	if (unlikely(!nvmet_check_auth_status(req)))
+		return NVME_SC_AUTH_REQUIRED | NVME_SC_DNR;
 
 	ret = nvmet_check_ctrl_status(req);
 	if (unlikely(ret))
@@ -918,6 +957,7 @@ bool nvmet_req_init(struct nvmet_req *req, struct nvmet_cq *cq,
 	req->metadata_sg_cnt = 0;
 	req->transfer_len = 0;
 	req->metadata_len = 0;
+	req->cqe->result.u64 = 0;
 	req->cqe->status = 0;
 	req->cqe->sq_head = 0;
 	req->ns = NULL;
@@ -1165,7 +1205,7 @@ static void nvmet_start_ctrl(struct nvmet_ctrl *ctrl)
 	 * reset the keep alive timer when the controller is enabled.
 	 */
 	if (ctrl->kato)
-		mod_delayed_work(system_wq, &ctrl->ka_work, ctrl->kato * HZ);
+		mod_delayed_work(nvmet_wq, &ctrl->ka_work, ctrl->kato * HZ);
 }
 
 static void nvmet_clear_ctrl(struct nvmet_ctrl *ctrl)
@@ -1208,9 +1248,10 @@ static void nvmet_init_cap(struct nvmet_ctrl *ctrl)
 	ctrl->cap |= (15ULL << 24);
 	/* maximum queue entries supported: */
 	if (ctrl->ops->get_max_queue_size)
-		ctrl->cap |= ctrl->ops->get_max_queue_size(ctrl) - 1;
+		ctrl->cap |= min_t(u16, ctrl->ops->get_max_queue_size(ctrl),
+				   ctrl->port->max_queue_size) - 1;
 	else
-		ctrl->cap |= NVMET_QUEUE_SIZE - 1;
+		ctrl->cap |= ctrl->port->max_queue_size - 1;
 
 	if (nvmet_is_passthru_subsys(ctrl->subsys))
 		nvmet_passthrough_override_cap(ctrl);
@@ -1270,6 +1311,11 @@ u16 nvmet_check_ctrl_status(struct nvmet_req *req)
 		pr_err("got cmd %d while CSTS.RDY == 0 on qid = %d\n",
 		       req->cmd->common.opcode, req->sq->qid);
 		return NVME_SC_CMD_SEQ_ERROR | NVME_SC_DNR;
+	}
+
+	if (unlikely(!nvmet_check_auth_status(req))) {
+		pr_warn("qid %d not authenticated\n", req->sq->qid);
+		return NVME_SC_AUTH_REQUIRED | NVME_SC_DNR;
 	}
 	return 0;
 }
@@ -1391,6 +1437,7 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 
 	kref_init(&ctrl->ref);
 	ctrl->subsys = subsys;
+	ctrl->pi_support = ctrl->port->pi_enable && ctrl->subsys->pi_support;
 	nvmet_init_cap(ctrl);
 	WRITE_ONCE(ctrl->aen_enabled, NVMET_AEN_CFG_OPTIONAL);
 
@@ -1404,9 +1451,6 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 			GFP_KERNEL);
 	if (!ctrl->sqs)
 		goto out_free_changed_ns_list;
-
-	if (subsys->cntlid_min > subsys->cntlid_max)
-		goto out_free_sqs;
 
 	ret = ida_alloc_range(&cntlid_ida,
 			     subsys->cntlid_min, subsys->cntlid_max,
@@ -1467,6 +1511,8 @@ static void nvmet_ctrl_free(struct kref *ref)
 	flush_work(&ctrl->async_event_work);
 	cancel_work_sync(&ctrl->fatal_err_work);
 
+	nvmet_destroy_auth(ctrl);
+
 	ida_free(&cntlid_ida, ctrl->cntlid);
 
 	nvmet_async_events_free(ctrl);
@@ -1508,6 +1554,13 @@ static struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
 	}
 
 	down_read(&nvmet_config_sem);
+	if (!strncmp(nvmet_disc_subsys->subsysnqn, subsysnqn,
+				NVMF_NQN_SIZE)) {
+		if (kref_get_unless_zero(&nvmet_disc_subsys->ref)) {
+			up_read(&nvmet_config_sem);
+			return nvmet_disc_subsys;
+		}
+	}
 	list_for_each_entry(p, &port->subsystems, entry) {
 		if (!strncmp(p->subsys->subsysnqn, subsysnqn,
 				NVMF_NQN_SIZE)) {
@@ -1543,6 +1596,14 @@ struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 		goto free_subsys;
 	}
 
+	subsys->ieee_oui = 0;
+
+	subsys->firmware_rev = kstrndup(UTS_RELEASE, NVMET_FR_MAX_SIZE, GFP_KERNEL);
+	if (!subsys->firmware_rev) {
+		ret = -ENOMEM;
+		goto free_mn;
+	}
+
 	switch (type) {
 	case NVME_NQN_NVME:
 		subsys->max_qid = NVMET_NR_QUEUES;
@@ -1554,14 +1615,14 @@ struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 	default:
 		pr_err("%s: Unknown Subsystem type - %d\n", __func__, type);
 		ret = -EINVAL;
-		goto free_mn;
+		goto free_fr;
 	}
 	subsys->type = type;
 	subsys->subsysnqn = kstrndup(subsysnqn, NVMF_NQN_SIZE,
 			GFP_KERNEL);
 	if (!subsys->subsysnqn) {
 		ret = -ENOMEM;
-		goto free_mn;
+		goto free_fr;
 	}
 	subsys->cntlid_min = NVME_CNTLID_MIN;
 	subsys->cntlid_max = NVME_CNTLID_MAX;
@@ -1574,6 +1635,8 @@ struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 
 	return subsys;
 
+free_fr:
+	kfree(subsys->firmware_rev);
 free_mn:
 	kfree(subsys->model_number);
 free_subsys:
@@ -1593,6 +1656,7 @@ static void nvmet_subsys_free(struct kref *ref)
 
 	kfree(subsys->subsysnqn);
 	kfree(subsys->model_number);
+	kfree(subsys->firmware_rev);
 	kfree(subsys);
 }
 
@@ -1613,26 +1677,29 @@ void nvmet_subsys_put(struct nvmet_subsys *subsys)
 
 static int __init nvmet_init(void)
 {
-	int error;
+	int error = -ENOMEM;
 
 	nvmet_ana_group_enabled[NVMET_DEFAULT_ANA_GRPID] = 1;
 
+	nvmet_bvec_cache = kmem_cache_create("nvmet-bvec",
+			NVMET_MAX_MPOOL_BVEC * sizeof(struct bio_vec), 0,
+			SLAB_HWCACHE_ALIGN, NULL);
+	if (!nvmet_bvec_cache)
+		return -ENOMEM;
+
 	zbd_wq = alloc_workqueue("nvmet-zbd-wq", WQ_MEM_RECLAIM, 0);
 	if (!zbd_wq)
-		return -ENOMEM;
+		goto out_destroy_bvec_cache;
 
 	buffered_io_wq = alloc_workqueue("nvmet-buffered-io-wq",
 			WQ_MEM_RECLAIM, 0);
-	if (!buffered_io_wq) {
-		error = -ENOMEM;
+	if (!buffered_io_wq)
 		goto out_free_zbd_work_queue;
-	}
 
-	nvmet_wq = alloc_workqueue("nvmet-wq", WQ_MEM_RECLAIM, 0);
-	if (!nvmet_wq) {
-		error = -ENOMEM;
+	nvmet_wq = alloc_workqueue("nvmet-wq",
+			WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
+	if (!nvmet_wq)
 		goto out_free_buffered_work_queue;
-	}
 
 	error = nvmet_init_discovery();
 	if (error)
@@ -1651,6 +1718,8 @@ out_free_buffered_work_queue:
 	destroy_workqueue(buffered_io_wq);
 out_free_zbd_work_queue:
 	destroy_workqueue(zbd_wq);
+out_destroy_bvec_cache:
+	kmem_cache_destroy(nvmet_bvec_cache);
 	return error;
 }
 
@@ -1662,6 +1731,7 @@ static void __exit nvmet_exit(void)
 	destroy_workqueue(nvmet_wq);
 	destroy_workqueue(buffered_io_wq);
 	destroy_workqueue(zbd_wq);
+	kmem_cache_destroy(nvmet_bvec_cache);
 
 	BUILD_BUG_ON(sizeof(struct nvmf_disc_rsp_page_entry) != 1024);
 	BUILD_BUG_ON(sizeof(struct nvmf_disc_rsp_page_hdr) != 1024);
@@ -1670,4 +1740,5 @@ static void __exit nvmet_exit(void)
 module_init(nvmet_init);
 module_exit(nvmet_exit);
 
+MODULE_DESCRIPTION("NVMe target core framework");
 MODULE_LICENSE("GPL v2");

@@ -382,6 +382,7 @@ err:
 	return -EINVAL;
 }
 
+#if 0
 static void lp5569_firmware_loaded(struct lp55xx_chip *chip)
 {
 	const struct firmware *fw = chip->fw;
@@ -401,6 +402,7 @@ static void lp5569_firmware_loaded(struct lp55xx_chip *chip)
 	lp5569_load_engine_and_select_page(chip);
 	lp5569_update_program_memory(chip, fw->data, fw->size);
 }
+#endif
 
 static ssize_t show_engine_mode(struct device *dev,
 				struct device_attribute *attr,
@@ -820,14 +822,14 @@ static int gpio_strobe_fn(void *arg)
 	return 0;
 }
 
-static int lp5569_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int lp5569_probe(struct i2c_client *client)
 {
 	int ret;
 	struct lp55xx_chip *chip;
 	struct lp55xx_led *led;
 	struct lp55xx_platform_data *pdata = dev_get_platdata(&client->dev);
 	struct device_node *np = client->dev.of_node;
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -890,7 +892,7 @@ err_init:
 	return ret;
 }
 
-static int lp5569_remove(struct i2c_client *client)
+static void lp5569_remove(struct i2c_client *client)
 {
 	struct lp55xx_led *led = i2c_get_clientdata(client);
 	struct lp55xx_chip *chip = led->chip;
@@ -902,8 +904,6 @@ static int lp5569_remove(struct i2c_client *client)
 		kthread_stop(chip->pdata->gpio_strobe_task);
 
 	lp55xx_deinit_device(chip);
-
-	return 0;
 }
 
 static const struct i2c_device_id lp5569_id[] = {

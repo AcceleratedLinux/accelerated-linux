@@ -1,4 +1,5 @@
-URL = https://strace.io/files/5.18/strace-5.18.tar.xz
+VERSION=6.8
+URL = https://strace.io/files/$(VERSION)/strace-$(VERSION).tar.xz
 
 ifeq ($(ARCH),arm64)
 MAKEVARS += ARCH=aarch64

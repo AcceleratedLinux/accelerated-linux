@@ -1,0 +1,60 @@
+--- a/modules/pam_motd/pam_motd.c
++++ b/modules/pam_motd/pam_motd.c
+@@ -341,13 +341,20 @@
+ 
+ static int try_to_display(pam_handle_t *pamh, char **motd_path_split,
+                           size_t num_motd_paths, char **motd_dir_path_split,
+-                          size_t num_motd_dir_paths, int report_missing)
++                          size_t num_motd_dir_paths, int report_missing,
++			  int drop_priv)
+ {
+     PAM_MODUTIL_DEF_PRIVS(privs);
+ 
++    if (drop_priv)
+     if (drop_privileges(pamh, &privs) != PAM_SUCCESS) {
++      if (drop_priv == -1) {
++        pam_syslog(pamh, LOG_INFO, "Unable to drop privileges");
++	drop_priv = 0;
++      } else {
+         pam_syslog(pamh, LOG_ERR, "Unable to drop privileges");
+         return PAM_SESSION_ERR;
++      }
+     }
+ 
+     if (motd_path_split != NULL) {
+@@ -375,6 +382,7 @@
+                                                     report_missing);
+     }
+ 
++    if (drop_priv)
+     if (pam_modutil_regain_priv(pamh, &privs)) {
+         pam_syslog(pamh, LOG_ERR, "Unable to regain privileges");
+         return PAM_SESSION_ERR;
+@@ -396,6 +404,7 @@
+     size_t num_motd_dir_paths = 0;
+     char **motd_dir_path_split = NULL;
+     int report_missing;
++    int motd_drop_priv = 1;
+ 
+     if (flags & PAM_SILENT) {
+ 	return retval;
+@@ -425,6 +434,10 @@
+ 			   "motd_dir= specification missing argument - ignored");
+ 	    }
+ 	}
++	else if ((str = pam_str_skip_prefix(*argv, "drop_priv=")) != NULL) {
++		motd_drop_priv = atoi(str);
++		D(("set motd.d drop_priv: %d", motd_drop_priv));
++	}
+ 	else
+ 	    pam_syslog(pamh, LOG_ERR, "unknown option: %s", *argv);
+     }
+@@ -461,7 +474,7 @@
+ 
+     retval = try_to_display(pamh, motd_path_split, num_motd_paths,
+                             motd_dir_path_split, num_motd_dir_paths,
+-                            report_missing);
++                            report_missing, motd_drop_priv);
+ 
+   out:
+     _pam_drop(motd_path_copy);

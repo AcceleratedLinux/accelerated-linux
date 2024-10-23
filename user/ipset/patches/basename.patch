@@ -1,0 +1,12 @@
+Index: ipset-7.21/src/ipset.c
+===================================================================
+--- ipset-7.21.orig/src/ipset.c
++++ ipset-7.21/src/ipset.c
+@@ -11,6 +11,7 @@
+ #include <stdio.h>			/* fprintf */
+ #include <stdlib.h>			/* exit */
+ #include <string.h>			/* strcmp */
++#include <libgen.h>			/* basename */
+ 
+ #include <config.h>
+ #include <libipset/ipset.h>		/* ipset library */

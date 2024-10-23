@@ -241,7 +241,6 @@ enum kxcjk1013_axis {
 };
 
 struct kxcjk1013_data {
-	struct regulator_bulk_data regulators[2];
 	struct i2c_client *client;
 	struct iio_trigger *dready_trig;
 	struct iio_trigger *motion_trig;
@@ -423,6 +422,23 @@ static int kiox010a_dsm(struct device *dev, int fn_index)
 	ACPI_FREE(obj);
 	return 0;
 }
+
+static const struct acpi_device_id kx_acpi_match[] = {
+	{"KXCJ1013", KXCJK1013},
+	{"KXCJ1008", KXCJ91008},
+	{"KXCJ9000", KXCJ91008},
+	{"KIOX0008", KXCJ91008},
+	{"KIOX0009", KXTJ21009},
+	{"KIOX000A", KXCJ91008},
+	{"KIOX010A", KXCJ91008}, /* KXCJ91008 in the display of a yoga 2-in-1 */
+	{"KIOX020A", KXCJ91008}, /* KXCJ91008 in the base of a yoga 2-in-1 */
+	{"KXTJ1009", KXTJ21009},
+	{"KXJ2109",  KXTJ21009},
+	{"SMO8500",  KXCJ91008},
+	{ }
+};
+MODULE_DEVICE_TABLE(acpi, kx_acpi_match);
+
 #endif
 
 static int kxcjk1013_set_mode(struct kxcjk1013_data *data,
@@ -1064,7 +1080,7 @@ static int kxcjk1013_write_event_config(struct iio_dev *indio_dev,
 
 	/*
 	 * We will expect the enable and disable to do operation in
-	 * in reverse order. This will happen here anyway as our
+	 * reverse order. This will happen here anyway as our
 	 * resume operation uses sync mode runtime pm calls, the
 	 * suspend operation will be delayed by autosuspend delay
 	 * So the disable operation will still happen in reverse of
@@ -1425,16 +1441,10 @@ static const char *kxcjk1013_match_acpi_device(struct device *dev,
 	return dev_name(dev);
 }
 
-static void kxcjk1013_disable_regulators(void *d)
+static int kxcjk1013_probe(struct i2c_client *client)
 {
-	struct kxcjk1013_data *data = d;
-
-	regulator_bulk_disable(ARRAY_SIZE(data->regulators), data->regulators);
-}
-
-static int kxcjk1013_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
-{
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
+	static const char * const regulator_names[] = { "vdd", "vddio" };
 	struct kxcjk1013_data *data;
 	struct iio_dev *indio_dev;
 	struct kxcjk_1013_platform_data *pdata;
@@ -1456,26 +1466,19 @@ static int kxcjk1013_probe(struct i2c_client *client,
 	} else {
 		data->active_high_intr = true; /* default polarity */
 
-		ret = iio_read_mount_matrix(&client->dev, &data->orientation);
-		if (ret)
-			return ret;
+		if (!iio_read_acpi_mount_matrix(&client->dev, &data->orientation, "ROTM")) {
+			ret = iio_read_mount_matrix(&client->dev, &data->orientation);
+			if (ret)
+				return ret;
+		}
+
 	}
 
-	data->regulators[0].supply = "vdd";
-	data->regulators[1].supply = "vddio";
-	ret = devm_regulator_bulk_get(&client->dev, ARRAY_SIZE(data->regulators),
-				      data->regulators);
+	ret = devm_regulator_bulk_get_enable(&client->dev,
+					     ARRAY_SIZE(regulator_names),
+					     regulator_names);
 	if (ret)
 		return dev_err_probe(&client->dev, ret, "Failed to get regulators\n");
-
-	ret = regulator_bulk_enable(ARRAY_SIZE(data->regulators),
-				    data->regulators);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(&client->dev, kxcjk1013_disable_regulators, data);
-	if (ret)
-		return ret;
 
 	/*
 	 * A typical delay of 10ms is required for powering up
@@ -1611,7 +1614,7 @@ err_poweroff:
 	return ret;
 }
 
-static int kxcjk1013_remove(struct i2c_client *client)
+static void kxcjk1013_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct kxcjk1013_data *data = iio_priv(indio_dev);
@@ -1630,8 +1633,6 @@ static int kxcjk1013_remove(struct i2c_client *client)
 	mutex_lock(&data->mutex);
 	kxcjk1013_set_mode(data, STANDBY);
 	mutex_unlock(&data->mutex);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -1705,22 +1706,6 @@ static const struct dev_pm_ops kxcjk1013_pm_ops = {
 	SET_RUNTIME_PM_OPS(kxcjk1013_runtime_suspend,
 			   kxcjk1013_runtime_resume, NULL)
 };
-
-static const struct acpi_device_id kx_acpi_match[] = {
-	{"KXCJ1013", KXCJK1013},
-	{"KXCJ1008", KXCJ91008},
-	{"KXCJ9000", KXCJ91008},
-	{"KIOX0008", KXCJ91008},
-	{"KIOX0009", KXTJ21009},
-	{"KIOX000A", KXCJ91008},
-	{"KIOX010A", KXCJ91008}, /* KXCJ91008 in the display of a yoga 2-in-1 */
-	{"KIOX020A", KXCJ91008}, /* KXCJ91008 in the base of a yoga 2-in-1 */
-	{"KXTJ1009", KXTJ21009},
-	{"KXJ2109",  KXTJ21009},
-	{"SMO8500",  KXCJ91008},
-	{ },
-};
-MODULE_DEVICE_TABLE(acpi, kx_acpi_match);
 
 static const struct i2c_device_id kxcjk1013_id[] = {
 	{"kxcjk1013", KXCJK1013},

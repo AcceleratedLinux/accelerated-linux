@@ -13,6 +13,9 @@ VENDOR_CFLAGS = -DCONFIG_ACCELECON
 VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
 VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 
+# do we need this?
+HW_COMPAT_PRODUCT = VirtualDAL-PR,VirtualDAL
+
 RELFILES = $(IMAGEDIR)/VM.tar.gz \
            $(IMAGEDIR)/Docker.tar.gz \
            $(IMAGEDIR)/acl-licenses.txt \
@@ -25,7 +28,7 @@ RELFILES = $(IMAGEDIR)/VM.tar.gz \
            $(IMAGEDIR)/rootfs \
            $(IMAGEDIR)/vmlinuz \
 	   prop/config/schema/accns.schema \
-	   prop/config/cc_acl/app/runt/FE00000A*
+	   prop/config/edp-rust-client/descriptors/runt/FE00000A*
 
 ############################################################################
 

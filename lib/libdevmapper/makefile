@@ -1,6 +1,5 @@
 VERSION = 2.03.05
-
-URL = ftp://sourceware.org/pub/lvm2/LVM2.$(VERSION).tgz
+URL = https://sourceware.org/pub/lvm2/releases/LVM2.$(VERSION).tgz
 
 CONFOPTS = --with-lvm1=none --disable-nls
 # uClibc cannot handle symbol versioning, which causes segfault

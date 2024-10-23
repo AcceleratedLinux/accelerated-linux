@@ -26,6 +26,8 @@
 
 #include "clearstate_defs.h"
 
+#define AMDGPU_MAX_RLC_INSTANCES	8
+
 /* firmware ID used in rlc toc */
 typedef enum _FIRMWARE_ID_ {
 	FIRMWARE_ID_INVALID					= 0,
@@ -157,8 +159,8 @@ typedef struct _RLC_TABLE_OF_CONTENT {
 
 struct amdgpu_rlc_funcs {
 	bool (*is_rlc_enabled)(struct amdgpu_device *adev);
-	void (*set_safe_mode)(struct amdgpu_device *adev);
-	void (*unset_safe_mode)(struct amdgpu_device *adev);
+	void (*set_safe_mode)(struct amdgpu_device *adev, int xcc_id);
+	void (*unset_safe_mode)(struct amdgpu_device *adev, int xcc_id);
 	int  (*init)(struct amdgpu_device *adev);
 	u32  (*get_csb_size)(struct amdgpu_device *adev);
 	void (*get_csb_buffer)(struct amdgpu_device *adev, volatile u32 *buffer);
@@ -167,7 +169,7 @@ struct amdgpu_rlc_funcs {
 	void (*stop)(struct amdgpu_device *adev);
 	void (*reset)(struct amdgpu_device *adev);
 	void (*start)(struct amdgpu_device *adev);
-	void (*update_spm_vmid)(struct amdgpu_device *adev, unsigned vmid);
+	void (*update_spm_vmid)(struct amdgpu_device *adev, struct amdgpu_ring *ring, unsigned vmid);
 	bool (*is_rlcg_access_range)(struct amdgpu_device *adev, uint32_t reg);
 };
 
@@ -201,7 +203,7 @@ struct amdgpu_rlc {
 	u32                     cp_table_size;
 
 	/* safe mode for updating CG/PG state */
-	bool in_safe_mode;
+	bool in_safe_mode[AMDGPU_MAX_RLC_INSTANCES];
 	const struct amdgpu_rlc_funcs *funcs;
 
 	/* for firmware data */
@@ -222,6 +224,11 @@ struct amdgpu_rlc {
 	u32 rlc_dram_ucode_size_bytes;
 	u32 rlcp_ucode_size_bytes;
 	u32 rlcv_ucode_size_bytes;
+	u32 global_tap_delays_ucode_size_bytes;
+	u32 se0_tap_delays_ucode_size_bytes;
+	u32 se1_tap_delays_ucode_size_bytes;
+	u32 se2_tap_delays_ucode_size_bytes;
+	u32 se3_tap_delays_ucode_size_bytes;
 
 	u32 *register_list_format;
 	u32 *register_restore;
@@ -232,6 +239,11 @@ struct amdgpu_rlc {
 	u8 *rlc_dram_ucode;
 	u8 *rlcp_ucode;
 	u8 *rlcv_ucode;
+	u8 *global_tap_delays_ucode;
+	u8 *se0_tap_delays_ucode;
+	u8 *se1_tap_delays_ucode;
+	u8 *se2_tap_delays_ucode;
+	u8 *se3_tap_delays_ucode;
 
 	bool is_rlc_v2_1;
 
@@ -247,15 +259,17 @@ struct amdgpu_rlc {
 
 	bool rlcg_reg_access_supported;
 	/* registers for rlcg indirect reg access */
-	struct amdgpu_rlcg_reg_access_ctrl reg_access_ctrl;
+	struct amdgpu_rlcg_reg_access_ctrl reg_access_ctrl[AMDGPU_MAX_RLC_INSTANCES];
 };
 
-void amdgpu_gfx_rlc_enter_safe_mode(struct amdgpu_device *adev);
-void amdgpu_gfx_rlc_exit_safe_mode(struct amdgpu_device *adev);
+void amdgpu_gfx_rlc_enter_safe_mode(struct amdgpu_device *adev, int xcc_id);
+void amdgpu_gfx_rlc_exit_safe_mode(struct amdgpu_device *adev, int xcc_id);
 int amdgpu_gfx_rlc_init_sr(struct amdgpu_device *adev, u32 dws);
 int amdgpu_gfx_rlc_init_csb(struct amdgpu_device *adev);
 int amdgpu_gfx_rlc_init_cpt(struct amdgpu_device *adev);
 void amdgpu_gfx_rlc_setup_cp_table(struct amdgpu_device *adev);
 void amdgpu_gfx_rlc_fini(struct amdgpu_device *adev);
-
+int amdgpu_gfx_rlc_init_microcode(struct amdgpu_device *adev,
+				  uint16_t version_major,
+				  uint16_t version_minor);
 #endif

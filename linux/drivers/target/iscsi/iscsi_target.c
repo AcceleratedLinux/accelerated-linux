@@ -26,6 +26,7 @@
 #include <target/target_core_base.h>
 #include <target/target_core_fabric.h>
 
+#include <target/target_core_backend.h>
 #include <target/iscsi/iscsi_target_core.h>
 #include "iscsi_target_parameters.h"
 #include "iscsi_target_seq_pdu_list.h"
@@ -362,8 +363,6 @@ struct iscsi_np *iscsit_add_np(
 	spin_lock_init(&np->np_thread_lock);
 	init_completion(&np->np_restart_comp);
 	INIT_LIST_HEAD(&np->np_list);
-
-	timer_setup(&np->np_login_timer, iscsi_handle_login_thread_timeout, 0);
 
 	ret = iscsi_target_setup_login_socket(np, sockaddr);
 	if (ret != 0) {
@@ -1004,8 +1003,10 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 			  unsigned char *buf)
 {
 	int data_direction, payload_length;
+	struct iscsi_ecdb_ahdr *ecdb_ahdr;
 	struct iscsi_scsi_req *hdr;
 	int iscsi_task_attr;
+	unsigned char *cdb;
 	int sam_task_attr;
 
 	atomic_long_inc(&conn->sess->cmd_pdus);
@@ -1106,6 +1107,27 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 					     ISCSI_REASON_BOOKMARK_INVALID, buf);
 	}
 
+	cdb = hdr->cdb;
+
+	if (hdr->hlength) {
+		ecdb_ahdr = (struct iscsi_ecdb_ahdr *) (hdr + 1);
+		if (ecdb_ahdr->ahstype != ISCSI_AHSTYPE_CDB) {
+			pr_err("Additional Header Segment type %d not supported!\n",
+			       ecdb_ahdr->ahstype);
+			return iscsit_add_reject_cmd(cmd,
+				ISCSI_REASON_CMD_NOT_SUPPORTED, buf);
+		}
+
+		cdb = kmalloc(be16_to_cpu(ecdb_ahdr->ahslength) + 15,
+			      GFP_KERNEL);
+		if (cdb == NULL)
+			return iscsit_add_reject_cmd(cmd,
+				ISCSI_REASON_BOOKMARK_NO_RESOURCES, buf);
+		memcpy(cdb, hdr->cdb, ISCSI_CDB_SIZE);
+		memcpy(cdb + ISCSI_CDB_SIZE, ecdb_ahdr->ecdb,
+		       be16_to_cpu(ecdb_ahdr->ahslength) - 1);
+	}
+
 	data_direction = (hdr->flags & ISCSI_FLAG_CMD_WRITE) ? DMA_TO_DEVICE :
 			 (hdr->flags & ISCSI_FLAG_CMD_READ) ? DMA_FROM_DEVICE :
 			  DMA_NONE;
@@ -1153,9 +1175,12 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 		struct iscsi_datain_req *dr;
 
 		dr = iscsit_allocate_datain_req();
-		if (!dr)
+		if (!dr) {
+			if (cdb != hdr->cdb)
+				kfree(cdb);
 			return iscsit_add_reject_cmd(cmd,
 					ISCSI_REASON_BOOKMARK_NO_RESOURCES, buf);
+		}
 
 		iscsit_attach_datain_req(cmd, dr);
 	}
@@ -1164,9 +1189,10 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 	 * Initialize struct se_cmd descriptor from target_core_mod infrastructure
 	 */
 	__target_init_cmd(&cmd->se_cmd, &iscsi_ops,
-			 conn->sess->se_sess, be32_to_cpu(hdr->data_length),
-			 cmd->data_direction, sam_task_attr,
-			 cmd->sense_buffer + 2, scsilun_to_int(&hdr->lun));
+			  conn->sess->se_sess, be32_to_cpu(hdr->data_length),
+			  cmd->data_direction, sam_task_attr,
+			  cmd->sense_buffer + 2, scsilun_to_int(&hdr->lun),
+			  conn->cmd_cnt);
 
 	pr_debug("Got SCSI Command, ITT: 0x%08x, CmdSN: 0x%08x,"
 		" ExpXferLen: %u, Length: %u, CID: %hu\n", hdr->itt,
@@ -1176,8 +1202,11 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 	target_get_sess_cmd(&cmd->se_cmd, true);
 
 	cmd->se_cmd.tag = (__force u32)cmd->init_task_tag;
-	cmd->sense_reason = target_cmd_init_cdb(&cmd->se_cmd, hdr->cdb,
+	cmd->sense_reason = target_cmd_init_cdb(&cmd->se_cmd, cdb,
 						GFP_KERNEL);
+
+	if (cdb != hdr->cdb)
+		kfree(cdb);
 
 	if (cmd->sense_reason) {
 		if (cmd->sense_reason == TCM_OUT_OF_RESOURCES) {
@@ -1205,12 +1234,6 @@ attach_cmd:
 	spin_lock_bh(&conn->cmd_lock);
 	list_add_tail(&cmd->i_conn_node, &conn->conn_cmd_list);
 	spin_unlock_bh(&conn->cmd_lock);
-	/*
-	 * Check if we need to delay processing because of ALUA
-	 * Active/NonOptimized primary access state..
-	 */
-	core_alua_check_nonop_delay(&cmd->se_cmd);
-
 	return 0;
 }
 EXPORT_SYMBOL(iscsit_setup_scsi_cmd);
@@ -2026,7 +2049,8 @@ iscsit_handle_task_mgt_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 	__target_init_cmd(&cmd->se_cmd, &iscsi_ops,
 			  conn->sess->se_sess, 0, DMA_NONE,
 			  TCM_SIMPLE_TAG, cmd->sense_buffer + 2,
-			  scsilun_to_int(&hdr->lun));
+			  scsilun_to_int(&hdr->lun),
+			  conn->cmd_cnt);
 
 	target_get_sess_cmd(&cmd->se_cmd, true);
 
@@ -4036,8 +4060,9 @@ static bool iscsi_target_check_conn_state(struct iscsit_conn *conn)
 static void iscsit_get_rx_pdu(struct iscsit_conn *conn)
 {
 	int ret;
-	u8 *buffer, opcode;
+	u8 *buffer, *tmp_buf, opcode;
 	u32 checksum = 0, digest = 0;
+	struct iscsi_hdr *hdr;
 	struct kvec iov;
 
 	buffer = kcalloc(ISCSI_HDR_LEN, sizeof(*buffer), GFP_KERNEL);
@@ -4060,6 +4085,25 @@ static void iscsit_get_rx_pdu(struct iscsit_conn *conn)
 		if (ret != ISCSI_HDR_LEN) {
 			iscsit_rx_thread_wait_for_tcp(conn);
 			break;
+		}
+
+		hdr = (struct iscsi_hdr *) buffer;
+		if (hdr->hlength) {
+			iov.iov_len = hdr->hlength * 4;
+			tmp_buf = krealloc(buffer,
+					  ISCSI_HDR_LEN + iov.iov_len,
+					  GFP_KERNEL);
+			if (!tmp_buf)
+				break;
+
+			buffer = tmp_buf;
+			iov.iov_base = &buffer[ISCSI_HDR_LEN];
+
+			ret = rx_data(conn, &iov, 1, iov.iov_len);
+			if (ret != iov.iov_len) {
+				iscsit_rx_thread_wait_for_tcp(conn);
+				break;
+			}
 		}
 
 		if (conn->conn_ops->HeaderDigest) {
@@ -4169,9 +4213,12 @@ static void iscsit_release_commands_from_conn(struct iscsit_conn *conn)
 	list_for_each_entry_safe(cmd, cmd_tmp, &tmp_list, i_conn_node) {
 		struct se_cmd *se_cmd = &cmd->se_cmd;
 
-		if (se_cmd->se_tfo != NULL) {
-			spin_lock_irq(&se_cmd->t_state_lock);
-			if (se_cmd->transport_state & CMD_T_ABORTED) {
+		if (!se_cmd->se_tfo)
+			continue;
+
+		spin_lock_irq(&se_cmd->t_state_lock);
+		if (se_cmd->transport_state & CMD_T_ABORTED) {
+			if (!(se_cmd->transport_state & CMD_T_TAS))
 				/*
 				 * LIO's abort path owns the cleanup for this,
 				 * so put it back on the list and let
@@ -4179,11 +4226,20 @@ static void iscsit_release_commands_from_conn(struct iscsit_conn *conn)
 				 */
 				list_move_tail(&cmd->i_conn_node,
 					       &conn->conn_cmd_list);
-			} else {
-				se_cmd->transport_state |= CMD_T_FABRIC_STOP;
-			}
-			spin_unlock_irq(&se_cmd->t_state_lock);
+		} else {
+			se_cmd->transport_state |= CMD_T_FABRIC_STOP;
 		}
+
+		if (cmd->se_cmd.t_state == TRANSPORT_WRITE_PENDING) {
+			/*
+			 * We never submitted the cmd to LIO core, so we have
+			 * to tell LIO to perform the completion process.
+			 */
+			spin_unlock_irq(&se_cmd->t_state_lock);
+			target_complete_cmd(&cmd->se_cmd, SAM_STAT_TASK_ABORTED);
+			continue;
+		}
+		spin_unlock_irq(&se_cmd->t_state_lock);
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
@@ -4193,6 +4249,16 @@ static void iscsit_release_commands_from_conn(struct iscsit_conn *conn)
 		iscsit_increment_maxcmdsn(cmd, sess);
 		iscsit_free_cmd(cmd, true);
 
+	}
+
+	/*
+	 * Wait on commands that were cleaned up via the aborted_task path.
+	 * LLDs that implement iscsit_wait_conn will already have waited for
+	 * commands.
+	 */
+	if (!conn->conn_transport->iscsit_wait_conn) {
+		target_stop_cmd_counter(conn->cmd_cnt);
+		target_wait_for_cmds(conn->cmd_cnt);
 	}
 }
 
@@ -4361,7 +4427,7 @@ int iscsit_close_connection(
 
 	spin_lock_bh(&sess->conn_lock);
 	atomic_dec(&sess->nconn);
-	pr_debug("Decremented iSCSI connection count to %hu from node:"
+	pr_debug("Decremented iSCSI connection count to %d from node:"
 		" %s\n", atomic_read(&sess->nconn),
 		sess->sess_ops->InitiatorName);
 	/*
@@ -4468,6 +4534,9 @@ int iscsit_close_session(struct iscsit_session *sess, bool can_sleep)
 	iscsit_stop_time2retain_timer(sess);
 	spin_unlock_bh(&se_tpg->session_lock);
 
+	if (sess->sess_ops->ErrorRecoveryLevel == 2)
+		iscsit_free_connection_recovery_entries(sess);
+
 	/*
 	 * transport_deregister_session_configfs() will clear the
 	 * struct se_node_acl->nacl_sess pointer now as a iscsi_np process context
@@ -4490,9 +4559,6 @@ int iscsit_close_session(struct iscsit_session *sess, bool can_sleep)
 	}
 
 	transport_deregister_session(sess->se_sess);
-
-	if (sess->sess_ops->ErrorRecoveryLevel == 2)
-		iscsit_free_connection_recovery_entries(sess);
 
 	iscsit_free_all_ooo_cmdsns(sess);
 

@@ -15,7 +15,6 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -1460,7 +1459,6 @@ static const struct snd_soc_component_driver soc_component_dev_da9055 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config da9055_regmap_config = {
@@ -1513,7 +1511,7 @@ static int da9055_i2c_probe(struct i2c_client *i2c)
  * and PMIC, which must be different to operate together.
  */
 static const struct i2c_device_id da9055_i2c_id[] = {
-	{ "da9055-codec", 0 },
+	{ "da9055-codec" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, da9055_i2c_id);
@@ -1532,7 +1530,7 @@ static struct i2c_driver da9055_i2c_driver = {
 		.name = "da9055-codec",
 		.of_match_table = of_match_ptr(da9055_of_match),
 	},
-	.probe_new	= da9055_i2c_probe,
+	.probe		= da9055_i2c_probe,
 	.id_table	= da9055_i2c_id,
 };
 

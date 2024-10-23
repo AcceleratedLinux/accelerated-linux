@@ -34,6 +34,8 @@ struct vduse_iova_domain {
 	struct vhost_iotlb *iotlb;
 	spinlock_t iotlb_lock;
 	struct file *file;
+	bool user_bounce_pages;
+	rwlock_t bounce_lock;
 };
 
 int vduse_domain_set_map(struct vduse_iova_domain *domain,
@@ -41,6 +43,14 @@ int vduse_domain_set_map(struct vduse_iova_domain *domain,
 
 void vduse_domain_clear_map(struct vduse_iova_domain *domain,
 			    struct vhost_iotlb *iotlb);
+
+void vduse_domain_sync_single_for_device(struct vduse_iova_domain *domain,
+				      dma_addr_t dma_addr, size_t size,
+				      enum dma_data_direction dir);
+
+void vduse_domain_sync_single_for_cpu(struct vduse_iova_domain *domain,
+				      dma_addr_t dma_addr, size_t size,
+				      enum dma_data_direction dir);
 
 dma_addr_t vduse_domain_map_page(struct vduse_iova_domain *domain,
 				 struct page *page, unsigned long offset,
@@ -60,6 +70,11 @@ void vduse_domain_free_coherent(struct vduse_iova_domain *domain, size_t size,
 				unsigned long attrs);
 
 void vduse_domain_reset_bounce_map(struct vduse_iova_domain *domain);
+
+int vduse_domain_add_user_bounce_pages(struct vduse_iova_domain *domain,
+				       struct page **pages, int count);
+
+void vduse_domain_remove_user_bounce_pages(struct vduse_iova_domain *domain);
 
 void vduse_domain_destroy(struct vduse_iova_domain *domain);
 

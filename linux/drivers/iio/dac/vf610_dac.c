@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
@@ -230,7 +231,7 @@ error_iio_device_register:
 	return ret;
 }
 
-static int vf610_dac_remove(struct platform_device *pdev)
+static void vf610_dac_remove(struct platform_device *pdev)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
 	struct vf610_dac *info = iio_priv(indio_dev);
@@ -238,8 +239,6 @@ static int vf610_dac_remove(struct platform_device *pdev)
 	iio_device_unregister(indio_dev);
 	vf610_dac_exit(info);
 	clk_disable_unprepare(info->clk);
-
-	return 0;
 }
 
 static int vf610_dac_suspend(struct device *dev)
@@ -273,7 +272,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(vf610_dac_pm_ops, vf610_dac_suspend,
 
 static struct platform_driver vf610_dac_driver = {
 	.probe          = vf610_dac_probe,
-	.remove         = vf610_dac_remove,
+	.remove_new     = vf610_dac_remove,
 	.driver         = {
 		.name   = "vf610-dac",
 		.of_match_table = vf610_dac_match,

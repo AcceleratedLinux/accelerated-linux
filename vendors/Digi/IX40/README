@@ -1,0 +1,47 @@
+DIGI/IX40
+---------
+
+USB LOADING
+-----------
+
+On a bare board with no programmed flash you can use the USB debug loading
+procedure of the iMX8 SoC to carry out a first boot. You will need to have
+the "USB Boot" jumper installed to do this.
+
+Use the Freescale "uuu" tool to do USB loading. You can find the source to
+the uuu program in the Freescale iMX mfgtools package. With that built and
+installed then run:
+
+    uuu imx-boot-imx8mpevk-sd.bin-flash_evk
+
+Fit link CON14 (USB boot) and CON1 (CPU Boot from USB).
+Connect 3 pin USB cable to CON13 (Black-White-Green)
+uuu images/boot-usb.bin
+
+
+NETWORK LINUX LOAD
+------------------
+
+Generate images for this board using the Digi/IX40 accelerated linux
+target. The default is to select the musl C-library when building.
+The build will generate separate kernel, root filesystem and devicetree blobs.
+
+You can load onto the IX40 board using the usual u-boot loader installed
+in the boot ROM of the board.
+
+  setenv bootargs console=ttymxc0,115200n8 root=/dev/ram0 initrd=0x60000000,64M
+  dhcp 0x40480000 kernel
+  tftpboot 0x4c000000 imx8mp-ix40.dtb
+  tftpboot 0x60000000 rootfs.bin
+  booti 0x40480000 - 0x4c000000
+
+The serial console is on the usual 4-pin TTL console header. You will need
+TTL to RS-232 converter. The console serial port is at the default
+115200,8,n,1.
+
+This also works, using the single FIT u-boot image:
+
+  setenv bootargs console=ttymxc0,115200n8 root=/dev/ram0
+  dhcp 0x60000000 ix40-initrd.itb
+  bootm 0x60000000
+

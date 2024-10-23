@@ -1,0 +1,25 @@
+From 9f519496d95fc01024002aff60562d56d655b46e Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Mon, 2 Sep 2024 17:56:15 +0200
+Subject: [PATCH] Use rpath-link instead of rpath in pkgconfig .pc file
+
+---
+ configure.ac | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index ec601c8445e9..be5df2528425 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -3158,7 +3158,7 @@ if test "$prefix" != "/usr"; then
+ 		# "native" linker is the GNU linker or accepts
+ 		# compatible command-line arguments.
+ 		#
+-		RPATH="-Wl,-rpath,\${libdir}"
++		RPATH="-Wl,-rpath-link,\${libdir}"
+ 		;;
+ 
+ 	solaris*)
+-- 
+2.43.0
+

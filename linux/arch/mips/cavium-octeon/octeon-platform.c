@@ -8,8 +8,10 @@
  */
 
 #include <linux/etherdevice.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/of_fdt.h>
+#include <linux/platform_device.h>
 #include <linux/libfdt.h>
 
 #include <asm/octeon/octeon.h>
@@ -86,11 +88,12 @@ static void octeon2_usb_clocks_start(struct device *dev)
 					 "refclk-frequency", &clock_rate);
 		if (i) {
 			dev_err(dev, "No UCTL \"refclk-frequency\"\n");
+			of_node_put(uctl_node);
 			goto exit;
 		}
 		i = of_property_read_string(uctl_node,
 					    "refclk-type", &clock_type);
-
+		of_node_put(uctl_node);
 		if (!i && strcmp("crystal", clock_type) == 0)
 			is_crystal_clock = true;
 	}
@@ -449,7 +452,6 @@ static const struct of_device_id octeon_ids[] __initconst = {
 	{ .compatible = "cavium,octeon-3860-bootbus", },
 	{ .compatible = "cavium,mdio-mux", },
 	{ .compatible = "gpio-leds", },
-	{ .compatible = "cavium,octeon-7130-usb-uctl", },
 	{},
 };
 
@@ -971,7 +973,7 @@ int __init octeon_prune_device_tree(void)
 			 * zero.
 			 */
 
-			/* Asume that CS1 immediately follows. */
+			/* Assume that CS1 immediately follows. */
 			mio_boot_reg_cfg.u64 =
 				cvmx_read_csr(CVMX_MIO_BOOT_REG_CFGX(cs + 1));
 			region1_base = mio_boot_reg_cfg.s.base << 16;

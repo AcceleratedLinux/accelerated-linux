@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding='utf-8'?>
+<!-- -*- Mode: XML; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- -->
+<!DOCTYPE serviceproviders SYSTEM "serviceproviders.2.dtd">
+
+<!-- Authors:
+-->
+
+<serviceproviders format="2.0">
+
+<country code="us">
+	<name>United States</name>
+	<provider>
+		<name>AT&amp;T</name>
+		<gsm>
+			<network-id mcc="310" mnc="410"/>
+			<network-id mcc="310" mnc="150"/>
+			<network-id mcc="310" mnc="170"/>
+			<network-id mcc="310" mnc="280"/>
+			<apn value="broadband">
+				<usage type="internet"/>
+				<name>broadband</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>T-Mobile</name>
+		<gsm>
+			<network-id mcc="310" mnc="026"/>
+			<network-id mcc="310" mnc="160"/>
+			<network-id mcc="310" mnc="200"/>
+			<network-id mcc="310" mnc="210"/>
+			<network-id mcc="310" mnc="220"/>
+			<network-id mcc="310" mnc="230"/>
+			<network-id mcc="310" mnc="240"/>
+			<network-id mcc="310" mnc="250"/>
+			<network-id mcc="310" mnc="260"/>
+			<network-id mcc="310" mnc="270"/>
+			<network-id mcc="310" mnc="310"/>
+			<network-id mcc="310" mnc="490"/>
+			<network-id mcc="310" mnc="660"/>
+			<network-id mcc="310" mnc="800"/>
+			<network-id mcc="311" mnc="660"/>
+			<network-id mcc="311" mnc="882"/>
+			<network-id mcc="311" mnc="490"/>
+			<network-id mcc="312" mnc="250"/>
+			<apn value="iot.tmowholesale">
+				<usage type="internet"/>
+				<name>iot.tmowholesale</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Verizon</name>
+		<gsm>
+			<network-id mcc="310" mnc="012"/>
+			<network-id mcc="311" mnc="480"/>
+			<network-id mcc="311" mnc="481"/>
+			<network-id mcc="311" mnc="482"/>
+			<network-id mcc="311" mnc="483"/>
+			<network-id mcc="311" mnc="484"/>
+			<network-id mcc="311" mnc="485"/>
+			<network-id mcc="311" mnc="486"/>
+			<network-id mcc="311" mnc="487"/>
+			<network-id mcc="311" mnc="488"/>
+			<network-id mcc="311" mnc="489"/>
+			<apn value="vzwinternet">
+				<usage type="internet"/>
+				<name>vzwinternet</name>
+				<dns>66.174.92.14</dns>
+				<dns>69.78.96.14</dns>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+</serviceproviders>

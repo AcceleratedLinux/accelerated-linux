@@ -16,6 +16,6 @@ include $(ROOTDIR)/tools/automake.inc
 #
 ath10k-firmware_romfs:
 	# Override with new file for board-sdio.bin
-	$(ROMFSINST) -e CONFIG_ATH10K_SDIO -d files/QCA9377/hw1.0/board.bin /lib/firmware/ath10k/QCA9377/hw1.0/board-sdio.bin
+	$(ROMFSINST) -e CONFIG_ATH10K_SDIO -d files/QCA9377/hw1.0/board.bin /lib/firmware/ath10k/QCA9377/hw1.0/board.bin
 	$(ROMFSINST) -e CONFIG_ATH10K_SDIO -d $(SDIR)/QCA9377/hw1.0/untested/firmware-sdio-5.bin_WLAN.TF.1.1.1-00061-QCATFSWPZ-1 /lib/firmware/ath10k/QCA9377/hw1.0/firmware-sdio-5.bin
 

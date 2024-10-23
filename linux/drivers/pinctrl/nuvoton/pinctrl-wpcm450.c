@@ -49,7 +49,6 @@ struct wpcm450_bank;
 struct wpcm450_gpio {
 	struct gpio_chip	gc;
 	struct wpcm450_pinctrl	*pctrl;
-	struct irq_chip		irqc;
 	const struct wpcm450_bank *bank;
 };
 
@@ -142,7 +141,8 @@ static void wpcm450_gpio_irq_ack(struct irq_data *d)
 
 static void wpcm450_gpio_irq_mask(struct irq_data *d)
 {
-	struct wpcm450_gpio *gpio = gpiochip_get_data(irq_data_get_irq_chip_data(d));
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct wpcm450_gpio *gpio = gpiochip_get_data(gc);
 	struct wpcm450_pinctrl *pctrl = gpio->pctrl;
 	unsigned long flags;
 	unsigned long even;
@@ -157,11 +157,14 @@ static void wpcm450_gpio_irq_mask(struct irq_data *d)
 	__assign_bit(bit, &even, 0);
 	iowrite32(even, pctrl->gpio_base + WPCM450_GPEVEN);
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+
+	gpiochip_disable_irq(gc, irqd_to_hwirq(d));
 }
 
 static void wpcm450_gpio_irq_unmask(struct irq_data *d)
 {
-	struct wpcm450_gpio *gpio = gpiochip_get_data(irq_data_get_irq_chip_data(d));
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct wpcm450_gpio *gpio = gpiochip_get_data(gc);
 	struct wpcm450_pinctrl *pctrl = gpio->pctrl;
 	unsigned long flags;
 	unsigned long even;
@@ -170,6 +173,8 @@ static void wpcm450_gpio_irq_unmask(struct irq_data *d)
 	bit = wpcm450_gpio_irq_bitnum(gpio, d);
 	if (bit < 0)
 		return;
+
+	gpiochip_enable_irq(gc, irqd_to_hwirq(d));
 
 	raw_spin_lock_irqsave(&pctrl->lock, flags);
 	even = ioread32(pctrl->gpio_base + WPCM450_GPEVEN);
@@ -293,6 +298,8 @@ static const struct irq_chip wpcm450_gpio_irqchip = {
 	.irq_unmask = wpcm450_gpio_irq_unmask,
 	.irq_mask = wpcm450_gpio_irq_mask,
 	.irq_set_type = wpcm450_gpio_set_irq_type,
+	.flags = IRQCHIP_IMMUTABLE,
+	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
 
 static void wpcm450_gpio_irqhandler(struct irq_desc *desc)
@@ -467,9 +474,8 @@ enum {
 #undef WPCM450_GRP
 };
 
-static struct group_desc wpcm450_groups[] = {
-#define WPCM450_GRP(x) { .name = #x, .pins = x ## _pins, \
-			.num_pins = ARRAY_SIZE(x ## _pins) }
+static const struct pingroup wpcm450_groups[] = {
+#define WPCM450_GRP(x) PINCTRL_PINGROUP(#x, x ## _pins, ARRAY_SIZE(x ## _pins))
 	WPCM450_GRPS
 #undef WPCM450_GRP
 };
@@ -621,6 +627,9 @@ struct wpcm450_pincfg {
 	int fn1, reg1, bit1;
 };
 
+/* Add this value to bit0 or bit1 to indicate that the MFSEL bit is inverted */
+#define INV	BIT(5)
+
 static const struct wpcm450_pincfg pincfg[] = {
 	/*		PIN	  FUNCTION 1		   FUNCTION 2 */
 	WPCM450_PINCFG(0,	 none, NONE, 0,		  none, NONE, 0),
@@ -658,7 +667,7 @@ static const struct wpcm450_pincfg pincfg[] = {
 
 	WPCM450_PINCFG(32,	 scs1, MFSEL1, 3,	  none, NONE, 0),
 	WPCM450_PINCFG(33,	 scs2, MFSEL1, 4,	  none, NONE, 0),
-	WPCM450_PINCFG(34,	 scs3, MFSEL1, 5,	  none, NONE, 0),
+	WPCM450_PINCFG(34,	 scs3, MFSEL1, 5 | INV,	  none, NONE, 0),
 	WPCM450_PINCFG(35,	 xcs1, MFSEL1, 29,	  none, NONE, 0),
 	WPCM450_PINCFG(36,	 xcs2, MFSEL1, 28,	  none, NONE, 0),
 	WPCM450_PINCFG(37,	 none, NONE, 0,		  none, NONE, 0), /* DVO */
@@ -718,8 +727,8 @@ static const struct wpcm450_pincfg pincfg[] = {
 	WPCM450_PINCFG(90,	r2err, MFSEL1, 15,	  none, NONE, 0),
 	WPCM450_PINCFG(91,	 r2md, MFSEL1, 16,	  none, NONE, 0),
 	WPCM450_PINCFG(92,	 r2md, MFSEL1, 16,	  none, NONE, 0),
-	WPCM450_PINCFG(93,	 kbcc, MFSEL1, 17,	  none, NONE, 0),
-	WPCM450_PINCFG(94,	 kbcc, MFSEL1, 17,	  none, NONE, 0),
+	WPCM450_PINCFG(93,	 kbcc, MFSEL1, 17 | INV,  none, NONE, 0),
+	WPCM450_PINCFG(94,	 kbcc, MFSEL1, 17 | INV,  none, NONE, 0),
 	WPCM450_PINCFG(95,	 none, NONE, 0,		  none, NONE, 0),
 
 	WPCM450_PINCFG(96,	 none, NONE, 0,		  none, NONE, 0),
@@ -793,6 +802,19 @@ static const struct pinctrl_pin_desc wpcm450_pins[] = {
 	WPCM450_PIN(124), WPCM450_PIN(125), WPCM450_PIN(126), WPCM450_PIN(127),
 };
 
+/* Helper function to update MFSEL field according to the selected function */
+static void wpcm450_update_mfsel(struct regmap *gcr_regmap, int reg, int bit, int fn, int fn_selected)
+{
+	bool value = (fn == fn_selected);
+
+	if (bit & INV) {
+		value = !value;
+		bit &= ~INV;
+	}
+
+	regmap_update_bits(gcr_regmap, reg, BIT(bit), value ? BIT(bit) : 0);
+}
+
 /* Enable mode in pin group */
 static void wpcm450_setfunc(struct regmap *gcr_regmap, const unsigned int *pin,
 			    int npins, int func)
@@ -804,13 +826,11 @@ static void wpcm450_setfunc(struct regmap *gcr_regmap, const unsigned int *pin,
 		cfg = &pincfg[pin[i]];
 		if (func == fn_gpio || cfg->fn0 == func || cfg->fn1 == func) {
 			if (cfg->reg0)
-				regmap_update_bits(gcr_regmap, cfg->reg0,
-						   BIT(cfg->bit0),
-						   (cfg->fn0 == func) ?  BIT(cfg->bit0) : 0);
+				wpcm450_update_mfsel(gcr_regmap, cfg->reg0,
+						     cfg->bit0, cfg->fn0, func);
 			if (cfg->reg1)
-				regmap_update_bits(gcr_regmap, cfg->reg1,
-						   BIT(cfg->bit1),
-						   (cfg->fn1 == func) ?  BIT(cfg->bit1) : 0);
+				wpcm450_update_mfsel(gcr_regmap, cfg->reg1,
+						     cfg->bit1, cfg->fn1, func);
 		}
 	}
 }
@@ -831,20 +851,10 @@ static int wpcm450_get_group_pins(struct pinctrl_dev *pctldev,
 				  const unsigned int **pins,
 				  unsigned int *npins)
 {
-	*npins = wpcm450_groups[selector].num_pins;
+	*npins = wpcm450_groups[selector].npins;
 	*pins  = wpcm450_groups[selector].pins;
 
 	return 0;
-}
-
-static int wpcm450_dt_node_to_map(struct pinctrl_dev *pctldev,
-				  struct device_node *np_config,
-				  struct pinctrl_map **map,
-				  u32 *num_maps)
-{
-	return pinconf_generic_dt_node_to_map(pctldev, np_config,
-					      map, num_maps,
-					      PIN_MAP_TYPE_INVALID);
 }
 
 static void wpcm450_dt_free_map(struct pinctrl_dev *pctldev,
@@ -857,7 +867,7 @@ static const struct pinctrl_ops wpcm450_pinctrl_ops = {
 	.get_groups_count = wpcm450_get_groups_count,
 	.get_group_name = wpcm450_get_group_name,
 	.get_group_pins = wpcm450_get_group_pins,
-	.dt_node_to_map = wpcm450_dt_node_to_map,
+	.dt_node_to_map = pinconf_generic_dt_node_to_map_all,
 	.dt_free_map = wpcm450_dt_free_map,
 };
 
@@ -890,7 +900,7 @@ static int wpcm450_pinmux_set_mux(struct pinctrl_dev *pctldev,
 	struct wpcm450_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
 
 	wpcm450_setfunc(pctrl->gcr_regmap, wpcm450_groups[group].pins,
-			wpcm450_groups[group].num_pins, function);
+			wpcm450_groups[group].npins, function);
 
 	return 0;
 }
@@ -1041,12 +1051,12 @@ static int wpcm450_gpio_register(struct platform_device *pdev,
 		if (ret < 0)
 			return ret;
 
-		gpio = &pctrl->gpio_bank[reg];
-		gpio->pctrl = pctrl;
-
 		if (reg >= WPCM450_NUM_BANKS)
 			return dev_err_probe(dev, -EINVAL,
 					     "GPIO index %d out of range!\n", reg);
+
+		gpio = &pctrl->gpio_bank[reg];
+		gpio->pctrl = pctrl;
 
 		bank = &wpcm450_banks[reg];
 		gpio->bank = bank;
@@ -1068,9 +1078,8 @@ static int wpcm450_gpio_register(struct platform_device *pdev,
 		gpio->gc.fwnode = child;
 		gpio->gc.add_pin_ranges = wpcm450_gpio_add_pin_ranges;
 
-		gpio->irqc = wpcm450_gpio_irqchip;
 		girq = &gpio->gc.irq;
-		girq->chip = &gpio->irqc;
+		gpio_irq_chip_set_chip(girq, &wpcm450_gpio_irqchip);
 		girq->parent_handler = wpcm450_gpio_irqhandler;
 		girq->parents = devm_kcalloc(dev, WPCM450_NUM_GPIO_IRQS,
 					     sizeof(*girq->parents), GFP_KERNEL);
@@ -1081,10 +1090,13 @@ static int wpcm450_gpio_register(struct platform_device *pdev,
 
 		girq->num_parents = 0;
 		for (i = 0; i < WPCM450_NUM_GPIO_IRQS; i++) {
-			int irq = fwnode_irq_get(child, i);
+			int irq;
 
+			irq = fwnode_irq_get(child, i);
 			if (irq < 0)
 				break;
+			if (!irq)
+				continue;
 
 			girq->parents[i] = irq;
 			girq->num_parents++;

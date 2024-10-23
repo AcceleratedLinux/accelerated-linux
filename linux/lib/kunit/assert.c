@@ -89,8 +89,7 @@ void kunit_ptr_not_err_assert_format(const struct kunit_assert *assert,
 EXPORT_SYMBOL_GPL(kunit_ptr_not_err_assert_format);
 
 /* Checks if `text` is a literal representing `value`, e.g. "5" and 5 */
-static bool is_literal(struct kunit *test, const char *text, long long value,
-		       gfp_t gfp)
+static bool is_literal(const char *text, long long value)
 {
 	char *buffer;
 	int len;
@@ -100,14 +99,15 @@ static bool is_literal(struct kunit *test, const char *text, long long value,
 	if (strlen(text) != len)
 		return false;
 
-	buffer = kunit_kmalloc(test, len+1, gfp);
+	buffer = kmalloc(len+1, GFP_KERNEL);
 	if (!buffer)
 		return false;
 
 	snprintf(buffer, len+1, "%lld", value);
 	ret = strncmp(buffer, text, len) == 0;
 
-	kunit_kfree(test, buffer);
+	kfree(buffer);
+
 	return ret;
 }
 
@@ -125,15 +125,15 @@ void kunit_binary_assert_format(const struct kunit_assert *assert,
 			  binary_assert->text->left_text,
 			  binary_assert->text->operation,
 			  binary_assert->text->right_text);
-	if (!is_literal(stream->test, binary_assert->text->left_text,
-			binary_assert->left_value, stream->gfp))
-		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %lld\n",
+	if (!is_literal(binary_assert->text->left_text, binary_assert->left_value))
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %lld (0x%llx)\n",
 				  binary_assert->text->left_text,
+				  binary_assert->left_value,
 				  binary_assert->left_value);
-	if (!is_literal(stream->test, binary_assert->text->right_text,
-			binary_assert->right_value, stream->gfp))
-		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %lld",
+	if (!is_literal(binary_assert->text->right_text, binary_assert->right_value))
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s == %lld (0x%llx)",
 				  binary_assert->text->right_text,
+				  binary_assert->right_value,
 				  binary_assert->right_value);
 	kunit_assert_print_msg(message, stream);
 }
@@ -204,3 +204,69 @@ void kunit_binary_str_assert_format(const struct kunit_assert *assert,
 	kunit_assert_print_msg(message, stream);
 }
 EXPORT_SYMBOL_GPL(kunit_binary_str_assert_format);
+
+/* Adds a hexdump of a buffer to a string_stream comparing it with
+ * a second buffer. The different bytes are marked with <>.
+ */
+static void kunit_assert_hexdump(struct string_stream *stream,
+				 const void *buf,
+				 const void *compared_buf,
+				 const size_t len)
+{
+	size_t i;
+	const u8 *buf1 = buf;
+	const u8 *buf2 = compared_buf;
+
+	string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT);
+
+	for (i = 0; i < len; ++i) {
+		if (!(i % 16) && i)
+			string_stream_add(stream, "\n" KUNIT_SUBSUBTEST_INDENT);
+
+		if (buf1[i] != buf2[i])
+			string_stream_add(stream, "<%02x>", buf1[i]);
+		else
+			string_stream_add(stream, " %02x ", buf1[i]);
+	}
+}
+
+void kunit_mem_assert_format(const struct kunit_assert *assert,
+			     const struct va_format *message,
+			     struct string_stream *stream)
+{
+	struct kunit_mem_assert *mem_assert;
+
+	mem_assert = container_of(assert, struct kunit_mem_assert,
+				  assert);
+
+	if (!mem_assert->left_value) {
+		string_stream_add(stream,
+				  KUNIT_SUBTEST_INDENT "Expected %s is not null, but is\n",
+				  mem_assert->text->left_text);
+	} else if (!mem_assert->right_value) {
+		string_stream_add(stream,
+				  KUNIT_SUBTEST_INDENT "Expected %s is not null, but is\n",
+				  mem_assert->text->right_text);
+	} else {
+		string_stream_add(stream,
+				KUNIT_SUBTEST_INDENT "Expected %s %s %s, but\n",
+				mem_assert->text->left_text,
+				mem_assert->text->operation,
+				mem_assert->text->right_text);
+
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s ==\n",
+				mem_assert->text->left_text);
+		kunit_assert_hexdump(stream, mem_assert->left_value,
+					mem_assert->right_value, mem_assert->size);
+
+		string_stream_add(stream, "\n");
+
+		string_stream_add(stream, KUNIT_SUBSUBTEST_INDENT "%s ==\n",
+				mem_assert->text->right_text);
+		kunit_assert_hexdump(stream, mem_assert->right_value,
+					mem_assert->left_value, mem_assert->size);
+
+		kunit_assert_print_msg(message, stream);
+	}
+}
+EXPORT_SYMBOL_GPL(kunit_mem_assert_format);

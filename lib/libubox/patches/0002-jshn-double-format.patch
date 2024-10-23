@@ -1,0 +1,23 @@
+diff --git a/jshn.c b/jshn.c
+index 1b685e5..e599918 100644
+--- a/jshn.c
++++ b/jshn.c
+@@ -423,7 +423,7 @@ int main(int argc, char **argv)
+ 		avl_insert(&env_vars, &vars[i].avl);
+ 	}
+ 
+-	while ((ch = getopt(argc, argv, "p:nir:R:o:w")) != -1) {
++	while ((ch = getopt(argc, argv, "p:nir:R:o:wd:")) != -1) {
+ 		switch(ch) {
+ 		case 'p':
+ 			var_prefix = optarg;
+@@ -447,6 +447,9 @@ int main(int argc, char **argv)
+ 		case 'i':
+ 			indent = true;
+ 			break;
++		case 'd':
++			json_c_set_serialization_double_format(optarg, JSON_C_OPTION_GLOBAL);
++			break;
+ 		default:
+ 			free(vars);
+ 			return usage(argv[0]);

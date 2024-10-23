@@ -41,6 +41,15 @@ If `-s` is specified once the detailed errors won't be shown.
 
 `ip` supports JSON formatting via the `-j` option.
 
+Queue statistics
+~~~~~~~~~~~~~~~~
+
+Queue statistics are accessible via the netdev netlink family.
+
+Currently no widely distributed CLI exists to access those statistics.
+Kernel development tools (ynl) can be used to experiment with them,
+see `Documentation/userspace-api/netlink/intro-specs.rst`.
+
 Protocol-specific statistics
 ----------------------------
 
@@ -147,6 +156,12 @@ Statistics are reported both in the responses to link information
 requests (`RTM_GETLINK`) and statistic requests (`RTM_GETSTATS`,
 when `IFLA_STATS_LINK_64` bit is set in the `.filter_mask` of the request).
 
+netdev (netlink)
+~~~~~~~~~~~~~~~~
+
+`netdev` generic netlink family allows accessing page pool and per queue
+statistics.
+
 ethtool
 -------
 
@@ -171,6 +186,7 @@ statistics are supported in the following commands:
 
   - `ETHTOOL_MSG_PAUSE_GET`
   - `ETHTOOL_MSG_FEC_GET`
+  - `ETHTOOL_MSG_MM_GET`
 
 debugfs
 -------

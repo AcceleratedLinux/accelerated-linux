@@ -9,6 +9,7 @@
 #ifndef __ASSEMBLY__
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/bug.h>
 #else
 #include <asm/types.h>
 #endif
@@ -20,7 +21,7 @@
  * page size. When using 64K pages however, whether we are really supporting
  * 64K pages in HW or not is irrelevant to those definitions.
  */
-#define PAGE_SHIFT		CONFIG_PPC_PAGE_SHIFT
+#define PAGE_SHIFT		CONFIG_PAGE_SHIFT
 #define PAGE_SIZE		(ASM_CONST(1) << PAGE_SHIFT)
 
 #ifndef __ASSEMBLY__
@@ -31,7 +32,7 @@ extern unsigned int hpage_shift;
 #define HPAGE_SHIFT hpage_shift
 #elif defined(CONFIG_PPC_8xx)
 #define HPAGE_SHIFT		19	/* 512k pages */
-#elif defined(CONFIG_PPC_FSL_BOOK3E)
+#elif defined(CONFIG_PPC_E500)
 #define HPAGE_SHIFT		22	/* 4M pages */
 #endif
 #define HPAGE_SIZE		((1UL) << HPAGE_SHIFT)
@@ -117,26 +118,7 @@ extern long long virt_phys_offset;
 
 #ifdef CONFIG_FLATMEM
 #define ARCH_PFN_OFFSET		((unsigned long)(MEMORY_START >> PAGE_SHIFT))
-#ifndef __ASSEMBLY__
-extern unsigned long max_mapnr;
-static inline bool pfn_valid(unsigned long pfn)
-{
-	unsigned long min_pfn = ARCH_PFN_OFFSET;
-
-	return pfn >= min_pfn && pfn < max_mapnr;
-}
 #endif
-#endif
-
-#define virt_to_pfn(kaddr)	(__pa(kaddr) >> PAGE_SHIFT)
-#define virt_to_page(kaddr)	pfn_to_page(virt_to_pfn(kaddr))
-#define pfn_to_kaddr(pfn)	__va((pfn) << PAGE_SHIFT)
-
-#define virt_addr_valid(vaddr)	({					\
-	unsigned long _addr = (unsigned long)vaddr;			\
-	_addr >= PAGE_OFFSET && _addr < (unsigned long)high_memory &&	\
-	pfn_valid(virt_to_pfn(_addr));					\
-})
 
 /*
  * On Book-E parts we need __va to parse the device tree and we can't
@@ -242,6 +224,25 @@ static inline bool pfn_valid(unsigned long pfn)
 #endif
 #endif
 
+#ifndef __ASSEMBLY__
+static inline unsigned long virt_to_pfn(const void *kaddr)
+{
+	return __pa(kaddr) >> PAGE_SHIFT;
+}
+
+static inline const void *pfn_to_kaddr(unsigned long pfn)
+{
+	return __va(pfn << PAGE_SHIFT);
+}
+#endif
+
+#define virt_to_page(kaddr)	pfn_to_page(virt_to_pfn(kaddr))
+#define virt_addr_valid(vaddr)	({					\
+	unsigned long _addr = (unsigned long)vaddr;			\
+	_addr >= PAGE_OFFSET && _addr < (unsigned long)high_memory &&	\
+	pfn_valid(virt_to_pfn((void *)_addr));				\
+})
+
 /*
  * Unfortunately the PLT is in the BSS in the PPC32 ELF ABI,
  * and needs to be executable.  This means the whole heap ends
@@ -307,12 +308,6 @@ static inline bool pfn_valid(unsigned long pfn)
 #else
 #include <asm/pgtable-types.h>
 #endif
-
-
-#ifndef CONFIG_HUGETLB_PAGE
-#define is_hugepd(pdep)		(0)
-#define pgd_huge(pgd)		(0)
-#endif /* CONFIG_HUGETLB_PAGE */
 
 struct page;
 extern void clear_user_page(void *page, unsigned long vaddr, struct page *pg);

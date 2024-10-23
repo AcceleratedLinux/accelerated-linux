@@ -1,6 +1,6 @@
-From 1851b31a83d78ef357fd9b2ec03174f4efbd2d0e Mon Sep 17 00:00:00 2001
-From: Robert Hodaszi <robert.hodaszi@digi.com>
-Date: Sat, 8 Jan 2022 15:44:49 +0100
+From 9b477a371314e2bab1489e500146cc502845624b Mon Sep 17 00:00:00 2001
+From: Ayman Ghanem <ayman.ghanem@digi.com>
+Date: Tue, 11 Apr 2023 11:43:13 -0500
 Subject: [PATCH] Added DHCP option error ignore
 
 Added a patch to allow DNSMASQ to send erroneous values to their
@@ -23,48 +23,48 @@ This commit allows that to happen by adding the flag
  2 files changed, 90 insertions(+), 17 deletions(-)
 
 diff --git a/src/dnsmasq.h b/src/dnsmasq.h
-index 81c95c6..a2b00ef 100644
+index 08d5e61..24aa134 100644
 --- a/src/dnsmasq.h
 +++ b/src/dnsmasq.h
-@@ -275,7 +275,8 @@ struct event_desc {
- #define OPT_UMBRELLA_DEVID 64
- #define OPT_CMARK_ALST_EN  65
- #define OPT_QUIET_TFTP     66
--#define OPT_LAST           67
-+#define OPT_IGN_CONF_ERR   67
-+#define OPT_LAST           68
+@@ -282,7 +282,8 @@ struct event_desc {
+ #define OPT_NO_IDENT       70
+ #define OPT_CACHE_RR       71
+ #define OPT_LOCALHOST_SERVICE  72
+-#define OPT_LAST           73
++#define OPT_IGN_CONF_ERR   73
++#define OPT_LAST           74
  
  #define OPTION_BITS (sizeof(unsigned int)*8)
  #define OPTION_SIZE ( (OPT_LAST/OPTION_BITS)+((OPT_LAST%OPTION_BITS)!=0) )
 diff --git a/src/option.c b/src/option.c
-index ffce9fc..4c5f140 100644
+index f4ff7c0..59a3f98 100644
 --- a/src/option.c
 +++ b/src/option.c
-@@ -174,6 +174,7 @@ struct myoption {
- #define LOPT_CMARK_ALST_EN 365
- #define LOPT_CMARK_ALST    366
- #define LOPT_QUIET_TFTP    367
-+#define LOPT_IGNORE_CONF_ERR 368
-  
+@@ -192,6 +192,7 @@ struct myoption {
+ #define LOPT_NO_DHCP4      383
+ #define LOPT_MAX_PROCS     384
+ #define LOPT_DNSSEC_LIMITS 385
++#define LOPT_IGNORE_CONF_ERR 386
+ 
  #ifdef HAVE_GETOPT_LONG
  static const struct option opts[] =  
-@@ -353,6 +354,7 @@ static const struct myoption opts[] =
-     { "log-debug", 0, 0, LOPT_LOG_DEBUG },
- 	{ "umbrella", 2, 0, LOPT_UMBRELLA },
-     { "quiet-tftp", 0, 0, LOPT_QUIET_TFTP },
+@@ -388,6 +389,7 @@ static const struct myoption opts[] =
+     { "use-stale-cache", 2, 0 , LOPT_STALE_CACHE },
+     { "no-ident", 0, 0, LOPT_NO_IDENT },
+     { "max-tcp-connections", 1, 0, LOPT_MAX_PROCS },
 +    { "ignore-conf-error", 0, 0, LOPT_IGNORE_CONF_ERR},
      { NULL, 0, 0, 0 }
    };
  
-@@ -539,6 +541,7 @@ static struct {
-   { LOPT_SCRIPT_TIME, OPT_LEASE_RENEW, NULL, gettext_noop("Call dhcp-script when lease expiry changes."), NULL },
-   { LOPT_UMBRELLA, ARG_ONE, "[=<optspec>]", gettext_noop("Send Cisco Umbrella identifiers including remote IP."), NULL },
-   { LOPT_QUIET_TFTP, OPT_QUIET_TFTP, NULL, gettext_noop("Do not log routine TFTP."), NULL },
+@@ -591,6 +593,7 @@ static struct {
+   { LOPT_NO_IDENT, OPT_NO_IDENT, NULL, gettext_noop("Do not add CHAOS TXT records."), NULL },
+   { LOPT_CACHE_RR, ARG_DUP, "<RR-type>", gettext_noop("Cache this DNS resource record type."), NULL },
+   { LOPT_MAX_PROCS, ARG_ONE, "<integer>", gettext_noop("Maximum number of concurrent tcp connections."), NULL },
 +  { LOPT_IGNORE_CONF_ERR, OPT_IGN_CONF_ERR, NULL, gettext_noop("Log dnsmasq conf errors to syslog but continue to run DNSMASQ."), NULL },
    { 0, 0, NULL, NULL, NULL }
  }; 
  
-@@ -810,7 +813,6 @@ static void do_usage(void)
+@@ -862,7 +865,6 @@ static void do_usage(void)
  
  #define ret_err(x) do { strcpy(errstr, (x)); return 0; } while (0)
  #define ret_err_free(x,m) do { strcpy(errstr, (x)); free((m)); return 0; } while (0)
@@ -72,7 +72,7 @@ index ffce9fc..4c5f140 100644
  
  static char *parse_mysockaddr(char *arg, union mysockaddr *addr) 
  {
-@@ -1189,14 +1191,24 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1501,14 +1503,24 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  	  new->u.vendor_class = (unsigned char *)opt_string_alloc(arg+7);
  	  new->flags |= DHOPT_VENDOR;
  	  if ((new->flags & DHOPT_ENCAPSULATE) || flags == DHOPT_MATCH)
@@ -99,7 +99,7 @@ index ffce9fc..4c5f140 100644
  	}
        else if (strstr(arg, "vi-encap:") == arg)
  	{
-@@ -1222,7 +1234,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1534,7 +1546,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
    if (is6)
      {
        if (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))
@@ -113,7 +113,7 @@ index ffce9fc..4c5f140 100644
        
        if (opt_len == 0 &&
  	  !(new->flags & DHOPT_RFC3925))
-@@ -1236,7 +1253,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1548,7 +1565,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
    
    /* option may be missing with rfc3925 match */
    if (!option_ok)
@@ -127,7 +127,7 @@ index ffce9fc..4c5f140 100644
    
    if (comma)
      {
-@@ -1314,10 +1336,30 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1626,10 +1648,30 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  	  is_string = is_dec = is_hex = 0;
  	  
  	  if (!is6 && (!is_addr || dots == 0))
@@ -161,7 +161,7 @@ index ffce9fc..4c5f140 100644
  	}
        /* or names */
        else if (opt_len & (OT_NAME | OT_RFC1035_NAME | OT_CSTRING))
-@@ -1410,7 +1452,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1722,7 +1764,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  	      comma = split(cp);
  	      slash = split_chr(cp, '/');
  	      if (!inet_pton(AF_INET, cp, &in))
@@ -175,7 +175,7 @@ index ffce9fc..4c5f140 100644
  	      if (!slash)
  		{
  		  memcpy(op, &in, INADDRSZ);
-@@ -1456,7 +1503,10 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1768,7 +1815,10 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  		  continue;
  		}
  
@@ -187,7 +187,7 @@ index ffce9fc..4c5f140 100644
  	    } 
  	  new->len = op - new->val;
  	}
-@@ -1483,7 +1533,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1795,7 +1845,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  		  if (strcmp (arg, ".") != 0)
  		    {
  		      if (!(dom = canonicalise_opt(arg)))
@@ -201,7 +201,7 @@ index ffce9fc..4c5f140 100644
  			
  		      domlen = strlen(dom) + 2;
  		    }
-@@ -1578,7 +1633,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1890,7 +1945,12 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
  		{
  		  char *dom = canonicalise_opt(arg);
  		  if (!dom)
@@ -215,7 +215,7 @@ index ffce9fc..4c5f140 100644
  		    		  
  		  newp = opt_malloc(len + header_size + strlen(dom) + 2);
  		  
-@@ -1622,14 +1682,24 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1934,14 +1994,24 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
        ((new->len > 255) || 
        (new->len > 253 && (new->flags & (DHOPT_VENDOR | DHOPT_ENCAPSULATE))) ||
         (new->len > 250 && (new->flags & DHOPT_RFC3925))))
@@ -242,7 +242,7 @@ index ffce9fc..4c5f140 100644
         
        if (is6)
  	{
-@@ -1654,7 +1724,6 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
+@@ -1966,7 +2036,6 @@ static int parse_dhcp_opt(char *errstr, char *arg, int flags)
      }
      
    return 1;
@@ -250,7 +250,7 @@ index ffce9fc..4c5f140 100644
    dhcp_opt_free(new);
    return 0;
  }
-@@ -1712,6 +1781,9 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
+@@ -2024,6 +2093,9 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
    
    switch (option)
      { 
@@ -260,15 +260,15 @@ index ffce9fc..4c5f140 100644
      case 'C': /* --conf-file */
        {
  	char *file = opt_string_alloc(arg);
-@@ -4932,7 +5004,7 @@ static void read_file(char *file, FILE *f, int hard_opt)
+@@ -5494,7 +5566,7 @@ static void read_file(char *file, FILE *f, int hard_opt, int from_script)
        if (errmess)
  	strcpy(daemon->namebuff, errmess);
  	  
 -      if (errmess || !one_opt(option, arg, daemon->namebuff, _("error"), 0, hard_opt == LOPT_REV_SERV))
 +      if ((errmess || !one_opt(option, arg, daemon->namebuff, _("error"), 0, hard_opt == LOPT_REV_SERV)) && (!option && !option_bool(OPT_IGN_CONF_ERR)))
  	{
- 	  sprintf(daemon->namebuff + strlen(daemon->namebuff), _(" at line %d of %s"), lineno, file);
- 	  if (hard_opt != 0)
+ 	  if (from_script)
+ 	    sprintf(daemon->namebuff + strlen(daemon->namebuff), _(" in output from %s"), file);
 -- 
-2.27.0
+2.39.2
 

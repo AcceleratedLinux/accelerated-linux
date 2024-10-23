@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/fsl,ls1046a-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP QorIQ LS1046A pin multiplexing
+
+maintainers:
+  - Unknown
+
+description: >
+  Bindings for LS1046A pinmux control.
+
+properties:
+  compatible:
+    const: fsl,ls1046a-pinctrl
+
+  reg:
+    description: >
+      Specifies the base address of SCFG_RCWPMUXCR0
+    maxItems: 2
+
+  big-endian:
+    description: >
+      If present, the register is implemented in big endian mode.
+    type: boolean
+
+patternProperties:
+  '^pinctrl-':
+    type: object
+    $ref: pinmux-node.yaml#
+    unevaluatedProperties: false
+
+    properties:
+      function:
+        enum: [ i2c, gpio, evt, usb, ftm ]
+
+      groups:
+        items:
+          enum: [ L4, M4, M3, N3 ]
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    pinmux: pinmux@157040c {
+      compatible = "fsl,ls1046a-pinctrl";
+      reg = <0 0x157040c 0 4>;
+      big-endian;
+      pinctrl_i2c2: pinctrl-i2c2 {
+        groups = "L4", "M4";
+        function = "i2c";
+      };
+      pinctrl_i2c2_gpio: pinctrl-i2c2-gpio3 {
+        groups = "L4", "M4";
+        function = "gpio";
+      };
+      pinctrl_i2c3: pinctrl-i2c3 {
+        groups = "M3", "N3";
+        function = "i2c";
+      };
+      pinctrl_i2c3_gpio: pinctrl-i2c3-gpio {
+        groups = "M3", "N3";
+        function = "gpio";
+      };
+    };

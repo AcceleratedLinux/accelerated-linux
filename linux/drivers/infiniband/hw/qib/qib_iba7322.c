@@ -2124,7 +2124,7 @@ static void qib_7322_handle_hwerrors(struct qib_devdata *dd, char *msg,
 
 	if (hwerrs & HWE_MASK(PowerOnBISTFailed)) {
 		isfatal = 1;
-		strlcpy(msg,
+		strscpy(msg,
 			"[Memory BIST test failed, InfiniPath hardware unusable]",
 			msgl);
 		/* ignore from now on, so disable until driver reloaded */
@@ -2850,9 +2850,9 @@ static void qib_setup_7322_cleanup(struct qib_devdata *dd)
 
 	qib_7322_free_irq(dd);
 	kfree(dd->cspec->cntrs);
-	kfree(dd->cspec->sendchkenable);
-	kfree(dd->cspec->sendgrhchk);
-	kfree(dd->cspec->sendibchk);
+	bitmap_free(dd->cspec->sendchkenable);
+	bitmap_free(dd->cspec->sendgrhchk);
+	bitmap_free(dd->cspec->sendibchk);
 	kfree(dd->cspec->msix_entries);
 	for (i = 0; i < dd->num_pports; i++) {
 		unsigned long flags;
@@ -3471,8 +3471,7 @@ try_intx:
 				    pci_irq_vector(dd->pcidev, msixnum),
 				    ret);
 			qib_7322_free_irq(dd);
-			pci_alloc_irq_vectors(dd->pcidev, 1, 1,
-					      PCI_IRQ_LEGACY);
+			pci_alloc_irq_vectors(dd->pcidev, 1, 1, PCI_IRQ_INTX);
 			goto try_intx;
 		}
 		dd->cspec->msix_entries[msixnum].arg = arg;
@@ -5143,7 +5142,7 @@ static int qib_7322_intr_fallback(struct qib_devdata *dd)
 	qib_devinfo(dd->pcidev,
 		"MSIx interrupt not detected, trying INTx interrupts\n");
 	qib_7322_free_irq(dd);
-	if (pci_alloc_irq_vectors(dd->pcidev, 1, 1, PCI_IRQ_LEGACY) < 0)
+	if (pci_alloc_irq_vectors(dd->pcidev, 1, 1, PCI_IRQ_INTX) < 0)
 		qib_dev_err(dd, "Failed to enable INTx\n");
 	qib_setup_7322_interrupt(dd, 0);
 	return 1;
@@ -6127,7 +6126,7 @@ static int setup_txselect(const char *str, const struct kernel_param *kp)
 			TXDDS_TABLE_SZ + TXDDS_EXTRA_SZ + TXDDS_MFG_SZ);
 		return -EINVAL;
 	}
-	strncpy(txselect_list, str, ARRAY_SIZE(txselect_list) - 1);
+	strscpy(txselect_list, str, sizeof(txselect_list));
 
 	xa_for_each(&qib_dev_table, index, dd)
 		if (dd->deviceid == PCI_DEVICE_ID_QLOGIC_IB_7322)
@@ -6383,18 +6382,11 @@ static int qib_init_7322_variables(struct qib_devdata *dd)
 	features = qib_7322_boardname(dd);
 
 	/* now that piobcnt2k and 4k set, we can allocate these */
-	sbufcnt = dd->piobcnt2k + dd->piobcnt4k +
-		NUM_VL15_BUFS + BITS_PER_LONG - 1;
-	sbufcnt /= BITS_PER_LONG;
-	dd->cspec->sendchkenable =
-		kmalloc_array(sbufcnt, sizeof(*dd->cspec->sendchkenable),
-			      GFP_KERNEL);
-	dd->cspec->sendgrhchk =
-		kmalloc_array(sbufcnt, sizeof(*dd->cspec->sendgrhchk),
-			      GFP_KERNEL);
-	dd->cspec->sendibchk =
-		kmalloc_array(sbufcnt, sizeof(*dd->cspec->sendibchk),
-			      GFP_KERNEL);
+	sbufcnt = dd->piobcnt2k + dd->piobcnt4k + NUM_VL15_BUFS;
+
+	dd->cspec->sendchkenable = bitmap_zalloc(sbufcnt, GFP_KERNEL);
+	dd->cspec->sendgrhchk = bitmap_zalloc(sbufcnt, GFP_KERNEL);
+	dd->cspec->sendibchk = bitmap_zalloc(sbufcnt, GFP_KERNEL);
 	if (!dd->cspec->sendchkenable || !dd->cspec->sendgrhchk ||
 		!dd->cspec->sendibchk) {
 		ret = -ENOMEM;

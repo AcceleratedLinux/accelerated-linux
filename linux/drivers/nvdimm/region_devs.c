@@ -5,6 +5,7 @@
 #include <linux/scatterlist.h>
 #include <linux/memregion.h>
 #include <linux/highmem.h>
+#include <linux/kstrtox.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/hash.h>
@@ -59,9 +60,51 @@ static int nvdimm_map_flush(struct device *dev, struct nvdimm *nvdimm, int dimm,
 	return 0;
 }
 
+static int nd_region_invalidate_memregion(struct nd_region *nd_region)
+{
+	int i, incoherent = 0;
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm *nvdimm = nd_mapping->nvdimm;
+
+		if (test_bit(NDD_INCOHERENT, &nvdimm->flags)) {
+			incoherent++;
+			break;
+		}
+	}
+
+	if (!incoherent)
+		return 0;
+
+	if (!cpu_cache_has_invalidate_memregion()) {
+		if (IS_ENABLED(CONFIG_NVDIMM_SECURITY_TEST)) {
+			dev_warn(
+				&nd_region->dev,
+				"Bypassing cpu_cache_invalidate_memergion() for testing!\n");
+			goto out;
+		} else {
+			dev_err(&nd_region->dev,
+				"Failed to synchronize CPU cache state\n");
+			return -ENXIO;
+		}
+	}
+
+	cpu_cache_invalidate_memregion(IORES_DESC_PERSISTENT_MEMORY);
+out:
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm *nvdimm = nd_mapping->nvdimm;
+
+		clear_bit(NDD_INCOHERENT, &nvdimm->flags);
+	}
+
+	return 0;
+}
+
 int nd_region_activate(struct nd_region *nd_region)
 {
-	int i, j, num_flush = 0;
+	int i, j, rc, num_flush = 0;
 	struct nd_region_data *ndrd;
 	struct device *dev = &nd_region->dev;
 	size_t flush_data_size = sizeof(void *);
@@ -84,6 +127,10 @@ int nd_region_activate(struct nd_region *nd_region)
 		flush_data_size += nvdimm->num_flush * sizeof(void *);
 	}
 	nvdimm_bus_unlock(&nd_region->dev);
+
+	rc = nd_region_invalidate_memregion(nd_region);
+	if (rc)
+		return rc;
 
 	ndrd = devm_kzalloc(dev, sizeof(*ndrd) + flush_data_size, GFP_KERNEL);
 	if (!ndrd)
@@ -133,7 +180,8 @@ static void nd_region_release(struct device *dev)
 		put_device(&nvdimm->dev);
 	}
 	free_percpu(nd_region->lane);
-	memregion_free(nd_region->id);
+	if (!test_bit(ND_REGION_CXL, &nd_region->flags))
+		memregion_free(nd_region->id);
 	kfree(nd_region);
 }
 
@@ -228,7 +276,7 @@ static ssize_t deep_flush_store(struct device *dev, struct device_attribute *att
 		const char *buf, size_t len)
 {
 	bool flush;
-	int rc = strtobool(buf, &flush);
+	int rc = kstrtobool(buf, &flush);
 	struct nd_region *nd_region = to_nd_region(dev);
 
 	if (rc)
@@ -483,7 +531,7 @@ static ssize_t read_only_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	bool ro;
-	int rc = strtobool(buf, &ro);
+	int rc = kstrtobool(buf, &ro);
 	struct nd_region *nd_region = to_nd_region(dev);
 
 	if (rc)
@@ -508,15 +556,12 @@ static ssize_t align_store(struct device *dev,
 {
 	struct nd_region *nd_region = to_nd_region(dev);
 	unsigned long val, dpa;
-	u32 remainder;
+	u32 mappings, remainder;
 	int rc;
 
 	rc = kstrtoul(buf, 0, &val);
 	if (rc)
 		return rc;
-
-	if (!nd_region->ndr_mappings)
-		return -ENXIO;
 
 	/*
 	 * Ensure space-align is evenly divisible by the region
@@ -525,7 +570,8 @@ static ssize_t align_store(struct device *dev,
 	 * contribute to the tail capacity in system-physical-address
 	 * space for the namespace.
 	 */
-	dpa = div_u64_rem(val, nd_region->ndr_mappings, &remainder);
+	mappings = max_t(u32, 1, nd_region->ndr_mappings);
+	dpa = div_u64_rem(val, mappings, &remainder);
 	if (!is_power_of_2(dpa) || dpa < PAGE_SIZE
 			|| val > region_size(nd_region) || remainder)
 		return -EINVAL;
@@ -794,12 +840,12 @@ static const struct device_type nd_volatile_device_type = {
 	.groups = nd_region_attribute_groups,
 };
 
-bool is_nd_pmem(struct device *dev)
+bool is_nd_pmem(const struct device *dev)
 {
 	return dev ? dev->type == &nd_pmem_device_type : false;
 }
 
-bool is_nd_volatile(struct device *dev)
+bool is_nd_volatile(const struct device *dev)
 {
 	return dev ? dev->type == &nd_volatile_device_type : false;
 }
@@ -893,7 +939,8 @@ unsigned int nd_region_acquire_lane(struct nd_region *nd_region)
 {
 	unsigned int cpu, lane;
 
-	cpu = get_cpu();
+	migrate_disable();
+	cpu = smp_processor_id();
 	if (nd_region->num_lanes < nr_cpu_ids) {
 		struct nd_percpu_lane *ndl_lock, *ndl_count;
 
@@ -912,16 +959,15 @@ EXPORT_SYMBOL(nd_region_acquire_lane);
 void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane)
 {
 	if (nd_region->num_lanes < nr_cpu_ids) {
-		unsigned int cpu = get_cpu();
+		unsigned int cpu = smp_processor_id();
 		struct nd_percpu_lane *ndl_lock, *ndl_count;
 
 		ndl_count = per_cpu_ptr(nd_region->lane, cpu);
 		ndl_lock = per_cpu_ptr(nd_region->lane, lane);
 		if (--ndl_count->count == 0)
 			spin_unlock(&ndl_lock->lock);
-		put_cpu();
 	}
-	put_cpu();
+	migrate_enable();
 }
 EXPORT_SYMBOL(nd_region_release_lane);
 
@@ -982,9 +1028,15 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 
 	if (!nd_region)
 		return NULL;
-	nd_region->id = memregion_alloc(GFP_KERNEL);
-	if (nd_region->id < 0)
-		goto err_id;
+	nd_region->ndr_mappings = ndr_desc->num_mappings;
+	/* CXL pre-assigns memregion ids before creating nvdimm regions */
+	if (test_bit(ND_REGION_CXL, &ndr_desc->flags)) {
+		nd_region->id = ndr_desc->memregion;
+	} else {
+		nd_region->id = memregion_alloc(GFP_KERNEL);
+		if (nd_region->id < 0)
+			goto err_id;
+	}
 
 	nd_region->lane = alloc_percpu(struct nd_percpu_lane);
 	if (!nd_region->lane)
@@ -1011,7 +1063,6 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 
 		get_device(&nvdimm->dev);
 	}
-	nd_region->ndr_mappings = ndr_desc->num_mappings;
 	nd_region->provider_data = ndr_desc->provider_data;
 	nd_region->nd_set = ndr_desc->nd_set;
 	nd_region->num_lanes = ndr_desc->num_lanes;
@@ -1043,9 +1094,10 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 
 	return nd_region;
 
- err_percpu:
-	memregion_free(nd_region->id);
- err_id:
+err_percpu:
+	if (!test_bit(ND_REGION_CXL, &ndr_desc->flags))
+		memregion_free(nd_region->id);
+err_id:
 	kfree(nd_region);
 	return NULL;
 }
@@ -1068,6 +1120,13 @@ struct nd_region *nvdimm_volatile_region_create(struct nvdimm_bus *nvdimm_bus,
 }
 EXPORT_SYMBOL_GPL(nvdimm_volatile_region_create);
 
+void nvdimm_region_delete(struct nd_region *nd_region)
+{
+	if (nd_region)
+		nd_device_unregister(&nd_region->dev, ND_SYNC);
+}
+EXPORT_SYMBOL_GPL(nvdimm_region_delete);
+
 int nvdimm_flush(struct nd_region *nd_region, struct bio *bio)
 {
 	int rc = 0;
@@ -1082,7 +1141,7 @@ int nvdimm_flush(struct nd_region *nd_region, struct bio *bio)
 	return rc;
 }
 /**
- * nvdimm_flush - flush any posted write queues between the cpu and pmem media
+ * generic_nvdimm_flush() - flush any posted write queues between the cpu and pmem media
  * @nd_region: interleaved pmem region
  */
 int generic_nvdimm_flush(struct nd_region *nd_region)
@@ -1210,3 +1269,5 @@ int nd_region_conflict(struct nd_region *nd_region, resource_size_t start,
 
 	return device_for_each_child(&nvdimm_bus->dev, &ctx, region_conflict);
 }
+
+MODULE_IMPORT_NS(DEVMEM);

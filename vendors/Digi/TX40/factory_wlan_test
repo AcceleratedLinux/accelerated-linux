@@ -1,0 +1,211 @@
+#!/bin/sh
+
+FAIL=1
+
+stop_test()
+{
+	local p
+	for p in `jobs -p`; do
+		kill $p
+	done
+
+	local i
+	for i in `seq 6`; do
+		[ "$(jobs -p)" ] || break
+		usleep 500000
+	done
+
+	[ "$(jobs -p)" ] && {
+		kill -9 `jobs -p` &>/dev/null
+	}
+
+	sleep 1
+	wlan_test_stop
+}
+
+cleanup()
+{
+	trap '' EXIT INT TERM
+
+	stop_test
+	if [ ${FAIL} -eq 1 ]; then
+		echo "Failed"
+		exit 1
+	else
+		exit 0
+	fi
+}
+
+wlan_test_start()
+{
+	# Wait until wlan0 appears
+	local i
+	for i in `seq 30`; do
+		ifconfig wlan0 &>/dev/null && break
+		usleep 100000
+	done
+
+	usleep 100000
+	ifconfig wlan0 up || cleanup
+
+
+	ifconfig wlan0 192.168.10.1
+	local password=manufacturingtest
+	local ssid=Digi-TX40-Manufacturing-Test
+
+	cat > "/var/run/dnsmasq_wlan0_dhcp.conf" <<EOF
+interface=wlan0
+
+dhcp-range=192.168.10.100,192.168.10.150,255.255.255.0,24h
+dhcp-leasefile=/tmp/wlan_dhcp.leases
+EOF
+
+	cat > "/var/run/hostapd_wlan0.conf" <<EOF
+driver=nl80211
+logger_syslog=127
+logger_syslog_level=2
+logger_stdout=127
+logger_stdout_level=2
+country_code=ZZ
+ieee80211d=1
+hw_mode=g
+beacon_int=100
+channel=7
+
+ieee80211n=1
+ht_capab=[LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1][MAX-AMSDU-7935][DSSS_CCK-40]
+ieee80211ax=1
+he_su_beamformer=1
+he_basic_mcs_nss_set=2
+he_default_pe_duration=4
+he_rts_threshold=1023
+he_mu_edca_qos_info_param_count=0
+he_mu_edca_qos_info_q_ack=0
+he_mu_edca_qos_info_queue_request=0
+he_mu_edca_qos_info_txop_request=0
+he_mu_edca_ac_be_aifsn=8
+he_mu_edca_ac_be_aci=0
+he_mu_edca_ac_be_ecwmin=9
+he_mu_edca_ac_be_ecwmax=10
+he_mu_edca_ac_be_timer=255
+he_mu_edca_ac_bk_aifsn=15
+he_mu_edca_ac_bk_aci=1
+he_mu_edca_ac_bk_ecwmin=9
+he_mu_edca_ac_bk_ecwmax=10
+he_mu_edca_ac_bk_timer=255
+he_mu_edca_ac_vi_ecwmin=5
+he_mu_edca_ac_vi_ecwmax=7
+he_mu_edca_ac_vi_aifsn=5
+he_mu_edca_ac_vi_aci=2
+he_mu_edca_ac_vi_timer=255
+he_mu_edca_ac_vo_aifsn=5
+he_mu_edca_ac_vo_aci=3
+he_mu_edca_ac_vo_ecwmin=5
+he_mu_edca_ac_vo_ecwmax=7
+he_mu_edca_ac_vo_timer=255
+
+interface=wlan0
+ctrl_interface=/var/run/hostapd
+disassoc_low_ack=1
+preamble=1
+wmm_enabled=1
+ignore_broadcast_ssid=0
+uapsd_advertisement_enabled=1
+wpa_group_rekey=600
+wpa_passphrase=$password
+auth_algs=1
+wpa=2
+wpa_pairwise=CCMP
+ssid=$ssid
+wpa_key_mgmt=WPA-PSK
+okc=0
+disable_pmksa_caching=1
+bssid=$(fw_printenv -n eth2addr)
+EOF
+
+	dnsmasq -C /var/run/dnsmasq_wlan0_dhcp.conf || cleanup
+
+	hostapd -B /var/run/hostapd_wlan0.conf >/dev/null || cleanup
+
+}
+
+wlan_test_stop()
+{
+	killall hostapd &>/dev/null
+	killall dnsmasq &>/dev/null
+}
+
+gather_connection_results()
+{
+	local count=1
+	local signal
+	local connected
+	while [ ${count} -lt 4 ];
+	do
+		local data="$(iw dev wlan0 station dump)"
+		signal="$(echo "${data}" | grep "signal:")"
+		connected="$(echo "${data}" | grep "connected time:")"
+		count=$((count+1))
+		sleep 2
+	done
+
+	signal="${signal##*[}"
+	signal="${signal%]*}"
+
+	# signal = -65, -45
+	ant1="${signal%,*}"  # -45
+	ant2="${signal##*,}" # -65
+
+	# Remove whitespace
+	ant1="$(echo ${ant1} | sed 's/[[:blank:]]//g')"
+	ant2="$(echo ${ant2} | sed 's/[[:blank:]]//g')"
+
+
+	echo "Antenna 1: ${ant1} dBm"
+	echo "Antenna 2: ${ant2} dBm"
+
+	FAIL=0
+
+}
+
+wlan_test_loop()
+{
+	local timeout_secs=${1}
+	local err=1
+	local time=$(date +%s)
+	local timeout=$((time + ${timeout_secs:-120}))
+	while [ ${time} -lt ${timeout} ]; do
+
+		# Check if any client is connected
+		local connected="$(iw dev wlan0 station dump)"
+
+		if [ -z "${connected}" ]; then
+			sleep 2
+			time=$(date +%s)
+		else
+			err=0
+			break
+		fi
+	done
+
+	[ ${err} -eq 1 ] && cleanup
+
+	gather_connection_results
+}
+
+start_test()
+{
+	local timeout_secs=${1}
+
+	/etc/action.d/udev start
+
+	wlan_test_start
+	sleep 2
+	wlan_test_loop ${timeout_secs}
+	sleep 2
+	wlan_test_stop
+}
+
+trap 'cleanup' EXIT INT TERM
+
+start_test ${1}

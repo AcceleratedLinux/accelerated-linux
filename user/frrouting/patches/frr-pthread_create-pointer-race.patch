@@ -1,0 +1,14 @@
+--- frr/lib/frr_pthread.c.orig	2024-04-08 13:52:37.436327916 +1000
++++ frr/lib/frr_pthread.c	2024-04-08 14:13:51.190202490 +1000
+@@ -141,6 +141,11 @@
+ {
+ 	struct frr_pthread *fpt = arg;
+ 
++	/* Workaround for a race between parent writing fpt->thread
++	 * before the start() function reads it. Both the parent thread
++	 * and this thread will be writing the same value, I hope. */
++	fpt->thread = pthread_self();
++
+ 	rcu_thread_start(fpt->rcu_thread);
+ 	return fpt->attr.start(fpt);
+ }

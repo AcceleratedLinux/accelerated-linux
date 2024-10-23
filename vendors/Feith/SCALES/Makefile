@@ -1,5 +1,5 @@
 #
-#	Makefile -- Build instructions for Feith SCALES
+#	Makefile -- Build instructions for Feith/SCALES
 #
 
 ROMFSIMG = $(IMAGEDIR)/romfs.img
@@ -117,14 +117,6 @@ romfs:
 image:
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	genromfs -v -V "ROMdisk" -f $(ROMFSIMG) -d $(ROMFSDIR)
-	$(CROSS)objcopy -O binary $(ROOTDIR)/$(LINUXDIR)/linux \
-			$(IMAGEDIR)/linux.bin
-	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
-	cp $(IMAGE) /tftpboot
-	gzip -c -9 $(IMAGE) > $(IMAGEZ)
-	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGEZ) >> $(IMAGEZ)
-	cp $(IMAGEZ) /tftpboot
 	BSS=`$(CROSS)objdump --headers $(ROOTDIR)/$(LINUXDIR)/linux | \
 	  grep .bss` ; \
 	ADDR=`set -- $${BSS} ; echo 0x$${4}` ; \
@@ -132,6 +124,12 @@ image:
 	  --adjust-section-vma=.romfs=$${ADDR} --no-adjust-warnings \
 	  --set-section-flags=.romfs=alloc,load,data   \
 	  $(ROOTDIR)/$(LINUXDIR)/linux $(ELFIMAGE) 2> /dev/null
+	$(CROSS)objcopy -O binary $(ELFIMAGE) $(IMAGE)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
+	cp $(IMAGE) /tftpboot
+	gzip -c -9 $(IMAGE) > $(IMAGEZ)
+	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGEZ) >> $(IMAGEZ)
+	cp $(IMAGEZ) /tftpboot
 
 vendor_flash:
 	$(ROOTDIR)/bin/make_flash

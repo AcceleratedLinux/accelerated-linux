@@ -1,0 +1,51 @@
+--- a/mDNSCore/mDNS.c	2022-09-01 19:40:16.751384190 +0100
++++ b/mDNSCore/mDNS.c	2022-09-01 19:40:24.923386050 +0100
+@@ -13507,7 +13507,7 @@ mDNSlocal AuthRecType setAuthRecType(mDN
+ // If the optional target host parameter is set, then the storage it points to must remain valid for the lifetime of the service registration
+ mDNSexport mStatus mDNS_RegisterService(mDNS *const m, ServiceRecordSet *sr,
+                                         const domainlabel *const name, const domainname *const type, const domainname *const domain,
+-                                        const domainname *const host, mDNSIPPort port, RData *const txtrdata, const mDNSu8 txtinfo[], mDNSu16 txtlen,
++                                        const domainname *const host, mDNSu16 priority, mDNSu16 weight, mDNSIPPort port, RData *const txtrdata, const mDNSu8 txtinfo[], mDNSu16 txtlen,
+                                         AuthRecord *SubTypes, mDNSu32 NumSubTypes,
+                                         mDNSInterfaceID InterfaceID, mDNSServiceCallback Callback, void *Context, mDNSu32 flags)
+ {
+@@ -13585,8 +13585,8 @@ mDNSexport mStatus mDNS_RegisterService(
+     }
+ 
+     // 3. Set up the SRV record rdata.
+-    sr->RR_SRV.resrec.rdata->u.srv.priority = 0;
+-    sr->RR_SRV.resrec.rdata->u.srv.weight   = 0;
++    sr->RR_SRV.resrec.rdata->u.srv.priority = priority;
++    sr->RR_SRV.resrec.rdata->u.srv.weight   = weight;
+     sr->RR_SRV.resrec.rdata->u.srv.port     = port;
+ 
+     // Setting AutoTarget tells DNS that the target of this SRV is to be automatically kept in sync with our host name
+@@ -13749,7 +13749,7 @@ mDNSexport mStatus mDNS_RenameAndReregis
+     // after the TXT record's deregistration, execute it now, otherwise it will be lost during the service re-registration.
+     if (sr->RR_TXT.NewRData) CompleteRDataUpdate(m, &sr->RR_TXT);
+     err = mDNS_RegisterService(m, sr, newname, &type, &domain,
+-                               host, sr->RR_SRV.resrec.rdata->u.srv.port,
++                               host, sr->RR_SRV.resrec.rdata->u.srv.priority, sr->RR_SRV.resrec.rdata->u.srv.weight, sr->RR_SRV.resrec.rdata->u.srv.port,
+                                (sr->RR_TXT.resrec.rdata != &sr->RR_TXT.rdatastorage) ? sr->RR_TXT.resrec.rdata : mDNSNULL,
+                                sr->RR_TXT.resrec.rdata->u.txt.c, sr->RR_TXT.resrec.rdlength,
+                                sr->SubTypes, sr->NumSubTypes,
+@@ -14388,7 +14388,7 @@ mDNSlocal void SleepProxyServerCallback(
+                 ConstructSleepProxyServerName(m, &name);
+                 mDNS_RegisterService(m, srs,
+                                      &name, &SleepProxyServiceType, &localdomain,
+-                                     mDNSNULL, m->SPSSocket->port, // Host, port
++                                     mDNSNULL, 0, 0, m->SPSSocket->port, // Host, priority, weight, port
+                                      mDNSNULL,
+                                      (mDNSu8 *)"", 1,           // TXT data, length
+                                      mDNSNULL, 0,               // Subtypes (none)
+--- a/mDNSCore/mDNSEmbeddedAPI.h	2022-09-01 19:40:16.747384189 +0100
++++ b/mDNSCore/mDNSEmbeddedAPI.h	2022-09-01 19:40:24.927386049 +0100
+@@ -2648,7 +2648,7 @@ extern void    mDNS_SetupResourceRecord(
+ 
+ extern mStatus mDNS_RegisterService  (mDNS *const m, ServiceRecordSet *sr,
+                                       const domainlabel *const name, const domainname *const type, const domainname *const domain,
+-                                      const domainname *const host, mDNSIPPort port, RData *txtrdata, const mDNSu8 txtinfo[], mDNSu16 txtlen,
++                                      const domainname *const host, mDNSu16 priority, mDNSu16 weight, mDNSIPPort port, RData *txtrdata, const mDNSu8 txtinfo[], mDNSu16 txtlen,
+                                       AuthRecord *SubTypes, mDNSu32 NumSubTypes,
+                                       mDNSInterfaceID InterfaceID, mDNSServiceCallback Callback, void *Context, mDNSu32 flags);
+ extern mStatus mDNS_AddRecordToService(mDNS *const m, ServiceRecordSet *sr, ExtraResourceRecord *extra, RData *rdata, mDNSu32 ttl,  mDNSu32 flags);

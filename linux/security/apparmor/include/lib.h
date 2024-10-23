@@ -16,12 +16,19 @@
 
 #include "match.h"
 
+extern struct aa_dfa *stacksplitdfa;
+
 /*
  * DEBUG remains global (no per profile flag) since it is mostly used in sysctl
  * which is not related to profile accesses.
  */
 
 #define DEBUG_ON (aa_g_debug)
+/*
+ * split individual debug cases out in preparation for finer grained
+ * debug controls in the future.
+ */
+#define AA_DEBUG_LABEL DEBUG_ON
 #define dbg_printk(__fmt, __args...) pr_debug(__fmt, ##__args)
 #define AA_DEBUG(fmt, args...)						\
 	do {								\
@@ -82,8 +89,8 @@ static inline bool aa_strneq(const char *str, const char *sub, int len)
  * character which is not used in standard matching and is only
  * used to separate pairs.
  */
-static inline unsigned int aa_dfa_null_transition(struct aa_dfa *dfa,
-						  unsigned int start)
+static inline aa_state_t aa_dfa_null_transition(struct aa_dfa *dfa,
+						aa_state_t start)
 {
 	/* the null transition only needs the string's null terminator byte */
 	return aa_dfa_next(dfa, start, 0);
@@ -94,6 +101,12 @@ static inline bool path_mediated_fs(struct dentry *dentry)
 	return !(dentry->d_sb->s_flags & SB_NOUSER);
 }
 
+struct aa_str_table {
+	int size;
+	char **table;
+};
+
+void aa_free_str_table(struct aa_str_table *table);
 
 struct counted_str {
 	struct kref count;
@@ -221,7 +234,7 @@ void aa_policy_destroy(struct aa_policy *policy);
  */
 #define fn_label_build(L, P, GFP, FN)					\
 ({									\
-	__label__ __cleanup, __done;					\
+	__label__ __do_cleanup, __done;					\
 	struct aa_label *__new_;					\
 									\
 	if ((L)->size > 1) {						\
@@ -239,7 +252,7 @@ void aa_policy_destroy(struct aa_policy *policy);
 			__new_ = (FN);					\
 			AA_BUG(!__new_);				\
 			if (IS_ERR(__new_))				\
-				goto __cleanup;				\
+				goto __do_cleanup;			\
 			__lvec[__j++] = __new_;				\
 		}							\
 		for (__j = __count = 0; __j < (L)->size; __j++)		\
@@ -261,7 +274,7 @@ void aa_policy_destroy(struct aa_policy *policy);
 			vec_cleanup(profile, __pvec, __count);		\
 		} else							\
 			__new_ = NULL;					\
-__cleanup:								\
+__do_cleanup:								\
 		vec_cleanup(label, __lvec, (L)->size);			\
 	} else {							\
 		(P) = labels_profile(L);				\

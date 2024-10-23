@@ -16,8 +16,7 @@
 static struct pmac_keywest *keywest_ctx;
 static bool keywest_probed;
 
-static int keywest_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int keywest_probe(struct i2c_client *client)
 {
 	keywest_probed = true;
 	/* If instantiated via i2c-powermac, we still need to set the client */
@@ -71,14 +70,12 @@ static int keywest_attach_adapter(struct i2c_adapter *adapter)
 	return 0;
 }
 
-static int keywest_remove(struct i2c_client *client)
+static void keywest_remove(struct i2c_client *client)
 {
 	if (! keywest_ctx)
-		return 0;
+		return;
 	if (client == keywest_ctx->client)
 		keywest_ctx->client = NULL;
-
-	return 0;
 }
 
 

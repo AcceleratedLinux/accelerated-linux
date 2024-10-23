@@ -21,6 +21,7 @@
 */
 
 #include "ucfront.h"
+#include "compile_commands.h"
 
 #define MYNAME "ucfront"
 
@@ -501,7 +502,7 @@ static void process_args(int argc, char **argv)
 	int i;
 	int j;
 	int k;
-	int input_files = 0;
+	ARGS *input_files;
 	struct stat st;
 	char *e;
 	const char *compiler = argv[0];
@@ -514,6 +515,7 @@ static void process_args(int argc, char **argv)
 
 	stripped_args = args_init(0, NULL);
 	basic_args = args_init(0, NULL);
+	input_files = args_init(0, NULL);
 
 	for (i=1; i<argc; i++) {
 		/* we must have -c or -S or -E */
@@ -708,8 +710,8 @@ static void process_args(int argc, char **argv)
 		}
 
 		/* Not an option, so this as an input file */
+		args_add(input_files, argv[i]);
 		args_add(stripped_args, argv[i]);
-		input_files++;
 	}
 
 	if (mode == MODE_COMPILE) {
@@ -896,8 +898,7 @@ static void process_args(int argc, char **argv)
 			args_add_prefix(stripped_args, e);
 			args_add_prefix(stripped_args, "-idirafter");
 		}
-		else if (getenv("CONFIG_LIB_UCLIBCXX") ||
-				getenv("CONFIG_LIB_UCLIBCXX_FORCE")) {
+		else if (getenv("CONFIG_LIB_UCLIBCXX")) {
 			x_asprintf(&e, "-I%s/lib/uClibc++/include", stagedir);
 			args_add_prefix(stripped_args, e);
 		}
@@ -953,6 +954,17 @@ static void process_args(int argc, char **argv)
 		}
 		free(e2);
 	}
+
+	if (mode == MODE_COMPILE && getenv("UCFRONT_COMPILE_COMMANDS_JSON")) {
+		/* Update compile_commands.json */
+		char *cwd = getcwd(NULL, 0);
+		for (i = 0; i < input_files->argc; i++)
+			compile_commands_update(cwd, input_files->argv[i], NULL,
+				stripped_args->argc, stripped_args->argv);
+		free(cwd);
+	}
+
+	args_free(input_files);
 }
 
 
@@ -965,6 +977,7 @@ static void analyze_code_clang(void)
 		char *clang, *clangpp;
 	} clangx[] = {
 		{ getenv("UCFRONT_CLANG"), getenv("UCFRONT_CLANGPP") },
+		{ "clang-9",               "clang++-9"               },
 		{ "clang-8",               "clang++-8"               },
 		{ "clang-7",               "clang++-7"               },
 		{ "clang-6",               "clang++-6"               },
@@ -1117,6 +1130,11 @@ static void analyze_code_clang(void)
 
 	if (pid == 0) {
 		close(0); /* just in case we read things we should not */
+
+		for(int i=0;i<clang_args->argc;i++)
+			fprintf(stderr, "%s ", clang_args->argv[i]);
+		fprintf(stderr, "\n");
+
 		exit(execvp(clang, clang_args->argv));
 	}
 

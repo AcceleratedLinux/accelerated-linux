@@ -21,10 +21,8 @@ MMC=/dev/mmcblk0
 parted -s ${MMC} mktable gpt
 parted -s ${MMC} mkpart image 2048s 186367s
 parted -s ${MMC} mkpart image1 186368s 370687s
-parted -s ${MMC} mkpart opt ext4 370688s 400MB
-parted -s ${MMC} mkpart spare ext4 400MB 3666MB
+parted -s ${MMC} mkpart opt ext4 370688s 3666MB
 
 mkfs.ext4 -F ${MMC}p3
-mkfs.ext4 -F ${MMC}p4
 
 exit 0

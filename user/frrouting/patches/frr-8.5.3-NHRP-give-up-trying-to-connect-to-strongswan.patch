@@ -1,0 +1,45 @@
+From 2b3380cf93cec0d210371219b126d77476594c2f Mon Sep 17 00:00:00 2001
+From: Walter Hagstrom <walter.hagstrom@digi.com>
+Date: Thu, 9 Nov 2023 13:53:43 -0500
+Subject: [PATCH] NHRP: give up trying to connect to strongswan
+
+In the case were we want to run NHRP without IPSec, give up after a
+while trying to connect to the strongswan vici socket, there is no point
+to keep trying to connect every two seconds and output an error when
+in debug mode.
+---
+ nhrpd/vici.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/nhrpd/vici.c b/nhrpd/vici.c
+index 6ba2399e0..1c8db4a08 100644
+--- a/nhrpd/vici.c
++++ b/nhrpd/vici.c
+@@ -503,6 +503,7 @@ static void vici_reconnect(struct thread *t)
+ 	struct vici_conn *vici = THREAD_ARG(t);
+ 	int fd;
+ 	char *file_path;
++	static int connect_attempts = 0;
+ 
+ 	if (vici->fd >= 0)
+ 		return;
+@@ -516,11 +517,12 @@ static void vici_reconnect(struct event *t)
+ 			fd = sock_open_unix(file_path);
+ 	}
+ 	if (fd < 0) {
+-		debugf(NHRP_DEBUG_VICI,
+-		       "%s: failure connecting VICI socket: %s", __func__,
+-		       strerror(errno));
+-		event_add_timer(master, vici_reconnect, vici, 2,
++		if (connect_attempts++ <10)
++			event_add_timer(master, vici_reconnect, vici, 5,
+ 				&vici->t_reconnect);
++		else {
++			debugf(NHRP_DEBUG_COMMON, "VICI: Failed to connect to strongSwan, giving up...");
++		}
+ 		return;
+ 	}
+
+-- 
+2.25.1
+

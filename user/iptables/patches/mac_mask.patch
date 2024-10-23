@@ -39,7 +39,7 @@
  };
  #undef s
 @@ -48,6 +52,10 @@
- 		printf(" !");
+ 		printf("! ");
  
  	xtables_print_mac(info->srcaddr);
 +

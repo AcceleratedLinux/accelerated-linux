@@ -8,6 +8,7 @@
 #ifndef _CRYPTO_AEAD_H
 #define _CRYPTO_AEAD_H
 
+#include <linux/atomic.h>
 #include <linux/container_of.h>
 #include <linux/crypto.h>
 #include <linux/slab.h>
@@ -27,15 +28,12 @@
  *
  * For example: authenc(hmac(sha256), cbc(aes))
  *
- * The example code provided for the symmetric key cipher operation
- * applies here as well. Naturally all *skcipher* symbols must be exchanged
- * the *aead* pendants discussed in the following. In addition, for the AEAD
- * operation, the aead_request_set_ad function must be used to set the
- * pointer to the associated data memory location before performing the
- * encryption or decryption operation. In case of an encryption, the associated
- * data memory is filled during the encryption operation. For decryption, the
- * associated data memory must contain data that is used to verify the integrity
- * of the decrypted data. Another deviation from the asynchronous block cipher
+ * The example code provided for the symmetric key cipher operation applies
+ * here as well. Naturally all *skcipher* symbols must be exchanged the *aead*
+ * pendants discussed in the following. In addition, for the AEAD operation,
+ * the aead_request_set_ad function must be used to set the pointer to the
+ * associated data memory location before performing the encryption or
+ * decryption operation. Another deviation from the asynchronous block cipher
  * operation is that the caller should explicitly check for -EBADMSG of the
  * crypto_aead_decrypt. That error indicates an authentication error, i.e.
  * a breach in the integrity of the message. In essence, that -EBADMSG error
@@ -49,7 +47,10 @@
  *
  * The destination scatterlist has the same layout, except that the plaintext
  * (resp. ciphertext) will grow (resp. shrink) by the authentication tag size
- * during encryption (resp. decryption).
+ * during encryption (resp. decryption). The authentication tag is generated
+ * during the encryption operation and appended to the ciphertext. During
+ * decryption, the authentication tag is consumed along with the ciphertext and
+ * used to verify the integrity of the plaintext and the associated data.
  *
  * In-place encryption/decryption is enabled by using the same scatterlist
  * pointer for both the source and destination.
@@ -194,6 +195,18 @@ static inline void crypto_free_aead(struct crypto_aead *tfm)
 {
 	crypto_destroy_tfm(tfm, crypto_aead_tfm(tfm));
 }
+
+/**
+ * crypto_has_aead() - Search for the availability of an aead.
+ * @alg_name: is the cra_name / name or cra_driver_name / driver name of the
+ *	      aead
+ * @type: specifies the type of the aead
+ * @mask: specifies the mask for the aead
+ *
+ * Return: true when the aead is known to the kernel crypto API; false
+ *	   otherwise
+ */
+int crypto_has_aead(const char *alg_name, u32 type, u32 mask);
 
 static inline const char *crypto_aead_driver_name(struct crypto_aead *tfm)
 {

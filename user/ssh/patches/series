@@ -1,5 +1,5 @@
 0002-Add-gen-keys-tool.patch
-0003-Add-uclibc-and-generic-DAL-support.patch
+0003-generic-DAL-support.patch
 0004-Change-umac_ctx-structure-to-static.patch
 0005-Adding-virtualuser-config-parameter.patch
 0006-Change-sshd-config-for-DAL.patch

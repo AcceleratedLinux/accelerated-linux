@@ -7,8 +7,7 @@ IMAGE="${1:-${ROOTDIR:-.}/images/image.bin}"
 ZIMAGE="${2:-${ROOTDIR:-.}/images/vmlinuz}"
 INITRD="${3:-${ROOTDIR:-.}/images/rootfs}"
 DISKRAW="${4:-${ROOTDIR:-.}/images/tx64_mfg.img}"
-MFGTAR="${5:-${ROOTDIR:-.}/images/tx64_mfg.tar.bz2}"
-GRUBIMG="${6:-${ROOTDIR:-.}/images/grub.img}"
+GRUBIMG="${5:-${ROOTDIR:-.}/images/grub.img}"
 
 # Disk size in sectors
 DISKSECTS="${7:-6000000}"
@@ -50,13 +49,6 @@ if [ "$GRUB_UPDATE" ]; then
 	(cd ${IMAGEDIR}; tar xvf ${GRUBIMG} || exit 1) || exit 1
 	rm -f ${GRUBIMG}
 fi
-
-echo "Creating bmap..."
-bmaptool create "${DISKRAW}" -o "${DISKRAW}.bmap"
-
-echo "Creating manufacturing tar file..."
-BASE_DISKRAW="$(basename ${DISKRAW})"
-tar -jcvf "${MFGTAR}" -C "${IMAGEDIR}" "${BASE_DISKRAW}" "${BASE_DISKRAW}.bmap"
 
 # compress this one, we do not want 3G files sitting around on servers :-)
 echo "Compressing RAW disk..."

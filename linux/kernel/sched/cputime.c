@@ -3,6 +3,10 @@
  * Simple CPU accounting cgroup controller
  */
 
+#ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
+ #include <asm/cputime.h>
+#endif
+
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 
 /*
@@ -226,6 +230,21 @@ void account_idle_time(u64 cputime)
 		cpustat[CPUTIME_IDLE] += cputime;
 }
 
+
+#ifdef CONFIG_SCHED_CORE
+/*
+ * Account for forceidle time due to core scheduling.
+ *
+ * REQUIRES: schedstat is enabled.
+ */
+void __account_forceidle_time(struct task_struct *p, u64 delta)
+{
+	__schedstat_add(p->stats.core_forceidle_sum, delta);
+
+	task_group_account_field(p, CPUTIME_FORCEIDLE, delta);
+}
+#endif
+
 /*
  * When a guest is interrupted for a longer amount of time, missed clock
  * ticks are not redelivered later. Due to that, this function may on
@@ -404,19 +423,6 @@ static inline void irqtime_account_process_tick(struct task_struct *p, int user_
  * Use precise platform statistics if available:
  */
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
-
-# ifndef __ARCH_HAS_VTIME_TASK_SWITCH
-void vtime_task_switch(struct task_struct *prev)
-{
-	if (is_idle_task(prev))
-		vtime_account_idle(prev);
-	else
-		vtime_account_kernel(prev);
-
-	vtime_flush(prev);
-	arch_vtime_task_switch(prev);
-}
-# endif
 
 void vtime_account_irq(struct task_struct *tsk, unsigned int offset)
 {

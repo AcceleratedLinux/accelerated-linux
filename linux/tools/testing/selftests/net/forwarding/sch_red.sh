@@ -1,3 +1,4 @@
+#!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
 # This test sends one stream of traffic from H1 through a TBF shaper, to a RED
@@ -450,35 +451,35 @@ uninstall_qdisc()
 ecn_test()
 {
 	install_qdisc ecn
-	do_ecn_test $BACKLOG
+	xfail_on_slow do_ecn_test $BACKLOG
 	uninstall_qdisc
 }
 
 ecn_nodrop_test()
 {
 	install_qdisc ecn nodrop
-	do_ecn_nodrop_test $BACKLOG
+	xfail_on_slow do_ecn_nodrop_test $BACKLOG
 	uninstall_qdisc
 }
 
 red_test()
 {
 	install_qdisc
-	do_red_test $BACKLOG
+	xfail_on_slow do_red_test $BACKLOG
 	uninstall_qdisc
 }
 
 red_qevent_test()
 {
 	install_qdisc qevent early_drop block 10
-	do_red_qevent_test $BACKLOG
+	xfail_on_slow do_red_qevent_test $BACKLOG
 	uninstall_qdisc
 }
 
 ecn_qevent_test()
 {
 	install_qdisc ecn qevent mark block 10
-	do_ecn_qevent_test $BACKLOG
+	xfail_on_slow do_ecn_qevent_test $BACKLOG
 	uninstall_qdisc
 }
 

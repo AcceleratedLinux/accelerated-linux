@@ -10,17 +10,9 @@
 
 #ifdef __KERNEL__
 
-/* Set to 1 to use kernel-wide empty_zero_page */
-#define RAID6_USE_EMPTY_ZERO_PAGE 0
 #include <linux/blkdev.h>
 
-/* We need a pre-zeroed page... if we don't want to use the kernel-provided
-   one define it here */
-#if RAID6_USE_EMPTY_ZERO_PAGE
-# define raid6_empty_zero_page empty_zero_page
-#else
 extern const char raid6_empty_zero_page[PAGE_SIZE];
-#endif
 
 #else /* ! __KERNEL__ */
 /* Used for testing in user space */
@@ -92,8 +84,6 @@ extern const struct raid6_calls raid6_intx1;
 extern const struct raid6_calls raid6_intx2;
 extern const struct raid6_calls raid6_intx4;
 extern const struct raid6_calls raid6_intx8;
-extern const struct raid6_calls raid6_intx16;
-extern const struct raid6_calls raid6_intx32;
 extern const struct raid6_calls raid6_mmxx1;
 extern const struct raid6_calls raid6_mmxx2;
 extern const struct raid6_calls raid6_sse1x1;
@@ -116,6 +106,8 @@ extern const struct raid6_calls raid6_vpermxor1;
 extern const struct raid6_calls raid6_vpermxor2;
 extern const struct raid6_calls raid6_vpermxor4;
 extern const struct raid6_calls raid6_vpermxor8;
+extern const struct raid6_calls raid6_lsx;
+extern const struct raid6_calls raid6_lasx;
 
 struct raid6_recov_calls {
 	void (*data2)(int, size_t, int, int, void **);
@@ -131,6 +123,8 @@ extern const struct raid6_recov_calls raid6_recov_avx2;
 extern const struct raid6_recov_calls raid6_recov_avx512;
 extern const struct raid6_recov_calls raid6_recov_s390xc;
 extern const struct raid6_recov_calls raid6_recov_neon;
+extern const struct raid6_recov_calls raid6_recov_lsx;
+extern const struct raid6_recov_calls raid6_recov_lasx;
 
 extern const struct raid6_calls raid6_neonx1;
 extern const struct raid6_calls raid6_neonx2;

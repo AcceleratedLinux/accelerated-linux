@@ -41,6 +41,15 @@
 #undef pr_info
 #undef pr_debug
 
+#define mmMP1_SMN_C2PMSG_66                                                                            0x0282
+#define mmMP1_SMN_C2PMSG_66_BASE_IDX                                                                   0
+
+#define mmMP1_SMN_C2PMSG_82                                                                            0x0292
+#define mmMP1_SMN_C2PMSG_82_BASE_IDX                                                                   0
+
+#define mmMP1_SMN_C2PMSG_90                                                                            0x029a
+#define mmMP1_SMN_C2PMSG_90_BASE_IDX                                                                   0
+
 static struct cmn2asic_msg_mapping renoir_message_map[SMU_MSG_MAX_COUNT] = {
 	MSG_MAP(TestMessage,                    PPSMC_MSG_TestMessage,                  1),
 	MSG_MAP(GetSmuVersion,                  PPSMC_MSG_GetSmuVersion,                1),
@@ -253,15 +262,15 @@ static int renoir_get_profiling_clk_mask(struct smu_context *smu,
 			/* mclk levels are in reverse order */
 			*mclk_mask = NUM_MEMCLK_DPM_LEVELS - 1;
 	} else if (level == AMD_DPM_FORCED_LEVEL_PROFILE_PEAK) {
-		if(sclk_mask)
+		if (sclk_mask)
 			/* The sclk as gfxclk and has three level about max/min/current */
 			*sclk_mask = 3 - 1;
 
-		if(mclk_mask)
+		if (mclk_mask)
 			/* mclk levels are in reverse order */
 			*mclk_mask = 0;
 
-		if(soc_mask)
+		if (soc_mask)
 			*soc_mask = NUM_SOCCLK_DPM_LEVELS - 1;
 	}
 
@@ -485,7 +494,7 @@ static int renoir_set_fine_grain_gfx_freq_parameters(struct smu_context *smu)
 static int renoir_print_clk_levels(struct smu_context *smu,
 			enum smu_clk_type clk_type, char *buf)
 {
-	int i, size = 0, ret = 0;
+	int i, idx, size = 0, ret = 0;
 	uint32_t cur_value = 0, value = 0, count = 0, min = 0, max = 0;
 	SmuMetrics_t metrics;
 	struct smu_dpm_context *smu_dpm_ctx = &(smu->smu_dpm);
@@ -585,7 +594,8 @@ static int renoir_print_clk_levels(struct smu_context *smu,
 	case SMU_VCLK:
 	case SMU_DCLK:
 		for (i = 0; i < count; i++) {
-			ret = renoir_get_dpm_clk_limited(smu, clk_type, i, &value);
+			idx = (clk_type == SMU_FCLK || clk_type == SMU_MCLK) ? (count - i - 1) : i;
+			ret = renoir_get_dpm_clk_limited(smu, clk_type, idx, &value);
 			if (ret)
 				return ret;
 			if (!value)
@@ -1162,6 +1172,7 @@ static int renoir_get_smu_metrics_data(struct smu_context *smu,
 	int ret = 0;
 	uint32_t apu_percent = 0;
 	uint32_t dgpu_percent = 0;
+	struct amdgpu_device *adev = smu->adev;
 
 
 	ret = smu_cmn_get_metrics_table(smu,
@@ -1186,8 +1197,16 @@ static int renoir_get_smu_metrics_data(struct smu_context *smu,
 	case METRICS_AVERAGE_VCNACTIVITY:
 		*value = metrics->AverageUvdActivity / 100;
 		break;
-	case METRICS_AVERAGE_SOCKETPOWER:
-		*value = (metrics->CurrentSocketPower << 8) / 1000;
+	case METRICS_CURR_SOCKETPOWER:
+		if (((amdgpu_ip_version(adev, MP1_HWIP, 0) ==
+		      IP_VERSION(12, 0, 1)) &&
+		     (adev->pm.fw_version >= 0x40000f)) ||
+		    ((amdgpu_ip_version(adev, MP1_HWIP, 0) ==
+		      IP_VERSION(12, 0, 0)) &&
+		     (adev->pm.fw_version >= 0x373200)))
+			*value = metrics->CurrentSocketPower << 8;
+		else
+			*value = (metrics->CurrentSocketPower << 8) / 1000;
 		break;
 	case METRICS_TEMPERATURE_EDGE:
 		*value = (metrics->GfxTemperature / 100) *
@@ -1282,9 +1301,9 @@ static int renoir_read_sensor(struct smu_context *smu,
 						  (uint32_t *)data);
 		*size = 4;
 		break;
-	case AMDGPU_PP_SENSOR_GPU_POWER:
+	case AMDGPU_PP_SENSOR_GPU_INPUT_POWER:
 		ret = renoir_get_smu_metrics_data(smu,
-						  METRICS_AVERAGE_SOCKETPOWER,
+						  METRICS_CURR_SOCKETPOWER,
 						  (uint32_t *)data);
 		*size = 4;
 		break;
@@ -1300,6 +1319,7 @@ static int renoir_read_sensor(struct smu_context *smu,
 						  (uint32_t *)data);
 		*size = 4;
 		break;
+	case AMDGPU_PP_SENSOR_GPU_AVG_POWER:
 	default:
 		ret = -EOPNOTSUPP;
 		break;
@@ -1447,6 +1467,8 @@ static const struct pptable_funcs renoir_ppt_funcs = {
 
 void renoir_set_ppt_funcs(struct smu_context *smu)
 {
+	struct amdgpu_device *adev = smu->adev;
+
 	smu->ppt_funcs = &renoir_ppt_funcs;
 	smu->message_map = renoir_message_map;
 	smu->clock_map = renoir_clk_map;
@@ -1454,4 +1476,7 @@ void renoir_set_ppt_funcs(struct smu_context *smu)
 	smu->workload_map = renoir_workload_map;
 	smu->smc_driver_if_version = SMU12_DRIVER_IF_VERSION;
 	smu->is_apu = true;
+	smu->param_reg = SOC15_REG_OFFSET(MP1, 0, mmMP1_SMN_C2PMSG_82);
+	smu->msg_reg = SOC15_REG_OFFSET(MP1, 0, mmMP1_SMN_C2PMSG_66);
+	smu->resp_reg = SOC15_REG_OFFSET(MP1, 0, mmMP1_SMN_C2PMSG_90);
 }

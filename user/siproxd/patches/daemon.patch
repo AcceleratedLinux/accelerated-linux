@@ -1,0 +1,186 @@
+
+Changes from uClinux-dist-20120401
+
+--- siproxd-0.5.11/scripts/config.sub
++++ siproxd/scripts/config.sub
+@@ -276,7 +276,10 @@
+ 		;;
+ 	m88110 | m680[12346]0 | m683?2 | m68360 | m5200 | v70 | w65 | z8k)
+ 		;;
+-
++	nios2 | nios2-* | nios2 | nios2-*)
++		basic_machine=nios2-altera
++		os=-linux
++		;;
+ 	# We use `pc' rather than `unknown'
+ 	# because (1) that's what they normally are, and
+ 	# (2) the word "unknown" tends to confuse beginning users.
+--- siproxd-0.5.11/src/accessctl.c
++++ siproxd/src/accessctl.c
+@@ -34,7 +34,7 @@
+ static char const ident[]="$Id: accessctl.c,v 1.14 2005/04/29 23:09:02 hb9xar Exp $";
+ 
+ /* configuration storage */
+-struct siproxd_config configuration;
++extern struct siproxd_config configuration;
+ 
+ /* prototypes used locally only */
+ int process_aclist (char *aclist, struct sockaddr_in from);
+--- siproxd-0.5.11/src/log.c
++++ siproxd/src/log.c
+@@ -235,7 +235,7 @@
+    } else if (silence_level < 1) {
+       /* running as daemon - log via SYSLOG facility */
+       vsnprintf(string, sizeof(string), format, ap);
+-      syslog(LOG_USER|LOG_DEBUG, "%s:%i %s", file, line, string);
++      syslog(LOG_DAEMON|LOG_DEBUG, "%s:%i %s", file, line, string);
+    }
+    /*
+     * Log to TCP
+@@ -337,7 +337,7 @@
+    if (silence_level < 3) {
+       /* running as daemon - log via SYSLOG facility */
+       vsnprintf(string, sizeof(string), format, ap);
+-      syslog(LOG_USER|LOG_NOTICE, "%s:%i WARNING:%s", file, line, string);
++      syslog(LOG_DAEMON|LOG_NOTICE, "%s:%i WARNING:%s", file, line, string);
+    }
+    /*
+     * Log to TCP
+@@ -388,7 +388,7 @@
+    if (silence_level < 2) {
+       /* running as daemon - log via SYSLOG facility */
+       vsnprintf(string, sizeof(string), format, ap);
+-      syslog(LOG_USER|LOG_NOTICE, "%s:%i INFO:%s", file, line, string);
++      syslog(LOG_DAEMON|LOG_NOTICE, "%s:%i INFO:%s", file, line, string);
+    }
+    /*
+     * Log to TCP
+--- siproxd-0.5.11/src/siproxd.c
++++ siproxd/src/siproxd.c
+@@ -28,6 +28,7 @@
+ #include <signal.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
++#include <syslog.h>
+ 
+ #ifdef  HAVE_GETOPT_H
+ #include <getopt.h>
+@@ -43,9 +44,29 @@
+ /* configuration storage */
+ struct siproxd_config configuration;
+ 
++char *pidfilename;
++
+ /* Global File instance on pw file */
+ FILE *siproxd_passwordfile;
+ 
++int createpidfile(char* pidfilename)
++{
++   FILE *f = NULL;
++   DEBUGC(DBCLASS_CONFIG,"creating PID file [%s]", pidfilename);
++   if ((f=fopen(pidfilename, "w")))
++      {
++         fprintf(f,"%i\n",(int)getpid());
++         fclose(f);
++      }
++   else
++      {
++         WARN("couldn't create new PID file: %s", strerror(errno));
++         return(1);
++      }
++   return(0);
++}
++
++
+ /* -h help option text */
+ static const char str_helpmsg[] =
+ PACKAGE "-" VERSION "-" BUILDSTR " (c) 2002-2005 Thomas Ries\n"
+@@ -93,7 +114,6 @@
+    char configfile[64]="siproxd";       /* basename of configfile */
+    int  config_search=1;                /* search the config file */
+    int  cmdline_debuglevel=0;
+-   char *pidfilename=NULL;
+    struct sigaction act;
+ 
+    log_set_stderr(1);
+@@ -132,6 +152,8 @@
+       siproxd_passwordfile = NULL;
+    }
+ 
++   // Open Log at beginning so it can still be accessed in the chroot
++   openlog("siproxd",LOG_NDELAY|LOG_PID,LOG_DAEMON);
+ /*
+  * parse command line
+  */
+@@ -201,9 +223,6 @@
+    log_set_pattern(configuration.debuglevel);
+    log_set_listen_port(configuration.debugport);
+ 
+-   /* change user and group IDs */
+-   secure_enviroment();
+-
+    /* daemonize if requested to */
+    if (configuration.daemonize) {
+       DEBUGC(DBCLASS_CONFIG,"daemonizing");
+@@ -213,27 +232,18 @@
+ 
+       log_set_stderr(0);
+       INFO("daemonized, pid=%i", getpid());
++      /* change user, group and chroot */
++      secure_enviroment();
++      
+    }
++   else
++      secure_enviroment();
+ 
+    /* write PID file of main thread */
+-   if (pidfilename == NULL) pidfilename = configuration.pid_file;
+-   if (pidfilename) {
+-      FILE *pidfile;
+-      DEBUGC(DBCLASS_CONFIG,"creating PID file [%s]", pidfilename);
+-      sts=unlink(configuration.pid_file);
+-      if ((sts==0) ||(errno == ENOENT)) {
+-         if ((pidfile=fopen(pidfilename, "w"))) {
+-            fprintf(pidfile,"%i\n",(int)getpid());
+-            fclose(pidfile);
+-         } else {
+-            WARN("couldn't create new PID file: %s", strerror(errno));
+-         }
+-      } else {
+-         WARN("couldn't delete old PID file: %s", strerror(errno));
+-      }
+-   }
+-
+-   /* initialize the RTP proxy */
++   if ((configuration.pid_file) && (!pidfilename))
++      createpidfile(configuration.pid_file);
++   
++   /* Start the RTP proxy */
+    sts=rtpproxy_init();
+    if (sts != STS_SUCCESS) {
+       ERROR("unable to initialize RTP proxy - aborting"); 
+--- siproxd-0.5.11/src/siproxd.h
++++ siproxd/src/siproxd.h
+@@ -270,3 +270,7 @@
+ #ifndef satoi
+ #define satoi atoi  /* used in libosips MSG_TEST_CODE macro ... */
+ #endif
++
++// Lets make sure the pidfilename gets all the way to utils.c
++int createpidfile(char* pidfilename);
++extern char* pidfilename;
+--- siproxd-0.5.11/src/utils.c
++++ siproxd/src/utils.c
+@@ -240,6 +240,12 @@
+       if (configuration.user) passwd=getpwnam(configuration.user);
+ 
+       /*
++       * Make pidfile outside of chroot
++       */
++      if (pidfilename)
++	createpidfile(pidfilename);
++
++      /*
+        * change root directory into chroot jail
+        */
+       if (configuration.chrootjail) {

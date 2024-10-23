@@ -19,7 +19,10 @@
 	#size-cells = <2>;
 
 	aliases {
-		ethernet0 = &gmac;
+		gpio0 = &gpio0;
+		gpio1 = &gpio1;
+		gpio2 = &gpio2;
+		gpio3 = &gpio3;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
 		i2c2 = &i2c2;
@@ -138,7 +141,7 @@
 	};
 
 	arm-pmu {
-		compatible = "arm,armv8-pmuv3";
+		compatible = "arm,cortex-a53-pmu";
 		interrupts = <GIC_SPI 112 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 113 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 114 IRQ_TYPE_LEVEL_HIGH>,
@@ -790,6 +793,7 @@
 		dma-names = "tx";
 		pinctrl-names = "default";
 		pinctrl-0 = <&spdif_tx>;
+		#sound-dai-cells = <0>;
 		status = "disabled";
 	};
 
@@ -801,6 +805,7 @@
 		clocks = <&cru SCLK_I2S_2CH>, <&cru HCLK_I2S_2CH>;
 		dmas = <&dmac_bus 6>, <&dmac_bus 7>;
 		dma-names = "tx", "rx";
+		#sound-dai-cells = <0>;
 		status = "disabled";
 	};
 
@@ -814,6 +819,7 @@
 		dma-names = "tx", "rx";
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s_8ch_bus>;
+		#sound-dai-cells = <0>;
 		status = "disabled";
 	};
 
@@ -1084,7 +1090,7 @@
 
 		gmac {
 			rgmii_pins: rgmii-pins {
-				rockchip,pins =	<3 RK_PC6 1 &pcfg_pull_none>,
+				rockchip,pins = <3 RK_PC6 1 &pcfg_pull_none>,
 						<3 RK_PD0 1 &pcfg_pull_none>,
 						<3 RK_PC3 1 &pcfg_pull_none>,
 						<3 RK_PB0 1 &pcfg_pull_none_12ma>,
@@ -1102,7 +1108,7 @@
 			};
 
 			rmii_pins: rmii-pins {
-				rockchip,pins =	<3 RK_PC6 1 &pcfg_pull_none>,
+				rockchip,pins = <3 RK_PC6 1 &pcfg_pull_none>,
 						<3 RK_PD0 1 &pcfg_pull_none>,
 						<3 RK_PC3 1 &pcfg_pull_none>,
 						<3 RK_PB0 1 &pcfg_pull_none_12ma>,
@@ -1257,7 +1263,7 @@
 
 		spdif {
 			spdif_tx: spdif-tx {
-				rockchip,pins =	<2 RK_PC7 1 &pcfg_pull_none>;
+				rockchip,pins = <2 RK_PC7 1 &pcfg_pull_none>;
 			};
 		};
 

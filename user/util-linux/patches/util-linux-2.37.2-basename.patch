@@ -1,0 +1,14 @@
+Fixes int-conversion error with basename().
+
+Index: util-linux-2.37.2/login-utils/su-common.c
+===================================================================
+--- util-linux-2.37.2.orig/login-utils/su-common.c
++++ util-linux-2.37.2/login-utils/su-common.c
+@@ -36,6 +36,7 @@
+ #include <sys/wait.h>
+ #include <syslog.h>
+ #include <utmpx.h>
++#include <libgen.h>
+ 
+ #ifdef HAVE_PTY
+ # include <pty.h>

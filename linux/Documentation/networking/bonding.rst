@@ -444,6 +444,18 @@ arp_missed_max
 
 	The default value is 2, and the allowable range is 1 - 255.
 
+coupled_control
+
+    Specifies whether the LACP state machine's MUX in the 802.3ad mode
+    should have separate Collecting and Distributing states.
+
+    This is by implementing the independent control state machine per
+    IEEE 802.1AX-2008 5.4.15 in addition to the existing coupled control
+    state machine.
+
+    The default value is 1. This setting does not separate the Collecting
+    and Distributing states, maintaining the bond in coupled control.
+
 downdelay
 
 	Specifies the time, in milliseconds, to wait before disabling
@@ -566,7 +578,8 @@ miimon
 	link monitoring.  A value of 100 is a good starting point.
 	The use_carrier option, below, affects how the link state is
 	determined.  See the High Availability section for additional
-	information.  The default value is 0.
+	information.  The default value is 100 if arp_interval is not
+	set.
 
 min_links
 
@@ -775,10 +788,22 @@ peer_notif_delay
 	Specify the delay, in milliseconds, between each peer
 	notification (gratuitous ARP and unsolicited IPv6 Neighbor
 	Advertisement) when they are issued after a failover event.
-	This delay should be a multiple of the link monitor interval
-	(arp_interval or miimon, whichever is active). The default
-	value is 0 which means to match the value of the link monitor
-	interval.
+	This delay should be a multiple of the MII link monitor interval
+	(miimon).
+
+	The valid range is 0 - 300000. The default value is 0, which means
+	to match the value of the MII link monitor interval.
+
+prio
+	Slave priority. A higher number means higher priority.
+	The primary slave has the highest priority. This option also
+	follows the primary_reselect rules.
+
+	This option could only be configured via netlink, and is only valid
+	for active-backup(1), balance-tlb (5) and balance-alb (6) mode.
+	The valid value range is a signed 32 bit integer.
+
+	The default value is 0.
 
 primary
 
@@ -835,7 +860,7 @@ primary_reselect
 tlb_dynamic_lb
 
 	Specifies if dynamic shuffling of flows is enabled in tlb
-	mode. The value has no effect on any other modes.
+	or alb mode. The value has no effect on any other modes.
 
 	The default behavior of tlb mode is to shuffle active flows across
 	slaves based on the load in that interval. This gives nice lb
@@ -945,6 +970,7 @@ xmit_hash_policy
 		hash = hash XOR source IP XOR destination IP
 		hash = hash XOR (hash RSHIFT 16)
 		hash = hash XOR (hash RSHIFT 8)
+		hash = hash RSHIFT 1
 		And then hash is reduced modulo slave count.
 
 		If the protocol is IPv6 then the source and destination
@@ -1622,7 +1648,7 @@ your init script::
 -----------------------------------------
 
 This section applies to distros which use /etc/network/interfaces file
-to describe network interface configuration, most notably Debian and it's
+to describe network interface configuration, most notably Debian and its
 derivatives.
 
 The ifup and ifdown commands on Debian don't support bonding out of
@@ -1970,15 +1996,6 @@ queries to one or more designated peer systems on the network, and
 uses the response as an indication that the link is operating.  This
 gives some assurance that traffic is actually flowing to and from one
 or more peers on the local network.
-
-The ARP monitor relies on the device driver itself to verify
-that traffic is flowing.  In particular, the driver must keep up to
-date the last receive time, dev->last_rx.  Drivers that use NETIF_F_LLTX
-flag must also update netdev_queue->trans_start.  If they do not, then the
-ARP monitor will immediately fail any slaves using that driver, and
-those slaves will stay down.  If networking monitoring (tcpdump, etc)
-shows the ARP requests and replies on the network, then it may be that
-your device driver is not updating last_rx and trans_start.
 
 7.2 Configuring Multiple ARP Targets
 ------------------------------------

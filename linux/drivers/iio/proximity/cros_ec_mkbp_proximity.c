@@ -184,7 +184,7 @@ static const struct iio_info cros_ec_mkbp_proximity_info = {
 	.write_event_config = cros_ec_mkbp_proximity_write_event_config,
 };
 
-static __maybe_unused int cros_ec_mkbp_proximity_resume(struct device *dev)
+static int cros_ec_mkbp_proximity_resume(struct device *dev)
 {
 	struct cros_ec_mkbp_proximity_data *data = dev_get_drvdata(dev);
 	struct cros_ec_device *ec = data->ec;
@@ -201,8 +201,8 @@ static __maybe_unused int cros_ec_mkbp_proximity_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(cros_ec_mkbp_proximity_pm_ops, NULL,
-			 cros_ec_mkbp_proximity_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(cros_ec_mkbp_proximity_pm_ops, NULL,
+				cros_ec_mkbp_proximity_resume);
 
 static int cros_ec_mkbp_proximity_probe(struct platform_device *pdev)
 {
@@ -239,15 +239,13 @@ static int cros_ec_mkbp_proximity_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int cros_ec_mkbp_proximity_remove(struct platform_device *pdev)
+static void cros_ec_mkbp_proximity_remove(struct platform_device *pdev)
 {
 	struct cros_ec_mkbp_proximity_data *data = platform_get_drvdata(pdev);
 	struct cros_ec_device *ec = data->ec;
 
 	blocking_notifier_chain_unregister(&ec->event_notifier,
 					   &data->notifier);
-
-	return 0;
 }
 
 static const struct of_device_id cros_ec_mkbp_proximity_of_match[] = {
@@ -260,10 +258,10 @@ static struct platform_driver cros_ec_mkbp_proximity_driver = {
 	.driver = {
 		.name = "cros-ec-mkbp-proximity",
 		.of_match_table = cros_ec_mkbp_proximity_of_match,
-		.pm = &cros_ec_mkbp_proximity_pm_ops,
+		.pm = pm_sleep_ptr(&cros_ec_mkbp_proximity_pm_ops),
 	},
 	.probe = cros_ec_mkbp_proximity_probe,
-	.remove = cros_ec_mkbp_proximity_remove,
+	.remove_new = cros_ec_mkbp_proximity_remove,
 };
 module_platform_driver(cros_ec_mkbp_proximity_driver);
 

@@ -12,6 +12,7 @@
 #include <linux/random.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/string.h>
 
 #include <linux/bitmap.h>
@@ -30,12 +31,16 @@
 #define PAD_SIZE 16
 #define FILL_CHAR '$'
 
+#define NOWARN(option, comment, block) \
+	__diag_push(); \
+	__diag_ignore_all(#option, comment); \
+	block \
+	__diag_pop();
+
 KSTM_MODULE_GLOBALS();
 
 static char *test_buffer __initdata;
 static char *alloced_buffer __initdata;
-
-extern bool no_hash_pointers;
 
 static int __printf(4, 0) __init
 do_test(int bufsize, const char *expect, int elen,
@@ -78,9 +83,14 @@ do_test(int bufsize, const char *expect, int elen,
 		return 1;
 	}
 
-	if (memchr_inv(test_buffer + written + 1, FILL_CHAR, BUF_SIZE + PAD_SIZE - (written + 1))) {
+	if (memchr_inv(test_buffer + written + 1, FILL_CHAR, bufsize - (written + 1))) {
 		pr_warn("vsnprintf(buf, %d, \"%s\", ...) wrote beyond the nul-terminator\n",
 			bufsize, fmt);
+		return 1;
+	}
+
+	if (memchr_inv(test_buffer + bufsize, FILL_CHAR, BUF_SIZE + PAD_SIZE - bufsize)) {
+		pr_warn("vsnprintf(buf, %d, \"%s\", ...) wrote beyond buffer\n", bufsize, fmt);
 		return 1;
 	}
 
@@ -115,7 +125,7 @@ __test(const char *expect, int elen, const char *fmt, ...)
 	 * be able to print it as expected.
 	 */
 	failed_tests += do_test(BUF_SIZE, expect, elen, fmt, ap);
-	rand = 1 + prandom_u32_max(elen+1);
+	rand = get_random_u32_inclusive(1, elen + 1);
 	/* Since elen < BUF_SIZE, we have 1 <= rand <= BUF_SIZE. */
 	failed_tests += do_test(rand, expect, elen, fmt, ap);
 	failed_tests += do_test(0, expect, elen, fmt, ap);
@@ -154,9 +164,11 @@ test_number(void)
 	test("0x1234abcd  ", "%#-12x", 0x1234abcd);
 	test("  0x1234abcd", "%#12x", 0x1234abcd);
 	test("0|001| 12|+123| 1234|-123|-1234", "%d|%03d|%3d|%+d|% d|%+d|% d", 0, 1, 12, 123, 1234, -123, -1234);
-	test("0|1|1|128|255", "%hhu|%hhu|%hhu|%hhu|%hhu", 0, 1, 257, 128, -1);
-	test("0|1|1|-128|-1", "%hhd|%hhd|%hhd|%hhd|%hhd", 0, 1, 257, 128, -1);
-	test("2015122420151225", "%ho%ho%#ho", 1037, 5282, -11627);
+	NOWARN(-Wformat, "Intentionally test narrowing conversion specifiers.", {
+		test("0|1|1|128|255", "%hhu|%hhu|%hhu|%hhu|%hhu", 0, 1, 257, 128, -1);
+		test("0|1|1|-128|-1", "%hhd|%hhd|%hhd|%hhd|%hhd", 0, 1, 257, 128, -1);
+		test("2015122420151225", "%ho%ho%#ho", 1037, 5282, -11627);
+	})
 	/*
 	 * POSIX/C99: »The result of converting zero with an explicit
 	 * precision of zero shall be no characters.« Hence the output
@@ -166,18 +178,6 @@ test_number(void)
 	 * behaviour.
 	 */
 	test("00|0|0|0|0", "%.2d|%.1d|%.0d|%.*d|%1.0d", 0, 0, 0, 0, 0, 0);
-#ifndef __CHAR_UNSIGNED__
-	{
-		/*
-		 * Passing a 'char' to a %02x specifier doesn't do
-		 * what was presumably the intention when char is
-		 * signed and the value is negative. One must either &
-		 * with 0xff or cast to u8.
-		 */
-		char val = -16;
-		test("0xfffffff0|0xf0|0xf0", "%#02x|%#02x|%#02x", val, val & 0xff, (u8)val);
-	}
-#endif
 }
 
 static void __init
@@ -641,12 +641,26 @@ page_flags_test(int section, int node, int zone, int last_cpupid,
 	test(cmp_buf, "%pGp", &flags);
 }
 
+static void __init page_type_test(unsigned int page_type, const char *name,
+				  char *cmp_buf)
+{
+	unsigned long size;
+
+	size = scnprintf(cmp_buf, BUF_SIZE, "%#x(", page_type);
+	if (page_type_has_type(page_type))
+		size += scnprintf(cmp_buf + size, BUF_SIZE - size, "%s", name);
+
+	snprintf(cmp_buf + size, BUF_SIZE - size, ")");
+	test(cmp_buf, "%pGt", &page_type);
+}
+
 static void __init
 flags(void)
 {
 	unsigned long flags;
 	char *cmp_buffer;
 	gfp_t gfp;
+	unsigned int page_type;
 
 	cmp_buffer = kmalloc(BUF_SIZE, GFP_KERNEL);
 	if (!cmp_buffer)
@@ -673,49 +687,59 @@ flags(void)
 	gfp = GFP_ATOMIC|__GFP_DMA;
 	test("GFP_ATOMIC|GFP_DMA", "%pGg", &gfp);
 
-	gfp = __GFP_ATOMIC;
-	test("__GFP_ATOMIC", "%pGg", &gfp);
+	gfp = __GFP_HIGH;
+	test("__GFP_HIGH", "%pGg", &gfp);
 
 	/* Any flags not translated by the table should remain numeric */
 	gfp = ~__GFP_BITS_MASK;
 	snprintf(cmp_buffer, BUF_SIZE, "%#lx", (unsigned long) gfp);
 	test(cmp_buffer, "%pGg", &gfp);
 
-	snprintf(cmp_buffer, BUF_SIZE, "__GFP_ATOMIC|%#lx",
+	snprintf(cmp_buffer, BUF_SIZE, "__GFP_HIGH|%#lx",
 							(unsigned long) gfp);
-	gfp |= __GFP_ATOMIC;
+	gfp |= __GFP_HIGH;
 	test(cmp_buffer, "%pGg", &gfp);
+
+	page_type = ~0;
+	page_type_test(page_type, "", cmp_buffer);
+
+	page_type = 10;
+	page_type_test(page_type, "", cmp_buffer);
+
+	page_type = ~PG_buddy;
+	page_type_test(page_type, "buddy", cmp_buffer);
+
+	page_type = ~(PG_table | PG_buddy);
+	page_type_test(page_type, "table|buddy", cmp_buffer);
 
 	kfree(cmp_buffer);
 }
 
 static void __init fwnode_pointer(void)
 {
-	const struct software_node softnodes[] = {
-		{ .name = "first", },
-		{ .name = "second", .parent = &softnodes[0], },
-		{ .name = "third", .parent = &softnodes[1], },
-		{ NULL /* Guardian */ }
-	};
-	const char * const full_name = "first/second/third";
+	const struct software_node first = { .name = "first" };
+	const struct software_node second = { .name = "second", .parent = &first };
+	const struct software_node third = { .name = "third", .parent = &second };
+	const struct software_node *group[] = { &first, &second, &third, NULL };
 	const char * const full_name_second = "first/second";
+	const char * const full_name_third = "first/second/third";
 	const char * const second_name = "second";
 	const char * const third_name = "third";
 	int rval;
 
-	rval = software_node_register_nodes(softnodes);
+	rval = software_node_register_node_group(group);
 	if (rval) {
 		pr_warn("cannot register softnodes; rval %d\n", rval);
 		return;
 	}
 
-	test(full_name_second, "%pfw", software_node_fwnode(&softnodes[1]));
-	test(full_name, "%pfw", software_node_fwnode(&softnodes[2]));
-	test(full_name, "%pfwf", software_node_fwnode(&softnodes[2]));
-	test(second_name, "%pfwP", software_node_fwnode(&softnodes[1]));
-	test(third_name, "%pfwP", software_node_fwnode(&softnodes[2]));
+	test(full_name_second, "%pfw", software_node_fwnode(&second));
+	test(full_name_third, "%pfw", software_node_fwnode(&third));
+	test(full_name_third, "%pfwf", software_node_fwnode(&third));
+	test(second_name, "%pfwP", software_node_fwnode(&second));
+	test(third_name, "%pfwP", software_node_fwnode(&third));
 
-	software_node_unregister_nodes(softnodes);
+	software_node_unregister_node_group(group);
 }
 
 static void __init fourcc_pointer(void)

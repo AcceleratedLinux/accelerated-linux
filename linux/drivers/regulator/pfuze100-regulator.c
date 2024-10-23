@@ -680,12 +680,12 @@ static const struct regmap_config pfuze_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = PFUZE_NUMREGS - 1,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
-static int pfuze100_regulator_probe(struct i2c_client *client,
-				    const struct i2c_device_id *id)
+static int pfuze100_regulator_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct pfuze_chip *pfuze_chip;
 	struct regulator_config config = { };
 	int i, ret;
@@ -699,8 +699,7 @@ static int pfuze100_regulator_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	if (client->dev.of_node) {
-		match = of_match_device(of_match_ptr(pfuze_dt_ids),
-				&client->dev);
+		match = of_match_device(pfuze_dt_ids, &client->dev);
 		if (!match) {
 			dev_err(&client->dev, "Error: No device match found\n");
 			return -ENODEV;
@@ -766,7 +765,7 @@ static int pfuze100_regulator_probe(struct i2c_client *client,
 		((pfuze_chip->chip_id == PFUZE3000) ? "3000" : "3001"))));
 
 	memcpy(pfuze_chip->regulator_descs, pfuze_chip->pfuze_regulators,
-		sizeof(pfuze_chip->regulator_descs));
+		regulator_num * sizeof(struct pfuze_regulator));
 
 	ret = pfuze_parse_regulators_dt(pfuze_chip);
 	if (ret)
@@ -845,6 +844,7 @@ static int pfuze100_regulator_probe(struct i2c_client *client,
 static struct i2c_driver pfuze_driver = {
 	.driver = {
 		.name = "pfuze100-regulator",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.of_match_table = pfuze_dt_ids,
 	},
 	.probe = pfuze100_regulator_probe,

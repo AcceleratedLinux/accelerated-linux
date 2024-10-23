@@ -176,6 +176,8 @@ int mlx5r_umr_resource_init(struct mlx5_ib_dev *dev)
 	dev->umrc.pd = pd;
 
 	sema_init(&dev->umrc.sem, MAX_UMR_WR);
+	mutex_init(&dev->umrc.lock);
+	dev->umrc.state = MLX5_UMR_STATE_ACTIVE;
 
 	return 0;
 
@@ -190,9 +192,36 @@ destroy_pd:
 
 void mlx5r_umr_resource_cleanup(struct mlx5_ib_dev *dev)
 {
+	if (dev->umrc.state == MLX5_UMR_STATE_UNINIT)
+		return;
 	ib_destroy_qp(dev->umrc.qp);
 	ib_free_cq(dev->umrc.cq);
 	ib_dealloc_pd(dev->umrc.pd);
+}
+
+static int mlx5r_umr_recover(struct mlx5_ib_dev *dev)
+{
+	struct umr_common *umrc = &dev->umrc;
+	struct ib_qp_attr attr;
+	int err;
+
+	attr.qp_state = IB_QPS_RESET;
+	err = ib_modify_qp(umrc->qp, &attr, IB_QP_STATE);
+	if (err) {
+		mlx5_ib_dbg(dev, "Couldn't modify UMR QP\n");
+		goto err;
+	}
+
+	err = mlx5r_umr_qp_rst2rts(dev, umrc->qp);
+	if (err)
+		goto err;
+
+	umrc->state = MLX5_UMR_STATE_ACTIVE;
+	return 0;
+
+err:
+	umrc->state = MLX5_UMR_STATE_ERR;
+	return err;
 }
 
 static int mlx5r_umr_post_send(struct ib_qp *ibqp, u32 mkey, struct ib_cqe *cqe,
@@ -231,7 +260,7 @@ static int mlx5r_umr_post_send(struct ib_qp *ibqp, u32 mkey, struct ib_cqe *cqe,
 
 	id.ib_cqe = cqe;
 	mlx5r_finish_wqe(qp, ctrl, seg, size, cur_edge, idx, id.wr_id, 0,
-			 MLX5_FENCE_MODE_NONE, MLX5_OPCODE_UMR);
+			 MLX5_FENCE_MODE_INITIATOR_SMALL, MLX5_OPCODE_UMR);
 
 	mlx5r_ring_db(qp, 1, ctrl);
 
@@ -270,17 +299,49 @@ static int mlx5r_umr_post_send_wait(struct mlx5_ib_dev *dev, u32 mkey,
 	mlx5r_umr_init_context(&umr_context);
 
 	down(&umrc->sem);
-	err = mlx5r_umr_post_send(umrc->qp, mkey, &umr_context.cqe, wqe,
-				  with_data);
-	if (err)
-		mlx5_ib_warn(dev, "UMR post send failed, err %d\n", err);
-	else {
-		wait_for_completion(&umr_context.done);
-		if (umr_context.status != IB_WC_SUCCESS) {
-			mlx5_ib_warn(dev, "reg umr failed (%u)\n",
-				     umr_context.status);
+	while (true) {
+		mutex_lock(&umrc->lock);
+		if (umrc->state == MLX5_UMR_STATE_ERR) {
+			mutex_unlock(&umrc->lock);
 			err = -EFAULT;
+			break;
 		}
+
+		if (umrc->state == MLX5_UMR_STATE_RECOVER) {
+			mutex_unlock(&umrc->lock);
+			usleep_range(3000, 5000);
+			continue;
+		}
+
+		err = mlx5r_umr_post_send(umrc->qp, mkey, &umr_context.cqe, wqe,
+					  with_data);
+		mutex_unlock(&umrc->lock);
+		if (err) {
+			mlx5_ib_warn(dev, "UMR post send failed, err %d\n",
+				     err);
+			break;
+		}
+
+		wait_for_completion(&umr_context.done);
+
+		if (umr_context.status == IB_WC_SUCCESS)
+			break;
+
+		if (umr_context.status == IB_WC_WR_FLUSH_ERR)
+			continue;
+
+		WARN_ON_ONCE(1);
+		mlx5_ib_warn(dev,
+			"reg umr failed (%u). Trying to recover and resubmit the flushed WQEs, mkey = %u\n",
+			umr_context.status, mkey);
+		mutex_lock(&umrc->lock);
+		err = mlx5r_umr_recover(dev);
+		mutex_unlock(&umrc->lock);
+		if (err)
+			mlx5_ib_warn(dev, "couldn't recover UMR, err %d\n",
+				     err);
+		err = -EFAULT;
+		break;
 	}
 	up(&umrc->sem);
 	return err;
@@ -319,6 +380,10 @@ static void mlx5r_umr_set_access_flags(struct mlx5_ib_dev *dev,
 				       struct mlx5_mkey_seg *seg,
 				       unsigned int access_flags)
 {
+	bool ro_read = (access_flags & IB_ACCESS_RELAXED_ORDERING) &&
+		       (MLX5_CAP_GEN(dev->mdev, relaxed_ordering_read) ||
+			pcie_relaxed_ordering_enabled(dev->mdev->pdev));
+
 	MLX5_SET(mkc, seg, a, !!(access_flags & IB_ACCESS_REMOTE_ATOMIC));
 	MLX5_SET(mkc, seg, rw, !!(access_flags & IB_ACCESS_REMOTE_WRITE));
 	MLX5_SET(mkc, seg, rr, !!(access_flags & IB_ACCESS_REMOTE_READ));
@@ -326,8 +391,7 @@ static void mlx5r_umr_set_access_flags(struct mlx5_ib_dev *dev,
 	MLX5_SET(mkc, seg, lr, 1);
 	MLX5_SET(mkc, seg, relaxed_ordering_write,
 		 !!(access_flags & IB_ACCESS_RELAXED_ORDERING));
-	MLX5_SET(mkc, seg, relaxed_ordering_read,
-		 !!(access_flags & IB_ACCESS_RELAXED_ORDERING));
+	MLX5_SET(mkc, seg, relaxed_ordering_read, ro_read);
 }
 
 int mlx5r_umr_rereg_pd_access(struct mlx5_ib_mr *mr, struct ib_pd *pd,
@@ -357,7 +421,7 @@ int mlx5r_umr_rereg_pd_access(struct mlx5_ib_mr *mr, struct ib_pd *pd,
 }
 
 #define MLX5_MAX_UMR_CHUNK                                                     \
-	((1 << (MLX5_MAX_UMR_SHIFT + 4)) - MLX5_UMR_MTT_ALIGNMENT)
+	((1 << (MLX5_MAX_UMR_SHIFT + 4)) - MLX5_UMR_FLEX_ALIGNMENT)
 #define MLX5_SPARE_UMR_CHUNK 0x10000
 
 /*
@@ -367,11 +431,11 @@ int mlx5r_umr_rereg_pd_access(struct mlx5_ib_mr *mr, struct ib_pd *pd,
  */
 static void *mlx5r_umr_alloc_xlt(size_t *nents, size_t ent_size, gfp_t gfp_mask)
 {
-	const size_t xlt_chunk_align = MLX5_UMR_MTT_ALIGNMENT / ent_size;
+	const size_t xlt_chunk_align = MLX5_UMR_FLEX_ALIGNMENT / ent_size;
 	size_t size;
 	void *res = NULL;
 
-	static_assert(PAGE_SIZE % MLX5_UMR_MTT_ALIGNMENT == 0);
+	static_assert(PAGE_SIZE % MLX5_UMR_FLEX_ALIGNMENT == 0);
 
 	/*
 	 * MLX5_IB_UPD_XLT_ATOMIC doesn't signal an atomic context just that the
@@ -575,9 +639,7 @@ int mlx5r_umr_update_mr_pas(struct mlx5_ib_mr *mr, unsigned int flags)
 	mlx5r_umr_set_update_xlt_data_seg(&wqe.data_seg, &sg);
 
 	cur_mtt = mtt;
-	rdma_for_each_block(mr->umem->sgt_append.sgt.sgl, &biter,
-			    mr->umem->sgt_append.sgt.nents,
-			    BIT(mr->page_shift)) {
+	rdma_umem_for_each_dma_block(mr->umem, &biter, BIT(mr->page_shift)) {
 		if (cur_mtt == (void *)mtt + sg.length) {
 			dma_sync_single_for_device(ddev, sg.addr, sg.length,
 						   DMA_TO_DEVICE);
@@ -605,7 +667,7 @@ int mlx5r_umr_update_mr_pas(struct mlx5_ib_mr *mr, unsigned int flags)
 	}
 
 	final_size = (void *)cur_mtt - (void *)mtt;
-	sg.length = ALIGN(final_size, MLX5_UMR_MTT_ALIGNMENT);
+	sg.length = ALIGN(final_size, MLX5_UMR_FLEX_ALIGNMENT);
 	memset(cur_mtt, 0, sg.length - final_size);
 	mlx5r_umr_final_update_xlt(dev, &wqe, mr, &sg, flags);
 
@@ -629,7 +691,7 @@ int mlx5r_umr_update_xlt(struct mlx5_ib_mr *mr, u64 idx, int npages,
 	int desc_size = (flags & MLX5_IB_UPD_XLT_INDIRECT)
 			       ? sizeof(struct mlx5_klm)
 			       : sizeof(struct mlx5_mtt);
-	const int page_align = MLX5_UMR_MTT_ALIGNMENT / desc_size;
+	const int page_align = MLX5_UMR_FLEX_ALIGNMENT / desc_size;
 	struct mlx5_ib_dev *dev = mr_to_mdev(mr);
 	struct device *ddev = &dev->mdev->pdev->dev;
 	const int page_mask = page_align - 1;
@@ -650,7 +712,7 @@ int mlx5r_umr_update_xlt(struct mlx5_ib_mr *mr, u64 idx, int npages,
 	if (WARN_ON(!mr->umem->is_odp))
 		return -EINVAL;
 
-	/* UMR copies MTTs in units of MLX5_UMR_MTT_ALIGNMENT bytes,
+	/* UMR copies MTTs in units of MLX5_UMR_FLEX_ALIGNMENT bytes,
 	 * so we need to align the offset and length accordingly
 	 */
 	if (idx & page_mask) {
@@ -687,7 +749,7 @@ int mlx5r_umr_update_xlt(struct mlx5_ib_mr *mr, u64 idx, int npages,
 		mlx5_odp_populate_xlt(xlt, idx, npages, mr, flags);
 		dma_sync_single_for_device(ddev, sg.addr, sg.length,
 					   DMA_TO_DEVICE);
-		sg.length = ALIGN(size_to_map, MLX5_UMR_MTT_ALIGNMENT);
+		sg.length = ALIGN(size_to_map, MLX5_UMR_FLEX_ALIGNMENT);
 
 		if (pages_mapped + pages_iter >= pages_to_map)
 			mlx5r_umr_final_update_xlt(dev, &wqe, mr, &sg, flags);

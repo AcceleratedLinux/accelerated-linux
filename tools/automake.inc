@@ -32,8 +32,8 @@ CONFOPTS += --enable-malloc0returnsnull
 #
 # make sure LD does the right thing during configure if invoked directly
 #
-LDFLAGS  += -Wl,-L$(STAGEDIR)/lib -Wl,-rpath-link -Wl,$(STAGEDIR)/lib
-LDFLAGS  += -Wl,-L$(STAGEDIR)/lib64 -Wl,-rpath-link -Wl,$(STAGEDIR)/lib64
+LDFLAGS  += -Wl,-L$(STAGEDIR)/lib -Wl,-rpath-link=$(STAGEDIR)/lib
+LDFLAGS  += -Wl,-L$(STAGEDIR)/lib64 -Wl,-rpath-link=$(STAGEDIR)/lib64
 
 #
 # force using our special libtool

@@ -1,20 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * NXP Wireless LAN device driver: station TX data handling
  *
  * Copyright 2011-2020 NXP
- *
- * This software file (the "File") is distributed by NXP
- * under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  */
 
 #include "decl.h"
@@ -41,8 +29,8 @@
  *      - Priority specific Tx control
  *      - Flags
  */
-void *mwifiex_process_sta_txpd(struct mwifiex_private *priv,
-				struct sk_buff *skb)
+void mwifiex_process_sta_txpd(struct mwifiex_private *priv,
+			      struct sk_buff *skb)
 {
 	struct mwifiex_adapter *adapter = priv->adapter;
 	struct txpd *local_tx_pd;
@@ -50,15 +38,6 @@ void *mwifiex_process_sta_txpd(struct mwifiex_private *priv,
 	unsigned int pad;
 	u16 pkt_type, pkt_offset;
 	int hroom = adapter->intf_hdr_len;
-
-	if (!skb->len) {
-		mwifiex_dbg(adapter, ERROR,
-			    "Tx: bad packet length: %d\n", skb->len);
-		tx_info->status_code = -1;
-		return skb->data;
-	}
-
-	BUG_ON(skb_headroom(skb) < MWIFIEX_MIN_DATA_HEADER_LEN);
 
 	pkt_type = mwifiex_is_skb_mgmt_frame(skb) ? PKT_TYPE_MGMT : 0;
 
@@ -121,8 +100,6 @@ void *mwifiex_process_sta_txpd(struct mwifiex_private *priv,
 	if (!local_tx_pd->tx_control)
 		/* TxCtrl set by user or default */
 		local_tx_pd->tx_control = cpu_to_le32(priv->pkt_tx_ctrl);
-
-	return skb->data;
 }
 
 /*

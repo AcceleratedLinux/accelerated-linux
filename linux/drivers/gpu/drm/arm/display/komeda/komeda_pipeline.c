@@ -4,6 +4,9 @@
  * Author: James.Qian.Wang <james.qian.wang@arm.com>
  *
  */
+#include <linux/of.h>
+#include <linux/seq_file.h>
+
 #include <drm/drm_print.h>
 
 #include "komeda_dev.h"

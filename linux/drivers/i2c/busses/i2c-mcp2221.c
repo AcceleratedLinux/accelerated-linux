@@ -39,6 +39,7 @@
 #include <linux/usb.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
+#include <linux/gpio/driver.h>
 
 #define DRIVER_NAME		"i2c-mcp2221"
 

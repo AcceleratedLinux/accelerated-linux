@@ -1,0 +1,59 @@
+From 8bd3c2df6f388618b3859245ef2fdf6ac9625e01 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 29 Feb 2024 14:12:37 +0000
+Subject: [PATCH] driver_ubx: always output NMEA sentences instead of UBX-NAV
+ messages
+
+When gpsd detects a u-blox device, it configures the device to output
+binary UBX-NAV messages instead of NMEA sentences. gpsd clients that
+require NMEA sentences (such as the DAL location service) are supplied
+with pseudo-NMEA sentences reconstructed by gpsd using the pseudonmea.c
+module. However, pseudonmea.c is not a complete implementation: the RMC
+message is known to incorrectly omit the mode indicator field; and
+perhaps there are other errors too?
+
+Previous versions of gpsd (specifically, 3.18 was in use) were not as
+good at detecting the u-blox module and so used the NMEA0183 driver
+instead, resulting in native NMEA sentences from the device being
+forwarded directly to clients. Since this is behaviour we want to retain
+(obviating the risk of errors creeping in as a result of the
+reconstruction of pseudo-NMEA sentences), we now force the u-blox driver
+to always output NMEA sentences (which appear to be forwarded directly
+to gpsd clients) instead of binary UBX-NAV messages.
+
+Also, work around a second issue, which resulted in the device not being
+programmed with the output rate (i.e. enabled to send) of GGA sentences.
+This was incorrectly causing the device not to send GGA sentences. It
+seems that the immediately-preceeding UBX-CFG-PRT command, which
+configures physical serial port parameters on the device, was causing
+the next command (a UBX-CFG-MSG command to write the GGA sentence output
+rate) to be missed. We now repeat this latter command after setting up
+the other sentence output rates, to ensure it takes effect.
+---
+ drivers/driver_ubx.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/driver_ubx.c b/drivers/driver_ubx.c
+index 7803449..7cb2820 100644
+--- a/drivers/driver_ubx.c
++++ b/drivers/driver_ubx.c
+@@ -4310,7 +4310,7 @@ static gps_mask_t ubx_cfg_prt(struct gps_device_t *session, speed_t speed,
+              session->driver.ubx.protver);
+ 
+     // selectively enable output protocols
+-    if (mode == MODE_NMEA) {
++    if (1) {
+         /*
+          * We have to club the GR601-W over the head to make it stop emitting
+          * UBX after we've told it to start.  But do not mung the
+@@ -4331,6 +4331,7 @@ static gps_mask_t ubx_cfg_prt(struct gps_device_t *session, speed_t speed,
+             0x07,          // msg id  = GST, GNSS pseudorange error statistics
+             0x08,          // msg id  = ZDA, for UTC year
+             0x09,          // msg id  = GBS, for RAIM errors
++            0x00,          // msg id  = GGA
+         };
+ 
+         const unsigned char ubx_nav_off[] = {
+-- 
+2.34.1
+

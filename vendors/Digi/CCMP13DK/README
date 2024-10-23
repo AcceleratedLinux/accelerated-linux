@@ -1,0 +1,54 @@
+
+First time setup for Digi CCMP13 Dev Kit
+========================================
+
+Setup the console and check you have access to the U-Boot command line.
+The instructions in this file assume that you are using the DEY U-Boot build,
+or that you have a U-Boot image built by DAL already loaded on the board.
+You will also need a second Micro USB cable, to connect to the "USB OTG" port.
+
+To install the DAL image, you will need NXP's `uuu` utility installed
+and on your PATH.
+
+
+BUILD DAL ARTIFACTS
+-------------------
+
+Build DAL like usual (i.e. `make Digi/CCMP13DK_default`).
+
+
+INSTALL THE FIRMWARE
+--------------------
+
+Open a serial terminal to the port exposed by the "CONSOLE" micro USB header
+(where a Cypress USB-to-serial adapter will enumerate), 115200/8/N/1.
+
+Reset or power-cycle the board, and when you see
+"Hit any key to stop autoboot:", press Enter to get to the U-Boot
+command line (prompt `=> `).
+
+In the U-Boot command line, run `fastboot 0`. Ensure that you are also
+connected to the USB OTG connector of the dev kit.
+
+Finally, to install your DAL build, cd to the accelerated-linux root directory
+and run:
+
+    vendors/Digi/CCMP13DK/install_dal.sh
+
+To force a reformatting of the UBI partitions, pass the `-r` flag.
+To skip the 10-second wait, pass the `-n` flag.
+To program only certain partitions, pass the `-o` flag; this flag accepts
+"boot" (TF-A, OP-TEE and U-Boot), "image" (only program the first copy)
+or "images" (program image and image1).
+
+Watch the serial console, and wait for the DAL prompt:
+
+    Digi International, Inc.
+    https://www.digi.com
+
+    #
+
+At the time of this writing (3/10/2023), we have the build configured such that
+the gigabit Ethernet port on the board is active and defaults to DHCP.
+Once you get an IP address, you can use the web UI or SSH into the device.
+Username: admin , password: default

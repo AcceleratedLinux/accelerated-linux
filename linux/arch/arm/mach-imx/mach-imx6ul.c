@@ -5,8 +5,8 @@
 #include <linux/irqchip.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mfd/syscon/imx6q-iomuxc-gpr.h>
-#include <linux/micrel_phy.h>
 #include <linux/of_platform.h>
+#include <linux/sys_soc.h>
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <asm/mach/arch.h>
@@ -16,21 +16,37 @@
 #include "cpuidle.h"
 #include "hardware.h"
 
-static void __init imx6ul_enet_clk_init(void)
+/*
+ * Fixup for ConnectIT4 WAN port not coming up.
+ * The clock enable and tx direction setting for ENET1 (the WAN port of a
+ * ConnectIT4) that are part of the IOMUXC_GPR_GPR1 register needs to be set
+ * for the kernels iMX6 clocking to detect it and configure it correctly.
+ * If these bits are not set then the iMX6 clk driver will incorrectly set
+ * the muxing of "enet1_ref" clock and will not configure and enable
+ * "enet1_ref_125m" (see drivers/clk/imx/clk-imx6ul.c). Most platforms seem
+ * to get this right in the boot loader and nothing is needed from the Linux
+ * kernel itself.
+ *
+ * Note that these bits must be set very early - before the kernels clock
+ * driver initializes the system clocks. That is before the usual init_early()
+ * or machine_init() hooks are run. But it does have to be after the IO
+ * mapping is in place (so something like dt_fixup is too early). The only
+ * viable solution is the init_irq hook.
+ */
+static void __init imx6ul_enet_fixup(void)
 {
-	struct regmap *gpr;
+	if (of_machine_is_compatible("digi,connectit4")) {
+		struct regmap *gpr;
 
-	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6ul-iomuxc-gpr");
-	if (!IS_ERR(gpr))
-		regmap_update_bits(gpr, IOMUXC_GPR1, IMX6UL_GPR1_ENET_CLK_DIR,
-				   IMX6UL_GPR1_ENET_CLK_OUTPUT);
-	else
-		pr_err("failed to find fsl,imx6ul-iomux-gpr regmap\n");
-}
-
-static inline void imx6ul_enet_init(void)
-{
-	imx6ul_enet_clk_init();
+		pr_info("ConnectIT4: forcing GPR1_CLK_ENET1_OUTPUT\n");
+		gpr = syscon_regmap_lookup_by_compatible("fsl,imx6ul-iomuxc-gpr");
+		if (!IS_ERR(gpr))
+			regmap_update_bits(gpr, IOMUXC_GPR1,
+				IMX6UL_GPR1_ENET_CLK_DIR,
+				IMX6UL_GPR1_ENET_CLK_OUTPUT);
+		else
+			pr_err("ConnectIT4: failed to map fsl,imx6ul-iomuxc-gpr\n");
+	}
 }
 
 static void __init imx6ul_init_machine(void)
@@ -39,7 +55,6 @@ static void __init imx6ul_init_machine(void)
 		imx_get_soc_revision());
 
 	of_platform_default_populate(NULL, NULL, NULL);
-	imx6ul_enet_init();
 	imx_anatop_init();
 	imx6ul_pm_init();
 }
@@ -50,6 +65,7 @@ static void __init imx6ul_init_irq(void)
 	imx_src_init();
 	irqchip_init();
 	imx6_pm_ccm_init("fsl,imx6ul-ccm");
+	imx6ul_enet_fixup();
 }
 
 static void __init imx6ul_init_late(void)
@@ -63,6 +79,7 @@ static void __init imx6ul_init_late(void)
 static const char * const imx6ul_dt_compat[] __initconst = {
 	"fsl,imx6ul",
 	"fsl,imx6ull",
+	"fsl,imx6ulz",
 	NULL,
 };
 

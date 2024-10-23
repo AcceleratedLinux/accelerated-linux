@@ -4,6 +4,7 @@
  * Copyright 2005-2006, Devicescape Software, Inc.
  * Copyright (c) 2006 Jiri Benc <jbenc@suse.cz>
  * Copyright 2017	Intel Deutschland GmbH
+ * Copyright (C) 2019, 2022-2024 Intel Corporation
  */
 
 #include <linux/kernel.h>
@@ -36,14 +37,14 @@ void rate_control_rate_init(struct sta_info *sta)
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_chanctx_conf *chanctx_conf;
 
-	ieee80211_sta_set_rx_nss(sta);
+	ieee80211_sta_init_nss(&sta->deflink);
 
 	if (!ref)
 		return;
 
 	rcu_read_lock();
 
-	chanctx_conf = rcu_dereference(sta->sdata->vif.chanctx_conf);
+	chanctx_conf = rcu_dereference(sta->sdata->vif.bss_conf.chanctx_conf);
 	if (WARN_ON(!chanctx_conf)) {
 		rcu_read_unlock();
 		return;
@@ -67,15 +68,17 @@ void rate_control_rate_init(struct sta_info *sta)
 }
 
 void rate_control_tx_status(struct ieee80211_local *local,
-			    struct ieee80211_supported_band *sband,
 			    struct ieee80211_tx_status *st)
 {
 	struct rate_control_ref *ref = local->rate_ctrl;
 	struct sta_info *sta = container_of(st->sta, struct sta_info, sta);
 	void *priv_sta = sta->rate_ctrl_priv;
+	struct ieee80211_supported_band *sband;
 
 	if (!ref || !test_sta_flag(sta, WLAN_STA_RATE_CONTROL))
 		return;
+
+	sband = local->hw.wiphy->bands[st->info->band];
 
 	spin_lock_bh(&sta->rate_ctrl_lock);
 	if (ref->ops->tx_status_ext)
@@ -89,18 +92,21 @@ void rate_control_tx_status(struct ieee80211_local *local,
 }
 
 void rate_control_rate_update(struct ieee80211_local *local,
-				    struct ieee80211_supported_band *sband,
-				    struct sta_info *sta, u32 changed)
+			      struct ieee80211_supported_band *sband,
+			      struct sta_info *sta, unsigned int link_id,
+			      u32 changed)
 {
 	struct rate_control_ref *ref = local->rate_ctrl;
 	struct ieee80211_sta *ista = &sta->sta;
 	void *priv_sta = sta->rate_ctrl_priv;
 	struct ieee80211_chanctx_conf *chanctx_conf;
 
+	WARN_ON(link_id != 0);
+
 	if (ref && ref->ops->rate_update) {
 		rcu_read_lock();
 
-		chanctx_conf = rcu_dereference(sta->sdata->vif.chanctx_conf);
+		chanctx_conf = rcu_dereference(sta->sdata->vif.bss_conf.chanctx_conf);
 		if (WARN_ON(!chanctx_conf)) {
 			rcu_read_unlock();
 			return;
@@ -112,7 +118,9 @@ void rate_control_rate_update(struct ieee80211_local *local,
 		spin_unlock_bh(&sta->rate_ctrl_lock);
 		rcu_read_unlock();
 	}
-	drv_sta_rc_update(local, sta->sdata, &sta->sta, changed);
+
+	if (sta->uploaded)
+		drv_sta_rc_update(local, sta->sdata, &sta->sta, changed);
 }
 
 int ieee80211_rate_control_register(const struct rate_control_ops *ops)
@@ -263,17 +271,18 @@ static void rate_control_free(struct ieee80211_local *local,
 	kfree(ctrl_ref);
 }
 
-void ieee80211_check_rate_mask(struct ieee80211_sub_if_data *sdata)
+void ieee80211_check_rate_mask(struct ieee80211_link_data *link)
 {
+	struct ieee80211_sub_if_data *sdata = link->sdata;
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_supported_band *sband;
-	u32 user_mask, basic_rates = sdata->vif.bss_conf.basic_rates;
+	u32 user_mask, basic_rates = link->conf->basic_rates;
 	enum nl80211_band band;
 
-	if (WARN_ON(!sdata->vif.bss_conf.chandef.chan))
+	if (WARN_ON(!link->conf->chanreq.oper.chan))
 		return;
 
-	band = sdata->vif.bss_conf.chandef.chan->band;
+	band = link->conf->chanreq.oper.chan->band;
 	if (band == NL80211_BAND_S1GHZ) {
 		/* TODO */
 		return;
@@ -753,7 +762,7 @@ static bool rate_control_cap_mask(struct ieee80211_sub_if_data *sdata,
 	u32 i, flags;
 
 	*mask = sdata->rc_rateidx_mask[sband->band];
-	flags = ieee80211_chandef_rate_flags(&sdata->vif.bss_conf.chandef);
+	flags = ieee80211_chandef_rate_flags(&sdata->vif.bss_conf.chanreq.oper);
 	for (i = 0; i < sband->n_bitrates; i++) {
 		if ((flags & sband->bitrates[i].flags) != flags)
 			*mask &= ~BIT(i);
@@ -809,7 +818,7 @@ rate_control_apply_mask_ratetbl(struct sta_info *sta,
 				   mcs_mask, vht_mask))
 		return;
 
-	chan_width = sta->sdata->vif.bss_conf.chandef.width;
+	chan_width = sta->sdata->vif.bss_conf.chanreq.oper.width;
 	for (i = 0; i < IEEE80211_TX_RATE_TABLE_SIZE; i++) {
 		if (rates->rate[i].idx < 0)
 			break;
@@ -846,7 +855,7 @@ static void rate_control_apply_mask(struct ieee80211_sub_if_data *sdata,
 	 * included in the configured mask and change the rate indexes
 	 * if needed.
 	 */
-	chan_width = sdata->vif.bss_conf.chandef.width;
+	chan_width = sdata->vif.bss_conf.chanreq.oper.width;
 	for (i = 0; i < max_rates; i++) {
 		/* Skip invalid rates */
 		if (rates[i].idx < 0)
@@ -868,6 +877,7 @@ void ieee80211_get_tx_rates(struct ieee80211_vif *vif,
 	struct ieee80211_sub_if_data *sdata;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_supported_band *sband;
+	u32 mask = ~0;
 
 	rate_control_fill_sta_table(sta, info, dest, max_rates);
 
@@ -880,9 +890,12 @@ void ieee80211_get_tx_rates(struct ieee80211_vif *vif,
 	if (ieee80211_is_tx_data(skb))
 		rate_control_apply_mask(sdata, sta, sband, dest, max_rates);
 
+	if (!(info->control.flags & IEEE80211_TX_CTRL_SCAN_TX))
+		mask = sdata->rc_rateidx_mask[info->band];
+
 	if (dest[0].idx < 0)
 		__rate_control_send_low(&sdata->local->hw, sband, sta, info,
-					sdata->rc_rateidx_mask[info->band]);
+					mask);
 
 	if (sta)
 		rate_fixup_ratelist(vif, sband, info, dest, max_rates);

@@ -95,7 +95,7 @@ int bnxt_set_vf_spoofchk(struct net_device *dev, int vf_id, bool setting)
 	/*TODO: if the driver supports VLAN filter on guest VLAN,
 	 * the spoof check should also include vlan anti-spoofing
 	 */
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (!rc) {
 		req->fid = cpu_to_le16(vf->fw_fid);
 		req->flags = cpu_to_le32(func_flags);
@@ -146,7 +146,7 @@ static int bnxt_hwrm_set_trusted_vf(struct bnxt *bp, struct bnxt_vf_info *vf)
 	if (!(bp->fw_cap & BNXT_FW_CAP_TRUSTED_VF))
 		return 0;
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (rc)
 		return rc;
 
@@ -232,7 +232,7 @@ int bnxt_set_vf_mac(struct net_device *dev, int vf_id, u8 *mac)
 	}
 	vf = &bp->pf.vf[vf_id];
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (rc)
 		return rc;
 
@@ -274,7 +274,7 @@ int bnxt_set_vf_vlan(struct net_device *dev, int vf_id, u16 vlan_id, u8 qos,
 	if (vlan_tag == vf->vlan)
 		return 0;
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (!rc) {
 		req->fid = cpu_to_le16(vf->fw_fid);
 		req->dflt_vlan = cpu_to_le16(vlan_tag);
@@ -307,14 +307,14 @@ int bnxt_set_vf_bw(struct net_device *dev, int vf_id, int min_tx_rate,
 		return -EINVAL;
 	}
 
-	if (min_tx_rate > pf_link_speed || min_tx_rate > max_tx_rate) {
+	if (min_tx_rate > pf_link_speed) {
 		netdev_info(bp->dev, "min tx rate %d is invalid for VF %d\n",
 			    min_tx_rate, vf_id);
 		return -EINVAL;
 	}
 	if (min_tx_rate == vf->min_tx_rate && max_tx_rate == vf->max_tx_rate)
 		return 0;
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (!rc) {
 		req->fid = cpu_to_le16(vf->fw_fid);
 		req->enables = cpu_to_le32(FUNC_CFG_REQ_ENABLES_MAX_BW |
@@ -491,7 +491,7 @@ static int __bnxt_set_vf_params(struct bnxt *bp, int vf_id)
 	struct bnxt_vf_info *vf;
 	int rc;
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (rc)
 		return rc;
 
@@ -536,7 +536,7 @@ static int bnxt_hwrm_func_vf_resc_cfg(struct bnxt *bp, int num_vfs, bool reset)
 	if (rc)
 		return rc;
 
-	if (bp->flags & BNXT_FLAG_CHIP_P5) {
+	if (bp->flags & BNXT_FLAG_CHIP_P5_PLUS) {
 		vf_msix = hw_resc->max_nqs - bnxt_nq_rings_in_use(bp);
 		vf_ring_grps = 0;
 	} else {
@@ -550,7 +550,6 @@ static int bnxt_hwrm_func_vf_resc_cfg(struct bnxt *bp, int num_vfs, bool reset)
 		vf_rx_rings = hw_resc->max_rx_rings - bp->rx_nr_rings;
 	vf_tx_rings = hw_resc->max_tx_rings - bp->tx_nr_rings;
 	vf_vnics = hw_resc->max_vnics - bp->nr_vnics;
-	vf_vnics = min_t(u16, vf_vnics, vf_rx_rings);
 	vf_rss = hw_resc->max_rsscos_ctxs - bp->rsscos_nr_ctxs;
 
 	req->min_rsscos_ctx = cpu_to_le16(BNXT_VF_MIN_RSS_CTX);
@@ -566,17 +565,26 @@ static int bnxt_hwrm_func_vf_resc_cfg(struct bnxt *bp, int num_vfs, bool reset)
 		req->min_l2_ctxs = cpu_to_le16(min);
 		req->min_vnics = cpu_to_le16(min);
 		req->min_stat_ctx = cpu_to_le16(min);
-		if (!(bp->flags & BNXT_FLAG_CHIP_P5))
+		if (!(bp->flags & BNXT_FLAG_CHIP_P5_PLUS))
 			req->min_hw_ring_grps = cpu_to_le16(min);
 	} else {
 		vf_cp_rings /= num_vfs;
 		vf_tx_rings /= num_vfs;
 		vf_rx_rings /= num_vfs;
-		vf_vnics /= num_vfs;
+		if ((bp->fw_cap & BNXT_FW_CAP_PRE_RESV_VNICS) &&
+		    vf_vnics >= pf->max_vfs) {
+			/* Take into account that FW has pre-reserved 1 VNIC for
+			 * each pf->max_vfs.
+			 */
+			vf_vnics = (vf_vnics - pf->max_vfs + num_vfs) / num_vfs;
+		} else {
+			vf_vnics /= num_vfs;
+		}
 		vf_stat_ctx /= num_vfs;
 		vf_ring_grps /= num_vfs;
 		vf_rss /= num_vfs;
 
+		vf_vnics = min_t(u16, vf_vnics, vf_rx_rings);
 		req->min_cmpl_rings = cpu_to_le16(vf_cp_rings);
 		req->min_tx_rings = cpu_to_le16(vf_tx_rings);
 		req->min_rx_rings = cpu_to_le16(vf_rx_rings);
@@ -594,7 +602,7 @@ static int bnxt_hwrm_func_vf_resc_cfg(struct bnxt *bp, int num_vfs, bool reset)
 	req->max_stat_ctx = cpu_to_le16(vf_stat_ctx);
 	req->max_hw_ring_grps = cpu_to_le16(vf_ring_grps);
 	req->max_rsscos_ctx = cpu_to_le16(vf_rss);
-	if (bp->flags & BNXT_FLAG_CHIP_P5)
+	if (bp->flags & BNXT_FLAG_CHIP_P5_PLUS)
 		req->max_msix = cpu_to_le16(vf_msix / num_vfs);
 
 	hwrm_req_hold(bp, req);
@@ -622,8 +630,8 @@ static int bnxt_hwrm_func_vf_resc_cfg(struct bnxt *bp, int num_vfs, bool reset)
 			le16_to_cpu(req->min_rsscos_ctx) * n;
 		hw_resc->max_stat_ctxs -= le16_to_cpu(req->min_stat_ctx) * n;
 		hw_resc->max_vnics -= le16_to_cpu(req->min_vnics) * n;
-		if (bp->flags & BNXT_FLAG_CHIP_P5)
-			hw_resc->max_irqs -= vf_msix * n;
+		if (bp->flags & BNXT_FLAG_CHIP_P5_PLUS)
+			hw_resc->max_nqs -= vf_msix;
 
 		rc = pf->active_vfs;
 	}
@@ -645,7 +653,7 @@ static int bnxt_hwrm_func_cfg(struct bnxt *bp, int num_vfs)
 	u32 mtu, i;
 	int rc;
 
-	rc = hwrm_req_init(bp, req, HWRM_FUNC_CFG);
+	rc = bnxt_hwrm_func_cfg_short_req_init(bp, &req);
 	if (rc)
 		return rc;
 
@@ -749,7 +757,6 @@ int bnxt_cfg_hw_sriov(struct bnxt *bp, int *num_vfs, bool reset)
 		*num_vfs = rc;
 	}
 
-	bnxt_ulp_sriov_cfg(bp, *num_vfs);
 	return 0;
 }
 
@@ -823,12 +830,26 @@ static int bnxt_sriov_enable(struct bnxt *bp, int *num_vfs)
 		goto err_out2;
 
 	rc = pci_enable_sriov(bp->pdev, *num_vfs);
-	if (rc) {
-		bnxt_ulp_sriov_cfg(bp, 0);
+	if (rc)
 		goto err_out2;
+
+	if (bp->eswitch_mode != DEVLINK_ESWITCH_MODE_SWITCHDEV)
+		return 0;
+
+	/* Create representors for VFs in switchdev mode */
+	devl_lock(bp->dl);
+	rc = bnxt_vf_reps_create(bp);
+	devl_unlock(bp->dl);
+	if (rc) {
+		netdev_info(bp->dev, "Cannot enable VFS as representors cannot be created\n");
+		goto err_out3;
 	}
 
 	return 0;
+
+err_out3:
+	/* Disable SR-IOV */
+	pci_disable_sriov(bp->pdev);
 
 err_out2:
 	/* Free the resources reserved for various VF's */
@@ -872,8 +893,6 @@ void bnxt_sriov_disable(struct bnxt *bp)
 	rtnl_lock();
 	bnxt_restore_pf_fw_resources(bp);
 	rtnl_unlock();
-
-	bnxt_ulp_sriov_cfg(bp, 0);
 }
 
 int bnxt_sriov_configure(struct pci_dev *pdev, int num_vfs)
@@ -931,8 +950,11 @@ static int bnxt_hwrm_fwd_resp(struct bnxt *bp, struct bnxt_vf_info *vf,
 	struct hwrm_fwd_resp_input *req;
 	int rc;
 
-	if (BNXT_FWD_RESP_SIZE_ERR(msg_size))
+	if (BNXT_FWD_RESP_SIZE_ERR(msg_size)) {
+		netdev_warn_once(bp->dev, "HWRM fwd response too big (%d bytes)\n",
+				 msg_size);
 		return -EINVAL;
+	}
 
 	rc = hwrm_req_init(bp, req, HWRM_FWD_RESP);
 	if (!rc) {
@@ -1066,7 +1088,7 @@ static int bnxt_vf_set_link(struct bnxt *bp, struct bnxt_vf_info *vf)
 		rc = bnxt_hwrm_exec_fwd_resp(
 			bp, vf, sizeof(struct hwrm_port_phy_qcfg_input));
 	} else {
-		struct hwrm_port_phy_qcfg_output phy_qcfg_resp = {0};
+		struct hwrm_port_phy_qcfg_output_compat phy_qcfg_resp = {};
 		struct hwrm_port_phy_qcfg_input *phy_qcfg_req;
 
 		phy_qcfg_req =
@@ -1077,6 +1099,11 @@ static int bnxt_vf_set_link(struct bnxt *bp, struct bnxt_vf_info *vf)
 		mutex_unlock(&bp->link_lock);
 		phy_qcfg_resp.resp_len = cpu_to_le16(sizeof(phy_qcfg_resp));
 		phy_qcfg_resp.seq_id = phy_qcfg_req->seq_id;
+		/* New SPEEDS2 fields are beyond the legacy structure, so
+		 * clear the SPEEDS2_SUPPORTED flag.
+		 */
+		phy_qcfg_resp.option_flags &=
+			~PORT_PHY_QCAPS_RESP_FLAGS2_SPEEDS2_SUPPORTED;
 		phy_qcfg_resp.valid = 1;
 
 		if (vf->flags & BNXT_VF_LINK_UP) {

@@ -7,7 +7,11 @@ include $(ROOTDIR)/tools/automake.inc
 build/%-my_build: build/%-patched
 	@echo "Building $* ..."
 	$(AT)mkdir -p build/$($*_BUILDDIR)
+ifdef CONFIG_LIB_DBUS
 	$(AT)ln -fs `pwd`/config build/$($*_BUILDDIR)/wpa_supplicant/.config
+else
+	$(AT)grep -v DBUS `pwd`/config > build/$($*_BUILDDIR)/wpa_supplicant/.config
+endif
 	$(AT)make -C build/$($*_BUILDDIR)/wpa_supplicant
 	$(AT)mkdir -p "$(STAGEDIR)/lib"
 	$(AT)ln -sf "`pwd`"/build/$($*_BUILDDIR)/wpa_supplicant/libwpa_client.so "$(STAGEDIR)/lib/libwpa_client.so"

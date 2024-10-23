@@ -14,8 +14,8 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
-#include "fsl-pstore-512MB.dtsi"
 
 / {
 	model = "Digi AnywhereUSB-2 Commercial";
@@ -50,6 +50,17 @@
 
 		pfe_reserved: packetbuffer@83400000 {
 			reg = <0 0x83400000 0 0xc00000>;
+		};
+
+		/*
+		* 64KiB reserved for pstore (ramoops).
+		*/
+		ramoops@8bdef000 {
+			compatible = "ramoops";
+			reg = <0 0x8bdef000 0 0x10000>;
+			ecc-size = <16>;
+			record-size = <0x1000>;
+			console-size = <0x1000>;
 		};
 	};
 
@@ -86,6 +97,16 @@
 			pinctrl-names = "default";
 			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
 		};
 	};
 };
@@ -167,13 +188,8 @@
 };
 
 &i2c1 {
-	clock-frequency = <400000>;
+	clock-frequency = <100000>;
 	status = "okay";
-
-	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x430>;
-	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -238,7 +254,7 @@
 };
 
 &gpio1 {
-	gpio-line-names = "", "", "", "", "", "", "", "dbg",
+	gpio-line-names = "", "", "", "", "", "", "", "developer_",
 			  "", "", "", "", "factory", "", "", "",
 			  "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "";

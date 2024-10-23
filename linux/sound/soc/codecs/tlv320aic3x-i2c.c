@@ -41,11 +41,9 @@ static int aic3x_i2c_probe(struct i2c_client *i2c)
 	return aic3x_probe(&i2c->dev, regmap, id->driver_data);
 }
 
-static int aic3x_i2c_remove(struct i2c_client *i2c)
+static void aic3x_i2c_remove(struct i2c_client *i2c)
 {
 	aic3x_remove(&i2c->dev);
-
-	return 0;
 }
 
 static const struct of_device_id aic3x_of_id[] = {
@@ -63,7 +61,7 @@ static struct i2c_driver aic3x_i2c_driver = {
 		.name = "tlv320aic3x",
 		.of_match_table = aic3x_of_id,
 	},
-	.probe_new = aic3x_i2c_probe,
+	.probe = aic3x_i2c_probe,
 	.remove = aic3x_i2c_remove,
 	.id_table = aic3x_i2c_id,
 };

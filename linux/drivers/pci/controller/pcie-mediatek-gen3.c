@@ -153,6 +153,37 @@ struct mtk_gen3_pcie {
 	DECLARE_BITMAP(msi_irq_in_use, PCIE_MSI_IRQS_NUM);
 };
 
+/* LTSSM state in PCIE_LTSSM_STATUS_REG bit[28:24] */
+static const char *const ltssm_str[] = {
+	"detect.quiet",			/* 0x00 */
+	"detect.active",		/* 0x01 */
+	"polling.active",		/* 0x02 */
+	"polling.compliance",		/* 0x03 */
+	"polling.configuration",	/* 0x04 */
+	"config.linkwidthstart",	/* 0x05 */
+	"config.linkwidthaccept",	/* 0x06 */
+	"config.lanenumwait",		/* 0x07 */
+	"config.lanenumaccept",		/* 0x08 */
+	"config.complete",		/* 0x09 */
+	"config.idle",			/* 0x0A */
+	"recovery.receiverlock",	/* 0x0B */
+	"recovery.equalization",	/* 0x0C */
+	"recovery.speed",		/* 0x0D */
+	"recovery.receiverconfig",	/* 0x0E */
+	"recovery.idle",		/* 0x0F */
+	"L0",				/* 0x10 */
+	"L0s",				/* 0x11 */
+	"L1.entry",			/* 0x12 */
+	"L1.idle",			/* 0x13 */
+	"L2.idle",			/* 0x14 */
+	"L2.transmitwake",		/* 0x15 */
+	"disable",			/* 0x16 */
+	"loopback.entry",		/* 0x17 */
+	"loopback.active",		/* 0x18 */
+	"loopback.exit",		/* 0x19 */
+	"hotreset",			/* 0x1A */
+};
+
 /**
  * mtk_pcie_config_tlp_header() - Configure a configuration TLP header
  * @bus: PCI bus to query
@@ -214,35 +245,60 @@ static int mtk_pcie_set_trans_table(struct mtk_gen3_pcie *pcie,
 				    resource_size_t cpu_addr,
 				    resource_size_t pci_addr,
 				    resource_size_t size,
-				    unsigned long type, int num)
+				    unsigned long type, int *num)
 {
+	resource_size_t remaining = size;
+	resource_size_t table_size;
+	resource_size_t addr_align;
+	const char *range_type;
 	void __iomem *table;
 	u32 val;
 
-	if (num >= PCIE_MAX_TRANS_TABLES) {
-		dev_err(pcie->dev, "not enough translate table for addr: %#llx, limited to [%d]\n",
-			(unsigned long long)cpu_addr, PCIE_MAX_TRANS_TABLES);
-		return -ENODEV;
+	while (remaining && (*num < PCIE_MAX_TRANS_TABLES)) {
+		/* Table size needs to be a power of 2 */
+		table_size = BIT(fls(remaining) - 1);
+
+		if (cpu_addr > 0) {
+			addr_align = BIT(ffs(cpu_addr) - 1);
+			table_size = min(table_size, addr_align);
+		}
+
+		/* Minimum size of translate table is 4KiB */
+		if (table_size < 0x1000) {
+			dev_err(pcie->dev, "illegal table size %#llx\n",
+				(unsigned long long)table_size);
+			return -EINVAL;
+		}
+
+		table = pcie->base + PCIE_TRANS_TABLE_BASE_REG + *num * PCIE_ATR_TLB_SET_OFFSET;
+		writel_relaxed(lower_32_bits(cpu_addr) | PCIE_ATR_SIZE(fls(table_size) - 1), table);
+		writel_relaxed(upper_32_bits(cpu_addr), table + PCIE_ATR_SRC_ADDR_MSB_OFFSET);
+		writel_relaxed(lower_32_bits(pci_addr), table + PCIE_ATR_TRSL_ADDR_LSB_OFFSET);
+		writel_relaxed(upper_32_bits(pci_addr), table + PCIE_ATR_TRSL_ADDR_MSB_OFFSET);
+
+		if (type == IORESOURCE_IO) {
+			val = PCIE_ATR_TYPE_IO | PCIE_ATR_TLP_TYPE_IO;
+			range_type = "IO";
+		} else {
+			val = PCIE_ATR_TYPE_MEM | PCIE_ATR_TLP_TYPE_MEM;
+			range_type = "MEM";
+		}
+
+		writel_relaxed(val, table + PCIE_ATR_TRSL_PARAM_OFFSET);
+
+		dev_dbg(pcie->dev, "set %s trans window[%d]: cpu_addr = %#llx, pci_addr = %#llx, size = %#llx\n",
+			range_type, *num, (unsigned long long)cpu_addr,
+			(unsigned long long)pci_addr, (unsigned long long)table_size);
+
+		cpu_addr += table_size;
+		pci_addr += table_size;
+		remaining -= table_size;
+		(*num)++;
 	}
 
-	table = pcie->base + PCIE_TRANS_TABLE_BASE_REG +
-		num * PCIE_ATR_TLB_SET_OFFSET;
-
-	writel_relaxed(lower_32_bits(cpu_addr) | PCIE_ATR_SIZE(fls(size) - 1),
-		       table);
-	writel_relaxed(upper_32_bits(cpu_addr),
-		       table + PCIE_ATR_SRC_ADDR_MSB_OFFSET);
-	writel_relaxed(lower_32_bits(pci_addr),
-		       table + PCIE_ATR_TRSL_ADDR_LSB_OFFSET);
-	writel_relaxed(upper_32_bits(pci_addr),
-		       table + PCIE_ATR_TRSL_ADDR_MSB_OFFSET);
-
-	if (type == IORESOURCE_IO)
-		val = PCIE_ATR_TYPE_IO | PCIE_ATR_TLP_TYPE_IO;
-	else
-		val = PCIE_ATR_TYPE_MEM | PCIE_ATR_TLP_TYPE_MEM;
-
-	writel_relaxed(val, table + PCIE_ATR_TRSL_PARAM_OFFSET);
+	if (remaining)
+		dev_warn(pcie->dev, "not enough translate table for addr: %#llx, limited to [%d]\n",
+			 (unsigned long long)cpu_addr, PCIE_MAX_TRANS_TABLES);
 
 	return 0;
 }
@@ -327,8 +383,16 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 				 !!(val & PCIE_PORT_LINKUP), 20,
 				 PCI_PM_D3COLD_WAIT * USEC_PER_MSEC);
 	if (err) {
+		const char *ltssm_state;
+		int ltssm_index;
+
 		val = readl_relaxed(pcie->base + PCIE_LTSSM_STATUS_REG);
-		dev_err(pcie->dev, "PCIe link down, ltssm reg val: %#x\n", val);
+		ltssm_index = PCIE_LTSSM_STATE(val);
+		ltssm_state = ltssm_index >= ARRAY_SIZE(ltssm_str) ?
+			      "Unknown state" : ltssm_str[ltssm_index];
+		dev_err(pcie->dev,
+			"PCIe link down, current LTSSM state: %s (%#x)\n",
+			ltssm_state, val);
 		return err;
 	}
 
@@ -341,30 +405,20 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 		resource_size_t cpu_addr;
 		resource_size_t pci_addr;
 		resource_size_t size;
-		const char *range_type;
 
-		if (type == IORESOURCE_IO) {
+		if (type == IORESOURCE_IO)
 			cpu_addr = pci_pio_to_address(res->start);
-			range_type = "IO";
-		} else if (type == IORESOURCE_MEM) {
+		else if (type == IORESOURCE_MEM)
 			cpu_addr = res->start;
-			range_type = "MEM";
-		} else {
+		else
 			continue;
-		}
 
 		pci_addr = res->start - entry->offset;
 		size = resource_size(res);
 		err = mtk_pcie_set_trans_table(pcie, cpu_addr, pci_addr, size,
-					       type, table_index);
+					       type, &table_index);
 		if (err)
 			return err;
-
-		dev_dbg(pcie->dev, "set %s trans window[%d]: cpu_addr = %#llx, pci_addr = %#llx, size = %#llx\n",
-			range_type, table_index, (unsigned long long)cpu_addr,
-			(unsigned long long)pci_addr, (unsigned long long)size);
-
-		table_index++;
 	}
 
 	return 0;
@@ -600,7 +654,8 @@ static int mtk_pcie_init_irq_domains(struct mtk_gen3_pcie *pcie)
 						  &intx_domain_ops, pcie);
 	if (!pcie->intx_domain) {
 		dev_err(dev, "failed to create INTx IRQ domain\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto out_put_node;
 	}
 
 	/* Setup MSI */
@@ -623,13 +678,15 @@ static int mtk_pcie_init_irq_domains(struct mtk_gen3_pcie *pcie)
 		goto err_msi_domain;
 	}
 
+	of_node_put(intc_node);
 	return 0;
 
 err_msi_domain:
 	irq_domain_remove(pcie->msi_bottom_domain);
 err_msi_bottom_domain:
 	irq_domain_remove(pcie->intx_domain);
-
+out_put_node:
+	of_node_put(intc_node);
 	return ret;
 }
 
@@ -901,7 +958,7 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mtk_pcie_remove(struct platform_device *pdev)
+static void mtk_pcie_remove(struct platform_device *pdev)
 {
 	struct mtk_gen3_pcie *pcie = platform_get_drvdata(pdev);
 	struct pci_host_bridge *host = pci_host_bridge_from_priv(pcie);
@@ -913,11 +970,9 @@ static int mtk_pcie_remove(struct platform_device *pdev)
 
 	mtk_pcie_irq_teardown(pcie);
 	mtk_pcie_power_down(pcie);
-
-	return 0;
 }
 
-static void __maybe_unused mtk_pcie_irq_save(struct mtk_gen3_pcie *pcie)
+static void mtk_pcie_irq_save(struct mtk_gen3_pcie *pcie)
 {
 	int i;
 
@@ -935,7 +990,7 @@ static void __maybe_unused mtk_pcie_irq_save(struct mtk_gen3_pcie *pcie)
 	raw_spin_unlock(&pcie->irq_lock);
 }
 
-static void __maybe_unused mtk_pcie_irq_restore(struct mtk_gen3_pcie *pcie)
+static void mtk_pcie_irq_restore(struct mtk_gen3_pcie *pcie)
 {
 	int i;
 
@@ -953,7 +1008,7 @@ static void __maybe_unused mtk_pcie_irq_restore(struct mtk_gen3_pcie *pcie)
 	raw_spin_unlock(&pcie->irq_lock);
 }
 
-static int __maybe_unused mtk_pcie_turn_off_link(struct mtk_gen3_pcie *pcie)
+static int mtk_pcie_turn_off_link(struct mtk_gen3_pcie *pcie)
 {
 	u32 val;
 
@@ -968,7 +1023,7 @@ static int __maybe_unused mtk_pcie_turn_off_link(struct mtk_gen3_pcie *pcie)
 				   50 * USEC_PER_MSEC);
 }
 
-static int __maybe_unused mtk_pcie_suspend_noirq(struct device *dev)
+static int mtk_pcie_suspend_noirq(struct device *dev)
 {
 	struct mtk_gen3_pcie *pcie = dev_get_drvdata(dev);
 	int err;
@@ -994,7 +1049,7 @@ static int __maybe_unused mtk_pcie_suspend_noirq(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused mtk_pcie_resume_noirq(struct device *dev)
+static int mtk_pcie_resume_noirq(struct device *dev)
 {
 	struct mtk_gen3_pcie *pcie = dev_get_drvdata(dev);
 	int err;
@@ -1015,8 +1070,8 @@ static int __maybe_unused mtk_pcie_resume_noirq(struct device *dev)
 }
 
 static const struct dev_pm_ops mtk_pcie_pm_ops = {
-	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_pcie_suspend_noirq,
-				      mtk_pcie_resume_noirq)
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_pcie_suspend_noirq,
+				  mtk_pcie_resume_noirq)
 };
 
 static const struct of_device_id mtk_pcie_of_match[] = {
@@ -1027,9 +1082,9 @@ MODULE_DEVICE_TABLE(of, mtk_pcie_of_match);
 
 static struct platform_driver mtk_pcie_driver = {
 	.probe = mtk_pcie_probe,
-	.remove = mtk_pcie_remove,
+	.remove_new = mtk_pcie_remove,
 	.driver = {
-		.name = "mtk-pcie",
+		.name = "mtk-pcie-gen3",
 		.of_match_table = mtk_pcie_of_match,
 		.pm = &mtk_pcie_pm_ops,
 	},

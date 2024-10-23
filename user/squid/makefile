@@ -1,4 +1,4 @@
-URL = http://www.squid-cache.org/Versions/v2/2.7/squid-2.7.STABLE9.tar.gz
+URL = https://www.squid-cache.org/Versions/v2/2.7/squid-2.7.STABLE9.tar.gz
 
 CFLAGS := $(CFLAGS:-O1=-O2)
 CXXFLAGS := $(CFLAGS:-O1=-O2)

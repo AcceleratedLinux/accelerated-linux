@@ -8,6 +8,7 @@
 #include <linux/rcupdate.h>
 #include <linux/smp.h>
 #include <linux/swap.h>
+#include <linux/rmap.h>
 
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
@@ -18,6 +19,10 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 {
 	struct mmu_gather_batch *batch;
 
+	/* Limit batching if we have delayed rmaps pending */
+	if (tlb->delayed_rmap && tlb->active != &tlb->local)
+		return false;
+
 	batch = tlb->active;
 	if (batch->next) {
 		tlb->active = batch->next;
@@ -27,7 +32,7 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 	if (tlb->batch_count == MAX_GATHER_BATCH_COUNT)
 		return false;
 
-	batch = (void *)__get_free_pages(GFP_NOWAIT | __GFP_NOWARN, 0);
+	batch = (void *)__get_free_page(GFP_NOWAIT | __GFP_NOWARN);
 	if (!batch)
 		return false;
 
@@ -42,26 +47,106 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 	return true;
 }
 
+#ifdef CONFIG_SMP
+static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch, struct vm_area_struct *vma)
+{
+	struct encoded_page **pages = batch->encoded_pages;
+
+	for (int i = 0; i < batch->nr; i++) {
+		struct encoded_page *enc = pages[i];
+
+		if (encoded_page_flags(enc) & ENCODED_PAGE_BIT_DELAY_RMAP) {
+			struct page *page = encoded_page_ptr(enc);
+			unsigned int nr_pages = 1;
+
+			if (unlikely(encoded_page_flags(enc) &
+				     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
+				nr_pages = encoded_nr_pages(pages[++i]);
+
+			folio_remove_rmap_ptes(page_folio(page), page, nr_pages,
+					       vma);
+		}
+	}
+}
+
+/**
+ * tlb_flush_rmaps - do pending rmap removals after we have flushed the TLB
+ * @tlb: the current mmu_gather
+ * @vma: The memory area from which the pages are being removed.
+ *
+ * Note that because of how tlb_next_batch() above works, we will
+ * never start multiple new batches with pending delayed rmaps, so
+ * we only need to walk through the current active batch and the
+ * original local one.
+ */
+void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma)
+{
+	if (!tlb->delayed_rmap)
+		return;
+
+	tlb_flush_rmap_batch(&tlb->local, vma);
+	if (tlb->active != &tlb->local)
+		tlb_flush_rmap_batch(tlb->active, vma);
+	tlb->delayed_rmap = 0;
+}
+#endif
+
+/*
+ * We might end up freeing a lot of pages. Reschedule on a regular
+ * basis to avoid soft lockups in configurations without full
+ * preemption enabled. The magic number of 512 folios seems to work.
+ */
+#define MAX_NR_FOLIOS_PER_FREE		512
+
+static void __tlb_batch_free_encoded_pages(struct mmu_gather_batch *batch)
+{
+	struct encoded_page **pages = batch->encoded_pages;
+	unsigned int nr, nr_pages;
+
+	while (batch->nr) {
+		if (!page_poisoning_enabled_static() && !want_init_on_free()) {
+			nr = min(MAX_NR_FOLIOS_PER_FREE, batch->nr);
+
+			/*
+			 * Make sure we cover page + nr_pages, and don't leave
+			 * nr_pages behind when capping the number of entries.
+			 */
+			if (unlikely(encoded_page_flags(pages[nr - 1]) &
+				     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
+				nr++;
+		} else {
+			/*
+			 * With page poisoning and init_on_free, the time it
+			 * takes to free memory grows proportionally with the
+			 * actual memory size. Therefore, limit based on the
+			 * actual memory size and not the number of involved
+			 * folios.
+			 */
+			for (nr = 0, nr_pages = 0;
+			     nr < batch->nr && nr_pages < MAX_NR_FOLIOS_PER_FREE;
+			     nr++) {
+				if (unlikely(encoded_page_flags(pages[nr]) &
+					     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
+					nr_pages += encoded_nr_pages(pages[++nr]);
+				else
+					nr_pages++;
+			}
+		}
+
+		free_pages_and_swap_cache(pages, nr);
+		pages += nr;
+		batch->nr -= nr;
+
+		cond_resched();
+	}
+}
+
 static void tlb_batch_pages_flush(struct mmu_gather *tlb)
 {
 	struct mmu_gather_batch *batch;
 
-	for (batch = &tlb->local; batch && batch->nr; batch = batch->next) {
-		struct page **pages = batch->pages;
-
-		do {
-			/*
-			 * limit free batch count when PAGE_SIZE > 4K
-			 */
-			unsigned int nr = min(512U, batch->nr);
-
-			free_pages_and_swap_cache(pages, nr);
-			pages += nr;
-			batch->nr -= nr;
-
-			cond_resched();
-		} while (batch->nr);
-	}
+	for (batch = &tlb->local; batch && batch->nr; batch = batch->next)
+		__tlb_batch_free_encoded_pages(batch);
 	tlb->active = &tlb->local;
 }
 
@@ -76,14 +161,19 @@ static void tlb_batch_list_free(struct mmu_gather *tlb)
 	tlb->local.next = NULL;
 }
 
-bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page, int page_size)
+static bool __tlb_remove_folio_pages_size(struct mmu_gather *tlb,
+		struct page *page, unsigned int nr_pages, bool delay_rmap,
+		int page_size)
 {
+	int flags = delay_rmap ? ENCODED_PAGE_BIT_DELAY_RMAP : 0;
 	struct mmu_gather_batch *batch;
 
 	VM_BUG_ON(!tlb->end);
 
 #ifdef CONFIG_MMU_GATHER_PAGE_SIZE
 	VM_WARN_ON(tlb->page_size != page_size);
+	VM_WARN_ON_ONCE(nr_pages != 1 && page_size != PAGE_SIZE);
+	VM_WARN_ON_ONCE(page_folio(page) != page_folio(page + nr_pages - 1));
 #endif
 
 	batch = tlb->active;
@@ -91,15 +181,38 @@ bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page, int page_
 	 * Add the page and check if we are full. If so
 	 * force a flush.
 	 */
-	batch->pages[batch->nr++] = page;
-	if (batch->nr == batch->max) {
+	if (likely(nr_pages == 1)) {
+		batch->encoded_pages[batch->nr++] = encode_page(page, flags);
+	} else {
+		flags |= ENCODED_PAGE_BIT_NR_PAGES_NEXT;
+		batch->encoded_pages[batch->nr++] = encode_page(page, flags);
+		batch->encoded_pages[batch->nr++] = encode_nr_pages(nr_pages);
+	}
+	/*
+	 * Make sure that we can always add another "page" + "nr_pages",
+	 * requiring two entries instead of only a single one.
+	 */
+	if (batch->nr >= batch->max - 1) {
 		if (!tlb_next_batch(tlb))
 			return true;
 		batch = tlb->active;
 	}
-	VM_BUG_ON_PAGE(batch->nr > batch->max, page);
+	VM_BUG_ON_PAGE(batch->nr > batch->max - 1, page);
 
 	return false;
+}
+
+bool __tlb_remove_folio_pages(struct mmu_gather *tlb, struct page *page,
+		unsigned int nr_pages, bool delay_rmap)
+{
+	return __tlb_remove_folio_pages_size(tlb, page, nr_pages, delay_rmap,
+					     PAGE_SIZE);
+}
+
+bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page,
+		bool delay_rmap, int page_size)
+{
+	return __tlb_remove_folio_pages_size(tlb, page, 1, delay_rmap, page_size);
 }
 
 #endif /* MMU_GATHER_NO_GATHER */
@@ -152,7 +265,7 @@ static void tlb_remove_table_smp_sync(void *arg)
 	/* Simply deliver the interrupt */
 }
 
-static void tlb_remove_table_sync_one(void)
+void tlb_remove_table_sync_one(void)
 {
 	/*
 	 * This isn't an RCU grace period and hence the page-tables cannot be
@@ -175,8 +288,6 @@ static void tlb_remove_table_free(struct mmu_table_batch *batch)
 }
 
 #else /* !CONFIG_MMU_GATHER_RCU_TABLE_FREE */
-
-static void tlb_remove_table_sync_one(void) { }
 
 static void tlb_remove_table_free(struct mmu_table_batch *batch)
 {
@@ -276,6 +387,7 @@ static void __tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	tlb->active     = &tlb->local;
 	tlb->batch_count = 0;
 #endif
+	tlb->delayed_rmap = 0;
 
 	tlb_table_init(tlb);
 #ifdef CONFIG_MMU_GATHER_PAGE_SIZE

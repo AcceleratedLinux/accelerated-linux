@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# Action for the IoT Gateway LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+FINDME_LEDS=""
+for i in $(seq 1 6); do
+	FINDME_LEDS="${FINDME_LEDS} red:status-$i green:status-$i blue:status-$i"
+done
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		# flash all six status LEDs white
+		FINDME="-o blue:power ${FINDME_LEDS// / -f }"
+	else
+		FINDME="-o blue:power ${FINDME_LEDS// / -O }"
+	fi
+	ledcmd $FINDME
+}
+
+case "$1" in
+start)
+	ledcmd -O ALL
+	ledcmd -o blue:power
+	exit 0
+	;;
+reload)
+	findme_update
+	;;
+stop)
+	# Firmware flash
+	ledcmd -O ALL
+	ledcmd -o red:power -o red:status-3 -o red:status-6
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+# Ethernet (LAN) status
+##############################################################
+if [ "$(runt get network.interface.eth.ipv4.up)" = 1 ]; then
+	# Turn on yellow:lan if the interface is up
+	LAN="-o yellow:lan"
+else
+	# Otherwise just keep it off
+	LAN="-O yellow:lan"
+fi
+
+# TODO: LCG-625
+exit 0
+
+# XBee LED
+##############################################################
+# When XBee is disabled, LED is off.
+# When XBee is enabled:
+#    Flashing green: XNM is running and we're online
+#    Solid green: XNM is not running, or we're doing some management activity.
+# Basic implementation here is copied from IX15/led.
+if [ "$(config get xbee.enable)" = 0 ]; then
+	XBEE_LED="-O user2"
+elif [ -f "/var/run/xnm.pid" ] && /bin/sumo /bin/kill -0 $(/bin/admin-file cat /var/run/xnm.pid) >/dev/null 2>&1; then
+	case "$(runt get xbee.xnm.status.code)" in
+	# Online
+	0)
+		XBEE_LED="-f user2"
+		;;
+	# Offline
+	1)
+		XBEE_LED="-o user2"  # solid
+		;;
+	# 2 - Local update process in progress
+	# 3 - Remote update process in progress
+	# 4 - Recovery in progress
+	# 5 - Network discovery in progress
+	# 6 - Neighbor discovery in progress
+	# 8 - Active discovery in progress
+	*)
+		XBEE_LED="-F user2"  # flash quickly
+		;;
+	esac
+else
+	XBEE_LED="-O user2"
+fi
+
+# Final LED command
+##############################################################
+ledcmd $LAN $XBEE_LED
+
+exit 0
+

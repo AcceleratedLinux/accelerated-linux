@@ -122,7 +122,6 @@ struct red_stats {
 	u32		forced_drop;	/* Forced drops, qavg > max_thresh */
 	u32		forced_mark;	/* Forced marks, qavg > max_thresh */
 	u32		pdrop;          /* Drops due to queue limits */
-	u32		other;          /* Drops due to drop() calls */
 };
 
 struct red_parms {
@@ -234,10 +233,10 @@ static inline void red_set_parms(struct red_parms *p,
 	int delta = qth_max - qth_min;
 	u32 max_p_delta;
 
-	p->qth_min	= qth_min << Wlog;
-	p->qth_max	= qth_max << Wlog;
-	p->Wlog		= Wlog;
-	p->Plog		= Plog;
+	WRITE_ONCE(p->qth_min, qth_min << Wlog);
+	WRITE_ONCE(p->qth_max, qth_max << Wlog);
+	WRITE_ONCE(p->Wlog, Wlog);
+	WRITE_ONCE(p->Plog, Plog);
 	if (delta <= 0)
 		delta = 1;
 	p->qth_delta	= delta;
@@ -245,7 +244,7 @@ static inline void red_set_parms(struct red_parms *p,
 		max_P = red_maxp(Plog);
 		max_P *= delta; /* max_P = (qth_max - qth_min)/2^Plog */
 	}
-	p->max_P = max_P;
+	WRITE_ONCE(p->max_P, max_P);
 	max_p_delta = max_P / delta;
 	max_p_delta = max(max_p_delta, 1U);
 	p->max_P_reciprocal  = reciprocal_value(max_p_delta);
@@ -258,7 +257,7 @@ static inline void red_set_parms(struct red_parms *p,
 	p->target_min = qth_min + 2*delta;
 	p->target_max = qth_min + 3*delta;
 
-	p->Scell_log	= Scell_log;
+	WRITE_ONCE(p->Scell_log, Scell_log);
 	p->Scell_max	= (255 << Scell_log);
 
 	if (stab)
@@ -364,7 +363,7 @@ static inline unsigned long red_calc_qavg(const struct red_parms *p,
 
 static inline u32 red_random(const struct red_parms *p)
 {
-	return reciprocal_divide(prandom_u32(), p->max_P_reciprocal);
+	return reciprocal_divide(get_random_u32(), p->max_P_reciprocal);
 }
 
 static inline int red_mark_probability(const struct red_parms *p,

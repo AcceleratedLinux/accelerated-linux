@@ -1,0 +1,37 @@
+From 0b6cce98477edebfcdcdd110ebd5242d7611d4ef Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Tue, 25 Apr 2023 14:32:26 +0100
+Subject: [PATCH] debug: do not log timestamp or thread id
+
+We're logging informational messages to the system log, which already
+includes a timestamp, and the thread id has no meaning to users.
+---
+ src/debug.c | 8 +-------
+ 1 file changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/src/debug.c b/src/debug.c
+index 631df42..8198609 100644
+--- a/src/debug.c
++++ b/src/debug.c
+@@ -114,17 +114,11 @@ void log_trace(int type, unsigned char *line, int len) {
+ }
+ 
+ void log_start(int level) {
+-  char t[23];
+-  time_t now;
+-
+   if(-1 == pthread_mutex_lock(&log_mutex)) {
+     perror("Could not lock the log mutex");
+   } else {
+     // we have the lock.
+-    now = time(NULL);
+-    strftime(t, 22, "%Y-%m-%d %H:%M:%S", localtime(&now));
+-    fprintf(log_file, "%s:%5.5ld:%s:", t, (long)pthread_self(), log_desc[level]);
+-    //free(t);
++    fprintf(log_file, "%s: ", log_desc[level]);
+   }
+ }
+ 
+-- 
+2.34.1
+

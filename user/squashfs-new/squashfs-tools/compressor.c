@@ -57,6 +57,14 @@ static struct compressor xz_comp_ops = {
 extern struct compressor xz_comp_ops;
 #endif
 
+#ifndef XZ_AES_SUPPORT
+static struct compressor xz_aes_comp_ops = {
+	XZ_AES_COMPRESSION, "xz-aes"
+};
+#else
+extern struct compressor xz_aes_comp_ops;
+#endif
+
 
 static struct compressor unknown_comp_ops = {
 	0, "unknown"
@@ -68,6 +76,7 @@ struct compressor *compressor[] = {
 	&lzma_comp_ops,
 	&lzo_comp_ops,
 	&xz_comp_ops,
+	&xz_aes_comp_ops,
 	&unknown_comp_ops
 };
 

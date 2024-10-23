@@ -1,1 +1,1 @@
-dep_libyang = pcre
+dep_libyang = pcre2

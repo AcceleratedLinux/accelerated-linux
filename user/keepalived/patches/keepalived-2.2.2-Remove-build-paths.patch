@@ -1,0 +1,25 @@
+From 699ad36313f38e5c340cf7115709185ebaec34b5 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 27 Aug 2024 13:26:40 +0200
+Subject: [PATCH] Remove build paths
+
+---
+ configure.ac | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 4d3b1eca369e..f13e2644f788 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -363,7 +363,7 @@ ENABLE_LOG_FILE_APPEND=No
+ # save the configure arguments
+ #
+ args=`echo $ac_configure_args | $SED -e "s/'//g"`
+-AC_DEFINE_UNQUOTED(KEEPALIVED_CONFIGURE_OPTIONS,"$args", [configure options specified])
++AC_DEFINE_UNQUOTED(KEEPALIVED_CONFIGURE_OPTIONS,"", [configure options specified])
+ 
+ # Save the CPPFLAGS, CFLAGS, LDFLAGS and LDLIBS settings for make time
+ KA_CPPFLAGS="$kernelinc -D_GNU_SOURCE $CPPFLAGS"
+-- 
+2.43.0
+

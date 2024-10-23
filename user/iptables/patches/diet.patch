@@ -1,86 +1,83 @@
-diff -Nurd iptables.orig-1.8.3/extensions/GNUmakefile.in iptables-1.8.3/extensions/GNUmakefile.in
---- iptables.orig-1.8.3/extensions/GNUmakefile.in	2019-05-28 01:09:32.000000000 +1000
-+++ iptables-1.8.3/extensions/GNUmakefile.in	2019-05-30 11:58:09.365797847 +1000
-@@ -62,6 +62,65 @@
- pf6_solibs    := $(patsubst %,libip6t_%.so,${pf6_build_mod})
- pfx_symlink_files := $(patsubst %,libxt_%.so,${pfx_symlinks})
- 
-+# Only build matches/targets for the current kernel config
+
+Disable extensions that aren't supported by linux/.config
+
+Index: iptables-1.8.10/extensions/GNUmakefile.in
+===================================================================
+--- iptables-1.8.10.orig/extensions/GNUmakefile.in
++++ iptables-1.8.10/extensions/GNUmakefile.in
+@@ -50,6 +50,75 @@ pfb_build_mod := $(filter-out @blacklist
+ pfa_build_mod := $(filter-out @blacklist_modules@ @blacklist_a_modules@,${pfa_build_mod})
+ pf4_build_mod := $(filter-out @blacklist_modules@ @blacklist_4_modules@,${pf4_build_mod})
+ pf6_build_mod := $(filter-out @blacklist_modules@ @blacklist_6_modules@,${pf6_build_mod})
++
++
++# Disable the extensions where kernel support is known to be disabled.
++
 +-include $(ROOTDIR)/$(LINUXDIR)/.config
-+lower=$(shell echo $(1) | tr [:upper:] [:lower:])
-+upper=$(shell echo $(1) | tr [:lower:] [:upper:])
-+keeplower=$(filter-out $(call upper,$(1)),$(1))
-+keepupper=$(filter-out $(call lower,$(1)),$(1))
-+TEST_CONFIG_VAL=$(patsubst $(3)_%,%,$(filter $(3)_%,$(foreach i,$(1),$(CONFIG_$(2)_$(i))_$(i))))
-+TEST_CONFIG_TYPE=$(call TEST_CONFIG_VAL,$(1),$(2),y) $(call TEST_CONFIG_VAL,$(1),$(2),m)
-+TEST_CONFIG=$(call TEST_CONFIG_TYPE,$(1),$(2)_$(3)) $(call TEST_CONFIG_TYPE,$(1),NETFILTER_XT_$(3))
++pfx_build_mod_PREFIX_ := CONFIG_NETFILTER_XT_TARGET_
++pfx_build_mod_prefix_ := CONFIG_NETFILTER_XT_MATCH_
++pfb_build_mod_prefix_ := CONFIG_BRIDGE_EBT_
++pfa_build_mod_prefix_ := CONFIG_IP_NF_ARP_
++pf4_build_mod_PREFIX_ := CONFIG_IP_NF_TARGET_
++pf4_build_mod_prefix_ := CONFIG_IP_NF_MATCH_
++pf6_build_mod_PREFIX_ := CONFIG_IP6_NF_TARGET_
++pf6_build_mod_prefix_ := CONFIG_IP6_NF_MATCH_
 +
-+PF_EXT_SLIB_BASE:=icmp
-+PF_EXT_SLIB_OPT:=$(filter-out $(PF_EXT_SLIB_BASE),$(pf4_build_mod))
-+PF_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PF_EXT_SLIB_OPT))))
-+PF_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PF_EXT_SLIB_OPT)))
-+pf4_build_mod:=$(PF_EXT_SLIB_BASE)
-+pf4_build_mod+=$(call lower,$(call TEST_CONFIG,$(PF_EXT_SLIB_MATCH),IP_NF,MATCH))
-+pf4_build_mod+=$(call TEST_CONFIG,$(PF_EXT_SLIB_TARGET),IP_NF,TARGET)
++# The mapping between kernel config and module support is mostly
++# straightforward, but complicated by aliasing.
++alias_CONFIG_BRIDGE_EBT_MARK = CONFIG_BRIDGE_EBT_MARK_T
++alias_CONFIG_BRIDGE_EBT_MARK_M = CONFIG_BRIDGE_EBT_MARK
++alias_CONFIG_IP6_NF_TARGET_DNPT = CONFIG_IP6_NF_TARGET_NPT
++alias_CONFIG_IP6_NF_TARGET_HL = CONFIG_NETFILTER_XT_TARGET_HL
++alias_CONFIG_IP6_NF_TARGET_NETMAP = CONFIG_NETFILTER_XT_TARGET_NETMAP
++alias_CONFIG_IP6_NF_TARGET_SNPT = CONFIG_IP6_NF_TARGET_NPT
++alias_CONFIG_IP6_NF_MATCH_DST = CONFIG_IP6_NF_MATCH_OPTS
++alias_CONFIG_IP6_NF_MATCH_HBH = CONFIG_IP6_NF_MATCH_OPTS
++alias_CONFIG_IP6_NF_MATCH_HL = CONFIG_NETFILTER_XT_MATCH_HL
++alias_CONFIG_IP6_NF_MATCH_ICMP6 = CONFIG_NETFILTER_XTABLES
++# alias_CONFIG_IP_NF_TARGET_CLUSTERIP =  not found
++alias_CONFIG_IP_NF_TARGET_NETMAP = CONFIG_NETFILTER_XT_TARGET_NETMAP
++alias_CONFIG_IP_NF_TARGET_TTL = CONFIG_NETFILTER_XT_TARGET_HL
++# alias_CONFIG_IP_NF_TARGET_ULOG =  not found
++alias_CONFIG_IP_NF_MATCH_ICMP = CONFIG_NETFILTER_XTABLES
++alias_CONFIG_IP_NF_MATCH_REALM = CONFIG_NETFILTER_XT_MATCH_REALM
++alias_CONFIG_IP_NF_MATCH_TTL = CONFIG_NETFILTER_XT_MATCH_HL
++alias_CONFIG_NETFILTER_XT_TARGET_CONNMARK = CONFIG_NETFILTER_XT_CONNMARK
++alias_CONFIG_NETFILTER_XT_TARGET_MARK = CONFIG_NETFILTER_XT_MARK
++alias_CONFIG_NETFILTER_XT_TARGET_NAT = CONFIG_NF_NAT
++alias_CONFIG_NETFILTER_XT_TARGET_SET = CONFIG_NETFILTER_XT_SET
++alias_CONFIG_NETFILTER_XT_TARGET_SYNPROXY = IP_NF_TARGET_SYNPROXY
++alias_CONFIG_NETFILTER_XT_TARGET_TOS = CONFIG_NETFILTER_XT_TARGET_DSCP
++alias_CONFIG_NETFILTER_XT_MATCH_CONNMARK = CONFIG_NETFILTER_XT_CONNMARK
++alias_CONFIG_NETFILTER_XT_MATCH_MARK = CONFIG_NETFILTER_XT_MARK
++alias_CONFIG_NETFILTER_XT_MATCH_RPFILTER = CONFIG_IP_NF_MATCH_RPFILTER
++alias_CONFIG_NETFILTER_XT_MATCH_SET = CONFIG_NETFILTER_XT_SET
++alias_CONFIG_NETFILTER_XT_MATCH_STANDARD = CONFIG_NETFILTER_XTABLES
++alias_CONFIG_NETFILTER_XT_MATCH_TCP = CONFIG_NETFILTER_XTABLES
++alias_CONFIG_NETFILTER_XT_MATCH_TOS = CONFIG_NETFILTER_XT_MATCH_DSCP
++alias_CONFIG_NETFILTER_XT_MATCH_UDP = CONFIG_NETFILTER_XTABLES
 +
-+PF6_EXT_SLIB_BASE:=icmp6
-+PF6_EXT_SLIB_OPT:=$(filter-out $(PF6_EXT_SLIB_BASE),$(pf6_build_mod))
-+PF6_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PF6_EXT_SLIB_OPT))))
-+PF6_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PF6_EXT_SLIB_OPT)))
-+pf6_build_mod:=$(PF6_EXT_SLIB_BASE)
-+pf6_build_mod+=$(call lower,$(call TEST_CONFIG,$(PF6_EXT_SLIB_MATCH),IP6_NF,MATCH))
-+pf6_build_mod+=$(call TEST_CONFIG,$(PF6_EXT_SLIB_TARGET),IP6_NF,TARGET)
++_disable_unconfigured_modules_in_var = \
++    $(foreach m,$($1),$(call _disable_unconfigured_module_in_var,$m,$1,$2))
++_disable_unconfigured_module_in_var = \
++    $(if $(_contains_lowercase),\
++        $(call _disable_module_ifndef,$1,$2,$3,$($2_prefix_)$(_to_uppercase)),\
++        $(call _disable_module_ifndef,$1,$2,$3,$($2_PREFIX_)$1))
++_disable_module_ifndef = \
++    $(if $(or $($4),$(alias_$4)),,$(_disable_module))
++_disable_module = \
++    $(info Removing netfilter extension $3_$1 from $2 because $(alias_$4:%=%/)$4 is not set)\
++    $(eval $2 := $$(filter-out $1,$$($2)))
++_contains_lowercase = $(shell echo $1|grep '[a-z]')
++_to_uppercase = $(shell echo $1|tr a-z A-Z)
 +
-+PFX_EXT_SLIB_BASE:=tcp udp standard
-+PFX_EXT_SLIB_OPT:=$(filter-out $(PFX_EXT_SLIB_BASE),$(pfx_build_mod))
-+PFX_EXT_SLIB_MATCH:=$(sort $(call upper,$(call keeplower,$(PFX_EXT_SLIB_OPT))))
-+PFX_EXT_SLIB_TARGET:=$(sort $(call keepupper,$(PFX_EXT_SLIB_OPT)))
-+pfx_build_mod:=$(PFX_EXT_SLIB_BASE)
-+pfx_build_mod+=$(call lower,$(call TEST_CONFIG,$(PFX_EXT_SLIB_MATCH),IP_NF,MATCH))
-+pfx_build_mod+=$(call TEST_CONFIG,$(PFX_EXT_SLIB_TARGET),IP_NF,TARGET)
-+ifeq ($(DO_IPV6), 1)
-+pfx_build_mod+=$(call lower,$(call TEST_CONFIG,$(PFX_EXT_SLIB_MATCH),IP6_NF,MATCH))
-+pfx_build_mod+=$(call TEST_CONFIG,$(PFX_EXT_SLIB_TARGET),IP6_NF,TARGET)
-+endif
-+pfx_build_mod:=$(sort $(pfx_build_mod))
++$(call _disable_unconfigured_modules_in_var,pfx_build_mod,xt)
++$(call _disable_unconfigured_modules_in_var,pfb_build_mod,ebt)
++$(call _disable_unconfigured_modules_in_var,pfa_build_mod,arpt)
++$(call _disable_unconfigured_modules_in_var,pf4_build_mod,ipt)
++$(call _disable_unconfigured_modules_in_var,pf6_build_mod,ip6t)
 +
-+ifneq ($(CONFIG_NETFILTER_XT_TARGET_DSCP),)
-+pfx_build_mod+=TOS
-+endif
-+ifneq ($(CONFIG_NETFILTER_XT_MARK),)
-+pfx_build_mod+=mark MARK
-+endif
-+ifneq ($(CONFIG_NETFILTER_XT_CONNMARK),)
-+pfx_build_mod+=connmark CONNMARK
-+endif
-+ifneq ($(CONFIG_IP_NF_NAT)$(CONFIG_NF_NAT),)
-+pf4_build_mod+=SNAT DNAT
-+pf6_build_mod+=SNAT DNAT
-+endif
-+ifneq ($(CONFIG_IP_NF_MATCH_AH_ESP),)
-+pf4_build_mod+=ah
-+pfx_build_mod+=esp
-+endif
-+ifneq ($(CONFIG_USER_IPSET_IPSET),)
-+pfx_build_mod+=set SET
-+endif
- 
- #
- # Building blocks
-@@ -148,11 +207,11 @@
- libext6.a: initext6.o ${libext6_objs}
- 	${AM_VERBOSE_AR} ${AR} crs $@ $^;
- 
--initext_func  := $(addprefix xt_,${pfx_build_mod})
--initextb_func := $(addprefix ebt_,${pfb_build_mod})
--initexta_func := $(addprefix arpt_,${pfa_build_mod})
--initext4_func := $(addprefix ipt_,${pf4_build_mod})
--initext6_func := $(addprefix ip6t_,${pf6_build_mod})
-+initext_func  := $(sort $(addprefix xt_,${pfx_build_mod}))
-+initextb_func := $(sort $(addprefix ebt_,${pfb_build_mod}))
-+initexta_func := $(sort $(addprefix arpt_,${pfa_build_mod}))
-+initext4_func := $(sort $(addprefix ipt_,${pf4_build_mod}))
-+initext6_func := $(sort $(addprefix ip6t_,${pf6_build_mod}))
- 
- .initext.dd: FORCE
- 	@echo "${initext_func}" >$@.tmp; \
++
+ pfx_objs      := $(patsubst %,libxt_%.o,${pfx_build_mod})
+ pfb_objs      := $(patsubst %,libebt_%.o,${pfb_build_mod})
+ pfa_objs      := $(patsubst %,libarpt_%.o,${pfa_build_mod})

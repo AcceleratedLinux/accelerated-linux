@@ -15,6 +15,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/compat.h>
+#include <linux/if_ether.h>
 #include <linux/netlink.h>
 #include <uapi/linux/ethtool.h>
 
@@ -72,13 +73,19 @@ enum {
  * @rx_buf_len: Current length of buffers on the rx ring.
  * @tcp_data_split: Scatter packet headers and data to separate buffers
  * @tx_push: The flag of tx push mode
+ * @rx_push: The flag of rx push mode
  * @cqe_size: Size of TX/RX completion queue event
+ * @tx_push_buf_len: Size of TX push buffer
+ * @tx_push_buf_max_len: Maximum allowed size of TX push buffer
  */
 struct kernel_ethtool_ringparam {
 	u32	rx_buf_len;
 	u8	tcp_data_split;
 	u8	tx_push;
+	u8	rx_push;
 	u32	cqe_size;
+	u32	tx_push_buf_len;
+	u32	tx_push_buf_max_len;
 };
 
 /**
@@ -86,11 +93,17 @@ struct kernel_ethtool_ringparam {
  * @ETHTOOL_RING_USE_RX_BUF_LEN: capture for setting rx_buf_len
  * @ETHTOOL_RING_USE_CQE_SIZE: capture for setting cqe_size
  * @ETHTOOL_RING_USE_TX_PUSH: capture for setting tx_push
+ * @ETHTOOL_RING_USE_RX_PUSH: capture for setting rx_push
+ * @ETHTOOL_RING_USE_TX_PUSH_BUF_LEN: capture for setting tx_push_buf_len
+ * @ETHTOOL_RING_USE_TCP_DATA_SPLIT: capture for setting tcp_data_split
  */
 enum ethtool_supported_ring_param {
-	ETHTOOL_RING_USE_RX_BUF_LEN = BIT(0),
-	ETHTOOL_RING_USE_CQE_SIZE   = BIT(1),
-	ETHTOOL_RING_USE_TX_PUSH    = BIT(2),
+	ETHTOOL_RING_USE_RX_BUF_LEN		= BIT(0),
+	ETHTOOL_RING_USE_CQE_SIZE		= BIT(1),
+	ETHTOOL_RING_USE_TX_PUSH		= BIT(2),
+	ETHTOOL_RING_USE_RX_PUSH		= BIT(3),
+	ETHTOOL_RING_USE_TX_PUSH_BUF_LEN	= BIT(4),
+	ETHTOOL_RING_USE_TCP_DATA_SPLIT		= BIT(5),
 };
 
 #define __ETH_RSS_HASH_BIT(bit)	((u32)1 << (bit))
@@ -106,11 +119,6 @@ enum ethtool_supported_ring_param {
 struct net_device;
 struct netlink_ext_ack;
 
-/* Some generic methods drivers may use in their ethtool_ops */
-u32 ethtool_op_get_link(struct net_device *dev);
-int ethtool_op_get_ts_info(struct net_device *dev, struct ethtool_ts_info *eti);
-
-
 /* Link extended state and substate. */
 struct ethtool_link_ext_state_info {
 	enum ethtool_link_ext_state link_ext_state;
@@ -123,6 +131,20 @@ struct ethtool_link_ext_state_info {
 		enum ethtool_link_ext_substate_module module;
 		u32 __link_ext_substate;
 	};
+};
+
+struct ethtool_link_ext_stats {
+	/* Custom Linux statistic for PHY level link down events.
+	 * In a simpler world it should be equal to netdev->carrier_down_count
+	 * unfortunately netdev also counts local reconfigurations which don't
+	 * actually take the physical link down, not to mention NC-SI which,
+	 * if present, keeps the link up regardless of host state.
+	 * This statistic counts when PHY _actually_ went down, or lost link.
+	 *
+	 * Note that we need u64 for ethtool_stats_init() and comparisons
+	 * to ETHTOOL_STAT_NOT_SET, but only u32 is exposed to the user.
+	 */
+	u64 link_down_events;
 };
 
 /**
@@ -200,9 +222,22 @@ extern int
 __ethtool_get_link_ksettings(struct net_device *dev,
 			     struct ethtool_link_ksettings *link_ksettings);
 
+struct ethtool_keee {
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertised);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(lp_advertised);
+	u32	tx_lpi_timer;
+	bool	tx_lpi_enabled;
+	bool	eee_active;
+	bool	eee_enabled;
+};
+
 struct kernel_ethtool_coalesce {
 	u8 use_cqe_mode_tx;
 	u8 use_cqe_mode_rx;
+	u32 tx_aggr_max_bytes;
+	u32 tx_aggr_max_frames;
+	u32 tx_aggr_time_usecs;
 };
 
 /**
@@ -246,7 +281,10 @@ bool ethtool_convert_link_mode_to_legacy_u32(u32 *legacy_u32,
 #define ETHTOOL_COALESCE_RATE_SAMPLE_INTERVAL	BIT(21)
 #define ETHTOOL_COALESCE_USE_CQE_RX		BIT(22)
 #define ETHTOOL_COALESCE_USE_CQE_TX		BIT(23)
-#define ETHTOOL_COALESCE_ALL_PARAMS		GENMASK(23, 0)
+#define ETHTOOL_COALESCE_TX_AGGR_MAX_BYTES	BIT(24)
+#define ETHTOOL_COALESCE_TX_AGGR_MAX_FRAMES	BIT(25)
+#define ETHTOOL_COALESCE_TX_AGGR_TIME_USECS	BIT(26)
+#define ETHTOOL_COALESCE_ALL_PARAMS		GENMASK(26, 0)
 
 #define ETHTOOL_COALESCE_USECS						\
 	(ETHTOOL_COALESCE_RX_USECS | ETHTOOL_COALESCE_TX_USECS)
@@ -274,6 +312,10 @@ bool ethtool_convert_link_mode_to_legacy_u32(u32 *legacy_u32,
 	 ETHTOOL_COALESCE_RATE_SAMPLE_INTERVAL)
 #define ETHTOOL_COALESCE_USE_CQE					\
 	(ETHTOOL_COALESCE_USE_CQE_RX | ETHTOOL_COALESCE_USE_CQE_TX)
+#define ETHTOOL_COALESCE_TX_AGGR		\
+	(ETHTOOL_COALESCE_TX_AGGR_MAX_BYTES |	\
+	 ETHTOOL_COALESCE_TX_AGGR_MAX_FRAMES |	\
+	 ETHTOOL_COALESCE_TX_AGGR_TIME_USECS)
 
 #define ETHTOOL_STAT_NOT_SET	(~0ULL)
 
@@ -287,48 +329,59 @@ static inline void ethtool_stats_init(u64 *stats, unsigned int n)
  * via a more targeted API.
  */
 struct ethtool_eth_mac_stats {
-	u64 FramesTransmittedOK;
-	u64 SingleCollisionFrames;
-	u64 MultipleCollisionFrames;
-	u64 FramesReceivedOK;
-	u64 FrameCheckSequenceErrors;
-	u64 AlignmentErrors;
-	u64 OctetsTransmittedOK;
-	u64 FramesWithDeferredXmissions;
-	u64 LateCollisions;
-	u64 FramesAbortedDueToXSColls;
-	u64 FramesLostDueToIntMACXmitError;
-	u64 CarrierSenseErrors;
-	u64 OctetsReceivedOK;
-	u64 FramesLostDueToIntMACRcvError;
-	u64 MulticastFramesXmittedOK;
-	u64 BroadcastFramesXmittedOK;
-	u64 FramesWithExcessiveDeferral;
-	u64 MulticastFramesReceivedOK;
-	u64 BroadcastFramesReceivedOK;
-	u64 InRangeLengthErrors;
-	u64 OutOfRangeLengthField;
-	u64 FrameTooLongErrors;
+	enum ethtool_mac_stats_src src;
+	struct_group(stats,
+		u64 FramesTransmittedOK;
+		u64 SingleCollisionFrames;
+		u64 MultipleCollisionFrames;
+		u64 FramesReceivedOK;
+		u64 FrameCheckSequenceErrors;
+		u64 AlignmentErrors;
+		u64 OctetsTransmittedOK;
+		u64 FramesWithDeferredXmissions;
+		u64 LateCollisions;
+		u64 FramesAbortedDueToXSColls;
+		u64 FramesLostDueToIntMACXmitError;
+		u64 CarrierSenseErrors;
+		u64 OctetsReceivedOK;
+		u64 FramesLostDueToIntMACRcvError;
+		u64 MulticastFramesXmittedOK;
+		u64 BroadcastFramesXmittedOK;
+		u64 FramesWithExcessiveDeferral;
+		u64 MulticastFramesReceivedOK;
+		u64 BroadcastFramesReceivedOK;
+		u64 InRangeLengthErrors;
+		u64 OutOfRangeLengthField;
+		u64 FrameTooLongErrors;
+	);
 };
 
 /* Basic IEEE 802.3 PHY statistics (30.3.2.1.*), not otherwise exposed
  * via a more targeted API.
  */
 struct ethtool_eth_phy_stats {
-	u64 SymbolErrorDuringCarrier;
+	enum ethtool_mac_stats_src src;
+	struct_group(stats,
+		u64 SymbolErrorDuringCarrier;
+	);
 };
 
 /* Basic IEEE 802.3 MAC Ctrl statistics (30.3.3.*), not otherwise exposed
  * via a more targeted API.
  */
 struct ethtool_eth_ctrl_stats {
-	u64 MACControlFramesTransmitted;
-	u64 MACControlFramesReceived;
-	u64 UnsupportedOpcodesReceived;
+	enum ethtool_mac_stats_src src;
+	struct_group(stats,
+		u64 MACControlFramesTransmitted;
+		u64 MACControlFramesReceived;
+		u64 UnsupportedOpcodesReceived;
+	);
 };
 
 /**
  * struct ethtool_pause_stats - statistics for IEEE 802.3x pause frames
+ * @src: input field denoting whether stats should be queried from the eMAC or
+ *	pMAC (if the MM layer is supported). To be ignored otherwise.
  * @tx_pause_frames: transmitted pause frame count. Reported to user space
  *	as %ETHTOOL_A_PAUSE_STAT_TX_FRAMES.
  *
@@ -342,8 +395,11 @@ struct ethtool_eth_ctrl_stats {
  *	from the standard.
  */
 struct ethtool_pause_stats {
-	u64 tx_pause_frames;
-	u64 rx_pause_frames;
+	enum ethtool_mac_stats_src src;
+	struct_group(stats,
+		u64 tx_pause_frames;
+		u64 rx_pause_frames;
+	);
 };
 
 #define ETHTOOL_MAX_LANES	8
@@ -365,8 +421,10 @@ struct ethtool_pause_stats {
  *	not entire FEC data blocks. This is a non-standard statistic.
  *	Reported to user space as %ETHTOOL_A_FEC_STAT_CORR_BITS.
  *
- * @lane: per-lane/PCS-instance counts as defined by the standard
- * @total: error counts for the entire port, for drivers incapable of reporting
+ * For each of the above fields, the two substructure members are:
+ *
+ * - @lanes: per-lane/PCS-instance counts as defined by the standard
+ * - @total: error counts for the entire port, for drivers incapable of reporting
  *	per-lane stats
  *
  * Drivers should fill in either only total or per-lane statistics, core
@@ -393,6 +451,8 @@ struct ethtool_rmon_hist_range {
 
 /**
  * struct ethtool_rmon_stats - selected RMON (RFC 2819) statistics
+ * @src: input field denoting whether stats should be queried from the eMAC or
+ *	pMAC (if the MM layer is supported). To be ignored otherwise.
  * @undersize_pkts: Equivalent to `etherStatsUndersizePkts` from the RFC.
  * @oversize_pkts: Equivalent to `etherStatsOversizePkts` from the RFC.
  * @fragments: Equivalent to `etherStatsFragments` from the RFC.
@@ -408,13 +468,36 @@ struct ethtool_rmon_hist_range {
  * ranges is left to the driver.
  */
 struct ethtool_rmon_stats {
-	u64 undersize_pkts;
-	u64 oversize_pkts;
-	u64 fragments;
-	u64 jabbers;
+	enum ethtool_mac_stats_src src;
+	struct_group(stats,
+		u64 undersize_pkts;
+		u64 oversize_pkts;
+		u64 fragments;
+		u64 jabbers;
 
-	u64 hist[ETHTOOL_RMON_HIST_MAX];
-	u64 hist_tx[ETHTOOL_RMON_HIST_MAX];
+		u64 hist[ETHTOOL_RMON_HIST_MAX];
+		u64 hist_tx[ETHTOOL_RMON_HIST_MAX];
+	);
+};
+
+/**
+ * struct ethtool_ts_stats - HW timestamping statistics
+ * @pkts: Number of packets successfully timestamped by the hardware.
+ * @lost: Number of hardware timestamping requests where the timestamping
+ *	information from the hardware never arrived for submission with
+ *	the skb.
+ * @err: Number of arbitrary timestamp generation error events that the
+ *	hardware encountered, exclusive of @lost statistics. Cases such
+ *	as resource exhaustion, unavailability, firmware errors, and
+ *	detected illogical timestamp values not submitted with the skb
+ *	are inclusive to this counter.
+ */
+struct ethtool_ts_stats {
+	struct_group(tx_stats,
+		u64 pkts;
+		u64 lost;
+		u64 err;
+	);
 };
 
 #define ETH_MODULE_EEPROM_PAGE_LEN	128
@@ -454,15 +537,144 @@ struct ethtool_module_power_mode_params {
 };
 
 /**
+ * struct ethtool_mm_state - 802.3 MAC merge layer state
+ * @verify_time:
+ *	wait time between verification attempts in ms (according to clause
+ *	30.14.1.6 aMACMergeVerifyTime)
+ * @max_verify_time:
+ *	maximum accepted value for the @verify_time variable in set requests
+ * @verify_status:
+ *	state of the verification state machine of the MM layer (according to
+ *	clause 30.14.1.2 aMACMergeStatusVerify)
+ * @tx_enabled:
+ *	set if the MM layer is administratively enabled in the TX direction
+ *	(according to clause 30.14.1.3 aMACMergeEnableTx)
+ * @tx_active:
+ *	set if the MM layer is enabled in the TX direction, which makes FP
+ *	possible (according to 30.14.1.5 aMACMergeStatusTx). This should be
+ *	true if MM is enabled, and the verification status is either verified,
+ *	or disabled.
+ * @pmac_enabled:
+ *	set if the preemptible MAC is powered on and is able to receive
+ *	preemptible packets and respond to verification frames.
+ * @verify_enabled:
+ *	set if the Verify function of the MM layer (which sends SMD-V
+ *	verification requests) is administratively enabled (regardless of
+ *	whether it is currently in the ETHTOOL_MM_VERIFY_STATUS_DISABLED state
+ *	or not), according to clause 30.14.1.4 aMACMergeVerifyDisableTx (but
+ *	using positive rather than negative logic). The device should always
+ *	respond to received SMD-V requests as long as @pmac_enabled is set.
+ * @tx_min_frag_size:
+ *	the minimum size of non-final mPacket fragments that the link partner
+ *	supports receiving, expressed in octets. Compared to the definition
+ *	from clause 30.14.1.7 aMACMergeAddFragSize which is expressed in the
+ *	range 0 to 3 (requiring a translation to the size in octets according
+ *	to the formula 64 * (1 + addFragSize) - 4), a value in a continuous and
+ *	unbounded range can be specified here.
+ * @rx_min_frag_size:
+ *	the minimum size of non-final mPacket fragments that this device
+ *	supports receiving, expressed in octets.
+ */
+struct ethtool_mm_state {
+	u32 verify_time;
+	u32 max_verify_time;
+	enum ethtool_mm_verify_status verify_status;
+	bool tx_enabled;
+	bool tx_active;
+	bool pmac_enabled;
+	bool verify_enabled;
+	u32 tx_min_frag_size;
+	u32 rx_min_frag_size;
+};
+
+/**
+ * struct ethtool_mm_cfg - 802.3 MAC merge layer configuration
+ * @verify_time: see struct ethtool_mm_state
+ * @verify_enabled: see struct ethtool_mm_state
+ * @tx_enabled: see struct ethtool_mm_state
+ * @pmac_enabled: see struct ethtool_mm_state
+ * @tx_min_frag_size: see struct ethtool_mm_state
+ */
+struct ethtool_mm_cfg {
+	u32 verify_time;
+	bool verify_enabled;
+	bool tx_enabled;
+	bool pmac_enabled;
+	u32 tx_min_frag_size;
+};
+
+/**
+ * struct ethtool_mm_stats - 802.3 MAC merge layer statistics
+ * @MACMergeFrameAssErrorCount:
+ *	received MAC frames with reassembly errors
+ * @MACMergeFrameSmdErrorCount:
+ *	received MAC frames/fragments rejected due to unknown or incorrect SMD
+ * @MACMergeFrameAssOkCount:
+ *	received MAC frames that were successfully reassembled and passed up
+ * @MACMergeFragCountRx:
+ *	number of additional correct SMD-C mPackets received due to preemption
+ * @MACMergeFragCountTx:
+ *	number of additional mPackets sent due to preemption
+ * @MACMergeHoldCount:
+ *	number of times the MM layer entered the HOLD state, which blocks
+ *	transmission of preemptible traffic
+ */
+struct ethtool_mm_stats {
+	u64 MACMergeFrameAssErrorCount;
+	u64 MACMergeFrameSmdErrorCount;
+	u64 MACMergeFrameAssOkCount;
+	u64 MACMergeFragCountRx;
+	u64 MACMergeFragCountTx;
+	u64 MACMergeHoldCount;
+};
+
+/**
+ * struct ethtool_rxfh_param - RXFH (RSS) parameters
+ * @hfunc: Defines the current RSS hash function used by HW (or to be set to).
+ *	Valid values are one of the %ETH_RSS_HASH_*.
+ * @indir_size: On SET, the array size of the user buffer for the
+ *	indirection table, which may be zero, or
+ *	%ETH_RXFH_INDIR_NO_CHANGE.  On GET (read from the driver),
+ *	the array size of the hardware indirection table.
+ * @indir: The indirection table of size @indir_size entries.
+ * @key_size: On SET, the array size of the user buffer for the hash key,
+ *	which may be zero.  On GET (read from the driver), the size of the
+ *	hardware hash key.
+ * @key: The hash key of size @key_size bytes.
+ * @rss_context: RSS context identifier.  Context 0 is the default for normal
+ *	traffic; other contexts can be referenced as the destination for RX flow
+ *	classification rules.  On SET, %ETH_RXFH_CONTEXT_ALLOC is used
+ *	to allocate a new RSS context; on return this field will
+ *	contain the ID of the newly allocated context.
+ * @rss_delete: Set to non-ZERO to remove the @rss_context context.
+ * @input_xfrm: Defines how the input data is transformed. Valid values are one
+ *	of %RXH_XFRM_*.
+ */
+struct ethtool_rxfh_param {
+	u8	hfunc;
+	u32	indir_size;
+	u32	*indir;
+	u32	key_size;
+	u8	*key;
+	u32	rss_context;
+	u8	rss_delete;
+	u8	input_xfrm;
+};
+
+/**
  * struct ethtool_ops - optional netdev operations
  * @cap_link_lanes_supported: indicates if the driver supports lanes
  *	parameter.
+ * @cap_rss_ctx_supported: indicates if the driver supports RSS
+ *	contexts.
+ * @cap_rss_sym_xor_supported: indicates if the driver supports symmetric-xor
+ *	RSS.
  * @supported_coalesce_params: supported types of interrupt coalescing.
  * @supported_ring_params: supported ring params.
- * @get_drvinfo: Report driver/device information.  Should only set the
- *	@driver, @version, @fw_version and @bus_info fields.  If not
- *	implemented, the @driver and @bus_info fields will be filled in
- *	according to the netdev's parent device.
+ * @get_drvinfo: Report driver/device information. Modern drivers no
+ *	longer have to implement this callback. Most fields are
+ *	correctly filled in by the core using system information, or
+ *	populated using other driver operations.
  * @get_regs_len: Get buffer length required for @get_regs
  * @get_regs: Get device registers
  * @get_wol: Report whether Wake-on-Lan is enabled
@@ -481,6 +693,7 @@ struct ethtool_module_power_mode_params {
  *	do not attach ext_substate attribute to netlink message). If link_ext_state
  *	and link_ext_substate are unknown, return -ENODATA. If not implemented,
  *	link_ext_state and link_ext_substate will not be sent to userspace.
+ * @get_link_ext_stats: Read extra link-related counters.
  * @get_eeprom_len: Read range of EEPROM addresses for validation of
  *	@get_eeprom and @set_eeprom requests.
  *	Returns 0 if device does not support EEPROM access.
@@ -552,15 +765,6 @@ struct ethtool_module_power_mode_params {
  *	will remain unchanged.
  *	Returns a negative error code or zero. An error code must be returned
  *	if at least one unsupported change was requested.
- * @get_rxfh_context: Get the contents of the RX flow hash indirection table,
- *	hash key, and/or hash function assiciated to the given rss context.
- *	Returns a negative error code or zero.
- * @set_rxfh_context: Create, remove and configure RSS contexts. Allows setting
- *	the contents of the RX flow hash indirection table, hash key, and/or
- *	hash function associated to the given context. Arguments which are set
- *	to %NULL or zero will remain unchanged.
- *	Returns a negative error code or zero. An error code must be returned
- *	if at least one unsupported change was requested.
  * @get_channels: Get number of channels.
  * @set_channels: Set number of channels.  Returns a negative error code or
  *	zero.
@@ -569,8 +773,12 @@ struct ethtool_module_power_mode_params {
  * @get_dump_data: Get dump data.
  * @set_dump: Set dump specific flags to the device.
  * @get_ts_info: Get the time stamping and PTP hardware clock capabilities.
+ *	It may be called with RCU, or rtnl or reference on the device.
  *	Drivers supporting transmit time stamps in software should set this to
- *	ethtool_op_get_ts_info().
+ *	ethtool_op_get_ts_info(). Drivers must not zero statistics which they
+ *	don't report. The stats	structure is initialized to ETHTOOL_STAT_NOT_SET
+ *	indicating driver does not report statistics.
+ * @get_ts_stats: Query the device hardware timestamping statistics.
  * @get_module_info: Get the size and type of the eeprom contained within
  *	a plug-in module.
  * @get_module_eeprom: Get the eeprom information from the plug-in module
@@ -624,6 +832,9 @@ struct ethtool_module_power_mode_params {
  *	plugged-in.
  * @set_module_power_mode: Set the power mode policy for the plug-in module
  *	used by the network device.
+ * @get_mm: Query the 802.3 MAC Merge layer state.
+ * @set_mm: Set the 802.3 MAC Merge layer parameters.
+ * @get_mm_stats: Query the 802.3 MAC Merge layer statistics.
  *
  * All operations are optional (i.e. the function pointer may be set
  * to %NULL) and callers must take this into account.  Callers must
@@ -639,6 +850,8 @@ struct ethtool_module_power_mode_params {
  */
 struct ethtool_ops {
 	u32     cap_link_lanes_supported:1;
+	u32     cap_rss_ctx_supported:1;
+	u32	cap_rss_sym_xor_supported:1;
 	u32	supported_coalesce_params;
 	u32	supported_ring_params;
 	void	(*get_drvinfo)(struct net_device *, struct ethtool_drvinfo *);
@@ -652,6 +865,8 @@ struct ethtool_ops {
 	u32	(*get_link)(struct net_device *);
 	int	(*get_link_ext_state)(struct net_device *,
 				      struct ethtool_link_ext_state_info *);
+	void	(*get_link_ext_stats)(struct net_device *dev,
+				      struct ethtool_link_ext_stats *stats);
 	int	(*get_eeprom_len)(struct net_device *);
 	int	(*get_eeprom)(struct net_device *,
 			      struct ethtool_eeprom *, u8 *);
@@ -696,15 +911,9 @@ struct ethtool_ops {
 	int	(*reset)(struct net_device *, u32 *);
 	u32	(*get_rxfh_key_size)(struct net_device *);
 	u32	(*get_rxfh_indir_size)(struct net_device *);
-	int	(*get_rxfh)(struct net_device *, u32 *indir, u8 *key,
-			    u8 *hfunc);
-	int	(*set_rxfh)(struct net_device *, const u32 *indir,
-			    const u8 *key, const u8 hfunc);
-	int	(*get_rxfh_context)(struct net_device *, u32 *indir, u8 *key,
-				    u8 *hfunc, u32 rss_context);
-	int	(*set_rxfh_context)(struct net_device *, const u32 *indir,
-				    const u8 *key, const u8 hfunc,
-				    u32 *rss_context, bool delete);
+	int	(*get_rxfh)(struct net_device *, struct ethtool_rxfh_param *);
+	int	(*set_rxfh)(struct net_device *, struct ethtool_rxfh_param *,
+			    struct netlink_ext_ack *extack);
 	void	(*get_channels)(struct net_device *, struct ethtool_channels *);
 	int	(*set_channels)(struct net_device *, struct ethtool_channels *);
 	int	(*get_dump_flag)(struct net_device *, struct ethtool_dump *);
@@ -712,12 +921,14 @@ struct ethtool_ops {
 				 struct ethtool_dump *, void *);
 	int	(*set_dump)(struct net_device *, struct ethtool_dump *);
 	int	(*get_ts_info)(struct net_device *, struct ethtool_ts_info *);
+	void	(*get_ts_stats)(struct net_device *dev,
+				struct ethtool_ts_stats *ts_stats);
 	int     (*get_module_info)(struct net_device *,
 				   struct ethtool_modinfo *);
 	int     (*get_module_eeprom)(struct net_device *,
 				     struct ethtool_eeprom *, u8 *);
-	int	(*get_eee)(struct net_device *, struct ethtool_eee *);
-	int	(*set_eee)(struct net_device *, struct ethtool_eee *);
+	int	(*get_eee)(struct net_device *dev, struct ethtool_keee *eee);
+	int	(*set_eee)(struct net_device *dev, struct ethtool_keee *eee);
 	int	(*get_tunable)(struct net_device *,
 			       const struct ethtool_tunable *, void *);
 	int	(*set_tunable)(struct net_device *,
@@ -760,6 +971,10 @@ struct ethtool_ops {
 	int	(*set_module_power_mode)(struct net_device *dev,
 					 const struct ethtool_module_power_mode_params *params,
 					 struct netlink_ext_ack *extack);
+	int	(*get_mm)(struct net_device *dev, struct ethtool_mm_state *state);
+	int	(*set_mm)(struct net_device *dev, struct ethtool_mm_cfg *cfg,
+			  struct netlink_ext_ack *extack);
+	void	(*get_mm_stats)(struct net_device *dev, struct ethtool_mm_stats *stats);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);
@@ -785,12 +1000,17 @@ int ethtool_virtdev_set_link_ksettings(struct net_device *dev,
 
 struct phy_device;
 struct phy_tdr_config;
+struct phy_plca_cfg;
+struct phy_plca_status;
 
 /**
  * struct ethtool_phy_ops - Optional PHY device options
  * @get_sset_count: Get number of strings that @get_strings will write.
  * @get_strings: Return a set of strings that describe the requested objects
  * @get_stats: Return extended statistics about the PHY device.
+ * @get_plca_cfg: Return PLCA configuration.
+ * @set_plca_cfg: Set PLCA configuration.
+ * @get_plca_status: Get PLCA configuration.
  * @start_cable_test: Start a cable test
  * @start_cable_test_tdr: Start a Time Domain Reflectometry cable test
  *
@@ -802,6 +1022,13 @@ struct ethtool_phy_ops {
 	int (*get_strings)(struct phy_device *dev, u8 *data);
 	int (*get_stats)(struct phy_device *dev,
 			 struct ethtool_stats *stats, u64 *data);
+	int (*get_plca_cfg)(struct phy_device *dev,
+			    struct phy_plca_cfg *plca_cfg);
+	int (*set_plca_cfg)(struct phy_device *dev,
+			    const struct phy_plca_cfg *plca_cfg,
+			    struct netlink_ext_ack *extack);
+	int (*get_plca_status)(struct phy_device *dev,
+			       struct phy_plca_status *plca_st);
 	int (*start_cable_test)(struct phy_device *phydev,
 				struct netlink_ext_ack *extack);
 	int (*start_cable_test_tdr)(struct phy_device *phydev,
@@ -834,13 +1061,98 @@ ethtool_params_from_link_mode(struct ethtool_link_ksettings *link_ksettings,
  */
 int ethtool_get_phc_vclocks(struct net_device *dev, int **vclock_index);
 
+/* Some generic methods drivers may use in their ethtool_ops */
+u32 ethtool_op_get_link(struct net_device *dev);
+int ethtool_op_get_ts_info(struct net_device *dev, struct ethtool_ts_info *eti);
+
+/**
+ * ethtool_mm_frag_size_add_to_min - Translate (standard) additional fragment
+ *	size expressed as multiplier into (absolute) minimum fragment size
+ *	value expressed in octets
+ * @val_add: Value of addFragSize multiplier
+ */
+static inline u32 ethtool_mm_frag_size_add_to_min(u32 val_add)
+{
+	return (ETH_ZLEN + ETH_FCS_LEN) * (1 + val_add) - ETH_FCS_LEN;
+}
+
+/**
+ * ethtool_mm_frag_size_min_to_add - Translate (absolute) minimum fragment size
+ *	expressed in octets into (standard) additional fragment size expressed
+ *	as multiplier
+ * @val_min: Value of addFragSize variable in octets
+ * @val_add: Pointer where the standard addFragSize value is to be returned
+ * @extack: Netlink extended ack
+ *
+ * Translate a value in octets to one of 0, 1, 2, 3 according to the reverse
+ * application of the 802.3 formula 64 * (1 + addFragSize) - 4. To be called
+ * by drivers which do not support programming the minimum fragment size to a
+ * continuous range. Returns error on other fragment length values.
+ */
+static inline int ethtool_mm_frag_size_min_to_add(u32 val_min, u32 *val_add,
+						  struct netlink_ext_ack *extack)
+{
+	u32 add_frag_size;
+
+	for (add_frag_size = 0; add_frag_size < 4; add_frag_size++) {
+		if (ethtool_mm_frag_size_add_to_min(add_frag_size) == val_min) {
+			*val_add = add_frag_size;
+			return 0;
+		}
+	}
+
+	NL_SET_ERR_MSG_MOD(extack,
+			   "minFragSize required to be one of 60, 124, 188 or 252");
+	return -EINVAL;
+}
+
+/**
+ * ethtool_get_ts_info_by_layer - Obtains time stamping capabilities from the MAC or PHY layer.
+ * @dev: pointer to net_device structure
+ * @info: buffer to hold the result
+ * Returns zero on success, non-zero otherwise.
+ */
+int ethtool_get_ts_info_by_layer(struct net_device *dev, struct ethtool_ts_info *info);
+
 /**
  * ethtool_sprintf - Write formatted string to ethtool string data
- * @data: Pointer to start of string to update
+ * @data: Pointer to a pointer to the start of string to update
  * @fmt: Format of string to write
  *
- * Write formatted string to data. Update data to point at start of
+ * Write formatted string to *data. Update *data to point at start of
  * next string.
  */
 extern __printf(2, 3) void ethtool_sprintf(u8 **data, const char *fmt, ...);
+
+/**
+ * ethtool_puts - Write string to ethtool string data
+ * @data: Pointer to a pointer to the start of string to update
+ * @str: String to write
+ *
+ * Write string to *data without a trailing newline. Update *data
+ * to point at start of next string.
+ *
+ * Prefer this function to ethtool_sprintf() when given only
+ * two arguments or if @fmt is just "%s".
+ */
+extern void ethtool_puts(u8 **data, const char *str);
+
+/* Link mode to forced speed capabilities maps */
+struct ethtool_forced_speed_map {
+	u32		speed;
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(caps);
+
+	const u32	*cap_arr;
+	u32		arr_size;
+};
+
+#define ETHTOOL_FORCED_SPEED_MAP(prefix, value)				\
+{									\
+	.speed		= SPEED_##value,				\
+	.cap_arr	= prefix##_##value,				\
+	.arr_size	= ARRAY_SIZE(prefix##_##value),			\
+}
+
+void
+ethtool_forced_speed_maps_init(struct ethtool_forced_speed_map *maps, u32 size);
 #endif /* _LINUX_ETHTOOL_H */

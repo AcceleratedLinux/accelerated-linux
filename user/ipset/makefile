@@ -1,5 +1,4 @@
-PKG = ipset-7.9
-URL = http://ipset.netfilter.org/$(PKG).tar.bz2
+URL = https://ipset.netfilter.org/ipset-7.21.tar.bz2
 AUTORECONF = autoreconf
 UCFRONT_ENV = 
 MAKEVARS = 

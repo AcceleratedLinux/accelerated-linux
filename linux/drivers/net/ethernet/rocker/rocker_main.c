@@ -32,7 +32,6 @@
 #include <net/fib_rules.h>
 #include <net/fib_notifier.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
-#include <generated/utsrelease.h>
 
 #include "rocker_hw.h"
 #include "rocker.h"
@@ -129,7 +128,7 @@ static int rocker_reg_test(const struct rocker *rocker)
 	u64 test_reg;
 	u64 rnd;
 
-	rnd = prandom_u32();
+	rnd = get_random_u32();
 	rnd >>= 1;
 	rocker_write32(rocker, TEST_REG, rnd);
 	test_reg = rocker_read32(rocker, TEST_REG);
@@ -139,9 +138,9 @@ static int rocker_reg_test(const struct rocker *rocker)
 		return -EIO;
 	}
 
-	rnd = prandom_u32();
+	rnd = get_random_u32();
 	rnd <<= 31;
-	rnd |= prandom_u32();
+	rnd |= get_random_u32();
 	rocker_write64(rocker, TEST_REG64, rnd);
 	test_reg = rocker_read64(rocker, TEST_REG64);
 	if (test_reg != rnd * 2) {
@@ -224,7 +223,7 @@ static int rocker_dma_test_offset(const struct rocker *rocker,
 	if (err)
 		goto unmap;
 
-	prandom_bytes(buf, ROCKER_TEST_DMA_BUF_SIZE);
+	get_random_bytes(buf, ROCKER_TEST_DMA_BUF_SIZE);
 	for (i = 0; i < ROCKER_TEST_DMA_BUF_SIZE; i++)
 		expect[i] = ~buf[i];
 	err = rocker_dma_test_one(rocker, wait, ROCKER_TEST_DMA_CTRL_INVERT,
@@ -1968,7 +1967,7 @@ static int rocker_port_change_mtu(struct net_device *dev, int new_mtu)
 		rocker_port_stop(dev);
 
 	netdev_info(dev, "MTU change from %d to %d\n", dev->mtu, new_mtu);
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 
 	err = rocker_cmd_set_port_settings_mtu(rocker_port, new_mtu);
 	if (err)
@@ -2226,8 +2225,7 @@ rocker_port_set_link_ksettings(struct net_device *dev,
 static void rocker_port_get_drvinfo(struct net_device *dev,
 				    struct ethtool_drvinfo *drvinfo)
 {
-	strlcpy(drvinfo->driver, rocker_driver_name, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, UTS_RELEASE, sizeof(drvinfo->version));
+	strscpy(drvinfo->driver, rocker_driver_name, sizeof(drvinfo->driver));
 }
 
 static struct rocker_port_stats {
@@ -2574,8 +2572,7 @@ static int rocker_probe_port(struct rocker *rocker, unsigned int port_number)
 	dev->netdev_ops = &rocker_port_netdev_ops;
 	dev->ethtool_ops = &rocker_port_ethtool_ops;
 	netif_napi_add_tx(dev, &rocker_port->napi_tx, rocker_port_poll_tx);
-	netif_napi_add(dev, &rocker_port->napi_rx, rocker_port_poll_rx,
-		       NAPI_POLL_WEIGHT);
+	netif_napi_add(dev, &rocker_port->napi_rx, rocker_port_poll_rx);
 	rocker_carrier_init(rocker_port);
 
 	dev->features |= NETIF_F_NETNS_LOCAL | NETIF_F_SG;

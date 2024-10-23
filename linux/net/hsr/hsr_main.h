@@ -21,6 +21,7 @@
  */
 #define HSR_LIFE_CHECK_INTERVAL		 2000 /* ms */
 #define HSR_NODE_FORGET_TIME		60000 /* ms */
+#define HSR_PROXY_NODE_FORGET_TIME	60000 /* ms */
 #define HSR_ANNOUNCE_INTERVAL		  100 /* ms */
 #define HSR_ENTRY_FORGET_TIME		  400 /* ms */
 
@@ -35,6 +36,7 @@
  * HSR_NODE_FORGET_TIME?
  */
 #define PRUNE_PERIOD			 3000 /* ms */
+#define PRUNE_PROXY_PERIOD		 3000 /* ms */
 #define HSR_TLV_EOT				   0  /* End of TLVs */
 #define HSR_TLV_ANNOUNCE		   22
 #define HSR_TLV_LIFE_CHECK		   23
@@ -46,9 +48,6 @@
 #define PRP_TLV_REDBOX_MAC		   30
 
 #define HSR_V1_SUP_LSDUSIZE		52
-
-#define HSR_HSIZE_SHIFT	8
-#define HSR_HSIZE	BIT(HSR_HSIZE_SHIFT)
 
 /* The helper functions below assumes that 'path' occupies the 4 most
  * significant bits of the 16-bit field shared by 'path' and 'LSDU_size' (or
@@ -86,7 +85,7 @@ struct hsr_vlan_ethhdr {
 struct hsr_sup_tlv {
 	u8		HSR_TLV_type;
 	u8		HSR_TLV_length;
-};
+} __packed;
 
 /* HSR/PRP Supervision Frame data types.
  * Field names as defined in the IEC:2010 standard for HSR.
@@ -185,28 +184,38 @@ struct hsr_proto_ops {
 	void (*update_san_info)(struct hsr_node *node, bool is_sup);
 };
 
+struct hsr_self_node {
+	unsigned char	macaddress_A[ETH_ALEN];
+	unsigned char	macaddress_B[ETH_ALEN];
+	struct rcu_head	rcu_head;
+};
+
 struct hsr_priv {
 	struct rcu_head		rcu_head;
 	struct list_head	ports;
-	struct hlist_head	node_db[HSR_HSIZE];	/* Known HSR nodes */
-	struct hlist_head	self_node_db;	/* MACs of slaves */
+	struct list_head	node_db;	/* Known HSR nodes */
+	struct list_head	proxy_node_db;	/* RedBox HSR proxy nodes */
+	struct hsr_self_node	__rcu *self_node;	/* MACs of slaves */
 	struct timer_list	announce_timer;	/* Supervision frame dispatch */
 	struct timer_list	prune_timer;
+	struct timer_list	prune_proxy_timer;
 	int announce_count;
 	u16 sequence_nr;
+	u16 interlink_sequence_nr; /* Interlink port seq_nr */
 	u16 sup_sequence_nr;	/* For HSRv1 separate seq_nr for supervision */
 	enum hsr_version prot_version;	/* Indicate if HSRv0, HSRv1 or PRPv1 */
 	spinlock_t seqnr_lock;	/* locking for sequence_nr */
 	spinlock_t list_lock;	/* locking for node list */
 	struct hsr_proto_ops	*proto_ops;
-	u32 hash_buckets;
-	u32 hash_seed;
 #define PRP_LAN_ID	0x5     /* 0x1010 for A and 0x1011 for B. Bit 0 is set
 				 * based on SLAVE_A or SLAVE_B
 				 */
 	u8 net_id;		/* for PRP, it occupies most significant 3 bits
 				 * of lan_id
 				 */
+	bool fwd_offloaded;	/* Forwarding offloaded to HW */
+	bool redbox;            /* Device supports HSR RedBox */
+	unsigned char		macaddress_redbox[ETH_ALEN];
 	unsigned char		sup_multicast_addr[ETH_ALEN] __aligned(sizeof(u16));
 				/* Align to u16 boundary to avoid unaligned access
 				 * in ether_addr_equal

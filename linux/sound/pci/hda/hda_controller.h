@@ -45,6 +45,7 @@
 #define AZX_DCAPS_CORBRP_SELF_CLEAR (1 << 28)	/* CORBRP clears itself after reset */
 #define AZX_DCAPS_NO_MSI64      (1 << 29)	/* Stick to 32-bit MSIs */
 #define AZX_DCAPS_SEPARATE_STREAM_TAG	(1 << 30) /* capture and playback use separate stream tag */
+#define AZX_DCAPS_PIO_COMMANDS (1 << 31)	/* Use PIO instead of CORB for commands */
 
 enum {
 	AZX_SNOOP_TYPE_NONE,
@@ -124,6 +125,7 @@ struct azx {
 	/* HD codec */
 	int  codec_probe_mask; /* copied from probe_mask option */
 	unsigned int beep_mode;
+	bool ctl_dev_id;
 
 #ifdef CONFIG_SND_HDA_PATCH_LOADER
 	const struct firmware *fw;

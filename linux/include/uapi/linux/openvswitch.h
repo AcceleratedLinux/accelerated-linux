@@ -76,6 +76,8 @@ enum ovs_datapath_cmd {
  * datapath.  Always present in notifications.
  * @OVS_DP_ATTR_MEGAFLOW_STATS: Statistics about mega flow masks usage for the
  * datapath. Always present in notifications.
+ * @OVS_DP_ATTR_IFINDEX: Interface index for a new datapath netdev. Only
+ * valid for %OVS_DP_CMD_NEW requests.
  *
  * These attributes follow the &struct ovs_header within the Generic Netlink
  * payload for %OVS_DP_* commands.
@@ -92,6 +94,7 @@ enum ovs_datapath_attr {
 	OVS_DP_ATTR_PER_CPU_PIDS,   /* Netlink PIDS to receive upcalls in
 				     * per-cpu dispatch mode
 				     */
+	OVS_DP_ATTR_IFINDEX,
 	__OVS_DP_ATTR_MAX
 };
 
@@ -274,10 +277,24 @@ enum ovs_vport_attr {
 	OVS_VPORT_ATTR_PAD,
 	OVS_VPORT_ATTR_IFINDEX,
 	OVS_VPORT_ATTR_NETNSID,
+	OVS_VPORT_ATTR_UPCALL_STATS,
 	__OVS_VPORT_ATTR_MAX
 };
 
 #define OVS_VPORT_ATTR_MAX (__OVS_VPORT_ATTR_MAX - 1)
+
+/**
+ * enum ovs_vport_upcall_attr - attributes for %OVS_VPORT_UPCALL* commands
+ * @OVS_VPORT_UPCALL_SUCCESS: 64-bit upcall success packets.
+ * @OVS_VPORT_UPCALL_FAIL: 64-bit upcall fail packets.
+ */
+enum ovs_vport_upcall_attr {
+	OVS_VPORT_UPCALL_ATTR_SUCCESS,
+	OVS_VPORT_UPCALL_ATTR_FAIL,
+	__OVS_VPORT_UPCALL_ATTR_MAX
+};
+
+#define OVS_VPORT_UPCALL_ATTR_MAX (__OVS_VPORT_UPCALL_ATTR_MAX - 1)
 
 enum {
 	OVS_VXLAN_EXT_UNSPEC,
@@ -748,6 +765,7 @@ struct ovs_action_push_vlan {
  */
 enum ovs_hash_alg {
 	OVS_HASH_ALG_L4,
+	OVS_HASH_ALG_SYM_L4,
 };
 
 /*
@@ -947,6 +965,7 @@ struct check_pkt_len_arg {
  * start of the packet or at the start of the l3 header depending on the value
  * of l3 tunnel flag in the tun_flags field of OVS_ACTION_ATTR_ADD_MPLS
  * argument.
+ * @OVS_ACTION_ATTR_DROP: Explicit drop action.
  *
  * Only a single header can be set with a single %OVS_ACTION_ATTR_SET.  Not all
  * fields within a header are modifiable, e.g. the IPv4 protocol and fragment
@@ -984,6 +1003,7 @@ enum ovs_action_attr {
 	OVS_ACTION_ATTR_CHECK_PKT_LEN, /* Nested OVS_CHECK_PKT_LEN_ATTR_*. */
 	OVS_ACTION_ATTR_ADD_MPLS,     /* struct ovs_action_add_mpls. */
 	OVS_ACTION_ATTR_DEC_TTL,      /* Nested OVS_DEC_TTL_ATTR_*. */
+	OVS_ACTION_ATTR_DROP,         /* u32 error code. */
 
 	__OVS_ACTION_ATTR_MAX,	      /* Nothing past this will be accepted
 				       * from userspace. */

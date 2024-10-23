@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "dp_rx.h"
@@ -250,7 +250,7 @@ const struct ce_attr ath11k_host_ce_config_qcn9074[] = {
 
 static bool ath11k_ce_need_shadow_fix(int ce_id)
 {
-	/* only ce4 needs shadow workaroud*/
+	/* only ce4 needs shadow workaround */
 	if (ce_id == 4)
 		return true;
 	return false;
@@ -442,7 +442,7 @@ static void ath11k_ce_recv_process_cb(struct ath11k_ce_pipe *pipe)
 	}
 
 	while ((skb = __skb_dequeue(&list))) {
-		ath11k_dbg(ab, ATH11K_DBG_AHB, "rx ce pipe %d len %d\n",
+		ath11k_dbg(ab, ATH11K_DBG_CE, "rx ce pipe %d len %d\n",
 			   pipe->pipe_num, skb->len);
 		pipe->recv_cb(ab, skb);
 	}
@@ -520,7 +520,7 @@ static void ath11k_ce_tx_process_cb(struct ath11k_ce_pipe *pipe)
 	}
 
 	while ((skb = __skb_dequeue(&list))) {
-		ath11k_dbg(ab, ATH11K_DBG_AHB, "tx ce pipe %d len %d\n",
+		ath11k_dbg(ab, ATH11K_DBG_CE, "tx ce pipe %d len %d\n",
 			   pipe->pipe_num, skb->len);
 		pipe->send_cb(ab, skb);
 	}
@@ -1042,7 +1042,7 @@ int ath11k_ce_alloc_pipes(struct ath11k_base *ab)
 
 		ret = ath11k_ce_alloc_pipe(ab, i);
 		if (ret) {
-			/* Free any parial successful allocation */
+			/* Free any partial successful allocation */
 			ath11k_ce_free_pipes(ab);
 			return ret;
 		}

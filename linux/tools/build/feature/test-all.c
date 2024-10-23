@@ -114,6 +114,10 @@
 # include "test-pthread-barrier.c"
 #undef main
 
+#define main main_test_scandirat
+# include "test-scandirat.c"
+#undef main
+
 #define main main_test_sched_getcpu
 # include "test-sched_getcpu.c"
 #undef main
@@ -129,6 +133,10 @@
 # include "test-libbabeltrace.c"
 #undef main
 #endif
+
+#define main main_test_libcapstone
+# include "test-libcapstone.c"
+#undef main
 
 #define main main_test_lzma
 # include "test-lzma.c"
@@ -164,6 +172,10 @@
 
 #define main main_test_disassembler_four_args
 # include "test-disassembler-four-args.c"
+#undef main
+
+#define main main_test_disassembler_init_styled
+# include "test-disassembler-init-styled.c"
 #undef main
 
 #define main main_test_libzstd
@@ -202,6 +214,7 @@ int main(int argc, char *argv[])
 	main_test_get_cpuid();
 	main_test_bpf();
 	main_test_libcrypto();
+	main_test_scandirat();
 	main_test_sched_getcpu();
 	main_test_sdt();
 	main_test_setns();

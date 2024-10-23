@@ -157,6 +157,14 @@ config MACH_U115
 	  This adds code to support the miscellaneous IO and power controls,
 	  specific LED code, etc.
 
+config MACH_U120
+	bool "Digi U120"
+	depends on MACH_ARMADA_38X
+	help
+	  Say 'Y' here if you want to support the Digi U120 board.
+	  This adds code to support the miscellaneous IO and power controls,
+	  specific LED code, etc.
+
 config MACH_DOVE
 	bool "Marvell Dove boards"
 	depends on ARCH_MULTI_V7

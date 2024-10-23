@@ -176,9 +176,6 @@ do { \
 	regs->tstate &= ~TSTATE_PEF;	\
 } while (0)
 
-/* Free all resources held by a thread. */
-#define release_thread(tsk)		do { } while (0)
-
 unsigned long __get_wchan(struct task_struct *task);
 
 #define task_pt_regs(tsk) (task_thread_info(tsk)->kregs)
@@ -216,7 +213,6 @@ unsigned long __get_wchan(struct task_struct *task);
  */
 #define ARCH_HAS_PREFETCH
 #define ARCH_HAS_PREFETCHW
-#define ARCH_HAS_SPINLOCK_PREFETCH
 
 static inline void prefetch(const void *x)
 {
@@ -241,8 +237,6 @@ static inline void prefetchw(const void *x)
 			     : /* no outputs */
 			     : "r" (x));
 }
-
-#define spin_lock_prefetch(x)	prefetchw(x)
 
 #define HAVE_ARCH_PICK_MMAP_LAYOUT
 

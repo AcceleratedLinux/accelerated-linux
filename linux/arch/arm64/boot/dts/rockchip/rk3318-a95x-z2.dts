@@ -9,6 +9,7 @@
 	compatible = "zkmagic,a95x-z2", "rockchip,rk3318";
 
 	aliases {
+		ethernet0 = &gmac2phy;
 		mmc0 = &sdmmc;
 		mmc1 = &sdio;
 		mmc2 = &emmc;
@@ -25,7 +26,7 @@
 		keyup-threshold-microvolt = <1800000>;
 		poll-interval = <100>;
 
-		recovery {
+		button-recovery {
 			label = "recovery";
 			linux,code = <KEY_VENDOR>;
 			press-threshold-microvolt = <17000>;

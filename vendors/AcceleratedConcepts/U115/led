@@ -30,7 +30,8 @@ esac
 ##############################################################
 
 # Find the primary modem, or alternatively *any* modem
-idx="$(modem name=modem idx 2> /dev/null)" || idx="$(modem idx 2> /dev/null)"
+modem_name="$(modem name 2> /dev/null)"
+idx="$(modem name="$modem_name" idx 2> /dev/null)"
 # Find the first interface on the modem
 for i in $(runt keys mm.map.interface_idx); do
 	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
@@ -42,7 +43,7 @@ if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
 	if [ "$(runt get surelink.ipv4_interface_$intf.passed)" = n \
 			-o "$(runt get surelink.ipv6_interface_$intf.passed)" = n ]; then
 		CELL=1
-	elif [ "$(runt get mm.modem.$idx.status.gtech)" = 4g ]; then
+	elif [ "$(runt get mm.modem.$modem_name.status.gtech)" = 4g ]; then
 		CELL=3
 	else
 		CELL=2
@@ -55,7 +56,7 @@ else
 fi
 
 if [ "$CELL" != 0 ]; then
-	case "$(runt get mm.modem.$idx.status.bars)" in
+	case "$(runt get mm.modem.$modem_name.status.bars)" in
 	5) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
 	4) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
 	3) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;

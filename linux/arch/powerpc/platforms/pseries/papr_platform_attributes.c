@@ -22,6 +22,7 @@
 
 #include <asm/hvcall.h>
 #include <asm/machdep.h>
+#include <asm/firmware.h>
 
 #include "pseries.h"
 
@@ -100,10 +101,12 @@ retry:
 		esi_buf_size = ESI_HDR_SIZE + (CURR_MAX_ESI_ATTRS * max_esi_attrs);
 
 		temp_buf = krealloc(buf, esi_buf_size, GFP_KERNEL);
-		if (temp_buf)
+		if (temp_buf) {
 			buf = temp_buf;
-		else
-			return -ENOMEM;
+		} else {
+			ret = -ENOMEM;
+			goto out_buf;
+		}
 
 		goto retry;
 	}

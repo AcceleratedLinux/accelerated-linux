@@ -316,21 +316,7 @@ static int hisi_cpa_pmu_probe(struct platform_device *pdev)
 	if (!name)
 		return -ENOMEM;
 
-	cpa_pmu->pmu = (struct pmu) {
-		.name		= name,
-		.module		= THIS_MODULE,
-		.task_ctx_nr	= perf_invalid_context,
-		.event_init	= hisi_uncore_pmu_event_init,
-		.pmu_enable	= hisi_uncore_pmu_enable,
-		.pmu_disable	= hisi_uncore_pmu_disable,
-		.add		= hisi_uncore_pmu_add,
-		.del		= hisi_uncore_pmu_del,
-		.start		= hisi_uncore_pmu_start,
-		.stop		= hisi_uncore_pmu_stop,
-		.read		= hisi_uncore_pmu_read,
-		.attr_groups	= cpa_pmu->pmu_events.attr_groups,
-		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
-	};
+	hisi_pmu_init(cpa_pmu, THIS_MODULE);
 
 	/* Power Management should be disabled before using CPA PMU. */
 	hisi_cpa_pmu_disable_pm(cpa_pmu);
@@ -355,7 +341,7 @@ static int hisi_cpa_pmu_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int hisi_cpa_pmu_remove(struct platform_device *pdev)
+static void hisi_cpa_pmu_remove(struct platform_device *pdev)
 {
 	struct hisi_pmu *cpa_pmu = platform_get_drvdata(pdev);
 
@@ -363,7 +349,6 @@ static int hisi_cpa_pmu_remove(struct platform_device *pdev)
 	cpuhp_state_remove_instance_nocalls(CPUHP_AP_PERF_ARM_HISI_CPA_ONLINE,
 					    &cpa_pmu->node);
 	hisi_cpa_pmu_enable_pm(cpa_pmu);
-	return 0;
 }
 
 static struct platform_driver hisi_cpa_pmu_driver = {
@@ -373,7 +358,7 @@ static struct platform_driver hisi_cpa_pmu_driver = {
 		.suppress_bind_attrs = true,
 	},
 	.probe = hisi_cpa_pmu_probe,
-	.remove = hisi_cpa_pmu_remove,
+	.remove_new = hisi_cpa_pmu_remove,
 };
 
 static int __init hisi_cpa_pmu_module_init(void)

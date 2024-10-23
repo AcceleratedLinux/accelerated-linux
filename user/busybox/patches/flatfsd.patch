@@ -1,6 +1,6 @@
-diff -Naur busybox-1.34.1.org/coreutils/sync.c busybox-1.34.1/coreutils/sync.c
---- busybox-1.34.1.org/coreutils/sync.c	2019-06-10 19:09:31.000000000 +1000
-+++ busybox-1.34.1/coreutils/sync.c	2019-07-02 13:50:05.417882112 +1000
+diff -Naur busybox-1.36.1.org/coreutils/sync.c busybox-1.36.1/coreutils/sync.c
+--- busybox-1.36.1.org/coreutils/sync.c	2019-06-10 19:09:31.000000000 +1000
++++ busybox-1.36.1/coreutils/sync.c	2019-07-02 13:50:05.417882112 +1000
 @@ -39,6 +39,7 @@
  //usage:     "\n	-f	Sync filesystems underlying FILEs"
  //usage:    )
@@ -58,9 +58,9 @@ diff -Naur busybox-1.34.1.org/coreutils/sync.c busybox-1.34.1/coreutils/sync.c
  	argv += optind;
  	if (!argv[0]) {
  		sync();
-diff -Naur busybox-1.34.1.org/init/halt.c busybox-1.34.1/init/halt.c
---- busybox-1.34.1.org/init/halt.c	2018-12-31 01:14:20.000000000 +1000
-+++ busybox-1.34.1/init/halt.c	2019-07-02 13:12:39.519850841 +1000
+diff -Naur busybox-1.36.1.org/init/halt.c busybox-1.36.1/init/halt.c
+--- busybox-1.36.1.org/init/halt.c	2018-12-31 01:14:20.000000000 +1000
++++ busybox-1.36.1/init/halt.c	2019-07-02 13:12:39.519850841 +1000
 @@ -93,6 +93,7 @@
  
  #include "libbb.h"
@@ -99,9 +99,9 @@ diff -Naur busybox-1.34.1.org/init/halt.c busybox-1.34.1/init/halt.c
  	write_wtmp();
  
  	if (flags & 8) /* -w */
-diff -Naur busybox-1.34.1.org/sysklogd/syslogd.c busybox-1.34.1/sysklogd/syslogd.c
---- busybox-1.34.1.org/sysklogd/syslogd.c	2019-06-10 19:09:31.000000000 +1000
-+++ busybox-1.34.1/sysklogd/syslogd.c	2019-07-02 13:12:39.519850841 +1000
+diff -Naur busybox-1.36.1.org/sysklogd/syslogd.c busybox-1.36.1/sysklogd/syslogd.c
+--- busybox-1.36.1.org/sysklogd/syslogd.c	2019-06-10 19:09:31.000000000 +1000
++++ busybox-1.36.1/sysklogd/syslogd.c	2019-07-02 13:12:39.519850841 +1000
 @@ -391,6 +391,13 @@
  }
  

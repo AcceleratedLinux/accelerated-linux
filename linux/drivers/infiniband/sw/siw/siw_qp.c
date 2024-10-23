@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0 or BSD-3-Clause
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 
 /* Authors: Bernard Metzler <bmt@zurich.ibm.com> */
 /* Copyright (c) 2008-2019, IBM Corporation */
@@ -10,6 +10,7 @@
 #include <linux/llist.h>
 #include <asm/barrier.h>
 #include <net/tcp.h>
+#include <trace/events/sock.h>
 
 #include "siw.h"
 #include "siw_verbs.h"
@@ -93,6 +94,8 @@ struct iwarp_msg_info iwarp_pktinfo[RDMAP_TERMINATE + 1] = {
 void siw_qp_llp_data_ready(struct sock *sk)
 {
 	struct siw_qp *qp;
+
+	trace_sk_data_ready(sk);
 
 	read_lock(&sk->sk_callback_lock);
 
@@ -201,7 +204,7 @@ static int siw_qp_readq_init(struct siw_qp *qp, int irq_size, int orq_size)
 {
 	if (irq_size) {
 		irq_size = roundup_pow_of_two(irq_size);
-		qp->irq = vzalloc(irq_size * sizeof(struct siw_sqe));
+		qp->irq = vcalloc(irq_size, sizeof(struct siw_sqe));
 		if (!qp->irq) {
 			qp->attrs.irq_size = 0;
 			return -ENOMEM;
@@ -209,7 +212,7 @@ static int siw_qp_readq_init(struct siw_qp *qp, int irq_size, int orq_size)
 	}
 	if (orq_size) {
 		orq_size = roundup_pow_of_two(orq_size);
-		qp->orq = vzalloc(orq_size * sizeof(struct siw_sqe));
+		qp->orq = vcalloc(orq_size, sizeof(struct siw_sqe));
 		if (!qp->orq) {
 			qp->attrs.orq_size = 0;
 			qp->attrs.irq_size = 0;
@@ -1180,7 +1183,7 @@ int siw_rqe_complete(struct siw_qp *qp, struct siw_rqe *rqe, u32 bytes,
 /*
  * siw_sq_flush()
  *
- * Flush SQ and ORRQ entries to CQ.
+ * Flush SQ and ORQ entries to CQ.
  *
  * Must be called with QP state write lock held.
  * Therefore, SQ and ORQ lock must not be taken.
@@ -1342,6 +1345,6 @@ void siw_free_qp(struct kref *ref)
 	vfree(qp->orq);
 
 	siw_put_tx_cpu(qp->tx_cpu);
-
+	complete(&qp->qp_free);
 	atomic_dec(&sdev->num_qp);
 }

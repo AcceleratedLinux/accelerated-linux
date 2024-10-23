@@ -26,11 +26,9 @@ static int pcm3168a_i2c_probe(struct i2c_client *i2c)
 	return pcm3168a_probe(&i2c->dev, regmap);
 }
 
-static int pcm3168a_i2c_remove(struct i2c_client *i2c)
+static void pcm3168a_i2c_remove(struct i2c_client *i2c)
 {
 	pcm3168a_remove(&i2c->dev);
-
-	return 0;
 }
 
 static const struct i2c_device_id pcm3168a_i2c_id[] = {
@@ -46,7 +44,7 @@ static const struct of_device_id pcm3168a_of_match[] = {
 MODULE_DEVICE_TABLE(of, pcm3168a_of_match);
 
 static struct i2c_driver pcm3168a_i2c_driver = {
-	.probe_new	= pcm3168a_i2c_probe,
+	.probe		= pcm3168a_i2c_probe,
 	.remove		= pcm3168a_i2c_remove,
 	.id_table	= pcm3168a_i2c_id,
 	.driver		= {

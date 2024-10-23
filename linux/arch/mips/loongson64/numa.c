@@ -132,6 +132,8 @@ static void __init node_mem_init(unsigned int node)
 
 		/* Reserve pfn range 0~node[0]->node_start_pfn */
 		memblock_reserve(0, PAGE_SIZE * start_pfn);
+		/* set nid for reserved memory on node 0 */
+		memblock_set_node(0, 1ULL << 44, &memblock.reserved, 0);
 	}
 }
 
@@ -196,7 +198,6 @@ void __init prom_init_numa_memory(void)
 	pr_info("CP0_PageGrain: CP0 5.1 (0x%x)\n", read_c0_pagegrain());
 	prom_meminit();
 }
-EXPORT_SYMBOL(prom_init_numa_memory);
 
 pg_data_t * __init arch_alloc_nodedata(int nid)
 {

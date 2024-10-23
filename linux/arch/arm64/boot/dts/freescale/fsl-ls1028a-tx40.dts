@@ -1,0 +1,323 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree file for Digi TX40.
+ *
+ * Copyright 2018-2021 NXP
+ * Copyright 2022 Digi Inc.
+ *
+ * Harninder Rai <harninder.rai@nxp.com>
+ * Robert Hodaszi <robert.hodaszi@digi.com>
+ *
+ */
+
+/dts-v1/;
+#include "fsl-ls1028a.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "Digi TX40";
+	compatible = "digi,tx40", "fsl,ls1028a";
+
+	aliases {
+		crypto = &crypto;
+		serial0 = &duart0;
+		serial1 = &duart1;
+		serial2 = &lpuart0;
+		serial3 = &lpuart1;
+		mmc0 = &esdhc1;
+		spi0 = &fspi;
+		ethernet0 = &enetc_port2;
+		ethernet1 = &mscc_felix_port0;
+		ethernet2 = &mscc_felix_port1;
+		watchdog0 = &mcu_wdt;
+		watchdog1 = &cluster1_core0_watchdog;
+		watchdog2 = &cluster1_core1_watchdog;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x0000000>;
+	};
+
+	reg_wifi: regulator-wifi {
+		compatible = "regulator-fixed";
+		regulator-name = "wifi-3p3v";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		regulator-boot-on;
+		gpio = <&gpio3 7 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	reg_gnss: regulator-gnss {
+		compatible = "regulator-fixed";
+		regulator-name = "gnss-3p3v";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&extgpio 7 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	regulator_gnss {
+		compatible = "regulator-output";
+		vout-supply = <&reg_gnss>;
+	};
+};
+
+&soc {
+	gpio-keys {
+		compatible = "gpio-keys";
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio1 16 GPIO_ACTIVE_LOW>;
+		};
+	};
+};
+
+&soc {
+	leds {
+		compatible = "gpio-leds";
+
+		extgpio@0 {
+			label = "cell-red";
+			gpios = <&extgpio 0 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@1 {
+			label = "cell-green";
+			gpios = <&extgpio 1 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@2 {
+			label = "cell-blue";
+			gpios = <&extgpio 2 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@3 {
+			label = "wifi-green";
+			gpios = <&extgpio 3 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+
+		extgpio@4 {
+			label = "gnss-green";
+			gpios = <&extgpio 4 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "none";
+			default-state = "off";
+		};
+	};
+};
+
+&gpu {
+	status = "disabled";
+};
+
+&duart0 {
+	status = "okay";
+};
+
+&duart1 {
+	status = "okay";
+};
+
+&lpuart0 {
+	status = "okay";
+	dtr-gpios = <&gpio3 13 GPIO_ACTIVE_LOW>;
+	dsr-gpios = <&gpio3 14 GPIO_ACTIVE_LOW>;
+	dcd-gpios = <&gpio3 15 GPIO_ACTIVE_LOW>;
+	rng-gpios = <&gpio3 16 GPIO_ACTIVE_LOW>;
+	uart-has-rtscts;
+};
+
+&lpuart1 {
+	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,qca6390-bt";
+	};
+};
+
+&enetc_mdio_pf3 {
+	/* VSC8514 QSGMII quad PHY */
+	qsgmii_phy0: ethernet-phy@0 {
+		reg = <0x00>;
+		vsc8531,led-0-inverted;
+		vsc8531,led-1-inverted;
+	};
+
+	qsgmii_phy1: ethernet-phy@1 {
+		reg = <0x01>;
+		vsc8531,led-0-inverted;
+		vsc8531,led-1-inverted;
+	};
+};
+
+&enetc_port2 {
+	status = "okay";
+};
+
+&esdhc1 {
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	non-removable;
+	bus-width = <8>;
+	status = "okay";
+	sdhci,no-led;
+};
+
+&fspi {
+	status = "okay";
+
+	mx25u12832f: flash@0 {
+		compatible = "jedec,spi-nor";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		spi-max-frequency = <40000000>;
+		/* The following setting enables 1-1-4 (CMD-ADDR-DATA) mode */
+		spi-rx-bus-width = <4>; /* 4 SPI Rx lines */
+		spi-tx-bus-width = <1>; /* 1 SPI Tx line */
+		reg = <0>;
+	};
+};
+
+&i2c0 {
+	status = "okay";
+
+	mcu_tx40: mcu@78 {
+		compatible = "digi,mcu-tx40";
+		reg = <0x78>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <15 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+
+		poweroff {
+			compatible = "digi,mcu-tx40-poweroff";
+		};
+
+		battery {
+			compatible = "digi,mcu-tx40-battery";
+		};
+
+		keys {
+			compatible = "digi,mcu-tx40-keys";
+		};
+
+		mcu_pwr_led: mcu_led {
+			compatible = "digi,mcu-tx40-led";
+			label = "power";
+			linux,default-trigger = "timer";
+		};
+
+		mcu_wdt: mcu_wdt {
+			compatible = "digi,mcu-tx40-wdt";
+			gpio = <&gpio1 21 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	rtc: max31329@68 {
+		compatible = "maxim,max31329";
+		reg = <0x68>;
+		trickle-resistor-ohms = <3000>;
+		interrupt-parent = <&mcu_tx40>;
+		interrupts = <3>;
+	};
+
+	/*accelerometer: lis2de12@18 {
+		compatible = "st,lis2de12";
+		reg = <0x18>;
+		interrupt-parent = <0x0c>;
+		interrupts = <0x04>;
+	};*/
+};
+
+&i2c1 {
+	status = "okay";
+
+	atecc: atecc508a@60 {
+		compatible = "atsha204-i2c";
+		reg = <0x60>;
+	};
+};
+
+&i2c4 {
+	status = "okay";
+
+	extgpio: pca9538@70 {
+		#gpio-cells = <2>;
+		compatible = "nxp,pca9538";
+		reg = <0x70>;
+		pinctrl-names = "default";
+		gpio-controller;
+	};
+
+	temperature: max31725@48 {
+		compatible = "maxim,max31725";
+		reg = <0x48>;
+	};
+};
+
+&i2c5 {
+	status = "okay";
+};
+
+&mscc_felix {
+	status = "okay";
+};
+
+&mscc_felix_port0 {
+	label = "eth1";
+	managed = "in-band-status";
+	phy-handle = <&qsgmii_phy0>;
+	phy-mode = "qsgmii";
+	status = "okay";
+};
+
+&mscc_felix_port1 {
+	label = "eth2";
+	managed = "in-band-status";
+	phy-handle = <&qsgmii_phy1>;
+	phy-mode = "qsgmii";
+	status = "okay";
+};
+
+&mscc_felix_port4 {
+	ethernet = <&enetc_port2>;
+	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+	dr_mode = "host";
+};
+
+&usb1 {
+	status = "okay";
+	dr_mode = "host";
+};
+
+&pcie1 {
+	status = "okay";
+	reset-gpios = <&gpio3 11 GPIO_ACTIVE_HIGH>;
+};
+
+&gpio1 {
+	gpio-line-names = "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "factory", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
+};

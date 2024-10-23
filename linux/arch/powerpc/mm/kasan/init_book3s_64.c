@@ -62,7 +62,7 @@ void __init kasan_init(void)
 	}
 
 	for_each_mem_range(i, &start, &end)
-		kasan_init_phys_region((void *)start, (void *)end);
+		kasan_init_phys_region(phys_to_virt(start), phys_to_virt(end));
 
 	for (i = 0; i < PTRS_PER_PTE; i++)
 		__set_pte_at(&init_mm, (unsigned long)kasan_early_shadow_page,
@@ -98,5 +98,7 @@ void __init kasan_init(void)
 	init_task.kasan_depth = 0;
 	pr_info("KASAN init done\n");
 }
+
+void __init kasan_early_init(void) { }
 
 void __init kasan_late_init(void) { }

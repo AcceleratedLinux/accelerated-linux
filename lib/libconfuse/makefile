@@ -1,6 +1,11 @@
+#
+# Switch to using the git repo to get latest fixes. There has been no
+# official package release since 2020.
+#
+URL     = https://github.com/libconfuse/libconfuse.git
+VERSION = 38d637245729096c301c801db9813ba69ee1542f
+METHOD  = git
 
-URL = https://github.com/martinh/libconfuse/releases/download/v3.3/confuse-3.3.tar.gz
-# CONFVARS = ac_cv_func_fmemopen=yes
-MAKEVARS =
+AUTORECONF = ./autogen.sh
 
 include $(ROOTDIR)/tools/automake.inc

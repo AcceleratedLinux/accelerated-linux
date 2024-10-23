@@ -1,0 +1,33 @@
+From 42fb7d4345e5056466e2bc96339324c0e47b459b Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Fri, 21 Jul 2023 15:43:06 +0200
+Subject: [PATCH] gpsdctl: don't autolaunch gpsd on GPS device add
+
+---
+ clients/gpsdctl.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/clients/gpsdctl.c b/clients/gpsdctl.c
+index 0595c61eaead..c04cd00305b5 100644
+--- a/clients/gpsdctl.c
++++ b/clients/gpsdctl.c
+@@ -40,6 +40,8 @@ static int gpsd_control(const char *action, const char *argument)
+         0 <= (connect = netlib_localsocket(control_socket, SOCK_STREAM))) {
+         syslog(LOG_INFO, "reached a running gpsd");
+     } else if (0 == strcmp(action, "add")) {
++/* Don't auto-launch gpsd, the system will handle this */
++#if 0
+         (void)snprintf(buf, sizeof(buf),
+                        "gpsd %s -F %s", gpsd_options, control_socket);
+         (void)syslog(LOG_NOTICE, "launching %s", buf);
+@@ -47,6 +49,7 @@ static int gpsd_control(const char *action, const char *argument)
+             (void)syslog(LOG_ERR, "launch of gpsd failed");
+             return -1;
+         }
++#endif
+         if (0 == access(control_socket, F_OK)) {
+             connect = netlib_localsocket(control_socket, SOCK_STREAM);
+         }
+-- 
+2.34.1
+

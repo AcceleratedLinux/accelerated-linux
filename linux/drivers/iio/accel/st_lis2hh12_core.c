@@ -23,10 +23,13 @@
 #include <linux/delay.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/events.h>
-#include <asm/unaligned.h>
 #include <linux/platform_data/st_lis2hh12.h>
-#include "st_lis2hh12.h"
 #include <linux/moduleparam.h>
+#ifdef CONFIG_OF
+#include <linux/of.h>
+#endif
+#include <asm/unaligned.h>
+#include "st_lis2hh12.h"
 
 #define ST_LIS2HH12_DEV_ATTR_SAMP_FREQ() \
 		IIO_DEV_ATTR_SAMP_FREQ(S_IWUSR | S_IRUGO, \
@@ -212,7 +215,7 @@ int lis2hh12_set_fifo_mode(struct lis2hh12_data *cdata, enum fifo_mode fm)
 }
 EXPORT_SYMBOL(lis2hh12_set_fifo_mode);
 
-int lis2hh12_write_max_odr(struct lis2hh12_sensor_data *sdata)
+static int lis2hh12_write_max_odr(struct lis2hh12_sensor_data *sdata)
 {
 	int err, i;
 	u32 max_odr = 0;
@@ -247,7 +250,7 @@ int lis2hh12_write_max_odr(struct lis2hh12_sensor_data *sdata)
 	return 0;
 }
 
-int lis2hh12_set_fs(struct lis2hh12_sensor_data *sdata, unsigned int gain)
+static int lis2hh12_set_fs(struct lis2hh12_sensor_data *sdata, unsigned int gain)
 {
 	int err, i;
 
@@ -376,7 +379,7 @@ enable_sensor_error:
 }
 EXPORT_SYMBOL(lis2hh12_set_enable);
 
-int lis2hh12_init_sensors(struct lis2hh12_data *cdata)
+static int lis2hh12_init_sensors(struct lis2hh12_data *cdata)
 {
 	int err;
 
@@ -456,11 +459,13 @@ static ssize_t lis2hh12_sysfs_get_raw_temperature(struct device *dev,
 {
 	int16_t raw_value;
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct lis2hh12_sensor_data *sdata = iio_priv(indio_dev);
+	struct lis2hh12_data *cdata = sdata->cdata;
 	int err;
 
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&cdata->mlock);
 	err = get_temp_raw_value(dev, &raw_value);
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&cdata->mlock);
 
 	if (err < 0)
 		return err;
@@ -475,12 +480,14 @@ static ssize_t lis2hh12_sysfs_get_abs_temperature(struct device *dev,
 	int16_t raw_value;
 	int temp_millicelsius;
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct lis2hh12_sensor_data *sdata = iio_priv(indio_dev);
+	struct lis2hh12_data *cdata = sdata->cdata;
 	int err;
 
 	/* get raw data */
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&cdata->mlock);
 	err = get_temp_raw_value(dev, &raw_value);
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&cdata->mlock);
 
 	if (err < 0)
 		return err;
@@ -494,7 +501,7 @@ static ssize_t lis2hh12_sysfs_get_abs_temperature(struct device *dev,
 	return sprintf(buf, "%d\n", temp_millicelsius);
 }
 
-ssize_t lis2hh12_sysfs_set_sampling_frequency(struct device * dev,
+static ssize_t lis2hh12_sysfs_set_sampling_frequency(struct device * dev,
 		struct device_attribute * attr, const char *buf, size_t count)
 {
 	int err;
@@ -502,6 +509,7 @@ ssize_t lis2hh12_sysfs_set_sampling_frequency(struct device * dev,
 	unsigned int odr, i;
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct lis2hh12_sensor_data *sdata = iio_priv(indio_dev);
+	struct lis2hh12_data *cdata = sdata->cdata;
 
 	err = kstrtoint(buf, 10, &odr);
 	if (err < 0)
@@ -519,9 +527,9 @@ ssize_t lis2hh12_sysfs_set_sampling_frequency(struct device * dev,
 	if (i == LIS2HH12_ODR_LIST_NUM)
 		return -EINVAL;
 
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&cdata->mlock);
 	sdata->odr = lis2hh12_odr_table.odr_avl[i].hz;
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&cdata->mlock);
 
 	err = lis2hh12_write_max_odr(sdata);
 	if (err < 0)
@@ -559,20 +567,21 @@ static ssize_t lis2hh12_sysfs_scale_avail(struct device *dev,
 	return len;
 }
 
-ssize_t lis2hh12_sysfs_flush_fifo(struct device *dev,
+static ssize_t lis2hh12_sysfs_flush_fifo(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t size)
 {
 	u64 event_type;
 	int64_t sensor_last_timestamp;
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct lis2hh12_sensor_data *sdata = iio_priv(indio_dev);
+	struct lis2hh12_data *cdata = sdata->cdata;
 
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&cdata->mlock);
 
 	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
 		disable_irq(sdata->cdata->irq);
 	} else {
-		mutex_unlock(&indio_dev->mlock);
+		mutex_unlock(&cdata->mlock);
 		return -EINVAL;
 	}
 
@@ -590,7 +599,7 @@ ssize_t lis2hh12_sysfs_flush_fifo(struct device *dev,
 				sdata->cdata->sensor_timestamp);
 
 	enable_irq(sdata->cdata->irq);
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&cdata->mlock);
 
 	return size;
 }
@@ -604,7 +613,7 @@ static ssize_t lis2hh12_sysfs_get_hwfifo_enabled(struct device *dev,
 	return sprintf(buf, "%d\n", sdata->cdata->hwfifo_enabled);
 }
 
-ssize_t lis2hh12_sysfs_set_hwfifo_enabled(struct device * dev,
+static ssize_t lis2hh12_sysfs_set_hwfifo_enabled(struct device * dev,
 		struct device_attribute * attr, const char *buf, size_t count)
 {
 	int err = 0, enable = 0;
@@ -639,7 +648,7 @@ static ssize_t lis2hh12_sysfs_get_hwfifo_watermark(struct device *dev,
 	return sprintf(buf, "%d\n", sdata->cdata->hwfifo_watermark);
 }
 
-ssize_t lis2hh12_sysfs_set_hwfifo_watermark(struct device * dev,
+static ssize_t lis2hh12_sysfs_set_hwfifo_watermark(struct device * dev,
 		struct device_attribute * attr, const char *buf, size_t count)
 {
 	int err = 0, watermark = 0;
@@ -681,18 +690,19 @@ static int lis2hh12_read_raw(struct iio_dev *indio_dev,
 	int err;
 	u8 outdata[2], nbytes;
 	struct lis2hh12_sensor_data *sdata = iio_priv(indio_dev);
+	struct lis2hh12_data *cdata = sdata->cdata;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&indio_dev->mlock);
+		mutex_lock(&cdata->mlock);
 		if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
-			mutex_unlock(&indio_dev->mlock);
+			mutex_unlock(&cdata->mlock);
 			return -EBUSY;
 		}
 
 		err = lis2hh12_set_enable(sdata, true);
 		if (err < 0) {
-			mutex_unlock(&indio_dev->mlock);
+			mutex_unlock(&cdata->mlock);
 			return -EBUSY;
 		}
 
@@ -702,7 +712,7 @@ static int lis2hh12_read_raw(struct iio_dev *indio_dev,
 
 		err = lis2hh12_read_register(sdata->cdata, ch->address, nbytes, outdata);
 		if (err < 0) {
-			mutex_unlock(&indio_dev->mlock);
+			mutex_unlock(&cdata->mlock);
 			return err;
 		}
 
@@ -710,7 +720,7 @@ static int lis2hh12_read_raw(struct iio_dev *indio_dev,
 		*val = *val >> ch->scan_type.shift;
 
 		err = lis2hh12_set_enable(sdata, false);
-		mutex_unlock(&indio_dev->mlock);
+		mutex_unlock(&cdata->mlock);
 
 		if (err < 0)
 			return err;
@@ -735,13 +745,14 @@ static int lis2hh12_write_raw(struct iio_dev *indio_dev,
 {
 	int err, i;
 	struct lis2hh12_sensor_data *sdata = iio_priv(indio_dev);
+	struct lis2hh12_data *cdata = sdata->cdata;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
-		mutex_lock(&indio_dev->mlock);
+		mutex_lock(&cdata->mlock);
 
 		if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
-			mutex_unlock(&indio_dev->mlock);
+			mutex_unlock(&cdata->mlock);
 			return -EBUSY;
 		}
 
@@ -751,7 +762,7 @@ static int lis2hh12_write_raw(struct iio_dev *indio_dev,
 		}
 
 		err = lis2hh12_set_fs(sdata, lis2hh12_fs_table.fs_avl[i].gain);
-		mutex_unlock(&indio_dev->mlock);
+		mutex_unlock(&cdata->mlock);
 
 		break;
 
@@ -844,6 +855,7 @@ int lis2hh12_common_probe(struct lis2hh12_data *cdata, int irq)
 	struct lis2hh12_sensor_data *sdata;
 
 	mutex_init(&cdata->tb.buf_lock);
+	mutex_init(&cdata->mlock);
 
 	cdata->fifo_data = 0;
 	cdata->hwfifo_enabled = 0;

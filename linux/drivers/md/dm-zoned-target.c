@@ -702,7 +702,7 @@ static int dmz_get_zoned_device(struct dm_target *ti, char *path,
 	}
 
 	bdev = ddev->bdev;
-	if (bdev_zoned_model(bdev) == BLK_ZONED_NONE) {
+	if (!bdev_is_zoned(bdev)) {
 		if (nr_devs == 1) {
 			ti->error = "Invalid regular device";
 			goto err;
@@ -748,24 +748,22 @@ err:
 /*
  * Cleanup zoned device information.
  */
-static void dmz_put_zoned_device(struct dm_target *ti)
+static void dmz_put_zoned_devices(struct dm_target *ti)
 {
 	struct dmz_target *dmz = ti->private;
 	int i;
 
-	for (i = 0; i < dmz->nr_ddevs; i++) {
-		if (dmz->ddev[i]) {
+	for (i = 0; i < dmz->nr_ddevs; i++)
+		if (dmz->ddev[i])
 			dm_put_device(ti, dmz->ddev[i]);
-			dmz->ddev[i] = NULL;
-		}
-	}
+
+	kfree(dmz->ddev);
 }
 
 static int dmz_fixup_devices(struct dm_target *ti)
 {
 	struct dmz_target *dmz = ti->private;
-	struct dmz_dev *reg_dev, *zoned_dev;
-	struct request_queue *q;
+	struct dmz_dev *reg_dev = NULL;
 	sector_t zone_nr_sectors = 0;
 	int i;
 
@@ -780,32 +778,32 @@ static int dmz_fixup_devices(struct dm_target *ti)
 			return -EINVAL;
 		}
 		for (i = 1; i < dmz->nr_ddevs; i++) {
-			zoned_dev = &dmz->dev[i];
+			struct dmz_dev *zoned_dev = &dmz->dev[i];
+			struct block_device *bdev = zoned_dev->bdev;
+
 			if (zoned_dev->flags & DMZ_BDEV_REGULAR) {
 				ti->error = "Secondary disk is not a zoned device";
 				return -EINVAL;
 			}
-			q = bdev_get_queue(zoned_dev->bdev);
 			if (zone_nr_sectors &&
-			    zone_nr_sectors != blk_queue_zone_sectors(q)) {
+			    zone_nr_sectors != bdev_zone_sectors(bdev)) {
 				ti->error = "Zone nr sectors mismatch";
 				return -EINVAL;
 			}
-			zone_nr_sectors = blk_queue_zone_sectors(q);
+			zone_nr_sectors = bdev_zone_sectors(bdev);
 			zoned_dev->zone_nr_sectors = zone_nr_sectors;
-			zoned_dev->nr_zones =
-				blkdev_nr_zones(zoned_dev->bdev->bd_disk);
+			zoned_dev->nr_zones = bdev_nr_zones(bdev);
 		}
 	} else {
-		reg_dev = NULL;
-		zoned_dev = &dmz->dev[0];
+		struct dmz_dev *zoned_dev = &dmz->dev[0];
+		struct block_device *bdev = zoned_dev->bdev;
+
 		if (zoned_dev->flags & DMZ_BDEV_REGULAR) {
 			ti->error = "Disk is not a zoned device";
 			return -EINVAL;
 		}
-		q = bdev_get_queue(zoned_dev->bdev);
-		zoned_dev->zone_nr_sectors = blk_queue_zone_sectors(q);
-		zoned_dev->nr_zones = blkdev_nr_zones(zoned_dev->bdev->bd_disk);
+		zoned_dev->zone_nr_sectors = bdev_zone_sectors(bdev);
+		zoned_dev->nr_zones = bdev_nr_zones(bdev);
 	}
 
 	if (reg_dev) {
@@ -949,7 +947,7 @@ err_bio:
 err_meta:
 	dmz_dtr_metadata(dmz->metadata);
 err_dev:
-	dmz_put_zoned_device(ti);
+	dmz_put_zoned_devices(ti);
 err:
 	kfree(dmz->dev);
 	kfree(dmz);
@@ -979,7 +977,7 @@ static void dmz_dtr(struct dm_target *ti)
 
 	bioset_exit(&dmz->bio_set);
 
-	dmz_put_zoned_device(ti);
+	dmz_put_zoned_devices(ti);
 
 	mutex_destroy(&dmz->chunk_lock);
 
@@ -1003,7 +1001,6 @@ static void dmz_io_hints(struct dm_target *ti, struct queue_limits *limits)
 
 	limits->discard_alignment = 0;
 	limits->discard_granularity = DMZ_BLOCK_SIZE;
-	limits->max_discard_sectors = chunk_sectors;
 	limits->max_hw_discard_sectors = chunk_sectors;
 	limits->max_write_zeroes_sectors = chunk_sectors;
 
@@ -1012,7 +1009,7 @@ static void dmz_io_hints(struct dm_target *ti, struct queue_limits *limits)
 	limits->max_sectors = chunk_sectors;
 
 	/* We are exposing a drive-managed zoned block device */
-	limits->zoned = BLK_ZONED_NONE;
+	limits->zoned = false;
 }
 
 /*
@@ -1120,7 +1117,6 @@ static void dmz_status(struct dm_target *ti, status_type_t type,
 		*result = '\0';
 		break;
 	}
-	return;
 }
 
 static int dmz_message(struct dm_target *ti, unsigned int argc, char **argv,
@@ -1140,7 +1136,7 @@ static int dmz_message(struct dm_target *ti, unsigned int argc, char **argv,
 	return r;
 }
 
-static struct target_type dmz_type = {
+static struct target_type zoned_target = {
 	.name		 = "zoned",
 	.version	 = {2, 0, 0},
 	.features	 = DM_TARGET_SINGLETON | DM_TARGET_MIXED_ZONED_MODEL,
@@ -1156,19 +1152,7 @@ static struct target_type dmz_type = {
 	.status		 = dmz_status,
 	.message	 = dmz_message,
 };
-
-static int __init dmz_init(void)
-{
-	return dm_register_target(&dmz_type);
-}
-
-static void __exit dmz_exit(void)
-{
-	dm_unregister_target(&dmz_type);
-}
-
-module_init(dmz_init);
-module_exit(dmz_exit);
+module_dm(zoned);
 
 MODULE_DESCRIPTION(DM_NAME " target for zoned block devices");
 MODULE_AUTHOR("Damien Le Moal <damien.lemoal@wdc.com>");

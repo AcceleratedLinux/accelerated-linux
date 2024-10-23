@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0+
 #include <linux/extcon.h>
 #include <linux/iio/consumer.h>
-#include <linux/iio/iio.h>
 #include <linux/input-event-codes.h>
 #include <linux/mfd/wm8994/registers.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #include <sound/jack.h>
@@ -167,7 +165,7 @@ static int aries_spk_cfg(struct snd_soc_dapm_widget *w,
 	int ret = 0;
 
 	rtd = snd_soc_get_pcm_runtime(card, &card->dai_link[0]);
-	component = asoc_rtd_to_codec(rtd, 0)->component;
+	component = snd_soc_rtd_to_codec(rtd, 0)->component;
 
 	/**
 	 * We have an odd setup - the SPKMODE pin is pulled up so
@@ -260,8 +258,8 @@ static const struct snd_soc_dapm_widget aries_dapm_widgets[] = {
 static int aries_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
-	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
 	unsigned int pll_out;
 	int ret;
 
@@ -288,8 +286,8 @@ static int aries_hw_params(struct snd_pcm_substream *substream,
 
 static int aries_hw_free(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
-	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
 	int ret;
 
 	/* Switch sysclk to MCLK1 */
@@ -317,7 +315,7 @@ static const struct snd_soc_ops aries_ops = {
 
 static int aries_baseband_init(struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
+	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
 	unsigned int pll_out;
 	int ret;
 
@@ -432,7 +430,6 @@ static const struct snd_soc_component_driver aries_component = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static struct snd_soc_dai_driver aries_ext_dai[] = {
@@ -485,14 +482,16 @@ static struct snd_soc_dai_link aries_dai[] = {
 		.name = "WM8994 AIF2",
 		.stream_name = "Baseband",
 		.init = &aries_baseband_init,
-		.params = &baseband_params,
+		.c2c_params = &baseband_params,
+		.num_c2c_params = 1,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(baseband),
 	},
 	{
 		.name = "WM8994 AIF3",
 		.stream_name = "Bluetooth",
-		.params = &bluetooth_params,
+		.c2c_params = &bluetooth_params,
+		.num_c2c_params = 1,
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(bluetooth),
 	},
@@ -544,6 +543,7 @@ static int aries_audio_probe(struct platform_device *pdev)
 	struct aries_wm8994_data *priv;
 	struct snd_soc_dai_link *dai_link;
 	const struct of_device_id *match;
+	enum iio_chan_type channel_type;
 	int ret, i;
 
 	if (!np)
@@ -595,7 +595,11 @@ static int aries_audio_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(priv->adc),
 				     "Failed to get ADC channel");
 
-	if (priv->adc->channel->type != IIO_VOLTAGE)
+	ret = iio_get_channel_type(priv->adc, &channel_type);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "Failed to get ADC channel type");
+	if (channel_type != IIO_VOLTAGE)
 		return -EINVAL;
 
 	priv->gpio_headset_key = devm_gpiod_get(dev, "headset-key",
@@ -615,10 +619,14 @@ static int aries_audio_probe(struct platform_device *pdev)
 	/* Update card-name if provided through DT, else use default name */
 	snd_soc_of_parse_card_name(card, "model");
 
-	ret = snd_soc_of_parse_audio_routing(card, "samsung,audio-routing");
+	ret = snd_soc_of_parse_audio_routing(card, "audio-routing");
 	if (ret < 0) {
-		dev_err(dev, "Audio routing invalid/unspecified\n");
-		return ret;
+		/* Backwards compatible way */
+		ret = snd_soc_of_parse_audio_routing(card, "samsung,audio-routing");
+		if (ret < 0) {
+			dev_err(dev, "Audio routing invalid/unspecified\n");
+			return ret;
+		}
 	}
 
 	aries_dai[1].dai_fmt = priv->variant->modem_dai_fmt;
@@ -628,8 +636,10 @@ static int aries_audio_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	codec = of_get_child_by_name(dev->of_node, "codec");
-	if (!codec)
-		return -EINVAL;
+	if (!codec) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	for_each_card_prelinks(card, i, dai_link) {
 		dai_link->codecs->of_node = of_parse_phandle(codec,

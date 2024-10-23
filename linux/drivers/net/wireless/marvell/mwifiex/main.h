@@ -1,20 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * NXP Wireless LAN device driver: major data structures and prototypes
  *
  * Copyright 2011-2020 NXP
- *
- * This software file (the "File") is distributed by NXP
- * under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  */
 
 #ifndef _MWIFIEX_MAIN_H_
@@ -22,6 +10,7 @@
 
 #include <linux/completion.h>
 #include <linux/kernel.h>
+#include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/semaphore.h>
@@ -39,16 +28,15 @@
 #include <linux/inetdevice.h>
 #include <linux/devcoredump.h>
 #include <linux/err.h>
-#include <linux/gpio.h>
 #include <linux/gfp.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
-#include <linux/of_gpio.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/of_irq.h>
+#include <linux/workqueue.h>
 
 #include "decl.h"
 #include "ioctl.h"
@@ -454,15 +442,6 @@ struct mwifiex_current_bss_params {
 	u8 data_rates[MWIFIEX_SUPPORTED_RATES];
 };
 
-struct mwifiex_sleep_params {
-	u16 sp_error;
-	u16 sp_offset;
-	u16 sp_stable_time;
-	u8 sp_cal_control;
-	u8 sp_ext_sleep_clk;
-	u16 sp_reserved;
-};
-
 struct mwifiex_sleep_period {
 	u16 period;
 	u16 reserved;
@@ -691,7 +670,6 @@ struct mwifiex_private {
 	struct cfg80211_chan_def dfs_chandef;
 	struct workqueue_struct *dfs_cac_workqueue;
 	struct delayed_work dfs_cac_work;
-	struct timer_list dfs_chan_switch_timer;
 	struct workqueue_struct *dfs_chan_sw_workqueue;
 	struct delayed_work dfs_chan_sw_work;
 	struct cfg80211_beacon_data beacon_after;
@@ -854,12 +832,12 @@ struct mwifiex_if_ops {
 	void (*cleanup_mpa_buf) (struct mwifiex_adapter *);
 	int (*cmdrsp_complete) (struct mwifiex_adapter *, struct sk_buff *);
 	int (*event_complete) (struct mwifiex_adapter *, struct sk_buff *);
-	int (*init_fw_port) (struct mwifiex_adapter *);
+	void (*init_fw_port)(struct mwifiex_adapter *adapter);
 	int (*dnld_fw) (struct mwifiex_adapter *, struct mwifiex_fw_image *);
 	void (*card_reset) (struct mwifiex_adapter *);
 	int (*reg_dump)(struct mwifiex_adapter *, char *);
 	void (*device_dump)(struct mwifiex_adapter *);
-	int (*clean_pcie_ring) (struct mwifiex_adapter *adapter);
+	void (*clean_pcie_ring)(struct mwifiex_adapter *adapter);
 	void (*iface_work)(struct work_struct *work);
 	void (*submit_rem_rx_urbs)(struct mwifiex_adapter *adapter);
 	void (*deaggr_pkt)(struct mwifiex_adapter *, struct sk_buff *);
@@ -898,8 +876,6 @@ struct mwifiex_adapter {
 	struct work_struct main_work;
 	struct workqueue_struct *rx_workqueue;
 	struct work_struct rx_work;
-	struct workqueue_struct *dfs_workqueue;
-	struct work_struct dfs_work;
 	bool rx_work_enabled;
 	bool rx_processing;
 	bool delay_main_work;
@@ -963,9 +939,7 @@ struct mwifiex_adapter {
 	u8 fw_bands;
 	u8 adhoc_start_band;
 	u8 config_bands;
-	struct mwifiex_chan_scan_param_set *scan_channels;
 	u8 tx_lock_flag;
-	struct mwifiex_sleep_params sleep_params;
 	struct mwifiex_sleep_period sleep_period;
 	u16 ps_mode;
 	u32 ps_state;
@@ -1055,7 +1029,7 @@ struct mwifiex_adapter {
 	/* Device dump data/length */
 	void *devdump_data;
 	int devdump_len;
-	struct timer_list devdump_timer;
+	struct delayed_work devdump_work;
 
 	bool ignore_btcoex_events;
 };
@@ -1165,8 +1139,10 @@ int mwifiex_process_uap_event(struct mwifiex_private *);
 void mwifiex_delete_all_station_list(struct mwifiex_private *priv);
 void mwifiex_wmm_del_peer_ra_list(struct mwifiex_private *priv,
 				  const u8 *ra_addr);
-void *mwifiex_process_sta_txpd(struct mwifiex_private *, struct sk_buff *skb);
-void *mwifiex_process_uap_txpd(struct mwifiex_private *, struct sk_buff *skb);
+void mwifiex_process_sta_txpd(struct mwifiex_private *priv,
+			      struct sk_buff *skb);
+void mwifiex_process_uap_txpd(struct mwifiex_private *priv,
+			      struct sk_buff *skb);
 int mwifiex_sta_init_cmd(struct mwifiex_private *, u8 first_sta, bool init);
 int mwifiex_cmd_802_11_scan(struct host_cmd_ds_command *cmd,
 			    struct mwifiex_scan_cmd_config *scan_cfg);
@@ -1174,7 +1150,6 @@ void mwifiex_queue_scan_cmd(struct mwifiex_private *priv,
 			    struct cmd_ctrl_node *cmd_node);
 int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 			    struct host_cmd_ds_command *resp);
-s32 mwifiex_ssid_cmp(struct cfg80211_ssid *ssid1, struct cfg80211_ssid *ssid2);
 int mwifiex_associate(struct mwifiex_private *priv,
 		      struct mwifiex_bssdescriptor *bss_desc);
 int mwifiex_cmd_802_11_associate(struct mwifiex_private *priv,

@@ -40,6 +40,9 @@
 #ifdef CONFIG_LEDMAN
 #include <linux/ledman.h>
 #endif
+#if defined(CONFIG_USER_NETFLASH_USE_UBI)
+#include <libubi.h>
+#endif
 
 #include "program.h"
 #include "decompress.h"
@@ -64,12 +67,18 @@ int preserve;		/* Preserve and portions of flash not written to */
 int stop_early;		/* stop at end of input data, do not write full dev. */
 int dojffs2;		/* Write the jffs2 magic to unused segments */
 
+#if defined(CONFIG_USER_NETFLASH_USE_UBI)
+static libubi_t libubi;
+#endif
+
 /****************************************************************************/
 
 static unsigned int writesize = 512;
 static unsigned int flashtype;
+static void (* program_segment_start)(int rd, unsigned long image_length);
 static void (* program_segment)(int rd, unsigned char *sgdata,
 		int sgpos, int sglength, int sgsize);
+static void (* program_segment_finish)(int rd);
 
 /****************************************************************************/
 
@@ -293,6 +302,50 @@ static void program_blkmem_segment(int rd, unsigned char *sgdata, int sgpos,
 }
 #endif
 
+#if defined(CONFIG_USER_NETFLASH_USE_UBI)
+static void program_ubi_segment_start(int rd, unsigned long image_length)
+{
+	int err = ubi_update_start(libubi, rd, image_length);
+	if (err) {
+		error("cannot start volume update");
+		exitstatus = BAD_OPEN_FLASH;
+	}
+}
+
+static void program_ubi_segment_finish(int rd)
+{
+	libubi_close(libubi);
+}
+
+static void program_ubi_segment(int rd, unsigned char *sgdata,
+		int sgpos, int sglength, int sgsize)
+{
+	int ret;
+
+	while (sglength) {
+		ret = write(rd, sgdata, sglength);
+		if (ret < 0) {
+			if (errno == EINTR) {
+				error("do not interrupt me!");
+				continue;
+			}
+			error("UBI: cannot write %d bytes", sglength);
+			exitstatus = BAD_SEG_WRITE;
+			return;
+		}
+
+		if (ret == 0) {
+			error("cannot write %d bytes to volume", sglength);
+			exitstatus = BAD_SEG_WRITE;
+			return;
+		}
+
+		sglength -= ret;
+		sgdata += ret;
+	}
+}
+#endif
+
 static int check_badblock_segment(int rd, int sgpos, int sgsize)
 {
 #if defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES)
@@ -395,6 +448,10 @@ void program_flash(int rd, unsigned long image_length, long long devsize, unsign
 	fb_seek_set(0);
 	sgpos = offset - (offset % sgsize);
 
+	if (program_segment_start) {
+		program_segment_start(rd, image_length);
+	}
+
 	for (; sgpos < devsize; sgpos += sgsize) {
 		int show_progress = 0;
 
@@ -452,6 +509,10 @@ void program_flash(int rd, unsigned long image_length, long long devsize, unsign
 	ledman_cmd(LEDMAN_CMD_ALT_OFF, LEDMAN_NVRAM_ALL);
 #endif
 #endif
+
+	if (program_segment_finish) {
+		program_segment_finish(rd);
+	}
 
 	/* Put the flash back in read mode, some old boot loaders don't */
 	lseek(rd, 0, SEEK_SET);
@@ -526,7 +587,51 @@ int program_flash_open(const char *rdev)
 #endif
 	}
 	if (!program_segment) {
-#if defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES)
+
+#if defined(CONFIG_USER_NETFLASH_USE_UBI)
+		int err;
+		struct ubi_vol_info vol_info;
+
+		libubi = libubi_open();
+		if (!libubi) {
+			if (errno == 0) {
+				error("UBI is not present in the system");
+			} else {
+				error("cannot open libubi");
+			}
+			exit(BAD_OPEN_FLASH);
+		}
+
+		err = ubi_probe_node(libubi, rdev);
+		if (err == 1) {
+			error("\"%s\" is an UBI device node, not an UBI volume node",
+			       rdev);
+			exit(BAD_OPEN_FLASH);
+		} else if (err < 0) {
+			if (errno == ENODEV) {
+				error("\"%s\" is not an UBI volume node", rdev);
+			} else {
+				error("error while probing \"%s\"", rdev);
+			}
+			exit(BAD_OPEN_FLASH);
+		}
+
+		err = ubi_get_vol_info(libubi, rdev, &vol_info);
+		if (err) {
+			error("cannot get information about UBI volume \"%s\"",
+				   rdev);
+			exit(BAD_OPEN_FLASH);
+		}
+
+		program_segment_start = program_ubi_segment_start;
+		program_segment = program_ubi_segment;
+		program_segment_finish = program_ubi_segment_finish;
+
+		devsize = vol_info.data_bytes;
+		sgsize = vol_info.leb_size;
+		flashtype = vol_info.type;
+
+#elif (defined(CONFIG_MTD) || defined(CONFIG_MTD_MODULES))
 		mtd_info_t mtd_info, rootfs_info;
 
 		program_segment = program_mtd_segment;

@@ -15,8 +15,6 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/of_device.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -610,7 +608,7 @@ static const unsigned int rcar_gen3_phy_cable[] = {
 };
 
 static struct phy *rcar_gen3_phy_usb2_xlate(struct device *dev,
-					    struct of_phandle_args *args)
+					    const struct of_phandle_args *args)
 {
 	struct rcar_gen3_chan *ch = dev_get_drvdata(dev);
 
@@ -675,8 +673,6 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 	channel->irq = platform_get_irq_optional(pdev, 0);
 	channel->dr_mode = rcar_gen3_get_dr_mode(dev->of_node);
 	if (channel->dr_mode != USB_DR_MODE_UNKNOWN) {
-		int ret;
-
 		channel->is_otg_channel = true;
 		channel->uses_otg_pins = !of_property_read_bool(dev->of_node,
 							"renesas,no-otg-pins");
@@ -740,8 +736,6 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 		ret = PTR_ERR(provider);
 		goto error;
 	} else if (channel->is_otg_channel) {
-		int ret;
-
 		ret = device_create_file(dev, &dev_attr_role);
 		if (ret < 0)
 			goto error;
@@ -755,7 +749,7 @@ error:
 	return ret;
 }
 
-static int rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
+static void rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
 {
 	struct rcar_gen3_chan *channel = platform_get_drvdata(pdev);
 
@@ -763,8 +757,6 @@ static int rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
 		device_remove_file(&pdev->dev, &dev_attr_role);
 
 	pm_runtime_disable(&pdev->dev);
-
-	return 0;
 };
 
 static struct platform_driver rcar_gen3_phy_usb2_driver = {
@@ -773,7 +765,7 @@ static struct platform_driver rcar_gen3_phy_usb2_driver = {
 		.of_match_table	= rcar_gen3_phy_usb2_match_table,
 	},
 	.probe	= rcar_gen3_phy_usb2_probe,
-	.remove = rcar_gen3_phy_usb2_remove,
+	.remove_new = rcar_gen3_phy_usb2_remove,
 };
 module_platform_driver(rcar_gen3_phy_usb2_driver);
 

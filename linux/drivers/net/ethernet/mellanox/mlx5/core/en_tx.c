@@ -39,6 +39,7 @@
 #include "ipoib/ipoib.h"
 #include "en_accel/en_accel.h"
 #include "en_accel/ipsec_rxtx.h"
+#include "en_accel/macsec.h"
 #include "en/ptp.h"
 #include <net/ipv6.h>
 
@@ -152,14 +153,18 @@ mlx5e_tx_get_gso_ihs(struct mlx5e_txqsq *sq, struct sk_buff *skb, int *hopbyhop)
 
 	*hopbyhop = 0;
 	if (skb->encapsulation) {
-		ihs = skb_inner_transport_offset(skb) + inner_tcp_hdrlen(skb);
+		if (skb_shinfo(skb)->gso_type & SKB_GSO_UDP_L4)
+			ihs = skb_inner_transport_offset(skb) +
+			      sizeof(struct udphdr);
+		else
+			ihs = skb_inner_tcp_all_headers(skb);
 		stats->tso_inner_packets++;
 		stats->tso_inner_bytes += skb->len - ihs;
 	} else {
 		if (skb_shinfo(skb)->gso_type & SKB_GSO_UDP_L4) {
 			ihs = skb_transport_offset(skb) + sizeof(struct udphdr);
 		} else {
-			ihs = skb_transport_offset(skb) + tcp_hdrlen(skb);
+			ihs = skb_tcp_all_headers(skb);
 			if (ipv6_has_hopopt_jumbo(skb)) {
 				*hopbyhop = sizeof(struct hop_jumbo_hdr);
 				ihs -= sizeof(struct hop_jumbo_hdr);
@@ -304,6 +309,8 @@ static void mlx5e_sq_calc_wqe_attr(struct sk_buff *skb, const struct mlx5e_tx_at
 	u16 ds_cnt_inl = 0;
 	u16 ds_cnt_ids = 0;
 
+	/* Sync the calculation with MLX5E_MAX_TX_WQEBBS. */
+
 	if (attr->insz)
 		ds_cnt_ids = DIV_ROUND_UP(sizeof(struct mlx5_wqe_inline_seg) + attr->insz,
 					  MLX5_SEND_WQE_DS);
@@ -316,6 +323,9 @@ static void mlx5e_sq_calc_wqe_attr(struct sk_buff *skb, const struct mlx5e_tx_at
 			inl += VLAN_HLEN;
 
 		ds_cnt_inl = DIV_ROUND_UP(inl, MLX5_SEND_WQE_DS);
+		if (WARN_ON_ONCE(ds_cnt_inl > MLX5E_MAX_TX_INLINE_DS))
+			netdev_warn(skb->dev, "ds_cnt_inl = %u > max %u\n", ds_cnt_inl,
+				    (u16)MLX5E_MAX_TX_INLINE_DS);
 		ds_cnt += ds_cnt_inl;
 	}
 
@@ -366,7 +376,7 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		     const struct mlx5e_tx_attr *attr,
 		     const struct mlx5e_tx_wqe_attr *wqe_attr, u8 num_dma,
 		     struct mlx5e_tx_wqe_info *wi, struct mlx5_wqe_ctrl_seg *cseg,
-		     bool xmit_more)
+		     struct mlx5_wqe_eth_seg *eseg, bool xmit_more)
 {
 	struct mlx5_wq_cyc *wq = &sq->wq;
 	bool send_doorbell;
@@ -388,9 +398,23 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 
 	mlx5e_tx_check_stop(sq);
 
-	if (unlikely(sq->ptpsq)) {
+	if (unlikely(sq->ptpsq &&
+		     (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP))) {
+		u8 metadata_index = be32_to_cpu(eseg->flow_table_metadata);
+
+		mlx5e_ptp_metadata_fifo_pop(&sq->ptpsq->metadata_freelist);
+
 		mlx5e_skb_cb_hwtstamp_init(skb);
-		mlx5e_skb_fifo_push(&sq->ptpsq->skb_fifo, skb);
+		mlx5e_ptp_metadata_map_put(&sq->ptpsq->metadata_map, skb,
+					   metadata_index);
+		/* ensure skb is put on metadata_map before tracking the index */
+		wmb();
+		mlx5e_ptpsq_track_metadata(sq->ptpsq, metadata_index);
+		if (!netif_tx_queue_stopped(sq->txq) &&
+		    mlx5e_ptpsq_metadata_freelist_empty(sq->ptpsq)) {
+			netif_tx_stop_queue(sq->txq);
+			sq->stats->stopped++;
+		}
 		skb_get(skb);
 	}
 
@@ -472,7 +496,7 @@ mlx5e_sq_xmit_wqe(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	if (unlikely(num_dma < 0))
 		goto err_drop;
 
-	mlx5e_txwqe_complete(sq, skb, attr, wqe_attr, num_dma, wi, cseg, xmit_more);
+	mlx5e_txwqe_complete(sq, skb, attr, wqe_attr, num_dma, wi, cseg, eseg, xmit_more);
 
 	return;
 
@@ -485,7 +509,7 @@ err_drop:
 static bool mlx5e_tx_skb_supports_mpwqe(struct sk_buff *skb, struct mlx5e_tx_attr *attr)
 {
 	return !skb_is_nonlinear(skb) && !skb_vlan_tag_present(skb) && !attr->ihs &&
-	       !attr->insz;
+	       !attr->insz && !mlx5e_macsec_skb_is_offload(skb);
 }
 
 static bool mlx5e_tx_mpwqe_same_eseg(struct mlx5e_txqsq *sq, struct mlx5_wqe_eth_seg *eseg)
@@ -631,12 +655,22 @@ void mlx5e_tx_mpwqe_ensure_complete(struct mlx5e_txqsq *sq)
 		mlx5e_tx_mpwqe_session_complete(sq);
 }
 
+static void mlx5e_cqe_ts_id_eseg(struct mlx5e_ptpsq *ptpsq, struct sk_buff *skb,
+				 struct mlx5_wqe_eth_seg *eseg)
+{
+	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP))
+		eseg->flow_table_metadata =
+			cpu_to_be32(mlx5e_ptp_metadata_fifo_peek(&ptpsq->metadata_freelist));
+}
+
 static void mlx5e_txwqe_build_eseg(struct mlx5e_priv *priv, struct mlx5e_txqsq *sq,
 				   struct sk_buff *skb, struct mlx5e_accel_tx_state *accel,
 				   struct mlx5_wqe_eth_seg *eseg, u16 ihs)
 {
 	mlx5e_accel_tx_eseg(priv, skb, eseg, ihs);
 	mlx5e_txwqe_build_eseg_csum(sq, skb, accel, eseg);
+	if (unlikely(sq->ptpsq))
+		mlx5e_cqe_ts_id_eseg(sq->ptpsq, skb, eseg);
 }
 
 netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -699,21 +733,6 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 	return NETDEV_TX_OK;
 }
 
-void mlx5e_sq_xmit_simple(struct mlx5e_txqsq *sq, struct sk_buff *skb, bool xmit_more)
-{
-	struct mlx5e_tx_wqe_attr wqe_attr;
-	struct mlx5e_tx_attr attr;
-	struct mlx5e_tx_wqe *wqe;
-	u16 pi;
-
-	mlx5e_sq_xmit_prepare(sq, skb, NULL, &attr);
-	mlx5e_sq_calc_wqe_attr(skb, &attr, &wqe_attr);
-	pi = mlx5e_txqsq_get_next_pi(sq, wqe_attr.num_wqebbs);
-	wqe = MLX5E_TX_FETCH_WQE(sq, pi);
-	mlx5e_txwqe_build_eseg_csum(sq, skb, NULL, &wqe->eth);
-	mlx5e_sq_xmit_wqe(sq, skb, &attr, &wqe_attr, wqe, pi, xmit_more);
-}
-
 static void mlx5e_tx_wi_dma_unmap(struct mlx5e_txqsq *sq, struct mlx5e_tx_wqe_info *wi,
 				  u32 *dma_fifo_cc)
 {
@@ -734,11 +753,13 @@ static void mlx5e_consume_skb(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		u64 ts = get_cqe_ts(cqe);
 
 		hwts.hwtstamp = mlx5e_cqe_ts_to_ns(sq->ptp_cyc2time, sq->clock, ts);
-		if (sq->ptpsq)
+		if (sq->ptpsq) {
 			mlx5e_skb_cb_hwtstamp_handler(skb, MLX5E_SKB_CB_CQE_HWTSTAMP,
 						      hwts.hwtstamp, sq->ptpsq->cq_stats);
-		else
+		} else {
 			skb_tstamp_tx(skb, &hwts);
+			sq->stats->timestamps++;
+		}
 	}
 
 	napi_consume_skb(skb, napi_budget);
@@ -753,6 +774,17 @@ static void mlx5e_tx_wi_consume_fifo_skbs(struct mlx5e_txqsq *sq, struct mlx5e_t
 		struct sk_buff *skb = mlx5e_skb_fifo_pop(&sq->db.skb_fifo);
 
 		mlx5e_consume_skb(sq, skb, cqe, napi_budget);
+	}
+}
+
+void mlx5e_txqsq_wake(struct mlx5e_txqsq *sq)
+{
+	if (netif_tx_queue_stopped(sq->txq) &&
+	    mlx5e_wqc_has_room_for(&sq->wq, sq->cc, sq->pc, sq->stop_room) &&
+	    !mlx5e_ptpsq_metadata_freelist_empty(sq->ptpsq) &&
+	    !test_bit(MLX5E_SQ_STATE_RECOVERING, &sq->state)) {
+		netif_tx_wake_queue(sq->txq);
+		sq->stats->wake++;
 	}
 }
 
@@ -836,7 +868,7 @@ bool mlx5e_poll_tx_cq(struct mlx5e_cq *cq, int napi_budget)
 				mlx5e_dump_error_cqe(&sq->cq, sq->sqn,
 						     (struct mlx5_err_cqe *)cqe);
 				mlx5_wq_cyc_wqe_dump(&sq->wq, ci, wi->num_wqebbs);
-				queue_work(cq->priv->wq, &sq->recover_work);
+				queue_work(cq->workqueue, &sq->recover_work);
 			}
 			stats->cqe_err++;
 		}
@@ -855,12 +887,7 @@ bool mlx5e_poll_tx_cq(struct mlx5e_cq *cq, int napi_budget)
 
 	netdev_tx_completed_queue(sq->txq, npkts, nbytes);
 
-	if (netif_tx_queue_stopped(sq->txq) &&
-	    mlx5e_wqc_has_room_for(&sq->wq, sq->cc, sq->pc, sq->stop_room) &&
-	    !test_bit(MLX5E_SQ_STATE_RECOVERING, &sq->state)) {
-		netif_tx_wake_queue(sq->txq);
-		stats->wake++;
-	}
+	mlx5e_txqsq_wake(sq);
 
 	return (i == MLX5E_TX_CQ_POLL_BUDGET);
 }
@@ -1019,7 +1046,7 @@ void mlx5i_sq_xmit(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	if (unlikely(num_dma < 0))
 		goto err_drop;
 
-	mlx5e_txwqe_complete(sq, skb, &attr, &wqe_attr, num_dma, wi, cseg, xmit_more);
+	mlx5e_txwqe_complete(sq, skb, &attr, &wqe_attr, num_dma, wi, cseg, eseg, xmit_more);
 
 	return;
 

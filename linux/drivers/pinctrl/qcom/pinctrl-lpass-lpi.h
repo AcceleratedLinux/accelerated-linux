@@ -6,9 +6,14 @@
 #ifndef __PINCTRL_LPASS_LPI_H__
 #define __PINCTRL_LPASS_LPI_H__
 
-#include <linux/bitops.h>
-#include <linux/bitfield.h>
+#include <linux/array_size.h>
+#include <linux/bits.h>
+
 #include "../core.h"
+
+struct platform_device;
+
+struct pinctrl_pin_desc;
 
 #define LPI_SLEW_RATE_CTL_REG	0xa000
 #define LPI_TLMM_REG_OFFSET		0x1000
@@ -40,11 +45,8 @@
 
 #define LPI_PINGROUP(id, soff, f1, f2, f3, f4)		\
 	{						\
-		.group.name = "gpio" #id,			\
-		.group.pins = gpio##id##_pins,		\
 		.pin = id,				\
 		.slew_offset = soff,			\
-		.group.num_pins = ARRAY_SIZE(gpio##id##_pins),	\
 		.funcs = (int[]){			\
 			LPI_MUX_gpio,			\
 			LPI_MUX_##f1,			\
@@ -55,8 +57,13 @@
 		.nfuncs = 5,				\
 	}
 
+/*
+ * Slew rate control is done in the same register as rest of the
+ * pin configuration.
+ */
+#define LPI_FLAG_SLEW_RATE_SAME_REG			BIT(0)
+
 struct lpi_pingroup {
-	struct group_desc group;
 	unsigned int pin;
 	/* Bit offset in slew register for SoundWire pins only */
 	int slew_offset;
@@ -77,10 +84,10 @@ struct lpi_pinctrl_variant_data {
 	int ngroups;
 	const struct lpi_function *functions;
 	int nfunctions;
-	bool is_clk_optional;
+	unsigned int flags;
 };
 
 int lpi_pinctrl_probe(struct platform_device *pdev);
-int lpi_pinctrl_remove(struct platform_device *pdev);
+void lpi_pinctrl_remove(struct platform_device *pdev);
 
 #endif /*__PINCTRL_LPASS_LPI_H__*/

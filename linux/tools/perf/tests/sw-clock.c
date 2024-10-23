@@ -13,6 +13,7 @@
 #include "util/evlist.h"
 #include "util/cpumap.h"
 #include "util/mmap.h"
+#include "util/sample.h"
 #include "util/thread_map.h"
 #include <perf/evlist.h>
 #include <perf/mmap.h>
@@ -61,7 +62,7 @@ static int __test__sw_clock_freq(enum perf_sw_ids clock_id)
 	}
 	evlist__add(evlist, evsel);
 
-	cpus = perf_cpu_map__dummy_new();
+	cpus = perf_cpu_map__new_any_cpu();
 	threads = thread_map__new_by_tid(getpid());
 	if (!cpus || !threads) {
 		err = -ENOMEM;

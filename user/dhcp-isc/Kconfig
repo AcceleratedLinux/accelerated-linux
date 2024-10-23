@@ -1,0 +1,29 @@
+
+config USER_DHCP_ISC
+	bool
+
+config USER_DHCP_ISC_SERVER_DHCPD
+	bool "dhcpd (ISC)"
+	select USER_DHCP_ISC
+	help
+	  A full featured DHCP daemon that can do almost anything.
+
+config USER_DHCP_ISC_DHCPCTL_OMSHELL
+	bool "omshell (ISC)"
+	select USER_DHCP_ISC
+	depends on USER_DHCP_ISC_SERVER_DHCPD
+	help
+	  A tool to control dhcp-isc server (dhcpd).
+
+config USER_DHCP_ISC_CLIENT_DHCLIENT
+	bool "dhclient (ISC)"
+	select USER_DHCP_ISC
+	help
+	  A DHCP client daemon that supports most everything.
+
+config USER_DHCP_ISC_RELAY_DHCRELAY
+	bool "dhcrelay (ISC)"
+	select USER_DHCP_ISC
+	help
+	  A DHCP relay daemon.
+

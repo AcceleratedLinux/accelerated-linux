@@ -16,6 +16,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 static inline pid_t rseq_gettid(void)
 {
@@ -36,13 +37,9 @@ static int opt_modulo, verbose;
 
 static int opt_yield, opt_signal, opt_sleep,
 		opt_disable_rseq, opt_threads = 200,
-		opt_disable_mod = 0, opt_test = 's', opt_mb = 0;
+		opt_disable_mod = 0, opt_test = 's';
 
-#ifndef RSEQ_SKIP_FASTPATH
 static long long opt_reps = 5000;
-#else
-static long long opt_reps = 100;
-#endif
 
 static __thread __attribute__((tls_model("initial-exec")))
 unsigned int signals_delivered;
@@ -268,6 +265,73 @@ unsigned int yield_mod_cnt, nr_abort;
 
 #include "rseq.h"
 
+static enum rseq_mo opt_mo = RSEQ_MO_RELAXED;
+
+#ifdef RSEQ_ARCH_HAS_OFFSET_DEREF_ADDV
+#define TEST_MEMBARRIER
+
+static int sys_membarrier(int cmd, int flags, int cpu_id)
+{
+	return syscall(__NR_membarrier, cmd, flags, cpu_id);
+}
+#endif
+
+#ifdef BUILDOPT_RSEQ_PERCPU_MM_CID
+# define RSEQ_PERCPU	RSEQ_PERCPU_MM_CID
+static
+int get_current_cpu_id(void)
+{
+	return rseq_current_mm_cid();
+}
+static
+bool rseq_validate_cpu_id(void)
+{
+	return rseq_mm_cid_available();
+}
+static
+bool rseq_use_cpu_index(void)
+{
+	return false;	/* Use mm_cid */
+}
+# ifdef TEST_MEMBARRIER
+/*
+ * Membarrier does not currently support targeting a mm_cid, so
+ * issue the barrier on all cpus.
+ */
+static
+int rseq_membarrier_expedited(int cpu)
+{
+	return sys_membarrier(MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ,
+			      0, 0);
+}
+# endif /* TEST_MEMBARRIER */
+#else
+# define RSEQ_PERCPU	RSEQ_PERCPU_CPU_ID
+static
+int get_current_cpu_id(void)
+{
+	return rseq_cpu_start();
+}
+static
+bool rseq_validate_cpu_id(void)
+{
+	return rseq_current_cpu_raw() >= 0;
+}
+static
+bool rseq_use_cpu_index(void)
+{
+	return true;	/* Use cpu_id as index. */
+}
+# ifdef TEST_MEMBARRIER
+static
+int rseq_membarrier_expedited(int cpu)
+{
+	return sys_membarrier(MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ,
+			      MEMBARRIER_CMD_FLAG_CPU, cpu);
+}
+# endif /* TEST_MEMBARRIER */
+#endif
+
 struct percpu_lock_entry {
 	intptr_t v;
 } __attribute__((aligned(128)));
@@ -355,8 +419,14 @@ static int rseq_this_cpu_lock(struct percpu_lock *lock)
 	for (;;) {
 		int ret;
 
-		cpu = rseq_cpu_start();
-		ret = rseq_cmpeqv_storev(&lock->c[cpu].v,
+		cpu = get_current_cpu_id();
+		if (cpu < 0) {
+			fprintf(stderr, "pid: %d: tid: %d, cpu: %d: cid: %d\n",
+					getpid(), (int) rseq_gettid(), rseq_current_cpu_raw(), cpu);
+			abort();
+		}
+		ret = rseq_cmpeqv_storev(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+					 &lock->c[cpu].v,
 					 0, 1, cpu);
 		if (rseq_likely(!ret))
 			break;
@@ -473,8 +543,9 @@ void *test_percpu_inc_thread(void *arg)
 		do {
 			int cpu;
 
-			cpu = rseq_cpu_start();
-			ret = rseq_addv(&data->c[cpu].count, 1, cpu);
+			cpu = get_current_cpu_id();
+			ret = rseq_addv(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+					&data->c[cpu].count, 1, cpu);
 		} while (rseq_unlikely(ret));
 #ifndef BENCHMARK
 		if (i != 0 && !(i % (reps / 10)))
@@ -543,13 +614,14 @@ void this_cpu_list_push(struct percpu_list *list,
 		intptr_t *targetptr, newval, expect;
 		int ret;
 
-		cpu = rseq_cpu_start();
+		cpu = get_current_cpu_id();
 		/* Load list->c[cpu].head with single-copy atomicity. */
 		expect = (intptr_t)RSEQ_READ_ONCE(list->c[cpu].head);
 		newval = (intptr_t)node;
 		targetptr = (intptr_t *)&list->c[cpu].head;
 		node->next = (struct percpu_list_node *)expect;
-		ret = rseq_cmpeqv_storev(targetptr, expect, newval, cpu);
+		ret = rseq_cmpeqv_storev(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+					 targetptr, expect, newval, cpu);
 		if (rseq_likely(!ret))
 			break;
 		/* Retry if comparison fails or rseq aborts. */
@@ -575,13 +647,14 @@ struct percpu_list_node *this_cpu_list_pop(struct percpu_list *list,
 		long offset;
 		int ret;
 
-		cpu = rseq_cpu_start();
+		cpu = get_current_cpu_id();
 		targetptr = (intptr_t *)&list->c[cpu].head;
 		expectnot = (intptr_t)NULL;
 		offset = offsetof(struct percpu_list_node, next);
 		load = (intptr_t *)&head;
-		ret = rseq_cmpnev_storeoffp_load(targetptr, expectnot,
-						   offset, load, cpu);
+		ret = rseq_cmpnev_storeoffp_load(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+						 targetptr, expectnot,
+						 offset, load, cpu);
 		if (rseq_likely(!ret)) {
 			node = head;
 			break;
@@ -652,7 +725,7 @@ void test_percpu_list(void)
 	/* Generate list entries for every usable cpu. */
 	sched_getaffinity(0, sizeof(allowed_cpus), &allowed_cpus);
 	for (i = 0; i < CPU_SETSIZE; i++) {
-		if (!CPU_ISSET(i, &allowed_cpus))
+		if (rseq_use_cpu_index() && !CPU_ISSET(i, &allowed_cpus))
 			continue;
 		for (j = 1; j <= 100; j++) {
 			struct percpu_list_node *node;
@@ -689,7 +762,7 @@ void test_percpu_list(void)
 	for (i = 0; i < CPU_SETSIZE; i++) {
 		struct percpu_list_node *node;
 
-		if (!CPU_ISSET(i, &allowed_cpus))
+		if (rseq_use_cpu_index() && !CPU_ISSET(i, &allowed_cpus))
 			continue;
 
 		while ((node = __percpu_list_pop(&list, i))) {
@@ -719,7 +792,7 @@ bool this_cpu_buffer_push(struct percpu_buffer *buffer,
 		intptr_t offset;
 		int ret;
 
-		cpu = rseq_cpu_start();
+		cpu = get_current_cpu_id();
 		offset = RSEQ_READ_ONCE(buffer->c[cpu].offset);
 		if (offset == buffer->c[cpu].buflen)
 			break;
@@ -727,14 +800,9 @@ bool this_cpu_buffer_push(struct percpu_buffer *buffer,
 		targetptr_spec = (intptr_t *)&buffer->c[cpu].array[offset];
 		newval_final = offset + 1;
 		targetptr_final = &buffer->c[cpu].offset;
-		if (opt_mb)
-			ret = rseq_cmpeqv_trystorev_storev_release(
-				targetptr_final, offset, targetptr_spec,
-				newval_spec, newval_final, cpu);
-		else
-			ret = rseq_cmpeqv_trystorev_storev(targetptr_final,
-				offset, targetptr_spec, newval_spec,
-				newval_final, cpu);
+		ret = rseq_cmpeqv_trystorev_storev(opt_mo, RSEQ_PERCPU,
+			targetptr_final, offset, targetptr_spec,
+			newval_spec, newval_final, cpu);
 		if (rseq_likely(!ret)) {
 			result = true;
 			break;
@@ -757,7 +825,7 @@ struct percpu_buffer_node *this_cpu_buffer_pop(struct percpu_buffer *buffer,
 		intptr_t offset;
 		int ret;
 
-		cpu = rseq_cpu_start();
+		cpu = get_current_cpu_id();
 		/* Load offset with single-copy atomicity. */
 		offset = RSEQ_READ_ONCE(buffer->c[cpu].offset);
 		if (offset == 0) {
@@ -767,7 +835,8 @@ struct percpu_buffer_node *this_cpu_buffer_pop(struct percpu_buffer *buffer,
 		head = RSEQ_READ_ONCE(buffer->c[cpu].array[offset - 1]);
 		newval = offset - 1;
 		targetptr = (intptr_t *)&buffer->c[cpu].offset;
-		ret = rseq_cmpeqv_cmpeqv_storev(targetptr, offset,
+		ret = rseq_cmpeqv_cmpeqv_storev(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+			targetptr, offset,
 			(intptr_t *)&buffer->c[cpu].array[offset - 1],
 			(intptr_t)head, newval, cpu);
 		if (rseq_likely(!ret))
@@ -843,7 +912,7 @@ void test_percpu_buffer(void)
 	/* Generate list entries for every usable cpu. */
 	sched_getaffinity(0, sizeof(allowed_cpus), &allowed_cpus);
 	for (i = 0; i < CPU_SETSIZE; i++) {
-		if (!CPU_ISSET(i, &allowed_cpus))
+		if (rseq_use_cpu_index() && !CPU_ISSET(i, &allowed_cpus))
 			continue;
 		/* Worse-case is every item in same CPU. */
 		buffer.c[i].array =
@@ -893,7 +962,7 @@ void test_percpu_buffer(void)
 	for (i = 0; i < CPU_SETSIZE; i++) {
 		struct percpu_buffer_node *node;
 
-		if (!CPU_ISSET(i, &allowed_cpus))
+		if (rseq_use_cpu_index() && !CPU_ISSET(i, &allowed_cpus))
 			continue;
 
 		while ((node = __percpu_buffer_pop(&buffer, i))) {
@@ -924,7 +993,7 @@ bool this_cpu_memcpy_buffer_push(struct percpu_memcpy_buffer *buffer,
 		size_t copylen;
 		int ret;
 
-		cpu = rseq_cpu_start();
+		cpu = get_current_cpu_id();
 		/* Load offset with single-copy atomicity. */
 		offset = RSEQ_READ_ONCE(buffer->c[cpu].offset);
 		if (offset == buffer->c[cpu].buflen)
@@ -935,15 +1004,11 @@ bool this_cpu_memcpy_buffer_push(struct percpu_memcpy_buffer *buffer,
 		copylen = sizeof(item);
 		newval_final = offset + 1;
 		targetptr_final = &buffer->c[cpu].offset;
-		if (opt_mb)
-			ret = rseq_cmpeqv_trymemcpy_storev_release(
-				targetptr_final, offset,
-				destptr, srcptr, copylen,
-				newval_final, cpu);
-		else
-			ret = rseq_cmpeqv_trymemcpy_storev(targetptr_final,
-				offset, destptr, srcptr, copylen,
-				newval_final, cpu);
+		ret = rseq_cmpeqv_trymemcpy_storev(
+			opt_mo, RSEQ_PERCPU,
+			targetptr_final, offset,
+			destptr, srcptr, copylen,
+			newval_final, cpu);
 		if (rseq_likely(!ret)) {
 			result = true;
 			break;
@@ -968,7 +1033,7 @@ bool this_cpu_memcpy_buffer_pop(struct percpu_memcpy_buffer *buffer,
 		size_t copylen;
 		int ret;
 
-		cpu = rseq_cpu_start();
+		cpu = get_current_cpu_id();
 		/* Load offset with single-copy atomicity. */
 		offset = RSEQ_READ_ONCE(buffer->c[cpu].offset);
 		if (offset == 0)
@@ -979,8 +1044,8 @@ bool this_cpu_memcpy_buffer_pop(struct percpu_memcpy_buffer *buffer,
 		copylen = sizeof(*item);
 		newval_final = offset - 1;
 		targetptr_final = &buffer->c[cpu].offset;
-		ret = rseq_cmpeqv_trymemcpy_storev(targetptr_final,
-			offset, destptr, srcptr, copylen,
+		ret = rseq_cmpeqv_trymemcpy_storev(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+			targetptr_final, offset, destptr, srcptr, copylen,
 			newval_final, cpu);
 		if (rseq_likely(!ret)) {
 			result = true;
@@ -1058,7 +1123,7 @@ void test_percpu_memcpy_buffer(void)
 	/* Generate list entries for every usable cpu. */
 	sched_getaffinity(0, sizeof(allowed_cpus), &allowed_cpus);
 	for (i = 0; i < CPU_SETSIZE; i++) {
-		if (!CPU_ISSET(i, &allowed_cpus))
+		if (rseq_use_cpu_index() && !CPU_ISSET(i, &allowed_cpus))
 			continue;
 		/* Worse-case is every item in same CPU. */
 		buffer.c[i].array =
@@ -1105,7 +1170,7 @@ void test_percpu_memcpy_buffer(void)
 	for (i = 0; i < CPU_SETSIZE; i++) {
 		struct percpu_memcpy_buffer_node item;
 
-		if (!CPU_ISSET(i, &allowed_cpus))
+		if (rseq_use_cpu_index() && !CPU_ISSET(i, &allowed_cpus))
 			continue;
 
 		while (__percpu_memcpy_buffer_pop(&buffer, &item, i)) {
@@ -1155,7 +1220,7 @@ static int set_signal_handler(void)
 }
 
 /* Test MEMBARRIER_CMD_PRIVATE_RESTART_RSEQ_ON_CPU membarrier command. */
-#ifdef RSEQ_ARCH_HAS_OFFSET_DEREF_ADDV
+#ifdef TEST_MEMBARRIER
 struct test_membarrier_thread_args {
 	int stop;
 	intptr_t percpu_list_ptr;
@@ -1176,15 +1241,16 @@ void *test_membarrier_worker_thread(void *arg)
 	}
 
 	/* Wait for initialization. */
-	while (!atomic_load(&args->percpu_list_ptr)) {}
+	while (!__atomic_load_n(&args->percpu_list_ptr, __ATOMIC_ACQUIRE)) {}
 
 	for (i = 0; i < iters; ++i) {
 		int ret;
 
 		do {
-			int cpu = rseq_cpu_start();
+			int cpu = get_current_cpu_id();
 
-			ret = rseq_offset_deref_addv(&args->percpu_list_ptr,
+			ret = rseq_offset_deref_addv(RSEQ_MO_RELAXED, RSEQ_PERCPU,
+				&args->percpu_list_ptr,
 				sizeof(struct percpu_list_entry) * cpu, 1, cpu);
 		} while (rseq_unlikely(ret));
 	}
@@ -1221,11 +1287,6 @@ void test_membarrier_free_percpu_list(struct percpu_list *list)
 		free(list->c[i].head);
 }
 
-static int sys_membarrier(int cmd, int flags, int cpu_id)
-{
-	return syscall(__NR_membarrier, cmd, flags, cpu_id);
-}
-
 /*
  * The manager thread swaps per-cpu lists that worker threads see,
  * and validates that there are no unexpected modifications.
@@ -1248,24 +1309,23 @@ void *test_membarrier_manager_thread(void *arg)
 	test_membarrier_init_percpu_list(&list_a);
 	test_membarrier_init_percpu_list(&list_b);
 
-	atomic_store(&args->percpu_list_ptr, (intptr_t)&list_a);
+	__atomic_store_n(&args->percpu_list_ptr, (intptr_t)&list_a, __ATOMIC_RELEASE);
 
-	while (!atomic_load(&args->stop)) {
+	while (!__atomic_load_n(&args->stop, __ATOMIC_ACQUIRE)) {
 		/* list_a is "active". */
 		cpu_a = rand() % CPU_SETSIZE;
 		/*
 		 * As list_b is "inactive", we should never see changes
 		 * to list_b.
 		 */
-		if (expect_b != atomic_load(&list_b.c[cpu_b].head->data)) {
+		if (expect_b != __atomic_load_n(&list_b.c[cpu_b].head->data, __ATOMIC_ACQUIRE)) {
 			fprintf(stderr, "Membarrier test failed\n");
 			abort();
 		}
 
 		/* Make list_b "active". */
-		atomic_store(&args->percpu_list_ptr, (intptr_t)&list_b);
-		if (sys_membarrier(MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ,
-					MEMBARRIER_CMD_FLAG_CPU, cpu_a) &&
+		__atomic_store_n(&args->percpu_list_ptr, (intptr_t)&list_b, __ATOMIC_RELEASE);
+		if (rseq_membarrier_expedited(cpu_a) &&
 				errno != ENXIO /* missing CPU */) {
 			perror("sys_membarrier");
 			abort();
@@ -1274,28 +1334,27 @@ void *test_membarrier_manager_thread(void *arg)
 		 * Cpu A should now only modify list_b, so the values
 		 * in list_a should be stable.
 		 */
-		expect_a = atomic_load(&list_a.c[cpu_a].head->data);
+		expect_a = __atomic_load_n(&list_a.c[cpu_a].head->data, __ATOMIC_ACQUIRE);
 
 		cpu_b = rand() % CPU_SETSIZE;
 		/*
 		 * As list_a is "inactive", we should never see changes
 		 * to list_a.
 		 */
-		if (expect_a != atomic_load(&list_a.c[cpu_a].head->data)) {
+		if (expect_a != __atomic_load_n(&list_a.c[cpu_a].head->data, __ATOMIC_ACQUIRE)) {
 			fprintf(stderr, "Membarrier test failed\n");
 			abort();
 		}
 
 		/* Make list_a "active". */
-		atomic_store(&args->percpu_list_ptr, (intptr_t)&list_a);
-		if (sys_membarrier(MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ,
-					MEMBARRIER_CMD_FLAG_CPU, cpu_b) &&
+		__atomic_store_n(&args->percpu_list_ptr, (intptr_t)&list_a, __ATOMIC_RELEASE);
+		if (rseq_membarrier_expedited(cpu_b) &&
 				errno != ENXIO /* missing CPU*/) {
 			perror("sys_membarrier");
 			abort();
 		}
 		/* Remember a value from list_b. */
-		expect_b = atomic_load(&list_b.c[cpu_b].head->data);
+		expect_b = __atomic_load_n(&list_b.c[cpu_b].head->data, __ATOMIC_ACQUIRE);
 	}
 
 	test_membarrier_free_percpu_list(&list_a);
@@ -1352,7 +1411,7 @@ void test_membarrier(void)
 		}
 	}
 
-	atomic_store(&thread_args.stop, 1);
+	__atomic_store_n(&thread_args.stop, 1, __ATOMIC_RELEASE);
 	ret = pthread_join(manager_thread, NULL);
 	if (ret) {
 		errno = ret;
@@ -1360,7 +1419,7 @@ void test_membarrier(void)
 		abort();
 	}
 }
-#else /* RSEQ_ARCH_HAS_OFFSET_DEREF_ADDV */
+#else /* TEST_MEMBARRIER */
 void test_membarrier(void)
 {
 	fprintf(stderr, "rseq_offset_deref_addv is not implemented on this architecture. "
@@ -1517,7 +1576,7 @@ int main(int argc, char **argv)
 			verbose = 1;
 			break;
 		case 'M':
-			opt_mb = 1;
+			opt_mo = RSEQ_MO_RELEASE;
 			break;
 		default:
 			show_usage(argc, argv);
@@ -1537,6 +1596,10 @@ int main(int argc, char **argv)
 
 	if (!opt_disable_rseq && rseq_register_current_thread())
 		goto error;
+	if (!opt_disable_rseq && !rseq_validate_cpu_id()) {
+		fprintf(stderr, "Error: cpu id getter unavailable\n");
+		goto error;
+	}
 	switch (opt_test) {
 	case 's':
 		printf_verbose("spinlock\n");

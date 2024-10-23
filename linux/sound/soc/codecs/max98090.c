@@ -10,7 +10,6 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm.h>
-#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/acpi.h>
@@ -1582,7 +1581,7 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 	struct snd_soc_component *component = codec_dai->component;
 	struct max98090_priv *max98090 = snd_soc_component_get_drvdata(component);
 	struct max98090_cdata *cdata;
-	u8 regval;
+	u8 regval, tdm_regval;
 
 	max98090->dai_fmt = fmt;
 	cdata = &max98090->dai[0];
@@ -1591,9 +1590,10 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 		cdata->fmt = fmt;
 
 		regval = 0;
-		switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-		case SND_SOC_DAIFMT_CBS_CFS:
-			/* Set to slave mode PLL - MAS mode off */
+		tdm_regval = 0;
+		switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+		case SND_SOC_DAIFMT_CBC_CFC:
+			/* Set to consumer mode PLL - MAS mode off */
 			snd_soc_component_write(component,
 				M98090_REG_CLOCK_RATIO_NI_MSB, 0x00);
 			snd_soc_component_write(component,
@@ -1602,8 +1602,8 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 				M98090_USE_M1_MASK, 0);
 			max98090->master = false;
 			break;
-		case SND_SOC_DAIFMT_CBM_CFM:
-			/* Set to master mode */
+		case SND_SOC_DAIFMT_CBP_CFP:
+			/* Set to provider mode */
 			if (max98090->tdm_slots == 4) {
 				/* TDM */
 				regval |= M98090_MAS_MASK |
@@ -1619,8 +1619,6 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 			}
 			max98090->master = true;
 			break;
-		case SND_SOC_DAIFMT_CBS_CFM:
-		case SND_SOC_DAIFMT_CBM_CFS:
 		default:
 			dev_err(component->dev, "DAI clock mode unsupported");
 			return -EINVAL;
@@ -1638,7 +1636,8 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 			regval |= M98090_RJ_MASK;
 			break;
 		case SND_SOC_DAIFMT_DSP_A:
-			/* Not supported mode */
+			tdm_regval |= M98090_TDM_MASK;
+			break;
 		default:
 			dev_err(component->dev, "DAI format unsupported");
 			return -EINVAL;
@@ -1667,11 +1666,20 @@ static int max98090_dai_set_fmt(struct snd_soc_dai *codec_dai,
 		 * seen for the case of TDM mode. The remaining cases have
 		 * normal logic.
 		 */
-		if (max98090->tdm_slots > 1)
+		if (tdm_regval)
 			regval ^= M98090_BCI_MASK;
 
 		snd_soc_component_write(component,
 			M98090_REG_INTERFACE_FORMAT, regval);
+
+		regval = 0;
+		if (tdm_regval)
+			regval = max98090->tdm_lslot << M98090_TDM_SLOTL_SHIFT |
+				 max98090->tdm_rslot << M98090_TDM_SLOTR_SHIFT |
+				 0 << M98090_TDM_SLOTDLY_SHIFT;
+
+		snd_soc_component_write(component, M98090_REG_TDM_FORMAT, regval);
+		snd_soc_component_write(component, M98090_REG_TDM_CONTROL, tdm_regval);
 	}
 
 	return 0;
@@ -1682,33 +1690,22 @@ static int max98090_set_tdm_slot(struct snd_soc_dai *codec_dai,
 {
 	struct snd_soc_component *component = codec_dai->component;
 	struct max98090_priv *max98090 = snd_soc_component_get_drvdata(component);
-	struct max98090_cdata *cdata;
-	cdata = &max98090->dai[0];
 
 	if (slots < 0 || slots > 4)
 		return -EINVAL;
 
+	if (slot_width != 16)
+		return -EINVAL;
+
+	if (rx_mask != tx_mask)
+		return -EINVAL;
+
+	if (!rx_mask)
+		return -EINVAL;
+
 	max98090->tdm_slots = slots;
-	max98090->tdm_width = slot_width;
-
-	if (max98090->tdm_slots > 1) {
-		/* SLOTL SLOTR SLOTDLY */
-		snd_soc_component_write(component, M98090_REG_TDM_FORMAT,
-			0 << M98090_TDM_SLOTL_SHIFT |
-			1 << M98090_TDM_SLOTR_SHIFT |
-			0 << M98090_TDM_SLOTDLY_SHIFT);
-
-		/* FSW TDM */
-		snd_soc_component_update_bits(component, M98090_REG_TDM_CONTROL,
-			M98090_TDM_MASK,
-			M98090_TDM_MASK);
-	}
-
-	/*
-	 * Normally advisable to set TDM first, but this permits either order
-	 */
-	cdata->fmt = 0;
-	max98090_dai_set_fmt(codec_dai, max98090->dai_fmt);
+	max98090->tdm_lslot = ffs(rx_mask) - 1;
+	max98090->tdm_rslot = fls(rx_mask) - 1;
 
 	return 0;
 }
@@ -2358,8 +2355,7 @@ static const struct snd_soc_dai_ops max98090_dai_ops = {
 	.no_capture_mute = 1,
 };
 
-static struct snd_soc_dai_driver max98090_dai[] = {
-{
+static struct snd_soc_dai_driver max98090_dai = {
 	.name = "HiFi",
 	.playback = {
 		.stream_name = "HiFi Playback",
@@ -2376,7 +2372,6 @@ static struct snd_soc_dai_driver max98090_dai[] = {
 		.formats = MAX98090_FORMATS,
 	},
 	 .ops = &max98090_dai_ops,
-}
 };
 
 static int max98090_probe(struct snd_soc_component *component)
@@ -2412,6 +2407,9 @@ static int max98090_probe(struct snd_soc_component *component)
 	max98090->lin_state = 0;
 	max98090->pa1en = 0;
 	max98090->pa2en = 0;
+
+	max98090->tdm_lslot = 0;
+	max98090->tdm_rslot = 1;
 
 	ret = snd_soc_component_read(component, M98090_REG_REVISION_ID);
 	if (ret < 0) {
@@ -2521,7 +2519,6 @@ static const struct snd_soc_component_driver soc_component_dev_max98090 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config max98090_regmap = {
@@ -2597,8 +2594,8 @@ static int max98090_i2c_probe(struct i2c_client *i2c)
 	}
 
 	ret = devm_snd_soc_register_component(&i2c->dev,
-			&soc_component_dev_max98090, max98090_dai,
-			ARRAY_SIZE(max98090_dai));
+					      &soc_component_dev_max98090,
+					      &max98090_dai, 1);
 err_enable:
 	return ret;
 }
@@ -2618,11 +2615,9 @@ static void max98090_i2c_shutdown(struct i2c_client *i2c)
 	msleep(40);
 }
 
-static int max98090_i2c_remove(struct i2c_client *client)
+static void max98090_i2c_remove(struct i2c_client *client)
 {
 	max98090_i2c_shutdown(client);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -2698,7 +2693,7 @@ static struct i2c_driver max98090_i2c_driver = {
 		.of_match_table = of_match_ptr(max98090_of_match),
 		.acpi_match_table = ACPI_PTR(max98090_acpi_match),
 	},
-	.probe_new = max98090_i2c_probe,
+	.probe = max98090_i2c_probe,
 	.shutdown = max98090_i2c_shutdown,
 	.remove = max98090_i2c_remove,
 	.id_table = max98090_i2c_id,

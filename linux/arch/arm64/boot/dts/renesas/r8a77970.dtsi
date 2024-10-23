@@ -16,14 +16,6 @@
 	#address-cells = <2>;
 	#size-cells = <2>;
 
-	aliases {
-		i2c0 = &i2c0;
-		i2c1 = &i2c1;
-		i2c2 = &i2c2;
-		i2c3 = &i2c3;
-		i2c4 = &i2c4;
-	};
-
 	/* External CAN clock - to be overridden by boards that provide it */
 	can_clk: can {
 		compatible = "fixed-clock";
@@ -336,6 +328,7 @@
 			interrupts = <GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 137 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "tuni0", "tuni1", "tuni2";
 			clocks = <&cpg CPG_MOD 125>;
 			clock-names = "fck";
 			power-domains = <&sysc R8A77970_PD_ALWAYS_ON>;
@@ -348,7 +341,9 @@
 			reg = <0 0xe6fc0000 0 0x30>;
 			interrupts = <GIC_SPI 128 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 129 IRQ_TYPE_LEVEL_HIGH>,
-				     <GIC_SPI 130 IRQ_TYPE_LEVEL_HIGH>;
+				     <GIC_SPI 130 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "tuni0", "tuni1", "tuni2", "ticpi2";
 			clocks = <&cpg CPG_MOD 124>;
 			clock-names = "fck";
 			power-domains = <&sysc R8A77970_PD_ALWAYS_ON>;
@@ -361,7 +356,9 @@
 			reg = <0 0xe6fd0000 0 0x30>;
 			interrupts = <GIC_SPI 303 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 304 IRQ_TYPE_LEVEL_HIGH>,
-				     <GIC_SPI 305 IRQ_TYPE_LEVEL_HIGH>;
+				     <GIC_SPI 305 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 306 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "tuni0", "tuni1", "tuni2", "ticpi2";
 			clocks = <&cpg CPG_MOD 123>;
 			clock-names = "fck";
 			power-domains = <&sysc R8A77970_PD_ALWAYS_ON>;
@@ -375,6 +372,7 @@
 			interrupts = <GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 132 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "tuni0", "tuni1", "tuni2";
 			clocks = <&cpg CPG_MOD 122>;
 			clock-names = "fck";
 			power-domains = <&sysc R8A77970_PD_ALWAYS_ON>;
@@ -388,6 +386,7 @@
 			interrupts = <GIC_SPI 116 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 117 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "tuni0", "tuni1", "tuni2";
 			clocks = <&cpg CPG_MOD 121>;
 			clock-names = "fck";
 			power-domains = <&sysc R8A77970_PD_ALWAYS_ON>;
@@ -1053,7 +1052,6 @@
 			reg-names = "regs", "dirmap", "wbuf";
 			interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&cpg CPG_MOD 917>;
-			clock-names = "rpc";
 			power-domains = <&sysc R8A77970_PD_ALWAYS_ON>;
 			resets = <&cpg 917>;
 			#address-cells = <1>;

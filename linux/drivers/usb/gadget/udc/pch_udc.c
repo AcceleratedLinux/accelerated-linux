@@ -274,7 +274,6 @@ struct pch_udc_cfg_data {
  * @td_data:		for data request
  * @dev:		reference to device struct
  * @offset_addr:	offset address of ep register
- * @desc:		for this ep
  * @queue:		queue for requests
  * @num:		endpoint number
  * @in:			endpoint is IN
@@ -2908,7 +2907,6 @@ static int pch_udc_start(struct usb_gadget *g,
 {
 	struct pch_udc_dev	*dev = to_pch_udc(g);
 
-	driver->driver.bus = NULL;
 	dev->driver = driver;
 
 	/* get ready for ep0 traffic */

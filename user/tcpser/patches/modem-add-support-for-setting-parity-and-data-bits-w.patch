@@ -1,0 +1,185 @@
+From f892cad3cc687e818946c4ed4e01c7b55937af95 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Wed, 26 Apr 2023 16:43:31 +0100
+Subject: [PATCH] modem: add support for setting parity and data bits with S23
+
+The parity and number of data bits may now be configured with S register
+23:
+
+    ats23=<val>
+
+Accepted values are:
+
+    0 - no parity, 8 data bits
+    1 - odd parity, 7 data bits
+    2 - even parity 7 data bits
+    4 - no parity, 7 data bits
+    5 - odd parity, 8 data bits
+    6 - even parity, 8 data bits
+---
+ src/dce.c        | 42 ++++++++++++++++++++++++++++++++++++++++++
+ src/dce.h        |  1 +
+ src/modem_core.c | 15 +++++++++++++++
+ src/modem_core.h |  8 ++++++++
+ src/serial.c     | 15 +++++++++++++++
+ src/serial.h     |  1 +
+ 6 files changed, 82 insertions(+)
+
+diff --git a/src/dce.c b/src/dce.c
+index 6b8d584..94abd1f 100644
+--- a/src/dce.c
++++ b/src/dce.c
+@@ -75,6 +75,48 @@ int dce_set_flow_control(dce_config *cfg, int opts) {
+   return rc;
+ }
+ 
++int dce_set_parity_databits(dce_config *cfg, unsigned val) {
++  unsigned cflag = 0;
++  int rc = 0;
++
++  LOG_ENTER();
++
++  switch (val) {
++    case MDM_PARITY_NONE_DATA_8:
++      LOG(LOG_ALL, "Setting NONE parity, 8 data bits");
++      cflag |= CS8;
++      break;
++    case MDM_PARITY_ODD_DATA_7:
++      LOG(LOG_ALL, "Setting ODD parity, 7 data bits");
++      cflag |= PARENB | PARODD | CS7;
++      break;
++    case MDM_PARITY_EVEN_DATA_7:
++      LOG(LOG_ALL, "Setting EVEN parity, 7 data bits");
++      cflag |= PARENB | CS7;
++      break;
++    case MDM_PARITY_NONE_DATA_7:
++      LOG(LOG_ALL, "Setting NONE parity, 7 data bits");
++      cflag |= CS7;
++      break;
++    case MDM_PARITY_ODD_DATA_8:
++      LOG(LOG_ALL, "Setting ODD parity, 8 DATA");
++      cflag |= PARENB | PARODD | CS8;
++      break;
++    case MDM_PARITY_EVEN_DATA_8:
++      LOG(LOG_ALL, "Setting EVEN parity, 8 DATA");
++      cflag |= PARENB | CS8;
++      break;
++  }
++
++  if (cfg->is_ip232) {
++  } else {
++    rc = ser_set_parity_databits(cfg->fd, cflag);
++  }
++
++  LOG_EXIT()
++  return rc;
++}
++
+ int dce_set_control_lines(dce_config *cfg, int state) {
+   int rc;
+ 
+diff --git a/src/dce.h b/src/dce.h
+index 6587d0e..ce1b924 100644
+--- a/src/dce.h
++++ b/src/dce.h
+@@ -47,6 +47,7 @@ typedef struct dce_config {
+ void dce_init_config(dce_config *cfg);
+ int dce_connect(dce_config *cfg);
+ int dce_set_flow_control(dce_config *cfg, int opts);
++int dce_set_parity_databits(dce_config *cfg, unsigned val);
+ int dce_set_control_lines(dce_config *cfg, int state);
+ int dce_get_control_lines(dce_config *cfg);
+ int dce_check_control_lines(dce_config *cfg);
+diff --git a/src/modem_core.c b/src/modem_core.c
+index cbf0427..c368e67 100644
+--- a/src/modem_core.c
++++ b/src/modem_core.c
+@@ -456,6 +456,21 @@ int mdm_parse_cmd(modem_config* cfg) {
+             case S_REG_LF:
+               cfg->crlf[1] = cfg->s[S_REG_LF];
+               break;
++            case S_REG_PARITY_DATABITS:
++              switch (cfg->s[S_REG_PARITY_DATABITS]) {
++                case MDM_PARITY_NONE_DATA_8:
++                case MDM_PARITY_ODD_DATA_7:
++                case MDM_PARITY_EVEN_DATA_7:
++                case MDM_PARITY_NONE_DATA_7:
++                case MDM_PARITY_ODD_DATA_8:
++                case MDM_PARITY_EVEN_DATA_8:
++                  dce_set_parity_databits(&cfg->dce_data, cfg->s[S_REG_PARITY_DATABITS]);
++                  break;
++                default:
++                  cmd=AT_CMD_ERR;
++                  break;
++              }
++              break;
+           }
+         } else {
+           LOG(LOG_DEBUG, "Ignoring S register %d=%s", num, tmp);
+diff --git a/src/modem_core.h b/src/modem_core.h
+index cefb6da..2cbdc26 100644
+--- a/src/modem_core.h
++++ b/src/modem_core.h
+@@ -31,6 +31,13 @@ typedef enum {
+ #define MDM_FC_RTS 1
+ #define MDM_FC_XON 2
+ 
++#define MDM_PARITY_NONE_DATA_8 0
++#define MDM_PARITY_ODD_DATA_7 1
++#define MDM_PARITY_EVEN_DATA_7 2
++#define MDM_PARITY_NONE_DATA_7 4
++#define MDM_PARITY_ODD_DATA_8 5
++#define MDM_PARITY_EVEN_DATA_8 6
++
+ #define MDM_CONN_NONE 0
+ #define MDM_CONN_OUTGOING 1
+ #define MDM_CONN_INCOMING 2
+@@ -60,6 +67,7 @@ enum {
+   S_REG_CARRIER_LOSS = 10,
+   S_REG_DTMF_TIME = 11,
+   S_REG_GUARD_TIME = 12,
++  S_REG_PARITY_DATABITS = 23,
+   S_REG_INACTIVITY_TIME = 30
+ };
+ 
+diff --git a/src/serial.c b/src/serial.c
+index f93fdc3..2f4dc29 100644
+--- a/src/serial.c
++++ b/src/serial.c
+@@ -194,6 +194,21 @@ int ser_set_flow_control(int fd, unsigned iflag, unsigned cflag) {
+   return 0;
+ }
+ 
++int ser_set_parity_databits(int fd, unsigned cflag) {
++  struct termios tio;
++  if(0 != tcgetattr(fd, &tio)) {
++    ELOG(LOG_FATAL, "Could not get serial port attributes");
++    return -1;
++  }
++  tio.c_cflag &= ~(PARENB | PARODD | CS7 | CS8);
++  tio.c_cflag |= cflag;
++  if(0 != tcsetattr(fd, TCSANOW, &tio)) {
++    ELOG(LOG_FATAL,"Could not set serial port attributes");
++    return -1;
++  }
++  return 0;
++}
++
+ int ser_get_control_lines(int fd) {
+   int status;
+ 
+diff --git a/src/serial.h b/src/serial.h
+index 2d0e3e8..90ee849 100644
+--- a/src/serial.h
++++ b/src/serial.h
+@@ -9,6 +9,7 @@
+ int ser_get_bps_const(int speed);
+ int ser_init_conn(char *tty, int speed);
+ int ser_set_flow_control(int fd, unsigned iflag, unsigned cflag);
++int ser_set_parity_databits(int fd, unsigned cflag);
+ int ser_get_control_lines(int fd);
+ int ser_set_control_lines(int fd, int state);
+ int ser_write(int fd, unsigned char *data,int len);
+-- 
+2.34.1
+

@@ -456,15 +456,15 @@ The ext4 superblock is laid out as follows in
    * - 0x277
      - __u8
      - s_lastcheck_hi
-     - Upper 8 bits of the s_lastcheck_hi field.
+     - Upper 8 bits of the s_lastcheck field.
    * - 0x278
      - __u8
      - s_first_error_time_hi
-     - Upper 8 bits of the s_first_error_time_hi field.
+     - Upper 8 bits of the s_first_error_time field.
    * - 0x279
      - __u8
      - s_last_error_time_hi
-     - Upper 8 bits of the s_last_error_time_hi field.
+     - Upper 8 bits of the s_last_error_time field.
    * - 0x27A
      - __u8
      - s_pad[2]
@@ -772,7 +772,7 @@ The ``s_default_mount_opts`` field is any combination of the following:
    * - 0x0010
      - Do not support 32-bit UIDs. (EXT4_DEFM_UID16)
    * - 0x0020
-     - All data and metadata are commited to the journal.
+     - All data and metadata are committed to the journal.
        (EXT4_DEFM_JMODE_DATA)
    * - 0x0040
      - All data are flushed to the disk before metadata are committed to the

@@ -1,20 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * NXP Wireless LAN device driver: commands and events
  *
  * Copyright 2011-2020 NXP
- *
- * This software file (the "File") is distributed by NXP
- * under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  */
 
 #include <asm/unaligned.h>
@@ -1256,8 +1244,6 @@ mwifiex_process_sleep_confirm_resp(struct mwifiex_adapter *adapter,
 				   u8 *pbuf, u32 upld_len)
 {
 	struct host_cmd_ds_command *cmd = (struct host_cmd_ds_command *) pbuf;
-	struct mwifiex_private *priv =
-		mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 	uint16_t result = le16_to_cpu(cmd->result);
 	uint16_t command = le16_to_cpu(cmd->command);
 	uint16_t seq_num = le16_to_cpu(cmd->seq_num);
@@ -1271,12 +1257,6 @@ mwifiex_process_sleep_confirm_resp(struct mwifiex_adapter *adapter,
 	mwifiex_dbg(adapter, CMD,
 		    "cmd: CMD_RESP: 0x%x, result %d, len %d, seqno 0x%x\n",
 		    command, result, le16_to_cpu(cmd->size), seq_num);
-
-	/* Get BSS number and corresponding priv */
-	priv = mwifiex_get_priv_by_id(adapter, HostCmd_GET_BSS_NO(seq_num),
-				      HostCmd_GET_BSS_TYPE(seq_num));
-	if (!priv)
-		priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 
 	/* Update sequence number */
 	seq_num = HostCmd_GET_SEQ_NO(seq_num);
@@ -1618,6 +1598,11 @@ int mwifiex_ret_get_hw_spec(struct mwifiex_private *priv,
 						    "channel report api version %d.%d\n",
 						    api_rev->major_ver,
 						    api_rev->minor_ver);
+					break;
+				case FW_HOTFIX_VER_ID:
+					mwifiex_dbg(adapter, INFO,
+						    "Firmware hotfix version %d\n",
+						    api_rev->major_ver);
 					break;
 				default:
 					mwifiex_dbg(adapter, FATAL,

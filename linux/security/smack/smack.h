@@ -120,6 +120,7 @@ struct inode_smack {
 struct task_smack {
 	struct smack_known	*smk_task;	/* label for access control */
 	struct smack_known	*smk_forked;	/* label when forked */
+	struct smack_known	*smk_transmuted;/* label when transmuted */
 	struct list_head	smk_rules;	/* per task access rules */
 	struct mutex		smk_rules_lock;	/* lock for the rules */
 	struct list_head	smk_relabel;	/* transit allowed labels */
@@ -127,7 +128,7 @@ struct task_smack {
 
 #define	SMK_INODE_INSTANT	0x01	/* inode is instantiated */
 #define	SMK_INODE_TRANSMUTE	0x02	/* directory is transmuting */
-#define	SMK_INODE_CHANGED	0x04	/* smack was transmuted */
+#define	SMK_INODE_CHANGED	0x04	/* smack was transmuted (unused) */
 #define	SMK_INODE_IMPURE	0x08	/* involved in an impure transaction */
 
 /*
@@ -179,15 +180,6 @@ struct smack_known_list_elem {
 	struct list_head	list;
 	struct smack_known	*smk_label;
 };
-
-/* Super block security struct flags for mount options */
-#define FSDEFAULT_MNT	0x01
-#define FSFLOOR_MNT	0x02
-#define FSHAT_MNT	0x04
-#define FSROOT_MNT	0x08
-#define FSTRANS_MNT	0x10
-
-#define NUM_SMK_MNT_OPTS	5
 
 enum {
 	Opt_error = -1,

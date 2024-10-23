@@ -20,6 +20,7 @@ struct squashfs_decompressor {
 		struct bio *, int, int, struct squashfs_page_actor *);
 	int	id;
 	char	*name;
+	int	alloc_buffer;
 	int	supported;
 };
 
@@ -32,6 +33,10 @@ static inline void *squashfs_comp_opts(struct squashfs_sb_info *msblk,
 
 #ifdef CONFIG_SQUASHFS_XZ
 extern const struct squashfs_decompressor squashfs_xz_comp_ops;
+#endif
+
+#ifdef CONFIG_SQUASHFS_XZ_AES
+extern const struct squashfs_decompressor squashfs_xz_aes_comp_ops;
 #endif
 
 #ifdef CONFIG_SQUASHFS_LZ4

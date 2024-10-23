@@ -15,6 +15,7 @@
 #include <linux/iio/trigger.h>
 #include <linux/interrupt.h>
 #include <linux/iio/events.h>
+#include <linux/of.h>
 
 #include "st_lis2hh12.h"
 

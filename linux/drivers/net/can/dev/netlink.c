@@ -36,10 +36,24 @@ static const struct nla_policy can_tdc_policy[IFLA_CAN_TDC_MAX + 1] = {
 	[IFLA_CAN_TDC_TDCF] = { .type = NLA_U32 },
 };
 
+static int can_validate_bittiming(const struct can_bittiming *bt,
+				  struct netlink_ext_ack *extack)
+{
+	/* sample point is in one-tenth of a percent */
+	if (bt->sample_point >= 1000) {
+		NL_SET_ERR_MSG(extack, "sample point must be between 0 and 100%");
+
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int can_validate(struct nlattr *tb[], struct nlattr *data[],
 			struct netlink_ext_ack *extack)
 {
 	bool is_can_fd = false;
+	int err;
 
 	/* Make sure that valid CAN FD configurations always consist of
 	 * - nominal/arbitration bittiming
@@ -50,6 +64,15 @@ static int can_validate(struct nlattr *tb[], struct nlattr *data[],
 
 	if (!data)
 		return 0;
+
+	if (data[IFLA_CAN_BITTIMING]) {
+		struct can_bittiming bt;
+
+		memcpy(&bt, nla_data(data[IFLA_CAN_BITTIMING]), sizeof(bt));
+		err = can_validate_bittiming(&bt, extack);
+		if (err)
+			return err;
+	}
 
 	if (data[IFLA_CAN_CTRLMODE]) {
 		struct can_ctrlmode *cm = nla_data(data[IFLA_CAN_CTRLMODE]);
@@ -71,7 +94,6 @@ static int can_validate(struct nlattr *tb[], struct nlattr *data[],
 		 */
 		if (data[IFLA_CAN_TDC]) {
 			struct nlattr *tb_tdc[IFLA_CAN_TDC_MAX + 1];
-			int err;
 
 			err = nla_parse_nested(tb_tdc, IFLA_CAN_TDC_MAX,
 					       data[IFLA_CAN_TDC],
@@ -100,6 +122,15 @@ static int can_validate(struct nlattr *tb[], struct nlattr *data[],
 	if (data[IFLA_CAN_DATA_BITTIMING] || data[IFLA_CAN_TDC]) {
 		if (!is_can_fd)
 			return -EOPNOTSUPP;
+	}
+
+	if (data[IFLA_CAN_DATA_BITTIMING]) {
+		struct can_bittiming bt;
+
+		memcpy(&bt, nla_data(data[IFLA_CAN_DATA_BITTIMING]), sizeof(bt));
+		err = can_validate_bittiming(&bt, extack);
+		if (err)
+			return err;
 	}
 
 	return 0;
@@ -176,20 +207,23 @@ static int can_changelink(struct net_device *dev, struct nlattr *tb[],
 		 * directly via do_set_bitrate(). Bail out if neither
 		 * is given.
 		 */
-		if (!priv->bittiming_const && !priv->do_set_bittiming)
+		if (!priv->bittiming_const && !priv->do_set_bittiming &&
+		    !priv->bitrate_const)
 			return -EOPNOTSUPP;
 
 		memcpy(&bt, nla_data(data[IFLA_CAN_BITTIMING]), sizeof(bt));
 		err = can_get_bittiming(dev, &bt,
 					priv->bittiming_const,
 					priv->bitrate_const,
-					priv->bitrate_const_cnt);
+					priv->bitrate_const_cnt,
+					extack);
 		if (err)
 			return err;
 
 		if (priv->bitrate_max && bt.bitrate > priv->bitrate_max) {
-			netdev_err(dev, "arbitration bitrate surpasses transceiver capabilities of %d bps\n",
-				   priv->bitrate_max);
+			NL_SET_ERR_MSG_FMT(extack,
+					   "arbitration bitrate %u bps surpasses transceiver capabilities of %u bps",
+					   bt.bitrate, priv->bitrate_max);
 			return -EINVAL;
 		}
 
@@ -278,7 +312,8 @@ static int can_changelink(struct net_device *dev, struct nlattr *tb[],
 		 * directly via do_set_bitrate(). Bail out if neither
 		 * is given.
 		 */
-		if (!priv->data_bittiming_const && !priv->do_set_data_bittiming)
+		if (!priv->data_bittiming_const && !priv->do_set_data_bittiming &&
+		    !priv->data_bitrate_const)
 			return -EOPNOTSUPP;
 
 		memcpy(&dbt, nla_data(data[IFLA_CAN_DATA_BITTIMING]),
@@ -286,13 +321,15 @@ static int can_changelink(struct net_device *dev, struct nlattr *tb[],
 		err = can_get_bittiming(dev, &dbt,
 					priv->data_bittiming_const,
 					priv->data_bitrate_const,
-					priv->data_bitrate_const_cnt);
+					priv->data_bitrate_const_cnt,
+					extack);
 		if (err)
 			return err;
 
 		if (priv->bitrate_max && dbt.bitrate > priv->bitrate_max) {
-			netdev_err(dev, "canfd data bitrate surpasses transceiver capabilities of %d bps\n",
-				   priv->bitrate_max);
+			NL_SET_ERR_MSG_FMT(extack,
+					   "CANFD data bitrate %u bps surpasses transceiver capabilities of %u bps",
+					   dbt.bitrate, priv->bitrate_max);
 			return -EINVAL;
 		}
 
@@ -309,7 +346,7 @@ static int can_changelink(struct net_device *dev, struct nlattr *tb[],
 			/* Neither of TDC parameters nor TDC flags are
 			 * provided: do calculation
 			 */
-			can_calc_tdco(&priv->tdc, priv->tdc_const, &priv->data_bittiming,
+			can_calc_tdco(&priv->tdc, priv->tdc_const, &dbt,
 				      &priv->ctrlmode, priv->ctrlmode_supported);
 		} /* else: both CAN_CTRLMODE_TDC_{AUTO,MANUAL} are explicitly
 		   * turned off. TDC is disabled: do nothing
@@ -509,7 +546,8 @@ static int can_fill_info(struct sk_buff *skb, const struct net_device *dev)
 	if (priv->do_get_state)
 		priv->do_get_state(dev, &state);
 
-	if ((priv->bittiming.bitrate &&
+	if ((priv->bittiming.bitrate != CAN_BITRATE_UNSET &&
+	     priv->bittiming.bitrate != CAN_BITRATE_UNKNOWN &&
 	     nla_put(skb, IFLA_CAN_BITTIMING,
 		     sizeof(priv->bittiming), &priv->bittiming)) ||
 

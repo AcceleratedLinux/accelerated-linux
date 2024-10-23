@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
+#include <linux/debugfs.h>
 #include <linux/string.h>
+
 #include <drm/drm_crtc.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_vblank.h>
@@ -463,7 +465,7 @@ void nv50_crc_atomic_set(struct nv50_head *head,
 	if (!outp)
 		return;
 
-	func->set_src(head, outp->or, nv50_crc_source_type(outp, asyh->crc.src),
+	func->set_src(head, outp->outp.or.id, nv50_crc_source_type(outp, asyh->crc.src),
 		      &crc->ctx[crc->ctx_idx]);
 }
 

@@ -74,6 +74,7 @@ struct ioatdma_device {
 	struct dca_provider *dca;
 	enum ioat_irq_mode irq_mode;
 	u32 cap;
+	int chancnt;
 
 	/* shadow version for CB3.3 chan reset errata workaround */
 	u64 msixtba0;
@@ -196,10 +197,8 @@ extern const struct sysfs_ops ioat_sysfs_ops;
 extern struct ioat_sysfs_entry ioat_version_attr;
 extern struct ioat_sysfs_entry ioat_cap_attr;
 extern int ioat_pending_level;
-extern int ioat_ring_alloc_order;
 extern struct kobj_type ioat_ktype;
 extern struct kmem_cache *ioat_cache;
-extern int ioat_ring_max_alloc_order;
 extern struct kmem_cache *ioat_sed_cache;
 
 static inline struct ioatdma_chan *to_ioat_chan(struct dma_chan *c)

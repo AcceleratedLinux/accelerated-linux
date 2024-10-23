@@ -488,7 +488,7 @@ poll_more:
 		if (unlikely(ib_req_notify_cq(priv->recv_cq,
 					      IB_CQ_NEXT_COMP |
 					      IB_CQ_REPORT_MISSED_EVENTS)) &&
-		    napi_reschedule(napi))
+		    napi_schedule(napi))
 			goto poll_more;
 	}
 
@@ -518,7 +518,7 @@ poll_more:
 		napi_complete(napi);
 		if (unlikely(ib_req_notify_cq(priv->send_cq, IB_CQ_NEXT_COMP |
 					      IB_CQ_REPORT_MISSED_EVENTS)) &&
-		    napi_reschedule(napi))
+		    napi_schedule(napi))
 			goto poll_more;
 	}
 	return n < 0 ? 0 : n;
@@ -531,11 +531,35 @@ void ipoib_ib_rx_completion(struct ib_cq *cq, void *ctx_ptr)
 	napi_schedule(&priv->recv_napi);
 }
 
+/* The function will force napi_schedule */
+void ipoib_napi_schedule_work(struct work_struct *work)
+{
+	struct ipoib_dev_priv *priv =
+		container_of(work, struct ipoib_dev_priv, reschedule_napi_work);
+	bool ret;
+
+	do {
+		ret = napi_schedule(&priv->send_napi);
+		if (!ret)
+			msleep(3);
+	} while (!ret && netif_queue_stopped(priv->dev) &&
+		 test_bit(IPOIB_FLAG_INITIALIZED, &priv->flags));
+}
+
 void ipoib_ib_tx_completion(struct ib_cq *cq, void *ctx_ptr)
 {
 	struct ipoib_dev_priv *priv = ctx_ptr;
+	bool ret;
 
-	napi_schedule(&priv->send_napi);
+	ret = napi_schedule(&priv->send_napi);
+	/*
+	 * if the queue is closed the driver must be able to schedule napi,
+	 * otherwise we can end with closed queue forever, because no new
+	 * packets to send and napi callback might not get new event after
+	 * its re-arm of the napi.
+	 */
+	if (!ret && netif_queue_stopped(priv->dev))
+		schedule_work(&priv->reschedule_napi_work);
 }
 
 static inline int post_send(struct ipoib_dev_priv *priv,
@@ -573,7 +597,7 @@ int ipoib_send(struct net_device *dev, struct sk_buff *skb,
 	unsigned int usable_sge = priv->max_send_sge - !!skb_headlen(skb);
 
 	if (skb_is_gso(skb)) {
-		hlen = skb_transport_offset(skb) + tcp_hdrlen(skb);
+		hlen = skb_tcp_all_headers(skb);
 		phead = skb->data;
 		if (unlikely(!skb_pull(skb, hlen))) {
 			ipoib_warn(priv, "linear data too small\n");
@@ -1109,7 +1133,7 @@ static bool ipoib_dev_addr_changed_valid(struct ipoib_dev_priv *priv)
 	 * if he sets the device address back to be based on GID index 0,
 	 * he no longer wishs to control it.
 	 *
-	 * If the user doesn't control the the device address,
+	 * If the user doesn't control the device address,
 	 * IPOIB_FLAG_DEV_ADDR_SET is set and ib_find_gid failed it means
 	 * the port GUID has changed and GID at index 0 has changed
 	 * so we need to change priv->local_gid and priv->dev->dev_addr

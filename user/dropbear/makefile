@@ -1,5 +1,5 @@
 
-URL = http://matt.ucc.asn.au/dropbear/releases/dropbear-2012.55.tar.gz
+URL = https://matt.ucc.asn.au/dropbear/releases/dropbear-2012.55.tar.gz
 AUTOMAKE_ROMFS = my_romfs
 
 include $(ROOTDIR)/tools/automake.inc

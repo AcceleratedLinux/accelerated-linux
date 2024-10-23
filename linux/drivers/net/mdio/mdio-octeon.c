@@ -56,8 +56,10 @@ static int octeon_mdiobus_probe(struct platform_device *pdev)
 
 	bus->mii_bus->parent = &pdev->dev;
 
-	bus->mii_bus->read = cavium_mdiobus_read;
-	bus->mii_bus->write = cavium_mdiobus_write;
+	bus->mii_bus->read = cavium_mdiobus_read_c22;
+	bus->mii_bus->write = cavium_mdiobus_write_c22;
+	bus->mii_bus->read_c45 = cavium_mdiobus_read_c45;
+	bus->mii_bus->write_c45 = cavium_mdiobus_write_c45;
 
 	platform_set_drvdata(pdev, bus);
 
@@ -83,7 +85,7 @@ fail_register:
 	return err;
 }
 
-static int octeon_mdiobus_remove(struct platform_device *pdev)
+static void octeon_mdiobus_remove(struct platform_device *pdev)
 {
 	struct cavium_mdiobus *bus;
 	union cvmx_smix_en smi_en;
@@ -93,7 +95,6 @@ static int octeon_mdiobus_remove(struct platform_device *pdev)
 	mdiobus_unregister(bus->mii_bus);
 	smi_en.u64 = 0;
 	oct_mdio_writeq(smi_en.u64, bus->register_base + SMI_EN);
-	return 0;
 }
 
 static const struct of_device_id octeon_mdiobus_match[] = {
@@ -110,7 +111,7 @@ static struct platform_driver octeon_mdiobus_driver = {
 		.of_match_table = octeon_mdiobus_match,
 	},
 	.probe		= octeon_mdiobus_probe,
-	.remove		= octeon_mdiobus_remove,
+	.remove_new	= octeon_mdiobus_remove,
 };
 
 module_platform_driver(octeon_mdiobus_driver);

@@ -211,7 +211,6 @@ static void iscsit_set_default_tpg_attribs(struct iscsi_portal_group *tpg)
 
 	a->authentication = TA_AUTHENTICATION;
 	a->login_timeout = TA_LOGIN_TIMEOUT;
-	a->netif_timeout = TA_NETIF_TIMEOUT;
 	a->default_cmdsn_depth = TA_DEFAULT_CMDSN_DEPTH;
 	a->generate_node_acls = TA_GENERATE_NODE_ACLS;
 	a->cache_dynamic_acls = TA_CACHE_DYNAMIC_ACLS;
@@ -394,8 +393,7 @@ struct iscsi_node_attrib *iscsit_tpg_get_node_attrib(
 {
 	struct se_session *se_sess = sess->se_sess;
 	struct se_node_acl *se_nacl = se_sess->se_node_acl;
-	struct iscsi_node_acl *acl = container_of(se_nacl, struct iscsi_node_acl,
-					se_node_acl);
+	struct iscsi_node_acl *acl = to_iscsi_nacl(se_nacl);
 
 	return &acl->node_attrib;
 }
@@ -663,31 +661,6 @@ int iscsit_ta_login_timeout(
 	a->login_timeout = login_timeout;
 	pr_debug("Set Logout Timeout to %u for Target Portal Group"
 		" %hu\n", a->login_timeout, tpg->tpgt);
-
-	return 0;
-}
-
-int iscsit_ta_netif_timeout(
-	struct iscsi_portal_group *tpg,
-	u32 netif_timeout)
-{
-	struct iscsi_tpg_attrib *a = &tpg->tpg_attrib;
-
-	if (netif_timeout > TA_NETIF_TIMEOUT_MAX) {
-		pr_err("Requested Network Interface Timeout %u larger"
-			" than maximum %u\n", netif_timeout,
-				TA_NETIF_TIMEOUT_MAX);
-		return -EINVAL;
-	} else if (netif_timeout < TA_NETIF_TIMEOUT_MIN) {
-		pr_err("Requested Network Interface Timeout %u smaller"
-			" than minimum %u\n", netif_timeout,
-				TA_NETIF_TIMEOUT_MIN);
-		return -EINVAL;
-	}
-
-	a->netif_timeout = netif_timeout;
-	pr_debug("Set Network Interface Timeout to %u for"
-		" Target Portal Group %hu\n", a->netif_timeout, tpg->tpgt);
 
 	return 0;
 }

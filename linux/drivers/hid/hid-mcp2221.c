@@ -10,12 +10,14 @@
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/bitfield.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/hid.h>
 #include <linux/hidraw.h>
 #include <linux/i2c.h>
 #include <linux/gpio/driver.h>
+#include <linux/iio/iio.h>
 #include "hid-ids.h"
 
 /* Commands codes in a raw output report */
@@ -30,6 +32,9 @@ enum {
 	MCP2221_I2C_CANCEL = 0x10,
 	MCP2221_GPIO_SET = 0x50,
 	MCP2221_GPIO_GET = 0x51,
+	MCP2221_SET_SRAM_SETTINGS = 0x60,
+	MCP2221_GET_SRAM_SETTINGS = 0x61,
+	MCP2221_READ_FLASH_DATA = 0xb0,
 };
 
 /* Response codes in a raw input report */
@@ -44,6 +49,7 @@ enum {
 	MCP2221_I2C_MASK_ADDR_NACK = 0x40,
 	MCP2221_I2C_WRADDRL_SEND = 0x21,
 	MCP2221_I2C_ADDR_NACK = 0x25,
+	MCP2221_I2C_READ_PARTIAL = 0x54,
 	MCP2221_I2C_READ_COMPL = 0x55,
 	MCP2221_ALT_F_NOT_GPIOV = 0xEE,
 	MCP2221_ALT_F_NOT_GPIOD = 0xEF,
@@ -74,8 +80,8 @@ struct mcp_get_gpio {
 	u8 cmd;
 	u8 dummy;
 	struct {
-		u8 direction;
 		u8 value;
+		u8 direction;
 	} gpio[MCP_NGPIO];
 } __packed;
 
@@ -89,6 +95,7 @@ struct mcp2221 {
 	struct i2c_adapter adapter;
 	struct mutex lock;
 	struct completion wait_in_report;
+	struct delayed_work init_work;
 	u8 *rxbuf;
 	u8 txbuf[64];
 	int rxbuf_idx;
@@ -97,6 +104,18 @@ struct mcp2221 {
 	struct gpio_chip *gc;
 	u8 gp_idx;
 	u8 gpio_dir;
+	u8 mode[4];
+#if IS_REACHABLE(CONFIG_IIO)
+	struct iio_chan_spec iio_channels[3];
+	u16 adc_values[3];
+	u8 adc_scale;
+	u8 dac_value;
+	u16 dac_scale;
+#endif
+};
+
+struct mcp2221_iio {
+	struct mcp2221 *mcp;
 };
 
 /*
@@ -169,6 +188,25 @@ static int mcp_cancel_last_cmd(struct mcp2221 *mcp)
 	return mcp_send_data_req_status(mcp, mcp->txbuf, 8);
 }
 
+/* Check if the last command succeeded or failed and return the result.
+ * If the command did fail, cancel that command which will free the i2c bus.
+ */
+static int mcp_chk_last_cmd_status_free_bus(struct mcp2221 *mcp)
+{
+	int ret;
+
+	ret = mcp_chk_last_cmd_status(mcp);
+	if (ret) {
+		/* The last command was a failure.
+		 * Send a cancel which will also free the bus.
+		 */
+		usleep_range(980, 1000);
+		mcp_cancel_last_cmd(mcp);
+	}
+
+	return ret;
+}
+
 static int mcp_set_i2c_speed(struct mcp2221 *mcp)
 {
 	int ret;
@@ -223,7 +261,7 @@ static int mcp_i2c_write(struct mcp2221 *mcp,
 		usleep_range(980, 1000);
 
 		if (last_status) {
-			ret = mcp_chk_last_cmd_status(mcp);
+			ret = mcp_chk_last_cmd_status_free_bus(mcp);
 			if (ret)
 				return ret;
 		}
@@ -260,6 +298,7 @@ static int mcp_i2c_smbus_read(struct mcp2221 *mcp,
 {
 	int ret;
 	u16 total_len;
+	int retries = 0;
 
 	mcp->txbuf[0] = type;
 	if (msg) {
@@ -283,19 +322,30 @@ static int mcp_i2c_smbus_read(struct mcp2221 *mcp,
 	mcp->rxbuf_idx = 0;
 
 	do {
+		/* Wait for the data to be read by the device */
+		usleep_range(980, 1000);
+
 		memset(mcp->txbuf, 0, 4);
 		mcp->txbuf[0] = MCP2221_I2C_GET_DATA;
 
 		ret = mcp_send_data_req_status(mcp, mcp->txbuf, 1);
-		if (ret)
-			return ret;
-
-		ret = mcp_chk_last_cmd_status(mcp);
-		if (ret)
-			return ret;
-
-		usleep_range(980, 1000);
+		if (ret) {
+			if (retries < 5) {
+				/* The data wasn't ready to read.
+				 * Wait a bit longer and try again.
+				 */
+				usleep_range(90, 100);
+				retries++;
+			} else {
+				return ret;
+			}
+		} else {
+			retries = 0;
+		}
 	} while (mcp->rxbuf_idx < total_len);
+
+	usleep_range(980, 1000);
+	ret = mcp_chk_last_cmd_status_free_bus(mcp);
 
 	return ret;
 }
@@ -309,11 +359,6 @@ static int mcp_i2c_xfer(struct i2c_adapter *adapter,
 	hid_hw_power(mcp->hdev, PM_HINT_FULLON);
 
 	mutex_lock(&mcp->lock);
-
-	/* Setting speed before every transaction is required for mcp2221 */
-	ret = mcp_set_i2c_speed(mcp);
-	if (ret)
-		goto exit;
 
 	if (num == 1) {
 		if (msgs->flags & I2C_M_RD) {
@@ -385,6 +430,9 @@ static int mcp_smbus_write(struct mcp2221 *mcp, u16 addr,
 		data_len = 7;
 		break;
 	default:
+		if (len > I2C_SMBUS_BLOCK_MAX)
+			return -EINVAL;
+
 		memcpy(&mcp->txbuf[5], buf, len);
 		data_len = len + 5;
 	}
@@ -396,9 +444,7 @@ static int mcp_smbus_write(struct mcp2221 *mcp, u16 addr,
 	if (last_status) {
 		usleep_range(980, 1000);
 
-		ret = mcp_chk_last_cmd_status(mcp);
-		if (ret)
-			return ret;
+		ret = mcp_chk_last_cmd_status_free_bus(mcp);
 	}
 
 	return ret;
@@ -415,10 +461,6 @@ static int mcp_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
 	hid_hw_power(mcp->hdev, PM_HINT_FULLON);
 
 	mutex_lock(&mcp->lock);
-
-	ret = mcp_set_i2c_speed(mcp);
-	if (ret)
-		goto exit;
 
 	switch (size) {
 
@@ -564,6 +606,7 @@ static const struct i2c_algorithm mcp_i2c_algo = {
 	.functionality = mcp_i2c_func,
 };
 
+#if IS_REACHABLE(CONFIG_GPIOLIB)
 static int mcp_gpio_get(struct gpio_chip *gc,
 				unsigned int offset)
 {
@@ -572,7 +615,7 @@ static int mcp_gpio_get(struct gpio_chip *gc,
 
 	mcp->txbuf[0] = MCP2221_GPIO_GET;
 
-	mcp->gp_idx = offsetof(struct mcp_get_gpio, gpio[offset].value);
+	mcp->gp_idx = offsetof(struct mcp_get_gpio, gpio[offset]);
 
 	mutex_lock(&mcp->lock);
 	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 1);
@@ -653,7 +696,7 @@ static int mcp_gpio_get_direction(struct gpio_chip *gc,
 
 	mcp->txbuf[0] = MCP2221_GPIO_GET;
 
-	mcp->gp_idx = offsetof(struct mcp_get_gpio, gpio[offset].direction);
+	mcp->gp_idx = offsetof(struct mcp_get_gpio, gpio[offset]);
 
 	mutex_lock(&mcp->lock);
 	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 1);
@@ -667,6 +710,7 @@ static int mcp_gpio_get_direction(struct gpio_chip *gc,
 
 	return GPIO_LINE_DIRECTION_OUT;
 }
+#endif
 
 /* Gives current state of i2c engine inside mcp2221 */
 static int mcp_get_i2c_eng_state(struct mcp2221 *mcp,
@@ -742,6 +786,9 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 				break;
 			}
 			mcp->status = mcp_get_i2c_eng_state(mcp, data, 8);
+#if IS_REACHABLE(CONFIG_IIO)
+			memcpy(&mcp->adc_values, &data[50], sizeof(mcp->adc_values));
+#endif
 			break;
 		default:
 			mcp->status = -EIO;
@@ -765,7 +812,8 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 				mcp->status = -EIO;
 				break;
 			}
-			if (data[2] == MCP2221_I2C_READ_COMPL) {
+			if (data[2] == MCP2221_I2C_READ_COMPL ||
+			    data[2] == MCP2221_I2C_READ_PARTIAL) {
 				buf = mcp->rxbuf;
 				memcpy(&buf[mcp->rxbuf_idx], &data[4], data[3]);
 				mcp->rxbuf_idx = mcp->rxbuf_idx + data[3];
@@ -813,6 +861,69 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 		complete(&mcp->wait_in_report);
 		break;
 
+	case MCP2221_SET_SRAM_SETTINGS:
+		switch (data[1]) {
+		case MCP2221_SUCCESS:
+			mcp->status = 0;
+			break;
+		default:
+			mcp->status = -EAGAIN;
+		}
+		complete(&mcp->wait_in_report);
+		break;
+
+	case MCP2221_GET_SRAM_SETTINGS:
+		switch (data[1]) {
+		case MCP2221_SUCCESS:
+			memcpy(&mcp->mode, &data[22], 4);
+#if IS_REACHABLE(CONFIG_IIO)
+			mcp->dac_value = data[6] & GENMASK(4, 0);
+#endif
+			mcp->status = 0;
+			break;
+		default:
+			mcp->status = -EAGAIN;
+		}
+		complete(&mcp->wait_in_report);
+		break;
+
+	case MCP2221_READ_FLASH_DATA:
+		switch (data[1]) {
+		case MCP2221_SUCCESS:
+			mcp->status = 0;
+
+			/* Only handles CHIP SETTINGS subpage currently */
+			if (mcp->txbuf[1] != 0) {
+				mcp->status = -EIO;
+				break;
+			}
+
+#if IS_REACHABLE(CONFIG_IIO)
+			{
+				u8 tmp;
+				/* DAC scale value */
+				tmp = FIELD_GET(GENMASK(7, 6), data[6]);
+				if ((data[6] & BIT(5)) && tmp)
+					mcp->dac_scale = tmp + 4;
+				else
+					mcp->dac_scale = 5;
+
+				/* ADC scale value */
+				tmp = FIELD_GET(GENMASK(4, 3), data[7]);
+				if ((data[7] & BIT(2)) && tmp)
+					mcp->adc_scale = tmp - 1;
+				else
+					mcp->adc_scale = 0;
+			}
+#endif
+
+			break;
+		default:
+			mcp->status = -EAGAIN;
+		}
+		complete(&mcp->wait_in_report);
+		break;
+
 	default:
 		mcp->status = -EIO;
 		complete(&mcp->wait_in_report);
@@ -820,6 +931,195 @@ static int mcp2221_raw_event(struct hid_device *hdev,
 
 	return 1;
 }
+
+/* Device resource managed function for HID unregistration */
+static void mcp2221_hid_unregister(void *ptr)
+{
+	struct hid_device *hdev = ptr;
+
+	hid_hw_close(hdev);
+	hid_hw_stop(hdev);
+}
+
+/* This is needed to be sure hid_hw_stop() isn't called twice by the subsystem */
+static void mcp2221_remove(struct hid_device *hdev)
+{
+#if IS_REACHABLE(CONFIG_IIO)
+	struct mcp2221 *mcp = hid_get_drvdata(hdev);
+
+	cancel_delayed_work_sync(&mcp->init_work);
+#endif
+}
+
+#if IS_REACHABLE(CONFIG_IIO)
+static int mcp2221_read_raw(struct iio_dev *indio_dev,
+			    struct iio_chan_spec const *channel, int *val,
+			    int *val2, long mask)
+{
+	struct mcp2221_iio *priv = iio_priv(indio_dev);
+	struct mcp2221 *mcp = priv->mcp;
+	int ret;
+
+	if (mask == IIO_CHAN_INFO_SCALE) {
+		if (channel->output)
+			*val = 1 << mcp->dac_scale;
+		else
+			*val = 1 << mcp->adc_scale;
+
+		return IIO_VAL_INT;
+	}
+
+	mutex_lock(&mcp->lock);
+
+	if (channel->output) {
+		*val = mcp->dac_value;
+		ret = IIO_VAL_INT;
+	} else {
+		/* Read ADC values */
+		ret = mcp_chk_last_cmd_status(mcp);
+
+		if (!ret) {
+			*val = le16_to_cpu((__force __le16) mcp->adc_values[channel->address]);
+			if (*val >= BIT(10))
+				ret =  -EINVAL;
+			else
+				ret = IIO_VAL_INT;
+		}
+	}
+
+	mutex_unlock(&mcp->lock);
+
+	return ret;
+}
+
+static int mcp2221_write_raw(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan,
+			     int val, int val2, long mask)
+{
+	struct mcp2221_iio *priv = iio_priv(indio_dev);
+	struct mcp2221 *mcp = priv->mcp;
+	int ret;
+
+	if (val < 0 || val >= BIT(5))
+		return -EINVAL;
+
+	mutex_lock(&mcp->lock);
+
+	memset(mcp->txbuf, 0, 12);
+	mcp->txbuf[0] = MCP2221_SET_SRAM_SETTINGS;
+	mcp->txbuf[4] = BIT(7) | val;
+
+	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 12);
+	if (!ret)
+		mcp->dac_value = val;
+
+	mutex_unlock(&mcp->lock);
+
+	return ret;
+}
+
+static const struct iio_info mcp2221_info = {
+	.read_raw = &mcp2221_read_raw,
+	.write_raw = &mcp2221_write_raw,
+};
+
+static int mcp_iio_channels(struct mcp2221 *mcp)
+{
+	int idx, cnt = 0;
+	bool dac_created = false;
+
+	/* GP0 doesn't have ADC/DAC alternative function */
+	for (idx = 1; idx < MCP_NGPIO; idx++) {
+		struct iio_chan_spec *chan = &mcp->iio_channels[cnt];
+
+		switch (mcp->mode[idx]) {
+		case 2:
+			chan->address = idx - 1;
+			chan->channel = cnt++;
+			break;
+		case 3:
+			/* GP1 doesn't have DAC alternative function */
+			if (idx == 1 || dac_created)
+				continue;
+			/* DAC1 and DAC2 outputs are connected to the same DAC */
+			dac_created = true;
+			chan->output = 1;
+			cnt++;
+			break;
+		default:
+			continue;
+		};
+
+		chan->type = IIO_VOLTAGE;
+		chan->indexed = 1;
+		chan->info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
+		chan->info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
+		chan->scan_index = -1;
+	}
+
+	return cnt;
+}
+
+static void mcp_init_work(struct work_struct *work)
+{
+	struct iio_dev *indio_dev;
+	struct mcp2221 *mcp = container_of(work, struct mcp2221, init_work.work);
+	struct mcp2221_iio *data;
+	static int retries = 5;
+	int ret, num_channels;
+
+	hid_hw_power(mcp->hdev, PM_HINT_FULLON);
+	mutex_lock(&mcp->lock);
+
+	mcp->txbuf[0] = MCP2221_GET_SRAM_SETTINGS;
+	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 1);
+
+	if (ret == -EAGAIN)
+		goto reschedule_task;
+
+	num_channels = mcp_iio_channels(mcp);
+	if (!num_channels)
+		goto unlock;
+
+	mcp->txbuf[0] = MCP2221_READ_FLASH_DATA;
+	mcp->txbuf[1] = 0;
+	ret = mcp_send_data_req_status(mcp, mcp->txbuf, 2);
+
+	if (ret == -EAGAIN)
+		goto reschedule_task;
+
+	indio_dev = devm_iio_device_alloc(&mcp->hdev->dev, sizeof(*data));
+	if (!indio_dev)
+		goto unlock;
+
+	data = iio_priv(indio_dev);
+	data->mcp = mcp;
+
+	indio_dev->name = "mcp2221";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->info = &mcp2221_info;
+	indio_dev->channels = mcp->iio_channels;
+	indio_dev->num_channels = num_channels;
+
+	devm_iio_device_register(&mcp->hdev->dev, indio_dev);
+
+unlock:
+	mutex_unlock(&mcp->lock);
+	hid_hw_power(mcp->hdev, PM_HINT_NORMAL);
+
+	return;
+
+reschedule_task:
+	mutex_unlock(&mcp->lock);
+	hid_hw_power(mcp->hdev, PM_HINT_NORMAL);
+
+	if (!retries--)
+		return;
+
+	/* Device is not ready to read SRAM or FLASH data, try again */
+	schedule_delayed_work(&mcp->init_work, msecs_to_jiffies(100));
+}
+#endif
 
 static int mcp2221_probe(struct hid_device *hdev,
 					const struct hid_device_id *id)
@@ -837,16 +1137,24 @@ static int mcp2221_probe(struct hid_device *hdev,
 		return ret;
 	}
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
+	/*
+	 * This driver uses the .raw_event callback and therefore does not need any
+	 * HID_CONNECT_xxx flags.
+	 */
+	ret = hid_hw_start(hdev, 0);
 	if (ret) {
 		hid_err(hdev, "can't start hardware\n");
 		return ret;
 	}
 
+	hid_info(hdev, "USB HID v%x.%02x Device [%s] on %s\n", hdev->version >> 8,
+			hdev->version & 0xff, hdev->name, hdev->phys);
+
 	ret = hid_hw_open(hdev);
 	if (ret) {
 		hid_err(hdev, "can't open device\n");
-		goto err_hstop;
+		hid_hw_stop(hdev);
+		return ret;
 	}
 
 	mutex_init(&mcp->lock);
@@ -854,35 +1162,45 @@ static int mcp2221_probe(struct hid_device *hdev,
 	hid_set_drvdata(hdev, mcp);
 	mcp->hdev = hdev;
 
+	ret = devm_add_action_or_reset(&hdev->dev, mcp2221_hid_unregister, hdev);
+	if (ret)
+		return ret;
+
+	hid_device_io_start(hdev);
+
 	/* Set I2C bus clock diviser */
 	if (i2c_clk_freq > 400)
 		i2c_clk_freq = 400;
 	if (i2c_clk_freq < 50)
 		i2c_clk_freq = 50;
 	mcp->cur_i2c_clk_div = (12000000 / (i2c_clk_freq * 1000)) - 3;
+	ret = mcp_set_i2c_speed(mcp);
+	if (ret) {
+		hid_err(hdev, "can't set i2c speed: %d\n", ret);
+		return ret;
+	}
 
 	mcp->adapter.owner = THIS_MODULE;
 	mcp->adapter.class = I2C_CLASS_HWMON;
 	mcp->adapter.algo = &mcp_i2c_algo;
 	mcp->adapter.retries = 1;
 	mcp->adapter.dev.parent = &hdev->dev;
+	ACPI_COMPANION_SET(&mcp->adapter.dev, ACPI_COMPANION(hdev->dev.parent));
 	snprintf(mcp->adapter.name, sizeof(mcp->adapter.name),
-			"MCP2221 usb-i2c bridge on hidraw%d",
-			((struct hidraw *)hdev->hidraw)->minor);
+			"MCP2221 usb-i2c bridge");
 
-	ret = i2c_add_adapter(&mcp->adapter);
+	i2c_set_adapdata(&mcp->adapter, mcp);
+	ret = devm_i2c_add_adapter(&hdev->dev, &mcp->adapter);
 	if (ret) {
 		hid_err(hdev, "can't add usb-i2c adapter: %d\n", ret);
-		goto err_i2c;
+		return ret;
 	}
-	i2c_set_adapdata(&mcp->adapter, mcp);
 
+#if IS_REACHABLE(CONFIG_GPIOLIB)
 	/* Setup GPIO chip */
 	mcp->gc = devm_kzalloc(&hdev->dev, sizeof(*mcp->gc), GFP_KERNEL);
-	if (!mcp->gc) {
-		ret = -ENOMEM;
-		goto err_gc;
-	}
+	if (!mcp->gc)
+		return -ENOMEM;
 
 	mcp->gc->label = "mcp2221_gpio";
 	mcp->gc->direction_input = mcp_gpio_direction_input;
@@ -897,26 +1215,15 @@ static int mcp2221_probe(struct hid_device *hdev,
 
 	ret = devm_gpiochip_add_data(&hdev->dev, mcp->gc, mcp);
 	if (ret)
-		goto err_gc;
+		return ret;
+#endif
+
+#if IS_REACHABLE(CONFIG_IIO)
+	INIT_DELAYED_WORK(&mcp->init_work, mcp_init_work);
+	schedule_delayed_work(&mcp->init_work, msecs_to_jiffies(100));
+#endif
 
 	return 0;
-
-err_gc:
-	i2c_del_adapter(&mcp->adapter);
-err_i2c:
-	hid_hw_close(mcp->hdev);
-err_hstop:
-	hid_hw_stop(mcp->hdev);
-	return ret;
-}
-
-static void mcp2221_remove(struct hid_device *hdev)
-{
-	struct mcp2221 *mcp = hid_get_drvdata(hdev);
-
-	i2c_del_adapter(&mcp->adapter);
-	hid_hw_close(mcp->hdev);
-	hid_hw_stop(mcp->hdev);
 }
 
 static const struct hid_device_id mcp2221_devices[] = {

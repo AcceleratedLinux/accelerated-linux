@@ -313,7 +313,7 @@ static int scan_read_oob(struct nand_chip *this, uint8_t *buf, loff_t offs,
 			 size_t len)
 {
 	struct mtd_info *mtd = nand_to_mtd(this);
-	struct mtd_oob_ops ops;
+	struct mtd_oob_ops ops = { };
 	int res, ret = 0;
 
 	ops.mode = MTD_OPS_PLACE_OOB;
@@ -354,7 +354,7 @@ static int scan_write_bbt(struct nand_chip *this, loff_t offs, size_t len,
 			  uint8_t *buf, uint8_t *oob)
 {
 	struct mtd_info *mtd = nand_to_mtd(this);
-	struct mtd_oob_ops ops;
+	struct mtd_oob_ops ops = { };
 
 	ops.mode = MTD_OPS_PLACE_OOB;
 	ops.ooboffs = 0;
@@ -416,7 +416,7 @@ static int scan_block_fast(struct nand_chip *this, struct nand_bbt_descr *bd,
 {
 	struct mtd_info *mtd = nand_to_mtd(this);
 
-	struct mtd_oob_ops ops;
+	struct mtd_oob_ops ops = { };
 	int ret, page_offset;
 
 	ops.ooblen = mtd->oobsize;
@@ -576,7 +576,6 @@ static int search_bbt(struct nand_chip *this, uint8_t *buf,
 		startblock &= bbtblocks - 1;
 	} else {
 		chips = 1;
-		bbtblocks = mtd->size >> this->bbt_erase_shift;
 	}
 
 	for (i = 0; i < chips; i++) {
@@ -756,7 +755,7 @@ static int write_bbt(struct nand_chip *this, uint8_t *buf,
 	uint8_t rcode = td->reserved_block_code;
 	size_t retlen, len = 0;
 	loff_t to;
-	struct mtd_oob_ops ops;
+	struct mtd_oob_ops ops = { };
 
 	ops.ooblen = mtd->oobsize;
 	ops.ooboffs = 0;

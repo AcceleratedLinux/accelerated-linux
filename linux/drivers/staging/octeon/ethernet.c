@@ -953,7 +953,7 @@ static int cvm_oct_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int cvm_oct_remove(struct platform_device *pdev)
+static void cvm_oct_remove(struct platform_device *pdev)
 {
 	int port;
 
@@ -994,7 +994,6 @@ static int cvm_oct_remove(struct platform_device *pdev)
 	if (CVMX_FPA_OUTPUT_BUFFER_POOL != CVMX_FPA_PACKET_POOL)
 		cvm_oct_mem_empty_fpa(CVMX_FPA_OUTPUT_BUFFER_POOL,
 				      CVMX_FPA_OUTPUT_BUFFER_POOL_SIZE, 128);
-	return 0;
 }
 
 static const struct of_device_id cvm_oct_match[] = {
@@ -1007,7 +1006,7 @@ MODULE_DEVICE_TABLE(of, cvm_oct_match);
 
 static struct platform_driver cvm_oct_driver = {
 	.probe		= cvm_oct_probe,
-	.remove		= cvm_oct_remove,
+	.remove_new	= cvm_oct_remove,
 	.driver		= {
 		.name	= KBUILD_MODNAME,
 		.of_match_table = cvm_oct_match,

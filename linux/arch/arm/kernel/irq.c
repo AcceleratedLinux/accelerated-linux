@@ -32,6 +32,7 @@
 #include <linux/kallsyms.h>
 #include <linux/proc_fs.h>
 #include <linux/export.h>
+#include <linux/vmalloc.h>
 
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/hardware/cache-uniphier.h>
@@ -70,6 +71,7 @@ static void __init init_irq_stacks(void)
 	}
 }
 
+#ifdef CONFIG_SOFTIRQ_ON_OWN_STACK
 static void ____do_softirq(void *arg)
 {
 	__do_softirq();
@@ -80,7 +82,7 @@ void do_softirq_own_stack(void)
 	call_with_stack(____do_softirq, NULL,
 			__this_cpu_read(irq_stack_ptr));
 }
-
+#endif
 #endif
 
 int arch_show_interrupts(struct seq_file *p, int prec)

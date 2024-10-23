@@ -1,0 +1,21 @@
+
+config USER_ATH11K_FIRMWARE
+        bool "ath11k-firmware"
+        help
+          ath11k firmware
+
+config USER_ATH11K_FIRMWARE_COMPEX
+        bool "Install firmware for Compex WLE3002HX"
+        depends on USER_ATH11K_FIRMWARE
+
+config USER_ATH11K_FIRMWARE_SPARKLAN_QCN9074
+        bool "Install firmware for SparkLan WPEQ-405AX"
+        depends on USER_ATH11K_FIRMWARE
+
+config USER_ATH11K_FIRMWARE_SPARKLAN_WCN6855
+        bool "Install firmware for SparkLan WNFQ-269AX(BT)"
+        depends on USER_ATH11K_FIRMWARE
+
+config USER_ATH11K_FIRMWARE_VOXMICRO
+        bool "Install firmware for Voxmicro E63W"
+        depends on USER_ATH11K_FIRMWARE

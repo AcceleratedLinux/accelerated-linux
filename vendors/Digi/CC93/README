@@ -1,0 +1,31 @@
+DIGI CONNECTCORE-93
+-------------------
+
+The Digi ConnectCore-93 DVK is made up of the Digi ConnectCore-93 SOM
+(System-on-Module) and its carrier board. The CC93 SoM is built around
+a Freescale iMX9 SoC.
+
+To build firmware for this board choose the Digi/CC93 target.
+To load that firmware onto the CC93 board run the following commands from
+the u-boot command line:
+
+    setenv ipaddr 192.168.2.1
+    setenv serverip 192.168.2.22
+    setenv bootargs console=ttyLP5,115200 earlycon root=/dev/ram0 initrd=0x83800000,64M
+    tftpboot 0x80400000 kernel
+    tftpboot 0x83000000 imx93-cc93-dvk.dtb
+    tftpboot 0x83800000 rootfs.bin
+    booti 0x80400000 - 0x83000000
+
+setenv ipaddr 192.168.2.1 ; setenv serverip 192.168.2.22 ; setenv bootargs console=ttyLP5,115200 earlycon root=/dev/ram0 initrd=0x83800000,64M ; tftpboot 0x80400000 kernel ; tftpboot 0x83000000 ccimx93-dvk.dtb ; tftpboot 0x83800000 rootfs.bin ; booti 0x80400000 - 0x83000000
+
+This assumes you have a local network with addresses on 192.168.2.0/24.
+
+To use the second ethernet port of the CC93 you will need to set jumpers
+J43, J45, J51-J60 on the carrier board.
+
+The console is on the USB-C connector (labelled "CONSOLE"). You will need a 
+USB-C to standard USB to plug into your development server. On standard
+Linux systems the console will show up as device /dev/ttyACM0, with default
+settings of 115200,8,n,1.
+

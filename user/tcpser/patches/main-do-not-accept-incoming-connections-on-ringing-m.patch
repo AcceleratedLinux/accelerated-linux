@@ -1,0 +1,62 @@
+From 7b4bcf5cbdd5a61a655e25e5236046bb39ac0322 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Sat, 6 May 2023 16:34:04 +0100
+Subject: [PATCH] main: do not accept incoming connections on ringing modem
+
+Previously, a second incoming socket connection was incorrectly accepted
+if the modem was still ringing from a previous connection, but had not
+yet gone off hook. The modem config struct would switch to using the
+second connection, leaving the first connection dangling open.
+
+Also, in the unlikely event that the accept() call fails, send a message
+from the bridge thread back to the main thread so that further accepts
+are attempted. Previously, if accept() failed there would be no further
+attempts to accept incoming connections.
+---
+ src/bridge.c | 6 +++---
+ src/tcpser.c | 4 ++--
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/bridge.c b/src/bridge.c
+index 8d7fd35..95046da 100644
+--- a/src/bridge.c
++++ b/src/bridge.c
+@@ -30,10 +30,10 @@ int accept_connection(modem_config *cfg) {
+       cfg->rings = 0;
+       mdm_send_ring(cfg);
+     }
+-    // tell parent I got it.
+-    LOG(LOG_DEBUG, "Informing parent task that I am busy");
+-    writePipe(cfg->mp[0][1], MSG_BUSY);
+   }
++  // tell parent I got it.
++  LOG(LOG_DEBUG, "Informing parent task that I am busy");
++  writePipe(cfg->mp[0][1], MSG_BUSY);
+   LOG_EXIT();
+   return 0;
+ }
+diff --git a/src/tcpser.c b/src/tcpser.c
+index 80c3aba..0465945 100644
+--- a/src/tcpser.c
++++ b/src/tcpser.c
+@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
+         LOG(LOG_DEBUG, "Incoming connection pending");
+         // first try for a modem that is listening.
+         for(i = 0; i < modem_count; i++) {
+-          if(cfg[i].s[0] != 0 && cfg[i].is_off_hook == FALSE) {
++          if(cfg[i].s[0] != 0 && cfg[i].is_off_hook == FALSE && cfg[i].is_ringing == FALSE) {
+             // send signal to pipe saying pick up...
+             LOG(LOG_DEBUG, "Sending incoming connection to listening modem #%d", i);
+             writePipe(cfg[i].mp[1][1], MSG_CALLING);
+@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
+         }
+         // now, send to any non-active modem.
+         for(i = 0; i < modem_count; i++) {
+-          if(cfg[i].is_off_hook == FALSE) {
++          if(cfg[i].is_off_hook == FALSE && cfg[i].is_ringing == FALSE) {
+             // send signal to pipe saying pick up...
+             LOG(LOG_DEBUG, "Sending incoming connection to non-connected modem #%d", i);
+             writePipe(cfg[i].mp[1][1], MSG_CALLING);
+-- 
+2.34.1
+

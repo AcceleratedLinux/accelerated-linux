@@ -1,0 +1,88 @@
+#!/bin/sh
+
+change_speed()
+{
+	echo "change ethernet speed to ${1}mbit"
+	ethtool -s lan speed $1 duplex full
+	ethtool -s wan speed $1 duplex full
+	if [ $1 -eq 10 ]; then
+		ledcmd -o RSS1 -O RSS2
+	else
+		ledcmd -o RSS1 -o RSS2
+	fi
+}
+
+poll()
+{
+	cnt=0
+        val=0
+        while [ $cnt -lt 50 ] ; do
+                usleep 10
+                but=$(cat /sys/class/gpio/gpio51/value)
+                val=$(($val + $but))
+                cnt=$(($cnt+1))
+        done
+        if [ $val -gt 25 ]; then
+                echo 1
+        else
+                echo 0
+        fi
+}
+
+change_speed_loop()
+{
+	speed=10
+	change_speed $speed
+	while true
+	do
+		if [ $(poll) -eq 0 ]; then
+			if [ $speed -eq 10 ]; then
+				speed=100
+			else
+				speed=10
+			fi
+			change_speed $speed
+		fi
+	done
+}
+
+ifconfig lan 192.168.0.1
+ifconfig wan 192.168.0.2
+
+/etc/action.d/dbus start &
+/etc/action.d/udev start &
+/sbin/ModemManager &
+
+echo 0 > /sys/class/gpio/gpio52/value
+
+ping -b -f -I lan 255.255.255.255 &
+ping -b -f -I wan 255.255.255.255 &
+
+ledcmd -O SIM1
+ledcmd -O SIM2
+
+# if sim select button is pressed change the speed of ethernet ports
+change_speed_loop &
+
+while true
+do
+	if mmcli -L | grep -q ModemManager1
+	then
+		modem cli -e
+		modem cli | grep state:
+		if modem cli | grep -q "state: 'registered'"
+		then
+			ledcmd -o COM -o ONLINE -o ETH
+		else
+			ledcmd -o COM -O ONLINE -o ETH
+		fi
+	else
+		ledcmd -o COM -O ONLINE -o ETH
+	fi
+	ledcmd -o SIM1
+	usleep 500000
+	ledcmd -O SIM1
+	ledcmd -o SIM2
+	usleep 500000
+	ledcmd -O SIM2
+done

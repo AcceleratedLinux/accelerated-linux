@@ -14,11 +14,11 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/of_device.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/phy/phy.h>
 #include <linux/regulator/consumer.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 
 #include "pcie-designware.h"
@@ -249,7 +249,7 @@ static int exynos_pcie_link_up(struct dw_pcie *pci)
 	return (val & PCIE_ELBI_XMLH_LINKUP);
 }
 
-static int exynos_pcie_host_init(struct pcie_port *pp)
+static int exynos_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct exynos_pcie *ep = to_exynos_pcie(pci);
@@ -258,9 +258,8 @@ static int exynos_pcie_host_init(struct pcie_port *pp)
 
 	exynos_pcie_assert_core_reset(ep);
 
-	phy_reset(ep->phy);
-	phy_power_on(ep->phy);
 	phy_init(ep->phy);
+	phy_power_on(ep->phy);
 
 	exynos_pcie_deassert_core_reset(ep);
 	exynos_pcie_enable_irq_pulse(ep);
@@ -269,14 +268,14 @@ static int exynos_pcie_host_init(struct pcie_port *pp)
 }
 
 static const struct dw_pcie_host_ops exynos_pcie_host_ops = {
-	.host_init = exynos_pcie_host_init,
+	.init = exynos_pcie_host_init,
 };
 
 static int exynos_add_pcie_port(struct exynos_pcie *ep,
 				       struct platform_device *pdev)
 {
 	struct dw_pcie *pci = &ep->pci;
-	struct pcie_port *pp = &pci->pp;
+	struct dw_pcie_rp *pp = &pci->pp;
 	struct device *dev = &pdev->dev;
 	int ret;
 
@@ -292,7 +291,7 @@ static int exynos_add_pcie_port(struct exynos_pcie *ep,
 	}
 
 	pp->ops = &exynos_pcie_host_ops;
-	pp->msi_irq = -ENODEV;
+	pp->msi_irq[0] = -ENODEV;
 
 	ret = dw_pcie_host_init(pp);
 	if (ret) {
@@ -376,7 +375,7 @@ fail_probe:
 	return ret;
 }
 
-static int __exit exynos_pcie_remove(struct platform_device *pdev)
+static void exynos_pcie_remove(struct platform_device *pdev)
 {
 	struct exynos_pcie *ep = platform_get_drvdata(pdev);
 
@@ -386,11 +385,9 @@ static int __exit exynos_pcie_remove(struct platform_device *pdev)
 	phy_exit(ep->phy);
 	exynos_pcie_deinit_clk_resources(ep);
 	regulator_bulk_disable(ARRAY_SIZE(ep->supplies), ep->supplies);
-
-	return 0;
 }
 
-static int __maybe_unused exynos_pcie_suspend_noirq(struct device *dev)
+static int exynos_pcie_suspend_noirq(struct device *dev)
 {
 	struct exynos_pcie *ep = dev_get_drvdata(dev);
 
@@ -402,11 +399,11 @@ static int __maybe_unused exynos_pcie_suspend_noirq(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused exynos_pcie_resume_noirq(struct device *dev)
+static int exynos_pcie_resume_noirq(struct device *dev)
 {
 	struct exynos_pcie *ep = dev_get_drvdata(dev);
 	struct dw_pcie *pci = &ep->pci;
-	struct pcie_port *pp = &pci->pp;
+	struct dw_pcie_rp *pp = &pci->pp;
 	int ret;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(ep->supplies), ep->supplies);
@@ -421,8 +418,8 @@ static int __maybe_unused exynos_pcie_resume_noirq(struct device *dev)
 }
 
 static const struct dev_pm_ops exynos_pcie_pm_ops = {
-	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(exynos_pcie_suspend_noirq,
-				      exynos_pcie_resume_noirq)
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(exynos_pcie_suspend_noirq,
+				  exynos_pcie_resume_noirq)
 };
 
 static const struct of_device_id exynos_pcie_of_match[] = {
@@ -432,7 +429,7 @@ static const struct of_device_id exynos_pcie_of_match[] = {
 
 static struct platform_driver exynos_pcie_driver = {
 	.probe		= exynos_pcie_probe,
-	.remove		= __exit_p(exynos_pcie_remove),
+	.remove_new	= exynos_pcie_remove,
 	.driver = {
 		.name	= "exynos-pcie",
 		.of_match_table = exynos_pcie_of_match,

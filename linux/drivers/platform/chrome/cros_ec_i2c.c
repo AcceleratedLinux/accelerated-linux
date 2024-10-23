@@ -286,8 +286,7 @@ done:
 	return ret;
 }
 
-static int cros_ec_i2c_probe(struct i2c_client *client,
-			     const struct i2c_device_id *dev_id)
+static int cros_ec_i2c_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct cros_ec_device *ec_dev = NULL;
@@ -317,13 +316,11 @@ static int cros_ec_i2c_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int cros_ec_i2c_remove(struct i2c_client *client)
+static void cros_ec_i2c_remove(struct i2c_client *client)
 {
 	struct cros_ec_device *ec_dev = i2c_get_clientdata(client);
 
 	cros_ec_unregister(ec_dev);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP

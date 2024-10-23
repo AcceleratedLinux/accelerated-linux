@@ -17,17 +17,9 @@
 #include <linux/module.h>
 #include <linux/etherdevice.h>
 #include "rtllib.h"
-struct modes_unit {
-	char *mode_string;
-	int mode_size;
-};
-static struct modes_unit rtllib_modes[] = {
-	{"a", 1},
-	{"b", 1},
-	{"g", 1},
-	{"?", 1},
-	{"N-24G", 5},
-	{"N-5G", 4},
+
+static const char * const rtllib_modes[] = {
+	"a", "b", "g", "?", "N-24G"
 };
 
 #define MAX_CUSTOM_LEN 64
@@ -37,7 +29,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 					   struct iw_request_info *info)
 {
 	char custom[MAX_CUSTOM_LEN];
-	char proto_name[IFNAMSIZ];
+	char proto_name[6];
 	char *pname = proto_name;
 	char *p;
 	struct iw_event iwe;
@@ -49,8 +41,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	iwe.cmd = SIOCGIWAP;
 	iwe.u.ap_addr.sa_family = ARPHRD_ETHER;
 	ether_addr_copy(iwe.u.ap_addr.sa_data, network->bssid);
-	start = iwe_stream_add_event_rsl(info, start, stop,
-					 &iwe, IW_EV_ADDR_LEN);
+	start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_ADDR_LEN);
 	/* Remaining entries will be displayed in the order we provide them */
 
 	/* Add the ESSID */
@@ -58,30 +49,25 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	iwe.u.data.flags = 1;
 	if (network->ssid_len > 0) {
 		iwe.u.data.length = min_t(u8, network->ssid_len, 32);
-		start = iwe_stream_add_point_rsl(info, start, stop, &iwe,
-						 network->ssid);
+		start = iwe_stream_add_point(info, start, stop, &iwe, network->ssid);
 	} else if (network->hidden_ssid_len == 0) {
 		iwe.u.data.length = sizeof("<hidden>");
-		start = iwe_stream_add_point_rsl(info, start, stop,
-						 &iwe, "<hidden>");
+		start = iwe_stream_add_point(info, start, stop, &iwe, "<hidden>");
 	} else {
 		iwe.u.data.length = min_t(u8, network->hidden_ssid_len, 32);
-		start = iwe_stream_add_point_rsl(info, start, stop, &iwe,
-						 network->hidden_ssid);
+		start = iwe_stream_add_point(info, start, stop, &iwe, network->hidden_ssid);
 	}
 	/* Add the protocol name */
 	iwe.cmd = SIOCGIWNAME;
 	for (i = 0; i < ARRAY_SIZE(rtllib_modes); i++) {
-		if (network->mode&(1<<i)) {
-			sprintf(pname, rtllib_modes[i].mode_string,
-				rtllib_modes[i].mode_size);
-			pname += rtllib_modes[i].mode_size;
+		if (network->mode & BIT(i)) {
+			strcpy(pname, rtllib_modes[i]);
+			pname += strlen(rtllib_modes[i]);
 		}
 	}
 	*pname = '\0';
 	snprintf(iwe.u.name, IFNAMSIZ, "IEEE802.11%s", proto_name);
-	start = iwe_stream_add_event_rsl(info, start, stop,
-					 &iwe, IW_EV_CHAR_LEN);
+	start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_CHAR_LEN);
 	/* Add mode */
 	iwe.cmd = SIOCGIWMODE;
 	if (network->capability &
@@ -90,8 +76,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 			iwe.u.mode = IW_MODE_MASTER;
 		else
 			iwe.u.mode = IW_MODE_ADHOC;
-		start = iwe_stream_add_event_rsl(info, start, stop,
-						 &iwe, IW_EV_UINT_LEN);
+		start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_UINT_LEN);
 	}
 
 	/* Add frequency/channel */
@@ -99,8 +84,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	iwe.u.freq.m = network->channel;
 	iwe.u.freq.e = 0;
 	iwe.u.freq.i = 0;
-	start = iwe_stream_add_event_rsl(info, start, stop, &iwe,
-					 IW_EV_FREQ_LEN);
+	start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_FREQ_LEN);
 
 	/* Add encryption capability */
 	iwe.cmd = SIOCGIWENCODE;
@@ -109,8 +93,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	else
 		iwe.u.data.flags = IW_ENCODE_DISABLED;
 	iwe.u.data.length = 0;
-	start = iwe_stream_add_point_rsl(info, start, stop,
-					 &iwe, network->ssid);
+	start = iwe_stream_add_point(info, start, stop, &iwe, network->ssid);
 	/* Add basic and extended rates */
 	max_rate = 0;
 	p = custom;
@@ -135,7 +118,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 			max_rate = rate;
 	}
 
-	if (network->mode >= IEEE_N_24G) {
+	if (network->mode >= WIRELESS_MODE_N_24G) {
 		struct ht_capab_ele *ht_cap = NULL;
 		bool is40M = false, isShortGI = false;
 		u8 max_mcs = 0;
@@ -146,26 +129,26 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 		else
 			ht_cap = (struct ht_capab_ele *)
 				 &network->bssht.bd_ht_cap_buf[0];
-		is40M = (ht_cap->ChlWidth) ? 1 : 0;
-		isShortGI = (ht_cap->ChlWidth) ?
-				((ht_cap->ShortGI40Mhz) ? 1 : 0) :
-				((ht_cap->ShortGI20Mhz) ? 1 : 0);
+		is40M = (ht_cap->chl_width) ? 1 : 0;
+		isShortGI = (ht_cap->chl_width) ?
+				((ht_cap->short_gi_40mhz) ? 1 : 0) :
+				((ht_cap->short_gi_20mhz) ? 1 : 0);
 
-		max_mcs = HTGetHighestMCSRate(ieee, ht_cap->MCS,
+		max_mcs = ht_get_highest_mcs_rate(ieee, ht_cap->MCS,
 					      MCS_FILTER_ALL);
 		rate = MCS_DATA_RATE[is40M][isShortGI][max_mcs & 0x7f];
 		if (rate > max_rate)
 			max_rate = rate;
 	}
 	iwe.cmd = SIOCGIWRATE;
-	iwe.u.bitrate.fixed = iwe.u.bitrate.disabled = 0;
+	iwe.u.bitrate.disabled = 0;
+	iwe.u.bitrate.fixed = 0;
 	iwe.u.bitrate.value = max_rate * 500000;
-	start = iwe_stream_add_event_rsl(info, start, stop, &iwe, IW_EV_PARAM_LEN);
+	start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_PARAM_LEN);
 	iwe.cmd = IWEVCUSTOM;
 	iwe.u.data.length = p - custom;
 	if (iwe.u.data.length)
-		start = iwe_stream_add_point_rsl(info, start, stop,
-						 &iwe, custom);
+		start = iwe_stream_add_point(info, start, stop, &iwe, custom);
 	/* Add quality statistics */
 	/* TODO: Fix these values... */
 	iwe.cmd = IWEVQUAL;
@@ -180,13 +163,13 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	if (!(network->stats.mask & RTLLIB_STATMASK_SIGNAL))
 		iwe.u.qual.updated |= IW_QUAL_QUAL_INVALID;
 	iwe.u.qual.updated = 7;
-	start = iwe_stream_add_event_rsl(info, start, stop, &iwe, IW_EV_QUAL_LEN);
+	start = iwe_stream_add_event(info, start, stop, &iwe, IW_EV_QUAL_LEN);
 
 	iwe.cmd = IWEVCUSTOM;
 	p = custom;
 	iwe.u.data.length = p - custom;
 	if (iwe.u.data.length)
-		start = iwe_stream_add_point_rsl(info, start, stop, &iwe, custom);
+		start = iwe_stream_add_point(info, start, stop, &iwe, custom);
 
 	memset(&iwe, 0, sizeof(iwe));
 	if (network->wpa_ie_len) {
@@ -195,7 +178,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 		memcpy(buf, network->wpa_ie, network->wpa_ie_len);
 		iwe.cmd = IWEVGENIE;
 		iwe.u.data.length = network->wpa_ie_len;
-		start = iwe_stream_add_point_rsl(info, start, stop, &iwe, buf);
+		start = iwe_stream_add_point(info, start, stop, &iwe, buf);
 	}
 	memset(&iwe, 0, sizeof(iwe));
 	if (network->rsn_ie_len) {
@@ -204,7 +187,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 		memcpy(buf, network->rsn_ie, network->rsn_ie_len);
 		iwe.cmd = IWEVGENIE;
 		iwe.u.data.length = network->rsn_ie_len;
-		start = iwe_stream_add_point_rsl(info, start, stop, &iwe, buf);
+		start = iwe_stream_add_point(info, start, stop, &iwe, buf);
 	}
 
 	/* add info for WZC */
@@ -215,7 +198,7 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 		memcpy(buf, network->wzc_ie, network->wzc_ie_len);
 		iwe.cmd = IWEVGENIE;
 		iwe.u.data.length = network->wzc_ie_len;
-		start = iwe_stream_add_point_rsl(info, start, stop, &iwe, buf);
+		start = iwe_stream_add_point(info, start, stop, &iwe, buf);
 	}
 
 	/* Add EXTRA: Age to display seconds since last beacon/probe response
@@ -225,11 +208,10 @@ static inline char *rtl819x_translate_scan(struct rtllib_device *ieee,
 	p = custom;
 	p += scnprintf(p, MAX_CUSTOM_LEN - (p - custom),
 		      " Last beacon: %lums ago",
-		      (jiffies - network->last_scanned) / (HZ / 100));
+		      (100 * (jiffies - network->last_scanned)) / HZ);
 	iwe.u.data.length = p - custom;
 	if (iwe.u.data.length)
-		start = iwe_stream_add_point_rsl(info, start, stop,
-						 &iwe, custom);
+		start = iwe_stream_add_point(info, start, stop, &iwe, custom);
 
 	return start;
 }
@@ -266,8 +248,8 @@ int rtllib_wx_get_scan(struct rtllib_device *ieee,
 				   escape_essid(network->ssid,
 						network->ssid_len),
 				   network->bssid,
-				   (jiffies - network->last_scanned) /
-				   (HZ / 100));
+				   (100 * (jiffies - network->last_scanned)) /
+				   HZ);
 	}
 
 	spin_unlock_irqrestore(&ieee->lock, flags);
@@ -285,7 +267,7 @@ int rtllib_wx_set_encode(struct rtllib_device *ieee,
 			 struct iw_request_info *info,
 			 union iwreq_data *wrqu, char *keybuf)
 {
-	struct iw_point *erq = &(wrqu->encoding);
+	struct iw_point *erq = &wrqu->encoding;
 	struct net_device *dev = ieee->dev;
 	struct rtllib_security sec = {
 		.flags = 0
@@ -312,8 +294,9 @@ int rtllib_wx_set_encode(struct rtllib_device *ieee,
 			netdev_dbg(ieee->dev,
 				   "Disabling encryption on key %d.\n", key);
 			lib80211_crypt_delayed_deinit(&ieee->crypt_info, crypt);
-		} else
+		} else {
 			netdev_dbg(ieee->dev, "Disabling encryption.\n");
+		}
 
 		/* Check all the keys to see if any are still configured,
 		 * and if no key index was provided, de-init them all
@@ -433,22 +416,6 @@ int rtllib_wx_set_encode(struct rtllib_device *ieee,
 	 */
 	sec.flags |= SEC_LEVEL;
 	sec.level = SEC_LEVEL_1; /* 40 and 104 bit WEP */
-
-	if (ieee->set_security)
-		ieee->set_security(dev, &sec);
-
-	/* Do not reset port if card is in Managed mode since resetting will
-	 * generate new IEEE 802.11 authentication which may end up in looping
-	 * with IEEE 802.1X.  If your hardware requires a reset after WEP
-	 * configuration (for example... Prism2), implement the reset_port in
-	 * the callbacks structures used to initialize the 802.11 stack.
-	 */
-	if (ieee->reset_on_keychange &&
-	    ieee->iw_mode != IW_MODE_INFRA &&
-	    ieee->reset_port && ieee->reset_port(dev)) {
-		netdev_dbg(dev, "%s: reset_port failed\n", dev->name);
-		return -EINVAL;
-	}
 	return 0;
 }
 EXPORT_SYMBOL(rtllib_wx_set_encode);
@@ -457,7 +424,7 @@ int rtllib_wx_get_encode(struct rtllib_device *ieee,
 			 struct iw_request_info *info,
 			 union iwreq_data *wrqu, char *keybuf)
 {
-	struct iw_point *erq = &(wrqu->encoding);
+	struct iw_point *erq = &wrqu->encoding;
 	int len, key;
 	struct lib80211_crypt_data *crypt;
 
@@ -608,7 +575,6 @@ int rtllib_wx_set_encode_ext(struct rtllib_device *ieee,
 			goto done;
 		}
 		*crypt = new_crypt;
-
 	}
 
 	if (ext->key_len > 0 && (*crypt)->ops->set_key &&
@@ -641,15 +607,6 @@ int rtllib_wx_set_encode_ext(struct rtllib_device *ieee,
 			sec.flags &= ~SEC_LEVEL;
 	}
 done:
-	if (ieee->set_security)
-		ieee->set_security(ieee->dev, &sec);
-
-	if (ieee->reset_on_keychange &&
-	    ieee->iw_mode != IW_MODE_INFRA &&
-	    ieee->reset_port && ieee->reset_port(dev)) {
-		netdev_dbg(ieee->dev, "Port reset failed\n");
-		return -EINVAL;
-	}
 	return ret;
 }
 EXPORT_SYMBOL(rtllib_wx_set_encode_ext);
@@ -662,7 +619,7 @@ int rtllib_wx_set_mlme(struct rtllib_device *ieee,
 	bool deauth = false;
 	struct iw_mlme *mlme = (struct iw_mlme *)extra;
 
-	if (ieee->state != RTLLIB_LINKED)
+	if (ieee->link_state != MAC80211_LINKED)
 		return -ENOLINK;
 
 	mutex_lock(&ieee->wx_mutex);
@@ -679,7 +636,7 @@ int rtllib_wx_set_mlme(struct rtllib_device *ieee,
 
 		ieee->cannot_notify = true;
 
-		SendDisassociation(ieee, deauth, mlme->reason_code);
+		send_disassociation(ieee, deauth, mlme->reason_code);
 		rtllib_disassociate(ieee);
 
 		ieee->wap_set = 0;
@@ -732,8 +689,9 @@ int rtllib_wx_set_auth(struct rtllib_device *ieee,
 		} else if (data->value & IW_AUTH_ALG_LEAP) {
 			ieee->open_wep = 1;
 			ieee->auth_mode = 2;
-		} else
+		} else {
 			return -EINVAL;
+		}
 		break;
 
 	case IW_AUTH_WPA_ENABLED:
@@ -776,7 +734,7 @@ int rtllib_wx_set_gen_ie(struct rtllib_device *ieee, u8 *ie, size_t len)
 	kfree(ieee->wps_ie);
 	ieee->wps_ie = NULL;
 	if (len) {
-		if (len != ie[1]+2)
+		if (len != ie[1] + 2)
 			return -EINVAL;
 		buf = kmemdup(ie, len, GFP_KERNEL);
 		if (!buf)

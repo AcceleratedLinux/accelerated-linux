@@ -1,0 +1,21 @@
+NOTES on sdcard
+------------------------------------------------------------
+creation script only creates a 256M image.
+------------------------------------------------------------
+
+To create the initial sdcard image after a successfull build run the following:
+./mk_firmware_image.sh ../../../images/sdcard.img sdcard 3
+To flash the image to an sd card:
+sudo dd if=../../../images/sdcard.img of=/dev/sdX bs=1M
+NOTE: replace /dev/sdX with your sdcard device!
+to resize the /opt to use rest of sdcard
+sudo parted /dev/sdX resizepart 4 100%
+
+#Contents of 1st partition should look like this:
+bcm*.dtb bootcode.bin boot.scr norm.scr config.txt start.elf u-boot.bin zImageA zImageB
+
+# If you want to use wifi you will need to download the firmware & put it in /opt
+/opt/rtl8188eufw.bin
+
+# /opt/custom.sh is run at start if it exists.
+# /opt/76-custom.rules is udev rules, add your devices to assign them accordingly.

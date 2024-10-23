@@ -12,8 +12,6 @@ CONFOPTS += --without-libcrack
 
 ifdef CONFIG_USER_SHADOW_PAM
 CONFOPTS += --with-libpam
-# The link test for this fails due to not linking with -lpam, so override
-CONFVARS += ac_cv_lib_pam_misc_misc_conv=yes
 endif
 ifdef CONFIG_USER_SHADOW_SHAREDLIB
 CONFOPTS += --enable-shared

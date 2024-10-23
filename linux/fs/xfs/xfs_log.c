@@ -57,7 +57,8 @@ xlog_grant_push_ail(
 STATIC void
 xlog_sync(
 	struct xlog		*log,
-	struct xlog_in_core	*iclog);
+	struct xlog_in_core	*iclog,
+	struct xlog_ticket	*ticket);
 #if defined(DEBUG)
 STATIC void
 xlog_verify_grant_tail(
@@ -225,12 +226,12 @@ xlog_ticket_reservation(
 	if (head == &log->l_write_head) {
 		ASSERT(tic->t_flags & XLOG_TIC_PERM_RESERV);
 		return tic->t_unit_res;
-	} else {
-		if (tic->t_flags & XLOG_TIC_PERM_RESERV)
-			return tic->t_unit_res * tic->t_cnt;
-		else
-			return tic->t_unit_res;
 	}
+
+	if (tic->t_flags & XLOG_TIC_PERM_RESERV)
+		return tic->t_unit_res * tic->t_cnt;
+
+	return tic->t_unit_res;
 }
 
 STATIC bool
@@ -567,7 +568,8 @@ xlog_state_shutdown_callbacks(
 int
 xlog_state_release_iclog(
 	struct xlog		*log,
-	struct xlog_in_core	*iclog)
+	struct xlog_in_core	*iclog,
+	struct xlog_ticket	*ticket)
 {
 	xfs_lsn_t		tail_lsn;
 	bool			last_ref;
@@ -614,7 +616,7 @@ xlog_state_release_iclog(
 	trace_xlog_iclog_syncing(iclog, _RET_IP_);
 
 	spin_unlock(&log->l_icloglock);
-	xlog_sync(log, iclog);
+	xlog_sync(log, iclog, ticket);
 	spin_lock(&log->l_icloglock);
 	return 0;
 }
@@ -631,23 +633,24 @@ xlog_state_release_iclog(
  */
 int
 xfs_log_mount(
-	xfs_mount_t	*mp,
-	xfs_buftarg_t	*log_target,
-	xfs_daddr_t	blk_offset,
-	int		num_bblks)
+	xfs_mount_t		*mp,
+	struct xfs_buftarg	*log_target,
+	xfs_daddr_t		blk_offset,
+	int			num_bblks)
 {
-	struct xlog	*log;
-	bool		fatal = xfs_has_crc(mp);
-	int		error = 0;
-	int		min_logfsbs;
+	struct xlog		*log;
+	int			error = 0;
+	int			min_logfsbs;
 
 	if (!xfs_has_norecovery(mp)) {
-		xfs_notice(mp, "Mounting V%d Filesystem",
-			   XFS_SB_VERSION_NUM(&mp->m_sb));
+		xfs_notice(mp, "Mounting V%d Filesystem %pU",
+			   XFS_SB_VERSION_NUM(&mp->m_sb),
+			   &mp->m_sb.sb_uuid);
 	} else {
 		xfs_notice(mp,
-"Mounting V%d filesystem in no-recovery mode. Filesystem will be inconsistent.",
-			   XFS_SB_VERSION_NUM(&mp->m_sb));
+"Mounting V%d filesystem %pU in no-recovery mode. Filesystem will be inconsistent.",
+			   XFS_SB_VERSION_NUM(&mp->m_sb),
+			   &mp->m_sb.sb_uuid);
 		ASSERT(xfs_is_readonly(mp));
 	}
 
@@ -659,53 +662,37 @@ xfs_log_mount(
 	mp->m_log = log;
 
 	/*
-	 * Validate the given log space and drop a critical message via syslog
-	 * if the log size is too small that would lead to some unexpected
-	 * situations in transaction log space reservation stage.
+	 * Now that we have set up the log and it's internal geometry
+	 * parameters, we can validate the given log space and drop a critical
+	 * message via syslog if the log size is too small. A log that is too
+	 * small can lead to unexpected situations in transaction log space
+	 * reservation stage. The superblock verifier has already validated all
+	 * the other log geometry constraints, so we don't have to check those
+	 * here.
 	 *
-	 * Note: we can't just reject the mount if the validation fails.  This
-	 * would mean that people would have to downgrade their kernel just to
-	 * remedy the situation as there is no way to grow the log (short of
-	 * black magic surgery with xfs_db).
+	 * Note: For v4 filesystems, we can't just reject the mount if the
+	 * validation fails.  This would mean that people would have to
+	 * downgrade their kernel just to remedy the situation as there is no
+	 * way to grow the log (short of black magic surgery with xfs_db).
 	 *
-	 * We can, however, reject mounts for CRC format filesystems, as the
+	 * We can, however, reject mounts for V5 format filesystems, as the
 	 * mkfs binary being used to make the filesystem should never create a
 	 * filesystem with a log that is too small.
 	 */
 	min_logfsbs = xfs_log_calc_minimum_size(mp);
-
 	if (mp->m_sb.sb_logblocks < min_logfsbs) {
 		xfs_warn(mp,
 		"Log size %d blocks too small, minimum size is %d blocks",
 			 mp->m_sb.sb_logblocks, min_logfsbs);
-		error = -EINVAL;
-	} else if (mp->m_sb.sb_logblocks > XFS_MAX_LOG_BLOCKS) {
-		xfs_warn(mp,
-		"Log size %d blocks too large, maximum size is %lld blocks",
-			 mp->m_sb.sb_logblocks, XFS_MAX_LOG_BLOCKS);
-		error = -EINVAL;
-	} else if (XFS_FSB_TO_B(mp, mp->m_sb.sb_logblocks) > XFS_MAX_LOG_BYTES) {
-		xfs_warn(mp,
-		"log size %lld bytes too large, maximum size is %lld bytes",
-			 XFS_FSB_TO_B(mp, mp->m_sb.sb_logblocks),
-			 XFS_MAX_LOG_BYTES);
-		error = -EINVAL;
-	} else if (mp->m_sb.sb_logsunit > 1 &&
-		   mp->m_sb.sb_logsunit % mp->m_sb.sb_blocksize) {
-		xfs_warn(mp,
-		"log stripe unit %u bytes must be a multiple of block size",
-			 mp->m_sb.sb_logsunit);
-		error = -EINVAL;
-		fatal = true;
-	}
-	if (error) {
+
 		/*
 		 * Log check errors are always fatal on v5; or whenever bad
 		 * metadata leads to a crash.
 		 */
-		if (fatal) {
+		if (xfs_has_crc(mp)) {
 			xfs_crit(mp, "AAIEEE! Log failed size checks. Abort!");
 			ASSERT(0);
+			error = -EINVAL;
 			goto out_free_log;
 		}
 		xfs_crit(mp, "Log size out of supported range.");
@@ -728,15 +715,7 @@ xfs_log_mount(
 	 * just worked.
 	 */
 	if (!xfs_has_norecovery(mp)) {
-		/*
-		 * log recovery ignores readonly state and so we need to clear
-		 * mount-based read only state so it can write to disk.
-		 */
-		bool	readonly = test_and_clear_bit(XFS_OPSTATE_READONLY,
-						&mp->m_opstate);
 		error = xlog_recover(log);
-		if (readonly)
-			set_bit(XFS_OPSTATE_READONLY, &mp->m_opstate);
 		if (error) {
 			xfs_warn(mp, "log mount/recovery failed: error %d",
 				error);
@@ -785,19 +764,12 @@ xfs_log_mount_finish(
 	struct xfs_mount	*mp)
 {
 	struct xlog		*log = mp->m_log;
-	bool			readonly;
 	int			error = 0;
 
 	if (xfs_has_norecovery(mp)) {
 		ASSERT(xfs_is_readonly(mp));
 		return 0;
 	}
-
-	/*
-	 * log recovery ignores readonly state and so we need to clear
-	 * mount-based read only state so it can write to disk.
-	 */
-	readonly = test_and_clear_bit(XFS_OPSTATE_READONLY, &mp->m_opstate);
 
 	/*
 	 * During the second phase of log recovery, we need iget and
@@ -848,8 +820,6 @@ xfs_log_mount_finish(
 	xfs_buftarg_drain(mp->m_ddev_targp);
 
 	clear_bit(XLOG_RECOVERY_NEEDED, &log->l_opstate);
-	if (readonly)
-		set_bit(XFS_OPSTATE_READONLY, &mp->m_opstate);
 
 	/* Make sure the log is dead if we're returning failure. */
 	ASSERT(!error || xlog_is_shutdown(log));
@@ -881,7 +851,24 @@ xlog_force_iclog(
 	iclog->ic_flags |= XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FUA;
 	if (iclog->ic_state == XLOG_STATE_ACTIVE)
 		xlog_state_switch_iclogs(iclog->ic_log, iclog, 0);
-	return xlog_state_release_iclog(iclog->ic_log, iclog);
+	return xlog_state_release_iclog(iclog->ic_log, iclog, NULL);
+}
+
+/*
+ * Cycle all the iclogbuf locks to make sure all log IO completion
+ * is done before we tear down these buffers.
+ */
+static void
+xlog_wait_iclog_completion(struct xlog *log)
+{
+	int		i;
+	struct xlog_in_core	*iclog = log->l_iclog;
+
+	for (i = 0; i < log->l_iclog_bufs; i++) {
+		down(&iclog->ic_sema);
+		up(&iclog->ic_sema);
+		iclog = iclog->ic_next;
+	}
 }
 
 /*
@@ -944,6 +931,8 @@ xlog_write_unmount_record(
 		.lv_niovecs = 1,
 		.lv_iovecp = &reg,
 	};
+	LIST_HEAD(lv_chain);
+	list_add(&vec.lv_list, &lv_chain);
 
 	BUILD_BUG_ON((sizeof(struct xlog_op_header) +
 		      sizeof(struct xfs_unmount_log_format)) !=
@@ -952,7 +941,7 @@ xlog_write_unmount_record(
 	/* account for space used by record data */
 	ticket->t_curr_res -= sizeof(unmount_rec);
 
-	return xlog_write(log, NULL, &vec, ticket, reg.i_len);
+	return xlog_write(log, NULL, &lv_chain, ticket, reg.i_len);
 }
 
 /*
@@ -1106,6 +1095,14 @@ xfs_log_unmount(
 	struct xfs_mount	*mp)
 {
 	xfs_log_clean(mp);
+
+	/*
+	 * If shutdown has come from iclog IO context, the log
+	 * cleaning will have been skipped and so we need to wait
+	 * for the iclog to complete shutdown processing before we
+	 * tear anything down.
+	 */
+	xlog_wait_iclog_completion(mp->m_log);
 
 	xfs_buftarg_drain(mp->m_ddev_targp);
 
@@ -1451,7 +1448,7 @@ xfs_log_work_queue(
  * Clear the log incompat flags if we have the opportunity.
  *
  * This only happens if we're about to log the second dummy transaction as part
- * of covering the log and we can get the log incompat feature usage lock.
+ * of covering the log.
  */
 static inline void
 xlog_clear_incompat(
@@ -1466,11 +1463,7 @@ xlog_clear_incompat(
 	if (log->l_covered_state != XLOG_STATE_COVER_DONE2)
 		return;
 
-	if (!down_write_trylock(&log->l_incompat_users))
-		return;
-
 	xfs_clear_incompat_log_features(mp);
-	up_write(&log->l_incompat_users);
 }
 
 /*
@@ -1531,7 +1524,7 @@ xlog_alloc_log(
 	int			error = -ENOMEM;
 	uint			log2_size = 0;
 
-	log = kmem_zalloc(sizeof(struct xlog), KM_MAYFAIL);
+	log = kzalloc(sizeof(struct xlog), GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!log) {
 		xfs_warn(mp, "Log allocation failed: No memory!");
 		goto out;
@@ -1545,6 +1538,7 @@ xlog_alloc_log(
 	log->l_covered_state = XLOG_STATE_COVER_IDLE;
 	set_bit(XLOG_ACTIVE_RECOVERY, &log->l_opstate);
 	INIT_DELAYED_WORK(&log->l_work, xfs_log_worker);
+	INIT_LIST_HEAD(&log->r_dfops);
 
 	log->l_prev_block  = -1;
 	/* log->l_tail_lsn = 0x100000000LL; cycle = 1; current block = 0 */
@@ -1587,8 +1581,6 @@ xlog_alloc_log(
 	}
 	log->l_sectBBsize = 1 << log2_size;
 
-	init_rwsem(&log->l_incompat_users);
-
 	xlog_get_iclog_buffer_size(mp, log);
 
 	spin_lock_init(&log->l_icloglock);
@@ -1607,7 +1599,8 @@ xlog_alloc_log(
 		size_t bvec_size = howmany(log->l_iclog_size, PAGE_SIZE) *
 				sizeof(struct bio_vec);
 
-		iclog = kmem_zalloc(sizeof(*iclog) + bvec_size, KM_MAYFAIL);
+		iclog = kzalloc(sizeof(*iclog) + bvec_size,
+				GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 		if (!iclog)
 			goto out_free_iclog;
 
@@ -1663,13 +1656,13 @@ out_destroy_workqueue:
 out_free_iclog:
 	for (iclog = log->l_iclog; iclog; iclog = prev_iclog) {
 		prev_iclog = iclog->ic_next;
-		kmem_free(iclog->ic_data);
-		kmem_free(iclog);
+		kvfree(iclog->ic_data);
+		kfree(iclog);
 		if (prev_iclog == log->l_iclog)
 			break;
 	}
 out_free_log:
-	kmem_free(log);
+	kfree(log);
 out:
 	return ERR_PTR(error);
 }	/* xlog_alloc_log */
@@ -1896,9 +1889,7 @@ xlog_write_iclog(
 		 * the buffer manually, the code needs to be kept in sync
 		 * with the I/O completion path.
 		 */
-		xlog_state_done_syncing(iclog);
-		up(&iclog->ic_sema);
-		return;
+		goto sync;
 	}
 
 	/*
@@ -1921,19 +1912,24 @@ xlog_write_iclog(
 		 * device cache first to ensure all metadata writeback covered
 		 * by the LSN in this iclog is on stable storage. This is slow,
 		 * but it *must* complete before we issue the external log IO.
+		 *
+		 * If the flush fails, we cannot conclude that past metadata
+		 * writeback from the log succeeded.  Repeating the flush is
+		 * not possible, hence we must shut down with log IO error to
+		 * avoid shutdown re-entering this path and erroring out again.
 		 */
-		if (log->l_targ != log->l_mp->m_ddev_targp)
-			blkdev_issue_flush(log->l_mp->m_ddev_targp->bt_bdev);
+		if (log->l_targ != log->l_mp->m_ddev_targp &&
+		    blkdev_issue_flush(log->l_mp->m_ddev_targp->bt_bdev))
+			goto shutdown;
 	}
 	if (iclog->ic_flags & XLOG_ICL_NEED_FUA)
 		iclog->ic_bio.bi_opf |= REQ_FUA;
 
 	iclog->ic_flags &= ~(XLOG_ICL_NEED_FLUSH | XLOG_ICL_NEED_FUA);
 
-	if (xlog_map_iclog_data(&iclog->ic_bio, iclog->ic_data, count)) {
-		xlog_force_shutdown(log, SHUTDOWN_LOG_IO_ERROR);
-		return;
-	}
+	if (xlog_map_iclog_data(&iclog->ic_bio, iclog->ic_data, count))
+		goto shutdown;
+
 	if (is_vmalloc_addr(iclog->ic_data))
 		flush_kernel_vmap_range(iclog->ic_data, count);
 
@@ -1954,6 +1950,12 @@ xlog_write_iclog(
 	}
 
 	submit_bio(&iclog->ic_bio);
+	return;
+shutdown:
+	xlog_force_shutdown(log, SHUTDOWN_LOG_IO_ERROR);
+sync:
+	xlog_state_done_syncing(iclog);
+	up(&iclog->ic_sema);
 }
 
 /*
@@ -2000,7 +2002,7 @@ xlog_calc_iclog_size(
 }
 
 /*
- * Flush out the in-core log (iclog) to the on-disk log in an asynchronous 
+ * Flush out the in-core log (iclog) to the on-disk log in an asynchronous
  * fashion.  Previously, we should have moved the current iclog
  * ptr in the log to point to the next available iclog.  This allows further
  * write to continue while this code syncs out an iclog ready to go.
@@ -2025,7 +2027,8 @@ xlog_calc_iclog_size(
 STATIC void
 xlog_sync(
 	struct xlog		*log,
-	struct xlog_in_core	*iclog)
+	struct xlog_in_core	*iclog,
+	struct xlog_ticket	*ticket)
 {
 	unsigned int		count;		/* byte count of bwrite */
 	unsigned int		roundoff;       /* roundoff to BB or stripe */
@@ -2037,12 +2040,20 @@ xlog_sync(
 
 	count = xlog_calc_iclog_size(log, iclog, &roundoff);
 
-	/* move grant heads by roundoff in sync */
-	xlog_grant_add_space(log, &log->l_reserve_head.grant, roundoff);
-	xlog_grant_add_space(log, &log->l_write_head.grant, roundoff);
+	/*
+	 * If we have a ticket, account for the roundoff via the ticket
+	 * reservation to avoid touching the hot grant heads needlessly.
+	 * Otherwise, we have to move grant heads directly.
+	 */
+	if (ticket) {
+		ticket->t_curr_res -= roundoff;
+	} else {
+		xlog_grant_add_space(log, &log->l_reserve_head.grant, roundoff);
+		xlog_grant_add_space(log, &log->l_write_head.grant, roundoff);
+	}
 
 	/* put cycle number in every block */
-	xlog_pack_data(log, iclog, roundoff); 
+	xlog_pack_data(log, iclog, roundoff);
 
 	/* real byte length */
 	size = iclog->ic_offset;
@@ -2093,17 +2104,6 @@ xlog_dealloc_log(
 	int		i;
 
 	/*
-	 * Cycle all the iclogbuf locks to make sure all log IO completion
-	 * is done before we tear down these buffers.
-	 */
-	iclog = log->l_iclog;
-	for (i = 0; i < log->l_iclog_bufs; i++) {
-		down(&iclog->ic_sema);
-		up(&iclog->ic_sema);
-		iclog = iclog->ic_next;
-	}
-
-	/*
 	 * Destroy the CIL after waiting for iclog IO completion because an
 	 * iclog EIO error will try to shut down the log, which accesses the
 	 * CIL to wake up the waiters.
@@ -2113,14 +2113,14 @@ xlog_dealloc_log(
 	iclog = log->l_iclog;
 	for (i = 0; i < log->l_iclog_bufs; i++) {
 		next_iclog = iclog->ic_next;
-		kmem_free(iclog->ic_data);
-		kmem_free(iclog);
+		kvfree(iclog->ic_data);
+		kfree(iclog);
 		iclog = next_iclog;
 	}
 
 	log->l_mp->m_log = NULL;
 	destroy_workqueue(log->l_ioend_workqueue);
-	kmem_free(log);
+	kfree(log);
 }
 
 /*
@@ -2275,7 +2275,7 @@ xlog_write_get_more_iclog_space(
 	spin_lock(&log->l_icloglock);
 	ASSERT(iclog->ic_state == XLOG_STATE_WANT_SYNC);
 	xlog_state_finish_copy(log, iclog, *record_cnt, *data_cnt);
-	error = xlog_state_release_iclog(log, iclog);
+	error = xlog_state_release_iclog(log, iclog, ticket);
 	spin_unlock(&log->l_icloglock);
 	if (error)
 		return error;
@@ -2471,13 +2471,13 @@ int
 xlog_write(
 	struct xlog		*log,
 	struct xfs_cil_ctx	*ctx,
-	struct xfs_log_vec	*log_vector,
+	struct list_head	*lv_chain,
 	struct xlog_ticket	*ticket,
 	uint32_t		len)
 
 {
 	struct xlog_in_core	*iclog = NULL;
-	struct xfs_log_vec	*lv = log_vector;
+	struct xfs_log_vec	*lv;
 	uint32_t		record_cnt = 0;
 	uint32_t		data_cnt = 0;
 	int			error = 0;
@@ -2505,7 +2505,7 @@ xlog_write(
 	if (ctx)
 		xlog_cil_set_ctx_write_state(ctx, iclog);
 
-	while (lv) {
+	list_for_each_entry(lv, lv_chain, lv_list) {
 		/*
 		 * If the entire log vec does not fit in the iclog, punt it to
 		 * the partial copy loop which can handle this case.
@@ -2526,7 +2526,6 @@ xlog_write(
 			xlog_write_full(lv, ticket, iclog, &log_offset,
 					 &len, &record_cnt, &data_cnt);
 		}
-		lv = lv->lv_next;
 	}
 	ASSERT(len == 0);
 
@@ -2538,7 +2537,7 @@ xlog_write(
 	 */
 	spin_lock(&log->l_icloglock);
 	xlog_state_finish_copy(log, iclog, record_cnt, 0);
-	error = xlog_state_release_iclog(log, iclog);
+	error = xlog_state_release_iclog(log, iclog, ticket);
 	spin_unlock(&log->l_icloglock);
 
 	return error;
@@ -2958,7 +2957,7 @@ restart:
 		 * reference to the iclog.
 		 */
 		if (!atomic_add_unless(&iclog->ic_refcnt, -1, 1))
-			error = xlog_state_release_iclog(log, iclog);
+			error = xlog_state_release_iclog(log, iclog, ticket);
 		spin_unlock(&log->l_icloglock);
 		if (error)
 			return error;
@@ -3406,7 +3405,8 @@ xfs_log_ticket_get(
 static int
 xlog_calc_unit_res(
 	struct xlog		*log,
-	int			unit_bytes)
+	int			unit_bytes,
+	int			*niclogs)
 {
 	int			iclog_space;
 	uint			num_headers;
@@ -3486,6 +3486,8 @@ xlog_calc_unit_res(
 	/* roundoff padding for transaction data and one for commit record */
 	unit_bytes += 2 * log->l_iclog_roundoff;
 
+	if (niclogs)
+		*niclogs = num_headers;
 	return unit_bytes;
 }
 
@@ -3494,7 +3496,7 @@ xfs_log_calc_unit_res(
 	struct xfs_mount	*mp,
 	int			unit_bytes)
 {
-	return xlog_calc_unit_res(mp->m_log, unit_bytes);
+	return xlog_calc_unit_res(mp->m_log, unit_bytes, NULL);
 }
 
 /*
@@ -3510,9 +3512,10 @@ xlog_ticket_alloc(
 	struct xlog_ticket	*tic;
 	int			unit_res;
 
-	tic = kmem_cache_zalloc(xfs_log_ticket_cache, GFP_NOFS | __GFP_NOFAIL);
+	tic = kmem_cache_zalloc(xfs_log_ticket_cache,
+			GFP_KERNEL | __GFP_NOFAIL);
 
-	unit_res = xlog_calc_unit_res(log, unit_bytes);
+	unit_res = xlog_calc_unit_res(log, unit_bytes, &tic->t_iclog_hdrs);
 
 	atomic_set(&tic->t_ref, 1);
 	tic->t_task		= current;
@@ -3521,7 +3524,7 @@ xlog_ticket_alloc(
 	tic->t_curr_res		= unit_res;
 	tic->t_cnt		= cnt;
 	tic->t_ocnt		= cnt;
-	tic->t_tid		= prandom_u32();
+	tic->t_tid		= get_random_u32();
 	if (permanent)
 		tic->t_flags |= XLOG_TIC_PERM_RESERV;
 
@@ -3861,24 +3864,4 @@ xfs_log_check_lsn(
 	}
 
 	return valid;
-}
-
-/*
- * Notify the log that we're about to start using a feature that is protected
- * by a log incompat feature flag.  This will prevent log covering from
- * clearing those flags.
- */
-void
-xlog_use_incompat_feat(
-	struct xlog		*log)
-{
-	down_read(&log->l_incompat_users);
-}
-
-/* Notify the log that we've finished using log incompat features. */
-void
-xlog_drop_incompat_feat(
-	struct xlog		*log)
-{
-	up_read(&log->l_incompat_users);
 }

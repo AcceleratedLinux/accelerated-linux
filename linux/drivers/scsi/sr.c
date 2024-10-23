@@ -95,7 +95,6 @@ static const struct dev_pm_ops sr_pm_ops = {
 static struct scsi_driver sr_template = {
 	.gendrv = {
 		.name   	= "sr",
-		.owner		= THIS_MODULE,
 		.probe		= sr_probe,
 		.remove		= sr_remove,
 		.pm		= &sr_pm_ops,
@@ -170,11 +169,15 @@ static unsigned int sr_get_events(struct scsi_device *sdev)
 	struct event_header *eh = (void *)buf;
 	struct media_event_desc *med = (void *)(buf + 4);
 	struct scsi_sense_hdr sshdr;
+	const struct scsi_exec_args exec_args = {
+		.sshdr = &sshdr,
+	};
 	int result;
 
-	result = scsi_execute_req(sdev, cmd, DMA_FROM_DEVICE, buf, sizeof(buf),
-				  &sshdr, SR_TIMEOUT, MAX_RETRIES, NULL);
-	if (scsi_sense_valid(&sshdr) && sshdr.sense_key == UNIT_ATTENTION)
+	result = scsi_execute_cmd(sdev, cmd, REQ_OP_DRV_IN, buf, sizeof(buf),
+				  SR_TIMEOUT, MAX_RETRIES, &exec_args);
+	if (result > 0 && scsi_sense_valid(&sshdr) &&
+	    sshdr.sense_key == UNIT_ATTENTION)
 		return DISK_EVENT_MEDIA_CHANGE;
 
 	if (result || be16_to_cpu(eh->data_len) < sizeof(*med))
@@ -481,9 +484,9 @@ static void sr_revalidate_disk(struct scsi_cd *cd)
 	get_sectorsize(cd);
 }
 
-static int sr_block_open(struct block_device *bdev, fmode_t mode)
+static int sr_block_open(struct gendisk *disk, blk_mode_t mode)
 {
-	struct scsi_cd *cd = scsi_cd(bdev->bd_disk);
+	struct scsi_cd *cd = scsi_cd(disk);
 	struct scsi_device *sdev = cd->device;
 	int ret;
 
@@ -491,11 +494,11 @@ static int sr_block_open(struct block_device *bdev, fmode_t mode)
 		return -ENXIO;
 
 	scsi_autopm_get_device(sdev);
-	if (bdev_check_media_change(bdev))
+	if (disk_check_media_change(disk))
 		sr_revalidate_disk(cd);
 
 	mutex_lock(&cd->lock);
-	ret = cdrom_open(&cd->cdi, bdev, mode);
+	ret = cdrom_open(&cd->cdi, mode);
 	mutex_unlock(&cd->lock);
 
 	scsi_autopm_put_device(sdev);
@@ -504,19 +507,19 @@ static int sr_block_open(struct block_device *bdev, fmode_t mode)
 	return ret;
 }
 
-static void sr_block_release(struct gendisk *disk, fmode_t mode)
+static void sr_block_release(struct gendisk *disk)
 {
 	struct scsi_cd *cd = scsi_cd(disk);
 
 	mutex_lock(&cd->lock);
-	cdrom_release(&cd->cdi, mode);
+	cdrom_release(&cd->cdi);
 	mutex_unlock(&cd->lock);
 
 	scsi_device_put(cd->device);
 }
 
-static int sr_block_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
-			  unsigned long arg)
+static int sr_block_ioctl(struct block_device *bdev, blk_mode_t mode,
+		unsigned cmd, unsigned long arg)
 {
 	struct scsi_cd *cd = scsi_cd(bdev->bd_disk);
 	struct scsi_device *sdev = cd->device;
@@ -529,18 +532,18 @@ static int sr_block_ioctl(struct block_device *bdev, fmode_t mode, unsigned cmd,
 	mutex_lock(&cd->lock);
 
 	ret = scsi_ioctl_block_when_processing_errors(sdev, cmd,
-			(mode & FMODE_NDELAY) != 0);
+			(mode & BLK_OPEN_NDELAY));
 	if (ret)
 		goto out;
 
 	scsi_autopm_get_device(sdev);
 
 	if (cmd != CDROMCLOSETRAY && cmd != CDROMEJECT) {
-		ret = cdrom_ioctl(&cd->cdi, bdev, mode, cmd, arg);
+		ret = cdrom_ioctl(&cd->cdi, bdev, cmd, arg);
 		if (ret != -ENOSYS)
 			goto put;
 	}
-	ret = scsi_ioctl(sdev, mode, cmd, argp);
+	ret = scsi_ioctl(sdev, mode & BLK_OPEN_WRITE, cmd, argp);
 
 put:
 	scsi_autopm_put_device(sdev);
@@ -587,20 +590,15 @@ static int sr_open(struct cdrom_device_info *cdi, int purpose)
 {
 	struct scsi_cd *cd = cdi->handle;
 	struct scsi_device *sdev = cd->device;
-	int retval;
 
 	/*
 	 * If the device is in error recovery, wait until it is done.
 	 * If the device is offline, then disallow any access to it.
 	 */
-	retval = -ENXIO;
 	if (!scsi_block_when_processing_errors(sdev))
-		goto error_out;
+		return -ENXIO;
 
 	return 0;
-
-error_out:
-	return retval;	
 }
 
 static void sr_release(struct cdrom_device_info *cdi)
@@ -624,8 +622,8 @@ static int sr_probe(struct device *dev)
 	if (!cd)
 		goto fail;
 
-	disk = __alloc_disk_node(sdev->request_queue, NUMA_NO_NODE,
-				 &sr_bio_compl_lkclass);
+	disk = blk_mq_alloc_disk_for_queue(sdev->request_queue,
+					   &sr_bio_compl_lkclass);
 	if (!disk)
 		goto fail_free;
 	mutex_init(&cd->lock);
@@ -718,27 +716,29 @@ fail:
 
 static void get_sectorsize(struct scsi_cd *cd)
 {
-	unsigned char cmd[10];
-	unsigned char buffer[8];
-	int the_result, retries = 3;
+	static const u8 cmd[10] = { READ_CAPACITY };
+	unsigned char buffer[8] = { };
+	int the_result;
 	int sector_size;
 	struct request_queue *queue;
+	struct scsi_failure failure_defs[] = {
+		{
+			.result = SCMD_FAILURE_RESULT_ANY,
+			.allowed = 3,
+		},
+		{}
+	};
+	struct scsi_failures failures = {
+		.failure_definitions = failure_defs,
+	};
+	const struct scsi_exec_args exec_args = {
+		.failures = &failures,
+	};
 
-	do {
-		cmd[0] = READ_CAPACITY;
-		memset((void *) &cmd[1], 0, 9);
-		memset(buffer, 0, sizeof(buffer));
-
-		/* Do the command and wait.. */
-		the_result = scsi_execute_req(cd->device, cmd, DMA_FROM_DEVICE,
-					      buffer, sizeof(buffer), NULL,
-					      SR_TIMEOUT, MAX_RETRIES, NULL);
-
-		retries--;
-
-	} while (the_result && retries);
-
-
+	/* Do the command and wait.. */
+	the_result = scsi_execute_cmd(cd->device, cmd, REQ_OP_DRV_IN, buffer,
+				      sizeof(buffer), SR_TIMEOUT, MAX_RETRIES,
+				      &exec_args);
 	if (the_result) {
 		cd->capacity = 0x1fffff;
 		sector_size = 2048;	/* A guess, just in case */
@@ -827,7 +827,7 @@ static int get_capabilities(struct scsi_cd *cd)
 	scsi_test_unit_ready(cd->device, SR_TIMEOUT, MAX_RETRIES, &sshdr);
 
 	/* ask for mode page 0x2a */
-	rc = scsi_mode_sense(cd->device, 0, 0x2a, buffer, ms_len,
+	rc = scsi_mode_sense(cd->device, 0, 0x2a, 0, buffer, ms_len,
 			     SR_TIMEOUT, 3, &data, NULL);
 
 	if (rc < 0 || data.length > ms_len ||

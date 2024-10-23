@@ -1,6 +1,6 @@
 UCLIBC_VERSION = 1.0.31
 UCLIBC = uClibc-ng-$(UCLIBC_VERSION)
-URL = http://downloads.uclibc-ng.org/releases/$(UCLIBC_VERSION)/$(UCLIBC).tar.xz
+URL = https://downloads.uclibc-ng.org/releases/$(UCLIBC_VERSION)/$(UCLIBC).tar.xz
 
 $(UCLIBC)_CONFVARS = cp ../../.config . ;
 $(UCLIBC)_CONFVARS += ( cd ../.. ; rm -f lib ; ln -sf build/$(UCLIBC)/lib lib ) ;

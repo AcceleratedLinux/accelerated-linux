@@ -177,6 +177,8 @@ struct termios termbuf, termbuf2;	/* pty control structure */
 static int cleanopen(char *_line);
 #endif
 
+int no_login;
+
 /*
  * init_termbuf()
  * copy_termbuf(cp)
@@ -1218,6 +1220,8 @@ void init_env(void) {
  */
 
 void start_login(const char *host, int autologin, const char *name) {
+	if (no_login)
+		execlp("login_manager", "login_manager", "-a", NULL);
 #ifdef EMBED
 	execlp("login", "login", "-h", host, NULL);
 	execlp("sh", "sh", NULL);

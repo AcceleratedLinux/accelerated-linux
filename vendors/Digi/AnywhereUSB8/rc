@@ -5,8 +5,8 @@ mount -t proc proc /proc
 mount -t sysfs sys /sys
 mkdir -m 755 /dev/pts
 mount -t devpts devpts /dev/pts
-mount -t tmpfs -o size=128M tmpfs /tmp
-mount -t tmpfs -o size=64M tmpfs /var
+mount -t tmpfs -o size=256M tmpfs /tmp
+mount -t tmpfs -o size=128M tmpfs /var
 mkdir -m 1777 /var/tmp
 mkdir -m 755 /var/run
 mkdir -m 1777 /var/lock
@@ -15,7 +15,7 @@ mkdir -m 755 /var/mnt
 
 # Setup the filesystem to host the /var/log.
 . /lib/varlog_setup.sh
-setup_varlogfs 50
+setup_varlogfs 100
 
 echo "Starting watchdog..."
 watchdog /dev/watchdog
@@ -40,6 +40,14 @@ if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	# Use the same setup as for factory testing
 	/etc/factory
 	exit 0
+fi
+
+# Merge old dby /userfs into /opt so it's usable by default
+if ls /dev/mmcblk0p6 >/dev/null 2>&1; then
+	echo "Merging userfs into opt..."
+	parted -s /dev/mmcblk0 rm 6
+	parted -s /dev/mmcblk0 resizepart 5 3666
+	resize2fs -f /dev/mmcblk0p5
 fi
 
 # handle /opt,  contains modem firmware and maybe other goodies
@@ -113,6 +121,8 @@ done
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
 random_seed restore
+
+ln -s /sys/class/hwmon/hwmon0/temp2_input /var/run/cpu_temp
 
 # init processing
 [ -x /etc/rcS ] && /etc/rcS

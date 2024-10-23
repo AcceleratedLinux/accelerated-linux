@@ -1,0 +1,60 @@
+
+Provide a way to reliably background the UBUS daemon after the socket has been created.
+This simplifies service managers and unit tests.
+
+--- a/ubusd_main.c
++++ b/ubusd_main.c
+@@ -10,6 +10,7 @@
+ #include <sys/param.h>
+ #endif
+ #include <syslog.h>
++#include <unistd.h>
+ 
+ #include <libubox/usock.h>
+ 
+@@ -208,6 +209,7 @@
+ 	fprintf(stderr, "Usage: %s [<options>]\n"
+ 		"Options: \n"
+ 		"  -A <path>:		Set the path to ACL files\n"
++		"  -D:       		Become a daemon after creating the socket\n"
+ 		"  -s <socket>:		Set the unix domain socket to listen on\n"
+ 		"\n", progname);
+ 	return 1;
+@@ -223,6 +225,7 @@
+ 	const char *ubus_socket = NULL;
+ 	int ret = 0;
+ 	int ch;
++	int daemonize = 0;
+ 
+ 	signal(SIGPIPE, SIG_IGN);
+ 	signal(SIGHUP, sighup_handler);
+@@ -230,7 +233,7 @@
+ 	openlog("ubusd", LOG_PID, LOG_DAEMON);
+ 	uloop_init();
+ 
+-	while ((ch = getopt(argc, argv, "A:s:")) != -1) {
++	while ((ch = getopt(argc, argv, "A:Ds:")) != -1) {
+ 		switch (ch) {
+ 		case 's':
+ 			ubus_socket = optarg;
+@@ -238,6 +241,9 @@
+ 		case 'A':
+ 			ubusd_acl_dir = optarg;
+ 			break;
++		case 'D':
++			daemonize = 1;
++			break;
+ 		default:
+ 			return usage(argv[0]);
+ 		}
+@@ -256,6 +262,10 @@
+ 		ret = -1;
+ 		goto out;
+ 	}
++
++	if (daemonize)
++		daemon(0, 0);
++
+ 	uloop_fd_add(&server_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+ 	ubusd_acl_load();
+ 

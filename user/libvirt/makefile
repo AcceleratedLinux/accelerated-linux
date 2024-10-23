@@ -1,5 +1,5 @@
 LIBVIRT_VERSION = 1.2.20
-URL = http://libvirt.org/sources/libvirt-${LIBVIRT_VERSION}.tar.gz
+URL = https://libvirt.org/sources/libvirt-${LIBVIRT_VERSION}.tar.gz
 
 MAKEVARS =
 CONFOPTS = --datarootdir=/usr/share --without-dtrace

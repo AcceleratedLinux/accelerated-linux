@@ -250,7 +250,7 @@ static bool upper_device_filter(struct ib_device *ib_dev, u32 port,
 
 /**
  * is_upper_ndev_bond_master_filter - Check if a given netdevice
- * is bond master device of netdevice of the the RDMA device of port.
+ * is bond master device of netdevice of the RDMA device of port.
  * @ib_dev:		IB device to check
  * @port:		Port to consider for adding default GID
  * @rdma_ndev:		Pointer to rdma netdevice
@@ -601,8 +601,7 @@ static void del_netdev_default_ips_join(struct ib_device *ib_dev, u32 port,
 
 	rcu_read_lock();
 	master_ndev = netdev_master_upper_dev_get_rcu(rdma_ndev);
-	if (master_ndev)
-		dev_hold(master_ndev);
+	dev_hold(master_ndev);
 	rcu_read_unlock();
 
 	if (master_ndev) {

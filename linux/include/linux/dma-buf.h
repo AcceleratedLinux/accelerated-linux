@@ -327,15 +327,6 @@ struct dma_buf {
 	const struct dma_buf_ops *ops;
 
 	/**
-	 * @lock:
-	 *
-	 * Used internally to serialize list manipulation, attach/detach and
-	 * vmap/unmap. Note that in many cases this is superseeded by
-	 * dma_resv_lock() on @resv.
-	 */
-	struct mutex lock;
-
-	/**
 	 * @vmapping_counter:
 	 *
 	 * Used internally to refcnt the vmaps returned by dma_buf_vmap().
@@ -352,20 +343,23 @@ struct dma_buf {
 	/**
 	 * @exp_name:
 	 *
-	 * Name of the exporter; useful for debugging. See the
-	 * DMA_BUF_SET_NAME IOCTL.
+	 * Name of the exporter; useful for debugging. Must not be NULL
 	 */
 	const char *exp_name;
 
 	/**
 	 * @name:
 	 *
-	 * Userspace-provided name; useful for accounting and debugging,
-	 * protected by dma_resv_lock() on @resv and @name_lock for read access.
+	 * Userspace-provided name. Default value is NULL. If not NULL,
+	 * length cannot be longer than DMA_BUF_NAME_LEN, including NIL
+	 * char. Useful for accounting and debugging. Read/Write accesses
+	 * are protected by @name_lock
+	 *
+	 * See the IOCTLs DMA_BUF_SET_NAME or DMA_BUF_SET_NAME_A/B
 	 */
 	const char *name;
 
-	/** @name_lock: Spinlock to protect name acces for read access. */
+	/** @name_lock: Spinlock to protect name access for read access. */
 	spinlock_t name_lock;
 
 	/**
@@ -376,8 +370,10 @@ struct dma_buf {
 	 */
 	struct module *owner;
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 	/** @list_node: node for dma_buf accounting and debugging. */
 	struct list_head list_node;
+#endif
 
 	/** @priv: exporter specific private data for this buffer object. */
 	void *priv;
@@ -402,7 +398,7 @@ struct dma_buf {
 	 *   anything the userspace API considers write access.
 	 *
 	 * - Drivers may just always add a write fence, since that only
-	 *   causes unecessarily synchronization, but no correctness issues.
+	 *   causes unnecessary synchronization, but no correctness issues.
 	 *
 	 * - Some drivers only expose a synchronous userspace API with no
 	 *   pipelining across drivers. These do not set any fences for their
@@ -627,9 +623,17 @@ int dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
 			     enum dma_data_direction dir);
 int dma_buf_end_cpu_access(struct dma_buf *dma_buf,
 			   enum dma_data_direction dir);
+struct sg_table *
+dma_buf_map_attachment_unlocked(struct dma_buf_attachment *attach,
+				enum dma_data_direction direction);
+void dma_buf_unmap_attachment_unlocked(struct dma_buf_attachment *attach,
+				       struct sg_table *sg_table,
+				       enum dma_data_direction direction);
 
 int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
 		 unsigned long);
 int dma_buf_vmap(struct dma_buf *dmabuf, struct iosys_map *map);
 void dma_buf_vunmap(struct dma_buf *dmabuf, struct iosys_map *map);
+int dma_buf_vmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
+void dma_buf_vunmap_unlocked(struct dma_buf *dmabuf, struct iosys_map *map);
 #endif /* __DMA_BUF_H__ */

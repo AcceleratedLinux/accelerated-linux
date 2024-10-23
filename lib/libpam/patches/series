@@ -1,0 +1,5 @@
+uclibc.patch
+sysconfdir.patch
+debug.patch
+groupname.patch
+motd-drop-priv.patch

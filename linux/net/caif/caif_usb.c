@@ -20,6 +20,7 @@
 #include <net/caif/cfpkt.h>
 #include <net/caif/cfcnfg.h>
 
+MODULE_DESCRIPTION("ST-Ericsson CAIF modem protocol USB support");
 MODULE_LICENSE("GPL");
 
 #define CFUSB_PAD_DESCR_SZ 1	/* Alignment descriptor length */
@@ -134,6 +135,9 @@ static int cfusbl_device_notify(struct notifier_block *me, unsigned long what,
 	struct usb_device *usbdev;
 	int res;
 
+	if (what == NETDEV_UNREGISTER && dev->reg_state >= NETREG_UNREGISTERED)
+		return 0;
+
 	/* Check whether we have a NCM device, and find its VID/PID. */
 	if (!(dev->dev.parent && dev->dev.parent->driver &&
 	      strcmp(dev->dev.parent->driver->name, "cdc_ncm") == 0))
@@ -184,7 +188,7 @@ static int cfusbl_device_notify(struct notifier_block *me, unsigned long what,
 		dev_add_pack(&caif_usb_type);
 	pack_added = true;
 
-	strlcpy(layer->name, dev->name, sizeof(layer->name));
+	strscpy(layer->name, dev->name, sizeof(layer->name));
 
 	return 0;
 err:

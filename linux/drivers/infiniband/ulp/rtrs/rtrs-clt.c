@@ -16,6 +16,7 @@
 
 #include "rtrs-clt.h"
 #include "rtrs-log.h"
+#include "rtrs-clt-trace.h"
 
 #define RTRS_CONNECT_TIMEOUT_MS 30000
 /*
@@ -44,7 +45,9 @@ static struct rtrs_rdma_dev_pd dev_pd = {
 };
 
 static struct workqueue_struct *rtrs_wq;
-static struct class *rtrs_clt_dev_class;
+static const struct class rtrs_clt_dev_class = {
+	.name = "rtrs-client",
+};
 
 static inline bool rtrs_clt_is_connected(const struct rtrs_clt_sess *clt)
 {
@@ -53,7 +56,10 @@ static inline bool rtrs_clt_is_connected(const struct rtrs_clt_sess *clt)
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(clt_path, &clt->paths_list, s.entry)
-		connected |= READ_ONCE(clt_path->state) == RTRS_CLT_CONNECTED;
+		if (READ_ONCE(clt_path->state) == RTRS_CLT_CONNECTED) {
+			connected = true;
+			break;
+		}
 	rcu_read_unlock();
 
 	return connected;
@@ -302,6 +308,8 @@ static void rtrs_rdma_error_recovery(struct rtrs_clt_con *con)
 {
 	struct rtrs_clt_path *clt_path = to_clt_path(con->c.path);
 
+	trace_rtrs_rdma_error_recovery(clt_path);
+
 	if (rtrs_clt_change_state_from_to(clt_path,
 					   RTRS_CLT_CONNECTED,
 					   RTRS_CLT_RECONNECTING)) {
@@ -376,7 +384,7 @@ static void complete_rdma_req(struct rtrs_clt_io_req *req, int errno,
 	struct rtrs_clt_path *clt_path;
 	int err;
 
-	if (WARN_ON(!req->in_use))
+	if (!req->in_use)
 		return;
 	if (WARN_ON(!req->con))
 		return;
@@ -740,25 +748,25 @@ struct path_it {
 	struct rtrs_clt_path *(*next_path)(struct path_it *it);
 };
 
-/**
- * list_next_or_null_rr_rcu - get next list element in round-robin fashion.
+/*
+ * rtrs_clt_get_next_path_or_null - get clt path from the list or return NULL
  * @head:	the head for the list.
- * @ptr:        the list head to take the next element from.
- * @type:       the type of the struct this is embedded in.
- * @memb:       the name of the list_head within the struct.
+ * @clt_path:	The element to take the next clt_path from.
  *
- * Next element returned in round-robin fashion, i.e. head will be skipped,
+ * Next clt path returned in round-robin fashion, i.e. head will be skipped,
  * but if list is observed as empty, NULL will be returned.
  *
- * This primitive may safely run concurrently with the _rcu list-mutation
+ * This function may safely run concurrently with the _rcu list-mutation
  * primitives such as list_add_rcu() as long as it's guarded by rcu_read_lock().
  */
-#define list_next_or_null_rr_rcu(head, ptr, type, memb) \
-({ \
-	list_next_or_null_rcu(head, ptr, type, memb) ?: \
-		list_next_or_null_rcu(head, READ_ONCE((ptr)->next), \
-				      type, memb); \
-})
+static inline struct rtrs_clt_path *
+rtrs_clt_get_next_path_or_null(struct list_head *head, struct rtrs_clt_path *clt_path)
+{
+	return list_next_or_null_rcu(head, &clt_path->s.entry, typeof(*clt_path), s.entry) ?:
+				     list_next_or_null_rcu(head,
+							   READ_ONCE((&clt_path->s.entry)->next),
+							   typeof(*clt_path), s.entry);
+}
 
 /**
  * get_next_path_rr() - Returns path in round-robin fashion.
@@ -767,13 +775,18 @@ struct path_it {
  * Related to @MP_POLICY_RR
  *
  * Locks:
- *    rcu_read_lock() must be hold.
+ *    rcu_read_lock() must be held.
  */
 static struct rtrs_clt_path *get_next_path_rr(struct path_it *it)
 {
 	struct rtrs_clt_path __rcu **ppcpu_path;
 	struct rtrs_clt_path *path;
 	struct rtrs_clt_sess *clt;
+
+	/*
+	 * Assert that rcu lock must be held
+	 */
+	RCU_LOCKDEP_WARN(!rcu_read_lock_held(), "no rcu read lock held");
 
 	clt = it->clt;
 
@@ -789,10 +802,8 @@ static struct rtrs_clt_path *get_next_path_rr(struct path_it *it)
 		path = list_first_or_null_rcu(&clt->paths_list,
 					      typeof(*path), s.entry);
 	else
-		path = list_next_or_null_rr_rcu(&clt->paths_list,
-						&path->s.entry,
-						typeof(*path),
-						s.entry);
+		path = rtrs_clt_get_next_path_or_null(&clt->paths_list, path);
+
 	rcu_assign_pointer(*ppcpu_path, path);
 
 	return path;
@@ -962,7 +973,7 @@ static void rtrs_clt_init_req(struct rtrs_clt_io_req *req,
 	refcount_set(&req->ref, 1);
 	req->mp_policy = clt_path->clt->mp_policy;
 
-	iov_iter_kvec(&iter, READ, vec, 1, usr_len);
+	iov_iter_kvec(&iter, ITER_SOURCE, vec, 1, usr_len);
 	len = _copy_from_iter(req->iu->buf, usr_len, &iter);
 	WARN_ON(len != usr_len);
 
@@ -1006,7 +1017,8 @@ rtrs_clt_get_copy_req(struct rtrs_clt_path *alive_path,
 static int rtrs_post_rdma_write_sg(struct rtrs_clt_con *con,
 				   struct rtrs_clt_io_req *req,
 				   struct rtrs_rbuf *rbuf, bool fr_en,
-				   u32 size, u32 imm, struct ib_send_wr *wr,
+				   u32 count, u32 size, u32 imm,
+				   struct ib_send_wr *wr,
 				   struct ib_send_wr *tail)
 {
 	struct rtrs_clt_path *clt_path = to_clt_path(con->c.path);
@@ -1026,12 +1038,12 @@ static int rtrs_post_rdma_write_sg(struct rtrs_clt_con *con,
 		num_sge = 2;
 		ptail = tail;
 	} else {
-		for_each_sg(req->sglist, sg, req->sg_cnt, i) {
+		for_each_sg(req->sglist, sg, count, i) {
 			sge[i].addr   = sg_dma_address(sg);
 			sge[i].length = sg_dma_len(sg);
 			sge[i].lkey   = clt_path->s.dev->ib_pd->local_dma_lkey;
 		}
-		num_sge = 1 + req->sg_cnt;
+		num_sge = 1 + count;
 	}
 	sge[i].addr   = req->iu->dma_addr;
 	sge[i].length = size;
@@ -1059,10 +1071,8 @@ static int rtrs_map_sg_fr(struct rtrs_clt_io_req *req, size_t count)
 
 	/* Align the MR to a 4K page size to match the block virt boundary */
 	nr = ib_map_mr_sg(req->mr, req->sglist, count, NULL, SZ_4K);
-	if (nr < 0)
-		return nr;
-	if (nr < req->sg_cnt)
-		return -EINVAL;
+	if (nr != count)
+		return nr < 0 ? nr : -EINVAL;
 	ib_update_fast_reg_key(req->mr, ib_inc_rkey(req->mr->rkey));
 
 	return nr;
@@ -1144,7 +1154,7 @@ static int rtrs_clt_write_req(struct rtrs_clt_io_req *req)
 	 */
 	rtrs_clt_update_all_stats(req, WRITE);
 
-	ret = rtrs_post_rdma_write_sg(req->con, req, rbuf, fr_en,
+	ret = rtrs_post_rdma_write_sg(req->con, req, rbuf, fr_en, count,
 				      req->usr_len + sizeof(*msg),
 				      imm, wr, &inv_wr);
 	if (ret) {
@@ -1381,9 +1391,9 @@ static int alloc_path_reqs(struct rtrs_clt_path *clt_path)
 				      clt_path->max_pages_per_mr);
 		if (IS_ERR(req->mr)) {
 			err = PTR_ERR(req->mr);
+			pr_err("Failed to alloc clt_path->max_pages_per_mr %d: %pe\n",
+			       clt_path->max_pages_per_mr, req->mr);
 			req->mr = NULL;
-			pr_err("Failed to alloc clt_path->max_pages_per_mr %d\n",
-			       clt_path->max_pages_per_mr);
 			goto out;
 		}
 
@@ -1403,8 +1413,7 @@ static int alloc_permits(struct rtrs_clt_sess *clt)
 	unsigned int chunk_bits;
 	int err, i;
 
-	clt->permits_map = kcalloc(BITS_TO_LONGS(clt->queue_depth),
-				   sizeof(long), GFP_KERNEL);
+	clt->permits_map = bitmap_zalloc(clt->queue_depth, GFP_KERNEL);
 	if (!clt->permits_map) {
 		err = -ENOMEM;
 		goto out_err;
@@ -1426,7 +1435,7 @@ static int alloc_permits(struct rtrs_clt_sess *clt)
 	return 0;
 
 err_map:
-	kfree(clt->permits_map);
+	bitmap_free(clt->permits_map);
 	clt->permits_map = NULL;
 out_err:
 	return err;
@@ -1434,13 +1443,11 @@ out_err:
 
 static void free_permits(struct rtrs_clt_sess *clt)
 {
-	if (clt->permits_map) {
-		size_t sz = clt->queue_depth;
-
+	if (clt->permits_map)
 		wait_event(clt->permits_wait,
-			   find_first_bit(clt->permits_map, sz) >= sz);
-	}
-	kfree(clt->permits_map);
+			   bitmap_empty(clt->permits_map, clt->queue_depth));
+
+	bitmap_free(clt->permits_map);
 	clt->permits_map = NULL;
 	kfree(clt->permits);
 	clt->permits = NULL;
@@ -1515,8 +1522,7 @@ static void rtrs_clt_err_recovery_work(struct work_struct *work)
 	rtrs_clt_stop_and_destroy_conns(clt_path);
 	queue_delayed_work(rtrs_wq, &clt_path->reconnect_dwork,
 			   msecs_to_jiffies(delay_ms +
-					    prandom_u32() %
-					    RTRS_RECONNECT_SEED));
+					    get_random_u32_below(RTRS_RECONNECT_SEED)));
 }
 
 static struct rtrs_clt_path *alloc_path(struct rtrs_clt_sess *clt,
@@ -1693,7 +1699,7 @@ static int create_con_cq_qp(struct rtrs_clt_con *con)
 		clt_path->s.dev_ref++;
 		max_send_wr = min_t(int, wr_limit,
 			      /* QD * (REQ + RSP + FR REGS or INVS) + drain */
-			      clt_path->queue_depth * 3 + 1);
+			      clt_path->queue_depth * 4 + 1);
 		max_recv_wr = min_t(int, wr_limit,
 			      clt_path->queue_depth * 3 + 1);
 		max_send_sge = 2;
@@ -1711,7 +1717,6 @@ static int create_con_cq_qp(struct rtrs_clt_con *con)
 			return -ENOMEM;
 		con->queue_num = cq_num;
 	}
-	cq_num = max_send_wr + max_recv_wr;
 	cq_vector = con->cpu % clt_path->s.dev->ib_dev->num_comp_vectors;
 	if (con->c.cid >= clt_path->s.irq_con_num)
 		err = rtrs_cq_qp_create(&clt_path->s, &con->c, max_send_sge,
@@ -1947,6 +1952,8 @@ static int rtrs_rdma_conn_rejected(struct rtrs_clt_con *con,
 
 void rtrs_clt_close_conns(struct rtrs_clt_path *clt_path, bool wait)
 {
+	trace_rtrs_clt_close_conns(clt_path);
+
 	if (rtrs_clt_change_state_get_old(clt_path, RTRS_CLT_CLOSING, NULL))
 		queue_work(rtrs_wq, &clt_path->close_work);
 	if (wait)
@@ -2018,6 +2025,8 @@ static int rtrs_clt_rdma_cm_handler(struct rdma_cm_id *cm_id,
 		/*
 		 * Device removal is a special case.  Queue close and return 0.
 		 */
+		rtrs_wrn_rl(s, "CM event: %s, status: %d\n", rdma_event_msg(ev->event),
+			    ev->status);
 		rtrs_clt_close_conns(clt_path, false);
 		return 0;
 	default:
@@ -2039,6 +2048,7 @@ static int rtrs_clt_rdma_cm_handler(struct rdma_cm_id *cm_id,
 	return 0;
 }
 
+/* The caller should do the cleanup in case of error */
 static int create_cm(struct rtrs_clt_con *con)
 {
 	struct rtrs_path *s = con->c.path;
@@ -2050,10 +2060,8 @@ static int create_cm(struct rtrs_clt_con *con)
 			       clt_path->s.dst_addr.ss_family == AF_IB ?
 			       RDMA_PS_IB : RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(cm_id)) {
-		err = PTR_ERR(cm_id);
-		rtrs_err(s, "Failed to create CM ID, err: %d\n", err);
-
-		return err;
+		rtrs_err(s, "Failed to create CM ID, err: %pe\n", cm_id);
+		return PTR_ERR(cm_id);
 	}
 	con->c.cm_id = cm_id;
 	con->cm_err = 0;
@@ -2061,14 +2069,14 @@ static int create_cm(struct rtrs_clt_con *con)
 	err = rdma_set_reuseaddr(cm_id, 1);
 	if (err != 0) {
 		rtrs_err(s, "Set address reuse failed, err: %d\n", err);
-		goto destroy_cm;
+		return err;
 	}
 	err = rdma_resolve_addr(cm_id, (struct sockaddr *)&clt_path->s.src_addr,
 				(struct sockaddr *)&clt_path->s.dst_addr,
 				RTRS_CONNECT_TIMEOUT_MS);
 	if (err) {
 		rtrs_err(s, "Failed to resolve address, err: %d\n", err);
-		goto destroy_cm;
+		return err;
 	}
 	/*
 	 * Combine connection status and session events. This is needed
@@ -2083,29 +2091,15 @@ static int create_cm(struct rtrs_clt_con *con)
 		if (err == 0)
 			err = -ETIMEDOUT;
 		/* Timedout or interrupted */
-		goto errr;
+		return err;
 	}
-	if (con->cm_err < 0) {
-		err = con->cm_err;
-		goto errr;
-	}
-	if (READ_ONCE(clt_path->state) != RTRS_CLT_CONNECTING) {
+	if (con->cm_err < 0)
+		return con->cm_err;
+	if (READ_ONCE(clt_path->state) != RTRS_CLT_CONNECTING)
 		/* Device removal */
-		err = -ECONNABORTED;
-		goto errr;
-	}
+		return -ECONNABORTED;
 
 	return 0;
-
-errr:
-	stop_cm(con);
-	mutex_lock(&con->con_mutex);
-	destroy_con_cq_qp(con);
-	mutex_unlock(&con->con_mutex);
-destroy_cm:
-	destroy_cm(con);
-
-	return err;
 }
 
 static void rtrs_clt_path_up(struct rtrs_clt_path *clt_path)
@@ -2217,17 +2211,6 @@ static void rtrs_clt_stop_and_destroy_conns(struct rtrs_clt_path *clt_path)
 	}
 }
 
-static inline bool xchg_paths(struct rtrs_clt_path __rcu **rcu_ppcpu_path,
-			      struct rtrs_clt_path *clt_path,
-			      struct rtrs_clt_path *next)
-{
-	struct rtrs_clt_path **ppcpu_path;
-
-	/* Call cmpxchg() without sparse warnings */
-	ppcpu_path = (typeof(ppcpu_path))rcu_ppcpu_path;
-	return clt_path == cmpxchg(ppcpu_path, clt_path, next);
-}
-
 static void rtrs_clt_remove_path_from_arr(struct rtrs_clt_path *clt_path)
 {
 	struct rtrs_clt_sess *clt = clt_path->clt;
@@ -2277,8 +2260,7 @@ static void rtrs_clt_remove_path_from_arr(struct rtrs_clt_path *clt_path)
 	 * removed.  If @sess is the last element, then @next is NULL.
 	 */
 	rcu_read_lock();
-	next = list_next_or_null_rr_rcu(&clt->paths_list, &clt_path->s.entry,
-					typeof(*next), s.entry);
+	next = rtrs_clt_get_next_path_or_null(&clt->paths_list, clt_path);
 	rcu_read_unlock();
 
 	/*
@@ -2303,7 +2285,8 @@ static void rtrs_clt_remove_path_from_arr(struct rtrs_clt_path *clt_path)
 		 * We race with IO code path, which also changes pointer,
 		 * thus we have to be careful not to overwrite it.
 		 */
-		if (xchg_paths(ppcpu_path, clt_path, next))
+		if (try_cmpxchg((struct rtrs_clt_path **)ppcpu_path, &clt_path,
+				next))
 			/*
 			 * @ppcpu_path was successfully replaced with @next,
 			 * that means that someone could also pick up the
@@ -2344,7 +2327,7 @@ static void rtrs_clt_close_work(struct work_struct *work)
 static int init_conns(struct rtrs_clt_path *clt_path)
 {
 	unsigned int cid;
-	int err;
+	int err, i;
 
 	/*
 	 * On every new session connections increase reconnect counter
@@ -2360,29 +2343,31 @@ static int init_conns(struct rtrs_clt_path *clt_path)
 			goto destroy;
 
 		err = create_cm(to_clt_con(clt_path->s.con[cid]));
-		if (err) {
-			destroy_con(to_clt_con(clt_path->s.con[cid]));
+		if (err)
 			goto destroy;
-		}
 	}
 	err = alloc_path_reqs(clt_path);
 	if (err)
 		goto destroy;
 
-	rtrs_start_hb(&clt_path->s);
-
 	return 0;
 
 destroy:
-	while (cid--) {
-		struct rtrs_clt_con *con = to_clt_con(clt_path->s.con[cid]);
+	/* Make sure we do the cleanup in the order they are created */
+	for (i = 0; i <= cid; i++) {
+		struct rtrs_clt_con *con;
 
-		stop_cm(con);
+		if (!clt_path->s.con[i])
+			break;
 
-		mutex_lock(&con->con_mutex);
-		destroy_con_cq_qp(con);
-		mutex_unlock(&con->con_mutex);
-		destroy_cm(con);
+		con = to_clt_con(clt_path->s.con[i]);
+		if (con->c.cm_id) {
+			stop_cm(con);
+			mutex_lock(&con->con_mutex);
+			destroy_con_cq_qp(con);
+			mutex_unlock(&con->con_mutex);
+			destroy_cm(con);
+		}
 		destroy_con(con);
 	}
 	/*
@@ -2638,6 +2623,7 @@ static int init_path(struct rtrs_clt_path *clt_path)
 		goto out;
 	}
 	rtrs_clt_path_up(clt_path);
+	rtrs_start_hb(&clt_path->s);
 out:
 	mutex_unlock(&clt_path->init_mutex);
 
@@ -2653,6 +2639,8 @@ static void rtrs_clt_reconnect_work(struct work_struct *work)
 	clt_path = container_of(to_delayed_work(work), struct rtrs_clt_path,
 				reconnect_dwork);
 	clt = clt_path->clt;
+
+	trace_rtrs_clt_reconnect_work(clt_path);
 
 	if (READ_ONCE(clt_path->state) != RTRS_CLT_RECONNECTING)
 		return;
@@ -2716,7 +2704,7 @@ static struct rtrs_clt_sess *alloc_clt(const char *sessname, size_t paths_num,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	clt->dev.class = rtrs_clt_dev_class;
+	clt->dev.class = &rtrs_clt_dev_class;
 	clt->dev.release = rtrs_clt_dev_release;
 	uuid_gen(&clt->paths_uuid);
 	INIT_LIST_HEAD_RCU(&clt->paths_list);
@@ -3169,16 +3157,17 @@ static const struct rtrs_rdma_dev_pd_ops dev_pd_ops = {
 
 static int __init rtrs_client_init(void)
 {
-	rtrs_rdma_dev_pd_init(0, &dev_pd);
+	int ret = 0;
 
-	rtrs_clt_dev_class = class_create(THIS_MODULE, "rtrs-client");
-	if (IS_ERR(rtrs_clt_dev_class)) {
+	rtrs_rdma_dev_pd_init(0, &dev_pd);
+	ret = class_register(&rtrs_clt_dev_class);
+	if (ret) {
 		pr_err("Failed to create rtrs-client dev class\n");
-		return PTR_ERR(rtrs_clt_dev_class);
+		return ret;
 	}
 	rtrs_wq = alloc_workqueue("rtrs_client_wq", 0, 0);
 	if (!rtrs_wq) {
-		class_destroy(rtrs_clt_dev_class);
+		class_unregister(&rtrs_clt_dev_class);
 		return -ENOMEM;
 	}
 
@@ -3188,7 +3177,7 @@ static int __init rtrs_client_init(void)
 static void __exit rtrs_client_exit(void)
 {
 	destroy_workqueue(rtrs_wq);
-	class_destroy(rtrs_clt_dev_class);
+	class_unregister(&rtrs_clt_dev_class);
 	rtrs_rdma_dev_pd_deinit(&dev_pd);
 }
 

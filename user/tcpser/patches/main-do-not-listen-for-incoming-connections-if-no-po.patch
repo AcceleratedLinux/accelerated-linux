@@ -1,0 +1,55 @@
+From db2c65c2a972a821c6d338237deb635f279cae40 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Tue, 25 Apr 2023 15:44:42 +0100
+Subject: [PATCH] main: do not listen for incoming connections if no port
+ specified
+
+We don't always want to listen for incoming TCP connections so, if no
+port is specified with the '-p' argument, do not open a listening
+socket. Previously, tcpser would default to listening on port 6400.
+---
+ src/tcpser.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/tcpser.c b/src/tcpser.c
+index 50d8385..80c3aba 100644
+--- a/src/tcpser.c
++++ b/src/tcpser.c
+@@ -47,10 +47,12 @@ int main(int argc, char *argv[]) {
+   signal(SIGIO, SIG_IGN); /* Some Linux variant term on SIGIO by default */
+ 
+   modem_count = init(argc, argv, cfg, MAX_MODEMS, &ip_addr, all_busy, sizeof(all_busy));
+-  sSocket = ip_init_server_conn(ip_addr, 6400);
+-  if(-1 == sSocket) {
+-    ELOG(LOG_FATAL, "Could not listen on %s", ip_addr);
+-    exit (-1);
++  if (ip_addr != NULL) {
++    sSocket = ip_init_server_conn(ip_addr, 6400);
++    if(-1 == sSocket) {
++      ELOG(LOG_FATAL, "Could not listen on %s", ip_addr);
++      exit (-1);
++    }
+   }
+ 
+   for(i = 0; i < modem_count; i++) {
+@@ -76,7 +78,7 @@ int main(int argc, char *argv[]) {
+       FD_SET(cfg[i].mp[0][0], &readfs);
+       max_fd=MAX(max_fd, cfg[i].mp[0][0]);
+     }
+-    if(accept_pending == FALSE) {
++    if(ip_addr != NULL && accept_pending == FALSE) {
+       max_fd=MAX(max_fd, sSocket);
+       FD_SET(sSocket, &readfs); 
+     }
+@@ -92,7 +94,7 @@ int main(int argc, char *argv[]) {
+         }
+       }
+     }
+-    if (FD_ISSET(sSocket, &readfs)) {  // IP traffic
++    if (ip_addr != NULL && FD_ISSET(sSocket, &readfs)) {  // IP traffic
+       if(!accept_pending) {
+         LOG(LOG_DEBUG, "Incoming connection pending");
+         // first try for a modem that is listening.
+-- 
+2.34.1
+

@@ -74,7 +74,7 @@ sequentially and type id is assigned to each recognized type starting from id
     #define BTF_KIND_ARRAY          3       /* Array        */
     #define BTF_KIND_STRUCT         4       /* Struct       */
     #define BTF_KIND_UNION          5       /* Union        */
-    #define BTF_KIND_ENUM           6       /* Enumeration  */
+    #define BTF_KIND_ENUM           6       /* Enumeration up to 32-bit values */
     #define BTF_KIND_FWD            7       /* Forward      */
     #define BTF_KIND_TYPEDEF        8       /* Typedef      */
     #define BTF_KIND_VOLATILE       9       /* Volatile     */
@@ -87,6 +87,7 @@ sequentially and type id is assigned to each recognized type starting from id
     #define BTF_KIND_FLOAT          16      /* Floating point       */
     #define BTF_KIND_DECL_TAG       17      /* Decl Tag     */
     #define BTF_KIND_TYPE_TAG       18      /* Type Tag     */
+    #define BTF_KIND_ENUM64         19      /* Enumeration up to 64-bit values */
 
 Note that the type section encodes debug info, not just pure types.
 ``BTF_KIND_FUNC`` is not a type, and it represents a defined subprogram.
@@ -101,10 +102,10 @@ Each type contains the following common data::
          * bits 24-28: kind (e.g. int, ptr, array...etc)
          * bits 29-30: unused
          * bit     31: kind_flag, currently used by
-         *             struct, union and fwd
+         *             struct, union, fwd, enum and enum64.
          */
         __u32 info;
-        /* "size" is used by INT, ENUM, STRUCT and UNION.
+        /* "size" is used by INT, ENUM, STRUCT, UNION and ENUM64.
          * "size" tells the size of the type it is describing.
          *
          * "type" is used by PTR, TYPEDEF, VOLATILE, CONST, RESTRICT,
@@ -271,20 +272,18 @@ In this case, if the base type is an int type, it must be a regular int type:
   * ``BTF_INT_OFFSET()`` must be 0.
   * ``BTF_INT_BITS()`` must be equal to ``{1,2,4,8,16} * 8``.
 
-The following kernel patch introduced ``kind_flag`` and explained why both
-modes exist:
-
-  https://github.com/torvalds/linux/commit/9d5f9f701b1891466fb3dbb1806ad97716f95cc3#diff-fa650a64fdd3968396883d2fe8215ff3
+Commit 9d5f9f701b18 introduced ``kind_flag`` and explains why both modes
+exist.
 
 2.2.6 BTF_KIND_ENUM
 ~~~~~~~~~~~~~~~~~~~
 
 ``struct btf_type`` encoding requirement:
   * ``name_off``: 0 or offset to a valid C identifier
-  * ``info.kind_flag``: 0
+  * ``info.kind_flag``: 0 for unsigned, 1 for signed
   * ``info.kind``: BTF_KIND_ENUM
   * ``info.vlen``: number of enum values
-  * ``size``: 4
+  * ``size``: 1/2/4/8
 
 ``btf_type`` is followed by ``info.vlen`` number of ``struct btf_enum``.::
 
@@ -296,6 +295,10 @@ modes exist:
 The ``btf_enum`` encoding:
   * ``name_off``: offset to a valid C identifier
   * ``val``: any value
+
+If the original enum value is signed and the size is less than 4,
+that value will be sign extended into 4 bytes. If the size is 8,
+the value will be truncated into 4 bytes.
 
 2.2.7 BTF_KIND_FWD
 ~~~~~~~~~~~~~~~~~~
@@ -364,7 +367,8 @@ No additional type data follow ``btf_type``.
   * ``name_off``: offset to a valid C identifier
   * ``info.kind_flag``: 0
   * ``info.kind``: BTF_KIND_FUNC
-  * ``info.vlen``: 0
+  * ``info.vlen``: linkage information (BTF_FUNC_STATIC, BTF_FUNC_GLOBAL
+                   or BTF_FUNC_EXTERN)
   * ``type``: a BTF_KIND_FUNC_PROTO type
 
 No additional type data follow ``btf_type``.
@@ -374,6 +378,9 @@ signature is defined by ``type``. The subprogram is thus an instance of that
 type. The BTF_KIND_FUNC may in turn be referenced by a func_info in the
 :ref:`BTF_Ext_Section` (ELF) or in the arguments to :ref:`BPF_Prog_Load`
 (ABI).
+
+Currently, only linkage values of BTF_FUNC_STATIC and BTF_FUNC_GLOBAL are
+supported in the kernel.
 
 2.2.13 BTF_KIND_FUNC_PROTO
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -493,7 +500,7 @@ the attribute is applied to a ``struct``/``union`` member or
 a ``func`` argument, and ``btf_decl_tag.component_idx`` should be a
 valid index (starting from 0) pointing to a member or an argument.
 
-2.2.17 BTF_KIND_TYPE_TAG
+2.2.18 BTF_KIND_TYPE_TAG
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``struct btf_type`` encoding requirement:
@@ -515,6 +522,32 @@ Basically, a pointer type points to zero or more
 type_tag, then zero or more const/volatile/restrict/typedef
 and finally the base type. The base type is one of
 int, ptr, array, struct, union, enum, func_proto and float types.
+
+2.2.19 BTF_KIND_ENUM64
+~~~~~~~~~~~~~~~~~~~~~~
+
+``struct btf_type`` encoding requirement:
+  * ``name_off``: 0 or offset to a valid C identifier
+  * ``info.kind_flag``: 0 for unsigned, 1 for signed
+  * ``info.kind``: BTF_KIND_ENUM64
+  * ``info.vlen``: number of enum values
+  * ``size``: 1/2/4/8
+
+``btf_type`` is followed by ``info.vlen`` number of ``struct btf_enum64``.::
+
+    struct btf_enum64 {
+        __u32   name_off;
+        __u32   val_lo32;
+        __u32   val_hi32;
+    };
+
+The ``btf_enum64`` encoding:
+  * ``name_off``: offset to a valid C identifier
+  * ``val_lo32``: lower 32-bit value for a 64-bit value
+  * ``val_hi32``: high 32-bit value for a 64-bit value
+
+If the original enum value is signed and the size is less than 8,
+that value will be sign extended into 8 bytes.
 
 3. BTF Kernel API
 =================
@@ -691,8 +724,8 @@ same as the one describe in :ref:`BTF_Type_String`.
 4.2 .BTF.ext section
 --------------------
 
-The .BTF.ext section encodes func_info and line_info which needs loader
-manipulation before loading into the kernel.
+The .BTF.ext section encodes func_info, line_info and CO-RE relocations
+which needs loader manipulation before loading into the kernel.
 
 The specification for .BTF.ext section is defined at ``tools/lib/bpf/btf.h``
 and ``tools/lib/bpf/btf.c``.
@@ -710,15 +743,20 @@ The current header of .BTF.ext section::
         __u32   func_info_len;
         __u32   line_info_off;
         __u32   line_info_len;
+
+        /* optional part of .BTF.ext header */
+        __u32   core_relo_off;
+        __u32   core_relo_len;
     };
 
 It is very similar to .BTF section. Instead of type/string section, it
-contains func_info and line_info section. See :ref:`BPF_Prog_Load` for details
-about func_info and line_info record format.
+contains func_info, line_info and core_relo sub-sections.
+See :ref:`BPF_Prog_Load` for details about func_info and line_info
+record format.
 
 The func_info is organized as below.::
 
-     func_info_rec_size
+     func_info_rec_size              /* __u32 value */
      btf_ext_info_sec for section #1 /* func_info for section #1 */
      btf_ext_info_sec for section #2 /* func_info for section #2 */
      ...
@@ -738,7 +776,7 @@ Here, num_info must be greater than 0.
 
 The line_info is organized as below.::
 
-     line_info_rec_size
+     line_info_rec_size              /* __u32 value */
      btf_ext_info_sec for section #1 /* line_info for section #1 */
      btf_ext_info_sec for section #2 /* line_info for section #2 */
      ...
@@ -751,6 +789,20 @@ The interpretation of ``bpf_func_info->insn_off`` and
 kernel API, the ``insn_off`` is the instruction offset in the unit of ``struct
 bpf_insn``. For ELF API, the ``insn_off`` is the byte offset from the
 beginning of section (``btf_ext_info_sec->sec_name_off``).
+
+The core_relo is organized as below.::
+
+     core_relo_rec_size              /* __u32 value */
+     btf_ext_info_sec for section #1 /* core_relo for section #1 */
+     btf_ext_info_sec for section #2 /* core_relo for section #2 */
+
+``core_relo_rec_size`` specifies the size of ``bpf_core_relo``
+structure when .BTF.ext is generated. All ``bpf_core_relo`` structures
+within a single ``btf_ext_info_sec`` describe relocations applied to
+section named by ``btf_ext_info_sec->sec_name_off``.
+
+See :ref:`Documentation/bpf/llvm_reloc.rst <btf-co-re-relocations>`
+for more information on CO-RE relocations.
 
 4.2 .BTF_ids section
 --------------------
@@ -955,7 +1007,7 @@ format.::
     } g2;
     int main() { return 0; }
     int test() { return 0; }
-    -bash-4.4$ clang -c -g -O2 -target bpf t2.c
+    -bash-4.4$ clang -c -g -O2 --target=bpf t2.c
     -bash-4.4$ readelf -S t2.o
       ......
       [ 8] .BTF              PROGBITS         0000000000000000  00000247
@@ -965,7 +1017,7 @@ format.::
       [10] .rel.BTF.ext      REL              0000000000000000  000007e0
            0000000000000040  0000000000000010          16     9     8
       ......
-    -bash-4.4$ clang -S -g -O2 -target bpf t2.c
+    -bash-4.4$ clang -S -g -O2 --target=bpf t2.c
     -bash-4.4$ cat t2.s
       ......
             .section        .BTF,"",@progbits
@@ -1027,4 +1079,9 @@ format.::
 7. Testing
 ==========
 
-Kernel bpf selftest `test_btf.c` provides extensive set of BTF-related tests.
+The kernel BPF selftest `tools/testing/selftests/bpf/prog_tests/btf.c`_
+provides an extensive set of BTF-related tests.
+
+.. Links
+.. _tools/testing/selftests/bpf/prog_tests/btf.c:
+   https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/tools/testing/selftests/bpf/prog_tests/btf.c

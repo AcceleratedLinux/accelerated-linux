@@ -1145,8 +1145,7 @@ static struct dvb_frontend *tda10071_get_dvb_frontend(struct i2c_client *client)
 	return &dev->fe;
 }
 
-static int tda10071_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int tda10071_probe(struct i2c_client *client)
 {
 	struct tda10071_dev *dev;
 	struct tda10071_platform_data *pdata = client->dev.platform_data;
@@ -1221,14 +1220,13 @@ err:
 	return ret;
 }
 
-static int tda10071_remove(struct i2c_client *client)
+static void tda10071_remove(struct i2c_client *client)
 {
 	struct tda10071_dev *dev = i2c_get_clientdata(client);
 
 	dev_dbg(&client->dev, "\n");
 
 	kfree(dev);
-	return 0;
 }
 
 static const struct i2c_device_id tda10071_id_table[] = {

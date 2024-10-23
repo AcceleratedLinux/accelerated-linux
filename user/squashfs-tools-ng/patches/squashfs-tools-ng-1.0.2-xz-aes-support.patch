@@ -1,0 +1,498 @@
+diff -Naur squashfs-tools-ng-1.0.2.org/configure.ac squashfs-tools-ng-1.0.2/configure.ac
+--- squashfs-tools-ng-1.0.2.org/configure.ac	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/configure.ac	2024-05-27 15:29:32.395846516 +1000
+@@ -152,6 +152,10 @@
+ 			      [AS_IF([test "x$with_xz" != "xcheck"],
+ 				     [AC_MSG_ERROR([cannot XZ sdk])],
+ 				     [with_xz="no"])])
++	PKG_CHECK_MODULES(OPENSSL, [libssl >= 1.1.0], [with_xz="yes"],
++			      [AS_IF([test "x$with_xz" != "xcheck"],
++				     [AC_MSG_ERROR([cannot find openssl sdk])],
++				     [with_xz="no"])])
+ ], [])
+ 
+ AS_IF([test "x$with_lz4" != "xno" -a "x$with_builtin_lz4" != "xyes"], [
+@@ -225,6 +229,7 @@
+ 	[libsqfs_dep_mod="$libsqfs_dep_mod zlib"], [])
+ 
+ AM_COND_IF([WITH_XZ], [libsqfs_dep_mod="$libsqfs_dep_mod liblzma >= 5.0.0"], [])
++AM_COND_IF([WITH_XZ], [libsqfs_dep_mod="$libsqfs_dep_mod libssl >= 1.1.0"], [])
+ AM_COND_IF([WITH_ZSTD], [libsqfs_dep_mod="$libsqfs_dep_mod libzstd"], [])
+ AC_SUBST([LIBSQFS_DEP_MOD], ["$libsqfs_dep_mod"])
+ 
+diff -Naur squashfs-tools-ng-1.0.2.org/include/sqfs/compressor.h squashfs-tools-ng-1.0.2/include/sqfs/compressor.h
+--- squashfs-tools-ng-1.0.2.org/include/sqfs/compressor.h	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/include/sqfs/compressor.h	2024-05-29 10:22:22.932531189 +1000
+@@ -443,6 +443,14 @@
+  */
+ SQFS_API int sqfs_compressor_id_from_name(const char *name);
+ 
++/**
++ * @brief Set the compression AES encryption key
++ *
++ * @param base pointer to the compressor.
++ * @param key 32 byte AES key to set.
++ */
++SQFS_API void sqfs_aes_set_key(const sqfs_compressor_t *base, uint8_t *key);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff -Naur squashfs-tools-ng-1.0.2.org/include/sqfs/super.h squashfs-tools-ng-1.0.2/include/sqfs/super.h
+--- squashfs-tools-ng-1.0.2.org/include/sqfs/super.h	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/include/sqfs/super.h	2024-05-28 17:29:35.299537238 +1000
+@@ -198,9 +198,10 @@
+ 	SQFS_COMP_XZ = 4,
+ 	SQFS_COMP_LZ4 = 5,
+ 	SQFS_COMP_ZSTD = 6,
++	SQFS_COMP_XZ_AES = 7,
+ 
+ 	SQFS_COMP_MIN = 1,
+-	SQFS_COMP_MAX = 6,
++	SQFS_COMP_MAX = 7,
+ } SQFS_COMPRESSOR;
+ 
+ /**
+diff -Naur squashfs-tools-ng-1.0.2.org/lib/common/compress.c squashfs-tools-ng-1.0.2/lib/common/compress.c
+--- squashfs-tools-ng-1.0.2.org/lib/common/compress.c	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/lib/common/compress.c	2024-05-27 14:23:54.605212412 +1000
+@@ -9,6 +9,7 @@
+ 
+ static int cmp_ids[] = {
+ 	SQFS_COMP_XZ,
++	SQFS_COMP_XZ_AES,
+ 	SQFS_COMP_ZSTD,
+ 	SQFS_COMP_GZIP,
+ 	SQFS_COMP_LZ4,
+diff -Naur squashfs-tools-ng-1.0.2.org/lib/sqfs/comp/compressor.c squashfs-tools-ng-1.0.2/lib/sqfs/comp/compressor.c
+--- squashfs-tools-ng-1.0.2.org/lib/sqfs/comp/compressor.c	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/lib/sqfs/comp/compressor.c	2024-05-28 12:09:02.477775138 +1000
+@@ -21,6 +21,7 @@
+ #endif
+ #ifdef WITH_XZ
+ 	[SQFS_COMP_XZ] = xz_compressor_create,
++	[SQFS_COMP_XZ_AES] = xz_aes_compressor_create,
+ 	[SQFS_COMP_LZMA] = lzma_compressor_create,
+ #endif
+ #ifdef WITH_LZ4
+@@ -38,6 +39,7 @@
+ 	[SQFS_COMP_XZ] = "xz",
+ 	[SQFS_COMP_LZ4] = "lz4",
+ 	[SQFS_COMP_ZSTD] = "zstd",
++	[SQFS_COMP_XZ_AES] = "xz-aes",
+ };
+ 
+ int sqfs_generic_write_options(sqfs_file_t *file, const void *data, size_t size)
+@@ -95,6 +97,7 @@
+ 
+ 	switch (cfg->id) {
+ 	case SQFS_COMP_XZ:
++	case SQFS_COMP_XZ_AES:
+ 		ret = memcmp(cfg->opt.xz.padd0, padd0,
+ 			     sizeof(cfg->opt.xz.padd0));
+ 		break;
+@@ -163,6 +166,7 @@
+ 		cfg->level = SQFS_ZSTD_DEFAULT_LEVEL;
+ 		break;
+ 	case SQFS_COMP_XZ:
++	case SQFS_COMP_XZ_AES:
+ 		flag_mask |= SQFS_COMP_FLAG_XZ_ALL;
+ 		cfg->level = SQFS_XZ_DEFAULT_LEVEL;
+ 		cfg->opt.xz.dict_size = block_size;
+diff -Naur squashfs-tools-ng-1.0.2.org/lib/sqfs/comp/internal.h squashfs-tools-ng-1.0.2/lib/sqfs/comp/internal.h
+--- squashfs-tools-ng-1.0.2.org/lib/sqfs/comp/internal.h	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/lib/sqfs/comp/internal.h	2024-05-27 13:27:20.462642854 +1000
+@@ -28,6 +28,10 @@
+ 			 sqfs_compressor_t **out);
+ 
+ SQFS_INTERNAL
++int xz_aes_compressor_create(const sqfs_compressor_config_t *cfg,
++			     sqfs_compressor_t **out);
++
++SQFS_INTERNAL
+ int gzip_compressor_create(const sqfs_compressor_config_t *cfg,
+ 			   sqfs_compressor_t **out);
+ 
+diff -Naur squashfs-tools-ng-1.0.2.org/lib/sqfs/comp/xz-aes.c squashfs-tools-ng-1.0.2/lib/sqfs/comp/xz-aes.c
+--- squashfs-tools-ng-1.0.2.org/lib/sqfs/comp/xz-aes.c	1970-01-01 10:00:00.000000000 +1000
++++ squashfs-tools-ng-1.0.2/lib/sqfs/comp/xz-aes.c	2024-05-29 11:12:26.796537124 +1000
+@@ -0,0 +1,359 @@
++/* SPDX-License-Identifier: LGPL-3.0-or-later */
++/*
++ * xz-aes.c
++ *
++ * Copyright (C) 2019 David Oberhollenzer <goliath@infraroot.at>
++ */
++#define SQFS_BUILDING_DLL
++#include "config.h"
++
++#include <stdbool.h>
++#include <stdlib.h>
++#include <string.h>
++#include <lzma.h>
++#include <openssl/ssl.h>
++#include <openssl/aes.h>
++
++#include "internal.h"
++
++typedef struct {
++	sqfs_compressor_t base;
++	size_t block_size;
++	size_t dict_size;
++
++	AES_KEY aes_enc_key;
++	AES_KEY aes_dec_key;
++
++	sqfs_u8 level;
++	sqfs_u8 lc;
++	sqfs_u8 lp;
++	sqfs_u8 pb;
++
++	int flags;
++} xz_aes_compressor_t;
++
++typedef struct {
++	sqfs_u32 dict_size;
++	sqfs_u32 flags;
++} xz_aes_options_t;
++
++/*
++ * Only support AES-256, so AES key will always be 256 bits (32 bytes).
++ */
++#define AES_KEY_BITS	256
++#define AES_KEY_BYTES	(AES_KEY_BITS / 8)
++
++static bool is_dict_size_valid(size_t size)
++{
++	size_t x = size & (size - 1);
++
++	if (x == 0)
++		return true;
++
++	return size == (x | (x >> 1));
++}
++
++static int xz_aes_write_options(sqfs_compressor_t *base, sqfs_file_t *file)
++{
++	xz_aes_compressor_t *xz = (xz_aes_compressor_t *)base;
++	xz_aes_options_t opt;
++	sqfs_u32 flags;
++
++	if (xz->flags == 0 && xz->dict_size == xz->block_size)
++		return 0;
++
++	flags = xz->flags & SQFS_COMP_FLAG_XZ_ALL;
++	flags &= ~SQFS_COMP_FLAG_XZ_EXTREME;
++
++	opt.dict_size = htole32(xz->dict_size);
++	opt.flags = htole32(flags);
++
++	return sqfs_generic_write_options(file, &opt, sizeof(opt));
++}
++
++static int xz_aes_read_options(sqfs_compressor_t *base, sqfs_file_t *file)
++{
++	xz_aes_compressor_t *xz = (xz_aes_compressor_t *)base;
++	xz_aes_options_t opt;
++	int ret;
++
++	ret = sqfs_generic_read_options(file, &opt, sizeof(opt));
++	if (ret)
++		return ret;
++
++	opt.dict_size = le32toh(opt.dict_size);
++	opt.flags = le32toh(opt.flags);
++
++	if (!is_dict_size_valid(opt.dict_size))
++		return SQFS_ERROR_CORRUPTED;
++
++	if (opt.flags & ~SQFS_COMP_FLAG_XZ_ALL)
++		return SQFS_ERROR_UNSUPPORTED;
++
++	xz->flags = opt.flags;
++	xz->dict_size = opt.dict_size;
++	return 0;
++}
++
++static sqfs_s32 compress(xz_aes_compressor_t *xz, lzma_vli filter,
++			 const sqfs_u8 *in, sqfs_u32 size,
++			 sqfs_u8 *out, sqfs_u32 outsize,
++			 sqfs_u32 presets)
++{
++	lzma_filter filters[5];
++	lzma_options_lzma opt;
++	size_t partial_aes_block, pos, written = 0;
++	lzma_ret ret;
++	sqfs_u8 *compdata;
++	int i = 0;
++
++	if (lzma_lzma_preset(&opt, presets))
++		return SQFS_ERROR_COMPRESSOR;
++
++	opt.lc = xz->lc;
++	opt.lp = xz->lp;
++	opt.pb = xz->pb;
++	opt.dict_size = xz->dict_size;
++
++	if (filter != LZMA_VLI_UNKNOWN) {
++		filters[i].id = filter;
++		filters[i].options = NULL;
++		++i;
++	}
++
++	filters[i].id = LZMA_FILTER_LZMA2;
++	filters[i].options = &opt;
++	++i;
++
++	filters[i].id = LZMA_VLI_UNKNOWN;
++	filters[i].options = NULL;
++	++i;
++
++	compdata = alloca(outsize + AES_BLOCK_SIZE);
++
++	ret = lzma_stream_buffer_encode(filters, LZMA_CHECK_CRC32, NULL,
++					in, size, compdata, &written, outsize);
++
++	if (ret == LZMA_BUF_ERROR)
++		return 0;
++	if (ret != LZMA_OK)
++		return SQFS_ERROR_COMPRESSOR;
++
++	partial_aes_block = written % AES_BLOCK_SIZE;
++	if (partial_aes_block) {
++		memset(compdata + written, 0, partial_aes_block);
++		written += partial_aes_block;
++	}
++
++	for (pos = 0; pos < written; pos += AES_BLOCK_SIZE)
++		AES_encrypt(compdata + pos, out + pos, &xz->aes_enc_key);
++
++	return written;
++}
++
++static lzma_vli flag_to_vli(int flag)
++{
++	switch (flag) {
++	case SQFS_COMP_FLAG_XZ_X86:
++		return LZMA_FILTER_X86;
++	case SQFS_COMP_FLAG_XZ_POWERPC:
++		return LZMA_FILTER_POWERPC;
++	case SQFS_COMP_FLAG_XZ_IA64:
++		return LZMA_FILTER_IA64;
++	case SQFS_COMP_FLAG_XZ_ARM:
++		return LZMA_FILTER_ARM;
++	case SQFS_COMP_FLAG_XZ_ARMTHUMB:
++		return LZMA_FILTER_ARMTHUMB;
++	case SQFS_COMP_FLAG_XZ_SPARC:
++		return LZMA_FILTER_SPARC;
++	}
++
++	return LZMA_VLI_UNKNOWN;
++}
++
++static sqfs_s32 xz_aes_comp_block(sqfs_compressor_t *base, const sqfs_u8 *in,
++			      sqfs_u32 size, sqfs_u8 *out, sqfs_u32 outsize)
++{
++	xz_aes_compressor_t *xz = (xz_aes_compressor_t *)base;
++	lzma_vli filter, selected = LZMA_VLI_UNKNOWN;
++	sqfs_s32 ret, smallest;
++	bool extreme;
++	size_t i;
++
++	if (size >= 0x7FFFFFFF)
++		return SQFS_ERROR_ARG_INVALID;
++
++	ret = compress(xz, LZMA_VLI_UNKNOWN, in, size, out,
++		       outsize, xz->level);
++	if (ret < 0 || xz->flags == 0)
++		return ret;
++
++	smallest = ret;
++	extreme = false;
++
++	if (xz->flags & SQFS_COMP_FLAG_XZ_EXTREME) {
++		ret = compress(xz, LZMA_VLI_UNKNOWN, in, size, out, outsize,
++			       xz->level | LZMA_PRESET_EXTREME);
++
++		if (ret > 0 && (smallest == 0 || ret < smallest)) {
++			smallest = ret;
++			extreme = true;
++		}
++	}
++
++	for (i = 1; i & SQFS_COMP_FLAG_XZ_ALL; i <<= 1) {
++		if ((i & SQFS_COMP_FLAG_XZ_EXTREME) || (xz->flags & i) == 0)
++			continue;
++
++		filter = flag_to_vli(i);
++
++		ret = compress(xz, filter, in, size, out, outsize, xz->level);
++		if (ret > 0 && (smallest == 0 || ret < smallest)) {
++			smallest = ret;
++			selected = filter;
++			extreme = false;
++		}
++
++		if (xz->flags & SQFS_COMP_FLAG_XZ_EXTREME) {
++			ret = compress(xz, filter, in, size, out, outsize,
++				       xz->level | LZMA_PRESET_EXTREME);
++
++			if (ret > 0 && (smallest == 0 || ret < smallest)) {
++				smallest = ret;
++				selected = filter;
++				extreme = true;
++			}
++		}
++	}
++
++	if (smallest == 0)
++		return 0;
++
++	return compress(xz, selected, in, size, out, outsize,
++			xz->level | (extreme ? LZMA_PRESET_EXTREME : 0));
++}
++
++static sqfs_s32 xz_aes_uncomp_block(sqfs_compressor_t *base, const sqfs_u8 *in,
++				sqfs_u32 size, sqfs_u8 *out, sqfs_u32 outsize)
++{
++	xz_aes_compressor_t *xz = (xz_aes_compressor_t *)base;
++	sqfs_u64 memlimit = 65 * 1024 * 1024;
++	size_t dest_pos = 0;
++	size_t src_pos = 0;
++	lzma_ret ret;
++	sqfs_u8 *compdata;
++
++	if (outsize >= 0x7FFFFFFF)
++		return SQFS_ERROR_ARG_INVALID;
++
++	compdata = alloca(size);
++
++	for (src_pos = 0; src_pos < size; src_pos += AES_BLOCK_SIZE)
++		AES_decrypt(in + src_pos, compdata + src_pos, &xz->aes_dec_key);
++
++	src_pos = 0;
++	ret = lzma_stream_buffer_decode(&memlimit, 0, NULL,
++					compdata, &src_pos, size,
++					out, &dest_pos, outsize);
++
++	if (ret == LZMA_OK && ((size - src_pos) < AES_BLOCK_SIZE))
++		return dest_pos;
++
++	return SQFS_ERROR_COMPRESSOR;
++}
++
++static void xz_aes_get_configuration(const sqfs_compressor_t *base,
++				 sqfs_compressor_config_t *cfg)
++{
++	const xz_aes_compressor_t *xz = (const xz_aes_compressor_t *)base;
++
++	memset(cfg, 0, sizeof(*cfg));
++	cfg->id = SQFS_COMP_XZ;
++	cfg->flags = xz->flags;
++	cfg->block_size = xz->block_size;
++	cfg->level = xz->level;
++	cfg->opt.xz.dict_size = xz->dict_size;
++	cfg->opt.xz.lc = xz->lc;
++	cfg->opt.xz.lp = xz->lp;
++	cfg->opt.xz.pb = xz->pb;
++
++	if (base->do_block == xz_aes_uncomp_block)
++		cfg->flags |= SQFS_COMP_FLAG_UNCOMPRESS;
++}
++
++static sqfs_object_t *xz_aes_create_copy(const sqfs_object_t *cmp)
++{
++	xz_aes_compressor_t *xz = malloc(sizeof(*xz));
++
++	if (xz == NULL)
++		return NULL;
++
++	memcpy(xz, cmp, sizeof(*xz));
++	return (sqfs_object_t *)xz;
++}
++
++static void xz_aes_destroy(sqfs_object_t *base)
++{
++	free(base);
++}
++
++void sqfs_aes_set_key(const sqfs_compressor_t *base, uint8_t *key)
++{
++	xz_aes_compressor_t *xz = (xz_aes_compressor_t *)base;
++
++	AES_set_encrypt_key(key, AES_KEY_BITS, &xz->aes_enc_key);
++	AES_set_decrypt_key(key, AES_KEY_BITS, &xz->aes_dec_key);
++}
++
++int xz_aes_compressor_create(const sqfs_compressor_config_t *cfg,
++			 sqfs_compressor_t **out)
++{
++	sqfs_compressor_t *base;
++	xz_aes_compressor_t *xz;
++
++	if (cfg->flags & ~(SQFS_COMP_FLAG_GENERIC_ALL |
++			   SQFS_COMP_FLAG_XZ_ALL)) {
++		return SQFS_ERROR_UNSUPPORTED;
++	}
++
++	if (!is_dict_size_valid(cfg->opt.xz.dict_size))
++		return SQFS_ERROR_UNSUPPORTED;
++
++	if (cfg->opt.xz.lc + cfg->opt.xz.lp > 4)
++		return SQFS_ERROR_UNSUPPORTED;
++
++	if (cfg->opt.xz.pb > SQFS_XZ_MAX_PB)
++		return SQFS_ERROR_UNSUPPORTED;
++
++	if (cfg->level > SQFS_XZ_MAX_LEVEL)
++		return SQFS_ERROR_UNSUPPORTED;
++
++	if (cfg->opt.xz.dict_size < SQFS_XZ_MIN_DICT_SIZE)
++		return SQFS_ERROR_UNSUPPORTED;
++
++	if (cfg->opt.xz.dict_size > SQFS_XZ_MAX_DICT_SIZE)
++		return SQFS_ERROR_UNSUPPORTED;
++
++	xz = calloc(1, sizeof(*xz));
++	base = (sqfs_compressor_t *)xz;
++	if (xz == NULL)
++		return SQFS_ERROR_ALLOC;
++
++	xz->flags = cfg->flags;
++	xz->dict_size = cfg->opt.xz.dict_size;
++	xz->block_size = cfg->block_size;
++	xz->lc = cfg->opt.xz.lc;
++	xz->lp = cfg->opt.xz.lp;
++	xz->pb = cfg->opt.xz.pb;
++	xz->level = cfg->level;
++	base->get_configuration = xz_aes_get_configuration;
++	base->do_block = (cfg->flags & SQFS_COMP_FLAG_UNCOMPRESS) ?
++		xz_aes_uncomp_block : xz_aes_comp_block;
++	base->write_options = xz_aes_write_options;
++	base->read_options = xz_aes_read_options;
++	((sqfs_object_t *)base)->copy = xz_aes_create_copy;
++	((sqfs_object_t *)base)->destroy = xz_aes_destroy;
++
++	*out = base;
++	return 0;
++}
+diff -Naur squashfs-tools-ng-1.0.2.org/lib/sqfs/Makemodule.am squashfs-tools-ng-1.0.2/lib/sqfs/Makemodule.am
+--- squashfs-tools-ng-1.0.2.org/lib/sqfs/Makemodule.am	2020-09-04 02:28:09.000000000 +1000
++++ squashfs-tools-ng-1.0.2/lib/sqfs/Makemodule.am	2024-05-27 15:34:12.370559878 +1000
+@@ -34,7 +34,7 @@
+ libsquashfs_la_CFLAGS = $(AM_CFLAGS) $(PTHREAD_CFLAGS) $(ZLIB_CFLAGS)
+ libsquashfs_la_CFLAGS += $(XZ_CFLAGS) $(LZ4_CFLAGS)
+ libsquashfs_la_CFLAGS += $(ZSTD_CFLAGS) $(PTHREAD_CFLAGS)
+-libsquashfs_la_LIBADD = $(XZ_LIBS) $(ZLIB_LIBS) $(LZ4_LIBS)
++libsquashfs_la_LIBADD = $(XZ_LIBS) $(ZLIB_LIBS) $(LZ4_LIBS) $(OPENSSL_LIBS)
+ libsquashfs_la_LIBADD += $(ZSTD_LIBS) $(PTHREAD_LIBS)
+ 
+ # directly "import" stuff from libutil
+@@ -74,6 +74,7 @@
+ 
+ if WITH_XZ
+ libsquashfs_la_SOURCES += lib/sqfs/comp/xz.c
++libsquashfs_la_SOURCES += lib/sqfs/comp/xz-aes.c
+ libsquashfs_la_SOURCES += lib/sqfs/comp/lzma.c
+ libsquashfs_la_CPPFLAGS += -DWITH_XZ
+ endif

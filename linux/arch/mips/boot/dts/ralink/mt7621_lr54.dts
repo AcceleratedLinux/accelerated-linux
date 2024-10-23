@@ -2,6 +2,7 @@
 
 #include "mt7621.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include "mt7621_pstore.dtsi"
 
 / {
@@ -13,9 +14,11 @@
 		reg = <0x0 0x10000000>;
 	};
 
+	/* Have to swap serial port 0 and 1, because of historical reasons
+	 * (bootloader is passing ttyS1 as console port) */
 	aliases {
-		serial0 = &uartlite1;
-		serial1 = &uartlite0;
+		serial0 = &serial1;
+		serial1 = &serial0;
 	};
 
 	chosen {
@@ -80,6 +83,23 @@
 			default-state = "off";
 		};
 	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio 18 GPIO_ACTIVE_LOW>; /* RST_PBC_N */
+		};
+	};
+
+	sim-mux0 {
+		compatible = "sim-mux";
+
+		sim-select-gpios  = <&gpio 17 GPIO_ACTIVE_LOW>;
+
+		sim-count = <2>;
+	};
 };
 
 &pcie {
@@ -132,6 +152,10 @@
 	pinctrl-0 = <&mdio_pins>, <&rgmii1_pins>;
 };
 
+&gmac1 {
+        status = "disabled";
+};
+
 &switch0 {
 	ports {
 		port@1 {
@@ -178,7 +202,7 @@
 	};
 };
 
-&uartlite0 {
+&serial0 {
 	status = "okay";
 };
 

@@ -1,0 +1,58 @@
+Subject: [PATCH] reread environment
+
+Make sure setup.py reads the correct CONFIG_ARGS
+
+The setup.py script that builds and installs all the Python modules
+shipped with the interpreter looks at the CONFIG_ARGS variable stored
+in the "sysconfig" module to look at the ./configure options and
+adjust its behaviour accordingly.
+
+Unfortunately, when cross-compiling, the value of CONFIG_ARGS returned
+by the sysconfig are the one passed to the ./configure script of the
+*host* Python and not the one we're currently building for the target.
+
+In order to avoid that, we re-initialize the values in the sysconfig
+module by re-reading the environment at the beginning of the setup.py
+script, and we make sure that the CONFIG_ARGS variable is actually
+part of the environment of setup.py.
+
+See the beginning of
+http://article.gmane.org/gmane.comp.python.devel/99772 for the
+inspiration.
+
+[Rebased from Python-2.7.1-008-reread-environment.patch]
+
+Signed-off-by: Mike Wadsten <mike.wadsten@digi.com>
+
+--- a/setup.py
++++ b/setup.py
+@@ -32,6 +32,9 @@
+ # Were we compiled --with-pydebug or with #define Py_DEBUG?
+ COMPILED_WITH_PYDEBUG = ('--with-pydebug' in sysconfig.get_config_var("CONFIG_ARGS"))
+ 
++sysconfig.get_config_vars()
++sysconfig._CONFIG_VARS.update(os.environ)
++
+ # This global variable is used to hold the list of modules to be disabled.
+ try:
+     disabled_module_list = sysconfig.get_config_var("DISABLED_EXTENSIONS").split(" ")
+
+--- a/Makefile.pre.in
++++ b/Makefile.pre.in
+@@ -531,6 +531,7 @@
+ 	$(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' OPT='$(OPT)' \
+ 		_TCLTK_INCLUDES='$(TCLTK_INCLUDES)' _TCLTK_LIBS='$(TCLTK_LIBS)' \
+ 		DISABLED_EXTENSIONS="$(DISABLED_EXTENSIONS)" \
++		CONFIG_ARGS="$(CONFIG_ARGS)" \
+ 		$(PYTHON_FOR_BUILD) $(srcdir)/setup.py $$quiet build
+ 
+ # Build static library
+@@ -1327,7 +1328,7 @@
+ # Install the dynamically loadable modules
+ # This goes into $(exec_prefix)
+ sharedinstall: sharedmods
+-	$(RUNSHARED) DISABLED_EXTENSIONS="$(DISABLED_EXTENSIONS)" \
++	$(RUNSHARED) DISABLED_EXTENSIONS="$(DISABLED_EXTENSIONS)" CONFIG_ARGS="$(CONFIG_ARGS)" \
+ 		$(PYTHON_FOR_BUILD) $(srcdir)/setup.py install \
+ 	   	--prefix=$(prefix) \
+ 		--install-scripts=$(BINDIR) \

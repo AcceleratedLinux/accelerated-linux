@@ -342,7 +342,7 @@ static struct regmap_config da9063_regmap_config = {
 	.num_ranges = ARRAY_SIZE(da9063_range_cfg),
 	.max_register = DA9063_REG_CONFIG_ID,
 
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const struct of_device_id da9063_dt_ids[] = {
@@ -351,9 +351,9 @@ static const struct of_device_id da9063_dt_ids[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(of, da9063_dt_ids);
-static int da9063_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+static int da9063_i2c_probe(struct i2c_client *i2c)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(i2c);
 	struct da9063 *da9063;
 	int ret;
 
@@ -469,7 +469,7 @@ static struct i2c_driver da9063_i2c_driver = {
 		.name = "da9063",
 		.of_match_table = da9063_dt_ids,
 	},
-	.probe    = da9063_i2c_probe,
+	.probe = da9063_i2c_probe,
 	.id_table = da9063_i2c_id,
 };
 

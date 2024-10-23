@@ -15,8 +15,8 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
-#include <drm/drm_fb_helper.h>
-#include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_fbdev_dma.h>
+#include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_module.h>
 #include <drm/drm_probe_helper.h>
@@ -433,14 +433,14 @@ static void kmb_irq_uninstall(struct drm_device *drm)
 	free_irq(kmb->irq_lcd, drm);
 }
 
-DEFINE_DRM_GEM_CMA_FOPS(fops);
+DEFINE_DRM_GEM_DMA_FOPS(fops);
 
 static const struct drm_driver kmb_driver = {
 	.driver_features = DRIVER_GEM |
 	    DRIVER_MODESET | DRIVER_ATOMIC,
 	/* GEM Operations */
 	.fops = &fops,
-	DRM_GEM_CMA_DRIVER_OPS_VMAP,
+	DRM_GEM_DMA_DRIVER_OPS_VMAP,
 	.name = "kmb-drm",
 	.desc = "KEEMBAY DISPLAY DRIVER",
 	.date = DRIVER_DATE,
@@ -448,7 +448,7 @@ static const struct drm_driver kmb_driver = {
 	.minor = DRIVER_MINOR,
 };
 
-static int kmb_remove(struct platform_device *pdev)
+static void kmb_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct drm_device *drm = dev_get_drvdata(dev);
@@ -473,7 +473,6 @@ static int kmb_remove(struct platform_device *pdev)
 	/* Unregister DSI host */
 	kmb_dsi_host_unregister(kmb->kmb_dsi);
 	drm_atomic_helper_shutdown(drm);
-	return 0;
 }
 
 static int kmb_probe(struct platform_device *pdev)
@@ -562,7 +561,7 @@ static int kmb_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_register;
 
-	drm_fbdev_generic_setup(&kmb->drm, 0);
+	drm_fbdev_dma_setup(&kmb->drm, 0);
 
 	return 0;
 
@@ -621,7 +620,7 @@ static SIMPLE_DEV_PM_OPS(kmb_pm_ops, kmb_pm_suspend, kmb_pm_resume);
 
 static struct platform_driver kmb_platform_driver = {
 	.probe = kmb_probe,
-	.remove = kmb_remove,
+	.remove_new = kmb_remove,
 	.driver = {
 		.name = "kmb-drm",
 		.pm = &kmb_pm_ops,

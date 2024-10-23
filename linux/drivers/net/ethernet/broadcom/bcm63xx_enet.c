@@ -388,7 +388,7 @@ static int bcm_enet_receive_queue(struct net_device *dev, int budget)
 					 priv->rx_buf_size, DMA_FROM_DEVICE);
 			priv->rx_buf[desc_idx] = NULL;
 
-			skb = build_skb(buf, priv->rx_frag_size);
+			skb = napi_build_skb(buf, priv->rx_frag_size);
 			if (unlikely(!skb)) {
 				skb_free_frag(buf);
 				dev->stats.rx_dropped++;
@@ -423,7 +423,7 @@ static int bcm_enet_receive_queue(struct net_device *dev, int budget)
 /*
  * try to or force reclaim of transmitted buffers
  */
-static int bcm_enet_tx_reclaim(struct net_device *dev, int force)
+static int bcm_enet_tx_reclaim(struct net_device *dev, int force, int budget)
 {
 	struct bcm_enet_priv *priv;
 	unsigned int bytes;
@@ -468,7 +468,7 @@ static int bcm_enet_tx_reclaim(struct net_device *dev, int force)
 			dev->stats.tx_errors++;
 
 		bytes += skb->len;
-		dev_kfree_skb(skb);
+		napi_consume_skb(skb, budget);
 		released++;
 	}
 
@@ -499,7 +499,7 @@ static int bcm_enet_poll(struct napi_struct *napi, int budget)
 			 ENETDMAC_IR, priv->tx_chan);
 
 	/* reclaim sent skb */
-	bcm_enet_tx_reclaim(dev, 0);
+	bcm_enet_tx_reclaim(dev, 0, budget);
 
 	spin_lock(&priv->rx_lock);
 	rx_work_done = bcm_enet_receive_queue(dev, budget);
@@ -1211,7 +1211,7 @@ static int bcm_enet_stop(struct net_device *dev)
 	bcm_enet_disable_mac(priv);
 
 	/* force reclaim of all tx buffers */
-	bcm_enet_tx_reclaim(dev, 1);
+	bcm_enet_tx_reclaim(dev, 1, 0);
 
 	/* free the rx buffer ring */
 	bcm_enet_free_rx_buf_ring(kdev, priv);
@@ -1321,8 +1321,8 @@ static const u32 unused_mib_regs[] = {
 static void bcm_enet_get_drvinfo(struct net_device *netdev,
 				 struct ethtool_drvinfo *drvinfo)
 {
-	strlcpy(drvinfo->driver, bcm_enet_driver_name, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->bus_info, "bcm63xx", sizeof(drvinfo->bus_info));
+	strscpy(drvinfo->driver, bcm_enet_driver_name, sizeof(drvinfo->driver));
+	strscpy(drvinfo->bus_info, "bcm63xx", sizeof(drvinfo->bus_info));
 }
 
 static int bcm_enet_get_sset_count(struct net_device *netdev,
@@ -1652,7 +1652,7 @@ static int bcm_enet_change_mtu(struct net_device *dev, int new_mtu)
 	priv->rx_frag_size = SKB_DATA_ALIGN(priv->rx_buf_offset + priv->rx_buf_size) +
 					    SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 	return 0;
 }
 
@@ -1902,7 +1902,7 @@ out:
 /*
  * exit func, stops hardware and unregisters netdevice
  */
-static int bcm_enet_remove(struct platform_device *pdev)
+static void bcm_enet_remove(struct platform_device *pdev)
 {
 	struct bcm_enet_priv *priv;
 	struct net_device *dev;
@@ -1932,15 +1932,13 @@ static int bcm_enet_remove(struct platform_device *pdev)
 	clk_disable_unprepare(priv->mac_clk);
 
 	free_netdev(dev);
-	return 0;
 }
 
-struct platform_driver bcm63xx_enet_driver = {
+static struct platform_driver bcm63xx_enet_driver = {
 	.probe	= bcm_enet_probe,
-	.remove	= bcm_enet_remove,
+	.remove_new = bcm_enet_remove,
 	.driver	= {
 		.name	= "bcm63xx_enet",
-		.owner  = THIS_MODULE,
 	},
 };
 
@@ -2362,7 +2360,7 @@ static int bcm_enetsw_stop(struct net_device *dev)
 	bcm_enet_disable_dma(priv, priv->rx_chan);
 
 	/* force reclaim of all tx buffers */
-	bcm_enet_tx_reclaim(dev, 1);
+	bcm_enet_tx_reclaim(dev, 1, 0);
 
 	/* free the rx buffer ring */
 	bcm_enet_free_rx_buf_ring(kdev, priv);
@@ -2532,8 +2530,8 @@ static int bcm_enetsw_get_sset_count(struct net_device *netdev,
 static void bcm_enetsw_get_drvinfo(struct net_device *netdev,
 				   struct ethtool_drvinfo *drvinfo)
 {
-	strncpy(drvinfo->driver, bcm_enet_driver_name, sizeof(drvinfo->driver));
-	strncpy(drvinfo->bus_info, "bcm63xx", sizeof(drvinfo->bus_info));
+	strscpy(drvinfo->driver, bcm_enet_driver_name, sizeof(drvinfo->driver));
+	strscpy(drvinfo->bus_info, "bcm63xx", sizeof(drvinfo->bus_info));
 }
 
 static void bcm_enetsw_get_ethtool_stats(struct net_device *netdev,
@@ -2740,7 +2738,7 @@ out:
 
 
 /* exit func, stops hardware and unregisters netdevice */
-static int bcm_enetsw_remove(struct platform_device *pdev)
+static void bcm_enetsw_remove(struct platform_device *pdev)
 {
 	struct bcm_enet_priv *priv;
 	struct net_device *dev;
@@ -2753,15 +2751,13 @@ static int bcm_enetsw_remove(struct platform_device *pdev)
 	clk_disable_unprepare(priv->mac_clk);
 
 	free_netdev(dev);
-	return 0;
 }
 
-struct platform_driver bcm63xx_enetsw_driver = {
+static struct platform_driver bcm63xx_enetsw_driver = {
 	.probe	= bcm_enetsw_probe,
-	.remove	= bcm_enetsw_remove,
+	.remove_new = bcm_enetsw_remove,
 	.driver	= {
 		.name	= "bcm63xx_enetsw",
-		.owner  = THIS_MODULE,
 	},
 };
 
@@ -2784,20 +2780,13 @@ static int bcm_enet_shared_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int bcm_enet_shared_remove(struct platform_device *pdev)
-{
-	return 0;
-}
-
 /* this "shared" driver is needed because both macs share a single
  * address space
  */
 struct platform_driver bcm63xx_enet_shared_driver = {
 	.probe	= bcm_enet_shared_probe,
-	.remove	= bcm_enet_shared_remove,
 	.driver	= {
 		.name	= "bcm63xx_enet_shared",
-		.owner  = THIS_MODULE,
 	},
 };
 

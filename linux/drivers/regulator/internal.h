@@ -58,7 +58,7 @@ struct regulator {
 	struct dentry *debugfs;
 };
 
-extern struct class regulator_class;
+extern const struct class regulator_class;
 
 static inline struct regulator_dev *dev_to_rdev(struct device *dev)
 {
@@ -122,4 +122,6 @@ enum regulator_get_type {
 
 struct regulator *_regulator_get(struct device *dev, const char *id,
 				 enum regulator_get_type get_type);
+int _regulator_bulk_get(struct device *dev, int num_consumers,
+			struct regulator_bulk_data *consumers, enum regulator_get_type get_type);
 #endif

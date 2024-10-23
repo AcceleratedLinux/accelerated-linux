@@ -11,7 +11,6 @@
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
-#include <linux/buffer_head.h>
 
 #include "squashfs_fs.h"
 #include "squashfs_fs_sb.h"
@@ -46,6 +45,12 @@ static const struct squashfs_decompressor squashfs_xz_comp_ops = {
 };
 #endif
 
+#ifndef CONFIG_SQUASHFS_XZ_AES
+static const struct squashfs_decompressor squashfs_xz_aes_comp_ops = {
+	NULL, NULL, NULL, NULL, XZ_AES_COMPRESSION, "xz-aes", 0
+};
+#endif
+
 #ifndef CONFIG_SQUASHFS_ZLIB
 static const struct squashfs_decompressor squashfs_zlib_comp_ops = {
 	NULL, NULL, NULL, NULL, ZLIB_COMPRESSION, "zlib", 0
@@ -67,6 +72,7 @@ static const struct squashfs_decompressor *decompressor[] = {
 	&squashfs_lz4_comp_ops,
 	&squashfs_lzo_comp_ops,
 	&squashfs_xz_comp_ops,
+	&squashfs_xz_aes_comp_ops,
 	&squashfs_lzma_unsupported_comp_ops,
 	&squashfs_zstd_comp_ops,
 	&squashfs_unknown_comp_ops
@@ -134,7 +140,7 @@ void *squashfs_decompressor_setup(struct super_block *sb, unsigned short flags)
 	if (IS_ERR(comp_opts))
 		return comp_opts;
 
-	stream = squashfs_decompressor_create(msblk, comp_opts);
+	stream = msblk->thread_ops->create(msblk, comp_opts);
 	if (IS_ERR(stream))
 		kfree(comp_opts);
 

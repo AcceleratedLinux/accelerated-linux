@@ -229,8 +229,7 @@ static void wf_ad7417_init_chip(struct wf_ad7417_priv *pv)
 	pv->config = config;
 }
 
-static int wf_ad7417_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
+static int wf_ad7417_probe(struct i2c_client *client)
 {
 	struct wf_ad7417_priv *pv;
 	const struct mpu_data *mpu;
@@ -289,7 +288,7 @@ static int wf_ad7417_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int wf_ad7417_remove(struct i2c_client *client)
+static void wf_ad7417_remove(struct i2c_client *client)
 {
 	struct wf_ad7417_priv *pv = dev_get_drvdata(&client->dev);
 	int i;
@@ -302,8 +301,6 @@ static int wf_ad7417_remove(struct i2c_client *client)
 		wf_unregister_sensor(&pv->sensors[i]);
 
 	kref_put(&pv->ref, wf_ad7417_release);
-
-	return 0;
 }
 
 static const struct i2c_device_id wf_ad7417_id[] = {

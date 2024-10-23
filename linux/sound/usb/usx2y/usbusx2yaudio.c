@@ -681,6 +681,7 @@ static int usx2y_rate_set(struct usx2ydev *usx2y, int rate)
 			err = -ENOMEM;
 			goto cleanup;
 		}
+		us->len = NOOF_SETRATE_URBS;
 		usbdata = kmalloc_array(NOOF_SETRATE_URBS, sizeof(int),
 					GFP_KERNEL);
 		if (!usbdata) {
@@ -702,7 +703,6 @@ static int usx2y_rate_set(struct usx2ydev *usx2y, int rate)
 		if (err < 0)
 			goto cleanup;
 		us->submitted =	0;
-		us->len =	NOOF_SETRATE_URBS;
 		usx2y->us04 =	us;
 		wait_event_timeout(usx2y->in04_wait_queue, !us->len, HZ);
 		usx2y->us04 =	NULL;
@@ -822,8 +822,7 @@ static int snd_usx2y_pcm_hw_free(struct snd_pcm_substream *substream)
 		usx2y_urbs_release(subs);
 		if (!cap_subs->pcm_substream ||
 		    !cap_subs->pcm_substream->runtime ||
-		    !cap_subs->pcm_substream->runtime->status ||
-		    cap_subs->pcm_substream->runtime->status->state < SNDRV_PCM_STATE_PREPARED) {
+		    cap_subs->pcm_substream->runtime->state < SNDRV_PCM_STATE_PREPARED) {
 			atomic_set(&cap_subs->state, STATE_STOPPED);
 			usx2y_urbs_release(cap_subs);
 		}

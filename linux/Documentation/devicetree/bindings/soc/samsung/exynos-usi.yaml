@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/soc/samsung/exynos-usi.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Samsung's Exynos USI (Universal Serial Interface) binding
+title: Samsung's Exynos USI (Universal Serial Interface)
 
 maintainers:
   - Sam Protsenko <semen.protsenko@linaro.org>
@@ -22,8 +22,15 @@ properties:
     pattern: "^usi@[0-9a-f]+$"
 
   compatible:
-    enum:
-      - samsung,exynos850-usi   # for USIv2 (Exynos850, ExynosAutoV9)
+    oneOf:
+      - items:
+          - enum:
+              - google,gs101-usi
+              - samsung,exynosautov9-usi
+              - samsung,exynosautov920-usi
+          - const: samsung,exynos850-usi
+      - enum:
+          - samsung,exynos850-usi
 
   reg: true
 
@@ -151,7 +158,7 @@ examples:
         };
 
         hsi2c_0: i2c@13820000 {
-            compatible = "samsung,exynosautov9-hsi2c";
+            compatible = "samsung,exynos850-hsi2c", "samsung,exynosautov9-hsi2c";
             reg = <0x13820000 0xc0>;
             interrupts = <GIC_SPI 227 IRQ_TYPE_LEVEL_HIGH>;
             #address-cells = <1>;

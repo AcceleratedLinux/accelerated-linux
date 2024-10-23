@@ -25,6 +25,7 @@ CSRC-$(UCLIBC_LINUX_SPECIFIC) += \
 	capset.c \
 	eventfd.c \
 	fanotify.c \
+	getrandom.c \
 	inotify.c \
 	ioperm.c \
 	iopl.c \

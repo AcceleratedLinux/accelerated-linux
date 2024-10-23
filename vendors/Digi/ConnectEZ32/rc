@@ -30,19 +30,11 @@ echo 6 > /proc/sys/kernel/printk
 /etc/rc.dev
 
 echo "Configuring GPIOs..."
-# dev mode jumper
-echo 460 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio460/direction
-echo 1 > /sys/class/gpio/gpio460/active_low
-
 # Enable Cell module power
-echo 367 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio367/direction
-# Enable sim select GPIO
-echo 366 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio366/direction
+echo 671 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio671/direction
 # Enable cell detect GPIO
-echo 365 > /sys/class/gpio/export
+echo 669 > /sys/class/gpio/export
 
 echo "Initializing network interfaces..."
 echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
@@ -135,8 +127,8 @@ while [ "$loop" -gt "0" ] && [ ! -e /sys/class/led/serlnk1 ]; do
 done
 
 # Enable all serial transceivers now that ports are in correct mode (sun break)
-echo 493 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio493/direction
+echo 525 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio525/direction
 
 # Reset device status LEDs before actions start... status LEDs all
 # default to timer trigger
@@ -150,6 +142,8 @@ done
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
 random_seed restore
+
+ln -s /sys/class/hwmon/hwmon0/temp2_input /var/run/cpu_temp
 
 # init processing
 [ -x /etc/rcS ] && /etc/rcS

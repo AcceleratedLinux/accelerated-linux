@@ -1311,7 +1311,7 @@ static int adm8211_config(struct ieee80211_hw *dev, u32 changed)
 static void adm8211_bss_info_changed(struct ieee80211_hw *dev,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_bss_conf *conf,
-				     u32 changes)
+				     u64 changes)
 {
 	struct adm8211_priv *priv = dev->priv;
 
@@ -1759,7 +1759,12 @@ static int adm8211_alloc_rings(struct ieee80211_hw *dev)
 }
 
 static const struct ieee80211_ops adm8211_ops = {
+	.add_chanctx = ieee80211_emulate_add_chanctx,
+	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+	.change_chanctx = ieee80211_emulate_change_chanctx,
+	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
 	.tx			= adm8211_tx,
+	.wake_tx_queue		= ieee80211_handle_wake_tx_queue,
 	.start			= adm8211_start,
 	.stop			= adm8211_stop,
 	.add_interface		= adm8211_add_interface,

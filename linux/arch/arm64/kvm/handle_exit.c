@@ -16,7 +16,9 @@
 #include <asm/kvm_asm.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_mmu.h>
+#include <asm/kvm_nested.h>
 #include <asm/debug-monitors.h>
+#include <asm/stacktrace/nvhe.h>
 #include <asm/traps.h>
 
 #include <kvm/arm_hypercalls.h>
@@ -34,34 +36,61 @@ static void kvm_handle_guest_serror(struct kvm_vcpu *vcpu, u64 esr)
 
 static int handle_hvc(struct kvm_vcpu *vcpu)
 {
-	int ret;
-
 	trace_kvm_hvc_arm64(*vcpu_pc(vcpu), vcpu_get_reg(vcpu, 0),
 			    kvm_vcpu_hvc_get_imm(vcpu));
 	vcpu->stat.hvc_exit_stat++;
 
-	ret = kvm_hvc_call_handler(vcpu);
-	if (ret < 0) {
-		vcpu_set_reg(vcpu, 0, ~0UL);
+	/* Forward hvc instructions to the virtual EL2 if the guest has EL2. */
+	if (vcpu_has_nv(vcpu)) {
+		if (vcpu_read_sys_reg(vcpu, HCR_EL2) & HCR_HCD)
+			kvm_inject_undefined(vcpu);
+		else
+			kvm_inject_nested_sync(vcpu, kvm_vcpu_get_esr(vcpu));
+
 		return 1;
 	}
 
-	return ret;
+	return kvm_smccc_call_handler(vcpu);
 }
 
 static int handle_smc(struct kvm_vcpu *vcpu)
 {
+	/*
+	 * Forward this trapped smc instruction to the virtual EL2 if
+	 * the guest has asked for it.
+	 */
+	if (forward_smc_trap(vcpu))
+		return 1;
+
 	/*
 	 * "If an SMC instruction executed at Non-secure EL1 is
 	 * trapped to EL2 because HCR_EL2.TSC is 1, the exception is a
 	 * Trap exception, not a Secure Monitor Call exception [...]"
 	 *
 	 * We need to advance the PC after the trap, as it would
-	 * otherwise return to the same address...
+	 * otherwise return to the same address. Furthermore, pre-incrementing
+	 * the PC before potentially exiting to userspace maintains the same
+	 * abstraction for both SMCs and HVCs.
 	 */
-	vcpu_set_reg(vcpu, 0, ~0UL);
 	kvm_incr_pc(vcpu);
-	return 1;
+
+	/*
+	 * SMCs with a nonzero immediate are reserved according to DEN0028E 2.9
+	 * "SMC and HVC immediate value".
+	 */
+	if (kvm_vcpu_hvc_get_imm(vcpu)) {
+		vcpu_set_reg(vcpu, 0, ~0UL);
+		return 1;
+	}
+
+	/*
+	 * If imm is zero then it is likely an SMCCC call.
+	 *
+	 * Note that on ARMv8.3, even if EL3 is not implemented, SMC executed
+	 * at Non-secure EL1 is trapped to EL2 if HCR_EL2.TSC==1, rather than
+	 * being treated as UNDEFINED.
+	 */
+	return kvm_smccc_call_handler(vcpu);
 }
 
 /*
@@ -120,7 +149,7 @@ static int kvm_handle_wfx(struct kvm_vcpu *vcpu)
 		kvm_vcpu_on_spin(vcpu, vcpu_mode_priv(vcpu));
 	} else {
 		if (esr & ESR_ELx_WFx_ISS_WFxT)
-			vcpu->arch.flags |= KVM_ARM64_WFIT;
+			vcpu_set_flag(vcpu, IN_WFIT);
 
 		kvm_vcpu_wfi(vcpu);
 	}
@@ -151,8 +180,14 @@ static int kvm_handle_guest_debug(struct kvm_vcpu *vcpu)
 	run->debug.arch.hsr_high = upper_32_bits(esr);
 	run->flags = KVM_DEBUG_ARCH_HSR_HIGH_VALID;
 
-	if (ESR_ELx_EC(esr) == ESR_ELx_EC_WATCHPT_LOW)
+	switch (ESR_ELx_EC(esr)) {
+	case ESR_ELx_EC_WATCHPT_LOW:
 		run->debug.arch.far = vcpu->arch.fault.far_el2;
+		break;
+	case ESR_ELx_EC_SOFTSTP_LOW:
+		vcpu_clear_flag(vcpu, DBG_SS_ACTIVE_PENDING);
+		break;
+	}
 
 	return 0;
 }
@@ -179,13 +214,69 @@ static int handle_sve(struct kvm_vcpu *vcpu)
 }
 
 /*
- * Guest usage of a ptrauth instruction (which the guest EL1 did not turn into
- * a NOP). If we get here, it is that we didn't fixup ptrauth on exit, and all
- * that we can do is give the guest an UNDEF.
+ * Two possibilities to handle a trapping ptrauth instruction:
+ *
+ * - Guest usage of a ptrauth instruction (which the guest EL1 did not
+ *   turn into a NOP). If we get here, it is because we didn't enable
+ *   ptrauth for the guest. This results in an UNDEF, as it isn't
+ *   supposed to use ptrauth without being told it could.
+ *
+ * - Running an L2 NV guest while L1 has left HCR_EL2.API==0, and for
+ *   which we reinject the exception into L1.
+ *
+ * Anything else is an emulation bug (hence the WARN_ON + UNDEF).
  */
 static int kvm_handle_ptrauth(struct kvm_vcpu *vcpu)
 {
+	if (!vcpu_has_ptrauth(vcpu)) {
+		kvm_inject_undefined(vcpu);
+		return 1;
+	}
+
+	if (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)) {
+		kvm_inject_nested_sync(vcpu, kvm_vcpu_get_esr(vcpu));
+		return 1;
+	}
+
+	/* Really shouldn't be here! */
+	WARN_ON_ONCE(1);
 	kvm_inject_undefined(vcpu);
+	return 1;
+}
+
+static int kvm_handle_eret(struct kvm_vcpu *vcpu)
+{
+	if (esr_iss_is_eretax(kvm_vcpu_get_esr(vcpu)) &&
+	    !vcpu_has_ptrauth(vcpu))
+		return kvm_handle_ptrauth(vcpu);
+
+	/*
+	 * If we got here, two possibilities:
+	 *
+	 * - the guest is in EL2, and we need to fully emulate ERET
+	 *
+	 * - the guest is in EL1, and we need to reinject the
+         *   exception into the L1 hypervisor.
+	 *
+	 * If KVM ever traps ERET for its own use, we'll have to
+	 * revisit this.
+	 */
+	if (is_hyp_ctxt(vcpu))
+		kvm_emulate_nested_eret(vcpu);
+	else
+		kvm_inject_nested_sync(vcpu, kvm_vcpu_get_esr(vcpu));
+
+	return 1;
+}
+
+static int handle_svc(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * So far, SVC traps only for NV via HFGITR_EL2. A SVC from a
+	 * 32bit guest would be caught by vpcu_mode_is_bad_32bit(), so
+	 * we should only have to deal with a 64 bit exception.
+	 */
+	kvm_inject_nested_sync(vcpu, kvm_vcpu_get_esr(vcpu));
 	return 1;
 }
 
@@ -202,8 +293,10 @@ static exit_handle_fn arm_exit_handlers[] = {
 	[ESR_ELx_EC_SMC32]	= handle_smc,
 	[ESR_ELx_EC_HVC64]	= handle_hvc,
 	[ESR_ELx_EC_SMC64]	= handle_smc,
+	[ESR_ELx_EC_SVC64]	= handle_svc,
 	[ESR_ELx_EC_SYS64]	= kvm_handle_sys_reg,
 	[ESR_ELx_EC_SVE]	= handle_sve,
+	[ESR_ELx_EC_ERET]	= kvm_handle_eret,
 	[ESR_ELx_EC_IABT_LOW]	= kvm_handle_guest_abort,
 	[ESR_ELx_EC_DABT_LOW]	= kvm_handle_guest_abort,
 	[ESR_ELx_EC_SOFTSTP_LOW]= kvm_handle_guest_debug,
@@ -347,11 +440,14 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr,
 			kvm_err("nVHE hyp BUG at: %s:%u!\n", file, line);
 		else
 			kvm_err("nVHE hyp BUG at: [<%016llx>] %pB!\n", panic_addr,
-					(void *)panic_addr);
+					(void *)(panic_addr + kaslr_offset()));
 	} else {
 		kvm_err("nVHE hyp panic at: [<%016llx>] %pB!\n", panic_addr,
-				(void *)panic_addr);
+				(void *)(panic_addr + kaslr_offset()));
 	}
+
+	/* Dump the nVHE hypervisor backtrace */
+	kvm_nvhe_dump_backtrace(hyp_offset);
 
 	/*
 	 * Hyp has panicked and we're going to handle that by panicking the

@@ -1061,7 +1061,6 @@ static const struct snd_soc_component_driver soc_component_dev_cs42l52 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 /* Current and threshold powerup sequence Pg37 */
@@ -1085,7 +1084,7 @@ static const struct regmap_config cs42l52_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(cs42l52_reg_defaults),
 	.readable_reg = cs42l52_readable_register,
 	.volatile_reg = cs42l52_volatile_register,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static int cs42l52_i2c_probe(struct i2c_client *i2c_client)
@@ -1216,7 +1215,7 @@ MODULE_DEVICE_TABLE(of, cs42l52_of_match);
 
 
 static const struct i2c_device_id cs42l52_id[] = {
-	{ "cs42l52", 0 },
+	{ "cs42l52" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, cs42l52_id);
@@ -1227,7 +1226,7 @@ static struct i2c_driver cs42l52_i2c_driver = {
 		.of_match_table = cs42l52_of_match,
 	},
 	.id_table = cs42l52_id,
-	.probe_new = cs42l52_i2c_probe,
+	.probe = cs42l52_i2c_probe,
 };
 
 module_i2c_driver(cs42l52_i2c_driver);

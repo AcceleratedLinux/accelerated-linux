@@ -125,7 +125,7 @@ int p54_parse_firmware(struct ieee80211_hw *dev, const struct firmware *fw)
 			   "FW rev %s - Softmac protocol %x.%x\n",
 			   fw_version, priv->fw_var >> 8, priv->fw_var & 0xff);
 		snprintf(dev->wiphy->fw_version, sizeof(dev->wiphy->fw_version),
-				"%s - %x.%x", fw_version,
+				"%.19s - %x.%x", fw_version,
 				priv->fw_var >> 8, priv->fw_var & 0xff);
 	}
 
@@ -173,10 +173,8 @@ int p54_parse_firmware(struct ieee80211_hw *dev, const struct firmware *fw)
 		 * keeping a extra list for uploaded keys.
 		 */
 
-		priv->used_rxkeys = kcalloc(BITS_TO_LONGS(priv->rx_keycache_size),
-					    sizeof(long),
-					    GFP_KERNEL);
-
+		priv->used_rxkeys = bitmap_zalloc(priv->rx_keycache_size,
+						  GFP_KERNEL);
 		if (!priv->used_rxkeys)
 			return -ENOMEM;
 	}

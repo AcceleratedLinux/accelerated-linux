@@ -470,7 +470,7 @@ static int _wm8993_set_fll(struct snd_soc_component *component, int fll_id, int 
 	struct i2c_client *i2c = to_i2c_client(component->dev);
 	u16 reg1, reg4, reg5;
 	struct _fll_div fll_div;
-	unsigned int timeout;
+	unsigned long time_left;
 	int ret;
 
 	/* Any change? */
@@ -543,19 +543,19 @@ static int _wm8993_set_fll(struct snd_soc_component *component, int fll_id, int 
 
 	/* If we've got an interrupt wired up make sure we get it */
 	if (i2c->irq)
-		timeout = msecs_to_jiffies(20);
+		time_left = msecs_to_jiffies(20);
 	else if (Fref < 1000000)
-		timeout = msecs_to_jiffies(3);
+		time_left = msecs_to_jiffies(3);
 	else
-		timeout = msecs_to_jiffies(1);
+		time_left = msecs_to_jiffies(1);
 
 	try_wait_for_completion(&wm8993->fll_lock);
 
 	/* Enable the FLL */
 	snd_soc_component_write(component, WM8993_FLL_CONTROL_1, reg1 | WM8993_FLL_ENA);
 
-	timeout = wait_for_completion_timeout(&wm8993->fll_lock, timeout);
-	if (i2c->irq && !timeout)
+	time_left = wait_for_completion_timeout(&wm8993->fll_lock, time_left);
+	if (i2c->irq && !time_left)
 		dev_warn(component->dev, "Timed out waiting for FLL\n");
 
 	dev_dbg(component->dev, "FLL enabled at %dHz->%dHz\n", Fref, Fout);
@@ -1608,7 +1608,7 @@ static const struct regmap_config wm8993_regmap = {
 	.volatile_reg = wm8993_volatile,
 	.readable_reg = wm8993_readable,
 
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.reg_defaults = wm8993_reg_defaults,
 	.num_reg_defaults = ARRAY_SIZE(wm8993_reg_defaults),
 };
@@ -1621,7 +1621,6 @@ static const struct snd_soc_component_driver soc_component_dev_wm8993 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int wm8993_i2c_probe(struct i2c_client *i2c)
@@ -1723,19 +1722,17 @@ err_enable:
 	return ret;
 }
 
-static int wm8993_i2c_remove(struct i2c_client *i2c)
+static void wm8993_i2c_remove(struct i2c_client *i2c)
 {
 	struct wm8993_priv *wm8993 = i2c_get_clientdata(i2c);
 
 	if (i2c->irq)
 		free_irq(i2c->irq, wm8993);
 	regulator_bulk_disable(ARRAY_SIZE(wm8993->supplies), wm8993->supplies);
-
-	return 0;
 }
 
 static const struct i2c_device_id wm8993_i2c_id[] = {
-	{ "wm8993", 0 },
+	{ "wm8993" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, wm8993_i2c_id);
@@ -1744,7 +1741,7 @@ static struct i2c_driver wm8993_i2c_driver = {
 	.driver = {
 		.name = "wm8993",
 	},
-	.probe_new = wm8993_i2c_probe,
+	.probe =    wm8993_i2c_probe,
 	.remove =   wm8993_i2c_remove,
 	.id_table = wm8993_i2c_id,
 };

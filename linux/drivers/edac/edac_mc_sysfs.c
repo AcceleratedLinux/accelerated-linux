@@ -146,7 +146,7 @@ static ssize_t csrow_ue_count_show(struct device *dev,
 {
 	struct csrow_info *csrow = to_csrow(dev);
 
-	return sprintf(data, "%u\n", csrow->ue_count);
+	return sysfs_emit(data, "%u\n", csrow->ue_count);
 }
 
 static ssize_t csrow_ce_count_show(struct device *dev,
@@ -154,7 +154,7 @@ static ssize_t csrow_ce_count_show(struct device *dev,
 {
 	struct csrow_info *csrow = to_csrow(dev);
 
-	return sprintf(data, "%u\n", csrow->ce_count);
+	return sysfs_emit(data, "%u\n", csrow->ce_count);
 }
 
 static ssize_t csrow_size_show(struct device *dev,
@@ -166,7 +166,7 @@ static ssize_t csrow_size_show(struct device *dev,
 
 	for (i = 0; i < csrow->nr_channels; i++)
 		nr_pages += csrow->channels[i]->dimm->nr_pages;
-	return sprintf(data, "%u\n", PAGES_TO_MiB(nr_pages));
+	return sysfs_emit(data, "%u\n", PAGES_TO_MiB(nr_pages));
 }
 
 static ssize_t csrow_mem_type_show(struct device *dev,
@@ -174,7 +174,7 @@ static ssize_t csrow_mem_type_show(struct device *dev,
 {
 	struct csrow_info *csrow = to_csrow(dev);
 
-	return sprintf(data, "%s\n", edac_mem_types[csrow->channels[0]->dimm->mtype]);
+	return sysfs_emit(data, "%s\n", edac_mem_types[csrow->channels[0]->dimm->mtype]);
 }
 
 static ssize_t csrow_dev_type_show(struct device *dev,
@@ -182,7 +182,7 @@ static ssize_t csrow_dev_type_show(struct device *dev,
 {
 	struct csrow_info *csrow = to_csrow(dev);
 
-	return sprintf(data, "%s\n", dev_types[csrow->channels[0]->dimm->dtype]);
+	return sysfs_emit(data, "%s\n", dev_types[csrow->channels[0]->dimm->dtype]);
 }
 
 static ssize_t csrow_edac_mode_show(struct device *dev,
@@ -191,7 +191,7 @@ static ssize_t csrow_edac_mode_show(struct device *dev,
 {
 	struct csrow_info *csrow = to_csrow(dev);
 
-	return sprintf(data, "%s\n", edac_caps[csrow->channels[0]->dimm->edac_mode]);
+	return sysfs_emit(data, "%s\n", edac_caps[csrow->channels[0]->dimm->edac_mode]);
 }
 
 /* show/store functions for DIMM Label attributes */
@@ -207,8 +207,7 @@ static ssize_t channel_dimm_label_show(struct device *dev,
 	if (!rank->dimm->label[0])
 		return 0;
 
-	return snprintf(data, sizeof(rank->dimm->label) + 1, "%s\n",
-			rank->dimm->label);
+	return sysfs_emit(data, "%s\n", rank->dimm->label);
 }
 
 static ssize_t channel_dimm_label_store(struct device *dev,
@@ -229,7 +228,7 @@ static ssize_t channel_dimm_label_store(struct device *dev,
 	if (copy_count == 0 || copy_count >= sizeof(rank->dimm->label))
 		return -EINVAL;
 
-	strncpy(rank->dimm->label, data, copy_count);
+	memcpy(rank->dimm->label, data, copy_count);
 	rank->dimm->label[copy_count] = '\0';
 
 	return count;
@@ -243,7 +242,7 @@ static ssize_t channel_ce_count_show(struct device *dev,
 	unsigned int chan = to_channel(mattr);
 	struct rank_info *rank = csrow->channels[chan];
 
-	return sprintf(data, "%u\n", rank->ce_count);
+	return sysfs_emit(data, "%u\n", rank->ce_count);
 }
 
 /* cwrow<id>/attribute files */
@@ -298,6 +297,14 @@ DEVICE_CHANNEL(ch6_dimm_label, S_IRUGO | S_IWUSR,
 	channel_dimm_label_show, channel_dimm_label_store, 6);
 DEVICE_CHANNEL(ch7_dimm_label, S_IRUGO | S_IWUSR,
 	channel_dimm_label_show, channel_dimm_label_store, 7);
+DEVICE_CHANNEL(ch8_dimm_label, S_IRUGO | S_IWUSR,
+	channel_dimm_label_show, channel_dimm_label_store, 8);
+DEVICE_CHANNEL(ch9_dimm_label, S_IRUGO | S_IWUSR,
+	channel_dimm_label_show, channel_dimm_label_store, 9);
+DEVICE_CHANNEL(ch10_dimm_label, S_IRUGO | S_IWUSR,
+	channel_dimm_label_show, channel_dimm_label_store, 10);
+DEVICE_CHANNEL(ch11_dimm_label, S_IRUGO | S_IWUSR,
+	channel_dimm_label_show, channel_dimm_label_store, 11);
 
 /* Total possible dynamic DIMM Label attribute file table */
 static struct attribute *dynamic_csrow_dimm_attr[] = {
@@ -309,6 +316,10 @@ static struct attribute *dynamic_csrow_dimm_attr[] = {
 	&dev_attr_legacy_ch5_dimm_label.attr.attr,
 	&dev_attr_legacy_ch6_dimm_label.attr.attr,
 	&dev_attr_legacy_ch7_dimm_label.attr.attr,
+	&dev_attr_legacy_ch8_dimm_label.attr.attr,
+	&dev_attr_legacy_ch9_dimm_label.attr.attr,
+	&dev_attr_legacy_ch10_dimm_label.attr.attr,
+	&dev_attr_legacy_ch11_dimm_label.attr.attr,
 	NULL
 };
 
@@ -329,6 +340,14 @@ DEVICE_CHANNEL(ch6_ce_count, S_IRUGO,
 		   channel_ce_count_show, NULL, 6);
 DEVICE_CHANNEL(ch7_ce_count, S_IRUGO,
 		   channel_ce_count_show, NULL, 7);
+DEVICE_CHANNEL(ch8_ce_count, S_IRUGO,
+		   channel_ce_count_show, NULL, 8);
+DEVICE_CHANNEL(ch9_ce_count, S_IRUGO,
+		   channel_ce_count_show, NULL, 9);
+DEVICE_CHANNEL(ch10_ce_count, S_IRUGO,
+		   channel_ce_count_show, NULL, 10);
+DEVICE_CHANNEL(ch11_ce_count, S_IRUGO,
+		   channel_ce_count_show, NULL, 11);
 
 /* Total possible dynamic ce_count attribute file table */
 static struct attribute *dynamic_csrow_ce_count_attr[] = {
@@ -340,6 +359,10 @@ static struct attribute *dynamic_csrow_ce_count_attr[] = {
 	&dev_attr_legacy_ch5_ce_count.attr.attr,
 	&dev_attr_legacy_ch6_ce_count.attr.attr,
 	&dev_attr_legacy_ch7_ce_count.attr.attr,
+	&dev_attr_legacy_ch8_ce_count.attr.attr,
+	&dev_attr_legacy_ch9_ce_count.attr.attr,
+	&dev_attr_legacy_ch10_ce_count.attr.attr,
+	&dev_attr_legacy_ch11_ce_count.attr.attr,
 	NULL
 };
 
@@ -491,7 +514,7 @@ static ssize_t dimmdev_label_show(struct device *dev,
 	if (!dimm->label[0])
 		return 0;
 
-	return snprintf(data, sizeof(dimm->label) + 1, "%s\n", dimm->label);
+	return sysfs_emit(data, "%s\n", dimm->label);
 }
 
 static ssize_t dimmdev_label_store(struct device *dev,
@@ -511,7 +534,7 @@ static ssize_t dimmdev_label_store(struct device *dev,
 	if (copy_count == 0 || copy_count >= sizeof(dimm->label))
 		return -EINVAL;
 
-	strncpy(dimm->label, data, copy_count);
+	memcpy(dimm->label, data, copy_count);
 	dimm->label[copy_count] = '\0';
 
 	return count;
@@ -522,7 +545,7 @@ static ssize_t dimmdev_size_show(struct device *dev,
 {
 	struct dimm_info *dimm = to_dimm(dev);
 
-	return sprintf(data, "%u\n", PAGES_TO_MiB(dimm->nr_pages));
+	return sysfs_emit(data, "%u\n", PAGES_TO_MiB(dimm->nr_pages));
 }
 
 static ssize_t dimmdev_mem_type_show(struct device *dev,
@@ -530,7 +553,7 @@ static ssize_t dimmdev_mem_type_show(struct device *dev,
 {
 	struct dimm_info *dimm = to_dimm(dev);
 
-	return sprintf(data, "%s\n", edac_mem_types[dimm->mtype]);
+	return sysfs_emit(data, "%s\n", edac_mem_types[dimm->mtype]);
 }
 
 static ssize_t dimmdev_dev_type_show(struct device *dev,
@@ -538,7 +561,7 @@ static ssize_t dimmdev_dev_type_show(struct device *dev,
 {
 	struct dimm_info *dimm = to_dimm(dev);
 
-	return sprintf(data, "%s\n", dev_types[dimm->dtype]);
+	return sysfs_emit(data, "%s\n", dev_types[dimm->dtype]);
 }
 
 static ssize_t dimmdev_edac_mode_show(struct device *dev,
@@ -547,7 +570,7 @@ static ssize_t dimmdev_edac_mode_show(struct device *dev,
 {
 	struct dimm_info *dimm = to_dimm(dev);
 
-	return sprintf(data, "%s\n", edac_caps[dimm->edac_mode]);
+	return sysfs_emit(data, "%s\n", edac_caps[dimm->edac_mode]);
 }
 
 static ssize_t dimmdev_ce_count_show(struct device *dev,
@@ -556,7 +579,7 @@ static ssize_t dimmdev_ce_count_show(struct device *dev,
 {
 	struct dimm_info *dimm = to_dimm(dev);
 
-	return sprintf(data, "%u\n", dimm->ce_count);
+	return sysfs_emit(data, "%u\n", dimm->ce_count);
 }
 
 static ssize_t dimmdev_ue_count_show(struct device *dev,
@@ -565,7 +588,7 @@ static ssize_t dimmdev_ue_count_show(struct device *dev,
 {
 	struct dimm_info *dimm = to_dimm(dev);
 
-	return sprintf(data, "%u\n", dimm->ue_count);
+	return sysfs_emit(data, "%u\n", dimm->ue_count);
 }
 
 /* dimm/rank attribute files */
@@ -734,7 +757,7 @@ static ssize_t mci_sdram_scrub_rate_show(struct device *dev,
 		return bandwidth;
 	}
 
-	return sprintf(data, "%d\n", bandwidth);
+	return sysfs_emit(data, "%d\n", bandwidth);
 }
 
 /* default attribute files for the MCI object */
@@ -744,7 +767,7 @@ static ssize_t mci_ue_count_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 
-	return sprintf(data, "%u\n", mci->ue_mc);
+	return sysfs_emit(data, "%u\n", mci->ue_mc);
 }
 
 static ssize_t mci_ce_count_show(struct device *dev,
@@ -753,7 +776,7 @@ static ssize_t mci_ce_count_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 
-	return sprintf(data, "%u\n", mci->ce_mc);
+	return sysfs_emit(data, "%u\n", mci->ce_mc);
 }
 
 static ssize_t mci_ce_noinfo_show(struct device *dev,
@@ -762,7 +785,7 @@ static ssize_t mci_ce_noinfo_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 
-	return sprintf(data, "%u\n", mci->ce_noinfo_count);
+	return sysfs_emit(data, "%u\n", mci->ce_noinfo_count);
 }
 
 static ssize_t mci_ue_noinfo_show(struct device *dev,
@@ -771,7 +794,7 @@ static ssize_t mci_ue_noinfo_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 
-	return sprintf(data, "%u\n", mci->ue_noinfo_count);
+	return sysfs_emit(data, "%u\n", mci->ue_noinfo_count);
 }
 
 static ssize_t mci_seconds_show(struct device *dev,
@@ -780,7 +803,7 @@ static ssize_t mci_seconds_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 
-	return sprintf(data, "%ld\n", (jiffies - mci->start_time) / HZ);
+	return sysfs_emit(data, "%ld\n", (jiffies - mci->start_time) / HZ);
 }
 
 static ssize_t mci_ctl_name_show(struct device *dev,
@@ -789,7 +812,7 @@ static ssize_t mci_ctl_name_show(struct device *dev,
 {
 	struct mem_ctl_info *mci = to_mci(dev);
 
-	return sprintf(data, "%s\n", mci->ctl_name);
+	return sysfs_emit(data, "%s\n", mci->ctl_name);
 }
 
 static ssize_t mci_size_mb_show(struct device *dev,
@@ -809,7 +832,7 @@ static ssize_t mci_size_mb_show(struct device *dev,
 		}
 	}
 
-	return sprintf(data, "%u\n", PAGES_TO_MiB(total_pages));
+	return sysfs_emit(data, "%u\n", PAGES_TO_MiB(total_pages));
 }
 
 static ssize_t mci_max_location_show(struct device *dev,

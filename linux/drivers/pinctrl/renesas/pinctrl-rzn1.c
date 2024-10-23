@@ -7,16 +7,20 @@
  */
 
 #include <dt-bindings/pinctrl/rzn1-pinctrl.h>
+
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/pinctrl/pinconf-generic.h>
-#include <linux/pinctrl/pinctrl.h>
-#include <linux/pinctrl/pinmux.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+
+#include <linux/pinctrl/pinconf-generic.h>
+#include <linux/pinctrl/pinconf.h>
+#include <linux/pinctrl/pinctrl.h>
+#include <linux/pinctrl/pinmux.h>
+
 #include "../core.h"
 #include "../pinconf.h"
 #include "../pinctrl-utils.h"
@@ -916,24 +920,22 @@ err_clk:
 	return ret;
 }
 
-static int rzn1_pinctrl_remove(struct platform_device *pdev)
+static void rzn1_pinctrl_remove(struct platform_device *pdev)
 {
 	struct rzn1_pinctrl *ipctl = platform_get_drvdata(pdev);
 
 	clk_disable_unprepare(ipctl->clk);
-
-	return 0;
 }
 
 static const struct of_device_id rzn1_pinctrl_match[] = {
 	{ .compatible = "renesas,rzn1-pinctrl", },
-	{}
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, rzn1_pinctrl_match);
 
 static struct platform_driver rzn1_pinctrl_driver = {
 	.probe	= rzn1_pinctrl_probe,
-	.remove = rzn1_pinctrl_remove,
+	.remove_new = rzn1_pinctrl_remove,
 	.driver	= {
 		.name		= "rzn1-pinctrl",
 		.of_match_table	= rzn1_pinctrl_match,
@@ -948,4 +950,3 @@ subsys_initcall(_pinctrl_drv_register);
 
 MODULE_AUTHOR("Phil Edworthy <phil.edworthy@renesas.com>");
 MODULE_DESCRIPTION("Renesas RZ/N1 pinctrl driver");
-MODULE_LICENSE("GPL v2");

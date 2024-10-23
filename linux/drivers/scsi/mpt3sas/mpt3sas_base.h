@@ -77,8 +77,8 @@
 #define MPT3SAS_DRIVER_NAME		"mpt3sas"
 #define MPT3SAS_AUTHOR "Avago Technologies <MPT-FusionLinux.pdl@avagotech.com>"
 #define MPT3SAS_DESCRIPTION	"LSI MPT Fusion SAS 3.0 Device Driver"
-#define MPT3SAS_DRIVER_VERSION		"42.100.00.00"
-#define MPT3SAS_MAJOR_VERSION		42
+#define MPT3SAS_DRIVER_VERSION		"48.100.00.00"
+#define MPT3SAS_MAJOR_VERSION		48
 #define MPT3SAS_MINOR_VERSION		100
 #define MPT3SAS_BUILD_VERSION		0
 #define MPT3SAS_RELEASE_VERSION	00
@@ -994,7 +994,7 @@ typedef void (*NVME_BUILD_PRP)(struct MPT3SAS_ADAPTER *ioc, u16 smid,
 typedef void (*PUT_SMID_IO_FP_HIP) (struct MPT3SAS_ADAPTER *ioc, u16 smid,
 	u16 funcdep);
 typedef void (*PUT_SMID_DEFAULT) (struct MPT3SAS_ADAPTER *ioc, u16 smid);
-typedef u32 (*BASE_READ_REG) (const volatile void __iomem *addr);
+typedef u32 (*BASE_READ_REG) (const void __iomem *addr);
 /*
  * To get high iops reply queue's msix index when high iops mode is enabled
  * else get the msix index of general reply queues.
@@ -1237,7 +1237,6 @@ typedef void (*MPT3SAS_FLUSH_RUNNING_CMDS)(struct MPT3SAS_ADAPTER *ioc);
  * @ioc_pg8: static ioc page 8
  * @iounit_pg0: static iounit page 0
  * @iounit_pg1: static iounit page 1
- * @iounit_pg8: static iounit page 8
  * @sas_hba: sas host object
  * @sas_expander_list: expander object list
  * @enclosure_list: enclosure object list
@@ -1367,6 +1366,7 @@ struct MPT3SAS_ADAPTER {
 	u8		got_task_abort_from_ioctl;
 
 	struct mutex	reset_in_progress_mutex;
+	struct mutex    hostdiag_unlock_mutex;
 	spinlock_t	ioc_reset_in_progress_lock;
 	u8		ioc_link_reset_in_progress;
 
@@ -1465,7 +1465,6 @@ struct MPT3SAS_ADAPTER {
 	Mpi2IOCPage8_t ioc_pg8;
 	Mpi2IOUnitPage0_t iounit_pg0;
 	Mpi2IOUnitPage1_t iounit_pg1;
-	Mpi2IOUnitPage8_t iounit_pg8;
 	Mpi2IOCPage1_t	ioc_pg1_copy;
 
 	struct _boot_device req_boot_device;
@@ -1618,6 +1617,7 @@ struct MPT3SAS_ADAPTER {
 	u8		diag_trigger_active;
 	u8		atomic_desc_capable;
 	BASE_READ_REG	base_readl;
+	BASE_READ_REG	base_readl_ext_retry;
 	struct SL_WH_MASTER_TRIGGER_T diag_trigger_master;
 	struct SL_WH_EVENT_TRIGGERS_T diag_trigger_event;
 	struct SL_WH_SCSI_TRIGGERS_T diag_trigger_scsi;
@@ -1652,6 +1652,32 @@ struct mpt3sas_debugfs_buffer {
 typedef u8 (*MPT_CALLBACK)(struct MPT3SAS_ADAPTER *ioc, u16 smid, u8 msix_index,
 	u32 reply);
 
+/*
+ * struct ATTO_SAS_NVRAM - ATTO NVRAM settings stored
+ *				in Manufacturing page 1 used to get
+ *				ATTO SasAddr.
+ */
+struct ATTO_SAS_NVRAM {
+	u8		Signature[4];
+	u8		Version;
+#define ATTO_SASNVR_VERSION		0
+
+	u8		Checksum;
+#define ATTO_SASNVR_CKSUM_SEED	0x5A
+	u8		Pad[10];
+	u8		SasAddr[8];
+#define ATTO_SAS_ADDR_ALIGN		64
+	u8		Reserved[232];
+};
+
+#define ATTO_SAS_ADDR_DEVNAME_BIAS		63
+
+union ATTO_SAS_ADDRESS {
+	U8		b[8];
+	U16		w[4];
+	U32		d[2];
+	U64		q;
+};
 
 /* base shared API */
 extern struct list_head mpt3sas_ioc_list;
@@ -1765,6 +1791,9 @@ void mpt3sas_base_disable_msix(struct MPT3SAS_ADAPTER *ioc);
 int mpt3sas_blk_mq_poll(struct Scsi_Host *shost, unsigned int queue_num);
 void mpt3sas_base_pause_mq_polling(struct MPT3SAS_ADAPTER *ioc);
 void mpt3sas_base_resume_mq_polling(struct MPT3SAS_ADAPTER *ioc);
+int mpt3sas_base_unlock_and_get_host_diagnostic(struct MPT3SAS_ADAPTER *ioc,
+	u32 *host_diagnostic);
+void mpt3sas_base_lock_host_diagnostic(struct MPT3SAS_ADAPTER *ioc);
 
 /* scsih shared API */
 struct scsi_cmnd *mpt3sas_scsih_scsi_lookup_get(struct MPT3SAS_ADAPTER *ioc,
@@ -1828,6 +1857,9 @@ int mpt3sas_config_get_number_hba_phys(struct MPT3SAS_ADAPTER *ioc,
 	u8 *num_phys);
 int mpt3sas_config_get_manufacturing_pg0(struct MPT3SAS_ADAPTER *ioc,
 	Mpi2ConfigReply_t *mpi_reply, Mpi2ManufacturingPage0_t *config_page);
+int mpt3sas_config_get_manufacturing_pg1(struct MPT3SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2ManufacturingPage1_t *config_page);
+
 int mpt3sas_config_get_manufacturing_pg7(struct MPT3SAS_ADAPTER *ioc,
 	Mpi2ConfigReply_t *mpi_reply, Mpi2ManufacturingPage7_t *config_page,
 	u16 sz);
@@ -1846,6 +1878,12 @@ int mpt3sas_config_get_bios_pg2(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
 	*mpi_reply, Mpi2BiosPage2_t *config_page);
 int mpt3sas_config_get_bios_pg3(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
 	*mpi_reply, Mpi2BiosPage3_t *config_page);
+int mpt3sas_config_set_bios_pg4(struct MPT3SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2BiosPage4_t *config_page,
+	int sz_config_page);
+int mpt3sas_config_get_bios_pg4(struct MPT3SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2BiosPage4_t *config_page,
+	int sz_config_page);
 int mpt3sas_config_get_iounit_pg0(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
 	*mpi_reply, Mpi2IOUnitPage0_t *config_page);
 int mpt3sas_config_get_sas_device_pg0(struct MPT3SAS_ADAPTER *ioc,
@@ -1947,6 +1985,7 @@ extern const struct attribute_group *mpt3sas_host_groups[];
 extern const struct attribute_group *mpt3sas_dev_groups[];
 void mpt3sas_ctl_init(ushort hbas_to_enumerate);
 void mpt3sas_ctl_exit(ushort hbas_to_enumerate);
+void mpt3sas_ctl_release(struct MPT3SAS_ADAPTER *ioc);
 u8 mpt3sas_ctl_done(struct MPT3SAS_ADAPTER *ioc, u16 smid, u8 msix_index,
 	u32 reply);
 void mpt3sas_ctl_pre_reset_handler(struct MPT3SAS_ADAPTER *ioc);
@@ -2008,9 +2047,6 @@ void mpt3sas_init_warpdrive_properties(struct MPT3SAS_ADAPTER *ioc,
 void
 mpt3sas_setup_direct_io(struct MPT3SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 	struct _raid_device *raid_device, Mpi25SCSIIORequest_t *mpi_request);
-
-/* NCQ Prio Handling Check */
-bool scsih_ncq_prio_supp(struct scsi_device *sdev);
 
 void mpt3sas_setup_debugfs(struct MPT3SAS_ADAPTER *ioc);
 void mpt3sas_destroy_debugfs(struct MPT3SAS_ADAPTER *ioc);

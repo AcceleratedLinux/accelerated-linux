@@ -102,7 +102,6 @@ static struct cpu_spec __initdata base_cpu_spec = {
 	.dcache_bsize		= 32, /* cache info init.             */
 	.num_pmcs		= 0,
 	.pmc_type		= PPC_PMC_DEFAULT,
-	.oprofile_cpu_type	= NULL,
 	.cpu_setup		= NULL,
 	.cpu_restore		= __restore_cpu_cpufeatures,
 	.machine_check_early	= NULL,
@@ -387,7 +386,6 @@ static int __init feat_enable_pmu_power8(struct dt_cpu_feature *f)
 
 	cur_cpu_spec->num_pmcs		= 6;
 	cur_cpu_spec->pmc_type		= PPC_PMC_IBM;
-	cur_cpu_spec->oprofile_cpu_type	= "ppc64/power8";
 
 	return 1;
 }
@@ -423,7 +421,6 @@ static int __init feat_enable_pmu_power9(struct dt_cpu_feature *f)
 
 	cur_cpu_spec->num_pmcs		= 6;
 	cur_cpu_spec->pmc_type		= PPC_PMC_IBM;
-	cur_cpu_spec->oprofile_cpu_type	= "ppc64/power9";
 
 	return 1;
 }
@@ -449,7 +446,6 @@ static int __init feat_enable_pmu_power10(struct dt_cpu_feature *f)
 
 	cur_cpu_spec->num_pmcs          = 6;
 	cur_cpu_spec->pmc_type          = PPC_PMC_IBM;
-	cur_cpu_spec->oprofile_cpu_type = "ppc64/power10";
 
 	return 1;
 }
@@ -457,6 +453,14 @@ static int __init feat_enable_pmu_power10(struct dt_cpu_feature *f)
 static int __init feat_enable_mce_power10(struct dt_cpu_feature *f)
 {
 	cur_cpu_spec->platform = "power10";
+	cur_cpu_spec->machine_check_early = __machine_check_early_realmode_p10;
+
+	return 1;
+}
+
+static int __init feat_enable_mce_power11(struct dt_cpu_feature *f)
+{
+	cur_cpu_spec->platform = "power11";
 	cur_cpu_spec->machine_check_early = __machine_check_early_realmode_p10;
 
 	return 1;
@@ -652,8 +656,10 @@ static struct dt_cpu_feature_match __initdata
 	{"pc-relative-addressing", feat_enable, 0},
 	{"machine-check-power9", feat_enable_mce_power9, 0},
 	{"machine-check-power10", feat_enable_mce_power10, 0},
+	{"machine-check-power11", feat_enable_mce_power11, 0},
 	{"performance-monitor-power9", feat_enable_pmu_power9, 0},
 	{"performance-monitor-power10", feat_enable_pmu_power10, 0},
+	{"performance-monitor-power11", feat_enable_pmu_power10, 0},
 	{"event-based-branch-v3", feat_enable, 0},
 	{"random-number-generator", feat_enable, 0},
 	{"system-call-vectored", feat_disable, 0},
@@ -1103,7 +1109,7 @@ static int __init dt_cpu_ftrs_scan_callback(unsigned long node, const char
 
 	prop = of_get_flat_dt_prop(node, "display-name", NULL);
 	if (prop && strlen((char *)prop) != 0) {
-		strlcpy(dt_cpu_name, (char *)prop, sizeof(dt_cpu_name));
+		strscpy(dt_cpu_name, (char *)prop, sizeof(dt_cpu_name));
 		cur_cpu_spec->cpu_name = dt_cpu_name;
 	}
 

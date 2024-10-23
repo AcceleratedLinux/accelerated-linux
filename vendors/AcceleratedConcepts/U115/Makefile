@@ -50,7 +50,7 @@ romfs.post:: romfs.cleanup
 
 uimage.bin:
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/armada-380-u115.dtb $(DTB)
+	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/marvell/armada-380-u115.dtb $(DTB)
 	cat $(DTB) >> $(ZIMAGE)
 	mkimage -A arm -O linux -T kernel -C none -a 0x01000000 -e 0x01000000 -n "Linux-3.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x3000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)

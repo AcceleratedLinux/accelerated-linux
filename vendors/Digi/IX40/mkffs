@@ -1,0 +1,24 @@
+#!/bin/sh
+
+#
+# mkffs -- make MMC flash filesystem for IX40
+#
+# Setup and create partitions on the MMC flash device.
+#
+
+MMC=/dev/mmcblk2
+
+#
+# The firmware image partitions start at an offset of 1MB and are each
+# 256MB in size. Note that we use sector start and end numbers to be
+# precise here. The rest of the MMC flash is allocated to the /opt
+# partition - which will be something like 6.8GB in size.
+#
+parted -s ${MMC} mktable gpt
+parted -s ${MMC} mkpart image 2048s 526335s
+parted -s ${MMC} mkpart image1 526336s 1050623s
+parted -s ${MMC} mkpart opt ext4 1050624s 7332MB
+
+mkfs.ext4 -F ${MMC}p3
+
+exit 0

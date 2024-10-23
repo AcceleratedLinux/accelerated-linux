@@ -83,7 +83,7 @@ static bool is_supervision_frame(struct hsr_priv *hsr, struct sk_buff *skb)
 		return false;
 
 	/* Get next tlv */
-	total_length += sizeof(struct hsr_sup_tlv) + hsr_sup_tag->tlv.HSR_TLV_length;
+	total_length += hsr_sup_tag->tlv.HSR_TLV_length;
 	if (!pskb_may_pull(skb, total_length))
 		return false;
 	skb_pull(skb, total_length);
@@ -150,15 +150,15 @@ struct sk_buff *hsr_get_untagged_frame(struct hsr_frame_info *frame,
 				       struct hsr_port *port)
 {
 	if (!frame->skb_std) {
-		if (frame->skb_hsr) {
+		if (frame->skb_hsr)
 			frame->skb_std =
 				create_stripped_skb_hsr(frame->skb_hsr, frame);
-		} else {
-			/* Unexpected */
-			WARN_ONCE(1, "%s:%d: Unexpected frame received (port_src %s)\n",
-				  __FILE__, __LINE__, port->dev->name);
+		else
+			netdev_warn_once(port->dev,
+					 "Unexpected frame received in hsr_get_untagged_frame()\n");
+
+		if (!frame->skb_std)
 			return NULL;
-		}
 	}
 
 	return skb_clone(frame->skb_std, GFP_ATOMIC);
@@ -342,26 +342,25 @@ struct sk_buff *prp_create_tagged_frame(struct hsr_frame_info *frame,
 	skb = skb_copy_expand(frame->skb_std, 0,
 			      skb_tailroom(frame->skb_std) + HSR_HLEN,
 			      GFP_ATOMIC);
-	prp_fill_rct(skb, frame, port);
-
-	return skb;
+	return prp_fill_rct(skb, frame, port);
 }
 
 static void hsr_deliver_master(struct sk_buff *skb, struct net_device *dev,
 			       struct hsr_node *node_src)
 {
 	bool was_multicast_frame;
-	int res;
+	int res, recv_len;
 
 	was_multicast_frame = (skb->pkt_type == PACKET_MULTICAST);
 	hsr_addr_subst_source(node_src, skb);
 	skb_pull(skb, ETH_HLEN);
+	recv_len = skb->len;
 	res = netif_rx(skb);
 	if (res == NET_RX_DROP) {
 		dev->stats.rx_dropped++;
 	} else {
 		dev->stats.rx_packets++;
-		dev->stats.rx_bytes += skb->len;
+		dev->stats.rx_bytes += recv_len;
 		if (was_multicast_frame)
 			dev->stats.multicast++;
 	}
@@ -378,6 +377,15 @@ static int hsr_xmit(struct sk_buff *skb, struct hsr_port *port,
 		 */
 		ether_addr_copy(eth_hdr(skb)->h_source, port->dev->dev_addr);
 	}
+
+	/* When HSR node is used as RedBox - the frame received from HSR ring
+	 * requires source MAC address (SA) replacement to one which can be
+	 * recognized by SAN devices (otherwise, frames are dropped by switch)
+	 */
+	if (port->type == HSR_PT_INTERLINK)
+		ether_addr_copy(eth_hdr(skb)->h_source,
+				port->hsr->macaddress_redbox);
+
 	return dev_queue_xmit(skb);
 }
 
@@ -391,8 +399,56 @@ bool prp_drop_frame(struct hsr_frame_info *frame, struct hsr_port *port)
 
 bool hsr_drop_frame(struct hsr_frame_info *frame, struct hsr_port *port)
 {
+	struct sk_buff *skb;
+
 	if (port->dev->features & NETIF_F_HW_HSR_FWD)
 		return prp_drop_frame(frame, port);
+
+	/* RedBox specific frames dropping policies
+	 *
+	 * Do not send HSR supervisory frames to SAN devices
+	 */
+	if (frame->is_supervision && port->type == HSR_PT_INTERLINK)
+		return true;
+
+	/* Do not forward to other HSR port (A or B) unicast frames which
+	 * are addressed to interlink port (and are in the ProxyNodeTable).
+	 */
+	skb = frame->skb_hsr;
+	if (skb && prp_drop_frame(frame, port) &&
+	    is_unicast_ether_addr(eth_hdr(skb)->h_dest) &&
+	    hsr_is_node_in_db(&port->hsr->proxy_node_db,
+			      eth_hdr(skb)->h_dest)) {
+		return true;
+	}
+
+	/* Do not forward to port C (Interlink) frames from nodes A and B
+	 * if DA is in NodeTable.
+	 */
+	if ((frame->port_rcv->type == HSR_PT_SLAVE_A ||
+	     frame->port_rcv->type == HSR_PT_SLAVE_B) &&
+	    port->type == HSR_PT_INTERLINK) {
+		skb = frame->skb_hsr;
+		if (skb && is_unicast_ether_addr(eth_hdr(skb)->h_dest) &&
+		    hsr_is_node_in_db(&port->hsr->node_db,
+				      eth_hdr(skb)->h_dest)) {
+			return true;
+		}
+	}
+
+	/* Do not forward to port A and B unicast frames received on the
+	 * interlink port if it is addressed to one of nodes registered in
+	 * the ProxyNodeTable.
+	 */
+	if ((port->type == HSR_PT_SLAVE_A || port->type == HSR_PT_SLAVE_B) &&
+	    frame->port_rcv->type == HSR_PT_INTERLINK) {
+		skb = frame->skb_std;
+		if (skb && is_unicast_ether_addr(eth_hdr(skb)->h_dest) &&
+		    hsr_is_node_in_db(&port->hsr->proxy_node_db,
+				      eth_hdr(skb)->h_dest)) {
+			return true;
+		}
+	}
 
 	return false;
 }
@@ -436,7 +492,7 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 			continue;
 
 		/* Don't send frame over port where it has been sent before.
-		 * Also fro SAN, this shouldn't be done.
+		 * Also for SAN, this shouldn't be done.
 		 */
 		if (!frame->is_from_san &&
 		    hsr_register_frame_out(port, frame->node_src,
@@ -449,13 +505,14 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 		}
 
 		/* Check if frame is to be dropped. Eg. for PRP no forward
-		 * between ports.
+		 * between ports, or sending HSR supervision to RedBox.
 		 */
 		if (hsr->proto_ops->drop_frame &&
 		    hsr->proto_ops->drop_frame(frame, port))
 			continue;
 
-		if (port->type != HSR_PT_MASTER)
+		if (port->type == HSR_PT_SLAVE_A ||
+		    port->type == HSR_PT_SLAVE_B)
 			skb = hsr->proto_ops->create_tagged_frame(frame, port);
 		else
 			skb = hsr->proto_ops->get_untagged_frame(frame, port);
@@ -470,7 +527,9 @@ static void hsr_forward_do(struct hsr_frame_info *frame)
 			hsr_deliver_master(skb, port->dev, frame->node_src);
 		} else {
 			if (!hsr_xmit(skb, port, frame))
-				sent = true;
+				if (port->type == HSR_PT_SLAVE_A ||
+				    port->type == HSR_PT_SLAVE_B)
+					sent = true;
 		}
 	}
 }
@@ -499,20 +558,20 @@ static void handle_std_frame(struct sk_buff *skb,
 {
 	struct hsr_port *port = frame->port_rcv;
 	struct hsr_priv *hsr = port->hsr;
-	unsigned long irqflags;
 
 	frame->skb_hsr = NULL;
 	frame->skb_prp = NULL;
 	frame->skb_std = skb;
 
-	if (port->type != HSR_PT_MASTER) {
+	if (port->type != HSR_PT_MASTER)
 		frame->is_from_san = true;
-	} else {
-		/* Sequence nr for the master node */
-		spin_lock_irqsave(&hsr->seqnr_lock, irqflags);
+
+	if (port->type == HSR_PT_MASTER ||
+	    port->type == HSR_PT_INTERLINK) {
+		/* Sequence nr for the master/interlink node */
+		lockdep_assert_held(&hsr->seqnr_lock);
 		frame->sequence_nr = hsr->sequence_nr;
 		hsr->sequence_nr++;
-		spin_unlock_irqrestore(&hsr->seqnr_lock, irqflags);
 	}
 }
 
@@ -567,26 +626,28 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 {
 	struct hsr_priv *hsr = port->hsr;
 	struct hsr_vlan_ethhdr *vlan_hdr;
+	struct list_head *n_db;
 	struct ethhdr *ethhdr;
 	__be16 proto;
 	int ret;
-	u32 hash;
 
 	/* Check if skb contains ethhdr */
 	if (skb->mac_len < sizeof(struct ethhdr))
 		return -EINVAL;
 
 	memset(frame, 0, sizeof(*frame));
-
-	ethhdr = (struct ethhdr *)skb_mac_header(skb);
-	hash = hsr_mac_hash(port->hsr, ethhdr->h_source);
 	frame->is_supervision = is_supervision_frame(port->hsr, skb);
-	frame->node_src = hsr_get_node(port, &hsr->node_db[hash], skb,
-				       frame->is_supervision,
-				       port->type);
+
+	n_db = &hsr->node_db;
+	if (port->type == HSR_PT_INTERLINK)
+		n_db = &hsr->proxy_node_db;
+
+	frame->node_src = hsr_get_node(port, n_db, skb,
+				       frame->is_supervision, port->type);
 	if (!frame->node_src)
 		return -1; /* Unknown node and !is_supervision, or no mem */
 
+	ethhdr = (struct ethhdr *)skb_mac_header(skb);
 	frame->is_vlan = false;
 	proto = ethhdr->h_proto;
 
@@ -598,6 +659,7 @@ static int fill_frame_info(struct hsr_frame_info *frame,
 		proto = vlan_hdr->vlanhdr.h_vlan_encapsulated_proto;
 		/* FIXME: */
 		netdev_warn_once(skb->dev, "VLAN not yet supported");
+		return -EINVAL;
 	}
 
 	frame->is_from_san = false;
@@ -616,11 +678,13 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
 {
 	struct hsr_frame_info frame;
 
+	rcu_read_lock();
 	if (fill_frame_info(&frame, skb, port) < 0)
 		goto out_drop;
 
 	hsr_register_frame_in(frame.node_src, port, frame.sequence_nr);
 	hsr_forward_do(&frame);
+	rcu_read_unlock();
 	/* Gets called for ingress frames as well as egress from master port.
 	 * So check and increment stats for master port only here.
 	 */
@@ -635,6 +699,7 @@ void hsr_forward_skb(struct sk_buff *skb, struct hsr_port *port)
 	return;
 
 out_drop:
+	rcu_read_unlock();
 	port->dev->stats.tx_dropped++;
 	kfree_skb(skb);
 }

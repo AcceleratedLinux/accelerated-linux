@@ -8,8 +8,17 @@ ELFIMAGE = $(IMAGEDIR)/image.elf
 
 DIRS = 
 
-ROMFS_DIRS = bin dev etc home lib mnt proc sbin usr var \
-             etc/config etc/default home/httpd home/httpd/cgi-bin
+ROMFS_DIRS = \
+	bin \
+	dev dev/flash \
+	etc etc/config etc/default \
+	home home/httpd home/httpd/cgi-bin \
+	lib \
+	mnt \
+	proc \
+	sbin \
+	usr \
+	var
 
 DEVICES = \
 	tty,c,5,0	console,c,5,1	cua0,c,5,64	cua1,c,5,65  \
@@ -70,11 +79,6 @@ romfs:
 image:
 	[ -d $(IMAGEDIR) ] || mkdir -p $(IMAGEDIR)
 	genromfs -v -V "ROMdisk" -f $(ROMFSIMG) -d $(ROMFSDIR)
-	$(CROSS)objcopy -O binary $(ROOTDIR)/$(LINUXDIR)/linux \
-	  $(IMAGEDIR)/linux.bin
-	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
-	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGE) /tftpboot
 	BSS=`$(CROSS)objdump --headers $(ROOTDIR)/$(LINUXDIR)/linux | \
 	  grep .bss` ; \
 	ADDR=`set -- $${BSS} ; echo 0x$${4}` ; \
@@ -82,5 +86,6 @@ image:
 	  --adjust-section-vma=.romfs=$${ADDR} --no-adjust-warnings \
 	  --set-section-flags=.romfs=alloc,load,data   \
 	  $(ROOTDIR)/$(LINUXDIR)/linux $(ELFIMAGE) 2> /dev/null
-
+	$(CROSS)objcopy -O binary $(ELFIMAGE) $(IMAGE)
+	[ -n "$(NO_BUILD_INTO_TFTPBOOT)" ] || cp $(IMAGE) /tftpboot
 

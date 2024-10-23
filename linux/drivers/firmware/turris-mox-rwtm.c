@@ -104,7 +104,7 @@ static void mox_kobj_release(struct kobject *kobj)
 	kfree(to_rwtm(kobj)->kobj);
 }
 
-static struct kobj_type mox_kobj_ktype = {
+static const struct kobj_type mox_kobj_ktype = {
 	.release	= mox_kobj_release,
 	.sysfs_ops	= &kobj_sysfs_ops,
 };
@@ -528,7 +528,6 @@ static int turris_mox_rwtm_probe(struct platform_device *pdev)
 	rwtm->hwrng.name = DRIVER_NAME "_hwrng";
 	rwtm->hwrng.read = mox_hwrng_read;
 	rwtm->hwrng.priv = (unsigned long) rwtm;
-	rwtm->hwrng.quality = 1024;
 
 	ret = devm_hwrng_register(dev, &rwtm->hwrng);
 	if (ret < 0) {
@@ -555,7 +554,7 @@ put_kobj:
 	return ret;
 }
 
-static int turris_mox_rwtm_remove(struct platform_device *pdev)
+static void turris_mox_rwtm_remove(struct platform_device *pdev)
 {
 	struct mox_rwtm *rwtm = platform_get_drvdata(pdev);
 
@@ -563,8 +562,6 @@ static int turris_mox_rwtm_remove(struct platform_device *pdev)
 	sysfs_remove_files(rwtm_to_kobj(rwtm), mox_rwtm_attrs);
 	kobject_put(rwtm_to_kobj(rwtm));
 	mbox_free_channel(rwtm->mbox);
-
-	return 0;
 }
 
 static const struct of_device_id turris_mox_rwtm_match[] = {
@@ -577,7 +574,7 @@ MODULE_DEVICE_TABLE(of, turris_mox_rwtm_match);
 
 static struct platform_driver turris_mox_rwtm_driver = {
 	.probe	= turris_mox_rwtm_probe,
-	.remove	= turris_mox_rwtm_remove,
+	.remove_new = turris_mox_rwtm_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
 		.of_match_table	= turris_mox_rwtm_match,

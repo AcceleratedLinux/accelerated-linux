@@ -354,7 +354,7 @@ static ssize_t srf08_write_sensitivity(struct srf08_data *data,
 		return -EINVAL;
 
 	for (i = 0; i < data->chip_info->num_sensitivity_avail; i++)
-		if (val && (val == data->chip_info->sensitivity_avail[i])) {
+		if (val == data->chip_info->sensitivity_avail[i]) {
 			regval = i;
 			break;
 		}
@@ -443,9 +443,9 @@ static const struct iio_info srf02_info = {
 	.read_raw = srf08_read_raw,
 };
 
-static int srf08_probe(struct i2c_client *client,
-					 const struct i2c_device_id *id)
+static int srf08_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct iio_dev *indio_dev;
 	struct srf08_data *data;
 	int ret;

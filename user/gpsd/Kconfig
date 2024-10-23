@@ -1,0 +1,16 @@
+config USER_GPSD
+	bool "gpsd"
+	help
+	  gpsd
+
+config USER_GPSD_PYTHON_PACKAGE
+	bool "gpsd Python packages"
+	depends on USER_GPSD
+	depends on USER_PYTHON
+
+config USER_GPSD_UBXTOOL
+	bool "gpsd's ubxtool"
+	depends on USER_GPSD_PYTHON_PACKAGE
+	depends on USER_PYTHON_MODULES_PYSERIAL
+	help
+	  ubxtool to communicate directly with u-blox GPS modules.

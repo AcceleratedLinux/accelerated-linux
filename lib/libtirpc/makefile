@@ -1,8 +1,6 @@
-URL = https://sourceforge.net/projects/libtirpc/files/libtirpc/1.0.3/libtirpc-1.0.3.tar.bz2
+URL = https://sourceforge.net/projects/libtirpc/files/libtirpc/1.3.4/libtirpc-1.3.4.tar.bz2
 
 CONFOPTS += --disable-gssapi
-
-AUTORECONF = autoreconf -i
 
 AUTOMAKE_PRESTAGE = libtirpc_prestage
 

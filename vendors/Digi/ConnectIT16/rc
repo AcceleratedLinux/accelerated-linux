@@ -45,8 +45,10 @@ ip link set eth3 name eth2
 # initialise devices before we need them
 /etc/rc.dev
 
-# instantiate ATECC508 device
-echo "atsha204-i2c 0x60" > /sys/bus/i2c/devices/i2c-1/new_device
+# Load ATECC508 SSDT overlay to instantiate chip
+mount -t configfs nodev /sys/kernel/config
+mkdir /sys/kernel/config/acpi/table/atecc508
+cat /etc/ssdt/atecc508.aml > /sys/kernel/config/acpi/table/atecc508/aml
 
 # the active main boot drive in /dev/sdX format
 DRIVE=$(stat -c "%t%02T %n" /dev/sd[a-z][0-9] | sed -n 's?'$(stat -c %D /)' \(/dev/sd.\).*?\1?p')
@@ -164,9 +166,11 @@ if [ -e /etc/config/.nocrypt ] ; then
 	exit 0
 fi
 
-# restore SIM slot selection, or otherwise just power
+# restore SIM slot selection
 SIM_SLOT="$(cat /etc/config/sim.conf 2>/dev/null)"
-[ "$SIM_SLOT" -a "$(sim)" != "$SIM_SLOT" ] && sim "$SIM_SLOT" || sim -o
+[ "$SIM_SLOT" -a "$(sim)" != "$SIM_SLOT" ] && sim "$SIM_SLOT"
+# always power on modem
+sim -o
 
 random_seed restore
 

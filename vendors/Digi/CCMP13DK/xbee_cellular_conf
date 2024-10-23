@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+# Copyright 2023 Digi International Inc., All Rights Reserved
+#
+# This software contains proprietary and confidential information of Digi
+# International Inc.  By accepting transfer of this copy, Recipient agrees
+# to retain this software in confidence, to prevent disclosure to others,
+# and to make no use of this software other than that for which it was
+# delivered.  This is an unpublished copyrighted work of Digi International
+# Inc.  Except as permitted by federal law, 17 USC 117, copying is strictly
+# prohibited.
+#
+# Restricted Rights Legend
+#
+# Use, duplication, or disclosure by the Government is subject to
+# restrictions set forth in sub-paragraph (c)(1)(ii) of The Rights in
+# Technical Data and Computer Software clause at DFARS 252.227-7031 or
+# subparagraphs (c)(1) and (2) of the Commercial Computer Software -
+# Restricted Rights at 48 CFR 52.227-19, as applicable.
+#
+# Digi International Inc., 9350 Excelsior Blvd., Suite 700, Hopkins, MN 55343
+
+import os
+import sys
+import time
+import argparse
+import configparser
+import logging
+from logging.handlers import SysLogHandler
+from serial import EIGHTBITS, STOPBITS_ONE, PARITY_NONE
+from digi.xbee.serial import XBeeSerialPort
+from digi.xbee.models.atcomm import ATStringCommand
+from digi.xbee.recovery import (
+    enter_at_command_mode, recover_device, AT_OK_RESPONSE
+)
+
+APP_NAME = __file__
+
+# Config file section and parameters
+SEC_XBEE_CELLULAR = "xbee-cellular"
+PARAM_ENABLED = "enabled"
+PARAM_TTY = "tty"
+PARAM_BAUDRATE = "baud"
+PARAM_DEBUG = "debug"
+
+# Specifc messages to send to logs for Success/Failure
+SUCCESS_MSG = "XBee Cellular is in USB Direct mode"
+FAILURE_MSG = "Unable to get XBee Cellular into USB Direct mode"
+
+MAX_TRIES = 5
+
+_BD_KEY = "BD"
+_AP_KEY = "AP"
+_AM_KEY = "AM"
+_P0_KEY = "P0"
+_P1_KEY = "P1"
+_DO_KEY = "DO"
+_BT_KEY = "BT"
+_DV_KEY = "DV"
+_APPLY_CHANGES_KEY = "apply_changes"
+_WRITE_REGISTER_KEY = "write_register"
+
+# The AT commands and values we need to set up the radio to perform optimally
+# as well as get into USB Direct mode.
+USB_DIRECT_AT_COMMANDS = {_BD_KEY: ("at%s" % ATStringCommand.BD.command, None),
+                          _AP_KEY: ("at%s" % ATStringCommand.AP.command, 1),
+                          _AM_KEY: ("atAM", 0),
+                          _P0_KEY: ("at%s" % ATStringCommand.P0.command, 6),
+                          _P1_KEY: ("at%s" % ATStringCommand.P1.command, 7),
+                          _DO_KEY: ("at%s" % ATStringCommand.DO.command, 4),
+                          _BT_KEY: ("at%s" % ATStringCommand.BT.command, 0),
+                          _DV_KEY: ("atDV", 1),
+                          }
+
+ACWR_AT_COMMANDS = {_APPLY_CHANGES_KEY: "at%s\r" % ATStringCommand.AC.command,
+                    _WRITE_REGISTER_KEY: "at%s\r" % ATStringCommand.WR.command,
+                    }
+
+XBEE_STANDARD_BAUDRATES_TABLE = [
+    (9600, 0x3),
+    (115200, 0x7),
+    (921600, 0xA),
+    (460800, 0x9),
+    (230400, 0x8),
+    (57600, 0x6),
+    (38400, 0x5),
+    (19200, 0x4),
+    (4800, 0x2),
+    (2400, 0x1),
+    (1200, 0x0)
+]
+
+_log = logging.getLogger(__name__)
+
+
+def setup_logging(verbose: bool = False) -> None:
+    """
+    Sets up the basic logging
+    """
+    fmt = "%(asctime)s %(name)s: %(levelname)8s: %(message)s"
+    logging.basicConfig(level=logging.INFO, format=fmt, stream=sys.stderr)
+
+    # Set up handler for logging to syslog
+    syslog_handler = SysLogHandler(address='/dev/log')
+    _log.addHandler(syslog_handler)
+
+    logging.getLogger("digi.xbee").setLevel(logging.DEBUG)
+
+    reader_log = logging.getLogger("digi.xbee.reader")
+    if verbose:
+        reader_log.setLevel(logging.DEBUG)
+        # Logs from digi.xbee.devices can be useful...
+        logging.getLogger("digi.xbee.devices").setLevel(logging.DEBUG)
+        # Set the script logs to DEBUG as well.
+        _log.setLevel(logging.DEBUG)
+        syslog_handler.setLevel(logging.DEBUG)
+    else:
+        _log.setLevel(logging.INFO)
+        syslog_handler.setLevel(logging.INFO)
+
+
+def load_config(file_path=None):
+    """
+    Loads the configuration file.
+
+    Args:
+         file_path (String, optional, default=`None`): Absolute path of the
+            file with the configuration to parse.
+
+    Returns:
+        :class: `ConfigParser`: The config file parsed object.
+
+    Raises:
+        ValueError: If any of the variables does not match the expected format.
+    """
+    parser = __init_default_config_parser()
+
+    if file_path:
+        __load_file(file_path, parser)
+
+    return parser
+
+
+def __init_default_config_parser():
+    """
+    Initializes the configuration parser.
+
+    Returns:
+        :class: `ConfigParser`: The config file parsed object.
+    """
+    # Create an initial configuration with default values
+    parser = configparser.ConfigParser()
+
+    parser.read_dict({
+        SEC_XBEE_CELLULAR: {
+            PARAM_ENABLED: False,
+            PARAM_TTY: "/dev/ttyXBeeCell",
+            PARAM_BAUDRATE: 9600,
+            PARAM_DEBUG: False}
+        })
+
+    return parser
+
+
+def __load_file(file_path, parser):
+    """
+    Processes the provided configuration file and returns.
+
+    Args:
+         file_path (String, optional, default=`None`): Absolute path of the
+            file with the configuration to parse.
+
+    Raises:
+        ValueError: If any of the variables does not match the expected format.
+    """
+    # Verify that the configuration file is readable
+    if not os.access(file_path, os.R_OK):
+        raise ValueError("Cannot read file: %s" % os.path.abspath(file_path))
+
+    parser.read(file_path)
+
+    # Check that the values match the format
+    # If any of the check fails, it will trigger a ValueError exception
+    xbee_cellular_section = parser[SEC_XBEE_CELLULAR]
+    xbee_cellular_section.getboolean(PARAM_ENABLED)
+    if not xbee_cellular_section[PARAM_TTY]:
+        raise ValueError("XBee Cellular TTY must be defined")
+    xbee_cellular_section.getint(PARAM_BAUDRATE)
+    xbee_cellular_section.getboolean(PARAM_DEBUG)
+
+
+def baud_to_shorthand_baud(baud):
+    """
+    Look up the shorthand code for the given baud.
+    """
+    for (tmp_baud, tmp_shorthand) in XBEE_STANDARD_BAUDRATES_TABLE:
+        if tmp_baud == int(baud):
+            return tmp_shorthand
+    return baud
+
+
+def baud_hunt(ser):
+    """
+    Attempts to hunt all reasonable baud rates to try to get into
+    AT Command Mode, by switching baud rates and issuing '+++'
+    to the modem.
+    We should expect to get OK back, if successful.
+    """
+    for baud, shorthand in XBEE_STANDARD_BAUDRATES_TABLE:
+        _log.debug("Trying to talk to XBee 3 Cellular at %d baud", baud)
+
+        ser.set_baudrate(baud)
+        if enter_at_command_mode(ser):
+            return True
+    return False
+
+
+def verify_ai_is_in_usb_direct(ser):
+    """
+    Attempts to send the ATAI command to the radio, and checks
+    the return value from it, if possible.
+    Returns True if AI returns 0x2B (USB Direct Mode)
+    Returns False if AI returns anything else (or empty)
+    """
+    command = "at%s\r" % ATStringCommand.AI.command
+    ser.write(str.encode(command, encoding="utf8"))
+
+    timeout = time.time() + 2
+    while ser.inWaiting() == 0 and time.time() < timeout:
+        time.sleep(0.1)
+    read = ser.read(ser.inWaiting())
+    _log.debug("command %s = %s", command[:-1], read)
+
+    # If the AI value comes back as 0x2B, everything is set properly.
+    try:
+        val = int(read[0:2].decode('utf-8'), 16)
+        if val == 0x2B:
+            return True
+    except Exception as exception:
+        return False
+
+    return False
+
+
+def verify_usb_direct_at_commands_properly_set(ser, baud):
+    """
+    Verifies each AT command to ensure that it is set to the expected
+    value, to ensure that USB Direct mode will work properly.
+    Returns True if all AT commands are set to their expected values.
+    Returns False if any AT command is not set properly.
+    """
+
+    # Look up the shorthand code for the baud
+    shorthand_baud = baud_to_shorthand_baud(baud)
+
+    for command, required_value in (
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_BD_KEY][0]),
+                shorthand_baud),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_AP_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_AP_KEY][1]),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_AM_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_AM_KEY][1]),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_P0_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_P0_KEY][1]),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_P1_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_P1_KEY][1]),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_DO_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_DO_KEY][1]),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_BT_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_BT_KEY][1]),
+            ("%s\r" % (USB_DIRECT_AT_COMMANDS[_DV_KEY][0]),
+                USB_DIRECT_AT_COMMANDS[_DV_KEY][1])):
+
+        ser.write(str.encode(command, encoding="utf8"))
+        timeout = time.time() + 2
+        while ser.inWaiting() == 0 and time.time() < timeout:
+            time.sleep(0.1)
+        read = ser.read(ser.inWaiting())
+        _log.debug("command %s = %s", command[:-1], read)
+
+        # Attempt to verify the value read from the modem,
+        # to what we want/expect for USB Direct mode.
+
+        if read == b"ERROR\r" and command == "%s\r" % (USB_DIRECT_AT_COMMANDS[_DV_KEY][0]):
+            # XBee does not support the DV command. Ignore it.
+            _log.debug("command %s not supported, ignoring ERROR", command[:-1])
+            continue
+        try:
+            value = int(read[0:2].decode('utf-8'), 16)
+            if value != required_value:
+                # Value is not what we want/expect!
+                _log.debug("command %s = (%d != %d)", command[:-1], value,
+                           required_value)
+                return False
+        except Exception as exception:
+            return False
+
+    return True
+
+
+def apply_usb_direct_at_commands(ser, baud):
+    """
+    Applies any/all USB Direct AT Commands that should be set on the radio.
+    This includes the baud, along with all settings that need to be set
+    to have the radio set to USB Direct mode.
+    """
+
+    # Look up the shorthand code for the baud
+    shorthand_baud = baud_to_shorthand_baud(baud)
+
+    for command in (
+            "%s%s\r" % (USB_DIRECT_AT_COMMANDS[_BD_KEY][0],
+                        shorthand_baud),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_AP_KEY]),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_AM_KEY]),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_P0_KEY]),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_P1_KEY]),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_DO_KEY]),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_BT_KEY]),
+            ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_DV_KEY]),
+            ACWR_AT_COMMANDS[_WRITE_REGISTER_KEY],
+            ACWR_AT_COMMANDS[_APPLY_CHANGES_KEY]):
+
+        ser.write(str.encode(command, encoding="utf8"))
+        timeout = time.time() + 2
+        while ser.inWaiting() == 0 and time.time() < timeout:
+            time.sleep(0.1)
+        read = ser.read(ser.inWaiting())
+        _log.debug("command %s = %s", command[:-1], read)
+
+        if read == b"ERROR\r" and command == ("%s%x\r" % USB_DIRECT_AT_COMMANDS[_DV_KEY]):
+            # XBee does not support the DV command. Ignore it.
+            _log.debug("command %s not supported, ignoring ERROR", command[:-1])
+            continue
+
+        if AT_OK_RESPONSE not in read:
+            return "Command {!r} failed, non OK returned value of {!r}".format(
+                   command, read)
+    # Set the baud we wrote and applied the changes to.
+    ser.set_baudrate(baud)
+
+
+def run():
+    """Main function that creates and runs the XBee Cellular Config"""
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config",
+                        default="/etc/xbee-cellular.conf",
+                        help="default configuration file")
+    args = parser.parse_args()
+
+    try:
+        cfg = load_config(args.config)
+    except ValueError as exc:
+        sys.stderr.write(
+            f"{APP_NAME}: ERROR in configuration file {args.config}: {exc}")
+        sys.exit(1)
+
+    enabled = cfg[SEC_XBEE_CELLULAR][PARAM_ENABLED]
+    tty = cfg[SEC_XBEE_CELLULAR][PARAM_TTY]
+    baud = cfg[SEC_XBEE_CELLULAR][PARAM_BAUDRATE]
+    debug = cfg[SEC_XBEE_CELLULAR][PARAM_DEBUG]
+
+    setup_logging(int(debug))
+
+    if int(enabled) == 0:
+        _log.error(APP_NAME + ": XBee Cellular support is disabled")
+        sys.exit(f"{APP_NAME}: ERROR: XBee Cellular support is disabled")
+
+    # Create the serial port
+    ser = XBeeSerialPort(baud_rate=baud,
+                         port=tty,
+                         data_bits=EIGHTBITS,
+                         stop_bits=STOPBITS_ONE,
+                         parity=PARITY_NONE,
+                         timeout=1.0)
+    if ser is None:
+        _log.error(APP_NAME + ": Unable to open XBee port")
+        sys.exit(f"{APP_NAME}: ERROR: Unable to open XBee port")
+
+    ser.open()
+
+    # Toss any data that might be in the input buffer
+    ser.reset_input_buffer()
+
+    # Attempt to get into AT Command mode first.
+    if not enter_at_command_mode(ser):
+
+        # Not able to get into AT Command mode or AI is not 0x2B.
+        # Try to baud hunt for it next.
+        #
+        # NOTE: We attempt to baud hunt rather than directly go to
+        #       Recovery mode, as Recovery mode abruptly
+        #       reboots/restarts the radio.
+        #       It is safer for the radio if we try to find it on other
+        #       baud rates first, as it is non-destructive.
+        if not baud_hunt(ser):
+
+            # Still unable to get into AT Command mode.
+            # See if Recovery Mode can find it.
+            # NOTE: Recovery mode opens the serial port by itself
+            ser.close()
+            try:
+                recover_device(ser)
+                ser.open()
+                enter_at_command_mode(ser)
+            except Exception as exception:
+                _log.error(APP_NAME + ": " + FAILURE_MSG)
+                sys.exit(f"{APP_NAME}: ERROR: " + FAILURE_MSG)
+
+    # We have a successful connection to the radio now.
+
+    # Check each AT Command we care about to make sure it is set correctly
+    if not verify_usb_direct_at_commands_properly_set(ser, baud):
+        # Apply AT commands that we need to get it into USB Direct mode
+        apply_usb_direct_at_commands(ser, baud)
+
+    # Check to see if AI is in USB Direct mode now.
+    if verify_ai_is_in_usb_direct(ser):
+        _log.info(APP_NAME + ": " + SUCCESS_MSG)
+        sys.stderr.write(APP_NAME + ": " + SUCCESS_MSG + "\r\n")
+        sys.exit(0)
+
+    # Unable to get into USB Direct Mode...
+    _log.error(APP_NAME + ": " + FAILURE_MSG)
+    sys.exit(f"{APP_NAME}: ERROR: " + FAILURE_MSG)
+
+
+if __name__ == '__main__':
+    run()

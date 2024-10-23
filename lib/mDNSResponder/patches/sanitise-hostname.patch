@@ -1,0 +1,15 @@
+--- a/mDNSPosix/mDNSPosix.c.orig	2020-07-21 18:17:17.000000000 -0500
++++ b/mDNSPosix/mDNSPosix.c	2021-04-28 17:48:53.902776975 -0500
+@@ -788,7 +788,11 @@
+ {
+     int len = 0;
+     gethostname((char *)(&namelabel->c[1]), MAX_DOMAIN_LABEL);
+-    while (len < MAX_DOMAIN_LABEL && namelabel->c[len+1] && namelabel->c[len+1] != '.') len++;
++    while (len < MAX_DOMAIN_LABEL && namelabel->c[len+1] && namelabel->c[len+1] != '.') {
++        if (namelabel->c[len+1] == ' ')
++            namelabel->c[len+1] = '-'; /* sanitise hostname */
++        len++;
++    }
+     namelabel->c[0] = len;
+ }
+ 

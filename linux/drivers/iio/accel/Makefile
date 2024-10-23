@@ -30,6 +30,7 @@ obj-$(CONFIG_BMC150_ACCEL) += bmc150-accel-core.o
 obj-$(CONFIG_BMC150_ACCEL_I2C) += bmc150-accel-i2c.o
 obj-$(CONFIG_BMC150_ACCEL_SPI) += bmc150-accel-spi.o
 obj-$(CONFIG_BMI088_ACCEL) += bmi088-accel-core.o
+obj-$(CONFIG_BMI088_ACCEL_I2C) += bmi088-accel-i2c.o
 obj-$(CONFIG_BMI088_ACCEL_SPI) += bmi088-accel-spi.o
 obj-$(CONFIG_DA280)	+= da280.o
 obj-$(CONFIG_DA311)	+= da311.o
@@ -40,6 +41,9 @@ obj-$(CONFIG_FXLS8962AF)	+= fxls8962af-core.o
 obj-$(CONFIG_FXLS8962AF_I2C)	+= fxls8962af-i2c.o
 obj-$(CONFIG_FXLS8962AF_SPI)	+= fxls8962af-spi.o
 obj-$(CONFIG_HID_SENSOR_ACCEL_3D) += hid-sensor-accel-3d.o
+obj-$(CONFIG_IIO_KX022A)	+= kionix-kx022a.o
+obj-$(CONFIG_IIO_KX022A_I2C)	+= kionix-kx022a-i2c.o
+obj-$(CONFIG_IIO_KX022A_SPI)	+= kionix-kx022a-spi.o
 obj-$(CONFIG_KXCJK1013) += kxcjk-1013.o
 obj-$(CONFIG_KXSD9)	+= kxsd9.o
 obj-$(CONFIG_KXSD9_SPI)	+= kxsd9-spi.o
@@ -57,6 +61,8 @@ obj-$(CONFIG_MMA8452)	+= mma8452.o
 obj-$(CONFIG_MMA9551_CORE)	+= mma9551_core.o
 obj-$(CONFIG_MMA9551)		+= mma9551.o
 obj-$(CONFIG_MMA9553)		+= mma9553.o
+
+obj-$(CONFIG_MSA311)		+= msa311.o
 
 obj-$(CONFIG_MXC4005)		+= mxc4005.o
 obj-$(CONFIG_MXC6255)		+= mxc6255.o

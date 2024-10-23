@@ -189,6 +189,67 @@ static ssize_t pwr_button_lock_store(struct device *dev,
 	return count;
 }
 
+static const char str_enabled[] = "enabled";
+static const char str_disabled[] = "disabled";
+
+static ssize_t ign_sense_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct mcu_tx54_keys *keys = dev_get_drvdata(dev);
+	int ret;
+	struct mcu_tx_pkt tx_pkt;
+	struct mcu_rx_pkt rx_pkt;
+
+	put_unaligned(MCU_CMD_GET_IGN_SENSE_ENABLE, &tx_pkt.cmd);
+	ret = mcu_tx54_transaction(keys->mcu, &tx_pkt, &rx_pkt,
+				   get_ign_sense_enable);
+	if (ret < 0) {
+		dev_err(keys->dev,
+			"Failed to get ignition sense config state (%d)\n",
+			ret);
+		return ret;
+	}
+
+	return sprintf(buf, "%s\n",
+		       get_unaligned(&rx_pkt.get_ign_sense_enable.value)
+				? "enabled" : "disabled");
+}
+
+static ssize_t ign_sense_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct mcu_tx54_keys *keys = dev_get_drvdata(dev);
+	int ret;
+	struct mcu_tx_pkt tx_pkt;
+	struct mcu_rx_pkt rx_pkt;
+	uint16_t val;
+
+	if (strncmp(buf, str_enabled, sizeof(str_enabled) - 1) == 0) {
+		val = 1;
+	} else if (strncmp(buf, str_disabled, sizeof(str_disabled) - 1) == 0) {
+		val = 0;
+	} else {
+		dev_err(dev,
+			"Invalid ignition sense state (should be enabled/disabled)\n");
+		return -EINVAL;
+	}
+
+	put_unaligned(MCU_CMD_SET_IGN_SENSE_ENABLE, &tx_pkt.cmd);
+	put_unaligned(val, &tx_pkt.set_ign_sense_enable.param);
+
+	ret = mcu_tx54_transaction(keys->mcu, &tx_pkt, &rx_pkt,
+				   set_ign_sense_enable);
+	if (ret < 0) {
+		dev_err(keys->dev,
+			"Failed to %s ignition sense (%d)\n",
+			val ? "enable" : "disable", ret);
+		return ret;
+	}
+
+	return count;
+}
+
 static ssize_t ign_delay_on_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
@@ -359,6 +420,7 @@ static DEVICE_ATTR_RW(pwr_button_lock);
 static DEVICE_ATTR_RW(ign_delay_on);
 static DEVICE_ATTR_RW(ign_delay_off);
 static DEVICE_ATTR_RW(temp_ign_delay_off);
+static DEVICE_ATTR_RW(ign_sense);
 
 static struct attribute *mcu_tx54_keys_attrs[] = {
 	&dev_attr_ignition.attr,
@@ -367,6 +429,7 @@ static struct attribute *mcu_tx54_keys_attrs[] = {
 	&dev_attr_ign_delay_on.attr,
 	&dev_attr_ign_delay_off.attr,
 	&dev_attr_temp_ign_delay_off.attr,
+	&dev_attr_ign_sense.attr,
 	NULL
 };
 

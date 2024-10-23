@@ -12,16 +12,19 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
-#include <linux/of_device.h>
-#include <linux/of_irq.h>
-#include <linux/of_platform.h>
+#include <linux/mod_devicetable.h>
+#include <linux/of.h>
+#include <linux/platform_device.h>
+#include <linux/property.h>
+#include <linux/regmap.h>
+#include <linux/seq_file.h>
+#include <linux/slab.h>
+
+#include <linux/pinctrl/consumer.h>
+#include <linux/pinctrl/pinconf-generic.h>
+#include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
-#include <linux/pinctrl/pinconf.h>
-#include <linux/pinctrl/pinconf-generic.h>
-#include <linux/platform_device.h>
-#include <linux/regmap.h>
-#include <linux/slab.h>
 
 #include "core.h"
 #include "pinconf.h"
@@ -79,16 +82,17 @@
 #define PINS_PER_GPIO_CHIP			32
 #define JZ4730_PINS_PER_PAIRED_REG	16
 
-#define INGENIC_PIN_GROUP_FUNCS(name, id, funcs)		\
-	{						\
-		name,					\
-		id##_pins,				\
-		ARRAY_SIZE(id##_pins),			\
-		funcs,					\
+#define INGENIC_PIN_GROUP_FUNCS(_name_, id, funcs)					\
+	{										\
+		.grp = PINCTRL_PINGROUP(_name_, id##_pins, ARRAY_SIZE(id##_pins)),	\
+		.data = funcs,								\
 	}
 
-#define INGENIC_PIN_GROUP(name, id, func)		\
-	INGENIC_PIN_GROUP_FUNCS(name, id, (void *)(func))
+#define INGENIC_PIN_GROUP(_name_, id, func)						\
+	{										\
+		.grp = PINCTRL_PINGROUP(_name_, id##_pins, ARRAY_SIZE(id##_pins)),	\
+		.data = (void *)func,							\
+	}
 
 enum jz_version {
 	ID_JZ4730,
@@ -130,12 +134,13 @@ struct ingenic_pinctrl {
 	struct pinctrl_pin_desc *pdesc;
 
 	const struct ingenic_chip_info *info;
+
+	struct gpio_chip *gc;
 };
 
 struct ingenic_gpio_chip {
 	struct ingenic_pinctrl *jzpc;
 	struct gpio_chip gc;
-	struct irq_chip irq_chip;
 	unsigned int irq, reg_base;
 };
 
@@ -667,7 +672,7 @@ static u8 jz4755_lcd_24bit_funcs[] = { 1, 1, 1, 1, 0, 0, };
 static const struct group_desc jz4755_groups[] = {
 	INGENIC_PIN_GROUP("uart0-data", jz4755_uart0_data, 0),
 	INGENIC_PIN_GROUP("uart0-hwflow", jz4755_uart0_hwflow, 0),
-	INGENIC_PIN_GROUP("uart1-data", jz4755_uart1_data, 0),
+	INGENIC_PIN_GROUP("uart1-data", jz4755_uart1_data, 1),
 	INGENIC_PIN_GROUP("uart2-data", jz4755_uart2_data, 1),
 	INGENIC_PIN_GROUP("ssi-dt-b", jz4755_ssi_dt_b, 0),
 	INGENIC_PIN_GROUP("ssi-dt-f", jz4755_ssi_dt_f, 0),
@@ -721,7 +726,7 @@ static const char *jz4755_ssi_groups[] = {
 	"ssi-ce1-b", "ssi-ce1-f",
 };
 static const char *jz4755_mmc0_groups[] = { "mmc0-1bit", "mmc0-4bit", };
-static const char *jz4755_mmc1_groups[] = { "mmc0-1bit", "mmc0-4bit", };
+static const char *jz4755_mmc1_groups[] = { "mmc1-1bit", "mmc1-4bit", };
 static const char *jz4755_i2c_groups[] = { "i2c-data", };
 static const char *jz4755_cim_groups[] = { "cim-data", };
 static const char *jz4755_lcd_groups[] = {
@@ -3393,7 +3398,7 @@ static void ingenic_gpio_irq_mask(struct irq_data *irqd)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(irqd);
 	struct ingenic_gpio_chip *jzgc = gpiochip_get_data(gc);
-	int irq = irqd->hwirq;
+	irq_hw_number_t irq = irqd_to_hwirq(irqd);
 
 	if (is_soc_or_above(jzgc->jzpc, ID_JZ4740))
 		ingenic_gpio_set_bit(jzgc, GPIO_MSK, irq, true);
@@ -3405,7 +3410,7 @@ static void ingenic_gpio_irq_unmask(struct irq_data *irqd)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(irqd);
 	struct ingenic_gpio_chip *jzgc = gpiochip_get_data(gc);
-	int irq = irqd->hwirq;
+	irq_hw_number_t irq = irqd_to_hwirq(irqd);
 
 	if (is_soc_or_above(jzgc->jzpc, ID_JZ4740))
 		ingenic_gpio_set_bit(jzgc, GPIO_MSK, irq, false);
@@ -3417,7 +3422,9 @@ static void ingenic_gpio_irq_enable(struct irq_data *irqd)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(irqd);
 	struct ingenic_gpio_chip *jzgc = gpiochip_get_data(gc);
-	int irq = irqd->hwirq;
+	irq_hw_number_t irq = irqd_to_hwirq(irqd);
+
+	gpiochip_enable_irq(gc, irq);
 
 	if (is_soc_or_above(jzgc->jzpc, ID_JZ4770))
 		ingenic_gpio_set_bit(jzgc, JZ4770_GPIO_INT, irq, true);
@@ -3433,7 +3440,7 @@ static void ingenic_gpio_irq_disable(struct irq_data *irqd)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(irqd);
 	struct ingenic_gpio_chip *jzgc = gpiochip_get_data(gc);
-	int irq = irqd->hwirq;
+	irq_hw_number_t irq = irqd_to_hwirq(irqd);
 
 	ingenic_gpio_irq_mask(irqd);
 
@@ -3443,13 +3450,15 @@ static void ingenic_gpio_irq_disable(struct irq_data *irqd)
 		ingenic_gpio_set_bit(jzgc, JZ4740_GPIO_SELECT, irq, false);
 	else
 		ingenic_gpio_set_bit(jzgc, JZ4730_GPIO_GPIER, irq, false);
+
+	gpiochip_disable_irq(gc, irq);
 }
 
 static void ingenic_gpio_irq_ack(struct irq_data *irqd)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(irqd);
 	struct ingenic_gpio_chip *jzgc = gpiochip_get_data(gc);
-	int irq = irqd->hwirq;
+	irq_hw_number_t irq = irqd_to_hwirq(irqd);
 	bool high;
 
 	if ((irqd_get_trigger_type(irqd) == IRQ_TYPE_EDGE_BOTH) &&
@@ -3477,6 +3486,7 @@ static int ingenic_gpio_irq_set_type(struct irq_data *irqd, unsigned int type)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(irqd);
 	struct ingenic_gpio_chip *jzgc = gpiochip_get_data(gc);
+	irq_hw_number_t irq = irqd_to_hwirq(irqd);
 
 	switch (type) {
 	case IRQ_TYPE_EDGE_BOTH:
@@ -3498,12 +3508,12 @@ static int ingenic_gpio_irq_set_type(struct irq_data *irqd, unsigned int type)
 		 * best we can do is to set up a single-edge interrupt and then
 		 * switch to the opposing edge when ACKing the interrupt.
 		 */
-		bool high = ingenic_gpio_get_value(jzgc, irqd->hwirq);
+		bool high = ingenic_gpio_get_value(jzgc, irq);
 
 		type = high ? IRQ_TYPE_LEVEL_LOW : IRQ_TYPE_LEVEL_HIGH;
 	}
 
-	irq_set_type(jzgc, irqd->hwirq, type);
+	irq_set_type(jzgc, irq, type);
 	return 0;
 }
 
@@ -3551,17 +3561,11 @@ static int ingenic_gpio_get(struct gpio_chip *gc, unsigned int offset)
 	return (int) ingenic_gpio_get_value(jzgc, offset);
 }
 
-static int ingenic_gpio_direction_input(struct gpio_chip *gc,
-		unsigned int offset)
-{
-	return pinctrl_gpio_direction_input(gc->base + offset);
-}
-
 static int ingenic_gpio_direction_output(struct gpio_chip *gc,
 		unsigned int offset, int value)
 {
 	ingenic_gpio_set(gc, offset, value);
-	return pinctrl_gpio_direction_output(gc->base + offset);
+	return pinctrl_gpio_direction_output(gc, offset);
 }
 
 static inline void ingenic_config_pin(struct ingenic_pinctrl *jzpc,
@@ -3668,21 +3672,44 @@ static const struct pinctrl_ops ingenic_pctlops = {
 static int ingenic_gpio_irq_request(struct irq_data *data)
 {
 	struct gpio_chip *gpio_chip = irq_data_get_irq_chip_data(data);
+	irq_hw_number_t irq = irqd_to_hwirq(data);
 	int ret;
 
-	ret = ingenic_gpio_direction_input(gpio_chip, data->hwirq);
+	ret = pinctrl_gpio_direction_input(gpio_chip, irq);
 	if (ret)
 		return ret;
 
-	return gpiochip_reqres_irq(gpio_chip, data->hwirq);
+	return gpiochip_reqres_irq(gpio_chip, irq);
 }
 
 static void ingenic_gpio_irq_release(struct irq_data *data)
 {
 	struct gpio_chip *gpio_chip = irq_data_get_irq_chip_data(data);
+	irq_hw_number_t irq = irqd_to_hwirq(data);
 
-	return gpiochip_relres_irq(gpio_chip, data->hwirq);
+	return gpiochip_relres_irq(gpio_chip, irq);
 }
+
+static void ingenic_gpio_irq_print_chip(struct irq_data *data, struct seq_file *p)
+{
+	struct gpio_chip *gpio_chip = irq_data_get_irq_chip_data(data);
+
+	seq_printf(p, "%s", gpio_chip->label);
+}
+
+static const struct irq_chip ingenic_gpio_irqchip = {
+	.irq_enable		= ingenic_gpio_irq_enable,
+	.irq_disable		= ingenic_gpio_irq_disable,
+	.irq_unmask		= ingenic_gpio_irq_unmask,
+	.irq_mask		= ingenic_gpio_irq_mask,
+	.irq_ack		= ingenic_gpio_irq_ack,
+	.irq_set_type		= ingenic_gpio_irq_set_type,
+	.irq_set_wake		= ingenic_gpio_irq_set_wake,
+	.irq_request_resources	= ingenic_gpio_irq_request,
+	.irq_release_resources	= ingenic_gpio_irq_release,
+	.irq_print_chip		= ingenic_gpio_irq_print_chip,
+	.flags			= IRQCHIP_MASK_ON_SUSPEND | IRQCHIP_IMMUTABLE,
+};
 
 static int ingenic_pinmux_set_pin_fn(struct ingenic_pinctrl *jzpc,
 		int pin, int func)
@@ -3735,17 +3762,17 @@ static int ingenic_pinmux_set_mux(struct pinctrl_dev *pctldev,
 		return -EINVAL;
 
 	dev_dbg(pctldev->dev, "enable function %s group %s\n",
-		func->name, grp->name);
+		func->name, grp->grp.name);
 
 	mode = (uintptr_t)grp->data;
 	if (mode <= 3) {
-		for (i = 0; i < grp->num_pins; i++)
-			ingenic_pinmux_set_pin_fn(jzpc, grp->pins[i], mode);
+		for (i = 0; i < grp->grp.npins; i++)
+			ingenic_pinmux_set_pin_fn(jzpc, grp->grp.pins[i], mode);
 	} else {
 		pin_modes = grp->data;
 
-		for (i = 0; i < grp->num_pins; i++)
-			ingenic_pinmux_set_pin_fn(jzpc, grp->pins[i], pin_modes[i]);
+		for (i = 0; i < grp->grp.npins; i++)
+			ingenic_pinmux_set_pin_fn(jzpc, grp->grp.pins[i], pin_modes[i]);
 	}
 
 	return 0;
@@ -4022,7 +4049,8 @@ static int ingenic_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 			break;
 
 		case PIN_CONFIG_OUTPUT:
-			ret = pinctrl_gpio_direction_output(pin);
+			ret = pinctrl_gpio_direction_output(jzpc->gc,
+							pin - jzpc->gc->base);
 			if (ret)
 				return ret;
 
@@ -4124,7 +4152,7 @@ static const struct of_device_id ingenic_gpio_of_matches[] __initconst = {
 };
 
 static int __init ingenic_gpio_probe(struct ingenic_pinctrl *jzpc,
-				     struct device_node *node)
+				     struct fwnode_handle *fwnode)
 {
 	struct ingenic_gpio_chip *jzgc;
 	struct device *dev = jzpc->dev;
@@ -4132,7 +4160,7 @@ static int __init ingenic_gpio_probe(struct ingenic_pinctrl *jzpc,
 	unsigned int bank;
 	int err;
 
-	err = of_property_read_u32(node, "reg", &bank);
+	err = fwnode_property_read_u32(fwnode, "reg", &bank);
 	if (err) {
 		dev_err(dev, "Cannot read \"reg\" property: %i\n", err);
 		return err;
@@ -4141,6 +4169,8 @@ static int __init ingenic_gpio_probe(struct ingenic_pinctrl *jzpc,
 	jzgc = devm_kzalloc(dev, sizeof(*jzgc), GFP_KERNEL);
 	if (!jzgc)
 		return -ENOMEM;
+
+	jzpc->gc = &jzgc->gc;
 
 	jzgc->jzpc = jzpc;
 	jzgc->reg_base = bank * jzpc->info->reg_offset;
@@ -4157,35 +4187,26 @@ static int __init ingenic_gpio_probe(struct ingenic_pinctrl *jzpc,
 
 	jzgc->gc.ngpio = 32;
 	jzgc->gc.parent = dev;
-	jzgc->gc.of_node = node;
+	jzgc->gc.fwnode = fwnode;
 	jzgc->gc.owner = THIS_MODULE;
 
 	jzgc->gc.set = ingenic_gpio_set;
 	jzgc->gc.get = ingenic_gpio_get;
-	jzgc->gc.direction_input = ingenic_gpio_direction_input;
+	jzgc->gc.direction_input = pinctrl_gpio_direction_input;
 	jzgc->gc.direction_output = ingenic_gpio_direction_output;
 	jzgc->gc.get_direction = ingenic_gpio_get_direction;
 	jzgc->gc.request = gpiochip_generic_request;
 	jzgc->gc.free = gpiochip_generic_free;
 
-	jzgc->irq = irq_of_parse_and_map(node, 0);
-	if (!jzgc->irq)
+	err = fwnode_irq_get(fwnode, 0);
+	if (err < 0)
+		return err;
+	if (!err)
 		return -EINVAL;
-
-	jzgc->irq_chip.name = jzgc->gc.label;
-	jzgc->irq_chip.irq_enable = ingenic_gpio_irq_enable;
-	jzgc->irq_chip.irq_disable = ingenic_gpio_irq_disable;
-	jzgc->irq_chip.irq_unmask = ingenic_gpio_irq_unmask;
-	jzgc->irq_chip.irq_mask = ingenic_gpio_irq_mask;
-	jzgc->irq_chip.irq_ack = ingenic_gpio_irq_ack;
-	jzgc->irq_chip.irq_set_type = ingenic_gpio_irq_set_type;
-	jzgc->irq_chip.irq_set_wake = ingenic_gpio_irq_set_wake;
-	jzgc->irq_chip.irq_request_resources = ingenic_gpio_irq_request;
-	jzgc->irq_chip.irq_release_resources = ingenic_gpio_irq_release;
-	jzgc->irq_chip.flags = IRQCHIP_MASK_ON_SUSPEND;
+	jzgc->irq = err;
 
 	girq = &jzgc->gc.irq;
-	girq->chip = &jzgc->irq_chip;
+	gpio_irq_chip_set_chip(girq, &ingenic_gpio_irqchip);
 	girq->parent_handler = ingenic_gpio_irq_handler;
 	girq->num_parents = 1;
 	girq->parents = devm_kcalloc(dev, 1, sizeof(*girq->parents),
@@ -4211,12 +4232,12 @@ static int __init ingenic_pinctrl_probe(struct platform_device *pdev)
 	struct pinctrl_desc *pctl_desc;
 	void __iomem *base;
 	const struct ingenic_chip_info *chip_info;
-	struct device_node *node;
 	struct regmap_config regmap_config;
+	struct fwnode_handle *fwnode;
 	unsigned int i;
 	int err;
 
-	chip_info = of_device_get_match_data(dev);
+	chip_info = device_get_match_data(dev);
 	if (!chip_info) {
 		dev_err(dev, "Unsupported SoC\n");
 		return -EINVAL;
@@ -4278,12 +4299,12 @@ static int __init ingenic_pinctrl_probe(struct platform_device *pdev)
 
 	for (i = 0; i < chip_info->num_groups; i++) {
 		const struct group_desc *group = &chip_info->groups[i];
+		const struct pingroup *grp = &group->grp;
 
-		err = pinctrl_generic_add_group(jzpc->pctl, group->name,
-				group->pins, group->num_pins, group->data);
+		err = pinctrl_generic_add_group(jzpc->pctl, grp->name, grp->pins, grp->npins,
+						group->data);
 		if (err < 0) {
-			dev_err(dev, "Failed to register group %s\n",
-					group->name);
+			dev_err(dev, "Failed to register group %s\n", grp->name);
 			return err;
 		}
 	}
@@ -4303,11 +4324,11 @@ static int __init ingenic_pinctrl_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, jzpc->map);
 
-	for_each_child_of_node(dev->of_node, node) {
-		if (of_match_node(ingenic_gpio_of_matches, node)) {
-			err = ingenic_gpio_probe(jzpc, node);
+	device_for_each_child_node(dev, fwnode) {
+		if (of_match_node(ingenic_gpio_of_matches, to_of_node(fwnode))) {
+			err = ingenic_gpio_probe(jzpc, fwnode);
 			if (err) {
-				of_node_put(node);
+				fwnode_handle_put(fwnode);
 				return err;
 			}
 		}

@@ -15,7 +15,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/pm_wakeup.h>
+#include <linux/device.h>
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
 #include <linux/coresight.h>
@@ -2267,7 +2267,7 @@ static int cnss_qdss_trace_save_hdlr(struct cnss_plat_data *plat_priv,
 			      QDSS_TRACE_FILE_NAME_MAX);
 
 	if (file_suffix) {
-		strlcpy(file_prefix, event_data->file_name,
+		strscpy(file_prefix, event_data->file_name,
 			(file_suffix - &event_data->file_name[0]) + 1);
 
 		if (plat_priv->device_id == QCN9100_DEVICE_ID)
@@ -2542,7 +2542,7 @@ static int cnss_do_m3_dump_upload(struct cnss_plat_data *plat_priv,
 			return m3_dump_major;
 		}
 
-		m3_dump_class = class_create(THIS_MODULE, "dump_q6v5");
+		m3_dump_class = class_create("dump_q6v5");
 		if (IS_ERR(m3_dump_class)) {
 			ret = PTR_ERR(m3_dump_class);
 			cnss_pr_err("%s: Unable to create class = %d",
@@ -2927,7 +2927,7 @@ static int cnss_init_dump_entry(struct cnss_plat_data *plat_priv)
 	ramdump_info->dump_data.len = ramdump_info->ramdump_size;
 	ramdump_info->dump_data.version = CNSS_DUMP_FORMAT_VER;
 	ramdump_info->dump_data.magic = CNSS_DUMP_MAGIC_VER_V2;
-	strlcpy(ramdump_info->dump_data.name, CNSS_DUMP_NAME,
+	strscpy(ramdump_info->dump_data.name, CNSS_DUMP_NAME,
 		sizeof(ramdump_info->dump_data.name));
 	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
 	dump_entry.addr = virt_to_phys(&ramdump_info->dump_data);
@@ -3047,7 +3047,7 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 	dump_data->version = CNSS_DUMP_FORMAT_VER_V2;
 	dump_data->magic = CNSS_DUMP_MAGIC_VER_V2;
 	dump_data->seg_version = CNSS_DUMP_SEG_VER;
-	strlcpy(dump_data->name, CNSS_DUMP_NAME,
+	strscpy(dump_data->name, CNSS_DUMP_NAME,
 		sizeof(dump_data->name));
 	dump_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
 	dump_entry.addr = virt_to_phys(dump_data);

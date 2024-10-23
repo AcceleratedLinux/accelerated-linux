@@ -13,7 +13,6 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/of_dma.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -388,7 +387,7 @@ static struct dma_async_tx_descriptor *jz4780_dma_prep_slave_sg(
 
 		if (i != (sg_len - 1) &&
 		    !(jzdma->soc_data->flags & JZ_SOC_DATA_BREAK_LINKS)) {
-			/* Automatically proceeed to the next descriptor. */
+			/* Automatically proceed to the next descriptor. */
 			desc->desc[i].dcm |= JZ_DMA_DCM_LINK;
 
 			/*
@@ -1009,7 +1008,7 @@ err_disable_clk:
 	return ret;
 }
 
-static int jz4780_dma_remove(struct platform_device *pdev)
+static void jz4780_dma_remove(struct platform_device *pdev)
 {
 	struct jz4780_dma_dev *jzdma = platform_get_drvdata(pdev);
 	int i;
@@ -1021,8 +1020,6 @@ static int jz4780_dma_remove(struct platform_device *pdev)
 
 	for (i = 0; i < jzdma->soc_data->nb_channels; i++)
 		tasklet_kill(&jzdma->chan[i].vchan.task);
-
-	return 0;
 }
 
 static const struct jz4780_dma_soc_data jz4740_dma_soc_data = {
@@ -1033,6 +1030,13 @@ static const struct jz4780_dma_soc_data jz4740_dma_soc_data = {
 
 static const struct jz4780_dma_soc_data jz4725b_dma_soc_data = {
 	.nb_channels = 6,
+	.transfer_ord_max = 5,
+	.flags = JZ_SOC_DATA_PER_CHAN_PM | JZ_SOC_DATA_NO_DCKES_DCKEC |
+		 JZ_SOC_DATA_BREAK_LINKS,
+};
+
+static const struct jz4780_dma_soc_data jz4755_dma_soc_data = {
+	.nb_channels = 4,
 	.transfer_ord_max = 5,
 	.flags = JZ_SOC_DATA_PER_CHAN_PM | JZ_SOC_DATA_NO_DCKES_DCKEC |
 		 JZ_SOC_DATA_BREAK_LINKS,
@@ -1101,6 +1105,7 @@ static const struct jz4780_dma_soc_data x1830_dma_soc_data = {
 static const struct of_device_id jz4780_dma_dt_match[] = {
 	{ .compatible = "ingenic,jz4740-dma", .data = &jz4740_dma_soc_data },
 	{ .compatible = "ingenic,jz4725b-dma", .data = &jz4725b_dma_soc_data },
+	{ .compatible = "ingenic,jz4755-dma", .data = &jz4755_dma_soc_data },
 	{ .compatible = "ingenic,jz4760-dma", .data = &jz4760_dma_soc_data },
 	{ .compatible = "ingenic,jz4760-mdma", .data = &jz4760_mdma_soc_data },
 	{ .compatible = "ingenic,jz4760-bdma", .data = &jz4760_bdma_soc_data },
@@ -1117,7 +1122,7 @@ MODULE_DEVICE_TABLE(of, jz4780_dma_dt_match);
 
 static struct platform_driver jz4780_dma_driver = {
 	.probe		= jz4780_dma_probe,
-	.remove		= jz4780_dma_remove,
+	.remove_new	= jz4780_dma_remove,
 	.driver	= {
 		.name	= "jz4780-dma",
 		.of_match_table = jz4780_dma_dt_match,

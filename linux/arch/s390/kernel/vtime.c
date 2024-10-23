@@ -7,13 +7,13 @@
  */
 
 #include <linux/kernel_stat.h>
-#include <linux/sched/cputime.h>
 #include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/timex.h>
 #include <linux/types.h>
 #include <linux/time.h>
 #include <asm/alternative.h>
+#include <asm/cputime.h>
 #include <asm/vtimer.h>
 #include <asm/vtime.h>
 #include <asm/cpu_mf.h>
@@ -32,14 +32,6 @@ DEFINE_PER_CPU(u64, mt_cycles[8]);
 static DEFINE_PER_CPU(u64, mt_scaling_mult) = { 1 };
 static DEFINE_PER_CPU(u64, mt_scaling_div) = { 1 };
 static DEFINE_PER_CPU(u64, mt_scaling_jiffies);
-
-static inline u64 get_vtimer(void)
-{
-	u64 timer;
-
-	asm volatile("stpt %0" : "=Q" (timer));
-	return timer;
-}
 
 static inline void set_vtimer(u64 expires)
 {
@@ -210,20 +202,20 @@ void vtime_flush(struct task_struct *tsk)
 		virt_timer_expire();
 
 	steal = S390_lowcore.steal_timer;
-	avg_steal = S390_lowcore.avg_steal_timer / 2;
+	avg_steal = S390_lowcore.avg_steal_timer;
 	if ((s64) steal > 0) {
 		S390_lowcore.steal_timer = 0;
 		account_steal_time(cputime_to_nsecs(steal));
 		avg_steal += steal;
 	}
-	S390_lowcore.avg_steal_timer = avg_steal;
+	S390_lowcore.avg_steal_timer = avg_steal / 2;
 }
 
 static u64 vtime_delta(void)
 {
 	u64 timer = S390_lowcore.last_update_timer;
 
-	S390_lowcore.last_update_timer = get_vtimer();
+	S390_lowcore.last_update_timer = get_cpu_timer();
 
 	return timer - S390_lowcore.last_update_timer;
 }

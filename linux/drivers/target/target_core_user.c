@@ -201,7 +201,7 @@ struct tcmu_tmr {
 
 	uint8_t tmr_type;
 	uint32_t tmr_cmd_cnt;
-	int16_t tmr_cmd_ids[];
+	int16_t tmr_cmd_ids[] __counted_by(tmr_cmd_cnt);
 };
 
 /*
@@ -486,6 +486,7 @@ static struct genl_family tcmu_genl_family __ro_after_init = {
 	.netnsok = true,
 	.small_ops = tcmu_genl_ops,
 	.n_small_ops = ARRAY_SIZE(tcmu_genl_ops),
+	.resv_start_op = TCMU_CMD_SET_FEATURES + 1,
 };
 
 #define tcmu_cmd_set_dbi_cur(cmd, index) ((cmd)->dbi_cur = (index))
@@ -1927,7 +1928,7 @@ static int tcmu_mmap(struct uio_info *info, struct vm_area_struct *vma)
 {
 	struct tcmu_dev *udev = container_of(info, struct tcmu_dev, uio_info);
 
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 	vma->vm_ops = &tcmu_vm_ops;
 
 	vma->vm_private_data = udev;
@@ -2819,14 +2820,14 @@ static ssize_t tcmu_dev_config_store(struct config_item *item, const char *page,
 			pr_err("Unable to reconfigure device\n");
 			return ret;
 		}
-		strlcpy(udev->dev_config, page, TCMU_CONFIG_LEN);
+		strscpy(udev->dev_config, page, TCMU_CONFIG_LEN);
 
 		ret = tcmu_update_uio_info(udev);
 		if (ret)
 			return ret;
 		return count;
 	}
-	strlcpy(udev->dev_config, page, TCMU_CONFIG_LEN);
+	strscpy(udev->dev_config, page, TCMU_CONFIG_LEN);
 
 	return count;
 }

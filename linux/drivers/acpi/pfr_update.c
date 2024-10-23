@@ -178,7 +178,7 @@ static int query_capability(struct pfru_update_cap_info *cap_hdr,
 	ret = 0;
 
 free_acpi_buffer:
-	kfree(out_obj);
+	ACPI_FREE(out_obj);
 
 	return ret;
 }
@@ -224,7 +224,7 @@ static int query_buffer(struct pfru_com_buf_info *info,
 	ret = 0;
 
 free_acpi_buffer:
-	kfree(out_obj);
+	ACPI_FREE(out_obj);
 
 	return ret;
 }
@@ -385,7 +385,7 @@ static int start_update(int action, struct pfru_device *pfru_dev)
 	ret = 0;
 
 free_acpi_buffer:
-	kfree(out_obj);
+	ACPI_FREE(out_obj);
 
 	return ret;
 }
@@ -455,7 +455,7 @@ static ssize_t pfru_write(struct file *file, const char __user *buf,
 
 	iov.iov_base = (void __user *)buf;
 	iov.iov_len = len;
-	iov_iter_init(&iter, WRITE, &iov, 1, len);
+	iov_iter_init(&iter, ITER_SOURCE, &iov, 1, len);
 
 	/* map the communication buffer */
 	phy_addr = (phys_addr_t)((buf_info.addr_hi << 32) | buf_info.addr_lo);
@@ -489,13 +489,11 @@ static const struct file_operations acpi_pfru_fops = {
 	.llseek		= noop_llseek,
 };
 
-static int acpi_pfru_remove(struct platform_device *pdev)
+static void acpi_pfru_remove(struct platform_device *pdev)
 {
 	struct pfru_device *pfru_dev = platform_get_drvdata(pdev);
 
 	misc_deregister(&pfru_dev->miscdev);
-
-	return 0;
 }
 
 static void pfru_put_idx(void *data)
@@ -567,7 +565,7 @@ static struct platform_driver acpi_pfru_driver = {
 		.acpi_match_table = acpi_pfru_ids,
 	},
 	.probe = acpi_pfru_probe,
-	.remove = acpi_pfru_remove,
+	.remove_new = acpi_pfru_remove,
 };
 module_platform_driver(acpi_pfru_driver);
 

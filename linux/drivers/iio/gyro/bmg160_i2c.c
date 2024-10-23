@@ -3,7 +3,7 @@
 #include <linux/regmap.h>
 #include <linux/iio/iio.h>
 #include <linux/module.h>
-#include <linux/acpi.h>
+#include <linux/mod_devicetable.h>
 
 #include "bmg160.h"
 
@@ -13,9 +13,9 @@ static const struct regmap_config bmg160_regmap_i2c_conf = {
 	.max_register = 0x3f
 };
 
-static int bmg160_i2c_probe(struct i2c_client *client,
-			    const struct i2c_device_id *id)
+static int bmg160_i2c_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct regmap *regmap;
 	const char *name = NULL;
 
@@ -32,11 +32,9 @@ static int bmg160_i2c_probe(struct i2c_client *client,
 	return bmg160_core_probe(&client->dev, regmap, client->irq, name);
 }
 
-static int bmg160_i2c_remove(struct i2c_client *client)
+static void bmg160_i2c_remove(struct i2c_client *client)
 {
 	bmg160_core_remove(&client->dev);
-
-	return 0;
 }
 
 static const struct acpi_device_id bmg160_acpi_match[] = {
@@ -68,7 +66,7 @@ MODULE_DEVICE_TABLE(of, bmg160_of_match);
 static struct i2c_driver bmg160_i2c_driver = {
 	.driver = {
 		.name	= "bmg160_i2c",
-		.acpi_match_table = ACPI_PTR(bmg160_acpi_match),
+		.acpi_match_table = bmg160_acpi_match,
 		.of_match_table = bmg160_of_match,
 		.pm	= &bmg160_pm_ops,
 	},

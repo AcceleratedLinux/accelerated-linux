@@ -14,7 +14,7 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
-#include "fsl-pstore-512MB.dtsi"
+#include <dt-bindings/input/input.h>
 
 / {
 	model = "Digi ConnectEZ-1";
@@ -56,9 +56,21 @@
 		pfe_reserved: packetbuffer@83400000 {
 			reg = <0 0x83400000 0 0xc00000>;
 		};
+
+		/*
+		* 64KiB reserved for pstore (ramoops).
+		* phys mem 0x0000000080000000-0x000000008bdfefff
+		*/
+		ramoops@8bdfdfff {
+			compatible = "ramoops";
+			reg = <0 0x8b000000 0 0x10000>;
+			ecc-size = <16>;
+			record-size = <0x1000>;
+			console-size = <0x1000>;
+		};
 	};
 
-	pfe: pfe@04000000 {
+	pfe: pfe@4000000 {
 		status = "okay";
 		compatible = "fsl,pfe";
 		reg =   <0x0 0x04000000 0x0 0xc00000>,	/* AXI 16M */
@@ -93,6 +105,16 @@
 			linux,default-trigger = "none";
 		};
 	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
+		};
+	};
 };
 
 &duart0 {
@@ -109,13 +131,8 @@
 };
 
 &i2c1 {
-	clock-frequency = <400000>;
+	clock-frequency = <1000000>;
 	status = "okay";
-
-	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x430>;
-	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -180,7 +197,7 @@
 };
 
 &gpio1 {
-	gpio-line-names = "", "", "", "", "", "", "", "dbg",
+	gpio-line-names = "", "", "", "", "", "", "", "developer_",
 			  "", "", "", "", "factory", "", "", "",
 			  "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "";

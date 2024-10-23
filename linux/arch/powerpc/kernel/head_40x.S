@@ -28,6 +28,8 @@
 #include <linux/init.h>
 #include <linux/pgtable.h>
 #include <linux/sizes.h>
+#include <linux/linkage.h>
+
 #include <asm/processor.h>
 #include <asm/page.h>
 #include <asm/mmu.h>
@@ -36,7 +38,6 @@
 #include <asm/ppc_asm.h>
 #include <asm/asm-offsets.h>
 #include <asm/ptrace.h>
-#include <asm/export.h>
 
 #include "head_32.h"
 
@@ -311,13 +312,13 @@ _ASM_NOKPROBE_SYMBOL(\name\()_virt)
 
 	rlwimi	r11, r10, 22, 20, 29	/* Compute PTE address */
 	lwz	r11, 0(r11)		/* Get Linux PTE */
-	li	r9, _PAGE_PRESENT | _PAGE_ACCESSED
+	li	r9, _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_READ
 	andc.	r9, r9, r11		/* Check permission */
 	bne	5f
 
-	rlwinm	r9, r11, 1, _PAGE_RW	/* dirty => rw */
-	and	r9, r9, r11		/* hwwrite = dirty & rw */
-	rlwimi	r11, r9, 0, _PAGE_RW	/* replace rw by hwwrite */
+	rlwinm	r9, r11, 1, _PAGE_WRITE	/* dirty => w */
+	and	r9, r9, r11		/* hwwrite = dirty & w */
+	rlwimi	r11, r9, 0, _PAGE_WRITE	/* replace w by hwwrite */
 
 	/* Create TLB tag.  This is the faulting address plus a static
 	 * set of bits.  These are size, valid, E, U0.
@@ -399,9 +400,9 @@ _ASM_NOKPROBE_SYMBOL(\name\()_virt)
 	andc.	r9, r9, r11		/* Check permission */
 	bne	5f
 
-	rlwinm	r9, r11, 1, _PAGE_RW	/* dirty => rw */
-	and	r9, r9, r11		/* hwwrite = dirty & rw */
-	rlwimi	r11, r9, 0, _PAGE_RW	/* replace rw by hwwrite */
+	rlwinm	r9, r11, 1, _PAGE_WRITE	/* dirty => w */
+	and	r9, r9, r11		/* hwwrite = dirty & w */
+	rlwimi	r11, r9, 0, _PAGE_WRITE	/* replace w by hwwrite */
 
 	/* Create TLB tag.  This is the faulting address plus a static
 	 * set of bits.  These are size, valid, E, U0.
@@ -560,10 +561,11 @@ finish_tlb_load:
 	/*
 	 * Clear out the software-only bits in the PTE to generate the
 	 * TLB_DATA value.  These are the bottom 2 bits of the RPM, the
-	 * top 3 bits of the zone field, and M.
+	 * 4 bits of the zone field, and M.
 	 */
-	li	r9, 0x0ce2
+	li	r9, 0x0cf2
 	andc	r11, r11, r9
+	rlwimi	r11, r10, 8, 24, 27	/* Copy 4 upper address bit into zone */
 
 	/* load the next available TLB index. */
 	lwz	r9, tlb_4xx_index@l(0)
@@ -602,7 +604,7 @@ start_here:
 	lis	r1,init_thread_union@ha
 	addi	r1,r1,init_thread_union@l
 	li	r0,0
-	stwu	r0,THREAD_SIZE-STACK_FRAME_OVERHEAD(r1)
+	stwu	r0,THREAD_SIZE-STACK_FRAME_MIN_SIZE(r1)
 
 	bl	early_init	/* We have to do this with MMU on */
 
@@ -662,7 +664,7 @@ start_here:
  * kernel initialization.  This maps the first 32 MBytes of memory 1:1
  * virtual to physical and more importantly sets the cache mode.
  */
-initial_mmu:
+SYM_FUNC_START_LOCAL(initial_mmu)
 	tlbia			/* Invalidate all TLB entries */
 	isync
 
@@ -711,6 +713,7 @@ initial_mmu:
 	mtspr	SPRN_EVPR,r0
 
 	blr
+SYM_FUNC_END(initial_mmu)
 
 _GLOBAL(abort)
         mfspr   r13,SPRN_DBCR0

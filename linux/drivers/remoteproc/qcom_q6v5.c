@@ -23,19 +23,13 @@
 
 static int q6v5_load_state_toggle(struct qcom_q6v5 *q6v5, bool enable)
 {
-	char buf[Q6V5_LOAD_STATE_MSG_LEN];
 	int ret;
 
 	if (!q6v5->qmp)
 		return 0;
 
-	ret = snprintf(buf, sizeof(buf),
-		       "{class: image, res: load_state, name: %s, val: %s}",
+	ret = qmp_send(q6v5->qmp, "{class: image, res: load_state, name: %s, val: %s}",
 		       q6v5->load_state, enable ? "on" : "off");
-
-	WARN_ON(ret >= Q6V5_LOAD_STATE_MSG_LEN);
-
-	ret = qmp_send(q6v5->qmp, buf, sizeof(buf));
 	if (ret)
 		dev_err(q6v5->dev, "failed to toggle load state\n");
 
@@ -112,6 +106,7 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	else
 		dev_err(q6v5->dev, "watchdog without message\n");
 
+	q6v5->running = false;
 	rproc_report_crash(q6v5->rproc, RPROC_WATCHDOG);
 
 	return IRQ_HANDLED;
@@ -122,6 +117,9 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	struct qcom_q6v5 *q6v5 = data;
 	size_t len;
 	char *msg;
+
+	if (!q6v5->running)
+		return IRQ_HANDLED;
 
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
 	if (!IS_ERR(msg) && len > 0 && msg[0])
@@ -201,8 +199,8 @@ int qcom_q6v5_request_stop(struct qcom_q6v5 *q6v5, struct qcom_sysmon *sysmon)
 
 	q6v5->running = false;
 
-	/* Don't perform SMP2P dance if sysmon already shut down the remote */
-	if (qcom_sysmon_shutdown_acked(sysmon))
+	/* Don't perform SMP2P dance if remote isn't running */
+	if (q6v5->rproc->state != RPROC_RUNNING || qcom_sysmon_shutdown_acked(sysmon))
 		return 0;
 
 	qcom_smem_state_update_bits(q6v5->state,

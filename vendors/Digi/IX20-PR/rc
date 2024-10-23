@@ -32,18 +32,6 @@ echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
 setmac -i eth1,eth2 -u -n 2
 
-# No Wi-Fi on the IX20, so turn all power off
-# GPIO123 = WiFi module power (output, active high)
-# GPIO124 = BT module power (output, active high)
-echo 123 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio123/direction
-echo 124 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio124/direction
-
-# developer key
-echo 86 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio86/direction
-
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory
 	exit 0

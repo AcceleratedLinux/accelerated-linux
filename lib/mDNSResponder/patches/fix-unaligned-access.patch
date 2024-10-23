@@ -1,0 +1,54 @@
+--- a/DNSCore/mDNS.c.orig	2020-09-21 12:26:28.000000000 -0500
++++ b/mDNSCore/mDNS.c	2021-05-27 17:22:59.450798000 -0500
+@@ -2462,7 +2462,7 @@
+ }
+ 
+ mDNSlocal void SendARP(mDNS *const m, const mDNSu8 op, const AuthRecord *const rr,
+-                       const mDNSv4Addr *const spa, const mDNSEthAddr *const tha, const mDNSv4Addr *const tpa, const mDNSEthAddr *const dst)
++                       const mDNSu8 *const spa, const mDNSEthAddr *const tha, const mDNSu8 *const tpa, const mDNSEthAddr *const dst)
+ {
+     int i;
+     mDNSu8 *ptr = m->omsg.data;
+@@ -2489,13 +2489,13 @@
+     for (i=0; i<6; i++) *ptr++ = intf->MAC.b[i];
+ 
+     // 0x1C Sender protocol address
+-    for (i=0; i<4; i++) *ptr++ = spa->b[i];
++    for (i=0; i<4; i++) *ptr++ = spa[i];
+ 
+     // 0x20 Target hardware address
+     for (i=0; i<6; i++) *ptr++ = tha->b[i];
+ 
+     // 0x26 Target protocol address
+-    for (i=0; i<4; i++) *ptr++ = tpa->b[i];
++    for (i=0; i<4; i++) *ptr++ = tpa[i];
+ 
+     // 0x2A Total ARP Packet length 42 bytes
+     mDNSPlatformSendRawPacket(m->omsg.data, ptr, rr->resrec.InterfaceID);
+@@ -2770,7 +2770,7 @@
+                         {
+                             LogSPS("ARP Announcement %2d Capturing traffic for H-MAC %.6a I-MAC %.6a %s",
+                                     rr->AnnounceCount, &rr->WakeUp.HMAC, &rr->WakeUp.IMAC, ARDisplayString(m,rr));
+-                            SendARP(m, 1, rr, &rr->AddressProxy.ip.v4, &zeroEthAddr, &rr->AddressProxy.ip.v4, &onesEthAddr);
++                            SendARP(m, 1, rr, rr->AddressProxy.ip.v4.b, &zeroEthAddr, rr->AddressProxy.ip.v4.b, &onesEthAddr);
+                         }
+                         else if (rr->AddressProxy.type == mDNSAddrType_IPv6)
+                         {
+@@ -3786,7 +3786,7 @@
+                     // (using our sender IP address) instead of an ARP *probe* (using all-zero sender IP address).
+                     // A similar concern may apply to the NDP Probe too. -- SC
+                     LogSPS("SendQueries ARP Probe %d %s %s", ar->ProbeCount, InterfaceNameForID(m, ar->resrec.InterfaceID), ARDisplayString(m,ar));
+-                    SendARP(m, 1, ar, &zerov4Addr, &zeroEthAddr, &ar->AddressProxy.ip.v4, &ar->WakeUp.IMAC);
++                    SendARP(m, 1, ar, zerov4Addr.b, &zeroEthAddr, ar->AddressProxy.ip.v4.b, &ar->WakeUp.IMAC);
+                 }
+                 else if (ar->AddressProxy.type == mDNSAddrType_IPv6)
+                 {
+@@ -13986,7 +13986,7 @@
+                 }
+                 else if (msg == msg4)
+                 {
+-                    SendARP(m, 2, rr, (mDNSv4Addr *)arp->tpa.b, &arp->sha, (mDNSv4Addr *)arp->spa.b, &arp->sha);
++                    SendARP(m, 2, rr, arp->tpa.b, &arp->sha, arp->spa.b, &arp->sha);
+                 }
+             }
+     }

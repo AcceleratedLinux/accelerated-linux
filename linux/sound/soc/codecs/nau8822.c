@@ -184,6 +184,7 @@ static int nau8822_eq_get(struct snd_kcontrol *kcontrol,
 	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
 	int i, reg;
 	u16 reg_val, *val;
+	__be16 tmp;
 
 	val = (u16 *)ucontrol->value.bytes.data;
 	reg = NAU8822_REG_EQ1;
@@ -192,8 +193,8 @@ static int nau8822_eq_get(struct snd_kcontrol *kcontrol,
 		/* conversion of 16-bit integers between native CPU format
 		 * and big endian format
 		 */
-		reg_val = cpu_to_be16(reg_val);
-		memcpy(val + i, &reg_val, sizeof(reg_val));
+		tmp = cpu_to_be16(reg_val);
+		memcpy(val + i, &tmp, sizeof(tmp));
 	}
 
 	return 0;
@@ -216,6 +217,7 @@ static int nau8822_eq_put(struct snd_kcontrol *kcontrol,
 	void *data;
 	u16 *val, value;
 	int i, reg, ret;
+	__be16 *tmp;
 
 	data = kmemdup(ucontrol->value.bytes.data,
 		params->max, GFP_KERNEL | GFP_DMA);
@@ -228,7 +230,8 @@ static int nau8822_eq_put(struct snd_kcontrol *kcontrol,
 		/* conversion of 16-bit integers between native CPU format
 		 * and big endian format
 		 */
-		value = be16_to_cpu(*(val + i));
+		tmp = (__be16 *)(val + i);
+		value = be16_to_cpup(tmp);
 		ret = snd_soc_component_write(component, reg + i, value);
 		if (ret) {
 			dev_err(component->dev,
@@ -726,6 +729,17 @@ static int nau8822_set_pll(struct snd_soc_dai *dai, int pll_id, int source,
 	struct nau8822_pll *pll_param = &nau8822->pll;
 	int ret, fs;
 
+	if (freq_in == pll_param->freq_in &&
+	    freq_out == pll_param->freq_out)
+		return 0;
+
+	if (freq_out == 0) {
+		dev_dbg(component->dev, "PLL disabled\n");
+		snd_soc_component_update_bits(component,
+			NAU8822_REG_POWER_MANAGEMENT_1, NAU8822_PLL_EN_MASK, NAU8822_PLL_OFF);
+		return 0;
+	}
+
 	fs = freq_out / 256;
 
 	ret = nau8822_calc_pll(freq_in, fs, pll_param);
@@ -761,6 +775,9 @@ static int nau8822_set_pll(struct snd_soc_dai *dai, int pll_id, int source,
 		NAU8822_REG_CLOCKING, NAU8822_CLKM_MASK, NAU8822_CLKM_PLL);
 	snd_soc_component_update_bits(component,
 		NAU8822_REG_POWER_MANAGEMENT_1, NAU8822_PLL_EN_MASK, NAU8822_PLL_ON);
+
+	pll_param->freq_in = freq_in;
+	pll_param->freq_out = freq_out;
 
 	return 0;
 }
@@ -1042,6 +1059,7 @@ static const int update_reg[] = {
 static int nau8822_probe(struct snd_soc_component *component)
 {
 	int i;
+	struct device_node *of_node = component->dev->of_node;
 
 	/*
 	 * Set the update bit in all registers, that have one. This way all
@@ -1051,6 +1069,14 @@ static int nau8822_probe(struct snd_soc_component *component)
 	for (i = 0; i < ARRAY_SIZE(update_reg); i++)
 		snd_soc_component_update_bits(component,
 			update_reg[i], 0x100, 0x100);
+
+	/* Check property to configure the two loudspeaker outputs as
+	 * a single Bridge Tied Load output
+	 */
+	if (of_property_read_bool(of_node, "nuvoton,spk-btl"))
+		snd_soc_component_update_bits(component,
+					      NAU8822_REG_RIGHT_SPEAKER_CONTROL,
+					      NAU8822_RSUBBYP, NAU8822_RSUBBYP);
 
 	return 0;
 }
@@ -1069,7 +1095,6 @@ static const struct snd_soc_component_driver soc_component_dev_nau8822 = {
 	.idle_bias_on			= 1,
 	.use_pmdown_time		= 1,
 	.endianness			= 1,
-	.non_legacy_dai_naming		= 1,
 };
 
 static const struct regmap_config nau8822_regmap_config = {
@@ -1126,7 +1151,7 @@ static int nau8822_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id nau8822_i2c_id[] = {
-	{ "nau8822", 0 },
+	{ "nau8822" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, nau8822_i2c_id);
@@ -1144,7 +1169,7 @@ static struct i2c_driver nau8822_i2c_driver = {
 		.name = "nau8822",
 		.of_match_table = of_match_ptr(nau8822_of_match),
 	},
-	.probe_new = nau8822_i2c_probe,
+	.probe = nau8822_i2c_probe,
 	.id_table = nau8822_i2c_id,
 };
 module_i2c_driver(nau8822_i2c_driver);

@@ -9,6 +9,7 @@
 
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/filelock.h>
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
@@ -737,20 +738,13 @@ static int user_plock(struct ocfs2_cluster_connection *conn,
 	 *
 	 * Internally, fs/dlm will pass these to a misc device, which
 	 * a userspace daemon will read and write to.
-	 *
-	 * For now, cancel requests (which happen internally only),
-	 * are turned into unlocks. Most of this function taken from
-	 * gfs2_lock.
 	 */
 
-	if (cmd == F_CANCELLK) {
-		cmd = F_SETLK;
-		fl->fl_type = F_UNLCK;
-	}
-
-	if (IS_GETLK(cmd))
+	if (cmd == F_CANCELLK)
+		return dlm_posix_cancel(conn->cc_lockspace, ino, file, fl);
+	else if (IS_GETLK(cmd))
 		return dlm_posix_get(conn->cc_lockspace, ino, file, fl);
-	else if (fl->fl_type == F_UNLCK)
+	else if (lock_is_unlock(fl))
 		return dlm_posix_unlock(conn->cc_lockspace, ino, file, fl);
 	else
 		return dlm_posix_lock(conn->cc_lockspace, ino, file, cmd, fl);
@@ -991,7 +985,7 @@ static int user_cluster_connect(struct ocfs2_cluster_connection *conn)
 	lc->oc_type = NO_CONTROLD;
 
 	rc = dlm_new_lockspace(conn->cc_name, conn->cc_cluster_name,
-			       DLM_LSFL_FS | DLM_LSFL_NEWEXCL, DLM_LVB_LEN,
+			       DLM_LSFL_NEWEXCL, DLM_LVB_LEN,
 			       &ocfs2_ls_ops, conn, &ops_rv, &fsdlm);
 	if (rc) {
 		if (rc == -EEXIST || rc == -EPROTO)

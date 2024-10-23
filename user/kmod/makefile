@@ -1,5 +1,5 @@
 
-VERSION = 18
+VERSION = 32
 URL = https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-$(VERSION).tar.gz
 
 CONFOPTS += --disable-dependency-tracking
@@ -8,18 +8,25 @@ CONFOPTS += --disable-manpages
 CONFOPTS += --disable-gtk-doc
 CONFOPTS += --disable-gtk-doc-html
 CONFOPTS += --disable-gtk-doc-pdf
-# CONFOPTS += --enable-debug
 
-AUTOMAKE_ROMFS = my_romfs
+ifdef CONFIG_USER_DEBUG
+  CONFOPTS += --enable-debug
+endif
+ifndef CONFIG_USER_KMOD_TOOLS
+  CONFOPTS += --disable-tools
+endif
+ifndef CONFIG_USER_KMOD_LIBKMOD
+  CONFOPTS += --disable-shared
+endif
+
+# kmod now installs tools under /bin, but much of uClinux expects /sbin/modprobe
+CONFOPTS += --bindir=/sbin
+
+# avoid jlibtool
+MAKEVARS=
+
+ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC),y)
+LDFLAGS += -lrt
+endif
 
 include $(ROOTDIR)/tools/automake.inc
-
-my_romfs:
-	$(ROMFSINST) -e CONFIG_USER_KMOD_LIBKMOD \
-		build/kmod-$(VERSION)-install/lib/libkmod.so /lib/libkmod.so
-	$(ROMFSINST) -e CONFIG_USER_KMOD_TOOLS \
-		build/kmod-$(VERSION)-install/bin/kmod /bin/kmod
-	for i in modprobe modinfo lsmod insmod depmod rmmod ; do \
-		$(ROMFSINST) -e CONFIG_USER_KMOD_TOOLS -s /bin/kmod /sbin/$$i || exit 1; \
-	done
-

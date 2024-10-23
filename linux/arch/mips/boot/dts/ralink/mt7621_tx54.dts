@@ -2,6 +2,7 @@
 
 #include "mt7621.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include "mt7621_pstore.dtsi"
 
 / {
@@ -16,9 +17,8 @@
 	/* Have to swap serial port 0 and 1, because of historical reasons
 	 * (bootloader is passing ttyS1 as console port) */
 	aliases {
-		serial0 = &uartlite1;
-		serial1 = &uartlite0;
-		serial2 = &uartlite2;
+		serial0 = &serial1;
+		serial1 = &serial0;
 	};
 
 	chosen {
@@ -88,6 +88,15 @@
 			default-state = "off";
 		};
 	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio 29 GPIO_ACTIVE_LOW>;
+		};
+	};
 };
 
 &pcie {
@@ -138,6 +147,10 @@
 /* Overwrite dtsi's pinctrl. TX54 is using RGMII2 pins as GPIOs */
 &ethernet {
 	pinctrl-0 = <&mdio_pins>, <&rgmii1_pins>;
+};
+
+&gmac1 {
+        status = "disabled";
 };
 
 &switch0 {
@@ -225,13 +238,23 @@
 		battery {
 			compatible = "digi,mcu-tx54-battery";
 		};
+
+		mcu_gpios: gpios {
+			compatible = "digi,mcu-tx54-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+
+			gpio-line-names = "ignition", "pwr_button";
+		};
 	};
 };
 
-&uartlite1 {
+&serial1 {
 	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart2_pins>;
+};
+
+&serial2 {
+	status = "okay";
 };
 
 &pinctrl {

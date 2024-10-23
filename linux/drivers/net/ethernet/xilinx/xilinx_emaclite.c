@@ -8,6 +8,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/platform_device.h>
 #include <linux/uaccess.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -15,9 +16,8 @@
 #include <linux/ethtool.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_device.h>
-#include <linux/of_platform.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include <linux/phy.h>
@@ -108,7 +108,7 @@
  * @next_tx_buf_to_use:	next Tx buffer to write to
  * @next_rx_buf_to_use:	next Rx buffer to read from
  * @base_addr:		base address of the Emaclite device
- * @reset_lock:		lock used for synchronization
+ * @reset_lock:		lock to serialize xmit and tx_timeout execution
  * @deferred_skb:	holds an skb (for transmission at a later time) when the
  *			Tx buffer is not free
  * @phy_dev:		pointer to the PHY device
@@ -536,7 +536,7 @@ static void xemaclite_tx_timeout(struct net_device *dev, unsigned int txqueue)
 	xemaclite_enable_interrupts(lp);
 
 	if (lp->deferred_skb) {
-		dev_kfree_skb(lp->deferred_skb);
+		dev_kfree_skb_irq(lp->deferred_skb);
 		lp->deferred_skb = NULL;
 		dev->stats.tx_errors++;
 	}
@@ -1060,7 +1060,7 @@ static bool get_bool(struct platform_device *ofdev, const char *s)
 static void xemaclite_ethtools_get_drvinfo(struct net_device *ndev,
 					   struct ethtool_drvinfo *ed)
 {
-	strlcpy(ed->driver, DRIVER_NAME, sizeof(ed->driver));
+	strscpy(ed->driver, DRIVER_NAME, sizeof(ed->driver));
 }
 
 static const struct ethtool_ops xemaclite_ethtool_ops = {
@@ -1114,8 +1114,7 @@ static int xemaclite_of_probe(struct platform_device *ofdev)
 
 	ndev->irq = rc;
 
-	res = platform_get_resource(ofdev, IORESOURCE_MEM, 0);
-	lp->base_addr = devm_ioremap_resource(&ofdev->dev, res);
+	lp->base_addr = devm_platform_get_and_ioremap_resource(ofdev, 0, &res);
 	if (IS_ERR(lp->base_addr)) {
 		rc = PTR_ERR(lp->base_addr);
 		goto error;
@@ -1180,10 +1179,8 @@ error:
  * This function is called if a device is physically removed from the system or
  * if the driver module is being unloaded. It frees any resources allocated to
  * the device.
- *
- * Return:	0, always.
  */
-static int xemaclite_of_remove(struct platform_device *of_dev)
+static void xemaclite_of_remove(struct platform_device *of_dev)
 {
 	struct net_device *ndev = platform_get_drvdata(of_dev);
 
@@ -1202,8 +1199,6 @@ static int xemaclite_of_remove(struct platform_device *of_dev)
 	lp->phy_node = NULL;
 
 	free_netdev(ndev);
-
-	return 0;
 }
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
@@ -1262,7 +1257,7 @@ static struct platform_driver xemaclite_of_driver = {
 		.of_match_table = xemaclite_of_match,
 	},
 	.probe		= xemaclite_of_probe,
-	.remove		= xemaclite_of_remove,
+	.remove_new	= xemaclite_of_remove,
 };
 
 module_platform_driver(xemaclite_of_driver);

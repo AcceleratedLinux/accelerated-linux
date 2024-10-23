@@ -1,0 +1,105 @@
+From efab964645d82494d9c3e218368e28887f634eb0 Mon Sep 17 00:00:00 2001
+From: Samuel Brian <samuel.brian@gearlinx.com>
+Date: Tue, 29 Jun 2021 15:37:35 +1000
+Subject: [PATCH 1/2] node: added non-callback chunk writing to the node
+ deserialize API
+
+---
+ src/mpack/mpack-node.c | 50 ++++++++++++++++++++++++++++++++++++++++--
+ src/mpack/mpack-node.h |  5 +++++
+ 2 files changed, 53 insertions(+), 2 deletions(-)
+
+diff --git a/src/mpack/mpack-node.c b/src/mpack/mpack-node.c
+index a03ffc1..b8404e1 100644
+--- a/src/mpack/mpack-node.c
++++ b/src/mpack/mpack-node.c
+@@ -99,8 +99,10 @@ static bool mpack_tree_reserve_fill(mpack_tree_t* tree) {
+     // no read function, the data should contain an entire message
+     // (or messages), so we flag it as invalid.
+     if (tree->read_fn == NULL) {
+-        mpack_log("tree has no read function!\n");
+-        mpack_tree_flag_error(tree, mpack_error_invalid);
++        if (!tree->buffer_chunked) {
++            mpack_log("tree has no read functionfor chunked data!\n");
++            mpack_tree_flag_error(tree, mpack_error_invalid);
++        }
+         return false;
+     }
+ 
+@@ -1070,6 +1072,50 @@ void mpack_tree_init_stream(mpack_tree_t* tree, mpack_tree_read_t read_fn, void*
+     mpack_log("initializing tree with stream, max size %i max nodes %i\n",
+             (int)max_message_size, (int)max_message_nodes);
+ }
++
++void mpack_tree_init_chunked(mpack_tree_t* tree,
++    size_t max_message_size, size_t max_message_nodes) {
++    mpack_tree_init_clear(tree);
++
++    tree->buffer_chunked = true;
++
++    mpack_tree_set_limits(tree, max_message_size, max_message_nodes);
++
++    mpack_log("===========================\n");
++    mpack_log("initializing tree for chunked buffer, max size %i max nodes %i\n",
++            (int)max_message_size, (int)max_message_nodes);
++}
++
++bool mpack_tree_add_chunk(mpack_tree_t* tree, const char* data, size_t length) {
++    size_t new_capacity;
++
++    if (!tree->buffer_chunked)
++        return false;
++
++    new_capacity = tree->data_length + length;
++    if (new_capacity > tree->buffer_capacity) {
++        char *new_buffer;
++        if (tree->buffer == NULL)
++            new_buffer = (char*)MPACK_MALLOC(new_capacity);
++        else
++            new_buffer = (char*)mpack_realloc(tree->buffer, tree->data_length, new_capacity);
++
++        if (new_buffer == NULL) {
++            mpack_tree_flag_error(tree, mpack_error_memory);
++            return false;
++        }
++
++        tree->data = new_buffer;
++        tree->buffer = new_buffer;
++        tree->buffer_capacity = new_capacity;
++    }
++
++    mpack_memcpy(tree->buffer + tree->data_length, data, length);
++    tree->data_length += length;
++    tree->parser.possible_nodes_left += length;
++
++    return true;
++}
+ #endif
+ 
+ void mpack_tree_set_limits(mpack_tree_t* tree, size_t max_message_size, size_t max_message_nodes) {
+diff --git a/src/mpack/mpack-node.h b/src/mpack/mpack-node.h
+index 42ba410..880446a 100644
+--- a/src/mpack/mpack-node.h
++++ b/src/mpack/mpack-node.h
+@@ -239,6 +239,7 @@ struct mpack_tree_t {
+     #ifdef MPACK_MALLOC
+     char* buffer;
+     size_t buffer_capacity;
++    bool buffer_chunked;
+     #endif
+ 
+     const char* data;
+@@ -344,6 +345,10 @@ MPACK_INLINE void mpack_tree_init(mpack_tree_t* tree, const char* data, size_t l
+  */
+ void mpack_tree_init_stream(mpack_tree_t* tree, mpack_tree_read_t read_fn, void* context,
+         size_t max_message_size, size_t max_message_nodes);
++
++void mpack_tree_init_chunked(mpack_tree_t* tree,
++    size_t max_message_size, size_t max_message_nodes);
++bool mpack_tree_add_chunk(mpack_tree_t* tree, const char* data, size_t length);
+ #endif
+ 
+ /**
+-- 
+2.30.2
+

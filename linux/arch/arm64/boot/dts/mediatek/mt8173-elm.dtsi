@@ -53,52 +53,40 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&gpio_keys_pins>;
 
-		lid {
+		switch-lid {
 			label = "Lid";
 			gpios = <&pio 69 GPIO_ACTIVE_LOW>;
 			linux,code = <SW_LID>;
 			linux,input-type = <EV_SW>;
-			gpio-key,wakeup;
+			wakeup-source;
 		};
 
-		power {
+		switch-power {
 			label = "Power";
 			gpios = <&pio 14 GPIO_ACTIVE_HIGH>;
 			linux,code = <KEY_POWER>;
 			debounce-interval = <30>;
-			gpio-key,wakeup;
+			wakeup-source;
 		};
 
-		tablet_mode {
+		switch-tablet-mode {
 			label = "Tablet_mode";
 			gpios = <&pio 121 GPIO_ACTIVE_HIGH>;
 			linux,code = <SW_TABLET_MODE>;
 			linux,input-type = <EV_SW>;
-			gpio-key,wakeup;
+			wakeup-source;
 		};
 
-		volume_down {
+		switch-volume-down {
 			label = "Volume_down";
 			gpios = <&pio 123 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_VOLUMEDOWN>;
 		};
 
-		volume_up {
+		switch-volume-up {
 			label = "Volume_up";
 			gpios = <&pio 124 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_VOLUMEUP>;
-		};
-	};
-
-	panel: panel {
-		compatible = "lg,lp120up1";
-		power-supply = <&panel_fixed_3v3>;
-		backlight = <&backlight>;
-
-		port {
-			panel_in: endpoint {
-				remote-endpoint = <&ps8640_out>;
-			};
 		};
 	};
 
@@ -108,6 +96,8 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
+		regulator-boot-on;
+		off-on-delay-us = <500000>;
 		gpio = <&pio 41 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&panel_fixed_pins>;
@@ -161,6 +151,18 @@
 			};
 		};
 	};
+
+	watchdog {
+		compatible = "arm,smc-wdt";
+	};
+};
+
+/*
+ * Disable the original MMIO watch dog and switch to the SMC watchdog, which
+ * operates on the same MMIO.
+ */
+&watchdog {
+	status = "disabled";
 };
 
 &mfg_async {
@@ -243,8 +245,7 @@
 		reg = <0x1a>;
 		avdd-supply = <&mt6397_vgp1_reg>;
 		cpvdd-supply = <&mt6397_vcama_reg>;
-		interrupt-parent = <&pio>;
-		interrupts = <3 IRQ_TYPE_EDGE_BOTH>;
+		interrupts-extended = <&pio 3 IRQ_TYPE_EDGE_BOTH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&rt5650_irq>;
 		#sound-dai-cells = <1>;
@@ -282,6 +283,20 @@
 				};
 			};
 		};
+
+		aux-bus {
+			panel: panel {
+				compatible = "edp-panel";
+				power-supply = <&panel_fixed_3v3>;
+				backlight = <&backlight>;
+
+				port {
+					panel_in: endpoint {
+						remote-endpoint = <&ps8640_out>;
+					};
+				};
+			};
+		};
 	};
 };
 
@@ -292,16 +307,15 @@
 	da9211: da9211@68 {
 		compatible = "dlg,da9211";
 		reg = <0x68>;
-		interrupt-parent = <&pio>;
-		interrupts = <15 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
 
 		regulators {
 			da9211_vcpu_reg: BUCKA {
 				regulator-name = "VBUCKA";
 				regulator-min-microvolt = < 700000>;
 				regulator-max-microvolt = <1310000>;
-				regulator-min-microamp  = <2000000>;
-				regulator-max-microamp  = <4400000>;
+				regulator-min-microamp = <2000000>;
+				regulator-max-microamp = <4400000>;
 				regulator-ramp-delay = <10000>;
 				regulator-always-on;
 				regulator-allowed-modes = <DA9211_BUCK_MODE_SYNC
@@ -312,8 +326,8 @@
 				regulator-name = "VBUCKB";
 				regulator-min-microvolt = < 700000>;
 				regulator-max-microvolt = <1310000>;
-				regulator-min-microamp  = <2000000>;
-				regulator-max-microamp  = <3000000>;
+				regulator-min-microamp = <2000000>;
+				regulator-max-microamp = <3000000>;
 				regulator-ramp-delay = <10000>;
 			};
 		};
@@ -337,8 +351,7 @@
 	touchscreen: touchscreen@10 {
 		compatible = "elan,ekth3500";
 		reg = <0x10>;
-		interrupt-parent = <&pio>;
-		interrupts = <88 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&pio 88 IRQ_TYPE_LEVEL_LOW>;
 	};
 };
 
@@ -350,8 +363,7 @@
 
 	trackpad: trackpad@15 {
 		compatible = "elan,ekth3000";
-		interrupt-parent = <&pio>;
-		interrupts = <117 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&pio 117 IRQ_TYPE_LEVEL_LOW>;
 		reg = <0x15>;
 		vcc-supply = <&mt6397_vgp6_reg>;
 		wakeup-source;
@@ -374,8 +386,8 @@
 	mmc-hs400-1_8v;
 	cap-mmc-hw-reset;
 	hs400-ds-delay = <0x14015>;
-	mediatek,hs200-cmd-int-delay=<30>;
-	mediatek,hs400-cmd-int-delay=<14>;
+	mediatek,hs200-cmd-int-delay = <30>;
+	mediatek,hs400-cmd-int-delay = <14>;
 	mediatek,hs400-cmd-resp-sel-rising;
 	vmmc-supply = <&mt6397_vemc_3v3_reg>;
 	vqmmc-supply = <&mt6397_vio18_reg>;
@@ -410,7 +422,7 @@
 	sd-uhs-sdr50;
 	sd-uhs-sdr104;
 	keep-power-in-suspend;
-	enable-sdio-wakeup;
+	wakeup-source;
 	cap-sdio-irq;
 	vmmc-supply = <&sdio_fixed_3v3>;
 	vqmmc-supply = <&mt6397_vgp3_reg>;
@@ -423,8 +435,7 @@
 	btmrvl: btmrvl@2 {
 		compatible = "marvell,sd8897-bt";
 		reg = <2>;
-		interrupt-parent = <&pio>;
-		interrupts = <119 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&pio 119 IRQ_TYPE_LEVEL_LOW>;
 		marvell,wakeup-pin = /bits/ 16 <0x0d>;
 		marvell,wakeup-gap-ms = /bits/ 16 <0x64>;
 	};
@@ -432,8 +443,7 @@
 	mwifiex: mwifiex@1 {
 		compatible = "marvell,sd8897";
 		reg = <1>;
-		interrupt-parent = <&pio>;
-		interrupts = <38 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&pio 38 IRQ_TYPE_LEVEL_LOW>;
 		marvell,wakeup-pin = <3>;
 	};
 };
@@ -913,12 +923,11 @@
 };
 
 &pwrap {
-	pmic: mt6397 {
+	pmic: pmic {
 		compatible = "mediatek,mt6397";
 		#address-cells = <1>;
 		#size-cells = <1>;
-		interrupt-parent = <&pio>;
-		interrupts = <11 IRQ_TYPE_LEVEL_HIGH>;
+		interrupts-extended = <&pio 11 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
@@ -929,7 +938,6 @@
 
 		pio6397: pinctrl {
 			compatible = "mediatek,mt6397-pinctrl";
-			pins-are-numbered;
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
@@ -1127,7 +1135,7 @@
 			compatible = "mediatek,mt6397-rtc";
 		};
 
-		syscfg_pctl_pmic: syscfg_pctl_pmic@c000 {
+		syscfg_pctl_pmic: syscon@c000 {
 			compatible = "mediatek,mt6397-pctl-pmic-syscfg",
 				     "syscon";
 			reg = <0 0x0000c000 0 0x0108>;
@@ -1145,9 +1153,9 @@
 		compatible = "google,cros-ec-spi";
 		reg = <0x0>;
 		spi-max-frequency = <12000000>;
-		interrupt-parent = <&pio>;
-		interrupts = <0 IRQ_TYPE_LEVEL_LOW>;
+		interrupts-extended = <&pio 0 IRQ_TYPE_LEVEL_LOW>;
 		google,cros-ec-spi-msg-delay = <500>;
+		wakeup-source;
 
 		i2c_tunnel: i2c-tunnel0 {
 			compatible = "google,cros-ec-i2c-tunnel";

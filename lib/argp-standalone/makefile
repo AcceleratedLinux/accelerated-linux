@@ -1,5 +1,5 @@
 VERSION = 1.3
-URL = http://www.lysator.liu.se/~nisse/misc/argp-standalone-$(VERSION).tar.gz
+URL = https://www.lysator.liu.se/~nisse/misc/argp-standalone-$(VERSION).tar.gz
 
 INSTALLTARGET = my_installed
 include $(ROOTDIR)/tools/automake.inc

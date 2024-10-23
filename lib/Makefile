@@ -43,29 +43,30 @@ dir_$(CONFIG_LIB_LIBG) += libg
 lib_libg = *.a
 
 dir_$(CONFIG_LIB_UEV) += libuev
-lib_uev = *.a
+lib_libuev = *.a
 
 dir_$(CONFIG_LIB_ITE) += libite
-lib_ite = *.a
+lib_libite = *.a
 
 dir_$(CONFIG_LIB_LIBPAM) += libpam
 lib_libpam = build/libpam*/.libs/*.a build/libpam*/.libs/*.so
 inc_libpam = */include/security/*.h,security
+dep_libpam = $(libcrypt-y)
+
+libcrypt-$(CONFIG_LIB_LIBXCRYPT) = libxcrypt
 
 dir_$(CONFIG_LIB_LIBPCAP) += libpcap
-lib_libpcap = *.a
+lib_libpcap = *.a *.so
 inc_libpcap = \
 	pcap*.h,. \
 	pcap/*.h,pcap \
 	net/bpf.h,net
 
-dir_$(CONFIG_LIB_LIBPCAP) += libpcapng
-lib_libpcapng = *.a
+dir_$(CONFIG_LIB_LIBPCAPNG) += libpcapng
+lib_libpcapng = libpcapng*.so
 dep_libpcapng = libpcap
 inc_libpcapng = \
-	pcap*.h,. \
-	pcap/*.h,pcap \
-	net/bpf.h,net
+	pcapng.h,.
 
 dir_$(CONFIG_LIB_ZLIB) += zlib
 lib_zlib = libz.a* libz.so*
@@ -115,16 +116,15 @@ dir_$(CONFIG_LIB_ARES) += libares
 lib_libares = build/*.a
 inc_libares = ares.h,.
 
-dir_$(CONFIG_LIB_LIBLZO) += lzo
-lib_lzo = build/src/.libs/*.a
-inc_lzo = include/lzo,.
+dir_$(CONFIG_LIB_PROTOBUF_C) += protobuf-c
+dep_protobuf-c = protobuf
+
+dir_$(CONFIG_LIB_LIBLZ4) += lz4
+lib_lz4 = build/src/.libs/*.a
+inc_lz4 = include/lz4,.
 
 dir_$(CONFIG_LIB_LIBLZMA) += liblzma
-lib_libzlma = *.a
-
-dir_$(CONFIG_LIB_OSIP2) += osip2
-lib_osip2 = build/install/lib/*.a
-inc_osip2 = build/install/include/osip*2,.
+lib_liblzma = *.a
 
 dir_$(CONFIG_LIB_LIBEFENCE) += libefence
 lib_libefence = *.a
@@ -215,6 +215,7 @@ dep_libldap = openssl
 dep_libnettle = libgmp
 dep_iptables = libpcap
 dep_glib = pcre zlib libffi libiconv
+dep_libyang = pcre2
 
 #
 # dir 6, 7 and 8 reserved for Makefile.local
@@ -230,7 +231,7 @@ dir_extra += $(ROOTDIR)/prop
 
 DIRS_y   = $(sort $(dir_base) $(dir_y) $(dir_extra))
 
-DIRS_all = $(dir_$(n)_n) $(dir_$(n)_) $(sort $(dir_base) $(dir_y) $(dir_n) $(dir_) $(dir_extra))
+DIRS_all = $(sort $(dir_base) $(dir_y) $(dir_) $(dir_extra))
 DIRPATH = $(if $(path_$(1)),$(path_$(1)),$(1))
 
 ##############################################################################
@@ -251,7 +252,7 @@ define dep
 $(1): base $(dep_$(1))
 endef
 
-$(foreach d,$(sort $(dir_y) $(dir_n) $(dir_)),$(eval $(call dep,$(d))))
+$(foreach d,$(sort $(dir_y) $(dir_)),$(eval $(call dep,$(d))))
 
 .PHONY: base
 base: $(dir_base) basepost
@@ -326,6 +327,12 @@ $(DIRS_y):
 
 %_romfs:
 	$(MAKE) $(SUBDIR_SMP_BUILD) -C $(@:_romfs=) romfs
+
+
+###################################
+# Add directory dependencies here #
+###################################
+
 
 ##############################################################################
 

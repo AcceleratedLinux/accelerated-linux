@@ -15,18 +15,20 @@
 #include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/hw_random.h>
-#include <linux/random.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
-#include <linux/sched/signal.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 
 #define RNG_MODULE_NAME		"hw_random"
+
+#define RNG_BUFFER_SIZE (SMP_CACHE_BYTES < 32 ? 32 : SMP_CACHE_BYTES)
 
 static struct hwrng *current_rng;
 /* the current rng has been explicitly chosen by user via sysfs */
@@ -41,36 +43,25 @@ static DEFINE_MUTEX(reading_mutex);
 static int data_avail;
 static u8 *rng_buffer, *rng_fillbuf;
 static unsigned short current_quality;
-static unsigned short default_quality; /* = 0; default to "off" */
+static unsigned short default_quality = 1024; /* default to maximum */
 
 module_param(current_quality, ushort, 0644);
 MODULE_PARM_DESC(current_quality,
 		 "current hwrng entropy estimation per 1024 bits of input -- obsolete, use rng_quality instead");
 module_param(default_quality, ushort, 0644);
 MODULE_PARM_DESC(default_quality,
-		 "default entropy content of hwrng per 1024 bits of input");
+		 "default maximum entropy content of hwrng per 1024 bits of input");
 
 static void drop_current_rng(void);
 static int hwrng_init(struct hwrng *rng);
-static void hwrng_manage_rngd(struct hwrng *rng);
+static int hwrng_fillfn(void *unused);
 
 static inline int rng_get_data(struct hwrng *rng, u8 *buffer, size_t size,
 			       int wait);
 
 static size_t rng_buffer_size(void)
 {
-	return SMP_CACHE_BYTES < 32 ? 32 : SMP_CACHE_BYTES;
-}
-
-static void add_early_randomness(struct hwrng *rng)
-{
-	int bytes_read;
-
-	mutex_lock(&reading_mutex);
-	bytes_read = rng_get_data(rng, rng_fillbuf, 32, 0);
-	mutex_unlock(&reading_mutex);
-	if (bytes_read > 0)
-		add_device_randomness(rng_fillbuf, bytes_read);
+	return RNG_BUFFER_SIZE;
 }
 
 static inline void cleanup_rng(struct kref *kref)
@@ -95,6 +86,15 @@ static int set_current_rng(struct hwrng *rng)
 
 	drop_current_rng();
 	current_rng = rng;
+
+	/* if necessary, start hwrng thread */
+	if (!hwrng_fill) {
+		hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
+		if (IS_ERR(hwrng_fill)) {
+			pr_err("hwrng_fill thread creation failed\n");
+			hwrng_fill = NULL;
+		}
+	}
 
 	return 0;
 }
@@ -161,13 +161,8 @@ static int hwrng_init(struct hwrng *rng)
 	reinit_completion(&rng->cleanup_done);
 
 skip_init:
-	if (!rng->quality)
-		rng->quality = default_quality;
-	if (rng->quality > 1024)
-		rng->quality = 1024;
+	rng->quality = min_t(u16, min_t(u16, default_quality, 1024), rng->quality ?: 1024);
 	current_quality = rng->quality; /* obsolete */
-
-	hwrng_manage_rngd(rng);
 
 	return 0;
 }
@@ -204,6 +199,7 @@ static inline int rng_get_data(struct hwrng *rng, u8 *buffer, size_t size,
 static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 			    size_t size, loff_t *offp)
 {
+	u8 buffer[RNG_BUFFER_SIZE];
 	ssize_t ret = 0;
 	int err = 0;
 	int bytes_read, len;
@@ -231,34 +227,37 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 			if (bytes_read < 0) {
 				err = bytes_read;
 				goto out_unlock_reading;
-			}
-			data_avail = bytes_read;
-		}
-
-		if (!data_avail) {
-			if (filp->f_flags & O_NONBLOCK) {
+			} else if (bytes_read == 0 &&
+				   (filp->f_flags & O_NONBLOCK)) {
 				err = -EAGAIN;
 				goto out_unlock_reading;
 			}
-		} else {
-			len = data_avail;
+
+			data_avail = bytes_read;
+		}
+
+		len = data_avail;
+		if (len) {
 			if (len > size)
 				len = size;
 
 			data_avail -= len;
 
-			if (copy_to_user(buf + ret, rng_buffer + data_avail,
-								len)) {
+			memcpy(buffer, rng_buffer + data_avail, len);
+		}
+		mutex_unlock(&reading_mutex);
+		put_rng(rng);
+
+		if (len) {
+			if (copy_to_user(buf + ret, buffer, len)) {
 				err = -EFAULT;
-				goto out_unlock_reading;
+				goto out;
 			}
 
 			size -= len;
 			ret += len;
 		}
 
-		mutex_unlock(&reading_mutex);
-		put_rng(rng);
 
 		if (need_resched())
 			schedule_timeout_interruptible(1);
@@ -269,6 +268,7 @@ static ssize_t rng_dev_read(struct file *filp, char __user *buf,
 		}
 	}
 out:
+	memzero_explicit(buffer, sizeof(buffer));
 	return ret ? : err;
 
 out_unlock_reading:
@@ -327,13 +327,12 @@ static ssize_t rng_current_store(struct device *dev,
 				 const char *buf, size_t len)
 {
 	int err;
-	struct hwrng *rng, *old_rng, *new_rng;
+	struct hwrng *rng, *new_rng;
 
 	err = mutex_lock_interruptible(&rng_mutex);
 	if (err)
 		return -ERESTARTSYS;
 
-	old_rng = current_rng;
 	if (sysfs_streq(buf, "")) {
 		err = enable_best_rng();
 	} else {
@@ -349,11 +348,8 @@ static ssize_t rng_current_store(struct device *dev,
 	new_rng = get_current_rng_nolock();
 	mutex_unlock(&rng_mutex);
 
-	if (new_rng) {
-		if (new_rng != old_rng)
-			add_early_randomness(new_rng);
+	if (new_rng)
 		put_rng(new_rng);
-	}
 
 	return err ? : len;
 }
@@ -369,7 +365,7 @@ static ssize_t rng_current_show(struct device *dev,
 	if (IS_ERR(rng))
 		return PTR_ERR(rng);
 
-	ret = snprintf(buf, PAGE_SIZE, "%s\n", rng ? rng->name : "none");
+	ret = sysfs_emit(buf, "%s\n", rng ? rng->name : "none");
 	put_rng(rng);
 
 	return ret;
@@ -454,10 +450,6 @@ static ssize_t rng_quality_store(struct device *dev,
 	/* the best available RNG may have changed */
 	ret = enable_best_rng();
 
-	/* start/stop rngd if necessary */
-	if (current_rng)
-		hwrng_manage_rngd(current_rng);
-
 out:
 	mutex_unlock(&rng_mutex);
 	return ret ? ret : len;
@@ -507,16 +499,14 @@ static int hwrng_fillfn(void *unused)
 			rng->quality = current_quality; /* obsolete */
 		quality = rng->quality;
 		mutex_unlock(&reading_mutex);
+
+		if (rc <= 0)
+			hwrng_msleep(rng, 10000);
+
 		put_rng(rng);
 
-		if (!quality)
-			break;
-
-		if (rc <= 0) {
-			pr_warn("hwrng: no data available\n");
-			msleep_interruptible(10000);
+		if (rc <= 0)
 			continue;
-		}
 
 		/* If we cannot credit at least one bit of entropy,
 		 * keep track of the remainder for the next iteration
@@ -527,33 +517,16 @@ static int hwrng_fillfn(void *unused)
 
 		/* Outside lock, sure, but y'know: randomness. */
 		add_hwgenerator_randomness((void *)rng_fillbuf, rc,
-					   entropy >> 10);
+					   entropy >> 10, true);
 	}
 	hwrng_fill = NULL;
 	return 0;
-}
-
-static void hwrng_manage_rngd(struct hwrng *rng)
-{
-	if (WARN_ON(!mutex_is_locked(&rng_mutex)))
-		return;
-
-	if (rng->quality == 0 && hwrng_fill)
-		kthread_stop(hwrng_fill);
-	if (rng->quality > 0 && !hwrng_fill) {
-		hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
-		if (IS_ERR(hwrng_fill)) {
-			pr_err("hwrng_fill thread creation failed\n");
-			hwrng_fill = NULL;
-		}
-	}
 }
 
 int hwrng_register(struct hwrng *rng)
 {
 	int err = -EINVAL;
 	struct hwrng *tmp;
-	bool is_new_current = false;
 
 	if (!rng->name || (!rng->data_read && !rng->read))
 		goto out;
@@ -570,6 +543,7 @@ int hwrng_register(struct hwrng *rng)
 
 	init_completion(&rng->cleanup_done);
 	complete(&rng->cleanup_done);
+	init_completion(&rng->dying);
 
 	if (!current_rng ||
 	    (!cur_rng_set_by_user && rng->quality > current_rng->quality)) {
@@ -581,25 +555,8 @@ int hwrng_register(struct hwrng *rng)
 		err = set_current_rng(rng);
 		if (err)
 			goto out_unlock;
-		/* to use current_rng in add_early_randomness() we need
-		 * to take a ref
-		 */
-		is_new_current = true;
-		kref_get(&rng->ref);
 	}
 	mutex_unlock(&rng_mutex);
-	if (is_new_current || !rng->init) {
-		/*
-		 * Use a new device's input to add some randomness to
-		 * the system.  If this rng device isn't going to be
-		 * used right away, its init function hasn't been
-		 * called yet by set_current_rng(); so only use the
-		 * randomness from devices that don't need an init callback
-		 */
-		add_early_randomness(rng);
-	}
-	if (is_new_current)
-		put_rng(rng);
 	return 0;
 out_unlock:
 	mutex_unlock(&rng_mutex);
@@ -610,13 +567,13 @@ EXPORT_SYMBOL_GPL(hwrng_register);
 
 void hwrng_unregister(struct hwrng *rng)
 {
-	struct hwrng *old_rng, *new_rng;
+	struct hwrng *new_rng;
 	int err;
 
 	mutex_lock(&rng_mutex);
 
-	old_rng = current_rng;
 	list_del(&rng->list);
+	complete_all(&rng->dying);
 	if (current_rng == rng) {
 		err = enable_best_rng();
 		if (err) {
@@ -633,11 +590,8 @@ void hwrng_unregister(struct hwrng *rng)
 	} else
 		mutex_unlock(&rng_mutex);
 
-	if (new_rng) {
-		if (old_rng != new_rng)
-			add_early_randomness(new_rng);
+	if (new_rng)
 		put_rng(new_rng);
-	}
 
 	wait_for_completion(&rng->cleanup_done);
 }
@@ -684,6 +638,20 @@ void devm_hwrng_unregister(struct device *dev, struct hwrng *rng)
 	devres_release(dev, devm_hwrng_release, devm_hwrng_match, rng);
 }
 EXPORT_SYMBOL_GPL(devm_hwrng_unregister);
+
+long hwrng_msleep(struct hwrng *rng, unsigned int msecs)
+{
+	unsigned long timeout = msecs_to_jiffies(msecs) + 1;
+
+	return wait_for_completion_interruptible_timeout(&rng->dying, timeout);
+}
+EXPORT_SYMBOL_GPL(hwrng_msleep);
+
+long hwrng_yield(struct hwrng *rng)
+{
+	return wait_for_completion_interruptible_timeout(&rng->dying, 1);
+}
+EXPORT_SYMBOL_GPL(hwrng_yield);
 
 static int __init hwrng_modinit(void)
 {

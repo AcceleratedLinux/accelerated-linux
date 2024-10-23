@@ -7,7 +7,6 @@
 #include <linux/delay.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
 #include <linux/regulator/consumer.h>
 
 #include <drm/drm_mipi_dsi.h>
@@ -486,14 +485,12 @@ static int k101_im2ba02_dsi_probe(struct mipi_dsi_device *dsi)
 	return 0;
 }
 
-static int k101_im2ba02_dsi_remove(struct mipi_dsi_device *dsi)
+static void k101_im2ba02_dsi_remove(struct mipi_dsi_device *dsi)
 {
 	struct k101_im2ba02 *ctx = mipi_dsi_get_drvdata(dsi);
 
 	mipi_dsi_detach(dsi);
 	drm_panel_remove(&ctx->panel);
-
-	return 0;
 }
 
 static const struct of_device_id k101_im2ba02_of_match[] = {

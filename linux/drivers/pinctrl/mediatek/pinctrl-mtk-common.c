@@ -8,8 +8,6 @@
 #include <linux/io.h>
 #include <linux/gpio/driver.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/machine.h>
@@ -328,6 +326,21 @@ static int mtk_pconf_set_pull_select(struct mtk_pinctrl *pctl,
 		dev_err(pctl->dev, "invalid pull-up argument %d on pin %d .\n",
 			arg, pin);
 		return -EINVAL;
+	}
+
+	if (pctl->devdata->mt8365_set_clr_mode) {
+		bit = pin & pctl->devdata->mode_mask;
+		reg_pullen = mtk_get_port(pctl, pin) +
+			pctl->devdata->pullen_offset;
+		reg_pullsel = mtk_get_port(pctl, pin) +
+			pctl->devdata->pullsel_offset;
+		ret = pctl->devdata->mt8365_set_clr_mode(mtk_get_regmap(pctl, pin),
+			bit, reg_pullen, reg_pullsel,
+			enable, isup);
+		if (ret)
+			return -EINVAL;
+
+		return 0;
 	}
 
 	bit = BIT(pin & pctl->devdata->mode_mask);
@@ -795,17 +808,11 @@ static const struct pinmux_ops mtk_pmx_ops = {
 	.gpio_request_enable	= mtk_pmx_gpio_request_enable,
 };
 
-static int mtk_gpio_direction_input(struct gpio_chip *chip,
-					unsigned offset)
-{
-	return pinctrl_gpio_direction_input(chip->base + offset);
-}
-
 static int mtk_gpio_direction_output(struct gpio_chip *chip,
 					unsigned offset, int value)
 {
 	mtk_gpio_set(chip, offset, value);
-	return pinctrl_gpio_direction_output(chip->base + offset);
+	return pinctrl_gpio_direction_output(chip, offset);
 }
 
 static int mtk_gpio_get_direction(struct gpio_chip *chip, unsigned offset)
@@ -885,13 +892,12 @@ static const struct gpio_chip mtk_gpio_chip = {
 	.request		= gpiochip_generic_request,
 	.free			= gpiochip_generic_free,
 	.get_direction		= mtk_gpio_get_direction,
-	.direction_input	= mtk_gpio_direction_input,
+	.direction_input	= pinctrl_gpio_direction_input,
 	.direction_output	= mtk_gpio_direction_output,
 	.get			= mtk_gpio_get,
 	.set			= mtk_gpio_set,
 	.to_irq			= mtk_gpio_to_irq,
 	.set_config		= mtk_gpio_set_config,
-	.of_gpio_n_cells	= 2,
 };
 
 static int mtk_eint_suspend(struct device *device)
@@ -908,9 +914,8 @@ static int mtk_eint_resume(struct device *device)
 	return mtk_eint_do_resume(pctl->eint);
 }
 
-const struct dev_pm_ops mtk_eint_pm_ops = {
-	.suspend_noirq = mtk_eint_suspend,
-	.resume_noirq = mtk_eint_resume,
+EXPORT_GPL_DEV_SLEEP_PM_OPS(mtk_eint_pm_ops) = {
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_eint_suspend, mtk_eint_resume)
 };
 
 static int mtk_pctrl_build_state(struct platform_device *pdev)
@@ -1042,7 +1047,6 @@ int mtk_pctrl_init(struct platform_device *pdev,
 	struct pinctrl_pin_desc *pins;
 	struct mtk_pinctrl *pctl;
 	struct device_node *np = pdev->dev.of_node, *node;
-	struct property *prop;
 	int ret, i;
 
 	pctl = devm_kzalloc(&pdev->dev, sizeof(*pctl), GFP_KERNEL);
@@ -1050,11 +1054,6 @@ int mtk_pctrl_init(struct platform_device *pdev,
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, pctl);
-
-	prop = of_find_property(np, "pins-are-numbered", NULL);
-	if (!prop)
-		return dev_err_probe(dev, -EINVAL,
-				     "only support pins-are-numbered format\n");
 
 	node = of_parse_phandle(np, "mediatek,pctl-regmap", 0);
 	if (node) {

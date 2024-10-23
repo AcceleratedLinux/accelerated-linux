@@ -31,16 +31,13 @@ index 9dca6d74..3d7f8a5a 100644
  
  int my_publish(struct mosquitto *mosq, int *mid, const char *topic, int payloadlen, void *payload, int qos, bool retain)
  {
-@@ -84,20 +96,24 @@ static void my_message_callback(struct mosquitto *mosq, void *obj, const struct
- 	UNUSED(obj);
- 	UNUSED(properties);
- 
-+	if(process_messages == false) return;
-+
+@@ -84,14 +96,15 @@ static void my_message_callback(struct mosquitto *mosq, void *obj, const struct
+	if(process_messages == false) return;
  	if(message->retain && cfg.no_retain) return;
  
 +	process_messages = false;
  	print_message(&cfg, message, properties);
+
  	switch(cfg.pub_mode){
  		case MSGMODE_CMD:
  		case MSGMODE_FILE:
@@ -51,12 +48,6 @@ index 9dca6d74..3d7f8a5a 100644
  			break;
  		case MSGMODE_STDIN_LINE:
  			client_state = rr_s_ready_to_publish;
- 			break;
- 	}
-+
- 	/* FIXME - check all below
- 	if(process_messages == false) return;
- 
 @@ -366,6 +382,7 @@ int main(int argc, char *argv[])
  		mosquitto_log_callback_set(g_mosq, my_log_callback);
  	}

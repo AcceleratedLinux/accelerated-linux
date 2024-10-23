@@ -67,7 +67,7 @@ static const struct regmap_access_table bd9571mwv_volatile_table = {
 static const struct regmap_config bd9571mwv_regmap_config = {
 	.reg_bits	= 8,
 	.val_bits	= 8,
-	.cache_type	= REGCACHE_RBTREE,
+	.cache_type	= REGCACHE_MAPLE,
 	.rd_table	= &bd9571mwv_readable_table,
 	.wr_table	= &bd9571mwv_writable_table,
 	.volatile_table	= &bd9571mwv_volatile_table,
@@ -152,7 +152,7 @@ static const struct regmap_access_table bd9574mwf_volatile_table = {
 static const struct regmap_config bd9574mwf_regmap_config = {
 	.reg_bits	= 8,
 	.val_bits	= 8,
-	.cache_type	= REGCACHE_RBTREE,
+	.cache_type	= REGCACHE_MAPLE,
 	.rd_table	= &bd9574mwf_readable_table,
 	.wr_table	= &bd9574mwf_writable_table,
 	.volatile_table	= &bd9574mwf_volatile_table,
@@ -204,8 +204,7 @@ static int bd957x_identify(struct device *dev, struct regmap *regmap)
 	return 0;
 }
 
-static int bd9571mwv_probe(struct i2c_client *client,
-			   const struct i2c_device_id *ids)
+static int bd9571mwv_probe(struct i2c_client *client)
 {
 	const struct regmap_config *regmap_config;
 	const struct regmap_irq_chip *irq_chip;

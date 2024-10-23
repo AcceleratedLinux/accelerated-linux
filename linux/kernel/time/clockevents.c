@@ -76,7 +76,7 @@ static u64 cev_delta2ns(unsigned long latch, struct clock_event_device *evt,
 }
 
 /**
- * clockevents_delta2ns - Convert a latch value (device ticks) to nanoseconds
+ * clockevent_delta2ns - Convert a latch value (device ticks) to nanoseconds
  * @latch:	value to convert
  * @evt:	pointer to clock event device descriptor
  *
@@ -659,7 +659,7 @@ void tick_cleanup_dead_cpu(int cpu)
 #endif
 
 #ifdef CONFIG_SYSFS
-static struct bus_type clockevents_subsys = {
+static const struct bus_type clockevents_subsys = {
 	.name		= "clockevents",
 	.dev_name       = "clockevent",
 };
@@ -677,7 +677,7 @@ static ssize_t current_device_show(struct device *dev,
 	raw_spin_lock_irq(&clockevents_lock);
 	td = tick_get_tick_dev(dev);
 	if (td && td->evtdev)
-		count = snprintf(buf, PAGE_SIZE, "%s\n", td->evtdev->name);
+		count = sysfs_emit(buf, "%s\n", td->evtdev->name);
 	raw_spin_unlock_irq(&clockevents_lock);
 	return count;
 }

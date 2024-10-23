@@ -892,7 +892,7 @@ bool sec_queue_can_enqueue(struct sec_queue *queue, int num)
 static void sec_queue_hw_init(struct sec_queue *queue)
 {
 	sec_queue_ar_alloc(queue, SEC_QUEUE_AR_FROCE_NOALLOC);
-	sec_queue_aw_alloc(queue, SEC_QUEUE_AR_FROCE_NOALLOC);
+	sec_queue_aw_alloc(queue, SEC_QUEUE_AW_FROCE_NOALLOC);
 	sec_queue_ar_pkgattr(queue, 1);
 	sec_queue_aw_pkgattr(queue, 1);
 
@@ -1107,8 +1107,8 @@ static int sec_queue_res_cfg(struct sec_queue *queue)
 	}
 	queue->task_irq = platform_get_irq(to_platform_device(dev),
 					   queue->queue_id * 2 + 1);
-	if (queue->task_irq <= 0) {
-		ret = -EINVAL;
+	if (queue->task_irq < 0) {
+		ret = queue->task_irq;
 		goto err_free_ring_db;
 	}
 
@@ -1271,7 +1271,7 @@ queues_unconfig:
 	return ret;
 }
 
-static int sec_remove(struct platform_device *pdev)
+static void sec_remove(struct platform_device *pdev)
 {
 	struct sec_dev_info *info = platform_get_drvdata(pdev);
 	int i;
@@ -1287,8 +1287,6 @@ static int sec_remove(struct platform_device *pdev)
 	}
 
 	sec_base_exit(info);
-
-	return 0;
 }
 
 static const __maybe_unused struct of_device_id sec_match[] = {
@@ -1306,7 +1304,7 @@ MODULE_DEVICE_TABLE(acpi, sec_acpi_match);
 
 static struct platform_driver sec_driver = {
 	.probe = sec_probe,
-	.remove = sec_remove,
+	.remove_new = sec_remove,
 	.driver = {
 		.name = "hisi_sec_platform_driver",
 		.of_match_table = sec_match,

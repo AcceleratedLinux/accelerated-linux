@@ -12,14 +12,13 @@
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/parser.h>
 #include <linux/suspend.h>
 
 #include <linux/clk.h>
 #include <linux/clk/at91_pmc.h>
 #include <linux/platform_data/atmel.h>
-
-#include <soc/at91/pm.h>
 
 #include <asm/cacheflush.h>
 #include <asm/fncpy.h>
@@ -336,16 +335,14 @@ static bool at91_pm_eth_quirk_is_valid(struct at91_pm_quirk_eth *eth)
 		pdev = of_find_device_by_node(eth->np);
 		if (!pdev)
 			return false;
+		/* put_device(eth->dev) is called at the end of suspend. */
 		eth->dev = &pdev->dev;
 	}
 
 	/* No quirks if device isn't a wakeup source. */
-	if (!device_may_wakeup(eth->dev)) {
-		put_device(eth->dev);
+	if (!device_may_wakeup(eth->dev))
 		return false;
-	}
 
-	/* put_device(eth->dev) is called at the end of suspend. */
 	return true;
 }
 
@@ -441,14 +438,14 @@ clk_unconfigure:
 				pr_err("AT91: PM: failed to enable %s clocks\n",
 				       j == AT91_PM_G_ETH ? "geth" : "eth");
 			}
-		} else {
-			/*
-			 * Release the reference to eth->dev taken in
-			 * at91_pm_eth_quirk_is_valid().
-			 */
-			put_device(eth->dev);
-			eth->dev = NULL;
 		}
+
+		/*
+		 * Release the reference to eth->dev taken in
+		 * at91_pm_eth_quirk_is_valid().
+		 */
+		put_device(eth->dev);
+		eth->dev = NULL;
 	}
 
 	return ret;
@@ -541,9 +538,41 @@ extern u32 at91_pm_suspend_in_sram_sz;
 
 static int at91_suspend_finish(unsigned long val)
 {
+	unsigned char modified_gray_code[] = {
+		0x00, 0x01, 0x02, 0x03, 0x06, 0x07, 0x04, 0x05, 0x0c, 0x0d,
+		0x0e, 0x0f, 0x0a, 0x0b, 0x08, 0x09, 0x18, 0x19, 0x1a, 0x1b,
+		0x1e, 0x1f, 0x1c, 0x1d, 0x14, 0x15, 0x16, 0x17, 0x12, 0x13,
+		0x10, 0x11,
+	};
+	unsigned int tmp, index;
 	int i;
 
 	if (soc_pm.data.mode == AT91_PM_BACKUP && soc_pm.data.ramc_phy) {
+		/*
+		 * Bootloader will perform DDR recalibration and will try to
+		 * restore the ZQ0SR0 with the value saved here. But the
+		 * calibration is buggy and restoring some values from ZQ0SR0
+		 * is forbidden and risky thus we need to provide processed
+		 * values for these (modified gray code values).
+		 */
+		tmp = readl(soc_pm.data.ramc_phy + DDR3PHY_ZQ0SR0);
+
+		/* Store pull-down output impedance select. */
+		index = (tmp >> DDR3PHY_ZQ0SR0_PDO_OFF) & 0x1f;
+		soc_pm.bu->ddr_phy_calibration[0] = modified_gray_code[index];
+
+		/* Store pull-up output impedance select. */
+		index = (tmp >> DDR3PHY_ZQ0SR0_PUO_OFF) & 0x1f;
+		soc_pm.bu->ddr_phy_calibration[0] |= modified_gray_code[index];
+
+		/* Store pull-down on-die termination impedance select. */
+		index = (tmp >> DDR3PHY_ZQ0SR0_PDODT_OFF) & 0x1f;
+		soc_pm.bu->ddr_phy_calibration[0] |= modified_gray_code[index];
+
+		/* Store pull-up on-die termination impedance select. */
+		index = (tmp >> DDR3PHY_ZQ0SRO_PUODT_OFF) & 0x1f;
+		soc_pm.bu->ddr_phy_calibration[0] |= modified_gray_code[index];
+
 		/*
 		 * The 1st 8 words of memory might get corrupted in the process
 		 * of DDR PHY recalibration; it is saved here in securam and it
@@ -624,16 +653,6 @@ static int at91_pm_enter(suspend_state_t state)
 	if (ret)
 		return ret;
 
-#ifdef CONFIG_PINCTRL_AT91
-	/*
-	 * FIXME: this is needed to communicate between the pinctrl driver and
-	 * the PM implementation in the machine. Possibly part of the PM
-	 * implementation should be moved down into the pinctrl driver and get
-	 * called as part of the generic suspend/resume path.
-	 */
-	at91_pinctrl_gpio_suspend();
-#endif
-
 	switch (state) {
 	case PM_SUSPEND_MEM:
 	case PM_SUSPEND_STANDBY:
@@ -658,9 +677,6 @@ static int at91_pm_enter(suspend_state_t state)
 	}
 
 error:
-#ifdef CONFIG_PINCTRL_AT91
-	at91_pinctrl_gpio_resume();
-#endif
 	at91_pm_config_quirks(false);
 	return 0;
 }
@@ -1066,10 +1082,6 @@ static int __init at91_pm_backup_init(void)
 		of_scan_flat_dt(at91_pm_backup_scan_memcs, &located);
 		if (!located)
 			goto securam_fail;
-
-		/* DDR3PHY_ZQ0SR0 */
-		soc_pm.bu->ddr_phy_calibration[0] = readl(soc_pm.data.ramc_phy +
-							  0x188);
 	}
 
 	return 0;
@@ -1091,6 +1103,7 @@ static void __init at91_pm_secure_init(void)
 	if (res.a0 == 0) {
 		pr_info("AT91: Secure PM: suspend mode set to %s\n",
 			pm_modes[suspend_mode].pattern);
+		soc_pm.data.mode = suspend_mode;
 		return;
 	}
 
@@ -1100,6 +1113,7 @@ static void __init at91_pm_secure_init(void)
 	res = sam_smccc_call(SAMA5_SMC_SIP_GET_SUSPEND_MODE, 0, 0);
 	if (res.a0 == 0) {
 		pr_warn("AT91: Secure PM: failed to get default mode\n");
+		soc_pm.data.mode = -1;
 		return;
 	}
 
@@ -1107,6 +1121,7 @@ static void __init at91_pm_secure_init(void)
 		pm_modes[suspend_mode].pattern);
 
 	soc_pm.data.suspend_mode = res.a1;
+	soc_pm.data.mode = soc_pm.data.suspend_mode;
 }
 static const struct of_device_id atmel_shdwc_ids[] = {
 	{ .compatible = "atmel,sama5d2-shdwc" },

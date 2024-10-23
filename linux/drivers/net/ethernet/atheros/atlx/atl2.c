@@ -905,7 +905,7 @@ static int atl2_change_mtu(struct net_device *netdev, int new_mtu)
 	struct atl2_hw *hw = &adapter->hw;
 
 	/* set MTU */
-	netdev->mtu = new_mtu;
+	WRITE_ONCE(netdev->mtu, new_mtu);
 	hw->max_frame_size = new_mtu;
 	ATL2_WRITE_REG(hw, REG_MTU, new_mtu + ETH_HLEN +
 		       VLAN_HLEN + ETH_FCS_LEN);
@@ -1377,7 +1377,7 @@ static int atl2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	netdev->watchdog_timeo = 5 * HZ;
 	netdev->min_mtu = 40;
 	netdev->max_mtu = ETH_DATA_LEN + VLAN_HLEN;
-	strncpy(netdev->name, pci_name(pdev), sizeof(netdev->name) - 1);
+	strscpy(netdev->name, pci_name(pdev), sizeof(netdev->name));
 
 	netdev->mem_start = mmio_start;
 	netdev->mem_end = mmio_start + mmio_len;
@@ -1980,9 +1980,9 @@ static void atl2_get_drvinfo(struct net_device *netdev,
 {
 	struct atl2_adapter *adapter = netdev_priv(netdev);
 
-	strlcpy(drvinfo->driver,  atl2_driver_name, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->fw_version, "L2", sizeof(drvinfo->fw_version));
-	strlcpy(drvinfo->bus_info, pci_name(adapter->pdev),
+	strscpy(drvinfo->driver,  atl2_driver_name, sizeof(drvinfo->driver));
+	strscpy(drvinfo->fw_version, "L2", sizeof(drvinfo->fw_version));
+	strscpy(drvinfo->bus_info, pci_name(adapter->pdev),
 		sizeof(drvinfo->bus_info));
 }
 

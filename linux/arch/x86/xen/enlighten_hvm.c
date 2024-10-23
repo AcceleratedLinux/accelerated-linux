@@ -4,9 +4,12 @@
 #include <linux/cpu.h>
 #include <linux/kexec.h>
 #include <linux/memblock.h>
+#include <linux/virtio_anchor.h>
 
 #include <xen/features.h>
 #include <xen/events.h>
+#include <xen/hvm.h>
+#include <xen/interface/hvm/hvm_op.h>
 #include <xen/interface/memory.h>
 
 #include <asm/apic.h>
@@ -29,6 +32,9 @@
 #include "smp.h"
 
 static unsigned long shared_info_pfn;
+
+__ro_after_init bool xen_percpu_upcall;
+EXPORT_SYMBOL_GPL(xen_percpu_upcall);
 
 void xen_hvm_init_shared_info(void)
 {
@@ -125,9 +131,12 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_xen_hvm_callback)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
+	if (xen_percpu_upcall)
+		apic_eoi();
+
 	inc_irq_stat(irq_hv_callback_count);
 
-	xen_hvm_evtchn_do_upcall();
+	xen_evtchn_do_upcall();
 
 	set_irq_regs(old_regs);
 }
@@ -139,7 +148,9 @@ static void xen_hvm_shutdown(void)
 	if (kexec_in_progress)
 		xen_reboot(SHUTDOWN_soft_reset);
 }
+#endif
 
+#ifdef CONFIG_CRASH_DUMP
 static void xen_hvm_crash_shutdown(struct pt_regs *regs)
 {
 	native_machine_crash_shutdown(regs);
@@ -152,21 +163,29 @@ static int xen_cpu_up_prepare_hvm(unsigned int cpu)
 	int rc = 0;
 
 	/*
-	 * This can happen if CPU was offlined earlier and
-	 * offlining timed out in common_cpu_die().
+	 * If a CPU was offlined earlier and offlining timed out then the
+	 * lock mechanism is still initialized. Uninit it unconditionally
+	 * as it's safe to call even if already uninited. Interrupts and
+	 * timer have already been handled in xen_cpu_dead_hvm().
 	 */
-	if (cpu_report_state(cpu) == CPU_DEAD_FROZEN) {
-		xen_smp_intr_free(cpu);
-		xen_uninit_lock_cpu(cpu);
-	}
+	xen_uninit_lock_cpu(cpu);
 
-	if (cpu_acpi_id(cpu) != U32_MAX)
+	if (cpu_acpi_id(cpu) != CPU_ACPIID_INVALID)
 		per_cpu(xen_vcpu_id, cpu) = cpu_acpi_id(cpu);
 	else
 		per_cpu(xen_vcpu_id, cpu) = cpu;
 	xen_vcpu_setup(cpu);
 	if (!xen_have_vector_callback)
 		return 0;
+
+	if (xen_percpu_upcall) {
+		rc = xen_set_upcall_vector(cpu);
+		if (rc) {
+			WARN(1, "HVMOP_set_evtchn_upcall_vector"
+			     " for CPU %d failed: %d\n", cpu, rc);
+			return rc;
+		}
+	}
 
 	if (xen_feature(XENFEAT_hvm_safe_pvclock))
 		xen_setup_timer(cpu);
@@ -188,14 +207,13 @@ static int xen_cpu_dead_hvm(unsigned int cpu)
 	return 0;
 }
 
-static bool no_vector_callback __initdata;
-
 static void __init xen_hvm_guest_init(void)
 {
 	if (xen_pv_domain())
 		return;
 
-	xen_set_restricted_virtio_memory_access();
+	if (IS_ENABLED(CONFIG_XEN_VIRTIO_FORCE_GRANT))
+		virtio_set_mem_acc_cb(xen_virtio_restricted_mem_acc);
 
 	init_hvm_pv_info();
 
@@ -211,9 +229,6 @@ static void __init xen_hvm_guest_init(void)
 
 	xen_panic_handler_init();
 
-	if (!no_vector_callback && xen_feature(XENFEAT_hvm_callback_vector))
-		xen_have_vector_callback = 1;
-
 	xen_hvm_smp_init();
 	WARN_ON(xen_cpuhp_setup(xen_cpu_up_prepare_hvm, xen_cpu_dead_hvm));
 	xen_unplug_emulated_devices();
@@ -223,6 +238,8 @@ static void __init xen_hvm_guest_init(void)
 
 #ifdef CONFIG_KEXEC_CORE
 	machine_ops.shutdown = xen_hvm_shutdown;
+#endif
+#ifdef CONFIG_CRASH_DUMP
 	machine_ops.crash_shutdown = xen_hvm_crash_shutdown;
 #endif
 }
@@ -239,7 +256,7 @@ early_param("xen_nopv", xen_parse_nopv);
 
 static __init int xen_parse_no_vector_callback(char *arg)
 {
-	no_vector_callback = true;
+	xen_have_vector_callback = false;
 	return 0;
 }
 early_param("xen_no_vector_callback", xen_parse_no_vector_callback);

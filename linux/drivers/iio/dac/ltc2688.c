@@ -84,17 +84,16 @@ struct ltc2688_chan {
 struct ltc2688_state {
 	struct spi_device *spi;
 	struct regmap *regmap;
-	struct regulator_bulk_data regulators[2];
 	struct ltc2688_chan channels[LTC2688_DAC_CHANNELS];
 	struct iio_chan_spec *iio_chan;
 	/* lock to protect against multiple access to the device and shared data */
 	struct mutex lock;
 	int vref;
 	/*
-	 * DMA (thus cache coherency maintenance) requires the
+	 * DMA (thus cache coherency maintenance) may require the
 	 * transfer buffers to live in their own cache lines.
 	 */
-	u8 tx_data[6] ____cacheline_aligned;
+	u8 tx_data[6] __aligned(IIO_DMA_MINALIGN);
 	u8 rx_data[3];
 };
 
@@ -747,26 +746,21 @@ static int ltc2688_span_lookup(const struct ltc2688_state *st, int min, int max)
 static int ltc2688_channel_config(struct ltc2688_state *st)
 {
 	struct device *dev = &st->spi->dev;
-	struct fwnode_handle *child;
 	u32 reg, clk_input, val, tmp[2];
 	int ret, span;
 
-	device_for_each_child_node(dev, child) {
+	device_for_each_child_node_scoped(dev, child) {
 		struct ltc2688_chan *chan;
 
 		ret = fwnode_property_read_u32(child, "reg", &reg);
-		if (ret) {
-			fwnode_handle_put(child);
+		if (ret)
 			return dev_err_probe(dev, ret,
 					     "Failed to get reg property\n");
-		}
 
-		if (reg >= LTC2688_DAC_CHANNELS) {
-			fwnode_handle_put(child);
+		if (reg >= LTC2688_DAC_CHANNELS)
 			return dev_err_probe(dev, -EINVAL,
 					     "reg bigger than: %d\n",
 					     LTC2688_DAC_CHANNELS);
-		}
 
 		val = 0;
 		chan = &st->channels[reg];
@@ -787,12 +781,10 @@ static int ltc2688_channel_config(struct ltc2688_state *st)
 		if (!ret) {
 			span = ltc2688_span_lookup(st, (int)tmp[0] / 1000,
 						   tmp[1] / 1000);
-			if (span < 0) {
-				fwnode_handle_put(child);
-				return dev_err_probe(dev, -EINVAL,
+			if (span < 0)
+				return dev_err_probe(dev, span,
 						     "output range not valid:[%d %d]\n",
 						     tmp[0], tmp[1]);
-			}
 
 			val |= FIELD_PREP(LTC2688_CH_SPAN_MSK, span);
 		}
@@ -801,17 +793,14 @@ static int ltc2688_channel_config(struct ltc2688_state *st)
 					       &clk_input);
 		if (!ret) {
 			if (clk_input >= LTC2688_CH_TGP_MAX) {
-				fwnode_handle_put(child);
 				return dev_err_probe(dev, -EINVAL,
 						     "toggle-dither-input inv value(%d)\n",
 						     clk_input);
 			}
 
 			ret = ltc2688_tgp_clk_setup(st, chan, child, clk_input);
-			if (ret) {
-				fwnode_handle_put(child);
+			if (ret)
 				return ret;
-			}
 
 			/*
 			 * 0 means software toggle which is the default mode.
@@ -845,11 +834,9 @@ static int ltc2688_channel_config(struct ltc2688_state *st)
 
 		ret = regmap_write(st->regmap, LTC2688_CMD_CH_SETTING(reg),
 				   val);
-		if (ret) {
-			fwnode_handle_put(child);
-			return dev_err_probe(dev, -EINVAL,
+		if (ret)
+			return dev_err_probe(dev, ret,
 					     "failed to set chan settings\n");
-		}
 	}
 
 	return 0;
@@ -900,13 +887,6 @@ static int ltc2688_setup(struct ltc2688_state *st, struct regulator *vref)
 
 	return regmap_set_bits(st->regmap, LTC2688_CMD_CONFIG,
 			       LTC2688_CONFIG_EXT_REF);
-}
-
-static void ltc2688_disable_regulators(void *data)
-{
-	struct ltc2688_state *st = data;
-
-	regulator_bulk_disable(ARRAY_SIZE(st->regulators), st->regulators);
 }
 
 static void ltc2688_disable_regulator(void *regulator)
@@ -965,6 +945,7 @@ static const struct iio_info ltc2688_info = {
 
 static int ltc2688_probe(struct spi_device *spi)
 {
+	static const char * const regulators[] = { "vcc", "iovcc" };
 	struct ltc2688_state *st;
 	struct iio_dev *indio_dev;
 	struct regulator *vref_reg;
@@ -988,20 +969,10 @@ static int ltc2688_probe(struct spi_device *spi)
 		return dev_err_probe(dev, PTR_ERR(st->regmap),
 				     "Failed to init regmap");
 
-	st->regulators[0].supply = "vcc";
-	st->regulators[1].supply = "iovcc";
-	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(st->regulators),
-				      st->regulators);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to get regulators\n");
-
-	ret = regulator_bulk_enable(ARRAY_SIZE(st->regulators), st->regulators);
+	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(regulators),
+					     regulators);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to enable regulators\n");
-
-	ret = devm_add_action_or_reset(dev, ltc2688_disable_regulators, st);
-	if (ret)
-		return ret;
 
 	vref_reg = devm_regulator_get_optional(dev, "vref");
 	if (IS_ERR(vref_reg)) {

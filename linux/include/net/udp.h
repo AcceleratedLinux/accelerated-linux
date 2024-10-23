@@ -21,6 +21,7 @@
 #include <linux/list.h>
 #include <linux/bug.h>
 #include <net/inet_sock.h>
+#include <net/gso.h>
 #include <net/sock.h>
 #include <net/snmp.h>
 #include <net/ip.h>
@@ -95,6 +96,7 @@ static inline struct udp_hslot *udp_hashslot2(struct udp_table *table,
 extern struct proto udp_prot;
 
 extern atomic_long_t udp_memory_allocated;
+DECLARE_PER_CPU(int, udp_memory_per_cpu_fw_alloc);
 
 /* sysctl variables for udp */
 extern long sysctl_udp_mem[3];
@@ -173,6 +175,15 @@ INDIRECT_CALLABLE_DECLARE(int udpv6_rcv(struct sk_buff *));
 struct sk_buff *__udp_gso_segment(struct sk_buff *gso_skb,
 				  netdev_features_t features, bool is_ipv6);
 
+static inline void udp_lib_init_sock(struct sock *sk)
+{
+	struct udp_sock *up = udp_sk(sk);
+
+	skb_queue_head_init(&up->reader_queue);
+	up->forward_threshold = sk->sk_rcvbuf >> 2;
+	set_bit(SOCK_CUSTOM_SOCKOPT, &sk->sk_socket->flags);
+}
+
 /* hash routines shared between UDPv4/6 and UDP-Litev4/6 */
 static inline int udp_lib_hash(struct sock *sk)
 {
@@ -246,7 +257,7 @@ static inline bool udp_sk_bound_dev_eq(struct net *net, int bound_dev_if,
 }
 
 /* net/ipv4/udp.c */
-void udp_destruct_sock(struct sock *sk);
+void udp_destruct_common(struct sock *sk);
 void skb_consume_udp(struct sock *sk, struct sk_buff *skb, int len);
 int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb);
 void udp_skb_destructor(struct sock *sk, struct sk_buff *skb);
@@ -262,18 +273,16 @@ static inline struct sk_buff *skb_recv_udp(struct sock *sk, unsigned int flags,
 
 int udp_v4_early_demux(struct sk_buff *skb);
 bool udp_sk_rx_dst_set(struct sock *sk, struct dst_entry *dst);
-int udp_get_port(struct sock *sk, unsigned short snum,
-		 int (*saddr_cmp)(const struct sock *,
-				  const struct sock *));
 int udp_err(struct sk_buff *, u32);
 int udp_abort(struct sock *sk, int err);
 int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len);
+void udp_splice_eof(struct socket *sock);
 int udp_push_pending_frames(struct sock *sk);
 void udp_flush_pending_frames(struct sock *sk);
 int udp_cmsg_send(struct sock *sk, struct msghdr *msg, u16 *gso_size);
 void udp4_hwcsum(struct sk_buff *skb, __be32 src, __be32 dst);
 int udp_rcv(struct sk_buff *skb);
-int udp_ioctl(struct sock *sk, int cmd, unsigned long arg);
+int udp_ioctl(struct sock *sk, int cmd, int *karg);
 int udp_init_sock(struct sock *sk);
 int udp_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 int __udp_disconnect(struct sock *sk, int flags);
@@ -305,8 +314,7 @@ struct sock *__udp6_lib_lookup(struct net *net,
 			       struct sk_buff *skb);
 struct sock *udp6_lib_lookup_skb(const struct sk_buff *skb,
 				 __be16 sport, __be16 dport);
-int udp_read_sock(struct sock *sk, read_descriptor_t *desc,
-		  sk_read_actor_t recv_actor);
+int udp_read_skb(struct sock *sk, skb_read_actor_t recv_actor);
 
 /* UDP uses skb->dev_scratch to cache as much information as possible and avoid
  * possibly multiple cache miss on dequeue()
@@ -371,14 +379,7 @@ static inline bool udp_skb_is_linear(struct sk_buff *skb)
 static inline int copy_linear_skb(struct sk_buff *skb, int len, int off,
 				  struct iov_iter *to)
 {
-	int n;
-
-	n = copy_to_iter(skb->data + off, len, to);
-	if (n == len)
-		return 0;
-
-	iov_iter_revert(to, n);
-	return -EFAULT;
+	return copy_to_iter_full(skb->data + off, len, to) ? 0 : -EFAULT;
 }
 
 /*
@@ -428,7 +429,6 @@ struct udp_seq_afinfo {
 struct udp_iter_state {
 	struct seq_net_private  p;
 	int			bucket;
-	struct udp_seq_afinfo	*bpf_seq_afinfo;
 };
 
 void *udp_seq_start(struct seq_file *seq, loff_t *pos);
@@ -519,7 +519,6 @@ static inline void udp_post_segment_fix_csum(struct sk_buff *skb)
 
 #ifdef CONFIG_BPF_SYSCALL
 struct sk_psock;
-struct proto *udp_bpf_get_proto(struct sock *sk, struct sk_psock *psock);
 int udp_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore);
 #endif
 

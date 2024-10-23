@@ -34,7 +34,7 @@
 #define MCA_ADC_INT_VREF	MCA_VREF_uV(1.2)
 #define MCA_ADC_DEF_VREF	MCA_VREF_uV(3)
 
-int mca_adc_read_raw(struct iio_dev *indio_dev,
+static int mca_adc_read_raw(struct iio_dev *indio_dev,
 		     struct iio_chan_spec const *channel, int *value,
 		     int *shift, long mask)
 {
@@ -831,8 +831,7 @@ error_free_ch:
 
 error_dev_free:
 	while (num_adcs && gpio_base >= 0) {
-		devm_gpio_free(&pdev->dev,
-			       gpio_base + adc_ch_list[num_adcs - 1]);
+		gpio_free(gpio_base + adc_ch_list[num_adcs - 1]);
 		num_adcs--;
 	}
 	iio_device_free(indio_dev);
@@ -852,7 +851,7 @@ int mca_adc_remove(struct platform_device *pdev, int gpio_base)
 		for (i = 0, chan = (struct iio_chan_spec *)indio_dev->channels;
 		     i < indio_dev->num_channels;
 		     i++) {
-			devm_gpio_free(&pdev->dev, gpio_base + chan->channel);
+			gpio_free(gpio_base + chan->channel);
 		}
 	}
 

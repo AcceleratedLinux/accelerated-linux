@@ -28,8 +28,8 @@ wwan_led_update()
 			WWAN_SIG="-f wansigg -O wansigr"
 		fi
 	else
-		idx="$(modem name=modem idx || modem idx)" 2>/dev/null
-		if [ -z "$idx" ]; then
+		modem_name="$(modem name)" 2>/dev/null
+		if [ -z "$modem_name" ]; then
 			if sim -m 2>/dev/null | grep -qw yes; then
 				# Don't glitch the flash if we're already flashing
 				if [ "$(cat /sys/class/leds/wanserg/delay_on)" != "500" ]; then
@@ -43,7 +43,7 @@ wwan_led_update()
 				WWAN_SIG="-O wansigg -O wansigr"
 			fi
 		else
-			case "$(runt get mm.modem."$idx".status.bars)" in
+			case "$(runt get mm.modem."$modem_name".status.bars)" in
 			5) WWAN_SIG="-O wansigg -O wansigr -o wansigb" ;; # blue
 			4) WWAN_SIG="-o wansigg -O wansigr -O wansigb" ;; # green
 			3) WWAN_SIG="-o wansigg -o wansigr -O wansigb" ;; # amber
@@ -61,9 +61,9 @@ wwan_led_update()
 			*) WWAN_SIG="-O wansigg -O wansigr -O wansigb" ;; # off
 			esac
 
-			if [ "$(runt get mm.modem."$idx".modem.sim_present)" = true ]; then
-				if [ "$(runt get mm.modem."$idx".status.state)" = connected ]; then
-					case "$(runt get mm.modem."$idx".status.gtech)" in
+			if [ "$(runt get mm.modem."$modem_name".modem.sim_present)" = true ]; then
+				if [ "$(runt get mm.modem."$modem_name".status.state)" = connected ]; then
+					case "$(runt get mm.modem."$modem_name".status.gtech)" in
 					2g) WWAN_SERV="-o wanserg -o wanserr -O wanserb" ;;    # amber
 					3g) WWAN_SERV="-o wanserg -O wanserr -O wanserb" ;;    # green
 					4g|5g) WWAN_SERV="-O wanserg -O wanserr -o wanserb" ;; # blue

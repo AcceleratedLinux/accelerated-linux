@@ -3,9 +3,11 @@
 		pcapng_fp_read;
 		pcapng_file_read;
 		pcapng_file_open;
+		pcapng_file_open_stdout;
+		pcapng_file_flush;
 		pcapng_file_close;
 		pcapng_file_size_exceeds_limit;
-        pcapng_file_truncate;
+		pcapng_file_truncate;
 		pcapng_write_section_block;
 		pcapng_write_interface_block;
 		pcapng_write_enhanced_packet_block;

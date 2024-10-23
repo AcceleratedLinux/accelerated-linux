@@ -33,7 +33,7 @@ struct exynos_bus {
 
 	unsigned long curr_freq;
 
-	struct opp_table *opp_table;
+	int opp_token;
 	struct clk *clk;
 	unsigned int ratio;
 };
@@ -161,8 +161,7 @@ static void exynos_bus_exit(struct device *dev)
 
 	dev_pm_opp_of_remove_table(dev);
 	clk_disable_unprepare(bus->clk);
-	dev_pm_opp_put_regulators(bus->opp_table);
-	bus->opp_table = NULL;
+	dev_pm_opp_put_regulators(bus->opp_token);
 }
 
 static void exynos_bus_passive_exit(struct device *dev)
@@ -179,18 +178,16 @@ static int exynos_bus_parent_parse_of(struct device_node *np,
 					struct exynos_bus *bus)
 {
 	struct device *dev = bus->dev;
-	struct opp_table *opp_table;
-	const char *vdd = "vdd";
+	const char *supplies[] = { "vdd", NULL };
 	int i, ret, count, size;
 
-	opp_table = dev_pm_opp_set_regulators(dev, &vdd, 1);
-	if (IS_ERR(opp_table)) {
-		ret = PTR_ERR(opp_table);
+	ret = dev_pm_opp_set_regulators(dev, supplies);
+	if (ret < 0) {
 		dev_err(dev, "failed to set regulators %d\n", ret);
 		return ret;
 	}
 
-	bus->opp_table = opp_table;
+	bus->opp_token = ret;
 
 	/*
 	 * Get the devfreq-event devices to get the current utilization of
@@ -236,8 +233,7 @@ static int exynos_bus_parent_parse_of(struct device_node *np,
 	return 0;
 
 err_regulator:
-	dev_pm_opp_put_regulators(bus->opp_table);
-	bus->opp_table = NULL;
+	dev_pm_opp_put_regulators(bus->opp_token);
 
 	return ret;
 }
@@ -436,7 +432,7 @@ static int exynos_bus_probe(struct platform_device *pdev)
 		goto err;
 
 	/* Create child platform device for the interconnect provider */
-	if (of_get_property(dev->of_node, "#interconnect-cells", NULL)) {
+	if (of_property_present(dev->of_node, "#interconnect-cells")) {
 		bus->icc_pdev = platform_device_register_data(
 						dev, "exynos-generic-icc",
 						PLATFORM_DEVID_AUTO, NULL, 0);
@@ -459,8 +455,7 @@ err:
 	dev_pm_opp_of_remove_table(dev);
 	clk_disable_unprepare(bus->clk);
 err_reg:
-	dev_pm_opp_put_regulators(bus->opp_table);
-	bus->opp_table = NULL;
+	dev_pm_opp_put_regulators(bus->opp_token);
 
 	return ret;
 }
@@ -472,7 +467,6 @@ static void exynos_bus_shutdown(struct platform_device *pdev)
 	devfreq_suspend_device(bus->devfreq);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int exynos_bus_resume(struct device *dev)
 {
 	struct exynos_bus *bus = dev_get_drvdata(dev);
@@ -500,11 +494,9 @@ static int exynos_bus_suspend(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static const struct dev_pm_ops exynos_bus_pm = {
-	SET_SYSTEM_SLEEP_PM_OPS(exynos_bus_suspend, exynos_bus_resume)
-};
+static DEFINE_SIMPLE_DEV_PM_OPS(exynos_bus_pm,
+				exynos_bus_suspend, exynos_bus_resume);
 
 static const struct of_device_id exynos_bus_of_match[] = {
 	{ .compatible = "samsung,exynos-bus", },
@@ -517,12 +509,13 @@ static struct platform_driver exynos_bus_platdrv = {
 	.shutdown	= exynos_bus_shutdown,
 	.driver = {
 		.name	= "exynos-bus",
-		.pm	= &exynos_bus_pm,
-		.of_match_table = of_match_ptr(exynos_bus_of_match),
+		.pm	= pm_sleep_ptr(&exynos_bus_pm),
+		.of_match_table = exynos_bus_of_match,
 	},
 };
 module_platform_driver(exynos_bus_platdrv);
 
+MODULE_SOFTDEP("pre: exynos_ppmu");
 MODULE_DESCRIPTION("Generic Exynos Bus frequency driver");
 MODULE_AUTHOR("Chanwoo Choi <cw00.choi@samsung.com>");
 MODULE_LICENSE("GPL v2");

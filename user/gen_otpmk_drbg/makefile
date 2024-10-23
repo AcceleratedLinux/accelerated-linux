@@ -1,5 +1,5 @@
 METHOD = git
-URL = git://source.codeaurora.org/external/qoriq/qoriq-components/cst
+URL = https://github.com/nxp-qoriq/cst
 VERSION = e9abf79077fc8faf976e9a3c46a38111aa5b2e69
 
 PATCHES=gen_otpmk_drbg-*

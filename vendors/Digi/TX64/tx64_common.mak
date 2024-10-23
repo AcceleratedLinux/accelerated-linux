@@ -38,8 +38,13 @@ FLASH_DEVICES = \
 all:
 
 clean: image.clean
+	rm -f atecc508.aml
 
-romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey
+atecc508.aml: $(COMMON_DIR)/atecc508.asl
+	@echo "Generating ATECC508 SSDT overlay..."
+	/usr/bin/iasl -p $@ $<
+
+romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cryptokey atecc508.aml
 	$(ROMFSINST) -s lib /lib64
 	$(ROMFSINST) $(COMMON_DIR)/start /etc/default/start
 	$(ROMFSINST) -s /var/tmp/log /dev/log
@@ -50,9 +55,10 @@ romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cr
 	$(ROMFSINST) -p 555 $(COMMON_DIR)/mkffs /etc/mkffs
 	$(ROMFSINST) -p 555 $(COMMON_DIR)/update-grub /bin/update-grub
 	$(ROMFSINST) -p 555 $(COMMON_DIR)/dmi2fwenv /etc/dmi2fwenv
-	$(ROMFSINST) -d -p 755 $(COMMON_DIR)/pwrbtn.sh /etc/acpi/events/PWRF/00000080
+	$(ROMFSINST) -d -p 755 $(COMMON_DIR)/pwrbtn.sh /etc/acpi/PWRF/00000080
 	# Create an mtab file (symlink to /proc/self/mounts) for e2fsprogs
 	$(ROMFSINST) -s /proc/self/mounts /etc/mtab
+	$(ROMFSINST) -d /etc/ssdt/atecc508.aml
 
 romfs.post:: romfs.cleanup
 	# We munge the grub installation to allow for read-only root

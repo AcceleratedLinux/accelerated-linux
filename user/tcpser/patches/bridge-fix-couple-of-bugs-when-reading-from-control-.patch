@@ -1,0 +1,36 @@
+From 418c0cba247d2ccffc05a834755836f5fdeff785 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Sat, 6 May 2023 15:23:03 +0100
+Subject: [PATCH] bridge: fix couple of bugs when reading from control pipe
+
+When logging at debug level, the data read from the control pipe is
+logged as a string and so needs to be nul-terminated.
+
+In addition, if more than character was read from the control pipe, only
+the first character was being tested rather than each of them.
+---
+ src/bridge.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/bridge.c b/src/bridge.c
+index 7cac205..8d7fd35 100644
+--- a/src/bridge.c
++++ b/src/bridge.c
+@@ -413,9 +413,12 @@ void *bridge_task(void *arg) {
+     }
+     if (FD_ISSET(cfg->wp[0][0], &readfs)) {  // control pipe
+       res = readPipe(cfg->wp[0][0], buf, sizeof(buf) - 1);
+-      LOG(LOG_DEBUG, "Received %s from control line watch task", buf);
++      if (res > 0) {
++        buf[res] = 0;
++        LOG(LOG_DEBUG, "Received %s from control line watch task", buf);
++      }
+       for(int i = 0; i < res ; i++) {
+-        switch (buf[0]) {
++        switch (buf[i]) {
+           case MSG_DTR_DOWN:
+             // DTR drop, close any active connection and put
+             // in cmd_mode
+-- 
+2.34.1
+

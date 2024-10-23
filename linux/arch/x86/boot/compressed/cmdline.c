@@ -13,6 +13,8 @@ static bool builtin_cmdline_inited __section(".data");
 #endif
 #endif
 
+#include <asm/bootparam.h>
+
 static unsigned long fs;
 static inline void set_fs(unsigned long seg)
 {
@@ -26,9 +28,9 @@ static inline char rdfs8(addr_t addr)
 #include "../cmdline.c"
 unsigned long get_cmd_line_ptr(void)
 {
-	unsigned long cmd_line_ptr = boot_params->hdr.cmd_line_ptr;
+	unsigned long cmd_line_ptr = boot_params_ptr->hdr.cmd_line_ptr;
 
-	cmd_line_ptr |= (u64)boot_params->ext_cmd_line_ptr << 32;
+	cmd_line_ptr |= (u64)boot_params_ptr->ext_cmd_line_ptr << 32;
 
 #ifdef CONFIG_CMDLINE_BOOL
 #ifndef CONFIG_CMDLINE_OVERRIDE

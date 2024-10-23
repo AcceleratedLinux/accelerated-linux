@@ -1,0 +1,5 @@
+# Map ignition power down and input voltage low events to acpid
+# s_type	n_type(hex)	s_code		n_code	value	description
+EV_KEY		0x01		KEY_POWER	116	1	button/power PWRF 00000080 00000000
+EV_KEY		0x01		KEY_SLEEP	142	1	button/battery BAT/low 00000081 00000000
+EV_KEY		0x01		KEY_BATTERY	236	1	button/battery BAT/crit 00000080 00000000

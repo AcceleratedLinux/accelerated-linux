@@ -33,7 +33,7 @@ nvbios_addr(struct nvkm_bios *bios, u32 *addr, u8 size)
 {
 	u32 p = *addr;
 
-	if (*addr > bios->image0_size && bios->imaged_addr) {
+	if (*addr >= bios->image0_size && bios->imaged_addr) {
 		*addr -= bios->image0_size;
 		*addr += bios->imaged_addr;
 	}
@@ -44,6 +44,14 @@ nvbios_addr(struct nvkm_bios *bios, u32 *addr, u8 size)
 	}
 
 	return true;
+}
+
+void *
+nvbios_pointer(struct nvkm_bios *bios, u32 addr)
+{
+	if (likely(nvbios_addr(bios, &addr, 0)))
+		return &bios->data[addr];
+	return NULL;
 }
 
 u8

@@ -1,6 +1,6 @@
 
 ZIMAGE    = $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage
-DTB	  = $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/armada-370-acm7000.dtb
+DTB	  = $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/marvell/armada-370-acm7000.dtb
 
 include $(ROOTDIR)/vendors/OpenGear/opengear.mk
 

@@ -23,6 +23,12 @@ static const struct resource mcu_tx54_battery_resources[] = {
 	DEFINE_RES_IRQ_NAMED(MCU_TX54_IRQ_PWR_FAIL, "IRQ_PWR_FAIL"),
 };
 
+static const struct resource mcu_tx54_gpio_resources[] = {
+	DEFINE_RES_IRQ_NAMED(MCU_TX54_IRQ_GPIO_IGN, MCU_TX54_IRQ_NAME_GPIO_IGN),
+	DEFINE_RES_IRQ_NAMED(MCU_TX54_IRQ_GPIO_BUTTON,
+			     MCU_TX54_IRQ_NAME_GPIO_BUTTON),
+};
+
 static const struct mfd_cell mcu_tx54_subdevs[] = {
 	{.name = "mcu-tx54-led",},
 	{.name = "mcu-tx54-poweroff",},
@@ -35,6 +41,11 @@ static const struct mfd_cell mcu_tx54_subdevs[] = {
 	 .name = "mcu-tx54-battery",
 	 .resources = mcu_tx54_battery_resources,
 	 .num_resources = ARRAY_SIZE(mcu_tx54_battery_resources),
+	},
+	{
+	 .name = "mcu-tx54-gpio",
+	 .resources = mcu_tx54_gpio_resources,
+	 .num_resources = ARRAY_SIZE(mcu_tx54_gpio_resources),
 	},
 };
 
@@ -496,8 +507,7 @@ static void mcu_tx54_device_exit(struct mcu_tx54 *mcu)
 	sysfs_remove_group(&mcu->dev->kobj, &mcu_tx54_attr_group);
 }
 
-static int mcu_tx54_i2c_probe(struct i2c_client *i2c,
-			      const struct i2c_device_id *id)
+static int mcu_tx54_i2c_probe(struct i2c_client *i2c)
 {
 	int ret;
 	struct mcu_tx54 *mcu;
@@ -543,7 +553,7 @@ static int mcu_tx54_i2c_probe(struct i2c_client *i2c,
 	return mcu_tx54_device_init(mcu);
 }
 
-static int mcu_tx54_i2c_remove(struct i2c_client *i2c)
+static void mcu_tx54_i2c_remove(struct i2c_client *i2c)
 {
 	struct mcu_tx54 *mcu = i2c_get_clientdata(i2c);
 	int i;
@@ -559,8 +569,6 @@ static int mcu_tx54_i2c_remove(struct i2c_client *i2c)
 
 	irq_domain_remove(mcu->irq_domain);
 	mcu->irq_domain = NULL;
-
-	return 0;
 }
 
 static const struct i2c_device_id mcu_tx54_i2c_id[] = {

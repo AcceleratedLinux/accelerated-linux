@@ -4,8 +4,8 @@
  * Author: Rob Clark <robdclark@gmail.com>
  */
 
+#include <linux/backlight.h>
 #include <linux/gpio/consumer.h>
-#include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 
 #include <video/display_timing.h>
@@ -307,7 +307,6 @@ static int panel_probe(struct platform_device *pdev)
 	struct backlight_device *backlight;
 	struct panel_module *panel_mod;
 	struct tilcdc_module *mod;
-	struct pinctrl *pinctrl;
 	int ret;
 
 	/* bail out early if no DT data: */
@@ -341,10 +340,6 @@ static int panel_probe(struct platform_device *pdev)
 
 	tilcdc_module_init(mod, "panel", &panel_module_ops);
 
-	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
-	if (IS_ERR(pinctrl))
-		dev_warn(&pdev->dev, "pins are not configured\n");
-
 	panel_mod->timings = of_get_display_timings(node);
 	if (!panel_mod->timings) {
 		dev_err(&pdev->dev, "could not get panel timings\n");
@@ -373,7 +368,7 @@ fail_backlight:
 	return ret;
 }
 
-static int panel_remove(struct platform_device *pdev)
+static void panel_remove(struct platform_device *pdev)
 {
 	struct tilcdc_module *mod = dev_get_platdata(&pdev->dev);
 	struct panel_module *panel_mod = to_panel_module(mod);
@@ -386,8 +381,6 @@ static int panel_remove(struct platform_device *pdev)
 
 	tilcdc_module_cleanup(mod);
 	kfree(panel_mod->info);
-
-	return 0;
 }
 
 static const struct of_device_id panel_of_match[] = {
@@ -397,7 +390,7 @@ static const struct of_device_id panel_of_match[] = {
 
 static struct platform_driver panel_driver = {
 	.probe = panel_probe,
-	.remove = panel_remove,
+	.remove_new = panel_remove,
 	.driver = {
 		.name = "tilcdc-panel",
 		.of_match_table = panel_of_match,

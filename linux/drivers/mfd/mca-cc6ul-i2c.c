@@ -143,8 +143,7 @@ static const struct of_device_id mca_cc6ul_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, mca_cc6ul_dt_ids);
 
-static int mca_cc6ul_i2c_probe(struct i2c_client *i2c,
-			       const struct i2c_device_id *id)
+static int mca_cc6ul_i2c_probe(struct i2c_client *i2c)
 {
 	struct mca_cc6ul *mca;
 	int ret;
@@ -167,13 +166,11 @@ static int mca_cc6ul_i2c_probe(struct i2c_client *i2c,
 	return mca_cc6ul_device_init(mca, i2c->irq);
 }
 
-static int mca_cc6ul_i2c_remove(struct i2c_client *i2c)
+static void mca_cc6ul_i2c_remove(struct i2c_client *i2c)
 {
 	struct mca_cc6ul *mca = i2c_get_clientdata(i2c);
 
 	mca_cc6ul_device_exit(mca);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM

@@ -127,7 +127,6 @@ static int check_mpls_supp_fields(u32 field_support, const __be32 *set_mask)
 }
 
 #define LAST_ETH_FIELD vlan_tag
-#define LAST_IB_FIELD sl
 #define LAST_IPV4_FIELD tos
 #define LAST_IPV6_FIELD traffic_class
 #define LAST_TCP_UDP_FIELD src_port
@@ -679,7 +678,15 @@ enum flow_table_type {
 #define MLX5_FS_MAX_TYPES	 6
 #define MLX5_FS_MAX_ENTRIES	 BIT(16)
 
-static struct mlx5_ib_flow_prio *_get_prio(struct mlx5_flow_namespace *ns,
+static bool mlx5_ib_shared_ft_allowed(struct ib_device *device)
+{
+	struct mlx5_ib_dev *dev = to_mdev(device);
+
+	return MLX5_CAP_GEN(dev->mdev, shared_object_to_user_object_allowed);
+}
+
+static struct mlx5_ib_flow_prio *_get_prio(struct mlx5_ib_dev *dev,
+					   struct mlx5_flow_namespace *ns,
 					   struct mlx5_ib_flow_prio *prio,
 					   int priority,
 					   int num_entries, int num_groups,
@@ -784,8 +791,8 @@ static struct mlx5_ib_flow_prio *get_flow_table(struct mlx5_ib_dev *dev,
 
 	ft = prio->flow_table;
 	if (!ft)
-		return _get_prio(ns, prio, priority, max_table_size, num_groups,
-				 flags);
+		return _get_prio(dev, ns, prio, priority, max_table_size,
+				 num_groups, flags);
 
 	return prio;
 }
@@ -927,7 +934,7 @@ int mlx5_ib_fs_add_op_fc(struct mlx5_ib_dev *dev, u32 port_num,
 
 	prio = &dev->flow_db->opfcs[type];
 	if (!prio->flow_table) {
-		prio = _get_prio(ns, prio, priority,
+		prio = _get_prio(dev, ns, prio, priority,
 				 dev->num_ports * MAX_OPFC_RULES, 1, 0);
 		if (IS_ERR(prio)) {
 			err = PTR_ERR(prio);
@@ -1407,8 +1414,8 @@ free_ucmd:
 }
 
 static struct mlx5_ib_flow_prio *
-_get_flow_table(struct mlx5_ib_dev *dev,
-		struct mlx5_ib_flow_matcher *fs_matcher,
+_get_flow_table(struct mlx5_ib_dev *dev, u16 user_priority,
+		enum mlx5_flow_namespace_type ns_type,
 		bool mcast)
 {
 	struct mlx5_flow_namespace *ns = NULL;
@@ -1421,11 +1428,11 @@ _get_flow_table(struct mlx5_ib_dev *dev,
 	if (mcast)
 		priority = MLX5_IB_FLOW_MCAST_PRIO;
 	else
-		priority = ib_prio_to_core_prio(fs_matcher->priority, false);
+		priority = ib_prio_to_core_prio(user_priority, false);
 
 	esw_encap = mlx5_eswitch_get_encap_mode(dev->mdev) !=
 		DEVLINK_ESWITCH_ENCAP_MODE_NONE;
-	switch (fs_matcher->ns_type) {
+	switch (ns_type) {
 	case MLX5_FLOW_NAMESPACE_BYPASS:
 		max_table_size = BIT(
 			MLX5_CAP_FLOWTABLE_NIC_RX(dev->mdev, log_max_ft_size));
@@ -1452,17 +1459,17 @@ _get_flow_table(struct mlx5_ib_dev *dev,
 					       reformat_l3_tunnel_to_l2) &&
 		    esw_encap)
 			flags |= MLX5_FLOW_TABLE_TUNNEL_EN_REFORMAT;
-		priority = fs_matcher->priority;
+		priority = user_priority;
 		break;
 	case MLX5_FLOW_NAMESPACE_RDMA_RX:
 		max_table_size = BIT(
 			MLX5_CAP_FLOWTABLE_RDMA_RX(dev->mdev, log_max_ft_size));
-		priority = fs_matcher->priority;
+		priority = user_priority;
 		break;
 	case MLX5_FLOW_NAMESPACE_RDMA_TX:
 		max_table_size = BIT(
 			MLX5_CAP_FLOWTABLE_RDMA_TX(dev->mdev, log_max_ft_size));
-		priority = fs_matcher->priority;
+		priority = user_priority;
 		break;
 	default:
 		break;
@@ -1470,11 +1477,11 @@ _get_flow_table(struct mlx5_ib_dev *dev,
 
 	max_table_size = min_t(int, max_table_size, MLX5_FS_MAX_ENTRIES);
 
-	ns = mlx5_get_flow_namespace(dev->mdev, fs_matcher->ns_type);
+	ns = mlx5_get_flow_namespace(dev->mdev, ns_type);
 	if (!ns)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	switch (fs_matcher->ns_type) {
+	switch (ns_type) {
 	case MLX5_FLOW_NAMESPACE_BYPASS:
 		prio = &dev->flow_db->prios[priority];
 		break;
@@ -1499,7 +1506,7 @@ _get_flow_table(struct mlx5_ib_dev *dev,
 	if (prio->flow_table)
 		return prio;
 
-	return _get_prio(ns, prio, priority, max_table_size,
+	return _get_prio(dev, ns, prio, priority, max_table_size,
 			 MLX5_FS_MAX_TYPES, flags);
 }
 
@@ -1618,7 +1625,8 @@ static struct mlx5_ib_flow_handler *raw_fs_rule_add(
 	mcast = raw_fs_is_multicast(fs_matcher, cmd_in);
 	mutex_lock(&dev->flow_db->lock);
 
-	ft_prio = _get_flow_table(dev, fs_matcher, mcast);
+	ft_prio = _get_flow_table(dev, fs_matcher->priority,
+				  fs_matcher->ns_type, mcast);
 	if (IS_ERR(ft_prio)) {
 		err = PTR_ERR(ft_prio);
 		goto unlock;
@@ -2015,6 +2023,275 @@ static int flow_matcher_cleanup(struct ib_uobject *uobject,
 	return 0;
 }
 
+static int steering_anchor_create_ft(struct mlx5_ib_dev *dev,
+				     struct mlx5_ib_flow_prio *ft_prio,
+				     enum mlx5_flow_namespace_type ns_type)
+{
+	struct mlx5_flow_table_attr ft_attr = {};
+	struct mlx5_flow_namespace *ns;
+	struct mlx5_flow_table *ft;
+
+	if (ft_prio->anchor.ft)
+		return 0;
+
+	ns = mlx5_get_flow_namespace(dev->mdev, ns_type);
+	if (!ns)
+		return -EOPNOTSUPP;
+
+	ft_attr.flags = MLX5_FLOW_TABLE_UNMANAGED;
+	ft_attr.uid = MLX5_SHARED_RESOURCE_UID;
+	ft_attr.prio = 0;
+	ft_attr.max_fte = 2;
+	ft_attr.level = 1;
+
+	ft = mlx5_create_flow_table(ns, &ft_attr);
+	if (IS_ERR(ft))
+		return PTR_ERR(ft);
+
+	ft_prio->anchor.ft = ft;
+
+	return 0;
+}
+
+static void steering_anchor_destroy_ft(struct mlx5_ib_flow_prio *ft_prio)
+{
+	if (ft_prio->anchor.ft) {
+		mlx5_destroy_flow_table(ft_prio->anchor.ft);
+		ft_prio->anchor.ft = NULL;
+	}
+}
+
+static int
+steering_anchor_create_fg_drop(struct mlx5_ib_flow_prio *ft_prio)
+{
+	int inlen = MLX5_ST_SZ_BYTES(create_flow_group_in);
+	struct mlx5_flow_group *fg;
+	void *flow_group_in;
+	int err = 0;
+
+	if (ft_prio->anchor.fg_drop)
+		return 0;
+
+	flow_group_in = kvzalloc(inlen, GFP_KERNEL);
+	if (!flow_group_in)
+		return -ENOMEM;
+
+	MLX5_SET(create_flow_group_in, flow_group_in, start_flow_index, 1);
+	MLX5_SET(create_flow_group_in, flow_group_in, end_flow_index, 1);
+
+	fg = mlx5_create_flow_group(ft_prio->anchor.ft, flow_group_in);
+	if (IS_ERR(fg)) {
+		err = PTR_ERR(fg);
+		goto out;
+	}
+
+	ft_prio->anchor.fg_drop = fg;
+
+out:
+	kvfree(flow_group_in);
+
+	return err;
+}
+
+static void
+steering_anchor_destroy_fg_drop(struct mlx5_ib_flow_prio *ft_prio)
+{
+	if (ft_prio->anchor.fg_drop) {
+		mlx5_destroy_flow_group(ft_prio->anchor.fg_drop);
+		ft_prio->anchor.fg_drop = NULL;
+	}
+}
+
+static int
+steering_anchor_create_fg_goto_table(struct mlx5_ib_flow_prio *ft_prio)
+{
+	int inlen = MLX5_ST_SZ_BYTES(create_flow_group_in);
+	struct mlx5_flow_group *fg;
+	void *flow_group_in;
+	int err = 0;
+
+	if (ft_prio->anchor.fg_goto_table)
+		return 0;
+
+	flow_group_in = kvzalloc(inlen, GFP_KERNEL);
+	if (!flow_group_in)
+		return -ENOMEM;
+
+	fg = mlx5_create_flow_group(ft_prio->anchor.ft, flow_group_in);
+	if (IS_ERR(fg)) {
+		err = PTR_ERR(fg);
+		goto out;
+	}
+	ft_prio->anchor.fg_goto_table = fg;
+
+out:
+	kvfree(flow_group_in);
+
+	return err;
+}
+
+static void
+steering_anchor_destroy_fg_goto_table(struct mlx5_ib_flow_prio *ft_prio)
+{
+	if (ft_prio->anchor.fg_goto_table) {
+		mlx5_destroy_flow_group(ft_prio->anchor.fg_goto_table);
+		ft_prio->anchor.fg_goto_table = NULL;
+	}
+}
+
+static int
+steering_anchor_create_rule_drop(struct mlx5_ib_flow_prio *ft_prio)
+{
+	struct mlx5_flow_act flow_act = {};
+	struct mlx5_flow_handle *handle;
+
+	if (ft_prio->anchor.rule_drop)
+		return 0;
+
+	flow_act.fg = ft_prio->anchor.fg_drop;
+	flow_act.action = MLX5_FLOW_CONTEXT_ACTION_DROP;
+
+	handle = mlx5_add_flow_rules(ft_prio->anchor.ft, NULL, &flow_act,
+				     NULL, 0);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+	ft_prio->anchor.rule_drop = handle;
+
+	return 0;
+}
+
+static void steering_anchor_destroy_rule_drop(struct mlx5_ib_flow_prio *ft_prio)
+{
+	if (ft_prio->anchor.rule_drop) {
+		mlx5_del_flow_rules(ft_prio->anchor.rule_drop);
+		ft_prio->anchor.rule_drop = NULL;
+	}
+}
+
+static int
+steering_anchor_create_rule_goto_table(struct mlx5_ib_flow_prio *ft_prio)
+{
+	struct mlx5_flow_destination dest = {};
+	struct mlx5_flow_act flow_act = {};
+	struct mlx5_flow_handle *handle;
+
+	if (ft_prio->anchor.rule_goto_table)
+		return 0;
+
+	flow_act.action = MLX5_FLOW_CONTEXT_ACTION_FWD_DEST;
+	flow_act.flags |= FLOW_ACT_IGNORE_FLOW_LEVEL;
+	flow_act.fg = ft_prio->anchor.fg_goto_table;
+
+	dest.type = MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE;
+	dest.ft = ft_prio->flow_table;
+
+	handle = mlx5_add_flow_rules(ft_prio->anchor.ft, NULL, &flow_act,
+				     &dest, 1);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+	ft_prio->anchor.rule_goto_table = handle;
+
+	return 0;
+}
+
+static void
+steering_anchor_destroy_rule_goto_table(struct mlx5_ib_flow_prio *ft_prio)
+{
+	if (ft_prio->anchor.rule_goto_table) {
+		mlx5_del_flow_rules(ft_prio->anchor.rule_goto_table);
+		ft_prio->anchor.rule_goto_table = NULL;
+	}
+}
+
+static int steering_anchor_create_res(struct mlx5_ib_dev *dev,
+				      struct mlx5_ib_flow_prio *ft_prio,
+				      enum mlx5_flow_namespace_type ns_type)
+{
+	int err;
+
+	err = steering_anchor_create_ft(dev, ft_prio, ns_type);
+	if (err)
+		return err;
+
+	err = steering_anchor_create_fg_drop(ft_prio);
+	if (err)
+		goto destroy_ft;
+
+	err = steering_anchor_create_fg_goto_table(ft_prio);
+	if (err)
+		goto destroy_fg_drop;
+
+	err = steering_anchor_create_rule_drop(ft_prio);
+	if (err)
+		goto destroy_fg_goto_table;
+
+	err = steering_anchor_create_rule_goto_table(ft_prio);
+	if (err)
+		goto destroy_rule_drop;
+
+	return 0;
+
+destroy_rule_drop:
+	steering_anchor_destroy_rule_drop(ft_prio);
+destroy_fg_goto_table:
+	steering_anchor_destroy_fg_goto_table(ft_prio);
+destroy_fg_drop:
+	steering_anchor_destroy_fg_drop(ft_prio);
+destroy_ft:
+	steering_anchor_destroy_ft(ft_prio);
+
+	return err;
+}
+
+static void mlx5_steering_anchor_destroy_res(struct mlx5_ib_flow_prio *ft_prio)
+{
+	steering_anchor_destroy_rule_goto_table(ft_prio);
+	steering_anchor_destroy_rule_drop(ft_prio);
+	steering_anchor_destroy_fg_goto_table(ft_prio);
+	steering_anchor_destroy_fg_drop(ft_prio);
+	steering_anchor_destroy_ft(ft_prio);
+}
+
+static int steering_anchor_cleanup(struct ib_uobject *uobject,
+				   enum rdma_remove_reason why,
+				   struct uverbs_attr_bundle *attrs)
+{
+	struct mlx5_ib_steering_anchor *obj = uobject->object;
+
+	if (atomic_read(&obj->usecnt))
+		return -EBUSY;
+
+	mutex_lock(&obj->dev->flow_db->lock);
+	if (!--obj->ft_prio->anchor.rule_goto_table_ref)
+		steering_anchor_destroy_rule_goto_table(obj->ft_prio);
+
+	put_flow_table(obj->dev, obj->ft_prio, true);
+	mutex_unlock(&obj->dev->flow_db->lock);
+
+	kfree(obj);
+	return 0;
+}
+
+static void fs_cleanup_anchor(struct mlx5_ib_flow_prio *prio,
+			      int count)
+{
+	while (count--)
+		mlx5_steering_anchor_destroy_res(&prio[count]);
+}
+
+void mlx5_ib_fs_cleanup_anchor(struct mlx5_ib_dev *dev)
+{
+	fs_cleanup_anchor(dev->flow_db->prios, MLX5_IB_NUM_FLOW_FT);
+	fs_cleanup_anchor(dev->flow_db->egress_prios, MLX5_IB_NUM_FLOW_FT);
+	fs_cleanup_anchor(dev->flow_db->sniffer, MLX5_IB_NUM_SNIFFER_FTS);
+	fs_cleanup_anchor(dev->flow_db->egress, MLX5_IB_NUM_EGRESS_FTS);
+	fs_cleanup_anchor(dev->flow_db->fdb, MLX5_IB_NUM_FDB_FTS);
+	fs_cleanup_anchor(dev->flow_db->rdma_rx, MLX5_IB_NUM_FLOW_FT);
+	fs_cleanup_anchor(dev->flow_db->rdma_tx, MLX5_IB_NUM_FLOW_FT);
+}
+
 static int mlx5_ib_matcher_ns(struct uverbs_attr_bundle *attrs,
 			      struct mlx5_ib_flow_matcher *obj)
 {
@@ -2050,12 +2327,10 @@ static int mlx5_ib_matcher_ns(struct uverbs_attr_bundle *attrs,
 		if (err)
 			return err;
 
-		if (flags) {
-			mlx5_ib_ft_type_to_namespace(
+		if (flags)
+			return mlx5_ib_ft_type_to_namespace(
 				MLX5_IB_UAPI_FLOW_TABLE_TYPE_NIC_TX,
 				&obj->ns_type);
-			return 0;
-		}
 	}
 
 	obj->ns_type = MLX5_FLOW_NAMESPACE_BYPASS;
@@ -2118,6 +2393,87 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_FLOW_MATCHER_CREATE)(
 
 end:
 	kfree(obj);
+	return err;
+}
+
+static int UVERBS_HANDLER(MLX5_IB_METHOD_STEERING_ANCHOR_CREATE)(
+	struct uverbs_attr_bundle *attrs)
+{
+	struct ib_uobject *uobj = uverbs_attr_get_uobject(
+		attrs, MLX5_IB_ATTR_STEERING_ANCHOR_CREATE_HANDLE);
+	struct mlx5_ib_dev *dev = mlx5_udata_to_mdev(&attrs->driver_udata);
+	enum mlx5_ib_uapi_flow_table_type ib_uapi_ft_type;
+	enum mlx5_flow_namespace_type ns_type;
+	struct mlx5_ib_steering_anchor *obj;
+	struct mlx5_ib_flow_prio *ft_prio;
+	u16 priority;
+	u32 ft_id;
+	int err;
+
+	if (!capable(CAP_NET_RAW))
+		return -EPERM;
+
+	err = uverbs_get_const(&ib_uapi_ft_type, attrs,
+			       MLX5_IB_ATTR_STEERING_ANCHOR_FT_TYPE);
+	if (err)
+		return err;
+
+	err = mlx5_ib_ft_type_to_namespace(ib_uapi_ft_type, &ns_type);
+	if (err)
+		return err;
+
+	err = uverbs_copy_from(&priority, attrs,
+			       MLX5_IB_ATTR_STEERING_ANCHOR_PRIORITY);
+	if (err)
+		return err;
+
+	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+	if (!obj)
+		return -ENOMEM;
+
+	mutex_lock(&dev->flow_db->lock);
+
+	ft_prio = _get_flow_table(dev, priority, ns_type, 0);
+	if (IS_ERR(ft_prio)) {
+		err = PTR_ERR(ft_prio);
+		goto free_obj;
+	}
+
+	ft_prio->refcount++;
+
+	if (!ft_prio->anchor.rule_goto_table_ref) {
+		err = steering_anchor_create_res(dev, ft_prio, ns_type);
+		if (err)
+			goto put_flow_table;
+	}
+
+	ft_prio->anchor.rule_goto_table_ref++;
+
+	ft_id = mlx5_flow_table_id(ft_prio->anchor.ft);
+
+	err = uverbs_copy_to(attrs, MLX5_IB_ATTR_STEERING_ANCHOR_FT_ID,
+			     &ft_id, sizeof(ft_id));
+	if (err)
+		goto destroy_res;
+
+	mutex_unlock(&dev->flow_db->lock);
+
+	uobj->object = obj;
+	obj->dev = dev;
+	obj->ft_prio = ft_prio;
+	atomic_set(&obj->usecnt, 0);
+
+	return 0;
+
+destroy_res:
+	--ft_prio->anchor.rule_goto_table_ref;
+	mlx5_steering_anchor_destroy_res(ft_prio);
+put_flow_table:
+	put_flow_table(dev, ft_prio, true);
+free_obj:
+	mutex_unlock(&dev->flow_db->lock);
+	kfree(obj);
+
 	return err;
 }
 
@@ -2477,6 +2833,35 @@ DECLARE_UVERBS_NAMED_OBJECT(MLX5_IB_OBJECT_FLOW_MATCHER,
 			    &UVERBS_METHOD(MLX5_IB_METHOD_FLOW_MATCHER_CREATE),
 			    &UVERBS_METHOD(MLX5_IB_METHOD_FLOW_MATCHER_DESTROY));
 
+DECLARE_UVERBS_NAMED_METHOD(
+	MLX5_IB_METHOD_STEERING_ANCHOR_CREATE,
+	UVERBS_ATTR_IDR(MLX5_IB_ATTR_STEERING_ANCHOR_CREATE_HANDLE,
+			MLX5_IB_OBJECT_STEERING_ANCHOR,
+			UVERBS_ACCESS_NEW,
+			UA_MANDATORY),
+	UVERBS_ATTR_CONST_IN(MLX5_IB_ATTR_STEERING_ANCHOR_FT_TYPE,
+			     enum mlx5_ib_uapi_flow_table_type,
+			     UA_MANDATORY),
+	UVERBS_ATTR_PTR_IN(MLX5_IB_ATTR_STEERING_ANCHOR_PRIORITY,
+			   UVERBS_ATTR_TYPE(u16),
+			   UA_MANDATORY),
+	UVERBS_ATTR_PTR_IN(MLX5_IB_ATTR_STEERING_ANCHOR_FT_ID,
+			   UVERBS_ATTR_TYPE(u32),
+			   UA_MANDATORY));
+
+DECLARE_UVERBS_NAMED_METHOD_DESTROY(
+	MLX5_IB_METHOD_STEERING_ANCHOR_DESTROY,
+	UVERBS_ATTR_IDR(MLX5_IB_ATTR_STEERING_ANCHOR_DESTROY_HANDLE,
+			MLX5_IB_OBJECT_STEERING_ANCHOR,
+			UVERBS_ACCESS_DESTROY,
+			UA_MANDATORY));
+
+DECLARE_UVERBS_NAMED_OBJECT(
+	MLX5_IB_OBJECT_STEERING_ANCHOR,
+	UVERBS_TYPE_ALLOC_IDR(steering_anchor_cleanup),
+	&UVERBS_METHOD(MLX5_IB_METHOD_STEERING_ANCHOR_CREATE),
+	&UVERBS_METHOD(MLX5_IB_METHOD_STEERING_ANCHOR_DESTROY));
+
 const struct uapi_definition mlx5_ib_flow_defs[] = {
 	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(
 		MLX5_IB_OBJECT_FLOW_MATCHER),
@@ -2485,6 +2870,9 @@ const struct uapi_definition mlx5_ib_flow_defs[] = {
 		&mlx5_ib_fs),
 	UAPI_DEF_CHAIN_OBJ_TREE(UVERBS_OBJECT_FLOW_ACTION,
 				&mlx5_ib_flow_actions),
+	UAPI_DEF_CHAIN_OBJ_TREE_NAMED(
+		MLX5_IB_OBJECT_STEERING_ANCHOR,
+		UAPI_DEF_IS_OBJ_SUPPORTED(mlx5_ib_shared_ft_allowed)),
 	{},
 };
 

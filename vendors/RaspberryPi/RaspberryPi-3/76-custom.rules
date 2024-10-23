@@ -1,0 +1,11 @@
+# rename pi's eth0 to lan
+SUBSYSTEM=="net", ACTION=="add", ENV{ID_VENDOR_ID}=="0424", ENV{ID_MODEL_ID}=="ec00", NAME="lan"
+
+# Huawei E353, switch to ethernet interface
+ATTR{idVendor}=="12d1", ATTR{idProduct}=="1f01", RUN+="usb_modeswitch '/%k'"
+
+# Huawei E353, rename ethernet interface to wan2
+SUBSYSTEM=="net", ACTION=="add", ENV{ID_VENDOR_ID}=="12d1", ENV{ID_MODEL_ID}=="14db", NAME="wan2"
+
+# AX88179A usb ethernet dongle
+SUBSYSTEM=="net", ACTION=="add", ENV{ID_VENDOR_ID}=="0b95", ENV{ID_MODEL_ID}=="1790", NAME="wan"

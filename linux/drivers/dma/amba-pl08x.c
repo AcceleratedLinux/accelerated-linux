@@ -231,7 +231,7 @@ enum pl08x_dma_chan_state {
 
 /**
  * struct pl08x_dma_chan - this structure wraps a DMA ENGINE channel
- * @vc: wrappped virtual channel
+ * @vc: wrapped virtual channel
  * @phychan: the physical channel utilized by this channel, if there is one
  * @name: name of channel
  * @cd: channel platform data
@@ -2239,7 +2239,7 @@ static int pl08x_resume(struct dma_chan *chan)
 bool pl08x_filter_id(struct dma_chan *chan, void *chan_id)
 {
 	struct pl08x_dma_chan *plchan;
-	char *name = chan_id;
+	const char *name = chan_id;
 
 	/* Reject channels for devices not bound to this driver */
 	if (chan->device->dev->driver != &pl08x_amba_driver.drv)
@@ -2367,7 +2367,7 @@ static int pl08x_dma_init_virtual_channels(struct pl08x_driver_data *pl08x,
 	INIT_LIST_HEAD(&dmadev->channels);
 
 	/*
-	 * Register as many many memcpy as we have physical channels,
+	 * Register as many memcpy as we have physical channels,
 	 * we won't always be able to use all but the code will have
 	 * to cope with that situation.
 	 */
@@ -2855,8 +2855,8 @@ static int pl08x_probe(struct amba_device *adev, const struct amba_id *id)
 	}
 
 	/* Initialize physical channels */
-	pl08x->phy_chans = kzalloc((vd->channels * sizeof(*pl08x->phy_chans)),
-			GFP_KERNEL);
+	pl08x->phy_chans = kcalloc(vd->channels, sizeof(*pl08x->phy_chans),
+				   GFP_KERNEL);
 	if (!pl08x->phy_chans) {
 		ret = -ENOMEM;
 		goto out_no_phychans;

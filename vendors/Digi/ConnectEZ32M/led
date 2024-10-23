@@ -14,29 +14,51 @@ fan_led_update()
 	FAN=""
 
 	# psu1_in - fan part of psu module
-	echo 304 > /sys/class/gpio/export 2>&1 || true
-	echo 1 > /sys/class/gpio/gpio304/active_low
-	FAN1_PRESENT=/sys/class/gpio/gpio304/value
+	echo 704 > /sys/class/gpio/export 2>&1 || true
+	echo 1 > /sys/class/gpio/gpio704/active_low
+	FAN1_PRESENT=/sys/class/gpio/gpio704/value
 
 	# psu2_in - fan part of psu module
-	echo 305 > /sys/class/gpio/export 2>&1 || true
-	echo 1 > /sys/class/gpio/gpio305/active_low
-	FAN2_PRESENT=/sys/class/gpio/gpio305/value
+	echo 705 > /sys/class/gpio/export 2>&1 || true
+	echo 1 > /sys/class/gpio/gpio705/active_low
+	FAN2_PRESENT=/sys/class/gpio/gpio705/value
 
 	# fan3_in
-	echo 306 > /sys/class/gpio/export 2>&1 || true
-	echo 1 > /sys/class/gpio/gpio306/active_low
-	FAN3_PRESENT=/sys/class/gpio/gpio306/value
+	echo 706 > /sys/class/gpio/export 2>&1 || true
+	echo 1 > /sys/class/gpio/gpio706/active_low
+	FAN3_PRESENT=/sys/class/gpio/gpio706/value
+
+	# dc_in1pok
+	echo 707 > /sys/class/gpio/export 2>&1 || true
+	PSU1_POK=/sys/class/gpio/gpio707/value
+
+	# dc_in2pok
+	echo 708 > /sys/class/gpio/export 2>&1 || true
+	PSU2_POK=/sys/class/gpio/gpio708/value
+
+	TEMP_HIGH_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
+	TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
+	runt set system.chassis.temp_high_alarm "$TEMP_HIGH_ALARM"
+	runt set system.chassis.temp_crit_alarm "$TEMP_CRIT_ALARM"
 
 	if [ "$(cat $FAN1_PRESENT)" = "1" ]; then
-		RPM=$(cat /sys/class/hwmon/hwmon0/fan1_input)
-		TEMP_MAX_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
-		TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
-		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan1_alarm)
+		runt set system.chassis.psu1 "present"
+		if [ "$(cat $PSU1_POK)" = "1" ]; then
+			runt set system.chassis.psu1_voltage "12"
+			runt set system.chassis.psu1_power "yes"
+		else
+			runt set system.chassis.psu1_voltage "0"
+			runt set system.chassis.psu1_power "no"
+		fi
 
-		if [ "$RPM" -le "10" ]; then
-			FAN="$FAN -O pwrfan1g -o pwrfan1r"
-		elif [ "$TEMP_MAX_ALARM" = "1" ] || [ "$TEMP_CRIT_ALARM" = "1" ]; then
+		RPM=$(cat /sys/class/hwmon/hwmon0/fan1_input)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan1_alarm)
+		runt set system.chassis.psu1_fan_rpm "$RPM"
+		runt set system.chassis.psu1_fan_alarm "$FAN_ALARM"
+
+		if [ "$RPM" -le "1000" ]; then
+			# If the fan isn't spinning fast enough, then set an artificial "alarm"
+			runt set system.chassis.psu1_fan_alarm "1"
 			# Don't glitch the flash if we're already flashing
 			if [ "$(cat /sys/class/leds/pwrfan2r/delay_on > /dev/null 2>&1)" != "250" ]; then
 				FAN="$FAN -O pwrfan1g -F pwrfan1r"
@@ -49,17 +71,30 @@ fan_led_update()
 		else
 			FAN="$FAN -o pwrfan1g -O pwrfan2r"
 		fi
+	else
+		runt set system.chassis.psu1 "absent"
+		runt set system.chassis.psu1_fan_rpm "0"
+		runt set system.chassis.psu1_fan_alarm "0"
 	fi
 
 	if [ "$(cat $FAN2_PRESENT)" = "1" ]; then
-		RPM=$(cat /sys/class/hwmon/hwmon0/fan2_input)
-		TEMP_MAX_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
-		TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
-		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan2_alarm)
+		runt set system.chassis.psu2 "present"
+		if [ "$(cat $PSU2_POK)" = "1" ]; then
+			runt set system.chassis.psu2_voltage "12"
+			runt set system.chassis.psu2_power "yes"
+		else
+			runt set system.chassis.psu2_voltage "0"
+			runt set system.chassis.psu2_power "no"
+		fi
 
-		if [ "$RPM" -le "10" ]; then
-			FAN="$FAN -O pwrfan2g -o pwrfan2r"
-		elif [ "$TEMP_MAX_ALARM" = "1" ] || [ "$TEMP_CRIT_ALARM" = "1" ]; then
+		RPM=$(cat /sys/class/hwmon/hwmon0/fan2_input)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan2_alarm)
+		runt set system.chassis.psu2_fan_rpm "$RPM"
+		runt set system.chassis.psu2_fan_alarm "$FAN_ALARM"
+
+		if [ "$RPM" -le "1000" ]; then
+			# If the fan isn't spinning fast enough, then set an artificial "alarm"
+			runt set system.chassis.psu2_fan_alarm "1"
 			# Don't glitch the flash if we're already flashing
 			if [ "$(cat /sys/class/leds/pwrfan2r/delay_on > /dev/null 2>&1)" != "250" ]; then
 				FAN="$FAN -O pwrfan2g -F pwrfan2r"
@@ -72,17 +107,23 @@ fan_led_update()
 		else
 			FAN="$FAN -o pwrfan2g -O pwrfan2r"
 		fi
+	else
+		runt set system.chassis.psu2 "absent"
+		runt set system.chassis.psu2_fan_rpm "0"
+		runt set system.chassis.psu2_fan_alarm "0"
 	fi
 
 	if [ "$(cat $FAN3_PRESENT)" = "1" ]; then
-		RPM=$(cat /sys/class/hwmon/hwmon0/fan3_input)
-		TEMP_MAX_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
-		TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
-		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan3_alarm)
+		runt set system.chassis.fan1 "present"
 
-		if [ "$RPM" -le "10" ]; then
-			FAN="$FAN -O sysfang -o sysfanr"
-		elif [ "$TEMP_MAX_ALARM" = "1" ] || [ "$TEMP_CRIT_ALARM" = "1" ]; then
+		RPM=$(cat /sys/class/hwmon/hwmon0/fan3_input)
+		FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan3_alarm)
+		runt set system.chassis.fan1_rpm "$RPM"
+		runt set system.chassis.fan1_alarm "$FAN_ALARM"
+
+		if [ "$RPM" -le "1000" ]; then
+			# If the fan isn't spinning fast enough, then set an artificial "alarm"
+			runt set system.chassis.fan1_alarm "1"
 			# Don't glitch the flash if we're already flashing
 			if [ "$(cat /sys/class/leds/sysfanr/delay_on > /dev/null 2>&1)" != "250" ]; then
 				FAN="$FAN -O sysfang -F sysfanr"
@@ -95,6 +136,10 @@ fan_led_update()
 		else
 			FAN="$FAN -o sysfang -O sysfanr"
 		fi
+	else
+		runt set system.chassis.fan1 "absent"
+		runt set system.chassis.fan1_rpm "0"
+		runt set system.chassis.fan1_alarm "0"
 	fi
 }
 
@@ -117,8 +162,8 @@ wwan_led_update()
 			WWAN_SERV="-f wanserg -O wanserr"
 			WWAN_SIG="-f wansigg -O wansigr"
 		else
-			idx="$(modem name=modem idx || modem idx)" 2>/dev/null
-			if [ -z "$idx" ]; then
+			modem_name="$(modem name)" 2>/dev/null
+			if [ -z "$modem_name" ]; then
 				if sim -m 2>/dev/null | grep -qw yes; then
 					# Slow flash SERV while waiting for modem to appear
 					WWAN_SERV="-f wanserg -O wanserr"
@@ -129,7 +174,7 @@ wwan_led_update()
 					WWAN_SIG="-O wansigg -O wansigr"
 				fi
 			else
-				case "$(runt get mm.modem.$idx.status.bars)" in
+				case "$(runt get mm.modem.$modem_name.status.bars)" in
 				5)   WWAN_SIG="-o wansigg -O wansigr" ;;
 				4|3) WWAN_SIG="-F wansigg -O wansigr" ;;
 				2|1) WWAN_SIG="-f wansigg -O wansigr" ;;
@@ -137,9 +182,9 @@ wwan_led_update()
 				*)   WWAN_SIG="-O wansigg -O wansigr" ;;
 				esac
 
-				if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
+				if [ "$(runt get mm.modem.$modem_name.status.state)" = connected ]; then
 					WWAN_SERV="-o wanserg -O wanserr"
-				elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
+				elif [ -z "$(runt get mm.modem.$modem_name.modem.imsi)" ]; then
 					# No SIM present
 					WWAN_SERV="-O wanserg -o wanserr"
 				else

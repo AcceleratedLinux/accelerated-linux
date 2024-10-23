@@ -16,6 +16,7 @@ VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
 RELFILES = $(IMAGEDIR)/VM.tar.gz \
            $(IMAGEDIR)/Docker.tar.gz \
            $(IMAGEDIR)/acl-licenses.txt \
+           $(IMAGEDIR)/sbom.cdx.json \
            $(IMAGEDIR)/license.log \
            $(IMAGEDIR)/romfs-inst.log \
            $(IMAGEDIR)/rootfs.gz \
@@ -25,7 +26,7 @@ RELFILES = $(IMAGEDIR)/VM.tar.gz \
            $(IMAGEDIR)/rootfs \
            $(IMAGEDIR)/vmlinuz \
 	   prop/config/schema/accns.schema \
-	   prop/config/cc_acl/app/runt/FE00000A*
+	   prop/config/edp-rust-client/descriptors/runt/FE00000A*
 
 ############################################################################
 

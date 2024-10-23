@@ -414,6 +414,7 @@ static const u64 fix_mac[] = {
 	END_SIGN
 };
 
+MODULE_DESCRIPTION("Neterion 10GbE driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 
@@ -2156,7 +2157,7 @@ static int verify_xena_quiescence(struct s2io_nic *sp)
 
 	/*
 	 * In PCI 33 mode, the P_PLL is not used, and therefore,
-	 * the the P_PLL_LOCK bit in the adapter_status register will
+	 * the P_PLL_LOCK bit in the adapter_status register will
 	 * not be asserted.
 	 */
 	if (!(val64 & ADAPTER_STATUS_P_PLL_LOCK) &&
@@ -2386,7 +2387,7 @@ static void free_tx_buffers(struct s2io_nic *nic)
 			skb = s2io_txdl_getskb(&mac_control->fifos[i], txdp, j);
 			if (skb) {
 				swstats->mem_freed += skb->truesize;
-				dev_kfree_skb(skb);
+				dev_kfree_skb_irq(skb);
 				cnt++;
 			}
 		}
@@ -3817,7 +3818,7 @@ static irqreturn_t s2io_test_intr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* Test interrupt path by forcing a a software IRQ */
+/* Test interrupt path by forcing a software IRQ */
 static int s2io_test_msi(struct s2io_nic *sp)
 {
 	struct pci_dev *pdev = sp->pdev;
@@ -5091,13 +5092,10 @@ static void do_s2io_restore_unicast_mc(struct s2io_nic *sp)
 static int do_s2io_add_mc(struct s2io_nic *sp, u8 *addr)
 {
 	int i;
-	u64 mac_addr = 0;
+	u64 mac_addr;
 	struct config_param *config = &sp->config;
 
-	for (i = 0; i < ETH_ALEN; i++) {
-		mac_addr <<= 8;
-		mac_addr |= addr[i];
-	}
+	mac_addr = ether_addr_to_u64(addr);
 	if ((0ULL == mac_addr) || (mac_addr == S2IO_DISABLE_MAC_ENTRY))
 		return SUCCESS;
 
@@ -5220,7 +5218,7 @@ static int s2io_set_mac_addr(struct net_device *dev, void *p)
 static int do_s2io_prog_unicast(struct net_device *dev, const u8 *addr)
 {
 	struct s2io_nic *sp = netdev_priv(dev);
-	register u64 mac_addr = 0, perm_addr = 0;
+	register u64 mac_addr, perm_addr;
 	int i;
 	u64 tmp64;
 	struct config_param *config = &sp->config;
@@ -5230,12 +5228,8 @@ static int do_s2io_prog_unicast(struct net_device *dev, const u8 *addr)
 	 * change on the device address registered with the OS. It will be
 	 * at offset 0.
 	 */
-	for (i = 0; i < ETH_ALEN; i++) {
-		mac_addr <<= 8;
-		mac_addr |= addr[i];
-		perm_addr <<= 8;
-		perm_addr |= sp->def_mac_addr[0].mac_addr[i];
-	}
+	mac_addr = ether_addr_to_u64(addr);
+	perm_addr = ether_addr_to_u64(sp->def_mac_addr[0].mac_addr);
 
 	/* check if the dev_addr is different than perm_addr */
 	if (mac_addr == perm_addr)
@@ -5348,9 +5342,9 @@ static void s2io_ethtool_gdrvinfo(struct net_device *dev,
 {
 	struct s2io_nic *sp = netdev_priv(dev);
 
-	strlcpy(info->driver, s2io_driver_name, sizeof(info->driver));
-	strlcpy(info->version, s2io_driver_version, sizeof(info->version));
-	strlcpy(info->bus_info, pci_name(sp->pdev), sizeof(info->bus_info));
+	strscpy(info->driver, s2io_driver_name, sizeof(info->driver));
+	strscpy(info->version, s2io_driver_version, sizeof(info->version));
+	strscpy(info->bus_info, pci_name(sp->pdev), sizeof(info->bus_info));
 }
 
 /**
@@ -5492,7 +5486,7 @@ s2io_ethtool_gringparam(struct net_device *dev,
 }
 
 /**
- * s2io_ethtool_getpause_data -Pause frame frame generation and reception.
+ * s2io_ethtool_getpause_data -Pause frame generation and reception.
  * @dev: pointer to netdev
  * @ep : pointer to the structure with pause parameters given by ethtool.
  * Description:
@@ -6643,7 +6637,7 @@ static int s2io_change_mtu(struct net_device *dev, int new_mtu)
 	struct s2io_nic *sp = netdev_priv(dev);
 	int ret = 0;
 
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 	if (netif_running(dev)) {
 		s2io_stop_all_tx_queue(sp);
 		s2io_card_down(sp);
@@ -7128,9 +7122,8 @@ static int s2io_card_up(struct s2io_nic *sp)
 		if (ret) {
 			DBG_PRINT(ERR_DBG, "%s: Out of memory in Open\n",
 				  dev->name);
-			s2io_reset(sp);
-			free_rx_buffers(sp);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto err_fill_buff;
 		}
 		DBG_PRINT(INFO_DBG, "Buf in ring:%d is %d:\n", i,
 			  ring->rx_bufs_left);
@@ -7168,18 +7161,16 @@ static int s2io_card_up(struct s2io_nic *sp)
 	/* Enable Rx Traffic and interrupts on the NIC */
 	if (start_nic(sp)) {
 		DBG_PRINT(ERR_DBG, "%s: Starting NIC failed\n", dev->name);
-		s2io_reset(sp);
-		free_rx_buffers(sp);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_out;
 	}
 
 	/* Add interrupt service routine */
 	if (s2io_add_isr(sp) != 0) {
 		if (sp->config.intr_type == MSI_X)
 			s2io_rem_isr(sp);
-		s2io_reset(sp);
-		free_rx_buffers(sp);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_out;
 	}
 
 	timer_setup(&sp->alarm_timer, s2io_alarm_handle, 0);
@@ -7199,6 +7190,20 @@ static int s2io_card_up(struct s2io_nic *sp)
 	}
 
 	return 0;
+
+err_out:
+	if (config->napi) {
+		if (config->intr_type == MSI_X) {
+			for (i = 0; i < sp->config.rx_ring_num; i++)
+				napi_disable(&sp->mac_control.rings[i].napi);
+		} else {
+			napi_disable(&sp->napi);
+		}
+	}
+err_fill_buff:
+	s2io_reset(sp);
+	free_rx_buffers(sp);
+	return ret;
 }
 
 /**
@@ -7359,10 +7364,9 @@ static int rx_osm_handler(struct ring_info *ring_data, struct RxD_t * rxdp)
 		int get_off = ring_data->rx_curr_get_info.offset;
 		int buf0_len = RXD_GET_BUFFER0_SIZE_3(rxdp->Control_2);
 		int buf2_len = RXD_GET_BUFFER2_SIZE_3(rxdp->Control_2);
-		unsigned char *buff = skb_push(skb, buf0_len);
 
 		struct buffAdd *ba = &ring_data->ba[get_block][get_off];
-		memcpy(buff, ba->ba_0, buf0_len);
+		skb_put_data(skb, ba->ba_0, buf0_len);
 		skb_put(skb, buf2_len);
 	}
 
@@ -7449,7 +7453,7 @@ aggregate:
  *  @link : inidicates whether link is UP/DOWN.
  *  Description:
  *  This function stops/starts the Tx queue depending on whether the link
- *  status of the NIC is is down or up. This is called by the Alarm
+ *  status of the NIC is down or up. This is called by the Alarm
  *  interrupt handler whenever a link change interrupt comes up.
  *  Return value:
  *  void.
@@ -7732,7 +7736,7 @@ s2io_init_nic(struct pci_dev *pdev, const struct pci_device_id *pre)
 	 * Setting the device configuration parameters.
 	 * Most of these parameters can be specified by the user during
 	 * module insertion as they are module loadable parameters. If
-	 * these parameters are not not specified during load time, they
+	 * these parameters are not specified during load time, they
 	 * are initialized with default values.
 	 */
 	config = &sp->config;
@@ -7905,10 +7909,10 @@ s2io_init_nic(struct pci_dev *pdev, const struct pci_device_id *pre)
 		for (i = 0; i < config->rx_ring_num ; i++) {
 			struct ring_info *ring = &mac_control->rings[i];
 
-			netif_napi_add(dev, &ring->napi, s2io_poll_msix, 64);
+			netif_napi_add(dev, &ring->napi, s2io_poll_msix);
 		}
 	} else {
-		netif_napi_add(dev, &sp->napi, s2io_poll_inta, 64);
+		netif_napi_add(dev, &sp->napi, s2io_poll_inta);
 	}
 
 	/* Not needed for Herc */

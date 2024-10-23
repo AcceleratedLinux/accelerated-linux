@@ -12,6 +12,7 @@
 #define IGC_MDIC		0x00020  /* MDI Control - RW */
 #define IGC_CONNSW		0x00034  /* Copper/Fiber switch control - RW */
 #define IGC_VET			0x00038  /* VLAN Ether Type - RW */
+#define IGC_LEDCTL		0x00E00	 /* LED Control - RW */
 #define IGC_I225_PHPM		0x00E14  /* I225 PHY Power Management */
 #define IGC_GPHY_VERSION	0x0001E  /* I225 gPHY Firmware Version */
 
@@ -58,9 +59,6 @@
 #define IGC_IVAR0		0x01700
 #define IGC_IVAR_MISC		0x01740  /* IVAR for "other" causes - RW */
 #define IGC_GPIE		0x01514  /* General Purpose Intr Enable - RW */
-
-/* MSI-X Table Register Descriptions */
-#define IGC_PBACL		0x05B68  /* MSIx PBA Clear - R/W 1 to clear */
 
 /* RSS registers */
 #define IGC_MRQC		0x05818 /* Multiple Receive Control - RW */
@@ -227,6 +225,7 @@
 /* Transmit Scheduling Registers */
 #define IGC_TQAVCTRL		0x3570
 #define IGC_TXQCTL(_n)		(0x3344 + 0x4 * (_n))
+#define IGC_GTXOFFSET		0x3310
 #define IGC_BASET_L		0x3314
 #define IGC_BASET_H		0x3318
 #define IGC_QBVCYCLET		0x331C
@@ -244,6 +243,23 @@
 #define IGC_SYSTIMH	0x0B604  /* System time register High - RO */
 #define IGC_SYSTIMR	0x0B6F8  /* System time register Residue */
 #define IGC_TIMINCA	0x0B608  /* Increment attributes register - RW */
+
+#define IGC_SYSTIML_1	0x0B688  /* System time register Low - RO (timer 1) */
+#define IGC_SYSTIMH_1	0x0B68C  /* System time register High - RO (timer 1) */
+#define IGC_SYSTIMR_1	0x0B684  /* System time register Residue (timer 1) */
+#define IGC_TIMINCA_1	0x0B690  /* Increment attributes register - RW (timer 1) */
+
+/* TX Timestamp Low */
+#define IGC_TXSTMPL_0		0x0B618
+#define IGC_TXSTMPL_1		0x0B698
+#define IGC_TXSTMPL_2		0x0B6B8
+#define IGC_TXSTMPL_3		0x0B6D8
+
+/* TX Timestamp High */
+#define IGC_TXSTMPH_0		0x0B61C
+#define IGC_TXSTMPH_1		0x0B69C
+#define IGC_TXSTMPH_2		0x0B6BC
+#define IGC_TXSTMPH_3		0x0B6DC
 
 #define IGC_TXSTMPL	0x0B618  /* Tx timestamp value Low - RO */
 #define IGC_TXSTMPH	0x0B61C  /* Tx timestamp value High - RO */
@@ -294,7 +310,6 @@
 
 /* LTR registers */
 #define IGC_LTRC	0x01A0 /* Latency Tolerance Reporting Control */
-#define IGC_DMACR	0x02508 /* DMA Coalescing Control Register */
 #define IGC_LTRMINV	0x5BB0 /* LTR Minimum Value */
 #define IGC_LTRMAXV	0x5BB4 /* LTR Maximum Value */
 

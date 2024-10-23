@@ -2,7 +2,7 @@ PKG = elf2flt
 METHOD = git
 URL = https://github.com/uclinux-dev/elf2flt.git
 
-BINUTILS_VERSION = 2.32
+BINUTILS_VERSION = 2.42
 BINUTILS_DIR = $(ROOTDIR)/tools/binutils
 BINUTILS_BUILD_DIR = $(BINUTILS_DIR)/build/binutils-$(BINUTILS_VERSION)
 BINUTILS_INSTALL_DIR = $(BINUTILS_DIR)/build/binutils-$(BINUTILS_VERSION)-install
@@ -12,7 +12,7 @@ BINUTILS_INSTALL_DIR = $(BINUTILS_DIR)/build/binutils-$(BINUTILS_VERSION)-instal
 # binutils build. These configuration settings point to those.
 #
 CONFOPTS += --target=$(TARGET)
-CONFOPTS += --with-libbfd=$(BINUTILS_BUILD_DIR)/$(TARGET)/bfd/libbfd.a
+CONFOPTS += --with-libbfd=$(BINUTILS_BUILD_DIR)/$(TARGET)/bfd/.libs/libbfd.a
 CONFOPTS += --with-binutils-include-dir=$(BINUTILS_BUILD_DIR)/include
 CONFOPTS += --with-bfd-include-dir=$(BINUTILS_BUILD_DIR)/$(TARGET)/bfd
 CONFOPTS += --with-libiberty=$(BINUTILS_BUILD_DIR)/$(TARGET)/libiberty/libiberty.a

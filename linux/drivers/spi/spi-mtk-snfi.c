@@ -76,7 +76,8 @@
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
 #include <linux/iopoll.h>
-#include <linux/of_platform.h>
+#include <linux/of.h>
+#include <linux/platform_device.h>
 #include <linux/mtd/nand-ecc-mtk.h>
 #include <linux/spi/spi.h>
 #include <linux/spi/spi-mem.h>
@@ -126,7 +127,8 @@
 #define STR_DATA BIT(0)
 
 #define NFI_STA 0x060
-#define NFI_NAND_FSM GENMASK(28, 24)
+#define NFI_NAND_FSM_7622 GENMASK(28, 24)
+#define NFI_NAND_FSM_7986 GENMASK(29, 23)
 #define NFI_FSM GENMASK(19, 16)
 #define READ_EMPTY BIT(12)
 
@@ -158,6 +160,7 @@
 #define MAS_WR GENMASK(5, 3)
 #define MAS_RDDLY GENMASK(2, 0)
 #define NFI_MASTERSTA_MASK_7622 (MAS_ADDR | MAS_RD | MAS_WR | MAS_RDDLY)
+#define NFI_MASTERSTA_MASK_7986 3
 
 // SNFI registers
 #define SNF_MAC_CTL 0x500
@@ -193,6 +196,8 @@
 #define DATA_READ_MODE_X4 2
 #define DATA_READ_MODE_DUAL 5
 #define DATA_READ_MODE_QUAD 6
+#define DATA_READ_LATCH_LAT GENMASK(9, 8)
+#define DATA_READ_LATCH_LAT_S 8
 #define PG_LOAD_CUSTOM_EN BIT(7)
 #define DATARD_CUSTOM_EN BIT(6)
 #define CS_DESELECT_CYC_S 0
@@ -203,6 +208,9 @@
 
 #define SNF_DLY_CTL3 0x548
 #define SFCK_SAM_DLY_S 0
+#define SFCK_SAM_DLY GENMASK(5, 0)
+#define SFCK_SAM_DLY_TOTAL 9
+#define SFCK_SAM_DLY_RANGE 47
 
 #define SNF_STA_CTL1 0x550
 #define CUS_PG_DONE BIT(28)
@@ -220,6 +228,11 @@
 
 static const u8 mt7622_spare_sizes[] = { 16, 26, 27, 28 };
 
+static const u8 mt7986_spare_sizes[] = {
+	16, 26, 27, 28, 32, 36, 40, 44, 48, 49, 50, 51, 52, 62, 61, 63, 64, 67,
+	74
+};
+
 struct mtk_snand_caps {
 	u16 sector_size;
 	u16 max_sectors;
@@ -230,6 +243,7 @@ struct mtk_snand_caps {
 	bool bbm_swap;
 	bool empty_page_check;
 	u32 mastersta_mask;
+	u32 nandfsm_mask;
 
 	const u8 *spare_sizes;
 	u32 num_spare_size;
@@ -244,6 +258,7 @@ static const struct mtk_snand_caps mt7622_snand_caps = {
 	.bbm_swap = false,
 	.empty_page_check = false,
 	.mastersta_mask = NFI_MASTERSTA_MASK_7622,
+	.nandfsm_mask = NFI_NAND_FSM_7622,
 	.spare_sizes = mt7622_spare_sizes,
 	.num_spare_size = ARRAY_SIZE(mt7622_spare_sizes)
 };
@@ -257,8 +272,23 @@ static const struct mtk_snand_caps mt7629_snand_caps = {
 	.bbm_swap = true,
 	.empty_page_check = false,
 	.mastersta_mask = NFI_MASTERSTA_MASK_7622,
+	.nandfsm_mask = NFI_NAND_FSM_7622,
 	.spare_sizes = mt7622_spare_sizes,
 	.num_spare_size = ARRAY_SIZE(mt7622_spare_sizes)
+};
+
+static const struct mtk_snand_caps mt7986_snand_caps = {
+	.sector_size = 1024,
+	.max_sectors = 8,
+	.fdm_size = 8,
+	.fdm_ecc_size = 1,
+	.fifo_size = 64,
+	.bbm_swap = true,
+	.empty_page_check = true,
+	.mastersta_mask = NFI_MASTERSTA_MASK_7986,
+	.nandfsm_mask = NFI_NAND_FSM_7986,
+	.spare_sizes = mt7986_spare_sizes,
+	.num_spare_size = ARRAY_SIZE(mt7986_spare_sizes)
 };
 
 struct mtk_snand_conf {
@@ -273,6 +303,7 @@ struct mtk_snand {
 	struct device *dev;
 	struct clk *nfi_clk;
 	struct clk *pad_clk;
+	struct clk *nfi_hclk;
 	void __iomem *nfi_base;
 	int irq;
 	struct completion op_done;
@@ -360,7 +391,7 @@ static int mtk_nfi_reset(struct mtk_snand *snf)
 	}
 
 	ret = readl_poll_timeout(snf->nfi_base + NFI_STA, val,
-				 !(val & (NFI_FSM | NFI_NAND_FSM)), 0,
+				 !(val & (NFI_FSM | snf->caps->nandfsm_mask)), 0,
 				 SNFI_POLL_INTERVAL);
 	if (ret) {
 		dev_err(snf->dev, "Failed to reset NFI\n");
@@ -1224,7 +1255,7 @@ static bool mtk_snand_supports_op(struct spi_mem *mem,
 
 static int mtk_snand_adjust_op_size(struct spi_mem *mem, struct spi_mem_op *op)
 {
-	struct mtk_snand *ms = spi_controller_get_devdata(mem->spi->master);
+	struct mtk_snand *ms = spi_controller_get_devdata(mem->spi->controller);
 	// page ops transfer size must be exactly ((sector_size + spare_size) *
 	// nsectors). Limit the op size if the caller requests more than that.
 	// exec_op will read more than needed and discard the leftover if the
@@ -1251,7 +1282,7 @@ static int mtk_snand_adjust_op_size(struct spi_mem *mem, struct spi_mem_op *op)
 
 static int mtk_snand_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 {
-	struct mtk_snand *ms = spi_controller_get_devdata(mem->spi->master);
+	struct mtk_snand *ms = spi_controller_get_devdata(mem->spi->controller);
 
 	dev_dbg(ms->dev, "OP %02x ADDR %08llX@%d:%u DATA %d:%u", op->cmd.opcode,
 		op->addr.val, op->addr.buswidth, op->addr.nbytes,
@@ -1295,36 +1326,11 @@ static irqreturn_t mtk_snand_irq(int irq, void *id)
 static const struct of_device_id mtk_snand_ids[] = {
 	{ .compatible = "mediatek,mt7622-snand", .data = &mt7622_snand_caps },
 	{ .compatible = "mediatek,mt7629-snand", .data = &mt7629_snand_caps },
+	{ .compatible = "mediatek,mt7986-snand", .data = &mt7986_snand_caps },
 	{},
 };
 
 MODULE_DEVICE_TABLE(of, mtk_snand_ids);
-
-static int mtk_snand_enable_clk(struct mtk_snand *ms)
-{
-	int ret;
-
-	ret = clk_prepare_enable(ms->nfi_clk);
-	if (ret) {
-		dev_err(ms->dev, "unable to enable nfi clk\n");
-		return ret;
-	}
-	ret = clk_prepare_enable(ms->pad_clk);
-	if (ret) {
-		dev_err(ms->dev, "unable to enable pad clk\n");
-		goto err1;
-	}
-	return 0;
-err1:
-	clk_disable_unprepare(ms->nfi_clk);
-	return ret;
-}
-
-static void mtk_snand_disable_clk(struct mtk_snand *ms)
-{
-	clk_disable_unprepare(ms->pad_clk);
-	clk_disable_unprepare(ms->nfi_clk);
-}
 
 static int mtk_snand_probe(struct platform_device *pdev)
 {
@@ -1332,13 +1338,15 @@ static int mtk_snand_probe(struct platform_device *pdev)
 	const struct of_device_id *dev_id;
 	struct spi_controller *ctlr;
 	struct mtk_snand *ms;
+	unsigned long spi_freq;
+	u32 val = 0;
 	int ret;
 
 	dev_id = of_match_node(mtk_snand_ids, np);
 	if (!dev_id)
 		return -EINVAL;
 
-	ctlr = devm_spi_alloc_master(&pdev->dev, sizeof(*ms));
+	ctlr = devm_spi_alloc_host(&pdev->dev, sizeof(*ms));
 	if (!ctlr)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, ctlr);
@@ -1362,54 +1370,69 @@ static int mtk_snand_probe(struct platform_device *pdev)
 
 	ms->dev = &pdev->dev;
 
-	ms->nfi_clk = devm_clk_get(&pdev->dev, "nfi_clk");
+	ms->nfi_clk = devm_clk_get_enabled(&pdev->dev, "nfi_clk");
 	if (IS_ERR(ms->nfi_clk)) {
 		ret = PTR_ERR(ms->nfi_clk);
 		dev_err(&pdev->dev, "unable to get nfi_clk, err = %d\n", ret);
 		goto release_ecc;
 	}
 
-	ms->pad_clk = devm_clk_get(&pdev->dev, "pad_clk");
+	ms->pad_clk = devm_clk_get_enabled(&pdev->dev, "pad_clk");
 	if (IS_ERR(ms->pad_clk)) {
 		ret = PTR_ERR(ms->pad_clk);
 		dev_err(&pdev->dev, "unable to get pad_clk, err = %d\n", ret);
 		goto release_ecc;
 	}
 
-	ret = mtk_snand_enable_clk(ms);
-	if (ret)
+	ms->nfi_hclk = devm_clk_get_optional_enabled(&pdev->dev, "nfi_hclk");
+	if (IS_ERR(ms->nfi_hclk)) {
+		ret = PTR_ERR(ms->nfi_hclk);
+		dev_err(&pdev->dev, "unable to get nfi_hclk, err = %d\n", ret);
 		goto release_ecc;
+	}
 
 	init_completion(&ms->op_done);
 
 	ms->irq = platform_get_irq(pdev, 0);
 	if (ms->irq < 0) {
 		ret = ms->irq;
-		goto disable_clk;
+		goto release_ecc;
 	}
 	ret = devm_request_irq(ms->dev, ms->irq, mtk_snand_irq, 0x0,
 			       "mtk-snand", ms);
 	if (ret) {
 		dev_err(ms->dev, "failed to request snfi irq\n");
-		goto disable_clk;
+		goto release_ecc;
 	}
 
 	ret = dma_set_mask(ms->dev, DMA_BIT_MASK(32));
 	if (ret) {
 		dev_err(ms->dev, "failed to set dma mask\n");
-		goto disable_clk;
+		goto release_ecc;
 	}
 
 	// switch to SNFI mode
 	nfi_write32(ms, SNF_CFG, SPI_MODE);
 
+	ret = of_property_read_u32(np, "rx-sample-delay-ns", &val);
+	if (!ret)
+		nfi_rmw32(ms, SNF_DLY_CTL3, SFCK_SAM_DLY,
+			  val * SFCK_SAM_DLY_RANGE / SFCK_SAM_DLY_TOTAL);
+
+	ret = of_property_read_u32(np, "mediatek,rx-latch-latency-ns", &val);
+	if (!ret) {
+		spi_freq = clk_get_rate(ms->pad_clk);
+		val = DIV_ROUND_CLOSEST(val, NSEC_PER_SEC / spi_freq);
+		nfi_rmw32(ms, SNF_MISC_CTL, DATA_READ_LATCH_LAT,
+			  val << DATA_READ_LATCH_LAT_S);
+	}
+
 	// setup an initial page format for ops matching page_cache_op template
 	// before ECC is called.
-	ret = mtk_snand_setup_pagefmt(ms, ms->caps->sector_size,
-				      ms->caps->spare_sizes[0]);
+	ret = mtk_snand_setup_pagefmt(ms, SZ_2K, SZ_64);
 	if (ret) {
 		dev_err(ms->dev, "failed to set initial page format\n");
-		goto disable_clk;
+		goto release_ecc;
 	}
 
 	// setup ECC engine
@@ -1421,7 +1444,7 @@ static int mtk_snand_probe(struct platform_device *pdev)
 	ret = nand_ecc_register_on_host_hw_engine(&ms->ecc_eng);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register ecc engine.\n");
-		goto disable_clk;
+		goto release_ecc;
 	}
 
 	ctlr->num_chipselect = 1;
@@ -1433,32 +1456,28 @@ static int mtk_snand_probe(struct platform_device *pdev)
 	ret = spi_register_controller(ctlr);
 	if (ret) {
 		dev_err(&pdev->dev, "spi_register_controller failed.\n");
-		goto disable_clk;
+		goto release_ecc;
 	}
 
 	return 0;
-disable_clk:
-	mtk_snand_disable_clk(ms);
 release_ecc:
 	mtk_ecc_release(ms->ecc);
 	return ret;
 }
 
-static int mtk_snand_remove(struct platform_device *pdev)
+static void mtk_snand_remove(struct platform_device *pdev)
 {
 	struct spi_controller *ctlr = platform_get_drvdata(pdev);
 	struct mtk_snand *ms = spi_controller_get_devdata(ctlr);
 
 	spi_unregister_controller(ctlr);
-	mtk_snand_disable_clk(ms);
 	mtk_ecc_release(ms->ecc);
 	kfree(ms->buf);
-	return 0;
 }
 
 static struct platform_driver mtk_snand_driver = {
 	.probe = mtk_snand_probe,
-	.remove = mtk_snand_remove,
+	.remove_new = mtk_snand_remove,
 	.driver = {
 		.name = "mtk-snand",
 		.of_match_table = mtk_snand_ids,

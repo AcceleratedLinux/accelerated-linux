@@ -1,0 +1,29 @@
+BananaPI BPI-R3
+---------------
+
+This is just some random notes on building and running on the BananaPi
+BPI-R3 platform. This is very much a work in progress.
+
+The BananaPI/BPI-R3 board is built around a Mediatek MT7986 SoC.
+This is an ARM64 (aarch64) CPU SoC, with quad core Cortex A53 CPUs @ 2.0GHz
+five 1Gb copper ethernet ports, and twp SFP modules.
+
+Generate images for this board using the BananaPI/BPI-R3 accelerated linux
+target. The default is to select the musl C-library when building.
+The build will generate a 3 files to be loaded onto the BPI-R3 board.
+
+To network load from the u-boot command line do:
+
+    setenv ipaddr 192.168.2.1
+    setenv serverip 192.168.2.22
+    setenv bootargs console=ttyS0,115200 root=/dev/ram0 initrd=0x70000000,64M
+    tftpboot 0x46000000 kernel
+    tftpboot 0x60000000 mt7986a-bananapi-bpi-r3.dtb
+    tftpboot 0x70000000 rootfs.bin
+    booti 0x46000000 - 0x60000000
+
+The console is on a 3-pin inline header. You will need a TTL-to-RS232
+converter connected and in place to use it. The three pins are GND, RX, TX,
+so you need to wire across to the 40-pin DIP header to get 3.3V (it is on
+pin 1). The console serial port is at the default 115200,8,n,1.
+

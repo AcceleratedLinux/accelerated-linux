@@ -18,8 +18,10 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
-	usr usr/var \
+	tmp \
+	usr usr/bin usr/sbin usr/var \
 	var
 
 DEVICES = \
@@ -95,13 +97,13 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ul-14x14-evk.dtb $(IMAGEDIR)
+	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/imx/imx6ul-14x14-evk.dtb $(IMAGEDIR)
 	mkimage -A arm -O linux -T kernel -C none -a 0x80800000 -e 0x80800000 -n "Linux-4.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x83800000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	if [ -d /tftpboot ]; then \
 		cp $(UKERNEL) /tftpboot ; \
 		cp $(UROMFSIMG) /tftpboot ; \
-		cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx6ul-14x14-evk.dtb /tftpboot/ ; \
+		cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/imx/imx6ul-14x14-evk.dtb /tftpboot/ ; \
 	fi
 
 include $(ROOTDIR)/vendors/config/config.dev

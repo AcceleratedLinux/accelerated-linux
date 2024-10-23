@@ -580,7 +580,7 @@ static int hash_table_init(struct clone *clone)
 
 	sz = 1 << HASH_TABLE_BITS;
 
-	clone->ht = kvmalloc(sz * sizeof(struct hash_table_bucket), GFP_KERNEL);
+	clone->ht = kvmalloc_array(sz, sizeof(struct hash_table_bucket), GFP_KERNEL);
 	if (!clone->ht)
 		return -ENOMEM;
 
@@ -1181,8 +1181,7 @@ static void process_deferred_discards(struct clone *clone)
 	struct bio_list discards = BIO_EMPTY_LIST;
 
 	spin_lock_irq(&clone->lock);
-	bio_list_merge(&discards, &clone->deferred_discard_bios);
-	bio_list_init(&clone->deferred_discard_bios);
+	bio_list_merge_init(&discards, &clone->deferred_discard_bios);
 	spin_unlock_irq(&clone->lock);
 
 	if (bio_list_empty(&discards))
@@ -1215,8 +1214,7 @@ static void process_deferred_bios(struct clone *clone)
 	struct bio_list bios = BIO_EMPTY_LIST;
 
 	spin_lock_irq(&clone->lock);
-	bio_list_merge(&bios, &clone->deferred_bios);
-	bio_list_init(&clone->deferred_bios);
+	bio_list_merge_init(&bios, &clone->deferred_bios);
 	spin_unlock_irq(&clone->lock);
 
 	if (bio_list_empty(&bios))
@@ -1237,11 +1235,9 @@ static void process_deferred_flush_bios(struct clone *clone)
 	 * before issuing them or signaling their completion.
 	 */
 	spin_lock_irq(&clone->lock);
-	bio_list_merge(&bios, &clone->deferred_flush_bios);
-	bio_list_init(&clone->deferred_flush_bios);
-
-	bio_list_merge(&bio_completions, &clone->deferred_flush_completions);
-	bio_list_init(&clone->deferred_flush_completions);
+	bio_list_merge_init(&bios, &clone->deferred_flush_bios);
+	bio_list_merge_init(&bio_completions,
+			    &clone->deferred_flush_completions);
 	spin_unlock_irq(&clone->lock);
 
 	if (bio_list_empty(&bios) && bio_list_empty(&bio_completions) &&
@@ -1683,8 +1679,8 @@ static int parse_metadata_dev(struct clone *clone, struct dm_arg_set *as, char *
 	int r;
 	sector_t metadata_dev_size;
 
-	r = dm_get_device(clone->ti, dm_shift_arg(as), FMODE_READ | FMODE_WRITE,
-			  &clone->metadata_dev);
+	r = dm_get_device(clone->ti, dm_shift_arg(as),
+			  BLK_OPEN_READ | BLK_OPEN_WRITE, &clone->metadata_dev);
 	if (r) {
 		*error = "Error opening metadata device";
 		return r;
@@ -1703,8 +1699,8 @@ static int parse_dest_dev(struct clone *clone, struct dm_arg_set *as, char **err
 	int r;
 	sector_t dest_dev_size;
 
-	r = dm_get_device(clone->ti, dm_shift_arg(as), FMODE_READ | FMODE_WRITE,
-			  &clone->dest_dev);
+	r = dm_get_device(clone->ti, dm_shift_arg(as),
+			  BLK_OPEN_READ | BLK_OPEN_WRITE, &clone->dest_dev);
 	if (r) {
 		*error = "Error opening destination device";
 		return r;
@@ -1725,7 +1721,7 @@ static int parse_source_dev(struct clone *clone, struct dm_arg_set *as, char **e
 	int r;
 	sector_t source_dev_size;
 
-	r = dm_get_device(clone->ti, dm_shift_arg(as), FMODE_READ,
+	r = dm_get_device(clone->ti, dm_shift_arg(as), BLK_OPEN_READ,
 			  &clone->source_dev);
 	if (r) {
 		*error = "Error opening source device";
@@ -1958,6 +1954,7 @@ static void clone_dtr(struct dm_target *ti)
 
 	mempool_exit(&clone->hydration_pool);
 	dm_kcopyd_client_destroy(clone->kcopyd_client);
+	cancel_delayed_work_sync(&clone->waker);
 	destroy_workqueue(clone->wq);
 	hash_table_exit(clone);
 	dm_clone_metadata_close(clone->cmd);
@@ -2035,7 +2032,7 @@ static void disable_passdown_if_not_supported(struct clone *clone)
 		reason = "max discard sectors smaller than a region";
 
 	if (reason) {
-		DMWARN("Destination device (%pd) %s: Disabling discard passdown.",
+		DMWARN("Destination device (%pg) %s: Disabling discard passdown.",
 		       dest_dev, reason);
 		clear_bit(DM_CLONE_DISCARD_PASSDOWN, &clone->flags);
 	}
@@ -2049,7 +2046,8 @@ static void set_discard_limits(struct clone *clone, struct queue_limits *limits)
 	if (!test_bit(DM_CLONE_DISCARD_PASSDOWN, &clone->flags)) {
 		/* No passdown is done so we set our own virtual limits */
 		limits->discard_granularity = clone->region_size << SECTOR_SHIFT;
-		limits->max_discard_sectors = round_down(UINT_MAX >> SECTOR_SHIFT, clone->region_size);
+		limits->max_hw_discard_sectors = round_down(UINT_MAX >> SECTOR_SHIFT,
+							    clone->region_size);
 		return;
 	}
 
@@ -2058,7 +2056,6 @@ static void set_discard_limits(struct clone *clone, struct queue_limits *limits)
 	 * device limits but discards aren't passed to the source device, so
 	 * inherit destination's limits.
 	 */
-	limits->max_discard_sectors = dest_limits->max_discard_sectors;
 	limits->max_hw_discard_sectors = dest_limits->max_hw_discard_sectors;
 	limits->discard_granularity = dest_limits->discard_granularity;
 	limits->discard_alignment = dest_limits->discard_alignment;
@@ -2203,7 +2200,7 @@ static int __init dm_clone_init(void)
 
 	r = dm_register_target(&clone_target);
 	if (r < 0) {
-		DMERR("Failed to register clone target");
+		kmem_cache_destroy(_hydration_cache);
 		return r;
 	}
 

@@ -454,12 +454,10 @@ bool ia_css_pipeline_has_stopped(struct ia_css_pipeline *pipeline)
 	return sp_group.pipe[thread_id].num_stages == 0;
 }
 
-#if defined(ISP2401)
 struct sh_css_sp_pipeline_io_status *ia_css_pipeline_get_pipe_io_status(void)
 {
 	return(&sh_css_sp_group.pipe_io_status);
 }
-#endif
 
 bool ia_css_pipeline_is_mapped(unsigned int key)
 {
@@ -695,7 +693,7 @@ static void pipeline_init_defaults(
 static void ia_css_pipeline_set_zoom_stage(struct ia_css_pipeline *pipeline)
 {
 	struct ia_css_pipeline_stage *stage = NULL;
-	int err = 0;
+	int err;
 
 	assert(pipeline);
 	if (pipeline->pipe_id == IA_CSS_PIPE_ID_PREVIEW) {
@@ -770,14 +768,6 @@ ia_css_pipeline_configure_inout_port(struct ia_css_pipeline *me,
 		SH_CSS_PIPE_PORT_CONFIG_SET(me->inout_port_config,
 					    (uint8_t)SH_CSS_PORT_INPUT,
 					    (uint8_t)(SH_CSS_HOST_TYPE), 1);
-		SH_CSS_PIPE_PORT_CONFIG_SET(me->inout_port_config,
-					    (uint8_t)SH_CSS_PORT_OUTPUT,
-					    (uint8_t)SH_CSS_HOST_TYPE, 1);
-		break;
-	case IA_CSS_PIPE_ID_ACC:
-		SH_CSS_PIPE_PORT_CONFIG_SET(me->inout_port_config,
-					    (uint8_t)SH_CSS_PORT_INPUT,
-					    (uint8_t)SH_CSS_HOST_TYPE, 1);
 		SH_CSS_PIPE_PORT_CONFIG_SET(me->inout_port_config,
 					    (uint8_t)SH_CSS_PORT_OUTPUT,
 					    (uint8_t)SH_CSS_HOST_TYPE, 1);

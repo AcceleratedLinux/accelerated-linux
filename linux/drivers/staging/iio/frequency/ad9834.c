@@ -83,7 +83,7 @@ struct ad9834_state {
 	 * DMA (thus cache coherency maintenance) requires the
 	 * transfer buffers to live in their own cache lines.
 	 */
-	__be16				data ____cacheline_aligned;
+	__be16				data __aligned(IIO_DMA_MINALIGN);
 	__be16				freq_data[2];
 };
 
@@ -331,11 +331,9 @@ static IIO_DEV_ATTR_PHASE(0, 1, 0200, NULL, ad9834_write, AD9834_REG_PHASE1);
 static IIO_DEV_ATTR_PHASESYMBOL(0, 0200, NULL, ad9834_write, AD9834_PSEL);
 static IIO_CONST_ATTR_PHASE_SCALE(0, "0.0015339808"); /* 2PI/2^12 rad*/
 
-static IIO_DEV_ATTR_PINCONTROL_EN(0, 0200, NULL,
-	ad9834_write, AD9834_PIN_SW);
+static IIO_DEV_ATTR_PINCONTROL_EN(0, 0200, NULL, ad9834_write, AD9834_PIN_SW);
 static IIO_DEV_ATTR_OUT_ENABLE(0, 0200, NULL, ad9834_write, AD9834_RESET);
-static IIO_DEV_ATTR_OUTY_ENABLE(0, 1, 0200, NULL,
-	ad9834_write, AD9834_OPBITEN);
+static IIO_DEV_ATTR_OUTY_ENABLE(0, 1, 0200, NULL, ad9834_write, AD9834_OPBITEN);
 static IIO_DEV_ATTR_OUT_WAVETYPE(0, 0, ad9834_store_wavetype, 0);
 static IIO_DEV_ATTR_OUT_WAVETYPE(0, 1, ad9834_store_wavetype, 1);
 
@@ -396,13 +394,6 @@ static void ad9834_disable_reg(void *data)
 	regulator_disable(reg);
 }
 
-static void ad9834_disable_clk(void *data)
-{
-	struct clk *clk = data;
-
-	clk_disable_unprepare(clk);
-}
-
 static int ad9834_probe(struct spi_device *spi)
 {
 	struct ad9834_state *st;
@@ -431,21 +422,11 @@ static int ad9834_probe(struct spi_device *spi)
 	}
 	st = iio_priv(indio_dev);
 	mutex_init(&st->lock);
-	st->mclk = devm_clk_get(&spi->dev, NULL);
+	st->mclk = devm_clk_get_enabled(&spi->dev, NULL);
 	if (IS_ERR(st->mclk)) {
-		ret = PTR_ERR(st->mclk);
-		return ret;
-	}
-
-	ret = clk_prepare_enable(st->mclk);
-	if (ret) {
 		dev_err(&spi->dev, "Failed to enable master clock\n");
-		return ret;
+		return PTR_ERR(st->mclk);
 	}
-
-	ret = devm_add_action_or_reset(&spi->dev, ad9834_disable_clk, st->mclk);
-	if (ret)
-		return ret;
 
 	st->spi = spi;
 	st->devid = spi_get_device_id(spi)->driver_data;

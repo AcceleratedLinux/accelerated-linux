@@ -18,8 +18,10 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
-	usr usr/var \
+	tmp \
+	usr usr/bin usr/sbin usr/var \
 	var
 
 DEVICES = \
@@ -96,13 +98,13 @@ image: ./mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR) ; \
 	$$mksquashfs . $(ROMFSIMG) -all-root -noappend
 	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/zImage $(ZIMAGE)
-	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx28-evk.dtb $(IMAGEDIR)
+	cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/mxs/imx28-evk.dtb $(IMAGEDIR)
 	mkimage -A arm -O linux -T kernel -C none -a 0x40800000 -e 0x40800000 -n "Linux-4.x" -d $(ZIMAGE) $(UKERNEL)
 	mkimage -A arm -O linux -T ramdisk -C none -a 0x44000000 -n "ramdisk" -d $(ROMFSIMG) $(UROMFSIMG)
 	if [ -d /tftpboot ]; then \
 		cp $(UKERNEL) /tftpboot ; \
 		cp $(UROMFSIMG) /tftpboot ; \
-		cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/imx28-evk.dtb /tftpboot/ ; \
+		cp $(ROOTDIR)/$(LINUXDIR)/arch/arm/boot/dts/nxp/mxs/imx28-evk.dtb /tftpboot/ ; \
 	fi
 
 include $(ROOTDIR)/vendors/config/config.dev

@@ -315,9 +315,9 @@ static void sbsm_del_mux_adapter(void *data)
 	i2c_mux_del_adapters(sbsm->muxc);
 }
 
-static int sbsm_probe(struct i2c_client *client,
-		      const struct i2c_device_id *id)
+static int sbsm_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct i2c_adapter *adapter = client->adapter;
 	struct sbsm_data *data;
 	struct device *dev = &client->dev;
@@ -358,7 +358,7 @@ static int sbsm_probe(struct i2c_client *client,
 	/* register muxed i2c channels. One for each supported battery */
 	for (i = 0; i < SBSM_MAX_BATS; ++i) {
 		if (data->supported_bats & BIT(i)) {
-			ret = i2c_mux_add_adapter(data->muxc, 0, i + 1, 0);
+			ret = i2c_mux_add_adapter(data->muxc, 0, i + 1);
 			if (ret)
 				break;
 		}

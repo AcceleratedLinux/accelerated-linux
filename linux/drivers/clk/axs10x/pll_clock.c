@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Synopsys AXS10X SDP Generic PLL clock driver
  *
  * Copyright (C) 2017 Synopsys
- *
- * This file is licensed under the terms of the GNU General Public
- * License version 2. This program is licensed "as is" without any
- * warranty of any kind, whether express or implied.
  */
 
 #include <linux/platform_device.h>
@@ -15,10 +12,9 @@
 #include <linux/err.h>
 #include <linux/device.h>
 #include <linux/io.h>
-#include <linux/of_address.h>
-#include <linux/of_device.h>
-#include <linux/slab.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
+#include <linux/slab.h>
 
 /* PLL registers addresses */
 #define PLL_REG_IDIV	0x0
@@ -256,14 +252,8 @@ static int axs10x_pll_clk_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	return of_clk_add_hw_provider(dev->of_node, of_clk_hw_simple_get,
-			&pll_clk->hw);
-}
-
-static int axs10x_pll_clk_remove(struct platform_device *pdev)
-{
-	of_clk_del_provider(pdev->dev.of_node);
-	return 0;
+	return devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get,
+					   &pll_clk->hw);
 }
 
 static void __init of_axs10x_pll_clk_setup(struct device_node *node)
@@ -335,7 +325,6 @@ static struct platform_driver axs10x_pll_clk_driver = {
 		.of_match_table = axs10x_pll_clk_id,
 	},
 	.probe = axs10x_pll_clk_probe,
-	.remove = axs10x_pll_clk_remove,
 };
 builtin_platform_driver(axs10x_pll_clk_driver);
 

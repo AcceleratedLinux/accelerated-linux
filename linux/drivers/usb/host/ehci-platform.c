@@ -53,8 +53,6 @@ struct ehci_platform_priv {
 	struct delayed_work poll_work;
 };
 
-static const char hcd_name[] = "ehci-platform";
-
 static int ehci_platform_reset(struct usb_hcd *hcd)
 {
 	struct platform_device *pdev = to_platform_device(hcd->self.controller);
@@ -361,14 +359,15 @@ static int ehci_platform_probe(struct platform_device *dev)
 			goto err_reset;
 	}
 
-	res_mem = platform_get_resource(dev, IORESOURCE_MEM, 0);
-	hcd->regs = devm_ioremap_resource(&dev->dev, res_mem);
+	hcd->regs = devm_platform_get_and_ioremap_resource(dev, 0, &res_mem);
 	if (IS_ERR(hcd->regs)) {
 		err = PTR_ERR(hcd->regs);
 		goto err_power;
 	}
 	hcd->rsrc_start = res_mem->start;
 	hcd->rsrc_len = resource_size(res_mem);
+
+	hcd->tpl_support = of_usb_host_tpl_support(dev->dev.of_node);
 
 	err = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (err)
@@ -400,7 +399,7 @@ err_put_clks:
 	return err;
 }
 
-static int ehci_platform_remove(struct platform_device *dev)
+static void ehci_platform_remove(struct platform_device *dev)
 {
 	struct usb_hcd *hcd = platform_get_drvdata(dev);
 	struct usb_ehci_pdata *pdata = dev_get_platdata(&dev->dev);
@@ -424,8 +423,6 @@ static int ehci_platform_remove(struct platform_device *dev)
 
 	if (pdata == &ehci_platform_defaults)
 		dev->dev.platform_data = NULL;
-
-	return 0;
 }
 
 static int __maybe_unused ehci_platform_suspend(struct device *dev)
@@ -511,7 +508,7 @@ static SIMPLE_DEV_PM_OPS(ehci_platform_pm_ops, ehci_platform_suspend,
 static struct platform_driver ehci_platform_driver = {
 	.id_table	= ehci_platform_table,
 	.probe		= ehci_platform_probe,
-	.remove		= ehci_platform_remove,
+	.remove_new	= ehci_platform_remove,
 	.shutdown	= usb_hcd_platform_shutdown,
 	.driver		= {
 		.name	= "ehci-platform",
@@ -526,8 +523,6 @@ static int __init ehci_platform_init(void)
 {
 	if (usb_disabled())
 		return -ENODEV;
-
-	pr_info("%s: " DRIVER_DESC "\n", hcd_name);
 
 	ehci_init_driver(&ehci_platform_hc_driver, &platform_overrides);
 	return platform_driver_register(&ehci_platform_driver);

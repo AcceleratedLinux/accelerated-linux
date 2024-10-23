@@ -186,7 +186,11 @@ static int rsnd_dvc_init(struct rsnd_mod *mod,
 			 struct rsnd_dai_stream *io,
 			 struct rsnd_priv *priv)
 {
-	rsnd_mod_power_on(mod);
+	int ret;
+
+	ret = rsnd_mod_power_on(mod);
+	if (ret < 0)
+		return ret;
 
 	rsnd_dvc_activation(mod);
 
@@ -290,7 +294,7 @@ static void rsnd_dvc_debug_info(struct seq_file *m,
 				struct rsnd_dai_stream *io,
 				struct rsnd_mod *mod)
 {
-	rsnd_debugfs_mod_reg_show(m, mod, RSND_GEN2_SCU,
+	rsnd_debugfs_mod_reg_show(m, mod, RSND_BASE_SCU,
 				  0xe00 + rsnd_mod_id(mod) * 0x100, 0x60);
 }
 #define DEBUG_INFO .debug_info = rsnd_dvc_debug_info
@@ -326,10 +330,6 @@ int rsnd_dvc_probe(struct rsnd_priv *priv)
 	struct clk *clk;
 	char name[RSND_DVC_NAME_SIZE];
 	int i, nr, ret;
-
-	/* This driver doesn't support Gen1 at this point */
-	if (rsnd_is_gen1(priv))
-		return 0;
 
 	node = rsnd_dvc_of_node(priv);
 	if (!node)

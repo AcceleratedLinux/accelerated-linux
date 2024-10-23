@@ -6,7 +6,6 @@
 #include <linux/net/intel/i40e_client.h>
 
 #include "i40e.h"
-#include "i40e_prototype.h"
 
 static LIST_HEAD(i40e_devices);
 static DEFINE_MUTEX(i40e_device_mutex);
@@ -102,25 +101,26 @@ i40e_notify_client_of_vf_msg(struct i40e_vsi *vsi, u32 vf_id, u8 *msg, u16 len)
 
 /**
  * i40e_notify_client_of_l2_param_changes - call the client notify callback
- * @vsi: the VSI with l2 param changes
+ * @pf: PF device pointer
  *
- * If there is a client to this VSI, call the client
+ * If there is a client, call its callback
  **/
-void i40e_notify_client_of_l2_param_changes(struct i40e_vsi *vsi)
+void i40e_notify_client_of_l2_param_changes(struct i40e_pf *pf)
 {
-	struct i40e_pf *pf = vsi->back;
+	struct i40e_vsi *vsi = i40e_pf_get_main_vsi(pf);
 	struct i40e_client_instance *cdev = pf->cinst;
 	struct i40e_params params;
 
 	if (!cdev || !cdev->client)
 		return;
 	if (!cdev->client->ops || !cdev->client->ops->l2_param_change) {
-		dev_dbg(&vsi->back->pdev->dev,
+		dev_dbg(&pf->pdev->dev,
 			"Cannot locate client instance l2_param_change routine\n");
 		return;
 	}
 	if (!test_bit(__I40E_CLIENT_INSTANCE_OPENED, &cdev->state)) {
-		dev_dbg(&vsi->back->pdev->dev, "Client is not open, abort l2 param change\n");
+		dev_dbg(&pf->pdev->dev,
+			"Client is not open, abort l2 param change\n");
 		return;
 	}
 	memset(&params, 0, sizeof(params));
@@ -149,8 +149,6 @@ static void i40e_client_release_qvlist(struct i40e_info *ldev)
 		u32 reg_idx;
 
 		qv_info = &qvlist_info->qv_info[i];
-		if (!qv_info)
-			continue;
 		reg_idx = I40E_PFINT_LNKLSTN(qv_info->v_idx - 1);
 		wr32(&pf->hw, reg_idx, I40E_PFINT_LNKLSTN_FIRSTQ_INDX_MASK);
 	}
@@ -160,21 +158,24 @@ static void i40e_client_release_qvlist(struct i40e_info *ldev)
 
 /**
  * i40e_notify_client_of_netdev_close - call the client close callback
- * @vsi: the VSI with netdev closed
+ * @pf: PF device pointer
  * @reset: true when close called due to a reset pending
  *
  * If there is a client to this netdev, call the client with close
  **/
-void i40e_notify_client_of_netdev_close(struct i40e_vsi *vsi, bool reset)
+void i40e_notify_client_of_netdev_close(struct i40e_pf *pf, bool reset)
 {
-	struct i40e_pf *pf = vsi->back;
 	struct i40e_client_instance *cdev = pf->cinst;
 
 	if (!cdev || !cdev->client)
 		return;
 	if (!cdev->client->ops || !cdev->client->ops->close) {
-		dev_dbg(&vsi->back->pdev->dev,
+		dev_dbg(&pf->pdev->dev,
 			"Cannot locate client instance close routine\n");
+		return;
+	}
+	if (!test_bit(__I40E_CLIENT_INSTANCE_OPENED, &cdev->state)) {
+		dev_dbg(&pf->pdev->dev, "Client is not open, abort close\n");
 		return;
 	}
 	cdev->client->ops->close(&cdev->lan_info, cdev->client, reset);
@@ -332,9 +333,9 @@ static int i40e_register_auxiliary_dev(struct i40e_info *ldev, const char *name)
  **/
 static void i40e_client_add_instance(struct i40e_pf *pf)
 {
+	struct i40e_vsi *vsi = i40e_pf_get_main_vsi(pf);
 	struct i40e_client_instance *cdev = NULL;
 	struct netdev_hw_addr *mac = NULL;
-	struct i40e_vsi *vsi = pf->vsi[pf->lan_vsi];
 
 	cdev = kzalloc(sizeof(*cdev), GFP_KERNEL);
 	if (!cdev)
@@ -398,9 +399,9 @@ void i40e_client_del_instance(struct i40e_pf *pf)
  **/
 void i40e_client_subtask(struct i40e_pf *pf)
 {
-	struct i40e_client *client;
+	struct i40e_vsi *vsi = i40e_pf_get_main_vsi(pf);
 	struct i40e_client_instance *cdev;
-	struct i40e_vsi *vsi = pf->vsi[pf->lan_vsi];
+	struct i40e_client *client;
 	int ret = 0;
 
 	if (!test_and_clear_bit(__I40E_CLIENT_SERVICE_REQUESTED, pf->state))
@@ -429,7 +430,6 @@ void i40e_client_subtask(struct i40e_pf *pf)
 				/* Remove failed client instance */
 				clear_bit(__I40E_CLIENT_INSTANCE_OPENED,
 					  &cdev->state);
-				i40e_client_del_instance(pf);
 				return;
 			}
 		}
@@ -538,9 +538,9 @@ static int i40e_client_virtchnl_send(struct i40e_info *ldev,
 {
 	struct i40e_pf *pf = ldev->pf;
 	struct i40e_hw *hw = &pf->hw;
-	i40e_status err;
+	int err;
 
-	err = i40e_aq_send_msg_to_vf(hw, vf_id, VIRTCHNL_OP_IWARP,
+	err = i40e_aq_send_msg_to_vf(hw, vf_id, VIRTCHNL_OP_RDMA,
 				     0, msg, len, NULL);
 	if (err)
 		dev_err(&pf->pdev->dev, "Unable to send iWarp message to VF, error %d, aq status %d\n",
@@ -574,8 +574,6 @@ static int i40e_client_setup_qvlist(struct i40e_info *ldev,
 
 	for (i = 0; i < qvlist_info->num_vectors; i++) {
 		qv_info = &qvlist_info->qv_info[i];
-		if (!qv_info)
-			continue;
 		v_idx = qv_info->v_idx;
 
 		/* Validate vector id belongs to this client */
@@ -667,11 +665,11 @@ static int i40e_client_update_vsi_ctxt(struct i40e_info *ldev,
 				       bool is_vf, u32 vf_id,
 				       u32 flag, u32 valid_flag)
 {
+	struct i40e_vsi *vsi = i40e_pf_get_main_vsi(ldev->pf);
 	struct i40e_pf *pf = ldev->pf;
-	struct i40e_vsi *vsi = pf->vsi[pf->lan_vsi];
 	struct i40e_vsi_context ctxt;
 	bool update = true;
-	i40e_status err;
+	int err;
 
 	/* TODO: for now do not allow setting VF's VSI setting */
 	if (is_vf)
@@ -683,8 +681,8 @@ static int i40e_client_update_vsi_ctxt(struct i40e_info *ldev,
 	ctxt.flags = I40E_AQ_VSI_TYPE_PF;
 	if (err) {
 		dev_info(&pf->pdev->dev,
-			 "couldn't get PF vsi config, err %s aq_err %s\n",
-			 i40e_stat_str(&pf->hw, err),
+			 "couldn't get PF vsi config, err %pe aq_err %s\n",
+			 ERR_PTR(err),
 			 i40e_aq_str(&pf->hw,
 				     pf->hw.aq.asq_last_status));
 		return -ENOENT;
@@ -711,8 +709,8 @@ static int i40e_client_update_vsi_ctxt(struct i40e_info *ldev,
 		err = i40e_aq_update_vsi_params(&vsi->back->hw, &ctxt, NULL);
 		if (err) {
 			dev_info(&pf->pdev->dev,
-				 "update VSI ctxt for PE failed, err %s aq_err %s\n",
-				 i40e_stat_str(&pf->hw, err),
+				 "update VSI ctxt for PE failed, err %pe aq_err %s\n",
+				 ERR_PTR(err),
 				 i40e_aq_str(&pf->hw,
 					     pf->hw.aq.asq_last_status));
 		}

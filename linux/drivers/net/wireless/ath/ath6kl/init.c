@@ -1014,7 +1014,7 @@ static int ath6kl_fetch_fw_apin(struct ath6kl *ar, const char *name)
 
 		switch (ie_id) {
 		case ATH6KL_FW_IE_FW_VERSION:
-			strlcpy(ar->wiphy->fw_version, data,
+			strscpy(ar->wiphy->fw_version, data,
 				min(sizeof(ar->wiphy->fw_version), ie_len+1));
 
 			ath6kl_dbg(ATH6KL_DBG_BOOT,
@@ -1677,7 +1677,7 @@ static void ath6kl_init_get_fwcaps(struct ath6kl *ar, char *buf, size_t buf_len)
 
 			/* add "..." to the end of string */
 			trunc_len = strlen(trunc) + 1;
-			strncpy(buf + buf_len - trunc_len, trunc, trunc_len);
+			memcpy(buf + buf_len - trunc_len, trunc, trunc_len);
 
 			return;
 		}

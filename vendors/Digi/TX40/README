@@ -1,0 +1,42 @@
+DIGI TX40
+---------
+
+The Digi/TX40 board is using NXP Layerscape LS1027A SoC. (ARMv8 64-bit core.)
+
+It is using multiple boot stages. First it runs the built-in ROM code (BL1),
+which loads the RCW (Reset Configuration Word) from the SPI NOR's 0x00000000
+address, and does some low-level initialization (clocks, pinmuxes, etc).
+The RCW contains a small code inside, which starts BL2 (platform initialization
+firmware) (image is merged with the RCW).
+On this platform, we are using TF-A (ARM's Trusted Firmware) as BL2. That
+initializes e.g. DDR, and loads the merged BL33 (U-Boot) and BL31 (resident
+runtime firmware) image from SPI NOR (address 0x00100000) to the DDR, and starts
+that. This is called (FIP image).
+
+The build process is of these images:
+ - build RCW
+ - build U-Boot
+ - build BL2 image with TFA (using RCW)
+   This generates the 'bl2_flexspi_nor.pbl' image. Write it into the SPI flash,
+   address 0x00000000
+ - build FIP image with TFA (using U-Boot)
+   This generates the 'fip.bin' image. Write it into the SPI flash, address
+   0x00100000
+
+See 'cw' folder for XSPI flash configuration for CodeWarrior.
+
+---------------
+  EVT units
+---------------
+The TX40 EVT units have slightly different GPIO arrangement, and different chips
+are used (accelerometer, GPIO expander).
+
+To build firmware for the EVT units, use:
+
+ # CONFIG_DEFAULTS_DIGI_TX40_EVT=y make Digi/TX40_default
+
+or after:
+
+ # CONFIG_DEFAULTS_DIGI_TX40_EVT=y make
+
+In U-Boot, CONFIG_TARGET_TX40_EVT=y should be enabled.

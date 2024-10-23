@@ -193,7 +193,7 @@ static void chtls_register_dev(struct chtls_dev *cdev)
 {
 	struct tls_toe_device *tlsdev = &cdev->tlsdev;
 
-	strlcpy(tlsdev->name, "chtls", TLS_TOE_DEVICE_NAME_MAX);
+	strscpy(tlsdev->name, "chtls", TLS_TOE_DEVICE_NAME_MAX);
 	strlcat(tlsdev->name, cdev->lldi->ports[0]->name,
 		TLS_TOE_DEVICE_NAME_MAX);
 	tlsdev->feature = chtls_inline_feature;
@@ -606,7 +606,7 @@ static void __init chtls_init_ulp_ops(void)
 	chtls_cpl_prot.destroy		= chtls_destroy_sock;
 	chtls_cpl_prot.shutdown		= chtls_shutdown;
 	chtls_cpl_prot.sendmsg		= chtls_sendmsg;
-	chtls_cpl_prot.sendpage		= chtls_sendpage;
+	chtls_cpl_prot.splice_eof	= chtls_splice_eof;
 	chtls_cpl_prot.recvmsg		= chtls_recvmsg;
 	chtls_cpl_prot.setsockopt	= chtls_setsockopt;
 	chtls_cpl_prot.getsockopt	= chtls_getsockopt;

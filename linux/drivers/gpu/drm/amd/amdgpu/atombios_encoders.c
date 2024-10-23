@@ -26,7 +26,9 @@
 
 #include <linux/pci.h>
 
-#include <drm/drm_crtc_helper.h>
+#include <acpi/video.h>
+
+#include <drm/drm_edid.h>
 #include <drm/amdgpu_drm.h>
 #include "amdgpu.h"
 #include "amdgpu_connectors.h"
@@ -118,8 +120,6 @@ amdgpu_atombios_encoder_set_backlight_level(struct amdgpu_encoder *amdgpu_encode
 	}
 }
 
-#if defined(CONFIG_BACKLIGHT_CLASS_DEVICE) || defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
-
 static u8 amdgpu_atombios_encoder_backlight_level(struct backlight_device *bd)
 {
 	u8 level;
@@ -184,7 +184,12 @@ void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *amdgpu_encode
 		return;
 
 	if (!(adev->mode_info.firmware_flags & ATOM_BIOS_INFO_BL_CONTROLLED_BY_GPU))
-		return;
+		goto register_acpi_backlight;
+
+	if (!acpi_video_backlight_use_native()) {
+		drm_info(dev, "Skipping amdgpu atom DIG backlight registration\n");
+		goto register_acpi_backlight;
+	}
 
 	pdata = kmalloc(sizeof(struct amdgpu_backlight_privdata), GFP_KERNEL);
 	if (!pdata) {
@@ -220,6 +225,10 @@ void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *amdgpu_encode
 error:
 	kfree(pdata);
 	return;
+
+register_acpi_backlight:
+	/* Try registering an ACPI video backlight device instead. */
+	acpi_video_register_backlight();
 }
 
 void
@@ -250,18 +259,6 @@ amdgpu_atombios_encoder_fini_backlight(struct amdgpu_encoder *amdgpu_encoder)
 		DRM_INFO("amdgpu atom LVDS backlight unloaded\n");
 	}
 }
-
-#else /* !CONFIG_BACKLIGHT_CLASS_DEVICE */
-
-void amdgpu_atombios_encoder_init_backlight(struct amdgpu_encoder *encoder)
-{
-}
-
-void amdgpu_atombios_encoder_fini_backlight(struct amdgpu_encoder *encoder)
-{
-}
-
-#endif
 
 bool amdgpu_atombios_encoder_is_digital(struct drm_encoder *encoder)
 {
@@ -338,7 +335,7 @@ amdgpu_atombios_encoder_setup_dac(struct drm_encoder *encoder, int action)
 	args.ucDacStandard = ATOM_DAC1_PS2;
 	args.usPixelClock = cpu_to_le16(amdgpu_encoder->pixel_clock / 10);
 
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 
 }
 
@@ -435,7 +432,7 @@ amdgpu_atombios_encoder_setup_dvo(struct drm_encoder *encoder, int action)
 		break;
 	}
 
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 int amdgpu_atombios_encoder_get_encoder_mode(struct drm_encoder *encoder)
@@ -735,7 +732,7 @@ amdgpu_atombios_encoder_setup_dig_encoder(struct drm_encoder *encoder,
 		break;
 	}
 
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 
 }
 
@@ -1139,7 +1136,7 @@ amdgpu_atombios_encoder_setup_dig_transmitter(struct drm_encoder *encoder, int a
 		break;
 	}
 
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 bool
@@ -1167,7 +1164,7 @@ amdgpu_atombios_encoder_set_edp_panel_power(struct drm_connector *connector,
 
 	args.v1.ucAction = action;
 
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 
 	/* wait for the panel to power up */
 	if (action == ATOM_TRANSMITTER_ACTION_POWER_ON) {
@@ -1291,7 +1288,7 @@ amdgpu_atombios_encoder_setup_external_encoder(struct drm_encoder *encoder,
 		DRM_ERROR("Unknown table version: %d, %d\n", frev, crev);
 		return;
 	}
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void
@@ -1636,7 +1633,7 @@ amdgpu_atombios_encoder_set_crtc_source(struct drm_encoder *encoder)
 		return;
 	}
 
-	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+	amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 /* This only needs to be called once at startup */
@@ -1709,7 +1706,7 @@ amdgpu_atombios_encoder_dac_load_detect(struct drm_encoder *encoder,
 				args.sDacload.ucMisc = DAC_LOAD_MISC_YPrPb;
 		}
 
-		amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args);
+		amdgpu_atom_execute_table(adev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 
 		return true;
 	} else
@@ -2083,8 +2080,11 @@ amdgpu_atombios_encoder_get_lcd_info(struct amdgpu_encoder *encoder)
 						}
 					}
 					record += fake_edid_record->ucFakeEDIDLength ?
-						fake_edid_record->ucFakeEDIDLength + 2 :
-						sizeof(ATOM_FAKE_EDID_PATCH_RECORD);
+						  struct_size(fake_edid_record,
+							      ucFakeEDIDString,
+							      fake_edid_record->ucFakeEDIDLength) :
+						  /* empty fake edid record must be 3 bytes long */
+						  sizeof(ATOM_FAKE_EDID_PATCH_RECORD) + 1;
 					break;
 				case LCD_PANEL_RESOLUTION_RECORD_TYPE:
 					panel_res_record = (ATOM_PANEL_RESOLUTION_PATCH_RECORD *)record;

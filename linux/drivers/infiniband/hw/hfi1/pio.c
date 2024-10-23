@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0 or BSD-3-Clause
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright(c) 2015-2018 Intel Corporation.
  */
@@ -820,7 +820,7 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 	}
 
 	hfi1_cdbg(PIO,
-		  "Send context %u(%u) %s group %u credits %u credit_ctrl 0x%llx threshold %u\n",
+		  "Send context %u(%u) %s group %u credits %u credit_ctrl 0x%llx threshold %u",
 		  sw_index,
 		  hw_context,
 		  sc_type_name(type),
@@ -913,8 +913,7 @@ void sc_disable(struct send_context *sc)
 	spin_unlock(&sc->release_lock);
 
 	write_seqlock(&sc->waitlock);
-	if (!list_empty(&sc->piowait))
-		list_move(&sc->piowait, &wake_list);
+	list_splice_init(&sc->piowait, &wake_list);
 	write_sequnlock(&sc->waitlock);
 	while (!list_empty(&wake_list)) {
 		struct iowait *wait;
@@ -1894,9 +1893,7 @@ int pio_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_scontexts)
 			vl_scontexts[i] = sc_per_vl + (extra > 0 ? 1 : 0);
 	}
 	/* build new map */
-	newmap = kzalloc(sizeof(*newmap) +
-			 roundup_pow_of_two(num_vls) *
-			 sizeof(struct pio_map_elem *),
+	newmap = kzalloc(struct_size(newmap, map, roundup_pow_of_two(num_vls)),
 			 GFP_KERNEL);
 	if (!newmap)
 		goto bail;
@@ -1911,9 +1908,8 @@ int pio_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_scontexts)
 			int sz = roundup_pow_of_two(vl_scontexts[i]);
 
 			/* only allocate once */
-			newmap->map[i] = kzalloc(sizeof(*newmap->map[i]) +
-						 sz * sizeof(struct
-							     send_context *),
+			newmap->map[i] = kzalloc(struct_size(newmap->map[i],
+							     ksc, sz),
 						 GFP_KERNEL);
 			if (!newmap->map[i])
 				goto bail;
@@ -2090,7 +2086,7 @@ int init_credit_return(struct hfi1_devdata *dd)
 				   "Unable to allocate credit return DMA range for NUMA %d\n",
 				   i);
 			ret = -ENOMEM;
-			goto done;
+			goto free_cr_base;
 		}
 	}
 	set_dev_node(&dd->pcidev->dev, dd->node);
@@ -2098,6 +2094,10 @@ int init_credit_return(struct hfi1_devdata *dd)
 	ret = 0;
 done:
 	return ret;
+
+free_cr_base:
+	free_credit_return(dd);
+	goto done;
 }
 
 void free_credit_return(struct hfi1_devdata *dd)

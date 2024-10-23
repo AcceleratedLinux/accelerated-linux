@@ -1,5 +1,5 @@
 VERSION = 5.46
-URL = http://www.kernel.org/pub/linux/bluetooth/bluez-$(VERSION).tar.xz
+URL = https://www.kernel.org/pub/linux/bluetooth/bluez-$(VERSION).tar.xz
 
 CONFOPTS += --disable-systemd
 

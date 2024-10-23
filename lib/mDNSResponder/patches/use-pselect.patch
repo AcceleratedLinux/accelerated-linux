@@ -1,0 +1,93 @@
+--- a/mDNSPosix/mDNSPosix.c.orig	2021-04-28 17:48:53.902776975 -0500
++++ b/mDNSPosix/mDNSPosix.c	2021-04-28 17:47:29.605953451 -0500
+@@ -1632,6 +1632,9 @@
+     int err = 0;
+     struct sockaddr sa;
+     assert(m != NULL);
++    
++    sigfillset(&gEventSignalSet);
++    sigemptyset(&gEventSignals);
+ 
+     if (mDNSPlatformInit_CanReceiveUnicast()) m->CanReceiveUnicastOn5353 = mDNStrue;
+ 
+@@ -2248,13 +2251,18 @@
+ {
+     struct sigaction action;
+     mStatus err;
++    sigset_t set;
++    
++    sigemptyset(&set);
++    sigaddset(&set, signum);
++    
++    (void) sigprocmask(SIG_BLOCK, &set, NULL);
++    sigdelset(&gEventSignalSet, signum);
+ 
+     mDNSPlatformMemZero(&action, sizeof action);        // more portable than member-wise assignment
+     action.sa_handler = NoteSignal;
+     err = sigaction(signum, &action, (struct sigaction*) NULL);
+ 
+-    sigaddset(&gEventSignalSet, signum);
+-
+     return err;
+ }
+ 
+@@ -2263,12 +2271,17 @@
+ {
+     struct sigaction action;
+     mStatus err;
++    sigset_t set;
++    
++    sigemptyset(&set);
++    sigaddset(&set, signum);
+ 
+     mDNSPlatformMemZero(&action, sizeof action);        // more portable than member-wise assignment
+     action.sa_handler = SIG_DFL;
+     err = sigaction(signum, &action, (struct sigaction*) NULL);
+ 
+-    sigdelset(&gEventSignalSet, signum);
++    sigaddset(&gEventSignalSet, signum);
++    (void) sigprocmask(SIG_UNBLOCK, &set, NULL);
+ 
+     return err;
+ }
+@@ -2282,19 +2295,26 @@
+     fd_set writeFDs;
+     int numFDs = 0, numReady;
+     struct timeval timeout = *pTimeout;
++    struct timespec timeout_spec;
++    sigset_t sigmask;
+ 
+     // 1. Set up the fd_set as usual here.
+     // This example client has no file descriptors of its own,
+     // but a real application would call FD_SET to add them to the set here
+     FD_ZERO(&listenFDs);
+     FD_ZERO(&writeFDs);
++    
++    (void) sigprocmask(SIG_SETMASK, NULL, &sigmask);
++    sigandset(&sigmask, &sigmask, &gEventSignalSet);
+ 
+     // 2. Set up the timeout.
+     mDNSPosixGetNextDNSEventTime(m, &timeout);
++    timeout_spec.tv_sec = timeout.tv_sec;
++    timeout_spec.tv_nsec = timeout.tv_usec * 1000;
+ 
+     // Include the sockets that are listening to the wire in our select() set
+     mDNSPosixGetFDSetForSelect(m, &numFDs, &listenFDs, &writeFDs);
+-    numReady = select(numFDs, &listenFDs, &writeFDs, (fd_set*) NULL, &timeout);
++    numReady = pselect(numFDs, &listenFDs, &writeFDs, (fd_set*) NULL, &timeout_spec, &sigmask);
+ 
+     if (numReady > 0)
+     {
+@@ -2313,11 +2333,9 @@
+     }
+     else
+         *pDataDispatched = mDNSfalse;
+-
+-    (void) sigprocmask(SIG_BLOCK, &gEventSignalSet, (sigset_t*) NULL);
++   
+     *pSignalsReceived = gEventSignals;
+     sigemptyset(&gEventSignals);
+-    (void) sigprocmask(SIG_UNBLOCK, &gEventSignalSet, (sigset_t*) NULL);
+ 
+     return mStatus_NoError;
+ }

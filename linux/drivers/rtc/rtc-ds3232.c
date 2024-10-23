@@ -359,7 +359,7 @@ static const struct hwmon_channel_info ds3232_hwmon_temp = {
 	.config = ds3232_hwmon_temp_config,
 };
 
-static const struct hwmon_channel_info *ds3232_hwmon_info[] = {
+static const struct hwmon_channel_info * const ds3232_hwmon_info[] = {
 	&ds3232_hwmon_chip,
 	&ds3232_hwmon_temp,
 	NULL
@@ -536,6 +536,8 @@ static int ds3232_probe(struct device *dev, struct regmap *regmap, int irq,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_I2C)
+
 #ifdef CONFIG_PM_SLEEP
 static int ds3232_suspend(struct device *dev)
 {
@@ -564,10 +566,7 @@ static const struct dev_pm_ops ds3232_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(ds3232_suspend, ds3232_resume)
 };
 
-#if IS_ENABLED(CONFIG_I2C)
-
-static int ds3232_i2c_probe(struct i2c_client *client,
-			    const struct i2c_device_id *id)
+static int ds3232_i2c_probe(struct i2c_client *client)
 {
 	struct regmap *regmap;
 	static const struct regmap_config config = {

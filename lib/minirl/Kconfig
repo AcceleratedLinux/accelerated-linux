@@ -1,0 +1,6 @@
+config LIB_MINIRL
+    bool "minirl"
+    help
+        Basic 'readline' alternative
+        Functionally equivalent to tinyrl
+

@@ -21,9 +21,15 @@
 /* Global discovery table size */
 #define UNCORE_DISCOVERY_GLOBAL_MAP_SIZE	0x20
 
-#define UNCORE_DISCOVERY_PCI_DOMAIN(data)	((data >> 28) & 0x7)
-#define UNCORE_DISCOVERY_PCI_BUS(data)		((data >> 20) & 0xff)
-#define UNCORE_DISCOVERY_PCI_DEVFN(data)	((data >> 12) & 0xff)
+#define UNCORE_DISCOVERY_PCI_DOMAIN_OFFSET	28
+#define UNCORE_DISCOVERY_PCI_DOMAIN(data)			\
+		((data >> UNCORE_DISCOVERY_PCI_DOMAIN_OFFSET) & 0x7)
+#define UNCORE_DISCOVERY_PCI_BUS_OFFSET		20
+#define UNCORE_DISCOVERY_PCI_BUS(data)				\
+		((data >> UNCORE_DISCOVERY_PCI_BUS_OFFSET) & 0xff)
+#define UNCORE_DISCOVERY_PCI_DEVFN_OFFSET	12
+#define UNCORE_DISCOVERY_PCI_DEVFN(data)			\
+		((data >> UNCORE_DISCOVERY_PCI_DEVFN_OFFSET) & 0xff)
 #define UNCORE_DISCOVERY_PCI_BOX_CTRL(data)	(data & 0xfff)
 
 
@@ -119,10 +125,10 @@ struct intel_uncore_discovery_type {
 	u8		ctr_offset;	/* Counter 0 offset */
 	u16		num_boxes;	/* number of boxes for the uncore block */
 	unsigned int	*ids;		/* Box IDs */
-	unsigned int	*box_offset;	/* Box offset */
+	u64		*box_offset;	/* Box offset */
 };
 
-bool intel_uncore_has_discovery_tables(void);
+bool intel_uncore_has_discovery_tables(int *ignore);
 void intel_uncore_clear_discovery_tables(void);
 void intel_uncore_generic_uncore_cpu_init(void);
 int intel_uncore_generic_uncore_pci_init(void);

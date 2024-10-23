@@ -166,7 +166,7 @@ static struct bin_attribute bcm53118_registers_attr = {
 static void bcm53118_slave_getinfo(struct net_device *dev,
 				 struct ethtool_drvinfo *info)
 {
-	strlcpy(info->driver, "bcm53118", sizeof(info->driver));
+	strscpy(info->driver, "bcm53118", sizeof(info->driver));
 }
 
 static const struct ethtool_ops bcm53118_slave_ethtool_ops = {

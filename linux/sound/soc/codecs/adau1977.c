@@ -876,7 +876,6 @@ static const struct snd_soc_component_driver adau1977_component_driver = {
 	.num_dapm_routes	= ARRAY_SIZE(adau1977_dapm_routes),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int adau1977_setup_micbias(struct adau1977 *adau1977)
@@ -992,7 +991,7 @@ const struct regmap_config adau1977_regmap_config = {
 	.max_register = ADAU1977_REG_DC_HPF_CAL,
 	.volatile_reg = adau1977_register_volatile,
 
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.reg_defaults = adau1977_reg_defaults,
 	.num_reg_defaults = ARRAY_SIZE(adau1977_reg_defaults),
 };

@@ -30,7 +30,7 @@
 	};
 };
 
-&xhci {
+&usb {
 	status = "okay";
 };
 

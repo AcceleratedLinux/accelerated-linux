@@ -6,6 +6,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_data/cros_usbpd_notify.h>
@@ -71,8 +72,8 @@ static void cros_usbpd_get_event_and_notify(struct device  *dev,
 	}
 
 	/* Check for PD host events on EC. */
-	ret = cros_ec_command(ec_dev, 0, EC_CMD_PD_HOST_EVENT_STATUS,
-			      NULL, 0, &host_event_status, sizeof(host_event_status));
+	ret = cros_ec_cmd(ec_dev, 0, EC_CMD_PD_HOST_EVENT_STATUS,
+			  NULL, 0, &host_event_status, sizeof(host_event_status));
 	if (ret < 0) {
 		dev_warn(dev, "Can't get host event status (err: %d)\n", ret);
 		goto send_notify;
@@ -134,15 +135,13 @@ static int cros_usbpd_notify_probe_acpi(struct platform_device *pdev)
 	return 0;
 }
 
-static int cros_usbpd_notify_remove_acpi(struct platform_device *pdev)
+static void cros_usbpd_notify_remove_acpi(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct acpi_device *adev = ACPI_COMPANION(dev);
 
 	acpi_remove_notify_handler(adev->handle, ACPI_ALL_NOTIFY,
 				   cros_usbpd_notify_acpi);
-
-	return 0;
 }
 
 static const struct acpi_device_id cros_usbpd_notify_acpi_device_ids[] = {
@@ -157,7 +156,7 @@ static struct platform_driver cros_usbpd_notify_acpi_driver = {
 		.acpi_match_table = cros_usbpd_notify_acpi_device_ids,
 	},
 	.probe = cros_usbpd_notify_probe_acpi,
-	.remove = cros_usbpd_notify_remove_acpi,
+	.remove_new = cros_usbpd_notify_remove_acpi,
 };
 
 #endif /* CONFIG_ACPI */
@@ -209,7 +208,7 @@ static int cros_usbpd_notify_probe_plat(struct platform_device *pdev)
 	return 0;
 }
 
-static int cros_usbpd_notify_remove_plat(struct platform_device *pdev)
+static void cros_usbpd_notify_remove_plat(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct cros_ec_dev *ecdev = dev_get_drvdata(dev->parent);
@@ -218,16 +217,21 @@ static int cros_usbpd_notify_remove_plat(struct platform_device *pdev)
 
 	blocking_notifier_chain_unregister(&ecdev->ec_dev->event_notifier,
 					   &pdnotify->nb);
-
-	return 0;
 }
+
+static const struct platform_device_id cros_usbpd_notify_id[] = {
+	{ DRV_NAME, 0 },
+	{}
+};
+MODULE_DEVICE_TABLE(platform, cros_usbpd_notify_id);
 
 static struct platform_driver cros_usbpd_notify_plat_driver = {
 	.driver = {
 		.name = DRV_NAME,
 	},
 	.probe = cros_usbpd_notify_probe_plat,
-	.remove = cros_usbpd_notify_remove_plat,
+	.remove_new = cros_usbpd_notify_remove_plat,
+	.id_table = cros_usbpd_notify_id,
 };
 
 static int __init cros_usbpd_notify_init(void)
@@ -239,7 +243,11 @@ static int __init cros_usbpd_notify_init(void)
 		return ret;
 
 #ifdef CONFIG_ACPI
-	platform_driver_register(&cros_usbpd_notify_acpi_driver);
+	ret = platform_driver_register(&cros_usbpd_notify_acpi_driver);
+	if (ret) {
+		platform_driver_unregister(&cros_usbpd_notify_plat_driver);
+		return ret;
+	}
 #endif
 	return 0;
 }
@@ -258,4 +266,3 @@ module_exit(cros_usbpd_notify_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("ChromeOS power delivery notifier device");
 MODULE_AUTHOR("Jon Flatley <jflat@chromium.org>");
-MODULE_ALIAS("platform:" DRV_NAME);

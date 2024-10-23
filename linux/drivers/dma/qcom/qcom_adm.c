@@ -379,13 +379,13 @@ static struct dma_async_tx_descriptor *adm_prep_slave_sg(struct dma_chan *chan,
 		if (blk_size < 0) {
 			dev_err(adev->dev, "invalid burst value: %d\n",
 				burst);
-			return ERR_PTR(-EINVAL);
+			return NULL;
 		}
 
 		crci = achan->crci & 0xf;
 		if (!crci || achan->crci > 0x1f) {
 			dev_err(adev->dev, "invalid crci value\n");
-			return ERR_PTR(-EINVAL);
+			return NULL;
 		}
 	}
 
@@ -403,8 +403,10 @@ static struct dma_async_tx_descriptor *adm_prep_slave_sg(struct dma_chan *chan,
 	}
 
 	async_desc = kzalloc(sizeof(*async_desc), GFP_NOWAIT);
-	if (!async_desc)
-		return ERR_PTR(-ENOMEM);
+	if (!async_desc) {
+		dev_err(adev->dev, "not enough memory for async_desc struct\n");
+		return NULL;
+	}
 
 	async_desc->mux = achan->mux ? ADM_CRCI_CTL_MUX_SEL : 0;
 	async_desc->crci = crci;
@@ -414,8 +416,10 @@ static struct dma_async_tx_descriptor *adm_prep_slave_sg(struct dma_chan *chan,
 				sizeof(*cple) + 2 * ADM_DESC_ALIGN;
 
 	async_desc->cpl = kzalloc(async_desc->dma_len, GFP_NOWAIT);
-	if (!async_desc->cpl)
+	if (!async_desc->cpl) {
+		dev_err(adev->dev, "not enough memory for cpl struct\n");
 		goto free;
+	}
 
 	async_desc->adev = adev;
 
@@ -437,8 +441,10 @@ static struct dma_async_tx_descriptor *adm_prep_slave_sg(struct dma_chan *chan,
 	async_desc->dma_addr = dma_map_single(adev->dev, async_desc->cpl,
 					      async_desc->dma_len,
 					      DMA_TO_DEVICE);
-	if (dma_mapping_error(adev->dev, async_desc->dma_addr))
+	if (dma_mapping_error(adev->dev, async_desc->dma_addr)) {
+		dev_err(adev->dev, "dma mapping error for cpl\n");
 		goto free;
+	}
 
 	cple_addr = async_desc->dma_addr + ((void *)cple - async_desc->cpl);
 
@@ -454,7 +460,7 @@ static struct dma_async_tx_descriptor *adm_prep_slave_sg(struct dma_chan *chan,
 
 free:
 	kfree(async_desc);
-	return ERR_PTR(-ENOMEM);
+	return NULL;
 }
 
 /**
@@ -494,7 +500,7 @@ static int adm_slave_config(struct dma_chan *chan, struct dma_slave_config *cfg)
 
 	spin_lock_irqsave(&achan->vc.lock, flag);
 	memcpy(&achan->slave, cfg, sizeof(struct dma_slave_config));
-	if (cfg->peripheral_size == sizeof(config))
+	if (cfg->peripheral_size == sizeof(*config))
 		achan->crci = config->crci;
 	spin_unlock_irqrestore(&achan->vc.lock, flag);
 
@@ -898,7 +904,7 @@ err_disable_core_clk:
 	return ret;
 }
 
-static int adm_dma_remove(struct platform_device *pdev)
+static void adm_dma_remove(struct platform_device *pdev)
 {
 	struct adm_device *adev = platform_get_drvdata(pdev);
 	struct adm_chan *achan;
@@ -921,8 +927,6 @@ static int adm_dma_remove(struct platform_device *pdev)
 
 	clk_disable_unprepare(adev->core_clk);
 	clk_disable_unprepare(adev->iface_clk);
-
-	return 0;
 }
 
 static const struct of_device_id adm_of_match[] = {
@@ -933,7 +937,7 @@ MODULE_DEVICE_TABLE(of, adm_of_match);
 
 static struct platform_driver adm_dma_driver = {
 	.probe = adm_dma_probe,
-	.remove = adm_dma_remove,
+	.remove_new = adm_dma_remove,
 	.driver = {
 		.name = "adm-dma-engine",
 		.of_match_table = adm_of_match,

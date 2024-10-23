@@ -1,5 +1,5 @@
 URL = https://git.code.sf.net/p/net-tools/code
-VERSION = 0eebece8c964e3cfa8a018f42b2e7e751a7009a0
+VERSION = v2.10
 METHOD = git
 AUTORECONF = touch config.h
 include $(ROOTDIR)/tools/automake.inc

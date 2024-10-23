@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <crypto/hash.h>
@@ -35,6 +36,7 @@ void ath11k_dp_peer_cleanup(struct ath11k *ar, int vdev_id, const u8 *addr)
 	}
 
 	ath11k_peer_rx_tid_cleanup(ar, peer);
+	peer->dp_setup_done = false;
 	crypto_free_shash(peer->tfm_mmic);
 	spin_unlock_bh(&ab->base_lock);
 }
@@ -71,7 +73,8 @@ int ath11k_dp_peer_setup(struct ath11k *ar, int vdev_id, const u8 *addr)
 	ret = ath11k_peer_rx_frag_setup(ar, addr, vdev_id);
 	if (ret) {
 		ath11k_warn(ab, "failed to setup rx defrag context\n");
-		return ret;
+		tid--;
+		goto peer_clean;
 	}
 
 	/* TODO: Setup other peer specific resource used in data path */
@@ -101,11 +104,14 @@ void ath11k_dp_srng_cleanup(struct ath11k_base *ab, struct dp_srng *ring)
 	if (!ring->vaddr_unaligned)
 		return;
 
-	if (ring->cached)
+	if (ring->cached) {
+		dma_unmap_single(ab->dev, ring->paddr_unaligned, ring->size,
+				 DMA_FROM_DEVICE);
 		kfree(ring->vaddr_unaligned);
-	else
+	} else {
 		dma_free_coherent(ab->dev, ring->size, ring->vaddr_unaligned,
 				  ring->paddr_unaligned);
+	}
 
 	ring->vaddr_unaligned = NULL;
 }
@@ -131,13 +137,11 @@ static int ath11k_dp_srng_calculate_msi_group(struct ath11k_base *ab,
 
 	switch (type) {
 	case HAL_WBM2SW_RELEASE:
-		if (ring_num < 3) {
-			grp_mask = &ab->hw_params.ring_mask->tx[0];
-		} else if (ring_num == 3) {
+		if (ring_num == DP_RX_RELEASE_RING_NUM) {
 			grp_mask = &ab->hw_params.ring_mask->rx_wbm_rel[0];
 			ring_num = 0;
 		} else {
-			return -ENOENT;
+			grp_mask = &ab->hw_params.ring_mask->tx[0];
 		}
 		break;
 	case HAL_REO_EXCEPTION:
@@ -248,7 +252,18 @@ int ath11k_dp_srng_setup(struct ath11k_base *ab, struct dp_srng *ring,
 
 		if (cached) {
 			ring->vaddr_unaligned = kzalloc(ring->size, GFP_KERNEL);
-			ring->paddr_unaligned = virt_to_phys(ring->vaddr_unaligned);
+			if (!ring->vaddr_unaligned)
+				return -ENOMEM;
+
+			ring->paddr_unaligned = dma_map_single(ab->dev,
+							       ring->vaddr_unaligned,
+							       ring->size,
+							       DMA_FROM_DEVICE);
+			if (dma_mapping_error(ab->dev, ring->paddr_unaligned)) {
+				kfree(ring->vaddr_unaligned);
+				ring->vaddr_unaligned = NULL;
+				return -ENOMEM;
+			}
 		}
 	}
 
@@ -371,6 +386,7 @@ static int ath11k_dp_srng_common_setup(struct ath11k_base *ab)
 	struct ath11k_dp *dp = &ab->dp;
 	struct hal_srng *srng;
 	int i, ret;
+	u8 tcl_num, wbm_num;
 
 	ret = ath11k_dp_srng_setup(ab, &dp->wbm_desc_rel_ring,
 				   HAL_SW2WBM_RELEASE, 0, 0,
@@ -396,9 +412,12 @@ static int ath11k_dp_srng_common_setup(struct ath11k_base *ab)
 	}
 
 	for (i = 0; i < ab->hw_params.max_tx_ring; i++) {
+		tcl_num = ab->hw_params.hal_params->tcl2wbm_rbm_map[i].tcl_ring_num;
+		wbm_num = ab->hw_params.hal_params->tcl2wbm_rbm_map[i].wbm_ring_num;
+
 		ret = ath11k_dp_srng_setup(ab, &dp->tx_ring[i].tcl_data_ring,
-					   HAL_TCL_DATA, i, 0,
-					   DP_TCL_DATA_RING_SIZE);
+					   HAL_TCL_DATA, tcl_num, 0,
+					   ab->hw_params.tx_ring_size);
 		if (ret) {
 			ath11k_warn(ab, "failed to set up tcl_data ring (%d) :%d\n",
 				    i, ret);
@@ -406,7 +425,7 @@ static int ath11k_dp_srng_common_setup(struct ath11k_base *ab)
 		}
 
 		ret = ath11k_dp_srng_setup(ab, &dp->tx_ring[i].tcl_comp_ring,
-					   HAL_WBM2SW_RELEASE, i, 0,
+					   HAL_WBM2SW_RELEASE, wbm_num, 0,
 					   DP_TX_COMP_RING_SIZE);
 		if (ret) {
 			ath11k_warn(ab, "failed to set up tcl_comp ring (%d) :%d\n",
@@ -431,7 +450,7 @@ static int ath11k_dp_srng_common_setup(struct ath11k_base *ab)
 	}
 
 	ret = ath11k_dp_srng_setup(ab, &dp->rx_rel_ring, HAL_WBM2SW_RELEASE,
-				   3, 0, DP_RX_RELEASE_RING_SIZE);
+				   DP_RX_RELEASE_RING_NUM, 0, DP_RX_RELEASE_RING_SIZE);
 	if (ret) {
 		ath11k_warn(ab, "failed to set up rx_rel ring :%d\n", ret);
 		goto err;
@@ -774,9 +793,10 @@ int ath11k_dp_service_srng(struct ath11k_base *ab,
 	int i, j;
 	int tot_work_done = 0;
 
-	if (ab->hw_params.ring_mask->tx[grp_id]) {
-		i = __fls(ab->hw_params.ring_mask->tx[grp_id]);
-		ath11k_dp_tx_completion_handler(ab, i);
+	for (i = 0; i < ab->hw_params.max_tx_ring; i++) {
+		if (BIT(ab->hw_params.hal_params->tcl2wbm_rbm_map[i].wbm_ring_num) &
+		    ab->hw_params.ring_mask->tx[grp_id])
+			ath11k_dp_tx_completion_handler(ab, i);
 	}
 
 	if (ab->hw_params.ring_mask->rx_err[grp_id]) {
@@ -963,7 +983,7 @@ static void ath11k_dp_update_vdev_search(struct ath11k_vif *arvif)
 {
 	 /* When v2_map_support is true:for STA mode, enable address
 	  * search index, tcl uses ast_hash value in the descriptor.
-	  * When v2_map_support is false: for STA mode, dont' enable
+	  * When v2_map_support is false: for STA mode, don't enable
 	  * address search index.
 	  */
 	switch (arvif->vdev_type) {
@@ -1003,7 +1023,7 @@ void ath11k_dp_vdev_tx_attach(struct ath11k *ar, struct ath11k_vif *arvif)
 
 static int ath11k_dp_tx_pending_cleanup(int buf_id, void *skb, void *ctx)
 {
-	struct ath11k_base *ab = (struct ath11k_base *)ctx;
+	struct ath11k_base *ab = ctx;
 	struct sk_buff *msdu = skb;
 
 	dma_unmap_single(ab->dev, ATH11K_SKB_CB(msdu)->paddr, msdu->len,

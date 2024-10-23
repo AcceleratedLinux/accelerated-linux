@@ -1,19 +1,7 @@
-diff -Nurd iptables.orig-1.8.3/extensions/GNUmakefile.in iptables-1.8.3/extensions/GNUmakefile.in
---- iptables.orig-1.8.3/extensions/GNUmakefile.in	2019-05-30 11:58:09.365797847 +1000
-+++ iptables-1.8.3/extensions/GNUmakefile.in	2019-05-30 11:58:09.513798973 +1000
-@@ -121,6 +121,9 @@
- ifneq ($(CONFIG_USER_IPSET_IPSET),)
- pfx_build_mod+=set SET
- endif
-+ifneq ($(CONFIG_MODULES_IPT_NETFLOW),)
-+pfx_build_mod+=NETFLOW
-+endif
- 
- #
- # Building blocks
-diff -Nurd iptables.orig-1.8.3/extensions/libxt_NETFLOW.c iptables-1.8.3/extensions/libxt_NETFLOW.c
---- iptables.orig-1.8.3/extensions/libxt_NETFLOW.c	1970-01-01 10:00:00.000000000 +1000
-+++ iptables-1.8.3/extensions/libxt_NETFLOW.c	2019-05-30 11:58:09.513798973 +1000
+Index: iptables-1.8.10/extensions/libxt_NETFLOW.c
+===================================================================
+--- /dev/null
++++ iptables-1.8.10/extensions/libxt_NETFLOW.c
 @@ -0,0 +1,117 @@
 +/*
 + * iptables helper for NETFLOW target
@@ -132,3 +120,15 @@ diff -Nurd iptables.orig-1.8.3/extensions/libxt_NETFLOW.c iptables-1.8.3/extensi
 +{
 +	xtables_register_target(&netflow);
 +}
+Index: iptables-1.8.10/extensions/GNUmakefile.in
+===================================================================
+--- iptables-1.8.10.orig/extensions/GNUmakefile.in
++++ iptables-1.8.10/extensions/GNUmakefile.in
+@@ -97,6 +97,7 @@ alias_CONFIG_NETFILTER_XT_MATCH_STANDARD
+ alias_CONFIG_NETFILTER_XT_MATCH_TCP = CONFIG_NETFILTER_XTABLES
+ alias_CONFIG_NETFILTER_XT_MATCH_TOS = CONFIG_NETFILTER_XT_MATCH_DSCP
+ alias_CONFIG_NETFILTER_XT_MATCH_UDP = CONFIG_NETFILTER_XTABLES
++alias_CONFIG_NETFILTER_XT_TARGET_NETFLOW = CONFIG_MODULES_IPT_NETFLOW
+ 
+ _disable_unconfigured_modules_in_var = \
+     $(foreach m,$($1),$(call _disable_unconfigured_module_in_var,$m,$1,$2))

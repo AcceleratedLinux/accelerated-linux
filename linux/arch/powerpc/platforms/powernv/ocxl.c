@@ -449,7 +449,7 @@ int pnv_ocxl_spa_setup(struct pci_dev *dev, void *spa_mem, int PE_mask,
 	if (!data)
 		return -ENOMEM;
 
-	bdfn = (dev->bus->number << 8) | dev->devfn;
+	bdfn = pci_dev_id(dev);
 	rc = opal_npu_spa_setup(phb->opal_id, bdfn, virt_to_phys(spa_mem),
 				PE_mask);
 	if (rc) {
@@ -478,10 +478,8 @@ EXPORT_SYMBOL_GPL(pnv_ocxl_spa_release);
 int pnv_ocxl_spa_remove_pe_from_cache(void *platform_data, int pe_handle)
 {
 	struct spa_data *data = (struct spa_data *) platform_data;
-	int rc;
 
-	rc = opal_npu_spa_clear_cache(data->phb_opal_id, data->bdfn, pe_handle);
-	return rc;
+	return opal_npu_spa_clear_cache(data->phb_opal_id, data->bdfn, pe_handle);
 }
 EXPORT_SYMBOL_GPL(pnv_ocxl_spa_remove_pe_from_cache);
 

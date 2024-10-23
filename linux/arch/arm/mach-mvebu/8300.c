@@ -31,19 +31,19 @@ static int ac8300_pcie_init(void)
 	rc = gpio_request(GPIO_WDISABLE0, "W_Disable0");
 	gpio_direction_output(GPIO_WDISABLE0, 1);
 	gpio_set_value(GPIO_WDISABLE0, 1);
-	gpio_export(GPIO_WDISABLE0, 0);
+	gpiod_export(gpio_to_desc(GPIO_WDISABLE0), 0);
 
 	/* Configure W_DISABLE1 (WIFI port) */
 	gpio_request(GPIO_WDISABLE1, "W_Disable1");
 	gpio_direction_output(GPIO_WDISABLE1, 1);
 	gpio_set_value(GPIO_WDISABLE1, 1);
-	gpio_export(GPIO_WDISABLE1, 0);
+	gpiod_export(gpio_to_desc(GPIO_WDISABLE1), 0);
 
 	/* Configure PCIe RESET (WIFI port) */
 	gpio_request(GPIO_PCIe_RESET, "PCIe RESET");
 	gpio_direction_output(GPIO_PCIe_RESET, 1);
 	gpio_set_value(GPIO_PCIe_RESET, 1);
-	gpio_export(GPIO_PCIe_RESET, 0);
+	gpiod_export(gpio_to_desc(GPIO_PCIe_RESET), 0);
 
 	return 0;
 }
@@ -57,7 +57,7 @@ static int ac8300_usb_powerup(void)
 	gpio_request(GPIO_USB1_PWR, "USB1 Power");
 	gpio_direction_output(GPIO_USB1_PWR, 1);
 	gpio_set_value(GPIO_USB1_PWR, 0);
-	gpio_export(GPIO_USB1_PWR, 0);
+	gpiod_export(gpio_to_desc(GPIO_USB1_PWR), 0);
 
 	/* Stager the USB power ups */
 	mdelay(50);
@@ -65,14 +65,14 @@ static int ac8300_usb_powerup(void)
 	gpio_request(GPIO_USB2_PWR, "USB2 Power");
 	gpio_direction_output(GPIO_USB2_PWR, 1);
 	gpio_set_value(GPIO_USB2_PWR, 0);
-	gpio_export(GPIO_USB2_PWR, 0);
+	gpiod_export(gpio_to_desc(GPIO_USB2_PWR), 0);
 
 	mdelay(50);
 
 	gpio_request(GPIO_USB3_PWR, "USB3 Power");
 	gpio_direction_output(GPIO_USB3_PWR, 1);
 	gpio_set_value(GPIO_USB3_PWR, 0);
-	gpio_export(GPIO_USB3_PWR, 0);
+	gpiod_export(gpio_to_desc(GPIO_USB3_PWR), 0);
 
 	return 0;
 }

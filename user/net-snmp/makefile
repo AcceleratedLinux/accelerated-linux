@@ -1,4 +1,4 @@
-VERSION = 5.9
+VERSION = 5.9.3
 URL = https://downloads.sourceforge.net/project/net-snmp/net-snmp/$(VERSION)/net-snmp-$(VERSION).tar.gz
 
 CORE_MIBS = SNMPv2-TC SNMPv2-SMI SNMPv2-MIB SNMP-TARGET-MIB \
@@ -13,8 +13,15 @@ CORE_MIBS = SNMPv2-TC SNMPv2-SMI SNMPv2-MIB SNMP-TARGET-MIB \
 AUTOMAKE_ROMFS = my_romfs
 MAKEVARS = 
 CFLAGS += -D__deprecated=
+CFLAGS += $(CONFIG_USER_NETSNMP_ADDITIONAL_CFLAGS)
 
-CONFOPTS = --with-install-prefix=/ --disable-debugging
+CONFOPTS = --with-install-prefix=/
+# Hide build paths
+CONFVARS += NETSNMP_CONFIGURE_OPTIONS=
+
+ifndef CONFIG_USER_NETSNMP_INCLUDE_DEBUG
+CONFOPTS += --disable-debugging
+endif
 
 CONFOPTS += --without-perl-modules --disable-embedded-perl
 CONFOPTS += --without-python-modules
@@ -119,6 +126,7 @@ build/net-snmp-$(VERSION)-symlink-mibs: build/net-snmp-$(VERSION)-extracted
 		echo "Adding MIBs from $$d"; \
 		[ ! -d "$$d" ] && echo "$$d does not exist" && exit 1; \
 		cd $$d; \
+		[ -e ./create.sh ] && ./create.sh; \
 		find . -type d | while read t; do mkdir -p $(AMIBDIR)/$$t;done;\
 		find . -type f | while read t; do ln -sf $$d/$$t $(AMIBDIR)/$$t;done;\
 	done

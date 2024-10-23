@@ -156,6 +156,10 @@ while :; do
 				echo "Skipping openssl FIPS file $so"
 				echo "`basename $so`: plugin" >> $TMPF
 				;;
+			*legacy*)
+				echo "Skipping openssl legacy file $so"
+				echo "`basename $so`: plugin" >> $TMPF
+				;;
 			*)
 				touch $TMPW
 				echo "Removing $so ..."

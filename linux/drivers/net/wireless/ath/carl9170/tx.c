@@ -189,7 +189,7 @@ static void carl9170_tx_accounting_free(struct ar9170 *ar, struct sk_buff *skb)
 
 static int carl9170_alloc_dev_space(struct ar9170 *ar, struct sk_buff *skb)
 {
-	struct _carl9170_tx_superframe *super = (void *) skb->data;
+	struct _carl9170_tx_superframe *super;
 	unsigned int chunks;
 	int cookie = -1;
 
@@ -280,7 +280,8 @@ static void carl9170_tx_release(struct kref *ref)
 	 * carl9170_tx_fill_rateinfo() has filled the rate information
 	 * before we get to this point.
 	 */
-	memset_after(&txinfo->status, 0, rates);
+	memset(&txinfo->pad, 0, sizeof(txinfo->pad));
+	memset(&txinfo->rate_driver_data, 0, sizeof(txinfo->rate_driver_data));
 
 	if (atomic_read(&ar->tx_total_queued))
 		ar->tx_schedule = true;
@@ -1628,7 +1629,7 @@ int carl9170_update_beacon(struct ar9170 *ar, const bool submit)
 		goto out_unlock;
 
 	skb = ieee80211_beacon_get_tim(ar->hw, carl9170_get_vif(cvif),
-		NULL, NULL);
+				       NULL, NULL, 0);
 
 	if (!skb) {
 		err = -ENOMEM;

@@ -1,0 +1,123 @@
+#!/bin/sh
+#
+# Action for U120 specific LED setting
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+case "$1" in
+start)
+	ledcmd -a -N cell-red -N cell-blue -N cell-green
+	exit 0
+	;;
+reload)
+	;;
+stop)
+	# Firmware flash
+	ledcmd -a -n cell-red -n cell-green -n cell-blue -o cell-red -f cell-green -O cell-blue
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+
+# Find the primary modem, or alternatively *any* modem
+modem_name="$(modem name 2> /dev/null)"
+idx="$(modem name="$modem_name" idx 2> /dev/null)"
+# Find the first interface on the modem
+for i in $(runt keys mm.map.interface_idx); do
+	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
+		&& intf=$i && break
+done
+
+if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
+	if [ "$(runt get surelink.ipv4_interface_$intf.passed)" = n \
+			-o "$(runt get surelink.ipv6_interface_$intf.passed)" = n ]; then
+		CELL=1
+	elif [ "$(runt get mm.modem.$modem_name.status.gtech)" = 4g ]; then
+		CELL=3
+	else
+		CELL=2
+	fi
+elif [ "$(runt get network.interface.$intf.ipv4.pending)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.pending)" = 1 ]; then
+	CELL=1
+else
+	CELL=0 # not-valid, never going to work
+fi
+
+if [ "$CELL" != 0 ]; then
+	case "$(runt get mm.modem.$modem_name.status.bars)" in
+	5) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
+	4) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
+	3) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;
+	2) SIGNAL="-o RSS1 -o RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	1) SIGNAL="-o RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	*) SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	esac
+else
+	SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5"
+fi
+
+##############################################################
+
+LINK=0
+for i in 1 2 3 4 5 6 7 8; do
+	LINK=$((LINK + $(ip link show lan$i 2> /dev/null | grep -c "state UP")))
+done
+
+LAN4=-1
+LAN6=-1
+if [ "$LINK" -ge 1 ]; then
+	case $(runt get network.interface.lan.ipv4.up) in
+	1) [ "$(runt get surelink.ipv4_interface_lan.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	0) [ "$(runt get network.interface.lan.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.lan.ipv6.up) in
+	1) [ "$(runt get surelink.ipv6_interface_lan.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	0) [ "$(runt get network.interface.lan.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
+	esac
+fi
+
+if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
+	# if neither interface exists, match link
+	LAN=$((LINK ? 2 : 0))
+elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
+	LAN=2
+elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
+	LAN=1
+else
+	LAN=0
+fi
+
+##############################################################
+
+#
+# The LED table of things based on all possible values above
+#
+LED00="-f cell-red -O cell-blue -f cell-green" # flashing yellow
+LED10="-f cell-red -O cell-blue -f cell-green" # flashing yellow
+LED20="-O cell-red -O cell-blue -f cell-green" # flashing green
+LED30="-O cell-red -f cell-blue -O cell-green" # flashing blue
+LED01="-f cell-red -O cell-blue -f cell-green" # flashing yellow
+LED11="-f cell-red -O cell-blue -f cell-green" # flashing yellow
+LED21="-O cell-red -O cell-blue -f cell-green" # flashing green
+LED31="-O cell-red -f cell-blue -O cell-green" # flashing blue
+LED02="-f cell-red -f cell-blue -f cell-green" # flashing white
+LED12="-f cell-red -f cell-blue -f cell-green" # flashing white
+LED22="-O cell-red -O cell-blue -o cell-green" # solid green
+LED32="-O cell-red -o cell-blue -O cell-green" # solid blue
+
+eval ledcmd $SIGNAL \$LED$CELL$LAN
+
+exit 0

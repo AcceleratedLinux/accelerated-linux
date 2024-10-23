@@ -6,10 +6,11 @@
 #include <linux/mm.h>
 #include <linux/kfence.h>
 #include <linux/kasan.h>
-#include <asm/ptdump.h>
 #include <asm/kasan.h>
+#include <asm/abs_lowcore.h>
 #include <asm/nospec-branch.h>
 #include <asm/sections.h>
+#include <asm/maccess.h>
 
 static unsigned long max_addr;
 
@@ -21,6 +22,8 @@ struct addr_marker {
 enum address_markers_idx {
 	IDENTITY_BEFORE_NR = 0,
 	IDENTITY_BEFORE_END_NR,
+	AMODE31_START_NR,
+	AMODE31_END_NR,
 	KERNEL_START_NR,
 	KERNEL_END_NR,
 #ifdef CONFIG_KFENCE
@@ -29,21 +32,27 @@ enum address_markers_idx {
 #endif
 	IDENTITY_AFTER_NR,
 	IDENTITY_AFTER_END_NR,
-#ifdef CONFIG_KASAN
-	KASAN_SHADOW_START_NR,
-	KASAN_SHADOW_END_NR,
-#endif
 	VMEMMAP_NR,
 	VMEMMAP_END_NR,
 	VMALLOC_NR,
 	VMALLOC_END_NR,
 	MODULES_NR,
 	MODULES_END_NR,
+	ABS_LOWCORE_NR,
+	ABS_LOWCORE_END_NR,
+	MEMCPY_REAL_NR,
+	MEMCPY_REAL_END_NR,
+#ifdef CONFIG_KASAN
+	KASAN_SHADOW_START_NR,
+	KASAN_SHADOW_END_NR,
+#endif
 };
 
 static struct addr_marker address_markers[] = {
 	[IDENTITY_BEFORE_NR]	= {0, "Identity Mapping Start"},
 	[IDENTITY_BEFORE_END_NR] = {(unsigned long)_stext, "Identity Mapping End"},
+	[AMODE31_START_NR]	= {0, "Amode31 Area Start"},
+	[AMODE31_END_NR]	= {0, "Amode31 Area End"},
 	[KERNEL_START_NR]	= {(unsigned long)_stext, "Kernel Image Start"},
 	[KERNEL_END_NR]		= {(unsigned long)_end, "Kernel Image End"},
 #ifdef CONFIG_KFENCE
@@ -52,16 +61,20 @@ static struct addr_marker address_markers[] = {
 #endif
 	[IDENTITY_AFTER_NR]	= {(unsigned long)_end, "Identity Mapping Start"},
 	[IDENTITY_AFTER_END_NR]	= {0, "Identity Mapping End"},
-#ifdef CONFIG_KASAN
-	[KASAN_SHADOW_START_NR]	= {KASAN_SHADOW_START, "Kasan Shadow Start"},
-	[KASAN_SHADOW_END_NR]	= {KASAN_SHADOW_END, "Kasan Shadow End"},
-#endif
 	[VMEMMAP_NR]		= {0, "vmemmap Area Start"},
 	[VMEMMAP_END_NR]	= {0, "vmemmap Area End"},
 	[VMALLOC_NR]		= {0, "vmalloc Area Start"},
 	[VMALLOC_END_NR]	= {0, "vmalloc Area End"},
 	[MODULES_NR]		= {0, "Modules Area Start"},
 	[MODULES_END_NR]	= {0, "Modules Area End"},
+	[ABS_LOWCORE_NR]	= {0, "Lowcore Area Start"},
+	[ABS_LOWCORE_END_NR]	= {0, "Lowcore Area End"},
+	[MEMCPY_REAL_NR]	= {0, "Real Memory Copy Area Start"},
+	[MEMCPY_REAL_END_NR]	= {0, "Real Memory Copy Area End"},
+#ifdef CONFIG_KASAN
+	[KASAN_SHADOW_START_NR]	= {KASAN_SHADOW_START, "Kasan Shadow Start"},
+	[KASAN_SHADOW_END_NR]	= {KASAN_SHADOW_END, "Kasan Shadow End"},
+#endif
 	{ -1, NULL }
 };
 
@@ -108,7 +121,6 @@ static void print_prot(struct seq_file *m, unsigned int pr, int level)
 
 static void note_prot_wx(struct pg_state *st, unsigned long addr)
 {
-#ifdef CONFIG_DEBUG_WX
 	if (!st->check_wx)
 		return;
 	if (st->current_prot & _PAGE_INVALID)
@@ -125,10 +137,10 @@ static void note_prot_wx(struct pg_state *st, unsigned long addr)
 	 */
 	if (addr == PAGE_SIZE && (nospec_uses_trampoline() || !static_key_enabled(&cpu_has_bear)))
 		return;
-	WARN_ONCE(1, "s390/mm: Found insecure W+X mapping at address %pS\n",
+	WARN_ONCE(IS_ENABLED(CONFIG_DEBUG_WX),
+		  "s390/mm: Found insecure W+X mapping at address %pS\n",
 		  (void *)st->start_address);
 	st->wx_pages += (addr - st->start_address) / PAGE_SIZE;
-#endif /* CONFIG_DEBUG_WX */
 }
 
 static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level, u64 val)
@@ -180,8 +192,7 @@ static void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 	}
 }
 
-#ifdef CONFIG_DEBUG_WX
-void ptdump_check_wx(void)
+bool ptdump_check_wx(void)
 {
 	struct pg_state st = {
 		.ptdump = {
@@ -204,16 +215,20 @@ void ptdump_check_wx(void)
 	};
 
 	if (!MACHINE_HAS_NX)
-		return;
+		return true;
 	ptdump_walk_pgd(&st.ptdump, &init_mm, NULL);
-	if (st.wx_pages)
+	if (st.wx_pages) {
 		pr_warn("Checked W+X mappings: FAILED, %lu W+X pages found\n", st.wx_pages);
-	else
+
+		return false;
+	} else {
 		pr_info("Checked W+X mappings: passed, no %sW+X pages found\n",
 			(nospec_uses_trampoline() || !static_key_enabled(&cpu_has_bear)) ?
 			"unexpected " : "");
+
+		return true;
+	}
 }
-#endif /* CONFIG_DEBUG_WX */
 
 #ifdef CONFIG_PTDUMP_DEBUGFS
 static int ptdump_show(struct seq_file *m, void *v)
@@ -273,11 +288,17 @@ static int pt_dump_init(void)
 	 * kernel ASCE. We need this to keep the page table walker functions
 	 * from accessing non-existent entries.
 	 */
-	max_addr = (S390_lowcore.kernel_asce & _REGION_ENTRY_TYPE_MASK) >> 2;
+	max_addr = (S390_lowcore.kernel_asce.val & _REGION_ENTRY_TYPE_MASK) >> 2;
 	max_addr = 1UL << (max_addr * 11 + 31);
 	address_markers[IDENTITY_AFTER_END_NR].start_address = ident_map_size;
+	address_markers[AMODE31_START_NR].start_address = (unsigned long)__samode31;
+	address_markers[AMODE31_END_NR].start_address = (unsigned long)__eamode31;
 	address_markers[MODULES_NR].start_address = MODULES_VADDR;
 	address_markers[MODULES_END_NR].start_address = MODULES_END;
+	address_markers[ABS_LOWCORE_NR].start_address = __abs_lowcore;
+	address_markers[ABS_LOWCORE_END_NR].start_address = __abs_lowcore + ABS_LOWCORE_MAP_SIZE;
+	address_markers[MEMCPY_REAL_NR].start_address = __memcpy_real_area;
+	address_markers[MEMCPY_REAL_END_NR].start_address = __memcpy_real_area + MEMCPY_REAL_SIZE;
 	address_markers[VMEMMAP_NR].start_address = (unsigned long) vmemmap;
 	address_markers[VMEMMAP_END_NR].start_address = (unsigned long)vmemmap + vmemmap_size;
 	address_markers[VMALLOC_NR].start_address = VMALLOC_START;

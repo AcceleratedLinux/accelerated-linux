@@ -44,7 +44,7 @@
 
 static char version[] =
 	DRV_MODULE_NAME " " DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")";
-MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
+MODULE_AUTHOR("David S. Miller <davem@davemloft.net>");
 MODULE_DESCRIPTION("Sun LDOM virtual network driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_MODULE_VERSION);
@@ -60,8 +60,8 @@ static struct vio_version vnet_versions[] = {
 static void vnet_get_drvinfo(struct net_device *dev,
 			     struct ethtool_drvinfo *info)
 {
-	strlcpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
-	strlcpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
+	strscpy(info->driver, DRV_MODULE_NAME, sizeof(info->driver));
+	strscpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
 }
 
 static u32 vnet_get_msglevel(struct net_device *dev)
@@ -433,6 +433,9 @@ static int vnet_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 
 	hp = mdesc_grab();
 
+	if (!hp)
+		return -ENODEV;
+
 	vp = vnet_find_parent(hp, vdev->mp, vdev);
 	if (IS_ERR(vp)) {
 		pr_err("Cannot find port parent vnet\n");
@@ -467,8 +470,7 @@ static int vnet_port_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	if (err)
 		goto err_out_free_port;
 
-	netif_napi_add(port->vp->dev, &port->napi, sunvnet_poll_common,
-		       NAPI_POLL_WEIGHT);
+	netif_napi_add(port->vp->dev, &port->napi, sunvnet_poll_common);
 
 	INIT_HLIST_NODE(&port->hash);
 	INIT_LIST_HEAD(&port->list);
@@ -525,7 +527,7 @@ static void vnet_port_remove(struct vio_dev *vdev)
 		hlist_del_rcu(&port->hash);
 
 		synchronize_rcu();
-		del_timer_sync(&port->clean_timer);
+		timer_shutdown_sync(&port->clean_timer);
 		sunvnet_port_rm_txq_common(port);
 		netif_napi_del(&port->napi);
 		sunvnet_port_free_tx_bufs_common(port);

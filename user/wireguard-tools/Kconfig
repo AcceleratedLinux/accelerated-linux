@@ -1,0 +1,2 @@
+config USER_WIREGUARD
+	bool "wireguard"

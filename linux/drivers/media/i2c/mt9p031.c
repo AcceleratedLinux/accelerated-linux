@@ -307,6 +307,7 @@ static inline int mt9p031_pll_disable(struct mt9p031 *mt9p031)
 
 static int mt9p031_power_on(struct mt9p031 *mt9p031)
 {
+	unsigned long rate, delay;
 	int ret;
 
 	/* Ensure RESET_BAR is active */
@@ -334,7 +335,12 @@ static int mt9p031_power_on(struct mt9p031 *mt9p031)
 	/* Now RESET_BAR must be high */
 	if (mt9p031->reset) {
 		gpiod_set_value(mt9p031->reset, 0);
-		usleep_range(1000, 2000);
+		/* Wait 850000 EXTCLK cycles before de-asserting reset. */
+		rate = clk_get_rate(mt9p031->clk);
+		if (!rate)
+			rate = 6000000;	/* Slowest supported clock, 6 MHz */
+		delay = DIV_ROUND_UP(850000 * 1000, rate);
+		msleep(delay);
 	}
 
 	return 0;
@@ -543,8 +549,7 @@ __mt9p031_get_pad_format(struct mt9p031 *mt9p031,
 {
 	switch (which) {
 	case V4L2_SUBDEV_FORMAT_TRY:
-		return v4l2_subdev_get_try_format(&mt9p031->subdev, sd_state,
-						  pad);
+		return v4l2_subdev_state_get_format(sd_state, pad);
 	case V4L2_SUBDEV_FORMAT_ACTIVE:
 		return &mt9p031->format;
 	default:
@@ -559,8 +564,7 @@ __mt9p031_get_pad_crop(struct mt9p031 *mt9p031,
 {
 	switch (which) {
 	case V4L2_SUBDEV_FORMAT_TRY:
-		return v4l2_subdev_get_try_crop(&mt9p031->subdev, sd_state,
-						pad);
+		return v4l2_subdev_state_get_crop(sd_state, pad);
 	case V4L2_SUBDEV_FORMAT_ACTIVE:
 		return &mt9p031->crop;
 	default:
@@ -623,12 +627,22 @@ static int mt9p031_get_selection(struct v4l2_subdev *subdev,
 {
 	struct mt9p031 *mt9p031 = to_mt9p031(subdev);
 
-	if (sel->target != V4L2_SEL_TGT_CROP)
-		return -EINVAL;
+	switch (sel->target) {
+	case V4L2_SEL_TGT_CROP_BOUNDS:
+		sel->r.left = MT9P031_COLUMN_START_MIN;
+		sel->r.top = MT9P031_ROW_START_MIN;
+		sel->r.width = MT9P031_WINDOW_WIDTH_MAX;
+		sel->r.height = MT9P031_WINDOW_HEIGHT_MAX;
+		return 0;
 
-	sel->r = *__mt9p031_get_pad_crop(mt9p031, sd_state, sel->pad,
-					 sel->which);
-	return 0;
+	case V4L2_SEL_TGT_CROP:
+		sel->r = *__mt9p031_get_pad_crop(mt9p031, sd_state,
+						 sel->pad, sel->which);
+		return 0;
+
+	default:
+		return -EINVAL;
+	}
 }
 
 static int mt9p031_set_selection(struct v4l2_subdev *subdev,
@@ -678,6 +692,36 @@ static int mt9p031_set_selection(struct v4l2_subdev *subdev,
 
 	*__crop = rect;
 	sel->r = rect;
+
+	return 0;
+}
+
+static int mt9p031_init_state(struct v4l2_subdev *subdev,
+			      struct v4l2_subdev_state *sd_state)
+{
+	struct mt9p031 *mt9p031 = to_mt9p031(subdev);
+	struct v4l2_mbus_framefmt *format;
+	struct v4l2_rect *crop;
+	const int which = sd_state == NULL ? V4L2_SUBDEV_FORMAT_ACTIVE :
+					     V4L2_SUBDEV_FORMAT_TRY;
+
+	crop = __mt9p031_get_pad_crop(mt9p031, sd_state, 0, which);
+	crop->left = MT9P031_COLUMN_START_DEF;
+	crop->top = MT9P031_ROW_START_DEF;
+	crop->width = MT9P031_WINDOW_WIDTH_DEF;
+	crop->height = MT9P031_WINDOW_HEIGHT_DEF;
+
+	format = __mt9p031_get_pad_format(mt9p031, sd_state, 0, which);
+
+	if (mt9p031->model == MT9P031_MODEL_MONOCHROME)
+		format->code = MEDIA_BUS_FMT_Y12_1X12;
+	else
+		format->code = MEDIA_BUS_FMT_SGRBG12_1X12;
+
+	format->width = MT9P031_WINDOW_WIDTH_DEF;
+	format->height = MT9P031_WINDOW_HEIGHT_DEF;
+	format->field = V4L2_FIELD_NONE;
+	format->colorspace = V4L2_COLORSPACE_SRGB;
 
 	return 0;
 }
@@ -980,28 +1024,6 @@ static int mt9p031_registered(struct v4l2_subdev *subdev)
 
 static int mt9p031_open(struct v4l2_subdev *subdev, struct v4l2_subdev_fh *fh)
 {
-	struct mt9p031 *mt9p031 = to_mt9p031(subdev);
-	struct v4l2_mbus_framefmt *format;
-	struct v4l2_rect *crop;
-
-	crop = v4l2_subdev_get_try_crop(subdev, fh->state, 0);
-	crop->left = MT9P031_COLUMN_START_DEF;
-	crop->top = MT9P031_ROW_START_DEF;
-	crop->width = MT9P031_WINDOW_WIDTH_DEF;
-	crop->height = MT9P031_WINDOW_HEIGHT_DEF;
-
-	format = v4l2_subdev_get_try_format(subdev, fh->state, 0);
-
-	if (mt9p031->model == MT9P031_MODEL_MONOCHROME)
-		format->code = MEDIA_BUS_FMT_Y12_1X12;
-	else
-		format->code = MEDIA_BUS_FMT_SGRBG12_1X12;
-
-	format->width = MT9P031_WINDOW_WIDTH_DEF;
-	format->height = MT9P031_WINDOW_HEIGHT_DEF;
-	format->field = V4L2_FIELD_NONE;
-	format->colorspace = V4L2_COLORSPACE_SRGB;
-
 	return mt9p031_set_power(subdev, 1);
 }
 
@@ -1034,6 +1056,7 @@ static const struct v4l2_subdev_ops mt9p031_subdev_ops = {
 };
 
 static const struct v4l2_subdev_internal_ops mt9p031_subdev_internal_ops = {
+	.init_state = mt9p031_init_state,
 	.registered = mt9p031_registered,
 	.open = mt9p031_open,
 	.close = mt9p031_close,
@@ -1055,7 +1078,7 @@ mt9p031_get_pdata(struct i2c_client *client)
 	if (!IS_ENABLED(CONFIG_OF) || !client->dev.of_node)
 		return client->dev.platform_data;
 
-	np = of_graph_get_next_endpoint(client->dev.of_node, NULL);
+	np = of_graph_get_endpoint_by_regs(client->dev.of_node, 0, -1);
 	if (!np)
 		return NULL;
 
@@ -1077,9 +1100,9 @@ done:
 	return pdata;
 }
 
-static int mt9p031_probe(struct i2c_client *client,
-			 const struct i2c_device_id *did)
+static int mt9p031_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *did = i2c_client_get_device_id(client);
 	struct mt9p031_platform_data *pdata = mt9p031_get_pdata(client);
 	struct i2c_adapter *adapter = client->adapter;
 	struct mt9p031 *mt9p031;
@@ -1166,20 +1189,9 @@ static int mt9p031_probe(struct i2c_client *client,
 
 	mt9p031->subdev.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 
-	mt9p031->crop.width = MT9P031_WINDOW_WIDTH_DEF;
-	mt9p031->crop.height = MT9P031_WINDOW_HEIGHT_DEF;
-	mt9p031->crop.left = MT9P031_COLUMN_START_DEF;
-	mt9p031->crop.top = MT9P031_ROW_START_DEF;
-
-	if (mt9p031->model == MT9P031_MODEL_MONOCHROME)
-		mt9p031->format.code = MEDIA_BUS_FMT_Y12_1X12;
-	else
-		mt9p031->format.code = MEDIA_BUS_FMT_SGRBG12_1X12;
-
-	mt9p031->format.width = MT9P031_WINDOW_WIDTH_DEF;
-	mt9p031->format.height = MT9P031_WINDOW_HEIGHT_DEF;
-	mt9p031->format.field = V4L2_FIELD_NONE;
-	mt9p031->format.colorspace = V4L2_COLORSPACE_SRGB;
+	ret = mt9p031_init_state(&mt9p031->subdev, NULL);
+	if (ret)
+		goto done;
 
 	mt9p031->reset = devm_gpiod_get_optional(&client->dev, "reset",
 						 GPIOD_OUT_HIGH);
@@ -1200,7 +1212,7 @@ done:
 	return ret;
 }
 
-static int mt9p031_remove(struct i2c_client *client)
+static void mt9p031_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
 	struct mt9p031 *mt9p031 = to_mt9p031(subdev);
@@ -1209,11 +1221,10 @@ static int mt9p031_remove(struct i2c_client *client)
 	v4l2_async_unregister_subdev(subdev);
 	media_entity_cleanup(&subdev->entity);
 	mutex_destroy(&mt9p031->power_lock);
-
-	return 0;
 }
 
 static const struct i2c_device_id mt9p031_id[] = {
+	{ "mt9p006", MT9P031_MODEL_COLOR },
 	{ "mt9p031", MT9P031_MODEL_COLOR },
 	{ "mt9p031m", MT9P031_MODEL_MONOCHROME },
 	{ }
@@ -1222,6 +1233,7 @@ MODULE_DEVICE_TABLE(i2c, mt9p031_id);
 
 #if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id mt9p031_of_match[] = {
+	{ .compatible = "aptina,mt9p006", },
 	{ .compatible = "aptina,mt9p031", },
 	{ .compatible = "aptina,mt9p031m", },
 	{ /* sentinel */ },

@@ -202,7 +202,7 @@ void dcn303_fpu_update_bw_bounding_box(struct dc *dc, struct clk_bw_params *bw_p
 	unsigned int num_dcfclk_sta_targets = 4;
 	unsigned int num_uclk_states;
 
-    dc_assert_fp_enabled();
+	dc_assert_fp_enabled();
 
 	if (dc->ctx->dc_bios->vram_info.num_chans)
 		dcn3_03_soc.num_chans = dc->ctx->dc_bios->vram_info.num_chans;
@@ -266,6 +266,17 @@ void dcn303_fpu_update_bw_bounding_box(struct dc *dc, struct clk_bw_params *bw_p
 					optimal_uclk_for_dcfclk_sta_targets[i] =
 							bw_params->clk_table.entries[j].memclk_mhz * 16;
 					break;
+				} else {
+					/* condition where (dcfclk_sta_targets[i] >= optimal_dcfclk_for_uclk[j]):
+					 * This is required for dcn303 because it just so happens that the memory
+					 * bandwidth is low enough such that all the optimal DCFCLK for each UCLK
+					 * is lower than the smallest DCFCLK STA target. In this case we need to
+					 * populate the optimal UCLK for each DCFCLK STA target to be the max UCLK.
+					 */
+					if (j == num_uclk_states - 1) {
+						optimal_uclk_for_dcfclk_sta_targets[i] =
+								bw_params->clk_table.entries[j].memclk_mhz * 16;
+					}
 				}
 			}
 		}
@@ -349,14 +360,11 @@ void dcn303_fpu_init_soc_bounding_box(struct bp_soc_bb_info bb_info)
 	dc_assert_fp_enabled();
 
 	if (bb_info.dram_clock_change_latency_100ns > 0)
-				dcn3_03_soc.dram_clock_change_latency_us =
-					bb_info.dram_clock_change_latency_100ns * 10;
+		dcn3_03_soc.dram_clock_change_latency_us = bb_info.dram_clock_change_latency_100ns * 10;
 
-			if (bb_info.dram_sr_enter_exit_latency_100ns > 0)
-				dcn3_03_soc.sr_enter_plus_exit_time_us =
-					bb_info.dram_sr_enter_exit_latency_100ns * 10;
+	if (bb_info.dram_sr_enter_exit_latency_100ns > 0)
+		dcn3_03_soc.sr_enter_plus_exit_time_us = bb_info.dram_sr_enter_exit_latency_100ns * 10;
 
-			if (bb_info.dram_sr_exit_latency_100ns > 0)
-				dcn3_03_soc.sr_exit_time_us =
-					bb_info.dram_sr_exit_latency_100ns * 10;
+	if (bb_info.dram_sr_exit_latency_100ns > 0)
+		dcn3_03_soc.sr_exit_time_us = bb_info.dram_sr_exit_latency_100ns * 10;
 }

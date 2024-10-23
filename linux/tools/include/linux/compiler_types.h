@@ -36,4 +36,8 @@
 #include <linux/compiler-gcc.h>
 #endif
 
+#ifndef asm_goto_output
+#define asm_goto_output(x...) asm goto(x)
+#endif
+
 #endif /* __LINUX_COMPILER_TYPES_H */

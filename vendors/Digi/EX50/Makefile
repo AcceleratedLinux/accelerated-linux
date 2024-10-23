@@ -13,6 +13,8 @@ IMAGESIZE = 67108864 # 64MB
 
 SIGNING_ALG = ecdsa
 
+
+
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
 ROMFS_DIRS += etc etc/cli etc/config etc/runt.d etc/ssl etc/ssl/firmware home proc sys tmp usr/sbin usr/var var opt bin
@@ -47,6 +49,7 @@ romfs: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version
 	echo "Digi EX50" > $(ROMFSDIR)/etc/issue
 	$(ROMFSINST) -d /etc/modprobe.d/blacklist-spi-nor.conf
 	$(ROMFSINST) -p 555 /etc/wifi_mac_calc.sh
+	$(ROMFSINST) -d -p 644 /libexec/udev/rules.d/76-power_supply_update_led.rules
 
 romfs.post:: romfs.cleanup
 

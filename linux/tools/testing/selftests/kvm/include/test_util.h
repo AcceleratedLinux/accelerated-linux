@@ -20,6 +20,8 @@
 #include <sys/mman.h>
 #include "kselftest.h"
 
+#define msecs_to_usecs(msec)    ((msec) * 1000ULL)
+
 static inline int _no_printf(const char *format, ...) { return 0; }
 
 #ifdef DEBUG
@@ -33,31 +35,48 @@ static inline int _no_printf(const char *format, ...) { return 0; }
 #define pr_info(...) _no_printf(__VA_ARGS__)
 #endif
 
-void print_skip(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void __printf(1, 2) print_skip(const char *fmt, ...);
+#define __TEST_REQUIRE(f, fmt, ...)				\
+do {								\
+	if (!(f))						\
+		ksft_exit_skip("- " fmt "\n", ##__VA_ARGS__);	\
+} while (0)
+
+#define TEST_REQUIRE(f) __TEST_REQUIRE(f, "Requirement not met: %s", #f)
 
 ssize_t test_write(int fd, const void *buf, size_t count);
 ssize_t test_read(int fd, void *buf, size_t count);
 int test_seq_read(const char *path, char **bufp, size_t *sizep);
 
-void test_assert(bool exp, const char *exp_str,
-		 const char *file, unsigned int line, const char *fmt, ...)
-		__attribute__((format(printf, 5, 6)));
+void __printf(5, 6) test_assert(bool exp, const char *exp_str,
+				const char *file, unsigned int line,
+				const char *fmt, ...);
 
 #define TEST_ASSERT(e, fmt, ...) \
 	test_assert((e), #e, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
-#define ASSERT_EQ(a, b) do { \
-	typeof(a) __a = (a); \
-	typeof(b) __b = (b); \
-	TEST_ASSERT(__a == __b, \
-		    "ASSERT_EQ(%s, %s) failed.\n" \
-		    "\t%s is %#lx\n" \
-		    "\t%s is %#lx", \
-		    #a, #b, #a, (unsigned long) __a, #b, (unsigned long) __b); \
+#define TEST_ASSERT_EQ(a, b)						\
+do {									\
+	typeof(a) __a = (a);						\
+	typeof(b) __b = (b);						\
+	test_assert(__a == __b, #a " == " #b, __FILE__, __LINE__,	\
+		    "%#lx != %#lx (%s != %s)",				\
+		    (unsigned long)(__a), (unsigned long)(__b), #a, #b);\
 } while (0)
 
-#define TEST_FAIL(fmt, ...) \
-	TEST_ASSERT(false, fmt, ##__VA_ARGS__)
+#define TEST_ASSERT_KVM_EXIT_REASON(vcpu, expected) do {		\
+	__u32 exit_reason = (vcpu)->run->exit_reason;			\
+									\
+	TEST_ASSERT(exit_reason == (expected),				\
+		    "Wanted KVM exit reason: %u (%s), got: %u (%s)",    \
+		    (expected), exit_reason_str((expected)),		\
+		    exit_reason, exit_reason_str(exit_reason));		\
+} while (0)
+
+#define TEST_FAIL(fmt, ...) do { \
+	TEST_ASSERT(false, fmt, ##__VA_ARGS__); \
+	__builtin_unreachable(); \
+} while (0)
 
 size_t parse_size(const char *size);
 
@@ -67,6 +86,32 @@ struct timespec timespec_add(struct timespec ts1, struct timespec ts2);
 struct timespec timespec_sub(struct timespec ts1, struct timespec ts2);
 struct timespec timespec_elapsed(struct timespec start);
 struct timespec timespec_div(struct timespec ts, int divisor);
+
+struct guest_random_state {
+	uint32_t seed;
+};
+
+extern uint32_t guest_random_seed;
+extern struct guest_random_state guest_rng;
+
+struct guest_random_state new_guest_random_state(uint32_t seed);
+uint32_t guest_random_u32(struct guest_random_state *state);
+
+static inline bool __guest_random_bool(struct guest_random_state *state,
+				       uint8_t percent)
+{
+	return (guest_random_u32(state) % 100) < percent;
+}
+
+static inline bool guest_random_bool(struct guest_random_state *state)
+{
+	return __guest_random_bool(state, 50);
+}
+
+static inline uint64_t guest_random_u64(struct guest_random_state *state)
+{
+	return ((uint64_t)guest_random_u32(state) << 32) | guest_random_u32(state);
+}
 
 enum vm_mem_backing_src_type {
 	VM_MEM_SRC_ANONYMOUS,
@@ -118,6 +163,11 @@ static inline bool backing_src_is_shared(enum vm_mem_backing_src_type t)
 	return vm_mem_backing_src_alias(t)->flag & MAP_SHARED;
 }
 
+static inline bool backing_src_can_be_huge(enum vm_mem_backing_src_type t)
+{
+	return t != VM_MEM_SRC_ANONYMOUS && t != VM_MEM_SRC_SHMEM;
+}
+
 /* Aligns x up to the next multiple of size. Size must be a power of 2. */
 static inline uint64_t align_up(uint64_t x, uint64_t size)
 {
@@ -142,5 +192,30 @@ static inline void *align_ptr_up(void *x, size_t size)
 {
 	return (void *)align_up((unsigned long)x, size);
 }
+
+int atoi_paranoid(const char *num_str);
+
+static inline uint32_t atoi_positive(const char *name, const char *num_str)
+{
+	int num = atoi_paranoid(num_str);
+
+	TEST_ASSERT(num > 0, "%s must be greater than 0, got '%s'", name, num_str);
+	return num;
+}
+
+static inline uint32_t atoi_non_negative(const char *name, const char *num_str)
+{
+	int num = atoi_paranoid(num_str);
+
+	TEST_ASSERT(num >= 0, "%s must be non-negative, got '%s'", name, num_str);
+	return num;
+}
+
+int guest_vsnprintf(char *buf, int n, const char *fmt, va_list args);
+__printf(3, 4) int guest_snprintf(char *buf, int n, const char *fmt, ...);
+
+char *strdup_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2), nonnull(1)));
+
+char *sys_get_cur_clocksource(void);
 
 #endif /* SELFTEST_KVM_TEST_UTIL_H */

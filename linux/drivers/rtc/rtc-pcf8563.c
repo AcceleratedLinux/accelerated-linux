@@ -507,8 +507,7 @@ static const struct rtc_class_ops pcf8563_rtc_ops = {
 	.alarm_irq_enable = pcf8563_irq_enable,
 };
 
-static int pcf8563_probe(struct i2c_client *client,
-				const struct i2c_device_id *id)
+static int pcf8563_probe(struct i2c_client *client)
 {
 	struct pcf8563 *pcf8563;
 	int err;
@@ -526,7 +525,6 @@ static int pcf8563_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, pcf8563);
 	pcf8563->client = client;
-	device_set_wakeup_capable(&client->dev, 1);
 
 	/* Set timer to lowest frequency to save power (ref Haoyu datasheet) */
 	buf = PCF8563_TMRC_1_60;
@@ -552,20 +550,33 @@ static int pcf8563_probe(struct i2c_client *client,
 	/* the pcf8563 alarm only supports a minute accuracy */
 	set_bit(RTC_FEATURE_ALARM_RES_MINUTE, pcf8563->rtc->features);
 	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, pcf8563->rtc->features);
+	clear_bit(RTC_FEATURE_ALARM, pcf8563->rtc->features);
 	pcf8563->rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
 	pcf8563->rtc->range_max = RTC_TIMESTAMP_END_2099;
 	pcf8563->rtc->set_start_time = true;
 
 	if (client->irq > 0) {
+		unsigned long irqflags = IRQF_TRIGGER_LOW;
+
+		if (dev_fwnode(&client->dev))
+			irqflags = 0;
+
 		err = devm_request_threaded_irq(&client->dev, client->irq,
 				NULL, pcf8563_irq,
-				IRQF_SHARED | IRQF_ONESHOT | IRQF_TRIGGER_LOW,
+				IRQF_SHARED | IRQF_ONESHOT | irqflags,
 				pcf8563_driver.driver.name, client);
 		if (err) {
 			dev_err(&client->dev, "unable to request IRQ %d\n",
 								client->irq);
 			return err;
 		}
+	} else {
+		client->irq = 0;
+	}
+
+	if (client->irq > 0 || device_property_read_bool(&client->dev, "wakeup-source")) {
+		device_init_wakeup(&client->dev, true);
+		set_bit(RTC_FEATURE_ALARM, pcf8563->rtc->features);
 	}
 
 	err = devm_rtc_register_device(pcf8563->rtc);

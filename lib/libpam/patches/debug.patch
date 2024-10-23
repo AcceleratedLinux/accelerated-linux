@@ -1,0 +1,27 @@
+
+Author: David Leonard <David.Leonard@digi.com>
+Date:   Tue Mar 30 13:31:47 2021 +1000
+
+    OG-8721 libpam: a bit more stack rule debugging
+
+Index: Linux-PAM-1.5.1/libpam/pam_dispatch.c
+===================================================================
+--- Linux-PAM-1.5.1.orig/libpam/pam_dispatch.c
++++ Linux-PAM-1.5.1/libpam/pam_dispatch.c
+@@ -81,6 +81,16 @@ static int _pam_dispatch_aux(pam_handle_
+ 
+         stack_level = h->stack_level;
+ 
++#ifdef DEBUG
++        char buf[128];
++        int i, n = 0;
++
++        n += snprintf(buf + n, sizeof buf - n, "%s", h->mod_name);
++        for (i = 0; i < h->argc; i++)
++            n += snprintf(buf + n, sizeof buf - n, " %s", h->argv[i]);
++        D(("processing: [%d] %s", depth, buf));
++#endif
++
+ 	/* skip leading modules if they have already returned */
+ 	if (depth < skip_depth) {
+ 	    continue;

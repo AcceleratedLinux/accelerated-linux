@@ -1,0 +1,73 @@
+From 22bc1264daa5ba556c03c8509f081b7d7fae83e4 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Thu, 18 May 2023 10:02:00 +0100
+Subject: [PATCH] modem: dial first phonebook entry if no dialstring is
+ specified
+
+If the ATD command is given without a dialstring, look up the first
+entry in the phonebook and use that. If the phonebook is empty, the
+behaviour is as before - which is to take the modem off hook, or answer
+an incoming call if there is one.
+---
+ src/modem_core.c | 8 ++++++++
+ src/phone_book.c | 4 ++++
+ src/phone_book.h | 1 +
+ 3 files changed, 13 insertions(+)
+
+diff --git a/src/modem_core.c b/src/modem_core.c
+index 2de6746..a781c7e 100644
+--- a/src/modem_core.c
++++ b/src/modem_core.c
+@@ -4,6 +4,7 @@
+ #include "getcmd.h"
+ #include "debug.h"
+ #include "modem_core.h"
++#include "phone_book.h"
+ 
+ char* mdm_responses[MDM_RESP_END_OF_LIST];
+ 
+@@ -363,6 +364,7 @@ int mdm_parse_cmd(modem_config* cfg) {
+         }
+         break;
+       case 'D':
++        char *first_number;
+         if(end > start) {
+           strncpy(cfg->dialno, (char *)command + start, end - start);
+           cfg->dialno[end - start] = '\0';
+@@ -377,6 +379,12 @@ int mdm_parse_cmd(modem_config* cfg) {
+           cfg->memory_dial = TRUE;
+           mdm_write(cfg, (unsigned char *)cfg->crlf, 2);
+           mdm_write(cfg, (unsigned char *)cfg->dialno, strlen(cfg->dialno));
++        } else if ((first_number = pb_first_number()) != NULL) {
++          strlcpy(cfg->dialno, first_number, sizeof(cfg->dialno));
++          cfg->dial_type = (unsigned char)num;
++          strlcpy(cfg->last_dialno, first_number, sizeof(cfg->last_dialno));
++          cfg->last_dial_type = (unsigned char)num;
++          cfg->memory_dial = FALSE;
+         } else {
+           cfg->dialno[0] = 0;
+           cfg->last_dialno[0] = 0;
+diff --git a/src/phone_book.c b/src/phone_book.c
+index faea642..253a3c5 100644
+--- a/src/phone_book.c
++++ b/src/phone_book.c
+@@ -49,3 +49,7 @@ char *pb_search(char *number) {
+   LOG_EXIT();
+   return 0;
+ }
++
++char *pb_first_number(void) {
++  return (size > 0) ? phone_book[0].number : NULL;
++}
+diff --git a/src/phone_book.h b/src/phone_book.h
+index 266e7bf..99be054 100644
+--- a/src/phone_book.h
++++ b/src/phone_book.h
+@@ -1,3 +1,4 @@
+ int pb_init(void);
+ int pb_add(char *from, char *to);
+ char *pb_search(char *number);
++char *pb_first_number(void);
+-- 
+2.34.1
+

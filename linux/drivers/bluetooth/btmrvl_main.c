@@ -1,21 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Marvell Bluetooth driver
  *
  * Copyright (C) 2009, Marvell International Ltd.
- *
- * This software file (the "File") is distributed by Marvell International
- * Ltd. under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  **/
 
 #include <linux/module.h>
@@ -134,13 +121,6 @@ int btmrvl_process_event(struct btmrvl_private *priv, struct sk_buff *skb)
 				((event->data[2] == MODULE_BROUGHT_UP) ||
 				(event->data[2] == MODULE_ALREADY_UP)) ?
 				"Bring-up succeed" : "Bring-up failed");
-
-			if (event->length > 3 && event->data[3])
-				priv->btmrvl_dev.dev_type = HCI_AMP;
-			else
-				priv->btmrvl_dev.dev_type = HCI_PRIMARY;
-
-			BT_DBG("dev_type: %d", priv->btmrvl_dev.dev_type);
 		} else if (priv->btmrvl_dev.sendcmdflag &&
 				event->data[1] == MODULE_SHUTDOWN_REQ) {
 			BT_DBG("EVENT:%s", (event->data[2]) ?
@@ -698,8 +678,6 @@ int btmrvl_register_hdev(struct btmrvl_private *priv)
 	hdev->set_bdaddr = btmrvl_set_bdaddr;
 	hdev->wakeup = btmrvl_wakeup;
 	SET_HCIDEV_DEV(hdev, &card->func->dev);
-
-	hdev->dev_type = priv->btmrvl_dev.dev_type;
 
 	ret = hci_register_dev(hdev);
 	if (ret < 0) {

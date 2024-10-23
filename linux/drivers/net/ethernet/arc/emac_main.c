@@ -15,11 +15,11 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
-#include <linux/of_platform.h>
 
 #include "emac.h"
 
@@ -91,7 +91,7 @@ static void arc_emac_get_drvinfo(struct net_device *ndev,
 {
 	struct arc_emac_priv *priv = netdev_priv(ndev);
 
-	strlcpy(info->driver, priv->drv_name, sizeof(info->driver));
+	strscpy(info->driver, priv->drv_name, sizeof(info->driver));
 }
 
 static const struct ethtool_ops arc_emac_ethtool_ops = {
@@ -1008,7 +1008,7 @@ out_put_node:
 }
 EXPORT_SYMBOL_GPL(arc_emac_probe);
 
-int arc_emac_remove(struct net_device *ndev)
+void arc_emac_remove(struct net_device *ndev)
 {
 	struct arc_emac_priv *priv = netdev_priv(ndev);
 
@@ -1019,8 +1019,6 @@ int arc_emac_remove(struct net_device *ndev)
 
 	if (!IS_ERR(priv->clk))
 		clk_disable_unprepare(priv->clk);
-
-	return 0;
 }
 EXPORT_SYMBOL_GPL(arc_emac_remove);
 

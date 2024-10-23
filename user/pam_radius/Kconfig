@@ -1,5 +1,6 @@
 config USER_PAM_RADIUS
 	bool "pam_radius"
 	depends on LIB_LIBPAM
+	select LIB_PAM_GROUPNAME_HELPER
 	help
 	  Pam radius plugin.

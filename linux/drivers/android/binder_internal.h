@@ -107,41 +107,19 @@ static inline int __init init_binderfs(void)
 }
 #endif
 
-int binder_stats_show(struct seq_file *m, void *unused);
-DEFINE_SHOW_ATTRIBUTE(binder_stats);
-
-int binder_state_show(struct seq_file *m, void *unused);
-DEFINE_SHOW_ATTRIBUTE(binder_state);
-
-int binder_transactions_show(struct seq_file *m, void *unused);
-DEFINE_SHOW_ATTRIBUTE(binder_transactions);
-
-int binder_transaction_log_show(struct seq_file *m, void *unused);
-DEFINE_SHOW_ATTRIBUTE(binder_transaction_log);
-
-struct binder_transaction_log_entry {
-	int debug_id;
-	int debug_id_done;
-	int call_type;
-	int from_proc;
-	int from_thread;
-	int target_handle;
-	int to_proc;
-	int to_thread;
-	int to_node;
-	int data_size;
-	int offsets_size;
-	int return_error_line;
-	uint32_t return_error;
-	uint32_t return_error_param;
-	char context_name[BINDERFS_MAX_NAME + 1];
+struct binder_debugfs_entry {
+	const char *name;
+	umode_t mode;
+	const struct file_operations *fops;
+	void *data;
 };
 
-struct binder_transaction_log {
-	atomic_t cur;
-	bool full;
-	struct binder_transaction_log_entry entry[32];
-};
+extern const struct binder_debugfs_entry binder_debugfs_entries[];
+
+#define binder_for_each_debugfs_entry(entry)	\
+	for ((entry) = binder_debugfs_entries;	\
+	     (entry)->name;			\
+	     (entry)++)
 
 enum binder_stat_types {
 	BINDER_STAT_PROC,
@@ -155,7 +133,7 @@ enum binder_stat_types {
 };
 
 struct binder_stats {
-	atomic_t br[_IOC_NR(BR_ONEWAY_SPAM_SUSPECT) + 1];
+	atomic_t br[_IOC_NR(BR_TRANSACTION_PENDING_FROZEN) + 1];
 	atomic_t bc[_IOC_NR(BC_REPLY_SG) + 1];
 	atomic_t obj_created[BINDER_STAT_COUNT];
 	atomic_t obj_deleted[BINDER_STAT_COUNT];
@@ -174,6 +152,7 @@ struct binder_work {
 	enum binder_work_type {
 		BINDER_WORK_TRANSACTION = 1,
 		BINDER_WORK_TRANSACTION_COMPLETE,
+		BINDER_WORK_TRANSACTION_PENDING,
 		BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT,
 		BINDER_WORK_RETURN_ERROR,
 		BINDER_WORK_NODE,
@@ -442,7 +421,7 @@ struct binder_proc {
 	struct list_head todo;
 	struct binder_stats stats;
 	struct list_head delivered_death;
-	int max_threads;
+	u32 max_threads;
 	int requested_threads;
 	int requested_threads_started;
 	int tmp_ref;
@@ -536,6 +515,8 @@ struct binder_transaction {
 	int debug_id;
 	struct binder_work work;
 	struct binder_thread *from;
+	pid_t from_pid;
+	pid_t from_tid;
 	struct binder_transaction *from_parent;
 	struct binder_proc *to_proc;
 	struct binder_thread *to_thread;
@@ -549,6 +530,7 @@ struct binder_transaction {
 	long    priority;
 	long    saved_priority;
 	kuid_t  sender_euid;
+	ktime_t start_time;
 	struct list_head fd_fixups;
 	binder_uintptr_t security_ctx;
 	/**
@@ -580,6 +562,4 @@ struct binder_object {
 	};
 };
 
-extern struct binder_transaction_log binder_transaction_log;
-extern struct binder_transaction_log binder_transaction_log_failed;
 #endif /* _LINUX_BINDER_INTERNAL_H */

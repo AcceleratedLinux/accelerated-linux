@@ -9,13 +9,10 @@
  */
 #include <linux/module.h>
 #include <linux/phy.h>
-#include <linux/gpio.h>
 #include <linux/delay.h>
 #include <linux/mdio.h>
 #include <linux/marvell_phy.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
-#include <linux/of_gpio.h>
 #include <linux/sfp.h>
 #include <linux/netdevice.h>
 
@@ -478,6 +475,7 @@ static int mv2222_config_init(struct phy_device *phydev)
 
 static int mv2222_sfp_insert(void *upstream, const struct sfp_eeprom_id *id)
 {
+	DECLARE_PHY_INTERFACE_MASK(interfaces);
 	struct phy_device *phydev = upstream;
 	phy_interface_t sfp_interface;
 	struct mv2222_data *priv;
@@ -486,10 +484,11 @@ static int mv2222_sfp_insert(void *upstream, const struct sfp_eeprom_id *id)
 
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(sfp_supported) = { 0, };
 
-	priv = (struct mv2222_data *)phydev->priv;
+	priv = phydev->priv;
 	dev = &phydev->mdio.dev;
 
-	sfp_parse_support(phydev->sfp_bus, id, sfp_supported);
+	sfp_parse_support(phydev->sfp_bus, id, sfp_supported, interfaces);
+	phydev->port = sfp_parse_port(phydev->sfp_bus, id, sfp_supported);
 	sfp_interface = sfp_select_interface(phydev->sfp_bus, sfp_supported);
 
 	dev_info(dev, "%s SFP module inserted\n", phy_modes(sfp_interface));
@@ -522,10 +521,11 @@ static void mv2222_sfp_remove(void *upstream)
 	struct phy_device *phydev = upstream;
 	struct mv2222_data *priv;
 
-	priv = (struct mv2222_data *)phydev->priv;
+	priv = phydev->priv;
 
 	priv->line_interface = PHY_INTERFACE_MODE_NA;
 	linkmode_zero(priv->supported);
+	phydev->port = PORT_NONE;
 }
 
 static void mv2222_sfp_link_up(void *upstream)

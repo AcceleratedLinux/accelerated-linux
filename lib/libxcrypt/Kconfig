@@ -1,0 +1,8 @@
+config LIB_LIBXCRYPT
+	bool "libxcrypt"
+	select LIBC_NOCRYPT
+	help
+		libxcrypt is a modern library for one-way hashing of passwords.
+		It supports a wide variety of both modern and historical hashing methods.
+		It provides the traditional Unix crypt and crypt_r interfaces, as well
+		as a set of extended interfaces pioneered by Openwall Linux.

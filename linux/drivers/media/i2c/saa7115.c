@@ -1804,9 +1804,9 @@ static int saa711x_detect_chip(struct i2c_client *client,
 	return -ENODEV;
 }
 
-static int saa711x_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int saa711x_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct saa711x_state *state;
 	struct v4l2_subdev *sd;
 	struct v4l2_ctrl_handler *hdl;
@@ -1927,13 +1927,12 @@ static int saa711x_probe(struct i2c_client *client,
 
 /* ----------------------------------------------------------------------- */
 
-static int saa711x_remove(struct i2c_client *client)
+static void saa711x_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 
 	v4l2_device_unregister_subdev(sd);
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
-	return 0;
 }
 
 static const struct i2c_device_id saa711x_id[] = {

@@ -6,32 +6,39 @@ The openocd jtag package can be used with the Armada-380 based U115
 boards. It can quite easily be used to load boot code (like u-boot) and
 then from there you can program the NAND flash.
 
-As of this writing I am using openocd-0.7.0, with local bug fixes. Later
-versions may work without change (best chance is using the latest source
-from the openocd git tree). I'll keep this updated as support in openocd
-improves.
+As of this writing I am using openocd-0.11.0, later versions should work.
+Some earlier versions don't work without fixes (like 0.7.0 for example).
 
 I have used a couple of different JTAG USB based debuggers with success.
 I expect most other standard types of USB jtag dongle would work. I had
 no problems with the Amontec JTAGkey USB based jtag debug dongle, and
 the JTAG Lock Pick Tiny.
 
-With the JTAG adapter conected to the U115 board run openocd with:
+With the JTAG adapter connected to the U115 board run openocd with:
 
-    sudo openocd -f tools/openocd/targets/u115.cfg
+    openocd -f interface/ftdi/jtag-lock-pick_tiny_2.cfg -f tools/openocd/targets/u115.cfg
+
+Substitue for the jtag-lock-pick_tiny_2.cfg whatever JTAG adapter you have.
+You will most likely need to be root to run openocd.
 
 Then on another console telnet to the openocd daemon:
 
     telnet localhost 4444
 
-Then issue the following commands:
+That should establish the connection. Keep in mind that you will want the
+watchdog timer disabled for this to work right. So you may need to jumper
+that on the U115 to disable.
+
+If you are using a bare board with no programmed flash then issue the
+following commands:
 
     reset
+    halt
     meminit
     loaduboot
     resume
 
-This initial "meminit" step will mnost likely produce no serial port debug.
+This initial "meminit" step will most likely produce no serial port debug.
 By default our u-boot will also produce no serial port console trace unless
 the ERASE button is held in when you "resume" executing it after load.
 
@@ -39,14 +46,16 @@ If you have held in the ERASE button and have the serial console enabled
 then you can break into the u-boot command line and "run netload" and
 that will network load a linux firmware image and run it.
 
-Note that running the "meminit" and "loaduboot" commands on an already flash
-programmed unit is more problematical. Generally you need to "reset" and
-"halt" quite quickly - even then the memory initializer code is likely to have
-run. This is ok, but don't run "meminit" again, only run "loaduboot" now.
-To run the reset/halt fast enough issue the commands on a single line:
+If you have an already programmed flash then you typically don't want to
+do the meminit step - it just complicates the process. Instead wait a few
+seconds after power up and then run the following commands:
 
-    reset ; halt
+    reset
+    # wait a couple of seconds (or for some console output)
+    halt
     loaduboot
+    resume
+
 
 FLASH
 -----

@@ -1,0 +1,7 @@
+mmc dev 0
+fatload mmc 0:1 ${fdt_addr_r} ${fdtfile}
+if test "${boot_id}" = "A"; then fatload mmc 0:1 ${kernel_addr_r} zImageA;fi
+if test "${boot_id}" = "B"; then fatload mmc 0:1 ${kernel_addr_r} zImageB;fi
+if test "${boot_state}" = "tryA"; then fatload mmc 0:1 ${kernel_addr_r} zImageA;setenv bootargs "earlyprintk=ttyS1,115200 earlycon=uart8250,mmio32,0x3f215040 console=ttyS1,115200 root=/dev/mmcblk0p2 ro noinitrd rootfstype=squashfs rootwait mem=1000M";fi
+if test "${boot_state}" = "tryB"; then fatload mmc 0:1 ${kernel_addr_r} zImageB;setenv bootargs "earlyprintk=ttyS1,115200 earlycon=uart8250,mmio32,0x3f215040 console=ttyS1,115200 root=/dev/mmcblk0p3 ro noinitrd rootfstype=squashfs rootwait mem=1000M";fi
+bootz ${kernel_addr_r} - ${fdt_addr_r}

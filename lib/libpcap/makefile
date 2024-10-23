@@ -1,5 +1,5 @@
-VERSION = 1.10.0
-URL = http://www.tcpdump.org/release/libpcap-$(VERSION).tar.gz
+VERSION = 1.10.4
+URL = https://www.tcpdump.org/release/libpcap-$(VERSION).tar.gz
 
 CONFVARS :=
 CONFVARS += ac_cv_linux_vers=2
@@ -16,6 +16,8 @@ endif
 ifndef CONFIG_LIB_LIBNL_GENERIC
 CONFOPTS += --without-libnl
 endif
+
+AUTORECONF = autoreconf -i
 
 include $(ROOTDIR)/tools/automake.inc
 

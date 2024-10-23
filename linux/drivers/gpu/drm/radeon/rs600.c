@@ -42,6 +42,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
 
 #include "atom.h"
 #include "radeon.h"
@@ -53,8 +54,7 @@
 static void rs600_gpu_init(struct radeon_device *rdev);
 int rs600_mc_wait_for_idle(struct radeon_device *rdev);
 
-static const u32 crtc_offsets[2] =
-{
+static const u32 crtc_offsets[2] = {
 	0,
 	AVIVO_D2CRTC_H_TOTAL - AVIVO_D1CRTC_H_TOTAL
 };

@@ -1,5 +1,5 @@
 VERSION = 3.3.15
-URL = http://downloads.sourceforge.net/project/procps-ng/Production/procps-ng-$(VERSION).tar.xz
+URL = https://downloads.sourceforge.net/project/procps-ng/Production/procps-ng-$(VERSION).tar.xz
 
 CONFVARS += ac_cv_func_malloc_0_nonnull=yes
 CONFVARS += ac_cv_func_realloc_0_nonnull=yes

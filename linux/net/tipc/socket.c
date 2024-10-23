@@ -37,6 +37,7 @@
 
 #include <linux/rhashtable.h>
 #include <linux/sched/signal.h>
+#include <trace/events/sock.h>
 
 #include "core.h"
 #include "name_table.h"
@@ -79,7 +80,6 @@ struct sockaddr_pair {
  * @phdr: preformatted message header used when sending messages
  * @cong_links: list of congested links
  * @publications: list of publications for port
- * @blocking_link: address of the congested link we are currently sleeping on
  * @pub_count: total # of publications port has made during its lifetime
  * @conn_timeout: the time we can wait for an unresponded setup request
  * @probe_unacked: probe has not received ack yet
@@ -146,8 +146,6 @@ static void tipc_data_ready(struct sock *sk);
 static void tipc_write_space(struct sock *sk);
 static void tipc_sock_destruct(struct sock *sk);
 static int tipc_release(struct socket *sock);
-static int tipc_accept(struct socket *sock, struct socket *new_sock, int flags,
-		       bool kern);
 static void tipc_sk_timeout(struct timer_list *t);
 static int tipc_sk_publish(struct tipc_sock *tsk, struct tipc_uaddr *ua);
 static int tipc_sk_withdraw(struct tipc_sock *tsk, struct tipc_uaddr *ua);
@@ -313,9 +311,9 @@ static void tsk_rej_rx_queue(struct sock *sk, int error)
 		tipc_sk_respond(sk, skb, error);
 }
 
-static bool tipc_sk_connected(struct sock *sk)
+static bool tipc_sk_connected(const struct sock *sk)
 {
-	return sk->sk_state == TIPC_ESTABLISHED;
+	return READ_ONCE(sk->sk_state) == TIPC_ESTABLISHED;
 }
 
 /* tipc_sk_type_connectionless - check if the socket is datagram socket
@@ -2130,6 +2128,8 @@ static void tipc_data_ready(struct sock *sk)
 {
 	struct socket_wq *wq;
 
+	trace_sk_data_ready(sk);
+
 	rcu_read_lock();
 	wq = rcu_dereference(sk->sk_wq);
 	if (skwq_has_sleeper(wq))
@@ -2614,6 +2614,7 @@ static int tipc_connect(struct socket *sock, struct sockaddr *dest,
 		/* Send a 'SYN-' to destination */
 		m.msg_name = dest;
 		m.msg_namelen = destlen;
+		iov_iter_kvec(&m.msg_iter, ITER_SOURCE, NULL, 0, 0);
 
 		/* If connect is in non-blocking case, set MSG_DONTWAIT to
 		 * indicate send_msg() is never blocked.
@@ -2708,13 +2709,12 @@ static int tipc_wait_for_accept(struct socket *sock, long timeo)
  * tipc_accept - wait for connection request
  * @sock: listening socket
  * @new_sock: new socket that is to be connected
- * @flags: file-related flags associated with socket
- * @kern: caused by kernel or by userspace?
+ * @arg: arguments for accept
  *
  * Return: 0 on success, errno otherwise
  */
-static int tipc_accept(struct socket *sock, struct socket *new_sock, int flags,
-		       bool kern)
+static int tipc_accept(struct socket *sock, struct socket *new_sock,
+		       struct proto_accept_arg *arg)
 {
 	struct sock *new_sk, *sk = sock->sk;
 	struct tipc_sock *new_tsock;
@@ -2730,14 +2730,14 @@ static int tipc_accept(struct socket *sock, struct socket *new_sock, int flags,
 		res = -EINVAL;
 		goto exit;
 	}
-	timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
+	timeo = sock_rcvtimeo(sk, arg->flags & O_NONBLOCK);
 	res = tipc_wait_for_accept(sock, timeo);
 	if (res)
 		goto exit;
 
 	buf = skb_peek(&sk->sk_receive_queue);
 
-	res = tipc_sk_create(sock_net(sock->sk), new_sock, 0, kern);
+	res = tipc_sk_create(sock_net(sock->sk), new_sock, 0, arg->kern);
 	if (res)
 		goto exit;
 	security_sk_clone(sock->sk, new_sock->sk);
@@ -2776,6 +2776,7 @@ static int tipc_accept(struct socket *sock, struct socket *new_sock, int flags,
 		__skb_queue_head(&new_sk->sk_receive_queue, buf);
 		skb_set_owner_r(buf, new_sk);
 	}
+	iov_iter_kvec(&m.msg_iter, ITER_SOURCE, NULL, 0, 0);
 	__tipc_sendstream(new_sock, &m, 0);
 	release_sock(new_sk);
 exit:
@@ -3010,7 +3011,7 @@ static int tipc_sk_insert(struct tipc_sock *tsk)
 	struct net *net = sock_net(sk);
 	struct tipc_net *tn = net_generic(net, tipc_net_id);
 	u32 remaining = (TIPC_MAX_PORT - TIPC_MIN_PORT) + 1;
-	u32 portid = prandom_u32() % remaining + TIPC_MIN_PORT;
+	u32 portid = get_random_u32_below(remaining) + TIPC_MIN_PORT;
 
 	while (remaining--) {
 		portid++;
@@ -3370,7 +3371,6 @@ static const struct proto_ops msg_ops = {
 	.sendmsg	= tipc_sendmsg,
 	.recvmsg	= tipc_recvmsg,
 	.mmap		= sock_no_mmap,
-	.sendpage	= sock_no_sendpage
 };
 
 static const struct proto_ops packet_ops = {
@@ -3391,7 +3391,6 @@ static const struct proto_ops packet_ops = {
 	.sendmsg	= tipc_send_packet,
 	.recvmsg	= tipc_recvmsg,
 	.mmap		= sock_no_mmap,
-	.sendpage	= sock_no_sendpage
 };
 
 static const struct proto_ops stream_ops = {
@@ -3412,7 +3411,6 @@ static const struct proto_ops stream_ops = {
 	.sendmsg	= tipc_sendstream,
 	.recvmsg	= tipc_recvstream,
 	.mmap		= sock_no_mmap,
-	.sendpage	= sock_no_sendpage
 };
 
 static const struct net_proto_family tipc_family_ops = {
@@ -3564,11 +3562,8 @@ int tipc_nl_sk_walk(struct sk_buff *skb, struct netlink_callback *cb,
 	rhashtable_walk_start(iter);
 	while ((tsk = rhashtable_walk_next(iter)) != NULL) {
 		if (IS_ERR(tsk)) {
-			err = PTR_ERR(tsk);
-			if (err == -EAGAIN) {
-				err = 0;
+			if (PTR_ERR(tsk) == -EAGAIN)
 				continue;
-			}
 			break;
 		}
 
@@ -3789,7 +3784,7 @@ int tipc_nl_publ_dump(struct sk_buff *skb, struct netlink_callback *cb)
 	struct tipc_sock *tsk;
 
 	if (!tsk_portid) {
-		struct nlattr **attrs = genl_dumpit_info(cb)->attrs;
+		struct nlattr **attrs = genl_dumpit_info(cb)->info.attrs;
 		struct nlattr *sock[TIPC_NLA_SOCK_MAX + 1];
 
 		if (!attrs[TIPC_NLA_SOCK])

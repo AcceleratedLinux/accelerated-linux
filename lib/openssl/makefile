@@ -1,13 +1,13 @@
 ##########################################################################
 #
-# This build supports either version 3.0 or legacy 1.1.
+# This build supports either version 3.2 or legacy 1.1.
 #
 ##########################################################################
 ifdef CONFIG_LIB_OPENSSL3
 ##########################################################################
 
-VERSION = 3.0.7
-URL = https://www.openssl.org/source/openssl-$(VERSION).tar.gz
+VERSION = 3.3.2
+URL = https://github.com/openssl/openssl/releases/download/openssl-$(VERSION)/openssl-$(VERSION).tar.gz
 
 openssl-$(VERSION)_CONFIGURE = ./config
 openssl-$(VERSION)_NODEFCONF = y
@@ -80,7 +80,7 @@ openssl-$(VERSION)_CONFOPTS += no-err
 #openssl-$(VERSION)_CONFOPTS += no-txt_db
 #openssl-$(VERSION)_CONFOPTS += no-pkcs7
 #openssl-$(VERSION)_CONFOPTS += no-pkcs12
-#openssl-$(VERSION)_CONFOPTS += no-comp
+openssl-$(VERSION)_CONFOPTS += no-comp
 #openssl-$(VERSION)_CONFOPTS += no-ocsp
 #openssl-$(VERSION)_CONFOPTS += no-ui
 #openssl-$(VERSION)_CONFOPTS += no-store
@@ -92,6 +92,8 @@ openssl-$(VERSION)_CONFOPTS += no-err
 AUTOMAKE_ROMFS = openssl_romfs
 
 CFLAGS += -g
+# Remove paths from the built binaries
+CFLAGS += -DOPENSSL_NO_FILENAMES
 
 include $(ROOTDIR)/tools/automake.inc
 
@@ -107,11 +109,14 @@ openssl_romfs:
 		fi; \
 	done
 	if [ -f $(OPENSSL_INSTALL)/lib/ossl-modules/fips.so ]; then \
-		$(ROMFSINST) -S -d $(OPENSSL_INSTALL)/lib/ossl-modules/fips.so /lib/ossl-modules/fips.so ; \
+		$(ROMFSINST) -d $(OPENSSL_INSTALL)/lib/ossl-modules/fips.so /lib/ossl-modules/fips.so ; \
 		$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS -d $(OPENSSL_INSTALL)/etc/ssl/fipsmodule.cnf /etc/ssl/fipsmodule.cnf ; \
 	fi
 	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS $(OPENSSL_INSTALL)/bin/openssl /bin/openssl
 	$(ROMFSINST) -e CONFIG_USER_OPENSSL_APPS $(OPENSSL_INSTALL)/bin/c_rehash /bin/c_rehash
+	if [ -f $(OPENSSL_INSTALL)/lib/ossl-modules/legacy.so ]; then \
+		$(ROMFSINST) -d $(OPENSSL_INSTALL)/lib/ossl-modules/legacy.so /lib/ossl-modules/legacy.so ; \
+	fi
 ifdef CONFIG_USER_OPENSSL_APPS
 ifdef CONFIG_USER_FLATFSD_ETC_CONFIG
 	$(ROMFSINST) -d $(OPENSSL_INSTALL)/etc/config/ssl/openssl.cnf /etc/default/ssl/openssl.cnf
@@ -131,7 +136,7 @@ endif
 else
 ##########################################################################
 
-OPENSSL_PKG = openssl-1.1.1s
+OPENSSL_PKG = openssl-1.1.1w
 
 OPENSSL_INSTALL = $(shell pwd)/build/$(OPENSSL_PKG)-install
 OPENSSL_SRC = $(shell pwd)/build/$(OPENSSL_PKG)
@@ -153,7 +158,7 @@ $(OPENSSL_PKG)_CONFOPTS += shared
 #
 ifdef CONFIG_MIPS
 ifdef CONFIG_64BIT
-$(OPENSSL_PKG)_CONFOPTS = ; $(CONFVARS) $($*_CONFVARS) CFLAGS="$(CFLAGS) $($*_CFLAGS)" ./Configure linux64-mips64
+$(OPENSSL_PKG)_CONFOPTS = ; $(CONFVARS) $($*_CONFVARS) CFLAGS="$(CPU_CFLAGS) $(CFLAGS) $($*_CFLAGS)" ./Configure linux64-mips64
 endif
 endif
 
@@ -194,7 +199,7 @@ $(OPENSSL_PKG)_CONFOPTS += no-err
 #$(OPENSSL_PKG)_CONFOPTS += no-txt_db
 #$(OPENSSL_PKG)_CONFOPTS += no-pkcs7
 #$(OPENSSL_PKG)_CONFOPTS += no-pkcs12
-#$(OPENSSL_PKG)_CONFOPTS += no-comp
+$(OPENSSL_PKG)_CONFOPTS += no-comp
 #$(OPENSSL_PKG)_CONFOPTS += no-ocsp
 #$(OPENSSL_PKG)_CONFOPTS += no-ui
 #$(OPENSSL_PKG)_CONFOPTS += no-store

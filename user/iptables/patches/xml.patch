@@ -1,7 +1,8 @@
-diff -Nurd iptables.orig-1.8.3/configure.ac iptables-1.8.3/configure.ac
---- iptables.orig-1.8.3/configure.ac	2019-05-28 01:09:32.000000000 +1000
-+++ iptables-1.8.3/configure.ac	2019-05-30 11:58:09.389798031 +1000
-@@ -39,6 +39,9 @@
+Index: iptables-1.8.10/configure.ac
+===================================================================
+--- iptables-1.8.10.orig/configure.ac
++++ iptables-1.8.10/configure.ac
+@@ -38,6 +38,9 @@ AC_ARG_ENABLE([ipv4],
  AC_ARG_ENABLE([ipv6],
  	AS_HELP_STRING([--disable-ipv6], [Do not build ip6tables]),
  	[enable_ipv6="$enableval"], [enable_ipv6="yes"])
@@ -11,7 +12,7 @@ diff -Nurd iptables.orig-1.8.3/configure.ac iptables-1.8.3/configure.ac
  AC_ARG_ENABLE([largefile],
  	AS_HELP_STRING([--disable-largefile], [Do not build largefile support]),
  	[enable_largefile="$enableval"],
-@@ -108,6 +111,7 @@
+@@ -105,6 +108,7 @@ AM_CONDITIONAL([ENABLE_STATIC], [test "$
  AM_CONDITIONAL([ENABLE_SHARED], [test "$enable_shared" = "yes"])
  AM_CONDITIONAL([ENABLE_IPV4], [test "$enable_ipv4" = "yes"])
  AM_CONDITIONAL([ENABLE_IPV6], [test "$enable_ipv6" = "yes"])
@@ -19,7 +20,7 @@ diff -Nurd iptables.orig-1.8.3/configure.ac iptables-1.8.3/configure.ac
  AM_CONDITIONAL([ENABLE_LARGEFILE], [test "$enable_largefile" = "yes"])
  AM_CONDITIONAL([ENABLE_DEVEL], [test "$enable_devel" = "yes"])
  AM_CONDITIONAL([ENABLE_LIBIPQ], [test "$enable_libipq" = "yes"])
-@@ -264,6 +268,7 @@
+@@ -253,6 +257,7 @@ echo "
  Iptables Configuration:
    IPv4 support:				${enable_ipv4}
    IPv6 support:				${enable_ipv6}
@@ -27,26 +28,30 @@ diff -Nurd iptables.orig-1.8.3/configure.ac iptables-1.8.3/configure.ac
    Devel support:			${enable_devel}
    IPQ support:				${enable_libipq}
    Large file support:			${enable_largefile}
-diff -Nurd iptables.orig-1.8.3/iptables/Makefile.am iptables-1.8.3/iptables/Makefile.am
---- iptables.orig-1.8.3/iptables/Makefile.am	2019-05-28 01:09:32.000000000 +1000
-+++ iptables-1.8.3/iptables/Makefile.am	2019-05-30 11:58:09.389798031 +1000
-@@ -6,9 +6,12 @@
+Index: iptables-1.8.10/iptables/Makefile.am
+===================================================================
+--- iptables-1.8.10.orig/iptables/Makefile.am
++++ iptables-1.8.10/iptables/Makefile.am
+@@ -6,12 +6,15 @@ AM_LDFLAGS       = ${regular_LDFLAGS}
  
  BUILT_SOURCES =
  
--xtables_legacy_multi_SOURCES  = xtables-legacy-multi.c iptables-xml.c
-+xtables_legacy_multi_SOURCES  = xtables-legacy-multi.c
- xtables_legacy_multi_CFLAGS   = ${AM_CFLAGS}
- xtables_legacy_multi_LDADD    = ../extensions/libext.a
-+if ENABLE_XML
-+xtables_legacy_multi_SOURCES += iptables-xml.c
-+endif
+-common_sources = iptables-xml.c xtables-multi.h xshared.c xshared.h
++common_sources = xtables-multi.h xshared.c xshared.h
+ common_ldadd   = ../extensions/libext.a ../libxtables/libxtables.la -lm
+ common_cflags  = ${AM_CFLAGS}
  if ENABLE_STATIC
- xtables_legacy_multi_CFLAGS  += -DALL_INCLUSIVE
+ common_cflags += -DALL_INCLUSIVE
  endif
-@@ -70,7 +73,9 @@
- 		   iptables-translate.8 ip6tables-translate.8 \
- 		   xtables-config-parser.c xtables-config-syntax.c
++if ENABLE_XML
++common_sources += iptables-xml.c
++endif
+ 
+ xtables_legacy_multi_SOURCES  = ${common_sources} xtables-legacy-multi.c \
+ 				iptables-restore.c iptables-save.c
+@@ -80,7 +83,9 @@ dist_man_MANS	 = xtables-nft.8 xtables-t
+ endif
+ CLEANFILES       = ${man_MANS} iptables-extensions.8.tmpl
  
 +if ENABLE_XML
  vx_bin_links   = iptables-xml
@@ -54,10 +59,11 @@ diff -Nurd iptables.orig-1.8.3/iptables/Makefile.am iptables-1.8.3/iptables/Make
  if ENABLE_IPV4
  v4_sbin_links  = iptables-legacy iptables-legacy-restore iptables-legacy-save \
  		 iptables iptables-restore iptables-save
-diff -Nurd iptables.orig-1.8.3/iptables/xtables-legacy-multi.c iptables-1.8.3/iptables/xtables-legacy-multi.c
---- iptables.orig-1.8.3/iptables/xtables-legacy-multi.c	2019-05-28 01:09:32.000000000 +1000
-+++ iptables-1.8.3/iptables/xtables-legacy-multi.c	2019-05-30 11:58:09.389798031 +1000
-@@ -32,8 +32,10 @@
+Index: iptables-1.8.10/iptables/xtables-legacy-multi.c
+===================================================================
+--- iptables-1.8.10.orig/iptables/xtables-legacy-multi.c
++++ iptables-1.8.10/iptables/xtables-legacy-multi.c
+@@ -28,8 +28,10 @@ static const struct subcommand multi_sub
  
  
  #endif
@@ -68,3 +74,18 @@ diff -Nurd iptables.orig-1.8.3/iptables/xtables-legacy-multi.c iptables-1.8.3/ip
  #ifdef ENABLE_IPV6
  	{"ip6tables",           ip6tables_main},
  	{"main6",               ip6tables_main},
+Index: iptables-1.8.10/iptables/xtables-nft-multi.c
+===================================================================
+--- iptables-1.8.10.orig/iptables/xtables-nft-multi.c
++++ iptables-1.8.10/xiptables/tables-nft-multi.c
+@@ -6,8 +6,10 @@
+ #include "xtables-multi.h"
+ 
+ static const struct subcommand multi_subcommands[] = {
++#ifdef ENABLE_XML
+ 	{"iptables-xml",		iptables_xml_main},
+ 	{"xml",				iptables_xml_main},
++#endif
+ 	{"iptables",			xtables_ip4_main},
+ 	{"iptables-nft",		xtables_ip4_main},
+ 	{"main4",			xtables_ip4_main},

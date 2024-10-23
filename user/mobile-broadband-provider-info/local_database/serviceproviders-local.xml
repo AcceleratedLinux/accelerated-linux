@@ -1,0 +1,723 @@
+<?xml version="1.0" encoding='utf-8'?>
+<!-- -*- Mode: XML; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- -->
+<!DOCTYPE serviceproviders SYSTEM "serviceproviders.2.dtd">
+
+<!-- Authors:
+-->
+
+<serviceproviders format="2.0">
+
+<country code="us">
+	<name>United States</name>
+	<provider>
+		<name>AT&amp;T FirstNet</name>
+		<gsm>
+			<network-id mcc="313" mnc="100"/>
+			<network-id mcc="313" mnc="110"/>
+			<network-id mcc="313" mnc="120"/>
+			<network-id mcc="313" mnc="130"/>
+			<network-id mcc="313" mnc="140"/>
+			<apn value="firstnet-broadband">
+				<usage type="internet"/>
+				<name>firstnet-broadband</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>AT&amp;T</name>
+		<gsm>
+			<network-id mcc="310" mnc="030"/>
+			<network-id mcc="310" mnc="038"/>
+			<network-id mcc="310" mnc="090"/>
+			<network-id mcc="310" mnc="150"/>
+			<network-id mcc="310" mnc="170"/>
+			<network-id mcc="310" mnc="280"/>
+			<network-id mcc="310" mnc="410"/>
+			<network-id mcc="310" mnc="560"/>
+			<network-id mcc="310" mnc="680"/>
+			<network-id mcc="310" mnc="016"/>
+			<network-id mcc="310" mnc="070"/>
+			<network-id mcc="310" mnc="080"/>
+			<network-id mcc="310" mnc="090"/>
+			<network-id mcc="310" mnc="380"/>
+			<network-id mcc="310" mnc="670"/>
+			<network-id mcc="310" mnc="950"/>
+			<network-id mcc="311" mnc="070"/>
+			<network-id mcc="311" mnc="090"/>
+			<network-id mcc="311" mnc="180"/>
+			<network-id mcc="311" mnc="190"/>
+			<network-id mcc="312" mnc="090"/>
+			<network-id mcc="310" mnc="670"/>
+			<network-id mcc="310" mnc="680"/>
+			<apn value="nrbroadband">
+				<usage type="internet"/>
+				<name>nrbroadband</name>
+			</apn>
+			<apn value=" ">
+				<usage type="internet"/>
+				<name> </name>
+			</apn>
+			<apn value="10008">
+				<usage type="internet"/>
+				<name>10008</name>
+			</apn>
+			<apn value="psmtneorm">
+				<usage type="internet"/>
+				<name>psmtneorm</name>
+			</apn>
+			<apn value="edneopate010.dpa">
+				<usage type="internet"/>
+				<name>edneopate010.dpa</name>
+			</apn>
+			<apn value="11226.mcs">
+				<usage type="internet"/>
+				<name>11226.mcs</name>
+			</apn>
+			<apn value="NFOD-INET-APN01.com.attz">
+				<usage type="internet"/>
+				<name>NFOD-INET-APN01.com.attz</name>
+			</apn>
+			<apn value="altaworx02.com.attz">
+				<usage type="internet"/>
+				<name>altaworx02.com.attz</name>
+			</apn>
+			<apn value="m2m.com.attz">
+				<usage type="internet"/>
+				<name>m2m.com.attz</name>
+			</apn>
+			<apn value="11904.mcs">
+				<usage type="internet"/>
+				<name>11904.mcs</name>
+			</apn>
+			<apn value="18327.mcs">
+				<usage type="internet"/>
+				<name>18327.mcs</name>
+			</apn>
+			<apn value="i2gold">
+				<usage type="internet"/>
+				<name>i2gold</name>
+			</apn>
+			<apn value="12655.mcs">
+				<usage type="internet"/>
+				<name>12655.mcs</name>
+			</apn>
+			<apn value="13631.mcs">
+				<usage type="internet"/>
+				<name>13631.mcs</name>
+			</apn>
+			<apn value="broadband">
+				<usage type="internet"/>
+				<name>broadband</name>
+			</apn>
+			<apn value="reseller">
+				<usage type="internet"/>
+				<name>reseller</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>T-Mobile</name>
+		<gsm>
+			<network-id mcc="310" mnc="026"/>
+			<network-id mcc="310" mnc="160"/>
+			<network-id mcc="310" mnc="200"/>
+			<network-id mcc="310" mnc="210"/>
+			<network-id mcc="310" mnc="220"/>
+			<network-id mcc="310" mnc="230"/>
+			<network-id mcc="310" mnc="240"/>
+			<network-id mcc="310" mnc="250"/>
+			<network-id mcc="310" mnc="260"/>
+			<network-id mcc="310" mnc="270"/>
+			<network-id mcc="310" mnc="310"/>
+			<network-id mcc="310" mnc="490"/>
+			<network-id mcc="310" mnc="580"/>
+			<network-id mcc="310" mnc="660"/>
+			<network-id mcc="310" mnc="800"/>
+			<network-id mcc="311" mnc="660"/>
+			<network-id mcc="311" mnc="882"/>
+			<network-id mcc="311" mnc="490"/>
+			<network-id mcc="312" mnc="250"/>
+			<apn value="fast.t-mobile.com">
+				<usage type="internet"/>
+				<name>fast.t-mobile.com</name>
+			</apn>
+			<apn value="fbb.home">
+				<usage type="internet"/>
+				<name>fbb.home</name>
+			</apn>
+			<apn value="iot.tmowholesale">
+				<usage type="internet"/>
+				<name>iot.tmowholesale</name>
+			</apn>
+			<apn value="">
+				<usage type="internet"/>
+				<name></name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Verizon</name>
+		<gsm>
+			<network-id mcc="310" mnc="010"/>
+			<network-id mcc="310" mnc="011"/>
+			<network-id mcc="310" mnc="012"/>
+			<network-id mcc="311" mnc="480"/>
+			<network-id mcc="311" mnc="481"/>
+			<network-id mcc="311" mnc="482"/>
+			<network-id mcc="311" mnc="483"/>
+			<network-id mcc="311" mnc="484"/>
+			<network-id mcc="311" mnc="485"/>
+			<network-id mcc="311" mnc="486"/>
+			<network-id mcc="311" mnc="487"/>
+			<network-id mcc="311" mnc="488"/>
+			<network-id mcc="311" mnc="489"/>
+			<apn value="mw01.vzwstatic">
+				<usage type="internet"/>
+				<name>mw01.vzwstatic</name>
+			</apn>
+			<apn value="ne01.vzwstatic">
+				<usage type="internet"/>
+				<name>ne01.vzwstatic</name>
+			</apn>
+			<apn value="so01.vzwstatic">
+				<usage type="internet"/>
+				<name>so01.vzwstatic</name>
+			</apn>
+			<apn value="we01.vzwstatic">
+				<usage type="internet"/>
+				<name>we01.vzwstatic</name>
+			</apn>
+			<apn value="digicpn.gw12.vzwentp">
+				<usage type="internet"/>
+				<name>digicpn.gw12.vzwentp</name>
+			</apn>
+			<apn value="INTRLOT.GW12.VZWENTP">
+				<usage type="internet"/>
+				<name>INTRLOT.GW12.VZWENTP</name>
+			</apn>
+			<apn value="intra.vzwentp">
+				<usage type="internet"/>
+				<name>intra.vzwentp</name>
+			</apn>
+			<apn value="V5GA01INTERNET">
+				<usage type="internet"/>
+				<name>V5GA01INTERNET</name>
+			</apn>
+			<apn value="vzwinternet">
+				<usage type="internet"/>
+				<name>vzwinternet</name>
+				<dns>66.174.92.14</dns>
+				<dns>69.78.96.14</dns>
+			</apn>
+			<apn value="TRACFONE.VZWENTP">
+				<usage type="internet"/>
+				<name>TRACFONE.VZWENTP</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Viaero</name>
+		<gsm>
+			<network-id mcc="310" mnc="410"/>
+			<network-id mcc="310" mnc="450"/>
+			<network-id mcc="310" mnc="740"/>
+			<network-id mcc="999" mnc="123"/>
+			<apn value="internet.vedge.com">
+				<usage type="internet"/>
+				<name>internet.vedge.com</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Sprint</name>
+		<gsm>
+			<network-id mcc="310" mnc="120"/>
+			<network-id mcc="311" mnc="490"/>
+			<network-id mcc="311" mnc="870"/>
+			<network-id mcc="311" mnc="880"/>
+			<apn value="">
+				<usage type="internet"/>
+				<name></name>
+			</apn>
+			<apn value="r.ispsn">
+				<usage type="internet"/>
+				<name>r.ispsn</name>
+			</apn>
+			<apn value="n.ispsn">
+				<usage type="internet"/>
+				<name>n.ispsn</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Sprint/Nextel</name>
+		<gsm>
+			<network-id mcc="311" mnc="882"/>
+			<apn value="">
+				<usage type="internet"/>
+				<name></name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>U.S. Cellular</name>
+		<gsm>
+			<network-id mcc="311" mnc="066"/>
+			<network-id mcc="311" mnc="222"/>
+			<network-id mcc="311" mnc="224"/>
+			<network-id mcc="311" mnc="225"/>
+			<network-id mcc="311" mnc="226"/>
+			<network-id mcc="311" mnc="227"/>
+			<network-id mcc="311" mnc="228"/>
+			<network-id mcc="311" mnc="229"/>
+			<network-id mcc="311" mnc="580"/>
+			<network-id mcc="311" mnc="581"/>
+			<network-id mcc="311" mnc="582"/>
+			<network-id mcc="311" mnc="583"/>
+			<network-id mcc="311" mnc="584"/>
+			<network-id mcc="311" mnc="585"/>
+			<network-id mcc="311" mnc="586"/>
+			<network-id mcc="311" mnc="587"/>
+			<network-id mcc="311" mnc="588"/>
+			<network-id mcc="311" mnc="589"/>
+			<apn value="">
+				<usage type="internet"/>
+				<name></name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="310" mnc="84"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="ca">
+	<name>Canada</name>
+	<provider>
+		<name>Rogers</name>
+		<gsm>
+			<network-id mcc="302" mnc="720"/>
+			<apn value="ltemobile.apn">
+				<usage type="internet"/>
+				<name>ltemobile.apn</name>
+			</apn>
+			<apn value="lteinternet.apn">
+				<usage type="internet"/>
+				<name>lteinternet.apn</name>
+			</apn>
+			<apn value="ltestaticip.apn">
+				<usage type="internet"/>
+				<name>ltestaticip.apn</name>
+			</apn>
+			<apn value="ltepublicip.apn">
+				<usage type="internet"/>
+				<name>ltepublicip.apn</name>
+			</apn>
+			<apn value="ltemobile.com">
+				<usage type="internet"/>
+				<name>ltemobile.com</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Bell Mobility</name>
+		<gsm>
+			<network-id mcc="302" mnc="610"/>
+			<network-id mcc="302" mnc="640"/>
+			<network-id mcc="302" mnc="651"/>
+			<network-id mcc="302" mnc="880"/>
+			<apn value="crmstatic.bell.ca.ioe">
+				<usage type="internet"/>
+				<name>crmstatic.bell.ca.ioe</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Telus</name>
+		<gsm>
+			<network-id mcc="302" mnc="220"/>
+			<network-id mcc="302" mnc="221"/>
+			<network-id mcc="302" mnc="223"/>
+			<network-id mcc="302" mnc="760"/>
+			<network-id mcc="302" mnc="860"/>
+			<network-id mcc="302" mnc="880"/>
+			<apn value="isp.telus.com">
+				<usage type="internet"/>
+				<name>isp.telus.com</name>
+			</apn>
+			<apn value="m2m.telus.iot">
+				<usage type="internet"/>
+				<name>m2m.telus.iot</name>
+			</apn>
+			<apn value="m2m-east.telus.iot">
+				<usage type="internet"/>
+				<name>m2m-east.telus.iot</name>
+			</apn>
+			<apn value="m2m-west.telus.iot">
+				<usage type="internet"/>
+				<name>m2m-west.telus.iot</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="au">
+	<name>Australia</name>
+	<provider>
+		<name>Telstra</name>
+		<gsm>
+			<network-id mcc="505" mnc="01"/>
+			<apn value="telstra.internet">
+				<usage type="internet"/>
+				<name>telstra.internet</name>
+			</apn>
+			<apn value="telstra.m2m">
+				<usage type="internet"/>
+				<name>telstra.m2m</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Vodafone</name>
+		<gsm>
+			<network-id mcc="505" mnc="03"/>
+			<apn value="live.vodafone.com">
+				<usage type="internet"/>
+				<name>live.vodafone.com</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="nl">
+	<name>Netherlands</name>
+	<provider>
+		<name>Vodafone</name>
+		<gsm>
+			<network-id mcc="204" mnc="04"/>
+			<apn value="wbb.attbusiness.net">
+				<usage type="internet"/>
+				<name>wbb.attbusiness.net</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="204" mnc="08"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="fr">
+	<name>France</name>
+	<provider>
+		<name>Orange</name>
+		<gsm>
+			<network-id mcc="208" mnc="00"/>
+			<network-id mcc="208" mnc="01"/>
+			<apn value="orange.m2m.spec">
+				<usage type="internet"/>
+				<name>orange.m2m.spec</name>
+			</apn>
+			<apn value="orange.m2m">
+				<usage type="internet"/>
+				<name>orange.m2m</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Bougyues Telecom</name>
+		<gsm>
+			<network-id mcc="208" mnc="20"/>
+			<network-id mcc="208" mnc="21"/>
+			<apn value="fipbouygtel.com">
+				<usage type="internet"/>
+				<name>fipbouygtel.com</name>
+			</apn>
+		</gsm>
+	</provider>
+	<provider>
+		<name>Airmob</name>
+		<gsm>
+			<network-id mcc="208" mnc="28"/>
+			<apn value="datapro">
+				<usage type="internet"/>
+				<name>datapro</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="hu">
+	<name>Hungary</name>
+	<provider>
+		<name>THU</name>
+		<gsm>
+			<network-id mcc="216" mnc="30"/>
+			<apn value="internet.telekom">
+				<usage type="internet"/>
+				<name>internet.telekom</name>
+			</apn>
+			<apn value="otpatm.gr.hu">
+				<usage type="internet"/>
+				<name>otpatm.gr.hu</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="de">
+	<name>Germany</name>
+	<provider>
+		<name>Telekom.de</name>
+		<gsm>
+			<network-id mcc="262" mnc="01"/>
+			<apn value="internet.telekom">
+				<usage type="internet"/>
+				<name>internet.telekom</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="at">
+	<name>Austria</name>
+	<provider>
+		<name>T-Mobile</name>
+		<gsm>
+			<network-id mcc="232" mnc="03"/>
+			<apn value="internet.gma.iot">
+				<usage type="internet"/>
+				<name>internet.gma.iot</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="il">
+	<name>Israel</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="425" mnc="01"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="pl">
+	<name>Poland</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="260" mnc="06"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="sg">
+	<name>Singapore</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="525" mnc="05"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="li">
+	<name>Liechtenstein</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="295" mnc="05"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="jo">
+	<name>Jordan</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="416" mnc="77"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="cr">
+	<name>Costa Rica</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="712" mnc="04"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="co">
+	<name>Columbia</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="732" mnc="12"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="se">
+	<name>Sweden</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="240" mnc="07"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+<country code="hk">
+	<name>Hong Kong</name>
+	<provider>
+		<name>FL1</name>
+		<gsm>
+			<network-id mcc="454" mnc="03"/>
+			<apn value="mbb.mobi-data.com">
+				<usage type="internet"/>
+				<name>mbb.mobi-data.com</name>
+			</apn>
+			<apn value="mobi-data.com">
+				<usage type="internet"/>
+				<name>mobi-data.com</name>
+			</apn>
+			<apn value="mbb.voiamo.net">
+				<usage type="internet"/>
+				<name>mbb.voiamo.net</name>
+			</apn>
+		</gsm>
+	</provider>
+</country>
+
+</serviceproviders>

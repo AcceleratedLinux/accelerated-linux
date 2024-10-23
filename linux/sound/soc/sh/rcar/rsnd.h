@@ -14,23 +14,17 @@
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
-#include <linux/of_graph.h>
-#include <linux/of_irq.h>
+#include <linux/of.h>
 #include <linux/sh_dma.h>
 #include <linux/workqueue.h>
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
 
-#define RSND_GEN1_SRU	0
-#define RSND_GEN1_ADG	1
-#define RSND_GEN1_SSI	2
-
-#define RSND_GEN2_SCU	0
-#define RSND_GEN2_ADG	1
-#define RSND_GEN2_SSIU	2
-#define RSND_GEN2_SSI	3
-
+#define RSND_BASE_ADG	0
+#define RSND_BASE_SSI	1
+#define RSND_BASE_SSIU	2
+#define RSND_BASE_SCU	3	// for Gen2/Gen3
+#define RSND_BASE_SDMC	3	// for Gen4	reuse
 #define RSND_BASE_MAX	4
 
 /*
@@ -513,6 +507,7 @@ struct rsnd_dai_stream {
 #define RSND_STREAM_HDMI0	(1 << 0) /* for HDMI0 */
 #define RSND_STREAM_HDMI1	(1 << 1) /* for HDMI1 */
 #define RSND_STREAM_TDM_SPLIT	(1 << 2) /* for TDM split mode */
+#define RSND_HW_RULE_ERR	(1 << 3) /* hw_rule error */
 
 #define rsnd_io_to_mod(io, i)	((i) < RSND_MOD_MAX ? (io)->mod[(i)] : NULL)
 #define rsnd_io_to_mod_ssi(io)	rsnd_io_to_mod((io), RSND_MOD_SSI)
@@ -538,6 +533,7 @@ struct rsnd_dai {
 	struct rsnd_dai_stream capture;
 	struct rsnd_priv *priv;
 	struct snd_pcm_hw_constraint_list constraint;
+	struct of_phandle_args dai_args;
 
 	int max_channels;	/* 2ch - 16ch */
 	int ssi_lane;		/* 1lane - 4lane */
@@ -628,6 +624,7 @@ struct rsnd_priv {
 #define RSND_GEN1	(1 << 0)
 #define RSND_GEN2	(2 << 0)
 #define RSND_GEN3	(3 << 0)
+#define RSND_GEN4	(4 << 0)
 #define RSND_SOC_MASK	(0xFF << 4)
 #define RSND_SOC_E	(1 << 4) /* E1/E2/E3 */
 
@@ -694,6 +691,9 @@ struct rsnd_priv {
 	struct snd_soc_dai_driver *daidrv;
 	struct rsnd_dai *rdai;
 	int rdai_nr;
+
+#define RSND_MAX_COMPONENT 3
+	int component_dais[RSND_MAX_COMPONENT];
 };
 
 #define rsnd_priv_to_pdev(priv)	((priv)->pdev)
@@ -702,7 +702,8 @@ struct rsnd_priv {
 #define rsnd_is_gen1(priv)	(((priv)->flags & RSND_GEN_MASK) == RSND_GEN1)
 #define rsnd_is_gen2(priv)	(((priv)->flags & RSND_GEN_MASK) == RSND_GEN2)
 #define rsnd_is_gen3(priv)	(((priv)->flags & RSND_GEN_MASK) == RSND_GEN3)
-#define rsnd_is_e3(priv)	(((priv)->flags & \
+#define rsnd_is_gen4(priv)	(((priv)->flags & RSND_GEN_MASK) == RSND_GEN4)
+#define rsnd_is_gen3_e3(priv)	(((priv)->flags & \
 					(RSND_GEN_MASK | RSND_SOC_MASK)) == \
 					(RSND_GEN3 | RSND_SOC_E))
 
@@ -891,18 +892,6 @@ void rsnd_mod_make_sure(struct rsnd_mod *mod, enum rsnd_mod_type type);
 		dev_info(dev, param);			\
 } while (0)
 
-/*
- * If you don't need rsnd_dai_call debug message,
- * define RSND_DEBUG_NO_DAI_CALL as 1 on top of core.c
- *
- * #define RSND_DEBUG_NO_DAI_CALL 1
- */
-#define rsnd_dbg_dai_call(dev, param...)		\
-	if (!IS_BUILTIN(RSND_DEBUG_NO_DAI_CALL))	\
-		dev_dbg(dev, param)
-
-#endif
-
 #ifdef CONFIG_DEBUG_FS
 int rsnd_debugfs_probe(struct snd_soc_component *component);
 void rsnd_debugfs_reg_show(struct seq_file *m, phys_addr_t _addr,
@@ -913,3 +902,5 @@ void rsnd_debugfs_mod_reg_show(struct seq_file *m, struct rsnd_mod *mod,
 #else
 #define rsnd_debugfs_probe  NULL
 #endif
+
+#endif /* RSND_H */

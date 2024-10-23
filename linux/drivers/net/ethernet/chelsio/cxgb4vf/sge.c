@@ -2094,7 +2094,7 @@ static void sge_rx_timer_cb(struct timer_list *t)
 				struct sge_eth_rxq *rxq;
 
 				rxq = container_of(fl, struct sge_eth_rxq, fl);
-				if (napi_reschedule(&rxq->rspq.napi))
+				if (napi_schedule(&rxq->rspq.napi))
 					fl->starving++;
 				else
 					set_bit(id, s->starving_fl);
@@ -2336,7 +2336,7 @@ int t4vf_sge_alloc_rxq(struct adapter *adapter, struct sge_rspq *rspq,
 	if (ret)
 		goto err;
 
-	netif_napi_add(dev, &rspq->napi, napi_rx_handler, 64);
+	netif_napi_add(dev, &rspq->napi, napi_rx_handler);
 	rspq->cur_desc = rspq->desc;
 	rspq->cidx = 0;
 	rspq->gen = 1;

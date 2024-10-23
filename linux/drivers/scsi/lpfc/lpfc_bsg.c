@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2017-2022 Broadcom. All Rights Reserved. The term *
+ * Copyright (C) 2017-2024 Broadcom. All Rights Reserved. The term *
  * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.     *
  * Copyright (C) 2009-2015 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
@@ -88,17 +88,9 @@ struct lpfc_bsg_mbox {
 	uint32_t outExtWLen; /* from app */
 };
 
-#define MENLO_DID 0x0000FC0E
-
-struct lpfc_bsg_menlo {
-	struct lpfc_iocbq *cmdiocbq;
-	struct lpfc_dmabuf *rmp;
-};
-
 #define TYPE_EVT 	1
 #define TYPE_IOCB	2
 #define TYPE_MBOX	3
-#define TYPE_MENLO	4
 struct bsg_job_data {
 	uint32_t type;
 	struct bsg_job *set_job; /* job waiting for this iocb to finish */
@@ -106,7 +98,6 @@ struct bsg_job_data {
 		struct lpfc_bsg_event *evt;
 		struct lpfc_bsg_iocb iocb;
 		struct lpfc_bsg_mbox mbox;
-		struct lpfc_bsg_menlo menlo;
 	} context_un;
 };
 
@@ -143,8 +134,8 @@ lpfc_free_bsg_buffers(struct lpfc_hba *phba, struct lpfc_dmabuf *mlist)
 	if (mlist) {
 		list_for_each_entry_safe(mlast, next_mlast, &mlist->list,
 					 list) {
-			lpfc_mbuf_free(phba, mlast->virt, mlast->phys);
 			list_del(&mlast->list);
+			lpfc_mbuf_free(phba, mlast->virt, mlast->phys);
 			kfree(mlast);
 		}
 		lpfc_mbuf_free(phba, mlist->virt, mlist->phys);
@@ -898,7 +889,7 @@ lpfc_bsg_ct_unsol_event(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 			struct lpfc_iocbq *piocbq)
 {
 	uint32_t evt_req_id = 0;
-	uint32_t cmd;
+	u16 cmd;
 	struct lpfc_dmabuf *dmabuf = NULL;
 	struct lpfc_bsg_event *evt;
 	struct event_data *evt_dat = NULL;
@@ -924,7 +915,7 @@ lpfc_bsg_ct_unsol_event(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 
 	ct_req = (struct lpfc_sli_ct_request *)bdeBuf1->virt;
 	evt_req_id = ct_req->FsType;
-	cmd = ct_req->CommandResponse.bits.CmdRsp;
+	cmd = be16_to_cpu(ct_req->CommandResponse.bits.CmdRsp);
 
 	spin_lock_irqsave(&phba->ct_ev_lock, flags);
 	list_for_each_entry(evt, &phba->ct_ev_waiters, node) {
@@ -1986,9 +1977,7 @@ lpfc_sli4_bsg_set_loopback_mode(struct lpfc_hba *phba, int mode,
 static int
 lpfc_sli4_diag_fcport_reg_setup(struct lpfc_hba *phba)
 {
-	int rc;
-
-	if (phba->pport->fc_flag & FC_VFI_REGISTERED) {
+	if (test_bit(FC_VFI_REGISTERED, &phba->pport->fc_flag)) {
 		lpfc_printf_log(phba, KERN_WARNING, LOG_LIBDFC,
 				"3136 Port still had vfi registered: "
 				"mydid:x%x, fcfi:%d, vfi:%d, vpi:%d\n",
@@ -1997,8 +1986,7 @@ lpfc_sli4_diag_fcport_reg_setup(struct lpfc_hba *phba)
 				phba->vpi_ids[phba->pport->vpi]);
 		return -EINVAL;
 	}
-	rc = lpfc_issue_reg_vfi(phba->pport);
-	return rc;
+	return lpfc_issue_reg_vfi(phba->pport);
 }
 
 /**
@@ -2525,7 +2513,7 @@ static int lpfcdiag_loop_self_reg(struct lpfc_hba *phba, uint16_t *rpi)
 		return -ENOMEM;
 	}
 
-	dmabuff = (struct lpfc_dmabuf *)mbox->ctx_buf;
+	dmabuff = mbox->ctx_buf;
 	mbox->ctx_buf = NULL;
 	mbox->ctx_ndlp = NULL;
 	status = lpfc_sli_issue_mbox_wait(phba, mbox, LPFC_MBOX_TMO);
@@ -2594,7 +2582,7 @@ static int lpfcdiag_loop_self_unreg(struct lpfc_hba *phba, uint16_t rpi)
  *
  * This function obtains the transmit and receive ids required to send
  * an unsolicited ct command with a payload. A special lpfc FsType and CmdRsp
- * flags are used to the unsolicted response handler is able to process
+ * flags are used to the unsolicited response handler is able to process
  * the ct command sent on the same port.
  **/
 static int lpfcdiag_loop_get_xri(struct lpfc_hba *phba, uint16_t rpi,
@@ -2886,7 +2874,7 @@ out:
  * @len: Number of data bytes
  *
  * This function allocates and posts a data buffer of sufficient size to receive
- * an unsolicted CT command.
+ * an unsolicited CT command.
  **/
 static int lpfcdiag_sli3_loop_post_rxbufs(struct lpfc_hba *phba, uint16_t rxxri,
 					  size_t len)
@@ -3181,10 +3169,10 @@ lpfc_bsg_diag_loopback_run(struct bsg_job *job)
 	}
 
 	cmdwqe = &cmdiocbq->wqe;
-	memset(cmdwqe, 0, sizeof(union lpfc_wqe));
+	memset(cmdwqe, 0, sizeof(*cmdwqe));
 	if (phba->sli_rev < LPFC_SLI_REV4) {
 		rspwqe = &rspiocbq->wqe;
-		memset(rspwqe, 0, sizeof(union lpfc_wqe));
+		memset(rspwqe, 0, sizeof(*rspwqe));
 	}
 
 	INIT_LIST_HEAD(&head);
@@ -3198,8 +3186,8 @@ lpfc_bsg_diag_loopback_run(struct bsg_job *job)
 			ctreq->RevisionId.bits.InId = 0;
 			ctreq->FsType = SLI_CT_ELX_LOOPBACK;
 			ctreq->FsSubType = 0;
-			ctreq->CommandResponse.bits.CmdRsp = ELX_LOOPBACK_DATA;
-			ctreq->CommandResponse.bits.Size   = size;
+			ctreq->CommandResponse.bits.CmdRsp = cpu_to_be16(ELX_LOOPBACK_DATA);
+			ctreq->CommandResponse.bits.Size   = cpu_to_be16(size);
 			segment_offset = ELX_LOOPBACK_HEADER_SZ;
 		} else
 			segment_offset = 0;
@@ -3388,7 +3376,7 @@ lpfc_bsg_issue_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq)
 	unsigned long flags;
 	uint8_t *pmb, *pmb_buf;
 
-	dd_data = pmboxq->ctx_ndlp;
+	dd_data = pmboxq->ctx_u.dd_data;
 
 	/*
 	 * The outgoing buffer is readily referred from the dma buffer,
@@ -3460,7 +3448,7 @@ static int lpfc_bsg_check_cmd_access(struct lpfc_hba *phba,
 	case MBX_RUN_DIAGS:
 	case MBX_RESTART:
 	case MBX_SET_MASK:
-		if (!(vport->fc_flag & FC_OFFLINE_MODE)) {
+		if (!test_bit(FC_OFFLINE_MODE, &vport->fc_flag)) {
 			lpfc_printf_log(phba, KERN_WARNING, LOG_LIBDFC,
 				"2743 Command 0x%x is illegal in on-line "
 				"state\n",
@@ -3502,15 +3490,6 @@ static int lpfc_bsg_check_cmd_access(struct lpfc_hba *phba,
 			"1226 mbox: set_variable 0x%x, 0x%x\n",
 			mb->un.varWords[0],
 			mb->un.varWords[1]);
-		if ((mb->un.varWords[0] == SETVAR_MLOMNT)
-			&& (mb->un.varWords[1] == 1)) {
-			phba->wait_4_mlo_maint_flg = 1;
-		} else if (mb->un.varWords[0] == SETVAR_MLORST) {
-			spin_lock_irq(&phba->hbalock);
-			phba->link_flag &= ~LS_LOOPBACK_MODE;
-			spin_unlock_irq(&phba->hbalock);
-			phba->fc_topology = LPFC_TOPOLOGY_PT_PT;
-		}
 		break;
 	case MBX_READ_SPARM64:
 	case MBX_REG_LOGIN:
@@ -3574,7 +3553,7 @@ lpfc_bsg_issue_mbox_ext_handle_job(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmboxq)
 	struct lpfc_sli_config_mbox *sli_cfg_mbx;
 	uint8_t *pmbx;
 
-	dd_data = pmboxq->ctx_buf;
+	dd_data = pmboxq->ctx_u.dd_data;
 
 	/* Determine if job has been aborted */
 	spin_lock_irqsave(&phba->ct_ev_lock, flags);
@@ -3961,7 +3940,7 @@ lpfc_bsg_sli_cfg_read_cmd_ext(struct lpfc_hba *phba, struct bsg_job *job,
 	pmboxq->mbox_cmpl = lpfc_bsg_issue_read_mbox_ext_cmpl;
 
 	/* context fields to callback function */
-	pmboxq->ctx_buf = dd_data;
+	pmboxq->ctx_u.dd_data = dd_data;
 	dd_data->type = TYPE_MBOX;
 	dd_data->set_job = job;
 	dd_data->context_un.mbox.pmboxq = pmboxq;
@@ -4133,7 +4112,7 @@ lpfc_bsg_sli_cfg_write_cmd_ext(struct lpfc_hba *phba, struct bsg_job *job,
 		pmboxq->mbox_cmpl = lpfc_bsg_issue_write_mbox_ext_cmpl;
 
 		/* context fields to callback function */
-		pmboxq->ctx_buf = dd_data;
+		pmboxq->ctx_u.dd_data = dd_data;
 		dd_data->type = TYPE_MBOX;
 		dd_data->set_job = job;
 		dd_data->context_un.mbox.pmboxq = pmboxq;
@@ -4481,7 +4460,7 @@ lpfc_bsg_write_ebuf_set(struct lpfc_hba *phba, struct bsg_job *job,
 		pmboxq->mbox_cmpl = lpfc_bsg_issue_write_mbox_ext_cmpl;
 
 		/* context fields to callback function */
-		pmboxq->ctx_buf = dd_data;
+		pmboxq->ctx_u.dd_data = dd_data;
 		dd_data->type = TYPE_MBOX;
 		dd_data->set_job = job;
 		dd_data->context_un.mbox.pmboxq = pmboxq;
@@ -4768,7 +4747,7 @@ lpfc_bsg_issue_mbox(struct lpfc_hba *phba, struct bsg_job *job,
 	if (mbox_req->inExtWLen || mbox_req->outExtWLen) {
 		from = pmbx;
 		ext = from + sizeof(MAILBOX_t);
-		pmboxq->ctx_buf = ext;
+		pmboxq->ext_buf = ext;
 		pmboxq->in_ext_byte_len =
 			mbox_req->inExtWLen * sizeof(uint32_t);
 		pmboxq->out_ext_byte_len =
@@ -4896,7 +4875,7 @@ lpfc_bsg_issue_mbox(struct lpfc_hba *phba, struct bsg_job *job,
 	pmboxq->mbox_cmpl = lpfc_bsg_issue_mbox_cmpl;
 
 	/* setup context field to pass wait_queue pointer to wake function */
-	pmboxq->ctx_ndlp = dd_data;
+	pmboxq->ctx_u.dd_data = dd_data;
 	dd_data->type = TYPE_MBOX;
 	dd_data->set_job = job;
 	dd_data->context_un.mbox.pmboxq = pmboxq;
@@ -4907,7 +4886,7 @@ lpfc_bsg_issue_mbox(struct lpfc_hba *phba, struct bsg_job *job,
 	dd_data->context_un.mbox.outExtWLen = mbox_req->outExtWLen;
 	job->dd_data = dd_data;
 
-	if ((vport->fc_flag & FC_OFFLINE_MODE) ||
+	if (test_bit(FC_OFFLINE_MODE, &vport->fc_flag) ||
 	    (!(phba->sli.sli_flag & LPFC_SLI_ACTIVE))) {
 		rc = lpfc_sli_issue_mbox(phba, pmboxq, MBX_POLL);
 		if (rc != MBX_SUCCESS) {
@@ -4992,283 +4971,6 @@ lpfc_bsg_mbox_cmd(struct bsg_job *job)
 	return rc;
 }
 
-/**
- * lpfc_bsg_menlo_cmd_cmp - lpfc_menlo_cmd completion handler
- * @phba: Pointer to HBA context object.
- * @cmdiocbq: Pointer to command iocb.
- * @rspiocbq: Pointer to response iocb.
- *
- * This function is the completion handler for iocbs issued using
- * lpfc_menlo_cmd function. This function is called by the
- * ring event handler function without any lock held. This function
- * can be called from both worker thread context and interrupt
- * context. This function also can be called from another thread which
- * cleans up the SLI layer objects.
- * This function copies the contents of the response iocb to the
- * response iocb memory object provided by the caller of
- * lpfc_sli_issue_iocb_wait and then wakes up the thread which
- * sleeps for the iocb completion.
- **/
-static void
-lpfc_bsg_menlo_cmd_cmp(struct lpfc_hba *phba,
-			struct lpfc_iocbq *cmdiocbq,
-			struct lpfc_iocbq *rspiocbq)
-{
-	struct bsg_job_data *dd_data;
-	struct bsg_job *job;
-	struct fc_bsg_reply *bsg_reply;
-	IOCB_t *rsp;
-	struct lpfc_dmabuf *bmp, *cmp, *rmp;
-	struct lpfc_bsg_menlo *menlo;
-	unsigned long flags;
-	struct menlo_response *menlo_resp;
-	unsigned int rsp_size;
-	int rc = 0;
-
-	dd_data = cmdiocbq->context_un.dd_data;
-	cmp = cmdiocbq->cmd_dmabuf;
-	bmp = cmdiocbq->bpl_dmabuf;
-	menlo = &dd_data->context_un.menlo;
-	rmp = menlo->rmp;
-	rsp = &rspiocbq->iocb;
-
-	/* Determine if job has been aborted */
-	spin_lock_irqsave(&phba->ct_ev_lock, flags);
-	job = dd_data->set_job;
-	if (job) {
-		bsg_reply = job->reply;
-		/* Prevent timeout handling from trying to abort job  */
-		job->dd_data = NULL;
-	}
-	spin_unlock_irqrestore(&phba->ct_ev_lock, flags);
-
-	/* Copy the job data or set the failing status for the job */
-
-	if (job) {
-		/* always return the xri, this would be used in the case
-		 * of a menlo download to allow the data to be sent as a
-		 * continuation of the exchange.
-		 */
-
-		menlo_resp = (struct menlo_response *)
-			bsg_reply->reply_data.vendor_reply.vendor_rsp;
-		menlo_resp->xri = rsp->ulpContext;
-		if (rsp->ulpStatus) {
-			if (rsp->ulpStatus == IOSTAT_LOCAL_REJECT) {
-				switch (rsp->un.ulpWord[4] & IOERR_PARAM_MASK) {
-				case IOERR_SEQUENCE_TIMEOUT:
-					rc = -ETIMEDOUT;
-					break;
-				case IOERR_INVALID_RPI:
-					rc = -EFAULT;
-					break;
-				default:
-					rc = -EACCES;
-					break;
-				}
-			} else {
-				rc = -EACCES;
-			}
-		} else {
-			rsp_size = rsp->un.genreq64.bdl.bdeSize;
-			bsg_reply->reply_payload_rcv_len =
-				lpfc_bsg_copy_data(rmp, &job->reply_payload,
-						   rsp_size, 0);
-		}
-
-	}
-
-	lpfc_sli_release_iocbq(phba, cmdiocbq);
-	lpfc_free_bsg_buffers(phba, cmp);
-	lpfc_free_bsg_buffers(phba, rmp);
-	lpfc_mbuf_free(phba, bmp->virt, bmp->phys);
-	kfree(bmp);
-	kfree(dd_data);
-
-	/* Complete the job if active */
-
-	if (job) {
-		bsg_reply->result = rc;
-		bsg_job_done(job, bsg_reply->result,
-			       bsg_reply->reply_payload_rcv_len);
-	}
-
-	return;
-}
-
-/**
- * lpfc_menlo_cmd - send an ioctl for menlo hardware
- * @job: fc_bsg_job to handle
- *
- * This function issues a gen request 64 CR ioctl for all menlo cmd requests,
- * all the command completions will return the xri for the command.
- * For menlo data requests a gen request 64 CX is used to continue the exchange
- * supplied in the menlo request header xri field.
- **/
-static int
-lpfc_menlo_cmd(struct bsg_job *job)
-{
-	struct lpfc_vport *vport = shost_priv(fc_bsg_to_shost(job));
-	struct fc_bsg_request *bsg_request = job->request;
-	struct fc_bsg_reply *bsg_reply = job->reply;
-	struct lpfc_hba *phba = vport->phba;
-	struct lpfc_iocbq *cmdiocbq;
-	IOCB_t *cmd;
-	int rc = 0;
-	struct menlo_command *menlo_cmd;
-	struct lpfc_dmabuf *bmp = NULL, *cmp = NULL, *rmp = NULL;
-	int request_nseg;
-	int reply_nseg;
-	struct bsg_job_data *dd_data;
-	struct ulp_bde64 *bpl = NULL;
-
-	/* in case no data is returned return just the return code */
-	bsg_reply->reply_payload_rcv_len = 0;
-
-	if (job->request_len <
-	    sizeof(struct fc_bsg_request) +
-		sizeof(struct menlo_command)) {
-		lpfc_printf_log(phba, KERN_WARNING, LOG_LIBDFC,
-				"2784 Received MENLO_CMD request below "
-				"minimum size\n");
-		rc = -ERANGE;
-		goto no_dd_data;
-	}
-
-	if (job->reply_len < sizeof(*bsg_reply) +
-				sizeof(struct menlo_response)) {
-		lpfc_printf_log(phba, KERN_WARNING, LOG_LIBDFC,
-				"2785 Received MENLO_CMD reply below "
-				"minimum size\n");
-		rc = -ERANGE;
-		goto no_dd_data;
-	}
-
-	if (!(phba->menlo_flag & HBA_MENLO_SUPPORT)) {
-		lpfc_printf_log(phba, KERN_WARNING, LOG_LIBDFC,
-				"2786 Adapter does not support menlo "
-				"commands\n");
-		rc = -EPERM;
-		goto no_dd_data;
-	}
-
-	menlo_cmd = (struct menlo_command *)
-		bsg_request->rqst_data.h_vendor.vendor_cmd;
-
-	/* allocate our bsg tracking structure */
-	dd_data = kmalloc(sizeof(struct bsg_job_data), GFP_KERNEL);
-	if (!dd_data) {
-		lpfc_printf_log(phba, KERN_WARNING, LOG_LIBDFC,
-				"2787 Failed allocation of dd_data\n");
-		rc = -ENOMEM;
-		goto no_dd_data;
-	}
-
-	bmp = kmalloc(sizeof(struct lpfc_dmabuf), GFP_KERNEL);
-	if (!bmp) {
-		rc = -ENOMEM;
-		goto free_dd;
-	}
-
-	bmp->virt = lpfc_mbuf_alloc(phba, 0, &bmp->phys);
-	if (!bmp->virt) {
-		rc = -ENOMEM;
-		goto free_bmp;
-	}
-
-	INIT_LIST_HEAD(&bmp->list);
-
-	bpl = (struct ulp_bde64 *)bmp->virt;
-	request_nseg = LPFC_BPL_SIZE/sizeof(struct ulp_bde64);
-	cmp = lpfc_alloc_bsg_buffers(phba, job->request_payload.payload_len,
-				     1, bpl, &request_nseg);
-	if (!cmp) {
-		rc = -ENOMEM;
-		goto free_bmp;
-	}
-	lpfc_bsg_copy_data(cmp, &job->request_payload,
-			   job->request_payload.payload_len, 1);
-
-	bpl += request_nseg;
-	reply_nseg = LPFC_BPL_SIZE/sizeof(struct ulp_bde64) - request_nseg;
-	rmp = lpfc_alloc_bsg_buffers(phba, job->reply_payload.payload_len, 0,
-				     bpl, &reply_nseg);
-	if (!rmp) {
-		rc = -ENOMEM;
-		goto free_cmp;
-	}
-
-	cmdiocbq = lpfc_sli_get_iocbq(phba);
-	if (!cmdiocbq) {
-		rc = -ENOMEM;
-		goto free_rmp;
-	}
-
-	cmd = &cmdiocbq->iocb;
-	cmd->un.genreq64.bdl.ulpIoTag32 = 0;
-	cmd->un.genreq64.bdl.addrHigh = putPaddrHigh(bmp->phys);
-	cmd->un.genreq64.bdl.addrLow = putPaddrLow(bmp->phys);
-	cmd->un.genreq64.bdl.bdeFlags = BUFF_TYPE_BLP_64;
-	cmd->un.genreq64.bdl.bdeSize =
-	    (request_nseg + reply_nseg) * sizeof(struct ulp_bde64);
-	cmd->un.genreq64.w5.hcsw.Fctl = (SI | LA);
-	cmd->un.genreq64.w5.hcsw.Dfctl = 0;
-	cmd->un.genreq64.w5.hcsw.Rctl = FC_RCTL_DD_UNSOL_CMD;
-	cmd->un.genreq64.w5.hcsw.Type = MENLO_TRANSPORT_TYPE; /* 0xfe */
-	cmd->ulpBdeCount = 1;
-	cmd->ulpClass = CLASS3;
-	cmd->ulpOwner = OWN_CHIP;
-	cmd->ulpLe = 1; /* Limited Edition */
-	cmdiocbq->cmd_flag |= LPFC_IO_LIBDFC;
-	cmdiocbq->vport = phba->pport;
-	/* We want the firmware to timeout before we do */
-	cmd->ulpTimeout = MENLO_TIMEOUT - 5;
-	cmdiocbq->cmd_cmpl = lpfc_bsg_menlo_cmd_cmp;
-	cmdiocbq->context_un.dd_data = dd_data;
-	cmdiocbq->cmd_dmabuf = cmp;
-	cmdiocbq->bpl_dmabuf = bmp;
-	if (menlo_cmd->cmd == LPFC_BSG_VENDOR_MENLO_CMD) {
-		cmd->ulpCommand = CMD_GEN_REQUEST64_CR;
-		cmd->ulpPU = MENLO_PU; /* 3 */
-		cmd->un.ulpWord[4] = MENLO_DID; /* 0x0000FC0E */
-		cmd->ulpContext = MENLO_CONTEXT; /* 0 */
-	} else {
-		cmd->ulpCommand = CMD_GEN_REQUEST64_CX;
-		cmd->ulpPU = 1;
-		cmd->un.ulpWord[4] = 0;
-		cmd->ulpContext = menlo_cmd->xri;
-	}
-
-	dd_data->type = TYPE_MENLO;
-	dd_data->set_job = job;
-	dd_data->context_un.menlo.cmdiocbq = cmdiocbq;
-	dd_data->context_un.menlo.rmp = rmp;
-	job->dd_data = dd_data;
-
-	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, cmdiocbq,
-		MENLO_TIMEOUT - 5);
-	if (rc == IOCB_SUCCESS)
-		return 0; /* done for now */
-
-	lpfc_sli_release_iocbq(phba, cmdiocbq);
-
-free_rmp:
-	lpfc_free_bsg_buffers(phba, rmp);
-free_cmp:
-	lpfc_free_bsg_buffers(phba, cmp);
-free_bmp:
-	if (bmp->virt)
-		lpfc_mbuf_free(phba, bmp->virt, bmp->phys);
-	kfree(bmp);
-free_dd:
-	kfree(dd_data);
-no_dd_data:
-	/* make error code available to userspace */
-	bsg_reply->result = rc;
-	job->dd_data = NULL;
-	return rc;
-}
-
 static int
 lpfc_forced_link_speed(struct bsg_job *job)
 {
@@ -5300,7 +5002,8 @@ lpfc_forced_link_speed(struct bsg_job *job)
 		goto job_error;
 	}
 
-	forced_reply->supported = (phba->hba_flag & HBA_FORCED_LINK_SPEED)
+	forced_reply->supported = test_bit(HBA_FORCED_LINK_SPEED,
+					   &phba->hba_flag)
 				   ? LPFC_FORCED_LINK_SPEED_SUPPORTED
 				   : LPFC_FORCED_LINK_SPEED_NOT_SUPPORTED;
 job_error:
@@ -5368,12 +5071,12 @@ lpfc_bsg_get_ras_config(struct bsg_job *job)
 		bsg_reply->reply_data.vendor_reply.vendor_rsp;
 
 	/* Current logging state */
-	spin_lock_irq(&phba->hbalock);
+	spin_lock_irq(&phba->ras_fwlog_lock);
 	if (ras_fwlog->state == ACTIVE)
 		ras_reply->state = LPFC_RASLOG_STATE_RUNNING;
 	else
 		ras_reply->state = LPFC_RASLOG_STATE_STOPPED;
-	spin_unlock_irq(&phba->hbalock);
+	spin_unlock_irq(&phba->ras_fwlog_lock);
 
 	ras_reply->log_level = phba->ras_fwlog.fw_loglevel;
 	ras_reply->log_buff_sz = phba->cfg_ras_fwlog_buffsize;
@@ -5430,13 +5133,13 @@ lpfc_bsg_set_ras_config(struct bsg_job *job)
 
 	if (action == LPFC_RASACTION_STOP_LOGGING) {
 		/* Check if already disabled */
-		spin_lock_irq(&phba->hbalock);
+		spin_lock_irq(&phba->ras_fwlog_lock);
 		if (ras_fwlog->state != ACTIVE) {
-			spin_unlock_irq(&phba->hbalock);
+			spin_unlock_irq(&phba->ras_fwlog_lock);
 			rc = -ESRCH;
 			goto ras_job_error;
 		}
-		spin_unlock_irq(&phba->hbalock);
+		spin_unlock_irq(&phba->ras_fwlog_lock);
 
 		/* Disable logging */
 		lpfc_ras_stop_fwlog(phba);
@@ -5447,10 +5150,10 @@ lpfc_bsg_set_ras_config(struct bsg_job *job)
 		 * FW-logging with new log-level. Return status
 		 * "Logging already Running" to caller.
 		 **/
-		spin_lock_irq(&phba->hbalock);
+		spin_lock_irq(&phba->ras_fwlog_lock);
 		if (ras_fwlog->state != INACTIVE)
 			action_status = -EINPROGRESS;
-		spin_unlock_irq(&phba->hbalock);
+		spin_unlock_irq(&phba->ras_fwlog_lock);
 
 		/* Enable logging */
 		rc = lpfc_sli4_ras_fwlog_init(phba, log_level,
@@ -5566,13 +5269,13 @@ lpfc_bsg_get_ras_fwlog(struct bsg_job *job)
 		goto ras_job_error;
 
 	/* Logging to be stopped before reading */
-	spin_lock_irq(&phba->hbalock);
+	spin_lock_irq(&phba->ras_fwlog_lock);
 	if (ras_fwlog->state == ACTIVE) {
-		spin_unlock_irq(&phba->hbalock);
+		spin_unlock_irq(&phba->ras_fwlog_lock);
 		rc = -EINPROGRESS;
 		goto ras_job_error;
 	}
-	spin_unlock_irq(&phba->hbalock);
+	spin_unlock_irq(&phba->ras_fwlog_lock);
 
 	if (job->request_len <
 	    sizeof(struct fc_bsg_request) +
@@ -5823,10 +5526,6 @@ lpfc_bsg_hst_vendor(struct bsg_job *job)
 	case LPFC_BSG_VENDOR_MBOX:
 		rc = lpfc_bsg_mbox_cmd(job);
 		break;
-	case LPFC_BSG_VENDOR_MENLO_CMD:
-	case LPFC_BSG_VENDOR_MENLO_DATA:
-		rc = lpfc_menlo_cmd(job);
-		break;
 	case LPFC_BSG_VENDOR_FORCED_LINK_SPEED:
 		rc = lpfc_forced_link_speed(job);
 		break;
@@ -5978,31 +5677,6 @@ lpfc_bsg_timeout(struct bsg_job *job)
 		if (phba->mbox_ext_buf_ctx.state == LPFC_BSG_MBOX_PORT)
 			phba->mbox_ext_buf_ctx.state = LPFC_BSG_MBOX_ABTS;
 		spin_unlock_irqrestore(&phba->ct_ev_lock, flags);
-		break;
-	case TYPE_MENLO:
-		/* Check to see if IOCB was issued to the port or not. If not,
-		 * remove it from the txq queue and call cancel iocbs.
-		 * Otherwise, call abort iotag.
-		 */
-		cmdiocb = dd_data->context_un.menlo.cmdiocbq;
-		spin_unlock_irqrestore(&phba->ct_ev_lock, flags);
-
-		spin_lock_irqsave(&phba->hbalock, flags);
-		list_for_each_entry_safe(check_iocb, next_iocb, &pring->txq,
-					 list) {
-			if (check_iocb == cmdiocb) {
-				list_move_tail(&check_iocb->list, &completions);
-				break;
-			}
-		}
-		if (list_empty(&completions))
-			lpfc_sli_issue_abort_iotag(phba, pring, cmdiocb, NULL);
-		spin_unlock_irqrestore(&phba->hbalock, flags);
-		if (!list_empty(&completions)) {
-			lpfc_sli_cancel_iocbs(phba, &completions,
-					      IOSTAT_LOCAL_REJECT,
-					      IOERR_SLI_ABORTED);
-		}
 		break;
 	default:
 		spin_unlock_irqrestore(&phba->ct_ev_lock, flags);

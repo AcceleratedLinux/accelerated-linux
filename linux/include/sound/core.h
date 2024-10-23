@@ -14,6 +14,7 @@
 #include <linux/pm.h>			/* pm_message_t */
 #include <linux/stringify.h>
 #include <linux/printk.h>
+#include <linux/xarray.h>
 
 /* number of supported soundcards */
 #ifdef CONFIG_SND_DYNAMIC_MINORS
@@ -95,14 +96,19 @@ struct snd_card {
 								private data */
 	struct list_head devices;	/* devices */
 
-	struct device ctl_dev;		/* control device */
+	struct device *ctl_dev;		/* control device */
 	unsigned int last_numid;	/* last used numeric ID */
-	struct rw_semaphore controls_rwsem;	/* controls list lock */
+	struct rw_semaphore controls_rwsem;	/* controls lock (list and values) */
 	rwlock_t ctl_files_rwlock;	/* ctl_files list lock */
 	int controls_count;		/* count of all controls */
 	size_t user_ctl_alloc_size;	// current memory allocation by user controls.
 	struct list_head controls;	/* all controls for this card */
 	struct list_head ctl_files;	/* active control files */
+#ifdef CONFIG_SND_CTL_FAST_LOOKUP
+	struct xarray ctl_numids;	/* hash table for numids */
+	struct xarray ctl_hash;		/* hash table for ctl id matching */
+	bool ctl_hash_collision;	/* ctl_hash collision seen? */
+#endif
 
 	struct snd_info_entry *proc_root;	/* root for soundcard specific files */
 	struct proc_dir_entry *proc_root_link;	/* number link to real id */
@@ -226,14 +232,14 @@ static inline struct device *snd_card_get_device_link(struct snd_card *card)
 
 extern int snd_major;
 extern int snd_ecards_limit;
-extern struct class *sound_class;
+extern const struct class sound_class;
 #ifdef CONFIG_SND_DEBUG
 extern struct dentry *sound_debugfs_root;
 #endif
 
 void snd_request_card(int card);
 
-void snd_device_initialize(struct device *dev, struct snd_card *card);
+int snd_device_alloc(struct device **dev_p, struct snd_card *card);
 
 int snd_register_device(int type, struct snd_card *card, int dev,
 			const struct file_operations *f_ops,
@@ -280,10 +286,10 @@ int snd_devm_card_new(struct device *parent, int idx, const char *xid,
 		      struct module *module, size_t extra_size,
 		      struct snd_card **card_ret);
 
-int snd_card_disconnect(struct snd_card *card);
+void snd_card_disconnect(struct snd_card *card);
 void snd_card_disconnect_sync(struct snd_card *card);
-int snd_card_free(struct snd_card *card);
-int snd_card_free_when_closed(struct snd_card *card);
+void snd_card_free(struct snd_card *card);
+void snd_card_free_when_closed(struct snd_card *card);
 int snd_card_free_on_error(struct device *dev, int ret);
 void snd_card_set_id(struct snd_card *card, const char *id);
 int snd_card_register(struct snd_card *card);
@@ -500,5 +506,13 @@ snd_pci_quirk_lookup_id(u16 vendor, u16 device,
 	return NULL;
 }
 #endif
+
+/* async signal helpers */
+struct snd_fasync;
+
+int snd_fasync_helper(int fd, struct file *file, int on,
+		      struct snd_fasync **fasyncp);
+void snd_kill_fasync(struct snd_fasync *fasync, int signal, int poll);
+void snd_fasync_free(struct snd_fasync *fasync);
 
 #endif /* __SOUND_CORE_H */

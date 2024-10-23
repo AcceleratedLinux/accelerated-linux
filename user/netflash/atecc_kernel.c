@@ -163,3 +163,37 @@ int hmac(atecc_ctx *ctx, uint8_t slot_id,
 
 	return rx_buff[1];
 }
+
+
+/*
+ * Read 4 bytes from one of the memory zones.
+ */
+int atecc_read4(atecc_ctx *ctx, const uint8_t zone, const uint16_t addr, uint8_t *bytes)
+{
+	struct atsha204_i2c_exec_data msgset;
+	struct atsha204_i2c_msg msgs[1];
+	uint8_t cmd_read[4];
+	uint8_t buf[8];
+	int ret;
+
+	cmd_read[0] = ATECC_OP_READ;
+	cmd_read[1] = zone;
+	cmd_read[2] = addr & 0xff;
+	cmd_read[3] = (addr >> 8) & 0xff;
+
+	msgs[0].cmd = cmd_read;
+	msgs[0].cmd_len = sizeof(cmd_read);
+	msgs[0].resp = buf;
+	msgs[0].resp_len = sizeof(buf);
+
+	msgset.msgs = msgs;
+	msgset.nmsgs = 1;
+
+	ret = ioctl(ctx->fd, ATSHA204_I2C_IOCTL_EXEC, &msgset);
+	if (ret < 0)
+		return ret;
+
+	memcpy(bytes, &buf[1], 4);
+	return 0;
+}
+

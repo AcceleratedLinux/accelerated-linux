@@ -315,7 +315,7 @@ struct w83791d_data {
 static int w83791d_probe(struct i2c_client *client);
 static int w83791d_detect(struct i2c_client *client,
 			  struct i2c_board_info *info);
-static int w83791d_remove(struct i2c_client *client);
+static void w83791d_remove(struct i2c_client *client);
 
 static int w83791d_read(struct i2c_client *client, u8 reg);
 static int w83791d_write(struct i2c_client *client, u8 reg, u8 value);
@@ -328,7 +328,7 @@ static void w83791d_print_debug(struct w83791d_data *data, struct device *dev);
 static void w83791d_init_client(struct i2c_client *client);
 
 static const struct i2c_device_id w83791d_id[] = {
-	{ "w83791d", 0 },
+	{ "w83791d" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, w83791d_id);
@@ -338,7 +338,7 @@ static struct i2c_driver w83791d_driver = {
 	.driver = {
 		.name = "w83791d",
 	},
-	.probe_new	= w83791d_probe,
+	.probe		= w83791d_probe,
 	.remove		= w83791d_remove,
 	.id_table	= w83791d_id,
 	.detect		= w83791d_detect,
@@ -1333,7 +1333,7 @@ static int w83791d_detect(struct i2c_client *client,
 	if (val1 != 0x71 || val2 != 0x5c)
 		return -ENODEV;
 
-	strlcpy(info->type, "w83791d", I2C_NAME_SIZE);
+	strscpy(info->type, "w83791d", I2C_NAME_SIZE);
 
 	return 0;
 }
@@ -1405,14 +1405,12 @@ error4:
 	return err;
 }
 
-static int w83791d_remove(struct i2c_client *client)
+static void w83791d_remove(struct i2c_client *client)
 {
 	struct w83791d_data *data = i2c_get_clientdata(client);
 
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &w83791d_group);
-
-	return 0;
 }
 
 static void w83791d_init_client(struct i2c_client *client)

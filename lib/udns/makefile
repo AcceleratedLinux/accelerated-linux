@@ -1,4 +1,4 @@
-URL = http://www.corpit.ru/mjt/udns/udns-0.4.tar.gz
+URL = https://www.corpit.ru/mjt/udns/udns-0.4.tar.gz
 BUILDTARGET = my_built
 INSTALLTARGET = my_installed
 include $(ROOTDIR)/tools/automake.inc

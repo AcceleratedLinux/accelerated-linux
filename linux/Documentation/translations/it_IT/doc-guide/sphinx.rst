@@ -5,8 +5,9 @@
 
 .. _it_sphinxdoc:
 
-Introduzione
-============
+=============================================
+Usare Sphinx per la documentazione del kernel
+=============================================
 
 Il kernel Linux usa `Sphinx`_ per la generazione della documentazione a partire
 dai file `reStructuredText`_ che si trovano nella cartella ``Documentation``.
@@ -150,7 +151,8 @@ Ovviamente, per generare la documentazione, Sphinx (``sphinx-build``)
 dev'essere installato. Se disponibile, il tema *Read the Docs* per Sphinx
 verrà utilizzato per ottenere una documentazione HTML più gradevole.
 Per la documentazione in formato PDF, invece, avrete bisogno di ``XeLaTeX`
-e di ``convert(1)`` disponibile in ImageMagick (https://www.imagemagick.org).
+e di ``convert(1)`` disponibile in ImageMagick
+(https://www.imagemagick.org). \ [#ink]_
 Tipicamente, tutti questi pacchetti sono disponibili e pacchettizzati nelle
 distribuzioni Linux.
 
@@ -158,8 +160,22 @@ Per poter passare ulteriori opzioni a Sphinx potete utilizzare la variabile
 make ``SPHINXOPTS``. Per esempio, se volete che Sphinx sia più verboso durante
 la generazione potete usare il seguente comando ``make SPHINXOPTS=-v htmldocs``.
 
+Potete anche personalizzare l'ouptut html passando un livello aggiuntivo
+DOCS_CSS usando la rispettiva variabile d'ambiente ``DOCS_CSS``.
+
+La variable make ``SPHINXDIRS`` è utile quando si vuole generare solo una parte
+della documentazione. Per esempio, si possono generare solo di documenti in
+``Documentation/doc-guide`` eseguendo ``make SPHINXDIRS=doc-guide htmldocs``. La
+sezione dedicata alla documentazione di ``make help`` vi mostrerà quali sotto
+cartelle potete specificare.
+
 Potete eliminare la documentazione generata tramite il comando
 ``make cleandocs``.
+
+.. [#ink] Avere installato anche ``inkscape(1)`` dal progetto Inkscape ()
+          potrebbe aumentare la qualità delle immagini che verranno integrate
+          nel documento PDF, specialmente per quando si usando rilasci del
+          kernel uguali o superiori a 5.18
 
 Scrivere la documentazione
 ==========================
@@ -276,11 +292,11 @@ incrociato quando questa ha una voce nell'indice.  Se trovate degli usi di
 Tabelle a liste
 ---------------
 
-Raccomandiamo l'uso delle tabelle in formato lista (*list table*). Le tabelle
-in formato lista sono liste di liste. In confronto all'ASCII-art potrebbero
-non apparire di facile lettura nei file in formato testo. Il loro vantaggio è
-che sono facili da creare o modificare e che la differenza di una modifica è
-molto più significativa perché limitata alle modifiche del contenuto.
+Il formato ``list-table`` può essere utile per tutte quelle tabelle che non
+possono essere facilmente scritte usando il formato ASCII-art di Sphinx. Però,
+questo genere di tabelle sono illeggibili per chi legge direttamente i file di
+testo. Dunque, questo formato dovrebbe essere evitato senza forti argomenti che
+ne giustifichino l'uso.
 
 La ``flat-table`` è anch'essa una lista di liste simile alle ``list-table``
 ma con delle funzionalità aggiuntive:

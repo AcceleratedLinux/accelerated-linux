@@ -53,8 +53,6 @@ image.linux:
 # for debugging
 image.bin: image.linux
 	genromfs -V "ROMdisk" -f $(ROMFSIMG) -d $(ROMFSDIR)
-	cat $(IMAGEDIR)/linux.bin $(ROMFSIMG) > $(IMAGE)
-	$(ROOTDIR)/bin/cksum -b -o 2 $(IMAGE) >> $(IMAGE)
 	BSS=`$(CROSS)objdump --headers $(ROOTDIR)/$(LINUXDIR)/linux | \
 	  grep .bss` ; \
 	ADDR=`set -- $${BSS} ; echo 0x$${4}` ; \
@@ -62,6 +60,7 @@ image.bin: image.linux
 	  --adjust-section-vma=.romfs=$${ADDR} --no-adjust-warnings \
 	  --set-section-flags=.romfs=alloc,load,data   \
 	  $(ROOTDIR)/$(LINUXDIR)/linux $(ELFIMAGE) 2> /dev/null
+	$(CROSS)objcopy -O binary $(ELFIMAGE) $(IMAGE)
 
 # Create a root filesystem on an SD card
 #

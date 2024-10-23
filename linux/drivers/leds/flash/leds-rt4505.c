@@ -393,12 +393,11 @@ static int rt4505_probe(struct i2c_client *client)
 	return 0;
 }
 
-static int rt4505_remove(struct i2c_client *client)
+static void rt4505_remove(struct i2c_client *client)
 {
 	struct rt4505_priv *priv = i2c_get_clientdata(client);
 
 	v4l2_flash_release(priv->v4l2_flash);
-	return 0;
 }
 
 static void rt4505_shutdown(struct i2c_client *client)
@@ -420,7 +419,7 @@ static struct i2c_driver rt4505_driver = {
 		.name = "rt4505",
 		.of_match_table = of_match_ptr(rt4505_leds_match),
 	},
-	.probe_new = rt4505_probe,
+	.probe = rt4505_probe,
 	.remove = rt4505_remove,
 	.shutdown = rt4505_shutdown,
 };

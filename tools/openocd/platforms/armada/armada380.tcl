@@ -4,17 +4,17 @@
 # (C) Copyright 2013,2016,  greg.ungerer@accelerated.com
 #
 
-jtag newtap armada380 dap -irlen 4 -ircapture 0x1 -irmask 0xf -expected-id 0x4ba00477
-target create armada380.cpu cortex_a8 -chain-position armada380.dap
-
+jtag newtap armada380 cpu -irlen 4 -ircapture 0x1 -irmask 0xf -expected-id 0x4ba00477
+dap create armada380.dap -chain-position armada380.cpu
+target create armada380 cortex_a -dap armada380.dap
 
 proc armada380_dbginit {target} {
      cortex_a dbginit
 }
 
-armada380.cpu configure -event reset-assert-post "armada380_dbginit armada380.cpu"
+armada380 configure -event reset-assert-post "armada380_dbginit armada380"
 
 # We need to init now, so we can run the apsel command.
-init
-dap apsel 1
+# init
+armada380.dap apsel 1
 

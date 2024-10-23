@@ -1,0 +1,119 @@
+From 7cc55e5e6c73a9f5a81e487b8bcc45014adac175 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Wed, 26 Apr 2023 12:35:08 +0100
+Subject: [PATCH] serial: fix flow control initialisation
+
+The IXON and IXOFF flags were being incorrectly applied to the serial
+port's termios cflag rather than iflag.
+---
+ src/dce.c    | 11 ++++++-----
+ src/ip232.c  |  2 +-
+ src/ip232.h  |  2 +-
+ src/serial.c |  8 +++++---
+ src/serial.h |  2 +-
+ 5 files changed, 14 insertions(+), 11 deletions(-)
+
+diff --git a/src/dce.c b/src/dce.c
+index 3cd25e7..6b8d584 100644
+--- a/src/dce.c
++++ b/src/dce.c
+@@ -47,7 +47,8 @@ int dce_connect(dce_config *cfg) {
+ }
+ 
+ int dce_set_flow_control(dce_config *cfg, int opts) {
+-  int status = 0;
++  unsigned iflag = 0;
++  unsigned cflag = 0;
+   int rc = 0;
+ 
+   LOG_ENTER();
+@@ -56,18 +57,18 @@ int dce_set_flow_control(dce_config *cfg, int opts) {
+   } else {
+     if((opts & MDM_FC_RTS) != 0) {
+       LOG(LOG_ALL, "Setting RTSCTS flow control");
+-      status |= CRTSCTS;
++      cflag |= CRTSCTS;
+     }
+     if((opts & MDM_FC_XON) != 0) {
+-      status |= (IXON | IXOFF);
++      iflag |= (IXON | IXOFF);
+       LOG(LOG_ALL, "Setting XON/XOFF flow control");
+     }
+   }
+ 
+   if (cfg->is_ip232) {
+-    rc = ip232_set_flow_control(cfg, status);
++    rc = ip232_set_flow_control(cfg, iflag, cflag);
+   } else {
+-    rc = ser_set_flow_control(cfg->fd, status);
++    rc = ser_set_flow_control(cfg->fd, iflag, cflag);
+   }
+ 
+   LOG_EXIT()
+diff --git a/src/ip232.c b/src/ip232.c
+index cdca6ad..05a2906 100644
+--- a/src/ip232.c
++++ b/src/ip232.c
+@@ -93,7 +93,7 @@ int ip232_init_conn(dce_config *cfg) {
+ }
+ 
+ 
+-int ip232_set_flow_control(dce_config *cfg, int status) {
++int ip232_set_flow_control(dce_config *cfg, unsigned iflag, unsigned cflag) {
+   return 0;
+ }
+ 
+diff --git a/src/ip232.h b/src/ip232.h
+index ec3e5e5..1fa4baf 100644
+--- a/src/ip232.h
++++ b/src/ip232.h
+@@ -10,7 +10,7 @@
+ #define MSG_BUSY '+'
+ 
+ int ip232_init_conn(dce_config *);
+-int ip232_set_flow_control(dce_config *, int status);
++int ip232_set_flow_control(dce_config *, unsigned iflag, unsigned cflag);
+ int ip232_get_control_lines(dce_config *);
+ int ip232_set_control_lines(dce_config *, int state);
+ int ip232_write(dce_config *, unsigned char *data, int len);
+diff --git a/src/serial.c b/src/serial.c
+index b32a1ec..f93fdc3 100644
+--- a/src/serial.c
++++ b/src/serial.c
+@@ -176,15 +176,17 @@ int ser_init_conn(char *tty, int speed) {
+   return fd;
+ }
+ 
+-int ser_set_flow_control(int fd, int status) {
++int ser_set_flow_control(int fd, unsigned iflag, unsigned cflag) {
+   struct termios tio;
+   if(0 != tcgetattr(fd, &tio)) {
+     ELOG(LOG_FATAL, "Could not get serial port attributes");
+     return -1;
+   }
+   // turn all off.
+-  tio.c_cflag &= ~(IXON | IXOFF | CRTSCTS);
+-  tio.c_cflag |= status;
++  tio.c_iflag &= ~(IXON | IXOFF);
++  tio.c_cflag &= ~CRTSCTS;
++  tio.c_iflag |= iflag;
++  tio.c_cflag |= cflag;
+   if(0 != tcsetattr(fd, TCSANOW, &tio)) {
+     ELOG(LOG_FATAL,"Could not set serial port attributes");
+     return -1;
+diff --git a/src/serial.h b/src/serial.h
+index 17fe0a2..2d0e3e8 100644
+--- a/src/serial.h
++++ b/src/serial.h
+@@ -8,7 +8,7 @@
+ 
+ int ser_get_bps_const(int speed);
+ int ser_init_conn(char *tty, int speed);
+-int ser_set_flow_control(int fd, int status);
++int ser_set_flow_control(int fd, unsigned iflag, unsigned cflag);
+ int ser_get_control_lines(int fd);
+ int ser_set_control_lines(int fd, int state);
+ int ser_write(int fd, unsigned char *data,int len);
+-- 
+2.34.1
+

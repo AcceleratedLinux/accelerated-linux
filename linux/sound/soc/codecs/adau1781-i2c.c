@@ -30,10 +30,9 @@ static int adau1781_i2c_probe(struct i2c_client *client)
 		id->driver_data, NULL);
 }
 
-static int adau1781_i2c_remove(struct i2c_client *client)
+static void adau1781_i2c_remove(struct i2c_client *client)
 {
 	adau17x1_remove(&client->dev);
-	return 0;
 }
 
 static const struct i2c_device_id adau1781_i2c_ids[] = {
@@ -57,7 +56,7 @@ static struct i2c_driver adau1781_i2c_driver = {
 		.name = "adau1781",
 		.of_match_table = of_match_ptr(adau1781_i2c_dt_ids),
 	},
-	.probe_new = adau1781_i2c_probe,
+	.probe = adau1781_i2c_probe,
 	.remove = adau1781_i2c_remove,
 	.id_table = adau1781_i2c_ids,
 };

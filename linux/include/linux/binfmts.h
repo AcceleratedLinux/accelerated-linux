@@ -43,9 +43,6 @@ struct linux_binprm {
 		 * original userspace.
 		 */
 		point_of_no_return:1;
-#ifdef __alpha__
-	unsigned int taso:1;
-#endif
 	struct file *executable; /* Executable to pass to the interpreter */
 	struct file *interpreter;
 	struct file *file;
@@ -92,6 +89,16 @@ struct linux_binfmt {
 	unsigned long min_coredump;	/* minimal dump size */
 #endif
 } __randomize_layout;
+
+#if IS_ENABLED(CONFIG_BINFMT_MISC)
+struct binfmt_misc {
+	struct list_head entries;
+	rwlock_t entries_lock;
+	bool enabled;
+} __randomize_layout;
+
+extern struct binfmt_misc init_binfmt_misc;
+#endif
 
 extern void __register_binfmt(struct linux_binfmt *fmt, int insert);
 

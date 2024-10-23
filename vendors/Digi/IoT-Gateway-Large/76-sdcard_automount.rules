@@ -1,0 +1,9 @@
+# SD card reader at MMC1
+ENV{DEVPATH}!="/devices/platform/soc/58007000.mmc/mmc_host/mmc1/mmc1:59b4/*", GOTO="end"
+
+# SD card reader with no card inserted has size 0
+KERNEL=="mmcblk1", ACTION=="add", ATTRS{size}!="0", RUN+="/bin/storage add /dev/%k sd"
+KERNEL=="mmcblk1", ACTION=="change", ATTRS{size}!="0", ENV{DISK_MEDIA_CHANGE}=="1", RUN+="/bin/storage add /dev/%k sd"
+KERNEL=="mmcblk1", ACTION=="change", ATTRS{size}=="0", RUN+="/bin/storage remove /dev/%k sd"
+
+LABEL="end"

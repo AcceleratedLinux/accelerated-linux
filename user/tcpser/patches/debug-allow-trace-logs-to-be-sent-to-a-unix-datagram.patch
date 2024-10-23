@@ -1,0 +1,123 @@
+From dc32831e46b2059f125d10e66631d456b0886a50 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Wed, 24 May 2023 15:03:43 +0100
+Subject: [PATCH] debug: allow trace logs to be sent to a unix datagram socket
+
+By default trace logs, enabled with the '-t' option, are formatted and
+sent to stdout. Add support for new '-u' option to specify the path of a
+unix datagram socket to which raw traces are sent. Each datagram
+consists of a single direction octet (zero=output, non-zero=input),
+followed by raw data.
+---
+ src/debug.c | 17 +++++++++++++++++
+ src/debug.h |  1 +
+ src/init.c  | 20 +++++++++++++++++++-
+ 3 files changed, 37 insertions(+), 1 deletion(-)
+
+diff --git a/src/debug.c b/src/debug.c
+index 8198609..56fded4 100644
+--- a/src/debug.c
++++ b/src/debug.c
+@@ -2,12 +2,16 @@
+ #include <time.h>
+ #include <pthread.h>
+ #include <stdio.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <sys/uio.h>
+ #define DEBUG_VARS 1      // need this so we don't get extern defs
+ #include "debug.h"
+ 
+ int log_level = 0;
+ FILE *log_file;
+ int trace_flags = 0;
++int trace_sock = -1;
+ char *log_desc[LOG_TRACE + 1];
+ pthread_mutex_t log_mutex;
+ 
+@@ -75,6 +79,19 @@ void log_trace(int type, unsigned char *line, int len) {
+     return;
+ 
+   if((type & trace_flags) != 0) {
++    if (trace_sock >= 0) {
++      unsigned char recv = (type & (TRACE_MODEM_IN | TRACE_SERIAL_IN | TRACE_IP_IN)) ? 1 : 0;
++      struct iovec iov[] = {
++        { .iov_base = &recv, .iov_len = sizeof(recv) }, /* the first octet indicates direction */
++        { .iov_base = line, .iov_len = len },
++      };
++      struct msghdr msg = {
++        .msg_iov = iov,
++        .msg_iovlen = sizeof(iov) / sizeof(*iov),
++      };
++      sendmsg(trace_sock, &msg, 0);
++      return;
++    }
+     text[16] = 0;
+     for(i = 0; i < len; i++) {
+       if((i % 16) == 0) {
+diff --git a/src/debug.h b/src/debug.h
+index 0e9b29c..60c278e 100644
+--- a/src/debug.h
++++ b/src/debug.h
+@@ -66,5 +66,6 @@ void log_end();
+ 
+ extern int log_level;
+ extern FILE *log_file;
++extern int trace_sock;
+ 
+ #endif
+diff --git a/src/init.c b/src/init.c
+index baa5e37..4320e6a 100644
+--- a/src/init.c
++++ b/src/init.c
+@@ -1,6 +1,9 @@
+ #include <stdio.h>
+ #include <stdlib.h>       // for exit,atoi
+ #include <unistd.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <sys/un.h>
+ #include "version.h"
+ #include "debug.h"
+ #include "phone_book.h"
+@@ -16,6 +19,7 @@ void print_help(char* name) {
+   fprintf(stderr, "       'S' = serial output\n");
+   fprintf(stderr, "       'i' = IP input\n");
+   fprintf(stderr, "       'I' = IP output\n");
++  fprintf(stderr, "  -u   trace file (unix datagram socket)\n");
+   fprintf(stderr, "  -l   0 (NONE), 1 (FATAL) - 7 (DEBUG_X) (defaults to 0)\n");
+   fprintf(stderr, "  -L   log file (defaults to stderr)\n");
+   fprintf(stderr, "\n");
+@@ -66,7 +70,7 @@ int init(int argc,
+   cfg[0].line_speed_follows_port_speed = TRUE;
+ 
+   while(opt>-1 && i < max_modem) {
+-    opt=getopt(argc, argv, "p:s:b:S:d:v:hw:i:Il:L:t:n:a:A:c:C:N:B:T:D:V");
++    opt=getopt(argc, argv, "p:s:b:S:d:v:hw:i:Il:L:t:u:n:a:A:c:C:N:B:T:D:V");
+     switch(opt) {
+       case 't':
+         trace_flags = log_get_trace_flags();
+@@ -94,6 +98,20 @@ int init(int argc,
+           log_set_trace_flags(trace_flags);
+         }
+         break;
++      case 'u':
++        trace_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
++        if (trace_sock < 0) {
++          LOG(LOG_ERROR, "Could not create trace socket: %m");
++        } else {
++          struct sockaddr_un sun = {.sun_family = AF_UNIX};
++          strlcpy(sun.sun_path, optarg, sizeof(sun.sun_path));
++          if (connect(trace_sock, (struct sockaddr*)&sun, sizeof(sun)) < 0) {
++            LOG(LOG_ERROR, "Could not connect to '%s': %m", optarg);
++            close(trace_sock);
++            trace_sock = -1;
++          }
++        }
++        break;
+       case 'a':
+         strncpy(cfg[i].local_answer, optarg, sizeof(cfg[i].local_answer));
+         break;
+-- 
+2.34.1
+

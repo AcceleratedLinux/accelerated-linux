@@ -1,0 +1,2 @@
+# Major number is dynamically allocated for ttyLP*, cannot statically create it
+SUBSYSTEM=="tty", KERNEL=="ttyLP2", SYMLINK+="serial/port1"

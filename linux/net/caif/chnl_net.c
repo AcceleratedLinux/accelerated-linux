@@ -31,6 +31,7 @@
 /*This list is protected by the rtnl lock. */
 static LIST_HEAD(chnl_net_list);
 
+MODULE_DESCRIPTION("ST-Ericsson CAIF modem protocol GPRS network device");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_RTNL_LINK("caif");
 
@@ -310,9 +311,6 @@ static int chnl_net_open(struct net_device *dev)
 
 	if (result == 0) {
 		pr_debug("connect timeout\n");
-		caif_disconnect_client(dev_net(dev), &priv->chnl);
-		priv->state = CAIF_DISCONNECTED;
-		pr_debug("state disconnected\n");
 		result = -ETIMEDOUT;
 		goto error;
 	}

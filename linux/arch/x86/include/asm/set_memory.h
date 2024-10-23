@@ -6,6 +6,9 @@
 #include <asm/page.h>
 #include <asm-generic/set_memory.h>
 
+#define set_memory_rox set_memory_rox
+int set_memory_rox(unsigned long addr, int numpages);
+
 /*
  * The set_memory_* API can be used to change various attributes of a virtual
  * address range. The attributes include:
@@ -44,6 +47,7 @@ int set_memory_uc(unsigned long addr, int numpages);
 int set_memory_wc(unsigned long addr, int numpages);
 int set_memory_wb(unsigned long addr, int numpages);
 int set_memory_np(unsigned long addr, int numpages);
+int set_memory_p(unsigned long addr, int numpages);
 int set_memory_4k(unsigned long addr, int numpages);
 int set_memory_encrypted(unsigned long addr, int numpages);
 int set_memory_decrypted(unsigned long addr, int numpages);

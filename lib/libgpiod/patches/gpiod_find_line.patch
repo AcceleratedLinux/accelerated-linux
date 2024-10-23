@@ -1,0 +1,85 @@
+
+The 2.0 API dropped the ability to find lines by name.
+Add it back.
+
+--- libgpiod-2.0/lib/misc.c.orig	2023-11-01 22:59:21.259994352 +1000
++++ libgpiod-2.0/lib/misc.c	2023-11-01 23:13:16.742126304 +1000
+@@ -14,3 +14,59 @@
+ {
+ 	return GPIOD_VERSION_STR;
+ }
++
++
++#include <dirent.h>
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <linux/limits.h>
++extern int versionsort(const struct dirent **a, const struct dirent **b);
++
++static int chip_dir_filter(const struct dirent *entry)
++{
++	char path[PATH_MAX];
++	if (strncmp(entry->d_name, "gpiochip", 8) != 0)
++		return 0;
++	snprintf(path, sizeof path, "/dev/%s", entry->d_name);
++	return gpiod_is_gpiochip_device(path);
++}
++
++GPIOD_API
++bool gpiod_find_line(const char *name, struct gpiod_chip **chip_return,
++		     unsigned int *offset_return)
++{
++	int i;
++	int ret = false;
++	struct dirent **dirents;
++	int dirents_cnt = scandir("/dev", &dirents, chip_dir_filter,
++				  versionsort);
++	if (dirents_cnt == -1)
++		return false;
++	for (i = 0; i < dirents_cnt; i++) {
++		char path[PATH_MAX];
++		struct gpiod_chip *chip;
++		int offset;
++
++		snprintf(path, sizeof path, "/dev/%s", dirents[i]->d_name);
++		chip = gpiod_chip_open(path);
++		if (!chip)
++			continue;
++		offset = gpiod_chip_get_line_offset_from_name(chip, name);
++		if (offset != -1) {
++			if (chip_return)
++				*chip_return = chip;
++			else
++				gpiod_chip_close(chip);
++			if (offset_return)
++				*offset_return = offset;
++			ret = true;
++			break;
++		}
++		gpiod_chip_close(chip);
++	}
++	for (i = 0; i < dirents_cnt; i++)
++		free(dirents[i]);
++	free(dirents);
++	return ret;
++}
+--- libgpiod-2.0/include/gpiod.h.orig	2023-11-01 22:59:35.567825029 +1000
++++ libgpiod-2.0/include/gpiod.h	2023-11-01 23:04:47.052138319 +1000
+@@ -1232,6 +1232,16 @@
+ const char *gpiod_api_version(void);
+ 
+ /**
++ * @brief Finds the first line in the system with the given name.
++ * @param name  The GPIO name to search for.
++ * @param chip_return Storage for chip with named line. Set to NULL on error.
++ * @param offset_return Storage for the named line's offset.
++ * @return true if found.
++ */
++bool gpiod_find_line(const char *name, struct gpiod_chip **chip_return,
++		     unsigned int *offset_return);
++
++/**
+  * @}
+  */
+ 

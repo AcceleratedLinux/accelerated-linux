@@ -42,10 +42,6 @@ echo 120 > /sys/class/gpio/export
 echo in > /sys/class/gpio/gpio120/direction
 echo 1   > /sys/class/gpio/gpio120/active_low
 
-# developer key
-echo 86 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio86/direction
-
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory
 	exit 0

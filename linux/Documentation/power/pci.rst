@@ -315,7 +315,7 @@ that these callbacks operate on::
 					   configuration space */
 	unsigned int	pme_support:5;	/* Bitmask of states from which PME#
 					   can be generated */
-	unsigned int	pme_interrupt:1;/* Is native PCIe PME signaling used? */
+	unsigned int	pme_poll:1;	/* Poll device's PME status bit */
 	unsigned int	d1_support:1;	/* Low power state D1 is supported */
 	unsigned int	d2_support:1;	/* Low power state D2 is supported */
 	unsigned int	no_d1d2:1;	/* D1 and D2 are forbidden */
@@ -333,7 +333,7 @@ struct pci_dev.
 The PCI subsystem's first task related to device power management is to
 prepare the device for power management and initialize the fields of struct
 pci_dev used for this purpose.  This happens in two functions defined in
-drivers/pci/pci.c, pci_pm_init() and platform_pci_wakeup_init().
+drivers/pci/, pci_pm_init() and pci_acpi_setup().
 
 The first of these functions checks if the device supports native PCI PM
 and if that's the case the offset of its power management capability structure
@@ -625,7 +625,7 @@ The PCI subsystem-level callbacks they correspond to::
 	pci_pm_poweroff()
 	pci_pm_poweroff_noirq()
 
-work in analogy with pci_pm_suspend() and pci_pm_poweroff_noirq(), respectively,
+work in analogy with pci_pm_suspend() and pci_pm_suspend_noirq(), respectively,
 although they don't attempt to save the device's standard configuration
 registers.
 

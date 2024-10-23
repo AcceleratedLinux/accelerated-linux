@@ -10,7 +10,7 @@ maintainers:
   - Hector Martin <marcan@marcan.st>
 
 allOf:
-  - $ref: "power-domain.yaml#"
+  - $ref: power-domain.yaml#
 
 description: |
   Apple SoCs include PMGR blocks responsible for power management,
@@ -32,6 +32,7 @@ properties:
     items:
       - enum:
           - apple,t8103-pmgr-pwrstate
+          - apple,t8112-pmgr-pwrstate
           - apple,t6000-pmgr-pwrstate
       - const: apple,pmgr-pwrstate
 

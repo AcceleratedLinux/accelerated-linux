@@ -1,3 +1,4 @@
 inline-ntp-syscalls-fallback.patch
 no-pthread-warmup.patch
 fix-pthread-stack-min.patch
+ntpdate-ignore-sanity-checks.patch

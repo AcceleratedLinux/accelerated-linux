@@ -182,7 +182,8 @@ static int __pnp_bus_suspend(struct device *dev, pm_message_t state)
 			return error;
 	}
 
-	if (pnp_can_disable(pnp_dev)) {
+	/* can_write is necessary to be able to re-start the device on resume */
+	if (pnp_can_disable(pnp_dev) && pnp_can_write(pnp_dev)) {
 		error = pnp_stop_dev(pnp_dev);
 		if (error)
 			return error;
@@ -255,7 +256,7 @@ static const struct dev_pm_ops pnp_bus_dev_pm_ops = {
 	.restore = pnp_bus_resume,
 };
 
-struct bus_type pnp_bus_type = {
+const struct bus_type pnp_bus_type = {
 	.name    = "pnp",
 	.match   = pnp_bus_match,
 	.probe   = pnp_device_probe,
@@ -264,6 +265,12 @@ struct bus_type pnp_bus_type = {
 	.pm	 = &pnp_bus_dev_pm_ops,
 	.dev_groups = pnp_dev_groups,
 };
+
+bool dev_is_pnp(const struct device *dev)
+{
+	return dev->bus == &pnp_bus_type;
+}
+EXPORT_SYMBOL_GPL(dev_is_pnp);
 
 int pnp_register_driver(struct pnp_driver *drv)
 {

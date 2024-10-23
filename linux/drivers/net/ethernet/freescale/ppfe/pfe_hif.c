@@ -999,8 +999,8 @@ int pfe_hif_init(struct pfe *pfe)
 
 	/* Initialize NAPI for Rx processing */
 	init_dummy_netdev(&hif->dummy_dev);
-	netif_napi_add(&hif->dummy_dev, &hif->napi, pfe_hif_rx_poll,
-		       HIF_RX_POLL_WEIGHT);
+	netif_napi_add_weight(&hif->dummy_dev, &hif->napi, pfe_hif_rx_poll,
+			      HIF_RX_POLL_WEIGHT);
 	napi_enable(&hif->napi);
 
 	spin_lock_init(&hif->tx_lock);

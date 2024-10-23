@@ -1,8 +1,13 @@
-VERSION = 5.5.0
+VERSION = 5.14.0
 URL = https://www.kernel.org/pub/linux/utils/net/iproute2/iproute2-$(VERSION).tar.xz
+
 MAKEVARS = SHARED_LIBS=n
 AUTOMAKE_ROMFS = my_romfs
+
 include $(ROOTDIR)/tools/automake.inc
+
+CONFOPTS =
+CONFIGURE_OPTS =
 
 INSTALL_DIR = build/$(PKG)-install
 

@@ -1,0 +1,34 @@
+<algorithm-file>
+	<architectures>
+		<architecture type="arm" address_size="64">
+			<controller type="QSPI">
+				<format>bin</format>
+				<entry_point>0x100</entry_point>
+				<file>QSPI_64b</file>
+				<fpinclude href="algorithms/params/MX25U12832F_QSPI_64.xml"/>
+				<supported_operations>
+					<operation>id</operation>
+					<operation>erase_sectors</operation>
+					<operation>program</operation>
+					<operation>dump</operation>
+					<operation>protect_sectors</operation>
+					<operation>unprotect_sectors</operation>
+				</supported_operations>
+			</controller>
+			<controller type="FSPI">
+				<format>bin</format>
+				<entry_point>0x100</entry_point>
+				<file>FSPI_64b</file>
+				<fpinclude href="algorithms/params/MX25U12832F_QSPI_64.xml"/>
+				<supported_operations>
+					<operation>id</operation>
+					<operation>erase_sectors</operation>
+					<operation>program</operation>
+					<operation>dump</operation>
+					<operation>protect_sectors</operation>
+					<operation>unprotect_sectors</operation>
+				</supported_operations>
+                 	</controller>
+		</architecture>
+	</architectures>
+</algorithm-file>

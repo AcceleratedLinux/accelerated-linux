@@ -200,6 +200,7 @@
 	pf(VID_RND)		/* Random VLAN ID */			\
 	pf(SVID_RND)		/* Random SVLAN ID */			\
 	pf(NODE)		/* Node memory alloc*/			\
+	pf(SHARED)		/* Shared SKB */			\
 
 #define pf(flag)		flag##_SHIFT,
 enum pkt_flags {
@@ -669,19 +670,19 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 	seq_puts(seq, "     Flags: ");
 
 	for (i = 0; i < NR_PKT_FLAGS; i++) {
-		if (i == F_FLOW_SEQ)
+		if (i == FLOW_SEQ_SHIFT)
 			if (!pkt_dev->cflows)
 				continue;
 
-		if (pkt_dev->flags & (1 << i))
+		if (pkt_dev->flags & (1 << i)) {
 			seq_printf(seq, "%s  ", pkt_flag_names[i]);
-		else if (i == F_FLOW_SEQ)
-			seq_puts(seq, "FLOW_RND  ");
-
 #ifdef CONFIG_XFRM
-		if (i == F_IPSEC && pkt_dev->spi)
-			seq_printf(seq, "spi:%u", pkt_dev->spi);
+			if (i == IPSEC_SHIFT && pkt_dev->spi)
+				seq_printf(seq, "spi:%u  ", pkt_dev->spi);
 #endif
+		} else if (i == FLOW_SEQ_SHIFT) {
+			seq_puts(seq, "FLOW_RND  ");
+		}
 	}
 
 	seq_puts(seq, "\n");
@@ -1198,7 +1199,8 @@ static ssize_t pktgen_if_write(struct file *file,
 		    ((pkt_dev->xmit_mode == M_NETIF_RECEIVE) ||
 		     !(pkt_dev->odev->priv_flags & IFF_TX_SKB_SHARING)))
 			return -ENOTSUPP;
-		if (value > 0 && pkt_dev->n_imix_entries > 0)
+		if (value > 0 && (pkt_dev->n_imix_entries > 0 ||
+				  !(pkt_dev->flags & F_SHARED)))
 			return -EINVAL;
 
 		i += len;
@@ -1257,6 +1259,10 @@ static ssize_t pktgen_if_write(struct file *file,
 		     ((pkt_dev->xmit_mode == M_START_XMIT) &&
 		     (!(pkt_dev->odev->priv_flags & IFF_TX_SKB_SHARING)))))
 			return -ENOTSUPP;
+
+		if (value > 1 && !(pkt_dev->flags & F_SHARED))
+			return -EINVAL;
+
 		pkt_dev->burst = value < 1 ? 1 : value;
 		sprintf(pg_result, "OK: burst=%u", pkt_dev->burst);
 		return count;
@@ -1318,9 +1324,10 @@ static ssize_t pktgen_if_write(struct file *file,
 		return count;
 	}
 	if (!strcmp(name, "flag")) {
+		bool disable = false;
 		__u32 flag;
 		char f[32];
-		bool disable = false;
+		char *end;
 
 		memset(f, 0, 32);
 		len = strn_len(&user_buffer[i], sizeof(f) - 1);
@@ -1332,28 +1339,42 @@ static ssize_t pktgen_if_write(struct file *file,
 		i += len;
 
 		flag = pktgen_read_flag(f, &disable);
-
 		if (flag) {
-			if (disable)
+			if (disable) {
+				/* If "clone_skb", or "burst" parameters are
+				 * configured, it means that the skb still
+				 * needs to be referenced by the pktgen, so
+				 * the skb must be shared.
+				 */
+				if (flag == F_SHARED && (pkt_dev->clone_skb ||
+							 pkt_dev->burst > 1))
+					return -EINVAL;
 				pkt_dev->flags &= ~flag;
-			else
+			} else {
 				pkt_dev->flags |= flag;
-		} else {
-			sprintf(pg_result,
-				"Flag -:%s:- unknown\nAvailable flags, (prepend ! to un-set flag):\n%s",
-				f,
-				"IPSRC_RND, IPDST_RND, UDPSRC_RND, UDPDST_RND, "
-				"MACSRC_RND, MACDST_RND, TXSIZE_RND, IPV6, "
-				"MPLS_RND, VID_RND, SVID_RND, FLOW_SEQ, "
-				"QUEUE_MAP_RND, QUEUE_MAP_CPU, UDPCSUM, "
-				"NO_TIMESTAMP, "
-#ifdef CONFIG_XFRM
-				"IPSEC, "
-#endif
-				"NODE_ALLOC\n");
+			}
+
+			sprintf(pg_result, "OK: flags=0x%x", pkt_dev->flags);
 			return count;
 		}
-		sprintf(pg_result, "OK: flags=0x%x", pkt_dev->flags);
+
+		/* Unknown flag */
+		end = pkt_dev->result + sizeof(pkt_dev->result);
+		pg_result += sprintf(pg_result,
+			"Flag -:%s:- unknown\n"
+			"Available flags, (prepend ! to un-set flag):\n", f);
+
+		for (int n = 0; n < NR_PKT_FLAGS && pg_result < end; n++) {
+			if (!IS_ENABLED(CONFIG_XFRM) && n == IPSEC_SHIFT)
+				continue;
+			pg_result += snprintf(pg_result, end - pg_result,
+					      "%s, ", pkt_flag_names[n]);
+		}
+		if (!WARN_ON_ONCE(pg_result >= end)) {
+			/* Remove the comma and whitespace at the end */
+			*(pg_result - 2) = '\0';
+		}
+
 		return count;
 	}
 	if (!strcmp(name, "dst_min") || !strcmp(name, "dst")) {
@@ -2100,7 +2121,7 @@ static int pktgen_setup_dev(const struct pktgen_net *pn,
 
 	/* Clean old setups */
 	if (pkt_dev->odev) {
-		dev_put_track(pkt_dev->odev, &pkt_dev->dev_tracker);
+		netdev_put(pkt_dev->odev, &pkt_dev->dev_tracker);
 		pkt_dev->odev = NULL;
 	}
 
@@ -2324,7 +2345,7 @@ static inline int f_pick(struct pktgen_dev *pkt_dev)
 				pkt_dev->curfl = 0; /*reset */
 		}
 	} else {
-		flow = prandom_u32() % pkt_dev->cflows;
+		flow = get_random_u32_below(pkt_dev->cflows);
 		pkt_dev->curfl = flow;
 
 		if (pkt_dev->flows[flow].count > pkt_dev->lflow) {
@@ -2380,10 +2401,8 @@ static void set_cur_queue_map(struct pktgen_dev *pkt_dev)
 	else if (pkt_dev->queue_map_min <= pkt_dev->queue_map_max) {
 		__u16 t;
 		if (pkt_dev->flags & F_QUEUE_MAP_RND) {
-			t = prandom_u32() %
-				(pkt_dev->queue_map_max -
-				 pkt_dev->queue_map_min + 1)
-				+ pkt_dev->queue_map_min;
+			t = get_random_u32_inclusive(pkt_dev->queue_map_min,
+						     pkt_dev->queue_map_max);
 		} else {
 			t = pkt_dev->cur_queue_map + 1;
 			if (t > pkt_dev->queue_map_max)
@@ -2412,7 +2431,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 		__u32 tmp;
 
 		if (pkt_dev->flags & F_MACSRC_RND)
-			mc = prandom_u32() % pkt_dev->src_mac_count;
+			mc = get_random_u32_below(pkt_dev->src_mac_count);
 		else {
 			mc = pkt_dev->cur_src_mac_offset++;
 			if (pkt_dev->cur_src_mac_offset >=
@@ -2438,7 +2457,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 		__u32 tmp;
 
 		if (pkt_dev->flags & F_MACDST_RND)
-			mc = prandom_u32() % pkt_dev->dst_mac_count;
+			mc = get_random_u32_below(pkt_dev->dst_mac_count);
 
 		else {
 			mc = pkt_dev->cur_dst_mac_offset++;
@@ -2465,23 +2484,22 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 		for (i = 0; i < pkt_dev->nr_labels; i++)
 			if (pkt_dev->labels[i] & MPLS_STACK_BOTTOM)
 				pkt_dev->labels[i] = MPLS_STACK_BOTTOM |
-					     ((__force __be32)prandom_u32() &
+					     ((__force __be32)get_random_u32() &
 						      htonl(0x000fffff));
 	}
 
 	if ((pkt_dev->flags & F_VID_RND) && (pkt_dev->vlan_id != 0xffff)) {
-		pkt_dev->vlan_id = prandom_u32() & (4096 - 1);
+		pkt_dev->vlan_id = get_random_u32_below(4096);
 	}
 
 	if ((pkt_dev->flags & F_SVID_RND) && (pkt_dev->svlan_id != 0xffff)) {
-		pkt_dev->svlan_id = prandom_u32() & (4096 - 1);
+		pkt_dev->svlan_id = get_random_u32_below(4096);
 	}
 
 	if (pkt_dev->udp_src_min < pkt_dev->udp_src_max) {
 		if (pkt_dev->flags & F_UDPSRC_RND)
-			pkt_dev->cur_udp_src = prandom_u32() %
-				(pkt_dev->udp_src_max - pkt_dev->udp_src_min)
-				+ pkt_dev->udp_src_min;
+			pkt_dev->cur_udp_src = get_random_u32_inclusive(pkt_dev->udp_src_min,
+									pkt_dev->udp_src_max - 1);
 
 		else {
 			pkt_dev->cur_udp_src++;
@@ -2492,9 +2510,8 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 
 	if (pkt_dev->udp_dst_min < pkt_dev->udp_dst_max) {
 		if (pkt_dev->flags & F_UDPDST_RND) {
-			pkt_dev->cur_udp_dst = prandom_u32() %
-				(pkt_dev->udp_dst_max - pkt_dev->udp_dst_min)
-				+ pkt_dev->udp_dst_min;
+			pkt_dev->cur_udp_dst = get_random_u32_inclusive(pkt_dev->udp_dst_min,
+									pkt_dev->udp_dst_max - 1);
 		} else {
 			pkt_dev->cur_udp_dst++;
 			if (pkt_dev->cur_udp_dst >= pkt_dev->udp_dst_max)
@@ -2509,7 +2526,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 		if (imn < imx) {
 			__u32 t;
 			if (pkt_dev->flags & F_IPSRC_RND)
-				t = prandom_u32() % (imx - imn) + imn;
+				t = get_random_u32_inclusive(imn, imx - 1);
 			else {
 				t = ntohl(pkt_dev->cur_saddr);
 				t++;
@@ -2531,8 +2548,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 				if (pkt_dev->flags & F_IPDST_RND) {
 
 					do {
-						t = prandom_u32() %
-							(imx - imn) + imn;
+						t = get_random_u32_inclusive(imn, imx - 1);
 						s = htonl(t);
 					} while (ipv4_is_loopback(s) ||
 						ipv4_is_multicast(s) ||
@@ -2569,7 +2585,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 
 			for (i = 0; i < 4; i++) {
 				pkt_dev->cur_in6_daddr.s6_addr32[i] =
-				    (((__force __be32)prandom_u32() |
+				    (((__force __be32)get_random_u32() |
 				      pkt_dev->min_in6_daddr.s6_addr32[i]) &
 				     pkt_dev->max_in6_daddr.s6_addr32[i]);
 			}
@@ -2579,9 +2595,8 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 	if (pkt_dev->min_pkt_size < pkt_dev->max_pkt_size) {
 		__u32 t;
 		if (pkt_dev->flags & F_TXSIZE_RND) {
-			t = prandom_u32() %
-				(pkt_dev->max_pkt_size - pkt_dev->min_pkt_size)
-				+ pkt_dev->min_pkt_size;
+			t = get_random_u32_inclusive(pkt_dev->min_pkt_size,
+						     pkt_dev->max_pkt_size - 1);
 		} else {
 			t = pkt_dev->cur_pkt_size + 1;
 			if (t > pkt_dev->max_pkt_size)
@@ -2590,7 +2605,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 		pkt_dev->cur_pkt_size = t;
 	} else if (pkt_dev->n_imix_entries > 0) {
 		struct imix_pkt *entry;
-		__u32 t = prandom_u32() % IMIX_PRECISION;
+		__u32 t = get_random_u32_below(IMIX_PRECISION);
 		__u8 entry_index = pkt_dev->imix_distribution[t];
 
 		entry = &pkt_dev->imix_entries[entry_index];
@@ -2791,14 +2806,17 @@ static void pktgen_finalize_skb(struct pktgen_dev *pkt_dev, struct sk_buff *skb,
 					break;
 			}
 			get_page(pkt_dev->page);
-			skb_frag_set_page(skb, i, pkt_dev->page);
-			skb_frag_off_set(&skb_shinfo(skb)->frags[i], 0);
+
 			/*last fragment, fill rest of data*/
 			if (i == (frags - 1))
-				skb_frag_size_set(&skb_shinfo(skb)->frags[i],
-				    (datalen < PAGE_SIZE ? datalen : PAGE_SIZE));
+				skb_frag_fill_page_desc(&skb_shinfo(skb)->frags[i],
+							pkt_dev->page, 0,
+							(datalen < PAGE_SIZE ?
+							 datalen : PAGE_SIZE));
 			else
-				skb_frag_size_set(&skb_shinfo(skb)->frags[i], frag_len);
+				skb_frag_fill_page_desc(&skb_shinfo(skb)->frags[i],
+							pkt_dev->page, 0, frag_len);
+
 			datalen -= skb_frag_size(&skb_shinfo(skb)->frags[i]);
 			skb->len += skb_frag_size(&skb_shinfo(skb)->frags[i]);
 			skb->data_len += skb_frag_size(&skb_shinfo(skb)->frags[i]);
@@ -3443,11 +3461,23 @@ static void pktgen_wait_for_skb(struct pktgen_dev *pkt_dev)
 
 static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 {
-	unsigned int burst = READ_ONCE(pkt_dev->burst);
+	bool skb_shared = !!(READ_ONCE(pkt_dev->flags) & F_SHARED);
 	struct net_device *odev = pkt_dev->odev;
 	struct netdev_queue *txq;
+	unsigned int burst = 1;
 	struct sk_buff *skb;
+	int clone_skb = 0;
 	int ret;
+
+	/* If 'skb_shared' is false, the read of possible
+	 * new values (if any) for 'burst' and 'clone_skb' will be skipped to
+	 * prevent some concurrent changes from slipping in. And the stabilized
+	 * config will be read in during the next run of pktgen_xmit.
+	 */
+	if (skb_shared) {
+		burst = READ_ONCE(pkt_dev->burst);
+		clone_skb = READ_ONCE(pkt_dev->clone_skb);
+	}
 
 	/* If device is offline, then don't send */
 	if (unlikely(!netif_running(odev) || !netif_carrier_ok(odev))) {
@@ -3465,7 +3495,7 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 
 	/* If no skb or clone count exhausted then get new one */
 	if (!pkt_dev->skb || (pkt_dev->last_ok &&
-			      ++pkt_dev->clone_count >= pkt_dev->clone_skb)) {
+			      ++pkt_dev->clone_count >= clone_skb)) {
 		/* build a new pkt */
 		kfree_skb(pkt_dev->skb);
 
@@ -3486,7 +3516,8 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 	if (pkt_dev->xmit_mode == M_NETIF_RECEIVE) {
 		skb = pkt_dev->skb;
 		skb->protocol = eth_type_trans(skb, skb->dev);
-		refcount_add(burst, &skb->users);
+		if (skb_shared)
+			refcount_add(burst, &skb->users);
 		local_bh_disable();
 		do {
 			ret = netif_receive_skb(skb);
@@ -3494,6 +3525,10 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 				pkt_dev->errors++;
 			pkt_dev->sofar++;
 			pkt_dev->seq_num++;
+			if (unlikely(!skb_shared)) {
+				pkt_dev->skb = NULL;
+				break;
+			}
 			if (refcount_read(&skb->users) != burst) {
 				/* skb was queued by rps/rfs or taps,
 				 * so cannot reuse this skb
@@ -3512,9 +3547,14 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		goto out; /* Skips xmit_mode M_START_XMIT */
 	} else if (pkt_dev->xmit_mode == M_QUEUE_XMIT) {
 		local_bh_disable();
-		refcount_inc(&pkt_dev->skb->users);
+		if (skb_shared)
+			refcount_inc(&pkt_dev->skb->users);
 
 		ret = dev_queue_xmit(pkt_dev->skb);
+
+		if (!skb_shared && dev_xmit_complete(ret))
+			pkt_dev->skb = NULL;
+
 		switch (ret) {
 		case NET_XMIT_SUCCESS:
 			pkt_dev->sofar++;
@@ -3552,10 +3592,14 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		pkt_dev->last_ok = 0;
 		goto unlock;
 	}
-	refcount_add(burst, &pkt_dev->skb->users);
+	if (skb_shared)
+		refcount_add(burst, &pkt_dev->skb->users);
 
 xmit_more:
 	ret = netdev_start_xmit(pkt_dev->skb, odev, txq, --burst > 0);
+
+	if (!skb_shared && dev_xmit_complete(ret))
+		pkt_dev->skb = NULL;
 
 	switch (ret) {
 	case NETDEV_TX_OK:
@@ -3578,7 +3622,8 @@ xmit_more:
 		fallthrough;
 	case NETDEV_TX_BUSY:
 		/* Retry it next time */
-		refcount_dec(&(pkt_dev->skb->users));
+		if (skb_shared)
+			refcount_dec(&pkt_dev->skb->users);
 		pkt_dev->last_ok = 0;
 	}
 	if (unlikely(burst))
@@ -3591,7 +3636,8 @@ out:
 
 	/* If pkt_dev->count is zero, then run forever */
 	if ((pkt_dev->count != 0) && (pkt_dev->sofar >= pkt_dev->count)) {
-		pktgen_wait_for_skb(pkt_dev);
+		if (pkt_dev->skb)
+			pktgen_wait_for_skb(pkt_dev);
 
 		/* Done with this */
 		pktgen_stop_device(pkt_dev);
@@ -3623,10 +3669,8 @@ static int pktgen_thread_worker(void *arg)
 		if (unlikely(!pkt_dev && t->control == 0)) {
 			if (t->net->pktgen_exiting)
 				break;
-			wait_event_interruptible_timeout(t->queue,
-							 t->control != 0,
-							 HZ/10);
-			try_to_freeze();
+			wait_event_freezable_timeout(t->queue,
+						     t->control != 0, HZ / 10);
 			continue;
 		}
 
@@ -3774,6 +3818,7 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 	pkt_dev->svlan_id = 0xffff;
 	pkt_dev->burst = 1;
 	pkt_dev->node = NUMA_NO_NODE;
+	pkt_dev->flags = F_SHARED;	/* SKB shared by default */
 
 	err = pktgen_setup_dev(t->net, pkt_dev, ifname);
 	if (err)
@@ -3807,7 +3852,7 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 
 	return add_dev_to_thread(t, pkt_dev);
 out2:
-	dev_put_track(pkt_dev->odev, &pkt_dev->dev_tracker);
+	netdev_put(pkt_dev->odev, &pkt_dev->dev_tracker);
 out1:
 #ifdef CONFIG_XFRM
 	free_SAs(pkt_dev);
@@ -3901,7 +3946,7 @@ static int pktgen_remove_device(struct pktgen_thread *t,
 	/* Dis-associate from the interface */
 
 	if (pkt_dev->odev) {
-		dev_put_track(pkt_dev->odev, &pkt_dev->dev_tracker);
+		netdev_put(pkt_dev->odev, &pkt_dev->dev_tracker);
 		pkt_dev->odev = NULL;
 	}
 
@@ -3985,8 +4030,7 @@ static void __net_exit pg_net_exit(struct net *net)
 	list_for_each_safe(q, n, &list) {
 		t = list_entry(q, struct pktgen_thread, th_list);
 		list_del(&t->th_list);
-		kthread_stop(t->tsk);
-		put_task_struct(t->tsk);
+		kthread_stop_put(t->tsk);
 		kfree(t);
 	}
 

@@ -1,0 +1,27 @@
+From ab4ba4f0597341581acf08a368be2f3861a30ec8 Mon Sep 17 00:00:00 2001
+From: Robert Hodaszi <robert.hodaszi@digi.com>
+Date: Tue, 18 Jul 2023 15:22:42 +0200
+Subject: [PATCH] Fix udev-uninstall script to use DESTDIR as udev-install
+
+---
+ SConscript | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/SConscript b/SConscript
+index c7eb1b6f7c4f..0f7d8aaf44eb 100644
+--- a/SConscript
++++ b/SConscript
+@@ -3264,8 +3264,8 @@ if env['systemd']:
+ 
+ 
+ Utility('udev-uninstall', '', [
+-    'rm -f %s/gpsd.hotplug' % env['udevdir'],
+-    'rm -f %s/rules.d/25-gpsd.rules' % env['udevdir'],
++    'rm -f %s/%s/gpsd.hotplug' % (DESTDIR, env['udevdir']),
++    'rm -f %s/%s/rules.d/25-gpsd.rules' % (DESTDIR, env['udevdir']),
+ ])
+ 
+ Utility('udev-test', '',
+-- 
+2.34.1
+

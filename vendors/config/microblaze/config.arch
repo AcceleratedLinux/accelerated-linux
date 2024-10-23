@@ -197,9 +197,9 @@ endif
 ifdef UCLINUX_BUILD_LIB
 
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(LOPT),$(LOPT),-O2) -fomit-frame-pointer
   endif
 	CFLAGS  += -pipe
 	CFLAGS  += -fno-common -fno-builtin -Wall #-Werror
@@ -238,9 +238,9 @@ ifdef UCLINUX_BUILD_USER
 	LIBC          = -Wl,-R,$(ROOTDIR)/lib/libc.gdb $(SLIBC)
   endif
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) $(CFLAGS_DEBUG)
   else
-	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -g -fomit-frame-pointer
+	CFLAGS  :=  $(if $(UOPT),$(UOPT),-O2) -fomit-frame-pointer
   endif
 
 	CFLAGS  += -pipe

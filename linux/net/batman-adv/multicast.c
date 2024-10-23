@@ -25,8 +25,6 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/jiffies.h>
-#include <linux/kernel.h>
-#include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/lockdep.h>
 #include <linux/netdevice.h>
@@ -37,6 +35,7 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/sprintf.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -237,6 +236,37 @@ static u8 batadv_mcast_mla_rtr_flags_get(struct batadv_priv *bat_priv,
 }
 
 /**
+ * batadv_mcast_mla_forw_flags_get() - get multicast forwarding flags
+ * @bat_priv: the bat priv with all the soft interface information
+ *
+ * Checks if all active hard interfaces have an MTU larger or equal to 1280
+ * bytes (IPv6 minimum MTU).
+ *
+ * Return: BATADV_MCAST_HAVE_MC_PTYPE_CAPA if yes, BATADV_NO_FLAGS otherwise.
+ */
+static u8 batadv_mcast_mla_forw_flags_get(struct batadv_priv *bat_priv)
+{
+	const struct batadv_hard_iface *hard_iface;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(hard_iface, &batadv_hardif_list, list) {
+		if (hard_iface->if_status != BATADV_IF_ACTIVE)
+			continue;
+
+		if (hard_iface->soft_iface != bat_priv->soft_iface)
+			continue;
+
+		if (hard_iface->net_dev->mtu < IPV6_MIN_MTU) {
+			rcu_read_unlock();
+			return BATADV_NO_FLAGS;
+		}
+	}
+	rcu_read_unlock();
+
+	return BATADV_MCAST_HAVE_MC_PTYPE_CAPA;
+}
+
+/**
  * batadv_mcast_mla_flags_get() - get the new multicast flags
  * @bat_priv: the bat priv with all the soft interface information
  *
@@ -257,6 +287,7 @@ batadv_mcast_mla_flags_get(struct batadv_priv *bat_priv)
 	mla_flags.enabled = 1;
 	mla_flags.tvlv_flags |= batadv_mcast_mla_rtr_flags_get(bat_priv,
 							       bridge);
+	mla_flags.tvlv_flags |= batadv_mcast_mla_forw_flags_get(bat_priv);
 
 	if (!bridge)
 		return mla_flags;
@@ -807,23 +838,25 @@ static void batadv_mcast_flags_log(struct batadv_priv *bat_priv, u8 flags)
 {
 	bool old_enabled = bat_priv->mcast.mla_flags.enabled;
 	u8 old_flags = bat_priv->mcast.mla_flags.tvlv_flags;
-	char str_old_flags[] = "[.... . ]";
+	char str_old_flags[] = "[.... . .]";
 
-	sprintf(str_old_flags, "[%c%c%c%s%s]",
+	sprintf(str_old_flags, "[%c%c%c%s%s%c]",
 		(old_flags & BATADV_MCAST_WANT_ALL_UNSNOOPABLES) ? 'U' : '.',
 		(old_flags & BATADV_MCAST_WANT_ALL_IPV4) ? '4' : '.',
 		(old_flags & BATADV_MCAST_WANT_ALL_IPV6) ? '6' : '.',
 		!(old_flags & BATADV_MCAST_WANT_NO_RTR4) ? "R4" : ". ",
-		!(old_flags & BATADV_MCAST_WANT_NO_RTR6) ? "R6" : ". ");
+		!(old_flags & BATADV_MCAST_WANT_NO_RTR6) ? "R6" : ". ",
+		!(old_flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA) ? 'P' : '.');
 
 	batadv_dbg(BATADV_DBG_MCAST, bat_priv,
-		   "Changing multicast flags from '%s' to '[%c%c%c%s%s]'\n",
+		   "Changing multicast flags from '%s' to '[%c%c%c%s%s%c]'\n",
 		   old_enabled ? str_old_flags : "<undefined>",
 		   (flags & BATADV_MCAST_WANT_ALL_UNSNOOPABLES) ? 'U' : '.',
 		   (flags & BATADV_MCAST_WANT_ALL_IPV4) ? '4' : '.',
 		   (flags & BATADV_MCAST_WANT_ALL_IPV6) ? '6' : '.',
 		   !(flags & BATADV_MCAST_WANT_NO_RTR4) ? "R4" : ". ",
-		   !(flags & BATADV_MCAST_WANT_NO_RTR6) ? "R6" : ". ");
+		   !(flags & BATADV_MCAST_WANT_NO_RTR6) ? "R6" : ". ",
+		   !(flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA) ? 'P' : '.');
 }
 
 /**
@@ -1137,222 +1170,64 @@ static int batadv_mcast_forw_rtr_count(struct batadv_priv *bat_priv,
 }
 
 /**
- * batadv_mcast_forw_tt_node_get() - get a multicast tt node
+ * batadv_mcast_forw_mode_by_count() - get forwarding mode by count
  * @bat_priv: the bat priv with all the soft interface information
- * @ethhdr: the ether header containing the multicast destination
+ * @skb: the multicast packet to check
+ * @vid: the vlan identifier
+ * @is_routable: stores whether the destination is routable
+ * @count: the number of originators the multicast packet need to be sent to
  *
- * Return: an orig_node matching the multicast address provided by ethhdr
- * via a translation table lookup. This increases the returned nodes refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_tt_node_get(struct batadv_priv *bat_priv,
-			      struct ethhdr *ethhdr)
-{
-	return batadv_transtable_search(bat_priv, NULL, ethhdr->h_dest,
-					BATADV_NO_FLAGS);
-}
-
-/**
- * batadv_mcast_forw_ipv4_node_get() - get a node with an ipv4 flag
- * @bat_priv: the bat priv with all the soft interface information
+ * For a multicast packet with multiple destination originators, checks which
+ * mode to use. For BATADV_FORW_MCAST it also encapsulates the packet with a
+ * complete batman-adv multicast header.
  *
- * Return: an orig_node which has the BATADV_MCAST_WANT_ALL_IPV4 flag set and
- * increases its refcount.
+ * Return:
+ *	BATADV_FORW_MCAST: If all nodes have multicast packet routing
+ *	capabilities and an MTU >= 1280 on all hard interfaces (including us)
+ *	and the encapsulated multicast packet with all destination addresses
+ *	would still fit into an 1280 bytes batman-adv multicast packet
+ *	(excluding the outer ethernet frame) and we could successfully push
+ *	the full batman-adv multicast packet header.
+ *	BATADV_FORW_UCASTS: If the packet cannot be sent in a batman-adv
+ *	multicast packet and the amount of batman-adv unicast packets needed
+ *	is smaller or equal to the configured multicast fanout.
+ *	BATADV_FORW_BCAST: Otherwise.
  */
-static struct batadv_orig_node *
-batadv_mcast_forw_ipv4_node_get(struct batadv_priv *bat_priv)
+static enum batadv_forw_mode
+batadv_mcast_forw_mode_by_count(struct batadv_priv *bat_priv,
+				struct sk_buff *skb, unsigned short vid,
+				int is_routable, int count)
 {
-	struct batadv_orig_node *tmp_orig_node, *orig_node = NULL;
+	unsigned int mcast_hdrlen = batadv_mcast_forw_packet_hdrlen(count);
+	u8 own_tvlv_flags = bat_priv->mcast.mla_flags.tvlv_flags;
 
-	rcu_read_lock();
-	hlist_for_each_entry_rcu(tmp_orig_node,
-				 &bat_priv->mcast.want_all_ipv4_list,
-				 mcast_want_all_ipv4_node) {
-		if (!kref_get_unless_zero(&tmp_orig_node->refcount))
-			continue;
+	if (!atomic_read(&bat_priv->mcast.num_no_mc_ptype_capa) &&
+	    own_tvlv_flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA &&
+	    skb->len + mcast_hdrlen <= IPV6_MIN_MTU &&
+	    batadv_mcast_forw_push(bat_priv, skb, vid, is_routable, count))
+		return BATADV_FORW_MCAST;
 
-		orig_node = tmp_orig_node;
-		break;
-	}
-	rcu_read_unlock();
+	if (count <= atomic_read(&bat_priv->multicast_fanout))
+		return BATADV_FORW_UCASTS;
 
-	return orig_node;
-}
-
-/**
- * batadv_mcast_forw_ipv6_node_get() - get a node with an ipv6 flag
- * @bat_priv: the bat priv with all the soft interface information
- *
- * Return: an orig_node which has the BATADV_MCAST_WANT_ALL_IPV6 flag set
- * and increases its refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_ipv6_node_get(struct batadv_priv *bat_priv)
-{
-	struct batadv_orig_node *tmp_orig_node, *orig_node = NULL;
-
-	rcu_read_lock();
-	hlist_for_each_entry_rcu(tmp_orig_node,
-				 &bat_priv->mcast.want_all_ipv6_list,
-				 mcast_want_all_ipv6_node) {
-		if (!kref_get_unless_zero(&tmp_orig_node->refcount))
-			continue;
-
-		orig_node = tmp_orig_node;
-		break;
-	}
-	rcu_read_unlock();
-
-	return orig_node;
-}
-
-/**
- * batadv_mcast_forw_ip_node_get() - get a node with an ipv4/ipv6 flag
- * @bat_priv: the bat priv with all the soft interface information
- * @ethhdr: an ethernet header to determine the protocol family from
- *
- * Return: an orig_node which has the BATADV_MCAST_WANT_ALL_IPV4 or
- * BATADV_MCAST_WANT_ALL_IPV6 flag, depending on the provided ethhdr, sets and
- * increases its refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_ip_node_get(struct batadv_priv *bat_priv,
-			      struct ethhdr *ethhdr)
-{
-	switch (ntohs(ethhdr->h_proto)) {
-	case ETH_P_IP:
-		return batadv_mcast_forw_ipv4_node_get(bat_priv);
-	case ETH_P_IPV6:
-		return batadv_mcast_forw_ipv6_node_get(bat_priv);
-	default:
-		/* we shouldn't be here... */
-		return NULL;
-	}
-}
-
-/**
- * batadv_mcast_forw_unsnoop_node_get() - get a node with an unsnoopable flag
- * @bat_priv: the bat priv with all the soft interface information
- *
- * Return: an orig_node which has the BATADV_MCAST_WANT_ALL_UNSNOOPABLES flag
- * set and increases its refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_unsnoop_node_get(struct batadv_priv *bat_priv)
-{
-	struct batadv_orig_node *tmp_orig_node, *orig_node = NULL;
-
-	rcu_read_lock();
-	hlist_for_each_entry_rcu(tmp_orig_node,
-				 &bat_priv->mcast.want_all_unsnoopables_list,
-				 mcast_want_all_unsnoopables_node) {
-		if (!kref_get_unless_zero(&tmp_orig_node->refcount))
-			continue;
-
-		orig_node = tmp_orig_node;
-		break;
-	}
-	rcu_read_unlock();
-
-	return orig_node;
-}
-
-/**
- * batadv_mcast_forw_rtr4_node_get() - get a node with an ipv4 mcast router flag
- * @bat_priv: the bat priv with all the soft interface information
- *
- * Return: an orig_node which has the BATADV_MCAST_WANT_NO_RTR4 flag unset and
- * increases its refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_rtr4_node_get(struct batadv_priv *bat_priv)
-{
-	struct batadv_orig_node *tmp_orig_node, *orig_node = NULL;
-
-	rcu_read_lock();
-	hlist_for_each_entry_rcu(tmp_orig_node,
-				 &bat_priv->mcast.want_all_rtr4_list,
-				 mcast_want_all_rtr4_node) {
-		if (!kref_get_unless_zero(&tmp_orig_node->refcount))
-			continue;
-
-		orig_node = tmp_orig_node;
-		break;
-	}
-	rcu_read_unlock();
-
-	return orig_node;
-}
-
-/**
- * batadv_mcast_forw_rtr6_node_get() - get a node with an ipv6 mcast router flag
- * @bat_priv: the bat priv with all the soft interface information
- *
- * Return: an orig_node which has the BATADV_MCAST_WANT_NO_RTR6 flag unset
- * and increases its refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_rtr6_node_get(struct batadv_priv *bat_priv)
-{
-	struct batadv_orig_node *tmp_orig_node, *orig_node = NULL;
-
-	rcu_read_lock();
-	hlist_for_each_entry_rcu(tmp_orig_node,
-				 &bat_priv->mcast.want_all_rtr6_list,
-				 mcast_want_all_rtr6_node) {
-		if (!kref_get_unless_zero(&tmp_orig_node->refcount))
-			continue;
-
-		orig_node = tmp_orig_node;
-		break;
-	}
-	rcu_read_unlock();
-
-	return orig_node;
-}
-
-/**
- * batadv_mcast_forw_rtr_node_get() - get a node with an ipv4/ipv6 router flag
- * @bat_priv: the bat priv with all the soft interface information
- * @ethhdr: an ethernet header to determine the protocol family from
- *
- * Return: an orig_node which has no BATADV_MCAST_WANT_NO_RTR4 or
- * BATADV_MCAST_WANT_NO_RTR6 flag, depending on the provided ethhdr, set and
- * increases its refcount.
- */
-static struct batadv_orig_node *
-batadv_mcast_forw_rtr_node_get(struct batadv_priv *bat_priv,
-			       struct ethhdr *ethhdr)
-{
-	switch (ntohs(ethhdr->h_proto)) {
-	case ETH_P_IP:
-		return batadv_mcast_forw_rtr4_node_get(bat_priv);
-	case ETH_P_IPV6:
-		return batadv_mcast_forw_rtr6_node_get(bat_priv);
-	default:
-		/* we shouldn't be here... */
-		return NULL;
-	}
+	return BATADV_FORW_BCAST;
 }
 
 /**
  * batadv_mcast_forw_mode() - check on how to forward a multicast packet
  * @bat_priv: the bat priv with all the soft interface information
- * @skb: The multicast packet to check
- * @orig: an originator to be set to forward the skb to
+ * @skb: the multicast packet to check
+ * @vid: the vlan identifier
  * @is_routable: stores whether the destination is routable
  *
- * Return: the forwarding mode as enum batadv_forw_mode and in case of
- * BATADV_FORW_SINGLE set the orig to the single originator the skb
- * should be forwarded to.
+ * Return: The forwarding mode as enum batadv_forw_mode.
  */
 enum batadv_forw_mode
 batadv_mcast_forw_mode(struct batadv_priv *bat_priv, struct sk_buff *skb,
-		       struct batadv_orig_node **orig, int *is_routable)
+		       unsigned short vid, int *is_routable)
 {
 	int ret, tt_count, ip_count, unsnoop_count, total_count;
 	bool is_unsnoopable = false;
-	unsigned int mcast_fanout;
 	struct ethhdr *ethhdr;
 	int rtr_count = 0;
 
@@ -1361,7 +1236,7 @@ batadv_mcast_forw_mode(struct batadv_priv *bat_priv, struct sk_buff *skb,
 	if (ret == -ENOMEM)
 		return BATADV_FORW_NONE;
 	else if (ret < 0)
-		return BATADV_FORW_ALL;
+		return BATADV_FORW_BCAST;
 
 	ethhdr = eth_hdr(skb);
 
@@ -1374,32 +1249,13 @@ batadv_mcast_forw_mode(struct batadv_priv *bat_priv, struct sk_buff *skb,
 
 	total_count = tt_count + ip_count + unsnoop_count + rtr_count;
 
-	switch (total_count) {
-	case 1:
-		if (tt_count)
-			*orig = batadv_mcast_forw_tt_node_get(bat_priv, ethhdr);
-		else if (ip_count)
-			*orig = batadv_mcast_forw_ip_node_get(bat_priv, ethhdr);
-		else if (unsnoop_count)
-			*orig = batadv_mcast_forw_unsnoop_node_get(bat_priv);
-		else if (rtr_count)
-			*orig = batadv_mcast_forw_rtr_node_get(bat_priv,
-							       ethhdr);
-
-		if (*orig)
-			return BATADV_FORW_SINGLE;
-
-		fallthrough;
-	case 0:
+	if (!total_count)
 		return BATADV_FORW_NONE;
-	default:
-		mcast_fanout = atomic_read(&bat_priv->multicast_fanout);
+	else if (unsnoop_count)
+		return BATADV_FORW_BCAST;
 
-		if (!unsnoop_count && total_count <= mcast_fanout)
-			return BATADV_FORW_SOME;
-	}
-
-	return BATADV_FORW_ALL;
+	return batadv_mcast_forw_mode_by_count(bat_priv, skb, vid, *is_routable,
+					       total_count);
 }
 
 /**
@@ -1411,10 +1267,10 @@ batadv_mcast_forw_mode(struct batadv_priv *bat_priv, struct sk_buff *skb,
  *
  * Return: NET_XMIT_DROP in case of error or NET_XMIT_SUCCESS otherwise.
  */
-int batadv_mcast_forw_send_orig(struct batadv_priv *bat_priv,
-				struct sk_buff *skb,
-				unsigned short vid,
-				struct batadv_orig_node *orig_node)
+static int batadv_mcast_forw_send_orig(struct batadv_priv *bat_priv,
+				       struct sk_buff *skb,
+				       unsigned short vid,
+				       struct batadv_orig_node *orig_node)
 {
 	/* Avoid sending multicast-in-unicast packets to other BLA
 	 * gateways - they already got the frame from the LAN side
@@ -1960,6 +1816,31 @@ static void batadv_mcast_want_rtr6_update(struct batadv_priv *bat_priv,
 }
 
 /**
+ * batadv_mcast_have_mc_ptype_update() - update multicast packet type counter
+ * @bat_priv: the bat priv with all the soft interface information
+ * @orig: the orig_node which multicast state might have changed of
+ * @mcast_flags: flags indicating the new multicast state
+ *
+ * If the BATADV_MCAST_HAVE_MC_PTYPE_CAPA flag of this originator, orig, has
+ * toggled then this method updates the counter accordingly.
+ */
+static void batadv_mcast_have_mc_ptype_update(struct batadv_priv *bat_priv,
+					      struct batadv_orig_node *orig,
+					      u8 mcast_flags)
+{
+	lockdep_assert_held(&orig->mcast_handler_lock);
+
+	/* switched from flag set to unset */
+	if (!(mcast_flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA) &&
+	    orig->mcast_flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA)
+		atomic_inc(&bat_priv->mcast.num_no_mc_ptype_capa);
+	/* switched from flag unset to set */
+	else if (mcast_flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA &&
+		 !(orig->mcast_flags & BATADV_MCAST_HAVE_MC_PTYPE_CAPA))
+		atomic_dec(&bat_priv->mcast.num_no_mc_ptype_capa);
+}
+
+/**
  * batadv_mcast_tvlv_flags_get() - get multicast flags from an OGM TVLV
  * @enabled: whether the originator has multicast TVLV support enabled
  * @tvlv_value: tvlv buffer containing the multicast flags
@@ -2027,6 +1908,7 @@ static void batadv_mcast_tvlv_ogm_handler(struct batadv_priv *bat_priv,
 	batadv_mcast_want_ipv6_update(bat_priv, orig, mcast_flags);
 	batadv_mcast_want_rtr4_update(bat_priv, orig, mcast_flags);
 	batadv_mcast_want_rtr6_update(bat_priv, orig, mcast_flags);
+	batadv_mcast_have_mc_ptype_update(bat_priv, orig, mcast_flags);
 
 	orig->mcast_flags = mcast_flags;
 	spin_unlock_bh(&orig->mcast_handler_lock);
@@ -2039,7 +1921,11 @@ static void batadv_mcast_tvlv_ogm_handler(struct batadv_priv *bat_priv,
 void batadv_mcast_init(struct batadv_priv *bat_priv)
 {
 	batadv_tvlv_handler_register(bat_priv, batadv_mcast_tvlv_ogm_handler,
-				     NULL, BATADV_TVLV_MCAST, 2,
+				     NULL, NULL, BATADV_TVLV_MCAST, 2,
+				     BATADV_TVLV_HANDLER_OGM_CIFNOTFND);
+	batadv_tvlv_handler_register(bat_priv, NULL, NULL,
+				     batadv_mcast_forw_tracker_tvlv_handler,
+				     BATADV_TVLV_MCAST_TRACKER, 1,
 				     BATADV_TVLV_HANDLER_OGM_CIFNOTFND);
 
 	INIT_DELAYED_WORK(&bat_priv->mcast.work, batadv_mcast_mla_update);
@@ -2289,6 +2175,7 @@ void batadv_mcast_free(struct batadv_priv *bat_priv)
 	cancel_delayed_work_sync(&bat_priv->mcast.work);
 
 	batadv_tvlv_container_unregister(bat_priv, BATADV_TVLV_MCAST, 2);
+	batadv_tvlv_handler_unregister(bat_priv, BATADV_TVLV_MCAST_TRACKER, 1);
 	batadv_tvlv_handler_unregister(bat_priv, BATADV_TVLV_MCAST, 2);
 
 	/* safely calling outside of worker, as worker was canceled above */
@@ -2312,6 +2199,8 @@ void batadv_mcast_purge_orig(struct batadv_orig_node *orig)
 				      BATADV_MCAST_WANT_NO_RTR4);
 	batadv_mcast_want_rtr6_update(bat_priv, orig,
 				      BATADV_MCAST_WANT_NO_RTR6);
+	batadv_mcast_have_mc_ptype_update(bat_priv, orig,
+					  BATADV_MCAST_HAVE_MC_PTYPE_CAPA);
 
 	spin_unlock_bh(&orig->mcast_handler_lock);
 }

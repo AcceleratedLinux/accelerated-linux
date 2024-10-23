@@ -92,6 +92,30 @@ config NVME_TCP
 
 	  If unsure, say N.
 
+config NVME_TCP_TLS
+	bool "NVMe over Fabrics TCP TLS encryption support"
+	depends on NVME_TCP
+	select NVME_KEYRING
+	select NET_HANDSHAKE
+	select KEYS
+	help
+	  Enables TLS encryption for NVMe TCP using the netlink handshake API.
+
+	  The TLS handshake daemon is availble at
+	  https://github.com/oracle/ktls-utils.
+
+	  If unsure, say N.
+
+config NVME_HOST_AUTH
+	bool "NVMe over Fabrics In-Band Authentication in host side"
+	depends on NVME_CORE
+	select NVME_AUTH
+	help
+	  This provides support for NVMe over Fabrics In-Band Authentication in
+	  host side.
+
+	  If unsure, say N.
+
 config NVME_APPLE
 	tristate "Apple ANS2 NVM Express host driver"
 	depends on OF && BLOCK

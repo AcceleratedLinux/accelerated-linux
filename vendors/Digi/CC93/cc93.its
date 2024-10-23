@@ -1,0 +1,58 @@
+/dts-v1/;
+
+/ {
+	description = "Digi/ConnectCore-93";
+	#address-cells = <1>;
+
+	images {
+		kernel_1 {
+			description = "Linux kernel";
+			data = /incbin/("kernel.gz");
+			type = "kernel";
+			arch = "arm64";
+			os = "linux";
+			compression = "gzip";
+			load = <0x46000000>;
+			entry = <0x46000000>;
+			hash_1 {
+				algo = "sha1";
+			};
+		};
+
+		ramdisk_1 {
+			description = "Linux ramdisk";
+			data = /incbin/("rootfs.bin");
+			type = "ramdisk";
+			arch = "arm64";
+			os = "linux";
+			compression = "none";
+			hash_2 {
+				algo = "sha1";
+			};
+		};
+
+		fdt_1 {
+			description = "Flattened Device Tree blob";
+			data = /incbin/("imx93-cc93-dvk.dtb");
+			type = "flat_dt";
+			arch = "arm64";
+			compression = "none";
+			hash_1 {
+				algo = "sha1";
+			};
+		};
+	};
+
+	configurations {
+		default = "config_cp01-c1";
+		config_cp01-c1 {
+			description = "Digi/ConnectCore-93 image";
+			kernel = "kernel_1";
+			ramdisk = "ramdisk_1";
+			fdt = "fdt_1";
+			hash_1 {
+				algo = "sha1";
+			};
+		};
+	};
+};

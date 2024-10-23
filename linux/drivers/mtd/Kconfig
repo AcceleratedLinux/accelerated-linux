@@ -69,6 +69,20 @@ config MTD_BLOCK_RO
 	  You do not need this option for use with the DiskOnChip devices. For
 	  those, enable NFTL support (CONFIG_NFTL) instead.
 
+config MTD_CRYPT
+	tristate "Encrypted access layer for MTD"
+	help
+	  Enable support of the MTD partition attribute binding "crypt".
+	  When used on an MTD partition reads and writes to the underlying
+	  flash device will be AES encrypted. The result is that access at
+	  a high level works as usual but the bytes actually stored in the
+	  flash memory cells will be encrypted.
+
+	  The partition otherwise behaves just as a normal unencrypted
+	  partition with all the same characteristics. It can be erased,
+	  read and written the same. The usual character and block devices
+	  are available for access.
+
 comment "Note that in some cases UBI block is preferred. See MTD_UBI_BLOCK."
 	depends on MTD_BLOCK || MTD_BLOCK_RO
 

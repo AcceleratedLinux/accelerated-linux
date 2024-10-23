@@ -1,4 +1,4 @@
-VERSION    = 2.3.3
+VERSION    = 2.3.4
 URL        = https://ftp.gnu.org/gnu/libidn/libidn2-$(VERSION).tar.gz
 # CONFVARS   += LIBS=-lintl
 # CONFVARS   += gl_cv_func_getopt_gnu=yes

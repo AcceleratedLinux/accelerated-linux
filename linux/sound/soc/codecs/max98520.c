@@ -11,10 +11,8 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
-#include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/of.h>
-#include <linux/of_gpio.h>
 #include <sound/tlv.h>
 #include "max98520.h"
 
@@ -657,7 +655,6 @@ static const struct snd_soc_component_driver soc_codec_dev_max98520 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config max98520_regmap = {
@@ -737,7 +734,7 @@ static int max98520_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id max98520_i2c_id[] = {
-	{ "max98520", 0},
+	{ "max98520"},
 	{ },
 };
 
@@ -757,7 +754,7 @@ static struct i2c_driver max98520_i2c_driver = {
 		.of_match_table = of_match_ptr(max98520_of_match),
 		.pm = &max98520_pm,
 	},
-	.probe_new = max98520_i2c_probe,
+	.probe = max98520_i2c_probe,
 	.id_table = max98520_i2c_id,
 };
 

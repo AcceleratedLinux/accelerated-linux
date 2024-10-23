@@ -42,20 +42,23 @@ int httpreadline(int fd, char *buf, int len)
 
 int openhttp(char *url)
 {
-	struct sockaddr_in	sin;
-	struct hostent		*hp;
+	struct addrinfo		*ai, *ais;
+	const struct addrinfo	ai_hint = { .ai_socktype = SOCK_STREAM };
 	char			*up, *sp, *ap;
 	char			urlip[256];
-	char			urlport[32];
+	char			urlport[32] = "80";
 	char			urlfile[256];
 	char 			authbuf[256];
 	char			enc_authbuf[b64_strlen(256)];
 	char			buf[256];
 	char			relocurl[512];
-	int			fd, portnr, relocated, auth;
+	int			fd, relocated, auth;
+	int			bracketed;
+	int			error;
+	const char		*host;
+	int			hostlen;
 
 	fd = -1;
-	portnr = 80;
 	up = url;
 	auth = 0;
 
@@ -95,14 +98,28 @@ int openhttp(char *url)
 		}
 		
 		/* Get system name (or IP address) from url */
-		for (sp = &urlip[0]; ((*up != ':') && (*up != '/')); up++) {
+		host = up;
+		bracketed = (*up == '[');
+		if (bracketed)
+			up++;
+		for (sp = &urlip[0];
+		     bracketed ? *up != ']' : ((*up != ':') && (*up != '/'));
+		     up++) {
+			unsigned int hex;
 			if (*up == 0)
 				return(-1);
-			*sp++ = *up;
+			if (sscanf(up, "%%%2x", &hex) == 1) {
+				up += 2;
+				*sp++ = hex; /* URL-encoded %dd */
+			} else {
+				*sp++ = *up;
+			}
 			if (sp >= &urlip[sizeof(urlip)-1])
 				return(-1);
 		}
 		*sp = 0;
+		if (bracketed && *up == ']')
+			up++;
 
 		/* Get port number if supplied */
 		if (*up == ':') {
@@ -114,8 +131,8 @@ int openhttp(char *url)
 					return(-1);
 			}
 			*sp = 0;
-			portnr = atoi(urlport);
 		}
+		hostlen = up - host;	/* host[:port] for the Host header */
 
 		/* Get file path */
 		for (sp = &urlfile[0]; (*up != 0); up++) {
@@ -125,43 +142,54 @@ int openhttp(char *url)
 		}
 		*sp = 0;
 
-		bzero(&sin, sizeof(sin));
-		sin.sin_family = AF_INET;
-		sin.sin_port = htons(portnr);
-		if (inet_aton(urlip, &sin.sin_addr) == 0) {
-			if ((hp = gethostbyname(urlip))) {
-				sin.sin_family = hp->h_addrtype;
-				memcpy(&sin.sin_addr, hp->h_addr, hp->h_length);
-			} else
-				return(-1);
+		/* Connect to host:port using first working address */
+		if ((error = getaddrinfo(urlip, urlport, &ai_hint, &ais)) != 0) {
+			fprintf(stderr, "%s %s: %s\n", urlip, urlport,
+				gai_strerror(error));
+			return(-1);
 		}
-
-		/* Open socket to IP address */
-		if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-			return(-1);
-
-		if (connect(fd, (struct sockaddr *) &sin, sizeof(sin)) < 0) {
+		fd = -1;
+		for (ai = ais; ai; ai = ai->ai_next) {
+			if ((fd = socket(ai->ai_family, ai->ai_socktype,
+					 ai->ai_protocol)) == -1)
+				continue;
+			if (connect(fd, ai->ai_addr, ai->ai_addrlen) != -1)
+				break;
 			close(fd);
+			fd = -1;
+		}
+		freeaddrinfo(ais);
+		if (fd == -1)
 			return(-1);
+
+		if (bracketed && strchr(urlip, '%')) {
+			/* Fixup scopes in IPv6 hosts. RFC 3986 requires
+			 * removing %scope component from Host headers.
+			 * See https://redmine.lighttpd.net/issues/2442 */
+			static char fixedhost[256];
+			int urliplen = strchr(urlip, '%') - urlip;
+			hostlen = snprintf(fixedhost, sizeof fixedhost,
+				"[%.*s]:%s", urliplen, urlip, urlport);
+			host = fixedhost;
 		}
 
 		/* Send GET request to server */
 		if (!auth) {
 			if (snprintf(buf, sizeof(buf), "GET %s HTTP/1.0\r\n"
 				"User-Agent: netflash/100\r\n"
-				"Host: %s\r\n"
+				"Host: %.*s\r\n"
 				"\r\n",
-				urlfile, urlip) >= sizeof(buf)) {
+				urlfile, hostlen, host) >= sizeof(buf)) {
 					close(fd);
 					return(-1);
 			}
 		} else {
 			if (snprintf(buf, sizeof(buf), "GET %s HTTP/1.0\r\n"
 				"User-Agent: netflash/100\r\n"
-				"Host: %s\r\n"
+				"Host: %.*s\r\n"
 				"Authorization: Basic %s\r\n"
 				"\r\n",
-				urlfile, urlip, enc_authbuf)  >= sizeof(buf)) {
+				urlfile, hostlen, host, enc_authbuf)  >= sizeof(buf)) {
 						close(fd);
 						return(-1);
 			}

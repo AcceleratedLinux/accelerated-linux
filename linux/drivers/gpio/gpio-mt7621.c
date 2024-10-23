@@ -10,7 +10,6 @@
 #include <linux/io.h>
 #include <linux/irqdomain.h>
 #include <linux/module.h>
-#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
@@ -124,6 +123,8 @@ mediatek_gpio_irq_unmask(struct irq_data *d)
 	unsigned long flags;
 	u32 rise, fall, high, low;
 
+	gpiochip_enable_irq(gc, d->hwirq);
+
 	spin_lock_irqsave(&rg->lock, flags);
 	rise = mtk_gpio_r32(rg, GPIO_REG_REDGE);
 	fall = mtk_gpio_r32(rg, GPIO_REG_FEDGE);
@@ -155,6 +156,8 @@ mediatek_gpio_irq_mask(struct irq_data *d)
 	mtk_gpio_w32(rg, GPIO_REG_HLVL, high & ~BIT(pin));
 	mtk_gpio_w32(rg, GPIO_REG_LLVL, low & ~BIT(pin));
 	spin_unlock_irqrestore(&rg->lock, flags);
+
+	gpiochip_disable_irq(gc, d->hwirq);
 }
 
 static int
@@ -197,6 +200,7 @@ mediatek_gpio_irq_type(struct irq_data *d, unsigned int type)
 		break;
 	}
 
+	gpiochip_lock_as_irq(gc, pin);
 	return 0;
 }
 
@@ -215,6 +219,16 @@ mediatek_gpio_xlate(struct gpio_chip *chip,
 
 	return gpio % MTK_BANK_WIDTH;
 }
+
+static const struct irq_chip mt7621_irq_chip = {
+	.name		= "mt7621-gpio",
+	.irq_mask_ack	= mediatek_gpio_irq_mask,
+	.irq_mask	= mediatek_gpio_irq_mask,
+	.irq_unmask	= mediatek_gpio_irq_unmask,
+	.irq_set_type	= mediatek_gpio_irq_type,
+	.flags		= IRQCHIP_IMMUTABLE,
+	GPIOCHIP_IRQ_RESOURCE_HELPERS,
+};
 
 static int
 mediatek_gpio_to_irq(struct gpio_chip *chip, unsigned int gpio)
@@ -255,6 +269,7 @@ static const struct irq_domain_ops mediatek_gpio_irq_domain_ops = {
 static void mediatek_gpio_fixup_line_names(struct gpio_chip *chip, int bank)
 {
 	struct gpio_device *gdev = chip->gpiodev;
+	struct device_node *chip_np;
 	const char **names;
 	int ret, i = 0;
 	int count;
@@ -268,7 +283,8 @@ static void mediatek_gpio_fixup_line_names(struct gpio_chip *chip, int bank)
 	if (bank == 0)
 		return;
 
-	count = of_property_count_strings(chip->of_node, "gpio-line-names");
+	chip_np = dev_of_node(&chip->gpiodev->dev);
+	count = of_property_count_strings(chip_np, "gpio-line-names");
 
 	/* Get the right chunk from all the GPIO names */
 	count -= offs;
@@ -283,7 +299,7 @@ static void mediatek_gpio_fixup_line_names(struct gpio_chip *chip, int bank)
 	if (!names)
 		goto err;
 
-	ret = of_property_read_string_helper(chip->of_node, "gpio-line-names",
+	ret = of_property_read_string_helper(chip_np, "gpio-line-names",
 					     names, count, offs);
 	if (ret < 0) {
 		dev_warn(&gdev->dev, "failed to read GPIO line names\n");
@@ -335,6 +351,7 @@ mediatek_gpio_bank_probe(struct device *dev, int bank)
 	if (!rg->chip.label)
 		return -ENOMEM;
 	rg->chip.to_irq = mediatek_gpio_to_irq;
+	rg->chip.offset = bank * MTK_BANK_WIDTH;
 
 	ret = devm_gpiochip_add_data(dev, &rg->chip, mtk);
 	if (ret < 0) {
@@ -372,7 +389,10 @@ mediatek_gpio_probe(struct platform_device *pdev)
 	if (IS_ERR(mtk->base))
 		return PTR_ERR(mtk->base);
 
-	mtk->gpio_irq = irq_of_parse_and_map(np, 0);
+	mtk->gpio_irq = platform_get_irq(pdev, 0);
+	if (mtk->gpio_irq < 0)
+		return mtk->gpio_irq;
+
 	mtk->dev = dev;
 	platform_set_drvdata(pdev, mtk);
 

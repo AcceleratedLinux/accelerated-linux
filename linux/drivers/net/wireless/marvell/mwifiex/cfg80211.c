@@ -1,20 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * NXP Wireless LAN device driver: CFG80211
  *
  * Copyright 2011-2020 NXP
- *
- * This software file (the "File") is distributed by NXP
- * under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  */
 
 #include "cfg80211.h"
@@ -154,7 +142,8 @@ static void *mwifiex_cfg80211_get_adapter(struct wiphy *wiphy)
  */
 static int
 mwifiex_cfg80211_del_key(struct wiphy *wiphy, struct net_device *netdev,
-			 u8 key_index, bool pairwise, const u8 *mac_addr)
+			 int link_id, u8 key_index, bool pairwise,
+			 const u8 *mac_addr)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(netdev);
 	static const u8 bc_mac[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
@@ -250,7 +239,7 @@ mwifiex_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 	tx_info->pkt_len = pkt_len;
 
 	mwifiex_form_mgmt_frame(skb, buf, len);
-	*cookie = prandom_u32() | 1;
+	*cookie = get_random_u32() | 1;
 
 	if (ieee80211_is_action(mgmt->frame_control))
 		skb = mwifiex_clone_skb_for_tx_status(priv,
@@ -314,7 +303,7 @@ mwifiex_cfg80211_remain_on_channel(struct wiphy *wiphy,
 					 duration);
 
 	if (!ret) {
-		*cookie = prandom_u32() | 1;
+		*cookie = get_random_u32() | 1;
 		priv->roc_cfg.cookie = *cookie;
 		priv->roc_cfg.chan = *chan;
 
@@ -443,7 +432,7 @@ mwifiex_cfg80211_set_power_mgmt(struct wiphy *wiphy,
  */
 static int
 mwifiex_cfg80211_set_default_key(struct wiphy *wiphy, struct net_device *netdev,
-				 u8 key_index, bool unicast,
+				 int link_id, u8 key_index, bool unicast,
 				 bool multicast)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(netdev);
@@ -468,8 +457,8 @@ mwifiex_cfg80211_set_default_key(struct wiphy *wiphy, struct net_device *netdev,
  */
 static int
 mwifiex_cfg80211_add_key(struct wiphy *wiphy, struct net_device *netdev,
-			 u8 key_index, bool pairwise, const u8 *mac_addr,
-			 struct key_params *params)
+			 int link_id, u8 key_index, bool pairwise,
+			 const u8 *mac_addr, struct key_params *params)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(netdev);
 	struct mwifiex_wep_key *wep_key;
@@ -506,6 +495,7 @@ mwifiex_cfg80211_add_key(struct wiphy *wiphy, struct net_device *netdev,
 static int
 mwifiex_cfg80211_set_default_mgmt_key(struct wiphy *wiphy,
 				      struct net_device *netdev,
+				      int link_id,
 				      u8 key_index)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(netdev);
@@ -1753,10 +1743,12 @@ mwifiex_mgmt_stypes[NUM_NL80211_IFTYPES] = {
  * Function configures data rates to firmware using bitrate mask
  * provided by cfg80211.
  */
-static int mwifiex_cfg80211_set_bitrate_mask(struct wiphy *wiphy,
-				struct net_device *dev,
-				const u8 *peer,
-				const struct cfg80211_bitrate_mask *mask)
+static int
+mwifiex_cfg80211_set_bitrate_mask(struct wiphy *wiphy,
+				  struct net_device *dev,
+				  unsigned int link_id,
+				  const u8 *peer,
+				  const struct cfg80211_bitrate_mask *mask)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 	u16 bitmap_rates[MAX_BITMAP_RATES_SIZE];
@@ -1843,10 +1835,11 @@ static int mwifiex_cfg80211_set_cqm_rssi_config(struct wiphy *wiphy,
  */
 static int mwifiex_cfg80211_change_beacon(struct wiphy *wiphy,
 					  struct net_device *dev,
-					  struct cfg80211_beacon_data *data)
+					  struct cfg80211_ap_update *params)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 	struct mwifiex_adapter *adapter = priv->adapter;
+	struct cfg80211_beacon_data *data = &params->beacon;
 
 	mwifiex_cancel_scan(adapter);
 
@@ -1998,7 +1991,8 @@ mwifiex_cfg80211_get_antenna(struct wiphy *wiphy, u32 *tx_ant, u32 *rx_ant)
 /* cfg80211 operation handler for stop ap.
  * Function stops BSS running at uAP interface.
  */
-static int mwifiex_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *dev)
+static int mwifiex_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
+				    unsigned int link_id)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 
@@ -2052,6 +2046,8 @@ static int mwifiex_cfg80211_start_ap(struct wiphy *wiphy,
 		return -ENOMEM;
 
 	mwifiex_set_sys_config_invalid_data(bss_cfg);
+
+	memcpy(bss_cfg->mac_addr, priv->curr_addr, ETH_ALEN);
 
 	if (params->beacon_interval)
 		bss_cfg->beacon_period = params->beacon_interval;
@@ -2421,7 +2417,7 @@ mwifiex_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		return -EINVAL;
 	}
 
-	if (priv->wdev.current_bss) {
+	if (priv->wdev.connected) {
 		mwifiex_dbg(adapter, ERROR,
 			    "%s: already connected\n", dev->name);
 		return -EALREADY;
@@ -2649,7 +2645,7 @@ mwifiex_cfg80211_scan(struct wiphy *wiphy,
 		return -EBUSY;
 	}
 
-	if (!priv->wdev.current_bss && priv->scan_block)
+	if (!priv->wdev.connected && priv->scan_block)
 		priv->scan_block = false;
 
 	if (!mwifiex_stop_bg_scan(priv))
@@ -3134,7 +3130,7 @@ struct wireless_dev *mwifiex_add_virtual_intf(struct wiphy *wiphy,
 	priv->dfs_cac_workqueue = alloc_workqueue("MWIFIEX_DFS_CAC%s",
 						  WQ_HIGHPRI |
 						  WQ_MEM_RECLAIM |
-						  WQ_UNBOUND, 1, name);
+						  WQ_UNBOUND, 0, name);
 	if (!priv->dfs_cac_workqueue) {
 		mwifiex_dbg(adapter, ERROR, "cannot alloc DFS CAC queue\n");
 		ret = -ENOMEM;
@@ -3145,7 +3141,7 @@ struct wireless_dev *mwifiex_add_virtual_intf(struct wiphy *wiphy,
 
 	priv->dfs_chan_sw_workqueue = alloc_workqueue("MWIFIEX_DFS_CHSW%s",
 						      WQ_HIGHPRI | WQ_UNBOUND |
-						      WQ_MEM_RECLAIM, 1, name);
+						      WQ_MEM_RECLAIM, 0, name);
 	if (!priv->dfs_chan_sw_workqueue) {
 		mwifiex_dbg(adapter, ERROR, "cannot alloc DFS channel sw queue\n");
 		ret = -ENOMEM;
@@ -3363,7 +3359,7 @@ static int mwifiex_set_wowlan_mef_entry(struct mwifiex_private *priv,
 		}
 
 		if (!wowlan->patterns[i].pkt_offset) {
-			if (!(byte_seq[0] & 0x01) &&
+			if (is_unicast_ether_addr(byte_seq) &&
 			    (byte_seq[MWIFIEX_MEF_MAX_BYTESEQ] == 1)) {
 				mef_cfg->criteria |= MWIFIEX_CRITERIA_UNICAST;
 				continue;
@@ -3760,10 +3756,10 @@ static int mwifiex_cfg80211_set_coalesce(struct wiphy *wiphy,
  */
 static int
 mwifiex_cfg80211_tdls_mgmt(struct wiphy *wiphy, struct net_device *dev,
-			   const u8 *peer, u8 action_code, u8 dialog_token,
-			   u16 status_code, u32 peer_capability,
-			   bool initiator, const u8 *extra_ies,
-			   size_t extra_ies_len)
+			   const u8 *peer, int link_id, u8 action_code,
+			   u8 dialog_token, u16 status_code,
+			   u32 peer_capability, bool initiator,
+			   const u8 *extra_ies, size_t extra_ies_len)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 	int ret;
@@ -4025,6 +4021,7 @@ mwifiex_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 
 static int mwifiex_cfg80211_get_channel(struct wiphy *wiphy,
 					struct wireless_dev *wdev,
+					unsigned int link_id,
 					struct cfg80211_chan_def *chandef)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(wdev->netdev);
@@ -4401,6 +4398,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			WIPHY_FLAG_AP_UAPSD |
 			WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL |
 			WIPHY_FLAG_HAS_CHANNEL_SWITCH |
+			WIPHY_FLAG_NETNS_OK |
 			WIPHY_FLAG_PS_ON_BY_DEFAULT;
 
 	if (ISSUPP_TDLS_ENABLED(adapter->fw_cap_info))

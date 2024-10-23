@@ -1,6 +1,8 @@
 
 config USER_GDB
 	bool "GDB (GNU debugger)"
+	select LIB_LIBMPFR
+	select LIB_LIBGMP
 	default n
 
 if USER_GDB

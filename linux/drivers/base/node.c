@@ -21,7 +21,7 @@
 #include <linux/swap.h>
 #include <linux/slab.h>
 
-static struct bus_type node_subsys = {
+static const struct bus_type node_subsys = {
 	.name = "node",
 	.dev_name = "node",
 };
@@ -45,7 +45,7 @@ static inline ssize_t cpumap_read(struct file *file, struct kobject *kobj,
 	return n;
 }
 
-static BIN_ATTR_RO(cpumap, 0);
+static BIN_ATTR_RO(cpumap, CPUMAP_FILE_MAX_BYTES);
 
 static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 				   struct bin_attribute *attr, char *buf,
@@ -66,7 +66,7 @@ static inline ssize_t cpulist_read(struct file *file, struct kobject *kobj,
 	return n;
 }
 
-static BIN_ATTR_RO(cpulist, 0);
+static BIN_ATTR_RO(cpulist, CPULIST_FILE_MAX_BYTES);
 
 /**
  * struct node_access_nodes - Access class device to hold user visible
@@ -74,14 +74,14 @@ static BIN_ATTR_RO(cpulist, 0);
  * @dev:	Device for this memory access class
  * @list_node:	List element in the node's access list
  * @access:	The access class rank
- * @hmem_attrs: Heterogeneous memory performance attributes
+ * @coord:	Heterogeneous memory performance coordinates
  */
 struct node_access_nodes {
 	struct device		dev;
 	struct list_head	list_node;
 	unsigned int		access;
 #ifdef CONFIG_HMEM_REPORTING
-	struct node_hmem_attrs	hmem_attrs;
+	struct access_coordinate	coord;
 #endif
 };
 #define to_access_nodes(dev) container_of(dev, struct node_access_nodes, dev)
@@ -126,7 +126,7 @@ static void node_access_release(struct device *dev)
 }
 
 static struct node_access_nodes *node_init_node_access(struct node *node,
-						       unsigned int access)
+						       enum access_coordinate_class access)
 {
 	struct node_access_nodes *access_node;
 	struct device *dev;
@@ -161,15 +161,15 @@ free:
 }
 
 #ifdef CONFIG_HMEM_REPORTING
-#define ACCESS_ATTR(name)						\
-static ssize_t name##_show(struct device *dev,				\
+#define ACCESS_ATTR(property)						\
+static ssize_t property##_show(struct device *dev,			\
 			   struct device_attribute *attr,		\
 			   char *buf)					\
 {									\
 	return sysfs_emit(buf, "%u\n",					\
-			  to_access_nodes(dev)->hmem_attrs.name);	\
+			  to_access_nodes(dev)->coord.property);	\
 }									\
-static DEVICE_ATTR_RO(name)
+static DEVICE_ATTR_RO(property)
 
 ACCESS_ATTR(read_bandwidth);
 ACCESS_ATTR(read_latency);
@@ -187,11 +187,11 @@ static struct attribute *access_attrs[] = {
 /**
  * node_set_perf_attrs - Set the performance values for given access class
  * @nid: Node identifier to be set
- * @hmem_attrs: Heterogeneous memory performance attributes
+ * @coord: Heterogeneous memory performance coordinates
  * @access: The access class the for the given attributes
  */
-void node_set_perf_attrs(unsigned int nid, struct node_hmem_attrs *hmem_attrs,
-			 unsigned int access)
+void node_set_perf_attrs(unsigned int nid, struct access_coordinate *coord,
+			 enum access_coordinate_class access)
 {
 	struct node_access_nodes *c;
 	struct node *node;
@@ -205,7 +205,7 @@ void node_set_perf_attrs(unsigned int nid, struct node_hmem_attrs *hmem_attrs,
 	if (!c)
 		return;
 
-	c->hmem_attrs = *hmem_attrs;
+	c->coord = *coord;
 	for (i = 0; access_attrs[i] != NULL; i++) {
 		if (sysfs_add_file_to_group(&c->dev.kobj, access_attrs[i],
 					    "initiators")) {
@@ -215,6 +215,7 @@ void node_set_perf_attrs(unsigned int nid, struct node_hmem_attrs *hmem_attrs,
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(node_set_perf_attrs);
 
 /**
  * struct node_cache_info - Internal tracking for memory node caches
@@ -433,6 +434,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     "Node %d ShadowCallStack:%8lu kB\n"
 #endif
 			     "Node %d PageTables:     %8lu kB\n"
+			     "Node %d SecPageTables:  %8lu kB\n"
 			     "Node %d NFS_Unstable:   %8lu kB\n"
 			     "Node %d Bounce:         %8lu kB\n"
 			     "Node %d WritebackTmp:   %8lu kB\n"
@@ -444,8 +446,11 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     "Node %d AnonHugePages:  %8lu kB\n"
 			     "Node %d ShmemHugePages: %8lu kB\n"
 			     "Node %d ShmemPmdMapped: %8lu kB\n"
-			     "Node %d FileHugePages: %8lu kB\n"
-			     "Node %d FilePmdMapped: %8lu kB\n"
+			     "Node %d FileHugePages:  %8lu kB\n"
+			     "Node %d FilePmdMapped:  %8lu kB\n"
+#endif
+#ifdef CONFIG_UNACCEPTED_MEMORY
+			     "Node %d Unaccepted:     %8lu kB\n"
 #endif
 			     ,
 			     nid, K(node_page_state(pgdat, NR_FILE_DIRTY)),
@@ -459,6 +464,7 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     nid, node_page_state(pgdat, NR_KERNEL_SCS_KB),
 #endif
 			     nid, K(node_page_state(pgdat, NR_PAGETABLE)),
+			     nid, K(node_page_state(pgdat, NR_SECONDARY_PAGETABLE)),
 			     nid, 0UL,
 			     nid, K(sum_zone_node_page_state(nid, NR_BOUNCE)),
 			     nid, K(node_page_state(pgdat, NR_WRITEBACK_TEMP)),
@@ -474,6 +480,10 @@ static ssize_t node_read_meminfo(struct device *dev,
 			     nid, K(node_page_state(pgdat, NR_SHMEM_PMDMAPPED)),
 			     nid, K(node_page_state(pgdat, NR_FILE_THPS)),
 			     nid, K(node_page_state(pgdat, NR_FILE_PMDMAPPED))
+#endif
+#ifdef CONFIG_UNACCEPTED_MEMORY
+			     ,
+			     nid, K(sum_zone_node_page_state(nid, NR_UNACCEPTED))
 #endif
 			    );
 	len += hugetlb_report_node_meminfo(buf, len, nid);
@@ -584,67 +594,15 @@ static const struct attribute_group *node_dev_groups[] = {
 #ifdef CONFIG_HAVE_ARCH_NODE_DEV_GROUP
 	&arch_node_dev_group,
 #endif
+#ifdef CONFIG_MEMORY_FAILURE
+	&memory_failure_attr_group,
+#endif
 	NULL
 };
 
-#ifdef CONFIG_HUGETLBFS
-/*
- * hugetlbfs per node attributes registration interface:
- * When/if hugetlb[fs] subsystem initializes [sometime after this module],
- * it will register its per node attributes for all online nodes with
- * memory.  It will also call register_hugetlbfs_with_node(), below, to
- * register its attribute registration functions with this node driver.
- * Once these hooks have been initialized, the node driver will call into
- * the hugetlb module to [un]register attributes for hot-plugged nodes.
- */
-static node_registration_func_t __hugetlb_register_node;
-static node_registration_func_t __hugetlb_unregister_node;
-
-static inline bool hugetlb_register_node(struct node *node)
-{
-	if (__hugetlb_register_node &&
-			node_state(node->dev.id, N_MEMORY)) {
-		__hugetlb_register_node(node);
-		return true;
-	}
-	return false;
-}
-
-static inline void hugetlb_unregister_node(struct node *node)
-{
-	if (__hugetlb_unregister_node)
-		__hugetlb_unregister_node(node);
-}
-
-void register_hugetlbfs_with_node(node_registration_func_t doregister,
-				  node_registration_func_t unregister)
-{
-	__hugetlb_register_node   = doregister;
-	__hugetlb_unregister_node = unregister;
-}
-#else
-static inline void hugetlb_register_node(struct node *node) {}
-
-static inline void hugetlb_unregister_node(struct node *node) {}
-#endif
-
 static void node_device_release(struct device *dev)
 {
-	struct node *node = to_node(dev);
-
-#if defined(CONFIG_MEMORY_HOTPLUG) && defined(CONFIG_HUGETLBFS)
-	/*
-	 * We schedule the work only when a memory section is
-	 * onlined/offlined on this node. When we come here,
-	 * all the memory on this node has been offlined,
-	 * so we won't enqueue new work to this work.
-	 *
-	 * The work is using node->node_work, so we should
-	 * flush work before freeing the memory.
-	 */
-	flush_work(&node->node_work);
-#endif
-	kfree(node);
+	kfree(to_node(dev));
 }
 
 /*
@@ -663,13 +621,13 @@ static int register_node(struct node *node, int num)
 	node->dev.groups = node_dev_groups;
 	error = device_register(&node->dev);
 
-	if (error)
+	if (error) {
 		put_device(&node->dev);
-	else {
+	} else {
 		hugetlb_register_node(node);
-
 		compaction_register_node(node);
 	}
+
 	return error;
 }
 
@@ -682,8 +640,8 @@ static int register_node(struct node *node, int num)
  */
 void unregister_node(struct node *node)
 {
+	hugetlb_unregister_node(node);
 	compaction_unregister_node(node);
-	hugetlb_unregister_node(node);		/* no-op, if memoryless node */
 	node_remove_accesses(node);
 	node_remove_caches(node);
 	device_unregister(&node->dev);
@@ -732,7 +690,7 @@ int register_cpu_under_node(unsigned int cpu, unsigned int nid)
  */
 int register_memory_node_under_compute_node(unsigned int mem_nid,
 					    unsigned int cpu_nid,
-					    unsigned int access)
+					    enum access_coordinate_class access)
 {
 	struct node *init_node, *targ_node;
 	struct node_access_nodes *initiator, *target;
@@ -905,82 +863,20 @@ void register_memory_blocks_under_node(int nid, unsigned long start_pfn,
 			   (void *)&nid, func);
 	return;
 }
-
-#ifdef CONFIG_HUGETLBFS
-/*
- * Handle per node hstate attribute [un]registration on transistions
- * to/from memoryless state.
- */
-static void node_hugetlb_work(struct work_struct *work)
-{
-	struct node *node = container_of(work, struct node, node_work);
-
-	/*
-	 * We only get here when a node transitions to/from memoryless state.
-	 * We can detect which transition occurred by examining whether the
-	 * node has memory now.  hugetlb_register_node() already check this
-	 * so we try to register the attributes.  If that fails, then the
-	 * node has transitioned to memoryless, try to unregister the
-	 * attributes.
-	 */
-	if (!hugetlb_register_node(node))
-		hugetlb_unregister_node(node);
-}
-
-static void init_node_hugetlb_work(int nid)
-{
-	INIT_WORK(&node_devices[nid]->node_work, node_hugetlb_work);
-}
-
-static int node_memory_callback(struct notifier_block *self,
-				unsigned long action, void *arg)
-{
-	struct memory_notify *mnb = arg;
-	int nid = mnb->status_change_nid;
-
-	switch (action) {
-	case MEM_ONLINE:
-	case MEM_OFFLINE:
-		/*
-		 * offload per node hstate [un]registration to a work thread
-		 * when transitioning to/from memoryless state.
-		 */
-		if (nid != NUMA_NO_NODE)
-			schedule_work(&node_devices[nid]->node_work);
-		break;
-
-	case MEM_GOING_ONLINE:
-	case MEM_GOING_OFFLINE:
-	case MEM_CANCEL_ONLINE:
-	case MEM_CANCEL_OFFLINE:
-	default:
-		break;
-	}
-
-	return NOTIFY_OK;
-}
-#endif	/* CONFIG_HUGETLBFS */
 #endif /* CONFIG_MEMORY_HOTPLUG */
-
-#if !defined(CONFIG_MEMORY_HOTPLUG) || !defined(CONFIG_HUGETLBFS)
-static inline int node_memory_callback(struct notifier_block *self,
-				unsigned long action, void *arg)
-{
-	return NOTIFY_OK;
-}
-
-static void init_node_hugetlb_work(int nid) { }
-
-#endif
 
 int __register_one_node(int nid)
 {
 	int error;
 	int cpu;
+	struct node *node;
 
-	node_devices[nid] = kzalloc(sizeof(struct node), GFP_KERNEL);
-	if (!node_devices[nid])
+	node = kzalloc(sizeof(struct node), GFP_KERNEL);
+	if (!node)
 		return -ENOMEM;
+
+	INIT_LIST_HEAD(&node->access_list);
+	node_devices[nid] = node;
 
 	error = register_node(node_devices[nid], nid);
 
@@ -990,9 +886,6 @@ int __register_one_node(int nid)
 			register_cpu_under_node(cpu, nid);
 	}
 
-	INIT_LIST_HEAD(&node_devices[nid]->access_list);
-	/* initialize work queue for memory hot plug */
-	init_node_hugetlb_work(nid);
 	node_init_caches(nid);
 
 	return error;
@@ -1063,13 +956,8 @@ static const struct attribute_group *cpu_root_attr_groups[] = {
 	NULL,
 };
 
-#define NODE_CALLBACK_PRI	2	/* lower than SLAB */
 void __init node_dev_init(void)
 {
-	static struct notifier_block node_memory_callback_nb = {
-		.notifier_call = node_memory_callback,
-		.priority = NODE_CALLBACK_PRI,
-	};
 	int ret, i;
 
  	BUILD_BUG_ON(ARRAY_SIZE(node_state_attr) != NR_NODE_STATES);
@@ -1078,8 +966,6 @@ void __init node_dev_init(void)
 	ret = subsys_system_register(&node_subsys, cpu_root_attr_groups);
 	if (ret)
 		panic("%s() failed to register subsystem: %d\n", __func__, ret);
-
-	register_hotmemory_notifier(&node_memory_callback_nb);
 
 	/*
 	 * Create all node devices, which will properly link the node

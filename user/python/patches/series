@@ -7,7 +7,6 @@
 0007-Abort-on-failed-module-build.patch
 0008-Serial-ioctl-workaround.patch
 0009-Do-not-adjust-the-shebang-of-Python-scripts-for-cros.patch
-0010-Override-system-locale-and-set-to-default-when-addin.patch
 0011-Add-importlib-fix-for-PEP-3147-issue.patch
 0013-Add-an-option-to-disable-pydoc.patch
 0014-Add-an-option-to-disable-lib2to3.patch

@@ -161,6 +161,15 @@ init_wifi() {
 	iwpriv wifi1 fc_buf3_max 8192
 }
 
+set_affinity() {
+	local int_name="$1"
+	local affinity="$2"
+
+	for irq in $(sed -rn "s/^[ ]*([0-9]+):.* $int_name\$/\\1/p" /proc/interrupts); do
+		echo $affinity > /proc/irq/$irq/smp_affinity
+	done
+}
+
 hostname EX50
 
 echo "Mounting filesystems..."
@@ -199,11 +208,13 @@ ip link set eth0 name wan
 modprobe shortcut-fe-cm
 modprobe ecm
 
+# Set NSS IRQs affinity to core-3 to improve throughput
+set_affinity nss_empty_buf_sos 8
+set_affinity nss_empty_buf_queue 8
+set_affinity nss_queue0 8
+
 # Set external network interfaces to asigned MAC addresses
 setmac -i lan,wan -u -n 2
-
-echo 495 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio495/direction
 
 # Configure and set the initial POWER LED color
 /etc/power-led.sh init
@@ -283,6 +294,16 @@ fi
 [ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
 
 random_seed restore
+
+# Search for CPU temperature sensor
+cputemp=$(grep cpu_thermal /sys/class/thermal/thermal_zone*/hwmon*/name 2>/dev/null)
+if [ "$cputemp" ]; then
+	cputemp="${cputemp%hwmon*}"
+	ln -s "$cputemp/temp" /var/run/cpu_temp
+else
+	# Add dummy temperature
+	echo 0 >/var/run/cpu_temp
+fi
 
 # init processing
 [ -x /etc/rcS ] && /etc/rcS

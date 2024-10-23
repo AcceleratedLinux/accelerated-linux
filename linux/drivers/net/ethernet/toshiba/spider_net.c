@@ -2270,8 +2270,7 @@ spider_net_setup_netdev(struct spider_net_card *card)
 	card->aneg_count = 0;
 	timer_setup(&card->aneg_timer, spider_net_link_phy, 0);
 
-	netif_napi_add(netdev, &card->napi,
-		       spider_net_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add(netdev, &card->napi, spider_net_poll);
 
 	spider_net_setup_netdev_ops(netdev);
 
@@ -2333,7 +2332,7 @@ spider_net_alloc_card(void)
 	struct spider_net_card *card;
 
 	netdev = alloc_etherdev(struct_size(card, darray,
-					    tx_descriptors + rx_descriptors));
+					    size_add(tx_descriptors, rx_descriptors)));
 	if (!netdev)
 		return NULL;
 

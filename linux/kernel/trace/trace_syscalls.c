@@ -201,8 +201,6 @@ print_syscall_exit(struct trace_iterator *iter, int flags,
 	return trace_handle_return(s);
 }
 
-extern char *__bad_type_size(void);
-
 #define SYSCALL_FIELD(_type, _name) {					\
 	.type = #_type, .name = #_name,					\
 	.size = sizeof(_type), .align = __alignof__(_type),		\
@@ -557,12 +555,15 @@ static int perf_call_bpf_enter(struct trace_event_call *call, struct pt_regs *re
 			       struct syscall_trace_enter *rec)
 {
 	struct syscall_tp_t {
-		unsigned long long regs;
-		unsigned long syscall_nr;
+		struct trace_entry ent;
+		int syscall_nr;
 		unsigned long args[SYSCALL_DEFINE_MAXARGS];
-	} param;
+	} __aligned(8) param;
 	int i;
 
+	BUILD_BUG_ON(sizeof(param.ent) < sizeof(void *));
+
+	/* bpf prog requires 'regs' to be the first member in the ctx (a.k.a. &param) */
 	*(struct pt_regs **)&param = regs;
 	param.syscall_nr = rec->nr;
 	for (i = 0; i < sys_data->nb_args; i++)
@@ -659,11 +660,12 @@ static int perf_call_bpf_exit(struct trace_event_call *call, struct pt_regs *reg
 			      struct syscall_trace_exit *rec)
 {
 	struct syscall_tp_t {
-		unsigned long long regs;
-		unsigned long syscall_nr;
+		struct trace_entry ent;
+		int syscall_nr;
 		unsigned long ret;
-	} param;
+	} __aligned(8) param;
 
+	/* bpf prog requires 'regs' to be the first member in the ctx (a.k.a. &param) */
 	*(struct pt_regs **)&param = regs;
 	param.syscall_nr = rec->nr;
 	param.ret = rec->ret;

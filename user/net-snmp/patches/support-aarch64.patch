@@ -6,28 +6,8 @@ Subject: [PATCH] user/net-snmp: support configuring on ARM64 machines
 Add configure support for building on ARM64 machines. The code is fine,
 we just need the configure front end support in place.
 ---
- config.guess | 7 +++++++
  config.sub   | 2 ++
- 2 files changed, 9 insertions(+)
 
-diff --git a/config.guess b/config.guess
-index ca2a03ca4f..5253cfd1d2 100755
---- a/config.guess
-+++ b/config.guess
-@@ -921,6 +921,13 @@ EOF
-     ppc64:Linux:*:*)
- 	echo powerpc64-unknown-linux-gnu
- 	exit ;;
-+    aarch64:Linux:*:*)
-+	echo ${UNAME_MACHINE}-unknown-linux-gnu
-+	exit ;;
-+    aarch64_be:Linux:*:*)
-+	UNAME_MACHINE=aarch64_be
-+	echo ${UNAME_MACHINE}-unknown-linux-gnu
-+	exit ;;
-     alpha:Linux:*:*)
- 	case `sed -n '/^cpu model/s/^.*: \(.*\)/\1/p' < /proc/cpuinfo` in
- 	  EV5)   UNAME_MACHINE=alphaev5 ;;
 diff --git a/config.sub b/config.sub
 index 2f24593c6a..c36ffbb8a7 100755
 --- a/config.sub

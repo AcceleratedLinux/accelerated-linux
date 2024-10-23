@@ -26,7 +26,8 @@ CONFIG     = 4096
 DIRS = 
 
 ROMFS_DIRS = \
-	bin boot \
+	bin \
+	boot \
 	dev dev/flash \
 	etc etc/config \
 	home home/httpd home/httpd/cgi-bin \
@@ -34,8 +35,9 @@ ROMFS_DIRS = \
 	mnt \
 	proc \
 	sbin \
+	sys \
 	tmp \
-	usr usr/bin usr/sbin \
+	usr usr/bin usr/sbin usr/var \
 	var var/run var/log var/tmp var/lock var/empty
 
 DEVICES = \

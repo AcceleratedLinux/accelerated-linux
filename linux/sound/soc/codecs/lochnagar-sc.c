@@ -217,7 +217,6 @@ static const struct snd_soc_component_driver lochnagar_sc_driver = {
 	.dapm_routes = lochnagar_sc_routes,
 	.num_dapm_routes = ARRAY_SIZE(lochnagar_sc_routes),
 
-	.non_legacy_dai_naming = 1,
 	.endianness = 1,
 };
 
@@ -254,7 +253,7 @@ MODULE_DEVICE_TABLE(of, lochnagar_of_match);
 static struct platform_driver lochnagar_sc_codec_driver = {
 	.driver = {
 		.name = "lochnagar-soundcard",
-		.of_match_table = of_match_ptr(lochnagar_of_match),
+		.of_match_table = lochnagar_of_match,
 	},
 
 	.probe = lochnagar_sc_probe,

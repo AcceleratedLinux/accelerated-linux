@@ -1,5 +1,5 @@
 URL = https://github.com/jemalloc/jemalloc.git
-VERSION = 4.2.1
+VERSION = 5.3.0
 METHOD = git
 
 CONFIGURE = ./autogen.sh

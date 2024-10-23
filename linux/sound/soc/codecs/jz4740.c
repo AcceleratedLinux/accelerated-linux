@@ -291,8 +291,6 @@ static const struct snd_soc_component_driver soc_codec_dev_jz4740_codec = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
-
 };
 
 static const struct regmap_config jz4740_codec_regmap_config = {
@@ -303,7 +301,7 @@ static const struct regmap_config jz4740_codec_regmap_config = {
 
 	.reg_defaults = jz4740_codec_reg_defaults,
 	.num_reg_defaults = ARRAY_SIZE(jz4740_codec_reg_defaults),
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static int jz4740_codec_probe(struct platform_device *pdev)

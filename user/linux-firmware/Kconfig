@@ -21,11 +21,10 @@ config USER_LINUX_FIRMWARE_QCA988X
 	help
 	  Include firmware for the QCA988X ath10k device.
 
-config USER_LINUX_FIRMWARE_QCA988X_CT
-	bool "CT firmware for QCA988X."
-	depends on USER_LINUX_FIRMWARE_QCA988X || USER_LINUX_FIRMWARE_ALL_FIRMWARE
+config USER_LINUX_FIRMWARE_QCA988X_XOS
+	bool "Firmware for QCA988X used in XOS products"
 	help
-	  Use CT firmware for the QCA988X ath10k device.
+	  Use the same firmware for the QCA988X ath10k device as XOS is using.
 
 config USER_LINUX_FIRMWARE_QCA9984
 	bool "Firmware for QCA9984."
@@ -44,6 +43,12 @@ config USER_LINUX_FIRMWARE_QCA6174
 	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
 	help
 	  Include firmware for the QCA6174 ath10k device.
+
+config USER_LINUX_FIRMWARE_QCA_BLUETOOTH
+	bool "Bluetooth firmware for QCA chipsets."
+	depends on USER_LINUX_FIRMWARE
+	help
+	  Include firmware for Bluetooth support on QCA chipsets.
 
 config USER_LINUX_FIRMWARE_RT2561
 	bool "Firmware for RT2561."
@@ -134,3 +139,22 @@ config USER_LINUX_FIRMWARE_MARVELL_SD8887
 	depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
 	help
 	  Include firmware for the MARVEL SD8887 on the device.
+
+config USER_LINUX_FIRMWARE_MT7915
+        bool "Firmware for MT7915."
+        depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+        help
+          Include firmware for the MT7915 on the device.
+
+config USER_LINUX_FIRMWARE_MT7615
+        bool "Firmware for MT7615."
+        depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+        help
+          Include firmware for the MT7615 on the device.
+
+config USER_LINUX_FIRMWARE_SDUART_N61X
+        bool "Firmware for the MAYA SDIO Wi-Fi module."
+        depends on USER_LINUX_FIRMWARE && USER_LINUX_FIRMWARE_ALL_FIRMWARE != y
+        help
+          Include firmware for the MAYA-W266-00B SDIO module on the device.
+

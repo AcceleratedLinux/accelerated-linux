@@ -10,11 +10,14 @@ all romfs:
 
 else
 
-URL      = http://dbus.freedesktop.org/releases/dbus-glib/dbus-glib-0.100.2.tar.gz
+URL      = https://dbus.freedesktop.org/releases/dbus-glib/dbus-glib-0.112.tar.gz
 
 CONFVARS  = ac_cv_have_abstract_sockets=yes
-CONFOPTS  = --disable-gtk-doc-html
-CONFOPTS  = --with-dbus-binding-tool=$(EXT_DBUS_BINDING_TOOL)
+CONFOPTS  = --disable-gtk-doc \
+	    --disable-gtk-doc-html \
+	    --with-dbus-binding-tool=$(EXT_DBUS_BINDING_TOOL) \
+	    --disable-tests \
+	    --disable-bash-completion
 
 ifdef CONFIG_LIB_GLIB_STATIC
 CONFVARS  += LIBS="-lffi"
@@ -27,8 +30,6 @@ ROMFS     = dbus-glib_romfs
 include $(ROOTDIR)/tools/automake.inc
 
 dbus-glib_romfs:
-	$(ROMFSINST) -R  /libexec/dbus-bash-completion-helper
-	$(ROMFSINST) -R  /etc/bash_completion.d/dbus-bash-completion.sh
 	$(ROMFSINST) -R  /bin/dbus-binding-tool
 
 endif

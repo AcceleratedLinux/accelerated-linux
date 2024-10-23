@@ -16,7 +16,7 @@ description:
   their own separate schema that should be referenced from here.
 
 maintainers:
-  - Pratyush Yadav <p.yadav@ti.com>
+  - Mark Brown <broonie@kernel.org>
 
 properties:
   reg:
@@ -28,21 +28,6 @@ properties:
           maximum: 256
     description:
       Chip select used by the device.
-
-  spi-3wire:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      The device requires 3-wire mode.
-
-  spi-cpha:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      The device requires shifted clock phase (CPHA) mode.
-
-  spi-cpol:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      The device requires inverse clock polarity (CPOL) mode.
 
   spi-cs-high:
     $ref: /schemas/types.yaml#/definitions/flag
@@ -59,6 +44,21 @@ properties:
     description:
       Maximum SPI clocking speed of the device in Hz.
 
+  spi-cs-setup-delay-ns:
+    description:
+      Delay in nanoseconds to be introduced by the controller after CS is
+      asserted.
+
+  spi-cs-hold-delay-ns:
+    description:
+      Delay in nanoseconds to be introduced by the controller before CS is
+      de-asserted.
+
+  spi-cs-inactive-delay-ns:
+    description:
+      Delay in nanoseconds to be introduced by the controller after CS is
+      de-asserted.
+
   spi-rx-bus-width:
     description:
       Bus width to the SPI bus used for read transfers.
@@ -70,6 +70,11 @@ properties:
   spi-rx-delay-us:
     description:
       Delay, in microseconds, after a read transfer.
+
+  rx-sample-delay-ns:
+    description: SPI Rx sample delay offset, unit is nanoseconds.
+      The delay from the default sample time before the actual
+      sample of the rxd input signal occurs.
 
   spi-tx-bus-width:
     description:
@@ -108,9 +113,16 @@ properties:
     minItems: 2
     maxItems: 4
 
+  st,spi-midi-ns:
+    description: |
+      Only for STM32H7, (Master Inter-Data Idleness) minimum time
+      delay in nanoseconds inserted between two consecutive data frames.
+
 # The controller specific properties go here.
 allOf:
+  - $ref: arm,pl022-peripheral-props.yaml#
   - $ref: cdns,qspi-nor-peripheral-props.yaml#
   - $ref: samsung,spi-peripheral-props.yaml#
+  - $ref: nvidia,tegra210-quad-peripheral-props.yaml#
 
 additionalProperties: true

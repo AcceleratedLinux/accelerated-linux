@@ -1,0 +1,11 @@
+# USB 2.x drive at address 1-1 or USB 3.x drive at address 2-1
+# devices/platform/soc/5800d000.usbh-ehci/usb2/2-1/2-1.1
+ENV{DEVPATH}=="/devices/platform/soc/5800d000.usbh-ehci/usb1/1-1/1-1.1/*", GOTO="found"
+ENV{DEVPATH}=="/devices/platform/soc/5800d000.usbh-ehci/usb2/2-1/2-1.1/*", GOTO="found"
+GOTO="end"
+
+LABEL="found"
+KERNEL=="sd[a-z]", ACTION=="add", RUN+="/bin/storage add /dev/%k usb1"
+KERNEL=="sd[a-z]", ACTION=="remove", RUN+="/bin/storage remove /dev/%k usb1"
+
+LABEL="end"

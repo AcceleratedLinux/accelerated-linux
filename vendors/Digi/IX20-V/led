@@ -1,0 +1,212 @@
+#!/bin/sh
+#
+# Action for IX20-V LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+# flash LTE and signal strength LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-a -n ONLINE -n ETH -n COM -n RSS1 -n RSS2 -n RSS3 -n RSS4 -n RSS5 -f ETH -O COM -O ONLINE -f RSS1 -f RSS2 -f RSS3 -f RSS4 -f RSS5"
+	else
+		FINDME="-a -N COM -N ETH -N ONLINE -N RSS1 -N RSS2 -N RSS3 -N RSS4 -N RSS5"
+	fi
+	ledcmd $FINDME
+}
+
+wifi_led_update() {
+	runt update network.wifi
+	eval $(config stop)
+	eval $(config start)
+	config load
+	wifi_led_state="-O"
+	aps=$(config keys network.wifi.ap)
+	for ap in $aps ; do
+	  ap=${ap%%.*}
+	  device="$(runt get network.wifi.ap.$ap.device)"
+	  if [ -n "$device" ]; then
+	    if ip link show $device up | grep -q "state UP"; then
+	      wifi_led_state="-o"
+	    fi
+	  fi
+	done
+	
+	clients=$(config keys network.wifi.client)
+	for client in $clients ; do
+	  client=${client%%.*}
+	  device="$(runt get network.wifi.client.$client.device)"
+	  if [ -n "$device" ]; then
+	    if ip link show $device up | grep -q "state UP"; then
+	      wifi_led_state="-o"
+	    fi
+	  fi
+	done
+
+	eval $(config stop)
+	echo "${wifi_led_state} $WIFI"
+}
+
+case "$1" in
+start)
+	ledcmd -a -N COM -N ETH -N ONLINE
+	exit 0
+	;;
+reload)
+	findme_update
+	;;
+stop)
+	# Firmware flash
+	ledcmd -a -n COM -n ETH -n ONLINE -o COM -f ETH -O ONLINE
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+
+# Find the primary modem, or alternatively *any* modem
+modem_name="$(modem name 2> /dev/null)"
+idx="$(modem name="$modem_name" idx 2> /dev/null)"
+# Find the first interface on the modem
+for i in $(runt keys mm.map.interface_idx); do
+	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
+		&& intf=$i && break
+done
+
+if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
+	if [ "$(runt get surelink.ipv4_interface_$intf.passed)" = n \
+			-o "$(runt get surelink.ipv6_interface_$intf.passed)" = n ]; then
+		CELL=1
+	elif [ "$(runt get mm.modem.$modem_name.status.gtech)" = 4g ]; then
+		CELL=3
+	else
+		CELL=2
+	fi
+elif [ "$(runt get network.interface.$intf.ipv4.pending)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.pending)" = 1 ]; then
+	CELL=1
+else
+	CELL=0 # not-valid, never going to work
+fi
+
+if [ "$CELL" != 0 ]; then
+	case "$(runt get mm.modem.$modem_name.status.bars)" in
+	5) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
+	4) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
+	3) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;
+	2) SIGNAL="-o RSS1 -o RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	1) SIGNAL="-o RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	*) SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
+	esac
+else
+	SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5"
+fi
+
+##############################################################
+
+LINK=$(ip link show eth2 2> /dev/null | grep -c "state UP")
+
+LAN4=-1
+LAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.eth2.ipv4.up) in
+	1) [ "$(runt get surelink.ipv4_interface_eth2.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	0) [ "$(runt get network.interface.eth2.ipv4.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.eth2.ipv6.up) in
+	1) [ "$(runt get surelink.ipv6_interface_eth2.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	0) [ "$(runt get network.interface.eth2.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
+	esac
+fi
+
+if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
+	# if neither interface exists, match link
+	LAN=$((LINK ? 2 : 0))
+elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
+	LAN=2
+elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
+	LAN=1
+else
+	LAN=0
+fi
+
+##############################################################
+
+ONLINE="LAN3_RX"
+
+LINK=$(ip link show eth1 2> /dev/null | grep -c "state UP")
+LAN4=-1
+LAN6=-1
+if [ "$LINK" = 1 ]; then
+	case $(runt get network.interface.eth1.ipv4.up) in
+	1) [ "$(runt get surelink.ipv4_interface_eth1.passed)" = n ] && LAN4=1 || LAN4=2 ;;
+	0) [ "$(runt get network.interface.lan1.eth1.pending)" = 1 ] && LAN4=1 || LAN4=0 ;;
+	esac
+
+	case $(runt get network.interface.eth1.ipv6.up) in
+	1) [ "$(runt get surelink.ipv6_interface_eth1.passed)" = n ] && LAN6=1 || LAN6=2 ;;
+	0) [ "$(runt get network.interface.eth1.ipv6.pending)" = 1 ] && LAN6=1 || LAN6=0 ;;
+	esac
+fi
+
+# working out ETH state
+if [ "$LAN4" = -1 -a "$LAN6" = -1 ]; then
+	ETH=$((LINK ? 2 : 0))
+elif [ "$LAN4" = 2 -o "$LAN6" = 2 ]; then
+	ETH=2
+elif [ "$LAN4" = 1 -o "$LAN6" = 1 ]; then
+	ETH=1
+else
+	ETH=0
+fi
+
+case "$CELL$ETH" in
+*2|[23]*) ONLINE_LED="-o $ONLINE";;
+*1|1*) ONLINE_LED="-f $ONLINE";;
+*) ONLINE_LED="-O $ONLINE";;
+esac
+
+##############################################################
+# Update wifi led (on if at least one AP or client is enabled)
+# the IX20-V has no wifi, the IX20W does
+WIFI="LAN3_TX"
+
+WIFI_ENABLED=$([ -x /bin/iwconfig ] && config get network.wifi.radio.phy0.enable)
+case "$WIFI_ENABLED" in
+1) WIFI_LED="$(wifi_led_update)";;
+*) WIFI_LED="-O $WIFI";;
+esac
+
+##############################################################
+
+#
+# The LED table of things based on all possible values above
+#
+LED00="-f COM -O ONLINE -f ETH" # flashing yellow
+LED10="-f COM -O ONLINE -f ETH" # flashing yellow
+LED20="-O COM -O ONLINE -f ETH" # flashing green
+LED30="-O COM -f ONLINE -O ETH" # flashing blue
+LED01="-f COM -O ONLINE -f ETH" # flashing yellow
+LED11="-f COM -O ONLINE -f ETH" # flashing yellow
+LED21="-O COM -O ONLINE -f ETH" # flashing green
+LED31="-O COM -f ONLINE -O ETH" # flashing blue
+LED02="-f COM -f ONLINE -f ETH" # flashing white
+LED12="-f COM -f ONLINE -f ETH" # flashing white
+LED22="-O COM -O ONLINE -o ETH" # solid green
+LED32="-O COM -o ONLINE -O ETH" # solid blue
+
+eval ledcmd $SIGNAL $ONLINE_LED $WIFI_LED \$LED$CELL$LAN
+
+
+exit 0

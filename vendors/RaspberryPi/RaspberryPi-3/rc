@@ -1,0 +1,104 @@
+hostname RaspberryPi-3
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=50M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
+
+# initialise devices before we need them
+/etc/rc.dev
+
+BOOTPART=/dev/mmcblk0p1
+EXTPART=/dev/mmcblk0p4
+
+mkdir -p /opt
+
+fsck.ext4 -p ${EXTPART} >/dev/null 2>&1
+ERR=$?
+if [ $ERR -eq 8 ]; then
+	mkfs.ext4 -L extras ${EXTPART}
+fi
+mount ${EXTPART} /opt
+ERR=$?
+
+if [ $ERR -eq 0 ]; then
+	if [ ! -e /opt/.config.lp ]; then
+		dd if=/dev/zero of=/opt/.config.lp bs=16M count=1
+		mkfs.ext4 /opt/.config.lp
+		mkdir /tmp/cfg
+		mount -o loop -t ext4 /opt/.config.lp /tmp/cfg
+		cp -dpR /etc/config/* /tmp/cfg/
+		umount /tmp/cfg
+	fi
+	mount -o loop -t ext4 /opt/.config.lp /etc/config
+else
+	echo "Failed to mount flash based config filesystem"
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=16M tmpfs /etc/config
+fi
+
+if [ ! -e /opt/76-custom.rules ]; then
+	cp /etc/default/76-custom.rules /opt
+fi
+
+mount -o,ro ${BOOTPART} /boot
+
+BOOT_STATE=$(fw_printenv boot_state 2>/dev/null|awk -F= '{print $2}')
+if [ "$BOOT_STATE" = "first" ]; then
+	# successful first boot off reimages sdcard.
+	mount -o,remount,rw ${BOOTPART} /boot
+	fw_setenv boot_state
+	mount -o,remount,ro ${BOOTPART} /boot
+
+elif [ "$BOOT_STATE" = "tryA" ]; then
+	# successful boot off new A zImageA & /dev/mmcblk0p2
+	mount -o,remount,rw ${BOOTPART} /boot
+	fw_setenv boot_state
+	fw_setenv boot_id A
+	fw_setenv bootargs "earlyprintk=ttyS1,115200 earlycon=uart8250,mmio32,0x3f215040 console=ttyS1,115200 root=/dev/mmcblk0p2 ro noinitrd rootfstype=squashfs rootwait mem=1000M"
+	mount -o,remount,ro ${BOOTPART} /boot
+
+elif [ "$BOOT_STATE" = "tryB" ]; then
+	# successful boot off new B zImageB & /dev/mmcblk0p3
+	mount -o,remount,rw ${BOOTPART} /boot
+	fw_setenv boot_state
+	fw_setenv boot_id B
+	fw_setenv bootargs "earlyprintk=ttyS1,115200 earlycon=uart8250,mmio32,0x3f215040 console=ttyS1,115200 root=/dev/mmcblk0p3 ro noinitrd rootfstype=squashfs rootwait mem=1000M"
+	mount -o,remount,ro ${BOOTPART} /boot
+fi
+
+mount -o remount,ro /
+
+mkdir -p /var/run/uci
+cp /etc/default/pam.conf /var/run
+cp /etc/default/passwd /var/run
+cp /etc/default/group /var/run
+echo "*.* -/var/log/messages	;rotate=200k:8" >/var/run/syslog.conf
+echo "ttyS1:unknown:/sbin/getty 115200 ttyS1" >/var/run/inittab
+echo "22 stream tcp nowait root /bin/sshd -i" >/var/run/inetd.conf
+
+# initial date updated too last access of config file
+if [ -e /etc/config/accns.json ]; then
+	SECONDS=$(stat -c %X /etc/config/accns.json)
+	date +%s -s @${SECONDS}
+fi
+
+actiond &
+cat /etc/motd
+
+if [ -e /opt/custom.sh ]; then
+	/opt/custom.sh
+fi
+
+exit 0

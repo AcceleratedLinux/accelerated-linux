@@ -9,12 +9,6 @@ endif
 
 # If we're building with libpam, we add this capability to ssh
 ifdef CONFIG_LIB_LIBPAM
-NEED_LIB_PAM := y
-endif
-ifdef CONFIG_LIB_LIBPAM_FORCE
-NEED_LIB_PAM := y
-endif
-ifeq ($(NEED_LIB_PAM),y)
 CONFOPTS += --with-modules=mod_auth_pam
 PAM_ELIBS:= -ldl
 else

@@ -32,16 +32,7 @@ echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
 ifconfig lo 127.0.0.1
 setmac -i eth1,eth2 -u -n 2
 
-# No Wi-Fi on the IX30, so turn all power off
-# GPIO24 = WiFi module power (output, active high)
-echo 24 > /sys/class/gpio/export
-echo low > /sys/class/gpio/gpio24/direction
-
 serial-mode /dev/serial/port1 init
-
-# developer key
-echo 86 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio86/direction
 
 if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
 	/etc/factory

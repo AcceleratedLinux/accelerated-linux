@@ -106,10 +106,10 @@ void dev_lstats_read(struct net_device *dev, u64 *packets, u64 *bytes)
 
 		lb_stats = per_cpu_ptr(dev->lstats, i);
 		do {
-			start = u64_stats_fetch_begin_irq(&lb_stats->syncp);
+			start = u64_stats_fetch_begin(&lb_stats->syncp);
 			tpackets = u64_stats_read(&lb_stats->packets);
 			tbytes = u64_stats_read(&lb_stats->bytes);
-		} while (u64_stats_fetch_retry_irq(&lb_stats->syncp, start));
+		} while (u64_stats_fetch_retry(&lb_stats->syncp, start));
 		*bytes   += tbytes;
 		*packets += tpackets;
 	}
@@ -141,16 +141,13 @@ static const struct ethtool_ops loopback_ethtool_ops = {
 
 static int loopback_dev_init(struct net_device *dev)
 {
-	dev->lstats = netdev_alloc_pcpu_stats(struct pcpu_lstats);
-	if (!dev->lstats)
-		return -ENOMEM;
+	netdev_lockdep_set_classes(dev);
 	return 0;
 }
 
 static void loopback_dev_free(struct net_device *dev)
 {
 	dev_net(dev)->loopback_dev = NULL;
-	free_percpu(dev->lstats);
 }
 
 static const struct net_device_ops loopback_ops = {
@@ -190,6 +187,7 @@ static void gen_lo_setup(struct net_device *dev,
 	dev->header_ops		= hdr_ops;
 	dev->netdev_ops		= dev_ops;
 	dev->needs_free_netdev	= true;
+	dev->pcpu_stat_type	= NETDEV_PCPU_STAT_LSTATS;
 	dev->priv_destructor	= dev_destructor;
 
 	netif_set_tso_max_size(dev, GSO_MAX_SIZE);
@@ -211,7 +209,7 @@ static __net_init int loopback_net_init(struct net *net)
 	int err;
 
 	err = -ENOMEM;
-	dev = alloc_netdev(0, "lo", NET_NAME_UNKNOWN, loopback_setup);
+	dev = alloc_netdev(0, "lo", NET_NAME_PREDICTABLE, loopback_setup);
 	if (!dev)
 		goto out;
 

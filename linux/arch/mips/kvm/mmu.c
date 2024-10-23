@@ -80,7 +80,7 @@ pgd_t *kvm_pgd_alloc(void)
 {
 	pgd_t *ret;
 
-	ret = (pgd_t *)__get_free_pages(GFP_KERNEL, PGD_ORDER);
+	ret = (pgd_t *)__get_free_pages(GFP_KERNEL, PGD_TABLE_ORDER);
 	if (ret)
 		kvm_pgd_init(ret);
 
@@ -122,8 +122,7 @@ static pte_t *kvm_mips_walk_pgd(pgd_t *pgd, struct kvm_mmu_memory_cache *cache,
 		if (!cache)
 			return NULL;
 		new_pmd = kvm_mmu_memory_cache_alloc(cache);
-		pmd_init((unsigned long)new_pmd,
-			 (unsigned long)invalid_pte_table);
+		pmd_init(new_pmd);
 		pud_populate(NULL, pud, new_pmd);
 	}
 	pmd = pmd_offset(pud, addr);
@@ -445,36 +444,6 @@ bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 	return true;
 }
 
-bool kvm_set_spte_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
-{
-	gpa_t gpa = range->start << PAGE_SHIFT;
-	pte_t hva_pte = range->pte;
-	pte_t *gpa_pte = kvm_mips_pte_for_gpa(kvm, NULL, gpa);
-	pte_t old_pte;
-
-	if (!gpa_pte)
-		return false;
-
-	/* Mapping may need adjusting depending on memslot flags */
-	old_pte = *gpa_pte;
-	if (range->slot->flags & KVM_MEM_LOG_DIRTY_PAGES && !pte_dirty(old_pte))
-		hva_pte = pte_mkclean(hva_pte);
-	else if (range->slot->flags & KVM_MEM_READONLY)
-		hva_pte = pte_wrprotect(hva_pte);
-
-	set_pte(gpa_pte, hva_pte);
-
-	/* Replacing an absent or old page doesn't need flushes */
-	if (!pte_present(old_pte) || !pte_young(old_pte))
-		return false;
-
-	/* Pages swapped, aged, moved, or cleaned require flushes */
-	return !pte_present(hva_pte) ||
-	       !pte_young(hva_pte) ||
-	       pte_pfn(old_pte) != pte_pfn(hva_pte) ||
-	       (pte_dirty(old_pte) && !pte_dirty(hva_pte));
-}
-
 bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 {
 	return kvm_mips_mkold_gpa_pt(kvm, range->start, range->end);
@@ -593,7 +562,7 @@ static int kvm_mips_map_page(struct kvm_vcpu *vcpu, unsigned long gpa,
 	gfn_t gfn = gpa >> PAGE_SHIFT;
 	int srcu_idx, err;
 	kvm_pfn_t pfn;
-	pte_t *ptep, entry, old_pte;
+	pte_t *ptep, entry;
 	bool writeable;
 	unsigned long prot_bits;
 	unsigned long mmu_seq;
@@ -615,17 +584,17 @@ retry:
 	 * Used to check for invalidations in progress, of the pfn that is
 	 * returned by pfn_to_pfn_prot below.
 	 */
-	mmu_seq = kvm->mmu_notifier_seq;
+	mmu_seq = kvm->mmu_invalidate_seq;
 	/*
-	 * Ensure the read of mmu_notifier_seq isn't reordered with PTE reads in
-	 * gfn_to_pfn_prot() (which calls get_user_pages()), so that we don't
+	 * Ensure the read of mmu_invalidate_seq isn't reordered with PTE reads
+	 * in gfn_to_pfn_prot() (which calls get_user_pages()), so that we don't
 	 * risk the page we get a reference to getting unmapped before we have a
-	 * chance to grab the mmu_lock without mmu_notifier_retry() noticing.
+	 * chance to grab the mmu_lock without mmu_invalidate_retry() noticing.
 	 *
 	 * This smp_rmb() pairs with the effective smp_wmb() of the combination
 	 * of the pte_unmap_unlock() after the PTE is zapped, and the
 	 * spin_lock() in kvm_mmu_notifier_invalidate_<page|range_end>() before
-	 * mmu_notifier_seq is incremented.
+	 * mmu_invalidate_seq is incremented.
 	 */
 	smp_rmb();
 
@@ -638,7 +607,7 @@ retry:
 
 	spin_lock(&kvm->mmu_lock);
 	/* Check if an invalidation has taken place since we got pfn */
-	if (mmu_notifier_retry(kvm, mmu_seq)) {
+	if (mmu_invalidate_retry(kvm, mmu_seq)) {
 		/*
 		 * This can happen when mappings are changed asynchronously, but
 		 * also synchronously if a COW is triggered by
@@ -665,7 +634,6 @@ retry:
 	entry = pfn_pte(pfn, __pgprot(prot_bits));
 
 	/* Write the PTE */
-	old_pte = *ptep;
 	set_pte(ptep, entry);
 
 	err = 0;

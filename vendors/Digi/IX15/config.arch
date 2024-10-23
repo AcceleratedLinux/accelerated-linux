@@ -18,9 +18,11 @@ RELFILES = images/image.bin \
 	   images/configs.tar.gz \
 	   images/romfs-inst.log \
 	   images/acl-licenses.txt \
+	   images/sbom.cdx.json \
 	   images/rci_descriptors.tar.gz \
 	   prop/config/schema/accns.schema \
-	   prop/config/cc_acl/app/runt/FE00000A*
+	   prop/config/edp-rust-client/descriptors/runt/FE00000A* \
+	   user/python2/build/python_2_7_lxc.tgz
 
 ############################################################################
 

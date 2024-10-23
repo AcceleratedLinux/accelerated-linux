@@ -351,13 +351,16 @@ static int sctp_v4_addr_valid(union sctp_addr *addr,
 /* Should this be available for binding?   */
 static int sctp_v4_available(union sctp_addr *addr, struct sctp_sock *sp)
 {
-	struct net *net = sock_net(&sp->inet.sk);
-	int ret = inet_addr_type(net, addr->v4.sin_addr.s_addr);
+	struct sock *sk = &sp->inet.sk;
+	struct net *net = sock_net(sk);
+	int tb_id = RT_TABLE_LOCAL;
+	int ret;
 
-
+	tb_id = l3mdev_fib_table_by_index(net, sk->sk_bound_dev_if) ?: tb_id;
+	ret = inet_addr_type_table(net, addr->v4.sin_addr.s_addr, tb_id);
 	if (addr->v4.sin_addr.s_addr != htonl(INADDR_ANY) &&
 	   ret != RTN_LOCAL &&
-	   !sp->inet.freebind &&
+	   !inet_test_bit(FREEBIND, sk) &&
 	    !READ_ONCE(net->ipv4.sysctl_ip_nonlocal_bind))
 		return 0;
 
@@ -423,7 +426,7 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 	struct dst_entry *dst = NULL;
 	union sctp_addr *daddr = &t->ipaddr;
 	union sctp_addr dst_saddr;
-	__u8 tos = inet_sk(sk)->tos;
+	u8 tos = READ_ONCE(inet_sk(sk)->tos);
 
 	if (t->dscp & SCTP_DSCP_SET_MASK)
 		tos = t->dscp & SCTP_DSCP_VAL_MASK;
@@ -432,7 +435,8 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 	fl4->fl4_dport = daddr->v4.sin_port;
 	fl4->flowi4_proto = IPPROTO_SCTP;
 	if (asoc) {
-		fl4->flowi4_tos = RT_CONN_FLAGS_TOS(asoc->base.sk, tos);
+		fl4->flowi4_tos = RT_TOS(tos);
+		fl4->flowi4_scope = ip_sock_rt_scope(asoc->base.sk);
 		fl4->flowi4_oif = asoc->base.sk->sk_bound_dev_if;
 		fl4->fl4_sport = htons(asoc->base.bind_addr.port);
 	}
@@ -497,9 +501,7 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 			continue;
 
 		fl4->fl4_sport = laddr->a.v4.sin_port;
-		flowi4_update_output(fl4,
-				     asoc->base.sk->sk_bound_dev_if,
-				     RT_CONN_FLAGS_TOS(asoc->base.sk, tos),
+		flowi4_update_output(fl4, asoc->base.sk->sk_bound_dev_if,
 				     daddr->v4.sin_addr.s_addr,
 				     laddr->a.v4.sin_addr.s_addr);
 
@@ -550,7 +552,7 @@ static void sctp_v4_get_saddr(struct sctp_sock *sk,
 			      struct flowi *fl)
 {
 	union sctp_addr *saddr = &t->saddr;
-	struct rtable *rt = (struct rtable *)t->dst;
+	struct rtable *rt = dst_rtable(t->dst);
 
 	if (rt) {
 		saddr->v4.sin_family = AF_INET;
@@ -562,6 +564,11 @@ static void sctp_v4_get_saddr(struct sctp_sock *sk,
 static int sctp_v4_skb_iif(const struct sk_buff *skb)
 {
 	return inet_iif(skb);
+}
+
+static int sctp_v4_skb_sdif(const struct sk_buff *skb)
+{
+	return inet_sdif(skb);
 }
 
 /* Was this packet marked by Explicit Congestion Notification? */
@@ -592,8 +599,6 @@ static struct sock *sctp_v4_create_accept_sk(struct sock *sk,
 	newinet = inet_sk(newsk);
 
 	newinet->inet_daddr = asoc->peer.primary_addr.v4.sin_addr.s_addr;
-
-	sk_refcnt_debug_inc(newsk);
 
 	if (newsk->sk_prot->init(newsk)) {
 		sk_common_release(newsk);
@@ -1052,7 +1057,7 @@ static inline int sctp_v4_xmit(struct sk_buff *skb, struct sctp_transport *t)
 	struct flowi4 *fl4 = &t->fl.u.ip4;
 	struct sock *sk = skb->sk;
 	struct inet_sock *inet = inet_sk(sk);
-	__u8 dscp = inet->tos;
+	__u8 dscp = READ_ONCE(inet->tos);
 	__be16 df = 0;
 
 	pr_debug("%s: skb:%p, len:%d, src:%pI4, dst:%pI4\n", __func__, skb,
@@ -1080,7 +1085,7 @@ static inline int sctp_v4_xmit(struct sk_buff *skb, struct sctp_transport *t)
 	skb_reset_inner_mac_header(skb);
 	skb_reset_inner_transport_header(skb);
 	skb_set_inner_ipproto(skb, IPPROTO_SCTP);
-	udp_tunnel_xmit_skb((struct rtable *)dst, sk, skb, fl4->saddr,
+	udp_tunnel_xmit_skb(dst_rtable(dst), sk, skb, fl4->saddr,
 			    fl4->daddr, dscp, ip4_dst_hoplimit(dst), df,
 			    sctp_sk(sk)->udp_port, t->encap_port, false, false);
 	return 0;
@@ -1129,7 +1134,6 @@ static const struct proto_ops inet_seqpacket_ops = {
 	.sendmsg	   = inet_sendmsg,
 	.recvmsg	   = inet_recvmsg,
 	.mmap		   = sock_no_mmap,
-	.sendpage	   = sock_no_sendpage,
 };
 
 /* Registration with AF_INET family.  */
@@ -1182,6 +1186,7 @@ static struct sctp_af sctp_af_inet = {
 	.available	   = sctp_v4_available,
 	.scope		   = sctp_v4_scope,
 	.skb_iif	   = sctp_v4_skb_iif,
+	.skb_sdif	   = sctp_v4_skb_sdif,
 	.is_ce		   = sctp_v4_is_ce,
 	.seq_dump_addr	   = sctp_v4_seq_dump_addr,
 	.ecn_capable	   = sctp_v4_ecn_capable,
@@ -1385,6 +1390,10 @@ static int __net_init sctp_defaults_init(struct net *net)
 	/* Initialize maximum autoclose timeout. */
 	net->sctp.max_autoclose		= INT_MAX / HZ;
 
+#ifdef CONFIG_NET_L3_MASTER_DEV
+	net->sctp.l3mdev_accept = 1;
+#endif
+
 	status = sctp_sysctl_net_register(net);
 	if (status)
 		goto err_sysctl_register;
@@ -1486,17 +1495,11 @@ static __init int sctp_init(void)
 
 	/* Allocate bind_bucket and chunk caches. */
 	status = -ENOBUFS;
-	sctp_bucket_cachep = kmem_cache_create("sctp_bind_bucket",
-					       sizeof(struct sctp_bind_bucket),
-					       0, SLAB_HWCACHE_ALIGN,
-					       NULL);
+	sctp_bucket_cachep = KMEM_CACHE(sctp_bind_bucket, SLAB_HWCACHE_ALIGN);
 	if (!sctp_bucket_cachep)
 		goto out;
 
-	sctp_chunk_cachep = kmem_cache_create("sctp_chunk",
-					       sizeof(struct sctp_chunk),
-					       0, SLAB_HWCACHE_ALIGN,
-					       NULL);
+	sctp_chunk_cachep = KMEM_CACHE(sctp_chunk, SLAB_HWCACHE_ALIGN);
 	if (!sctp_chunk_cachep)
 		goto err_chunk_cachep;
 
@@ -1523,11 +1526,11 @@ static __init int sctp_init(void)
 	limit = (sysctl_sctp_mem[1]) << (PAGE_SHIFT - 7);
 	max_share = min(4UL*1024*1024, limit);
 
-	sysctl_sctp_rmem[0] = SK_MEM_QUANTUM; /* give each asoc 1 page min */
+	sysctl_sctp_rmem[0] = PAGE_SIZE; /* give each asoc 1 page min */
 	sysctl_sctp_rmem[1] = 1500 * SKB_TRUESIZE(1);
 	sysctl_sctp_rmem[2] = max(sysctl_sctp_rmem[1], max_share);
 
-	sysctl_sctp_wmem[0] = SK_MEM_QUANTUM;
+	sysctl_sctp_wmem[0] = PAGE_SIZE;
 	sysctl_sctp_wmem[1] = 16*1024;
 	sysctl_sctp_wmem[2] = max(64*1024, max_share);
 

@@ -9,6 +9,6 @@ endif
 
 LDFLAGS += -lpthread
 
-URL = http://ftp.gnu.org/gnu/wget/wget-1.19.5.tar.gz
+URL = https://ftp.gnu.org/gnu/wget/wget-1.19.5.tar.gz
 
 include $(ROOTDIR)/tools/automake.inc

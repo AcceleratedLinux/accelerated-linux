@@ -61,7 +61,7 @@ diff --git a/sandbox-seccomp-filter.c b/sandbox-seccomp-filter.c
 index bbc2380..90dd3d0 100644
 --- a/sandbox-seccomp-filter.c
 +++ b/sandbox-seccomp-filter.c
-@@ -270,6 +270,18 @@ static const struct sock_filter preauth_insns[] = {
+@@ -356,6 +356,18 @@ static const struct sock_filter preauth_insns[] = {
  #ifdef __NR_clock_gettime64
  	SC_ALLOW(__NR_clock_gettime64),
  #endif

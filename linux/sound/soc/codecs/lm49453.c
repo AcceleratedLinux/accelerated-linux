@@ -1399,7 +1399,6 @@ static const struct snd_soc_component_driver soc_component_dev_lm49453 = {
 	.num_dapm_routes	= ARRAY_SIZE(lm49453_audio_map),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct regmap_config lm49453_regmap_config = {
@@ -1442,13 +1441,8 @@ static int lm49453_i2c_probe(struct i2c_client *i2c)
 	return ret;
 }
 
-static int lm49453_i2c_remove(struct i2c_client *client)
-{
-	return 0;
-}
-
 static const struct i2c_device_id lm49453_i2c_id[] = {
-	{ "lm49453", 0 },
+	{ "lm49453" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lm49453_i2c_id);
@@ -1457,8 +1451,7 @@ static struct i2c_driver lm49453_i2c_driver = {
 	.driver = {
 		.name = "lm49453",
 	},
-	.probe_new = lm49453_i2c_probe,
-	.remove = lm49453_i2c_remove,
+	.probe = lm49453_i2c_probe,
 	.id_table = lm49453_i2c_id,
 };
 

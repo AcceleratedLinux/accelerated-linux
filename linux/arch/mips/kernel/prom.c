@@ -26,8 +26,10 @@ __init void mips_set_machine_name(const char *name)
 	if (name == NULL)
 		return;
 
-	strlcpy(mips_machine_name, name, sizeof(mips_machine_name));
+	strscpy(mips_machine_name, name, sizeof(mips_machine_name));
 	pr_info("MIPS: machine is %s\n", mips_get_machine_name());
+
+	dump_stack_set_arch_desc(name);
 }
 
 char *mips_get_machine_name(void)
@@ -52,9 +54,9 @@ int __init __dt_register_buses(const char *bus0, const char *bus1)
 	if (!of_have_populated_dt())
 		panic("device tree not present");
 
-	strlcpy(of_ids[0].compatible, bus0, sizeof(of_ids[0].compatible));
+	strscpy(of_ids[0].compatible, bus0, sizeof(of_ids[0].compatible));
 	if (bus1) {
-		strlcpy(of_ids[1].compatible, bus1,
+		strscpy(of_ids[1].compatible, bus1,
 			sizeof(of_ids[1].compatible));
 	}
 

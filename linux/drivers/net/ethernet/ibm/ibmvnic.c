@@ -68,6 +68,7 @@
 #include <linux/workqueue.h>
 #include <linux/if_vlan.h>
 #include <linux/utsname.h>
+#include <linux/cpu.h>
 
 #include "ibmvnic.h"
 
@@ -96,6 +97,8 @@ static int pending_scrq(struct ibmvnic_adapter *,
 static union sub_crq *ibmvnic_next_scrq(struct ibmvnic_adapter *,
 					struct ibmvnic_sub_crq_queue *);
 static int ibmvnic_poll(struct napi_struct *napi, int data);
+static int reset_sub_crq_queues(struct ibmvnic_adapter *adapter);
+static inline void reinit_init_done(struct ibmvnic_adapter *adapter);
 static void send_query_map(struct ibmvnic_adapter *adapter);
 static int send_request_map(struct ibmvnic_adapter *, dma_addr_t, u32, u8);
 static int send_request_unmap(struct ibmvnic_adapter *, u8);
@@ -113,6 +116,7 @@ static void ibmvnic_tx_scrq_clean_buffer(struct ibmvnic_adapter *adapter,
 static void free_long_term_buff(struct ibmvnic_adapter *adapter,
 				struct ibmvnic_long_term_buff *ltb);
 static void ibmvnic_disable_irqs(struct ibmvnic_adapter *adapter);
+static void flush_reset_queue(struct ibmvnic_adapter *adapter);
 
 struct ibmvnic_stat {
 	char name[ETH_GSTRING_LEN];
@@ -169,6 +173,195 @@ static int send_version_xchg(struct ibmvnic_adapter *adapter)
 	crq.version_exchange.version = cpu_to_be16(ibmvnic_version);
 
 	return ibmvnic_send_crq(adapter, &crq);
+}
+
+static void ibmvnic_clean_queue_affinity(struct ibmvnic_adapter *adapter,
+					 struct ibmvnic_sub_crq_queue *queue)
+{
+	if (!(queue && queue->irq))
+		return;
+
+	cpumask_clear(queue->affinity_mask);
+
+	if (irq_set_affinity_and_hint(queue->irq, NULL))
+		netdev_warn(adapter->netdev,
+			    "%s: Clear affinity failed, queue addr = %p, IRQ = %d\n",
+			    __func__, queue, queue->irq);
+}
+
+static void ibmvnic_clean_affinity(struct ibmvnic_adapter *adapter)
+{
+	struct ibmvnic_sub_crq_queue **rxqs;
+	struct ibmvnic_sub_crq_queue **txqs;
+	int num_rxqs, num_txqs;
+	int i;
+
+	rxqs = adapter->rx_scrq;
+	txqs = adapter->tx_scrq;
+	num_txqs = adapter->num_active_tx_scrqs;
+	num_rxqs = adapter->num_active_rx_scrqs;
+
+	netdev_dbg(adapter->netdev, "%s: Cleaning irq affinity hints", __func__);
+	if (txqs) {
+		for (i = 0; i < num_txqs; i++)
+			ibmvnic_clean_queue_affinity(adapter, txqs[i]);
+	}
+	if (rxqs) {
+		for (i = 0; i < num_rxqs; i++)
+			ibmvnic_clean_queue_affinity(adapter, rxqs[i]);
+	}
+}
+
+static int ibmvnic_set_queue_affinity(struct ibmvnic_sub_crq_queue *queue,
+				      unsigned int *cpu, int *stragglers,
+				      int stride)
+{
+	cpumask_var_t mask;
+	int i;
+	int rc = 0;
+
+	if (!(queue && queue->irq))
+		return rc;
+
+	/* cpumask_var_t is either a pointer or array, allocation works here */
+	if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
+		return -ENOMEM;
+
+	/* while we have extra cpu give one extra to this irq */
+	if (*stragglers) {
+		stride++;
+		(*stragglers)--;
+	}
+	/* atomic write is safer than writing bit by bit directly */
+	for (i = 0; i < stride; i++) {
+		cpumask_set_cpu(*cpu, mask);
+		*cpu = cpumask_next_wrap(*cpu, cpu_online_mask,
+					 nr_cpu_ids, false);
+	}
+	/* set queue affinity mask */
+	cpumask_copy(queue->affinity_mask, mask);
+	rc = irq_set_affinity_and_hint(queue->irq, queue->affinity_mask);
+	free_cpumask_var(mask);
+
+	return rc;
+}
+
+/* assumes cpu read lock is held */
+static void ibmvnic_set_affinity(struct ibmvnic_adapter *adapter)
+{
+	struct ibmvnic_sub_crq_queue **rxqs = adapter->rx_scrq;
+	struct ibmvnic_sub_crq_queue **txqs = adapter->tx_scrq;
+	struct ibmvnic_sub_crq_queue *queue;
+	int num_rxqs = adapter->num_active_rx_scrqs, i_rxqs = 0;
+	int num_txqs = adapter->num_active_tx_scrqs, i_txqs = 0;
+	int total_queues, stride, stragglers, i;
+	unsigned int num_cpu, cpu;
+	bool is_rx_queue;
+	int rc = 0;
+
+	netdev_dbg(adapter->netdev, "%s: Setting irq affinity hints", __func__);
+	if (!(adapter->rx_scrq && adapter->tx_scrq)) {
+		netdev_warn(adapter->netdev,
+			    "%s: Set affinity failed, queues not allocated\n",
+			    __func__);
+		return;
+	}
+
+	total_queues = num_rxqs + num_txqs;
+	num_cpu = num_online_cpus();
+	/* number of cpu's assigned per irq */
+	stride = max_t(int, num_cpu / total_queues, 1);
+	/* number of leftover cpu's */
+	stragglers = num_cpu >= total_queues ? num_cpu % total_queues : 0;
+	/* next available cpu to assign irq to */
+	cpu = cpumask_next(-1, cpu_online_mask);
+
+	for (i = 0; i < total_queues; i++) {
+		is_rx_queue = false;
+		/* balance core load by alternating rx and tx assignments
+		 * ex: TX0 -> RX0 -> TX1 -> RX1 etc.
+		 */
+		if ((i % 2 == 1 && i_rxqs < num_rxqs) || i_txqs == num_txqs) {
+			queue = rxqs[i_rxqs++];
+			is_rx_queue = true;
+		} else {
+			queue = txqs[i_txqs++];
+		}
+
+		rc = ibmvnic_set_queue_affinity(queue, &cpu, &stragglers,
+						stride);
+		if (rc)
+			goto out;
+
+		if (!queue || is_rx_queue)
+			continue;
+
+		rc = __netif_set_xps_queue(adapter->netdev,
+					   cpumask_bits(queue->affinity_mask),
+					   i_txqs - 1, XPS_CPUS);
+		if (rc)
+			netdev_warn(adapter->netdev, "%s: Set XPS on queue %d failed, rc = %d.\n",
+				    __func__, i_txqs - 1, rc);
+	}
+
+out:
+	if (rc) {
+		netdev_warn(adapter->netdev,
+			    "%s: Set affinity failed, queue addr = %p, IRQ = %d, rc = %d.\n",
+			    __func__, queue, queue->irq, rc);
+		ibmvnic_clean_affinity(adapter);
+	}
+}
+
+static int ibmvnic_cpu_online(unsigned int cpu, struct hlist_node *node)
+{
+	struct ibmvnic_adapter *adapter;
+
+	adapter = hlist_entry_safe(node, struct ibmvnic_adapter, node);
+	ibmvnic_set_affinity(adapter);
+	return 0;
+}
+
+static int ibmvnic_cpu_dead(unsigned int cpu, struct hlist_node *node)
+{
+	struct ibmvnic_adapter *adapter;
+
+	adapter = hlist_entry_safe(node, struct ibmvnic_adapter, node_dead);
+	ibmvnic_set_affinity(adapter);
+	return 0;
+}
+
+static int ibmvnic_cpu_down_prep(unsigned int cpu, struct hlist_node *node)
+{
+	struct ibmvnic_adapter *adapter;
+
+	adapter = hlist_entry_safe(node, struct ibmvnic_adapter, node);
+	ibmvnic_clean_affinity(adapter);
+	return 0;
+}
+
+static enum cpuhp_state ibmvnic_online;
+
+static int ibmvnic_cpu_notif_add(struct ibmvnic_adapter *adapter)
+{
+	int ret;
+
+	ret = cpuhp_state_add_instance_nocalls(ibmvnic_online, &adapter->node);
+	if (ret)
+		return ret;
+	ret = cpuhp_state_add_instance_nocalls(CPUHP_IBMVNIC_DEAD,
+					       &adapter->node_dead);
+	if (!ret)
+		return ret;
+	cpuhp_state_remove_instance_nocalls(ibmvnic_online, &adapter->node);
+	return ret;
+}
+
+static void ibmvnic_cpu_notif_remove(struct ibmvnic_adapter *adapter)
+{
+	cpuhp_state_remove_instance_nocalls(ibmvnic_online, &adapter->node);
+	cpuhp_state_remove_instance_nocalls(CPUHP_IBMVNIC_DEAD,
+					    &adapter->node_dead);
 }
 
 static long h_reg_sub_crq(unsigned long unit_address, unsigned long token,
@@ -1262,7 +1455,7 @@ static int init_napi(struct ibmvnic_adapter *adapter)
 	for (i = 0; i < adapter->req_rx_queues; i++) {
 		netdev_dbg(adapter->netdev, "Adding napi[%d]\n", i);
 		netif_napi_add(adapter->netdev, &adapter->napi[i],
-			       ibmvnic_poll, NAPI_POLL_WEIGHT);
+			       ibmvnic_poll);
 	}
 
 	adapter->num_active_rx_napi = adapter->req_rx_queues;
@@ -1314,8 +1507,8 @@ static const char *adapter_state_to_string(enum vnic_state state)
 
 static int ibmvnic_login(struct net_device *netdev)
 {
+	unsigned long flags, timeout = msecs_to_jiffies(20000);
 	struct ibmvnic_adapter *adapter = netdev_priv(netdev);
-	unsigned long timeout = msecs_to_jiffies(20000);
 	int retry_count = 0;
 	int retries = 10;
 	bool retry;
@@ -1336,11 +1529,9 @@ static int ibmvnic_login(struct net_device *netdev)
 
 		if (!wait_for_completion_timeout(&adapter->init_done,
 						 timeout)) {
-			netdev_warn(netdev, "Login timed out, retrying...\n");
-			retry = true;
-			adapter->init_done_rc = 0;
-			retry_count++;
-			continue;
+			netdev_warn(netdev, "Login timed out\n");
+			adapter->login_pending = false;
+			goto partial_reset;
 		}
 
 		if (adapter->init_done_rc == ABORTED) {
@@ -1382,10 +1573,69 @@ static int ibmvnic_login(struct net_device *netdev)
 					    "SCRQ irq initialization failed\n");
 				return rc;
 			}
+		/* Default/timeout error handling, reset and start fresh */
 		} else if (adapter->init_done_rc) {
 			netdev_warn(netdev, "Adapter login failed, init_done_rc = %d\n",
 				    adapter->init_done_rc);
-			return -EIO;
+
+partial_reset:
+			/* adapter login failed, so free any CRQs or sub-CRQs
+			 * and register again before attempting to login again.
+			 * If we don't do this then the VIOS may think that
+			 * we are already logged in and reject any subsequent
+			 * attempts
+			 */
+			netdev_warn(netdev,
+				    "Freeing and re-registering CRQs before attempting to login again\n");
+			retry = true;
+			adapter->init_done_rc = 0;
+			release_sub_crqs(adapter, true);
+			/* Much of this is similar logic as ibmvnic_probe(),
+			 * we are essentially re-initializing communication
+			 * with the server. We really should not run any
+			 * resets/failovers here because this is already a form
+			 * of reset and we do not want parallel resets occurring
+			 */
+			do {
+				reinit_init_done(adapter);
+				/* Clear any failovers we got in the previous
+				 * pass since we are re-initializing the CRQ
+				 */
+				adapter->failover_pending = false;
+				release_crq_queue(adapter);
+				/* If we don't sleep here then we risk an
+				 * unnecessary failover event from the VIOS.
+				 * This is a known VIOS issue caused by a vnic
+				 * device freeing and registering a CRQ too
+				 * quickly.
+				 */
+				msleep(1500);
+				/* Avoid any resets, since we are currently
+				 * resetting.
+				 */
+				spin_lock_irqsave(&adapter->rwi_lock, flags);
+				flush_reset_queue(adapter);
+				spin_unlock_irqrestore(&adapter->rwi_lock,
+						       flags);
+
+				rc = init_crq_queue(adapter);
+				if (rc) {
+					netdev_err(netdev, "login recovery: init CRQ failed %d\n",
+						   rc);
+					return -EIO;
+				}
+
+				rc = ibmvnic_reset_init(adapter, false);
+				if (rc)
+					netdev_err(netdev, "login recovery: Reset init failed %d\n",
+						   rc);
+				/* IBMVNIC_CRQ_INIT will return EAGAIN if it
+				 * fails, since ibmvnic_reset_init will free
+				 * irq's in failure, we won't be able to receive
+				 * new CRQs so we need to keep trying. probe()
+				 * handles this similarly.
+				 */
+			} while (rc == -EAGAIN && retry_count++ < retries);
 		}
 	} while (retry);
 
@@ -1397,12 +1647,22 @@ static int ibmvnic_login(struct net_device *netdev)
 
 static void release_login_buffer(struct ibmvnic_adapter *adapter)
 {
+	if (!adapter->login_buf)
+		return;
+
+	dma_unmap_single(&adapter->vdev->dev, adapter->login_buf_token,
+			 adapter->login_buf_sz, DMA_TO_DEVICE);
 	kfree(adapter->login_buf);
 	adapter->login_buf = NULL;
 }
 
 static void release_login_rsp_buffer(struct ibmvnic_adapter *adapter)
 {
+	if (!adapter->login_rsp_buf)
+		return;
+
+	dma_unmap_single(&adapter->vdev->dev, adapter->login_rsp_buf_token,
+			 adapter->login_rsp_buf_sz, DMA_FROM_DEVICE);
 	kfree(adapter->login_rsp_buf);
 	adapter->login_rsp_buf = NULL;
 }
@@ -1625,7 +1885,14 @@ static int __ibmvnic_open(struct net_device *netdev)
 		if (prev_state == VNIC_CLOSED)
 			enable_irq(adapter->tx_scrq[i]->irq);
 		enable_scrq_irq(adapter, adapter->tx_scrq[i]);
-		netdev_tx_reset_queue(netdev_get_tx_queue(netdev, i));
+		/* netdev_tx_reset_queue will reset dql stats. During NON_FATAL
+		 * resets, don't reset the stats because there could be batched
+		 * skb's waiting to be sent. If we reset dql stats, we risk
+		 * num_completed being greater than num_queued. This will cause
+		 * a BUG_ON in dql_completed().
+		 */
+		if (adapter->reset_reason != VNIC_RESET_NON_FATAL)
+			netdev_tx_reset_queue(netdev_get_tx_queue(netdev, i));
 	}
 
 	rc = set_link_state(adapter, IBMVNIC_LOGICAL_LNK_UP);
@@ -2104,7 +2371,7 @@ static int ibmvnic_tx_scrq_flush(struct ibmvnic_adapter *adapter,
 		ibmvnic_tx_scrq_clean_buffer(adapter, tx_scrq);
 	else
 		ind_bufp->index = 0;
-	return 0;
+	return rc;
 }
 
 static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
@@ -2157,7 +2424,9 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 		tx_dropped++;
 		tx_send_failed++;
 		ret = NETDEV_TX_OK;
-		ibmvnic_tx_scrq_flush(adapter, tx_scrq);
+		lpar_rc = ibmvnic_tx_scrq_flush(adapter, tx_scrq);
+		if (lpar_rc != H_SUCCESS)
+			goto tx_err;
 		goto out;
 	}
 
@@ -2172,8 +2441,10 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 		dev_kfree_skb_any(skb);
 		tx_send_failed++;
 		tx_dropped++;
-		ibmvnic_tx_scrq_flush(adapter, tx_scrq);
 		ret = NETDEV_TX_OK;
+		lpar_rc = ibmvnic_tx_scrq_flush(adapter, tx_scrq);
+		if (lpar_rc != H_SUCCESS)
+			goto tx_err;
 		goto out;
 	}
 
@@ -2211,6 +2482,18 @@ static netdev_tx_t ibmvnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	    (tx_pool->consumer_index + 1) % tx_pool->num_buffers;
 
 	tx_buff = &tx_pool->tx_buff[bufidx];
+
+	/* Sanity checks on our free map to make sure it points to an index
+	 * that is not being occupied by another skb. If skb memory is
+	 * not freed then we see congestion control kick in and halt tx.
+	 */
+	if (unlikely(tx_buff->skb)) {
+		dev_warn_ratelimited(dev, "TX free map points to untracked skb (%s %d idx=%d)\n",
+				     skb_is_gso(skb) ? "tso_pool" : "tx_pool",
+				     queue_num, bufidx);
+		dev_kfree_skb_any(tx_buff->skb);
+	}
+
 	tx_buff->skb = skb;
 	tx_buff->index = bufidx;
 	tx_buff->pool_index = queue_num;
@@ -3007,19 +3290,19 @@ static void __ibmvnic_reset(struct work_struct *work)
 		rwi = get_next_rwi(adapter);
 
 		/*
-		 * If there is another reset queued, free the previous rwi
-		 * and process the new reset even if previous reset failed
-		 * (the previous reset could have failed because of a fail
-		 * over for instance, so process the fail over).
-		 *
 		 * If there are no resets queued and the previous reset failed,
 		 * the adapter would be in an undefined state. So retry the
 		 * previous reset as a hard reset.
+		 *
+		 * Else, free the previous rwi and, if there is another reset
+		 * queued, process the new reset even if previous reset failed
+		 * (the previous reset could have failed because of a fail
+		 * over for instance, so process the fail over).
 		 */
-		if (rwi)
-			kfree(tmprwi);
-		else if (rc)
+		if (!rwi && rc)
 			rwi = tmprwi;
+		else
+			kfree(tmprwi);
 
 		if (rwi && (rwi->reset_reason == VNIC_RESET_FAILOVER ||
 			    rwi->reset_reason == VNIC_RESET_MOBILITY || rc))
@@ -3252,7 +3535,7 @@ restart_poll:
 		if (napi_complete_done(napi, frames_processed)) {
 			enable_scrq_irq(adapter, rx_scrq);
 			if (pending_scrq(adapter, rx_scrq)) {
-				if (napi_reschedule(napi)) {
+				if (napi_schedule(napi)) {
 					disable_scrq_irq(adapter, rx_scrq);
 					goto restart_poll;
 				}
@@ -3626,6 +3909,8 @@ static int reset_sub_crq_queues(struct ibmvnic_adapter *adapter)
 	if (!adapter->tx_scrq || !adapter->rx_scrq)
 		return -EINVAL;
 
+	ibmvnic_clean_affinity(adapter);
+
 	for (i = 0; i < adapter->req_tx_queues; i++) {
 		netdev_dbg(adapter->netdev, "Re-setting tx_scrq[%d]\n", i);
 		rc = reset_one_sub_crq_queue(adapter, adapter->tx_scrq[i]);
@@ -3675,6 +3960,7 @@ static void release_sub_crq_queue(struct ibmvnic_adapter *adapter,
 	dma_unmap_single(dev, scrq->msg_token, 4 * PAGE_SIZE,
 			 DMA_BIDIRECTIONAL);
 	free_pages((unsigned long)scrq->msgs, 2);
+	free_cpumask_var(scrq->affinity_mask);
 	kfree(scrq);
 }
 
@@ -3695,6 +3981,8 @@ static struct ibmvnic_sub_crq_queue *init_sub_crq_queue(struct ibmvnic_adapter
 		dev_warn(dev, "Couldn't allocate crq queue messages page\n");
 		goto zero_page_failed;
 	}
+	if (!zalloc_cpumask_var(&scrq->affinity_mask, GFP_KERNEL))
+		goto cpumask_alloc_failed;
 
 	scrq->msg_token = dma_map_single(dev, scrq->msgs, 4 * PAGE_SIZE,
 					 DMA_BIDIRECTIONAL);
@@ -3747,6 +4035,8 @@ reg_failed:
 	dma_unmap_single(dev, scrq->msg_token, 4 * PAGE_SIZE,
 			 DMA_BIDIRECTIONAL);
 map_failed:
+	free_cpumask_var(scrq->affinity_mask);
+cpumask_alloc_failed:
 	free_pages((unsigned long)scrq->msgs, 2);
 zero_page_failed:
 	kfree(scrq);
@@ -3758,6 +4048,7 @@ static void release_sub_crqs(struct ibmvnic_adapter *adapter, bool do_h_free)
 {
 	int i;
 
+	ibmvnic_clean_affinity(adapter);
 	if (adapter->tx_scrq) {
 		for (i = 0; i < adapter->num_active_tx_scrqs; i++) {
 			if (!adapter->tx_scrq[i])
@@ -3781,6 +4072,12 @@ static void release_sub_crqs(struct ibmvnic_adapter *adapter, bool do_h_free)
 		adapter->tx_scrq = NULL;
 		adapter->num_active_tx_scrqs = 0;
 	}
+
+	/* Clean any remaining outstanding SKBs
+	 * we freed the irq so we won't be hearing
+	 * from them
+	 */
+	clean_tx_pools(adapter);
 
 	if (adapter->rx_scrq) {
 		for (i = 0; i < adapter->num_active_rx_scrqs; i++) {
@@ -4035,6 +4332,11 @@ static int init_sub_crq_irqs(struct ibmvnic_adapter *adapter)
 			goto req_rx_irq_failed;
 		}
 	}
+
+	cpus_read_lock();
+	ibmvnic_set_affinity(adapter);
+	cpus_read_unlock();
+
 	return rc;
 
 req_rx_irq_failed:
@@ -4619,11 +4921,14 @@ static int send_login(struct ibmvnic_adapter *adapter)
 	if (rc) {
 		adapter->login_pending = false;
 		netdev_err(adapter->netdev, "Failed to send login, rc=%d\n", rc);
-		goto buf_rsp_map_failed;
+		goto buf_send_failed;
 	}
 
 	return 0;
 
+buf_send_failed:
+	dma_unmap_single(dev, rsp_buffer_token, rsp_buffer_size,
+			 DMA_FROM_DEVICE);
 buf_rsp_map_failed:
 	kfree(login_rsp_buffer);
 	adapter->login_rsp_buf = NULL;
@@ -4964,7 +5269,8 @@ static void handle_vpd_rsp(union ibmvnic_crq *crq,
 	/* copy firmware version string from vpd into adapter */
 	if ((substr + 3 + fw_level_len) <
 	    (adapter->vpd->buff + adapter->vpd->len)) {
-		strncpy((char *)adapter->fw_version, substr + 3, fw_level_len);
+		strscpy(adapter->fw_version, substr + 3,
+			sizeof(adapter->fw_version));
 	} else {
 		dev_info(dev, "FW substr extrapolated VPD buff\n");
 	}
@@ -5185,6 +5491,7 @@ static int handle_login_rsp(union ibmvnic_crq *login_rsp_crq,
 	int num_tx_pools;
 	int num_rx_pools;
 	u64 *size_array;
+	u32 rsp_len;
 	int i;
 
 	/* CHECK: Test/set of login_pending does not need to be atomic
@@ -5195,11 +5502,6 @@ static int handle_login_rsp(union ibmvnic_crq *login_rsp_crq,
 		return 0;
 	}
 	adapter->login_pending = false;
-
-	dma_unmap_single(dev, adapter->login_buf_token, adapter->login_buf_sz,
-			 DMA_TO_DEVICE);
-	dma_unmap_single(dev, adapter->login_rsp_buf_token,
-			 adapter->login_rsp_buf_sz, DMA_FROM_DEVICE);
 
 	/* If the number of queues requested can't be allocated by the
 	 * server, the login response will return with code 1. We will need
@@ -5236,6 +5538,23 @@ static int handle_login_rsp(union ibmvnic_crq *login_rsp_crq,
 		ibmvnic_reset(adapter, VNIC_RESET_FATAL);
 		return -EIO;
 	}
+
+	rsp_len = be32_to_cpu(login_rsp->len);
+	if (be32_to_cpu(login->login_rsp_len) < rsp_len ||
+	    rsp_len <= be32_to_cpu(login_rsp->off_txsubm_subcrqs) ||
+	    rsp_len <= be32_to_cpu(login_rsp->off_rxadd_subcrqs) ||
+	    rsp_len <= be32_to_cpu(login_rsp->off_rxadd_buff_size) ||
+	    rsp_len <= be32_to_cpu(login_rsp->off_supp_tx_desc)) {
+		/* This can happen if a login request times out and there are
+		 * 2 outstanding login requests sent, the LOGIN_RSP crq
+		 * could have been for the older login request. So we are
+		 * parsing the newer response buffer which may be incomplete
+		 */
+		dev_err(dev, "FATAL: Login rsp offsets/lengths invalid\n");
+		ibmvnic_reset(adapter, VNIC_RESET_FATAL);
+		return -EIO;
+	}
+
 	size_array = (u64 *)((u8 *)(adapter->login_rsp_buf) +
 		be32_to_cpu(adapter->login_rsp_buf->off_rxadd_buff_size));
 	/* variable buffer sizes are not supported, so just read the
@@ -6152,9 +6471,18 @@ static int ibmvnic_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	}
 	dev_info(&dev->dev, "ibmvnic registered\n");
 
+	rc = ibmvnic_cpu_notif_add(adapter);
+	if (rc) {
+		netdev_err(netdev, "Registering cpu notifier failed\n");
+		goto cpu_notif_add_failed;
+	}
+
 	complete(&adapter->probe_done);
 
 	return 0;
+
+cpu_notif_add_failed:
+	unregister_netdev(netdev);
 
 ibmvnic_register_fail:
 	device_remove_file(&dev->dev, &dev_attr_failover);
@@ -6205,6 +6533,8 @@ static void ibmvnic_remove(struct vio_dev *dev)
 	spin_unlock(&adapter->rwi_lock);
 
 	spin_unlock_irqrestore(&adapter->state_lock, flags);
+
+	ibmvnic_cpu_notif_remove(adapter);
 
 	flush_work(&adapter->ibmvnic_reset);
 	flush_delayed_work(&adapter->ibmvnic_delayed_reset);
@@ -6336,15 +6666,40 @@ static struct vio_driver ibmvnic_driver = {
 /* module functions */
 static int __init ibmvnic_module_init(void)
 {
+	int ret;
+
+	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN, "net/ibmvnic:online",
+				      ibmvnic_cpu_online,
+				      ibmvnic_cpu_down_prep);
+	if (ret < 0)
+		goto out;
+	ibmvnic_online = ret;
+	ret = cpuhp_setup_state_multi(CPUHP_IBMVNIC_DEAD, "net/ibmvnic:dead",
+				      NULL, ibmvnic_cpu_dead);
+	if (ret)
+		goto err_dead;
+
+	ret = vio_register_driver(&ibmvnic_driver);
+	if (ret)
+		goto err_vio_register;
+
 	pr_info("%s: %s %s\n", ibmvnic_driver_name, ibmvnic_driver_string,
 		IBMVNIC_DRIVER_VERSION);
 
-	return vio_register_driver(&ibmvnic_driver);
+	return 0;
+err_vio_register:
+	cpuhp_remove_multi_state(CPUHP_IBMVNIC_DEAD);
+err_dead:
+	cpuhp_remove_multi_state(ibmvnic_online);
+out:
+	return ret;
 }
 
 static void __exit ibmvnic_module_exit(void)
 {
 	vio_unregister_driver(&ibmvnic_driver);
+	cpuhp_remove_multi_state(CPUHP_IBMVNIC_DEAD);
+	cpuhp_remove_multi_state(ibmvnic_online);
 }
 
 module_init(ibmvnic_module_init);

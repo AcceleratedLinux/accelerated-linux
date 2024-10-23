@@ -4,3 +4,182 @@ config USER_SHADOW_UTILS
 	  A collection of shadow password file based utilities.
 	  These are generally full featured with lots of flexibility.
 
+if USER_SHADOW_UTILS
+
+config USER_SHADOW_PAM
+	bool "use PAM"
+	select LIB_LIBPAM
+	select LIB_LIBPAM_LIBPAM
+	select LIB_LIBPAM_LIBPAM_MISC
+	help
+	  Instead of using the shadow password file, authentication and session
+	  control is managed by PAM the pluggable authentication framework.
+
+config USER_SHADOW_SHAREDLIB
+	bool "use shared library"
+	help
+	  Enabling this option creates a shadow shared library and all the
+	  various applications then use this library.  Enabling this option will
+	  save space.  The cost of this space saving is the opening of a trivial
+	  escalation from normal user privileges to super user ones.  You have
+	  been warned.
+
+config USER_SHADOW_CHAGE
+	bool "chage"
+	help
+	  Change user password expiry information.
+
+config USER_SHADOW_CHFN
+	bool "chfn"
+	help
+	  Change real user name and information.
+
+config USER_SHADOW_CHPASSWD
+	bool "chpasswd"
+	help
+	  Update passwords in batch mode.
+
+config USER_SHADOW_CHSH
+	bool "chsh"
+	help
+	  Change login shell.
+
+config USER_SHADOW_EXPIRY
+	bool "expiry"
+	help
+	  Check and enforce password expiration policy.
+
+config USER_SHADOW_FAILLOG
+	bool "faillog"
+	help
+	  Display faillog records or set login failure limits.
+
+config USER_SHADOW_GPASSWD
+	bool "gpasswd"
+	help
+	  Administer the groups file.
+
+config USER_SHADOW_GROUPADD
+	bool "groupadd"
+	help
+	  Create a new group.
+
+config USER_SHADOW_GROUPDEL
+	bool "groupdel"
+	help
+	  Delete a group.
+
+config USER_SHADOW_GROUPMOD
+	bool "groupmod"
+	help
+	  Modify a group.
+
+config USER_SHADOW_GROUPS
+	bool "groups"
+	help
+	  Print the groups a user is in.
+
+config USER_SHADOW_GRPCK
+	bool "grpck"
+	help
+	  Verify integrity of group files.
+
+config USER_SHADOW_GRPCONV
+	bool "grpconv"
+	help
+	  Convert to and from shadow passwords and groups.
+
+config USER_SHADOW_GRPUNCONV
+	bool "grpunconv"
+	help
+	  Convert to and from shadow passwords and groups.
+
+config USER_SHADOW_ID
+	bool "id"
+	help
+	  Print real and effective UIDs and GIDs.
+
+config USER_SHADOW_LASTLOG
+	bool "lastlog"
+	help
+	  Examine the lastlog file.
+	  This file contains historic login information.
+
+config USER_SHADOW_LOGIN
+	bool "login"
+	help
+	  The shadow login program.
+	  Generally fully featured login program that supports shadow passwords.
+
+config USER_SHADOW_LOGOUTD
+	bool "logoutd"
+	help
+	  Enforce login time restrictions.
+
+config USER_SHADOW_NEWGRP
+	bool "newgrp"
+	help
+	  Log in to a new group.
+
+config USER_SHADOW_NEWUSERS
+	bool "newusers"
+	help
+	  Update and create new users in batch.
+
+config USER_SHADOW_NOLOGIN
+	bool "nologin"
+	help
+	  Politely refuse a login.
+
+config USER_SHADOW_PASSWD
+	bool "passwd"
+	help
+	  The shadow passwd program that complements the shadow login by
+	  allowing passwords to be changed.
+
+config USER_SHADOW_PWCK
+	bool "pwck"
+	help
+	  Verify integrity of password files.
+
+config USER_SHADOW_PWCONV
+	bool "pwconv"
+	help
+	  Convert to and from shadow passwords and groups.
+
+config USER_SHADOW_PWUNCONV
+	bool "pwunconv"
+	help
+	  Convert to and from shadow passwords and groups.
+
+config USER_SHADOW_SU
+	bool "su"
+	help
+	  Change user ID or become super-user.
+
+config USER_SHADOW_SULOGIN
+	bool "sulogin"
+	help
+	  Single-user login.
+
+config USER_SHADOW_USERADD
+	bool "useradd"
+	help
+	  Create a new user or update default new user information.
+
+config USER_SHADOW_USERDEL
+	bool "userdel"
+	help
+	  Delete a user account and related files.
+
+config USER_SHADOW_USERMOD
+	bool "usermod"
+	help
+	  Modify a user account.
+
+config USER_SHADOW_VIPW
+	bool "vipw"
+	help
+	  Edit the password, group, shadow-password or shadow-group file.
+
+endif

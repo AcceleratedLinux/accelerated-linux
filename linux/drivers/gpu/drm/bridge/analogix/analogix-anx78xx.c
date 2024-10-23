@@ -1211,11 +1211,11 @@ static const u16 anx78xx_chipid_list[] = {
 	0x7808,
 	0x7812,
 	0x7814,
+	0x7816,
 	0x7818,
 };
 
-static int anx78xx_i2c_probe(struct i2c_client *client,
-			     const struct i2c_device_id *id)
+static int anx78xx_i2c_probe(struct i2c_client *client)
 {
 	struct anx78xx *anx78xx;
 	struct anx78xx_platform_data *pdata;
@@ -1232,9 +1232,7 @@ static int anx78xx_i2c_probe(struct i2c_client *client,
 
 	mutex_init(&anx78xx->lock);
 
-#if IS_ENABLED(CONFIG_OF)
 	anx78xx->bridge.of_node = client->dev.of_node;
-#endif
 
 	anx78xx->client = client;
 	i2c_set_clientdata(client, anx78xx);
@@ -1357,7 +1355,7 @@ err_unregister_i2c:
 	return err;
 }
 
-static int anx78xx_i2c_remove(struct i2c_client *client)
+static void anx78xx_i2c_remove(struct i2c_client *client)
 {
 	struct anx78xx *anx78xx = i2c_get_clientdata(client);
 
@@ -1366,35 +1364,25 @@ static int anx78xx_i2c_remove(struct i2c_client *client)
 	unregister_i2c_dummy_clients(anx78xx);
 
 	kfree(anx78xx->edid);
-
-	return 0;
 }
 
-static const struct i2c_device_id anx78xx_id[] = {
-	{ "anx7814", 0 },
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(i2c, anx78xx_id);
-
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id anx78xx_match_table[] = {
 	{ .compatible = "analogix,anx7808", .data = anx7808_i2c_addresses },
 	{ .compatible = "analogix,anx7812", .data = anx781x_i2c_addresses },
 	{ .compatible = "analogix,anx7814", .data = anx781x_i2c_addresses },
+	{ .compatible = "analogix,anx7816", .data = anx781x_i2c_addresses },
 	{ .compatible = "analogix,anx7818", .data = anx781x_i2c_addresses },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, anx78xx_match_table);
-#endif
 
 static struct i2c_driver anx78xx_driver = {
 	.driver = {
 		   .name = "anx7814",
-		   .of_match_table = of_match_ptr(anx78xx_match_table),
+		   .of_match_table = anx78xx_match_table,
 		  },
 	.probe = anx78xx_i2c_probe,
 	.remove = anx78xx_i2c_remove,
-	.id_table = anx78xx_id,
 };
 module_i2c_driver(anx78xx_driver);
 

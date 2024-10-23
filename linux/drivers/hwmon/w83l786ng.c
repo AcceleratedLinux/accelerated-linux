@@ -16,7 +16,6 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/hwmon.h>
-#include <linux/hwmon-vid.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
@@ -687,7 +686,7 @@ w83l786ng_detect(struct i2c_client *client, struct i2c_board_info *info)
 		return -ENODEV;
 	}
 
-	strlcpy(info->type, "w83l786ng", I2C_NAME_SIZE);
+	strscpy(info->type, "w83l786ng", I2C_NAME_SIZE);
 
 	return 0;
 }
@@ -742,7 +741,7 @@ w83l786ng_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id w83l786ng_id[] = {
-	{ "w83l786ng", 0 },
+	{ "w83l786ng" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, w83l786ng_id);
@@ -752,7 +751,7 @@ static struct i2c_driver w83l786ng_driver = {
 	.driver = {
 		   .name = "w83l786ng",
 	},
-	.probe_new	= w83l786ng_probe,
+	.probe		= w83l786ng_probe,
 	.id_table	= w83l786ng_id,
 	.detect		= w83l786ng_detect,
 	.address_list	= normal_i2c,

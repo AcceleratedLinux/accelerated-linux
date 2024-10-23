@@ -1,0 +1,112 @@
+hostname "Digi IoT Gateway"
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=64M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
+
+echo "Starting watchdog..."
+watchdog /dev/watchdog -T 32 -t 8
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# initialise devices before we need them
+/etc/rc.dev
+
+# Wipe and recreate XBee symlink
+rm -rf /dev/ttyXBee
+ln -s /dev/ttySTM2 /dev/ttyXBee
+
+# Wipe and recreate the XBee Cellular symlink
+# NOTE: When the real Gateway hardware is done,
+# there will be 2 XBee ports, both on seperate
+# serial ports.
+# For now, we will reuse /dev/ttySTM2
+rm -rf /dev/ttyXBeeCell
+ln -s /dev/ttySTM2 /dev/ttyXBeeCell
+
+echo "Initializing network interfaces..."
+ip link set eth0 name eth
+
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+setmac -i eth -u -n 1
+
+if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+	/etc/factory
+	exit 0
+fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
+	# Use the same setup as for factory testing
+	/etc/factory
+	exit 0
+fi
+if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=standalone" ]; then
+	# run standalone emc noise generation
+	/etc/emc
+	exit 0
+fi
+
+echo "Mounting config filesystem..."
+if ! mount -t ubifs ubi1:config /etc/config
+then
+	echo "Failed to mount flash based config filesystem"
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=4M tmpfs /etc/config
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2)"
+	[ -f /etc/config/.init2 ] && filter='$'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
+
+# handle /opt,  contains modem firmware and maybe other goodies
+echo "Mounting opt filesystem...."
+if ! mount -t ubifs ubi1:opt /opt
+then
+    echo "Failed to mount flash based opt filesystem"
+fi
+
+# modem firmware updates
+[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+exit 0

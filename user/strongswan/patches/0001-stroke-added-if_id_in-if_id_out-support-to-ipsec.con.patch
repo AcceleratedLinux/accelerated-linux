@@ -20,11 +20,11 @@ ipsec.conf.
  src/stroke/stroke_msg.h                      |  2 +
  9 files changed, 70 insertions(+)
 
-diff --git a/src/libcharon/plugins/stroke/stroke_config.c b/src/libcharon/plugins/stroke/stroke_config.c
-index 175b6b549..0d746c269 100644
---- a/src/libcharon/plugins/stroke/stroke_config.c
-+++ b/src/libcharon/plugins/stroke/stroke_config.c
-@@ -1076,6 +1076,8 @@ static child_cfg_t *build_child_cfg(private_stroke_config_t *this,
+Index: strongswan-5.9.13/src/libcharon/plugins/stroke/stroke_config.c
+===================================================================
+--- strongswan-5.9.13.orig/src/libcharon/plugins/stroke/stroke_config.c
++++ strongswan-5.9.13/src/libcharon/plugins/stroke/stroke_config.c
+@@ -1077,6 +1077,8 @@ static child_cfg_t *build_child_cfg(priv
  				.jitter = msg->add_conn.rekey.margin_packets * msg->add_conn.rekey.fuzz / 100
  			},
  		},
@@ -33,11 +33,11 @@ index 175b6b549..0d746c269 100644
  		.mark_in = {
  			.value = msg->add_conn.mark_in.value,
  			.mask = msg->add_conn.mark_in.mask
-diff --git a/src/starter/args.c b/src/starter/args.c
-index a37ce6a3e..342e57961 100644
---- a/src/starter/args.c
-+++ b/src/starter/args.c
-@@ -175,6 +175,9 @@ static const token_info_t token_info[] =
+Index: strongswan-5.9.13/src/starter/args.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/args.c
++++ strongswan-5.9.13/src/starter/args.c
+@@ -174,6 +174,9 @@ static const token_info_t token_info[] =
  	{ ARG_STR,  offsetof(starter_conn_t, me_peerid), NULL                          },
  	{ ARG_UINT, offsetof(starter_conn_t, reqid), NULL                              },
  	{ ARG_UINT, offsetof(starter_conn_t, replay_window), NULL                      },
@@ -47,11 +47,11 @@ index a37ce6a3e..342e57961 100644
  	{ ARG_MISC, 0, NULL  /* KW_MARK */                                             },
  	{ ARG_MISC, 0, NULL  /* KW_MARK_IN */                                          },
  	{ ARG_MISC, 0, NULL  /* KW_MARK_OUT */                                         },
-diff --git a/src/starter/cmp.c b/src/starter/cmp.c
-index aee55d94c..b19f1451a 100644
---- a/src/starter/cmp.c
-+++ b/src/starter/cmp.c
-@@ -42,6 +42,8 @@ bool starter_cmp_conn(starter_conn_t *c1, starter_conn_t *c2)
+Index: strongswan-5.9.13/src/starter/cmp.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/cmp.c
++++ strongswan-5.9.13/src/starter/cmp.c
+@@ -42,6 +42,8 @@ bool starter_cmp_conn(starter_conn_t *c1
  	VARCMP(mode);
  	VARCMP(proxy_mode);
  	VARCMP(options);
@@ -60,11 +60,11 @@ index aee55d94c..b19f1451a 100644
  	VARCMP(mark_in.value);
  	VARCMP(mark_in.mask);
  	VARCMP(mark_out.value);
-diff --git a/src/starter/confread.c b/src/starter/confread.c
-index 407ef5e13..ac530dc69 100644
---- a/src/starter/confread.c
-+++ b/src/starter/confread.c
-@@ -443,6 +443,57 @@ static void handle_keyword(kw_token_t token, starter_conn_t *conn, char *key,
+Index: strongswan-5.9.13/src/starter/confread.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/confread.c
++++ strongswan-5.9.13/src/starter/confread.c
+@@ -442,6 +442,57 @@ static void handle_keyword(kw_token_t to
  		case KW_COMPRESS:
  			KW_SA_OPTION_FLAG("yes", "no", SA_OPTION_COMPRESS)
  			break;
@@ -122,10 +122,10 @@ index 407ef5e13..ac530dc69 100644
  		case KW_MARK:
  			if (!mark_from_string(value, MARK_OP_UNIQUE, &conn->mark_in))
  			{
-diff --git a/src/starter/confread.h b/src/starter/confread.h
-index 0c22481f0..825a12e19 100644
---- a/src/starter/confread.h
-+++ b/src/starter/confread.h
+Index: strongswan-5.9.13/src/starter/confread.h
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/confread.h
++++ strongswan-5.9.13/src/starter/confread.h
 @@ -141,6 +141,8 @@ struct starter_conn {
  		unsigned long   sa_keying_tries;
  		unsigned long   sa_rekey_fuzz;
@@ -135,11 +135,11 @@ index 0c22481f0..825a12e19 100644
  		mark_t          mark_in;
  		mark_t          mark_out;
  		uint32_t       replay_window;
-diff --git a/src/starter/keywords.h.in b/src/starter/keywords.h.in
-index 60ec2723a..c0dbaff01 100644
---- a/src/starter/keywords.h.in
-+++ b/src/starter/keywords.h.in
-@@ -74,6 +74,9 @@ enum kw_token_t {
+Index: strongswan-5.9.13/src/starter/keywords.h.in
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/keywords.h.in
++++ strongswan-5.9.13/src/starter/keywords.h.in
+@@ -73,6 +73,9 @@ enum kw_token_t {
  	KW_ME_PEERID,
  	KW_REQID,
  	KW_REPLAY_WINDOW,
@@ -149,11 +149,11 @@ index 60ec2723a..c0dbaff01 100644
  	KW_MARK,
  	KW_MARK_IN,
  	KW_MARK_OUT,
-diff --git a/src/starter/keywords.txt b/src/starter/keywords.txt
-index e696dce8e..3cf30ab4e 100644
---- a/src/starter/keywords.txt
-+++ b/src/starter/keywords.txt
-@@ -72,6 +72,9 @@ mediated_by,       KW_MEDIATED_BY
+Index: strongswan-5.9.13/src/starter/keywords.txt
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/keywords.txt
++++ strongswan-5.9.13/src/starter/keywords.txt
+@@ -71,6 +71,9 @@ mediated_by,       KW_MEDIATED_BY
  me_peerid,         KW_ME_PEERID
  reqid,             KW_REQID
  replay_window,     KW_REPLAY_WINDOW
@@ -163,11 +163,11 @@ index e696dce8e..3cf30ab4e 100644
  mark,              KW_MARK
  mark_in,           KW_MARK_IN
  mark_out,          KW_MARK_OUT
-diff --git a/src/starter/starterstroke.c b/src/starter/starterstroke.c
-index 90ba1cd72..cf591796a 100644
---- a/src/starter/starterstroke.c
-+++ b/src/starter/starterstroke.c
-@@ -227,6 +227,8 @@ int starter_stroke_add_conn(starter_config_t *cfg, starter_conn_t *conn)
+Index: strongswan-5.9.13/src/starter/starterstroke.c
+===================================================================
+--- strongswan-5.9.13.orig/src/starter/starterstroke.c
++++ strongswan-5.9.13/src/starter/starterstroke.c
+@@ -226,6 +226,8 @@ int starter_stroke_add_conn(starter_conf
  	push_string(&msg, add_conn.ikeme.peerid, conn->me_peerid);
  	msg->add_conn.reqid = conn->reqid;
  	msg->add_conn.replay_window = conn->replay_window;
@@ -176,11 +176,11 @@ index 90ba1cd72..cf591796a 100644
  	msg->add_conn.mark_in.value = conn->mark_in.value;
  	msg->add_conn.mark_in.mask = conn->mark_in.mask;
  	msg->add_conn.mark_out.value = conn->mark_out.value;
-diff --git a/src/stroke/stroke_msg.h b/src/stroke/stroke_msg.h
-index 08560d36f..862b3d7d9 100644
---- a/src/stroke/stroke_msg.h
-+++ b/src/stroke/stroke_msg.h
-@@ -296,6 +296,8 @@ struct stroke_msg_t {
+Index: strongswan-5.9.13/src/stroke/stroke_msg.h
+===================================================================
+--- strongswan-5.9.13.orig/src/stroke/stroke_msg.h
++++ strongswan-5.9.13/src/stroke/stroke_msg.h
+@@ -297,6 +297,8 @@ struct stroke_msg_t {
  				char *mediated_by;
  				char *peerid;
  			} ikeme;

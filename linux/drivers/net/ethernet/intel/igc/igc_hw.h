@@ -89,8 +89,6 @@ struct igc_mac_info {
 	u32 mta_shadow[MAX_MTA_REG];
 	u16 rar_entry_count;
 
-	u8 forced_speed_duplex;
-
 	bool asf_firmware_present;
 	bool arc_subsystem_valid;
 
@@ -275,6 +273,7 @@ struct igc_hw_stats {
 	u64 o2bspc;
 	u64 b2ospc;
 	u64 b2ogprc;
+	u64 txdrop;
 };
 
 struct net_device *igc_get_hw_dev(struct igc_hw *hw);

@@ -7,11 +7,7 @@
 from docutils import nodes
 import sphinx
 from sphinx import addnodes
-if sphinx.version_info[0] < 2 or \
-   sphinx.version_info[0] == 2 and sphinx.version_info[1] < 1:
-    from sphinx.environment import NoUri
-else:
-    from sphinx.errors import NoUri
+from sphinx.errors import NoUri
 import re
 from itertools import chain
 
@@ -74,6 +70,12 @@ Skipfuncs = [ 'open', 'close', 'read', 'write', 'fcntl', 'mmap',
 
 c_namespace = ''
 
+#
+# Detect references to commits.
+#
+RE_git = re.compile(r'commit\s+(?P<rev>[0-9a-f]{12,40})(?:\s+\(".*?"\))?',
+    flags=re.IGNORECASE | re.DOTALL)
+
 def markup_refs(docname, app, node):
     t = node.astext()
     done = 0
@@ -90,7 +92,8 @@ def markup_refs(docname, app, node):
                            RE_struct: markup_c_ref,
                            RE_union: markup_c_ref,
                            RE_enum: markup_c_ref,
-                           RE_typedef: markup_c_ref}
+                           RE_typedef: markup_c_ref,
+                           RE_git: markup_git}
 
     if sphinx.version_info[0] >= 3:
         markup_func = markup_func_sphinx3
@@ -121,13 +124,20 @@ def markup_refs(docname, app, node):
     return repl
 
 #
+# Keep track of cross-reference lookups that failed so we don't have to
+# do them again.
+#
+failed_lookups = { }
+def failure_seen(target):
+    return (target) in failed_lookups
+def note_failure(target):
+    failed_lookups[target] = True
+
+#
 # In sphinx3 we can cross-reference to C macro and function, each one with its
 # own C role, but both match the same regex, so we try both.
 #
 def markup_func_ref_sphinx3(docname, app, match):
-    class_str = ['c-func', 'c-macro']
-    reftype_str = ['function', 'macro']
-
     cdom = app.env.domains['c']
     #
     # Go through the dance of getting an xref out of the C domain
@@ -143,27 +153,28 @@ def markup_func_ref_sphinx3(docname, app, match):
 
     if base_target not in Skipnames:
         for target in possible_targets:
-            if target not in Skipfuncs:
-                for class_s, reftype_s in zip(class_str, reftype_str):
-                    lit_text = nodes.literal(classes=['xref', 'c', class_s])
-                    lit_text += target_text
-                    pxref = addnodes.pending_xref('', refdomain = 'c',
-                                                  reftype = reftype_s,
-                                                  reftarget = target, modname = None,
-                                                  classname = None)
-                    #
-                    # XXX The Latex builder will throw NoUri exceptions here,
-                    # work around that by ignoring them.
-                    #
-                    try:
-                        xref = cdom.resolve_xref(app.env, docname, app.builder,
-                                                 reftype_s, target, pxref,
-                                                 lit_text)
-                    except NoUri:
-                        xref = None
+            if (target not in Skipfuncs) and not failure_seen(target):
+                lit_text = nodes.literal(classes=['xref', 'c', 'c-func'])
+                lit_text += target_text
+                pxref = addnodes.pending_xref('', refdomain = 'c',
+                                              reftype = 'function',
+                                              reftarget = target,
+                                              modname = None,
+                                              classname = None)
+                #
+                # XXX The Latex builder will throw NoUri exceptions here,
+                # work around that by ignoring them.
+                #
+                try:
+                    xref = cdom.resolve_xref(app.env, docname, app.builder,
+                                             'function', target, pxref,
+                                             lit_text)
+                except NoUri:
+                    xref = None
 
-                    if xref:
-                        return xref
+                if xref:
+                    return xref
+                note_failure(target)
 
     return target_text
 
@@ -267,6 +278,17 @@ def get_c_namespace(app, docname):
             if match:
                 return match.group(1)
     return ''
+
+def markup_git(docname, app, match):
+    # While we could probably assume that we are running in a git
+    # repository, we can't know for sure, so let's just mechanically
+    # turn them into git.kernel.org links without checking their
+    # validity. (Maybe we can do something in the future to warn about
+    # these references if this is explicitly requested.)
+    text = match.group(0)
+    rev = match.group('rev')
+    return nodes.reference('', nodes.Text(text),
+        refuri=f'https://git.kernel.org/torvalds/c/{rev}')
 
 def auto_markup(app, doctree, name):
     global c_namespace

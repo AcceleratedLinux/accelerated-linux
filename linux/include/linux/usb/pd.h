@@ -228,6 +228,7 @@ enum pd_pdo_type {
 #define PDO_FIXED_UNCHUNK_EXT		BIT(24) /* Unchunked Extended Message supported (Source) */
 #define PDO_FIXED_FRS_CURR_MASK		(BIT(24) | BIT(23)) /* FR_Swap Current (Sink) */
 #define PDO_FIXED_FRS_CURR_SHIFT	23
+#define PDO_FIXED_PEAK_CURR_SHIFT	20
 #define PDO_FIXED_VOLT_SHIFT		10	/* 50mV units */
 #define PDO_FIXED_CURR_SHIFT		0	/* 10mA units */
 
@@ -482,6 +483,7 @@ static inline unsigned int rdo_max_power(u32 rdo)
 #define PD_T_BIST_CONT_MODE	50	/* 30 - 60 ms */
 #define PD_T_SINK_TX		16	/* 16 - 20 ms */
 #define PD_T_CHUNK_NOT_SUPP	42	/* 40 - 50 ms */
+#define PD_T_VCONN_STABLE	50
 
 #define PD_T_DRP_TRY		100	/* 75 - 150 ms */
 #define PD_T_DRP_TRYWAIT	600	/* 400 - 800 ms */
@@ -494,5 +496,43 @@ static inline unsigned int rdo_max_power(u32 rdo)
 #define PD_N_HARD_RESET_COUNT	2
 
 #define PD_P_SNK_STDBY_MW	2500	/* 2500 mW */
+
+#if IS_ENABLED(CONFIG_TYPEC)
+
+struct usb_power_delivery;
+
+/**
+ * usb_power_delivery_desc - USB Power Delivery Descriptor
+ * @revision: USB Power Delivery Specification Revision
+ * @version: USB Power Delivery Specicication Version - optional
+ */
+struct usb_power_delivery_desc {
+	u16 revision;
+	u16 version;
+};
+
+/**
+ * usb_power_delivery_capabilities_desc - Description of USB Power Delivery Capabilities Message
+ * @pdo: The Power Data Objects in the Capability Message
+ * @role: Power role of the capabilities
+ */
+struct usb_power_delivery_capabilities_desc {
+	u32 pdo[PDO_MAX_OBJECTS];
+	enum typec_role role;
+};
+
+struct usb_power_delivery_capabilities *
+usb_power_delivery_register_capabilities(struct usb_power_delivery *pd,
+					 struct usb_power_delivery_capabilities_desc *desc);
+void usb_power_delivery_unregister_capabilities(struct usb_power_delivery_capabilities *cap);
+
+struct usb_power_delivery *usb_power_delivery_register(struct device *parent,
+						       struct usb_power_delivery_desc *desc);
+void usb_power_delivery_unregister(struct usb_power_delivery *pd);
+
+int usb_power_delivery_link_device(struct usb_power_delivery *pd, struct device *dev);
+void usb_power_delivery_unlink_device(struct usb_power_delivery *pd, struct device *dev);
+
+#endif /* CONFIG_TYPEC */
 
 #endif /* __LINUX_USB_PD_H */

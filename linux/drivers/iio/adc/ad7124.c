@@ -14,7 +14,8 @@
 #include <linux/kernel.h>
 #include <linux/kfifo.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
+#include <linux/mod_devicetable.h>
+#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 
@@ -807,22 +808,19 @@ static int ad7124_check_chip_id(struct ad7124_state *st)
 	return 0;
 }
 
-static int ad7124_of_parse_channel_config(struct iio_dev *indio_dev,
-					  struct device_node *np)
+static int ad7124_parse_channel_config(struct iio_dev *indio_dev,
+				       struct device *dev)
 {
 	struct ad7124_state *st = iio_priv(indio_dev);
 	struct ad7124_channel_config *cfg;
 	struct ad7124_channel *channels;
-	struct device_node *child;
 	struct iio_chan_spec *chan;
 	unsigned int ain[2], channel = 0, tmp;
 	int ret;
 
-	st->num_channels = of_get_available_child_count(np);
-	if (!st->num_channels) {
-		dev_err(indio_dev->dev.parent, "no channel children\n");
-		return -ENODEV;
-	}
+	st->num_channels = device_get_child_node_count(dev);
+	if (!st->num_channels)
+		return dev_err_probe(dev, -ENODEV, "no channel children\n");
 
 	chan = devm_kcalloc(indio_dev->dev.parent, st->num_channels,
 			    sizeof(*chan), GFP_KERNEL);
@@ -838,39 +836,38 @@ static int ad7124_of_parse_channel_config(struct iio_dev *indio_dev,
 	indio_dev->num_channels = st->num_channels;
 	st->channels = channels;
 
-	for_each_available_child_of_node(np, child) {
+	device_for_each_child_node_scoped(dev, child) {
 		cfg = &st->channels[channel].cfg;
 
-		ret = of_property_read_u32(child, "reg", &channel);
+		ret = fwnode_property_read_u32(child, "reg", &channel);
 		if (ret)
-			goto err;
+			return ret;
 
-		if (channel >= indio_dev->num_channels) {
-			dev_err(indio_dev->dev.parent,
+		if (channel >= indio_dev->num_channels)
+			return dev_err_probe(dev, -EINVAL,
 				"Channel index >= number of channels\n");
-			ret = -EINVAL;
-			goto err;
-		}
 
-		ret = of_property_read_u32_array(child, "diff-channels",
-						 ain, 2);
+		ret = fwnode_property_read_u32_array(child, "diff-channels",
+						     ain, 2);
 		if (ret)
-			goto err;
+			return ret;
 
 		st->channels[channel].nr = channel;
 		st->channels[channel].ain = AD7124_CHANNEL_AINP(ain[0]) |
 						  AD7124_CHANNEL_AINM(ain[1]);
 
-		cfg->bipolar = of_property_read_bool(child, "bipolar");
+		cfg->bipolar = fwnode_property_read_bool(child, "bipolar");
 
-		ret = of_property_read_u32(child, "adi,reference-select", &tmp);
+		ret = fwnode_property_read_u32(child, "adi,reference-select", &tmp);
 		if (ret)
 			cfg->refsel = AD7124_INT_REF;
 		else
 			cfg->refsel = tmp;
 
-		cfg->buf_positive = of_property_read_bool(child, "adi,buffered-positive");
-		cfg->buf_negative = of_property_read_bool(child, "adi,buffered-negative");
+		cfg->buf_positive =
+			fwnode_property_read_bool(child, "adi,buffered-positive");
+		cfg->buf_negative =
+			fwnode_property_read_bool(child, "adi,buffered-negative");
 
 		chan[channel] = ad7124_channel_template;
 		chan[channel].address = channel;
@@ -880,10 +877,6 @@ static int ad7124_of_parse_channel_config(struct iio_dev *indio_dev,
 	}
 
 	return 0;
-err:
-	of_node_put(child);
-
-	return ret;
 }
 
 static int ad7124_setup(struct ad7124_state *st)
@@ -936,11 +929,6 @@ static void ad7124_reg_disable(void *r)
 	regulator_disable(r);
 }
 
-static void ad7124_clk_disable(void *c)
-{
-	clk_disable_unprepare(c);
-}
-
 static int ad7124_probe(struct spi_device *spi)
 {
 	const struct ad7124_chip_info *info;
@@ -948,7 +936,7 @@ static int ad7124_probe(struct spi_device *spi)
 	struct iio_dev *indio_dev;
 	int i, ret;
 
-	info = of_device_get_match_data(&spi->dev);
+	info = spi_get_device_match_data(spi);
 	if (!info)
 		return -ENODEV;
 
@@ -968,7 +956,7 @@ static int ad7124_probe(struct spi_device *spi)
 	if (ret < 0)
 		return ret;
 
-	ret = ad7124_of_parse_channel_config(indio_dev, spi->dev.of_node);
+	ret = ad7124_parse_channel_config(indio_dev, &spi->dev);
 	if (ret < 0)
 		return ret;
 
@@ -993,17 +981,9 @@ static int ad7124_probe(struct spi_device *spi)
 			return ret;
 	}
 
-	st->mclk = devm_clk_get(&spi->dev, "mclk");
+	st->mclk = devm_clk_get_enabled(&spi->dev, "mclk");
 	if (IS_ERR(st->mclk))
 		return PTR_ERR(st->mclk);
-
-	ret = clk_prepare_enable(st->mclk);
-	if (ret < 0)
-		return ret;
-
-	ret = devm_add_action_or_reset(&spi->dev, ad7124_clk_disable, st->mclk);
-	if (ret)
-		return ret;
 
 	ret = ad7124_soft_reset(st);
 	if (ret < 0)
@@ -1034,12 +1014,20 @@ static const struct of_device_id ad7124_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, ad7124_of_match);
 
+static const struct spi_device_id ad71124_ids[] = {
+	{ "ad7124-4", (kernel_ulong_t)&ad7124_chip_info_tbl[ID_AD7124_4] },
+	{ "ad7124-8", (kernel_ulong_t)&ad7124_chip_info_tbl[ID_AD7124_8] },
+	{}
+};
+MODULE_DEVICE_TABLE(spi, ad71124_ids);
+
 static struct spi_driver ad71124_driver = {
 	.driver = {
 		.name = "ad7124",
 		.of_match_table = ad7124_of_match,
 	},
 	.probe = ad7124_probe,
+	.id_table = ad71124_ids,
 };
 module_spi_driver(ad71124_driver);
 

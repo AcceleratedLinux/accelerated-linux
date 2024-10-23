@@ -1,0 +1,10 @@
+config LIB_PROTOBUF
+	bool "libprotobuf"
+	select LIB_PROTOBUF_HOST
+	help
+		The libprotobuf library.
+
+config LIB_PROTOBUF_HOST
+	bool "libprotobuf-host"
+	help
+		The protoc host binary.

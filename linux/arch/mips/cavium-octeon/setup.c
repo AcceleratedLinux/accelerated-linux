@@ -73,7 +73,7 @@ extern void pci_console_init(const char *arg);
 static unsigned long long max_memory = ULLONG_MAX;
 static unsigned long long reserve_low_mem;
 
-DEFINE_SEMAPHORE(octeon_bootbus_sem);
+DEFINE_SEMAPHORE(octeon_bootbus_sem, 1);
 EXPORT_SYMBOL(octeon_bootbus_sem);
 
 static struct octeon_boot_descriptor *octeon_boot_desc_ptr;
@@ -294,6 +294,9 @@ void octeon_crash_smp_send_stop(void)
 #endif
 
 #endif /* CONFIG_KEXEC */
+
+uint64_t octeon_reserve32_memory;
+EXPORT_SYMBOL(octeon_reserve32_memory);
 
 #ifdef CONFIG_KEXEC
 /* crashkernel cmdline parameter is parsed _after_ memory setup
@@ -588,7 +591,7 @@ void octeon_user_io_init(void)
 	/* Get the current settings for CP0_CVMMEMCTL_REG */
 	cvmmemctl.u64 = read_c0_cvmmemctl();
 	/* R/W If set, marked write-buffer entries time out the same
-	 * as as other entries; if clear, marked write-buffer entries
+	 * as other entries; if clear, marked write-buffer entries
 	 * use the maximum timeout. */
 	cvmmemctl.s.dismarkwblongto = 1;
 	/* R/W If set, a merged store does not clear the write-buffer
@@ -852,6 +855,27 @@ void __init prom_init(void)
 		cvmx_write_csr(CVMX_LED_UDD_DATX(0), 0);
 		cvmx_write_csr(CVMX_LED_UDD_DATX(1), 0);
 		cvmx_write_csr(CVMX_LED_EN, 1);
+	}
+
+	/*
+	 * We need to temporarily allocate all memory in the reserve32
+	 * region. This makes sure the kernel doesn't allocate this
+	 * memory when it is getting memory from the
+	 * bootloader. Later, after the memory allocations are
+	 * complete, the reserve32 will be freed.
+	 *
+	 * Allocate memory for RESERVED32 aligned on 2MB boundary. This
+	 * is in case we later use hugetlb entries with it.
+	 */
+	if (CONFIG_CAVIUM_RESERVE32) {
+		int64_t addr =
+			cvmx_bootmem_phy_named_block_alloc(CONFIG_CAVIUM_RESERVE32 << 20,
+							   0, 0, 2 << 20,
+							   "CAVIUM_RESERVE32", 0);
+		if (addr < 0)
+			pr_err("Failed to allocate CAVIUM_RESERVE32 memory area\n");
+		else
+			octeon_reserve32_memory = addr;
 	}
 
 #ifdef CONFIG_CAVIUM_OCTEON_LOCK_L2
@@ -1137,6 +1161,16 @@ void __init plat_mem_setup(void)
 #endif /* CONFIG_CRASH_DUMP */
 #endif /* SG590 || SG8200 || SG770 */
 
+#ifdef CONFIG_CAVIUM_OCTEON_USE_BOOTMEM
+	/*
+	 * Now that we've allocated the kernel memory it is safe to
+	 * free the reserved region. We free it here so that builtin
+	 * drivers can use the memory.
+	 */
+	if (octeon_reserve32_memory)
+		cvmx_bootmem_free_named("CAVIUM_RESERVE32");
+#endif /* CONFIG_CAVIUM_OCTEON_USE_BOOTMEM */
+
 	if (total == 0)
 		panic("Unable to allocate memory from "
 		      "cvmx_bootmem_phy_alloc");
@@ -1293,7 +1327,7 @@ static int __init octeon_no_pci_init(void)
 	 */
 	octeon_dummy_iospace = vzalloc(IO_SPACE_LIMIT);
 	set_io_port_base((unsigned long)octeon_dummy_iospace);
-	ioport_resource.start = MAX_RESOURCE;
+	ioport_resource.start = RESOURCE_SIZE_MAX;
 	ioport_resource.end = 0;
 	return 0;
 }

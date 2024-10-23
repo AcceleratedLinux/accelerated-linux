@@ -23,7 +23,6 @@ dir_p = $(ROOTDIR)/prop
 dir_smp = libqmi libmbim ModemManager busybox
 
 dir_y = 
-dir_n =
 dir_  =
 
 dir_$(CONFIG_JFFS_FS)                       += mtd-utils
@@ -85,7 +84,6 @@ dir_$(CONFIG_USER_DISCARD_DISCARD)          += discard
 dir_$(CONFIG_USER_DISCARD_ECHO)             += discard
 dir_$(CONFIG_USER_DOSFSTOOLS_MKDOSFS)       += dosfstools
 dir_$(CONFIG_USER_DOSFSTOOLS_DOSFSCK)       += dosfstools
-dir_$(CONFIG_USER_DNSMASQ_DNSMASQ)          += dnsmasq
 dir_$(CONFIG_USER_DNSMASQ2_DNSMASQ2)        += dnsmasq2
 dir_$(CONFIG_USER_DROPBEAR_DROPBEAR)        += dropbear
 dir_$(CONFIG_USER_EBTABLES_EBTABLES)        += ebtables
@@ -227,6 +225,7 @@ dir_$(CONFIG_USER_OGGPLAY_EXAMPLE)          += oggplay
 dir_$(CONFIG_USER_OGGPLAY_OGGPLAY)          += oggplay
 dir_$(CONFIG_USER_OPENSWAN)                 += openswan
 dir_$(CONFIG_USER_OPENVPN_OPENVPN)          += openvpn
+dir_$(CONFIG_USER_WIREGUARD)                += wireguard-tools
 dir_$(CONFIG_USER_OPROFILE)                 += oprofile
 dir_$(CONFIG_USER_P7ZIP_7ZA)                += p7zip
 dir_$(CONFIG_USER_PALMBOT_PALMBOT)          += palmbot
@@ -243,7 +242,6 @@ dir_$(CONFIG_USER_PLAYRT_PLAYRT)            += playrt
 dir_$(CONFIG_USER_PLUG_PLUG)                += plug
 dir_$(CONFIG_USER_POP3PROXY_POP3PROXY)      += pop3proxy
 dir_$(CONFIG_USER_PORTMAP_PORTMAP)          += portmap
-dir_$(CONFIG_USER_POTRACE_POTRACE)          += potrace
 dir_$(CONFIG_USER_PPTP_PPTP)                += pptp
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP)         += pptp-client
 dir_$(CONFIG_USER_PPTP_CLIENT_PPTP_CALLMGR) += pptp-client
@@ -306,7 +304,6 @@ dir_$(CONFIG_USER_SHUTILS_WHOAMI)           += shutils
 dir_$(CONFIG_USER_SHUTILS_YES)              += shutils
 dir_$(CONFIG_USER_SIGS_SIGS)                += sigs
 dir_$(CONFIG_USER_RS485_RS485)              += rs485
-dir_$(CONFIG_USER_SIPROXD_SIPROXD)          += siproxd
 dir_$(CONFIG_USER_SLATTACH_SLATTACH)        += slattach
 dir_$(CONFIG_USER_SMBMOUNT_SMBMOUNT)        += smbmount
 dir_$(CONFIG_USER_SMBMOUNT_SMBUMOUNT)       += smbmount
@@ -363,8 +360,6 @@ dir_$(CONFIG_USER_USBHUBCTRL_USBHUBCTRL)    += usbhubctrl
 dir_$(CONFIG_USER_USBISO_USBISO)            += iso_client
 dir_$(CONFIG_USER_VERSION_VERSION)          += version
 dir_$(CONFIG_USER_VCONFIG_VCONFIG)          += vconfig
-dir_$(CONFIG_USER_VIXIECRON_CRON)           += vixie-cron
-dir_$(CONFIG_USER_VIXIECRON_CRONTAB)        += vixie-cron
 dir_$(CONFIG_USER_VPLAY_VPLAY)              += vplay
 dir_$(CONFIG_USER_VPLAY_VREC)               += vplay
 dir_$(CONFIG_USER_VPLAY_MIXER)              += vplay
@@ -386,6 +381,8 @@ dir_$(CONFIG_USER_ZEBRA_ZEBRA_ZEBRA)        += zebra
 dir_$(CONFIG_USER_IFMETRIC)                 += ifmetric
 dir_$(CONFIG_USER_IPSETD)                   += ipsetd
 dir_$(CONFIG_USER_ATH11K_FIRMWARE)          += ath11k-firmware
+dir_$(CONFIG_USER_WISUN_BR)                 += wisun_br
+dir_$(CONFIG_USER_MEDIATEK_FIRMWARE)        += mediatek-firmware
 
 dir_y += games
 
@@ -396,7 +393,6 @@ ifdef HOSTBUILD
 # only build the dirs with hostbuild support
 hostdir = $(patsubst %/hostbuild.mak,%,$(wildcard */hostbuild.mak))
 dir_y := $(filter $(hostdir),$(dir_y))
-dir_n := $(filter $(hostdir),$(dir_n))
 dir_ := $(filter $(hostdir),$(dir_))
 dir_p :=
 dir_v :=
@@ -430,6 +426,9 @@ netflash: i2c-tools
 ifdef CONFIG_USER_NETFLASH_VERIFY_FW_PRODUCT_INFO
 netflash: squashfs-tools-ng
 endif
+ifdef CONFIG_USER_NETFLASH_USE_UBI
+netflash: mtd-utils
+endif
 flashrom: pciutils udev
 ovs: dpdk
 swconfig: uci
@@ -439,6 +438,7 @@ e2fsprogs: util-linux
 cryptsetup: util-linux
 samba: util-linux
 util-linux: readline
+gpsd: python python-modules
 $(ROOTDIR)/prop: ubus ModemManager hostapd ipset i2c-tools powerman python python-modules apparmor mosquitto wpa_supplicant
 
 ###################################
@@ -461,7 +461,7 @@ romfs:
 	done
 
 clean:
-	-for i in $(dir_v) $(sort $(dir_y) $(dir_n) $(dir_)) $(dir_p) ; do \
+	-for i in $(dir_v) $(sort $(dir_y) $(dir_)) $(dir_p) ; do \
 		if [ -f $$i/.sgbuilt_user ]; then \
 			$(MAKE) -j1 -C $$i clean ; \
 			rm -f $$i/.sgbuilt_user; \
@@ -469,7 +469,7 @@ clean:
 	done
 
 prune:
-	-for i in $(sort $(dir_n) $(dir_)) ; do \
+	-for i in $(sort $(dir_)) ; do \
 		found=0; \
 		for j in $(sort $(dir_y)) ; do \
 			if [ $$i = $$j ]; then \

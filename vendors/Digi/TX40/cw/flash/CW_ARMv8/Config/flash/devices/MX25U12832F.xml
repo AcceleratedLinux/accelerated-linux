@@ -1,0 +1,22 @@
+<device-file>
+	<device>
+		<content>
+			<device_parameters>
+				<device_type>spi</device_type>
+				<manufacturerid>0xC2</manufacturerid>
+			</device_parameters>
+			<name>MX25U12832F</name>
+			<sectors>
+				<sector count="256" size="0x10000"/>
+			</sectors>
+			<organizations>
+				<organization depth="16M" width="8">
+					<id>0x2538</id>
+					<algorithm>
+						<fpinclude href="algorithms/MX25U12832F.xml"/>
+					</algorithm>
+				</organization>
+			</organizations>
+		</content>
+	</device>
+</device-file>

@@ -19,14 +19,14 @@ wwan_led_update()
 		WWAN_SERV="-O WWAN_SERV_BLUE -f WWAN_SERV_RED"
 		WWAN_SIG="-O WWAN_SIG_BLUE -f WWAN_SIG_RED"
 	elif [ "$MODEM_STATUS" = "Recovering firmware" ]; then
-		WWAN_SERV="-f WWAN_SERV_BLUE -O WWAN_SERV_RED"
-		WWAN_SIG="-f WWAN_SIG_BLUE -O WWAN_SIG_RED"
+		WWAN_SERV="-O WWAN_SERV_RED -f WWAN_SERV_BLUE"
+		WWAN_SIG="-O WWAN_SIG_RED -f WWAN_SIG_BLUE"
 	else
-		idx="$(modem name=wwan idx || modem idx)" 2>/dev/null
-		if [ -z "$idx" ]; then
+		modem_name="$(modem name)" 2>/dev/null
+		if [ -z "$modem_name" ]; then
 			if sim -m 2>/dev/null | grep -qw yes; then
 				# Slow flash SERV while waiting for modem to appear
-				WWAN_SERV="-f WWAN_SERV_BLUE -O WWAN_SERV_RED"
+				WWAN_SERV="-O WWAN_SERV_RED -f WWAN_SERV_BLUE"
 				WWAN_SIG="-O WWAN_SIG_BLUE -O WWAN_SIG_RED"
 			else
 				# No modem present at all. Everything off
@@ -34,22 +34,22 @@ wwan_led_update()
 				WWAN_SIG="-O WWAN_SIG_BLUE -O WWAN_SIG_RED"
 			fi
 		else
-			case "$(runt get mm.modem.$idx.status.bars)" in
-			5)   WWAN_SIG="-o WWAN_SIG_BLUE -O WWAN_SIG_RED" ;;
-			4|3) WWAN_SIG="-F WWAN_SIG_BLUE -O WWAN_SIG_RED" ;;
-			2|1) WWAN_SIG="-f WWAN_SIG_BLUE -O WWAN_SIG_RED" ;;
+			case "$(runt get mm.modem.$modem_name.status.bars)" in
+			5)   WWAN_SIG="-O WWAN_SIG_RED -o WWAN_SIG_BLUE" ;;
+			4|3) WWAN_SIG="-O WWAN_SIG_RED -F WWAN_SIG_BLUE" ;;
+			2|1) WWAN_SIG="-O WWAN_SIG_RED -f WWAN_SIG_BLUE" ;;
 			0)   WWAN_SIG="-O WWAN_SIG_BLUE -f WWAN_SIG_RED" ;;
 			*)   WWAN_SIG="-O WWAN_SIG_BLUE -O WWAN_SIG_RED" ;;
 			esac
 
-			if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
-				WWAN_SERV="-o WWAN_SERV_BLUE -O WWAN_SERV_RED"
-			elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
+			if [ "$(runt get mm.modem.$modem_name.status.state)" = connected ]; then
+				WWAN_SERV="-O WWAN_SERV_RED -o WWAN_SERV_BLUE"
+			elif [ -z "$(runt get mm.modem.$modem_name.modem.imsi)" ]; then
 				# No SIM present
 				WWAN_SERV="-O WWAN_SERV_BLUE -o WWAN_SERV_RED"
 			else
 				# Connecting
-				WWAN_SERV="-F WWAN_SERV_BLUE -O WWAN_SERV_RED"
+				WWAN_SERV="-O WWAN_SERV_RED -F WWAN_SERV_BLUE"
 			fi
 		fi
 	fi

@@ -1,0 +1,69 @@
+
+Add GNU libc's NON-POSIX sem_clockwait() so we can use CLOCK_MONOTONIC times.
+
+--- musl-1.2.4/src/thread/sem_timedwait.c
++++ musl-1.2.4/src/thread/sem_timedwait.c
+@@ -7,7 +7,7 @@
+ 	a_dec(p);
+ }
+ 
+-int sem_timedwait(sem_t *restrict sem, const struct timespec *restrict at)
++int sem_clockwait(sem_t *restrict sem, clockid_t clk, const struct timespec *restrict at)
+ {
+ 	pthread_testcancel();
+ 
+@@ -22,7 +22,7 @@
+ 		a_inc(sem->__val+1);
+ 		a_cas(sem->__val, 0, 0x80000000);
+ 		pthread_cleanup_push(cleanup, (void *)(sem->__val+1));
+-		r = __timedwait_cp(sem->__val, 0x80000000, CLOCK_REALTIME, at, priv);
++		r = __timedwait_cp(sem->__val, 0x80000000, clk, at, priv);
+ 		pthread_cleanup_pop(1);
+ 		if (r) {
+ 			errno = r;
+@@ -31,3 +31,8 @@
+ 	}
+ 	return 0;
+ }
++
++int sem_timedwait(sem_t *restrict sem, const struct timespec *restrict at)
++{
++	return sem_clockwait(sem, CLOCK_REALTIME, at);
++}
+--- musl-1.2.4/include/semaphore.h
++++ musl-1.2.4/include/semaphore.h
+@@ -29,8 +29,12 @@
+ int    sem_unlink(const char *);
+ int    sem_wait(sem_t *);
+ 
++#include <time.h>
++int    sem_clockwait(sem_t *__restrict, clockid_t clk, const struct timespec *__restrict);
++
+ #if _REDIR_TIME64
+ __REDIR(sem_timedwait, __sem_timedwait_time64);
++__REDIR(sem_clockwait, __sem_clockwait_time64);
+ #endif
+ 
+ #ifdef __cplusplus
+--- musl-1.2.4/compat/time32/time32.h
++++ musl-1.2.4/compat/time32/time32.h
+@@ -68,6 +68,7 @@
+ int __sched_rr_get_interval_time32() __asm__("sched_rr_get_interval");
+ int __select_time32() __asm__("select");
+ int __sem_timedwait_time32() __asm__("sem_timedwait");
++int __sem_clockwait_time32() __asm__("sem_clockwait");
+ int __semtimedop_time32() __asm__("semtimedop");
+ int __setitimer_time32() __asm__("setitimer");
+ int __settimeofday_time32() __asm__("settimeofday");
+--- musl-1.2.4/compat/time32/sem_timedwait_time32.c
++++ musl-1.2.4/compat/time32/sem_timedwait_time32.c
+@@ -7,3 +7,9 @@
+ 	return sem_timedwait(sem, !ts32 ? 0 : (&(struct timespec){
+ 		.tv_sec = ts32->tv_sec, .tv_nsec = ts32->tv_nsec}));
+ }
++
++int __sem_clockwait_time32(sem_t *sem, clockid_t clk, const struct timespec32 *restrict ts32)
++{
++	return sem_clockwait(sem, clk, !ts32 ? 0 : (&(struct timespec){
++		.tv_sec = ts32->tv_sec, .tv_nsec = ts32->tv_nsec}));
++}

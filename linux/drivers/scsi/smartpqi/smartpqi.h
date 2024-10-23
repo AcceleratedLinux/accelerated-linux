@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  *    driver for Microchip PQI-based storage controllers
- *    Copyright (c) 2019-2021 Microchip Technology Inc. and its subsidiaries
+ *    Copyright (c) 2019-2023 Microchip Technology Inc. and its subsidiaries
  *    Copyright (c) 2016-2018 Microsemi Corporation
  *    Copyright (c) 2016 PMC-Sierra, Inc.
  *
@@ -293,7 +293,8 @@ struct pqi_raid_path_request {
 	u8	additional_cdb_bytes_usage : 3;
 	u8	reserved5 : 3;
 	u8	cdb[16];
-	u8	reserved6[12];
+	u8	reserved6[11];
+	u8	ml_device_lun_number;
 	__le32	timeout;
 	struct pqi_sg_descriptor sg_descriptors[PQI_MAX_EMBEDDED_SG_DESCRIPTORS];
 };
@@ -467,7 +468,8 @@ struct pqi_task_management_request {
 	struct pqi_iu_header header;
 	__le16	request_id;
 	__le16	nexus_id;
-	u8	reserved[2];
+	u8	reserved;
+	u8	ml_device_lun_number;
 	__le16  timeout;
 	u8	lun_number[8];
 	__le16	protocol_specific;
@@ -708,6 +710,7 @@ typedef u32 pqi_index_t;
 #define SOP_TMF_COMPLETE		0x0
 #define SOP_TMF_REJECTED		0x4
 #define SOP_TMF_FUNCTION_SUCCEEDED	0x8
+#define SOP_TMF_INCORRECT_LOGICAL_UNIT	0x9
 
 /* additional CDB bytes usage field codes */
 #define SOP_ADDITIONAL_CDB_BYTES_0	0	/* 16-byte CDB */
@@ -863,7 +866,8 @@ struct pqi_config_table_firmware_features {
 #define PQI_FIRMWARE_FEATURE_UNIQUE_WWID_IN_REPORT_PHYS_LUN	16
 #define PQI_FIRMWARE_FEATURE_FW_TRIAGE				17
 #define PQI_FIRMWARE_FEATURE_RPL_EXTENDED_FORMAT_4_5		18
-#define PQI_FIRMWARE_FEATURE_MAXIMUM				18
+#define PQI_FIRMWARE_FEATURE_MULTI_LUN_DEVICE_SUPPORT           21
+#define PQI_FIRMWARE_FEATURE_MAXIMUM                            21
 
 struct pqi_config_table_debug {
 	struct pqi_config_table_section_header header;
@@ -950,7 +954,7 @@ struct report_log_lun {
 
 struct report_log_lun_list {
 	struct report_lun_header header;
-	struct report_log_lun lun_entries[1];
+	struct report_log_lun lun_entries[];
 };
 
 struct report_phys_lun_8byte_wwid {
@@ -978,12 +982,12 @@ struct report_phys_lun_16byte_wwid {
 
 struct report_phys_lun_8byte_wwid_list {
 	struct report_lun_header header;
-	struct report_phys_lun_8byte_wwid lun_entries[1];
+	struct report_phys_lun_8byte_wwid lun_entries[];
 };
 
 struct report_phys_lun_16byte_wwid_list {
 	struct report_lun_header header;
-	struct report_phys_lun_16byte_wwid lun_entries[1];
+	struct report_phys_lun_16byte_wwid lun_entries[];
 };
 
 struct raid_map_disk_data {
@@ -1081,6 +1085,17 @@ struct pqi_stream_data {
 	u32	last_accessed;
 };
 
+#define PQI_MAX_LUNS_PER_DEVICE		256
+
+struct pqi_tmf_work {
+	struct work_struct work_struct;
+	struct scsi_cmnd *scmd;
+	struct pqi_ctrl_info *ctrl_info;
+	struct pqi_scsi_dev *device;
+	u8	lun;
+	u8	scsi_opcode;
+};
+
 struct pqi_scsi_dev {
 	int	devtype;		/* as reported by INQUIRY command */
 	u8	device_type;		/* as reported by */
@@ -1102,8 +1117,10 @@ struct pqi_scsi_dev {
 	u8	volume_offline : 1;
 	u8	rescan : 1;
 	u8	ignore_device : 1;
+	u8	erase_in_progress : 1;
 	bool	aio_enabled;		/* only valid for physical disks */
 	bool	in_remove;
+	bool	in_reset[PQI_MAX_LUNS_PER_DEVICE];
 	bool	device_offline;
 	u8	vendor[8];		/* bytes 8-15 of inquiry data */
 	u8	model[16];		/* bytes 16-31 of inquiry data */
@@ -1124,6 +1141,7 @@ struct pqi_scsi_dev {
 	u8	phy_id;
 	u8	ncq_prio_enable;
 	u8	ncq_prio_support;
+	u8	lun_count;
 	bool	raid_bypass_configured;	/* RAID bypass configured */
 	bool	raid_bypass_enabled;	/* RAID bypass enabled */
 	u32	next_bypass_group[RAID_MAP_MAX_DATA_DISKS_PER_ROW];
@@ -1139,8 +1157,10 @@ struct pqi_scsi_dev {
 	struct list_head delete_list_entry;
 
 	struct pqi_stream_data stream_data[NUM_STREAMS_PER_LUN];
-	atomic_t scsi_cmds_outstanding;
-	atomic_t raid_bypass_cnt;
+	atomic_t scsi_cmds_outstanding[PQI_MAX_LUNS_PER_DEVICE];
+	unsigned int raid_bypass_cnt;
+
+	struct pqi_tmf_work tmf_work[PQI_MAX_LUNS_PER_DEVICE];
 };
 
 /* VPD inquiry pages */
@@ -1262,6 +1282,12 @@ struct pqi_event {
 #define PQI_CTRL_PRODUCT_REVISION_A	0
 #define PQI_CTRL_PRODUCT_REVISION_B	1
 
+enum pqi_ctrl_removal_state {
+	PQI_CTRL_PRESENT = 0,
+	PQI_CTRL_GRACEFUL_REMOVAL,
+	PQI_CTRL_SURPRISE_REMOVAL
+};
+
 struct pqi_ctrl_info {
 	unsigned int	ctrl_id;
 	struct pci_dev	*pci_dev;
@@ -1294,7 +1320,6 @@ struct pqi_ctrl_info {
 	dma_addr_t	error_buffer_dma_handle;
 	size_t		sg_chain_buffer_length;
 	unsigned int	num_queue_groups;
-	u16		max_hw_queue_index;
 	u16		num_elements_per_iq;
 	u16		num_elements_per_oq;
 	u16		max_inbound_iu_length_per_firmware;
@@ -1322,7 +1347,6 @@ struct pqi_ctrl_info {
 	bool		controller_online;
 	bool		block_requests;
 	bool		scan_blocked;
-	u8		logical_volume_rescan_needed : 1;
 	u8		inbound_spanning_supported : 1;
 	u8		outbound_spanning_supported : 1;
 	u8		pqi_mode_enabled : 1;
@@ -1332,18 +1356,20 @@ struct pqi_ctrl_info {
 	u8		tmf_iu_timeout_supported : 1;
 	u8		firmware_triage_supported : 1;
 	u8		rpl_extended_format_4_5_supported : 1;
+	u8		multi_lun_device_supported : 1;
 	u8		enable_r1_writes : 1;
 	u8		enable_r5_writes : 1;
 	u8		enable_r6_writes : 1;
 	u8		lv_drive_type_mix_valid : 1;
 	u8		enable_stream_detection : 1;
-
+	u8		disable_managed_interrupts : 1;
 	u8		ciss_report_log_flags;
 	u32		max_transfer_encrypted_sas_sata;
 	u32		max_transfer_encrypted_nvme;
 	u32		max_write_raid_5_6;
 	u32		max_write_raid_1_10_2drive;
 	u32		max_write_raid_1_10_3drive;
+	int		numa_node;
 
 	struct list_head scsi_device_list;
 	spinlock_t	scsi_device_list_lock;
@@ -1355,8 +1381,6 @@ struct pqi_ctrl_info {
 	u64		sas_address;
 
 	struct pqi_io_request *io_request_pool;
-	u16		next_io_request_slot;
-
 	struct pqi_event events[PQI_NUM_SUPPORTED_EVENTS];
 	struct work_struct event_work;
 
@@ -1381,6 +1405,7 @@ struct pqi_ctrl_info {
 	struct work_struct ofa_quiesce_work;
 	u32		ofa_bytes_requested;
 	u16		ofa_cancel_reason;
+	enum pqi_ctrl_removal_state ctrl_removal_state;
 };
 
 enum pqi_ctrl_mode {

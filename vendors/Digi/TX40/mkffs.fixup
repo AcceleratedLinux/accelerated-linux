@@ -1,0 +1,89 @@
+#!/bin/sh
+# Detect an earlier incorrect partitioning and correct it
+
+old_cfg_start=1435648
+new_cfg_start=14223360
+old_opt_size=1024000
+MMC=/dev/mmcblk0
+P3=/opt
+P4=/etc/config
+
+if ! grep -qx $old_opt_size /sys/block/${MMC#/dev/}/${MMC#/dev/}p3/size; then
+   [ -t 1 ] && echo "/opt's size is not the old size; leaving it alone" >&2
+   exit 0
+fi
+
+echo "resizing /opt and /etc/config..."
+
+must_umount () {
+    if grep -qw $1 /proc/mounts; then
+        umount $1
+        if grep -qw $1 /proc/mounts; then
+            echo "could not umount $1"
+	    exit 1
+	fi
+    fi
+}
+must_umount $P3
+must_umount $P4
+
+P5=/tmp/p5
+mkdir -p $P5
+
+# If any of the following steps fail, we shouldn't continue.
+# Importantly, resize2fs may fail early if the filesystem
+# is too full to resize.
+set -xe
+
+e2fsck -p -f ${MMC}p3
+e2fsck -p -f ${MMC}p4
+
+#                    old_cfg_st  new_cfg_start
+#2048  206848 411648 1435648     14223360  100%
+#'     '      '      '           '         '
+#|image|image1|3opt--|4config--------------| initial
+resize2fs ${MMC}p4 $((new_cfg_start - old_cfg_start))s || {
+    set +e
+    mount ${MMC}p3 $P3
+    mount ${MMC}p4 $P4
+    exit 1
+}
+
+#|image|image1|3opt--|4config----          |
+
+parted -s $MMC rm 4
+#|image|image1|3opt--|-----------          |
+
+parted -s $MMC mkpart config ext4 ${new_cfg_start}s 100%
+#|image|image1|3opt--|-----------|4config  |
+
+parted -s $MMC mkpart config ext4 ${old_cfg_start}s $((new_cfg_start - 1))s
+parted -s $MMC name 5 oconfig
+#|image|image1|3opt--|5oconfig---|4config  |
+
+mount ${MMC}p5 $P5
+#|image|image1|3opt--|5oconfig--*|4config  |
+
+mkfs.ext4 -q -F ${MMC}p4
+#|image|image1|3opt--|5oconfig--*|4config--|
+
+mount ${MMC}p4 $P4
+#|image|image1|3opt--|5oconfig--*|4config-*|
+
+cp -pr $P5/* $P4/
+
+umount $P5
+#|image|image1|3opt--|5oconfig---|4config-*|
+
+parted -s $MMC rm 5
+#|image|image1|3opt--|           |4config-*|
+
+parted -s $MMC resizepart 3 $((new_cfg_start - 1))s
+#|image|image1|3opt--            |4config-*|
+
+resize2fs ${MMC}p3
+#|image|image1|3opt--------------|4config-*|
+
+mount ${MMC}p3 $P3
+#|image|image1|3opt-------------*|4config-*|
+

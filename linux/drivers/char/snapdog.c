@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/uaccess.h>
+#include <linux/of.h>
 #include <asm/irq_regs.h>
 
 /****************************************************************************/
@@ -115,7 +116,7 @@
 #if defined(CONFIG_MACH_8300) || defined(CONFIG_MACH_6300CX) || \
     defined(CONFIG_MACH_6330MX) || defined(CONFIG_MACH_6350SR) || \
     defined(CONFIG_MACH_CM71xx) || defined(CONFIG_MACH_ACM700x)
-	#include <asm/gpio.h>
+	#include <linux/gpio.h>
 
 #if defined(CONFIG_MACH_CM71xx)
 	#define GPIO_WATCHDOG   46
@@ -160,7 +161,7 @@
 	 * the kernels own GPIO services - they are setup up too late
 	 * in the boot process.
 	 */
-#ifdef CONFIG_MACH_U115
+#if defined(CONFIG_MACH_U115) || defined(CONFIG_MACH_U120)
 	#define GPIO_ADDR	0xf1018100
 	#define GPIO_WDT	20	/* GPIO 20 (low bank) */
 	#define GPIO_WDT_EN	19	/* GPIO 19 (low bank) */
@@ -199,7 +200,7 @@
 			v &= ~(0x1 << GPIO_WDT);
 			writel(v, snapdog_regp + 0x4);
 
-#ifdef CONFIG_MACH_U115
+#if defined(CONFIG_MACH_U115) || defined(CONFIG_MACH_U120)
 			/* Enable WDT GPIO as output */
 			v = readl(snapdog_regp + 0x4);
 			v &= ~(0x1 << GPIO_WDT_EN);
@@ -284,7 +285,7 @@
 #endif
 
 #if defined(CONFIG_MACH_UTM400)
-	#include <asm/gpio.h>
+	#include <linux/gpio.h>
 
 	static int wdt_state;
 
@@ -855,7 +856,7 @@ snapdog_ioctl(
 	unsigned long arg)
 {
 	static struct watchdog_info ident = {
-		.options = WDIOF_MAGICCLOSE,
+		.options = WDIOF_MAGICCLOSE | WDIOF_SETTIMEOUT,
 		.identity = "HW/SW Watchdog for SnapGear",
 	};
 
@@ -871,6 +872,16 @@ snapdog_ioctl(
 	case WDIOC_GETSTATUS:
 	case WDIOC_GETBOOTSTATUS:
 		return(put_user(0, (int __user *) arg));
+
+	case WDIOC_SETTIMEOUT:
+ 		if (get_user(snapdog_timeout, (unsigned int __user *)arg))
+ 			return -EFAULT;
+ 		printk(KERN_INFO "snapdog: WDIOF_SETTIMEOUT %d", snapdog_timeout);
+		return(0);
+
+	case WDIOC_GETTIMEOUT:
+		printk(KERN_INFO "snapdog: WDIOF_GETTIMEOUT %d", snapdog_timeout);
+		return(put_user(snapdog_timeout, (int __user *) arg));
 
 	case WDIOC_KEEPALIVE:
 		snapdog_user_service();

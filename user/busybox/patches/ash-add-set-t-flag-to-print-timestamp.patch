@@ -12,7 +12,7 @@ diff --git a/shell/ash.c b/shell/ash.c
 index 668df37..0ff1f96 100644
 --- a/shell/ash.c
 +++ b/shell/ash.c
-@@ -153,6 +153,13 @@
+@@ -158,6 +158,13 @@
  //config:	you to run the specified command or builtin,
  //config:	even when there is a function with the same name.
  //config:
@@ -26,7 +26,7 @@ index 668df37..0ff1f96 100644
  //config:endif # ash options
  
  //applet:IF_ASH(APPLET(ash, BB_DIR_BIN, BB_SUID_DROP))
-@@ -356,6 +363,9 @@ static const char *const optletters_optnames[] = {
+@@ -352,6 +359,9 @@ static const char *const optletters_optnames[] = {
  	,"\0"  "nolog"
  	,"\0"  "debug"
  #endif
@@ -36,19 +36,19 @@ index 668df37..0ff1f96 100644
  };
  //bash 4.4.23 also has these opts (with these defaults):
  //braceexpand           on
-@@ -451,6 +461,9 @@ struct globals_misc {
+@@ -449,6 +459,9 @@ struct globals_misc {
  #if DEBUG
- # define nolog optlist[15 + BASH_PIPEFAIL]
- # define debug optlist[16 + BASH_PIPEFAIL]
+ # define nolog optlist[16 + BASH_PIPEFAIL]
+ # define debug optlist[17 + BASH_PIPEFAIL]
 +#endif
 +#if ENABLE_ASH_TIMESTAMP_FLAG
-+# define tflag optlist[15 + BASH_PIPEFAIL + 2 * DEBUG]
++# define tflag optlist[16 + BASH_PIPEFAIL + 2 * DEBUG]
  #endif
  
  	/* trap handler commands */
-@@ -10427,6 +10440,17 @@ evalcommand(union node *cmd, int flags)
- 
+@@ -10495,6 +10508,17 @@ evalcommand(union node *cmd, int flags)
  		fdprintf(preverrout_fd, "%s", expandstr(ps4val(), DQSYNTAX));
+ 		inps4 = 0;
  
 +#if ENABLE_ASH_TIMESTAMP_FLAG
 +		if (tflag) {
@@ -64,10 +64,10 @@ index 668df37..0ff1f96 100644
  		sp = varlist.list;
  		while (sp) {
  			char *varval = sp->text;
-@@ -11360,8 +11384,11 @@ options(int *login_sh)
+@@ -11452,8 +11476,11 @@ options(int *login_sh)
  			val = 1;
  			if (p[0] == '\0' || LONE_DASH(p)) {
- 				if (!login_sh) {
+ 				if (login_sh == NULL) { /* we came from setcmd() */
 -					/* "-" means turn off -x and -v */
 +					/* "-" means turn off -t, -x and -v */
  					if (p[0] == '\0')

@@ -1,0 +1,16 @@
+make-do-not-override-GCC-and-CFLAGS.patch
+debug-do-not-log-timestamp-or-thread-id.patch
+main-do-not-listen-for-incoming-connections-if-no-po.patch
+serial-fix-flow-control-initialisation.patch
+modem-add-support-for-setting-parity-and-data-bits-w.patch
+init-add-b-command-line-option-to-specify-number-of-.patch
+modem-add-support-for-setting-speed-with-S31.patch
+bridge-reset-inactivity-timer-when-data-read-from-so.patch
+bridge-disconnect-socket-if-incoming-call-is-not-ans.patch
+bridge-fix-possible-buffer-overflow-when-reading-fro.patch
+bridge-fix-couple-of-bugs-when-reading-from-control-.patch
+main-do-not-accept-incoming-connections-on-ringing-m.patch
+phone_book-do-not-use-fixed-size-arrays.patch
+modem-fix-max-length-of-data-read-from-serial-port.patch
+modem-dial-first-phonebook-entry-if-no-dialstring-is.patch
+debug-allow-trace-logs-to-be-sent-to-a-unix-datagram.patch

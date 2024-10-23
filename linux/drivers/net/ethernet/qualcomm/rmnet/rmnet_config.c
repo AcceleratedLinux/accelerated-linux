@@ -12,6 +12,7 @@
 #include "rmnet_handlers.h"
 #include "rmnet_vnd.h"
 #include "rmnet_private.h"
+#include "rmnet_map.h"
 
 /* Local Definitions and Declarations */
 
@@ -38,6 +39,8 @@ static int rmnet_unregister_real_device(struct net_device *real_dev)
 
 	if (port->nr_rmnet_devs)
 		return -EINVAL;
+
+	rmnet_map_tx_aggregate_exit(port);
 
 	netdev_rx_handler_unregister(real_dev);
 
@@ -78,6 +81,8 @@ static int rmnet_register_real_device(struct net_device *real_dev,
 
 	for (entry = 0; entry < RMNET_MAX_LOGICAL_EP; entry++)
 		INIT_HLIST_HEAD(&port->muxed_ep[entry]);
+
+	rmnet_map_tx_aggregate_init(port);
 
 	netdev_dbg(real_dev, "registered with rmnet\n");
 	return 0;
@@ -391,7 +396,7 @@ nla_put_failure:
 
 struct rtnl_link_ops rmnet_link_ops __read_mostly = {
 	.kind		= "rmnet",
-	.maxtype	= __IFLA_RMNET_MAX,
+	.maxtype	= IFLA_RMNET_MAX,
 	.priv_size	= sizeof(struct rmnet_priv),
 	.setup		= rmnet_vnd_setup,
 	.validate	= rmnet_rtnl_validate,
@@ -515,4 +520,5 @@ static void __exit rmnet_exit(void)
 module_init(rmnet_init)
 module_exit(rmnet_exit)
 MODULE_ALIAS_RTNL_LINK("rmnet");
+MODULE_DESCRIPTION("Qualcomm RmNet MAP driver");
 MODULE_LICENSE("GPL v2");

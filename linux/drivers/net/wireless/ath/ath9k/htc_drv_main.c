@@ -100,7 +100,7 @@ static void ath9k_htc_vif_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 		priv->rearm_ani = true;
 	}
 
-	if (bss_conf->assoc) {
+	if (vif->cfg.assoc) {
 		priv->rearm_ani = true;
 		priv->reconfig_beacon = true;
 	}
@@ -719,7 +719,7 @@ static int ath9k_htc_tx_aggr_oper(struct ath9k_htc_priv *priv,
 
 	aggr.sta_index = ista->index;
 	aggr.tidno = tid & 0xf;
-	aggr.aggr_enable = (action == IEEE80211_AMPDU_TX_START) ? true : false;
+	aggr.aggr_enable = action == IEEE80211_AMPDU_TX_START;
 
 	WMI_CMD_BUF(WMI_TX_AGGR_ENABLE_CMDID, &aggr);
 	if (ret)
@@ -1264,7 +1264,6 @@ static void ath9k_htc_configure_filter(struct ieee80211_hw *hw,
 	u32 rfilt;
 
 	mutex_lock(&priv->mutex);
-	changed_flags &= SUPPORTED_FILTERS;
 	*total_flags &= SUPPORTED_FILTERS;
 
 	if (test_bit(ATH_OP_INVALID, &common->op_flags)) {
@@ -1369,7 +1368,8 @@ static void ath9k_htc_sta_rc_update(struct ieee80211_hw *hw,
 }
 
 static int ath9k_htc_conf_tx(struct ieee80211_hw *hw,
-			     struct ieee80211_vif *vif, u16 queue,
+			     struct ieee80211_vif *vif,
+			     unsigned int link_id, u16 queue,
 			     const struct ieee80211_tx_queue_params *params)
 {
 	struct ath9k_htc_priv *priv = hw->priv;
@@ -1488,8 +1488,8 @@ static void ath9k_htc_bss_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 	struct ath_common *common = ath9k_hw_common(priv->ah);
 	struct ieee80211_bss_conf *bss_conf = &vif->bss_conf;
 
-	if ((vif->type == NL80211_IFTYPE_STATION) && bss_conf->assoc) {
-		common->curaid = bss_conf->aid;
+	if ((vif->type == NL80211_IFTYPE_STATION) && vif->cfg.assoc) {
+		common->curaid = vif->cfg.aid;
 		common->last_rssi = ATH_RSSI_DUMMY_MARKER;
 		memcpy(common->curbssid, bss_conf->bssid, ETH_ALEN);
 		set_bit(ATH_OP_PRIM_STA_VIF, &common->op_flags);
@@ -1509,7 +1509,7 @@ static void ath9k_htc_choose_set_bssid(struct ath9k_htc_priv *priv)
 static void ath9k_htc_bss_info_changed(struct ieee80211_hw *hw,
 				       struct ieee80211_vif *vif,
 				       struct ieee80211_bss_conf *bss_conf,
-				       u32 changed)
+				       u64 changed)
 {
 	struct ath9k_htc_priv *priv = hw->priv;
 	struct ath_hw *ah = priv->ah;
@@ -1521,17 +1521,17 @@ static void ath9k_htc_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_ASSOC) {
 		ath_dbg(common, CONFIG, "BSS Changed ASSOC %d\n",
-			bss_conf->assoc);
+			vif->cfg.assoc);
 
-		bss_conf->assoc ?
+		vif->cfg.assoc ?
 			priv->num_sta_assoc_vif++ : priv->num_sta_assoc_vif--;
 
-		if (!bss_conf->assoc)
+		if (!vif->cfg.assoc)
 			clear_bit(ATH_OP_PRIM_STA_VIF, &common->op_flags);
 
 		if (priv->ah->opmode == NL80211_IFTYPE_STATION) {
 			ath9k_htc_choose_set_bssid(priv);
-			if (bss_conf->assoc && (priv->num_sta_assoc_vif == 1))
+			if (vif->cfg.assoc && (priv->num_sta_assoc_vif == 1))
 				ath9k_htc_start_ani(priv);
 			else if (priv->num_sta_assoc_vif == 0)
 				ath9k_htc_stop_ani(priv);
@@ -1540,7 +1540,7 @@ static void ath9k_htc_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_IBSS) {
 		if (priv->ah->opmode == NL80211_IFTYPE_ADHOC) {
-			common->curaid = bss_conf->aid;
+			common->curaid = vif->cfg.aid;
 			memcpy(common->curbssid, bss_conf->bssid, ETH_ALEN);
 			ath9k_htc_set_bssid(priv);
 		}
@@ -1868,7 +1868,12 @@ static void ath9k_htc_channel_switch_beacon(struct ieee80211_hw *hw,
 }
 
 struct ieee80211_ops ath9k_htc_ops = {
+	.add_chanctx = ieee80211_emulate_add_chanctx,
+	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+	.change_chanctx = ieee80211_emulate_change_chanctx,
+	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
 	.tx                 = ath9k_htc_tx,
+	.wake_tx_queue      = ieee80211_handle_wake_tx_queue,
 	.start              = ath9k_htc_start,
 	.stop               = ath9k_htc_stop,
 	.add_interface      = ath9k_htc_add_interface,

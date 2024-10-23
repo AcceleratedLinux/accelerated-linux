@@ -54,7 +54,6 @@ struct ia_css_pipeline {
 	unsigned int inout_port_config;
 	int num_execs;
 	bool acquire_isp_each_stage;
-	u32 pipe_qos_config;
 };
 
 #define DEFAULT_PIPELINE { \
@@ -65,7 +64,6 @@ struct ia_css_pipeline {
 	.dvs_frame_delay	= IA_CSS_FRAME_DELAY_1, \
 	.num_execs		= -1, \
 	.acquire_isp_each_stage	= true, \
-	.pipe_qos_config	= QOS_INVALID \
 }
 
 /* Stage descriptor used to create a new stage in the pipeline */
@@ -243,7 +241,6 @@ bool ia_css_pipeline_uses_params(struct ia_css_pipeline *pipeline);
  */
 bool ia_css_pipeline_get_sp_thread_id(unsigned int key, unsigned int *val);
 
-#if defined(ISP2401)
 /**
  * @brief Get the pipeline io status
  *
@@ -252,7 +249,6 @@ bool ia_css_pipeline_get_sp_thread_id(unsigned int key, unsigned int *val);
  *	Pointer to pipe_io_status
  */
 struct sh_css_sp_pipeline_io_status *ia_css_pipeline_get_pipe_io_status(void);
-#endif
 
 /**
  * @brief Map an SP thread to this pipeline

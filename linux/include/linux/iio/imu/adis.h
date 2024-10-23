@@ -11,6 +11,7 @@
 
 #include <linux/spi/spi.h>
 #include <linux/interrupt.h>
+#include <linux/iio/iio.h>
 #include <linux/iio/types.h>
 
 #define ADIS_WRITE_REG(reg) ((0x80 | (reg)))
@@ -131,7 +132,7 @@ struct adis {
 	unsigned long		irq_flag;
 	void			*buffer;
 
-	u8			tx[10] ____cacheline_aligned;
+	u8			tx[10] __aligned(IIO_DMA_MINALIGN);
 	u8			rx[4];
 };
 
@@ -402,9 +403,20 @@ static inline int adis_update_bits_base(struct adis *adis, unsigned int reg,
 	__adis_update_bits_base(adis, reg, mask, val, sizeof(val));	\
 })
 
-int adis_enable_irq(struct adis *adis, bool enable);
 int __adis_check_status(struct adis *adis);
 int __adis_initial_startup(struct adis *adis);
+int __adis_enable_irq(struct adis *adis, bool enable);
+
+static inline int adis_enable_irq(struct adis *adis, bool enable)
+{
+	int ret;
+
+	mutex_lock(&adis->state_lock);
+	ret = __adis_enable_irq(adis, enable);
+	mutex_unlock(&adis->state_lock);
+
+	return ret;
+}
 
 static inline int adis_check_status(struct adis *adis)
 {
@@ -412,18 +424,6 @@ static inline int adis_check_status(struct adis *adis)
 
 	mutex_lock(&adis->state_lock);
 	ret = __adis_check_status(adis);
-	mutex_unlock(&adis->state_lock);
-
-	return ret;
-}
-
-/* locked version of __adis_initial_startup() */
-static inline int adis_initial_startup(struct adis *adis)
-{
-	int ret;
-
-	mutex_lock(&adis->state_lock);
-	ret = __adis_initial_startup(adis);
 	mutex_unlock(&adis->state_lock);
 
 	return ret;

@@ -19,7 +19,6 @@ static struct ctl_table sched_autogroup_sysctls[] = {
 		.extra1         = SYSCTL_ZERO,
 		.extra2         = SYSCTL_ONE,
 	},
-	{}
 };
 
 static void __init sched_autogroup_sysctl_init(void)
@@ -161,7 +160,8 @@ autogroup_move_group(struct task_struct *p, struct autogroup *ag)
 	struct task_struct *t;
 	unsigned long flags;
 
-	BUG_ON(!lock_task_sighand(p, &flags));
+	if (WARN_ON_ONCE(!lock_task_sighand(p, &flags)))
+		return;
 
 	prev = p->signal->autogroup;
 	if (prev == ag) {

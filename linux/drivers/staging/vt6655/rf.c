@@ -171,7 +171,7 @@ bool IFRFbWriteEmbedded(struct vnt_private *priv, unsigned long dwData)
 	unsigned short ww;
 	unsigned long dwValue;
 
-	VNSvOutPortD(iobase + MAC_REG_IFREGCTL, dwData);
+	iowrite32((u32)dwData, iobase + MAC_REG_IFREGCTL);
 
 	/* W_MAX_TIMEOUT is the timeout period */
 	for (ww = 0; ww < W_MAX_TIMEOUT; ww++) {
@@ -209,10 +209,10 @@ static bool RFbAL2230Init(struct vnt_private *priv)
 	/* 3-wire control for normal mode */
 	iowrite8(0, iobase + MAC_REG_SOFTPWRCTL);
 
-	MACvWordRegBitsOn(iobase, MAC_REG_SOFTPWRCTL, (SOFTPWRCTL_SWPECTI  |
-							 SOFTPWRCTL_TXPEINV));
+	vt6655_mac_word_reg_bits_on(iobase, MAC_REG_SOFTPWRCTL,
+				    (SOFTPWRCTL_SWPECTI | SOFTPWRCTL_TXPEINV));
 	/* PLL  Off */
-	MACvWordRegBitsOff(iobase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
+	vt6655_mac_word_reg_bits_off(iobase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
 
 	/* patch abnormal AL2230 frequency output */
 	IFRFbWriteEmbedded(priv, (0x07168700 + (BY_AL2230_REG_LEN << 3) + IFREGCTL_REGW));
@@ -222,7 +222,7 @@ static bool RFbAL2230Init(struct vnt_private *priv)
 	MACvTimer0MicroSDelay(priv, 30); /* delay 30 us */
 
 	/* PLL On */
-	MACvWordRegBitsOn(iobase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
+	vt6655_mac_word_reg_bits_on(iobase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
 
 	MACvTimer0MicroSDelay(priv, 150);/* 150us */
 	ret &= IFRFbWriteEmbedded(priv, (0x00d80f00 + (BY_AL2230_REG_LEN << 3) + IFREGCTL_REGW));
@@ -232,10 +232,10 @@ static bool RFbAL2230Init(struct vnt_private *priv)
 	ret &= IFRFbWriteEmbedded(priv,
 				  al2230_init_table[CB_AL2230_INIT_SEQ - 1]);
 
-	MACvWordRegBitsOn(iobase, MAC_REG_SOFTPWRCTL, (SOFTPWRCTL_SWPE3    |
-							 SOFTPWRCTL_SWPE2    |
-							 SOFTPWRCTL_SWPECTI  |
-							 SOFTPWRCTL_TXPEINV));
+	vt6655_mac_word_reg_bits_on(iobase, MAC_REG_SOFTPWRCTL, (SOFTPWRCTL_SWPE3    |
+								 SOFTPWRCTL_SWPE2    |
+								 SOFTPWRCTL_SWPECTI  |
+								 SOFTPWRCTL_TXPEINV));
 
 	/* 3-wire control for power saving mode */
 	iowrite8(PSSIG_WPE3 | PSSIG_WPE2, iobase + MAC_REG_PSPWRSIG);
@@ -268,7 +268,7 @@ static bool RFbAL2230SelectChannel(struct vnt_private *priv, unsigned char byCha
  * Parameters:
  *  In:
  *      byBBType
- *      byRFType
+ *      rf_type
  *  Out:
  *      none
  *
@@ -279,7 +279,7 @@ bool RFbInit(struct vnt_private *priv)
 {
 	bool ret = true;
 
-	switch (priv->byRFType) {
+	switch (priv->rf_type) {
 	case RF_AIROHA:
 	case RF_AL2230S:
 		priv->max_pwr_level = AL2230_PWR_IDX_LEN;
@@ -300,7 +300,7 @@ bool RFbInit(struct vnt_private *priv)
  *
  * Parameters:
  *  In:
- *      byRFType
+ *      rf_type
  *      byChannel    - Channel number
  *  Out:
  *      none
@@ -308,12 +308,12 @@ bool RFbInit(struct vnt_private *priv)
  * Return Value: true if succeeded; false if failed.
  *
  */
-bool RFbSelectChannel(struct vnt_private *priv, unsigned char byRFType,
+bool RFbSelectChannel(struct vnt_private *priv, unsigned char rf_type,
 		      u16 byChannel)
 {
 	bool ret = true;
 
-	switch (byRFType) {
+	switch (rf_type) {
 	case RF_AIROHA:
 	case RF_AL2230S:
 		ret = RFbAL2230SelectChannel(priv, byChannel);
@@ -350,7 +350,7 @@ bool rf_write_wake_prog_syn(struct vnt_private *priv, unsigned char rf_type,
 	unsigned char sleep_count = 0;
 	unsigned short idx = MISCFIFO_SYNDATA_IDX;
 
-	VNSvOutPortW(iobase + MAC_REG_MISCFFNDEX, 0);
+	iowrite16(0, iobase + MAC_REG_MISCFFNDEX);
 	switch (rf_type) {
 	case RF_AIROHA:
 	case RF_AL2230S:
@@ -438,12 +438,12 @@ bool RFbSetPower(struct vnt_private *priv, unsigned int rate, u16 uCH)
 		break;
 	}
 
-	if (priv->byCurPwr == byPwr)
+	if (priv->cur_pwr == byPwr)
 		return true;
 
 	ret = RFbRawSetPower(priv, byPwr, rate);
 	if (ret)
-		priv->byCurPwr = byPwr;
+		priv->cur_pwr = byPwr;
 
 	return ret;
 }
@@ -470,7 +470,7 @@ bool RFbRawSetPower(struct vnt_private *priv, unsigned char byPwr,
 	if (byPwr >= priv->max_pwr_level)
 		return false;
 
-	switch (priv->byRFType) {
+	switch (priv->rf_type) {
 	case RF_AIROHA:
 		ret &= IFRFbWriteEmbedded(priv, al2230_power_table[byPwr]);
 		if (rate <= RATE_11M)
@@ -521,7 +521,7 @@ RFvRSSITodBm(struct vnt_private *priv, unsigned char byCurrRSSI, long *pldBm)
 	long a = 0;
 	unsigned char abyAIROHARF[4] = {0, 18, 0, 40};
 
-	switch (priv->byRFType) {
+	switch (priv->rf_type) {
 	case RF_AIROHA:
 	case RF_AL2230S:
 		a = abyAIROHARF[byIdx];

@@ -170,6 +170,9 @@ enum rgmii_clock_delay {
 /* Extended Page 2 Registers */
 #define MSCC_PHY_CU_PMD_TX_CNTL		  16
 
+#define MSCC_PHY_EEE_CNTL                 17
+#define INVERT_LED_POL_POS                10
+
 /* RGMII setting controls at address 18E2, for VSC8572 and similar */
 #define VSC8572_RGMII_CNTL		  18
 #define VSC8572_RGMII_RX_DELAY_MASK	  0x000E
@@ -179,6 +182,7 @@ enum rgmii_clock_delay {
 #define VSC8502_RGMII_CNTL		  20
 #define VSC8502_RGMII_RX_DELAY_MASK	  0x0070
 #define VSC8502_RGMII_TX_DELAY_MASK	  0x0007
+#define VSC8502_RGMII_RX_CLK_DISABLE	  0x0800
 
 #define MSCC_PHY_WOL_LOWER_MAC_ADDR	  21
 #define MSCC_PHY_WOL_MID_MAC_ADDR	  22
@@ -276,6 +280,7 @@ enum rgmii_clock_delay {
 /* Microsemi PHY ID's
  *   Code assumes lowest nibble is 0
  */
+#define PHY_ID_VSC8501			  0x00070530
 #define PHY_ID_VSC8502			  0x00070630
 #define PHY_ID_VSC8504			  0x000704c0
 #define PHY_ID_VSC8514			  0x00070670
@@ -290,6 +295,7 @@ enum rgmii_clock_delay {
 #define PHY_ID_VSC8575			  0x000707d0
 #define PHY_ID_VSC8582			  0x000707b0
 #define PHY_ID_VSC8584			  0x000707c0
+#define PHY_VENDOR_MSCC			0x00070400
 
 #define MSCC_VDDMAC_1500		  1500
 #define MSCC_VDDMAC_1800		  1800
@@ -361,6 +367,7 @@ struct vsc85xx_hw_stat {
 
 struct vsc8531_private {
 	int rate_magic;
+	u16 leds_inverted;
 	u16 supp_led_modes;
 	u32 leds_mode[MAX_LEDS];
 	u8 nleds;
@@ -413,6 +420,11 @@ struct vsc8531_private {
  * gpio_lock: used for PHC operations. Common for all PHYs as the load/save GPIO
  * is shared.
  */
+
+enum vsc85xx_global_phy {
+	VSC88XX_BASE_ADDR = 0,
+};
+
 struct vsc85xx_shared_private {
 	struct mutex gpio_lock;
 };

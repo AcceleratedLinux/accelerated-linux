@@ -58,10 +58,15 @@
 static bool dump_vma_snapshot(struct coredump_params *cprm);
 static void free_vma_snapshot(struct coredump_params *cprm);
 
+#define CORE_FILE_NOTE_SIZE_DEFAULT (4*1024*1024)
+/* Define a reasonable max cap */
+#define CORE_FILE_NOTE_SIZE_MAX (16*1024*1024)
+
 static int core_uses_pid;
 static unsigned int core_pipe_limit;
 static char core_pattern[CORENAME_MAX_SIZE] = "core";
 static int core_name_size = CORENAME_MAX_SIZE;
+unsigned int core_file_note_size_limit = CORE_FILE_NOTE_SIZE_DEFAULT;
 
 struct core_name {
 	char *corename;
@@ -70,7 +75,10 @@ struct core_name {
 
 static int expand_corename(struct core_name *cn, int size)
 {
-	char *corename = krealloc(cn->corename, size, GFP_KERNEL);
+	char *corename;
+
+	size = kmalloc_size_roundup(size);
+	corename = krealloc(cn->corename, size, GFP_KERNEL);
 
 	if (!corename)
 		return -ENOMEM;
@@ -78,7 +86,7 @@ static int expand_corename(struct core_name *cn, int size)
 	if (size > core_name_size) /* racy but harmless */
 		core_name_size = size;
 
-	cn->size = ksize(corename);
+	cn->size = size;
 	cn->corename = corename;
 	return 0;
 }
@@ -327,6 +335,10 @@ static int format_corename(struct core_name *cn, struct coredump_params *cprm,
 				err = cn_printf(cn, "%lu",
 					      rlimit(RLIMIT_CORE));
 				break;
+			/* CPU the task ran on */
+			case 'C':
+				err = cn_printf(cn, "%d", cprm->cpu);
+				break;
 			default:
 				break;
 			}
@@ -356,7 +368,7 @@ static int zap_process(struct task_struct *start, int exit_code)
 	struct task_struct *t;
 	int nr = 0;
 
-	/* ignore all signals except SIGKILL, see prepare_signal() */
+	/* Allow SIGKILL, see prepare_signal() */
 	start->signal->flags = SIGNAL_GROUP_EXIT;
 	start->signal->group_exit_code = exit_code;
 	start->signal->group_stop_count = 0;
@@ -404,9 +416,8 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 	if (core_waiters > 0) {
 		struct core_thread *ptr;
 
-		freezer_do_not_count();
-		wait_for_completion(&core_state->startup);
-		freezer_count();
+		wait_for_completion_state(&core_state->startup,
+					  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
 		/*
 		 * Wait for all the threads to become inactive, so that
 		 * all the thread context (extended register state, like
@@ -414,7 +425,7 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 		 */
 		ptr = core_state->dumper.next;
 		while (ptr != NULL) {
-			wait_task_inactive(ptr->task, 0);
+			wait_task_inactive(ptr->task, TASK_ANY);
 			ptr = ptr->next;
 		}
 	}
@@ -536,7 +547,6 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 	static atomic_t core_dump_count = ATOMIC_INIT(0);
 	struct coredump_params cprm = {
 		.siginfo = siginfo,
-		.regs = signal_pt_regs(),
 		.limit = rlimit(RLIMIT_CORE),
 		/*
 		 * We must use the same mm->flags while dumping core to avoid
@@ -545,6 +555,7 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 		 */
 		.mm_flags = mm->flags,
 		.vma_meta = NULL,
+		.cpu = raw_smp_processor_id(),
 	};
 
 #ifdef CONFIG_COREDUMP_PRINTK
@@ -567,7 +578,7 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 	 */
 	printk("\n");
 	printk(KERN_ERR"STACK DUMP:\n");
-	for (lines=0,stack=(int32_t *)user_stack(signal_pt_regs());(lines < 10) && 
+	for (lines=0,stack=(int32_t *)user_stack(current_pt_regs());(lines < 10) && 
 			(stack <= (int32_t *)current->mm->start_stack);lines++) {
 		/* print out the address */
 		output+=snprintf(output, 79-(output-output_buf), "0x%08lx: ",
@@ -585,62 +596,54 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 		printk(KERN_ERR "%s", output_buf);
 		output = output_buf;
 	}
-	show_regs(signal_pt_regs());
+	show_regs(current_pt_regs());
 
 #ifdef CONFIG_MMU
 	{
-	struct mm_struct *mm=NULL;
-	struct vm_area_struct *map;
-	char buf[200]={0};
-	int flags=0;
-	char *line;
-	dev_t dev = 0;
-	unsigned long ino = 0;
+	struct mm_struct *mm = current->mm;
 
-	mm = current->mm;
-	if (mm) 
-		atomic_inc(&mm->mm_users);
-	if (!mm)
-		goto finished;
-
-	mmap_read_lock(mm);
-	map = mm->mmap;
-
-	while (map) {
+	if (mm) {
+        	VMA_ITERATOR(vmi, mm, 0);
+		struct vm_area_struct *map;
+		char buf[200] = { 0 };
+		char *line;
+		dev_t dev = 0;
+		unsigned long ino = 0;
+		int flags;
 		char str[5];
 
-		if (map->vm_file != NULL) {
-			dev = map->vm_file->f_path.dentry->d_inode->i_sb->s_dev;
-			ino = map->vm_file->f_path.dentry->d_inode->i_ino;
-			line = d_path(&map->vm_file->f_path, buf, sizeof(buf));
-		} else {
-			line=NULL;
+		atomic_inc(&mm->mm_users);
+		mmap_read_lock(mm);
+        	for_each_vma(vmi, map) {
+			if (map->vm_file != NULL) {
+				dev = map->vm_file->f_path.dentry->d_inode->i_sb->s_dev;
+				ino = map->vm_file->f_path.dentry->d_inode->i_ino;
+				line = d_path(&map->vm_file->f_path, buf, sizeof(buf));
+			} else {
+				line = NULL;
+			}
+
+			flags = map->vm_flags;
+
+			str[0] = flags & VM_READ ? 'r' : '-';
+			str[1] = flags & VM_WRITE ? 'w' : '-';
+			str[2] = flags & VM_EXEC ? 'x' : '-';
+			str[3] = flags & VM_MAYSHARE ? 's' : 'p';
+			str[4] = 0;
+
+			printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end,
+				str, map->vm_pgoff << PAGE_SHIFT,
+				MAJOR(dev), MINOR(dev), ino, line ? line : "");
 		}
-
-		flags = map->vm_flags;
-
-		str[0] = flags & VM_READ ? 'r' : '-';
-		str[1] = flags & VM_WRITE ? 'w' : '-';
-		str[2] = flags & VM_EXEC ? 'x' : '-';
-		str[3] = flags & VM_MAYSHARE ? 's' : 'p';
-		str[4] = 0;
-
-		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end,
-				str,
-				map->vm_pgoff << PAGE_SHIFT,
-				MAJOR(dev), MINOR(dev), ino, line?line:"");
-		map = map->vm_next;
+		mmap_read_unlock(mm);
+		mmput(mm);
 	}
-	mmap_read_unlock(mm);
-	mmput(mm);
 	}
 #else
 	/*
 	 * How do we find base address of shared libs??
 	 */
 #endif
-
-finished:
 #endif
 
 	audit_core_dumps(siginfo->si_signo);
@@ -744,9 +747,9 @@ finished:
 			goto close_fail;
 		}
 	} else {
-		struct user_namespace *mnt_userns;
+		struct mnt_idmap *idmap;
 		struct inode *inode;
-		int open_flags = O_CREAT | O_RDWR | O_NOFOLLOW |
+		int open_flags = O_CREAT | O_WRONLY | O_NOFOLLOW |
 				 O_LARGEFILE | O_EXCL;
 
 		if (cprm.limit < binfmt->min_coredump)
@@ -822,9 +825,9 @@ finished:
 		 * a process dumps core while its cwd is e.g. on a vfat
 		 * filesystem.
 		 */
-		mnt_userns = file_mnt_user_ns(cprm.file);
-		if (!uid_eq(i_uid_into_mnt(mnt_userns, inode),
-			    current_fsuid())) {
+		idmap = file_mnt_idmap(cprm.file);
+		if (!vfsuid_eq_kuid(i_uid_into_vfsuid(idmap, inode),
+				    current_fsuid())) {
 			pr_info_ratelimited("Core dump to %s aborted: cannot preserve file owner\n",
 					    cn.corename);
 			goto close_fail;
@@ -836,7 +839,7 @@ finished:
 		}
 		if (!(cprm.file->f_mode & FMODE_CAN_WRITE))
 			goto close_fail;
-		if (do_truncate(mnt_userns, cprm.file->f_path.dentry,
+		if (do_truncate(idmap, cprm.file->f_path.dentry,
 				0, 0, cprm.file))
 			goto close_fail;
 	}
@@ -922,9 +925,9 @@ static int __dump_skip(struct coredump_params *cprm, size_t nr)
 {
 	static char zeroes[PAGE_SIZE];
 	struct file *file = cprm->file;
-	if (file->f_op->llseek && file->f_op->llseek != no_llseek) {
+	if (file->f_mode & FMODE_LSEEK) {
 		if (dump_interrupted() ||
-		    file->f_op->llseek(file, nr, SEEK_CUR) < 0)
+		    vfs_llseek(file, nr, SEEK_CUR) < 0)
 			return 0;
 		cprm->pos += nr;
 		return 1;
@@ -962,14 +965,80 @@ void dump_skip(struct coredump_params *cprm, size_t nr)
 EXPORT_SYMBOL(dump_skip);
 
 #ifdef CONFIG_ELF_CORE
+static int dump_emit_page(struct coredump_params *cprm, struct page *page)
+{
+	struct bio_vec bvec;
+	struct iov_iter iter;
+	struct file *file = cprm->file;
+	loff_t pos;
+	ssize_t n;
+
+	if (!page)
+		return 0;
+
+	if (cprm->to_skip) {
+		if (!__dump_skip(cprm, cprm->to_skip))
+			return 0;
+		cprm->to_skip = 0;
+	}
+	if (cprm->written + PAGE_SIZE > cprm->limit)
+		return 0;
+	if (dump_interrupted())
+		return 0;
+	pos = file->f_pos;
+	bvec_set_page(&bvec, page, PAGE_SIZE, 0);
+	iov_iter_bvec(&iter, ITER_SOURCE, &bvec, 1, PAGE_SIZE);
+	n = __kernel_write_iter(cprm->file, &iter, &pos);
+	if (n != PAGE_SIZE)
+		return 0;
+	file->f_pos = pos;
+	cprm->written += PAGE_SIZE;
+	cprm->pos += PAGE_SIZE;
+
+	return 1;
+}
+
+/*
+ * If we might get machine checks from kernel accesses during the
+ * core dump, let's get those errors early rather than during the
+ * IO. This is not performance-critical enough to warrant having
+ * all the machine check logic in the iovec paths.
+ */
+#ifdef copy_mc_to_kernel
+
+#define dump_page_alloc() alloc_page(GFP_KERNEL)
+#define dump_page_free(x) __free_page(x)
+static struct page *dump_page_copy(struct page *src, struct page *dst)
+{
+	void *buf = kmap_local_page(src);
+	size_t left = copy_mc_to_kernel(page_address(dst), buf, PAGE_SIZE);
+	kunmap_local(buf);
+	return left ? NULL : dst;
+}
+
+#else
+
+/* We just want to return non-NULL; it's never used. */
+#define dump_page_alloc() ERR_PTR(-EINVAL)
+#define dump_page_free(x) ((void)(x))
+static inline struct page *dump_page_copy(struct page *src, struct page *dst)
+{
+	return src;
+}
+#endif
+
 int dump_user_range(struct coredump_params *cprm, unsigned long start,
 		    unsigned long len)
 {
 	unsigned long addr;
+	struct page *dump_page;
+
+	dump_page = dump_page_alloc();
+	if (!dump_page)
+		return 0;
 
 	for (addr = start; addr < start + len; addr += PAGE_SIZE) {
 		struct page *page;
-		int stop;
 
 		/*
 		 * To avoid having to allocate page tables for virtual address
@@ -980,17 +1049,17 @@ int dump_user_range(struct coredump_params *cprm, unsigned long start,
 		 */
 		page = get_dump_page(addr);
 		if (page) {
-			void *kaddr = kmap_local_page(page);
-
-			stop = !dump_emit(cprm, kaddr, PAGE_SIZE);
-			kunmap_local(kaddr);
+			int stop = !dump_emit_page(cprm, dump_page_copy(page, dump_page));
 			put_page(page);
-			if (stop)
+			if (stop) {
+				dump_page_free(dump_page);
 				return 0;
+			}
 		} else {
 			dump_skip(cprm, PAGE_SIZE);
 		}
 	}
+	dump_page_free(dump_page);
 	return 1;
 }
 #endif
@@ -1030,6 +1099,9 @@ static int proc_dostring_coredump(struct ctl_table *table, int write,
 	return error;
 }
 
+static const unsigned int core_file_note_size_min = CORE_FILE_NOTE_SIZE_DEFAULT;
+static const unsigned int core_file_note_size_max = CORE_FILE_NOTE_SIZE_MAX;
+
 static struct ctl_table coredump_sysctls[] = {
 	{
 		.procname	= "core_uses_pid",
@@ -1052,7 +1124,15 @@ static struct ctl_table coredump_sysctls[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-	{ }
+	{
+		.procname       = "core_file_note_size_limit",
+		.data           = &core_file_note_size_limit,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= (unsigned int *)&core_file_note_size_min,
+		.extra2		= (unsigned int *)&core_file_note_size_max,
+	},
 };
 
 static int __init init_fs_coredump_sysctls(void)
@@ -1178,30 +1258,20 @@ whole:
 	return vma->vm_end - vma->vm_start;
 }
 
-static struct vm_area_struct *first_vma(struct task_struct *tsk,
-					struct vm_area_struct *gate_vma)
-{
-	struct vm_area_struct *ret = tsk->mm->mmap;
-
-	if (ret)
-		return ret;
-	return gate_vma;
-}
-
 /*
  * Helper function for iterating across a vma list.  It ensures that the caller
  * will visit `gate_vma' prior to terminating the search.
  */
-static struct vm_area_struct *next_vma(struct vm_area_struct *this_vma,
+static struct vm_area_struct *coredump_next_vma(struct vma_iterator *vmi,
+				       struct vm_area_struct *vma,
 				       struct vm_area_struct *gate_vma)
 {
-	struct vm_area_struct *ret;
-
-	ret = this_vma->vm_next;
-	if (ret)
-		return ret;
-	if (this_vma == gate_vma)
+	if (gate_vma && (vma == gate_vma))
 		return NULL;
+
+	vma = vma_next(vmi);
+	if (vma)
+		return vma;
 	return gate_vma;
 }
 
@@ -1225,9 +1295,10 @@ static void free_vma_snapshot(struct coredump_params *cprm)
  */
 static bool dump_vma_snapshot(struct coredump_params *cprm)
 {
-	struct vm_area_struct *vma, *gate_vma;
+	struct vm_area_struct *gate_vma, *vma = NULL;
 	struct mm_struct *mm = current->mm;
-	int i;
+	VMA_ITERATOR(vmi, mm, 0);
+	int i = 0;
 
 	/*
 	 * Once the stack expansion code is fixed to not change VMA bounds
@@ -1247,8 +1318,7 @@ static bool dump_vma_snapshot(struct coredump_params *cprm)
 		return false;
 	}
 
-	for (i = 0, vma = first_vma(current, gate_vma); vma != NULL;
-			vma = next_vma(vma, gate_vma), i++) {
+	while ((vma = coredump_next_vma(&vmi, vma, gate_vma)) != NULL) {
 		struct core_vma_metadata *m = cprm->vma_meta + i;
 
 		m->start = vma->vm_start;
@@ -1256,10 +1326,10 @@ static bool dump_vma_snapshot(struct coredump_params *cprm)
 		m->flags = vma->vm_flags;
 		m->dump_size = vma_dump_size(vma, cprm->mm_flags);
 		m->pgoff = vma->vm_pgoff;
-
 		m->file = vma->vm_file;
 		if (m->file)
 			get_file(m->file);
+		i++;
 	}
 
 	mmap_write_unlock(mm);

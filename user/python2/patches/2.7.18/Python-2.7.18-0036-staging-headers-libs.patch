@@ -1,0 +1,55 @@
+Subject: [PATCH] no host headers libs
+
+Do not look at host headers/libraries in cross-compile mode
+
+When we are cross-compiling, setup.py should never look in /usr or
+/usr/local to find headers or libraries. A later patch adds a
+mechanism to tell setup.py to look in a specific directory for headers
+and libraries.
+
+Subject: [PATCH] staging headers libs
+
+Tell setup.py the location of headers/libraries
+
+Allow the libraries detection routine to look for headers and libs in
+other directories than /usr/include or /usr/lib through the
+environment variables PYTHON_MODULES_INCLUDE and PYTHON_MODULES_LIB.
+
+We can then use it to look for libraries in the buildroot staging
+directory.
+
+Patch ported to python2.7 by Maxime Ripard <ripard@archos.com>
+
+[Rebased to Python 2.7.18 from Python-2.7.1-004 and -005 patches]
+
+Signed-off-by: Mike Wadsten <mike.wadsten@digi.com>
+
+--- a/setup.py
++++ b/setup.py
+@@ -507,6 +507,17 @@
+             os.unlink(tmpfile)
+ 
+     def detect_modules(self):
++        # Look for headers and libraries in the standard location,
++        # unless overridden by these environment variables.
++        for directory in os.environ.get(
++            "PYTHON_MODULES_INCLUDE", "/usr/include"
++        ).split():
++            add_dir_to_list(self.compiler.include_dirs, directory)
++        for directory in os.environ.get(
++            "PYTHON_MODULES_LIB", "/usr/lib"
++        ).split():
++            add_dir_to_list(self.compiler.library_dirs, directory)
++
+         # Ensure that /usr/local is always used
+         if not cross_compiling:
+             add_dir_to_list(self.compiler.library_dirs, '/usr/local/lib')
+@@ -1278,6 +1289,8 @@
+         # the more recent berkeleydb's db.h file first in the include path
+         # when attempting to compile and it will fail.
+         f = "/usr/include/db.h"
++        if cross_compiling:
++            f = ''
+ 
+         if host_platform == 'darwin':
+             if is_macosx_sdk_path(f):

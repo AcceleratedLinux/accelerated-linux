@@ -122,7 +122,7 @@ main(int argc, char *argv[])
 #endif /* CRAY */
 
 //#ifndef REALLY_SMALL_TELNETD
-	while ((ch = getopt(argc, argv, "d:a:e:lhnr:I:D:B:sS:a:X:L:p:")) != EOF) {
+	while ((ch = getopt(argc, argv, "d:a:e:Alhnr:I:D:B:sS:a:X:L:p:")) != EOF) {
 		switch(ch) {
 
 #ifdef	AUTHENTICATE
@@ -152,6 +152,10 @@ main(int argc, char *argv[])
 			}
 			break;
 #endif	/* AUTHENTICATE */
+
+		case 'A':
+			no_login = 1;
+			break;
 
 #ifdef BFTPDAEMON
 		case 'B':

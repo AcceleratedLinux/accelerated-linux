@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2017-2022 Broadcom. All Rights Reserved. The term *
+ * Copyright (C) 2017-2024 Broadcom. All Rights Reserved. The term *
  * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.     *
  * Copyright (C) 2004-2016 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
@@ -300,7 +300,7 @@ __lpfc_nvme_xmt_ls_rsp_cmp(struct lpfc_hba *phba, struct lpfc_iocbq *cmdwqe,
 	struct nvmefc_ls_rsp *ls_rsp = &axchg->ls_rsp;
 	uint32_t status, result;
 
-	status = bf_get(lpfc_wcqe_c_status, wcqe) & LPFC_IOCB_STATUS_MASK;
+	status = bf_get(lpfc_wcqe_c_status, wcqe);
 	result = wcqe->parameter;
 
 	if (axchg->state != LPFC_NVME_STE_LS_RSP || axchg->entry_cnt != 2) {
@@ -350,7 +350,7 @@ lpfc_nvmet_xmt_ls_rsp_cmp(struct lpfc_hba *phba, struct lpfc_iocbq *cmdwqe,
 	if (!phba->targetport)
 		goto finish;
 
-	status = bf_get(lpfc_wcqe_c_status, wcqe) & LPFC_IOCB_STATUS_MASK;
+	status = bf_get(lpfc_wcqe_c_status, wcqe);
 	result = wcqe->parameter;
 
 	tgtp = (struct lpfc_nvmet_tgtport *)phba->targetport->private;
@@ -722,7 +722,7 @@ lpfc_nvmet_xmt_fcp_op_cmp(struct lpfc_hba *phba, struct lpfc_iocbq *cmdwqe,
 	struct lpfc_nvmet_tgtport *tgtp;
 	struct nvmefc_tgt_fcp_req *rsp;
 	struct lpfc_async_xchg_ctx *ctxp;
-	uint32_t status, result, op, start_clean, logerr;
+	uint32_t status, result, op, logerr;
 	struct lpfc_wcqe_complete *wcqe = &rspwqe->wcqe_cmpl;
 #ifdef CONFIG_SCSI_LPFC_DEBUG_FS
 	int id;
@@ -820,9 +820,7 @@ lpfc_nvmet_xmt_fcp_op_cmp(struct lpfc_hba *phba, struct lpfc_iocbq *cmdwqe,
 		/* lpfc_nvmet_xmt_fcp_release() will recycle the context */
 	} else {
 		ctxp->entry_cnt++;
-		start_clean = offsetof(struct lpfc_iocbq, cmd_flag);
-		memset(((char *)cmdwqe) + start_clean, 0,
-		       (sizeof(struct lpfc_iocbq) - start_clean));
+		memset_startat(cmdwqe, 0, cmd_flag);
 #ifdef CONFIG_SCSI_LPFC_DEBUG_FS
 		if (ctxp->ts_cmd_nvme) {
 			ctxp->ts_isr_data = cmdwqe->isr_timestamp;
@@ -874,7 +872,7 @@ __lpfc_nvme_xmt_ls_rsp(struct lpfc_async_xchg_ctx *axchg,
 	struct ulp_bde64 bpl;
 	int rc;
 
-	if (phba->pport->load_flag & FC_UNLOADING)
+	if (test_bit(FC_UNLOADING, &phba->pport->load_flag))
 		return -ENODEV;
 
 	lpfc_printf_log(phba, KERN_INFO, LOG_NVME_DISC,
@@ -986,7 +984,7 @@ lpfc_nvmet_xmt_ls_rsp(struct nvmet_fc_target_port *tgtport,
 	struct lpfc_nvmet_tgtport *nvmep = tgtport->private;
 	int rc;
 
-	if (axchg->phba->pport->load_flag & FC_UNLOADING)
+	if (test_bit(FC_UNLOADING, &axchg->phba->pport->load_flag))
 		return -ENODEV;
 
 	rc = __lpfc_nvme_xmt_ls_rsp(axchg, ls_rsp, lpfc_nvmet_xmt_ls_rsp_cmp);
@@ -1024,7 +1022,7 @@ lpfc_nvmet_xmt_fcp_op(struct nvmet_fc_target_port *tgtport,
 	int id;
 #endif
 
-	if (phba->pport->load_flag & FC_UNLOADING) {
+	if (test_bit(FC_UNLOADING, &phba->pport->load_flag)) {
 		rc = -ENODEV;
 		goto aerr;
 	}
@@ -1147,7 +1145,7 @@ lpfc_nvmet_xmt_fcp_abort(struct nvmet_fc_target_port *tgtport,
 	struct lpfc_queue *wq;
 	unsigned long flags;
 
-	if (phba->pport->load_flag & FC_UNLOADING)
+	if (test_bit(FC_UNLOADING, &phba->pport->load_flag))
 		return;
 
 	if (!ctxp->hdwq)
@@ -1319,7 +1317,7 @@ lpfc_nvmet_ls_req(struct nvmet_fc_target_port *targetport,
 		return -EINVAL;
 
 	phba = lpfc_nvmet->phba;
-	if (phba->pport->load_flag & FC_UNLOADING)
+	if (test_bit(FC_UNLOADING, &phba->pport->load_flag))
 		return -EINVAL;
 
 	hstate = atomic_read(&lpfc_nvmet->state);
@@ -1355,7 +1353,7 @@ lpfc_nvmet_ls_abort(struct nvmet_fc_target_port *targetport,
 	int ret;
 
 	phba = lpfc_nvmet->phba;
-	if (phba->pport->load_flag & FC_UNLOADING)
+	if (test_bit(FC_UNLOADING, &phba->pport->load_flag))
 		return;
 
 	ndlp = (struct lpfc_nodelist *)hosthandle;
@@ -1471,7 +1469,7 @@ lpfc_nvmet_cleanup_io_context(struct lpfc_hba *phba)
 	if (!infop)
 		return;
 
-	/* Cycle the the entire CPU context list for every MRQ */
+	/* Cycle the entire CPU context list for every MRQ */
 	for (i = 0; i < phba->cfg_nvmet_mrq; i++) {
 		for_each_present_cpu(j) {
 			infop = lpfc_get_ctx_list(phba, j, i);
@@ -1588,7 +1586,7 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 		wqe = &nvmewqe->wqe;
 
 		/* Initialize WQE */
-		memset(wqe, 0, sizeof(union lpfc_wqe));
+		memset(wqe, 0, sizeof(*wqe));
 
 		ctx_buf->iocbq->cmd_dmabuf = NULL;
 		spin_lock(&phba->sli4_hba.sgl_list_lock);
@@ -1622,10 +1620,7 @@ lpfc_nvmet_setup_io_context(struct lpfc_hba *phba)
 			cpu = cpumask_first(cpu_present_mask);
 			continue;
 		}
-		cpu = cpumask_next(cpu, cpu_present_mask);
-		if (cpu == nr_cpu_ids)
-			cpu = cpumask_first(cpu_present_mask);
-
+		cpu = lpfc_next_present_cpu(cpu);
 	}
 
 	for_each_present_cpu(i) {
@@ -1816,7 +1811,9 @@ lpfc_sli4_nvmet_xri_aborted(struct lpfc_hba *phba,
 		ctxp->flag &= ~LPFC_NVME_XBUSY;
 		spin_unlock_irqrestore(&ctxp->ctxlock, iflag);
 
+		spin_lock_irqsave(&phba->rrq_list_lock, iflag);
 		rrq_empty = list_empty(&phba->active_rrq_list);
+		spin_unlock_irqrestore(&phba->rrq_list_lock, iflag);
 		ndlp = lpfc_findnode_did(phba->pport, ctxp->sid);
 		if (ndlp &&
 		    (ndlp->nlp_state == NLP_STE_UNMAPPED_NODE ||
@@ -3337,46 +3334,6 @@ lpfc_nvmet_unsol_issue_abort(struct lpfc_hba *phba,
 	return 1;
 }
 
-/**
- * lpfc_nvmet_prep_abort_wqe - set up 'abort' work queue entry.
- * @pwqeq: Pointer to command iocb.
- * @xritag: Tag that  uniqely identifies the local exchange resource.
- * @opt: Option bits -
- *		bit 0 = inhibit sending abts on the link
- *
- * This function is called with hbalock held.
- **/
-static void
-lpfc_nvmet_prep_abort_wqe(struct lpfc_iocbq *pwqeq, u16 xritag, u8 opt)
-{
-	union lpfc_wqe128 *wqe = &pwqeq->wqe;
-
-	/* WQEs are reused.  Clear stale data and set key fields to
-	 * zero like ia, iaab, iaar, xri_tag, and ctxt_tag.
-	 */
-	memset(wqe, 0, sizeof(*wqe));
-
-	if (opt & INHIBIT_ABORT)
-		bf_set(abort_cmd_ia, &wqe->abort_cmd, 1);
-	/* Abort specified xri tag, with the mask deliberately zeroed */
-	bf_set(abort_cmd_criteria, &wqe->abort_cmd, T_XRI_TAG);
-
-	bf_set(wqe_cmnd, &wqe->abort_cmd.wqe_com, CMD_ABORT_XRI_CX);
-
-	/* Abort the I/O associated with this outstanding exchange ID. */
-	wqe->abort_cmd.wqe_com.abort_tag = xritag;
-
-	/* iotag for the wqe completion. */
-	bf_set(wqe_reqtag, &wqe->abort_cmd.wqe_com, pwqeq->iotag);
-
-	bf_set(wqe_qosd, &wqe->abort_cmd.wqe_com, 1);
-	bf_set(wqe_lenloc, &wqe->abort_cmd.wqe_com, LPFC_WQE_LENLOC_NONE);
-
-	bf_set(wqe_cmd_type, &wqe->abort_cmd.wqe_com, OTHER_COMMAND);
-	bf_set(wqe_wqec, &wqe->abort_cmd.wqe_com, 1);
-	bf_set(wqe_cqid, &wqe->abort_cmd.wqe_com, LPFC_WQE_CQ_ID_DEFAULT);
-}
-
 static int
 lpfc_nvmet_sol_fcp_issue_abort(struct lpfc_hba *phba,
 			       struct lpfc_async_xchg_ctx *ctxp,
@@ -3386,7 +3343,7 @@ lpfc_nvmet_sol_fcp_issue_abort(struct lpfc_hba *phba,
 	struct lpfc_iocbq *abts_wqeq;
 	struct lpfc_nodelist *ndlp;
 	unsigned long flags;
-	u8 opt;
+	bool ia;
 	int rc;
 
 	tgtp = (struct lpfc_nvmet_tgtport *)phba->targetport->private;
@@ -3426,7 +3383,7 @@ lpfc_nvmet_sol_fcp_issue_abort(struct lpfc_hba *phba,
 	}
 	abts_wqeq = ctxp->abort_wqeq;
 	ctxp->state = LPFC_NVME_STE_ABORT;
-	opt = (ctxp->flag & LPFC_NVME_ABTS_RCV) ? INHIBIT_ABORT : 0;
+	ia = (ctxp->flag & LPFC_NVME_ABTS_RCV) ? true : false;
 	spin_unlock_irqrestore(&ctxp->ctxlock, flags);
 
 	/* Announce entry to new IO submit field. */
@@ -3438,14 +3395,12 @@ lpfc_nvmet_sol_fcp_issue_abort(struct lpfc_hba *phba,
 	/* If the hba is getting reset, this flag is set.  It is
 	 * cleared when the reset is complete and rings reestablished.
 	 */
-	spin_lock_irqsave(&phba->hbalock, flags);
 	/* driver queued commands are in process of being flushed */
-	if (phba->hba_flag & HBA_IOQ_FLUSH) {
-		spin_unlock_irqrestore(&phba->hbalock, flags);
+	if (test_bit(HBA_IOQ_FLUSH, &phba->hba_flag)) {
 		atomic_inc(&tgtp->xmt_abort_rsp_error);
 		lpfc_printf_log(phba, KERN_ERR, LOG_TRACE_EVENT,
 				"6163 Driver in reset cleanup - flushing "
-				"NVME Req now. hba_flag x%x oxid x%x\n",
+				"NVME Req now. hba_flag x%lx oxid x%x\n",
 				phba->hba_flag, ctxp->oxid);
 		lpfc_sli_release_iocbq(phba, abts_wqeq);
 		spin_lock_irqsave(&ctxp->ctxlock, flags);
@@ -3454,6 +3409,7 @@ lpfc_nvmet_sol_fcp_issue_abort(struct lpfc_hba *phba,
 		return 0;
 	}
 
+	spin_lock_irqsave(&phba->hbalock, flags);
 	/* Outstanding abort is in progress */
 	if (abts_wqeq->cmd_flag & LPFC_DRIVER_ABORTED) {
 		spin_unlock_irqrestore(&phba->hbalock, flags);
@@ -3472,7 +3428,9 @@ lpfc_nvmet_sol_fcp_issue_abort(struct lpfc_hba *phba,
 	/* Ready - mark outstanding as aborted by driver. */
 	abts_wqeq->cmd_flag |= LPFC_DRIVER_ABORTED;
 
-	lpfc_nvmet_prep_abort_wqe(abts_wqeq, ctxp->wqeq->sli4_xritag, opt);
+	lpfc_sli_prep_abort_xri(phba, abts_wqeq, ctxp->wqeq->sli4_xritag,
+				abts_wqeq->iotag, CLASS3,
+				LPFC_WQE_CQ_ID_DEFAULT, ia, true);
 
 	/* ABTS WQE must go to the same WQ as the WQE to be aborted */
 	abts_wqeq->hba_wqidx = ctxp->wqeq->hba_wqidx;

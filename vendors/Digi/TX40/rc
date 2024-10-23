@@ -1,0 +1,147 @@
+hostname "$(fw_printenv -n serial)"
+
+echo "Mounting filesystems..."
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mkdir -m 755 /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=120M tmpfs /tmp
+mount -t tmpfs -o size=32M tmpfs /var
+mkdir -m 1777 /var/tmp
+mkdir -m 755 /var/run
+mkdir -m 1777 /var/lock
+mkdir -m 755 /var/empty
+mkdir -m 755 /var/mnt
+
+# Setup the filesystem to host the /var/log.
+. /lib/varlog_setup.sh
+setup_varlogfs 16
+
+echo "Starting watchdog..."
+watchdog /dev/watchdog
+
+# make sure we dont see all errors
+echo 6 > /proc/sys/kernel/printk
+
+# initialise devices before we need them
+/etc/rc.dev
+
+echo "Initializing network interfaces..."
+echo 1 >/proc/sys/net/ipv4/conf/all/promote_secondaries
+ifconfig lo 127.0.0.1
+
+setmac -i eth1,eth2 -u -n 2
+
+if [ "$(fw_printenv factory 2> /dev/null)" = "factory=enabled" ]; then
+	# Load wifi module for testing
+	modprobe ath11k_pci
+	/etc/factory
+	exit 0
+fi
+
+case "$(fw_printenv emctest 2> /dev/null)" in
+emctest=enabled)
+	# Use the same setup as for factory testing
+	# Load wifi module for testing
+	modprobe ath11k_pci
+	/etc/factory
+	exit 0
+	;;
+emctest=standalone|emctest=standalone_radiated)
+	# Run standalone emc test application
+	modprobe ath11k_pci
+	/etc/emc
+	/etc/factory
+	exit 0
+	;;
+*);;
+esac
+
+# handle /opt, contains modem firmware and maybe other goodies
+echo "Mounting opt filesystem..."
+if ! mount -t ext4 /dev/flash/opt /opt; then
+	echo "Cannot mount /opt, reformatting..."
+	mkfs.ext4 -F /dev/flash/opt
+	mount -t ext4 /dev/flash/opt /opt
+fi
+
+echo "Mounting config filesystem ..."
+if ! mount -t ext4 /dev/flash/config /etc/config
+then
+	echo "Cannot mount /etc/config..."
+	echo "Using tmpfs for /etc/config."
+	mount -t tmpfs -o size=4M tmpfs /etc/config
+	touch /etc/config/.init
+fi
+[ "$(echo /etc/config/*)" = '/etc/config/*' ] && touch /etc/config/.init
+
+if [ -f /etc/config/.init ]; then
+	echo "Factory defaulting config ..."
+	filter="($|/certs$|/certs/|/ssh_host_rsa_key|/ssh_host_dsa_key|/ssh_host_key|/id_rsa|/id_dsa|/identity|/accns.pem|/accns.crt|/unique.crt|/.nocrypt|/.init2|/factory.json|/cfd.json|/nv.json|/current.json|/validation.json|/shadow|/awusbdcerts|/descriptors|/.migrate|/random-seed)"
+	[ -f /etc/config/.init2 ] && filter='($|/.migrate|/random-seed)'
+	touch /etc/config/.init2
+	find /etc/config -name '*' |
+		egrep -v "/etc/config$filter" |
+		xargs rm -rf
+	cp -ra /etc/default/. /etc/config/.
+	echo "Factory default settings restored" > /etc/config/reboot_msg
+else
+	rm -f /etc/config/.init2
+fi
+if [ ! -f /etc/config/accns.json ]; then
+	cp -ra /etc/default/. /etc/config/.
+fi
+
+/etc/mkffs.fixup
+
+# Load SFP driver early, bootloader update needs this
+modprobe nvmem_layerscape_sfp
+
+echo "Initializing CELL interface control..."
+/bin/sim -i
+
+cat /etc/inittab.d/* > /etc/inittab
+
+# cryptography disabled mode
+if [ -e /etc/config/.nocrypt ] ; then
+	sh /etc/nocrypt
+	exit 0
+fi
+
+# modem firmware updates
+[ -f /etc/config/switch_firmware_carrier ] && sh /etc/config/switch_firmware_carrier
+
+# Short circuit if PCI vendor and device ID are not present
+[ -e /sys/bus/pci/devices/0001:01:00.0/vendor ] &&
+[ -e /sys/bus/pci/devices/0001:01:00.0/device ] &&
+if [ $(cat /sys/bus/pci/devices/0001:01:00.0/vendor) = "0x17cb" ] &&
+   [ $(cat /sys/bus/pci/devices/0001:01:00.0/device) = "0x1103" ]; then
+	# Sparklan WIFI module
+	echo "Sparklan WIFI module detected."
+	modprobe wlan_cnss_core_pcie
+	sleep 1
+	modprobe wlan
+elif [ $(cat /sys/bus/pci/devices/0001:01:00.0/vendor) = "0x17cb" ] &&
+     [ $(cat /sys/bus/pci/devices/0001:01:00.0/device) = "0x1101" ]; then
+	# Voxmicro WIFI module
+	echo "Voxmicro WIFI module detected."
+	modprobe ath11k_pci
+else
+	# Unknown WIFI module
+	echo "Unknown WIFI module present!"
+fi
+
+random_seed restore
+
+# init processing
+[ -x /etc/rcS ] && /etc/rcS
+
+# do the rc script processing
+actiond &
+
+cat /etc/motd
+
+# Reset boot counter
+/etc/reset_bootcounter.sh
+
+exit 0

@@ -1,2 +1,2 @@
-URL = http://www.netfilter.org/projects/libnftnl/files/libnftnl-1.1.8.tar.bz2
+URL = https://www.netfilter.org/projects/libnftnl/files/libnftnl-1.2.6.tar.xz
 include $(ROOTDIR)/tools/automake.inc

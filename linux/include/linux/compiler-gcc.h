@@ -35,11 +35,9 @@
 	(typeof(ptr)) (__ptr + (off));					\
 })
 
-#ifdef CONFIG_RETPOLINE
+#ifdef CONFIG_MITIGATION_RETPOLINE
 #define __noretpoline __attribute__((__indirect_branch__("keep")))
 #endif
-
-#define __UNIQUE_ID(prefix) __PASTE(__PASTE(__UNIQUE_ID_, prefix), __COUNTER__)
 
 #if defined(LATENT_ENTROPY_PLUGIN) && !defined(__CHECKER__)
 #define __latent_entropy __attribute__((latent_entropy))
@@ -67,15 +65,24 @@
 	} while (0)
 
 /*
- * GCC 'asm goto' miscompiles certain code sequences:
+ * GCC 'asm goto' with outputs miscompiles certain code sequences:
  *
- *   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58670
+ *   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=113921
  *
- * Work it around via a compiler barrier quirk suggested by Jakub Jelinek.
+ * Work around it via the same compiler barrier quirk that we used
+ * to use for the old 'asm goto' workaround.
  *
- * (asm goto is automatically volatile - the naming reflects this.)
+ * Also, always mark such 'asm goto' statements as volatile: all
+ * asm goto statements are supposed to be volatile as per the
+ * documentation, but some versions of gcc didn't actually do
+ * that for asms with outputs:
+ *
+ *    https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98619
  */
-#define asm_volatile_goto(x...)	do { asm goto(x); asm (""); } while (0)
+#ifdef CONFIG_GCC_ASM_GOTO_OUTPUT_WORKAROUND
+#define asm_goto_output(x...) \
+	do { asm volatile goto(x); asm (""); } while (0)
+#endif
 
 #if defined(CONFIG_ARCH_USE_BUILTIN_BSWAP)
 #define __HAVE_BUILTIN_BSWAP32__
@@ -93,26 +100,21 @@
 #define __noscs __attribute__((__no_sanitize__("shadow-call-stack")))
 #endif
 
-#if __has_attribute(__no_sanitize_address__)
-#define __no_sanitize_address __attribute__((no_sanitize_address))
-#else
-#define __no_sanitize_address
-#endif
+#define __no_sanitize_address __attribute__((__no_sanitize_address__))
 
-#if defined(__SANITIZE_THREAD__) && __has_attribute(__no_sanitize_thread__)
-#define __no_sanitize_thread __attribute__((no_sanitize_thread))
+#if defined(__SANITIZE_THREAD__)
+#define __no_sanitize_thread __attribute__((__no_sanitize_thread__))
 #else
 #define __no_sanitize_thread
 #endif
 
-#if __has_attribute(__no_sanitize_undefined__)
-#define __no_sanitize_undefined __attribute__((no_sanitize_undefined))
-#else
-#define __no_sanitize_undefined
-#endif
+#define __no_sanitize_undefined __attribute__((__no_sanitize_undefined__))
 
+/*
+ * Only supported since gcc >= 12
+ */
 #if defined(CONFIG_KCOV) && __has_attribute(__no_sanitize_coverage__)
-#define __no_sanitize_coverage __attribute__((no_sanitize_coverage))
+#define __no_sanitize_coverage __attribute__((__no_sanitize_coverage__))
 #else
 #define __no_sanitize_coverage
 #endif
@@ -124,6 +126,12 @@
 #ifdef __SANITIZE_HWADDRESS__
 #define __SANITIZE_ADDRESS__
 #endif
+
+/*
+ * GCC does not support KMSAN.
+ */
+#define __no_sanitize_memory
+#define __no_kmsan_checks
 
 /*
  * Turn individual warnings and errors on and off locally, depending
@@ -148,7 +156,7 @@
 #endif
 
 #define __diag_ignore_all(option, comment) \
-	__diag_GCC(8, ignore, option)
+	__diag(__diag_GCC_ignore option)
 
 /*
  * Prior to 9.1, -Wno-alloc-size-larger-than (and therefore the "alloc_size"

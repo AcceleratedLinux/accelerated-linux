@@ -19,7 +19,7 @@ struct group_info *groups_alloc(int gidsetsize)
 	if (!gi)
 		return NULL;
 
-	atomic_set(&gi->usage, 1);
+	refcount_set(&gi->usage, 1);
 	gi->ngroups = gidsetsize;
 	return gi;
 }
@@ -134,13 +134,26 @@ EXPORT_SYMBOL(set_groups);
 int set_current_groups(struct group_info *group_info)
 {
 	struct cred *new;
+	const struct cred *old;
+	int retval;
 
 	new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
 
+	old = current_cred();
+
 	set_groups(new, group_info);
+
+	retval = security_task_fix_setgroups(new, old);
+	if (retval < 0)
+		goto error;
+
 	return commit_creds(new);
+
+error:
+	abort_creds(new);
+	return retval;
 }
 
 EXPORT_SYMBOL(set_current_groups);

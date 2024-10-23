@@ -222,7 +222,7 @@ endif
 image.squashfs: mksquashfs
 	rm -f $(ROMFSIMG); mksquashfs=`pwd`/mksquashfs; cd $(ROMFSDIR); \
 	$(ROOTDIR)/tools/fakeroot-env $$mksquashfs . $(ROMFSIMG) \
-		$(CONFIG_SQUASHFS_XATTR:y=-xattrs) \
+		$(CONFIG_SQUASHFS_XATTR:y=-xattrs) $(SQUASHFS_COMP) \
 		-noappend $(SQUASH_BCJ) $(SQUASH_ENDIAN)
 
 image.squashfs7z: mksquashfs7z
@@ -338,6 +338,24 @@ ifdef CONFIG_USER_NETFLASH_NETFLASH
 	rm -f $(ROMFSDIR)/$(NETFLASH_KILL_LIST_FILE)
 	for p in $(sort $(NETFLASH_KILL_LIST_y)) ; do echo $$p >> $(ROMFSDIR)/$(NETFLASH_KILL_LIST_FILE); done
 endif
+# Setup symlinks for DigiRM directories defined in prop/config/cc_acl/app/filesystem_service.c
+ifdef CONFIG_PROP_ANALYZER
+	$(ROMFSINST) -s /etc/config/analyzer /analyzer
+endif
+ifdef CONFIG_PROP_AWUSBD
+	$(ROMFSINST) -s /etc/config/usbtrace /usbtrace
+endif
+ifdef CONFIG_PROP_CONFIG_SERIALD
+	$(ROMFSINST) -s /etc/config/serial /serial
+endif
+ifdef CONFIG_USER_COOVACHILLI
+	$(ROMFSINST) -s /etc/config/hotspot /hotspots
+endif
+ifdef CONFIG_PROP_XBEE
+	$(ROMFSINST) -s /etc/config/xbee-profiles /xbee-profiles
+endif
+	$(ROMFSINST) -s /etc/config/scripts /applications
+	$(ROMFSINST) -s /var/log /logs
 
 romfs.recover:
 	$(ROMFSINST) $(VENDOR_ROMFS_DIR)/romfs.recover /
@@ -437,6 +455,11 @@ endif
 endif
 
 romfs.post:: romfs.nooom
+
+#LIST_SOFTWARE = $(ROOTDIR)/tools/list-software
+#$(IMAGEDIR)/sbom.cdx.json: $(IMAGEDIR)/romfs-inst.log $(LIST_SOFTWARE)
+#	 cd $(ROOTDIR) && $(LIST_SOFTWARE) > $@
+#romfs.post:: $(IMAGEDIR)/sbom.cdx.json
 
 # OVF generation for VM targets
 ovf:

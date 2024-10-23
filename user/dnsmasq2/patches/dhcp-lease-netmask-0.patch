@@ -10,10 +10,10 @@ useful to force a lease regardless of what subnet is on that interface.
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/dhcp.c b/src/dhcp.c
-index e500bc2..fa55296 100644
+index b65facd..7bf90eb 100644
 --- a/src/dhcp.c
 +++ b/src/dhcp.c
-@@ -565,7 +565,7 @@ static int complete_context(struct in_addr local, int if_index, char *label,
+@@ -582,7 +582,7 @@ static int complete_context(struct in_addr local, int if_index, char *label,
  
        for (context = daemon->dhcp; context; context = context->next)
  	{
@@ -22,7 +22,7 @@ index e500bc2..fa55296 100644
  	      is_same_net(share->shared_addr, context->start, context->netmask) &&
  	      is_same_net(share->shared_addr, context->end, context->netmask))
  	    {
-@@ -589,7 +589,7 @@ static int complete_context(struct in_addr local, int if_index, char *label,
+@@ -606,7 +606,7 @@ static int complete_context(struct in_addr local, int if_index, char *label,
    
    for (context = daemon->dhcp; context; context = context->next)
      {

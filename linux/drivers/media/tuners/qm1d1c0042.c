@@ -401,8 +401,7 @@ static const struct dvb_tuner_ops qm1d1c0042_ops = {
 };
 
 
-static int qm1d1c0042_probe(struct i2c_client *client,
-			    const struct i2c_device_id *id)
+static int qm1d1c0042_probe(struct i2c_client *client)
 {
 	struct qm1d1c0042_state *state;
 	struct qm1d1c0042_config *cfg;
@@ -424,14 +423,13 @@ static int qm1d1c0042_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int qm1d1c0042_remove(struct i2c_client *client)
+static void qm1d1c0042_remove(struct i2c_client *client)
 {
 	struct qm1d1c0042_state *state;
 
 	state = cfg_to_state(i2c_get_clientdata(client));
 	state->cfg.fe->tuner_priv = NULL;
 	kfree(state);
-	return 0;
 }
 
 

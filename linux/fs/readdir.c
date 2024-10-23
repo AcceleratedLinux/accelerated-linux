@@ -25,6 +25,53 @@
 #include <asm/unaligned.h>
 
 /*
+ * Some filesystems were never converted to '->iterate_shared()'
+ * and their directory iterators want the inode lock held for
+ * writing. This wrapper allows for converting from the shared
+ * semantics to the exclusive inode use.
+ */
+int wrap_directory_iterator(struct file *file,
+			    struct dir_context *ctx,
+			    int (*iter)(struct file *, struct dir_context *))
+{
+	struct inode *inode = file_inode(file);
+	int ret;
+
+	/*
+	 * We'd love to have an 'inode_upgrade_trylock()' operation,
+	 * see the comment in mmap_upgrade_trylock() in mm/memory.c.
+	 *
+	 * But considering this is for "filesystems that never got
+	 * converted", it really doesn't matter.
+	 *
+	 * Also note that since we have to return with the lock held
+	 * for reading, we can't use the "killable()" locking here,
+	 * since we do need to get the lock even if we're dying.
+	 *
+	 * We could do the write part killably and then get the read
+	 * lock unconditionally if it mattered, but see above on why
+	 * this does the very simplistic conversion.
+	 */
+	up_read(&inode->i_rwsem);
+	down_write(&inode->i_rwsem);
+
+	/*
+	 * Since we dropped the inode lock, we should do the
+	 * DEADDIR test again. See 'iterate_dir()' below.
+	 *
+	 * Note that we don't need to re-do the f_pos games,
+	 * since the file must be locked wrt f_pos anyway.
+	 */
+	ret = -ENOENT;
+	if (!IS_DEADDIR(inode))
+		ret = iter(file, ctx);
+
+	downgrade_write(&inode->i_rwsem);
+	return ret;
+}
+EXPORT_SYMBOL(wrap_directory_iterator);
+
+/*
  * Note the "unsafe_put_user() semantics: we goto a
  * label for errors.
  */
@@ -40,39 +87,32 @@
 int iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(file);
-	bool shared = false;
 	int res = -ENOTDIR;
-	if (file->f_op->iterate_shared)
-		shared = true;
-	else if (!file->f_op->iterate)
+
+	if (!file->f_op->iterate_shared)
 		goto out;
 
 	res = security_file_permission(file, MAY_READ);
 	if (res)
 		goto out;
 
-	if (shared)
-		res = down_read_killable(&inode->i_rwsem);
-	else
-		res = down_write_killable(&inode->i_rwsem);
+	res = fsnotify_file_perm(file, MAY_READ);
+	if (res)
+		goto out;
+
+	res = down_read_killable(&inode->i_rwsem);
 	if (res)
 		goto out;
 
 	res = -ENOENT;
 	if (!IS_DEADDIR(inode)) {
 		ctx->pos = file->f_pos;
-		if (shared)
-			res = file->f_op->iterate_shared(file, ctx);
-		else
-			res = file->f_op->iterate(file, ctx);
+		res = file->f_op->iterate_shared(file, ctx);
 		file->f_pos = ctx->pos;
 		fsnotify_access(file);
 		file_accessed(file);
 	}
-	if (shared)
-		inode_unlock_shared(inode);
-	else
-		inode_unlock(inode);
+	inode_unlock_shared(inode);
 out:
 	return res;
 }
@@ -131,7 +171,7 @@ struct old_linux_dirent {
 	unsigned long	d_ino;
 	unsigned long	d_offset;
 	unsigned short	d_namlen;
-	char		d_name[1];
+	char		d_name[];
 };
 
 struct readdir_callback {
@@ -140,7 +180,7 @@ struct readdir_callback {
 	int result;
 };
 
-static int fillonedir(struct dir_context *ctx, const char *name, int namlen,
+static bool fillonedir(struct dir_context *ctx, const char *name, int namlen,
 		      loff_t offset, u64 ino, unsigned int d_type)
 {
 	struct readdir_callback *buf =
@@ -149,14 +189,14 @@ static int fillonedir(struct dir_context *ctx, const char *name, int namlen,
 	unsigned long d_ino;
 
 	if (buf->result)
-		return -EINVAL;
+		return false;
 	buf->result = verify_dirent_name(name, namlen);
-	if (buf->result < 0)
-		return buf->result;
+	if (buf->result)
+		return false;
 	d_ino = ino;
 	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino) {
 		buf->result = -EOVERFLOW;
-		return -EOVERFLOW;
+		return false;
 	}
 	buf->result++;
 	dirent = buf->dirent;
@@ -169,12 +209,12 @@ static int fillonedir(struct dir_context *ctx, const char *name, int namlen,
 	unsafe_put_user(namlen, &dirent->d_namlen, efault_end);
 	unsafe_copy_dirent_name(dirent->d_name, name, namlen, efault_end);
 	user_write_access_end();
-	return 0;
+	return true;
 efault_end:
 	user_write_access_end();
 efault:
 	buf->result = -EFAULT;
-	return -EFAULT;
+	return false;
 }
 
 SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
@@ -208,7 +248,7 @@ struct linux_dirent {
 	unsigned long	d_ino;
 	unsigned long	d_off;
 	unsigned short	d_reclen;
-	char		d_name[1];
+	char		d_name[];
 };
 
 struct getdents_callback {
@@ -219,7 +259,7 @@ struct getdents_callback {
 	int error;
 };
 
-static int filldir(struct dir_context *ctx, const char *name, int namlen,
+static bool filldir(struct dir_context *ctx, const char *name, int namlen,
 		   loff_t offset, u64 ino, unsigned int d_type)
 {
 	struct linux_dirent __user *dirent, *prev;
@@ -232,18 +272,18 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
-		return buf->error;
+		return false;
 	buf->error = -EINVAL;	/* only used if we fail.. */
 	if (reclen > buf->count)
-		return -EINVAL;
+		return false;
 	d_ino = ino;
 	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino) {
 		buf->error = -EOVERFLOW;
-		return -EOVERFLOW;
+		return false;
 	}
 	prev_reclen = buf->prev_reclen;
 	if (prev_reclen && signal_pending(current))
-		return -EINTR;
+		return false;
 	dirent = buf->current_dir;
 	prev = (void __user *) dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
@@ -260,12 +300,12 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 	buf->current_dir = (void __user *)dirent + reclen;
 	buf->prev_reclen = reclen;
 	buf->count -= reclen;
-	return 0;
+	return true;
 efault_end:
 	user_write_access_end();
 efault:
 	buf->error = -EFAULT;
-	return -EFAULT;
+	return false;
 }
 
 SYSCALL_DEFINE3(getdents, unsigned int, fd,
@@ -307,7 +347,7 @@ struct getdents_callback64 {
 	int error;
 };
 
-static int filldir64(struct dir_context *ctx, const char *name, int namlen,
+static bool filldir64(struct dir_context *ctx, const char *name, int namlen,
 		     loff_t offset, u64 ino, unsigned int d_type)
 {
 	struct linux_dirent64 __user *dirent, *prev;
@@ -319,13 +359,13 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
-		return buf->error;
+		return false;
 	buf->error = -EINVAL;	/* only used if we fail.. */
 	if (reclen > buf->count)
-		return -EINVAL;
+		return false;
 	prev_reclen = buf->prev_reclen;
 	if (prev_reclen && signal_pending(current))
-		return -EINTR;
+		return false;
 	dirent = buf->current_dir;
 	prev = (void __user *)dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
@@ -342,13 +382,13 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 	buf->prev_reclen = reclen;
 	buf->current_dir = (void __user *)dirent + reclen;
 	buf->count -= reclen;
-	return 0;
+	return true;
 
 efault_end:
 	user_write_access_end();
 efault:
 	buf->error = -EFAULT;
-	return -EFAULT;
+	return false;
 }
 
 SYSCALL_DEFINE3(getdents64, unsigned int, fd,
@@ -388,7 +428,7 @@ struct compat_old_linux_dirent {
 	compat_ulong_t	d_ino;
 	compat_ulong_t	d_offset;
 	unsigned short	d_namlen;
-	char		d_name[1];
+	char		d_name[];
 };
 
 struct compat_readdir_callback {
@@ -397,7 +437,7 @@ struct compat_readdir_callback {
 	int result;
 };
 
-static int compat_fillonedir(struct dir_context *ctx, const char *name,
+static bool compat_fillonedir(struct dir_context *ctx, const char *name,
 			     int namlen, loff_t offset, u64 ino,
 			     unsigned int d_type)
 {
@@ -407,14 +447,14 @@ static int compat_fillonedir(struct dir_context *ctx, const char *name,
 	compat_ulong_t d_ino;
 
 	if (buf->result)
-		return -EINVAL;
+		return false;
 	buf->result = verify_dirent_name(name, namlen);
-	if (buf->result < 0)
-		return buf->result;
+	if (buf->result)
+		return false;
 	d_ino = ino;
 	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino) {
 		buf->result = -EOVERFLOW;
-		return -EOVERFLOW;
+		return false;
 	}
 	buf->result++;
 	dirent = buf->dirent;
@@ -427,12 +467,12 @@ static int compat_fillonedir(struct dir_context *ctx, const char *name,
 	unsafe_put_user(namlen, &dirent->d_namlen, efault_end);
 	unsafe_copy_dirent_name(dirent->d_name, name, namlen, efault_end);
 	user_write_access_end();
-	return 0;
+	return true;
 efault_end:
 	user_write_access_end();
 efault:
 	buf->result = -EFAULT;
-	return -EFAULT;
+	return false;
 }
 
 COMPAT_SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
@@ -460,7 +500,7 @@ struct compat_linux_dirent {
 	compat_ulong_t	d_ino;
 	compat_ulong_t	d_off;
 	unsigned short	d_reclen;
-	char		d_name[1];
+	char		d_name[];
 };
 
 struct compat_getdents_callback {
@@ -471,7 +511,7 @@ struct compat_getdents_callback {
 	int error;
 };
 
-static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
+static bool compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 		loff_t offset, u64 ino, unsigned int d_type)
 {
 	struct compat_linux_dirent __user *dirent, *prev;
@@ -484,18 +524,18 @@ static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
-		return buf->error;
+		return false;
 	buf->error = -EINVAL;	/* only used if we fail.. */
 	if (reclen > buf->count)
-		return -EINVAL;
+		return false;
 	d_ino = ino;
 	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino) {
 		buf->error = -EOVERFLOW;
-		return -EOVERFLOW;
+		return false;
 	}
 	prev_reclen = buf->prev_reclen;
 	if (prev_reclen && signal_pending(current))
-		return -EINTR;
+		return false;
 	dirent = buf->current_dir;
 	prev = (void __user *) dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
@@ -511,12 +551,12 @@ static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 	buf->prev_reclen = reclen;
 	buf->current_dir = (void __user *)dirent + reclen;
 	buf->count -= reclen;
-	return 0;
+	return true;
 efault_end:
 	user_write_access_end();
 efault:
 	buf->error = -EFAULT;
-	return -EFAULT;
+	return false;
 }
 
 COMPAT_SYSCALL_DEFINE3(getdents, unsigned int, fd,

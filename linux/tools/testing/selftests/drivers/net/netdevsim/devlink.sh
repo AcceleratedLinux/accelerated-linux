@@ -17,38 +17,57 @@ SYSFS_NET_DIR=/sys/bus/netdevsim/devices/$DEV_NAME/net/
 DEBUGFS_DIR=/sys/kernel/debug/netdevsim/$DEV_NAME/
 DL_HANDLE=netdevsim/$DEV_NAME
 
+wait_for_devlink()
+{
+	"$@" | grep -q $DL_HANDLE
+}
+
+devlink_wait()
+{
+	local timeout=$1
+
+	busywait "$timeout" wait_for_devlink devlink dev
+}
+
 fw_flash_test()
 {
+	DUMMYFILE=$(find /lib/firmware -type f -printf '%P\n' | head -1)
 	RET=0
 
-	devlink dev flash $DL_HANDLE file dummy
+	if [ -z "$DUMMYFILE" ]
+	then
+		echo "SKIP: unable to find suitable dummy firmware file"
+		return
+	fi
+
+	devlink dev flash $DL_HANDLE file $DUMMYFILE
 	check_err $? "Failed to flash with status updates on"
 
-	devlink dev flash $DL_HANDLE file dummy component fw.mgmt
+	devlink dev flash $DL_HANDLE file $DUMMYFILE component fw.mgmt
 	check_err $? "Failed to flash with component attribute"
 
-	devlink dev flash $DL_HANDLE file dummy overwrite settings
+	devlink dev flash $DL_HANDLE file $DUMMYFILE overwrite settings
 	check_fail $? "Flash with overwrite settings should be rejected"
 
 	echo "1"> $DEBUGFS_DIR/fw_update_overwrite_mask
 	check_err $? "Failed to change allowed overwrite mask"
 
-	devlink dev flash $DL_HANDLE file dummy overwrite settings
+	devlink dev flash $DL_HANDLE file $DUMMYFILE overwrite settings
 	check_err $? "Failed to flash with settings overwrite enabled"
 
-	devlink dev flash $DL_HANDLE file dummy overwrite identifiers
+	devlink dev flash $DL_HANDLE file $DUMMYFILE overwrite identifiers
 	check_fail $? "Flash with overwrite settings should be identifiers"
 
 	echo "3"> $DEBUGFS_DIR/fw_update_overwrite_mask
 	check_err $? "Failed to change allowed overwrite mask"
 
-	devlink dev flash $DL_HANDLE file dummy overwrite identifiers overwrite settings
+	devlink dev flash $DL_HANDLE file $DUMMYFILE overwrite identifiers overwrite settings
 	check_err $? "Failed to flash with settings and identifiers overwrite enabled"
 
 	echo "n"> $DEBUGFS_DIR/fw_update_status
 	check_err $? "Failed to disable status updates"
 
-	devlink dev flash $DL_HANDLE file dummy
+	devlink dev flash $DL_HANDLE file $DUMMYFILE
 	check_err $? "Failed to flash with status updates off"
 
 	log_test "fw flash test"
@@ -256,6 +275,9 @@ netns_reload_test()
 	ip netns del testns2
 	ip netns del testns1
 
+	# Wait until netns async cleanup is done.
+	devlink_wait 2000
+
 	log_test "netns reload test"
 }
 
@@ -347,6 +369,9 @@ resource_test()
 
 	ip netns del testns2
 	ip netns del testns1
+
+	# Wait until netns async cleanup is done.
+	devlink_wait 2000
 
 	log_test "resource test"
 }
@@ -496,8 +521,8 @@ dummy_reporter_test()
 
 	check_reporter_info dummy healthy 3 3 10 true
 
-	echo 8192> $DEBUGFS_DIR/health/binary_len
-	check_fail $? "Failed set dummy reporter binary len to 8192"
+	echo 8192 > $DEBUGFS_DIR/health/binary_len
+	check_err $? "Failed set dummy reporter binary len to 8192"
 
 	local dump=$(devlink health dump show $DL_HANDLE reporter dummy -j)
 	check_err $? "Failed show dump of dummy reporter"

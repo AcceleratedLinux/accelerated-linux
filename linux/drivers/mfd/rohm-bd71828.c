@@ -15,7 +15,7 @@
 #include <linux/mfd/rohm-bd71828.h>
 #include <linux/mfd/rohm-generic.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
 
@@ -197,7 +197,7 @@ static const struct regmap_config bd71815_regmap = {
 	.val_bits = 8,
 	.volatile_table = &bd71815_volatile_regs,
 	.max_register = BD71815_MAX_REGISTER - 1,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const struct regmap_config bd71828_regmap = {
@@ -205,7 +205,7 @@ static const struct regmap_config bd71828_regmap = {
 	.val_bits = 8,
 	.volatile_table = &bd71828_volatile_regs,
 	.max_register = BD71828_MAX_REGISTER,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 /*
@@ -413,9 +413,8 @@ static struct regmap_irq_chip bd71828_irq_chip = {
 	.irqs = &bd71828_irqs[0],
 	.num_irqs = ARRAY_SIZE(bd71828_irqs),
 	.status_base = BD71828_REG_INT_BUCK,
-	.mask_base = BD71828_REG_INT_MASK_BUCK,
+	.unmask_base = BD71828_REG_INT_MASK_BUCK,
 	.ack_base = BD71828_REG_INT_BUCK,
-	.mask_invert = true,
 	.init_ack_masked = true,
 	.num_regs = 12,
 	.num_main_regs = 1,
@@ -430,9 +429,8 @@ static struct regmap_irq_chip bd71815_irq_chip = {
 	.irqs = &bd71815_irqs[0],
 	.num_irqs = ARRAY_SIZE(bd71815_irqs),
 	.status_base = BD71815_REG_INT_STAT_01,
-	.mask_base = BD71815_REG_INT_EN_01,
+	.unmask_base = BD71815_REG_INT_EN_01,
 	.ack_base = BD71815_REG_INT_STAT_01,
-	.mask_invert = true,
 	.init_ack_masked = true,
 	.num_regs = 12,
 	.num_main_regs = 1,
@@ -464,6 +462,27 @@ static int set_clk_mode(struct device *dev, struct regmap *regmap,
 
 	return regmap_update_bits(regmap, clkmode_reg, OUT32K_MODE,
 				  OUT32K_MODE_CMOS);
+}
+
+static struct i2c_client *bd71828_dev;
+static void bd71828_power_off(void)
+{
+	while (true) {
+		s32 val;
+
+		/* We are not allowed to sleep, so do not use regmap involving mutexes here. */
+		val = i2c_smbus_read_byte_data(bd71828_dev, BD71828_REG_PS_CTRL_1);
+		if (val >= 0)
+			i2c_smbus_write_byte_data(bd71828_dev,
+						  BD71828_REG_PS_CTRL_1,
+						  BD71828_MASK_STATE_HBNT | (u8)val);
+		mdelay(500);
+	}
+}
+
+static void bd71828_remove_poweroff(void *data)
+{
+	pm_power_off = NULL;
 }
 
 static int bd71828_i2c_probe(struct i2c_client *i2c)
@@ -515,27 +534,24 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	}
 
 	regmap = devm_regmap_init_i2c(i2c, regmap_config);
-	if (IS_ERR(regmap)) {
-		dev_err(&i2c->dev, "Failed to initialize Regmap\n");
-		return PTR_ERR(regmap);
-	}
+	if (IS_ERR(regmap))
+		return dev_err_probe(&i2c->dev, PTR_ERR(regmap),
+				     "Failed to initialize Regmap\n");
 
 	ret = devm_regmap_add_irq_chip(&i2c->dev, regmap, i2c->irq,
 				       IRQF_ONESHOT, 0, irqchip, &irq_data);
-	if (ret) {
-		dev_err(&i2c->dev, "Failed to add IRQ chip\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&i2c->dev, ret,
+				     "Failed to add IRQ chip\n");
 
 	dev_dbg(&i2c->dev, "Registered %d IRQs for chip\n",
 		irqchip->num_irqs);
 
 	if (button_irq) {
 		ret = regmap_irq_get_virq(irq_data, button_irq);
-		if (ret < 0) {
-			dev_err(&i2c->dev, "Failed to get the power-key IRQ\n");
-			return ret;
-		}
+		if (ret < 0)
+			return dev_err_probe(&i2c->dev, ret,
+					     "Failed to get the power-key IRQ\n");
 
 		button.irq = ret;
 	}
@@ -547,7 +563,20 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	ret = devm_mfd_add_devices(&i2c->dev, PLATFORM_DEVID_AUTO, mfd, cells,
 				   NULL, 0, regmap_irq_get_domain(irq_data));
 	if (ret)
-		dev_err(&i2c->dev, "Failed to create subdevices\n");
+		return	dev_err_probe(&i2c->dev, ret, "Failed to create subdevices\n");
+
+	if (of_device_is_system_power_controller(i2c->dev.of_node) &&
+	    chip_type == ROHM_CHIP_TYPE_BD71828) {
+		if (!pm_power_off) {
+			bd71828_dev = i2c;
+			pm_power_off = bd71828_power_off;
+			ret = devm_add_action_or_reset(&i2c->dev,
+						       bd71828_remove_poweroff,
+						       NULL);
+		} else {
+			dev_warn(&i2c->dev, "Poweroff callback already assigned\n");
+		}
+	}
 
 	return ret;
 }
@@ -569,7 +598,7 @@ static struct i2c_driver bd71828_drv = {
 		.name = "rohm-bd71828",
 		.of_match_table = bd71828_of_match,
 	},
-	.probe_new = &bd71828_i2c_probe,
+	.probe = bd71828_i2c_probe,
 };
 module_i2c_driver(bd71828_drv);
 

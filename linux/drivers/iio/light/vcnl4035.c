@@ -8,6 +8,7 @@
  * TODO: Proximity
  */
 #include <linux/bitops.h>
+#include <linux/bitfield.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
@@ -42,6 +43,7 @@
 #define VCNL4035_ALS_PERS_MASK		GENMASK(3, 2)
 #define VCNL4035_INT_ALS_IF_H_MASK	BIT(12)
 #define VCNL4035_INT_ALS_IF_L_MASK	BIT(13)
+#define VCNL4035_DEV_ID_MASK		GENMASK(7, 0)
 
 /* Default values */
 #define VCNL4035_MODE_ALS_ENABLE	BIT(0)
@@ -89,7 +91,7 @@ static irqreturn_t vcnl4035_drdy_irq_thread(int irq, void *private)
 							IIO_EV_TYPE_THRESH,
 							IIO_EV_DIR_EITHER),
 				iio_get_time_ns(indio_dev));
-		iio_trigger_poll_chained(data->drdy_trigger0);
+		iio_trigger_poll_nested(data->drdy_trigger0);
 		return IRQ_HANDLED;
 	}
 
@@ -413,6 +415,7 @@ static int vcnl4035_init(struct vcnl4035_data *data)
 		return ret;
 	}
 
+	id = FIELD_GET(VCNL4035_DEV_ID_MASK, id);
 	if (id != VCNL4035_DEV_ID_VAL) {
 		dev_err(&data->client->dev, "Wrong id, got %x, expected %x\n",
 			id, VCNL4035_DEV_ID_VAL);
@@ -539,8 +542,7 @@ static int vcnl4035_probe_trigger(struct iio_dev *indio_dev)
 	return ret;
 }
 
-static int vcnl4035_probe(struct i2c_client *client,
-				const struct i2c_device_id *id)
+static int vcnl4035_probe(struct i2c_client *client)
 {
 	struct vcnl4035_data *data;
 	struct iio_dev *indio_dev;
@@ -601,20 +603,24 @@ fail_poweroff:
 	return ret;
 }
 
-static int vcnl4035_remove(struct i2c_client *client)
+static void vcnl4035_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
+	int ret;
 
 	pm_runtime_dont_use_autosuspend(&client->dev);
 	pm_runtime_disable(&client->dev);
 	iio_device_unregister(indio_dev);
 	pm_runtime_set_suspended(&client->dev);
 
-	return vcnl4035_set_als_power_state(iio_priv(indio_dev),
-					VCNL4035_MODE_ALS_DISABLE);
+	ret = vcnl4035_set_als_power_state(iio_priv(indio_dev),
+					   VCNL4035_MODE_ALS_DISABLE);
+	if (ret)
+		dev_warn(&client->dev, "Failed to put device into standby (%pe)\n",
+			 ERR_PTR(ret));
 }
 
-static int __maybe_unused vcnl4035_runtime_suspend(struct device *dev)
+static int vcnl4035_runtime_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
 	struct vcnl4035_data *data = iio_priv(indio_dev);
@@ -626,7 +632,7 @@ static int __maybe_unused vcnl4035_runtime_suspend(struct device *dev)
 	return ret;
 }
 
-static int __maybe_unused vcnl4035_runtime_resume(struct device *dev)
+static int vcnl4035_runtime_resume(struct device *dev)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(to_i2c_client(dev));
 	struct vcnl4035_data *data = iio_priv(indio_dev);
@@ -643,12 +649,8 @@ static int __maybe_unused vcnl4035_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops vcnl4035_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
-	SET_RUNTIME_PM_OPS(vcnl4035_runtime_suspend,
-			   vcnl4035_runtime_resume, NULL)
-};
+static DEFINE_RUNTIME_DEV_PM_OPS(vcnl4035_pm_ops, vcnl4035_runtime_suspend,
+				 vcnl4035_runtime_resume, NULL);
 
 static const struct i2c_device_id vcnl4035_id[] = {
 	{ "vcnl4035", 0 },
@@ -665,10 +667,10 @@ MODULE_DEVICE_TABLE(of, vcnl4035_of_match);
 static struct i2c_driver vcnl4035_driver = {
 	.driver = {
 		.name   = VCNL4035_DRV_NAME,
-		.pm	= &vcnl4035_pm_ops,
+		.pm	= pm_ptr(&vcnl4035_pm_ops),
 		.of_match_table = vcnl4035_of_match,
 	},
-	.probe  = vcnl4035_probe,
+	.probe = vcnl4035_probe,
 	.remove	= vcnl4035_remove,
 	.id_table = vcnl4035_id,
 };

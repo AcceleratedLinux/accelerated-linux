@@ -11,7 +11,7 @@
 #include <linux/net.h>
 #include <linux/igmp.h>
 #include <linux/workqueue.h>
-#include <net/sch_generic.h>
+#include <net/pkt_sched.h>
 #include <net/net_namespace.h>
 #include <net/ip.h>
 #include <net/udp.h>
@@ -80,11 +80,11 @@ static struct mld2_grec mldv2_zero_grec;
 
 static struct amt_skb_cb *amt_skb_cb(struct sk_buff *skb)
 {
-	BUILD_BUG_ON(sizeof(struct amt_skb_cb) + sizeof(struct qdisc_skb_cb) >
+	BUILD_BUG_ON(sizeof(struct amt_skb_cb) + sizeof(struct tc_skb_cb) >
 		     sizeof_field(struct sk_buff, cb));
 
 	return (struct amt_skb_cb *)((void *)skb->cb +
-		sizeof(struct qdisc_skb_cb));
+		sizeof(struct tc_skb_cb));
 }
 
 static void __amt_source_gc_work(void)
@@ -449,7 +449,7 @@ out:
 	dev_put(amt->dev);
 }
 
-/* Non-existant group is created as INCLUDE {empty}:
+/* Non-existent group is created as INCLUDE {empty}:
  *
  * RFC 3376 - 5.1. Action on Change of Interface State
  *
@@ -1400,11 +1400,11 @@ static void amt_add_srcs(struct amt_dev *amt, struct amt_tunnel_list *tunnel,
 	int i;
 
 	if (!v6) {
-		igmp_grec = (struct igmpv3_grec *)grec;
+		igmp_grec = grec;
 		nsrcs = ntohs(igmp_grec->grec_nsrcs);
 	} else {
 #if IS_ENABLED(CONFIG_IPV6)
-		mld_grec = (struct mld2_grec *)grec;
+		mld_grec = grec;
 		nsrcs = ntohs(mld_grec->grec_nsrcs);
 #else
 	return;
@@ -1485,11 +1485,11 @@ static void amt_lookup_act_srcs(struct amt_tunnel_list *tunnel,
 	int i, j;
 
 	if (!v6) {
-		igmp_grec = (struct igmpv3_grec *)grec;
+		igmp_grec = grec;
 		nsrcs = ntohs(igmp_grec->grec_nsrcs);
 	} else {
 #if IS_ENABLED(CONFIG_IPV6)
-		mld_grec = (struct mld2_grec *)grec;
+		mld_grec = grec;
 		nsrcs = ntohs(mld_grec->grec_nsrcs);
 #else
 	return;
@@ -2894,8 +2894,7 @@ static void amt_event_work(struct work_struct *work)
 			amt_event_send_request(amt);
 			break;
 		default:
-			if (skb)
-				kfree_skb(skb);
+			kfree_skb(skb);
 			break;
 		}
 	}
@@ -3033,8 +3032,7 @@ static int amt_dev_stop(struct net_device *dev)
 	cancel_work_sync(&amt->event_wq);
 	for (i = 0; i < AMT_MAX_EVENTS; i++) {
 		skb = amt->events[i].skb;
-		if (skb)
-			kfree_skb(skb);
+		kfree_skb(skb);
 		amt->events[i].event = AMT_EVENT_NONE;
 		amt->events[i].skb = NULL;
 	}
@@ -3065,15 +3063,10 @@ static int amt_dev_init(struct net_device *dev)
 	int err;
 
 	amt->dev = dev;
-	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
-	if (!dev->tstats)
-		return -ENOMEM;
 
 	err = gro_cells_init(&amt->gro_cells, dev);
-	if (err) {
-		free_percpu(dev->tstats);
+	if (err)
 		return err;
-	}
 
 	return 0;
 }
@@ -3083,7 +3076,6 @@ static void amt_dev_uninit(struct net_device *dev)
 	struct amt_dev *amt = netdev_priv(dev);
 
 	gro_cells_destroy(&amt->gro_cells);
-	free_percpu(dev->tstats);
 }
 
 static const struct net_device_ops amt_netdev_ops = {
@@ -3092,7 +3084,6 @@ static const struct net_device_ops amt_netdev_ops = {
 	.ndo_open		= amt_dev_open,
 	.ndo_stop		= amt_dev_stop,
 	.ndo_start_xmit         = amt_dev_xmit,
-	.ndo_get_stats64        = dev_get_tstats64,
 };
 
 static void amt_link_setup(struct net_device *dev)
@@ -3113,6 +3104,7 @@ static void amt_link_setup(struct net_device *dev)
 	dev->hw_features	|= NETIF_F_SG | NETIF_F_HW_CSUM;
 	dev->hw_features	|= NETIF_F_FRAGLIST | NETIF_F_RXCSUM;
 	dev->hw_features	|= NETIF_F_GSO_SOFTWARE;
+	dev->pcpu_stat_type	= NETDEV_PCPU_STAT_TSTATS;
 	eth_hw_addr_random(dev);
 	eth_zero_addr(dev->broadcast);
 	ether_setup(dev);
@@ -3451,5 +3443,6 @@ static void __exit amt_fini(void)
 module_exit(amt_fini);
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Driver for Automatic Multicast Tunneling (AMT)");
 MODULE_AUTHOR("Taehee Yoo <ap420073@gmail.com>");
 MODULE_ALIAS_RTNL_LINK("amt");

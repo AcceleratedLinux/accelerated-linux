@@ -2,6 +2,16 @@
 #ifndef _NET_IP6_ROUTE_H
 #define _NET_IP6_ROUTE_H
 
+#include <net/addrconf.h>
+#include <net/flow.h>
+#include <net/ip6_fib.h>
+#include <net/sock.h>
+#include <net/lwtunnel.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
+#include <linux/route.h>
+#include <net/nexthop.h>
+
 struct route_info {
 	__u8			type;
 	__u8			length;
@@ -18,16 +28,6 @@ struct route_info {
 	__be32			lifetime;
 	__u8			prefix[];	/* 0,8 or 16 */
 };
-
-#include <net/addrconf.h>
-#include <net/flow.h>
-#include <net/ip6_fib.h>
-#include <net/sock.h>
-#include <net/lwtunnel.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/route.h>
-#include <net/nexthop.h>
 
 #define RT6_LOOKUP_F_IFACE		0x00000001
 #define RT6_LOOKUP_F_REACHABLE		0x00000002
@@ -53,13 +53,12 @@ struct route_info {
  */
 static inline int rt6_srcprefs2flags(unsigned int srcprefs)
 {
-	/* No need to bitmask because srcprefs have only 3 bits. */
-	return srcprefs << 3;
+	return (srcprefs & IPV6_PREFER_SRC_MASK) << 3;
 }
 
 static inline unsigned int rt6_flags2srcprefs(int flags)
 {
-	return (flags >> 3) & 7;
+	return (flags >> 3) & IPV6_PREFER_SRC_MASK;
 }
 
 static inline bool rt6_need_strict(const struct in6_addr *daddr)
@@ -84,10 +83,6 @@ struct dst_entry *ip6_route_input_lookup(struct net *net,
 					 struct flowi6 *fl6,
 					 const struct sk_buff *skb, int flags);
 
-struct dst_entry *ip6_route_output_flags_noref(struct net *net,
-					       const struct sock *sk,
-					       struct flowi6 *fl6, int flags);
-
 struct dst_entry *ip6_route_output_flags(struct net *net, const struct sock *sk,
 					 struct flowi6 *fl6, int flags);
 
@@ -104,7 +99,7 @@ static inline struct dst_entry *ip6_route_output(struct net *net,
 static inline void ip6_rt_put_flags(struct rt6_info *rt, int flags)
 {
 	if (!(flags & RT6_LOOKUP_F_DST_NOREF) ||
-	    !list_empty(&rt->rt6i_uncached))
+	    !list_empty(&rt->dst.rt_uncached))
 		ip6_rt_put(rt);
 }
 
@@ -160,7 +155,7 @@ void fib6_force_start_gc(struct net *net);
 
 struct fib6_info *addrconf_f6i_alloc(struct net *net, struct inet6_dev *idev,
 				     const struct in6_addr *addr, bool anycast,
-				     gfp_t gfp_flags);
+				     gfp_t gfp_flags, struct netlink_ext_ack *extack);
 
 struct rt6_info *ip6_dst_alloc(struct net *net, struct net_device *dev,
 			       int flags);
@@ -175,7 +170,8 @@ struct fib6_info *rt6_get_dflt_router(struct net *net,
 struct fib6_info *rt6_add_dflt_router(struct net *net,
 				     const struct in6_addr *gwaddr,
 				     struct net_device *dev, unsigned int pref,
-				     u32 defrtr_usr_metric);
+				     u32 defrtr_usr_metric,
+				     int lifetime);
 
 void rt6_purge_dflt_routers(struct net *net);
 
@@ -219,12 +215,11 @@ int rt6_unregister_notifier(struct notifier_block *nb);
 static inline const struct rt6_info *skb_rt6_info(const struct sk_buff *skb)
 {
 	const struct dst_entry *dst = skb_dst(skb);
-	const struct rt6_info *rt6 = NULL;
 
 	if (dst)
-		rt6 = container_of(dst, struct rt6_info, dst);
+		return dst_rt6_info(dst);
 
-	return rt6;
+	return NULL;
 }
 
 /*
@@ -236,7 +231,7 @@ static inline void ip6_dst_store(struct sock *sk, struct dst_entry *dst,
 {
 	struct ipv6_pinfo *np = inet6_sk(sk);
 
-	np->dst_cookie = rt6_get_cookie((struct rt6_info *)dst);
+	np->dst_cookie = rt6_get_cookie(dst_rt6_info(dst));
 	sk_setup_caps(sk, dst);
 	np->daddr_cache = daddr;
 #ifdef CONFIG_IPV6_SUBTREES
@@ -249,7 +244,7 @@ void ip6_sk_dst_store_flow(struct sock *sk, struct dst_entry *dst,
 
 static inline bool ipv6_unicast_destination(const struct sk_buff *skb)
 {
-	struct rt6_info *rt = (struct rt6_info *) skb_dst(skb);
+	const struct rt6_info *rt = dst_rt6_info(skb_dst(skb));
 
 	return rt->rt6i_flags & RTF_LOCAL;
 }
@@ -257,7 +252,7 @@ static inline bool ipv6_unicast_destination(const struct sk_buff *skb)
 static inline bool ipv6_anycast_destination(const struct dst_entry *dst,
 					    const struct in6_addr *daddr)
 {
-	struct rt6_info *rt = (struct rt6_info *)dst;
+	const struct rt6_info *rt = dst_rt6_info(dst);
 
 	return rt->rt6i_flags & RTF_ANYCAST ||
 		(rt->rt6i_dst.plen < 127 &&
@@ -275,7 +270,7 @@ static inline unsigned int ip6_skb_dst_mtu(const struct sk_buff *skb)
 	const struct dst_entry *dst = skb_dst(skb);
 	unsigned int mtu;
 
-	if (np && np->pmtudisc >= IPV6_PMTUDISC_PROBE) {
+	if (np && READ_ONCE(np->pmtudisc) >= IPV6_PMTUDISC_PROBE) {
 		mtu = READ_ONCE(dst->dev->mtu);
 		mtu -= lwtunnel_headroom(dst->lwtstate, mtu);
 	} else {
@@ -286,14 +281,18 @@ static inline unsigned int ip6_skb_dst_mtu(const struct sk_buff *skb)
 
 static inline bool ip6_sk_accept_pmtu(const struct sock *sk)
 {
-	return inet6_sk(sk)->pmtudisc != IPV6_PMTUDISC_INTERFACE &&
-	       inet6_sk(sk)->pmtudisc != IPV6_PMTUDISC_OMIT;
+	u8 pmtudisc = READ_ONCE(inet6_sk(sk)->pmtudisc);
+
+	return pmtudisc != IPV6_PMTUDISC_INTERFACE &&
+	       pmtudisc != IPV6_PMTUDISC_OMIT;
 }
 
 static inline bool ip6_sk_ignore_df(const struct sock *sk)
 {
-	return inet6_sk(sk)->pmtudisc < IPV6_PMTUDISC_DO ||
-	       inet6_sk(sk)->pmtudisc == IPV6_PMTUDISC_OMIT;
+	u8 pmtudisc = READ_ONCE(inet6_sk(sk)->pmtudisc);
+
+	return pmtudisc < IPV6_PMTUDISC_DO ||
+	       pmtudisc == IPV6_PMTUDISC_OMIT;
 }
 
 static inline const struct in6_addr *rt6_nexthop(const struct rt6_info *rt,
@@ -337,7 +336,7 @@ static inline unsigned int ip6_dst_mtu_maybe_forward(const struct dst_entry *dst
 	rcu_read_lock();
 	idev = __in6_dev_get(dst->dev);
 	if (idev)
-		mtu = idev->cnf.mtu6;
+		mtu = READ_ONCE(idev->cnf.mtu6);
 	rcu_read_unlock();
 
 out:

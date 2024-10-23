@@ -1,27 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Broadcom Kona GPIO Driver
  *
  * Author: Broadcom Corporation <bcm-kernel-feedback-list@broadcom.com>
  * Copyright (C) 2012-2014 Broadcom Corporation
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/bitops.h>
 #include <linux/err.h>
-#include <linux/io.h>
 #include <linux/gpio/driver.h>
-#include <linux/of_device.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/irqdomain.h>
 #include <linux/irqchip/chained_irq.h>
+#include <linux/mod_devicetable.h>
+#include <linux/platform_device.h>
+#include <linux/property.h>
 
 #define BCM_GPIO_PASSWD				0x00a5a501
 #define GPIO_PER_BANK				32
@@ -70,7 +64,6 @@ struct bcm_kona_gpio {
 	struct gpio_chip gpio_chip;
 	struct irq_domain *irq_domain;
 	struct bcm_kona_gpio_bank *banks;
-	struct platform_device *pdev;
 };
 
 struct bcm_kona_gpio_bank {
@@ -564,18 +557,11 @@ static void bcm_kona_gpio_reset(struct bcm_kona_gpio *kona_gpio)
 static int bcm_kona_gpio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	const struct of_device_id *match;
 	struct bcm_kona_gpio_bank *bank;
 	struct bcm_kona_gpio *kona_gpio;
 	struct gpio_chip *chip;
 	int ret;
 	int i;
-
-	match = of_match_device(bcm_kona_gpio_of_match, dev);
-	if (!match) {
-		dev_err(dev, "Failed to find gpio controller\n");
-		return -ENODEV;
-	}
 
 	kona_gpio = devm_kzalloc(dev, sizeof(*kona_gpio), GFP_KERNEL);
 	if (!kona_gpio)
@@ -604,15 +590,13 @@ static int bcm_kona_gpio_probe(struct platform_device *pdev)
 	if (!kona_gpio->banks)
 		return -ENOMEM;
 
-	kona_gpio->pdev = pdev;
-	platform_set_drvdata(pdev, kona_gpio);
 	chip->parent = dev;
 	chip->ngpio = kona_gpio->num_bank * GPIO_PER_BANK;
 
-	kona_gpio->irq_domain = irq_domain_add_linear(dev->of_node,
-						      chip->ngpio,
-						      &bcm_kona_irq_ops,
-						      kona_gpio);
+	kona_gpio->irq_domain = irq_domain_create_linear(dev_fwnode(dev),
+							 chip->ngpio,
+							 &bcm_kona_irq_ops,
+							 kona_gpio);
 	if (!kona_gpio->irq_domain) {
 		dev_err(dev, "Couldn't allocate IRQ domain\n");
 		return -ENXIO;

@@ -18,6 +18,8 @@
 #include <linux/magic.h>
 #include <linux/pgtable.h>
 #include <linux/sizes.h>
+#include <linux/linkage.h>
+
 #include <asm/processor.h>
 #include <asm/page.h>
 #include <asm/mmu.h>
@@ -27,7 +29,6 @@
 #include <asm/ppc_asm.h>
 #include <asm/asm-offsets.h>
 #include <asm/ptrace.h>
-#include <asm/export.h>
 #include <asm/code-patching-asm.h>
 #include <asm/interrupt.h>
 
@@ -198,12 +199,12 @@ instruction_counter:
 	mfspr	r10, SPRN_SRR0	/* Get effective address of fault */
 	INVALIDATE_ADJACENT_PAGES_CPU15(r10, r11)
 	mtspr	SPRN_MD_EPN, r10
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_EXECMEM
 	mfcr	r11
 	compare_to_kernel_boundary r10, r10
 #endif
 	mfspr	r10, SPRN_M_TWB	/* Get level 1 table */
-#ifdef CONFIG_MODULES
+#ifdef CONFIG_EXECMEM
 	blt+	3f
 	rlwinm	r10, r10, 0, 20, 31
 	oris	r10, r10, (swapper_pg_dir - PAGE_OFFSET)@ha
@@ -537,7 +538,7 @@ start_here:
 	ori	r0, r0, STACK_END_MAGIC@l
 	stw	r0, 0(r1)
 	li	r0,0
-	stwu	r0,THREAD_SIZE-STACK_FRAME_OVERHEAD(r1)
+	stwu	r0,THREAD_SIZE-STACK_FRAME_MIN_SIZE(r1)
 
 	lis	r6, swapper_pg_dir@ha
 	tophys(r6,r6)
@@ -625,7 +626,7 @@ start_here:
  * 24 Mbytes of data, and the 512k IMMR space.  Anything not covered by
  * these mappings is mapped by page tables.
  */
-initial_mmu:
+SYM_FUNC_START_LOCAL(initial_mmu)
 	li	r8, 0
 	mtspr	SPRN_MI_CTR, r8		/* remove PINNED ITLB entries */
 	lis	r10, MD_TWAM@h
@@ -686,6 +687,7 @@ initial_mmu:
 #endif
 	mtspr	SPRN_DER, r8
 	blr
+SYM_FUNC_END(initial_mmu)
 
 _GLOBAL(mmu_pin_tlb)
 	lis	r9, (1f - PAGE_OFFSET)@h

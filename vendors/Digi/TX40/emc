@@ -1,0 +1,916 @@
+#!/bin/sh
+
+readonly CMD_EXIT="quit"
+readonly CMD_REBOOT="reboot"
+
+readonly TESTS="""wlan_test
+disk_test /dev/sda1
+eth_test
+eth_speed
+cell_test
+i2c_test
+gnss_test
+uptime
+cpu_temp"""
+#uart_test"""
+
+#readonly UART_TEST_WAIT=900000
+readonly I2C_TEST_WAIT=800000
+readonly DISK_TEST_WAIT=700000
+readonly WLAN_TEST_WAIT=600000
+readonly ETH_TEST_WAIT=500000
+readonly CELL_TEST_WAIT=400000
+
+readonly LED_ETH=gnss-green
+readonly LED_WLAN_TEST=wifi-green
+readonly LED_CELL_TEST=cell-red
+readonly LED_I2C_TEST=cell-green
+readonly LED_DISK_TEST=cell-blue
+#readonly LED_UART_TEST=cell-blue
+# These are on MCU
+readonly LED_GNSS_TEST=g
+readonly LED_ETH_TEST=r
+
+FAIL=
+
+error()
+{
+	echo "ERROR: $@"
+
+	FAIL=1
+	kill $$
+}
+
+set_mcu_led()
+{
+	# String from 'r', 'g' and 'b' letters to clear and set
+	local to_clear="$1"
+	local to_set="$2"
+
+	(
+		flock -s 200
+		leds=$(cat /sys/bus/i2c/devices/0-0078/pwr_led | grep -o . | sort | tr -d '\n')
+		new_leds=$(echo "${to_set}${leds//[${to_clear}]}" | grep -o . | sort -u | tr -d '\n')
+		[ "$new_leds" = "$leds" ] ||
+			echo "$new_leds" >/sys/bus/i2c/devices/0-0078/pwr_led
+	) 200>/tmp/mcu_led.lock
+}
+
+change_speed()
+{
+	echo "change ethernet speed to ${1}mbit"
+	ip netns exec ns1 ethtool -s eth1 speed $1 duplex full
+	ethtool -s eth2 speed $1 duplex full
+	case "$1" in
+	10) ledcmd -f $LED_ETH ;;
+	100) ledcmd -F $LED_ETH ;;
+	1000) ledcmd -o $LED_ETH ;;
+	esac
+}
+
+poll()
+{
+	cnt=0
+	val=0
+	while [ $cnt -lt 50 ] ; do
+		usleep 10
+		but=$(cat /sys/class/gpio/gpio528/value)
+		val=$(($val + $but))
+		cnt=$(($cnt+1))
+	done
+	if [ $val -gt 25 ]; then
+		echo 1
+	else
+		echo 0
+	fi
+}
+
+# If sim select button is pressed change the speed of Ethernet ports
+eth_speed_start()
+{
+	echo 528 > /sys/class/gpio/export 2>/dev/null
+	echo in > /sys/class/gpio/gpio528/direction
+}
+
+eth_speed_loop()
+{
+	speed=1000
+	change_speed $speed
+	while [ 1 ]; do
+		if [ $(poll) -eq 0 ]; then
+			case "$speed" in
+			10) speed=100;;
+			100) speed=1000;;
+			1000) speed=10;;
+			*) speed=1000;;
+			esac
+			change_speed $speed
+		fi
+	done
+}
+
+eth_test_start()
+{
+	ip netns add ns1
+
+	ip link set dev eth1 down
+	ip link set dev eth2 down
+
+	ip link set dev eth1 netns ns1
+
+	ip netns exec ns1 ip address add 192.168.0.1/24 dev eth1
+	ip address add 192.168.0.2/24 dev eth2
+
+	ip netns exec ns1 ip link set dev eth1 up
+	ip link set dev eth2 up
+}
+
+eth_test_loop()
+{
+	local err=0
+	local loop=0
+	# Don't throw error in the first 10 seconds
+	local no_err_cntr=10
+
+	while [ 1 ]; do
+		loop=$((loop + 1))
+
+		if ping -I eth2 -c 1 -W0.1 192.168.0.1 &>/dev/null; then
+			set_mcu_led "$LED_ETH_TEST" ""
+			no_err_cntr=0
+		elif [ $no_err_cntr -gt 0 ]; then
+			no_err_cntr=$((no_err_cntr - 1))
+		else
+			set_mcu_led "" "$LED_ETH_TEST"
+			err=$((err + 1))
+			echo -n "-- "
+		fi
+
+		echo "Ethernet test loop $loop, err=$err"
+
+		usleep $ETH_TEST_WAIT
+	done
+}
+
+wlan_test_start()
+{
+	# Wait until wlan0 appears
+	local i
+	for i in `seq 30`; do
+		ifconfig wlan0 &>/dev/null && break
+		usleep 100000
+	done
+
+	usleep 100000
+	ifconfig wlan0 up || {
+		echo "ERROR: wlan0 failed to come up"
+		return 1
+	}
+
+	# If non-radiated test, prepare it to run an AP with DHCP-server
+	if [ "$NON_RADIATED_TEST" ]; then
+		ip link set dev wlan0 address $(fw_printenv -n eth2addr)
+		iw phy phy0 interface add wlan1 type __ap
+		ip link set dev wlan1 address $(fw_printenv -n eth3addr)
+		ip addr add 192.168.10.1/24 dev wlan0
+		ip addr add 192.168.11.1/24 dev wlan1
+
+		local password=$(fw_printenv -n upasswd)
+		[ "$password" ] || password=DigiEMCTestPassword
+
+		echo """
+interface=wlan0
+interface=wlan1
+
+dhcp-range=wlan0,192.168.10.100,192.168.10.150,255.255.255.0,24h
+dhcp-range=wlan1,192.168.11.100,192.168.11.150,255.255.255.0,24h
+dhcp-leasefile=/tmp/wlan_dhcp.leases
+""" > /var/run/dnsmasq_dhcp.conf
+
+		echo """
+driver=nl80211
+logger_syslog=127
+logger_syslog_level=2
+logger_stdout=127
+logger_stdout_level=2
+country_code=ZZ
+ieee80211d=1
+hw_mode=g
+beacon_int=100
+channel=6
+
+ieee80211n=1
+ht_capab=[LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1][MAX-AMSDU-7935][DSSS_CCK-40]
+ieee80211ax=1
+he_su_beamformer=1
+he_basic_mcs_nss_set=2
+he_default_pe_duration=4
+he_rts_threshold=1023
+he_mu_edca_qos_info_param_count=0
+he_mu_edca_qos_info_q_ack=0
+he_mu_edca_qos_info_queue_request=0
+he_mu_edca_qos_info_txop_request=0
+he_mu_edca_ac_be_aifsn=8
+he_mu_edca_ac_be_aci=0
+he_mu_edca_ac_be_ecwmin=9
+he_mu_edca_ac_be_ecwmax=10
+he_mu_edca_ac_be_timer=255
+he_mu_edca_ac_bk_aifsn=15
+he_mu_edca_ac_bk_aci=1
+he_mu_edca_ac_bk_ecwmin=9
+he_mu_edca_ac_bk_ecwmax=10
+he_mu_edca_ac_bk_timer=255
+he_mu_edca_ac_vi_ecwmin=5
+he_mu_edca_ac_vi_ecwmax=7
+he_mu_edca_ac_vi_aifsn=5
+he_mu_edca_ac_vi_aci=2
+he_mu_edca_ac_vi_timer=255
+he_mu_edca_ac_vo_aifsn=5
+he_mu_edca_ac_vo_aci=3
+he_mu_edca_ac_vo_ecwmin=5
+he_mu_edca_ac_vo_ecwmax=7
+he_mu_edca_ac_vo_timer=255
+
+interface=wlan0
+ctrl_interface=/var/run/hostapd
+disassoc_low_ack=1
+preamble=1
+wmm_enabled=1
+ignore_broadcast_ssid=0
+uapsd_advertisement_enabled=1
+wpa_group_rekey=600
+wpa_passphrase=$password
+auth_algs=1
+wpa=2
+wpa_pairwise=CCMP
+ssid=Digi-TX40-$(fw_printenv -n serial)
+wpa_key_mgmt=WPA-PSK
+okc=0
+disable_pmksa_caching=1
+bssid=$(fw_printenv -n eth2addr)
+""" > /var/run/hostapd_wlan0.conf
+
+		echo """
+# cat /var/run/hostapd_wifi2.conf
+driver=nl80211
+logger_syslog=127
+logger_syslog_level=2
+logger_stdout=127
+logger_stdout_level=2
+country_code=ZZ
+ieee80211d=1
+ieee80211h=1
+hw_mode=a
+chanlist=36 40 44 48
+beacon_int=100
+channel=acs_survey
+
+
+ieee80211n=1
+ht_capab=[HT40+][LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1][MAX-AMSDU-7935][DSSS_CCK-40]
+ieee80211ac=1
+vht_oper_chwidth=1
+vht_oper_centr_freq_seg0_idx=auto
+vht_capab=[RXLDPC][SHORT-GI-80][TX-STBC-2BY1][SU-BEAMFORMER][SU-BEAMFORMEE][MU-BEAMFORMEE][RX-ANTENNA-PATTERN][TX-ANTENNA-PATTERN][RX-STBC-1][MAX-]
+ieee80211ax=1
+he_oper_chwidth=1
+he_oper_centr_freq_seg0_idx=auto
+he_su_beamformer=1
+he_basic_mcs_nss_set=2
+he_default_pe_duration=4
+he_rts_threshold=1023
+he_mu_edca_qos_info_param_count=0
+he_mu_edca_qos_info_q_ack=0
+he_mu_edca_qos_info_queue_request=0
+he_mu_edca_qos_info_txop_request=0
+he_mu_edca_ac_be_aifsn=8
+he_mu_edca_ac_be_aci=0
+he_mu_edca_ac_be_ecwmin=9
+he_mu_edca_ac_be_ecwmax=10
+he_mu_edca_ac_be_timer=255
+he_mu_edca_ac_bk_aifsn=15
+he_mu_edca_ac_bk_aci=1
+he_mu_edca_ac_bk_ecwmin=9
+he_mu_edca_ac_bk_ecwmax=10
+he_mu_edca_ac_bk_timer=255
+he_mu_edca_ac_vi_ecwmin=5
+he_mu_edca_ac_vi_ecwmax=7
+he_mu_edca_ac_vi_aifsn=5
+he_mu_edca_ac_vi_aci=2
+he_mu_edca_ac_vi_timer=255
+he_mu_edca_ac_vo_aifsn=5
+he_mu_edca_ac_vo_aci=3
+he_mu_edca_ac_vo_ecwmin=5
+he_mu_edca_ac_vo_ecwmax=7
+he_mu_edca_ac_vo_timer=255
+
+interface=wlan1
+ctrl_interface=/var/run/hostapd
+disassoc_low_ack=1
+preamble=1
+wmm_enabled=1
+ignore_broadcast_ssid=0
+uapsd_advertisement_enabled=1
+wpa_group_rekey=600
+wpa_passphrase=ASTVM45RJV5C
+auth_algs=1
+wpa=2
+wpa_pairwise=CCMP
+ssid=Digi-TX40-$(fw_printenv -n serial)-5G
+wpa_key_mgmt=WPA-PSK
+okc=0
+disable_pmksa_caching=1
+bssid=$(fw_printenv -n eth3addr)
+""" > /var/run/hostapd_wlan1.conf
+
+		dnsmasq -C /var/run/dnsmasq_dhcp.conf ||
+			echo "ERROR: failed to run dnsmasq for Wi-Fi test"
+
+		hostapd -P /var/run/hostapd_wlan0.pid -B /var/run/hostapd_wlan0.conf >/dev/null ||
+			echo "ERROR: failed to start hostapd for Wi-Fi 2.4GHz test"
+
+		hostapd -P /var/run/hostapd_wlan1.pid -B /var/run/hostapd_wlan1.conf >/dev/null ||
+			echo "ERROR: failed to start hostapd for Wi-Fi 5GHz test"
+
+	fi
+}
+
+wlan_test_stop()
+{
+	killall hostapd
+	killall dnsmasq
+}
+
+wlan_test_loop()
+{
+	local AP_TEST_PERIOD=3
+
+	local loop=0
+	local err=0
+	local success
+	local first_client_timeout_wlan0=$(($(date +%s) + 20))
+	local first_client_timeout_wlan1=$(($(date +%s) + 20))
+	while [ 1 ]; do
+		loop=$((loop + 1))
+		success=1
+
+		iwlist wlan0 txpower &>/dev/null || success=
+
+		if [ "$NON_RADIATED_TEST" ]; then
+			# Check if hostapd is still running on wlan0
+			local pid=$(cat /var/run/hostapd_wlan0.pid 2>/dev/null)
+			if [ "$pid" ] && kill -0 $pid 2>/dev/null; then
+				# Check if any client is connected
+				if iw dev wlan0 station dump | grep -q Station; then
+					first_client_timeout_wlan0=0
+				else
+					[ $(date +%s) -lt "$first_client_timeout_wlan0" ] || success=
+				fi
+			else
+				success=
+				rm -f /var/run/hostapd_wlan0.pid
+				hostapd -P /var/run/hostapd_wlan0.pid -B /var/run/hostapd_wlan0.conf &>/dev/null
+			fi
+			# Check if hostapd is still running wlan1
+			local pid=$(cat /var/run/hostapd_wlan1.pid 2>/dev/null)
+			if [ "$pid" ] && kill -0 $pid 2>/dev/null; then
+				# Check if any client is connected
+				if iw dev wlan1 station dump | grep -q Station; then
+					first_client_timeout_wlan1=0
+				else
+					[ $(date +%s) -lt "$first_client_timeout_wlan1" ] || success=
+				fi
+			else
+				success=
+				rm -f /var/run/hostapd_wlan1.pid
+				hostapd -P /var/run/hostapd_wlan1.pid -B /var/run/hostapd_wlan1.conf &>/dev/null
+			fi
+		fi
+
+		if [ "$success" ]; then
+			ledcmd -O $LED_WLAN_TEST
+		else
+			ledcmd -o $LED_WLAN_TEST
+			err=$((err + 1))
+			echo -n "-- "
+		fi
+		echo "Wi-Fi (${NON_RADIATED_TEST:+non-}radiated) test loop $loop, err=$err"
+
+		usleep $WLAN_TEST_WAIT
+	done
+}
+
+disk_test_start()
+{
+	dd if=/dev/random of=/tmp/random bs=1M count=10 &>/dev/null
+}
+disk_test_stop()
+{
+	rm -f /tmp/random
+}
+disk_test_loop()
+{
+	local loop=0
+	local read_err=0
+	local write_err=0
+	local success
+
+	while [ 1 ]; do
+		loop=$((loop + 1))
+		success=1
+
+		dd if=/tmp/random of=/dev/sda1 &>/dev/null || {
+			write_err=$((write_err + 1))
+			success=
+		}
+		sync; echo 3 > /proc/sys/vm/drop_caches
+		dd if=/dev/sda1 of=/dev/zero bs=1M count=10 &>/dev/null || {
+			read_err=$((read_err + 1))
+			success=
+		}
+
+		if [ "$success" ]; then
+			ledcmd -O $LED_DISK_TEST
+		else
+			ledcmd -o $LED_DISK_TEST
+			echo -n "-- "
+		fi
+		echo "USB test loop $loop, read err=$read_err, write err=$write_err"
+
+		usleep $DISK_TEST_WAIT
+	done
+}
+
+
+cell_test_start()
+{
+	modem at "AT#SIMDET=0"
+
+	if [ "$NON_RADIATED_TEST" ]; then
+		mmcli -L | grep -q ModemManager1 &&
+			modem cli -e &>/dev/null
+	fi
+
+	return 0
+}
+
+check_sim()
+{
+	modem at 'AT+ICCID' &>/dev/null
+}
+
+cell_test_radiated()
+{
+	mmcli -L | grep -q ModemManager1 &&
+		check_sim
+}
+
+cell_test_non_radiated()
+{
+	mmcli -L | grep -q ModemManager1 || return 1
+
+	case $(modem cli | grep "  state:") in
+	*registered)
+		cell_test_was_disabled=
+		return 0
+		;;
+	*disabled)
+		# Enable modem. Don't count as error first time
+		modem cli -e &>/dev/null
+		local ret=$?
+
+		[ "$cell_test_was_disabled" ] && ret=1
+		cell_test_was_disabled=1
+
+		return $ret
+		;;
+	*)
+		cell_test_was_disabled=
+		return 1
+		;;
+	esac
+}
+
+cell_test_loop()
+{
+	local loop=0
+	local err=0
+
+	while [ 1 ]; do
+		loop=$((loop + 1))
+
+		if [ "$NON_RADIATED_TEST" ]; then
+			cell_test_non_radiated
+		else
+			cell_test_radiated
+		fi
+
+		if [ "$?" = 0 ]; then
+			ledcmd -O $LED_CELL_TEST
+		else
+			ledcmd -o $LED_CELL_TEST
+			err=$((err + 1))
+			echo -n "-- "
+		fi
+		echo "Cellular (${NON_RADIATED_TEST:+non-}radiated) test loop $loop, err=$err"
+
+		usleep $CELL_TEST_WAIT
+	done
+}
+
+i2c_test_loop()
+{
+	local loop=0
+	local err_atecc=0
+	local err_temp=0
+	local err_acc=0
+	local err_rtc=0
+	local err_mcu=0
+	local success
+	local board_temp
+
+	while [ 1 ]; do
+		loop=$((loop + 1))
+		success=1
+
+		cat /sys/bus/i2c/devices/1-0060/serialnum &>/dev/num || {
+			err_atecc=$((err_atecc + 1))
+			success=
+		}
+
+		board_temp=$(cat /sys/class/hwmon/hwmon0/temp1_input 2>/dev/null) || {
+			err_temp=$((err_temp + 1))
+			success=
+		}
+		if [ "$board_temp" ]; then
+			board_temp=$(( (board_temp + 500) / 1000 ))
+		else
+			board_temp="ERROR"
+		fi
+
+		i2cget -f -y 0 0x18 0 b &>/dev/null || {
+			err_acc=$((err_acc + 1))
+			success=
+		}
+
+		i2cget -f -y 0 0x68 0 b &>/dev/null || {
+			err_rtc=$((err_rtc + 1))
+			success=
+		}
+
+		cat /sys/bus/i2c/devices/0-0078/fw_version &>/dev/null || {
+			err_mcu=$((err_mcu + 1))
+			success=
+		}
+
+		echo "Board temperature: $board_temp C"
+		if [ "$success" ]; then
+			ledcmd -O $LED_I2C_TEST
+		else
+			ledcmd -o $LED_I2C_TEST
+			echo -n "-- "
+		fi
+		echo "I2C test loop $loop, err_atecc=$err_atecc, err_temp=$err_temp, err_acc=$err_acc err_rtc=$err_rtc err_mcu=$err_mcu"
+
+		usleep $I2C_TEST_WAIT
+	done
+}
+
+gnss_test_start()
+{
+	echo enabled > /sys/devices/platform/regulator_gnss/state
+
+	sleep 1
+
+	# Report GSV event with 1HZ
+	local i
+	local success=
+	for i in `seq 3`; do
+		ubxtool -f /dev/ttyGPS -c '06,01,F0,03,00,01,00,00,00,00' 2>/dev/null | grep -q UBX-ACK-ACK && {
+			success=1
+			break
+		}
+
+		usleep 100000
+	done
+
+	[ "$success" ] || {
+		echo "ERROR: failed to configure GSV command in GNSS"
+	}
+
+	stty -F /dev/ttyGPS 9600 raw
+
+	exec 50</dev/ttyGPS
+}
+
+gnss_test_stop()
+{
+	exec 50<&-
+
+	echo disabled > /sys/devices/platform/regulator_gnss/state
+}
+
+parse_gsv_for_snrs()
+{
+	local sentence="$1"
+
+	echo "$sentence" | awk -F[,*] '{
+		total=$2;
+		this=$3;
+		sats=$4;
+		sats_here=(total > this) ? 4 : sats % 4;
+		for (i = 0; i < sats_here; i++) {
+			snr=$(8 + 4 * i);
+			if (snr)
+				print snr;
+		}
+	}'
+}
+
+gnss_test_loop()
+{
+	local last_tick=$(date +%s)
+	local msg_arrived=true
+	local err=0
+	local loop=0
+	local satellites_found=
+	local satellites_init_timeout=$((last_tick + 60))
+	while [ 1 ]; do
+		local line=
+		read -u 50 -t 1 -r line 2>/dev/null
+
+		# Set "msg_arrived" for each NMEA messages
+		# Parse GPGSV/GLGSV for satellites in view
+		case "$line" in
+		\$G[LP]GSV,*)
+			msg_arrived=true
+			[ "$satellites_found" ] || {
+				local snrs=$(parse_gsv_for_snrs "$line")
+				[ "$snrs" ] && satellites_found=true
+			}
+			;;
+		\$GN*) msg_arrived=true;;
+		*) ;;
+		esac
+
+		# 2-second test tick
+		curr_tick=$(date +%s)
+		if [ $curr_tick -ge $((last_tick + 2)) ]; then
+			last_tick=$curr_tick
+
+			local success=true
+			[ "$msg_arrived" ] || success=
+
+			if [ "$NON_RADIATED_TEST" ]; then
+				# In the first x seconds, don't count no-satellites as error, just drop a warning message
+				if [ "$satellites_found" ]; then
+					satellites_init_timeout=$((curr_tick + 10))
+				elif [ "$curr_tick" -gt "$satellites_init_timeout" ]; then
+					success=
+				else
+					echo "WARN (GNSS): cannot see any satellites (not an error yet)"
+				fi
+			fi
+
+			if [ "$success" ]; then
+				set_mcu_led "$LED_GNSS_TEST" ""
+			else
+				set_mcu_led "" "$LED_GNSS_TEST"
+
+				err=$((err + 1))
+				echo -n "-- "
+			fi
+
+			loop=$((loop + 1))
+			msg_arrived=
+			satellites_found=
+
+			echo "GNSS (${NON_RADIATED_TEST:+non-}radiated) test loop $loop, err=$err"
+		fi
+	done
+}
+
+# uart_test_start()
+# {
+# 	stty -F /dev/ttyLP2 115200 raw -echo -echoe -echok -echoctl -echoke
+# }
+# uart_test_loop()
+# {
+# 	exec 5</dev/ttyLP2
+
+# 	local loop=0
+# 	local err=0
+# 	local dummy
+# 	local sentence
+# 	local TEST_STRING="test string"
+# 	local success
+# 	while [ 1 ]; do
+# 		loop=$((loop + 1))
+
+# 		# Flush buffer
+# 		while read -t 0 -u 5 dummy; do :; done
+
+# 		success=
+# 		echo "$TEST_STRING" >/dev/ttyLP2
+# 		while read -t 1 -u 5 sentence; do
+# 			[ "$sentence" = "$TEST_STRING" ] && {
+# 				success=1
+# 				break
+# 			}
+# 		done
+
+# 		if [ "$success" ]; then
+# 			ledcmd -O $LED_UART_TEST
+# 			# Sleep only if success, otherwise read timeout is just enough
+# 			usleep $UART_TEST_WAIT
+# 		else
+# 			ledcmd -o $LED_UART_TEST
+# 			err=$((err + 1))
+# 			echo -n "-- "
+# 		fi
+# 		echo "UART test loop $loop, err=$err"
+# 	done
+# }
+
+uptime_loop()
+{
+	while [ 1 ]; do
+		awk '{printf "Uptime: %02d:%02d:%02d\n", int($1/3600), int(($1%3600)/60), int($1%60)}' /proc/uptime
+		sleep 5
+	done
+}
+
+cpu_temp_loop()
+{
+	while [ 1 ]; do
+		local temp=$(cat /sys/class/thermal/thermal_zone0/temp)
+		printf "CPU temperature: %d C\n" $(( (temp + 500) / 1000 ))
+
+		sleep 5
+	done
+}
+
+TEST_NAMES=
+start_test()
+{
+	local test=$1
+	shift
+
+	echo "Starting test '$test'..."
+
+	TEST_NAMES="$TEST_NAMES $test"
+	if type ${test}_start &>/dev/null; then
+		eval ${test}_start $@ || error "failed to start $test"
+	fi
+
+	if type ${test}_loop &>/dev/null; then
+		eval ${test}_loop $@ &
+	fi
+}
+
+start_all_test()
+{
+	local test
+	local old_ifs
+
+	old_ifs=$IFS
+	IFS=$'\n'
+	for test in $TESTS; do
+		IFS=$old_ifs
+		start_test $test
+	done
+
+}
+
+stop_all_tests()
+{
+	for p in `jobs -p`; do
+		kill $p
+	done
+	#kill `jobs -p` &>/dev/null
+
+	local i
+	for i in `seq 6`; do
+		[ "$(jobs -p)" ] || break
+		usleep 500000
+	done
+
+	[ "$(jobs -p)" ] && {
+		echo "Forcefully killing still running tasks..."
+		kill -9 `jobs -p` &>/dev/null
+	}
+
+	sleep 1
+
+	local func
+	local test
+	for test in $TEST_NAMES; do
+		func=${test}_stop
+		if type $func &>/dev/null; then
+			eval $func
+		fi
+	done
+}
+
+serial_cmd()
+{
+	local sentence
+	while [ 1 ]; do
+		exec 6</dev/ttyLP2
+
+		while read -u 6 sentence; do
+			case "$sentence" in
+			$CMD_EXIT)
+				echo "Exiting to shell..."
+				echo 'ttyLP2:unknown:/sbin/getty 115200 ttyLP2' >/var/run/inittab.emc
+				mount --bind /var/run/inittab.emc /etc/inittab.d/console
+			 	kill $$
+				;;
+			$CMD_REBOOT)
+				echo "Rebooting unit..."
+			 	reboot
+				while [ 1 ]; do :; done
+				;;
+			*)
+				echo "-- ERROR: invalid command on external UART"
+				;;
+			esac
+		done
+	done
+}
+
+cleanup()
+{
+	trap '' EXIT INT TERM
+
+	echo "Cleaning up to exit..."
+
+	stop_all_tests
+
+	if [ "$FAIL" ]; then
+		# Blink all LEDs in red in case of ERROR
+		ledcmd -f gnss-green -f wifi-green -f cell-red -O cell-green -O cell-blue
+		set_mcu_led "rg" "b"
+		exit_val=1
+	else
+		# Blink all LEDs in green if SUCCESS
+		ledcmd -f gnss-green -f wifi-green -O cell-red -f cell-green -O cell-blue
+		set_mcu_led "rg" "b"
+		exit_val=0
+	fi
+
+	trap EXIT INT TERM
+
+	echo "Exiting..."
+
+	exit $exit_val
+}
+
+trap 'cleanup 0' EXIT INT TERM
+
+# Stop all LEDs, except POWER (fast blinking)
+ledcmd -O gnss-green -O wifi-green -O cell-red -O cell-green -O cell-blue -F power
+
+echo "Redirecting output to external serial port"
+stty -F /dev/ttyLP2 115200 -raw
+exec > /dev/ttyLP2 2>&1
+
+case $(fw_printenv emctest 2>/dev/null) in
+*_radiated) NON_RADIATED_TEST= ;;
+*) NON_RADIATED_TEST=1 ;;
+esac
+
+echo "Starting ${NON_RADIATED_TEST:+non-}radiated test..."
+
+echo "Setting CPU to full speed..."
+echo performance > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+
+sim -i
+should_wait=
+ps | grep -q "[d]bus" || { echo " - Starting dbus..."; should_wait=1; /etc/action.d/dbus start; }
+ps | grep -q "[u]dev" || { echo " - Starting udev..."; should_wait=1; /etc/action.d/udev start; }
+ps | grep -q "[s]yslogd" || { echo " - Starting syslog..."; should_wait=1; /etc/action.d/syslog start; }
+ps | grep -q "[M]odemManager" || { echo " - Starting ModemManager..."; should_wait=1; /etc/action.d/ModemManager start; }
+
+# Wait until daemons start
+[ "$should_wait" ] && sleep 3
+
+for i in `seq 150 -1 1`; do
+	echo -ne "\rWaiting for ModemManager to enumerate the modem ($((i/2)))..."
+	mmcli -L | grep -q ModemManager1 && break
+	usleep 500000
+done
+echo
+mmcli -L | grep -q ModemManager1 || error "ModemManager cannot see the modem"
+
+start_all_test
+
+# Reset boot counter
+/etc/reset_bootcounter.sh
+
+# POWER LED solid
+ledcmd -o power
+
+while [ 1 ]; do
+	serial_cmd
+done

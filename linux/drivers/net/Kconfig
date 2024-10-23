@@ -76,6 +76,7 @@ config WIREGUARD
 	tristate "WireGuard secure network tunnel"
 	depends on NET && INET
 	depends on IPV6 || !IPV6
+	depends on !KMSAN # KMSAN doesn't support the crypto configs below
 	select NET_UDP_TUNNEL
 	select DST_CACHE
 	select CRYPTO
@@ -85,8 +86,6 @@ config WIREGUARD
 	select CRYPTO_POLY1305_X86_64 if X86 && 64BIT
 	select CRYPTO_BLAKE2S_X86 if X86 && 64BIT
 	select CRYPTO_CURVE25519_X86 if X86 && 64BIT
-	select ARM_CRYPTO if ARM
-	select ARM64_CRYPTO if ARM64
 	select CRYPTO_CHACHA20_NEON if ARM || (ARM64 && KERNEL_MODE_NEON)
 	select CRYPTO_POLY1305_NEON if ARM64 && KERNEL_MODE_NEON
 	select CRYPTO_POLY1305_ARM if ARM
@@ -291,6 +290,19 @@ config GTP
 	  To compile this drivers as a module, choose M here: the module
 	  will be called gtp.
 
+config PFCP
+	tristate "Packet Forwarding Control Protocol (PFCP)"
+	depends on INET
+	select NET_UDP_TUNNEL
+	help
+	  This allows one to create PFCP virtual interfaces that allows to
+	  set up software and hardware offload of PFCP packets.
+	  Note that this module does not support PFCP protocol in the kernel space.
+	  There is no support for parsing any PFCP messages.
+
+	  To compile this drivers as a module, choose M here: the module
+	  will be called pfcp.
+
 config AMT
 	tristate "Automatic Multicast Tunneling (AMT)"
 	depends on INET && IP_MULTICAST
@@ -333,9 +345,30 @@ config NETCONSOLE_DYNAMIC
 	  at runtime through a userspace interface exported using configfs.
 	  See <file:Documentation/networking/netconsole.rst> for details.
 
+config NETCONSOLE_EXTENDED_LOG
+	bool "Set kernel extended message by default"
+	depends on NETCONSOLE
+	default n
+	help
+	  Set extended log support for netconsole message. If this option is
+	  set, log messages are transmitted with extended metadata header in a
+	  format similar to /dev/kmsg.  See
+	  <file:Documentation/networking/netconsole.rst> for details.
+
+config NETCONSOLE_PREPEND_RELEASE
+	bool "Prepend kernel release version in the message by default"
+	depends on NETCONSOLE_EXTENDED_LOG
+	default n
+	help
+	  Set kernel release to be prepended to each netconsole message by
+	  default. If this option is set, the kernel release is prepended into
+	  the first field of every netconsole message, so, the netconsole
+	  server/peer can easily identify what kernel release is logging each
+	  message.  See <file:Documentation/networking/netconsole.rst> for
+	  details.
+
 config NETPOLL
 	def_bool NETCONSOLE
-	select SRCU
 
 config NET_POLL_CONTROLLER
 	def_bool NETPOLL
@@ -404,6 +437,7 @@ config TUN_VNET_CROSS_LE
 
 config VETH
 	tristate "Virtual ethernet pair device"
+	select PAGE_POOL
 	help
 	  This device is a local ethernet tunnel. Devices are created in pairs.
 	  When one end receives the packet it appears on its pair and vice
@@ -413,6 +447,7 @@ config VIRTIO_NET
 	tristate "Virtio network driver"
 	depends on VIRTIO
 	select NET_FAILOVER
+	select DIMLIB
 	help
 	  This is the virtual network driver for virtio.  It can be used with
 	  QEMU based VMMs (like KVM or Xen).  Say Y or M.
@@ -426,6 +461,15 @@ config NLMON
 	  messages if they tap into the netlink device, record pcaps for further
 	  diagnostics, etc. This is mostly intended for developers or support
 	  to debug netlink issues. If unsure, say N.
+
+config NETKIT
+	bool "BPF-programmable network device"
+	depends on BPF_SYSCALL
+	help
+	  The netkit device is a virtual networking device where BPF programs
+	  can be attached to the device(s) transmission routine in order to
+	  implement the driver's internal logic. The device can be configured
+	  to operate in L3 or L2 mode. If unsure, say N.
 
 config NET_VRF
 	tristate "Virtual Routing and Forwarding (Lite)"
@@ -476,7 +520,7 @@ source "drivers/net/ipa/Kconfig"
 
 config NET_SB1000
 	tristate "General Instruments Surfboard 1000"
-	depends on PNP
+	depends on ISA && PNP
 	help
 	  This is a driver for the General Instrument (also known as
 	  NextLevel) SURFboard 1000 internal
@@ -499,6 +543,10 @@ config NET_SB1000
 	  If you don't have this card, of course say N.
 
 source "drivers/net/phy/Kconfig"
+
+source "drivers/net/pse-pd/Kconfig"
+
+source "drivers/net/can/Kconfig"
 
 source "drivers/net/mctp/Kconfig"
 
@@ -568,6 +616,7 @@ config VMXNET3
 	tristate "VMware VMXNET3 ethernet driver"
 	depends on PCI && INET
 	depends on PAGE_SIZE_LESS_THAN_64KB
+	select PAGE_POOL
 	help
 	  This driver supports VMware's vmxnet3 virtual ethernet NIC.
 	  To compile this driver as a module, choose M here: the
@@ -580,18 +629,7 @@ config FUJITSU_ES
 	  This driver provides support for Extended Socket network device
 	  on Extended Partitioning of FUJITSU PRIMEQUEST 2000 E2 series.
 
-config USB4_NET
-	tristate "Networking over USB4 and Thunderbolt cables"
-	depends on USB4 && INET
-	help
-	  Select this if you want to create network between two computers
-	  over a USB4 and Thunderbolt cables. The driver supports Apple
-	  ThunderboltIP protocol and allows communication with any host
-	  supporting the same protocol including Windows and macOS.
-
-	  To compile this driver a module, choose M here. The module will be
-	  called thunderbolt-net.
-
+source "drivers/net/thunderbolt/Kconfig"
 source "drivers/net/hyperv/Kconfig"
 
 config NETDEVSIM
@@ -600,7 +638,9 @@ config NETDEVSIM
 	depends on INET
 	depends on IPV6 || IPV6=n
 	depends on PSAMPLE || PSAMPLE=n
+	depends on PTP_1588_CLOCK_MOCK || PTP_1588_CLOCK_MOCK=n
 	select NET_DEVLINK
+	select PAGE_POOL
 	help
 	  This driver is a developer testing tool and software model that can
 	  be used to test various control path networking APIs, especially
@@ -627,5 +667,11 @@ config NETDEV_LEGACY_INIT
 	help
 	  Drivers that call netdev_boot_setup_check() should select this
 	  symbol, everything else no longer needs it.
+
+config SIM_MUX
+	tristate "SIM Multiplexer Driver"
+	depends on GPIOLIB
+	help
+	  Driver for controlling SIM multiplexers via GPIO
 
 endif # NETDEVICES

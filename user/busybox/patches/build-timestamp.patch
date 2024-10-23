@@ -18,10 +18,10 @@ Date:   Wed May 9 11:59:37 2018 +1000
     For files that store the build time, use UTC so that the builds are
     independent of the server's timezone.
 
-Index: busybox-1.31.0/Makefile
+Index: busybox-1.36.1/Makefile
 ===================================================================
---- busybox-1.31.0.orig/Makefile
-+++ busybox-1.31.0/Makefile
+--- busybox-1.36.1.orig/Makefile
++++ busybox-1.36.1/Makefile
 @@ -524,6 +524,10 @@ include $(srctree)/Makefile.flags
  # we execute the config step to be sure to catch updated Kconfig files
  include/autoconf.h: .kconfig.d .config $(wildcard $(srctree)/*/*.c) $(wildcard $(srctree)/*/*/*.c) | gen_build_files

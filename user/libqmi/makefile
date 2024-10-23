@@ -1,22 +1,20 @@
-URL = https://www.freedesktop.org/software/libqmi/libqmi-1.26.4.tar.xz
-DOWNLOADHASH = c0adcb84ba452e3e13edeb3f94f7b003ea927b354bc187629e05efb333ce270b
+URL      = https://gitlab.freedesktop.org/mobile-broadband/libqmi.git
+METHOD   = git
+VERSION  = 1.34.0
 
-CONFOPTS = --without-docs --without-tests
-CONFOPTS += --enable-more-warnings=no
-ifdef CONFIG_LIB_GLIB_STATIC
-CONFOPTS += --enable-static --disable-shared
-CONFVARS = LIBS="-lgmodule-2.0 -lglib-2.0 -lffi -lz -lpthread -ldl"
-endif
-MAKEVARS = 
+CONFOPTS += -Dbash_completion=false
+CONFOPTS += -Dqrtr=false
+CONFOPTS += -Dintrospection=false
+CONFOPTS += -Dman=false
+CONFOPTS += -Dudevdir=/lib/udev
+
 ROMFS    = libqmi_romfs
-
-AUTORECONF = autoreconf -i
 
 ifneq ($(CONFIG_DEFAULTS_DIGI_TX64)$(CONFIG_DEFAULTS_DIGI_TX64_PR)$(CONFIG_DEFAULTS_DIGI_TX64_RAIL_SINGLE_CELLULAR_PR),)
 PATCH_SERIES = series-TX64
 endif
 
-include $(ROOTDIR)/tools/automake.inc
+include $(ROOTDIR)/tools/meson.inc
 
 libqmi_romfs:
 ifndef CONFIG_USER_LIBQMI_QMICLI

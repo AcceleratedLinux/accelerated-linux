@@ -47,6 +47,7 @@
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <asm/ibmebus.h>
 #include <asm/machdep.h>
 
@@ -54,7 +55,7 @@ static struct device ibmebus_bus_device = { /* fake "parent" device */
 	.init_name = "ibmebus",
 };
 
-struct bus_type ibmebus_bus_type;
+const struct bus_type ibmebus_bus_type;
 
 /* These devices will automatically be added to the bus during init */
 static const struct of_device_id ibmebus_matches[] __initconst = {
@@ -152,7 +153,11 @@ static const struct dma_map_ops ibmebus_dma_ops = {
 static int ibmebus_match_path(struct device *dev, const void *data)
 {
 	struct device_node *dn = to_platform_device(dev)->dev.of_node;
-	return (of_find_node_by_path(data) == dn);
+	struct device_node *tn = of_find_node_by_path(data);
+
+	of_node_put(tn);
+
+	return (tn == dn);
 }
 
 static int ibmebus_match_node(struct device *dev, const void *data)
@@ -263,7 +268,7 @@ static char *ibmebus_chomp(const char *in, size_t count)
 	return out;
 }
 
-static ssize_t probe_store(struct bus_type *bus, const char *buf, size_t count)
+static ssize_t probe_store(const struct bus_type *bus, const char *buf, size_t count)
 {
 	struct device_node *dn = NULL;
 	struct device *dev;
@@ -301,7 +306,7 @@ out:
 }
 static BUS_ATTR_WO(probe);
 
-static ssize_t remove_store(struct bus_type *bus, const char *buf, size_t count)
+static ssize_t remove_store(const struct bus_type *bus, const char *buf, size_t count)
 {
 	struct device *dev;
 	char *path;
@@ -422,9 +427,14 @@ static struct attribute *ibmebus_bus_device_attrs[] = {
 };
 ATTRIBUTE_GROUPS(ibmebus_bus_device);
 
-struct bus_type ibmebus_bus_type = {
+static int ibmebus_bus_modalias(const struct device *dev, struct kobj_uevent_env *env)
+{
+	return of_device_uevent_modalias(dev, env);
+}
+
+const struct bus_type ibmebus_bus_type = {
 	.name      = "ibmebus",
-	.uevent    = of_device_uevent_modalias,
+	.uevent    = ibmebus_bus_modalias,
 	.bus_groups = ibmbus_bus_groups,
 	.match     = ibmebus_bus_bus_match,
 	.probe     = ibmebus_bus_device_probe,
@@ -451,6 +461,7 @@ static int __init ibmebus_bus_init(void)
 	if (err) {
 		printk(KERN_WARNING "%s: device_register returned %i\n",
 		       __func__, err);
+		put_device(&ibmebus_bus_device);
 		bus_unregister(&ibmebus_bus_type);
 
 		return err;

@@ -1773,6 +1773,10 @@ static int wm5102_set_fll(struct snd_soc_component *component, int fll_id,
 #define WM5102_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
+static const struct snd_soc_dai_ops wm5102_dai_ops = {
+	.compress_new = snd_soc_new_compress,
+};
+
 static struct snd_soc_dai_driver wm5102_dai[] = {
 	{
 		.name = "wm5102-aif1",
@@ -1906,7 +1910,7 @@ static struct snd_soc_dai_driver wm5102_dai[] = {
 			.rates = WM5102_RATES,
 			.formats = WM5102_FORMATS,
 		},
-		.compress_new = snd_soc_new_compress,
+		.ops = &wm5102_dai_ops,
 	},
 	{
 		.name = "wm5102-dsp-trace",
@@ -2028,7 +2032,6 @@ static const struct snd_soc_component_driver soc_component_dev_wm5102 = {
 	.num_dapm_routes	= ARRAY_SIZE(wm5102_dapm_routes),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int wm5102_probe(struct platform_device *pdev)
@@ -2143,12 +2146,13 @@ err_dsp_irq:
 	arizona_set_irq_wake(arizona, ARIZONA_IRQ_DSP_IRQ1, 0);
 	arizona_free_irq(arizona, ARIZONA_IRQ_DSP_IRQ1, wm5102);
 err_jack_codec_dev:
+	pm_runtime_disable(&pdev->dev);
 	arizona_jack_codec_dev_remove(&wm5102->core);
 
 	return ret;
 }
 
-static int wm5102_remove(struct platform_device *pdev)
+static void wm5102_remove(struct platform_device *pdev)
 {
 	struct wm5102_priv *wm5102 = platform_get_drvdata(pdev);
 	struct arizona *arizona = wm5102->core.arizona;
@@ -2163,8 +2167,6 @@ static int wm5102_remove(struct platform_device *pdev)
 	arizona_free_irq(arizona, ARIZONA_IRQ_DSP_IRQ1, wm5102);
 
 	arizona_jack_codec_dev_remove(&wm5102->core);
-
-	return 0;
 }
 
 static struct platform_driver wm5102_codec_driver = {
@@ -2172,7 +2174,7 @@ static struct platform_driver wm5102_codec_driver = {
 		.name = "wm5102-codec",
 	},
 	.probe = wm5102_probe,
-	.remove = wm5102_remove,
+	.remove_new = wm5102_remove,
 };
 
 module_platform_driver(wm5102_codec_driver);

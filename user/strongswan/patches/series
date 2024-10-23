@@ -1,3 +1,9 @@
 strongswan-id-ipvX-dns.patch
 0001-stroke-added-if_id_in-if_id_out-support-to-ipsec.con.patch
 0002-ike-added-round-robin-and-random-other-hosts-list-wa.patch
+0003-charon-add-optional-source-and-remote-overrides-for-.patch
+0004-vici-send-certificates-for-ike-sa-events.patch
+0005-vici-add-support-for-individual-sa-state-changes.patch
+disable_test_time_printf_hook.patch
+0006-strongSwan-Add-RSA-algorithms-other-than-SHA-1.patch
+0007-strongswan-invoke-updown-script-only-when-no-SA.patch

@@ -51,18 +51,22 @@ __setup("hlt", cpu_idle_nopoll_setup);
 
 static noinline int __cpuidle cpu_idle_poll(void)
 {
+	instrumentation_begin();
 	trace_cpu_idle(0, smp_processor_id());
 	stop_critical_timings();
-	rcu_idle_enter();
-	local_irq_enable();
+	ct_cpuidle_enter();
 
+	raw_local_irq_enable();
 	while (!tif_need_resched() &&
 	       (cpu_idle_force_poll || tick_check_broadcast_expired()))
 		cpu_relax();
+	raw_local_irq_disable();
 
-	rcu_idle_exit();
+	ct_cpuidle_exit();
 	start_critical_timings();
 	trace_cpu_idle(PWR_EVENT_EXIT, smp_processor_id());
+	local_irq_enable();
+	instrumentation_end();
 
 	return 1;
 }
@@ -71,12 +75,30 @@ static noinline int __cpuidle cpu_idle_poll(void)
 void __weak arch_cpu_idle_prepare(void) { }
 void __weak arch_cpu_idle_enter(void) { }
 void __weak arch_cpu_idle_exit(void) { }
-void __weak arch_cpu_idle_dead(void) { }
+void __weak __noreturn arch_cpu_idle_dead(void) { while (1); }
 void __weak arch_cpu_idle(void)
 {
 	cpu_idle_force_poll = 1;
-	raw_local_irq_enable();
 }
+
+#ifdef CONFIG_GENERIC_CLOCKEVENTS_BROADCAST_IDLE
+DEFINE_STATIC_KEY_FALSE(arch_needs_tick_broadcast);
+
+static inline void cond_tick_broadcast_enter(void)
+{
+	if (static_branch_unlikely(&arch_needs_tick_broadcast))
+		tick_broadcast_enter();
+}
+
+static inline void cond_tick_broadcast_exit(void)
+{
+	if (static_branch_unlikely(&arch_needs_tick_broadcast))
+		tick_broadcast_exit();
+}
+#else
+static inline void cond_tick_broadcast_enter(void) { }
+static inline void cond_tick_broadcast_exit(void) { }
+#endif
 
 /**
  * default_idle_call - Default CPU idle routine.
@@ -85,44 +107,22 @@ void __weak arch_cpu_idle(void)
  */
 void __cpuidle default_idle_call(void)
 {
-	if (current_clr_polling_and_test()) {
-		local_irq_enable();
-	} else {
-
+	instrumentation_begin();
+	if (!current_clr_polling_and_test()) {
+		cond_tick_broadcast_enter();
 		trace_cpu_idle(1, smp_processor_id());
 		stop_critical_timings();
 
-		/*
-		 * arch_cpu_idle() is supposed to enable IRQs, however
-		 * we can't do that because of RCU and tracing.
-		 *
-		 * Trace IRQs enable here, then switch off RCU, and have
-		 * arch_cpu_idle() use raw_local_irq_enable(). Note that
-		 * rcu_idle_enter() relies on lockdep IRQ state, so switch that
-		 * last -- this is very similar to the entry code.
-		 */
-		trace_hardirqs_on_prepare();
-		lockdep_hardirqs_on_prepare();
-		rcu_idle_enter();
-		lockdep_hardirqs_on(_THIS_IP_);
-
+		ct_cpuidle_enter();
 		arch_cpu_idle();
-
-		/*
-		 * OK, so IRQs are enabled here, but RCU needs them disabled to
-		 * turn itself back on.. funny thing is that disabling IRQs
-		 * will cause tracing, which needs RCU. Jump through hoops to
-		 * make it 'work'.
-		 */
-		raw_local_irq_disable();
-		lockdep_hardirqs_off(_THIS_IP_);
-		rcu_idle_exit();
-		lockdep_hardirqs_on(_THIS_IP_);
-		raw_local_irq_enable();
+		ct_cpuidle_exit();
 
 		start_critical_timings();
 		trace_cpu_idle(PWR_EVENT_EXIT, smp_processor_id());
+		cond_tick_broadcast_exit();
 	}
+	local_irq_enable();
+	instrumentation_end();
 }
 
 static int call_cpuidle_s2idle(struct cpuidle_driver *drv,
@@ -279,10 +279,39 @@ static void do_idle(void)
 	while (!need_resched()) {
 		rmb();
 
+		/*
+		 * Interrupts shouldn't be re-enabled from that point on until
+		 * the CPU sleeping instruction is reached. Otherwise an interrupt
+		 * may fire and queue a timer that would be ignored until the CPU
+		 * wakes from the sleeping instruction. And testing need_resched()
+		 * doesn't tell about pending needed timer reprogram.
+		 *
+		 * Several cases to consider:
+		 *
+		 * - SLEEP-UNTIL-PENDING-INTERRUPT based instructions such as
+		 *   "wfi" or "mwait" are fine because they can be entered with
+		 *   interrupt disabled.
+		 *
+		 * - sti;mwait() couple is fine because the interrupts are
+		 *   re-enabled only upon the execution of mwait, leaving no gap
+		 *   in-between.
+		 *
+		 * - ROLLBACK based idle handlers with the sleeping instruction
+		 *   called with interrupts enabled are NOT fine. In this scheme
+		 *   when the interrupt detects it has interrupted an idle handler,
+		 *   it rolls back to its beginning which performs the
+		 *   need_resched() check before re-executing the sleeping
+		 *   instruction. This can leak a pending needed timer reprogram.
+		 *   If such a scheme is really mandatory due to the lack of an
+		 *   appropriate CPU sleeping instruction, then a FAST-FORWARD
+		 *   must instead be applied: when the interrupt detects it has
+		 *   interrupted an idle handler, it must resume to the end of
+		 *   this idle handler so that the generic idle loop is iterated
+		 *   again to reprogram the tick.
+		 */
 		local_irq_disable();
 
 		if (cpu_is_offline(cpu)) {
-			tick_nohz_idle_stop_tick();
 			cpuhp_report_idle_dead();
 			arch_cpu_idle_dead();
 		}
@@ -394,6 +423,7 @@ EXPORT_SYMBOL_GPL(play_idle_precise);
 
 void cpu_startup_entry(enum cpuhp_state state)
 {
+	current->flags |= PF_IDLE;
 	arch_cpu_idle_prepare();
 	cpuhp_online_idle(state);
 	while (1)
@@ -421,7 +451,7 @@ balance_idle(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 /*
  * Idle tasks are unconditionally rescheduled:
  */
-static void check_preempt_curr_idle(struct rq *rq, struct task_struct *p, int flags)
+static void wakeup_preempt_idle(struct rq *rq, struct task_struct *p, int flags)
 {
 	resched_curr(rq);
 }
@@ -502,7 +532,7 @@ DEFINE_SCHED_CLASS(idle) = {
 	/* dequeue is not valid, we print a debug message there: */
 	.dequeue_task		= dequeue_task_idle,
 
-	.check_preempt_curr	= check_preempt_curr_idle,
+	.wakeup_preempt		= wakeup_preempt_idle,
 
 	.pick_next_task		= pick_next_task_idle,
 	.put_prev_task		= put_prev_task_idle,

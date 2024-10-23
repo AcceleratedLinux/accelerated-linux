@@ -72,17 +72,12 @@ static struct imx_icc_node_desc nodes[] = {
 
 static int imx8mn_icc_probe(struct platform_device *pdev)
 {
-	return imx_icc_register(pdev, nodes, ARRAY_SIZE(nodes));
-}
-
-static int imx8mn_icc_remove(struct platform_device *pdev)
-{
-	return imx_icc_unregister(pdev);
+	return imx_icc_register(pdev, nodes, ARRAY_SIZE(nodes), NULL);
 }
 
 static struct platform_driver imx8mn_icc_driver = {
 	.probe = imx8mn_icc_probe,
-	.remove = imx8mn_icc_remove,
+	.remove_new = imx_icc_unregister,
 	.driver = {
 		.name = "imx8mn-interconnect",
 	},

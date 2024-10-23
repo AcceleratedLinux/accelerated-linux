@@ -53,7 +53,7 @@ static LIST_HEAD(prm_module_list);
 
 struct prm_handler_info {
 	guid_t guid;
-	u64 handler_addr;
+	efi_status_t (__efiapi *handler_addr)(u64, void *);
 	u64 static_data_buffer_addr;
 	u64 acpi_param_buffer_addr;
 
@@ -69,7 +69,7 @@ struct prm_module_info {
 	bool updatable;
 
 	struct list_head module_list;
-	struct prm_handler_info handlers[];
+	struct prm_handler_info handlers[] __counted_by(handler_count);
 };
 
 static u64 efi_pa_va_lookup(u64 pa)
@@ -148,7 +148,7 @@ acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 		th = &tm->handlers[cur_handler];
 
 		guid_copy(&th->guid, (guid_t *)handler_info->handler_guid);
-		th->handler_addr = efi_pa_va_lookup(handler_info->handler_address);
+		th->handler_addr = (void *)efi_pa_va_lookup(handler_info->handler_address);
 		th->static_data_buffer_addr = efi_pa_va_lookup(handler_info->static_data_buffer_address);
 		th->acpi_param_buffer_addr = efi_pa_va_lookup(handler_info->acpi_param_buffer_address);
 	} while (++cur_handler < tm->handler_count && (handler_info = get_next_handler(handler_info)));
@@ -236,6 +236,11 @@ static acpi_status acpi_platformrt_space_handler(u32 function,
 	efi_status_t status;
 	struct prm_context_buffer context;
 
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+		pr_err_ratelimited("PRM: EFI runtime services no longer available\n");
+		return AE_NO_HANDLER;
+	}
+
 	/*
 	 * The returned acpi_status will always be AE_OK. Error values will be
 	 * saved in the first byte of the PRM message buffer to be used by ASL.
@@ -255,9 +260,9 @@ static acpi_status acpi_platformrt_space_handler(u32 function,
 		context.static_data_buffer = handler->static_data_buffer_addr;
 		context.mmio_ranges = module->mmio_info;
 
-		status = efi_call_virt_pointer(handler, handler_addr,
-					       handler->acpi_param_buffer_addr,
-					       &context);
+		status = efi_call_acpi_prm_handler(handler->handler_addr,
+						   handler->acpi_param_buffer_addr,
+						   &context);
 		if (status == EFI_SUCCESS) {
 			buffer->prm_status = PRM_HANDLER_SUCCESS;
 		} else {
@@ -324,6 +329,11 @@ void __init init_prmt(void)
 		return;
 
 	pr_info("PRM: found %u modules\n", mc);
+
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+		pr_err("PRM: EFI runtime services unavailable\n");
+		return;
+	}
 
 	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,
 						    ACPI_ADR_SPACE_PLATFORM_RT,

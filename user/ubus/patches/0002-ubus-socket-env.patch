@@ -1,0 +1,51 @@
+
+Use envvar UBUS_SOCKET for the default ubus socket path.
+This is for test isolation.
+
+--- a/libubus-io.c
++++ b/libubus-io.c
+@@ -377,6 +377,8 @@
+ 	int ret = UBUS_STATUS_UNKNOWN_ERROR;
+ 
+ 	if (!path)
++		path = getenv("UBUS_SOCKET");
++	if (!path)
+ 		path = UBUS_UNIX_SOCKET;
+ 
+ 	if (ctx->sock.fd >= 0) {
+--- a/ubusd_main.c
++++ b/ubusd_main.c
+@@ -237,7 +237,7 @@
+
+ int main(int argc, char **argv)
+ {
+-	const char *ubus_socket = UBUS_UNIX_SOCKET;
++	const char *ubus_socket = UBUS_UNIX_SOCKET; 
+ 	int ret = 0;
+ 	int ch;
+
+@@ -261,7 +261,12 @@
+ 		}
+ 	}
+ 
++	if (!ubus_socket)
++		ubus_socket = getenv("UBUS_SOCKET");
++	if (!ubus_socket)
++		ubus_socket = UBUS_UNIX_SOCKET;
++
+	mkdir_sockdir();
+ 	unlink(ubus_socket);
+ 	umask(0111);
+ 	server_fd.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, ubus_socket, NULL);
+
+--- a/CMakeLists.txt	2024-01-10 01:00:16.618711368 +0000
++++ b/CMakeLists.txt	2024-01-10 01:00:28.535638969 +0000
+@@ -13,7 +13,7 @@
+ OPTION(BUILD_EXAMPLES "build examples" ON)
+
+ SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
+-SET(UBUS_UNIX_SOCKET "/var/run/ubus/ubus.sock")
++SET(UBUS_UNIX_SOCKET "/var/run/ubus.sock")
+ SET(UBUS_MAX_MSGLEN 1048576)
+
+ ADD_DEFINITIONS( -DUBUS_UNIX_SOCKET="${UBUS_UNIX_SOCKET}")

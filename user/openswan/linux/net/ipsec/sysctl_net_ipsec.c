@@ -103,7 +103,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_ah,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -112,7 +111,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_esp,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -121,7 +119,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_mast,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -130,7 +127,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_tunnel,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -139,7 +135,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_xmit,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -148,7 +143,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_eroute,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -157,7 +151,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_spi,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -166,7 +159,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_radij,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -175,7 +167,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_netlink,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -184,7 +175,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_xform,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -193,7 +183,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_rcv,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -202,7 +191,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &debug_pfkey,
           .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -211,7 +199,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &sysctl_ipsec_debug_verbose,
          .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 #else
@@ -250,7 +237,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &sysctl_ipsec_debug_ipcomp,
          .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 #else
@@ -267,7 +253,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &sysctl_ipsec_regress_pfkey_lossage,
          .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 #else
@@ -283,7 +268,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &sysctl_ipsec_icmp,
          .maxlen   = sizeof(int),
          .mode     = 0644,
-         .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -292,7 +276,6 @@ static struct ctl_table ipsec_table[] = {
          .data     = &sysctl_ipsec_inbound_policy_check,
           .maxlen   = sizeof(int),
           .mode     = 0644,
-          .child    = NULL,
          .proc_handler = &proc_dointvec,
        },
 
@@ -301,7 +284,6 @@ static struct ctl_table ipsec_table[] = {
           .data     = &sysctl_ipsec_tos,
           .maxlen   = sizeof(int),
           .mode     = 0644,
-          .child    = NULL,
           .proc_handler = &proc_dointvec,
        },
        {}
@@ -315,6 +297,8 @@ static struct ctl_table ipsec_table[] = {
 	{}
 #endif
 };
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,5,0)
 
 static struct ctl_table ipsec_net_table[] = {
 #ifdef CTL_TABLE_PARENT
@@ -349,12 +333,16 @@ static struct ctl_table ipsec_root_table[] = {
         {}
 #endif
 };
+
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(6,5,0) */
  
 static struct ctl_table_header *ipsec_table_header;
 
 int ipsec_sysctl_register(void)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,21)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,5,0)
+        ipsec_table_header = register_sysctl("net/ipsec", ipsec_table);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,21)
         ipsec_table_header = register_sysctl_table(ipsec_root_table);
 #else
         ipsec_table_header = register_sysctl_table(ipsec_root_table, 0);

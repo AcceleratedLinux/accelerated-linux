@@ -1,6 +1,6 @@
-URL      = git://git.openwrt.org/project/netifd.git
+URL      = https://github.com/AcceleratedLinux/netifd.git
 METHOD   = git
-VERSION = 5cf30b59baa03db2448570c78e7e92873555d2ec
+VERSION  = b71e916ce0267ad94285f2755289207768c2d473
 
 include $(ROOTDIR)/tools/cmake.inc
 

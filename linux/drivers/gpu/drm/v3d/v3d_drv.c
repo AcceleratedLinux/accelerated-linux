@@ -19,12 +19,10 @@
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
-#include <linux/pm_runtime.h>
+#include <linux/sched/clock.h>
 #include <linux/reset.h>
 
 #include <drm/drm_drv.h>
-#include <drm/drm_fb_cma_helper.h>
-#include <drm/drm_fb_helper.h>
 #include <drm/drm_managed.h>
 #include <uapi/drm/v3d_drm.h>
 
@@ -43,7 +41,6 @@ static int v3d_get_param_ioctl(struct drm_device *dev, void *data,
 {
 	struct v3d_dev *v3d = to_v3d_dev(dev);
 	struct drm_v3d_get_param *args = data;
-	int ret;
 	static const u32 reg_map[] = {
 		[DRM_V3D_PARAM_V3D_UIFCFG] = V3D_HUB_UIFCFG,
 		[DRM_V3D_PARAM_V3D_HUB_IDENT1] = V3D_HUB_IDENT1,
@@ -69,17 +66,12 @@ static int v3d_get_param_ioctl(struct drm_device *dev, void *data,
 		if (args->value != 0)
 			return -EINVAL;
 
-		ret = pm_runtime_get_sync(v3d->drm.dev);
-		if (ret < 0)
-			return ret;
 		if (args->param >= DRM_V3D_PARAM_V3D_CORE0_IDENT0 &&
 		    args->param <= DRM_V3D_PARAM_V3D_CORE0_IDENT2) {
 			args->value = V3D_CORE_READ(0, offset);
 		} else {
 			args->value = V3D_READ(offset);
 		}
-		pm_runtime_mark_last_busy(v3d->drm.dev);
-		pm_runtime_put_autosuspend(v3d->drm.dev);
 		return 0;
 	}
 
@@ -97,6 +89,9 @@ static int v3d_get_param_ioctl(struct drm_device *dev, void *data,
 		args->value = (v3d->ver >= 40);
 		return 0;
 	case DRM_V3D_PARAM_SUPPORTS_MULTISYNC_EXT:
+		args->value = 1;
+		return 0;
+	case DRM_V3D_PARAM_SUPPORTS_CPU_QUEUE:
 		args->value = 1;
 		return 0;
 	default:
@@ -124,6 +119,9 @@ v3d_open(struct drm_device *dev, struct drm_file *file)
 		drm_sched_entity_init(&v3d_priv->sched_entity[i],
 				      DRM_SCHED_PRIORITY_NORMAL, &sched,
 				      1, NULL);
+
+		memset(&v3d_priv->stats[i], 0, sizeof(v3d_priv->stats[i]));
+		seqcount_init(&v3d_priv->stats[i].lock);
 	}
 
 	v3d_perfmon_open_file(v3d_priv);
@@ -145,7 +143,51 @@ v3d_postclose(struct drm_device *dev, struct drm_file *file)
 	kfree(v3d_priv);
 }
 
-DEFINE_DRM_GEM_FOPS(v3d_drm_fops);
+void v3d_get_stats(const struct v3d_stats *stats, u64 timestamp,
+		   u64 *active_runtime, u64 *jobs_completed)
+{
+	unsigned int seq;
+
+	do {
+		seq = read_seqcount_begin(&stats->lock);
+		*active_runtime = stats->enabled_ns;
+		if (stats->start_ns)
+			*active_runtime += timestamp - stats->start_ns;
+		*jobs_completed = stats->jobs_completed;
+	} while (read_seqcount_retry(&stats->lock, seq));
+}
+
+static void v3d_show_fdinfo(struct drm_printer *p, struct drm_file *file)
+{
+	struct v3d_file_priv *file_priv = file->driver_priv;
+	u64 timestamp = local_clock();
+	enum v3d_queue queue;
+
+	for (queue = 0; queue < V3D_MAX_QUEUES; queue++) {
+		struct v3d_stats *stats = &file_priv->stats[queue];
+		u64 active_runtime, jobs_completed;
+
+		v3d_get_stats(stats, timestamp, &active_runtime, &jobs_completed);
+
+		/* Note that, in case of a GPU reset, the time spent during an
+		 * attempt of executing the job is not computed in the runtime.
+		 */
+		drm_printf(p, "drm-engine-%s: \t%llu ns\n",
+			   v3d_queue_to_string(queue), active_runtime);
+
+		/* Note that we only count jobs that completed. Therefore, jobs
+		 * that were resubmitted due to a GPU reset are not computed.
+		 */
+		drm_printf(p, "v3d-jobs-%s: \t%llu jobs\n",
+			   v3d_queue_to_string(queue), jobs_completed);
+	}
+}
+
+static const struct file_operations v3d_drm_fops = {
+	.owner = THIS_MODULE,
+	DRM_GEM_FOPS,
+	.show_fdinfo = drm_show_fdinfo,
+};
 
 /* DRM_AUTH is required on SUBMIT_CL for now, while we don't have GMP
  * protection between clients.  Note that render nodes would be
@@ -165,6 +207,7 @@ static const struct drm_ioctl_desc v3d_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(V3D_PERFMON_CREATE, v3d_perfmon_create_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(V3D_PERFMON_DESTROY, v3d_perfmon_destroy_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(V3D_PERFMON_GET_VALUES, v3d_perfmon_get_values_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(V3D_SUBMIT_CPU, v3d_submit_cpu_ioctl, DRM_RENDER_ALLOW | DRM_AUTH),
 };
 
 static const struct drm_driver v3d_drm_driver = {
@@ -180,14 +223,12 @@ static const struct drm_driver v3d_drm_driver = {
 #endif
 
 	.gem_create_object = v3d_create_object,
-	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
-	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
 	.gem_prime_import_sg_table = v3d_prime_import_sg_table,
-	.gem_prime_mmap = drm_gem_prime_mmap,
 
 	.ioctls = v3d_drm_ioctls,
 	.num_ioctls = ARRAY_SIZE(v3d_drm_ioctls),
 	.fops = &v3d_drm_fops,
+	.show_fdinfo = v3d_show_fdinfo,
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
@@ -198,6 +239,8 @@ static const struct drm_driver v3d_drm_driver = {
 };
 
 static const struct of_device_id v3d_of_match[] = {
+	{ .compatible = "brcm,2711-v3d" },
+	{ .compatible = "brcm,2712-v3d" },
 	{ .compatible = "brcm,7268-v3d" },
 	{ .compatible = "brcm,7278-v3d" },
 	{},
@@ -280,10 +323,6 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	pm_runtime_use_autosuspend(dev);
-	pm_runtime_set_autosuspend_delay(dev, 50);
-	pm_runtime_enable(dev);
-
 	ret = v3d_gem_init(drm);
 	if (ret)
 		goto dma_free;
@@ -296,8 +335,14 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 	if (ret)
 		goto irq_disable;
 
+	ret = v3d_sysfs_init(dev);
+	if (ret)
+		goto drm_unregister;
+
 	return 0;
 
+drm_unregister:
+	drm_dev_unregister(drm);
 irq_disable:
 	v3d_irq_disable(v3d);
 gem_destroy:
@@ -307,10 +352,13 @@ dma_free:
 	return ret;
 }
 
-static int v3d_platform_drm_remove(struct platform_device *pdev)
+static void v3d_platform_drm_remove(struct platform_device *pdev)
 {
 	struct drm_device *drm = platform_get_drvdata(pdev);
 	struct v3d_dev *v3d = to_v3d_dev(drm);
+	struct device *dev = &pdev->dev;
+
+	v3d_sysfs_destroy(dev);
 
 	drm_dev_unregister(drm);
 
@@ -318,13 +366,11 @@ static int v3d_platform_drm_remove(struct platform_device *pdev)
 
 	dma_free_wc(v3d->drm.dev, 4096, v3d->mmu_scratch,
 		    v3d->mmu_scratch_paddr);
-
-	return 0;
 }
 
 static struct platform_driver v3d_platform_driver = {
 	.probe		= v3d_platform_drm_probe,
-	.remove		= v3d_platform_drm_remove,
+	.remove_new	= v3d_platform_drm_remove,
 	.driver		= {
 		.name	= "v3d",
 		.of_match_table = v3d_of_match,

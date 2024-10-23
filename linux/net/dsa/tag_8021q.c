@@ -2,14 +2,15 @@
 /* Copyright (c) 2019, Vladimir Oltean <olteanv@gmail.com>
  *
  * This module is not a complete tagger implementation. It only provides
- * primitives for taggers that rely on 802.1Q VLAN tags to use. The
- * dsa_8021q_netdev_ops is registered for API compliance and not used
- * directly by callers.
+ * primitives for taggers that rely on 802.1Q VLAN tags to use.
  */
 #include <linux/if_vlan.h>
 #include <linux/dsa/8021q.h>
 
-#include "dsa_priv.h"
+#include "port.h"
+#include "switch.h"
+#include "tag.h"
+#include "tag_8021q.h"
 
 /* Binary structure of the fake 12-bit VID field (when the TPID is
  * ETH_P_DSA_8021Q):
@@ -61,6 +62,20 @@
 #define DSA_8021Q_PORT_MASK		GENMASK(3, 0)
 #define DSA_8021Q_PORT(x)		(((x) << DSA_8021Q_PORT_SHIFT) & \
 						 DSA_8021Q_PORT_MASK)
+
+struct dsa_tag_8021q_vlan {
+	struct list_head list;
+	int port;
+	u16 vid;
+	refcount_t refcount;
+};
+
+struct dsa_8021q_context {
+	struct dsa_switch *ds;
+	struct list_head vlans;
+	/* EtherType of RX VID, used for filtering on conduit interface */
+	__be16 proto;
+};
 
 u16 dsa_tag_8021q_bridge_vid(unsigned int bridge_num)
 {
@@ -323,7 +338,7 @@ static int dsa_tag_8021q_port_setup(struct dsa_switch *ds, int port)
 	struct dsa_8021q_context *ctx = ds->tag_8021q_ctx;
 	struct dsa_port *dp = dsa_to_port(ds, port);
 	u16 vid = dsa_tag_8021q_standalone_vid(dp);
-	struct net_device *master;
+	struct net_device *conduit;
 	int err;
 
 	/* The CPU port is implicitly configured by
@@ -332,7 +347,7 @@ static int dsa_tag_8021q_port_setup(struct dsa_switch *ds, int port)
 	if (!dsa_port_is_user(dp))
 		return 0;
 
-	master = dp->cpu_dp->master;
+	conduit = dsa_port_to_conduit(dp);
 
 	err = dsa_port_tag_8021q_vlan_add(dp, vid, false);
 	if (err) {
@@ -342,8 +357,8 @@ static int dsa_tag_8021q_port_setup(struct dsa_switch *ds, int port)
 		return err;
 	}
 
-	/* Add the VLAN to the master's RX filter. */
-	vlan_vid_add(master, ctx->proto, vid);
+	/* Add the VLAN to the conduit's RX filter. */
+	vlan_vid_add(conduit, ctx->proto, vid);
 
 	return err;
 }
@@ -353,7 +368,7 @@ static void dsa_tag_8021q_port_teardown(struct dsa_switch *ds, int port)
 	struct dsa_8021q_context *ctx = ds->tag_8021q_ctx;
 	struct dsa_port *dp = dsa_to_port(ds, port);
 	u16 vid = dsa_tag_8021q_standalone_vid(dp);
-	struct net_device *master;
+	struct net_device *conduit;
 
 	/* The CPU port is implicitly configured by
 	 * configuring the front-panel ports
@@ -361,11 +376,11 @@ static void dsa_tag_8021q_port_teardown(struct dsa_switch *ds, int port)
 	if (!dsa_port_is_user(dp))
 		return;
 
-	master = dp->cpu_dp->master;
+	conduit = dsa_port_to_conduit(dp);
 
 	dsa_port_tag_8021q_vlan_del(dp, vid, false);
 
-	vlan_vid_del(master, ctx->proto, vid);
+	vlan_vid_del(conduit, ctx->proto, vid);
 }
 
 static int dsa_tag_8021q_setup(struct dsa_switch *ds)
@@ -400,6 +415,7 @@ static void dsa_tag_8021q_teardown(struct dsa_switch *ds)
 int dsa_tag_8021q_register(struct dsa_switch *ds, __be16 proto)
 {
 	struct dsa_8021q_context *ctx;
+	int err;
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -412,7 +428,15 @@ int dsa_tag_8021q_register(struct dsa_switch *ds, __be16 proto)
 
 	ds->tag_8021q_ctx = ctx;
 
-	return dsa_tag_8021q_setup(ds);
+	err = dsa_tag_8021q_setup(ds);
+	if (err)
+		goto err_free;
+
+	return 0;
+
+err_free:
+	kfree(ctx);
+	return err;
 }
 EXPORT_SYMBOL_GPL(dsa_tag_8021q_register);
 
@@ -437,17 +461,17 @@ EXPORT_SYMBOL_GPL(dsa_tag_8021q_unregister);
 struct sk_buff *dsa_8021q_xmit(struct sk_buff *skb, struct net_device *netdev,
 			       u16 tpid, u16 tci)
 {
-	/* skb->data points at skb_mac_header, which
-	 * is fine for vlan_insert_tag.
+	/* skb->data points at the MAC header, which is fine
+	 * for vlan_insert_tag().
 	 */
 	return vlan_insert_tag(skb, htons(tpid), tci);
 }
 EXPORT_SYMBOL_GPL(dsa_8021q_xmit);
 
-struct net_device *dsa_tag_8021q_find_port_by_vbid(struct net_device *master,
+struct net_device *dsa_tag_8021q_find_port_by_vbid(struct net_device *conduit,
 						   int vbid)
 {
-	struct dsa_port *cpu_dp = master->dsa_ptr;
+	struct dsa_port *cpu_dp = conduit->dsa_ptr;
 	struct dsa_switch_tree *dst = cpu_dp->dst;
 	struct dsa_port *dp;
 
@@ -466,7 +490,7 @@ struct net_device *dsa_tag_8021q_find_port_by_vbid(struct net_device *master,
 			continue;
 
 		if (dsa_port_bridge_num_get(dp) == vbid)
-			return dp->slave;
+			return dp->user;
 	}
 
 	return NULL;

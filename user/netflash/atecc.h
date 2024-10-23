@@ -36,6 +36,8 @@ typedef struct  {
 
 int atecc_init(atecc_ctx *ctx);
 void atecc_close(atecc_ctx *ctx);
+int atecc_read4(atecc_ctx *ctx, const uint8_t zone,
+		const uint16_t addr, uint8_t *bytes);
 int verify(atecc_ctx *ctx, uint8_t slot_id, const uint8_t *message,
 	   const uint8_t *r, const uint8_t *s);
 int hmac(atecc_ctx *ctx, uint8_t slot_id,

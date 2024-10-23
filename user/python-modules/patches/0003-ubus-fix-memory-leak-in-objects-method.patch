@@ -1,0 +1,26 @@
+From: Tatiana Leon <Tatiana.Leon@digi.com>
+Date: Fri, 24 Nov 2023 11:27:11 +0100
+Subject: [PATCH] fix memory leak in 'objects()' method
+
+Signed-off-by: Tatiana Leon <Tatiana.Leon@digi.com>
+---
+ ubus_python.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/ubus_python.c b/ubus_python.c
+index 1803718..0133001 100644
+--- a/ubus_python.c
++++ b/ubus_python.c
+@@ -1145,10 +1145,12 @@ static void ubus_python_objects_handler(struct ubus_context *c, struct ubus_obje
+ 	// Add it to dict object
+ 	PyObject *path = PyUnicode_FromString(o->path);
+ 	if (!path) {
++		Py_DECREF(json_signatures);
+ 		goto object_handler_cleanup;
+ 	}
+ 	PyDict_SetItem(objects, path, json_signatures);  // we don't care about retval here
+ 	Py_DECREF(path);
++	Py_DECREF(json_signatures);
+ 
+ object_handler_cleanup:
+ 	Py_DECREF(str_signatures);

@@ -35,6 +35,7 @@ struct nv_device_info_v0 {
 #define NV_DEVICE_INFO_V0_VOLTA                                            0x0b
 #define NV_DEVICE_INFO_V0_TURING                                           0x0c
 #define NV_DEVICE_INFO_V0_AMPERE                                           0x0d
+#define NV_DEVICE_INFO_V0_ADA                                              0x0e
 	__u8  family;
 	__u8  pad06[2];
 	__u64 ram_size;
@@ -68,7 +69,7 @@ struct nv_device_time_v0 {
 
 /* Returns the number of available runlists. */
 #define NV_DEVICE_HOST_RUNLISTS                       NV_DEVICE_HOST(0x00000000)
-/* Returns the number of available channels. */
+/* Returns the number of available channels (0 if per-runlist). */
 #define NV_DEVICE_HOST_CHANNELS                       NV_DEVICE_HOST(0x00000001)
 
 /* Returns a mask of available engine types on runlist(data). */
@@ -90,4 +91,8 @@ struct nv_device_time_v0 {
 #define NV_DEVICE_HOST_RUNLIST_ENGINES_SEC2                          0x00004000
 #define NV_DEVICE_HOST_RUNLIST_ENGINES_NVDEC                         0x00008000
 #define NV_DEVICE_HOST_RUNLIST_ENGINES_NVENC                         0x00010000
+#define NV_DEVICE_HOST_RUNLIST_ENGINES_NVJPG                         0x00020000
+#define NV_DEVICE_HOST_RUNLIST_ENGINES_OFA                           0x00040000
+/* Returns the number of available channels on runlist(data). */
+#define NV_DEVICE_HOST_RUNLIST_CHANNELS               NV_DEVICE_HOST(0x00000101)
 #endif

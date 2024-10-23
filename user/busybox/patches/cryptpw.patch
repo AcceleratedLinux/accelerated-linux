@@ -1,0 +1,21 @@
+
+Allow specifying the exact crypt salt for testing.
+
+--- busybox-1.36.1/loginutils/cryptpw.c.orig	2024-07-22 12:06:23.301640276 +1000
++++ busybox-1.36.1/loginutils/cryptpw.c	2024-07-22 12:33:05.826426074 +1000
+@@ -114,10 +114,14 @@
+ 	if (argv[0] && !opt_S)
+ 		opt_S = argv[1];
+ 
++    if (opt_S && *opt_S == '$') {     /* -S '$...' overrides -m */
++	safe_strncpy(salt, opt_S, sizeof(salt));
++    } else {
+ 	salt_ptr = crypt_make_pw_salt(salt, opt_m);
+ 	if (opt_S)
+ 		/* put user's data after the "$N$" prefix */
+-		safe_strncpy(salt_ptr, opt_S, sizeof(salt) - (sizeof("$N$")-1));
++		safe_strncpy(salt_ptr, opt_S, sizeof(salt) - (salt_ptr - salt));
++    }
+ 
+ 	xmove_fd(fd, STDIN_FILENO);
+ 

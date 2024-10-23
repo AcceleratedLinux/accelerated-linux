@@ -1,7 +1,8 @@
-URL     = https://sourceforge.net/projects/gptfdisk/files/gptfdisk/1.0.4/gptfdisk-1.0.4.tar.gz
+URL     = https://sourceforge.net/projects/gptfdisk/files/gptfdisk/1.0.9/gptfdisk-1.0.9.tar.gz
 
 BUILD   = gdisk sgdisk
 
+CPPFLAGS += -D_LARGEFILE64_SOURCE
 LDFLAGS += -lstdc++ -lm
 ifndef CONFIG_DEFAULTS_LIBC_MUSL
 LDFLAGS += -lintl

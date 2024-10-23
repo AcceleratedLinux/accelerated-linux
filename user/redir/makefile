@@ -1,5 +1,5 @@
 
-URL         = http://fossies.org/linux/misc/old/redir-2.2.1.tar.gz
+URL         = https://fossies.org/linux/misc/old/redir-2.2.1.tar.gz
 CONFIGURE   = :
 MAKEVARS    = CFLAGS="$(CFLAGS)" CC="$(CC)" LDFLAGS="$(LDFLAGS)"
 FINALTARGET = built

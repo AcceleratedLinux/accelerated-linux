@@ -24,8 +24,7 @@
 #define FSI2SPI_IRQ			0x20
 
 #define SPI_FSI_BASE			0x70000
-#define SPI_FSI_INIT_TIMEOUT_MS		1000
-#define SPI_FSI_STATUS_TIMEOUT_MS	100
+#define SPI_FSI_TIMEOUT_MS		1000
 #define SPI_FSI_MAX_RX_SIZE		8
 #define SPI_FSI_MAX_TX_SIZE		40
 
@@ -299,6 +298,7 @@ static void fsi_spi_sequence_init(struct fsi_spi_sequence *seq)
 static int fsi_spi_transfer_data(struct fsi_spi *ctx,
 				 struct spi_transfer *transfer)
 {
+	int loops;
 	int rc = 0;
 	unsigned long end;
 	u64 status = 0ULL;
@@ -317,9 +317,10 @@ static int fsi_spi_transfer_data(struct fsi_spi *ctx,
 			if (rc)
 				return rc;
 
-			end = jiffies + msecs_to_jiffies(SPI_FSI_STATUS_TIMEOUT_MS);
+			loops = 0;
+			end = jiffies + msecs_to_jiffies(SPI_FSI_TIMEOUT_MS);
 			do {
-				if (time_after(jiffies, end))
+				if (loops++ && time_after(jiffies, end))
 					return -ETIMEDOUT;
 
 				rc = fsi_spi_status(ctx, &status, "TX");
@@ -335,9 +336,10 @@ static int fsi_spi_transfer_data(struct fsi_spi *ctx,
 		u8 *rx = transfer->rx_buf;
 
 		while (transfer->len > recv) {
-			end = jiffies + msecs_to_jiffies(SPI_FSI_STATUS_TIMEOUT_MS);
+			loops = 0;
+			end = jiffies + msecs_to_jiffies(SPI_FSI_TIMEOUT_MS);
 			do {
-				if (time_after(jiffies, end))
+				if (loops++ && time_after(jiffies, end))
 					return -ETIMEDOUT;
 
 				rc = fsi_spi_status(ctx, &status, "RX");
@@ -359,6 +361,7 @@ static int fsi_spi_transfer_data(struct fsi_spi *ctx,
 
 static int fsi_spi_transfer_init(struct fsi_spi *ctx)
 {
+	int loops = 0;
 	int rc;
 	bool reset = false;
 	unsigned long end;
@@ -369,9 +372,9 @@ static int fsi_spi_transfer_init(struct fsi_spi *ctx)
 		SPI_FSI_CLOCK_CFG_SCK_NO_DEL |
 		FIELD_PREP(SPI_FSI_CLOCK_CFG_SCK_DIV, 19);
 
-	end = jiffies + msecs_to_jiffies(SPI_FSI_INIT_TIMEOUT_MS);
+	end = jiffies + msecs_to_jiffies(SPI_FSI_TIMEOUT_MS);
 	do {
-		if (time_after(jiffies, end))
+		if (loops++ && time_after(jiffies, end))
 			return -ETIMEDOUT;
 
 		rc = fsi_spi_read_reg(ctx, SPI_FSI_STATUS, &status);
@@ -422,7 +425,7 @@ static int fsi_spi_transfer_one_message(struct spi_controller *ctlr,
 					struct spi_message *mesg)
 {
 	int rc;
-	u8 seq_slave = SPI_FSI_SEQUENCE_SEL_SLAVE(mesg->spi->chip_select + 1);
+	u8 seq_slave = SPI_FSI_SEQUENCE_SEL_SLAVE(spi_get_chipselect(mesg->spi, 0) + 1);
 	unsigned int len;
 	struct spi_transfer *transfer;
 	struct fsi_spi *ctx = spi_controller_get_devdata(ctlr);
@@ -539,7 +542,7 @@ static int fsi_spi_probe(struct device *dev)
 		if (of_property_read_u32(np, "reg", &base))
 			continue;
 
-		ctlr = spi_alloc_master(dev, sizeof(*ctx));
+		ctlr = spi_alloc_host(dev, sizeof(*ctx));
 		if (!ctlr) {
 			of_node_put(np);
 			break;

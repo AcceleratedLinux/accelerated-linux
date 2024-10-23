@@ -138,7 +138,6 @@ static const struct snd_soc_component_driver pistachio_internal_dac_driver = {
 	.num_dapm_routes	= ARRAY_SIZE(pistachio_internal_dac_routes),
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static int pistachio_internal_dac_probe(struct platform_device *pdev)
@@ -216,15 +215,13 @@ err_regulator:
 	return ret;
 }
 
-static int pistachio_internal_dac_remove(struct platform_device *pdev)
+static void pistachio_internal_dac_remove(struct platform_device *pdev)
 {
 	struct pistachio_internal_dac *dac = dev_get_drvdata(&pdev->dev);
 
 	pm_runtime_disable(&pdev->dev);
 	pistachio_internal_dac_pwr_off(dac);
 	regulator_disable(dac->supply);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -274,7 +271,7 @@ static struct platform_driver pistachio_internal_dac_plat_driver = {
 		.pm = &pistachio_internal_dac_pm_ops
 	},
 	.probe = pistachio_internal_dac_probe,
-	.remove = pistachio_internal_dac_remove
+	.remove_new = pistachio_internal_dac_remove
 };
 module_platform_driver(pistachio_internal_dac_plat_driver);
 

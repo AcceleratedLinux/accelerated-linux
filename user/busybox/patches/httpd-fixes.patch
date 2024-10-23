@@ -1,7 +1,7 @@
-diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd.c
---- busybox-1.34.1.org/networking/httpd.c	2021-06-16 20:02:16.000000000 +1000
-+++ busybox-1.34.1/networking/httpd.c	2021-12-23 15:29:28.956822393 +1000
-@@ -259,8 +259,10 @@
+diff -Naur busybox-1.36.1.org/networking/httpd.c busybox-1.36.1/networking/httpd.c
+--- busybox-1.36.1.org/networking/httpd.c	2021-06-16 20:02:16.000000000 +1000
++++ busybox-1.36.1/networking/httpd.c	2021-12-23 15:29:28.956822393 +1000
+@@ -265,8 +265,10 @@
  
  //usage:#define httpd_trivial_usage
  //usage:       "[-ifv[v]]"
@@ -12,15 +12,15 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  //usage:	IF_FEATURE_HTTPD_SETUID(" [-u USER[:GRP]]")
  //usage:	IF_FEATURE_HTTPD_BASIC_AUTH(" [-r REALM]")
  //usage:       " [-h HOME]\n"
-@@ -270,6 +272,7 @@
+@@ -276,6 +278,7 @@
  //usage:     "\n	-i		Inetd mode"
- //usage:     "\n	-f		Don't daemonize"
+ //usage:     "\n	-f		Run in foreground"
  //usage:     "\n	-v[v]		Verbose"
 +//usage:     "\n	-n NUM		Max instances (Default of 0 is unlimited)"
- //usage:     "\n	-p [IP:]PORT	Bind to IP:PORT (default *:80)"
+ //usage:     "\n	-p [IP:]PORT	Bind to IP:PORT (default *:"STR(CONFIG_FEATURE_HTTPD_PORT_DEFAULT)")"
  //usage:	IF_FEATURE_HTTPD_SETUID(
  //usage:     "\n	-u USER[:GRP]	Set uid/gid after binding to port")
-@@ -280,7 +283,11 @@
+@@ -286,7 +289,11 @@
  //usage:	IF_FEATURE_HTTPD_AUTH_MD5(
  //usage:     "\n	-m STRING	MD5 crypt STRING")
  //usage:     "\n	-e STRING	HTML encode STRING"
@@ -32,7 +32,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  /* TODO: use TCP_CORK, parse_config() */
  
-@@ -297,6 +304,10 @@
+@@ -303,6 +310,10 @@
  #if ENABLE_FEATURE_USE_SENDFILE
  # include <sys/sendfile.h>
  #endif
@@ -43,7 +43,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  /* see sys/netinet6/in6.h */
  #if defined(__FreeBSD__)
-@@ -312,13 +323,16 @@
+@@ -318,7 +329,9 @@
  #endif
  
  #define IOBUF_SIZE 8192
@@ -53,7 +53,8 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
 +#endif
  
  #define HEADER_READ_TIMEOUT 60
- 
+
+@@ -328,6 +341,7 @@
  static const char DEFAULT_PATH_HTTPD_CONF[] ALIGN1 = "/etc";
  static const char HTTPD_CONF[] ALIGN1 = "httpd.conf";
  static const char HTTP_200[] ALIGN1 = "HTTP/1.1 200 OK\r\n";
@@ -61,7 +62,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  static const char index_html[] ALIGN1 = "index.html";
  
  typedef struct has_next_ptr {
-@@ -360,9 +374,9 @@
+@@ -369,9 +383,9 @@
  	HTTP_NOT_FOUND = 404,
  	HTTP_FORBIDDEN = 403,
  	HTTP_REQUEST_TIMEOUT = 408,
@@ -72,7 +73,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	HTTP_CONTINUE = 100,
  #if 0   /* future use */
  	HTTP_SWITCHING_PROTOCOLS = 101,
-@@ -441,13 +455,21 @@
+@@ -450,13 +464,21 @@
  #endif
  };
  
@@ -94,7 +95,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	time_t last_mod;
  #if ENABLE_FEATURE_HTTPD_ETAG
  	char *if_none_match;
-@@ -468,6 +490,12 @@
+@@ -477,6 +499,12 @@
  
  	IF_FEATURE_HTTPD_BASIC_AUTH(const char *g_realm;)
  	IF_FEATURE_HTTPD_BASIC_AUTH(char *remoteuser;)
@@ -107,7 +108,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  	off_t file_size;        /* -1 - unknown */
  #if ENABLE_FEATURE_HTTPD_RANGES
-@@ -496,16 +524,24 @@
+@@ -505,16 +533,24 @@
  #endif
  #if ENABLE_FEATURE_HTTPD_PROXY
  	Htaccess_Proxy *proxy;
@@ -132,7 +133,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #define bind_addr_or_port (G.bind_addr_or_port)
  #define g_query           (G.g_query          )
  #define opt_c_configFile  (G.opt_c_configFile )
-@@ -516,6 +552,12 @@
+@@ -525,6 +561,12 @@
  #define last_mod          (G.last_mod         )
  #define g_realm           (G.g_realm          )
  #define remoteuser        (G.remoteuser       )
@@ -145,7 +146,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #define file_size         (G.file_size        )
  #if ENABLE_FEATURE_HTTPD_RANGES
  #define range_start       (G.range_start      )
-@@ -537,6 +579,16 @@
+@@ -546,6 +588,16 @@
  #define hdr_cnt           (G.hdr_cnt          )
  #define http_error_page   (G.http_error_page  )
  #define proxy             (G.proxy            )
@@ -162,7 +163,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #define INIT_G() do { \
  	setup_common_bufsiz(); \
  	SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); \
-@@ -1008,6 +1060,38 @@
+@@ -1017,6 +1069,38 @@
  	*p = '\0';
  	return out;
  }
@@ -201,7 +202,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #endif
  
  #if ENABLE_FEATURE_HTTPD_BASIC_AUTH
-@@ -1070,7 +1154,6 @@
+@@ -1079,7 +1163,6 @@
  static void send_headers(unsigned responseNum)
  {
  #if ENABLE_FEATURE_HTTPD_DATE || ENABLE_FEATURE_HTTPD_LAST_MODIFIED
@@ -209,7 +210,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	/* Fixed size 29-byte string. Example: Sun, 06 Nov 1994 08:49:37 GMT */
  	char date_str[40]; /* using a bit larger buffer to paranoia reasons */
  	struct tm tm;
-@@ -1080,6 +1163,7 @@
+@@ -1089,6 +1172,7 @@
  #if ENABLE_FEATURE_HTTPD_ERROR_PAGES
  	const char *error_page = NULL;
  #endif
@@ -217,7 +218,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	unsigned len;
  	unsigned i;
  
-@@ -1093,6 +1177,9 @@
+@@ -1102,6 +1186,9 @@
  			break;
  		}
  	}
@@ -227,7 +228,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  	if (verbose)
  		bb_error_msg("response:%u", responseNum);
-@@ -1109,26 +1196,28 @@
+@@ -1118,26 +1205,28 @@
  		/* ^^^ using gmtime_r() instead of gmtime() to not use static data */
  #endif
  		len = sprintf(iobuf,
@@ -242,7 +243,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
 +			,http_major_version, http_minor_version,
 +			responseNum, responseString, mime_type
  #if ENABLE_FEATURE_HTTPD_DATE
- 			,date_str
+ 			, date_str
  #endif
  		);
  	}
@@ -255,9 +256,9 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
 -		);
 -	}
 +	if (!keep_alive)
-+	    len += sprintf(iobuf + len, "Connection: close\r\n");
++		len += sprintf(iobuf + len, "Connection: close\r\n");
 +	else
-+	    len += sprintf(iobuf + len, "Connection: keep-alive\r\n");
++		len += sprintf(iobuf + len, "Connection: keep-alive\r\n");
  
 +/* Do not send this header. We no longer want the browser to prompt for
 + * Basic Auth *ever*, because the browser will cache the credentials and
@@ -266,7 +267,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #if ENABLE_FEATURE_HTTPD_BASIC_AUTH
  	if (responseNum == HTTP_UNAUTHORIZED) {
  		len += sprintf(iobuf + len,
-@@ -1137,6 +1226,7 @@
+@@ -1146,6 +1235,7 @@
  		);
  	}
  #endif
@@ -274,7 +275,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	if (responseNum == HTTP_MOVED_TEMPORARILY) {
  		/* Responding to "GET /dir" with
  		 * "HTTP/1.1 302 Found" "Location: /dir/"
-@@ -1161,7 +1251,7 @@
+@@ -1170,7 +1260,7 @@
  		iobuf[len++] = '\n';
  		if (DEBUG) {
  			iobuf[len] = '\0';
@@ -283,7 +284,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		}
  		full_write(STDOUT_FILENO, iobuf, len);
  		dbg("writing error page: '%s'\n", error_page);
-@@ -1230,13 +1320,14 @@
+@@ -1239,13 +1329,14 @@
  	 * Theoretically we should not send it if page is compressed,
  	 * but de-facto standard is to send it (see comment below).
  	 */
@@ -299,7 +300,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  				file_size
  		);
  	}
-@@ -1257,18 +1348,14 @@
+@@ -1266,18 +1357,14 @@
  	iobuf[len++] = '\n';
  	if (infoString) {
  		len += sprintf(iobuf + len,
@@ -322,7 +323,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	}
  	if (full_write(STDOUT_FILENO, iobuf, len) != len) {
  		if (verbose > 1)
-@@ -1297,12 +1384,21 @@
+@@ -1307,12 +1394,21 @@
  {
  	unsigned count;
  	char c;
@@ -345,7 +346,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			if (hdr_cnt <= 0)
  				goto ret;
  			hdr_ptr = hdr_buf;
-@@ -1317,16 +1413,20 @@
+@@ -1327,16 +1423,20 @@
  		if (count < (IOBUF_SIZE - 1))      /* check overflow */
  			count++;
  	}
@@ -368,7 +369,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  {
  	enum { FROM_CGI = 1, TO_CGI = 2 }; /* indexes in pfd[] */
  	struct pollfd pfd[3];
-@@ -1353,31 +1453,18 @@
+@@ -1363,31 +1463,18 @@
  
  	/* NB: breaking out of this loop jumps to log_and_exit() */
  	out_cnt = 0;
@@ -411,7 +412,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			} else {
  				/* post_len <= 0 && hdr_cnt <= 0:
  				 * no more POST data to CGI,
-@@ -1389,7 +1476,7 @@
+@@ -1399,7 +1486,7 @@
  		}
  
  		/* Now wait on the set of sockets */
@@ -420,7 +421,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		if (count <= 0) {
  #if 0
  			if (safe_waitpid(pid, &status, WNOHANG) <= 0) {
-@@ -1398,15 +1485,15 @@
+@@ -1408,15 +1495,15 @@
  				continue;
  			}
  			if (DEBUG && WIFEXITED(status))
@@ -439,7 +440,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			/* Have data from peer and can write to CGI */
  			count = safe_write(toCgi_wr, hdr_ptr, hdr_cnt);
  			/* Doesn't happen, we dont use nonblocking IO here
-@@ -1418,25 +1505,32 @@
+@@ -1428,25 +1515,32 @@
  				hdr_cnt -= count;
  			} else {
  				/* EOF/broken pipe to CGI, stop piping POST data */
@@ -477,7 +478,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			}
  		}
  
-@@ -1458,10 +1552,10 @@
+@@ -1468,10 +1562,10 @@
  				 * CGI may output a few first bytes and then wait
  				 * for POSTDATA without closing stdout.
  				 * With full_read we may wait here forever. */
@@ -490,7 +491,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  					if (out_cnt) {
  						full_write(STDOUT_FILENO, HTTP_200, sizeof(HTTP_200)-1);
  						full_write(STDOUT_FILENO, rbuf, out_cnt);
-@@ -1499,7 +1593,7 @@
+@@ -1509,7 +1603,7 @@
  					out_cnt = -1; /* buffering off */
  				}
  			} else {
@@ -499,7 +500,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  				if (count <= 0)
  					break;  /* eof (or error) */
  			}
-@@ -1508,7 +1602,7 @@
+@@ -1518,7 +1612,7 @@
  			dbg("cgi read %d bytes: '%.*s'\n", count, count, rbuf);
  		} /* if (pfd[FROM_CGI].revents) */
  	} /* while (1) */
@@ -508,7 +509,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  }
  #endif
  
-@@ -1529,18 +1623,24 @@
+@@ -1539,18 +1633,24 @@
   * Parameters:
   * const char *url              The requested URL (with leading /).
   * const char *orig_uri         The original URI before rewriting (if any)
@@ -536,7 +537,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  {
  	struct fd_pair fromCgi;  /* CGI -> httpd pipe */
  	struct fd_pair toCgi;    /* httpd -> CGI pipe */
-@@ -1618,14 +1718,26 @@
+@@ -1628,14 +1728,26 @@
  #endif
  		}
  	}
@@ -564,7 +565,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	/* setenv1("SERVER_NAME", safe_gethostname()); - don't do this,
  	 * just run "env SERVER_NAME=xyz httpd ..." instead */
  
-@@ -1711,10 +1823,14 @@
+@@ -1720,10 +1832,14 @@
  	/* Restore variables possibly changed by child */
  	xfunc_error_retval = 0;
  
@@ -580,7 +581,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  }
  
  #endif          /* FEATURE_HTTPD_CGI */
-@@ -1775,8 +1891,8 @@
+@@ -1784,8 +1900,8 @@
  	 * (happens if you abort downloads from local httpd): */
  	signal(SIGPIPE, SIG_IGN);
  
@@ -591,7 +592,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	suffix = strrchr(url, '.');
  	if (suffix) {
  		static const char suffixTable[] ALIGN1 =
-@@ -1905,7 +2021,7 @@
+@@ -1921,7 +2037,7 @@
  }
  
  #if ENABLE_FEATURE_HTTPD_ACL_IP
@@ -600,7 +601,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  {
  	Htaccess_IP *cur;
  
-@@ -1921,18 +2037,14 @@
+@@ -1937,18 +2053,14 @@
  			(unsigned char)(cur->mask >> 8),
  			(unsigned char)(cur->mask)
  		);
@@ -623,7 +624,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #endif
  
  #if ENABLE_FEATURE_HTTPD_BASIC_AUTH
-@@ -2004,6 +2116,7 @@
+@@ -2020,6 +2132,7 @@
  		const char *dir_prefix;
  		size_t len;
  		int r;
@@ -631,7 +632,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  		dir_prefix = cur->before_colon;
  
-@@ -2027,13 +2140,23 @@
+@@ -2043,13 +2156,23 @@
  		/* Path match found */
  		prev = dir_prefix;
  
@@ -656,7 +657,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			colon_after_user = strchr(user_and_passwd, ':');
  			if (!colon_after_user)
  				goto bad_input;
-@@ -2051,13 +2174,23 @@
+@@ -2067,13 +2182,23 @@
  			if (!passwd)
  				goto bad_input;
  			passwd++;
@@ -681,7 +682,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  				userinfo.name = user_and_passwd;
  				userinfo.pw = colon_after_user + 1;
  				r = pam_start("httpd", user_and_passwd, &conv_info, &pamh) != PAM_SUCCESS;
-@@ -2065,9 +2198,16 @@
+@@ -2081,9 +2214,16 @@
  					r = pam_authenticate(pamh, PAM_DISALLOW_NULL_AUTHTOK) != PAM_SUCCESS
  					 || pam_acct_mgmt(pamh, PAM_DISALLOW_NULL_AUTHTOK)    != PAM_SUCCESS
  					;
@@ -698,7 +699,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  				goto end_check_passwd;
  # else
  #  if ENABLE_FEATURE_SHADOWPASSWDS
-@@ -2100,7 +2240,7 @@
+@@ -2116,7 +2256,7 @@
  			}
  			/* Else: passwd is from httpd.conf, it is either plaintext or encrypted */
  
@@ -707,7 +708,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  				char *encrypted;
  # if !ENABLE_PAM
   check_encrypted:
-@@ -2127,7 +2267,11 @@
+@@ -2143,7 +2283,11 @@
  			remoteuser = xstrndup(user_and_passwd,
  				strchrnul(user_and_passwd, ':') - user_and_passwd
  			);
@@ -720,7 +721,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		}
  	} /* for */
  
-@@ -2141,11 +2285,43 @@
+@@ -2157,11 +2301,43 @@
  {
  	Htaccess_Proxy *p;
  	for (p = proxy; p; p = p->next) {
@@ -765,7 +766,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #endif
  
  /*
-@@ -2167,32 +2343,37 @@
+@@ -2183,32 +2359,37 @@
  	char *urlcopy;
  	char *urlp;
  	char *tptr;
@@ -822,7 +823,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  	/* Allocation of iobuf is postponed until now
  	 * (IOW, server process doesn't need to waste 8k) */
-@@ -2210,117 +2391,86 @@
+@@ -2226,117 +2407,86 @@
  			bb_simple_error_msg("connected");
  	}
  #if ENABLE_FEATURE_HTTPD_ACL_IP
@@ -993,7 +994,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  	/* Decode URL escape sequences */
  	tptr = percent_decode_in_place(urlcopy, /*strict:*/ 1);
-@@ -2335,7 +2485,7 @@
+@@ -2351,7 +2501,7 @@
  	/* Algorithm stolen from libbb bb_simplify_path(),
  	 * but don't strdup, retain trailing slash, protect root */
  	urlp = tptr = urlcopy;
@@ -1002,7 +1003,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		if (*urlp == '/') {
  			/* skip duplicate (or initial) slash */
  			if (*tptr == '/') {
-@@ -2360,214 +2510,214 @@
+@@ -2376,214 +2526,214 @@
  			}
  		}
  		*++urlp = *tptr;
@@ -1375,7 +1376,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	/* Case: no "Authorization:" was seen, but page might require passwd.
  	 * Check that with dummy user:pass */
  	if (authorized < 0)
-@@ -2576,38 +2726,179 @@
+@@ -2592,38 +2742,179 @@
  		send_headers_and_exit(HTTP_UNAUTHORIZED);
  #endif
  
@@ -1573,7 +1574,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  /*
   * The main http server function.
   * Given a socket, listen for new connections and farm out
-@@ -2618,15 +2909,30 @@
+@@ -2634,15 +2925,30 @@
  static void mini_httpd(int server_socket) NORETURN;
  static void mini_httpd(int server_socket)
  {
@@ -1605,7 +1606,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		/* Wait for connections... */
  		fromAddr.len = LSA_SIZEOF_SA;
  		n = accept(server_socket, &fromAddr.u.sa, &fromAddr.len);
-@@ -2641,9 +2947,10 @@
+@@ -2657,9 +2963,10 @@
  //to ratelimit connects in iptables)
  
  		/* set the KEEPALIVE option to cull dead connections */
@@ -1618,7 +1619,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			/* child */
  			/* Do not reload config on HUP */
  			signal(SIGHUP, SIG_IGN);
-@@ -2652,7 +2959,8 @@
+@@ -2668,7 +2975,8 @@
  			xdup2(0, 1);
  
  			handle_incoming_and_exit(&fromAddr);
@@ -1628,7 +1629,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		/* parent, or fork failed */
  		close(n);
  	} /* while (1) */
-@@ -2663,6 +2971,7 @@
+@@ -2679,6 +2987,7 @@
  static void mini_httpd_nommu(int server_socket, int argc, char **argv)
  {
  	char *argv_copy[argc + 2];
@@ -1636,7 +1637,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  	argv_copy[0] = argv[0];
  	argv_copy[1] = (char*)"-i";
-@@ -2674,17 +2983,34 @@
+@@ -2690,17 +2999,34 @@
  	 * Try to do any dangerous calls after fork.
  	 */
  	while (1) {
@@ -1675,7 +1676,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			/* child */
  			/* Do not reload config on HUP */
  			signal(SIGHUP, SIG_IGN);
-@@ -2694,7 +3020,8 @@
+@@ -2710,7 +3036,8 @@
  
  			/* Run a copy of ourself in inetd mode */
  			re_exec(argv_copy);
@@ -1685,7 +1686,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  		argv_copy[0][0] &= 0x7f;
  		/* parent, or vfork failed */
  		close(n);
-@@ -2730,10 +3057,13 @@
+@@ -2746,10 +3073,13 @@
  	c_opt_config_file = 0,
  	d_opt_decode_url,
  	h_opt_home_httpd,
@@ -1699,7 +1700,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	p_opt_port      ,
  	p_opt_inetd     ,
  	p_opt_foreground,
-@@ -2741,10 +3071,13 @@
+@@ -2757,10 +3087,13 @@
  	OPT_CONFIG_FILE = 1 << c_opt_config_file,
  	OPT_DECODE_URL  = 1 << d_opt_decode_url,
  	OPT_HOME_HTTPD  = 1 << h_opt_home_httpd,
@@ -1713,7 +1714,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	OPT_PORT        = 1 << p_opt_port,
  	OPT_INETD       = 1 << p_opt_inetd,
  	OPT_FOREGROUND  = 1 << p_opt_foreground,
-@@ -2758,8 +3091,10 @@
+@@ -2774,8 +3107,10 @@
  	int server_socket = server_socket; /* for gcc */
  	unsigned opt;
  	char *url_for_decode;
@@ -1724,7 +1725,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  	IF_FEATURE_HTTPD_SETUID(struct bb_uidgid_t ugid;)
  	IF_FEATURE_HTTPD_AUTH_MD5(const char *pass;)
  
-@@ -2774,21 +3109,22 @@
+@@ -2790,21 +3125,22 @@
  	/* We do not "absolutize" path given by -h (home) opt.
  	 * If user gives relative path in -h,
  	 * $SCRIPT_FILENAME will not be set. */
@@ -1753,7 +1754,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  			, &bind_addr_or_port
  			, &verbose
  		);
-@@ -2796,11 +3132,17 @@
+@@ -2812,11 +3148,17 @@
  		fputs_stdout(percent_decode_in_place(url_for_decode, /*strict:*/ 0));
  		return 0;
  	}
@@ -1771,7 +1772,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  #endif
  #if ENABLE_FEATURE_HTTPD_AUTH_MD5
  	if (opt & OPT_MD5) {
-@@ -2818,6 +3160,21 @@
+@@ -2834,6 +3176,21 @@
  		xget_uidgid(&ugid, s_ugid);
  	}
  #endif
@@ -1793,7 +1794,7 @@ diff -Naur busybox-1.34.1.org/networking/httpd.c busybox-1.34.1/networking/httpd
  
  #if !BB_MMU
  	if (!(opt & OPT_FOREGROUND)) {
-@@ -2832,7 +3189,7 @@
+@@ -2848,7 +3205,7 @@
  		xchdir(home_httpd);
  
  	if (!(opt & OPT_INETD)) {

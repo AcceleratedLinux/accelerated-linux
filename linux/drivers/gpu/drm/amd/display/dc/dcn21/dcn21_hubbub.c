@@ -140,7 +140,7 @@ int hubbub21_init_dchub(struct hubbub *hubbub,
 
 bool hubbub21_program_urgent_watermarks(
 		struct hubbub *hubbub,
-		struct dcn_watermark_set *watermarks,
+		union dcn_watermark_set *watermarks,
 		unsigned int refclk_mhz,
 		bool safe_to_lower)
 {
@@ -334,7 +334,7 @@ bool hubbub21_program_urgent_watermarks(
 
 bool hubbub21_program_stutter_watermarks(
 		struct hubbub *hubbub,
-		struct dcn_watermark_set *watermarks,
+		union dcn_watermark_set *watermarks,
 		unsigned int refclk_mhz,
 		bool safe_to_lower)
 {
@@ -487,7 +487,7 @@ bool hubbub21_program_stutter_watermarks(
 
 bool hubbub21_program_pstate_watermarks(
 		struct hubbub *hubbub,
-		struct dcn_watermark_set *watermarks,
+		union dcn_watermark_set *watermarks,
 		unsigned int refclk_mhz,
 		bool safe_to_lower)
 {
@@ -573,7 +573,7 @@ bool hubbub21_program_pstate_watermarks(
 
 bool hubbub21_program_watermarks(
 		struct hubbub *hubbub,
-		struct dcn_watermark_set *watermarks,
+		union dcn_watermark_set *watermarks,
 		unsigned int refclk_mhz,
 		bool safe_to_lower)
 {
@@ -635,7 +635,7 @@ void hubbub21_wm_read_state(struct hubbub *hubbub,
 			DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_A, &s->sr_exit);
 
 	REG_GET(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_A,
-			 DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_A, &s->dram_clk_chanage);
+			 DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_A, &s->dram_clk_change);
 
 	s = &wm->sets[1];
 	s->wm_set = 1;
@@ -649,7 +649,7 @@ void hubbub21_wm_read_state(struct hubbub *hubbub,
 			DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_B, &s->sr_exit);
 
 	REG_GET(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_B,
-			DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_B, &s->dram_clk_chanage);
+			DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_B, &s->dram_clk_change);
 
 	s = &wm->sets[2];
 	s->wm_set = 2;
@@ -663,7 +663,7 @@ void hubbub21_wm_read_state(struct hubbub *hubbub,
 			DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_C, &s->sr_exit);
 
 	REG_GET(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_C,
-			DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_C, &s->dram_clk_chanage);
+			DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_C, &s->dram_clk_change);
 
 	s = &wm->sets[3];
 	s->wm_set = 3;
@@ -677,7 +677,7 @@ void hubbub21_wm_read_state(struct hubbub *hubbub,
 			DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_D, &s->sr_exit);
 
 	REG_GET(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_D,
-			DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_D, &s->dram_clk_chanage);
+			DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_D, &s->dram_clk_change);
 }
 
 static void hubbub21_apply_DEDCN21_147_wa(struct hubbub *hubbub)

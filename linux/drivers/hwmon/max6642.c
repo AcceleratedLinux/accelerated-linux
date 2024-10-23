@@ -148,7 +148,7 @@ static int max6642_detect(struct i2c_client *client,
 	if ((reg_status & 0x2b) != 0x00)
 		return -ENODEV;
 
-	strlcpy(info->type, "max6642", I2C_NAME_SIZE);
+	strscpy(info->type, "max6642", I2C_NAME_SIZE);
 
 	return 0;
 }
@@ -291,7 +291,7 @@ static int max6642_probe(struct i2c_client *client)
  */
 
 static const struct i2c_device_id max6642_id[] = {
-	{ "max6642", 0 },
+	{ "max6642" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max6642_id);
@@ -301,7 +301,7 @@ static struct i2c_driver max6642_driver = {
 	.driver = {
 		.name	= "max6642",
 	},
-	.probe_new	= max6642_probe,
+	.probe		= max6642_probe,
 	.id_table	= max6642_id,
 	.detect		= max6642_detect,
 	.address_list	= normal_i2c,

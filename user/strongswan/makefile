@@ -1,6 +1,6 @@
 
-VERSION = 5.9.7
-URL = http://download.strongswan.org/strongswan-$(VERSION).tar.bz2
+VERSION = 5.9.13
+URL = https://download.strongswan.org/strongswan-$(VERSION).tar.bz2
 strongswan-$(VERSION)_ROMFS = strongswan_romfs
 
 CONFOPTS := 

@@ -187,10 +187,8 @@ struct v4l2_buffer
 	on the negotiated data format and may change with each buffer for
 	compressed variable size data like JPEG images. Drivers must set
 	this field when ``type`` refers to a capture stream, applications
-	when it refers to an output stream. If the application sets this
-	to 0 for an output stream, then ``bytesused`` will be set to the
-	size of the buffer (see the ``length`` field of this struct) by
-	the driver. For multiplanar formats this field is ignored and the
+	when it refers to an output stream. For multiplanar formats this field
+        is ignored and the
 	``planes`` pointer is used instead.
     * - __u32
       - ``flags``
@@ -327,10 +325,7 @@ struct v4l2_plane
       - ``bytesused``
       - The number of bytes occupied by data in the plane (its payload).
 	Drivers must set this field when ``type`` refers to a capture
-	stream, applications when it refers to an output stream. If the
-	application sets this to 0 for an output stream, then
-	``bytesused`` will be set to the size of the plane (see the
-	``length`` field of this struct) by the driver.
+	stream, applications when it refers to an output stream.
 
 	.. note::
 
@@ -554,9 +549,9 @@ Buffer Flags
       - 0x00000400
       - The buffer has been prepared for I/O and can be queued by the
 	application. Drivers set or clear this flag when the
-	:ref:`VIDIOC_QUERYBUF`,
+	:ref:`VIDIOC_QUERYBUF <VIDIOC_QUERYBUF>`,
 	:ref:`VIDIOC_PREPARE_BUF <VIDIOC_QBUF>`,
-	:ref:`VIDIOC_QBUF` or
+	:ref:`VIDIOC_QBUF <VIDIOC_QBUF>` or
 	:ref:`VIDIOC_DQBUF <VIDIOC_QBUF>` ioctl is called.
     * .. _`V4L2-BUF-FLAG-NO-CACHE-INVALIDATE`:
 

@@ -3,3 +3,10 @@ config USER_ETHTOOL_ETHTOOL
 	help
 	  ethtool is a small utility for examining and tuning your
 	  ethernet-based network interface. (80k+)
+
+config USER_ETHTOOL_PRETTY_DUMP
+	bool "enable registers, EEPROM and SFP pretty dumps"
+	default n
+	depends on USER_ETHTOOL_ETHTOOL
+	help
+	  Adds approximately 200kB to the ethtool binary

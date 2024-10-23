@@ -9,19 +9,19 @@
 # exec 2>> /tmp/iod_power_supply.log
 # set -x
 
-ANALOG_POWER_GPIO="/sys/class/gpio/gpio369"
-DIO1_POWER_GPIO="/sys/class/gpio/gpio373"
-DIO2_POWER_GPIO="/sys/class/gpio/gpio374"
+ANALOG_POWER_GPIO="/sys/class/gpio/gpio641"
+DIO1_POWER_GPIO="/sys/class/gpio/gpio645"
+DIO2_POWER_GPIO="/sys/class/gpio/gpio646"
 
 init_gpio()
 {
-	echo 369 > /sys/class/gpio/export
+	echo 641 > /sys/class/gpio/export
 	echo low > "$ANALOG_POWER_GPIO"/direction
 
-	echo 373 > /sys/class/gpio/export
+	echo 645 > /sys/class/gpio/export
 	echo low > "$DIO1_POWER_GPIO"/direction
 
-	echo 374 > /sys/class/gpio/export
+	echo 646 > /sys/class/gpio/export
 	echo low > "$DIO2_POWER_GPIO"/direction
 }
 

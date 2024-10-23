@@ -1,0 +1,114 @@
+From 719a1f839fb8c8dbeda3beebef9b33a7f8877ab3 Mon Sep 17 00:00:00 2001
+From: "Sreeves, Francis" <francis.sreeves@digi.com>
+Date: Wed, 26 Apr 2023 20:15:57 +0100
+Subject: [PATCH] init: add '-b' command line option to specify number of stop
+ bits
+
+The serial port is configured with the specified number of stop bits
+after it's opened. Valid values are '1' (default) and '2'.
+---
+ src/dce.c    | 2 +-
+ src/dce.h    | 1 +
+ src/init.c   | 7 ++++++-
+ src/serial.c | 4 +++-
+ src/serial.h | 2 +-
+ 5 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/src/dce.c b/src/dce.c
+index 94abd1f..59335ae 100644
+--- a/src/dce.c
++++ b/src/dce.c
+@@ -35,7 +35,7 @@ int dce_connect(dce_config *cfg) {
+   if (cfg->is_ip232) {
+     rc = ip232_init_conn(cfg);
+   } else {
+-    rc = ser_init_conn(cfg->tty, cfg->port_speed);
++    rc = ser_init_conn(cfg->tty, cfg->port_speed, cfg->stopbits);
+     if(-1 < rc) {
+       cfg->is_connected = TRUE;
+       cfg->fd = rc;
+diff --git a/src/dce.h b/src/dce.h
+index ce1b924..d9c72a3 100644
+--- a/src/dce.h
++++ b/src/dce.h
+@@ -32,6 +32,7 @@ enum {
+ 
+ typedef struct dce_config {
+   int port_speed;
++  int stopbits;
+   int parity;
+   int is_ip232;
+   char tty[256];
+diff --git a/src/init.c b/src/init.c
+index 39ec857..0a85a8c 100644
+--- a/src/init.c
++++ b/src/init.c
+@@ -25,6 +25,7 @@ void print_help(char* name) {
+   fprintf(stderr, "  -d   serial device (e.g. /dev/ttyS0). Cannot be used with -v\n");
+   fprintf(stderr, "  -v   tcp port (or address:port) for virtual RS232. Cannot be used with -d\n");
+   fprintf(stderr, "  -s   serial port speed (defaults to 38400)\n");
++  fprintf(stderr, "  -b   serial port stop bits (default 1)\n");
+   fprintf(stderr, "  -S   speed modem will report (defaults to -s value)\n");
+   fprintf(stderr, "  -I   invert DCD pin\n");
+   fprintf(stderr, "  -n   add phone entry (number=replacement)\n");
+@@ -60,10 +61,11 @@ int init(int argc,
+   LOG_ENTER();
+   mdm_init_config(&cfg[0]);
+   cfg[0].dce_data.port_speed = 38400;
++  cfg[0].dce_data.stopbits = 1;
+   cfg[0].line_speed = 38400;
+ 
+   while(opt>-1 && i < max_modem) {
+-    opt=getopt(argc, argv, "p:s:S:d:v:hw:i:Il:L:t:n:a:A:c:C:N:B:T:D:V");
++    opt=getopt(argc, argv, "p:s:b:S:d:v:hw:i:Il:L:t:n:a:A:c:C:N:B:T:D:V");
+     switch(opt) {
+       case 't':
+         trace_flags = log_get_trace_flags();
+@@ -139,6 +141,9 @@ int init(int argc,
+         if(dce_set == FALSE)
+           cfg[i].line_speed = cfg[i].dce_data.port_speed;
+         break;
++      case 'b':
++        cfg[i].dce_data.stopbits = atoi(optarg);
++        break;
+       case '?':
+       case 'h':
+         print_help(argv[0]);
+diff --git a/src/serial.c b/src/serial.c
+index 2f4dc29..d53450d 100644
+--- a/src/serial.c
++++ b/src/serial.c
+@@ -121,7 +121,7 @@ int ser_get_bps_const(int speed) {
+ 
+ }
+ 
+-int ser_init_conn(char *tty, int speed) {
++int ser_init_conn(char *tty, int speed, int stopbits) {
+   int fd = -1;
+   struct termios tio;
+   int bps_rate = 0;
+@@ -157,6 +157,8 @@ int ser_init_conn(char *tty, int speed) {
+ #else
+       tio.c_cflag = CS8 | CLOCAL | CREAD | CRTSCTS;
+ #endif
++      if (stopbits == 2)
++        tio.c_cflag |= CSTOPB;
+       tio.c_iflag = IGNBRK;
+       tio.c_oflag = 0;
+       tio.c_lflag = 0;
+diff --git a/src/serial.h b/src/serial.h
+index 90ee849..a805511 100644
+--- a/src/serial.h
++++ b/src/serial.h
+@@ -7,7 +7,7 @@
+ #endif
+ 
+ int ser_get_bps_const(int speed);
+-int ser_init_conn(char *tty, int speed);
++int ser_init_conn(char *tty, int speed, int stopbits);
+ int ser_set_flow_control(int fd, unsigned iflag, unsigned cflag);
+ int ser_set_parity_databits(int fd, unsigned cflag);
+ int ser_get_control_lines(int fd);
+-- 
+2.34.1
+

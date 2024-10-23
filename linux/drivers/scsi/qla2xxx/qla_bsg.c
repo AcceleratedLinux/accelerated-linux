@@ -278,11 +278,15 @@ qla2x00_process_els(struct bsg_job *bsg_job)
 	const char *type;
 	int req_sg_cnt, rsp_sg_cnt;
 	int rval =  (DID_ERROR << 16);
-	uint16_t nextlid = 0;
 	uint32_t els_cmd = 0;
+	int qla_port_allocated = 0;
 
 	if (bsg_request->msgcode == FC_BSG_RPT_ELS) {
 		rport = fc_bsg_to_rport(bsg_job);
+		if (!rport) {
+			rval = -ENOMEM;
+			goto done;
+		}
 		fcport = *(fc_port_t **) rport->dd_data;
 		host = rport_to_shost(rport);
 		vha = shost_priv(host);
@@ -329,9 +333,9 @@ qla2x00_process_els(struct bsg_job *bsg_job)
 		/* make sure the rport is logged in,
 		 * if not perform fabric login
 		 */
-		if (qla2x00_fabric_login(vha, fcport, &nextlid)) {
+		if (atomic_read(&fcport->state) != FCS_ONLINE) {
 			ql_dbg(ql_dbg_user, vha, 0x7003,
-			    "Failed to login port %06X for ELS passthru.\n",
+			    "Port %06X is not online for ELS passthru.\n",
 			    fcport->d_id.b24);
 			rval = -EIO;
 			goto done;
@@ -348,6 +352,7 @@ qla2x00_process_els(struct bsg_job *bsg_job)
 			goto done;
 		}
 
+		qla_port_allocated = 1;
 		/* Initialize all required  fields of fcport */
 		fcport->vha = vha;
 		fcport->d_id.b.al_pa =
@@ -432,7 +437,7 @@ done_unmap_sg:
 	goto done_free_fcport;
 
 done_free_fcport:
-	if (bsg_request->msgcode != FC_BSG_RPT_ELS)
+	if (qla_port_allocated)
 		qla2x00_free_fcport(fcport);
 done:
 	return rval;
@@ -2425,6 +2430,89 @@ qla2x00_do_dport_diagnostics(struct bsg_job *bsg_job)
 }
 
 static int
+qla2x00_do_dport_diagnostics_v2(struct bsg_job *bsg_job)
+{
+	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
+	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
+	scsi_qla_host_t *vha = shost_priv(host);
+	int rval;
+	struct qla_dport_diag_v2 *dd;
+	mbx_cmd_t mc;
+	mbx_cmd_t *mcp = &mc;
+	uint16_t options;
+
+	if (!IS_DPORT_CAPABLE(vha->hw))
+		return -EPERM;
+
+	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
+	if (!dd)
+		return -ENOMEM;
+
+	sg_copy_to_buffer(bsg_job->request_payload.sg_list,
+			bsg_job->request_payload.sg_cnt, dd, sizeof(*dd));
+
+	options  = dd->options;
+
+	/*  Check dport Test in progress */
+	if (options == QLA_GET_DPORT_RESULT_V2 &&
+	    vha->dport_status & DPORT_DIAG_IN_PROGRESS) {
+		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
+					EXT_STATUS_DPORT_DIAG_IN_PROCESS;
+		goto dportcomplete;
+	}
+
+	/*  Check chip reset in progress and start/restart requests arrive */
+	if (vha->dport_status & DPORT_DIAG_CHIP_RESET_IN_PROGRESS &&
+	    (options == QLA_START_DPORT_TEST_V2 ||
+	     options == QLA_RESTART_DPORT_TEST_V2)) {
+		vha->dport_status &= ~DPORT_DIAG_CHIP_RESET_IN_PROGRESS;
+	}
+
+	/*  Check chip reset in progress and get result request arrive */
+	if (vha->dport_status & DPORT_DIAG_CHIP_RESET_IN_PROGRESS &&
+	    options == QLA_GET_DPORT_RESULT_V2) {
+		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
+					EXT_STATUS_DPORT_DIAG_NOT_RUNNING;
+		goto dportcomplete;
+	}
+
+	rval = qla26xx_dport_diagnostics_v2(vha, dd, mcp);
+
+	if (rval == QLA_SUCCESS) {
+		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
+					EXT_STATUS_OK;
+		if (options == QLA_START_DPORT_TEST_V2 ||
+		    options == QLA_RESTART_DPORT_TEST_V2) {
+			dd->mbx1 = mcp->mb[0];
+			dd->mbx2 = mcp->mb[1];
+			vha->dport_status |=  DPORT_DIAG_IN_PROGRESS;
+		} else if (options == QLA_GET_DPORT_RESULT_V2) {
+			dd->mbx1 = le16_to_cpu(vha->dport_data[1]);
+			dd->mbx2 = le16_to_cpu(vha->dport_data[2]);
+		}
+	} else {
+		dd->mbx1 = mcp->mb[0];
+		dd->mbx2 = mcp->mb[1];
+		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
+				EXT_STATUS_DPORT_DIAG_ERR;
+	}
+
+dportcomplete:
+	sg_copy_from_buffer(bsg_job->reply_payload.sg_list,
+			    bsg_job->reply_payload.sg_cnt, dd, sizeof(*dd));
+
+	bsg_reply->reply_payload_rcv_len = sizeof(*dd);
+	bsg_job->reply_len = sizeof(*bsg_reply);
+	bsg_reply->result = DID_OK << 16;
+	bsg_job_done(bsg_job, bsg_reply->result,
+		     bsg_reply->reply_payload_rcv_len);
+
+	kfree(dd);
+
+	return 0;
+}
+
+static int
 qla2x00_get_flash_image_status(struct bsg_job *bsg_job)
 {
 	scsi_qla_host_t *vha = shost_priv(fc_bsg_to_shost(bsg_job));
@@ -2436,19 +2524,23 @@ qla2x00_get_flash_image_status(struct bsg_job *bsg_job)
 	qla27xx_get_active_image(vha, &active_regions);
 	regions.global_image = active_regions.global;
 
+	if (IS_QLA27XX(ha))
+		regions.nvme_params = QLA27XX_PRIMARY_IMAGE;
+
 	if (IS_QLA28XX(ha)) {
 		qla28xx_get_aux_images(vha, &active_regions);
 		regions.board_config = active_regions.aux.board_config;
 		regions.vpd_nvram = active_regions.aux.vpd_nvram;
 		regions.npiv_config_0_1 = active_regions.aux.npiv_config_0_1;
 		regions.npiv_config_2_3 = active_regions.aux.npiv_config_2_3;
+		regions.nvme_params = active_regions.aux.nvme_params;
 	}
 
 	ql_dbg(ql_dbg_user, vha, 0x70e1,
-	    "%s(%lu): FW=%u BCFG=%u VPDNVR=%u NPIV01=%u NPIV02=%u\n",
+	    "%s(%lu): FW=%u BCFG=%u VPDNVR=%u NPIV01=%u NPIV02=%u NVME_PARAMS=%u\n",
 	    __func__, vha->host_no, regions.global_image,
 	    regions.board_config, regions.vpd_nvram,
-	    regions.npiv_config_0_1, regions.npiv_config_2_3);
+	    regions.npiv_config_0_1, regions.npiv_config_2_3, regions.nvme_params);
 
 	sg_copy_from_buffer(bsg_job->reply_payload.sg_list,
 	    bsg_job->reply_payload.sg_cnt, &regions, sizeof(regions));
@@ -2860,6 +2952,9 @@ qla2x00_process_vendor_specific(struct scsi_qla_host *vha, struct bsg_job *bsg_j
 	case QL_VND_DPORT_DIAGNOSTICS:
 		return qla2x00_do_dport_diagnostics(bsg_job);
 
+	case QL_VND_DPORT_DIAGNOSTICS_V2:
+		return qla2x00_do_dport_diagnostics_v2(bsg_job);
+
 	case QL_VND_EDIF_MGMT:
 		return qla_edif_app_mgmt(bsg_job);
 
@@ -2901,6 +2996,8 @@ qla24xx_bsg_request(struct bsg_job *bsg_job)
 
 	if (bsg_request->msgcode == FC_BSG_RPT_ELS) {
 		rport = fc_bsg_to_rport(bsg_job);
+		if (!rport)
+			return ret;
 		host = rport_to_shost(rport);
 		vha = shost_priv(host);
 	} else {
@@ -2975,6 +3072,13 @@ qla24xx_bsg_timeout(struct bsg_job *bsg_job)
 
 	ql_log(ql_log_info, vha, 0x708b, "%s CMD timeout. bsg ptr %p.\n",
 	    __func__, bsg_job);
+
+	if (qla2x00_isp_reg_stat(ha)) {
+		ql_log(ql_log_info, vha, 0x9007,
+		    "PCI/Register disconnect.\n");
+		qla_pci_set_eeh_busy(vha);
+	}
+
 	/* find the bsg job from the active list of commands */
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 	for (que = 0; que < ha->max_req_queues; que++) {
@@ -2992,7 +3096,8 @@ qla24xx_bsg_timeout(struct bsg_job *bsg_job)
 			    sp->u.bsg_job == bsg_job) {
 				req->outstanding_cmds[cnt] = NULL;
 				spin_unlock_irqrestore(&ha->hardware_lock, flags);
-				if (ha->isp_ops->abort_command(sp)) {
+
+				if (!ha->flags.eeh_busy && ha->isp_ops->abort_command(sp)) {
 					ql_log(ql_log_warn, vha, 0x7089,
 					    "mbx abort_command failed.\n");
 					bsg_reply->result = -EIO;

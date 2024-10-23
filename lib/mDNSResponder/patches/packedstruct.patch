@@ -1,0 +1,14 @@
+diff --git a/mDNSCore/mDNSEmbeddedAPI.h b/mDNSCore/mDNSEmbeddedAPI.h
+index b1df70a..3d16505 100755
+--- a/mDNSCore/mDNSEmbeddedAPI.h
++++ b/mDNSCore/mDNSEmbeddedAPI.h
+@@ -150,6 +150,9 @@ extern "C" {
+  #if ((__GNUC__ > 2) || ((__GNUC__ == 2) && (__GNUC_MINOR__ >= 9)))
+   #define packedstruct struct __attribute__((__packed__))
+   #define packedunion  union  __attribute__((__packed__))
++ #elif ((__clang_major__ >= 14))
++  #define packedstruct struct __attribute__((__packed__))
++  #define packedunion  union  __attribute__((__packed__))
+  #else
+   #define packedstruct struct
+   #define packedunion  union

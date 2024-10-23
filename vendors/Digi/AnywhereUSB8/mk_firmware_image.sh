@@ -79,7 +79,7 @@ add_production_signature() {
 add_signature() {
 	local sig_file="$1"
 	HASH=$(openssl dgst -sha256 <$FIRMWARE_TAR)
-	echo "${HASH#(stdin)= }" >update.hash
+	echo "${HASH#*(stdin)= }" >update.hash
 
 	openssl rsautl -sign -inkey $(echo ${SIGNER_CERT} | sed 's/\.pem$/_key.pem/') -keyform PEM -in update.hash >update.sig
 	printf "\nUPDATE_SIZE=%s" `stat -t $FIRMWARE_TAR | awk '{printf $2}'` >update.size

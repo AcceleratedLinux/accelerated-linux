@@ -165,7 +165,7 @@
 	};
 
 	pmu {
-		compatible = "arm,armv8-pmuv3";
+		compatible = "arm,cortex-a35-pmu";
 		interrupts = <GIC_SPI 4 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 5 IRQ_TYPE_LEVEL_LOW>,
 			     <GIC_SPI 6 IRQ_TYPE_LEVEL_LOW>,
@@ -202,7 +202,7 @@
 			#clock-cells = <1>;
 		};
 
-		toprgu: toprgu@10007000 {
+		watchdog@10007000 {
 			compatible = "mediatek,mt8516-wdt",
 				     "mediatek,mt6589-wdt";
 			reg = <0 0x10007000 0 0x1000>;
@@ -229,7 +229,6 @@
 			compatible = "mediatek,mt8516-pinctrl";
 			reg = <0 0x1000b000 0 0x1000>;
 			mediatek,pctl-regmap = <&syscfg_pctl>;
-			pins-are-numbered;
 			gpio-controller;
 			#gpio-cells = <2>;
 			interrupt-controller;

@@ -41,8 +41,6 @@
 #include <linux/hrtimer.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/of_device.h>
 #include <linux/of_dma.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_data/i2c-imx.h>
@@ -118,28 +116,6 @@
 #define I2CR_IEN_OPCODE_1	I2CR_IEN
 
 #define I2C_PM_TIMEOUT		10 /* ms */
-
-struct pinmux_cfg {
-	void __iomem	*reg;
-	uint32_t	mask;
-	uint32_t	i2c_mode;
-	uint32_t	gpio_mode;
-};
-
-/* The SCFG, Supplemental Configuration Unit, provides SoC specific
- * configuration and status registers for the device. There is a
- * SDHC IO VSEL control register on SCFG for some platforms. It's
- * used to support SDHC IO voltage switching.
- */
-static const struct of_device_id scfg_device_ids[] = {
-	{
-		.compatible = "fsl,ls1012a-scfg",
-	},
-	{
-		.compatible = "fsl,ls1046a-scfg",
-	},
-	{}
-};
 
 /*
  * sorted list of clock divider, register value pairs
@@ -235,11 +211,6 @@ struct imx_i2c_struct {
 	unsigned int		bitrate;
 	const struct imx_i2c_hwdata	*hwdata;
 	struct i2c_bus_recovery_info rinfo;
-
-	struct pinctrl *pinctrl;
-	struct pinctrl_state *pinctrl_pins_default;
-	struct pinctrl_state *pinctrl_pins_gpio;
-	struct pinmux_cfg	*pinmux_cfg;
 
 	struct imx_i2c_dma	*dma;
 
@@ -829,6 +800,11 @@ static irqreturn_t i2c_imx_slave_handle(struct imx_i2c_struct *i2c_imx,
 		ctl &= ~I2CR_MTX;
 		imx_i2c_write_reg(ctl, i2c_imx, IMX_I2C_I2CR);
 		imx_i2c_read_reg(i2c_imx, IMX_I2C_I2DR);
+
+		/* flag the last byte as processed */
+		i2c_imx_slave_event(i2c_imx,
+				    I2C_SLAVE_READ_PROCESSED, &value);
+
 		i2c_imx_slave_finish_op(i2c_imx);
 		return IRQ_HANDLED;
 	}
@@ -1157,7 +1133,8 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs,
 	int i, result;
 	unsigned int temp;
 	int block_data = msgs->flags & I2C_M_RECV_LEN;
-	int use_dma = i2c_imx->dma && msgs->len >= DMA_THRESHOLD && !block_data;
+	int use_dma = i2c_imx->dma && msgs->flags & I2C_M_DMA_SAFE &&
+		msgs->len >= DMA_THRESHOLD && !block_data;
 
 	dev_dbg(&i2c_imx->adapter.dev,
 		"<%s> write slave address: addr=0x%x\n",
@@ -1323,7 +1300,8 @@ static int i2c_imx_xfer_common(struct i2c_adapter *adapter,
 			result = i2c_imx_read(i2c_imx, &msgs[i], is_lastmsg, atomic);
 		} else {
 			if (!atomic &&
-			    i2c_imx->dma && msgs[i].len >= DMA_THRESHOLD)
+			    i2c_imx->dma && msgs[i].len >= DMA_THRESHOLD &&
+				msgs[i].flags & I2C_M_DMA_SAFE)
 				result = i2c_imx_dma_write(i2c_imx, &msgs[i]);
 			else
 				result = i2c_imx_write(i2c_imx, &msgs[i], atomic);
@@ -1381,126 +1359,6 @@ static int i2c_imx_xfer_atomic(struct i2c_adapter *adapter,
 	return result;
 }
 
-static void i2c_imx_prepare_recovery(struct i2c_adapter *adap)
-{
-	struct imx_i2c_struct *i2c_imx;
-
-	i2c_imx = container_of(adap, struct imx_i2c_struct, adapter);
-
-	pinctrl_select_state(i2c_imx->pinctrl, i2c_imx->pinctrl_pins_gpio);
-}
-
-static void i2c_imx_unprepare_recovery(struct i2c_adapter *adap)
-{
-	struct imx_i2c_struct *i2c_imx;
-
-	i2c_imx = container_of(adap, struct imx_i2c_struct, adapter);
-
-	pinctrl_select_state(i2c_imx->pinctrl, i2c_imx->pinctrl_pins_default);
-}
-
-static void i2c_imx_prepare_recovery_layerscape(struct i2c_adapter *adap)
-{
-	struct imx_i2c_struct *i2c_imx =
-		container_of(adap, struct imx_i2c_struct, adapter);
-	struct pinmux_cfg *pmux_cfg = i2c_imx->pinmux_cfg;
-	uint32_t val;
-
-	/* Change pins to GPIO-mode */
-	val = ioread32be(pmux_cfg->reg);
-	val &= ~pmux_cfg->mask;
-	val |= pmux_cfg->gpio_mode;
-	iowrite32be(val, pmux_cfg->reg);
-}
-
-static void i2c_imx_unprepare_recovery_layerscape(struct i2c_adapter *adap)
-{
-	struct imx_i2c_struct *i2c_imx =
-		container_of(adap, struct imx_i2c_struct, adapter);
-	struct pinmux_cfg *pmux_cfg = i2c_imx->pinmux_cfg;
-	uint32_t val;
-
-	/* Change pins to I2C-mode */
-	val = ioread32be(pmux_cfg->reg);
-	val &= ~pmux_cfg->mask;
-	val |= pmux_cfg->i2c_mode;
-	iowrite32be(val, pmux_cfg->reg);
-}
-
-/*
- * Some Layerscape platforms don't have a pinctrl driver. Will manually handle
- * pin mode change on these.
- */
-static int i2c_imx_init_recovery_for_layerscape(struct imx_i2c_struct *i2c_imx,
-		struct platform_device *pdev, struct device_node *scfg_np)
-{
-	struct i2c_bus_recovery_info *rinfo = &i2c_imx->rinfo;
-	struct pinmux_cfg *pinmux_cfg;
-	struct device_node *np = pdev->dev.of_node;
-	void __iomem *scfg_base = NULL;
-	int ret;
-	uint32_t pmux_reg_offset;
-	uint32_t pmux_mode_cfg[3];
-
-	scfg_base = of_iomap(scfg_np, 0);
-	if (!scfg_base) {
-		dev_err(&pdev->dev, "failed to map scfg\n");
-		return -ENOMEM;
-	}
-	of_node_put(scfg_np);
-
-	rinfo->sda_gpiod =
-		devm_gpiod_get(&pdev->dev, "sda", GPIOD_OUT_HIGH_OPEN_DRAIN);
-	rinfo->scl_gpiod =
-		devm_gpiod_get(&pdev->dev, "scl", GPIOD_OUT_HIGH_OPEN_DRAIN);
-
-	if (PTR_ERR(rinfo->sda_gpiod) == -EPROBE_DEFER ||
-	    PTR_ERR(rinfo->scl_gpiod) == -EPROBE_DEFER) {
-		return -EPROBE_DEFER;
-	} else if (IS_ERR(rinfo->sda_gpiod) || IS_ERR(rinfo->scl_gpiod)) {
-		dev_dbg(&pdev->dev, "recovery GPIO information incomplete\n");
-		return 0;
-	}
-
-	/* Read SCFG PMUX register offset */
-	ret = of_property_read_u32(np, "pmux-reg-offset", &pmux_reg_offset);
-	if (ret < 0) {
-		dev_dbg(&pdev->dev, "failed to read pmux register offset\n");
-		return 0;
-	}
-
-	/*
-	 * Read PMUX register mode bits configuration:
-	 *  <mask i2c_mode gpio_mode>
-	 */
-	ret = of_property_read_u32_array(np, "pmux-mode-cfg", pmux_mode_cfg,
-					 ARRAY_SIZE(pmux_mode_cfg));
-	if (ret < 0) {
-		dev_dbg(&pdev->dev, "failed to read pmux mode config\n");
-		return 0;
-	}
-
-	pinmux_cfg = devm_kzalloc(&pdev->dev, sizeof(*pinmux_cfg), GFP_KERNEL);
-	if (!pinmux_cfg)
-		return -ENOMEM;
-
-	i2c_imx->pinmux_cfg = pinmux_cfg;
-
-	pinmux_cfg->reg = scfg_base + pmux_reg_offset;
-	pinmux_cfg->mask = pmux_mode_cfg[0];
-	pinmux_cfg->i2c_mode = pmux_mode_cfg[1];
-	pinmux_cfg->gpio_mode = pmux_mode_cfg[2];
-
-	dev_dbg(&pdev->dev, "using scl,sda for recovery\n");
-
-	rinfo->prepare_recovery = i2c_imx_prepare_recovery_layerscape;
-	rinfo->unprepare_recovery = i2c_imx_unprepare_recovery_layerscape;
-	rinfo->recover_bus = i2c_generic_scl_recovery;
-	i2c_imx->adapter.bus_recovery_info = rinfo;
-
-	return 0;
-}
-
 /*
  * We switch SCL and SDA to their GPIO function and do some bitbanging
  * for bus recovery. These alternative pinmux settings can be
@@ -1511,46 +1369,13 @@ static int i2c_imx_init_recovery_for_layerscape(struct imx_i2c_struct *i2c_imx,
 static int i2c_imx_init_recovery_info(struct imx_i2c_struct *i2c_imx,
 		struct platform_device *pdev)
 {
-	struct i2c_bus_recovery_info *rinfo = &i2c_imx->rinfo;
+	struct i2c_bus_recovery_info *bri = &i2c_imx->rinfo;
 
-	i2c_imx->pinctrl = devm_pinctrl_get(&pdev->dev);
-	if (!i2c_imx->pinctrl || IS_ERR(i2c_imx->pinctrl)) {
-		struct device_node *np;
+	bri->pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(bri->pinctrl))
+		return PTR_ERR(bri->pinctrl);
 
-		np = of_find_matching_node(NULL, scfg_device_ids);
-		if (np)
-			return i2c_imx_init_recovery_for_layerscape(i2c_imx,
-								    pdev, np);
-		dev_info(&pdev->dev,
-			 "can't get pinctrl, bus recovery not supported\n");
-		return PTR_ERR(i2c_imx->pinctrl);
-	}
-
-	i2c_imx->pinctrl_pins_default = pinctrl_lookup_state(i2c_imx->pinctrl,
-			PINCTRL_STATE_DEFAULT);
-	i2c_imx->pinctrl_pins_gpio = pinctrl_lookup_state(i2c_imx->pinctrl,
-			"gpio");
-	rinfo->sda_gpiod = devm_gpiod_get(&pdev->dev, "sda", GPIOD_OUT_HIGH_OPEN_DRAIN);
-	rinfo->scl_gpiod = devm_gpiod_get(&pdev->dev, "scl", GPIOD_OUT_HIGH_OPEN_DRAIN);
-
-	if (PTR_ERR(rinfo->sda_gpiod) == -EPROBE_DEFER ||
-	    PTR_ERR(rinfo->scl_gpiod) == -EPROBE_DEFER) {
-		return -EPROBE_DEFER;
-	} else if (IS_ERR(rinfo->sda_gpiod) ||
-		   IS_ERR(rinfo->scl_gpiod) ||
-		   IS_ERR(i2c_imx->pinctrl_pins_default) ||
-		   IS_ERR(i2c_imx->pinctrl_pins_gpio)) {
-		dev_dbg(&pdev->dev, "recovery information incomplete\n");
-		return 0;
-	}
-
-	dev_dbg(&pdev->dev, "using scl%s for recovery\n",
-		rinfo->sda_gpiod ? ",sda" : "");
-
-	rinfo->prepare_recovery = i2c_imx_prepare_recovery;
-	rinfo->unprepare_recovery = i2c_imx_unprepare_recovery;
-	rinfo->recover_bus = i2c_generic_scl_recovery;
-	i2c_imx->adapter.bus_recovery_info = rinfo;
+	i2c_imx->adapter.bus_recovery_info = bri;
 
 	return 0;
 }
@@ -1583,8 +1408,7 @@ static int i2c_imx_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&pdev->dev, res);
+	base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
@@ -1615,16 +1439,10 @@ static int i2c_imx_probe(struct platform_device *pdev)
 	ACPI_COMPANION_SET(&i2c_imx->adapter.dev, ACPI_COMPANION(&pdev->dev));
 
 	/* Get I2C clock */
-	i2c_imx->clk = devm_clk_get(&pdev->dev, NULL);
+	i2c_imx->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(i2c_imx->clk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(i2c_imx->clk),
 				     "can't get I2C clock\n");
-
-	ret = clk_prepare_enable(i2c_imx->clk);
-	if (ret) {
-		dev_err(&pdev->dev, "can't enable I2C clock, ret=%d\n", ret);
-		return ret;
-	}
 
 	/* Init queue */
 	init_waitqueue_head(&i2c_imx->queue);
@@ -1645,8 +1463,7 @@ static int i2c_imx_probe(struct platform_device *pdev)
 		goto rpm_disable;
 
 	/* Request IRQ */
-	ret = request_threaded_irq(irq, i2c_imx_isr, NULL, IRQF_SHARED,
-				   pdev->name, i2c_imx);
+	ret = request_irq(irq, i2c_imx_isr, IRQF_SHARED, pdev->name, i2c_imx);
 	if (ret) {
 		dev_err(&pdev->dev, "can't claim irq %d\n", irq);
 		goto rpm_disable;
@@ -1697,18 +1514,15 @@ rpm_disable:
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
-	clk_disable_unprepare(i2c_imx->clk);
 	return ret;
 }
 
-static int i2c_imx_remove(struct platform_device *pdev)
+static void i2c_imx_remove(struct platform_device *pdev)
 {
 	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
 	int irq, ret;
 
-	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret < 0)
-		return ret;
+	ret = pm_runtime_get_sync(&pdev->dev);
 
 	hrtimer_cancel(&i2c_imx->slave_timer);
 
@@ -1719,22 +1533,21 @@ static int i2c_imx_remove(struct platform_device *pdev)
 	if (i2c_imx->dma)
 		i2c_imx_dma_free(i2c_imx);
 
-	/* setup chip registers to defaults */
-	imx_i2c_write_reg(0, i2c_imx, IMX_I2C_IADR);
-	imx_i2c_write_reg(0, i2c_imx, IMX_I2C_IFDR);
-	imx_i2c_write_reg(0, i2c_imx, IMX_I2C_I2CR);
-	imx_i2c_write_reg(0, i2c_imx, IMX_I2C_I2SR);
+	if (ret >= 0) {
+		/* setup chip registers to defaults */
+		imx_i2c_write_reg(0, i2c_imx, IMX_I2C_IADR);
+		imx_i2c_write_reg(0, i2c_imx, IMX_I2C_IFDR);
+		imx_i2c_write_reg(0, i2c_imx, IMX_I2C_I2CR);
+		imx_i2c_write_reg(0, i2c_imx, IMX_I2C_I2SR);
+	}
 
 	clk_notifier_unregister(i2c_imx->clk, &i2c_imx->clk_change_nb);
 	irq = platform_get_irq(pdev, 0);
 	if (irq >= 0)
 		free_irq(irq, i2c_imx);
-	clk_disable_unprepare(i2c_imx->clk);
 
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	return 0;
 }
 
 static int __maybe_unused i2c_imx_runtime_suspend(struct device *dev)
@@ -1765,7 +1578,7 @@ static const struct dev_pm_ops i2c_imx_pm_ops = {
 
 static struct platform_driver i2c_imx_driver = {
 	.probe = i2c_imx_probe,
-	.remove = i2c_imx_remove,
+	.remove_new = i2c_imx_remove,
 	.driver = {
 		.name = DRIVER_NAME,
 		.pm = &i2c_imx_pm_ops,

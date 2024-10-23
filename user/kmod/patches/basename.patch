@@ -1,0 +1,81 @@
+
+basename() requires <libgen.h>
+Also, basename() modifies its argument, so replace
+some uses with a strrchr()-based equivalent.
+
+Index: kmod-32/libkmod/libkmod-config.c
+===================================================================
+--- kmod-32.orig/libkmod/libkmod-config.c
++++ kmod-32/libkmod/libkmod-config.c
+@@ -794,7 +794,10 @@ static int conf_files_insert_sorted(stru
+ 	bool is_single = false;
+ 
+ 	if (name == NULL) {
+-		name = basename(path);
++		const char *slash = strrchr(path, '/');
++		name = slash ? slash + 1 : path;
++		if (!*name)
++			return -EINVAL;
+ 		is_single = true;
+ 	}
+ 
+Index: kmod-32/shared/util.c
+===================================================================
+--- kmod-32.orig/shared/util.c
++++ kmod-32/shared/util.c
+@@ -172,9 +172,9 @@ char *modname_normalize(const char *modn
+ 
+ char *path_to_modname(const char *path, char buf[static PATH_MAX], size_t *len)
+ {
+-	char *modname;
++	const char *slash = strrchr(path, '/');
++	const char *modname = slash ? slash + 1 : path;
+ 
+-	modname = basename(path);
+ 	if (modname == NULL || modname[0] == '\0')
+ 		return NULL;
+ 
+Index: kmod-32/testsuite/testsuite.c
+===================================================================
+--- kmod-32.orig/testsuite/testsuite.c
++++ kmod-32/testsuite/testsuite.c
+@@ -70,7 +70,7 @@ static void help(void)
+ 
+ 	printf("Usage:\n"
+ 	       "\t%s [options] <test>\n"
+-	       "Options:\n", basename(progname));
++	       "Options:\n", progname);
+ 
+ 	for (itr = options, itr_short = options_short;
+ 				itr->name != NULL; itr++, itr_short++)
+Index: kmod-32/tools/depmod.c
+===================================================================
+--- kmod-32.orig/tools/depmod.c
++++ kmod-32/tools/depmod.c
+@@ -762,9 +762,12 @@ static int cfg_files_insert_sorted(struc
+ 	if (name != NULL)
+ 		namelen = strlen(name);
+ 	else {
+-		name = basename(dir);
++		const char *slash = strrchr(dir, '/');
++		name = slash ? slash + 1 : dir;
++		if (!*name)
++			return -EINVAL;
+ 		namelen = strlen(name);
+-		dirlen -= namelen + 1;
++		dirlen -= slash ? namelen + 1 : namelen;
+ 	}
+ 
+ 	n_files = *p_n_files;
+Index: kmod-32/tools/kmod.c
+===================================================================
+--- kmod-32.orig/tools/kmod.c
++++ kmod-32/tools/kmod.c
+@@ -19,6 +19,7 @@
+ 
+ #include <errno.h>
+ #include <getopt.h>
++#include <libgen.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>

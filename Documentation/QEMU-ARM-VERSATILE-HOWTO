@@ -17,7 +17,7 @@ versatile board, and it will boot up the the usual Linux shell prompt.
 
 If you want to boot up with a serial console then do:
 
-  qemu-system-arm -M versatilepb -nographic -kernel images/zImage -initrd images/rootfs.bin -dtb linux/arch/arm/boot/dts/versatile-pb.dtb -append "root=/dev/ram0 console=ttyAMA0,115200"
+  qemu-system-arm -M versatilepb -nographic -kernel images/zImage -initrd images/rootfs.bin -dtb linux/arch/arm/boot/dts/arm/versatile-pb.dtb -append "root=/dev/ram0 console=ttyAMA0,115200"
 
 The serial console output with come out on the same device that run on.
 
@@ -29,7 +29,7 @@ You can run in no-MMU mode on the Versatile board too. It is basically the
 same as running the normal VM kernel. Build for the ARM/Versatile-PB-noMMU
 target.
 
-  qemu-system-arm -M versatilepb -nographic -kernel images/zImage -dtb linux/arch/arm/boot/dts/versatile-pb.dtb -append "console=ttyAMA0,115200"
+  qemu-system-arm -M versatilepb -nographic -kernel images/zImage -dtb linux/arch/arm/boot/dts/arm/versatile-pb.dtb -append "console=ttyAMA0,115200"
 
 The serial console output will come out on the same terminal device that
 you ran qemu from.

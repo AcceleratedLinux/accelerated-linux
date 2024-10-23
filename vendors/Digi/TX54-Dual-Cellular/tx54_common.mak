@@ -19,6 +19,8 @@ IMAGESIZE	= 73900032 # 70.4 MB
 
 SIGNING_ALG = ecdsa
 
+
+
 VENDOR_ROMFS_DIR = $(ROOTDIR)/vendors/AcceleratedConcepts
 ROMFS_DIRS = $(DEFAULT_ROMFS_DIRS)
 ROMFS_DIRS += etc etc/config home proc sys tmp usr/var var opt
@@ -57,7 +59,7 @@ romfs.common: romfs_dev romfs.dirs romfs.default romfs.rc romfs.version romfs.cr
 	$(ROMFSINST) -s /var/run /run
 	$(ROMFSINST) -s /var/run/syslog.conf -e CONFIG_USER_SYSKLOGD /etc/syslog.conf
 	$(ROMFSINST) -d $(THIS_DIR)/console /etc/inittab.d/console
-	$(ROMFSINST) -d -p 755 $(THIS_DIR)/pwrbtn.sh /etc/acpi/events/PWRF/00000080
+	$(ROMFSINST) -d -p 755 $(THIS_DIR)/pwrbtn.sh /etc/acpi/PWRF/00000080
 	$(ROMFSINST) -d -p 555 $(THIS_DIR)/fwenv_fixup.sh /sbin/fwenv_fixup.sh
 	$(ROMFSINST) -d $(THIS_DIR)/blacklist-hwcrypto.conf /etc/modprobe.d/blacklist-hwcrypto.conf
 	$(ROMFSINST) -d -p 755 $(THIS_DIR)/set_temp_pwr_off_delay /bin/set_temp_pwr_off_delay
@@ -66,7 +68,7 @@ romfs.post:: romfs.cleanup
 
 lzma: Makefile
 	make -C $(ROOTDIR)/user/lzma clean
-	make -C $(ROOTDIR)/user/lzma CC="$(HOSTCC)"
+	unset CFLAGS ; make -C $(ROOTDIR)/user/lzma CC="$(HOSTCC)"
 	cp  $(ROOTDIR)/user/lzma/build/C/Util/Lzma/lzma .
 	make -C $(ROOTDIR)/user/lzma clean
 

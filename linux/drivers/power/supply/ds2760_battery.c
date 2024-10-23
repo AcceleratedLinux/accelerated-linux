@@ -227,20 +227,12 @@ static int rated_capacities[] = {
 	920,	/* NEC */
 	1440,	/* Samsung */
 	1440,	/* BYD */
-#ifdef CONFIG_MACH_H4700
-	1800,	/* HP iPAQ hx4700 3.7V 1800mAh (359113-001) */
-#else
 	1440,	/* Lishen */
-#endif
 	1440,	/* NEC */
 	2880,	/* Samsung */
 	2880,	/* BYD */
 	2880,	/* Lishen */
 	2880,	/* NEC */
-#ifdef CONFIG_MACH_H4700
-	0,
-	3600,	/* HP iPAQ hx4700 3.7V 3600mAh (359114-001) */
-#endif
 };
 
 /* array is level at temps 0°C, 10°C, 20°C, 30°C, 40°C
@@ -747,7 +739,7 @@ static int w1_ds2760_add_slave(struct w1_slave *sl)
 	if (current_accum)
 		ds2760_battery_set_current_accum(di, current_accum);
 
-	di->bat = power_supply_register(dev, &di->bat_desc, &psy_cfg);
+	di->bat = devm_power_supply_register(dev, &di->bat_desc, &psy_cfg);
 	if (IS_ERR(di->bat)) {
 		dev_err(di->dev, "failed to register battery\n");
 		retval = PTR_ERR(di->bat);
@@ -770,7 +762,6 @@ static int w1_ds2760_add_slave(struct w1_slave *sl)
 	goto success;
 
 workqueue_failed:
-	power_supply_unregister(di->bat);
 batt_failed:
 di_alloc_failed:
 success:
@@ -785,7 +776,6 @@ static void w1_ds2760_remove_slave(struct w1_slave *sl)
 	cancel_delayed_work_sync(&di->monitor_work);
 	cancel_delayed_work_sync(&di->set_charged_work);
 	destroy_workqueue(di->monitor_wqueue);
-	power_supply_unregister(di->bat);
 }
 
 #ifdef CONFIG_OF

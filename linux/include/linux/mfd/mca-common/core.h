@@ -13,6 +13,8 @@
 #include <linux/interrupt.h>
 #include <linux/mfd/mca-common/registers.h>
 #include <linux/gpio.h>
+#include <linux/gpio/driver.h>
+#include <linux/platform_device.h>
 
 #define MCA_MAKE_FW_VER(a,b)		(u16)(((a) << 8) | ((b) & 0xff))
 #define MCA_FW_VER_MAJOR(v)		(((v) >> 8) & 0xff)

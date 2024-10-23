@@ -34,6 +34,9 @@
 static DEFINE_MUTEX(device_ctls_mutex);
 static LIST_HEAD(edac_device_list);
 
+/* Default workqueue processing interval on this instance, in msecs */
+#define DEFAULT_POLL_INTERVAL 1000
+
 #ifdef CONFIG_EDAC_DEBUG
 static void edac_device_dump_device(struct edac_device_ctl_info *edac_dev)
 {
@@ -53,14 +56,12 @@ static void edac_device_dump_device(struct edac_device_ctl_info *edac_dev)
 struct edac_device_ctl_info *
 edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instances,
 			   char *blk_name, unsigned nr_blocks, unsigned off_val,
-			   struct edac_dev_sysfs_block_attribute *attrib_spec,
-			   unsigned nr_attrib, int device_index)
+			   int device_index)
 {
-	struct edac_dev_sysfs_block_attribute *dev_attrib, *attrib_p, *attrib;
 	struct edac_device_block *dev_blk, *blk_p, *blk;
 	struct edac_device_instance *dev_inst, *inst;
 	struct edac_device_ctl_info *dev_ctl;
-	unsigned instance, block, attr;
+	unsigned instance, block;
 	void *pvt;
 	int err;
 
@@ -81,15 +82,6 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 		goto free;
 
 	dev_ctl->blocks = dev_blk;
-
-	if (nr_attrib) {
-		dev_attrib = kcalloc(nr_attrib, sizeof(struct edac_dev_sysfs_block_attribute),
-				     GFP_KERNEL);
-		if (!dev_attrib)
-			goto free;
-
-		dev_ctl->attribs = dev_attrib;
-	}
 
 	if (pvt_sz) {
 		pvt = kzalloc(pvt_sz, GFP_KERNEL);
@@ -129,44 +121,6 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 
 			edac_dbg(4, "instance=%d inst_p=%p block=#%d block_p=%p name='%s'\n",
 				 instance, inst, block, blk, blk->name);
-
-			/* if there are NO attributes OR no attribute pointer
-			 * then continue on to next block iteration
-			 */
-			if ((nr_attrib == 0) || (attrib_spec == NULL))
-				continue;
-
-			/* setup the attribute array for this block */
-			blk->nr_attribs = nr_attrib;
-			attrib_p = &dev_attrib[block*nr_instances*nr_attrib];
-			blk->block_attributes = attrib_p;
-
-			edac_dbg(4, "THIS BLOCK_ATTRIB=%p\n",
-				 blk->block_attributes);
-
-			/* Initialize every user specified attribute in this
-			 * block with the data the caller passed in
-			 * Each block gets its own copy of pointers,
-			 * and its unique 'value'
-			 */
-			for (attr = 0; attr < nr_attrib; attr++) {
-				attrib = &attrib_p[attr];
-
-				/* populate the unique per attrib
-				 * with the code pointers and info
-				 */
-				attrib->attr = attrib_spec[attr].attr;
-				attrib->show = attrib_spec[attr].show;
-				attrib->store = attrib_spec[attr].store;
-
-				attrib->block = blk;	/* up link */
-
-				edac_dbg(4, "alloc-attrib=%p attrib_name='%s' attrib-spec=%p spec-name=%s\n",
-					 attrib, attrib->attr.name,
-					 &attrib_spec[attr],
-					 attrib_spec[attr].attr.name
-					);
-			}
 		}
 	}
 
@@ -336,7 +290,7 @@ static void edac_device_workq_function(struct work_struct *work_req)
 	 * whole one second to save timers firing all over the period
 	 * between integral seconds
 	 */
-	if (edac_dev->poll_msec == 1000)
+	if (edac_dev->poll_msec == DEFAULT_POLL_INTERVAL)
 		edac_queue_work(&edac_dev->work, round_jiffies_relative(edac_dev->delay));
 	else
 		edac_queue_work(&edac_dev->work, edac_dev->delay);
@@ -366,7 +320,7 @@ static void edac_device_workq_setup(struct edac_device_ctl_info *edac_dev,
 	 * timers firing on sub-second basis, while they are happy
 	 * to fire together on the 1 second exactly
 	 */
-	if (edac_dev->poll_msec == 1000)
+	if (edac_dev->poll_msec == DEFAULT_POLL_INTERVAL)
 		edac_queue_work(&edac_dev->work, round_jiffies_relative(edac_dev->delay));
 	else
 		edac_queue_work(&edac_dev->work, edac_dev->delay);
@@ -394,17 +348,16 @@ static void edac_device_workq_teardown(struct edac_device_ctl_info *edac_dev)
  *	Then restart the workq on the new delay
  */
 void edac_device_reset_delay_period(struct edac_device_ctl_info *edac_dev,
-					unsigned long value)
+				    unsigned long msec)
 {
-	unsigned long jiffs = msecs_to_jiffies(value);
+	edac_dev->poll_msec = msec;
+	edac_dev->delay	    = msecs_to_jiffies(msec);
 
-	if (value == 1000)
-		jiffs = round_jiffies_relative(value);
-
-	edac_dev->poll_msec = value;
-	edac_dev->delay	    = jiffs;
-
-	edac_mod_work(&edac_dev->work, jiffs);
+	/* See comment in edac_device_workq_setup() above */
+	if (edac_dev->poll_msec == DEFAULT_POLL_INTERVAL)
+		edac_mod_work(&edac_dev->work, round_jiffies_relative(edac_dev->delay));
+	else
+		edac_mod_work(&edac_dev->work, edac_dev->delay);
 }
 
 int edac_device_alloc_index(void)
@@ -443,11 +396,7 @@ int edac_device_add_device(struct edac_device_ctl_info *edac_dev)
 		/* This instance is NOW RUNNING */
 		edac_dev->op_state = OP_RUNNING_POLL;
 
-		/*
-		 * enable workq processing on this instance,
-		 * default = 1000 msec
-		 */
-		edac_device_workq_setup(edac_dev, 1000);
+		edac_device_workq_setup(edac_dev, edac_dev->poll_msec ?: DEFAULT_POLL_INTERVAL);
 	} else {
 		edac_dev->op_state = OP_RUNNING_INTERRUPT;
 	}

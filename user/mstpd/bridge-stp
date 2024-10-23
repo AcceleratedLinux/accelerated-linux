@@ -1,0 +1,47 @@
+#!/bin/sh
+#
+# `/sbin/bridge-stp <bridge> <start|stop>` is called by the kernel when STP is
+# enabled/disabled on a bridge (via `brctl stp <bridge> <on|off>` or
+# `ip link set <bridge> type bridge stp_state <0|1>`).  The kernel
+# enables user_stp mode if that command returns 0, or enables kernel_stp mode if
+# that command returns any other value.
+#
+# This script is not intended to be called with the above arguments directly
+# (not via the kernel).
+#
+# To avoid kernel deadlocks, this script (and any foreground processes it runs)
+# must not make any changes (using brctl, ifconfig, ip, /sys/..., etc) to the
+# bridge or any associated kernel network interfaces in any code paths that are
+# used when this script is called by the kernel.
+
+# Parse arguments.
+CalledAs="$(basename "$0")"
+if [ $# -eq 2 ] && [ "$2" = 'start' ]; then
+    action='start'
+    br_n="$1"
+elif [ $# -eq 2 ] && [ "$2" = 'stop' ]; then
+    action='stop'
+    br_n="$1"
+else
+    echo "Usage: $0 <bridge> {start|stop}" >&2
+    exit 1
+fi
+
+export PATH='/sbin:/usr/sbin:/bin:/usr/bin'
+
+logger -t mstpd "$0 $br_n $action"
+action $action rstp
+
+[ "$action" = "stop" ] && exit 0
+
+ERR=1
+BRIDGES=$(runt get system.mstpd.bridges)
+for bridge in $BRIDGES; do
+	if [ "$bridge" = "$br_n" ]; then
+		ERR=0
+	fi
+done
+
+[ -z "$(pidof mstpd)" ] && ERR=1
+
+exit $ERR

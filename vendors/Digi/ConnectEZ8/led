@@ -9,6 +9,25 @@
 #exec 2>> /tmp/led.log
 #set -x
 
+fan_update()
+{
+	TEMP_HIGH_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_max_alarm)
+	TEMP_CRIT_ALARM=$(cat /sys/class/hwmon/hwmon0/temp2_crit_alarm)
+	runt set system.chassis.temp_high_alarm "$TEMP_HIGH_ALARM"
+	runt set system.chassis.temp_crit_alarm "$TEMP_CRIT_ALARM"
+
+	runt set system.chassis.fan1 "present"
+	RPM=$(cat /sys/class/hwmon/hwmon0/fan1_input)
+	FAN_ALARM=$(cat /sys/class/hwmon/hwmon0/fan1_alarm)
+	runt set system.chassis.fan1_rpm "$RPM"
+	runt set system.chassis.fan1_alarm "$FAN_ALARM"
+
+	if [ "$RPM" -le "1000" ]; then
+		# If the fan isn't spinning fast enough, then set an artificial "alarm"
+		runt set system.chassis.fan1_alarm "1"
+	fi
+}
+
 wwan_led_update()
 {
 	WWAN_SERV="-O wanserg -O wanserr"
@@ -28,8 +47,8 @@ wwan_led_update()
 			WWAN_SERV="-f wanserg -O wanserr"
 			WWAN_SIG="-f wansigg -O wansigr"
 		else
-			idx="$(modem name=modem idx || modem idx)" 2>/dev/null
-			if [ -z "$idx" ]; then
+			modem_name="$(modem name)" 2>/dev/null
+			if [ -z "$modem_name" ]; then
 				if sim -m 2>/dev/null | grep -qw yes; then
 					# Slow flash SERV while waiting for modem to appear
 					WWAN_SERV="-f wanserg -O wanserr"
@@ -40,7 +59,7 @@ wwan_led_update()
 					WWAN_SIG="-O wansigg -O wansigr"
 				fi
 			else
-				case "$(runt get mm.modem.$idx.status.bars)" in
+				case "$(runt get mm.modem.$modem_name.status.bars)" in
 				5)   WWAN_SIG="-o wansigg -O wansigr" ;;
 				4|3) WWAN_SIG="-F wansigg -O wansigr" ;;
 				2|1) WWAN_SIG="-f wansigg -O wansigr" ;;
@@ -48,9 +67,9 @@ wwan_led_update()
 				*)   WWAN_SIG="-O wansigg -O wansigr" ;;
 				esac
 
-				if [ "$(runt get mm.modem.$idx.status.state)" = connected ]; then
+				if [ "$(runt get mm.modem.$modem_name.status.state)" = connected ]; then
 					WWAN_SERV="-o wanserg -O wanserr"
-				elif [ -z "$(runt get mm.modem.$idx.modem.imsi)" ]; then
+				elif [ -z "$(runt get mm.modem.$modem_name.modem.imsi)" ]; then
 					# No SIM present
 					WWAN_SERV="-O wanserg -o wanserr"
 				else
@@ -171,6 +190,7 @@ reload)
 	findme_update
 	wwan_led_update
 	wifi_led_update
+	fan_update
 	ledcmd $WWAN_SERV $WWAN_SIG $FINDME $WIFI_SERV
 	;;
 *)

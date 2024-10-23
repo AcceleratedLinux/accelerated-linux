@@ -2,19 +2,13 @@
 #define __PERF_MMAP_H 1
 
 #include <internal/mmap.h>
-#include <linux/compiler.h>
-#include <linux/refcount.h>
 #include <linux/types.h>
-#include <linux/ring_buffer.h>
 #include <linux/bitops.h>
 #include <perf/cpumap.h>
-#include <stdbool.h>
-#include <pthread.h> // for cpu_set_t
 #ifdef HAVE_AIO_SUPPORT
 #include <aio.h>
 #endif
 #include "auxtrace.h"
-#include "event.h"
 #include "util/compress.h"
 
 struct aiocb;
@@ -45,7 +39,6 @@ struct mmap {
 #endif
 	struct mmap_cpu_mask	affinity_mask;
 	void		*data;
-	int		comp_level;
 	struct perf_data_file *file;
 	struct zstd_data      zstd_data;
 };

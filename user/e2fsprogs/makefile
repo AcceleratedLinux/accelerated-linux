@@ -1,4 +1,4 @@
-E2FSPROGS_VERSION = 1.45.5
+E2FSPROGS_VERSION = 1.47.0
 URL = https://sourceforge.net/projects/e2fsprogs/files/e2fsprogs/v$(E2FSPROGS_VERSION)/e2fsprogs-$(E2FSPROGS_VERSION).tar.gz
 
 CONFOPTS += --disable-defrag
@@ -10,6 +10,8 @@ endif
 ifdef CONFIG_USER_UTIL_LINUX_LIBUUID
 CONFOPTS += --disable-libuuid
 endif
+
+CFLAGS += -D_FILE_OFFSET_BITS=64
 
 AUTOMAKE_ROMFS = e2fsprogs_romfs
 

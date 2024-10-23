@@ -274,6 +274,7 @@ typedef long long		squashfs_inode;
 #define LZMA_COMPRESSION	2
 #define LZO_COMPRESSION		3
 #define XZ_COMPRESSION		4
+#define XZ_AES_COMPRESSION	7
 
 struct squashfs_super_block {
 #ifdef CONFIG_SQUASHFS_CRAMFS_MAGIC

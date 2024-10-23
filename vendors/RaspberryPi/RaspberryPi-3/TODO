@@ -1,0 +1,4 @@
+TODO
+- usb ethernet dongle doesnt get detected when plugged into pi directly, must use hub.
+- wifi dongle
+- clang shouldnt use CPUFLAGS, failing with ANALYZE=1

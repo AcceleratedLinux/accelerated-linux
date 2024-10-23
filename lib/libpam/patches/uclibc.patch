@@ -1,0 +1,27 @@
+
+From: uClinux-dist-20060803
+
+Index: Linux-PAM-1.5.1/libpam/pam_modutil_getspnam.c
+===================================================================
+--- Linux-PAM-1.5.1.orig/libpam/pam_modutil_getspnam.c
++++ Linux-PAM-1.5.1/libpam/pam_modutil_getspnam.c
+@@ -121,7 +121,19 @@ pam_modutil_getspnam(pam_handle_t *pamh,
+      * getspnam(). So, we use the standard libc function.
+      */
+ 
++#ifdef __UCLIBC__
++
++    /* And uClibc doesn't even have this although it does have the thing
++     * definied in the .h files so configure "finds" it.
++     */
++
++    return NULL;
++
++#else
++
+     return getspnam(user);
+ 
++#endif /* def __UCLIBC__ */
++
+ #endif /* def HAVE_GETSPNAM_R */
+ }

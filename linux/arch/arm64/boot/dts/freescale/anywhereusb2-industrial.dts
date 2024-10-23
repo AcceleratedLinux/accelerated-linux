@@ -14,6 +14,7 @@
 #include "fsl-ls1012a.dtsi"
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
 #include "fsl-pstore-512MB.dtsi"
 
@@ -53,7 +54,7 @@
 		};
 	};
 
-	pfe: pfe@04000000 {
+	pfe: pfe@4000000 {
 		status = "okay";
 		compatible = "fsl,pfe";
 		reg =   <0x0 0x04000000 0x0 0xc00000>,	/* AXI 16M */
@@ -69,6 +70,15 @@
 		fsl,rcpm-wakeup = <&rcpm 0xf0000020>;
 		clocks = <&clockgen 4 0>;
 		clock-names = "pfe";
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&gpio0 24 GPIO_ACTIVE_LOW>;
+		};
 	};
 };
 
@@ -177,13 +187,8 @@
 };
 
 &i2c1 {
-	clock-frequency = <400000>;
+	clock-frequency = <100000>;
 	status = "okay";
-
-	scl-gpios = <&gpio0 13 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	sda-gpios = <&gpio0 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-	pmux-reg-offset = <0x430>;
-	pmux-mode-cfg = <0x8B000000 0x00000000 0x80000000>;
 
 	rng: atecc508a@60 {
 		compatible = "atsha204-i2c";
@@ -254,4 +259,11 @@
 			  "", "", "", "", "", "", "", "",
 			  "", "", "", "", "", "", "", "",
 			  "factory", "", "", "", "", "", "", "";
+};
+
+&gpio1 {
+	gpio-line-names = "", "", "", "", "", "", "", "developer_",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "",
+			  "", "", "", "", "", "", "", "";
 };

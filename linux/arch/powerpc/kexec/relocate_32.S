@@ -8,6 +8,7 @@
  * 		Author: Suzuki Poulose <suzuki@in.ibm.com>
  */
 
+#include <linux/objtool.h>
 #include <asm/reg.h>
 #include <asm/page.h>
 #include <asm/mmu.h>
@@ -25,14 +26,14 @@ relocate_new_kernel:
 	/* r4 = reboot_code_buffer */
 	/* r5 = start_address      */
 
-#ifdef CONFIG_FSL_BOOKE
+#ifdef CONFIG_PPC_85xx
 
 	mr	r29, r3
 	mr	r30, r4
 	mr	r31, r5
 
 #define ENTRY_MAPPING_KEXEC_SETUP
-#include <kernel/fsl_booke_entry_mapping.S>
+#include <kernel/85xx_entry_mapping.S>
 #undef ENTRY_MAPPING_KEXEC_SETUP
 
 	mr      r3, r29
@@ -349,6 +350,7 @@ write_utlb:
 	cmpwi	r10, PPC47x_TLB0_4K
 	bne	0f
 	li	r10, 0x1000			/* r10 = 4k */
+	ANNOTATE_INTRA_FUNCTION_CALL
 	bl	1f
 
 0:

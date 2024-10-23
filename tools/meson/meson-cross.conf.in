@@ -4,14 +4,14 @@ cpp = '@CXX@'
 ar = '@AR@'
 strip = '@STRIP@'
 nm = '@NM@'
-pkgconfig = '@PKGCONFIG@'
+pkg-config = '@PKGCONFIG@'
 cmake = '@CMAKE@'
 
 [built-in options]
-c_args = [@CFLAGS@]
-c_link_args = [@LDFLAGS@]
-cpp_args = [@CXXFLAGS@]
-cpp_link_args = [@LDFLAGS@]
+c_args = @CFLAGS@
+c_link_args = @LDFLAGS@
+cpp_args = @CXXFLAGS@
+cpp_link_args = @LDFLAGS@
 prefix = '/'
 wrap_mode = 'nodownload'
 

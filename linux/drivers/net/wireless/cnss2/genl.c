@@ -48,20 +48,6 @@ enum {
 
 #define CNSS_GENL_CMD_MAX (__CNSS_GENL_CMD_MAX - 1)
 
-static struct nla_policy cnss_genl_msg_policy[CNSS_GENL_ATTR_MAX + 1] = {
-	[CNSS_GENL_ATTR_MSG_TYPE] = { .type = NLA_U8 },
-	[CNSS_GENL_ATTR_MSG_FILE_NAME] = { .type = NLA_NUL_STRING,
-					   .len = CNSS_GENL_STR_LEN_MAX },
-	[CNSS_GENL_ATTR_MSG_TOTAL_SIZE] = { .type = NLA_U32 },
-	[CNSS_GENL_ATTR_MSG_SEG_ID] = { .type = NLA_U32 },
-	[CNSS_GENL_ATTR_MSG_END] = { .type = NLA_U8 },
-	[CNSS_GENL_ATTR_MSG_DATA_LEN] = { .type = NLA_U32 },
-	[CNSS_GENL_ATTR_MSG_DATA] = { .type = NLA_BINARY,
-				      .len = CNSS_GENL_DATA_LEN_MAX },
-	[CNSS_GENL_ATTR_MSG_INSTANCE_ID] = { .type = NLA_U32 },
-	[CNSS_GENL_ATTR_MSG_VALUE] = { .type = NLA_U32 },
-};
-
 static struct genl_ops cnss_genl_ops[] = {
 	{
 		.cmd = CNSS_GENL_CMD_MSG,
@@ -131,9 +117,9 @@ static int cnss_genl_send_data(u8 type, char *file_name, u32 total_size,
 		 type, file_name, total_size, seg_id, end, data_len);
 
 	if (!file_name)
-		strlcpy(filename, "default", sizeof(filename));
+		strscpy(filename, "default", sizeof(filename));
 	else
-		strlcpy(filename, file_name, sizeof(filename));
+		strscpy(filename, file_name, sizeof(filename));
 
 	skb = genlmsg_new(NLMSG_HDRLEN +
 			  nla_total_size(sizeof(type)) +

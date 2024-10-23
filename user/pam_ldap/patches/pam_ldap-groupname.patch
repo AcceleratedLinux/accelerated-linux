@@ -1,5 +1,5 @@
---- pam_ldap-185/pam_ldap.c.orig	2009-11-06 04:29:34.000000000 -0600
-+++ pam_ldap-185/pam_ldap.c	2020-04-06 21:24:31.816834333 -0500
+--- pam_ldap/pam_ldap.c.orig	2022-01-03 16:44:14.000000000 -0600
++++ pam_ldap/pam_ldap.c	2024-01-17 08:09:58.836048252 -0600
 @@ -175,6 +175,9 @@
    "Password Insufficient"
  };
@@ -10,19 +10,32 @@
  #ifdef __GNUC__
  #define DEBUG_MSG(level, fmt, args...)		\
  	do {					\
-@@ -557,6 +560,11 @@
-       free ((void *) (*info)->tmpluser);
-     }
+@@ -264,7 +267,8 @@
+ static char *_get_md5_salt (char saltbuf[16]);
+ static char *_get_salt (char salt[16]);
+ static int _escape_string (const char *str, char *buf, size_t buflen);
+-static int _get_user_info (pam_ldap_session_t * session, const char *user);
++static int _get_user_info (pam_handle_t * pamh, pam_ldap_session_t * session,
++						   const char *user);
+ static int _pam_ldap_get_session (pam_handle_t * pamh, const char *username,
+ 				  const char *configFile,
+ 				  pam_ldap_session_t ** psession);
+@@ -607,6 +611,14 @@
+   return;
+ }
  
-+  if ((*info)->group_list != NULL)
-+    {
-+      ldap_value_free ((*info)->group_list);
-+    }
++static void
++_cleanup_groupname (pam_handle_t * pamh, void *data, int error_status)
++{
++	ldap_value_free ((char **) data);
 +
-   free ((void *) (*info)->username);
-   free (*info);
- 
-@@ -2681,9 +2689,12 @@
++	return;
++}
++
+ static int
+ _alloc_config (pam_ldap_config_t ** presult)
+ {
+@@ -2681,11 +2693,14 @@
    "shadowMin",
    "shadowWarning",
    "uidNumber",
@@ -33,54 +46,48 @@
 +#define ATTRS_SIZE	(sizeof _pam_ldap_attrs/sizeof _pam_ldap_attrs[0])
 +
  static int
- _get_user_info (pam_ldap_session_t * session, const char *user)
+-_get_user_info (pam_ldap_session_t * session, const char *user)
++_get_user_info (pam_handle_t * pamh, pam_ldap_session_t * session, const char *user)
  {
-@@ -2860,6 +2871,13 @@
+   char filter[LDAP_FILT_MAXSIZ], escapedUser[LDAP_FILT_MAXSIZ];
+   int rc;
+@@ -2860,6 +2875,17 @@
    _get_long_integer_value (session->ld, msg, "shadowFlag",
  			   &session->info->shadow.flag);
  
 +  /* Get device group list */
 +  if (groupname != NULL)
 +    {
-+      _get_string_values (session->ld, msg, groupname,
-+			  &session->info->group_list);
++      char **group_list;
++      if (_get_string_values (session->ld, msg, groupname,
++			  &group_list) == PAM_SUCCESS)
++    {
++      pam_set_data(pamh, "DAL_GROUPNAME", group_list, _cleanup_groupname);
++    }
 +    }
 +
    ldap_msgfree (res);
  
    return PAM_SUCCESS;
-@@ -3404,6 +3422,30 @@
- 		      &resp, aconv->appdata_ptr);
- }
+@@ -3039,7 +3065,7 @@
  
-+/* Set device group list in environment */
-+static void
-+_set_group_list(pam_handle_t * pamh, char **group_list)
-+{
-+  if (group_list == NULL)
-+    return;
-+
-+  char buf[256] = "GROUPNAME=";
-+  char **p;
-+  int n = 10;
-+  for (p = group_list; *p; p++)
-+  {
-+    if (n + strlen(*p) + 1 < sizeof buf)
-+      n += snprintf (buf+n, (sizeof buf)-n, "%s,", *p);
-+    else
-+      syslog (LOG_WARNING, "group list too long: %s", *p);
-+  }
-+  
-+  if (n > 10)
-+    buf[n-1] = '\0';
-+
-+  pam_putenv(pamh, buf);
-+}
-+
- PAM_EXTERN int
- pam_sm_authenticate (pam_handle_t * pamh,
- 		     int flags, int argc, const char **argv)
-@@ -3432,6 +3473,13 @@
+   if (session->info == NULL)
+     {
+-      rc = _get_user_info (session, user);
++      rc = _get_user_info (pamh, session, user);
+       if (rc != PAM_SUCCESS)
+ 	return rc;
+     }
+@@ -3087,7 +3113,7 @@
+ 
+   if (session->info == NULL)
+     {
+-      rc = _get_user_info (session, user);
++      rc = _get_user_info (pamh, session, user);
+       if (rc != PAM_SUCCESS)
+ 	{
+ 	  return rc;
+@@ -3432,6 +3458,13 @@
  	;
        else if (!strcmp (argv[i], "debug"))
  	;
@@ -94,35 +101,47 @@
        else
  	syslog (LOG_ERR, "illegal option %s", argv[i]);
      }
-@@ -3470,6 +3518,10 @@
+@@ -3470,6 +3503,7 @@
                                    _cleanup_data);
                rc = pam_set_item (pamh, PAM_USER, (void *) session->info->username);
              }
 +
-+	  if (rc == PAM_SUCCESS)
-+	    _set_group_list(pamh, session->info->group_list);
-+
  	  return rc;
  	}
      }
-@@ -3508,6 +3560,9 @@
+@@ -3507,7 +3541,7 @@
+                           _cleanup_data);
        rc = pam_set_item (pamh, PAM_USER, (void *) session->info->username);
      }
- 
-+  if (rc == PAM_SUCCESS)
-+    _set_group_list(pamh, session->info->group_list);
+-
 +  
    return rc;
  }
  
---- pam_ldap-185/pam_ldap.h.orig	2009-11-06 04:29:34.000000000 -0600
-+++ pam_ldap-185/pam_ldap.h	2020-04-06 20:59:27.363061473 -0500
-@@ -250,6 +250,8 @@
-     char *tmpluser;
-     /* shadow stuff */
-     pam_ldap_shadow_t shadow;
-+    /* device group list */
-+    char **group_list;
-   }
- pam_ldap_user_info_t;
+@@ -3616,7 +3650,7 @@
+   /* do we prohibit changes */
+   if (session->conf->password_prohibit_message)
+     {
+-      rc = _get_user_info (session, username);
++      rc = _get_user_info (pamh, session, username);
+       STATUS_MAP_IGNORE_POLICY (rc, ignore_flags);
+       /* skip non-ldap users */
+       if (rc != PAM_SUCCESS)
+@@ -3630,7 +3664,7 @@
+   if (flags & PAM_PRELIM_CHECK)
+     {
+       /* see whether the user exists */
+-      rc = _get_user_info (session, username);
++      rc = _get_user_info (pamh, session, username);
+       STATUS_MAP_IGNORE_POLICY (rc, ignore_flags);
+       if (rc != PAM_SUCCESS)
+ 	return rc;
+@@ -3987,7 +4021,7 @@
  
+   if (session->info == NULL)
+     {
+-      rc = _get_user_info (session, username);
++      rc = _get_user_info (pamh, session, username);
+       if (rc != PAM_SUCCESS)
+ 	{
+ 	  STATUS_MAP_IGNORE_POLICY (rc, ignore_flags);

@@ -1,5 +1,5 @@
 VERSION = 1.6
-URL = http://download.aircrack-ng.org/aircrack-ng-$(VERSION).tar.gz
+URL = https://download.aircrack-ng.org/aircrack-ng-$(VERSION).tar.gz
 
 CFLAGS += -D_GLIBCXX_HAVE_MBSTATE_T=1 -fno-stack-protector
 CXXFLAGS += -D_GLIBCXX_HAVE_MBSTATE_T=1 -fno-stack-protector -lstdc++

@@ -626,8 +626,11 @@ struct ipu3_uapi_stats_3a {
  * @b:	white balance gain for B channel.
  * @gb:	white balance gain for Gb channel.
  *
- * Precision u3.13, range [0, 8). White balance correction is done by applying
- * a multiplicative gain to each color channels prior to BNR.
+ * For BNR parameters WB gain factor for the three channels [Ggr, Ggb, Gb, Gr].
+ * Their precision is U3.13 and the range is (0, 8) and the actual gain is
+ * Gx + 1, it is typically Gx = 1.
+ *
+ * Pout = {Pin * (1 + Gx)}.
  */
 struct ipu3_uapi_bnr_static_config_wb_gains_config {
 	__u16 gr;
@@ -2482,11 +2485,9 @@ struct ipu3_uapi_anr_config {
  *		&ipu3_uapi_yuvp1_y_ee_nr_config
  * @yds:	y down scaler config. See &ipu3_uapi_yuvp1_yds_config
  * @chnr:	chroma noise reduction config. See &ipu3_uapi_yuvp1_chnr_config
- * @reserved1: reserved
  * @yds2:	y channel down scaler config. See &ipu3_uapi_yuvp1_yds_config
  * @tcc:	total color correction config as defined in struct
  *		&ipu3_uapi_yuvp2_tcc_static_config
- * @reserved2: reserved
  * @anr:	advanced noise reduction config.See &ipu3_uapi_anr_config
  * @awb_fr:	AWB filter response config. See ipu3_uapi_awb_fr_config
  * @ae:	auto exposure config  As specified by &ipu3_uapi_ae_config
@@ -2721,7 +2722,6 @@ struct ipu3_uapi_obgrid_param {
  * @acc_ae: 0 = no update, 1 = update.
  * @acc_af: 0 = no update, 1 = update.
  * @acc_awb: 0 = no update, 1 = update.
- * @__acc_osys: 0 = no update, 1 = update.
  * @reserved3: Not used.
  * @lin_vmem_params: 0 = no update, 1 = update.
  * @tnr3_vmem_params: 0 = no update, 1 = update.

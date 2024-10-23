@@ -1,5 +1,4 @@
-VERSION = ddab69d59c11bb6480cb33fea5a27bc87b1157bb # stable/7.5, 22 Apr 2021
-#VERSION = 79188bf710e92acf42fb5b9b0a2e9593a5ee9b05 # release 8.2.2 July 2022
+VERSION = 31ed3dd753d62b5d8916998bc32814007e91364b
 URL = https://github.com/FRRouting/frr.git
 METHOD = git
 
@@ -7,6 +6,8 @@ SRCDIR = frr
 BUILDDIR = frr-build
 CONFIGURE = ../$(SRCDIR)/configure
 AUTORECONF = ./bootstrap.sh
+PROTOC=$(ROOTDIR)/lib/protobuf/build/protobuf-Hostinstall/bin/protoc
+PROTOC_C=$(ROOTDIR)/lib/protobuf-c/build/protobuf-c-Hostinstall/bin/protoc-c
 
 CONFOPTS =
 CONFOPTS += --prefix=
@@ -14,7 +15,6 @@ CONFOPTS += --sbindir=/bin
 CONFOPTS += --program-transform-name=
 CONFOPTS += --disable-user --disable-group
 CONFOPTS += --disable-doc
-CONFOPTS += --enable-exampledir=/samples
 
 # Additional features that are enabled by default but not required.
 CONFOPTS += --disable-babeld
@@ -25,6 +25,7 @@ CONFOPTS += --disable-ldpd
 CONFOPTS += --disable-ospfapi
 CONFOPTS += --disable-pbrd
 CONFOPTS += --disable-pimd
+CONFOPTS += --disable-pim6d
 CONFOPTS += --disable-vrrpd
 CONFOPTS += --disable-watchfrr
 
@@ -61,10 +62,11 @@ endif
 
 CURSES = -lncurses
 
-MAKEVARS =
+# this takes a while; parallelize it.
+MAKEVARS = -j$(HOST_NCPU)
 
 include $(ROOTDIR)/tools/automake.inc
-
+CFLAGS += -g0
 # Use the same python version as the one built for the target.
 PYTHON_VERSION := $(shell sed -n 's/^PYTHON_VERSION[[:blank:]]*=[[:blank:]]*\(.*\)$$/\1/g;T;p' $(ROOTDIR)/user/python/makefile)
 PYTHON_VERSION_SHORT := $(shell echo $(PYTHON_VERSION) | cut -d'.' -f1,2)

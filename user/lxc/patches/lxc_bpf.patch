@@ -1,6 +1,6 @@
 --- lxc/src/lxc/cgroups/cgroup2_devices.c.orig	2021-06-28 13:26:30.858664499 +1000
 +++ lxc/src/lxc/cgroups/cgroup2_devices.c	2021-06-28 13:24:50.782666546 +1000
-@@ -331,8 +331,9 @@
+@@ -329,8 +329,9 @@
  
  	prog->kernel_fd = bpf(BPF_PROG_LOAD, attr, sizeof(*attr));
  	if (prog->kernel_fd < 0)

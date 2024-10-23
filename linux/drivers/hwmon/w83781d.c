@@ -1171,7 +1171,7 @@ w83781d_detect(struct i2c_client *client, struct i2c_board_info *info)
 	if (isa)
 		mutex_unlock(&isa->update_lock);
 
-	strlcpy(info->type, client_name, I2C_NAME_SIZE);
+	strscpy(info->type, client_name, I2C_NAME_SIZE);
 
 	return 0;
 
@@ -1239,7 +1239,7 @@ static int w83781d_probe(struct i2c_client *client)
 	return err;
 }
 
-static int
+static void
 w83781d_remove(struct i2c_client *client)
 {
 	struct w83781d_data *data = i2c_get_clientdata(client);
@@ -1250,8 +1250,6 @@ w83781d_remove(struct i2c_client *client)
 
 	i2c_unregister_device(data->lm75[0]);
 	i2c_unregister_device(data->lm75[1]);
-
-	return 0;
 }
 
 static int
@@ -1587,7 +1585,7 @@ static struct i2c_driver w83781d_driver = {
 		.name = "w83781d",
 		.of_match_table = w83781d_of_match,
 	},
-	.probe_new	= w83781d_probe,
+	.probe		= w83781d_probe,
 	.remove		= w83781d_remove,
 	.id_table	= w83781d_ids,
 	.detect		= w83781d_detect,
@@ -1818,16 +1816,13 @@ w83781d_isa_probe(struct platform_device *pdev)
 	return err;
 }
 
-static int
-w83781d_isa_remove(struct platform_device *pdev)
+static void w83781d_isa_remove(struct platform_device *pdev)
 {
 	struct w83781d_data *data = platform_get_drvdata(pdev);
 
 	hwmon_device_unregister(data->hwmon_dev);
 	w83781d_remove_files(&pdev->dev);
 	device_remove_file(&pdev->dev, &dev_attr_name);
-
-	return 0;
 }
 
 static struct platform_driver w83781d_isa_driver = {
@@ -1835,7 +1830,7 @@ static struct platform_driver w83781d_isa_driver = {
 		.name = "w83781d",
 	},
 	.probe = w83781d_isa_probe,
-	.remove = w83781d_isa_remove,
+	.remove_new = w83781d_isa_remove,
 };
 
 /* return 1 if a supported chip is found, 0 otherwise */

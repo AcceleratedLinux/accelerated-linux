@@ -1,4 +1,4 @@
-BUSYBOX = busybox-1.34.1
+BUSYBOX = busybox-1.36.1
 URL = https://busybox.net/downloads/$(BUSYBOX).tar.bz2
 
 BUILDVARS = ./mkconfig > build/$($*_BUILDDIR)/.config ;

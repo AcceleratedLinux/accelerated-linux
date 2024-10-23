@@ -69,8 +69,8 @@ CPULDFLAGS += -melf64btsmip
 
 ifndef CROSS_COMPILE
   ifeq ($(CONFIG_DEFAULTS_LIBC_MUSL),y)
-    ifneq ($(shell which mips64-linux-musl-20220202-gcc),)
-      CROSS_COMPILE = mips64-linux-musl-20220202-
+    ifneq ($(shell which mips64-linux-musl-20240415-gcc),)
+      CROSS_COMPILE = mips64-linux-musl-20240415-
     else
       CROSS_COMPILE = mips64-linux-musl-
     endif
@@ -79,8 +79,8 @@ endif
 
 ifneq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
   ifndef CROSS_COMPILE
-    ifneq ($(shell which mips64-linux-uclibc-20200917-gcc),)
-      CROSS_COMPILE = mips64-linux-uclibc-20200917-
+    ifneq ($(shell which mips64-linux-uclibc-20240415-gcc),)
+      CROSS_COMPILE = mips64-linux-uclibc-20240415-
     endif
   endif
   ifndef CROSS_COMPILE
@@ -90,11 +90,6 @@ ifneq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
   endif
 endif
 
-ifndef CROSS_COMPILE
-  ifneq ($(shell which mips64-linux-20160421-gcc),)
-    CROSS_COMPILE = mips64-linux-20160421-
-  endif
-endif
 ifndef CROSS_COMPILE
   CROSS_COMPILE  = mips64-linux-
 endif
@@ -135,7 +130,7 @@ ifdef UCLINUX_BUILD_LIB
 	GLIBC_TARGET_OPTS = mips64-linux --enable-shared
   endif
   ifdef CONFIG_LIB_DEBUG
-	CFLAGS  := -g
+	CFLAGS  := $(CFLAGS_DEBUG)
 	LDFLAGS :=
   else
 	CFLAGS  := 
@@ -171,11 +166,11 @@ endif
 ifdef UCLINUX_BUILD_USER
 
   ifdef CONFIG_USER_DEBUG
-	CFLAGS  := -g
+	CFLAGS  := -O2 $(CFLAGS_DEBUG)
 	LDFLAGS :=
   else
 	CFLAGS  := -O2
-	LDFLAGS := -g
+	LDFLAGS :=
   endif
   ifeq ($(CONFIG_DEFAULTS_LIBC_UCLIBC)$(CONFIG_DEFAULTS_LIBC_UCLIBC_NG),)
 	CFLAGS  += -fstack-protector-strong

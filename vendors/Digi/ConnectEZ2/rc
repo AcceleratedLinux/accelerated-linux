@@ -26,12 +26,6 @@ echo 6 > /proc/sys/kernel/printk
 # initialise devices before we need them
 /etc/rc.dev
 
-echo "Configuring GPIOs..."
-# GPIO2 on I2C0 is the dev mode jumper
-echo 425 > /sys/class/gpio/export
-echo in > /sys/class/gpio/gpio425/direction
-echo 1 > /sys/class/gpio/gpio425/active_low
-
 # This file must be present before the sim daemon starts
 touch /var/run/sim_button
 
@@ -51,6 +45,14 @@ if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	# Use the same setup as for factory testing
 	/etc/factory
 	exit 0
+fi
+
+# Merge old dby /userfs into /opt so it's usable by default
+if ls /dev/mmcblk1p4 >/dev/null 2>&1; then
+	echo "Merging userfs into opt..."
+	parted -s /dev/mmcblk1 rm 4
+	parted -s /dev/mmcblk1 resizepart 3 3666
+	resize2fs -f /dev/mmcblk1p3
 fi
 
 # handle /opt, contains modem firmware and maybe other goodies
@@ -144,8 +146,8 @@ do
 done
 
 # Enable all serial transceivers now that ports are in correct mode
-echo 431 > /sys/class/gpio/export
-echo high > /sys/class/gpio/gpio431/direction
+echo 599 > /sys/class/gpio/export
+echo high > /sys/class/gpio/gpio599/direction
 
 # Reset device status LEDs before actions start... status LEDs all
 # default to timer trigger

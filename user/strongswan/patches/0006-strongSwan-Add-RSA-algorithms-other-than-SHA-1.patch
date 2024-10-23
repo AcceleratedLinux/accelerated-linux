@@ -1,0 +1,80 @@
+From 53f22fb43dc276e6f0457e46bc97ee8f799c7ac1 Mon Sep 17 00:00:00 2001
+From: Walter Hagstrom <walter.hagstrom@digi.com>
+Date: Thu, 12 Jan 2023 11:45:03 -0500
+Subject: [PATCH] strongSwan: Add RSA algorithms other than SHA-1
+
+strongSwan only supports SHA-1 for the legacy IKEv2 signature RSA
+authentication when using digital certificates. Cisco devices don't
+support SHA-1 for security reasons.  This patch now to tries SHA2-256
+and SHA2-512 if SHA1 fails.
+
+DAL-7071
+---
+ .../authenticators/pubkey_authenticator.c     | 107 +++++++++++++-----
+ 1 file changed, 78 insertions(+), 29 deletions(-)
+
+Index: strongswan-5.9.13/src/libcharon/sa/ikev2/authenticators/pubkey_authenticator.c
+===================================================================
+--- strongswan-5.9.13.orig/src/libcharon/sa/ikev2/authenticators/pubkey_authenticator.c
++++ strongswan-5.9.13/src/libcharon/sa/ikev2/authenticators/pubkey_authenticator.c
+@@ -636,6 +636,52 @@ METHOD(authenticator_t, process, status_
+ 										  COND_ONLINE_VALIDATION_SUSPENDED);
+ 	enumerator = lib->credmgr->create_public_enumerator(lib->credmgr,
+ 													key_type, id, auth, online);
++    if (auth_method == AUTH_RSA)
++    {
++	while (status == NOT_FOUND)
++	{
++		while (enumerator->enumerate(enumerator, &public, &current_auth))
++		{
++			if (public->verify(public, params->scheme, params->params, octets, auth_data) &&
++				is_compliant_cert(current_auth))
++			{
++				DBG1(DBG_IKE, "authentication of '%Y' with %N successful", id,
++					signature_scheme_names, params->scheme);
++				status = SUCCESS;
++				auth->merge(auth, current_auth, FALSE);
++				auth->add(auth, AUTH_RULE_AUTH_CLASS, AUTH_CLASS_PUBKEY);
++				auth->add(auth, AUTH_RULE_IKE_SIGNATURE_SCHEME, signature_params_clone(params));
++				if (!online)
++				{
++					auth->add(auth, AUTH_RULE_CERT_VALIDATION_SUSPENDED, TRUE);
++				}
++				break;
++			}
++			else
++			{
++				if (params->scheme == SIGN_RSA_EMSA_PKCS1_SHA1)
++				{
++					DBG1(DBG_IKE, "authentication of '%Y' with %N failed. Retrying with %N", id,
++						signature_scheme_names, params->scheme, signature_scheme_names, SIGN_RSA_EMSA_PKCS1_SHA2_256);
++					params->scheme = SIGN_RSA_EMSA_PKCS1_SHA2_256;
++					break;
++				}
++				if (params->scheme == SIGN_RSA_EMSA_PKCS1_SHA2_256)
++				{
++					DBG1(DBG_IKE, "authentication of '%Y' with %N failed. Retrying with %N", id,
++						signature_scheme_names, params->scheme, signature_scheme_names, SIGN_RSA_EMSA_PKCS1_SHA2_512);
++					params->scheme = SIGN_RSA_EMSA_PKCS1_SHA2_512;
++					break;
++				}
++				status = FAILED;
++				DBG1(DBG_IKE, "signature validation failed, looking for another key");
++				break;
++			}
++		}
++	}
++    }
++    else
++    {
+ 	while (enumerator->enumerate(enumerator, &public, &current_auth))
+ 	{
+ 		if (public->verify(public, params->scheme, params->params, octets,
+@@ -678,6 +724,7 @@ METHOD(authenticator_t, process, status_
+ 			DBG1(DBG_IKE, "signature validation failed, looking for another key");
+ 		}
+ 	}
++    }
+ 	enumerator->destroy(enumerator);
+ 	chunk_free(&octets);
+ 	signature_params_destroy(params);

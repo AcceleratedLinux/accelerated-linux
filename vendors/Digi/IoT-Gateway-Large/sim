@@ -1,0 +1,56 @@
+#!/bin/sh
+#
+# IoT Gateway modem control utility
+
+GPIO_POWER="XBEE2_PWR_EN"
+GPIO_RESET="XBEE2_nRST"
+
+case "$1" in
+-n)
+	echo 1
+	;;
+-o)
+	# Float the reset line (pulled up internally in the XBee)
+	/bin/gpioset --drive open-drain -t 0 ${GPIO_RESET}=1
+	/bin/gpioset -t 0 ${GPIO_POWER}=1
+	;;
+-O)
+	# Drive the reset line low
+	/bin/gpioset --drive open-drain -t 0 ${GPIO_RESET}=0
+	/bin/gpioset -t 0 ${GPIO_POWER}=0
+	;;
+-m)
+	if [ -n "$(/bin/modem port=modem/xbee_cellular idx)" ]; then
+		echo "Cell module detected: yes"
+	else
+		echo "Cell module detected: no"
+	fi
+	;;
+-p)
+	pwr_state=$(/bin/gpioget --as-is --numeric ${GPIO_POWER})
+	rst_state=$(/bin/gpioget --as-is --numeric ${GPIO_RESET})
+	if [ "$pwr_state" = 1 -a "$rst_state" = 1 ]; then
+		echo "Current state: on"
+	else
+		echo "Current state: off"
+	fi
+	;;
+'')
+	echo 1
+	;;
+*)
+	logger -t modem "sim: invalid option"
+	echo "usage: $(basename $0) [none|-dDnoOp]
+Get, set and control cellular modem power (MM name xbee_cellular)
+
+	-h	help	- this help
+	-n	number	- print number of SIM slots
+	-o	on	- turn on power to the cell module
+	-O	off	- turn off power to the cell module
+	-m	module detect	- detect cell module
+	-p	power	- report the modem's current power state"
+	[ "$1" = -h ] && exit 0 || exit 1
+	;;
+esac
+
+exit 0

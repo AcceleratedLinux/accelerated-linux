@@ -189,7 +189,7 @@ create_req:
 		return NULL;
 
 	size = min_t(size_t, r_xprt->rx_ep->re_inline_recv, PAGE_SIZE);
-	req = rpcrdma_req_create(r_xprt, size, GFP_KERNEL);
+	req = rpcrdma_req_create(r_xprt, size);
 	if (!req)
 		return NULL;
 	if (rpcrdma_req_setup(r_xprt, req)) {
@@ -263,11 +263,9 @@ void rpcrdma_bc_receive_call(struct rpcrdma_xprt *r_xprt,
 	/* Queue rqst for ULP's callback service */
 	bc_serv = xprt->bc_serv;
 	xprt_get(xprt);
-	spin_lock(&bc_serv->sv_cb_lock);
-	list_add(&rqst->rq_bc_list, &bc_serv->sv_cb_list);
-	spin_unlock(&bc_serv->sv_cb_lock);
+	lwq_enqueue(&rqst->rq_bc_list, &bc_serv->sv_cb_list);
 
-	wake_up(&bc_serv->sv_cb_waitq);
+	svc_pool_wake_idle_thread(&bc_serv->sv_pools[0]);
 
 	r_xprt->rx_stats.bcall_count++;
 	return;

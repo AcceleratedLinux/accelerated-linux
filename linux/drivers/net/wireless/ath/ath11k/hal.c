@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/dma-mapping.h>
 #include "hal_tx.h"
@@ -126,7 +126,7 @@ static const struct hal_srng_config hw_srng_config_template[] = {
 	},
 	{ /* WBM2SW_RELEASE */
 		.start_ring_id = HAL_SRNG_RING_ID_WBM2SW0_RELEASE,
-		.max_rings = 4,
+		.max_rings = 5,
 		.entry_size = sizeof(struct hal_wbm_release_ring) >> 2,
 		.lmac_ring = false,
 		.ring_dir = HAL_SRNG_DIR_DST,
@@ -571,7 +571,7 @@ u32 ath11k_hal_ce_get_desc_size(enum hal_ce_desc type)
 void ath11k_hal_ce_src_set_desc(void *buf, dma_addr_t paddr, u32 len, u32 id,
 				u8 byte_swap_data)
 {
-	struct hal_ce_srng_src_desc *desc = (struct hal_ce_srng_src_desc *)buf;
+	struct hal_ce_srng_src_desc *desc = buf;
 
 	desc->buffer_addr_low = paddr & HAL_ADDR_LSB_REG_MASK;
 	desc->buffer_addr_info =
@@ -586,8 +586,7 @@ void ath11k_hal_ce_src_set_desc(void *buf, dma_addr_t paddr, u32 len, u32 id,
 
 void ath11k_hal_ce_dst_set_desc(void *buf, dma_addr_t paddr)
 {
-	struct hal_ce_srng_dest_desc *desc =
-		(struct hal_ce_srng_dest_desc *)buf;
+	struct hal_ce_srng_dest_desc *desc = buf;
 
 	desc->buffer_addr_low = paddr & HAL_ADDR_LSB_REG_MASK;
 	desc->buffer_addr_info =
@@ -597,8 +596,7 @@ void ath11k_hal_ce_dst_set_desc(void *buf, dma_addr_t paddr)
 
 u32 ath11k_hal_ce_dst_status_get_length(void *buf)
 {
-	struct hal_ce_srng_dst_status_desc *desc =
-		(struct hal_ce_srng_dst_status_desc *)buf;
+	struct hal_ce_srng_dst_status_desc *desc = buf;
 	u32 len;
 
 	len = FIELD_GET(HAL_CE_DST_STATUS_DESC_FLAGS_LEN, desc->flags);
@@ -628,15 +626,30 @@ u32 *ath11k_hal_srng_dst_peek(struct ath11k_base *ab, struct hal_srng *srng)
 	return NULL;
 }
 
+static u32 *ath11k_hal_srng_dst_peek_with_dma(struct ath11k_base *ab,
+					      struct hal_srng *srng, dma_addr_t *paddr)
+{
+	lockdep_assert_held(&srng->lock);
+
+	if (srng->u.dst_ring.tp != srng->u.dst_ring.cached_hp) {
+		*paddr = srng->ring_base_paddr +
+			  sizeof(*srng->ring_base_vaddr) * srng->u.dst_ring.tp;
+		return srng->ring_base_vaddr + srng->u.dst_ring.tp;
+	}
+
+	return NULL;
+}
+
 static void ath11k_hal_srng_prefetch_desc(struct ath11k_base *ab,
 					  struct hal_srng *srng)
 {
+	dma_addr_t desc_paddr;
 	u32 *desc;
 
 	/* prefetch only if desc is available */
-	desc = ath11k_hal_srng_dst_peek(ab, srng);
+	desc = ath11k_hal_srng_dst_peek_with_dma(ab, srng, &desc_paddr);
 	if (likely(desc)) {
-		dma_sync_single_for_cpu(ab->dev, virt_to_phys(desc),
+		dma_sync_single_for_cpu(ab->dev, desc_paddr,
 					(srng->entry_size * sizeof(u32)),
 					DMA_FROM_DEVICE);
 		prefetch(desc);
@@ -1009,8 +1022,8 @@ int ath11k_hal_srng_setup(struct ath11k_base *ab, enum hal_ring_type type,
 				srng->u.src_ring.hp_addr =
 				(u32 *)((unsigned long)ab->mem + reg_base);
 			else
-				ath11k_dbg(ab, ATH11k_DBG_HAL,
-					   "hal type %d ring_num %d reg_base 0x%x shadow 0x%lx\n",
+				ath11k_dbg(ab, ATH11K_DBG_HAL,
+					   "type %d ring_num %d reg_base 0x%x shadow 0x%lx\n",
 					   type, ring_num,
 					   reg_base,
 					   (unsigned long)srng->u.src_ring.hp_addr -
@@ -1043,7 +1056,7 @@ int ath11k_hal_srng_setup(struct ath11k_base *ab, enum hal_ring_type type,
 				(u32 *)((unsigned long)ab->mem + reg_base +
 					(HAL_REO1_RING_TP(ab) - HAL_REO1_RING_HP(ab)));
 			else
-				ath11k_dbg(ab, ATH11k_DBG_HAL,
+				ath11k_dbg(ab, ATH11K_DBG_HAL,
 					   "type %d ring_num %d target_reg 0x%x shadow 0x%lx\n",
 					   type, ring_num,
 					   reg_base + (HAL_REO1_RING_TP(ab) -
@@ -1118,8 +1131,8 @@ int ath11k_hal_srng_update_shadow_config(struct ath11k_base *ab,
 	ath11k_hal_srng_update_hp_tp_addr(ab, shadow_cfg_idx, ring_type,
 					  ring_num);
 
-	ath11k_dbg(ab, ATH11k_DBG_HAL,
-		   "target_reg %x, shadow reg 0x%x shadow_idx 0x%x, ring_type %d, ring num %d",
+	ath11k_dbg(ab, ATH11K_DBG_HAL,
+		   "update shadow config target_reg %x shadow reg 0x%x shadow_idx 0x%x ring_type %d ring num %d",
 		  target_reg,
 		  HAL_SHADOW_REG(ab, shadow_cfg_idx),
 		  shadow_cfg_idx,
@@ -1164,8 +1177,8 @@ void ath11k_hal_srng_shadow_update_hp_tp(struct ath11k_base *ab,
 {
 	lockdep_assert_held(&srng->lock);
 
-	/* check whether the ring is emptry. Update the shadow
-	 * HP only when then ring isn't' empty.
+	/* check whether the ring is empty. Update the shadow
+	 * HP only when then ring isn't empty.
 	 */
 	if (srng->ring_dir == HAL_SRNG_DIR_SRC &&
 	    *srng->u.src_ring.tp_addr != srng->u.src_ring.hp)
@@ -1220,16 +1233,20 @@ static int ath11k_hal_srng_create_config(struct ath11k_base *ab)
 	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_TCL_REG + HAL_TCL_STATUS_RING_HP;
 
 	s = &hal->srng_config[HAL_CE_SRC];
-	s->reg_start[0] = HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab) + HAL_CE_DST_RING_BASE_LSB;
-	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab) + HAL_CE_DST_RING_HP;
+	s->reg_start[0] = HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab) + HAL_CE_DST_RING_BASE_LSB +
+		ATH11K_CE_OFFSET(ab);
+	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab) + HAL_CE_DST_RING_HP +
+		ATH11K_CE_OFFSET(ab);
 	s->reg_size[0] = HAL_SEQ_WCSS_UMAC_CE1_SRC_REG(ab) -
 		HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab);
 	s->reg_size[1] = HAL_SEQ_WCSS_UMAC_CE1_SRC_REG(ab) -
 		HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab);
 
 	s = &hal->srng_config[HAL_CE_DST];
-	s->reg_start[0] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) + HAL_CE_DST_RING_BASE_LSB;
-	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) + HAL_CE_DST_RING_HP;
+	s->reg_start[0] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) + HAL_CE_DST_RING_BASE_LSB +
+		ATH11K_CE_OFFSET(ab);
+	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) + HAL_CE_DST_RING_HP +
+		ATH11K_CE_OFFSET(ab);
 	s->reg_size[0] = HAL_SEQ_WCSS_UMAC_CE1_DST_REG(ab) -
 		HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab);
 	s->reg_size[1] = HAL_SEQ_WCSS_UMAC_CE1_DST_REG(ab) -
@@ -1237,8 +1254,9 @@ static int ath11k_hal_srng_create_config(struct ath11k_base *ab)
 
 	s = &hal->srng_config[HAL_CE_DST_STATUS];
 	s->reg_start[0] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) +
-		HAL_CE_DST_STATUS_RING_BASE_LSB;
-	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) + HAL_CE_DST_STATUS_RING_HP;
+		HAL_CE_DST_STATUS_RING_BASE_LSB + ATH11K_CE_OFFSET(ab);
+	s->reg_start[1] = HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab) + HAL_CE_DST_STATUS_RING_HP +
+		ATH11K_CE_OFFSET(ab);
 	s->reg_size[0] = HAL_SEQ_WCSS_UMAC_CE1_DST_REG(ab) -
 		HAL_SEQ_WCSS_UMAC_CE0_DST_REG(ab);
 	s->reg_size[1] = HAL_SEQ_WCSS_UMAC_CE1_DST_REG(ab) -

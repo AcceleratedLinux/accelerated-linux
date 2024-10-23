@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#define _GNU_SOURCE /* for program_invocation_short_name */
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
@@ -16,8 +15,6 @@
 #include <test_util.h>
 #include <kvm_util.h>
 #include <processor.h>
-
-#define VCPU_ID 0
 
 /*
  * s390x needs at least 1MB alignment, and the x86_64 MOVE/DELETE tests need a
@@ -54,8 +51,8 @@ static inline uint64_t guest_spin_on_val(uint64_t spin_val)
 
 static void *vcpu_worker(void *data)
 {
-	struct kvm_vm *vm = data;
-	struct kvm_run *run;
+	struct kvm_vcpu *vcpu = data;
+	struct kvm_run *run = vcpu->run;
 	struct ucall uc;
 	uint64_t cmd;
 
@@ -64,13 +61,11 @@ static void *vcpu_worker(void *data)
 	 * which will occur if the guest attempts to access a memslot after it
 	 * has been deleted or while it is being moved .
 	 */
-	run = vcpu_state(vm, VCPU_ID);
-
 	while (1) {
-		vcpu_run(vm, VCPU_ID);
+		vcpu_run(vcpu);
 
 		if (run->exit_reason == KVM_EXIT_IO) {
-			cmd = get_ucall(vm, VCPU_ID, &uc);
+			cmd = get_ucall(vcpu, &uc);
 			if (cmd != UCALL_SYNC)
 				break;
 
@@ -92,8 +87,7 @@ static void *vcpu_worker(void *data)
 	}
 
 	if (run->exit_reason == KVM_EXIT_IO && cmd == UCALL_ABORT)
-		TEST_FAIL("%s at %s:%ld, val = %lu", (const char *)uc.args[0],
-			  __FILE__, uc.args[1], uc.args[2]);
+		REPORT_GUEST_ASSERT(uc);
 
 	return NULL;
 }
@@ -103,23 +97,24 @@ static void wait_for_vcpu(void)
 	struct timespec ts;
 
 	TEST_ASSERT(!clock_gettime(CLOCK_REALTIME, &ts),
-		    "clock_gettime() failed: %d\n", errno);
+		    "clock_gettime() failed: %d", errno);
 
 	ts.tv_sec += 2;
 	TEST_ASSERT(!sem_timedwait(&vcpu_ready, &ts),
-		    "sem_timedwait() failed: %d\n", errno);
+		    "sem_timedwait() failed: %d", errno);
 
 	/* Wait for the vCPU thread to reenter the guest. */
 	usleep(100000);
 }
 
-static struct kvm_vm *spawn_vm(pthread_t *vcpu_thread, void *guest_code)
+static struct kvm_vm *spawn_vm(struct kvm_vcpu **vcpu, pthread_t *vcpu_thread,
+			       void *guest_code)
 {
 	struct kvm_vm *vm;
 	uint64_t *hva;
 	uint64_t gpa;
 
-	vm = vm_create_default(VCPU_ID, 0, guest_code);
+	vm = vm_create_with_one_vcpu(vcpu, guest_code);
 
 	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS_THP,
 				    MEM_REGION_GPA, MEM_REGION_SLOT,
@@ -138,7 +133,7 @@ static struct kvm_vm *spawn_vm(pthread_t *vcpu_thread, void *guest_code)
 	hva = addr_gpa2hva(vm, MEM_REGION_GPA);
 	memset(hva, 0, 2 * 4096);
 
-	pthread_create(vcpu_thread, NULL, vcpu_worker, vm);
+	pthread_create(vcpu_thread, NULL, vcpu_worker, *vcpu);
 
 	/* Ensure the guest thread is spun up. */
 	wait_for_vcpu();
@@ -160,19 +155,22 @@ static void guest_code_move_memory_region(void)
 	 * window where the memslot is invalid is usually quite small.
 	 */
 	val = guest_spin_on_val(0);
-	GUEST_ASSERT_1(val == 1 || val == MMIO_VAL, val);
+	__GUEST_ASSERT(val == 1 || val == MMIO_VAL,
+		       "Expected '1' or MMIO ('%lx'), got '%lx'", MMIO_VAL, val);
 
 	/* Spin until the misaligning memory region move completes. */
 	val = guest_spin_on_val(MMIO_VAL);
-	GUEST_ASSERT_1(val == 1 || val == 0, val);
+	__GUEST_ASSERT(val == 1 || val == 0,
+		       "Expected '0' or '1' (no MMIO), got '%lx'", val);
 
 	/* Spin until the memory region starts to get re-aligned. */
 	val = guest_spin_on_val(0);
-	GUEST_ASSERT_1(val == 1 || val == MMIO_VAL, val);
+	__GUEST_ASSERT(val == 1 || val == MMIO_VAL,
+		       "Expected '1' or MMIO ('%lx'), got '%lx'", MMIO_VAL, val);
 
 	/* Spin until the re-aligning memory region move completes. */
 	val = guest_spin_on_val(MMIO_VAL);
-	GUEST_ASSERT_1(val == 1, val);
+	GUEST_ASSERT_EQ(val, 1);
 
 	GUEST_DONE();
 }
@@ -180,10 +178,11 @@ static void guest_code_move_memory_region(void)
 static void test_move_memory_region(void)
 {
 	pthread_t vcpu_thread;
+	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	uint64_t *hva;
 
-	vm = spawn_vm(&vcpu_thread, guest_code_move_memory_region);
+	vm = spawn_vm(&vcpu, &vcpu_thread, guest_code_move_memory_region);
 
 	hva = addr_gpa2hva(vm, MEM_REGION_GPA);
 
@@ -221,21 +220,33 @@ static void test_move_memory_region(void)
 
 static void guest_code_delete_memory_region(void)
 {
+	struct desc_ptr idt;
 	uint64_t val;
+
+	/*
+	 * Clobber the IDT so that a #PF due to the memory region being deleted
+	 * escalates to triple-fault shutdown.  Because the memory region is
+	 * deleted, there will be no valid mappings.  As a result, KVM will
+	 * repeatedly intercepts the state-2 page fault that occurs when trying
+	 * to vector the guest's #PF.  I.e. trying to actually handle the #PF
+	 * in the guest will never succeed, and so isn't an option.
+	 */
+	memset(&idt, 0, sizeof(idt));
+	__asm__ __volatile__("lidt %0" :: "m"(idt));
 
 	GUEST_SYNC(0);
 
 	/* Spin until the memory region is deleted. */
 	val = guest_spin_on_val(0);
-	GUEST_ASSERT_1(val == MMIO_VAL, val);
+	GUEST_ASSERT_EQ(val, MMIO_VAL);
 
 	/* Spin until the memory region is recreated. */
 	val = guest_spin_on_val(MMIO_VAL);
-	GUEST_ASSERT_1(val == 0, val);
+	GUEST_ASSERT_EQ(val, 0);
 
 	/* Spin until the memory region is deleted. */
 	val = guest_spin_on_val(0);
-	GUEST_ASSERT_1(val == MMIO_VAL, val);
+	GUEST_ASSERT_EQ(val, MMIO_VAL);
 
 	asm("1:\n\t"
 	    ".pushsection .rodata\n\t"
@@ -252,17 +263,18 @@ static void guest_code_delete_memory_region(void)
 	    "final_rip_end: .quad 1b\n\t"
 	    ".popsection");
 
-	GUEST_ASSERT_1(0, 0);
+	GUEST_ASSERT(0);
 }
 
 static void test_delete_memory_region(void)
 {
 	pthread_t vcpu_thread;
+	struct kvm_vcpu *vcpu;
 	struct kvm_regs regs;
 	struct kvm_run *run;
 	struct kvm_vm *vm;
 
-	vm = spawn_vm(&vcpu_thread, guest_code_delete_memory_region);
+	vm = spawn_vm(&vcpu, &vcpu_thread, guest_code_delete_memory_region);
 
 	/* Delete the memory region, the guest should not die. */
 	vm_mem_region_delete(vm, MEM_REGION_SLOT);
@@ -286,13 +298,13 @@ static void test_delete_memory_region(void)
 
 	pthread_join(vcpu_thread, NULL);
 
-	run = vcpu_state(vm, VCPU_ID);
+	run = vcpu->run;
 
 	TEST_ASSERT(run->exit_reason == KVM_EXIT_SHUTDOWN ||
 		    run->exit_reason == KVM_EXIT_INTERNAL_ERROR,
 		    "Unexpected exit reason = %d", run->exit_reason);
 
-	vcpu_regs_get(vm, VCPU_ID, &regs);
+	vcpu_regs_get(vcpu, &regs);
 
 	/*
 	 * On AMD, after KVM_EXIT_SHUTDOWN the VMCB has been reinitialized already,
@@ -301,7 +313,7 @@ static void test_delete_memory_region(void)
 	if (run->exit_reason == KVM_EXIT_INTERNAL_ERROR)
 		TEST_ASSERT(regs.rip >= final_rip_start &&
 			    regs.rip < final_rip_end,
-			    "Bad rip, expected 0x%lx - 0x%lx, got 0x%llx\n",
+			    "Bad rip, expected 0x%lx - 0x%lx, got 0x%llx",
 			    final_rip_start, final_rip_end, regs.rip);
 
 	kvm_vm_free(vm);
@@ -309,25 +321,80 @@ static void test_delete_memory_region(void)
 
 static void test_zero_memory_regions(void)
 {
-	struct kvm_run *run;
+	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 
 	pr_info("Testing KVM_RUN with zero added memory regions\n");
 
-	vm = vm_create(VM_MODE_DEFAULT, 0, O_RDWR);
-	vm_vcpu_add(vm, VCPU_ID);
+	vm = vm_create_barebones();
+	vcpu = __vm_vcpu_add(vm, 0);
 
-	TEST_ASSERT(!ioctl(vm_get_fd(vm), KVM_SET_NR_MMU_PAGES, 64),
-		    "KVM_SET_NR_MMU_PAGES failed, errno = %d\n", errno);
-	vcpu_run(vm, VCPU_ID);
-
-	run = vcpu_state(vm, VCPU_ID);
-	TEST_ASSERT(run->exit_reason == KVM_EXIT_INTERNAL_ERROR,
-		    "Unexpected exit_reason = %u\n", run->exit_reason);
+	vm_ioctl(vm, KVM_SET_NR_MMU_PAGES, (void *)64ul);
+	vcpu_run(vcpu);
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_INTERNAL_ERROR);
 
 	kvm_vm_free(vm);
 }
 #endif /* __x86_64__ */
+
+static void test_invalid_memory_region_flags(void)
+{
+	uint32_t supported_flags = KVM_MEM_LOG_DIRTY_PAGES;
+	const uint32_t v2_only_flags = KVM_MEM_GUEST_MEMFD;
+	struct kvm_vm *vm;
+	int r, i;
+
+#if defined __aarch64__ || defined __riscv || defined __x86_64__
+	supported_flags |= KVM_MEM_READONLY;
+#endif
+
+#ifdef __x86_64__
+	if (kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM))
+		vm = vm_create_barebones_type(KVM_X86_SW_PROTECTED_VM);
+	else
+#endif
+		vm = vm_create_barebones();
+
+	if (kvm_check_cap(KVM_CAP_MEMORY_ATTRIBUTES) & KVM_MEMORY_ATTRIBUTE_PRIVATE)
+		supported_flags |= KVM_MEM_GUEST_MEMFD;
+
+	for (i = 0; i < 32; i++) {
+		if ((supported_flags & BIT(i)) && !(v2_only_flags & BIT(i)))
+			continue;
+
+		r = __vm_set_user_memory_region(vm, 0, BIT(i),
+						0, MEM_REGION_SIZE, NULL);
+
+		TEST_ASSERT(r && errno == EINVAL,
+			    "KVM_SET_USER_MEMORY_REGION should have failed on v2 only flag 0x%lx", BIT(i));
+
+		if (supported_flags & BIT(i))
+			continue;
+
+		r = __vm_set_user_memory_region2(vm, 0, BIT(i),
+						 0, MEM_REGION_SIZE, NULL, 0, 0);
+		TEST_ASSERT(r && errno == EINVAL,
+			    "KVM_SET_USER_MEMORY_REGION2 should have failed on unsupported flag 0x%lx", BIT(i));
+	}
+
+	if (supported_flags & KVM_MEM_GUEST_MEMFD) {
+		int guest_memfd = vm_create_guest_memfd(vm, MEM_REGION_SIZE, 0);
+
+		r = __vm_set_user_memory_region2(vm, 0,
+						 KVM_MEM_LOG_DIRTY_PAGES | KVM_MEM_GUEST_MEMFD,
+						 0, MEM_REGION_SIZE, NULL, guest_memfd, 0);
+		TEST_ASSERT(r && errno == EINVAL,
+			    "KVM_SET_USER_MEMORY_REGION2 should have failed, dirty logging private memory is unsupported");
+
+		r = __vm_set_user_memory_region2(vm, 0,
+						 KVM_MEM_READONLY | KVM_MEM_GUEST_MEMFD,
+						 0, MEM_REGION_SIZE, NULL, guest_memfd, 0);
+		TEST_ASSERT(r && errno == EINVAL,
+			    "KVM_SET_USER_MEMORY_REGION2 should have failed, read-only GUEST_MEMFD memslots are unsupported");
+
+		close(guest_memfd);
+	}
+}
 
 /*
  * Test it can be added memory slots up to KVM_CAP_NR_MEMSLOTS, then any
@@ -354,7 +421,7 @@ static void test_add_max_memory_regions(void)
 		    "KVM_CAP_NR_MEMSLOTS should be greater than 0");
 	pr_info("Allowed number of memory slots: %i\n", max_mem_slots);
 
-	vm = vm_create(VM_MODE_DEFAULT, 0, O_RDWR);
+	vm = vm_create_barebones();
 
 	/* Check it can be added memory slots up to the maximum allowed */
 	pr_info("Adding slots 0..%i, each memory region with %dK size\n",
@@ -388,16 +455,105 @@ static void test_add_max_memory_regions(void)
 	kvm_vm_free(vm);
 }
 
+
+#ifdef __x86_64__
+static void test_invalid_guest_memfd(struct kvm_vm *vm, int memfd,
+				     size_t offset, const char *msg)
+{
+	int r = __vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+					     MEM_REGION_GPA, MEM_REGION_SIZE,
+					     0, memfd, offset);
+	TEST_ASSERT(r == -1 && errno == EINVAL, "%s", msg);
+}
+
+static void test_add_private_memory_region(void)
+{
+	struct kvm_vm *vm, *vm2;
+	int memfd, i;
+
+	pr_info("Testing ADD of KVM_MEM_GUEST_MEMFD memory regions\n");
+
+	vm = vm_create_barebones_type(KVM_X86_SW_PROTECTED_VM);
+
+	test_invalid_guest_memfd(vm, vm->kvm_fd, 0, "KVM fd should fail");
+	test_invalid_guest_memfd(vm, vm->fd, 0, "VM's fd should fail");
+
+	memfd = kvm_memfd_alloc(MEM_REGION_SIZE, false);
+	test_invalid_guest_memfd(vm, memfd, 0, "Regular memfd() should fail");
+	close(memfd);
+
+	vm2 = vm_create_barebones_type(KVM_X86_SW_PROTECTED_VM);
+	memfd = vm_create_guest_memfd(vm2, MEM_REGION_SIZE, 0);
+	test_invalid_guest_memfd(vm, memfd, 0, "Other VM's guest_memfd() should fail");
+
+	vm_set_user_memory_region2(vm2, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+				   MEM_REGION_GPA, MEM_REGION_SIZE, 0, memfd, 0);
+	close(memfd);
+	kvm_vm_free(vm2);
+
+	memfd = vm_create_guest_memfd(vm, MEM_REGION_SIZE, 0);
+	for (i = 1; i < PAGE_SIZE; i++)
+		test_invalid_guest_memfd(vm, memfd, i, "Unaligned offset should fail");
+
+	vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+				   MEM_REGION_GPA, MEM_REGION_SIZE, 0, memfd, 0);
+	close(memfd);
+
+	kvm_vm_free(vm);
+}
+
+static void test_add_overlapping_private_memory_regions(void)
+{
+	struct kvm_vm *vm;
+	int memfd;
+	int r;
+
+	pr_info("Testing ADD of overlapping KVM_MEM_GUEST_MEMFD memory regions\n");
+
+	vm = vm_create_barebones_type(KVM_X86_SW_PROTECTED_VM);
+
+	memfd = vm_create_guest_memfd(vm, MEM_REGION_SIZE * 4, 0);
+
+	vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+				   MEM_REGION_GPA, MEM_REGION_SIZE * 2, 0, memfd, 0);
+
+	vm_set_user_memory_region2(vm, MEM_REGION_SLOT + 1, KVM_MEM_GUEST_MEMFD,
+				   MEM_REGION_GPA * 2, MEM_REGION_SIZE * 2,
+				   0, memfd, MEM_REGION_SIZE * 2);
+
+	/*
+	 * Delete the first memslot, and then attempt to recreate it except
+	 * with a "bad" offset that results in overlap in the guest_memfd().
+	 */
+	vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+				   MEM_REGION_GPA, 0, NULL, -1, 0);
+
+	/* Overlap the front half of the other slot. */
+	r = __vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+					 MEM_REGION_GPA * 2 - MEM_REGION_SIZE,
+					 MEM_REGION_SIZE * 2,
+					 0, memfd, 0);
+	TEST_ASSERT(r == -1 && errno == EEXIST, "%s",
+		    "Overlapping guest_memfd() bindings should fail with EEXIST");
+
+	/* And now the back half of the other slot. */
+	r = __vm_set_user_memory_region2(vm, MEM_REGION_SLOT, KVM_MEM_GUEST_MEMFD,
+					 MEM_REGION_GPA * 2 + MEM_REGION_SIZE,
+					 MEM_REGION_SIZE * 2,
+					 0, memfd, 0);
+	TEST_ASSERT(r == -1 && errno == EEXIST, "%s",
+		    "Overlapping guest_memfd() bindings should fail with EEXIST");
+
+	close(memfd);
+	kvm_vm_free(vm);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 #ifdef __x86_64__
 	int i, loops;
-#endif
 
-	/* Tell stdout not to buffer its content */
-	setbuf(stdout, NULL);
-
-#ifdef __x86_64__
 	/*
 	 * FIXME: the zero-memslot test fails on aarch64 and s390x because
 	 * KVM_RUN fails with ENOEXEC or EFAULT.
@@ -405,11 +561,21 @@ int main(int argc, char *argv[])
 	test_zero_memory_regions();
 #endif
 
+	test_invalid_memory_region_flags();
+
 	test_add_max_memory_regions();
 
 #ifdef __x86_64__
+	if (kvm_has_cap(KVM_CAP_GUEST_MEMFD) &&
+	    (kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM))) {
+		test_add_private_memory_region();
+		test_add_overlapping_private_memory_regions();
+	} else {
+		pr_info("Skipping tests for KVM_MEM_GUEST_MEMFD memory regions\n");
+	}
+
 	if (argc > 1)
-		loops = atoi(argv[1]);
+		loops = atoi_positive("Number of iterations", argv[1]);
 	else
 		loops = 10;
 

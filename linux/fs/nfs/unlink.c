@@ -139,6 +139,7 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 		 */
 		spin_lock(&alias->d_lock);
 		if (d_really_is_positive(alias) &&
+		    !nfs_compare_fh(NFS_FH(inode), NFS_FH(d_inode(alias))) &&
 		    !(alias->d_flags & DCACHE_NFSFS_RENAMED)) {
 			devname_garbage = alias->d_fsdata;
 			alias->d_fsdata = data;
@@ -266,7 +267,7 @@ static void nfs_async_rename_done(struct rpc_task *task, void *calldata)
 	struct inode *new_dir = data->new_dir;
 	struct dentry *old_dentry = data->old_dentry;
 
-	trace_nfs_sillyrename_rename(old_dir, old_dentry,
+	trace_nfs_async_rename_done(old_dir, old_dentry,
 			new_dir, data->new_dentry, task->tk_status);
 	if (!NFS_PROTO(old_dir)->rename_done(task, old_dir, new_dir)) {
 		rpc_restart_call_prepare(task);

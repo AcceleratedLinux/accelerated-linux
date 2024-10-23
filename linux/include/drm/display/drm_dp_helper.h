@@ -69,6 +69,8 @@ bool drm_dp_128b132b_link_training_failed(const u8 link_status[DP_LINK_STATUS_SI
 u8 drm_dp_link_rate_to_bw_code(int link_rate);
 int drm_dp_bw_code_to_link_rate(u8 link_bw);
 
+const char *drm_dp_phy_name(enum drm_dp_phy dp_phy);
+
 /**
  * struct drm_dp_vsc_sdp - drm DP VSC SDP
  *
@@ -96,8 +98,39 @@ struct drm_dp_vsc_sdp {
 	enum dp_content_type content_type;
 };
 
-void drm_dp_vsc_sdp_log(const char *level, struct device *dev,
-			const struct drm_dp_vsc_sdp *vsc);
+/**
+ * struct drm_dp_as_sdp - drm DP Adaptive Sync SDP
+ *
+ * This structure represents a DP AS SDP of drm
+ * It is based on DP 2.1 spec [Table 2-126:  Adaptive-Sync SDP Header Bytes] and
+ * [Table 2-127: Adaptive-Sync SDP Payload for DB0 through DB8]
+ *
+ * @sdp_type: Secondary-data packet type
+ * @revision: Revision Number
+ * @length: Number of valid data bytes
+ * @vtotal: Minimum Vertical Vtotal
+ * @target_rr: Target Refresh
+ * @duration_incr_ms: Successive frame duration increase
+ * @duration_decr_ms: Successive frame duration decrease
+ * @operation_mode: Adaptive Sync Operation Mode
+ */
+struct drm_dp_as_sdp {
+	unsigned char sdp_type;
+	unsigned char revision;
+	unsigned char length;
+	int vtotal;
+	int target_rr;
+	int duration_incr_ms;
+	int duration_decr_ms;
+	enum operation_mode mode;
+};
+
+void drm_dp_as_sdp_log(struct drm_printer *p,
+		       const struct drm_dp_as_sdp *as_sdp);
+void drm_dp_vsc_sdp_log(struct drm_printer *p, const struct drm_dp_vsc_sdp *vsc);
+
+bool drm_dp_vsc_sdp_supported(struct drm_dp_aux *aux, const u8 dpcd[DP_RECEIVER_CAP_SIZE]);
+bool drm_dp_as_sdp_supported(struct drm_dp_aux *aux, const u8 dpcd[DP_RECEIVER_CAP_SIZE]);
 
 int drm_dp_psr_setup_time(const u8 psr_cap[EDP_PSR_RECEIVER_CAP_SIZE]);
 
@@ -162,6 +195,7 @@ drm_dp_is_branch(const u8 dpcd[DP_RECEIVER_CAP_SIZE])
 }
 
 /* DP/eDP DSC support */
+u8 drm_dp_dsc_sink_bpp_incr(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE]);
 u8 drm_dp_dsc_sink_max_slice_count(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE],
 				   bool is_edp);
 u8 drm_dp_dsc_sink_line_buf_depth(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE]);
@@ -179,9 +213,8 @@ static inline u16
 drm_edp_dsc_sink_output_bpp(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE])
 {
 	return dsc_dpcd[DP_DSC_MAX_BITS_PER_PIXEL_LOW - DP_DSC_SUPPORT] |
-		(dsc_dpcd[DP_DSC_MAX_BITS_PER_PIXEL_HI - DP_DSC_SUPPORT] &
-		 DP_DSC_MAX_BITS_PER_PIXEL_HI_MASK <<
-		 DP_DSC_MAX_BITS_PER_PIXEL_HI_SHIFT);
+		((dsc_dpcd[DP_DSC_MAX_BITS_PER_PIXEL_HI - DP_DSC_SUPPORT] &
+		  DP_DSC_MAX_BITS_PER_PIXEL_HI_MASK) << 8);
 }
 
 static inline u32
@@ -190,6 +223,19 @@ drm_dp_dsc_sink_max_slice_width(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE])
 	/* Max Slicewidth = Number of Pixels * 320 */
 	return dsc_dpcd[DP_DSC_MAX_SLICE_WIDTH - DP_DSC_SUPPORT] *
 		DP_DSC_SLICE_WIDTH_MULTIPLIER;
+}
+
+/**
+ * drm_dp_dsc_sink_supports_format() - check if sink supports DSC with given output format
+ * @dsc_dpcd : DSC-capability DPCDs of the sink
+ * @output_format: output_format which is to be checked
+ *
+ * Returns true if the sink supports DSC with the given output_format, false otherwise.
+ */
+static inline bool
+drm_dp_dsc_sink_supports_format(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE], u8 output_format)
+{
+	return dsc_dpcd[DP_DSC_DEC_COLOR_FORMAT_CAP - DP_DSC_SUPPORT] & output_format;
 }
 
 /* Forward Error Correction Support on DP 1.4 */
@@ -203,6 +249,12 @@ static inline bool
 drm_dp_channel_coding_supported(const u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
 	return dpcd[DP_MAIN_LINK_CHANNEL_CODING] & DP_CAP_ANSI_8B10B;
+}
+
+static inline bool
+drm_dp_128b132b_supported(const u8 dpcd[DP_RECEIVER_CAP_SIZE])
+{
+	return dpcd[DP_MAIN_LINK_CHANNEL_CODING] & DP_CAP_ANSI_128B132B;
 }
 
 static inline bool
@@ -237,6 +289,19 @@ drm_edp_backlight_supported(const u8 edp_dpcd[EDP_DISPLAY_CTL_CAP_SIZE])
 	return !!(edp_dpcd[1] & DP_EDP_TCON_BACKLIGHT_ADJUSTMENT_CAP);
 }
 
+/**
+ * drm_dp_is_uhbr_rate - Determine if a link rate is UHBR
+ * @link_rate: link rate in 10kbits/s units
+ *
+ * Determine if the provided link rate is an UHBR rate.
+ *
+ * Returns: %True if @link_rate is an UHBR rate.
+ */
+static inline bool drm_dp_is_uhbr_rate(int link_rate)
+{
+	return link_rate >= 1000000;
+}
+
 /*
  * DisplayPort AUX channel
  */
@@ -258,8 +323,8 @@ struct drm_dp_aux_msg {
 };
 
 struct cec_adapter;
-struct edid;
 struct drm_connector;
+struct drm_edid;
 
 /**
  * struct drm_dp_aux_cec - DisplayPort CEC-Tunneling-over-AUX
@@ -370,12 +435,65 @@ struct drm_dp_aux {
 	 * helpers assume this is the case.
 	 *
 	 * Also note that this callback can be called no matter the
-	 * state @dev is in. Drivers that need that device to be powered
-	 * to perform this operation will first need to make sure it's
-	 * been properly enabled.
+	 * state @dev is in and also no matter what state the panel is
+	 * in. It's expected:
+	 *
+	 * - If the @dev providing the AUX bus is currently unpowered then
+	 *   it will power itself up for the transfer.
+	 *
+	 * - If we're on eDP (using a drm_panel) and the panel is not in a
+	 *   state where it can respond (it's not powered or it's in a
+	 *   low power state) then this function may return an error, but
+	 *   not crash. It's up to the caller of this code to make sure that
+	 *   the panel is powered on if getting an error back is not OK. If a
+	 *   drm_panel driver is initiating a DP AUX transfer it may power
+	 *   itself up however it wants. All other code should ensure that
+	 *   the pre_enable() bridge chain (which eventually calls the
+	 *   drm_panel prepare function) has powered the panel.
 	 */
 	ssize_t (*transfer)(struct drm_dp_aux *aux,
 			    struct drm_dp_aux_msg *msg);
+
+	/**
+	 * @wait_hpd_asserted: wait for HPD to be asserted
+	 *
+	 * This is mainly useful for eDP panels drivers to wait for an eDP
+	 * panel to finish powering on. It is optional for DP AUX controllers
+	 * to implement this function. It is required for DP AUX endpoints
+	 * (panel drivers) to call this function after powering up but before
+	 * doing AUX transfers unless the DP AUX endpoint driver knows that
+	 * we're not using the AUX controller's HPD. One example of the panel
+	 * driver not needing to call this is if HPD is hooked up to a GPIO
+	 * that the panel driver can read directly.
+	 *
+	 * If a DP AUX controller does not implement this function then it
+	 * may still support eDP panels that use the AUX controller's built-in
+	 * HPD signal by implementing a long wait for HPD in the transfer()
+	 * callback, though this is deprecated.
+	 *
+	 * This function will efficiently wait for the HPD signal to be
+	 * asserted. The `wait_us` parameter that is passed in says that we
+	 * know that the HPD signal is expected to be asserted within `wait_us`
+	 * microseconds. This function could wait for longer than `wait_us` if
+	 * the logic in the DP controller has a long debouncing time. The
+	 * important thing is that if this function returns success that the
+	 * DP controller is ready to send AUX transactions.
+	 *
+	 * This function returns 0 if HPD was asserted or -ETIMEDOUT if time
+	 * expired and HPD wasn't asserted. This function should not print
+	 * timeout errors to the log.
+	 *
+	 * The semantics of this function are designed to match the
+	 * readx_poll_timeout() function. That means a `wait_us` of 0 means
+	 * to wait forever. Like readx_poll_timeout(), this function may sleep.
+	 *
+	 * NOTE: this function specifically reports the state of the HPD pin
+	 * that's associated with the DP AUX channel. This is different from
+	 * the HPD concept in much of the rest of DRM which is more about
+	 * physical presence of a display. For eDP, for instance, a display is
+	 * assumed always present even if the HPD pin is deasserted.
+	 */
+	int (*wait_hpd_asserted)(struct drm_dp_aux *aux, unsigned long wait_us);
 
 	/**
 	 * @i2c_nack_count: Counts I2C NACKs, used for DP validation.
@@ -393,9 +511,15 @@ struct drm_dp_aux {
 	 * @is_remote: Is this AUX CH actually using sideband messaging.
 	 */
 	bool is_remote;
+
+	/**
+	 * @powered_down: If true then the remote endpoint is powered down.
+	 */
+	bool powered_down;
 };
 
 int drm_dp_dpcd_probe(struct drm_dp_aux *aux, unsigned int offset);
+void drm_dp_dpcd_set_powered(struct drm_dp_aux *aux, bool powered);
 ssize_t drm_dp_dpcd_read(struct drm_dp_aux *aux, unsigned int offset,
 			 void *buffer, size_t size);
 ssize_t drm_dp_dpcd_write(struct drm_dp_aux *aux, unsigned int offset,
@@ -451,18 +575,18 @@ bool drm_dp_downstream_is_type(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 			       const u8 port_cap[4], u8 type);
 bool drm_dp_downstream_is_tmds(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 			       const u8 port_cap[4],
-			       const struct edid *edid);
+			       const struct drm_edid *drm_edid);
 int drm_dp_downstream_max_dotclock(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 				   const u8 port_cap[4]);
 int drm_dp_downstream_max_tmds_clock(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 				     const u8 port_cap[4],
-				     const struct edid *edid);
+				     const struct drm_edid *drm_edid);
 int drm_dp_downstream_min_tmds_clock(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 				     const u8 port_cap[4],
-				     const struct edid *edid);
+				     const struct drm_edid *drm_edid);
 int drm_dp_downstream_max_bpc(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 			      const u8 port_cap[4],
-			      const struct edid *edid);
+			      const struct drm_edid *drm_edid);
 bool drm_dp_downstream_420_passthrough(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 				       const u8 port_cap[4]);
 bool drm_dp_downstream_444_to_420_conversion(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
@@ -474,7 +598,7 @@ int drm_dp_downstream_id(struct drm_dp_aux *aux, char id[6]);
 void drm_dp_downstream_debug(struct seq_file *m,
 			     const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 			     const u8 port_cap[4],
-			     const struct edid *edid,
+			     const struct drm_edid *drm_edid,
 			     struct drm_dp_aux *aux);
 enum drm_mode_subconnector
 drm_dp_subconnector_type(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
@@ -576,6 +700,13 @@ enum drm_dp_quirk {
 	 * the DP_MAX_LINK_RATE register reporting a lower max multiplier.
 	 */
 	DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS,
+	/**
+	 * @DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC:
+	 *
+	 * The device applies HBLANK expansion for some modes, but this
+	 * requires enabling DSC.
+	 */
+	DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC,
 };
 
 /**
@@ -638,11 +769,12 @@ static inline int drm_panel_dp_aux_backlight(struct drm_panel *panel,
 
 #endif
 
-#ifdef CONFIG_DRM_DP_CEC
+#ifdef CONFIG_DRM_DISPLAY_DP_AUX_CEC
 void drm_dp_cec_irq(struct drm_dp_aux *aux);
 void drm_dp_cec_register_connector(struct drm_dp_aux *aux,
 				   struct drm_connector *connector);
 void drm_dp_cec_unregister_connector(struct drm_dp_aux *aux);
+void drm_dp_cec_attach(struct drm_dp_aux *aux, u16 source_physical_address);
 void drm_dp_cec_set_edid(struct drm_dp_aux *aux, const struct edid *edid);
 void drm_dp_cec_unset_edid(struct drm_dp_aux *aux);
 #else
@@ -657,6 +789,11 @@ drm_dp_cec_register_connector(struct drm_dp_aux *aux,
 }
 
 static inline void drm_dp_cec_unregister_connector(struct drm_dp_aux *aux)
+{
+}
+
+static inline void drm_dp_cec_attach(struct drm_dp_aux *aux,
+				     u16 source_physical_address)
 {
 }
 
@@ -718,5 +855,19 @@ int drm_dp_pcon_pps_override_param(struct drm_dp_aux *aux, u8 pps_param[6]);
 bool drm_dp_downstream_rgb_to_ycbcr_conversion(const u8 dpcd[DP_RECEIVER_CAP_SIZE],
 					       const u8 port_cap[4], u8 color_spc);
 int drm_dp_pcon_convert_rgb_to_ycbcr(struct drm_dp_aux *aux, u8 color_spc);
+
+#define DRM_DP_BW_OVERHEAD_MST		BIT(0)
+#define DRM_DP_BW_OVERHEAD_UHBR		BIT(1)
+#define DRM_DP_BW_OVERHEAD_SSC_REF_CLK	BIT(2)
+#define DRM_DP_BW_OVERHEAD_FEC		BIT(3)
+#define DRM_DP_BW_OVERHEAD_DSC		BIT(4)
+
+int drm_dp_bw_overhead(int lane_count, int hactive,
+		       int dsc_slice_count,
+		       int bpp_x16, unsigned long flags);
+int drm_dp_bw_channel_coding_efficiency(bool is_uhbr);
+int drm_dp_max_dprx_data_rate(int max_link_rate, int max_lanes);
+
+ssize_t drm_dp_vsc_sdp_pack(const struct drm_dp_vsc_sdp *vsc, struct dp_sdp *sdp);
 
 #endif /* _DRM_DP_HELPER_H_ */

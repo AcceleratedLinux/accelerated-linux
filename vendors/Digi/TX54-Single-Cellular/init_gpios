@@ -30,16 +30,7 @@
 # GPIO pin name and ordering.
 #
 gpio_index() {
-	local index=$1
-	if [ ${index} -ge 96 ] ; then
-		echo $((400 + ${index} - 96))
-	elif [ ${index} -ge 64 ] ; then
-		echo $((416 + ${index} - 64))
-	elif [ ${index} -ge 32 ] ; then
-		echo $((448 + ${index} - 32))
-	else
-		echo $((480 + ${index}))
-	fi
+	echo $((512 + $1))
 }
 
 init_gpio() {

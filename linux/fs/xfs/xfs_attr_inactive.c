@@ -23,6 +23,7 @@
 #include "xfs_quota.h"
 #include "xfs_dir2.h"
 #include "xfs_error.h"
+#include "xfs_health.h"
 
 /*
  * Invalidate any incore buffers associated with this remote attribute value
@@ -147,6 +148,7 @@ xfs_attr3_node_inactive(
 	if (level > XFS_DA_NODE_MAXDEPTH) {
 		xfs_buf_mark_corrupt(bp);
 		xfs_trans_brelse(*trans, bp);	/* no locks for later trans */
+		xfs_dirattr_mark_sick(dp, XFS_ATTR_FORK);
 		return -EFSCORRUPTED;
 	}
 
@@ -158,6 +160,7 @@ xfs_attr3_node_inactive(
 	}
 	child_fsb = be32_to_cpu(ichdr.btree[0].before);
 	xfs_trans_brelse(*trans, bp);	/* no locks for later trans */
+	bp = NULL;
 
 	/*
 	 * If this is the node level just above the leaves, simply loop
@@ -196,6 +199,7 @@ xfs_attr3_node_inactive(
 		default:
 			xfs_buf_mark_corrupt(child_bp);
 			xfs_trans_brelse(*trans, child_bp);
+			xfs_dirattr_mark_sick(dp, XFS_ATTR_FORK);
 			error = -EFSCORRUPTED;
 			break;
 		}
@@ -211,12 +215,8 @@ xfs_attr3_node_inactive(
 				&child_bp);
 		if (error)
 			return error;
-		error = bp->b_error;
-		if (error) {
-			xfs_trans_brelse(*trans, child_bp);
-			return error;
-		}
 		xfs_trans_binval(*trans, child_bp);
+		child_bp = NULL;
 
 		/*
 		 * If we're not done, re-read the parent to get the next
@@ -233,6 +233,7 @@ xfs_attr3_node_inactive(
 						  bp->b_addr);
 			child_fsb = be32_to_cpu(phdr.btree[i + 1].before);
 			xfs_trans_brelse(*trans, bp);
+			bp = NULL;
 		}
 		/*
 		 * Atomically commit the whole invalidate stuff.
@@ -288,6 +289,7 @@ xfs_attr3_root_inactive(
 		error = xfs_attr3_leaf_inactive(trans, dp, bp);
 		break;
 	default:
+		xfs_dirattr_mark_sick(dp, XFS_ATTR_FORK);
 		error = -EFSCORRUPTED;
 		xfs_buf_mark_corrupt(bp);
 		xfs_trans_brelse(*trans, bp);
@@ -335,10 +337,9 @@ xfs_attr_inactive(
 	int			error = 0;
 
 	mp = dp->i_mount;
-	ASSERT(! XFS_NOT_DQATTACHED(mp, dp));
 
 	xfs_ilock(dp, lock_mode);
-	if (!XFS_IFORK_Q(dp))
+	if (!xfs_inode_has_attr_fork(dp))
 		goto out_destroy_fork;
 	xfs_iunlock(dp, lock_mode);
 
@@ -351,7 +352,7 @@ xfs_attr_inactive(
 	lock_mode = XFS_ILOCK_EXCL;
 	xfs_ilock(dp, lock_mode);
 
-	if (!XFS_IFORK_Q(dp))
+	if (!xfs_inode_has_attr_fork(dp))
 		goto out_cancel;
 
 	/*
@@ -362,12 +363,11 @@ xfs_attr_inactive(
 
 	/*
 	 * Invalidate and truncate the attribute fork extents. Make sure the
-	 * fork actually has attributes as otherwise the invalidation has no
+	 * fork actually has xattr blocks as otherwise the invalidation has no
 	 * blocks to read and returns an error. In this case, just do the fork
 	 * removal below.
 	 */
-	if (xfs_inode_hasattr(dp) &&
-	    dp->i_afp->if_format != XFS_DINODE_FMT_LOCAL) {
+	if (dp->i_af.if_nextents > 0) {
 		error = xfs_attr3_root_inactive(&trans, dp);
 		if (error)
 			goto out_cancel;
@@ -388,11 +388,7 @@ out_cancel:
 	xfs_trans_cancel(trans);
 out_destroy_fork:
 	/* kill the in-core attr fork before we drop the inode lock */
-	if (dp->i_afp) {
-		xfs_idestroy_fork(dp->i_afp);
-		kmem_cache_free(xfs_ifork_cache, dp->i_afp);
-		dp->i_afp = NULL;
-	}
+	xfs_ifork_zap_attr(dp);
 	if (lock_mode)
 		xfs_iunlock(dp, lock_mode);
 	return error;

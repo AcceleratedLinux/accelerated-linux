@@ -10,6 +10,7 @@
 
 #include "ipq6018.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 
 / {
 	model = "Digi EX50";
@@ -140,6 +141,42 @@
 		qcom,link-poll = <1>;
 		qcom,phy-mdio-addr = <24>;
 		phy-mode = "sgmii";
+	};
+
+	power-monitor {
+		compatible = "digi,ex50-power";
+
+		poe-present-gpios = <&tlmm 18 GPIO_ACTIVE_LOW>;
+		poe-mec-gpios     = <&tlmm 71 GPIO_ACTIVE_LOW>;
+		dc-present-gpios  = <&tlmm 34 GPIO_ACTIVE_LOW>;
+	};
+
+	sim-mux0 {
+		compatible = "sim-mux";
+
+		sim-select-gpios  = <&tlmm 78 GPIO_ACTIVE_LOW>;
+		sim-present-gpios = <&tlmm  0 GPIO_ACTIVE_HIGH>,
+				    <&tlmm 62 GPIO_ACTIVE_HIGH>;
+
+		sim-count = <2>;
+	};
+};
+
+&soc {
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		factory-button {
+			label = "factory";
+			linux,code = <KEY_DELETE>;
+			gpios = <&tlmm 68 GPIO_ACTIVE_LOW>;
+		};
+
+		sim-button {
+			label = "sim_switch";
+			linux,code = <KEY_SELECT>;
+			gpios = <&tlmm 79 GPIO_ACTIVE_LOW>;
+		};
 	};
 };
 
@@ -287,7 +324,7 @@
 	status = "okay";
 };
 
-&i2c_1 {
+&blsp1_i2c3 {
 	pinctrl-0 = <&i2c_1_pins>;
 	pinctrl-names = "default";
 	status = "okay";
@@ -325,7 +362,7 @@
 	};
 };
 
-&spi_0 {
+&blsp1_spi1 {
 	cs-select = <0>;
 	status = "okay";
 
@@ -459,21 +496,21 @@
 	status = "disabled";
 };
 
-&pcie_phy0 {
+&pcie_phy {
 	status = "disabled";
 };
 
 &tlmm {
 	gpio-line-names = "", "", "", "", "", "", "", "",
-			  "", "", "", "", "", "", "", "",
-			  "dcd", "", "poe_in", "", "", "", "", "",
-			  "", "", "", "", "", "", "", "wdi",
-			  "", "", "dc_in", "", "", "", "", "",
-			  "", "", "", "", "", "", "", "",
-			  "", "", "", "", "", "", "", "",
-			  "", "dtr", "", "", "", "", "", "dev_mode",
-			  "", "", "", "", "factory", "rts", "cts", "full_power",
-			  "", "", "wdi_enable", "", "", "", "sim_select", "";
+	/*  8 */	  "", "", "", "", "", "", "", "",
+	/* 16 */	  "dcd", "", "poe_in", "", "", "", "", "",
+	/* 24 */	  "", "", "", "", "", "", "", "wdi",
+	/* 32 */	  "", "", "dc_in", "", "", "", "", "",
+	/* 40 */	  "", "", "", "", "", "", "", "",
+	/* 48 */	  "", "", "", "", "", "", "", "",
+	/* 56 */	  "", "dtr", "", "", "", "", "", "developer_",
+	/* 64 */	  "", "", "", "", "factory", "rts", "cts", "full_power",
+	/* 72 */	  "", "", "wdi_enable", "", "", "", "sim_select", "sim_switch";
 
 	i2c_1_pins: i2c-1-pins {
 		pins = "gpio42", "gpio43";
@@ -509,12 +546,6 @@
 
 	serial_gpio_pins: serial-gpio-pins {
 		pins = "gpio16", "gpio57", "gpio69", "gpio70";
-		functions = "gpio";
-		drive-strength = <8>;
-	};
-
-	power_gpio_pins: power-gpio-pins {
-		pins = "gpio18", "gpio34", "gpio71";
 		functions = "gpio";
 		drive-strength = <8>;
 	};

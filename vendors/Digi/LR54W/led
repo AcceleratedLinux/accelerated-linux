@@ -98,9 +98,9 @@ eval $(config stop)
 # Yellow: Poor / Fair signal.
 # Green: Good / Excellent signal.
 update_signal_led() {
-	local idx=$1
+	local modem_name=$1
 
-	case "$(runt get mm.modem.${idx}.status.bars)" in
+	case "$(runt get mm.modem.${modem_name}.status.bars)" in
 		4|5) SIGNAL="-o WWAN1_SIGNAL_GREEN -O WWAN1_SIGNAL_YELLOW" ;;
 		1|2|3) SIGNAL="-o WWAN1_SIGNAL_YELLOW -O WWAN1_SIGNAL_GREEN" ;;
 		*) SIGNAL="-O WWAN1_SIGNAL_YELLOW -O WWAN1_SIGNAL_GREEN" ;;
@@ -113,27 +113,27 @@ update_signal_led() {
 # Solid Yellow: 2G or 3G connection is up.
 # Solid Green: 4G connection is up.
 update_service_led() {
-	local idx=$1
+	local modem_name=$1
 
-	if [ "$(runt get mm.modem.${idx}.status.state)" = connected ]; then
-		case "$(runt get mm.modem.${idx}.status.gtech)" in
+	if [ "$(runt get mm.modem.${modem_name}.status.state)" = connected ]; then
+		case "$(runt get mm.modem.${modem_name}.status.gtech)" in
 			4g) SERVICE="-o WWAN1_SERVICE_GREEN -O WWAN1_SERVICE_YELLOW" ;;
 			3g|2g) SERVICE="-o WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN" ;;
 			*) SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN" ;;
 		esac
-	elif [ "$(runt get mm.modem.${idx}.status.state)" = connecting ]; then
+	elif [ "$(runt get mm.modem.${modem_name}.status.state)" = connecting ]; then
 		SERVICE="-f WWAN1_SERVICE_GREEN -O WWAN1_SERVICE_YELLOW"
 	else
 		SERVICE="-O WWAN1_SERVICE_YELLOW -O WWAN1_SERVICE_GREEN"
 	fi
 }
 
-idx="$(modem idx 2>/dev/null)"
+modem_name="$(modem name 2>/dev/null)"
 
 SIGNAL=
 SERVICE=
-update_signal_led ${idx}
-update_service_led ${idx}
+update_signal_led ${modem_name}
+update_service_led ${modem_name}
 
 LEDCMD="${LEDCMD} ${SERVICE} ${SIGNAL}"
 

@@ -1,0 +1,124 @@
+#!/bin/sh
+#
+# Action for ConnectEZ 2/4 specific LED setting
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+wifi_led_update()
+{
+	WIFI_SERV=
+
+	eval "$(config stop)"
+	eval "$(config start)"
+	config load
+
+	error=0
+	ap_status="off"
+	client_status="off"
+	if config exists network wifi; then
+		runt update network.wifi
+		aps=$(config keys network.wifi.ap)
+		for ap in $aps ; do
+			ap=${ap%%.*}
+			device="$(runt get network.wifi.ap."$ap".device)"
+			if [ -n "$device" ]; then
+				if ip link show "$device" up 2>&1 | grep -q "state UP"; then
+					ap_status="on"
+				fi
+			fi
+		done
+
+		clients=$(config keys network.wifi.client)
+		for client in $clients ; do
+			client=${client%%.*}
+			device="$(runt get network.wifi.client."$client".device)"
+			if [ -n "$device" ]; then
+				if ip link show "$device" up 2>&1 | grep -q "state UP"; then
+					client_status="connected"
+				else
+					client_status="searching"
+				fi
+			fi
+		done
+	fi
+	eval "$(config stop)"
+		
+####################################################################################
+#
+# Wifi LED table
+#
+#--------------------------------------------------------------------------------------|
+# State                      |   wifig    |   wifir    |   wifib    |  Color           |
+#--------------------------------------------------------------------------------------|
+# Both Unconfigured          |    Off     |    Off     |    Off     |    No Light      |
+#--------------------------------------------------------------------------------------|
+# Client Connected (No AP)   |    On      |    Off     |    Off     |   Green Solid    |
+#--------------------------------------------------------------------------------------|
+# Client Searching (No AP)   | Slow Flash |    Off     |    Off     |   Green Flash    |
+#--------------------------------------------------------------------------------------|
+# Client unconfig - AP up    |    On      |    On      |    Off     |   Amber Solid    |
+#--------------------------------------------------------------------------------------|
+# Client Connected - AP up   |    Off     |    Off     |    On      |   Blue Solid     |
+#--------------------------------------------------------------------------------------|
+# Client Searching - AP up   |    On      | Slow Flash |    Off     |Amber/Green Flash |
+#--------------------------------------------------------------------------------------|
+# Error                      |    Off     |    On      |    Off     |    Red Solid     |
+#--------------------------------------------------------------------------------------|
+	if [ "$error" = "1" ]; then
+		WIFI_SERV="-o wifir -O wifig -O wifib" # There currently no good way to detect error
+	else
+		if [ "$client_status" = "connected" ] && [ "$ap_status" = "off" ]; then
+			WIFI_SERV="-o wifig -O wifir -O wifib " # green
+		elif [ "$client_status" = "off" ] && [ "$ap_status" = "on" ]; then
+			WIFI_SERV="-o wifig -o wifir -O wifib" # amber
+		elif [ "$client_status" = "searching" ] && [ "$ap_status" = "off" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/wifig/delay_on)" != "500" ]; then
+				WIFI_SERV="-f wifig -O wifir -O wifib" # slow flash green
+			fi
+		elif [ "$client_status" = "connected" ] && [ "$ap_status" = "on" ]; then
+			WIFI_SERV="-O wifig -O wifir -o wifib" # blue
+		elif [ "$client_status" = "searching" ] && [ "$ap_status" = "on" ]; then
+			# Don't glitch the flash if we're already flashing
+			if [ "$(cat /sys/class/leds/wifir/delay_on)" != "500" ]; then
+				WIFI_SERV="-o wifig -f wifir -O wifib" # slow flash amber/green
+			fi
+		else
+			WIFI_SERV="-O wifig -O wifir -O wifib" # off
+		fi
+	fi
+}
+
+findme_update()
+{
+	FINDME=
+	if find-me state > /dev/null 2>&1; then
+		FINDME="-f userg" # slow flash user green
+	else
+		FINDME="-O userg"
+	fi
+}
+
+case "$1" in
+start|stop)
+	ledcmd -O userg
+	ledcmd -O wifig -O wifir -O wifib
+	;;
+reload)
+	findme_update
+	wifi_led_update
+	ledcmd $FINDME $WIFI_SERV
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+exit 0

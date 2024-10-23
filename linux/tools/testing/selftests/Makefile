@@ -1,28 +1,44 @@
 # SPDX-License-Identifier: GPL-2.0
 TARGETS += alsa
+TARGETS += amd-pstate
 TARGETS += arm64
 TARGETS += bpf
 TARGETS += breakpoints
+TARGETS += cachestat
 TARGETS += capabilities
 TARGETS += cgroup
 TARGETS += clone3
+TARGETS += connector
 TARGETS += core
 TARGETS += cpufreq
 TARGETS += cpu-hotplug
 TARGETS += damon
+TARGETS += devices
+TARGETS += dmabuf-heaps
 TARGETS += drivers/dma-buf
 TARGETS += drivers/s390x/uvdevice
+TARGETS += drivers/net
+TARGETS += drivers/net/bonding
+TARGETS += drivers/net/team
+TARGETS += drivers/net/virtio_net
+TARGETS += dt
 TARGETS += efivarfs
 TARGETS += exec
+TARGETS += fchmodat2
 TARGETS += filesystems
 TARGETS += filesystems/binderfs
 TARGETS += filesystems/epoll
+TARGETS += filesystems/fat
+TARGETS += filesystems/overlayfs
+TARGETS += filesystems/statmount
 TARGETS += firmware
 TARGETS += fpu
 TARGETS += ftrace
 TARGETS += futex
 TARGETS += gpio
+TARGETS += hid
 TARGETS += intel_pstate
+TARGETS += iommu
 TARGETS += ipc
 TARGETS += ir
 TARGETS += kcmp
@@ -32,6 +48,7 @@ TARGETS += landlock
 TARGETS += lib
 TARGETS += livepatch
 TARGETS += lkdtm
+TARGETS += lsm
 TARGETS += membarrier
 TARGETS += memfd
 TARGETS += memory-hotplug
@@ -44,20 +61,28 @@ TARGETS += nci
 TARGETS += net
 TARGETS += net/af_unix
 TARGETS += net/forwarding
+TARGETS += net/hsr
 TARGETS += net/mptcp
-TARGETS += netfilter
+TARGETS += net/openvswitch
+TARGETS += net/tcp_ao
+TARGETS += net/netfilter
 TARGETS += nsfs
+TARGETS += perf_events
 TARGETS += pidfd
 TARGETS += pid_namespace
+TARGETS += power_supply
 TARGETS += powerpc
+TARGETS += prctl
 TARGETS += proc
 TARGETS += pstore
 TARGETS += ptrace
 TARGETS += openat2
 TARGETS += resctrl
+TARGETS += riscv
 TARGETS += rlimits
 TARGETS += rseq
 TARGETS += rtc
+TARGETS += rust
 TARGETS += seccomp
 TARGETS += sgx
 TARGETS += sigaltstack
@@ -69,15 +94,21 @@ TARGETS += sync
 TARGETS += syscall_user_dispatch
 TARGETS += sysctl
 TARGETS += tc-testing
+TARGETS += tdx
+TARGETS += thermal/intel/power_floor
+TARGETS += thermal/intel/workload_hint
 TARGETS += timens
 ifneq (1, $(quicktest))
 TARGETS += timers
 endif
 TARGETS += tmpfs
 TARGETS += tpm2
+TARGETS += tty
+TARGETS += uevent
 TARGETS += user
+TARGETS += user_events
 TARGETS += vDSO
-TARGETS += vm
+TARGETS += mm
 TARGETS += x86
 TARGETS += zram
 #Please keep the TARGETS list alphabetically sorted
@@ -86,6 +117,13 @@ TARGETS += zram
 
 TARGETS_HOTPLUG = cpu-hotplug
 TARGETS_HOTPLUG += memory-hotplug
+
+# Networking tests want the net/lib target, include it automatically
+ifneq ($(filter net drivers/net drivers/net/hw,$(TARGETS)),)
+ifeq ($(filter net/lib,$(TARGETS)),)
+	INSTALL_DEP_TARGETS := net/lib
+endif
+endif
 
 # User can optionally provide a TARGETS skiplist.  By default we skip
 # BPF since it has cutting edge build time dependencies which require
@@ -143,7 +181,6 @@ endif
 # Prepare for headers install
 include $(top_srcdir)/scripts/subarch.include
 ARCH           ?= $(SUBARCH)
-export KSFT_KHDR_INSTALL_DONE := 1
 export BUILD
 export KHDR_INCLUDES
 
@@ -151,30 +188,7 @@ export KHDR_INCLUDES
 # all isn't the first target in the file.
 .DEFAULT_GOAL := all
 
-# Install headers here once for all tests. KSFT_KHDR_INSTALL_DONE
-# is used to avoid running headers_install from lib.mk.
-# Invoke headers install with --no-builtin-rules to avoid circular
-# dependency in "make kselftest" case. In this case, second level
-# make inherits builtin-rules which will use the rule generate
-# Makefile.o and runs into
-# "Circular Makefile.o <- prepare dependency dropped."
-# and headers_install fails and test compile fails.
-#
-# O= KBUILD_OUTPUT cases don't run into this error, since main Makefile
-# invokes them as sub-makes and --no-builtin-rules is not necessary,
-# but doesn't cause any failures. Keep it simple and use the same
-# flags in both cases.
-# Local build cases: "make kselftest", "make -C" - headers are installed
-# in the default INSTALL_HDR_PATH usr/include.
-khdr:
-ifeq (1,$(DEFAULT_INSTALL_HDR_PATH))
-	$(MAKE) --no-builtin-rules ARCH=$(ARCH) -C $(top_srcdir) headers_install
-else
-	$(MAKE) --no-builtin-rules INSTALL_HDR_PATH=$(abs_objtree)/usr \
-		ARCH=$(ARCH) -C $(top_srcdir) headers_install
-endif
-
-all: khdr
+all:
 	@ret=1;							\
 	for TARGET in $(TARGETS); do				\
 		BUILD_TARGET=$$BUILD/$$TARGET;			\
@@ -189,6 +203,8 @@ run_tests: all
 	@for TARGET in $(TARGETS); do \
 		BUILD_TARGET=$$BUILD/$$TARGET;	\
 		$(MAKE) OUTPUT=$$BUILD_TARGET -C $$TARGET run_tests \
+				SRC_PATH=$(shell readlink -e $$(pwd)) \
+				OBJ_PATH=$(BUILD)                   \
 				O=$(abs_objtree);		    \
 	done;
 
@@ -234,12 +250,16 @@ ifdef INSTALL_PATH
 	install -m 744 kselftest/module.sh $(INSTALL_PATH)/kselftest/
 	install -m 744 kselftest/runner.sh $(INSTALL_PATH)/kselftest/
 	install -m 744 kselftest/prefix.pl $(INSTALL_PATH)/kselftest/
+	install -m 744 kselftest/ktap_helpers.sh $(INSTALL_PATH)/kselftest/
 	install -m 744 run_kselftest.sh $(INSTALL_PATH)/
 	rm -f $(TEST_LIST)
 	@ret=1;	\
-	for TARGET in $(TARGETS); do \
+	for TARGET in $(TARGETS) $(INSTALL_DEP_TARGETS); do \
 		BUILD_TARGET=$$BUILD/$$TARGET;	\
-		$(MAKE) OUTPUT=$$BUILD_TARGET -C $$TARGET INSTALL_PATH=$(INSTALL_PATH)/$$TARGET install \
+		$(MAKE) OUTPUT=$$BUILD_TARGET -C $$TARGET install \
+				INSTALL_PATH=$(INSTALL_PATH)/$$TARGET \
+				SRC_PATH=$(shell readlink -e $$(pwd)) \
+				OBJ_PATH=$(INSTALL_PATH) \
 				O=$(abs_objtree)		\
 				$(if $(FORCE_TARGETS),|| exit);	\
 		ret=$$((ret * $$?));		\
@@ -252,8 +272,8 @@ ifdef INSTALL_PATH
 	@# included in the generated runlist.
 	for TARGET in $(TARGETS); do \
 		BUILD_TARGET=$$BUILD/$$TARGET;	\
-		[ ! -d $(INSTALL_PATH)/$$TARGET ] && echo "Skipping non-existent dir: $$TARGET" && continue; \
-		echo -n "Emit Tests for $$TARGET\n"; \
+		[ ! -d $(INSTALL_PATH)/$$TARGET ] && printf "Skipping non-existent dir: $$TARGET\n" && continue; \
+		printf "Emit Tests for $$TARGET\n"; \
 		$(MAKE) -s --no-print-directory OUTPUT=$$BUILD_TARGET COLLECTION=$$TARGET \
 			-C $$TARGET emit_tests >> $(TEST_LIST); \
 	done;
@@ -274,4 +294,4 @@ clean:
 		$(MAKE) OUTPUT=$$BUILD_TARGET -C $$TARGET clean;\
 	done;
 
-.PHONY: khdr all run_tests hotplug run_hotplug clean_hotplug run_pstore_crash install clean gen_tar
+.PHONY: all run_tests hotplug run_hotplug clean_hotplug run_pstore_crash install clean gen_tar

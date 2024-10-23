@@ -1,0 +1,4 @@
+config LIB_ABSL_CPP
+	bool "absail-cpp"
+	help
+		The abseil-cpp library.

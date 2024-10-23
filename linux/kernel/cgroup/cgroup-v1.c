@@ -58,8 +58,8 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 	struct cgroup_root *root;
 	int retval = 0;
 
-	mutex_lock(&cgroup_mutex);
-	percpu_down_write(&cgroup_threadgroup_rwsem);
+	cgroup_lock();
+	cgroup_attach_lock(true);
 	for_each_root(root) {
 		struct cgroup *from_cgrp;
 
@@ -71,8 +71,8 @@ int cgroup_attach_task_all(struct task_struct *from, struct task_struct *tsk)
 		if (retval)
 			break;
 	}
-	percpu_up_write(&cgroup_threadgroup_rwsem);
-	mutex_unlock(&cgroup_mutex);
+	cgroup_attach_unlock(true);
+	cgroup_unlock();
 
 	return retval;
 }
@@ -106,9 +106,9 @@ int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 	if (ret)
 		return ret;
 
-	mutex_lock(&cgroup_mutex);
+	cgroup_lock();
 
-	percpu_down_write(&cgroup_threadgroup_rwsem);
+	cgroup_attach_lock(true);
 
 	/* all tasks in @from are being moved, all csets are source */
 	spin_lock_irq(&css_set_lock);
@@ -144,8 +144,8 @@ int cgroup_transfer_tasks(struct cgroup *to, struct cgroup *from)
 	} while (task && !ret);
 out_err:
 	cgroup_migrate_finish(&mgctx);
-	percpu_up_write(&cgroup_threadgroup_rwsem);
-	mutex_unlock(&cgroup_mutex);
+	cgroup_attach_unlock(true);
+	cgroup_unlock();
 	return ret;
 }
 
@@ -360,10 +360,9 @@ static int pidlist_array_load(struct cgroup *cgrp, enum cgroup_filetype type,
 	}
 	css_task_iter_end(&it);
 	length = n;
-	/* now sort & (if procs) strip out duplicates */
+	/* now sort & strip out duplicates (tgids or recycled thread PIDs) */
 	sort(array, length, sizeof(pid_t), cmppid, NULL);
-	if (type == CGROUP_FILE_PROCS)
-		length = pidlist_uniq(array, length);
+	length = pidlist_uniq(array, length);
 
 	l = cgroup_pidlist_find_create(cgrp, type);
 	if (!l) {
@@ -431,7 +430,7 @@ static void *cgroup_pidlist_start(struct seq_file *s, loff_t *pos)
 			if (l->list[mid] == pid) {
 				index = mid;
 				break;
-			} else if (l->list[mid] <= pid)
+			} else if (l->list[mid] < pid)
 				index = mid + 1;
 			else
 				end = mid;
@@ -563,7 +562,7 @@ static ssize_t cgroup_release_agent_write(struct kernfs_open_file *of,
 	if (!cgrp)
 		return -ENODEV;
 	spin_lock(&release_agent_path_lock);
-	strlcpy(cgrp->root->release_agent_path, strstrip(buf),
+	strscpy(cgrp->root->release_agent_path, strstrip(buf),
 		sizeof(cgrp->root->release_agent_path));
 	spin_unlock(&release_agent_path_lock);
 	cgroup_kn_unlock(of->kn);
@@ -797,13 +796,13 @@ void cgroup1_release_agent(struct work_struct *work)
 		goto out_free;
 
 	spin_lock(&release_agent_path_lock);
-	strlcpy(agentbuf, cgrp->root->release_agent_path, PATH_MAX);
+	strscpy(agentbuf, cgrp->root->release_agent_path, PATH_MAX);
 	spin_unlock(&release_agent_path_lock);
 	if (!agentbuf[0])
 		goto out_free;
 
 	ret = cgroup_path_ns(cgrp, pathbuf, PATH_MAX, &init_cgroup_ns);
-	if (ret < 0 || ret >= PATH_MAX)
+	if (ret < 0)
 		goto out_free;
 
 	argv[0] = agentbuf;
@@ -847,13 +846,13 @@ static int cgroup1_rename(struct kernfs_node *kn, struct kernfs_node *new_parent
 	kernfs_break_active_protection(new_parent);
 	kernfs_break_active_protection(kn);
 
-	mutex_lock(&cgroup_mutex);
+	cgroup_lock();
 
 	ret = kernfs_rename(kn, new_parent, new_name_str);
 	if (!ret)
 		TRACE_CGROUP_PATH(rename, cgrp);
 
-	mutex_unlock(&cgroup_mutex);
+	cgroup_unlock();
 
 	kernfs_unbreak_active_protection(kn);
 	kernfs_unbreak_active_protection(new_parent);
@@ -875,6 +874,8 @@ static int cgroup1_show_options(struct seq_file *seq, struct kernfs_root *kf_roo
 		seq_puts(seq, ",xattr");
 	if (root->flags & CGRP_ROOT_CPUSET_V2_MODE)
 		seq_puts(seq, ",cpuset_v2_mode");
+	if (root->flags & CGRP_ROOT_FAVOR_DYNMODS)
+		seq_puts(seq, ",favordynmods");
 
 	spin_lock(&release_agent_path_lock);
 	if (strlen(root->release_agent_path))
@@ -898,6 +899,8 @@ enum cgroup1_param {
 	Opt_noprefix,
 	Opt_release_agent,
 	Opt_xattr,
+	Opt_favordynmods,
+	Opt_nofavordynmods,
 };
 
 const struct fs_parameter_spec cgroup1_fs_parameters[] = {
@@ -909,6 +912,8 @@ const struct fs_parameter_spec cgroup1_fs_parameters[] = {
 	fsparam_flag  ("noprefix",	Opt_noprefix),
 	fsparam_string("release_agent",	Opt_release_agent),
 	fsparam_flag  ("xattr",		Opt_xattr),
+	fsparam_flag  ("favordynmods",	Opt_favordynmods),
+	fsparam_flag  ("nofavordynmods", Opt_nofavordynmods),
 	{}
 };
 
@@ -959,6 +964,12 @@ int cgroup1_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		break;
 	case Opt_xattr:
 		ctx->flags |= CGRP_ROOT_XATTR;
+		break;
+	case Opt_favordynmods:
+		ctx->flags |= CGRP_ROOT_FAVOR_DYNMODS;
+		break;
+	case Opt_nofavordynmods:
+		ctx->flags &= ~CGRP_ROOT_FAVOR_DYNMODS;
 		break;
 	case Opt_release_agent:
 		/* Specifying two release agents is forbidden */
@@ -1107,7 +1118,7 @@ int cgroup1_reconfigure(struct fs_context *fc)
 	trace_cgroup_remount(root);
 
  out_unlock:
-	mutex_unlock(&cgroup_mutex);
+	cgroup_unlock();
 	return ret;
 }
 
@@ -1211,8 +1222,11 @@ static int cgroup1_root_to_use(struct fs_context *fc)
 	init_cgroup_root(ctx);
 
 	ret = cgroup_setup_root(root, ctx->subsys_mask);
-	if (ret)
+	if (!ret)
+		cgroup_favor_dynmods(root, ctx->flags & CGRP_ROOT_FAVOR_DYNMODS);
+	else
 		cgroup_free_root(root);
+
 	return ret;
 }
 
@@ -1231,7 +1245,7 @@ int cgroup1_get_tree(struct fs_context *fc)
 	if (!ret && !percpu_ref_tryget_live(&ctx->root->cgrp.self.refcnt))
 		ret = 1;	/* restart */
 
-	mutex_unlock(&cgroup_mutex);
+	cgroup_unlock();
 
 	if (!ret)
 		ret = cgroup_do_get_tree(fc);
@@ -1246,6 +1260,40 @@ int cgroup1_get_tree(struct fs_context *fc)
 		return restart_syscall();
 	}
 	return ret;
+}
+
+/**
+ * task_get_cgroup1 - Acquires the associated cgroup of a task within a
+ * specific cgroup1 hierarchy. The cgroup1 hierarchy is identified by its
+ * hierarchy ID.
+ * @tsk: The target task
+ * @hierarchy_id: The ID of a cgroup1 hierarchy
+ *
+ * On success, the cgroup is returned. On failure, ERR_PTR is returned.
+ * We limit it to cgroup1 only.
+ */
+struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id)
+{
+	struct cgroup *cgrp = ERR_PTR(-ENOENT);
+	struct cgroup_root *root;
+	unsigned long flags;
+
+	rcu_read_lock();
+	for_each_root(root) {
+		/* cgroup1 only*/
+		if (root == &cgrp_dfl_root)
+			continue;
+		if (root->hierarchy_id != hierarchy_id)
+			continue;
+		spin_lock_irqsave(&css_set_lock, flags);
+		cgrp = task_cgroup_from_root(tsk, root);
+		if (!cgrp || !cgroup_tryget(cgrp))
+			cgrp = ERR_PTR(-ENOENT);
+		spin_unlock_irqrestore(&css_set_lock, flags);
+		break;
+	}
+	rcu_read_unlock();
+	return cgrp;
 }
 
 static int __init cgroup1_wq_init(void)
@@ -1287,6 +1335,7 @@ static int __init cgroup_no_v1(char *str)
 				continue;
 
 			cgroup_no_v1_mask |= 1 << i;
+			break;
 		}
 	}
 	return 1;

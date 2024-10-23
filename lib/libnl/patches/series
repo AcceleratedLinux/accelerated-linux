@@ -1,5 +1,2 @@
-libnl-add-route-mtu.patch
-libnl-add-route-oif.patch
-libnl-poll-h.patch
-libnl-route-link-fixing-a-deadlock.patch
-libnl-attr-mark-nested-attributes-as-nla_f_nested.patch
+0001-Interface-MTU-Device-now-supports-route-and-interfac.patch
+0002-lib-libnl-added-rtnl_route_set_oif-rtnl_route_get_oi.patch

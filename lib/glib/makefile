@@ -1,28 +1,18 @@
-VERSION = 2.71.0
+VERSION = 2.81.0
 URL := https://download.gnome.org/sources/glib/$(basename $(VERSION))/glib-$(VERSION).tar.xz
-DOWNLOADHASH = 926816526f6e4bba9af726970ff87be7dac0b70d5805050c6207b7bb17ea4fca
+DOWNLOADHASH = 1665188ed9cc941c0a189dc6295e6859872523d1bfc84a5a84732a7ae87b02e4
 WGETOPTS = --no-check-certificate
 
 CONFOPTS += -Dlibmount=disabled
-CONFOPTS += -Dtests=false -Dinstalled_tests=false
+CONFOPTS += -Dtests=false
+CONFOPTS += -Dinstalled_tests=false
 CONFOPTS += -Dselinux=disabled		# build without selinux support
-CONFOPTS += -Dfam=false			# don't use fam for file system monitoring
 CONFOPTS += -Dxattr=false		# build without xattr support
-CONFOPTS += -Dgtk_doc=false		# use gtk-doc to build documentation [[default=no]]
-CONFOPTS += -Dman=false			# generate man pages [default=auto]
-CONFOPTS += -Ddtrace=false		# include tracing support for dtrace
-CONFOPTS += -Dsystemtap=false		# include tracing support for systemtap
+CONFOPTS += -Ddocumentation=false	# Build API reference and tools documentation
+CONFOPTS += -Dman-pages=disabled	# generate man pages [default=auto]
+CONFOPTS += -Ddtrace=disabled		# include tracing support for dtrace
+CONFOPTS += -Dsystemtap=disabled	# include tracing support for systemtap
 CONFOPTS += -Dlibelf=disabled
-ifdef CONFIG_LIB_LIBICONV
-CONFOPTS += -Diconv=external
-CFLAGS += -I$(ROOTDIR)/lib/libiconv/build/libiconv-1.14-install/include
-else
-ifdef CONFIG_LIB_MINI_ICONV
-CONFOPTS += -Diconv=external
-else
-CONFOPTS += -Diconv=auto
-endif
-endif
 CONFOPTS += -Dglib_debug=disabled
 CONFOPTS += -Doss_fuzz=disabled
 

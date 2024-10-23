@@ -456,8 +456,8 @@ static ssize_t mtouch_firmware_rev_show(struct device *dev,
 	struct usbtouch_usb *usbtouch = usb_get_intfdata(intf);
 	struct mtouch_priv *priv = usbtouch->priv;
 
-	return scnprintf(output, PAGE_SIZE, "%1x.%1x\n",
-			 priv->fw_rev_major, priv->fw_rev_minor);
+	return sysfs_emit(output, "%1x.%1x\n",
+			  priv->fw_rev_major, priv->fw_rev_minor);
 }
 static DEVICE_ATTR(firmware_rev, 0444, mtouch_firmware_rev_show, NULL);
 
@@ -1708,7 +1708,7 @@ static int usbtouch_probe(struct usb_interface *intf,
 	usbtouch->input = input_dev;
 
 	if (udev->manufacturer)
-		strlcpy(usbtouch->name, udev->manufacturer, sizeof(usbtouch->name));
+		strscpy(usbtouch->name, udev->manufacturer, sizeof(usbtouch->name));
 
 	if (udev->product) {
 		if (udev->manufacturer)

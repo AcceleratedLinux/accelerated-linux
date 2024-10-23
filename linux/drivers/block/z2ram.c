@@ -140,15 +140,13 @@ static void get_chipram(void)
 	return;
 }
 
-static int z2_open(struct block_device *bdev, fmode_t mode)
+static int z2_open(struct gendisk *disk, blk_mode_t mode)
 {
-	int device;
+	int device = disk->first_minor;
 	int max_z2_map = (Z2RAM_SIZE / Z2RAM_CHUNKSIZE) * sizeof(z2ram_map[0]);
 	int max_chip_map = (amiga_chip_size / Z2RAM_CHUNKSIZE) *
 	    sizeof(z2ram_map[0]);
 	int rc = -ENOMEM;
-
-	device = MINOR(bdev->bd_dev);
 
 	mutex_lock(&z2ram_mutex);
 	if (current_device != -1 && current_device != device) {
@@ -290,7 +288,7 @@ err_out:
 	return rc;
 }
 
-static void z2_release(struct gendisk *disk, fmode_t mode)
+static void z2_release(struct gendisk *disk)
 {
 	mutex_lock(&z2ram_mutex);
 	if (current_device == -1) {
@@ -320,7 +318,7 @@ static int z2ram_register_disk(int minor)
 	struct gendisk *disk;
 	int err;
 
-	disk = blk_mq_alloc_disk(&tag_set, NULL);
+	disk = blk_mq_alloc_disk(&tag_set, NULL, NULL);
 	if (IS_ERR(disk))
 		return PTR_ERR(disk);
 
@@ -337,7 +335,7 @@ static int z2ram_register_disk(int minor)
 	z2ram_gendisk[minor] = disk;
 	err = add_disk(disk);
 	if (err)
-		blk_cleanup_disk(disk);
+		put_disk(disk);
 	return err;
 }
 
@@ -384,7 +382,6 @@ static void __exit z2_exit(void)
 
 	for (i = 0; i < Z2MINOR_COUNT; i++) {
 		del_gendisk(z2ram_gendisk[i]);
-		blk_cleanup_queue(z2ram_gendisk[i]->queue);
 		put_disk(z2ram_gendisk[i]);
 	}
 	blk_mq_free_tag_set(&tag_set);

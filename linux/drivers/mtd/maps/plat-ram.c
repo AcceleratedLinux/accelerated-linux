@@ -68,14 +68,14 @@ static inline void platram_setrw(struct platram_info *info, int to)
  * called to remove the device from the driver's control
 */
 
-static int platram_remove(struct platform_device *pdev)
+static void platram_remove(struct platform_device *pdev)
 {
 	struct platram_info *info = to_platram_info(pdev);
 
 	dev_dbg(&pdev->dev, "removing device\n");
 
 	if (info == NULL)
-		return 0;
+		return;
 
 	if (info->mtd) {
 		mtd_device_unregister(info->mtd);
@@ -87,8 +87,6 @@ static int platram_remove(struct platform_device *pdev)
 	platram_setrw(info, PLATRAM_RO);
 
 	kfree(info);
-
-	return 0;
 }
 
 /* platram_probe
@@ -126,8 +124,7 @@ static int platram_probe(struct platform_device *pdev)
 	info->pdata = pdata;
 
 	/* get the resource for the memory mapping */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	info->map.virt = devm_ioremap_resource(&pdev->dev, res);
+	info->map.virt = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(info->map.virt)) {
 		err = PTR_ERR(info->map.virt);
 		goto exit_free;
@@ -214,7 +211,7 @@ MODULE_ALIAS("platform:mtd-ram");
 
 static struct platform_driver platram_driver = {
 	.probe		= platram_probe,
-	.remove		= platram_remove,
+	.remove_new	= platram_remove,
 	.driver		= {
 		.name	= "mtd-ram",
 	},

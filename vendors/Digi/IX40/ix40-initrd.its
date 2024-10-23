@@ -1,0 +1,59 @@
+/dts-v1/;
+
+/ {
+	description = "Digi/IX40";
+	address-cells = <1>;
+
+	images {
+		kernel {
+			description = "Linux kernel";
+			data = /incbin/("kernel.gz");
+			type = "kernel";
+			arch = "arm64";
+			os = "linux";
+			compression = "gzip";
+			load = <0x40400000>;
+			entry = <0x40400000>;
+			hash-1 {
+				algo = "sha1";
+			};
+		};
+
+		ramdisk {
+			description = "Linux ramdisk";
+			data = /incbin/("rootfs.bin");
+			type = "ramdisk";
+			arch = "arm64";
+			os = "linux";
+			compression = "none";
+			load = <0x50000000>;
+			entry = <0x50000000>;
+			hash-1 {
+				algo = "sha1";
+			};
+		};
+
+		fdt {
+			description = "Flattened Device Tree blob";
+			data = /incbin/("imx8mp-ix40.dtb");
+			type = "flat_dt";
+			arch = "arm64";
+			compression = "none";
+			load = <0x4f000000>;
+			entry = <0x4f000000>;
+			hash-1 {
+				algo = "sha1";
+			};
+		};
+	};
+
+	configurations {
+		default = "config";
+		config {
+			description = "Digi/IX40 image";
+			kernel = "kernel";
+			ramdisk = "ramdisk";
+			fdt = "fdt";
+		};
+	};
+};

@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Copyright(c) 2003 - 2014 Intel Corporation. All rights reserved.
- * Copyright (C) 2018 - 2019 Intel Corporation
+ * Copyright(C) 2018 - 2019, 2022 - 2023 Intel Corporation
  *
  * Portions of this file are derived from the ipw3945 project, as well
  * as portions of the ieee80211 subsystem header files.
@@ -1001,7 +1001,7 @@ static void iwlagn_mac_channel_switch(struct ieee80211_hw *hw,
 	if (priv->lib->set_channel_switch(priv, ch_switch)) {
 		clear_bit(STATUS_CHANNEL_SWITCH_PENDING, &priv->status);
 		priv->switch_channel = 0;
-		ieee80211_chswitch_done(ctx->vif, false);
+		ieee80211_chswitch_done(ctx->vif, false, 0);
 	}
 
 out:
@@ -1024,7 +1024,7 @@ void iwl_chswitch_done(struct iwl_priv *priv, bool is_success)
 		return;
 
 	if (ctx->vif)
-		ieee80211_chswitch_done(ctx->vif, is_success);
+		ieee80211_chswitch_done(ctx->vif, is_success, 0);
 }
 
 static void iwlagn_configure_filter(struct ieee80211_hw *hw,
@@ -1153,7 +1153,8 @@ static int iwlagn_mac_set_tim(struct ieee80211_hw *hw,
 }
 
 static int iwlagn_mac_conf_tx(struct ieee80211_hw *hw,
-			      struct ieee80211_vif *vif, u16 queue,
+			      struct ieee80211_vif *vif,
+			      unsigned int link_id, u16 queue,
 			      const struct ieee80211_tx_queue_params *params)
 {
 	struct iwl_priv *priv = IWL_MAC80211_GET_DVM(hw);
@@ -1569,7 +1570,12 @@ static void iwlagn_mac_sta_notify(struct ieee80211_hw *hw,
 }
 
 const struct ieee80211_ops iwlagn_hw_ops = {
+	.add_chanctx = ieee80211_emulate_add_chanctx,
+	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+	.change_chanctx = ieee80211_emulate_change_chanctx,
+	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
 	.tx = iwlagn_mac_tx,
+	.wake_tx_queue = ieee80211_handle_wake_tx_queue,
 	.start = iwlagn_mac_start,
 	.stop = iwlagn_mac_stop,
 #ifdef CONFIG_PM_SLEEP

@@ -45,7 +45,8 @@ esac
 ##############################################################
 
 # Find the primary modem, or alternatively *any* modem
-idx="$(modem name=modem idx 2> /dev/null)" || idx="$(modem idx 2> /dev/null)"
+modem_name="$(modem name 2> /dev/null)"
+idx="$(modem name="$modem_name" idx 2> /dev/null)"
 # Find the first interface on the modem
 for i in $(runt keys mm.map.interface_idx); do
 	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
@@ -65,7 +66,7 @@ else
 fi
 
 if [ "$CELL" != 0 ]; then
-	case "$(runt get mm.modem.$idx.status.bars)" in
+	case "$(runt get mm.modem.$modem_name.status.bars)" in
 	5) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -o RSS5" ;;
 	4) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -o RSS4 -O RSS5" ;;
 	3) SIGNAL="-o RSS1 -o RSS2 -o RSS3 -O RSS4 -O RSS5" ;;
@@ -74,7 +75,7 @@ if [ "$CELL" != 0 ]; then
 	*) SIGNAL="-O RSS1 -O RSS2 -O RSS3 -O RSS4 -O RSS5" ;;
 	esac
 
-	case "$(runt get mm.modem.$idx.status.gtech)" in
+	case "$(runt get mm.modem.$modem_name.status.gtech)" in
 	4g) RAT="-o LAN3_RX -O LAN3_TX" ;;
 	3g) RAT="-O LAN3_RX -o LAN3_TX" ;;
 	*)  RAT="-O LAN3_RX -O LAN3_TX" ;;

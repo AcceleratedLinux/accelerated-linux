@@ -2435,7 +2435,7 @@ restart:
 	} else {
 		dma_addr_t mapping;
 		u32 vlan_tag = 0;
-		int i, len = 0;
+		int i;
 
 		mapping = ace_map_tx_skb(ap, skb, NULL, idx);
 		flagsize = (skb_headlen(skb) << 16);
@@ -2454,7 +2454,6 @@ restart:
 			const skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 			struct tx_ring_info *info;
 
-			len += skb_frag_size(frag);
 			info = ap->skb->tx_skbuff + idx;
 			desc = ap->tx_ring + idx;
 
@@ -2540,7 +2539,7 @@ static int ace_change_mtu(struct net_device *dev, int new_mtu)
 	struct ace_regs __iomem *regs = ap->regs;
 
 	writel(new_mtu + ETH_HLEN + 4, &regs->IfMtu);
-	dev->mtu = new_mtu;
+	WRITE_ONCE(dev->mtu, new_mtu);
 
 	if (new_mtu > ACE_STD_MTU) {
 		if (!(ap->jumbo)) {
@@ -2691,12 +2690,12 @@ static void ace_get_drvinfo(struct net_device *dev,
 {
 	struct ace_private *ap = netdev_priv(dev);
 
-	strlcpy(info->driver, "acenic", sizeof(info->driver));
+	strscpy(info->driver, "acenic", sizeof(info->driver));
 	snprintf(info->fw_version, sizeof(info->version), "%i.%i.%i",
 		 ap->firmware_major, ap->firmware_minor, ap->firmware_fix);
 
 	if (ap->pdev)
-		strlcpy(info->bus_info, pci_name(ap->pdev),
+		strscpy(info->bus_info, pci_name(ap->pdev),
 			sizeof(info->bus_info));
 
 }

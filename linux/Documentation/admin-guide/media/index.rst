@@ -20,16 +20,8 @@ Documentation/driver-api/media/index.rst
   - for driver development information and Kernel APIs used by
     media devices;
 
-The media subsystem
-===================
-
-.. only:: html
-
-    .. class:: toc-title
-
-        Table of Contents
-
 .. toctree::
+	:caption: Table of Contents
 	:maxdepth: 2
 	:numbered:
 
@@ -38,13 +30,14 @@ The media subsystem
 
 	remote-controller
 
+	cec
+
 	dvb
 
 	cardlist
 
 	v4l-drivers
 	dvb-drivers
-	cec-drivers
 
 **Copyright** |copy| 1999-2020 : LinuxTV Developers
 

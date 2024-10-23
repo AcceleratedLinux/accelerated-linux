@@ -1,3 +1,1 @@
-0001-file-uci_parse_package-fix-heap-use-after-free.patch
-0002-file-Check-buffer-size-after-strtok.patch
 0003-error-UCI_CONFDIR-redefined.patch

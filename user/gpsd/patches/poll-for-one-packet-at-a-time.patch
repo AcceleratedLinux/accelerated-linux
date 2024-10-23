@@ -1,4 +1,4 @@
-From f12a687dc3d3b71d5de057f0c6ae3049c6b18532 Mon Sep 17 00:00:00 2001
+From f1fd531496bd6b7e4329d5d11bc95a1ae8300391 Mon Sep 17 00:00:00 2001
 From: "Sreeves, Francis" <francis.sreeves@digi.com>
 Date: Thu, 21 May 2020 16:49:19 +0100
 Subject: [PATCH] user/gpsd: poll for one packet at a time
@@ -10,29 +10,29 @@ read, as does, for example, the Navilock NL-82012U external USB device.
 
 DAL-2577
 ---
- libgpsd_core.c | 2 --
+ gpsd/libgpsd_core.c | 2 --
  1 file changed, 2 deletions(-)
 
-diff --git a/libgpsd_core.c b/libgpsd_core.c
-index 344b728..1298e72 100644
---- a/libgpsd_core.c
-+++ b/libgpsd_core.c
-@@ -1626,7 +1626,6 @@ int gpsd_multipoll(const bool data_ready,
- 	    if (device->lexer.type != BAD_PACKET)
- 		handler(device, changed);
+diff --git a/gpsd/libgpsd_core.c b/gpsd/libgpsd_core.c
+index 47ee5d57e03a..1b652f05f959 100644
+--- a/gpsd/libgpsd_core.c
++++ b/gpsd/libgpsd_core.c
+@@ -2078,7 +2078,6 @@ int gpsd_multipoll(const bool data_ready,
+                 handler(device, changed);
+             }
  
 -#ifdef __future__
- 	    /*
- 	     * Bernd Ocklin suggests:
- 	     * Exit when a full packet was received and parsed.
-@@ -1638,7 +1637,6 @@ int gpsd_multipoll(const bool data_ready,
- 	     */
- 	    if ((changed & PACKET_SET) != 0)
+             // this breaks: test/daemon/passthrough.log ??
+             /*
+              * Bernd Ocklin suggests:
+@@ -2094,7 +2093,6 @@ int gpsd_multipoll(const bool data_ready,
+             if (0 != (changed & PACKET_SET)) {
                 break;
--#endif /* __future__ */
- 	}
-     }
-     else if (device->reawake>0 && time(NULL) >device->reawake) {
+             }
+-#endif  // __future__
+         }
+     } else if (0 < device->reawake &&
+                time(NULL) > device->reawake) {
 -- 
-2.17.1
+2.34.1
 

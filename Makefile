@@ -34,6 +34,11 @@ ROOTDIR = $(shell pwd)
 
 include vendors/config/common/config.arch
 
+# bin/version is expensive, so run it once
+ifdef VERSIONPKG
+ VERSIONPKG := $(VERSIONPKG)
+endif
+
 ############################################################################
 
 DIRS    = $(VENDOR_TOPDIRS) include lib include user
@@ -51,12 +56,14 @@ export UCFRONT_ANALYZE_PATH=prop
 
 # helper functions for process the scan info
 # do not consider reported bugs and eerror just yet
+# NOTE: cant use return code for rc since we will get tee's return code
+# instead of scanreports
 ANALYZE_CLEAN   = rm -rf $(STAGEDIR)/clang/$(1)
 ANALYZE_SUMMARY = echo "Producing static analysis results"; \
                    tools/clang/scanreport \
 			-e $(ROOTDIR)/tools/clang/scan-exceptions.txt \
-			-o $(STAGEDIR)/clang; \
-                   rc=$$?; \
+			-o $(STAGEDIR)/clang |tee $(IMAGEDIR)/static_analysis.txt; \
+                   rc=$(grep -c "reporting clang error for" $(IMAGEDIR)/static_analysis.txt 2>/dev/null); \
                    tar Cczf $(STAGEDIR)/clang \
                         $(IMAGEDIR)/static-analysis.tar.gz .; \
                    exit $$rc
@@ -340,7 +347,7 @@ ifdef CONFIG_USER_PYTHON_REMOVE_SOURCE
 	for i in $(ROMFSDIR)/usr/lib/python*; do \
 		[ -e "$$i" ] || continue; \
 		python=$(ROOTDIR)/user/python/build/Python-Hostinstall/bin/`basename $$i`; \
-		$$python -m compileall -b $$i || exit 1; \
+		$$python -m compileall -b $$i -d dal || exit 1; \
 		find $$i -type d -name __pycache__ -exec rm -r {} + ; \
 		find $$i -type f -name "*.py" \
 			! -name _in_process.py `# required by pip` \
@@ -362,13 +369,21 @@ image: live_images
 	    grep -qe "CONFIG_PROP.*=y" $(ROOTDIR)/config/.config && \
 		exit 1; \
 	fi
+	cp ${LINUXDIR}/vmlinux ${IMAGEDIR}/vmlinux &> /dev/null
 	-$(call ANALYZE_SUMMARY)
+
+RELEASE_FILES = $(RELFILES)
+ifeq ($(ANALYZE),1)
+RELEASE_FILES += $(IMAGEDIR)/static_analysis.txt
+RELEASE_FILES += $(IMAGEDIR)/static-analysis.tar.gz
+endif
 
 .PHONY: release
 release:
 	[ -d $(RELDIR) ] || mkdir -p $(RELDIR)
 	@prefix=$(CONFIG_PRODUCT)-$(VERSIONPKG)-`date -u "-d$(BUILD_START_STRING)" +%Y%m%d%H%M`; \
-	for f in $(RELFILES) $(IMAGEDIR)/acl-licenses.txt `( cd images/live_images/ ; ls | xargs readlink -f $1 )` ; do \
+	for f in $(RELEASE_FILES) $(IMAGEDIR)/acl-licenses.txt \
+		`( cd images/live_images/ ; ls | xargs readlink -f $1 2>/dev/null)` ; do \
 		s=`echo "$$f" | sed 's/^\([^,]*\)\(,.*\)\{0,1\}$$/\1/'`; \
 		d=`echo "$$s" | sed 's/\([^,]*\)\([.][^.]*,\)\{0,1\}/\1/'`; \
 		[ -f "$$s" ] || continue; \
@@ -483,6 +498,7 @@ distclean: mrproper linux_distclean toolchain_clean
 	-rm -f bin/ucfront-gcc bin/ucfront-g++ bin/ucfront-ld bin/ucfront-env bin/jlibtool
 	-$(MAKE) -C tools/sg-cksum clean
 	-rm -f bin/cksum
+	-find . -name compile_commands.json -exec rm -f '{}' \;
 
 .PHONY: bugreport
 bugreport:
@@ -529,6 +545,30 @@ ifdef CONFIG_USER_PYTHON_LIVE_IMAGE
 		$(CONFIG_SQUASHFS_XATTR:y=-xattrs) \
 		-noappend $(SQUASH_BCJ) $(SQUASH_ENDIAN) ;
 endif
+
+ifneq ($(BUILD_VERSION),)
+DTVERSION = $(BUILD_VERSION)
+else
+DTVERSION = $(VERSIONPKG)
+endif
+
+.PHONY: dal_devtests
+dal_devtests:
+	mkdir -p $(IMAGEDIR)/dal_devtests; \
+	cp -a $(ROOTDIR)/tools/dal_devtest/* $(IMAGEDIR)/dal_devtests/; \
+	cat $(ROOTDIR)/tools/dal_devtest/common_functions.sh | \
+		sed 's/@@VERSION@@/'$(DTVERSION)'/g' > \
+		$(IMAGEDIR)/dal_devtests/common_functions.sh; \
+	chmod +x $(IMAGEDIR)/dal_devtests/common_functions.sh; \
+	for dir in `find prop/config -type d -name dal_devtests`; do \
+		path=`dirname $$dir`; \
+		app_dir=`basename $$path`; \
+		mkdir -p $(IMAGEDIR)/dal_devtests/$$app_dir; \
+		cp -a $$dir/* $(IMAGEDIR)/dal_devtests/$$app_dir/; \
+	done; \
+	tar -czf $(IMAGEDIR)/dal_devtests.tgz -C $(IMAGEDIR) dal_devtests; \
+	rm -rf $(IMAGEDIR)/dal_devtests
+
 
 %_only: tools
 	@case "$(@)" in \

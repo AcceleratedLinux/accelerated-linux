@@ -18,9 +18,10 @@ ROMFS_DIRS = \
 	lib \
 	mnt \
 	proc \
+	sbin \
 	sys \
 	tmp \
-	usr usr/bin usr/lib usr/var \
+	usr usr/bin usr/lib usr/sbin usr/var \
 	var
 
 DEVICES = null,c,1,3	zero,c,1,5	console,c,5,1

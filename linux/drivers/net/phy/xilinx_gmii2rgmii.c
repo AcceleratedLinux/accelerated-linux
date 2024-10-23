@@ -22,7 +22,7 @@
 
 struct gmii2rgmii {
 	struct phy_device *phy_dev;
-	struct phy_driver *phy_drv;
+	const struct phy_driver *phy_drv;
 	struct phy_driver conv_phy_drv;
 	struct mdio_device *mdio;
 };
@@ -105,6 +105,7 @@ static int xgmiitorgmii_probe(struct mdio_device *mdiodev)
 
 	if (!priv->phy_dev->drv) {
 		dev_info(dev, "Attached phy not ready\n");
+		put_device(&priv->phy_dev->mdio.dev);
 		return -EPROBE_DEFER;
 	}
 

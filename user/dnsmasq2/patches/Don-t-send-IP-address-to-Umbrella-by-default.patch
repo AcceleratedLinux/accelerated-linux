@@ -1,69 +1,73 @@
-From cfac860da5783471beeac104aa8dc701fcf7bbc9 Mon Sep 17 00:00:00 2001
-From: Robert Hodaszi <robert.hodaszi@digi.com>
-Date: Tue, 11 Jan 2022 14:34:59 +0100
+From c9cc0e99431e91ed9182b77cbd26cd0aece02c8f Mon Sep 17 00:00:00 2001
+From: Ayman Ghanem <ayman.ghanem@digi.com>
+Date: Tue, 11 Apr 2023 12:44:30 -0500
 Subject: [PATCH] Don't send IP address to Umbrella by default
 
 Adding a new 'sendip' argument to '--umbrella', to enable local IP
 sending.
+
+(Original author: Robert Hodaszi <robert.hodaszi@digi.com>)
 ---
- src/dnsmasq.h |  1 +
- src/edns0.c   | 12 +++++++-----
- src/option.c  |  5 +++++
- 3 files changed, 13 insertions(+), 5 deletions(-)
+ src/dnsmasq.h | 3 ++-
+ src/edns0.c   | 8 +++++---
+ src/option.c  | 6 ++++++
+ 3 files changed, 13 insertions(+), 4 deletions(-)
 
 diff --git a/src/dnsmasq.h b/src/dnsmasq.h
-index a2b00ef..7553999 100644
+index 24aa134..488cd25 100644
 --- a/src/dnsmasq.h
 +++ b/src/dnsmasq.h
-@@ -276,6 +276,7 @@ struct event_desc {
- #define OPT_CMARK_ALST_EN  65
- #define OPT_QUIET_TFTP     66
- #define OPT_IGN_CONF_ERR   67
-+#define OPT_UMBRELLA_SENDIP 69
- #define OPT_LAST           68
+@@ -283,7 +283,8 @@ struct event_desc {
+ #define OPT_CACHE_RR       71
+ #define OPT_LOCALHOST_SERVICE  72
+ #define OPT_IGN_CONF_ERR   73
+-#define OPT_LAST           74
++#define OPT_UMBRELLA_SENDIP 74
++#define OPT_LAST           75
  
  #define OPTION_BITS (sizeof(unsigned int)*8)
+ #define OPTION_SIZE ( (OPT_LAST/OPTION_BITS)+((OPT_LAST%OPTION_BITS)!=0) )
 diff --git a/src/edns0.c b/src/edns0.c
-index 7bd26b8..ed0b3ef 100644
+index 598478f..1c122a8 100644
 --- a/src/edns0.c
 +++ b/src/edns0.c
-@@ -466,11 +466,13 @@ static size_t add_umbrella_opt(struct dns_header *header, size_t plen, unsigned
-     PUTLONG(daemon->umbrella_org, u);
-   }
- 
--  int family = source->sa.sa_family;
+@@ -498,9 +498,11 @@ static size_t add_umbrella_opt(struct dns_header *header, size_t plen, unsigned
+       PUTLONG(daemon->umbrella_org, u);
+     }
+   
 -  PUTSHORT(family == AF_INET ? UMBRELLA_IPV4 : UMBRELLA_IPV6, u);
--  int size = family == AF_INET ? INADDRSZ : IN6ADDRSZ;
 -  memcpy(u, get_addrp(source, family), size);
 -  u += size;
 +  if (option_bool(OPT_UMBRELLA_SENDIP)) {
-+    int family = source->sa.sa_family;
 +    PUTSHORT(family == AF_INET ? UMBRELLA_IPV4 : UMBRELLA_IPV6, u);
-+    int size = family == AF_INET ? INADDRSZ : IN6ADDRSZ;
 +    memcpy(u, get_addrp(source, family), size);
 +    u += size;
 +  }
- 
-   if (option_bool(OPT_UMBRELLA_DEVID)) {
-     PUTSHORT(UMBRELLA_DEVICE, u);
+   
+   if (option_bool(OPT_UMBRELLA_DEVID))
+     {
 diff --git a/src/option.c b/src/option.c
-index d18f54a..594f130 100644
+index 9c6bae1..42da410 100644
 --- a/src/option.c
 +++ b/src/option.c
-@@ -2538,8 +2538,13 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
-             ret_err(gen_err);
-           }
-         }
-+	else if (strstr(arg, "sendip")) {
-+	  set_option_bool(OPT_UMBRELLA_SENDIP);
-+	}
-         arg = comma;
-       }
+@@ -2882,11 +2882,17 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
+ 	      if (!strtoul_check(arg+8, &daemon->umbrella_asset))
+ 		ret_err(gen_err);
+ 	    }
++	  else if (strstr(arg, "sendip"))
++	    {
++	      set_option_bool(OPT_UMBRELLA_SENDIP);
++	    }
+ 	  else
+ 	    ret_err(gen_err);
+ 	  
+ 	  arg = comma;
+ 	}
 +      if (!option_bool(OPT_UMBRELLA_SENDIP) && !option_bool(OPT_UMBRELLA_DEVID))
 +        ret_err("deviceid and/or sendip option is mandatory for Umbrella");
        break;
- 
+       
      case LOPT_ADD_MAC: /* --add-mac */
 -- 
-2.27.0
+2.39.2
 

@@ -55,9 +55,9 @@ static struct attribute *mmc_dev_attrs[] = {
 ATTRIBUTE_GROUPS(mmc_dev);
 
 static int
-mmc_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
+mmc_bus_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
-	struct mmc_card *card = mmc_dev_to_card(dev);
+	const struct mmc_card *card = mmc_dev_to_card(dev);
 	const char *type;
 	unsigned int i;
 	int retval = 0;
@@ -85,7 +85,7 @@ mmc_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
 			return retval;
 	}
 
-	if (card->type == MMC_TYPE_SDIO || card->type == MMC_TYPE_SD_COMBO) {
+	if (mmc_card_sdio(card) || mmc_card_sd_combo(card)) {
 		retval = add_uevent_var(env, "SDIO_ID=%04X:%04X",
 					card->cis.vendor, card->cis.device);
 		if (retval)
@@ -107,7 +107,7 @@ mmc_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
 	 * SDIO (non-combo) cards are not handled by mmc_block driver and do not
 	 * have accessible CID register which used by mmc_card_name() function.
 	 */
-	if (card->type == MMC_TYPE_SDIO)
+	if (mmc_card_sdio(card))
 		return 0;
 
 	retval = add_uevent_var(env, "MMC_NAME=%s", mmc_card_name(card));
@@ -214,7 +214,7 @@ static const struct dev_pm_ops mmc_bus_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(mmc_bus_suspend, mmc_bus_resume)
 };
 
-static struct bus_type mmc_bus_type = {
+static const struct bus_type mmc_bus_type = {
 	.name		= "mmc",
 	.dev_groups	= mmc_dev_groups,
 	.uevent		= mmc_bus_uevent,
@@ -272,7 +272,7 @@ static void mmc_release_card(struct device *dev)
 /*
  * Allocate and initialise a new MMC card structure.
  */
-struct mmc_card *mmc_alloc_card(struct mmc_host *host, struct device_type *type)
+struct mmc_card *mmc_alloc_card(struct mmc_host *host, const struct device_type *type)
 {
 	struct mmc_card *card;
 
@@ -310,6 +310,9 @@ int mmc_add_card(struct mmc_card *card)
 
 
 	dev_set_name(&card->dev, "%s:%04x", mmc_hostname(card->host), card->rca);
+	dev_set_removable(&card->dev,
+			  mmc_card_is_removable(card->host) ?
+			  DEVICE_REMOVABLE : DEVICE_FIXED);
 
 	switch (card->type) {
 	case MMC_TYPE_MMC:
@@ -359,9 +362,7 @@ int mmc_add_card(struct mmc_card *card)
 			uhs_bus_speed_mode, type, card->rca);
 	}
 
-#ifdef CONFIG_DEBUG_FS
 	mmc_add_card_debugfs(card);
-#endif
 	card->dev.of_node = mmc_of_find_child_device(card->host, 0);
 
 	device_enable_async_suspend(&card->dev);
@@ -383,9 +384,7 @@ void mmc_remove_card(struct mmc_card *card)
 {
 	struct mmc_host *host = card->host;
 
-#ifdef CONFIG_DEBUG_FS
 	mmc_remove_card_debugfs(card);
-#endif
 
 	if (mmc_card_present(card)) {
 		if (mmc_host_is_spi(card->host)) {

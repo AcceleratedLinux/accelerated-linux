@@ -83,7 +83,7 @@ static int mt7615_start(struct ieee80211_hw *hw)
 	ieee80211_queue_delayed_work(hw, &phy->mt76->mac_work, timeout);
 
 	if (!running)
-		mt7615_mac_reset_counters(dev);
+		mt7615_mac_reset_counters(phy);
 
 out:
 	mt7615_mutex_release(dev);
@@ -222,11 +222,11 @@ static int mt7615_add_interface(struct ieee80211_hw *hw,
 
 	idx = MT7615_WTBL_RESERVED - mvif->mt76.idx;
 
-	INIT_LIST_HEAD(&mvif->sta.poll_list);
+	INIT_LIST_HEAD(&mvif->sta.wcid.poll_list);
 	mvif->sta.wcid.idx = idx;
-	mvif->sta.wcid.ext_phy = mvif->mt76.band_idx;
+	mvif->sta.wcid.phy_idx = mvif->mt76.band_idx;
 	mvif->sta.wcid.hw_key_idx = -1;
-	mt76_packet_id_init(&mvif->sta.wcid);
+	mt76_wcid_init(&mvif->sta.wcid);
 
 	mt7615_mac_wtbl_update(dev, idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
@@ -274,32 +274,12 @@ static void mt7615_remove_interface(struct ieee80211_hw *hw,
 
 	mt7615_mutex_release(dev);
 
-	spin_lock_bh(&dev->sta_poll_lock);
-	if (!list_empty(&msta->poll_list))
-		list_del_init(&msta->poll_list);
-	spin_unlock_bh(&dev->sta_poll_lock);
+	spin_lock_bh(&dev->mt76.sta_poll_lock);
+	if (!list_empty(&msta->wcid.poll_list))
+		list_del_init(&msta->wcid.poll_list);
+	spin_unlock_bh(&dev->mt76.sta_poll_lock);
 
-	mt76_packet_id_flush(&dev->mt76, &mvif->sta.wcid);
-}
-
-static void mt7615_init_dfs_state(struct mt7615_phy *phy)
-{
-	struct mt76_phy *mphy = phy->mt76;
-	struct ieee80211_hw *hw = mphy->hw;
-	struct cfg80211_chan_def *chandef = &hw->conf.chandef;
-
-	if (hw->conf.flags & IEEE80211_CONF_OFFCHANNEL)
-		return;
-
-	if (!(chandef->chan->flags & IEEE80211_CHAN_RADAR) &&
-	    !(mphy->chandef.chan->flags & IEEE80211_CHAN_RADAR))
-		return;
-
-	if (mphy->chandef.chan->center_freq == chandef->chan->center_freq &&
-	    mphy->chandef.width == chandef->width)
-		return;
-
-	phy->dfs_state = -1;
+	mt76_wcid_cleanup(&dev->mt76, &mvif->sta.wcid);
 }
 
 int mt7615_set_channel(struct mt7615_phy *phy)
@@ -314,7 +294,6 @@ int mt7615_set_channel(struct mt7615_phy *phy)
 
 	set_bit(MT76_RESET, &phy->mt76->state);
 
-	mt7615_init_dfs_state(phy);
 	mt76_set_channel(phy->mt76);
 
 	if (is_mt7615(&dev->mt76) && dev->flash_eeprom) {
@@ -341,7 +320,7 @@ int mt7615_set_channel(struct mt7615_phy *phy)
 	if (ret)
 		goto out;
 
-	mt7615_mac_reset_counters(dev);
+	mt7615_mac_reset_counters(phy);
 	phy->noise = 0;
 	phy->chfreq = mt76_rr(dev, MT_CHFREQ(ext_phy));
 
@@ -412,18 +391,17 @@ static int mt7615_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 
 	if (cmd == SET_KEY)
 		*wcid_keyidx = idx;
-	else if (idx == *wcid_keyidx)
-		*wcid_keyidx = -1;
-	else
+	else {
+		if (idx == *wcid_keyidx)
+			*wcid_keyidx = -1;
 		goto out;
+	}
 
-	mt76_wcid_key_setup(&dev->mt76, wcid,
-			    cmd == SET_KEY ? key : NULL);
-
+	mt76_wcid_key_setup(&dev->mt76, wcid, key);
 	if (mt76_is_mmio(&dev->mt76))
-		err = mt7615_mac_wtbl_set_key(dev, wcid, key, cmd);
+		err = mt7615_mac_wtbl_set_key(dev, wcid, key);
 	else
-		err = __mt7615_mac_wtbl_set_key(dev, wcid, key, cmd);
+		err = __mt7615_mac_wtbl_set_key(dev, wcid, key);
 
 out:
 	mt7615_mutex_release(dev);
@@ -494,7 +472,8 @@ static int mt7615_config(struct ieee80211_hw *hw, u32 changed)
 }
 
 static int
-mt7615_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif, u16 queue,
+mt7615_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+	       unsigned int link_id, u16 queue,
 	       const struct ieee80211_tx_queue_params *params)
 {
 	struct mt76_vif *mvif = (struct mt76_vif *)vif->drv_priv;
@@ -573,10 +552,36 @@ static void mt7615_configure_filter(struct ieee80211_hw *hw,
 	mt7615_mutex_release(dev);
 }
 
+static void
+mt7615_update_mu_group(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+		       struct ieee80211_bss_conf *info)
+{
+	struct mt7615_vif *mvif = (struct mt7615_vif *)vif->drv_priv;
+	struct mt7615_dev *dev = mt7615_hw_dev(hw);
+	u8 i, band = mvif->mt76.band_idx;
+	u32 *mu;
+
+	mu = (u32 *)info->mu_group.membership;
+	for (i = 0; i < WLAN_MEMBERSHIP_LEN / sizeof(*mu); i++) {
+		if (is_mt7663(&dev->mt76))
+			mt76_wr(dev, MT7663_WF_PHY_GID_TAB_VLD(band, i), mu[i]);
+		else
+			mt76_wr(dev, MT_WF_PHY_GID_TAB_VLD(band, i), mu[i]);
+	}
+
+	mu = (u32 *)info->mu_group.position;
+	for (i = 0; i < WLAN_USER_POSITION_LEN / sizeof(*mu); i++) {
+		if (is_mt7663(&dev->mt76))
+			mt76_wr(dev, MT7663_WF_PHY_GID_TAB_POS(band, i), mu[i]);
+		else
+			mt76_wr(dev, MT_WF_PHY_GID_TAB_POS(band, i), mu[i]);
+	}
+}
+
 static void mt7615_bss_info_changed(struct ieee80211_hw *hw,
 				    struct ieee80211_vif *vif,
 				    struct ieee80211_bss_conf *info,
-				    u32 changed)
+				    u64 changed)
 {
 	struct mt7615_dev *dev = mt7615_hw_dev(hw);
 	struct mt7615_phy *phy = mt7615_hw_phy(hw);
@@ -591,6 +596,9 @@ static void mt7615_bss_info_changed(struct ieee80211_hw *hw,
 			mt7615_mac_set_timing(phy);
 		}
 	}
+
+	if (changed & BSS_CHANGED_ERP_CTS_PROT)
+		mt7615_mac_enable_rtscts(dev, vif, info->use_cts_prot);
 
 	if (changed & BSS_CHANGED_BEACON_ENABLED && info->enable_beacon) {
 		mt7615_mcu_add_bss_info(phy, vif, NULL, true);
@@ -616,7 +624,10 @@ static void mt7615_bss_info_changed(struct ieee80211_hw *hw,
 	}
 
 	if (changed & BSS_CHANGED_ASSOC)
-		mt7615_mac_set_beacon_filter(phy, vif, info->assoc);
+		mt7615_mac_set_beacon_filter(phy, vif, vif->cfg.assoc);
+
+	if (changed & BSS_CHANGED_MU_GROUPS)
+		 mt7615_update_mu_group(hw, vif, info);
 
 	mt7615_mutex_release(dev);
 }
@@ -646,11 +657,11 @@ int mt7615_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	if (idx < 0)
 		return -ENOSPC;
 
-	INIT_LIST_HEAD(&msta->poll_list);
+	INIT_LIST_HEAD(&msta->wcid.poll_list);
 	msta->vif = mvif;
 	msta->wcid.sta = 1;
 	msta->wcid.idx = idx;
-	msta->wcid.ext_phy = mvif->mt76.band_idx;
+	msta->wcid.phy_idx = mvif->mt76.band_idx;
 
 	phy = mvif->mt76.band_idx ? mt7615_ext_phy(dev) : &dev->phy;
 	err = mt76_connac_pm_wake(phy->mt76, &dev->pm);
@@ -694,10 +705,10 @@ void mt7615_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	if (vif->type == NL80211_IFTYPE_STATION && !sta->tdls)
 		mt7615_mcu_add_bss_info(phy, vif, sta, false);
 
-	spin_lock_bh(&dev->sta_poll_lock);
-	if (!list_empty(&msta->poll_list))
-		list_del_init(&msta->poll_list);
-	spin_unlock_bh(&dev->sta_poll_lock);
+	spin_lock_bh(&mdev->sta_poll_lock);
+	if (!list_empty(&msta->wcid.poll_list))
+		list_del_init(&msta->wcid.poll_list);
+	spin_unlock_bh(&mdev->sta_poll_lock);
 
 	mt76_connac_power_save_sched(phy->mt76, &dev->pm);
 }
@@ -1215,12 +1226,16 @@ static void mt7615_sta_set_decap_offload(struct ieee80211_hw *hw,
 	struct mt7615_dev *dev = mt7615_hw_dev(hw);
 	struct mt7615_sta *msta = (struct mt7615_sta *)sta->drv_priv;
 
+	mt7615_mutex_acquire(dev);
+
 	if (enabled)
 		set_bit(MT_WCID_FLAG_HDR_TRANS, &msta->wcid.flags);
 	else
 		clear_bit(MT_WCID_FLAG_HDR_TRANS, &msta->wcid.flags);
 
 	mt7615_mcu_set_sta_decap_offload(dev, vif, sta);
+
+	mt7615_mutex_release(dev);
 }
 
 #ifdef CONFIG_PM
@@ -1311,6 +1326,10 @@ static void mt7615_set_rekey_data(struct ieee80211_hw *hw,
 #endif /* CONFIG_PM */
 
 const struct ieee80211_ops mt7615_ops = {
+	.add_chanctx = ieee80211_emulate_add_chanctx,
+	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+	.change_chanctx = ieee80211_emulate_change_chanctx,
+	.switch_vif_chanctx = ieee80211_emulate_switch_vif_chanctx,
 	.tx = mt7615_tx,
 	.start = mt7615_start,
 	.stop = mt7615_stop,
@@ -1360,4 +1379,5 @@ const struct ieee80211_ops mt7615_ops = {
 };
 EXPORT_SYMBOL_GPL(mt7615_ops);
 
+MODULE_DESCRIPTION("MediaTek MT7615E and MT7663E wireless driver");
 MODULE_LICENSE("Dual BSD/GPL");

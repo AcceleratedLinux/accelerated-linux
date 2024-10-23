@@ -44,13 +44,28 @@ post_kprobe_handler(struct kprobe *, struct kprobe_ctlblk *, struct pt_regs *);
 static void __kprobes arch_prepare_ss_slot(struct kprobe *p)
 {
 	kprobe_opcode_t *addr = p->ainsn.api.insn;
-	void *addrs[] = {addr, addr + 1};
-	u32 insns[] = {p->opcode, BRK64_OPCODE_KPROBES_SS};
 
-	/* prepare insn slot */
-	aarch64_insn_patch_text(addrs, insns, 2);
-
-	flush_icache_range((uintptr_t)addr, (uintptr_t)(addr + MAX_INSN_SIZE));
+	/*
+	 * Prepare insn slot, Mark Rutland points out it depends on a coupe of
+	 * subtleties:
+	 *
+	 * - That the I-cache maintenance for these instructions is complete
+	 *   *before* the kprobe BRK is written (and aarch64_insn_patch_text_nosync()
+	 *   ensures this, but just omits causing a Context-Synchronization-Event
+	 *   on all CPUS).
+	 *
+	 * - That the kprobe BRK results in an exception (and consequently a
+	 *   Context-Synchronoization-Event), which ensures that the CPU will
+	 *   fetch thesingle-step slot instructions *after* this, ensuring that
+	 *   the new instructions are used
+	 *
+	 * It supposes to place ISB after patching to guarantee I-cache maintenance
+	 * is observed on all CPUS, however, single-step slot is installed in
+	 * the BRK exception handler, so it is unnecessary to generate
+	 * Contex-Synchronization-Event via ISB again.
+	 */
+	aarch64_insn_patch_text_nosync(addr, p->opcode);
+	aarch64_insn_patch_text_nosync(addr + 1, BRK64_OPCODE_KPROBES_SS);
 
 	/*
 	 * Needs restoring of return address after stepping xol.
@@ -112,13 +127,6 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 		arch_prepare_simulate(p);
 
 	return 0;
-}
-
-void *alloc_insn_page(void)
-{
-	return __vmalloc_node_range(PAGE_SIZE, 1, VMALLOC_START, VMALLOC_END,
-			GFP_KERNEL, PAGE_KERNEL_ROX, VM_FLUSH_RESET_PERMS,
-			NUMA_NO_NODE, __builtin_return_address(0));
 }
 
 /* arm kprobe: install breakpoint in text */
@@ -279,19 +287,12 @@ int __kprobes kprobe_fault_handler(struct pt_regs *regs, unsigned int fsr)
 		}
 
 		break;
-	case KPROBE_HIT_ACTIVE:
-	case KPROBE_HIT_SSDONE:
-		/*
-		 * In case the user-specified fault handler returned
-		 * zero, try to fix up.
-		 */
-		if (fixup_exception(regs))
-			return 1;
 	}
 	return 0;
 }
 
-static void __kprobes kprobe_handler(struct pt_regs *regs)
+static int __kprobes
+kprobe_breakpoint_handler(struct pt_regs *regs, unsigned long esr)
 {
 	struct kprobe *p, *cur_kprobe;
 	struct kprobe_ctlblk *kcb;
@@ -301,38 +302,43 @@ static void __kprobes kprobe_handler(struct pt_regs *regs)
 	cur_kprobe = kprobe_running();
 
 	p = get_kprobe((kprobe_opcode_t *) addr);
-
-	if (p) {
-		if (cur_kprobe) {
-			if (reenter_kprobe(p, regs, kcb))
-				return;
-		} else {
-			/* Probe hit */
-			set_current_kprobe(p);
-			kcb->kprobe_status = KPROBE_HIT_ACTIVE;
-
-			/*
-			 * If we have no pre-handler or it returned 0, we
-			 * continue with normal processing.  If we have a
-			 * pre-handler and it returned non-zero, it will
-			 * modify the execution path and no need to single
-			 * stepping. Let's just reset current kprobe and exit.
-			 */
-			if (!p->pre_handler || !p->pre_handler(p, regs)) {
-				setup_singlestep(p, regs, kcb, 0);
-			} else
-				reset_current_kprobe();
-		}
+	if (WARN_ON_ONCE(!p)) {
+		/*
+		 * Something went wrong. This BRK used an immediate reserved
+		 * for kprobes, but we couldn't find any corresponding probe.
+		 */
+		return DBG_HOOK_ERROR;
 	}
-	/*
-	 * The breakpoint instruction was removed right
-	 * after we hit it.  Another cpu has removed
-	 * either a probepoint or a debugger breakpoint
-	 * at this address.  In either case, no further
-	 * handling of this interrupt is appropriate.
-	 * Return back to original instruction, and continue.
-	 */
+
+	if (cur_kprobe) {
+		/* Hit a kprobe inside another kprobe */
+		if (!reenter_kprobe(p, regs, kcb))
+			return DBG_HOOK_ERROR;
+	} else {
+		/* Probe hit */
+		set_current_kprobe(p);
+		kcb->kprobe_status = KPROBE_HIT_ACTIVE;
+
+		/*
+		 * If we have no pre-handler or it returned 0, we
+		 * continue with normal processing.  If we have a
+		 * pre-handler and it returned non-zero, it will
+		 * modify the execution path and not need to single-step
+		 * Let's just reset current kprobe and exit.
+		 */
+		if (!p->pre_handler || !p->pre_handler(p, regs))
+			setup_singlestep(p, regs, kcb, 0);
+		else
+			reset_current_kprobe();
+	}
+
+	return DBG_HOOK_HANDLED;
 }
+
+static struct break_hook kprobes_break_hook = {
+	.imm = KPROBES_BRK_IMM,
+	.fn = kprobe_breakpoint_handler,
+};
 
 static int __kprobes
 kprobe_breakpoint_ss_handler(struct pt_regs *regs, unsigned long esr)
@@ -359,15 +365,18 @@ static struct break_hook kprobes_break_ss_hook = {
 };
 
 static int __kprobes
-kprobe_breakpoint_handler(struct pt_regs *regs, unsigned long esr)
+kretprobe_breakpoint_handler(struct pt_regs *regs, unsigned long esr)
 {
-	kprobe_handler(regs);
+	if (regs->pc != (unsigned long)__kretprobe_trampoline)
+		return DBG_HOOK_ERROR;
+
+	regs->pc = kretprobe_trampoline_handler(regs, (void *)regs->regs[29]);
 	return DBG_HOOK_HANDLED;
 }
 
-static struct break_hook kprobes_break_hook = {
-	.imm = KPROBES_BRK_IMM,
-	.fn = kprobe_breakpoint_handler,
+static struct break_hook kretprobes_break_hook = {
+	.imm = KRETPROBES_BRK_IMM,
+	.fn = kretprobe_breakpoint_handler,
 };
 
 /*
@@ -386,10 +395,6 @@ int __init arch_populate_kprobe_blacklist(void)
 					(unsigned long)__irqentry_text_end);
 	if (ret)
 		return ret;
-	ret = kprobe_add_area_blacklist((unsigned long)__idmap_text_start,
-					(unsigned long)__idmap_text_end);
-	if (ret)
-		return ret;
 	ret = kprobe_add_area_blacklist((unsigned long)__hyp_text_start,
 					(unsigned long)__hyp_text_end);
 	if (ret || is_kernel_in_hyp_mode())
@@ -397,11 +402,6 @@ int __init arch_populate_kprobe_blacklist(void)
 	ret = kprobe_add_area_blacklist((unsigned long)__hyp_idmap_text_start,
 					(unsigned long)__hyp_idmap_text_end);
 	return ret;
-}
-
-void __kprobes __used *trampoline_probe_handler(struct pt_regs *regs)
-{
-	return (void *)kretprobe_trampoline_handler(regs, (void *)regs->regs[29]);
 }
 
 void __kprobes arch_prepare_kretprobe(struct kretprobe_instance *ri,
@@ -423,6 +423,7 @@ int __init arch_init_kprobes(void)
 {
 	register_kernel_break_hook(&kprobes_break_hook);
 	register_kernel_break_hook(&kprobes_break_ss_hook);
+	register_kernel_break_hook(&kretprobes_break_hook);
 
 	return 0;
 }

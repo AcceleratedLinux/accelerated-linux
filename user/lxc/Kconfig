@@ -1,5 +1,6 @@
 config USER_LXC
 	bool 'lxc'
 	select LIB_LIBSECCOMP
+	select LIB_LIBCAP
 	help
 	  Linux containers

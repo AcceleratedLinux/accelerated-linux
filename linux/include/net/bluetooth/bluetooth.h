@@ -1,6 +1,7 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
    Copyright (C) 2000-2001 Qualcomm Incorporated
+   Copyright 2023 NXP
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -55,6 +56,8 @@
 #define BTPROTO_CMTP	5
 #define BTPROTO_HIDP	6
 #define BTPROTO_AVDTP	7
+#define BTPROTO_ISO	8
+#define BTPROTO_LAST	BTPROTO_ISO
 
 #define SOL_HCI		0
 #define SOL_L2CAP	6
@@ -149,9 +152,68 @@ struct bt_voice {
 #define BT_MODE_LE_FLOWCTL	0x03
 #define BT_MODE_EXT_FLOWCTL	0x04
 
-#define BT_PKT_STATUS          16
+#define BT_PKT_STATUS           16
 
 #define BT_SCM_PKT_STATUS	0x03
+
+#define BT_ISO_QOS		17
+
+#define BT_ISO_QOS_CIG_UNSET	0xff
+#define BT_ISO_QOS_CIS_UNSET	0xff
+
+#define BT_ISO_QOS_BIG_UNSET	0xff
+#define BT_ISO_QOS_BIS_UNSET	0xff
+
+#define BT_ISO_SYNC_TIMEOUT	0x07d0 /* 20 secs */
+
+struct bt_iso_io_qos {
+	__u32 interval;
+	__u16 latency;
+	__u16 sdu;
+	__u8  phy;
+	__u8  rtn;
+};
+
+struct bt_iso_ucast_qos {
+	__u8  cig;
+	__u8  cis;
+	__u8  sca;
+	__u8  packing;
+	__u8  framing;
+	struct bt_iso_io_qos in;
+	struct bt_iso_io_qos out;
+};
+
+struct bt_iso_bcast_qos {
+	__u8  big;
+	__u8  bis;
+	__u8  sync_factor;
+	__u8  packing;
+	__u8  framing;
+	struct bt_iso_io_qos in;
+	struct bt_iso_io_qos out;
+	__u8  encryption;
+	__u8  bcode[16];
+	__u8  options;
+	__u16 skip;
+	__u16 sync_timeout;
+	__u8  sync_cte_type;
+	__u8  mse;
+	__u16 timeout;
+};
+
+struct bt_iso_qos {
+	union {
+		struct bt_iso_ucast_qos ucast;
+		struct bt_iso_bcast_qos bcast;
+	};
+};
+
+#define BT_ISO_PHY_1M		0x01
+#define BT_ISO_PHY_2M		0x02
+#define BT_ISO_PHY_CODED	0x04
+#define BT_ISO_PHY_ANY		(BT_ISO_PHY_1M | BT_ISO_PHY_2M | \
+				 BT_ISO_PHY_CODED)
 
 #define BT_CODEC	19
 
@@ -176,6 +238,8 @@ struct bt_codecs {
 #define BT_CODEC_CVSD		0x02
 #define BT_CODEC_TRANSPARENT	0x03
 #define BT_CODEC_MSBC		0x05
+
+#define BT_ISO_BASE		20
 
 __printf(1, 2)
 void bt_info(const char *fmt, ...);
@@ -221,7 +285,7 @@ void bt_err_ratelimited(const char *fmt, ...);
 	bt_err_ratelimited("%s: " fmt, bt_dev_name(hdev), ##__VA_ARGS__)
 
 /* Connection and socket states */
-enum {
+enum bt_sock_state {
 	BT_CONNECTED = 1, /* Equal to TCP_ESTABLISHED to make net code happy */
 	BT_OPEN,
 	BT_BOUND,
@@ -324,6 +388,7 @@ struct bt_sock {
 enum {
 	BT_SK_DEFER_SETUP,
 	BT_SK_SUSPEND,
+	BT_SK_PKT_STATUS
 };
 
 struct bt_sock_list {
@@ -338,6 +403,8 @@ int  bt_sock_register(int proto, const struct net_proto_family *ops);
 void bt_sock_unregister(int proto);
 void bt_sock_link(struct bt_sock_list *l, struct sock *s);
 void bt_sock_unlink(struct bt_sock_list *l, struct sock *s);
+struct sock *bt_sock_alloc(struct net *net, struct socket *sock,
+			   struct proto *prot, int proto, gfp_t prio, int kern);
 int  bt_sock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 		     int flags);
 int  bt_sock_stream_recvmsg(struct socket *sock, struct msghdr *msg,
@@ -366,10 +433,6 @@ struct l2cap_ctrl {
 	__le16  psm;
 	bdaddr_t bdaddr;
 	struct l2cap_chan *chan;
-};
-
-struct sco_ctrl {
-	u8	pkt_status;
 };
 
 struct hci_dev;
@@ -402,16 +465,18 @@ struct bt_skb_cb {
 	u8 force_active;
 	u16 expect;
 	u8 incoming:1;
+	u8 pkt_status:2;
 	union {
 		struct l2cap_ctrl l2cap;
-		struct sco_ctrl sco;
 		struct hci_ctrl hci;
 		struct mgmt_ctrl mgmt;
+		struct scm_creds creds;
 	};
 };
 #define bt_cb(skb) ((struct bt_skb_cb *)((skb)->cb))
 
 #define hci_skb_pkt_type(skb) bt_cb((skb))->pkt_type
+#define hci_skb_pkt_status(skb) bt_cb((skb))->pkt_status
 #define hci_skb_expect(skb) bt_cb((skb))->expect
 #define hci_skb_opcode(skb) bt_cb((skb))->hci.opcode
 #define hci_skb_event(skb) bt_cb((skb))->hci.req_event
@@ -478,7 +543,7 @@ static inline struct sk_buff *bt_skb_sendmsg(struct sock *sk,
 		return ERR_PTR(-EFAULT);
 	}
 
-	skb->priority = sk->sk_priority;
+	skb->priority = READ_ONCE(sk->sk_priority);
 
 	return skb;
 }
@@ -494,7 +559,7 @@ static inline struct sk_buff *bt_skb_sendmmsg(struct sock *sk,
 	struct sk_buff *skb, **frag;
 
 	skb = bt_skb_sendmsg(sk, msg, len, mtu, headroom, tailroom);
-	if (IS_ERR_OR_NULL(skb))
+	if (IS_ERR(skb))
 		return skb;
 
 	len -= skb->len;
@@ -520,7 +585,17 @@ static inline struct sk_buff *bt_skb_sendmmsg(struct sock *sk,
 	return skb;
 }
 
+static inline int bt_copy_from_sockptr(void *dst, size_t dst_size,
+				       sockptr_t src, size_t src_size)
+{
+	if (dst_size > src_size)
+		return -EINVAL;
+
+	return copy_from_sockptr(dst, src, dst_size);
+}
+
 int bt_to_errno(u16 code);
+__u8 bt_status(int err);
 
 void hci_sock_set_flag(struct sock *sk, int nr);
 void hci_sock_clear_flag(struct sock *sk, int nr);
@@ -558,8 +633,30 @@ static inline void sco_exit(void)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_BT_LE)
+int iso_init(void);
+int iso_exit(void);
+bool iso_enabled(void);
+#else
+static inline int iso_init(void)
+{
+	return 0;
+}
+
+static inline int iso_exit(void)
+{
+	return 0;
+}
+
+static inline bool iso_enabled(void)
+{
+	return false;
+}
+#endif
+
 int mgmt_init(void);
 void mgmt_exit(void);
+void mgmt_cleanup(struct sock *sk);
 
 void bt_sock_reclassify_lock(struct sock *sk, int proto);
 

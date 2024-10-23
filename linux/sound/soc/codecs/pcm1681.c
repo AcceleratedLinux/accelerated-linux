@@ -13,8 +13,6 @@
 #include <linux/i2c.h>
 #include <linux/regmap.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
-#include <linux/of_gpio.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -290,11 +288,10 @@ static const struct snd_soc_component_driver soc_component_dev_pcm1681 = {
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static const struct i2c_device_id pcm1681_i2c_id[] = {
-	{"pcm1681", 0},
+	{"pcm1681"},
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, pcm1681_i2c_id);
@@ -328,7 +325,7 @@ static struct i2c_driver pcm1681_i2c_driver = {
 		.of_match_table = of_match_ptr(pcm1681_dt_ids),
 	},
 	.id_table	= pcm1681_i2c_id,
-	.probe_new	= pcm1681_i2c_probe,
+	.probe		= pcm1681_i2c_probe,
 };
 
 module_i2c_driver(pcm1681_i2c_driver);

@@ -1,0 +1,168 @@
+#!/bin/sh
+#
+# Action for Digi/TX40 LEDs
+#
+##############################################################
+# allow script override
+[ -x /etc/config/led ] && exec /etc/config/led "$@"
+##############################################################
+#exec 2>> /tmp/led.log
+#set -x
+
+# Flash CELL, GNSS and Wi-Fi LEDs green
+findme_update() {
+	FINDME=
+	if find-me state &>/dev/null; then
+		FINDME="-f cell-green -O cell-red -O cell-blue -f gnss-green -O gnss-red -O gnss-blue -f wifi-green -O wifi-red -O wifi-blue"
+	fi
+}
+
+case "$1" in
+start)
+	# power on
+	ledcmd -o power
+	exit 0
+	;;
+reload)
+	findme_update
+	;;
+stop)
+	ledcmd -F power
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|reload}"
+	exit 1
+	;;
+esac
+
+##############################################################
+
+# Find the primary modem, or alternatively *any* modem
+modem_name="$(modem name 2> /dev/null)"
+idx="$(modem name="$modem_name" idx 2> /dev/null)"
+# Find the first interface on the modem
+for i in $(runt keys mm.map.interface_idx); do
+	[ "$(runt get mm.map.interface_idx.$i)" = "$idx" ] \
+		&& intf=$i && break
+done
+
+if [ "$(runt get network.interface.$intf.ipv4.up)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.up)" = 1 ]; then
+	if [ "$(runt get surelink.ipv4_interface_$intf.passed)" = n \
+			-o "$(runt get surelink.ipv6_interface_$intf.passed)" = n ]; then
+		CELL=1
+	elif [ "$(runt get mm.modem.$modem_name.status.gtech)" = 4g ]; then
+		CELL=3
+	elif [ "$(runt get mm.modem.$modem_name.status.gtech)" = 5g ]; then
+		CELL=4
+	else
+		CELL=2
+	fi
+elif [ "$(runt get network.interface.$intf.ipv4.pending)" = 1 ] \
+		|| [ "$(runt get network.interface.$intf.ipv6.pending)" = 1 ]; then
+	CELL=1
+else
+	CELL=0 # not-valid, never going to work
+fi
+
+if [ "$CELL" != 0 ]; then
+	case "$(runt get mm.modem.$modem_name.status.bars)" in
+	4|5) SIGNAL=HIGH ;;
+	1|2|3) SIGNAL=LOW ;;
+	*) SIGNAL=NO ;;
+	esac
+else
+	SIGNAL=NO
+fi
+
+##############################################################
+
+#
+# Cellular LED table
+#
+LED0NO="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED1NO="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED2NO="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED3NO="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED4NO="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED0LOW="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED1LOW="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED2LOW="-O cell-red -f cell-green -O cell-blue" # flashing green
+LED3LOW="-O cell-red -O cell-green -f cell-blue" # flashing blue
+LED4LOW="-f cell-red -O cell-green -f cell-blue" # flashing magenta
+LED0HIGH="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED1HIGH="-f cell-red -f cell-green -O cell-blue" # flashing yellow
+LED2HIGH="-O cell-red -o cell-green -O cell-blue" # solid green
+LED3HIGH="-O cell-red -O cell-green -o cell-blue" # solid blue
+LED4HIGH="-o cell-red -O cell-green -o cell-blue" # solid magenta
+
+##############################################################
+
+#
+# GNSS LED
+#
+# Off: GNSS is disabled
+# Flashing green: GNSS is enabled but does not have a valid fix
+# Solid green: GNSS is enabled and has a valid fix
+#
+[ -e "/sys/class/leds/gnss-red" ] && EVT_BOARD=1
+
+case "$(runt get location.state)" in
+    "Enabled, signal") GNSS="-o gnss-green" ;;
+    "Enabled, no signal") GNSS="-f gnss-green" ;;
+    *) GNSS="-O gnss-green" ;;
+esac
+[ "$EVT_BOARD" ] && GNSS="$GNSS -O gnss-red -O gnss-blue"
+
+##############################################################
+
+#
+# Wi-Fi LED
+#
+# Off: Wi-Fi 2.4GHz and 5GHz are off
+# Solid green: Wi-Fi 2.4GHz or 5GHz is on
+
+# Update wifi leds
+runt update network.wifi
+eval $(config stop)
+eval $(config start)
+config load
+
+WIFI="-O wifi-green"
+
+aps=$(config keys network.wifi.ap)
+for ap in $aps ; do
+	ap=${ap%%.*}
+	device="$(runt get network.wifi.ap.$ap.device)"
+	if [ -n "$device" ]; then
+		if ip link show $device up 2>/dev/null | grep -q "state UP"; then
+			radio=$(config dump network.wifi.ap.$ap.radio)
+			num="${radio//[^0-9]/}"
+			WIFI="-o wifi-green"
+		fi
+	fi
+done
+
+clients=$(config keys network.wifi.client)
+for client in $clients ; do
+	client=${client%%.*}
+	device="$(runt get network.wifi.client.$client.device)"
+	if [ -n "$device" ]; then
+		if ip link show $device up 2>/dev/null | grep -q "state UP"; then
+			radio=$(config dump network.wifi.client.$client.radio)
+			num="${radio//[^0-9]/}"
+			WIFI="-o wifi-green"
+		fi
+	fi
+done
+
+eval $(config stop)
+
+[ "$EVT_BOARD" ] && WIFI="$WIFI -O wifi-red -O wifi-blue"
+
+##############################################################
+
+eval ledcmd \$LED$CELL$SIGNAL $GNSS $WIFI $FINDME
+
+exit 0

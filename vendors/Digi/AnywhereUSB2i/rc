@@ -45,6 +45,14 @@ if [ "$(fw_printenv emctest 2> /dev/null)" = "emctest=enabled" ]; then
 	exit 0
 fi
 
+# Merge old dby /userfs into /opt so it's usable by default
+if ls /dev/mmcblk0p6 >/dev/null 2>&1; then
+	echo "Merging userfs into opt..."
+	parted -s /dev/mmcblk0 rm 6
+	parted -s /dev/mmcblk0 resizepart 5 3666
+	resize2fs -f /dev/mmcblk0p5
+fi
+
 # handle /opt, contains modem firmware and maybe other goodies
 echo "Mounting opt filesystem..."
 if ! mount -t ext4 /dev/flash/opt /opt; then

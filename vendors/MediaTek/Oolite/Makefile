@@ -93,7 +93,7 @@ romfs:
 
 lzma: Makefile
 	make -C $(ROOTDIR)/user/lzma clean
-	make -C $(ROOTDIR)/user/lzma CC="$(HOSTCC)"
+	unset CFLAGS ; make -C $(ROOTDIR)/user/lzma CC="$(HOSTCC)"
 	cp  $(ROOTDIR)/user/lzma/build/C/Util/Lzma/lzma .
 	make -C $(ROOTDIR)/user/lzma clean
 

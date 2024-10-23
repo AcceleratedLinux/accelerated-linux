@@ -21,6 +21,7 @@
 #include <net/act_api.h>
 #include <net/pkt_cls.h>
 #include <net/sch_generic.h>
+#include <net/tc_wrapper.h>
 
 #define HTSIZE 256
 
@@ -47,8 +48,9 @@ static u32 fw_hash(u32 handle)
 	return handle % HTSIZE;
 }
 
-static int fw_classify(struct sk_buff *skb, const struct tcf_proto *tp,
-		       struct tcf_result *res)
+TC_INDIRECT_SCOPE int fw_classify(struct sk_buff *skb,
+				  const struct tcf_proto *tp,
+				  struct tcf_result *res)
 {
 	struct fw_head *head = rcu_dereference_bh(tp->root);
 	struct fw_filter *f;
@@ -210,11 +212,6 @@ static int fw_set_parms(struct net *net, struct tcf_proto *tp,
 	if (err < 0)
 		return err;
 
-	if (tb[TCA_FW_CLASSID]) {
-		f->res.classid = nla_get_u32(tb[TCA_FW_CLASSID]);
-		tcf_bind_filter(tp, &f->res, base);
-	}
-
 	if (tb[TCA_FW_INDEV]) {
 		int ret;
 		ret = tcf_change_indev(net, tb[TCA_FW_INDEV], extack);
@@ -230,6 +227,11 @@ static int fw_set_parms(struct net *net, struct tcf_proto *tp,
 			return err;
 	} else if (head->mask != 0xFFFFFFFF)
 		return err;
+
+	if (tb[TCA_FW_CLASSID]) {
+		f->res.classid = nla_get_u32(tb[TCA_FW_CLASSID]);
+		tcf_bind_filter(tp, &f->res, base);
+	}
 
 	return 0;
 }
@@ -265,7 +267,6 @@ static int fw_change(struct net *net, struct sk_buff *in_skb,
 			return -ENOBUFS;
 
 		fnew->id = f->id;
-		fnew->res = f->res;
 		fnew->ifindex = f->ifindex;
 		fnew->tp = f->tp;
 
@@ -358,15 +359,8 @@ static void fw_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 
 		for (f = rtnl_dereference(head->ht[h]); f;
 		     f = rtnl_dereference(f->next)) {
-			if (arg->count < arg->skip) {
-				arg->count++;
-				continue;
-			}
-			if (arg->fn(tp, f, arg) < 0) {
-				arg->stop = 1;
+			if (!tc_cls_stats_dump(tp, arg, f))
 				return;
-			}
-			arg->count++;
 		}
 	}
 }
@@ -423,12 +417,7 @@ static void fw_bind_class(void *fh, u32 classid, unsigned long cl, void *q,
 {
 	struct fw_filter *f = fh;
 
-	if (f && f->res.classid == classid) {
-		if (cl)
-			__tcf_bind_filter(q, &f->res, base);
-		else
-			__tcf_unbind_filter(q, &f->res);
-	}
+	tc_cls_bind_class(classid, cl, q, &f->res, base);
 }
 
 static struct tcf_proto_ops cls_fw_ops __read_mostly = {
@@ -444,6 +433,7 @@ static struct tcf_proto_ops cls_fw_ops __read_mostly = {
 	.bind_class	=	fw_bind_class,
 	.owner		=	THIS_MODULE,
 };
+MODULE_ALIAS_NET_CLS("fw");
 
 static int __init init_fw(void)
 {
@@ -457,4 +447,5 @@ static void __exit exit_fw(void)
 
 module_init(init_fw)
 module_exit(exit_fw)
+MODULE_DESCRIPTION("SKB mark based TC classifier");
 MODULE_LICENSE("GPL");

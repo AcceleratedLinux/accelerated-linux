@@ -112,8 +112,7 @@ static void smbalert_work(struct work_struct *work)
 }
 
 /* Setup SMBALERT# infrastructure */
-static int smbalert_probe(struct i2c_client *ara,
-			  const struct i2c_device_id *id)
+static int smbalert_probe(struct i2c_client *ara)
 {
 	struct i2c_smbus_alert_setup *setup = dev_get_platdata(&ara->dev);
 	struct i2c_smbus_alert *alert;
@@ -153,12 +152,11 @@ static int smbalert_probe(struct i2c_client *ara,
 }
 
 /* IRQ and memory resources are managed so they are freed automatically */
-static int smbalert_remove(struct i2c_client *ara)
+static void smbalert_remove(struct i2c_client *ara)
 {
 	struct i2c_smbus_alert *alert = i2c_get_clientdata(ara);
 
 	cancel_work_sync(&alert->alert);
-	return 0;
 }
 
 static const struct i2c_device_id smbalert_ids[] = {
@@ -310,8 +308,8 @@ EXPORT_SYMBOL_GPL(i2c_free_slave_host_notify_device);
  * target systems are the same.
  * Restrictions to automatic SPD instantiation:
  *  - Only works if all filled slots have the same memory type
- *  - Only works for DDR2, DDR3 and DDR4 for now
- *  - Only works on systems with 1 to 4 memory slots
+ *  - Only works for DDR, DDR2, DDR3 and DDR4 for now
+ *  - Only works on systems with 1 to 8 memory slots
  */
 #if IS_ENABLED(CONFIG_DMI)
 void i2c_register_spd(struct i2c_adapter *adap)
@@ -353,18 +351,29 @@ void i2c_register_spd(struct i2c_adapter *adap)
 	if (!dimm_count)
 		return;
 
-	dev_info(&adap->dev, "%d/%d memory slots populated (from DMI)\n",
-		 dimm_count, slot_count);
-
-	if (slot_count > 4) {
-		dev_warn(&adap->dev,
-			 "Systems with more than 4 memory slots not supported yet, not instantiating SPD\n");
-		return;
+	/*
+	 * If we're a child adapter on a muxed segment, then limit slots to 8,
+	 * as this is the max number of SPD EEPROMs that can be addressed per bus.
+	 */
+	if (i2c_parent_is_i2c_adapter(adap)) {
+		slot_count = 8;
+	} else {
+		if (slot_count > 8) {
+			dev_warn(&adap->dev,
+				 "More than 8 memory slots on a single bus, contact i801 maintainer to add missing mux config\n");
+			return;
+		}
 	}
 
+	/*
+	 * Memory types could be found at section 7.18.2 (Memory Device — Type), table 78
+	 * https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.6.0.pdf
+	 */
 	switch (common_mem_type) {
+	case 0x12:	/* DDR */
 	case 0x13:	/* DDR2 */
 	case 0x18:	/* DDR3 */
+	case 0x1B:	/* LPDDR */
 	case 0x1C:	/* LPDDR2 */
 	case 0x1D:	/* LPDDR3 */
 		name = "spd";
@@ -391,7 +400,7 @@ void i2c_register_spd(struct i2c_adapter *adap)
 		unsigned short addr_list[2];
 
 		memset(&info, 0, sizeof(struct i2c_board_info));
-		strlcpy(info.type, name, I2C_NAME_SIZE);
+		strscpy(info.type, name, I2C_NAME_SIZE);
 		addr_list[0] = 0x50 + n;
 		addr_list[1] = I2C_CLIENT_END;
 

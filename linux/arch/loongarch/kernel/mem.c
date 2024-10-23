@@ -50,7 +50,6 @@ void __init memblock_init(void)
 	}
 
 	memblock_set_current_limit(PFN_PHYS(max_low_pfn));
-	memblock_set_node(0, PHYS_ADDR_MAX, &memblock.memory, 0);
 
 	/* Reserve the first 2MB */
 	memblock_reserve(PHYS_OFFSET, 0x200000);
@@ -59,6 +58,6 @@ void __init memblock_init(void)
 	memblock_reserve(__pa_symbol(&_text),
 			 __pa_symbol(&_end) - __pa_symbol(&_text));
 
-	/* Reserve the initrd */
-	reserve_initrd_mem();
+	memblock_set_node(0, PHYS_ADDR_MAX, &memblock.memory, 0);
+	memblock_set_node(0, PHYS_ADDR_MAX, &memblock.reserved, 0);
 }

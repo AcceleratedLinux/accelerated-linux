@@ -321,7 +321,7 @@ struct qib_verbs_txreq {
  * These 7 values (SDR, DDR, and QDR may be ORed for auto-speed
  * negotiation) are used for the 3rd argument to path_f_set_ib_cfg
  * with cmd QIB_IB_CFG_SPD_ENB, by direct calls or via sysfs.  They
- * are also the the possible values for qib_link_speed_enabled and active
+ * are also the possible values for qib_link_speed_enabled and active
  * The values were chosen to match values used within the IB spec.
  */
 #define QIB_IB_SDR 1
@@ -1359,7 +1359,6 @@ static inline u32 qib_get_rcvhdrtail(const struct qib_ctxtdata *rcd)
  * sysfs interface.
  */
 
-extern const char ib_qib_version[];
 extern const struct attribute_group qib_attr_group;
 extern const struct attribute_group *qib_attr_port_groups[];
 

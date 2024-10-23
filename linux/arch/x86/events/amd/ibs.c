@@ -156,8 +156,8 @@ perf_event_try_update(struct perf_event *event, u64 new_raw_count, int width)
 	 * count to the generic event atomically:
 	 */
 	prev_raw_count = local64_read(&hwc->prev_count);
-	if (local64_cmpxchg(&hwc->prev_count, prev_raw_count,
-					new_raw_count) != prev_raw_count)
+	if (!local64_try_cmpxchg(&hwc->prev_count,
+				 &prev_raw_count, new_raw_count))
 		return 0;
 
 	/*
@@ -190,7 +190,7 @@ static struct perf_ibs *get_ibs_pmu(int type)
 }
 
 /*
- * Use IBS for precise event sampling:
+ * core pmu config -> IBS config
  *
  *  perf record -a -e cpu-cycles:p ...    # use ibs op counting cycle count
  *  perf record -a -e r076:p ...          # same as -e cpu-cycles:p
@@ -199,25 +199,9 @@ static struct perf_ibs *get_ibs_pmu(int type)
  * IbsOpCntCtl (bit 19) of IBS Execution Control Register (IbsOpCtl,
  * MSRC001_1033) is used to select either cycle or micro-ops counting
  * mode.
- *
- * The rip of IBS samples has skid 0. Thus, IBS supports precise
- * levels 1 and 2 and the PERF_EFLAGS_EXACT is set. In rare cases the
- * rip is invalid when IBS was not able to record the rip correctly.
- * We clear PERF_EFLAGS_EXACT and take the rip from pt_regs then.
- *
  */
-static int perf_ibs_precise_event(struct perf_event *event, u64 *config)
+static int core_pmu_ibs_config(struct perf_event *event, u64 *config)
 {
-	switch (event->attr.precise_ip) {
-	case 0:
-		return -ENOENT;
-	case 1:
-	case 2:
-		break;
-	default:
-		return -EOPNOTSUPP;
-	}
-
 	switch (event->attr.type) {
 	case PERF_TYPE_HARDWARE:
 		switch (event->attr.config) {
@@ -243,6 +227,47 @@ static int perf_ibs_precise_event(struct perf_event *event, u64 *config)
 	return -EOPNOTSUPP;
 }
 
+/*
+ * The rip of IBS samples has skid 0. Thus, IBS supports precise
+ * levels 1 and 2 and the PERF_EFLAGS_EXACT is set. In rare cases the
+ * rip is invalid when IBS was not able to record the rip correctly.
+ * We clear PERF_EFLAGS_EXACT and take the rip from pt_regs then.
+ */
+int forward_event_to_ibs(struct perf_event *event)
+{
+	u64 config = 0;
+
+	if (!event->attr.precise_ip || event->attr.precise_ip > 2)
+		return -EOPNOTSUPP;
+
+	if (!core_pmu_ibs_config(event, &config)) {
+		event->attr.type = perf_ibs_op.pmu.type;
+		event->attr.config = config;
+	}
+	return -ENOENT;
+}
+
+/*
+ * Grouping of IBS events is not possible since IBS can have only
+ * one event active at any point in time.
+ */
+static int validate_group(struct perf_event *event)
+{
+	struct perf_event *sibling;
+
+	if (event->group_leader == event)
+		return 0;
+
+	if (event->group_leader->pmu == event->pmu)
+		return -EINVAL;
+
+	for_each_sibling_event(sibling, event->group_leader) {
+		if (sibling->pmu == event->pmu)
+			return -EINVAL;
+	}
+	return 0;
+}
+
 static int perf_ibs_init(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
@@ -251,20 +276,23 @@ static int perf_ibs_init(struct perf_event *event)
 	int ret;
 
 	perf_ibs = get_ibs_pmu(event->attr.type);
-	if (perf_ibs) {
-		config = event->attr.config;
-	} else {
-		perf_ibs = &perf_ibs_op;
-		ret = perf_ibs_precise_event(event, &config);
-		if (ret)
-			return ret;
-	}
+	if (!perf_ibs)
+		return -ENOENT;
+
+	config = event->attr.config;
 
 	if (event->pmu != &perf_ibs->pmu)
 		return -ENOENT;
 
 	if (config & ~perf_ibs->config_mask)
 		return -EINVAL;
+
+	if (has_branch_stack(event))
+		return -EOPNOTSUPP;
+
+	ret = validate_group(event);
+	if (ret)
+		return ret;
 
 	if (hwc->sample_period) {
 		if (config & perf_ibs->cnt_mask)
@@ -299,16 +327,6 @@ static int perf_ibs_init(struct perf_event *event)
 
 	hwc->config_base = perf_ibs->msr;
 	hwc->config = config;
-
-	/*
-	 * rip recorded by IbsOpRip will not be consistent with rsp and rbp
-	 * recorded as part of interrupt regs. Thus we need to use rip from
-	 * interrupt regs while unwinding call stack. Setting _EARLY flag
-	 * makes sure we unwind call-stack before perf sample rip is set to
-	 * IbsOpRip.
-	 */
-	if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN)
-		event->attr.sample_type |= __PERF_SAMPLE_CALLCHAIN_EARLY;
 
 	return 0;
 }
@@ -641,7 +659,7 @@ static const struct attribute_group *op_attr_update[] = {
 
 static struct perf_ibs perf_ibs_fetch = {
 	.pmu = {
-		.task_ctx_nr	= perf_invalid_context,
+		.task_ctx_nr	= perf_hw_context,
 
 		.event_init	= perf_ibs_init,
 		.add		= perf_ibs_add,
@@ -665,7 +683,7 @@ static struct perf_ibs perf_ibs_fetch = {
 
 static struct perf_ibs perf_ibs_op = {
 	.pmu = {
-		.task_ctx_nr	= perf_invalid_context,
+		.task_ctx_nr	= perf_hw_context,
 
 		.event_init	= perf_ibs_init,
 		.add		= perf_ibs_add,
@@ -687,6 +705,319 @@ static struct perf_ibs perf_ibs_op = {
 
 	.get_count		= get_ibs_op_count,
 };
+
+static void perf_ibs_get_mem_op(union ibs_op_data3 *op_data3,
+				struct perf_sample_data *data)
+{
+	union perf_mem_data_src *data_src = &data->data_src;
+
+	data_src->mem_op = PERF_MEM_OP_NA;
+
+	if (op_data3->ld_op)
+		data_src->mem_op = PERF_MEM_OP_LOAD;
+	else if (op_data3->st_op)
+		data_src->mem_op = PERF_MEM_OP_STORE;
+}
+
+/*
+ * Processors having CPUID_Fn8000001B_EAX[11] aka IBS_CAPS_ZEN4 has
+ * more fine granular DataSrc encodings. Others have coarse.
+ */
+static u8 perf_ibs_data_src(union ibs_op_data2 *op_data2)
+{
+	if (ibs_caps & IBS_CAPS_ZEN4)
+		return (op_data2->data_src_hi << 3) | op_data2->data_src_lo;
+
+	return op_data2->data_src_lo;
+}
+
+#define	L(x)		(PERF_MEM_S(LVL, x) | PERF_MEM_S(LVL, HIT))
+#define	LN(x)		PERF_MEM_S(LVLNUM, x)
+#define	REM		PERF_MEM_S(REMOTE, REMOTE)
+#define	HOPS(x)		PERF_MEM_S(HOPS, x)
+
+static u64 g_data_src[8] = {
+	[IBS_DATA_SRC_LOC_CACHE]	  = L(L3) | L(REM_CCE1) | LN(ANY_CACHE) | HOPS(0),
+	[IBS_DATA_SRC_DRAM]		  = L(LOC_RAM) | LN(RAM),
+	[IBS_DATA_SRC_REM_CACHE]	  = L(REM_CCE2) | LN(ANY_CACHE) | REM | HOPS(1),
+	[IBS_DATA_SRC_IO]		  = L(IO) | LN(IO),
+};
+
+#define RMT_NODE_BITS			(1 << IBS_DATA_SRC_DRAM)
+#define RMT_NODE_APPLICABLE(x)		(RMT_NODE_BITS & (1 << x))
+
+static u64 g_zen4_data_src[32] = {
+	[IBS_DATA_SRC_EXT_LOC_CACHE]	  = L(L3) | LN(L3),
+	[IBS_DATA_SRC_EXT_NEAR_CCX_CACHE] = L(REM_CCE1) | LN(ANY_CACHE) | REM | HOPS(0),
+	[IBS_DATA_SRC_EXT_DRAM]		  = L(LOC_RAM) | LN(RAM),
+	[IBS_DATA_SRC_EXT_FAR_CCX_CACHE]  = L(REM_CCE2) | LN(ANY_CACHE) | REM | HOPS(1),
+	[IBS_DATA_SRC_EXT_PMEM]		  = LN(PMEM),
+	[IBS_DATA_SRC_EXT_IO]		  = L(IO) | LN(IO),
+	[IBS_DATA_SRC_EXT_EXT_MEM]	  = LN(CXL),
+};
+
+#define ZEN4_RMT_NODE_BITS		((1 << IBS_DATA_SRC_EXT_DRAM) | \
+					 (1 << IBS_DATA_SRC_EXT_PMEM) | \
+					 (1 << IBS_DATA_SRC_EXT_EXT_MEM))
+#define ZEN4_RMT_NODE_APPLICABLE(x)	(ZEN4_RMT_NODE_BITS & (1 << x))
+
+static __u64 perf_ibs_get_mem_lvl(union ibs_op_data2 *op_data2,
+				  union ibs_op_data3 *op_data3,
+				  struct perf_sample_data *data)
+{
+	union perf_mem_data_src *data_src = &data->data_src;
+	u8 ibs_data_src = perf_ibs_data_src(op_data2);
+
+	data_src->mem_lvl = 0;
+	data_src->mem_lvl_num = 0;
+
+	/*
+	 * DcMiss, L2Miss, DataSrc, DcMissLat etc. are all invalid for Uncached
+	 * memory accesses. So, check DcUcMemAcc bit early.
+	 */
+	if (op_data3->dc_uc_mem_acc && ibs_data_src != IBS_DATA_SRC_EXT_IO)
+		return L(UNC) | LN(UNC);
+
+	/* L1 Hit */
+	if (op_data3->dc_miss == 0)
+		return L(L1) | LN(L1);
+
+	/* L2 Hit */
+	if (op_data3->l2_miss == 0) {
+		/* Erratum #1293 */
+		if (boot_cpu_data.x86 != 0x19 || boot_cpu_data.x86_model > 0xF ||
+		    !(op_data3->sw_pf || op_data3->dc_miss_no_mab_alloc))
+			return L(L2) | LN(L2);
+	}
+
+	/*
+	 * OP_DATA2 is valid only for load ops. Skip all checks which
+	 * uses OP_DATA2[DataSrc].
+	 */
+	if (data_src->mem_op != PERF_MEM_OP_LOAD)
+		goto check_mab;
+
+	if (ibs_caps & IBS_CAPS_ZEN4) {
+		u64 val = g_zen4_data_src[ibs_data_src];
+
+		if (!val)
+			goto check_mab;
+
+		/* HOPS_1 because IBS doesn't provide remote socket detail */
+		if (op_data2->rmt_node && ZEN4_RMT_NODE_APPLICABLE(ibs_data_src)) {
+			if (ibs_data_src == IBS_DATA_SRC_EXT_DRAM)
+				val = L(REM_RAM1) | LN(RAM) | REM | HOPS(1);
+			else
+				val |= REM | HOPS(1);
+		}
+
+		return val;
+	} else {
+		u64 val = g_data_src[ibs_data_src];
+
+		if (!val)
+			goto check_mab;
+
+		/* HOPS_1 because IBS doesn't provide remote socket detail */
+		if (op_data2->rmt_node && RMT_NODE_APPLICABLE(ibs_data_src)) {
+			if (ibs_data_src == IBS_DATA_SRC_DRAM)
+				val = L(REM_RAM1) | LN(RAM) | REM | HOPS(1);
+			else
+				val |= REM | HOPS(1);
+		}
+
+		return val;
+	}
+
+check_mab:
+	/*
+	 * MAB (Miss Address Buffer) Hit. MAB keeps track of outstanding
+	 * DC misses. However, such data may come from any level in mem
+	 * hierarchy. IBS provides detail about both MAB as well as actual
+	 * DataSrc simultaneously. Prioritize DataSrc over MAB, i.e. set
+	 * MAB only when IBS fails to provide DataSrc.
+	 */
+	if (op_data3->dc_miss_no_mab_alloc)
+		return L(LFB) | LN(LFB);
+
+	/* Don't set HIT with NA */
+	return PERF_MEM_S(LVL, NA) | LN(NA);
+}
+
+static bool perf_ibs_cache_hit_st_valid(void)
+{
+	/* 0: Uninitialized, 1: Valid, -1: Invalid */
+	static int cache_hit_st_valid;
+
+	if (unlikely(!cache_hit_st_valid)) {
+		if (boot_cpu_data.x86 == 0x19 &&
+		    (boot_cpu_data.x86_model <= 0xF ||
+		    (boot_cpu_data.x86_model >= 0x20 &&
+		     boot_cpu_data.x86_model <= 0x5F))) {
+			cache_hit_st_valid = -1;
+		} else {
+			cache_hit_st_valid = 1;
+		}
+	}
+
+	return cache_hit_st_valid == 1;
+}
+
+static void perf_ibs_get_mem_snoop(union ibs_op_data2 *op_data2,
+				   struct perf_sample_data *data)
+{
+	union perf_mem_data_src *data_src = &data->data_src;
+	u8 ibs_data_src;
+
+	data_src->mem_snoop = PERF_MEM_SNOOP_NA;
+
+	if (!perf_ibs_cache_hit_st_valid() ||
+	    data_src->mem_op != PERF_MEM_OP_LOAD ||
+	    data_src->mem_lvl & PERF_MEM_LVL_L1 ||
+	    data_src->mem_lvl & PERF_MEM_LVL_L2 ||
+	    op_data2->cache_hit_st)
+		return;
+
+	ibs_data_src = perf_ibs_data_src(op_data2);
+
+	if (ibs_caps & IBS_CAPS_ZEN4) {
+		if (ibs_data_src == IBS_DATA_SRC_EXT_LOC_CACHE ||
+		    ibs_data_src == IBS_DATA_SRC_EXT_NEAR_CCX_CACHE ||
+		    ibs_data_src == IBS_DATA_SRC_EXT_FAR_CCX_CACHE)
+			data_src->mem_snoop = PERF_MEM_SNOOP_HITM;
+	} else if (ibs_data_src == IBS_DATA_SRC_LOC_CACHE) {
+		data_src->mem_snoop = PERF_MEM_SNOOP_HITM;
+	}
+}
+
+static void perf_ibs_get_tlb_lvl(union ibs_op_data3 *op_data3,
+				 struct perf_sample_data *data)
+{
+	union perf_mem_data_src *data_src = &data->data_src;
+
+	data_src->mem_dtlb = PERF_MEM_TLB_NA;
+
+	if (!op_data3->dc_lin_addr_valid)
+		return;
+
+	if (!op_data3->dc_l1tlb_miss) {
+		data_src->mem_dtlb = PERF_MEM_TLB_L1 | PERF_MEM_TLB_HIT;
+		return;
+	}
+
+	if (!op_data3->dc_l2tlb_miss) {
+		data_src->mem_dtlb = PERF_MEM_TLB_L2 | PERF_MEM_TLB_HIT;
+		return;
+	}
+
+	data_src->mem_dtlb = PERF_MEM_TLB_L2 | PERF_MEM_TLB_MISS;
+}
+
+static void perf_ibs_get_mem_lock(union ibs_op_data3 *op_data3,
+				  struct perf_sample_data *data)
+{
+	union perf_mem_data_src *data_src = &data->data_src;
+
+	data_src->mem_lock = PERF_MEM_LOCK_NA;
+
+	if (op_data3->dc_locked_op)
+		data_src->mem_lock = PERF_MEM_LOCK_LOCKED;
+}
+
+#define ibs_op_msr_idx(msr)	(msr - MSR_AMD64_IBSOPCTL)
+
+static void perf_ibs_get_data_src(struct perf_ibs_data *ibs_data,
+				  struct perf_sample_data *data,
+				  union ibs_op_data2 *op_data2,
+				  union ibs_op_data3 *op_data3)
+{
+	union perf_mem_data_src *data_src = &data->data_src;
+
+	data_src->val |= perf_ibs_get_mem_lvl(op_data2, op_data3, data);
+	perf_ibs_get_mem_snoop(op_data2, data);
+	perf_ibs_get_tlb_lvl(op_data3, data);
+	perf_ibs_get_mem_lock(op_data3, data);
+}
+
+static __u64 perf_ibs_get_op_data2(struct perf_ibs_data *ibs_data,
+				   union ibs_op_data3 *op_data3)
+{
+	__u64 val = ibs_data->regs[ibs_op_msr_idx(MSR_AMD64_IBSOPDATA2)];
+
+	/* Erratum #1293 */
+	if (boot_cpu_data.x86 == 0x19 && boot_cpu_data.x86_model <= 0xF &&
+	    (op_data3->sw_pf || op_data3->dc_miss_no_mab_alloc)) {
+		/*
+		 * OP_DATA2 has only two fields on Zen3: DataSrc and RmtNode.
+		 * DataSrc=0 is 'No valid status' and RmtNode is invalid when
+		 * DataSrc=0.
+		 */
+		val = 0;
+	}
+	return val;
+}
+
+static void perf_ibs_parse_ld_st_data(__u64 sample_type,
+				      struct perf_ibs_data *ibs_data,
+				      struct perf_sample_data *data)
+{
+	union ibs_op_data3 op_data3;
+	union ibs_op_data2 op_data2;
+	union ibs_op_data op_data;
+
+	data->data_src.val = PERF_MEM_NA;
+	op_data3.val = ibs_data->regs[ibs_op_msr_idx(MSR_AMD64_IBSOPDATA3)];
+
+	perf_ibs_get_mem_op(&op_data3, data);
+	if (data->data_src.mem_op != PERF_MEM_OP_LOAD &&
+	    data->data_src.mem_op != PERF_MEM_OP_STORE)
+		return;
+
+	op_data2.val = perf_ibs_get_op_data2(ibs_data, &op_data3);
+
+	if (sample_type & PERF_SAMPLE_DATA_SRC) {
+		perf_ibs_get_data_src(ibs_data, data, &op_data2, &op_data3);
+		data->sample_flags |= PERF_SAMPLE_DATA_SRC;
+	}
+
+	if (sample_type & PERF_SAMPLE_WEIGHT_TYPE && op_data3.dc_miss &&
+	    data->data_src.mem_op == PERF_MEM_OP_LOAD) {
+		op_data.val = ibs_data->regs[ibs_op_msr_idx(MSR_AMD64_IBSOPDATA)];
+
+		if (sample_type & PERF_SAMPLE_WEIGHT_STRUCT) {
+			data->weight.var1_dw = op_data3.dc_miss_lat;
+			data->weight.var2_w = op_data.tag_to_ret_ctr;
+		} else if (sample_type & PERF_SAMPLE_WEIGHT) {
+			data->weight.full = op_data3.dc_miss_lat;
+		}
+		data->sample_flags |= PERF_SAMPLE_WEIGHT_TYPE;
+	}
+
+	if (sample_type & PERF_SAMPLE_ADDR && op_data3.dc_lin_addr_valid) {
+		data->addr = ibs_data->regs[ibs_op_msr_idx(MSR_AMD64_IBSDCLINAD)];
+		data->sample_flags |= PERF_SAMPLE_ADDR;
+	}
+
+	if (sample_type & PERF_SAMPLE_PHYS_ADDR && op_data3.dc_phy_addr_valid) {
+		data->phys_addr = ibs_data->regs[ibs_op_msr_idx(MSR_AMD64_IBSDCPHYSAD)];
+		data->sample_flags |= PERF_SAMPLE_PHYS_ADDR;
+	}
+}
+
+static int perf_ibs_get_offset_max(struct perf_ibs *perf_ibs, u64 sample_type,
+				   int check_rip)
+{
+	if (sample_type & PERF_SAMPLE_RAW ||
+	    (perf_ibs == &perf_ibs_op &&
+	     (sample_type & PERF_SAMPLE_DATA_SRC ||
+	      sample_type & PERF_SAMPLE_WEIGHT_TYPE ||
+	      sample_type & PERF_SAMPLE_ADDR ||
+	      sample_type & PERF_SAMPLE_PHYS_ADDR)))
+		return perf_ibs->offset_max;
+	else if (check_rip)
+		return 3;
+	return 1;
+}
 
 static int perf_ibs_handle_irq(struct perf_ibs *perf_ibs, struct pt_regs *iregs)
 {
@@ -735,12 +1066,9 @@ fail:
 	size = 1;
 	offset = 1;
 	check_rip = (perf_ibs == &perf_ibs_op && (ibs_caps & IBS_CAPS_RIPINVALIDCHK));
-	if (event->attr.sample_type & PERF_SAMPLE_RAW)
-		offset_max = perf_ibs->offset_max;
-	else if (check_rip)
-		offset_max = 3;
-	else
-		offset_max = 1;
+
+	offset_max = perf_ibs_get_offset_max(perf_ibs, event->attr.sample_type, check_rip);
+
 	do {
 		rdmsrl(msr + offset, *buf++);
 		size++;
@@ -790,8 +1118,11 @@ fail:
 				.data = ibs_data.data,
 			},
 		};
-		data.raw = &raw;
+		perf_sample_save_raw_data(&data, &raw);
 	}
+
+	if (perf_ibs == &perf_ibs_op)
+		perf_ibs_parse_ld_st_data(event->attr.sample_type, &ibs_data, &data);
 
 	/*
 	 * rip recorded by IbsOpRip will not be consistent with rsp and rbp
@@ -799,7 +1130,7 @@ fail:
 	 * interrupt regs while unwinding call stack.
 	 */
 	if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN)
-		data.callchain = perf_callchain(event, iregs);
+		perf_sample_save_callchain(&data, event, iregs);
 
 	throttle = perf_event_overflow(event, &data, &regs);
 out:

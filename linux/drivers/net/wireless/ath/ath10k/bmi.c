@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2005-2011 Atheros Communications Inc.
  * Copyright (c) 2011-2014,2016-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "bmi.h"
@@ -101,7 +102,7 @@ int ath10k_bmi_get_target_info_sdio(struct ath10k *ar,
 	cmd.id = __cpu_to_le32(BMI_GET_TARGET_INFO);
 
 	/* Step 1: Read 4 bytes of the target info and check if it is
-	 * the special sentinal version word or the first word in the
+	 * the special sentinel version word or the first word in the
 	 * version response.
 	 */
 	resplen = sizeof(u32);
@@ -111,7 +112,7 @@ int ath10k_bmi_get_target_info_sdio(struct ath10k *ar,
 		return ret;
 	}
 
-	/* Some SDIO boards have a special sentinal byte before the real
+	/* Some SDIO boards have a special sentinel byte before the real
 	 * version response.
 	 */
 	if (__le32_to_cpu(tmp) == TARGET_VERSION_SENTINAL) {

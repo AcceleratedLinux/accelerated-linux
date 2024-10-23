@@ -1,6 +1,6 @@
-GLIBC_VERSION = 2.34
+GLIBC_VERSION = 2.39
 
-URL = http://ftp.gnu.org/gnu/glibc/glibc-$(GLIBC_VERSION).tar.bz2
+URL = https://ftp.gnu.org/gnu/glibc/glibc-$(GLIBC_VERSION).tar.xz
 
 CONFOPTS += --without-selinux
 CONFOPTS += --disable-sanity-checks

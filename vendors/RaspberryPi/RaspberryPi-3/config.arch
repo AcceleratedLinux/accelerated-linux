@@ -1,0 +1,22 @@
+############################################################################
+
+LINUXTARGET = zImage dtbs
+
+HW_VENDOR = RaspberryPi
+VERSIONPKG ?= $(shell $(ROOTDIR)/bin/version)
+VERSIONSTR = $(CONFIG_VENDOR)/$(CONFIG_PRODUCT) Version $(VERSIONPKG)
+
+VENDOR_CFLAGS = -DCONFIG_ACCELECON
+VENDOR_TOPDIRS = boot
+
+############################################################################
+
+CPUFLAGS = -mtune=cortex-a53 -mfpu=neon-fp-armv8 -O3
+
+include $(ROOTDIR)/vendors/config/arm/config.arch
+
+RELFILES = images/image.bin \
+	   images/acl-licenses.txt \
+	   images/license.log
+
+############################################################################

@@ -1,5 +1,5 @@
-VERSION=4.99.0
-URL = http://www.tcpdump.org/release/tcpdump-$(VERSION).tar.gz
+VERSION=4.99.4
+URL = https://www.tcpdump.org/release/tcpdump-$(VERSION).tar.gz
 PATCHES = tcpdump-no-version-binary.patch
 
 CONFVARS :=

@@ -11,10 +11,10 @@ Subject: [PATCH 05/10] Adding 'virtualuser' config parameter
  4 files changed, 33 insertions(+), 4 deletions(-)
 
 diff --git a/auth.c b/auth.c
-index 00b168b..d00e2b9 100644
+index 3b380d9bb..9e9c9cee2 100644
 --- a/auth.c
 +++ b/auth.c
-@@ -586,7 +586,7 @@ getpwnamallow(struct ssh *ssh, const char *user)
+@@ -485,7 +485,7 @@ getpwnamallow(struct ssh *ssh, const char *user)
  	aix_setauthdb(user);
  #endif
  
@@ -23,7 +23,7 @@ index 00b168b..d00e2b9 100644
  
  #if defined(_AIX) && defined(HAVE_SETAUTHDB)
  	aix_restoreauthdb();
-@@ -620,8 +620,14 @@ getpwnamallow(struct ssh *ssh, const char *user)
+@@ -519,8 +519,14 @@ getpwnamallow(struct ssh *ssh, const char *user)
  		auth_close(as);
  #endif
  #endif
@@ -41,7 +41,7 @@ index 00b168b..d00e2b9 100644
  }
  
 diff --git a/loginrec.c b/loginrec.c
-index ea058fd..b4a254c 100644
+index 4f2149958..cc0059854 100644
 --- a/loginrec.c
 +++ b/loginrec.c
 @@ -169,6 +169,11 @@
@@ -56,7 +56,7 @@ index ea058fd..b4a254c 100644
  #include "xmalloc.h"
  #include "sshkey.h"
  #include "hostfile.h"
-@@ -214,6 +219,7 @@ int wtmp_get_entry(struct logininfo *li);
+@@ -215,6 +220,7 @@ int wtmp_get_entry(struct logininfo *li);
  int wtmpx_get_entry(struct logininfo *li);
  
  extern struct sshbuf *loginmsg;
@@ -64,7 +64,7 @@ index ea058fd..b4a254c 100644
  
  /* pick the shortest string */
  #define MIN_SIZEOF(s1,s2) (sizeof(s1) < sizeof(s2) ? sizeof(s1) : sizeof(s2))
-@@ -384,7 +390,7 @@ login_init_entry(struct logininfo *li, pid_t pid, const char *username,
+@@ -385,7 +391,7 @@ login_init_entry(struct logininfo *li, pid_t pid, const char *username,
  
  	if (username) {
  		strlcpy(li->username, username, sizeof(li->username));
@@ -74,10 +74,10 @@ index ea058fd..b4a254c 100644
  			fatal("%s: Cannot find user \"%s\"", __func__,
  			    li->username);
 diff --git a/servconf.c b/servconf.c
-index 1fba8d0..575b936 100644
+index 4b434909a..0013d8791 100644
 --- a/servconf.c
 +++ b/servconf.c
-@@ -192,6 +192,7 @@ initialize_server_options(ServerOptions *options)
+@@ -190,6 +190,7 @@ initialize_server_options(ServerOptions *options)
  	options->ip_qos_interactive = -1;
  	options->ip_qos_bulk = -1;
  	options->version_addendum = NULL;
@@ -85,15 +85,15 @@ index 1fba8d0..575b936 100644
  	options->fingerprint_hash = -1;
  	options->disable_forwarding = -1;
  	options->expose_userauth_info = -1;
-@@ -516,6 +517,7 @@ typedef enum {
+@@ -529,6 +530,7 @@ typedef enum {
  	sAuthenticationMethods, sHostKeyAgent, sPermitUserRC,
  	sStreamLocalBindMask, sStreamLocalBindUnlink,
  	sAllowStreamLocalForwarding, sFingerprintHash, sDisableForwarding,
 +	sVirtualUser,
  	sExposeAuthInfo, sRDomain, sPubkeyAuthOptions, sSecurityKeyProvider,
+ 	sRequiredRSASize, sChannelTimeout, sUnusedConnectionTimeout,
  	sDeprecated, sIgnore, sUnsupported
- } ServerOpCodes;
-@@ -672,6 +674,7 @@ static struct {
+@@ -686,6 +688,7 @@ static struct {
  	{ "allowstreamlocalforwarding", sAllowStreamLocalForwarding, SSHCFG_ALL },
  	{ "fingerprinthash", sFingerprintHash, SSHCFG_GLOBAL },
  	{ "disableforwarding", sDisableForwarding, SSHCFG_ALL },
@@ -101,7 +101,7 @@ index 1fba8d0..575b936 100644
  	{ "exposeauthinfo", sExposeAuthInfo, SSHCFG_ALL },
  	{ "rdomain", sRDomain, SSHCFG_ALL },
  	{ "casignaturealgorithms", sCASignatureAlgorithms, SSHCFG_ALL },
-@@ -2413,6 +2416,17 @@ process_server_config_line_depth(ServerOptions *options, char *line,
+@@ -2525,6 +2528,17 @@ process_server_config_line_depth(ServerOptions *options, char *line,
  			options->fingerprint_hash = value;
  		break;
  
@@ -119,7 +119,7 @@ index 1fba8d0..575b936 100644
  	case sExposeAuthInfo:
  		intptr = &options->expose_userauth_info;
  		goto parse_flag;
-@@ -2946,6 +2960,7 @@ dump_config(ServerOptions *o)
+@@ -3164,6 +3178,7 @@ dump_config(ServerOptions *o)
  	dump_cfg_string(sHostbasedAcceptedAlgorithms, o->hostbased_accepted_algos);
  	dump_cfg_string(sHostKeyAlgorithms, o->hostkeyalgorithms);
  	dump_cfg_string(sPubkeyAcceptedAlgorithms, o->pubkey_accepted_algos);
@@ -128,10 +128,10 @@ index 1fba8d0..575b936 100644
  	dump_cfg_string(sRDomain, o->routing_domain);
  #endif
 diff --git a/servconf.h b/servconf.h
-index dd5cbc1..a7ad3e0 100644
+index ed7b72e8e..c7b1e1266 100644
 --- a/servconf.h
 +++ b/servconf.h
-@@ -225,6 +225,8 @@ typedef struct {
+@@ -223,6 +223,8 @@ typedef struct {
  	u_int	num_auth_methods;
  	char   **auth_methods;
  
@@ -140,6 +140,5 @@ index dd5cbc1..a7ad3e0 100644
  	int	fingerprint_hash;
  	int	expose_userauth_info;
  	u_int64_t timing_secret;
--- 
 2.30.2
 

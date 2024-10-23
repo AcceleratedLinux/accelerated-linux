@@ -17,14 +17,16 @@
 #include <asm/glue-pf.h>
 #include <asm/mach/arch.h>
 #include <asm/thread_info.h>
-#include <asm/memory.h>
+#include <asm/page.h>
 #include <asm/mpu.h>
 #include <asm/procinfo.h>
 #include <asm/suspend.h>
-#include <asm/vdso_datapage.h>
 #include <asm/hardware/cache-l2x0.h>
 #include <linux/kbuild.h>
 #include <linux/arm-smccc.h>
+
+#include <vdso/datapage.h>
+
 #include "signal.h"
 
 /*
@@ -47,7 +49,6 @@ int main(void)
   DEFINE(TI_CPU_DOMAIN,		offsetof(struct thread_info, cpu_domain));
   DEFINE(TI_CPU_SAVE,		offsetof(struct thread_info, cpu_context));
   DEFINE(TI_ABI_SYSCALL,	offsetof(struct thread_info, abi_syscall));
-  DEFINE(TI_USED_CP,		offsetof(struct thread_info, used_cp));
   DEFINE(TI_TP_VALUE,		offsetof(struct thread_info, tp_value));
   DEFINE(TI_FPSTATE,		offsetof(struct thread_info, fpstate));
 #ifdef CONFIG_VFP
@@ -56,6 +57,7 @@ int main(void)
   DEFINE(VFP_CPU,		offsetof(union vfp_state, hard.cpu));
 #endif
 #endif
+  DEFINE(SOFTIRQ_DISABLE_OFFSET,SOFTIRQ_DISABLE_OFFSET);
 #ifdef CONFIG_ARM_THUMBEE
   DEFINE(TI_THUMBEE_STATE,	offsetof(struct thread_info, thumbee_state));
 #endif
@@ -83,6 +85,7 @@ int main(void)
   DEFINE(S_OLD_R0,		offsetof(struct pt_regs, ARM_ORIG_r0));
   DEFINE(PT_REGS_SIZE,		sizeof(struct pt_regs));
   DEFINE(SVC_DACR,		offsetof(struct svc_pt_regs, dacr));
+  DEFINE(SVC_TTBCR,		offsetof(struct svc_pt_regs, ttbcr));
   DEFINE(SVC_REGS_SIZE,		sizeof(struct svc_pt_regs));
   BLANK();
   DEFINE(SIGFRAME_RC3_OFFSET,	offsetof(struct sigframe, retcode[3]));

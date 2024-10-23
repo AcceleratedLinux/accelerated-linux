@@ -46,6 +46,7 @@
 #endif
 
 #include <getopt.h>		/* getopt_long() */
+#include <libgen.h>		/* basename() */
 #include <linux/sockios.h>	/* SIOCSIFNAME */
 #include <fnmatch.h>		/* fnmatch() */
 //#include <sys/syslog.h>

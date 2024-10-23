@@ -1,0 +1,10 @@
+add-mDNSEmbedLib.patch
+build-warnings.patch
+sanitise-hostname.patch
+use-pselect.patch
+fix-debugf.patch
+fix-unaligned-access.patch
+fix-mismatch-bound.patch
+fix-enum-conversion.patch
+pass-priority-and-weight.patch
+packedstruct.patch

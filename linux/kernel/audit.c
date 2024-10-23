@@ -53,9 +53,7 @@
 #include <net/sock.h>
 #include <net/netlink.h>
 #include <linux/skbuff.h>
-#ifdef CONFIG_SECURITY
 #include <linux/security.h>
-#endif
 #include <linux/freezer.h>
 #include <linux/pid_namespace.h>
 #include <net/netns/generic.h>
@@ -321,18 +319,17 @@ static inline int audit_rate_check(void)
 	static DEFINE_SPINLOCK(lock);
 	unsigned long		flags;
 	unsigned long		now;
-	unsigned long		elapsed;
 	int			retval	   = 0;
 
-	if (!audit_rate_limit) return 1;
+	if (!audit_rate_limit)
+		return 1;
 
 	spin_lock_irqsave(&lock, flags);
 	if (++messages < audit_rate_limit) {
 		retval = 1;
 	} else {
-		now     = jiffies;
-		elapsed = now - last_check;
-		if (elapsed > HZ) {
+		now = jiffies;
+		if (time_after(now, last_check + HZ)) {
 			last_check = now;
 			messages   = 0;
 			retval     = 1;
@@ -366,7 +363,7 @@ void audit_log_lost(const char *message)
 	if (!print) {
 		spin_lock_irqsave(&lock, flags);
 		now = jiffies;
-		if (now - last_msg > HZ) {
+		if (time_after(now, last_msg + HZ)) {
 			print = 1;
 			last_msg = now;
 		}
@@ -490,15 +487,19 @@ static void auditd_conn_free(struct rcu_head *rcu)
  * @pid: auditd PID
  * @portid: auditd netlink portid
  * @net: auditd network namespace pointer
+ * @skb: the netlink command from the audit daemon
+ * @ack: netlink ack flag, cleared if ack'd here
  *
  * Description:
  * This function will obtain and drop network namespace references as
  * necessary.  Returns zero on success, negative values on failure.
  */
-static int auditd_set(struct pid *pid, u32 portid, struct net *net)
+static int auditd_set(struct pid *pid, u32 portid, struct net *net,
+		      struct sk_buff *skb, bool *ack)
 {
 	unsigned long flags;
 	struct auditd_connection *ac_old, *ac_new;
+	struct nlmsghdr *nlh;
 
 	if (!pid || !net)
 		return -EINVAL;
@@ -509,6 +510,13 @@ static int auditd_set(struct pid *pid, u32 portid, struct net *net)
 	ac_new->pid = get_pid(pid);
 	ac_new->portid = portid;
 	ac_new->net = get_net(net);
+
+	/* send the ack now to avoid a race with the queue backlog */
+	if (*ack) {
+		nlh = nlmsg_hdr(skb);
+		netlink_ack(skb, nlh, 0, NULL);
+		*ack = false;
+	}
 
 	spin_lock_irqsave(&auditd_conn_lock, flags);
 	ac_old = rcu_dereference_protected(auditd_conn,
@@ -1100,7 +1108,7 @@ static inline void audit_log_user_recv_msg(struct audit_buffer **ab,
 	audit_log_common_recv_msg(NULL, ab, msg_type);
 }
 
-int is_audit_feature_set(int i)
+static int is_audit_feature_set(int i)
 {
 	return af.features & AUDIT_FEATURE_TO_MASK(i);
 }
@@ -1203,7 +1211,8 @@ static int audit_replace(struct pid *pid)
 	return auditd_send_unicast_skb(skb);
 }
 
-static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
+static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
+			     bool *ack)
 {
 	u32			seq;
 	void			*data;
@@ -1296,7 +1305,8 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 				/* register a new auditd connection */
 				err = auditd_set(req_pid,
 						 NETLINK_CB(skb).portid,
-						 sock_net(NETLINK_CB(skb).sk));
+						 sock_net(NETLINK_CB(skb).sk),
+						 skb, ack);
 				if (audit_enabled != AUDIT_OFF)
 					audit_log_config_change("audit_pid",
 								new_pid,
@@ -1390,7 +1400,7 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 						 str);
 			} else {
 				audit_log_format(ab, " data=");
-				if (data_len > 0 && str[data_len - 1] == '\0')
+				if (str[data_len - 1] == '\0')
 					data_len--;
 				audit_log_n_untrustedstring(ab, str, data_len);
 			}
@@ -1541,9 +1551,10 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
  * Parse the provided skb and deal with any messages that may be present,
  * malformed skbs are discarded.
  */
-static void audit_receive(struct sk_buff  *skb)
+static void audit_receive(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlh;
+	bool ack;
 	/*
 	 * len MUST be signed for nlmsg_next to be able to dec it below 0
 	 * if the nlmsg_len was not aligned
@@ -1556,9 +1567,12 @@ static void audit_receive(struct sk_buff  *skb)
 
 	audit_ctl_lock();
 	while (nlmsg_ok(nlh, len)) {
-		err = audit_receive_msg(skb, nlh);
-		/* if err or if this message says it wants a response */
-		if (err || (nlh->nlmsg_flags & NLM_F_ACK))
+		ack = nlh->nlmsg_flags & NLM_F_ACK;
+		err = audit_receive_msg(skb, nlh, &ack);
+
+		/* send an ack if the user asked for one and audit_receive_msg
+		 * didn't already do it, or if there was an error. */
+		if (ack || err)
 			netlink_ack(skb, nlh, err, NULL);
 
 		nlh = nlmsg_next(nlh, &len);
@@ -1679,9 +1693,7 @@ static int __init audit_init(void)
 	if (audit_initialized == AUDIT_DISABLED)
 		return 0;
 
-	audit_buffer_cache = kmem_cache_create("audit_buffer",
-					       sizeof(struct audit_buffer),
-					       0, SLAB_PANIC, NULL);
+	audit_buffer_cache = KMEM_CACHE(audit_buffer, SLAB_PANIC);
 
 	skb_queue_head_init(&audit_queue);
 	skb_queue_head_init(&audit_retry_queue);

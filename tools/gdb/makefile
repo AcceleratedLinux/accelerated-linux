@@ -1,4 +1,4 @@
-PKG = gdb-10.2
+PKG = gdb-14.2
 URL = https://ftp.gnu.org/gnu/gdb/$(PKG).tar.xz
 
 CONFOPTS += --target=$(TARGET)

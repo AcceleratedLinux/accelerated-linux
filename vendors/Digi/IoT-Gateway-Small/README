@@ -1,0 +1,18 @@
+
+First time setup for Digi IoT Gateway Small
+===========================================
+
+Setup the console and check you have access to the U-Boot command line. 
+
+
+BUILD DAL ARTIFACTS
+-------------------
+
+Build DAL like usual (i.e. `make Digi/IoT-Gateway-Small_default`). 
+
+
+INSTALL THE FIRMWARE
+--------------------
+
+See the Confluence page "Developer setup for non-manufactured IoT Gateway"
+for instructions on the firmware installation process.

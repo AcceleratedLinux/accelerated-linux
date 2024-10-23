@@ -1,0 +1,2 @@
+setenv console console=ttyS0,115200
+run netload
